@@ -33,3 +33,9 @@ Determinism + unit-style tests for core modules.
 ## Core rule
 UI renders **snapshots** and triggers **actions**.
 UI must never depend on internal simulation variables directly.
+
+## Determinism
+- Campaigns are driven by a single root seed.
+- Seeds are derived via dot-separated paths (case-sensitive).
+- UI does not own randomness.
+- No global randomness functions are used.

@@ -65,3 +65,14 @@ Shape:
   "msg": String,          // short human-readable line
   "data": Dictionary      // optional detailed payload
 }
+
+--
+
+## Randomness Policy (Determinism)
+- All randomness must derive from CampaignSeed
+- Use dot-separated seed paths (case-sensitive) e.g. campaign.realm.01.stage.03.encounter.01.spawn.enemy.02
+- Forbidden: randomize(), rand(), randf(), and global randomness.
+- Forbidden: creating RandomNumberGenerator.new() directly in systems. (Only allowed insife CampaignSeed or future RandomProvider wrapper.)
+- Each subsystem must request an RNG via:
+  - CampaignSeed.get_rng(path) or
+  - CampaignSeed.get_rng_from(parent_seed, path)

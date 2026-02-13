@@ -2,3 +2,4 @@ res://ui/Approot.tscn
 res://ui/UISnapshotRenderer.gd
 res://ui/AppRoot.gd
 res://ui/components/DebugPanel.gd
+res://core/CampaignSeed.gd

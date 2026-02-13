@@ -27,7 +27,7 @@ func _ready():
 	}
 	
 	renderer.render(current_snapshot)
-
+	
 func _on_debug_command(command: String) -> void:
 	# For now: echo + placeholder.
 	# Later: this will rout into acting dispatch / debug commands.
