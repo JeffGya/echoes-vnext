@@ -39,3 +39,10 @@ UI must never depend on internal simulation variables directly.
 - Seeds are derived via dot-separated paths (case-sensitive).
 - UI does not own randomness.
 - No global randomness functions are used.
+
+## Saves
+Default save path: user://saves/slot_01.json
+Saves are JSON and include schema_version for future migrations.
+
+Game has one single save slot forever. No multiple saves allowed.
+See CONVENTS.md for more about saving and making sure it works properly.

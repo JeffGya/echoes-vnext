@@ -66,7 +66,30 @@ Shape:
   "data": Dictionary      // optional detailed payload
 }
 
---
+---
+
+## Save Schema Versioning & Migrations
+- Saves are JSON and must include schema_version (int).
+-	Never change the meaning of an existing field without bumping schema_version.
+-	Prefer additive changes:
+    -	add new fields with safe defaults
+    -	keep old fields until a migration is in place
+-	Migrations must be explicit and ordered:
+    -	migrate_v1_to_v2(data: Dictionary) -> Dictionary
+    -	migrate_v2_to_v3(...)
+-	SaveService.load_from_file() must: 
+    -	parse JSON
+    -	validate schema version
+    -	run migrations (when implemented)
+    -	return a valid vLatest dictionary or {}
+
+### Save Files & Crash Safety
+-	Default save path: user://saves/slot_01.json
+-	Writes must be crash-safe:
+	-	write to *.tmp
+	-	rename to final
+
+---
 
 ## Randomness Policy (Determinism)
 - All randomness must derive from CampaignSeed

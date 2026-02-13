@@ -5,6 +5,7 @@ extends Control
 @onready var debug_panel: DebugPanel = $HSplitContainer/DebugPanel
 
 var current_snapshot: Dictionary = {}
+var current_save: Dictionary = {}
 
 func _ready():
 	# Bind renderer to UI elements it can update.
@@ -25,6 +26,15 @@ func _ready():
 			"next_state": "sanctum"
 		}
 	}
+	
+	current_save = SaveService.load_from_file(SaveSchema.DEFAULT_SAVE_PATH)
+	
+	if current_save.is_empty():
+		# MVP: hardcoded seed for now; late Flow will decicde seed creation and persistence rules
+		current_save = SaveService.make_new_save(12346)
+		SaveService.save_to_file(SaveSchema.DEFAULT_SAVE_PATH, current_save)
+		
+	print("Save loaded. schema_version:", int(current_save.get("schema_version", 0)))
 	
 	renderer.render(current_snapshot)
 	

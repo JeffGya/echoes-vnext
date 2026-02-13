@@ -3,3 +3,5 @@ res://ui/UISnapshotRenderer.gd
 res://ui/AppRoot.gd
 res://ui/components/DebugPanel.gd
 res://core/CampaignSeed.gd
+res://core/save/SaveService.gd
+res://core/save/SaveSchema.gd
