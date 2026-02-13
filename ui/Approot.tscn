@@ -1,0 +1,69 @@
+[gd_scene load_steps=4 format=3 uid="uid://djonhnpk45xl4"]
+
+[ext_resource type="Script" uid="uid://31tvrxyncblb" path="res://ui/AppRoot.gd" id="1_51q3y"]
+[ext_resource type="Script" uid="uid://ctdrd0hyvl5e5" path="res://ui/UISnapshotRenderer.gd" id="2_fv0kl"]
+[ext_resource type="Script" uid="uid://dy8h1bq01y4go" path="res://ui/components/DebugPanel.gd" id="2_ism07"]
+
+[node name="Approot" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_51q3y")
+
+[node name="HSplitContainer" type="HSplitContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="LeftPanel" type="VBoxContainer" parent="HSplitContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Header" type="Label" parent="HSplitContainer/LeftPanel"]
+layout_mode = 2
+size_flags_vertical = 0
+text = "Echoes vNext"
+
+[node name="SnapshotView" type="RichTextLabel" parent="HSplitContainer/LeftPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+fit_content = true
+
+[node name="DebugPanel" type="VBoxContainer" parent="HSplitContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+script = ExtResource("2_ism07")
+
+[node name="DebugHeader" type="Label" parent="HSplitContainer/DebugPanel"]
+layout_mode = 2
+text = "Debug"
+
+[node name="DebugOuput" type="RichTextLabel" parent="HSplitContainer/DebugPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="DebugInputRow" type="HBoxContainer" parent="HSplitContainer/DebugPanel"]
+layout_mode = 2
+
+[node name="DebugInput" type="LineEdit" parent="HSplitContainer/DebugPanel/DebugInputRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Enter debug input"
+
+[node name="DebugSend" type="Button" parent="HSplitContainer/DebugPanel/DebugInputRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Confirm"
+
+[node name="UISnapshotRenderer" type="Node" parent="."]
+unique_name_in_owner = true
+script = ExtResource("2_fv0kl")

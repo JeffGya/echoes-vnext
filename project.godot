@@ -1,0 +1,31 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="echoes-vnext"
+config/version="0"
+run/main_scene="uid://djonhnpk45xl4"
+config/features=PackedStringArray("4.5", "GL Compatibility")
+boot_splash/bg_color=Color(0.74311703, 0.9579194, 0.5060285, 1)
+config/icon="uid://fwbkud6ktd8i"
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/stretch/scale_mode="integer"
+window/ios/hide_status_bar=false
+
+[rendering]
+
+renderer/rendering_method="mobile"
