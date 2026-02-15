@@ -23,6 +23,8 @@ static func format(event: Dictionary) -> String:
 		category = "State"
 	elif type.begins_with("combat."):
 		category = "Combat"
+	elif type.begins_with("config."):
+		category = "Config"
 		
 	# Default fallback: show msg + (optional) type for context
 	return '[t:%d][%s][%s] %s' % [t, sev_label, category, msg]

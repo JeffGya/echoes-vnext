@@ -7,3 +7,6 @@ res://core/save/SaveService.gd
 res://core/save/SaveSchema.gd
 res://core/log/StructuredLogger.gd
 res://core/log/LogFormatter.gd
+res://core/config/JsonFileLoader.gd
+res://core/config/ConfigValidator.gd
+res://core/config/ConfigService.gd

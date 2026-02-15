@@ -6,26 +6,43 @@ This project is intentionally split into:
 
 ## Folder map
 
-### res://core/
-Deterministic game logic, services, and models.
+### res://contracts/
 
+### res://core/
+*Deterministic game logic, services, and models.*
+- CampaignSeed.gd
 - core/state/ — State machines (Flow + Encounter + Actor/Behavior hooks)
 - core/actors/ — Actor model (Echoes, Enemies, Allies, Structures), stats, behaviors, directives
 - core/grid/ — Board model, placement rules, movement, distance helpers
+- core/log/
+    - LogFormatter.gd
+    - StrucuredLogger.gd
 - core/combat/ — Combat loop, action resolver, objectives, snapshot builders
 - core/realms/ — Realm + Stage models, generator, rewards, progression service
 - core/sanctum/ — Sanctum state, roster, summoning, party selection
 - core/save/ — Save/load schema, persistence service, future migrations
+    - SaveSchema.gd
+    - SaveService.gd  
 - core/config/ — JSON configs + validation helpers
+    - JsonFileLoader.gd
+    - ConfigValidator.gd
+    - ConfigService.gd
+    
 
 ### res://ui/
 Rendering only. UI must be snapshot-driven.
-
+- AppRoot.gd
+- AppRoot.tscn
+- UISnapshotRenderer.gd
 - ui/screens/ — High-level screens (Sanctum, Realm Select, Combat, Resolve, Debug)
 - ui/components/ — Reusable UI components (ActionList, LogView, Panels)
+    - DebugPanel.gd
 
 ### res://data/
 Game data assets (JSON): actor templates, realm definitions, balance knobs.
+- res://data/balance.json
+- res://data/actors.json
+- res://data/realms.json
 
 ### res://tests/
 Determinism + unit-style tests for core modules.

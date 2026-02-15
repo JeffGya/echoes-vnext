@@ -110,6 +110,18 @@ Shape:
   "data": Dictionary      // optional detailed payload
 }
 
+### Config
+Configs live in res://data/ there are treated as read-only inputs.
+Schema changes are additive. Migrations will come later if needed. 
+
+Shape: 
+{
+  "schema_version": 1,    // Only int allowed.
+  "data": {}              // Data must be a Dictionary
+}
+
+
+
 ---
 
 ## Save Schema Versioning & Migrations

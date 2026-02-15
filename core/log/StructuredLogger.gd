@@ -23,7 +23,7 @@ func clear() -> void:
 func set_level(level: String) -> void:
 	# Accept only known levels (fails closed to INFO)
 	if level != LEVEL_OFF and level != LEVEL_INFO and level != LEVEL_DEBUG:
-		_level = LEVEL_INFO
+		_level = LEVEL_DEBUG
 		return
 	_level = level
 
@@ -35,7 +35,8 @@ func _should_log(sev: String) -> bool:
 		return false
 	if _level == LEVEL_INFO:
 		return sev == LEVEL_INFO
-	# LEVEL_DEBUG logs both
+	if _level == LEVEL_DEBUG:
+		return sev == LEVEL_INFO or sev == LEVEL_DEBUG
 	return true
 
 func info(t: int, type: String, msg: String, data: Dictionary = {}) -> void:
