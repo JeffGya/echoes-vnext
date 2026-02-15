@@ -46,3 +46,25 @@ Saves are JSON and include schema_version for future migrations.
 
 Game has one single save slot forever. No multiple saves allowed.
 See CONVENTS.md for more about saving and making sure it works properly.
+
+
+## Structured Logging (CORE-004)
+
+Echoes vNext uses a deterministic StructuredLogger located in `res://core/log/StructuredLogger.gd`.
+
+Purpose:
+- Determinism validation
+- Debugging complex state machines
+- Future replay tooling
+- Snapshot inspection
+
+Key rules:
+- Logs are structured dictionaries (see LogEvent contract in CONVENTIONS.md).
+- Logs use a monotonic simulation tick (`t`) injected by the caller.
+- Logger never generates its own time.
+- No OS timestamps.
+- Core systems must not use `print()` for meaningful events.
+- All state transitions must log via `state.transition`.
+- Event types must be namespaced (e.g., `save.load`, `combat.attack`).
+
+The UI may format logs for readability (see LogFormatter), but the stored log structure must remain JSON-safe and deterministic.

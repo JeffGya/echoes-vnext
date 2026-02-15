@@ -1,3 +1,35 @@
+# Echoes vNext — Development Notes
+
+## Development Environment Setup
+
+...
+
+## Saves
+
+...
+
+## Structured Logging (CORE-004)
+
+Echoes vNext uses a deterministic StructuredLogger located in `res://core/log/StructuredLogger.gd`.
+
+Purpose:
+- Determinism validation
+- Debugging complex state machines
+- Future replay tooling
+- Snapshot inspection
+
+Key rules:
+- Logs are structured dictionaries (see LogEvent contract in CONVENTIONS.md).
+- Logs use a monotonic simulation tick (`t`) injected by the caller.
+- Logger never generates its own time.
+- No OS timestamps.
+- Core systems must not use `print()` for meaningful events.
+- All state transitions must log via `state.transition`.
+- Event types must be namespaced (e.g., `save.load`, `combat.attack`).
+
+The UI may format logs for readability (see LogFormatter), but the stored log structure must remain JSON-safe and deterministic.
+---
+
 # Echoes vNext — Conventions & Contracts
 
 ## Naming conventions
@@ -26,6 +58,17 @@
 - Renders snapshots.
 - Sends actions.
 - Must not read internal sim variables directly.
+
+---
+
+## Randomness Policy (Determinism)
+- All randomness must derive from CampaignSeed
+- Use dot-separated seed paths (case-sensitive) e.g. campaign.realm.01.stage.03.encounter.01.spawn.enemy.02
+- Forbidden: randomize(), rand(), randf(), and global randomness.
+- Forbidden: creating RandomNumberGenerator.new() directly in systems. (Only allowed inside CampaignSeed or future RandomProvider wrapper.)
+- Each subsystem must request an RNG via:
+  - CampaignSeed.get_rng(path) or
+  - CampaignSeed.get_rng_from(parent_seed, path)
 
 ---
 
@@ -61,6 +104,7 @@ Logs are structured, stable, and testable.
 Shape:
 {
   "t": int,               // monotonic tick or timestamp
+  "sev": String,          // "info" | "debug"
   "type": String,         // e.g. "state.transition", "combat.attack"
   "msg": String,          // short human-readable line
   "data": Dictionary      // optional detailed payload
@@ -91,11 +135,41 @@ Shape:
 
 ---
 
-## Randomness Policy (Determinism)
-- All randomness must derive from CampaignSeed
-- Use dot-separated seed paths (case-sensitive) e.g. campaign.realm.01.stage.03.encounter.01.spawn.enemy.02
-- Forbidden: randomize(), rand(), randf(), and global randomness.
-- Forbidden: creating RandomNumberGenerator.new() directly in systems. (Only allowed insife CampaignSeed or future RandomProvider wrapper.)
-- Each subsystem must request an RNG via:
-  - CampaignSeed.get_rng(path) or
-  - CampaignSeed.get_rng_from(parent_seed, path)
+## Logging (StructuredLogger)
+
+We use structured logs for determinism validation, debugging, and future replay tooling.
+
+### LogEvent shape (canonical)
+Every log entry must be a JSON-safe Dictionary with this shape:
+
+{
+  "t": int,
+  "sev": "String"
+  "type": String,
+  "msg": String,
+  "data": Dictionary
+}
+
+### Timestamp (`t`)
+`t` is a deterministic simulation tick provided by the caller.
+
+- The logger does NOT generate timestamps.
+- The logger does NOT call OS time APIs.
+- For early foundation work, `t` comes from a temporary `sim_tick` owned by AppRoot.
+- IMPORTANT: When Flow/Encounter state machines are implemented, they will become the
+  authoritative owner of `sim_tick`. AppRoot ticking must be replaced at that point.
+
+### Rules
+- No `print()` in core systems for meaningful events — use StructuredLogger instead.
+- `type` must be namespaced (e.g. "state.transition", "combat.action").
+- `msg` is a short human-readable summary.
+- `data` is structured payload (always a Dictionary; may be empty).
+- Payload must be JSON-safe (no Nodes/Objects; only primitives, arrays, dictionaries).
+- Logger must deep-copy `data` before storing it to prevent mutation side effects.
+- Logger must never maintain its own internal tick counter; time is always injected by the caller.
+- All state machine transitions must emit a `state.transition` log.
+- Core services (save, flow, combat, grid, actors) must log meaningful state changes.
+- Logger level filtering (off/info/debug) must not affect simulation determinism.
+- Log formatting is a UI concern; stored logs must remain structured dictionaries.
+
+See README_DEV.md → Structured Logging (CORE-004) for architectural intent and usage guidelines.
