@@ -10,3 +10,10 @@ res://core/log/LogFormatter.gd
 res://core/config/JsonFileLoader.gd
 res://core/config/ConfigValidator.gd
 res://core/config/ConfigService.gd
+res://core/state/State.gd
+res://core/state/StateMachine.gd
+res://tests/TestContext.gd
+res://tests/TestStates.gd
+res://tests/state_machine_smoke.gd
+res://tests/state_machine_smoke.tscn
+res://tests/TestStateB.gd

@@ -12,11 +12,13 @@ This project is intentionally split into:
 *Deterministic game logic, services, and models.*
 - CampaignSeed.gd
 - core/state/ — State machines (Flow + Encounter + Actor/Behavior hooks)
+    - State.gd
+    - StateMachine.gd
 - core/actors/ — Actor model (Echoes, Enemies, Allies, Structures), stats, behaviors, directives
 - core/grid/ — Board model, placement rules, movement, distance helpers
 - core/log/
     - LogFormatter.gd
-    - StrucuredLogger.gd
+    - StructuredLogger.gd
 - core/combat/ — Combat loop, action resolver, objectives, snapshot builders
 - core/realms/ — Realm + Stage models, generator, rewards, progression service
 - core/sanctum/ — Sanctum state, roster, summoning, party selection
@@ -62,7 +64,7 @@ Default save path: user://saves/slot_01.json
 Saves are JSON and include schema_version for future migrations.
 
 Game has one single save slot forever. No multiple saves allowed.
-See CONVENTS.md for more about saving and making sure it works properly.
+See CONVENTIONS.md for more about saving and making sure it works properly.
 
 
 ## Structured Logging (CORE-004)

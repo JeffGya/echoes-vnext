@@ -73,7 +73,64 @@ The UI may format logs for readability (see LogFormatter), but the stored log st
 ---
 
 ## Contracts
-Contracts live in res://core/contracts/
+Contracts live in res://contracts/
+
+### State Machines
+State machines live in: `res://core/state/`
+
+**Purpose:**
+1. Provide a consistent, reusable transition model across Flow / Combat / Actor systems.
+2. Enforce deterministic transition logs ("state.transition") with caller-injected tick (`t`).
+
+#### State (base contract)
+States are core-safe and must extend `RefCounted`.
+
+Required API:
+- `get_id() -> String`
+  Stable, deterministic ID for the state. Must not be generated at runtime.
+
+Lifecycle hooks (all deterministic: no OS time; no RNG):
+- `enter(ctx: RefCounted, t: int) -> void`
+- `exit(ctx: RefCounted, t: int) -> void`
+
+Notes:
+- Context (`ctx`) is a `RefCounted` object owned by the caller (e.g., FlowContext, CombatContext later).
+- Base State provides no-op defaults; concrete overrides as needed.
+
+#### StateMachine (base contract)
+State machines are core-safe and must extend `RefCounted`.
+
+Required behavior:
+- Holds a registry of states: transitions occur by `state_id`.
+- Tracks current state and only changes state through one canonical choke point: `transition()`.
+
+Required API:
+- `register_state(state: State) -> void`
+- `set_initial(state_id: String, ctx: RefCounted, logger: StructuredLogger, t: int) -> void`
+- `transition(to_state_id: String, ctx: RefCounted, logger: StructuredLogger, t: int, reason := "") -> bool`
+
+Transition order:
+1. current.exit(ctx, t) (if current exists)
+2. set current = next
+3. next.enter(ctx, t)
+4. emit `state.transition` log (see below)
+
+#### Transition Logging (required)
+Every successful transition MUST emit a log event with:
+- `type`: `"state.transition"`
+- `t`: injected by caller
+- `data` payload (canonical keys):
+  - `machine_id`: String (namespaced). Example: `"state.flow"`, `"state.combat"`, `"state.actor.behavior"`
+  - `from_state`: String (empty string allowed if none)
+  - `to_state`: String
+  - `reason`: String (may be empty)
+
+Rules:
+- Transitions must never generate their own time: `t` is always injected.
+- Payload must remain JSON-safe and deterministic (no Nodes/Objects; only primitives, arrays, dictionaries).
+- Missing state IDs must be handled deterministically (log + no crash; transition returns false).
+- No-op transitions (to_state == current_state) must log state.transition.noop at debug and return false.
+
 
 ### Snapshot (sim → UI)
 Snapshots are the ONLY source of truth for UI rendering.
