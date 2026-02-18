@@ -1,9 +1,9 @@
+VBoxContainer
 Button
 LineEdit
 HBoxContainer
 RichTextLabel
 Label
-VBoxContainer
 HSplitContainer
 Node
 Control

@@ -11,21 +11,42 @@ This project is intentionally split into:
 ### res://core/
 *Deterministic game logic, services, and models.*
 - CampaignSeed.gd
-- core/state/ — State machines (Flow + Encounter + Actor/Behavior hooks)
+- *core/state/ — State machines (Flow + Encounter + Actor/Behavior hooks)*
     - State.gd
     - StateMachine.gd
-- core/actors/ — Actor model (Echoes, Enemies, Allies, Structures), stats, behaviors, directives
-- core/grid/ — Board model, placement rules, movement, distance helpers
-- core/log/
+    - *core/state/flow*
+      - FlowContext.gd
+      - FlowStateIds.gd
+      - *core/state/flow/states*
+         - *core/state/flow/states/boot*
+            - FlowSplashState.gd
+            - FlowMainMenuState.gd
+        - *core/state/flow/states/sanctum*
+            - FlowSanctumState.gd
+            - FlowPartyManageState.gd
+            - FLowEchoManageState.gd
+            - FlowRealmSelectState.gd
+            - FlowSummonState.gd
+        - *core/state/flow/states/venture*
+            - FlowEncounterState.gd
+            - FlowStageMapState.gd
+            - FlowStageState.gd
+        - FlowResolveState.gd
+
+        
+
+- *core/actors/ — Actor model (Echoes, Enemies, Allies, Structures), stats, behaviors, directives*
+- *core/grid/ — Board model, placement rules, movement, distance helpers*
+- *core/log/*
     - LogFormatter.gd
     - StructuredLogger.gd
-- core/combat/ — Combat loop, action resolver, objectives, snapshot builders
-- core/realms/ — Realm + Stage models, generator, rewards, progression service
-- core/sanctum/ — Sanctum state, roster, summoning, party selection
-- core/save/ — Save/load schema, persistence service, future migrations
+- *core/combat/ — Combat loop, action resolver, objectives, snapshot builders*
+- *core/realms/ — Realm + Stage models, generator, rewards, progression service*
+- *core/sanctum/ — Sanctum state, roster, summoning, party selection*
+- *core/save/ — Save/load schema, persistence service, future migrations*
     - SaveSchema.gd
     - SaveService.gd  
-- core/config/ — JSON configs + validation helpers
+- *core/config/ — JSON configs + validation helpers*
     - JsonFileLoader.gd
     - ConfigValidator.gd
     - ConfigService.gd

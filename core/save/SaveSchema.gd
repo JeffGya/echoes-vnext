@@ -15,6 +15,7 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 
 	return {
 		"schema_version": SCHEMA_VERSION,
+		"first_boot": true, # Used to determine if this is a new save or loaded save (for first-time user experience)
 		"meta": {
 			"created_at_unix": now,
 			"last_saved_at_unix": now,
@@ -25,7 +26,7 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"tick": 0       
 		},
 		"flow": {
-			"state": "boot",
+			"state": "flow.splash",
 			"context": {}
 		},
 		"sanctum": {
