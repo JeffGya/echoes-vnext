@@ -7,35 +7,38 @@ func _init(id: String = FlowStateIds.ENCOUNTER) -> void:
 	
 func enter(ctx: RefCounted, t: int) -> void:
 	var flow_ctx := ctx as FlowContext
+
+	# Create encounter context once per active encounter.
+	if flow_ctx.encounter_ctx == null:
+		flow_ctx.encounter_ctx = EncounterContext.new()
+		flow_ctx.encounter_ctx.encounter_id = flow_ctx.encounter_id
+		# Prove the pipe works with a non-combat mode.
+		flow_ctx.encounter_ctx.resolution_mode = EncounterResolutionModes.PURIFY_SHRINE
+
+	# Create machine once, register states once.
+	if flow_ctx.encounter_machine == null:
+		flow_ctx.encounter_machine = EncounterStateMachine.new()
+		flow_ctx.encounter_machine.register_default_states()
+
+	# Pass-through the encounter phase snapshot to UI.
+	flow_ctx.last_snapshot = flow_ctx.encounter_ctx.phase_snapshot
 	
-	# MVP scaffold: Encounter will later be driven by EncounterStateMachine + combat loop.
-	# For now, treat it as a placeholder "encounter screen" with deterministic actions.
-	flow_ctx.last_snapshot = {
-		"type": FlowStateIds.ENCOUNTER,
-		"data": {
-			"title": "Encounter",
-			"realm_id": flow_ctx.realm_id,
-			"stage_id": flow_ctx.stage_id,
-			"encounter_id": flow_ctx.encounter_id,
-			"note": "MVP scaffold: encounter/combat not implemented yet."
-		},
-		"actions": [
-			{
-				"type": "flow.go_state",
-				"to": FlowStateIds.RESOLVE,
-				"label": "Complete Encounter -> Resolver"
+	# If the encounter machine hasn't produced a phase snapshot yet, show a tiny scaffold.
+	if flow_ctx.encounter_ctx.phase_snapshot.is_empty():
+		flow_ctx.last_snapshot = {
+			"type": FlowStateIds.ENCOUNTER,
+			"data": {
+				"title": "Encounter",
+				"encounter_id": flow_ctx.encounter_ctx.encounter_id,
+				"resolution_mode": flow_ctx.encounter_ctx.resolution_mode,
+				"note": "Encounter initializing (waiting for AppRoot to start machine)."
 			},
-			{
-				"type": "flow.go_state",
-				"to": FlowStateIds.STAGE,
-				"label": "Back to Stage",
-				"disabled": true
-			}
-		],
-		"meta": {
-			"t": t
+			"actions": [],
+			"meta": { "t": t }
 		}
-	}
+		return
+
+	flow_ctx.last_snapshot = flow_ctx.encounter_ctx.phase_snapshot
 	
 func exit(ctx: RefCounted, t: int) -> void:
 	pass

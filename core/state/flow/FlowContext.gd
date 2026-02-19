@@ -13,6 +13,10 @@ var realm_id: String = ""
 var stage_id: String = ""
 var encounter_id: String = ""
 
+# Encounter runtime (active only while in flow.encounter)
+var encounter_ctx: EncounterContext = null
+var encounter_machine: EncounterStateMachine = null
+
 # Save payload (pure data) + request mechanism
 var save_data: Dictionary = {}
 var save_request: bool = false

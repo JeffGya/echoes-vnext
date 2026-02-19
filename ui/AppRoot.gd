@@ -90,6 +90,21 @@ func _run_boot() -> void:
 	renderer.render(current_snapshot)
 	_flush_logs_to_console()
 
+func _ensure_encounter_started(t: int) -> void:
+	if flow_ctx == null:
+		return
+	if str(flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.ENCOUNTER:
+		return
+	if flow_ctx.encounter_ctx == null:
+		return
+	if flow_ctx.encounter_machine == null:
+		return
+	if not flow_ctx.encounter_ctx.phase_snapshot.is_empty():
+		return
+
+	flow_ctx.encounter_machine.start(flow_ctx.encounter_ctx, logger, t)
+	flow_ctx.last_snapshot = flow_ctx.encounter_ctx.phase_snapshot
+
 func _on_debug_command(command: String) -> void:
 	# For now: echo + placeholder.
 	# Later: this will route into acting dispatch / debug commands.
@@ -137,8 +152,26 @@ func _on_ui_action_selected(action: Dictionary) -> void:
 		"flow.quit":
 			logger.debug(t, "ui.flow.quit", "Quit not implemented (MVP).", {})
 		
+		"encounter.advance":
+			var to_state := str(action.get("to", ""))
+			if flow_ctx.encounter_machine == null or flow_ctx.encounter_ctx == null:
+				logger.debug(t, "ui.encounter.advance.", "Encounter not initialized", { "action": action })
+			else:
+				flow_ctx.encounter_machine.transition(to_state, flow_ctx.encounter_ctx, logger, t, "ui.encounter.advance")
+				flow_ctx.last_snapshot = flow_ctx.encounter_ctx.phase_snapshot
+		
+		"encounter.complete":
+			# Clear encounter runtime
+			flow_ctx.encounter_ctx = null
+			flow_ctx.encounter_machine = null
+			
+			flow_machine.transition(FlowStateIds.RESOLVE, flow_ctx, logger, t, "ui.encounter.complete")
+			
 		_:
 			logger.debug(t, "ui.action.unknown", "Unkown action type", { "action": action })
+	
+	# If we just entered flow.encounter, bootstrap the Encounter machine.
+	_ensure_encounter_started(t)
 	
 	# Re-render whatever Flow decided is current
 	current_snapshot = flow_ctx.last_snapshot

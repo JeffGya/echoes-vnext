@@ -32,7 +32,17 @@ This project is intentionally split into:
             - FlowStageMapState.gd
             - FlowStageState.gd
         - FlowResolveState.gd
-
+    - *core/state/encounter*
+      - EncounterContext.gd
+      - EncounterResolutionModes.gd
+      - EncounterStateIds.gd
+      - EncounterStateMachine.gd
+      - *core/state/encounter/states*
+         - EncounterSetupState.gd
+         - EncounterBlessingState.gd
+         - EncounterRoundsState.gd
+         - EncounterResolutionState.gd
+         - EncounterAftermathState.gd
         
 
 - *core/actors/ — Actor model (Echoes, Enemies, Allies, Structures), stats, behaviors, directives*
@@ -73,6 +83,61 @@ Determinism + unit-style tests for core modules.
 ## Core rule
 UI renders **snapshots** and triggers **actions**.
 UI must never depend on internal simulation variables directly.
+
+---
+
+## Flow Layer (STATE-002 Baseline)
+
+The FlowStateMachine owns the macro progression of the game. AppRoot only forwards UI actions and renders snapshots.
+
+Flow responsibilities:
+- Own the authoritative simulation tick (`sim_tick`).
+- Validate and execute high-level transitions.
+- Produce Flow-level snapshots.
+- Decide when saving is triggered (see CONVENTIONS.md → Flow Architecture Addendum).
+
+Flow is NOT a screen router.
+It is a deterministic state machine that governs game progression.
+
+### Current Flow States (MVP baseline)
+
+Boot / Splash / Main Menu
+Sanctum (hub)
+PartyManage / EchoManage / Summon
+RealmSelect
+Stage / Encounter
+Resolve
+
+All transitions must:
+- Emit `state.transition` logs.
+- Produce a snapshot for UI.
+- Be deterministic and seed-consistent.
+
+---
+
+## Encounter Layer (STATE-003 Baseline)
+
+EncounterStateMachine is a reusable phased-resolution scaffold used by certain Stage Objectives.
+
+Layering model:
+Flow (macro) → Stage (objective progression) → Objective (design intent) → EncounterStateMachine (phased resolution, when needed)
+
+Key rules:
+- Encounter is not the objective itself; it is the deterministic container used to resolve an objective.
+- Objectives select/inform an encounter `resolution_mode` (a stable string ID).
+- Encounter phases are deterministic and write their current snapshot into `EncounterContext.phase_snapshot`.
+- While in `flow.encounter`, Flow passes the encounter snapshot through to UI.
+
+Bootstrap + routing (current MVP):
+- `FlowEncounterState` creates/holds `EncounterContext` + `EncounterStateMachine` in `FlowContext` and sets defaults (including `resolution_mode`).
+- `AppRoot` owns the logger + tick and bootstraps the encounter machine when entering `flow.encounter`.
+- `AppRoot` routes `encounter.advance` and `encounter.complete` actions.
+
+MVP encounter phases:
+- `encounter.setup` → `encounter.blessing` → `encounter.rounds` → `encounter.resolution` → `encounter.aftermath`
+
+Note:
+- Combat logic is not implemented here. Combat-specific behavior plugs into these phases later under COMBAT backlog tasks.
 
 ## Determinism
 - Campaigns are driven by a single root seed.

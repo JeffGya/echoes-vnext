@@ -204,6 +204,136 @@ Shape:
 
 ---
 
+## Flow Architecture Addendum (STATE-002)
+
+This section captures canonical Flow decisions derived from the STATE-002 design interview. These rules define macro-loop behavior, save triggers, and progression constraints. They are authoritative for FlowStateMachine and future Encounter integration.
+
+### Canonical Macro Loop
+
+Boot → Splash → Main Menu → Sanctum
+
+From Sanctum:
+- Party Manage
+- Echo Manage
+- Summon
+- Realm Select
+
+From Realm Select:
+- Stage → Encounter(s) → Resolve → Sanctum
+
+Rules:
+- Summoning is only allowed inside Sanctum.
+- Resolve always returns to Sanctum.
+- Stage and Encounter are venture states; Sanctum is the persistent hub.
+
+---
+
+### Realm Progression Rule
+
+- A player locks into a selected Realm and progresses through its stages sequentially.
+- Realm selection may be restricted until all stages in the current Realm are completed.
+- RealmSelect state is responsible for validating availability.
+
+---
+
+### Save Trigger Policy (No Manual Save)
+
+Echoes vNext does NOT allow manual saving in MVP.
+
+Save operations are system-driven and must occur only at controlled boundaries.
+
+Approved save triggers:
+- New game initialization
+- After summoning
+- After selecting a realm
+- Entering a stage
+- After a stage objective resolves (if multiple objectives exist)
+- Returning to Sanctum
+
+Rules:
+- Not every state writes to save.
+- Never save multiple times per tick.
+- Saving must remain deterministic and explainable.
+- Echo death is permanent in MVP (no rollback system).
+
+---
+
+### First Boot Branching
+
+Main Menu → Continue must branch deterministically:
+
+- If first boot: initialize minimal save state and proceed to Sanctum.
+- If save exists: load and continue.
+
+
+Future expansions (cutscene/tutorial) must remain FlowState transitions, not UI shortcuts.
+
+---
+
+## Encounter Terminology (Objective vs Encounter Resolution)
+
+To avoid confusion between design-level objectives and runtime encounter phases, Echoes vNext uses the following layered model:
+
+Flow (macro)
+    ↓
+Stage (objective progression)
+    ↓
+Objective (what a stage node represents)
+    ↓
+EncounterStateMachine (only if the objective requires phased resolution)
+
+### Definitions
+
+- **Objective**: A design-level concept that describes what a stage node represents (e.g. combat, shrine, event, boss, treasure, narrative choice).
+- **EncounterStateMachine**: A runtime phase scaffold used to *resolve* certain objectives deterministically (Setup → Blessing → Rounds → Resolution → Aftermath).
+
+Not every Objective requires an EncounterStateMachine. Simple objectives may be resolved directly by Stage without entering Encounter phases.
+
+### Resolution Mode
+
+When an Objective is resolved via EncounterStateMachine, the EncounterContext should carry a **resolution_mode** (not "objective type") to describe which resolution logic is plugged into the phase scaffold.
+
+Examples:
+- ObjectiveType: `shrine` → resolution_mode: `purify_shrine`
+- ObjectiveType: `combat` → resolution_mode: `combat`
+- ObjectiveType: `event` → resolution_mode: `guide_spirit`
+
+Rule:
+- Treat "Encounter" as a *phase resolution container*, not as a content label.
+- `resolution_mode` is a stable ID that may appear in snapshots and saves; avoid renaming once used.
+
+### Encounter Contracts (STATE-003)
+
+Encounter state machines live in: `res://core/state/encounter/`
+
+Contracts:
+- Machine id: `state.encounter`
+- Phase ids (MVP scaffold):
+  - `encounter.setup`
+  - `encounter.blessing`
+  - `encounter.rounds`
+  - `encounter.resolution`
+  - `encounter.aftermath`
+
+Snapshot contract:
+- Encounter states write the current snapshot into `EncounterContext.phase_snapshot`.
+- Flow passes that snapshot through to UI while in `flow.encounter`.
+
+Action contracts:
+- `encounter.advance` (UI → core)
+  - must include `to` (String) to indicate the next encounter phase.
+- `encounter.complete` (UI → core)
+  - signals the encounter is done; Flow decides where to go next (MVP: Resolve).
+
+Logger ownership:
+- State `enter(ctx, t)` does not receive a logger.
+- The caller that owns `t` (currently AppRoot) is responsible for starting machines and calling `transition(..., logger, t, reason)`.
+- Encounter machine bootstrap happens when Flow enters `flow.encounter`:
+  - `FlowEncounterState` ensures `EncounterContext` + `EncounterStateMachine` exist and sets defaults (including `resolution_mode`).
+  - `AppRoot` detects `flow.encounter` and calls `EncounterStateMachine.start(ctx, logger, t)` once if needed.
+
+---
+
 ## Logging (StructuredLogger)
 
 We use structured logs for determinism validation, debugging, and future replay tooling.
