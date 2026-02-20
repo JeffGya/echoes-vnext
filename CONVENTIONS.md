@@ -142,6 +142,12 @@ Shape:
   "data": Dictionary      // state-specific payload
 }
 
+Note: Some Flow states may act as **wrapper snapshots**.
+
+- Example: `flow.encounter` wraps the current Encounter phase snapshot inside `data`.
+- In that case, UI should treat `snapshot.data` as the *inner* snapshot (e.g. `encounter.setup`) and may need to read UI actions from `snapshot.data.actions` instead of `snapshot.actions`.
+- This keeps Flow as the screen owner while allowing Encounter phases to drive their own UI payload.
+
 ### Action (UI → sim)
 Action ID format: domain.subdomain.verb_noun
 UI triggers actions by ID, not by calling internal functions directly.
@@ -242,6 +248,7 @@ Echoes vNext does NOT allow manual saving in MVP.
 
 Save operations are system-driven and must occur only at controlled boundaries.
 
+
 Approved save triggers:
 - New game initialization
 - After summoning
@@ -255,6 +262,52 @@ Rules:
 - Never save multiple times per tick.
 - Saving must remain deterministic and explainable.
 - Echo death is permanent in MVP (no rollback system).
+
+---
+
+### Deterministic Accrual at Sanctioned Boundaries
+
+Echoes vNext does NOT use OS time, wall-clock time, or real-time accumulation for economy or emotion systems.
+
+All accrual, drift, or periodic effects must be deterministic and applied only at sanctioned Flow boundaries.
+
+#### Rules
+
+1) No OS time
+- Core must never call OS time APIs (e.g., DateTime, system clock, unix time) for progression.
+- No "time since last login" logic.
+- No background/offline accumulation.
+
+2) Accrual is boundary-applied, not continuous
+- Economy or Emotion drift does NOT run every frame.
+- It must be executed explicitly at approved boundaries owned by Flow.
+
+3) Sanctioned boundaries
+Accrual/drift may only be applied at the same boundaries approved for system-driven saves:
+- New game initialization
+- After summoning
+- After selecting a realm
+- Entering a stage
+- After a stage objective resolves
+- Returning to Sanctum
+
+4) Use sim_tick deltas
+- Each system that applies accrual must persist a `last_applied_tick` in save.
+- When applying:
+  - `delta_ticks = current_sim_tick - last_applied_tick`
+  - Apply bounded, deterministic math.
+  - Update `last_applied_tick`.
+- If `last_applied_tick == current_sim_tick`, the operation must be a deterministic no-op.
+
+5) Exactly-once per boundary
+- Accrual must be safe against duplicate calls within the same tick.
+- Systems must guard against double-application.
+
+6) No cascading saves
+- Applying accrual must not trigger multiple saves within the same tick.
+- Flow remains the authoritative owner of when a save actually occurs.
+
+This rule exists to preserve determinism, replayability, and simulation explainability.
 
 ---
 

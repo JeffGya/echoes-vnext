@@ -130,8 +130,10 @@ Key rules:
 
 Bootstrap + routing (current MVP):
 - `FlowEncounterState` creates/holds `EncounterContext` + `EncounterStateMachine` in `FlowContext` and sets defaults (including `resolution_mode`).
-- `AppRoot` owns the logger + tick and bootstraps the encounter machine when entering `flow.encounter`.
-- `AppRoot` routes `encounter.advance` and `encounter.complete` actions.
+- `FlowRuntime` (core/runtime) owns the logger + tick and bootstraps the encounter machine when entering `flow.encounter`.
+- `FlowRuntime` routes `encounter.advance` and `encounter.complete` actions.
+
+UI never talks to EncounterStateMachine directly.
 
 MVP encounter phases:
 - `encounter.setup` → `encounter.blessing` → `encounter.rounds` → `encounter.resolution` → `encounter.aftermath`
@@ -173,3 +175,54 @@ Key rules:
 - Event types must be namespaced (e.g., `save.load`, `combat.attack`).
 
 The UI may format logs for readability (see LogFormatter), but the stored log structure must remain JSON-safe and deterministic.
+
+---
+
+## Snapshot Emission Model (STATE-004)
+
+Snapshots are emitted deterministically on successful Flow transitions.
+
+Authoritative owner:
+- `FlowRuntime` (core/runtime) owns:
+  - simulation tick (`t`)
+  - logger
+  - FlowContext
+  - FlowStateMachine
+  - dispatch(action) → snapshot
+
+State machines:
+- Mutate context.
+- Log transitions.
+- DO NOT emit UI snapshots directly.
+
+Flow responsibilities:
+- After every successful Flow transition:
+  - Rebuild snapshot from current state.
+  - Validate snapshot structure.
+  - Return snapshot to UI layer.
+
+Encounter integration:
+- While in `flow.encounter`, Flow wraps the active Encounter phase snapshot.
+- The Encounter phase snapshot lives in `EncounterContext.phase_snapshot`.
+- Flow snapshot structure:
+
+  {
+    "type": "flow.encounter",
+    "meta": {...},
+    "data": <encounter phase snapshot>
+  }
+
+UI layer:
+- Renders only the snapshot returned from `FlowRuntime`.
+- Never reads internal FlowContext or EncounterContext directly.
+
+Snapshot contract:
+- Must include: `type`, `meta`, `data`.
+- Must be JSON-safe.
+- Must not contain null values.
+- Exactly one snapshot is emitted per successful Flow transition.
+
+This guarantees:
+- UI decoupling.
+- Deterministic replay potential.
+- Extensibility for Player Influence Systems, Sanctum dashboards, Grid, and Combat rendering.

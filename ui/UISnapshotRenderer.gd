@@ -28,6 +28,14 @@ func render(snapshot: Dictionary) -> void:
 		return
 		
 	var actions_v: Variant = snapshot.get("actions", [])
+
+	# STATE-004: flow.encounter is a wrapper snapshot.
+	# The actual phase snapshot lives in snapshot["data"], so actions may be nested.
+	if (typeof(actions_v) != TYPE_ARRAY or (actions_v as Array).is_empty()) and str(snapshot.get("type", "")) == "flow.encounter":
+		var inner_v: Variant = snapshot.get("data", {})
+		if typeof(inner_v) == TYPE_DICTIONARY:
+			actions_v = (inner_v as Dictionary).get("actions", [])
+
 	if typeof(actions_v) != TYPE_ARRAY:
 		return
 		
