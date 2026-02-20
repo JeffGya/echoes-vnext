@@ -84,12 +84,28 @@ func _rebuild_snapshot(ctx: FlowContext, logger: StructuredLogger, t: int) -> vo
 				{ "flow_state": _current_state_id, "snapshot_type": str(snap.get("type", "")) }
 			)
 			# For MVP we don't assert; just flag it.
-			
+
+	# ECONOMY-001 Subtask 5: surface balances in Sanctum snapshot data (snapshot-only UI contract)
+	if str(snap.get("type", "")) == FlowStateIds.SANCTUM:
+		# Ensure snap.data is a dictionary we can safely augment
+		if not snap.has("data") or typeof(snap["data"]) != TYPE_DICTIONARY:
+			snap["data"] = {}
+
+		var data: Dictionary = snap["data"]
+
+		# Read from save data only (authoritative), normalize int/float safely
+		var econ: Dictionary = {}
+		if ctx.save_data != null and ctx.save_data.has("economy") and typeof(ctx.save_data["economy"]) == TYPE_DICTIONARY:
+			econ = ctx.save_data["economy"]
+
+		data["ase_balance"] = int(econ.get("ase", 0))
+		data["ekwan_balance"] = int(econ.get("ekwan", 0))
+
 	# Enforce snapshot contract (STATE-004 Subtask 5)
 	_validate_snapshot(snap, logger, t)
 
-	ctx.last_snapshot = snap
-	
+	ctx.last_snapshot = snap	
+
 func _validate_snapshot(snap: Dictionary, logger: StructuredLogger, t: int) -> void:
 	if snap.is_empty():
 		logger.debug(t, "snapshot.invalid", "Snapshot is empty", {})

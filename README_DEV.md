@@ -9,58 +9,69 @@ This project is intentionally split into:
 ### res://contracts/
 
 ### res://core/
-*Deterministic game logic, services, and models.*
+*Deterministic game logic, services, and models (no UI dependencies).*
 - CampaignSeed.gd
-- *core/state/ — State machines (Flow + Encounter + Actor/Behavior hooks)*
-    - State.gd
-    - StateMachine.gd
-    - *core/state/flow*
-      - FlowContext.gd
-      - FlowStateIds.gd
-      - *core/state/flow/states*
-         - *core/state/flow/states/boot*
-            - FlowSplashState.gd
-            - FlowMainMenuState.gd
-        - *core/state/flow/states/sanctum*
-            - FlowSanctumState.gd
-            - FlowPartyManageState.gd
-            - FLowEchoManageState.gd
-            - FlowRealmSelectState.gd
-            - FlowSummonState.gd
-        - *core/state/flow/states/venture*
-            - FlowEncounterState.gd
-            - FlowStageMapState.gd
-            - FlowStageState.gd
-        - FlowResolveState.gd
-    - *core/state/encounter*
-      - EncounterContext.gd
-      - EncounterResolutionModes.gd
-      - EncounterStateIds.gd
-      - EncounterStateMachine.gd
-      - *core/state/encounter/states*
-         - EncounterSetupState.gd
-         - EncounterBlessingState.gd
-         - EncounterRoundsState.gd
-         - EncounterResolutionState.gd
-         - EncounterAftermathState.gd
-        
 
-- *core/actors/ — Actor model (Echoes, Enemies, Allies, Structures), stats, behaviors, directives*
-- *core/grid/ — Board model, placement rules, movement, distance helpers*
-- *core/log/*
-    - LogFormatter.gd
-    - StructuredLogger.gd
-- *core/combat/ — Combat loop, action resolver, objectives, snapshot builders*
-- *core/realms/ — Realm + Stage models, generator, rewards, progression service*
-- *core/sanctum/ — Sanctum state, roster, summoning, party selection*
-- *core/save/ — Save/load schema, persistence service, future migrations*
-    - SaveSchema.gd
-    - SaveService.gd  
-- *core/config/ — JSON configs + validation helpers*
-    - JsonFileLoader.gd
-    - ConfigValidator.gd
-    - ConfigService.gd
-    
+- core/runtime/ — Authoritative runtime owners (tick + logger + dispatch)
+  - FlowRuntime.gd
+
+- core/state/ — State machine base + Flow/Encounter machines + states
+  - State.gd
+  - StateMachine.gd
+
+  - core/state/flow/
+    - FlowContext.gd
+    - FlowStateIds.gd
+    - FlowStateMachine.gd
+    - core/state/flow/states/
+      - boot/
+        - FlowSplashState.gd
+        - FlowMainMenuState.gd
+      - sanctum/
+        - FlowSanctumState.gd
+        - FlowPartyManageState.gd
+        - FlowEchoManageState.gd
+        - FlowRealmSelectState.gd
+        - FlowSummonState.gd
+      - venture/
+        - FlowEncounterState.gd
+        - FlowStageMapState.gd
+        - FlowStageState.gd
+      - FlowResolveState.gd
+
+  - core/state/encounter/
+    - EncounterContext.gd
+    - EncounterResolutionModes.gd
+    - EncounterStateIds.gd
+    - EncounterStateMachine.gd
+    - core/state/encounter/states/
+      - EncounterSetupState.gd
+      - EncounterBlessingState.gd
+      - EncounterRoundsState.gd
+      - EncounterResolutionState.gd
+      - EncounterAftermathState.gd
+
+- core/economy/ — Economy service + systems (ase, ekwan reserved)
+  - EconomyService.gd
+
+- core/log/
+  - StructuredLogger.gd
+  - LogFormatter.gd
+
+- core/save/ — Save/load schema + persistence (future migrations)
+  - SaveSchema.gd
+  - SaveService.gd
+
+- core/config/ — JSON configs + validation helpers
+  - JsonFileLoader.gd
+  - ConfigValidator.gd
+  - ConfigService.gd
+
+- core/actors/ — Actor model (Echoes, Enemies, Allies, Structures), stats, behaviors, directives
+- core/grid/ — Board model, placement rules, movement, distance helpers
+- core/combat/ — Combat loop, action resolver, objectives, snapshot builders
+- core/realms/ — Realm + Stage models, generator, rewards, progression service
+- core/sanctum/ — Sanctum state, roster, summoning, party selection
 
 ### res://ui/
 Rendering only. UI must be snapshot-driven.
@@ -78,7 +89,12 @@ Game data assets (JSON): actor templates, realm definitions, balance knobs.
 - res://data/realms.json
 
 ### res://tests/
-Determinism + unit-style tests for core modules.
+Lightweight deterministic tests for core modules.
+- Run via Debug Panel: `tests`
+- Tests must not use OS time or RNG.
+
+- CoreTestRunner.gd
+- EconomyTests.gd
 
 ## Core rule
 UI renders **snapshots** and triggers **actions**.
@@ -154,6 +170,20 @@ Saves are JSON and include schema_version for future migrations.
 Game has one single save slot forever. No multiple saves allowed.
 See CONVENTIONS.md for more about saving and making sure it works properly.
 
+## Economy (ECONOMY-001)
+
+Economy is centralized in `res://core/economy/EconomyService.gd`.
+
+MVP rules:
+- Ase is the primary currency.
+- Ekwan is present as a reserved/inert field (default 0) for future systems (post-MVP).
+- All balance mutations must go through EconomyService (single choke point).
+- Sanctum snapshots surface:
+  - `ase_balance` (int)
+  - `ekwan_balance` (int, reserved)
+
+Accrual / offline accumulation is NOT implemented in ECONOMY-001.
+(See ECONOMY-002 for the planned online/offline accrual rules from the GDD.)
 
 ## Structured Logging (CORE-004)
 
@@ -176,6 +206,22 @@ Key rules:
 
 The UI may format logs for readability (see LogFormatter), but the stored log structure must remain JSON-safe and deterministic.
 
+---
+## Debug Panel commands (dev tooling)
+
+The Debug Panel is a dev-only helper for running core tests and mutating balances during development.
+Commands are logged as `debug.cmd.*` events with `t:-` (outside simulation tick space).
+
+Available commands:
+- `tests` — run core test suite
+- `ase show`
+- `ase add <amount> [reason...]`
+- `ase spend <amount> [reason...]`
+- `ekwan show`
+- `ekwan add <amount> [reason...]`
+- `ekwan spend <amount> [reason...]`
+
+Note: these commands must not advance simulation tick and must not introduce non-deterministic behavior.
 ---
 
 ## Snapshot Emission Model (STATE-004)

@@ -29,6 +29,10 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"state": "flow.splash",
 			"context": {}
 		},
+		"economy": {
+			"ase": 0,
+			"ekwan": 0
+		},
 		"sanctum": {
 			"ase": 0,
 			"roster": [],

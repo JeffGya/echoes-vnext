@@ -1,5 +1,8 @@
 res://ui/Approot.tscn
+res://core/save/SaveService.gd
+res://core/save/SaveSchema.gd
+res://core/economy/EconomyService.gd
+res://core/log/LogFormatter.gd
 res://core/runtime/FlowRuntime.gd
 res://ui/AppRoot.gd
 res://core/state/flow/FlowStateMachine.gd
-res://ui/UISnapshotRenderer.gd

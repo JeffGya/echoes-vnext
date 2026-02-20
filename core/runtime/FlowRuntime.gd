@@ -117,6 +117,12 @@ func dispatch(action: Dictionary) -> Dictionary:
 	_log_snapshot_emitted(t, out, "dispatch")
 	return out
 
+func get_save_data() -> Dictionary:
+	return flow_ctx.save_data
+
+func get_tick() -> int:
+	return int(flow_ctx.sim_tick)
+
 func _ensure_encounter_started(t: int) -> void:
 	if str(flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.ENCOUNTER:
 		return

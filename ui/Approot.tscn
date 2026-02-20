@@ -30,17 +30,23 @@ layout_mode = 2
 size_flags_vertical = 0
 text = "Echoes vNext"
 
-[node name="SnapshotView" type="RichTextLabel" parent="HSplitContainer/LeftPanel"]
-unique_name_in_owner = true
+[node name="ScrollContainer" type="ScrollContainer" parent="HSplitContainer/LeftPanel"]
 layout_mode = 2
 size_flags_vertical = 3
-theme_override_font_sizes/normal_font_size = 16
+follow_focus = true
+
+[node name="SnapshotView" type="RichTextLabel" parent="HSplitContainer/LeftPanel/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_font_sizes/normal_font_size = 32
 fit_content = true
 
 [node name="ActionsContainer" type="VBoxContainer" parent="HSplitContainer/LeftPanel"]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_vertical = 3
+size_flags_vertical = 8
 
 [node name="DebugPanel" type="VBoxContainer" parent="HSplitContainer"]
 layout_mode = 2
@@ -51,10 +57,16 @@ script = ExtResource("2_ism07")
 layout_mode = 2
 text = "Debug"
 
-[node name="DebugOuput" type="RichTextLabel" parent="HSplitContainer/DebugPanel"]
-unique_name_in_owner = true
+[node name="ScrollContainer" type="ScrollContainer" parent="HSplitContainer/DebugPanel"]
 layout_mode = 2
 size_flags_vertical = 3
+
+[node name="DebugOuput" type="RichTextLabel" parent="HSplitContainer/DebugPanel/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_font_sizes/normal_font_size = 24
 
 [node name="DebugInputRow" type="HBoxContainer" parent="HSplitContainer/DebugPanel"]
 layout_mode = 2

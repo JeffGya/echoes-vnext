@@ -8,7 +8,12 @@
 
 ...
 
-## Structured Logging (CORE-004)
+## Tests (res://tests/)
+We maintain lightweight, deterministic core tests under `res://tests/`.
+- Tests must not use OS time or RNG.
+- Tests should be runnable via the Debug Panel command: `tests`.
+
+## Structured Logging
 
 Echoes vNext uses a deterministic StructuredLogger located in `res://core/log/StructuredLogger.gd`.
 
@@ -26,6 +31,12 @@ Key rules:
 - Core systems must not use `print()` for meaningful events.
 - All state transitions must log via `state.transition`.
 - Event types must be namespaced (e.g., `save.load`, `combat.attack`).
+
+Canonical event namespaces (MVP):
+- save.* (e.g., save.load, save.write, save.schema.repair)
+- state.transition (required)
+- economy.* (see below)
+- debug.cmd.* (dev tooling; outside sim tick space)
 
 The UI may format logs for readability (see LogFormatter), but the stored log structure must remain JSON-safe and deterministic.
 ---
@@ -143,6 +154,13 @@ Shape:
 }
 
 Note: Some Flow states may act as **wrapper snapshots**.
+
+### Snapshot: Sanctum economy fields (ECONOMY-001)
+Sanctum snapshots must surface economy balances for UI display (UI reads snapshot only).
+
+Snapshot.data keys:
+- ase_balance: int
+- ekwan_balance: int   (reserved / inert in MVP, but visible)
 
 - Example: `flow.encounter` wraps the current Encounter phase snapshot inside `data`.
 - In that case, UI should treat `snapshot.data` as the *inner* snapshot (e.g. `encounter.setup`) and may need to read UI actions from `snapshot.data.actions` instead of `snapshot.actions`.
@@ -266,8 +284,11 @@ Rules:
 ---
 
 ### Deterministic Accrual at Sanctioned Boundaries
+NOTE (design conflict to resolve in ECONOMY-002):
+This section currently prohibits offline accumulation for now. The GDD explicitly requires offline accumulation (at a lower rate than online).
+Until ECONOMY-002 is implemented, ECONOMY-001 does NOT implement accrual; EconomyService remains a balance ledger only. For accumulation later we want to adhere to the suggestions and calculations in the GDD that does require a live counter of ase being counted. We need to determine how we deal with that in a deterministic safe way. It is more important that the game feels alive and in the moment.
+We will update this section during ECONOMY-002 to align with the chosen source of truth.
 
-Echoes vNext does NOT use OS time, wall-clock time, or real-time accumulation for economy or emotion systems.
 
 All accrual, drift, or periodic effects must be deterministic and applied only at sanctioned Flow boundaries.
 
@@ -405,6 +426,17 @@ Every log entry must be a JSON-safe Dictionary with this shape:
 ### Timestamp (`t`)
 `t` is a deterministic simulation tick provided by the caller.
 
+### Tooling logs outside sim time (DebugCmd)
+Some dev tooling events are logged outside the simulation tick space using a negative tick.
+
+- Debug command events use `t = -1` (rendered as `t:-` by LogFormatter).
+- These events are NOT simulation progression and must not consume sim ticks.
+
+Canonical types:
+- debug.cmd.in   (payload: { cmd })
+- debug.cmd.out  (payload: { line })
+- debug.cmd.err  (payload: { line })
+
 - The logger does NOT generate timestamps.
 - The logger does NOT call OS time APIs.
 - For early foundation work, `t` comes from a temporary `sim_tick` owned by AppRoot.
@@ -423,5 +455,26 @@ Every log entry must be a JSON-safe Dictionary with this shape:
 - Core services (save, flow, combat, grid, actors) must log meaningful state changes.
 - Logger level filtering (off/info/debug) must not affect simulation determinism.
 - Log formatting is a UI concern; stored logs must remain structured dictionaries.
+
+### Economy log event types (ECONOMY-001)
+Economy changes must be explainable and replay-friendly. Use these canonical types:
+
+- economy.ase.add
+- economy.ase.spend
+- economy.ase.add_denied (invalid amount)
+- economy.ase.spend_denied (insufficient funds)
+
+Reserved / symmetric (Ekwan is inert in MVP but present):
+- economy.ekwan.add
+- economy.ekwan.spend
+- economy.ekwan.add_denied
+- economy.ekwan.spend_denied
+
+Payload rules:
+- Must include: amount, before, after (if successful), reason
+- Must be JSON-safe (no Nodes/Objects)
+- Severity policy:
+  - emit as info normally
+  - emit as debug when logger level is DEBUG (to include "reason" in formatted output)
 
 See README_DEV.md → Structured Logging (CORE-004) for architectural intent and usage guidelines.

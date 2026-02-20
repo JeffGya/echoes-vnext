@@ -52,7 +52,133 @@ func _on_ui_action_selected(action: Dictionary) -> void:
 	_flush_logs_to_console()
 	
 func _on_debug_command(command: String) -> void:
-	# For now: echo + placeholder.
-	# Later: this will route into acting dispatch / debug commands.
-	# We keep the behaviour explicit and centralized.
-	print("[DEBUG CMD]", command)
+	var cmd := command.strip_edges()
+	_log_debug_cmd_in(cmd)
+	if cmd.is_empty():
+		return
+
+	var parts := cmd.split(" ", false)
+	if parts.is_empty():
+		return
+
+	var head := parts[0].to_lower()
+
+	# -------------------------
+	# tests
+	# -------------------------
+	if head == "tests" or head == "test":
+		_run_tests(parts)
+		return
+
+	# -------------------------
+	# economy shortcuts
+	# -------------------------
+	if head == "ase" or head == "ekwan":
+		_run_currency_command(head, parts)
+		return
+
+	_debug_print("Unknown command: " + cmd)
+	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1")
+	
+	_flush_logs_to_console()
+
+func _debug_print(line: String) -> void:
+	debug_panel.output.append_text(line + "\n")
+	_log_debug_cmd_out(line)
+
+func _log_debug_cmd_in(cmd: String) -> void:
+	logger.info(-1, "debug.cmd.in", "Debug command", { "cmd": cmd })
+
+func _log_debug_cmd_out(line: String) -> void:
+	logger.info(-1, "debug.cmd.out", "Debug output", { "line": line })
+	
+func _log_debug_cmd_err(line: String) -> void:
+	logger.info(-1, "debug.cmd.err", "Debug error", { "line": line })
+
+func _run_tests(parts: Array) -> void:
+	# Optional: allow "tests economy" later; for now run all.
+	var runner := CoreTestRunner.new()
+	EconomyTests.register(runner)
+
+	var result: Dictionary = runner.run_all()
+	_debug_print("Tests: %d total, %d passed, %d failed" % [
+		int(result.get("total", 0)),
+		int(result.get("passed", 0)),
+		int(result.get("failed", 0))
+	])
+
+	var results: Array = result.get("results", [])
+	for r in results:
+		var ok := bool(r.get("ok", false))
+		var name := str(r.get("name", "unnamed"))
+		if ok:
+			_debug_print("✅ " + name)
+		else:
+			_debug_print("❌ " + name + " — " + str(r.get("error", "unknown error")))
+			
+	_flush_logs_to_console()
+
+func _run_currency_command(currency: String, parts: Array) -> void:
+	# Usage:
+	#   ase show
+	#   ase add <amount> [reason...]
+	#   ase spend <amount> [reason...]
+	# Same for ekwan.
+	if parts.size() < 2:
+		_debug_print("Usage: %s show | %s add <amount> [reason] | %s spend <amount> [reason]" % [currency, currency, currency])
+		return
+
+	var op := str(parts[1]).to_lower()
+
+	# We need the authoritative save dictionary to mutate.
+	# Add this method in FlowRuntime if it doesn't exist yet: runtime.get_save_data()
+	var save_ref: Dictionary = runtime.get_save_data()
+
+	var econ := EconomyService.new(save_ref)
+
+	# Use runtime tick if available; otherwise fall back to 0 (still deterministic but less informative).
+	var t := 0
+	if runtime.has_method("get_tick"):
+		t = int(runtime.get_tick())
+
+	if op == "show":
+		if currency == "ase":
+			_debug_print("Ase = %d" % econ.get_ase())
+		else:
+			_debug_print("Ekwan = %d" % econ.get_ekwan())
+		return
+
+	if op != "add" and op != "spend":
+		_debug_print("Unknown %s op: %s (use show/add/spend)" % [currency, op])
+		return
+
+	if parts.size() < 3:
+		_debug_print("Missing amount. Example: %s %s 10" % [currency, op])
+		return
+
+	var amount := int(parts[2])
+
+	# Reason: everything after amount joined with spaces; optional.
+	var reason := ""
+	if parts.size() > 3:
+		reason = " ".join(parts.slice(3))
+	else:
+		reason = "debug.%s.%s" % [currency, op]
+
+	if currency == "ase":
+		if op == "add":
+			econ.add_ase(amount, reason, logger, t)
+			_debug_print("Ase now = %d" % econ.get_ase())
+		else:
+			var ok := econ.spend_ase(amount, reason, logger, t)
+			_debug_print("Spend ok = %s | Ase now = %d" % [str(ok), econ.get_ase()])
+	else:
+		if op == "add":
+			econ.add_ekwan(amount, reason, logger, t)
+			_debug_print("Ekwan now = %d" % econ.get_ekwan())
+		else:
+			var ok2 := econ.spend_ekwan(amount, reason, logger, t)
+			_debug_print("Spend ok = %s | Ekwan now = %d" % [str(ok2), econ.get_ekwan()])
+
+	# Optional: if you have a safe “refresh snapshot without transition” method later, call it here.
+	_flush_logs_to_console()

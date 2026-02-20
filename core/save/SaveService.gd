@@ -72,7 +72,11 @@ static func load_from_file(path: String, logger: StructuredLogger = null, t: int
 		push_error(("[SaveService] Save file JSON did not parse into Dictionary: " + path))
 		_log_info(logger, t, "save.load.fail", "Save JSON did not parse into Dictionary", {"path": path})
 		return {}
-		
+	
+	var repaired := _apply_additive_defaults_and_repairs(parsed, logger, t)
+	if repaired:
+		save_to_file(path, parsed, logger, t)
+	
 	if not validate(parsed):
 		_log_info(logger, t, "save.validate.fail", "Save validation failed", {"path": path})
 		return {}
@@ -99,6 +103,52 @@ static func ensure_save_dir_exists(path: String) -> void:
 static func _has_dict_key(d: Dictionary, key:String) -> bool:
 	return d.has(key) and d[key] != null
 		
+static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: StructuredLogger = null, t: int = -1) -> bool:
+	if save == null or save.is_empty():
+		return false
+		
+	var repaired := false
+	var repaired_notes: Array = []
+	
+	# Make sure economy dictionary exists
+	if not save.has("economy") or typeof(save["economy"]) != TYPE_DICTIONARY:
+		# Backfill Ase from legacy location if present (sanctum.ase), otherwise 0
+		var legacy_ase := 0
+		if save.has("sanctum") and typeof(save["sanctum"]) == TYPE_DICTIONARY:
+			var s : Dictionary = save["sanctum"]
+			if s.has("ase") and (typeof(s["ase"]) == TYPE_INT or typeof(s["ase"]) == TYPE_FLOAT):
+				legacy_ase = int(s["ase"])
+				
+		save["economy"] = {
+			"ase": legacy_ase,
+			"ekwan": 0
+		}
+		repaired = true
+		repaired_notes.append("economy has been added and legacy ase has been moved from sanctum.ase. ")
+		
+	var econ : Dictionary = save["economy"]
+	
+	# Make sure ase exist as an int
+	if not econ.has("ase") or (typeof(econ["ase"]) != TYPE_INT and typeof(econ["ase"]) != TYPE_FLOAT):
+		econ["ase"] = 0
+		repaired = true
+		repaired_notes.append("economy.ase set to int default")
+	
+	# Makes sure ekwan exists as an int
+	if not econ.has("ekwan") or (typeof(econ["ekwan"]) != TYPE_INT and typeof(econ["ekwan"]) != TYPE_FLOAT):
+		econ["ekwan"] = 0
+		repaired = true
+		repaired_notes.append("economy.ekwan set to int default")
+		
+	# Get structured log if anything was repaired (uses injected t)
+	if repaired:
+		_log_info(logger, t, "save.schema.repair", "Applied additive save schema repairs", {
+			"notes": repaired_notes,
+			"schema_version": int(save.get("schema_version", 0))
+		})
+	
+	return repaired
+	
 static func validate(data: Dictionary) -> bool:
 	if data.is_empty():
 		return false
@@ -120,7 +170,7 @@ static func validate(data: Dictionary) -> bool:
 		return false
 		
 	# Required top-level keys
-	for k in ["meta", "campaign", "flow", "sanctum"]:
+	for k in ["meta", "campaign", "flow", "sanctum", "economy"]:
 		if not data.has(k) or typeof(data[k]) != TYPE_DICTIONARY:
 			push_error("[SaveService] Invalid save: missing or invalid top-level key: " + k)
 			return false
@@ -135,5 +185,3 @@ static func validate(data: Dictionary) -> bool:
 		return false
 		
 	return true
-	
-	
