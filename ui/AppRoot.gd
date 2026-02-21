@@ -4,10 +4,13 @@ extends Control
 @onready var renderer: UISnapshotRenderer = %UISnapshotRenderer
 @onready var debug_panel: DebugPanel = $HSplitContainer/DebugPanel
 @onready var actions_container: Control = %ActionsContainer
+@onready var econ_bank_timer: Timer = $EconBankTimer
 
 var runtime: FlowRuntime
 
 var _last_log_index: int = 0
+
+var _econ_timer_started: bool = false
 
 # current_snapshot to be deleted after STATE-002 has been implemented properly.
 var current_snapshot: Dictionary = {}
@@ -25,6 +28,8 @@ func _ready():
 	renderer.bind_view(snapshot_view, actions_container)
 	renderer.action_selected.connect(_on_ui_action_selected)
 	
+
+	
 	logger = StructuredLogger.new()
 	# TEMP: debug by default until DebugPanel controls log level
 	logger.set_level("debug")
@@ -33,12 +38,45 @@ func _ready():
 	runtime = FlowRuntime.new(logger, config_service)
 	var snap := runtime.boot()
 	renderer.render(snap)
-	_flush_logs_to_console()
+	
+	var interval := _get_sanctum_bank_interval_seconds()
+	econ_bank_timer.wait_time = float(interval)
+	econ_bank_timer.timeout.connect(_on_econ_bank_timer_timeout)
+	_maybe_start_econ_timer_from_snapshot(snap)
+	_maybe_stop_econ_timer_from_snapshot(snap)
 	
 	# Connect debug panel to AppRoot
 	debug_panel.command_submitted.connect(_on_debug_command)
 	
-	#_run_boot()
+	_flush_logs_to_console()
+
+# Economy bank timer.
+func _on_econ_bank_timer_timeout() -> void:
+	# Capture authoritative balance BEFORE settle
+	var save_ref: Dictionary = runtime.get_save_data()
+	var econ_before := EconomyService.new(save_ref)
+	var before := econ_before.get_ase()
+
+	# Perform settlement
+	_dispatch_settle_now("bank.interval")
+
+	# Read authoritative balance AFTER settle
+	var econ_after := EconomyService.new(runtime.get_save_data())
+	var after := econ_after.get_ase()
+
+	var delta := after - before
+
+	_debug_print("[bank.interval] +%d Ase → total = %d" % [delta, after])
+
+	_flush_logs_to_console()
+	
+func _get_sanctum_bank_interval_seconds() -> int:
+	var balance: Dictionary = config_service.get_balance()
+	var data_v = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var econ_v = data.get("economy", {})
+	var econ_cfg: Dictionary = econ_v as Dictionary if econ_v is Dictionary else {}
+	return int(econ_cfg.get("sanctum_bank_interval_seconds", 300))
 
 func _flush_logs_to_console() -> void:
 	var logs := logger.get_logs()
@@ -49,7 +87,38 @@ func _flush_logs_to_console() -> void:
 func _on_ui_action_selected(action: Dictionary) -> void:
 	var snap := runtime.dispatch(action)
 	renderer.render(snap)
+	_maybe_start_econ_timer_from_snapshot(snap)
+	_maybe_stop_econ_timer_from_snapshot(snap)
 	_flush_logs_to_console()
+
+	
+func _maybe_start_econ_timer_from_snapshot(snap: Dictionary) -> void:
+	if _econ_timer_started:
+		return
+
+	var snap_type := str(snap.get("type", ""))
+
+	# Only start once we’re past splash/menu.
+	if snap_type == "flow.splash" or snap_type == "flow.main_menu" or snap_type == "":
+		return
+
+	_econ_timer_started = true
+	econ_bank_timer.start()
+
+	logger.debug(-1, "economy.bank_timer.started", "Bank timer started", {
+		"snapshot_type": snap_type,
+		"interval_seconds": econ_bank_timer.wait_time
+	})
+	
+func _maybe_stop_econ_timer_from_snapshot(snap: Dictionary) -> void:
+	if not _econ_timer_started:
+		return
+
+	var snap_type := str(snap.get("type", ""))
+	if snap_type == "flow.main_menu" or snap_type == "flow.splash":
+		_econ_timer_started = false
+		econ_bank_timer.stop()
+		logger.debug(-1, "economy.bank_timer.stopped", "Bank timer stopped", { "snapshot_type": snap_type })
 	
 func _on_debug_command(command: String) -> void:
 	var cmd := command.strip_edges()
@@ -94,6 +163,17 @@ func _log_debug_cmd_out(line: String) -> void:
 	
 func _log_debug_cmd_err(line: String) -> void:
 	logger.info(-1, "debug.cmd.err", "Debug error", { "line": line })
+
+func _dispatch_settle_now(source: String) -> void:
+	var now_unix := int(Time.get_unix_time_from_system())
+	var settle_action: Dictionary = {
+		"type": "economy.settle_time",
+		"now_unix": now_unix,
+		"source": source
+	}
+	# We don't need the returned snapshot right now for debug,
+	# but dispatch ensures Core settles and logs deterministically.
+	runtime.dispatch(settle_action)
 
 func _run_tests(parts: Array) -> void:
 	# Optional: allow "tests economy" later; for now run all.
@@ -143,6 +223,7 @@ func _run_currency_command(currency: String, parts: Array) -> void:
 
 	if op == "show":
 		if currency == "ase":
+			_dispatch_settle_now("debug.before_show")
 			_debug_print("Ase = %d" % econ.get_ase())
 		else:
 			_debug_print("Ekwan = %d" % econ.get_ekwan())
@@ -170,6 +251,7 @@ func _run_currency_command(currency: String, parts: Array) -> void:
 			econ.add_ase(amount, reason, logger, t)
 			_debug_print("Ase now = %d" % econ.get_ase())
 		else:
+			_dispatch_settle_now("debug.before_spend")
 			var ok := econ.spend_ase(amount, reason, logger, t)
 			_debug_print("Spend ok = %s | Ase now = %d" % [str(ok), econ.get_ase()])
 	else:

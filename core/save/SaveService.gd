@@ -109,6 +109,7 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 		
 	var repaired := false
 	var repaired_notes: Array = []
+	var now_unix := int(Time.get_unix_time_from_system())
 	
 	# Make sure economy dictionary exists
 	if not save.has("economy") or typeof(save["economy"]) != TYPE_DICTIONARY:
@@ -121,10 +122,14 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 				
 		save["economy"] = {
 			"ase": legacy_ase,
-			"ekwan": 0
+			"ekwan": 0,
+
+			# ECONOMY-002 guards
+			"last_settle_unix": now_unix,
+			"last_offline_unix": now_unix
 		}
 		repaired = true
-		repaired_notes.append("economy has been added and legacy ase has been moved from sanctum.ase. ")
+		repaired_notes.append("economy added (ase migrated from sanctum.ase) + added accrual guard timestamps")
 		
 	var econ : Dictionary = save["economy"]
 	
@@ -139,7 +144,45 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 		econ["ekwan"] = 0
 		repaired = true
 		repaired_notes.append("economy.ekwan set to int default")
-		
+	
+	# Make sure last_settle_unix exists
+	if not econ.has("last_settle_unix"):
+		econ["last_settle_unix"] = now_unix
+		repaired = true
+		repaired_notes.append("economy.last_settle_unix set to unix default")
+	else:
+		var v = econ["last_settle_unix"]
+		var vi := int(v)
+		if typeof(v) == TYPE_FLOAT:
+			# Only repair if the float is not already an integer value (i.e., has decimals)
+			if v != float(vi):
+				econ["last_settle_unix"] = vi
+				repaired = true
+				repaired_notes.append("economy.last_settle_unix normalized float->int (fractional)")
+		elif typeof(v) != TYPE_INT:
+			econ["last_settle_unix"] = vi
+			repaired = true
+			repaired_notes.append("economy.last_settle_unix repaired invalid type")
+	
+	# Make sure last_offline_unix exists
+	if not econ.has("last_offline_unix"):
+		econ["last_offline_unix"] = now_unix
+		repaired = true
+		repaired_notes.append("economy.last_offline_unix set to unix default")
+	else:
+		var v = econ["last_offline_unix"]
+		var vi := int(v)
+		if typeof(v) == TYPE_FLOAT:
+			# Only repair if the float is not already an integer value (i.e., has decimals)
+			if v != float(vi):
+				econ["last_offline_unix"] = vi
+				repaired = true
+				repaired_notes.append("economy.last_offline_unix normalized float->int (fractional)")
+		elif typeof(v) != TYPE_INT:
+			econ["last_offline_unix"] = vi
+			repaired = true
+			repaired_notes.append("economy.last_offline_unix repaired invalid type")
+			
 	# Get structured log if anything was repaired (uses injected t)
 	if repaired:
 		_log_info(logger, t, "save.schema.repair", "Applied additive save schema repairs", {

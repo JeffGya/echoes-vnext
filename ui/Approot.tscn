@@ -85,3 +85,5 @@ text = "Confirm"
 [node name="UISnapshotRenderer" type="Node" parent="."]
 unique_name_in_owner = true
 script = ExtResource("2_fv0kl")
+
+[node name="EconBankTimer" type="Timer" parent="."]

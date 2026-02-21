@@ -11,7 +11,7 @@ const DEFAULT_SAVE_PATH: String = "user://saves/slot_01.json"
 static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> Dictionary:
 	# Creates a new save dictionary that conforms to the schema.
 	# Keep this stabel and addive over time (avoid breaking changes).
-	var now := Time.get_unix_time_from_system()
+	var now := int(Time.get_unix_time_from_system())
 
 	return {
 		"schema_version": SCHEMA_VERSION,
@@ -31,7 +31,11 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 		},
 		"economy": {
 			"ase": 0,
-			"ekwan": 0
+			"ekwan": 0,
+			
+			# ECONOMY-002 guards
+			"last_settle_unix": now,
+			"last_offline_unix": now
 		},
 		"sanctum": {
 			"ase": 0,

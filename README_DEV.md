@@ -183,7 +183,11 @@ MVP rules:
   - `ekwan_balance` (int, reserved)
 
 Accrual / offline accumulation is NOT implemented in ECONOMY-001.
-(See ECONOMY-002 for the planned online/offline accrual rules from the GDD.)
+
+### ECONOMY-002
+- Offline accrual is applied when the player presses Continue (session start), not at boot/splash.
+-	FlowRuntime owns the save flush via save_request (single choke point).
+-	Online “bank timer” settlements do not save. (we shal see if after gameplay tests it makes sense to still do that for now we follow this.)
 
 ## Structured Logging (CORE-004)
 

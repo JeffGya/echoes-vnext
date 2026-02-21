@@ -6,3 +6,5 @@ res://core/log/LogFormatter.gd
 res://core/runtime/FlowRuntime.gd
 res://ui/AppRoot.gd
 res://core/state/flow/FlowStateMachine.gd
+res://core/economy/EconomyAccrualService.gd
+res://data/balance.json

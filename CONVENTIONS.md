@@ -283,57 +283,120 @@ Rules:
 
 ---
 
-### Deterministic Accrual at Sanctioned Boundaries
-NOTE (design conflict to resolve in ECONOMY-002):
-This section currently prohibits offline accumulation for now. The GDD explicitly requires offline accumulation (at a lower rate than online).
-Until ECONOMY-002 is implemented, ECONOMY-001 does NOT implement accrual; EconomyService remains a balance ledger only. For accumulation later we want to adhere to the suggestions and calculations in the GDD that does require a live counter of ase being counted. We need to determine how we deal with that in a deterministic safe way. It is more important that the game feels alive and in the moment.
-We will update this section during ECONOMY-002 to align with the chosen source of truth.
+### Economy Accrual & Settlement Model (ECONOMY-002)
+Echoes vNext uses a settlement-based economy model.
 
+### Canon Principle
+- Canon source: GDD defines the intended spirit and pacing of Ase (time invested + sanctum vitality). vNext defines the architecture to implement it safely.
+- If CONVENTIONS and the GDD disagree on economy pacing (or any other rule), we prefer to default to the GDD and document the exception here.
+-	The Core simulation is the authoritative ledger.
+-	The UI may predict, but Core commits.
+-	Ase represents time invested and sanctum vitality (see GDD).
+-	Economy must feel alive without sacrificing explainability.
 
-All accrual, drift, or periodic effects must be deterministic and applied only at sanctioned Flow boundaries.
+#### Online Accrual (Live Settlement Model)
+Ase accrues continuously while the game is running, but it is not applied every frame.
 
-#### Rules
+Instead, Core uses a settlement model:
 
-1) No OS time
-- Core must never call OS time APIs (e.g., DateTime, system clock, unix time) for progression.
-- No "time since last login" logic.
-- No background/offline accumulation.
+##### Settlement Action
+Core exposes an internal action:
+economy.settle_time { now_unix, source }
 
-2) Accrual is boundary-applied, not continuous
-- Economy or Emotion drift does NOT run every frame.
-- It must be executed explicitly at approved boundaries owned by Flow.
+Settlement:
+1.	Computes elapsed seconds since economy.last_settle_unix
+2.	Applies deterministic accrual math
+3.	Updates economy.last_settle_unix
+4.	Emits structured logs
+5.	Does NOT trigger a save
 
-3) Sanctioned boundaries
-Accrual/drift may only be applied at the same boundaries approved for system-driven saves:
-- New game initialization
-- After summoning
-- After selecting a realm
-- Entering a stage
-- After a stage objective resolves
-- Returning to Sanctum
+##### Settlement and timer
+Settlement must occur:
+-	Before any Ase spend
+-	At sanctioned Flow boundaries
+-	Start bank timer when the “run/session starts” (i.e., first non-menu snapshot)
+-	Timer keeps running while the app is running (online)
+-	We don’t tie it to Sanctum, because Sanctum isn’t guaranteed to be first forever
+-	Sanctum is where it’s most visible, but accrual is global
+This allows the game to feel alive while keeping Core authoritative.
 
-4) Use sim_tick deltas
-- Each system that applies accrual must persist a `last_applied_tick` in save.
-- When applying:
-  - `delta_ticks = current_sim_tick - last_applied_tick`
-  - Apply bounded, deterministic math.
-  - Update `last_applied_tick`.
-- If `last_applied_tick == current_sim_tick`, the operation must be a deterministic no-op.
+#### UI Prediction Rules
+The UI may:
+-	Display approximate rate hints (e.g. “~4 Ase/min”)
+-	Animate predicted growth
+-	Use last_settle_unix from snapshot for smooth display
 
-5) Exactly-once per boundary
-- Accrual must be safe against duplicate calls within the same tick.
-- Systems must guard against double-application.
+The UI must NOT:
+-	Commit Ase values
+-	Pass earned amounts to Core
+-	Promise exact deltas to the player
 
-6) No cascading saves
-- Applying accrual must not trigger multiple saves within the same tick.
-- Flow remains the authoritative owner of when a save actually occurs.
+Prediction contract:
+- Sanctum snapshots must include `economy.last_settle_unix` and an approximate `ase_rate_hint` so UI prediction uses Core-provided parameters (reduces mismatch risk).
 
-This rule exists to preserve determinism, replayability, and simulation explainability.
+If UI and Core disagree, Core is authoritative.
+
+#### Offline Accrual (Session start (flow.continue) after load only)
+Offline accrual is allowed per GDD.
+
+Rules:
+-	OS time may be read only when entering a session (on Continue / Start).
+-	Offline accrual applies at most once per session.
+-	Uses economy.last_offline_unix.
+-	Applies a decay curve from 50% → 0 over a capped duration.
+-	Must clamp or penalize time anomalies.
+-	Must log structured details.
+
+Offline accrual must not run during active play.
+
+#### OS Time Policy
+OS time usage is strictly limited:
+
+Allowed:
+-	As an input to economy.settle_time
+-	At boot/load for offline accrual
+
+Forbidden:
+-	Continuous OS-time-driven logic in core loops
+-	Frame-based time accumulation
+-	Background accrual outside settlement model
+
+All OS time inputs must be:
+-	Validated
+-	Clamped
+-	Logged
+
+Time validation rule:
+- Core never trusts timestamps blindly. It must detect negative deltas and extreme forward jumps, apply clamps/penalties, and log `economy.time_anomaly`.
+
+#### Save Discipline
+Settlement must:
+-	Mutate in-memory save state only
+-	Not trigger automatic saves
+-	Respect Flow’s save trigger policy
+
+Exactly-once behavior is enforced via:
+-	economy.last_settle_unix
+-	economy.last_offline_unix
+
+Save flush
+-	Core systems may set flow_ctx.save_request = true
+-	FlowRuntime dispatch is the single save choke point
+-	At most one save per dispatch tick
+
+#### Determinism Philosophy
+Economy accrual is deterministic relative to captured inputs.
+
+Given:
+-	Identical save state
+-	Identical settlement timestamps
+-	Identical multiplier inputs
+
+The resulting Ase balance must be identical.
 
 ---
 
 ### First Boot Branching
-
 Main Menu → Continue must branch deterministically:
 
 - If first boot: initialize minimal save state and proceed to Sanctum.
@@ -345,7 +408,6 @@ Future expansions (cutscene/tutorial) must remain FlowState transitions, not UI 
 ---
 
 ## Encounter Terminology (Objective vs Encounter Resolution)
-
 To avoid confusion between design-level objectives and runtime encounter phases, Echoes vNext uses the following layered model:
 
 Flow (macro)
@@ -469,6 +531,10 @@ Reserved / symmetric (Ekwan is inert in MVP but present):
 - economy.ekwan.spend
 - economy.ekwan.add_denied
 - economy.ekwan.spend_denied
+-	economy.offline.apply
+-	economy.offline.noop
+-	economy.offline.skip
+-	economy.time_anomaly
 
 Payload rules:
 - Must include: amount, before, after (if successful), reason
