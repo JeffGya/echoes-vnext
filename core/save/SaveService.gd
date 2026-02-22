@@ -113,15 +113,9 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 	
 	# Make sure economy dictionary exists
 	if not save.has("economy") or typeof(save["economy"]) != TYPE_DICTIONARY:
-		# Backfill Ase from legacy location if present (sanctum.ase), otherwise 0
-		var legacy_ase := 0
-		if save.has("sanctum") and typeof(save["sanctum"]) == TYPE_DICTIONARY:
-			var s : Dictionary = save["sanctum"]
-			if s.has("ase") and (typeof(s["ase"]) == TYPE_INT or typeof(s["ase"]) == TYPE_FLOAT):
-				legacy_ase = int(s["ase"])
-				
+		# Legacy backfill is removed. sanctum.ase is properly ignored from now on.
 		save["economy"] = {
-			"ase": legacy_ase,
+			"ase": 0,
 			"ekwan": 0,
 
 			# ECONOMY-002 guards
@@ -129,7 +123,7 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			"last_offline_unix": now_unix
 		}
 		repaired = true
-		repaired_notes.append("economy added (ase migrated from sanctum.ase) + added accrual guard timestamps")
+		repaired_notes.append("economy added (ase defaulted to 0) + added accrual guard timestamps")
 		
 	var econ : Dictionary = save["economy"]
 	
@@ -182,14 +176,53 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			econ["last_offline_unix"] = vi
 			repaired = true
 			repaired_notes.append("economy.last_offline_unix repaired invalid type")
-			
+		
+	# ---- Sanctum repairs (SANCTUM-001) ----
+	if not save.has("sanctum") or typeof(save["sanctum"]) != TYPE_DICTIONARY:
+		save["sanctum"] = {
+			# NOTE: sanctum.ase is legacy and ignored.
+			"ase": 0,
+			"roster": [],
+			"active_party_ids": [],
+			"name": "",
+			"name_roll_index": 0
+		}
+		repaired = true
+		repaired_notes.append("sanctum added (roster + active_party_ids defaults; sanctum.ase legacy ignored)")
+	else:
+		var sanctum: Dictionary = save["sanctum"]
+
+		if not sanctum.has("roster") or not (sanctum["roster"] is Array):
+			sanctum["roster"] = []
+			repaired = true
+			repaired_notes.append("sanctum.roster set to array default")
+
+		if not sanctum.has("active_party_ids") or not (sanctum["active_party_ids"] is Array):
+			sanctum["active_party_ids"] = []
+			repaired = true
+			repaired_notes.append("sanctum.active_party_ids set to array default")
+		
+		if not sanctum.has("name") or typeof(sanctum["name"]) != TYPE_STRING:
+			sanctum["name"] = ""
+			repaired = true
+			repaired_notes.append("sanctum.name set to string default")
+
+		if not sanctum.has("name_roll_index") or (typeof(sanctum["name_roll_index"]) != TYPE_INT and typeof(sanctum["name_roll_index"]) != TYPE_FLOAT):
+			sanctum["name_roll_index"] = 0
+			repaired = true
+			repaired_notes.append("sanctum.name_roll_index set to int default")
+		else:
+			# normalize float->int if needed
+			sanctum["name_roll_index"] = int(sanctum["name_roll_index"])
+	
+	
 	# Get structured log if anything was repaired (uses injected t)
 	if repaired:
 		_log_info(logger, t, "save.schema.repair", "Applied additive save schema repairs", {
 			"notes": repaired_notes,
 			"schema_version": int(save.get("schema_version", 0))
 		})
-	
+		
 	return repaired
 	
 static func validate(data: Dictionary) -> bool:

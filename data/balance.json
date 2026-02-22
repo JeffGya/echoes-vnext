@@ -2,7 +2,7 @@
   "schema_version": 1,
   "data": {
 	"economy": {
-	  "ase_online_per_min_base": 2.0,
+	  "ase_online_per_min_base": 1,
 	  "offline_start_factor": 0.5,
 	  "offline_cap_seconds": 28800,
 	  "sanctum_bank_interval_seconds": 300

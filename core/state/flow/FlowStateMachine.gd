@@ -97,14 +97,66 @@ func _rebuild_snapshot(ctx: FlowContext, logger: StructuredLogger, t: int) -> vo
 		var econ: Dictionary = {}
 		if ctx.save_data != null and ctx.save_data.has("economy") and typeof(ctx.save_data["economy"]) == TYPE_DICTIONARY:
 			econ = ctx.save_data["economy"]
+			
+		# SANCTUM-001: Ase rate hint (NOT a balance prediction)
+		# Used only for UI text like: "~ 1.2 Ase gathered p/h"
+		var ase_per_min_base := 0.0
+		var multiplier := 1.0 # seam for later emotion metrics
+
+		if ctx.config_service != null:
+			var balance: Dictionary = ctx.config_service.get_balance()
+			if balance.has("data") and typeof(balance["data"]) == TYPE_DICTIONARY:
+				var bal_data: Dictionary = balance["data"]
+				if bal_data.has("economy") and typeof(bal_data["economy"]) == TYPE_DICTIONARY:
+					var econ_cfg: Dictionary = bal_data["economy"]
+					ase_per_min_base = float(econ_cfg.get("ase_online_per_min_base", 0.0))
+
 
 		data["ase_balance"] = int(econ.get("ase", 0))
 		data["ekwan_balance"] = int(econ.get("ekwan", 0))
+		# per_hour = per_min * 60
+		data["ase_rate_per_hour_hint"] = ase_per_min_base * 60.0 * multiplier
+		
+		
+		# SANCTUM-001: surface sanctum hub info (snapshot-only UI contract)
+		var sanctum: Dictionary = {}
+		if ctx.save_data != null and ctx.save_data.has("sanctum") and typeof(ctx.save_data["sanctum"]) == TYPE_DICTIONARY:
+			sanctum = ctx.save_data["sanctum"]
+			
+		var roster: Array = []
+		if sanctum.has("roster") and sanctum["roster"] is Array:
+			roster = sanctum["roster"]
+			
+		var active_party_ids: Array = []
+		if sanctum.has("active_party_ids") and sanctum["active_party_ids"] is Array:
+			active_party_ids = sanctum["active_party_ids"]
+		
+		# Sanctum name
+		if ctx.save_data != null and ctx.save_data.has("sanctum") and typeof(ctx.save_data["sanctum"]) == TYPE_DICTIONARY:
+			sanctum = ctx.save_data["sanctum"]
+			
+		var sanctum_name := str(sanctum.get("name", ""))
+		var roll_index := int(sanctum.get("name_roll_index", 0))
+		
+		# Deterministic suggestion (even if already named, harmless)
+		var root_seed := int(ctx.save_data.get("campaign", {}).get("root_seed", 0))
+		var seed := CampaignSeed.new(root_seed)
+		data["sanctum_name_suggested"] = SanctumNameService.suggest(seed, roll_index)
+
+
+		data["sanctum_name"] = sanctum_name
+		data["roster_count"] = roster.size()
+		data["active_party_count"] = active_party_ids.size()
+
+		# Optional: include these only if you want the UI to list them later (out of scope for MVP. Possibly later we can use set parties that can be prepared before.)
+		# data["active_party_ids"] = active_party_ids
 
 	# Enforce snapshot contract (STATE-004 Subtask 5)
 	_validate_snapshot(snap, logger, t)
 
 	ctx.last_snapshot = snap	
+
+	
 
 func _validate_snapshot(snap: Dictionary, logger: StructuredLogger, t: int) -> void:
 	if snap.is_empty():

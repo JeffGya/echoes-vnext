@@ -1,0 +1,131 @@
+[gd_scene load_steps=2 format=3 uid="uid://bu3o3n582e5j2"]
+
+[ext_resource type="Script" uid="uid://cb8hn28k3qlg6" path="res://ui/screens/SanctumScreen.gd" id="1_55k7r"]
+
+[node name="SanctumScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("1_55k7r")
+
+[node name="NameModal" type="Control" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="PanelContainer" type="PanelContainer" parent="NameModal"]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="MarginContainer" type="MarginContainer" parent="NameModal/PanelContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="VBoxContainer" type="VBoxContainer" parent="NameModal/PanelContainer/MarginContainer"]
+layout_mode = 2
+
+[node name="ModalTitle" type="Label" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Name your Sanctum. "
+
+[node name="ModalSubtitle" type="Label" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Choose wisely! You can only name your Sanctum once."
+
+[node name="NameEdit" type="LineEdit" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="RerollButton" type="Button" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Reroll"
+
+[node name="ConfirmButton" type="Button" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Choose"
+
+[node name="FoldableContainer" type="FoldableContainer" parent="."]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -156.0
+offset_top = -31.0
+grow_horizontal = 0
+grow_vertical = 0
+folded = true
+title = "Sanctum Actions"
+title_position = 1
+
+[node name="VBoxContainer" type="VBoxContainer" parent="FoldableContainer"]
+visible = false
+layout_mode = 2
+
+[node name="Buttons" type="VBoxContainer" parent="FoldableContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="PanelContainer" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -145.0
+offset_bottom = 109.0
+grow_horizontal = 0
+
+[node name="MarginContainer" type="MarginContainer" parent="PanelContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="VBoxContainer" type="VBoxContainer" parent="PanelContainer/MarginContainer"]
+layout_mode = 2
+
+[node name="TitleLabel" type="Label" parent="PanelContainer/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "My Sanctum"
+
+[node name="AseLabel" type="Label" parent="PanelContainer/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Ase: 500"
+
+[node name="AseDeltaLabel" type="Label" parent="PanelContainer/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = " "
+
+[node name="AseRateLabel" type="Label" parent="PanelContainer/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="EchoCountLabel" type="Label" parent="PanelContainer/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "echo count  50"

@@ -116,6 +116,73 @@ func dispatch(action: Dictionary) -> Dictionary:
 		# ---- Economy ----
 		"economy.settle_time":
 			_handle_economy_settle_time(action, t)
+			
+		"economy.ase.add":
+			var amount := int(action.get("amount", 0))
+			var reason := str(action.get("reason", "economy.ase.add"))
+			econ.add_ase(amount, reason, logger, t)
+			flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+		"economy.ase.spend":
+			# settle first (same as you do in debug.before_spend)
+			var now_unix := int(action.get("now_unix", 0))
+			if now_unix > 0:
+				_handle_economy_settle_time({ "type":"economy.settle_time", "now_unix": now_unix, "source": "debug.before_spend" }, t)
+
+			var amount := int(action.get("amount", 0))
+			var reason := str(action.get("reason", "economy.ase.spend"))
+			econ.spend_ase(amount, reason, logger, t)
+			# include ok in snapshot? not needed now; debug prints it
+			flow_machine.refresh_snapshot(flow_ctx, logger, t)
+		
+		# ---- Sanctum ----
+		"sanctum.name.reroll":
+			if not flow_ctx.save_data.has("sanctum") or not (flow_ctx.save_data["sanctum"] is Dictionary):
+				flow_ctx.save_data["sanctum"] = {}
+
+			var sanctum: Dictionary = flow_ctx.save_data["sanctum"] as Dictionary
+			var idx := int(sanctum.get("name_roll_index", 0)) + 1
+			sanctum["name_roll_index"] = idx
+
+			# No save request on reroll (no save spam)
+			logger.debug(t, "sanctum.name.reroll", "Rerolled sanctum name suggestion", {
+				"roll_index": idx
+			})
+
+			# IMPORTANT: no transition occurs, so we must refresh snapshot
+			flow_machine.refresh_snapshot(flow_ctx, logger, t)
+		
+		"sanctum.name.confirm":
+			if not flow_ctx.save_data.has("sanctum") or not (flow_ctx.save_data["sanctum"] is Dictionary):
+				flow_ctx.save_data["sanctum"] = {}
+
+			var sanctum: Dictionary = flow_ctx.save_data["sanctum"] as Dictionary
+
+			var raw := str(action.get("name", ""))
+			var name := raw.strip_edges()
+
+			# MVP sanitize rules (deterministic, no OS time)
+			if name.length() < 2:
+				name = "Sanctum"
+			if name.length() > 24:
+				name = name.substr(0, 24)
+
+			sanctum["name"] = name
+
+			# Request a save flush (Flow-owned choke point will do it once)
+			flow_ctx.save_request = true
+			if flow_ctx.save_request_reason != "":
+				flow_ctx.save_request_reason += "|sanctum.name.confirm"
+			else:
+				flow_ctx.save_request_reason = "sanctum.name.confirm"
+
+			logger.info(t, "sanctum.name.confirm", "Sanctum name set", {
+				"name": name
+			})
+
+			# IMPORTANT: no transition occurs, so refresh snapshot
+			flow_machine.refresh_snapshot(flow_ctx, logger, t)
+		
 		_:
 			logger.debug(t, "ui.action.unknown", "Unknown action type", { "action": action })
 
@@ -237,6 +304,10 @@ func _handle_economy_settle_time(action: Dictionary, t: int) -> void:
 		"gain": gain,
 		"ase_after": int(econ_data.get("ase", 0)),
 	})
+	
+	# IMPORTANT: settle_time can occur without a flow transition (e.g., Sanctum bank interval),
+	# so we must refresh snapshot so UI updates immediately.
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 	
 func _apply_offline_accrual_if_needed(t: int, source: String) -> int:
 	# Offline accrual must only happen when the player enters the session (flow.continue),

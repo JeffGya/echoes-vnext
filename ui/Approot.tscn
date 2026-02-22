@@ -13,29 +13,89 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_51q3y")
 
-[node name="HSplitContainer" type="HSplitContainer" parent="."]
-layout_mode = 1
+[node name="UISnapshotRenderer" type="Node" parent="."]
+unique_name_in_owner = true
+script = ExtResource("2_fv0kl")
+
+[node name="EconBankTimer" type="Timer" parent="."]
+
+[node name="OverlayRoot" type="CanvasLayer" parent="."]
+
+[node name="DebugOverlay" type="Control" parent="OverlayRoot"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="LeftPanel" type="VBoxContainer" parent="HSplitContainer"]
+[node name="DebugPanel" type="VBoxContainer" parent="OverlayRoot/DebugOverlay"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 966.0
+offset_right = 1920.0
+offset_bottom = 1080.0
+size_flags_horizontal = 3
+script = ExtResource("2_ism07")
+
+[node name="DebugHeader" type="Label" parent="OverlayRoot/DebugOverlay/DebugPanel"]
+layout_mode = 2
+text = "Debug"
+
+[node name="ScrollContainer" type="ScrollContainer" parent="OverlayRoot/DebugOverlay/DebugPanel"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="DebugOuput" type="RichTextLabel" parent="OverlayRoot/DebugOverlay/DebugPanel/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_font_sizes/normal_font_size = 24
+
+[node name="DebugInputRow" type="HBoxContainer" parent="OverlayRoot/DebugOverlay/DebugPanel"]
+layout_mode = 2
+
+[node name="DebugInput" type="LineEdit" parent="OverlayRoot/DebugOverlay/DebugPanel/DebugInputRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Enter debug input"
+
+[node name="DebugSend" type="Button" parent="OverlayRoot/DebugOverlay/DebugPanel/DebugInputRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Confirm"
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_top = 40
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 40
+
+[node name="LeftPanel" type="VBoxContainer" parent="MarginContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="Header" type="Label" parent="HSplitContainer/LeftPanel"]
+[node name="Header" type="Label" parent="MarginContainer/LeftPanel"]
 layout_mode = 2
 size_flags_vertical = 0
 text = "Echoes vNext"
 
-[node name="ScrollContainer" type="ScrollContainer" parent="HSplitContainer/LeftPanel"]
+[node name="ScrollContainer" type="ScrollContainer" parent="MarginContainer/LeftPanel"]
 layout_mode = 2
 size_flags_vertical = 3
 follow_focus = true
 
-[node name="SnapshotView" type="RichTextLabel" parent="HSplitContainer/LeftPanel/ScrollContainer"]
+[node name="SnapshotView" type="RichTextLabel" parent="MarginContainer/LeftPanel/ScrollContainer"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -43,47 +103,12 @@ size_flags_vertical = 3
 theme_override_font_sizes/normal_font_size = 32
 fit_content = true
 
-[node name="ActionsContainer" type="VBoxContainer" parent="HSplitContainer/LeftPanel"]
+[node name="ActionsContainer" type="VBoxContainer" parent="MarginContainer/LeftPanel"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 8
 
-[node name="DebugPanel" type="VBoxContainer" parent="HSplitContainer"]
-layout_mode = 2
-size_flags_horizontal = 3
-script = ExtResource("2_ism07")
-
-[node name="DebugHeader" type="Label" parent="HSplitContainer/DebugPanel"]
-layout_mode = 2
-text = "Debug"
-
-[node name="ScrollContainer" type="ScrollContainer" parent="HSplitContainer/DebugPanel"]
+[node name="ScreenHost" type="Control" parent="MarginContainer"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
-
-[node name="DebugOuput" type="RichTextLabel" parent="HSplitContainer/DebugPanel/ScrollContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-theme_override_font_sizes/normal_font_size = 24
-
-[node name="DebugInputRow" type="HBoxContainer" parent="HSplitContainer/DebugPanel"]
-layout_mode = 2
-
-[node name="DebugInput" type="LineEdit" parent="HSplitContainer/DebugPanel/DebugInputRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-placeholder_text = "Enter debug input"
-
-[node name="DebugSend" type="Button" parent="HSplitContainer/DebugPanel/DebugInputRow"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Confirm"
-
-[node name="UISnapshotRenderer" type="Node" parent="."]
-unique_name_in_owner = true
-script = ExtResource("2_fv0kl")
-
-[node name="EconBankTimer" type="Timer" parent="."]

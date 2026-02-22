@@ -2,9 +2,11 @@ extends Control
 
 @onready var snapshot_view: RichTextLabel = %SnapshotView
 @onready var renderer: UISnapshotRenderer = %UISnapshotRenderer
-@onready var debug_panel: DebugPanel = $HSplitContainer/DebugPanel
+@onready var debug_overlay: Control = %DebugOverlay
+@onready var debug_panel: DebugPanel = %DebugPanel
 @onready var actions_container: Control = %ActionsContainer
 @onready var econ_bank_timer: Timer = $EconBankTimer
+@onready var screen_host: Control = %ScreenHost
 
 var runtime: FlowRuntime
 
@@ -23,12 +25,14 @@ var config_service: ConfigService
 var flow_ctx: FlowContext
 var flow_machine: FlowStateMachine
 
+# Sanctum related variables
+var _sanctum_screen: SanctumScreen
+var _sanctum_scene := preload("res://ui/screens/SanctumScreen.tscn")
+
 func _ready():
 	# Bind renderer to UI elements it can update.
 	renderer.bind_view(snapshot_view, actions_container)
 	renderer.action_selected.connect(_on_ui_action_selected)
-	
-
 	
 	logger = StructuredLogger.new()
 	# TEMP: debug by default until DebugPanel controls log level
@@ -37,7 +41,7 @@ func _ready():
 	config_service = ConfigService.new()
 	runtime = FlowRuntime.new(logger, config_service)
 	var snap := runtime.boot()
-	renderer.render(snap)
+	_render_snapshot(snap)
 	
 	var interval := _get_sanctum_bank_interval_seconds()
 	econ_bank_timer.wait_time = float(interval)
@@ -58,7 +62,8 @@ func _on_econ_bank_timer_timeout() -> void:
 	var before := econ_before.get_ase()
 
 	# Perform settlement
-	_dispatch_settle_now("bank.interval")
+	var snap := _dispatch_settle_now("bank.interval")
+	_render_snapshot(snap)
 
 	# Read authoritative balance AFTER settle
 	var econ_after := EconomyService.new(runtime.get_save_data())
@@ -86,11 +91,11 @@ func _flush_logs_to_console() -> void:
 	
 func _on_ui_action_selected(action: Dictionary) -> void:
 	var snap := runtime.dispatch(action)
-	renderer.render(snap)
+	_render_snapshot(snap)
+	
 	_maybe_start_econ_timer_from_snapshot(snap)
 	_maybe_stop_econ_timer_from_snapshot(snap)
 	_flush_logs_to_console()
-
 	
 func _maybe_start_econ_timer_from_snapshot(snap: Dictionary) -> void:
 	if _econ_timer_started:
@@ -150,6 +155,9 @@ func _on_debug_command(command: String) -> void:
 	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1")
 	
 	_flush_logs_to_console()
+	
+func _toggle_debug_overlay() -> void:
+	debug_overlay.visible = not debug_overlay.visible
 
 func _debug_print(line: String) -> void:
 	debug_panel.output.append_text(line + "\n")
@@ -164,7 +172,14 @@ func _log_debug_cmd_out(line: String) -> void:
 func _log_debug_cmd_err(line: String) -> void:
 	logger.info(-1, "debug.cmd.err", "Debug error", { "line": line })
 
-func _dispatch_settle_now(source: String) -> void:
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		# F1 is consistent. You can add backtick later if you want.
+		if event.keycode == KEY_F1:
+			_toggle_debug_overlay()
+			get_viewport().set_input_as_handled()
+
+func _dispatch_settle_now(source: String) -> Dictionary:
 	var now_unix := int(Time.get_unix_time_from_system())
 	var settle_action: Dictionary = {
 		"type": "economy.settle_time",
@@ -173,7 +188,7 @@ func _dispatch_settle_now(source: String) -> void:
 	}
 	# We don't need the returned snapshot right now for debug,
 	# but dispatch ensures Core settles and logs deterministically.
-	runtime.dispatch(settle_action)
+	return runtime.dispatch(settle_action)
 
 func _run_tests(parts: Array) -> void:
 	# Optional: allow "tests economy" later; for now run all.
@@ -213,7 +228,6 @@ func _run_currency_command(currency: String, parts: Array) -> void:
 	# We need the authoritative save dictionary to mutate.
 	# Add this method in FlowRuntime if it doesn't exist yet: runtime.get_save_data()
 	var save_ref: Dictionary = runtime.get_save_data()
-
 	var econ := EconomyService.new(save_ref)
 
 	# Use runtime tick if available; otherwise fall back to 0 (still deterministic but less informative).
@@ -248,12 +262,27 @@ func _run_currency_command(currency: String, parts: Array) -> void:
 
 	if currency == "ase":
 		if op == "add":
-			econ.add_ase(amount, reason, logger, t)
-			_debug_print("Ase now = %d" % econ.get_ase())
+			var snap := runtime.dispatch({
+				"type": "economy.ase.add",
+				"amount": amount,
+				"reason": reason
+			})
+			_render_snapshot(snap)
+			var econ_after := EconomyService.new(runtime.get_save_data())
+			_debug_print("Ase now = %d" % econ_after.get_ase())
 		else:
-			_dispatch_settle_now("debug.before_spend")
-			var ok := econ.spend_ase(amount, reason, logger, t)
-			_debug_print("Spend ok = %s | Ase now = %d" % [str(ok), econ.get_ase()])
+			var now_unix := int(Time.get_unix_time_from_system())
+			var snap := runtime.dispatch({
+				"type": "economy.ase.spend",
+				"amount": amount,
+				"reason": reason,
+				"now_unix": now_unix
+			})
+			_render_snapshot(snap)
+			
+			var econ_after := EconomyService.new(runtime.get_save_data())
+			_debug_print("Ase now = %d" % econ_after.get_ase())
+			
 	else:
 		if op == "add":
 			econ.add_ekwan(amount, reason, logger, t)
@@ -264,3 +293,29 @@ func _run_currency_command(currency: String, parts: Array) -> void:
 
 	# Optional: if you have a safe “refresh snapshot without transition” method later, call it here.
 	_flush_logs_to_console()
+
+# Snapshot renderer that keeps external screens in mind and snapshots within Approot.
+# Goal is to eventually go to a screen only model and make Approot thinner.
+func _render_snapshot(snap: Dictionary) -> void:
+	var snap_type := str(snap.get("type", ""))
+	
+	if snap_type == "flow.sanctum":
+		# Ensure Sanctum screen exists once
+		if _sanctum_screen == null:
+			_sanctum_screen = _sanctum_scene.instantiate() as SanctumScreen
+			screen_host.add_child(_sanctum_screen)
+			_sanctum_screen.set_dispatch(Callable(self, "_on_ui_action_selected"))
+			
+		# Show bespoke screen; hide gener snapshot UI
+		screen_host.visible = true
+		snapshot_view.visible = false
+		actions_container.visible = false
+		
+		_sanctum_screen.set_snapshot(snap)
+		return
+	
+	# Fallback: existing renderer path for all other states
+	screen_host.visible = false
+	snapshot_view.visible = true
+	actions_container.visible = true
+	renderer.render(snap)

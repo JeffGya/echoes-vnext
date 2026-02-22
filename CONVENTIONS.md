@@ -153,7 +153,16 @@ Shape:
   "data": Dictionary      // state-specific payload
 }
 
+
 Note: Some Flow states may act as **wrapper snapshots**.
+
+### Wrapper snapshots (Flow)
+Some Flow states may act as **wrapper snapshots** and embed an inner snapshot inside `data`.
+
+Example:
+- `flow.encounter` wraps the current Encounter phase snapshot inside `data`.
+- In that case, UI should treat `snapshot.data` as the *inner* snapshot (e.g. `encounter.setup`) and may need to read UI actions from `snapshot.data.actions` instead of `snapshot.actions`.
+- This keeps Flow as the screen owner while allowing Encounter phases to drive their own UI payload.
 
 ### Snapshot: Sanctum economy fields (ECONOMY-001)
 Sanctum snapshots must surface economy balances for UI display (UI reads snapshot only).
@@ -162,21 +171,25 @@ Snapshot.data keys:
 - ase_balance: int
 - ekwan_balance: int   (reserved / inert in MVP, but visible)
 
-- Example: `flow.encounter` wraps the current Encounter phase snapshot inside `data`.
-- In that case, UI should treat `snapshot.data` as the *inner* snapshot (e.g. `encounter.setup`) and may need to read UI actions from `snapshot.data.actions` instead of `snapshot.actions`.
-- This keeps Flow as the screen owner while allowing Encounter phases to drive their own UI payload.
+### Snapshot.data keys (Sanctum hub, SANCTUM-001)
+- sanctum_name: String (empty until confirmed)
+- sanctum_name_suggested: String (deterministic suggestion)
+- roster_count: int (MVP placeholder)
+- ase_rate_per_hour_hint: float (rate hint only, not a balance prediction)
 
 ### Action (UI → sim)
-Action ID format: domain.subdomain.verb_noun
+Action type format: domain.subdomain.verb (with optional qualifiers)
+Examples: flow.go_state, economy.ase.spend, sanctum.name.confirm
 UI triggers actions by ID, not by calling internal functions directly.
 
 Shape:
 {
-  "id": String,           // e.g. "sanctum.summon_echo"
-  "label": String,        // UI-facing label
-  "enabled": bool,        // UI state
-  "tooltip": String,      // explain why enabled/disabled
-  "payload": Dictionary   // parameters (optional)
+  "type": "String",          // e.g. "flow.go_state", "economy.ase.spend"
+  "label": "String",         // optional UI label for dynamic buttons
+  "to": "String",            // optional (flow.go_state)
+  "amount": 0,               // optional (economy.*)
+  "reason": "String",        // optional debug/dev reason text
+  "payload": {}              // optional extra params (future-proof)
 }
 
 ### LogEvent (sim → UI/QA)
@@ -207,18 +220,18 @@ Shape:
 
 ## Save Schema Versioning & Migrations
 - Saves are JSON and must include schema_version (int).
--	Never change the meaning of an existing field without bumping schema_version.
--	Prefer additive changes:
-    -	add new fields with safe defaults
-    -	keep old fields until a migration is in place
--	Migrations must be explicit and ordered:
-    -	migrate_v1_to_v2(data: Dictionary) -> Dictionary
-    -	migrate_v2_to_v3(...)
--	SaveService.load_from_file() must: 
-    -	parse JSON
-    -	validate schema version
-    -	run migrations (when implemented)
-    -	return a valid vLatest dictionary or {}
+- Never change the meaning of an existing field without bumping schema_version.
+- Prefer additive changes:
+    - add new fields with safe defaults
+    - keep old fields until a migration is in place
+- Migrations must be explicit and ordered:
+    - migrate_v1_to_v2(data: Dictionary) -> Dictionary
+    - migrate_v2_to_v3(...)
+- SaveService.load_from_file() must: 
+    - parse JSON
+    - validate schema version
+    - run migrations (when implemented)
+    - return a valid vLatest dictionary or {}
 
 ### Save Files & Crash Safety
 -	Default save path: user://saves/slot_01.json
@@ -289,10 +302,10 @@ Echoes vNext uses a settlement-based economy model.
 ### Canon Principle
 - Canon source: GDD defines the intended spirit and pacing of Ase (time invested + sanctum vitality). vNext defines the architecture to implement it safely.
 - If CONVENTIONS and the GDD disagree on economy pacing (or any other rule), we prefer to default to the GDD and document the exception here.
--	The Core simulation is the authoritative ledger.
--	The UI may predict, but Core commits.
--	Ase represents time invested and sanctum vitality (see GDD).
--	Economy must feel alive without sacrificing explainability.
+- The Core simulation is the authoritative ledger.
+- The UI may predict, but Core commits.
+- Ase represents time invested and sanctum vitality (see GDD).
+- Economy must feel alive without sacrificing explainability.
 
 #### Online Accrual (Live Settlement Model)
 Ase accrues continuously while the game is running, but it is not applied every frame.
@@ -322,14 +335,15 @@ This allows the game to feel alive while keeping Core authoritative.
 
 #### UI Prediction Rules
 The UI may:
--	Display approximate rate hints (e.g. “~4 Ase/min”)
--	Animate predicted growth
--	Use last_settle_unix from snapshot for smooth display
+- Use last_settle_unix from snapshot for smooth display
+- UI may display ~ X Ase gathered p/h using ase_rate_per_hour_hint.
+- UI may animate balance display, but must not imply the ledger has changed unless snapshot ase_balance changes.
 
 The UI must NOT:
--	Commit Ase values
--	Pass earned amounts to Core
--	Promise exact deltas to the player
+- Commit Ase values
+- Pass earned amounts to Core
+- Promise exact deltas to the player
+
 
 Prediction contract:
 - Sanctum snapshots must include `economy.last_settle_unix` and an approximate `ase_rate_hint` so UI prediction uses Core-provided parameters (reduces mismatch risk).
@@ -490,6 +504,9 @@ Every log entry must be a JSON-safe Dictionary with this shape:
 
 ### Tooling logs outside sim time (DebugCmd)
 Some dev tooling events are logged outside the simulation tick space using a negative tick.
+
+- Debug Panel is a global overlay mounted once under AppRoot and can be toggled (F1).
+- Debug commands dispatch through FlowRuntime.dispatch and must not call core services directly.
 
 - Debug command events use `t = -1` (rendered as `t:-` by LogFormatter).
 - These events are NOT simulation progression and must not consume sim ticks.

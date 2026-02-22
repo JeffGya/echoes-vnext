@@ -1,12 +1,14 @@
-Timer
-ScrollContainer
-VScrollBar
-VBoxContainer
-Button
-LineEdit
-HBoxContainer
-RichTextLabel
 Label
-HSplitContainer
-Node
+PanelContainer
+Panel
+MarginContainer
+Window
+AcceptDialog
 Control
+CanvasLayer
+Button
+HBoxContainer
+LineEdit
+VBoxContainer
+FoldableContainer      - Matches the "expandable" keyword.
+Node

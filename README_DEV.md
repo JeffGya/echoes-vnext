@@ -75,12 +75,31 @@ This project is intentionally split into:
 
 ### res://ui/
 Rendering only. UI must be snapshot-driven.
+
 - AppRoot.gd
 - AppRoot.tscn
 - UISnapshotRenderer.gd
 - ui/screens/ — High-level screens (Sanctum, Realm Select, Combat, Resolve, Debug)
 - ui/components/ — Reusable UI components (ActionList, LogView, Panels)
-    - DebugPanel.gd
+  - DebugPanel.gd
+
+#### UI Screen Hosting (SANCTUM-001)
+- AppRoot is a screen host shell: it initializes the runtime, swaps the active screen based on `snapshot.type`, and passes `snapshot + dispatch` into the screen.
+- Bespoke screens live in `res://ui/screens/` (e.g., `SanctumScreen.tscn`).
+- UI stays snapshot-driven: screens render from snapshots and dispatch actions; they never access core sim state directly.
+
+**Debug Overlay**
+- Mounted under AppRoot as an overlay (CanvasLayer).
+- Toggle key: F1.
+- Overlays the active screen and blocks clicks while open.
+- Debug commands are routed through runtime dispatch.
+
+**Economy “alive” Sanctum**
+- Sanctum snapshots include balances + rate hint.
+- Economy mutations via dispatch refresh snapshot even without flow transitions:
+  - economy.settle_time
+  - economy.ase.add
+  - economy.ase.spend
 
 ### res://data/
 Game data assets (JSON): actor templates, realm definitions, balance knobs.

@@ -38,8 +38,10 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"last_offline_unix": now
 		},
 		"sanctum": {
-			"ase": 0,
+			"ase": 0, #legacy ignore. Backfill handled in repair function.
 			"roster": [],
-			"active_party_ids": []
+			"active_party_ids": [],
+			"name": "",
+			"name_roll_index": 0
 		}
 	}

@@ -48,16 +48,21 @@ func enter(ctx: RefCounted, t:int) -> void:
 			"label": "Enter Stage (Select a Realm first)",
 			"disabled": true
 		})
-		
+	
+	# Base Sanctum snapshot. FlowStateMachine._rebuild_snapshot() enriches data with:
+	# - ase_balance, ekwan_balance (Economy)
+	# - roster_count, active_party_count (Sanctum)
+	var data := {
+		"title": "Sanctum",
+		"first_boot": flow_ctx.save_data.get("first_boot", true),
+		"realm_id": flow_ctx.realm_id,
+		"stage_id": flow_ctx.stage_id,
+		"encounter_id": flow_ctx.encounter_id
+	}
+
 	flow_ctx.last_snapshot = {
 		"type": FlowStateIds.SANCTUM,
-		"data": {
-			"title": "Sanctum",
-			"first_boot": flow_ctx.save_data.get("first_boot", true),
-			"realm_id": flow_ctx.realm_id,
-			"stage_id": flow_ctx.stage_id,
-			"encounter_id": flow_ctx.encounter_id
-		},
+		"data": data,
 		"actions": actions,
 		"meta": {
 			"t": t
