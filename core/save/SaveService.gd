@@ -111,6 +111,53 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 	var repaired_notes: Array = []
 	var now_unix := int(Time.get_unix_time_from_system())
 	
+	# ---- Campaign repairs (SANCTUM-002) ----
+	if not save.has("campaign") or typeof(save["campaign"]) != TYPE_DICTIONARY:
+		# Deterministic repair only (no randomness). If we can, derive repair seed from created_at_unix.
+		var repair_seed := "DEFAULT_SEED"
+		if save.has("meta") and typeof(save["meta"]) == TYPE_DICTIONARY:
+			var meta: Dictionary = save["meta"]
+			if meta.has("created_at_unix") and (typeof(meta["created_at_unix"]) == TYPE_INT or typeof(meta["created_at_unix"]) == TYPE_FLOAT):
+				repair_seed = "repair:%d:%d" % [int(meta["created_at_unix"]), int(save.get("schema_version", 0))]
+				
+		save["campaign"] = {
+			"root_seed": 0, # legacy
+			"tick": 0,
+			"seed_root": repair_seed,
+			"seed_source": "repair"
+		}
+		repaired = true
+		repaired_notes.append("campaign added (seed_root/seed_source repaired)")
+	else:
+		var camp: Dictionary = save["campaign"]
+		
+		# Ensure legacy root_seed exists and is numeric
+		if not camp.has("root_seed") or (typeof(camp["root_seed"]) != TYPE_INT and typeof(camp["root_seed"]) != TYPE_FLOAT):
+			camp["root_seed"] = 0
+			repaired = true
+			repaired_notes.append("campaign.root_seed set to int default")
+			
+		# Ensure tick exists
+		if not camp.has("tick") or (typeof(camp["tick"]) != TYPE_INT and typeof(camp["tick"]) != TYPE_FLOAT):			
+			camp["tick"] = 0
+			repaired = true
+			repaired_notes.append("campaign.tick set to int default")
+		else:
+			camp["tick"] = int(camp["tick"])
+			
+		# Ensure seed_root exists (we derive from legacy root_seed)
+		if not camp.has("seed_root") or typeof(camp["seed_root"]) != TYPE_STRING or str(camp["seed_root"]).is_empty():
+			var legacy_seed := int(camp.get("root_seed", 0))
+			camp["seed_root"] = "legacy:%d" % legacy_seed
+			repaired = true
+			repaired_notes.append("campaign.seed_root set from legacy root_seed")
+			
+		# Ensure seed_source exists
+		if not camp.has("seed_source") or typeof(camp["seed_source"]) != TYPE_STRING or str(camp["seed_source"]).is_empty():
+			camp["seed_source"] = "repair"
+			repaired = true
+			repaired_notes.append("campaign.seed_source set to string default")
+			
 	# Make sure economy dictionary exists
 	if not save.has("economy") or typeof(save["economy"]) != TYPE_DICTIONARY:
 		# Legacy backfill is removed. sanctum.ase is properly ignored from now on.
@@ -184,8 +231,10 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			"ase": 0,
 			"roster": [],
 			"active_party_ids": [],
+			"summon_count": 0,
 			"name": "",
-			"name_roll_index": 0
+			"name_roll_index": 0,
+			"starter_granted": false
 		}
 		repaired = true
 		repaired_notes.append("sanctum added (roster + active_party_ids defaults; sanctum.ase legacy ignored)")
@@ -215,7 +264,182 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			# normalize float->int if needed
 			sanctum["name_roll_index"] = int(sanctum["name_roll_index"])
 	
+		# SANCTUM-002: starter summon gating flag
+		if not sanctum.has("starter_granted") or typeof(sanctum["starter_granted"]) != TYPE_BOOL:
+			sanctum["starter_granted"] = false
+			repaired = true
+			repaired_notes.append("sanctum.starter_granted set to bool default")
 	
+		# SANCTUM-002: summon_count default (stable index for seed paths)
+		if not sanctum.has("summon_count") or (typeof(sanctum["summon_count"]) != TYPE_INT and typeof(sanctum["summon_count"]) != TYPE_FLOAT):
+			sanctum["summon_count"] = 0
+			repaired = true
+			repaired_notes.append("sanctum.summon_count set to int default")
+		else:
+			sanctum["summon_count"] = int(sanctum["summon_count"])
+	
+		# SANCTUM-002: roster item additive repairs (Echo placeholder contract)
+		# Keep deterministic: no RNG, no OS time; only defaults + key migrations.
+		var roster: Array = sanctum.get("roster", [])
+		for i in range(roster.size()):
+			var item = roster[i]
+			if typeof(item) != TYPE_DICTIONARY:
+				# If something weird got into the roster, replace it with a minimal safe dict.
+				roster[i] = {
+					"id": "echo_repaired_%04d" % i,
+					"name": "",
+					"gender": "unknown",
+					"seed_path": "",
+					"summon_index": 0,
+					"origin": "repair",
+					"class_origin": "uncalled",
+					"archetype_birth": "",
+					"traits": { "courage": 0, "wisdom": 0, "faith": 0 },
+					"stats": { "max_hp": 0, "atk": 0, "def": 0, "agi": 0, "int": 0, "cha": 0 },
+					"xp_total": 0,
+					"rank": 1,
+					"vector_scores": {},
+					"rarity": "uncalled",
+					"generation_context": { "modifiers": {} }
+				}
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d] replaced non-dict with safe echo record" % i)
+				continue
+
+			var echo: Dictionary = item
+
+			# id
+			if not echo.has("id") or typeof(echo["id"]) != TYPE_STRING:
+				echo["id"] = "echo_repaired_%04d" % i
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].id set to string default" % i)
+
+			# name
+			if not echo.has("name") or typeof(echo["name"]) != TYPE_STRING:
+				echo["name"] = ""
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].name set to string default" % i)
+
+			# gender (we do NOT backfill deterministically yet—legacy becomes 'unknown')
+			if not echo.has("gender") or typeof(echo["gender"]) != TYPE_STRING:
+				echo["gender"] = "unknown"
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].gender set to 'unknown' default" % i)
+
+			# origin
+			if not echo.has("origin") or typeof(echo["origin"]) != TYPE_STRING:
+				echo["origin"] = "repair"
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].origin set to string default" % i)
+
+			# summon_index
+			if not echo.has("summon_index") or (typeof(echo["summon_index"]) != TYPE_INT and typeof(echo["summon_index"]) != TYPE_FLOAT):
+				echo["summon_index"] = 0
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].summon_index set to int default" % i)
+			else:
+				echo["summon_index"] = int(echo["summon_index"])
+
+			# seed_path
+			if not echo.has("seed_path") or typeof(echo["seed_path"]) != TYPE_STRING:
+				echo["seed_path"] = ""
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].seed_path set to string default" % i)
+
+			# class_origin (we now treat 'uncalled' as the default class at birth)
+			if not echo.has("class_origin") or typeof(echo["class_origin"]) != TYPE_STRING or str(echo["class_origin"]).is_empty():
+				echo["class_origin"] = "uncalled"
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].class_origin defaulted to 'uncalled'" % i)
+
+			# archetype_birth
+			if not echo.has("archetype_birth") or typeof(echo["archetype_birth"]) != TYPE_STRING:
+				echo["archetype_birth"] = ""
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].archetype_birth set to string default" % i)
+
+			# xp_total
+			if not echo.has("xp_total") or (typeof(echo["xp_total"]) != TYPE_INT and typeof(echo["xp_total"]) != TYPE_FLOAT):
+				echo["xp_total"] = 0
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].xp_total set to int default" % i)
+			else:
+				echo["xp_total"] = int(echo["xp_total"])
+
+			# rank
+			if not echo.has("rank") or (typeof(echo["rank"]) != TYPE_INT and typeof(echo["rank"]) != TYPE_FLOAT):
+				echo["rank"] = 1
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].rank set to int default" % i)
+			else:
+				echo["rank"] = int(echo["rank"])
+
+			# traits
+			if not echo.has("traits") or typeof(echo["traits"]) != TYPE_DICTIONARY:
+				echo["traits"] = { "courage": 0, "wisdom": 0, "faith": 0 }
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].traits set to default dict" % i)
+			else:
+				var tr: Dictionary = echo["traits"]
+				for k in ["courage", "wisdom", "faith"]:
+					if not tr.has(k) or (typeof(tr[k]) != TYPE_INT and typeof(tr[k]) != TYPE_FLOAT):
+						tr[k] = 0
+						repaired = true
+						repaired_notes.append("sanctum.roster[%d].traits.%s set to int default" % [i, k])
+					else:
+						tr[k] = int(tr[k])
+
+			# stats (migrate old keys if present)
+			if not echo.has("stats") or typeof(echo["stats"]) != TYPE_DICTIONARY:
+				echo["stats"] = { "max_hp": 0, "atk": 0, "def": 0, "agi": 0, "int": 0, "cha": 0 }
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].stats set to default dict" % i)
+			else:
+				var st: Dictionary = echo["stats"]
+
+				# Migration: old "spd" -> "agi"
+				if st.has("spd") and (not st.has("agi")):
+					st["agi"] = int(st.get("spd", 0))
+					repaired = true
+					repaired_notes.append("sanctum.roster[%d].stats migrated spd->agi" % i)
+
+				# Migration: old "hp" -> "max_hp" (if it existed)
+				if st.has("hp") and (not st.has("max_hp")):
+					st["max_hp"] = int(st.get("hp", 0))
+					repaired = true
+					repaired_notes.append("sanctum.roster[%d].stats migrated hp->max_hp" % i)
+
+				# Ensure canonical stat keys exist and are ints
+				for k in ["max_hp", "atk", "def", "agi", "int", "cha"]:
+					if not st.has(k) or (typeof(st[k]) != TYPE_INT and typeof(st[k]) != TYPE_FLOAT):
+						st[k] = 0
+						repaired = true
+						repaired_notes.append("sanctum.roster[%d].stats.%s set to int default" % [i, k])
+					else:
+						st[k] = int(st[k])
+
+			# vector_scores
+			if not echo.has("vector_scores") or typeof(echo["vector_scores"]) != TYPE_DICTIONARY:
+				echo["vector_scores"] = {}
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].vector_scores set to {} default" % i)
+
+			# rarity (canonical tiers: uncalled/called/chosen; repair legacy 'common')
+			if not echo.has("rarity") or typeof(echo["rarity"]) != TYPE_STRING or str(echo["rarity"]).is_empty():
+				echo["rarity"] = "uncalled"
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].rarity set to 'uncalled' default" % i)
+			elif str(echo["rarity"]) == "common":
+				echo["rarity"] = "uncalled"
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].rarity repaired common->uncalled" % i)
+
+			# generation_context
+			if not echo.has("generation_context") or typeof(echo["generation_context"]) != TYPE_DICTIONARY:
+				echo["generation_context"] = { "modifiers": {} }
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].generation_context set to default dict" % i)
+
 	# Get structured log if anything was repaired (uses injected t)
 	if repaired:
 		_log_info(logger, t, "save.schema.repair", "Applied additive save schema repairs", {
@@ -251,10 +475,22 @@ static func validate(data: Dictionary) -> bool:
 			push_error("[SaveService] Invalid save: missing or invalid top-level key: " + k)
 			return false
 			
-	# Required nested keys
-	if not data["campaign"].has("root_seed"):
-		push_error("[SaveService] Invalid save: missing campaign.root_seed")
+	# Required nested keys (SANCTUM-002)
+	var camp: Dictionary = data["campaign"]
+
+	# Accept either the new seed_root or legacy root_seed (repairs should backfill seed_root)
+	var has_seed_root := camp.has("seed_root") and typeof(camp["seed_root"]) == TYPE_STRING and not str(camp["seed_root"]).is_empty()
+	var has_root_seed := camp.has("root_seed")
+
+	if not has_seed_root and not has_root_seed:
+		push_error("[SaveService] Invalid save: missing campaign.seed_root (and legacy root_seed)")
 		return false
+
+	# If seed_root exists, seed_source must exist too
+	if has_seed_root:
+		if not camp.has("seed_source") or typeof(camp["seed_source"]) != TYPE_STRING:
+			push_error("[SaveService] Invalid save: missing campaign.seed_source")
+			return false
 		
 	if not data["flow"].has("state"):
 		push_error("[SaveService] invalid save: missing flow.state")

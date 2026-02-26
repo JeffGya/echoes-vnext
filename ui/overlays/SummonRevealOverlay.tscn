@@ -1,0 +1,99 @@
+[gd_scene format=3 uid="uid://bfbskhxcrbhu6"]
+
+[ext_resource type="Script" uid="uid://wq0quyb8ws4l" path="res://ui/overlays/SummonRevealOverlay.gd" id="1_88dhn"]
+
+[node name="SummonRevealOverlay" type="Control" unique_id=1259915153]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_88dhn")
+
+[node name="Dim" type="ColorRect" parent="." unique_id=1697296574]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.627451)
+
+[node name="Center" type="CenterContainer" parent="." unique_id=1586327616]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Center" unique_id=1082645147]
+layout_mode = 2
+
+[node name="Root" type="VBoxContainer" parent="Center/Panel" unique_id=1166772418]
+layout_mode = 2
+
+[node name="HeaderRow" type="HBoxContainer" parent="Center/Panel/Root" unique_id=696798872]
+layout_mode = 2
+
+[node name="TitleLabel" type="Label" parent="Center/Panel/Root/HeaderRow" unique_id=1449996307]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Title"
+
+[node name="Spacer" type="Control" parent="Center/Panel/Root/HeaderRow" unique_id=350985703]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="CountLabel" type="Label" parent="Center/Panel/Root/HeaderRow" unique_id=1556176856]
+unique_name_in_owner = true
+layout_mode = 2
+text = "2 / 5"
+
+[node name="Card" type="VBoxContainer" parent="Center/Panel/Root" unique_id=1825013501]
+layout_mode = 2
+
+[node name="NameLabel" type="Label" parent="Center/Panel/Root/Card" unique_id=1458562725]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Tim"
+
+[node name="MetaLabel" type="Label" parent="Center/Panel/Root/Card" unique_id=1063462373]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ArchetypeLabel" type="Label" parent="Center/Panel/Root/Card" unique_id=1434712799]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Demon"
+
+[node name="TraitsLabel" type="Label" parent="Center/Panel/Root/Card" unique_id=94066665]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="StatsLabel" type="Label" parent="Center/Panel/Root/Card" unique_id=1575817635]
+unique_name_in_owner = true
+layout_mode = 2
+text = "(gender / rarity / calling)"
+
+[node name="ButtonRow" type="HBoxContainer" parent="Center/Panel/Root" unique_id=810608827]
+layout_mode = 2
+
+[node name="PrevButton" type="Button" parent="Center/Panel/Root/ButtonRow" unique_id=1204214177]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Prev"
+
+[node name="NextButton" type="Button" parent="Center/Panel/Root/ButtonRow" unique_id=1880198530]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Next"
+
+[node name="Spacer2" type="Control" parent="Center/Panel/Root/ButtonRow" unique_id=1487977956]
+layout_mode = 2
+
+[node name="DismissButton" type="Button" parent="Center/Panel/Root/ButtonRow" unique_id=964103679]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Dismiss"

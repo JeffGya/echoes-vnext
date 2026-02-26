@@ -22,8 +22,10 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"app_version": app_version
 		},
 		"campaign": {
-			"root_seed": root_seed,
-			"tick": 0       
+			"root_seed": root_seed, # legacy / still used by validate
+			"tick": 0,
+			"seed_root": "legacy:%d" % root_seed,
+			"seed_source": "imported"
 		},
 		"flow": {
 			"state": "flow.splash",
@@ -42,6 +44,9 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"roster": [],
 			"active_party_ids": [],
 			"name": "",
-			"name_roll_index": 0
+			"name_roll_index": 0,
+			"starter_granted": false,
+			"summon_count": 0,
+
 		}
 	}

@@ -46,7 +46,7 @@ func _rebuild_snapshot(ctx: FlowContext, logger: StructuredLogger, t: int) -> vo
 		if ctx.encounter_ctx != null and not ctx.encounter_ctx.phase_snapshot.is_empty():
 			snap = {
 				"type": FlowStateIds.ENCOUNTER,
-				"meta": { "tick": t },
+				"meta": { "t": t },
 				"data": ctx.encounter_ctx.phase_snapshot
 			}
 		else:
@@ -54,10 +54,10 @@ func _rebuild_snapshot(ctx: FlowContext, logger: StructuredLogger, t: int) -> vo
 			# has not produced its first phase snapshot yet. Emit a valid, non-null pending wrapper.
 			snap = {
 				"type": FlowStateIds.ENCOUNTER,
-				"meta": { "tick": t },
+				"meta": { "t": t },
 				"data": {
 					"type": "encounter.pending",
-					"meta": { "tick": t },
+					"meta": { "t": t },
 					"data": {
 						"flow_state": _current_state_id
 					}

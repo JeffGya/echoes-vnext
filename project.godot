@@ -8,13 +8,16 @@
 
 config_version=5
 
+[animation]
+
+compatibility/default_parent_skeleton_in_mesh_instance_3d=true
+
 [application]
 
 config/name="echoes-vnext"
 config/version="0"
 run/main_scene="uid://djonhnpk45xl4"
-config/features=PackedStringArray("4.5", "GL Compatibility")
-boot_splash/bg_color=Color(0.74311703, 0.9579194, 0.5060285, 1)
+config/features=PackedStringArray("4.6", "GL Compatibility")
 config/icon="uid://fwbkud6ktd8i"
 
 [display]
@@ -23,9 +26,6 @@ window/size/viewport_width=1920
 window/size/viewport_height=1080
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
-window/stretch/scale_mode="integer"
-window/vsync/vsync_mode=2
-window/ios/hide_status_bar=false
 
 [rendering]
 

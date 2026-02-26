@@ -21,20 +21,7 @@ func enter(ctx: RefCounted, t: int) -> void:
 			"title": "Main Menu",
 			"is_first_boot": is_first_boot
 		},
-		"actions":[
-			{
-				"type": "flow.continue",
-				"label": "Continue"
-			},
-			{
-				"type": "flow.settings",
-				"label": "Settings"
-			},
-			{
-				"type": "flow.quit",
-				"label": "Quit"
-			}
-		],
+		"actions": _build_actions(is_first_boot),
 		"meta": {
 			"t": t
 		}
@@ -42,3 +29,32 @@ func enter(ctx: RefCounted, t: int) -> void:
 	
 func exit(ctx: RefCounted, t: int) -> void:
 	pass
+
+func _build_actions(is_first_boot: bool) -> Array:
+	var actions: Array = []
+
+	if is_first_boot:
+		actions.append({
+			"type": "flow.new_game",
+			"label": "Start",
+			"slot": "main.cta_primary"
+		})
+	else:
+		actions.append({
+			"type": "flow.continue",
+			"label": "Continue",
+			"slot": "main.cta_primary"
+		})
+
+	actions.append({
+		"type": "flow.settings",
+		"label": "Settings",
+		"slot": "main.settings"
+	})
+	actions.append({
+		"type": "flow.quit",
+		"label": "Quit",
+		"slot": "main.quit"
+	})
+
+	return actions

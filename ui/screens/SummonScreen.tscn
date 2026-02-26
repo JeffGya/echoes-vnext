@@ -1,0 +1,91 @@
+[gd_scene load_steps=2 format=3 uid="uid://c33j5580b3r3y"]
+
+[ext_resource type="Script" uid="uid://cxcoica6uu5nx" path="res://ui/screens/SummonScreen.gd" id="1_epawg"]
+
+[node name="SummonScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_epawg")
+
+[node name="Root" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="HeaderRow" type="HBoxContainer" parent="Root"]
+layout_mode = 2
+
+[node name="BackButton" type="Button" parent="Root/HeaderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Back"
+
+[node name="Spacer" type="Control" parent="Root/HeaderRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+
+[node name="TitleLabel" type="Label" parent="Root/HeaderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Summon"
+
+[node name="EconomyBlock" type="VBoxContainer" parent="Root"]
+layout_mode = 2
+
+[node name="AseLabel" type="Label" parent="Root/EconomyBlock"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Ase: )"
+
+[node name="AseRateLabel" type="Label" parent="Root/EconomyBlock"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "~ 0.0 Ase / hour"
+
+[node name="GradeRow" type="HBoxContainer" parent="Root"]
+layout_mode = 2
+
+[node name="GradeLabel" type="Label" parent="Root/GradeRow"]
+layout_mode = 2
+text = "Grade"
+
+[node name="GradeOption" type="OptionButton" parent="Root/GradeRow"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="CountBlock" type="VBoxContainer" parent="Root"]
+layout_mode = 2
+
+[node name="CountLabel" type="Label" parent="Root/CountBlock"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Summons: 1"
+
+[node name="CountSlider" type="HSlider" parent="Root/CountBlock"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 1.0
+max_value = 10.0
+value = 1.0
+scrollable = false
+tick_count = 10
+ticks_on_borders = true
+ticks_position = 3
+
+[node name="CostLabel" type="Label" parent="Root/CountBlock"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Cost: 60"
+
+[node name="SummonButton" type="Button" parent="Root"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Summon"

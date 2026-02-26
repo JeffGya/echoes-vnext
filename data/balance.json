@@ -6,6 +6,46 @@
 	  "offline_start_factor": 0.5,
 	  "offline_cap_seconds": 28800,
 	  "sanctum_bank_interval_seconds": 300
+	},
+	"summoning": {
+		  "ase_cost_per_summon": 60,
+
+		"trait_min": 30,
+		"trait_max": 70,
+
+		"calling_weights": {
+			"uncalled": 9.0,
+			"guardian": 0.333,
+			"warrior": 0.333,
+			"archer": 0.333
+		},
+
+		"birth_stats": {
+			"hp_base": 100,
+			"hp_courage_mul": 0.25,
+			"hp_faith_mul": 0.15,
+			"hp_min": 15,
+
+			"atk_base": 4,
+			"atk_courage_mul": 0.12,
+			"atk_faith_mul": 0.05,
+
+			"def_base": 2,
+			"def_wisdom_mul": 0.12,
+			"def_faith_mul": 0.08,
+
+			"agi_base": 2,
+			"agi_wisdom_mul": 0.08,
+			"agi_courage_mul": 0.08,
+
+			"int_base": 4,
+			"int_wisdom_mul": 0.22,
+			"int_courage_mul": 0.04,
+
+			"cha_base": 1,
+			"cha_faith_mul": 0.08,
+			"cha_wisdom_mul": 0.08
+		}
 	}
   }
 }

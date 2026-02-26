@@ -29,6 +29,10 @@ var flow_machine: FlowStateMachine
 var _sanctum_screen: SanctumScreen
 var _sanctum_scene := preload("res://ui/screens/SanctumScreen.tscn")
 
+# Summon related variables
+var _summon_screen: SummonScreen
+var _summon_scene := preload("res://ui/screens/SummonScreen.tscn")
+
 func _ready():
 	# Bind renderer to UI elements it can update.
 	renderer.bind_view(snapshot_view, actions_container)
@@ -145,10 +149,31 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	# -------------------------
+	# seed shortcuts (SANCTUM-002 / debug only)
+	# -------------------------
+	if head == "seed":
+		_run_seed_command(parts)
+		return
+
+	# -------------------------
 	# economy shortcuts
 	# -------------------------
 	if head == "ase" or head == "ekwan":
 		_run_currency_command(head, parts)
+		return
+
+	# -------------------------
+	# echo shortcuts (SANCTUM-002 / debug only)
+	# -------------------------
+	if head == "echo":
+		_run_echo_command(parts)
+		return
+		
+	# -------------------------
+	# summon shortcut (SANCTUM-002 / debug only)
+	# -------------------------
+	if head == "summon":
+		_run_summon_command(parts)
 		return
 
 	_debug_print("Unknown command: " + cmd)
@@ -194,6 +219,7 @@ func _run_tests(parts: Array) -> void:
 	# Optional: allow "tests economy" later; for now run all.
 	var runner := CoreTestRunner.new()
 	EconomyTests.register(runner)
+	SanctumSummonTests.register(runner)
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [
@@ -211,6 +237,139 @@ func _run_tests(parts: Array) -> void:
 		else:
 			_debug_print("❌ " + name + " — " + str(r.get("error", "unknown error")))
 			
+	_flush_logs_to_console()
+
+func _run_echo_command(parts: Array) -> void:
+	# Usage:
+	#   echo gentest
+	if parts.size() < 2:
+		_debug_print("Usage: echo gentest")
+		return
+
+	var op := str(parts[1]).to_lower()
+	if op != "gentest":
+		_debug_print("Unknown echo op: %s (use gentest)" % op)
+		return
+
+	# Capture log window so we can print the structured payload to the debug panel.
+	var start_idx := _last_log_index
+
+	var snap := runtime.dispatch({ "type": "debug.echo.gen_test" })
+	_render_snapshot(snap)
+
+	# Print payload from the debug.echo.gen_test log (if present)
+	var logs := logger.get_logs()
+	for i in range(start_idx, logs.size()):
+		var e: Dictionary = logs[i]
+		if str(e.get("type", "")) == "debug.echo.gen_test":
+			# now extract payload, but we’ll discover its key next
+			var p_v: Variant = e.get("data", {})
+			var p: Dictionary = p_v if p_v is Dictionary else {}
+
+			_debug_print("EchoFactory gen test:")
+			_debug_print("seed_root = %s" % str(p.get("seed_root", "")))
+			_debug_print("path_a = %s" % str(p.get("path_a", "")))
+			_debug_print("path_b = %s" % str(p.get("path_b", "")))
+			_debug_print("fp1 = %s" % str(p.get("fingerprint_1", "")))
+			_debug_print("fp2 = %s" % str(p.get("fingerprint_2", "")))
+			_debug_print("fp3 = %s" % str(p.get("fingerprint_3", "")))
+			_debug_print("same_path_equal = %s" % str(p.get("same_path_equal", false)))
+			_debug_print("diff_path_differs = %s" % str(p.get("diff_path_differs", false)))
+			break
+
+	_flush_logs_to_console()
+
+func _run_seed_command(parts: Array) -> void:
+	# Usage:
+	#   seed show
+	#   seed set <seed_string>
+	#   seed reset <seed_string>
+	if parts.size() < 2:
+		_debug_print("Usage: seed show | seed set <seed> | seed reset <seed>")
+		return
+
+	var op := str(parts[1]).to_lower()
+
+	if op == "show":
+		var snap := runtime.dispatch({ "type": "debug.seed.show" })
+		_render_snapshot(snap)
+
+		# Print the seed values explicitly (do not rely on LogFormatter payload rendering)
+		var save_ref: Dictionary = runtime.get_save_data()
+		var camp_v : Variant = save_ref.get("campaign", {})
+		var camp: Dictionary = camp_v if camp_v is Dictionary else {}
+		var seed_root := str(camp.get("seed_root", ""))
+		var seed_source := str(camp.get("seed_source", ""))
+		var root_seed := int(camp.get("root_seed", 0))
+
+		_debug_print("seed_root = %s" % seed_root)
+		_debug_print("seed_source = %s" % seed_source)
+		_debug_print("root_seed = %d" % root_seed)
+
+		_flush_logs_to_console()
+		return
+
+	if op != "set" and op != "reset":
+		_debug_print("Unknown seed op: %s (use show/set/reset)" % op)
+		return
+
+	if parts.size() < 3:
+		_debug_print("Missing seed string. Example: seed %s my-seed-123" % op)
+		return
+
+	var seed_str := str(parts[2]).strip_edges()
+	if seed_str.is_empty():
+		_debug_print("Seed cannot be empty.")
+		return
+
+	var action_type := "debug.seed.set" if op == "set" else "debug.seed.reset"
+	var snap := runtime.dispatch({
+		"type": action_type,
+		"seed_root": seed_str
+	})
+
+	_render_snapshot(snap)
+
+	# Print updated seed values explicitly
+	var save_ref: Dictionary = runtime.get_save_data()
+	var camp_v : Variant = save_ref.get("campaign", {})
+	var camp: Dictionary = camp_v if camp_v is Dictionary else {}
+	var seed_root2 := str(camp.get("seed_root", ""))
+	var seed_source2 := str(camp.get("seed_source", ""))
+	var root_seed2 := int(camp.get("root_seed", 0))
+
+	_debug_print("seed_root = %s" % seed_root2)
+	_debug_print("seed_source = %s" % seed_source2)
+	_debug_print("root_seed = %d" % root_seed2)
+
+	_flush_logs_to_console()
+
+func _run_summon_command(parts: Array) -> void:
+	# Usage: summon [count]
+	var count := 1
+	if parts.size() >= 2:
+		count = max(1, int(parts[1]))
+	count = min(count, 10)
+
+	var now_unix := int(Time.get_unix_time_from_system())
+	var snap := runtime.dispatch({
+		"type": "sanctum.summon",
+		"count": count,
+		"now_unix": now_unix
+	})
+	_render_snapshot(snap)
+
+	# print result
+	var save_ref: Dictionary = runtime.get_save_data()
+	var sanctum: Dictionary = (save_ref.get("sanctum", {}) as Dictionary)
+	var roster: Array = sanctum.get("roster", [])
+	var summon_count := int(sanctum.get("summon_count", 0))
+	var econ_after := EconomyService.new(save_ref)
+
+	_debug_print("Summon x%d → roster=%d summon_count=%d ase=%d" % [
+		count, roster.size(), summon_count, econ_after.get_ase()
+	])
+
 	_flush_logs_to_console()
 
 func _run_currency_command(currency: String, parts: Array) -> void:
@@ -296,26 +455,52 @@ func _run_currency_command(currency: String, parts: Array) -> void:
 
 # Snapshot renderer that keeps external screens in mind and snapshots within Approot.
 # Goal is to eventually go to a screen only model and make Approot thinner.
+# We will move to a ScreenRouter pattern. This is a halfway house to keep things manageable.
 func _render_snapshot(snap: Dictionary) -> void:
 	var snap_type := str(snap.get("type", ""))
-	
+
 	if snap_type == "flow.sanctum":
-		# Ensure Sanctum screen exists once
 		if _sanctum_screen == null:
 			_sanctum_screen = _sanctum_scene.instantiate() as SanctumScreen
 			screen_host.add_child(_sanctum_screen)
-			_sanctum_screen.set_dispatch(Callable(self, "_on_ui_action_selected"))
-			
-		# Show bespoke screen; hide gener snapshot UI
-		screen_host.visible = true
-		snapshot_view.visible = false
-		actions_container.visible = false
-		
+			_sanctum_screen.action_requested.connect(_on_ui_action_selected)
+
+		_show_screen(_sanctum_screen)
 		_sanctum_screen.set_snapshot(snap)
 		return
-	
-	# Fallback: existing renderer path for all other states
+
+	if snap_type == "flow.summon":
+		if _summon_screen == null:
+			_summon_screen = _summon_scene.instantiate() as SummonScreen
+			screen_host.add_child(_summon_screen)
+			# IMPORTANT: SummonScreen emits action_requested, not set_dispatch.
+			_summon_screen.action_requested.connect(_on_ui_action_selected)
+
+		_show_screen(_summon_screen)
+		_summon_screen.set_snapshot(snap)
+		return
+
+	_hide_bespoke_screens()
+	renderer.render(snap)
+
+func _show_screen(screen: Control) -> void:
+	screen_host.visible = true
+	snapshot_view.visible = false
+	actions_container.visible = false
+
+	# Hide all bespoke screens, then show the active one.
+	if _sanctum_screen != null:
+		_sanctum_screen.visible = false
+	if _summon_screen != null:
+		_summon_screen.visible = false
+
+	screen.visible = true
+
+func _hide_bespoke_screens() -> void:
 	screen_host.visible = false
 	snapshot_view.visible = true
 	actions_container.visible = true
-	renderer.render(snap)
+	if _sanctum_screen != null:
+		_sanctum_screen.visible = false
+	if _summon_screen != null:
+		_summon_screen.visible = false

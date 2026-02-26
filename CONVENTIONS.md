@@ -81,6 +81,46 @@ The UI may format logs for readability (see LogFormatter), but the stored log st
   - CampaignSeed.get_rng(path) or
   - CampaignSeed.get_rng_from(parent_seed, path)
 
+### Campaign seed lifecycle (SANCTUM-002)
+
+Echoes vNext runs on a single persisted campaign root seed.
+
+Storage (save):
+- campaign.seed_root: String
+- campaign.seed_source: String  // "random" | "debug" | "repair" | "imported" (future)
+
+Rules:
+- New Game:
+  - generates a new campaign.seed_root exactly once
+  - stores it in save and sets campaign.seed_source = "random"
+- Continue:
+  - loads campaign.seed_root from save
+  - never regenerates or changes it automatically
+- Save repair:
+  - if campaign.seed_root is missing, set it to a deterministic “repair seed” derived from existing save fields (fallback: “DEFAULT_SEED” only if nothing usable exists) and campaign.seed_source = "repair"
+  - repair must never generate a random seed (prevents nondeterministic migrations)
+
+Debug tooling (dev only):
+- seed show / seed set / seed reset exist only in the Debug Panel (not main game UX)
+- seed set <string>: updates campaign.seed_root and marks seed_source = "debug" (no gameplay UI exposure)
+- seed reset <string>: sets seed_root and clears dependent summon dev state (see Sanctum summoning notes below)
+
+### Seed path namespaces (SANCTUM-002)
+
+All derived RNG must use dot-separated, case-sensitive seed paths under the campaign root seed.
+
+Reserved namespaces:
+- campaign.starter.*   // free starter summon on New Game
+- campaign.summon.*    // paid summons from Sanctum Summon screen
+
+Rules:
+- Namespaces must never overlap.
+- Stored generated records should include their seed_path for audit/replay.
+
+#### Stored fields
+- Generated Echo records must include `seed_path` and `summon_index`.
+- Save must persist `campaign.seed_root`, `campaign.seed_source`, `sanctum.summon_count`, and `sanctum.roster`.
+
 ---
 
 ## Contracts
@@ -180,17 +220,37 @@ Snapshot.data keys:
 ### Action (UI → sim)
 Action type format: domain.subdomain.verb (with optional qualifiers)
 Examples: flow.go_state, economy.ase.spend, sanctum.name.confirm
-UI triggers actions by ID, not by calling internal functions directly.
 
-Shape:
+**Action placement (Feb 2026 — required for bespoke screens)**
+- Screens must not rely on generic button lists.
+- Snapshots expose actions in **named slots** so UI can place buttons independently.
+- Generic action rendering is fallback only.
+
+Canonical shape:
 {
   "type": "String",          // e.g. "flow.go_state", "economy.ase.spend"
-  "label": "String",         // optional UI label for dynamic buttons
+  "label": "String",         // optional UI label
   "to": "String",            // optional (flow.go_state)
   "amount": 0,               // optional (economy.*)
   "reason": "String",        // optional debug/dev reason text
-  "payload": {}              // optional extra params (future-proof)
+  "payload": {}              // optional extra params
 }
+
+Snapshot.actions shape (preferred):
+{
+  "actions": {
+    "primary":   { ...action... },
+    "secondary": { ...action... },
+    "back":      { ...action... },
+    "reroll":    { ...action... }
+  }
+}
+
+Rules:
+- `snapshot.actions` is a Dictionary keyed by slot name → action Dictionary.
+- Bespoke screens bind to known slots and emit `action_requested(action: Dictionary)`.
+- AppRoot listens for `action_requested` and forwards to runtime dispatch.
+- Fallback generic renderer MAY iterate `snapshot.actions.values()` if a bespoke screen is not available.
 
 ### LogEvent (sim → UI/QA)
 Logs are structured, stable, and testable.
@@ -236,8 +296,8 @@ Shape:
 ### Save Files & Crash Safety
 -	Default save path: user://saves/slot_01.json
 -	Writes must be crash-safe:
-	-	write to *.tmp
-	-	rename to final
+    -	write to *.tmp
+    -	rename to final
 
 ---
 
@@ -259,7 +319,7 @@ From Realm Select:
 - Stage → Encounter(s) → Resolve → Sanctum
 
 Rules:
-- Summoning is only allowed inside Sanctum.
+- Summoning is only allowed inside the Sanctum hub (including the Summon screen).
 - Resolve always returns to Sanctum.
 - Stage and Encounter are venture states; Sanctum is the persistent hub.
 
@@ -282,11 +342,12 @@ Save operations are system-driven and must occur only at controlled boundaries.
 
 Approved save triggers:
 - New game initialization
-- After summoning
+- After successful summoning (paid or starter)
 - After selecting a realm
 - Entering a stage
 - After a stage objective resolves (if multiple objectives exist)
 - Returning to Sanctum
+- After confirming Sanctum name
 
 Rules:
 - Not every state writes to save.
@@ -294,6 +355,44 @@ Rules:
 - Saving must remain deterministic and explainable.
 - Echo death is permanent in MVP (no rollback system).
 
+### Starter summon (SANCTUM-002)
+
+On New Game / first boot setup, the Keeper receives exactly one free starter Echo.
+- Starter uses reserved seed namespace: `campaign.starter.0`
+- Paid summons use reserved seed namespace: `campaign.summon.<summon_count>`
+- Summon generation is deterministic from `campaign.seed_root` + `seed_path` (dot-separated, case-sensitive)
+
+---
+### Summoning contract (SANCTUM-002)
+
+Core rules:
+- Paid summoning is only available in the Sanctum Summon screen.
+- Cost = **60 Ase per summon**.
+- Core must **settle before spend** (ECONOMY-002).
+- Successful summon is **transactional**:
+  1) settle_time
+  2) validate funds
+  3) spend (reason="summon.cost")
+  4) generate Echo via EchoFactory
+  5) append to `sanctum.roster`
+  6) increment `sanctum.summon_count`
+  7) request save (single choke point)
+
+Bulk summoning:
+- Summon accepts a `count` (MVP: 1–10 UI slider).
+- Total cost = 60 * count.
+- Each Echo uses a unique seed path: `campaign.summon.<summon_index>`.
+
+Reveal UX (transient):
+- Summon does **not** cause a Flow transition.
+- Runtime refreshes the snapshot.
+- Newly summoned Echo summaries are placed into a **transient reveal queue** in FlowContext.
+- The reveal queue is **NOT saved**.
+- UI displays a trading-card overlay to page through reveals and dismiss.
+
+Non-goals (reserved):
+- Sanctum upgrades do not affect trait rolls (rarity/grade may be affected later).
+- Emotion cost/connection is deferred to EmotionService; summoning records reserve a `generation_context` field for future modifiers.
 ---
 
 ### Economy Accrual & Settlement Model (ECONOMY-002)

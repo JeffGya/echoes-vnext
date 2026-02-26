@@ -48,6 +48,28 @@ func enter(ctx: RefCounted, t:int) -> void:
 			"label": "Enter Stage (Select a Realm first)",
 			"disabled": true
 		})
+		
+	# --- Sanctum roster (from save) ---
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+
+	var roster_v: Variant = sanctum.get("roster", [])
+	var roster: Array = roster_v if roster_v is Array else []
+
+	# Build a small preview list (first 3)
+	var roster_preview: Array = []
+	var limit : Variant = min(3, roster.size())
+	for i in range(limit):
+		var echo_v: Variant = roster[i]
+		var echo: Dictionary = echo_v if echo_v is Dictionary else {}
+
+		roster_preview.append({
+			"id": str(echo.get("id", "")),
+			"name": str(echo.get("name", "")),
+			"calling_origin": str(echo.get("calling_origin", "")),
+			"rarity": str(echo.get("rarity", "")),
+			"rank": int(echo.get("rank", 1)),
+		})
 	
 	# Base Sanctum snapshot. FlowStateMachine._rebuild_snapshot() enriches data with:
 	# - ase_balance, ekwan_balance (Economy)
@@ -57,7 +79,9 @@ func enter(ctx: RefCounted, t:int) -> void:
 		"first_boot": flow_ctx.save_data.get("first_boot", true),
 		"realm_id": flow_ctx.realm_id,
 		"stage_id": flow_ctx.stage_id,
-		"encounter_id": flow_ctx.encounter_id
+		"encounter_id": flow_ctx.encounter_id,
+		"roster_count": roster.size(),
+		"roster_preview": roster_preview,
 	}
 
 	flow_ctx.last_snapshot = {

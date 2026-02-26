@@ -88,6 +88,11 @@ Rendering only. UI must be snapshot-driven.
 - Bespoke screens live in `res://ui/screens/` (e.g., `SanctumScreen.tscn`).
 - UI stays snapshot-driven: screens render from snapshots and dispatch actions; they never access core sim state directly.
 
+**Action slots (Feb 2026)**
+- Snapshots expose actions as a Dictionary keyed by UI slot name (e.g. primary/secondary/back).
+- Bespoke screens bind to named slots so buttons can be placed independently.
+- Generic action-list rendering is fallback only.
+
 **Debug Overlay**
 - Mounted under AppRoot as an overlay (CanvasLayer).
 - Toggle key: F1.
@@ -189,6 +194,8 @@ Saves are JSON and include schema_version for future migrations.
 Game has one single save slot forever. No multiple saves allowed.
 See CONVENTIONS.md for more about saving and making sure it works properly.
 
+Summoning (paid or starter) triggers a save to prevent rerolling.
+
 ## Economy (ECONOMY-001)
 
 Economy is centralized in `res://core/economy/EconomyService.gd`.
@@ -243,8 +250,15 @@ Available commands:
 - `ekwan show`
 - `ekwan add <amount> [reason...]`
 - `ekwan spend <amount> [reason...]`
+- `seed show`
+- `seed set <string>`
+- `seed reset <string>`
+- `summon [count]`  (paid summon; defaults to 1)
+- `roster`          (prints roster summary; dev only)
+- `echo gentest`    (EchoFactory determinism test)
 
 Note: these commands must not advance simulation tick and must not introduce non-deterministic behavior.
+Note: seed commands exist only in the Debug Panel (dev tooling) and are not part of player UX.
 ---
 
 ## Snapshot Emission Model (STATE-004)

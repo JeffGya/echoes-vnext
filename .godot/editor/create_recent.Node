@@ -1,14 +1,14 @@
+Button
+Control
+HBoxContainer
 Label
+VBoxContainer
 PanelContainer
+CenterContainer
+ColorRect
+HSlider
+OptionButton
+RichTextLabel
 Panel
 MarginContainer
 Window
-AcceptDialog
-Control
-CanvasLayer
-Button
-HBoxContainer
-LineEdit
-VBoxContainer
-FoldableContainer      - Matches the "expandable" keyword.
-Node

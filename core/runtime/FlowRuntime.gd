@@ -67,6 +67,10 @@ func dispatch(action: Dictionary) -> Dictionary:
 	match action_type:
 		
 		# ---- Flow ----
+		"flow.new_game":
+			_handle_new_game(t)
+			flow_machine.transition(FlowStateIds.SANCTUM, flow_ctx, logger, t, "ui.flow.new_game")
+			
 		"flow.advance":
 			var to_state := str(action.get("to", ""))
 			flow_machine.transition(to_state, flow_ctx, logger, t, "ui.flow.advance")
@@ -98,6 +102,20 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 		"flow.quit":
 			logger.debug(t, "ui.flow.quit", "Quit not implemented (MVP).", {})
+
+		# ---- Debug Seed (SANCTUM-002) ----
+		"debug.seed.show":
+			_handle_debug_seed_show(t)
+
+		"debug.seed.set":
+			_handle_debug_seed_set(action, t, false)
+
+		"debug.seed.reset":
+			_handle_debug_seed_set(action, t, true)
+			
+		# ---- Debug Echo (SANCTUM-002) ----
+		"debug.echo.gen_test":
+			_handle_debug_echo_gen_test(t)
 
 		# ---- Encounter ----
 		"encounter.advance":
@@ -179,6 +197,17 @@ func dispatch(action: Dictionary) -> Dictionary:
 			logger.info(t, "sanctum.name.confirm", "Sanctum name set", {
 				"name": name
 			})
+			
+		"sanctum.summon":
+			_handle_sanctum_summon(action, t)
+
+		# UI actions
+		"ui.dismiss_summon_reveals":
+			flow_ctx.pending_summon_reveals.clear()
+			logger.debug(t, "ui.dismiss_summon_reveals", "Dismissed summon reveal queue", {
+				"remaining": flow_ctx.pending_summon_reveals.size()
+			})
+			flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 			# IMPORTANT: no transition occurs, so refresh snapshot
 			flow_machine.refresh_snapshot(flow_ctx, logger, t)
@@ -213,6 +242,318 @@ func dispatch(action: Dictionary) -> Dictionary:
 	var out := flow_ctx.last_snapshot
 	_log_snapshot_emitted(t, out, "dispatch")
 	return out
+
+# Helper section for the flow actions
+func _handle_sanctum_summon(action: Dictionary, t: int) -> void:
+	# 0) parse count
+	var count := int(action.get("count", 1))
+	if count < 1:
+		count = 1
+	if count > 10:
+		count = 10
+
+	# 1) settle before spend
+	var now_unix := int(action.get("now_unix", 0))
+	if now_unix > 0:
+		_handle_economy_settle_time({
+			"type": "economy.settle_time",
+			"now_unix": now_unix,
+			"source": "sanctum.summon.before_spend"
+		}, t)
+
+	# 2) read cost
+	var balance := config_service.get_balance()
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var summ_v: Variant = data.get("summoning", {})
+	var summ_cfg: Dictionary = summ_v if summ_v is Dictionary else {}
+	var cost_each := int(summ_cfg.get("ase_cost_per_summon", 60))
+
+	var total_cost := cost_each * count
+
+	# 3) check funds
+	var econ_v: Variant = flow_ctx.save_data.get("economy", {})
+	var econ_data: Dictionary = econ_v if econ_v is Dictionary else {}
+	var ase_before := int(econ_data.get("ase", 0))
+
+	if ase_before < total_cost:
+		logger.info(t, "sanctum.summon.denied", "Not enough Ase to summon", {
+			"ase": ase_before,
+			"cost_each": cost_each,
+			"count": count,
+			"total_cost": total_cost
+		})
+		return
+
+	# 4) spend once
+	var ok_spend: bool = econ.spend_ase(total_cost, "summon.cost", logger, t)
+	if not ok_spend:
+		logger.info(t, "sanctum.summon.denied", "Spend failed", {
+			"ase": ase_before,
+			"total_cost": total_cost,
+			"count": count
+		})
+		return
+
+	# 5) generate + persist many
+	var camp: Dictionary = {}
+	if flow_ctx.save_data.has("campaign") and typeof(flow_ctx.save_data["campaign"]) == TYPE_DICTIONARY:
+		camp = flow_ctx.save_data["campaign"]
+	var seed_root := str(camp.get("seed_root", "")).strip_edges()
+	if seed_root.is_empty():
+		logger.info(t, "sanctum.summon.denied", "Missing campaign seed_root", {})
+		return
+
+	var result := SummonService.summon_paid_many(flow_ctx.save_data, seed_root, summ_cfg, count, logger, t)
+
+	if bool(result.get("ok", false)):
+		# Append newly summoned echoes to transient reveal queue (NOT saved)
+		var echoes_v: Variant = result.get("echoes", [])
+		var echoes: Array = echoes_v if echoes_v is Array else []
+		for e_v in echoes:
+			if e_v is Dictionary:
+				flow_ctx.pending_summon_reveals.append(e_v)
+
+		flow_ctx.save_request = true
+		flow_ctx.save_request_reason = "sanctum.summon"
+		
+func _handle_new_game(t: int) -> void:
+	# Create a new campaign root seed string (random once; then persisted)
+	var seed_root := _generate_seed_root_string()
+	var legacy_root_seed := _legacy_root_seed_from_seed_root(seed_root)
+
+	# Replace current save with a fresh one
+	var save := SaveService.make_new_save(legacy_root_seed)
+
+	# Canonical campaign seed fields (SANCTUM-002)
+	if not save.has("campaign") or typeof(save["campaign"]) != TYPE_DICTIONARY:
+		save["campaign"] = {}
+	var camp: Dictionary = save["campaign"]
+	camp["seed_root"] = seed_root
+	camp["seed_source"] = "random"
+
+	# This is a brand-new run (menu first boot should not persist)
+	save["first_boot"] = false
+
+	# Ensure sanctum dict exists
+	if not save.has("sanctum") or typeof(save["sanctum"]) != TYPE_DICTIONARY:
+		save["sanctum"] = {}
+	var sanctum: Dictionary = save["sanctum"]
+	
+	if not sanctum.has("roster") or typeof(sanctum["roster"]) != TYPE_ARRAY:
+		sanctum["roster"] = []
+
+	var roster: Array = sanctum["roster"] as Array
+	
+	# Deterministic starter Echo (no placeholder)
+	var balance := config_service.get_balance()
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var summ_v: Variant = data.get("summoning", {})
+	var summ_cfg: Dictionary = summ_v if summ_v is Dictionary else {}
+
+	var seed_path := "campaign.starter.0"
+
+	# NOTE: EchoFactory leaves "id" blank on purpose (id is assigned by caller)
+	var echo: Dictionary = EchoFactory.generate(
+		seed_root,
+		seed_path,
+		0,
+		"starter",
+		summ_cfg
+	)
+
+	# Assign stable id outside factory (does NOT affect determinism)
+	var echo_id := "echo_%04d" % (roster.size() + 1)
+	echo["id"] = echo_id
+
+	roster.append(echo)
+	sanctum["starter_granted"] = true
+
+	logger.info(t, "sanctum.starter.grant", "Starter Echo granted", {
+		"echo_id": echo_id,
+		"seed_path": seed_path,
+		"seed_root": seed_root
+	})
+
+	# Install save into runtime + rebuild economy service
+	flow_ctx.save_data = save
+	econ = EconomyService.new(flow_ctx.save_data)
+
+	# Request save flush via Flow-owned choke point
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason != "":
+		flow_ctx.save_request_reason += "|flow.new_game"
+	else:
+		flow_ctx.save_request_reason = "flow.new_game"
+
+	# IMPORTANT: no transition has occurred yet when this runs, so refresh snapshot after mutation
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+# Helpers
+func _handle_debug_seed_show(t: int) -> void:
+	var camp: Dictionary = {}
+	if flow_ctx.save_data != null and flow_ctx.save_data.has("campaign") and typeof(flow_ctx.save_data["campaign"]) == TYPE_DICTIONARY:
+		camp = flow_ctx.save_data["campaign"]
+
+	var seed_root := str(camp.get("seed_root", ""))
+	var seed_source := str(camp.get("seed_source", ""))
+	var root_seed := int(camp.get("root_seed", 0))
+
+	logger.info(t, "debug.seed.show", "Seed show", {
+		"seed_root": seed_root,
+		"seed_source": seed_source,
+		"root_seed": root_seed
+	})
+
+	# Refresh is optional, but harmless and keeps UI consistent if you display seed-derived hints.
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+func _handle_debug_seed_set(action: Dictionary, t: int, do_reset: bool) -> void:
+	var seed_root := str(action.get("seed_root", "")).strip_edges()
+	if seed_root.is_empty():
+		logger.info(t, "debug.seed.denied", "Denied seed set/reset (empty seed_root)", {})
+		return
+
+	# Ensure campaign dict exists
+	if not flow_ctx.save_data.has("campaign") or typeof(flow_ctx.save_data["campaign"]) != TYPE_DICTIONARY:
+		flow_ctx.save_data["campaign"] = {}
+	var camp: Dictionary = flow_ctx.save_data["campaign"]
+
+	# Update canonical seed fields
+	camp["seed_root"] = seed_root
+	camp["seed_source"] = "debug"
+
+	# Keep legacy root_seed in sync for current systems (e.g., sanctum name suggestion)
+	camp["root_seed"] = _legacy_root_seed_from_seed_root(seed_root)
+
+	# Reset sanctum data if requested
+	if do_reset:
+		if not flow_ctx.save_data.has("sanctum") or typeof(flow_ctx.save_data["sanctum"]) != TYPE_DICTIONARY:
+			flow_ctx.save_data["sanctum"] = {}
+		var sanctum: Dictionary = flow_ctx.save_data["sanctum"]
+
+		# Reset everything test-relevant
+		sanctum["name"] = ""
+		sanctum["name_roll_index"] = 0
+		sanctum["roster"] = []
+		sanctum["active_party_ids"] = []
+		sanctum["summon_count"] = 0
+		sanctum["starter_granted"] = false
+
+		logger.info(t, "debug.seed.reset", "Seed reset applied", {
+			"seed_root": seed_root,
+			"root_seed": int(camp.get("root_seed", 0))
+		})
+	else:
+		logger.info(t, "debug.seed.set", "Seed set applied", {
+			"seed_root": seed_root,
+			"root_seed": int(camp.get("root_seed", 0))
+		})
+
+	# Save once via Flow-owned choke point
+	flow_ctx.save_request = true
+	var reason := "debug.seed.reset" if do_reset else "debug.seed.set"
+	if flow_ctx.save_request_reason != "":
+		flow_ctx.save_request_reason += "|" + reason
+	else:
+		flow_ctx.save_request_reason = reason
+
+	# IMPORTANT: no flow transition occurs, so refresh snapshot immediately
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+func _generate_seed_root_string() -> String:
+	# Dev-safe randomness: allowed only as an input at New Game.
+	# Uses OS crypto bytes, not global RNG.
+	var crypto := Crypto.new()
+	var bytes: PackedByteArray = crypto.generate_random_bytes(16)
+	return bytes.hex_encode()
+
+func _legacy_root_seed_from_seed_root(seed_root: String) -> int:
+	# Temporary compatibility: several MVP systems still use CampaignSeed(int).
+	# Derive a deterministic int from the first 8 hex chars (32-bit).
+	if seed_root.length() < 8:
+		return 0
+	var prefix := seed_root.substr(0, 8)
+	# Parse as hex via "0x" prefix
+	return int("0x" + prefix)
+
+func _handle_debug_echo_gen_test(t: int) -> void:
+	# Pull seed_root from save
+	var camp: Dictionary = {}
+	if flow_ctx.save_data != null and flow_ctx.save_data.has("campaign") and typeof(flow_ctx.save_data["campaign"]) == TYPE_DICTIONARY:
+		camp = flow_ctx.save_data["campaign"]
+
+	var seed_root := str(camp.get("seed_root", "")).strip_edges()
+	if seed_root.is_empty():
+		logger.info(t, "debug.echo.gen_test.denied", "Denied echo gen test (missing seed_root)", {})
+		return
+
+	# Pull summoning config from balance.json
+	var balance := config_service.get_balance()
+	var data_v : Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var summ_v : Variant = data.get("summoning", {})
+	var summ_cfg: Dictionary = summ_v if summ_v is Dictionary else {}
+
+	# Generate same path twice
+	var path0 := "campaign.summon.0"
+	var e1: Dictionary = EchoFactory.generate(seed_root, path0, 0, "summon", summ_cfg)
+	var e2: Dictionary = EchoFactory.generate(seed_root, path0, 0, "summon", summ_cfg)
+
+	# Generate different path
+	var path1 := "campaign.summon.1"
+	var e3: Dictionary = EchoFactory.generate(seed_root, path1, 1, "summon", summ_cfg)
+
+	var fp1 := _echo_fingerprint(e1)
+	var fp2 := _echo_fingerprint(e2)
+	var fp3 := _echo_fingerprint(e3)
+
+	logger.info(t, "debug.echo.gen_test", "EchoFactory determinism test", {
+		"seed_root": seed_root,
+		"path_a": path0,
+		"path_b": path1,
+		"fingerprint_1": fp1,
+		"fingerprint_2": fp2,
+		"fingerprint_3": fp3,
+		"same_path_equal": fp1 == fp2,
+		"diff_path_differs": fp1 != fp3,
+	})
+
+	# No state transition: refresh snapshot so UI/debug panels remain in sync
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+func _echo_fingerprint(e: Dictionary) -> String:
+	# Stable, human-readable digest for determinism checks.
+	# Do NOT include id (caller assigns it).
+	var name := str(e.get("name", ""))
+	var gender := str(e.get("gender", ""))
+	var rarity := str(e.get("rarity", ""))
+	var calling := str(e.get("calling_origin", ""))
+	var arch := str(e.get("archetype_birth", ""))
+	var traits_v : Variant = e.get("traits", {})
+	var traits: Dictionary = traits_v if traits_v is Dictionary else {}
+	var stats_v : Variant = e.get("stats", {})
+	var stats: Dictionary = stats_v if stats_v is Dictionary else {}
+
+	return "%s|%s|%s|%s|%s|c%dw%df%d|hp%datk%ddef%dagi%dint%dcha%d" % [
+		name,
+		gender,
+		rarity,
+		calling,
+		arch,
+		int(traits.get("courage", 0)),
+		int(traits.get("wisdom", 0)),
+		int(traits.get("faith", 0)),
+		int(stats.get("max_hp", 0)),
+		int(stats.get("atk", 0)),
+		int(stats.get("def", 0)),
+		int(stats.get("agi", 0)),
+		int(stats.get("int", 0)),
+		int(stats.get("cha", 0)),
+	]
 
 func _handle_economy_settle_time(action: Dictionary, t: int) -> void:
 	var now_unix := int(action.get("now_unix", 0))
@@ -415,7 +756,6 @@ func _apply_offline_accrual_if_needed(t: int, source: String) -> int:
 		flow_ctx.save_request_reason = "economy.offline_accrual"
 	
 	return gain
-
 	
 func _get_balance_economy_cfg() -> Dictionary:
 	var balance := config_service.get_balance()

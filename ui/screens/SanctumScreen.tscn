@@ -129,3 +129,34 @@ layout_mode = 2
 unique_name_in_owner = true
 layout_mode = 2
 text = "echo count  50"
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -23.0
+offset_right = 23.0
+offset_bottom = 77.0
+grow_horizontal = 2
+
+[node name="EchoPreview1" type="Label" parent="VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Test 1"
+
+[node name="EchoPreview2" type="Label" parent="VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "test 2"
+
+[node name="EchoPreview3" type="Label" parent="VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "test 3"
+
+[node name="SnapShotView" type="RichTextLabel" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
