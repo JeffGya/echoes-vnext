@@ -1,6 +1,268 @@
 {
   "schema_version": 1,
   "data": {
-    
+    "_note": "MVP actor templates. Stat keys match EchoFactory output (max_hp, atk, def, agi, int, cha). When core/actors/ is built, these templates are loaded and instantiated at runtime — do not store actor state here. Values are placeholders; tune once combat math is implemented. Groups are referenced by realms.json generation rules (group_pools); the realm controls which groups can appear — actor templates and groups are content only, not wired to any realm directly.",
+
+    "enemies": {
+      "enemy.dust_wanderer": {
+        "id": "enemy.dust_wanderer",
+        "name": "Dust Wanderer",
+        "description": "A drifting spirit corrupted by the vale's desolation. Slow but relentless.",
+        "actor_type": "enemy",
+        "tier": 1,
+        "stats": {
+          "max_hp": 40,
+          "atk": 4,
+          "def": 1,
+          "agi": 2,
+          "int": 1,
+          "cha": 0
+        },
+        "tags": ["undead", "melee"]
+      },
+
+      "enemy.dust_sentinel": {
+        "id": "enemy.dust_sentinel",
+        "name": "Dust Sentinel",
+        "description": "A hardened remnant that guards corrupted waymarkers. Tougher and more deliberate than a wanderer.",
+        "actor_type": "enemy",
+        "tier": 1,
+        "stats": {
+          "max_hp": 60,
+          "atk": 5,
+          "def": 4,
+          "agi": 1,
+          "int": 2,
+          "cha": 0
+        },
+        "tags": ["undead", "melee", "defender"]
+      },
+
+      "enemy.vale_brute": {
+        "id": "enemy.vale_brute",
+        "name": "Vale Brute",
+        "description": "A massive corrupted form that anchors enemy formations. High threat in close quarters.",
+        "actor_type": "enemy",
+        "tier": 1,
+        "stats": {
+          "max_hp": 110,
+          "atk": 8,
+          "def": 3,
+          "agi": 1,
+          "int": 1,
+          "cha": 0
+        },
+        "tags": ["undead", "melee", "heavy"]
+      },
+
+      "enemy.ashen_revenant": {
+        "id": "enemy.ashen_revenant",
+        "name": "Ashen Revenant",
+        "description": "A spirit that has calcified into something colder and more dangerous. Strikes from a distance.",
+        "actor_type": "enemy",
+        "tier": 2,
+        "stats": {
+          "max_hp": 55,
+          "atk": 7,
+          "def": 2,
+          "agi": 4,
+          "int": 5,
+          "cha": 0
+        },
+        "tags": ["undead", "ranged"]
+      },
+
+      "enemy.ashen_wraith": {
+        "id": "enemy.ashen_wraith",
+        "name": "Ashen Wraith",
+        "description": "Fragile but extremely fast. Moves in packs and overwhelms isolated echoes.",
+        "actor_type": "enemy",
+        "tier": 2,
+        "stats": {
+          "max_hp": 30,
+          "atk": 6,
+          "def": 0,
+          "agi": 8,
+          "int": 2,
+          "cha": 0
+        },
+        "tags": ["undead", "melee", "fast"]
+      },
+
+      "enemy.hollow_golem": {
+        "id": "enemy.hollow_golem",
+        "name": "Hollow Golem",
+        "description": "A construct born from compressed ashen grief. Nearly immovable. Devastating if reached.",
+        "actor_type": "enemy",
+        "tier": 2,
+        "stats": {
+          "max_hp": 180,
+          "atk": 12,
+          "def": 8,
+          "agi": 1,
+          "int": 1,
+          "cha": 0
+        },
+        "tags": ["construct", "melee", "heavy", "boss"]
+      }
+    },
+
+    "structures": {
+      "structure.corrupted_shrine": {
+        "id": "structure.corrupted_shrine",
+        "name": "Corrupted Shrine",
+        "description": "A sanctified marker overwhelmed by corruption. Must be purified before it is destroyed.",
+        "actor_type": "structure",
+        "stats": {
+          "max_hp": 80
+        },
+        "tags": ["shrine", "purifiable"],
+        "_note": "Purify threshold: echoes can purify (restore HP) only when shrine HP is below 50%. Purify is an action instead of attacking. Stat requirements for purify are deferred to core/actors/ (cha or int check, TBD)."
+      },
+
+      "structure.ancient_totem": {
+        "id": "structure.ancient_totem",
+        "name": "Ancient Totem",
+        "description": "A relic of enormous weight — spiritual and physical. Carrying it debuffs the bearer.",
+        "actor_type": "structure",
+        "stats": {
+          "max_hp": 60
+        },
+        "tags": ["totem", "carryable"],
+        "carryable_chance": 0.6,
+        "_note": "carryable_chance: 60% chance this totem can be picked up (per EncounterResolutionModes). Carrier debuff magnitude is deferred to core/actors/. Enemies can steal the totem and deal double damage."
+      }
+    },
+
+    "spirits": {
+      "spirit.lost_wanderer": {
+        "id": "spirit.lost_wanderer",
+        "name": "Lost Wanderer",
+        "description": "A displaced spirit searching for its place of rest. Gentle, but capable of brief resistance when threatened.",
+        "actor_type": "spirit",
+        "stats": {
+          "max_hp": 50,
+          "atk": 3,
+          "def": 1,
+          "agi": 3,
+          "int": 4,
+          "cha": 6
+        },
+        "tags": ["spirit", "escort_target"],
+        "combat_join_chance": 0.5,
+        "combat_damage_factor": 0.25,
+        "_note": "combat_join_chance: 50% chance spirit joins battle during guide_spirit mode. combat_damage_factor: 25% damage debuff when fighting (per EncounterResolutionModes). If successfully protected/escorted, may be offered as a free summon."
+      }
+    },
+
+    "groups": {
+      "_note": "Spawn groups referenced by realms.json group_pools. StageGenerator picks a group per objective using a derived seed, then instantiates one actor per template_id per count. Wave-based modes cycle the group each wave. tier matches the highest enemy tier in the group — used by StageGenerator for difficulty validation.",
+
+      "group.vale_patrol_sm": {
+        "id": "group.vale_patrol_sm",
+        "tier": 1,
+        "description": "Small roaming patrol. Entry-level threat.",
+        "spawns": [
+          { "template_id": "enemy.dust_wanderer", "count": 2 }
+        ]
+      },
+
+      "group.vale_patrol_md": {
+        "id": "group.vale_patrol_md",
+        "tier": 1,
+        "description": "A larger patrol with a sentinel anchor.",
+        "spawns": [
+          { "template_id": "enemy.dust_wanderer", "count": 2 },
+          { "template_id": "enemy.dust_sentinel", "count": 1 }
+        ]
+      },
+
+      "group.vale_shrine_guard": {
+        "id": "group.vale_shrine_guard",
+        "tier": 1,
+        "description": "Waves defending a corrupted shrine.",
+        "spawns": [
+          { "template_id": "enemy.dust_wanderer", "count": 2 },
+          { "template_id": "enemy.dust_sentinel", "count": 1 }
+        ]
+      },
+
+      "group.vale_totem_assault": {
+        "id": "group.vale_totem_assault",
+        "tier": 1,
+        "description": "Coordinated group trying to seize and destroy the totem.",
+        "spawns": [
+          { "template_id": "enemy.dust_wanderer", "count": 3 },
+          { "template_id": "enemy.dust_sentinel", "count": 1 }
+        ]
+      },
+
+      "group.vale_spirit_threat": {
+        "id": "group.vale_spirit_threat",
+        "tier": 1,
+        "description": "Enemies drawn to a wandering spirit's presence.",
+        "spawns": [
+          { "template_id": "enemy.dust_wanderer", "count": 2 }
+        ]
+      },
+
+      "group.vale_boss_guard": {
+        "id": "group.vale_boss_guard",
+        "tier": 1,
+        "description": "The heavy guard of the Elder Waymarker. Designed as a final boss challenge for realm.01.",
+        "spawns": [
+          { "template_id": "enemy.dust_sentinel", "count": 2 },
+          { "template_id": "enemy.vale_brute", "count": 1 }
+        ]
+      },
+
+      "group.hollow_scouts": {
+        "id": "group.hollow_scouts",
+        "tier": 2,
+        "description": "Fast-moving advance force from the Ashen Hollow.",
+        "spawns": [
+          { "template_id": "enemy.ashen_revenant", "count": 2 }
+        ]
+      },
+
+      "group.hollow_wraith_pack": {
+        "id": "group.hollow_wraith_pack",
+        "tier": 2,
+        "description": "A swarm of wraiths. High pressure, low durability.",
+        "spawns": [
+          { "template_id": "enemy.ashen_wraith", "count": 4 }
+        ]
+      },
+
+      "group.hollow_shrine_assault": {
+        "id": "group.hollow_shrine_assault",
+        "tier": 2,
+        "description": "Mixed force assaulting a shrine in the hollow.",
+        "spawns": [
+          { "template_id": "enemy.ashen_wraith", "count": 2 },
+          { "template_id": "enemy.ashen_revenant", "count": 2 }
+        ]
+      },
+
+      "group.hollow_totem_siege": {
+        "id": "group.hollow_totem_siege",
+        "tier": 2,
+        "description": "Coordinated siege force — revenants hold range while wraiths rush the totem.",
+        "spawns": [
+          { "template_id": "enemy.ashen_wraith", "count": 3 },
+          { "template_id": "enemy.ashen_revenant", "count": 1 }
+        ]
+      },
+
+      "group.hollow_boss_guard": {
+        "id": "group.hollow_boss_guard",
+        "tier": 2,
+        "description": "The Hollow Golem's escort. Final boss challenge for realm.02.",
+        "spawns": [
+          { "template_id": "enemy.ashen_revenant", "count": 2 },
+          { "template_id": "enemy.hollow_golem", "count": 1 }
+        ]
+      }
+    }
   }
 }

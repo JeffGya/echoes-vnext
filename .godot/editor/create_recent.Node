@@ -1,5 +1,10 @@
-Button
+MarginContainer
 Control
+CanvasLayer
+Camera2D
+TileMapLayer
+Node2D
+Button
 HBoxContainer
 Label
 VBoxContainer
@@ -8,7 +13,3 @@ CenterContainer
 ColorRect
 HSlider
 OptionButton
-RichTextLabel
-Panel
-MarginContainer
-Window

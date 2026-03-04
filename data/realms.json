@@ -1,6 +1,157 @@
 {
   "schema_version": 1,
   "data": {
-    
+    "_note": "Realm generation rulesets. Stages are NOT preset — they are generated deterministically at runtime by StageGenerator using CampaignSeed + these rules. The generator caches results in save so a player always sees the same stages on the same campaign. To change stage content: adjust the pools and ranges here. To change a specific stage a player has already generated: that requires a save migration.",
+
+    "realm_order": ["realm.01", "realm.02"],
+
+    "realms": {
+
+      "realm.01": {
+        "id": "realm.01",
+        "name": "Vale of Dust",
+        "description": "A forgotten stretch of bleached earth where corrupted waymarkers still call out to passing spirits. The first proving ground for any Keeper.",
+        "locked": false,
+        "unlock_requires": null,
+
+        "generation": {
+          "stage_count": 3,
+          "seed_namespace": "campaign.realm.01",
+          "_note_seed": "StageGenerator derives per-stage seeds as: seed_namespace + '.stage.' + stage_index (e.g. 'campaign.realm.01.stage.0'). Each objective within a stage is further derived from that stage seed.",
+
+          "stage_rules": {
+            "min_objectives": 2,
+            "max_objectives": 4,
+            "topology": "linear",
+            "_note_topology": "linear = each objective connects only to the next. branching is reserved for post-MVP. Generator reads this to build the connections array.",
+            "entry_type": "combat",
+            "exit_type": "combat",
+            "exit_is_boss": true,
+            "_note_constraints": "entry_type and exit_type are forced — the generator always places these at the start and end. Middle nodes are drawn from objective_pool. If min_objectives is 2, there are no middle nodes (entry + exit only)."
+          },
+
+          "objective_pool": [
+            { "objective_type": "combat",       "resolution_mode": "combat",       "weight": 4.0 },
+            { "objective_type": "shrine",        "resolution_mode": "purify_shrine","weight": 2.0 },
+            { "objective_type": "totem",         "resolution_mode": "protect_totem","weight": 2.0 },
+            { "objective_type": "guide_spirit",  "resolution_mode": "guide_spirit", "weight": 1.0 }
+          ],
+
+          "group_pools": {
+            "_note": "Maps objective_type to a weighted list of group_ids from actors.json. Generator picks one group per objective using the objective's derived seed.",
+            "combat": [
+              { "group_id": "group.vale_patrol_sm", "weight": 2.0 },
+              { "group_id": "group.vale_patrol_md", "weight": 1.0 }
+            ],
+            "shrine": [
+              { "group_id": "group.vale_shrine_guard", "weight": 1.0 }
+            ],
+            "totem": [
+              { "group_id": "group.vale_totem_assault", "weight": 1.0 }
+            ],
+            "guide_spirit": [
+              { "group_id": "group.vale_spirit_threat", "weight": 1.0 }
+            ],
+            "boss": [
+              { "group_id": "group.vale_boss_guard", "weight": 1.0 }
+            ]
+          },
+
+          "structure_pools": {
+            "_note": "Maps objective_type to a list of structure_template_ids. Generator picks one randomly per objective. null for types that have no structure.",
+            "shrine":  ["structure.corrupted_shrine"],
+            "totem":   ["structure.ancient_totem"]
+          },
+
+          "spirit_pools": {
+            "_note": "Maps objective_type to a list of spirit_template_ids. null for types that have no spirit.",
+            "guide_spirit": ["spirit.lost_wanderer"]
+          },
+
+          "reward_ranges": {
+            "_note": "Generator rolls a value in [min, max] (inclusive, integer) for each objective using a derived seed. boss uses its own range regardless of objective_type. stage_completion is rolled once per stage.",
+            "per_objective": {
+              "combat":       { "ase": [15, 25], "xp": [10, 20] },
+              "shrine":       { "ase": [25, 40], "xp": [20, 35] },
+              "totem":        { "ase": [25, 40], "xp": [20, 35] },
+              "guide_spirit": { "ase": [35, 50], "xp": [30, 45] },
+              "boss":         { "ase": [55, 75], "xp": [45, 65] }
+            },
+            "stage_completion": { "ase": [60, 100], "xp": [50, 80] }
+          }
+        }
+      },
+
+      "realm.02": {
+        "id": "realm.02",
+        "name": "The Ashen Hollow",
+        "description": "A sunken basin choked with calcified grief. The air resists movement. Echoes that enter here are tested far beyond the vale.",
+        "locked": true,
+        "unlock_requires": "realm.01",
+
+        "generation": {
+          "stage_count": 3,
+          "seed_namespace": "campaign.realm.02",
+
+          "stage_rules": {
+            "min_objectives": 3,
+            "max_objectives": 5,
+            "topology": "linear",
+            "entry_type": "combat",
+            "exit_type": "combat",
+            "exit_is_boss": true
+          },
+
+          "objective_pool": [
+            { "objective_type": "combat",       "resolution_mode": "combat",       "weight": 3.0 },
+            { "objective_type": "combat",       "resolution_mode": "survival",     "weight": 2.0 },
+            { "objective_type": "shrine",        "resolution_mode": "purify_shrine","weight": 1.5 },
+            { "objective_type": "totem",         "resolution_mode": "protect_totem","weight": 1.5 },
+            { "objective_type": "guide_spirit",  "resolution_mode": "guide_spirit", "weight": 1.0 }
+          ],
+          "_note_pool": "realm.02 introduces survival mode as a weighted combat variant. Two entries with objective_type 'combat' but different resolution_mode — the generator treats them as distinct draws.",
+
+          "group_pools": {
+            "combat": [
+              { "group_id": "group.hollow_scouts",      "weight": 2.0 },
+              { "group_id": "group.hollow_wraith_pack", "weight": 1.5 }
+            ],
+            "shrine": [
+              { "group_id": "group.hollow_shrine_assault", "weight": 1.0 }
+            ],
+            "totem": [
+              { "group_id": "group.hollow_totem_siege", "weight": 1.0 }
+            ],
+            "guide_spirit": [
+              { "group_id": "group.hollow_scouts", "weight": 1.0 }
+            ],
+            "boss": [
+              { "group_id": "group.hollow_boss_guard", "weight": 1.0 }
+            ]
+          },
+
+          "structure_pools": {
+            "shrine": ["structure.corrupted_shrine"],
+            "totem":  ["structure.ancient_totem"]
+          },
+
+          "spirit_pools": {
+            "guide_spirit": ["spirit.lost_wanderer"]
+          },
+
+          "reward_ranges": {
+            "per_objective": {
+              "combat":       { "ase": [25, 40], "xp": [20, 35] },
+              "shrine":       { "ase": [40, 60], "xp": [35, 55] },
+              "totem":        { "ase": [40, 60], "xp": [35, 55] },
+              "guide_spirit": { "ase": [55, 75], "xp": [50, 70] },
+              "boss":         { "ase": [90, 130], "xp": [80, 110] }
+            },
+            "stage_completion": { "ase": [100, 160], "xp": [90, 140] }
+          }
+        }
+      }
+
+    }
   }
 }

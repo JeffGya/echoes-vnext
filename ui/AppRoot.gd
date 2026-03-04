@@ -33,6 +33,10 @@ var _sanctum_scene := preload("res://ui/screens/SanctumScreen.tscn")
 var _summon_screen: SummonScreen
 var _summon_scene := preload("res://ui/screens/SummonScreen.tscn")
 
+# Sanctum shell (Phase B - Spatial visualization)
+var _sanctum_shell: SanctumShell
+var _sanctum_shell_scene := preload("res://ui/shells/SanctumShell.tscn")
+
 func _ready():
 	# Bind renderer to UI elements it can update.
 	renderer.bind_view(snapshot_view, actions_container)
@@ -458,23 +462,40 @@ func _run_currency_command(currency: String, parts: Array) -> void:
 # We will move to a ScreenRouter pattern. This is a halfway house to keep things manageable.
 func _render_snapshot(snap: Dictionary) -> void:
 	var snap_type := str(snap.get("type", ""))
+	var is_sanctum_family := (
+		snap_type == "flow.sanctum"
+		or snap_type == "flow.summon"
+		#or snap_type == "flow.party_manage"
+		#or snap_type == "flow.echo_manage"
+		#or snap_type == "flow.realm_select"
+	)
 
-	if snap_type == "flow.sanctum":
-		if _sanctum_screen == null:
-			_sanctum_screen = _sanctum_scene.instantiate() as SanctumScreen
-			screen_host.add_child(_sanctum_screen)
-			_sanctum_screen.action_requested.connect(_on_ui_action_selected)
+	if is_sanctum_family:
+		if _sanctum_shell == null:
+			_sanctum_shell = _sanctum_shell_scene.instantiate() as SanctumShell
+			screen_host.add_child(_sanctum_shell)
+			_sanctum_shell.action_requested.connect(_on_ui_action_selected)
 
-		_show_screen(_sanctum_screen)
-		_sanctum_screen.set_snapshot(snap)
+		_show_screen(_sanctum_shell)
+		_sanctum_shell.set_snapshot(snap)
 		return
 
-	if snap_type == "flow.summon":
-		if _summon_screen == null:
-			_summon_screen = _summon_scene.instantiate() as SummonScreen
-			screen_host.add_child(_summon_screen)
-			# IMPORTANT: SummonScreen emits action_requested, not set_dispatch.
-			_summon_screen.action_requested.connect(_on_ui_action_selected)
+	#if snap_type == "flow.sanctum":
+		#if _sanctum_screen == null:
+			#_sanctum_screen = _sanctum_scene.instantiate() as SanctumScreen
+			#screen_host.add_child(_sanctum_screen)
+			#_sanctum_screen.action_requested.connect(_on_ui_action_selected)
+#
+		#_show_screen(_sanctum_screen)
+		#_sanctum_screen.set_snapshot(snap)
+		#return
+#
+	#if snap_type == "flow.summon":
+		#if _summon_screen == null:
+			#_summon_screen = _summon_scene.instantiate() as SummonScreen
+			#screen_host.add_child(_summon_screen)
+			## IMPORTANT: SummonScreen emits action_requested, not set_dispatch.
+			#_summon_screen.action_requested.connect(_on_ui_action_selected)
 
 		_show_screen(_summon_screen)
 		_summon_screen.set_snapshot(snap)
@@ -494,6 +515,9 @@ func _show_screen(screen: Control) -> void:
 	if _summon_screen != null:
 		_summon_screen.visible = false
 
+	if _sanctum_shell != null:
+		_sanctum_shell.visible = false
+
 	screen.visible = true
 
 func _hide_bespoke_screens() -> void:
@@ -504,3 +528,6 @@ func _hide_bespoke_screens() -> void:
 		_sanctum_screen.visible = false
 	if _summon_screen != null:
 		_summon_screen.visible = false
+		
+	if _sanctum_shell != null:
+		_sanctum_shell.visible = false

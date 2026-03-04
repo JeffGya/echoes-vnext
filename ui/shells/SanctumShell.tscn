@@ -1,0 +1,58 @@
+[gd_scene format=3 uid="uid://qgu4n8kdnm2c"]
+
+[ext_resource type="Script" uid="uid://hopk81nlmu8u" path="res://ui/shells/SanctumShell.gd" id="1_1eqo0"]
+[ext_resource type="PackedScene" uid="uid://d1px4m6lxvynp" path="res://ui/sanctum/SanctumSpatialRenderer.tscn" id="2_iy4vj"]
+
+[node name="SanctumShell" type="Control" unique_id=995803856]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("1_1eqo0")
+
+[node name="UILayer" type="CanvasLayer" parent="." unique_id=2051671050]
+layer = 10
+
+[node name="Control" type="Control" parent="UILayer" unique_id=829806780]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="UILayer/Control" unique_id=741223848]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_top = 40
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 40
+
+[node name="OverlayRoot" type="Control" parent="UILayer/Control/MarginContainer" unique_id=1677153853]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 1
+
+[node name="SpatialLayer" type="Control" parent="." unique_id=296146589]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="SpatialView" type="Node2D" parent="SpatialLayer" unique_id=1063782013]
+
+[node name="Camera2D" type="Camera2D" parent="SpatialLayer/SpatialView" unique_id=525201893]
+
+[node name="SanctumSpatialRenderer2" parent="SpatialLayer/SpatialView" unique_id=637007143 instance=ExtResource("2_iy4vj")]
+position = Vector2(54, 0)

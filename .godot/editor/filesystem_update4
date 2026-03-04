@@ -1,1 +1,7 @@
 res://tests/SanctumSummonTests.gd
+res://ui/shells/SanctumShell.tscn
+res://ui/shells/SanctumShell.gd
+res://ui/AppRoot.gd
+res://ui/sanctum/SanctumSpatialRenderer.tscn
+res://ui/sanctum/SanctumSpatialRenderer.gd
+res://ui/Approot.tscn
