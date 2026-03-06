@@ -16,6 +16,7 @@ signal action_requested(action: Dictionary)
 @onready var echo_preview_1: Label = %EchoPreview1
 @onready var echo_preview_2: Label = %EchoPreview2
 @onready var echo_preview_3: Label = %EchoPreview3
+@onready var party_slots_label: Label = %PartySlots
 
 @onready var name_modal: Control = %NameModal
 @onready var name_edit: LineEdit = %NameEdit
@@ -66,7 +67,24 @@ func _render() -> void:
 		else:
 			l.text = ""
 			l.visible = false
-			
+
+	# Party slots (SANCTUM-003 Subtask 4)
+	var slots_v: Variant = data.get("party_slots", [])
+	var slots: Array = slots_v if slots_v is Array else []
+	if slots.is_empty():
+		party_slots_label.text = "Party: —"
+	else:
+		var lines: Array = []
+		for s_v in slots:
+			if not (s_v is Dictionary):
+				continue
+			var s: Dictionary = s_v
+			var nm := str(s.get("name", "?"))
+			var lv := int(s.get("level", 1))
+			var rk := int(s.get("rank", 1))
+			lines.append("%s  Lv%d  Rank%d" % [nm, lv, rk])
+		party_slots_label.text = "Party:\n" + "\n".join(lines)
+
 	# Ase animate on change
 	if _last_ase_balance != -1 and ase_balance != _last_ase_balance:
 		var delta := ase_balance - _last_ase_balance

@@ -1,8 +1,8 @@
-[gd_scene load_steps=2 format=3 uid="uid://bu3o3n582e5j2"]
+[gd_scene format=3 uid="uid://bu3o3n582e5j2"]
 
 [ext_resource type="Script" uid="uid://cb8hn28k3qlg6" path="res://ui/screens/SanctumScreen.gd" id="1_55k7r"]
 
-[node name="SanctumScreen" type="Control"]
+[node name="SanctumScreen" type="Control" unique_id=1161105008]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -13,7 +13,7 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 script = ExtResource("1_55k7r")
 
-[node name="NameModal" type="Control" parent="."]
+[node name="NameModal" type="Control" parent="." unique_id=693095641]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 8
@@ -24,47 +24,47 @@ anchor_bottom = 0.5
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="PanelContainer" type="PanelContainer" parent="NameModal"]
+[node name="PanelContainer" type="PanelContainer" parent="NameModal" unique_id=92131753]
 layout_mode = 0
 offset_right = 40.0
 offset_bottom = 40.0
 
-[node name="MarginContainer" type="MarginContainer" parent="NameModal/PanelContainer"]
+[node name="MarginContainer" type="MarginContainer" parent="NameModal/PanelContainer" unique_id=2118801272]
 layout_mode = 2
 theme_override_constants/margin_left = 24
 theme_override_constants/margin_top = 24
 theme_override_constants/margin_right = 24
 theme_override_constants/margin_bottom = 24
 
-[node name="VBoxContainer" type="VBoxContainer" parent="NameModal/PanelContainer/MarginContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="NameModal/PanelContainer/MarginContainer" unique_id=1013432852]
 layout_mode = 2
 
-[node name="ModalTitle" type="Label" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer"]
+[node name="ModalTitle" type="Label" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer" unique_id=1688515526]
 layout_mode = 2
 text = "Name your Sanctum. "
 
-[node name="ModalSubtitle" type="Label" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer"]
+[node name="ModalSubtitle" type="Label" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer" unique_id=509012857]
 layout_mode = 2
 text = "Choose wisely! You can only name your Sanctum once."
 
-[node name="NameEdit" type="LineEdit" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer"]
+[node name="NameEdit" type="LineEdit" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer" unique_id=1858359016]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="HBoxContainer" type="HBoxContainer" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer"]
+[node name="HBoxContainer" type="HBoxContainer" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer" unique_id=1626716239]
 layout_mode = 2
 
-[node name="RerollButton" type="Button" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer/HBoxContainer"]
+[node name="RerollButton" type="Button" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1245369722]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Reroll"
 
-[node name="ConfirmButton" type="Button" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer/HBoxContainer"]
+[node name="ConfirmButton" type="Button" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1052186876]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Choose"
 
-[node name="FoldableContainer" type="FoldableContainer" parent="."]
+[node name="FoldableContainer" type="FoldableContainer" parent="." unique_id=1654670297]
 layout_mode = 1
 anchors_preset = 3
 anchor_left = 1.0
@@ -79,58 +79,82 @@ folded = true
 title = "Sanctum Actions"
 title_position = 1
 
-[node name="VBoxContainer" type="VBoxContainer" parent="FoldableContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="FoldableContainer" unique_id=93611923]
 visible = false
 layout_mode = 2
 
-[node name="Buttons" type="VBoxContainer" parent="FoldableContainer/VBoxContainer"]
+[node name="Buttons" type="VBoxContainer" parent="FoldableContainer/VBoxContainer" unique_id=235291421]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="PanelContainer" type="PanelContainer" parent="."]
+[node name="RightSidebar" type="VBoxContainer" parent="."]
 layout_mode = 1
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -145.0
-offset_bottom = 109.0
+offset_left = -160.0
 grow_horizontal = 0
 
-[node name="MarginContainer" type="MarginContainer" parent="PanelContainer"]
+[node name="SanctumEconomy" type="PanelContainer" parent="RightSidebar" unique_id=1507197648]
+layout_mode = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="RightSidebar/SanctumEconomy" unique_id=864755987]
 layout_mode = 2
 theme_override_constants/margin_left = 16
 theme_override_constants/margin_top = 16
 theme_override_constants/margin_right = 16
 theme_override_constants/margin_bottom = 16
 
-[node name="VBoxContainer" type="VBoxContainer" parent="PanelContainer/MarginContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="RightSidebar/SanctumEconomy/MarginContainer" unique_id=1781193527]
 layout_mode = 2
 
-[node name="TitleLabel" type="Label" parent="PanelContainer/MarginContainer/VBoxContainer"]
+[node name="TitleLabel" type="Label" parent="RightSidebar/SanctumEconomy/MarginContainer/VBoxContainer" unique_id=342244828]
 unique_name_in_owner = true
 layout_mode = 2
 text = "My Sanctum"
 
-[node name="AseLabel" type="Label" parent="PanelContainer/MarginContainer/VBoxContainer"]
+[node name="AseLabel" type="Label" parent="RightSidebar/SanctumEconomy/MarginContainer/VBoxContainer" unique_id=63832903]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Ase: 500"
 
-[node name="AseDeltaLabel" type="Label" parent="PanelContainer/MarginContainer/VBoxContainer"]
+[node name="AseDeltaLabel" type="Label" parent="RightSidebar/SanctumEconomy/MarginContainer/VBoxContainer" unique_id=1358080709]
 unique_name_in_owner = true
 layout_mode = 2
 text = " "
 
-[node name="AseRateLabel" type="Label" parent="PanelContainer/MarginContainer/VBoxContainer"]
+[node name="AseRateLabel" type="Label" parent="RightSidebar/SanctumEconomy/MarginContainer/VBoxContainer" unique_id=1156631093]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="EchoCountLabel" type="Label" parent="PanelContainer/MarginContainer/VBoxContainer"]
+[node name="EchoCountLabel" type="Label" parent="RightSidebar/SanctumEconomy/MarginContainer/VBoxContainer" unique_id=850487838]
 unique_name_in_owner = true
 layout_mode = 2
 text = "echo count  50"
 
-[node name="VBoxContainer" type="VBoxContainer" parent="."]
+[node name="PartyInfoPanel" type="PanelContainer" parent="RightSidebar"]
+layout_mode = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="RightSidebar/PartyInfoPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="VBoxContainer" type="VBoxContainer" parent="RightSidebar/PartyInfoPanel/MarginContainer"]
+layout_mode = 2
+
+[node name="PartyInfoHeader" type="Label" parent="RightSidebar/PartyInfoPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Active Party"
+
+[node name="PartySlots" type="Label" parent="RightSidebar/PartyInfoPanel/MarginContainer/VBoxContainer" unique_id=2006824437]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Party: —"
+
+[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=1055720466]
 layout_mode = 1
 anchors_preset = 5
 anchor_left = 0.5
@@ -140,22 +164,22 @@ offset_right = 23.0
 offset_bottom = 77.0
 grow_horizontal = 2
 
-[node name="EchoPreview1" type="Label" parent="VBoxContainer"]
+[node name="EchoPreview1" type="Label" parent="VBoxContainer" unique_id=2096908756]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Test 1"
 
-[node name="EchoPreview2" type="Label" parent="VBoxContainer"]
+[node name="EchoPreview2" type="Label" parent="VBoxContainer" unique_id=1461597698]
 unique_name_in_owner = true
 layout_mode = 2
 text = "test 2"
 
-[node name="EchoPreview3" type="Label" parent="VBoxContainer"]
+[node name="EchoPreview3" type="Label" parent="VBoxContainer" unique_id=55486395]
 unique_name_in_owner = true
 layout_mode = 2
 text = "test 3"
 
-[node name="SnapShotView" type="RichTextLabel" parent="."]
+[node name="SnapShotView" type="RichTextLabel" parent="." unique_id=1171635051]
 unique_name_in_owner = true
 layout_mode = 0
 offset_right = 40.0

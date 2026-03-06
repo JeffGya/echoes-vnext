@@ -46,6 +46,9 @@
 			"cha_faith_mul": 0.08,
 			"cha_wisdom_mul": 0.08
 		}
+	},
+	"sanctum": {
+		"party_max_size": 5
 	}
   }
 }

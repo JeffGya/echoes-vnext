@@ -224,6 +224,7 @@ func _run_tests(parts: Array) -> void:
 	var runner := CoreTestRunner.new()
 	EconomyTests.register(runner)
 	SanctumSummonTests.register(runner)
+	PartyTests.register(runner)
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [
@@ -465,7 +466,7 @@ func _render_snapshot(snap: Dictionary) -> void:
 	var is_sanctum_family := (
 		snap_type == "flow.sanctum"
 		or snap_type == "flow.summon"
-		#or snap_type == "flow.party_manage"
+		or snap_type == "flow.party_manage"
 		#or snap_type == "flow.echo_manage"
 		#or snap_type == "flow.realm_select"
 	)
@@ -479,23 +480,6 @@ func _render_snapshot(snap: Dictionary) -> void:
 		_show_screen(_sanctum_shell)
 		_sanctum_shell.set_snapshot(snap)
 		return
-
-	#if snap_type == "flow.sanctum":
-		#if _sanctum_screen == null:
-			#_sanctum_screen = _sanctum_scene.instantiate() as SanctumScreen
-			#screen_host.add_child(_sanctum_screen)
-			#_sanctum_screen.action_requested.connect(_on_ui_action_selected)
-#
-		#_show_screen(_sanctum_screen)
-		#_sanctum_screen.set_snapshot(snap)
-		#return
-#
-	#if snap_type == "flow.summon":
-		#if _summon_screen == null:
-			#_summon_screen = _summon_scene.instantiate() as SummonScreen
-			#screen_host.add_child(_summon_screen)
-			## IMPORTANT: SummonScreen emits action_requested, not set_dispatch.
-			#_summon_screen.action_requested.connect(_on_ui_action_selected)
 
 		_show_screen(_summon_screen)
 		_summon_screen.set_snapshot(snap)

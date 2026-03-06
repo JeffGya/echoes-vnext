@@ -31,7 +31,7 @@ var _floor_bounds_sv := Rect2(Vector2.ZERO, Vector2.ZERO) # floor bounds in Spat
 var _scene_by_flow_type: Dictionary = {}
 var _sanctum_scene := preload("res://ui/screens/SanctumScreen.tscn")
 var _summon_scene := preload("res://ui/screens/SummonScreen.tscn")
-#var _party_scene := preload("res://ui/screens/PartyManageScreen.tscn")
+var _party_scene := preload("res://ui/screens/PartyManageScreen.tscn")
 #var _echo_scene := preload("res://ui/screens/EchoManageScreen.tscn")
 #var _realm_scene := preload("res://ui/screens/RealmSelectScreen.tscn")
 
@@ -39,7 +39,7 @@ func _ready() -> void:
 	_scene_by_flow_type = {
 		"flow.sanctum": _sanctum_scene,
 		"flow.summon": _summon_scene,
-		#"flow.party_manage": _party_scene,
+		"flow.party_manage": _party_scene,
 		#"flow.echo_manage": _echo_scene,
 		#"flow.realm_select": _realm_scene,
 	}

@@ -200,7 +200,13 @@ func dispatch(action: Dictionary) -> Dictionary:
 			
 		"sanctum.summon":
 			_handle_sanctum_summon(action, t)
-
+		
+		"sanctum.party.toggle":
+			_handle_sanctum_party_toggle(action, t)
+			
+		"sanctum.party.confirm":
+			_handle_sanctum_party_confirm(t)
+		
 		# UI actions
 		"ui.dismiss_summon_reveals":
 			flow_ctx.pending_summon_reveals.clear()
@@ -797,3 +803,129 @@ func _log_snapshot_emitted(t: int, snapshot: Dictionary, reason: String) -> void
 		"reason": reason,
 		"snapshot_type": str(snapshot.get("type", "")),
 	})
+	
+func _get_party_max_size() -> int:
+	var max_party_size := 5
+	if config_service == null:
+		return max_party_size
+
+	var balance: Dictionary = config_service.get_balance()
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+
+	var s_v: Variant = data.get("sanctum", {})
+	var s_cfg: Dictionary = s_v if s_v is Dictionary else {}
+
+	return int(s_cfg.get("party_max_size", 5))
+	
+func _handle_sanctum_party_toggle(action: Dictionary, t: int) -> void:
+	# Only meaningful inside Party Manage; ignore elsewhere to avoid accidental mutations.
+	if str(flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.PARTY_MANAGE:
+		logger.debug(t, "sanctum.party.toggle.ignored", "Party toggle ignored (not in party_manage)", {
+			"snapshot_type": str(flow_ctx.last_snapshot.get("type", ""))
+		})
+		return
+
+	var payload_v: Variant = action.get("payload", {})
+	var payload: Dictionary = payload_v if payload_v is Dictionary else {}
+
+	var echo_id := str(payload.get("echo_id", "")).strip_edges()
+	if echo_id.is_empty():
+		logger.debug(t, "sanctum.party.toggle.denied", "Party toggle denied (missing echo_id)", {})
+		return
+
+	# Ensure pending exists (should have been initialized on enter, but be defensive)
+	if flow_ctx.pending_party_ids == null:
+		flow_ctx.pending_party_ids = []
+	if not (flow_ctx.pending_party_ids is Array):
+		flow_ctx.pending_party_ids = []
+
+	# Validate echo_id exists in roster (prevent selecting ghost ids)
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	var roster_v: Variant = sanctum.get("roster", [])
+	var roster: Array = roster_v if roster_v is Array else []
+
+	var exists := false
+	for e_v in roster:
+		if e_v is Dictionary and str(e_v.get("id", "")) == echo_id:
+			exists = true
+			break
+
+	if not exists:
+		logger.debug(t, "sanctum.party.toggle.denied", "Party toggle denied (echo not in roster)", {
+			"echo_id": echo_id
+		})
+		return
+
+	var max_party_size := _get_party_max_size()
+
+	# Toggle behavior
+	var added := false
+	if flow_ctx.pending_party_ids.has(echo_id):
+		flow_ctx.pending_party_ids.erase(echo_id)
+		added = false
+	else:
+		if flow_ctx.pending_party_ids.size() >= max_party_size:
+			logger.info(t, "sanctum.party.toggle_denied", "Party is full", {
+				"echo_id": echo_id,
+				"max_party_size": max_party_size,
+				"pending_count": flow_ctx.pending_party_ids.size()
+			})
+			return
+		flow_ctx.pending_party_ids.append(echo_id)
+		added = true
+
+	logger.debug(t, "sanctum.party.toggle", "Party toggled", {
+		"echo_id": echo_id,
+		"added": added,
+		"pending_count": flow_ctx.pending_party_ids.size(),
+		"max_party_size": max_party_size
+	})
+
+	# No flow transition — update UI immediately
+	flow_ctx.last_snapshot = FlowPartyManageState.build_snapshot(flow_ctx, t)
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+	
+func _handle_sanctum_party_confirm(t: int) -> void:
+	# Only meaningful inside Party Manage
+	if str(flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.PARTY_MANAGE:
+		logger.debug(t, "sanctum.party.confirm.ignored", "Party confirm ignored (not in party_manage)", {
+			"snapshot_type": str(flow_ctx.last_snapshot.get("type", ""))
+		})
+		return
+
+	var max_party_size := _get_party_max_size()
+
+	var pending: Array = flow_ctx.pending_party_ids if flow_ctx.pending_party_ids is Array else []
+	if pending.size() < 1:
+		logger.debug(t, "sanctum.party.confirm.denied", "Party confirm denied (empty selection)", {})
+		return
+	if pending.size() > max_party_size:
+		logger.debug(t, "sanctum.party.confirm.denied", "Party confirm denied (over max)", {
+			"count": pending.size(),
+			"max_party_size": max_party_size
+		})
+		return
+
+	# Ensure sanctum dict exists
+	if not flow_ctx.save_data.has("sanctum") or typeof(flow_ctx.save_data["sanctum"]) != TYPE_DICTIONARY:
+		flow_ctx.save_data["sanctum"] = {}
+	var sanctum: Dictionary = flow_ctx.save_data["sanctum"]
+
+	# Persist selection
+	sanctum["active_party_ids"] = pending.duplicate()
+
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason != "":
+		flow_ctx.save_request_reason += "|sanctum.party.confirm"
+	else:
+		flow_ctx.save_request_reason = "sanctum.party.confirm"
+
+	logger.info(t, "sanctum.party.confirm", "Party confirmed", {
+		"count": pending.size(),
+		"party_ids": pending
+	})
+
+	# Return to sanctum hub
+	flow_machine.transition(FlowStateIds.SANCTUM, flow_ctx, logger, t, "ui.sanctum.party.confirm")

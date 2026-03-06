@@ -1,0 +1,77 @@
+[gd_scene format=3 uid="uid://brc7exe07k8y7"]
+
+[ext_resource type="Script" uid="uid://dqxhccb5n6irv" path="res://ui/screens/PartyManageScreen.gd" id="1_gi31j"]
+
+[node name="PartyManageScreen" type="Control" unique_id=43332754]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_gi31j")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=1995364774]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Title" type="Label" parent="VBoxContainer" unique_id=239651022]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Manage Party"
+
+[node name="PanelSplit" type="HBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="RosterPanel" type="VBoxContainer" parent="VBoxContainer/PanelSplit"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="RosterHeader" type="Label" parent="VBoxContainer/PanelSplit/RosterPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Roster"
+
+[node name="RosterScroll" type="ScrollContainer" parent="VBoxContainer/PanelSplit/RosterPanel"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="RosterList" type="VBoxContainer" parent="VBoxContainer/PanelSplit/RosterPanel/RosterScroll" unique_id=1261631453]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="PartyPanel" type="VBoxContainer" parent="VBoxContainer/PanelSplit"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="PartyHeader" type="Label" parent="VBoxContainer/PanelSplit/PartyPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Party (0/5)"
+
+[node name="PartyScroll" type="ScrollContainer" parent="VBoxContainer/PanelSplit/PartyPanel"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PartyList" type="VBoxContainer" parent="VBoxContainer/PanelSplit/PartyPanel/PartyScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer" unique_id=367487950]
+layout_mode = 2
+alignment = 1
+
+[node name="Back" type="Button" parent="VBoxContainer/HBoxContainer" unique_id=1386470547]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Back"
+
+[node name="Confirm" type="Button" parent="VBoxContainer/HBoxContainer" unique_id=781990249]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Confirm"

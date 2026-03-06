@@ -148,6 +148,25 @@ func _rebuild_snapshot(ctx: FlowContext, logger: StructuredLogger, t: int) -> vo
 		data["roster_count"] = roster.size()
 		data["active_party_count"] = active_party_ids.size()
 
+		# SANCTUM-003 Subtask 4: party_slots projection (player-facing only, no IDs)
+		var party_slots: Array = []
+		for pid_v in active_party_ids:
+			var pid := str(pid_v)
+			if pid.is_empty():
+				continue
+			for echo_v in roster:
+				if not (echo_v is Dictionary):
+					continue
+				var echo: Dictionary = echo_v
+				if str(echo.get("id", "")) == pid:
+					party_slots.append({
+						"name": str(echo.get("name", "")),
+						"level": int(echo.get("level", 1)),
+						"rank": int(echo.get("rank", 1))
+					})
+					break
+		data["party_slots"] = party_slots
+
 		# Optional: include these only if you want the UI to list them later (out of scope for MVP. Possibly later we can use set parties that can be prepared before.)
 		# data["active_party_ids"] = active_party_ids
 

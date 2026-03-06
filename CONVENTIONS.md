@@ -216,6 +216,25 @@ Snapshot.data keys:
 - sanctum_name_suggested: String (deterministic suggestion)
 - roster_count: int (MVP placeholder)
 - ase_rate_per_hour_hint: float (rate hint only, not a balance prediction)
+- party_slots: Array[Dictionary] — confirmed party for display only: [{ name, level, rank }] (no IDs)
+
+### Snapshot.data keys (Party Manage, SANCTUM-003)
+- title: String
+- max_party_size: int (from `balance.json data.sanctum.party_max_size`; default 5)
+- active_party_ids: Array[String] — INTERNAL transient pending selection (FlowContext.pending_party_ids); initialized from `save.sanctum.active_party_ids` on enter
+- roster: Array[Dictionary] — one row per echo: `{ id, name, rank, in_party: bool, level? }`
+
+Action slots:
+- `back` → `flow.go_state` to `flow.sanctum`
+- `primary` → `sanctum.party.confirm` with `enabled: bool` (true when pending ≥ 1)
+
+Per-row actions (dispatched directly by UI row, NOT in snapshot.actions):
+- `{ "type": "sanctum.party.toggle", "payload": { "echo_id": String } }`
+  - Adds echo if not in pending and `pending.size() < max_party_size`
+  - Removes echo if already in pending (idempotent toggle)
+
+Transient FlowContext field:
+- `pending_party_ids: Array` — initialized from `save.sanctum.active_party_ids` on enter(); never written to save; discarded on exit()
 
 ### Action (UI → sim)
 Action type format: domain.subdomain.verb (with optional qualifiers)
@@ -348,6 +367,7 @@ Approved save triggers:
 - After a stage objective resolves (if multiple objectives exist)
 - Returning to Sanctum
 - After confirming Sanctum name
+- After confirming party selection (`sanctum.party.confirm`)
 
 Rules:
 - Not every state writes to save.
@@ -633,6 +653,10 @@ Canonical types:
 - Core services (save, flow, combat, grid, actors) must log meaningful state changes.
 - Logger level filtering (off/info/debug) must not affect simulation determinism.
 - Log formatting is a UI concern; stored logs must remain structured dictionaries.
+
+### Sanctum party action types (SANCTUM-003)
+- `sanctum.party.toggle` — payload: `{ echo_id: String }`. Adds or removes echo from transient pending selection. Silently ignored if party is full and echo is not already in pending.
+- `sanctum.party.confirm` — no payload. Persists `pending_party_ids` → `save.sanctum.active_party_ids` and transitions back to `flow.sanctum`.
 
 ### Economy log event types (ECONOMY-001)
 Economy changes must be explainable and replay-friendly. Use these canonical types:

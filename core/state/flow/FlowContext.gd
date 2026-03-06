@@ -8,9 +8,14 @@ var sim_tick: int = 0
 # Last snapshot produced by Flow (UI renders this)
 var last_snapshot: Dictionary = {}
 
-# UI-only queue (NOT saved)
+# ---- UI-only vars (NOT saved) ----
 # Used for summon reveal overlays (Summon screen only).
 var pending_summon_reveals: Array = [] # Array[Dictionary] (Echo records or summaries)
+
+# Used while inside flow.party_manage before confirm.
+var pending_party_ids: Array = [] # Array[String] (Echo ids)
+
+# ----
 
 # Session / run metadata (placeholders; filled in later)
 var realm_id: String = ""
