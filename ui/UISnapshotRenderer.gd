@@ -1,3 +1,15 @@
+## UISnapshotRenderer
+##
+## Role: Generic fallback renderer for snapshot types that have no bespoke screen yet.
+## Renders snapshot JSON to a RichTextLabel and builds action buttons from Array-style
+## or legacy action formats.
+##
+## NOT a base class. Bespoke screens extend Control directly and implement the
+## bespoke screen contract (set_snapshot / action_requested signal).
+##
+## Usage: AppRoot uses this when no matching bespoke scene is found for snapshot.type.
+## See CONVENTIONS.md → "Bespoke Screen Contract" for the full interface spec.
+
 extends Node
 
 class_name UISnapshotRenderer

@@ -485,6 +485,7 @@ func _render_snapshot(snap: Dictionary) -> void:
 		_summon_screen.set_snapshot(snap)
 		return
 
+	# No bespoke screen found for this snapshot type — fall back to UISnapshotRenderer.
 	_hide_bespoke_screens()
 	renderer.render(snap)
 

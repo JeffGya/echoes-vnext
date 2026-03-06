@@ -271,6 +271,49 @@ Rules:
 - AppRoot listens for `action_requested` and forwards to runtime dispatch.
 - Fallback generic renderer MAY iterate `snapshot.actions.values()` if a bespoke screen is not available.
 
+### Bespoke Screen Contract (UI-001)
+
+All snapshot-driven screens must follow this interface. It is the single standard for how UI screens receive state and send actions.
+
+**Entry point**
+Every bespoke screen must expose:
+```
+func set_snapshot(snap: Dictionary) -> void
+```
+AppRoot calls this whenever a new snapshot arrives. The screen reads `snap["data"]` for display values and `snap["actions"]` for named action slots. It must not store references to sim objects.
+
+**Exit point**
+Every bespoke screen must declare:
+```
+signal action_requested(action: Dictionary)
+```
+All user interactions that need to reach the sim are emitted through this signal. AppRoot connects it and forwards to `FlowRuntime.dispatch()`. Screens never call `dispatch()` directly.
+
+**Action slots**
+`snap["actions"]` is a **slot-keyed Dictionary** — never an Array:
+```
+{
+  "nav.back":   { "type": "flow.go_state", "to": "flow.sanctum", "slot": "nav.back", ... },
+  "cta.summon": { "type": "sanctum.summon", "slot": "cta.summon", ... }
+}
+```
+Screens bind buttons to named slots independently. There is no prescribed display order from the snapshot. Array-style action lists are **legacy / fallback only** (UISnapshotRenderer and un-migrated states).
+
+**Per-row actions**
+Row-level interactions (e.g. party toggle per echo row) are dispatched directly by the UI row component — they are NOT listed in `snap["actions"]`.
+
+**Hard prohibitions**
+- No screen may read `FlowContext`, `FlowRuntime`, `SanctumState`, `SaveService`, or any other sim internal directly.
+- No screen may call `dispatch()` directly.
+
+**AppRoot responsibilities**
+AppRoot maps `snapshot.type` to the correct bespoke scene, swaps the active screen, calls `set_snapshot()`, and connects the `action_requested` signal. For unknown snapshot types it falls back to `UISnapshotRenderer`.
+
+**Template**
+All new screens start from `res://ui/screens/ScreenTemplate.gd`. It enforces snapshot structure via asserts and types `actions` as a Dictionary.
+
+---
+
 ### LogEvent (sim → UI/QA)
 Logs are structured, stable, and testable.
 

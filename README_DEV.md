@@ -80,6 +80,7 @@ Rendering only. UI must be snapshot-driven.
 - AppRoot.tscn
 - UISnapshotRenderer.gd
 - ui/screens/ — High-level screens (Sanctum, Realm Select, Combat, Resolve, Debug)
+  - ScreenTemplate.gd — Canonical starting point for all new bespoke screens (UI-001)
 - ui/components/ — Reusable UI components (ActionList, LogView, Panels)
   - DebugPanel.gd
 
