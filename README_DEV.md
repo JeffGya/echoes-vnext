@@ -68,6 +68,8 @@ This project is intentionally split into:
   - ConfigService.gd
 
 - core/actors/ — Actor model (Echoes, Enemies, Allies, Structures), stats, behaviors, directives
+  - ActorSchema.gd — REQUIRED_FIELDS const; validate() + get_defaults() for Actor dicts
+  - EchoActor.gd   — static from_echo() — Echo save dict → Actor dict (read-only deep-copy view)
 - core/grid/ — Board model, placement rules, movement, distance helpers
 - core/combat/ — Combat loop, action resolver, objectives, snapshot builders
 - core/realms/ — Realm + Stage models, generator, rewards, progression service

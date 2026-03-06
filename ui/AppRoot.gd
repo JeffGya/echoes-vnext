@@ -225,6 +225,7 @@ func _run_tests(parts: Array) -> void:
 	EconomyTests.register(runner)
 	SanctumSummonTests.register(runner)
 	PartyTests.register(runner)
+	ActorTests.register(runner)
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [

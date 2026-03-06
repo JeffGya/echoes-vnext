@@ -771,3 +771,51 @@ Payload rules:
   - emit as debug when logger level is DEBUG (to include "reason" in formatted output)
 
 See README_DEV.md → Structured Logging (CORE-004) for architectural intent and usage guidelines.
+
+---
+
+## Actor Contract (ACTOR-001)
+
+Actors are the unified data shape for any entity that participates in combat or fills a party
+slot: Echoes now; enemies, NPCs, and structures in future stories.
+
+### Required fields (all must be present and non-null)
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | String | Matches Echo save id; internal — never displayed |
+| `name` | String | Display name |
+| `rarity` | String | `"uncalled"` \| `"called"` \| `"chosen"` (enemies may use `""`) |
+| `rank` | int | Echo life stage (1–10); enemies may use 0 or level-equivalent |
+| `calling_origin` | String | Echo origin; `""` for enemies/NPCs |
+| `stats` | Dictionary | `{ max_hp, atk, def, agi, int, cha }` — all int |
+| `traits` | Dictionary | `{ courage, wisdom, faith }` — all int (0 for enemies) |
+| `xp_total` | int | Lifetime XP (0 for enemies) |
+| `level` | int | Experience step within rank (defaults to 1 until PROG-001) |
+| `actor_type` | String | `"echo"` \| reserved: `"enemy"`, `"npc"` |
+
+### Validation
+
+`ActorSchema.validate(actor: Dictionary) -> bool`
+Checks presence and non-null only. Does not enforce value ranges — enemy/NPC actors may use
+zero or empty values for Echo-specific fields (traits, calling_origin, etc.).
+
+### Read-only contract
+
+Actor dicts are **read-only views** of save data. Mutating a returned actor dict must not
+mutate the underlying save. Callers that need mutation (e.g. combat state) must work with
+separate runtime-only copies.
+
+This is enforced in `EchoActor.from_echo()` via `.duplicate(true)` on nested dicts.
+
+### Canonical interfaces
+
+- `SanctumService.get_party_actors() -> Array` — Actor dicts for the active party.
+- `SanctumService.get_roster_actors() -> Array` — Actor dicts for the full roster.
+
+Both return `[]` gracefully on empty roster/party. Neither modifies save data.
+
+### Future stubs
+
+- **position** `{ "x": int, "y": int }` — added when `core/grid/` lands (GRID stories).
+- **ActorStateMachine** — per-round behavior selection, scaffolded when `core/combat/` exists.
