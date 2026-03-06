@@ -8,7 +8,12 @@
 	  "sanctum_bank_interval_seconds": 300
 	},
 	"summoning": {
-		  "ase_cost_per_summon": 60,
+		"ase_cost_per_summon": 60,
+		"ase_cost_per_summon_by_grade": {
+			"uncalled": 60,
+			"called":   150,
+			"chosen":   400
+		},
 
 		"trait_min": 30,
 		"trait_max": 70,

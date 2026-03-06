@@ -200,7 +200,10 @@ func dispatch(action: Dictionary) -> Dictionary:
 			
 		"sanctum.summon":
 			_handle_sanctum_summon(action, t)
-		
+
+		"sanctum.grade_select":
+			_handle_sanctum_grade_select(action, t)
+
 		"sanctum.party.toggle":
 			_handle_sanctum_party_toggle(action, t)
 			
@@ -267,13 +270,18 @@ func _handle_sanctum_summon(action: Dictionary, t: int) -> void:
 			"source": "sanctum.summon.before_spend"
 		}, t)
 
-	# 2) read cost
+	# 2) read cost (grade-based; fall back to flat key if grade missing)
 	var balance := config_service.get_balance()
 	var data_v: Variant = balance.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	var summ_v: Variant = data.get("summoning", {})
 	var summ_cfg: Dictionary = summ_v if summ_v is Dictionary else {}
-	var cost_each := int(summ_cfg.get("ase_cost_per_summon", 60))
+
+	var fallback_flat_cost := int(summ_cfg.get("ase_cost_per_summon", 60))
+	var grade_costs_v: Variant = summ_cfg.get("ase_cost_per_summon_by_grade", {})
+	var grade_costs: Dictionary = grade_costs_v if grade_costs_v is Dictionary else {}
+	var grade := flow_ctx.selected_summon_grade
+	var cost_each := int(grade_costs.get(grade, fallback_flat_cost))
 
 	var total_cost := cost_each * count
 
@@ -285,6 +293,7 @@ func _handle_sanctum_summon(action: Dictionary, t: int) -> void:
 	if ase_before < total_cost:
 		logger.info(t, "sanctum.summon.denied", "Not enough Ase to summon", {
 			"ase": ase_before,
+			"grade": grade,
 			"cost_each": cost_each,
 			"count": count,
 			"total_cost": total_cost
@@ -292,10 +301,12 @@ func _handle_sanctum_summon(action: Dictionary, t: int) -> void:
 		return
 
 	# 4) spend once
-	var ok_spend: bool = econ.spend_ase(total_cost, "summon.cost", logger, t)
+	var spend_reason := "summon.cost." + grade
+	var ok_spend: bool = econ.spend_ase(total_cost, spend_reason, logger, t)
 	if not ok_spend:
 		logger.info(t, "sanctum.summon.denied", "Spend failed", {
 			"ase": ase_before,
+			"grade": grade,
 			"total_cost": total_cost,
 			"count": count
 		})
@@ -323,6 +334,45 @@ func _handle_sanctum_summon(action: Dictionary, t: int) -> void:
 		flow_ctx.save_request = true
 		flow_ctx.save_request_reason = "sanctum.summon"
 		
+func _handle_sanctum_grade_select(action: Dictionary, t: int) -> void:
+	var grade := str(action.get("grade", "")).strip_edges()
+	if grade.is_empty():
+		logger.debug(t, "economy.summon.grade_select.denied", "Grade select denied (empty grade)", {})
+		return
+
+	# Validate grade against the cost table in balance.json
+	var balance := config_service.get_balance()
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var summ_v: Variant = data.get("summoning", {})
+	var summ_cfg: Dictionary = summ_v if summ_v is Dictionary else {}
+	var grade_costs_v: Variant = summ_cfg.get("ase_cost_per_summon_by_grade", {})
+	var grade_costs: Dictionary = grade_costs_v if grade_costs_v is Dictionary else {}
+
+	if not grade_costs.has(grade):
+		logger.debug(t, "economy.summon.grade_select.denied", "Grade select denied (invalid grade key)", {
+			"grade": grade,
+			"valid_grades": grade_costs.keys()
+		})
+		return
+
+	flow_ctx.selected_summon_grade = grade
+
+	var ase_cost := int(grade_costs.get(grade, 60))
+	var econ_v: Variant = flow_ctx.save_data.get("economy", {})
+	var econ_data: Dictionary = econ_v if econ_v is Dictionary else {}
+	var ase_balance := int(econ_data.get("ase", 0))
+
+	logger.debug(t, "economy.summon.grade_select", "Summon grade selected", {
+		"grade": grade,
+		"ase_cost": ase_cost,
+		"can_afford": ase_balance >= ase_cost,
+	})
+
+	# Rebuild snapshot mid-state (refresh_snapshot reads ctx.last_snapshot as-is for SUMMON)
+	flow_ctx.last_snapshot = FlowSummonState.build_snapshot(flow_ctx, t)
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
 func _handle_new_game(t: int) -> void:
 	# Create a new campaign root seed string (random once; then persisted)
 	var seed_root := _generate_seed_root_string()

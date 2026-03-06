@@ -445,24 +445,30 @@ On New Game / first boot setup, the Keeper receives exactly one free starter Ech
 - Summon generation is deterministic from `campaign.seed_root` + `seed_path` (dot-separated, case-sensitive)
 
 ---
-### Summoning contract (SANCTUM-002)
+### Summoning contract (SANCTUM-002 / ECONOMY-003)
 
 Core rules:
 - Paid summoning is only available in the Sanctum Summon screen.
-- Cost = **60 Ase per summon**.
+- Cost is **grade-based** (ECONOMY-003): uncalled=60, called=150, chosen=400 Ase per summon.
+- Legacy flat key `ase_cost_per_summon = 60` is kept in `balance.json` as a fallback only.
 - Core must **settle before spend** (ECONOMY-002).
 - Successful summon is **transactional**:
   1) settle_time
-  2) validate funds
-  3) spend (reason="summon.cost")
+  2) validate funds for selected grade
+  3) spend (reason="summon.cost.`<grade>`")
   4) generate Echo via EchoFactory
   5) append to `sanctum.roster`
   6) increment `sanctum.summon_count`
   7) request save (single choke point)
 
+Grade selection:
+- Grade defaults to `"uncalled"` every time the player enters the Summon screen.
+- Player may select a different grade via `sanctum.grade_select` action.
+- Selected grade is stored in `FlowContext.selected_summon_grade` (transient — NOT saved).
+
 Bulk summoning:
 - Summon accepts a `count` (MVP: 1–10 UI slider).
-- Total cost = 60 * count.
+- Total cost = `grade_cost * count`.
 - Each Echo uses a unique seed path: `campaign.summon.<summon_index>`.
 
 Reveal UX (transient):
@@ -716,9 +722,28 @@ Canonical types:
 - Logger level filtering (off/info/debug) must not affect simulation determinism.
 - Log formatting is a UI concern; stored logs must remain structured dictionaries.
 
-### Sanctum party action types (SANCTUM-003)
+### Snapshot.data keys (Summon screen, ECONOMY-003)
+- `title`: String
+- `ase_balance`: int
+- `ase_rate_per_hour_hint`: float
+- `ase_cost_per_summon`: int — **legacy flat fallback** (kept for backward-compat; always equals the uncalled cost)
+- `selected_grade`: String — currently active grade key (`"uncalled"` | `"called"` | `"chosen"`)
+- `summon_disabled`: bool — `true` when `ase_balance < selected_cost` (direct int comparison, no service call from state)
+- `summon_disabled_reason`: String — `"not_enough_ase"` when disabled, `""` otherwise
+- `summon_grade_options`: `Array[Dictionary]` — `[{ key, label, ase_cost }]` for all three grade tiers
+- `default_summon_grade`: String (`"uncalled"`)
+- `default_summon_amount`: int (1)
+- `pending_summon_reveals`: Array — transient reveal queue (NOT saved)
+
+Action slots:
+- `nav.back` → `flow.go_state` to `flow.sanctum`
+- `cta.summon` → `sanctum.summon` with `"disabled": summon_disabled`
+- `overlay.dismiss_reveals` → `ui.dismiss_summon_reveals`
+
+### Sanctum action types (SANCTUM-003 / ECONOMY-003)
 - `sanctum.party.toggle` — payload: `{ echo_id: String }`. Adds or removes echo from transient pending selection. Silently ignored if party is full and echo is not already in pending.
 - `sanctum.party.confirm` — no payload. Persists `pending_party_ids` → `save.sanctum.active_party_ids` and transitions back to `flow.sanctum`.
+- `sanctum.grade_select` — flat action (grade is a top-level field, not nested in payload): `{ "type": "sanctum.grade_select", "grade": "called" }`. Stores grade in `FlowContext.selected_summon_grade`, validates against `ase_cost_per_summon_by_grade` table, then rebuilds snapshot mid-state. Invalid grade keys are logged and silently ignored.
 
 ### Economy log event types (ECONOMY-001)
 Economy changes must be explainable and replay-friendly. Use these canonical types:

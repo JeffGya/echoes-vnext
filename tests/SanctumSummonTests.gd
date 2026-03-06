@@ -24,6 +24,12 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("sanctum.summon/paid_summon_spends_60_each", Callable(SanctumSummonTests, "_t_paid_summon_spends_60_each"))
 	runner.register_test("sanctum.summon/paid_summon_appends_roster_and_increments_count", Callable(SanctumSummonTests, "_t_paid_summon_appends_roster_and_increments_count"))
 	runner.register_test("sanctum.summon/reveal_queue_is_transient_not_saved", Callable(SanctumSummonTests, "_t_reveal_queue_transient_not_saved"))
+	# ECONOMY-003: Grade-based summon cost tests
+	runner.register_test("sanctum.summon/uncalled_grade_spends_60", Callable(SanctumSummonTests, "_t_uncalled_grade_spends_60"))
+	runner.register_test("sanctum.summon/called_grade_spends_150", Callable(SanctumSummonTests, "_t_called_grade_spends_150"))
+	runner.register_test("sanctum.summon/denied_when_balance_insufficient_for_grade", Callable(SanctumSummonTests, "_t_denied_when_balance_insufficient_for_grade"))
+	runner.register_test("sanctum.summon/summon_disabled_true_when_insufficient", Callable(SanctumSummonTests, "_t_summon_disabled_true_when_insufficient"))
+	runner.register_test("sanctum.summon/summon_disabled_false_when_sufficient", Callable(SanctumSummonTests, "_t_summon_disabled_false_when_sufficient"))
 
 # -------------------------
 # Tests (must return Dictionary)
@@ -273,6 +279,159 @@ static func _t_reveal_queue_transient_not_saved() -> Dictionary:
 			return {"ok": false, "error": "Save must not contain ui.pending_reveals"}
 
 	return {"ok": true}
+
+# ECONOMY-003: Grade-based summon cost tests
+
+static func _t_uncalled_grade_spends_60() -> Dictionary:
+	var env := _make_runtime_env()
+	if not bool(env.get("ok", false)):
+		return env
+
+	var runtime: FlowRuntime = env["runtime"]
+	var save_ref: Dictionary = runtime.get_save_data()
+
+	var now_unix := 111111
+	var econ_v: Variant = save_ref.get("economy", {})
+	var econ: Dictionary = econ_v if econ_v is Dictionary else {}
+	econ["last_settle_unix"] = now_unix
+	save_ref["economy"] = econ
+
+	runtime.dispatch({ "type": "economy.ase.add", "amount": 500, "reason": "test.seed" })
+	runtime.dispatch({ "type": "flow.go_state", "to": "flow.summon" })
+	# grade_select "uncalled" explicitly (grade already resets to uncalled on enter)
+	runtime.dispatch({ "type": "sanctum.grade_select", "grade": "uncalled" })
+
+	var before := int(EconomyService.new(runtime.get_save_data()).get_ase())
+	runtime.dispatch({ "type": "sanctum.summon", "count": 1, "now_unix": now_unix })
+	var after := int(EconomyService.new(runtime.get_save_data()).get_ase())
+
+	var delta := before - after
+	if delta != 60:
+		return { "ok": false, "error": "Expected -60 Ase for uncalled summon. before=%d after=%d delta=%d" % [before, after, delta] }
+	return { "ok": true }
+
+static func _t_called_grade_spends_150() -> Dictionary:
+	var env := _make_runtime_env()
+	if not bool(env.get("ok", false)):
+		return env
+
+	var runtime: FlowRuntime = env["runtime"]
+	var save_ref: Dictionary = runtime.get_save_data()
+
+	var now_unix := 222222
+	var econ_v: Variant = save_ref.get("economy", {})
+	var econ: Dictionary = econ_v if econ_v is Dictionary else {}
+	econ["last_settle_unix"] = now_unix
+	save_ref["economy"] = econ
+
+	runtime.dispatch({ "type": "economy.ase.add", "amount": 500, "reason": "test.seed" })
+	runtime.dispatch({ "type": "flow.go_state", "to": "flow.summon" })
+	runtime.dispatch({ "type": "sanctum.grade_select", "grade": "called" })
+
+	var before := int(EconomyService.new(runtime.get_save_data()).get_ase())
+	runtime.dispatch({ "type": "sanctum.summon", "count": 1, "now_unix": now_unix })
+	var after := int(EconomyService.new(runtime.get_save_data()).get_ase())
+
+	var delta := before - after
+	if delta != 150:
+		return { "ok": false, "error": "Expected -150 Ase for called summon. before=%d after=%d delta=%d" % [before, after, delta] }
+	return { "ok": true }
+
+static func _t_denied_when_balance_insufficient_for_grade() -> Dictionary:
+	var env := _make_runtime_env()
+	if not bool(env.get("ok", false)):
+		return env
+
+	var runtime: FlowRuntime = env["runtime"]
+	var save_ref: Dictionary = runtime.get_save_data()
+
+	var now_unix := 333333
+	var econ_v: Variant = save_ref.get("economy", {})
+	var econ: Dictionary = econ_v if econ_v is Dictionary else {}
+	# Set Ase directly (not via add) so existing save balance doesn't interfere
+	econ["ase"] = 100
+	econ["last_settle_unix"] = now_unix
+	save_ref["economy"] = econ
+
+	# 100 Ase — enough for uncalled (60) but NOT called (150)
+	runtime.dispatch({ "type": "flow.go_state", "to": "flow.summon" })
+	runtime.dispatch({ "type": "sanctum.grade_select", "grade": "called" })
+
+	var before := int(EconomyService.new(runtime.get_save_data()).get_ase())
+	runtime.dispatch({ "type": "sanctum.summon", "count": 1, "now_unix": now_unix })
+	var after := int(EconomyService.new(runtime.get_save_data()).get_ase())
+
+	if before != after:
+		return { "ok": false, "error": "Balance should be unchanged when denied. before=%d after=%d" % [before, after] }
+	return { "ok": true }
+
+static func _t_summon_disabled_true_when_insufficient() -> Dictionary:
+	var env := _make_runtime_env()
+	if not bool(env.get("ok", false)):
+		return env
+
+	var runtime: FlowRuntime = env["runtime"]
+	var save_ref: Dictionary = runtime.get_save_data()
+
+	# Set Ase directly (not via add) so existing save balance doesn't interfere
+	var econ_v: Variant = save_ref.get("economy", {})
+	var econ: Dictionary = econ_v if econ_v is Dictionary else {}
+	econ["ase"] = 100
+	save_ref["economy"] = econ
+
+	# 100 Ase, select "called" (costs 150) — should disable summon
+	runtime.dispatch({ "type": "flow.go_state", "to": "flow.summon" })
+	var snap: Dictionary = runtime.dispatch({ "type": "sanctum.grade_select", "grade": "called" })
+
+	var data_v: Variant = snap.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+
+	if not data.get("summon_disabled", false):
+		return { "ok": false, "error": "Expected summon_disabled=true when balance(100) < called cost(150). snap_data=%s" % [str(data)] }
+
+	var reason := str(data.get("summon_disabled_reason", ""))
+	if reason != "not_enough_ase":
+		return { "ok": false, "error": "Expected summon_disabled_reason='not_enough_ase', got '%s'" % reason }
+
+	var actions_v: Variant = snap.get("actions", {})
+	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
+	var cta_v: Variant = actions.get("cta.summon", {})
+	var cta: Dictionary = cta_v if cta_v is Dictionary else {}
+	if not bool(cta.get("disabled", false)):
+		return { "ok": false, "error": "Expected cta.summon.disabled=true in snapshot actions" }
+
+	return { "ok": true }
+
+static func _t_summon_disabled_false_when_sufficient() -> Dictionary:
+	var env := _make_runtime_env()
+	if not bool(env.get("ok", false)):
+		return env
+
+	var runtime: FlowRuntime = env["runtime"]
+
+	# Set balance to 500, then select "chosen" (costs 400) — should NOT disable summon
+	runtime.dispatch({ "type": "economy.ase.add", "amount": 500, "reason": "test.seed" })
+	runtime.dispatch({ "type": "flow.go_state", "to": "flow.summon" })
+	var snap: Dictionary = runtime.dispatch({ "type": "sanctum.grade_select", "grade": "chosen" })
+
+	var data_v: Variant = snap.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+
+	if bool(data.get("summon_disabled", true)):
+		return { "ok": false, "error": "Expected summon_disabled=false when balance(500) >= chosen cost(400). snap_data=%s" % [str(data)] }
+
+	var reason := str(data.get("summon_disabled_reason", "x"))
+	if reason != "":
+		return { "ok": false, "error": "Expected summon_disabled_reason='' when not disabled, got '%s'" % reason }
+
+	var actions_v: Variant = snap.get("actions", {})
+	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
+	var cta_v: Variant = actions.get("cta.summon", {})
+	var cta: Dictionary = cta_v if cta_v is Dictionary else {}
+	if bool(cta.get("disabled", true)):
+		return { "ok": false, "error": "Expected cta.summon.disabled=false in snapshot actions" }
+
+	return { "ok": true }
 
 # -------------------------
 # Helpers

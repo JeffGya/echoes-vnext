@@ -15,6 +15,10 @@ var pending_summon_reveals: Array = [] # Array[Dictionary] (Echo records or summ
 # Used while inside flow.party_manage before confirm.
 var pending_party_ids: Array = [] # Array[String] (Echo ids)
 
+# Selected summon grade for the current Summon screen visit.
+# Reset to "uncalled" each time FlowSummonState.enter() runs — never persisted to save.
+var selected_summon_grade: String = "uncalled"
+
 # ----
 
 # Session / run metadata (placeholders; filled in later)
