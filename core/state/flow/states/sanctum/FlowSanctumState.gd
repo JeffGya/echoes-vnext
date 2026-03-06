@@ -9,45 +9,42 @@ func enter(ctx: RefCounted, t:int) -> void:
 	var flow_ctx := ctx as FlowContext
 	
 	var has_realm_locked_in := flow_ctx.realm_id != ""
-	
-	var actions: Array = [
-		{
+
+	# Slot-keyed Dictionary — Feb 2026 standard. Each entry includes its own "slot" key.
+	# cta.enter_stage is always present; "disabled" flag communicates availability to UI.
+	var actions: Dictionary = {
+		"nav.party_manage": {
 			"type": "flow.go_state",
 			"to": FlowStateIds.PARTY_MANAGE,
-			"label": "Manage Party"
+			"label": "Manage Party",
+			"slot": "nav.party_manage",
 		},
-		{
+		"nav.echo_manage": {
 			"type": "flow.go_state",
 			"to": FlowStateIds.ECHO_MANAGE,
-			"label": "Manage Echoes"
+			"label": "Manage Echoes",
+			"slot": "nav.echo_manage",
 		},
-		{
+		"nav.realm_select": {
 			"type": "flow.go_state",
 			"to": FlowStateIds.REALM_SELECT,
-			"label": "Select Realm"
+			"label": "Select Realm",
+			"slot": "nav.realm_select",
 		},
-		{
+		"nav.summon": {
 			"type": "flow.go_state",
 			"to": FlowStateIds.SUMMON,
-			"label": "Summon Echo"
-		}
-	]
-	
-	# Start run is only available if a realm is locked in.
-	if has_realm_locked_in:
-		actions.append({
+			"label": "Summon Echo",
+			"slot": "nav.summon",
+		},
+		"cta.enter_stage": {
 			"type": "flow.go_state",
 			"to": FlowStateIds.STAGE_MAP,
-			"label": "Enter Stage"
-		})
-	else: 
-		# Still show it, but disabled, so UI can teach the flow.
-		actions.append({
-			"type": "flow.go_state",
-			"to": FlowStateIds.STAGE_MAP,
-			"label": "Enter Stage (Select a Realm first)",
-			"disabled": true
-		})
+			"label": "Enter Stage",
+			"slot": "cta.enter_stage",
+			"disabled": not has_realm_locked_in,
+		},
+	}
 		
 	# --- Sanctum roster (from save) ---
 	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})

@@ -11,7 +11,6 @@ signal action_requested(action: Dictionary)
 @onready var ase_rate_label: Label = %AseRateLabel
 @onready var ase_delta_label: Label = %AseDeltaLabel
 @onready var echo_count_label : Label = %EchoCountLabel
-@onready var buttons : VBoxContainer = %Buttons
 
 @onready var echo_preview_1: Label = %EchoPreview1
 @onready var echo_preview_2: Label = %EchoPreview2
@@ -67,12 +66,16 @@ func _render() -> void:
 		else:
 			l.text = ""
 			l.visible = false
+	# Empty roster message
+	if preview.is_empty():
+		echo_preview_1.text = "No Echoes summoned yet"
+		echo_preview_1.visible = true
 
 	# Party slots (SANCTUM-003 Subtask 4)
 	var slots_v: Variant = data.get("party_slots", [])
 	var slots: Array = slots_v if slots_v is Array else []
 	if slots.is_empty():
-		party_slots_label.text = "Party: —"
+		party_slots_label.text = "No party set"
 	else:
 		var lines: Array = []
 		for s_v in slots:
@@ -93,38 +96,6 @@ func _render() -> void:
 
 	_last_ase_balance = ase_balance
 
-	# Rebuild buttons from snapshot actions
-	for c in buttons.get_children():
-		c.queue_free()
-		
-	var actions_v: Variant = _snapshot.get("actions", {})
-	var action_list: Array = []
-
-	# New style: Dictionary of slot -> action
-	if actions_v is Dictionary:
-		var actions_dict: Dictionary = actions_v
-		for k in actions_dict.keys():
-			var a_v: Variant = actions_dict[k]
-			if a_v is Dictionary:
-				action_list.append(a_v)
-
-	# Legacy style: Array of actions
-	elif actions_v is Array:
-		action_list = actions_v
-
-	for action_v in action_list:
-		if not (action_v is Dictionary):
-			continue
-		var action: Dictionary = action_v
-			
-		var b := Button.new()
-		b.text = str(action.get("label", "Action"))
-		b.disabled = bool(action.get("disabled", false))
-		b.pressed.connect(func():
-			action_requested.emit(action)
-		)
-		buttons.add_child(b)
-	
 	if sanctum_name == "":
 		# Modal opening edge: reset dirty so first suggestion shows and rerolls work
 		if not name_modal.visible:

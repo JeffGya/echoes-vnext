@@ -218,6 +218,25 @@ Snapshot.data keys:
 - ase_rate_per_hour_hint: float (rate hint only, not a balance prediction)
 - party_slots: Array[Dictionary] — confirmed party for display only: [{ name, level, rank }] (no IDs)
 
+Action slots (UI-002 — slot-keyed Dictionary, Feb 2026 standard):
+```
+{
+  "nav.party_manage": { "type": "flow.go_state", "to": "flow.party_manage", "label": "Manage Party",  "slot": "nav.party_manage" },
+  "nav.echo_manage":  { "type": "flow.go_state", "to": "flow.echo_manage",  "label": "Manage Echoes", "slot": "nav.echo_manage"  },
+  "nav.realm_select": { "type": "flow.go_state", "to": "flow.realm_select", "label": "Select Realm",  "slot": "nav.realm_select" },
+  "nav.summon":       { "type": "flow.go_state", "to": "flow.summon",       "label": "Summon Echo",   "slot": "nav.summon"       },
+  "cta.enter_stage":  { "type": "flow.go_state", "to": "flow.stage_map",    "label": "Enter Stage",   "slot": "cta.enter_stage",
+                        "disabled": true/false }  // disabled when realm_id == ""
+}
+```
+
+**Shell-cached nav pattern (UI-002)**
+SanctumShell owns the persistent nav bar — it is NOT injected into every sanctum-family snapshot.
+- On `flow.sanctum` snapshots: shell caches all `nav.*` and `cta.*` slots from `snap.actions` into `_cached_nav` and rebuilds the NavBar.
+- For all other sanctum-family types (flow.summon, flow.party_manage, etc.): NavBar renders from `_cached_nav` unchanged.
+- Cache is safe: `cta.enter_stage` (only conditional action) can only change via `flow.realm_select`, which always returns to `flow.sanctum` before the player sees the nav again.
+- This keeps SummonState, PartyManageState, EchoManageState, RealmSelectState free from nav injection.
+
 ### Snapshot.data keys (Party Manage, SANCTUM-003)
 - title: String
 - max_party_size: int (from `balance.json data.sanctum.party_max_size`; default 5)

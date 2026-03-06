@@ -7,10 +7,14 @@ class_name SanctumShell
 @onready var spatial_view: Node2D = $SpatialLayer/SpatialView
 @onready var camera: Camera2D = $SpatialLayer/SpatialView/Camera2D
 @onready var spatial_renderer: Node2D = $SpatialLayer/SpatialView/SanctumSpatialRenderer2
+@onready var _nav_buttons: VBoxContainer = %NavButtons
 
 signal action_requested(action: Dictionary)
 
 var _active_overlay: Control = null
+# Nav actions cached from the last flow.sanctum snapshot.
+# The shell owns the persistent nav bar so all sanctum-family screens share it.
+var _cached_nav: Dictionary = {}
 
 # Camera config (Phase B)
 var _zoom_levels := [Vector2(1.0, 1.0), Vector2(1.5, 1.5)]
@@ -56,10 +60,26 @@ func set_snapshot(snap: Dictionary) -> void:
 	# For now this is a stub. Later we will add proper renderer script.
 	if spatial_renderer != null and spatial_renderer.has_method("render"):
 		spatial_renderer.call("render", snap)
-	
+
 	# 2) Swap overlay UI based on flow snapshot type
 	var snap_type := str(snap.get("type", ""))
 	_show_overlay_for_type(snap_type, snap)
+
+	# 3) Cache nav actions from flow.sanctum and rebuild the persistent shell nav bar.
+	# The cache is safe: cta.enter_stage (only conditional action) can only change via
+	# flow.realm_select, which always returns to flow.sanctum before the player sees the
+	# nav again — so the cache is never stale.
+	if snap_type == "flow.sanctum":
+		var actions_v: Variant = snap.get("actions", {})
+		if actions_v is Dictionary:
+			_cached_nav = {}
+			var actions_dict: Dictionary = actions_v
+			for k: String in actions_dict.keys():
+				if k.begins_with("nav.") or k.begins_with("cta."):
+					var val: Variant = actions_dict[k]
+					if val is Dictionary:
+						_cached_nav[k] = val
+			_rebuild_nav_bar()
 	
 func _show_overlay_for_type(snap_type: String, snap: Dictionary) -> void:
 	if not _scene_by_flow_type.has(snap_type):
@@ -146,8 +166,24 @@ func _unhandled_input(event: InputEvent) -> void:
 
 # ---- HELPERS ----
 func _on_overlay_action_requested(action: Dictionary) -> void:
-	action_requested.emit(action) 
-	
+	action_requested.emit(action)
+
+func _rebuild_nav_bar() -> void:
+	# Clear previous buttons
+	for c in _nav_buttons.get_children():
+		c.queue_free()
+	# Build one button per cached nav/cta slot
+	for k: String in _cached_nav.keys():
+		var action_v: Variant = _cached_nav[k]
+		if not (action_v is Dictionary):
+			continue
+		var action: Dictionary = action_v
+		var b := Button.new()
+		b.text = str(action.get("label", "Action"))
+		b.disabled = bool(action.get("disabled", false))
+		b.pressed.connect(_on_overlay_action_requested.bind(action))
+		_nav_buttons.add_child(b)
+
 func _pan_by_delta(screen_delta: Vector2) -> void:
 	# Camera moves opposite to drag direction for "grab world" feel.
 	var z := camera.zoom.x
