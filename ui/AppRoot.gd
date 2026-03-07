@@ -226,6 +226,7 @@ func _run_tests(parts: Array) -> void:
 	SanctumSummonTests.register(runner)
 	PartyTests.register(runner)
 	ActorTests.register(runner)
+	EchoSchemaTests.register(runner)
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [

@@ -92,9 +92,12 @@ func dispatch(action: Dictionary) -> Dictionary:
 				flow_ctx.save_data["first_boot"] = false
 				flow_ctx.save_request = true
 				flow_ctx.save_request_reason = "continue_first_boot"
-				
+
 			_apply_offline_accrual_if_needed(t, "flow.continue")
-				
+
+			# PROG-001: patch old echo dicts that pre-date draw-order v2 fields
+			_repair_echo_schema(t)
+
 			flow_machine.transition(FlowStateIds.SANCTUM, flow_ctx, logger, t, "ui.flow.continue")
 
 		"flow.settings":
@@ -937,6 +940,33 @@ func _handle_sanctum_party_toggle(action: Dictionary, t: int) -> void:
 	flow_ctx.last_snapshot = FlowPartyManageState.build_snapshot(flow_ctx, t)
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 	
+## PROG-001: one-time repair pass for echo fields added after draw-order v1.
+## Called on flow.continue — patches roster echoes missing class_origin / level.
+## If any echoes were patched, requests a save flush so defaults persist.
+func _repair_echo_schema(t: int) -> void:
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	var roster_v: Variant = sanctum.get("roster", [])
+	var roster: Array = roster_v if roster_v is Array else []
+
+	var patched_count := 0
+	for e_v in roster:
+		if e_v is Dictionary:
+			if EchoFactory.repair_echo_fields(e_v):
+				patched_count += 1
+
+	if patched_count > 0:
+		flow_ctx.save_request = true
+		if flow_ctx.save_request_reason != "":
+			flow_ctx.save_request_reason += "|sanctum.schema.repair"
+		else:
+			flow_ctx.save_request_reason = "sanctum.schema.repair"
+		logger.info(t, "sanctum.schema.repair", "Repaired old echo fields", {
+			"patched": patched_count,
+			"roster_size": roster.size()
+		})
+
+
 func _handle_sanctum_party_confirm(t: int) -> void:
 	# Only meaningful inside Party Manage
 	if str(flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.PARTY_MANAGE:

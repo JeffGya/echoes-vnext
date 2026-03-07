@@ -19,7 +19,6 @@ extends RefCounted
 ## of mutating save data.
 ##
 ## Missing Echo fields fall back to ActorSchema defaults.
-## `level` defaults to 1 until PROG-001 writes it to Echo dicts.
 static func from_echo(echo: Dictionary) -> Dictionary:
 	var defaults := ActorSchema.get_defaults()
 
@@ -36,7 +35,6 @@ static func from_echo(echo: Dictionary) -> Dictionary:
 		"stats":          echo_stats.duplicate(true),
 		"traits":         echo_traits.duplicate(true),
 		"xp_total":       echo.get("xp_total",       defaults["xp_total"]),
-		# PROG-001 will write "level" to Echo dicts; until then defaults to 1.
 		"level":          echo.get("level",          1),
 		"actor_type":     "echo",
 	}

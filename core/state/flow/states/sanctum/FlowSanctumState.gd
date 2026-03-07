@@ -61,11 +61,12 @@ func enter(ctx: RefCounted, t:int) -> void:
 		var echo: Dictionary = echo_v if echo_v is Dictionary else {}
 
 		roster_preview.append({
-			"id": str(echo.get("id", "")),
-			"name": str(echo.get("name", "")),
+			"id":             str(echo.get("id", "")),
+			"name":           str(echo.get("name", "")),
 			"calling_origin": str(echo.get("calling_origin", "")),
-			"rarity": str(echo.get("rarity", "")),
-			"rank": int(echo.get("rank", 1)),
+			"rarity":         str(echo.get("rarity", "")),
+			"rank":           int(echo.get("rank", 1)),
+			"level":          int(echo.get("level", 1)),  # PROG-001 addition
 		})
 	
 	# Base Sanctum snapshot. FlowStateMachine._rebuild_snapshot() enriches data with:

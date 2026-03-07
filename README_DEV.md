@@ -74,6 +74,12 @@ This project is intentionally split into:
 - core/combat/ — Combat loop, action resolver, objectives, snapshot builders
 - core/realms/ — Realm + Stage models, generator, rewards, progression service
 - core/sanctum/ — Sanctum state, roster, summoning, party selection
+  - EchoFactory.gd — deterministic Echo generation. RNG draw order v2 (6 draws). Draw 6 is
+    `class_origin` (birth Vector bias) — appended after all v1 draws, never reordered. Weights
+    live in `data/balance.json` under `data.summoning.class_origin_weights`, which is the single
+    Vector type registry for the entire system. `repair_echo_fields()` patches old pre-v2 Echoes
+    on Continue (called by `FlowRuntime._repair_echo_schema()`). Never add draws in the middle
+    of the sequence — always append and bump `rng_draw_order_version`.
 
 ### res://ui/
 Rendering only. UI must be snapshot-driven.
@@ -121,7 +127,11 @@ Lightweight deterministic tests for core modules.
 - Tests must not use OS time or RNG.
 
 - CoreTestRunner.gd
-- EconomyTests.gd
+- EconomyTests.gd        (2 tests)
+- SanctumSummonTests.gd  (14 tests)
+- PartyTests.gd          (4 tests)
+- ActorTests.gd          (5 tests — ACTOR-001)
+- EchoSchemaTests.gd     (4 tests — PROG-001: class_origin, level, repair, actor validation)
 
 ## Core rule
 UI renders **snapshots** and triggers **actions**.

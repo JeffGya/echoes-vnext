@@ -162,8 +162,10 @@ static func _make_test_echo(id: String, name: String) -> Dictionary:
 		"origin":         "summon",
 		"traits":         { "courage": 55, "wisdom": 42, "faith": 38 },
 		"stats":          { "max_hp": 120, "atk": 9, "def": 7, "agi": 6, "int": 5, "cha": 4 },
+		"class_origin": "vanguard",  # birth Vector bias (PROG-001)
+		"level":        1,            # static at generation (PROG-001)
 		"xp_total":       0,
 		"rank":           1,
 		"vector_scores":  {},
-		"generation_context": { "version": 1, "rarity_raw": "uncalled" },
+		"generation_context": { "version": 1, "rng_draw_order_version": "v2", "rarity_raw": "uncalled" },
 	}

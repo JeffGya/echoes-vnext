@@ -10,14 +10,20 @@ class_name EchoFactory
 # - Deterministic RNG comes ONLY from (seed_root, seed_path) CampaignSeed.
 # - RNG draw order MUST remain stable. If we ever change it, we must version it.
 #
-# RNG draw order v1 (do not change without schema/version decision):
+# RNG draw order v1 — draws 1-5 (IMMUTABLE — never reorder or insert between existing draws):
 # (1) rarity roll (uncalled/called/chosen) -> MVP clamps output to "uncalled" but still consumes draw
 # (2) calling_origin (weighted; includes "uncalled" at 90%)
 # (3) gender bit (50/50)
 # (4) name (first, last)
 # (5) traits: courage, wisdom, faith
-# (6) archetype_birth derived from traits (simple mapping v1)
-# (7) derived stats computed from traits (balance.json birth_stats).
+# [post-draw derivations, no RNG]: archetype_birth from traits; stats from traits + birth_stats
+#
+# RNG draw order v2 — PROG-001 addition (appended after all v1 draws):
+# (6) class_origin — birth Vector bias (protector/vanguard/seeker/pillar).
+#     Values always mirror the active Vector taxonomy.
+#     Expand post-MVP by adding new Vectors to balance.json data.summoning.class_origin_weights.
+#     class_origin_weights is the single Vector type registry for the entire system.
+#     No code change needed when expanding — balance.json only.
 #
 # Output: a Dictionary suitable to store in sanctum.roster[].
 
@@ -58,8 +64,17 @@ static func generate(
 	var courage := rng.randi_range(trait_min, trait_max)
 	var wisdom := rng.randi_range(trait_min, trait_max)
 	var faith := rng.randi_range(trait_min, trait_max)
-	
-	# ---- (6) archetype_birth derived from traits ----
+
+	# ---- v2 draw (6): class_origin — birth Vector bias ----
+	# Values mirror the active Vector taxonomy. Expand via balance.json only — no code change needed.
+	var class_origin_weights: Dictionary = summoning_cfg.get("class_origin_weights", {
+		"protector": 1.0, "vanguard": 1.0, "seeker": 1.0, "pillar": 1.0
+	})
+	var class_origin: String = _roll_weighted_key(rng, class_origin_weights)
+	if class_origin.is_empty():
+		class_origin = "protector"
+
+	# ---- archetype_birth derived from traits (no RNG draw) ----
 	var archetype_birth := _derive_archetype_birth(courage, wisdom, faith)
 	
 	# ---- (7) derived stats ---
@@ -69,9 +84,10 @@ static func generate(
 	var vector_scores := {}
 	
 	# generation_context: reserved for future emotion/rarity modifiers.
-	# Keep minimal + stable (additive only),
+	# Keep minimal + stable (additive only).
 	var generation_context := {
 		"version": 1,
+		"rng_draw_order_version": "v2",
 		"rarity_raw": rarity_raw,
 		"seed_root": seed_root,
 		"seed_path": seed_path,
@@ -89,10 +105,12 @@ static func generate(
 		"summon_index": summon_index,
 		"origin": origin,
 		
-		# prgression-facing stable identity
+		# progression-facing stable identity
 		"rarity": rarity,
 		"calling_origin": calling_origin,
 		"archetype_birth": archetype_birth,
+		"class_origin": class_origin,  # birth Vector bias — same taxonomy as Vectors (v2)
+		"level": 1,                    # static at generation; updated by progression systems later
 		
 		"traits": {
 			"courage": courage,
@@ -168,6 +186,32 @@ static func _derive_archetype_birth(courage: int, wisdom: int, faith: int) -> St
 	if wisdom >= courage and wisdom >= faith:
 		return "sage"
 	return "devout"
+
+## Applies safe defaults for Echo fields introduced after draw-order v1.
+## Returns true if any field was patched (caller should mark save_request = true).
+## Safe to call repeatedly — no-op if all fields already present and non-null.
+static func repair_echo_fields(echo: Dictionary) -> bool:
+	var patched := false
+
+	if not echo.has("level") or echo["level"] == null:
+		echo["level"] = 1
+		patched = true
+
+	if not echo.has("class_origin") or echo["class_origin"] == null:
+		# Best available approximation from calling_origin (always present in v1 echoes).
+		# Mapping: summoning lineage → nearest birth Vector bias.
+		var calling := str(echo.get("calling_origin", "uncalled"))
+		var class_map := {
+			"guardian": "protector",
+			"warrior":  "vanguard",
+			"archer":   "seeker",
+			"uncalled": "pillar"
+		}
+		echo["class_origin"] = class_map.get(calling, "protector")
+		patched = true
+
+	return patched
+
 
 static func _compute_birth_stats(courage: int, wisdom: int, faith: int, birth_cfg: Dictionary) -> Dictionary:
 	# Actor progression spec MVP keys: max_hp, atk, def, agi, int, cha

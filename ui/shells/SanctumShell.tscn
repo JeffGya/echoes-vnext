@@ -79,4 +79,4 @@ grow_vertical = 2
 [node name="Camera2D" type="Camera2D" parent="SpatialLayer/SpatialView" unique_id=525201893]
 
 [node name="SanctumSpatialRenderer2" parent="SpatialLayer/SpatialView" unique_id=637007143 instance=ExtResource("2_iy4vj")]
-position = Vector2(54, 0)
+position = Vector2(-4, -1)

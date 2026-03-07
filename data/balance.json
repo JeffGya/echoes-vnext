@@ -25,6 +25,13 @@
 			"archer": 0.333
 		},
 
+		"class_origin_weights": {
+			"protector": 1.0,
+			"vanguard":  1.0,
+			"seeker":    1.0,
+			"pillar":    1.0
+		},
+
 		"birth_stats": {
 			"hp_base": 100,
 			"hp_courage_mul": 0.25,
