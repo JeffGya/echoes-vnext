@@ -774,25 +774,50 @@ See README_DEV.md → Structured Logging (CORE-004) for architectural intent and
 
 ---
 
-## Actor Contract (ACTOR-001)
+## Actor Contract (ACTOR-001 + ACTOR-002)
 
 Actors are the unified data shape for any entity that participates in combat or fills a party
 slot: Echoes now; enemies, NPCs, and structures in future stories.
 
 ### Required fields (all must be present and non-null)
 
+**Base identity + save-backed fields** (present in `sanctum.roster[]` save dicts for Echoes):
+
 | Field | Type | Notes |
 |-------|------|-------|
 | `id` | String | Matches Echo save id; internal — never displayed |
 | `name` | String | Display name |
-| `rarity` | String | `"uncalled"` \| `"called"` \| `"chosen"` (enemies may use `""`) |
-| `rank` | int | Echo life stage (1–10); enemies may use 0 or level-equivalent |
-| `calling_origin` | String | Echo origin; `""` for enemies/NPCs |
-| `stats` | Dictionary | `{ max_hp, atk, def, agi, int, cha }` — all int |
+| `rarity` | String | `"uncalled"` \| `"called"` \| `"chosen"` (enemies may use `"uncalled"`) |
+| `rank` | int | Echo life stage (1–10); enemies may use 1 |
+| `calling_origin` | String | Echo summoning origin; `"uncalled"` for enemies/NPCs |
+| `stats` | Dictionary | `{ max_hp, atk, def, agi, int, cha }` — all int; PROG-002 derives from traits |
 | `traits` | Dictionary | `{ courage, wisdom, faith }` — all int (0 for enemies) |
 | `xp_total` | int | Lifetime XP (0 for enemies) |
-| `level` | int | Experience step within rank (defaults to 1 until PROG-001) |
-| `actor_type` | String | `"echo"` \| reserved: `"enemy"`, `"npc"` |
+| `level` | int | Experience step within rank (1 at generation; progression TBD) |
+| `actor_type` | String | `"echo"` \| `"enemy"` \| reserved: `"npc"` |
+
+**Top-level runtime fields — ACTOR-002** (set by `EchoActor.from_echo()` / `EnemyActor.from_definition()`; NOT stored in `sanctum.roster[]` save data):
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| `current_hp` | int | `= stats.max_hp` at spawn | Mutable during combat. Reset to max_hp at next spawn. |
+| `speed` | int | `5` | Turn-order input for COMBAT-002 (`actor.speed XOR seed`). Flat default until COMBAT-002 derives the formula. |
+| `morale` | int | `50` | Flat placeholder (0–100). EMOTION-001 supersedes with `emotion.morale_current` stored on the Echo save dict. |
+| `fear` | int | `0` | Flat placeholder (0–100). EMOTION-001 supersedes with `emotion.fear_current` stored on the Echo save dict. |
+
+> **Note on morale/fear:** These are placeholder values until EMOTION-001 (pickup 24) lands.
+> EMOTION-001 introduces `EmotionService` and stores `{ faith, morale_base, morale_current, fear_current }`
+> on the Echo save dict under `sanctum.roster[i]["emotion"]`. At that point the actor dict
+> will be enriched from the emotion block, and these flat placeholders will be removed.
+
+### stats sub-dict is the PROG-002 block
+
+`actor.stats` contains the six trait-derived combat stats only: `max_hp, atk, def, agi, int, cha`.
+`speed`, `morale`, `fear`, and `current_hp` are top-level actor dict fields — **not** inside `stats`.
+Access them directly: `actor["speed"]`, `actor["current_hp"]`, etc.
+
+`ActorStateMachine.get_stat(name)` reads from `actor.stats` (the 6-field sub-dict only).
+Top-level runtime fields are accessed directly by behavior modules.
 
 ### Validation
 
@@ -808,6 +833,25 @@ separate runtime-only copies.
 
 This is enforced in `EchoActor.from_echo()` via `.duplicate(true)` on nested dicts.
 
+### Actor mapper files
+
+| File | Creates |
+|------|---------|
+| `core/actors/EchoActor.gd` | `static from_echo(echo) -> Dictionary` — maps Echo save dict to actor dict |
+| `core/actors/EnemyActor.gd` | `static from_definition(defn, t) -> Dictionary` — creates enemy actor from a definition dict |
+
+### ActorStateMachine
+
+`core/actors/ActorStateMachine.gd` — stores the actor dict and exposes `get_stat(name)` for
+behavior modules. ACTOR-003+ will add state phases and pluggable behavior modules.
+
+```
+ActorStateMachine.new(actor_dict)
+  .get_stat("max_hp")   → actor.stats["max_hp"]
+  .get_stat("agi")      → actor.stats["agi"]
+  .get_stat("unknown")  → null
+```
+
 ### Canonical interfaces
 
 - `SanctumService.get_party_actors() -> Array` — Actor dicts for the active party.
@@ -815,10 +859,15 @@ This is enforced in `EchoActor.from_echo()` via `.duplicate(true)` on nested dic
 
 Both return `[]` gracefully on empty roster/party. Neither modifies save data.
 
+### Logging
+
+`actor.stats_init` — emitted by `SummonService` (both `summon_paid_one` and `summon_paid_many`)
+after each echo is generated and assigned an id. Contains: `echo_id`, `stats` dict, `speed`, `morale`, `fear`.
+
 ### Future stubs
 
 - **position** `{ "x": int, "y": int }` — added when `core/grid/` lands (GRID stories).
-- **ActorStateMachine** — per-round behavior selection, scaffolded when `core/combat/` exists.
+- **ACTOR-003+** — state phases (idle → select_action → resolve → cooldown) and behavior modules.
 
 ---
 

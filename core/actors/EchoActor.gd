@@ -37,6 +37,11 @@ static func from_echo(echo: Dictionary) -> Dictionary:
 		"xp_total":       echo.get("xp_total",       defaults["xp_total"]),
 		"level":          echo.get("level",          1),
 		"actor_type":     "echo",
+		# ACTOR-002: runtime fields — not stored in save data; set fresh on each actor creation
+		"current_hp":     echo_stats.get("max_hp", 0),  # = max_hp at spawn; mutable in combat
+		"speed":          5,    # flat default — COMBAT-002 derives formula later
+		"morale":         50,   # flat placeholder — EMOTION-001 supersedes with emotion.morale_current
+		"fear":           0,    # flat placeholder — EMOTION-001 supersedes with emotion.fear_current
 	}
 
 	assert(ActorSchema.validate(actor), \

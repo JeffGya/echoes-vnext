@@ -46,6 +46,13 @@ static func summon_paid_one(
 		"summon_index": summon_count,
 		"roster_count_after": roster.size()
 	})
+	logger.info(t, "actor.stats_init", "Echo stats initialized", {
+		"echo_id": echo_id,
+		"stats":   echo.get("stats", {}),
+		"speed":   5,
+		"morale":  50,
+		"fear":    0
+	})
 	
 	return {
 		"ok": true,
@@ -96,6 +103,13 @@ static func summon_paid_many(
 		roster.append(echo)
 		out_echoes.append(echo)
 		out_ids.append(echo_id)
+		logger.info(t, "actor.stats_init", "Echo stats initialized", {
+			"echo_id": echo_id,
+			"stats":   echo.get("stats", {}),
+			"speed":   5,
+			"morale":  50,
+			"fear":    0
+		})
 
 	# increment once at the end (important: stable monotonic)
 	sanctum["summon_count"] = summon_count + count

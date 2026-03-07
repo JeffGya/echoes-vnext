@@ -14,14 +14,21 @@
 # GRID-STUB: position { "x": int, "y": int } will be added to the contract
 # when core/grid/ lands (GRID stories). Not a required field in MVP.
 #
-# ACTOR-SM-STUB: ActorStateMachine (per-round behavior selection) will be
-# scaffolded in a future story once core/combat/ and core/grid/ exist.
+# ActorStateMachine (core/actors/ActorStateMachine.gd) is scaffolded in ACTOR-002.
+# It stores the actor dict and exposes get_stat() for behavior modules.
+# ACTOR-003+ adds state phases and behavior module wiring.
 
 class_name ActorSchema
 extends RefCounted
 
 ## Canonical list of required field names for any Actor dict.
 ## All fields must be present and non-null. Value ranges are not enforced here.
+##
+## ACTOR-002 additions (top-level runtime fields — not saved in sanctum.roster[]):
+##   current_hp  — mutable during combat; set to stats.max_hp at spawn by EchoActor/EnemyActor
+##   speed       — turn order input for COMBAT-002 (actor.speed XOR seed); flat default 5
+##   morale      — flat placeholder (50); EMOTION-001 supersedes with emotion.morale_current
+##   fear        — flat placeholder (0);  EMOTION-001 supersedes with emotion.fear_current
 const REQUIRED_FIELDS: Array = [
 	"id",
 	"name",
@@ -33,6 +40,10 @@ const REQUIRED_FIELDS: Array = [
 	"xp_total",
 	"level",
 	"actor_type",
+	"current_hp",
+	"speed",
+	"morale",
+	"fear",
 ]
 
 ## Returns false if actor is missing any required field or has a null value.
@@ -58,4 +69,9 @@ static func get_defaults() -> Dictionary:
 		"xp_total":       0,
 		"level":          1,
 		"actor_type":     "echo",
+		# ACTOR-002: top-level runtime fields (not saved in sanctum.roster[])
+		"current_hp":     0,
+		"speed":          5,
+		"morale":         50,
+		"fear":           0,
 	}
