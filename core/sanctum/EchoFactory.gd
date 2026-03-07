@@ -214,63 +214,11 @@ static func repair_echo_fields(echo: Dictionary) -> bool:
 
 
 static func _compute_birth_stats(courage: int, wisdom: int, faith: int, birth_cfg: Dictionary) -> Dictionary:
-	# Actor progression spec MVP keys: max_hp, atk, def, agi, int, cha
-	var hp_base := float(birth_cfg.get("hp_base", 100))
-	var hp_cour_mul := float(birth_cfg.get("hp_courage_mul", 0.25))
-	var hp_faith_mul := float(birth_cfg.get("hp_faith_mul", 0.15))
-	var hp_min := int(birth_cfg.get("hp_min", 15))
-	
-	var atk_base := float(birth_cfg.get("atk_base", 4))
-	var atk_cour_mul := float(birth_cfg.get("atk_courage_mul", 0.12))
-	var atk_faith_mul := float(birth_cfg.get("atk_faith_mul", 0.05))
-
-	var def_base := float(birth_cfg.get("def_base", 2))
-	var def_wis_mul := float(birth_cfg.get("def_wisdom_mul", 0.12))
-	var def_faith_mul := float(birth_cfg.get("def_faith_mul", 0.08))
-
-	var agi_base := float(birth_cfg.get("agi_base", 2))
-	var agi_wis_mul := float(birth_cfg.get("agi_wisdom_mul", 0.08))
-	var agi_cour_mul := float(birth_cfg.get("agi_courage_mul", 0.08))
-
-	var int_base := float(birth_cfg.get("int_base", 4))
-	var int_wis_mul := float(birth_cfg.get("int_wisdom_mul", 0.22))
-	var int_cour_mul := float(birth_cfg.get("int_courage_mul", 0.04))
-
-	var cha_base := float(birth_cfg.get("cha_base", 1))
-	var cha_faith_mul := float(birth_cfg.get("cha_faith_mul", 0.08))
-	var cha_wis_mul := float(birth_cfg.get("cha_wisdom_mul", 0.08))
-	
-	var max_hp := int(round(hp_base + hp_cour_mul * float(courage) + hp_faith_mul * float(faith)))
-	if max_hp < hp_min:
-		max_hp = hp_min
-	
-	var atk := int(round(atk_base + atk_cour_mul * float(courage) + atk_faith_mul * float(faith)))
-	if atk < 1:
-		atk = 1
-
-	var def := int(round(def_base + def_wis_mul * float(wisdom) + def_faith_mul * float(faith)))
-	if def < 0:
-		def = 0
-
-	var agi := int(round(agi_base + agi_wis_mul * float(wisdom) + agi_cour_mul * float(courage)))
-	if agi < 0:
-		agi = 0
-
-	var intel := int(round(int_base + int_wis_mul * float(wisdom) + int_cour_mul * float(courage)))
-	if intel < 0:
-		intel = 0
-
-	var cha := int(round(cha_base + cha_faith_mul * float(faith) + cha_wis_mul * float(wisdom)))
-	if cha < 0:
-		cha = 0
-	return {
-		"max_hp": max_hp,
-		"atk": atk,
-		"def": def,
-		"agi": agi,
-		"int": intel,
-		"cha": cha
-	}
+	# PROG-002: Delegates to DerivedStatService with rank=1, level=1 (birth values).
+	# At birth, (rank-1) and (level-1) are both 0, so growth terms add nothing.
+	# Formula and defaults are identical to the pre-PROG-002 inline code.
+	var traits := { "courage": courage, "wisdom": wisdom, "faith": faith }
+	return DerivedStatService.compute_stats(traits, 1, 1, birth_cfg)
 	
 	
 	

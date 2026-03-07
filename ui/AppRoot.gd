@@ -228,6 +228,7 @@ func _run_tests(parts: Array) -> void:
 	ActorTests.register(runner)
 	EchoSchemaTests.register(runner)
 	ActorStatInitTests.register(runner)
+	DerivedStatTests.register(runner)
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [

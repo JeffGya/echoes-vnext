@@ -56,7 +56,21 @@
 
 			"cha_base": 1,
 			"cha_faith_mul": 0.08,
-			"cha_wisdom_mul": 0.08
+			"cha_wisdom_mul": 0.08,
+
+			"_comment_growth": "rank/level bonuses use (rank-1) and (level-1) offsets — 0 at birth, preserving save compat",
+			"hp_per_rank":  10,
+			"hp_per_level":  5,
+			"atk_per_rank":  2,
+			"atk_per_level": 1,
+			"def_per_rank":  1,
+			"def_per_level": 0,
+			"agi_per_rank":  1,
+			"agi_per_level": 0,
+			"int_per_rank":  1,
+			"int_per_level": 1,
+			"cha_per_rank":  1,
+			"cha_per_level": 0
 		}
 	},
 	"sanctum": {
