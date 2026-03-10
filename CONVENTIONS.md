@@ -871,6 +871,76 @@ after each echo is generated and assigned an id. Contains: `echo_id`, `stats` di
 
 ---
 
+## BehaviorModule Contract (ACTOR-003)
+
+Every actor carries exactly one `BehaviorModule`, assigned at `ActorStateMachine` construction.
+If no module is provided, `IdleBehaviorModule` is assigned as the safe default.
+
+### Interface (`core/actors/BehaviorModule.gd`)
+
+- `get_module_id() -> String` — stable string ID for the module. Must not be generated at runtime.
+- `select_intent(context: Dictionary) -> Dictionary` — pure function. No side effects, no RNG, no OS time.
+
+Base class methods push_error if called directly. Never instantiate `BehaviorModule` — always use a subclass.
+
+### Context dict (locked — ACTOR-003)
+
+```
+{
+  "actor":      Dictionary,   # this actor's full dict
+  "all_actors": Array,        # all actors in play ([] until combat stories)
+  "t":          int           # sim tick, injected by caller
+}
+```
+
+Grid fields (position, adjacency) are added when `core/grid/` lands (GRID stories).
+
+### Intent dict
+
+```
+{
+  "action_type": String,   # e.g. "actor.idle", "actor.melee", "actor.guard"
+  "target_id":   String,   # "" for untargeted actions
+  "priority":    float     # 0.0 = lowest
+}
+```
+
+### Turn method
+
+`ActorStateMachine.advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dictionary`
+
+Called by the combat loop once per turn. Invokes `select_intent()`, stores result as `_last_intent`,
+logs `actor.intent`, and returns the intent dict.
+
+### Module ID registry
+
+| ID | File | Added |
+|----|------|-------|
+| `"idle"` | `core/actors/behaviors/IdleBehaviorModule.gd` | ACTOR-003 |
+| `"melee"` | TBD | ACTOR-004 |
+| `"guardian"` | TBD | ACTOR-005 |
+
+### Debug snapshot
+
+`ActorStateMachine.get_snapshot() -> Dictionary`
+
+Returns `{ actor_id, name, behavior_module, last_intent }` for debug overlays and tests.
+
+### Log event
+
+```
+type:    "actor.intent"
+payload: { module_id: String, action_type: String, target_id: String, actor_id: String }
+```
+
+### Rules
+
+- `select_intent()` must be deterministic: same context → same intent every call.
+- Context dict must be JSON-safe (no Nodes/Objects).
+- Machine ID for actor behavior transitions: `state.actor.behavior`
+
+---
+
 ## Derived Stat Pipeline (PROG-002)
 
 `DerivedStatService` is a pure static utility (`core/actors/DerivedStatService.gd`).
