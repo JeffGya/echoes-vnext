@@ -61,6 +61,7 @@ func enter(ctx: RefCounted, t:int) -> void:
 		var echo: Dictionary = echo_v if echo_v is Dictionary else {}
 
 		var _emo := EmotionService.get_emotion(echo)
+		var _last_drift_v: Variant = _emo.get("_last_drift", {})
 		roster_preview.append({
 			"id":             str(echo.get("id", "")),
 			"name":           str(echo.get("name", "")),
@@ -68,11 +69,13 @@ func enter(ctx: RefCounted, t:int) -> void:
 			"rarity":         str(echo.get("rarity", "")),
 			"rank":           int(echo.get("rank", 1)),
 			"level":          int(echo.get("level", 1)),  # PROG-001 addition
-			# EMOTION-001: emotion snapshot (computed tier, not stored)
+			# EMOTION-002: emotion snapshot (computed tier, fear, last drift event)
 			"emotion": {
-				"faith":          int(_emo.get("faith",          50)),
-				"morale_current": int(_emo.get("morale_current", 50)),
-				"morale_tier":    EmotionService.get_morale_tier(int(_emo.get("morale_current", 50))),
+				"faith":            int(_emo.get("faith",          50)),
+				"morale_current":   int(_emo.get("morale_current", 50)),
+				"morale_tier":      EmotionService.get_morale_tier(int(_emo.get("morale_current", 50))),
+				"fear_current":     int(_emo.get("fear_current",   0)),
+				"last_drift_event": _last_drift_v if _last_drift_v is Dictionary else {},
 			},
 		})
 	

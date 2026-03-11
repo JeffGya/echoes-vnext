@@ -1093,12 +1093,12 @@ Every Echo carries exactly one emotion block, initialised on creation via `Emoti
 
 ### Emotion block shape (stored at `echo["emotion"]`)
 
-| Field           | Type | Range  | Default | Description                                   |
-|-----------------|------|--------|---------|-----------------------------------------------|
-| faith           | int  | 0–100  | 50      | Determines summon bonuses (future mechanics)  |
-| morale_base     | int  | 0–100  | 50      | Long-term baseline; changed by story events   |
-| morale_current  | int  | 0–100  | 50      | Combat-volatile; starts == morale_base        |
-| fear_current    | int  | 0–100  | 0       | Resets to 0 each venture                     |
+| Field           | Type | Range  | Default                                                          | Description                                                      |
+|-----------------|------|--------|------------------------------------------------------------------|------------------------------------------------------------------|
+| faith           | int  | 0–100  | `traits.faith` (30–70); 50 for repaired / no-traits echoes      | Determines summon bonuses (future mechanics)                     |
+| morale_base     | int  | 25–74  | Derived from `traits.courage` + `archetype_birth`; 50 fallback  | Long-term baseline; birth-derived; changed by story events       |
+| morale_current  | int  | 0–100  | = `morale_base` at birth                                         | Combat-volatile; starts == morale_base at birth                  |
+| fear_current    | int  | 0–100  | 0                                                                | Resets to 0 each venture                                         |
 
 ### Morale tiers (computed — not stored)
 
@@ -1118,13 +1118,16 @@ Never at `save_data["echoes"][echo_id]` (that path does not exist in this codeba
 
 ### Log events
 
-| Type                       | Payload fields                                                   |
-|----------------------------|------------------------------------------------------------------|
-| `emotion.init`             | echo_id, faith, morale_base, morale_current, fear_current        |
-| `emotion.faith.set`        | echo_id, faith                                                   |
-| `emotion.morale_base.set`  | echo_id, morale_base                                             |
-| `emotion.morale_current.set` | echo_id, morale_current, morale_tier                           |
-| `emotion.fear.set`         | echo_id, fear_current                                            |
+| Type                              | Payload fields                                                                              |
+|-----------------------------------|---------------------------------------------------------------------------------------------|
+| `emotion.init`                    | echo_id, faith, morale_base, morale_current, fear_current, birth_source, archetype_birth    |
+| `emotion.faith.set`               | echo_id, faith                                                                              |
+| `emotion.morale_base.set`         | echo_id, morale_base                                                                        |
+| `emotion.morale_current.set`      | echo_id, morale_current, morale_tier                                                        |
+| `emotion.fear.set`                | echo_id, fear_current                                                                       |
+| `emotion.morale.drift`            | echo_id, cause, delta, old_value, new_value, morale_tier                                    |
+| `emotion.fear.drift`              | echo_id, cause, delta, old_value, new_value                                                 |
+| `emotion.fear.threshold_crossed`  | echo_id, fear_current, fear_threshold                                                       |
 
 ### Debug command
 
@@ -1139,6 +1142,60 @@ emotion <echo_id>    → print emotion block for a specific echo
 - All values are clamped 0–100 at the setter level; callers need not clamp first
 - `EmotionService` methods are static — no instantiation
 - `init_echo()` is idempotent: safe to call on echoes that already have an emotion block
+- `init_echo()` derives `morale_base` (range 25–74) and `faith` from traits when present; falls back to flat 50 for repaired / no-traits echoes (EMOTION-002 birth variance)
+- `apply_morale_delta()` and `apply_fear_delta()` are the **only valid drift entry points** — never mutate `morale_current` or `fear_current` directly
+- `_last_drift` is a transient field on the emotion block (underscore prefix = not persisted to save); read by `FlowSanctumState` to populate `last_drift_event` in the snapshot
 - `SaveService` repair loop adds emotion defaults for old saves (backward compat)
 - `EchoActor.from_echo()` reads `emotion.morale_current` and `emotion.fear_current` for the actor dict
-- `FlowSanctumState` roster_preview includes `emotion { faith, morale_current, morale_tier }` per echo
+- `FlowSanctumState` roster_preview includes `emotion { faith, morale_current, morale_tier, fear_current, last_drift_event }` per echo (EMOTION-002)
+
+---
+
+## Emotion Drift Rules (EMOTION-002)
+
+Drift moves `morale_current` and `fear_current` at sanctioned game boundaries.
+All drift is applied exclusively through `EmotionService.apply_morale_delta()` and `apply_fear_delta()`.
+
+### Drift triggers (wired in `FlowRuntime`)
+
+| Trigger | Field | Delta | Config key |
+|---------|-------|-------|------------|
+| `encounter.complete` → win  | morale_current | +10 | `data.emotion.drift.combat_exit_win_morale` |
+| `encounter.complete` → win  | fear_current   | −5  | `data.emotion.drift.combat_exit_win_fear` |
+| `encounter.complete` → loss | morale_current | −15 | `data.emotion.drift.combat_exit_loss_morale` |
+| `encounter.complete` → loss | fear_current   | +20 | `data.emotion.drift.combat_exit_loss_fear` |
+| `flow.go_state` → `flow.sanctum` (only if `morale_current < morale_base`) | morale_current | +2 | `data.emotion.drift.sanctum_tick_morale` |
+
+### Fear threshold
+
+When `fear_current` reaches or exceeds `data.emotion.drift.fear_threshold` (default: 80) after
+`apply_fear_delta()`, `emotion.fear.threshold_crossed` is emitted. This is the hook for future
+panic behavior (not yet wired to combat output in MVP).
+
+### Sanctum recovery rule
+
+The sanctum tick only fires when `morale_current < morale_base`. Recovery never pushes morale
+above the echo's birth baseline — a win streak produces inspired tiers only transiently through
+`apply_morale_delta()`, never by resetting the base.
+
+### Birth variance formula (EMOTION-002)
+
+`EmotionService.init_echo()` derives `morale_base` and `faith` from traits when present.
+
+**Stage 1** — continuous courage base:
+```
+base = 25 + round((courage − 30) × 49.0 / 40.0)   # maps trait range 30–70 → morale range 25–74
+```
+
+**Stage 2** — archetype modifier:
+```
+"brave"  → base + 5   (dominant courage → extra confidence)
+"sage"   → base − 5   (dominant wisdom → reflective self-doubt)
+"devout" → base + 0   (dominant faith → neutral; faith lives in faith field)
+```
+
+`morale_base = clamp(base + modifier, 25, 74)` — no echo starts broken (0–24), no echo starts inspired (75–100).
+
+`faith` = `traits.faith` directly (30–70 is already an appropriate sub-range of 0–100).
+
+Echoes without traits (repaired saves, test echoes) fall back to flat 50 for both fields.

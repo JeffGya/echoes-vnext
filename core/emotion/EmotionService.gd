@@ -16,10 +16,13 @@
 #   50–74  → "steady"
 #   75–100 → "inspired"
 #
-# Rules (EMOTION-001):
+# Rules (EMOTION-001/002):
 # - Never write echo["emotion"] directly — always use these setters.
 # - All values are clamped at the setter; callers need not clamp first.
-# - init_echo() is idempotent: safe to call even if the block already exists.
+# - init_echo() is idempotent: no-op if block already exists.
+# - Birth variance (EMOTION-002): morale_base derives from traits.courage + archetype_birth.
+#   Range 25–74 (shaken/steady). Echoes with no traits fall back to flat 50.
+# - apply_morale_delta() / apply_fear_delta() are the only valid drift entry points.
 
 class_name EmotionService
 
@@ -31,17 +34,56 @@ const DEFAULTS := {
 }
 
 
-## Ensures echo["emotion"] exists with all 4 fields initialised to defaults.
-## Call when an echo is first created (new_game, summon).
-## Logs emotion.init — idempotent: will not overwrite existing field values.
+## Initialises echo["emotion"] on first creation. Idempotent: no-op if block exists.
+## Birth variance (EMOTION-002): morale_base derived from traits.courage + archetype_birth.
+##   Stage 1 — remap courage (30–70) → base morale (25–74)
+##   Stage 2 — archetype modifier: brave +5, sage -5, devout 0
+##   Result clamped to 25–74 (shaken/steady range; no echo starts broken or inspired).
+##   faith uses traits.faith directly (30–70). Fallback to 50 if traits absent.
 static func init_echo(echo: Dictionary, logger: StructuredLogger, t: int) -> void:
-	_ensure_emotion_block(echo)
+	if echo.has("emotion"):
+		return  # idempotent — block already set (e.g. second call, save repair echo)
+
+	# Derive birth values from traits if present (EMOTION-002)
+	var traits_v: Variant = echo.get("traits", {})
+	var traits: Dictionary = traits_v if traits_v is Dictionary else {}
+
+	var birth_morale: int = DEFAULTS["morale_base"]  # fallback: no traits = flat 50
+	var birth_faith: int  = DEFAULTS["faith"]         # fallback: no traits = flat 50
+
+	if not traits.is_empty() and traits.has("courage"):
+		var courage := int(traits.get("courage", 50))
+		# Stage 1: continuous base from courage trait range 30–70 → morale range 25–74
+		var base_morale := 25 + int(round((courage - 30) * 49.0 / 40.0))
+		# Stage 2: archetype modifier for narrative clarity on top
+		var archetype := str(echo.get("archetype_birth", ""))
+		var modifier := 0
+		if archetype == "brave":
+			modifier = 5   # dominant courage → extra confidence
+		elif archetype == "sage":
+			modifier = -5  # dominant wisdom → reflective self-doubt
+		# devout: 0 modifier (faith lives in the faith field)
+		birth_morale = clampi(base_morale + modifier, 25, 74)
+
+	if not traits.is_empty() and traits.has("faith"):
+		# faith uses the trait value directly (30–70 is already a fine sub-range of 0–100)
+		birth_faith = int(traits.get("faith", 50))
+
+	echo["emotion"] = {
+		"faith":          birth_faith,
+		"morale_base":    birth_morale,
+		"morale_current": birth_morale,  # always synced to base at birth
+		"fear_current":   0              # always 0 at birth — builds through combat
+	}
+
 	logger.info(t, "emotion.init", "Emotion block initialised", {
 		"echo_id":         echo.get("id", ""),
-		"faith":           echo["emotion"]["faith"],
-		"morale_base":     echo["emotion"]["morale_base"],
-		"morale_current":  echo["emotion"]["morale_current"],
-		"fear_current":    echo["emotion"]["fear_current"]
+		"faith":           birth_faith,
+		"morale_base":     birth_morale,
+		"morale_current":  birth_morale,
+		"fear_current":    0,
+		"birth_source":    "traits" if not traits.is_empty() else "defaults",
+		"archetype_birth": str(echo.get("archetype_birth", ""))
 	})
 
 
@@ -102,6 +144,54 @@ static func get_morale_tier(morale_current: int) -> String:
 	elif morale_current >= 25:
 		return "shaken"
 	return "broken"
+
+
+# ---------------------------------------------------------------------------
+# Drift methods (EMOTION-002)
+# ---------------------------------------------------------------------------
+
+## Adds delta to morale_current (clamped 0–100). Logs emotion.morale.drift.
+## Stores _last_drift on the emotion block (transient; not saved to disk).
+static func apply_morale_delta(echo: Dictionary, delta: int, cause: String, logger: StructuredLogger, t: int) -> void:
+	_ensure_emotion_block(echo)
+	var emo: Dictionary = echo["emotion"]
+	var old_val := int(emo.get("morale_current", 50))
+	var new_val := clampi(old_val + delta, 0, 100)
+	emo["morale_current"] = new_val
+	emo["_last_drift"] = { "cause": cause, "delta": delta, "field": "morale", "new_value": new_val }
+	logger.info(t, "emotion.morale.drift", "Morale drifted", {
+		"echo_id":     echo.get("id", ""),
+		"cause":       cause,
+		"delta":       delta,
+		"old_value":   old_val,
+		"new_value":   new_val,
+		"morale_tier": get_morale_tier(new_val)
+	})
+
+
+## Adds delta to fear_current (clamped 0–100). Logs emotion.fear.drift.
+## If fear_current >= fear_threshold after change, also logs emotion.fear.threshold_crossed.
+## Stores _last_drift on the emotion block (transient; not saved to disk).
+static func apply_fear_delta(echo: Dictionary, delta: int, cause: String, fear_threshold: int, logger: StructuredLogger, t: int) -> void:
+	_ensure_emotion_block(echo)
+	var emo: Dictionary = echo["emotion"]
+	var old_val := int(emo.get("fear_current", 0))
+	var new_val := clampi(old_val + delta, 0, 100)
+	emo["fear_current"] = new_val
+	emo["_last_drift"] = { "cause": cause, "delta": delta, "field": "fear", "new_value": new_val }
+	logger.info(t, "emotion.fear.drift", "Fear drifted", {
+		"echo_id":   echo.get("id", ""),
+		"cause":     cause,
+		"delta":     delta,
+		"old_value": old_val,
+		"new_value": new_val
+	})
+	if new_val >= fear_threshold:
+		logger.info(t, "emotion.fear.threshold_crossed", "Fear threshold reached", {
+			"echo_id":        echo.get("id", ""),
+			"fear_current":   new_val,
+			"fear_threshold": fear_threshold
+		})
 
 
 # ---------------------------------------------------------------------------

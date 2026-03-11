@@ -77,6 +77,9 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 		"flow.go_state":
 			var to_state := str(action.get("to", ""))
+			# EMOTION-002: sanctum recovery tick applies before snapshot rebuild
+			if to_state == FlowStateIds.SANCTUM:
+				_apply_sanctum_emotion_tick(t)
 			flow_machine.transition(to_state, flow_ctx, logger, t, "ui.flow.go_state")
 
 		"flow.select_realm":
@@ -130,6 +133,9 @@ func dispatch(action: Dictionary) -> Dictionary:
 				flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 		"encounter.complete":
+			# EMOTION-002: apply win/loss drift to all roster echoes before clearing encounter
+			var enc_outcome := str(action.get("outcome", "loss"))
+			_apply_encounter_emotion_drift(enc_outcome, t)
 			flow_ctx.encounter_ctx = null
 			flow_ctx.encounter_machine = null
 			flow_machine.transition(FlowStateIds.RESOLVE, flow_ctx, logger, t, "ui.encounter.complete")
@@ -821,6 +827,57 @@ func _apply_offline_accrual_if_needed(t: int, source: String) -> int:
 	
 	return gain
 	
+func _get_drift_cfg() -> Dictionary:
+	var balance := config_service.get_balance()
+	if balance.is_empty():
+		return {}
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var emo_v: Variant = data.get("emotion", {})
+	var emo: Dictionary = emo_v if emo_v is Dictionary else {}
+	var drift_v: Variant = emo.get("drift", {})
+	return drift_v if drift_v is Dictionary else {}
+
+
+# EMOTION-002: applies combat win/loss morale+fear deltas to all roster echoes.
+func _apply_encounter_emotion_drift(outcome: String, t: int) -> void:
+	var drift := _get_drift_cfg()
+	var fear_threshold := int(drift.get("fear_threshold", 80))
+	var roster_v: Variant = flow_ctx.save_data.get("sanctum", {}).get("roster", [])
+	var roster: Array = roster_v if roster_v is Array else []
+	for echo_v in roster:
+		if not echo_v is Dictionary:
+			continue
+		if outcome == "win":
+			EmotionService.apply_morale_delta(echo_v, int(drift.get("combat_exit_win_morale",   10)), "combat_exit_win",  logger, t)
+			EmotionService.apply_fear_delta(  echo_v, int(drift.get("combat_exit_win_fear",      -5)), "combat_exit_win",  fear_threshold, logger, t)
+		else:
+			EmotionService.apply_morale_delta(echo_v, int(drift.get("combat_exit_loss_morale", -15)), "combat_exit_loss", logger, t)
+			EmotionService.apply_fear_delta(  echo_v, int(drift.get("combat_exit_loss_fear",    20)), "combat_exit_loss", fear_threshold, logger, t)
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason != "":
+		flow_ctx.save_request_reason += "|encounter.emotion_drift"
+	else:
+		flow_ctx.save_request_reason = "encounter.emotion_drift"
+
+
+# EMOTION-002: applies sanctum morale recovery tick to echoes below their base.
+func _apply_sanctum_emotion_tick(t: int) -> void:
+	var drift := _get_drift_cfg()
+	var tick_delta := int(drift.get("sanctum_tick_morale", 2))
+	var roster_v: Variant = flow_ctx.save_data.get("sanctum", {}).get("roster", [])
+	var roster: Array = roster_v if roster_v is Array else []
+	for echo_v in roster:
+		if not echo_v is Dictionary:
+			continue
+		var emo := EmotionService.get_emotion(echo_v)
+		var morale_base    := int(emo.get("morale_base",    50))
+		var morale_current := int(emo.get("morale_current", 50))
+		# Recovery only moves morale toward base — never above it
+		if morale_current < morale_base:
+			EmotionService.apply_morale_delta(echo_v, tick_delta, "sanctum_tick", logger, t)
+
+
 func _get_balance_economy_cfg() -> Dictionary:
 	var balance := config_service.get_balance()
 	if balance.is_empty():

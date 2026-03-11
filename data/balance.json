@@ -75,6 +75,17 @@
 	},
 	"sanctum": {
 		"party_max_size": 5
+	},
+	"emotion": {
+		"drift": {
+			"_comment": "All drift values are integers applied as deltas to morale_current or fear_current (clamped 0–100).",
+			"combat_exit_win_morale":   10,
+			"combat_exit_win_fear":     -5,
+			"combat_exit_loss_morale": -15,
+			"combat_exit_loss_fear":    20,
+			"sanctum_tick_morale":       2,
+			"fear_threshold":           80
+		}
 	}
   }
 }
