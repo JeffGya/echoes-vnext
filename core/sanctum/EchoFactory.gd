@@ -80,8 +80,10 @@ static func generate(
 	# ---- (7) derived stats ---
 	var stats := _compute_birth_stats(courage, wisdom, faith, summoning_cfg.get("birth_stats", {}))
 	
-	# Keep vectors empty at birth (spec: vectors accumulate over time)
+	# Keep vectors empty at birth — VectorService.init_vectors() populates these
+	# from archetype_init config immediately after summon (called by FlowRuntime).
 	var vector_scores := {}
+	var dominant_vector := ""  # populated by VectorService.init_vectors()
 	
 	# generation_context: reserved for future emotion/rarity modifiers.
 	# Keep minimal + stable (additive only).
@@ -123,7 +125,8 @@ static func generate(
 		"xp_total": 0,
 		"rank": 1,
 		"vector_scores": vector_scores,
-		
+		"dominant_vector": dominant_vector,  # PROG-005: populated by VectorService.init_vectors()
+
 		"generation_context": generation_context
 	}
 	
@@ -208,6 +211,21 @@ static func repair_echo_fields(echo: Dictionary) -> bool:
 			"uncalled": "pillar"
 		}
 		echo["class_origin"] = class_map.get(calling, "protector")
+		patched = true
+
+	# PROG-005: vector fields — additive-only, no hardcoded key names
+	if not echo.has("vector_scores") or typeof(echo["vector_scores"]) != TYPE_DICTIONARY:
+		# Ensure field exists as empty dict. Config unavailable here so we cannot
+		# use archetype_init weights — VectorService.init_vectors() will handle
+		# new summons; old echoes get neutral empty scores with class_origin as dominant.
+		echo["vector_scores"] = {}
+		patched = true
+
+	if not echo.has("dominant_vector") or echo["dominant_vector"] == null \
+			or str(echo["dominant_vector"]).is_empty():
+		# Best fallback without config: class_origin is the birth Vector bias.
+		# compute_dominant() safely returns current_dominant when total == 0.
+		echo["dominant_vector"] = str(echo.get("class_origin", ""))
 		patched = true
 
 	return patched

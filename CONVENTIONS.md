@@ -1199,3 +1199,94 @@ base = 25 + round((courage − 30) × 49.0 / 40.0)   # maps trait range 30–70 
 `faith` = `traits.faith` directly (30–70 is already an appropriate sub-range of 0–100).
 
 Echoes without traits (repaired saves, test echoes) fall back to flat 50 for both fields.
+
+---
+
+## Vector System (PROG-005)
+
+### Overview
+
+Vectors are medium-term directional identity for Echoes — slower than emotions, faster than
+traits. They feed Layer 2 of the 6-step Actor intent resolution pipeline. Four vectors are active
+in MVP (Protector, Vanguard, Seeker, Pillar). Post-MVP vectors (Opportunist, Devoted, Skeptic,
+Strategist, Rebel, etc.) are added to `balance.json` only — no GDScript changes needed.
+
+### Vector keys
+
+Vector keys are the values used in `class_origin_weights` (e.g. "protector", "vanguard",
+"seeker", "pillar"). These are the same keys used in `archetype_init`, `vector_scores`, and
+`dominant_vector`. All GDScript code iterates dynamically over `vector_scores.keys()` — never
+hardcodes key names.
+
+### Save paths (additive-only)
+
+```
+save_data["sanctum"]["roster"][i]["vector_scores"]   → Dictionary<String, int>
+save_data["sanctum"]["roster"][i]["dominant_vector"] → String
+```
+
+Accumulators are integers clamped to **0–1000**. `dominant_vector` is stored for hysteresis
+(the margin rule requires knowing the current dominant across calls).
+
+### Dominant vector rule (locked, PROG-005)
+
+```
+total = sum(vector_scores.values())
+if total == 0: return current_dominant          # empty/new echo — safe fallback
+candidate = argmax(vector_scores)               # key with highest value
+if candidate == current_dominant: return current_dominant
+margin_threshold = total * 0.03                 # 3% of total sum
+if vector_scores[candidate] - vector_scores.get(current_dominant, 0) > margin_threshold:
+    return candidate                            # challenger takes dominant
+return current_dominant                         # insufficient margin — no switch
+```
+
+Rapid oscillation is intentionally allowed. Each switch fires `vector.dominant.changed` log.
+
+### VectorService — single choke point
+
+`core/actors/VectorService.gd` owns all vector mutations. Never mutate `vector_scores` or
+`dominant_vector` directly from other systems.
+
+| Method | Description |
+|--------|-------------|
+| `init_vectors(echo, vec_cfg, logger, t)` | Seeds vector_scores + dominant_vector from archetype_init config at summon time |
+| `accumulate(echo, vector_key, amount, logger, t)` | Adds to a vector accumulator (clamped 0–1000), detects dominant switch |
+| `compute_dominant(vector_scores, current_dominant) → String` | Pure function — margin rule |
+| `get_snapshot_data(echo) → Dictionary` | Returns `{ scores: Dict, dominant_vector: String }` for snapshots |
+
+### Call sites
+
+- **Summon** (paid + starter): FlowRuntime `sanctum.summon` handler, after `EmotionService.init_echo()`.
+- **Accumulation**: future combat handlers — each encounter event calls `VectorService.accumulate()`.
+
+### config location
+
+`data.vectors.archetype_init` in `balance.json`. Keys match `class_origin_weights` exactly.
+Extend by adding new `class_origin` keys to both `class_origin_weights` and `archetype_init`.
+
+### Save compatibility
+
+`EchoFactory.repair_echo_fields()` patches pre-PROG-005 echoes:
+- `vector_scores` → `{}` (empty; no fake values — keys not known without config)
+- `dominant_vector` → `echo.class_origin` (birth Vector bias; safe with total=0 rule)
+
+### Snapshot shape
+
+Actor snapshot `vectors` block:
+```
+{
+  "scores": { "<vector_key>": int, ... },   # all keys, no hardcoded list
+  "dominant_vector": String
+}
+```
+
+### Intent pipeline reference
+
+Vectors feed **Layer 2** of the 6-step Actor intent resolution order (see GDD echo-and-actor-systems.md):
+1. Core Role Intent
+2. **Vector Bias** ← dominant_vector read here (~15% intent weight, designer-tunable)
+3. Emotion Bias
+4. Context Bias
+5. Skill Consideration
+6. Final Weighted Action Selection

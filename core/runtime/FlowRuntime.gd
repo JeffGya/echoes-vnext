@@ -336,10 +336,15 @@ func _handle_sanctum_summon(action: Dictionary, t: int) -> void:
 		# Append newly summoned echoes to transient reveal queue (NOT saved)
 		var echoes_v: Variant = result.get("echoes", [])
 		var echoes: Array = echoes_v if echoes_v is Array else []
+		# PROG-005: extract vector config once for the loop (data dict is already resolved above)
+		var vec_cfg_v: Variant = data.get("vectors", {})
+		var vec_cfg: Dictionary = vec_cfg_v if vec_cfg_v is Dictionary else {}
 		for e_v in echoes:
 			if e_v is Dictionary:
 				# EMOTION-001: initialise emotion block before the echo enters reveals/roster
 				EmotionService.init_echo(e_v, logger, t)
+				# PROG-005: initialise vector scores from archetype_init config
+				VectorService.init_vectors(e_v, vec_cfg, logger, t)
 				flow_ctx.pending_summon_reveals.append(e_v)
 
 		flow_ctx.save_request = true
@@ -436,6 +441,10 @@ func _handle_new_game(t: int) -> void:
 
 	# EMOTION-001: initialise emotion block before the echo enters the roster
 	EmotionService.init_echo(echo, logger, t)
+	# PROG-005: initialise vector scores from archetype_init config
+	var vec_cfg_ng_v: Variant = data.get("vectors", {})
+	var vec_cfg_ng: Dictionary = vec_cfg_ng_v if vec_cfg_ng_v is Dictionary else {}
+	VectorService.init_vectors(echo, vec_cfg_ng, logger, t)
 
 	roster.append(echo)
 	sanctum["starter_granted"] = true

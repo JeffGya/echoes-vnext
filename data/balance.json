@@ -86,6 +86,15 @@
 			"sanctum_tick_morale":       2,
 			"fear_threshold":           80
 		}
+	},
+	"vectors": {
+		"_comment": "Per-class_origin starting vector weights. Keys match class_origin_weights keys exactly. Add new vectors here only — no GDScript changes needed.",
+		"archetype_init": {
+			"protector": { "protector": 60, "vanguard": 20, "seeker": 10, "pillar": 10 },
+			"vanguard":  { "protector": 10, "vanguard": 60, "seeker": 20, "pillar": 10 },
+			"seeker":    { "protector": 10, "vanguard": 20, "seeker": 60, "pillar": 10 },
+			"pillar":    { "protector": 10, "vanguard": 20, "seeker": 10, "pillar": 60 }
+		}
 	}
   }
 }

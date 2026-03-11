@@ -26,6 +26,10 @@ static func from_echo(echo: Dictionary) -> Dictionary:
 	var echo_stats: Dictionary = echo.get("stats", defaults["stats"])
 	var echo_traits: Dictionary = echo.get("traits", defaults["traits"])
 
+	# PROG-005: deep-copy vector_scores so mutations on the actor dict cannot
+	# bleed back into save data. Any future vector keys are carried through automatically.
+	var echo_vector_scores: Dictionary = echo.get("vector_scores", {})
+
 	var actor := {
 		"id":             echo.get("id",             defaults["id"]),
 		"name":           echo.get("name",           defaults["name"]),
@@ -42,6 +46,9 @@ static func from_echo(echo: Dictionary) -> Dictionary:
 		"speed":          5,    # flat default — COMBAT-002 derives formula later
 		"morale":         int(echo.get("emotion", {}).get("morale_current", 50)),  # EMOTION-001
 		"fear":           int(echo.get("emotion", {}).get("fear_current",   0)),  # EMOTION-001
+		# PROG-005: vector data — read-only view of save data; deep copy for isolation
+		"vector_scores":   echo_vector_scores.duplicate(true),
+		"dominant_vector": str(echo.get("dominant_vector", "")),
 	}
 
 	assert(ActorSchema.validate(actor), \

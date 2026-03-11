@@ -63,13 +63,23 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 
 
 ## Returns a debug-friendly snapshot of this actor's current behavior state.
-## Used by debug overlays and tests to verify module assignment and last intent.
+## Used by debug overlays and tests to verify module assignment, last intent, and vectors.
 ##
-## Shape: { "actor_id": String, "name": String, "behavior_module": String, "last_intent": Dictionary }
+## Shape:
+##   {
+##     "actor_id": String,
+##     "name": String,
+##     "behavior_module": String,
+##     "last_intent": Dictionary,
+##     "vectors": { "scores": Dictionary<String,int>, "dominant_vector": String }
+##   }
+## vectors.scores contains all keys from actor_dict.vector_scores (any N keys — no hardcoded list).
 func get_snapshot() -> Dictionary:
 	return {
 		"actor_id": _actor.get("id", ""),
 		"name": _actor.get("name", ""),
 		"behavior_module": _behavior_module.get_module_id(),
-		"last_intent": _last_intent.duplicate()
+		"last_intent": _last_intent.duplicate(),
+		# PROG-005: Layer 2 vector data for intent pipeline and debug display
+		"vectors": VectorService.get_snapshot_data(_actor)
 	}
