@@ -1083,3 +1083,62 @@ Old Echo repair mapping (for `class_origin` on pre-v2 saves — derived from `ca
 - `"archer"` → `"seeker"`
 - `"uncalled"` → `"pillar"`
 - all others → `"protector"` (safe fallback)
+
+---
+
+## EmotionService Contract (EMOTION-001)
+
+Every Echo carries exactly one emotion block, initialised on creation via `EmotionService.init_echo()`.
+`EmotionService` is the single choke point for all emotion mutations — mirrors `EconomyService` for Ase.
+
+### Emotion block shape (stored at `echo["emotion"]`)
+
+| Field           | Type | Range  | Default | Description                                   |
+|-----------------|------|--------|---------|-----------------------------------------------|
+| faith           | int  | 0–100  | 50      | Determines summon bonuses (future mechanics)  |
+| morale_base     | int  | 0–100  | 50      | Long-term baseline; changed by story events   |
+| morale_current  | int  | 0–100  | 50      | Combat-volatile; starts == morale_base        |
+| fear_current    | int  | 0–100  | 0       | Resets to 0 each venture                     |
+
+### Morale tiers (computed — not stored)
+
+```
+0–24   → "broken"
+25–49  → "shaken"
+50–74  → "steady"
+75–100 → "inspired"
+```
+
+`EmotionService.get_morale_tier(morale_current: int) -> String` — pure; no dict required.
+
+### Save location
+
+`save_data["sanctum"]["roster"][i]["emotion"]` — lives on the roster echo dict.
+Never at `save_data["echoes"][echo_id]` (that path does not exist in this codebase).
+
+### Log events
+
+| Type                       | Payload fields                                                   |
+|----------------------------|------------------------------------------------------------------|
+| `emotion.init`             | echo_id, faith, morale_base, morale_current, fear_current        |
+| `emotion.faith.set`        | echo_id, faith                                                   |
+| `emotion.morale_base.set`  | echo_id, morale_base                                             |
+| `emotion.morale_current.set` | echo_id, morale_current, morale_tier                           |
+| `emotion.fear.set`         | echo_id, fear_current                                            |
+
+### Debug command
+
+```
+emotion              → print emotion block for all roster echoes
+emotion <echo_id>    → print emotion block for a specific echo
+```
+
+### Rules
+
+- All emotion mutations go through `EmotionService` — never write `echo["emotion"]` directly
+- All values are clamped 0–100 at the setter level; callers need not clamp first
+- `EmotionService` methods are static — no instantiation
+- `init_echo()` is idempotent: safe to call on echoes that already have an emotion block
+- `SaveService` repair loop adds emotion defaults for old saves (backward compat)
+- `EchoActor.from_echo()` reads `emotion.morale_current` and `emotion.fear_current` for the actor dict
+- `FlowSanctumState` roster_preview includes `emotion { faith, morale_current, morale_tier }` per echo

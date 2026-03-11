@@ -440,6 +440,19 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 				repaired = true
 				repaired_notes.append("sanctum.roster[%d].generation_context set to default dict" % i)
 
+			# EMOTION-001: emotion block
+			if not echo.has("emotion") or typeof(echo["emotion"]) != TYPE_DICTIONARY:
+				echo["emotion"] = { "faith": 50, "morale_base": 50, "morale_current": 50, "fear_current": 0 }
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].emotion added with defaults" % i)
+			else:
+				var _e_def := { "faith": 50, "morale_base": 50, "morale_current": 50, "fear_current": 0 }
+				for _k in _e_def:
+					if not echo["emotion"].has(_k):
+						echo["emotion"][_k] = _e_def[_k]
+						repaired = true
+						repaired_notes.append("sanctum.roster[%d].emotion.%s set to default" % [i, _k])
+
 	# Get structured log if anything was repaired (uses injected t)
 	if repaired:
 		_log_info(logger, t, "save.schema.repair", "Applied additive save schema repairs", {

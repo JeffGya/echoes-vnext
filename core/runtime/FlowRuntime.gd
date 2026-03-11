@@ -332,6 +332,8 @@ func _handle_sanctum_summon(action: Dictionary, t: int) -> void:
 		var echoes: Array = echoes_v if echoes_v is Array else []
 		for e_v in echoes:
 			if e_v is Dictionary:
+				# EMOTION-001: initialise emotion block before the echo enters reveals/roster
+				EmotionService.init_echo(e_v, logger, t)
 				flow_ctx.pending_summon_reveals.append(e_v)
 
 		flow_ctx.save_request = true
@@ -425,6 +427,9 @@ func _handle_new_game(t: int) -> void:
 	# Assign stable id outside factory (does NOT affect determinism)
 	var echo_id := "echo_%04d" % (roster.size() + 1)
 	echo["id"] = echo_id
+
+	# EMOTION-001: initialise emotion block before the echo enters the roster
+	EmotionService.init_echo(echo, logger, t)
 
 	roster.append(echo)
 	sanctum["starter_granted"] = true

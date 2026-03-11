@@ -180,8 +180,15 @@ func _on_debug_command(command: String) -> void:
 		_run_summon_command(parts)
 		return
 
+	# -------------------------
+	# emotion (EMOTION-001)
+	# -------------------------
+	if head == "emotion":
+		_run_emotion_command(parts)
+		return
+
 	_debug_print("Unknown command: " + cmd)
-	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1")
+	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id]")
 	
 	_flush_logs_to_console()
 	
@@ -230,6 +237,7 @@ func _run_tests(parts: Array) -> void:
 	ActorStatInitTests.register(runner)
 	DerivedStatTests.register(runner)
 	BehaviorModuleTests.register(runner)
+	EmotionTests.register(runner)
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [
@@ -379,6 +387,54 @@ func _run_summon_command(parts: Array) -> void:
 	_debug_print("Summon x%d → roster=%d summon_count=%d ase=%d" % [
 		count, roster.size(), summon_count, econ_after.get_ase()
 	])
+
+	_flush_logs_to_console()
+
+# EMOTION-001: emotion debug command
+# Usage:
+#   emotion          — print emotion block for all roster echoes
+#   emotion <echo_id> — print emotion block for a specific echo by id
+func _run_emotion_command(parts: Array) -> void:
+	var save_ref: Dictionary = runtime.get_save_data()
+	var sanctum: Dictionary = (save_ref.get("sanctum", {}) as Dictionary)
+	var roster: Array = sanctum.get("roster", []) as Array
+
+	if roster.is_empty():
+		_debug_print("emotion: roster is empty")
+		_flush_logs_to_console()
+		return
+
+	var target_id := ""
+	if parts.size() >= 2:
+		target_id = str(parts[1]).strip_edges()
+
+	var found := false
+	for echo_v in roster:
+		if not (echo_v is Dictionary):
+			continue
+		var echo: Dictionary = echo_v as Dictionary
+		var eid := str(echo.get("id", ""))
+
+		if target_id != "" and eid != target_id:
+			continue
+
+		var _emo := EmotionService.get_emotion(echo)
+		_debug_print("emotion | id=%s name=%s faith=%d morale_base=%d morale_current=%d tier=%s fear=%d" % [
+			eid,
+			str(echo.get("name", "?")),
+			int(_emo.get("faith",          50)),
+			int(_emo.get("morale_base",    50)),
+			int(_emo.get("morale_current", 50)),
+			EmotionService.get_morale_tier(int(_emo.get("morale_current", 50))),
+			int(_emo.get("fear_current",   0))
+		])
+		found = true
+
+		if target_id != "":
+			break
+
+	if target_id != "" and not found:
+		_debug_print("emotion: echo_id '%s' not found in roster" % target_id)
 
 	_flush_logs_to_console()
 

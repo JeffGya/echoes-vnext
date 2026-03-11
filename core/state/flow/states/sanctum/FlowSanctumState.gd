@@ -60,6 +60,7 @@ func enter(ctx: RefCounted, t:int) -> void:
 		var echo_v: Variant = roster[i]
 		var echo: Dictionary = echo_v if echo_v is Dictionary else {}
 
+		var _emo := EmotionService.get_emotion(echo)
 		roster_preview.append({
 			"id":             str(echo.get("id", "")),
 			"name":           str(echo.get("name", "")),
@@ -67,6 +68,12 @@ func enter(ctx: RefCounted, t:int) -> void:
 			"rarity":         str(echo.get("rarity", "")),
 			"rank":           int(echo.get("rank", 1)),
 			"level":          int(echo.get("level", 1)),  # PROG-001 addition
+			# EMOTION-001: emotion snapshot (computed tier, not stored)
+			"emotion": {
+				"faith":          int(_emo.get("faith",          50)),
+				"morale_current": int(_emo.get("morale_current", 50)),
+				"morale_tier":    EmotionService.get_morale_tier(int(_emo.get("morale_current", 50))),
+			},
 		})
 	
 	# Base Sanctum snapshot. FlowStateMachine._rebuild_snapshot() enriches data with:
