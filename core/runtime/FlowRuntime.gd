@@ -7,6 +7,7 @@ var config_service: ConfigService
 var flow_ctx: FlowContext
 var flow_machine: FlowStateMachine
 var econ: EconomyService
+var directive_service: DirectiveService  # DIRECTIVE-001
 
 func _init(_logger: StructuredLogger, _config_service: ConfigService) -> void:
 	logger = _logger
@@ -49,7 +50,8 @@ func boot() -> Dictionary:
 
 	flow_ctx.save_data = save
 	econ = EconomyService.new(flow_ctx.save_data)
-	
+	directive_service = DirectiveService.new(flow_ctx.save_data)  # DIRECTIVE-001
+
 	# Flow state machine
 	flow_machine = FlowStateMachine.new()
 	flow_machine.register_default_states()
@@ -218,7 +220,11 @@ func dispatch(action: Dictionary) -> Dictionary:
 			
 		"sanctum.party.confirm":
 			_handle_sanctum_party_confirm(t)
-		
+
+		# ---- Directives (DIRECTIVE-001) ----
+		"directive.select":
+			_handle_directive_select(action, t)
+
 		# UI actions
 		"ui.dismiss_summon_reveals":
 			flow_ctx.pending_summon_reveals.clear()
@@ -458,6 +464,7 @@ func _handle_new_game(t: int) -> void:
 	# Install save into runtime + rebuild economy service
 	flow_ctx.save_data = save
 	econ = EconomyService.new(flow_ctx.save_data)
+	directive_service = DirectiveService.new(flow_ctx.save_data)  # DIRECTIVE-001
 
 	# Request save flush via Flow-owned choke point
 	flow_ctx.save_request = true
@@ -1080,3 +1087,15 @@ func _handle_sanctum_party_confirm(t: int) -> void:
 
 	# Return to sanctum hub
 	flow_machine.transition(FlowStateIds.SANCTUM, flow_ctx, logger, t, "ui.sanctum.party.confirm")
+
+
+# DIRECTIVE-001: writes the chosen directive to stage_context, requests save, refreshes snapshot.
+func _handle_directive_select(action: Dictionary, t: int) -> void:
+	var id := str(action.get("directive_id", ""))
+	directive_service.set_active_directive(id, logger, t)
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason != "":
+		flow_ctx.save_request_reason += "|directive.select"
+	else:
+		flow_ctx.save_request_reason = "directive.select"
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)

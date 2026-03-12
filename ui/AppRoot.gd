@@ -239,6 +239,7 @@ func _run_tests(parts: Array) -> void:
 	BehaviorModuleTests.register(runner)
 	EmotionTests.register(runner)
 	VectorTests.register(runner)
+	DirectiveTests.register(runner)  # DIRECTIVE-001
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [

@@ -1287,6 +1287,113 @@ Vectors feed **Layer 2** of the 6-step Actor intent resolution order (see GDD ec
 1. Core Role Intent
 2. **Vector Bias** ← dominant_vector read here (~15% intent weight, designer-tunable)
 3. Emotion Bias
-4. Context Bias
+4. **Context Bias** ← directive intent_weights applied here (ACTOR-004+)
 5. Skill Consideration
 6. Final Weighted Action Selection
+
+---
+
+## Stage Directives (DIRECTIVE-001)
+
+### What a directive is
+
+A directive is the player's strategic intent for a stage — a stable named bias applied to Actor SM intent resolution (Layer 4: Context Bias). Directives are weighted preferences, not hard commands. The Actor SM reads `intent_weights` and biases its action selection accordingly.
+
+### Directive definition shape (5 required keys)
+
+```gdscript
+{
+  "id":              String,      # stable save key — never rename after shipping
+  "label":           String,      # player-facing name
+  "description":     String,      # player-facing short description
+  "intent_weights":  Dictionary,  # shared vocabulary keys → float bias values (0–1); missing keys = 0 (neutral)
+  "unlock_condition": String      # "always" = selectable; "locked" = future unlock
+}
+```
+
+### MVP registry (6 directives, 2 selectable)
+
+| ID | label | unlock_condition | Key intent_weights |
+|----|-------|-----------------|-------------------|
+| `directive.none` | No Directive | `always` | `{}` |
+| `directive.scout` | Scout | `always` | survival_bias:0.3, avoid_overcommit:0.3, prefer_disengage:0.2, reporting_priority:0.2 |
+| `directive.protect` | Protect | `locked` | ally_protection_bias:0.4, threat_interception:0.3, formation_cohesion:0.2, survival_bias:0.1 |
+| `directive.push` | Push | `locked` | objective_advance_priority:0.5, engage_only_blockers:0.3, avoid_side_engagement:0.2 |
+| `directive.preserve` | Preserve | `locked` | resource_efficiency:0.4, avoid_overcommit:0.3, retreat_on_disadvantage:0.2, survival_bias:0.1 |
+| `directive.focus` | Focus | `locked` | dominant_skill_bias:0.5, consistency_priority:0.3, vector_alignment_priority:0.2 |
+
+### Intent weights vocabulary (shared across all directives)
+
+Keys not present in a directive's `intent_weights` are treated as **0 / neutral** by the Actor SM. New directives use existing keys or introduce new ones — no enum needed.
+
+| Key | Meaning | Directives using it |
+|-----|---------|---------------------|
+| `survival_bias` | Prioritise staying alive | scout (high), protect/preserve (low) |
+| `avoid_overcommit` | Don't go all-in | scout, preserve |
+| `prefer_disengage` | Retreat when threatened | scout |
+| `reporting_priority` | Prioritise info-gathering behaviors | scout |
+| `ally_protection_bias` | Intercept threats to allies | protect |
+| `threat_interception` | Move to block attacks targeting allies | protect |
+| `formation_cohesion` | Stay close to allies | protect |
+| `objective_advance_priority` | Advance toward stage objective | push |
+| `engage_only_blockers` | Fight only what blocks the path | push |
+| `avoid_side_engagement` | Ignore non-blocking threats | push |
+| `resource_efficiency` | Use minimum force, avoid waste | preserve |
+| `retreat_on_disadvantage` | Retreat when cost/benefit is negative | preserve |
+| `dominant_skill_bias` | Lean into dominant skill/vector | focus |
+| `consistency_priority` | Prefer predictable, optimised actions | focus |
+| `vector_alignment_priority` | Align actions with dominant vector | focus |
+
+### Save path
+
+```
+save_data["stage_context"]["active_directive_id"]  # String, default: "directive.none"
+```
+
+`stage_context` is a top-level save block added in DIRECTIVE-001. Future stories add to it.
+
+### DirectiveService
+
+`core/directives/DirectiveService.gd` — extends RefCounted. Instance owned by FlowRuntime (instantiated in `boot()` and `_handle_new_game()` after save replacement).
+
+| Method | Description |
+|--------|-------------|
+| `get_registry() -> Dictionary` | All 6 definitions keyed by directive ID |
+| `get_directive(id) -> Dictionary` | Single definition; `{}` if unknown |
+| `set_active_directive(id, logger, t)` | Writes to `stage_context`, logs `directive.selected` |
+| `get_active_directive() -> Dictionary` | Full definition for current active ID; falls back to `directive.none` |
+| `get_available_directives() -> Array` | IDs where `unlock_condition == "always"` (MVP: 2) |
+
+### Action type
+
+```gdscript
+{ "type": "directive.select", "directive_id": String }
+```
+
+Handled by `FlowRuntime._handle_directive_select()` → `DirectiveService.set_active_directive()` → `save_request = true` → `refresh_snapshot()`.
+
+### Log event
+
+```gdscript
+logger.info(t, "directive.selected", "Directive selected", { "directive_id": String, "t": int })
+```
+
+### Snapshot fields (SANCTUM type)
+
+Added to `data` block in `FlowStateMachine._rebuild_snapshot()` SANCTUM enrichment:
+
+```gdscript
+data["active_directive_id"]   # String — current active directive ID
+data["available_directives"]  # Array[String] — MVP static ["directive.none", "directive.scout"]
+                              # DIRECTIVE-002 replaces with directive_service.get_available_directives()
+```
+
+### Unlock logic
+
+`get_available_directives()` filters registry entries where `unlock_condition == "always"`. DIRECTIVE-002 adds dynamic unlock conditions (e.g. `"stage_completed_once"`). No GDScript changes needed to add new unlock conditions — handled entirely in DirectiveService.
+
+### Notes
+
+- Registry is hardcoded in-class (not config-driven) — directive IDs and weights are design decisions, not runtime-tunable values
+- `intent_weights` consumed by Actor SM Layer 4 (ACTOR-004+)
+- Do NOT add `stage_context` to `SaveService.validate()` required keys — it is additive-only; repair handles old saves

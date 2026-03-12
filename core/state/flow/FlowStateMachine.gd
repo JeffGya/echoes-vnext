@@ -170,6 +170,15 @@ func _rebuild_snapshot(ctx: FlowContext, logger: StructuredLogger, t: int) -> vo
 		# Optional: include these only if you want the UI to list them later (out of scope for MVP. Possibly later we can use set parties that can be prepared before.)
 		# data["active_party_ids"] = active_party_ids
 
+		# DIRECTIVE-001: surface active directive in Sanctum snapshot (debug/snapshot visibility)
+		# DIRECTIVE-002 will replace the static available_directives list with a dynamic call.
+		var stage_ctx_dir: Dictionary = {}
+		if ctx.save_data != null and ctx.save_data.has("stage_context") \
+				and typeof(ctx.save_data["stage_context"]) == TYPE_DICTIONARY:
+			stage_ctx_dir = ctx.save_data["stage_context"]
+		data["active_directive_id"] = str(stage_ctx_dir.get("active_directive_id", "directive.none"))
+		data["available_directives"] = ["directive.none", "directive.scout"]  # MVP static list
+
 	# Enforce snapshot contract (STATE-004 Subtask 5)
 	_validate_snapshot(snap, logger, t)
 

@@ -453,6 +453,18 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 						repaired = true
 						repaired_notes.append("sanctum.roster[%d].emotion.%s set to default" % [i, _k])
 
+	# ---- stage_context repairs (DIRECTIVE-001) ----
+	if not save.has("stage_context") or typeof(save["stage_context"]) != TYPE_DICTIONARY:
+		save["stage_context"] = { "active_directive_id": "directive.none" }
+		repaired = true
+		repaired_notes.append("stage_context added with default active_directive_id")
+	else:
+		var sc: Dictionary = save["stage_context"]
+		if not sc.has("active_directive_id") or typeof(sc["active_directive_id"]) != TYPE_STRING:
+			sc["active_directive_id"] = "directive.none"
+			repaired = true
+			repaired_notes.append("stage_context.active_directive_id set to 'directive.none' default")
+
 	# Get structured log if anything was repaired (uses injected t)
 	if repaired:
 		_log_info(logger, t, "save.schema.repair", "Applied additive save schema repairs", {

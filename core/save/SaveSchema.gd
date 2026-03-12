@@ -48,5 +48,9 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"starter_granted": false,
 			"summon_count": 0,
 
+		},
+		# DIRECTIVE-001: stage-level context (directive, future: stage seed, objective state)
+		"stage_context": {
+			"active_directive_id": "directive.none"
 		}
 	}
