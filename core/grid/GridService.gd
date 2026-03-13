@@ -23,15 +23,15 @@ extends RefCounted
 # -------------------------
 
 ## Returns the number of columns on the combat board.
-## Reads from balance.json data.grid.board_cols; falls back to 6.
+## Reads from balance.json data.grid.board_cols; falls back to 10.
 static func get_board_cols(cfg: Dictionary = {}) -> int:
-	return int(cfg.get("board_cols", 6))
+	return int(cfg.get("board_cols", 10))
 
 
 ## Returns the number of rows on the combat board.
-## Reads from balance.json data.grid.board_rows; falls back to 3.
+## Reads from balance.json data.grid.board_rows; falls back to 10.
 static func get_board_rows(cfg: Dictionary = {}) -> int:
-	return int(cfg.get("board_rows", 3))
+	return int(cfg.get("board_rows", 10))
 
 
 ## Returns the full board config dict { board_cols, board_rows }.
@@ -49,3 +49,15 @@ static func is_valid_pos(pos: Dictionary, cfg: Dictionary = {}) -> bool:
 	var row: int = int(pos.get("row", -1))
 	return col >= 0 and col < get_board_cols(cfg) \
 		and row >= 0 and row < get_board_rows(cfg)
+
+
+# -------------------------
+# Actor spawn positions (GRID-002)
+# -------------------------
+
+## Assigns a grid position to an actor dict in-place; returns the actor.
+## Overwrites any existing grid_pos (including the default placeholder {col:0,row:0}).
+## Pure and deterministic — no side effects beyond setting actor["grid_pos"].
+static func assign_grid_pos(actor: Dictionary, col: int, row: int) -> Dictionary:
+	actor["grid_pos"] = { "col": col, "row": row }
+	return actor

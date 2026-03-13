@@ -38,6 +38,7 @@ var save_request_reason: String = ""
 # Optional core services (core-safe)
 var config_service = null # ConfigService
 var campaign_seed = null # CampaignSeed
+var logger = null # StructuredLogger — injected by FlowRuntime; GRID-002 allows flow states to log
 
 # Debug / diagnostics
 var last_error: String = ""

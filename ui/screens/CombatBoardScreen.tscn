@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://dtgdie4phqgyg" path="res://ui/screens/CombatBoardScreen.gd" id="1_script"]
 [ext_resource type="Texture2D" uid="uid://bitpbc4p75ue7" path="res://assets/sanctum/tiles/floor/sanctum_tile_floor_clay_base_128x96.png" id="2_tile"]
+[ext_resource type="Script" path="res://ui/screens/CombatTokenLayer.gd" id="3_token_layer"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_board"]
 texture = ExtResource("2_tile")
@@ -29,6 +30,13 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_script")
 
+[node name="Board" type="TileMapLayer" parent="." unique_id=1614739804]
+y_sort_enabled = true
+tile_set = SubResource("TileSet_board")
+
+[node name="TokenLayer" type="Node2D" parent="." unique_id=743928105]
+script = ExtResource("3_token_layer")
+
 [node name="BackButton" type="Button" parent="." unique_id=125887286]
 layout_mode = 0
 offset_left = 16.0
@@ -36,7 +44,3 @@ offset_top = 16.0
 offset_right = 136.0
 offset_bottom = 56.0
 text = "← Back"
-
-[node name="Board" type="TileMapLayer" parent="." unique_id=1614739804]
-y_sort_enabled = true
-tile_set = SubResource("TileSet_board")

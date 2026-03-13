@@ -1,6 +1,7 @@
 # res://ui/screens/CombatBoardScreen.gd
 # Bespoke combat board screen — renders the isometric grid for flow.encounter.
 # GRID-001: Board configuration + isometric floor tile rendering.
+# GRID-002: Actor tokens drawn at grid_pos cells via CombatTokenLayer.
 #
 # Contract (UI-001):
 # - set_snapshot(snap: Dictionary) → _clear() + _render(data, actions)
@@ -12,7 +13,6 @@
 #   INFRA-001 (pickup 44) will move this routing into RealmShell.
 #
 # Future GRID stories extend _render() and _clear():
-#   GRID-002 — actor tokens drawn at grid_pos cells
 #   GRID-004 — distance debug overlay on cells
 #   GRID-005 — token positions updated after move_toward()
 
@@ -21,15 +21,16 @@ extends Control
 
 signal action_requested(action: Dictionary)
 
-@onready var _board: TileMapLayer       = $Board
-@onready var _back_button: Button       = $BackButton
+@onready var _board: TileMapLayer           = $Board
+@onready var _token_layer: CombatTokenLayer = $TokenLayer
+@onready var _back_button: Button           = $BackButton
 
 # Clay floor tile: source 0, atlas position (0, 0)
 const _TILE_SOURCE_ID:    int       = 0
 const _TILE_ATLAS_COORDS: Vector2i  = Vector2i(0, 0)
 
-var _current_cols: int       = 6
-var _current_rows: int       = 3
+var _current_cols: int       = 10
+var _current_rows: int       = 10
 # Cached nav.back action — set in _render(), read in _on_back_pressed().
 var _nav_back_action: Dictionary = {}
 
@@ -56,14 +57,19 @@ func set_snapshot(snap: Dictionary) -> void:
 
 func _clear() -> void:
 	_board.clear()
+	_token_layer.clear_tokens()
 	_back_button.visible = false
 	_nav_back_action = {}
 
 func _render(data: Dictionary, actions: Dictionary) -> void:
-	_current_cols = int(data.get("board_cols", 6))
-	_current_rows = int(data.get("board_rows", 3))
+	_current_cols = int(data.get("board_cols", 10))
+	_current_rows = int(data.get("board_rows", 10))
 	_draw_board(_current_cols, _current_rows)
 	_center_board(_current_cols, _current_rows)
+	# GRID-002: draw actor tokens if the snapshot includes an actor list.
+	var actors: Array = data.get("actors", [])
+	if not actors.is_empty():
+		_draw_tokens(actors)
 	# Show back button only when the snapshot supplies a nav.back action.
 	if actions.has("nav.back"):
 		var action_v: Variant = actions["nav.back"]
@@ -85,6 +91,7 @@ func _draw_board(cols: int, rows: int) -> void:
 
 ## Offsets the TileMapLayer so the grid is visually centred on screen.
 ## map_to_local() returns the pixel centre of a cell in TileMapLayer-local space.
+## The TokenLayer is placed at the same position so its draw coordinates match.
 func _center_board(cols: int, rows: int) -> void:
 	# Sample the four corner cells to get the visual bounding box.
 	var tl: Vector2 = _board.map_to_local(Vector2i(0,        0       ))
@@ -99,6 +106,8 @@ func _center_board(cols: int, rows: int) -> void:
 
 	var viewport_center: Vector2 = get_viewport_rect().size / 2.0
 	_board.position = viewport_center - grid_center
+	# GRID-002: token layer shares the board's coordinate origin.
+	_token_layer.position = _board.position
 
 
 ## Emits the cached nav.back action when the Back button is pressed.
@@ -109,3 +118,37 @@ func _on_back_pressed() -> void:
 
 func _on_action(action: Dictionary) -> void:
 	action_requested.emit(action)
+
+
+# -------------------------
+# Token rendering (GRID-002)
+# -------------------------
+
+## Converts the actor list from the snapshot into token descriptors and
+## passes them to the CombatTokenLayer for drawing.
+## _center_board() must be called first so _board.position is set correctly.
+func _draw_tokens(actors: Array) -> void:
+	var tokens: Array[Dictionary] = []
+	for actor in actors:
+		var gp: Dictionary = actor.get("grid_pos", {})
+		var col: int = gp.get("col", 0)
+		var row: int = gp.get("row", 0)
+		# map_to_local() returns the cell centre in TileMapLayer-local space.
+		# Since _token_layer.position == _board.position, these coordinates
+		# are correct in the token layer's local space without further offset.
+		var cell_pos: Vector2 = _board.map_to_local(Vector2i(col, row))
+		var faction: String = actor.get("faction", "")
+		var shape := "square" if actor.get("is_structure", false) else "circle"
+		var name_str: String = actor.get("name", "??")
+		tokens.append({
+			"pos":   cell_pos,
+			"color": _faction_color(faction),
+			"shape": shape,
+			"label": name_str.substr(0, 2).to_upper(),
+		})
+	_token_layer.update_tokens(tokens)
+
+
+## Returns the placeholder colour for a given faction string.
+func _faction_color(faction: String) -> Color:
+	return CombatTokenLayer.FACTION_COLORS.get(faction, Color.WHITE)

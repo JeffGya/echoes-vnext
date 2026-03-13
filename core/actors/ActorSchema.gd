@@ -11,8 +11,8 @@
 # - validate() checks presence and non-null only, not value ranges.
 #   Enemy/NPC actors may use zero/empty values for Echo-specific fields.
 #
-# GRID-STUB: position { "x": int, "y": int } will be added to the contract
-# when core/grid/ lands (GRID stories). Not a required field in MVP.
+# GRID-002: grid_pos { col, row } is now a required field.
+# Assigned by GridService.assign_grid_pos() during encounter entry.
 #
 # ActorStateMachine (core/actors/ActorStateMachine.gd) is scaffolded in ACTOR-002.
 # It stores the actor dict and exposes get_stat() for behavior modules.
@@ -36,6 +36,10 @@ extends RefCounted
 ##   is_dead      — set to true when current_hp <= 0; immutable once true.
 ##                  Echo dicts are preserved intact on death (future relic system).
 ##   death_round  — sim tick (t) at which the actor died; 0 = never died.
+## GRID-002 addition:
+##   grid_pos     — spawn position on the combat board; { col: int, row: int }.
+##                  Assigned by GridService.assign_grid_pos() during encounter entry.
+##                  Default { col: 0, row: 0 } is a safe placeholder until assigned.
 const REQUIRED_FIELDS: Array = [
 	"id",
 	"name",
@@ -54,6 +58,7 @@ const REQUIRED_FIELDS: Array = [
 	"is_structure",
 	"is_dead",
 	"death_round",
+	"grid_pos",
 ]
 
 ## Returns false if actor is missing any required field or has a null value.
@@ -89,4 +94,6 @@ static func get_defaults() -> Dictionary:
 		# ACTOR-008: death state — immutable once is_dead=true; death_round=0 means alive
 		"is_dead":        false,
 		"death_round":    0,
+		# GRID-002: combat board position — assigned by GridService.assign_grid_pos()
+		"grid_pos":       { "col": 0, "row": 0 },
 	}

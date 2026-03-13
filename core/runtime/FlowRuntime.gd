@@ -23,6 +23,7 @@ func boot() -> Dictionary:
 	flow_ctx = FlowContext.new()
 	flow_ctx.sim_tick = 0
 	flow_ctx.config_service = config_service
+	flow_ctx.logger = logger  # GRID-002: allows flow states to log without changing State.enter() signature
 
 	logger.debug(_next_tick(), "boot.start", "Boot sequence started", {})
 
