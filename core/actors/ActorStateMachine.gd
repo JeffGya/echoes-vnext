@@ -21,6 +21,8 @@ var _behavior_module: BehaviorModule
 var _last_intent: Dictionary = {}
 var _last_action: Dictionary = {}
 var _movement_skipped: bool = false  # ACTOR-006: true when actor is_structure; no movement phase
+var _last_morale_tier: String = "steady"  # ACTOR-007: morale tier of the winning intent
+var _last_morale_modifier: int = 0        # ACTOR-007: flat score modifier applied by morale tier
 
 
 ## actor_dict: the actor's full dict (from EchoActor.from_echo or EnemyActor.from_definition).
@@ -72,6 +74,9 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 
 	var intent: Dictionary = _behavior_module.select_intent(context)
 	_last_intent = intent
+	# ACTOR-007: read morale metadata annotated by BehaviorArbiter onto the winner.
+	_last_morale_tier     = str(intent.get("morale_tier",     "steady"))
+	_last_morale_modifier = int(intent.get("morale_modifier", 0))
 	logger.info(t, "actor.intent", "Intent selected", {
 		"module_id": _behavior_module.get_module_id(),
 		"action_type": intent.get("action_type", ""),
@@ -85,10 +90,12 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		"distance":    intent.get("distance", -1),
 	}
 	logger.info(t, "actor.action", "Action resolved", {
-		"action_type": _last_action["action_type"],
-		"source_id":   _actor.get("id", ""),
-		"target_id":   _last_action["target_id"],
-		"damage":      0,  # placeholder — real damage in COMBAT-001+
+		"action_type":            _last_action["action_type"],
+		"source_id":              _actor.get("id", ""),
+		"target_id":              _last_action["target_id"],
+		"damage":                 0,  # placeholder — real damage in COMBAT-001+
+		"morale_tier":            _last_morale_tier,      # ACTOR-007
+		"action_weight_modifier": _last_morale_modifier,  # ACTOR-007
 	})
 	return intent
 
@@ -117,4 +124,7 @@ func get_snapshot() -> Dictionary:
 		# ACTOR-006: structure identity fields
 		"is_structure":     _actor.get("is_structure", false),
 		"movement_skipped": _movement_skipped,
+		# ACTOR-007: morale influence fields
+		"morale_tier":           _last_morale_tier,
+		"action_weight_modifier": _last_morale_modifier,
 	}

@@ -18,10 +18,11 @@
 #   config dict (ACTOR-006/ENEMY-001).
 #
 # Score formula (per candidate):
-#   score = (base + trait_bonus + vector_bonus) * fear_factor + directive_bonus
+#   score = (base + trait_bonus + vector_bonus + morale_bonus) * fear_factor + directive_bonus
 #   - base: intent_weights_by_calling_origin[calling_origin][action_type]
 #   - trait_bonus: sum(trait_value × trait_action_muls[action_type][trait_key])
 #   - vector_bonus: sum(vector_score × vector_action_muls[action_type][vector_key])
+#   - morale_bonus: morale_action_muls[action_type][morale_tier] (ACTOR-007; steady tier = 0)
 #   - fear_factor: clamp(1.0 - fear/100 × fear_active_dampen, 0, 1) for active intents only
 #   - directive_bonus: sum(dir_weight × directive_action_muls[action_type][key]) × directive_base_bonus
 #
@@ -56,6 +57,11 @@ const _DEFAULTS := {
 		"melee_attack": { "objective_advance_priority": 1.0, "engage_only_blockers": 1.0 },
 		"protect_ally": { "ally_protection_bias": 1.0, "threat_interception": 1.0 },
 		"actor.idle":   { "survival_bias": 1.0, "prefer_disengage": 1.0, "resource_efficiency": 1.0 },
+	},
+	"morale_action_muls": {
+		"melee_attack": { "broken": -20, "shaken": -8, "steady": 0, "inspired": 12 },
+		"protect_ally": { "broken": -8,  "shaken": -3, "steady": 0, "inspired": 6  },
+		"actor.idle":   { "broken": 15,  "shaken": 6,  "steady": 0, "inspired": -5 },
 	},
 	"directive_base_bonus":  20.0,
 	"fear_active_dampen":    0.6,
@@ -93,6 +99,14 @@ func select_intent(context: Dictionary) -> Dictionary:
 
 	var winner: Dictionary = candidates[0].duplicate()
 	winner.erase("_score")
+
+	# ACTOR-007: attach morale metadata to winner for ActorStateMachine to log and snapshot.
+	var winner_tier: String  = EmotionService.get_morale_tier(int(actor.get("morale", 50)))
+	var m_tables: Dictionary = _cfg_get("morale_action_muls")
+	var w_row: Dictionary    = m_tables.get(str(winner.get("action_type", "")), {})
+	winner["morale_tier"]     = winner_tier
+	winner["morale_modifier"] = int(w_row.get(winner_tier, 0))
+
 	return winner
 
 
@@ -179,10 +193,17 @@ func _score(action_type: String, actor: Dictionary, directive: Dictionary) -> fl
 		var dampen: float  = float(_cfg_get("fear_active_dampen"))
 		fear_factor        = clamp(1.0 - (fear / 100.0) * dampen, 0.0, 1.0)
 
-	# 5. Directive bonus — generic loop over intent_weights (semantic keys).
+	# 5. Morale bonus — flat integer modifier based on tier; steady tier = 0 (neutral baseline).
+	#    Lives inside the pre-fear bracket so fear can dampen morale-influenced scores too.
+	var morale_tables: Dictionary = _cfg_get("morale_action_muls")
+	var morale_tier: String       = EmotionService.get_morale_tier(int(actor.get("morale", 50)))
+	var ml_row: Dictionary        = morale_tables.get(action_type, {})
+	var morale_bonus: float       = float(ml_row.get(morale_tier, 0.0))
+
+	# 6. Directive bonus — generic loop over intent_weights (semantic keys).
 	var directive_bonus: float = _directive_bonus(action_type, directive)
 
-	return (base + trait_bonus + vector_bonus) * fear_factor + directive_bonus
+	return (base + trait_bonus + vector_bonus + morale_bonus) * fear_factor + directive_bonus
 
 
 ## Maps directive semantic intent_weights keys → action bonus.

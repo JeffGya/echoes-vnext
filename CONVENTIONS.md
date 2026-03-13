@@ -979,7 +979,7 @@ payload: { action_type: String, source_id: String, target_id: String, damage: in
 ### Score formula
 
 ```
-score = (base + trait_bonus + vector_bonus) × fear_factor + directive_bonus
+score = (base + trait_bonus + vector_bonus + morale_bonus) × fear_factor + directive_bonus
 ```
 
 | Layer | Source |
@@ -987,6 +987,7 @@ score = (base + trait_bonus + vector_bonus) × fear_factor + directive_bonus
 | `base` | `intent_weights_by_calling_origin[calling_origin][action_type]` in `balance.json data.actor` |
 | `trait_bonus` | `sum(trait_value × trait_action_muls[action_type][trait_key])` — generic loop |
 | `vector_bonus` | `sum(vector_score × vector_action_muls[action_type][vector_key])` — generic loop |
+| `morale_bonus` | `morale_action_muls[action_type][morale_tier]` — flat int; `steady` tier = 0 (neutral baseline). Inside the pre-fear bracket so fear can dampen morale-influenced scores. (ACTOR-007) |
 | `fear_factor` | `clamp(1.0 - fear/100 × fear_active_dampen, 0, 1)` for active intents; passive (idle) = 1.0 |
 | `directive_bonus` | `sum(dir_weight × directive_action_muls[action_type][semantic_key]) × directive_base_bonus` |
 
@@ -1011,7 +1012,8 @@ Tiebreak: alphabetically smallest `action_type` string (deterministic).
 | New `calling_origin` (e.g. "healer") | Add row to `intent_weights_by_calling_origin` in `balance.json data.actor`. Missing rows fall back to "uncalled". |
 | New vector type (e.g. "scholar") | Add columns to `vector_action_muls`. `_score()` loops `for vector_key in row` — new keys auto-picked up. |
 | New directive semantic key | Add entries to `directive_action_muls`. Unknown keys contribute 0 — no crash. |
-| New action type (sneak, run, defend) | Add rows to all 4 tables in `balance.json data.actor` + candidate generation logic in `_generate_candidates()`. `_score()` unchanged. |
+| New action type (sneak, run, defend) | Add rows to all 5 tables in `balance.json data.actor` (including `morale_action_muls`) + candidate generation logic in `_generate_candidates()`. `_score()` unchanged. |
+| New morale tier | Add column to `morale_action_muls` in `balance.json data.actor`. `EmotionService.get_morale_tier()` must return the new tier name. `_score()` generic `.get()` auto-picks it up. |
 
 **Central tuning knobs:** All multipliers live exclusively in `data.actor` in `balance.json`. Edit there to tune game feel — no GDScript needed.
 
@@ -1082,6 +1084,66 @@ Two new fields appended to the existing snapshot shape:
 | `movement_skipped` | bool | `true` only if `advance_turn()` was called on a structure actor |
 
 `movement_skipped` resets to `false` on each new `ActorStateMachine` instance — it is a per-instance transient field, not persisted.
+
+---
+
+## Morale Influence (ACTOR-007)
+
+Echoes carry `morale` (0–100), driven by `EmotionService`. ACTOR-007 wires morale into `BehaviorArbiter` as a 6th scoring layer (`morale_bonus`) so that emotional state visibly affects combat decisions.
+
+### Morale tiers (code-authoritative — 4 tiers)
+
+| Tier | Range | Behaviour effect |
+|------|-------|-----------------|
+| `broken` | 0–24 | Heavy penalty on aggression; strong bonus on idle |
+| `shaken` | 25–49 | Mild penalty on aggression; small bonus on idle |
+| `steady` | 50–74 | **Neutral baseline — bonus = 0 for all actions** |
+| `inspired` | 75–100 | Bonus on aggression; small penalty on idle |
+
+`EmotionService.get_morale_tier(morale_current: int) -> String` is the single choke point for tier lookup. All existing actors default to `morale = 50` → `"steady"` → `morale_bonus = 0` → zero regression on pre-ACTOR-007 scores.
+
+### `morale_action_muls` config table (`balance.json data.actor`)
+
+```json
+"morale_action_muls": {
+    "melee_attack": { "broken": -20, "shaken": -8, "steady": 0, "inspired": 12 },
+    "protect_ally": { "broken": -8,  "shaken": -3, "steady": 0, "inspired": 6  },
+    "actor.idle":   { "broken": 15,  "shaken": 6,  "steady": 0, "inspired": -5 }
+}
+```
+
+`steady = 0` is the neutral baseline — existing scores are preserved at default morale.
+
+### Morale metadata on the intent winner
+
+`BehaviorArbiter.select_intent()` annotates the winning intent dict with two extra keys before returning:
+
+| Key | Type | Value |
+|-----|------|-------|
+| `morale_tier` | String | Tier of the actor at decision time (`"broken"` / `"shaken"` / `"steady"` / `"inspired"`) |
+| `morale_modifier` | int | Flat score modifier applied to the winning action at that tier |
+
+These keys are read by `ActorStateMachine` and are **not** part of the intent contract consumed by the combat loop — they exist for logging and debugging only.
+
+### `actor.action` log additions (ACTOR-007)
+
+Two new fields appended to the existing `actor.action` log event:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `morale_tier` | String | Tier at decision time |
+| `action_weight_modifier` | int | Flat morale modifier applied to the winning action |
+
+### `get_snapshot()` additions (ACTOR-007)
+
+Two new fields appended to the existing `ActorStateMachine.get_snapshot()` shape:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `morale_tier` | String | Tier at last `advance_turn()` call; defaults to `"steady"` before first turn |
+| `action_weight_modifier` | int | Flat morale modifier at last turn; defaults to `0` |
+
+Both fields default to `"steady"` / `0` on a fresh `ActorStateMachine` instance and are updated on every `advance_turn()` call.
 
 ---
 

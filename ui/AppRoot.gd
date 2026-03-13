@@ -240,6 +240,7 @@ func _run_tests(parts: Array) -> void:
 	MeleeTests.register(runner)  # ACTOR-004
 	BehaviorArbiterTests.register(runner)  # ACTOR-005
 	StructureTests.register(runner)        # ACTOR-006
+	MoraleInfluenceTests.register(runner)  # ACTOR-007
 	EmotionTests.register(runner)
 	VectorTests.register(runner)
 	DirectiveTests.register(runner)  # DIRECTIVE-001

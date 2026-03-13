@@ -111,6 +111,12 @@
 			"protect_ally": { "ally_protection_bias": 1.0, "threat_interception": 1.0 },
 			"actor.idle":   { "survival_bias": 1.0, "prefer_disengage": 1.0, "resource_efficiency": 1.0 }
 		},
+		"morale_action_muls": {
+			"_comment": "Flat bonus added to the pre-fear score sum. Tiers: broken 0–24 / shaken 25–49 / steady 50–74 / inspired 75–100. steady=0 is the neutral baseline — existing scores are unchanged at default morale.",
+			"melee_attack": { "broken": -20, "shaken": -8, "steady": 0, "inspired": 12 },
+			"protect_ally": { "broken": -8,  "shaken": -3, "steady": 0, "inspired": 6  },
+			"actor.idle":   { "broken": 15,  "shaken": 6,  "steady": 0, "inspired": -5 }
+		},
 		"directive_base_bonus":  20.0,
 		"fear_active_dampen":    0.6,
 		"fear_passive_actions":  ["actor.idle"],
