@@ -129,7 +129,7 @@ func _generate_candidates(actor: Dictionary, all_actors: Array) -> Array[Diction
 			})
 
 	# protect_ally: only when a threatened same-faction ally exists.
-	var threshold: float = _get("threat_threshold")
+	var threshold: float = _cfg_get("threat_threshold")
 	var threatened: Dictionary = ActorService.get_threatened_ally(actor, all_actors, threshold)
 	if not threatened.is_empty():
 		var ally_id: String = str(threatened.get("id", ""))
@@ -153,30 +153,30 @@ func _score(action_type: String, actor: Dictionary, directive: Dictionary) -> fl
 	var fear: float            = float(actor.get("fear", 0))
 
 	# 1. Base weight from calling_origin table.
-	var origin_table: Dictionary = _get("intent_weights_by_calling_origin")
+	var origin_table: Dictionary = _cfg_get("intent_weights_by_calling_origin")
 	var calling_row: Dictionary  = origin_table.get(calling_origin, origin_table.get("uncalled", {}))
-	var default_weight: float    = _get("default_intent_weight")
+	var default_weight: float    = _cfg_get("default_intent_weight")
 	var base: float              = float(calling_row.get(action_type, default_weight))
 
 	# 2. Trait bonus — generic loop: new traits picked up automatically from balance.json.
-	var trait_tables: Dictionary = _get("trait_action_muls")
+	var trait_tables: Dictionary = _cfg_get("trait_action_muls")
 	var t_row: Dictionary        = trait_tables.get(action_type, {})
 	var trait_bonus: float       = 0.0
 	for trait_key: String in t_row:
 		trait_bonus += float(traits.get(trait_key, 0)) * float(t_row[trait_key])
 
 	# 3. Vector bonus — generic loop: new vectors picked up automatically from balance.json.
-	var vector_tables: Dictionary = _get("vector_action_muls")
+	var vector_tables: Dictionary = _cfg_get("vector_action_muls")
 	var v_row: Dictionary         = vector_tables.get(action_type, {})
 	var vector_bonus: float       = 0.0
 	for vector_key: String in v_row:
 		vector_bonus += float(vectors.get(vector_key, 0)) * float(v_row[vector_key])
 
 	# 4. Fear factor: dampens active intents; passive intents (actor.idle) are unaffected.
-	var passive_actions: Array = _get("fear_passive_actions")
+	var passive_actions: Array = _cfg_get("fear_passive_actions")
 	var fear_factor: float     = 1.0
 	if action_type not in passive_actions:
-		var dampen: float  = float(_get("fear_active_dampen"))
+		var dampen: float  = float(_cfg_get("fear_active_dampen"))
 		fear_factor        = clamp(1.0 - (fear / 100.0) * dampen, 0.0, 1.0)
 
 	# 5. Directive bonus — generic loop over intent_weights (semantic keys).
@@ -196,9 +196,9 @@ func _directive_bonus(action_type: String, directive: Dictionary) -> float:
 	if dir_weights.is_empty():
 		return 0.0
 
-	var dir_muls_table: Dictionary = _get("directive_action_muls")
+	var dir_muls_table: Dictionary = _cfg_get("directive_action_muls")
 	var d_row: Dictionary          = dir_muls_table.get(action_type, {})
-	var base_bonus: float          = float(_get("directive_base_bonus"))
+	var base_bonus: float          = float(_cfg_get("directive_base_bonus"))
 	var bonus: float               = 0.0
 
 	# Generic loop: for each semantic key that boosts this action_type,
@@ -211,7 +211,7 @@ func _directive_bonus(action_type: String, directive: Dictionary) -> float:
 
 
 ## Config accessor — falls back to _DEFAULTS when _cfg is empty or key is missing.
-func _get(key: String) -> Variant:
+func _cfg_get(key: String) -> Variant:
 	if _cfg.has(key):
 		return _cfg[key]
 	return _DEFAULTS[key]
