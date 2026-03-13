@@ -87,6 +87,35 @@
 			"fear_threshold":           80
 		}
 	},
+	"actor": {
+		"_comment": "Behavior Arbitration Engine (ACTOR-005). All multipliers live here — no GDScript changes needed to tune game feel or add new actions/callings/vectors/directives.",
+		"intent_weights_by_calling_origin": {
+			"guardian": { "melee_attack": 20, "protect_ally": 65, "actor.idle": 10 },
+			"warrior":  { "melee_attack": 65, "protect_ally": 10, "actor.idle": 10 },
+			"archer":   { "melee_attack": 45, "protect_ally": 10, "actor.idle": 10 },
+			"uncalled": { "melee_attack": 40, "protect_ally": 15, "actor.idle": 20 }
+		},
+		"default_intent_weight": 5.0,
+		"trait_action_muls": {
+			"melee_attack": { "courage": 0.35, "wisdom": 0.05, "faith": 0.00 },
+			"protect_ally": { "courage": 0.10, "wisdom": 0.05, "faith": 0.50 },
+			"actor.idle":   { "courage": 0.00, "wisdom": 0.20, "faith": 0.05 }
+		},
+		"vector_action_muls": {
+			"melee_attack": { "vanguard": 0.40, "protector": 0.00, "seeker": 0.15, "pillar": 0.00 },
+			"protect_ally": { "vanguard": 0.00, "protector": 0.45, "seeker": 0.00, "pillar": 0.15 },
+			"actor.idle":   { "vanguard": 0.00, "protector": 0.00, "seeker": 0.10, "pillar": 0.20 }
+		},
+		"directive_action_muls": {
+			"melee_attack": { "objective_advance_priority": 1.0, "engage_only_blockers": 1.0 },
+			"protect_ally": { "ally_protection_bias": 1.0, "threat_interception": 1.0 },
+			"actor.idle":   { "survival_bias": 1.0, "prefer_disengage": 1.0, "resource_efficiency": 1.0 }
+		},
+		"directive_base_bonus":  20.0,
+		"fear_active_dampen":    0.6,
+		"fear_passive_actions":  ["actor.idle"],
+		"threat_threshold":      0.5
+	},
 	"vectors": {
 		"_comment": "Per-class_origin starting vector weights. Keys match class_origin_weights keys exactly. Add new vectors here only — no GDScript changes needed.",
 		"archetype_init": {

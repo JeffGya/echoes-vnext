@@ -23,13 +23,16 @@ var _last_action: Dictionary = {}
 
 
 ## actor_dict: the actor's full dict (from EchoActor.from_echo or EnemyActor.from_definition).
-## behavior_module: the AI module to query each turn. Defaults to IdleBehaviorModule if null.
-func _init(actor_dict: Dictionary, behavior_module: BehaviorModule = null) -> void:
+## behavior_module: the AI module to query each turn. Explicit injection wins; used by tests and
+##   non-echo actors that need a specific module. Defaults to BehaviorArbiter for echo actors.
+## actor_cfg: the data.actor block from balance.json; passed through to BehaviorArbiter.
+##   Pass {} (default) to use BehaviorArbiter's hardcoded defaults — safe for all existing callers.
+func _init(actor_dict: Dictionary, behavior_module: BehaviorModule = null, actor_cfg: Dictionary = {}) -> void:
 	_actor = actor_dict
 	if behavior_module != null:
 		_behavior_module = behavior_module
 	elif actor_dict.get("actor_type", "") == "echo":
-		_behavior_module = MeleeBehaviorModule.new()  # ACTOR-004: echo actors default to melee
+		_behavior_module = BehaviorArbiter.new(actor_cfg)  # ACTOR-005: echo actors use weighted arbiter
 	else:
 		_behavior_module = IdleBehaviorModule.new()
 	_last_intent = {}

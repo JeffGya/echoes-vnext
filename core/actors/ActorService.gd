@@ -7,6 +7,7 @@
 # - Grid positions use { "col": int, "row": int } until core/grid/ lands (GRID stories).
 #
 # ACTOR-004: get_nearest_enemy() established here.
+# ACTOR-005: get_threatened_ally() added here.
 # All future behaviors that need spatial queries should use this service.
 
 class_name ActorService
@@ -52,5 +53,47 @@ static func get_nearest_enemy(actor: Dictionary, all_actors: Array) -> Dictionar
 		if better:
 			best = candidate
 			best_dist = dist
+
+	return best
+
+
+## Returns the most threatened same-faction ally of `actor` from `all_actors`.
+## "Threatened" = current_hp < max_hp * threshold (from balance.json data.actor.threat_threshold).
+## `actor` itself is excluded — an echo cannot protect itself via this function.
+## Tiebreak: lowest current_hp; if equal, lexicographically smallest actor_id.
+## Returns {} if no threatened ally found.
+##
+## Pure function — same inputs always produce the same output.
+static func get_threatened_ally(actor: Dictionary, all_actors: Array, threshold: float) -> Dictionary:
+	var my_faction: String = actor.get("faction", "")
+	var best: Dictionary = {}
+
+	for candidate_v in all_actors:
+		if not (candidate_v is Dictionary):
+			continue
+		var c: Dictionary = candidate_v
+		if c.get("faction", "") != my_faction:
+			continue  # different faction — skip
+		if c.get("id", "") == actor.get("id", ""):
+			continue  # self — skip
+
+		var chp: int = int(c.get("current_hp", 0))
+		var mhp: int = int(c.get("stats", {}).get("max_hp", 1))
+		if mhp <= 0 or float(chp) >= float(mhp) * threshold:
+			continue  # not threatened — skip
+
+		var better := false
+		if best.is_empty():
+			better = true
+		else:
+			var bhp: int = int(best.get("current_hp", 0))
+			if chp < bhp:
+				better = true
+			elif chp == bhp:
+				# Tiebreak: lexicographically smallest actor_id
+				better = str(c.get("id", "")) < str(best.get("id", ""))
+
+		if better:
+			best = c
 
 	return best

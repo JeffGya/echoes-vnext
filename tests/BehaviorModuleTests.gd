@@ -73,8 +73,8 @@ static func _t_actorsm_advance_turn_logs_intent() -> Dictionary:
 		return { "ok": false, "error": "No actor.intent log event found after advance_turn()" }
 
 	var data: Dictionary = found_event.get("data", {})
-	# ACTOR-004: echo actors now default to MeleeBehaviorModule
-	if str(data.get("module_id", "")) != "melee":
+	# ACTOR-005: echo actors now default to BehaviorArbiter
+	if str(data.get("module_id", "")) != "arbiter":
 		return { "ok": false, "error": "actor.intent log has wrong module_id: %s" % str(data.get("module_id")) }
 	if str(data.get("action_type", "")) != "actor.idle":
 		return { "ok": false, "error": "actor.intent log has wrong action_type: %s" % str(data.get("action_type")) }
@@ -94,9 +94,9 @@ static func _t_actorsm_snapshot_includes_module() -> Dictionary:
 
 	var snap: Dictionary = sm.get_snapshot()
 
-	# behavior_module field — ACTOR-004: echo actors default to MeleeBehaviorModule
-	if str(snap.get("behavior_module", "")) != "melee":
-		return { "ok": false, "error": "Expected behavior_module='melee', got: %s" % str(snap.get("behavior_module")) }
+	# behavior_module field — ACTOR-005: echo actors default to BehaviorArbiter
+	if str(snap.get("behavior_module", "")) != "arbiter":
+		return { "ok": false, "error": "Expected behavior_module='arbiter', got: %s" % str(snap.get("behavior_module")) }
 	# actor_id and name round-trip
 	if str(snap.get("actor_id", "")) != "echo_0002":
 		return { "ok": false, "error": "Expected actor_id='echo_0002', got: %s" % str(snap.get("actor_id")) }

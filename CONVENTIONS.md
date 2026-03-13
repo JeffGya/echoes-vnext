@@ -879,6 +879,9 @@ They will be promoted to required when `core/grid/` lands (GRID-001).
 `ActorService.get_nearest_enemy(actor, all_actors)` — pure static utility in `core/actors/ActorService.gd`.
 Returns the nearest enemy actor (by Manhattan distance, tiebreak: smallest `actor_id` string). Returns `{}` if none found.
 
+`ActorService.get_threatened_ally(actor, all_actors, threshold)` — pure static utility in `core/actors/ActorService.gd` (ACTOR-005).
+Returns the most threatened same-faction ally of `actor` (current_hp < max_hp × threshold). `actor` itself is excluded. Tiebreak: lowest `current_hp`; if equal, smallest `actor_id`. Returns `{}` if none found.
+
 ### Future stubs
 
 - **position** `{ "x": int, "y": int }` — real grid position added when `core/grid/` lands (GRID-001 replaces `grid_pos` placeholder).
@@ -889,10 +892,11 @@ Returns the nearest enemy actor (by Manhattan distance, tiebreak: smallest `acto
 ## BehaviorModule Contract (ACTOR-003)
 
 Every actor carries exactly one `BehaviorModule`, assigned at `ActorStateMachine` construction.
-Default module assignment (ACTOR-004):
-- `actor_type == "echo"` → `MeleeBehaviorModule` (attacks nearest enemy at distance 1)
+Default module assignment (ACTOR-005):
+- `actor_type == "echo"` → `BehaviorArbiter` (data-driven weighted intent scoring — see Behavior Arbitration below)
 - All other actor types → `IdleBehaviorModule` (safe no-op fallback)
-- Explicit module passed to `ActorStateMachine._init()` always overrides the default.
+- Explicit module passed to `ActorStateMachine._init()` always overrides the default (used by tests and non-echo actors).
+- `ActorStateMachine._init()` signature: `(actor_dict, behavior_module = null, actor_cfg = {})` — `actor_cfg` is the `data.actor` block from `balance.json`; pass `{}` to use BehaviorArbiter's hardcoded defaults.
 
 ### Interface (`core/actors/BehaviorModule.gd`)
 
@@ -935,8 +939,10 @@ logs `actor.intent`, stores `_last_action`, logs `actor.action`, and returns the
 | ID | File | Added |
 |----|------|-------|
 | `"idle"` | `core/actors/behaviors/IdleBehaviorModule.gd` | ACTOR-003 |
-| `"melee"` | `core/actors/behaviors/MeleeBehaviorModule.gd` | ACTOR-004 |
-| `"guardian"` | TBD | ACTOR-005 |
+| `"melee"` | `core/actors/behaviors/MeleeBehaviorModule.gd` | ACTOR-004 (explicit injection only) |
+| `"arbiter"` | `core/actors/behaviors/BehaviorArbiter.gd` | ACTOR-005 (default for echo actors) |
+
+`MeleeBehaviorModule` and `IdleBehaviorModule` remain valid for explicit injection (tests, non-echo actors, future enemy routing).
 
 ### Debug snapshot
 
@@ -960,6 +966,57 @@ payload: { action_type: String, source_id: String, target_id: String, damage: in
 - `select_intent()` must be deterministic: same context → same intent every call.
 - Context dict must be JSON-safe (no Nodes/Objects).
 - Machine ID for actor behavior transitions: `state.actor.behavior`
+
+---
+
+## Behavior Arbitration Engine (ACTOR-005)
+
+`BehaviorArbiter` replaces the single hard-coded `BehaviorModule` per echo role with a data-driven weighted intent scoring system. Every echo generates all candidate intents each turn and the arbiter scores each one — the highest score wins.
+
+**Key principle — roles weight, not determine:** `calling_origin` gives a strong base tendency (guardian → protect_ally: 65) but traits and vectors can override it. Any echo can guard if their faith/protector vector is high enough.
+
+### Score formula
+
+```
+score = (base + trait_bonus + vector_bonus) × fear_factor + directive_bonus
+```
+
+| Layer | Source |
+|-------|--------|
+| `base` | `intent_weights_by_calling_origin[calling_origin][action_type]` in `balance.json data.actor` |
+| `trait_bonus` | `sum(trait_value × trait_action_muls[action_type][trait_key])` — generic loop |
+| `vector_bonus` | `sum(vector_score × vector_action_muls[action_type][vector_key])` — generic loop |
+| `fear_factor` | `clamp(1.0 - fear/100 × fear_active_dampen, 0, 1)` for active intents; passive (idle) = 1.0 |
+| `directive_bonus` | `sum(dir_weight × directive_action_muls[action_type][semantic_key]) × directive_base_bonus` |
+
+Tiebreak: alphabetically smallest `action_type` string (deterministic).
+
+### Candidate generation
+
+| Candidate | Condition |
+|-----------|-----------|
+| `actor.idle` | Always — unconditional safe fallback |
+| `melee_attack` | Nearest enemy at Manhattan distance == 1 |
+| `protect_ally` | Threatened same-faction ally exists (current_hp < max_hp × threat_threshold) |
+
+### Intent shapes
+
+`protect_ally`: `{ action_type: "protect_ally", target_id: ally_id, protected_actor_id: ally_id, priority: 1.0 }`
+
+### Extensibility (all additive — no GDScript changes needed)
+
+| New thing | What to do |
+|-----------|------------|
+| New `calling_origin` (e.g. "healer") | Add row to `intent_weights_by_calling_origin` in `balance.json data.actor`. Missing rows fall back to "uncalled". |
+| New vector type (e.g. "scholar") | Add columns to `vector_action_muls`. `_score()` loops `for vector_key in row` — new keys auto-picked up. |
+| New directive semantic key | Add entries to `directive_action_muls`. Unknown keys contribute 0 — no crash. |
+| New action type (sneak, run, defend) | Add rows to all 4 tables in `balance.json data.actor` + candidate generation logic in `_generate_candidates()`. `_score()` unchanged. |
+
+**Central tuning knobs:** All multipliers live exclusively in `data.actor` in `balance.json`. Edit there to tune game feel — no GDScript needed.
+
+**Enemy/NPC ready:** `BehaviorArbiter` is actor-agnostic — reads `calling_origin`, `traits`, `vector_scores`, `fear` from any actor dict. Enemies and NPCs receive the same arbiter with a different config dict (e.g. `data.enemy_actor`) wired in ACTOR-006.
+
+Context dict carries an optional `"directive"` key (the active directive definition dict). Absent or `{}` → 0 directive bonus. Directive `intent_weights` vocabulary (semantic keys like `"ally_protection_bias"`) defined in `DirectiveService.gd`.
 
 ---
 
