@@ -37,6 +37,11 @@ var _summon_scene := preload("res://ui/screens/SummonScreen.tscn")
 var _sanctum_shell: SanctumShell
 var _sanctum_shell_scene := preload("res://ui/shells/SanctumShell.tscn")
 
+# Combat board screen — GRID-001 temporary direct route.
+# INFRA-001 (pickup 44) moves flow.encounter routing into RealmShell.
+var _combat_board_screen: CombatBoardScreen
+var _combat_board_scene := preload("res://ui/screens/CombatBoardScreen.tscn")
+
 func _ready():
 	# Bind renderer to UI elements it can update.
 	renderer.bind_view(snapshot_view, actions_container)
@@ -245,6 +250,7 @@ func _run_tests(parts: Array) -> void:
 	EmotionTests.register(runner)
 	VectorTests.register(runner)
 	DirectiveTests.register(runner)  # DIRECTIVE-001
+	GridTests.register(runner)       # GRID-001
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [
@@ -553,6 +559,17 @@ func _render_snapshot(snap: Dictionary) -> void:
 		_summon_screen.set_snapshot(snap)
 		return
 
+	# GRID-001: flow.encounter → CombatBoardScreen (temporary direct route).
+	# INFRA-001 (pickup 44) will move this into RealmShell.
+	if snap_type == FlowStateIds.ENCOUNTER:
+		if _combat_board_screen == null:
+			_combat_board_screen = _combat_board_scene.instantiate() as CombatBoardScreen
+			screen_host.add_child(_combat_board_screen)
+			_combat_board_screen.action_requested.connect(_on_ui_action_selected)
+		_show_screen(_combat_board_screen)
+		_combat_board_screen.set_snapshot(snap)
+		return
+
 	# No bespoke screen found for this snapshot type — fall back to UISnapshotRenderer.
 	_hide_bespoke_screens()
 	renderer.render(snap)
@@ -567,9 +584,10 @@ func _show_screen(screen: Control) -> void:
 		_sanctum_screen.visible = false
 	if _summon_screen != null:
 		_summon_screen.visible = false
-
 	if _sanctum_shell != null:
 		_sanctum_shell.visible = false
+	if _combat_board_screen != null:
+		_combat_board_screen.visible = false
 
 	screen.visible = true
 
@@ -581,6 +599,7 @@ func _hide_bespoke_screens() -> void:
 		_sanctum_screen.visible = false
 	if _summon_screen != null:
 		_summon_screen.visible = false
-		
 	if _sanctum_shell != null:
 		_sanctum_shell.visible = false
+	if _combat_board_screen != null:
+		_combat_board_screen.visible = false

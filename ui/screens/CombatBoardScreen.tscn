@@ -1,0 +1,42 @@
+[gd_scene format=3 uid="uid://b3k2n8qvx4r1m"]
+
+[ext_resource type="Script" uid="uid://dtgdie4phqgyg" path="res://ui/screens/CombatBoardScreen.gd" id="1_script"]
+[ext_resource type="Texture2D" uid="uid://bitpbc4p75ue7" path="res://assets/sanctum/tiles/floor/sanctum_tile_floor_clay_base_128x96.png" id="2_tile"]
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_board"]
+texture = ExtResource("2_tile")
+texture_region_size = Vector2i(128, 96)
+0:0/0 = 0
+0:0/0/texture_origin = Vector2i(0, -16)
+1:0/0 = 0
+1:0/0/texture_origin = Vector2i(0, -16)
+0:1/0 = 0
+0:1/0/texture_origin = Vector2i(0, -16)
+1:1/0 = 0
+1:1/0/texture_origin = Vector2i(0, -16)
+
+[sub_resource type="TileSet" id="TileSet_board"]
+tile_shape = 1
+tile_size = Vector2i(128, 64)
+sources/0 = SubResource("TileSetAtlasSource_board")
+
+[node name="CombatBoardScreen" type="Control" unique_id=1420352690]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+
+[node name="BackButton" type="Button" parent="." unique_id=125887286]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 136.0
+offset_bottom = 56.0
+text = "← Back"
+
+[node name="Board" type="TileMapLayer" parent="." unique_id=1614739804]
+y_sort_enabled = true
+tile_set = SubResource("TileSet_board")

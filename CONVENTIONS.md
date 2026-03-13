@@ -1632,3 +1632,65 @@ data["available_directives"]  # Array[String] — MVP static ["directive.none", 
 - Registry is hardcoded in-class (not config-driven) — directive IDs and weights are design decisions, not runtime-tunable values
 - `intent_weights` consumed by Actor SM Layer 4 (ACTOR-004+)
 - Do NOT add `stage_context` to `SaveService.validate()` required keys — it is additive-only; repair handles old saves
+
+---
+
+## Grid & Combat Visual Layer (GRID-001+)
+
+### Renderer separation (locked)
+
+The Sanctum and combat board use **entirely separate renderer scenes**. Never share or repurpose between contexts.
+
+| Renderer | File | Purpose |
+|----------|------|---------|
+| `SanctumSpatialRenderer` | `ui/sanctum/SanctumSpatialRenderer.tscn` | Sanctum overview visualization (Phase B, currently no-op) |
+| `CombatBoardScreen` | `ui/screens/CombatBoardScreen.tscn` | Combat encounter board — created in GRID-001 |
+
+Both use the same TileSet config (128×64 isometric diamond tiles, `y_sort_enabled = true`, `sanctum_tile_floor_clay_base_128x96.png`) but are fully independent scenes.
+
+### Actor token contract (placeholder — GRID-002+)
+
+Until actor art exists, all actors render as **faction-colored shapes** with a 2-letter name abbreviation. This design is stable across all GRID stories.
+
+| Faction / Type | Shape | Color |
+|---------------|-------|-------|
+| `echo` | Circle | Blue |
+| `enemy` | Circle | Red |
+| `structure` | Rounded square | Gray |
+| `npc` / ally | Circle | Green |
+
+Token size is scaled to fit within an isometric cell. Replace with actor sprites when art assets are ready — no code contract changes needed.
+
+### Combat FX scope boundary
+
+| Element | Scope |
+|---------|-------|
+| Grid tile rendering | GRID-001 |
+| Actor tokens at grid positions | GRID-002 |
+| Distance debug overlay | GRID-004 |
+| Token position update on move | GRID-005 |
+| Health bars | COMBAT phase |
+| Damage numbers / floaters | COMBAT phase |
+| Movement animation (tweening) | COMBAT phase |
+| Hit / death visual effects | COMBAT phase |
+| Actor art / sprites | When art assets are ready |
+
+### Stage / realm map
+
+A map view for stage navigation (`flow.stage_map`) is **not in scope for GRID stories**. Deferred to INFRA-001 (pickup 44) or a dedicated STAGE-MAP story.
+
+### AppRoot routing (temporary)
+
+GRID-001 adds a direct route in AppRoot:
+```gdscript
+"flow.encounter" → CombatBoardScreen
+```
+This is a **temporary direct route** — INFRA-001 (pickup 44) moves it into RealmShell when the full venture shell is built. No other GRID story changes this routing.
+
+### Log events (GRID-001+)
+
+| Event type | When emitted | Required data fields |
+|-----------|-------------|---------------------|
+| `combat.init` | On combat session start | `board_cols`, `board_rows`, `t` |
+| `actor.spawned` | On actor placement | `actor_id`, `grid_pos`, `t` |
+| `actor.moved` | After `move_toward()` resolves | `actor_id`, `from_pos`, `to_pos`, `t` |

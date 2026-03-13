@@ -23,7 +23,16 @@ func enter(ctx: RefCounted, t: int) -> void:
 	# Pass-through the encounter phase snapshot to UI.
 	flow_ctx.last_snapshot = flow_ctx.encounter_ctx.phase_snapshot
 	
-	# If the encounter machine hasn't produced a phase snapshot yet, show a tiny scaffold.
+	# GRID-001: read board config from balance.json data.grid block.
+	var grid_cfg: Dictionary = {}
+	if flow_ctx.config_service != null:
+		var balance: Dictionary = flow_ctx.config_service.get_balance()
+		var bdata: Dictionary = balance.get("data", {})
+		grid_cfg = bdata.get("grid", {})
+	var board_cols: int = GridService.get_board_cols(grid_cfg)
+	var board_rows: int = GridService.get_board_rows(grid_cfg)
+
+	# If the encounter machine hasn't produced a phase snapshot yet, show the combat board scaffold.
 	if flow_ctx.encounter_ctx.phase_snapshot.is_empty():
 		flow_ctx.last_snapshot = {
 			"type": FlowStateIds.ENCOUNTER,
@@ -31,9 +40,18 @@ func enter(ctx: RefCounted, t: int) -> void:
 				"title": "Encounter",
 				"encounter_id": flow_ctx.encounter_ctx.encounter_id,
 				"resolution_mode": flow_ctx.encounter_ctx.resolution_mode,
-				"note": "Encounter initializing (waiting for AppRoot to start machine)."
+				# GRID-001: board dimensions for CombatBoardScreen renderer
+				"board_cols": board_cols,
+				"board_rows": board_rows,
 			},
-			"actions": [],
+			"actions": {
+				"nav.back": {
+					"type": "flow.go_state",
+					"to": FlowStateIds.SANCTUM,
+					"label": "← Back",
+					"slot": "nav.back",
+				},
+			},
 			"meta": { "t": t }
 		}
 		return

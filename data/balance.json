@@ -130,6 +130,11 @@
 			"seeker":    { "protector": 10, "vanguard": 20, "seeker": 60, "pillar": 10 },
 			"pillar":    { "protector": 10, "vanguard": 20, "seeker": 10, "pillar": 60 }
 		}
+	},
+	"grid": {
+		"_comment": "Combat board dimensions — immutable mid-combat; read by GridService. GRID-001.",
+		"board_cols": 6,
+		"board_rows": 3
 	}
   }
 }
