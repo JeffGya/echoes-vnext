@@ -20,6 +20,7 @@ var _actor: Dictionary
 var _behavior_module: BehaviorModule
 var _last_intent: Dictionary = {}
 var _last_action: Dictionary = {}
+var _movement_skipped: bool = false  # ACTOR-006: true when actor is_structure; no movement phase
 
 
 ## actor_dict: the actor's full dict (from EchoActor.from_echo or EnemyActor.from_definition).
@@ -60,6 +61,15 @@ func get_stat(stat_name: String) -> Variant:
 ## Returns the selected intent dict:
 ##   { "action_type": String, "target_id": String, "priority": float }
 func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dictionary:
+	# ACTOR-006: structures never move — log the skip before intent selection.
+	_movement_skipped = _actor.get("is_structure", false)
+	if _movement_skipped:
+		logger.info(t, "actor.turn", "Movement skipped (structure)", {
+			"actor_id":         _actor.get("id", ""),
+			"is_structure":     true,
+			"movement_skipped": true,
+		})
+
 	var intent: Dictionary = _behavior_module.select_intent(context)
 	_last_intent = intent
 	logger.info(t, "actor.intent", "Intent selected", {
@@ -103,5 +113,8 @@ func get_snapshot() -> Dictionary:
 		"last_intent": _last_intent.duplicate(),
 		"last_action": _last_action.duplicate(),  # ACTOR-004: post-resolution action snapshot
 		# PROG-005: Layer 2 vector data for intent pipeline and debug display
-		"vectors": VectorService.get_snapshot_data(_actor)
+		"vectors": VectorService.get_snapshot_data(_actor),
+		# ACTOR-006: structure identity fields
+		"is_structure":     _actor.get("is_structure", false),
+		"movement_skipped": _movement_skipped,
 	}

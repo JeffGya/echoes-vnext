@@ -794,7 +794,8 @@ slot: Echoes now; enemies, NPCs, and structures in future stories.
 | `traits` | Dictionary | `{ courage, wisdom, faith }` — all int (0 for enemies) |
 | `xp_total` | int | Lifetime XP (0 for enemies) |
 | `level` | int | Experience step within rank (1 at generation; progression TBD) |
-| `actor_type` | String | `"echo"` \| `"enemy"` \| reserved: `"npc"` |
+| `actor_type` | String | `"echo"` \| `"enemy"` \| `"structure"` \| reserved: `"npc"` |
+| `is_structure` | bool | `false` for Echoes/Enemies; `true` only for `StructureActor`-spawned dicts. Set at spawn, **immutable by convention** — never reassign after construction. Prevents movement phase. (ACTOR-006) |
 
 **Top-level runtime fields — ACTOR-002** (set by `EchoActor.from_echo()` / `EnemyActor.from_definition()`; NOT stored in `sanctum.roster[]` save data):
 
@@ -892,9 +893,9 @@ Returns the most threatened same-faction ally of `actor` (current_hp < max_hp ×
 ## BehaviorModule Contract (ACTOR-003)
 
 Every actor carries exactly one `BehaviorModule`, assigned at `ActorStateMachine` construction.
-Default module assignment (ACTOR-005):
+Default module assignment (ACTOR-005 / ACTOR-006):
 - `actor_type == "echo"` → `BehaviorArbiter` (data-driven weighted intent scoring — see Behavior Arbitration below)
-- All other actor types → `IdleBehaviorModule` (safe no-op fallback)
+- All other actor types (including `"structure"`) → `IdleBehaviorModule` (safe no-op fallback)
 - Explicit module passed to `ActorStateMachine._init()` always overrides the default (used by tests and non-echo actors).
 - `ActorStateMachine._init()` signature: `(actor_dict, behavior_module = null, actor_cfg = {})` — `actor_cfg` is the `data.actor` block from `balance.json`; pass `{}` to use BehaviorArbiter's hardcoded defaults.
 
@@ -1014,9 +1015,73 @@ Tiebreak: alphabetically smallest `action_type` string (deterministic).
 
 **Central tuning knobs:** All multipliers live exclusively in `data.actor` in `balance.json`. Edit there to tune game feel — no GDScript needed.
 
-**Enemy/NPC ready:** `BehaviorArbiter` is actor-agnostic — reads `calling_origin`, `traits`, `vector_scores`, `fear` from any actor dict. Enemies and NPCs receive the same arbiter with a different config dict (e.g. `data.enemy_actor`) wired in ACTOR-006.
+**Enemy/NPC ready:** `BehaviorArbiter` is actor-agnostic — reads `calling_origin`, `traits`, `vector_scores`, `fear` from any actor dict. Enemies and NPCs can receive the same arbiter with a different config dict (e.g. `data.enemy_actor`). Enemy arbiter routing is a future story (ENEMY-001). Structure actors (`actor_type="structure"`) use `IdleBehaviorModule` instead (ACTOR-006).
 
 Context dict carries an optional `"directive"` key (the active directive definition dict). Absent or `{}` → 0 directive bonus. Directive `intent_weights` vocabulary (semantic keys like `"ally_protection_bias"`) defined in `DirectiveService.gd`.
+
+---
+
+## Structure Actor Support (ACTOR-006)
+
+Structures (Shrines, Totems, Hazards) participate in combat targeting and HP tracking without ever moving. They are represented as standard actor dicts so that targeting, HP resolution, and snapshots work identically to Echoes and Enemies.
+
+### Factory
+
+`StructureActor.from_definition(defn, t)` — pure static factory (`core/actors/StructureActor.gd`). No logger param (same pattern as `EnemyActor`; caller logs if needed).
+
+| `defn` key | Default | Notes |
+|------------|---------|-------|
+| `id` | `"structure_unknown"` | Unique identifier |
+| `name` | `"Unknown Structure"` | Display name |
+| `max_hp` | `100` | Clamped to minimum 1 |
+| `faction` | `"structure"` | Typically `"neutral"` in practice |
+| `grid_pos` | `{ col: 0, row: 0 }` | Board position |
+
+`t` (sim tick) is accepted for API consistency with `EnemyActor.from_definition(defn, t)` but is not used internally.
+
+Fixed output fields (not read from `defn`):
+- `actor_type: "structure"`, `is_structure: true`, `rarity: "uncalled"`, `rank: 1`, `level: 1`
+- `traits: { courage: 0, wisdom: 0, faith: 0 }`, `speed: 0`, `morale: 50`, `fear: 0`
+- `stats: { max_hp: N, atk: 0, def: 0, agi: 0, int: 0, cha: 0 }`, `current_hp: N`
+
+### `is_structure` flag
+
+- `bool`, default `false` in `ActorSchema.get_defaults()`.
+- `true` only in `StructureActor.from_definition()` output.
+- **Immutable by convention** — never reassign after construction.
+- All factories must include it: `EchoActor` and `EnemyActor` include `is_structure: false` explicitly; `get_defaults()` covers any future factory that delegates to it.
+
+### Movement skip
+
+`ActorStateMachine.advance_turn()` checks `is_structure` at the top of every turn. If `true`:
+- Sets `_movement_skipped = true`.
+- Logs an `actor.turn` event (see below).
+- Continues normally to intent selection (`IdleBehaviorModule` → `actor.idle`).
+
+If `false` (Echoes, Enemies), `_movement_skipped` stays `false` and no `actor.turn` log is emitted.
+
+### `actor.turn` log event (movement skip)
+
+Fired by `ActorStateMachine.advance_turn()` for structure actors only:
+
+```
+logger.info(t, "actor.turn", "Movement skipped (structure)", {
+    "actor_id":         String,
+    "is_structure":     true,
+    "movement_skipped": true,
+})
+```
+
+### `get_snapshot()` additions (ACTOR-006)
+
+Two new fields appended to the existing snapshot shape:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `is_structure` | bool | Read from actor dict; `false` for Echoes and Enemies |
+| `movement_skipped` | bool | `true` only if `advance_turn()` was called on a structure actor |
+
+`movement_skipped` resets to `false` on each new `ActorStateMachine` instance — it is a per-instance transient field, not persisted.
 
 ---
 

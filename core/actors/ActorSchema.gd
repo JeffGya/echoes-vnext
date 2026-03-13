@@ -29,6 +29,9 @@ extends RefCounted
 ##   speed       — turn order input for COMBAT-002 (actor.speed XOR seed); flat default 5
 ##   morale      — flat placeholder (50); EMOTION-001 supersedes with emotion.morale_current
 ##   fear        — flat placeholder (0);  EMOTION-001 supersedes with emotion.fear_current
+## ACTOR-006 addition:
+##   is_structure — true only for Shrine/Totem/Hazard actors; set at spawn, immutable by convention.
+##                  Prevents movement phase and any callings that require mobility.
 const REQUIRED_FIELDS: Array = [
 	"id",
 	"name",
@@ -44,6 +47,7 @@ const REQUIRED_FIELDS: Array = [
 	"speed",
 	"morale",
 	"fear",
+	"is_structure",
 ]
 
 ## Returns false if actor is missing any required field or has a null value.
@@ -74,4 +78,6 @@ static func get_defaults() -> Dictionary:
 		"speed":          5,
 		"morale":         50,
 		"fear":           0,
+		# ACTOR-006: structure flag — false for Echoes/Enemies; true only for structure actors
+		"is_structure":   false,
 	}
