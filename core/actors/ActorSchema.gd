@@ -32,6 +32,10 @@ extends RefCounted
 ## ACTOR-006 addition:
 ##   is_structure — true only for Shrine/Totem/Hazard actors; set at spawn, immutable by convention.
 ##                  Prevents movement phase and any callings that require mobility.
+## ACTOR-008 additions:
+##   is_dead      — set to true when current_hp <= 0; immutable once true.
+##                  Echo dicts are preserved intact on death (future relic system).
+##   death_round  — sim tick (t) at which the actor died; 0 = never died.
 const REQUIRED_FIELDS: Array = [
 	"id",
 	"name",
@@ -48,6 +52,8 @@ const REQUIRED_FIELDS: Array = [
 	"morale",
 	"fear",
 	"is_structure",
+	"is_dead",
+	"death_round",
 ]
 
 ## Returns false if actor is missing any required field or has a null value.
@@ -80,4 +86,7 @@ static func get_defaults() -> Dictionary:
 		"fear":           0,
 		# ACTOR-006: structure flag — false for Echoes/Enemies; true only for structure actors
 		"is_structure":   false,
+		# ACTOR-008: death state — immutable once is_dead=true; death_round=0 means alive
+		"is_dead":        false,
+		"death_round":    0,
 	}

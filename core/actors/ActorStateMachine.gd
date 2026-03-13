@@ -63,6 +63,24 @@ func get_stat(stat_name: String) -> Variant:
 ## Returns the selected intent dict:
 ##   { "action_type": String, "target_id": String, "priority": float }
 func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dictionary:
+	# ACTOR-008: Guard 1 — actor was already killed in a previous turn; skip silently.
+	if _actor.get("is_dead", false):
+		_last_intent = { "action_type": "actor.dead", "actor_id": _actor.get("id", "") }
+		_last_action = _last_intent
+		return _last_intent
+
+	# ACTOR-008: Guard 2 — actor dies this turn (hp <= 0 integer check, no float).
+	if int(_actor.get("current_hp", 1)) <= 0:
+		_actor["is_dead"]     = true
+		_actor["death_round"] = int(context.get("round", t))
+		logger.info(t, "actor.died", "Actor KO'd", {
+			"actor_id":     _actor.get("id", ""),
+			"round_number": _actor["death_round"],
+		})
+		_last_intent = { "action_type": "actor.dead", "actor_id": _actor.get("id", "") }
+		_last_action = _last_intent
+		return _last_intent
+
 	# ACTOR-006: structures never move — log the skip before intent selection.
 	_movement_skipped = _actor.get("is_structure", false)
 	if _movement_skipped:
@@ -127,4 +145,7 @@ func get_snapshot() -> Dictionary:
 		# ACTOR-007: morale influence fields
 		"morale_tier":           _last_morale_tier,
 		"action_weight_modifier": _last_morale_modifier,
+		# ACTOR-008: death state fields
+		"status":      "dead" if _actor.get("is_dead", false) else "alive",
+		"death_round": int(_actor.get("death_round", 0)),
 	}

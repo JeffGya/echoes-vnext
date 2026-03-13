@@ -32,6 +32,8 @@ static func get_nearest_enemy(actor: Dictionary, all_actors: Array) -> Dictionar
 		if not (candidate_v is Dictionary):
 			continue
 		var candidate: Dictionary = candidate_v
+		if candidate.get("is_dead", false):
+			continue  # ACTOR-008: dead actors are not valid targets
 		if candidate.get("faction", "") == my_faction:
 			continue  # same faction — skip
 		if candidate.get("id", "") == actor.get("id", ""):
@@ -72,6 +74,8 @@ static func get_threatened_ally(actor: Dictionary, all_actors: Array, threshold:
 		if not (candidate_v is Dictionary):
 			continue
 		var c: Dictionary = candidate_v
+		if c.get("is_dead", false):
+			continue  # ACTOR-008: dead actors cannot be protected
 		if c.get("faction", "") != my_faction:
 			continue  # different faction — skip
 		if c.get("id", "") == actor.get("id", ""):

@@ -241,6 +241,7 @@ func _run_tests(parts: Array) -> void:
 	BehaviorArbiterTests.register(runner)  # ACTOR-005
 	StructureTests.register(runner)        # ACTOR-006
 	MoraleInfluenceTests.register(runner)  # ACTOR-007
+	KODeathTests.register(runner)          # ACTOR-008
 	EmotionTests.register(runner)
 	VectorTests.register(runner)
 	DirectiveTests.register(runner)  # DIRECTIVE-001

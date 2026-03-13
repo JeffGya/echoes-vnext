@@ -796,6 +796,8 @@ slot: Echoes now; enemies, NPCs, and structures in future stories.
 | `level` | int | Experience step within rank (1 at generation; progression TBD) |
 | `actor_type` | String | `"echo"` \| `"enemy"` \| `"structure"` \| reserved: `"npc"` |
 | `is_structure` | bool | `false` for Echoes/Enemies; `true` only for `StructureActor`-spawned dicts. Set at spawn, **immutable by convention** — never reassign after construction. Prevents movement phase. (ACTOR-006) |
+| `is_dead` | bool | `false` at spawn. Set to `true` by `ActorStateMachine.advance_turn()` when `current_hp <= 0`. **Immutable once true** — no state transition can clear it. Echo dicts are preserved intact on death (future Relic system reads from dead Echo). (ACTOR-008) |
+| `death_round` | int | `0` (= alive). Set to the sim tick `t` at the moment of KO by `ActorStateMachine`. Never reset. (ACTOR-008) |
 
 **Top-level runtime fields — ACTOR-002** (set by `EchoActor.from_echo()` / `EnemyActor.from_definition()`; NOT stored in `sanctum.roster[]` save data):
 
@@ -934,6 +936,13 @@ Grid fields (position, adjacency) are added when `core/grid/` lands (GRID storie
 
 Called by the combat loop once per turn. Invokes `select_intent()`, stores result as `_last_intent`,
 logs `actor.intent`, stores `_last_action`, logs `actor.action`, and returns the intent dict.
+
+**ACTOR-008 death guards** — checked at the very top of `advance_turn()`, before any module call:
+
+1. If `actor_dict["is_dead"] == true` (already dead in a prior turn) → return `{ "action_type": "actor.dead", "actor_id": ... }` immediately; no logging, no module call.
+2. If `actor_dict["current_hp"] <= 0` (dies this turn) → set `is_dead = true`, set `death_round = context.get("round", t)`, log `actor.died`, return dead-intent. The behavior module is **never called** for a dead actor.
+
+`actor.dead` is a terminal intent shape: `{ "action_type": "actor.dead", "actor_id": String }`. CombatService (COMBAT-001+) must skip dead actors in turn order.
 
 ### Module ID registry
 
@@ -1144,6 +1153,26 @@ Two new fields appended to the existing `ActorStateMachine.get_snapshot()` shape
 | `action_weight_modifier` | int | Flat morale modifier at last turn; defaults to `0` |
 
 Both fields default to `"steady"` / `0` on a fresh `ActorStateMachine` instance and are updated on every `advance_turn()` call.
+
+### `actor.died` log event (ACTOR-008)
+
+Fired by `ActorStateMachine.advance_turn()` on the turn an actor's `current_hp` first drops to `<= 0`:
+
+```
+type:    "actor.died"
+payload: { actor_id: String, round_number: int }
+```
+
+`round_number` = `context.get("round", t)` — uses the combat round counter if provided, falls back to sim tick `t`.
+
+### `get_snapshot()` additions (ACTOR-008)
+
+Two new fields appended to the existing `ActorStateMachine.get_snapshot()` shape:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `status` | String | `"alive"` or `"dead"` — derived from `actor_dict["is_dead"]` |
+| `death_round` | int | `0` (= alive) or the tick at which the actor died |
 
 ---
 

@@ -35,6 +35,9 @@ static func from_definition(defn: Dictionary, t: int) -> Dictionary:
 		"calling_origin": "uncalled",
 		"actor_type":     "structure",
 		"is_structure":   true,
+		# ACTOR-008: death state — always starts alive at spawn
+		"is_dead":        false,
+		"death_round":    0,
 		"level":          1,
 		"xp_total":       0,
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },

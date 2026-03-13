@@ -42,6 +42,9 @@ static func from_echo(echo: Dictionary) -> Dictionary:
 		"level":          echo.get("level",          1),
 		"actor_type":     "echo",
 		"is_structure":   false,   # ACTOR-006: Echoes are never structures
+		# ACTOR-008: death state — always starts alive at spawn; ActorSM sets is_dead on KO
+		"is_dead":        false,
+		"death_round":    0,
 		# ACTOR-002: runtime fields — not stored in save data; set fresh on each actor creation
 		"current_hp":     echo_stats.get("max_hp", 0),  # = max_hp at spawn; mutable in combat
 		"speed":          5,    # flat default — COMBAT-002 derives formula later
