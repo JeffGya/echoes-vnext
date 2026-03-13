@@ -49,6 +49,9 @@ static func from_echo(echo: Dictionary) -> Dictionary:
 		# PROG-005: vector data — read-only view of save data; deep copy for isolation
 		"vector_scores":   echo_vector_scores.duplicate(true),
 		"dominant_vector": str(echo.get("dominant_vector", "")),
+		# ACTOR-004: faction + grid_pos placeholder until GRID-001 places actors on board
+		"faction":  "echo",
+		"grid_pos": { "col": 0, "row": 0 },
 	}
 
 	assert(ActorSchema.validate(actor), \

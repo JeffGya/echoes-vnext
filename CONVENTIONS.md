@@ -864,17 +864,35 @@ Both return `[]` gracefully on empty roster/party. Neither modifies save data.
 `actor.stats_init` — emitted by `SummonService` (both `summon_paid_one` and `summon_paid_many`)
 after each echo is generated and assigned an id. Contains: `echo_id`, `stats` dict, `speed`, `morale`, `fear`.
 
+### Spatial fields (ACTOR-004)
+
+Actor dicts now carry `faction` and `grid_pos` as spatial placeholders:
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| `faction` | String | `"echo"` / `"enemy"` | Used by `ActorService.get_nearest_enemy()` for side identification |
+| `grid_pos` | Dictionary | `{ "col": 0, "row": 0 }` | Manhattan distance calculation; real values injected by GRID-001 |
+
+These fields are **not** in `ActorSchema.REQUIRED_FIELDS` — they are extra fields carried on the dict.
+They will be promoted to required when `core/grid/` lands (GRID-001).
+
+`ActorService.get_nearest_enemy(actor, all_actors)` — pure static utility in `core/actors/ActorService.gd`.
+Returns the nearest enemy actor (by Manhattan distance, tiebreak: smallest `actor_id` string). Returns `{}` if none found.
+
 ### Future stubs
 
-- **position** `{ "x": int, "y": int }` — added when `core/grid/` lands (GRID stories).
-- **ACTOR-003+** — state phases (idle → select_action → resolve → cooldown) and behavior modules.
+- **position** `{ "x": int, "y": int }` — real grid position added when `core/grid/` lands (GRID-001 replaces `grid_pos` placeholder).
+- **ACTOR-003** — state phases (idle → select_action → resolve → cooldown) and behavior module wiring (DONE).
 
 ---
 
 ## BehaviorModule Contract (ACTOR-003)
 
 Every actor carries exactly one `BehaviorModule`, assigned at `ActorStateMachine` construction.
-If no module is provided, `IdleBehaviorModule` is assigned as the safe default.
+Default module assignment (ACTOR-004):
+- `actor_type == "echo"` → `MeleeBehaviorModule` (attacks nearest enemy at distance 1)
+- All other actor types → `IdleBehaviorModule` (safe no-op fallback)
+- Explicit module passed to `ActorStateMachine._init()` always overrides the default.
 
 ### Interface (`core/actors/BehaviorModule.gd`)
 
@@ -910,27 +928,31 @@ Grid fields (position, adjacency) are added when `core/grid/` lands (GRID storie
 `ActorStateMachine.advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dictionary`
 
 Called by the combat loop once per turn. Invokes `select_intent()`, stores result as `_last_intent`,
-logs `actor.intent`, and returns the intent dict.
+logs `actor.intent`, stores `_last_action`, logs `actor.action`, and returns the intent dict.
 
 ### Module ID registry
 
 | ID | File | Added |
 |----|------|-------|
 | `"idle"` | `core/actors/behaviors/IdleBehaviorModule.gd` | ACTOR-003 |
-| `"melee"` | TBD | ACTOR-004 |
+| `"melee"` | `core/actors/behaviors/MeleeBehaviorModule.gd` | ACTOR-004 |
 | `"guardian"` | TBD | ACTOR-005 |
 
 ### Debug snapshot
 
 `ActorStateMachine.get_snapshot() -> Dictionary`
 
-Returns `{ actor_id, name, behavior_module, last_intent }` for debug overlays and tests.
+Returns `{ actor_id, name, behavior_module, last_intent, last_action, vectors }` for debug overlays and tests.
 
-### Log event
+### Log events
 
 ```
 type:    "actor.intent"
 payload: { module_id: String, action_type: String, target_id: String, actor_id: String }
+
+type:    "actor.action"                      # ACTOR-004
+payload: { action_type: String, source_id: String, target_id: String, damage: int }
+# damage is 0 (placeholder) until COMBAT-001+ wires the damage resolution loop
 ```
 
 ### Rules

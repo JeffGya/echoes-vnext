@@ -237,6 +237,7 @@ func _run_tests(parts: Array) -> void:
 	ActorStatInitTests.register(runner)
 	DerivedStatTests.register(runner)
 	BehaviorModuleTests.register(runner)
+	MeleeTests.register(runner)  # ACTOR-004
 	EmotionTests.register(runner)
 	VectorTests.register(runner)
 	DirectiveTests.register(runner)  # DIRECTIVE-001

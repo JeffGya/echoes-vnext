@@ -19,13 +19,19 @@ extends RefCounted
 var _actor: Dictionary
 var _behavior_module: BehaviorModule
 var _last_intent: Dictionary = {}
+var _last_action: Dictionary = {}
 
 
 ## actor_dict: the actor's full dict (from EchoActor.from_echo or EnemyActor.from_definition).
 ## behavior_module: the AI module to query each turn. Defaults to IdleBehaviorModule if null.
 func _init(actor_dict: Dictionary, behavior_module: BehaviorModule = null) -> void:
 	_actor = actor_dict
-	_behavior_module = behavior_module if behavior_module != null else IdleBehaviorModule.new()
+	if behavior_module != null:
+		_behavior_module = behavior_module
+	elif actor_dict.get("actor_type", "") == "echo":
+		_behavior_module = MeleeBehaviorModule.new()  # ACTOR-004: echo actors default to melee
+	else:
+		_behavior_module = IdleBehaviorModule.new()
 	_last_intent = {}
 
 
@@ -59,6 +65,18 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		"target_id": intent.get("target_id", ""),
 		"actor_id": _actor.get("id", "")
 	})
+	# ACTOR-004: store last_action for snapshot and log actor.action
+	_last_action = {
+		"action_type": intent.get("action_type", ""),
+		"target_id":   intent.get("target_id", ""),
+		"distance":    intent.get("distance", -1),
+	}
+	logger.info(t, "actor.action", "Action resolved", {
+		"action_type": _last_action["action_type"],
+		"source_id":   _actor.get("id", ""),
+		"target_id":   _last_action["target_id"],
+		"damage":      0,  # placeholder — real damage in COMBAT-001+
+	})
 	return intent
 
 
@@ -80,6 +98,7 @@ func get_snapshot() -> Dictionary:
 		"name": _actor.get("name", ""),
 		"behavior_module": _behavior_module.get_module_id(),
 		"last_intent": _last_intent.duplicate(),
+		"last_action": _last_action.duplicate(),  # ACTOR-004: post-resolution action snapshot
 		# PROG-005: Layer 2 vector data for intent pipeline and debug display
 		"vectors": VectorService.get_snapshot_data(_actor)
 	}

@@ -11,7 +11,7 @@
 #   "id"      String  — required; use a stable enemy id (e.g. "enemy.dust_wanderer")
 #   "name"    String  — display name
 #   "level"   int     — defaults to 1
-#   "faction" String  — optional; not part of Actor contract, ignored here
+#   "faction" String  — optional; defaults to "enemy" if omitted (ACTOR-004)
 
 class_name EnemyActor
 extends RefCounted
@@ -51,6 +51,9 @@ static func from_definition(defn: Dictionary, t: int) -> Dictionary:
 		"speed":      5,        # flat default — COMBAT-002 derives formula later
 		"morale":     50,       # flat placeholder — EMOTION-001 supersedes this
 		"fear":       0,        # flat placeholder — EMOTION-001 supersedes this
+		# ACTOR-004: faction + grid_pos placeholder until GRID-001 places actors on board
+		"faction":  defn.get("faction", "enemy"),
+		"grid_pos": { "col": 0, "row": 0 },
 	}
 
 	assert(ActorSchema.validate(actor),
