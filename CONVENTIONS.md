@@ -1687,10 +1687,71 @@ GRID-001 adds a direct route in AppRoot:
 ```
 This is a **temporary direct route** — INFRA-001 (pickup 44) moves it into RealmShell when the full venture shell is built. No other GRID story changes this routing.
 
+### Deterministic placement contract (GRID-003)
+
+Actor spawn positions are computed by `GridService.place_actors()` using a seeded RNG derived from the campaign seed + encounter_id. The same seed always produces the same positions.
+
+#### `GridService.place_actors()` signature
+
+```gdscript
+static func place_actors(
+    echo_actors: Array,
+    enemy_actors: Array,
+    board_cfg: Dictionary,
+    rng: RandomNumberGenerator,
+    place_cfg: Dictionary = {}
+) -> void
+```
+
+- Mutates `grid_pos` on each actor dict in-place.
+- `board_cfg` — the full `data.grid` block from `balance.json` (includes `board_cols`, `board_rows`, and `placement_modifiers`).
+- `rng` — a **freshly seeded** `RandomNumberGenerator`; caller must seed it before passing.
+- `place_cfg` — the `placement_modifiers` sub-dict from `data.grid` (passed separately for clarity). Defaults to `{}` (all modifiers = 0).
+
+#### Placement score formula
+
+```
+score = floor((stats.agi + speed) / 2) + archetype_mod + calling_mod + trait_mod + vector_mod
+```
+
+All modifier values read **fresh at combat start** (current actor state, not birth snapshot).
+
+| Component | Source field | Lookup table in balance.json |
+|-----------|-------------|------------------------------|
+| `archetype_mod` | `actor.archetype_birth` | `data.grid.placement_modifiers.by_archetype` |
+| `calling_mod` | `actor.calling_origin` | `data.grid.placement_modifiers.by_calling_origin` |
+| `trait_mod` | dominant key in `actor.traits` (`courage`/`wisdom`/`faith`) | `data.grid.placement_modifiers.by_dominant_trait` |
+| `vector_mod` | dominant key in `actor.vector_scores` (`vanguard`/`protector`/`seeker`/`pillar`) | `data.grid.placement_modifiers.by_dominant_vector` |
+
+Unknown keys default to `0` — add new archetypes, callings, or vectors to `balance.json` only; no GDScript changes needed.
+
+#### Tiebreak rules
+
+- **Sort order:** ascending by score, tiebreak `actor_id` ascending (slowest/most supportive → back column first).
+- **Dominant trait tiebreak:** `courage > faith > wisdom`
+- **Dominant vector tiebreak:** `vanguard > seeker > protector > pillar`
+
+#### Column assignment
+
+- Echoes fill left half: `col=1` (back) → `col=2` → … (inward toward center).
+- Enemies fill right half: `col=board_cols-2` (back) → `col=board_cols-3` → … (inward).
+- Rows within each column are RNG-shuffled (Fisher-Yates) using the injected seed.
+
+#### Snapshot field
+
+`placement_seed: int` is emitted in the encounter snapshot `data` block for determinism auditing.
+
+#### RNG derive path
+
+```gdscript
+flow_ctx.campaign_seed.derive("combat.placement." + encounter_id)
+flow_ctx.campaign_seed.get_rng("combat.placement." + encounter_id)
+```
+
 ### Log events (GRID-001+)
 
 | Event type | When emitted | Required data fields |
 |-----------|-------------|---------------------|
 | `combat.init` | On combat session start | `board_cols`, `board_rows`, `t` |
-| `actor.spawned` | On actor placement | `actor_id`, `grid_pos`, `t` |
+| `combat.actor.spawned` | On actor placement (GRID-003) | `actor_id`, `grid_pos`, `placement_seed`, `t` |
 | `actor.moved` | After `move_toward()` resolves | `actor_id`, `from_pos`, `to_pos`, `t` |

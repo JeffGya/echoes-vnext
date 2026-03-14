@@ -3,14 +3,14 @@
 # GRID-001: Board configuration — board_cols and board_rows owned here.
 #
 # Rules:
-# - No RNG, no OS time. All methods are pure and deterministic.
+# - No RNG, no OS time in config/math methods. All are pure and deterministic.
 # - Board config is immutable mid-combat; read from balance.json data.grid block.
 # - GridService is the single source of truth for all grid math.
 # - Caller logs LOG_COMBAT_INIT with the dimensions returned here.
 #
 # Future stories extend this file:
 #   GRID-002 — assign_grid_pos(), spawn positions
-#   GRID-003 — place_actors() with seeded RNG
+#   GRID-003 — place_actors() with seeded RNG              ← implemented here
 #   GRID-004 — manhattan_distance()
 #   GRID-005 — move_toward()
 
@@ -61,3 +61,132 @@ static func is_valid_pos(pos: Dictionary, cfg: Dictionary = {}) -> bool:
 static func assign_grid_pos(actor: Dictionary, col: int, row: int) -> Dictionary:
 	actor["grid_pos"] = { "col": col, "row": row }
 	return actor
+
+
+# -------------------------
+# Deterministic placement (GRID-003)
+# -------------------------
+
+## Places echo_actors (left half) and enemy_actors (right half) on the board using
+## seeded RNG. Mutates grid_pos on each actor in-place. Returns nothing.
+##
+## Placement score = floor((agi + speed) / 2) + archetype_mod + calling_mod
+##                   + trait_mod + vector_mod
+## All modifiers read from place_cfg (balance.json data.grid.placement_modifiers).
+## Unknown keys default to 0 — tables are open for extension without code changes.
+##
+## Sort order: ascending by score, tiebreak actor_id ascending.
+## Actors with lower scores (supportive roles) are placed in back columns;
+## higher scores (aggressive roles) advance to front columns.
+##
+## Rows within each column are shuffled via the injected RNG.
+## The RNG must be freshly seeded by the caller to guarantee reproducibility.
+static func place_actors(echo_actors: Array, enemy_actors: Array,
+		board_cfg: Dictionary, rng: RandomNumberGenerator,
+		place_cfg: Dictionary = {}) -> void:
+	var cols: int = get_board_cols(board_cfg)
+	var rows: int = get_board_rows(board_cfg)
+
+	# Sort both arrays by placement score ascending (slowest/support → back).
+	var sorted_echoes: Array = echo_actors.duplicate()
+	var sorted_enemies: Array = enemy_actors.duplicate()
+
+	sorted_echoes.sort_custom(func(a, b):
+		var sa: int = _placement_score(a, place_cfg)
+		var sb: int = _placement_score(b, place_cfg)
+		if sa != sb: return sa < sb
+		return str(a.get("id", "")) < str(b.get("id", ""))
+	)
+	sorted_enemies.sort_custom(func(a, b):
+		var sa: int = _placement_score(a, place_cfg)
+		var sb: int = _placement_score(b, place_cfg)
+		if sa != sb: return sa < sb
+		return str(a.get("id", "")) < str(b.get("id", ""))
+	)
+
+	# Echoes fill from col=1 inward (col=1 = back, col=2 = more forward, etc.)
+	_pack_faction(sorted_echoes, 1, 1, rows, rng)
+
+	# Enemies fill from col=cols-2 inward (col=cols-2 = back, col=cols-3 = forward)
+	_pack_faction(sorted_enemies, cols - 2, -1, rows, rng)
+
+
+## Assigns grid positions for one faction's actors into columns starting at start_col,
+## stepping by col_step (+1 for echoes moving right, -1 for enemies moving left).
+## Rows within each column are RNG-shuffled.
+static func _pack_faction(actors: Array, start_col: int, col_step: int,
+		board_rows: int, rng: RandomNumberGenerator) -> void:
+	var col: int = start_col
+	var col_start_idx: int = 0
+
+	while col_start_idx < actors.size():
+		# Build a shuffled row list for this column.
+		var row_list: Array = []
+		for r in range(board_rows):
+			row_list.append(r)
+		# Fisher-Yates shuffle using the seeded RNG.
+		for i in range(row_list.size() - 1, 0, -1):
+			var j: int = rng.randi() % (i + 1)
+			var tmp = row_list[i]; row_list[i] = row_list[j]; row_list[j] = tmp
+
+		# Assign as many actors as fit in this column's rows.
+		var slot: int = 0
+		while col_start_idx < actors.size() and slot < board_rows:
+			assign_grid_pos(actors[col_start_idx], col, row_list[slot])
+			col_start_idx += 1
+			slot += 1
+
+		col += col_step
+
+
+## Computes the composite placement score for one actor.
+## Higher score = placed further forward (closer to the opposing faction).
+## All modifier lookups default to 0 for unknown keys — tables are freely extensible.
+static func _placement_score(actor: Dictionary, place_cfg: Dictionary) -> int:
+	# Base: average of agility stat and top-level speed.
+	var agi: int  = int(actor.get("stats", {}).get("agi", 0))
+	var spd: int  = int(actor.get("speed", 0))
+	var base: int = int(floor((agi + spd) / 2.0))
+
+	# Archetype modifier (brave / sage / devout — and any future archetypes).
+	var arch_table: Dictionary = place_cfg.get("by_archetype", {})
+	var arch_mod: int = int(arch_table.get(actor.get("archetype_birth", ""), 0))
+
+	# Calling modifier (warrior / guardian / archer / uncalled — extensible).
+	var call_table: Dictionary = place_cfg.get("by_calling_origin", {})
+	var call_mod: int = int(call_table.get(actor.get("calling_origin", ""), 0))
+
+	# Dominant trait modifier (reads actor.traits fresh — current value at combat start).
+	# Tiebreak: courage > faith > wisdom (order mirrors modifier magnitude).
+	var trait_table: Dictionary = place_cfg.get("by_dominant_trait", {})
+	var traits: Dictionary = actor.get("traits", {})
+	var dom_trait: String = _dominant_key(traits, ["courage", "faith", "wisdom"])
+	var trait_mod: int = int(trait_table.get(dom_trait, 0))
+
+	# Dominant vector modifier (reads actor.vector_scores fresh — can drift over a run).
+	# Tiebreak: vanguard > seeker > protector > pillar.
+	var vec_table: Dictionary = place_cfg.get("by_dominant_vector", {})
+	var vectors: Dictionary = actor.get("vector_scores", {})
+	var dom_vec: String = _dominant_key(vectors, ["vanguard", "seeker", "protector", "pillar"])
+	var vec_mod: int = int(vec_table.get(dom_vec, 0))
+
+	return base + arch_mod + call_mod + trait_mod + vec_mod
+
+
+## Returns the key with the highest integer value in a Dictionary.
+## tiebreak_order defines which key wins when values are equal (first in list wins).
+## Returns "" if the dict is empty or all values are non-integers.
+static func _dominant_key(scores: Dictionary, tiebreak_order: Array) -> String:
+	if scores.is_empty():
+		return ""
+	var best_key: String = ""
+	var best_val: int = -9999999
+	# Iterate in tiebreak order so the first key wins ties.
+	for key in tiebreak_order:
+		if not scores.has(key):
+			continue
+		var val: int = int(scores[key])
+		if val > best_val:
+			best_val = val
+			best_key = key
+	return best_key

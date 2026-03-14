@@ -37,9 +37,9 @@ func enter(ctx: RefCounted, t: int) -> void:
 
 		# GRID-002: build echo actor list from the active party in save_data.
 		var echo_actors: Array = []
-		if flow_ctx.save_data.has("sanctum") and flow_ctx.save_data.has("roster"):
+		if flow_ctx.save_data.has("sanctum"):
 			var party_ids: Array = flow_ctx.save_data["sanctum"].get("active_party_ids", [])
-			var roster: Array = flow_ctx.save_data["roster"]
+			var roster: Array = flow_ctx.save_data["sanctum"].get("roster", [])
 			for echo in roster:
 				if echo.get("id", "") in party_ids:
 					echo_actors.append(EchoActor.from_echo(echo))
@@ -55,28 +55,32 @@ func enter(ctx: RefCounted, t: int) -> void:
 			enemy_actors.append(EnemyActor.from_definition(defn, t))
 		enemy_actors.sort_custom(func(a, b): return a["id"] < b["id"])
 
-		# GRID-002: assign positions — echoes on the left (col 0), enemies on the right (col cols-1).
-		# Sorted by actor_id within each faction (initiative rank deferred to GRID-003+).
-		var left_col := 0; var left_row := 0
-		for actor in echo_actors:
-			GridService.assign_grid_pos(actor, left_col, left_row)
-			left_row += 1
-			if left_row >= board_rows: left_row = 0; left_col += 1
+		# GRID-003: deterministic seeded placement — replaces the GRID-002 manual loops.
+		# Placement score = floor((agi + speed) / 2) + archetype_mod + calling_mod
+		#                   + trait_mod + vector_mod (all read fresh at combat start).
+		# All modifier tables live in balance.json data.grid.placement_modifiers.
+		var place_cfg: Dictionary = grid_cfg.get("placement_modifiers", {})
+		var placement_seed: int = 0
+		var rng := RandomNumberGenerator.new()
+		if flow_ctx.campaign_seed != null:
+			placement_seed = flow_ctx.campaign_seed.derive(
+				"combat.placement." + flow_ctx.encounter_ctx.encounter_id)
+			rng = flow_ctx.campaign_seed.get_rng(
+				"combat.placement." + flow_ctx.encounter_ctx.encounter_id)
+		else:
+			rng.seed = hash(flow_ctx.encounter_ctx.encounter_id)
 
-		var right_col := board_cols - 1; var right_row := 0
-		for actor in enemy_actors:
-			GridService.assign_grid_pos(actor, right_col, right_row)
-			right_row += 1
-			if right_row >= board_rows: right_row = 0; right_col -= 1
+		GridService.place_actors(echo_actors, enemy_actors, grid_cfg, rng, place_cfg)
 
-		# GRID-002: log combat.actor.spawned for every actor with their assigned grid_pos.
+		# GRID-003: log combat.actor.spawned — includes placement_seed for determinism audit.
 		var all_actors: Array = echo_actors + enemy_actors
 		if flow_ctx.logger != null:
 			for actor in all_actors:
 				flow_ctx.logger.info(t, "combat.actor.spawned",
 					"Actor spawned at (%d,%d)" % [actor["grid_pos"]["col"], actor["grid_pos"]["row"]],
 					{ "actor_id": actor["id"], "name": actor["name"],
-					  "faction": actor.get("faction", ""), "grid_pos": actor["grid_pos"] })
+					  "faction": actor.get("faction", ""), "grid_pos": actor["grid_pos"],
+					  "placement_seed": placement_seed })
 
 		flow_ctx.last_snapshot = {
 			"type": FlowStateIds.ENCOUNTER,
@@ -89,6 +93,8 @@ func enter(ctx: RefCounted, t: int) -> void:
 				"board_rows": board_rows,
 				# GRID-002: spawned actor list for token rendering
 				"actors": all_actors,
+				# GRID-003: placement seed for determinism audit
+				"placement_seed": placement_seed,
 			},
 			"actions": {
 				"nav.back": {

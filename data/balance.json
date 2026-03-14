@@ -134,7 +134,34 @@
 	"grid": {
 		"_comment": "Combat board dimensions — immutable mid-combat; read by GridService. GRID-001. Default 10x10 for MVP (range 6x6–30x30 depending on tier — tier scaling deferred to future GRID/COMBAT story).",
 		"board_cols": 10,
-		"board_rows": 10
+		"board_rows": 10,
+		"placement_modifiers": {
+			"_comment": "GRID-003: Placement score modifiers. Full formula: score = floor((agi + speed) / 2) + archetype_mod + calling_mod + trait_mod + vector_mod. All read fresh at combat start (CURRENT values, not birth snapshot). Higher score = placed further forward (closer to enemies). Sort ascending by score; tiebreak actor_id ascending. Actors without a field default to 0. Add new archetypes/callings/vectors here only — no GDScript changes needed.",
+			"by_archetype": {
+				"brave":  2,
+				"sage":   0,
+				"devout": -2
+			},
+			"by_calling_origin": {
+				"warrior":  2,
+				"guardian": -1,
+				"archer":   -2,
+				"uncalled": 0
+			},
+			"by_dominant_trait": {
+				"_comment": "Dominant trait = highest value in actor.traits {courage, wisdom, faith}. Tiebreak: courage > faith > wisdom.",
+				"courage": 1,
+				"faith":   0,
+				"wisdom":  -1
+			},
+			"by_dominant_vector": {
+				"_comment": "Dominant vector = highest value in actor.vector_scores {vanguard, protector, seeker, pillar}. Tiebreak: vanguard > seeker > protector > pillar.",
+				"vanguard":  2,
+				"seeker":    0,
+				"protector": -1,
+				"pillar":    -2
+			}
+		}
 	}
   }
 }
