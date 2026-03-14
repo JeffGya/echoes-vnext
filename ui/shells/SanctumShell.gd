@@ -8,6 +8,7 @@ class_name SanctumShell
 @onready var camera: Camera2D = $SpatialLayer/SpatialView/Camera2D
 @onready var spatial_renderer: Node2D = $SpatialLayer/SpatialView/SanctumSpatialRenderer2
 @onready var _nav_buttons: VBoxContainer = %NavButtons
+@onready var _ui_layer: CanvasLayer = $UILayer
 
 signal action_requested(action: Dictionary)
 
@@ -47,13 +48,20 @@ func _ready() -> void:
 		#"flow.echo_manage": _echo_scene,
 		#"flow.realm_select": _realm_scene,
 	}
-	
+
 	_center_spatial_view()
 	spatial_layer.resized.connect(_on_spatial_layer_resized)
-	
+
 	camera.zoom = _zoom_levels[_zoom_index]
 	_recompute_floor_bounds()
 	_clamp_camera_to_floor()
+	# CanvasLayer does not inherit visibility from its Control parent.
+	# Sync UILayer visibility whenever SanctumShell is shown/hidden.
+	visibility_changed.connect(_sync_ui_layer_visibility)
+
+func _sync_ui_layer_visibility() -> void:
+	_ui_layer.visible = visible
+
 
 func set_snapshot(snap: Dictionary) -> void:
 	# 1) Update spatial background (read-only visual layer)

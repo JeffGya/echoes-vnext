@@ -2,7 +2,7 @@
 # Tests for the ACTOR-004 melee behavior system:
 #   1. get_nearest_enemy() returns the closest enemy when multiple are present.
 #   2. get_nearest_enemy() tiebreak: lexicographically smallest actor_id wins.
-#   3. select_intent() returns idle when the nearest enemy is at distance 2.
+#   3. select_intent() returns actor.move (with target_pos) when enemy is at distance 2. (GRID-005)
 #   4. advance_turn() fires both actor.intent and actor.action log events
 #      with correct fields when a melee attack resolves.
 #
@@ -15,7 +15,7 @@ class_name MeleeTests
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("melee/get_nearest_enemy_returns_closest",         Callable(MeleeTests, "_t_get_nearest_enemy_returns_closest"))
 	runner.register_test("melee/get_nearest_enemy_tiebreak_by_id",          Callable(MeleeTests, "_t_get_nearest_enemy_tiebreak_by_id"))
-	runner.register_test("melee/select_intent_idle_when_enemy_at_dist_2",   Callable(MeleeTests, "_t_select_intent_idle_when_enemy_at_dist_2"))
+	runner.register_test("melee/select_intent_move_when_enemy_at_dist_2",   Callable(MeleeTests, "_t_select_intent_move_when_enemy_at_dist_2"))
 	runner.register_test("melee/advance_turn_logs_actor_action_events",      Callable(MeleeTests, "_t_advance_turn_logs_actor_action_events"))
 
 
@@ -59,10 +59,10 @@ static func _t_get_nearest_enemy_tiebreak_by_id() -> Dictionary:
 	return { "ok": true }
 
 
-# Test 3: select_intent_idle_when_enemy_at_dist_2
+# Test 3: select_intent_move_when_enemy_at_dist_2
 # Actor at (0,0); enemy at (2,0) dist=2 — outside melee range.
-# Expected: idle intent returned.
-static func _t_select_intent_idle_when_enemy_at_dist_2() -> Dictionary:
+# Expected: actor.move intent returned with target_pos matching the enemy's grid_pos. (GRID-005)
+static func _t_select_intent_move_when_enemy_at_dist_2() -> Dictionary:
 	var actor := { "id": "echo_001", "faction": "echo",  "grid_pos": { "col": 0, "row": 0 } }
 	var enemy := { "id": "enemy_001", "faction": "enemy", "grid_pos": { "col": 2, "row": 0 } }
 
@@ -70,8 +70,13 @@ static func _t_select_intent_idle_when_enemy_at_dist_2() -> Dictionary:
 	var context := { "actor": actor, "all_actors": [enemy], "t": 1 }
 	var intent: Dictionary = module.select_intent(context)
 
-	if str(intent.get("action_type", "")) != "actor.idle":
-		return { "ok": false, "error": "Expected actor.idle at dist=2, got: %s" % str(intent.get("action_type")) }
+	if str(intent.get("action_type", "")) != "actor.move":
+		return { "ok": false, "error": "Expected actor.move at dist=2, got: %s" % str(intent.get("action_type")) }
+	var tp: Dictionary = intent.get("target_pos", {})
+	if tp.is_empty():
+		return { "ok": false, "error": "Expected target_pos to be set, got empty dict" }
+	if int(tp.get("col", -1)) != 2 or int(tp.get("row", -1)) != 0:
+		return { "ok": false, "error": "Expected target_pos={col:2,row:0}, got: %s" % str(tp) }
 
 	return { "ok": true }
 

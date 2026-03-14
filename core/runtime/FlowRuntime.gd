@@ -126,6 +126,10 @@ func dispatch(action: Dictionary) -> Dictionary:
 		"debug.echo.gen_test":
 			_handle_debug_echo_gen_test(t)
 
+		# ---- Debug Round (GRID-005 TEMP — remove at COMBAT-001) ----
+		"debug.advance_round":
+			_handle_debug_advance_round(t)
+
 		# ---- Encounter ----
 		"encounter.advance":
 			var to_state := str(action.get("to", ""))
@@ -356,7 +360,15 @@ func _handle_sanctum_summon(action: Dictionary, t: int) -> void:
 
 		flow_ctx.save_request = true
 		flow_ctx.save_request_reason = "sanctum.summon"
-		
+
+		# Rebuild snapshot so SummonScreen immediately reflects the updated Ase balance
+		# and the pending_summon_reveals queue (reveal overlay). Without this, the screen
+		# stays stale and repeated clicks each trigger a real summon — the root cause of
+		# echoes accumulating silently across sessions.
+		# Same static build_snapshot() pattern used by _handle_sanctum_grade_select.
+		flow_ctx.last_snapshot = FlowSummonState.build_snapshot(flow_ctx, t)
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
 func _handle_sanctum_grade_select(action: Dictionary, t: int) -> void:
 	var grade := str(action.get("grade", "")).strip_edges()
 	if grade.is_empty():
@@ -550,6 +562,47 @@ func _handle_debug_seed_set(action: Dictionary, t: int, do_reset: bool) -> void:
 
 	# IMPORTANT: no flow transition occurs, so refresh snapshot immediately
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+## GRID-005 TEMP — debug round stepper; removed at COMBAT-001.
+## Runs one full turn for every non-dead actor using MeleeBehaviorModule (debug only).
+## Actor grid_pos dicts are live refs in last_snapshot["data"]["actors"] — mutations
+## propagate automatically when refresh_snapshot() re-emits the snapshot.
+func _handle_debug_advance_round(t: int) -> void:
+	var snap_data: Dictionary = flow_ctx.last_snapshot.get("data", {})
+	var actors_v: Variant = snap_data.get("actors", [])
+	var actors: Array = actors_v if actors_v is Array else []
+	if actors.is_empty():
+		logger.debug(t, "debug.advance_round.skipped", "No actors in snapshot", {})
+		return
+
+	var balance: Dictionary = flow_ctx.config_service.get_balance()
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var board_cfg_v: Variant = data.get("grid", {})
+	var board_cfg: Dictionary = board_cfg_v if board_cfg_v is Dictionary else {}
+	var actor_cfg_v: Variant = data.get("actor", {})
+	var actor_cfg: Dictionary = actor_cfg_v if actor_cfg_v is Dictionary else {}
+
+	for actor_v in actors:
+		if not actor_v is Dictionary:
+			continue
+		var actor: Dictionary = actor_v as Dictionary
+		if actor.get("is_dead", false):
+			continue
+		# GRID-005 TEMP: inject MeleeBehaviorModule for all actors so each actor
+		# closes the gap toward its nearest enemy. Real per-actor module selection
+		# happens at COMBAT-001 when the actual combat loop is built.
+		var sm := ActorStateMachine.new(actor, MeleeBehaviorModule.new(), actor_cfg)
+		sm.advance_turn({
+			"actor":      actor,
+			"all_actors": actors,
+			"t":          t,
+			"round":      t,
+			"board_cfg":  board_cfg,
+		}, logger, t)
+
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
 
 func _generate_seed_root_string() -> String:
 	# Dev-safe randomness: allowed only as an input at New Game.

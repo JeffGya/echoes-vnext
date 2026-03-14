@@ -41,49 +41,29 @@ func refresh_snapshot(ctx: FlowContext, logger: StructuredLogger, t: int) -> voi
 func _rebuild_snapshot(ctx: FlowContext, logger: StructuredLogger, t: int) -> void:
 	var snap: Dictionary = {}
 
-	# Encounter passthrough wrapper (STATE-004 Subtask 3, Option 1)
-	if _current_state_id == FlowStateIds.ENCOUNTER:
-		if ctx.encounter_ctx != null and not ctx.encounter_ctx.phase_snapshot.is_empty():
-			snap = {
-				"type": FlowStateIds.ENCOUNTER,
-				"meta": { "t": t },
-				"data": ctx.encounter_ctx.phase_snapshot
-			}
-		else:
-			# Deterministic bootstrap gap: Flow has entered flow.encounter but the Encounter machine
-			# has not produced its first phase snapshot yet. Emit a valid, non-null pending wrapper.
-			snap = {
-				"type": FlowStateIds.ENCOUNTER,
-				"meta": { "t": t },
-				"data": {
-					"type": "encounter.pending",
-					"meta": { "t": t },
-					"data": {
-						"flow_state": _current_state_id
-					}
-				}
-			}
-	else:
-		# Normal flow state snapshot
-		if _current_state == null:
-			logger.debug(
-				t,
-				"snapshot.invalid",
-				"Flow current state is null",
-				{ "flow_state": _current_state_id }
-			)
-			assert(false)
-			return
+	# GRID-002: ENCOUNTER uses ctx.last_snapshot (same contract as all flow states).
+	# FlowEncounterState.enter() builds the full combat board snapshot: board config,
+	# actor list, and nav actions. The encounter_ctx.phase_snapshot passthrough will be
+	# restored by a COMBAT story once EncounterStateMachine produces round snapshots.
+	if _current_state_id != FlowStateIds.ENCOUNTER and _current_state == null:
+		logger.debug(
+			t,
+			"snapshot.invalid",
+			"Flow current state is null",
+			{ "flow_state": _current_state_id }
+		)
+		assert(false)
+		return
 
-		snap = ctx.last_snapshot
-		if str(snap.get("type", "")) != _current_state_id:
-			logger.debug(
-				t,
-				"snapshot.mismatch",
-				"Snapshot type does not match current flow state",
-				{ "flow_state": _current_state_id, "snapshot_type": str(snap.get("type", "")) }
-			)
-			# For MVP we don't assert; just flag it.
+	snap = ctx.last_snapshot
+	if str(snap.get("type", "")) != _current_state_id:
+		logger.debug(
+			t,
+			"snapshot.mismatch",
+			"Snapshot type does not match current flow state",
+			{ "flow_state": _current_state_id, "snapshot_type": str(snap.get("type", "")) }
+		)
+		# For MVP we don't assert; just flag it.
 
 	# ECONOMY-001 Subtask 5: surface balances in Sanctum snapshot data (snapshot-only UI contract)
 	if str(snap.get("type", "")) == FlowStateIds.SANCTUM:

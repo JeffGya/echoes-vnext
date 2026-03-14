@@ -41,4 +41,11 @@ func select_intent(context: Dictionary) -> Dictionary:
 			"priority":       1.0,
 		}
 
-	return { "action_type": "actor.idle", "target_id": "", "priority": 0.0 }
+	# GRID-005: target exists but is out of melee range — close the gap.
+	return {
+		"action_type":    "actor.move",
+		"target_id":      str(target.get("id", "")),
+		"target_distance": dist,
+		"target_pos":     t_pos.duplicate(),
+		"priority":       0.5,
+	}

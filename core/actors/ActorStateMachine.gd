@@ -106,6 +106,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		"action_type":    intent.get("action_type", ""),
 		"target_id":      intent.get("target_id", ""),
 		"target_distance": intent.get("target_distance", -1),  # GRID-004
+		"target_pos":     intent.get("target_pos", {}),        # GRID-005
 	}
 	logger.info(t, "actor.action", "Action resolved", {
 		"action_type":            _last_action["action_type"],
@@ -116,6 +117,17 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		"morale_tier":            _last_morale_tier,      # ACTOR-007
 		"action_weight_modifier": _last_morale_modifier,  # ACTOR-007
 	})
+	# GRID-005: resolve movement when the behavior module requests a move.
+	if intent.get("action_type", "") == "actor.move" and not _movement_skipped:
+		var target_pos: Dictionary = intent.get("target_pos", {})
+		if not target_pos.is_empty():
+			var move_result: Dictionary = GridService.move_toward(
+					_actor, target_pos, context.get("board_cfg", {}))
+			logger.info(t, "actor.moved", "Actor moved", {
+				"actor_id": _actor.get("id", ""),
+				"from_pos": move_result["from_pos"],
+				"to_pos":   move_result["to_pos"],
+			})
 	return intent
 
 

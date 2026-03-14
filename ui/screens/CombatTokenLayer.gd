@@ -64,7 +64,7 @@ func _draw() -> void:
 			# Rounded square for structure actors
 			draw_rect(
 				Rect2(pos - Vector2(TOKEN_HALF, TOKEN_HALF),
-				      Vector2(TOKEN_HALF * 2.0, TOKEN_HALF * 2.0)),
+					  Vector2(TOKEN_HALF * 2.0, TOKEN_HALF * 2.0)),
 				color
 			)
 

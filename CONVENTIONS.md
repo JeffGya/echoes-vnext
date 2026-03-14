@@ -1779,4 +1779,58 @@ static func manhattan_distance(a: Dictionary, b: Dictionary) -> int
 | `combat.init` | On combat session start | `board_cols`, `board_rows`, `t` |
 | `combat.actor.spawned` | On actor placement (GRID-003) | `actor_id`, `grid_pos`, `placement_seed`, `t` |
 | `actor.action` | After each turn resolves (GRID-004) | `action_type`, `source_id`, `target_id`, `target_distance`, `damage`, `morale_tier`, `action_weight_modifier`, `t` |
-| `actor.moved` | After `move_toward()` resolves | `actor_id`, `from_pos`, `to_pos`, `t` |
+| `actor.moved` | After `move_toward()` resolves (GRID-005) | `actor_id`, `from_pos`, `to_pos`, `t` |
+
+### Greedy movement helper (GRID-005)
+
+#### `GridService.move_toward()` signature
+
+```gdscript
+static func move_toward(actor: Dictionary, target_pos: Dictionary,
+        board_cfg: Dictionary = {}) -> Dictionary
+```
+
+- Mutates `actor["grid_pos"]` in-place (one cell per call).
+- Returns `{ "from_pos": Dictionary, "to_pos": Dictionary }` — both are `grid_pos` dicts.
+- Algorithm: 8-directional greedy — picks the valid neighbour with the lowest `manhattan_distance` to `target_pos`. Tiebreak: lowest `col + row` sum.
+- Out-of-bounds neighbours (filtered by `is_valid_pos()`) are never selected.
+- If no valid neighbour exists (degenerate board), actor is not moved and `from_pos == to_pos`.
+- Pure except for the actor mutation — no RNG, no logging.
+
+#### `actor.move` intent (GRID-005)
+
+Returned by `MeleeBehaviorModule.select_intent()` when a nearest enemy exists at `manhattan_distance > 1`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `action_type` | `"actor.move"` | Intent type |
+| `target_id` | String | ID of the actor being moved toward |
+| `target_distance` | int | Current Manhattan distance to target |
+| `target_pos` | Dictionary | `grid_pos` of the target at intent selection time |
+| `priority` | float | `0.5` |
+
+`ActorStateMachine.advance_turn()` resolves `actor.move` intents by calling `GridService.move_toward()` and logging `actor.moved`.
+
+#### Context shape (GRID-005 extension)
+
+`advance_turn(context, logger, t)` now accepts an optional `"board_cfg"` key:
+
+```gdscript
+{
+    "actor":      Dictionary,   # current actor
+    "all_actors": Array,        # all actors in the encounter
+    "t":          int,          # sim tick
+    "round":      int,          # round number (same as t in debug handler)
+    "board_cfg":  Dictionary,   # balance.json data.grid — optional, defaults to {}
+}
+```
+
+Existing callers that omit `"board_cfg"` are safe — `is_valid_pos()` uses 10×10 fallbacks.
+
+#### `debug.advance_round` (GRID-005 TEMP — removed at COMBAT-001)
+
+A temporary debug action that triggers one full round for all non-dead actors.
+- Emitted by the "Adv. Round" button in `CombatBoardScreen` (step mode — one press = one round).
+- Handled by `FlowRuntime._handle_debug_advance_round()`.
+- Uses `MeleeBehaviorModule` for all actors (debug only — real per-actor module selection at COMBAT-001).
+- After all actors advance, calls `flow_machine.refresh_snapshot()` — token positions update automatically because `actor["grid_pos"]` dicts in `last_snapshot["data"]["actors"]` are live references.
