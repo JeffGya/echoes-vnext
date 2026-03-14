@@ -103,14 +103,15 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	})
 	# ACTOR-004: store last_action for snapshot and log actor.action
 	_last_action = {
-		"action_type": intent.get("action_type", ""),
-		"target_id":   intent.get("target_id", ""),
-		"distance":    intent.get("distance", -1),
+		"action_type":    intent.get("action_type", ""),
+		"target_id":      intent.get("target_id", ""),
+		"target_distance": intent.get("target_distance", -1),  # GRID-004
 	}
 	logger.info(t, "actor.action", "Action resolved", {
 		"action_type":            _last_action["action_type"],
 		"source_id":              _actor.get("id", ""),
 		"target_id":              _last_action["target_id"],
+		"target_distance":        _last_action["target_distance"],  # GRID-004
 		"damage":                 0,  # placeholder — real damage in COMBAT-001+
 		"morale_tier":            _last_morale_tier,      # ACTOR-007
 		"action_weight_modifier": _last_morale_modifier,  # ACTOR-007

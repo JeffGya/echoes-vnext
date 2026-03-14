@@ -31,15 +31,14 @@ func select_intent(context: Dictionary) -> Dictionary:
 
 	var my_pos: Dictionary = actor.get("grid_pos", { "col": 0, "row": 0 })
 	var t_pos:  Dictionary = target.get("grid_pos", { "col": 0, "row": 0 })
-	var dist: int = abs(my_pos.get("col", 0) - t_pos.get("col", 0)) \
-				  + abs(my_pos.get("row", 0) - t_pos.get("row", 0))
+	var dist: int = GridService.manhattan_distance(my_pos, t_pos)
 
 	if dist == 1:
 		return {
-			"action_type": "melee_attack",
-			"target_id":   str(target.get("id", "")),
-			"distance":    dist,
-			"priority":    1.0,
+			"action_type":    "melee_attack",
+			"target_id":      str(target.get("id", "")),
+			"target_distance": dist,
+			"priority":       1.0,
 		}
 
 	return { "action_type": "actor.idle", "target_id": "", "priority": 0.0 }

@@ -2,6 +2,7 @@
 # Bespoke combat board screen — renders the isometric grid for flow.encounter.
 # GRID-001: Board configuration + isometric floor tile rendering.
 # GRID-002: Actor tokens drawn at grid_pos cells via CombatTokenLayer.
+# GRID-004: Distance debug overlay via CombatDistanceLayer (dev-facing only).
 #
 # Contract (UI-001):
 # - set_snapshot(snap: Dictionary) → _clear() + _render(data, actions)
@@ -13,7 +14,6 @@
 #   INFRA-001 (pickup 44) will move this routing into RealmShell.
 #
 # Future GRID stories extend _render() and _clear():
-#   GRID-004 — distance debug overlay on cells
 #   GRID-005 — token positions updated after move_toward()
 
 class_name CombatBoardScreen
@@ -21,9 +21,10 @@ extends Control
 
 signal action_requested(action: Dictionary)
 
-@onready var _board: TileMapLayer           = $Board
-@onready var _token_layer: CombatTokenLayer = $TokenLayer
-@onready var _back_button: Button           = $BackButton
+@onready var _board: TileMapLayer                   = $Board
+@onready var _token_layer: CombatTokenLayer         = $TokenLayer
+@onready var _distance_layer: CombatDistanceLayer   = $DistanceLayer  # GRID-004
+@onready var _back_button: Button                   = $BackButton
 
 # Clay floor tile: source 0, atlas position (0, 0)
 const _TILE_SOURCE_ID:    int       = 0
@@ -58,6 +59,7 @@ func set_snapshot(snap: Dictionary) -> void:
 func _clear() -> void:
 	_board.clear()
 	_token_layer.clear_tokens()
+	_distance_layer.clear_distances()  # GRID-004
 	_back_button.visible = false
 	_nav_back_action = {}
 
@@ -70,6 +72,8 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	var actors: Array = data.get("actors", [])
 	if not actors.is_empty():
 		_draw_tokens(actors)
+		# GRID-004: show distance debug overlay from actors[0] as reference.
+		_distance_layer.update_distances(actors[0], _board, data)
 	# Show back button only when the snapshot supplies a nav.back action.
 	if actions.has("nav.back"):
 		var action_v: Variant = actions["nav.back"]
@@ -108,6 +112,8 @@ func _center_board(cols: int, rows: int) -> void:
 	_board.position = viewport_center - grid_center
 	# GRID-002: token layer shares the board's coordinate origin.
 	_token_layer.position = _board.position
+	# GRID-004: distance layer shares the same origin.
+	_distance_layer.position = _board.position
 
 
 ## Emits the cached nav.back action when the Back button is pressed.

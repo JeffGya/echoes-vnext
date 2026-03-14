@@ -11,7 +11,7 @@
 # Future stories extend this file:
 #   GRID-002 — assign_grid_pos(), spawn positions
 #   GRID-003 — place_actors() with seeded RNG              ← implemented here
-#   GRID-004 — manhattan_distance()
+#   GRID-004 — manhattan_distance()              ← implemented here
 #   GRID-005 — move_toward()
 
 class_name GridService
@@ -49,6 +49,18 @@ static func is_valid_pos(pos: Dictionary, cfg: Dictionary = {}) -> bool:
 	var row: int = int(pos.get("row", -1))
 	return col >= 0 and col < get_board_cols(cfg) \
 		and row >= 0 and row < get_board_rows(cfg)
+
+
+# -------------------------
+# Distance helpers (GRID-004)
+# -------------------------
+
+## Returns the Manhattan distance between two grid_pos dicts { col, row }.
+## Pure integer function — no floats, no RNG, no side effects.
+## distance(A, A) == 0; distance(adjacent cell) == 1.
+static func manhattan_distance(a: Dictionary, b: Dictionary) -> int:
+	return abs(int(a.get("col", 0)) - int(b.get("col", 0))) \
+		 + abs(int(a.get("row", 0)) - int(b.get("row", 0)))
 
 
 # -------------------------

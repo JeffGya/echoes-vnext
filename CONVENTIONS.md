@@ -1748,10 +1748,35 @@ flow_ctx.campaign_seed.derive("combat.placement." + encounter_id)
 flow_ctx.campaign_seed.get_rng("combat.placement." + encounter_id)
 ```
 
+### Manhattan distance helper (GRID-004)
+
+#### `GridService.manhattan_distance()` signature
+
+```gdscript
+static func manhattan_distance(a: Dictionary, b: Dictionary) -> int
+```
+
+- Both `a` and `b` are `grid_pos` dicts `{ "col": int, "row": int }` — **not** full actor dicts.
+- Returns `|a.col - b.col| + |a.row - b.row|`.
+- Pure integer — no floats, no RNG, no side effects.
+- `distance(pos, pos)` == `0`; `distance(adjacent cell)` == `1`.
+
+#### `target_distance` — canonical action log field
+
+`target_distance` is the canonical field name for distance in action intent dicts and log payloads. The old `"distance"` key used before GRID-004 is deprecated.
+
+- `MeleeBehaviorModule` returns `"target_distance": int` in the attack intent dict.
+- `actor.action` log includes `"target_distance"` in the payload (read via `intent.get("target_distance", -1)`; `-1` = no target or non-melee action).
+
+#### Distance debug overlay
+
+`CombatDistanceLayer` (`ui/screens/CombatDistanceLayer.gd`) is a Node2D sibling of `CombatTokenLayer` in `CombatBoardScreen.tscn`. It renders per-cell Manhattan distance labels (developer-facing only, not player UI). Reference actor is `actors[0]` from the snapshot until COMBAT stories introduce turn order.
+
 ### Log events (GRID-001+)
 
 | Event type | When emitted | Required data fields |
 |-----------|-------------|---------------------|
 | `combat.init` | On combat session start | `board_cols`, `board_rows`, `t` |
 | `combat.actor.spawned` | On actor placement (GRID-003) | `actor_id`, `grid_pos`, `placement_seed`, `t` |
+| `actor.action` | After each turn resolves (GRID-004) | `action_type`, `source_id`, `target_id`, `target_distance`, `damage`, `morale_tier`, `action_weight_modifier`, `t` |
 | `actor.moved` | After `move_toward()` resolves | `actor_id`, `from_pos`, `to_pos`, `t` |

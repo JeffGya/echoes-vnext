@@ -1,6 +1,6 @@
 # res://tests/GridTests.gd
 # Tests for the GRID-001 Board Configuration system + GRID-002 grid_pos assignment
-# + GRID-003 deterministic placement:
+# + GRID-003 deterministic placement + GRID-004 Manhattan distance:
 #   1. GridService returns the defaults (10 cols, 10 rows) when called with no config.
 #   2. GridService reads board_cols and board_rows from a config dict.
 #   3. GridService.is_valid_pos() accepts cells inside the board.
@@ -13,6 +13,10 @@
 #  10. Higher placement score → more forward column at spawn.                          (GRID-003)
 #  11. All placed positions are valid per is_valid_pos().                              (GRID-003)
 #  12. Echo actors stay in left half; enemy actors stay in right half.                 (GRID-003)
+#  13. manhattan_distance returns 0 for identical positions.                           (GRID-004)
+#  14. manhattan_distance returns 1 for adjacent column cells.                         (GRID-004)
+#  15. manhattan_distance returns 2 for a one-step diagonal move.                      (GRID-004)
+#  16. manhattan_distance returns correct value for a multi-step cross-board path.     (GRID-004)
 #
 # All tests are pure unit tests — no runtime or save file needed.
 # Run via Debug Panel: tests
@@ -34,6 +38,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("grid/placement_score_places_forward",       Callable(GridTests, "_t_placement_score_places_forward"))
 	runner.register_test("grid/placement_all_positions_valid",        Callable(GridTests, "_t_placement_all_positions_valid"))
 	runner.register_test("grid/placement_faction_halves",             Callable(GridTests, "_t_placement_faction_halves"))
+	# GRID-004
+	runner.register_test("grid/distance_same_cell_is_zero",          Callable(GridTests, "_t_distance_same_cell_is_zero"))
+	runner.register_test("grid/distance_adjacent_col_is_one",        Callable(GridTests, "_t_distance_adjacent_col_is_one"))
+	runner.register_test("grid/distance_diagonal_step_is_two",       Callable(GridTests, "_t_distance_diagonal_step_is_two"))
+	runner.register_test("grid/distance_multi_step_cross_board",     Callable(GridTests, "_t_distance_multi_step_cross_board"))
 
 
 # -------------------------
@@ -359,4 +368,51 @@ static func _t_placement_faction_halves() -> Dictionary:
 		if col < half:
 			return { "ok": false, "error": "Enemy '%s' landed in left half (col=%d)" % [actor["id"], col] }
 
+	return { "ok": true }
+
+
+# -------------------------
+# GRID-004 Tests
+# -------------------------
+
+# Test 13: distance_same_cell_is_zero
+# Expected: manhattan_distance of a position to itself is 0.
+static func _t_distance_same_cell_is_zero() -> Dictionary:
+	var pos := { "col": 3, "row": 4 }
+	var dist: int = GridService.manhattan_distance(pos, pos)
+	if dist != 0:
+		return { "ok": false, "error": "Expected distance(same,same)=0, got: %d" % dist }
+	return { "ok": true }
+
+
+# Test 14: distance_adjacent_col_is_one
+# Expected: cells that differ by exactly one column have distance 1.
+static func _t_distance_adjacent_col_is_one() -> Dictionary:
+	var a := { "col": 0, "row": 0 }
+	var b := { "col": 1, "row": 0 }
+	var dist: int = GridService.manhattan_distance(a, b)
+	if dist != 1:
+		return { "ok": false, "error": "Expected distance(adjacent col)=1, got: %d" % dist }
+	return { "ok": true }
+
+
+# Test 15: distance_diagonal_step_is_two
+# Expected: a move of +1 col and +1 row has Manhattan distance 2 (not sqrt(2)).
+static func _t_distance_diagonal_step_is_two() -> Dictionary:
+	var a := { "col": 0, "row": 0 }
+	var b := { "col": 1, "row": 1 }
+	var dist: int = GridService.manhattan_distance(a, b)
+	if dist != 2:
+		return { "ok": false, "error": "Expected distance(diagonal step)=2, got: %d" % dist }
+	return { "ok": true }
+
+
+# Test 16: distance_multi_step_cross_board
+# Expected: distance from (0,0) to (4,3) = |4-0| + |3-0| = 7.
+static func _t_distance_multi_step_cross_board() -> Dictionary:
+	var a := { "col": 0, "row": 0 }
+	var b := { "col": 4, "row": 3 }
+	var dist: int = GridService.manhattan_distance(a, b)
+	if dist != 7:
+		return { "ok": false, "error": "Expected distance((0,0)→(4,3))=7, got: %d" % dist }
 	return { "ok": true }
