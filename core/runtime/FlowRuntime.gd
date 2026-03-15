@@ -584,6 +584,13 @@ func _handle_combat_init(t: int) -> void:
 		"objective":     cs.get("objective", ""),
 		"round_counter": int(cs.get("round_counter", 0)),
 	})
+	# COMBAT-002: log round_start with full initiative order for determinism audit.
+	var order: Array = cs.get("initiative_order", [])
+	logger.info(t, "combat.round_start", "Round 0 initiative set", {
+		"round_counter":    int(cs.get("round_counter", 0)),
+		"actor_count":      order.size(),
+		"initiative_order": order,
+	})
 
 	# Save checkpoint on combat start.
 	flow_ctx.save_request = true

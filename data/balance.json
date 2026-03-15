@@ -162,6 +162,35 @@
 				"pillar":    -2
 			}
 		}
+	},
+	"combat": {
+		"_comment": "COMBAT-002: Initiative scoring modifiers. Formula: (speed*3 + agi*2) + arch_mod + calling_mod + trait_mod + vec_mod + nudge. Sort descending. Tiebreak: party list order. Nudge: CampaignSeed.derive_from(placement_seed, actor_id) % 10. All values tunable without code changes.",
+		"initiative_modifiers": {
+			"by_archetype": {
+				"brave":  3,
+				"sage":   0,
+				"devout": -2
+			},
+			"by_calling_origin": {
+				"warrior":  3,
+				"guardian": -1,
+				"archer":    1,
+				"uncalled":  0
+			},
+			"by_dominant_trait": {
+				"_comment": "Dominant trait = highest value in actor.traits {courage, wisdom, faith}. Tiebreak: courage > faith > wisdom.",
+				"courage":  2,
+				"faith":    0,
+				"wisdom":  -1
+			},
+			"by_dominant_vector": {
+				"_comment": "Dominant vector = highest value in actor.vector_scores {vanguard, protector, seeker, pillar}. Tiebreak: vanguard > seeker > protector > pillar.",
+				"vanguard":  2,
+				"seeker":    1,
+				"protector": -1,
+				"pillar":   -2
+			}
+		}
 	}
   }
 }

@@ -11,7 +11,13 @@ func enter(ctx: RefCounted, t: int) -> void:
 	ectx.phase_index = 2
 
 	# COMBAT-001: initialize combat state from pre-placed actors.
-	ectx.combat_state = CombatState.create(ectx.actors, ectx.resolution_mode)
+	# COMBAT-002: pass placement_seed + initiative_cfg for deterministic turn order.
+	ectx.combat_state = CombatState.create(
+		ectx.actors,
+		ectx.resolution_mode,
+		ectx.placement_seed,
+		ectx.initiative_cfg
+	)
 
 	# Minimal phase_snapshot — FlowEncounterState.build_snapshot() drives the real UI snapshot.
 	ectx.phase_snapshot = {

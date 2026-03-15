@@ -26,6 +26,9 @@ signal action_requested(action: Dictionary)
 @onready var _round_label: Label                    = $RoundLabel
 @onready var _objective_label: Label                = $ObjectiveLabel
 @onready var _start_combat_button: Button           = $StartCombatButton
+# COMBAT-002: Initiative panel overlay.
+@onready var _initiative_panel: PanelContainer      = $InitiativePanel
+@onready var _initiative_list: VBoxContainer        = $InitiativePanel/InitiativeList
 
 # Clay floor tile: source 0, atlas position (0, 0)
 const _TILE_SOURCE_ID:    int       = 0
@@ -48,6 +51,8 @@ func _ready() -> void:
 	# COMBAT-001: Start Combat button triggers combat.init.
 	_start_combat_button.visible = false
 	_start_combat_button.pressed.connect(_on_start_combat_pressed)
+	# COMBAT-002: Initiative panel hidden until combat is initialised.
+	_initiative_panel.visible = false
 
 
 # -------------------------
@@ -69,6 +74,10 @@ func _clear() -> void:
 	_objective_label.visible = false
 	_start_combat_button.visible = false
 	_nav_back_action = {}
+	# COMBAT-002: reset initiative panel.
+	_initiative_panel.visible = false
+	for child in _initiative_list.get_children():
+		child.queue_free()
 
 func _render(data: Dictionary, actions: Dictionary) -> void:
 	_current_cols = int(data.get("board_cols", 10))
@@ -105,6 +114,9 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 		if action_v is Dictionary:
 			_nav_back_action = action_v
 			_back_button.visible = true
+
+	# COMBAT-002: draw initiative panel overlay.
+	_draw_initiative_panel(data)
 
 
 # -------------------------
@@ -188,3 +200,56 @@ func _draw_tokens(actors: Array) -> void:
 ## Returns the placeholder colour for a given faction string.
 func _faction_color(faction: String) -> Color:
 	return CombatTokenLayer.FACTION_COLORS.get(faction, Color.WHITE)
+
+
+# -------------------------
+# Initiative panel (COMBAT-002)
+# -------------------------
+
+## Draws the left-side initiative order overlay from snapshot data.
+## Active actor (active_initiative_index): arrow + yellow font.
+## Dead actor (is_dead == true in data.actors): X prefix + red font + 40% opacity.
+## All other actors: plain white font.
+## Panel is hidden when initiative_order is empty (pre-combat).
+func _draw_initiative_panel(data: Dictionary) -> void:
+	var order: Array = data.get("initiative_order", [])
+	if order.is_empty():
+		_initiative_panel.visible = false
+		return
+
+	var active_idx: int = int(data.get("active_initiative_index", 0))
+
+	# Build a set of dead actor IDs from the actors array.
+	var dead_ids: Dictionary = {}
+	for actor in data.get("actors", []):
+		if actor.get("is_dead", false):
+			dead_ids[str(actor.get("id", ""))] = true
+
+	# Free stale rows from previous render.
+	for child in _initiative_list.get_children():
+		child.queue_free()
+
+	# Create one Label per initiative entry.
+	for i in range(order.size()):
+		var entry: Dictionary = order[i]
+		var actor_id: String  = str(entry.get("id", "??"))
+		var actor_name: String = str(entry.get("name", "??"))
+		var is_dead: bool = dead_ids.has(actor_id)
+
+		var row := Label.new()
+		row.add_theme_font_size_override("font_size", 13)
+
+		if is_dead:
+			row.text = "X  %s" % actor_name
+			row.add_theme_color_override("font_color", Color.RED)
+			row.self_modulate = Color(1, 1, 1, 0.4)
+		elif i == active_idx:
+			row.text = "→  %s" % actor_name
+			row.add_theme_color_override("font_color", Color.YELLOW)
+		else:
+			row.text = "    %s" % actor_name
+			row.add_theme_color_override("font_color", Color.WHITE)
+
+		_initiative_list.add_child(row)
+
+	_initiative_panel.visible = true

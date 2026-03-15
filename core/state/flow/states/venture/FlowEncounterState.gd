@@ -26,6 +26,9 @@ func enter(ctx: RefCounted, t: int) -> void:
 		var balance: Dictionary = flow_ctx.config_service.get_balance()
 		var bdata: Dictionary = balance.get("data", {})
 		grid_cfg = bdata.get("grid", {})
+		# COMBAT-002: store initiative modifiers so EncounterRoundsState.enter() can use them.
+		var combat_cfg: Dictionary = bdata.get("combat", {})
+		flow_ctx.encounter_ctx.initiative_cfg = combat_cfg.get("initiative_modifiers", {})
 
 	# Build actors only once (when phase_snapshot is empty = first entry before machine starts).
 	if flow_ctx.encounter_ctx.phase_snapshot.is_empty():
@@ -87,6 +90,7 @@ func exit(ctx: RefCounted, t: int) -> void:
 
 ## COMBAT-001: static snapshot builder — always emits type "flow.encounter".
 ## Reads ectx.actors, ectx.combat_state, ectx.placement_seed.
+## COMBAT-002: also emits initiative_order + active_initiative_index from combat_state.
 ## Called from enter() and from FlowRuntime._handle_combat_init().
 static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# Read board config.
@@ -106,6 +110,8 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 
 	var objective_type: String = ""
 	var round: int = 0
+	var initiative_order: Array = []
+	var active_initiative_index: int = 0
 
 	var actions: Dictionary = {
 		"nav.back": {
@@ -127,6 +133,9 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		# Post-init: show disabled Confirm Round (placeholder — real logic in COMBAT-004).
 		objective_type = str(combat_state.get("objective", ""))
 		round = int(combat_state.get("round_counter", 0))
+		# COMBAT-002: include initiative order in post-init snapshot.
+		initiative_order = combat_state.get("initiative_order", [])
+		active_initiative_index = int(combat_state.get("active_initiative_index", 0))
 		actions["cta.confirm_round"] = {
 			"type":     "combat.confirm_round",
 			"label":    "Confirm Round",
@@ -141,10 +150,12 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"encounter_id":   encounter_id,
 			"board_cols":     board_cols,
 			"board_rows":     board_rows,
-			"actors":         actors,
-			"placement_seed": placement_seed,
-			"objective_type": objective_type,
-			"round":          round,
+			"actors":                  actors,
+			"placement_seed":           placement_seed,
+			"objective_type":           objective_type,
+			"round":                    round,
+			"initiative_order":         initiative_order,
+			"active_initiative_index":  active_initiative_index,
 		},
 		"actions": actions,
 		"meta":    { "t": t },

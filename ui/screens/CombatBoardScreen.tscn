@@ -22,6 +22,13 @@ tile_shape = 1
 tile_size = Vector2i(128, 64)
 sources/0 = SubResource("TileSetAtlasSource_board")
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_initiative"]
+content_margin_left = 8.0
+content_margin_top = 8.0
+content_margin_right = 8.0
+content_margin_bottom = 8.0
+bg_color = Color(0, 0, 0, 0.6)
+
 [node name="CombatBoardScreen" type="Control" unique_id=1420352690]
 layout_mode = 3
 anchors_preset = 15
@@ -65,3 +72,15 @@ offset_left = 72.0
 offset_right = 210.0
 offset_bottom = 31.0
 text = "Start Combat"
+
+[node name="InitiativePanel" type="PanelContainer" parent="." unique_id=100000007]
+visible = false
+layout_mode = 1
+anchors_preset = -1
+anchor_top = 0.05
+anchor_bottom = 0.95
+offset_right = 185.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_initiative")
+
+[node name="InitiativeList" type="VBoxContainer" parent="InitiativePanel" unique_id=100000009]
+layout_mode = 2

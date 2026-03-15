@@ -1837,18 +1837,36 @@ Replaced by `combat.init`. See Combat Core section below.
 
 ### CombatState shape
 
-`CombatState` is a plain Dictionary created via `CombatState.create(actors, objective)`:
+`CombatState` is a plain Dictionary created via `CombatState.create(actors, objective, initiative_seed, init_cfg)`:
 
 ```gdscript
 {
-    "actors":        Array,   # deep copy of placed actors at combat start
-    "objective":     String,  # from EncounterContext.resolution_mode
-    "round_counter": int,     # starts at 0
+    "actors":                  Array,   # deep copy of placed actors at combat start
+    "objective":               String,  # from EncounterContext.resolution_mode
+    "round_counter":           int,     # starts at 0
+    "initiative_order":        Array,   # [{ "id": String, "name": String }, ...] descending score
+    "active_initiative_index": int,     # whose turn it is; always 0 at init; COMBAT-004 advances it
 }
 ```
 
 Stored on `EncounterContext.combat_state`. Set by `EncounterRoundsState.enter()` via `combat.init`.
 Validated by `CombatState.validate(state: Dictionary) -> bool`.
+
+### Initiative formula (COMBAT-002)
+
+```
+initiative_score = (speed * 3 + agi * 2)
+                 + archetype_mod          # balance.json data.combat.initiative_modifiers.by_archetype
+                 + calling_mod            # by_calling_origin
+                 + trait_mod              # by_dominant_trait (courage > faith > wisdom tiebreak)
+                 + vector_mod             # by_dominant_vector (vanguard > seeker > protector > pillar)
+                 + seed_nudge             # CampaignSeed.derive_from(placement_seed, actor_id) % 10
+```
+
+Sort: **descending** (highest score acts first).
+Tiebreak: original array position in `ectx.actors` (echoes before enemies = party list order).
+
+`active_initiative_index` is always 0 after `combat.init`. COMBAT-004 advances it through the round.
 
 ### `combat.init` action
 
@@ -1863,6 +1881,8 @@ Validated by `CombatState.validate(state: Dictionary) -> bool`.
 - Saves checkpoint, rebuilds `flow.encounter` snapshot via `FlowEncounterState.build_snapshot()`.
 
 **Log event:** `combat.init { actor_count: int, objective: String, round_counter: 0, t: int }`
+
+**Log event (COMBAT-002):** `combat.round_start { round_counter: int, actor_count: int, initiative_order: Array, t: int }`
 
 ### Action slots (COMBAT-001)
 

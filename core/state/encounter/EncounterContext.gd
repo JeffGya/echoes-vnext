@@ -24,6 +24,8 @@ var actors: Array = []
 var placement_seed: int = 0
 # COMBAT-001: combat state dict — set by EncounterRoundsState.enter() via combat.init.
 var combat_state: Dictionary = {}
+# COMBAT-002: initiative config — set by FlowEncounterState.enter() from balance.json data.combat.initiative_modifiers.
+var initiative_cfg: Dictionary = {}
 
 # Optional deterministic notes for debugging / temporary tests
 var notes: Array[String] = []
