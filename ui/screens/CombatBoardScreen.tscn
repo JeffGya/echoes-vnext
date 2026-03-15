@@ -47,9 +47,21 @@ offset_right = 66.0
 offset_bottom = 31.0
 text = "← Back"
 
-[node name="AdvRoundButton" type="Button" parent="." unique_id=248371904]
+[node name="RoundLabel" type="Label" parent="." unique_id=100000004]
+layout_mode = 1
+offset_left = 220.0
+offset_right = 380.0
+offset_bottom = 31.0
+
+[node name="ObjectiveLabel" type="Label" parent="." unique_id=100000005]
+layout_mode = 1
+offset_top = 35.0
+offset_right = 400.0
+offset_bottom = 66.0
+
+[node name="StartCombatButton" type="Button" parent="." unique_id=100000006]
 layout_mode = 1
 offset_left = 72.0
-offset_right = 155.0
+offset_right = 210.0
 offset_bottom = 31.0
-text = "Adv. Round"
+text = "Start Combat"

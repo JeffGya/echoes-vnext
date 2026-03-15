@@ -23,7 +23,9 @@ signal action_requested(action: Dictionary)
 @onready var _token_layer: CombatTokenLayer         = $TokenLayer
 @onready var _distance_layer: CombatDistanceLayer   = $DistanceLayer  # GRID-004
 @onready var _back_button: Button                   = $BackButton
-@onready var _adv_round_button: Button              = $AdvRoundButton  # GRID-005 TEMP
+@onready var _round_label: Label                    = $RoundLabel
+@onready var _objective_label: Label                = $ObjectiveLabel
+@onready var _start_combat_button: Button           = $StartCombatButton
 
 # Clay floor tile: source 0, atlas position (0, 0)
 const _TILE_SOURCE_ID:    int       = 0
@@ -43,9 +45,9 @@ func _ready() -> void:
 	# Wire back button once at startup; action dict is cached per-render.
 	_back_button.visible = false
 	_back_button.pressed.connect(_on_back_pressed)
-	# GRID-005 TEMP — remove when COMBAT-001 adds real combat loop.
-	_adv_round_button.visible = false
-	_adv_round_button.pressed.connect(_on_adv_round_pressed)
+	# COMBAT-001: Start Combat button triggers combat.init.
+	_start_combat_button.visible = false
+	_start_combat_button.pressed.connect(_on_start_combat_pressed)
 
 
 # -------------------------
@@ -63,7 +65,9 @@ func _clear() -> void:
 	_token_layer.clear_tokens()
 	_distance_layer.clear_distances()  # GRID-004
 	_back_button.visible = false
-	_adv_round_button.visible = false  # GRID-005 TEMP
+	_round_label.visible = false
+	_objective_label.visible = false
+	_start_combat_button.visible = false
 	_nav_back_action = {}
 
 func _render(data: Dictionary, actions: Dictionary) -> void:
@@ -77,8 +81,24 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 		_draw_tokens(actors)
 		# GRID-004: show distance debug overlay from actors[0] as reference.
 		_distance_layer.update_distances(actors[0], _board, data)
-		# GRID-005 TEMP: show Adv. Round button whenever actors are present.
-		_adv_round_button.visible = true
+
+	# COMBAT-001: render round counter and objective type from snapshot.
+	_round_label.text = "Round: %d" % int(data.get("round", 0))
+	_round_label.visible = true
+	var obj_type: String = str(data.get("objective_type", ""))
+	_objective_label.text = obj_type
+	_objective_label.visible = not obj_type.is_empty()
+
+	# COMBAT-001: wire cta.combat_init → Start Combat; cta.confirm_round → disabled.
+	if actions.has("cta.combat_init"):
+		_start_combat_button.text = "Start Combat"
+		_start_combat_button.disabled = false
+		_start_combat_button.visible = true
+	elif actions.has("cta.confirm_round"):
+		_start_combat_button.text = "Confirm Round"
+		_start_combat_button.disabled = true
+		_start_combat_button.visible = true
+
 	# Show back button only when the snapshot supplies a nav.back action.
 	if actions.has("nav.back"):
 		var action_v: Variant = actions["nav.back"]
@@ -127,9 +147,9 @@ func _on_back_pressed() -> void:
 		action_requested.emit(_nav_back_action)
 
 
-## GRID-005 TEMP — step-mode round trigger; removed when COMBAT-001 adds real combat loop.
-func _on_adv_round_pressed() -> void:
-	action_requested.emit({ "type": "debug.advance_round" })
+## COMBAT-001: triggers combat.init to initialize CombatState.
+func _on_start_combat_pressed() -> void:
+	action_requested.emit({ "type": "combat.init" })
 
 
 func _on_action(action: Dictionary) -> void:

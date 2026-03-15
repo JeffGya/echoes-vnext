@@ -1827,10 +1827,54 @@ Returned by `MeleeBehaviorModule.select_intent()` when a nearest enemy exists at
 
 Existing callers that omit `"board_cfg"` are safe — `is_valid_pos()` uses 10×10 fallbacks.
 
-#### `debug.advance_round` (GRID-005 TEMP — removed at COMBAT-001)
+#### `debug.advance_round` (GRID-005 TEMP — **removed at COMBAT-001**)
 
-A temporary debug action that triggers one full round for all non-dead actors.
-- Emitted by the "Adv. Round" button in `CombatBoardScreen` (step mode — one press = one round).
-- Handled by `FlowRuntime._handle_debug_advance_round()`.
-- Uses `MeleeBehaviorModule` for all actors (debug only — real per-actor module selection at COMBAT-001).
-- After all actors advance, calls `flow_machine.refresh_snapshot()` — token positions update automatically because `actor["grid_pos"]` dicts in `last_snapshot["data"]["actors"]` are live references.
+Replaced by `combat.init`. See Combat Core section below.
+
+---
+
+## Combat Core
+
+### CombatState shape
+
+`CombatState` is a plain Dictionary created via `CombatState.create(actors, objective)`:
+
+```gdscript
+{
+    "actors":        Array,   # deep copy of placed actors at combat start
+    "objective":     String,  # from EncounterContext.resolution_mode
+    "round_counter": int,     # starts at 0
+}
+```
+
+Stored on `EncounterContext.combat_state`. Set by `EncounterRoundsState.enter()` via `combat.init`.
+Validated by `CombatState.validate(state: Dictionary) -> bool`.
+
+### `combat.init` action
+
+```gdscript
+{ "type": "combat.init" }
+```
+
+- Emitted by `StartCombatButton` in `CombatBoardScreen`.
+- Handled by `FlowRuntime._handle_combat_init()`.
+- Transitions EncounterStateMachine to `encounter.rounds`.
+- Creates `CombatState` on `EncounterContext.combat_state`.
+- Saves checkpoint, rebuilds `flow.encounter` snapshot via `FlowEncounterState.build_snapshot()`.
+
+**Log event:** `combat.init { actor_count: int, objective: String, round_counter: 0, t: int }`
+
+### Action slots (COMBAT-001)
+
+| Slot | Present when | Action type |
+|------|-------------|-------------|
+| `cta.combat_init` | Before `combat.init` | `combat.init` |
+| `cta.confirm_round` | After `combat.init` (disabled until COMBAT-004) | `combat.confirm_round` |
+
+### `FlowEncounterState.build_snapshot()` pattern
+
+Static method — same pattern as `FlowSummonState.build_snapshot()`. Always emits `type: "flow.encounter"`.
+Called from `FlowEncounterState.enter()` and `FlowRuntime._handle_combat_init()`.
+
+Reads `ectx.actors`, `ectx.combat_state`, `ectx.placement_seed` from `EncounterContext`.
+`ectx.actors` is set once in `FlowEncounterState.enter()` after `GridService.place_actors()`.

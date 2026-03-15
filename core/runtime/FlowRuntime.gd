@@ -126,9 +126,9 @@ func dispatch(action: Dictionary) -> Dictionary:
 		"debug.echo.gen_test":
 			_handle_debug_echo_gen_test(t)
 
-		# ---- Debug Round (GRID-005 TEMP — remove at COMBAT-001) ----
-		"debug.advance_round":
-			_handle_debug_advance_round(t)
+		# ---- Combat ----
+		"combat.init":
+			_handle_combat_init(t)
 
 		# ---- Encounter ----
 		"encounter.advance":
@@ -563,44 +563,34 @@ func _handle_debug_seed_set(action: Dictionary, t: int, do_reset: bool) -> void:
 	# IMPORTANT: no flow transition occurs, so refresh snapshot immediately
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
-## GRID-005 TEMP — debug round stepper; removed at COMBAT-001.
-## Runs one full turn for every non-dead actor using MeleeBehaviorModule (debug only).
-## Actor grid_pos dicts are live refs in last_snapshot["data"]["actors"] — mutations
-## propagate automatically when refresh_snapshot() re-emits the snapshot.
-func _handle_debug_advance_round(t: int) -> void:
-	var snap_data: Dictionary = flow_ctx.last_snapshot.get("data", {})
-	var actors_v: Variant = snap_data.get("actors", [])
-	var actors: Array = actors_v if actors_v is Array else []
-	if actors.is_empty():
-		logger.debug(t, "debug.advance_round.skipped", "No actors in snapshot", {})
+## COMBAT-001: initializes CombatState, logs combat.init, saves, and rebuilds snapshot.
+func _handle_combat_init(t: int) -> void:
+	if flow_ctx.encounter_ctx == null or flow_ctx.encounter_machine == null:
+		logger.debug(t, "combat.init.no_op", "combat.init with no encounter context", {})
 		return
 
-	var balance: Dictionary = flow_ctx.config_service.get_balance()
-	var data_v: Variant = balance.get("data", {})
-	var data: Dictionary = data_v if data_v is Dictionary else {}
-	var board_cfg_v: Variant = data.get("grid", {})
-	var board_cfg: Dictionary = board_cfg_v if board_cfg_v is Dictionary else {}
-	var actor_cfg_v: Variant = data.get("actor", {})
-	var actor_cfg: Dictionary = actor_cfg_v if actor_cfg_v is Dictionary else {}
+	# If machine hasn't been started yet (edge case), start it first.
+	if flow_ctx.encounter_ctx.phase_snapshot.is_empty():
+		flow_ctx.encounter_machine.start(flow_ctx.encounter_ctx, logger, t)
 
-	for actor_v in actors:
-		if not actor_v is Dictionary:
-			continue
-		var actor: Dictionary = actor_v as Dictionary
-		if actor.get("is_dead", false):
-			continue
-		# GRID-005 TEMP: inject MeleeBehaviorModule for all actors so each actor
-		# closes the gap toward its nearest enemy. Real per-actor module selection
-		# happens at COMBAT-001 when the actual combat loop is built.
-		var sm := ActorStateMachine.new(actor, MeleeBehaviorModule.new(), actor_cfg)
-		sm.advance_turn({
-			"actor":      actor,
-			"all_actors": actors,
-			"t":          t,
-			"round":      t,
-			"board_cfg":  board_cfg,
-		}, logger, t)
+	# Transition to ROUNDS — EncounterRoundsState.enter() creates CombatState on ectx.
+	flow_ctx.encounter_machine.transition(
+		EncounterStateIds.ROUNDS, flow_ctx.encounter_ctx, logger, t, "combat.init")
 
+	# Log after EncounterRoundsState.enter() has set combat_state.
+	var cs: Dictionary = flow_ctx.encounter_ctx.combat_state
+	logger.info(t, "combat.init", "Combat state initialized", {
+		"actor_count":   cs.get("actors", []).size(),
+		"objective":     cs.get("objective", ""),
+		"round_counter": int(cs.get("round_counter", 0)),
+	})
+
+	# Save checkpoint on combat start.
+	flow_ctx.save_request = true
+	flow_ctx.save_request_reason = "combat.init"
+
+	# Rebuild flow.encounter snapshot with combat state included.
+	flow_ctx.last_snapshot = FlowEncounterState.build_snapshot(flow_ctx, t)
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 

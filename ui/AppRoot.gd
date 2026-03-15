@@ -251,6 +251,7 @@ func _run_tests(parts: Array) -> void:
 	VectorTests.register(runner)
 	DirectiveTests.register(runner)  # DIRECTIVE-001
 	GridTests.register(runner)       # GRID-001
+	CombatStateTests.register(runner)  # COMBAT-001
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [

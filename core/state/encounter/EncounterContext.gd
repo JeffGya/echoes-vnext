@@ -18,5 +18,12 @@ var round_index: int = 0
 var save_request: bool = false
 var save_request_reason: String = ""
 
+# COMBAT-001: placed actor list — stored after GridService.place_actors(); write-once.
+var actors: Array = []
+# COMBAT-001: placement seed — stored alongside actors for snapshot replay.
+var placement_seed: int = 0
+# COMBAT-001: combat state dict — set by EncounterRoundsState.enter() via combat.init.
+var combat_state: Dictionary = {}
+
 # Optional deterministic notes for debugging / temporary tests
 var notes: Array[String] = []

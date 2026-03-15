@@ -4,7 +4,7 @@ extends State
 
 func _init(id: String = FlowStateIds.ENCOUNTER) -> void:
 	super(id)
-	
+
 func enter(ctx: RefCounted, t: int) -> void:
 	var flow_ctx := ctx as FlowContext
 
@@ -20,19 +20,14 @@ func enter(ctx: RefCounted, t: int) -> void:
 		flow_ctx.encounter_machine = EncounterStateMachine.new()
 		flow_ctx.encounter_machine.register_default_states()
 
-	# Pass-through the encounter phase snapshot to UI.
-	flow_ctx.last_snapshot = flow_ctx.encounter_ctx.phase_snapshot
-	
 	# GRID-001: read board config from balance.json data.grid block.
 	var grid_cfg: Dictionary = {}
 	if flow_ctx.config_service != null:
 		var balance: Dictionary = flow_ctx.config_service.get_balance()
 		var bdata: Dictionary = balance.get("data", {})
 		grid_cfg = bdata.get("grid", {})
-	var board_cols: int = GridService.get_board_cols(grid_cfg)
-	var board_rows: int = GridService.get_board_rows(grid_cfg)
 
-	# If the encounter machine hasn't produced a phase snapshot yet, show the combat board scaffold.
+	# Build actors only once (when phase_snapshot is empty = first entry before machine starts).
 	if flow_ctx.encounter_ctx.phase_snapshot.is_empty():
 
 		# GRID-002: build echo actor list from the active party in save_data.
@@ -55,10 +50,7 @@ func enter(ctx: RefCounted, t: int) -> void:
 			enemy_actors.append(EnemyActor.from_definition(defn, t))
 		enemy_actors.sort_custom(func(a, b): return a["id"] < b["id"])
 
-		# GRID-003: deterministic seeded placement — replaces the GRID-002 manual loops.
-		# Placement score = floor((agi + speed) / 2) + archetype_mod + calling_mod
-		#                   + trait_mod + vector_mod (all read fresh at combat start).
-		# All modifier tables live in balance.json data.grid.placement_modifiers.
+		# GRID-003: deterministic seeded placement.
 		var place_cfg: Dictionary = grid_cfg.get("placement_modifiers", {})
 		var placement_seed: int = 0
 		var rng := RandomNumberGenerator.new()
@@ -72,8 +64,12 @@ func enter(ctx: RefCounted, t: int) -> void:
 
 		GridService.place_actors(echo_actors, enemy_actors, grid_cfg, rng, place_cfg)
 
-		# GRID-003: log combat.actor.spawned — includes placement_seed for determinism audit.
+		# COMBAT-001: store placed actors and seed on ectx for snapshot rebuilds.
 		var all_actors: Array = echo_actors + enemy_actors
+		flow_ctx.encounter_ctx.actors = all_actors.duplicate(true)
+		flow_ctx.encounter_ctx.placement_seed = placement_seed
+
+		# GRID-003: log combat.actor.spawned — includes placement_seed for determinism audit.
 		if flow_ctx.logger != null:
 			for actor in all_actors:
 				flow_ctx.logger.info(t, "combat.actor.spawned",
@@ -82,33 +78,74 @@ func enter(ctx: RefCounted, t: int) -> void:
 					  "faction": actor.get("faction", ""), "grid_pos": actor["grid_pos"],
 					  "placement_seed": placement_seed })
 
-		flow_ctx.last_snapshot = {
-			"type": FlowStateIds.ENCOUNTER,
-			"data": {
-				"title": "Encounter",
-				"encounter_id": flow_ctx.encounter_ctx.encounter_id,
-				"resolution_mode": flow_ctx.encounter_ctx.resolution_mode,
-				# GRID-001: board dimensions for CombatBoardScreen renderer
-				"board_cols": board_cols,
-				"board_rows": board_rows,
-				# GRID-002: spawned actor list for token rendering
-				"actors": all_actors,
-				# GRID-003: placement seed for determinism audit
-				"placement_seed": placement_seed,
-			},
-			"actions": {
-				"nav.back": {
-					"type": "flow.go_state",
-					"to": FlowStateIds.SANCTUM,
-					"label": "← Back",
-					"slot": "nav.back",
-				},
-			},
-			"meta": { "t": t }
-		}
-		return
+	# COMBAT-001: always build snapshot via static builder (type always "flow.encounter").
+	flow_ctx.last_snapshot = FlowEncounterState.build_snapshot(flow_ctx, t)
 
-	flow_ctx.last_snapshot = flow_ctx.encounter_ctx.phase_snapshot
-	
 func exit(ctx: RefCounted, t: int) -> void:
 	pass
+
+
+## COMBAT-001: static snapshot builder — always emits type "flow.encounter".
+## Reads ectx.actors, ectx.combat_state, ectx.placement_seed.
+## Called from enter() and from FlowRuntime._handle_combat_init().
+static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
+	# Read board config.
+	var grid_cfg: Dictionary = {}
+	if flow_ctx.config_service != null:
+		var balance: Dictionary = flow_ctx.config_service.get_balance()
+		var bdata: Dictionary = balance.get("data", {})
+		grid_cfg = bdata.get("grid", {})
+	var board_cols: int = GridService.get_board_cols(grid_cfg)
+	var board_rows: int = GridService.get_board_rows(grid_cfg)
+
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	var actors: Array = ectx.actors if ectx != null else []
+	var combat_state: Dictionary = ectx.combat_state if ectx != null else {}
+	var encounter_id: String = ectx.encounter_id if ectx != null else ""
+	var placement_seed: int = ectx.placement_seed if ectx != null else 0
+
+	var objective_type: String = ""
+	var round: int = 0
+
+	var actions: Dictionary = {
+		"nav.back": {
+			"type":  "flow.go_state",
+			"to":    FlowStateIds.SANCTUM,
+			"label": "← Back",
+			"slot":  "nav.back",
+		},
+	}
+
+	if combat_state.is_empty():
+		# Pre-init: offer Start Combat.
+		actions["cta.combat_init"] = {
+			"type":  "combat.init",
+			"label": "Start Combat",
+			"slot":  "cta.combat_init",
+		}
+	else:
+		# Post-init: show disabled Confirm Round (placeholder — real logic in COMBAT-004).
+		objective_type = str(combat_state.get("objective", ""))
+		round = int(combat_state.get("round_counter", 0))
+		actions["cta.confirm_round"] = {
+			"type":     "combat.confirm_round",
+			"label":    "Confirm Round",
+			"slot":     "cta.confirm_round",
+			"disabled": true,
+		}
+
+	return {
+		"type": FlowStateIds.ENCOUNTER,
+		"data": {
+			"title":          "Encounter",
+			"encounter_id":   encounter_id,
+			"board_cols":     board_cols,
+			"board_rows":     board_rows,
+			"actors":         actors,
+			"placement_seed": placement_seed,
+			"objective_type": objective_type,
+			"round":          round,
+		},
+		"actions": actions,
+		"meta":    { "t": t },
+	}
