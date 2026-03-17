@@ -30,7 +30,10 @@ const FACTION_COLORS: Dictionary = {
 	"npc":       Color(0.20, 0.70, 0.35),
 }
 
-# Internal token list.  Each entry: { pos: Vector2, color: Color, shape: String, label: String }
+# Internal token list.
+# Each entry: { pos: Vector2, color: Color, shape: String, label: String,
+#               hp_ratio: float, hp_color: Color, damage_text: String }
+# hp_ratio/hp_color/damage_text added in COMBAT-003 for HP bars and damage floats.
 var _tokens: Array[Dictionary] = []
 
 
@@ -79,3 +82,26 @@ func _draw() -> void:
 			FONT_SIZE,
 			Color.WHITE
 		)
+
+		# COMBAT-003: HP bar — 44×4 px strip below the token.
+		var bar_w: float  = TOKEN_RADIUS * 2.0
+		var bar_y: float  = pos.y + TOKEN_RADIUS + 3.0
+		var bar_x: float  = pos.x - TOKEN_RADIUS
+		var hp_ratio: float = clampf(tok.get("hp_ratio", 1.0), 0.0, 1.0)
+		var hp_color: Color = tok.get("hp_color", Color.GREEN)
+		draw_rect(Rect2(bar_x, bar_y, bar_w, 4.0), Color(0.15, 0.15, 0.15))
+		if hp_ratio > 0.0:
+			draw_rect(Rect2(bar_x, bar_y, bar_w * hp_ratio, 4.0), hp_color)
+
+		# COMBAT-003: Damage float — red text above the token.
+		var dmg_text: String = tok.get("damage_text", "")
+		if not dmg_text.is_empty():
+			draw_string(
+				font,
+				Vector2(pos.x - TOKEN_RADIUS, pos.y - TOKEN_RADIUS - 2.0),
+				dmg_text,
+				HORIZONTAL_ALIGNMENT_CENTER,
+				TOKEN_RADIUS * 2.0,
+				FONT_SIZE,
+				Color.RED
+			)

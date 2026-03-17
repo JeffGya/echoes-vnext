@@ -26,6 +26,8 @@ var placement_seed: int = 0
 var combat_state: Dictionary = {}
 # COMBAT-002: initiative config — set by FlowEncounterState.enter() from balance.json data.combat.initiative_modifiers.
 var initiative_cfg: Dictionary = {}
+# COMBAT-003: transient round action results — cleared at start of each round; NOT persisted.
+var last_round_results: Array = []
 
 # Optional deterministic notes for debugging / temporary tests
 var notes: Array[String] = []

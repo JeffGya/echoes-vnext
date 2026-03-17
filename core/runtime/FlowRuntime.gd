@@ -130,6 +130,10 @@ func dispatch(action: Dictionary) -> Dictionary:
 		"combat.init":
 			_handle_combat_init(t)
 
+		# COMBAT-003 TEMP: removed at COMBAT-004 once real round loop lands.
+		"debug.advance_round":
+			_handle_debug_advance_round(action, t)
+
 		# ---- Encounter ----
 		"encounter.advance":
 			var to_state := str(action.get("to", ""))
@@ -599,6 +603,98 @@ func _handle_combat_init(t: int) -> void:
 	# Rebuild flow.encounter snapshot with combat state included.
 	flow_ctx.last_snapshot = FlowEncounterState.build_snapshot(flow_ctx, t)
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+## COMBAT-003 TEMP: round resolver — full initiative pass, action dispatch, snapshot rebuild.
+## Removed at COMBAT-004 when the real round loop replaces this debug shortcut.
+func _handle_debug_advance_round(_action: Dictionary, t: int) -> void:
+	if flow_ctx.encounter_ctx == null or flow_ctx.encounter_ctx.combat_state.is_empty():
+		logger.debug(t, "combat.advance_round.no_op", "Advance round: no active combat state", {})
+		return
+
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	var combat_state: Dictionary = ectx.combat_state
+
+	# Read config blocks.
+	var balance: Dictionary = config_service.get_balance()
+	var bdata: Dictionary = balance.get("data", {})
+	var grid_cfg: Dictionary = bdata.get("grid", {})
+	var actor_cfg: Dictionary = bdata.get("actor", {})
+
+	# 1. Clear round-scoped state on all actors (guard_state is runtime-only — not persisted).
+	for actor_v in ectx.actors:
+		if actor_v is Dictionary:
+			actor_v["guard_state"] = false
+	ectx.last_round_results = []
+
+	# 2. Advance round counter.
+	combat_state["round_counter"] = int(combat_state.get("round_counter", 0)) + 1
+	var round: int = int(combat_state["round_counter"])
+
+	# 3. Resolve each actor's turn in initiative order.
+	var initiative_order: Array = combat_state.get("initiative_order", [])
+	for entry_v in initiative_order:
+		if not entry_v is Dictionary:
+			continue
+		var actor_id: String = str(entry_v.get("id", ""))
+		var actor: Dictionary = _find_actor_by_id(ectx.actors, actor_id)
+		if actor.is_empty() or actor.get("is_dead", false):
+			continue
+
+		# Build per-turn context — matches ActorStateMachine.advance_turn() contract.
+		var ctx: Dictionary = {
+			"all_actors": ectx.actors,
+			"board_cfg":  grid_cfg,
+			"cfg":        balance,   # ActorStateMachine reads cfg.data.emotion.fear_threshold
+			"t":          t,
+			"round":      round,
+		}
+
+		# Create per-actor state machine and advance the turn.
+		var asm := ActorStateMachine.new(actor, null, actor_cfg)
+		var intent: Dictionary = asm.advance_turn(ctx, logger, t)
+
+		match intent.get("action_type", ""):
+			"melee_attack":
+				var target_id: String = str(intent.get("target_id", ""))
+				var target: Dictionary = _find_actor_by_id(ectx.actors, target_id)
+				if target.is_empty():
+					continue
+				var result: Dictionary = CombatService.resolve_action("melee_attack", actor, target, round)
+				if not result.is_empty():
+					ectx.last_round_results.append(result)
+					logger.info(t, "combat.action_resolved", "Melee resolved", result)
+			"actor.guard":
+				var result: Dictionary = CombatService.resolve_action("actor.guard", actor, {}, round)
+				if not result.is_empty():
+					ectx.last_round_results.append(result)
+					logger.info(t, "combat.guard_taken", "Actor guarding", { "actor_id": actor.get("id", "") })
+			"actor.refuse":
+				# Absolute Fear Rule was already logged in ActorStateMachine — just record it here.
+				logger.info(t, "combat.action_refused", "Actor refused (Absolute Fear Rule)", {
+					"actor_id": actor.get("id", ""),
+					"fear":     int(actor.get("fear", 0)),
+				})
+			_:
+				pass  # actor.move, actor.idle, protect_ally, etc. — resolved elsewhere or no-op
+
+	# 4. Log round end.
+	logger.info(t, "combat.round_end", "Round complete", {
+		"round":         round,
+		"results_count": ectx.last_round_results.size(),
+	})
+
+	# 5. Rebuild snapshot so CombatBoardScreen sees updated HP, guard flags, and action_results.
+	flow_ctx.last_snapshot = FlowEncounterState.build_snapshot(flow_ctx, t)
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+## Returns the first actor dict matching actor_id in the array, or {} if not found.
+func _find_actor_by_id(actors: Array, actor_id: String) -> Dictionary:
+	for a_v in actors:
+		if a_v is Dictionary and str(a_v.get("id", "")) == actor_id:
+			return a_v
+	return {}
 
 
 func _generate_seed_root_string() -> String:

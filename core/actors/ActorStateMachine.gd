@@ -90,6 +90,25 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 			"movement_skipped": true,
 		})
 
+	# COMBAT-003: Absolute Fear Rule — fires pre-arbiter when fear >= threshold (default 80).
+	# GDD: "fear_current drives refusal/guard/retreat; can override ALL at extreme threshold."
+	var fear_threshold: int = int(context.get("cfg", {}).get("data", {}).get("emotion", {}).get("fear_threshold", 80))
+	if int(_actor.get("fear", 0)) >= fear_threshold:
+		var refuse_intent: Dictionary = {
+			"action_type": "actor.refuse",
+			"target_id":   "",
+			"actor_id":    str(_actor.get("id", "")),
+			"priority":    0.0,
+		}
+		_last_intent = refuse_intent
+		_last_action = refuse_intent.duplicate()
+		logger.info(t, "actor.refused", "Absolute Fear Rule triggered", {
+			"actor_id": str(_actor.get("id", "")),
+			"fear":     int(_actor.get("fear", 0)),
+			"threshold": fear_threshold,
+		})
+		return refuse_intent
+
 	var intent: Dictionary = _behavior_module.select_intent(context)
 	_last_intent = intent
 	# ACTOR-007: read morale metadata annotated by BehaviorArbiter onto the winner.

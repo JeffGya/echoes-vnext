@@ -26,6 +26,8 @@ signal action_requested(action: Dictionary)
 @onready var _round_label: Label                    = $RoundLabel
 @onready var _objective_label: Label                = $ObjectiveLabel
 @onready var _start_combat_button: Button           = $StartCombatButton
+# COMBAT-003 TEMP: removed at COMBAT-004.
+@onready var _adv_round_button: Button              = $AdvRoundButton
 # COMBAT-002: Initiative panel overlay.
 @onready var _initiative_panel: PanelContainer      = $InitiativePanel
 @onready var _initiative_list: VBoxContainer        = $InitiativePanel/InitiativeList
@@ -51,6 +53,9 @@ func _ready() -> void:
 	# COMBAT-001: Start Combat button triggers combat.init.
 	_start_combat_button.visible = false
 	_start_combat_button.pressed.connect(_on_start_combat_pressed)
+	# COMBAT-003 TEMP: Adv. Round button — hidden until after Start Combat.
+	_adv_round_button.visible = false
+	_adv_round_button.pressed.connect(_on_adv_round_pressed)
 	# COMBAT-002: Initiative panel hidden until combat is initialised.
 	_initiative_panel.visible = false
 
@@ -73,6 +78,7 @@ func _clear() -> void:
 	_round_label.visible = false
 	_objective_label.visible = false
 	_start_combat_button.visible = false
+	_adv_round_button.visible = false
 	_nav_back_action = {}
 	# COMBAT-002: reset initiative panel.
 	_initiative_panel.visible = false
@@ -87,7 +93,7 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	# GRID-002: draw actor tokens if the snapshot includes an actor list.
 	var actors: Array = data.get("actors", [])
 	if not actors.is_empty():
-		_draw_tokens(actors)
+		_draw_tokens(actors, data)
 		# GRID-004: show distance debug overlay from actors[0] as reference.
 		_distance_layer.update_distances(actors[0], _board, data)
 
@@ -107,6 +113,8 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 		_start_combat_button.text = "Confirm Round"
 		_start_combat_button.disabled = true
 		_start_combat_button.visible = true
+		# COMBAT-003 TEMP: show Adv. Round only post-init.
+		_adv_round_button.visible = true
 
 	# Show back button only when the snapshot supplies a nav.back action.
 	if actions.has("nav.back"):
@@ -164,6 +172,12 @@ func _on_start_combat_pressed() -> void:
 	action_requested.emit({ "type": "combat.init" })
 
 
+## COMBAT-003 TEMP: advances one full round via debug handler in FlowRuntime.
+## Removed at COMBAT-004 when the real round loop replaces this shortcut.
+func _on_adv_round_pressed() -> void:
+	action_requested.emit({ "type": "debug.advance_round" })
+
+
 func _on_action(action: Dictionary) -> void:
 	action_requested.emit(action)
 
@@ -175,7 +189,17 @@ func _on_action(action: Dictionary) -> void:
 ## Converts the actor list from the snapshot into token descriptors and
 ## passes them to the CombatTokenLayer for drawing.
 ## _center_board() must be called first so _board.position is set correctly.
-func _draw_tokens(actors: Array) -> void:
+## COMBAT-003: reads action_results from data to build a damage lookup by target_id.
+func _draw_tokens(actors: Array, data: Dictionary = {}) -> void:
+	# Build damage lookup: target_id → damage string (e.g. "-12").
+	var damage_by_id: Dictionary = {}
+	for result_v in data.get("action_results", []):
+		if result_v is Dictionary and result_v.get("action_type", "") == "melee_attack":
+			var tid: String = str(result_v.get("target_id", ""))
+			var dmg: int    = int(result_v.get("damage", 0))
+			if not tid.is_empty() and dmg > 0:
+				damage_by_id[tid] = "-%d" % dmg
+
 	var tokens: Array[Dictionary] = []
 	for actor in actors:
 		var gp: Dictionary = actor.get("grid_pos", {})
@@ -188,11 +212,28 @@ func _draw_tokens(actors: Array) -> void:
 		var faction: String = actor.get("faction", "")
 		var shape := "square" if actor.get("is_structure", false) else "circle"
 		var name_str: String = actor.get("name", "??")
+		var actor_id: String = str(actor.get("id", ""))
+
+		# COMBAT-003: HP bar ratio + colour.
+		var max_hp: float  = float(actor.get("stats", {}).get("max_hp", 1))
+		var cur_hp: float  = float(actor.get("current_hp", max_hp))
+		var hp_ratio: float = clampf(cur_hp / max(max_hp, 1.0), 0.0, 1.0)
+		var hp_color: Color
+		if hp_ratio > 0.5:
+			hp_color = Color.GREEN
+		elif hp_ratio > 0.25:
+			hp_color = Color.YELLOW
+		else:
+			hp_color = Color.RED
+
 		tokens.append({
-			"pos":   cell_pos,
-			"color": _faction_color(faction),
-			"shape": shape,
-			"label": name_str.substr(0, 2).to_upper(),
+			"pos":         cell_pos,
+			"color":       _faction_color(faction),
+			"shape":       shape,
+			"label":       name_str.substr(0, 2).to_upper(),
+			"hp_ratio":    hp_ratio,
+			"hp_color":    hp_color,
+			"damage_text": damage_by_id.get(actor_id, ""),
 		})
 	_token_layer.update_tokens(tokens)
 

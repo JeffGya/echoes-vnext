@@ -37,35 +37,39 @@ var _cfg: Dictionary
 # Used when _cfg is empty (no balance.json block passed in).
 const _DEFAULTS := {
 	"intent_weights_by_calling_origin": {
-		"guardian": { "melee_attack": 20, "protect_ally": 65, "actor.idle": 10 },
-		"warrior":  { "melee_attack": 65, "protect_ally": 10, "actor.idle": 10 },
-		"archer":   { "melee_attack": 45, "protect_ally": 10, "actor.idle": 10 },
-		"uncalled": { "melee_attack": 40, "protect_ally": 15, "actor.idle": 20 },
+		"guardian": { "melee_attack": 20, "protect_ally": 65, "actor.guard": 45, "actor.idle": 10 },
+		"warrior":  { "melee_attack": 65, "protect_ally": 10, "actor.guard": 15, "actor.idle": 10 },
+		"archer":   { "melee_attack": 45, "protect_ally": 10, "actor.guard": 20, "actor.idle": 10 },
+		"uncalled": { "melee_attack": 40, "protect_ally": 15, "actor.guard": 25, "actor.idle": 20 },
 	},
 	"default_intent_weight": 5.0,
 	"trait_action_muls": {
 		"melee_attack": { "courage": 0.35, "wisdom": 0.05, "faith": 0.00 },
 		"protect_ally": { "courage": 0.10, "wisdom": 0.05, "faith": 0.50 },
+		"actor.guard":  { "courage": 0.20, "wisdom": 0.10, "faith": 0.30 },
 		"actor.idle":   { "courage": 0.00, "wisdom": 0.20, "faith": 0.05 },
 	},
 	"vector_action_muls": {
 		"melee_attack": { "vanguard": 0.40, "protector": 0.00, "seeker": 0.15, "pillar": 0.00 },
 		"protect_ally": { "vanguard": 0.00, "protector": 0.45, "seeker": 0.00, "pillar": 0.15 },
+		"actor.guard":  { "vanguard": 0.00, "protector": 0.50, "seeker": 0.00, "pillar": 0.20 },
 		"actor.idle":   { "vanguard": 0.00, "protector": 0.00, "seeker": 0.10, "pillar": 0.20 },
 	},
 	"directive_action_muls": {
 		"melee_attack": { "objective_advance_priority": 1.0, "engage_only_blockers": 1.0 },
 		"protect_ally": { "ally_protection_bias": 1.0, "threat_interception": 1.0 },
+		"actor.guard":  { "ally_protection_bias": 1.0, "survival_bias": 1.0 },
 		"actor.idle":   { "survival_bias": 1.0, "prefer_disengage": 1.0, "resource_efficiency": 1.0 },
 	},
 	"morale_action_muls": {
 		"melee_attack": { "broken": -20, "shaken": -8, "steady": 0, "inspired": 12 },
 		"protect_ally": { "broken": -8,  "shaken": -3, "steady": 0, "inspired": 6  },
+		"actor.guard":  { "broken": 20,  "shaken": 10, "steady": 0, "inspired": -5 },
 		"actor.idle":   { "broken": 15,  "shaken": 6,  "steady": 0, "inspired": -5 },
 	},
 	"directive_base_bonus":  20.0,
 	"fear_active_dampen":    0.6,
-	"fear_passive_actions":  ["actor.idle"],
+	"fear_passive_actions":  ["actor.idle", "actor.guard"],
 	"threat_threshold":      0.5,
 }
 
@@ -126,6 +130,10 @@ func _generate_candidates(actor: Dictionary, all_actors: Array) -> Array[Diction
 
 	# actor.idle is always a candidate — the unconditional safe fallback.
 	candidates.append({ "action_type": "actor.idle", "target_id": "", "priority": 0.0 })
+
+	# actor.guard — unconditional basic action (GDD: all echoes can defend/guard).
+	# Arbiter scoring determines when it wins; Protector vector + guardian calling bias heavily.
+	candidates.append({ "action_type": "actor.guard", "target_id": "", "priority": 0.0 })
 
 	# melee_attack: only when an enemy is adjacent (dist == 1).
 	var nearest_enemy: Dictionary = ActorService.get_nearest_enemy(actor, all_actors)

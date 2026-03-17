@@ -156,6 +156,8 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"round":                    round,
 			"initiative_order":         initiative_order,
 			"active_initiative_index":  active_initiative_index,
+			# COMBAT-003: transient action results from the last resolved round.
+			"action_results":           ectx.last_round_results.duplicate() if ectx != null else [],
 		},
 		"actions": actions,
 		"meta":    { "t": t },

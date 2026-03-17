@@ -96,4 +96,6 @@ static func get_defaults() -> Dictionary:
 		"death_round":    0,
 		# GRID-002: combat board position — assigned by GridService.assign_grid_pos()
 		"grid_pos":       { "col": 0, "row": 0 },
+		# COMBAT-003: runtime defensive stance — cleared at round start; NOT persisted.
+		"guard_state":    false,
 	}

@@ -1898,3 +1898,99 @@ Called from `FlowEncounterState.enter()` and `FlowRuntime._handle_combat_init()`
 
 Reads `ectx.actors`, `ectx.combat_state`, `ectx.placement_seed` from `EncounterContext`.
 `ectx.actors` is set once in `FlowEncounterState.enter()` after `GridService.place_actors()`.
+
+---
+
+### Action Inventory (COMBAT-003)
+
+Full dispatch table — authoritative reference for all action types:
+
+| Action Type | Source | Resolver scope | Notes |
+|---|---|---|---|
+| `melee_attack` | BehaviorArbiter | **Full** — damage resolver | Stats + emotions only (no trait/vector) |
+| `actor.guard` | BehaviorArbiter | **Full** — sets guard_state | Unconditional candidate; all echoes eligible |
+| `actor.refuse` | ActorStateMachine (pre-arbiter) | **Full** — Absolute Fear Rule | No HP/state mutation; fear ≥ threshold |
+| `protect_ally` | BehaviorArbiter | **Stub** — `{}` | Movement resolved elsewhere |
+| `actor.move` | MeleeBehaviorModule | **No-op** — GridService resolves | Already implemented in ASM movement resolver |
+| `actor.idle` | BehaviorArbiter | **No-op** — `{}` | Safe fallback |
+| `actor.retreat` | *(future)* | **Stub** — `{}` | Fear-driven; GridService.move_away() not yet built |
+| `actor.interact` | *(future)* | **Stub** — `{}` | Objective actions (shrine purify, totem) |
+
+### CombatService dispatch contract (COMBAT-003)
+
+```gdscript
+static func resolve_action(action_type: String, attacker: Dictionary,
+        defender: Dictionary, round: int) -> Dictionary
+```
+
+- `melee_attack` → `_resolve_melee()` — damage + guard check + kill detection
+- `actor.guard` → `_resolve_guard()` — sets `attacker["guard_state"] = true`
+- `actor.refuse` → `{ "action_type": "actor.refuse", "refused": true, "actor_id": ... }` — no mutation
+- `protect_ally`, `actor.retreat`, `actor.interact` → `{}` (stubs)
+- `actor.move`, `actor.idle`, `_` → `{}` (no-ops)
+
+#### Melee damage formula
+
+```
+effective_def = defender["def"] * 2  if defender["guard_state"] == true  else defender["def"]
+base_damage   = max(0, attacker["atk"] - effective_def)
+morale_bonus  = (attacker["morale"] - 50) / 10   # int div: −5 to +5
+fear_penalty  = attacker["fear"] / 20              # int div: 0 to 5
+damage        = max(0, base_damage + morale_bonus - fear_penalty)
+```
+
+Stats + emotions only. Calling / trait / vector modifiers are for equipment/weapon compatibility — not base melee.
+
+#### ActionResultSnapshot shapes
+
+```gdscript
+# melee_attack
+{ "action_type": "melee_attack", "attacker_id": String, "target_id": String,
+  "damage": int, "defender_hp_before": int, "defender_hp_after": int }
+
+# actor.guard
+{ "action_type": "actor.guard", "actor_id": String, "guard_state": true }
+
+# actor.refuse
+{ "action_type": "actor.refuse", "refused": true, "actor_id": String }
+
+# all stubs / no-ops
+{}
+```
+
+### guard_state lifecycle (COMBAT-003)
+
+- **Field:** `guard_state: false` — added to `ActorSchema.get_defaults()` (runtime only, not save-backed)
+- **Set:** by `CombatService._resolve_guard()` when actor's turn action is `actor.guard`
+- **Cleared:** by `FlowRuntime._handle_debug_advance_round()` at the start of each round for all actors
+- **Effect:** doubles `effective_def` in `CombatService._melee_damage()` for that round
+- **Persist:** NOT persisted — runtime combat state only; rebuilt each encounter
+
+### Absolute Fear Rule (COMBAT-003)
+
+Pre-arbiter check in `ActorStateMachine.advance_turn()`, before any module call:
+
+```gdscript
+var fear_threshold: int = int(context.get("cfg", {}).get("data", {}).get("emotion", {}).get("fear_threshold", 80))
+if int(actor.get("fear", 0)) >= fear_threshold:
+    # log actor.refused, return actor.refuse intent immediately
+```
+
+`fear_threshold` defaults to `80` (matches `balance.json data.emotion.fear_threshold`).
+`CombatService.resolve_action("actor.refuse", ...)` returns refused dict — no HP/state mutation.
+
+### last_round_results (COMBAT-003)
+
+- `EncounterContext.var last_round_results: Array = []` — transient field, cleared each round start
+- Populated by `FlowRuntime._handle_debug_advance_round()` with non-empty ActionResultSnapshot dicts
+- `FlowEncounterState.build_snapshot()` adds `"action_results": last_round_results.duplicate()` to `data`
+
+### New log events (COMBAT-003)
+
+| Event | Fired when | Key payload fields |
+|---|---|---|
+| `combat.action_resolved` | Melee resolved via debug.advance_round | full melee result dict |
+| `combat.guard_taken` | Actor guards via debug.advance_round | `actor_id` |
+| `combat.action_refused` | Actor refuses due to Absolute Fear | `actor_id`, `fear` |
+| `actor.refused` | Fear threshold check inside ActorStateMachine | `actor_id`, `fear` |
+| `combat.round_end` | End of each debug.advance_round | `round` |

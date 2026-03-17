@@ -30,12 +30,13 @@ static func register(runner: CoreTestRunner) -> void:
 # Tests
 # -------------------------
 
-# Test 1: broken_morale_idles_despite_adjacent_enemy
+# Test 1: broken_morale_guards_despite_adjacent_enemy
 # Setup: uncalled echo, morale=10 (broken), fear=0, adjacent enemy at dist=1.
 # Score check (hardcoded defaults, zeroed traits):
-#   melee_attack: (base=40 + 0 + 0 + morale_bonus(−20)) × 1.0 = 20.0
-#   actor.idle:   (base=20 + 0 + 0 + morale_bonus(+15)) × 1.0 = 35.0
-# Expected: actor.idle wins — low morale suppresses aggression.
+#   melee_attack: (base=40 + morale_bonus(−20)) × 1.0 = 20.0
+#   actor.idle:   (base=20 + morale_bonus(+15)) × 1.0 = 35.0
+#   actor.guard:  (base=25 + morale_bonus(+20)) × 1.0 = 45.0   ← wins (COMBAT-003)
+# Expected: actor.guard wins — broken morale heavily favours a defensive stance.
 # Demonstrates: morale_bonus is inside the pre-fear bracket and affects candidate ranking.
 static func _t_broken_morale_idles_despite_adjacent_enemy() -> Dictionary:
 	var actor := {
@@ -58,10 +59,11 @@ static func _t_broken_morale_idles_despite_adjacent_enemy() -> Dictionary:
 	var context := { "actor": actor, "all_actors": [enemy], "t": 1 }
 	var intent: Dictionary = arbiter.select_intent(context)
 
-	if str(intent.get("action_type", "")) != "actor.idle":
+	# COMBAT-003: actor.guard (25+20=45) > actor.idle (20+15=35) > melee (40−20=20).
+	if str(intent.get("action_type", "")) != "actor.guard":
 		return {
 			"ok": false,
-			"error": "Expected actor.idle (broken morale: idle=35 > melee=20), got: %s" % str(intent.get("action_type")),
+			"error": "Expected actor.guard (broken morale: guard=45 > idle=35 > melee=20), got: %s" % str(intent.get("action_type")),
 		}
 
 	return { "ok": true }
@@ -119,8 +121,8 @@ static func _t_morale_modifier_carried_in_intent() -> Dictionary:
 
 
 # Test 3: advance_turn_action_log_has_morale_fields
-# Setup: uncalled echo, morale=10 (broken), adjacent enemy → actor.idle wins.
-# Expected: actor.action log entry has morale_tier="broken" and action_weight_modifier=15.
+# Setup: uncalled echo, morale=10 (broken), adjacent enemy → actor.guard wins (COMBAT-003).
+# Expected: actor.action log entry has morale_tier="broken" and action_weight_modifier=20.
 # Demonstrates: ActorStateMachine reads morale metadata from intent and writes it to the action log.
 static func _t_advance_turn_action_log_has_morale_fields() -> Dictionary:
 	var actor := {
@@ -130,7 +132,7 @@ static func _t_advance_turn_action_log_has_morale_fields() -> Dictionary:
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
 		"vector_scores":  {},
 		"fear":           0,
-		"morale":         10,  # broken tier → idle morale_bonus = +15 → action_weight_modifier = 15
+		"morale":         10,  # broken tier → guard morale_bonus = +20 → action_weight_modifier = 20 (COMBAT-003)
 		"grid_pos":       { "col": 0, "row": 0 },
 	}
 	var enemy := {
@@ -168,19 +170,19 @@ static func _t_advance_turn_action_log_has_morale_fields() -> Dictionary:
 
 	if not adata.has("action_weight_modifier"):
 		return { "ok": false, "error": "actor.action data missing 'action_weight_modifier' key" }
-	# idle wins at broken: actor.idle morale_bonus = +15, so action_weight_modifier = 15.
-	if int(adata.get("action_weight_modifier", -999)) != 15:
+	# COMBAT-003: guard wins at broken: actor.guard morale_bonus = +20, so action_weight_modifier = 20.
+	if int(adata.get("action_weight_modifier", -999)) != 20:
 		return {
 			"ok": false,
-			"error": "actor.action action_weight_modifier expected 15 (idle bonus at broken), got: %s" % str(adata.get("action_weight_modifier")),
+			"error": "actor.action action_weight_modifier expected 20 (guard bonus at broken), got: %s" % str(adata.get("action_weight_modifier")),
 		}
 
 	return { "ok": true }
 
 
 # Test 4: snapshot_has_morale_tier_and_modifier
-# Setup: uncalled echo, morale=10 (broken), adjacent enemy → actor.idle wins.
-# Expected: get_snapshot() after advance_turn() returns morale_tier="broken" and action_weight_modifier=15.
+# Setup: uncalled echo, morale=10 (broken), adjacent enemy → actor.guard wins (COMBAT-003).
+# Expected: get_snapshot() after advance_turn() returns morale_tier="broken" and action_weight_modifier=20.
 # Demonstrates: ActorStateMachine exposes morale fields in the debug snapshot.
 static func _t_snapshot_has_morale_tier_and_modifier() -> Dictionary:
 	var actor := {
@@ -190,7 +192,7 @@ static func _t_snapshot_has_morale_tier_and_modifier() -> Dictionary:
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
 		"vector_scores":  {},
 		"fear":           0,
-		"morale":         10,  # broken tier → idle wins → action_weight_modifier = 15
+		"morale":         10,  # broken tier → guard wins → action_weight_modifier = 20 (COMBAT-003)
 		"grid_pos":       { "col": 0, "row": 0 },
 	}
 	var enemy := {
@@ -218,11 +220,11 @@ static func _t_snapshot_has_morale_tier_and_modifier() -> Dictionary:
 
 	if not snapshot.has("action_weight_modifier"):
 		return { "ok": false, "error": "get_snapshot() missing 'action_weight_modifier' key" }
-	# idle wins at broken: actor.idle morale_bonus = +15, so action_weight_modifier = 15.
-	if int(snapshot.get("action_weight_modifier", -999)) != 15:
+	# COMBAT-003: guard wins at broken: actor.guard morale_bonus = +20, so action_weight_modifier = 20.
+	if int(snapshot.get("action_weight_modifier", -999)) != 20:
 		return {
 			"ok": false,
-			"error": "snapshot.action_weight_modifier expected 15 (idle bonus at broken), got: %s" % str(snapshot.get("action_weight_modifier")),
+			"error": "snapshot.action_weight_modifier expected 20 (guard bonus at broken), got: %s" % str(snapshot.get("action_weight_modifier")),
 		}
 
 	return { "ok": true }

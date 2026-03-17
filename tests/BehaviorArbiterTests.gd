@@ -110,13 +110,14 @@ static func _t_high_faith_warrior_can_guard() -> Dictionary:
 	return { "ok": true }
 
 
-# Test 3: high_fear_idles_despite_adjacent_enemy
+# Test 3: high_fear_guards_despite_adjacent_enemy
 # Setup: echo at (0,0), fear=100, enemy at (1,0) dist=1. No threatened ally.
-# Expected: actor.idle wins.
+# Expected: actor.guard wins (highest passive score).
 # Score check with uncalled defaults, zeroed traits:
-#   melee: (base=40) × fear_factor(clamp(1−1.0×0.6)=0.40) = 16.0
-#   idle:  (base=20) × 1.0 (passive, no fear dampen) = 20.0
-# Demonstrates: fear dampens active intents — idle always remains the safe fallback.
+#   melee:  (base=40) × fear_factor(clamp(1−1.0×0.6)=0.40) = 16.0
+#   idle:   (base=20) × 1.0 (passive, no fear dampen) = 20.0
+#   guard:  (base=25) × 1.0 (passive, in fear_passive_actions) = 25.0
+# Demonstrates: fear dampens active intents — guard is the preferred passive action (COMBAT-003).
 static func _t_high_fear_idles_despite_adjacent_enemy() -> Dictionary:
 	var actor := {
 		"id":             "echo_005",
@@ -137,8 +138,9 @@ static func _t_high_fear_idles_despite_adjacent_enemy() -> Dictionary:
 	var context := { "actor": actor, "all_actors": [enemy], "t": 1 }
 	var intent: Dictionary = arbiter.select_intent(context)
 
-	if str(intent.get("action_type", "")) != "actor.idle":
-		return { "ok": false, "error": "Expected actor.idle at fear=100 (melee dampened to 16 < idle 20), got: %s" % str(intent.get("action_type")) }
+	# COMBAT-003: actor.guard (base=25 passive) > actor.idle (base=20 passive) > melee (16 dampened).
+	if str(intent.get("action_type", "")) != "actor.guard":
+		return { "ok": false, "error": "Expected actor.guard at fear=100 (guard=25 > idle=20 > melee=16), got: %s" % str(intent.get("action_type")) }
 
 	return { "ok": true }
 
