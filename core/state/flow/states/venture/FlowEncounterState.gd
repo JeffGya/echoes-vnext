@@ -130,19 +130,22 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"slot":  "cta.combat_init",
 		}
 	else:
-		# Post-init: show disabled Confirm Round (placeholder — real logic in COMBAT-004).
+		# Post-init: COMBAT-004 — Confirm Round is now live (no longer disabled).
 		objective_type = str(combat_state.get("objective", ""))
 		round = int(combat_state.get("round_counter", 0))
 		# COMBAT-002: include initiative order in post-init snapshot.
 		initiative_order = combat_state.get("initiative_order", [])
 		active_initiative_index = int(combat_state.get("active_initiative_index", 0))
-		actions["cta.confirm_round"] = {
-			"type":     "combat.confirm_round",
-			"label":    "Confirm Round",
-			"slot":     "cta.confirm_round",
-			"disabled": true,
-		}
+		# COMBAT-004: omit cta.confirm_round when combat is over (no more rounds).
+		var combat_over: bool = bool(combat_state.get("combat_over", false))
+		if not combat_over:
+			actions["cta.confirm_round"] = {
+				"type":  "combat.confirm_round",
+				"label": "Confirm Round",
+				"slot":  "cta.confirm_round",
+			}
 
+	var combat_over_flag: bool = bool(combat_state.get("combat_over", false))
 	return {
 		"type": FlowStateIds.ENCOUNTER,
 		"data": {
@@ -158,6 +161,9 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"active_initiative_index":  active_initiative_index,
 			# COMBAT-003: transient action results from the last resolved round.
 			"action_results":           ectx.last_round_results.duplicate() if ectx != null else [],
+			# COMBAT-004: end condition fields.
+			"actors_acted":             [],
+			"combat_over":              combat_over_flag,
 		},
 		"actions": actions,
 		"meta":    { "t": t },

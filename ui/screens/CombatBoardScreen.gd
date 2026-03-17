@@ -3,7 +3,6 @@
 # GRID-001: Board configuration + isometric floor tile rendering.
 # GRID-002: Actor tokens drawn at grid_pos cells via CombatTokenLayer.
 # GRID-004: Distance debug overlay via CombatDistanceLayer (dev-facing only).
-# GRID-005: "Adv. Round" step-mode button (TEMP — removed at COMBAT-001).
 #
 # Contract (UI-001):
 # - set_snapshot(snap: Dictionary) → _clear() + _render(data, actions)
@@ -26,8 +25,6 @@ signal action_requested(action: Dictionary)
 @onready var _round_label: Label                    = $RoundLabel
 @onready var _objective_label: Label                = $ObjectiveLabel
 @onready var _start_combat_button: Button           = $StartCombatButton
-# COMBAT-003 TEMP: removed at COMBAT-004.
-@onready var _adv_round_button: Button              = $AdvRoundButton
 # COMBAT-002: Initiative panel overlay.
 @onready var _initiative_panel: PanelContainer      = $InitiativePanel
 @onready var _initiative_list: VBoxContainer        = $InitiativePanel/InitiativeList
@@ -40,6 +37,8 @@ var _current_cols: int       = 10
 var _current_rows: int       = 10
 # Cached nav.back action — set in _render(), read in _on_back_pressed().
 var _nav_back_action: Dictionary = {}
+# COMBAT-004: cached CTA action for the single action button (Start Combat or Confirm Round).
+var _cta_action: Dictionary = {}
 
 
 # -------------------------
@@ -50,12 +49,9 @@ func _ready() -> void:
 	# Wire back button once at startup; action dict is cached per-render.
 	_back_button.visible = false
 	_back_button.pressed.connect(_on_back_pressed)
-	# COMBAT-001: Start Combat button triggers combat.init.
+	# COMBAT-001/004: CTA button — Start Combat pre-init, Confirm Round post-init.
 	_start_combat_button.visible = false
-	_start_combat_button.pressed.connect(_on_start_combat_pressed)
-	# COMBAT-003 TEMP: Adv. Round button — hidden until after Start Combat.
-	_adv_round_button.visible = false
-	_adv_round_button.pressed.connect(_on_adv_round_pressed)
+	_start_combat_button.pressed.connect(_on_cta_pressed)
 	# COMBAT-002: Initiative panel hidden until combat is initialised.
 	_initiative_panel.visible = false
 
@@ -78,8 +74,8 @@ func _clear() -> void:
 	_round_label.visible = false
 	_objective_label.visible = false
 	_start_combat_button.visible = false
-	_adv_round_button.visible = false
 	_nav_back_action = {}
+	_cta_action = {}
 	# COMBAT-002: reset initiative panel.
 	_initiative_panel.visible = false
 	for child in _initiative_list.get_children():
@@ -104,17 +100,17 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	_objective_label.text = obj_type
 	_objective_label.visible = not obj_type.is_empty()
 
-	# COMBAT-001: wire cta.combat_init → Start Combat; cta.confirm_round → disabled.
+	# COMBAT-001/004: CTA button — Start Combat pre-init, Confirm Round post-init.
 	if actions.has("cta.combat_init"):
+		_cta_action = { "type": "combat.init" }
 		_start_combat_button.text = "Start Combat"
 		_start_combat_button.disabled = false
 		_start_combat_button.visible = true
 	elif actions.has("cta.confirm_round"):
+		_cta_action = { "type": "combat.confirm_round" }
 		_start_combat_button.text = "Confirm Round"
-		_start_combat_button.disabled = true
+		_start_combat_button.disabled = false
 		_start_combat_button.visible = true
-		# COMBAT-003 TEMP: show Adv. Round only post-init.
-		_adv_round_button.visible = true
 
 	# Show back button only when the snapshot supplies a nav.back action.
 	if actions.has("nav.back"):
@@ -167,15 +163,10 @@ func _on_back_pressed() -> void:
 		action_requested.emit(_nav_back_action)
 
 
-## COMBAT-001: triggers combat.init to initialize CombatState.
-func _on_start_combat_pressed() -> void:
-	action_requested.emit({ "type": "combat.init" })
-
-
-## COMBAT-003 TEMP: advances one full round via debug handler in FlowRuntime.
-## Removed at COMBAT-004 when the real round loop replaces this shortcut.
-func _on_adv_round_pressed() -> void:
-	action_requested.emit({ "type": "debug.advance_round" })
+## COMBAT-004: emits the cached CTA action (Start Combat or Confirm Round).
+func _on_cta_pressed() -> void:
+	if not _cta_action.is_empty():
+		action_requested.emit(_cta_action)
 
 
 func _on_action(action: Dictionary) -> void:

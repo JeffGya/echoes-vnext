@@ -130,9 +130,9 @@ func dispatch(action: Dictionary) -> Dictionary:
 		"combat.init":
 			_handle_combat_init(t)
 
-		# COMBAT-003 TEMP: removed at COMBAT-004 once real round loop lands.
-		"debug.advance_round":
-			_handle_debug_advance_round(action, t)
+		# COMBAT-004: real round lifecycle — replaces TEMP debug.advance_round.
+		"combat.confirm_round":
+			_handle_combat_confirm_round(t)
 
 		# ---- Encounter ----
 		"encounter.advance":
@@ -605,15 +605,19 @@ func _handle_combat_init(t: int) -> void:
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 
-## COMBAT-003 TEMP: round resolver — full initiative pass, action dispatch, snapshot rebuild.
-## Removed at COMBAT-004 when the real round loop replaces this debug shortcut.
-func _handle_debug_advance_round(_action: Dictionary, t: int) -> void:
+## COMBAT-004: real round lifecycle — replaces TEMP debug.advance_round.
+## Full initiative pass → action dispatch → end condition check → snapshot rebuild.
+func _handle_combat_confirm_round(t: int) -> void:
 	if flow_ctx.encounter_ctx == null or flow_ctx.encounter_ctx.combat_state.is_empty():
-		logger.debug(t, "combat.advance_round.no_op", "Advance round: no active combat state", {})
+		logger.debug(t, "combat.confirm_round.no_op", "Confirm round: no active combat state", {})
 		return
 
 	var ectx: EncounterContext = flow_ctx.encounter_ctx
 	var combat_state: Dictionary = ectx.combat_state
+
+	# Guard: combat already over — ignore stale presses.
+	if bool(combat_state.get("combat_over", false)):
+		return
 
 	# Read config blocks.
 	var balance: Dictionary = config_service.get_balance()
@@ -621,18 +625,23 @@ func _handle_debug_advance_round(_action: Dictionary, t: int) -> void:
 	var grid_cfg: Dictionary = bdata.get("grid", {})
 	var actor_cfg: Dictionary = bdata.get("actor", {})
 
-	# 1. Clear round-scoped state on all actors (guard_state is runtime-only — not persisted).
+	# 1. Log round_start before incrementing.
+	var prev_round: int = int(combat_state.get("round_counter", 0))
+	logger.info(t, "combat.round_start", "Round starting", { "round": prev_round + 1 })
+
+	# 2. Clear round-scoped state on all actors (guard_state is runtime-only — not persisted).
 	for actor_v in ectx.actors:
 		if actor_v is Dictionary:
 			actor_v["guard_state"] = false
 	ectx.last_round_results = []
 
-	# 2. Advance round counter.
-	combat_state["round_counter"] = int(combat_state.get("round_counter", 0)) + 1
+	# 3. Advance round counter.
+	combat_state["round_counter"] = prev_round + 1
 	var round: int = int(combat_state["round_counter"])
 
-	# 3. Resolve each actor's turn in initiative order.
+	# 4. Resolve each actor's turn in initiative order; track actors_acted for the log.
 	var initiative_order: Array = combat_state.get("initiative_order", [])
+	var actors_acted: Array = []
 	for entry_v in initiative_order:
 		if not entry_v is Dictionary:
 			continue
@@ -640,6 +649,8 @@ func _handle_debug_advance_round(_action: Dictionary, t: int) -> void:
 		var actor: Dictionary = _find_actor_by_id(ectx.actors, actor_id)
 		if actor.is_empty() or actor.get("is_dead", false):
 			continue
+
+		actors_acted.append(actor_id)
 
 		# Build per-turn context — matches ActorStateMachine.advance_turn() contract.
 		var ctx: Dictionary = {
@@ -678,13 +689,29 @@ func _handle_debug_advance_round(_action: Dictionary, t: int) -> void:
 			_:
 				pass  # actor.move, actor.idle, protect_ally, etc. — resolved elsewhere or no-op
 
-	# 4. Log round end.
+	# 5. Build remaining_actors list (living — for round_end log and DoD audit).
+	var remaining_actors: Array = []
+	for a_v in ectx.actors:
+		if a_v is Dictionary and not a_v.get("is_dead", false):
+			remaining_actors.append(str(a_v.get("id", "")))
+
+	# 6. Log round end with actors_acted + remaining_actors.
 	logger.info(t, "combat.round_end", "Round complete", {
-		"round":         round,
-		"results_count": ectx.last_round_results.size(),
+		"round":            round,
+		"actors_acted":     actors_acted,
+		"remaining_actors": remaining_actors,
 	})
 
-	# 5. Rebuild snapshot so CombatBoardScreen sees updated HP, guard flags, and action_results.
+	# 7. Check end condition — sets combat_over flag and logs combat.end if met.
+	var end_check: Dictionary = CombatState.check_end_condition(ectx.actors, ectx.resolution_mode)
+	if end_check.get("over", false):
+		combat_state["combat_over"] = true
+		logger.info(t, "combat.end", "Combat ended", {
+			"reason": str(end_check.get("reason", "")),
+			"round":  round,
+		})
+
+	# 8. Rebuild snapshot so CombatBoardScreen sees updated HP, guard flags, and action_results.
 	flow_ctx.last_snapshot = FlowEncounterState.build_snapshot(flow_ctx, t)
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 

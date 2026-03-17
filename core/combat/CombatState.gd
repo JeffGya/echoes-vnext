@@ -124,6 +124,17 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 	return order
 
 
+## COMBAT-004: Returns { "over": bool, "reason": String }.
+## "reason" is "" when not over. MVP: checks "all_enemies_dead" only.
+## COMBAT-005/006 will extend this with shrine and other objective checks.
+static func check_end_condition(actors: Array, _objective: String) -> Dictionary:
+	var living_enemies := actors.filter(func(a: Dictionary) -> bool:
+		return a.get("faction", "") == "enemy" and not a.get("is_dead", false))
+	if living_enemies.is_empty():
+		return { "over": true, "reason": "all_enemies_dead" }
+	return { "over": false, "reason": "" }
+
+
 ## Returns the key with the highest integer value in a Dictionary.
 ## tiebreak_order defines which key wins when values are equal (first in list wins).
 ## Returns "" if the dict is empty.

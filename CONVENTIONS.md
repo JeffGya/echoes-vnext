@@ -1889,7 +1889,7 @@ Tiebreak: original array position in `ectx.actors` (echoes before enemies = part
 | Slot | Present when | Action type |
 |------|-------------|-------------|
 | `cta.combat_init` | Before `combat.init` | `combat.init` |
-| `cta.confirm_round` | After `combat.init` (disabled until COMBAT-004) | `combat.confirm_round` |
+| `cta.confirm_round` | After `combat.init`; omitted when `combat_over == true` | `combat.confirm_round` |
 
 ### `FlowEncounterState.build_snapshot()` pattern
 
@@ -1962,7 +1962,7 @@ Stats + emotions only. Calling / trait / vector modifiers are for equipment/weap
 
 - **Field:** `guard_state: false` — added to `ActorSchema.get_defaults()` (runtime only, not save-backed)
 - **Set:** by `CombatService._resolve_guard()` when actor's turn action is `actor.guard`
-- **Cleared:** by `FlowRuntime._handle_debug_advance_round()` at the start of each round for all actors
+- **Cleared:** by `FlowRuntime._handle_combat_confirm_round()` at the start of each round for all actors
 - **Effect:** doubles `effective_def` in `CombatService._melee_damage()` for that round
 - **Persist:** NOT persisted — runtime combat state only; rebuilt each encounter
 
@@ -1982,15 +1982,71 @@ if int(actor.get("fear", 0)) >= fear_threshold:
 ### last_round_results (COMBAT-003)
 
 - `EncounterContext.var last_round_results: Array = []` — transient field, cleared each round start
-- Populated by `FlowRuntime._handle_debug_advance_round()` with non-empty ActionResultSnapshot dicts
+- Populated by `FlowRuntime._handle_combat_confirm_round()` with non-empty ActionResultSnapshot dicts
 - `FlowEncounterState.build_snapshot()` adds `"action_results": last_round_results.duplicate()` to `data`
 
 ### New log events (COMBAT-003)
 
 | Event | Fired when | Key payload fields |
 |---|---|---|
-| `combat.action_resolved` | Melee resolved via debug.advance_round | full melee result dict |
-| `combat.guard_taken` | Actor guards via debug.advance_round | `actor_id` |
+| `combat.action_resolved` | Melee resolved via combat.confirm_round | full melee result dict |
+| `combat.guard_taken` | Actor guards via combat.confirm_round | `actor_id` |
 | `combat.action_refused` | Actor refuses due to Absolute Fear | `actor_id`, `fear` |
 | `actor.refused` | Fear threshold check inside ActorStateMachine | `actor_id`, `fear` |
-| `combat.round_end` | End of each debug.advance_round | `round` |
+| `combat.round_end` | End of each combat.confirm_round | `round` |
+
+---
+
+## Combat Round Lifecycle (COMBAT-004)
+
+### `combat.confirm_round` action
+
+```gdscript
+{ "type": "combat.confirm_round" }
+```
+
+- Emitted by `StartCombatButton` (text = "Confirm Round") in `CombatBoardScreen` after `combat.init`.
+- Handled by `FlowRuntime._handle_combat_confirm_round(t: int)`.
+- One press = one full round: all actors take a turn in initiative order, then end condition is checked.
+- Guard: if `combat_state["combat_over"] == true`, the handler returns immediately (no-op).
+
+**Handler sequence:**
+1. Log `combat.round_start { round }` (before increment)
+2. Clear `guard_state` + `last_round_results` on all actors
+3. Increment `round_counter`
+4. Loop `initiative_order` — for each living actor: resolve intent via CombatService → log → append to `actors_acted`
+5. Log `combat.round_end { round, actors_acted, remaining_actors }`
+6. Call `CombatState.check_end_condition(ectx.actors, ectx.resolution_mode)`:
+   - If over → `combat_state["combat_over"] = true` + log `combat.end { reason, round }`
+7. `_rebuild_snapshot()`
+
+### New log events (COMBAT-004)
+
+| Event | Fired when | Key payload fields |
+|---|---|---|
+| `combat.round_start` | Top of each `combat.confirm_round` handler (before increment) | `round: int` |
+| `combat.round_end` | After all actors have acted in a round | `round: int`, `actors_acted: Array[String]`, `remaining_actors: Array[String]` |
+| `combat.end` | When end condition is met | `reason: String`, `round: int` |
+
+### `CombatState.check_end_condition()` contract (COMBAT-004)
+
+```gdscript
+static func check_end_condition(actors: Array, _objective: String) -> Dictionary
+```
+
+- Pure static function — no side effects, testable without FlowRuntime.
+- Returns `{ "over": false, "reason": "" }` when ≥1 living enemy exists.
+- Returns `{ "over": true, "reason": "all_enemies_dead" }` when all enemies have `is_dead == true`.
+- MVP: only `"all_enemies_dead"` objective is checked. COMBAT-005/006 add shrine/other logic.
+- Lives in `core/combat/CombatState.gd`.
+
+### Snapshot fields added (COMBAT-004)
+
+`FlowEncounterState.build_snapshot()` post-init data additions:
+
+| Field | Type | Value |
+|---|---|---|
+| `combat_over` | bool | `combat_state.get("combat_over", false)` |
+| `actors_acted` | Array | `[]` placeholder (populated after round) |
+
+`cta.confirm_round` is **omitted** from `actions` when `combat_over == true` — button hides automatically.
