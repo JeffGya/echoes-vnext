@@ -154,7 +154,14 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				"label": "Confirm Round",
 				"slot":  "cta.confirm_round",
 			}
-		# "combat_end": no CTA added
+		# COMBAT-005: named CTA for result overlay button.
+		"combat_end":
+			actions["cta.end_combat"] = {
+				"type":  "flow.go_state",
+				"to":    FlowStateIds.SANCTUM,
+				"label": "Return to Sanctum",
+				"slot":  "cta.end_combat",
+			}
 
 	if not combat_state.is_empty():
 		objective_type          = str(combat_state.get("objective", ""))
@@ -165,6 +172,9 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# COMBAT-SEQ: per-actor fields for token highlight and initiative panel action text.
 	var current_actor_id: String  = str(ectx.last_actor_action.get("source_id", "")) if ectx != null else ""
 	var last_actor_action: Dictionary = ectx.last_actor_action.duplicate() if ectx != null else {}
+
+	# COMBAT-005: combat result fields — populated when combat_over; defaults when not.
+	var combat_result: Dictionary = ectx.combat_result if ectx != null else {}
 
 	return {
 		"type": FlowStateIds.ENCOUNTER,
@@ -186,6 +196,10 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"last_actor_action":        last_actor_action,
 			"round_phase":              round_phase,
 			"combat_over":              combat_over_flag,
+			# COMBAT-005: result fields (populated at combat_end; false/""/0 otherwise).
+			"victory":     bool(combat_result.get("victory", false)),
+			"reason":      str(combat_result.get("reason", "")),
+			"round_ended": int(combat_result.get("round_ended", 0)),
 		},
 		"actions": actions,
 		"meta":    { "t": t },

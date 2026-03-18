@@ -127,15 +127,19 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 	return order
 
 
-## COMBAT-004: Returns { "over": bool, "reason": String }.
-## "reason" is "" when not over. MVP: checks "all_enemies_dead" only.
-## COMBAT-005/006 will extend this with shrine and other objective checks.
+## COMBAT-005: Returns { "over": bool, "victory": bool, "reason": String }.
+## "reason" is "" when not over. Victory check runs first (echoes that kill the
+## last enemy take priority over dying in the same round).
 static func check_end_condition(actors: Array, _objective: String) -> Dictionary:
 	var living_enemies := actors.filter(func(a: Dictionary) -> bool:
 		return a.get("faction", "") == "enemy" and not a.get("is_dead", false))
 	if living_enemies.is_empty():
-		return { "over": true, "reason": "all_enemies_dead" }
-	return { "over": false, "reason": "" }
+		return { "over": true, "victory": true, "reason": "all_enemies_defeated" }
+	var living_echoes := actors.filter(func(a: Dictionary) -> bool:
+		return a.get("faction", "") == "echo" and not a.get("is_dead", false))
+	if living_echoes.is_empty():
+		return { "over": true, "victory": false, "reason": "all_echoes_dead" }
+	return { "over": false, "victory": false, "reason": "" }
 
 
 ## Returns the key with the highest integer value in a Dictionary.

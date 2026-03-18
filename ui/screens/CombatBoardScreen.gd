@@ -33,6 +33,12 @@ signal action_requested(action: Dictionary)
 # COMBAT-002: Initiative panel overlay.
 @onready var _initiative_panel: PanelContainer      = $InitiativePanel
 @onready var _initiative_list: VBoxContainer        = $InitiativePanel/InitiativeList
+# COMBAT-005: Combat result overlay — shown when round_phase == "combat_end".
+@onready var _result_overlay: PanelContainer        = $CombatResultOverlay
+@onready var _outcome_label: Label                  = $CombatResultOverlay/ResultContent/OutcomeLabel
+@onready var _reason_label: Label                   = $CombatResultOverlay/ResultContent/ReasonLabel
+@onready var _round_ended_label: Label              = $CombatResultOverlay/ResultContent/RoundEndedLabel
+@onready var _end_combat_button: Button             = $CombatResultOverlay/ResultContent/EndCombatButton
 
 # Clay floor tile: source 0, atlas position (0, 0)
 const _TILE_SOURCE_ID:    int       = 0
@@ -48,6 +54,8 @@ var _current_rows: int       = 10
 var _nav_back_action: Dictionary = {}
 # The action to auto-dispatch when _step_timer fires (cta.next_actor or cta.confirm_round).
 var _pending_dispatch_action: Dictionary = {}
+# COMBAT-005: cached action for the "Return to Sanctum" button in the result overlay.
+var _end_combat_action: Dictionary = {}
 # Step delay in seconds — controlled by speed buttons.
 var _step_delay: float = _SPEED_NORMAL
 # Manual mode: when true, player clicks the CTA button instead of auto-dispatch.
@@ -76,6 +84,8 @@ func _ready() -> void:
 	_step_timer.timeout.connect(_on_step_timer_timeout)
 
 	_initiative_panel.visible = false
+	_result_overlay.visible   = false
+	_end_combat_button.pressed.connect(_on_end_combat_pressed)
 
 	# Speed buttons — built programmatically, no scene changes needed.
 	var speed_bar := HBoxContainer.new()
@@ -119,6 +129,9 @@ func _clear() -> void:
 	_initiative_panel.visible = false
 	for child in _initiative_list.get_children():
 		child.queue_free()
+
+	_result_overlay.visible = false
+	_end_combat_action      = {}
 
 func _render(data: Dictionary, actions: Dictionary) -> void:
 	_current_cols = int(data.get("board_cols", 10))
@@ -165,6 +178,18 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 			_nav_back_action = action_v
 			_back_button.visible = true
 
+	# COMBAT-005: result overlay — shown only at combat_end.
+	if round_phase == "combat_end":
+		var victory: bool    = bool(data.get("victory", false))
+		var reason: String   = str(data.get("reason", ""))
+		var round_ended: int = int(data.get("round_ended", 0))
+		_outcome_label.text    = "VICTORY" if victory else "DEFEAT"
+		_reason_label.text     = _format_result_reason(reason)
+		_round_ended_label.text = "Completed in Round %d" % round_ended
+		if actions.has("cta.end_combat"):
+			_end_combat_action = actions["cta.end_combat"]
+		_result_overlay.visible = true
+
 	# COMBAT-002: draw initiative panel — snapshot-driven, no local playback state.
 	_draw_initiative_panel(data)
 
@@ -199,6 +224,20 @@ func _center_board(cols: int, rows: int) -> void:
 func _on_back_pressed() -> void:
 	if not _nav_back_action.is_empty():
 		action_requested.emit(_nav_back_action)
+
+
+# COMBAT-005: "Return to Sanctum" button in the result overlay.
+func _on_end_combat_pressed() -> void:
+	if not _end_combat_action.is_empty():
+		action_requested.emit(_end_combat_action)
+
+
+## COMBAT-005: Maps internal reason strings to player-facing labels.
+func _format_result_reason(reason: String) -> String:
+	match reason:
+		"all_enemies_defeated": return "All enemies defeated"
+		"all_echoes_dead":      return "All echoes fell"
+	return reason
 
 
 func _on_cta_pressed() -> void:

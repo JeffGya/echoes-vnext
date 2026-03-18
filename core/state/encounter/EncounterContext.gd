@@ -30,6 +30,9 @@ var initiative_cfg: Dictionary = {}
 var last_round_results: Array = []
 # COMBAT-SEQ: most recent single actor action result — updated after each actor acts; {} between rounds.
 var last_actor_action: Dictionary = {}
+# COMBAT-005: transient combat result — set by FlowRuntime._end_round(); not persisted.
+# Shape: { "victory": bool, "reason": String, "round_ended": int }
+var combat_result: Dictionary = {}
 
 # Optional deterministic notes for debugging / temporary tests
 var notes: Array[String] = []

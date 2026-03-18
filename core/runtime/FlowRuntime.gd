@@ -807,9 +807,16 @@ func _end_round(t: int) -> void:
 	var end_check: Dictionary = CombatState.check_end_condition(ectx.actors, ectx.resolution_mode)
 	if end_check.get("over", false):
 		combat_state["combat_over"] = true
+		# COMBAT-005: store result on ectx so build_snapshot() can surface it.
+		ectx.combat_result = {
+			"victory":     bool(end_check.get("victory", false)),
+			"reason":      str(end_check.get("reason", "")),
+			"round_ended": round,
+		}
 		logger.info(t, "combat.end", "Combat ended", {
-			"reason": str(end_check.get("reason", "")),
-			"round":  round,
+			"victory": bool(end_check.get("victory", false)),
+			"reason":  str(end_check.get("reason", "")),
+			"round":   round,
 		})
 
 	# Reset round-phase state — snapshot will show cta.confirm_round (or nothing if combat_over).

@@ -97,10 +97,13 @@ static func _resolve_guard(actor: Dictionary) -> Dictionary:
 ## Melee damage: stats + emotions only.
 ## Guard check doubles effective_def when defender["guard_state"] == true.
 ## Calling / trait / vector modifiers are for equipment/weapon compatibility — not here.
+## atk/def are nested under actor["stats"] — morale/fear are flat top-level emotion fields.
 static func _melee_damage(attacker: Dictionary, defender: Dictionary) -> int:
-	var raw_def: int      = int(defender.get("def", 0))
+	var a_stats: Dictionary = attacker.get("stats", {})
+	var d_stats: Dictionary = defender.get("stats", {})
+	var raw_def: int      = int(d_stats.get("def", 0))
 	var eff_def: int      = raw_def * 2 if defender.get("guard_state", false) else raw_def
-	var base: int         = max(0, int(attacker.get("atk", 0)) - eff_def)
+	var base: int         = max(0, int(a_stats.get("atk", 0)) - eff_def)
 	var morale_bonus: int = (int(attacker.get("morale", 50)) - 50) / 10   # int div: −5 to +5
 	var fear_penalty: int = int(attacker.get("fear", 0)) / 20              # int div: 0 to 5
 	return max(0, base + morale_bonus - fear_penalty)

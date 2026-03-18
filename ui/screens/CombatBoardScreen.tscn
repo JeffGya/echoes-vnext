@@ -29,6 +29,22 @@ content_margin_right = 8.0
 content_margin_bottom = 8.0
 bg_color = Color(0, 0, 0, 0.6)
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_result"]
+content_margin_left = 24.0
+content_margin_top = 24.0
+content_margin_right = 24.0
+content_margin_bottom = 24.0
+bg_color = Color(0.05, 0.05, 0.1, 0.92)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.6, 0.6, 0.6, 0.8)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
 [node name="CombatBoardScreen" type="Control" unique_id=1420352690]
 layout_mode = 3
 anchors_preset = 15
@@ -96,3 +112,45 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_initiative")
 
 [node name="InitiativeList" type="VBoxContainer" parent="InitiativePanel" unique_id=100000009]
 layout_mode = 2
+
+[node name="CombatResultOverlay" type="PanelContainer" parent="." unique_id=100000012]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -160.0
+offset_top = -110.0
+offset_right = 160.0
+offset_bottom = 110.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_result")
+
+[node name="ResultContent" type="VBoxContainer" parent="CombatResultOverlay" unique_id=100000013]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="OutcomeLabel" type="Label" parent="CombatResultOverlay/ResultContent" unique_id=100000014]
+layout_mode = 2
+horizontal_alignment = 1
+text = "VICTORY"
+theme_override_font_sizes/font_size = 28
+
+[node name="ReasonLabel" type="Label" parent="CombatResultOverlay/ResultContent" unique_id=100000015]
+layout_mode = 2
+horizontal_alignment = 1
+text = "All enemies defeated"
+theme_override_font_sizes/font_size = 16
+
+[node name="RoundEndedLabel" type="Label" parent="CombatResultOverlay/ResultContent" unique_id=100000016]
+layout_mode = 2
+horizontal_alignment = 1
+text = "Completed in Round 0"
+theme_override_font_sizes/font_size = 14
+
+[node name="EndCombatButton" type="Button" parent="CombatResultOverlay/ResultContent" unique_id=100000017]
+layout_mode = 2
+text = "Return to Sanctum"

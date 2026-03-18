@@ -32,8 +32,8 @@ static func _make_attacker(atk: int, morale: int = 50, fear: int = 0) -> Diction
 		"id":         "attacker_01",
 		"faction":    "echo",
 		"actor_type": "echo",
-		"atk":        atk,
-		"morale":     morale,
+		"stats":      { "atk": atk },   # atk/def nested under stats — matches real actor shape
+		"morale":     morale,            # morale/fear are flat top-level emotion fields
 		"fear":        fear,
 		"guard_state": false,
 	}
@@ -43,7 +43,7 @@ static func _make_defender(def: int, hp: int, guard_state: bool = false) -> Dict
 		"id":         "defender_01",
 		"faction":    "enemy",
 		"actor_type": "enemy",
-		"def":         def,
+		"stats":      { "def": def },   # def nested under stats — matches real actor shape
 		"current_hp":  hp,
 		"is_dead":     false,
 		"guard_state": guard_state,
