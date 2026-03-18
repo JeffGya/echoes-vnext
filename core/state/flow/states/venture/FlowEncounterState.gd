@@ -89,9 +89,8 @@ func exit(ctx: RefCounted, t: int) -> void:
 
 
 ## COMBAT-001: static snapshot builder — always emits type "flow.encounter".
-## Reads ectx.actors, ectx.combat_state, ectx.placement_seed.
-## COMBAT-002: also emits initiative_order + active_initiative_index from combat_state.
-## Called from enter() and from FlowRuntime._handle_combat_init().
+## COMBAT-SEQ: emits per-actor snapshots with round_phase, current_actor_id, last_actor_action.
+## Called from enter() and from FlowRuntime sequential resolution methods.
 static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# Read board config.
 	var grid_cfg: Dictionary = {}
@@ -113,6 +112,19 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var initiative_order: Array = []
 	var active_initiative_index: int = 0
 
+	# COMBAT-SEQ: determine round_phase from combat_state.round_phase.
+	var combat_over_flag: bool = bool(combat_state.get("combat_over", false))
+	var cs_phase: String = str(combat_state.get("round_phase", "idle"))
+	var round_phase: String
+	if combat_state.is_empty():
+		round_phase = "pre_combat"
+	elif combat_over_flag:
+		round_phase = "combat_end"
+	elif cs_phase == "in_round":
+		round_phase = "actor_turn"
+	else:
+		round_phase = "round_end"
+
 	var actions: Dictionary = {
 		"nav.back": {
 			"type":  "flow.go_state",
@@ -122,30 +134,38 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		},
 	}
 
-	if combat_state.is_empty():
-		# Pre-init: offer Start Combat.
-		actions["cta.combat_init"] = {
-			"type":  "combat.init",
-			"label": "Start Combat",
-			"slot":  "cta.combat_init",
-		}
-	else:
-		# Post-init: COMBAT-004 — Confirm Round is now live (no longer disabled).
-		objective_type = str(combat_state.get("objective", ""))
-		round = int(combat_state.get("round_counter", 0))
-		# COMBAT-002: include initiative order in post-init snapshot.
-		initiative_order = combat_state.get("initiative_order", [])
-		active_initiative_index = int(combat_state.get("active_initiative_index", 0))
-		# COMBAT-004: omit cta.confirm_round when combat is over (no more rounds).
-		var combat_over: bool = bool(combat_state.get("combat_over", false))
-		if not combat_over:
+	# COMBAT-SEQ: CTA slot depends on round_phase.
+	match round_phase:
+		"pre_combat":
+			actions["cta.combat_init"] = {
+				"type":  "combat.init",
+				"label": "Start Combat",
+				"slot":  "cta.combat_init",
+			}
+		"actor_turn":
+			actions["cta.next_actor"] = {
+				"type":  "combat.next_actor",
+				"label": "Next",
+				"slot":  "cta.next_actor",
+			}
+		"round_end":
 			actions["cta.confirm_round"] = {
 				"type":  "combat.confirm_round",
 				"label": "Confirm Round",
 				"slot":  "cta.confirm_round",
 			}
+		# "combat_end": no CTA added
 
-	var combat_over_flag: bool = bool(combat_state.get("combat_over", false))
+	if not combat_state.is_empty():
+		objective_type          = str(combat_state.get("objective", ""))
+		round                   = int(combat_state.get("round_counter", 0))
+		initiative_order        = combat_state.get("initiative_order", [])
+		active_initiative_index = int(combat_state.get("active_initiative_index", 0))
+
+	# COMBAT-SEQ: per-actor fields for token highlight and initiative panel action text.
+	var current_actor_id: String  = str(ectx.last_actor_action.get("source_id", "")) if ectx != null else ""
+	var last_actor_action: Dictionary = ectx.last_actor_action.duplicate() if ectx != null else {}
+
 	return {
 		"type": FlowStateIds.ENCOUNTER,
 		"data": {
@@ -159,10 +179,12 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"round":                    round,
 			"initiative_order":         initiative_order,
 			"active_initiative_index":  active_initiative_index,
-			# COMBAT-003: transient action results from the last resolved round.
+			# COMBAT-SEQ: accumulated results so far this round (grows one entry per actor).
 			"action_results":           ectx.last_round_results.duplicate() if ectx != null else [],
-			# COMBAT-004: end condition fields.
-			"actors_acted":             [],
+			# COMBAT-SEQ: per-actor display fields.
+			"current_actor_id":         current_actor_id,
+			"last_actor_action":        last_actor_action,
+			"round_phase":              round_phase,
 			"combat_over":              combat_over_flag,
 		},
 		"actions": actions,

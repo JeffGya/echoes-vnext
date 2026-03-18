@@ -28,6 +28,8 @@ var combat_state: Dictionary = {}
 var initiative_cfg: Dictionary = {}
 # COMBAT-003: transient round action results — cleared at start of each round; NOT persisted.
 var last_round_results: Array = []
+# COMBAT-SEQ: most recent single actor action result — updated after each actor acts; {} between rounds.
+var last_actor_action: Dictionary = {}
 
 # Optional deterministic notes for debugging / temporary tests
 var notes: Array[String] = []

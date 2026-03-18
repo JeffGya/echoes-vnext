@@ -22,6 +22,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("arbiter/high_faith_warrior_can_guard",               Callable(BehaviorArbiterTests, "_t_high_faith_warrior_can_guard"))
 	runner.register_test("arbiter/high_fear_idles_despite_adjacent_enemy",     Callable(BehaviorArbiterTests, "_t_high_fear_idles_despite_adjacent_enemy"))
 	runner.register_test("arbiter/advance_turn_logs_arbiter_intent_and_action", Callable(BehaviorArbiterTests, "_t_advance_turn_logs_arbiter_intent_and_action"))
+	runner.register_test("situational/own_hp_low_prefers_guard",               Callable(BehaviorArbiterTests, "_t_own_hp_low_prefers_guard"))
+	runner.register_test("situational/last_echo_standing_guards",              Callable(BehaviorArbiterTests, "_t_last_echo_standing_guards"))
+	runner.register_test("situational/enemy_type_is_aggressive",               Callable(BehaviorArbiterTests, "_t_enemy_type_is_aggressive"))
+	runner.register_test("situational/overwhelming_advantage_pushes_move",     Callable(BehaviorArbiterTests, "_t_overwhelming_advantage_pushes_move"))
 
 
 # -------------------------
@@ -71,21 +75,25 @@ static func _t_guardian_origin_prefers_protect_ally() -> Dictionary:
 
 
 # Test 2: high_faith_warrior_can_guard
-# Setup: warrior echo, faith=70, no adjacent enemy, threatened ally present.
-# Expected: protect_ally wins (base=10 + faith_bonus=35 = 45) over idle (base=10 + 3.5 = 13.5).
-# Demonstrates: traits can override calling_origin — any echo can guard given the right build.
-# The warrior has low protect_ally base (10), but faith lifts the score above idle.
+# Setup: warrior echo, faith=70, protector vector=80, enemy at dist=2, threatened ally present.
+# Expected: protect_ally wins over actor.move + actor.guard.
+# Score breakdown (warrior defaults, faith=70, protector=80, courage=0):
+#   protect_ally: 10 + faith*0.50(=35) + protector*0.45(=36) = 81
+#   actor.guard:  15 + faith*0.30(=21) + protector*0.50(=40) = 76
+#   actor.move:   55 + faith*0.00(=0)  + protector*0.05(=4)  = 59
+# Demonstrates: high faith + protector vector can pull a warrior away from advancing
+# toward the enemy, in favour of protecting a threatened ally.
 static func _t_high_faith_warrior_can_guard() -> Dictionary:
 	var actor := {
 		"id":             "echo_003",
 		"faction":        "echo",
 		"calling_origin": "warrior",
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 70 },
-		"vector_scores":  {},
+		"vector_scores":  { "protector": 80 },
 		"fear":           0,
 		"grid_pos":       { "col": 0, "row": 0 },
 	}
-	# Enemy at dist=2 — NOT adjacent, so melee_attack is not a candidate.
+	# Enemy at dist=2 — NOT adjacent, so melee_attack is not a candidate; actor.move is.
 	var enemy := {
 		"id":       "enemy_001",
 		"faction":  "enemy",
@@ -105,7 +113,7 @@ static func _t_high_faith_warrior_can_guard() -> Dictionary:
 	var intent: Dictionary = arbiter.select_intent(context)
 
 	if str(intent.get("action_type", "")) != "protect_ally":
-		return { "ok": false, "error": "Expected protect_ally (faith=70 bonus lifts warrior above idle), got: %s" % str(intent.get("action_type")) }
+		return { "ok": false, "error": "Expected protect_ally (faith=70 + protector=80 lifts warrior above actor.move), got: %s" % str(intent.get("action_type")) }
 
 	return { "ok": true }
 
@@ -206,5 +214,176 @@ static func _t_advance_turn_logs_arbiter_intent_and_action() -> Dictionary:
 		return { "ok": false, "error": "actor.action: expected target_id='enemy_020', got: %s" % str(adata.get("target_id")) }
 	if int(adata.get("damage", -1)) != 0:
 		return { "ok": false, "error": "actor.action: expected damage=0 (placeholder), got: %s" % str(adata.get("damage")) }
+
+	return { "ok": true }
+
+
+# -------------------------
+# Situational modifier tests (ACTOR-SIT)
+# -------------------------
+
+# Test 5: own_hp_low_prefers_guard
+# Setup: uncalled echo at 25% HP (own_hp_low fires), enemy at dist=3 (actor.move candidate),
+#        no allies, no dead allies (last_echo_standing does NOT fire).
+# Score breakdown (uncalled, no traits/vectors, own_hp_low active):
+#   actor.guard: base(25) + own_hp_low(+12) = 37   ← winner
+#   actor.move:  base(35) + own_hp_low(-5)  = 30
+#   actor.idle:  base(20) + own_hp_low(+8)  = 28
+# Demonstrates: situational HP condition overrides personality-based aggression.
+static func _t_own_hp_low_prefers_guard() -> Dictionary:
+	var actor := {
+		"id":             "echo_sit_001",
+		"faction":        "echo",
+		"calling_origin": "uncalled",
+		"actor_type":     "echo",
+		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
+		"vector_scores":  {},
+		"fear":           0,
+		"morale":         50,
+		"grid_pos":       { "col": 0, "row": 0 },
+		"current_hp":     25,
+		"stats":          { "max_hp": 100 },
+	}
+	var enemy := {
+		"id":       "enemy_sit_001",
+		"faction":  "enemy",
+		"is_dead":  false,
+		"grid_pos": { "col": 3, "row": 0 },
+	}
+
+	var arbiter := BehaviorArbiter.new({})
+	var context := { "actor": actor, "all_actors": [enemy], "t": 1 }
+	var intent: Dictionary = arbiter.select_intent(context)
+
+	if str(intent.get("action_type", "")) != "actor.guard":
+		return { "ok": false, "error": "Expected actor.guard at 25%% HP (guard=37 > move=30 > idle=28), got: %s" % str(intent.get("action_type")) }
+
+	return { "ok": true }
+
+
+# Test 6: last_echo_standing_guards
+# Setup: uncalled echo, 1 dead ally (is_dead=true), adjacent enemy (dist=1).
+#        last_echo_standing fires (living_allies=0, dead_allies=1).
+# Score breakdown (uncalled, no traits/vectors, last_echo_standing active):
+#   actor.guard:   base(25) + last_echo_standing(+20) = 45   ← winner
+#   actor.idle:    base(20) + last_echo_standing(+15) = 35
+#   melee_attack:  base(40) + last_echo_standing(-15) = 25
+# Demonstrates: final-survivor condition pushes even an uncalled echo to defend.
+static func _t_last_echo_standing_guards() -> Dictionary:
+	var actor := {
+		"id":             "echo_sit_002",
+		"faction":        "echo",
+		"calling_origin": "uncalled",
+		"actor_type":     "echo",
+		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
+		"vector_scores":  {},
+		"fear":           0,
+		"morale":         50,
+		"grid_pos":       { "col": 0, "row": 0 },
+	}
+	var dead_ally := {
+		"id":      "echo_dead_001",
+		"faction": "echo",
+		"is_dead": true,
+		"grid_pos": { "col": 2, "row": 0 },
+	}
+	var enemy := {
+		"id":       "enemy_sit_002",
+		"faction":  "enemy",
+		"is_dead":  false,
+		"grid_pos": { "col": 1, "row": 0 },
+	}
+
+	var arbiter := BehaviorArbiter.new({})
+	var context := { "actor": actor, "all_actors": [dead_ally, enemy], "t": 1 }
+	var intent: Dictionary = arbiter.select_intent(context)
+
+	if str(intent.get("action_type", "")) != "actor.guard":
+		return { "ok": false, "error": "Expected actor.guard when last echo standing (guard=45 > idle=35 > melee=25), got: %s" % str(intent.get("action_type")) }
+
+	return { "ok": true }
+
+
+# Test 7: enemy_type_is_aggressive
+# Setup: enemy actor (actor_type="enemy", calling_origin="enemy"), adjacent echo (dist=1).
+#        enemy_engaged fires (enemy type + dist=1).
+# Score breakdown (enemy calling, no traits/vectors, enemy_engaged active):
+#   melee_attack: base(70) + enemy_engaged(+15) = 85   ← winner
+#   actor.guard:  base(10) + enemy_engaged(-8)  =  2
+#   actor.idle:   base(5)  + enemy_engaged(-10) = -5
+# Demonstrates: enemy calling_origin + situational pressure produce decisive aggression.
+static func _t_enemy_type_is_aggressive() -> Dictionary:
+	var actor := {
+		"id":             "enemy_sit_003",
+		"faction":        "enemy",
+		"calling_origin": "enemy",
+		"actor_type":     "enemy",
+		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
+		"vector_scores":  {},
+		"fear":           0,
+		"morale":         50,
+		"grid_pos":       { "col": 1, "row": 0 },
+	}
+	var echo_target := {
+		"id":       "echo_sit_003",
+		"faction":  "echo",
+		"is_dead":  false,
+		"grid_pos": { "col": 0, "row": 0 },
+	}
+
+	var arbiter := BehaviorArbiter.new({})
+	var context := { "actor": actor, "all_actors": [echo_target], "t": 1 }
+	var intent: Dictionary = arbiter.select_intent(context)
+
+	if str(intent.get("action_type", "")) != "melee_attack":
+		return { "ok": false, "error": "Expected melee_attack from enemy actor (melee=85 >> guard=2), got: %s" % str(intent.get("action_type")) }
+	if str(intent.get("target_id", "")) != "echo_sit_003":
+		return { "ok": false, "error": "Expected target_id='echo_sit_003', got: %s" % str(intent.get("target_id")) }
+
+	return { "ok": true }
+
+
+# Test 8: overwhelming_advantage_pushes_move
+# Setup: uncalled echo, 4 living allies vs 2 enemies, nearest enemy at dist=2.
+#        overwhelming_advantage fires (living_allies=4 >= living_enemies=2 × 2).
+# Score breakdown (uncalled, no traits/vectors, overwhelming_advantage active):
+#   actor.move:  base(35) + overwhelming_advantage(+8)  = 43   ← winner
+#   actor.guard: base(25) + overwhelming_advantage(-5)  = 20
+#   actor.idle:  base(20) + overwhelming_advantage(-6)  = 14
+# Demonstrates: numerical superiority pushes even neutral actors to advance.
+static func _t_overwhelming_advantage_pushes_move() -> Dictionary:
+	var actor := {
+		"id":             "echo_sit_004",
+		"faction":        "echo",
+		"calling_origin": "uncalled",
+		"actor_type":     "echo",
+		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
+		"vector_scores":  {},
+		"fear":           0,
+		"morale":         50,
+		"grid_pos":       { "col": 0, "row": 0 },
+	}
+	# 4 living allies (living_allies=4)
+	var allies: Array = []
+	for i in range(4):
+		allies.append({
+			"id":      "echo_ally_%d" % i,
+			"faction": "echo",
+			"is_dead": false,
+			"grid_pos": { "col": i + 1, "row": 1 },
+		})
+	# 2 living enemies — nearest at dist=2
+	var enemies: Array = [
+		{ "id": "enemy_sit_004a", "faction": "enemy", "is_dead": false, "grid_pos": { "col": 2, "row": 0 } },
+		{ "id": "enemy_sit_004b", "faction": "enemy", "is_dead": false, "grid_pos": { "col": 3, "row": 0 } },
+	]
+	var all_actors: Array = allies + enemies
+
+	var arbiter := BehaviorArbiter.new({})
+	var context := { "actor": actor, "all_actors": all_actors, "t": 1 }
+	var intent: Dictionary = arbiter.select_intent(context)
+
+	if str(intent.get("action_type", "")) != "actor.move":
+		return { "ok": false, "error": "Expected actor.move when overwhelming (move=43 > guard=20 > idle=14), got: %s" % str(intent.get("action_type")) }
 
 	return { "ok": true }

@@ -34,8 +34,8 @@ func _init(actor_dict: Dictionary, behavior_module: BehaviorModule = null, actor
 	_actor = actor_dict
 	if behavior_module != null:
 		_behavior_module = behavior_module
-	elif actor_dict.get("actor_type", "") == "echo":
-		_behavior_module = BehaviorArbiter.new(actor_cfg)  # ACTOR-005: echo actors use weighted arbiter
+	elif actor_dict.get("actor_type", "") in ["echo", "enemy"]:
+		_behavior_module = BehaviorArbiter.new(actor_cfg)  # ACTOR-005: echo + enemy actors use weighted arbiter
 	else:
 		_behavior_module = IdleBehaviorModule.new()
 	_last_intent = {}
@@ -114,7 +114,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	# ACTOR-007: read morale metadata annotated by BehaviorArbiter onto the winner.
 	_last_morale_tier     = str(intent.get("morale_tier",     "steady"))
 	_last_morale_modifier = int(intent.get("morale_modifier", 0))
-	logger.info(t, "actor.intent", "Intent selected", {
+	logger.debug(t, "actor.intent", "Intent selected", {
 		"module_id": _behavior_module.get_module_id(),
 		"action_type": intent.get("action_type", ""),
 		"target_id": intent.get("target_id", ""),
@@ -127,7 +127,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		"target_distance": intent.get("target_distance", -1),  # GRID-004
 		"target_pos":     intent.get("target_pos", {}),        # GRID-005
 	}
-	logger.info(t, "actor.action", "Action resolved", {
+	logger.debug(t, "actor.action", "Action resolved", {
 		"action_type":            _last_action["action_type"],
 		"source_id":              _actor.get("id", ""),
 		"target_id":              _last_action["target_id"],
@@ -140,8 +140,16 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	if intent.get("action_type", "") == "actor.move" and not _movement_skipped:
 		var target_pos: Dictionary = intent.get("target_pos", {})
 		if not target_pos.is_empty():
+			# Build occupied set: all living actors except self (1 actor per cell).
+			var my_id: String = str(_actor.get("id", ""))
+			var occupied: Array = []
+			for a_v in context.get("all_actors", []):
+				if a_v is Dictionary \
+						and str(a_v.get("id", "")) != my_id \
+						and not a_v.get("is_dead", false):
+					occupied.append(a_v.get("grid_pos", {}))
 			var move_result: Dictionary = GridService.move_toward(
-					_actor, target_pos, context.get("board_cfg", {}))
+					_actor, target_pos, context.get("board_cfg", {}), occupied)
 			logger.info(t, "actor.moved", "Actor moved", {
 				"actor_id": _actor.get("id", ""),
 				"from_pos": move_result["from_pos"],

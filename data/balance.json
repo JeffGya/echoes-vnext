@@ -90,41 +90,131 @@
 	"actor": {
 		"_comment": "Behavior Arbitration Engine (ACTOR-005). All multipliers live here — no GDScript changes needed to tune game feel or add new actions/callings/vectors/directives.",
 		"intent_weights_by_calling_origin": {
-			"guardian": { "melee_attack": 20, "protect_ally": 65, "actor.guard": 45, "actor.idle": 10 },
-			"warrior":  { "melee_attack": 65, "protect_ally": 10, "actor.guard": 15, "actor.idle": 10 },
-			"archer":   { "melee_attack": 45, "protect_ally": 10, "actor.guard": 20, "actor.idle": 10 },
-			"uncalled": { "melee_attack": 40, "protect_ally": 15, "actor.guard": 25, "actor.idle": 20 }
+			"guardian": { "melee_attack": 20, "protect_ally": 65, "actor.guard": 45, "actor.idle": 10, "actor.move": 25 },
+			"warrior":  { "melee_attack": 65, "protect_ally": 10, "actor.guard": 15, "actor.idle": 10, "actor.move": 55 },
+			"archer":   { "melee_attack": 45, "protect_ally": 10, "actor.guard": 20, "actor.idle": 10, "actor.move": 40 },
+			"uncalled": { "melee_attack": 40, "protect_ally": 15, "actor.guard": 25, "actor.idle": 20, "actor.move": 35 },
+			"enemy":    { "melee_attack": 70, "protect_ally":  0, "actor.guard": 10, "actor.idle":  5, "actor.move": 60 }
 		},
 		"default_intent_weight": 5.0,
 		"trait_action_muls": {
 			"melee_attack": { "courage": 0.35, "wisdom": 0.05, "faith": 0.00 },
 			"protect_ally": { "courage": 0.10, "wisdom": 0.05, "faith": 0.50 },
 			"actor.guard":  { "courage": 0.20, "wisdom": 0.10, "faith": 0.30 },
-			"actor.idle":   { "courage": 0.00, "wisdom": 0.20, "faith": 0.05 }
+			"actor.idle":   { "courage": 0.00, "wisdom": 0.20, "faith": 0.05 },
+			"actor.move":   { "courage": 0.35, "wisdom": 0.05, "faith": 0.00 }
 		},
 		"vector_action_muls": {
 			"melee_attack": { "vanguard": 0.40, "protector": 0.00, "seeker": 0.15, "pillar": 0.00 },
 			"protect_ally": { "vanguard": 0.00, "protector": 0.45, "seeker": 0.00, "pillar": 0.15 },
-			"actor.guard":  { "vanguard": 0.00, "protector": 0.50, "seeker": 0.00, "pillar": 0.20 },
-			"actor.idle":   { "vanguard": 0.00, "protector": 0.00, "seeker": 0.10, "pillar": 0.20 }
+			"actor.guard":  { "vanguard": 0.00, "protector": 0.15, "seeker": 0.00, "pillar": 0.10 },
+			"actor.idle":   { "vanguard": 0.00, "protector": 0.00, "seeker": 0.10, "pillar": 0.20 },
+			"actor.move":   { "vanguard": 0.40, "protector": 0.05, "seeker": 0.10, "pillar": 0.00 }
 		},
 		"directive_action_muls": {
 			"melee_attack": { "objective_advance_priority": 1.0, "engage_only_blockers": 1.0 },
 			"protect_ally": { "ally_protection_bias": 1.0, "threat_interception": 1.0 },
 			"actor.guard":  { "ally_protection_bias": 1.0, "survival_bias": 1.0 },
-			"actor.idle":   { "survival_bias": 1.0, "prefer_disengage": 1.0, "resource_efficiency": 1.0 }
+			"actor.idle":   { "survival_bias": 1.0, "prefer_disengage": 1.0, "resource_efficiency": 1.0 },
+			"actor.move":   { "objective_advance_priority": 1.0, "engage_only_blockers": 1.0 }
 		},
 		"morale_action_muls": {
 			"_comment": "Flat bonus added to the pre-fear score sum. Tiers: broken 0–24 / shaken 25–49 / steady 50–74 / inspired 75–100. steady=0 is the neutral baseline — existing scores are unchanged at default morale.",
 			"melee_attack": { "broken": -20, "shaken": -8, "steady": 0, "inspired": 12 },
 			"protect_ally": { "broken": -8,  "shaken": -3, "steady": 0, "inspired": 6  },
 			"actor.guard":  { "broken": 20,  "shaken": 10, "steady": 0, "inspired": -5 },
-			"actor.idle":   { "broken": 15,  "shaken": 6,  "steady": 0, "inspired": -5 }
+			"actor.idle":   { "broken": 15,  "shaken": 6,  "steady": 0, "inspired": -5 },
+			"actor.move":   { "broken": -20, "shaken": -8, "steady": 0, "inspired": 10 }
 		},
 		"directive_base_bonus":  20.0,
 		"fear_active_dampen":    0.6,
 		"fear_passive_actions":  ["actor.idle", "actor.guard"],
-		"threat_threshold":      0.5
+		"threat_threshold":      1.0,
+		"guard_range":           4,
+		"situational_muls": {
+			"_comment": "Flat score additions per active board condition. Keys not in active_conditions are never read. _stub_ keys are never computed — zero-value placeholders for future features.",
+
+			"own_hp_low": {
+				"_comment": "hp_ratio < threshold. Injured — pull back. Applies to echo and enemy.",
+				"threshold": 0.35,
+				"melee_attack": -8, "protect_ally": 0, "actor.guard": 12, "actor.idle": 8, "actor.move": -5
+			},
+			"own_hp_critical": {
+				"_comment": "hp_ratio < threshold. Near death. Stacks with own_hp_low.",
+				"threshold": 0.20,
+				"melee_attack": -12, "protect_ally": -5, "actor.guard": 18, "actor.idle": 12, "actor.move": -10
+			},
+			"outnumbered": {
+				"_comment": "living enemies > living allies (living_allies > 0 required).",
+				"melee_attack": -10, "protect_ally": 8, "actor.guard": 10, "actor.idle": 6, "actor.move": -6
+			},
+			"overwhelming_advantage": {
+				"_comment": "living allies >= living enemies x 2.",
+				"melee_attack": 10, "protect_ally": -3, "actor.guard": -5, "actor.idle": -6, "actor.move": 8
+			},
+			"last_echo_standing": {
+				"_comment": "All allies dead (dead_allies > 0). Final survivor mode.",
+				"melee_attack": -15, "protect_ally": 0, "actor.guard": 20, "actor.idle": 15, "actor.move": -10
+			},
+			"enemy_far": {
+				"_comment": "Nearest enemy distance > threshold tiles. Guard useless — advance.",
+				"threshold": 5,
+				"melee_attack": 0, "protect_ally": 0, "actor.guard": -12, "actor.idle": -5, "actor.move": 8
+			},
+			"enemy_engaged": {
+				"_comment": "enemy_type only. Adjacent to an echo — maintain pressure.",
+				"melee_attack": 15, "protect_ally": 0, "actor.guard": -8, "actor.idle": -10, "actor.move": 0
+			},
+			"enemy_advancing": {
+				"_comment": "enemy_type only. Not yet adjacent — close the gap.",
+				"melee_attack": 0, "protect_ally": 0, "actor.guard": -10, "actor.idle": -8, "actor.move": 15
+			},
+
+			"_stub_near_friendly_structure": {
+				"_comment": "STUB: within N tiles of own Shrine/Totem. Defensive bonus.",
+				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
+			},
+			"_stub_near_hostile_structure": {
+				"_comment": "STUB: within N tiles of enemy structure. Aggressive push.",
+				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
+			},
+			"_stub_ally_adjacent": {
+				"_comment": "STUB: a living ally in adjacent cell. Formation/support bonus.",
+				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
+			},
+			"_stub_flanked": {
+				"_comment": "STUB: enemies on 2+ sides. Defensive pressure.",
+				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
+			},
+			"_stub_surrounded": {
+				"_comment": "STUB: enemies on 3+ sides. Severe defensive/survival override.",
+				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
+			},
+			"_stub_in_formation": {
+				"_comment": "STUB: 2+ allies adjacent (shield wall). Boost guard.",
+				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
+			},
+			"_stub_actor_has_ranged_skill": {
+				"_comment": "STUB: ranged skill equipped. Move to optimal range.",
+				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
+			},
+			"_stub_weapon_extended_reach": {
+				"_comment": "STUB: spear/halberd. Attack at dist=2 (also changes candidate generation).",
+				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
+			},
+			"_stub_enemy_type_ranged": {
+				"_comment": "STUB: nearest enemy is ranged type. Close gap or shield up.",
+				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
+			},
+			"_stub_objective_in_range": {
+				"_comment": "STUB: combat objective target within N tiles. Intensify toward goal.",
+				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
+			},
+			"_stub_enemy_bodyguard": {
+				"_comment": "STUB: enemy_type protecting a priority target. Intercept aggression.",
+				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
+			}
+		}
 	},
 	"vectors": {
 		"_comment": "Per-class_origin starting vector weights. Keys match class_origin_weights keys exactly. Add new vectors here only — no GDScript changes needed.",

@@ -58,9 +58,9 @@ static func _t_actorsm_advance_turn_logs_intent() -> Dictionary:
 	var intent: Dictionary = sm.advance_turn(context, logger, 5)
 
 	# Verify returned intent.
-	# COMBAT-003: actor.guard is now an unconditional candidate with base=25 (uncalled) >
-	# actor.idle base=20. With no enemies present, guard wins over idle.
-	if intent.get("action_type") != "actor.guard":
+	# ACTOR-SIT: guard is only a candidate when an enemy is within guard_range tiles.
+	# With all_actors=[], there are no enemies → no guard candidate → idle wins.
+	if intent.get("action_type") != "actor.idle":
 		return { "ok": false, "error": "advance_turn() returned wrong action_type: %s" % str(intent.get("action_type")) }
 
 	# Find actor.intent log event
@@ -78,7 +78,7 @@ static func _t_actorsm_advance_turn_logs_intent() -> Dictionary:
 	# ACTOR-005: echo actors now default to BehaviorArbiter
 	if str(data.get("module_id", "")) != "arbiter":
 		return { "ok": false, "error": "actor.intent log has wrong module_id: %s" % str(data.get("module_id")) }
-	if str(data.get("action_type", "")) != "actor.guard":
+	if str(data.get("action_type", "")) != "actor.idle":
 		return { "ok": false, "error": "actor.intent log has wrong action_type: %s" % str(data.get("action_type")) }
 	if str(data.get("actor_id", "")) != "echo_0001":
 		return { "ok": false, "error": "actor.intent log has wrong actor_id: %s" % str(data.get("actor_id")) }
@@ -111,9 +111,9 @@ static func _t_actorsm_snapshot_includes_module() -> Dictionary:
 	logger.set_level("off")
 	sm.advance_turn({ "actor": actor, "all_actors": [], "t": 1 }, logger, 1)
 	var snap2: Dictionary = sm.get_snapshot()
-	# COMBAT-003: actor.guard (base=25 uncalled) > actor.idle (base=20) with no enemies present.
-	if str(snap2.get("last_intent", {}).get("action_type", "")) != "actor.guard":
-		return { "ok": false, "error": "Expected last_intent.action_type='actor.guard' after advance_turn(), got: %s" % str(snap2.get("last_intent")) }
+	# ACTOR-SIT: guard requires enemy within guard_range. With all_actors=[], idle wins.
+	if str(snap2.get("last_intent", {}).get("action_type", "")) != "actor.idle":
+		return { "ok": false, "error": "Expected last_intent.action_type='actor.idle' after advance_turn(), got: %s" % str(snap2.get("last_intent")) }
 
 	return { "ok": true }
 

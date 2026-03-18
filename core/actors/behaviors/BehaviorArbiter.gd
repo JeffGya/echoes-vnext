@@ -37,10 +37,13 @@ var _cfg: Dictionary
 # Used when _cfg is empty (no balance.json block passed in).
 const _DEFAULTS := {
 	"intent_weights_by_calling_origin": {
-		"guardian": { "melee_attack": 20, "protect_ally": 65, "actor.guard": 45, "actor.idle": 10 },
-		"warrior":  { "melee_attack": 65, "protect_ally": 10, "actor.guard": 15, "actor.idle": 10 },
-		"archer":   { "melee_attack": 45, "protect_ally": 10, "actor.guard": 20, "actor.idle": 10 },
-		"uncalled": { "melee_attack": 40, "protect_ally": 15, "actor.guard": 25, "actor.idle": 20 },
+		"guardian": { "melee_attack": 20, "protect_ally": 65, "actor.guard": 45, "actor.idle": 10, "actor.move": 25 },
+		"warrior":  { "melee_attack": 65, "protect_ally": 10, "actor.guard": 15, "actor.idle": 10, "actor.move": 55 },
+		"archer":   { "melee_attack": 45, "protect_ally": 10, "actor.guard": 20, "actor.idle": 10, "actor.move": 40 },
+		"uncalled": { "melee_attack": 40, "protect_ally": 15, "actor.guard": 25, "actor.idle": 20, "actor.move": 35 },
+		# Enemy baseline: aggressive. protect_ally=0 (enemies don't protect each other in MVP).
+		# guard/idle stay low so enemies almost never passively hold unless situationally forced.
+		"enemy":    { "melee_attack": 70, "protect_ally":  0, "actor.guard": 10, "actor.idle":  5, "actor.move": 60 },
 	},
 	"default_intent_weight": 5.0,
 	"trait_action_muls": {
@@ -48,29 +51,129 @@ const _DEFAULTS := {
 		"protect_ally": { "courage": 0.10, "wisdom": 0.05, "faith": 0.50 },
 		"actor.guard":  { "courage": 0.20, "wisdom": 0.10, "faith": 0.30 },
 		"actor.idle":   { "courage": 0.00, "wisdom": 0.20, "faith": 0.05 },
+		"actor.move":   { "courage": 0.35, "wisdom": 0.05, "faith": 0.00 },
 	},
 	"vector_action_muls": {
 		"melee_attack": { "vanguard": 0.40, "protector": 0.00, "seeker": 0.15, "pillar": 0.00 },
 		"protect_ally": { "vanguard": 0.00, "protector": 0.45, "seeker": 0.00, "pillar": 0.15 },
-		"actor.guard":  { "vanguard": 0.00, "protector": 0.50, "seeker": 0.00, "pillar": 0.20 },
+		"actor.guard":  { "vanguard": 0.00, "protector": 0.15, "seeker": 0.00, "pillar": 0.10 },
 		"actor.idle":   { "vanguard": 0.00, "protector": 0.00, "seeker": 0.10, "pillar": 0.20 },
+		"actor.move":   { "vanguard": 0.40, "protector": 0.05, "seeker": 0.10, "pillar": 0.00 },
 	},
 	"directive_action_muls": {
 		"melee_attack": { "objective_advance_priority": 1.0, "engage_only_blockers": 1.0 },
 		"protect_ally": { "ally_protection_bias": 1.0, "threat_interception": 1.0 },
 		"actor.guard":  { "ally_protection_bias": 1.0, "survival_bias": 1.0 },
 		"actor.idle":   { "survival_bias": 1.0, "prefer_disengage": 1.0, "resource_efficiency": 1.0 },
+		"actor.move":   { "objective_advance_priority": 1.0, "engage_only_blockers": 1.0 },
 	},
 	"morale_action_muls": {
 		"melee_attack": { "broken": -20, "shaken": -8, "steady": 0, "inspired": 12 },
 		"protect_ally": { "broken": -8,  "shaken": -3, "steady": 0, "inspired": 6  },
 		"actor.guard":  { "broken": 20,  "shaken": 10, "steady": 0, "inspired": -5 },
 		"actor.idle":   { "broken": 15,  "shaken": 6,  "steady": 0, "inspired": -5 },
+		"actor.move":   { "broken": -20, "shaken": -8, "steady": 0, "inspired": 10 },
 	},
 	"directive_base_bonus":  20.0,
 	"fear_active_dampen":    0.6,
 	"fear_passive_actions":  ["actor.idle", "actor.guard"],
-	"threat_threshold":      0.5,
+	"threat_threshold":      1.0,   # 1.0 = any HP damage qualifies; lower to tighten the gate
+	"guard_range":           4,     # enemy must be within this many tiles for guard to be a candidate
+
+	# -------------------------
+	# Situational modifier tables
+	# Flat bonuses added to the final score per active board condition.
+	# Positive = boost, negative = penalty.
+	# Each active condition key is looked up here; its per-action value is summed into situational_bonus.
+	# Stub keys (_stub_*) are never added to active_conditions, so their zero values have no effect.
+	# To activate a stub: remove _stub_ prefix, set values, implement the condition in _build_board_summary().
+	# -------------------------
+	"situational_muls": {
+		# --- Active conditions (computed every turn) ---
+		"own_hp_low": {
+			# hp_ratio < threshold. Injured echo pulls back. Applies to both echo and enemy.
+			"threshold":    0.35,
+			"melee_attack": -8, "protect_ally":  0, "actor.guard": 12, "actor.idle":  8, "actor.move": -5,
+		},
+		"own_hp_critical": {
+			# hp_ratio < threshold. Near death — stacks with own_hp_low for stronger effect.
+			"threshold":    0.20,
+			"melee_attack": -12, "protect_ally": -5, "actor.guard": 18, "actor.idle": 12, "actor.move": -10,
+		},
+		"outnumbered": {
+			# living enemies > living allies (requires living_allies > 0 so 1v1 / solo don't trigger).
+			"melee_attack": -10, "protect_ally":  8, "actor.guard": 10, "actor.idle":  6, "actor.move": -6,
+		},
+		"overwhelming_advantage": {
+			# living allies >= living enemies * 2. Push the advantage.
+			"melee_attack": 10, "protect_ally": -3, "actor.guard": -5, "actor.idle": -6, "actor.move":  8,
+		},
+		"last_echo_standing": {
+			# All allies dead (dead_allies > 0). Final survivor — survival mode.
+			"melee_attack": -15, "protect_ally":  0, "actor.guard": 20, "actor.idle": 15, "actor.move": -10,
+		},
+		"enemy_far": {
+			# Nearest enemy distance > threshold tiles. Guard is pointless — advance.
+			"threshold":    5,
+			"melee_attack":  0, "protect_ally":  0, "actor.guard": -12, "actor.idle": -5, "actor.move":  8,
+		},
+		# Enemy-type only conditions (gated by actor_type == "enemy" in _build_board_summary).
+		"enemy_engaged": {
+			# Adjacent to an echo — maintain pressure, don't retreat.
+			"melee_attack": 15, "protect_ally":  0, "actor.guard": -8, "actor.idle": -10, "actor.move":  0,
+		},
+		"enemy_advancing": {
+			# Not yet adjacent — close the gap aggressively.
+			"melee_attack":  0, "protect_ally":  0, "actor.guard": -10, "actor.idle":  -8, "actor.move": 15,
+		},
+
+		# --- Stub conditions (zero values — no effect until implemented) ---
+		# To activate: remove _stub_ prefix, tune values, add condition check to _build_board_summary().
+		"_stub_near_friendly_structure": {
+			# Actor within N tiles of own Shrine/Totem. Defensive bonus near own structures.
+			"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0,
+		},
+		"_stub_near_hostile_structure": {
+			# Actor within N tiles of enemy structure. Aggressive push to destroy it.
+			"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0,
+		},
+		"_stub_ally_adjacent": {
+			# A living ally is in an adjacent cell. Formation/support bonus.
+			"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0,
+		},
+		"_stub_flanked": {
+			# Enemies on 2+ cardinal sides of actor. Defensive pressure.
+			"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0,
+		},
+		"_stub_surrounded": {
+			# Enemies on 3+ sides. Severe defensive/survival override.
+			"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0,
+		},
+		"_stub_in_formation": {
+			# 2+ allies adjacent (shield wall). Boost guard for formation play.
+			"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0,
+		},
+		"_stub_actor_has_ranged_skill": {
+			# Actor has a ranged skill equipped. Move to optimal range instead of melee.
+			"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0,
+		},
+		"_stub_weapon_extended_reach": {
+			# Spear/halberd type weapon. Attack at dist=2 (also changes candidate generation).
+			"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0,
+		},
+		"_stub_enemy_type_ranged": {
+			# Nearest enemy is an archer/ranged type. Close gap or shield up.
+			"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0,
+		},
+		"_stub_objective_in_range": {
+			# Combat objective target is within N tiles. Intensify toward goal.
+			"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0,
+		},
+		"_stub_enemy_bodyguard": {
+			# Enemy-type actor protecting a priority target. Intercept aggression.
+			"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0,
+		},
+	},
 }
 
 
@@ -89,11 +192,14 @@ func select_intent(context: Dictionary) -> Dictionary:
 	var all_actors: Array     = context.get("all_actors", [])
 	var directive: Dictionary = context.get("directive", {})
 
+	# Build board summary once — passed to _score() for every candidate to avoid re-computation.
+	var board_summary: Dictionary = _build_board_summary(actor, all_actors, context.get("board_cfg", {}))
+
 	var candidates: Array[Dictionary] = _generate_candidates(actor, all_actors)
 
 	# Score each candidate, then sort: highest score first; tiebreak alphabetically.
 	for c: Dictionary in candidates:
-		c["_score"] = _score(c["action_type"], actor, directive)
+		c["_score"] = _score(c["action_type"], actor, directive, board_summary)
 
 	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		if a["_score"] != b["_score"]:
@@ -120,8 +226,13 @@ func select_intent(context: Dictionary) -> Dictionary:
 
 ## Generates all candidate intents for this turn:
 ## - actor.idle: always available (safe fallback, never absent)
-## - melee_attack: if nearest enemy is at Manhattan distance == 1
-## - protect_ally: if a threatened same-faction ally exists (below threat_threshold)
+## - actor.guard: only when nearest enemy is within guard_range tiles (balance.json data.actor.guard_range)
+## - melee_attack: only when nearest enemy is at Manhattan distance == 1
+## - actor.move: when nearest enemy exists but is not yet adjacent (dist > 1)
+## - protect_ally: only when a same-faction ally has taken any damage (current_hp < max_hp)
+##
+## Guard and protect_ally are situation-gated — they only enter the pool when the board
+## state makes them meaningful. Scoring still determines the winner among candidates.
 ##
 ## Adding new action types: add candidate generation here + rows in balance.json tables.
 ## _score() needs no changes.
@@ -131,26 +242,43 @@ func _generate_candidates(actor: Dictionary, all_actors: Array) -> Array[Diction
 	# actor.idle is always a candidate — the unconditional safe fallback.
 	candidates.append({ "action_type": "actor.idle", "target_id": "", "priority": 0.0 })
 
-	# actor.guard — unconditional basic action (GDD: all echoes can defend/guard).
-	# Arbiter scoring determines when it wins; Protector vector + guardian calling bias heavily.
-	candidates.append({ "action_type": "actor.guard", "target_id": "", "priority": 0.0 })
-
-	# melee_attack: only when an enemy is adjacent (dist == 1).
+	# Compute nearest enemy and distance upfront — used by melee, move, and guard.
 	var nearest_enemy: Dictionary = ActorService.get_nearest_enemy(actor, all_actors)
+	var my_pos: Dictionary = actor.get("grid_pos", { "col": 0, "row": 0 })
+	var enemy_dist: int = 999999
+	var t_pos: Dictionary = {}
 	if not nearest_enemy.is_empty():
-		var my_pos: Dictionary  = actor.get("grid_pos", { "col": 0, "row": 0 })
-		var t_pos: Dictionary   = nearest_enemy.get("grid_pos", { "col": 0, "row": 0 })
-		var dist: int = abs(my_pos.get("col", 0) - t_pos.get("col", 0)) \
-					  + abs(my_pos.get("row", 0) - t_pos.get("row", 0))
-		if dist == 1:
+		t_pos = nearest_enemy.get("grid_pos", { "col": 0, "row": 0 })
+		enemy_dist = abs(my_pos.get("col", 0) - t_pos.get("col", 0)) \
+				   + abs(my_pos.get("row", 0) - t_pos.get("row", 0))
+
+	# melee_attack: adjacent enemy (dist == 1).
+	# actor.move: enemy exists but not adjacent (dist > 1).
+	if not nearest_enemy.is_empty():
+		if enemy_dist == 1:
 			candidates.append({
 				"action_type": "melee_attack",
 				"target_id":   str(nearest_enemy.get("id", "")),
-				"distance":    dist,
+				"distance":    enemy_dist,
 				"priority":    1.0,
 			})
+		else:
+			candidates.append({
+				"action_type":    "actor.move",
+				"target_id":      str(nearest_enemy.get("id", "")),
+				"target_pos":     t_pos,
+				"target_distance": enemy_dist,
+				"priority":       1.0,
+			})
 
-	# protect_ally: only when a threatened same-faction ally exists.
+	# actor.guard — only meaningful when an enemy is within guard_range tiles.
+	# No nearby threat → guarding is pointless; omit so scorer never picks it.
+	var guard_range: int = int(_cfg_get("guard_range"))
+	if not nearest_enemy.is_empty() and enemy_dist <= guard_range:
+		candidates.append({ "action_type": "actor.guard", "target_id": "", "priority": 0.0 })
+
+	# protect_ally — only when a same-faction ally has taken any damage (current_hp < max_hp).
+	# threshold=1.0 in balance.json ensures any HP loss qualifies; tune down to tighten the gate.
 	var threshold: float = _cfg_get("threat_threshold")
 	var threatened: Dictionary = ActorService.get_threatened_ally(actor, all_actors, threshold)
 	if not threatened.is_empty():
@@ -165,10 +293,122 @@ func _generate_candidates(actor: Dictionary, all_actors: Array) -> Array[Diction
 	return candidates
 
 
+## Computes a read-only snapshot of the current board state for this actor.
+## Called once in select_intent() before the scoring loop so the computation runs
+## once per turn, not once per candidate.
+##
+## HP sentinel: if current_hp key is absent OR stats.max_hp == 0, hp_ratio = 1.0.
+## This ensures test actors (which don't carry full schema) never trigger HP conditions.
+##
+## last_echo_standing sentinel: requires dead_allies > 0 so a designed 1v1 scenario
+## (all_actors contains only enemies) never fires the condition.
+func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dictionary) -> Dictionary:
+	var my_id:      String = str(actor.get("id", ""))
+	var my_faction: String = str(actor.get("faction", ""))
+	var actor_type: String = str(actor.get("actor_type", "echo"))
+
+	# Count living/dead allies and enemies in a single pass.
+	var living_allies: int  = 0
+	var living_enemies: int = 0
+	var dead_allies: int    = 0
+	for a_v in all_actors:
+		if not (a_v is Dictionary):
+			continue
+		var a: Dictionary = a_v
+		if str(a.get("id", "")) == my_id:
+			continue  # skip self
+		var is_dead: bool = a.get("is_dead", false)
+		if str(a.get("faction", "")) == my_faction:
+			if is_dead:
+				dead_allies += 1
+			else:
+				living_allies += 1
+		else:
+			if not is_dead:
+				living_enemies += 1
+
+	# HP ratio — sentinel 1.0 when data is absent.
+	var max_hp: int    = int(actor.get("stats", {}).get("max_hp", 0))
+	var hp_ratio: float = 1.0
+	if max_hp > 0 and actor.has("current_hp"):
+		hp_ratio = clampf(float(actor["current_hp"]) / float(max_hp), 0.0, 1.0)
+
+	# Distance to nearest enemy.
+	var nearest_enemy: Dictionary = ActorService.get_nearest_enemy(actor, all_actors)
+	var enemy_dist: int = 999999
+	if not nearest_enemy.is_empty():
+		var my_pos: Dictionary = actor.get("grid_pos", { "col": 0, "row": 0 })
+		enemy_dist = GridService.manhattan_distance(my_pos, nearest_enemy.get("grid_pos", { "col": 0, "row": 0 }))
+
+	# Evaluate active conditions.
+	var sit_cfg: Dictionary = _cfg_get("situational_muls")
+	var active: Array[String] = []
+
+	# own_hp_low / own_hp_critical — HP-based; only fire when real HP data exists.
+	var low_threshold:  float = float(sit_cfg.get("own_hp_low",      {}).get("threshold", 0.35))
+	var crit_threshold: float = float(sit_cfg.get("own_hp_critical",  {}).get("threshold", 0.20))
+	if max_hp > 0 and actor.has("current_hp"):
+		if hp_ratio < crit_threshold:
+			active.append("own_hp_critical")
+		if hp_ratio < low_threshold:
+			active.append("own_hp_low")
+
+	# outnumbered: enemies outnumber allies; requires at least 1 living ally so 1v1 doesn't trigger.
+	if living_enemies > living_allies and living_allies > 0:
+		active.append("outnumbered")
+
+	# overwhelming_advantage: allies are at least 2× enemies.
+	if living_enemies > 0 and living_allies >= living_enemies * 2:
+		active.append("overwhelming_advantage")
+
+	# last_echo_standing: all allies fallen; dead_allies > 0 distinguishes real rout from scripted solo.
+	if living_allies == 0 and dead_allies > 0:
+		active.append("last_echo_standing")
+
+	# enemy_far: nearest enemy beyond far threshold.
+	var far_threshold: int = int(sit_cfg.get("enemy_far", {}).get("threshold", 5))
+	if enemy_dist > far_threshold and enemy_dist < 999999:
+		active.append("enemy_far")
+
+	# Enemy-type-only conditions — gated so echo actors never receive them.
+	if actor_type == "enemy" and enemy_dist < 999999:
+		if enemy_dist == 1:
+			active.append("enemy_engaged")
+		elif enemy_dist > 1:
+			active.append("enemy_advancing")
+
+	return {
+		"hp_ratio":          hp_ratio,
+		"enemy_dist":        enemy_dist,
+		"living_allies":     living_allies,
+		"living_enemies":    living_enemies,
+		"dead_allies":       dead_allies,
+		"actor_type":        actor_type,
+		"active_conditions": active,
+	}
+
+
+## Flat bonus from all currently active situational conditions.
+## Loops over active_conditions and sums per-action bonuses from situational_muls.
+## Keys starting with "_stub_" are never placed in active_conditions, so stub rows
+## in balance.json have zero effect regardless of their values.
+## Returns 0.0 when board_summary is empty (backward-compatible; existing tests unaffected).
+func _situational_bonus(action_type: String, board_summary: Dictionary) -> float:
+	var conditions: Array = board_summary.get("active_conditions", [])
+	if conditions.is_empty():
+		return 0.0
+	var sit_cfg: Dictionary = _cfg_get("situational_muls")
+	var bonus: float = 0.0
+	for cond_key: String in conditions:
+		var cond_row: Dictionary = sit_cfg.get(cond_key, {})
+		bonus += float(cond_row.get(action_type, 0.0))
+	return bonus
+
+
 ## Generic data-driven score for action_type given this actor's state and active directive.
 ## Does NOT contain action-type-specific conditionals — new actions require only
 ## balance.json row additions, not changes here.
-func _score(action_type: String, actor: Dictionary, directive: Dictionary) -> float:
+func _score(action_type: String, actor: Dictionary, directive: Dictionary, board_summary: Dictionary = {}) -> float:
 	var calling_origin: String = str(actor.get("calling_origin", "uncalled"))
 	var traits: Dictionary     = actor.get("traits", {})
 	var vectors: Dictionary    = actor.get("vector_scores", {})
@@ -211,7 +451,7 @@ func _score(action_type: String, actor: Dictionary, directive: Dictionary) -> fl
 	# 6. Directive bonus — generic loop over intent_weights (semantic keys).
 	var directive_bonus: float = _directive_bonus(action_type, directive)
 
-	return (base + trait_bonus + vector_bonus + morale_bonus) * fear_factor + directive_bonus
+	return (base + trait_bonus + vector_bonus + morale_bonus) * fear_factor + directive_bonus + _situational_bonus(action_type, board_summary)
 
 
 ## Maps directive semantic intent_weights keys → action bonus.

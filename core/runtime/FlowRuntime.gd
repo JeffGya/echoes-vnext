@@ -130,9 +130,13 @@ func dispatch(action: Dictionary) -> Dictionary:
 		"combat.init":
 			_handle_combat_init(t)
 
-		# COMBAT-004: real round lifecycle — replaces TEMP debug.advance_round.
+		# COMBAT-004: starts a new round, resolves the first actor, emits a per-actor snapshot.
 		"combat.confirm_round":
 			_handle_combat_confirm_round(t)
+
+		# COMBAT-SEQ: advances to the next actor in initiative order; emits a per-actor snapshot.
+		"combat.next_actor":
+			_handle_combat_next_actor(t)
 
 		# ---- Encounter ----
 		"encounter.advance":
@@ -605,8 +609,8 @@ func _handle_combat_init(t: int) -> void:
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 
-## COMBAT-004: real round lifecycle — replaces TEMP debug.advance_round.
-## Full initiative pass → action dispatch → end condition check → snapshot rebuild.
+## COMBAT-SEQ: starts a new round, clears round-scoped state, resolves the first living actor,
+## and emits a per-actor snapshot. Subsequent actors are driven by combat.next_actor.
 func _handle_combat_confirm_round(t: int) -> void:
 	if flow_ctx.encounter_ctx == null or flow_ctx.encounter_ctx.combat_state.is_empty():
 		logger.debug(t, "combat.confirm_round.no_op", "Confirm round: no active combat state", {})
@@ -619,12 +623,6 @@ func _handle_combat_confirm_round(t: int) -> void:
 	if bool(combat_state.get("combat_over", false)):
 		return
 
-	# Read config blocks.
-	var balance: Dictionary = config_service.get_balance()
-	var bdata: Dictionary = balance.get("data", {})
-	var grid_cfg: Dictionary = bdata.get("grid", {})
-	var actor_cfg: Dictionary = bdata.get("actor", {})
-
 	# 1. Log round_start before incrementing.
 	var prev_round: int = int(combat_state.get("round_counter", 0))
 	logger.info(t, "combat.round_start", "Round starting", { "round": prev_round + 1 })
@@ -634,75 +632,178 @@ func _handle_combat_confirm_round(t: int) -> void:
 		if actor_v is Dictionary:
 			actor_v["guard_state"] = false
 	ectx.last_round_results = []
+	ectx.last_actor_action  = {}
 
-	# 3. Advance round counter.
-	combat_state["round_counter"] = prev_round + 1
-	var round: int = int(combat_state["round_counter"])
+	# 3. Advance round counter, reset actor pointer, mark round active.
+	combat_state["round_counter"]        = prev_round + 1
+	combat_state["current_actor_index"]  = 0
+	combat_state["round_phase"]          = "in_round"
 
-	# 4. Resolve each actor's turn in initiative order; track actors_acted for the log.
-	var initiative_order: Array = combat_state.get("initiative_order", [])
-	var actors_acted: Array = []
-	for entry_v in initiative_order:
-		if not entry_v is Dictionary:
-			continue
-		var actor_id: String = str(entry_v.get("id", ""))
-		var actor: Dictionary = _find_actor_by_id(ectx.actors, actor_id)
-		if actor.is_empty() or actor.get("is_dead", false):
-			continue
+	# 4. Resolve the first actor (emits snapshot with cta.next_actor).
+	_resolve_next_actor(t)
 
-		actors_acted.append(actor_id)
 
-		# Build per-turn context — matches ActorStateMachine.advance_turn() contract.
-		var ctx: Dictionary = {
-			"all_actors": ectx.actors,
-			"board_cfg":  grid_cfg,
-			"cfg":        balance,   # ActorStateMachine reads cfg.data.emotion.fear_threshold
-			"t":          t,
-			"round":      round,
-		}
+## COMBAT-SEQ: advances one step in the current round — resolves the next living actor
+## and emits a per-actor snapshot.
+func _handle_combat_next_actor(t: int) -> void:
+	if flow_ctx.encounter_ctx == null or flow_ctx.encounter_ctx.combat_state.is_empty():
+		return
+	if bool(flow_ctx.encounter_ctx.combat_state.get("combat_over", false)):
+		return
+	_resolve_next_actor(t)
 
-		# Create per-actor state machine and advance the turn.
-		var asm := ActorStateMachine.new(actor, null, actor_cfg)
-		var intent: Dictionary = asm.advance_turn(ctx, logger, t)
 
-		match intent.get("action_type", ""):
-			"melee_attack":
-				var target_id: String = str(intent.get("target_id", ""))
-				var target: Dictionary = _find_actor_by_id(ectx.actors, target_id)
-				if target.is_empty():
-					continue
+## COMBAT-SEQ: finds the next living actor from current_actor_index, resolves their turn,
+## appends the result to last_round_results, emits a per-actor snapshot.
+## If no living actor remains, calls _end_round() instead.
+func _resolve_next_actor(t: int) -> void:
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	var combat_state: Dictionary = ectx.combat_state
+
+	# Find the next living actor starting at current_actor_index.
+	var next_idx: int = _find_next_living_actor_idx(ectx)
+	if next_idx == -1:
+		_end_round(t)
+		return
+
+	# Advance pointers — current_actor_index advances PAST this actor after resolution.
+	combat_state["active_initiative_index"] = next_idx
+
+	var order: Array = combat_state.get("initiative_order", [])
+	var actor_id: String = str(order[next_idx].get("id", ""))
+	var actor: Dictionary = _find_actor_by_id(ectx.actors, actor_id)
+
+	# Read config blocks.
+	var balance: Dictionary = config_service.get_balance()
+	var bdata: Dictionary = balance.get("data", {})
+	var grid_cfg: Dictionary = bdata.get("grid", {})
+	var actor_cfg: Dictionary = bdata.get("actor", {})
+	var round: int = int(combat_state.get("round_counter", 0))
+
+	# Build per-turn context — matches ActorStateMachine.advance_turn() contract.
+	var ctx: Dictionary = {
+		"actor":      actor,
+		"all_actors": ectx.actors,
+		"board_cfg":  grid_cfg,
+		"cfg":        balance,
+		"t":          t,
+		"round":      round,
+	}
+
+	# Resolve this actor's turn.
+	var asm := ActorStateMachine.new(actor, null, actor_cfg)
+	var intent: Dictionary = asm.advance_turn(ctx, logger, t)
+	var action_type: String = intent.get("action_type", "actor.idle")
+
+	logger.debug(t, "combat.actor_turn", "%s → %s" % [actor.get("name", "?"), action_type], {
+		"round":       round,
+		"actor_id":    actor.get("id", ""),
+		"actor_name":  actor.get("name", ""),
+		"action_type": action_type,
+		"faction":     actor.get("faction", ""),
+	})
+
+	# Resolve the action and append result to last_round_results.
+	match action_type:
+		"melee_attack":
+			var target_id: String = str(intent.get("target_id", ""))
+			var target: Dictionary = _find_actor_by_id(ectx.actors, target_id)
+			if not target.is_empty():
 				var result: Dictionary = CombatService.resolve_action("melee_attack", actor, target, round)
 				if not result.is_empty():
+					result["source_name"] = str(actor.get("name", ""))
+					result["target_name"] = str(target.get("name", ""))
 					ectx.last_round_results.append(result)
-					logger.info(t, "combat.action_resolved", "Melee resolved", result)
-			"actor.guard":
-				var result: Dictionary = CombatService.resolve_action("actor.guard", actor, {}, round)
-				if not result.is_empty():
-					ectx.last_round_results.append(result)
-					logger.info(t, "combat.guard_taken", "Actor guarding", { "actor_id": actor.get("id", "") })
-			"actor.refuse":
-				# Absolute Fear Rule was already logged in ActorStateMachine — just record it here.
-				logger.info(t, "combat.action_refused", "Actor refused (Absolute Fear Rule)", {
-					"actor_id": actor.get("id", ""),
-					"fear":     int(actor.get("fear", 0)),
-				})
-			_:
-				pass  # actor.move, actor.idle, protect_ally, etc. — resolved elsewhere or no-op
+					var kill_str: String = " (kills)" if result.get("is_kill", false) else ""
+					logger.info(t, "combat.action_resolved",
+					"%s attacks %s for %d%s" % [actor.get("name", "?"), target.get("name", "?"), int(result.get("damage", 0)), kill_str], result)
+		"actor.guard":
+			var guard_result: Dictionary = CombatService.resolve_action("actor.guard", actor, {}, round)
+			if not guard_result.is_empty():
+				guard_result["source_name"] = str(actor.get("name", ""))
+				ectx.last_round_results.append(guard_result)
+				logger.info(t, "combat.guard_taken",
+					"%s guards" % actor.get("name", "?"), { "actor_id": actor.get("id", "") })
+		"actor.refuse":
+			logger.info(t, "combat.action_refused",
+				"%s refuses (fear %d)" % [actor.get("name", "?"), int(actor.get("fear", 0))], {
+				"actor_id": actor.get("id", ""),
+				"fear":     int(actor.get("fear", 0)),
+			})
+			ectx.last_round_results.append({
+				"action_type": "actor.refuse",
+				"source_id":   str(actor.get("id", "")),
+				"source_name": str(actor.get("name", "")),
+				"target_id":   "",
+				"target_name": "",
+				"damage":      0,
+				"is_kill":     false,
+			})
+		"actor.move":
+			var move_target_id: String = str(intent.get("target_id", ""))
+			var move_target: Dictionary = _find_actor_by_id(ectx.actors, move_target_id)
+			var move_target_name: String = str(move_target.get("name", "")) if not move_target.is_empty() else ""
+			logger.debug(t, "combat.actor_moved",
+				"%s moves toward %s" % [actor.get("name", "?"), move_target_name if not move_target_name.is_empty() else move_target_id], {
+				"actor_id":    actor.get("id", ""),
+				"actor_name":  actor.get("name", ""),
+				"target_id":   move_target_id,
+				"target_name": move_target_name,
+				"grid_pos":    actor.get("grid_pos", {}),
+				"round":       round,
+			})
+			ectx.last_round_results.append({
+				"action_type": "actor.move",
+				"source_id":   str(actor.get("id", "")),
+				"source_name": str(actor.get("name", "")),
+				"target_id":   move_target_id,
+				"target_name": move_target_name,
+				"damage":      0,
+				"is_kill":     false,
+				"to_pos":      actor.get("grid_pos", {}).duplicate(),
+			})
+		_:
+			ectx.last_round_results.append({
+				"action_type": action_type,
+				"source_id":   str(actor.get("id", "")),
+				"source_name": str(actor.get("name", "")),
+				"target_id":   str(intent.get("target_id", "")),
+				"target_name": "",
+				"damage":      0,
+				"is_kill":     false,
+			})
 
-	# 5. Build remaining_actors list (living — for round_end log and DoD audit).
+	# Store the most recent result for per-actor snapshot display.
+	if not ectx.last_round_results.is_empty():
+		ectx.last_actor_action = ectx.last_round_results.back().duplicate()
+
+	# Advance current_actor_index past this actor so the next call finds the correct one.
+	combat_state["current_actor_index"] = next_idx + 1
+
+	# Emit per-actor snapshot — UI shows updated board + arrow + action text for this actor.
+	flow_ctx.last_snapshot = FlowEncounterState.build_snapshot(flow_ctx, t)
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+## COMBAT-SEQ: called after the last actor in the round has acted.
+## Logs round_end, checks end condition, resets round state, emits round-end snapshot.
+func _end_round(t: int) -> void:
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	var combat_state: Dictionary = ectx.combat_state
+	var round: int = int(combat_state.get("round_counter", 0))
+
+	# Build remaining_actors list (living — for round_end log).
 	var remaining_actors: Array = []
 	for a_v in ectx.actors:
 		if a_v is Dictionary and not a_v.get("is_dead", false):
 			remaining_actors.append(str(a_v.get("id", "")))
 
-	# 6. Log round end with actors_acted + remaining_actors.
 	logger.info(t, "combat.round_end", "Round complete", {
 		"round":            round,
-		"actors_acted":     actors_acted,
 		"remaining_actors": remaining_actors,
 	})
 
-	# 7. Check end condition — sets combat_over flag and logs combat.end if met.
+	# Check end condition.
 	var end_check: Dictionary = CombatState.check_end_condition(ectx.actors, ectx.resolution_mode)
 	if end_check.get("over", false):
 		combat_state["combat_over"] = true
@@ -711,9 +812,27 @@ func _handle_combat_confirm_round(t: int) -> void:
 			"round":  round,
 		})
 
-	# 8. Rebuild snapshot so CombatBoardScreen sees updated HP, guard flags, and action_results.
+	# Reset round-phase state — snapshot will show cta.confirm_round (or nothing if combat_over).
+	combat_state["round_phase"]          = "idle"
+	combat_state["current_actor_index"]  = 0
+	combat_state["active_initiative_index"] = 0
+	ectx.last_actor_action = {}
+
 	flow_ctx.last_snapshot = FlowEncounterState.build_snapshot(flow_ctx, t)
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+## COMBAT-SEQ: scans initiative_order from current_actor_index forward.
+## Returns the index of the next living actor, or -1 if all actors in the order have gone.
+func _find_next_living_actor_idx(ectx: EncounterContext) -> int:
+	var order: Array = ectx.combat_state.get("initiative_order", [])
+	var start: int = int(ectx.combat_state.get("current_actor_index", 0))
+	for i in range(start, order.size()):
+		var aid: String = str(order[i].get("id", ""))
+		var a: Dictionary = _find_actor_by_id(ectx.actors, aid)
+		if not a.is_empty() and not a.get("is_dead", false):
+			return i
+	return -1
 
 
 ## Returns the first actor dict matching actor_id in the array, or {} if not found.

@@ -71,10 +71,11 @@ static func manhattan_distance(a: Dictionary, b: Dictionary) -> int:
 ## Mutates actor["grid_pos"] in-place. Returns { "from_pos": Dictionary, "to_pos": Dictionary }.
 ## Pure except for the actor mutation — no RNG, no logging.
 ## If no valid neighbour exists (degenerate board), actor is not moved.
+## occupied_positions: Array of { col, row } dicts for cells already taken by living actors.
 static func move_toward(actor: Dictionary, target_pos: Dictionary,
-		board_cfg: Dictionary = {}) -> Dictionary:
+		board_cfg: Dictionary = {}, occupied_positions: Array = []) -> Dictionary:
 	var from_pos: Dictionary = actor.get("grid_pos", { "col": 0, "row": 0 }).duplicate()
-	var best: Dictionary = _greedy_step(from_pos, target_pos, board_cfg)
+	var best: Dictionary = _greedy_step(from_pos, target_pos, board_cfg, occupied_positions)
 	if best != from_pos:
 		assign_grid_pos(actor, int(best.get("col", 0)), int(best.get("row", 0)))
 	return { "from_pos": from_pos, "to_pos": actor["grid_pos"].duplicate() }
@@ -82,9 +83,10 @@ static func move_toward(actor: Dictionary, target_pos: Dictionary,
 
 ## Returns the best neighbour cell to step toward target_pos using greedy minimisation.
 ## Considers all 8 neighbours; filters out-of-bounds cells via is_valid_pos().
+## Filters cells in occupied_positions so two living actors cannot share a cell.
 ## Tiebreak: lowest (col + row) sum. Returns from_pos if no valid neighbour found.
 static func _greedy_step(from_pos: Dictionary, target_pos: Dictionary,
-		board_cfg: Dictionary) -> Dictionary:
+		board_cfg: Dictionary, occupied_positions: Array = []) -> Dictionary:
 	var fc: int = int(from_pos.get("col", 0))
 	var fr: int = int(from_pos.get("row", 0))
 
@@ -98,6 +100,16 @@ static func _greedy_step(from_pos: Dictionary, target_pos: Dictionary,
 				continue
 			var candidate: Dictionary = { "col": fc + dc, "row": fr + dr }
 			if not is_valid_pos(candidate, board_cfg):
+				continue
+			# Skip cells already occupied by a living actor.
+			var is_occupied: bool = false
+			for occ_v in occupied_positions:
+				if occ_v is Dictionary \
+						and int(occ_v.get("col", -1)) == candidate["col"] \
+						and int(occ_v.get("row", -1)) == candidate["row"]:
+					is_occupied = true
+					break
+			if is_occupied:
 				continue
 			var dist: int = manhattan_distance(candidate, target_pos)
 			var sum: int = int(candidate["col"]) + int(candidate["row"])

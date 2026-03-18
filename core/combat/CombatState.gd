@@ -34,6 +34,9 @@ static func create(actors: Array, objective: String,
 		"round_counter":           0,
 		"initiative_order":        _calc_initiative(actors, initiative_seed, init_cfg),
 		"active_initiative_index": 0,
+		# COMBAT-SEQ: sequential resolution fields — runtime only, not in REQUIRED_FIELDS.
+		"current_actor_index":     0,     # pointer into initiative_order for the current round
+		"round_phase":             "idle", # "idle" (between rounds) | "in_round" (round active)
 	}
 
 

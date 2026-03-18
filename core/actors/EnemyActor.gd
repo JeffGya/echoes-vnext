@@ -32,7 +32,7 @@ static func from_definition(defn: Dictionary, t: int) -> Dictionary:
 		"name":           defn.get("name", "Unknown Enemy"),
 		"rarity":         "uncalled",
 		"rank":           1,
-		"calling_origin": "uncalled",
+		"calling_origin": "enemy",
 		"actor_type":     "enemy",
 		"is_structure":   false,
 		# ACTOR-008: death state — always starts alive at spawn

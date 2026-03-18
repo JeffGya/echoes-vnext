@@ -32,15 +32,20 @@ const FACTION_COLORS: Dictionary = {
 
 # Internal token list.
 # Each entry: { pos: Vector2, color: Color, shape: String, label: String,
-#               hp_ratio: float, hp_color: Color, damage_text: String }
+#               hp_ratio: float, hp_color: Color, damage_text: String, actor_id: String }
 # hp_ratio/hp_color/damage_text added in COMBAT-003 for HP bars and damage floats.
+# actor_id + active_actor_id added in COMBAT-SEQ for the yellow active-turn ring.
 var _tokens: Array[Dictionary] = []
+# COMBAT-SEQ: id of the actor whose turn it is; "" between turns / rounds.
+var _active_actor_id: String = ""
 
 
 ## Replace the token list and trigger a redraw.
+## active_actor_id: the actor currently acting — draws a yellow ring on their token.
 ## Call this from CombatBoardScreen._render() after computing cell positions.
-func update_tokens(tokens: Array[Dictionary]) -> void:
+func update_tokens(tokens: Array[Dictionary], active_actor_id: String = "") -> void:
 	_tokens = tokens
+	_active_actor_id = active_actor_id
 	queue_redraw()
 
 
@@ -48,6 +53,7 @@ func update_tokens(tokens: Array[Dictionary]) -> void:
 ## Call this from CombatBoardScreen._clear().
 func clear_tokens() -> void:
 	_tokens = []
+	_active_actor_id = ""
 	queue_redraw()
 
 
@@ -82,6 +88,10 @@ func _draw() -> void:
 			FONT_SIZE,
 			Color.WHITE
 		)
+
+		# COMBAT-SEQ: Yellow ring around the active actor's token while their turn plays out.
+		if not _active_actor_id.is_empty() and tok.get("actor_id", "") == _active_actor_id:
+			draw_arc(pos, TOKEN_RADIUS + 4.0, 0.0, TAU, 32, Color.YELLOW, 2.5)
 
 		# COMBAT-003: HP bar — 44×4 px strip below the token.
 		var bar_w: float  = TOKEN_RADIUS * 2.0
