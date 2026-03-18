@@ -25,6 +25,8 @@
 #                  + (rank-1)*int_per_rank + (level-1)*int_per_level),  min 0
 #   cha    = round(cha_base + faith*cha_faith_mul + wisdom*cha_wisdom_mul
 #                  + (rank-1)*cha_per_rank + (level-1)*cha_per_level),  min 0
+#   speed  = round(speed_base + courage*speed_courage_mul + wisdom*speed_wisdom_mul
+#                  + (rank-1)*speed_per_rank + (level-1)*speed_per_level),  min 1
 #
 # stat_cfg keys live under data.summoning.birth_stats in balance.json.
 # All keys fall back to safe defaults — {} never crashes.
@@ -39,7 +41,7 @@ extends RefCounted
 ## level    — int (>= 1)
 ## stat_cfg — birth_stats config dict from balance.json (data.summoning.birth_stats)
 ##
-## Returns: { "max_hp": int, "atk": int, "def": int, "agi": int, "int": int, "cha": int }
+## Returns: { "max_hp": int, "atk": int, "def": int, "agi": int, "int": int, "cha": int, "speed": int }
 static func compute_stats(
 	traits:   Dictionary,
 	rank:     int,
@@ -157,6 +159,23 @@ static func compute_stats(
 	if cha < 0:
 		cha = 0
 
+	# ---- speed ----
+	var speed_base:        float = float(stat_cfg.get("speed_base",        2))
+	var speed_courage_mul: float = float(stat_cfg.get("speed_courage_mul", 0.06))
+	var speed_wisdom_mul:  float = float(stat_cfg.get("speed_wisdom_mul",  0.04))
+	var speed_per_rank:    float = float(stat_cfg.get("speed_per_rank",    0))
+	var speed_per_level:   float = float(stat_cfg.get("speed_per_level",   0))
+
+	var speed: int = int(round(
+		speed_base
+		+ speed_courage_mul * float(courage)
+		+ speed_wisdom_mul  * float(wisdom)
+		+ speed_per_rank    * float(rank_bonus)
+		+ speed_per_level   * float(level_bonus)
+	))
+	if speed < 1:
+		speed = 1
+
 	return {
 		"max_hp": max_hp,
 		"atk":    atk,
@@ -164,4 +183,5 @@ static func compute_stats(
 		"agi":    agi,
 		"int":    intel,
 		"cha":    cha,
+		"speed":  speed,
 	}

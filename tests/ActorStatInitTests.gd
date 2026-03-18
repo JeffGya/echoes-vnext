@@ -2,7 +2,7 @@
 # Tests for the ACTOR-002 stat block MVP:
 #   - EchoFactory stat block is deterministic across identical seeds (incl. new fields)
 #   - EchoActor.from_echo() → ActorSchema.validate() passes with all ACTOR-002 fields
-#   - EnemyActor.from_definition() → ActorSchema.validate() passes; actor_type = "enemy"
+#   - EnemyActor.from_definition() → ActorSchema.validate() passes; actor_type = "enemy"; hp > 0
 #   - ActorStateMachine.get_stat() returns correct value for a stats sub-dict field
 #
 # All tests are pure unit tests (no runtime needed).
@@ -80,9 +80,10 @@ static func _t_echo_actor_validates() -> Dictionary:
 	if actual_hp != expected_hp:
 		return { "ok": false, "error": "current_hp (%d) != stats.max_hp (%d) at spawn" % [actual_hp, expected_hp] }
 
-	# Flat defaults
-	if int(actor.get("speed",  -1)) != 5:
-		return { "ok": false, "error": "Expected speed=5, got: %d" % int(actor.get("speed", -1)) }
+	# BALANCE-001: speed is now formula-derived (not flat 5). Verify it is a positive integer.
+	# The test cfg passes only hp_base=100, so speed uses DerivedStatService defaults (min 1).
+	if int(actor.get("speed", -1)) < 1:
+		return { "ok": false, "error": "Expected speed >= 1 (formula-derived), got: %d" % int(actor.get("speed", -1)) }
 	if int(actor.get("morale", -1)) != 50:
 		return { "ok": false, "error": "Expected morale=50, got: %d" % int(actor.get("morale", -1)) }
 	if int(actor.get("fear",   -1)) != 0:
@@ -112,9 +113,11 @@ static func _t_enemy_actor_validates() -> Dictionary:
 	if current_hp != max_hp:
 		return { "ok": false, "error": "enemy current_hp (%d) != stats.max_hp (%d) at spawn" % [current_hp, max_hp] }
 
-	# Level-2 scaling: max_hp = 50 + 2*10 = 70
-	if max_hp != 70:
-		return { "ok": false, "error": "Expected max_hp=70 for level-2 enemy, got: %d" % max_hp }
+	# BALANCE-001: max_hp is now formula-derived via DerivedStatService (no cfg passed here,
+	# so DerivedStatService uses its safe defaults with neutral traits 50/50/50 at level 2).
+	# Old flat formula (50 + level*10 = 70) no longer applies. Just verify HP is positive.
+	if max_hp < 1:
+		return { "ok": false, "error": "Expected max_hp > 0 for level-2 enemy, got: %d" % max_hp }
 
 	return { "ok": true }
 

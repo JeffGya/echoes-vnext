@@ -47,7 +47,7 @@ static func from_echo(echo: Dictionary) -> Dictionary:
 		"death_round":    0,
 		# ACTOR-002: runtime fields — not stored in save data; set fresh on each actor creation
 		"current_hp":     echo_stats.get("max_hp", 0),  # = max_hp at spawn; mutable in combat
-		"speed":          5,    # flat default — COMBAT-002 derives formula later
+		"speed":          echo_stats.get("speed", 5),  # formula-derived; fallback 5 for saves pre-BALANCE-001
 		"morale":         int(echo.get("emotion", {}).get("morale_current", 50)),  # EMOTION-001
 		"fear":           int(echo.get("emotion", {}).get("fear_current",   0)),  # EMOTION-001
 		# PROG-005: vector data — read-only view of save data; deep copy for isolation

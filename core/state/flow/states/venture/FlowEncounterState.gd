@@ -44,13 +44,22 @@ func enter(ctx: RefCounted, t: int) -> void:
 		echo_actors.sort_custom(func(a, b): return a["id"] < b["id"])
 
 		# GRID-002: build enemy actor list (hardcoded stubs — actors.json is empty in MVP).
+		# BALANCE-001: pass birth_stats + enemy_types cfg so EnemyActor uses DerivedStatService.
+		var actor_cfg: Dictionary = {}
+		if flow_ctx.config_service != null:
+			var bal: Dictionary  = flow_ctx.config_service.get_balance()
+			var bd: Dictionary   = bal.get("data", {})
+			actor_cfg = {
+				"birth_stats": bd.get("summoning", {}).get("birth_stats", {}),
+				"enemy_types": bd.get("actor", {}).get("enemy_types", {}),
+			}
 		var enemy_defs: Array = [
-			{ "id": "enemy_guardian_01", "name": "Guardian", "level": 1, "faction": "enemy" },
-			{ "id": "enemy_shadow_01",   "name": "Shadow",   "level": 1, "faction": "enemy" },
+			{ "id": "enemy_guardian_01", "name": "Guardian", "type": "guardian", "faction": "enemy" },
+			{ "id": "enemy_shadow_01",   "name": "Shadow",   "type": "shadow",   "faction": "enemy" },
 		]
 		var enemy_actors: Array = []
 		for defn in enemy_defs:
-			enemy_actors.append(EnemyActor.from_definition(defn, t))
+			enemy_actors.append(EnemyActor.from_definition(defn, t, actor_cfg))
 		enemy_actors.sort_custom(func(a, b): return a["id"] < b["id"])
 
 		# GRID-003: deterministic seeded placement.

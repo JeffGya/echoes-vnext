@@ -33,18 +33,18 @@
 		},
 
 		"birth_stats": {
-			"hp_base": 100,
+			"hp_base": 80,
 			"hp_courage_mul": 0.25,
 			"hp_faith_mul": 0.15,
 			"hp_min": 15,
 
-			"atk_base": 4,
-			"atk_courage_mul": 0.12,
-			"atk_faith_mul": 0.05,
+			"atk_base": 2,
+			"atk_courage_mul": 0.20,
+			"atk_faith_mul": 0.12,
 
 			"def_base": 2,
-			"def_wisdom_mul": 0.12,
-			"def_faith_mul": 0.08,
+			"def_wisdom_mul": 0.08,
+			"def_faith_mul": 0.04,
 
 			"agi_base": 2,
 			"agi_wisdom_mul": 0.08,
@@ -58,6 +58,10 @@
 			"cha_faith_mul": 0.08,
 			"cha_wisdom_mul": 0.08,
 
+			"speed_base": 2,
+			"speed_courage_mul": 0.06,
+			"speed_wisdom_mul": 0.04,
+
 			"_comment_growth": "rank/level bonuses use (rank-1) and (level-1) offsets — 0 at birth, preserving save compat",
 			"hp_per_rank":  10,
 			"hp_per_level":  5,
@@ -70,7 +74,9 @@
 			"int_per_rank":  1,
 			"int_per_level": 1,
 			"cha_per_rank":  1,
-			"cha_per_level": 0
+			"cha_per_level": 0,
+			"speed_per_rank":  1,
+			"speed_per_level": 0
 		}
 	},
 	"sanctum": {
@@ -89,6 +95,11 @@
 	},
 	"actor": {
 		"_comment": "Behavior Arbitration Engine (ACTOR-005). All multipliers live here — no GDScript changes needed to tune game feel or add new actions/callings/vectors/directives.",
+		"enemy_types": {
+			"_comment": "Per-type trait values — fed to DerivedStatService using the same birth_stats formula as echoes. Add new types here; no GDScript changes needed.",
+			"guardian": { "traits": { "courage": 45, "wisdom": 65, "faith": 70 } },
+			"shadow":   { "traits": { "courage": 75, "wisdom": 30, "faith": 55 } }
+		},
 		"intent_weights_by_calling_origin": {
 			"guardian": { "melee_attack": 20, "protect_ally": 65, "actor.guard": 45, "actor.idle": 10, "actor.move": 25 },
 			"warrior":  { "melee_attack": 65, "protect_ally": 10, "actor.guard": 15, "actor.idle": 10, "actor.move": 55 },
