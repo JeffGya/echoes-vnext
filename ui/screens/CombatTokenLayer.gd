@@ -32,12 +32,16 @@ const FACTION_COLORS: Dictionary = {
 
 # Internal token list.
 # Each entry: { pos: Vector2, color: Color, shape: String, label: String,
-#               hp_ratio: float, hp_color: Color, damage_text: String, actor_id: String }
+#               hp_ratio: float, hp_color: Color, damage_text: String, actor_id: String,
+#               fear: int, morale: int }
 # hp_ratio/hp_color/damage_text added in COMBAT-003 for HP bars and damage floats.
 # actor_id + active_actor_id added in COMBAT-SEQ for the yellow active-turn ring.
+# fear/morale added for the combat_emotion debug overlay.
 var _tokens: Array[Dictionary] = []
 # COMBAT-SEQ: id of the actor whose turn it is; "" between turns / rounds.
 var _active_actor_id: String = ""
+# Debug: when true, renders F:<fear> and M:<morale> labels above each token.
+var _emotion_debug: bool = false
 
 
 ## Replace the token list and trigger a redraw.
@@ -46,6 +50,13 @@ var _active_actor_id: String = ""
 func update_tokens(tokens: Array[Dictionary], active_actor_id: String = "") -> void:
 	_tokens = tokens
 	_active_actor_id = active_actor_id
+	queue_redraw()
+
+
+## Toggle the emotion debug overlay (F:<fear> / M:<morale> labels above each token).
+## Called from CombatBoardScreen in response to the "combat_emotion" debug command.
+func set_emotion_debug(enabled: bool) -> void:
+	_emotion_debug = enabled
 	queue_redraw()
 
 
@@ -114,4 +125,32 @@ func _draw() -> void:
 				TOKEN_RADIUS * 2.0,
 				FONT_SIZE,
 				Color.RED
+			)
+
+		# Debug emotion overlay: F:<fear> and M:<morale> stacked above the token.
+		# Fear label on top (row -2), morale below it (row -1), both above the token circle.
+		# Only rendered when _emotion_debug is true (toggled via "combat_emotion" debug cmd).
+		if _emotion_debug and not tok.get("is_structure", false):
+			const EM_FONT_SIZE: int = 10
+			var fear_val: int   = int(tok.get("fear", 0))
+			var morale_val: int = int(tok.get("morale", 50))
+			var fear_y: float   = pos.y - TOKEN_RADIUS - 16.0
+			var morale_y: float = pos.y - TOKEN_RADIUS - 4.0
+			draw_string(
+				font,
+				Vector2(pos.x - TOKEN_RADIUS, fear_y),
+				"F:%d" % fear_val,
+				HORIZONTAL_ALIGNMENT_CENTER,
+				TOKEN_RADIUS * 2.0,
+				EM_FONT_SIZE,
+				Color(1.0, 0.45, 0.1)   # orange-red
+			)
+			draw_string(
+				font,
+				Vector2(pos.x - TOKEN_RADIUS, morale_y),
+				"M:%d" % morale_val,
+				HORIZONTAL_ALIGNMENT_CENTER,
+				TOKEN_RADIUS * 2.0,
+				EM_FONT_SIZE,
+				Color(0.3, 0.8, 1.0)    # cyan-blue
 			)

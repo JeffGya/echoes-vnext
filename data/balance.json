@@ -301,7 +301,16 @@
 				"protector": 10,
 				"seeker":     5,
 				"vanguard":   0
-			}
+			},
+			"morale_drain_per_wave": 5
+		},
+		"emotion": {
+			"_comment": "In-combat emotion accumulation. Applied to runtime actor dicts only — does NOT affect save data (save gets standard exit deltas). fear_per_hit: fear added to defender on each melee hit. fear_per_ally_ko: fear added to all living same-faction actors when a comrade is KO'd. fear_per_round: baseline fear tick applied to all living actors at end of each round. morale_decay_n_rounds: morale decays every N rounds. morale_decay_amount: morale lost per decay tick (echo actors only).",
+			"fear_per_hit":          2,
+			"fear_per_ally_ko":      4,
+			"fear_per_round":        1,
+			"morale_decay_n_rounds": 3,
+			"morale_decay_amount":   1
 		},
 		"initiative_modifiers": {
 			"by_archetype": {

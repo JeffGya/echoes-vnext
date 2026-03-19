@@ -694,14 +694,33 @@ func _resolve_next_actor(t: int) -> void:
 	var actor_cfg: Dictionary = bdata.get("actor", {})
 	var round: int = int(combat_state.get("round_counter", 0))
 
+	# COMBAT-006: find shrine and compute context fields for purify_shrine objective.
+	var shrine_alive: bool    = false
+	var shrine_hp_ratio: float = 1.0
+	if ectx.resolution_mode == EncounterResolutionModes.PURIFY_SHRINE:
+		for a_v in ectx.actors:
+			if a_v is Dictionary and a_v.get("is_structure", false) and not a_v.get("is_dead", false):
+				shrine_alive = true
+				var s_max: int = int(a_v.get("stats", {}).get("max_hp", 0))
+				if s_max > 0:
+					shrine_hp_ratio = clampf(float(a_v.get("current_hp", s_max)) / float(s_max), 0.0, 1.0)
+				break
+
 	# Build per-turn context — matches ActorStateMachine.advance_turn() contract.
 	var ctx: Dictionary = {
-		"actor":      actor,
-		"all_actors": ectx.actors,
-		"board_cfg":  grid_cfg,
-		"cfg":        balance,
-		"t":          t,
-		"round":      round,
+		"actor":                   actor,
+		"all_actors":              ectx.actors,
+		"board_cfg":               grid_cfg,
+		"cfg":                     balance,
+		"t":                       t,
+		"round":                   round,
+		# COMBAT-006: shrine context fields for BehaviorArbiter + MeleeBehaviorModule.
+		"purifier_id":             ectx.purifier_id,
+		"is_purifier":             str(actor.get("id", "")) == ectx.purifier_id,
+		"shrine_alive":            shrine_alive,
+		"shrine_hp_ratio":         shrine_hp_ratio,
+		"prefer_objective_target": actor.get("faction", "") == "enemy" \
+			and ectx.resolution_mode == EncounterResolutionModes.PURIFY_SHRINE,
 	}
 
 	# Resolve this actor's turn.
@@ -731,6 +750,15 @@ func _resolve_next_actor(t: int) -> void:
 					var kill_str: String = " (kills)" if result.get("is_kill", false) else ""
 					logger.info(t, "combat.action_resolved",
 					"%s attacks %s for %d%s" % [actor.get("name", "?"), target.get("name", "?"), int(result.get("damage", 0)), kill_str], result)
+					# In-combat fear accumulation: each hit adds fear pressure to the defender (runtime dict only).
+					var combat_emo_cfg: Dictionary = bdata.get("combat", {}).get("emotion", {})
+					var fear_per_hit: int = int(combat_emo_cfg.get("fear_per_hit", 2))
+					target["fear"] = mini(100, int(target.get("fear", 0)) + fear_per_hit)
+					logger.debug(t, "combat.fear.hit", "%s gains fear from hit" % target.get("name", "?"), {
+						"actor_id": str(target.get("id", "")),
+						"delta":    fear_per_hit,
+						"new_fear": int(target.get("fear", 0)),
+					})
 		"actor.guard":
 			var guard_result: Dictionary = CombatService.resolve_action("actor.guard", actor, {}, round)
 			if not guard_result.is_empty():
@@ -817,20 +845,119 @@ func _end_round(t: int) -> void:
 		"remaining_actors": remaining_actors,
 	})
 
+	# COMBAT-006: apply per-round shrine drain before end-condition check (drain can kill shrine).
+	var shrine_hp_val: int = 0
+	if ectx.resolution_mode == EncounterResolutionModes.PURIFY_SHRINE:
+		var balance_drain: Dictionary = config_service.get_balance()
+		var shrine_cfg_drain: Dictionary = balance_drain.get("data", {}).get("combat", {}).get("shrine", {})
+		for a_v in ectx.actors:
+			if a_v is Dictionary and a_v.get("is_structure", false) and not a_v.get("is_dead", false):
+				var drain_result: Dictionary = ShrineService.apply_drain(a_v, shrine_cfg_drain)
+				shrine_hp_val = int(drain_result.get("shrine_hp", 0))
+				if shrine_hp_val <= 0:
+					a_v["is_dead"]     = true
+					a_v["death_round"] = round
+				logger.info(t, "combat.shrine_drain", "Shrine drained this round", {
+					"shrine_id":     str(a_v.get("id", "")),
+					"drain":         int(drain_result.get("drain", 0)),
+					"shrine_hp":     shrine_hp_val,
+					"stacks_active": a_v.get("purify_stacks", []).size(),
+				})
+				# Decrement purifier cooldown (min 0).
+				if not ectx.purifier_id.is_empty():
+					for pa_v in ectx.actors:
+						if pa_v is Dictionary and str(pa_v.get("id", "")) == ectx.purifier_id:
+							pa_v["purify_cooldown"] = maxi(0, int(pa_v.get("purify_cooldown", 0)) - 1)
+							break
+				# Shrine morale drain: each wave grinds down the party's will (runtime dict only).
+				var morale_drain_wave: int = int(shrine_cfg_drain.get("morale_drain_per_wave", 5))
+				var shrine_morale_affected: int = 0
+				for em_a in ectx.actors:
+					if em_a is Dictionary and not em_a.get("is_dead", false) \
+							and em_a.get("faction", "") == "echo":
+						em_a["morale"] = maxi(0, int(em_a.get("morale", 50)) - morale_drain_wave)
+						shrine_morale_affected += 1
+				if shrine_morale_affected > 0:
+					logger.info(t, "combat.shrine.morale_drain", "Shrine wave drains echo morale", {
+						"delta":          -morale_drain_wave,
+						"affected_count": shrine_morale_affected,
+					})
+				break
+		# Capture shrine_hp even if alive (for snapshot).
+		if shrine_hp_val == 0:
+			for a_v in ectx.actors:
+				if a_v is Dictionary and a_v.get("is_structure", false):
+					shrine_hp_val = int(a_v.get("current_hp", 0))
+					break
+
+	# In-combat emotion tick — applied to runtime actor dicts only; save data unchanged here.
+	var emo_tick_cfg: Dictionary = config_service.get_balance().get("data", {}).get("combat", {}).get("emotion", {})
+
+	# A) Ally KO fear spread: when a comrade falls, surviving same-faction actors gain fear.
+	var fear_per_ally_ko: int = int(emo_tick_cfg.get("fear_per_ally_ko", 4))
+	for res_v in ectx.last_round_results:
+		if res_v is Dictionary and int(res_v.get("defender_hp_after", 1)) <= 0:
+			var ko_id: String = str(res_v.get("target_id", ""))
+			var ko_actor: Dictionary = _find_actor_by_id(ectx.actors, ko_id)
+			if ko_actor.is_empty():
+				continue
+			var ko_faction: String = str(ko_actor.get("faction", ""))
+			var ko_spread_count: int = 0
+			for sp_a in ectx.actors:
+				if sp_a is Dictionary and not sp_a.get("is_dead", false) \
+						and str(sp_a.get("id", "")) != ko_id \
+						and str(sp_a.get("faction", "")) == ko_faction \
+						and not sp_a.get("is_structure", false):
+					sp_a["fear"] = mini(100, int(sp_a.get("fear", 0)) + fear_per_ally_ko)
+					ko_spread_count += 1
+			if ko_spread_count > 0:
+				logger.info(t, "combat.fear.ally_ko", "Ally KO spreads fear to survivors", {
+					"ko_actor_id":    ko_id,
+					"affected_count": ko_spread_count,
+					"delta":          fear_per_ally_ko,
+				})
+
+	# B) Per-round fear tick: baseline fear accumulation for all living actors.
+	var fear_per_round: int = int(emo_tick_cfg.get("fear_per_round", 1))
+	for tick_a in ectx.actors:
+		if tick_a is Dictionary and not tick_a.get("is_dead", false) \
+				and not tick_a.get("is_structure", false):
+			tick_a["fear"] = mini(100, int(tick_a.get("fear", 0)) + fear_per_round)
+	logger.debug(t, "combat.emotion.tick", "Round fear tick applied", {
+		"round":      round,
+		"fear_delta": fear_per_round,
+	})
+
+	# C) Morale decay every N rounds: long fights grind echo morale (echo actors only).
+	var morale_decay_n: int  = int(emo_tick_cfg.get("morale_decay_n_rounds", 3))
+	var morale_decay_amt: int = int(emo_tick_cfg.get("morale_decay_amount", 1))
+	if morale_decay_n > 0 and round % morale_decay_n == 0:
+		for dec_a in ectx.actors:
+			if dec_a is Dictionary and not dec_a.get("is_dead", false) \
+					and dec_a.get("faction", "") == "echo":
+				dec_a["morale"] = maxi(0, int(dec_a.get("morale", 50)) - morale_decay_amt)
+		logger.debug(t, "combat.emotion.morale_decay", "Round morale decay applied", {
+			"round": round,
+			"delta": -morale_decay_amt,
+		})
+
 	# Check end condition.
 	var end_check: Dictionary = CombatState.check_end_condition(ectx.actors, ectx.resolution_mode)
 	if end_check.get("over", false):
 		combat_state["combat_over"] = true
 		# COMBAT-005: store result on ectx so build_snapshot() can surface it.
+		# COMBAT-006: include shrine_hp in result for snapshot display.
 		ectx.combat_result = {
 			"victory":     bool(end_check.get("victory", false)),
 			"reason":      str(end_check.get("reason", "")),
 			"round_ended": round,
+			"shrine_hp":   shrine_hp_val,
 		}
 		logger.info(t, "combat.end", "Combat ended", {
-			"victory": bool(end_check.get("victory", false)),
-			"reason":  str(end_check.get("reason", "")),
-			"round":   round,
+			"victory":   bool(end_check.get("victory", false)),
+			"reason":    str(end_check.get("reason", "")),
+			"round":     round,
+			"shrine_hp": shrine_hp_val,
 		})
 
 	# Reset round-phase state — snapshot will show cta.confirm_round (or nothing if combat_over).

@@ -2059,3 +2059,68 @@ static func check_end_condition(actors: Array, _objective: String) -> Dictionary
 | `actors_acted` | Array | `[]` placeholder (populated after round) |
 
 `cta.confirm_round` is **omitted** from `actions` when `combat_over == true` — button hides automatically.
+
+---
+
+## In-Combat Emotion Dynamics
+
+> Added post-COMBAT-006 (not a formal backlog story — gap-filling pass based on addenda review).
+
+Fear and morale are **live, accumulating values** on the runtime actor dict during combat. They are NOT static snapshots read once at encounter start.
+
+### Contract
+
+- `actor.fear` and `actor.morale` are **flat top-level fields** on the runtime dict (not under `stats`).
+- Mutations during combat are **direct dict field writes** — `EmotionService` is NOT called during combat.
+- Save data is unchanged during combat. The standardised win/loss exit deltas (`combat_exit_win_fear`, etc.) are applied by FlowRuntime at combat exit via `EmotionService`.
+- The **Absolute Fear Rule** (`fear >= 80 → actor.refuse`) is now reachable mid-combat because fear accumulates from hits.
+
+### Accumulation sources (all in `FlowRuntime`)
+
+| Source | When | Target | Delta |
+|--------|------|--------|-------|
+| Fear per hit | After any `melee_attack` result in `_resolve_next_actor()` | Defender | `+data.combat.emotion.fear_per_hit` (default 2) |
+| Ally KO spread | In `_end_round()`, after scanning last_round_results for hp_after ≤ 0 | All living same-faction survivors | `+data.combat.emotion.fear_per_ally_ko` (default 4) |
+| Per-round fear tick | In `_end_round()`, after KO spread | All living non-structure actors | `+data.combat.emotion.fear_per_round` (default 1) |
+| Morale decay | In `_end_round()`, every N rounds (default 3) | All living echo actors | `−data.combat.emotion.morale_decay_amount` (default 1) |
+| Shrine wave drain | In `_end_round()`, purify_shrine objective only | All living echo actors | `−data.combat.shrine.morale_drain_per_wave` (default 5) |
+
+All values clamped: `fear` → 0–100, `morale` → 0–100.
+Structures (`is_structure == true`) are always excluded from all emotion ticks.
+
+### balance.json location
+
+```json
+"data": {
+  "combat": {
+    "emotion": {
+      "fear_per_hit":          2,
+      "fear_per_ally_ko":      4,
+      "fear_per_round":        1,
+      "morale_decay_n_rounds": 3,
+      "morale_decay_amount":   1
+    },
+    "shrine": {
+      "morale_drain_per_wave": 5
+    }
+  }
+}
+```
+
+### New log events
+
+| Event | Fired when | Key payload fields |
+|-------|------------|-------------------|
+| `combat.fear.hit` | After any melee hit, in `_resolve_next_actor()` | `actor_id`, `delta`, `new_fear` |
+| `combat.fear.ally_ko` | When an actor is KO'd in a round, at `_end_round()` | `ko_actor_id`, `affected_count`, `delta` |
+| `combat.emotion.tick` | End of every round (per-round fear tick) | `round`, `fear_delta` |
+| `combat.emotion.morale_decay` | Every N rounds in `_end_round()` | `round`, `delta` |
+| `combat.shrine.morale_drain` | After shrine drain resolves each round (`purify_shrine` only) | `delta`, `affected_count` |
+
+### Debug command
+
+| Command | Effect |
+|---------|--------|
+| `combat_emotion` / `combat_em` | Toggles `F:<fear>` (orange) and `M:<morale>` (cyan) labels above all actor tokens on `CombatBoardScreen`. No-ops if CombatBoardScreen is not active. |
+
+The overlay is rendered by `CombatTokenLayer._draw()` when `_emotion_debug == true`. The flag is toggled via `CombatBoardScreen.set_emotion_debug()`, called from `AppRoot._run_combat_emotion_command()`.

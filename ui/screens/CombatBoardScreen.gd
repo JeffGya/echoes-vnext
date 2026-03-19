@@ -232,11 +232,12 @@ func _on_end_combat_pressed() -> void:
 		action_requested.emit(_end_combat_action)
 
 
-## COMBAT-005: Maps internal reason strings to player-facing labels.
+## COMBAT-005/006: Maps internal reason strings to player-facing labels.
 func _format_result_reason(reason: String) -> String:
 	match reason:
 		"all_enemies_defeated": return "All enemies defeated"
 		"all_echoes_dead":      return "All echoes fell"
+		"shrine_destroyed":     return "Shrine Destroyed"  # COMBAT-006
 	return reason
 
 
@@ -348,8 +349,17 @@ func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}
 			"hp_color":    hp_color,
 			"damage_text": damage_by_id.get(actor_id, ""),
 			"actor_id":    actor_id,   # COMBAT-SEQ: needed for yellow ring
+			"fear":        int(actor.get("fear", 0)),
+			"morale":      int(actor.get("morale", 50)),
+			"is_structure": actor.get("is_structure", false),
 		})
 	_token_layer.update_tokens(tokens, current_actor_id)
+
+
+## Toggle the emotion debug overlay on the token layer.
+## Called from AppRoot when the "combat_emotion" debug command fires.
+func set_emotion_debug(enabled: bool) -> void:
+	_token_layer.set_emotion_debug(enabled)
 
 
 func _faction_color(faction: String) -> Color:

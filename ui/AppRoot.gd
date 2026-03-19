@@ -206,8 +206,15 @@ func _on_debug_command(command: String) -> void:
 		_run_combat_objective_command(parts)
 		return
 
+	# -------------------------
+	# combat_emotion debug overlay toggle
+	# -------------------------
+	if head == "combat_emotion" or head == "combat_em":
+		_run_combat_emotion_command()
+		return
+
 	_debug_print("Unknown command: " + cmd)
-	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective [purify_shrine|defeat_enemies]")
+	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective [purify_shrine|defeat_enemies] | combat_emotion")
 	
 	_flush_logs_to_console()
 	
@@ -545,6 +552,22 @@ func _run_combat_objective_command(parts: Array) -> void:
 		_debug_print("combat_objective set to: %s — encounter reset, re-enter combat to apply" % op)
 	else:
 		_debug_print("Unknown mode '%s'. Use: purify_shrine | defeat_enemies" % op)
+	_flush_logs_to_console()
+
+
+# Toggle the emotion debug overlay on the active CombatBoardScreen.
+# Shows F:<fear> and M:<morale> above each actor token.
+# No-ops gracefully when CombatBoardScreen is not active.
+func _run_combat_emotion_command() -> void:
+	if _combat_board_screen == null or not _combat_board_screen.visible:
+		_debug_print("combat_emotion: CombatBoardScreen not active — command ignored")
+		_flush_logs_to_console()
+		return
+	# Toggle the flag. Read current state from the token layer directly.
+	var currently_on: bool = _combat_board_screen._token_layer._emotion_debug
+	_combat_board_screen.set_emotion_debug(not currently_on)
+	var state_label: String = "ON" if not currently_on else "OFF"
+	_debug_print("Emotion debug: %s" % state_label)
 	_flush_logs_to_console()
 
 
