@@ -485,8 +485,9 @@ func _run_hero_info_command(parts: Array) -> void:
 		var arch  := str(echo.get("archetype_birth", ""))
 		var bias  := PersonalityArchetype.combat_bias(arch)
 		var dkey  := PersonalityArchetype.dialogue_key(arch)
-		var bark  := ArchetypeBarks.arrival(arch, str(echo.get("name", "")))
 		var t_v   := echo.get("traits", {}) as Dictionary
+		var tier  := ShoutBank.get_tier(int(t_v.get("courage", 0)), int(t_v.get("wisdom", 0)), int(t_v.get("faith", 0)))
+		var bark  := ShoutBank.get_shout("arrival", arch, tier)
 		var stats := echo.get("stats", {}) as Dictionary
 		var vs    := echo.get("vector_scores", {}) as Dictionary
 		var dom_v := str(echo.get("dominant_vector", "?"))

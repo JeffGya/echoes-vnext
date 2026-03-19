@@ -68,6 +68,11 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Demon"
 
+[node name="BarkLabel" type="Label" parent="Center/Panel/Root/Card" unique_id=312749058]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+
 [node name="TraitsLabel" type="Label" parent="Center/Panel/Root/Card" unique_id=94066665]
 unique_name_in_owner = true
 layout_mode = 2

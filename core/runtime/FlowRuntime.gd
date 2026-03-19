@@ -365,10 +365,18 @@ func _handle_sanctum_summon(action: Dictionary, t: int) -> void:
 				# PROG-005: initialise vector scores from archetype_init config
 				VectorService.init_vectors(e_v, vec_cfg, logger, t)
 				# Arrival bark — logged for debug output and telemetry (display-only, no side effects)
-				var bark := ArchetypeBarks.arrival(str(e_v.get("archetype_birth", "")), str(e_v.get("name", "")))
+				var arch_v   := str(e_v.get("archetype_birth", ""))
+				var t_v_bark := e_v.get("traits", {}) as Dictionary
+				var tier_v   := ShoutBank.get_tier(
+					int(t_v_bark.get("courage", 50)),
+					int(t_v_bark.get("wisdom",  50)),
+					int(t_v_bark.get("faith",   50))
+				)
+				var bark := ShoutBank.get_shout("arrival", arch_v, tier_v)
 				logger.info(t, "sanctum.summon.bark", bark, {
 					"echo_id": str(e_v.get("id", "")),
-					"arch":    str(e_v.get("archetype_birth", ""))
+					"arch":    arch_v,
+					"tier":    tier_v,
 				})
 				flow_ctx.pending_summon_reveals.append(e_v)
 

@@ -10,6 +10,7 @@ signal dismiss_requested()
 @onready var name_label: Label = %NameLabel
 @onready var meta_label: Label = %MetaLabel
 @onready var archetype_label: Label = %ArchetypeLabel
+@onready var bark_label: Label = %BarkLabel
 @onready var traits_label: Label = %TraitsLabel
 @onready var stats_label: Label = %StatsLabel
 
@@ -67,15 +68,17 @@ func _update_ui() -> void:
 	name_label.text = echo_name
 	meta_label.text = "%s • %s • %s" % [gender, rarity, calling]
 	
-	archetype_label.text = "Archetype: %s" % str(e.get("archetype_birth", ""))
-	
+	var arch := str(e.get("archetype_birth", ""))
+	archetype_label.text = "Archetype: %s" % arch
+
 	var traits_v: Variant = e.get("traits", {})
 	var traits: Dictionary = traits_v if traits_v is Dictionary else {}
-	traits_label.text = "Traits: C %d  W %d  F %d" % [
-		int(traits.get("courage", 0)),
-		int(traits.get("wisdom", 0)),
-		int(traits.get("faith", 0)),
-	]
+	var courage := int(traits.get("courage", 0))
+	var wisdom  := int(traits.get("wisdom", 0))
+	var faith   := int(traits.get("faith", 0))
+	var tier    := ShoutBank.get_tier(courage, wisdom, faith)
+	bark_label.text = "\"%s\"" % ShoutBank.get_shout("arrival", arch, tier)
+	traits_label.text = "Traits: C %d  W %d  F %d" % [courage, wisdom, faith]
 	
 	var stats_v: Variant = e.get("stats", {})
 	var stats: Dictionary = stats_v if stats_v is Dictionary else {}
