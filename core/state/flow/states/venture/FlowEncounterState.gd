@@ -12,8 +12,11 @@ func enter(ctx: RefCounted, t: int) -> void:
 	if flow_ctx.encounter_ctx == null:
 		flow_ctx.encounter_ctx = EncounterContext.new()
 		flow_ctx.encounter_ctx.encounter_id = flow_ctx.encounter_id
-		# Prove the pipe works with a non-combat mode.
-		flow_ctx.encounter_ctx.resolution_mode = EncounterResolutionModes.PURIFY_SHRINE
+		# COMBAT-006 dev toggle: use override if set, otherwise default to PURIFY_SHRINE.
+		if not flow_ctx.dev_combat_objective.is_empty():
+			flow_ctx.encounter_ctx.resolution_mode = flow_ctx.dev_combat_objective
+		else:
+			flow_ctx.encounter_ctx.resolution_mode = EncounterResolutionModes.PURIFY_SHRINE
 
 	# Create machine once, register states once.
 	if flow_ctx.encounter_machine == null:
@@ -76,10 +79,43 @@ func enter(ctx: RefCounted, t: int) -> void:
 
 		GridService.place_actors(echo_actors, enemy_actors, grid_cfg, rng, place_cfg)
 
+		# COMBAT-006: spawn shrine actor if objective is purify_shrine.
+		var shrine_actor: Dictionary = {}
+		var shrine_cfg: Dictionary = {}
+		if flow_ctx.encounter_ctx.resolution_mode == EncounterResolutionModes.PURIFY_SHRINE:
+			var structure_cfg: Dictionary = {}
+			if flow_ctx.config_service != null:
+				var bal: Dictionary = flow_ctx.config_service.get_balance()
+				var bd: Dictionary  = bal.get("data", {})
+				structure_cfg = bd.get("actor", {}).get("structures", {})
+				shrine_cfg    = bd.get("combat", {}).get("shrine", {})
+			var shrine_def: Dictionary = structure_cfg.get("shrine", {
+				"id": "shrine_01", "name": "Ancestral Shrine",
+				"faction": "structure", "max_hp": 200,
+				"grid_pos": { "col": 0, "row": 4 }
+			})
+			shrine_actor = StructureActor.from_definition(shrine_def, t)
+			# Runtime-only shrine fields — not in ActorSchema REQUIRED_FIELDS.
+			shrine_actor["purify_stacks"] = []
+
 		# COMBAT-001: store placed actors and seed on ectx for snapshot rebuilds.
 		var all_actors: Array = echo_actors + enemy_actors
+		if not shrine_actor.is_empty():
+			all_actors.append(shrine_actor)
 		flow_ctx.encounter_ctx.actors = all_actors.duplicate(true)
 		flow_ctx.encounter_ctx.placement_seed = placement_seed
+
+		# COMBAT-006: select purifier and initialise cooldown field on the actor.
+		if not shrine_actor.is_empty() and not shrine_cfg.is_empty():
+			var purifier_id: String = ShrineService.select_purifier(echo_actors, shrine_cfg)
+			flow_ctx.encounter_ctx.purifier_id = purifier_id
+			# Tag the purifier actor in ectx.actors with purify_cooldown = 0.
+			if not purifier_id.is_empty():
+				for i in range(flow_ctx.encounter_ctx.actors.size()):
+					var a: Dictionary = flow_ctx.encounter_ctx.actors[i]
+					if a.get("id", "") == purifier_id:
+						flow_ctx.encounter_ctx.actors[i]["purify_cooldown"] = 0
+						break
 
 		# GRID-003: log combat.actor.spawned — includes placement_seed for determinism audit.
 		if flow_ctx.logger != null:
@@ -89,6 +125,12 @@ func enter(ctx: RefCounted, t: int) -> void:
 					{ "actor_id": actor["id"], "name": actor["name"],
 					  "faction": actor.get("faction", ""), "grid_pos": actor["grid_pos"],
 					  "placement_seed": placement_seed })
+			# COMBAT-006: log purifier selection.
+			if not flow_ctx.encounter_ctx.purifier_id.is_empty():
+				flow_ctx.logger.info(t, "combat.purifier_selected",
+					"Purifier selected for shrine objective",
+					{ "purifier_id": flow_ctx.encounter_ctx.purifier_id,
+					  "shrine_id":   shrine_actor.get("id", "") })
 
 	# COMBAT-001: always build snapshot via static builder (type always "flow.encounter").
 	flow_ctx.last_snapshot = FlowEncounterState.build_snapshot(flow_ctx, t)
@@ -185,6 +227,13 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# COMBAT-005: combat result fields — populated when combat_over; defaults when not.
 	var combat_result: Dictionary = ectx.combat_result if ectx != null else {}
 
+	# COMBAT-006: read shrine HP from actors (0 if no shrine or shrine dead).
+	var shrine_hp: int = 0
+	for a_v in actors:
+		if a_v is Dictionary and a_v.get("is_structure", false):
+			shrine_hp = int(a_v.get("current_hp", 0))
+			break
+
 	return {
 		"type": FlowStateIds.ENCOUNTER,
 		"data": {
@@ -209,6 +258,8 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"victory":     bool(combat_result.get("victory", false)),
 			"reason":      str(combat_result.get("reason", "")),
 			"round_ended": int(combat_result.get("round_ended", 0)),
+			# COMBAT-006: shrine HP (live value each frame; 0 when no shrine or shrine dead).
+			"shrine_hp":   shrine_hp,
 		},
 		"actions": actions,
 		"meta":    { "t": t },

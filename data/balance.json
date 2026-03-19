@@ -100,6 +100,16 @@
 			"guardian": { "traits": { "courage": 45, "wisdom": 65, "faith": 70 } },
 			"shadow":   { "traits": { "courage": 75, "wisdom": 30, "faith": 55 } }
 		},
+		"structures": {
+			"_comment": "COMBAT-006: Static structure definitions. Built via StructureActor.from_definition(). grid_pos is fixed — not placed by GridService.",
+			"shrine": {
+				"id":       "shrine_01",
+				"name":     "Ancestral Shrine",
+				"faction":  "structure",
+				"max_hp":   200,
+				"grid_pos": { "col": 0, "row": 4 }
+			}
+		},
 		"intent_weights_by_calling_origin": {
 			"guardian": { "melee_attack": 20, "protect_ally": 65, "actor.guard": 45, "actor.idle": 10, "actor.move": 25 },
 			"warrior":  { "melee_attack": 65, "protect_ally": 10, "actor.guard": 15, "actor.idle": 10, "actor.move": 55 },
@@ -149,7 +159,7 @@
 		"fear_active_dampen":    0.6,
 		"fear_passive_actions":  ["actor.idle", "actor.guard"],
 		"threat_threshold":      1.0,
-		"guard_range":           4,
+		"guard_range":           2,
 		"situational_muls": {
 			"_comment": "Flat score additions per active board condition. Keys not in active_conditions are never read. _stub_ keys are never computed — zero-value placeholders for future features.",
 
@@ -189,13 +199,14 @@
 				"melee_attack": 0, "protect_ally": 0, "actor.guard": -10, "actor.idle": -8, "actor.move": 15
 			},
 
-			"_stub_near_friendly_structure": {
-				"_comment": "STUB: within N tiles of own Shrine/Totem. Defensive bonus.",
-				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
+			"near_friendly_structure": {
+				"_comment": "COMBAT-006: Shrine/Totem alive — soft defensive bonus for echo actors only. No move penalty so echoes advance freely to intercept.",
+				"melee_attack": -5, "protect_ally": 8, "actor.guard": 3, "actor.idle": 0, "actor.move": 0,
+				"actor.purify_shrine": 10
 			},
-			"_stub_near_hostile_structure": {
-				"_comment": "STUB: within N tiles of enemy structure. Aggressive push.",
-				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
+			"near_hostile_structure": {
+				"_comment": "COMBAT-006: Enemy sees living shrine — boost aggression toward it.",
+				"melee_attack": 10, "protect_ally": 0, "actor.guard": -5, "actor.idle": -5, "actor.move": 10
 			},
 			"_stub_ally_adjacent": {
 				"_comment": "STUB: a living ally in adjacent cell. Formation/support bonus.",
@@ -277,6 +288,21 @@
 	},
 	"combat": {
 		"_comment": "COMBAT-002: Initiative scoring modifiers. Formula: (speed*3 + agi*2) + arch_mod + calling_mod + trait_mod + vec_mod + nudge. Sort descending. Tiebreak: party list order. Nudge: CampaignSeed.derive_from(placement_seed, actor_id) % 10. All values tunable without code changes.",
+		"shrine": {
+			"_comment": "COMBAT-006: Purify Shrine objective config. Drain runs after all actor turns each round. Purify slows drain — it does not heal. Purifier = highest (faith × weight_faith + vector_bonus) echo, selected once at combat init.",
+			"base_drain_per_round":   5,
+			"purify_stack_rounds":    2,
+			"purify_drain_reduction": 3,
+			"purify_expiry_penalty":  2,
+			"purify_cooldown_rounds": 3,
+			"purify_weight_faith":    0.5,
+			"purify_weight_by_vector": {
+				"pillar":    20,
+				"protector": 10,
+				"seeker":     5,
+				"vanguard":   0
+			}
+		},
 		"initiative_modifiers": {
 			"by_archetype": {
 				"valiant": 4, "proud": 3, "canny": 2, "ambitious": 2, "loyal": 1,

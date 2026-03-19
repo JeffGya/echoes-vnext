@@ -36,6 +36,8 @@ static func get_nearest_enemy(actor: Dictionary, all_actors: Array) -> Dictionar
 			continue  # ACTOR-008: dead actors are not valid targets
 		if candidate.get("faction", "") == my_faction:
 			continue  # same faction — skip
+		if candidate.get("is_structure", false):
+			continue  # COMBAT-006 fix: structures are never valid enemy targets
 		if candidate.get("id", "") == actor.get("id", ""):
 			continue  # self — skip
 

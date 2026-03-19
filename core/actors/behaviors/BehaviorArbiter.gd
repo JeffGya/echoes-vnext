@@ -94,7 +94,7 @@ const _DEFAULTS := {
 	"fear_active_dampen":    0.6,
 	"fear_passive_actions":  ["actor.idle", "actor.guard"],
 	"threat_threshold":      1.0,   # 1.0 = any HP damage qualifies; lower to tighten the gate
-	"guard_range":           4,     # enemy must be within this many tiles for guard to be a candidate
+	"guard_range":           2,     # enemy must be within this many tiles for guard to be a candidate
 
 	# -------------------------
 	# Situational modifier tables
@@ -145,13 +145,14 @@ const _DEFAULTS := {
 
 		# --- Stub conditions (zero values — no effect until implemented) ---
 		# To activate: remove _stub_ prefix, tune values, add condition check to _build_board_summary().
-		"_stub_near_friendly_structure": {
-			# Actor within N tiles of own Shrine/Totem. Defensive bonus near own structures.
-			"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0,
+		"near_friendly_structure": {
+			# A living friendly structure (shrine/totem) exists on the board. Soft defensive bonus — only for echo actors.
+			# No move penalty: echoes must still advance freely to intercept enemies heading for the shrine.
+			"melee_attack": -5, "protect_ally": 8, "actor.guard": 3, "actor.idle": 0, "actor.move": 0, "actor.purify_shrine": 10,
 		},
-		"_stub_near_hostile_structure": {
-			# Actor within N tiles of enemy structure. Aggressive push to destroy it.
-			"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0,
+		"near_hostile_structure": {
+			# Enemy actor: shrine is alive — push toward it aggressively.
+			"melee_attack": 10, "protect_ally": 0, "actor.guard": -5, "actor.idle": -5, "actor.move": 10,
 		},
 		"_stub_ally_adjacent": {
 			# A living ally is in an adjacent cell. Formation/support bonus.
@@ -211,11 +212,24 @@ func select_intent(context: Dictionary) -> Dictionary:
 	# Build board summary once — passed to _score() for every candidate to avoid re-computation.
 	var board_summary: Dictionary = _build_board_summary(actor, all_actors, context.get("board_cfg", {}))
 
-	var candidates: Array[Dictionary] = _generate_candidates(actor, all_actors)
+	var candidates: Array[Dictionary] = _generate_candidates(actor, all_actors, context)
 
 	# Score each candidate, then sort: highest score first; tiebreak alphabetically.
 	for c: Dictionary in candidates:
 		c["_score"] = _score(c["action_type"], actor, directive, board_summary)
+
+	# COMBAT-006: actor.purify_shrine override — injected AFTER scoring so 9999 is never overwritten.
+	# Same pattern as Absolute Fear Rule: deterministic always-win when all conditions are met.
+	if context.get("is_purifier", false) \
+			and context.get("shrine_alive", false) \
+			and float(context.get("shrine_hp_ratio", 1.0)) < 0.5 \
+			and int(actor.get("purify_cooldown", 0)) == 0:
+		candidates.append({
+			"action_type": "actor.purify_shrine",
+			"target_id":   "",
+			"priority":    1.0,
+			"_score":      9999.0,
+		})
 
 	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		if a["_score"] != b["_score"]:
@@ -258,14 +272,24 @@ func select_intent(context: Dictionary) -> Dictionary:
 ##
 ## Adding new action types: add candidate generation here + rows in balance.json tables.
 ## _score() needs no changes.
-func _generate_candidates(actor: Dictionary, all_actors: Array) -> Array[Dictionary]:
+func _generate_candidates(actor: Dictionary, all_actors: Array, context: Dictionary = {}) -> Array[Dictionary]:
 	var candidates: Array[Dictionary] = []
 
 	# actor.idle is always a candidate — the unconditional safe fallback.
 	candidates.append({ "action_type": "actor.idle", "target_id": "", "priority": 0.0 })
 
+	# COMBAT-006: enemy actors in purify_shrine encounter prioritise the shrine target.
+	# prefer_objective_target is set by FlowRuntime for enemy actors when objective is purify_shrine.
+	var shrine_override: Dictionary = {}
+	if context.get("prefer_objective_target", false):
+		for a_v in all_actors:
+			if a_v is Dictionary and a_v.get("is_structure", false) and not a_v.get("is_dead", false):
+				shrine_override = a_v
+				break
+
 	# Compute nearest enemy and distance upfront — used by melee, move, and guard.
-	var nearest_enemy: Dictionary = ActorService.get_nearest_enemy(actor, all_actors)
+	var nearest_enemy: Dictionary = shrine_override if not shrine_override.is_empty() \
+			else ActorService.get_nearest_enemy(actor, all_actors)
 	var my_pos: Dictionary = actor.get("grid_pos", { "col": 0, "row": 0 })
 	var enemy_dist: int = 999999
 	var t_pos: Dictionary = {}
@@ -398,6 +422,20 @@ func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dict
 			active.append("enemy_engaged")
 		elif enemy_dist > 1:
 			active.append("enemy_advancing")
+
+	# COMBAT-006: near_friendly_structure / near_hostile_structure based on actor faction.
+	# Echoes get a soft defensive bonus near the shrine; enemies get an aggression boost toward it.
+	for a_v in all_actors:
+		if not (a_v is Dictionary):
+			continue
+		var a: Dictionary = a_v
+		if a.get("is_structure", false) and not a.get("is_dead", false):
+			if str(a.get("faction", "")) == "structure":
+				if actor_type != "enemy":
+					active.append("near_friendly_structure")
+				else:
+					active.append("near_hostile_structure")
+			break
 
 	return {
 		"hp_ratio":          hp_ratio,

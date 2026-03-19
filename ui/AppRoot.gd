@@ -199,8 +199,15 @@ func _on_debug_command(command: String) -> void:
 		_run_hero_info_command(parts)
 		return
 
+	# -------------------------
+	# combat_objective dev toggle (COMBAT-006)
+	# -------------------------
+	if head == "combat_objective":
+		_run_combat_objective_command(parts)
+		return
+
 	_debug_print("Unknown command: " + cmd)
-	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id>")
+	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective [purify_shrine|defeat_enemies]")
 	
 	_flush_logs_to_console()
 	
@@ -512,6 +519,32 @@ func _run_hero_info_command(parts: Array) -> void:
 		return
 
 	_debug_print("hero_info: echo_id '%s' not found in roster" % target_id)
+	_flush_logs_to_console()
+
+
+# COMBAT-006: dev toggle for encounter objective.
+# Usage: combat_objective purify_shrine | combat_objective defeat_enemies | combat_objective show
+func _run_combat_objective_command(parts: Array) -> void:
+	var valid_modes: Array = [EncounterResolutionModes.PURIFY_SHRINE, "defeat_enemies"]
+	if parts.size() < 2:
+		_debug_print("Usage: combat_objective <purify_shrine|defeat_enemies|show>")
+		return
+	var op: String = parts[1].to_lower()
+	if op == "show":
+		var current: String = runtime.flow_ctx.dev_combat_objective
+		if current.is_empty():
+			_debug_print("combat_objective: using default (purify_shrine)")
+		else:
+			_debug_print("combat_objective: override = %s" % current)
+		return
+	if op in valid_modes:
+		runtime.flow_ctx.dev_combat_objective = op
+		# Reset encounter state so next entry uses the new objective.
+		runtime.flow_ctx.encounter_ctx = null
+		runtime.flow_ctx.encounter_machine = null
+		_debug_print("combat_objective set to: %s — encounter reset, re-enter combat to apply" % op)
+	else:
+		_debug_print("Unknown mode '%s'. Use: purify_shrine | defeat_enemies" % op)
 	_flush_logs_to_console()
 
 

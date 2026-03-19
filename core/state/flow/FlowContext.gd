@@ -43,3 +43,7 @@ var logger = null # StructuredLogger — injected by FlowRuntime; GRID-002 allow
 # Debug / diagnostics
 var last_error: String = ""
 var last_transition_reason: String = ""
+
+# COMBAT-006 dev toggle: overrides encounter objective when non-empty.
+# Set via AppRoot debug command "combat_objective <mode>". Empty = use default.
+var dev_combat_objective: String = ""
