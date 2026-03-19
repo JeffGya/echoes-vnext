@@ -352,11 +352,24 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 				repaired = true
 				repaired_notes.append("sanctum.roster[%d].class_origin defaulted to 'uncalled'" % i)
 
-			# archetype_birth
+			# archetype_birth — ensure it is a valid 9-archetype value.
+			# Legacy saves may contain "brave" or "sage" (old 3-value system); re-derive from traits.
 			if not echo.has("archetype_birth") or typeof(echo["archetype_birth"]) != TYPE_STRING:
 				echo["archetype_birth"] = ""
 				repaired = true
 				repaired_notes.append("sanctum.roster[%d].archetype_birth set to string default" % i)
+			if echo["archetype_birth"] not in PersonalityArchetype.ARCHETYPES:
+				var t_v: Dictionary = echo.get("traits", {})
+				if not t_v.is_empty():
+					echo["archetype_birth"] = EchoFactory._derive_archetype_birth(
+						int(t_v.get("courage", 50)),
+						int(t_v.get("wisdom",  50)),
+						int(t_v.get("faith",   50))
+					)
+				else:
+					echo["archetype_birth"] = "reflective"
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].archetype_birth re-derived (legacy value)" % i)
 
 			# xp_total
 			if not echo.has("xp_total") or (typeof(echo["xp_total"]) != TYPE_INT and typeof(echo["xp_total"]) != TYPE_FLOAT):

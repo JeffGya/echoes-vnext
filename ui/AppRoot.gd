@@ -192,8 +192,15 @@ func _on_debug_command(command: String) -> void:
 		_run_emotion_command(parts)
 		return
 
+	# -------------------------
+	# hero_info (archetype system)
+	# -------------------------
+	if head == "hero_info" or head == "hero":
+		_run_hero_info_command(parts)
+		return
+
 	_debug_print("Unknown command: " + cmd)
-	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id]")
+	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id>")
 	
 	_flush_logs_to_console()
 	
@@ -254,6 +261,7 @@ func _run_tests(parts: Array) -> void:
 	CombatStateTests.register(runner)   # COMBAT-001 + COMBAT-002
 	CombatServiceTests.register(runner) # COMBAT-003
 	CombatRoundTests.register(runner)   # COMBAT-004
+	ArchetypeTests.register(runner)     # 9-archetype personality system
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [
@@ -453,6 +461,58 @@ func _run_emotion_command(parts: Array) -> void:
 		_debug_print("emotion: echo_id '%s' not found in roster" % target_id)
 
 	_flush_logs_to_console()
+
+# Usage:
+#   hero_info <echo_id> — print archetype, bias, dialogue key, bark, traits, vectors, stats
+func _run_hero_info_command(parts: Array) -> void:
+	if parts.size() < 2:
+		_debug_print("Usage: hero_info <echo_id>")
+		_flush_logs_to_console()
+		return
+
+	var target_id := str(parts[1]).strip_edges()
+	var save_ref: Dictionary = runtime.get_save_data()
+	var sanctum: Dictionary  = save_ref.get("sanctum", {}) as Dictionary
+	var roster: Array        = sanctum.get("roster", []) as Array
+
+	for echo_v in roster:
+		if not (echo_v is Dictionary):
+			continue
+		var echo: Dictionary = echo_v as Dictionary
+		if str(echo.get("id", "")) != target_id:
+			continue
+
+		var arch  := str(echo.get("archetype_birth", ""))
+		var bias  := PersonalityArchetype.combat_bias(arch)
+		var dkey  := PersonalityArchetype.dialogue_key(arch)
+		var bark  := ArchetypeBarks.arrival(arch, str(echo.get("name", "")))
+		var t_v   := echo.get("traits", {}) as Dictionary
+		var stats := echo.get("stats", {}) as Dictionary
+		var vs    := echo.get("vector_scores", {}) as Dictionary
+		var dom_v := str(echo.get("dominant_vector", "?"))
+
+		_debug_print("[hero_info] id=%s  name=%s  arch=%s  bias=%s  dialogue=%s" % [
+			target_id, str(echo.get("name", "?")), arch, bias, dkey
+		])
+		_debug_print("  traits: courage=%d wisdom=%d faith=%d" % [
+			int(t_v.get("courage", 0)), int(t_v.get("wisdom", 0)), int(t_v.get("faith", 0))
+		])
+		_debug_print("  vectors: dominant=%s  (vanguard=%d protector=%d seeker=%d pillar=%d)" % [
+			dom_v,
+			int(vs.get("vanguard", 0)), int(vs.get("protector", 0)),
+			int(vs.get("seeker", 0)),   int(vs.get("pillar", 0))
+		])
+		_debug_print("  stats: hp=%d atk=%d def=%d agi=%d speed=%d" % [
+			int(stats.get("max_hp", 0)), int(stats.get("atk", 0)), int(stats.get("def", 0)),
+			int(stats.get("agi", 0)),    int(stats.get("speed", 0))
+		])
+		_debug_print("  Bark: \"%s\"" % bark)
+		_flush_logs_to_console()
+		return
+
+	_debug_print("hero_info: echo_id '%s' not found in roster" % target_id)
+	_flush_logs_to_console()
+
 
 func _run_currency_command(currency: String, parts: Array) -> void:
 	# Usage:

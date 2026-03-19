@@ -70,12 +70,13 @@ func enter(ctx: RefCounted, t:int) -> void:
 		var _emo := EmotionService.get_emotion(echo)
 		var _last_drift_v: Variant = _emo.get("_last_drift", {})
 		roster_preview.append({
-			"id":             str(echo.get("id", "")),
-			"name":           str(echo.get("name", "")),
-			"calling_origin": str(echo.get("calling_origin", "")),
-			"rarity":         str(echo.get("rarity", "")),
-			"rank":           int(echo.get("rank", 1)),
-			"level":          int(echo.get("level", 1)),  # PROG-001 addition
+			"id":              str(echo.get("id", "")),
+			"name":            str(echo.get("name", "")),
+			"calling_origin":  str(echo.get("calling_origin", "")),
+			"rarity":          str(echo.get("rarity", "")),
+			"rank":            int(echo.get("rank", 1)),
+			"level":           int(echo.get("level", 1)),  # PROG-001 addition
+			"archetype_birth": str(echo.get("archetype_birth", "")),
 			# EMOTION-002: emotion snapshot (computed tier, fear, last drift event)
 			"emotion": {
 				"faith":            int(_emo.get("faith",          50)),

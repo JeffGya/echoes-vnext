@@ -182,13 +182,9 @@ static func _roll_weighted_key(rng: RandomNumberGenerator, weights: Dictionary) 
 	return str(keys[keys.size() - 1])
 	
 static func _derive_archetype_birth(courage: int, wisdom: int, faith: int) -> String:
-	# v1 mapping: dominant trait decides archetype label.
-	# This is intentionally simple and deterministic; later we can replace with a config-driven matrix.
-	if courage >= wisdom and courage >= faith:
-		return "brave"
-	if wisdom >= courage and wisdom >= faith:
-		return "sage"
-	return "devout"
+	# Delegates to PersonalityArchetype — 9-archetype system (archetypes_mvp.md §2).
+	# Deterministic: same traits always produce the same archetype. No RNG draw.
+	return PersonalityArchetype.from_traits(courage, wisdom, faith)
 
 ## Applies safe defaults for Echo fields introduced after draw-order v1.
 ## Returns true if any field was patched (caller should mark save_request = true).

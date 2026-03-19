@@ -745,6 +745,15 @@ Action slots:
 - `sanctum.party.confirm` — no payload. Persists `pending_party_ids` → `save.sanctum.active_party_ids` and transitions back to `flow.sanctum`.
 - `sanctum.grade_select` — flat action (grade is a top-level field, not nested in payload): `{ "type": "sanctum.grade_select", "grade": "called" }`. Stores grade in `FlowContext.selected_summon_grade`, validates against `ase_cost_per_summon_by_grade` table, then rebuilds snapshot mid-state. Invalid grade keys are logged and silently ignored.
 
+### Archetype log event types (9-archetype system)
+- `sanctum.summon.bark` — emitted once per summoned echo on paid summon. Pure display event; no sim effect.
+  Payload: `{ echo_id: String, arch: String }`
+  Message: the arrival bark string itself.
+
+Source of truth for valid archetype values: `PersonalityArchetype.ARCHETYPES` (`core/echoes/PersonalityArchetype.gd`).
+
+---
+
 ### Economy log event types (ECONOMY-001)
 Economy changes must be explainable and replay-friendly. Use these canonical types:
 

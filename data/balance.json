@@ -122,6 +122,14 @@
 			"actor.idle":   { "vanguard": 0.00, "protector": 0.00, "seeker": 0.10, "pillar": 0.20 },
 			"actor.move":   { "vanguard": 0.40, "protector": 0.05, "seeker": 0.10, "pillar": 0.00 }
 		},
+		"_comment_archetype": "Flat constant added inside the fear-factor bracket. Encodes combat_bias from PersonalityArchetype: aggressive=valiant/proud→melee/move, steadfast=loyal/stoic/devout→guard, supportive=empathic→protect_ally, cautious=reflective→guard/idle.",
+		"archetype_action_muls": {
+			"melee_attack": { "valiant": 25, "proud": 20, "ambitious": 12, "canny": 8, "loyal": 4, "stoic": 0, "devout": 0, "empathic": -8, "reflective": -12 },
+			"actor.move":   { "valiant": 20, "canny": 12, "ambitious": 8, "proud": 8, "loyal": -4, "stoic": 0, "devout": 0, "empathic": 0, "reflective": -8 },
+			"actor.guard":  { "stoic": 25, "loyal": 16, "reflective": 16, "devout": 12, "empathic": 8, "canny": 4, "ambitious": 0, "valiant": -8, "proud": -8 },
+			"protect_ally": { "empathic": 32, "loyal": 20, "devout": 12, "stoic": 8, "reflective": 4, "canny": 0, "ambitious": 0, "valiant": 0, "proud": -4 },
+			"actor.idle":   { "reflective": 12, "stoic": 4, "devout": 4, "canny": 4, "loyal": 0, "empathic": 0, "ambitious": -4, "valiant": -8, "proud": -8 }
+		},
 		"directive_action_muls": {
 			"melee_attack": { "objective_advance_priority": 1.0, "engage_only_blockers": 1.0 },
 			"protect_ally": { "ally_protection_bias": 1.0, "threat_interception": 1.0 },
@@ -243,9 +251,8 @@
 		"placement_modifiers": {
 			"_comment": "GRID-003: Placement score modifiers. Full formula: score = floor((agi + speed) / 2) + archetype_mod + calling_mod + trait_mod + vector_mod. All read fresh at combat start (CURRENT values, not birth snapshot). Higher score = placed further forward (closer to enemies). Sort ascending by score; tiebreak actor_id ascending. Actors without a field default to 0. Add new archetypes/callings/vectors here only — no GDScript changes needed.",
 			"by_archetype": {
-				"brave":  2,
-				"sage":   0,
-				"devout": -2
+				"valiant": 4, "proud": 3, "ambitious": 2, "canny": 1, "loyal": 1,
+				"devout": 0, "stoic": 0, "empathic": -1, "reflective": -2
 			},
 			"by_calling_origin": {
 				"warrior":  2,
@@ -272,9 +279,8 @@
 		"_comment": "COMBAT-002: Initiative scoring modifiers. Formula: (speed*3 + agi*2) + arch_mod + calling_mod + trait_mod + vec_mod + nudge. Sort descending. Tiebreak: party list order. Nudge: CampaignSeed.derive_from(placement_seed, actor_id) % 10. All values tunable without code changes.",
 		"initiative_modifiers": {
 			"by_archetype": {
-				"brave":  3,
-				"sage":   0,
-				"devout": -2
+				"valiant": 4, "proud": 3, "canny": 2, "ambitious": 2, "loyal": 1,
+				"devout": 1, "stoic": 0, "empathic": -1, "reflective": -2
 			},
 			"by_calling_origin": {
 				"warrior":  3,

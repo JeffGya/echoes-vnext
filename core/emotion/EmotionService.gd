@@ -35,9 +35,12 @@ const DEFAULTS := {
 
 
 ## Initialises echo["emotion"] on first creation. Idempotent: no-op if block exists.
-## Birth variance (EMOTION-002): morale_base derived from traits.courage + archetype_birth.
+## Birth variance (EMOTION-002, updated for 9-archetype system):
+##   morale_base derived from traits.courage + archetype_birth modifier.
 ##   Stage 1 — remap courage (30–70) → base morale (25–74)
-##   Stage 2 — archetype modifier: brave +5, sage -5, devout 0
+##   Stage 2 — archetype modifier (9-archetype system):
+##     valiant +5, proud +5, loyal +3, ambitious +3,
+##     devout +2, empathic +2, canny 0, stoic 0, reflective -5
 ##   Result clamped to 25–74 (shaken/steady range; no echo starts broken or inspired).
 ##   faith uses traits.faith directly (30–70). Fallback to 50 if traits absent.
 static func init_echo(echo: Dictionary, logger: StructuredLogger, t: int) -> void:
@@ -55,14 +58,13 @@ static func init_echo(echo: Dictionary, logger: StructuredLogger, t: int) -> voi
 		var courage := int(traits.get("courage", 50))
 		# Stage 1: continuous base from courage trait range 30–70 → morale range 25–74
 		var base_morale := 25 + int(round((courage - 30) * 49.0 / 40.0))
-		# Stage 2: archetype modifier for narrative clarity on top
+		# Stage 2: archetype modifier for narrative clarity on top (9-archetype system)
 		var archetype := str(echo.get("archetype_birth", ""))
-		var modifier := 0
-		if archetype == "brave":
-			modifier = 5   # dominant courage → extra confidence
-		elif archetype == "sage":
-			modifier = -5  # dominant wisdom → reflective self-doubt
-		# devout: 0 modifier (faith lives in the faith field)
+		const ARCH_MORALE_MOD: Dictionary = {
+			"valiant": 5, "proud": 5, "loyal": 3, "ambitious": 3,
+			"devout": 2, "empathic": 2, "canny": 0, "stoic": 0, "reflective": -5
+		}
+		var modifier: int = ARCH_MORALE_MOD.get(archetype, 0)
 		birth_morale = clampi(base_morale + modifier, 25, 74)
 
 	if not traits.is_empty() and traits.has("faith"):

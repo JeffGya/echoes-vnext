@@ -133,8 +133,10 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		"target_id":              _last_action["target_id"],
 		"target_distance":        _last_action["target_distance"],  # GRID-004
 		"damage":                 0,  # placeholder — real damage in COMBAT-001+
-		"morale_tier":            _last_morale_tier,      # ACTOR-007
-		"action_weight_modifier": _last_morale_modifier,  # ACTOR-007
+		"morale_tier":            _last_morale_tier,                     # ACTOR-007
+		"action_weight_modifier": _last_morale_modifier,                 # ACTOR-007
+		"archetype_birth":        str(intent.get("archetype_birth", "")),
+		"archetype_modifier":     int(intent.get("archetype_modifier", 0)),
 	})
 	# GRID-005: resolve movement when the behavior module requests a move.
 	if intent.get("action_type", "") == "actor.move" and not _movement_skipped:

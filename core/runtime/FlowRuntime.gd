@@ -364,6 +364,12 @@ func _handle_sanctum_summon(action: Dictionary, t: int) -> void:
 				EmotionService.init_echo(e_v, logger, t)
 				# PROG-005: initialise vector scores from archetype_init config
 				VectorService.init_vectors(e_v, vec_cfg, logger, t)
+				# Arrival bark — logged for debug output and telemetry (display-only, no side effects)
+				var bark := ArchetypeBarks.arrival(str(e_v.get("archetype_birth", "")), str(e_v.get("name", "")))
+				logger.info(t, "sanctum.summon.bark", bark, {
+					"echo_id": str(e_v.get("id", "")),
+					"arch":    str(e_v.get("archetype_birth", ""))
+				})
 				flow_ctx.pending_summon_reveals.append(e_v)
 
 		flow_ctx.save_request = true

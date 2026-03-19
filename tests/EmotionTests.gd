@@ -153,32 +153,36 @@ static func _t_echo_actor_reads_emotion() -> Dictionary:
 
 # Test 5: birth_variance_from_traits
 # init_echo() must derive morale_base from traits.courage (continuous base)
-# plus an archetype_birth modifier (brave +5, sage -5, devout 0).
+# plus an archetype_birth modifier (9-archetype system).
+# Modifiers: valiant +5, proud +5, loyal +3, ambitious +3, devout +2, empathic +2, canny 0, stoic 0, reflective -5.
 # Final value clamped to 25–74. Echoes with no traits fall back to flat 50.
 static func _t_birth_variance_from_traits() -> Dictionary:
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
 
-	# High courage + brave archetype → base=74, modifier=+5 → clamped 74
-	var echo_brave := { "id": "echo_brave", "archetype_birth": "brave",
+	# High courage + valiant archetype → base=74, modifier=+5 → clamped 74
+	# (c=70, w=40, f=40 derives "valiant" via dominance pass — dc=20, unique max ≥8)
+	var echo_valiant := { "id": "echo_valiant", "archetype_birth": "valiant",
 		"traits": { "courage": 70, "wisdom": 40, "faith": 40 } }
-	EmotionService.init_echo(echo_brave, logger, 1)
-	if int(echo_brave["emotion"]["morale_base"]) != 74:
-		return { "ok": false, "error": "Expected morale_base=74 (brave, courage=70), got: %d" % int(echo_brave["emotion"]["morale_base"]) }
+	EmotionService.init_echo(echo_valiant, logger, 1)
+	if int(echo_valiant["emotion"]["morale_base"]) != 74:
+		return { "ok": false, "error": "Expected morale_base=74 (valiant, courage=70), got: %d" % int(echo_valiant["emotion"]["morale_base"]) }
 
-	# High courage + sage archetype → base=74, modifier=-5 → 69
-	var echo_sage := { "id": "echo_sage", "archetype_birth": "sage",
+	# High courage + canny archetype → base=74, modifier=0 → 74
+	# (c=70, w=80, f=40 derives "canny" via dominance pass — dw=16.7, unique max ≥8)
+	var echo_canny := { "id": "echo_canny", "archetype_birth": "canny",
 		"traits": { "courage": 70, "wisdom": 80, "faith": 40 } }
-	EmotionService.init_echo(echo_sage, logger, 2)
-	if int(echo_sage["emotion"]["morale_base"]) != 69:
-		return { "ok": false, "error": "Expected morale_base=69 (sage, courage=70), got: %d" % int(echo_sage["emotion"]["morale_base"]) }
+	EmotionService.init_echo(echo_canny, logger, 2)
+	if int(echo_canny["emotion"]["morale_base"]) != 74:
+		return { "ok": false, "error": "Expected morale_base=74 (canny, courage=70), got: %d" % int(echo_canny["emotion"]["morale_base"]) }
 
-	# Low courage + devout archetype → base=25, modifier=0 → 25 (floor)
+	# Low courage + devout archetype → base=25, modifier=+2 → clamped 27
+	# (c=30, w=40, f=60 derives "devout" via dominance pass — df=16.7, unique max ≥8)
 	var echo_devout := { "id": "echo_devout", "archetype_birth": "devout",
 		"traits": { "courage": 30, "wisdom": 40, "faith": 60 } }
 	EmotionService.init_echo(echo_devout, logger, 3)
-	if int(echo_devout["emotion"]["morale_base"]) != 25:
-		return { "ok": false, "error": "Expected morale_base=25 (devout, courage=30), got: %d" % int(echo_devout["emotion"]["morale_base"]) }
+	if int(echo_devout["emotion"]["morale_base"]) != 27:
+		return { "ok": false, "error": "Expected morale_base=27 (devout, courage=30), got: %d" % int(echo_devout["emotion"]["morale_base"]) }
 
 	# No traits → fallback flat 50 (test echo and save-repair safety)
 	var echo_bare := { "id": "echo_bare" }
@@ -187,16 +191,16 @@ static func _t_birth_variance_from_traits() -> Dictionary:
 		return { "ok": false, "error": "Expected morale_base=50 fallback for echo with no traits, got: %d" % int(echo_bare["emotion"]["morale_base"]) }
 
 	# morale_current always equals morale_base at birth
-	if echo_brave["emotion"]["morale_current"] != echo_brave["emotion"]["morale_base"]:
+	if echo_valiant["emotion"]["morale_current"] != echo_valiant["emotion"]["morale_base"]:
 		return { "ok": false, "error": "morale_current must equal morale_base at init" }
 
 	# fear always 0 at birth regardless of archetype
-	if int(echo_brave["emotion"]["fear_current"]) != 0:
+	if int(echo_valiant["emotion"]["fear_current"]) != 0:
 		return { "ok": false, "error": "fear_current must be 0 at init regardless of traits/archetype" }
 
 	# faith uses trait value directly (courage=70, faith trait=40 → emotion.faith=40)
-	if int(echo_brave["emotion"]["faith"]) != 40:
-		return { "ok": false, "error": "Expected emotion.faith=40 (from traits.faith=40), got: %d" % int(echo_brave["emotion"]["faith"]) }
+	if int(echo_valiant["emotion"]["faith"]) != 40:
+		return { "ok": false, "error": "Expected emotion.faith=40 (from traits.faith=40), got: %d" % int(echo_valiant["emotion"]["faith"]) }
 
 	return { "ok": true }
 

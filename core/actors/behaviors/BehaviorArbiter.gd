@@ -18,10 +18,11 @@
 #   config dict (ACTOR-006/ENEMY-001).
 #
 # Score formula (per candidate):
-#   score = (base + trait_bonus + vector_bonus + morale_bonus) * fear_factor + directive_bonus
+#   score = (base + trait_bonus + vector_bonus + archetype_bonus + morale_bonus) * fear_factor + directive_bonus
 #   - base: intent_weights_by_calling_origin[calling_origin][action_type]
 #   - trait_bonus: sum(trait_value × trait_action_muls[action_type][trait_key])
 #   - vector_bonus: sum(vector_score × vector_action_muls[action_type][vector_key])
+#   - archetype_bonus: flat constant from archetype_action_muls[action_type][archetype_birth]
 #   - morale_bonus: morale_action_muls[action_type][morale_tier] (ACTOR-007; steady tier = 0)
 #   - fear_factor: clamp(1.0 - fear/100 × fear_active_dampen, 0, 1) for active intents only
 #   - directive_bonus: sum(dir_weight × directive_action_muls[action_type][key]) × directive_base_bonus
@@ -59,6 +60,21 @@ const _DEFAULTS := {
 		"actor.guard":  { "vanguard": 0.00, "protector": 0.15, "seeker": 0.00, "pillar": 0.10 },
 		"actor.idle":   { "vanguard": 0.00, "protector": 0.00, "seeker": 0.10, "pillar": 0.20 },
 		"actor.move":   { "vanguard": 0.40, "protector": 0.05, "seeker": 0.10, "pillar": 0.00 },
+	},
+	# Flat archetype bonus — direct lookup by archetype_birth string (not a score, just a constant).
+	# Mirrors combat_bias() from PersonalityArchetype: aggressive→melee/move, steadfast→guard,
+	# supportive→protect_ally, cautious→guard+idle, balanced→no strong bias.
+	"archetype_action_muls": {
+		"melee_attack": { "valiant": 25, "proud": 20, "ambitious": 12, "canny": 8, "loyal": 4,
+		                  "stoic": 0, "devout": 0, "empathic": -8, "reflective": -12 },
+		"actor.move":   { "valiant": 20, "canny": 12, "ambitious": 8, "proud": 8, "loyal": -4,
+		                  "stoic": 0, "devout": 0, "empathic": 0, "reflective": -8 },
+		"actor.guard":  { "stoic": 25, "loyal": 16, "reflective": 16, "devout": 12, "empathic": 8,
+		                  "canny": 4, "ambitious": 0, "valiant": -8, "proud": -8 },
+		"protect_ally": { "empathic": 32, "loyal": 20, "devout": 12, "stoic": 8, "reflective": 4,
+		                  "canny": 0, "ambitious": 0, "valiant": 0, "proud": -4 },
+		"actor.idle":   { "reflective": 12, "stoic": 4, "devout": 4, "canny": 4, "loyal": 0,
+		                  "empathic": 0, "ambitious": -4, "valiant": -8, "proud": -8 },
 	},
 	"directive_action_muls": {
 		"melee_attack": { "objective_advance_priority": 1.0, "engage_only_blockers": 1.0 },
@@ -216,6 +232,12 @@ func select_intent(context: Dictionary) -> Dictionary:
 	var w_row: Dictionary    = m_tables.get(str(winner.get("action_type", "")), {})
 	winner["morale_tier"]     = winner_tier
 	winner["morale_modifier"] = int(w_row.get(winner_tier, 0))
+
+	# Archetype metadata — for ActorStateMachine logging.
+	var winner_arch: String       = str(actor.get("archetype_birth", ""))
+	var winner_a_row: Dictionary  = _cfg_get("archetype_action_muls").get(str(winner.get("action_type", "")), {})
+	winner["archetype_birth"]    = winner_arch
+	winner["archetype_modifier"] = int(winner_a_row.get(winner_arch, 0))
 
 	return winner
 
@@ -434,6 +456,13 @@ func _score(action_type: String, actor: Dictionary, directive: Dictionary, board
 	for vector_key: String in v_row:
 		vector_bonus += float(vectors.get(vector_key, 0)) * float(v_row[vector_key])
 
+	# 3b. Archetype bonus — flat constant lookup by archetype_birth string (not a continuous score).
+	#     Encodes personality combat tendency (combat_bias): aggressive→melee/move, steadfast→guard, etc.
+	var arch_tables: Dictionary = _cfg_get("archetype_action_muls")
+	var a_row: Dictionary       = arch_tables.get(action_type, {})
+	var archetype: String       = str(actor.get("archetype_birth", ""))
+	var archetype_bonus: float  = float(a_row.get(archetype, 0.0))
+
 	# 4. Fear factor: dampens active intents; passive intents (actor.idle) are unaffected.
 	var passive_actions: Array = _cfg_get("fear_passive_actions")
 	var fear_factor: float     = 1.0
@@ -451,7 +480,7 @@ func _score(action_type: String, actor: Dictionary, directive: Dictionary, board
 	# 6. Directive bonus — generic loop over intent_weights (semantic keys).
 	var directive_bonus: float = _directive_bonus(action_type, directive)
 
-	return (base + trait_bonus + vector_bonus + morale_bonus) * fear_factor + directive_bonus + _situational_bonus(action_type, board_summary)
+	return (base + trait_bonus + vector_bonus + archetype_bonus + morale_bonus) * fear_factor + directive_bonus + _situational_bonus(action_type, board_summary)
 
 
 ## Maps directive semantic intent_weights keys → action bonus.
