@@ -1,0 +1,60 @@
+[gd_scene format=3 uid="uid://resolve_screen_001"]
+
+[ext_resource type="Script" path="res://ui/screens/ResolveScreen.gd" id="1_resolve"]
+
+[node name="ResolveScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_resolve")
+
+[node name="Content" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -250.0
+offset_right = 200.0
+offset_bottom = 250.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 12
+
+[node name="TitleLabel" type="Label" parent="Content"]
+layout_mode = 2
+text = "Result"
+theme_override_font_sizes/font_size = 14
+horizontal_alignment = 1
+
+[node name="OutcomeLabel" type="Label" parent="Content"]
+layout_mode = 2
+text = "VICTORY"
+theme_override_font_sizes/font_size = 28
+horizontal_alignment = 1
+
+[node name="ReasonLabel" type="Label" parent="Content"]
+layout_mode = 2
+text = ""
+theme_override_font_sizes/font_size = 16
+horizontal_alignment = 1
+
+[node name="RoundLabel" type="Label" parent="Content"]
+layout_mode = 2
+text = "Completed in Round 0"
+theme_override_font_sizes/font_size = 14
+horizontal_alignment = 1
+
+[node name="ActorList" type="VBoxContainer" parent="Content"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="ContinueButton" type="Button" parent="Content"]
+layout_mode = 2
+custom_minimum_size = Vector2(160, 40)
+text = "Return to Sanctum"

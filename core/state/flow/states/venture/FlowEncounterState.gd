@@ -132,17 +132,83 @@ func enter(ctx: RefCounted, t: int) -> void:
 					{ "purifier_id": flow_ctx.encounter_ctx.purifier_id,
 					  "shrine_id":   shrine_actor.get("id", "") })
 
-	# COMBAT-001: always build snapshot via static builder (type always "flow.encounter").
-	flow_ctx.last_snapshot = FlowEncounterState.build_snapshot(flow_ctx, t)
+	# COMBAT-001/COMBAT-007: always build round snapshot at entry (pre_combat phase).
+	flow_ctx.last_snapshot = FlowEncounterState.build_round_snapshot(flow_ctx, t)
 
 func exit(ctx: RefCounted, t: int) -> void:
 	pass
 
 
-## COMBAT-001: static snapshot builder — always emits type "flow.encounter".
-## COMBAT-SEQ: emits per-actor snapshots with round_phase, current_actor_id, last_actor_action.
-## Called from enter() and from FlowRuntime sequential resolution methods.
-static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
+# ────────────────────────────────────────────────────────────────────────────
+# COMBAT-007: Pure static helper functions — projection and objective state.
+# ────────────────────────────────────────────────────────────────────────────
+
+## Derives a player-facing status string from a runtime actor dict.
+## Priority: dead > guarding > refusing (fear ≥ 80) > alive
+static func _derive_status(actor: Dictionary) -> String:
+	if actor.get("is_dead", false):
+		return "dead"
+	if actor.get("guard_state", false):
+		return "guarding"
+	if int(actor.get("fear", 0)) >= 80:
+		return "refusing"
+	return "alive"
+
+
+## Projects a full runtime actor dict to the minimal render-safe snapshot shape.
+## Strips internal fields (traits, xp, archetype, raw stats block, etc.)
+## while preserving all fields needed by CombatBoardScreen.
+static func _project_actor(actor: Dictionary) -> Dictionary:
+	var stats: Dictionary = actor.get("stats", {})
+	var max_hp: int = int(stats.get("max_hp", 1))
+	return {
+		"id":           str(actor.get("id", "")),
+		"name":         str(actor.get("name", "")),
+		"hp":           int(actor.get("current_hp", max_hp)),
+		"max_hp":       max_hp,
+		"status":       FlowEncounterState._derive_status(actor),
+		"grid_pos":     actor.get("grid_pos", { "col": 0, "row": 0 }),
+		"faction":      str(actor.get("faction", "")),
+		"is_structure": bool(actor.get("is_structure", false)),
+		"fear":         int(actor.get("fear", 0)),
+		"morale":       int(actor.get("morale", 50)),
+	}
+
+
+## Builds the objective_state sub-dict from ectx and combat_state.
+## type: objective string; shrine_hp: current shrine HP (0 if N/A); shrine_alive: bool.
+static func _build_objective_state(ectx: EncounterContext, combat_state: Dictionary) -> Dictionary:
+	var obj_type: String = ""
+	if not combat_state.is_empty():
+		obj_type = str(combat_state.get("objective", ""))
+	elif ectx != null:
+		obj_type = str(ectx.resolution_mode)
+
+	var shrine_hp: int    = 0
+	var shrine_alive: bool = false
+	if ectx != null:
+		for a_v in ectx.actors:
+			if a_v is Dictionary and a_v.get("is_structure", false):
+				shrine_hp    = int(a_v.get("current_hp", 0))
+				shrine_alive = not bool(a_v.get("is_dead", false))
+				break
+
+	return {
+		"type":         obj_type,
+		"shrine_hp":    shrine_hp,
+		"shrine_alive": shrine_alive,
+	}
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# COMBAT-007: Primary snapshot builders.
+# ────────────────────────────────────────────────────────────────────────────
+
+## COMBAT-007: RoundSnapshot builder — emits type "flow.encounter".
+## Covers all non-terminal phases: pre_combat, actor_turn, round_end.
+## Called from enter(), _handle_combat_init(), _resolve_next_actor(), and
+## _end_round() when combat is NOT over.
+static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# Read board config.
 	var grid_cfg: Dictionary = {}
 	if flow_ctx.config_service != null:
@@ -153,28 +219,39 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var board_rows: int = GridService.get_board_rows(grid_cfg)
 
 	var ectx: EncounterContext = flow_ctx.encounter_ctx
-	var actors: Array = ectx.actors if ectx != null else []
+	var raw_actors: Array = ectx.actors if ectx != null else []
 	var combat_state: Dictionary = ectx.combat_state if ectx != null else {}
 	var encounter_id: String = ectx.encounter_id if ectx != null else ""
 	var placement_seed: int = ectx.placement_seed if ectx != null else 0
 
-	var objective_type: String = ""
 	var round: int = 0
 	var initiative_order: Array = []
 	var active_initiative_index: int = 0
 
-	# COMBAT-SEQ: determine round_phase from combat_state.round_phase.
-	var combat_over_flag: bool = bool(combat_state.get("combat_over", false))
+	# Determine round_phase from combat_state.
 	var cs_phase: String = str(combat_state.get("round_phase", "idle"))
 	var round_phase: String
 	if combat_state.is_empty():
 		round_phase = "pre_combat"
-	elif combat_over_flag:
-		round_phase = "combat_end"
 	elif cs_phase == "in_round":
 		round_phase = "actor_turn"
 	else:
 		round_phase = "round_end"
+
+	if not combat_state.is_empty():
+		round                   = int(combat_state.get("round_counter", 0))
+		initiative_order        = combat_state.get("initiative_order", [])
+		active_initiative_index = int(combat_state.get("active_initiative_index", 0))
+
+	# Per-actor display fields.
+	var current_actor_id: String      = str(ectx.last_actor_action.get("source_id", "")) if ectx != null else ""
+	var last_actor_action_v: Dictionary = ectx.last_actor_action.duplicate() if ectx != null else {}
+
+	# Project actors to clean render shape.
+	var projected_actors: Array = []
+	for a_v in raw_actors:
+		if a_v is Dictionary:
+			projected_actors.append(FlowEncounterState._project_actor(a_v))
 
 	var actions: Dictionary = {
 		"nav.back": {
@@ -185,7 +262,6 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		},
 	}
 
-	# COMBAT-SEQ: CTA slot depends on round_phase.
 	match round_phase:
 		"pre_combat":
 			actions["cta.combat_init"] = {
@@ -205,62 +281,65 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				"label": "Confirm Round",
 				"slot":  "cta.confirm_round",
 			}
-		# COMBAT-005: named CTA for result overlay button.
-		"combat_end":
-			actions["cta.end_combat"] = {
-				"type":  "flow.go_state",
-				"to":    FlowStateIds.SANCTUM,
-				"label": "Return to Sanctum",
-				"slot":  "cta.end_combat",
-			}
-
-	if not combat_state.is_empty():
-		objective_type          = str(combat_state.get("objective", ""))
-		round                   = int(combat_state.get("round_counter", 0))
-		initiative_order        = combat_state.get("initiative_order", [])
-		active_initiative_index = int(combat_state.get("active_initiative_index", 0))
-
-	# COMBAT-SEQ: per-actor fields for token highlight and initiative panel action text.
-	var current_actor_id: String  = str(ectx.last_actor_action.get("source_id", "")) if ectx != null else ""
-	var last_actor_action: Dictionary = ectx.last_actor_action.duplicate() if ectx != null else {}
-
-	# COMBAT-005: combat result fields — populated when combat_over; defaults when not.
-	var combat_result: Dictionary = ectx.combat_result if ectx != null else {}
-
-	# COMBAT-006: read shrine HP from actors (0 if no shrine or shrine dead).
-	var shrine_hp: int = 0
-	for a_v in actors:
-		if a_v is Dictionary and a_v.get("is_structure", false):
-			shrine_hp = int(a_v.get("current_hp", 0))
-			break
 
 	return {
 		"type": FlowStateIds.ENCOUNTER,
 		"data": {
-			"title":          "Encounter",
-			"encounter_id":   encounter_id,
-			"board_cols":     board_cols,
-			"board_rows":     board_rows,
-			"actors":                  actors,
-			"placement_seed":           placement_seed,
-			"objective_type":           objective_type,
-			"round":                    round,
-			"initiative_order":         initiative_order,
-			"active_initiative_index":  active_initiative_index,
-			# COMBAT-SEQ: accumulated results so far this round (grows one entry per actor).
-			"action_results":           ectx.last_round_results.duplicate() if ectx != null else [],
-			# COMBAT-SEQ: per-actor display fields.
-			"current_actor_id":         current_actor_id,
-			"last_actor_action":        last_actor_action,
-			"round_phase":              round_phase,
-			"combat_over":              combat_over_flag,
-			# COMBAT-005: result fields (populated at combat_end; false/""/0 otherwise).
-			"victory":     bool(combat_result.get("victory", false)),
-			"reason":      str(combat_result.get("reason", "")),
-			"round_ended": int(combat_result.get("round_ended", 0)),
-			# COMBAT-006: shrine HP (live value each frame; 0 when no shrine or shrine dead).
-			"shrine_hp":   shrine_hp,
+			"title":                   "Encounter",
+			"encounter_id":            encounter_id,
+			"board_cols":              board_cols,
+			"board_rows":              board_rows,
+			"actors":                  projected_actors,
+			"placement_seed":          placement_seed,
+			"objective_state":         FlowEncounterState._build_objective_state(ectx, combat_state),
+			"round":                   round,
+			"initiative_order":        initiative_order,
+			"active_initiative_index": active_initiative_index,
+			"action_results":          ectx.last_round_results.duplicate() if ectx != null else [],
+			"current_actor_id":        current_actor_id,
+			"last_actor_action":       last_actor_action_v,
+			"round_phase":             round_phase,
+			"combat_over":             false,
 		},
 		"actions": actions,
 		"meta":    { "t": t },
+	}
+
+
+## COMBAT-007: FinalCombatSnapshot builder — emits type "flow.resolve".
+## Called from _end_round() only when combat_over is true.
+## Consumed by ResolveScreen (UI-005 scaffold).
+static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	var raw_actors: Array = ectx.actors if ectx != null else []
+	var combat_state: Dictionary = ectx.combat_state if ectx != null else {}
+	var encounter_id: String = ectx.encounter_id if ectx != null else ""
+	var combat_result: Dictionary = ectx.combat_result if ectx != null else {}
+
+	# Project actors to clean render shape.
+	var projected_actors: Array = []
+	for a_v in raw_actors:
+		if a_v is Dictionary:
+			projected_actors.append(FlowEncounterState._project_actor(a_v))
+
+	return {
+		"type": FlowStateIds.RESOLVE,
+		"data": {
+			"title":           "Result",
+			"encounter_id":    encounter_id,
+			"actors":          projected_actors,
+			"objective_state": FlowEncounterState._build_objective_state(ectx, combat_state),
+			"victory":         bool(combat_result.get("victory", false)),
+			"reason":          str(combat_result.get("reason", "")),
+			"round_ended":     int(combat_result.get("round_ended", 0)),
+		},
+		"actions": {
+			"cta.continue": {
+				"type":  "flow.go_state",
+				"to":    FlowStateIds.SANCTUM,
+				"label": "Return to Sanctum",
+				"slot":  "cta.continue",
+			},
+		},
+		"meta": { "t": t },
 	}

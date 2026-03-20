@@ -25,7 +25,18 @@ func select_intent(context: Dictionary) -> Dictionary:
 	var actor: Dictionary = context.get("actor", {})
 	var all_actors: Array = context.get("all_actors", [])
 
-	var target: Dictionary = ActorService.get_nearest_enemy(actor, all_actors)
+	# COMBAT-006: enemy actors in a purify_shrine encounter prioritise the shrine over echoes.
+	# FlowRuntime sets prefer_objective_target = true for enemy actors in PURIFY_SHRINE encounters.
+	var target: Dictionary = {}
+	if context.get("prefer_objective_target", false):
+		for a_v in all_actors:
+			if a_v is Dictionary \
+					and a_v.get("is_structure", false) \
+					and not a_v.get("is_dead", false):
+				target = a_v
+				break
+	if target.is_empty():
+		target = ActorService.get_nearest_enemy(actor, all_actors)
 	if target.is_empty():
 		return { "action_type": "actor.idle", "target_id": "", "priority": 0.0 }
 

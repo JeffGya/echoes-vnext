@@ -20,6 +20,7 @@ script = ExtResource("2_fv0kl")
 [node name="EconBankTimer" type="Timer" parent="." unique_id=1889882999]
 
 [node name="OverlayRoot" type="CanvasLayer" parent="." unique_id=1206220084]
+layer = 128
 
 [node name="DebugOverlay" type="Control" parent="OverlayRoot" unique_id=2042280526]
 unique_name_in_owner = true

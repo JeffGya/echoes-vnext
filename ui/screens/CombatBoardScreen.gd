@@ -147,7 +147,9 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 
 	_round_label.text    = "Round: %d" % int(data.get("round", 0))
 	_round_label.visible = true
-	var obj_type: String = str(data.get("objective_type", ""))
+	# COMBAT-007: read objective_state dict (replaces flat objective_type field).
+	var obj_state: Dictionary = data.get("objective_state", {})
+	var obj_type: String = str(obj_state.get("type", ""))
 	_objective_label.text    = obj_type
 	_objective_label.visible = not obj_type.is_empty()
 
@@ -178,17 +180,9 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 			_nav_back_action = action_v
 			_back_button.visible = true
 
-	# COMBAT-005: result overlay — shown only at combat_end.
-	if round_phase == "combat_end":
-		var victory: bool    = bool(data.get("victory", false))
-		var reason: String   = str(data.get("reason", ""))
-		var round_ended: int = int(data.get("round_ended", 0))
-		_outcome_label.text    = "VICTORY" if victory else "DEFEAT"
-		_reason_label.text     = _format_result_reason(reason)
-		_round_ended_label.text = "Completed in Round %d" % round_ended
-		if actions.has("cta.end_combat"):
-			_end_combat_action = actions["cta.end_combat"]
-		_result_overlay.visible = true
+	# COMBAT-007: combat_end phase no longer reaches CombatBoardScreen —
+	# _end_round() now emits type "flow.resolve" which AppRoot routes to ResolveScreen.
+	# The CombatResultOverlay is kept in scene for compatibility but never shown here.
 
 	# COMBAT-002: draw initiative panel — snapshot-driven, no local playback state.
 	_draw_initiative_panel(data)
@@ -329,8 +323,9 @@ func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}
 		var name_str: String  = actor.get("name", "??")
 		var actor_id: String  = str(actor.get("id", ""))
 
-		var max_hp: float   = float(actor.get("stats", {}).get("max_hp", 1))
-		var cur_hp: float   = float(actor.get("current_hp", max_hp))
+		# COMBAT-007: actors[] is now a projection — hp and max_hp are top-level fields.
+		var max_hp: float   = float(actor.get("max_hp", 1))
+		var cur_hp: float   = float(actor.get("hp", max_hp))
 		var hp_ratio: float = clampf(cur_hp / max(max_hp, 1.0), 0.0, 1.0)
 		var hp_color: Color
 		if hp_ratio > 0.5:
@@ -385,10 +380,10 @@ func _draw_initiative_panel(data: Dictionary) -> void:
 
 	var active_idx: int = int(data.get("active_initiative_index", 0))
 
-	# Build dead-id set from actors array.
+	# Build dead-id set from actors projection (COMBAT-007: use status field instead of is_dead).
 	var dead_ids: Dictionary = {}
 	for actor in data.get("actors", []):
-		if actor.get("is_dead", false):
+		if actor.get("status", "") == "dead":
 			dead_ids[str(actor.get("id", ""))] = true
 
 	# Build action-text lookup from action_results resolved so far this round.

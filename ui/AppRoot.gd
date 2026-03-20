@@ -42,6 +42,10 @@ var _sanctum_shell_scene := preload("res://ui/shells/SanctumShell.tscn")
 var _combat_board_screen: CombatBoardScreen
 var _combat_board_scene := preload("res://ui/screens/CombatBoardScreen.tscn")
 
+# COMBAT-007: Resolve screen — receives type "flow.resolve" from FlowEncounterState.build_final_snapshot().
+var _resolve_screen: ResolveScreen
+var _resolve_scene := preload("res://ui/screens/ResolveScreen.tscn")
+
 func _ready():
 	# Bind renderer to UI elements it can update.
 	renderer.bind_view(snapshot_view, actions_container)
@@ -274,8 +278,9 @@ func _run_tests(parts: Array) -> void:
 	GridTests.register(runner)       # GRID-001
 	CombatStateTests.register(runner)   # COMBAT-001 + COMBAT-002
 	CombatServiceTests.register(runner) # COMBAT-003
-	CombatRoundTests.register(runner)   # COMBAT-004
-	ArchetypeTests.register(runner)     # 9-archetype personality system
+	CombatRoundTests.register(runner)     # COMBAT-004
+	CombatSnapshotTests.register(runner) # COMBAT-007
+	ArchetypeTests.register(runner)      # 9-archetype personality system
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [
@@ -690,6 +695,16 @@ func _render_snapshot(snap: Dictionary) -> void:
 		_combat_board_screen.set_snapshot(snap)
 		return
 
+	# COMBAT-007: flow.resolve → ResolveScreen.
+	if snap_type == FlowStateIds.RESOLVE:
+		if _resolve_screen == null:
+			_resolve_screen = _resolve_scene.instantiate() as ResolveScreen
+			screen_host.add_child(_resolve_screen)
+			_resolve_screen.action_requested.connect(_on_ui_action_selected)
+		_show_screen(_resolve_screen)
+		_resolve_screen.set_snapshot(snap)
+		return
+
 	# No bespoke screen found for this snapshot type — fall back to UISnapshotRenderer.
 	_hide_bespoke_screens()
 	renderer.render(snap)
@@ -708,6 +723,8 @@ func _show_screen(screen: Control) -> void:
 		_sanctum_shell.visible = false
 	if _combat_board_screen != null:
 		_combat_board_screen.visible = false
+	if _resolve_screen != null:
+		_resolve_screen.visible = false
 
 	screen.visible = true
 
@@ -723,3 +740,5 @@ func _hide_bespoke_screens() -> void:
 		_sanctum_shell.visible = false
 	if _combat_board_screen != null:
 		_combat_board_screen.visible = false
+	if _resolve_screen != null:
+		_resolve_screen.visible = false

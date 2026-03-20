@@ -18,6 +18,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("structure/sm_movement_skipped_in_snapshot",          Callable(StructureTests, "_t_sm_movement_skipped_in_snapshot"))
 	runner.register_test("structure/sm_logs_actor_turn_event",                 Callable(StructureTests, "_t_sm_logs_actor_turn_event"))
 	runner.register_test("structure/selects_idle_intent",                      Callable(StructureTests, "_t_selects_idle_intent"))
+	# COMBAT-006: ShrineService tests.
+	runner.register_test("shrine/drain_applies_base_drain_each_round",         Callable(StructureTests, "_t_drain_applies_base_drain"))
+	runner.register_test("shrine/purify_stack_reduces_drain",                  Callable(StructureTests, "_t_purify_stack_reduces_drain"))
+	runner.register_test("shrine/purify_stack_expiry_adds_penalty",            Callable(StructureTests, "_t_purify_stack_expiry_adds_penalty"))
+	runner.register_test("shrine/select_purifier_prefers_faith_pillar_vector", Callable(StructureTests, "_t_select_purifier_prefers_faith_pillar"))
 
 
 # -------------------------
@@ -130,5 +135,93 @@ static func _t_selects_idle_intent() -> Dictionary:
 
 	if str(intent.get("action_type", "")) != "actor.idle":
 		return { "ok": false, "error": "Expected actor.idle from structure, got: %s" % str(intent.get("action_type")) }
+
+	return { "ok": true }
+
+
+# COMBAT-006 — ShrineService tests ----------------------------------------
+
+# Test 5: drain_applies_base_drain_each_round
+# Shrine at 200 hp, no stacks, base_drain=5 → current_hp becomes 195.
+static func _t_drain_applies_base_drain() -> Dictionary:
+	var shrine: Dictionary = { "current_hp": 200, "purify_stacks": [] }
+	var cfg: Dictionary    = { "base_drain_per_round": 5, "purify_expiry_penalty": 2 }
+
+	var result: Dictionary = ShrineService.apply_drain(shrine, cfg)
+
+	if int(result.get("drain", -1)) != 5:
+		return { "ok": false, "error": "Expected drain=5, got: %s" % str(result.get("drain")) }
+	if int(shrine.get("current_hp", -1)) != 195:
+		return { "ok": false, "error": "Expected shrine hp=195, got: %s" % str(shrine.get("current_hp")) }
+
+	return { "ok": true }
+
+
+# Test 6: purify_stack_reduces_drain
+# Shrine at 200 hp, 1 active stack (reduction=3, duration=2), base=5 → drain=2, hp=198.
+static func _t_purify_stack_reduces_drain() -> Dictionary:
+	var shrine: Dictionary = {
+		"current_hp":    200,
+		"purify_stacks": [{ "duration": 2, "reduction": 3 }],
+	}
+	var cfg: Dictionary = { "base_drain_per_round": 5, "purify_expiry_penalty": 2 }
+
+	var result: Dictionary = ShrineService.apply_drain(shrine, cfg)
+
+	if int(result.get("drain", -1)) != 2:
+		return { "ok": false, "error": "Expected drain=2 (5-3=2), got: %s" % str(result.get("drain")) }
+	if int(shrine.get("current_hp", -1)) != 198:
+		return { "ok": false, "error": "Expected shrine hp=198, got: %s" % str(shrine.get("current_hp")) }
+
+	return { "ok": true }
+
+
+# Test 7: purify_stack_expiry_adds_penalty
+# Shrine at 200 hp, 1 stack with duration=1 (expires this tick), penalty=2, base=5 → drain=7, hp=193.
+static func _t_purify_stack_expiry_adds_penalty() -> Dictionary:
+	var shrine: Dictionary = {
+		"current_hp":    200,
+		"purify_stacks": [{ "duration": 1, "reduction": 3 }],
+	}
+	var cfg: Dictionary = { "base_drain_per_round": 5, "purify_expiry_penalty": 2 }
+
+	var result: Dictionary = ShrineService.apply_drain(shrine, cfg)
+
+	# duration ticks down to 0 → expires → penalty applies (no reduction)
+	# drain = 5 - 0 + 2 = 7
+	if int(result.get("drain", -1)) != 7:
+		return { "ok": false, "error": "Expected drain=7 (5+2 penalty), got: %s" % str(result.get("drain")) }
+	if int(shrine.get("current_hp", -1)) != 193:
+		return { "ok": false, "error": "Expected shrine hp=193, got: %s" % str(shrine.get("current_hp")) }
+	if int(result.get("stacks_expired", -1)) != 1:
+		return { "ok": false, "error": "Expected stacks_expired=1, got: %s" % str(result.get("stacks_expired")) }
+
+	return { "ok": true }
+
+
+# Test 8: select_purifier_prefers_faith_pillar_vector
+# echo_A: faith=60, dominant_vector=vanguard → weight = 60*0.5 + 0 = 30
+# echo_B: faith=40, dominant_vector=pillar   → weight = 40*0.5 + 20 = 40
+# Expected: echo_B selected.
+static func _t_select_purifier_prefers_faith_pillar() -> Dictionary:
+	var echo_a: Dictionary = {
+		"id":            "echo_a",
+		"traits":        { "faith": 60 },
+		"vector_scores": { "vanguard": 100, "pillar": 10, "protector": 10, "seeker": 10 },
+	}
+	var echo_b: Dictionary = {
+		"id":            "echo_b",
+		"traits":        { "faith": 40 },
+		"vector_scores": { "pillar": 100, "vanguard": 10, "protector": 10, "seeker": 10 },
+	}
+	var shrine_cfg: Dictionary = {
+		"purify_weight_faith": 0.5,
+		"purify_weight_by_vector": { "pillar": 20, "protector": 10, "seeker": 5, "vanguard": 0 },
+	}
+
+	var purifier_id: String = ShrineService.select_purifier([echo_a, echo_b], shrine_cfg)
+
+	if purifier_id != "echo_b":
+		return { "ok": false, "error": "Expected echo_b (weight=40 > echo_a weight=30), got: %s" % purifier_id }
 
 	return { "ok": true }

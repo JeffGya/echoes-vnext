@@ -157,6 +157,26 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 				"from_pos": move_result["from_pos"],
 				"to_pos":   move_result["to_pos"],
 			})
+
+	# COMBAT-006: resolve purify shrine action — applies a drain-reduction stack to the shrine.
+	if intent.get("action_type", "") == "actor.purify_shrine":
+		var shrine_cfg_data: Dictionary = \
+			context.get("cfg", {}).get("data", {}).get("combat", {}).get("shrine", {})
+		var shrine_ref: Dictionary = {}
+		for a_v in context.get("all_actors", []):
+			if a_v is Dictionary and a_v.get("is_structure", false) \
+					and not a_v.get("is_dead", false):
+				shrine_ref = a_v
+				break
+		if not shrine_ref.is_empty():
+			ShrineService.apply_purify_stack(shrine_ref, _actor, shrine_cfg_data)
+			logger.info(t, "actor.purified_shrine", "Purify applied to shrine", {
+				"actor_id":     _actor.get("id", ""),
+				"shrine_id":    shrine_ref.get("id", ""),
+				"stacks_count": shrine_ref.get("purify_stacks", []).size(),
+				"cooldown_set": _actor.get("purify_cooldown", 0),
+			})
+
 	return intent
 
 

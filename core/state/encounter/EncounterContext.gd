@@ -31,8 +31,16 @@ var last_round_results: Array = []
 # COMBAT-SEQ: most recent single actor action result — updated after each actor acts; {} between rounds.
 var last_actor_action: Dictionary = {}
 # COMBAT-005: transient combat result — set by FlowRuntime._end_round(); not persisted.
-# Shape: { "victory": bool, "reason": String, "round_ended": int }
+# Shape: { "victory": bool, "reason": String, "round_ended": int, "shrine_hp": int }
 var combat_result: Dictionary = {}
+# COMBAT-006: id of the designated purifier echo — set once at combat init; "" if no shrine objective.
+var purifier_id: String = ""
+
+# COMBAT-007: in-memory snapshot persistence — never written to disk.
+# last_round_snapshot: set at each round_end; overwritten each round.
+# final_snapshot: set once at combat_end (type "flow.resolve").
+var last_round_snapshot: Dictionary = {}
+var final_snapshot: Dictionary = {}
 
 # Optional deterministic notes for debugging / temporary tests
 var notes: Array[String] = []

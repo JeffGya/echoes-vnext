@@ -127,19 +127,43 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 	return order
 
 
-## COMBAT-005: Returns { "over": bool, "victory": bool, "reason": String }.
-## "reason" is "" when not over. Victory check runs first (echoes that kill the
-## last enemy take priority over dying in the same round).
-static func check_end_condition(actors: Array, _objective: String) -> Dictionary:
+## COMBAT-005/006: Returns { "over": bool, "victory": bool, "reason": String }.
+## "reason" is "" when not over. Check priority (locked):
+##   1. all_enemies_defeated → victory  (runs first — echoes that kill the last enemy win
+##      even if the shrine falls the same round)
+##   2. shrine_destroyed (purify_shrine objective only) → defeat
+##   3. all_echoes_dead → defeat
+static func check_end_condition(actors: Array, objective: String) -> Dictionary:
+	# 1. Victory: all enemies dead.
 	var living_enemies := actors.filter(func(a: Dictionary) -> bool:
 		return a.get("faction", "") == "enemy" and not a.get("is_dead", false))
 	if living_enemies.is_empty():
 		return { "over": true, "victory": true, "reason": "all_enemies_defeated" }
+
+	# 2. Shrine destroyed (purify_shrine objective only).
+	if objective == EncounterResolutionModes.PURIFY_SHRINE:
+		var shrine: Dictionary = _find_shrine(actors)
+		if not shrine.is_empty() and shrine.get("is_dead", false):
+			return { "over": true, "victory": false, "reason": "shrine_destroyed" }
+
+	# 3. Defeat: all echoes dead.
 	var living_echoes := actors.filter(func(a: Dictionary) -> bool:
 		return a.get("faction", "") == "echo" and not a.get("is_dead", false))
 	if living_echoes.is_empty():
 		return { "over": true, "victory": false, "reason": "all_echoes_dead" }
+
 	return { "over": false, "victory": false, "reason": "" }
+
+
+## Returns the first structure actor (is_structure == true) from the list, or {} if none found.
+static func _find_shrine(actors: Array) -> Dictionary:
+	for actor_v in actors:
+		if not (actor_v is Dictionary):
+			continue
+		var actor: Dictionary = actor_v
+		if actor.get("is_structure", false):
+			return actor
+	return {}
 
 
 ## Returns the key with the highest integer value in a Dictionary.

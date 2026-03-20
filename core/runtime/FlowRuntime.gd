@@ -619,7 +619,7 @@ func _handle_combat_init(t: int) -> void:
 	flow_ctx.save_request_reason = "combat.init"
 
 	# Rebuild flow.encounter snapshot with combat state included.
-	flow_ctx.last_snapshot = FlowEncounterState.build_snapshot(flow_ctx, t)
+	flow_ctx.last_snapshot = FlowEncounterState.build_round_snapshot(flow_ctx, t)
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 
@@ -823,7 +823,7 @@ func _resolve_next_actor(t: int) -> void:
 	combat_state["current_actor_index"] = next_idx + 1
 
 	# Emit per-actor snapshot — UI shows updated board + arrow + action text for this actor.
-	flow_ctx.last_snapshot = FlowEncounterState.build_snapshot(flow_ctx, t)
+	flow_ctx.last_snapshot = FlowEncounterState.build_round_snapshot(flow_ctx, t)
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 
@@ -966,7 +966,17 @@ func _end_round(t: int) -> void:
 	combat_state["active_initiative_index"] = 0
 	ectx.last_actor_action = {}
 
-	flow_ctx.last_snapshot = FlowEncounterState.build_snapshot(flow_ctx, t)
+	# COMBAT-007: build the appropriate snapshot and persist it in-memory on ectx.
+	if bool(combat_state.get("combat_over", false)):
+		# FinalCombatSnapshot — emits type "flow.resolve"; stored on ectx.final_snapshot.
+		var final_snap: Dictionary = FlowEncounterState.build_final_snapshot(flow_ctx, t)
+		ectx.final_snapshot    = final_snap
+		flow_ctx.last_snapshot = final_snap
+	else:
+		# RoundSnapshot — emits type "flow.encounter"; stored on ectx.last_round_snapshot.
+		var round_snap: Dictionary = FlowEncounterState.build_round_snapshot(flow_ctx, t)
+		ectx.last_round_snapshot = round_snap
+		flow_ctx.last_snapshot   = round_snap
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 
@@ -1371,9 +1381,13 @@ func _ensure_encounter_started(t: int) -> void:
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 func _log_snapshot_emitted(t: int, snapshot: Dictionary, reason: String) -> void:
+	# COMBAT-007: include field_count for determinism audit (LOG_SNAPSHOT_EMITTED contract).
+	var data_v: Variant = snapshot.get("data", {})
+	var field_count: int = data_v.size() if data_v is Dictionary else 0
 	logger.debug(t, "snapshot.emitted", "Snapshot emitted", {
-		"reason": reason,
+		"reason":        reason,
 		"snapshot_type": str(snapshot.get("type", "")),
+		"field_count":   field_count,
 	})
 	
 func _get_party_max_size() -> int:
