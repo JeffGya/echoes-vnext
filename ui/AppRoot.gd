@@ -25,26 +25,14 @@ var config_service: ConfigService
 var flow_ctx: FlowContext
 var flow_machine: FlowStateMachine
 
-# Sanctum related variables
-var _sanctum_screen: SanctumScreen
-var _sanctum_scene := preload("res://ui/screens/SanctumScreen.tscn")
-
-# Summon related variables
-var _summon_screen: SummonScreen
-var _summon_scene := preload("res://ui/screens/SummonScreen.tscn")
-
-# Sanctum shell (Phase B - Spatial visualization)
+# INFRA-001: Two-shell router. All bespoke screens live inside their respective shell.
+# SanctumShell — flow.sanctum, flow.summon, flow.party_manage, flow.echo_manage, flow.realm_select
+# RealmShell   — flow.stage_map, flow.stage, flow.encounter, flow.resolve
 var _sanctum_shell: SanctumShell
 var _sanctum_shell_scene := preload("res://ui/shells/SanctumShell.tscn")
 
-# Combat board screen — GRID-001 temporary direct route.
-# INFRA-001 (pickup 44) moves flow.encounter routing into RealmShell.
-var _combat_board_screen: CombatBoardScreen
-var _combat_board_scene := preload("res://ui/screens/CombatBoardScreen.tscn")
-
-# COMBAT-007: Resolve screen — receives type "flow.resolve" from FlowEncounterState.build_final_snapshot().
-var _resolve_screen: ResolveScreen
-var _resolve_scene := preload("res://ui/screens/ResolveScreen.tscn")
+var _realm_shell: RealmShell
+var _realm_shell_scene := preload("res://ui/shells/RealmShell.tscn")
 
 func _ready():
 	# Bind renderer to UI elements it can update.
@@ -564,13 +552,20 @@ func _run_combat_objective_command(parts: Array) -> void:
 # Shows F:<fear> and M:<morale> above each actor token.
 # No-ops gracefully when CombatBoardScreen is not active.
 func _run_combat_emotion_command() -> void:
-	if _combat_board_screen == null or not _combat_board_screen.visible:
+	# CombatBoardScreen now lives inside RealmShell — access it via the active overlay.
+	var combat_screen: CombatBoardScreen = null
+	if _realm_shell != null and _realm_shell.visible:
+		var overlay: Control = _realm_shell._active_overlay
+		if overlay is CombatBoardScreen:
+			combat_screen = overlay as CombatBoardScreen
+
+	if combat_screen == null:
 		_debug_print("combat_emotion: CombatBoardScreen not active — command ignored")
 		_flush_logs_to_console()
 		return
 	# Toggle the flag. Read current state from the token layer directly.
-	var currently_on: bool = _combat_board_screen._token_layer._emotion_debug
-	_combat_board_screen.set_emotion_debug(not currently_on)
+	var currently_on: bool = combat_screen._token_layer._emotion_debug
+	combat_screen.set_emotion_debug(not currently_on)
 	var state_label: String = "ON" if not currently_on else "OFF"
 	_debug_print("Emotion debug: %s" % state_label)
 	_flush_logs_to_console()
@@ -657,52 +652,41 @@ func _run_currency_command(currency: String, parts: Array) -> void:
 	# Optional: if you have a safe “refresh snapshot without transition” method later, call it here.
 	_flush_logs_to_console()
 
-# Snapshot renderer that keeps external screens in mind and snapshots within Approot.
-# Goal is to eventually go to a screen only model and make Approot thinner.
-# We will move to a ScreenRouter pattern. This is a halfway house to keep things manageable.
+# INFRA-001: Two-branch router. Sanctum-family → SanctumShell, venture-family → RealmShell.
+# All screen preloading and routing lives inside each shell.
+const SANCTUM_FAMILY: Array = [
+	"flow.sanctum",
+	"flow.summon",
+	"flow.party_manage",
+	# "flow.echo_manage",   # uncomment when EchoManageScreen exists
+	# "flow.realm_select",  # uncomment when RealmSelectScreen exists
+]
+const VENTURE_FAMILY: Array = [
+	"flow.stage_map",
+	"flow.stage",
+	"flow.encounter",
+	"flow.resolve",
+]
+
 func _render_snapshot(snap: Dictionary) -> void:
 	var snap_type := str(snap.get("type", ""))
-	var is_sanctum_family := (
-		snap_type == "flow.sanctum"
-		or snap_type == "flow.summon"
-		or snap_type == "flow.party_manage"
-		#or snap_type == "flow.echo_manage"
-		#or snap_type == "flow.realm_select"
-	)
 
-	if is_sanctum_family:
+	if snap_type in SANCTUM_FAMILY:
 		if _sanctum_shell == null:
 			_sanctum_shell = _sanctum_shell_scene.instantiate() as SanctumShell
 			screen_host.add_child(_sanctum_shell)
 			_sanctum_shell.action_requested.connect(_on_ui_action_selected)
-
 		_show_screen(_sanctum_shell)
 		_sanctum_shell.set_snapshot(snap)
 		return
 
-		_show_screen(_summon_screen)
-		_summon_screen.set_snapshot(snap)
-		return
-
-	# GRID-001: flow.encounter → CombatBoardScreen (temporary direct route).
-	# INFRA-001 (pickup 44) will move this into RealmShell.
-	if snap_type == FlowStateIds.ENCOUNTER:
-		if _combat_board_screen == null:
-			_combat_board_screen = _combat_board_scene.instantiate() as CombatBoardScreen
-			screen_host.add_child(_combat_board_screen)
-			_combat_board_screen.action_requested.connect(_on_ui_action_selected)
-		_show_screen(_combat_board_screen)
-		_combat_board_screen.set_snapshot(snap)
-		return
-
-	# COMBAT-007: flow.resolve → ResolveScreen.
-	if snap_type == FlowStateIds.RESOLVE:
-		if _resolve_screen == null:
-			_resolve_screen = _resolve_scene.instantiate() as ResolveScreen
-			screen_host.add_child(_resolve_screen)
-			_resolve_screen.action_requested.connect(_on_ui_action_selected)
-		_show_screen(_resolve_screen)
-		_resolve_screen.set_snapshot(snap)
+	if snap_type in VENTURE_FAMILY:
+		if _realm_shell == null:
+			_realm_shell = _realm_shell_scene.instantiate() as RealmShell
+			screen_host.add_child(_realm_shell)
+			_realm_shell.action_requested.connect(_on_ui_action_selected)
+		_show_screen(_realm_shell)
+		_realm_shell.set_snapshot(snap)
 		return
 
 	# No bespoke screen found for this snapshot type — fall back to UISnapshotRenderer.
@@ -714,17 +698,10 @@ func _show_screen(screen: Control) -> void:
 	snapshot_view.visible = false
 	actions_container.visible = false
 
-	# Hide all bespoke screens, then show the active one.
-	if _sanctum_screen != null:
-		_sanctum_screen.visible = false
-	if _summon_screen != null:
-		_summon_screen.visible = false
 	if _sanctum_shell != null:
 		_sanctum_shell.visible = false
-	if _combat_board_screen != null:
-		_combat_board_screen.visible = false
-	if _resolve_screen != null:
-		_resolve_screen.visible = false
+	if _realm_shell != null:
+		_realm_shell.visible = false
 
 	screen.visible = true
 
@@ -732,13 +709,7 @@ func _hide_bespoke_screens() -> void:
 	screen_host.visible = false
 	snapshot_view.visible = true
 	actions_container.visible = true
-	if _sanctum_screen != null:
-		_sanctum_screen.visible = false
-	if _summon_screen != null:
-		_summon_screen.visible = false
 	if _sanctum_shell != null:
 		_sanctum_shell.visible = false
-	if _combat_board_screen != null:
-		_combat_board_screen.visible = false
-	if _resolve_screen != null:
-		_resolve_screen.visible = false
+	if _realm_shell != null:
+		_realm_shell.visible = false

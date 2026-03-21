@@ -44,13 +44,6 @@ func enter(ctx: RefCounted, t:int) -> void:
 			"slot": "cta.enter_stage",
 			"disabled": not has_realm_locked_in,
 		},
-		# [DEV] Temporary nav button — GRID-001. Removed when INFRA-001 moves encounter to RealmShell (pickup 44).
-		"nav.combat_board": {
-			"type": "flow.go_state",
-			"to": FlowStateIds.ENCOUNTER,
-			"label": "[DEV] Combat Board",
-			"slot": "nav.combat_board",
-		},
 	}
 		
 	# --- Sanctum roster (from save) ---

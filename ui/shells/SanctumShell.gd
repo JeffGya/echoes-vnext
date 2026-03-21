@@ -20,7 +20,7 @@ var _cached_nav: Dictionary = {}
 # Camera config (Phase B)
 var _zoom_levels := [Vector2(1.0, 1.0), Vector2(1.5, 1.5)]
 var _zoom_index := 1 # Start at 1.5
-var _pan_speed  := 1.0
+var _pan_speed  := 2.5
 
 var _is_panning := false
 var _last_pointer_pos := Vector2.ZERO
@@ -61,6 +61,10 @@ func _ready() -> void:
 
 func _sync_ui_layer_visibility() -> void:
 	_ui_layer.visible = visible
+	# Camera2D.enabled is independent of node visibility in Godot 4.
+	# Disable it when SanctumShell is hidden so it does not affect the viewport
+	# while RealmShell (or any other screen) is active.
+	camera.enabled = visible
 
 
 func set_snapshot(snap: Dictionary) -> void:

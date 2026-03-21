@@ -237,6 +237,19 @@ SanctumShell owns the persistent nav bar — it is NOT injected into every sanct
 - Cache is safe: `cta.enter_stage` (only conditional action) can only change via `flow.realm_select`, which always returns to `flow.sanctum` before the player sees the nav again.
 - This keeps SummonState, PartyManageState, EchoManageState, RealmSelectState free from nav injection.
 
+**Shell Routing Model (INFRA-001)**
+Two shells own all bespoke screens. AppRoot routes on `snapshot.type`:
+
+| Shell | Snapshot types | Character |
+|-------|---------------|-----------|
+| `SanctumShell` | `flow.sanctum`, `flow.summon`, `flow.party_manage`, `flow.echo_manage`, `flow.realm_select` | Non-linear hub — owns persistent NavBar + spatial layer |
+| `RealmShell` | `flow.stage_map`, `flow.stage`, `flow.encounter`, `flow.resolve` | Linear venture — lightweight pass-through, no shared chrome |
+
+Key differences:
+- SanctumShell: CanvasLayer NavBar cached from `flow.sanctum`; SpatialLayer for room art; per-screen overlays in OverlayRoot
+- RealmShell: No NavBar, no CanvasLayer, no SpatialLayer. Each venture screen is fullscreen and self-contained.
+- AppRoot only holds `_sanctum_shell` and `_realm_shell` — all screen preloading lives inside each shell.
+
 ### Snapshot.data keys (Party Manage, SANCTUM-003)
 - title: String
 - max_party_size: int (from `balance.json data.sanctum.party_max_size`; default 5)

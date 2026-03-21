@@ -92,6 +92,12 @@ func dispatch(action: Dictionary) -> Dictionary:
 			flow_ctx.save_request_reason = "realm_select"
 			flow_machine.transition(FlowStateIds.STAGE, flow_ctx, logger, t, "ui.flow.select_stage")
 
+		"flow.select_stage":
+			var stage_id := str(action.get("stage_id", ""))
+			flow_ctx.stage_id = stage_id
+			logger.info(t, "state.stage_select", "Stage selected", { "stage_id": stage_id })
+			flow_machine.transition(FlowStateIds.STAGE, flow_ctx, logger, t, "ui.flow.select_stage")
+
 		"flow.continue":
 			var is_first_boot: bool = bool(flow_ctx.save_data.get("first_boot", true))
 			if is_first_boot:

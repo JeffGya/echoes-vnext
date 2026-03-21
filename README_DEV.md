@@ -87,8 +87,18 @@ Rendering only. UI must be snapshot-driven.
 - AppRoot.gd
 - AppRoot.tscn
 - UISnapshotRenderer.gd
+- ui/shells/ — Shell hosts; each shell owns overlay-swapping for a family of snapshot types
+  - SanctumShell.gd/.tscn — Hub shell: persistent NavBar (FoldableContainer) + CanvasLayer + SpatialLayer. Routes: flow.sanctum, flow.summon, flow.party_manage
+  - RealmShell.gd/.tscn   — Venture shell: lightweight pass-through, no shared chrome. Routes: flow.stage_map, flow.stage, flow.encounter, flow.resolve (INFRA-001)
 - ui/screens/ — High-level screens (Sanctum, Realm Select, Combat, Resolve, Debug)
-  - ScreenTemplate.gd — Canonical starting point for all new bespoke screens (UI-001)
+  - ScreenTemplate.gd         — Canonical starting point for all new bespoke screens (UI-001)
+  - SanctumScreen.gd/.tscn    — Sanctum hub (Ase, roster preview, party slots, name modal)
+  - SummonScreen.gd/.tscn     — Summon screen (grade select, cost, reveal overlay)
+  - PartyManageScreen.gd/.tscn— Party selection (roster ↔ party panels)
+  - StageMapScreen.gd/.tscn   — Stage progress map (two-panel: stage list + detail) (INFRA-001)
+  - StageScreen.gd/.tscn      — Stage overview before encounter (info panel + party bar) (INFRA-001)
+  - CombatBoardScreen.gd/.tscn— Isometric combat board (token layer, initiative panel)
+  - ResolveScreen.gd/.tscn    — Post-combat resolve (victory/defeat, actor roster)
 - ui/components/ — Reusable UI components (ActionList, LogView, Panels)
   - DebugPanel.gd
 
