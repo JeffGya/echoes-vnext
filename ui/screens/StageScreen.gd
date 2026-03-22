@@ -21,7 +21,6 @@ var _cached_back_action:  Dictionary = {}
 @onready var _info_panel:       PanelContainer = %InfoPanel
 @onready var _title_label:      Label          = %StageTitleLabel
 @onready var _objective_label:  Label          = %ObjectiveLabel
-@onready var _party_bar:        HBoxContainer  = %PartyBar
 @onready var _encounter_button: Button         = %EncounterButton
 @onready var _back_button:      Button         = %BackButton
 
@@ -58,8 +57,6 @@ func set_snapshot(snap: Dictionary) -> void:
 	_render(snap["data"], snap.get("actions", {}))
 
 func _clear() -> void:
-	for c in _party_bar.get_children():
-		c.queue_free()
 	_title_label.text     = ""
 	_objective_label.text = ""
 	_cached_start_action  = {}
@@ -68,8 +65,6 @@ func _clear() -> void:
 func _render(data: Dictionary, actions: Dictionary) -> void:
 	_title_label.text     = str(data.get("stage_name", "Stage"))
 	_objective_label.text = "Objective: " + _format_objective(str(data.get("objective_type", "")))
-
-	_build_party_bar(data.get("party_preview", []))
 
 	# nav.back
 	var back_v: Variant = actions.get("nav.back", {})
@@ -85,62 +80,6 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 		_encounter_button.text = str(start_v.get("label", "Start Encounter →"))
 	else:
 		_encounter_button.disabled = true
-
-# ---------------------------------------------------------------------------
-# Party bar
-# ---------------------------------------------------------------------------
-
-func _build_party_bar(party: Array) -> void:
-	for i in 5:
-		_party_bar.add_child(_make_party_card(party[i] if i < party.size() else {}))
-
-func _make_party_card(member: Dictionary) -> PanelContainer:
-	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(0, 72)
-	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-	var style := StyleBoxFlat.new()
-	style.bg_color = COL_CARD_BG
-	style.set_corner_radius_all(6)
-	style.set_content_margin_all(6)
-	card.add_theme_stylebox_override("panel", style)
-
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 3)
-	card.add_child(vbox)
-
-	# Image placeholder row
-	var img_row := HBoxContainer.new()
-	img_row.add_theme_constant_override("separation", 6)
-
-	var placeholder := ColorRect.new()
-	placeholder.custom_minimum_size = Vector2(28, 28)
-	placeholder.color = Color("#504840")
-	img_row.add_child(placeholder)
-
-	var name_lbl := Label.new()
-	name_lbl.text = str(member.get("name", "Empty")) if not member.is_empty() else "—"
-	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_lbl.add_theme_color_override("font_color", COL_TEXT)
-	name_lbl.add_theme_font_size_override("font_size", 11)
-	img_row.add_child(name_lbl)
-	vbox.add_child(img_row)
-
-	# HP bar placeholder
-	var hp_bar := ProgressBar.new()
-	hp_bar.value = 100 if not member.is_empty() else 0
-	hp_bar.custom_minimum_size = Vector2(0, 5)
-	hp_bar.show_percentage = false
-	vbox.add_child(hp_bar)
-
-	# Status
-	var status_lbl := Label.new()
-	status_lbl.text = "Ready" if not member.is_empty() else ""
-	status_lbl.add_theme_color_override("font_color", COL_TEXT_DIM)
-	status_lbl.add_theme_font_size_override("font_size", 10)
-	vbox.add_child(status_lbl)
-
-	return card
 
 # ---------------------------------------------------------------------------
 # Helpers

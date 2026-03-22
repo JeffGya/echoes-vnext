@@ -368,23 +368,40 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		if a_v is Dictionary:
 			projected_actors.append(FlowEncounterState._project_actor(a_v))
 
+	# UI-005: pre-compute summary counts so ResolveScreen reads clean fields.
+	var enemies_defeated: int = 0
+	var echoes_survived: int  = 0
+	for a in projected_actors:
+		if str(a.get("faction", "")) == "enemy" and str(a.get("status", "")) == "dead":
+			enemies_defeated += 1
+		if str(a.get("faction", "")) == "echo" and str(a.get("status", "")) != "dead":
+			echoes_survived += 1
+
 	return {
 		"type": FlowStateIds.RESOLVE,
 		"data": {
-			"title":           "Result",
-			"encounter_id":    encounter_id,
-			"actors":          projected_actors,
-			"objective_state": FlowEncounterState._build_objective_state(ectx, combat_state),
-			"victory":         bool(combat_result.get("victory", false)),
-			"reason":          str(combat_result.get("reason", "")),
-			"round_ended":     int(combat_result.get("round_ended", 0)),
+			"title":            "Result",
+			"encounter_id":     encounter_id,
+			"actors":           projected_actors,
+			"objective_state":  FlowEncounterState._build_objective_state(ectx, combat_state),
+			"victory":          bool(combat_result.get("victory", false)),
+			"reason":           str(combat_result.get("reason", "")),
+			"round_ended":      int(combat_result.get("round_ended", 0)),
+			"enemies_defeated": enemies_defeated,
+			"echoes_survived":  echoes_survived,
 		},
 		"actions": {
 			"cta.continue": {
 				"type":  "flow.go_state",
 				"to":    FlowStateIds.SANCTUM,
-				"label": "Return to Sanctum",
+				"label": "To Sanctum",
 				"slot":  "cta.continue",
+			},
+			"cta.next_stage": {
+				"type":  "flow.go_state",
+				"to":    FlowStateIds.STAGE_MAP,
+				"label": "Next Stage",
+				"slot":  "cta.next_stage",
 			},
 		},
 		"meta": { "t": t },

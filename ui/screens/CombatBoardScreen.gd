@@ -39,12 +39,11 @@ signal action_requested(action: Dictionary)
 @onready var _reason_label: Label                   = $CombatResultOverlay/ResultContent/ReasonLabel
 @onready var _round_ended_label: Label              = $CombatResultOverlay/ResultContent/RoundEndedLabel
 @onready var _end_combat_button: Button             = $CombatResultOverlay/ResultContent/EndCombatButton
-# UI-004: Pre-battle panel (pre_combat phase only) + persistent party strip.
+# UI-004: Pre-battle panel (pre_combat phase only).
 @onready var _prebattle_panel: PanelContainer       = $PrebattlePanel
 @onready var _prebattle_objective: Label            = $PrebattlePanel/PrebattleContent/ObjectivePanelLabel
 @onready var _retreat_button: Button                = $PrebattlePanel/PrebattleContent/ButtonRow/RetreatButton
 @onready var _enter_combat_button: Button           = $PrebattlePanel/PrebattleContent/ButtonRow/EnterCombatButton
-@onready var _party_bar: HBoxContainer              = $PartyBar
 
 # Clay floor tile: source 0, atlas position (0, 0)
 const _TILE_SOURCE_ID:    int       = 0
@@ -147,12 +146,10 @@ func _clear() -> void:
 	_result_overlay.visible = false
 	_end_combat_action      = {}
 
-	# UI-004: hide pre-battle panel; reset cached actions; clear party bar cards.
+	# UI-004: hide pre-battle panel; reset cached actions.
 	_prebattle_panel.visible         = false
 	_pending_enter_combat_action     = {}
 	_pending_retreat_action          = {}
-	for child in _party_bar.get_children():
-		child.queue_free()
 
 func _render(data: Dictionary, actions: Dictionary) -> void:
 	_current_cols = int(data.get("board_cols", 10))
@@ -173,9 +170,6 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	var obj_type: String = str(obj_state.get("type", ""))
 	_objective_label.text    = obj_type
 	_objective_label.visible = not obj_type.is_empty()
-
-	# UI-004: build party bar from echo actors — always shown during encounter.
-	_build_party_bar(data.get("actors", []))
 
 	# COMBAT-SEQ: CTA and auto-dispatch depend on round_phase.
 	var round_phase: String  = str(data.get("round_phase", "pre_combat"))
@@ -550,57 +544,6 @@ func _show_prebattle_panel(data: Dictionary, actions: Dictionary) -> void:
 	_prebattle_panel.visible = true
 
 
-## Builds the party bar from the projected echo actors array.
-## Clears existing cards first. One card per echo actor — no padding.
-func _build_party_bar(actors: Array) -> void:
-	for child in _party_bar.get_children():
-		child.queue_free()
-
-	for actor in actors:
-		if not (actor is Dictionary):
-			continue
-		if str(actor.get("faction", "")) != "echo":
-			continue
-		_party_bar.add_child(_make_echo_card(actor))
-
-
-## Creates a single echo card Control for the party bar.
-func _make_echo_card(actor: Dictionary) -> Control:
-	var card := VBoxContainer.new()
-	card.custom_minimum_size = Vector2(100, 80)
-
-	# HP label.
-	var hp_label := Label.new()
-	hp_label.add_theme_font_size_override("font_size", 11)
-	var hp: int     = int(actor.get("hp", 0))
-	var max_hp: int = int(actor.get("max_hp", 1))
-	hp_label.text = "HP %d/%d" % [hp, max_hp]
-	hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	card.add_child(hp_label)
-
-	# Portrait circle — draws echo initials (matches CombatTokenLayer style).
-	var portrait := _EchoPortrait.new(actor.get("name", "??"))
-	portrait.custom_minimum_size = Vector2(44, 44)
-	card.add_child(portrait)
-
-	# Echo name label.
-	var name_label := Label.new()
-	name_label.add_theme_font_size_override("font_size", 12)
-	name_label.text = str(actor.get("name", ""))
-	name_label.clip_text = true
-	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	card.add_child(name_label)
-
-	# Morale status label.
-	var status_label := Label.new()
-	status_label.add_theme_font_size_override("font_size", 11)
-	status_label.text = str(actor.get("morale_status", "Normal"))
-	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	card.add_child(status_label)
-
-	return card
-
-
 ## Maps objective type string to a player-facing label.
 func _format_objective_label(obj_type: String) -> String:
 	match obj_type:
@@ -621,22 +564,3 @@ func _on_retreat_pressed() -> void:
 		var act := _pending_retreat_action
 		_pending_retreat_action = {}
 		action_requested.emit(act)
-
-
-## Minimal inner class — draws a coloured circle with 2-letter echo initials.
-## Reuses the same visual language as CombatTokenLayer tokens.
-class _EchoPortrait extends Control:
-	var _initials: String
-
-	func _init(echo_name: String) -> void:
-		_initials = echo_name.substr(0, 2).to_upper()
-
-	func _draw() -> void:
-		var center := size / 2.0
-		var radius: float = minf(center.x, center.y) - 2.0
-		draw_circle(center, radius, Color(0.25, 0.45, 0.75))
-		var font := ThemeDB.fallback_font
-		var font_size := 13
-		var text_size := font.get_string_size(_initials, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
-		var text_pos  := center - text_size / 2.0 + Vector2(0, text_size.y * 0.1)
-		draw_string(font, text_pos, _initials, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, Color.WHITE)
