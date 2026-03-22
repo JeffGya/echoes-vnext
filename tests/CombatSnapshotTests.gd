@@ -22,6 +22,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("snapshot/status_derivation",                  Callable(CombatSnapshotTests, "_t_status_derivation"))
 	runner.register_test("snapshot/objective_state_shape",              Callable(CombatSnapshotTests, "_t_objective_state_shape"))
 	runner.register_test("snapshot/field_count_is_nonzero",             Callable(CombatSnapshotTests, "_t_field_count_is_nonzero"))
+	# UI-004 additions:
+	runner.register_test("snapshot/pre_combat_has_retreat_fields",       Callable(CombatSnapshotTests, "_t_pre_combat_has_retreat_fields"))
+	runner.register_test("snapshot/cta_retreat_absent_when_ineligible",  Callable(CombatSnapshotTests, "_t_cta_retreat_absent_when_ineligible"))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -134,13 +137,14 @@ static func _t_actor_projection_fields() -> Dictionary:
 
 	var proj: Dictionary = FlowEncounterState._project_actor(actor)
 
-	# Required keys must be present.
-	for key in ["id", "name", "hp", "max_hp", "status", "grid_pos", "faction", "is_structure", "fear", "morale"]:
+	# Required keys must be present (UI-004 added calling_origin + morale_status).
+	for key in ["id", "name", "hp", "max_hp", "status", "grid_pos", "faction",
+				"is_structure", "fear", "morale", "calling_origin", "morale_status"]:
 		if not proj.has(key):
 			return { "ok": false, "error": "projection missing key: '%s'" % key }
 
 	# Internal keys must NOT be present.
-	for key in ["traits", "xp_total", "archetype_birth", "calling_origin"]:
+	for key in ["traits", "xp_total", "archetype_birth"]:
 		if proj.has(key):
 			return { "ok": false, "error": "projection contains internal key that should be stripped: '%s'" % key }
 
@@ -223,5 +227,43 @@ static func _t_field_count_is_nonzero() -> Dictionary:
 	# Round snapshot carries more display fields (board_cols, initiative, etc.) than final.
 	if round_field_count <= final_field_count:
 		return { "ok": false, "error": "round_snapshot should have more fields than final (%d vs %d)" % [round_field_count, final_field_count] }
+
+	return { "ok": true }
+
+
+# Test 7 (UI-004): pre_combat_has_retreat_fields
+# Setup: minimal pre_combat FlowContext (no config_service → defaults apply).
+# Expected: build_round_snapshot returns data with retreat_eligible, retreat_ase_cost,
+#           retreat_tier_label, retreat_success_pct keys.
+static func _t_pre_combat_has_retreat_fields() -> Dictionary:
+	var ctx: FlowContext = CombatSnapshotTests._make_pre_combat_ctx()
+	var snap: Dictionary = FlowEncounterState.build_round_snapshot(ctx, 1)
+	var data: Dictionary = snap.get("data", {})
+
+	for key in ["retreat_eligible", "retreat_ase_cost", "retreat_tier_label", "retreat_success_pct"]:
+		if not data.has(key):
+			return { "ok": false, "error": "pre_combat data missing UI-004 key: '%s'" % key }
+
+	return { "ok": true }
+
+
+# Test 8 (UI-004): cta_retreat_absent_when_ineligible
+# Setup: pre_combat FlowContext with NO actors (empty) → speed gate fails → ineligible.
+# Expected: actions dict does NOT contain "cta.retreat".
+#           retreat_eligible == false in data.
+static func _t_cta_retreat_absent_when_ineligible() -> Dictionary:
+	var ctx: FlowContext = CombatSnapshotTests._make_pre_combat_ctx()
+	# No actors → RetreatService.can_attempt() returns false.
+	ctx.encounter_ctx.actors = []
+
+	var snap: Dictionary = FlowEncounterState.build_round_snapshot(ctx, 1)
+	var data: Dictionary = snap.get("data", {})
+	var actions: Dictionary = snap.get("actions", {})
+
+	if bool(data.get("retreat_eligible", true)) != false:
+		return { "ok": false, "error": "Expected retreat_eligible=false with no actors, got: %s" % str(data.get("retreat_eligible")) }
+
+	if actions.has("cta.retreat"):
+		return { "ok": false, "error": "cta.retreat must not be present in actions when ineligible" }
 
 	return { "ok": true }

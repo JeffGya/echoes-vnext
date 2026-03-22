@@ -153,6 +153,12 @@ func dispatch(action: Dictionary) -> Dictionary:
 				flow_ctx.encounter_machine.transition(to_state, flow_ctx.encounter_ctx, logger, t, "ui.encounter.advance")
 				flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
+		# UI-004: player attempts to retreat before combat starts.
+		# Roll is seeded for determinism; Ase spent win or lose.
+		# Success → Sanctum. Failure → combat starts automatically.
+		"encounter.retreat":
+			_handle_encounter_retreat(action, t)
+
 		"encounter.complete":
 			# EMOTION-002: apply win/loss drift to all roster echoes before clearing encounter
 			var enc_outcome := str(action.get("outcome", "loss"))
@@ -590,6 +596,61 @@ func _handle_debug_seed_set(action: Dictionary, t: int, do_reset: bool) -> void:
 
 	# IMPORTANT: no flow transition occurs, so refresh snapshot immediately
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+## UI-004: Player attempts retreat before round 1.
+## Gate (speed) and tier (agi) were computed at snapshot time and baked into the action dict.
+## Ase is spent regardless of roll outcome.
+## Success → clear encounter, go to Sanctum. Failure → start combat immediately.
+func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
+	if flow_ctx.encounter_ctx == null:
+		logger.debug(t, "encounter.retreat.no_op", "Retreat: no active encounter context", {})
+		return
+
+	var ase_cost:    int = int(action.get("ase_cost",    0))
+	var success_pct: int = int(action.get("success_pct", 0))
+	var encounter_id: String = flow_ctx.encounter_ctx.encounter_id
+
+	# Spend Ase (always, win or lose). Guard: only spend if player can afford.
+	if ase_cost > 0:
+		if econ.can_afford_ase(ase_cost):
+			econ.spend_ase(ase_cost, "encounter.retreat", logger, t)
+		else:
+			logger.debug(t, "encounter.retreat.no_ase", "Retreat: insufficient Ase — no spend", {
+				"ase_cost": ase_cost, "ase_balance": econ.get_ase()
+			})
+
+	# Seeded roll for determinism.
+	var rng := RandomNumberGenerator.new()
+	if flow_ctx.campaign_seed != null:
+		rng = flow_ctx.campaign_seed.get_rng("encounter.retreat." + encounter_id + "." + str(t))
+	else:
+		rng.seed = hash("encounter.retreat." + encounter_id + str(t))
+
+	var roll_result: Dictionary = RetreatService.roll_retreat(success_pct, rng)
+	var success: bool = bool(roll_result.get("success", false))
+
+	logger.info(t, "encounter.retreat", "Retreat attempted", {
+		"encounter_id": encounter_id,
+		"ase_cost":     ase_cost,
+		"success_pct":  success_pct,
+		"success":      success,
+	})
+
+	if success:
+		# Clear encounter context — no emotion drift on retreat.
+		flow_ctx.encounter_ctx    = null
+		flow_ctx.encounter_machine = null
+		flow_ctx.save_request      = true
+		flow_ctx.save_request_reason = "encounter.retreat"
+		_apply_sanctum_emotion_tick(t)
+		flow_machine.transition(FlowStateIds.SANCTUM, flow_ctx, logger, t, "encounter.retreat.success")
+	else:
+		logger.info(t, "encounter.retreat.failed", "Retreat failed — combat begins", {
+			"encounter_id": encounter_id,
+		})
+		# Start combat immediately.
+		_handle_combat_init(t)
+
 
 ## COMBAT-001: initializes CombatState, logs combat.init, saves, and rebuilds snapshot.
 func _handle_combat_init(t: int) -> void:

@@ -39,6 +39,12 @@ signal action_requested(action: Dictionary)
 @onready var _reason_label: Label                   = $CombatResultOverlay/ResultContent/ReasonLabel
 @onready var _round_ended_label: Label              = $CombatResultOverlay/ResultContent/RoundEndedLabel
 @onready var _end_combat_button: Button             = $CombatResultOverlay/ResultContent/EndCombatButton
+# UI-004: Pre-battle panel (pre_combat phase only) + persistent party strip.
+@onready var _prebattle_panel: PanelContainer       = $PrebattlePanel
+@onready var _prebattle_objective: Label            = $PrebattlePanel/PrebattleContent/ObjectivePanelLabel
+@onready var _retreat_button: Button                = $PrebattlePanel/PrebattleContent/ButtonRow/RetreatButton
+@onready var _enter_combat_button: Button           = $PrebattlePanel/PrebattleContent/ButtonRow/EnterCombatButton
+@onready var _party_bar: HBoxContainer              = $PartyBar
 
 # Clay floor tile: source 0, atlas position (0, 0)
 const _TILE_SOURCE_ID:    int       = 0
@@ -56,6 +62,9 @@ var _nav_back_action: Dictionary = {}
 var _pending_dispatch_action: Dictionary = {}
 # COMBAT-005: cached action for the "Return to Sanctum" button in the result overlay.
 var _end_combat_action: Dictionary = {}
+# UI-004: cached actions for the pre-battle panel buttons.
+var _pending_enter_combat_action: Dictionary = {}
+var _pending_retreat_action: Dictionary      = {}
 # Step delay in seconds — controlled by speed buttons.
 var _step_delay: float = _SPEED_NORMAL
 # Manual mode: when true, player clicks the CTA button instead of auto-dispatch.
@@ -86,6 +95,11 @@ func _ready() -> void:
 	_initiative_panel.visible = false
 	_result_overlay.visible   = false
 	_end_combat_button.pressed.connect(_on_end_combat_pressed)
+
+	# UI-004: Pre-battle panel wiring.
+	_prebattle_panel.visible = false
+	_enter_combat_button.pressed.connect(_on_enter_combat_pressed)
+	_retreat_button.pressed.connect(_on_retreat_pressed)
 
 	# Speed buttons — built programmatically, no scene changes needed.
 	var speed_bar := HBoxContainer.new()
@@ -133,6 +147,13 @@ func _clear() -> void:
 	_result_overlay.visible = false
 	_end_combat_action      = {}
 
+	# UI-004: hide pre-battle panel; reset cached actions; clear party bar cards.
+	_prebattle_panel.visible         = false
+	_pending_enter_combat_action     = {}
+	_pending_retreat_action          = {}
+	for child in _party_bar.get_children():
+		child.queue_free()
+
 func _render(data: Dictionary, actions: Dictionary) -> void:
 	_current_cols = int(data.get("board_cols", 10))
 	_current_rows = int(data.get("board_rows", 10))
@@ -153,9 +174,17 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	_objective_label.text    = obj_type
 	_objective_label.visible = not obj_type.is_empty()
 
+	# UI-004: build party bar from echo actors — always shown during encounter.
+	_build_party_bar(data.get("actors", []))
+
 	# COMBAT-SEQ: CTA and auto-dispatch depend on round_phase.
 	var round_phase: String  = str(data.get("round_phase", "pre_combat"))
 	var combat_over: bool    = bool(data.get("combat_over", false))
+
+	# UI-004: pre_combat → show pre-battle panel instead of plain CTA button.
+	if round_phase == "pre_combat":
+		_show_prebattle_panel(data, actions)
+		return
 
 	if actions.has("cta.combat_init"):
 		_show_cta("Start Combat", actions["cta.combat_init"])
@@ -476,3 +505,138 @@ func _action_color_for_text(action_text: String) -> Color:
 	if action_text == "Refuses":
 		return Color.RED
 	return Color(0.65, 0.65, 0.65)
+
+
+# -------------------------
+# UI-004: Pre-battle panel + Party bar
+# -------------------------
+
+## Shows the pre-battle overview panel (pre_combat phase only).
+## Populates objective label and wires Retreat + Enter Combat buttons from snapshot.
+func _show_prebattle_panel(data: Dictionary, actions: Dictionary) -> void:
+	# Hide the main HUD labels — pre_combat uses its own panel.
+	_round_label.visible     = false
+	_objective_label.visible = false
+
+	# Objective label.
+	var obj_state: Dictionary = data.get("objective_state", {})
+	var obj_type: String = str(obj_state.get("type", ""))
+	_prebattle_objective.text = _format_objective_label(obj_type)
+
+	# Enter Combat button — always enabled; dispatches cta.combat_init.
+	if actions.has("cta.combat_init"):
+		_enter_combat_button.disabled = false
+		_pending_enter_combat_action  = actions["cta.combat_init"]
+	else:
+		_enter_combat_button.disabled = true
+		_pending_enter_combat_action  = {}
+
+	# Retreat button — always shown; enabled only when eligible.
+	var retreat_eligible: bool = bool(data.get("retreat_eligible", false))
+	if retreat_eligible and actions.has("cta.retreat"):
+		_pending_retreat_action   = actions["cta.retreat"]
+		_retreat_button.disabled  = false
+		var tier_label: String    = str(data.get("retreat_tier_label", ""))
+		var ase_cost: int         = int(data.get("retreat_ase_cost", 0))
+		if tier_label == "Guaranteed":
+			_retreat_button.text = "Retreat (%d ase)\nEscape guaranteed" % ase_cost
+		else:
+			_retreat_button.text = "Retreat (%d ase)\nChance of failure: %s" % [ase_cost, tier_label.to_lower()]
+	else:
+		_pending_retreat_action  = {}
+		_retreat_button.disabled = true
+		_retreat_button.text     = "Retreat is not possible"
+
+	_prebattle_panel.visible = true
+
+
+## Builds the party bar from the projected echo actors array.
+## Clears existing cards first. One card per echo actor — no padding.
+func _build_party_bar(actors: Array) -> void:
+	for child in _party_bar.get_children():
+		child.queue_free()
+
+	for actor in actors:
+		if not (actor is Dictionary):
+			continue
+		if str(actor.get("faction", "")) != "echo":
+			continue
+		_party_bar.add_child(_make_echo_card(actor))
+
+
+## Creates a single echo card Control for the party bar.
+func _make_echo_card(actor: Dictionary) -> Control:
+	var card := VBoxContainer.new()
+	card.custom_minimum_size = Vector2(100, 80)
+
+	# HP label.
+	var hp_label := Label.new()
+	hp_label.add_theme_font_size_override("font_size", 11)
+	var hp: int     = int(actor.get("hp", 0))
+	var max_hp: int = int(actor.get("max_hp", 1))
+	hp_label.text = "HP %d/%d" % [hp, max_hp]
+	hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card.add_child(hp_label)
+
+	# Portrait circle — draws echo initials (matches CombatTokenLayer style).
+	var portrait := _EchoPortrait.new(actor.get("name", "??"))
+	portrait.custom_minimum_size = Vector2(44, 44)
+	card.add_child(portrait)
+
+	# Echo name label.
+	var name_label := Label.new()
+	name_label.add_theme_font_size_override("font_size", 12)
+	name_label.text = str(actor.get("name", ""))
+	name_label.clip_text = true
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card.add_child(name_label)
+
+	# Morale status label.
+	var status_label := Label.new()
+	status_label.add_theme_font_size_override("font_size", 11)
+	status_label.text = str(actor.get("morale_status", "Normal"))
+	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card.add_child(status_label)
+
+	return card
+
+
+## Maps objective type string to a player-facing label.
+func _format_objective_label(obj_type: String) -> String:
+	match obj_type:
+		"purify_shrine":   return "Purify the Ancestral Shrine"
+		"defeat_enemies":  return "Defeat all enemies"
+	return obj_type if not obj_type.is_empty() else "[Battle objective]"
+
+
+func _on_enter_combat_pressed() -> void:
+	if not _pending_enter_combat_action.is_empty():
+		var act := _pending_enter_combat_action
+		_pending_enter_combat_action = {}
+		action_requested.emit(act)
+
+
+func _on_retreat_pressed() -> void:
+	if not _pending_retreat_action.is_empty():
+		var act := _pending_retreat_action
+		_pending_retreat_action = {}
+		action_requested.emit(act)
+
+
+## Minimal inner class — draws a coloured circle with 2-letter echo initials.
+## Reuses the same visual language as CombatTokenLayer tokens.
+class _EchoPortrait extends Control:
+	var _initials: String
+
+	func _init(echo_name: String) -> void:
+		_initials = echo_name.substr(0, 2).to_upper()
+
+	func _draw() -> void:
+		var center := size / 2.0
+		var radius: float = minf(center.x, center.y) - 2.0
+		draw_circle(center, radius, Color(0.25, 0.45, 0.75))
+		var font := ThemeDB.fallback_font
+		var font_size := 13
+		var text_size := font.get_string_size(_initials, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
+		var text_pos  := center - text_size / 2.0 + Vector2(0, text_size.y * 0.1)
+		draw_string(font, text_pos, _initials, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, Color.WHITE)

@@ -268,6 +268,7 @@ func _run_tests(parts: Array) -> void:
 	CombatServiceTests.register(runner) # COMBAT-003
 	CombatRoundTests.register(runner)     # COMBAT-004
 	CombatSnapshotTests.register(runner) # COMBAT-007
+	RetreatTests.register(runner)        # UI-004
 	ArchetypeTests.register(runner)      # 9-archetype personality system
 
 	var result: Dictionary = runner.run_all()

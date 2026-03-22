@@ -312,6 +312,14 @@
 			"morale_decay_n_rounds": 3,
 			"morale_decay_amount":   1
 		},
+		"retreat_ase_cost": 30,
+		"retreat_agi_tiers": [
+			{ "min_delta":   10, "label": "Guaranteed", "success_pct": 100 },
+			{ "min_delta":    3, "label": "Low",         "success_pct":  80 },
+			{ "min_delta":   -2, "label": "Moderate",    "success_pct":  60 },
+			{ "min_delta":   -9, "label": "Risky",       "success_pct":  40 },
+			{ "min_delta": -9999,"label": "Dangerous",   "success_pct":  20 }
+		],
 		"initiative_modifiers": {
 			"by_archetype": {
 				"valiant": 4, "proud": 3, "canny": 2, "ambitious": 2, "loyal": 1,

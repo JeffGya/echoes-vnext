@@ -161,18 +161,33 @@ static func _derive_status(actor: Dictionary) -> String:
 static func _project_actor(actor: Dictionary) -> Dictionary:
 	var stats: Dictionary = actor.get("stats", {})
 	var max_hp: int = int(stats.get("max_hp", 1))
+	var fear: int = int(actor.get("fear", 0))
 	return {
-		"id":           str(actor.get("id", "")),
-		"name":         str(actor.get("name", "")),
-		"hp":           int(actor.get("current_hp", max_hp)),
-		"max_hp":       max_hp,
-		"status":       FlowEncounterState._derive_status(actor),
-		"grid_pos":     actor.get("grid_pos", { "col": 0, "row": 0 }),
-		"faction":      str(actor.get("faction", "")),
-		"is_structure": bool(actor.get("is_structure", false)),
-		"fear":         int(actor.get("fear", 0)),
-		"morale":       int(actor.get("morale", 50)),
+		"id":             str(actor.get("id", "")),
+		"name":           str(actor.get("name", "")),
+		"hp":             int(actor.get("current_hp", max_hp)),
+		"max_hp":         max_hp,
+		"status":         FlowEncounterState._derive_status(actor),
+		"grid_pos":       actor.get("grid_pos", { "col": 0, "row": 0 }),
+		"faction":        str(actor.get("faction", "")),
+		"is_structure":   bool(actor.get("is_structure", false)),
+		"fear":           fear,
+		"morale":         int(actor.get("morale", 50)),
+		# UI-004: added for party strip and pre-battle overlay.
+		"calling_origin": str(actor.get("calling_origin", "")),
+		"morale_status":  FlowEncounterState._derive_morale_status(fear),
 	}
+
+
+## UI-004: Derives a player-facing morale status label from the actor's current fear level.
+static func _derive_morale_status(fear: int) -> String:
+	if fear >= 80:
+		return "Broken"
+	if fear >= 40:
+		return "Afraid"
+	if fear > 0:
+		return "Shaken"
+	return "Normal"
 
 
 ## Builds the objective_state sub-dict from ectx and combat_state.
@@ -262,6 +277,12 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		},
 	}
 
+	# UI-004: Retreat eligibility — computed pre_combat only; inert in all other phases.
+	var retreat_eligible:    bool   = false
+	var retreat_ase_cost:    int    = 0
+	var retreat_tier_label:  String = ""
+	var retreat_success_pct: int    = 0
+
 	match round_phase:
 		"pre_combat":
 			actions["cta.combat_init"] = {
@@ -269,6 +290,26 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				"label": "Start Combat",
 				"slot":  "cta.combat_init",
 			}
+			# UI-004: compute retreat fields from ectx.actors.
+			var raw_actors_for_retreat: Array = ectx.actors if ectx != null else []
+			retreat_eligible = RetreatService.can_attempt(raw_actors_for_retreat)
+			var combat_cfg_r: Dictionary = {}
+			if flow_ctx.config_service != null:
+				var bal_r: Dictionary   = flow_ctx.config_service.get_balance()
+				var bdata_r: Dictionary = bal_r.get("data", {})
+				combat_cfg_r = bdata_r.get("combat", {})
+			retreat_ase_cost = int(combat_cfg_r.get("retreat_ase_cost", 30))
+			var tier_cfg_r: Array = combat_cfg_r.get("retreat_agi_tiers", [])
+			var tier_r: Dictionary = RetreatService.get_chance_tier(raw_actors_for_retreat, tier_cfg_r)
+			if not tier_r.is_empty():
+				retreat_tier_label  = str(tier_r.get("label", ""))
+				retreat_success_pct = int(tier_r.get("success_pct", 0))
+				actions["cta.retreat"] = {
+					"type":        "encounter.retreat",
+					"slot":        "cta.retreat",
+					"success_pct": retreat_success_pct,
+					"ase_cost":    retreat_ase_cost,
+				}
 		"actor_turn":
 			actions["cta.next_actor"] = {
 				"type":  "combat.next_actor",
@@ -300,6 +341,11 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"last_actor_action":       last_actor_action_v,
 			"round_phase":             round_phase,
 			"combat_over":             false,
+			# UI-004: always present; non-zero/non-empty only in pre_combat phase.
+			"retreat_eligible":        retreat_eligible,
+			"retreat_ase_cost":        retreat_ase_cost,
+			"retreat_tier_label":      retreat_tier_label,
+			"retreat_success_pct":     retreat_success_pct,
 		},
 		"actions": actions,
 		"meta":    { "t": t },
