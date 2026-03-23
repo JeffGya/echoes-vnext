@@ -6,7 +6,7 @@
 # - select_intent() is deterministic: same context → same intent every call.
 # - Falls back to actor.idle if no enemy is found or nearest enemy is not adjacent.
 #
-# Attack range: distance == 1 (Manhattan, using grid_pos { col, row }).
+# Attack range: is_adjacent() — Chebyshev distance == 1 (covers all 8 neighbours).
 # Tiebreak: lexicographically smallest actor_id (delegated to ActorService).
 #
 # GRID-STUB: All actors default to grid_pos { col: 0, row: 0 } until GRID-001.
@@ -42,9 +42,9 @@ func select_intent(context: Dictionary) -> Dictionary:
 
 	var my_pos: Dictionary = actor.get("grid_pos", { "col": 0, "row": 0 })
 	var t_pos:  Dictionary = target.get("grid_pos", { "col": 0, "row": 0 })
-	var dist: int = GridService.manhattan_distance(my_pos, t_pos)
+	var dist: int = GridService.chebyshev_distance(my_pos, t_pos)
 
-	if dist == 1:
+	if GridService.is_adjacent(my_pos, t_pos):
 		return {
 			"action_type":    "melee_attack",
 			"target_id":      str(target.get("id", "")),

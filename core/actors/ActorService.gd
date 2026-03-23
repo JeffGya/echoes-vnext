@@ -42,8 +42,7 @@ static func get_nearest_enemy(actor: Dictionary, all_actors: Array) -> Dictionar
 			continue  # self — skip
 
 		var cpos: Dictionary = candidate.get("grid_pos", { "col": 0, "row": 0 })
-		var dist: int = abs(my_pos.get("col", 0) - cpos.get("col", 0)) \
-					  + abs(my_pos.get("row", 0) - cpos.get("row", 0))
+		var dist: int = GridService.chebyshev_distance(my_pos, cpos)
 
 		var better := false
 		if best.is_empty():

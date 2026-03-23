@@ -58,9 +58,26 @@ static func is_valid_pos(pos: Dictionary, cfg: Dictionary = {}) -> bool:
 ## Returns the Manhattan distance between two grid_pos dicts { col, row }.
 ## Pure integer function — no floats, no RNG, no side effects.
 ## distance(A, A) == 0; distance(adjacent cell) == 1.
+## Used internally by _greedy_step() as a direction heuristic — do not replace there.
 static func manhattan_distance(a: Dictionary, b: Dictionary) -> int:
 	return abs(int(a.get("col", 0)) - int(b.get("col", 0))) \
 		 + abs(int(a.get("row", 0)) - int(b.get("row", 0)))
+
+
+## Returns the Chebyshev distance between two grid_pos dicts { col, row }.
+## Chebyshev = max(|Δcol|, |Δrow|) — matches the true step cost for 8-directional movement.
+## A diagonal neighbour is distance 1, same as an orthogonal neighbour.
+## Use for all range checks and AI distance awareness; keep manhattan_distance() for _greedy_step.
+static func chebyshev_distance(a: Dictionary, b: Dictionary) -> int:
+	return max(abs(int(a.get("col", 0)) - int(b.get("col", 0))),
+			   abs(int(a.get("row", 0)) - int(b.get("row", 0))))
+
+
+## Returns true if two grid_pos dicts are adjacent (Chebyshev distance == 1).
+## Covers all 8 neighbours: orthogonal (N/S/E/W) and diagonal (NE/NW/SE/SW).
+## Use for melee range checks — do not substitute manhattan_distance == 1.
+static func is_adjacent(a: Dictionary, b: Dictionary) -> bool:
+	return chebyshev_distance(a, b) == 1
 
 
 # -------------------------

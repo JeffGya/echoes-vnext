@@ -5,6 +5,7 @@
 #   3. select_intent() returns actor.move (with target_pos) when enemy is at distance 2. (GRID-005)
 #   4. advance_turn() fires both actor.intent and actor.action log events
 #      with correct fields when a melee attack resolves.
+#   5. select_intent() returns melee_attack when enemy is at a diagonal neighbour.     (GRID-ADJ)
 #
 # All tests are pure unit tests — no runtime or save file needed.
 # Run via Debug Panel: tests
@@ -17,6 +18,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("melee/get_nearest_enemy_tiebreak_by_id",          Callable(MeleeTests, "_t_get_nearest_enemy_tiebreak_by_id"))
 	runner.register_test("melee/select_intent_move_when_enemy_at_dist_2",   Callable(MeleeTests, "_t_select_intent_move_when_enemy_at_dist_2"))
 	runner.register_test("melee/advance_turn_logs_actor_action_events",      Callable(MeleeTests, "_t_advance_turn_logs_actor_action_events"))
+	runner.register_test("melee/select_intent_attack_when_enemy_diagonal",  Callable(MeleeTests, "_t_select_intent_attack_when_enemy_diagonal"))
 
 
 # -------------------------
@@ -142,5 +144,24 @@ static func _t_advance_turn_logs_actor_action_events() -> Dictionary:
 		return { "ok": false, "error": "actor.action: expected target_id='enemy_001', got: %s" % str(adata.get("target_id")) }
 	if int(adata.get("damage", -1)) != 0:
 		return { "ok": false, "error": "actor.action: expected damage=0 (placeholder), got: %s" % str(adata.get("damage")) }
+
+	return { "ok": true }
+
+
+# Test 5: select_intent_attack_when_enemy_diagonal
+# Actor at (0,0); enemy at (1,1) — diagonally adjacent (Chebyshev distance == 1).
+# Expected: melee_attack intent (not actor.move). Proves GRID-ADJ fix.
+static func _t_select_intent_attack_when_enemy_diagonal() -> Dictionary:
+	var actor := { "id": "echo_001", "faction": "echo",  "grid_pos": { "col": 0, "row": 0 } }
+	var enemy := { "id": "enemy_001", "faction": "enemy", "grid_pos": { "col": 1, "row": 1 } }
+
+	var module := MeleeBehaviorModule.new()
+	var context := { "actor": actor, "all_actors": [enemy], "t": 1 }
+	var intent: Dictionary = module.select_intent(context)
+
+	if str(intent.get("action_type", "")) != "melee_attack":
+		return { "ok": false, "error": "Expected melee_attack for diagonal neighbour (1,1), got: %s" % str(intent.get("action_type")) }
+	if str(intent.get("target_id", "")) != "enemy_001":
+		return { "ok": false, "error": "Expected target_id='enemy_001', got: %s" % str(intent.get("target_id")) }
 
 	return { "ok": true }

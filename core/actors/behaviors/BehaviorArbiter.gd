@@ -295,13 +295,12 @@ func _generate_candidates(actor: Dictionary, all_actors: Array, context: Diction
 	var t_pos: Dictionary = {}
 	if not nearest_enemy.is_empty():
 		t_pos = nearest_enemy.get("grid_pos", { "col": 0, "row": 0 })
-		enemy_dist = abs(my_pos.get("col", 0) - t_pos.get("col", 0)) \
-				   + abs(my_pos.get("row", 0) - t_pos.get("row", 0))
+		enemy_dist = GridService.chebyshev_distance(my_pos, t_pos)
 
-	# melee_attack: adjacent enemy (dist == 1).
-	# actor.move: enemy exists but not adjacent (dist > 1).
+	# melee_attack: adjacent enemy (Chebyshev distance == 1, all 8 neighbours).
+	# actor.move: enemy exists but not adjacent.
 	if not nearest_enemy.is_empty():
-		if enemy_dist == 1:
+		if GridService.is_adjacent(my_pos, t_pos):
 			candidates.append({
 				"action_type": "melee_attack",
 				"target_id":   str(nearest_enemy.get("id", "")),
@@ -381,10 +380,10 @@ func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dict
 
 	# Distance to nearest enemy.
 	var nearest_enemy: Dictionary = ActorService.get_nearest_enemy(actor, all_actors)
+	var my_pos: Dictionary = actor.get("grid_pos", { "col": 0, "row": 0 })
 	var enemy_dist: int = 999999
 	if not nearest_enemy.is_empty():
-		var my_pos: Dictionary = actor.get("grid_pos", { "col": 0, "row": 0 })
-		enemy_dist = GridService.manhattan_distance(my_pos, nearest_enemy.get("grid_pos", { "col": 0, "row": 0 }))
+		enemy_dist = GridService.chebyshev_distance(my_pos, nearest_enemy.get("grid_pos", { "col": 0, "row": 0 }))
 
 	# Evaluate active conditions.
 	var sit_cfg: Dictionary = _cfg_get("situational_muls")
@@ -418,9 +417,10 @@ func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dict
 
 	# Enemy-type-only conditions — gated so echo actors never receive them.
 	if actor_type == "enemy" and enemy_dist < 999999:
-		if enemy_dist == 1:
+		var n_pos: Dictionary = nearest_enemy.get("grid_pos", { "col": 0, "row": 0 })
+		if GridService.is_adjacent(my_pos, n_pos):
 			active.append("enemy_engaged")
-		elif enemy_dist > 1:
+		else:
 			active.append("enemy_advancing")
 
 	# COMBAT-006: near_friendly_structure / near_hostile_structure based on actor faction.

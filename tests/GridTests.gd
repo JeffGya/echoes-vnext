@@ -1,6 +1,7 @@
 # res://tests/GridTests.gd
 # Tests for the GRID-001 Board Configuration system + GRID-002 grid_pos assignment
-# + GRID-003 deterministic placement + GRID-004 Manhattan distance + GRID-005 greedy movement:
+# + GRID-003 deterministic placement + GRID-004 Manhattan distance + GRID-005 greedy movement
+# + GRID-ADJ Chebyshev distance and adjacency:
 #   1. GridService returns the defaults (10 cols, 10 rows) when called with no config.
 #   2. GridService reads board_cols and board_rows from a config dict.
 #   3. GridService.is_valid_pos() accepts cells inside the board.
@@ -21,6 +22,10 @@
 #  18. move_toward() with diagonal target moves one step diagonally.                  (GRID-005)
 #  19. move_toward() at board corner never moves out of bounds.                       (GRID-005)
 #  20. move_toward() return dict has correct from_pos and to_pos.                     (GRID-005)
+#  21. chebyshev_distance returns 1 for an orthogonal neighbour.                      (GRID-ADJ)
+#  22. chebyshev_distance returns 1 for a diagonal neighbour.                         (GRID-ADJ)
+#  23. chebyshev_distance returns 2 for a two-step orthogonal distance.               (GRID-ADJ)
+#  24. is_adjacent returns true for a diagonal neighbour.                             (GRID-ADJ)
 #
 # All tests are pure unit tests — no runtime or save file needed.
 # Run via Debug Panel: tests
@@ -52,6 +57,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("grid/move_toward_diagonal",                Callable(GridTests, "_t_move_toward_diagonal"))
 	runner.register_test("grid/move_toward_stays_inbounds",          Callable(GridTests, "_t_move_toward_stays_inbounds"))
 	runner.register_test("grid/move_toward_returns_from_to",         Callable(GridTests, "_t_move_toward_returns_from_to"))
+	# GRID-ADJ
+	runner.register_test("grid/chebyshev_orthogonal_is_one",         Callable(GridTests, "_t_chebyshev_orthogonal_is_one"))
+	runner.register_test("grid/chebyshev_diagonal_is_one",           Callable(GridTests, "_t_chebyshev_diagonal_is_one"))
+	runner.register_test("grid/chebyshev_two_steps_is_two",          Callable(GridTests, "_t_chebyshev_two_steps_is_two"))
+	runner.register_test("grid/is_adjacent_diagonal",                Callable(GridTests, "_t_is_adjacent_diagonal"))
 
 
 # -------------------------
@@ -526,4 +536,53 @@ static func _t_move_toward_returns_from_to() -> Dictionary:
 			"error": "Expected to_pos={col:4,row:3}, got col=%d row=%d" % [
 				int(to.get("col", -1)), int(to.get("row", -1))]
 		}
+	return { "ok": true }
+
+
+# -------------------------
+# GRID-ADJ Tests
+# -------------------------
+
+# Test 21: chebyshev_orthogonal_is_one
+# Expected: chebyshev_distance of an orthogonal neighbour is 1.
+static func _t_chebyshev_orthogonal_is_one() -> Dictionary:
+	var a := { "col": 0, "row": 0 }
+	var b := { "col": 1, "row": 0 }
+	var dist: int = GridService.chebyshev_distance(a, b)
+	if dist != 1:
+		return { "ok": false, "error": "Expected chebyshev(orthogonal)=1, got: %d" % dist }
+	return { "ok": true }
+
+
+# Test 22: chebyshev_diagonal_is_one
+# Expected: chebyshev_distance of a diagonal neighbour is 1 (not 2).
+# This is the key difference from Manhattan — diagonal costs the same as orthogonal.
+static func _t_chebyshev_diagonal_is_one() -> Dictionary:
+	var a := { "col": 0, "row": 0 }
+	var b := { "col": 1, "row": 1 }
+	var dist: int = GridService.chebyshev_distance(a, b)
+	if dist != 1:
+		return { "ok": false, "error": "Expected chebyshev(diagonal)=1, got: %d" % dist }
+	return { "ok": true }
+
+
+# Test 23: chebyshev_two_steps_is_two
+# Expected: chebyshev_distance of a two-step orthogonal position is 2.
+static func _t_chebyshev_two_steps_is_two() -> Dictionary:
+	var a := { "col": 0, "row": 0 }
+	var b := { "col": 2, "row": 0 }
+	var dist: int = GridService.chebyshev_distance(a, b)
+	if dist != 2:
+		return { "ok": false, "error": "Expected chebyshev(two steps)=2, got: %d" % dist }
+	return { "ok": true }
+
+
+# Test 24: is_adjacent_diagonal
+# Expected: is_adjacent() returns true for a diagonal neighbour.
+# Confirms that melee range now covers all 8 surrounding cells.
+static func _t_is_adjacent_diagonal() -> Dictionary:
+	var a := { "col": 0, "row": 0 }
+	var b := { "col": 1, "row": 1 }
+	if not GridService.is_adjacent(a, b):
+		return { "ok": false, "error": "Expected is_adjacent({0,0},{1,1})=true (diagonal neighbour)" }
 	return { "ok": true }

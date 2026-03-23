@@ -193,7 +193,9 @@ Emotion block stored at `echo["emotion"]`:
 ### GridService (`core/grid/GridService.gd`)
 Pure static. Board 10×10 (from `balance.json data.grid`).
 - `place_actors(echo_actors, enemy_actors, board_cfg, rng)` → deterministic faction placement
-- `manhattan_distance(a, b) -> int`
+- `manhattan_distance(a, b) -> int` — direction heuristic used by `_greedy_step()` internally; do NOT use for range checks
+- `chebyshev_distance(a, b) -> int` — true step cost for 8-dir movement; use for all range checks and AI distance awareness
+- `is_adjacent(a, b) -> bool` — Chebyshev == 1; use for melee range, engagement checks
 - `move_toward(actor, target_pos, board_cfg) -> { from_pos, to_pos }` — 8-dir greedy, mutates `actor["grid_pos"]`
 - `is_valid_pos(pos, board_cfg) -> bool`
 
