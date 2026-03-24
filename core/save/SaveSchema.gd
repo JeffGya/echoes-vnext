@@ -52,5 +52,7 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 		# DIRECTIVE-001: stage-level context (directive, future: stage seed, objective state)
 		"stage_context": {
 			"active_directive_id": "directive.none"
-		}
+		},
+		# REALM-001: generated realm models keyed by realm_id (e.g. "realm.01": { ...RealmModel fields })
+		"realms": {}
 	}

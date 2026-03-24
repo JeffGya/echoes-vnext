@@ -478,6 +478,12 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			repaired = true
 			repaired_notes.append("stage_context.active_directive_id set to 'directive.none' default")
 
+	# ---- REALM-001: realms repair ----
+	if not save.has("realms") or typeof(save["realms"]) != TYPE_DICTIONARY:
+		save["realms"] = {}
+		repaired = true
+		repaired_notes.append("realms added with empty dict default")
+
 	# Get structured log if anything was repaired (uses injected t)
 	if repaired:
 		_log_info(logger, t, "save.schema.repair", "Applied additive save schema repairs", {

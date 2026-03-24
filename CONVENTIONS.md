@@ -94,7 +94,7 @@ AppRoot routes `snapshot.type` → shell → bespoke screen.
 | Shell | File | Snapshot types |
 |-------|------|---------------|
 | `SanctumShell` | `ui/shells/SanctumShell.gd` | flow.sanctum, flow.summon, flow.party_manage, flow.echo_manage, flow.realm_select |
-| `RealmShell` | `ui/shells/RealmShell.gd` | flow.stage_map, flow.stage, flow.encounter, flow.resolve |
+| `RealmShell` | `ui/shells/RealmShell.gd` | flow.realm_init, flow.stage_map, flow.stage, flow.encounter, flow.resolve |
 
 **Shell-cached nav pattern (UI-002):**
 - SanctumShell owns the persistent NavBar — NOT injected into every sanctum-family snapshot
@@ -213,7 +213,7 @@ End condition priority:
 Initiative: composite score (`speed XOR seed`), stable descending sort.
 
 ### Save Schema (`core/save/SaveSchema.gd` + `SaveService.gd`)
-8 top-level keys: `schema_version`, `first_boot`, `meta`, `campaign`, `flow`, `economy`, `sanctum`, `stage_context`
+9 top-level keys: `schema_version`, `first_boot`, `meta`, `campaign`, `flow`, `economy`, `sanctum`, `stage_context`, `realms`
 
 Crash-safe: write to `.tmp` → rename. Additive repair on load (adds missing fields with safe defaults).
 
@@ -236,6 +236,8 @@ Full field shapes live in each FlowState file (`core/state/flow/states/`).
 | PartyManageScreen | `flow.party_manage` | max_party_size (5), roster (id/name/rank/in_party), active_party_ids | back, primary (sanctum.party.confirm, enabled when pending≥1) |
 | CombatBoardScreen | `flow.encounter` | actors (projected), round, round_phase, initiative_order, objective_state, retreat fields (pre_combat only) | nav.back, cta.retreat (when eligible) |
 | ResolveScreen | `flow.resolve` | victory, reason, round_ended, actors (projected), objective_state, enemies_defeated, echoes_survived | cta.continue → flow.sanctum, cta.next_stage → flow.stage_map |
+| RealmSelectScreen | `flow.realm_select` | title, current_realm_id, realms[] (id/name/virtue/description/stage_count_min/max/status/locked) | nav.back |
+| RealmInitScreen | `flow.realm_init` | realm_id, name, virtue, description, stage_count, seed | cta.begin, nav.back |
 | StageMapScreen | `flow.stage_map` | (scaffold — INFRA-001; full logic pending) | — |
 | StageScreen | `flow.stage` | (scaffold — INFRA-001; full logic pending) | — |
 
@@ -293,6 +295,7 @@ EncounterStateMachine phases (scaffold): `setup → blessing → rounds → reso
 | | `encounter.advance` | advances encounter phase (`to: String`) |
 | **directive** | `directive.select` | sets active directive in save |
 | **ui** | `ui.dismiss_summon_reveals` | clears pending reveal queue |
+| **flow** | `flow.select_realm` | selects a realm; triggers `RealmService.get_or_create`; transitions to `flow.realm_init`. Payload: `{ realm_id: String }` |
 | **debug** | `debug.seed.show/set/reset` | seed tooling (dev only, `t = -1`) |
 | | `debug.echo.gen_test` | generates test echo (dev only) |
 
@@ -308,6 +311,7 @@ EncounterStateMachine phases (scaffold): `setup → blessing → rounds → reso
 | `sanctum.*` | sanctum.summon.bark, sanctum.party.toggle, sanctum.party.confirm, sanctum.summon.start/complete |
 | `actor.*` | actor.intent, actor.action, actor.moved, actor.purified_shrine, actor.died |
 | `combat.*` | combat.round_start, combat.shrine_drain, combat.end |
+| `realm.*` | realm.created — Payload: `realm_id, virtue, seed, stage_count, run_index, run_count` |
 | `encounter.*` | encounter.retreat.attempted, encounter.retreat.failed |
 | `snapshot.*` | snapshot.emitted (includes `field_count: data.size()`) |
 | `debug.cmd.*` | debug.cmd.in/out/err (`t = -1` — outside sim tick space) |
@@ -355,7 +359,7 @@ Echo traits (resilience + leadership) use a **separate derived RNG** at path `<s
 
 ### Deferred
 - XP / rank progression (fields reserved in schema; no logic yet)
-- Realm / stage generator (`realms.json` is an empty shell)
+- Realm stage generator — `RealmModel` + `RealmService` done (REALM-001); stage generation from objective/group pools → **REALM-003**
 - Echo Manage screen (`FlowEchoManageState` = scaffold, no logic)
 - Full art: StageScreen, StageMapScreen (scaffolds built; deferred to UI-006+)
 - HP progress bar in RealmShell EchoBar (text label is current; bar deferred to UX pass)

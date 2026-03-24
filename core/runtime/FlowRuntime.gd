@@ -50,6 +50,21 @@ func boot() -> Dictionary:
 		SaveService.save_to_file(SaveSchema.DEFAULT_SAVE_PATH, save, logger, _next_tick())
 
 	flow_ctx.save_data = save
+
+	# REALM-001: populate campaign_seed from save (was always null before this story)
+	var _boot_camp_v: Variant = flow_ctx.save_data.get("campaign", {})
+	var _boot_camp: Dictionary = _boot_camp_v if _boot_camp_v is Dictionary else {}
+	flow_ctx.campaign_seed = CampaignSeed.new(int(_boot_camp.get("root_seed", 0)))
+
+	# REALM-001: restore active realm_id from save (survives Continue)
+	var _boot_realms_v: Variant = flow_ctx.save_data.get("realms", {})
+	var _boot_realms: Dictionary = _boot_realms_v if _boot_realms_v is Dictionary else {}
+	for _rid in _boot_realms:
+		var _rm: Dictionary = _boot_realms[_rid] if _boot_realms[_rid] is Dictionary else {}
+		if _rm.get("status", "") == "active":
+			flow_ctx.realm_id = str(_rid)
+			break
+
 	econ = EconomyService.new(flow_ctx.save_data)
 	directive_service = DirectiveService.new(flow_ctx.save_data)  # DIRECTIVE-001
 
@@ -86,11 +101,11 @@ func dispatch(action: Dictionary) -> Dictionary:
 			flow_machine.transition(to_state, flow_ctx, logger, t, "ui.flow.go_state")
 
 		"flow.select_realm":
+			# REALM-001: create/retrieve RealmModel, then show realm overview card
 			var realm_id := str(action.get("realm_id", ""))
 			flow_ctx.realm_id = realm_id
-			flow_ctx.save_request = true
-			flow_ctx.save_request_reason = "realm_select"
-			flow_machine.transition(FlowStateIds.STAGE, flow_ctx, logger, t, "ui.flow.select_stage")
+			RealmService.get_or_create(realm_id, flow_ctx, t)  # sets save_request internally
+			flow_machine.transition(FlowStateIds.REALM_INIT, flow_ctx, logger, t, "ui.realm_selected")
 
 		"flow.select_stage":
 			var stage_id := str(action.get("stage_id", ""))
@@ -512,6 +527,12 @@ func _handle_new_game(t: int) -> void:
 
 	# Install save into runtime + rebuild economy service
 	flow_ctx.save_data = save
+
+	# REALM-001: populate campaign_seed from the newly generated save
+	flow_ctx.campaign_seed = CampaignSeed.new(legacy_root_seed)
+	# New game always starts with no active realm
+	flow_ctx.realm_id = ""
+
 	econ = EconomyService.new(flow_ctx.save_data)
 	directive_service = DirectiveService.new(flow_ctx.save_data)  # DIRECTIVE-001
 

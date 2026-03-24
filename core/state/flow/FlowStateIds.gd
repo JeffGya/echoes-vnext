@@ -14,6 +14,7 @@ const REALM_SELECT := "flow.realm_select"
 const SUMMON := "flow.summon" # Sanctum-only
 
 # Venture
+const REALM_INIT := "flow.realm_init"  # REALM-001: overview card shown after realm selection
 const STAGE_MAP := "flow.stage_map"
 const STAGE := "flow.stage"
 const ENCOUNTER := "flow.encounter"

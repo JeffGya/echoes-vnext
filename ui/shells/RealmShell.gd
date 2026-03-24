@@ -5,6 +5,7 @@ signal action_requested(action: Dictionary)
 
 var _active_overlay: Control = null
 
+var _realm_init_scene := preload("res://ui/screens/RealmInitScreen.tscn")  # REALM-001
 var _stage_map_scene  := preload("res://ui/screens/StageMapScreen.tscn")
 var _stage_scene      := preload("res://ui/screens/StageScreen.tscn")
 var _combat_board_scene := preload("res://ui/screens/CombatBoardScreen.tscn")
@@ -17,10 +18,11 @@ var _scene_by_flow_type: Dictionary = {}
 
 func _ready() -> void:
 	_scene_by_flow_type = {
-		"flow.stage_map": _stage_map_scene,
-		"flow.stage":     _stage_scene,
-		"flow.encounter": _combat_board_scene,
-		"flow.resolve":   _resolve_scene,
+		"flow.realm_init": _realm_init_scene,  # REALM-001
+		"flow.stage_map":  _stage_map_scene,
+		"flow.stage":      _stage_scene,
+		"flow.encounter":  _combat_board_scene,
+		"flow.resolve":    _resolve_scene,
 	}
 
 func set_snapshot(snap: Dictionary) -> void:

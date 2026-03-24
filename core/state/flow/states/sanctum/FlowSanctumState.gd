@@ -8,7 +8,16 @@ func _init(id: String = FlowStateIds.SANCTUM) -> void:
 func enter(ctx: RefCounted, t:int) -> void:
 	var flow_ctx := ctx as FlowContext
 	
-	var has_realm_locked_in := flow_ctx.realm_id != ""
+	# REALM-001: check save_data["realms"] directly — survives Continue (realm_id restored in boot)
+	var _realms_v: Variant = flow_ctx.save_data.get("realms", {})
+	var _realms: Dictionary = _realms_v if _realms_v is Dictionary else {}
+	var has_realm_locked_in := false
+	for _rid in _realms:
+		var _rm_v: Variant = _realms[_rid]
+		var _rm: Dictionary = _rm_v if _rm_v is Dictionary else {}
+		if _rm.get("status", "") == RealmModel.STATUS_ACTIVE:
+			has_realm_locked_in = true
+			break
 
 	# Slot-keyed Dictionary — Feb 2026 standard. Each entry includes its own "slot" key.
 	# cta.enter_stage is always present; "disabled" flag communicates availability to UI.

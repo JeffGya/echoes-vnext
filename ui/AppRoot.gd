@@ -271,6 +271,7 @@ func _run_tests(parts: Array) -> void:
 	RetreatTests.register(runner)        # UI-004
 	ArchetypeTests.register(runner)      # 9-archetype personality system
 	SmartnessTierTests.register(runner)  # PROG-010
+	RealmModelTests.register(runner)     # REALM-001
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [
@@ -661,9 +662,10 @@ const SANCTUM_FAMILY: Array = [
 	"flow.summon",
 	"flow.party_manage",
 	# "flow.echo_manage",   # uncomment when EchoManageScreen exists
-	# "flow.realm_select",  # uncomment when RealmSelectScreen exists
+	"flow.realm_select",   # REALM-001
 ]
 const VENTURE_FAMILY: Array = [
+	"flow.realm_init",     # REALM-001: realm overview card
 	"flow.stage_map",
 	"flow.stage",
 	"flow.encounter",
