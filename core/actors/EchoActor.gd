@@ -30,6 +30,10 @@ static func from_echo(echo: Dictionary) -> Dictionary:
 	# bleed back into save data. Any future vector keys are carried through automatically.
 	var echo_vector_scores: Dictionary = echo.get("vector_scores", {})
 
+	# PROG-010: deep-copy identity trait arrays so combat mutations don't bleed into save data.
+	var echo_resilience: Array = (echo.get("resilience_traits", []) as Array).duplicate()
+	var echo_leadership: Array = (echo.get("leadership_traits", []) as Array).duplicate()
+
 	var actor := {
 		"id":             echo.get("id",             defaults["id"]),
 		"name":           echo.get("name",           defaults["name"]),
@@ -56,6 +60,9 @@ static func from_echo(echo: Dictionary) -> Dictionary:
 		# ACTOR-004: faction + grid_pos placeholder until GRID-001 places actors on board
 		"faction":  "echo",
 		"grid_pos": { "col": 0, "row": 0 },
+		# PROG-010: identity traits — deep copy from echo save
+		"resilience_traits": echo_resilience,
+		"leadership_traits": echo_leadership,
 	}
 
 	assert(ActorSchema.validate(actor), \

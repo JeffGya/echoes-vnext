@@ -151,6 +151,8 @@ Actor dicts are **read-only views** of save data. Deep-copied at construction. M
 | `is_dead` | `false` at spawn. Set `true` by ActorStateMachine. Immutable once true. |
 | `death_round` | `0` (alive). Set to `t` at KO. Never reset. |
 | `grid_pos` | `{ "col": int, "row": int }` |
+| `resilience_traits` | `Array[String]` — seeded personal traits (1–2, e.g. `["resist_fear"]`). Default `[]`. EchoActor only; `[]` for enemies/structures. |
+| `leadership_traits` | `Array[String]` — seeded calling-pool traits (1–2). Default `[]`. EchoActor only; `[]` for enemies/structures. |
 
 `guard_state: false` — in `get_defaults()` only (runtime, not saved, not in REQUIRED_FIELDS)
 
@@ -174,7 +176,7 @@ Default module assignment (ActorStateMachine._init()):
 - all others (incl. `"structure"`) → `IdleBehaviorModule`
 - Explicit module passed to `_init()` always overrides the default
 
-**Absolute Fear Rule:** `fear ≥ 80` → returns `actor.refuse` immediately, before module is called.
+**Absolute Fear Rule:** `fear ≥ 80` → returns `actor.refuse` immediately, before module is called. **PROG-010 tier override:** Veteran+ last-echo-standing raises threshold to 88; Elite raises to 95. `suppress_panic_spiral` resilience trait adds +5 on top of tier baseline.
 
 ### EmotionService (`core/emotion/EmotionService.gd`)
 Single choke point for all emotion mutations (outside of mid-combat direct writes).
@@ -239,6 +241,9 @@ Full field shapes live in each FlowState file (`core/state/flow/states/`).
 
 **Projected actor shape** (FlowEncounterState._project_actor): `id, name, hp, max_hp, status` (dead/guarding/refusing/alive), `calling_origin`, `morale_status` (Normal/Shaken/Afraid/Broken from fear)
 
+**Extended actor snapshot fields** (ActorStateMachine.get_snapshot() — PROG-010):
+`smartness_tier` (novice/adept/veteran/elite), `resilience_traits: Array`, `leadership_traits: Array`, `active_leadership: String` (trait fired this turn), `bark_line: String`, `bark_context: String`, `bark_tier: String`, `bark_target_id: String`
+
 ---
 
 ## Flow Architecture
@@ -281,6 +286,8 @@ EncounterStateMachine phases (scaffold): `setup → blessing → rounds → reso
 | | `economy.ase.spend` | spends Ase (validate first) |
 | **combat** | `combat.init` | initializes combat state, places actors |
 | | `combat.confirm_round` | runs full round loop |
+| **actor** | `actor.taunt` | Blade Veteran+ only; sets `taunted_by` on nearest enemy actor; clears next round. Taunted enemy gets +25 melee_attack score vs taunter. |
+| | `actor.retreat` | Calling-gated (Adept+): warrior=never, guardian/uncalled < 30% HP, archer < 50% HP. |
 | **encounter** | `encounter.retreat` | attempts retreat; spends Ase regardless of roll outcome |
 | | `encounter.complete` | signals encounter done; Flow routes to resolve |
 | | `encounter.advance` | advances encounter phase (`to: String`) |
@@ -325,6 +332,8 @@ Core rules:
 EchoFactory RNG draw order v1 — **IMMUTABLE. Never reorder. Append new draws at end only (bump to v2):**
 `rarity_tier → calling_origin → gender → name → traits → archetype_birth → derived_stats`
 
+Echo traits (resilience + leadership) use a **separate derived RNG** at path `<seed_path>.echo_traits.v1` — they are NOT part of the v1/v2 draw sequence. This derived RNG is also immutable once assigned.
+
 ---
 
 ## Decisions Made vs Deferred
@@ -340,6 +349,9 @@ EchoFactory RNG draw order v1 — **IMMUTABLE. Never reorder. Append new draws a
 - `is_dead` and `is_structure` are immutable once set
 - One save slot forever. Auto-save only at sanctioned boundaries (no manual save in MVP)
 - `static build_snapshot()` pattern for mid-state snapshot updates
+- `SmartnessTierService` is the single lookup point for tier (rank-based) + calling_behavior config
+- Echo traits (`resilience_traits` + `leadership_traits`) seeded at EchoFactory via derived RNG `.echo_traits.v1` — immutable, separate from v1/v2 draw sequence. Never reorder v1/v2.
+- Bark system (PROG-010): snapshot fields + ShoutBank expansion only. Reactive responses deferred to VOICE-001. Bark display deferred to VOICE-002.
 
 ### Deferred
 - XP / rank progression (fields reserved in schema; no logic yet)
@@ -347,6 +359,6 @@ EchoFactory RNG draw order v1 — **IMMUTABLE. Never reorder. Append new draws a
 - Echo Manage screen (`FlowEchoManageState` = scaffold, no logic)
 - Full art: StageScreen, StageMapScreen (scaffolds built; deferred to UI-006+)
 - HP progress bar in RealmShell EchoBar (text label is current; bar deferred to UX pass)
-- Voice / shout system (ShoutBank + PersonalityArchetype exist; bark events only for now)
+- Voice reactive system: VOICE-001 (reactive bark responses — other actors respond to barks, deferred). Bark display: VOICE-002 (deferred). Bark snapshot fields + ShoutBank expansion: DONE (PROG-010).
 - Multiple save slots (one slot is the current contract)
 - Sanctuary upgrades affecting trait rolls (`generation_context` reserved for future modifiers)

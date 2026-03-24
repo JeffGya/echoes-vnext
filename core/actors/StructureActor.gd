@@ -48,6 +48,9 @@ static func from_definition(defn: Dictionary, t: int) -> Dictionary:
 		"fear":           0,
 		"faction":        str(defn.get("faction", "structure")),
 		"grid_pos":       defn.get("grid_pos", { "col": 0, "row": 0 }),
+		# PROG-010: structures have no identity traits
+		"resilience_traits": [],
+		"leadership_traits": [],
 	}
 
 	assert(ActorSchema.validate(actor), \

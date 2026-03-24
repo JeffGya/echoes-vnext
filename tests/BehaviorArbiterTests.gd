@@ -223,7 +223,7 @@ static func _t_advance_turn_logs_arbiter_intent_and_action() -> Dictionary:
 # -------------------------
 
 # Test 5: own_hp_low_prefers_guard
-# Setup: uncalled echo at 25% HP (own_hp_low fires), enemy at dist=3 (actor.move candidate),
+# Setup: uncalled echo at 25% HP (own_hp_low fires), enemy at dist=2 (actor.move candidate, within guard_range),
 #        no allies, no dead allies (last_echo_standing does NOT fire).
 # Score breakdown (uncalled, no traits/vectors, own_hp_low active):
 #   actor.guard: base(25) + own_hp_low(+12) = 37   ← winner
@@ -248,7 +248,7 @@ static func _t_own_hp_low_prefers_guard() -> Dictionary:
 		"id":       "enemy_sit_001",
 		"faction":  "enemy",
 		"is_dead":  false,
-		"grid_pos": { "col": 3, "row": 0 },
+		"grid_pos": { "col": 2, "row": 0 },
 	}
 
 	var arbiter := BehaviorArbiter.new({})

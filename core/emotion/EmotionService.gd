@@ -174,19 +174,46 @@ static func apply_morale_delta(echo: Dictionary, delta: int, cause: String, logg
 ## Adds delta to fear_current (clamped 0–100). Logs emotion.fear.drift.
 ## If fear_current >= fear_threshold after change, also logs emotion.fear.threshold_crossed.
 ## Stores _last_drift on the emotion block (transient; not saved to disk).
-static func apply_fear_delta(echo: Dictionary, delta: int, cause: String, fear_threshold: int, logger: StructuredLogger, t: int) -> void:
+##
+## PROG-010: resilience_traits and smartness_tier are optional params.
+## If "resist_fear" is in resilience_traits AND smartness_tier is "veteran" or "elite",
+## the incoming fear delta is reduced by 40%. Sets emotion._resilience_fired = true when
+## a trait fires (cleared each turn by ActorStateMachine before advance_turn).
+static func apply_fear_delta(
+	echo: Dictionary,
+	delta: int,
+	cause: String,
+	fear_threshold: int,
+	logger: StructuredLogger,
+	t: int,
+	resilience_traits: Array = [],
+	smartness_tier: String = ""
+) -> void:
 	_ensure_emotion_block(echo)
 	var emo: Dictionary = echo["emotion"]
 	var old_val := int(emo.get("fear_current", 0))
-	var new_val := clampi(old_val + delta, 0, 100)
+
+	# PROG-010: resist_fear — reduce fear delta by 40% at Veteran+
+	var effective_delta := delta
+	var trait_fired := false
+	if delta > 0 and "resist_fear" in resilience_traits \
+			and (smartness_tier == "veteran" or smartness_tier == "elite"):
+		effective_delta = int(round(float(delta) * 0.60))
+		trait_fired = true
+
+	var new_val := clampi(old_val + effective_delta, 0, 100)
 	emo["fear_current"] = new_val
-	emo["_last_drift"] = { "cause": cause, "delta": delta, "field": "fear", "new_value": new_val }
+	emo["_last_drift"] = { "cause": cause, "delta": effective_delta, "field": "fear", "new_value": new_val }
+	if trait_fired:
+		emo["_resilience_fired"] = true
 	logger.info(t, "emotion.fear.drift", "Fear drifted", {
-		"echo_id":   echo.get("id", ""),
-		"cause":     cause,
-		"delta":     delta,
-		"old_value": old_val,
-		"new_value": new_val
+		"echo_id":          echo.get("id", ""),
+		"cause":            cause,
+		"delta":            effective_delta,
+		"delta_original":   delta,
+		"old_value":        old_val,
+		"new_value":        new_val,
+		"resilience_fired": trait_fired
 	})
 	if new_val >= fear_threshold:
 		logger.info(t, "emotion.fear.threshold_crossed", "Fear threshold reached", {

@@ -361,7 +361,9 @@ func _handle_sanctum_summon(action: Dictionary, t: int) -> void:
 		logger.info(t, "sanctum.summon.denied", "Missing campaign seed_root", {})
 		return
 
-	var result := SummonService.summon_paid_many(flow_ctx.save_data, seed_root, summ_cfg, count, logger, t)
+	var smart_v: Variant = data.get("smartness", {})
+	var smart_cfg: Dictionary = smart_v if smart_v is Dictionary else {}
+	var result := SummonService.summon_paid_many(flow_ctx.save_data, seed_root, summ_cfg, count, logger, t, smart_cfg)
 
 	if bool(result.get("ok", false)):
 		# Append newly summoned echoes to transient reveal queue (NOT saved)

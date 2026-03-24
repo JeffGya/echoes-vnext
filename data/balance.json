@@ -1,350 +1,833 @@
 {
-  "schema_version": 1,
-  "data": {
-	"economy": {
-	  "ase_online_per_min_base": 0.3,
-	  "offline_start_factor": 0.05,
-	  "offline_cap_seconds": 28800,
-	  "sanctum_bank_interval_seconds": 240
-	},
-	"summoning": {
-		"ase_cost_per_summon": 60,
-		"ase_cost_per_summon_by_grade": {
-			"uncalled": 60,
-			"called":   150,
-			"chosen":   400
+	"schema_version": 1.0,
+	"data": {
+		"economy": {
+			"ase_online_per_min_base": 0.3,
+			"offline_start_factor": 0.05,
+			"offline_cap_seconds": 28800.0,
+			"sanctum_bank_interval_seconds": 240.0
 		},
-
-		"trait_min": 30,
-		"trait_max": 70,
-
-		"calling_weights": {
-			"uncalled": 9.0,
-			"guardian": 0.333,
-			"warrior": 0.333,
-			"archer": 0.333
-		},
-
-		"class_origin_weights": {
-			"protector": 1.0,
-			"vanguard":  1.0,
-			"seeker":    1.0,
-			"pillar":    1.0
-		},
-
-		"birth_stats": {
-			"hp_base": 80,
-			"hp_courage_mul": 0.25,
-			"hp_faith_mul": 0.15,
-			"hp_min": 15,
-
-			"atk_base": 2,
-			"atk_courage_mul": 0.20,
-			"atk_faith_mul": 0.12,
-
-			"def_base": 2,
-			"def_wisdom_mul": 0.08,
-			"def_faith_mul": 0.04,
-
-			"agi_base": 2,
-			"agi_wisdom_mul": 0.08,
-			"agi_courage_mul": 0.08,
-
-			"int_base": 4,
-			"int_wisdom_mul": 0.22,
-			"int_courage_mul": 0.04,
-
-			"cha_base": 1,
-			"cha_faith_mul": 0.08,
-			"cha_wisdom_mul": 0.08,
-
-			"speed_base": 2,
-			"speed_courage_mul": 0.06,
-			"speed_wisdom_mul": 0.04,
-
-			"_comment_growth": "rank/level bonuses use (rank-1) and (level-1) offsets — 0 at birth, preserving save compat",
-			"hp_per_rank":  10,
-			"hp_per_level":  5,
-			"atk_per_rank":  2,
-			"atk_per_level": 1,
-			"def_per_rank":  1,
-			"def_per_level": 0,
-			"agi_per_rank":  1,
-			"agi_per_level": 0,
-			"int_per_rank":  1,
-			"int_per_level": 1,
-			"cha_per_rank":  1,
-			"cha_per_level": 0,
-			"speed_per_rank":  1,
-			"speed_per_level": 0
-		}
-	},
-	"sanctum": {
-		"party_max_size": 5
-	},
-	"emotion": {
-		"drift": {
-			"_comment": "All drift values are integers applied as deltas to morale_current or fear_current (clamped 0–100).",
-			"combat_exit_win_morale":   10,
-			"combat_exit_win_fear":     -5,
-			"combat_exit_loss_morale": -15,
-			"combat_exit_loss_fear":    20,
-			"sanctum_tick_morale":       2,
-			"fear_threshold":           80
-		}
-	},
-	"actor": {
-		"_comment": "Behavior Arbitration Engine (ACTOR-005). All multipliers live here — no GDScript changes needed to tune game feel or add new actions/callings/vectors/directives.",
-		"enemy_types": {
-			"_comment": "Per-type trait values — fed to DerivedStatService using the same birth_stats formula as echoes. Add new types here; no GDScript changes needed.",
-			"guardian": { "traits": { "courage": 45, "wisdom": 65, "faith": 70 } },
-			"shadow":   { "traits": { "courage": 75, "wisdom": 30, "faith": 55 } }
-		},
-		"structures": {
-			"_comment": "COMBAT-006: Static structure definitions. Built via StructureActor.from_definition(). grid_pos is fixed — not placed by GridService.",
-			"shrine": {
-				"id":       "shrine_01",
-				"name":     "Ancestral Shrine",
-				"faction":  "structure",
-				"max_hp":   200,
-				"grid_pos": { "col": 0, "row": 4 }
+		"summoning": {
+			"ase_cost_per_summon": 60.0,
+			"ase_cost_per_summon_by_grade": {
+				"uncalled": 60.0,
+				"called": 150.0,
+				"chosen": 400.0
+			},
+			"trait_min": 30.0,
+			"trait_max": 70.0,
+			"calling_weights": {
+				"uncalled": 9.0,
+				"guardian": 0.333,
+				"warrior": 0.333,
+				"archer": 0.333
+			},
+			"class_origin_weights": {
+				"protector": 1.0,
+				"vanguard": 1.0,
+				"seeker": 1.0,
+				"pillar": 1.0
+			},
+			"birth_stats": {
+				"hp_base": 80.0,
+				"hp_courage_mul": 0.25,
+				"hp_faith_mul": 0.15,
+				"hp_min": 15.0,
+				"atk_base": 2.0,
+				"atk_courage_mul": 0.2,
+				"atk_faith_mul": 0.12,
+				"def_base": 2.0,
+				"def_wisdom_mul": 0.08,
+				"def_faith_mul": 0.04,
+				"agi_base": 2.0,
+				"agi_wisdom_mul": 0.08,
+				"agi_courage_mul": 0.08,
+				"int_base": 4.0,
+				"int_wisdom_mul": 0.22,
+				"int_courage_mul": 0.04,
+				"cha_base": 1.0,
+				"cha_faith_mul": 0.08,
+				"cha_wisdom_mul": 0.08,
+				"speed_base": 2.0,
+				"speed_courage_mul": 0.06,
+				"speed_wisdom_mul": 0.04,
+				"_comment_growth": "rank/level bonuses use (rank-1) and (level-1) offsets — 0 at birth, preserving save compat",
+				"hp_per_rank": 10.0,
+				"hp_per_level": 5.0,
+				"atk_per_rank": 2.0,
+				"atk_per_level": 1.0,
+				"def_per_rank": 1.0,
+				"def_per_level": 0.0,
+				"agi_per_rank": 1.0,
+				"agi_per_level": 0.0,
+				"int_per_rank": 1.0,
+				"int_per_level": 1.0,
+				"cha_per_rank": 1.0,
+				"cha_per_level": 0.0,
+				"speed_per_rank": 1.0,
+				"speed_per_level": 0.0
 			}
 		},
-		"intent_weights_by_calling_origin": {
-			"guardian": { "melee_attack": 20, "protect_ally": 65, "actor.guard": 45, "actor.idle": 10, "actor.move": 25 },
-			"warrior":  { "melee_attack": 65, "protect_ally": 10, "actor.guard": 15, "actor.idle": 10, "actor.move": 55 },
-			"archer":   { "melee_attack": 45, "protect_ally": 10, "actor.guard": 20, "actor.idle": 10, "actor.move": 40 },
-			"uncalled": { "melee_attack": 40, "protect_ally": 15, "actor.guard": 25, "actor.idle": 20, "actor.move": 35 },
-			"enemy":    { "melee_attack": 70, "protect_ally":  0, "actor.guard": 10, "actor.idle":  5, "actor.move": 60 }
-		},
-		"default_intent_weight": 5.0,
-		"trait_action_muls": {
-			"melee_attack": { "courage": 0.35, "wisdom": 0.05, "faith": 0.00 },
-			"protect_ally": { "courage": 0.10, "wisdom": 0.05, "faith": 0.50 },
-			"actor.guard":  { "courage": 0.20, "wisdom": 0.10, "faith": 0.30 },
-			"actor.idle":   { "courage": 0.00, "wisdom": 0.20, "faith": 0.05 },
-			"actor.move":   { "courage": 0.35, "wisdom": 0.05, "faith": 0.00 }
-		},
-		"vector_action_muls": {
-			"melee_attack": { "vanguard": 0.40, "protector": 0.00, "seeker": 0.15, "pillar": 0.00 },
-			"protect_ally": { "vanguard": 0.00, "protector": 0.45, "seeker": 0.00, "pillar": 0.15 },
-			"actor.guard":  { "vanguard": 0.00, "protector": 0.15, "seeker": 0.00, "pillar": 0.10 },
-			"actor.idle":   { "vanguard": 0.00, "protector": 0.00, "seeker": 0.10, "pillar": 0.20 },
-			"actor.move":   { "vanguard": 0.40, "protector": 0.05, "seeker": 0.10, "pillar": 0.00 }
-		},
-		"_comment_archetype": "Flat constant added inside the fear-factor bracket. Encodes combat_bias from PersonalityArchetype: aggressive=valiant/proud→melee/move, steadfast=loyal/stoic/devout→guard, supportive=empathic→protect_ally, cautious=reflective→guard/idle.",
-		"archetype_action_muls": {
-			"melee_attack": { "valiant": 25, "proud": 20, "ambitious": 12, "canny": 8, "loyal": 4, "stoic": 0, "devout": 0, "empathic": -8, "reflective": -12 },
-			"actor.move":   { "valiant": 20, "canny": 12, "ambitious": 8, "proud": 8, "loyal": -4, "stoic": 0, "devout": 0, "empathic": 0, "reflective": -8 },
-			"actor.guard":  { "stoic": 25, "loyal": 16, "reflective": 16, "devout": 12, "empathic": 8, "canny": 4, "ambitious": 0, "valiant": -8, "proud": -8 },
-			"protect_ally": { "empathic": 32, "loyal": 20, "devout": 12, "stoic": 8, "reflective": 4, "canny": 0, "ambitious": 0, "valiant": 0, "proud": -4 },
-			"actor.idle":   { "reflective": 12, "stoic": 4, "devout": 4, "canny": 4, "loyal": 0, "empathic": 0, "ambitious": -4, "valiant": -8, "proud": -8 }
-		},
-		"directive_action_muls": {
-			"melee_attack": { "objective_advance_priority": 1.0, "engage_only_blockers": 1.0 },
-			"protect_ally": { "ally_protection_bias": 1.0, "threat_interception": 1.0 },
-			"actor.guard":  { "ally_protection_bias": 1.0, "survival_bias": 1.0 },
-			"actor.idle":   { "survival_bias": 1.0, "prefer_disengage": 1.0, "resource_efficiency": 1.0 },
-			"actor.move":   { "objective_advance_priority": 1.0, "engage_only_blockers": 1.0 }
-		},
-		"morale_action_muls": {
-			"_comment": "Flat bonus added to the pre-fear score sum. Tiers: broken 0–24 / shaken 25–49 / steady 50–74 / inspired 75–100. steady=0 is the neutral baseline — existing scores are unchanged at default morale.",
-			"melee_attack": { "broken": -20, "shaken": -8, "steady": 0, "inspired": 12 },
-			"protect_ally": { "broken": -8,  "shaken": -3, "steady": 0, "inspired": 6  },
-			"actor.guard":  { "broken": 20,  "shaken": 10, "steady": 0, "inspired": -5 },
-			"actor.idle":   { "broken": 15,  "shaken": 6,  "steady": 0, "inspired": -5 },
-			"actor.move":   { "broken": -20, "shaken": -8, "steady": 0, "inspired": 10 }
-		},
-		"directive_base_bonus":  20.0,
-		"fear_active_dampen":    0.6,
-		"fear_passive_actions":  ["actor.idle", "actor.guard"],
-		"threat_threshold":      1.0,
-		"guard_range":           2,
-		"situational_muls": {
-			"_comment": "Flat score additions per active board condition. Keys not in active_conditions are never read. _stub_ keys are never computed — zero-value placeholders for future features.",
-
-			"own_hp_low": {
-				"_comment": "hp_ratio < threshold. Injured — pull back. Applies to echo and enemy.",
-				"threshold": 0.35,
-				"melee_attack": -8, "protect_ally": 0, "actor.guard": 12, "actor.idle": 8, "actor.move": -5
-			},
-			"own_hp_critical": {
-				"_comment": "hp_ratio < threshold. Near death. Stacks with own_hp_low.",
-				"threshold": 0.20,
-				"melee_attack": -12, "protect_ally": -5, "actor.guard": 18, "actor.idle": 12, "actor.move": -10
-			},
-			"outnumbered": {
-				"_comment": "living enemies > living allies (living_allies > 0 required).",
-				"melee_attack": -10, "protect_ally": 8, "actor.guard": 10, "actor.idle": 6, "actor.move": -6
-			},
-			"overwhelming_advantage": {
-				"_comment": "living allies >= living enemies x 2.",
-				"melee_attack": 10, "protect_ally": -3, "actor.guard": -5, "actor.idle": -6, "actor.move": 8
-			},
-			"last_echo_standing": {
-				"_comment": "All allies dead (dead_allies > 0). Final survivor mode.",
-				"melee_attack": -15, "protect_ally": 0, "actor.guard": 20, "actor.idle": 15, "actor.move": -10
-			},
-			"enemy_far": {
-				"_comment": "Nearest enemy distance > threshold tiles. Guard useless — advance.",
-				"threshold": 5,
-				"melee_attack": 0, "protect_ally": 0, "actor.guard": -12, "actor.idle": -5, "actor.move": 8
-			},
-			"enemy_engaged": {
-				"_comment": "enemy_type only. Adjacent to an echo — maintain pressure.",
-				"melee_attack": 15, "protect_ally": 0, "actor.guard": -8, "actor.idle": -10, "actor.move": 0
-			},
-			"enemy_advancing": {
-				"_comment": "enemy_type only. Not yet adjacent — close the gap.",
-				"melee_attack": 0, "protect_ally": 0, "actor.guard": -10, "actor.idle": -8, "actor.move": 15
-			},
-
-			"near_friendly_structure": {
-				"_comment": "COMBAT-006: Shrine/Totem alive — soft defensive bonus for echo actors only. No move penalty so echoes advance freely to intercept.",
-				"melee_attack": -5, "protect_ally": 8, "actor.guard": 3, "actor.idle": 0, "actor.move": 0,
-				"actor.purify_shrine": 10
-			},
-			"near_hostile_structure": {
-				"_comment": "COMBAT-006: Enemy sees living shrine — boost aggression toward it.",
-				"melee_attack": 10, "protect_ally": 0, "actor.guard": -5, "actor.idle": -5, "actor.move": 10
-			},
-			"_stub_ally_adjacent": {
-				"_comment": "STUB: a living ally in adjacent cell. Formation/support bonus.",
-				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
-			},
-			"_stub_flanked": {
-				"_comment": "STUB: enemies on 2+ sides. Defensive pressure.",
-				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
-			},
-			"_stub_surrounded": {
-				"_comment": "STUB: enemies on 3+ sides. Severe defensive/survival override.",
-				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
-			},
-			"_stub_in_formation": {
-				"_comment": "STUB: 2+ allies adjacent (shield wall). Boost guard.",
-				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
-			},
-			"_stub_actor_has_ranged_skill": {
-				"_comment": "STUB: ranged skill equipped. Move to optimal range.",
-				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
-			},
-			"_stub_weapon_extended_reach": {
-				"_comment": "STUB: spear/halberd. Attack at dist=2 (also changes candidate generation).",
-				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
-			},
-			"_stub_enemy_type_ranged": {
-				"_comment": "STUB: nearest enemy is ranged type. Close gap or shield up.",
-				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
-			},
-			"_stub_objective_in_range": {
-				"_comment": "STUB: combat objective target within N tiles. Intensify toward goal.",
-				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
-			},
-			"_stub_enemy_bodyguard": {
-				"_comment": "STUB: enemy_type protecting a priority target. Intercept aggression.",
-				"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0
-			}
-		}
-	},
-	"vectors": {
-		"_comment": "Per-class_origin starting vector weights. Keys match class_origin_weights keys exactly. Add new vectors here only — no GDScript changes needed.",
-		"archetype_init": {
-			"protector": { "protector": 60, "vanguard": 20, "seeker": 10, "pillar": 10 },
-			"vanguard":  { "protector": 10, "vanguard": 60, "seeker": 20, "pillar": 10 },
-			"seeker":    { "protector": 10, "vanguard": 20, "seeker": 60, "pillar": 10 },
-			"pillar":    { "protector": 10, "vanguard": 20, "seeker": 10, "pillar": 60 }
-		}
-	},
-	"grid": {
-		"_comment": "Combat board dimensions — immutable mid-combat; read by GridService. GRID-001. Default 10x10 for MVP (range 6x6–30x30 depending on tier — tier scaling deferred to future GRID/COMBAT story).",
-		"board_cols": 10,
-		"board_rows": 10,
-		"placement_modifiers": {
-			"_comment": "GRID-003: Placement score modifiers. Full formula: score = floor((agi + speed) / 2) + archetype_mod + calling_mod + trait_mod + vector_mod. All read fresh at combat start (CURRENT values, not birth snapshot). Higher score = placed further forward (closer to enemies). Sort ascending by score; tiebreak actor_id ascending. Actors without a field default to 0. Add new archetypes/callings/vectors here only — no GDScript changes needed.",
-			"by_archetype": {
-				"valiant": 4, "proud": 3, "ambitious": 2, "canny": 1, "loyal": 1,
-				"devout": 0, "stoic": 0, "empathic": -1, "reflective": -2
-			},
-			"by_calling_origin": {
-				"warrior":  2,
-				"guardian": -1,
-				"archer":   -2,
-				"uncalled": 0
-			},
-			"by_dominant_trait": {
-				"_comment": "Dominant trait = highest value in actor.traits {courage, wisdom, faith}. Tiebreak: courage > faith > wisdom.",
-				"courage": 1,
-				"faith":   0,
-				"wisdom":  -1
-			},
-			"by_dominant_vector": {
-				"_comment": "Dominant vector = highest value in actor.vector_scores {vanguard, protector, seeker, pillar}. Tiebreak: vanguard > seeker > protector > pillar.",
-				"vanguard":  2,
-				"seeker":    0,
-				"protector": -1,
-				"pillar":    -2
-			}
-		}
-	},
-	"combat": {
-		"_comment": "COMBAT-002: Initiative scoring modifiers. Formula: (speed*3 + agi*2) + arch_mod + calling_mod + trait_mod + vec_mod + nudge. Sort descending. Tiebreak: party list order. Nudge: CampaignSeed.derive_from(placement_seed, actor_id) % 10. All values tunable without code changes.",
-		"shrine": {
-			"_comment": "COMBAT-006: Purify Shrine objective config. Drain runs after all actor turns each round. Purify slows drain — it does not heal. Purifier = highest (faith × weight_faith + vector_bonus) echo, selected once at combat init.",
-			"base_drain_per_round":   5,
-			"purify_stack_rounds":    2,
-			"purify_drain_reduction": 3,
-			"purify_expiry_penalty":  2,
-			"purify_cooldown_rounds": 3,
-			"purify_weight_faith":    0.5,
-			"purify_weight_by_vector": {
-				"pillar":    20,
-				"protector": 10,
-				"seeker":     5,
-				"vanguard":   0
-			},
-			"morale_drain_per_wave": 5
+		"sanctum": {
+			"party_max_size": 5.0
 		},
 		"emotion": {
-			"_comment": "In-combat emotion accumulation. Applied to runtime actor dicts only — does NOT affect save data (save gets standard exit deltas). fear_per_hit: fear added to defender on each melee hit. fear_per_ally_ko: fear added to all living same-faction actors when a comrade is KO'd. fear_per_round: baseline fear tick applied to all living actors at end of each round. morale_decay_n_rounds: morale decays every N rounds. morale_decay_amount: morale lost per decay tick (echo actors only).",
-			"fear_per_hit":          2,
-			"fear_per_ally_ko":      4,
-			"fear_per_round":        1,
-			"morale_decay_n_rounds": 3,
-			"morale_decay_amount":   1
+			"drift": {
+				"_comment": "All drift values are integers applied as deltas to morale_current or fear_current (clamped 0–100).",
+				"combat_exit_win_morale": 10.0,
+				"combat_exit_win_fear": -5.0,
+				"combat_exit_loss_morale": -15.0,
+				"combat_exit_loss_fear": 20.0,
+				"sanctum_tick_morale": 2.0,
+				"fear_threshold": 80.0
+			}
 		},
-		"retreat_ase_cost": 30,
-		"retreat_agi_tiers": [
-			{ "min_delta":   10, "label": "Guaranteed", "success_pct": 100 },
-			{ "min_delta":    3, "label": "Low",         "success_pct":  80 },
-			{ "min_delta":   -2, "label": "Moderate",    "success_pct":  60 },
-			{ "min_delta":   -9, "label": "Risky",       "success_pct":  40 },
-			{ "min_delta": -9999,"label": "Dangerous",   "success_pct":  20 }
-		],
-		"initiative_modifiers": {
-			"by_archetype": {
-				"valiant": 4, "proud": 3, "canny": 2, "ambitious": 2, "loyal": 1,
-				"devout": 1, "stoic": 0, "empathic": -1, "reflective": -2
+		"actor": {
+			"_comment": "Behavior Arbitration Engine (ACTOR-005). All multipliers live here — no GDScript changes needed to tune game feel or add new actions/callings/vectors/directives.",
+			"enemy_types": {
+				"_comment": "Per-type trait values — fed to DerivedStatService using the same birth_stats formula as echoes. Add new types here; no GDScript changes needed.",
+				"guardian": {
+					"traits": {
+						"courage": 45.0,
+						"wisdom": 65.0,
+						"faith": 70.0
+					}
+				},
+				"shadow": {
+					"traits": {
+						"courage": 75.0,
+						"wisdom": 30.0,
+						"faith": 55.0
+					}
+				}
 			},
-			"by_calling_origin": {
-				"warrior":  3,
-				"guardian": -1,
-				"archer":    1,
-				"uncalled":  0
+			"structures": {
+				"_comment": "COMBAT-006: Static structure definitions. Built via StructureActor.from_definition(). grid_pos is fixed — not placed by GridService.",
+				"shrine": {
+					"id": "shrine_01",
+					"name": "Ancestral Shrine",
+					"faction": "structure",
+					"max_hp": 200.0,
+					"grid_pos": {
+						"col": 0.0,
+						"row": 4.0
+					}
+				}
 			},
-			"by_dominant_trait": {
-				"_comment": "Dominant trait = highest value in actor.traits {courage, wisdom, faith}. Tiebreak: courage > faith > wisdom.",
-				"courage":  2,
-				"faith":    0,
-				"wisdom":  -1
+			"intent_weights_by_calling_origin": {
+				"guardian": {
+					"melee_attack": 20.0,
+					"protect_ally": 65.0,
+					"actor.guard": 45.0,
+					"actor.idle": 10.0,
+					"actor.move": 25.0
+				},
+				"warrior": {
+					"melee_attack": 65.0,
+					"protect_ally": 10.0,
+					"actor.guard": 15.0,
+					"actor.idle": 10.0,
+					"actor.move": 55.0
+				},
+				"archer": {
+					"melee_attack": 45.0,
+					"protect_ally": 10.0,
+					"actor.guard": 20.0,
+					"actor.idle": 10.0,
+					"actor.move": 40.0
+				},
+				"uncalled": {
+					"melee_attack": 50.0,
+					"protect_ally": 15.0,
+					"actor.guard": 25.0,
+					"actor.idle": 20.0,
+					"actor.move": 44.0
+				},
+				"enemy": {
+					"melee_attack": 70.0,
+					"protect_ally": 0.0,
+					"actor.guard": 10.0,
+					"actor.idle": 5.0,
+					"actor.move": 60.0
+				}
 			},
-			"by_dominant_vector": {
-				"_comment": "Dominant vector = highest value in actor.vector_scores {vanguard, protector, seeker, pillar}. Tiebreak: vanguard > seeker > protector > pillar.",
-				"vanguard":  2,
-				"seeker":    1,
-				"protector": -1,
-				"pillar":   -2
+			"default_intent_weight": 5.0,
+			"wound_chase_mul": 15.0,
+			"surrounded_move_penalty": -18.0,
+			"formation_distance": 6.0,
+			"trait_action_muls": {
+				"melee_attack": {
+					"courage": 0.35,
+					"wisdom": 0.05,
+					"faith": 0.0
+				},
+				"protect_ally": {
+					"courage": 0.1,
+					"wisdom": 0.05,
+					"faith": 0.5
+				},
+				"actor.guard": {
+					"courage": 0.2,
+					"wisdom": 0.1,
+					"faith": 0.3
+				},
+				"actor.idle": {
+					"courage": 0.0,
+					"wisdom": 0.2,
+					"faith": 0.05
+				},
+				"actor.move": {
+					"courage": 0.35,
+					"wisdom": 0.05,
+					"faith": 0.0
+				}
+			},
+			"vector_action_muls": {
+				"melee_attack": {
+					"vanguard": 0.4,
+					"protector": 0.0,
+					"seeker": 0.15,
+					"pillar": 0.0
+				},
+				"protect_ally": {
+					"vanguard": 0.0,
+					"protector": 0.45,
+					"seeker": 0.0,
+					"pillar": 0.15
+				},
+				"actor.guard": {
+					"vanguard": 0.0,
+					"protector": 0.15,
+					"seeker": 0.0,
+					"pillar": 0.1
+				},
+				"actor.idle": {
+					"vanguard": 0.0,
+					"protector": 0.0,
+					"seeker": 0.1,
+					"pillar": 0.2
+				},
+				"actor.move": {
+					"vanguard": 0.4,
+					"protector": 0.05,
+					"seeker": 0.1,
+					"pillar": 0.0
+				}
+			},
+			"_comment_archetype": "Flat constant added inside the fear-factor bracket. Encodes combat_bias from PersonalityArchetype: aggressive=valiant/proud→melee/move, steadfast=loyal/stoic/devout→guard, supportive=empathic→protect_ally, cautious=reflective→guard/idle.",
+			"_comment_archetype_prog010": "PROG-010 balance fixes: stoic guard 25→14, reflective guard 16→8 (reduce passive stacking). empathic protect_ally 32→18 (still highest but not dominant).",
+			"archetype_action_muls": {
+				"melee_attack": {
+					"valiant": 25.0,
+					"proud": 20.0,
+					"ambitious": 12.0,
+					"canny": 8.0,
+					"loyal": 4.0,
+					"stoic": 0.0,
+					"devout": 0.0,
+					"empathic": -8.0,
+					"reflective": -12.0
+				},
+				"actor.move": {
+					"valiant": 20.0,
+					"canny": 12.0,
+					"ambitious": 8.0,
+					"proud": 8.0,
+					"loyal": -4.0,
+					"stoic": 0.0,
+					"devout": 0.0,
+					"empathic": 0.0,
+					"reflective": -8.0
+				},
+				"actor.guard": {
+					"stoic": 14.0,
+					"loyal": 16.0,
+					"reflective": 8.0,
+					"devout": 12.0,
+					"empathic": 8.0,
+					"canny": 4.0,
+					"ambitious": 0.0,
+					"valiant": -8.0,
+					"proud": -8.0
+				},
+				"protect_ally": {
+					"empathic": 18.0,
+					"loyal": 20.0,
+					"devout": 12.0,
+					"stoic": 8.0,
+					"reflective": 4.0,
+					"canny": 0.0,
+					"ambitious": 0.0,
+					"valiant": 0.0,
+					"proud": -4.0
+				},
+				"actor.idle": {
+					"reflective": 12.0,
+					"stoic": 4.0,
+					"devout": 4.0,
+					"canny": 4.0,
+					"loyal": 0.0,
+					"empathic": 0.0,
+					"ambitious": -4.0,
+					"valiant": -8.0,
+					"proud": -8.0
+				}
+			},
+			"directive_action_muls": {
+				"melee_attack": {
+					"objective_advance_priority": 1.0,
+					"engage_only_blockers": 1.0
+				},
+				"protect_ally": {
+					"ally_protection_bias": 1.0,
+					"threat_interception": 1.0
+				},
+				"actor.guard": {
+					"ally_protection_bias": 1.0,
+					"survival_bias": 1.0
+				},
+				"actor.idle": {
+					"survival_bias": 1.0,
+					"prefer_disengage": 1.0,
+					"resource_efficiency": 1.0
+				},
+				"actor.move": {
+					"objective_advance_priority": 1.0,
+					"engage_only_blockers": 1.0
+				}
+			},
+			"morale_action_muls": {
+				"_comment": "Flat bonus added to the pre-fear score sum. Tiers: broken 0–24 / shaken 25–49 / steady 50–74 / inspired 75–100. steady=0 is the neutral baseline — existing scores are unchanged at default morale. PROG-010: shaken bonuses reduced to remove built-in passive bias (root cause 1 fix).",
+				"melee_attack": {
+					"broken": -20.0,
+					"shaken": -3.0,
+					"steady": 0.0,
+					"inspired": 12.0
+				},
+				"protect_ally": {
+					"broken": -8.0,
+					"shaken": -3.0,
+					"steady": 0.0,
+					"inspired": 6.0
+				},
+				"actor.guard": {
+					"broken": 20.0,
+					"shaken": 4.0,
+					"steady": 0.0,
+					"inspired": -5.0
+				},
+				"actor.idle": {
+					"broken": 15.0,
+					"shaken": 2.0,
+					"steady": 0.0,
+					"inspired": -5.0
+				},
+				"actor.move": {
+					"broken": -20.0,
+					"shaken": -3.0,
+					"steady": 0.0,
+					"inspired": 10.0
+				}
+			},
+			"directive_base_bonus": 20.0,
+			"fear_active_dampen": 0.6,
+			"fear_passive_actions": [
+				"actor.idle",
+				"actor.guard"
+			],
+			"threat_threshold": 0.5,
+			"guard_range": 1.0,
+			"situational_muls": {
+				"_comment": "Flat score additions per active board condition. Keys not in active_conditions are never read. _stub_ keys are never computed — zero-value placeholders for future features.",
+				"own_hp_low": {
+					"_comment": "hp_ratio < threshold. Injured — pull back. Applies to echo and enemy.",
+					"threshold": 0.35,
+					"melee_attack": -8.0,
+					"protect_ally": 0.0,
+					"actor.guard": 12.0,
+					"actor.idle": 8.0,
+					"actor.move": -5.0
+				},
+				"own_hp_critical": {
+					"_comment": "hp_ratio < threshold. Near death. Stacks with own_hp_low.",
+					"threshold": 0.2,
+					"melee_attack": -12.0,
+					"protect_ally": -5.0,
+					"actor.guard": 18.0,
+					"actor.idle": 12.0,
+					"actor.move": -10.0
+				},
+				"outnumbered": {
+					"_comment": "living enemies > living allies (living_allies > 0 required).",
+					"melee_attack": -10.0,
+					"protect_ally": 8.0,
+					"actor.guard": 10.0,
+					"actor.idle": 6.0,
+					"actor.move": -6.0
+				},
+				"overwhelming_advantage": {
+					"_comment": "living allies >= living enemies x 2.",
+					"melee_attack": 10.0,
+					"protect_ally": -3.0,
+					"actor.guard": -5.0,
+					"actor.idle": -6.0,
+					"actor.move": 8.0
+				},
+				"last_echo_standing": {
+					"_comment": "All allies dead (dead_allies > 0). Final survivor mode.",
+					"melee_attack": -15.0,
+					"protect_ally": 0.0,
+					"actor.guard": 20.0,
+					"actor.idle": 15.0,
+					"actor.move": -10.0
+				},
+				"enemy_far": {
+					"_comment": "Nearest enemy distance > threshold tiles. Guard useless — advance.",
+					"threshold": 5.0,
+					"melee_attack": 0.0,
+					"protect_ally": 0.0,
+					"actor.guard": -12.0,
+					"actor.idle": -5.0,
+					"actor.move": 8.0
+				},
+				"echo_in_melee": {
+					"_comment": "echo_type only. Adjacent to an enemy — fight, don't idle.",
+					"melee_attack": 18.0,
+					"protect_ally": -3.0,
+					"actor.guard": -5.0,
+					"actor.idle": -12.0,
+					"actor.move": -5.0
+				},
+				"enemy_engaged": {
+					"_comment": "enemy_type only. Adjacent to an echo — maintain pressure.",
+					"melee_attack": 15.0,
+					"protect_ally": 0.0,
+					"actor.guard": -8.0,
+					"actor.idle": -10.0,
+					"actor.move": 0.0
+				},
+				"enemy_advancing": {
+					"_comment": "enemy_type only. Not yet adjacent — close the gap.",
+					"melee_attack": 0.0,
+					"protect_ally": 0.0,
+					"actor.guard": -10.0,
+					"actor.idle": -8.0,
+					"actor.move": 15.0
+				},
+				"near_friendly_structure": {
+					"_comment": "COMBAT-006: Shrine/Totem alive — soft defensive bonus for echo actors only. No move penalty so echoes advance freely to intercept.",
+					"melee_attack": -5.0,
+					"protect_ally": 8.0,
+					"actor.guard": 3.0,
+					"actor.idle": 0.0,
+					"actor.move": 0.0,
+					"actor.purify_shrine": 10.0
+				},
+				"near_hostile_structure": {
+					"_comment": "COMBAT-006: Enemy sees living shrine — boost aggression toward it.",
+					"melee_attack": 10.0,
+					"protect_ally": 0.0,
+					"actor.guard": -5.0,
+					"actor.idle": -5.0,
+					"actor.move": 10.0
+				},
+				"echo_retreating": {
+					"_comment": "PROG-010: enemy_type Adept+ only. An echo on the board has last_intent == actor.retreat — enemies give chase.",
+					"actor.move": 20.0,
+					"melee_attack": 0.0,
+					"actor.guard": 0.0,
+					"actor.idle": 0.0,
+					"protect_ally": 0.0
+				},
+				"_stub_ally_adjacent": {
+					"_comment": "STUB: a living ally in adjacent cell. Formation/support bonus.",
+					"melee_attack": 0.0,
+					"protect_ally": 0.0,
+					"actor.guard": 0.0,
+					"actor.idle": 0.0,
+					"actor.move": 0.0
+				},
+				"_stub_flanked": {
+					"_comment": "STUB: enemies on 2+ sides. Defensive pressure.",
+					"melee_attack": 0.0,
+					"protect_ally": 0.0,
+					"actor.guard": 0.0,
+					"actor.idle": 0.0,
+					"actor.move": 0.0
+				},
+				"_stub_surrounded": {
+					"_comment": "STUB: enemies on 3+ sides. Severe defensive/survival override.",
+					"melee_attack": 0.0,
+					"protect_ally": 0.0,
+					"actor.guard": 0.0,
+					"actor.idle": 0.0,
+					"actor.move": 0.0
+				},
+				"_stub_in_formation": {
+					"_comment": "STUB: 2+ allies adjacent (shield wall). Boost guard.",
+					"melee_attack": 0.0,
+					"protect_ally": 0.0,
+					"actor.guard": 0.0,
+					"actor.idle": 0.0,
+					"actor.move": 0.0
+				},
+				"_stub_actor_has_ranged_skill": {
+					"_comment": "STUB: ranged skill equipped. Move to optimal range.",
+					"melee_attack": 0.0,
+					"protect_ally": 0.0,
+					"actor.guard": 0.0,
+					"actor.idle": 0.0,
+					"actor.move": 0.0
+				},
+				"_stub_weapon_extended_reach": {
+					"_comment": "STUB: spear/halberd. Attack at dist=2 (also changes candidate generation).",
+					"melee_attack": 0.0,
+					"protect_ally": 0.0,
+					"actor.guard": 0.0,
+					"actor.idle": 0.0,
+					"actor.move": 0.0
+				},
+				"_stub_enemy_type_ranged": {
+					"_comment": "STUB: nearest enemy is ranged type. Close gap or shield up.",
+					"melee_attack": 0.0,
+					"protect_ally": 0.0,
+					"actor.guard": 0.0,
+					"actor.idle": 0.0,
+					"actor.move": 0.0
+				},
+				"_stub_objective_in_range": {
+					"_comment": "STUB: combat objective target within N tiles. Intensify toward goal.",
+					"melee_attack": 0.0,
+					"protect_ally": 0.0,
+					"actor.guard": 0.0,
+					"actor.idle": 0.0,
+					"actor.move": 0.0
+				},
+				"_stub_enemy_bodyguard": {
+					"_comment": "STUB: enemy_type protecting a priority target. Intercept aggression.",
+					"melee_attack": 0.0,
+					"protect_ally": 0.0,
+					"actor.guard": 0.0,
+					"actor.idle": 0.0,
+					"actor.move": 0.0
+				}
+			}
+		},
+		"vectors": {
+			"_comment": "Per-class_origin starting vector weights. Keys match class_origin_weights keys exactly. Add new vectors here only — no GDScript changes needed.",
+			"archetype_init": {
+				"protector": {
+					"protector": 60.0,
+					"vanguard": 20.0,
+					"seeker": 10.0,
+					"pillar": 10.0
+				},
+				"vanguard": {
+					"protector": 10.0,
+					"vanguard": 60.0,
+					"seeker": 20.0,
+					"pillar": 10.0
+				},
+				"seeker": {
+					"protector": 10.0,
+					"vanguard": 20.0,
+					"seeker": 60.0,
+					"pillar": 10.0
+				},
+				"pillar": {
+					"protector": 10.0,
+					"vanguard": 20.0,
+					"seeker": 10.0,
+					"pillar": 60.0
+				}
+			}
+		},
+		"smartness": {
+			"_comment": "PROG-010: Smartness Tier system. Tier derived from actor rank. Calling-specific behavior modifiers. All thresholds config-driven.",
+			"tier_by_rank": {
+				"1": "novice",
+				"2": "adept",
+				"3": "veteran",
+				"4": "elite",
+				"5": "elite"
+			},
+			"calling_behavior": {
+				"_comment": "Per-calling combat personality. retreat_threshold: HP ratio below which retreat is considered (null = never retreat). press_advantage: melee bonus when target hp < press_hp_threshold. directive_mul: multiplier on directive bonuses for this calling. leadership_radius: tile radius for Elite leadership trait effects.",
+				"guardian": {
+					"retreat_threshold": 0.3,
+					"press_advantage": false,
+					"directive_mul": 1.0,
+					"leadership_radius": 3.0
+				},
+				"warrior": {
+					"retreat_threshold": null,
+					"press_advantage": true,
+					"directive_mul": 1.0,
+					"leadership_radius": 3.0
+				},
+				"archer": {
+					"retreat_threshold": 0.5,
+					"press_advantage": false,
+					"directive_mul": 1.0,
+					"leadership_radius": 4.0
+				},
+				"uncalled": {
+					"retreat_threshold": 0.3,
+					"press_advantage": false,
+					"directive_mul": 1.5,
+					"leadership_radius": 3.0
+				}
+			},
+			"press_hp_threshold": 0.5,
+			"press_attack_bonus": 15.0,
+			"protect_ally_veteran_mul": 1.3,
+			"protect_ally_veteran_hp_threshold": 0.5,
+			"last_stand_fear_threshold": {
+				"_comment": "Absolute Fear Rule threshold override when last_echo_standing is active. Replaces default 80.",
+				"veteran": 88.0,
+				"elite": 95.0
+			},
+			"last_stand_elite_morale_tick": 5.0,
+			"enemy_demoralize_fear_tick": 5.0,
+			"enemy_demoralize_radius": 3.0,
+			"resilience_trait_pool": {
+				"_comment": "Drawing weights per trait per calling_origin. Higher = more likely. All echoes draw 1-2 traits. Weighted by calling_origin then archetype.",
+				"resist_fear": {
+					"warrior": 5.0,
+					"guardian": 4.0,
+					"archer": 2.0,
+					"uncalled": 2.0
+				},
+				"self_regulate": {
+					"warrior": 1.0,
+					"guardian": 2.0,
+					"archer": 4.0,
+					"uncalled": 5.0
+				},
+				"suppress_panic_spiral": {
+					"warrior": 2.0,
+					"guardian": 2.0,
+					"archer": 4.0,
+					"uncalled": 4.0
+				},
+				"ignore_broken_allies": {
+					"warrior": 5.0,
+					"guardian": 3.0,
+					"archer": 2.0,
+					"uncalled": 2.0
+				}
+			},
+			"leadership_trait_pool": {
+				"_comment": "Available leadership traits per calling_origin. Each echo draws 1-2. Activated at Elite tier.",
+				"guardian": [
+					"inspire_aura",
+					"calm_fear",
+					"rally_call",
+					"block_contagion"
+				],
+				"warrior": [
+					"kill_momentum",
+					"aggression_field",
+					"challenge_call",
+					"fearless_example"
+				],
+				"archer": [
+					"mark_target",
+					"safe_path_read",
+					"threat_read",
+					"cover_positioning"
+				],
+				"seer": [
+					"fear_read",
+					"morale_forecast"
+				],
+				"uncalled": [
+					"directive_amplify",
+					"calm_fear",
+					"rally_call",
+					"anchor_presence"
+				]
+			},
+			"leadership_trait_effects": {
+				"_comment": "Numeric parameters for each leadership trait. Used by ActorStateMachine when trait activates.",
+				"inspire_aura": {
+					"morale_per_round": 3.0
+				},
+				"calm_fear": {
+					"fear_reduction": 15.0
+				},
+				"rally_call": {
+					"morale_boost": 10.0,
+					"once_per_combat": true
+				},
+				"block_contagion": {
+					"radius": 2.0
+				},
+				"kill_momentum": {
+					"morale_boost": 8.0,
+					"radius": 1.0
+				},
+				"aggression_field": {
+					"melee_score_bonus": 8.0
+				},
+				"challenge_call": {
+					"taunt_attack_bonus": 25.0
+				},
+				"fearless_example": {
+					"fear_accumulation_factor": 0.7,
+					"radius": 2.0
+				},
+				"mark_target": {
+					"attack_score_bonus": 10.0
+				},
+				"safe_path_read": {
+					"move_score_bonus": 8.0
+				},
+				"threat_read": {
+					"retreat_threshold_reduction": 0.1
+				},
+				"cover_positioning": {
+
+				},
+				"fear_read": {
+					"fear_reduction_per_round": 5.0
+				},
+				"morale_forecast": {
+					"morale_lock_rounds": 3.0,
+					"once_per_combat": true
+				},
+				"directive_amplify": {
+					"directive_mul": 1.5
+				},
+				"anchor_presence": {
+					"radius": 2.0
+				}
+			}
+		},
+		"grid": {
+			"_comment": "Combat board dimensions — immutable mid-combat; read by GridService. GRID-001. Default 10x10 for MVP (range 6x6–30x30 depending on tier — tier scaling deferred to future GRID/COMBAT story).",
+			"board_cols": 10.0,
+			"board_rows": 10.0,
+			"placement_modifiers": {
+				"_comment": "GRID-003: Placement score modifiers. Full formula: score = floor((agi + speed) / 2) + archetype_mod + calling_mod + trait_mod + vector_mod. All read fresh at combat start (CURRENT values, not birth snapshot). Higher score = placed further forward (closer to enemies). Sort ascending by score; tiebreak actor_id ascending. Actors without a field default to 0. Add new archetypes/callings/vectors here only — no GDScript changes needed.",
+				"by_archetype": {
+					"valiant": 4.0,
+					"proud": 3.0,
+					"ambitious": 2.0,
+					"canny": 1.0,
+					"loyal": 1.0,
+					"devout": 0.0,
+					"stoic": 0.0,
+					"empathic": -1.0,
+					"reflective": -2.0
+				},
+				"by_calling_origin": {
+					"warrior": 2.0,
+					"guardian": -1.0,
+					"archer": -2.0,
+					"uncalled": 0.0
+				},
+				"by_dominant_trait": {
+					"_comment": "Dominant trait = highest value in actor.traits {courage, wisdom, faith}. Tiebreak: courage > faith > wisdom.",
+					"courage": 1.0,
+					"faith": 0.0,
+					"wisdom": -1.0
+				},
+				"by_dominant_vector": {
+					"_comment": "Dominant vector = highest value in actor.vector_scores {vanguard, protector, seeker, pillar}. Tiebreak: vanguard > seeker > protector > pillar.",
+					"vanguard": 2.0,
+					"seeker": 0.0,
+					"protector": -1.0,
+					"pillar": -2.0
+				}
+			}
+		},
+		"combat": {
+			"_comment": "COMBAT-002: Initiative scoring modifiers. Formula: (speed*3 + agi*2) + arch_mod + calling_mod + trait_mod + vec_mod + nudge. Sort descending. Tiebreak: party list order. Nudge: CampaignSeed.derive_from(placement_seed, actor_id) % 10. All values tunable without code changes.",
+			"shrine": {
+				"_comment": "COMBAT-006: Purify Shrine objective config. Drain runs after all actor turns each round. Purify slows drain — it does not heal. Purifier = highest (faith × weight_faith + vector_bonus) echo, selected once at combat init.",
+				"base_drain_per_round": 5.0,
+				"purify_stack_rounds": 2.0,
+				"purify_drain_reduction": 3.0,
+				"purify_expiry_penalty": 2.0,
+				"purify_cooldown_rounds": 3.0,
+				"purify_weight_faith": 0.5,
+				"purify_weight_by_vector": {
+					"pillar": 20.0,
+					"protector": 10.0,
+					"seeker": 5.0,
+					"vanguard": 0.0
+				},
+				"morale_drain_per_wave": 5.0
+			},
+			"emotion": {
+				"_comment": "In-combat emotion accumulation. Applied to runtime actor dicts only — does NOT affect save data (save gets standard exit deltas). fear_per_hit: fear added to defender on each melee hit. fear_per_ally_ko: fear added to all living same-faction actors when a comrade is KO'd. fear_per_round: baseline fear tick applied to all living actors at end of each round. morale_decay_n_rounds: morale decays every N rounds. morale_decay_amount: morale lost per decay tick (echo actors only).",
+				"fear_per_hit": 2.0,
+				"fear_per_ally_ko": 4.0,
+				"fear_per_round": 1.0,
+				"morale_decay_n_rounds": 3.0,
+				"morale_decay_amount": 1.0
+			},
+			"retreat_ase_cost": 30.0,
+			"retreat_agi_tiers": [
+				{
+					"min_delta": 10.0,
+					"label": "Guaranteed",
+					"success_pct": 100.0
+				},
+				{
+					"min_delta": 3.0,
+					"label": "Low",
+					"success_pct": 80.0
+				},
+				{
+					"min_delta": -2.0,
+					"label": "Moderate",
+					"success_pct": 60.0
+				},
+				{
+					"min_delta": -9.0,
+					"label": "Risky",
+					"success_pct": 40.0
+				},
+				{
+					"min_delta": -9999.0,
+					"label": "Dangerous",
+					"success_pct": 20.0
+				}
+			],
+			"initiative_modifiers": {
+				"by_archetype": {
+					"valiant": 4.0,
+					"proud": 3.0,
+					"canny": 2.0,
+					"ambitious": 2.0,
+					"loyal": 1.0,
+					"devout": 1.0,
+					"stoic": 0.0,
+					"empathic": -1.0,
+					"reflective": -2.0
+				},
+				"by_calling_origin": {
+					"warrior": 3.0,
+					"guardian": -1.0,
+					"archer": 1.0,
+					"uncalled": 0.0
+				},
+				"by_dominant_trait": {
+					"_comment": "Dominant trait = highest value in actor.traits {courage, wisdom, faith}. Tiebreak: courage > faith > wisdom.",
+					"courage": 2.0,
+					"faith": 0.0,
+					"wisdom": -1.0
+				},
+				"by_dominant_vector": {
+					"_comment": "Dominant vector = highest value in actor.vector_scores {vanguard, protector, seeker, pillar}. Tiebreak: vanguard > seeker > protector > pillar.",
+					"vanguard": 2.0,
+					"seeker": 1.0,
+					"protector": -1.0,
+					"pillar": -2.0
+				}
 			}
 		}
 	}
-  }
 }

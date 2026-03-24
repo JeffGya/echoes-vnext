@@ -41,7 +41,7 @@ func _ready():
 	
 	logger = StructuredLogger.new()
 	# TEMP: debug by default until DebugPanel controls log level
-	logger.set_level("debug")
+	logger.set_level("info")
 	
 	config_service = ConfigService.new()
 	runtime = FlowRuntime.new(logger, config_service)
@@ -270,6 +270,7 @@ func _run_tests(parts: Array) -> void:
 	CombatSnapshotTests.register(runner) # COMBAT-007
 	RetreatTests.register(runner)        # UI-004
 	ArchetypeTests.register(runner)      # 9-archetype personality system
+	SmartnessTierTests.register(runner)  # PROG-010
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [

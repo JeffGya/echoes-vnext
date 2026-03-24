@@ -40,6 +40,9 @@ extends RefCounted
 ##   grid_pos     — spawn position on the combat board; { col: int, row: int }.
 ##                  Assigned by GridService.assign_grid_pos() during encounter entry.
 ##                  Default { col: 0, row: 0 } is a safe placeholder until assigned.
+## PROG-010 additions:
+##   resilience_traits  — Array of trait IDs active at Veteran+. Default [].
+##   leadership_traits  — Array of trait IDs active at Elite tier. Default [].
 const REQUIRED_FIELDS: Array = [
 	"id",
 	"name",
@@ -59,6 +62,8 @@ const REQUIRED_FIELDS: Array = [
 	"is_dead",
 	"death_round",
 	"grid_pos",
+	"resilience_traits",
+	"leadership_traits",
 ]
 
 ## Returns false if actor is missing any required field or has a null value.
@@ -98,4 +103,7 @@ static func get_defaults() -> Dictionary:
 		"grid_pos":       { "col": 0, "row": 0 },
 		# COMBAT-003: runtime defensive stance — cleared at round start; NOT persisted.
 		"guard_state":    false,
+		# PROG-010: identity traits (seeded at generation; active from Veteran+/Elite tier)
+		"resilience_traits": [],
+		"leadership_traits": [],
 	}

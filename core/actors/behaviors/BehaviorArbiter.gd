@@ -41,7 +41,7 @@ const _DEFAULTS := {
 		"guardian": { "melee_attack": 20, "protect_ally": 65, "actor.guard": 45, "actor.idle": 10, "actor.move": 25 },
 		"warrior":  { "melee_attack": 65, "protect_ally": 10, "actor.guard": 15, "actor.idle": 10, "actor.move": 55 },
 		"archer":   { "melee_attack": 45, "protect_ally": 10, "actor.guard": 20, "actor.idle": 10, "actor.move": 40 },
-		"uncalled": { "melee_attack": 40, "protect_ally": 15, "actor.guard": 25, "actor.idle": 20, "actor.move": 35 },
+		"uncalled": { "melee_attack": 50, "protect_ally": 15, "actor.guard": 25, "actor.idle": 20, "actor.move": 44 },
 		# Enemy baseline: aggressive. protect_ally=0 (enemies don't protect each other in MVP).
 		# guard/idle stay low so enemies almost never passively hold unless situationally forced.
 		"enemy":    { "melee_attack": 70, "protect_ally":  0, "actor.guard": 10, "actor.idle":  5, "actor.move": 60 },
@@ -69,9 +69,9 @@ const _DEFAULTS := {
 		                  "stoic": 0, "devout": 0, "empathic": -8, "reflective": -12 },
 		"actor.move":   { "valiant": 20, "canny": 12, "ambitious": 8, "proud": 8, "loyal": -4,
 		                  "stoic": 0, "devout": 0, "empathic": 0, "reflective": -8 },
-		"actor.guard":  { "stoic": 25, "loyal": 16, "reflective": 16, "devout": 12, "empathic": 8,
+		"actor.guard":  { "stoic": 14, "loyal": 16, "reflective": 8, "devout": 12, "empathic": 8,
 		                  "canny": 4, "ambitious": 0, "valiant": -8, "proud": -8 },
-		"protect_ally": { "empathic": 32, "loyal": 20, "devout": 12, "stoic": 8, "reflective": 4,
+		"protect_ally": { "empathic": 18, "loyal": 20, "devout": 12, "stoic": 8, "reflective": 4,
 		                  "canny": 0, "ambitious": 0, "valiant": 0, "proud": -4 },
 		"actor.idle":   { "reflective": 12, "stoic": 4, "devout": 4, "canny": 4, "loyal": 0,
 		                  "empathic": 0, "ambitious": -4, "valiant": -8, "proud": -8 },
@@ -84,17 +84,25 @@ const _DEFAULTS := {
 		"actor.move":   { "objective_advance_priority": 1.0, "engage_only_blockers": 1.0 },
 	},
 	"morale_action_muls": {
-		"melee_attack": { "broken": -20, "shaken": -8, "steady": 0, "inspired": 12 },
+		"melee_attack": { "broken": -20, "shaken": -3, "steady": 0, "inspired": 12 },
 		"protect_ally": { "broken": -8,  "shaken": -3, "steady": 0, "inspired": 6  },
-		"actor.guard":  { "broken": 20,  "shaken": 10, "steady": 0, "inspired": -5 },
-		"actor.idle":   { "broken": 15,  "shaken": 6,  "steady": 0, "inspired": -5 },
-		"actor.move":   { "broken": -20, "shaken": -8, "steady": 0, "inspired": 10 },
+		"actor.guard":  { "broken": 20,  "shaken":  4, "steady": 0, "inspired": -5 },
+		"actor.idle":   { "broken": 15,  "shaken":  2, "steady": 0, "inspired": -5 },
+		"actor.move":   { "broken": -20, "shaken": -3, "steady": 0, "inspired": 10 },
 	},
 	"directive_base_bonus":  20.0,
 	"fear_active_dampen":    0.6,
 	"fear_passive_actions":  ["actor.idle", "actor.guard"],
-	"threat_threshold":      1.0,   # 1.0 = any HP damage qualifies; lower to tighten the gate
-	"guard_range":           2,     # enemy must be within this many tiles for guard to be a candidate
+	"threat_threshold":      0.50,  # 0.50 = ally must be below 50% HP to qualify as threatened
+	"guard_range":           1,     # enemy must be adjacent for guard to be a candidate (melee-only MVP)
+	# PROG-010: tier-based scoring defaults
+	"wound_chase_mul":              15.0,  # Adept+ finish-wounded score bonus multiplier
+	"surrounded_move_penalty":     -18.0, # Adept+ penalty for move into surrounded position
+	"formation_distance":            6,   # Veteran+ formation pull threshold (tiles)
+	"press_hp_threshold":            0.5, # Veteran+ calling bonus HP gate (target < 50%)
+	"press_attack_bonus":           15.0, # Veteran warrior melee bonus vs wounded target
+	"protect_ally_veteran_mul":      1.3, # Veteran guardian protect_ally score multiplier
+	"protect_ally_veteran_hp_threshold": 0.50, # HP gate for guardian Veteran+ protect_ally mul
 
 	# -------------------------
 	# Situational modifier tables
@@ -132,6 +140,10 @@ const _DEFAULTS := {
 			# Nearest enemy distance > threshold tiles. Guard is pointless — advance.
 			"threshold":    5,
 			"melee_attack":  0, "protect_ally":  0, "actor.guard": -12, "actor.idle": -5, "actor.move":  8,
+		},
+		# Echo-type only: adjacent to an enemy — fight, don't idle.
+		"echo_in_melee": {
+			"melee_attack": 18, "protect_ally": -3, "actor.guard": -5, "actor.idle": -12, "actor.move": -5,
 		},
 		# Enemy-type only conditions (gated by actor_type == "enemy" in _build_board_summary).
 		"enemy_engaged": {
@@ -209,14 +221,18 @@ func select_intent(context: Dictionary) -> Dictionary:
 	var all_actors: Array     = context.get("all_actors", [])
 	var directive: Dictionary = context.get("directive", {})
 
-	# Build board summary once — passed to _score() for every candidate to avoid re-computation.
-	var board_summary: Dictionary = _build_board_summary(actor, all_actors, context.get("board_cfg", {}))
+	# PROG-010: read tier + calling behavior injected by ActorStateMachine
+	var smartness_tier: String    = str(context.get("smartness_tier", "novice"))
+	var calling_behavior: Dictionary = context.get("calling_behavior", {})
 
-	var candidates: Array[Dictionary] = _generate_candidates(actor, all_actors, context)
+	# Build board summary once — passed to _score() for every candidate to avoid re-computation.
+	var board_summary: Dictionary = _build_board_summary(actor, all_actors, context.get("board_cfg", {}), smartness_tier)
+
+	var candidates: Array[Dictionary] = _generate_candidates(actor, all_actors, context, smartness_tier, calling_behavior)
 
 	# Score each candidate, then sort: highest score first; tiebreak alphabetically.
 	for c: Dictionary in candidates:
-		c["_score"] = _score(c["action_type"], actor, directive, board_summary)
+		c["_score"] = _score(c["action_type"], actor, directive, board_summary, smartness_tier, calling_behavior, c)
 
 	# COMBAT-006: actor.purify_shrine override — injected AFTER scoring so 9999 is never overwritten.
 	# Same pattern as Absolute Fear Rule: deterministic always-win when all conditions are met.
@@ -272,7 +288,13 @@ func select_intent(context: Dictionary) -> Dictionary:
 ##
 ## Adding new action types: add candidate generation here + rows in balance.json tables.
 ## _score() needs no changes.
-func _generate_candidates(actor: Dictionary, all_actors: Array, context: Dictionary = {}) -> Array[Dictionary]:
+func _generate_candidates(
+	actor: Dictionary,
+	all_actors: Array,
+	context: Dictionary = {},
+	smartness_tier: String = "novice",
+	calling_behavior: Dictionary = {}
+) -> Array[Dictionary]:
 	var candidates: Array[Dictionary] = []
 
 	# actor.idle is always a candidate — the unconditional safe fallback.
@@ -287,10 +309,24 @@ func _generate_candidates(actor: Dictionary, all_actors: Array, context: Diction
 				shrine_override = a_v
 				break
 
-	# Compute nearest enemy and distance upfront — used by melee, move, and guard.
-	var nearest_enemy: Dictionary = shrine_override if not shrine_override.is_empty() \
-			else ActorService.get_nearest_enemy(actor, all_actors)
+	var actor_type: String = str(actor.get("actor_type", "echo"))
+	var calling_origin: String = str(actor.get("calling_origin", "uncalled"))
 	var my_pos: Dictionary = actor.get("grid_pos", { "col": 0, "row": 0 })
+
+	# PROG-010: Enemy Adept+ focus fire — prefer most-wounded echo over nearest.
+	# Echo actors use standard nearest-enemy selection.
+	var nearest_enemy: Dictionary
+	if shrine_override.is_empty():
+		if actor_type == "enemy" \
+				and (smartness_tier == "adept" or smartness_tier == "veteran" or smartness_tier == "elite"):
+			nearest_enemy = _get_most_wounded_enemy(actor, all_actors)
+			if nearest_enemy.is_empty():
+				nearest_enemy = ActorService.get_nearest_enemy(actor, all_actors)
+		else:
+			nearest_enemy = ActorService.get_nearest_enemy(actor, all_actors)
+	else:
+		nearest_enemy = shrine_override
+
 	var enemy_dist: int = 999999
 	var t_pos: Dictionary = {}
 	if not nearest_enemy.is_empty():
@@ -300,20 +336,23 @@ func _generate_candidates(actor: Dictionary, all_actors: Array, context: Diction
 	# melee_attack: adjacent enemy (Chebyshev distance == 1, all 8 neighbours).
 	# actor.move: enemy exists but not adjacent.
 	if not nearest_enemy.is_empty():
+		var target_hp_ratio: float = _hp_ratio(nearest_enemy)
 		if GridService.is_adjacent(my_pos, t_pos):
 			candidates.append({
-				"action_type": "melee_attack",
-				"target_id":   str(nearest_enemy.get("id", "")),
-				"distance":    enemy_dist,
-				"priority":    1.0,
+				"action_type":     "melee_attack",
+				"target_id":       str(nearest_enemy.get("id", "")),
+				"distance":        enemy_dist,
+				"target_hp_ratio": target_hp_ratio,
+				"priority":        1.0,
 			})
 		else:
 			candidates.append({
-				"action_type":    "actor.move",
-				"target_id":      str(nearest_enemy.get("id", "")),
-				"target_pos":     t_pos,
+				"action_type":     "actor.move",
+				"target_id":       str(nearest_enemy.get("id", "")),
+				"target_pos":      t_pos,
 				"target_distance": enemy_dist,
-				"priority":       1.0,
+				"target_hp_ratio": target_hp_ratio,
+				"priority":        1.0,
 			})
 
 	# actor.guard — only meaningful when an enemy is within guard_range tiles.
@@ -323,7 +362,7 @@ func _generate_candidates(actor: Dictionary, all_actors: Array, context: Diction
 		candidates.append({ "action_type": "actor.guard", "target_id": "", "priority": 0.0 })
 
 	# protect_ally — only when a same-faction ally has taken any damage (current_hp < max_hp).
-	# threshold=1.0 in balance.json ensures any HP loss qualifies; tune down to tighten the gate.
+	# threshold=0.50 means ally must be below 50% HP (missing ≥50% HP) to qualify as threatened.
 	var threshold: float = _cfg_get("threat_threshold")
 	var threatened: Dictionary = ActorService.get_threatened_ally(actor, all_actors, threshold)
 	if not threatened.is_empty():
@@ -333,6 +372,31 @@ func _generate_candidates(actor: Dictionary, all_actors: Array, context: Diction
 			"target_id":         ally_id,
 			"protected_actor_id": ally_id,
 			"priority":          1.0,
+		})
+
+	# PROG-010: actor.retreat — calling-aware, Adept+ only. Warriors never retreat.
+	# Only echo actors can retreat.
+	if actor_type == "echo" \
+			and (smartness_tier == "adept" or smartness_tier == "veteran" or smartness_tier == "elite"):
+		var retreat_threshold: Variant = calling_behavior.get("retreat_threshold", null)
+		if retreat_threshold != null and calling_origin != "warrior":
+			var hp_r: float = _hp_ratio(actor)
+			if hp_r < float(retreat_threshold):
+				candidates.append({
+					"action_type": "actor.retreat",
+					"target_id":   "",
+					"priority":    1.0,
+				})
+
+	# PROG-010: actor.taunt — Blade (warrior calling) Veteran+ only.
+	# Mechanical effect applied by combat loop (taunted_by set on enemy).
+	if actor_type == "echo" and calling_origin == "warrior" \
+			and (smartness_tier == "veteran" or smartness_tier == "elite") \
+			and not nearest_enemy.is_empty():
+		candidates.append({
+			"action_type": "actor.taunt",
+			"target_id":   str(nearest_enemy.get("id", "")),
+			"priority":    1.0,
 		})
 
 	return candidates
@@ -347,7 +411,7 @@ func _generate_candidates(actor: Dictionary, all_actors: Array, context: Diction
 ##
 ## last_echo_standing sentinel: requires dead_allies > 0 so a designed 1v1 scenario
 ## (all_actors contains only enemies) never fires the condition.
-func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dictionary) -> Dictionary:
+func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dictionary, smartness_tier: String = "novice") -> Dictionary:
 	var my_id:      String = str(actor.get("id", ""))
 	var my_faction: String = str(actor.get("faction", ""))
 	var actor_type: String = str(actor.get("actor_type", "echo"))
@@ -415,6 +479,10 @@ func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dict
 	if enemy_dist > far_threshold and enemy_dist < 999999:
 		active.append("enemy_far")
 
+	# Echo-type: in_melee — adjacent to an enemy, push to attack.
+	if actor_type == "echo" and enemy_dist <= 1:
+		active.append("echo_in_melee")
+
 	# Enemy-type-only conditions — gated so echo actors never receive them.
 	if actor_type == "enemy" and enemy_dist < 999999:
 		var n_pos: Dictionary = nearest_enemy.get("grid_pos", { "col": 0, "row": 0 })
@@ -422,6 +490,20 @@ func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dict
 			active.append("enemy_engaged")
 		else:
 			active.append("enemy_advancing")
+
+	# PROG-010: echo_retreating — enemy Adept+ pursuit.
+	# Active when this enemy is Adept+ and any echo is retreating (last_intent == actor.retreat).
+	if actor_type == "enemy" \
+			and (smartness_tier == "adept" or smartness_tier == "veteran" or smartness_tier == "elite"):
+		for a_v in all_actors:
+			if not (a_v is Dictionary):
+				continue
+			var a: Dictionary = a_v as Dictionary
+			if a.get("actor_type", "") == "echo" and not a.get("is_dead", false):
+				var li_v: Variant = a.get("last_intent", {})
+				if li_v is Dictionary and str((li_v as Dictionary).get("action_type", "")) == "actor.retreat":
+					active.append("echo_retreating")
+					break
 
 	# COMBAT-006: near_friendly_structure / near_hostile_structure based on actor faction.
 	# Echoes get a soft defensive bonus near the shrine; enemies get an aggression boost toward it.
@@ -468,7 +550,15 @@ func _situational_bonus(action_type: String, board_summary: Dictionary) -> float
 ## Generic data-driven score for action_type given this actor's state and active directive.
 ## Does NOT contain action-type-specific conditionals — new actions require only
 ## balance.json row additions, not changes here.
-func _score(action_type: String, actor: Dictionary, directive: Dictionary, board_summary: Dictionary = {}) -> float:
+func _score(
+	action_type: String,
+	actor: Dictionary,
+	directive: Dictionary,
+	board_summary: Dictionary = {},
+	smartness_tier: String = "novice",
+	calling_behavior: Dictionary = {},
+	candidate: Dictionary = {}
+) -> float:
 	var calling_origin: String = str(actor.get("calling_origin", "uncalled"))
 	var traits: Dictionary     = actor.get("traits", {})
 	var vectors: Dictionary    = actor.get("vector_scores", {})
@@ -518,7 +608,42 @@ func _score(action_type: String, actor: Dictionary, directive: Dictionary, board
 	# 6. Directive bonus — generic loop over intent_weights (semantic keys).
 	var directive_bonus: float = _directive_bonus(action_type, directive)
 
-	return (base + trait_bonus + vector_bonus + archetype_bonus + morale_bonus) * fear_factor + directive_bonus + _situational_bonus(action_type, board_summary)
+	# PROG-010: calling-aware score multipliers (Veteran+ only)
+	var calling_mul: float = 1.0
+	if smartness_tier == "veteran" or smartness_tier == "elite":
+		var actor_type_str: String = str(actor.get("actor_type", "echo"))
+		var calling_str: String = str(actor.get("calling_origin", "uncalled"))
+		if actor_type_str == "echo":
+			var press_threshold: float = float(_cfg_get("press_hp_threshold") if _cfg.has("press_hp_threshold") \
+				else 0.5)
+			var target_hp: float = float(candidate.get("target_hp_ratio", 1.0))
+			match calling_str:
+				"guardian":
+					if action_type == "protect_ally":
+						var protect_mul: float = float(_cfg_get("protect_ally_veteran_mul") \
+							if _cfg.has("protect_ally_veteran_mul") else 1.3)
+						var protect_hp_gate: float = float(_cfg_get("protect_ally_veteran_hp_threshold") \
+							if _cfg.has("protect_ally_veteran_hp_threshold") else 0.50)
+						if target_hp <= protect_hp_gate:
+							calling_mul = protect_mul
+				"warrior":
+					if action_type == "melee_attack" and target_hp <= press_threshold:
+						base += float(_cfg_get("press_attack_bonus") if _cfg.has("press_attack_bonus") else 15.0)
+
+	# PROG-010: Adept+ finish-the-wounded — melee_attack bonus for wounded targets
+	if action_type == "melee_attack" \
+			and (smartness_tier == "adept" or smartness_tier == "veteran" or smartness_tier == "elite"):
+		var target_hp_r: float = float(candidate.get("target_hp_ratio", 1.0))
+		var wound_mul: float = float(_cfg_get("wound_chase_mul") if _cfg.has("wound_chase_mul") else 15.0)
+		base += (1.0 - target_hp_r) * wound_mul
+
+	# PROG-010: taunted_by — enemy strongly prefers the taunt-source echo (+25 attack score)
+	if action_type == "melee_attack":
+		var taunted_by: String = str(actor.get("taunted_by", ""))
+		if not taunted_by.is_empty() and str(candidate.get("target_id", "")) == taunted_by:
+			base += 25.0
+
+	return (base + trait_bonus + vector_bonus + archetype_bonus + morale_bonus) * fear_factor * calling_mul + directive_bonus + _situational_bonus(action_type, board_summary)
 
 
 ## Maps directive semantic intent_weights keys → action bonus.
@@ -551,3 +676,32 @@ func _cfg_get(key: String) -> Variant:
 	if _cfg.has(key):
 		return _cfg[key]
 	return _DEFAULTS[key]
+
+
+# PROG-010: Returns the most wounded (lowest hp_ratio) enemy relative to this actor.
+# Used for enemy Adept+ focus fire. Falls back to empty if no enemies exist.
+func _get_most_wounded_enemy(actor: Dictionary, all_actors: Array) -> Dictionary:
+	var my_faction: String = str(actor.get("faction", "echo"))
+	var best: Dictionary = {}
+	var best_ratio: float = 2.0
+	for a_v in all_actors:
+		if not (a_v is Dictionary):
+			continue
+		var a: Dictionary = a_v as Dictionary
+		if str(a.get("faction", "")) == my_faction:
+			continue
+		if a.get("is_dead", false) or a.get("is_structure", false):
+			continue
+		var r: float = _hp_ratio(a)
+		if r < best_ratio:
+			best_ratio = r
+			best = a
+	return best
+
+
+# PROG-010: Compute hp_ratio for any actor dict. Returns 1.0 if stats unavailable.
+static func _hp_ratio(actor: Dictionary) -> float:
+	var max_hp: int = int(actor.get("stats", {}).get("max_hp", 0))
+	if max_hp <= 0 or not actor.has("current_hp"):
+		return 1.0
+	return clampf(float(actor["current_hp"]) / float(max_hp), 0.0, 1.0)

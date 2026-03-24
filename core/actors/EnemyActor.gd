@@ -72,6 +72,9 @@ static func from_definition(defn: Dictionary, t: int, cfg: Dictionary = {}) -> D
 		# ACTOR-004: faction + grid_pos placeholder until GRID-001 places actors on board
 		"faction":  defn.get("faction", "enemy"),
 		"grid_pos": { "col": 0, "row": 0 },
+		# PROG-010: enemies have no identity traits (empty arrays satisfy schema)
+		"resilience_traits": [],
+		"leadership_traits": [],
 	}
 
 	assert(ActorSchema.validate(actor),

@@ -25,6 +25,12 @@ class_name EchoFactory
 #     class_origin_weights is the single Vector type registry for the entire system.
 #     No code change needed when expanding — balance.json only.
 #
+# PROG-010 echo identity traits — uses a SEPARATE derived RNG, NOT appended to v1/v2 draw order:
+# CampaignSeed.get_rng_from(parent_seed, seed_path + ".echo_traits.v1")
+# (A) resilience_traits: 1–2 traits from weighted pool, gated by calling_origin + archetype_birth
+# (B) leadership_traits: 1–2 traits from calling-specific pool, weighted by archetype_birth
+# Same seed_path always produces the same traits. Separate stream never shifts v1/v2 draws.
+#
 # Output: a Dictionary suitable to store in sanctum.roster[].
 
 static func generate(
@@ -32,7 +38,8 @@ static func generate(
 	seed_path: String,
 	summon_index: int,
 	origin: String,
-	summoning_cfg: Dictionary
+	summoning_cfg: Dictionary,
+	smartness_cfg: Dictionary = {}
 ) -> Dictionary:
 	# Convert seed_root string -> deterministic int parent seed.
 	# NOTE: String.hash() is stable within Godot for deterministic use in this project.
@@ -76,7 +83,15 @@ static func generate(
 
 	# ---- archetype_birth derived from traits (no RNG draw) ----
 	var archetype_birth := _derive_archetype_birth(courage, wisdom, faith)
-	
+
+	# ---- PROG-010 identity traits (separate derived RNG — never touches v1/v2 stream) ----
+	var resilience_traits: Array = []
+	var leadership_traits: Array = []
+	if not smartness_cfg.is_empty():
+		var trait_rng := CampaignSeed.get_rng_from(parent_seed, seed_path + ".echo_traits.v1")
+		resilience_traits = _draw_resilience_traits(trait_rng, calling_origin, archetype_birth, smartness_cfg)
+		leadership_traits = _draw_leadership_traits(trait_rng, calling_origin, archetype_birth, smartness_cfg)
+
 	# ---- (7) derived stats ---
 	var stats := _compute_birth_stats(courage, wisdom, faith, summoning_cfg.get("birth_stats", {}))
 	
@@ -126,6 +141,10 @@ static func generate(
 		"rank": 1,
 		"vector_scores": vector_scores,
 		"dominant_vector": dominant_vector,  # PROG-005: populated by VectorService.init_vectors()
+
+		# PROG-010: seeded identity traits (derived RNG — separate from v1/v2 draw order)
+		"resilience_traits": resilience_traits,
+		"leadership_traits": leadership_traits,
 
 		"generation_context": generation_context
 	}
@@ -224,8 +243,78 @@ static func repair_echo_fields(echo: Dictionary) -> bool:
 		echo["dominant_vector"] = str(echo.get("class_origin", ""))
 		patched = true
 
+	# PROG-010: echo identity traits (default empty — filled by generate() for new echoes)
+	if not echo.has("resilience_traits") or typeof(echo["resilience_traits"]) != TYPE_ARRAY:
+		echo["resilience_traits"] = []
+		patched = true
+
+	if not echo.has("leadership_traits") or typeof(echo["leadership_traits"]) != TYPE_ARRAY:
+		echo["leadership_traits"] = []
+		patched = true
+
 	return patched
 
+
+# Draws 1–2 resilience traits for this echo.
+# Pool shape (balance.json): { trait_id: { calling: weight, ... }, ... }
+# Weight for this echo = pool[trait_id][calling_origin] (default 1 if absent).
+static func _draw_resilience_traits(
+	rng: RandomNumberGenerator,
+	calling_origin: String,
+	_archetype_birth: String,
+	smartness_cfg: Dictionary
+) -> Array:
+	var pool: Dictionary = smartness_cfg.get("resilience_trait_pool", {})
+	if pool.is_empty():
+		return []
+	# Build weighted dict: trait_id → weight from calling_origin column
+	var weights: Dictionary = {}
+	for trait_id in pool:
+		if str(trait_id).begins_with("_"):
+			continue  # skip _comment keys
+		var entry = pool[trait_id]
+		if entry is Dictionary:
+			var w: float = float((entry as Dictionary).get(calling_origin, 1.0))
+			if w > 0.0:
+				weights[trait_id] = w
+	if weights.is_empty():
+		return []
+	var count: int = 1 + (rng.randi() % 2)  # 1 or 2
+	return _draw_unique_from_weights(rng, weights, count)
+
+# Draws 1–2 leadership traits for this echo from their calling-specific pool.
+# Pool shape (balance.json): { calling: [trait_id, ...], ... }
+# All traits in the calling's array have equal weight; pick 1–2 unique.
+static func _draw_leadership_traits(
+	rng: RandomNumberGenerator,
+	calling_origin: String,
+	_archetype_birth: String,
+	smartness_cfg: Dictionary
+) -> Array:
+	var pool: Dictionary = smartness_cfg.get("leadership_trait_pool", {})
+	if pool.is_empty():
+		return []
+	var trait_list: Variant = pool.get(calling_origin, pool.get("uncalled", []))
+	if not (trait_list is Array) or (trait_list as Array).is_empty():
+		return []
+	# Equal weights for all traits in the calling's pool
+	var weights: Dictionary = {}
+	for trait_id in (trait_list as Array):
+		weights[str(trait_id)] = 1.0
+	var count: int = 1 + (rng.randi() % 2)  # 1 or 2
+	return _draw_unique_from_weights(rng, weights, count)
+
+# Picks `count` unique keys from a { key: weight } dict using weighted random selection.
+static func _draw_unique_from_weights(rng: RandomNumberGenerator, weights: Dictionary, count: int) -> Array:
+	var result: Array = []
+	var remaining: Dictionary = weights.duplicate()
+	while result.size() < count and not remaining.is_empty():
+		var picked: String = _roll_weighted_key(rng, remaining)
+		if picked.is_empty():
+			break
+		result.append(picked)
+		remaining.erase(picked)
+	return result
 
 static func _compute_birth_stats(courage: int, wisdom: int, faith: int, birth_cfg: Dictionary) -> Dictionary:
 	# PROG-002: Delegates to DerivedStatService with rank=1, level=1 (birth values).
