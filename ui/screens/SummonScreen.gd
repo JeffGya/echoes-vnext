@@ -73,7 +73,7 @@ func set_snapshot(snapshot: Dictionary) -> void:
 
 	# Rate hint (~ X / hour)
 	var rate := float(data.get("ase_rate_per_hour_hint", 0.0))
-	ase_rate_label.text = "~ %.1f Ase / hour" % rate
+	ase_rate_label.text = "(~ %.1f Ase / hour)" % rate
 
 	# Overlay reveals (transient)
 	var reveals_v: Variant = data.get("pending_summon_reveals", [])

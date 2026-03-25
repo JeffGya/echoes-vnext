@@ -25,9 +25,18 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="PanelContainer" type="PanelContainer" parent="NameModal" unique_id=92131753]
-layout_mode = 0
-offset_right = 40.0
-offset_bottom = 40.0
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -242.0
+offset_top = -96.0
+offset_right = 242.0
+offset_bottom = 96.0
+grow_horizontal = 2
+grow_vertical = 2
 
 [node name="MarginContainer" type="MarginContainer" parent="NameModal/PanelContainer" unique_id=2118801272]
 layout_mode = 2
@@ -38,14 +47,24 @@ theme_override_constants/margin_bottom = 24
 
 [node name="VBoxContainer" type="VBoxContainer" parent="NameModal/PanelContainer/MarginContainer" unique_id=1013432852]
 layout_mode = 2
+size_flags_vertical = 0
+theme_override_constants/separation = 16
 
-[node name="ModalTitle" type="Label" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer" unique_id=1688515526]
+[node name="VBoxContainer" type="VBoxContainer" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer" unique_id=624811592]
 layout_mode = 2
-text = "Name your Sanctum. "
 
-[node name="ModalSubtitle" type="Label" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer" unique_id=509012857]
+[node name="ModalTitle" type="Label" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer/VBoxContainer" unique_id=1688515526]
+layout_mode = 2
+size_flags_vertical = 1
+text = "Welcome Keeper. To start you must name your Sanctum"
+autowrap_mode = 3
+justification_flags = 160
+
+[node name="ModalSubtitle" type="Label" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer/VBoxContainer" unique_id=509012857]
 layout_mode = 2
 text = "Choose wisely! You can only name your Sanctum once."
+autowrap_mode = 3
+justification_flags = 160
 
 [node name="NameEdit" type="LineEdit" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer" unique_id=1858359016]
 unique_name_in_owner = true
@@ -57,14 +76,16 @@ layout_mode = 2
 [node name="RerollButton" type="Button" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1245369722]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 text = "Reroll"
 
 [node name="ConfirmButton" type="Button" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1052186876]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 text = "Choose"
 
-[node name="RightSidebar" type="VBoxContainer" parent="."]
+[node name="RightSidebar" type="VBoxContainer" parent="." unique_id=1283973613]
 layout_mode = 1
 anchors_preset = 1
 anchor_left = 1.0
@@ -109,20 +130,20 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "echo count  50"
 
-[node name="PartyInfoPanel" type="PanelContainer" parent="RightSidebar"]
+[node name="PartyInfoPanel" type="PanelContainer" parent="RightSidebar" unique_id=1270531692]
 layout_mode = 2
 
-[node name="MarginContainer" type="MarginContainer" parent="RightSidebar/PartyInfoPanel"]
+[node name="MarginContainer" type="MarginContainer" parent="RightSidebar/PartyInfoPanel" unique_id=1131547635]
 layout_mode = 2
 theme_override_constants/margin_left = 12
 theme_override_constants/margin_top = 12
 theme_override_constants/margin_right = 12
 theme_override_constants/margin_bottom = 12
 
-[node name="VBoxContainer" type="VBoxContainer" parent="RightSidebar/PartyInfoPanel/MarginContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="RightSidebar/PartyInfoPanel/MarginContainer" unique_id=1645617329]
 layout_mode = 2
 
-[node name="PartyInfoHeader" type="Label" parent="RightSidebar/PartyInfoPanel/MarginContainer/VBoxContainer"]
+[node name="PartyInfoHeader" type="Label" parent="RightSidebar/PartyInfoPanel/MarginContainer/VBoxContainer" unique_id=1941957998]
 layout_mode = 2
 text = "Active Party"
 

@@ -275,6 +275,7 @@ func _run_tests(parts: Array) -> void:
 	ObjectiveModelTests.register(runner) # REALM-002
 	StageModelTests.register(runner)     # REALM-002
 	EconomyRewardTests.register(runner)  # ECONOMY-004
+	StageProgressionTests.register(runner)  # REALM-004
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [

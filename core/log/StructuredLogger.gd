@@ -23,7 +23,7 @@ func clear() -> void:
 func set_level(level: String) -> void:
 	# Accept only known levels (fails closed to INFO)
 	if level != LEVEL_OFF and level != LEVEL_INFO and level != LEVEL_DEBUG:
-		_level = LEVEL_DEBUG
+		_level = LEVEL_INFO
 		return
 	_level = level
 

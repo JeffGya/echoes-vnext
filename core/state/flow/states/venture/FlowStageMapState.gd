@@ -11,15 +11,32 @@ func enter(ctx: RefCounted, t: int) -> void:
 	# Load active realm model
 	var model := RealmService.get_active(flow_ctx)
 
+	# REALM-004: guard — no active realm (e.g. after realm completion, ctx.realm_id cleared).
+	# Emit a redirect snapshot rather than the old scaffold fallback.
+	if model.is_empty():
+		flow_ctx.logger.warn(t, "stage_map.no_active_realm", "StageMapState entered with no active realm; redirecting", {})
+		flow_ctx.last_snapshot = {
+			"type":    FlowStateIds.STAGE_MAP,
+			"data":    { "error": "no_active_realm" },
+			"actions": {
+				"nav.back": {
+					"type":  "flow.go_state",
+					"to":    FlowStateIds.REALM_SELECT,
+					"label": "Select Realm",
+					"slot":  "nav.back",
+				}
+			},
+			"meta": { "t": t },
+		}
+		return
+
 	# --- Build stage list from RealmModel ---
 	var raw_model_stages: Variant = model.get("stages", [])
 	var model_stages: Array = raw_model_stages if raw_model_stages is Array else []
 	var current_stage_index := int(model.get("current_stage_index", 0))
-	var realm_name: String = str(model.get("name", "")) if not model.is_empty() else ""
-
-	# Fall back to a minimal scaffold row so the screen is never blank
-	if model_stages.is_empty():
-		model_stages = [{ "index": 0, "type": "combat", "seed": 0, "objectives": [] }]
+	var realm_name: String   = str(model.get("name", ""))
+	var realm_complete: bool = bool(model.get("is_completed", false))
+	var stage_count: int     = int(model.get("stage_count", model_stages.size()))
 
 	var stages: Array = []
 	for stage_v in model_stages:
@@ -65,12 +82,6 @@ func enter(ctx: RefCounted, t: int) -> void:
 
 	# Actions
 	var actions: Dictionary = {
-		"cta.enter_stage": {
-			"type":     "flow.select_stage",
-			"stage_id": str(current_stage.get("id", "stage.0")),
-			"label":    "Enter " + str(current_stage.get("name", "Stage")),
-			"slot":     "cta.enter_stage",
-		},
 		"nav.back": {
 			"type":  "flow.go_state",
 			"to":    FlowStateIds.SANCTUM,
@@ -78,6 +89,14 @@ func enter(ctx: RefCounted, t: int) -> void:
 			"slot":  "nav.back",
 		},
 	}
+	# REALM-004: only offer stage entry when realm is not yet complete
+	if not realm_complete:
+		actions["cta.enter_stage"] = {
+			"type":     "flow.select_stage",
+			"stage_id": str(current_stage.get("id", "stage.0")),
+			"label":    "Enter " + str(current_stage.get("name", "Stage")),
+			"slot":     "cta.enter_stage",
+		}
 
 	# Party preview (from save)
 	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
@@ -106,6 +125,9 @@ func enter(ctx: RefCounted, t: int) -> void:
 		if s.get("status", "") == "completed":
 			stages_completed_count += 1
 
+	# REALM-004: stages_remaining = total stages not yet completed (excludes current)
+	var stages_remaining: int = max(0, stage_count - stages_completed_count - 1)
+
 	flow_ctx.last_snapshot = {
 		"type": FlowStateIds.STAGE_MAP,
 		"data": {
@@ -114,6 +136,9 @@ func enter(ctx: RefCounted, t: int) -> void:
 			"realm_name":             realm_name,
 			"current_stage_id":       str(current_stage.get("id", "")),
 			"stages_completed_count": stages_completed_count,
+			"stage_count":            stage_count,
+			"stages_remaining":       stages_remaining,
+			"realm_complete":         realm_complete,
 			"stages":                 stages,
 			"party_preview":          party_preview,
 		},

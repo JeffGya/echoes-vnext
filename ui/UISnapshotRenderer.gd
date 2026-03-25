@@ -25,7 +25,7 @@ func bind_view(view: RichTextLabel, actions: Control) -> void:
 	# AppRoot provides the UI nodes this renderer can write to.
 	snapshot_view = view
 	actions_container = actions
-	
+
 # Render function that is repsonsible for keeping track and showing the content and actions based on what the flows and states pass from the Approot.
 func render(snapshot: Dictionary) -> void:
 	if snapshot_view == null:
@@ -33,12 +33,12 @@ func render(snapshot: Dictionary) -> void:
 		return
 	# 1) Debug JSON view (temporary for debug/dev purposes)
 	snapshot_view.text = JSON.stringify(snapshot, "\t")
-	
+
 	# 2) Action buttons
 	_clear_actions()
 	if actions_container == null:
 		return
-		
+
 	var actions_v: Variant = snapshot.get("actions", [])
 
 	# STATE-004: flow.encounter is a wrapper snapshot.
@@ -50,9 +50,9 @@ func render(snapshot: Dictionary) -> void:
 
 	if typeof(actions_v) != TYPE_ARRAY:
 		return
-		
+
 	var actions: Array = actions_v
-		
+
 	for a in actions:
 		if typeof(a) != TYPE_DICTIONARY:
 			continue
@@ -61,14 +61,14 @@ func render(snapshot: Dictionary) -> void:
 		var btn := Button.new()
 		btn.text = str(action_dict.get("label", action_dict.get("type", "action")))
 		btn.disabled = bool(action_dict.get("disabled", false))
-		
-	
+
+
 		# Capture the action dictionary deterministically
-		# Deep copy so UI can’t mutate the original snapshot dictionary.
+		# Deep copy so UI can't mutate the original snapshot dictionary.
 		var action_copy: Dictionary = action_dict.duplicate(true)
 		btn.pressed.connect(_on_action_button_pressed.bind(action_copy))
 		actions_container.add_child(btn)
-		
+
 	# snapshot_view.text = json_string
 
 # A helper to clear old buttons

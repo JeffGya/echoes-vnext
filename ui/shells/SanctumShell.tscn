@@ -12,6 +12,7 @@ grow_horizontal = 2
 grow_vertical = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
+mouse_filter = 1
 script = ExtResource("1_1eqo0")
 
 [node name="UILayer" type="CanvasLayer" parent="." unique_id=2051671050]
@@ -25,21 +26,14 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="MarginContainer" type="MarginContainer" parent="UILayer/Control" unique_id=741223848]
+[node name="OverlayRoot" type="Control" parent="UILayer/Control" unique_id=1677153853]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 40
-theme_override_constants/margin_top = 40
-theme_override_constants/margin_right = 40
-theme_override_constants/margin_bottom = 40
-
-[node name="OverlayRoot" type="Control" parent="UILayer/Control/MarginContainer" unique_id=1677153853]
-unique_name_in_owner = true
-layout_mode = 2
 mouse_filter = 1
 
 [node name="NavBar" type="FoldableContainer" parent="UILayer/Control" unique_id=100000001]

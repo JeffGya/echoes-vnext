@@ -1,8 +1,8 @@
-[gd_scene load_steps=2 format=3 uid="uid://c33j5580b3r3y"]
+[gd_scene format=3 uid="uid://c33j5580b3r3y"]
 
 [ext_resource type="Script" uid="uid://cxcoica6uu5nx" path="res://ui/screens/SummonScreen.gd" id="1_epawg"]
 
-[node name="SummonScreen" type="Control"]
+[node name="SummonScreen" type="Control" unique_id=230762143]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -11,81 +11,114 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_epawg")
 
-[node name="Root" type="VBoxContainer" parent="."]
+[node name="PanelContainer" type="PanelContainer" parent="." unique_id=1578541612]
 layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -248.0
+offset_top = -154.5
+offset_right = 248.0
+offset_bottom = 154.5
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="HeaderRow" type="HBoxContainer" parent="Root"]
+[node name="MarginContainer" type="MarginContainer" parent="PanelContainer" unique_id=2128138723]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Root" type="VBoxContainer" parent="PanelContainer/MarginContainer" unique_id=2057454550]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="HeaderRow" type="VBoxContainer" parent="PanelContainer/MarginContainer/Root" unique_id=1754412997]
 layout_mode = 2
 
-[node name="BackButton" type="Button" parent="Root/HeaderRow"]
+[node name="BackButton" type="Button" parent="PanelContainer/MarginContainer/Root/HeaderRow" unique_id=1421889307]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 40)
 layout_mode = 2
+size_flags_horizontal = 0
 text = "Back"
 
-[node name="Spacer" type="Control" parent="Root/HeaderRow"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 0
-
-[node name="TitleLabel" type="Label" parent="Root/HeaderRow"]
+[node name="TitleLabel" type="Label" parent="PanelContainer/MarginContainer/Root/HeaderRow" unique_id=1132561822]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Summon"
+theme_override_font_sizes/font_size = 32
+text = "Summon new echo"
+horizontal_alignment = 1
 
-[node name="EconomyBlock" type="VBoxContainer" parent="Root"]
+[node name="RichTextLabel" type="RichTextLabel" parent="PanelContainer/MarginContainer/Root/HeaderRow" unique_id=564134391]
 layout_mode = 2
+text = "Call into Anansi's web and have a new echo join your sanctum. "
+fit_content = true
 
-[node name="AseLabel" type="Label" parent="Root/EconomyBlock"]
-unique_name_in_owner = true
+[node name="GradeRow" type="HBoxContainer" parent="PanelContainer/MarginContainer/Root" unique_id=662195026]
 layout_mode = 2
-text = "Ase: )"
+theme_override_constants/separation = 8
 
-[node name="AseRateLabel" type="Label" parent="Root/EconomyBlock"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "~ 0.0 Ase / hour"
-
-[node name="GradeRow" type="HBoxContainer" parent="Root"]
-layout_mode = 2
-
-[node name="GradeLabel" type="Label" parent="Root/GradeRow"]
+[node name="GradeLabel" type="Label" parent="PanelContainer/MarginContainer/Root/GradeRow" unique_id=1692942969]
 layout_mode = 2
 text = "Grade"
 
-[node name="GradeOption" type="OptionButton" parent="Root/GradeRow"]
+[node name="GradeOption" type="OptionButton" parent="PanelContainer/MarginContainer/Root/GradeRow" unique_id=1274774425]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="CountBlock" type="VBoxContainer" parent="Root"]
+[node name="CountBlock" type="VBoxContainer" parent="PanelContainer/MarginContainer/Root" unique_id=2049438268]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="HBoxContainer" type="HBoxContainer" parent="PanelContainer/MarginContainer/Root/CountBlock" unique_id=518440358]
 layout_mode = 2
 
-[node name="CountLabel" type="Label" parent="Root/CountBlock"]
+[node name="CountLabel" type="Label" parent="PanelContainer/MarginContainer/Root/CountBlock/HBoxContainer" unique_id=1530584432]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Summons: 1"
 
-[node name="CountSlider" type="HSlider" parent="Root/CountBlock"]
+[node name="Spacer" type="Control" parent="PanelContainer/MarginContainer/Root/CountBlock/HBoxContainer" unique_id=182158761]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="CostLabel" type="Label" parent="PanelContainer/MarginContainer/Root/CountBlock/HBoxContainer" unique_id=1122663884]
 unique_name_in_owner = true
 layout_mode = 2
+text = "Cost: 60"
+
+[node name="CountSlider" type="HSlider" parent="PanelContainer/MarginContainer/Root/CountBlock" unique_id=2095828650]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 1
 min_value = 1.0
 max_value = 10.0
 value = 1.0
 scrollable = false
 tick_count = 10
-ticks_on_borders = true
 ticks_position = 3
 
-[node name="CostLabel" type="Label" parent="Root/CountBlock"]
-unique_name_in_owner = true
+[node name="EconomyBlock" type="HBoxContainer" parent="PanelContainer/MarginContainer/Root" unique_id=1528207265]
 layout_mode = 2
-text = "Cost: 60"
+theme_override_constants/separation = 8
 
-[node name="SummonButton" type="Button" parent="Root"]
+[node name="AseLabel" type="Label" parent="PanelContainer/MarginContainer/Root/EconomyBlock" unique_id=308396408]
 unique_name_in_owner = true
 layout_mode = 2
+text = "Ase: ~"
+
+[node name="AseRateLabel" type="Label" parent="PanelContainer/MarginContainer/Root/EconomyBlock" unique_id=321123828]
+unique_name_in_owner = true
+layout_mode = 2
+text = "(~ 0.0 Ase / hour)"
+
+[node name="SummonButton" type="Button" parent="PanelContainer/MarginContainer/Root" unique_id=287604029]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 40)
+layout_mode = 2
+size_flags_horizontal = 4
 text = "Summon"

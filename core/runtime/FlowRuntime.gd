@@ -109,9 +109,14 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 		"flow.select_stage":
 			var stage_id := str(action.get("stage_id", ""))
-			flow_ctx.stage_id = stage_id
+			flow_ctx.stage_id     = stage_id
+			flow_ctx.encounter_id = flow_ctx.realm_id + "." + stage_id  # BUG-003: was always ""
 			logger.info(t, "state.stage_select", "Stage selected", { "stage_id": stage_id })
 			flow_machine.transition(FlowStateIds.STAGE, flow_ctx, logger, t, "ui.flow.select_stage")
+
+		# REALM-004: advance stage index; on realm complete, route to REALM_SELECT.
+		"flow.complete_stage":
+			_handle_complete_stage(t)
 
 		"flow.continue":
 			var is_first_boot: bool = bool(flow_ctx.save_data.get("first_boot", true))
@@ -458,6 +463,23 @@ func _handle_sanctum_grade_select(action: Dictionary, t: int) -> void:
 	# Rebuild snapshot mid-state (refresh_snapshot reads ctx.last_snapshot as-is for SUMMON)
 	flow_ctx.last_snapshot = FlowSummonState.build_snapshot(flow_ctx, t)
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+# REALM-004: Advance stage index; on realm complete, clear context and route to REALM_SELECT.
+func _handle_complete_stage(t: int) -> void:
+	# BUG-001: encounter.complete is not dispatched in the build_final_snapshot() path.
+	# Apply win-drift before nulling so EmotionService can still read roster echoes.
+	_apply_encounter_emotion_drift("win", t)
+	flow_ctx.encounter_ctx     = null
+	flow_ctx.encounter_machine = null
+	var result := RealmService.advance_stage(flow_ctx, t)  # sets save_request + logs internally
+	if result.get("is_completed", false):
+		# Clear stale context so re-entry into a new realm starts clean
+		flow_ctx.realm_id = ""
+		flow_ctx.stage_id = ""
+		flow_machine.transition(FlowStateIds.REALM_SELECT, flow_ctx, logger, t, "realm.complete")
+	else:
+		flow_machine.transition(FlowStateIds.STAGE_MAP, flow_ctx, logger, t, "realm.stage_complete")
+
 
 func _handle_new_game(t: int) -> void:
 	# Create a new campaign root seed string (random once; then persisted)

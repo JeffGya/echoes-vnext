@@ -1,8 +1,8 @@
 [gd_scene format=3 uid="uid://bwm4aksecsiyy"]
 
-[ext_resource type="Script" path="res://ui/shells/RealmShell.gd" id="1_realmshell"]
+[ext_resource type="Script" uid="uid://c7smmm40nja3b" path="res://ui/shells/RealmShell.gd" id="1_realmshell"]
 
-[node name="RealmShell" type="Control"]
+[node name="RealmShell" type="Control" unique_id=1632562241]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -11,16 +11,16 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_realmshell")
 
-[node name="OverlayRoot" type="Control" parent="."]
+[node name="OverlayRoot" type="Control" parent="." unique_id=2080329546]
 layout_mode = 1
-anchors_preset = -1
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_bottom = -88.0
+offset_bottom = -133.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="EchoBar" type="HBoxContainer" parent="."]
+[node name="EchoBar" type="HBoxContainer" parent="." unique_id=1023380146]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = -1

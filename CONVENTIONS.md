@@ -131,7 +131,8 @@ Every `transition()` MUST emit:
 
 ### FlowRuntime + FlowContext (`core/runtime/FlowRuntime.gd` + `core/state/flow/FlowContext.gd`)
 - `FlowRuntime.dispatch(action)` — single choke point for all state mutations
-- Key FlowContext fields: `sim_tick`, `last_snapshot`, `pending_party_ids`, `selected_summon_grade`, `encounter_ctx`, `encounter_machine`, `save_data`, `save_request`, `logger`, `dev_combat_objective`
+- Key FlowContext fields: `sim_tick`, `last_snapshot`, `pending_party_ids`, `selected_summon_grade`, `encounter_ctx`, `encounter_machine`, `encounter_id`, `save_data`, `save_request`, `logger`, `dev_combat_objective`
+- `encounter_id` format: `"realm_id.stage_id"` (e.g. `"realm.01.stage.0"`). Set in `flow.select_stage` handler before transition. Used to derive unique placement seed path `"combat.placement.<encounter_id>"`. Never assign in FlowEncounterState — read-only there.
 - `refresh_snapshot()` reads `ctx.last_snapshot` as-is for non-SANCTUM states
 - For mid-state snapshot updates: use static `build_snapshot()` pattern, then call `refresh_snapshot()`
 
@@ -235,7 +236,7 @@ Full field shapes live in each FlowState file (`core/state/flow/states/`).
 | SummonScreen | `flow.summon` | ase_balance, selected_grade, summon_grade_options, summon_disabled, pending_summon_reveals | nav.back, cta.summon, overlay.dismiss_reveals |
 | PartyManageScreen | `flow.party_manage` | max_party_size (5), roster (id/name/rank/in_party), active_party_ids | back, primary (sanctum.party.confirm, enabled when pending≥1) |
 | CombatBoardScreen | `flow.encounter` | actors (projected), round, round_phase, initiative_order, objective_state, retreat fields (pre_combat only) | nav.back, cta.retreat (when eligible) |
-| ResolveScreen | `flow.resolve` | victory, reason, round_ended, actors (projected), objective_state, enemies_defeated, echoes_survived, ase_awarded, rank (S/A/B/C/D/F), reward_breakdown (Array of {label, delta}) | cta.continue → flow.sanctum, cta.next_stage → flow.stage_map |
+| ResolveScreen | `flow.resolve` | victory, reason, round_ended, actors (projected), objective_state, enemies_defeated, echoes_survived, ase_awarded, rank (S/A/B/C/D/F), reward_breakdown (Array of {label, delta}) | cta.continue → flow.sanctum, cta.next_stage → flow.complete_stage |
 | RealmSelectScreen | `flow.realm_select` | title, current_realm_id, realms[] (id/name/virtue/description/stage_count_min/max/status/locked) | nav.back |
 | RealmInitScreen | `flow.realm_init` | realm_id, name, virtue, description, stage_count, seed, stages[] (stage_index, stage_type, stage_seed, stage_description, objective_count, objectives[{obj_index, obj_type, obj_description}]) | cta.begin, nav.back |
 | StageMapScreen | `flow.stage_map` | realm_id, realm_name, current_stage_id, stages_completed_count, stages[] (id, name, status, stage_type, stage_description, objective_count, objectives[{obj_index, obj_type, obj_description}]), party_preview | cta.enter_stage, nav.back |
@@ -296,6 +297,8 @@ EncounterStateMachine phases (scaffold): `setup → blessing → rounds → reso
 | **directive** | `directive.select` | sets active directive in save |
 | **ui** | `ui.dismiss_summon_reveals` | clears pending reveal queue |
 | **flow** | `flow.select_realm` | selects a realm; triggers `RealmService.get_or_create`; transitions to `flow.realm_init`. Payload: `{ realm_id: String }` |
+| | `flow.select_stage` | sets `ctx.stage_id`, transitions to `flow.stage`. Payload: `{ stage_id: String }` |
+| | `flow.complete_stage` | REALM-004: advances `current_stage_index` via `RealmService.advance_stage()`; on realm complete routes to `flow.realm_select` (clears `ctx.realm_id`+`ctx.stage_id`); else routes to `flow.stage_map` |
 | **debug** | `debug.seed.show/set/reset` | seed tooling (dev only, `t = -1`) |
 | | `debug.echo.gen_test` | generates test echo (dev only) |
 
@@ -361,6 +364,8 @@ Echo traits (resilience + leadership) use a **separate derived RNG** at path `<s
 - Stage IDs use format `"stage.%d"` (zero-based index), e.g. `"stage.0"`, `"stage.1"`. Set on `flow_ctx.stage_id` by `flow.select_stage` action handler in FlowRuntime.
 - ECONOMY-004: Stage reward is paid once inside `build_final_snapshot()` — no `reward_paid` guard needed since this function is called exactly once per combat end. `RewardCalc` is a pure static helper with zero side effects. Rank uses board totals (`total_enemies`, `total_echoes`) for `max_possible` so rank reflects missed opportunities. Defeat uses `base × defeat_factor` as rank numerator — defeat naturally scores C or lower. All reward config lives in `balance.data.rewards`.
 - REALM-003 delivered as part of REALM-002: deterministic stage generation (`RealmGenerator.generate()`), `stages[]` in `RealmInitSnapshot`, stage UI (RealmInitScreen, StageMapScreen, StageScreen), and `LOG_REALM_CREATED` with full stage list are all complete. REALM-003 Notion card is Done — no additional code needed.
+- REALM-004: `RealmService.advance_stage(ctx, t) → Dictionary` increments `current_stage_index` in save; detects realm complete (`new_index >= stage_count`) and writes `is_completed=true`, `status="completed"`; always sets `save_request=true`; idempotent if already complete. Called by `flow.complete_stage` handler in FlowRuntime. `cta.next_stage` in resolve snapshot dispatches `flow.complete_stage` (not `flow.go_state`). On realm complete, FlowRuntime clears `ctx.realm_id`+`ctx.stage_id` before routing to `REALM_SELECT`. `FlowStageMapState` emits `stages_remaining`, `realm_complete`, `stage_count` in snapshot data; gates `cta.enter_stage` when `realm_complete==true`; guards empty model with redirect snapshot (not scaffold).
+- Combat-stage pipeline fixes (post REALM-004): Three bugs fixed. (1) `_handle_complete_stage()` now nulls `encounter_ctx`+`encounter_machine` before advancing stage — fixes stale board actors on next stage entry. (2) `FlowEncounterState.enter()` now calls `_resolve_mode_from_stage()` instead of hardcoding `PURIFY_SHRINE` — reads stage's first objective type (`combat`→`COMBAT`, `shrine`→`PURIFY_SHRINE`) from the realm model. (3) `flow.select_stage` handler now sets `encounter_id = realm_id + "." + stage_id` — fixes identical actor placement across all encounters. Win-path emotion drift (`_apply_encounter_emotion_drift("win", t)`) is now called in `_handle_complete_stage()` before nulling the encounter, wiring the EMOTION-002 drift that was silently skipped in the `build_final_snapshot()` path.
 
 ### Deferred
 - XP / rank progression (fields reserved in schema; no logic yet)

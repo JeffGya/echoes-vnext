@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Godot Editor",
+      "runtimeExecutable": "/Applications/Godot.app/Contents/MacOS/Godot",
+      "runtimeArgs": ["--path", "/Users/jeffreygyamfi/Sites/echoes-vnext", "--editor"],
+      "port": null
+    },
+    {
+      "name": "Godot Run (Game)",
+      "runtimeExecutable": "/Applications/Godot.app/Contents/MacOS/Godot",
+      "runtimeArgs": ["--path", "/Users/jeffreygyamfi/Sites/echoes-vnext"],
+      "port": null
+    },
+    {
+      "name": "Godot Headless (Test Runner)",
+      "runtimeExecutable": "/Applications/Godot.app/Contents/MacOS/Godot",
+      "runtimeArgs": ["--path", "/Users/jeffreygyamfi/Sites/echoes-vnext", "--headless", "--script", "tests/CoreTestRunner.gd"],
+      "port": null
+    }
+  ]
+}

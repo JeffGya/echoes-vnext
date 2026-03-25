@@ -54,10 +54,15 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	var stages: Array        = data.get("stages", [])
 	var realm_name: String   = str(data.get("realm_name", "Unknown Realm"))
 	var completed: int       = int(data.get("stages_completed_count", 0))
+	var realm_complete: bool = bool(data.get("realm_complete", false))
 
 	# Header
-	_title_label.text    = "Currently: " + realm_name if not realm_name.is_empty() else "Stage Map"
-	_subtitle_label.text = "(%d/%d) stages completed" % [completed, stages.size()]
+	_title_label.text = "Currently: " + realm_name if not realm_name.is_empty() else "Stage Map"
+	# REALM-004: show completion state in subtitle
+	if realm_complete:
+		_subtitle_label.text = "Realm complete — all stages cleared."
+	else:
+		_subtitle_label.text = "(%d/%d) stages completed" % [completed, stages.size()]
 
 	# Left panel title
 	_left_panel_title.text = realm_name + " – Stages" if not realm_name.is_empty() else "Stages"

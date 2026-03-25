@@ -16,7 +16,8 @@ func enter(ctx: RefCounted, t: int) -> void:
 		if not flow_ctx.dev_combat_objective.is_empty():
 			flow_ctx.encounter_ctx.resolution_mode = flow_ctx.dev_combat_objective
 		else:
-			flow_ctx.encounter_ctx.resolution_mode = EncounterResolutionModes.PURIFY_SHRINE
+			# BUG-002: read stage's first objective type and map to resolution mode.
+			flow_ctx.encounter_ctx.resolution_mode = _resolve_mode_from_stage(flow_ctx)
 
 	# Create machine once, register states once.
 	if flow_ctx.encounter_machine == null:
@@ -137,6 +138,52 @@ func enter(ctx: RefCounted, t: int) -> void:
 
 func exit(ctx: RefCounted, t: int) -> void:
 	pass
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# BUG-002: Reads the stage's first objective type and maps it to the correct
+# encounter resolution mode. Same stage-lookup pattern as FlowStageState.enter().
+# ────────────────────────────────────────────────────────────────────────────
+
+static func _resolve_mode_from_stage(flow_ctx: FlowContext) -> String:
+	var model := RealmService.get_active(flow_ctx)
+	if model.is_empty():
+		return EncounterResolutionModes.PURIFY_SHRINE
+
+	# Parse stage index from "stage.N" — same pattern as FlowStageState
+	var stage_index := 0
+	var sid := str(flow_ctx.stage_id)
+	if sid.contains("."):
+		var parts := sid.split(".")
+		stage_index = int(parts[parts.size() - 1])
+
+	var stages_v: Variant = model.get("stages", [])
+	var stages: Array = stages_v if stages_v is Array else []
+
+	var stage: Dictionary = {}
+	for s_v in stages:
+		var s: Dictionary = s_v if s_v is Dictionary else {}
+		if int(s.get("index", -1)) == stage_index:
+			stage = s
+			break
+
+	if stage.is_empty():
+		return EncounterResolutionModes.PURIFY_SHRINE
+
+	var objs_v: Variant = stage.get("objectives", [])
+	var objs: Array = objs_v if objs_v is Array else []
+	if objs.is_empty():
+		return EncounterResolutionModes.PURIFY_SHRINE
+
+	var first_obj_v: Variant = objs[0]
+	var first_obj: Dictionary = first_obj_v if first_obj_v is Dictionary else {}
+	match str(first_obj.get("type", "")):
+		ObjectiveModel.TYPE_SHRINE:
+			return EncounterResolutionModes.PURIFY_SHRINE
+		ObjectiveModel.TYPE_COMBAT:
+			return EncounterResolutionModes.COMBAT
+		_:  # "boss" stub + unknowns
+			return EncounterResolutionModes.PURIFY_SHRINE
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -474,8 +521,7 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				"slot":  "cta.continue",
 			},
 			"cta.next_stage": {
-				"type":  "flow.go_state",
-				"to":    FlowStateIds.STAGE_MAP,
+				"type":  "flow.complete_stage",
 				"label": "Next Stage",
 				"slot":  "cta.next_stage",
 			},

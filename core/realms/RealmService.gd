@@ -159,6 +159,62 @@ static func compute_runtime_locks(realm_cfg_list: Array, save_realms: Dictionary
 	return locks
 
 
+# REALM-004: Increment current_stage_index for the active realm.
+#
+# On success:  returns the mutated model dict.
+# On complete: marks realm is_completed=true, status="completed".
+# Guards:      returns {} if no active model; skips if already completed (idempotent).
+# Always:      sets save_request = true on any mutation.
+static func advance_stage(ctx: FlowContext, t: int) -> Dictionary:
+	var model := get_active(ctx)
+	if model.is_empty():
+		ctx.logger.warn(t, "realm.stage.advance.fail", "advance_stage called but no active realm found", {
+			"realm_id": ctx.realm_id,
+		})
+		return {}
+
+	# Idempotency guard — already completed
+	if bool(model.get("is_completed", false)):
+		ctx.logger.warn(t, "realm.stage.advance.skip", "Realm already completed — skipping advance", {
+			"realm_id": ctx.realm_id,
+		})
+		return model
+
+	var current_index := int(model.get("current_stage_index", 0))
+	var stage_count   := int(model.get("stage_count", 1))
+	var new_index     := current_index + 1
+
+	# Write incremented index
+	ctx.save_data["realms"][ctx.realm_id]["current_stage_index"] = new_index
+
+	var stages_remaining := stage_count - new_index
+
+	# Realm complete?
+	if new_index >= stage_count:
+		ctx.save_data["realms"][ctx.realm_id]["is_completed"] = true
+		ctx.save_data["realms"][ctx.realm_id]["status"]       = RealmModel.STATUS_COMPLETED
+		ctx.logger.info(t, "realm.complete", "Realm marked complete", {
+			"realm_id":    ctx.realm_id,
+			"stage_count": stage_count,
+		})
+
+	# Always log the advance
+	ctx.logger.info(t, "realm.stage.advanced", "Stage index advanced", {
+		"realm_id":        ctx.realm_id,
+		"new_index":       new_index,
+		"stages_remaining": stages_remaining,
+	})
+
+	# Trigger save flush
+	ctx.save_request = true
+	if ctx.save_request_reason.is_empty():
+		ctx.save_request_reason = "realm.stage_advance"
+	else:
+		ctx.save_request_reason += "|realm.stage_advance"
+
+	return ctx.save_data["realms"][ctx.realm_id]
+
+
 # Count realms that have ever been started (status != "not_started").
 static func _count_started_realms(save_realms: Dictionary) -> int:
 	var count := 0
