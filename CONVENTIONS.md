@@ -360,10 +360,10 @@ Echo traits (resilience + leadership) use a **separate derived RNG** at path `<s
 - `objective_params: {}` on ObjectiveModel is the extension point for post-MVP stage content (roaming intel map, escort targets, etc.). Not in REQUIRED_FIELDS — always read via `.get("params", {})`.
 - Stage IDs use format `"stage.%d"` (zero-based index), e.g. `"stage.0"`, `"stage.1"`. Set on `flow_ctx.stage_id` by `flow.select_stage` action handler in FlowRuntime.
 - ECONOMY-004: Stage reward is paid once inside `build_final_snapshot()` — no `reward_paid` guard needed since this function is called exactly once per combat end. `RewardCalc` is a pure static helper with zero side effects. Rank uses board totals (`total_enemies`, `total_echoes`) for `max_possible` so rank reflects missed opportunities. Defeat uses `base × defeat_factor` as rank numerator — defeat naturally scores C or lower. All reward config lives in `balance.data.rewards`.
+- REALM-003 delivered as part of REALM-002: deterministic stage generation (`RealmGenerator.generate()`), `stages[]` in `RealmInitSnapshot`, stage UI (RealmInitScreen, StageMapScreen, StageScreen), and `LOG_REALM_CREATED` with full stage list are all complete. REALM-003 Notion card is Done — no additional code needed.
 
 ### Deferred
 - XP / rank progression (fields reserved in schema; no logic yet)
-- Realm stage generator — `RealmModel` + `RealmService` done (REALM-001); stage generation from objective/group pools → **REALM-003**
 - Echo Manage screen (`FlowEchoManageState` = scaffold, no logic)
 - Full art: StageScreen, StageMapScreen (scaffolds built; deferred to UI-006+)
 - HP progress bar in RealmShell EchoBar (text label is current; bar deferred to UX pass)
