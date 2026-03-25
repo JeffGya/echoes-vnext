@@ -704,6 +704,28 @@
 				}
 			}
 		},
+		"rewards": {
+			"_comment": "ECONOMY-004: Stage reward payout config. All values tunable without code changes.",
+			"objective_weights": {
+				"combat": 30,
+				"shrine": 40,
+				"boss":   60
+			},
+			"enemy_defeated_bonus":  5,
+			"echo_survived_bonus":   10,
+			"speed_bonus_pct":       0.15,
+			"speed_bonus_threshold": 5,
+			"redo_penalty_per_run":  0.10,
+			"redo_penalty_floor":    0.50,
+			"defeat_factor":         0.25,
+			"rank_thresholds": {
+				"S": 0.90,
+				"A": 0.75,
+				"B": 0.55,
+				"C": 0.35,
+				"D": 0.15
+			}
+		},
 		"grid": {
 			"_comment": "Combat board dimensions — immutable mid-combat; read by GridService. GRID-001. Default 10x10 for MVP (range 6x6–30x30 depending on tier — tier scaling deferred to future GRID/COMBAT story).",
 			"board_cols": 10.0,

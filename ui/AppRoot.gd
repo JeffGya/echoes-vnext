@@ -272,6 +272,9 @@ func _run_tests(parts: Array) -> void:
 	ArchetypeTests.register(runner)      # 9-archetype personality system
 	SmartnessTierTests.register(runner)  # PROG-010
 	RealmModelTests.register(runner)     # REALM-001
+	ObjectiveModelTests.register(runner) # REALM-002
+	StageModelTests.register(runner)     # REALM-002
+	EconomyRewardTests.register(runner)  # ECONOMY-004
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [

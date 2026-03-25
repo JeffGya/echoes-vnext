@@ -106,11 +106,13 @@ func _make_stage_row(stage: Dictionary) -> HBoxContainer:
 	name_rtl.fit_content = true
 	name_rtl.scroll_active = false
 	name_rtl.bbcode_enabled = true
-	var name_str := str(stage.get("name", "Unknown objective"))
+	var name_str  := str(stage.get("name", "Unknown stage"))
+	var obj_count := int(stage.get("objective_count", 0))
+	var obj_suffix := " (%d obj)" % obj_count if obj_count > 0 else ""
 	if stage.get("status", "") == "completed":
-		name_rtl.text = "[color=#908870][s]%s[/s][/color]" % name_str
+		name_rtl.text = "[color=#908870][s]%s%s[/s][/color]" % [name_str, obj_suffix]
 	else:
-		name_rtl.text = "[color=#f0e8d0]%s[/color]" % name_str
+		name_rtl.text = "[color=#f0e8d0]%s[/color][color=#908870]%s[/color]" % [name_str, obj_suffix]
 	row.add_child(name_rtl)
 
 	# Arrow
@@ -181,32 +183,40 @@ func _build_detail(stage: Dictionary) -> void:
 
 	_right_vbox.add_child(_spacer(8))
 
-	# Sub-objectives (MVP: none known yet)
-	var sub_lbl := Label.new()
-	sub_lbl.text = "• No known sub-objectives"
-	sub_lbl.add_theme_color_override("font_color", COL_TEXT_DIM)
-	_right_vbox.add_child(sub_lbl)
+	# Objectives list
+	var obj_header := Label.new()
+	obj_header.text = "Objectives"
+	obj_header.add_theme_font_size_override("font_size", 14)
+	obj_header.add_theme_color_override("font_color", COL_TEXT)
+	_right_vbox.add_child(obj_header)
+
+	_right_vbox.add_child(_spacer(4))
+
+	var raw_objs: Variant = stage.get("objectives", [])
+	var objectives: Array = raw_objs if raw_objs is Array else []
+	if objectives.is_empty():
+		var no_obj := Label.new()
+		no_obj.text = "  • No objectives loaded"
+		no_obj.add_theme_color_override("font_color", COL_TEXT_DIM)
+		_right_vbox.add_child(no_obj)
+	else:
+		for obj_v in objectives:
+			var obj: Dictionary = obj_v if obj_v is Dictionary else {}
+			var type_label := str(obj.get("obj_type", "")).capitalize()
+			var desc       := str(obj.get("obj_description", ""))
+			var obj_lbl    := Label.new()
+			obj_lbl.text   = "  %d. %s — %s" % [int(obj.get("obj_index", 0)) + 1, type_label, desc]
+			obj_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			obj_lbl.add_theme_color_override("font_color", COL_TEXT_DIM)
+			_right_vbox.add_child(obj_lbl)
 
 	_right_vbox.add_child(_spacer(16))
 
-	# Intel section
+	# Intel section — post-MVP roaming map will fill this
 	var intel_header := Label.new()
 	intel_header.text = "Gathered intel – none"
 	intel_header.add_theme_color_override("font_color", COL_TEXT)
 	_right_vbox.add_child(intel_header)
-
-	_right_vbox.add_child(_spacer(6))
-
-	var intel_questions: Array[String] = [
-		"What is the main objective?",
-		"What are the additional objectives?",
-		"How many enemies?",
-	]
-	for q in intel_questions:
-		var q_lbl := Label.new()
-		q_lbl.text = "  • " + q
-		q_lbl.add_theme_color_override("font_color", COL_TEXT_DIM)
-		_right_vbox.add_child(q_lbl)
 
 # ---------------------------------------------------------------------------
 # Helpers

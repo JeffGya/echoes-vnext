@@ -371,11 +371,84 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# UI-005: pre-compute summary counts so ResolveScreen reads clean fields.
 	var enemies_defeated: int = 0
 	var echoes_survived: int  = 0
+	var total_enemies: int    = 0
+	var total_echoes: int     = 0
 	for a in projected_actors:
-		if str(a.get("faction", "")) == "enemy" and str(a.get("status", "")) == "dead":
-			enemies_defeated += 1
-		if str(a.get("faction", "")) == "echo" and str(a.get("status", "")) != "dead":
-			echoes_survived += 1
+		var faction := str(a.get("faction", ""))
+		var status  := str(a.get("status", ""))
+		if faction == "enemy":
+			total_enemies += 1
+			if status == "dead":
+				enemies_defeated += 1
+		elif faction == "echo":
+			total_echoes += 1
+			if status != "dead":
+				echoes_survived += 1
+
+	# ECONOMY-004: Read reward config from balance.json
+	var reward_cfg: Dictionary = {}
+	if flow_ctx.config_service != null:
+		var balance: Dictionary = flow_ctx.config_service.get_balance()
+		var bal_data_v: Variant = balance.get("data", {})
+		var bal_data: Dictionary = bal_data_v if bal_data_v is Dictionary else {}
+		var rc_v: Variant = bal_data.get("rewards", {})
+		reward_cfg = rc_v if rc_v is Dictionary else {}
+
+	# ECONOMY-004: Resolve stage objectives from realm model
+	var stage_objectives: Array = []
+	var realm_model: Dictionary = RealmService.get_active(flow_ctx)
+	var raw_model_stages: Variant = realm_model.get("stages", [])
+	var model_stages: Array = raw_model_stages if raw_model_stages is Array else []
+	var sid := str(flow_ctx.stage_id)
+	var stage_index := 0
+	if sid.contains("."):
+		var parts := sid.split(".")
+		stage_index = int(parts[parts.size() - 1])
+	for s_v in model_stages:
+		var s: Dictionary = s_v if s_v is Dictionary else {}
+		if int(s.get("index", -1)) == stage_index:
+			var raw_objs: Variant = s.get("objectives", [])
+			stage_objectives = raw_objs if raw_objs is Array else []
+			break
+
+	# ECONOMY-004: Compute and pay reward
+	var run_count := int(realm_model.get("run_count", 0))
+	var victory   := bool(combat_result.get("victory", false))
+	var round_ended := int(combat_result.get("round_ended", 0))
+
+	var reward_data: Dictionary = RewardCalc.compute(
+		victory,
+		stage_objectives,
+		enemies_defeated,
+		total_enemies,
+		echoes_survived,
+		total_echoes,
+		round_ended,
+		run_count,
+		reward_cfg
+	)
+
+	var economy_svc := EconomyService.new(flow_ctx.save_data)
+	var reward_result: Dictionary = economy_svc.reward_stage_complete(
+		victory,
+		int(reward_data.get("base_reward", 0)),
+		int(reward_data.get("enemy_bonus", 0)),
+		enemies_defeated,
+		int(reward_data.get("echo_bonus", 0)),
+		echoes_survived,
+		int(reward_data.get("speed_bonus", 0)),
+		float(reward_data.get("redo_multiplier", 1.0)),
+		str(reward_data.get("rank", "F")),
+		flow_ctx.logger,
+		t
+	)
+
+	# Trigger save — Ase is now in save data and must persist
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason != "":
+		flow_ctx.save_request_reason += "|stage.reward"
+	else:
+		flow_ctx.save_request_reason = "stage.reward"
 
 	return {
 		"type": FlowStateIds.RESOLVE,
@@ -384,11 +457,14 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"encounter_id":     encounter_id,
 			"actors":           projected_actors,
 			"objective_state":  FlowEncounterState._build_objective_state(ectx, combat_state),
-			"victory":          bool(combat_result.get("victory", false)),
+			"victory":          victory,
 			"reason":           str(combat_result.get("reason", "")),
-			"round_ended":      int(combat_result.get("round_ended", 0)),
+			"round_ended":      round_ended,
 			"enemies_defeated": enemies_defeated,
 			"echoes_survived":  echoes_survived,
+			"ase_awarded":      int(reward_result.get("ase_awarded", 0)),
+			"rank":             str(reward_result.get("rank", "F")),
+			"reward_breakdown": reward_result.get("breakdown", []),
 		},
 		"actions": {
 			"cta.continue": {

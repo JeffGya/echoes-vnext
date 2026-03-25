@@ -73,12 +73,14 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("realm/runtime_lock_completed",  Callable(RealmModelTests, "_t_runtime_lock_completed_open"))
 
 
-# ─── Test 1 — All 11 required fields present ────────────────────────────────
+# ─── Test 1 — All 12 required fields present (includes "stages" from REALM-002) ──
 static func _t_model_fields_present() -> Dictionary:
 	var model := RealmModel.make("realm.01", "Vale of Dust", "courage", "desc", 999, 3, 0, 0)
 	for key in RealmModel.REQUIRED_FIELDS:
 		if not model.has(key):
 			return { "ok": false, "error": "RealmModel.make() missing required field: %s" % key }
+	if not model.get("stages") is Array:
+		return { "ok": false, "error": "'stages' should be an Array (even if empty)" }
 	return { "ok": true }
 
 
@@ -111,6 +113,16 @@ static func _t_service_first_create() -> Dictionary:
 	var stage_count: int = int(model.get("stage_count", 0))
 	if stage_count < 3 or stage_count > 4:
 		return { "ok": false, "error": "stage_count out of range [3,4]: got %d" % stage_count }
+
+	# REALM-002: stages[] must be populated by RealmGenerator
+	var stages_v: Variant = model.get("stages", null)
+	if not stages_v is Array:
+		return { "ok": false, "error": "'stages' should be an Array after first create" }
+	var stages: Array = stages_v
+	if stages.is_empty():
+		return { "ok": false, "error": "'stages' should be non-empty after first create" }
+	if stages.size() != stage_count:
+		return { "ok": false, "error": "stages.size()=%d does not match stage_count=%d" % [stages.size(), stage_count] }
 
 	if not ctx.save_request:
 		return { "ok": false, "error": "save_request should be true after first create" }

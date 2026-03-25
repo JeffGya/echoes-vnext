@@ -16,7 +16,9 @@
         "unlock_requires": null,
         "seed_namespace": "campaign.realm.01",
         "stage_count_min": 3,
-        "stage_count_max": 4
+        "stage_count_max": 4,
+        "obj_count_min": 1,
+        "obj_count_max": 2
       },
 
       "realm.02": {
@@ -28,7 +30,9 @@
         "unlock_requires": null,
         "seed_namespace": "campaign.realm.02",
         "stage_count_min": 5,
-        "stage_count_max": 7
+        "stage_count_max": 7,
+        "obj_count_min": 2,
+        "obj_count_max": 3
       }
 
     }

@@ -10,13 +10,14 @@ extends Control
 
 signal action_requested(action: Dictionary)
 
-@onready var name_label:        Label  = %RealmName
-@onready var virtue_label:      Label  = %Virtue
-@onready var description_label: Label  = %Description
-@onready var stage_count_label: Label  = %StageCount
-@onready var seed_label:        Label  = %Seed
-@onready var begin_btn:         Button = %Begin
-@onready var back_btn:          Button = %Back
+@onready var name_label:        Label       = %RealmName
+@onready var virtue_label:      Label       = %Virtue
+@onready var description_label: Label       = %Description
+@onready var stage_count_label: Label       = %StageCount
+@onready var stage_list:        VBoxContainer = %StageList
+@onready var seed_label:        Label       = %Seed
+@onready var begin_btn:         Button      = %Begin
+@onready var back_btn:          Button      = %Back
 
 var _action_begin: Dictionary = {}
 var _action_back:  Dictionary = {}
@@ -34,6 +35,25 @@ func set_snapshot(snap: Dictionary) -> void:
 	description_label.text = str(data.get("description", ""))
 	stage_count_label.text = "Stages: %d" % int(data.get("stage_count", 0))
 	seed_label.text        = "Seed: %d" % int(data.get("seed", 0))
+
+	# Rebuild stage list
+	for child in stage_list.get_children():
+		child.queue_free()
+	var stages_v: Variant = data.get("stages", [])
+	var stages: Array = stages_v if stages_v is Array else []
+	for s in stages:
+		var lbl := Label.new()
+		var type_label := str(s.get("stage_type", "")).capitalize()
+		var obj_count  := int(s.get("objective_count", 0))
+		var desc       := str(s.get("stage_description", ""))
+		lbl.text = "Stage %d — %s (%d obj): %s" % [
+			int(s.get("stage_index", 0)) + 1,
+			type_label,
+			obj_count,
+			desc,
+		]
+		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		stage_list.add_child(lbl)
 
 	var begin_v: Variant = actions.get("cta.begin", {})
 	_action_begin = begin_v if begin_v is Dictionary else {}

@@ -21,6 +21,7 @@ var _cached_back_action:  Dictionary = {}
 @onready var _info_panel:       PanelContainer = %InfoPanel
 @onready var _title_label:      Label          = %StageTitleLabel
 @onready var _objective_label:  Label          = %ObjectiveLabel
+@onready var _objectives_list:  VBoxContainer  = %ObjectivesList
 @onready var _encounter_button: Button         = %EncounterButton
 @onready var _back_button:      Button         = %BackButton
 
@@ -59,12 +60,30 @@ func set_snapshot(snap: Dictionary) -> void:
 func _clear() -> void:
 	_title_label.text     = ""
 	_objective_label.text = ""
+	for child in _objectives_list.get_children():
+		child.queue_free()
 	_cached_start_action  = {}
 	_cached_back_action   = {}
 
 func _render(data: Dictionary, actions: Dictionary) -> void:
 	_title_label.text     = str(data.get("stage_name", "Stage"))
-	_objective_label.text = "Objective: " + _format_objective(str(data.get("objective_type", "")))
+
+	var raw_objs: Variant  = data.get("objectives", [])
+	var objectives: Array  = raw_objs if raw_objs is Array else []
+
+	if not objectives.is_empty():
+		_objective_label.text = "%d objective%s" % [objectives.size(), "s" if objectives.size() > 1 else ""]
+		for obj_v in objectives:
+			var obj: Dictionary = obj_v if obj_v is Dictionary else {}
+			var type_label := str(obj.get("obj_type", "")).capitalize()
+			var desc       := str(obj.get("obj_description", ""))
+			var lbl        := Label.new()
+			lbl.text       = "  %d. %s — %s" % [int(obj.get("obj_index", 0)) + 1, type_label, desc]
+			lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			lbl.add_theme_color_override("font_color", COL_TEXT_DIM)
+			_objectives_list.add_child(lbl)
+	else:
+		_objective_label.text = "Objective: " + _format_objective(str(data.get("objective_type", "")))
 
 	# nav.back
 	var back_v: Variant = actions.get("nav.back", {})

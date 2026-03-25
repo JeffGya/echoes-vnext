@@ -44,6 +44,43 @@ horizontal_alignment = 1
 [node name="HSeparator" type="HSeparator" parent="CenterContainer/ResultCard/CardContent"]
 layout_mode = 2
 
+[node name="RankRow" type="HBoxContainer" parent="CenterContainer/ResultCard/CardContent"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 12
+
+[node name="RankKey" type="Label" parent="CenterContainer/ResultCard/CardContent/RankRow"]
+layout_mode = 2
+text = "Rank"
+theme_override_font_sizes/font_size = 16
+
+[node name="RankBadge" type="Label" parent="CenterContainer/ResultCard/CardContent/RankRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "—"
+theme_override_font_sizes/font_size = 22
+
+[node name="AseRow" type="HBoxContainer" parent="CenterContainer/ResultCard/CardContent"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 12
+
+[node name="AseKey" type="Label" parent="CenterContainer/ResultCard/CardContent/AseRow"]
+layout_mode = 2
+text = "Ase earned"
+theme_override_font_sizes/font_size = 16
+
+[node name="AseValue" type="Label" parent="CenterContainer/ResultCard/CardContent/AseRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+theme_override_font_sizes/font_size = 16
+
+[node name="BreakdownSection" type="VBoxContainer" parent="CenterContainer/ResultCard/CardContent"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
 [node name="StatGrid" type="GridContainer" parent="CenterContainer/ResultCard/CardContent"]
 layout_mode = 2
 columns = 2

@@ -91,6 +91,67 @@ func spend_ase(amount: int, reason: String, logger: StructuredLogger, t: int) ->
 	})
 	return true
 
+# ---- Stage Reward API ----
+
+## ECONOMY-004: Compute and pay out stage reward after encounter end.
+## Builds a breakdown Array of {label: String, delta: int} — absolute Ase only, no percentages.
+## enemies_defeated / echoes_survived: raw counts for descriptive labels.
+## Returns reward_result dict with ase_awarded, rank, victory, breakdown.
+func reward_stage_complete(
+	victory: bool,
+	base_reward: int,
+	enemy_bonus: int,
+	enemies_defeated: int,
+	echo_bonus: int,
+	echoes_survived: int,
+	speed_bonus: int,
+	redo_multiplier: float,
+	rank: String,
+	logger: StructuredLogger,
+	t: int
+) -> Dictionary:
+	var total: int
+	var breakdown: Array  # Array of {label: String, delta: int}
+
+	if victory:
+		var pre_redo := base_reward + enemy_bonus + echo_bonus + speed_bonus
+		total = roundi(float(pre_redo) * redo_multiplier)
+		var redo_penalty := total - pre_redo  # negative or 0
+
+		breakdown = []
+		breakdown.append({ "label": "Base objectives", "delta": base_reward })
+		if enemy_bonus > 0:
+			var e_label := "%d %s defeated" % [enemies_defeated, "enemy" if enemies_defeated == 1 else "enemies"]
+			breakdown.append({ "label": e_label, "delta": enemy_bonus })
+		if echo_bonus > 0:
+			var ec_label := "%d %s survived" % [echoes_survived, "echo" if echoes_survived == 1 else "echoes"]
+			breakdown.append({ "label": ec_label, "delta": echo_bonus })
+		if speed_bonus > 0:
+			breakdown.append({ "label": "Speed bonus", "delta": speed_bonus })
+		if redo_penalty < 0:
+			breakdown.append({ "label": "Redo penalty", "delta": redo_penalty })
+	else:
+		total = roundi(float(base_reward) * 0.25 * redo_multiplier)
+		var base_consolation := roundi(float(base_reward) * 0.25)
+		var defeat_penalty   := base_consolation - base_reward  # negative
+		var redo_penalty     := total - base_consolation        # negative or 0
+
+		breakdown = []
+		breakdown.append({ "label": "Base objectives", "delta": base_reward })
+		breakdown.append({ "label": "Defeat penalty", "delta": defeat_penalty })
+		if redo_penalty < 0:
+			breakdown.append({ "label": "Redo penalty", "delta": redo_penalty })
+
+	if total > 0:
+		add_ase(total, "stage_reward", logger, t)
+
+	return {
+		"ase_awarded": total,
+		"rank":        rank,
+		"victory":     victory,
+		"breakdown":   breakdown,
+	}
+
 # ---- Mutation API (Ekwan) ----
 func add_ekwan(amount: int, reason: String, logger: StructuredLogger, t: int) -> void:
 	if amount <= 0:

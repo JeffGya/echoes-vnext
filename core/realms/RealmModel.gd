@@ -8,7 +8,8 @@ extends RefCounted
 
 const REQUIRED_FIELDS: Array = [
 	"id", "name", "virtue", "description", "seed", "stage_count",
-	"current_stage_index", "is_completed", "status", "run_index", "run_count"
+	"current_stage_index", "is_completed", "status", "run_index", "run_count",
+	"stages"
 ]
 
 # Status constants
@@ -42,6 +43,7 @@ static func make(
 		"status":               STATUS_ACTIVE,
 		"run_index":            run_index,
 		"run_count":            run_count,
+		"stages":               [],  # Populated by RealmService via RealmGenerator after make()
 	}
 
 

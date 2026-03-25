@@ -44,8 +44,10 @@ static func get_or_create(realm_id: String, ctx: FlowContext, t: int) -> Diction
 	var cfg: Dictionary = cfg_v if cfg_v is Dictionary else {}
 
 	var seed_namespace := str(cfg.get("seed_namespace", "campaign.realm." + realm_id))
-	var stage_min := int(cfg.get("stage_count_min", 3))
-	var stage_max := int(cfg.get("stage_count_max", 5))
+	var stage_min   := int(cfg.get("stage_count_min", 3))
+	var stage_max   := int(cfg.get("stage_count_max", 5))
+	var obj_min     := int(cfg.get("obj_count_min", 1))
+	var obj_max     := int(cfg.get("obj_count_max", 2))
 
 	# Determine run_count (0 for new, old+1 for re-run)
 	var run_count := 0
@@ -77,10 +79,14 @@ static func get_or_create(realm_id: String, ctx: FlowContext, t: int) -> Diction
 		run_count
 	)
 
+	# Generate deterministic stages and wire them into the model
+	var stages := RealmGenerator.generate(realm_seed, stage_count, obj_min, obj_max)
+	model["stages"] = stages
+
 	# Store in save_data
 	ctx.save_data["realms"][realm_id] = model
 
-	# Log creation
+	# Log creation — includes full stage_types + stage_seeds for run reconstruction
 	ctx.logger.info(t, "realm.created", "Realm model created", {
 		"realm_id":    realm_id,
 		"virtue":      model["virtue"],
@@ -88,6 +94,8 @@ static func get_or_create(realm_id: String, ctx: FlowContext, t: int) -> Diction
 		"stage_count": stage_count,
 		"run_index":   run_index,
 		"run_count":   run_count,
+		"stage_types": stages.map(func(s: Dictionary) -> String: return str(s.get("type", ""))),
+		"stage_seeds": stages.map(func(s: Dictionary) -> int:    return int(s.get("seed", 0))),
 	})
 
 	# Trigger save flush
