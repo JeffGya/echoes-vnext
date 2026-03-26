@@ -93,9 +93,10 @@ func spend_ase(amount: int, reason: String, logger: StructuredLogger, t: int) ->
 
 # ---- Stage Reward API ----
 
-## ECONOMY-004: Compute and pay out stage reward after encounter end.
+## ECONOMY-004 + REALM-005: Compute and pay out stage reward after encounter end.
 ## Builds a breakdown Array of {label: String, delta: int} — absolute Ase only, no percentages.
 ## enemies_defeated / echoes_survived: raw counts for descriptive labels.
+## virtue_bonus: flat Ase bonus from realm virtue + stage index (REALM-005). Added on victory only.
 ## Returns reward_result dict with ase_awarded, rank, victory, breakdown.
 func reward_stage_complete(
 	victory: bool,
@@ -107,6 +108,7 @@ func reward_stage_complete(
 	speed_bonus: int,
 	redo_multiplier: float,
 	rank: String,
+	virtue_bonus: int,
 	logger: StructuredLogger,
 	t: int
 ) -> Dictionary:
@@ -115,8 +117,8 @@ func reward_stage_complete(
 
 	if victory:
 		var pre_redo := base_reward + enemy_bonus + echo_bonus + speed_bonus
-		total = roundi(float(pre_redo) * redo_multiplier)
-		var redo_penalty := total - pre_redo  # negative or 0
+		total = roundi(float(pre_redo) * redo_multiplier) + virtue_bonus
+		var redo_penalty := roundi(float(pre_redo) * redo_multiplier) - pre_redo  # negative or 0
 
 		breakdown = []
 		breakdown.append({ "label": "Base objectives", "delta": base_reward })
@@ -130,6 +132,8 @@ func reward_stage_complete(
 			breakdown.append({ "label": "Speed bonus", "delta": speed_bonus })
 		if redo_penalty < 0:
 			breakdown.append({ "label": "Redo penalty", "delta": redo_penalty })
+		if virtue_bonus > 0:
+			breakdown.append({ "label": "Realm virtue", "delta": virtue_bonus })
 	else:
 		total = roundi(float(base_reward) * 0.25 * redo_multiplier)
 		var base_consolation := roundi(float(base_reward) * 0.25)

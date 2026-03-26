@@ -458,6 +458,19 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			stage_objectives = raw_objs if raw_objs is Array else []
 			break
 
+	# REALM-005: Compute virtue-based stage bonus
+	var realm_virtue  := str(realm_model.get("virtue", ""))
+	var run_index     := int(realm_model.get("run_index", 0))
+	var stage_reward_data: Dictionary = RealmService.calculate_stage_reward(
+		stage_index, realm_virtue, run_index, reward_cfg
+	)
+	var virtue_bonus   := int(stage_reward_data.get("virtue_bonus", 0))
+	var formula_inputs: Dictionary = stage_reward_data.get("formula_inputs", {})
+
+	# LOG_ECONOMY_REWARD: confirms formula_inputs (REALM-005 DoD point 4)
+	if flow_ctx.logger != null:
+		flow_ctx.logger.info(t, "economy.stage.reward", "Stage reward formula", formula_inputs)
+
 	# ECONOMY-004: Compute and pay reward
 	var run_count := int(realm_model.get("run_count", 0))
 	var victory   := bool(combat_result.get("victory", false))
@@ -486,6 +499,7 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		int(reward_data.get("speed_bonus", 0)),
 		float(reward_data.get("redo_multiplier", 1.0)),
 		str(reward_data.get("rank", "F")),
+		virtue_bonus,
 		flow_ctx.logger,
 		t
 	)
@@ -512,6 +526,8 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"ase_awarded":      int(reward_result.get("ase_awarded", 0)),
 			"rank":             str(reward_result.get("rank", "F")),
 			"reward_breakdown": reward_result.get("breakdown", []),
+			"formula_inputs":   formula_inputs,
+			"relics":           [],
 		},
 		"actions": {
 			"cta.continue": {

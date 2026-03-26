@@ -215,6 +215,43 @@ static func advance_stage(ctx: FlowContext, t: int) -> Dictionary:
 	return ctx.save_data["realms"][ctx.realm_id]
 
 
+## REALM-005: Pure static helper — computes virtue-based stage bonus from realm identity.
+## No side effects. Same inputs → identical output every time (deterministic).
+##
+## stage_index:  zero-based index of the current stage (0 = first stage)
+## realm_virtue: virtue string from realm config (e.g. "courage", "wisdom")
+## run_index:    how many realms the player has ever started before this one (0 = first realm)
+## reward_cfg:   balance.data.rewards dict
+static func calculate_stage_reward(
+	stage_index: int,
+	realm_virtue: String,
+	run_index: int,
+	reward_cfg: Dictionary
+) -> Dictionary:
+	var vb_v: Variant = reward_cfg.get("virtue_bonuses", {})
+	var virtue_bonuses: Dictionary = vb_v if vb_v is Dictionary else {}
+	var per_index := int(reward_cfg.get("stage_index_bonus_per", 0))
+
+	var order_base := float(reward_cfg.get("realm_order_multiplier_base", 1.0))
+	var order_step := float(reward_cfg.get("realm_order_multiplier_step", 0.5))
+	var order_mul  := order_base + float(run_index) * order_step
+
+	var virtue_base  := int(virtue_bonuses.get(realm_virtue, 0))
+	var stage_bonus  := stage_index * per_index
+	var virtue_bonus := roundi(float(virtue_base + stage_bonus) * order_mul)
+
+	return {
+		"virtue_bonus": virtue_bonus,
+		"formula_inputs": {
+			"stage_index":      stage_index,
+			"realm_virtue":     realm_virtue,
+			"run_index":        run_index,
+			"order_multiplier": order_mul,
+			"virtue_bonus":     virtue_bonus
+		}
+	}
+
+
 # Count realms that have ever been started (status != "not_started").
 static func _count_started_realms(save_realms: Dictionary) -> int:
 	var count := 0

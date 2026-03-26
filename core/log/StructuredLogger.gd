@@ -45,6 +45,9 @@ func info(t: int, type: String, msg: String, data: Dictionary = {}) -> void:
 func debug(t: int, type: String, msg: String, data: Dictionary = {}) -> void:
 	log_event(t, LEVEL_DEBUG, type, msg, data)
 
+func warn(t: int, type: String, msg: String, data: Dictionary = {}) -> void:
+	log_event(t, LEVEL_INFO, type, msg, data)
+
 func get_logs() -> Array[Dictionary]:
 	# Return a shallow copy so callers don't accidentally mutate our internal array.
 	# Note: individual dictionaries are stored as deep-copied payloads already.

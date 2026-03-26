@@ -33,10 +33,10 @@
 				"hp_courage_mul": 0.25,
 				"hp_faith_mul": 0.15,
 				"hp_min": 15.0,
-				"atk_base": 2.0,
+				"atk_base": 3.0,
 				"atk_courage_mul": 0.2,
 				"atk_faith_mul": 0.12,
-				"def_base": 2.0,
+				"def_base": 2.5,
 				"def_wisdom_mul": 0.08,
 				"def_faith_mul": 0.04,
 				"agi_base": 2.0,
@@ -724,7 +724,16 @@
 				"B": 0.55,
 				"C": 0.35,
 				"D": 0.15
-			}
+			},
+			"_comment_realm005": "REALM-005: Virtue-based stage bonus. Formula: roundi((virtue_bonuses[virtue] + stage_index * stage_index_bonus_per) * (base + run_index * step)). Victory-only.",
+			"virtue_bonuses": {
+				"courage": 10,
+				"wisdom":  15,
+				"faith":   20
+			},
+			"stage_index_bonus_per":       5,
+			"realm_order_multiplier_base": 1.0,
+			"realm_order_multiplier_step": 0.5
 		},
 		"grid": {
 			"_comment": "Combat board dimensions — immutable mid-combat; read by GridService. GRID-001. Default 10x10 for MVP (range 6x6–30x30 depending on tier — tier scaling deferred to future GRID/COMBAT story).",
