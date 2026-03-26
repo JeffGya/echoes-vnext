@@ -1,4 +1,5 @@
 # Godot 4.x
+.godot/
 .import/
 .export/
 .export_presets.cfg
