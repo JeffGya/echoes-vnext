@@ -34,11 +34,11 @@ var _floor_bounds_sv := Rect2(Vector2.ZERO, Vector2.ZERO) # floor bounds in Spat
  
 # PackedScenes will be preloaded later
 var _scene_by_flow_type: Dictionary = {}
-var _sanctum_scene := preload("res://ui/screens/SanctumScreen.tscn")
-var _summon_scene := preload("res://ui/screens/SummonScreen.tscn")
-var _party_scene := preload("res://ui/screens/PartyManageScreen.tscn")
-#var _echo_scene := preload("res://ui/screens/EchoManageScreen.tscn")
-var _realm_scene := preload("res://ui/screens/RealmSelectScreen.tscn")
+var _sanctum_scene := preload("res://ui/screens/sanctum/SanctumScreen.tscn")
+var _summon_scene := preload("res://ui/screens/sanctum/SummonScreen.tscn")
+var _party_scene := preload("res://ui/screens/sanctum/PartyManageScreen.tscn")
+#var _echo_scene := preload("res://ui/screens/sanctum/EchoManageScreen.tscn")
+var _realm_scene := preload("res://ui/screens/realm/RealmSelectScreen.tscn")
 
 func _ready() -> void:
 	_scene_by_flow_type = {
@@ -193,6 +193,9 @@ func _rebuild_nav_bar() -> void:
 		var b := Button.new()
 		b.text = str(action.get("label", "Action"))
 		b.disabled = bool(action.get("disabled", false))
+		b.custom_minimum_size = Vector2(80, 48)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.theme_type_variation = "ButtonSecondary"
 		b.pressed.connect(_on_overlay_action_requested.bind(action))
 		_nav_buttons.add_child(b)
 

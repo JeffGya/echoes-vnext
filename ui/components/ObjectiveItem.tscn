@@ -1,0 +1,20 @@
+[gd_scene format=3 uid="uid://objective_item"]
+
+[ext_resource type="Script" path="res://ui/components/ObjectiveItem.gd" id="1_objitem"]
+
+[node name="ObjectiveItem" type="HBoxContainer"]
+theme_override_constants/separation = 6
+script = ExtResource("1_objitem")
+
+[node name="IndexLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(24, 0)
+text = "1."
+
+[node name="DescLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Objective description"
+autowrap_mode = 3

@@ -39,6 +39,7 @@ var save_request_reason: String = ""
 var config_service = null # ConfigService
 var campaign_seed = null # CampaignSeed
 var logger = null # StructuredLogger — injected by FlowRuntime; GRID-002 allows flow states to log
+var flow_machine = null # FlowStateMachine — injected by FlowStateMachine.start(); allows states to trigger deferred transitions
 
 # Debug / diagnostics
 var last_error: String = ""

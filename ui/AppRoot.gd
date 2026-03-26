@@ -670,7 +670,6 @@ const SANCTUM_FAMILY: Array = [
 	"flow.realm_select",   # REALM-001
 ]
 const VENTURE_FAMILY: Array = [
-	"flow.realm_init",     # REALM-001: realm overview card
 	"flow.stage_map",
 	"flow.stage",
 	"flow.encounter",

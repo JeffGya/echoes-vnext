@@ -33,6 +33,7 @@ func enter(ctx: RefCounted, t:int) -> void:
 			"to": FlowStateIds.ECHO_MANAGE,
 			"label": "Manage Echoes",
 			"slot": "nav.echo_manage",
+			"disabled": true,
 		},
 		"nav.realm_select": {
 			"type": "flow.go_state",

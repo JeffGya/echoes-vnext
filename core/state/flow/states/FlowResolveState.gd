@@ -7,28 +7,31 @@ func _init(id: String = FlowStateIds.RESOLVE) -> void:
 func enter(ctx: RefCounted, t: int) -> void:
 	var flow_ctx := ctx as FlowContext
 
-	# MVP scaffold: resolve will later display real run results (deaths/rewards/stats).
-	# For now, keep it deterministic and simple.
-	var result: Dictionary = {}
-	# If you later add flow_ctx.last_run_result, read it here.
+	# Fix BUG-001: build_final_snapshot() already writes a proper "flow.resolve" snapshot
+	# into flow_ctx.last_snapshot before the FSM transitions here. Guard-and-pass-through:
+	# if it's already the right type, keep it — do not overwrite with the scaffold.
+	if not flow_ctx.last_snapshot.is_empty() \
+			and str(flow_ctx.last_snapshot.get("type", "")) == FlowStateIds.RESOLVE:
+		return
 
+	# Fallback scaffold — only reached if the encounter path skipped build_final_snapshot().
+	# Uses slot-keyed Dictionary actions (not legacy Array). No cta.next_stage — player must replay.
 	flow_ctx.last_snapshot = {
 		"type": FlowStateIds.RESOLVE,
 		"data": {
-			"title": "Resolve",
-			"result": result,
-			"note": "MVP scaffold: stage/encounter results not implemented yet."
+			"title":   "Resolve",
+			"victory": false,
+			"note":    "Result unavailable.",
 		},
-		"actions": [
-			{
-				"type": "flow.go_state",
-				"to": FlowStateIds.SANCTUM,
-				"label": "Return to Sanctum"
-			}
-		],
-		"meta": {
-			"t": t
-		}
+		"actions": {
+			"cta.continue": {
+				"type":  "flow.go_state",
+				"to":    FlowStateIds.SANCTUM,
+				"label": "Return to Sanctum",
+				"slot":  "cta.continue",
+			},
+		},
+		"meta": { "t": t },
 	}
 
 func exit(ctx: RefCounted, t: int) -> void:

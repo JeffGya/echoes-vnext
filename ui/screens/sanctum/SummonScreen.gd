@@ -1,4 +1,4 @@
-# res://ui/screens/SummonScreen.gd
+# res://ui/screens/sanctum/SummonScreen.gd
 extends Control
 class_name SummonScreen
 

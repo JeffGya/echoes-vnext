@@ -1,0 +1,19 @@
+[gd_scene format=3 uid="uid://reward_entry_item"]
+
+[ext_resource type="Script" path="res://ui/components/RewardEntryItem.gd" id="1_rewardentry"]
+
+[node name="RewardEntryItem" type="HBoxContainer"]
+theme_override_constants/separation = 8
+script = ExtResource("1_rewardentry")
+
+[node name="EntryLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Reward entry"
+
+[node name="DeltaLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+text = "+0 Ase"
+horizontal_alignment = 2

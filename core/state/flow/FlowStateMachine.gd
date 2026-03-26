@@ -25,6 +25,7 @@ func register_default_states() -> void:
 	
 # Deterministic entry point for Flow.
 func start(ctx: FlowContext, logger: StructuredLogger, t: int) -> void:
+	ctx.flow_machine = self
 	set_initial(FlowStateIds.SPLASH, ctx, logger, t)
 	_rebuild_snapshot(ctx, logger, t)
 

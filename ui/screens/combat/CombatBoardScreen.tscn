@@ -1,9 +1,9 @@
 [gd_scene format=3 uid="uid://b3k2n8qvx4r1m"]
 
-[ext_resource type="Script" uid="uid://dtgdie4phqgyg" path="res://ui/screens/CombatBoardScreen.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://dtgdie4phqgyg" path="res://ui/screens/combat/CombatBoardScreen.gd" id="1_script"]
 [ext_resource type="Texture2D" uid="uid://bitpbc4p75ue7" path="res://assets/sanctum/tiles/floor/sanctum_tile_floor_clay_base_128x96.png" id="2_tile"]
-[ext_resource type="Script" uid="uid://4pvmnr0qinn4" path="res://ui/screens/CombatTokenLayer.gd" id="3_token_layer"]
-[ext_resource type="Script" uid="uid://dl4ku77tgom45" path="res://ui/screens/CombatDistanceLayer.gd" id="4_distance_layer"]
+[ext_resource type="Script" uid="uid://4pvmnr0qinn4" path="res://ui/screens/combat/CombatTokenLayer.gd" id="3_token_layer"]
+[ext_resource type="Script" uid="uid://dl4ku77tgom45" path="res://ui/screens/combat/CombatDistanceLayer.gd" id="4_distance_layer"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_board"]
 texture = ExtResource("2_tile")
@@ -65,10 +65,16 @@ script = ExtResource("3_token_layer")
 script = ExtResource("4_distance_layer")
 
 [node name="BackButton" type="Button" parent="." unique_id=125887286]
+unique_name_in_owner = true
 layout_mode = 1
-offset_right = 66.0
-offset_bottom = 31.0
-text = "← Back"
+anchors_preset = 0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 96.0
+offset_bottom = 64.0
+custom_minimum_size = Vector2(80, 48)
+theme_type_variation = "ButtonGhost"
+text = "←"
 
 [node name="RoundLabel" type="Label" parent="." unique_id=100000004]
 layout_mode = 1

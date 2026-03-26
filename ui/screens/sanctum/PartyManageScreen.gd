@@ -1,4 +1,4 @@
-# res://ui/screens/PartyManageScreen.gd
+# res://ui/screens/sanctum/PartyManageScreen.gd
 extends Control
 
 signal action_requested(action: Dictionary)

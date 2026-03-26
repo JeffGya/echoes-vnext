@@ -238,7 +238,7 @@ Full field shapes live in each FlowState file (`core/state/flow/states/`).
 | CombatBoardScreen | `flow.encounter` | actors (projected), round, round_phase, initiative_order, objective_state, retreat fields (pre_combat only) | nav.back, cta.retreat (when eligible) |
 | ResolveScreen | `flow.resolve` | victory, reason, round_ended, actors (projected), objective_state, enemies_defeated, echoes_survived, ase_awarded, rank (S/A/B/C/D/F), reward_breakdown (Array of {label, delta}) | cta.continue → flow.sanctum, cta.next_stage → flow.complete_stage |
 | RealmSelectScreen | `flow.realm_select` | title, current_realm_id, realms[] (id/name/virtue/description/stage_count_min/max/status/locked) | nav.back |
-| RealmInitScreen | `flow.realm_init` | realm_id, name, virtue, description, stage_count, seed, stages[] (stage_index, stage_type, stage_seed, stage_description, objective_count, objectives[{obj_index, obj_type, obj_description}]) | cta.begin, nav.back |
+| ~~RealmInitScreen~~ | `flow.realm_init` | **Removed (UI-003)** — FlowRealmInitState now auto-advances to `flow.stage_map` on enter(); no screen rendered. | — |
 | StageMapScreen | `flow.stage_map` | realm_id, realm_name, current_stage_id, stages_completed_count, stages[] (id, name, status, stage_type, stage_description, objective_count, objectives[{obj_index, obj_type, obj_description}]), party_preview | cta.enter_stage, nav.back |
 | StageScreen | `flow.stage` | stage_id, stage_name, stage_type, stage_description, objective_count, objectives[] ({obj_index, obj_type, obj_description}), realm_id, party_preview | cta.start, nav.back |
 

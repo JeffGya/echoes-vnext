@@ -170,20 +170,15 @@ static func _resolve_mode_from_stage(flow_ctx: FlowContext) -> String:
 	if stage.is_empty():
 		return EncounterResolutionModes.PURIFY_SHRINE
 
-	var objs_v: Variant = stage.get("objectives", [])
-	var objs: Array = objs_v if objs_v is Array else []
-	if objs.is_empty():
-		return EncounterResolutionModes.PURIFY_SHRINE
-
-	var first_obj_v: Variant = objs[0]
-	var first_obj: Dictionary = first_obj_v if first_obj_v is Dictionary else {}
-	match str(first_obj.get("type", "")):
-		ObjectiveModel.TYPE_SHRINE:
+	# Fix BUG-002: use stage.type (set by RealmGenerator from any shrine objective)
+	# not objectives[0].type (which only checks the first objective and misses mixed stages).
+	match str(stage.get("type", "")):
+		StageModel.TYPE_PURIFICATION:
 			return EncounterResolutionModes.PURIFY_SHRINE
-		ObjectiveModel.TYPE_COMBAT:
+		StageModel.TYPE_COMBAT:
 			return EncounterResolutionModes.COMBAT
-		_:  # "boss" stub + unknowns
-			return EncounterResolutionModes.PURIFY_SHRINE
+		_:
+			return EncounterResolutionModes.COMBAT
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -529,18 +524,25 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"formula_inputs":   formula_inputs,
 			"relics":           [],
 		},
-		"actions": {
-			"cta.continue": {
-				"type":  "flow.go_state",
-				"to":    FlowStateIds.SANCTUM,
-				"label": "To Sanctum",
-				"slot":  "cta.continue",
-			},
-			"cta.next_stage": {
-				"type":  "flow.complete_stage",
-				"label": "Next Stage",
-				"slot":  "cta.next_stage",
-			},
-		},
+		"actions": _build_resolve_actions(victory),
 		"meta": { "t": t },
 	}
+
+
+# Fix BUG-004: cta.next_stage only offered on victory — defeat should not advance the stage.
+static func _build_resolve_actions(victory: bool) -> Dictionary:
+	var actions: Dictionary = {
+		"cta.continue": {
+			"type":  "flow.go_state",
+			"to":    FlowStateIds.SANCTUM,
+			"label": "To Sanctum",
+			"slot":  "cta.continue",
+		},
+	}
+	if victory:
+		actions["cta.next_stage"] = {
+			"type":  "flow.complete_stage",
+			"label": "Next Stage",
+			"slot":  "cta.next_stage",
+		}
+	return actions

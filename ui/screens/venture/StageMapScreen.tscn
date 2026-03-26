@@ -1,6 +1,7 @@
-[gd_scene format=3 uid="uid://baxjg2vqatdie"]
+[gd_scene load_steps=3 format=3 uid="uid://baxjg2vqatdie"]
 
-[ext_resource type="Script" path="res://ui/screens/StageMapScreen.gd" id="1_stagemap"]
+[ext_resource type="Script" path="res://ui/screens/venture/StageMapScreen.gd" id="1_stagemap"]
+[ext_resource type="PackedScene" path="res://ui/components/StageRowItem.tscn" id="2_stagerow"]
 
 [node name="StageMapScreen" type="Control"]
 layout_mode = 3
@@ -16,6 +17,7 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_top = 64.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 0
@@ -41,7 +43,7 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 13
+theme_override_font_sizes/font_size = 14
 
 [node name="ContentRow" type="HBoxContainer" parent="MainVBox"]
 layout_mode = 2
@@ -60,16 +62,24 @@ theme_override_constants/separation = 4
 [node name="LeftPanelTitle" type="Label" parent="MainVBox/ContentRow/LeftPanel/LeftVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 13
+theme_override_font_sizes/font_size = 14
 
 [node name="Divider" type="HSeparator" parent="MainVBox/ContentRow/LeftPanel/LeftVBox"]
 layout_mode = 2
 
-[node name="StageList" type="VBoxContainer" parent="MainVBox/ContentRow/LeftPanel/LeftVBox"]
-unique_name_in_owner = true
+[node name="StageScroll" type="ScrollContainer" parent="MainVBox/ContentRow/LeftPanel/LeftVBox"]
 layout_mode = 2
 size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="StageList" type="VBoxContainer" parent="MainVBox/ContentRow/LeftPanel/LeftVBox/StageScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_constants/separation = 4
+
+[node name="StageRowPlaceholder" parent="MainVBox/ContentRow/LeftPanel/LeftVBox/StageScroll/StageList" instance=ExtResource("2_stagerow")]
+layout_mode = 2
 
 [node name="RightPanel" type="PanelContainer" parent="MainVBox/ContentRow"]
 unique_name_in_owner = true
@@ -83,21 +93,26 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 6
 
+[node name="BackButton" type="Button" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 96.0
+offset_bottom = 64.0
+custom_minimum_size = Vector2(80, 48)
+theme_type_variation = "ButtonGhost"
+text = "←"
+
 [node name="BottomBar" type="HBoxContainer" parent="MainVBox"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 56)
-alignment = 1
-
-[node name="BackButton" type="Button" parent="MainVBox/BottomBar"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "← Back"
-
-[node name="Spacer" type="Control" parent="MainVBox/BottomBar"]
-layout_mode = 2
-size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 80)
+alignment = 2
 
 [node name="EnterButton" type="Button" parent="MainVBox/BottomBar"]
 unique_name_in_owner = true
 layout_mode = 2
+custom_minimum_size = Vector2(80, 48)
+theme_type_variation = "ButtonPrimary"
 text = "Enter next stage"

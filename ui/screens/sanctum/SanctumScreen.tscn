@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://bu3o3n582e5j2"]
 
-[ext_resource type="Script" uid="uid://cb8hn28k3qlg6" path="res://ui/screens/SanctumScreen.gd" id="1_55k7r"]
+[ext_resource type="Script" uid="uid://cb8hn28k3qlg6" path="res://ui/screens/sanctum/SanctumScreen.gd" id="1_55k7r"]
 
 [node name="SanctumScreen" type="Control" unique_id=1161105008]
 layout_mode = 3
@@ -31,10 +31,10 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -242.0
-offset_top = -96.0
-offset_right = 242.0
-offset_bottom = 96.0
+offset_left = -280.0
+offset_top = -160.0
+offset_right = 280.0
+offset_bottom = 160.0
 grow_horizontal = 2
 grow_vertical = 2
 
@@ -77,12 +77,16 @@ layout_mode = 2
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
+custom_minimum_size = Vector2(80, 48)
+theme_type_variation = "ButtonSecondary"
 text = "Reroll"
 
 [node name="ConfirmButton" type="Button" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1052186876]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
+custom_minimum_size = Vector2(80, 48)
+theme_type_variation = "ButtonPrimary"
 text = "Choose"
 
 [node name="RightSidebar" type="VBoxContainer" parent="." unique_id=1283973613]

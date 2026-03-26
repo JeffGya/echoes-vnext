@@ -797,7 +797,11 @@
 				"fear_per_ally_ko": 4.0,
 				"fear_per_round": 1.0,
 				"morale_decay_n_rounds": 3.0,
-				"morale_decay_amount": 1.0
+				"morale_decay_amount": 1.0,
+				"morale_per_kill": 25.0,
+				"fear_reduce_per_kill": 15.0,
+				"morale_ripple_per_kill": 10.0,
+				"fear_ripple_per_kill": 5.0
 			},
 			"retreat_ase_cost": 30.0,
 			"retreat_agi_tiers": [

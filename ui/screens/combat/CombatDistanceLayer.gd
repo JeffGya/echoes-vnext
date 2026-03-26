@@ -1,4 +1,4 @@
-# res://ui/screens/CombatDistanceLayer.gd
+# res://ui/screens/combat/CombatDistanceLayer.gd
 # GRID-004: Debug overlay that draws per-cell Manhattan distance labels on the combat board.
 #
 # Developer-facing only — never shown to the player.

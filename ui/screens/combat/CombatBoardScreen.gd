@@ -1,4 +1,4 @@
-# res://ui/screens/CombatBoardScreen.gd
+# res://ui/screens/combat/CombatBoardScreen.gd
 # Bespoke combat board screen — renders the isometric grid for flow.encounter.
 # GRID-001: Board configuration + isometric floor tile rendering.
 # GRID-002: Actor tokens drawn at grid_pos cells via CombatTokenLayer.

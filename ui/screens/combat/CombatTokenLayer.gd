@@ -1,4 +1,4 @@
-# res://ui/screens/CombatTokenLayer.gd
+# res://ui/screens/combat/CombatTokenLayer.gd
 # GRID-002: Draws faction-coloured placeholder actor tokens on the combat board.
 #
 # This Node2D is a child of CombatBoardScreen and shares the board's coordinate

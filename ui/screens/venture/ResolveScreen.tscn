@@ -1,6 +1,7 @@
-[gd_scene format=3 uid="uid://resolve_screen_001"]
+[gd_scene load_steps=3 format=3 uid="uid://resolve_screen_001"]
 
-[ext_resource type="Script" path="res://ui/screens/ResolveScreen.gd" id="1_resolve"]
+[ext_resource type="Script" path="res://ui/screens/venture/ResolveScreen.gd" id="1_resolve"]
+[ext_resource type="PackedScene" path="res://ui/components/RewardEntryItem.tscn" id="2_rewardentry"]
 
 [node name="ResolveScreen" type="Control"]
 layout_mode = 3
@@ -81,6 +82,9 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 4
 
+[node name="RewardEntryPlaceholder" parent="CenterContainer/ResultCard/CardContent/BreakdownSection" instance=ExtResource("2_rewardentry")]
+layout_mode = 2
+
 [node name="StatGrid" type="GridContainer" parent="CenterContainer/ResultCard/CardContent"]
 layout_mode = 2
 columns = 2
@@ -131,11 +135,13 @@ theme_override_constants/separation = 12
 [node name="SanctumButton" type="Button" parent="CenterContainer/ResultCard/CardContent/ButtonRow"]
 unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(160, 44)
+custom_minimum_size = Vector2(160, 48)
+theme_type_variation = "ButtonSecondary"
 text = "To Sanctum"
 
 [node name="NextStageButton" type="Button" parent="CenterContainer/ResultCard/CardContent/ButtonRow"]
 unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(160, 44)
+custom_minimum_size = Vector2(160, 48)
+theme_type_variation = "ButtonPrimary"
 text = "Next Stage"

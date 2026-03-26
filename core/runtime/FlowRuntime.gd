@@ -101,11 +101,11 @@ func dispatch(action: Dictionary) -> Dictionary:
 			flow_machine.transition(to_state, flow_ctx, logger, t, "ui.flow.go_state")
 
 		"flow.select_realm":
-			# REALM-001: create/retrieve RealmModel, then show realm overview card
+			# REALM-001: create/retrieve RealmModel, then go directly to stage map
 			var realm_id := str(action.get("realm_id", ""))
 			flow_ctx.realm_id = realm_id
 			RealmService.get_or_create(realm_id, flow_ctx, t)  # sets save_request internally
-			flow_machine.transition(FlowStateIds.REALM_INIT, flow_ctx, logger, t, "ui.realm_selected")
+			flow_machine.transition(FlowStateIds.STAGE_MAP, flow_ctx, logger, t, "ui.realm_selected")
 
 		"flow.select_stage":
 			var stage_id := str(action.get("stage_id", ""))
@@ -253,6 +253,9 @@ func dispatch(action: Dictionary) -> Dictionary:
 			logger.info(t, "sanctum.name.confirm", "Sanctum name set", {
 				"name": name
 			})
+
+			# Refresh snapshot so the modal hides (sanctum_name is now set)
+			flow_machine.refresh_snapshot(flow_ctx, logger, t)
 			
 		"sanctum.summon":
 			_handle_sanctum_summon(action, t)
@@ -466,9 +469,12 @@ func _handle_sanctum_grade_select(action: Dictionary, t: int) -> void:
 
 # REALM-004: Advance stage index; on realm complete, clear context and route to REALM_SELECT.
 func _handle_complete_stage(t: int) -> void:
-	# BUG-001: encounter.complete is not dispatched in the build_final_snapshot() path.
-	# Apply win-drift before nulling so EmotionService can still read roster echoes.
-	_apply_encounter_emotion_drift("win", t)
+	# Fix BUG-003: read outcome BEFORE nulling encounter_ctx so drift reflects the actual result.
+	var outcome := "loss"
+	if flow_ctx.encounter_ctx != null:
+		var victory := bool(flow_ctx.encounter_ctx.combat_result.get("victory", false))
+		outcome = "win" if victory else "loss"
+	_apply_encounter_emotion_drift(outcome, t)
 	flow_ctx.encounter_ctx     = null
 	flow_ctx.encounter_machine = null
 	var result := RealmService.advance_stage(flow_ctx, t)  # sets save_request + logs internally
@@ -871,6 +877,32 @@ func _resolve_next_actor(t: int) -> void:
 						"delta":    fear_per_hit,
 						"new_fear": int(target.get("fear", 0)),
 					})
+					# Kill bonus: killer gets morale + fear reduction; living Echo allies get a ripple.
+					if result.get("is_kill", false):
+						var morale_per_kill: int      = int(combat_emo_cfg.get("morale_per_kill",       25))
+						var fear_reduce_per_kill: int = int(combat_emo_cfg.get("fear_reduce_per_kill",  15))
+						var morale_ripple: int         = int(combat_emo_cfg.get("morale_ripple_per_kill", 10))
+						var fear_ripple: int           = int(combat_emo_cfg.get("fear_ripple_per_kill",    5))
+						actor["morale"] = mini(100, int(actor.get("morale", 50)) + morale_per_kill)
+						actor["fear"]   = maxi(0,   int(actor.get("fear",   0)) - fear_reduce_per_kill)
+						logger.info(t, "combat.kill_boost", "%s gains morale from kill" % actor.get("name", "?"), {
+							"actor_id":     str(actor.get("id", "")),
+							"morale_delta": morale_per_kill,
+							"fear_delta":   -fear_reduce_per_kill,
+						})
+						for ally_v in ectx.actors:
+							var ally: Dictionary = ally_v if ally_v is Dictionary else {}
+							if str(ally.get("id", "")) == str(actor.get("id", "")): continue
+							if ally.get("is_dead", false): continue
+							if str(ally.get("faction", "")) != "echo": continue
+							ally["morale"] = mini(100, int(ally.get("morale", 50)) + morale_ripple)
+							ally["fear"]   = maxi(0,   int(ally.get("fear",   0)) - fear_ripple)
+							logger.info(t, "combat.kill_ripple",
+								"%s ripple from %s kill" % [ally.get("name", "?"), actor.get("name", "?")], {
+								"ally_id":      str(ally.get("id", "")),
+								"morale_delta": morale_ripple,
+								"fear_delta":   -fear_ripple,
+							})
 		"actor.guard":
 			var guard_result: Dictionary = CombatService.resolve_action("actor.guard", actor, {}, round)
 			if not guard_result.is_empty():

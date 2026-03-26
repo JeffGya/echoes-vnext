@@ -1,5 +1,5 @@
-# res://ui/screens/ResolveScreen.gd
-# UI-005: Resolve Screen — full art implementation.
+# res://ui/screens/venture/ResolveScreen.gd
+# UI-003: Resolve Screen — full art implementation.
 # Renders the final combat result (type "flow.resolve") emitted by
 # FlowEncounterState.build_final_snapshot().
 #
@@ -10,22 +10,24 @@
 #
 # Note: The echo party bar is owned by RealmShell and updated automatically
 # on every snapshot. This screen only renders the result summary card.
+#
+# Rank colors are @export so they can be adjusted in the Godot editor
+# without touching this script.
 
 class_name ResolveScreen
 extends Control
 
 signal action_requested(action: Dictionary)
 
-const RANK_COLORS: Dictionary = {
-	"S": Color("#ffd700"),  # gold
-	"A": Color("#c0ff80"),  # lime
-	"B": Color("#80c0ff"),  # sky blue
-	"C": Color("#f0e8d0"),  # text default
-	"D": Color("#b08040"),  # amber dim
-	"F": Color("#c04040"),  # red
-}
-const COL_TEXT_DIM := Color("#908870")
-const COL_TEXT     := Color("#f0e8d0")
+# Purposeful informational colors — adjustable in Godot inspector per instance.
+@export var rank_color_s: Color = Color("#ffd700")  # gold
+@export var rank_color_a: Color = Color("#c0ff80")  # lime
+@export var rank_color_b: Color = Color("#80c0ff")  # sky blue
+@export var rank_color_c: Color = Color("#f0e8d0")  # text default
+@export var rank_color_d: Color = Color("#b08040")  # amber dim
+@export var rank_color_f: Color = Color("#c04040")  # red
+
+const RewardEntryScene := preload("res://ui/components/RewardEntryItem.tscn")
 
 @onready var _banner:            Label         = %BannerLabel
 @onready var _reason:            Label         = %ReasonLabel
@@ -75,11 +77,10 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	_echoes_value.text  = str(data.get("echoes_survived", 0))
 	_rounds_value.text  = str(data.get("round_ended", 0))
 
-	# Rank badge
+	# Rank badge — color is informational (S=gold, F=red)
 	var rank := str(data.get("rank", "F"))
 	_rank_badge.text = rank
-	var rank_color: Variant = RANK_COLORS.get(rank, COL_TEXT)
-	_rank_badge.add_theme_color_override("font_color", rank_color as Color)
+	_rank_badge.add_theme_color_override("font_color", _rank_color(rank))
 
 	# Ase earned
 	_ase_value.text = str(data.get("ase_awarded", 0)) + " Ase"
@@ -112,29 +113,17 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 func _build_breakdown(breakdown: Array, total_ase: int) -> void:
 	for entry_v in breakdown:
 		var entry: Dictionary = entry_v if entry_v is Dictionary else {}
-		var label_str := str(entry.get("label", ""))
-		var delta     := int(entry.get("delta", 0))
-		if label_str.is_empty():
+		if str(entry.get("label", "")).is_empty():
 			continue
+		var item: RewardEntryItem = RewardEntryScene.instantiate()
+		_breakdown_section.add_child(item)
+		item.setup(entry)
 
-		var lbl := Label.new()
-		if delta >= 0:
-			lbl.text = "%s: +%d Ase" % [label_str, delta]
-			lbl.add_theme_color_override("font_color", COL_TEXT)
-		else:
-			lbl.text = "%s: −%d Ase" % [label_str, abs(delta)]
-			lbl.add_theme_color_override("font_color", COL_TEXT_DIM)
-		lbl.add_theme_font_size_override("font_size", 13)
-		_breakdown_section.add_child(lbl)
-
-	# Total line
 	if not breakdown.is_empty():
 		var sep := HSeparator.new()
 		_breakdown_section.add_child(sep)
 		var total_lbl := Label.new()
 		total_lbl.text = "= %d Ase" % total_ase
-		total_lbl.add_theme_color_override("font_color", COL_TEXT)
-		total_lbl.add_theme_font_size_override("font_size", 14)
 		_breakdown_section.add_child(total_lbl)
 
 
@@ -159,6 +148,16 @@ func _format_reason(reason: String) -> String:
 		"all_echoes_dead":      return "All echoes fell"
 		"shrine_destroyed":     return "Shrine Destroyed"
 	return reason
+
+
+func _rank_color(rank: String) -> Color:
+	match rank:
+		"S": return rank_color_s
+		"A": return rank_color_a
+		"B": return rank_color_b
+		"C": return rank_color_c
+		"D": return rank_color_d
+		_:   return rank_color_f
 
 
 func _ready() -> void:

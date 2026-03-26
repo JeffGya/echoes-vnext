@@ -1,0 +1,34 @@
+[gd_scene format=3 uid="uid://stage_row_item"]
+
+[ext_resource type="Script" path="res://ui/components/StageRowItem.gd" id="1_stagerow"]
+
+[node name="StageRowItem" type="HBoxContainer"]
+custom_minimum_size = Vector2(0, 48)
+theme_override_constants/separation = 8
+script = ExtResource("1_stagerow")
+
+[node name="StatusBadge" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(90, 0)
+
+[node name="BadgeLabel" type="Label" parent="StatusBadge"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Not started"
+horizontal_alignment = 1
+
+[node name="StageName" type="RichTextLabel" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+text = "Stage Name"
+
+[node name="Arrow" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+text = "►"
