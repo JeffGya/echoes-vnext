@@ -45,7 +45,11 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"id": id,
 			"name": name,
 			"rank": rank,
-			"in_party": in_party
+			"in_party": in_party,
+			# SANCTUM-005: identity fields for archetype + calling display.
+			"archetype":        str(e.get("archetype_birth", "")),
+			"calling":          str(e.get("calling", "")),
+			"calling_eligible": bool(e.get("calling_eligible", false)),
 		}
 
 		if e.has("level"):

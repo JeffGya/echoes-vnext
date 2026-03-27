@@ -127,6 +127,26 @@ func _make_draggable_row(e: Dictionary, from_list: String) -> Control:
 	rank_lbl.text = "Rank %d" % rank
 	row.add_child(rank_lbl)
 
+	# SANCTUM-005: archetype label.
+	var archetype_str := str(e.get("archetype", "")).capitalize()
+	if not archetype_str.is_empty():
+		var arch_lbl := Label.new()
+		arch_lbl.text = archetype_str
+		row.add_child(arch_lbl)
+
+	# SANCTUM-005: three-tier calling display (name only, no description).
+	var confirmed_calling: String = str(e.get("calling", ""))
+	var calling_eligible: bool    = bool(e.get("calling_eligible", false))
+	if not confirmed_calling.is_empty():
+		var calling_lbl := Label.new()
+		calling_lbl.text = confirmed_calling.capitalize()
+		row.add_child(calling_lbl)
+	elif calling_eligible:
+		var undecided_lbl := Label.new()
+		undecided_lbl.text = "Calling Undecided"
+		row.add_child(undecided_lbl)
+	# else: not eligible — archetype only, no calling shown.
+
 	# Drag source: row provides drag data, does not accept drops
 	row.set_drag_forwarding(
 		func(_p: Vector2) -> Variant:

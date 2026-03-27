@@ -116,6 +116,8 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			# if pending but options were never written, compute and store them now.
 			"calling_options":  _get_or_backfill_calling_options(e, calling_cfg),
 			"calling":          str(e.get("calling", "")),
+			# SANCTUM-005: one-line description for confirmed calling (detail panel only).
+			"calling_description": _get_calling_description(str(e.get("calling", "")), calling_cfg),
 		})
 
 	var echo_count: int = echo_entries.size()
@@ -156,6 +158,20 @@ static func _get_or_backfill_calling_options(e: Dictionary, calling_cfg: Diction
 	var options: Array = CallingService.compute_all_options(e, calling_cfg)
 	e["calling_options"] = options
 	return options
+
+
+## SANCTUM-005: Returns the one-line description for a confirmed calling from balance.json.
+## Returns "" if calling_id is empty or not found in definitions.
+static func _get_calling_description(calling_id: String, calling_cfg: Dictionary) -> String:
+	if calling_id.is_empty() or calling_cfg.is_empty():
+		return ""
+	var defs_v: Variant = calling_cfg.get("definitions", {})
+	if not (defs_v is Dictionary):
+		return ""
+	var defs: Dictionary = defs_v
+	if not defs.has(calling_id):
+		return ""
+	return str(defs[calling_id].get("description", ""))
 
 
 ## Derives a player-facing morale status label from fear level.

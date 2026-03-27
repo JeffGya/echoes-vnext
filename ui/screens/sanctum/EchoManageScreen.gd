@@ -56,6 +56,8 @@ var _action_back: Dictionary   = {}
 var _echoes: Array             = []
 var _selected_echo: Dictionary = {}
 var _rank_up_overlay: RankUpOverlay = null
+# SANCTUM-005: programmatic description label inserted after detail_calling_label.
+var _calling_desc_label: Label = null
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -84,6 +86,14 @@ func _ready() -> void:
 	# PROG-007: Path Awaits button — deferred calling access.
 	if not calling_eligible_badge.pressed.is_connected(_on_path_awaits_pressed):
 		calling_eligible_badge.pressed.connect(_on_path_awaits_pressed)
+
+	# SANCTUM-005: Description label for confirmed calling — inserted after detail_calling_label.
+	_calling_desc_label = Label.new()
+	_calling_desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_calling_desc_label.visible = false
+	var _cl_parent := detail_calling_label.get_parent()
+	_cl_parent.add_child(_calling_desc_label)
+	_cl_parent.move_child(_calling_desc_label, detail_calling_label.get_index() + 1)
 
 	# PROG-004: Rank-up overlay — instantiated once, lives as a child of this screen.
 	_rank_up_overlay = _RANK_UP_OVERLAY_SCENE.instantiate() as RankUpOverlay
@@ -143,7 +153,6 @@ func _rebuild_echo_list() -> void:
 func _make_echo_row(e: Dictionary) -> Control:
 	var echo_id        := str(e.get("id", ""))
 	var name_str       := str(e.get("name", ""))
-	var calling        := str(e.get("calling_origin", "Uncalled"))
 	var level          := int(e.get("level", 1))
 	var rank           := int(e.get("rank", 1))
 	var in_party       := bool(e.get("in_party", false))
@@ -161,9 +170,25 @@ func _make_echo_row(e: Dictionary) -> Control:
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(name_lbl)
 
-	var calling_lbl := Label.new()
-	calling_lbl.text = calling
-	row.add_child(calling_lbl)
+	# SANCTUM-005: archetype label (secondary identity, after name).
+	var archetype_str := str(e.get("archetype", "")).capitalize()
+	if not archetype_str.is_empty():
+		var arch_lbl := Label.new()
+		arch_lbl.text = archetype_str
+		row.add_child(arch_lbl)
+
+	# SANCTUM-005: replace calling_origin display with three-tier calling logic.
+	var confirmed_calling: String = str(e.get("calling", ""))
+	var calling_eligible: bool    = bool(e.get("calling_eligible", false))
+	var calling_display: String   = ""
+	if not confirmed_calling.is_empty():
+		calling_display = confirmed_calling.capitalize()
+	elif calling_eligible:
+		calling_display = "Calling Undecided"
+	if not calling_display.is_empty():
+		var calling_lbl := Label.new()
+		calling_lbl.text = calling_display
+		row.add_child(calling_lbl)
 
 	var level_lbl := Label.new()
 	level_lbl.text = "Lv %d" % level
@@ -210,7 +235,6 @@ func _make_echo_row(e: Dictionary) -> Control:
 
 func _render_detail(e: Dictionary) -> void:
 	var name_str   := str(e.get("name", ""))
-	var calling    := str(e.get("calling_origin", "Uncalled"))
 	var rank       := int(e.get("rank", 1))
 	var rarity     := str(e.get("rarity", "uncalled"))
 	var level      := int(e.get("level", 1))
@@ -235,7 +259,6 @@ func _render_detail(e: Dictionary) -> void:
 	detail_hp_bar.value     = hp_max
 	detail_hp_label.text    = "HP %d/%d" % [hp_max, hp_max]
 
-	detail_calling_label.text = calling
 	detail_rank_label.text    = "Rank %d" % rank
 	detail_grade_label.text   = rarity.capitalize()
 	detail_level_label.text   = "Level %d" % level
@@ -249,20 +272,29 @@ func _render_detail(e: Dictionary) -> void:
 	if not dominant_vector.is_empty():
 		dominant_vector_label.text = _vector_label(dominant_vector)
 
-	# PROG-007: show confirmed calling in the calling label; show ⚡ badge when pending.
-	var confirmed_calling: String = str(e.get("calling", ""))
-	var calling_options_v: Variant = e.get("calling_options", [])
-	var calling_pending: bool = (calling_options_v is Array) and (calling_options_v as Array).size() > 0
+	# SANCTUM-005: three-tier calling display.
+	var confirmed_calling: String   = str(e.get("calling", ""))
+	var calling_description: String = str(e.get("calling_description", ""))
 
 	if not confirmed_calling.is_empty():
-		detail_calling_label.text = confirmed_calling.capitalize()
+		# Tier 1: confirmed calling — show name + one-line description.
+		detail_calling_label.visible   = true
+		detail_calling_label.text      = confirmed_calling.capitalize()
+		_calling_desc_label.text       = calling_description
+		_calling_desc_label.visible    = not calling_description.is_empty()
+		calling_eligible_badge.visible = false
+	elif calling_eligible:
+		# Tier 2: eligible but undecided — "Calling Undecided" + ⚡ Path Awaits badge.
+		detail_calling_label.visible   = true
+		detail_calling_label.text      = "Calling Undecided"
+		_calling_desc_label.visible    = false
+		calling_eligible_badge.visible = true
+		calling_eligible_badge.text    = "⚡ Path Awaits"
 	else:
-		detail_calling_label.text = calling
-
-	# calling_eligible_badge repurposed: shows "⚡ Path Awaits" when calling is pending.
-	calling_eligible_badge.visible = calling_pending
-	if calling_pending:
-		calling_eligible_badge.text = "⚡ Path Awaits"
+		# Tier 3: not yet eligible — hide calling section entirely.
+		detail_calling_label.visible   = false
+		_calling_desc_label.visible    = false
+		calling_eligible_badge.visible = false
 
 	ascend_button.visible = rank_up_eligible
 	if rank_up_eligible:
