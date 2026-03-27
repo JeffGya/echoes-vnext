@@ -19,9 +19,10 @@ func exit(ctx: RefCounted, t: int) -> void:
 # ────────────────────────────────────────────────────────────────────────────
 
 static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
-	# --- Read max_level and prog_cfg from balance.json (thresholds now per-echo via get_effective_thresholds) ---
-	var max_level: int       = 5
-	var prog_cfg: Dictionary = {}
+	# --- Read max_level, prog_cfg, and calling_cfg from balance.json ---
+	var max_level: int        = 5
+	var prog_cfg: Dictionary  = {}
+	var calling_cfg: Dictionary = {}
 	if flow_ctx.config_service != null:
 		var bal: Dictionary = flow_ctx.config_service.get_balance()
 		var bd: Dictionary  = bal.get("data", {})
@@ -29,6 +30,9 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		if prog_v is Dictionary:
 			prog_cfg = prog_v as Dictionary
 			max_level = int(prog_cfg.get("max_level_per_rank", 5))
+		var calling_v: Variant = bd.get("calling", {})
+		if calling_v is Dictionary:
+			calling_cfg = calling_v as Dictionary
 
 	# --- Read roster and party ids from save_data ---
 	var roster: Array    = []
@@ -108,7 +112,9 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"dominant_vector":  dominant_vector,
 			"trait_drift_preview": drift_preview,
 			# PROG-007 fields:
-			"calling_options":  (e.get("calling_options", []) if CallingService.is_calling_pending(e) else []),
+			# Back-fill calling_options for echoes ranked up before PROG-007:
+			# if pending but options were never written, compute and store them now.
+			"calling_options":  _get_or_backfill_calling_options(e, calling_cfg),
 			"calling":          str(e.get("calling", "")),
 		})
 
@@ -133,6 +139,23 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		},
 		"meta": { "t": t },
 	}
+
+
+## Returns calling_options for the echo, backfilling if the echo was ranked up
+## before PROG-007 (calling_eligible=true but calling_options never written).
+## Writes options back to the echo dict so they persist on the next save.
+static func _get_or_backfill_calling_options(e: Dictionary, calling_cfg: Dictionary) -> Array:
+	if not CallingService.is_calling_pending(e):
+		return []
+	var existing_v: Variant = e.get("calling_options", [])
+	if existing_v is Array and not (existing_v as Array).is_empty():
+		return existing_v as Array
+	# Missing or empty — compute and write back (will be saved on next save trigger).
+	if calling_cfg.is_empty():
+		return []
+	var options: Array = CallingService.compute_all_options(e, calling_cfg)
+	e["calling_options"] = options
+	return options
 
 
 ## Derives a player-facing morale status label from fear level.
