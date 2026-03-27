@@ -271,6 +271,10 @@ func dispatch(action: Dictionary) -> Dictionary:
 		"sanctum.party.confirm":
 			_handle_sanctum_party_confirm(t)
 
+		# PROG-004: Keeper-confirmed rank-up from Echo Manage.
+		"sanctum.rank_up":
+			_handle_sanctum_rank_up(action, t)
+
 		# ---- Directives (DIRECTIVE-001) ----
 		"directive.select":
 			_handle_directive_select(action, t)
@@ -1715,6 +1719,88 @@ func _handle_sanctum_party_confirm(t: int) -> void:
 
 	# Return to sanctum hub
 	flow_machine.transition(FlowStateIds.SANCTUM, flow_ctx, logger, t, "ui.sanctum.party.confirm")
+
+
+# PROG-004: Executes Keeper-confirmed rank-up for a single echo.
+# Only valid from ECHO_MANAGE snapshot. Guards: echo must exist in roster and be eligible.
+func _handle_sanctum_rank_up(action: Dictionary, t: int) -> void:
+	var snap_type: String = str(flow_ctx.last_snapshot.get("type", ""))
+	if snap_type != FlowStateIds.ECHO_MANAGE:
+		logger.debug(t, "sanctum.rank_up.ignored", "Rank-up ignored (not in echo manage)", {
+			"snapshot_type": snap_type
+		})
+		return
+
+	var payload_v: Variant = action.get("payload", {})
+	var payload: Dictionary = payload_v if payload_v is Dictionary else {}
+	var echo_id: String = str(payload.get("echo_id", "")).strip_edges()
+	if echo_id.is_empty():
+		logger.debug(t, "sanctum.rank_up.denied", "Rank-up denied (missing echo_id)", {})
+		return
+
+	# Find echo in roster.
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	var roster_v: Variant = sanctum.get("roster", [])
+	var roster: Array = roster_v if roster_v is Array else []
+
+	var echo_ref: Dictionary = {}
+	var echo_idx: int = -1
+	for i in range(roster.size()):
+		if roster[i] is Dictionary and str(roster[i].get("id", "")) == echo_id:
+			echo_ref = roster[i]
+			echo_idx = i
+			break
+
+	if echo_idx == -1:
+		logger.debug(t, "sanctum.rank_up.denied", "Rank-up denied (echo not in roster)", {
+			"echo_id": echo_id
+		})
+		return
+
+	# Read prog_cfg from balance.json.
+	var prog_cfg_v: Variant = {}
+	var birth_stats_v: Variant = {}
+	if config_service != null:
+		var bal: Dictionary = config_service.get_balance()
+		var bd: Dictionary  = bal.get("data", {})
+		prog_cfg_v   = bd.get("progression", {})
+		birth_stats_v = bd.get("summoning", {}).get("birth_stats", {})
+	var prog_cfg: Dictionary    = prog_cfg_v if prog_cfg_v is Dictionary else {}
+	var birth_stats: Dictionary = birth_stats_v if birth_stats_v is Dictionary else {}
+
+	# Guard: must be eligible.
+	if not ProgressionService.is_rank_up_eligible(echo_ref, prog_cfg):
+		logger.debug(t, "sanctum.rank_up.denied", "Rank-up denied (not eligible)", {
+			"echo_id": echo_id,
+			"level": int(echo_ref.get("level", 1)),
+			"rank":  int(echo_ref.get("rank", 1)),
+		})
+		return
+
+	# Execute rank-up — mutates echo_ref in place (roster[echo_idx] is the same ref).
+	var event: Dictionary = ProgressionService.execute_rank_up(
+		echo_ref,
+		flow_ctx.campaign_seed,
+		prog_cfg,
+		birth_stats,
+		logger,
+		t
+	)
+
+	# Persist.
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason != "":
+		flow_ctx.save_request_reason += "|progression.rank_up"
+	else:
+		flow_ctx.save_request_reason = "progression.rank_up"
+
+	# Rebuild Echo Manage snapshot with updated roster data.
+	flow_ctx.last_snapshot = FlowEchoManageState.build_snapshot(flow_ctx, t)
+
+	# Attach the rank-up event to the snapshot data so the UI can drive the reveal overlay.
+	if flow_ctx.last_snapshot.has("data") and flow_ctx.last_snapshot["data"] is Dictionary:
+		flow_ctx.last_snapshot["data"]["rank_up_event"] = event
 
 
 # DIRECTIVE-001: writes the chosen directive to stage_context, requests save, refreshes snapshot.

@@ -1,0 +1,119 @@
+[gd_scene format=3 uid="uid://crr6taw8gvl7c"]
+
+[ext_resource type="Script" uid="uid://rankupovrlgd4" path="res://ui/overlays/RankUpOverlay.gd" id="1_rankup"]
+
+[node name="RankUpOverlay" type="Control" unique_id=200000001]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+visible = false
+script = ExtResource("1_rankup")
+
+[node name="Dim" type="ColorRect" parent="." unique_id=200000002]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.627451)
+
+[node name="Center" type="CenterContainer" parent="." unique_id=200000003]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Center" unique_id=200000004]
+layout_mode = 2
+custom_minimum_size = Vector2(320, 0)
+
+[node name="Margin" type="MarginContainer" parent="Center/Panel" unique_id=200000005]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Root" type="VBoxContainer" parent="Center/Panel/Margin" unique_id=200000006]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="ConfirmPanel" type="VBoxContainer" parent="Center/Panel/Margin/Root" unique_id=200000007]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ConfirmText" type="Label" parent="Center/Panel/Margin/Root/ConfirmPanel" unique_id=200000008]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+text = "[Anansi narrator text]"
+
+[node name="ButtonRow" type="HBoxContainer" parent="Center/Panel/Margin/Root/ConfirmPanel" unique_id=200000009]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="CancelButton" type="Button" parent="Center/Panel/Margin/Root/ConfirmPanel/ButtonRow" unique_id=200000010]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(80, 48)
+theme_type_variation = "ButtonSecondary"
+text = "Cancel"
+
+[node name="ConfirmButton" type="Button" parent="Center/Panel/Margin/Root/ConfirmPanel/ButtonRow" unique_id=200000011]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(80, 48)
+theme_type_variation = "ButtonPrimary"
+text = "Confirm Ascension"
+
+[node name="RevealPanel" type="VBoxContainer" parent="Center/Panel/Margin/Root" unique_id=200000012]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 12
+visible = false
+
+[node name="RankBadge" type="Label" parent="Center/Panel/Margin/Root/RevealPanel" unique_id=200000013]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+horizontal_alignment = 1
+text = "Rank 2"
+
+[node name="RevealName" type="Label" parent="Center/Panel/Margin/Root/RevealPanel" unique_id=200000014]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+horizontal_alignment = 1
+text = "[Echo Name]"
+
+[node name="RevealText" type="Label" parent="Center/Panel/Margin/Root/RevealPanel" unique_id=200000015]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+horizontal_alignment = 1
+text = "[Reveal narrative]"
+
+[node name="CallingStirs" type="Label" parent="Center/Panel/Margin/Root/RevealPanel" unique_id=200000016]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+horizontal_alignment = 1
+text = "★ A Calling stirs within {name}."
+visible = false
+
+[node name="ContinueButton" type="Button" parent="Center/Panel/Margin/Root/RevealPanel" unique_id=200000017]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+custom_minimum_size = Vector2(0, 48)
+theme_type_variation = "ButtonPrimary"
+text = "Continue"

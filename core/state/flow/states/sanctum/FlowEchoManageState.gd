@@ -15,22 +15,24 @@ func exit(ctx: RefCounted, t: int) -> void:
 
 # ────────────────────────────────────────────────────────────────────────────
 # PROG-003: Static builder — follows FlowSummonState.build_snapshot() pattern.
-# Reads roster from save_data; computes xp_to_next via ProgressionService.
+# PROG-004: Adds rank_up_eligible, calling_eligible, dominant_vector, trait_drift_preview.
 # ────────────────────────────────────────────────────────────────────────────
 
 static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
-	# --- Read level thresholds and max_level from balance.json ---
-	var thresholds: Array = [0, 100, 250, 450, 700]
-	var max_level: int    = 5
+	# --- Read level thresholds, max_level, and prog_cfg from balance.json ---
+	var thresholds: Array    = [0, 100, 250, 450, 700]
+	var max_level: int       = 5
+	var prog_cfg: Dictionary = {}
 	if flow_ctx.config_service != null:
 		var bal: Dictionary = flow_ctx.config_service.get_balance()
 		var bd: Dictionary  = bal.get("data", {})
 		var prog_v: Variant  = bd.get("progression", {})
 		if prog_v is Dictionary:
-			var t_v: Variant = (prog_v as Dictionary).get("level_thresholds", thresholds)
+			prog_cfg = prog_v as Dictionary
+			var t_v: Variant = prog_cfg.get("level_thresholds", thresholds)
 			if t_v is Array:
 				thresholds = t_v
-			max_level = int((prog_v as Dictionary).get("max_level_per_rank", 5))
+			max_level = int(prog_cfg.get("max_level_per_rank", 5))
 
 	# --- Read roster and party ids from save_data ---
 	var roster: Array    = []
@@ -62,17 +64,27 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		var stats_v: Variant  = e.get("stats", {})
 		var stats: Dictionary = stats_v if stats_v is Dictionary else {}
 
+		# PROG-004: rank-up eligibility, calling_eligible flag, dominant_vector.
+		var rank_up_eligible: bool = ProgressionService.is_rank_up_eligible(e, prog_cfg)
+		var calling_eligible: bool = bool(e.get("calling_eligible", false))
+		var dominant_vector: String = str(e.get("dominant_vector", ""))
+
+		# Drift preview: deterministic, pure — only computed when eligible.
+		var drift_preview: Dictionary = {}
+		if rank_up_eligible and flow_ctx.campaign_seed != null:
+			drift_preview = ProgressionService.compute_trait_drift_preview(e, flow_ctx.campaign_seed, prog_cfg)
+
 		echo_entries.append({
-			"id":              str(e.get("id", "")),
-			"name":            str(e.get("name", "")),
-			"calling_origin":  str(e.get("calling_origin", "Uncalled")),
-			"rank":            int(e.get("rank", 1)),
-			"rarity":          str(e.get("rarity", "uncalled")),
-			"level":           level,
-			"xp_total":        xp_total,
-			"xp_to_next":      xp_to_next,
-			"archetype":       str(e.get("archetype_birth", "")),
-			"hp_max":          max_hp,
+			"id":               str(e.get("id", "")),
+			"name":             str(e.get("name", "")),
+			"calling_origin":   str(e.get("calling_origin", "Uncalled")),
+			"rank":             int(e.get("rank", 1)),
+			"rarity":           str(e.get("rarity", "uncalled")),
+			"level":            level,
+			"xp_total":         xp_total,
+			"xp_to_next":       xp_to_next,
+			"archetype":        str(e.get("archetype_birth", "")),
+			"hp_max":           max_hp,
 			"stats": {
 				"atk":   int(stats.get("atk",   0)),
 				"def":   int(stats.get("def",   0)),
@@ -81,11 +93,16 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				"cha":   int(stats.get("cha",   0)),
 				"speed": int(stats.get("speed", 0)),
 			},
-			"morale":          morale,
-			"fear":            fear,
-			"morale_status":   _derive_morale_status(fear),
-			"in_party":        str(e.get("id", "")) in party_ids,
-			"current_shout":   "",  # VOICE-001 stub — no event bus yet
+			"morale":           morale,
+			"fear":             fear,
+			"morale_status":    _derive_morale_status(fear),
+			"in_party":         str(e.get("id", "")) in party_ids,
+			"current_shout":    "",  # VOICE-001 stub — no event bus yet
+			# PROG-004 fields:
+			"rank_up_eligible": rank_up_eligible,
+			"calling_eligible": calling_eligible,
+			"dominant_vector":  dominant_vector,
+			"trait_drift_preview": drift_preview,
 		})
 
 	var echo_count: int = echo_entries.size()

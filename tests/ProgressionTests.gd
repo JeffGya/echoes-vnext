@@ -16,6 +16,14 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("prog_level_capped_at_max_per_rank",          Callable(ProgressionTests, "_test_level_cap"))
 	runner.register_test("prog_virtue_multiplier_courage",             Callable(ProgressionTests, "_test_virtue_multiplier"))
 	runner.register_test("prog_xp_persisted_to_save_data",            Callable(ProgressionTests, "_test_xp_persisted"))
+	# PROG-004:
+	runner.register_test("prog_wisdom_multiplier_guard_share",         Callable(ProgressionTests, "_test_wisdom_multiplier"))
+	runner.register_test("prog_faith_multiplier_survival_bonus",       Callable(ProgressionTests, "_test_faith_multiplier"))
+	runner.register_test("prog_rank_up_eligible_at_max_level",         Callable(ProgressionTests, "_test_rank_up_eligible"))
+	runner.register_test("prog_rank_up_increments_rank",               Callable(ProgressionTests, "_test_rank_up_increments_rank"))
+	runner.register_test("prog_rank_up_xp_carry_overflow",             Callable(ProgressionTests, "_test_rank_up_xp_carry"))
+	runner.register_test("prog_rank_up_trait_drift_deterministic",     Callable(ProgressionTests, "_test_rank_up_drift_deterministic"))
+	runner.register_test("prog_rank_up_calling_eligible_at_rank_3",   Callable(ProgressionTests, "_test_rank_up_calling_eligible"))
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -61,6 +69,26 @@ static func _default_prog_cfg() -> Dictionary:
 		"level_thresholds":          [0, 100, 250, 450, 700],
 		"max_level_per_rank":        5,
 	}
+
+## PROG-004 config — extends _default_prog_cfg() with rank-up and virtue additions.
+static func _prog004_cfg() -> Dictionary:
+	var cfg := _default_prog_cfg()
+	cfg["wisdom_xp_multiplier_max"]  = 0.20
+	cfg["faith_xp_multiplier_max"]   = 0.20
+	cfg["rank_up_trait_drift_magnitude"] = 1
+	cfg["vector_drift_weights"] = {
+		"vanguard":  { "courage": 0.65, "wisdom": 0.25, "faith": 0.10 },
+		"seeker":    { "courage": 0.15, "wisdom": 0.65, "faith": 0.20 },
+		"pillar":    { "courage": 0.10, "wisdom": 0.25, "faith": 0.65 },
+		"protector": { "courage": 0.35, "wisdom": 0.15, "faith": 0.50 },
+	}
+	return cfg
+
+## Echo at max level with a dominant vector set — used by PROG-004 rank-up tests.
+static func _make_echo_at_max_level(id: String, vector: String = "vanguard") -> Dictionary:
+	var e := _make_echo(id, 700, 5)  # xp=700 = last threshold, level=5 = max
+	e["dominant_vector"] = vector
+	return e
 
 ## Minimal birth_stats stub — real values not needed, just valid numbers.
 static func _stub_birth_stats() -> Dictionary:
@@ -262,4 +290,115 @@ static func _test_xp_persisted() -> Dictionary:
 	var new_xp: int = int(save["sanctum"]["roster"][0].get("xp_total", 0))
 	if new_xp != 40:
 		return { "ok": false, "error": "Expected xp_total=40 in save_data, got %d" % new_xp }
+	return { "ok": true }
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# PROG-004 tests
+# ────────────────────────────────────────────────────────────────────────────
+
+## 9. Wisdom multiplier: guard_share × (wisdom/100) × wisdom_max applied correctly.
+static func _test_wisdom_multiplier() -> Dictionary:
+	var traits := { "courage": 0, "wisdom": 80, "faith": 0 }
+	# All 4 actions are guard actions → guard_share = 1.0
+	var alog := { "melee_count": 0, "guard_count": 4, "kill_count": 0, "total_count": 4 }
+	var cfg := _prog004_cfg()
+	var result: float = ProgressionService.compute_virtue_multiplier(traits, alog, 0.20, cfg)
+	# Expected: courage_bonus=0, wisdom_bonus=1.0*(80/100)*0.20=0.16, faith_bonus=0 → 0.16
+	var expected: float = 0.16
+	if absf(result - expected) > 0.001:
+		return { "ok": false, "error": "wisdom multiplier expected ~%.3f got %.3f" % [expected, result] }
+	return { "ok": true }
+
+
+## 10. Faith multiplier: survived=true gets bonus; survived=false gets 0.
+static func _test_faith_multiplier() -> Dictionary:
+	var traits := { "courage": 0, "wisdom": 0, "faith": 100 }
+	var alog_survived     := { "melee_count": 0, "guard_count": 0, "kill_count": 0, "total_count": 1, "survived": true }
+	var alog_not_survived := { "melee_count": 0, "guard_count": 0, "kill_count": 0, "total_count": 1, "survived": false }
+	var cfg := _prog004_cfg()
+	var bonus_alive: float = ProgressionService.compute_virtue_multiplier(traits, alog_survived,     0.20, cfg)
+	var bonus_dead:  float = ProgressionService.compute_virtue_multiplier(traits, alog_not_survived, 0.20, cfg)
+	# Alive: faith_bonus = 1.0 * (100/100) * 0.20 = 0.20
+	if absf(bonus_alive - 0.20) > 0.001:
+		return { "ok": false, "error": "survived=true: expected 0.20 got %.3f" % bonus_alive }
+	if bonus_dead != 0.0:
+		return { "ok": false, "error": "survived=false: expected 0.0 got %.3f" % bonus_dead }
+	return { "ok": true }
+
+
+## 11. Echo at level == max_level_per_rank (5) and rank < 5 is eligible for rank-up.
+static func _test_rank_up_eligible() -> Dictionary:
+	var cfg := _prog004_cfg()
+	var eligible_echo   := _make_echo("e1", 700, 5)  # level 5, rank 1
+	var ineligible_echo := _make_echo("e2", 250, 3)  # level 3, rank 1
+	var at_max_rank     := _make_echo("e3", 700, 5)
+	at_max_rank["rank"] = 5  # already at MVP cap — not eligible
+	if not ProgressionService.is_rank_up_eligible(eligible_echo, cfg):
+		return { "ok": false, "error": "level-5 rank-1 echo should be eligible" }
+	if ProgressionService.is_rank_up_eligible(ineligible_echo, cfg):
+		return { "ok": false, "error": "level-3 echo should NOT be eligible" }
+	if ProgressionService.is_rank_up_eligible(at_max_rank, cfg):
+		return { "ok": false, "error": "rank-5 echo should NOT be eligible (MVP cap)" }
+	return { "ok": true }
+
+
+## 12. execute_rank_up increments rank from 1 → 2 and resets level to 1.
+static func _test_rank_up_increments_rank() -> Dictionary:
+	var echo  := _make_echo_at_max_level("e1", "vanguard")
+	var seed  := CampaignSeed.new(99999)
+	var event := ProgressionService.execute_rank_up(echo, seed, _prog004_cfg(), _stub_birth_stats(), null, 0)
+	if int(echo.get("rank", 0)) != 2:
+		return { "ok": false, "error": "Expected rank=2, got %d" % int(echo.get("rank", 0)) }
+	if int(echo.get("level", 0)) != 1:
+		return { "ok": false, "error": "Expected level reset to 1, got %d" % int(echo.get("level", 0)) }
+	if int(event.get("new_rank", 0)) != 2:
+		return { "ok": false, "error": "Event new_rank expected 2, got %d" % int(event.get("new_rank", 0)) }
+	return { "ok": true }
+
+
+## 13. XP overflow carries over on rank-up: xp_total = max(0, old_xp - last_threshold).
+static func _test_rank_up_xp_carry() -> Dictionary:
+	var echo := _make_echo_at_max_level("e1", "vanguard")
+	# Set xp_total to last_threshold (700) + 150 overflow
+	echo["xp_total"] = 850
+	var seed := CampaignSeed.new(42)
+	ProgressionService.execute_rank_up(echo, seed, _prog004_cfg(), _stub_birth_stats(), null, 0)
+	# Expected carry: 850 - 700 = 150
+	var new_xp: int = int(echo.get("xp_total", -1))
+	if new_xp != 150:
+		return { "ok": false, "error": "Expected xp carry=150, got %d" % new_xp }
+	return { "ok": true }
+
+
+## 14. Same campaign seed + echo id produces the same trait drift every time (deterministic).
+static func _test_rank_up_drift_deterministic() -> Dictionary:
+	var cfg  := _prog004_cfg()
+	var seed := CampaignSeed.new(12345)
+	var echo1 := _make_echo_at_max_level("e1", "vanguard")
+	var echo2 := _make_echo_at_max_level("e1", "vanguard")  # identical id and vector
+	var drift1 := ProgressionService.compute_trait_drift_preview(echo1, seed, cfg)
+	var drift2 := ProgressionService.compute_trait_drift_preview(echo2, seed, cfg)
+	if drift1.is_empty() or drift2.is_empty():
+		return { "ok": false, "error": "Expected non-empty drift previews" }
+	if str(drift1.get("trait_key")) != str(drift2.get("trait_key")):
+		return { "ok": false, "error": "trait_key not deterministic: %s vs %s" % [drift1.get("trait_key"), drift2.get("trait_key")] }
+	if int(drift1.get("direction", 0)) != int(drift2.get("direction", 0)):
+		return { "ok": false, "error": "direction not deterministic: %d vs %d" % [drift1.get("direction", 0), drift2.get("direction", 0)] }
+	return { "ok": true }
+
+
+## 15. calling_eligible is set to true when rank advances to 3.
+static func _test_rank_up_calling_eligible() -> Dictionary:
+	# Start at rank 2, level 5 so the next rank-up lands on rank 3.
+	var echo     := _make_echo_at_max_level("e1", "pillar")
+	echo["rank"] = 2
+	var seed  := CampaignSeed.new(777)
+	var event := ProgressionService.execute_rank_up(echo, seed, _prog004_cfg(), _stub_birth_stats(), null, 0)
+	if int(echo.get("rank", 0)) != 3:
+		return { "ok": false, "error": "Expected rank=3, got %d" % int(echo.get("rank", 0)) }
+	if not bool(echo.get("calling_eligible", false)):
+		return { "ok": false, "error": "calling_eligible not set on echo at rank 3" }
+	if not bool(event.get("calling_eligible", false)):
+		return { "ok": false, "error": "calling_eligible not set in rank-up event" }
 	return { "ok": true }

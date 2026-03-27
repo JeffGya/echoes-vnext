@@ -1,5 +1,7 @@
 # res://ui/screens/sanctum/EchoManageScreen.gd
 # PROG-003: Echo Manage screen — list + detail panel.
+# PROG-004: Rank-up overlay (RankUpOverlay), dominant_vector label,
+#           CallingEligibleBadge, AscendButton, ▲ row indicator.
 #
 # Layout: persistent echo list (left) + detail panel (right, shown on row tap).
 # Follows ScreenTemplate contract: set_snapshot() → _clear() → _render().
@@ -10,6 +12,9 @@
 extends Control
 
 signal action_requested(action: Dictionary)
+
+# ── Overlay preload (PROG-004) ─────────────────────────────────────────────
+const _RANK_UP_OVERLAY_SCENE: PackedScene = preload("res://ui/overlays/RankUpOverlay.tscn")
 
 # ── Static node refs ──────────────────────────────────────────────────────
 @onready var echo_count_label: Label       = %EchoCountLabel
@@ -38,11 +43,17 @@ signal action_requested(action: Dictionary)
 @onready var detail_assign_job_btn: Button   = %AssignJobBtn
 @onready var back_btn: Button                = %BackButton
 
+# PROG-004 detail panel nodes (defined in EchoManageScreen.tscn)
+@onready var dominant_vector_label: Label    = %DominantVectorLabel
+@onready var calling_eligible_badge: Label   = %CallingEligibleBadge
+@onready var ascend_button: Button           = %AscendButton
+
 # ── State ─────────────────────────────────────────────────────────────────
 var _snap: Dictionary          = {}
 var _action_back: Dictionary   = {}
 var _echoes: Array             = []
 var _selected_echo: Dictionary = {}
+var _rank_up_overlay: RankUpOverlay = null
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -63,6 +74,16 @@ func _ready() -> void:
 
 	# Assign job is a stub — disabled until Sanctum jobs story.
 	detail_assign_job_btn.disabled = true
+
+	# PROG-004: Ascend button — connected once; echo is read from _selected_echo at press time.
+	if not ascend_button.pressed.is_connected(_on_ascend_pressed):
+		ascend_button.pressed.connect(_on_ascend_pressed)
+
+	# PROG-004: Rank-up overlay — instantiated once, lives as a child of this screen.
+	_rank_up_overlay = _RANK_UP_OVERLAY_SCENE.instantiate() as RankUpOverlay
+	add_child(_rank_up_overlay)
+	_rank_up_overlay.confirm_requested.connect(_on_rank_up_confirm_requested)
+	_rank_up_overlay.dismissed.connect(_on_rank_up_dismissed)
 
 
 # ── Snapshot contract ─────────────────────────────────────────────────────
@@ -90,6 +111,12 @@ func set_snapshot(snap: Dictionary) -> void:
 				break
 		_render_detail(_selected_echo)
 
+	# PROG-004: If a rank_up_event arrived, advance the overlay to the reveal panel.
+	var rank_up_event_v: Variant = data.get("rank_up_event", null)
+	if rank_up_event_v is Dictionary and not (rank_up_event_v as Dictionary).is_empty():
+		if _rank_up_overlay != null:
+			_rank_up_overlay.show_reveal(rank_up_event_v as Dictionary)
+
 
 # ── List builder ──────────────────────────────────────────────────────────
 
@@ -104,12 +131,13 @@ func _rebuild_echo_list() -> void:
 
 
 func _make_echo_row(e: Dictionary) -> Control:
-	var echo_id   := str(e.get("id", ""))
-	var name_str  := str(e.get("name", ""))
-	var calling   := str(e.get("calling_origin", "Uncalled"))
-	var level     := int(e.get("level", 1))
-	var rank      := int(e.get("rank", 1))
-	var in_party  := bool(e.get("in_party", false))
+	var echo_id        := str(e.get("id", ""))
+	var name_str       := str(e.get("name", ""))
+	var calling        := str(e.get("calling_origin", "Uncalled"))
+	var level          := int(e.get("level", 1))
+	var rank           := int(e.get("rank", 1))
+	var in_party       := bool(e.get("in_party", false))
+	var rank_up_eligible := bool(e.get("rank_up_eligible", false))
 
 	var row := HBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -136,6 +164,12 @@ func _make_echo_row(e: Dictionary) -> Control:
 		var party_badge := Label.new()
 		party_badge.text = "★"
 		row.add_child(party_badge)
+
+	# PROG-004: show ascend indicator when rank-up is available.
+	if rank_up_eligible:
+		var ascend_badge := Label.new()
+		ascend_badge.text = "▲"
+		row.add_child(ascend_badge)
 
 	var arrow_btn := Button.new()
 	arrow_btn.text = "▶"
@@ -186,6 +220,21 @@ func _render_detail(e: Dictionary) -> void:
 	detail_rank_label.text    = "Rank %d" % rank
 	detail_grade_label.text   = rarity.capitalize()
 	detail_level_label.text   = "Level %d" % level
+
+	# PROG-004: dominant vector, calling eligible badge, ascend button.
+	var dominant_vector: String  = str(e.get("dominant_vector", ""))
+	var calling_eligible: bool   = bool(e.get("calling_eligible", false))
+	var rank_up_eligible: bool   = bool(e.get("rank_up_eligible", false))
+
+	dominant_vector_label.visible = not dominant_vector.is_empty()
+	if not dominant_vector.is_empty():
+		dominant_vector_label.text = _vector_label(dominant_vector)
+
+	calling_eligible_badge.visible = calling_eligible
+
+	ascend_button.visible = rank_up_eligible
+	if rank_up_eligible:
+		ascend_button.text = "▲ Ascend to Rank %d" % (rank + 1)
 
 	# XP bar: progress toward next level threshold
 	if xp_to_next > 0:
@@ -266,3 +315,35 @@ func _on_assign_party_pressed() -> void:
 		"type":    "sanctum.party.toggle",
 		"payload": { "echo_id": str(_selected_echo.get("id", "")) },
 	})
+
+
+# ── PROG-004 handlers ─────────────────────────────────────────────────────
+
+func _on_ascend_pressed() -> void:
+	if _selected_echo.is_empty() or _rank_up_overlay == null:
+		return
+	_rank_up_overlay.show_confirm(_selected_echo)
+
+
+func _on_rank_up_confirm_requested(echo_id: String) -> void:
+	action_requested.emit({
+		"type":    "sanctum.rank_up",
+		"payload": { "echo_id": echo_id },
+	})
+
+
+func _on_rank_up_dismissed() -> void:
+	pass  # Snapshot already refreshed via set_snapshot(); nothing extra needed.
+
+
+# ── PROG-004 helpers ──────────────────────────────────────────────────────
+
+## Returns a player-facing descriptive label for a dominant vector.
+## Vectors are never shown numerically — descriptive only (GDD §5.4).
+static func _vector_label(vector: String) -> String:
+	match vector:
+		"vanguard":  return "Vanguard spirit"
+		"seeker":    return "Seeker's curiosity"
+		"pillar":    return "Pillar's steadiness"
+		"protector": return "Protector's shelter"
+		_:           return ""

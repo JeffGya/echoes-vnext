@@ -525,6 +525,20 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var echo_logs: Dictionary = {}
 	if ectx != null:
 		echo_logs = ectx.echo_action_logs
+		# PROG-004: mark survived=false for any echo that was KO'd during the encounter.
+		# Defaults to true (set when entry is first created in echo_action_logs).
+		# Used by ProgressionService to compute the faith virtue XP multiplier.
+		for actor_v in ectx.actors:
+			if not actor_v is Dictionary:
+				continue
+			if str(actor_v.get("faction", "")) != "echo":
+				continue
+			var eid: String = str(actor_v.get("id", ""))
+			if echo_logs.has(eid):
+				if bool(actor_v.get("is_dead", false)):
+					echo_logs[eid]["survived"] = false
+				elif not echo_logs[eid].has("survived"):
+					echo_logs[eid]["survived"] = true
 
 	xp_events = ProgressionService.award_post_combat_xp(
 		flow_ctx.save_data,

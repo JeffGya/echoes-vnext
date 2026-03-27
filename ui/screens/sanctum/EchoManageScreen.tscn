@@ -172,6 +172,30 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "—"
 
+[node name="DominantVectorLabel" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000060]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+horizontal_alignment = 1
+visible = false
+
+[node name="CallingEligibleBadge" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000061]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+horizontal_alignment = 1
+text = "★ Calling awaits"
+visible = false
+
+[node name="AscendButton" type="Button" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000062]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+custom_minimum_size = Vector2(0, 48)
+theme_type_variation = "ButtonPrimary"
+text = "▲ Ascend to Rank 2"
+visible = false
+
 [node name="XPRow" type="HBoxContainer" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000028]
 layout_mode = 2
 

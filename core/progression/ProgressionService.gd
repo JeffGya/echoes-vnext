@@ -1,12 +1,13 @@
 # res://core/progression/ProgressionService.gd
 # PROG-003: XP accrual, level-up detection, and stat recomputation.
+# PROG-004: Wisdom/faith virtue multipliers, rank-up eligibility, trait drift execution.
 #
 # Rules:
 # - Pure static service. No RNG, no OS time, no side effects beyond mutating the
 #   save_data roster ref that is passed in.
 # - Deterministic: same inputs always produce the same outputs.
 # - Mutations are performed directly on save_data["sanctum"]["roster"] entries.
-#   Callers must set save_request = true after calling award_post_combat_xp().
+#   Callers must set save_request = true after calling award_post_combat_xp() / execute_rank_up().
 # - All thresholds and tuning values come from prog_cfg (data.progression in balance.json).
 #
 # XP sources (PROG-003):
@@ -16,15 +17,22 @@
 #   raw_xp   = kill_xp + clear_xp + realm_xp
 #   final_xp = round(raw_xp × (1.0 + virtue_multiplier))
 #
-# Virtue multiplier (courage, PROG-003):
-#   melee_share = (melee_count + kill_count) / max(total_count, 1)
-#   multiplier  = melee_share × (traits.courage / 100.0) × virtue_xp_multiplier_max
+# Virtue multipliers (PROG-004):
+#   courage: melee_share × (courage / 100.0) × virtue_xp_multiplier_max
+#   wisdom:  guard_share  × (wisdom  / 100.0) × wisdom_xp_multiplier_max
+#   faith:   survived (1.0 or 0.0) × (faith / 100.0) × faith_xp_multiplier_max
+#
+# Rank-up (PROG-004):
+#   Eligible when level == max_level_per_rank.
+#   XP carry-over: new_xp_total = max(0, xp_total - level_thresholds[-1])
+#   Trait drift: seeded weighted roll from vector_drift_weights[dominant_vector].
+#   Seed path: campaign_seed.derive("echo.{id}.rank_up.rank_{new_rank}")
+#   Magnitude: ±rank_up_trait_drift_magnitude (default ±1), clamped to [1, 100].
+#   calling_eligible set to true when new rank == 3.
 #
 # Level threshold array (level_thresholds in balance.json):
 #   index i = minimum cumulative XP to hold level (i+1)
 #   e.g. [0, 100, 250, 450, 700] → level 1 = 0 XP, level 2 = 100 XP, etc.
-#
-# Deferred to PROG-004: wisdom/faith virtue multipliers, rank-up, deeper vector feedback.
 
 class_name ProgressionService
 extends RefCounted
@@ -112,7 +120,7 @@ static func award_post_combat_xp(
 		# Virtue multiplier (courage, PROG-003 only).
 		var traits_v: Variant = echo.get("traits", {})
 		var traits: Dictionary = traits_v if traits_v is Dictionary else {}
-		var multiplier: float = compute_virtue_multiplier(traits, alog, virt_max)
+		var multiplier: float = compute_virtue_multiplier(traits, alog, virt_max, prog_cfg)
 		var final_xp: int = int(round(float(raw_xp) * (1.0 + multiplier)))
 
 		# Apply XP and check for level-up.
@@ -190,26 +198,154 @@ static func get_xp_to_next(xp_total: int, thresholds: Array, max_level: int = 5)
 
 
 ## Computes the virtue-based XP multiplier for a single echo.
-## MVP: courage only. melee_share drives the bonus.
-## max_mult — from balance.json virtue_xp_multiplier_max (e.g. 0.20 = +20% max)
+## PROG-003: courage (melee_share). PROG-004: wisdom (guard_share) + faith (survived).
+## prog_cfg — full data.progression dict (contains all multiplier_max keys).
 static func compute_virtue_multiplier(
 	traits: Dictionary,
 	action_log: Dictionary,
-	max_mult: float
+	max_mult: float,
+	prog_cfg: Dictionary = {}
 ) -> float:
-	var total: int  = int(action_log.get("total_count", 0))
+	var total: int = int(action_log.get("total_count", 0))
 	if total == 0:
 		return 0.0
 
-	var melee: int  = int(action_log.get("melee_count", 0))
-	var kills: int  = int(action_log.get("kill_count", 0))
+	# ── Courage ──────────────────────────────────────────────────────────
+	var melee: int   = int(action_log.get("melee_count", 0))
 	var courage: float = float(traits.get("courage", 0)) / 100.0
-
-	# melee_share: fraction of total actions that were aggressive (melee + kills counted once)
 	var melee_share: float = clampf(float(melee) / float(total), 0.0, 1.0)
+	var courage_bonus: float = melee_share * courage * max_mult
 
-	# Multiplier scales with both how aggressively the echo fought AND their courage trait.
-	return melee_share * courage * max_mult
+	# ── Wisdom (PROG-004) ────────────────────────────────────────────────
+	var wisdom_max: float = float(prog_cfg.get("wisdom_xp_multiplier_max", 0.0))
+	var wisdom_bonus: float = 0.0
+	if wisdom_max > 0.0:
+		var guards: int  = int(action_log.get("guard_count", 0))
+		var wisdom: float = float(traits.get("wisdom", 0)) / 100.0
+		var guard_share: float = clampf(float(guards) / float(total), 0.0, 1.0)
+		wisdom_bonus = guard_share * wisdom * wisdom_max
+
+	# ── Faith (PROG-004) ─────────────────────────────────────────────────
+	var faith_max: float = float(prog_cfg.get("faith_xp_multiplier_max", 0.0))
+	var faith_bonus: float = 0.0
+	if faith_max > 0.0:
+		var survived: bool = bool(action_log.get("survived", true))
+		var faith: float   = float(traits.get("faith", 0)) / 100.0
+		faith_bonus = (1.0 if survived else 0.0) * faith * faith_max
+
+	return courage_bonus + wisdom_bonus + faith_bonus
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# PROG-004: Rank-up eligibility and execution
+# ────────────────────────────────────────────────────────────────────────────
+
+## Returns true when the echo is eligible to rank up.
+## Eligible = current level equals max_level_per_rank.
+static func is_rank_up_eligible(echo: Dictionary, prog_cfg: Dictionary) -> bool:
+	var level: int     = int(echo.get("level", 1))
+	var max_level: int = int(prog_cfg.get("max_level_per_rank", 5))
+	var rank: int      = int(echo.get("rank", 1))
+	var max_rank: int  = 5  # MVP cap
+	return level >= max_level and rank < max_rank
+
+
+## Computes the trait drift that WOULD apply on rank-up — pure, no mutation.
+## Returns { trait_key: String, direction: int (+1 or -1), narrative_key: String }
+## Returns {} if not eligible or config is missing.
+static func compute_trait_drift_preview(
+	echo: Dictionary,
+	campaign_seed,
+	prog_cfg: Dictionary
+) -> Dictionary:
+	if not is_rank_up_eligible(echo, prog_cfg):
+		return {}
+	var dominant: String = str(echo.get("dominant_vector", ""))
+	var new_rank: int    = int(echo.get("rank", 1)) + 1
+	var echo_id: String  = str(echo.get("id", ""))
+	return _compute_drift(dominant, new_rank, echo_id, campaign_seed, prog_cfg)
+
+
+## Executes rank-up: increments rank, resets level, carries XP, applies trait drift,
+## sets calling_eligible at rank 3, recomputes derived stats.
+## Mutates echo dict in place. Returns a drift event dict for logging/UI.
+##
+## campaign_seed  — CampaignSeed instance (has derive(path) → int)
+## prog_cfg       — data.progression from balance.json
+## birth_stats_cfg — data.summoning.birth_stats from balance.json
+## logger         — StructuredLogger (may be null)
+## t              — sim_tick
+static func execute_rank_up(
+	echo: Dictionary,
+	campaign_seed,
+	prog_cfg: Dictionary,
+	birth_stats_cfg: Dictionary,
+	logger,
+	t: int
+) -> Dictionary:
+	var old_rank: int = int(echo.get("rank", 1))
+	var echo_id: String  = str(echo.get("id", ""))
+	var echo_name: String = str(echo.get("name", "?"))
+
+	# 1. Increment rank.
+	var new_rank: int = old_rank + 1
+	echo["rank"] = new_rank
+
+	# 2. Reset level.
+	echo["level"] = 1
+
+	# 3. Carry XP overflow: subtract the last threshold (max level XP cost).
+	var thresholds: Array = _get_thresholds(prog_cfg)
+	var max_threshold: int = int(thresholds.back()) if not thresholds.is_empty() else 700
+	var old_xp: int = int(echo.get("xp_total", 0))
+	echo["xp_total"] = maxi(0, old_xp - max_threshold)
+
+	# 4. Compute deterministic trait drift using dominant vector.
+	var dominant: String = str(echo.get("dominant_vector", ""))
+	var drift: Dictionary = _compute_drift(dominant, new_rank, echo_id, campaign_seed, prog_cfg)
+
+	# 5. Apply trait drift.
+	var trait_key: String = str(drift.get("trait_key", ""))
+	var direction: int    = int(drift.get("direction", 1))
+	var magnitude: int    = int(prog_cfg.get("rank_up_trait_drift_magnitude", 1))
+	var traits_v: Variant = echo.get("traits", {})
+	var traits: Dictionary = traits_v if traits_v is Dictionary else {}
+	var old_trait_val: int = int(traits.get(trait_key, 0))
+	var new_trait_val: int = clampi(old_trait_val + (direction * magnitude), 1, 100)
+	if not trait_key.is_empty():
+		traits[trait_key] = new_trait_val
+		echo["traits"] = traits
+
+	# 6. Set calling_eligible at rank 3.
+	var calling_eligible: bool = (new_rank == 3)
+	if calling_eligible:
+		echo["calling_eligible"] = true
+
+	# 7. Recompute derived stats with new rank.
+	var new_stats: Dictionary = DerivedStatService.compute_stats(traits, new_rank, 1, birth_stats_cfg)
+	echo["stats"] = new_stats
+
+	# 8. Log the event.
+	var seed_ref: String = "echo.%s.rank_up.rank_%d" % [echo_id, new_rank]
+	var event: Dictionary = {
+		"echo_id":          echo_id,
+		"echo_name":        echo_name,
+		"old_rank":         old_rank,
+		"new_rank":         new_rank,
+		"trait_key":        trait_key,
+		"direction":        direction,
+		"old_trait_value":  old_trait_val,
+		"new_trait_value":  new_trait_val,
+		"calling_eligible": calling_eligible,
+		"seed_ref":         seed_ref,
+		"narrative_key":    str(drift.get("narrative_key", "")),
+	}
+	if logger != null:
+		logger.info(t, "progression.rank_up",
+			"%s ascended to Rank %d" % [echo_name, new_rank],
+			event)
+
+	return event
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -219,3 +355,60 @@ static func compute_virtue_multiplier(
 static func _get_thresholds(prog_cfg: Dictionary) -> Array:
 	var t_v: Variant = prog_cfg.get("level_thresholds", [0, 100, 250, 450, 700])
 	return t_v if t_v is Array else [0, 100, 250, 450, 700]
+
+
+## Pure helper: derives a deterministic trait drift from the echo's dominant vector.
+## Uses CampaignSeed.derive(path) → int to seed a local RNG.
+## Returns { trait_key, direction, narrative_key } or {} on failure.
+static func _compute_drift(
+	dominant_vector: String,
+	new_rank: int,
+	echo_id: String,
+	campaign_seed,
+	prog_cfg: Dictionary
+) -> Dictionary:
+	# Look up the drift weight table for this vector.
+	var weights_v: Variant = prog_cfg.get("vector_drift_weights", {})
+	if not (weights_v is Dictionary):
+		return {}
+	var weights_map: Dictionary = weights_v
+	if not weights_map.has(dominant_vector):
+		# Fallback: equal weights across all three traits.
+		weights_map = { dominant_vector: { "courage": 0.34, "wisdom": 0.33, "faith": 0.33 } }
+
+	var trait_weights_v: Variant = weights_map.get(dominant_vector, {})
+	if not (trait_weights_v is Dictionary) or trait_weights_v.is_empty():
+		return {}
+	var trait_weights: Dictionary = trait_weights_v
+
+	# Seed a local RNG deterministically.
+	var seed_path: String = "echo.%s.rank_up.rank_%d" % [echo_id, new_rank]
+	var seed_val: int = campaign_seed.derive(seed_path)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_val
+
+	# Weighted trait selection: roll [0, 1) and pick trait by cumulative weight.
+	var trait_key: String = ""
+	var roll: float = rng.randf()
+	var cumulative: float = 0.0
+	for tk in trait_weights:
+		cumulative += float(trait_weights[tk])
+		if roll < cumulative:
+			trait_key = str(tk)
+			break
+	# Fallback to last key if floating-point rounding leaves us without a match.
+	if trait_key.is_empty() and not trait_weights.is_empty():
+		trait_key = str(trait_weights.keys().back())
+
+	# Direction: +1 or -1 via second seeded roll.
+	var direction: int = 1 if rng.randi() % 2 == 0 else -1
+
+	# Narrative key: e.g. "courage_positive", "wisdom_negative"
+	var dir_label: String = "positive" if direction > 0 else "negative"
+	var narrative_key: String = "%s_%s" % [trait_key, dir_label]
+
+	return {
+		"trait_key":     trait_key,
+		"direction":     direction,
+		"narrative_key": narrative_key,
+	}
