@@ -19,8 +19,7 @@ func exit(ctx: RefCounted, t: int) -> void:
 # ────────────────────────────────────────────────────────────────────────────
 
 static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
-	# --- Read level thresholds, max_level, and prog_cfg from balance.json ---
-	var thresholds: Array    = [0, 100, 250, 450, 700]
+	# --- Read max_level and prog_cfg from balance.json (thresholds now per-echo via get_effective_thresholds) ---
 	var max_level: int       = 5
 	var prog_cfg: Dictionary = {}
 	if flow_ctx.config_service != null:
@@ -29,9 +28,6 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		var prog_v: Variant  = bd.get("progression", {})
 		if prog_v is Dictionary:
 			prog_cfg = prog_v as Dictionary
-			var t_v: Variant = prog_cfg.get("level_thresholds", thresholds)
-			if t_v is Array:
-				thresholds = t_v
 			max_level = int(prog_cfg.get("max_level_per_rank", 5))
 
 	# --- Read roster and party ids from save_data ---
@@ -59,7 +55,13 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		var morale: int    = int(e.get("emotion", {}).get("morale_current", 50))
 		var max_hp: int    = int(e.get("stats", {}).get("max_hp", 0))
 
-		var xp_to_next: int = ProgressionService.get_xp_to_next(xp_total, thresholds, max_level)
+		# XP tuning: use rank-effective thresholds so rank 2+ echoes have harder per-level costs.
+		var eff_thresholds: Array = ProgressionService.get_effective_thresholds(int(e.get("rank", 1)), prog_cfg)
+		var xp_to_next: int = ProgressionService.get_xp_to_next(xp_total, eff_thresholds, max_level)
+		var level_idx: int   = maxi(0, level - 1)
+		var xp_in_level: int = xp_total - int(eff_thresholds[level_idx]) if level_idx < eff_thresholds.size() else 0
+		var next_idx: int    = mini(level, eff_thresholds.size() - 1)
+		var xp_per_level: int = int(eff_thresholds[next_idx]) - int(eff_thresholds[level_idx]) if xp_to_next > 0 else 0
 
 		var stats_v: Variant  = e.get("stats", {})
 		var stats: Dictionary = stats_v if stats_v is Dictionary else {}
@@ -83,6 +85,8 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"level":            level,
 			"xp_total":         xp_total,
 			"xp_to_next":       xp_to_next,
+			"xp_in_level":      xp_in_level,
+			"xp_per_level":     xp_per_level,
 			"archetype":        str(e.get("archetype_birth", "")),
 			"hp_max":           max_hp,
 			"stats": {

@@ -540,6 +540,14 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				elif not echo_logs[eid].has("survived"):
 					echo_logs[eid]["survived"] = true
 
+	# XP tuning: compute realm XP multiplier from campaign position (run_index).
+	# run_index = how many times this realm has been started (campaign difficulty proxy).
+	var realm_xp_mult: float = 1.0
+	var mult_rate: float = float(prog_cfg_d.get("realm_xp_multiplier_per_realm", 0.0))
+	if mult_rate > 0.0:
+		realm_xp_mult = 1.0 + float(run_index) * mult_rate
+
+	# XP tuning: kill XP was already applied mid-combat — skip it here to avoid double-count.
 	xp_events = ProgressionService.award_post_combat_xp(
 		flow_ctx.save_data,
 		echo_logs,
@@ -548,7 +556,9 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		prog_cfg_d,
 		birth_stats_d,
 		flow_ctx.logger,
-		t
+		t,
+		realm_xp_mult,
+		true
 	)
 
 	# XP mutations are covered by the save_request set above.

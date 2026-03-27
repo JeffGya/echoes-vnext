@@ -236,13 +236,13 @@ func _render_detail(e: Dictionary) -> void:
 	if rank_up_eligible:
 		ascend_button.text = "▲ Ascend to Rank %d" % (rank + 1)
 
-	# XP bar: progress toward next level threshold
+	# XP bar: progress toward next level threshold (pre-computed by FlowEchoManageState)
+	var xp_in_level: int  = int(e.get("xp_in_level", 0))
+	var xp_per_level: int = int(e.get("xp_per_level", 100))
 	if xp_to_next > 0:
-		var xp_in_level: int = _xp_within_current_level(xp_total, level)
-		var xp_needed: int   = xp_in_level + xp_to_next
-		detail_xp_bar.max_value = maxi(1, xp_needed)
+		detail_xp_bar.max_value = maxi(1, xp_per_level)
 		detail_xp_bar.value     = xp_in_level
-		detail_xp_label.text    = "XP %d/%d" % [xp_in_level, xp_needed]
+		detail_xp_label.text    = "XP %d/%d" % [xp_in_level, xp_per_level]
 	else:
 		# At max level for this rank
 		detail_xp_bar.max_value = 1
@@ -280,18 +280,6 @@ func _render_detail(e: Dictionary) -> void:
 
 	# Party CTA label
 	detail_assign_party_btn.text = "Remove from party" if in_party else "Assign to party"
-
-
-# ── XP helpers ───────────────────────────────────────────────────────────
-
-## Returns how much XP the echo has earned above the current level threshold.
-## e.g. if level 2 requires 100 XP and echo has 180 XP total, returns 80.
-func _xp_within_current_level(xp_total: int, level: int) -> int:
-	# Read thresholds from the snapshot's balance context (use defaults if unavailable)
-	var thresholds: Array = [0, 100, 250, 450, 700]
-	if level >= 1 and level <= thresholds.size():
-		return xp_total - int(thresholds[level - 1])
-	return 0
 
 
 # ── Button handlers ───────────────────────────────────────────────────────

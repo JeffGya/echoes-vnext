@@ -819,6 +819,8 @@ func _resolve_next_actor(t: int) -> void:
 	var bdata: Dictionary = balance.get("data", {})
 	var grid_cfg: Dictionary = bdata.get("grid", {})
 	var actor_cfg: Dictionary = bdata.get("actor", {})
+	var prog_cfg_block: Dictionary    = bdata.get("progression", {})
+	var birth_stats_block: Dictionary = bdata.get("summoning", {}).get("birth_stats", {})
 	var round: int = int(combat_state.get("round_counter", 0))
 
 	# COMBAT-006: find shrine and compute context fields for purify_shrine objective.
@@ -986,6 +988,13 @@ func _resolve_next_actor(t: int) -> void:
 				alog["total_count"] += 1
 				if bool(last_res.get("is_kill", false)):
 					alog["kill_count"] += 1
+					# XP tuning: kill XP applied immediately for mid-combat stat bump.
+					var roster_echo: Dictionary = _find_roster_echo(str(actor.get("id", "")))
+					if not roster_echo.is_empty():
+						ProgressionService.apply_mid_combat_kill_xp(
+							roster_echo, actor, prog_cfg_block, birth_stats_block,
+							_get_realm_xp_multiplier(), logger, t
+						)
 			"actor.guard":
 				alog["guard_count"] += 1
 				alog["total_count"] += 1
@@ -1813,3 +1822,49 @@ func _handle_directive_select(action: Dictionary, t: int) -> void:
 	else:
 		flow_ctx.save_request_reason = "directive.select"
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+# ── XP tuning helpers (ST5) ──────────────────────────────────────────────────
+
+## Returns the save_data roster entry for the given echo_id, or {} if not found.
+func _find_roster_echo(echo_id: String) -> Dictionary:
+	if echo_id.is_empty():
+		return {}
+	var sanc_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if not sanc_v is Dictionary:
+		return {}
+	var roster_v: Variant = (sanc_v as Dictionary).get("roster", [])
+	if not roster_v is Array:
+		return {}
+	for entry_v in roster_v:
+		if entry_v is Dictionary and str(entry_v.get("id", "")) == echo_id:
+			return entry_v as Dictionary
+	return {}
+
+
+## Returns the realm XP multiplier for the current realm based on run_index.
+## Reads realm_id from flow_ctx and run_index from save_data["realms"].
+## Returns 1.0 on any guard failure.
+func _get_realm_xp_multiplier() -> float:
+	if flow_ctx == null:
+		return 1.0
+	var realm_id: String = str(flow_ctx.realm_id)
+	if realm_id.is_empty():
+		return 1.0
+	var prog_cfg_v: Variant = {}
+	if config_service != null:
+		var bal: Dictionary = config_service.get_balance()
+		var bd: Dictionary  = bal.get("data", {})
+		prog_cfg_v = bd.get("progression", {})
+	var prog_cfg_r: Dictionary = prog_cfg_v if prog_cfg_v is Dictionary else {}
+	var rate: float = float(prog_cfg_r.get("realm_xp_multiplier_per_realm", 0.0))
+	if rate <= 0.0:
+		return 1.0
+	var realms_v: Variant = flow_ctx.save_data.get("realms", {})
+	if not realms_v is Dictionary:
+		return 1.0
+	var realm_entry_v: Variant = (realms_v as Dictionary).get(realm_id, {})
+	if not realm_entry_v is Dictionary:
+		return 1.0
+	var run_idx: int = int((realm_entry_v as Dictionary).get("run_index", 0))
+	return 1.0 + float(run_idx) * rate

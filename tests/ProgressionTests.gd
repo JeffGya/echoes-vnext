@@ -24,6 +24,12 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("prog_rank_up_xp_carry_overflow",             Callable(ProgressionTests, "_test_rank_up_xp_carry"))
 	runner.register_test("prog_rank_up_trait_drift_deterministic",     Callable(ProgressionTests, "_test_rank_up_drift_deterministic"))
 	runner.register_test("prog_rank_up_calling_eligible_at_rank_3",   Callable(ProgressionTests, "_test_rank_up_calling_eligible"))
+	# XP tuning (ST7):
+	runner.register_test("prog_rank2_effective_thresholds_shift",          Callable(ProgressionTests, "_test_rank2_effective_thresholds"))
+	runner.register_test("prog_realm_multiplier_scales_stage_xp",          Callable(ProgressionTests, "_test_realm_multiplier_scales_xp"))
+	runner.register_test("prog_mid_combat_kill_xp_updates_xp_total",       Callable(ProgressionTests, "_test_mid_combat_kill_xp_total"))
+	runner.register_test("prog_mid_combat_level_up_updates_actor_stats",   Callable(ProgressionTests, "_test_mid_combat_level_up_stats"))
+	runner.register_test("prog_kill_xp_skipped_in_post_combat",            Callable(ProgressionTests, "_test_skip_kill_xp_flag"))
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -66,9 +72,16 @@ static func _default_prog_cfg() -> Dictionary:
 		"xp_stage_clear_base":       40,
 		"xp_realm_completion_bonus": 100,
 		"virtue_xp_multiplier_max":  0.20,
-		"level_thresholds":          [0, 100, 250, 450, 700],
+		"level_thresholds":          [0, 100, 300, 600, 1000],
 		"max_level_per_rank":        5,
 	}
+
+## XP tuning config — Option A thresholds + rank shift + realm multiplier.
+static func _xp_tuning_cfg() -> Dictionary:
+	var cfg := _default_prog_cfg()
+	cfg["rank_level_base_shift"]         = 50
+	cfg["realm_xp_multiplier_per_realm"] = 0.15
+	return cfg
 
 ## PROG-004 config — extends _default_prog_cfg() with rank-up and virtue additions.
 static func _prog004_cfg() -> Dictionary:
@@ -86,7 +99,7 @@ static func _prog004_cfg() -> Dictionary:
 
 ## Echo at max level with a dominant vector set — used by PROG-004 rank-up tests.
 static func _make_echo_at_max_level(id: String, vector: String = "vanguard") -> Dictionary:
-	var e := _make_echo(id, 700, 5)  # xp=700 = last threshold, level=5 = max
+	var e := _make_echo(id, 1000, 5)  # xp=1000 = last threshold (Option A), level=5 = max
 	e["dominant_vector"] = vector
 	return e
 
@@ -230,7 +243,7 @@ static func _test_level_up_stat_recompute() -> Dictionary:
 static func _test_level_cap() -> Dictionary:
 	var save: Dictionary = {
 		"sanctum": {
-			"roster":          [_make_echo("e1", 700, 5)],  # already at level 5
+			"roster":          [_make_echo("e1", 1000, 5)],  # already at level 5 (xp=1000 = Option A max threshold)
 			"active_party_ids": ["e1"],
 		}
 	}
@@ -330,9 +343,9 @@ static func _test_faith_multiplier() -> Dictionary:
 ## 11. Echo at level == max_level_per_rank (5) and rank < 5 is eligible for rank-up.
 static func _test_rank_up_eligible() -> Dictionary:
 	var cfg := _prog004_cfg()
-	var eligible_echo   := _make_echo("e1", 700, 5)  # level 5, rank 1
-	var ineligible_echo := _make_echo("e2", 250, 3)  # level 3, rank 1
-	var at_max_rank     := _make_echo("e3", 700, 5)
+	var eligible_echo   := _make_echo("e1", 1000, 5)  # level 5, rank 1 — xp=1000 (Option A max)
+	var ineligible_echo := _make_echo("e2", 300, 3)  # level 3, rank 1 — not yet max level
+	var at_max_rank     := _make_echo("e3", 1000, 5)
 	at_max_rank["rank"] = 5  # already at MVP cap — not eligible
 	if not ProgressionService.is_rank_up_eligible(eligible_echo, cfg):
 		return { "ok": false, "error": "level-5 rank-1 echo should be eligible" }
@@ -360,11 +373,11 @@ static func _test_rank_up_increments_rank() -> Dictionary:
 ## 13. XP overflow carries over on rank-up: xp_total = max(0, old_xp - last_threshold).
 static func _test_rank_up_xp_carry() -> Dictionary:
 	var echo := _make_echo_at_max_level("e1", "vanguard")
-	# Set xp_total to last_threshold (700) + 150 overflow
-	echo["xp_total"] = 850
+	# Set xp_total to last_threshold (1000) + 150 overflow
+	echo["xp_total"] = 1150
 	var seed := CampaignSeed.new(42)
 	ProgressionService.execute_rank_up(echo, seed, _prog004_cfg(), _stub_birth_stats(), null, 0)
-	# Expected carry: 850 - 700 = 150
+	# Expected carry: 1150 - 1000 = 150
 	var new_xp: int = int(echo.get("xp_total", -1))
 	if new_xp != 150:
 		return { "ok": false, "error": "Expected xp carry=150, got %d" % new_xp }
@@ -401,4 +414,112 @@ static func _test_rank_up_calling_eligible() -> Dictionary:
 		return { "ok": false, "error": "calling_eligible not set on echo at rank 3" }
 	if not bool(event.get("calling_eligible", false)):
 		return { "ok": false, "error": "calling_eligible not set in rank-up event" }
+	return { "ok": true }
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# XP Tuning tests (ST7)
+# ────────────────────────────────────────────────────────────────────────────
+
+## 16. Rank 2 effective thresholds: first per-level step is 150 (not 100) with shift=50.
+static func _test_rank2_effective_thresholds() -> Dictionary:
+	var cfg := _xp_tuning_cfg()
+	var eff := ProgressionService.get_effective_thresholds(2, cfg)
+	# Base: [0, 100, 300, 600, 1000]. Step costs: [100, 200, 300, 400].
+	# With shift=50: [150, 250, 350, 450]. Cumulative: [0, 150, 400, 750, 1200].
+	if eff.size() < 2:
+		return { "ok": false, "error": "Expected array of length ≥2, got %d" % eff.size() }
+	var first_step: int = int(eff[1]) - int(eff[0])
+	if first_step != 150:
+		return { "ok": false, "error": "Expected rank-2 first step=150, got %d" % first_step }
+	# Rank 1 must still return base thresholds unchanged.
+	var base := ProgressionService.get_effective_thresholds(1, cfg)
+	if int(base[1]) != 100:
+		return { "ok": false, "error": "Rank-1 first step should be 100, got %d" % int(base[1]) }
+	return { "ok": true }
+
+
+## 17. Stage XP is scaled by realm multiplier (run_index=2, rate=0.15 → mult=1.30).
+static func _test_realm_multiplier_scales_xp() -> Dictionary:
+	var cfg := _xp_tuning_cfg()
+	var run_index: int = 2
+	var mult: float = 1.0 + float(run_index) * float(cfg.get("realm_xp_multiplier_per_realm", 0.0))
+	var save_base := _make_save(["e1"])
+	var save_mult := _make_save(["e2"])
+
+	# Award without multiplier.
+	ProgressionService.award_post_combat_xp(
+		save_base, {}, true, false, cfg, _stub_birth_stats(), null, 0, 1.0, true
+	)
+	# Award with multiplier.
+	ProgressionService.award_post_combat_xp(
+		save_mult, {}, true, false, cfg, _stub_birth_stats(), null, 0, mult, true
+	)
+
+	var xp_base: int = int(save_base["sanctum"]["roster"][0].get("xp_total", 0))
+	var xp_mult: int = int(save_mult["sanctum"]["roster"][0].get("xp_total", 0))
+	var expected: int = roundi(float(xp_base) * mult)
+	if xp_mult != expected:
+		return { "ok": false, "error": "Expected scaled XP=%d, got %d (base=%d, mult=%.2f)" % [expected, xp_mult, xp_base, mult] }
+	return { "ok": true }
+
+
+## 18. apply_mid_combat_kill_xp adds kill XP to echo's xp_total immediately.
+static func _test_mid_combat_kill_xp_total() -> Dictionary:
+	var cfg   := _xp_tuning_cfg()
+	var echo  := _make_echo("e1", 0, 1)
+	var actor := echo.duplicate()  # minimal live actor (no hp sync needed at level 1)
+	actor["current_hp"] = int(echo["stats"]["max_hp"])
+
+	var kill_xp: int = int(cfg.get("xp_kill_bonus", 25))
+	ProgressionService.apply_mid_combat_kill_xp(echo, actor, cfg, _stub_birth_stats(), 1.0, null, 0)
+
+	if int(echo.get("xp_total", -1)) != kill_xp:
+		return { "ok": false, "error": "Expected xp_total=%d, got %d" % [kill_xp, int(echo.get("xp_total", -1))] }
+	return { "ok": true }
+
+
+## 19. When kill XP crosses a level threshold, live actor stats are updated immediately.
+static func _test_mid_combat_level_up_stats() -> Dictionary:
+	var cfg  := _xp_tuning_cfg()
+	# Put echo just below the level-2 threshold (100 XP).
+	var echo := _make_echo("e1", 90, 1)
+	var actor: Dictionary = echo.duplicate()
+	actor["current_hp"] = int(echo["stats"]["max_hp"])
+	var old_atk: int = int(actor.get("atk", 0))
+
+	# kill_xp=25 → 90+25=115 > 100 → should level up to 2.
+	ProgressionService.apply_mid_combat_kill_xp(echo, actor, cfg, _stub_birth_stats(), 1.0, null, 0)
+
+	if int(echo.get("level", 0)) != 2:
+		return { "ok": false, "error": "Expected level=2 after level-up, got %d" % int(echo.get("level", 0)) }
+	var new_atk: int = int(actor.get("atk", 0))
+	if new_atk <= old_atk:
+		return { "ok": false, "error": "Expected atk to increase after level-up, old=%d new=%d" % [old_atk, new_atk] }
+	return { "ok": true }
+
+
+## 20. When skip_kill_xp=true, kill XP is NOT awarded in award_post_combat_xp.
+static func _test_skip_kill_xp_flag() -> Dictionary:
+	var cfg  := _xp_tuning_cfg()
+	var save_with    := _make_save(["e1"])
+	var save_without := _make_save(["e2"])
+	var logs := { "e1": { "melee_count": 0, "guard_count": 0, "kill_count": 2, "total_count": 2 },
+				  "e2": { "melee_count": 0, "guard_count": 0, "kill_count": 2, "total_count": 2 } }
+
+	# skip_kill_xp=false → kills are counted.
+	ProgressionService.award_post_combat_xp(
+		save_with, { "e1": logs["e1"] }, true, false, cfg, _stub_birth_stats(), null, 0, 1.0, false
+	)
+	# skip_kill_xp=true → kills are NOT counted.
+	ProgressionService.award_post_combat_xp(
+		save_without, { "e2": logs["e2"] }, true, false, cfg, _stub_birth_stats(), null, 0, 1.0, true
+	)
+
+	var xp_with:    int = int(save_with["sanctum"]["roster"][0].get("xp_total", 0))
+	var xp_without: int = int(save_without["sanctum"]["roster"][0].get("xp_total", 0))
+	var kill_xp_expected: int = 2 * int(cfg.get("xp_kill_bonus", 25))
+
+	if xp_with - xp_without != kill_xp_expected:
+		return { "ok": false, "error": "Expected diff=%d (kill XP), got xp_with=%d xp_without=%d" % [kill_xp_expected, xp_with, xp_without] }
 	return { "ok": true }

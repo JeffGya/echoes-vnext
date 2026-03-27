@@ -62,7 +62,9 @@ static func award_post_combat_xp(
 	prog_cfg: Dictionary,
 	birth_stats_cfg: Dictionary,
 	logger,
-	t: int
+	t: int,
+	realm_xp_multiplier: float = 1.0,
+	skip_kill_xp: bool = false
 ) -> Array:
 	var xp_events: Array = []
 
@@ -79,7 +81,6 @@ static func award_post_combat_xp(
 	var party_ids_v: Variant = sanctum.get("active_party_ids", [])
 	var party_ids: Array = party_ids_v if party_ids_v is Array else []
 
-	var thresholds: Array = _get_thresholds(prog_cfg)
 	var max_level: int   = int(prog_cfg.get("max_level_per_rank", 5))
 	var kill_bonus: int  = int(prog_cfg.get("xp_kill_bonus", 25))
 	var clear_base: int  = int(prog_cfg.get("xp_stage_clear_base", 40))
@@ -98,36 +99,43 @@ static func award_post_combat_xp(
 		if not (echo_id in party_ids):
 			continue
 
+		# Use rank-effective thresholds for this echo.
+		var echo_rank: int      = int(echo.get("rank", 1))
+		var eff_thresholds: Array = get_effective_thresholds(echo_rank, prog_cfg)
+
 		# XP from kills (this echo's kills only).
+		# skip_kill_xp = true when kills were already applied mid-combat in FlowRuntime.
 		var alog: Dictionary = {}
 		if echo_action_logs.has(echo_id):
 			var alog_v: Variant = echo_action_logs[echo_id]
 			alog = alog_v if alog_v is Dictionary else {}
 
-		var kill_count: int  = int(alog.get("kill_count", 0))
-		var kill_xp: int     = kill_count * kill_bonus
+		var kill_xp: int = 0
+		if not skip_kill_xp:
+			var kill_count: int = int(alog.get("kill_count", 0))
+			kill_xp = kill_count * kill_bonus
 
-		# XP from stage clear (victory only).
-		var clear_xp: int = clear_base if victory else 0
+		# XP from stage clear (victory only) — scaled by realm_xp_multiplier.
+		var clear_xp: int = roundi(float(clear_base) * realm_xp_multiplier) if victory else 0
 
-		# XP from realm completion (victory + final stage).
-		var realm_xp: int = realm_bonus if (victory and realm_completed) else 0
+		# XP from realm completion (victory + final stage) — scaled by realm_xp_multiplier.
+		var realm_xp: int = roundi(float(realm_bonus) * realm_xp_multiplier) if (victory and realm_completed) else 0
 
 		var raw_xp: int = kill_xp + clear_xp + realm_xp
 		if raw_xp <= 0:
 			continue
 
-		# Virtue multiplier (courage, PROG-003 only).
+		# Virtue multiplier (courage/wisdom/faith).
 		var traits_v: Variant = echo.get("traits", {})
 		var traits: Dictionary = traits_v if traits_v is Dictionary else {}
 		var multiplier: float = compute_virtue_multiplier(traits, alog, virt_max, prog_cfg)
 		var final_xp: int = int(round(float(raw_xp) * (1.0 + multiplier)))
 
-		# Apply XP and check for level-up.
+		# Apply XP and check for level-up using effective thresholds.
 		var old_xp: int    = int(echo.get("xp_total", 0))
 		var old_level: int = int(echo.get("level", 1))
 		var new_xp: int    = old_xp + final_xp
-		var new_level: int = mini(get_level_for_xp(new_xp, thresholds), max_level)
+		var new_level: int = mini(get_level_for_xp(new_xp, eff_thresholds), max_level)
 
 		# Mutate roster entry.
 		roster[i]["xp_total"] = new_xp
@@ -135,8 +143,7 @@ static func award_post_combat_xp(
 
 		# Recompute derived stats on level-up.
 		if new_level > old_level:
-			var rank: int = int(echo.get("rank", 1))
-			var new_stats: Dictionary = DerivedStatService.compute_stats(traits, rank, new_level, birth_stats_cfg)
+			var new_stats: Dictionary = DerivedStatService.compute_stats(traits, echo_rank, new_level, birth_stats_cfg)
 			roster[i]["stats"] = new_stats
 			if logger != null:
 				logger.info(t, "progression.level_up",
@@ -149,7 +156,7 @@ static func award_post_combat_xp(
 						"new_xp":    new_xp,
 					})
 
-		var xp_to_next: int = get_xp_to_next(new_xp, thresholds, max_level)
+		var xp_to_next: int = get_xp_to_next(new_xp, eff_thresholds, max_level)
 
 		xp_events.append({
 			"echo_id":    echo_id,
@@ -294,9 +301,9 @@ static func execute_rank_up(
 	# 2. Reset level.
 	echo["level"] = 1
 
-	# 3. Carry XP overflow: subtract the last threshold (max level XP cost).
-	var thresholds: Array = _get_thresholds(prog_cfg)
-	var max_threshold: int = int(thresholds.back()) if not thresholds.is_empty() else 700
+	# 3. Carry XP overflow: subtract the last threshold of the OLD rank's effective curve.
+	var thresholds: Array  = get_effective_thresholds(old_rank, prog_cfg)
+	var max_threshold: int = int(thresholds.back()) if not thresholds.is_empty() else 1000
 	var old_xp: int = int(echo.get("xp_total", 0))
 	echo["xp_total"] = maxi(0, old_xp - max_threshold)
 
@@ -353,8 +360,96 @@ static func execute_rank_up(
 # ────────────────────────────────────────────────────────────────────────────
 
 static func _get_thresholds(prog_cfg: Dictionary) -> Array:
-	var t_v: Variant = prog_cfg.get("level_thresholds", [0, 100, 250, 450, 700])
-	return t_v if t_v is Array else [0, 100, 250, 450, 700]
+	var t_v: Variant = prog_cfg.get("level_thresholds", [0, 100, 300, 600, 1000])
+	return t_v if t_v is Array else [0, 100, 300, 600, 1000]
+
+
+## Returns cumulative XP thresholds scaled for the given rank.
+## Adds (rank-1) * rank_level_base_shift to each per-level step cost.
+## Rank 1 returns base thresholds unchanged. Pure — no side effects.
+## Example: rank=2, base=[0,100,300,600,1000], shift=50
+##   step costs [100,200,300,400] → shifted [150,250,350,450] → result [0,150,400,750,1200]
+static func get_effective_thresholds(rank: int, prog_cfg: Dictionary) -> Array:
+	var base: Array    = _get_thresholds(prog_cfg)
+	var shift: int     = int(prog_cfg.get("rank_level_base_shift", 0))
+	if shift == 0 or rank <= 1 or base.size() < 2:
+		return base
+	var extra: int     = (rank - 1) * shift
+	var result: Array  = [0]
+	for i in range(1, base.size()):
+		var step_cost: int     = int(base[i]) - int(base[i - 1])
+		var shifted_cost: int  = step_cost + extra
+		result.append(result.back() + shifted_cost)
+	return result
+
+
+## Applies kill XP immediately to an echo mid-combat.
+## Mutates both the save_data roster entry (echo) and the live actor dict.
+## Returns a level_up event dict if the echo levelled up, otherwise {}.
+## Called from FlowRuntime._resolve_next_actor() after each kill.
+static func apply_mid_combat_kill_xp(
+	echo: Dictionary,
+	actor: Dictionary,
+	prog_cfg: Dictionary,
+	birth_stats_cfg: Dictionary,
+	realm_xp_multiplier: float,
+	logger,
+	t: int
+) -> Dictionary:
+	var kill_bonus: int  = int(prog_cfg.get("xp_kill_bonus", 25))
+	var max_level: int   = int(prog_cfg.get("max_level_per_rank", 5))
+	var kill_xp: int     = roundi(float(kill_bonus) * realm_xp_multiplier)
+	if kill_xp <= 0:
+		return {}
+
+	var echo_rank: int        = int(echo.get("rank", 1))
+	var eff_thresholds: Array = get_effective_thresholds(echo_rank, prog_cfg)
+	var old_xp: int           = int(echo.get("xp_total", 0))
+	var old_level: int        = int(echo.get("level", 1))
+	var new_xp: int           = old_xp + kill_xp
+	var new_level: int        = mini(get_level_for_xp(new_xp, eff_thresholds), max_level)
+
+	echo["xp_total"] = new_xp
+
+	if new_level <= old_level:
+		return {}
+
+	# Level-up — mutate save_data echo and sync live actor stats.
+	echo["level"] = new_level
+	var traits_v: Variant      = echo.get("traits", {})
+	var traits: Dictionary     = traits_v if traits_v is Dictionary else {}
+	var new_stats: Dictionary  = DerivedStatService.compute_stats(traits, echo_rank, new_level, birth_stats_cfg)
+	echo["stats"] = new_stats
+
+	# Sync live actor — top-level stat fields.
+	var old_max_hp: int = int(actor.get("max_hp", 0))
+	for stat_key in ["atk", "def", "agi", "int", "cha", "speed", "max_hp"]:
+		if new_stats.has(stat_key):
+			actor[stat_key] = new_stats[stat_key]
+
+	# Partial heal: give the HP increase from max_hp bump.
+	var new_max_hp: int  = int(new_stats.get("max_hp", old_max_hp))
+	var hp_gained: int   = maxi(0, new_max_hp - old_max_hp)
+	if hp_gained > 0:
+		var cur_hp: int = int(actor.get("current_hp", old_max_hp))
+		actor["current_hp"] = mini(cur_hp + hp_gained, new_max_hp)
+
+	var echo_id: String   = str(echo.get("id", ""))
+	var echo_name: String = str(echo.get("name", "?"))
+	var event: Dictionary = {
+		"echo_id":   echo_id,
+		"echo_name": echo_name,
+		"old_level": old_level,
+		"new_level": new_level,
+		"old_xp":    old_xp,
+		"new_xp":    new_xp,
+		"kill_xp":   kill_xp,
+	}
+	if logger != null:
+		logger.info(t, "progression.level_up",
+			"%s levelled up to %d (mid-combat)" % [echo_name, new_level],
+			event)
+	return event
 
 
 ## Pure helper: derives a deterministic trait drift from the echo's dominant vector.

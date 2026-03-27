@@ -781,8 +781,10 @@
 			"virtue_xp_multiplier_max": 0.20,
 			"wisdom_xp_multiplier_max": 0.20,
 			"faith_xp_multiplier_max": 0.20,
-			"level_thresholds": [0, 100, 250, 450, 700],
+			"level_thresholds": [0, 100, 300, 600, 1000],
 			"max_level_per_rank": 5,
+			"rank_level_base_shift": 50,
+			"realm_xp_multiplier_per_realm": 0.15,
 			"_comment_prog004": "PROG-004: Rank-up and trait drift. vector_drift_weights must sum to 1.0 per vector key. rank_up_trait_drift_magnitude = +-N applied to one trait per rank-up.",
 			"rank_up_trait_drift_magnitude": 1,
 			"vector_drift_weights": {
