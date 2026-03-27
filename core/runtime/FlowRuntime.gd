@@ -275,6 +275,10 @@ func dispatch(action: Dictionary) -> Dictionary:
 		"sanctum.rank_up":
 			_handle_sanctum_rank_up(action, t)
 
+		# PROG-007: Keeper confirms a calling for an echo (may be deferred after rank-up).
+		"sanctum.calling.confirm":
+			_handle_sanctum_calling_confirm(action, t)
+
 		# ---- Directives (DIRECTIVE-001) ----
 		"directive.select":
 			_handle_directive_select(action, t)
@@ -1767,16 +1771,19 @@ func _handle_sanctum_rank_up(action: Dictionary, t: int) -> void:
 		})
 		return
 
-	# Read prog_cfg from balance.json.
+	# Read prog_cfg and calling_cfg from balance.json.
 	var prog_cfg_v: Variant = {}
 	var birth_stats_v: Variant = {}
+	var calling_cfg_v: Variant = {}
 	if config_service != null:
 		var bal: Dictionary = config_service.get_balance()
 		var bd: Dictionary  = bal.get("data", {})
-		prog_cfg_v   = bd.get("progression", {})
+		prog_cfg_v    = bd.get("progression", {})
 		birth_stats_v = bd.get("summoning", {}).get("birth_stats", {})
+		calling_cfg_v = bd.get("calling", {})
 	var prog_cfg: Dictionary    = prog_cfg_v if prog_cfg_v is Dictionary else {}
 	var birth_stats: Dictionary = birth_stats_v if birth_stats_v is Dictionary else {}
+	var calling_cfg: Dictionary = calling_cfg_v if calling_cfg_v is Dictionary else {}
 
 	# Guard: must be eligible.
 	if not ProgressionService.is_rank_up_eligible(echo_ref, prog_cfg):
@@ -1793,6 +1800,7 @@ func _handle_sanctum_rank_up(action: Dictionary, t: int) -> void:
 		flow_ctx.campaign_seed,
 		prog_cfg,
 		birth_stats,
+		calling_cfg,
 		logger,
 		t
 	)
@@ -1810,6 +1818,86 @@ func _handle_sanctum_rank_up(action: Dictionary, t: int) -> void:
 	# Attach the rank-up event to the snapshot data so the UI can drive the reveal overlay.
 	if flow_ctx.last_snapshot.has("data") and flow_ctx.last_snapshot["data"] is Dictionary:
 		flow_ctx.last_snapshot["data"]["rank_up_event"] = event
+
+
+# PROG-007: Confirms a Keeper-chosen calling for an echo.
+# Only valid from ECHO_MANAGE snapshot. Guards: echo must exist in roster and have a calling pending.
+func _handle_sanctum_calling_confirm(action: Dictionary, t: int) -> void:
+	var snap_type: String = str(flow_ctx.last_snapshot.get("type", ""))
+	if snap_type != FlowStateIds.ECHO_MANAGE:
+		logger.debug(t, "sanctum.calling.ignored", "Calling confirm ignored (not in echo manage)", {
+			"snapshot_type": snap_type
+		})
+		return
+
+	var payload_v: Variant = action.get("payload", {})
+	var payload: Dictionary = payload_v if payload_v is Dictionary else {}
+	var echo_id: String = str(payload.get("echo_id", "")).strip_edges()
+	var chosen_calling_id: String = str(payload.get("chosen_calling_id", "")).strip_edges()
+
+	if echo_id.is_empty() or chosen_calling_id.is_empty():
+		logger.debug(t, "sanctum.calling.denied", "Calling confirm denied (missing echo_id or chosen_calling_id)", {})
+		return
+
+	# Find echo in roster.
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	var roster_v: Variant = sanctum.get("roster", [])
+	var roster: Array = roster_v if roster_v is Array else []
+
+	var echo_ref: Dictionary = {}
+	for i in range(roster.size()):
+		if roster[i] is Dictionary and str(roster[i].get("id", "")) == echo_id:
+			echo_ref = roster[i]
+			break
+
+	if echo_ref.is_empty():
+		logger.debug(t, "sanctum.calling.denied", "Calling confirm denied (echo not in roster)", {
+			"echo_id": echo_id
+		})
+		return
+
+	# Guard: must have a calling pending (calling_eligible=true and no calling set yet).
+	if not CallingService.is_calling_pending(echo_ref):
+		logger.debug(t, "sanctum.calling.denied", "Calling confirm denied (no calling pending)", {
+			"echo_id":         echo_id,
+			"calling_eligible": bool(echo_ref.get("calling_eligible", false)),
+			"calling":         str(echo_ref.get("calling", "")),
+		})
+		return
+
+	# Read calling_cfg from balance.json.
+	var calling_cfg_v: Variant = {}
+	if config_service != null:
+		var bal: Dictionary = config_service.get_balance()
+		calling_cfg_v = bal.get("data", {}).get("calling", {})
+	var calling_cfg: Dictionary = calling_cfg_v if calling_cfg_v is Dictionary else {}
+
+	# Confirm the calling — mutates echo_ref in place.
+	var confirmed: String = CallingService.confirm_calling(echo_ref, chosen_calling_id, calling_cfg, logger, t)
+	if confirmed.is_empty():
+		logger.debug(t, "sanctum.calling.denied", "Calling confirm denied (invalid chosen_calling_id)", {
+			"echo_id":           echo_id,
+			"chosen_calling_id": chosen_calling_id,
+		})
+		return
+
+	# Persist.
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason != "":
+		flow_ctx.save_request_reason += "|progression.calling.confirm"
+	else:
+		flow_ctx.save_request_reason = "progression.calling.confirm"
+
+	# Rebuild Echo Manage snapshot.
+	flow_ctx.last_snapshot = FlowEchoManageState.build_snapshot(flow_ctx, t)
+
+	# Attach calling_event so UI can react (clear pending indicator, etc.).
+	if flow_ctx.last_snapshot.has("data") and flow_ctx.last_snapshot["data"] is Dictionary:
+		flow_ctx.last_snapshot["data"]["calling_event"] = {
+			"echo_id":    echo_id,
+			"calling":    confirmed,
+		}
 
 
 # DIRECTIVE-001: writes the chosen directive to stage_context, requests save, refreshes snapshot.

@@ -360,7 +360,7 @@ static func _test_rank_up_eligible() -> Dictionary:
 static func _test_rank_up_increments_rank() -> Dictionary:
 	var echo  := _make_echo_at_max_level("e1", "vanguard")
 	var seed  := CampaignSeed.new(99999)
-	var event := ProgressionService.execute_rank_up(echo, seed, _prog004_cfg(), _stub_birth_stats(), null, 0)
+	var event := ProgressionService.execute_rank_up(echo, seed, _prog004_cfg(), _stub_birth_stats(), {}, null, 0)
 	if int(echo.get("rank", 0)) != 2:
 		return { "ok": false, "error": "Expected rank=2, got %d" % int(echo.get("rank", 0)) }
 	if int(echo.get("level", 0)) != 1:
@@ -376,7 +376,7 @@ static func _test_rank_up_xp_carry() -> Dictionary:
 	# Set xp_total to last_threshold (1000) + 150 overflow
 	echo["xp_total"] = 1150
 	var seed := CampaignSeed.new(42)
-	ProgressionService.execute_rank_up(echo, seed, _prog004_cfg(), _stub_birth_stats(), null, 0)
+	ProgressionService.execute_rank_up(echo, seed, _prog004_cfg(), _stub_birth_stats(), {}, null, 0)
 	# Expected carry: 1150 - 1000 = 150
 	var new_xp: int = int(echo.get("xp_total", -1))
 	if new_xp != 150:
@@ -407,7 +407,7 @@ static func _test_rank_up_calling_eligible() -> Dictionary:
 	var echo     := _make_echo_at_max_level("e1", "pillar")
 	echo["rank"] = 2
 	var seed  := CampaignSeed.new(777)
-	var event := ProgressionService.execute_rank_up(echo, seed, _prog004_cfg(), _stub_birth_stats(), null, 0)
+	var event := ProgressionService.execute_rank_up(echo, seed, _prog004_cfg(), _stub_birth_stats(), {}, null, 0)
 	if int(echo.get("rank", 0)) != 3:
 		return { "ok": false, "error": "Expected rank=3, got %d" % int(echo.get("rank", 0)) }
 	if not bool(echo.get("calling_eligible", false)):

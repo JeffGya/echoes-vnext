@@ -2,6 +2,8 @@
 # PROG-003: Echo Manage screen — list + detail panel.
 # PROG-004: Rank-up overlay (RankUpOverlay), dominant_vector label,
 #           CallingEligibleBadge, AscendButton, ▲ row indicator.
+# PROG-007: Calling selection (CallingPanel via RankUpOverlay), ⚡ pending indicator,
+#           deferred access from detail panel, sanctum.calling.confirm dispatch.
 #
 # Layout: persistent echo list (left) + detail panel (right, shown on row tap).
 # Follows ScreenTemplate contract: set_snapshot() → _clear() → _render().
@@ -45,7 +47,7 @@ const _RANK_UP_OVERLAY_SCENE: PackedScene = preload("res://ui/overlays/RankUpOve
 
 # PROG-004 detail panel nodes (defined in EchoManageScreen.tscn)
 @onready var dominant_vector_label: Label    = %DominantVectorLabel
-@onready var calling_eligible_badge: Label   = %CallingEligibleBadge
+@onready var calling_eligible_badge: Button  = %CallingEligibleBadge
 @onready var ascend_button: Button           = %AscendButton
 
 # ── State ─────────────────────────────────────────────────────────────────
@@ -79,11 +81,17 @@ func _ready() -> void:
 	if not ascend_button.pressed.is_connected(_on_ascend_pressed):
 		ascend_button.pressed.connect(_on_ascend_pressed)
 
+	# PROG-007: Path Awaits button — deferred calling access.
+	if not calling_eligible_badge.pressed.is_connected(_on_path_awaits_pressed):
+		calling_eligible_badge.pressed.connect(_on_path_awaits_pressed)
+
 	# PROG-004: Rank-up overlay — instantiated once, lives as a child of this screen.
 	_rank_up_overlay = _RANK_UP_OVERLAY_SCENE.instantiate() as RankUpOverlay
 	add_child(_rank_up_overlay)
 	_rank_up_overlay.confirm_requested.connect(_on_rank_up_confirm_requested)
 	_rank_up_overlay.dismissed.connect(_on_rank_up_dismissed)
+	# PROG-007: Calling confirmation signal.
+	_rank_up_overlay.calling_confirm_requested.connect(_on_calling_confirm_requested)
 
 
 # ── Snapshot contract ─────────────────────────────────────────────────────
@@ -117,6 +125,8 @@ func set_snapshot(snap: Dictionary) -> void:
 		if _rank_up_overlay != null:
 			_rank_up_overlay.show_reveal(rank_up_event_v as Dictionary)
 
+	# PROG-007: calling_event is attached after confirm — snapshot already rebuilt; no extra action needed.
+
 
 # ── List builder ──────────────────────────────────────────────────────────
 
@@ -137,7 +147,10 @@ func _make_echo_row(e: Dictionary) -> Control:
 	var level          := int(e.get("level", 1))
 	var rank           := int(e.get("rank", 1))
 	var in_party       := bool(e.get("in_party", false))
-	var rank_up_eligible := bool(e.get("rank_up_eligible", false))
+	var rank_up_eligible  := bool(e.get("rank_up_eligible", false))
+	# PROG-007: calling pending indicator
+	var calling_options_v: Variant = e.get("calling_options", [])
+	var calling_pending: bool = (calling_options_v is Array) and (calling_options_v as Array).size() > 0
 
 	var row := HBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -170,6 +183,12 @@ func _make_echo_row(e: Dictionary) -> Control:
 		var ascend_badge := Label.new()
 		ascend_badge.text = "▲"
 		row.add_child(ascend_badge)
+
+	# PROG-007: show ⚡ when a calling choice is pending.
+	if calling_pending:
+		var calling_badge := Label.new()
+		calling_badge.text = "⚡"
+		row.add_child(calling_badge)
 
 	var arrow_btn := Button.new()
 	arrow_btn.text = "▶"
@@ -230,7 +249,20 @@ func _render_detail(e: Dictionary) -> void:
 	if not dominant_vector.is_empty():
 		dominant_vector_label.text = _vector_label(dominant_vector)
 
-	calling_eligible_badge.visible = calling_eligible
+	# PROG-007: show confirmed calling in the calling label; show ⚡ badge when pending.
+	var confirmed_calling: String = str(e.get("calling", ""))
+	var calling_options_v: Variant = e.get("calling_options", [])
+	var calling_pending: bool = (calling_options_v is Array) and (calling_options_v as Array).size() > 0
+
+	if not confirmed_calling.is_empty():
+		detail_calling_label.text = confirmed_calling.capitalize()
+	else:
+		detail_calling_label.text = calling
+
+	# calling_eligible_badge repurposed: shows "⚡ Path Awaits" when calling is pending.
+	calling_eligible_badge.visible = calling_pending
+	if calling_pending:
+		calling_eligible_badge.text = "⚡ Path Awaits"
 
 	ascend_button.visible = rank_up_eligible
 	if rank_up_eligible:
@@ -322,6 +354,28 @@ func _on_rank_up_confirm_requested(echo_id: String) -> void:
 
 func _on_rank_up_dismissed() -> void:
 	pass  # Snapshot already refreshed via set_snapshot(); nothing extra needed.
+
+
+# ── PROG-007 handlers ─────────────────────────────────────────────────────
+
+## Called when the ⚡ Path Awaits badge/button is tapped in the detail panel.
+## Opens the CallingPanel directly — no rank-up flow required.
+func _on_path_awaits_pressed() -> void:
+	if _selected_echo.is_empty() or _rank_up_overlay == null:
+		return
+	var options_v: Variant = _selected_echo.get("calling_options", [])
+	var options: Array = options_v if options_v is Array else []
+	if options.is_empty():
+		return
+	_rank_up_overlay.show_calling(str(_selected_echo.get("id", "")), options)
+
+
+## Dispatches sanctum.calling.confirm when the Keeper picks a calling in the overlay.
+func _on_calling_confirm_requested(echo_id: String, chosen_calling_id: String) -> void:
+	action_requested.emit({
+		"type":    "sanctum.calling.confirm",
+		"payload": { "echo_id": echo_id, "chosen_calling_id": chosen_calling_id },
+	})
 
 
 # ── PROG-004 helpers ──────────────────────────────────────────────────────

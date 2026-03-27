@@ -107,6 +107,9 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"calling_eligible": calling_eligible,
 			"dominant_vector":  dominant_vector,
 			"trait_drift_preview": drift_preview,
+			# PROG-007 fields:
+			"calling_options":  (e.get("calling_options", []) if CallingService.is_calling_pending(e) else []),
+			"calling":          str(e.get("calling", "")),
 		})
 
 	var echo_count: int = echo_entries.size()

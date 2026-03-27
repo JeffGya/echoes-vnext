@@ -884,6 +884,67 @@
 					"pillar": -2.0
 				}
 			}
+		},
+		"calling": {
+			"compatibility_threshold": 0.15,
+			"calling_preferred_morale_boost": 10,
+			"calling_compatible_morale_dip": 5,
+			"calling_ambivalent_morale_dip": 3,
+			"calling_ambivalent_fear_increase": 3,
+			"calling_incompatible_fear_increase": 10,
+			"vector_to_calling": {
+				"vanguard":  "blade",
+				"protector": "warder",
+				"pillar":    "steward",
+				"seeker":    "seeker"
+			},
+			"seeker_trait_split": {
+				"courage_gte_wisdom": "ranger",
+				"wisdom_gt_courage":  "seer"
+			},
+			"all_callings": ["blade", "warder", "steward", "ranger", "seer"],
+			"definitions": {
+				"blade": {
+					"display_name": "The Blade",
+					"icon_key":     "calling_blade",
+					"description":  "Decisive force. The Blade breaks through what others cannot.",
+					"benefits":     ["Increased melee damage output", "Higher aggression intent weighting"],
+					"downsides":    ["Reduced defensive instinct", "Lower foresight in positioning"],
+					"vector":       "vanguard"
+				},
+				"warder": {
+					"display_name": "The Warder",
+					"icon_key":     "calling_warder",
+					"description":  "Unyielding shelter. The Warder stands where others fall back.",
+					"benefits":     ["Guard actions more effective", "Faster ally-response selection"],
+					"downsides":    ["Reduced offensive pressure", "Slower at pressing advantages"],
+					"vector":       "protector"
+				},
+				"steward": {
+					"display_name": "The Steward",
+					"icon_key":     "calling_steward",
+					"description":  "Enduring presence. The Steward holds what others abandon.",
+					"benefits":     ["Objective control bonuses", "Morale stabilisation for nearby allies"],
+					"downsides":    ["Lower mobility", "Less reactive to shifting threats"],
+					"vector":       "pillar"
+				},
+				"ranger": {
+					"display_name": "The Ranger",
+					"icon_key":     "calling_ranger",
+					"description":  "Swift and prepared. The Ranger reads the field before others see it.",
+					"benefits":     ["Improved objective awareness", "Faster repositioning intent"],
+					"downsides":    ["Less effective in sustained melee", "Reduced frontal durability"],
+					"vector":       "seeker"
+				},
+				"seer": {
+					"display_name": "The Seer",
+					"icon_key":     "calling_seer",
+					"description":  "Sight beyond sight. The Seer guides where others guess.",
+					"benefits":     ["Higher tactical foresight weighting", "Improved directive interpretation"],
+					"downsides":    ["Reduced raw combat output", "Lower aggression expression"],
+					"vector":       "seeker"
+				}
+			}
 		}
 	}
 }

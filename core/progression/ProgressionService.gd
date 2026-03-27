@@ -280,6 +280,7 @@ static func compute_trait_drift_preview(
 ## campaign_seed  — CampaignSeed instance (has derive(path) → int)
 ## prog_cfg       — data.progression from balance.json
 ## birth_stats_cfg — data.summoning.birth_stats from balance.json
+## calling_cfg    — data.calling from balance.json (optional; pass {} to skip calling_options)
 ## logger         — StructuredLogger (may be null)
 ## t              — sim_tick
 static func execute_rank_up(
@@ -287,6 +288,7 @@ static func execute_rank_up(
 	campaign_seed,
 	prog_cfg: Dictionary,
 	birth_stats_cfg: Dictionary,
+	calling_cfg: Dictionary,
 	logger,
 	t: int
 ) -> Dictionary:
@@ -323,10 +325,12 @@ static func execute_rank_up(
 		traits[trait_key] = new_trait_val
 		echo["traits"] = traits
 
-	# 6. Set calling_eligible at rank 3.
+	# 6. Set calling_eligible at rank 3; compute all calling options if cfg provided.
 	var calling_eligible: bool = (new_rank == 3)
 	if calling_eligible:
 		echo["calling_eligible"] = true
+		if not calling_cfg.is_empty():
+			echo["calling_options"] = CallingService.compute_all_options(echo, calling_cfg)
 
 	# 7. Recompute derived stats with new rank.
 	var new_stats: Dictionary = DerivedStatService.compute_stats(traits, new_rank, 1, birth_stats_cfg)
@@ -344,6 +348,7 @@ static func execute_rank_up(
 		"old_trait_value":  old_trait_val,
 		"new_trait_value":  new_trait_val,
 		"calling_eligible": calling_eligible,
+		"calling_options":  echo.get("calling_options", []),
 		"seed_ref":         seed_ref,
 		"narrative_key":    str(drift.get("narrative_key", "")),
 	}
