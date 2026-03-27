@@ -42,5 +42,10 @@ var purifier_id: String = ""
 var last_round_snapshot: Dictionary = {}
 var final_snapshot: Dictionary = {}
 
+# PROG-003: per-echo action log — accumulated across all rounds; consumed at resolve for XP calc.
+# Shape: { echo_id: { melee_count: int, guard_count: int, kill_count: int, total_count: int } }
+# Initialised fresh per EncounterContext instance (i.e. once per combat). Never persisted.
+var echo_action_logs: Dictionary = {}
+
 # Optional deterministic notes for debugging / temporary tests
 var notes: Array[String] = []

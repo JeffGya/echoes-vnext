@@ -115,8 +115,10 @@ func dispatch(action: Dictionary) -> Dictionary:
 			flow_machine.transition(FlowStateIds.STAGE, flow_ctx, logger, t, "ui.flow.select_stage")
 
 		# REALM-004: advance stage index; on realm complete, route to REALM_SELECT.
+		# destination override allows cta.continue on victory to route to SANCTUM instead of STAGE_MAP.
 		"flow.complete_stage":
-			_handle_complete_stage(t)
+			var dest_override := str(action.get("destination", ""))
+			_handle_complete_stage(t, dest_override)
 
 		"flow.continue":
 			var is_first_boot: bool = bool(flow_ctx.save_data.get("first_boot", true))
@@ -468,7 +470,9 @@ func _handle_sanctum_grade_select(action: Dictionary, t: int) -> void:
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 # REALM-004: Advance stage index; on realm complete, clear context and route to REALM_SELECT.
-func _handle_complete_stage(t: int) -> void:
+# destination_override: when set, non-completed stages route there instead of STAGE_MAP.
+# Realm completion always routes to REALM_SELECT regardless of override.
+func _handle_complete_stage(t: int, destination_override: String = "") -> void:
 	# Fix BUG-003: read outcome BEFORE nulling encounter_ctx so drift reflects the actual result.
 	var outcome := "loss"
 	if flow_ctx.encounter_ctx != null:
@@ -484,7 +488,8 @@ func _handle_complete_stage(t: int) -> void:
 		flow_ctx.stage_id = ""
 		flow_machine.transition(FlowStateIds.REALM_SELECT, flow_ctx, logger, t, "realm.complete")
 	else:
-		flow_machine.transition(FlowStateIds.STAGE_MAP, flow_ctx, logger, t, "realm.stage_complete")
+		var dest: String = destination_override if destination_override != "" else FlowStateIds.STAGE_MAP
+		flow_machine.transition(dest, flow_ctx, logger, t, "realm.stage_complete")
 
 
 func _handle_new_game(t: int) -> void:
@@ -962,6 +967,26 @@ func _resolve_next_actor(t: int) -> void:
 	# Store the most recent result for per-actor snapshot display.
 	if not ectx.last_round_results.is_empty():
 		ectx.last_actor_action = ectx.last_round_results.back().duplicate()
+
+	# PROG-003: accumulate echo action log for XP virtue multiplier at resolve.
+	# Only echo-faction actors contribute. Accumulated across all rounds.
+	if str(actor.get("faction", "")) == "echo" and not ectx.last_round_results.is_empty():
+		var last_res: Dictionary = ectx.last_round_results.back()
+		var eid: String = str(actor.get("id", ""))
+		if not ectx.echo_action_logs.has(eid):
+			ectx.echo_action_logs[eid] = { "melee_count": 0, "guard_count": 0, "kill_count": 0, "total_count": 0 }
+		var alog: Dictionary = ectx.echo_action_logs[eid]
+		match str(last_res.get("action_type", "")):
+			"melee_attack":
+				alog["melee_count"] += 1
+				alog["total_count"] += 1
+				if bool(last_res.get("is_kill", false)):
+					alog["kill_count"] += 1
+			"actor.guard":
+				alog["guard_count"] += 1
+				alog["total_count"] += 1
+			"actor.move", "actor.idle", "actor.refuse":
+				alog["total_count"] += 1
 
 	# Advance current_actor_index past this actor so the next call finds the correct one.
 	combat_state["current_actor_index"] = next_idx + 1
@@ -1549,10 +1574,11 @@ func _get_party_max_size() -> int:
 	return int(s_cfg.get("party_max_size", 5))
 	
 func _handle_sanctum_party_toggle(action: Dictionary, t: int) -> void:
-	# Only meaningful inside Party Manage; ignore elsewhere to avoid accidental mutations.
-	if str(flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.PARTY_MANAGE:
-		logger.debug(t, "sanctum.party.toggle.ignored", "Party toggle ignored (not in party_manage)", {
-			"snapshot_type": str(flow_ctx.last_snapshot.get("type", ""))
+	# Allow from Party Manage and Echo Manage; ignore elsewhere to avoid accidental mutations.
+	var snap_type := str(flow_ctx.last_snapshot.get("type", ""))
+	if snap_type != FlowStateIds.PARTY_MANAGE and snap_type != FlowStateIds.ECHO_MANAGE:
+		logger.debug(t, "sanctum.party.toggle.ignored", "Party toggle ignored (not in party/echo manage)", {
+			"snapshot_type": snap_type
 		})
 		return
 
@@ -1613,8 +1639,11 @@ func _handle_sanctum_party_toggle(action: Dictionary, t: int) -> void:
 		"max_party_size": max_party_size
 	})
 
-	# No flow transition — update UI immediately
-	flow_ctx.last_snapshot = FlowPartyManageState.build_snapshot(flow_ctx, t)
+	# No flow transition — update UI immediately via the correct builder for current state.
+	if snap_type == FlowStateIds.ECHO_MANAGE:
+		flow_ctx.last_snapshot = FlowEchoManageState.build_snapshot(flow_ctx, t)
+	else:
+		flow_ctx.last_snapshot = FlowPartyManageState.build_snapshot(flow_ctx, t)
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 	
 ## PROG-001: one-time repair pass for echo fields added after draw-order v1.

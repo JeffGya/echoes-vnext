@@ -1,0 +1,268 @@
+# res://ui/screens/sanctum/EchoManageScreen.gd
+# PROG-003: Echo Manage screen — list + detail panel.
+#
+# Layout: persistent echo list (left) + detail panel (right, shown on row tap).
+# Follows ScreenTemplate contract: set_snapshot() → _clear() → _render().
+# Never reads FlowContext or sim internals directly.
+# Per-echo row taps are handled client-side (no dispatch). Party assignment dispatches
+# sanctum.party.toggle via action_requested signal.
+
+extends Control
+
+signal action_requested(action: Dictionary)
+
+# ── Static node refs ──────────────────────────────────────────────────────
+@onready var echo_count_label: Label       = %EchoCountLabel
+@onready var echo_row_list: VBoxContainer  = %EchoRowList
+@onready var summon_btn: Button            = %SummonBtn
+@onready var view_bonds_btn: Button        = %ViewBondsBtn
+@onready var detail_panel: Control         = %DetailPanel
+
+# Detail panel nodes
+@onready var detail_name_label: Label      = %DetailName
+@onready var detail_shout_label: Label     = %DetailShout
+@onready var detail_hp_bar: ProgressBar    = %DetailHPBar
+@onready var detail_hp_label: Label        = %DetailHPLabel
+@onready var detail_calling_label: Label   = %DetailCalling
+@onready var detail_rank_label: Label      = %DetailRank
+@onready var detail_grade_label: Label     = %DetailGrade
+@onready var detail_level_label: Label     = %DetailLevel
+@onready var detail_xp_bar: ProgressBar    = %DetailXPBar
+@onready var detail_xp_label: Label        = %DetailXPLabel
+@onready var detail_archetype_label: Label = %DetailArchetype
+@onready var detail_stats_grid: GridContainer = %DetailStatsGrid
+@onready var detail_emotion_status: Label  = %DetailEmotionStatus
+@onready var detail_morale_bar: ProgressBar = %DetailMoraleBar
+@onready var detail_fear_bar: ProgressBar   = %DetailFearBar
+@onready var detail_assign_party_btn: Button = %AssignPartyBtn
+@onready var detail_assign_job_btn: Button   = %AssignJobBtn
+@onready var back_btn: Button                = %BackButton
+
+# ── State ─────────────────────────────────────────────────────────────────
+var _snap: Dictionary          = {}
+var _action_back: Dictionary   = {}
+var _echoes: Array             = []
+var _selected_echo: Dictionary = {}
+
+# ── Lifecycle ─────────────────────────────────────────────────────────────
+
+func _ready() -> void:
+	detail_panel.visible = false
+
+	if not back_btn.pressed.is_connected(_on_back_pressed):
+		back_btn.pressed.connect(_on_back_pressed)
+
+	if not summon_btn.pressed.is_connected(_on_summon_pressed):
+		summon_btn.pressed.connect(_on_summon_pressed)
+
+	# View bonds is a stub — disabled until BONDS story.
+	view_bonds_btn.disabled = true
+
+	if not detail_assign_party_btn.pressed.is_connected(_on_assign_party_pressed):
+		detail_assign_party_btn.pressed.connect(_on_assign_party_pressed)
+
+	# Assign job is a stub — disabled until Sanctum jobs story.
+	detail_assign_job_btn.disabled = true
+
+
+# ── Snapshot contract ─────────────────────────────────────────────────────
+
+func set_snapshot(snap: Dictionary) -> void:
+	_snap = snap
+	var data: Dictionary    = snap.get("data", {}) if snap.get("data") is Dictionary else {}
+	var actions: Dictionary = snap.get("actions", {}) if snap.get("actions") is Dictionary else {}
+
+	var back_v: Variant = actions.get("nav.back", {})
+	_action_back = back_v if back_v is Dictionary else {}
+
+	_echoes = data.get("echoes", []) if data.get("echoes") is Array else []
+	var count: int = int(data.get("echo_count", _echoes.size()))
+	echo_count_label.text = "%d Echoes in sanctum" % count
+
+	_rebuild_echo_list()
+
+	# If a selected echo is already set, refresh its detail panel in case XP/level changed.
+	if not _selected_echo.is_empty():
+		var sel_id: String = str(_selected_echo.get("id", ""))
+		for e_v in _echoes:
+			if e_v is Dictionary and str(e_v.get("id", "")) == sel_id:
+				_selected_echo = e_v
+				break
+		_render_detail(_selected_echo)
+
+
+# ── List builder ──────────────────────────────────────────────────────────
+
+func _rebuild_echo_list() -> void:
+	for c in echo_row_list.get_children():
+		c.queue_free()
+
+	for e_v in _echoes:
+		if not (e_v is Dictionary):
+			continue
+		echo_row_list.add_child(_make_echo_row(e_v))
+
+
+func _make_echo_row(e: Dictionary) -> Control:
+	var echo_id   := str(e.get("id", ""))
+	var name_str  := str(e.get("name", ""))
+	var calling   := str(e.get("calling_origin", "Uncalled"))
+	var level     := int(e.get("level", 1))
+	var rank      := int(e.get("rank", 1))
+	var in_party  := bool(e.get("in_party", false))
+
+	var row := HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.custom_minimum_size   = Vector2(0, 48)
+
+	var name_lbl := Label.new()
+	name_lbl.text = name_str
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(name_lbl)
+
+	var calling_lbl := Label.new()
+	calling_lbl.text = calling
+	row.add_child(calling_lbl)
+
+	var level_lbl := Label.new()
+	level_lbl.text = "Lv %d" % level
+	row.add_child(level_lbl)
+
+	var rank_lbl := Label.new()
+	rank_lbl.text = "R%d" % rank
+	row.add_child(rank_lbl)
+
+	if in_party:
+		var party_badge := Label.new()
+		party_badge.text = "★"
+		row.add_child(party_badge)
+
+	var arrow_btn := Button.new()
+	arrow_btn.text = "▶"
+	arrow_btn.custom_minimum_size = Vector2(40, 48)
+	arrow_btn.theme_type_variation = "ButtonGhost"
+	# Capture echo dict by value for the closure.
+	var e_capture: Dictionary = e.duplicate()
+	arrow_btn.pressed.connect(func() -> void:
+		_selected_echo = e_capture
+		_render_detail(e_capture)
+		detail_panel.visible = true
+	)
+	row.add_child(arrow_btn)
+
+	return row
+
+
+# ── Detail panel renderer ─────────────────────────────────────────────────
+
+func _render_detail(e: Dictionary) -> void:
+	var name_str   := str(e.get("name", ""))
+	var calling    := str(e.get("calling_origin", "Uncalled"))
+	var rank       := int(e.get("rank", 1))
+	var rarity     := str(e.get("rarity", "uncalled"))
+	var level      := int(e.get("level", 1))
+	var xp_total   := int(e.get("xp_total", 0))
+	var xp_to_next := int(e.get("xp_to_next", 0))
+	var archetype  := str(e.get("archetype", ""))
+	var hp_max     := int(e.get("hp_max", 0))
+	var morale     := int(e.get("morale", 50))
+	var fear       := int(e.get("fear", 0))
+	var status     := str(e.get("morale_status", "Normal"))
+	var in_party   := bool(e.get("in_party", false))
+	var shout      := str(e.get("current_shout", ""))
+	var stats_v: Variant = e.get("stats", {})
+	var stats: Dictionary = stats_v if stats_v is Dictionary else {}
+
+	detail_name_label.text  = name_str
+	detail_shout_label.text = shout
+	detail_shout_label.visible = not shout.is_empty()
+
+	# HP bar (always full outside combat in MVP)
+	detail_hp_bar.max_value = maxi(1, hp_max)
+	detail_hp_bar.value     = hp_max
+	detail_hp_label.text    = "HP %d/%d" % [hp_max, hp_max]
+
+	detail_calling_label.text = calling
+	detail_rank_label.text    = "Rank %d" % rank
+	detail_grade_label.text   = rarity.capitalize()
+	detail_level_label.text   = "Level %d" % level
+
+	# XP bar: progress toward next level threshold
+	if xp_to_next > 0:
+		var xp_in_level: int = _xp_within_current_level(xp_total, level)
+		var xp_needed: int   = xp_in_level + xp_to_next
+		detail_xp_bar.max_value = maxi(1, xp_needed)
+		detail_xp_bar.value     = xp_in_level
+		detail_xp_label.text    = "XP %d/%d" % [xp_in_level, xp_needed]
+	else:
+		# At max level for this rank
+		detail_xp_bar.max_value = 1
+		detail_xp_bar.value     = 1
+		detail_xp_label.text    = "XP MAX"
+
+	detail_archetype_label.text = archetype.capitalize()
+
+	# Stats grid (2-column: label + value)
+	for c in detail_stats_grid.get_children():
+		c.queue_free()
+	var stat_rows: Array = [
+		["Attack",       stats.get("atk",   0)],
+		["Defense",      stats.get("def",   0)],
+		["Intelligence", stats.get("int",   0)],
+		["Agility",      stats.get("agi",   0)],
+		["Charisma",     stats.get("cha",   0)],
+		["Speed",        stats.get("speed", 0)],
+	]
+	for row_v in stat_rows:
+		var key_lbl := Label.new()
+		key_lbl.text = str(row_v[0])
+		var val_lbl := Label.new()
+		val_lbl.text = str(int(row_v[1]))
+		val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		detail_stats_grid.add_child(key_lbl)
+		detail_stats_grid.add_child(val_lbl)
+
+	# Emotion section
+	detail_emotion_status.text = status
+	detail_morale_bar.max_value = 100
+	detail_morale_bar.value     = morale
+	detail_fear_bar.max_value   = 100
+	detail_fear_bar.value       = fear
+
+	# Party CTA label
+	detail_assign_party_btn.text = "Remove from party" if in_party else "Assign to party"
+
+
+# ── XP helpers ───────────────────────────────────────────────────────────
+
+## Returns how much XP the echo has earned above the current level threshold.
+## e.g. if level 2 requires 100 XP and echo has 180 XP total, returns 80.
+func _xp_within_current_level(xp_total: int, level: int) -> int:
+	# Read thresholds from the snapshot's balance context (use defaults if unavailable)
+	var thresholds: Array = [0, 100, 250, 450, 700]
+	if level >= 1 and level <= thresholds.size():
+		return xp_total - int(thresholds[level - 1])
+	return 0
+
+
+# ── Button handlers ───────────────────────────────────────────────────────
+
+func _on_back_pressed() -> void:
+	if not _action_back.is_empty():
+		action_requested.emit(_action_back)
+
+
+func _on_summon_pressed() -> void:
+	action_requested.emit({
+		"type": "flow.go_state",
+		"to":   "flow.summon",
+	})
+
+
+func _on_assign_party_pressed() -> void:
+	if _selected_echo.is_empty():
+		return
+	action_requested.emit({
+		"type":    "sanctum.party.toggle",
+		"payload": { "echo_id": str(_selected_echo.get("id", "")) },
+	})

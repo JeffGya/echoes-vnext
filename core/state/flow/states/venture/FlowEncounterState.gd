@@ -506,6 +506,63 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	else:
 		flow_ctx.save_request_reason = "stage.reward"
 
+	# PROG-003: award XP and check level-ups for all party echoes.
+	var xp_events: Array = []
+	var prog_cfg_v: Variant = {}
+	var birth_stats_v: Variant = {}
+	if flow_ctx.config_service != null:
+		var bal_p: Dictionary = flow_ctx.config_service.get_balance()
+		var bd_p: Dictionary  = bal_p.get("data", {})
+		prog_cfg_v   = bd_p.get("progression", {})
+		birth_stats_v = bd_p.get("summoning", {}).get("birth_stats", {})
+	var prog_cfg_d: Dictionary   = prog_cfg_v if prog_cfg_v is Dictionary else {}
+	var birth_stats_d: Dictionary = birth_stats_v if birth_stats_v is Dictionary else {}
+
+	# Detect realm completion: is this the final stage?
+	var stage_count: int = int(realm_model.get("stage_count", 1))
+	var realm_complete_now: bool = victory and (stage_index >= stage_count - 1)
+
+	var echo_logs: Dictionary = {}
+	if ectx != null:
+		echo_logs = ectx.echo_action_logs
+
+	xp_events = ProgressionService.award_post_combat_xp(
+		flow_ctx.save_data,
+		echo_logs,
+		victory,
+		realm_complete_now,
+		prog_cfg_d,
+		birth_stats_d,
+		flow_ctx.logger,
+		t
+	)
+
+	# XP mutations are covered by the save_request set above.
+	if flow_ctx.save_request_reason != "" and not xp_events.is_empty():
+		flow_ctx.save_request_reason += "|progression.xp"
+
+	# Bug fix (PROG-003): sync final combat emotion state back to roster so Echo Manage
+	# reflects the actual fear/morale echoes accumulated during the encounter.
+	# The win/loss drift in _apply_encounter_emotion_drift() then applies on top.
+	if ectx != null:
+		var em_sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+		var em_sanctum: Dictionary = em_sanctum_v if em_sanctum_v is Dictionary else {}
+		var em_roster_v: Variant = em_sanctum.get("roster", [])
+		var em_roster: Array = em_roster_v if em_roster_v is Array else []
+		for actor_v in ectx.actors:
+			if not actor_v is Dictionary:
+				continue
+			if str(actor_v.get("faction", "")) != "echo":
+				continue
+			var eid: String = str(actor_v.get("id", ""))
+			for i in range(em_roster.size()):
+				if em_roster[i] is Dictionary and str(em_roster[i].get("id", "")) == eid:
+					if not em_roster[i].has("emotion"):
+						em_roster[i]["emotion"] = {}
+					em_roster[i]["emotion"]["fear_current"]   = int(actor_v.get("fear", 0))
+					em_roster[i]["emotion"]["morale_current"] = int(actor_v.get("morale", 0))
+					break
+
 	return {
 		"type": FlowStateIds.RESOLVE,
 		"data": {
@@ -523,6 +580,8 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"reward_breakdown": reward_result.get("breakdown", []),
 			"formula_inputs":   formula_inputs,
 			"relics":           [],
+			# PROG-003: per-echo XP events for ResolveScreen and EchoManage display.
+			"xp_events":        xp_events,
 		},
 		"actions": _build_resolve_actions(victory),
 		"meta": { "t": t },
@@ -530,19 +589,27 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 
 
 # Fix BUG-004: cta.next_stage only offered on victory — defeat should not advance the stage.
+# Bug fix: on victory, cta.continue also advances the stage (destination overrides routing to SANCTUM).
+# On defeat, cta.continue is a plain go_state — no stage advance.
 static func _build_resolve_actions(victory: bool) -> Dictionary:
-	var actions: Dictionary = {
-		"cta.continue": {
-			"type":  "flow.go_state",
-			"to":    FlowStateIds.SANCTUM,
-			"label": "To Sanctum",
-			"slot":  "cta.continue",
-		},
-	}
+	var actions: Dictionary = {}
 	if victory:
+		actions["cta.continue"] = {
+			"type":        "flow.complete_stage",
+			"destination": FlowStateIds.SANCTUM,
+			"label":       "To Sanctum",
+			"slot":        "cta.continue",
+		}
 		actions["cta.next_stage"] = {
 			"type":  "flow.complete_stage",
 			"label": "Next Stage",
 			"slot":  "cta.next_stage",
+		}
+	else:
+		actions["cta.continue"] = {
+			"type":  "flow.go_state",
+			"to":    FlowStateIds.SANCTUM,
+			"label": "To Sanctum",
+			"slot":  "cta.continue",
 		}
 	return actions

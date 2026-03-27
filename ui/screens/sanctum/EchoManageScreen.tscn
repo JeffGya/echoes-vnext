@@ -1,0 +1,293 @@
+[gd_scene format=3 uid="uid://echomanage003a"]
+
+[ext_resource type="Script" uid="uid://echomanagegdscr" path="res://ui/screens/sanctum/EchoManageScreen.gd" id="1_echmng"]
+
+[node name="EchoManageScreen" type="Control" unique_id=100000001]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_echmng")
+
+[node name="RootVBox" type="VBoxContainer" parent="." unique_id=100000050]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 0
+
+[node name="BackButton" type="Button" parent="RootVBox" unique_id=100000020]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(80, 48)
+size_flags_horizontal = 0
+text = "← Back"
+
+[node name="Panel" type="PanelContainer" parent="RootVBox" unique_id=100000002]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="MarginContainer" type="MarginContainer" parent="RootVBox/Panel" unique_id=100000003]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="MainHBox" type="HBoxContainer" parent="RootVBox/Panel/MarginContainer" unique_id=100000004]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 16
+
+[node name="EchoListPanel" type="VBoxContainer" parent="RootVBox/Panel/MarginContainer/MainHBox" unique_id=100000005]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(260, 0)
+theme_override_constants/separation = 8
+
+[node name="EchoCountLabel" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/EchoListPanel" unique_id=100000006]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0 Echoes in sanctum"
+
+[node name="EchoScroll" type="ScrollContainer" parent="RootVBox/Panel/MarginContainer/MainHBox/EchoListPanel" unique_id=100000007]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="EchoRowList" type="VBoxContainer" parent="RootVBox/Panel/MarginContainer/MainHBox/EchoListPanel/EchoScroll" unique_id=100000008]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 4
+
+[node name="ListCTAs" type="HBoxContainer" parent="RootVBox/Panel/MarginContainer/MainHBox/EchoListPanel" unique_id=100000009]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="SummonBtn" type="Button" parent="RootVBox/Panel/MarginContainer/MainHBox/EchoListPanel/ListCTAs" unique_id=100000010]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(80, 48)
+theme_type_variation = "ButtonPrimary"
+text = "Summon new echo"
+
+[node name="ViewBondsBtn" type="Button" parent="RootVBox/Panel/MarginContainer/MainHBox/EchoListPanel/ListCTAs" unique_id=100000011]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(80, 48)
+theme_type_variation = "ButtonSecondary"
+text = "View bonds"
+
+[node name="DetailPanel" type="VBoxContainer" parent="RootVBox/Panel/MarginContainer/MainHBox" unique_id=100000012]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+visible = false
+
+[node name="DetailName" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000013]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+text = "[EchoName]"
+horizontal_alignment = 1
+
+[node name="DetailShout" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000014]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+horizontal_alignment = 1
+visible = false
+
+[node name="HPRow" type="HBoxContainer" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000015]
+layout_mode = 2
+
+[node name="DetailHPLabel" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/HPRow" unique_id=100000016]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(80, 0)
+text = "HP 0/0"
+
+[node name="DetailHPBar" type="ProgressBar" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/HPRow" unique_id=100000017]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 20)
+value = 100.0
+show_percentage = false
+
+[node name="CallingRankRow" type="HBoxContainer" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000018]
+layout_mode = 2
+
+[node name="CallingKeyLbl" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/CallingRankRow" unique_id=100000019]
+layout_mode = 2
+custom_minimum_size = Vector2(60, 0)
+text = "Calling"
+
+[node name="DetailCalling" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/CallingRankRow" unique_id=100000020]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "—"
+
+[node name="RankKeyLbl" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/CallingRankRow" unique_id=100000021]
+layout_mode = 2
+custom_minimum_size = Vector2(40, 0)
+text = "Rank"
+
+[node name="DetailRank" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/CallingRankRow" unique_id=100000022]
+unique_name_in_owner = true
+layout_mode = 2
+text = "—"
+
+[node name="GradeLevelRow" type="HBoxContainer" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000023]
+layout_mode = 2
+
+[node name="GradeKeyLbl" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/GradeLevelRow" unique_id=100000024]
+layout_mode = 2
+custom_minimum_size = Vector2(60, 0)
+text = "Grade"
+
+[node name="DetailGrade" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/GradeLevelRow" unique_id=100000025]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "—"
+
+[node name="LevelKeyLbl" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/GradeLevelRow" unique_id=100000026]
+layout_mode = 2
+custom_minimum_size = Vector2(40, 0)
+text = "Level"
+
+[node name="DetailLevel" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/GradeLevelRow" unique_id=100000027]
+unique_name_in_owner = true
+layout_mode = 2
+text = "—"
+
+[node name="XPRow" type="HBoxContainer" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000028]
+layout_mode = 2
+
+[node name="DetailXPLabel" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/XPRow" unique_id=100000029]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(100, 0)
+text = "XP 0/100"
+
+[node name="DetailXPBar" type="ProgressBar" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/XPRow" unique_id=100000030]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 20)
+value = 0.0
+show_percentage = false
+
+[node name="DetailArchetype" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000031]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Archetype: —"
+
+[node name="StatsHeader" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000032]
+layout_mode = 2
+text = "Stats"
+
+[node name="DetailStatsGrid" type="GridContainer" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000033]
+unique_name_in_owner = true
+layout_mode = 2
+columns = 2
+
+[node name="EmotionHeader" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000034]
+layout_mode = 2
+text = "Emotional state"
+
+[node name="DetailEmotionStatus" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000035]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Normal"
+
+[node name="MoraleRow" type="HBoxContainer" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000036]
+layout_mode = 2
+
+[node name="MoraleKeyLbl" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/MoraleRow" unique_id=100000037]
+layout_mode = 2
+custom_minimum_size = Vector2(60, 0)
+text = "Morale"
+
+[node name="DetailMoraleBar" type="ProgressBar" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/MoraleRow" unique_id=100000038]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 20)
+value = 50.0
+show_percentage = false
+
+[node name="FearRow" type="HBoxContainer" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000039]
+layout_mode = 2
+
+[node name="FearKeyLbl" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/FearRow" unique_id=100000040]
+layout_mode = 2
+custom_minimum_size = Vector2(60, 0)
+text = "Fear"
+
+[node name="DetailFearBar" type="ProgressBar" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/FearRow" unique_id=100000041]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 20)
+value = 0.0
+show_percentage = false
+
+[node name="TabStrip" type="HBoxContainer" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000042]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="TabBase" type="Button" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/TabStrip" unique_id=100000043]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(60, 36)
+theme_type_variation = "ButtonPrimary"
+text = "Base"
+disabled = true
+
+[node name="TabSkills" type="Button" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/TabStrip" unique_id=100000044]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(60, 36)
+theme_type_variation = "ButtonSecondary"
+text = "Skills"
+disabled = true
+
+[node name="TabBonds" type="Button" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/TabStrip" unique_id=100000045]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(60, 36)
+theme_type_variation = "ButtonSecondary"
+text = "Bonds"
+disabled = true
+
+[node name="DetailCTAs" type="HBoxContainer" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000046]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="AssignPartyBtn" type="Button" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/DetailCTAs" unique_id=100000047]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(80, 48)
+theme_type_variation = "ButtonPrimary"
+text = "Assign to party"
+
+[node name="AssignJobBtn" type="Button" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/DetailCTAs" unique_id=100000048]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(80, 48)
+theme_type_variation = "ButtonSecondary"
+text = "Assign job"

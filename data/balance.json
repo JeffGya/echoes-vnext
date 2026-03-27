@@ -773,6 +773,15 @@
 				}
 			}
 		},
+		"progression": {
+			"_comment": "PROG-003: XP accrual and level-up config. All values tunable without code changes.",
+			"xp_kill_bonus": 25,
+			"xp_stage_clear_base": 40,
+			"xp_realm_completion_bonus": 100,
+			"virtue_xp_multiplier_max": 0.20,
+			"level_thresholds": [0, 100, 250, 450, 700],
+			"max_level_per_rank": 5
+		},
 		"combat": {
 			"_comment": "COMBAT-002: Initiative scoring modifiers. Formula: (speed*3 + agi*2) + arch_mod + calling_mod + trait_mod + vec_mod + nudge. Sort descending. Tiebreak: party list order. Nudge: CampaignSeed.derive_from(placement_seed, actor_id) % 10. All values tunable without code changes.",
 			"shrine": {

@@ -37,7 +37,7 @@ var _scene_by_flow_type: Dictionary = {}
 var _sanctum_scene := preload("res://ui/screens/sanctum/SanctumScreen.tscn")
 var _summon_scene := preload("res://ui/screens/sanctum/SummonScreen.tscn")
 var _party_scene := preload("res://ui/screens/sanctum/PartyManageScreen.tscn")
-#var _echo_scene := preload("res://ui/screens/sanctum/EchoManageScreen.tscn")
+var _echo_scene := preload("res://ui/screens/sanctum/EchoManageScreen.tscn")
 var _realm_scene := preload("res://ui/screens/realm/RealmSelectScreen.tscn")
 
 func _ready() -> void:
@@ -45,7 +45,7 @@ func _ready() -> void:
 		"flow.sanctum": _sanctum_scene,
 		"flow.summon": _summon_scene,
 		"flow.party_manage": _party_scene,
-		#"flow.echo_manage": _echo_scene,
+		"flow.echo_manage": _echo_scene,
 		"flow.realm_select": _realm_scene,
 	}
 

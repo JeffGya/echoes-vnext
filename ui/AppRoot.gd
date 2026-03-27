@@ -277,6 +277,7 @@ func _run_tests(parts: Array) -> void:
 	EconomyRewardTests.register(runner)  # ECONOMY-004
 	StageProgressionTests.register(runner)  # REALM-004
 	RealmRewardTests.register(runner)       # REALM-005
+	ProgressionTests.register(runner)       # PROG-003
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [
@@ -666,7 +667,7 @@ const SANCTUM_FAMILY: Array = [
 	"flow.sanctum",
 	"flow.summon",
 	"flow.party_manage",
-	# "flow.echo_manage",   # uncomment when EchoManageScreen exists
+	"flow.echo_manage",
 	"flow.realm_select",   # REALM-001
 ]
 const VENTURE_FAMILY: Array = [
