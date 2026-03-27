@@ -41,7 +41,7 @@ func _ready():
 	
 	logger = StructuredLogger.new()
 	# TEMP: debug by default until DebugPanel controls log level
-	logger.set_level("info")
+	logger.set_level("debug")
 	
 	config_service = ConfigService.new()
 	runtime = FlowRuntime.new(logger, config_service)
