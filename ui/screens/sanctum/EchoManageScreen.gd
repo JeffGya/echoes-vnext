@@ -56,8 +56,11 @@ var _action_back: Dictionary   = {}
 var _echoes: Array             = []
 var _selected_echo: Dictionary = {}
 var _rank_up_overlay: RankUpOverlay = null
-# SANCTUM-005: programmatic description label inserted after detail_calling_label.
-var _calling_desc_label: Label = null
+# SANCTUM-005: ⓘ info button next to calling label + overlay for full description.
+var _calling_info_btn: Button   = null
+var _calling_info_overlay: Control = null
+var _calling_info_title: Label  = null
+var _calling_info_desc: Label   = null
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -87,15 +90,18 @@ func _ready() -> void:
 	if not calling_eligible_badge.pressed.is_connected(_on_path_awaits_pressed):
 		calling_eligible_badge.pressed.connect(_on_path_awaits_pressed)
 
-	# SANCTUM-005: Description label for confirmed calling — inserted after detail_calling_label.
-	# SIZE_EXPAND_FILL is required so the label knows its width and renders on one line.
-	_calling_desc_label = Label.new()
-	_calling_desc_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_calling_desc_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	_calling_desc_label.visible = false
-	var _cl_parent := detail_calling_label.get_parent()
-	_cl_parent.add_child(_calling_desc_label)
-	_cl_parent.move_child(_calling_desc_label, detail_calling_label.get_index() + 1)
+	# SANCTUM-005: ⓘ button inserted right after calling label; overlay built once.
+	_calling_info_btn = Button.new()
+	_calling_info_btn.text = "ⓘ"
+	_calling_info_btn.flat = true
+	_calling_info_btn.visible = false
+	var _ci_parent := detail_calling_label.get_parent()
+	_ci_parent.add_child(_calling_info_btn)
+	_ci_parent.move_child(_calling_info_btn, detail_calling_label.get_index() + 1)
+	_calling_info_btn.pressed.connect(_on_calling_info_pressed)
+
+	_calling_info_overlay = _build_calling_info_overlay()
+	add_child(_calling_info_overlay)
 
 	# PROG-004: Rank-up overlay — instantiated once, lives as a child of this screen.
 	_rank_up_overlay = _RANK_UP_OVERLAY_SCENE.instantiate() as RankUpOverlay
@@ -279,23 +285,22 @@ func _render_detail(e: Dictionary) -> void:
 	var calling_description: String = str(e.get("calling_description", ""))
 
 	if not confirmed_calling.is_empty():
-		# Tier 1: confirmed calling — show name + one-line description.
+		# Tier 1: confirmed calling — show name + ⓘ button for description overlay.
 		detail_calling_label.visible   = true
 		detail_calling_label.text      = confirmed_calling.capitalize()
-		_calling_desc_label.text       = calling_description
-		_calling_desc_label.visible    = not calling_description.is_empty()
+		_calling_info_btn.visible      = not calling_description.is_empty()
 		calling_eligible_badge.visible = false
 	elif calling_eligible:
 		# Tier 2: eligible but undecided — "Calling Undecided" + ⚡ Path Awaits badge.
 		detail_calling_label.visible   = true
 		detail_calling_label.text      = "Calling Undecided"
-		_calling_desc_label.visible    = false
+		_calling_info_btn.visible      = false
 		calling_eligible_badge.visible = true
 		calling_eligible_badge.text    = "⚡ Path Awaits"
 	else:
 		# Tier 3: not yet eligible — hide calling section entirely.
 		detail_calling_label.visible   = false
-		_calling_desc_label.visible    = false
+		_calling_info_btn.visible      = false
 		calling_eligible_badge.visible = false
 
 	ascend_button.visible = rank_up_eligible
@@ -410,6 +415,65 @@ func _on_calling_confirm_requested(echo_id: String, chosen_calling_id: String) -
 		"type":    "sanctum.calling.confirm",
 		"payload": { "echo_id": echo_id, "chosen_calling_id": chosen_calling_id },
 	})
+
+
+# ── SANCTUM-005 helpers ───────────────────────────────────────────────────
+
+## Builds the calling info overlay once in _ready(). Hidden by default.
+## Panel anchored to the center third of the screen; backdrop dims the rest.
+func _build_calling_info_overlay() -> Control:
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.visible = false
+
+	var backdrop := ColorRect.new()
+	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	backdrop.color = Color(0.0, 0.0, 0.0, 0.6)
+	overlay.add_child(backdrop)
+
+	var panel := Panel.new()
+	panel.anchor_left   = 0.1
+	panel.anchor_right  = 0.9
+	panel.anchor_top    = 0.3
+	panel.anchor_bottom = 0.7
+	overlay.add_child(panel)
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left",   16)
+	margin.add_theme_constant_override("margin_right",  16)
+	margin.add_theme_constant_override("margin_top",    16)
+	margin.add_theme_constant_override("margin_bottom", 16)
+	panel.add_child(margin)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 12)
+	margin.add_child(vbox)
+
+	_calling_info_title = Label.new()
+	_calling_info_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(_calling_info_title)
+
+	_calling_info_desc = Label.new()
+	_calling_info_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_calling_info_desc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.add_child(_calling_info_desc)
+
+	var close_btn := Button.new()
+	close_btn.text = "Got it"
+	close_btn.pressed.connect(func() -> void: overlay.visible = false)
+	vbox.add_child(close_btn)
+
+	return overlay
+
+
+## Shows the calling info overlay populated with the selected echo's calling data.
+func _on_calling_info_pressed() -> void:
+	if _selected_echo.is_empty() or _calling_info_overlay == null:
+		return
+	_calling_info_title.text = str(_selected_echo.get("calling", "")).capitalize()
+	_calling_info_desc.text  = str(_selected_echo.get("calling_description", ""))
+	_calling_info_overlay.visible = true
 
 
 # ── PROG-004 helpers ──────────────────────────────────────────────────────
