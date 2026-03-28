@@ -88,8 +88,10 @@ func _ready() -> void:
 		calling_eligible_badge.pressed.connect(_on_path_awaits_pressed)
 
 	# SANCTUM-005: Description label for confirmed calling — inserted after detail_calling_label.
+	# SIZE_EXPAND_FILL is required so the label knows its width and renders on one line.
 	_calling_desc_label = Label.new()
-	_calling_desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_calling_desc_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_calling_desc_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_calling_desc_label.visible = false
 	var _cl_parent := detail_calling_label.get_parent()
 	_cl_parent.add_child(_calling_desc_label)
