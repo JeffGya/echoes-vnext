@@ -1,5 +1,6 @@
 # res://core/progression/SkillDefinition.gd
 # PROG-008: Active skill data contract and validator.
+# PROG-009: Added tier_gate as a recognised optional field (empty in PROG-009; PROG-011 populates).
 #
 # Skill slots hold ACTIVE skills only — skills that fire as intent actions in combat.
 # Passive skills (always-on trait effects) and stat bumps are never placed in slots.
@@ -7,6 +8,8 @@
 # Rules:
 # - No RNG, no OS time, no side effects.
 # - validate() checks presence and String/int/float type only — not value ranges.
+# - validate() accepts (but does not require) optional fields: tier_gate, once_per_combat,
+#   read_field_max_streak, read_field_cooldown_rounds. Unknown extra fields are silently ignored.
 # - MAX_SKILL_SLOTS is the canonical loadout capacity constant for compile-time use.
 # - get_slot_count() is the single choke point for slot entitlement logic; future
 #   rank 6 / second-calling expansion updates this function only.

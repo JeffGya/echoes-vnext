@@ -377,12 +377,12 @@ func _render_detail(e: Dictionary) -> void:
 	var skill_slots_v: Variant = e.get("skill_slots", [""])
 	var skill_slots: Array = skill_slots_v if skill_slots_v is Array else [""]
 	skill_slot_value1.text = "\u2014" if str(skill_slots[0]).is_empty() \
-		else str(skill_slots[0]).capitalize()
+		else str(skill_slots[0])
 	var has_slot2: bool = skill_slots.size() >= 2
 	skill_slot_row2.visible = has_slot2
 	if has_slot2:
 		skill_slot_value2.text = "\u2014" if str(skill_slots[1]).is_empty() \
-			else str(skill_slots[1]).capitalize()
+			else str(skill_slots[1])
 
 
 # ── Button handlers ───────────────────────────────────────────────────────

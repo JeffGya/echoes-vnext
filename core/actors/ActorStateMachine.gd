@@ -128,9 +128,17 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	# PROG-010: check last_echo_standing
 	var last_echo_standing := _is_last_echo_standing(context)
 
+	# PROG-009: tick per-round runtime cooldown counters before candidate generation.
+	if _actor.has("_read_field_cooldown"):
+		_actor["_read_field_cooldown"] = maxi(0, int(_actor["_read_field_cooldown"]) - 1)
+	if _actor.has("_withdraw_cooldown"):
+		_actor["_withdraw_cooldown"] = maxi(0, int(_actor["_withdraw_cooldown"]) - 1)
+
 	# COMBAT-003 + PROG-010: Absolute Fear Rule — dynamic threshold based on tier + last stand.
+	# PROG-009: per-calling override from calling_behavior.absolute_fear_threshold.
 	# GDD: "fear_current drives refusal/guard/retreat; can override ALL at extreme threshold."
-	var fear_threshold: int = int(cfg_data.get("emotion", {}).get("fear_threshold", 80))
+	var fear_threshold: int = int(_calling_behavior.get("absolute_fear_threshold", \
+		cfg_data.get("emotion", {}).get("fear_threshold", 80)))
 	if last_echo_standing:
 		var ls_thresholds: Dictionary = smart_cfg.get("last_stand_fear_threshold", {})
 		if _smartness_tier == "elite":
@@ -195,15 +203,10 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	augmented_context["resilience_traits"] = resilience_traits
 	augmented_context["leadership_traits"] = leadership_traits
 
-	# PROG-008: Layer 5 — inject active skill slots into intent pipeline context (stub).
-	# BehaviorArbiter will read this in future skill stories; for now we log and pass through.
-	var skill_slots: Array = (_actor.get("skill_slots", [""]) as Array).duplicate()
-	augmented_context["skill_slots"] = skill_slots
-	logger.debug(t, "actor.skill_slots", "Skill slots read", {
-		"actor_id":   str(_actor.get("id", "")),
-		"skill_slots": skill_slots,
-		"slot_count":  skill_slots.size(),
-	})
+	# PROG-009: inject equipped_skills + skills_cfg into context for BehaviorArbiter.
+	# equipped_skills: slot → skill_id dict set by FlowSkillLoadoutState at encounter start.
+	augmented_context["equipped_skills"] = _actor.get("equipped_skills", {})
+	augmented_context["skills_cfg"]      = cfg_data.get("skills", {})
 
 	var intent: Dictionary = _behavior_module.select_intent(augmented_context)
 	_last_intent = intent
@@ -246,6 +249,29 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	var calling: String = str(_actor.get("calling_origin", ""))
 	_select_bark(arch, calling, action_type, start_fear, end_fear, start_morale_tier, end_morale_tier,
 		last_echo_standing, resilience_fired, intent.get("target_id", ""))
+	# PROG-009: Ranger passive — threat-minimising move.
+	# When a Ranger chooses actor.move (or actor.withdraw), redirect target_pos
+	# away from the nearest enemy so they reposition rather than advance.
+	var _calling_p: String = str(_actor.get("calling_origin", ""))
+	if _calling_p == "ranger" and str(intent.get("action_type", "")) == "actor.move" \
+			and not _movement_skipped:
+		var _my_pos_r: Dictionary = _actor.get("grid_pos", {})
+		var _ne_r: Dictionary = ActorService.get_nearest_enemy(_actor, context.get("all_actors", []))
+		if not _ne_r.is_empty() and not _my_pos_r.is_empty():
+			var _e_col: int = int(_ne_r.get("grid_pos", {}).get("col", 0))
+			var _e_row: int = int(_ne_r.get("grid_pos", {}).get("row", 0))
+			var _mc: int    = int(_my_pos_r.get("col", 0))
+			var _mr: int    = int(_my_pos_r.get("row", 0))
+			var _nx: int    = 0 if _mc == _e_col else (1 if _mc > _e_col else -1)
+			var _ny: int    = 0 if _mr == _e_row else (1 if _mr > _e_row else -1)
+			var _bc: Dictionary = context.get("board_cfg", {})
+			var _bc_w: int  = int(_bc.get("board_cols", 10))
+			var _bc_h: int  = int(_bc.get("board_rows", 10))
+			intent["target_pos"] = {
+				"col": clampi(_mc + _nx * 3, 0, _bc_w - 1),
+				"row": clampi(_mr + _ny * 3, 0, _bc_h - 1),
+			}
+
 	# GRID-005: resolve movement when the behavior module requests a move.
 	if intent.get("action_type", "") == "actor.move" and not _movement_skipped:
 		var target_pos: Dictionary = intent.get("target_pos", {})
@@ -284,6 +310,9 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 				"stacks_count": shrine_ref.get("purify_stacks", []).size(),
 				"cooldown_set": _actor.get("purify_cooldown", 0),
 			})
+
+	# PROG-009: update per-round passive counters and skill state flags.
+	_update_passive_state(intent, context, t)
 
 	return intent
 
@@ -498,3 +527,148 @@ func _apply_leadership(
 					})
 					return trait_id
 	return ""
+
+
+# PROG-009: Update per-round passive state counters after each turn.
+# Warder: tracks anchor_rounds for guard/protect_ally bonus (+8 per round, cap 3 rounds = +24).
+# Steward: tracks stationary_rounds for soft-taunt eligibility.
+# Skill once-per-combat flags are set here when the skill fires.
+# Skill cooldowns (read_field, withdraw) are ticked at turn START instead.
+func _update_passive_state(intent: Dictionary, context: Dictionary, t: int) -> void:
+	var action: String         = str(intent.get("action_type", ""))
+	var calling_origin: String = str(_actor.get("calling_origin", ""))
+	var moved: bool            = (action == "actor.move" or action == "actor.withdraw")
+
+	match calling_origin:
+		"warder":
+			if moved:
+				_actor["_anchor_rounds"] = 0
+			else:
+				_actor["_anchor_rounds"] = mini(int(_actor.get("_anchor_rounds", 0)) + 1, 3)
+		"steward":
+			if moved:
+				_actor["_stationary_rounds"] = 0
+			else:
+				_actor["_stationary_rounds"] = int(_actor.get("_stationary_rounds", 0)) + 1
+		"seer":
+			if action == "actor.read_field":
+				var streak: int     = int(_actor.get("_read_field_streak", 0)) + 1
+				var max_streak: int = 3
+				_actor["_read_field_streak"] = streak
+				if streak >= max_streak:
+					_actor["_read_field_streak"]  = 0
+					_actor["_read_field_cooldown"] = 1
+			else:
+				_actor["_read_field_streak"] = 0  # streak resets on any other action
+			# Seer idle_fear_aura — when idle wins, reduce fear of nearby allies
+			if action == "actor.idle":
+				var aura_val: int     = int(_calling_behavior.get("idle_fear_aura", 3))
+				var aura_radius: int  = int(_calling_behavior.get("leadership_radius", 5))
+				var my_pos_s: Dictionary = _actor.get("grid_pos", {})
+				if not my_pos_s.is_empty():
+					for a_sv in context.get("all_actors", []):
+						if not (a_sv is Dictionary): continue
+						var a_s: Dictionary = a_sv
+						if a_s.get("is_dead", false): continue
+						if str(a_s.get("id", "")) == str(_actor.get("id", "")): continue
+						if str(a_s.get("faction", "")) == str(_actor.get("faction", "")):
+							var a_s_pos: Dictionary = a_s.get("grid_pos", {})
+							if not a_s_pos.is_empty() and \
+									GridService.chebyshev_distance(my_pos_s, a_s_pos) <= aura_radius:
+								a_s["fear"] = clampi(int(a_s.get("fear", 0)) - aura_val, 0, 100)
+		"ranger":
+			if action == "actor.withdraw":
+				_actor["_withdraw_cooldown"] = 1
+
+	# Once-per-combat flags
+	if action == "actor.steady_call":
+		_actor["_steady_call_used"] = true
+	if action == "actor.reveal":
+		_actor["_reveal_used"] = true
+
+	# Apply mark to target for 2 rounds
+	if action == "actor.mark":
+		var mark_target: String = str(intent.get("target_id", ""))
+		if not mark_target.is_empty():
+			for ma_v in context.get("all_actors", []):
+				if not (ma_v is Dictionary): continue
+				var ma: Dictionary = ma_v
+				if str(ma.get("id", "")) == mark_target:
+					ma["marked_by"]       = str(_actor.get("id", ""))
+					ma["_mark_duration"]  = 2
+					break
+
+	# Tick mark duration — decrement on the marked actor's turn (we do it each round here)
+	if _actor.has("_mark_duration"):
+		var dur: int = int(_actor["_mark_duration"]) - 1
+		if dur <= 0:
+			_actor.erase("marked_by")
+			_actor.erase("_mark_duration")
+		else:
+			_actor["_mark_duration"] = dur
+
+	# Apply revealed_by_seer to target for 3 rounds
+	if action == "actor.reveal":
+		var reveal_target: String = str(intent.get("target_id", ""))
+		if not reveal_target.is_empty():
+			for rv_v in context.get("all_actors", []):
+				if not (rv_v is Dictionary): continue
+				var rv: Dictionary = rv_v
+				if str(rv.get("id", "")) == reveal_target:
+					rv["revealed_by_seer"]    = str(_actor.get("id", ""))
+					rv["_reveal_duration"]    = 3
+					break
+
+	# Tick reveal duration
+	if _actor.has("_reveal_duration"):
+		var rdur: int = int(_actor["_reveal_duration"]) - 1
+		if rdur <= 0:
+			_actor.erase("revealed_by_seer")
+			_actor.erase("_reveal_duration")
+		else:
+			_actor["_reveal_duration"] = rdur
+
+	# Apply hold_ground effects (Steward)
+	if action == "actor.hold_ground":
+		var hg_radius: int       = 2
+		var hg_morale_bonus: int = 3
+		var my_pos_hg: Dictionary = _actor.get("grid_pos", {})
+		if not my_pos_hg.is_empty():
+			for hg_av in context.get("all_actors", []):
+				if not (hg_av is Dictionary): continue
+				var hg_a: Dictionary = hg_av
+				if hg_a.get("is_dead", false): continue
+				if str(hg_a.get("faction", "")) == str(_actor.get("faction", "")) \
+						and str(hg_a.get("id", "")) != str(_actor.get("id", "")):
+					var hg_pos: Dictionary = hg_a.get("grid_pos", {})
+					if not hg_pos.is_empty() and GridService.chebyshev_distance(my_pos_hg, hg_pos) <= hg_radius:
+						hg_a["morale"] = clampi(int(hg_a.get("morale", 50)) + hg_morale_bonus, 0, 100)
+
+	# Apply steady_call effects (Steward)
+	if action == "actor.steady_call":
+		var sc_radius: int    = int(_calling_behavior.get("leadership_radius", 4))
+		var sc_fear_red: int  = 20
+		var my_pos_sc: Dictionary = _actor.get("grid_pos", {})
+		if not my_pos_sc.is_empty():
+			for sc_av in context.get("all_actors", []):
+				if not (sc_av is Dictionary): continue
+				var sc_a: Dictionary = sc_av
+				if sc_a.get("is_dead", false): continue
+				if str(sc_a.get("faction", "")) == str(_actor.get("faction", "")):
+					var sc_pos: Dictionary = sc_a.get("grid_pos", {})
+					if not sc_pos.is_empty() and GridService.chebyshev_distance(my_pos_sc, sc_pos) <= sc_radius:
+						sc_a["fear"] = clampi(int(sc_a.get("fear", 0)) - sc_fear_red, 0, 100)
+
+	# Apply interpose effects (Warder — grant guard_state to protected ally)
+	if action == "actor.interpose":
+		var interpose_target: String = str(intent.get("target_id", ""))
+		if not interpose_target.is_empty():
+			for ip_v in context.get("all_actors", []):
+				if not (ip_v is Dictionary): continue
+				var ip_a: Dictionary = ip_v
+				if str(ip_a.get("id", "")) == interpose_target:
+					ip_a["guard_state"] = true
+					break
+
+	if t > 0:  # suppress unused-variable warning for t in Godot
+		pass

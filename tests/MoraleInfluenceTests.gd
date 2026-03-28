@@ -81,7 +81,7 @@ static func _t_morale_modifier_carried_in_intent() -> Dictionary:
 	var actor := {
 		"id":             "echo_morale_002",
 		"faction":        "echo",
-		"calling_origin": "warrior",
+		"calling_origin": "blade",
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
 		"vector_scores":  {},
 		"fear":           0,

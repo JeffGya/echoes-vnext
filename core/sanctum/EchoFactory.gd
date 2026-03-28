@@ -220,9 +220,11 @@ static func repair_echo_fields(echo: Dictionary) -> bool:
 		# Mapping: summoning lineage → nearest birth Vector bias.
 		var calling := str(echo.get("calling_origin", "uncalled"))
 		var class_map := {
-			"guardian": "protector",
-			"warrior":  "vanguard",
-			"archer":   "seeker",
+			"warder":   "protector",
+			"blade":    "vanguard",
+			"ranger":   "seeker",
+			"seer":     "seeker",
+			"steward":  "pillar",
 			"uncalled": "pillar"
 		}
 		echo["class_origin"] = class_map.get(calling, "protector")

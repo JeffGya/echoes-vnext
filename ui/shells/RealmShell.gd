@@ -5,10 +5,10 @@ signal action_requested(action: Dictionary)
 
 var _active_overlay: Control = null
 
-var _stage_map_scene  := preload("res://ui/screens/venture/StageMapScreen.tscn")
-var _stage_scene      := preload("res://ui/screens/venture/StageScreen.tscn")
-var _combat_board_scene := preload("res://ui/screens/combat/CombatBoardScreen.tscn")
-var _resolve_scene    := preload("res://ui/screens/venture/ResolveScreen.tscn")
+var _stage_map_scene      := preload("res://ui/screens/venture/StageMapScreen.tscn")
+var _stage_scene          := preload("res://ui/screens/venture/StageScreen.tscn")
+var _combat_board_scene   := preload("res://ui/screens/combat/CombatBoardScreen.tscn")
+var _resolve_scene        := preload("res://ui/screens/venture/ResolveScreen.tscn")
 
 const EchoCardScene := preload("res://ui/components/EchoCardItem.tscn")
 
@@ -19,10 +19,10 @@ var _scene_by_flow_type: Dictionary = {}
 
 func _ready() -> void:
 	_scene_by_flow_type = {
-		"flow.stage_map":  _stage_map_scene,
-		"flow.stage":      _stage_scene,
-		"flow.encounter":  _combat_board_scene,
-		"flow.resolve":    _resolve_scene,
+		"flow.stage_map":    _stage_map_scene,
+		"flow.stage":        _stage_scene,
+		"flow.encounter":    _combat_board_scene,
+		"flow.resolve":      _resolve_scene,
 	}
 
 func set_snapshot(snap: Dictionary) -> void:

@@ -280,6 +280,11 @@ func _run_tests(parts: Array) -> void:
 	ProgressionTests.register(runner)       # PROG-003
 	CallingTests.register(runner)           # PROG-007
 	SkillDefinitionTests.register(runner)   # PROG-008
+	CallingBehaviorTests.register(runner)   # PROG-009
+	ExclusiveActionTests.register(runner)   # PROG-009
+	CooldownTests.register(runner)          # PROG-009
+	PassiveIdentityTests.register(runner)   # PROG-009
+	SkillLoadoutTests.register(runner)      # PROG-009
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [

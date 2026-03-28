@@ -40,7 +40,7 @@ static func _t_guardian_origin_prefers_protect_ally() -> Dictionary:
 	var actor := {
 		"id":             "echo_001",
 		"faction":        "echo",
-		"calling_origin": "guardian",
+		"calling_origin": "warder",
 		"traits":         { "courage": 55, "wisdom": 42, "faith": 38 },
 		"vector_scores":  {},
 		"fear":           0,
@@ -65,7 +65,7 @@ static func _t_guardian_origin_prefers_protect_ally() -> Dictionary:
 	var intent: Dictionary = arbiter.select_intent(context)
 
 	if str(intent.get("action_type", "")) != "protect_ally":
-		return { "ok": false, "error": "Expected protect_ally (guardian base=65), got: %s" % str(intent.get("action_type")) }
+		return { "ok": false, "error": "Expected protect_ally (warder base=65), got: %s" % str(intent.get("action_type")) }
 	if str(intent.get("target_id", "")) != "echo_002":
 		return { "ok": false, "error": "Expected target_id='echo_002', got: %s" % str(intent.get("target_id")) }
 	if str(intent.get("protected_actor_id", "")) != "echo_002":
@@ -87,7 +87,7 @@ static func _t_high_faith_warrior_can_guard() -> Dictionary:
 	var actor := {
 		"id":             "echo_003",
 		"faction":        "echo",
-		"calling_origin": "warrior",
+		"calling_origin": "blade",
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 70 },
 		"vector_scores":  { "protector": 80 },
 		"fear":           0,
