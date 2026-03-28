@@ -279,6 +279,7 @@ func _run_tests(parts: Array) -> void:
 	RealmRewardTests.register(runner)       # REALM-005
 	ProgressionTests.register(runner)       # PROG-003
 	CallingTests.register(runner)           # PROG-007
+	SkillDefinitionTests.register(runner)   # PROG-008
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [

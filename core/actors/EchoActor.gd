@@ -63,6 +63,8 @@ static func from_echo(echo: Dictionary) -> Dictionary:
 		# PROG-010: identity traits — deep copy from echo save
 		"resilience_traits": echo_resilience,
 		"leadership_traits": echo_leadership,
+		# PROG-008: active skill slots — deep copy; [""] = 1 empty slot at MVP; grows with callings
+		"skill_slots": (echo.get("skill_slots", [""]) as Array).duplicate(),
 	}
 
 	assert(ActorSchema.validate(actor), \

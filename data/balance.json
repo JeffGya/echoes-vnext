@@ -945,6 +945,21 @@
 					"vector":       "seeker"
 				}
 			}
+		},
+		"skills": {
+			"_comment": "PROG-008: Active skill slot system. max_skill_slots is the loadout cap (MVP=1). Passive skills and stat bumps are NOT in slots — they are always-on effects handled elsewhere.",
+			"max_skill_slots": 1,
+			"definitions": {},
+			"_field_contract": {
+				"_comment": "SkillDefinition contract — active skills only. Each definition must have all 7 fields.",
+				"skill_id":             "String — unique id e.g. 'skill.shield_bash'",
+				"calling_requirement":  "String — calling_id required to equip, '' = any calling",
+				"target_type":          "String — 'self' | 'ally' | 'enemy' | 'area'",
+				"action_type":          "String — actor intent action_type dispatched when skill fires",
+				"cooldown_rounds":      "int    — rounds before skill can fire again; 0 = no cooldown",
+				"scaling_source":       "String — stat key that scales effect e.g. 'atk', 'cha'",
+				"intent_weight_tag":    "String — tag used by BehaviorArbiter weight lookup"
+			}
 		}
 	}
 }

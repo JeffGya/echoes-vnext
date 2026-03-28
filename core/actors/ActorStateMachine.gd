@@ -195,6 +195,16 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	augmented_context["resilience_traits"] = resilience_traits
 	augmented_context["leadership_traits"] = leadership_traits
 
+	# PROG-008: Layer 5 — inject active skill slots into intent pipeline context (stub).
+	# BehaviorArbiter will read this in future skill stories; for now we log and pass through.
+	var skill_slots: Array = (_actor.get("skill_slots", [""]) as Array).duplicate()
+	augmented_context["skill_slots"] = skill_slots
+	logger.debug(t, "actor.skill_slots", "Skill slots read", {
+		"actor_id":   str(_actor.get("id", "")),
+		"skill_slots": skill_slots,
+		"slot_count":  skill_slots.size(),
+	})
+
 	var intent: Dictionary = _behavior_module.select_intent(augmented_context)
 	_last_intent = intent
 	# ACTOR-007: read morale metadata annotated by BehaviorArbiter onto the winner.

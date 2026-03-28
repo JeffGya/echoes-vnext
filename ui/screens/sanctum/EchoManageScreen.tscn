@@ -269,19 +269,60 @@ custom_minimum_size = Vector2(0, 20)
 value = 0.0
 show_percentage = false
 
+[node name="SkillsTabContent" type="VBoxContainer" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000070]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+visible = false
+
+[node name="SkillsTabHeader" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/SkillsTabContent" unique_id=100000071]
+layout_mode = 2
+text = "Active skill slots"
+
+[node name="SkillSlotRow1" type="HBoxContainer" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/SkillsTabContent" unique_id=100000072]
+layout_mode = 2
+
+[node name="SkillSlotLabel1" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/SkillsTabContent/SkillSlotRow1" unique_id=100000073]
+layout_mode = 2
+custom_minimum_size = Vector2(60, 0)
+text = "Skill 1"
+
+[node name="SkillSlotValue1" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/SkillsTabContent/SkillSlotRow1" unique_id=100000074]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "\u2014"
+
+[node name="SkillSlotRow2" type="HBoxContainer" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/SkillsTabContent" unique_id=100000075]
+unique_name_in_owner = true
+layout_mode = 2
+visible = false
+
+[node name="SkillSlotLabel2" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/SkillsTabContent/SkillSlotRow2" unique_id=100000076]
+layout_mode = 2
+custom_minimum_size = Vector2(60, 0)
+text = "Skill 2"
+
+[node name="SkillSlotValue2" type="Label" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/SkillsTabContent/SkillSlotRow2" unique_id=100000077]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "\u2014"
+
 [node name="TabStrip" type="HBoxContainer" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel" unique_id=100000042]
 layout_mode = 2
 theme_override_constants/separation = 4
 
 [node name="TabBase" type="Button" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/TabStrip" unique_id=100000043]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 custom_minimum_size = Vector2(60, 36)
 theme_type_variation = "ButtonPrimary"
 text = "Base"
-disabled = true
 
 [node name="TabSkills" type="Button" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/TabStrip" unique_id=100000044]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 custom_minimum_size = Vector2(60, 36)
@@ -290,6 +331,7 @@ text = "Skills"
 disabled = true
 
 [node name="TabBonds" type="Button" parent="RootVBox/Panel/MarginContainer/MainHBox/DetailPanel/TabStrip" unique_id=100000045]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 custom_minimum_size = Vector2(60, 36)

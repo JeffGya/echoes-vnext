@@ -218,6 +218,8 @@ static func _project_actor(actor: Dictionary) -> Dictionary:
 		# UI-004: added for party strip and pre-battle overlay.
 		"calling_origin": str(actor.get("calling_origin", "")),
 		"morale_status":  FlowEncounterState._derive_morale_status(fear),
+		# PROG-008: active skill slots forwarded for pre-battle and resolve screens.
+		"skill_slots": (actor.get("skill_slots", [""]) as Array).duplicate(),
 	}
 
 

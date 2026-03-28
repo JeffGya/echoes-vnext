@@ -466,6 +466,13 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 						repaired = true
 						repaired_notes.append("sanctum.roster[%d].emotion.%s set to default" % [i, _k])
 
+			# PROG-008: skill_slots — Array of active skill_id strings. One slot per calling (MVP=1).
+			# Initialise as [""] so the slot exists but is empty. Future rank 6 story appends "".
+			if not echo.has("skill_slots") or typeof(echo["skill_slots"]) != TYPE_ARRAY:
+				echo["skill_slots"] = [""]
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].skill_slots defaulted to ['']" % i)
+
 	# ---- stage_context repairs (DIRECTIVE-001) ----
 	if not save.has("stage_context") or typeof(save["stage_context"]) != TYPE_DICTIONARY:
 		save["stage_context"] = { "active_directive_id": "directive.none" }

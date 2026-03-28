@@ -50,6 +50,14 @@ const _RANK_UP_OVERLAY_SCENE: PackedScene = preload("res://ui/overlays/RankUpOve
 @onready var calling_eligible_badge: Button  = %CallingEligibleBadge
 @onready var ascend_button: Button           = %AscendButton
 
+# PROG-008: Skills tab nodes — defined in .tscn; .gd handles logic only.
+@onready var skills_tab_content: VBoxContainer = %SkillsTabContent
+@onready var skill_slot_row2: HBoxContainer    = %SkillSlotRow2
+@onready var skill_slot_value1: Label          = %SkillSlotValue1
+@onready var skill_slot_value2: Label          = %SkillSlotValue2
+@onready var tab_base: Button                  = %TabBase
+@onready var tab_skills: Button                = %TabSkills
+
 # ── State ─────────────────────────────────────────────────────────────────
 var _snap: Dictionary          = {}
 var _action_back: Dictionary   = {}
@@ -89,6 +97,12 @@ func _ready() -> void:
 	# PROG-007: Path Awaits button — deferred calling access.
 	if not calling_eligible_badge.pressed.is_connected(_on_path_awaits_pressed):
 		calling_eligible_badge.pressed.connect(_on_path_awaits_pressed)
+
+	# PROG-008: Tab switching — Base tab always available; Skills tab gated by calling.
+	if not tab_base.pressed.is_connected(_on_tab_base_pressed):
+		tab_base.pressed.connect(_on_tab_base_pressed)
+	if not tab_skills.pressed.is_connected(_on_tab_skills_pressed):
+		tab_skills.pressed.connect(_on_tab_skills_pressed)
 
 	# SANCTUM-005: ⓘ button inserted right after calling label; overlay built once.
 	_calling_info_btn = Button.new()
@@ -352,6 +366,24 @@ func _render_detail(e: Dictionary) -> void:
 	# Party CTA label
 	detail_assign_party_btn.text = "Remove from party" if in_party else "Assign to party"
 
+	# PROG-008: TabSkills — enabled only when calling is confirmed.
+	# Reset to Base tab each time a new echo is selected.
+	var calling_confirmed: bool = not str(e.get("calling", "")).is_empty()
+	tab_skills.disabled = not calling_confirmed
+	skills_tab_content.visible          = false
+	tab_base.theme_type_variation   = "ButtonPrimary"
+	tab_skills.theme_type_variation = "ButtonSecondary"
+	# Pre-populate skill slot values (shown when the Keeper opens the Skills tab).
+	var skill_slots_v: Variant = e.get("skill_slots", [""])
+	var skill_slots: Array = skill_slots_v if skill_slots_v is Array else [""]
+	skill_slot_value1.text = "\u2014" if str(skill_slots[0]).is_empty() \
+		else str(skill_slots[0]).capitalize()
+	var has_slot2: bool = skill_slots.size() >= 2
+	skill_slot_row2.visible = has_slot2
+	if has_slot2:
+		skill_slot_value2.text = "\u2014" if str(skill_slots[1]).is_empty() \
+			else str(skill_slots[1]).capitalize()
+
 
 # ── Button handlers ───────────────────────────────────────────────────────
 
@@ -415,6 +447,24 @@ func _on_calling_confirm_requested(echo_id: String, chosen_calling_id: String) -
 		"type":    "sanctum.calling.confirm",
 		"payload": { "echo_id": echo_id, "chosen_calling_id": chosen_calling_id },
 	})
+
+
+# ── PROG-008 tab handlers ────────────────────────────────────────────────
+
+## Switches back to Base tab: hides SkillsTabContent, restores button styles.
+func _on_tab_base_pressed() -> void:
+	skills_tab_content.visible          = false
+	tab_base.theme_type_variation   = "ButtonPrimary"
+	tab_skills.theme_type_variation = "ButtonSecondary"
+
+
+## Opens the Skills tab when calling is confirmed (guard against disabled state).
+func _on_tab_skills_pressed() -> void:
+	if tab_skills.disabled:
+		return
+	skills_tab_content.visible          = true
+	tab_base.theme_type_variation   = "ButtonSecondary"
+	tab_skills.theme_type_variation = "ButtonPrimary"
 
 
 # ── SANCTUM-005 helpers ───────────────────────────────────────────────────

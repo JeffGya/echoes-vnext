@@ -118,6 +118,8 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"calling":          str(e.get("calling", "")),
 			# SANCTUM-005: one-line description for confirmed calling (detail panel only).
 			"calling_description": _get_calling_description(str(e.get("calling", "")), calling_cfg),
+			# PROG-008: active skill slots — Array of skill_id strings; [""] = 1 empty slot (MVP).
+			"skill_slots": (e.get("skill_slots", [""]) as Array).duplicate(),
 		})
 
 	var echo_count: int = echo_entries.size()
