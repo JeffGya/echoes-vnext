@@ -234,25 +234,21 @@ static func _t_calling_filter() -> Dictionary:
 	return { "ok": true }
 
 
-# Test 2: equipped_skill_id in party_prep reads from pending_equipped_skills first,
-# falls back to echo.equipped_skills when pending is absent.
+# Test 2: equipped_skill_id in party_prep is "" when pending is empty (no pre-selection),
+# and reflects pending when a skill has been assigned in-session.
 static func _t_default_equipped() -> Dictionary:
-	# Case A: pending empty, echo has saved equipped_skills → reads from save
-	var ctx_save := _make_ctx("blade", _mini_skill_defs())
-	var roster_v: Variant = ctx_save.save_data["sanctum"]["roster"]
-	var roster: Array = roster_v if roster_v is Array else []
-	roster[0]["equipped_skills"] = { "0": "blade_resolve" }
-
-	var snap_save := FlowStageMapState.build_snapshot(ctx_save, 1)
-	var prep_v: Variant = snap_save.get("data", {}).get("party_prep", [])
+	# Case A: pending empty → equipped_skill_id = "" (Keeper sees all options, no pre-selection)
+	var ctx_empty := _make_ctx("blade", _mini_skill_defs())
+	var snap_empty := FlowStageMapState.build_snapshot(ctx_empty, 1)
+	var prep_v: Variant = snap_empty.get("data", {}).get("party_prep", [])
 	var prep: Array = prep_v if prep_v is Array else []
 	if prep.is_empty():
 		return { "ok": false, "error": "party_prep is empty (expected 1 entry for called blade echo)" }
 	var row: Dictionary = prep[0] if prep[0] is Dictionary else {}
-	if str(row.get("equipped_skill_id", "")) != "blade_resolve":
-		return { "ok": false, "error": "Expected equipped_skill_id='blade_resolve' from save, got: '%s'" % str(row.get("equipped_skill_id")) }
+	if str(row.get("equipped_skill_id", "MISSING")) != "":
+		return { "ok": false, "error": "Expected equipped_skill_id='' when pending empty, got: '%s'" % str(row.get("equipped_skill_id")) }
 
-	# Case B: pending set → overrides save
+	# Case B: pending set → equipped_skill_id reflects in-session selection
 	var ctx_pending := _make_ctx("blade", _mini_skill_defs(),
 		{ "echo_test_01": { "0": "blade_resolve" } })
 	var snap_pending := FlowStageMapState.build_snapshot(ctx_pending, 1)
@@ -262,7 +258,7 @@ static func _t_default_equipped() -> Dictionary:
 		return { "ok": false, "error": "party_prep is empty (pending case)" }
 	var row2: Dictionary = prep2[0] if prep2[0] is Dictionary else {}
 	if str(row2.get("equipped_skill_id", "")) != "blade_resolve":
-		return { "ok": false, "error": "Expected equipped_skill_id from pending, got: '%s'" % str(row2.get("equipped_skill_id")) }
+		return { "ok": false, "error": "Expected equipped_skill_id='blade_resolve' from pending, got: '%s'" % str(row2.get("equipped_skill_id")) }
 
 	return { "ok": true }
 

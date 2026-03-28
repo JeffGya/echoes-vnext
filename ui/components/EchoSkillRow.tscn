@@ -1,0 +1,30 @@
+[gd_scene load_steps=2 format=3 uid="uid://echo_skill_row"]
+
+[ext_resource type="Script" path="res://ui/components/EchoSkillRow.gd" id="1_skillrow"]
+
+[node name="EchoSkillRow" type="PanelContainer"]
+custom_minimum_size = Vector2(160, 72)
+script = ExtResource("1_skillrow")
+
+[node name="VBox" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="NameLabel" type="Label" parent="VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Echo"
+
+[node name="CallingLabel" type="Label" parent="VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "—"
+
+[node name="SkillPicker" type="OptionButton" parent="VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 32)
+fit_to_longest_item = false
+text = "Pick skill"

@@ -184,19 +184,21 @@ static func _get_calling_description(calling_id: String, calling_cfg: Dictionary
 	return str(defs[calling_id].get("description", ""))
 
 
-## PROG-009: Returns all available calling skills for the echo's calling_origin.
+## PROG-009: Returns all available calling skills for the echo's confirmed calling.
 ## Used by EchoManageScreen skills tab to show the echo's full skill roster (read-only).
 ## Returns [] for uncalled echoes (tab disabled).
+## NOTE: reads from `calling` (confirmed calling id, e.g. "ranger"), NOT `calling_origin`
+## (the birth field, which stays "uncalled" until calling is confirmed).
 static func _resolve_skill_slots(echo: Dictionary, skill_defs: Dictionary) -> Array:
-	var calling_origin := str(echo.get("calling_origin", ""))
-	if calling_origin.is_empty() or calling_origin == "Uncalled":
+	var calling := str(echo.get("calling", ""))
+	if calling.is_empty() or calling == "uncalled":
 		return []
 	if skill_defs.is_empty():
 		return []
 	var result: Array = []
 	for skill_id in skill_defs.keys():
 		var defn: Dictionary = skill_defs[skill_id]
-		if str(defn.get("calling_requirement", "")) == calling_origin:
+		if str(defn.get("calling_requirement", "")) == calling:
 			result.append(str(defn.get("display_name", skill_id)))
 	return result
 

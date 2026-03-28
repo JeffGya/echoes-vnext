@@ -148,25 +148,22 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				"calling_origin": calling_origin,
 			})
 
-			# PROG-009: party prep row — only for echoes with a confirmed calling
+			# PROG-009: party prep row — only for echoes with a confirmed calling.
+			# `calling` is the confirmed calling id (e.g. "ranger"); `calling_origin` stays
+			# "uncalled" at the save level until calling is confirmed, so use `calling` here.
 			var calling := str(echo.get("calling", ""))
-			if not calling.is_empty() and calling != "Uncalled":
+			if not calling.is_empty() and calling != "uncalled":
 				any_called = true
-				var available_skills: Array = filter_skills_for_calling(calling_origin, skill_defs)
-				# Equipped: prefer pending (in-session), fall back to what's saved on the echo
+				var available_skills: Array = filter_skills_for_calling(calling, skill_defs)
+				# Equipped: in-session pending only — no pre-selection from save.
 				var pending_echo_v: Variant = flow_ctx.pending_equipped_skills.get(echo_id, {})
 				var pending_echo: Dictionary = pending_echo_v if pending_echo_v is Dictionary else {}
-				var eq_from_pending := str(pending_echo.get("0", ""))
-				var eq_from_save    := ""
-				var saved_eq_v: Variant = echo.get("equipped_skills", {})
-				if saved_eq_v is Dictionary:
-					eq_from_save = str((saved_eq_v as Dictionary).get("0", ""))
-				var equipped_skill_id := eq_from_pending if not eq_from_pending.is_empty() else eq_from_save
+				var equipped_skill_id := str(pending_echo.get("0", ""))
 
 				party_prep.append({
 					"echo_id":          echo_id,
 					"echo_name":        str(echo.get("name", "")),
-					"calling_origin":   calling_origin,
+					"calling_origin":   calling,  # confirmed calling id (e.g. "ranger"), used for display
 					"available_skills": available_skills,
 					"equipped_skill_id": equipped_skill_id,
 				})
@@ -218,25 +215,7 @@ static func filter_skills_for_calling(calling_origin: String, skill_defs: Dictio
 	return result
 
 
-## PROG-009: Pre-populates pending_equipped_skills from each echo's saved equipped_skills
-## on enter, so the UI reflects the current loadout immediately.
-static func _load_pending_from_save(flow_ctx: FlowContext) -> Dictionary:
-	var result: Dictionary = {}
-	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
-	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
-	var active_ids_v: Variant = sanctum.get("active_party_ids", [])
-	var active_ids: Array = active_ids_v if active_ids_v is Array else []
-	var roster_v: Variant = sanctum.get("roster", [])
-	var roster: Array = roster_v if roster_v is Array else []
-
-	for echo_id_v in active_ids:
-		var echo_id := str(echo_id_v)
-		for echo_v in roster:
-			var echo: Dictionary = echo_v if echo_v is Dictionary else {}
-			if str(echo.get("id", "")) != echo_id:
-				continue
-			var eq_v: Variant = echo.get("equipped_skills", {})
-			if eq_v is Dictionary and not (eq_v as Dictionary).is_empty():
-				result[echo_id] = (eq_v as Dictionary).duplicate()
-			break
-	return result
+## PROG-009: Clears pending_equipped_skills on enter so the Keeper always makes a fresh
+## choice. Skills from the previous run are not pre-selected.
+static func _load_pending_from_save(_flow_ctx: FlowContext) -> Dictionary:
+	return {}

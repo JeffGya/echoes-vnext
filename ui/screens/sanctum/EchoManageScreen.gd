@@ -374,10 +374,10 @@ func _render_detail(e: Dictionary) -> void:
 	tab_base.theme_type_variation   = "ButtonPrimary"
 	tab_skills.theme_type_variation = "ButtonSecondary"
 	# Pre-populate skill slot values (shown when the Keeper opens the Skills tab).
-	var skill_slots_v: Variant = e.get("skill_slots", [""])
-	var skill_slots: Array = skill_slots_v if skill_slots_v is Array else [""]
-	skill_slot_value1.text = "\u2014" if str(skill_slots[0]).is_empty() \
-		else str(skill_slots[0])
+	# skill_slots is [] for uncalled echoes — guard all index access.
+	var skill_slots_v: Variant = e.get("skill_slots", [])
+	var skill_slots: Array = skill_slots_v if skill_slots_v is Array else []
+	skill_slot_value1.text = skill_slots[0] if skill_slots.size() >= 1 and not str(skill_slots[0]).is_empty() else "\u2014"
 	var has_slot2: bool = skill_slots.size() >= 2
 	skill_slot_row2.visible = has_slot2
 	if has_slot2:

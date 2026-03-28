@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3 uid="uid://baxjg2vqatdie"]
+[gd_scene load_steps=4 format=3 uid="uid://baxjg2vqatdie"]
 
 [ext_resource type="Script" path="res://ui/screens/venture/StageMapScreen.gd" id="1_stagemap"]
 [ext_resource type="PackedScene" path="res://ui/components/StageRowItem.tscn" id="2_stagerow"]
+[ext_resource type="PackedScene" path="res://ui/components/EchoSkillRow.tscn" id="3_skillrow"]
 
 [node name="StageMapScreen" type="Control"]
 layout_mode = 3
@@ -104,6 +105,18 @@ offset_bottom = 64.0
 custom_minimum_size = Vector2(80, 48)
 theme_type_variation = "ButtonGhost"
 text = "←"
+
+[node name="PrepBar" type="PanelContainer" parent="MainVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 80)
+visible = false
+
+[node name="PrepRow" type="HBoxContainer" parent="MainVBox/PrepBar"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
 
 [node name="BottomBar" type="HBoxContainer" parent="MainVBox"]
 layout_mode = 2
