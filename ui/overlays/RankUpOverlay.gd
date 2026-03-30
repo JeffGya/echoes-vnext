@@ -8,7 +8,7 @@
 #   CallingPanel  — All 5 callings displayed with compatibility tags. Keeper picks one.
 #                   "Choose Later" defers — calling persists in save until confirmed.
 #
-# Usage pattern (EchoManageScreen):
+# Usage pattern (EchoPartyScreen):
 #   1. Preload as const; instantiate once in _ready(); add_child().
 #   2. Call show_confirm(echo_data) when Ascend button is tapped.
 #   3. Connect confirm_requested(echo_id) → dispatch sanctum.rank_up.
@@ -58,6 +58,7 @@ const _BADGE_AMBIVALENT: String = "Ambivalent"
 # ── Scene refs — CallingPanel ───────────────────────────────────────────────
 @onready var calling_panel: VBoxContainer      = %CallingPanel
 @onready var calling_options_container: VBoxContainer = %CallingOptionsContainer
+@onready var calling_option_template: PanelContainer = %CallingOptionTemplate
 @onready var confirm_calling_button: Button    = %ConfirmCallingButton
 @onready var defer_button: Button              = %DeferButton
 
@@ -137,7 +138,7 @@ func show_reveal(rank_up_event: Dictionary) -> void:
 
 
 ## Show the calling selection panel directly — used for both the post-rank-up flow
-## and deferred access from Echo Manage (Keeper taps ⚡ Path Awaits on a pending echo).
+## and deferred access from EchoParty (Keeper taps ⚡ Path Awaits on a pending echo).
 func show_calling(echo_id: String, calling_options: Array) -> void:
 	_calling_echo_id      = echo_id
 	_calling_options      = calling_options
@@ -157,9 +158,10 @@ func show_calling(echo_id: String, calling_options: Array) -> void:
 ## Builds calling option rows dynamically from _calling_options.
 ## Clears container first — safe to call multiple times.
 func _build_calling_rows() -> void:
-	# Clear existing rows
+	# Clear previously generated rows only. Static designer content stays intact.
 	for child in calling_options_container.get_children():
-		child.queue_free()
+		if bool(child.get_meta("generated_calling_option", false)):
+			child.queue_free()
 
 	for opt_v in _calling_options:
 		if not (opt_v is Dictionary):
@@ -171,79 +173,54 @@ func _build_calling_rows() -> void:
 		var compatibility: String = str(opt.get("compatibility", ""))
 		var is_preferred: bool   = bool(opt.get("is_preferred", false))
 
-		# Row container
-		var row := PanelContainer.new()
-		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.custom_minimum_size = Vector2(0, 80)
-
-		var row_margin := MarginContainer.new()
-		row_margin.layout_mode = 2
-		row_margin.add_theme_constant_override("margin_left",   12)
-		row_margin.add_theme_constant_override("margin_top",    10)
-		row_margin.add_theme_constant_override("margin_right",  12)
-		row_margin.add_theme_constant_override("margin_bottom", 10)
-		row.add_child(row_margin)
-
-		var col := VBoxContainer.new()
-		col.add_theme_constant_override("separation", 4)
-		row_margin.add_child(col)
-
-		# Header row: name + compatibility badge
-		var header := HBoxContainer.new()
-		header.add_theme_constant_override("separation", 8)
-		col.add_child(header)
-
-		var name_lbl := Label.new()
+		var row := calling_option_template.duplicate() as PanelContainer
+		row.visible = true
+		row.modulate = Color(1, 1, 1)
+		var name_lbl := _calling_row_node(row, "CallingNameLabel") as Label
 		name_lbl.text = display_name
-		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		header.add_child(name_lbl)
 
 		# Compatibility badge (preferred / compatible / ambivalent only — not for incompatible)
 		var badge_text: String = ""
-		match compatibility:
+		var effective_compatibility: String = "preferred" if is_preferred else compatibility
+		match effective_compatibility:
 			"preferred":  badge_text = _BADGE_PREFERRED
 			"compatible": badge_text = _BADGE_COMPATIBLE
 			"ambivalent": badge_text = _BADGE_AMBIVALENT
-		if not badge_text.is_empty():
-			var badge := Label.new()
-			badge.text = badge_text
-			header.add_child(badge)
+		var badge_lbl := _calling_row_node(row, "CompatibilityBadgeLabel") as Label
+		badge_lbl.visible = not badge_text.is_empty()
+		badge_lbl.text = badge_text
 
 		# Description
-		if not description.is_empty():
-			var desc_lbl := Label.new()
-			desc_lbl.text = description
-			desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			col.add_child(desc_lbl)
+		var desc_lbl := _calling_row_node(row, "DescriptionLabel") as Label
+		desc_lbl.visible = not description.is_empty()
+		desc_lbl.text = description
 
 		# Tapping the row selects it
-		var btn := Button.new()
-		btn.flat = true
-		btn.custom_minimum_size = Vector2(0, 80)
-		# Overlay the full row — use a Button as the interactive layer
-		# We store cid in the button's metadata for the callback
-		btn.set_meta("calling_id", cid)
-		btn.pressed.connect(_on_calling_row_pressed.bind(cid, row))
-		# Place button as sibling under row_margin so it overlays the content
-		# Actually simpler: make the PanelContainer itself a button via Button theme trick.
-		# Cleaner: add a transparent Button on top inside the row_margin.
-		row_margin.add_child(btn)
+		var select_btn := _calling_row_node(row, "SelectButton") as Button
+		select_btn.pressed.connect(_on_calling_row_pressed.bind(cid))
 
+		row.set_meta("generated_calling_option", true)
 		calling_options_container.add_child(row)
 		# Store a ref so we can update highlight on selection
 		row.set_meta("calling_id", cid)
 
 
-func _on_calling_row_pressed(cid: String, row: PanelContainer) -> void:
+func _on_calling_row_pressed(cid: String) -> void:
 	_selected_calling_id = cid
 	confirm_calling_button.disabled = false
 
 	# Highlight selected row; clear others
 	for child in calling_options_container.get_children():
-		if child is PanelContainer:
+		if child is PanelContainer and bool(child.get_meta("generated_calling_option", false)):
 			var is_selected: bool = (str(child.get_meta("calling_id", "")) == cid)
 			# Toggle a simple modulate tint for selection feedback
 			child.modulate = Color(1.0, 0.85, 0.4) if is_selected else Color(1, 1, 1)
+
+
+func _calling_row_node(row: Node, node_name: String) -> Node:
+	var found := row.find_child(node_name, true, false)
+	assert(found != null, "RankUpOverlay: calling option template missing node '%s'" % node_name)
+	return found
 
 
 # ── Private button handlers ─────────────────────────────────────────────────
@@ -254,7 +231,7 @@ func _on_cancel_pressed() -> void:
 
 
 func _on_confirm_pressed() -> void:
-	# EchoManageScreen receives this → dispatches sanctum.rank_up → calls show_reveal().
+	# EchoPartyScreen receives this → dispatches sanctum.rank_up → calls show_reveal().
 	confirm_requested.emit(_echo_id)
 
 
@@ -278,7 +255,7 @@ func _on_confirm_calling_pressed() -> void:
 
 
 func _on_defer_pressed() -> void:
-	# Keeper defers — calling_options stay in save; ⚡ indicator remains on Echo Manage.
+	# Keeper defers — calling_options stay in save; ⚡ indicator remains on EchoParty.
 	_reset_calling_state()
 	visible = false
 	dismissed.emit()

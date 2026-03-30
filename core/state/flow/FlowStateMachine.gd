@@ -12,8 +12,7 @@ func register_default_states() -> void:
 	register_state(FlowMainMenuState.new())
 	
 	register_state(FlowSanctumState.new())
-	register_state(FlowPartyManageState.new())
-	register_state(FlowEchoManageState.new())
+	register_state(FlowEchoPartyState.new())
 	register_state(FlowRealmSelectState.new())
 	register_state(FlowSummonState.new())
 

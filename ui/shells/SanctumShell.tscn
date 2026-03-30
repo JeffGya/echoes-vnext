@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://hopk81nlmu8u" path="res://ui/shells/SanctumShell.gd" id="1_1eqo0"]
 [ext_resource type="PackedScene" uid="uid://d1px4m6lxvynp" path="res://ui/sanctum/SanctumSpatialRenderer.tscn" id="2_iy4vj"]
+[ext_resource type="Theme" uid="uid://8qssuuodths2" path="res://assets/theme/LivingTreeSystem.tres" id="2_q4uf4"]
 
 [node name="SanctumShell" type="Control" unique_id=995803856]
 layout_mode = 3
@@ -38,27 +39,30 @@ mouse_filter = 1
 
 [node name="NavBar" type="FoldableContainer" parent="UILayer/Control" unique_id=100000001]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 1
 anchors_preset = 3
 anchor_left = 1.0
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -236.0
-offset_top = -47.0
-offset_right = -16.0
-offset_bottom = -16.0
+offset_left = -220.0
+offset_top = -48.0
 grow_horizontal = 0
 grow_vertical = 0
+theme = ExtResource("2_q4uf4")
 folded = true
 title = "Sanctum Actions"
 title_position = 1
 
 [node name="VBoxContainer" type="VBoxContainer" parent="UILayer/Control/NavBar" unique_id=100000002]
+visible = false
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 
 [node name="NavButtons" type="VBoxContainer" parent="UILayer/Control/NavBar/VBoxContainer" unique_id=100000003]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 
 [node name="SpatialLayer" type="Control" parent="." unique_id=296146589]
@@ -68,6 +72,16 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+
+[node name="ColorRect" type="ColorRect" parent="SpatialLayer" unique_id=616532453]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+scale = Vector2(1.0002433, 0.999602)
+color = Color(0.23921569, 0.3529412, 0.2784314, 1)
 
 [node name="SpatialView" type="Node2D" parent="SpatialLayer" unique_id=1063782013]
 

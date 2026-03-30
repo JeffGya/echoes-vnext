@@ -44,32 +44,10 @@ func _render() -> void:
 	var suggested := str(data.get("sanctum_name_suggested", "Sanctum"))
 		
 	title_label.text = sanctum_name if sanctum_name != "" else "Sanctum"
-	ase_label.text = "Ase: %d" % ase_balance
-	ase_rate_label.text = "~ %.1f Ase gathered p/h" % per_hour
-	echo_count_label.text = "Echoes in sanctum: %d" % int(data.get("roster_count", 0))
+	ase_label.text = "%d" % ase_balance
+	ase_rate_label.text = "~ %.1f p/h" % per_hour
+	echo_count_label.text = "%d echoes" % int(data.get("roster_count", 0))
 	
-		# Roster preview (first 3)
-	var preview_v: Variant = data.get("roster_preview", [])
-	var preview: Array = preview_v if preview_v is Array else []
-
-	var labels := [echo_preview_1, echo_preview_2, echo_preview_3]
-	for i in range(labels.size()):
-		var l: Label = labels[i]
-		if i < preview.size() and preview[i] is Dictionary:
-			var e: Dictionary = preview[i]
-			var nm := str(e.get("name", ""))
-			var call := str(e.get("calling_origin", ""))
-			var rar := str(e.get("rarity", ""))
-			var rk := int(e.get("rank", 1))
-			l.text = "%s (%s • %s • r%d)" % [nm, call, rar, rk]
-			l.visible = true
-		else:
-			l.text = ""
-			l.visible = false
-	# Empty roster message
-	if preview.is_empty():
-		echo_preview_1.text = "No Echoes summoned yet"
-		echo_preview_1.visible = true
 
 	# Party slots (SANCTUM-003 Subtask 4)
 	var slots_v: Variant = data.get("party_slots", [])

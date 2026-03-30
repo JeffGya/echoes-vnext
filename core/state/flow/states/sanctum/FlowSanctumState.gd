@@ -22,17 +22,11 @@ func enter(ctx: RefCounted, t:int) -> void:
 	# Slot-keyed Dictionary — Feb 2026 standard. Each entry includes its own "slot" key.
 	# cta.enter_stage is always present; "disabled" flag communicates availability to UI.
 	var actions: Dictionary = {
-		"nav.party_manage": {
+		"nav.echo_party": {
 			"type": "flow.go_state",
-			"to": FlowStateIds.PARTY_MANAGE,
-			"label": "Manage Party",
-			"slot": "nav.party_manage",
-		},
-		"nav.echo_manage": {
-			"type": "flow.go_state",
-			"to": FlowStateIds.ECHO_MANAGE,
-			"label": "Manage Echoes",
-			"slot": "nav.echo_manage",
+			"to": FlowStateIds.ECHO_PARTY,
+			"label": "EchoParty",
+			"slot": "nav.echo_party",
 		},
 		"nav.realm_select": {
 			"type": "flow.go_state",

@@ -567,7 +567,7 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	if flow_ctx.save_request_reason != "" and not xp_events.is_empty():
 		flow_ctx.save_request_reason += "|progression.xp"
 
-	# Bug fix (PROG-003): sync final combat emotion state back to roster so Echo Manage
+	# Bug fix (PROG-003): sync final combat emotion state back to roster so EchoParty
 	# reflects the actual fear/morale echoes accumulated during the encounter.
 	# The win/loss drift in _apply_encounter_emotion_drift() then applies on top.
 	if ectx != null:
@@ -606,7 +606,7 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"reward_breakdown": reward_result.get("breakdown", []),
 			"formula_inputs":   formula_inputs,
 			"relics":           [],
-			# PROG-003: per-echo XP events for ResolveScreen and EchoManage display.
+			# PROG-003: per-echo XP events for ResolveScreen and EchoParty display.
 			"xp_events":        xp_events,
 		},
 		"actions": _build_resolve_actions(victory),
