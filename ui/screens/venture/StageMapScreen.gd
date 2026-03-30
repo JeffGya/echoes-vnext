@@ -24,12 +24,9 @@ const EchoSkillRowScene := preload("res://ui/components/EchoSkillRow.tscn")
 @onready var _detail_complete_label: Label  = %DetailCompleteLabel
 @onready var _detail_title_label: Label     = %DetailTitleLabel
 @onready var _detail_status_label: Label    = %DetailStatusLabel
-@onready var _detail_spacer_after_status: Control = %DetailSpacerAfterStatus
 @onready var _objectives_header_label: Label = %ObjectivesHeaderLabel
-@onready var _objectives_spacer: Control = %ObjectivesSpacer
 @onready var _detail_no_objectives_label: Label = %DetailNoObjectivesLabel
 @onready var _detail_objectives_list: VBoxContainer = %DetailObjectivesList
-@onready var _detail_intel_spacer: Control = %DetailIntelSpacer
 @onready var _detail_intel_label: Label = %DetailIntelLabel
 
 var _back_action: Dictionary = {}
@@ -153,9 +150,7 @@ func _build_detail(stage: Dictionary) -> void:
 	_detail_status_label.text = _badge_text(status)
 	_detail_title_label.visible = true
 	_detail_status_label.visible = true
-	_detail_spacer_after_status.visible = true
 	_objectives_header_label.visible = true
-	_objectives_spacer.visible = true
 
 	var raw_objs: Variant = stage.get("objectives", [])
 	var objectives: Array = raw_objs if raw_objs is Array else []
@@ -170,7 +165,6 @@ func _build_detail(stage: Dictionary) -> void:
 			item.setup(obj)
 
 	# Intel section — post-MVP roaming map will fill this
-	_detail_intel_spacer.visible = true
 	_detail_intel_label.visible = true
 
 # ---------------------------------------------------------------------------
@@ -181,12 +175,9 @@ func _reset_detail_panel() -> void:
 	_detail_complete_label.visible = false
 	_detail_title_label.visible = false
 	_detail_status_label.visible = false
-	_detail_spacer_after_status.visible = false
 	_objectives_header_label.visible = false
-	_objectives_spacer.visible = false
 	_detail_no_objectives_label.visible = false
 	_detail_objectives_list.visible = false
-	_detail_intel_spacer.visible = false
 	_detail_intel_label.visible = false
 
 

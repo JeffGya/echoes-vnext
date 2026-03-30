@@ -1,8 +1,8 @@
-[gd_scene load_steps=2 format=3 uid="uid://baxjg2vqatdie"]
+[gd_scene format=3 uid="uid://baxjg2vqatdie"]
 
-[ext_resource type="Script" path="res://ui/screens/venture/StageMapScreen.gd" id="1_stagemap"]
+[ext_resource type="Script" uid="uid://doymxqbcsrely" path="res://ui/screens/venture/StageMapScreen.gd" id="1_stagemap"]
 
-[node name="StageMapScreen" type="Control"]
+[node name="StageMapScreen" type="Control" unique_id=1347412226]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -11,7 +11,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_stagemap")
 
-[node name="MainVBox" type="VBoxContainer" parent="."]
+[node name="MainVBox" type="VBoxContainer" parent="." unique_id=957603662]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -21,167 +21,148 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 0
 
-[node name="HeaderBar" type="PanelContainer" parent="MainVBox"]
+[node name="HeaderBar" type="PanelContainer" parent="MainVBox" unique_id=1432133010]
 unique_name_in_owner = true
-layout_mode = 2
 custom_minimum_size = Vector2(0, 72)
+layout_mode = 2
 
-[node name="HeaderContent" type="VBoxContainer" parent="MainVBox/HeaderBar"]
+[node name="HeaderContent" type="VBoxContainer" parent="MainVBox/HeaderBar" unique_id=1223857945]
 layout_mode = 2
 alignment = 1
 
-[node name="TitleLabel" type="Label" parent="MainVBox/HeaderBar/HeaderContent"]
+[node name="TitleLabel" type="Label" parent="MainVBox/HeaderBar/HeaderContent" unique_id=2025074408]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-horizontal_alignment = 1
 theme_override_font_sizes/font_size = 22
+horizontal_alignment = 1
 
-[node name="SubtitleLabel" type="Label" parent="MainVBox/HeaderBar/HeaderContent"]
+[node name="SubtitleLabel" type="Label" parent="MainVBox/HeaderBar/HeaderContent" unique_id=784391980]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-horizontal_alignment = 1
 theme_override_font_sizes/font_size = 14
+horizontal_alignment = 1
 
-[node name="ContentRow" type="HBoxContainer" parent="MainVBox"]
+[node name="ContentRow" type="HBoxContainer" parent="MainVBox" unique_id=1185059282]
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 0
 
-[node name="LeftPanel" type="PanelContainer" parent="MainVBox/ContentRow"]
+[node name="LeftPanel" type="PanelContainer" parent="MainVBox/ContentRow" unique_id=1749387686]
 unique_name_in_owner = true
-layout_mode = 2
 custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
 
-[node name="LeftVBox" type="VBoxContainer" parent="MainVBox/ContentRow/LeftPanel"]
+[node name="LeftVBox" type="VBoxContainer" parent="MainVBox/ContentRow/LeftPanel" unique_id=908507201]
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="LeftPanelTitle" type="Label" parent="MainVBox/ContentRow/LeftPanel/LeftVBox"]
+[node name="LeftPanelTitle" type="Label" parent="MainVBox/ContentRow/LeftPanel/LeftVBox" unique_id=1955755252]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
 
-[node name="Divider" type="HSeparator" parent="MainVBox/ContentRow/LeftPanel/LeftVBox"]
+[node name="Divider" type="HSeparator" parent="MainVBox/ContentRow/LeftPanel/LeftVBox" unique_id=695026596]
 layout_mode = 2
 
-[node name="StageScroll" type="ScrollContainer" parent="MainVBox/ContentRow/LeftPanel/LeftVBox"]
+[node name="StageScroll" type="ScrollContainer" parent="MainVBox/ContentRow/LeftPanel/LeftVBox" unique_id=308348377]
 layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="StageList" type="VBoxContainer" parent="MainVBox/ContentRow/LeftPanel/LeftVBox/StageScroll"]
+[node name="StageList" type="VBoxContainer" parent="MainVBox/ContentRow/LeftPanel/LeftVBox/StageScroll" unique_id=1990773789]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 4
 
-[node name="RightPanel" type="PanelContainer" parent="MainVBox/ContentRow"]
+[node name="RightPanel" type="PanelContainer" parent="MainVBox/ContentRow" unique_id=919616212]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="RightVBox" type="VBoxContainer" parent="MainVBox/ContentRow/RightPanel"]
+[node name="RightVBox" type="VBoxContainer" parent="MainVBox/ContentRow/RightPanel" unique_id=849089620]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
-theme_override_constants/separation = 6
+theme_override_constants/separation = 8
 
-[node name="DetailCompleteLabel" type="Label" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
+[node name="DetailCompleteLabel" type="Label" parent="MainVBox/ContentRow/RightPanel/RightVBox" unique_id=914455860]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 text = "All stages complete."
-visible = false
 
-[node name="DetailTitleLabel" type="Label" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
+[node name="DetailTitleLabel" type="Label" parent="MainVBox/ContentRow/RightPanel/RightVBox" unique_id=1469204067]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 18
-visible = false
 
-[node name="DetailStatusLabel" type="Label" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
+[node name="DetailStatusLabel" type="Label" parent="MainVBox/ContentRow/RightPanel/RightVBox" unique_id=1251868101]
 unique_name_in_owner = true
-layout_mode = 2
 visible = false
-
-[node name="DetailSpacerAfterStatus" type="Control" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
-unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(0, 8)
+
+[node name="ObjectivesHeaderLabel" type="Label" parent="MainVBox/ContentRow/RightPanel/RightVBox" unique_id=1801770519]
+unique_name_in_owner = true
 visible = false
-
-[node name="ObjectivesHeaderLabel" type="Label" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
-unique_name_in_owner = true
 layout_mode = 2
-text = "Objectives"
 theme_override_font_sizes/font_size = 14
-visible = false
+text = "Objectives"
 
-[node name="ObjectivesSpacer" type="Control" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
+[node name="DetailNoObjectivesLabel" type="Label" parent="MainVBox/ContentRow/RightPanel/RightVBox" unique_id=1899245249]
 unique_name_in_owner = true
-layout_mode = 2
-custom_minimum_size = Vector2(0, 4)
 visible = false
-
-[node name="DetailNoObjectivesLabel" type="Label" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
-unique_name_in_owner = true
 layout_mode = 2
 text = "  • No objectives loaded"
-visible = false
 
-[node name="DetailObjectivesList" type="VBoxContainer" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
+[node name="DetailObjectivesList" type="VBoxContainer" parent="MainVBox/ContentRow/RightPanel/RightVBox" unique_id=1653143794]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 theme_override_constants/separation = 6
-visible = false
 
-[node name="DetailIntelSpacer" type="Control" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
+[node name="DetailIntelLabel" type="Label" parent="MainVBox/ContentRow/RightPanel/RightVBox" unique_id=660217441]
 unique_name_in_owner = true
-layout_mode = 2
-custom_minimum_size = Vector2(0, 16)
 visible = false
-
-[node name="DetailIntelLabel" type="Label" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
-unique_name_in_owner = true
 layout_mode = 2
 text = "Gathered intel – none"
+
+[node name="PrepBar" type="PanelContainer" parent="MainVBox" unique_id=1938470813]
+unique_name_in_owner = true
 visible = false
-
-[node name="BackButton" type="Button" parent="."]
-unique_name_in_owner = true
-layout_mode = 1
-anchors_preset = 0
-offset_left = 16.0
-offset_top = 16.0
-offset_right = 96.0
-offset_bottom = 64.0
-custom_minimum_size = Vector2(80, 48)
-theme_type_variation = "ButtonGhost"
-text = "←"
-
-[node name="PrepBar" type="PanelContainer" parent="MainVBox"]
-unique_name_in_owner = true
-layout_mode = 2
 custom_minimum_size = Vector2(0, 80)
-visible = false
+layout_mode = 2
 
-[node name="PrepRow" type="HBoxContainer" parent="MainVBox/PrepBar"]
+[node name="PrepRow" type="HBoxContainer" parent="MainVBox/PrepBar" unique_id=1059938736]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 8
 
-[node name="BottomBar" type="HBoxContainer" parent="MainVBox"]
-layout_mode = 2
+[node name="BottomBar" type="HBoxContainer" parent="MainVBox" unique_id=86883404]
 custom_minimum_size = Vector2(0, 80)
+layout_mode = 2
 alignment = 2
 
-[node name="EnterButton" type="Button" parent="MainVBox/BottomBar"]
+[node name="EnterButton" type="Button" parent="MainVBox/BottomBar" unique_id=387500688]
 unique_name_in_owner = true
-layout_mode = 2
 custom_minimum_size = Vector2(80, 48)
-theme_type_variation = "ButtonPrimary"
+layout_mode = 2
+theme_type_variation = &"ButtonPrimary"
 text = "Enter next stage"
+
+[node name="BackButton" type="Button" parent="." unique_id=712170287]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 48)
+layout_mode = 1
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 96.0
+offset_bottom = 64.0
+theme_type_variation = &"ButtonGhost"
+text = "←"

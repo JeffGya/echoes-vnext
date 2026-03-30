@@ -60,7 +60,7 @@ anchor_bottom = 0.5
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="PanelContainer" type="PanelContainer" parent="NameModal" unique_id=92131753]
+[node name="NameModalPanel" type="PanelContainer" parent="NameModal" unique_id=92131753]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -74,7 +74,7 @@ offset_bottom = 156.5
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="MarginContainer" type="MarginContainer" parent="NameModal/PanelContainer" unique_id=2118801272]
+[node name="MarginContainer" type="MarginContainer" parent="NameModal/NameModalPanel" unique_id=2118801272]
 layout_mode = 2
 size_flags_vertical = 4
 theme_override_constants/margin_left = 24
@@ -82,15 +82,15 @@ theme_override_constants/margin_top = 24
 theme_override_constants/margin_right = 24
 theme_override_constants/margin_bottom = 24
 
-[node name="VBoxContainer" type="VBoxContainer" parent="NameModal/PanelContainer/MarginContainer" unique_id=1013432852]
+[node name="VBoxContainer" type="VBoxContainer" parent="NameModal/NameModalPanel/MarginContainer" unique_id=1013432852]
 layout_mode = 2
 size_flags_vertical = 0
 theme_override_constants/separation = 16
 
-[node name="VBoxContainer" type="VBoxContainer" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer" unique_id=624811592]
+[node name="VBoxContainer" type="VBoxContainer" parent="NameModal/NameModalPanel/MarginContainer/VBoxContainer" unique_id=624811592]
 layout_mode = 2
 
-[node name="ModalTitle" type="Label" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer/VBoxContainer" unique_id=1688515526]
+[node name="ModalTitle" type="Label" parent="NameModal/NameModalPanel/MarginContainer/VBoxContainer/VBoxContainer" unique_id=1688515526]
 layout_mode = 2
 size_flags_vertical = 1
 theme_type_variation = &"HeaderLargePanel"
@@ -98,7 +98,7 @@ text = "Name your sanctum"
 autowrap_mode = 3
 justification_flags = 160
 
-[node name="ModalSubtitle" type="Label" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer/VBoxContainer" unique_id=509012857]
+[node name="ModalSubtitle" type="Label" parent="NameModal/NameModalPanel/MarginContainer/VBoxContainer/VBoxContainer" unique_id=509012857]
 layout_mode = 2
 theme_type_variation = &"ContentBasePanel"
 text = "Akwaaba Keeper, 
@@ -106,17 +106,17 @@ You are welcomed to your sanctum. Choose your sanctum name wisely!"
 autowrap_mode = 3
 justification_flags = 160
 
-[node name="NameEdit" type="LineEdit" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer" unique_id=1858359016]
+[node name="NameEdit" type="LineEdit" parent="NameModal/NameModalPanel/MarginContainer/VBoxContainer" unique_id=1858359016]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(48, 48)
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="HBoxContainer" type="HBoxContainer" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer" unique_id=1626716239]
+[node name="HBoxContainer" type="HBoxContainer" parent="NameModal/NameModalPanel/MarginContainer/VBoxContainer" unique_id=1626716239]
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="RerollButton" type="Button" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1245369722]
+[node name="RerollButton" type="Button" parent="NameModal/NameModalPanel/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1245369722]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 48)
 layout_mode = 2
@@ -124,7 +124,7 @@ size_flags_horizontal = 3
 theme_type_variation = &"ButtonSecondary"
 text = "Reroll"
 
-[node name="ConfirmButton" type="Button" parent="NameModal/PanelContainer/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1052186876]
+[node name="ConfirmButton" type="Button" parent="NameModal/NameModalPanel/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1052186876]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 48)
 layout_mode = 2
