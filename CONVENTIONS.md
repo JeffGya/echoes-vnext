@@ -88,6 +88,12 @@ Rules:
 - `UISnapshotRenderer` is fallback-only for unknown snapshot types — **not** a base class
 - All new screens start from `ScreenTemplate.gd`
 
+**UI node discipline (short form):**
+- Prefer scene-authored structure + theme variations over runtime-created UI nodes.
+- Use lightweight nodes for lightweight jobs: status badges as `Label` variants, HP bars as `ProgressBar`.
+- Avoid spacer-only `Control` nodes when container `separation`/margins can express the layout.
+- Use specific node names (avoid generic `PanelContainer`) to keep styling/refactors safe.
+
 ### Shell Routing Model (INFRA-001)
 AppRoot routes `snapshot.type` → shell → bespoke screen.
 

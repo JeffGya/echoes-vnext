@@ -30,6 +30,25 @@ func setup(actor: Dictionary) -> void:
 		hp_bar.visible = false
 
 	if actor.has("morale_status"):
-		status_label.text = str(actor.get("morale_status", "Normal"))
+		var morale_status := str(actor.get("morale_status", "steady")).to_lower()
+		status_label.text = _morale_text(morale_status)
+		status_label.theme_type_variation = _morale_theme_key(morale_status)
 	else:
 		status_label.text = str(actor.get("calling_origin", "Ready"))
+		status_label.theme_type_variation = &"EmotionBadge.Ready"
+
+func _morale_text(morale_status: String) -> String:
+	match morale_status:
+		"inspired": return "Inspired"
+		"steady":   return "Steady"
+		"shaken":   return "Shaken"
+		"broken":   return "Broken"
+		_:          return morale_status.capitalize()
+
+func _morale_theme_key(morale_status: String) -> StringName:
+	match morale_status:
+		"inspired": return &"EmotionBadge.Inspired"
+		"steady":   return &"EmotionBadge.Steady"
+		"shaken":   return &"EmotionBadge.Shaken"
+		"broken":   return &"EmotionBadge.Broken"
+		_:          return &"EmotionBadge.Ready"
