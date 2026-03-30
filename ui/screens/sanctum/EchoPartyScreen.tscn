@@ -524,9 +524,10 @@ theme_override_constants/margin_bottom = 10
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="ImagePlaceholder" type="PanelContainer" parent="RootVBox/Templates/PartyCardTemplate/CardMargin/CardRoot" unique_id=142153905]
+[node name="ImagePlaceholder" type="ColorRect" parent="RootVBox/Templates/PartyCardTemplate/CardMargin/CardRoot" unique_id=142153905]
 custom_minimum_size = Vector2(80, 80)
 layout_mode = 2
+color = Color(0.164706, 0.176471, 0.211765, 1)
 
 [node name="ImageLabel" type="Label" parent="RootVBox/Templates/PartyCardTemplate/CardMargin/CardRoot/ImagePlaceholder" unique_id=2109212432]
 layout_mode = 2
@@ -605,34 +606,34 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="PanelContainer" type="PanelContainer" parent="CallingInfoOverlay/Center" unique_id=74537191]
+[node name="CallingInfoPanel" type="PanelContainer" parent="CallingInfoOverlay/Center" unique_id=74537191]
 custom_minimum_size = Vector2(520, 0)
 layout_mode = 2
 
-[node name="Margin" type="MarginContainer" parent="CallingInfoOverlay/Center/PanelContainer" unique_id=1977916543]
+[node name="Margin" type="MarginContainer" parent="CallingInfoOverlay/Center/CallingInfoPanel" unique_id=1977916543]
 layout_mode = 2
 theme_override_constants/margin_left = 16
 theme_override_constants/margin_top = 16
 theme_override_constants/margin_right = 16
 theme_override_constants/margin_bottom = 16
 
-[node name="Content" type="VBoxContainer" parent="CallingInfoOverlay/Center/PanelContainer/Margin" unique_id=536612825]
+[node name="Content" type="VBoxContainer" parent="CallingInfoOverlay/Center/CallingInfoPanel/Margin" unique_id=536612825]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="CallingInfoTitle" type="Label" parent="CallingInfoOverlay/Center/PanelContainer/Margin/Content" unique_id=1886582866]
+[node name="CallingInfoTitle" type="Label" parent="CallingInfoOverlay/Center/CallingInfoPanel/Margin/Content" unique_id=1886582866]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Calling"
 horizontal_alignment = 1
 
-[node name="CallingInfoDesc" type="Label" parent="CallingInfoOverlay/Center/PanelContainer/Margin/Content" unique_id=1325531195]
+[node name="CallingInfoDesc" type="Label" parent="CallingInfoOverlay/Center/CallingInfoPanel/Margin/Content" unique_id=1325531195]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 autowrap_mode = 2
 
-[node name="CallingInfoCloseBtn" type="Button" parent="CallingInfoOverlay/Center/PanelContainer/Margin/Content" unique_id=1551677796]
+[node name="CallingInfoCloseBtn" type="Button" parent="CallingInfoOverlay/Center/CallingInfoPanel/Margin/Content" unique_id=1551677796]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2

@@ -36,15 +36,13 @@ layout_mode = 2
 
 [node name="HeaderRow" type="HBoxContainer" parent="Center/Panel/Root" unique_id=696798872]
 layout_mode = 2
+theme_override_constants/separation = 8
 
 [node name="TitleLabel" type="Label" parent="Center/Panel/Root/HeaderRow" unique_id=1449996307]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Title"
-
-[node name="Spacer" type="Control" parent="Center/Panel/Root/HeaderRow" unique_id=350985703]
-layout_mode = 2
 size_flags_horizontal = 3
+text = "Title"
 
 [node name="CountLabel" type="Label" parent="Center/Panel/Root/HeaderRow" unique_id=1556176856]
 unique_name_in_owner = true
@@ -84,19 +82,22 @@ text = "(gender / rarity / calling)"
 
 [node name="ButtonRow" type="HBoxContainer" parent="Center/Panel/Root" unique_id=810608827]
 layout_mode = 2
+theme_override_constants/separation = 8
 
-[node name="PrevButton" type="Button" parent="Center/Panel/Root/ButtonRow" unique_id=1204214177]
+[node name="NavButtons" type="HBoxContainer" parent="Center/Panel/Root/ButtonRow" unique_id=2059873001]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="PrevButton" type="Button" parent="Center/Panel/Root/ButtonRow/NavButtons" unique_id=1204214177]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Prev"
 
-[node name="NextButton" type="Button" parent="Center/Panel/Root/ButtonRow" unique_id=1880198530]
+[node name="NextButton" type="Button" parent="Center/Panel/Root/ButtonRow/NavButtons" unique_id=1880198530]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Next"
-
-[node name="Spacer2" type="Control" parent="Center/Panel/Root/ButtonRow" unique_id=1487977956]
-layout_mode = 2
 
 [node name="DismissButton" type="Button" parent="Center/Panel/Root/ButtonRow" unique_id=964103679]
 unique_name_in_owner = true
