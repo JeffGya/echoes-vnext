@@ -1,15 +1,15 @@
 [gd_scene format=3 uid="uid://crr6taw8gvl7c"]
 
-[ext_resource type="Script" path="res://ui/overlays/RankUpOverlay.gd" id="1_rankup"]
+[ext_resource type="Script" uid="uid://ckk5mnvdxsgxy" path="res://ui/overlays/RankUpOverlay.gd" id="1_rankup"]
 
 [node name="RankUpOverlay" type="Control" unique_id=200000001]
+visible = false
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-visible = false
 script = ExtResource("1_rankup")
 
 [node name="Dim" type="ColorRect" parent="." unique_id=200000002]
@@ -30,8 +30,8 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="Panel" type="PanelContainer" parent="Center" unique_id=200000004]
-layout_mode = 2
 custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
 
 [node name="Margin" type="MarginContainer" parent="Center/Panel" unique_id=200000005]
 layout_mode = 2
@@ -52,8 +52,8 @@ theme_override_constants/separation = 12
 [node name="ConfirmText" type="Label" parent="Center/Panel/Margin/Root/ConfirmPanel" unique_id=200000008]
 unique_name_in_owner = true
 layout_mode = 2
-autowrap_mode = 2
 text = "[Anansi narrator text]"
+autowrap_mode = 2
 
 [node name="ButtonRow" type="HBoxContainer" parent="Center/Panel/Margin/Root/ConfirmPanel" unique_id=200000009]
 layout_mode = 2
@@ -61,74 +61,74 @@ theme_override_constants/separation = 8
 
 [node name="CancelButton" type="Button" parent="Center/Panel/Margin/Root/ConfirmPanel/ButtonRow" unique_id=200000010]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 48)
 layout_mode = 2
 size_flags_horizontal = 3
-custom_minimum_size = Vector2(80, 48)
-theme_type_variation = "ButtonSecondary"
+theme_type_variation = &"ButtonSecondary"
 text = "Cancel"
 
 [node name="ConfirmButton" type="Button" parent="Center/Panel/Margin/Root/ConfirmPanel/ButtonRow" unique_id=200000011]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 48)
 layout_mode = 2
 size_flags_horizontal = 3
-custom_minimum_size = Vector2(80, 48)
-theme_type_variation = "ButtonPrimary"
+theme_type_variation = &"ButtonPrimary"
 text = "Confirm Ascension"
 
 [node name="RevealPanel" type="VBoxContainer" parent="Center/Panel/Margin/Root" unique_id=200000012]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 theme_override_constants/separation = 12
-visible = false
 
 [node name="RankBadge" type="Label" parent="Center/Panel/Margin/Root/RevealPanel" unique_id=200000013]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
-horizontal_alignment = 1
 text = "Rank 2"
+horizontal_alignment = 1
 
 [node name="RevealName" type="Label" parent="Center/Panel/Margin/Root/RevealPanel" unique_id=200000014]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
-horizontal_alignment = 1
 text = "[Echo Name]"
+horizontal_alignment = 1
 
 [node name="RevealText" type="Label" parent="Center/Panel/Margin/Root/RevealPanel" unique_id=200000015]
 unique_name_in_owner = true
 layout_mode = 2
-autowrap_mode = 2
-horizontal_alignment = 1
 text = "[Reveal narrative]"
+horizontal_alignment = 1
+autowrap_mode = 2
 
 [node name="CallingStirs" type="Label" parent="Center/Panel/Margin/Root/RevealPanel" unique_id=200000016]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 size_flags_horizontal = 4
-horizontal_alignment = 1
 text = "★ A Calling stirs within {name}."
-visible = false
+horizontal_alignment = 1
 
 [node name="ContinueButton" type="Button" parent="Center/Panel/Margin/Root/RevealPanel" unique_id=200000017]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 4
-custom_minimum_size = Vector2(0, 48)
-theme_type_variation = "ButtonPrimary"
+theme_type_variation = &"ButtonPrimary"
 text = "Continue"
 
 [node name="CallingPanel" type="VBoxContainer" parent="Center/Panel/Margin/Root" unique_id=200000018]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 theme_override_constants/separation = 12
-visible = false
 
 [node name="CallingTitle" type="Label" parent="Center/Panel/Margin/Root/CallingPanel" unique_id=200000019]
 layout_mode = 2
 size_flags_horizontal = 4
-horizontal_alignment = 1
 text = "A Path Reveals Itself"
+horizontal_alignment = 1
 
 [node name="CallingOptionsContainer" type="VBoxContainer" parent="Center/Panel/Margin/Root/CallingPanel" unique_id=200000020]
 unique_name_in_owner = true
@@ -137,68 +137,17 @@ theme_override_constants/separation = 8
 
 [node name="ConfirmCallingButton" type="Button" parent="Center/Panel/Margin/Root/CallingPanel" unique_id=200000021]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 4
-custom_minimum_size = Vector2(0, 48)
-theme_type_variation = "ButtonPrimary"
-text = "Confirm Path"
+theme_type_variation = &"ButtonPrimary"
 disabled = true
+text = "Confirm Path"
 
 [node name="DeferButton" type="Button" parent="Center/Panel/Margin/Root/CallingPanel" unique_id=200000022]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 4
-custom_minimum_size = Vector2(0, 48)
-theme_type_variation = "ButtonSecondary"
+theme_type_variation = &"ButtonSecondary"
 text = "Choose Later"
-
-[node name="Templates" type="Control" parent="Center/Panel/Margin/Root" unique_id=200000030]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-
-[node name="CallingOptionTemplate" type="PanelContainer" parent="Center/Panel/Margin/Root/Templates" unique_id=200000031]
-unique_name_in_owner = true
-visible = false
-custom_minimum_size = Vector2(0, 80)
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="ContentMargin" type="MarginContainer" parent="Center/Panel/Margin/Root/Templates/CallingOptionTemplate" unique_id=200000032]
-layout_mode = 2
-theme_override_constants/margin_left = 12
-theme_override_constants/margin_top = 10
-theme_override_constants/margin_right = 12
-theme_override_constants/margin_bottom = 10
-
-[node name="ContentColumn" type="VBoxContainer" parent="Center/Panel/Margin/Root/Templates/CallingOptionTemplate/ContentMargin" unique_id=200000033]
-layout_mode = 2
-theme_override_constants/separation = 4
-
-[node name="HeaderRow" type="HBoxContainer" parent="Center/Panel/Margin/Root/Templates/CallingOptionTemplate/ContentMargin/ContentColumn" unique_id=200000034]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="CallingNameLabel" type="Label" parent="Center/Panel/Margin/Root/Templates/CallingOptionTemplate/ContentMargin/ContentColumn/HeaderRow" unique_id=200000035]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Calling Name"
-
-[node name="CompatibilityBadgeLabel" type="Label" parent="Center/Panel/Margin/Root/Templates/CallingOptionTemplate/ContentMargin/ContentColumn/HeaderRow" unique_id=200000036]
-layout_mode = 2
-text = "Compatible"
-
-[node name="DescriptionLabel" type="Label" parent="Center/Panel/Margin/Root/Templates/CallingOptionTemplate/ContentMargin/ContentColumn" unique_id=200000037]
-layout_mode = 2
-autowrap_mode = 2
-text = "Calling description."
-
-[node name="SelectButton" type="Button" parent="Center/Panel/Margin/Root/Templates/CallingOptionTemplate" unique_id=200000038]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_type_variation = "ButtonGhost"
-flat = true

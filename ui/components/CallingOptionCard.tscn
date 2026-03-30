@@ -1,0 +1,52 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/components/CallingOptionCard.gd" id="1_calling_card"]
+
+[node name="CallingOptionCard" type="PanelContainer"]
+custom_minimum_size = Vector2(0, 80)
+size_flags_horizontal = 3
+script = ExtResource("1_calling_card")
+
+[node name="ContentMargin" type="MarginContainer" parent="."]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 10
+
+[node name="ContentColumn" type="VBoxContainer" parent="ContentMargin"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="HeaderRow" type="HBoxContainer" parent="ContentMargin/ContentColumn"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="CallingNameLabel" type="Label" parent="ContentMargin/ContentColumn/HeaderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Calling Name"
+
+[node name="CompatibilityBadgeLabel" type="Label" parent="ContentMargin/ContentColumn/HeaderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Compatible"
+visible = false
+
+[node name="DescriptionLabel" type="Label" parent="ContentMargin/ContentColumn"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+text = "Calling description."
+
+[node name="SelectButton" type="Button" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_type_variation = "ButtonGhost"
+flat = true

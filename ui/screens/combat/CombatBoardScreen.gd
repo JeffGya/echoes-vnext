@@ -18,6 +18,8 @@ extends Control
 
 signal action_requested(action: Dictionary)
 
+const InitiativeRowScene := preload("res://ui/components/InitiativeRowItem.tscn")
+
 @onready var _board: TileMapLayer                   = $Board
 @onready var _token_layer: CombatTokenLayer         = $TokenLayer
 @onready var _distance_layer: CombatDistanceLayer   = $DistanceLayer
@@ -44,6 +46,9 @@ signal action_requested(action: Dictionary)
 @onready var _prebattle_objective: Label            = $PrebattlePanel/PrebattleContent/ObjectivePanelLabel
 @onready var _retreat_button: Button                = $PrebattlePanel/PrebattleContent/ButtonRow/RetreatButton
 @onready var _enter_combat_button: Button           = $PrebattlePanel/PrebattleContent/ButtonRow/EnterCombatButton
+@onready var _speed_slow_button: Button             = %SpeedSlowButton
+@onready var _speed_normal_button: Button           = %SpeedNormalButton
+@onready var _speed_fast_button: Button             = %SpeedFastButton
 
 # Clay floor tile: source 0, atlas position (0, 0)
 const _TILE_SOURCE_ID:    int       = 0
@@ -100,19 +105,10 @@ func _ready() -> void:
 	_enter_combat_button.pressed.connect(_on_enter_combat_pressed)
 	_retreat_button.pressed.connect(_on_retreat_pressed)
 
-	# Speed buttons — built programmatically, no scene changes needed.
-	var speed_bar := HBoxContainer.new()
-	speed_bar.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	speed_bar.position = Vector2(295, 3)
-	add_child(speed_bar)
-
-	for speed_def in [["Slow", _SPEED_SLOW], ["Normal", _SPEED_NORMAL], ["Fast", _SPEED_FAST]]:
-		var btn := Button.new()
-		btn.text = speed_def[0]
-		btn.custom_minimum_size = Vector2(48, 26)
-		var delay: float = speed_def[1]
-		btn.pressed.connect(func(): _on_speed_pressed(delay))
-		speed_bar.add_child(btn)
+	# Speed buttons are authored in scene.
+	_speed_slow_button.pressed.connect(func(): _on_speed_pressed(_SPEED_SLOW))
+	_speed_normal_button.pressed.connect(func(): _on_speed_pressed(_SPEED_NORMAL))
+	_speed_fast_button.pressed.connect(func(): _on_speed_pressed(_SPEED_FAST))
 
 
 # -------------------------
@@ -426,37 +422,16 @@ func _draw_initiative_panel(data: Dictionary) -> void:
 		var actor_name: String = str(entry.get("name", "??"))
 		var is_dead: bool      = dead_ids.has(actor_id)
 		var action_text: String = action_by_id.get(actor_id, "")
-
-		var hbox := HBoxContainer.new()
-
-		var name_label := Label.new()
-		name_label.add_theme_font_size_override("font_size", 13)
-		name_label.custom_minimum_size.x = 155
-		name_label.clip_text = true
-
-		var action_label := Label.new()
-		action_label.add_theme_font_size_override("font_size", 12)
-		action_label.custom_minimum_size.x = 70
-		action_label.clip_text = true
-		action_label.text = action_text
-
-		if is_dead:
-			name_label.text = "X  %s" % actor_name
-			name_label.add_theme_color_override("font_color", Color.RED)
-			action_label.add_theme_color_override("font_color", Color.RED)
-			hbox.self_modulate = Color(1, 1, 1, 0.4)
-		elif i == active_idx:
-			name_label.text = "→  %s" % actor_name
-			name_label.add_theme_color_override("font_color", Color.YELLOW)
-			action_label.add_theme_color_override("font_color", _action_color_for_text(action_text))
-		else:
-			name_label.text = "   %s" % actor_name
-			name_label.add_theme_color_override("font_color", Color.WHITE)
-			action_label.add_theme_color_override("font_color", Color(0.65, 0.65, 0.65))
-
-		hbox.add_child(name_label)
-		hbox.add_child(action_label)
-		_initiative_list.add_child(hbox)
+		var row: Node = InitiativeRowScene.instantiate()
+		_initiative_list.add_child(row)
+		row.call(
+			"setup_row",
+			actor_name,
+			action_text,
+			i == active_idx,
+			is_dead,
+			_action_color_for_text(action_text)
+		)
 
 	_initiative_panel.visible = true
 

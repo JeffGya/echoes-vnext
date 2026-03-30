@@ -1,8 +1,6 @@
-[gd_scene load_steps=4 format=3 uid="uid://baxjg2vqatdie"]
+[gd_scene load_steps=2 format=3 uid="uid://baxjg2vqatdie"]
 
 [ext_resource type="Script" path="res://ui/screens/venture/StageMapScreen.gd" id="1_stagemap"]
-[ext_resource type="PackedScene" path="res://ui/components/StageRowItem.tscn" id="2_stagerow"]
-[ext_resource type="PackedScene" path="res://ui/components/EchoSkillRow.tscn" id="3_skillrow"]
 
 [node name="StageMapScreen" type="Control"]
 layout_mode = 3
@@ -79,9 +77,6 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 4
 
-[node name="StageRowPlaceholder" parent="MainVBox/ContentRow/LeftPanel/LeftVBox/StageScroll/StageList" instance=ExtResource("2_stagerow")]
-layout_mode = 2
-
 [node name="RightPanel" type="PanelContainer" parent="MainVBox/ContentRow"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -93,6 +88,67 @@ layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 6
+
+[node name="DetailCompleteLabel" type="Label" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "All stages complete."
+visible = false
+
+[node name="DetailTitleLabel" type="Label" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 18
+visible = false
+
+[node name="DetailStatusLabel" type="Label" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+visible = false
+
+[node name="DetailSpacerAfterStatus" type="Control" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 8)
+visible = false
+
+[node name="ObjectivesHeaderLabel" type="Label" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Objectives"
+theme_override_font_sizes/font_size = 14
+visible = false
+
+[node name="ObjectivesSpacer" type="Control" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 4)
+visible = false
+
+[node name="DetailNoObjectivesLabel" type="Label" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "  • No objectives loaded"
+visible = false
+
+[node name="DetailObjectivesList" type="VBoxContainer" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 6
+visible = false
+
+[node name="DetailIntelSpacer" type="Control" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 16)
+visible = false
+
+[node name="DetailIntelLabel" type="Label" parent="MainVBox/ContentRow/RightPanel/RightVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Gathered intel – none"
+visible = false
 
 [node name="BackButton" type="Button" parent="."]
 unique_name_in_owner = true
