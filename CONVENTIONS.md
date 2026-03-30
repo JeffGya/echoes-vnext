@@ -290,7 +290,16 @@ EncounterStateMachine phases (scaffold): `setup → blessing → rounds → reso
 | **combat** | `combat.init` | initializes combat state, places actors |
 | | `combat.confirm_round` | runs full round loop |
 | **actor** | `actor.taunt` | Blade Veteran+ only; sets `taunted_by` on nearest enemy actor; clears next round. Taunted enemy gets +25 melee_attack score vs taunter. |
-| | `actor.retreat` | Calling-gated (Adept+): warrior=never, guardian/uncalled < 30% HP, archer < 50% HP. |
+| | `actor.retreat` | Calling-gated (Adept+): blade=never, warder/uncalled < 30% HP, ranger < 50% HP. |
+| | `actor.press` | **Blade skill** (blade_resolve). Condition: hit same target last round. Extra melee candidate +15 base score. |
+| | `actor.interpose` | **Warder skill** (warders_vigil). Condition: ally threatened. Move to interpose; grant guard_state to protected ally. |
+| | `actor.hold_ground` | **Steward skill** (stewards_ground). Condition: adjacent to shrine OR 2+ allies within 2 tiles. +3 morale to allies in 2-tile radius; soft taunt on adjacent enemies. |
+| | `actor.steady_call` | **Steward skill** (stewards_call). Once-per-combat. fear_current −20 to all allies in leadership_radius. |
+| | `actor.mark` | **Ranger skill** (rangers_mark). Condition: enemy within 3 tiles AND not already marked. Sets `marked_by` → +10 all Echo attack scores vs target for 2 rounds. |
+| | `actor.withdraw` | **Ranger skill** (rangers_withdraw). Condition: adjacent to 2+ enemies. Move to threat-minimising tile; −3 fear on resolve. cooldown: 1. |
+| | `actor.read_field` | **Seer skill** (seers_sight). Condition: `_read_field_cooldown == 0`. Writes `_seers_blessing` to allies in radius → +10 next guard/protect_ally. Streak cap: 3 consecutive uses; 1-round cooldown after cap. |
+| | `actor.reveal` | **Seer skill** (seers_reveal). Once-per-combat. Condition: enemy not yet attacked this combat. Sets `revealed_by_seer` → +15 all Echo attack scores vs target for 3 rounds. |
+| | | *Calling skill action types defined in `/docs/calling-reference.md`* |
 | **encounter** | `encounter.retreat` | attempts retreat; spends Ase regardless of roll outcome |
 | | `encounter.complete` | signals encounter done; Flow routes to resolve |
 | | `encounter.advance` | advances encounter phase (`to: String`) |

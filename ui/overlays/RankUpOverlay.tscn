@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://crr6taw8gvl7c"]
 
-[ext_resource type="Script" uid="uid://rankupovrlgd4" path="res://ui/overlays/RankUpOverlay.gd" id="1_rankup"]
+[ext_resource type="Script" path="res://ui/overlays/RankUpOverlay.gd" id="1_rankup"]
 
 [node name="RankUpOverlay" type="Control" unique_id=200000001]
 layout_mode = 3

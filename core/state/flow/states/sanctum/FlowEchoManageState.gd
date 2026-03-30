@@ -22,7 +22,8 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# --- Read max_level, prog_cfg, and calling_cfg from balance.json ---
 	var max_level: int        = 5
 	var prog_cfg: Dictionary  = {}
-	var calling_cfg: Dictionary = {}
+	var calling_cfg: Dictionary  = {}
+	var skill_defs: Dictionary   = {}
 	if flow_ctx.config_service != null:
 		var bal: Dictionary = flow_ctx.config_service.get_balance()
 		var bd: Dictionary  = bal.get("data", {})
@@ -33,6 +34,12 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		var calling_v: Variant = bd.get("calling", {})
 		if calling_v is Dictionary:
 			calling_cfg = calling_v as Dictionary
+		# PROG-009: skill display names for the skills tab.
+		var skills_v: Variant = bd.get("skills", {})
+		if skills_v is Dictionary:
+			var defs_v: Variant = (skills_v as Dictionary).get("definitions", {})
+			if defs_v is Dictionary:
+				skill_defs = defs_v as Dictionary
 
 	# --- Read roster and party ids from save_data ---
 	var roster: Array    = []
@@ -118,8 +125,9 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"calling":          str(e.get("calling", "")),
 			# SANCTUM-005: one-line description for confirmed calling (detail panel only).
 			"calling_description": _get_calling_description(str(e.get("calling", "")), calling_cfg),
-			# PROG-008: active skill slots — Array of skill_id strings; [""] = 1 empty slot (MVP).
-			"skill_slots": (e.get("skill_slots", [""]) as Array).duplicate(),
+			# PROG-009: build skill_slots from equipped_skills dict + display name lookup.
+			# equipped_skills: {"0": skill_id, ...} → Array of display_name strings (or "" for empty).
+			"skill_slots": _resolve_skill_slots(e, skill_defs),
 		})
 
 	var echo_count: int = echo_entries.size()
@@ -174,6 +182,25 @@ static func _get_calling_description(calling_id: String, calling_cfg: Dictionary
 	if not defs.has(calling_id):
 		return ""
 	return str(defs[calling_id].get("description", ""))
+
+
+## PROG-009: Returns all available calling skills for the echo's confirmed calling.
+## Used by EchoManageScreen skills tab to show the echo's full skill roster (read-only).
+## Returns [] for uncalled echoes (tab disabled).
+## NOTE: reads from `calling` (confirmed calling id, e.g. "ranger"), NOT `calling_origin`
+## (the birth field, which stays "uncalled" until calling is confirmed).
+static func _resolve_skill_slots(echo: Dictionary, skill_defs: Dictionary) -> Array:
+	var calling := str(echo.get("calling", ""))
+	if calling.is_empty() or calling == "uncalled":
+		return []
+	if skill_defs.is_empty():
+		return []
+	var result: Array = []
+	for skill_id in skill_defs.keys():
+		var defn: Dictionary = skill_defs[skill_id]
+		if str(defn.get("calling_requirement", "")) == calling:
+			result.append(str(defn.get("display_name", skill_id)))
+	return result
 
 
 ## Derives a player-facing morale status label from fear level.

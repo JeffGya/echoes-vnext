@@ -65,6 +65,8 @@ static func from_echo(echo: Dictionary) -> Dictionary:
 		"leadership_traits": echo_leadership,
 		# PROG-008: active skill slots — deep copy; [""] = 1 empty slot at MVP; grows with callings
 		"skill_slots": (echo.get("skill_slots", [""]) as Array).duplicate(),
+		# PROG-009: equipped skills dict — slot_index_str → skill_id. Deep copy for isolation.
+		"equipped_skills": (echo.get("equipped_skills", {}) as Dictionary).duplicate(true),
 	}
 
 	assert(ActorSchema.validate(actor), \

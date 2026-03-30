@@ -74,7 +74,7 @@ func enter(ctx: RefCounted, t: int) -> void:
 		"cta.start": {
 			"type":  "flow.go_state",
 			"to":    FlowStateIds.ENCOUNTER,
-			"label": "Start Objective",
+			"label": "Begin",
 			"slot":  "cta.start",
 		},
 		"nav.back": {

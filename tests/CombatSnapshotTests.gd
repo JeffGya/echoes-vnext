@@ -131,7 +131,7 @@ static func _t_actor_projection_fields() -> Dictionary:
 		"traits":         { "courage": 70, "wisdom": 50, "faith": 40 },
 		"xp_total":       0,
 		"archetype_birth": "brave",
-		"calling_origin": "warrior",
+		"calling_origin": "blade",
 		"rank":           1,
 	}
 

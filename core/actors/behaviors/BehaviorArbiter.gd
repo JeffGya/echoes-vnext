@@ -6,7 +6,7 @@
 #
 # Key design principles:
 # - Roles weight, not determine: calling_origin gives a strong base tendency
-#   (guardian → protect_ally: 65) but traits and vectors can override it.
+#   (warder → protect_ally: 65) but traits and vectors can override it.
 #   Any echo can guard if their faith/protector vector is high enough.
 # - Extensibility: _score() loops over config table rows generically.
 #   Adding new actions, callings, vectors, or directives requires only
@@ -38,9 +38,11 @@ var _cfg: Dictionary
 # Used when _cfg is empty (no balance.json block passed in).
 const _DEFAULTS := {
 	"intent_weights_by_calling_origin": {
-		"guardian": { "melee_attack": 20, "protect_ally": 65, "actor.guard": 45, "actor.idle": 10, "actor.move": 25 },
-		"warrior":  { "melee_attack": 65, "protect_ally": 10, "actor.guard": 15, "actor.idle": 10, "actor.move": 55 },
-		"archer":   { "melee_attack": 45, "protect_ally": 10, "actor.guard": 20, "actor.idle": 10, "actor.move": 40 },
+		"warder":   { "melee_attack": 20, "protect_ally": 65, "actor.guard": 45, "actor.idle": 10, "actor.move": 25 },
+		"blade":    { "melee_attack": 65, "protect_ally": 10, "actor.guard": 15, "actor.idle": 10, "actor.move": 55 },
+		"ranger":   { "melee_attack": 45, "protect_ally": 10, "actor.guard": 20, "actor.idle": 10, "actor.move": 40 },
+		"steward":  { "melee_attack": 35, "protect_ally": 30, "actor.guard": 55, "actor.idle": 25, "actor.move": 20 },
+		"seer":     { "melee_attack": 25, "protect_ally": 20, "actor.guard": 30, "actor.idle": 40, "actor.move": 35 },
 		"uncalled": { "melee_attack": 50, "protect_ally": 15, "actor.guard": 25, "actor.idle": 20, "actor.move": 44 },
 		# Enemy baseline: aggressive. protect_ally=0 (enemies don't protect each other in MVP).
 		# guard/idle stay low so enemies almost never passively hold unless situationally forced.
@@ -100,9 +102,9 @@ const _DEFAULTS := {
 	"surrounded_move_penalty":     -18.0, # Adept+ penalty for move into surrounded position
 	"formation_distance":            6,   # Veteran+ formation pull threshold (tiles)
 	"press_hp_threshold":            0.5, # Veteran+ calling bonus HP gate (target < 50%)
-	"press_attack_bonus":           15.0, # Veteran warrior melee bonus vs wounded target
-	"protect_ally_veteran_mul":      1.3, # Veteran guardian protect_ally score multiplier
-	"protect_ally_veteran_hp_threshold": 0.50, # HP gate for guardian Veteran+ protect_ally mul
+	"press_attack_bonus":           15.0, # Veteran blade melee bonus vs wounded target
+	"protect_ally_veteran_mul":      1.3, # Veteran warder protect_ally score multiplier
+	"protect_ally_veteran_hp_threshold": 0.50, # HP gate for warder Veteran+ protect_ally mul
 
 	# -------------------------
 	# Situational modifier tables
@@ -143,7 +145,7 @@ const _DEFAULTS := {
 		},
 		# Echo-type only: adjacent to an enemy — fight, don't idle.
 		"echo_in_melee": {
-			"melee_attack": 18, "protect_ally": -3, "actor.guard": -5, "actor.idle": -12, "actor.move": -5,
+			"melee_attack": 18, "actor.press": 18, "protect_ally": -3, "actor.guard": -5, "actor.idle": -12, "actor.move": -5,
 		},
 		# Enemy-type only conditions (gated by actor_type == "enemy" in _build_board_summary).
 		"enemy_engaged": {
@@ -201,6 +203,16 @@ const _DEFAULTS := {
 		"_stub_enemy_bodyguard": {
 			# Enemy-type actor protecting a priority target. Intercept aggression.
 			"melee_attack": 0, "protect_ally": 0, "actor.guard": 0, "actor.idle": 0, "actor.move": 0,
+		},
+		# PROG-009: Seer directive aura — nearby allies receive a small bonus to strategic actions.
+		# Fires when a Seer ally is within 3 tiles.
+		"seer_directive_aura": {
+			"melee_attack": 0, "protect_ally": 3, "actor.guard": 3, "actor.idle": 4, "actor.move": 0,
+		},
+		# PROG-009: discourages echo move spam when close to enemy but not yet adjacent.
+		# Fires when echo moved last round AND enemy is within 1-3 tiles but not adjacent.
+		"repeated_move_penalty": {
+			"melee_attack": 0, "protect_ally": 0, "actor.guard": 5, "actor.idle": 5, "actor.move": -12,
 		},
 	},
 }
@@ -335,6 +347,15 @@ func _generate_candidates(
 
 	# melee_attack: adjacent enemy (Chebyshev distance == 1, all 8 neighbours).
 	# actor.move: enemy exists but not adjacent.
+	# PROG-009: pre-compute mark/reveal bonuses for melee_attack candidates.
+	var _mark_bonus: float   = 0.0
+	var _reveal_bonus: float = 0.0
+	if not nearest_enemy.is_empty():
+		if not str(nearest_enemy.get("marked_by", "")).is_empty():
+			_mark_bonus = 10.0
+		if not str(nearest_enemy.get("revealed_by_seer", "")).is_empty():
+			_reveal_bonus = 15.0
+
 	if not nearest_enemy.is_empty():
 		var target_hp_ratio: float = _hp_ratio(nearest_enemy)
 		if GridService.is_adjacent(my_pos, t_pos):
@@ -344,6 +365,8 @@ func _generate_candidates(
 				"distance":        enemy_dist,
 				"target_hp_ratio": target_hp_ratio,
 				"priority":        1.0,
+				"_mark_bonus":     _mark_bonus,
+				"_reveal_bonus":   _reveal_bonus,
 			})
 		else:
 			candidates.append({
@@ -379,7 +402,7 @@ func _generate_candidates(
 	if actor_type == "echo" \
 			and (smartness_tier == "adept" or smartness_tier == "veteran" or smartness_tier == "elite"):
 		var retreat_threshold: Variant = calling_behavior.get("retreat_threshold", null)
-		if retreat_threshold != null and calling_origin != "warrior":
+		if retreat_threshold != null and calling_origin != "blade":
 			var hp_r: float = _hp_ratio(actor)
 			if hp_r < float(retreat_threshold):
 				candidates.append({
@@ -388,9 +411,9 @@ func _generate_candidates(
 					"priority":    1.0,
 				})
 
-	# PROG-010: actor.taunt — Blade (warrior calling) Veteran+ only.
+	# PROG-010: actor.taunt — Blade calling Veteran+ only.
 	# Mechanical effect applied by combat loop (taunted_by set on enemy).
-	if actor_type == "echo" and calling_origin == "warrior" \
+	if actor_type == "echo" and calling_origin == "blade" \
 			and (smartness_tier == "veteran" or smartness_tier == "elite") \
 			and not nearest_enemy.is_empty():
 		candidates.append({
@@ -398,6 +421,144 @@ func _generate_candidates(
 			"target_id":   str(nearest_enemy.get("id", "")),
 			"priority":    1.0,
 		})
+
+	# PROG-009: Skill-gated action candidates.
+	# Each echo may have equipped_skills (slot → skill_id). For each equipped skill whose
+	# condition is met this turn, generate a typed candidate with a pre-resolved skill_base_bonus
+	# so _score() doesn't need intent weight rows for every calling skill action_type.
+	if actor_type == "echo":
+		var skills_cfg: Dictionary = context.get("skills_cfg", {})
+		var skill_defs: Dictionary = skills_cfg.get("definitions", {})
+		var equipped: Dictionary   = actor.get("equipped_skills", {})
+		for _slot_key in equipped:
+			var skill_id: String = str(equipped[_slot_key])
+			if skill_id.is_empty():
+				continue
+			var defn: Dictionary = skill_defs.get(skill_id, {})
+			if defn.is_empty():
+				continue
+			var action_t: String = str(defn.get("action_type", ""))
+			if action_t.is_empty():
+				continue
+			var weight_tag: String = str(defn.get("intent_weight_tag", "melee_attack"))
+			match action_t:
+				"actor.press":
+					# Condition: hit same target last round AND still adjacent.
+					var press_li_v: Variant = actor.get("last_intent", {})
+					var press_li: Dictionary = press_li_v if press_li_v is Dictionary else {}
+					if str(press_li.get("action_type", "")) == "melee_attack" \
+							and not str(press_li.get("target_id", "")).is_empty() \
+							and not nearest_enemy.is_empty() \
+							and str(press_li.get("target_id", "")) == str(nearest_enemy.get("id", "")) \
+							and not t_pos.is_empty() \
+							and GridService.is_adjacent(my_pos, t_pos):
+						candidates.append({
+							"action_type":      "actor.press",
+							"target_id":        str(nearest_enemy.get("id", "")),
+							"target_hp_ratio":  _hp_ratio(nearest_enemy),
+							"skill_id":         skill_id,
+							"skill_base_bonus": _resolve_skill_base(calling_origin, weight_tag, 15.0),
+							"priority":         1.0,
+						})
+				"actor.interpose":
+					# Condition: ally threatened.
+					var interpose_ally: Dictionary = ActorService.get_threatened_ally(actor, all_actors, threshold)
+					if not interpose_ally.is_empty():
+						candidates.append({
+							"action_type":      "actor.interpose",
+							"target_id":        str(interpose_ally.get("id", "")),
+							"skill_id":         skill_id,
+							"skill_base_bonus": _resolve_skill_base(calling_origin, weight_tag, 0.0),
+							"priority":         1.0,
+						})
+				"actor.hold_ground":
+					# Condition: adjacent to shrine OR 2+ faction allies within 2 tiles.
+					var hg_shrine: bool = false
+					var hg_allies: int  = 0
+					for hg_av in all_actors:
+						if not (hg_av is Dictionary): continue
+						var hg_a: Dictionary = hg_av
+						if hg_a.get("is_dead", false): continue
+						var hg_pos: Dictionary = hg_a.get("grid_pos", {})
+						if hg_pos.is_empty(): continue
+						if hg_a.get("is_structure", false):
+							if GridService.chebyshev_distance(my_pos, hg_pos) <= 1:
+								hg_shrine = true
+						elif str(hg_a.get("faction", "")) == str(actor.get("faction", "")) \
+								and str(hg_a.get("id", "")) != str(actor.get("id", "")):
+							if GridService.chebyshev_distance(my_pos, hg_pos) <= 2:
+								hg_allies += 1
+					if hg_shrine or hg_allies >= 2:
+						candidates.append({
+							"action_type":      "actor.hold_ground",
+							"target_id":        "",
+							"skill_id":         skill_id,
+							"skill_base_bonus": _resolve_skill_base(calling_origin, weight_tag, 0.0),
+							"priority":         1.0,
+						})
+				"actor.steady_call":
+					# Once per combat; no other condition required.
+					if not bool(actor.get("_steady_call_used", false)):
+						candidates.append({
+							"action_type":      "actor.steady_call",
+							"target_id":        "",
+							"skill_id":         skill_id,
+							"skill_base_bonus": _resolve_skill_base(calling_origin, weight_tag, 10.0),
+							"priority":         1.0,
+						})
+				"actor.mark":
+					# Condition: enemy within 3 tiles AND not already marked.
+					if not nearest_enemy.is_empty() and enemy_dist <= 3 \
+							and str(nearest_enemy.get("marked_by", "")).is_empty():
+						candidates.append({
+							"action_type":      "actor.mark",
+							"target_id":        str(nearest_enemy.get("id", "")),
+							"skill_id":         skill_id,
+							"skill_base_bonus": _resolve_skill_base(calling_origin, weight_tag, 5.0),
+							"priority":         1.0,
+						})
+				"actor.withdraw":
+					# Condition: adjacent to 2+ enemies AND not on cooldown.
+					if int(actor.get("_withdraw_cooldown", 0)) <= 0:
+						var wd_count: int = 0
+						for wd_av in all_actors:
+							if not (wd_av is Dictionary): continue
+							var wd_a: Dictionary = wd_av
+							if wd_a.get("is_dead", false) or wd_a.get("is_structure", false): continue
+							if str(wd_a.get("faction", "")) != str(actor.get("faction", "")):
+								var wd_pos: Dictionary = wd_a.get("grid_pos", {})
+								if not wd_pos.is_empty() and GridService.is_adjacent(my_pos, wd_pos):
+									wd_count += 1
+						if wd_count >= 2:
+							candidates.append({
+								"action_type":      "actor.withdraw",
+								"target_id":        "",
+								"skill_id":         skill_id,
+								"skill_base_bonus": _resolve_skill_base(calling_origin, weight_tag, 0.0),
+								"priority":         1.0,
+							})
+				"actor.read_field":
+					# Condition: _read_field_cooldown == 0.
+					if int(actor.get("_read_field_cooldown", 0)) == 0:
+						candidates.append({
+							"action_type":      "actor.read_field",
+							"target_id":        "",
+							"skill_id":         skill_id,
+							"skill_base_bonus": _resolve_skill_base(calling_origin, weight_tag, 10.0),
+							"priority":         1.0,
+						})
+				"actor.reveal":
+					# Once per combat; condition: nearest enemy not yet revealed by seer.
+					if not bool(actor.get("_reveal_used", false)) \
+							and not nearest_enemy.is_empty() \
+							and str(nearest_enemy.get("revealed_by_seer", "")).is_empty():
+						candidates.append({
+							"action_type":      "actor.reveal",
+							"target_id":        str(nearest_enemy.get("id", "")),
+							"skill_id":         skill_id,
+							"skill_base_bonus": _resolve_skill_base(calling_origin, weight_tag, 10.0),
+							"priority":         1.0,
+						})
 
 	return candidates
 
@@ -505,6 +666,28 @@ func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dict
 					active.append("echo_retreating")
 					break
 
+	# PROG-009: Seer directive aura — any echo ally within 3 tiles of a living Seer gets a bonus.
+	if actor_type == "echo":
+		for sa_v in all_actors:
+			if not (sa_v is Dictionary): continue
+			var sa: Dictionary = sa_v
+			if sa.get("is_dead", false): continue
+			if str(sa.get("id", "")) == my_id: continue
+			if str(sa.get("faction", "")) == my_faction \
+					and str(sa.get("calling_origin", "")) == "seer":
+				var sa_pos: Dictionary = sa.get("grid_pos", {})
+				if not sa_pos.is_empty() and GridService.chebyshev_distance(my_pos, sa_pos) <= 3:
+					active.append("seer_directive_aura")
+					break
+
+	# PROG-009: repeated_move_penalty — echo moved last round AND enemy is nearby but not adjacent.
+	# Fires in the 2-3 tile band: too close to keep running, close enough to act.
+	if actor_type == "echo" and enemy_dist > 1 and enemy_dist <= 3:
+		var last_i_v: Variant = actor.get("last_intent", {})
+		var last_i: Dictionary = last_i_v if last_i_v is Dictionary else {}
+		if str(last_i.get("action_type", "")) == "actor.move":
+			active.append("repeated_move_penalty")
+
 	# COMBAT-006: near_friendly_structure / near_hostile_structure based on actor faction.
 	# Echoes get a soft defensive bonus near the shrine; enemies get an aggression boost toward it.
 	for a_v in all_actors:
@@ -565,10 +748,16 @@ func _score(
 	var fear: float            = float(actor.get("fear", 0))
 
 	# 1. Base weight from calling_origin table.
+	# Skill-gated candidates carry skill_base_bonus (pre-resolved via intent_weight_tag + bonus);
+	# use that directly so unknown action types don't fall through to the default weight.
 	var origin_table: Dictionary = _cfg_get("intent_weights_by_calling_origin")
 	var calling_row: Dictionary  = origin_table.get(calling_origin, origin_table.get("uncalled", {}))
 	var default_weight: float    = _cfg_get("default_intent_weight")
-	var base: float              = float(calling_row.get(action_type, default_weight))
+	var base: float
+	if candidate.has("skill_base_bonus"):
+		base = float(candidate["skill_base_bonus"])
+	else:
+		base = float(calling_row.get(action_type, default_weight))
 
 	# 2. Trait bonus — generic loop: new traits picked up automatically from balance.json.
 	var trait_tables: Dictionary = _cfg_get("trait_action_muls")
@@ -604,6 +793,15 @@ func _score(
 	var morale_tier: String       = EmotionService.get_morale_tier(int(actor.get("morale", 50)))
 	var ml_row: Dictionary        = morale_tables.get(action_type, {})
 	var morale_bonus: float       = float(ml_row.get(morale_tier, 0.0))
+	# PROG-009: Blade passive — broken morale → aggression override (override the default penalty).
+	if morale_tier == "broken" and calling_origin == "blade":
+		var bmo: Dictionary = calling_behavior.get("broken_morale_override", {})
+		if bmo.has(action_type):
+			morale_bonus = float(bmo[action_type])
+	# PROG-009: Warder passive — anchor bonus on guard/protect_ally per stationary round.
+	if calling_origin == "warder" and (action_type == "actor.guard" or action_type == "protect_ally"):
+		var anchor_rounds: int = int(actor.get("_anchor_rounds", 0))
+		base += float(mini(anchor_rounds * 8, 24))
 
 	# 6. Directive bonus — generic loop over intent_weights (semantic keys).
 	var directive_bonus: float = _directive_bonus(action_type, directive)
@@ -618,7 +816,7 @@ func _score(
 				else 0.5)
 			var target_hp: float = float(candidate.get("target_hp_ratio", 1.0))
 			match calling_str:
-				"guardian":
+				"warder":
 					if action_type == "protect_ally":
 						var protect_mul: float = float(_cfg_get("protect_ally_veteran_mul") \
 							if _cfg.has("protect_ally_veteran_mul") else 1.3)
@@ -626,7 +824,7 @@ func _score(
 							if _cfg.has("protect_ally_veteran_hp_threshold") else 0.50)
 						if target_hp <= protect_hp_gate:
 							calling_mul = protect_mul
-				"warrior":
+				"blade":
 					if action_type == "melee_attack" and target_hp <= press_threshold:
 						base += float(_cfg_get("press_attack_bonus") if _cfg.has("press_attack_bonus") else 15.0)
 
@@ -642,6 +840,31 @@ func _score(
 		var taunted_by: String = str(actor.get("taunted_by", ""))
 		if not taunted_by.is_empty() and str(candidate.get("target_id", "")) == taunted_by:
 			base += 25.0
+		# PROG-009: marked_by (+10 for all echoes) + revealed_by_seer (+15 for all echoes)
+		base += float(candidate.get("_mark_bonus",   0.0))
+		base += float(candidate.get("_reveal_bonus", 0.0))
+
+	# PROG-009: Calling emotional signatures — fear amplifies calling-specific tendencies.
+	if fear > 0.0:
+		match calling_origin:
+			"ranger":
+				# Fear → movement bonus (threat-sensitive repositioning); idle suppressed.
+				if action_type == "actor.move":
+					base += float(calling_behavior.get("fear_move_bonus", 0.0))
+				elif action_type == "actor.idle":
+					base -= 8.0
+			"seer":
+				# Fear → idle rises (Seer retreats into perception, not action).
+				if action_type == "actor.idle":
+					base += fear * 0.15
+			"steward":
+				# Fear → move penalty (Steward holds ground under pressure).
+				if action_type == "actor.move":
+					base -= fear * 0.15
+			"warder":
+				# Fear → protect_ally bonus (defensive surge under pressure).
+				if action_type == "protect_ally":
+					base += fear * 0.1
 
 	return (base + trait_bonus + vector_bonus + archetype_bonus + morale_bonus) * fear_factor * calling_mul + directive_bonus + _situational_bonus(action_type, board_summary)
 
@@ -697,6 +920,17 @@ func _get_most_wounded_enemy(actor: Dictionary, all_actors: Array) -> Dictionary
 			best_ratio = r
 			best = a
 	return best
+
+
+# PROG-009: Resolve base score for a skill candidate.
+# Looks up calling_origin's weight for intent_weight_tag (the action type this skill resembles),
+# then adds a skill-specific bonus. Stored as skill_base_bonus in the candidate dict so
+# _score() can use it in place of the normal action_type table lookup.
+func _resolve_skill_base(calling_origin: String, intent_weight_tag: String, bonus: float) -> float:
+	var origin_table: Dictionary = _cfg_get("intent_weights_by_calling_origin")
+	var calling_row: Dictionary  = origin_table.get(calling_origin, origin_table.get("uncalled", {}))
+	var default_weight: float    = float(_cfg_get("default_intent_weight"))
+	return float(calling_row.get(intent_weight_tag, default_weight)) + bonus
 
 
 # PROG-010: Compute hp_ratio for any actor dict. Returns 1.0 if stats unavailable.

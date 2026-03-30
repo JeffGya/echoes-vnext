@@ -109,16 +109,16 @@ static func _t_determinism() -> Dictionary:
 
 # Test 3: repair_adds_defaults
 # Steps:
-#   1. Build a minimal old-style echo dict with calling_origin "warrior" and no level or class_origin.
+#   1. Build a minimal echo dict with calling_origin "blade" and no level or class_origin.
 #   2. Call EchoFactory.repair_echo_fields(echo).
 #   3. Assert return value is true (patched = fields were missing).
 #   4. Assert echo["level"] == 1.
-#   5. Assert echo["class_origin"] == "vanguard" (old save-compat mapping: warrior → vanguard).
+#   5. Assert echo["class_origin"] == "vanguard" (blade → vanguard).
 static func _t_repair_adds_defaults() -> Dictionary:
 	var echo: Dictionary = {
 		"id":             "echo_old_001",
 		"name":           "Kofi Mensah",
-		"calling_origin": "warrior"
+		"calling_origin": "blade"
 	}
 
 	var patched: bool = EchoFactory.repair_echo_fields(echo)
@@ -131,7 +131,7 @@ static func _t_repair_adds_defaults() -> Dictionary:
 
 	var co: String = str(echo.get("class_origin", ""))
 	if co != "vanguard":
-		return { "ok": false, "error": "Expected class_origin='vanguard' (from calling_origin='warrior'), got: '%s'" % co }
+		return { "ok": false, "error": "Expected class_origin='vanguard' (from calling_origin='blade'), got: '%s'" % co }
 
 	return { "ok": true }
 

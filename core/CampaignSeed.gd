@@ -9,9 +9,10 @@ var root_seed: int
 static func _mix64(x: int) -> int:
 	# SplitMix64-style mixing (finalizer).
 	# Relies on 64-bit integer wraparound.
-	var z := x + 0x9E3779B97F4A7C15
-	z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9
-	z = (z ^ (z >> 27)) * 0x94D049BB133111EB
+	# Constants are expressed as signed 64-bit values to avoid hex parse overflow logs.
+	var z := x + -7046029254386353131  # 0x9E3779B97F4A7C15
+	z = (z ^ (z >> 30)) * -4658895280553007687  # 0xBF58476D1CE4E5B9
+	z = (z ^ (z >> 27)) * -7723592293110705685  # 0x94D049BB133111EB
 	z = z ^ (z >> 31)
 	return z
 

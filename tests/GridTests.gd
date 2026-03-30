@@ -257,9 +257,9 @@ static func _t_placement_same_seed_same_positions() -> Dictionary:
 	var cfg := { "board_cols": 10, "board_rows": 10 }
 	var place_cfg := {}  # no modifiers — pure base score
 
-	var echo_a := _make_actor("e1", 3, 4, "brave",  "warrior",  { "courage": 50, "wisdom": 30, "faith": 20 }, { "vanguard": 60, "protector": 10, "seeker": 20, "pillar": 10 })
+	var echo_a := _make_actor("e1", 3, 4, "brave",  "blade",    { "courage": 50, "wisdom": 30, "faith": 20 }, { "vanguard": 60, "protector": 10, "seeker": 20, "pillar": 10 })
 	var echo_b := _make_actor("e2", 2, 3, "devout", "uncalled", { "courage": 20, "wisdom": 25, "faith": 55 }, { "vanguard": 10, "protector": 40, "seeker": 30, "pillar": 20 })
-	var enemy_a := _make_actor("n1", 2, 5, "sage",   "guardian", { "courage": 30, "wisdom": 50, "faith": 20 }, { "vanguard": 20, "protector": 60, "seeker": 10, "pillar": 10 })
+	var enemy_a := _make_actor("n1", 2, 5, "sage",   "warder",   { "courage": 30, "wisdom": 50, "faith": 20 }, { "vanguard": 20, "protector": 60, "seeker": 10, "pillar": 10 })
 
 	# First run.
 	var echoes1 := [echo_a.duplicate(true), echo_b.duplicate(true)]
@@ -295,17 +295,17 @@ static func _t_placement_score_places_forward() -> Dictionary:
 	# Use the confirmed modifier tables.
 	var place_cfg := {
 		"by_archetype":        { "brave": 2, "devout": -2 },
-		"by_calling_origin":   { "warrior": 2, "archer": -2 },
+		"by_calling_origin":   { "blade": 2, "ranger": -2 },
 		"by_dominant_trait":   { "courage": 1, "wisdom": -1, "faith": 0 },
 		"by_dominant_vector":  { "vanguard": 2, "pillar": -2, "seeker": 0, "protector": -1 },
 	}
 
-	# High-score echo: brave + warrior + courage-dominant + vanguard-dominant.
-	var fast := _make_actor("fast", 5, 5, "brave",  "warrior",
+	# High-score echo: brave + blade + courage-dominant + vanguard-dominant.
+	var fast := _make_actor("fast", 5, 5, "brave",  "blade",
 		{ "courage": 60, "wisdom": 20, "faith": 20 },
 		{ "vanguard": 70, "protector": 10, "seeker": 10, "pillar": 10 })
-	# Low-score echo: devout + archer + faith-dominant + pillar-dominant.
-	var slow := _make_actor("slow", 1, 1, "devout", "archer",
+	# Low-score echo: devout + ranger + faith-dominant + pillar-dominant.
+	var slow := _make_actor("slow", 1, 1, "devout", "ranger",
 		{ "courage": 15, "wisdom": 20, "faith": 65 },
 		{ "vanguard": 5, "protector": 15, "seeker": 20, "pillar": 60 })
 
@@ -334,10 +334,10 @@ static func _t_placement_all_positions_valid() -> Dictionary:
 	var echoes: Array = []
 	var enemies: Array = []
 	for i in range(5):
-		echoes.append(_make_actor("e%d" % i, i, i + 1, "brave", "warrior",
+		echoes.append(_make_actor("e%d" % i, i, i + 1, "brave", "blade",
 			{ "courage": 50, "wisdom": 25, "faith": 25 },
 			{ "vanguard": 60, "protector": 10, "seeker": 20, "pillar": 10 }))
-		enemies.append(_make_actor("n%d" % i, i, i + 1, "sage", "guardian",
+		enemies.append(_make_actor("n%d" % i, i, i + 1, "sage", "warder",
 			{ "courage": 20, "wisdom": 55, "faith": 25 },
 			{ "vanguard": 10, "protector": 50, "seeker": 30, "pillar": 10 }))
 

@@ -20,7 +20,8 @@ const _RANK_UP_OVERLAY_SCENE: PackedScene = preload("res://ui/overlays/RankUpOve
 
 # ── Static node refs ──────────────────────────────────────────────────────
 @onready var echo_count_label: Label       = %EchoCountLabel
-@onready var echo_row_list: VBoxContainer  = %EchoRowList
+@onready var echo_rows: VBoxContainer      = %EchoRows
+@onready var echo_row_template: HBoxContainer = %EchoRowTemplate
 @onready var summon_btn: Button            = %SummonBtn
 @onready var view_bonds_btn: Button        = %ViewBondsBtn
 @onready var detail_panel: Control         = %DetailPanel
@@ -37,7 +38,12 @@ const _RANK_UP_OVERLAY_SCENE: PackedScene = preload("res://ui/overlays/RankUpOve
 @onready var detail_xp_bar: ProgressBar    = %DetailXPBar
 @onready var detail_xp_label: Label        = %DetailXPLabel
 @onready var detail_archetype_label: Label = %DetailArchetype
-@onready var detail_stats_grid: GridContainer = %DetailStatsGrid
+@onready var stat_attack_value: Label      = %StatAttackValue
+@onready var stat_defense_value: Label     = %StatDefenseValue
+@onready var stat_intelligence_value: Label = %StatIntelligenceValue
+@onready var stat_agility_value: Label     = %StatAgilityValue
+@onready var stat_charisma_value: Label    = %StatCharismaValue
+@onready var stat_speed_value: Label       = %StatSpeedValue
 @onready var detail_emotion_status: Label  = %DetailEmotionStatus
 @onready var detail_morale_bar: ProgressBar = %DetailMoraleBar
 @onready var detail_fear_bar: ProgressBar   = %DetailFearBar
@@ -57,6 +63,11 @@ const _RANK_UP_OVERLAY_SCENE: PackedScene = preload("res://ui/overlays/RankUpOve
 @onready var skill_slot_value2: Label          = %SkillSlotValue2
 @onready var tab_base: Button                  = %TabBase
 @onready var tab_skills: Button                = %TabSkills
+@onready var calling_info_btn: Button          = %CallingInfoBtn
+@onready var calling_info_overlay: Control     = %CallingInfoOverlay
+@onready var calling_info_title: Label         = %CallingInfoTitle
+@onready var calling_info_desc: Label          = %CallingInfoDesc
+@onready var calling_info_close_btn: Button    = %CallingInfoCloseBtn
 
 # ── State ─────────────────────────────────────────────────────────────────
 var _snap: Dictionary          = {}
@@ -64,11 +75,6 @@ var _action_back: Dictionary   = {}
 var _echoes: Array             = []
 var _selected_echo: Dictionary = {}
 var _rank_up_overlay: RankUpOverlay = null
-# SANCTUM-005: ⓘ info button next to calling label + overlay for full description.
-var _calling_info_btn: Button   = null
-var _calling_info_overlay: Control = null
-var _calling_info_title: Label  = null
-var _calling_info_desc: Label   = null
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -104,18 +110,10 @@ func _ready() -> void:
 	if not tab_skills.pressed.is_connected(_on_tab_skills_pressed):
 		tab_skills.pressed.connect(_on_tab_skills_pressed)
 
-	# SANCTUM-005: ⓘ button inserted right after calling label; overlay built once.
-	_calling_info_btn = Button.new()
-	_calling_info_btn.text = "ⓘ"
-	_calling_info_btn.flat = true
-	_calling_info_btn.visible = false
-	var _ci_parent := detail_calling_label.get_parent()
-	_ci_parent.add_child(_calling_info_btn)
-	_ci_parent.move_child(_calling_info_btn, detail_calling_label.get_index() + 1)
-	_calling_info_btn.pressed.connect(_on_calling_info_pressed)
-
-	_calling_info_overlay = _build_calling_info_overlay()
-	add_child(_calling_info_overlay)
+	if not calling_info_btn.pressed.is_connected(_on_calling_info_pressed):
+		calling_info_btn.pressed.connect(_on_calling_info_pressed)
+	if not calling_info_close_btn.pressed.is_connected(_on_calling_info_close_pressed):
+		calling_info_close_btn.pressed.connect(_on_calling_info_close_pressed)
 
 	# PROG-004: Rank-up overlay — instantiated once, lives as a child of this screen.
 	_rank_up_overlay = _RANK_UP_OVERLAY_SCENE.instantiate() as RankUpOverlay
@@ -163,17 +161,16 @@ func set_snapshot(snap: Dictionary) -> void:
 # ── List builder ──────────────────────────────────────────────────────────
 
 func _rebuild_echo_list() -> void:
-	for c in echo_row_list.get_children():
+	for c in echo_rows.get_children():
 		c.queue_free()
 
 	for e_v in _echoes:
 		if not (e_v is Dictionary):
 			continue
-		echo_row_list.add_child(_make_echo_row(e_v))
+		echo_rows.add_child(_make_echo_row(e_v))
 
 
 func _make_echo_row(e: Dictionary) -> Control:
-	var echo_id        := str(e.get("id", ""))
 	var name_str       := str(e.get("name", ""))
 	var level          := int(e.get("level", 1))
 	var rank           := int(e.get("rank", 1))
@@ -183,21 +180,17 @@ func _make_echo_row(e: Dictionary) -> Control:
 	var calling_options_v: Variant = e.get("calling_options", [])
 	var calling_pending: bool = (calling_options_v is Array) and (calling_options_v as Array).size() > 0
 
-	var row := HBoxContainer.new()
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.custom_minimum_size   = Vector2(0, 48)
+	var row := echo_row_template.duplicate() as HBoxContainer
+	row.visible = true
 
-	var name_lbl := Label.new()
+	var name_lbl := _row_node(row, "NameLabel") as Label
 	name_lbl.text = name_str
-	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(name_lbl)
 
 	# SANCTUM-005: archetype label (secondary identity, after name).
 	var archetype_str := str(e.get("archetype", "")).capitalize()
-	if not archetype_str.is_empty():
-		var arch_lbl := Label.new()
-		arch_lbl.text = archetype_str
-		row.add_child(arch_lbl)
+	var arch_lbl := _row_node(row, "ArchetypeLabel") as Label
+	arch_lbl.visible = not archetype_str.is_empty()
+	arch_lbl.text = archetype_str
 
 	# SANCTUM-005: replace calling_origin display with three-tier calling logic.
 	var confirmed_calling: String = str(e.get("calling", ""))
@@ -207,50 +200,39 @@ func _make_echo_row(e: Dictionary) -> Control:
 		calling_display = confirmed_calling.capitalize()
 	elif calling_eligible:
 		calling_display = "Calling Undecided"
-	if not calling_display.is_empty():
-		var calling_lbl := Label.new()
-		calling_lbl.text = calling_display
-		row.add_child(calling_lbl)
+	var calling_lbl := _row_node(row, "CallingLabel") as Label
+	calling_lbl.visible = not calling_display.is_empty()
+	calling_lbl.text = calling_display
 
-	var level_lbl := Label.new()
+	var level_lbl := _row_node(row, "LevelLabel") as Label
 	level_lbl.text = "Lv %d" % level
-	row.add_child(level_lbl)
 
-	var rank_lbl := Label.new()
+	var rank_lbl := _row_node(row, "RankLabel") as Label
 	rank_lbl.text = "R%d" % rank
-	row.add_child(rank_lbl)
 
-	if in_party:
-		var party_badge := Label.new()
-		party_badge.text = "★"
-		row.add_child(party_badge)
+	var party_badge := _row_node(row, "PartyBadge") as Label
+	party_badge.visible = in_party
 
 	# PROG-004: show ascend indicator when rank-up is available.
-	if rank_up_eligible:
-		var ascend_badge := Label.new()
-		ascend_badge.text = "▲"
-		row.add_child(ascend_badge)
+	var ascend_badge := _row_node(row, "AscendBadge") as Label
+	ascend_badge.visible = rank_up_eligible
 
 	# PROG-007: show ⚡ when a calling choice is pending.
-	if calling_pending:
-		var calling_badge := Label.new()
-		calling_badge.text = "⚡"
-		row.add_child(calling_badge)
+	var calling_badge := _row_node(row, "CallingPendingBadge") as Label
+	calling_badge.visible = calling_pending
 
-	var arrow_btn := Button.new()
-	arrow_btn.text = "▶"
-	arrow_btn.custom_minimum_size = Vector2(40, 48)
-	arrow_btn.theme_type_variation = "ButtonGhost"
-	# Capture echo dict by value for the closure.
-	var e_capture: Dictionary = e.duplicate()
-	arrow_btn.pressed.connect(func() -> void:
-		_selected_echo = e_capture
-		_render_detail(e_capture)
-		detail_panel.visible = true
-	)
-	row.add_child(arrow_btn)
+	var arrow_btn := _row_node(row, "ArrowButton") as Button
+	# Capture echo dict by value for the callback.
+	var e_capture: Dictionary = e.duplicate(true)
+	arrow_btn.pressed.connect(_on_echo_row_pressed.bind(e_capture))
 
 	return row
+
+
+func _on_echo_row_pressed(echo_data: Dictionary) -> void:
+	_selected_echo = echo_data
+	_render_detail(echo_data)
+	detail_panel.visible = true
 
 
 # ── Detail panel renderer ─────────────────────────────────────────────────
@@ -302,19 +284,19 @@ func _render_detail(e: Dictionary) -> void:
 		# Tier 1: confirmed calling — show name + ⓘ button for description overlay.
 		detail_calling_label.visible   = true
 		detail_calling_label.text      = confirmed_calling.capitalize()
-		_calling_info_btn.visible      = not calling_description.is_empty()
+		calling_info_btn.visible       = not calling_description.is_empty()
 		calling_eligible_badge.visible = false
 	elif calling_eligible:
 		# Tier 2: eligible but undecided — "Calling Undecided" + ⚡ Path Awaits badge.
 		detail_calling_label.visible   = true
 		detail_calling_label.text      = "Calling Undecided"
-		_calling_info_btn.visible      = false
+		calling_info_btn.visible       = false
 		calling_eligible_badge.visible = true
 		calling_eligible_badge.text    = "⚡ Path Awaits"
 	else:
 		# Tier 3: not yet eligible — hide calling section entirely.
 		detail_calling_label.visible   = false
-		_calling_info_btn.visible      = false
+		calling_info_btn.visible       = false
 		calling_eligible_badge.visible = false
 
 	ascend_button.visible = rank_up_eligible
@@ -336,25 +318,13 @@ func _render_detail(e: Dictionary) -> void:
 
 	detail_archetype_label.text = archetype.capitalize()
 
-	# Stats grid (2-column: label + value)
-	for c in detail_stats_grid.get_children():
-		c.queue_free()
-	var stat_rows: Array = [
-		["Attack",       stats.get("atk",   0)],
-		["Defense",      stats.get("def",   0)],
-		["Intelligence", stats.get("int",   0)],
-		["Agility",      stats.get("agi",   0)],
-		["Charisma",     stats.get("cha",   0)],
-		["Speed",        stats.get("speed", 0)],
-	]
-	for row_v in stat_rows:
-		var key_lbl := Label.new()
-		key_lbl.text = str(row_v[0])
-		var val_lbl := Label.new()
-		val_lbl.text = str(int(row_v[1]))
-		val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		detail_stats_grid.add_child(key_lbl)
-		detail_stats_grid.add_child(val_lbl)
+	# Stats rows are scene-authored for easier styling in editor.
+	stat_attack_value.text = str(int(stats.get("atk", 0)))
+	stat_defense_value.text = str(int(stats.get("def", 0)))
+	stat_intelligence_value.text = str(int(stats.get("int", 0)))
+	stat_agility_value.text = str(int(stats.get("agi", 0)))
+	stat_charisma_value.text = str(int(stats.get("cha", 0)))
+	stat_speed_value.text = str(int(stats.get("speed", 0)))
 
 	# Emotion section
 	detail_emotion_status.text = status
@@ -374,15 +344,16 @@ func _render_detail(e: Dictionary) -> void:
 	tab_base.theme_type_variation   = "ButtonPrimary"
 	tab_skills.theme_type_variation = "ButtonSecondary"
 	# Pre-populate skill slot values (shown when the Keeper opens the Skills tab).
-	var skill_slots_v: Variant = e.get("skill_slots", [""])
-	var skill_slots: Array = skill_slots_v if skill_slots_v is Array else [""]
-	skill_slot_value1.text = "\u2014" if str(skill_slots[0]).is_empty() \
-		else str(skill_slots[0]).capitalize()
+	# skill_slots is [] for uncalled echoes — guard all index access.
+	var skill_slots_v: Variant = e.get("skill_slots", [])
+
+	var skill_slots: Array = skill_slots_v if skill_slots_v is Array else []
+	skill_slot_value1.text = skill_slots[0] if skill_slots.size() >= 1 and not str(skill_slots[0]).is_empty() else "\u2014"
 	var has_slot2: bool = skill_slots.size() >= 2
 	skill_slot_row2.visible = has_slot2
 	if has_slot2:
 		skill_slot_value2.text = "\u2014" if str(skill_slots[1]).is_empty() \
-			else str(skill_slots[1]).capitalize()
+			else str(skill_slots[1])
 
 
 # ── Button handlers ───────────────────────────────────────────────────────
@@ -468,62 +439,24 @@ func _on_tab_skills_pressed() -> void:
 
 
 # ── SANCTUM-005 helpers ───────────────────────────────────────────────────
-
-## Builds the calling info overlay once in _ready(). Hidden by default.
-## Panel anchored to the center third of the screen; backdrop dims the rest.
-func _build_calling_info_overlay() -> Control:
-	var overlay := Control.new()
-	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.visible = false
-
-	var backdrop := ColorRect.new()
-	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-	backdrop.color = Color(0.0, 0.0, 0.0, 0.6)
-	overlay.add_child(backdrop)
-
-	var panel := Panel.new()
-	panel.anchor_left   = 0.1
-	panel.anchor_right  = 0.9
-	panel.anchor_top    = 0.3
-	panel.anchor_bottom = 0.7
-	overlay.add_child(panel)
-
-	var margin := MarginContainer.new()
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left",   16)
-	margin.add_theme_constant_override("margin_right",  16)
-	margin.add_theme_constant_override("margin_top",    16)
-	margin.add_theme_constant_override("margin_bottom", 16)
-	panel.add_child(margin)
-
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 12)
-	margin.add_child(vbox)
-
-	_calling_info_title = Label.new()
-	_calling_info_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(_calling_info_title)
-
-	_calling_info_desc = Label.new()
-	_calling_info_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_calling_info_desc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vbox.add_child(_calling_info_desc)
-
-	var close_btn := Button.new()
-	close_btn.text = "Got it"
-	close_btn.pressed.connect(func() -> void: overlay.visible = false)
-	vbox.add_child(close_btn)
-
-	return overlay
-
-
 ## Shows the calling info overlay populated with the selected echo's calling data.
 func _on_calling_info_pressed() -> void:
-	if _selected_echo.is_empty() or _calling_info_overlay == null:
+	if _selected_echo.is_empty():
 		return
-	_calling_info_title.text = str(_selected_echo.get("calling", "")).capitalize()
-	_calling_info_desc.text  = str(_selected_echo.get("calling_description", ""))
-	_calling_info_overlay.visible = true
+	calling_info_title.text = str(_selected_echo.get("calling", "")).capitalize()
+	calling_info_desc.text  = str(_selected_echo.get("calling_description", ""))
+	calling_info_overlay.visible = true
+
+
+func _on_calling_info_close_pressed() -> void:
+	calling_info_overlay.visible = false
+
+
+# Resolves row sub-nodes by name recursively so the row layout can be freely re-parented.
+func _row_node(row: Node, node_name: String) -> Node:
+	var found := row.find_child(node_name, true, false)
+	assert(found != null, "EchoManageScreen: row template missing node '%s'" % node_name)
+	return found
 
 
 # ── PROG-004 helpers ──────────────────────────────────────────────────────

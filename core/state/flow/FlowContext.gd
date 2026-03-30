@@ -15,6 +15,10 @@ var pending_summon_reveals: Array = [] # Array[Dictionary] (Echo records or summ
 # Used while inside flow.party_manage before confirm.
 var pending_party_ids: Array = [] # Array[String] (Echo ids)
 
+# PROG-009: skill loadout built during party prep on STAGE_MAP.
+# Dict: echo_id → { slot_index_str → skill_id }. Persisted to save on flow.select_stage (cta.enter_stage).
+var pending_equipped_skills: Dictionary = {}
+
 # Selected summon grade for the current Summon screen visit.
 # Reset to "uncalled" each time FlowSummonState.enter() runs — never persisted to save.
 var selected_summon_grade: String = "uncalled"

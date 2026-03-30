@@ -111,6 +111,8 @@ func dispatch(action: Dictionary) -> Dictionary:
 			var stage_id := str(action.get("stage_id", ""))
 			flow_ctx.stage_id     = stage_id
 			flow_ctx.encounter_id = flow_ctx.realm_id + "." + stage_id  # BUG-003: was always ""
+			# PROG-009: persist skill loadout to save before entering the stage
+			_persist_equipped_skills(t)
 			logger.info(t, "state.stage_select", "Stage selected", { "stage_id": stage_id })
 			flow_machine.transition(FlowStateIds.STAGE, flow_ctx, logger, t, "ui.flow.select_stage")
 
@@ -282,6 +284,13 @@ func dispatch(action: Dictionary) -> Dictionary:
 		# ---- Directives (DIRECTIVE-001) ----
 		"directive.select":
 			_handle_directive_select(action, t)
+
+		# ---- Skill Loadout (PROG-009) — assign/unassign while on STAGE_MAP ----
+		"skill.assign":
+			_handle_skill_assign(action, t)
+
+		"skill.unassign":
+			_handle_skill_unassign(action, t)
 
 		# UI actions
 		"ui.dismiss_summon_reveals":
@@ -1928,6 +1937,93 @@ func _find_roster_echo(echo_id: String) -> Dictionary:
 		if entry_v is Dictionary and str(entry_v.get("id", "")) == echo_id:
 			return entry_v as Dictionary
 	return {}
+
+
+## PROG-009: Assigns a skill to an echo slot while on STAGE_MAP party prep.
+## Updates flow_ctx.pending_equipped_skills and rebuilds the STAGE_MAP snapshot.
+func _handle_skill_assign(action: Dictionary, t: int) -> void:
+	if str(flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.STAGE_MAP:
+		logger.debug(t, "skill.assign.ignored", "skill.assign outside STAGE_MAP", {
+			"snapshot_type": str(flow_ctx.last_snapshot.get("type", ""))
+		})
+		return
+
+	var payload_v: Variant = action.get("payload", {})
+	var payload: Dictionary = payload_v if payload_v is Dictionary else {}
+	var echo_id  := str(payload.get("echo_id",  "")).strip_edges()
+	var slot     := str(payload.get("slot",     "0")).strip_edges()
+	var skill_id := str(payload.get("skill_id", "")).strip_edges()
+
+	if echo_id.is_empty() or skill_id.is_empty():
+		logger.debug(t, "skill.assign.denied", "skill.assign missing echo_id or skill_id", { "payload": payload })
+		return
+
+	if not flow_ctx.pending_equipped_skills.has(echo_id):
+		flow_ctx.pending_equipped_skills[echo_id] = {}
+	flow_ctx.pending_equipped_skills[echo_id][slot] = skill_id
+
+	logger.debug(t, "skill.assign", "Skill assigned", {
+		"echo_id": echo_id, "slot": slot, "skill_id": skill_id
+	})
+	flow_ctx.last_snapshot = FlowStageMapState.build_snapshot(flow_ctx, t)
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+## PROG-009: Unassigns a skill from an echo slot while on STAGE_MAP party prep.
+func _handle_skill_unassign(action: Dictionary, t: int) -> void:
+	if str(flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.STAGE_MAP:
+		logger.debug(t, "skill.unassign.ignored", "skill.unassign outside STAGE_MAP", {
+			"snapshot_type": str(flow_ctx.last_snapshot.get("type", ""))
+		})
+		return
+
+	var payload_v: Variant = action.get("payload", {})
+	var payload: Dictionary = payload_v if payload_v is Dictionary else {}
+	var echo_id := str(payload.get("echo_id", "")).strip_edges()
+	var slot    := str(payload.get("slot",    "0")).strip_edges()
+
+	if echo_id.is_empty():
+		logger.debug(t, "skill.unassign.denied", "skill.unassign missing echo_id", {})
+		return
+
+	if flow_ctx.pending_equipped_skills.has(echo_id):
+		flow_ctx.pending_equipped_skills[echo_id].erase(slot)
+
+	logger.debug(t, "skill.unassign", "Skill unassigned", {
+		"echo_id": echo_id, "slot": slot
+	})
+	flow_ctx.last_snapshot = FlowStageMapState.build_snapshot(flow_ctx, t)
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+## PROG-009: Persists pending_equipped_skills to each echo in the roster and flags a save.
+## Called by flow.select_stage (on cta.enter_stage) before transitioning to STAGE.
+func _persist_equipped_skills(t: int) -> void:
+	if flow_ctx.pending_equipped_skills.is_empty():
+		return
+
+	var sanc_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var sanctum: Dictionary = sanc_v if sanc_v is Dictionary else {}
+	var roster_v: Variant = sanctum.get("roster", [])
+	var roster: Array = roster_v if roster_v is Array else []
+
+	for echo_id in flow_ctx.pending_equipped_skills.keys():
+		var eq: Dictionary = flow_ctx.pending_equipped_skills[echo_id]
+		for i in range(roster.size()):
+			var e: Dictionary = roster[i] if roster[i] is Dictionary else {}
+			if str(e.get("id", "")) == str(echo_id):
+				roster[i]["equipped_skills"] = eq.duplicate()
+				break
+
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason != "":
+		flow_ctx.save_request_reason += "|skill.persist"
+	else:
+		flow_ctx.save_request_reason = "skill.persist"
+
+	logger.info(t, "skill.persist", "Equipped skills persisted to save", {
+		"equipped_count": flow_ctx.pending_equipped_skills.size()
+	})
 
 
 ## Returns the realm XP multiplier for the current realm based on run_index.

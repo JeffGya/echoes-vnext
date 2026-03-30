@@ -11,12 +11,15 @@ signal action_requested(action: Dictionary)
 
 const StageRowScene   := preload("res://ui/components/StageRowItem.tscn")
 const ObjectiveScene  := preload("res://ui/components/ObjectiveItem.tscn")
+const EchoSkillRowScene := preload("res://ui/components/EchoSkillRow.tscn")
 
 @onready var _title_label: Label            = %TitleLabel
 @onready var _subtitle_label: Label         = %SubtitleLabel
 @onready var _left_panel_title: Label       = %LeftPanelTitle
 @onready var _stage_list: VBoxContainer     = %StageList
 @onready var _right_vbox: VBoxContainer     = %RightVBox
+@onready var _prep_bar: PanelContainer      = %PrepBar
+@onready var _prep_row: HBoxContainer       = %PrepRow
 @onready var _back_button: Button           = %BackButton
 @onready var _enter_button: Button          = %EnterButton
 
@@ -30,6 +33,8 @@ func _clear() -> void:
 	for child in _stage_list.get_children():
 		child.queue_free()
 	for child in _right_vbox.get_children():
+		child.queue_free()
+	for child in _prep_row.get_children():
 		child.queue_free()
 
 func _render(data: Dictionary, actions: Dictionary) -> void:
@@ -75,6 +80,37 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 		_enter_button.pressed.connect(func(): action_requested.emit(enter_action))
 	else:
 		_enter_button.disabled = true
+
+	# PROG-009: Party prep bar — skill selection for called echoes before entering the stage.
+	var party_prep_v: Variant = data.get("party_prep", [])
+	var party_prep: Array = party_prep_v if party_prep_v is Array else []
+	_build_prep_bar(party_prep)
+
+# ---------------------------------------------------------------------------
+# PROG-009: Party prep bar — skill dropdowns for called echoes
+# ---------------------------------------------------------------------------
+
+func _build_prep_bar(party_prep: Array) -> void:
+	_prep_bar.visible = not party_prep.is_empty()
+	for prep_entry in party_prep:
+		if not (prep_entry is Dictionary):
+			continue
+		var row: EchoSkillRow = EchoSkillRowScene.instantiate()
+		_prep_row.add_child(row)
+		row.setup(prep_entry)
+		row.skill_selected.connect(_on_echo_skill_selected)
+
+func _on_echo_skill_selected(echo_id: String, skill_id: String) -> void:
+	if skill_id.is_empty():
+		action_requested.emit({
+			"type":    "skill.unassign",
+			"payload": { "echo_id": echo_id, "slot": "0" },
+		})
+	else:
+		action_requested.emit({
+			"type":    "skill.assign",
+			"payload": { "echo_id": echo_id, "slot": "0", "skill_id": skill_id },
+		})
 
 # ---------------------------------------------------------------------------
 # Right-panel detail builder
