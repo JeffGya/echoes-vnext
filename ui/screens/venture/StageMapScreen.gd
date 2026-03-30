@@ -148,6 +148,7 @@ func _build_detail(stage: Dictionary) -> void:
 	# Header row: stage name + status text
 	_detail_title_label.text = str(stage.get("name", "Unknown stage"))
 	_detail_status_label.text = _badge_text(status)
+	_detail_status_label.theme_type_variation = _badge_theme_key(status)
 	_detail_title_label.visible = true
 	_detail_status_label.visible = true
 	_objectives_header_label.visible = true
@@ -195,3 +196,10 @@ func _badge_text(status: String) -> String:
 		"completed":              return "Completed"
 		"current", "not_started": return "Not started"
 		_:                        return "Locked"
+
+func _badge_theme_key(status: String) -> StringName:
+	match status:
+		"completed":              return &"StatusBadge.Completed"
+		"current", "not_started": return &"StatusBadge.NotStarted"
+		"in_progress":            return &"StatusBadge.InProgress"
+		_:                        return &"StatusBadge.Locked"

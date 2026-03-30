@@ -23,7 +23,9 @@ func setup(r: Dictionary) -> void:
 	realm_name_label.text = str(r.get("name", _realm_id))
 	virtue_label.text     = str(r.get("virtue", "")).capitalize()
 	var locked: bool      = bool(r.get("locked", false))
-	status_label.text     = _status_text(locked, str(r.get("status", "not_started")))
+	var status: String    = str(r.get("status", "not_started"))
+	status_label.text     = _status_text(locked, status)
+	status_label.theme_type_variation = _status_theme_key(locked, status)
 	modulate.a            = alpha_locked if locked else 1.0
 
 func _on_gui_input(event: InputEvent) -> void:
@@ -37,3 +39,11 @@ func _status_text(locked: bool, status: String) -> String:
 		"in_progress": return "In progress"
 		"completed":   return "Completed"
 		_:             return "Not started"
+
+func _status_theme_key(locked: bool, status: String) -> StringName:
+	if locked:
+		return &"StatusBadge.Locked"
+	match status:
+		"in_progress": return &"StatusBadge.InProgress"
+		"completed":   return &"StatusBadge.Completed"
+		_:             return &"StatusBadge.NotStarted"
