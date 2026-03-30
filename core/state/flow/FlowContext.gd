@@ -12,7 +12,7 @@ var last_snapshot: Dictionary = {}
 # Used for summon reveal overlays (Summon screen only).
 var pending_summon_reveals: Array = [] # Array[Dictionary] (Echo records or summaries)
 
-# Used while inside flow.party_manage before confirm.
+# Used by flow.echo_party for immediate party selection state.
 var pending_party_ids: Array = [] # Array[String] (Echo ids)
 
 # PROG-009: skill loadout built during party prep on STAGE_MAP.

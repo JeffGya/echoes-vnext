@@ -1,0 +1,641 @@
+[gd_scene format=3 uid="uid://c0h5ruqbf4atx"]
+
+[ext_resource type="Script" uid="uid://cgvsh3u4gahcb" path="res://ui/screens/sanctum/EchoPartyScreen.gd" id="1_echo_party"]
+
+[node name="EchoPartyScreen" type="Control" unique_id=521395711]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_echo_party")
+
+[node name="BackButton" type="Button" parent="." unique_id=683983492]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 48)
+layout_mode = 1
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 96.0
+offset_bottom = 64.0
+theme_type_variation = &"ButtonGhost"
+text = "←"
+
+[node name="RootVBox" type="VBoxContainer" parent="." unique_id=630127278]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 64.0
+offset_right = 1904.0
+offset_bottom = 1064.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 12
+
+[node name="HeaderRow" type="HBoxContainer" parent="RootVBox" unique_id=1721161362]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ThreePanelRow" type="HBoxContainer" parent="RootVBox" unique_id=1412607601]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 12
+
+[node name="EchoListPanel" type="PanelContainer" parent="RootVBox/ThreePanelRow" unique_id=37195665]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="EchoListMargin" type="MarginContainer" parent="RootVBox/ThreePanelRow/EchoListPanel" unique_id=12754966]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="EchoListVBox" type="VBoxContainer" parent="RootVBox/ThreePanelRow/EchoListPanel/EchoListMargin" unique_id=1033463941]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="EchoCountLabel" type="Label" parent="RootVBox/ThreePanelRow/EchoListPanel/EchoListMargin/EchoListVBox" unique_id=1144572978]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Echoes: 0"
+
+[node name="EchoListTitle" type="Label" parent="RootVBox/ThreePanelRow/EchoListPanel/EchoListMargin/EchoListVBox" unique_id=1198466467]
+layout_mode = 2
+text = "Echoes"
+
+[node name="EchoListScroll" type="ScrollContainer" parent="RootVBox/ThreePanelRow/EchoListPanel/EchoListMargin/EchoListVBox" unique_id=1936686560]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="EchoRows" type="VBoxContainer" parent="RootVBox/ThreePanelRow/EchoListPanel/EchoListMargin/EchoListVBox/EchoListScroll" unique_id=1379360919]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 6
+
+[node name="DetailContainer" type="PanelContainer" parent="RootVBox/ThreePanelRow" unique_id=1610970849]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="DetailMargin" type="MarginContainer" parent="RootVBox/ThreePanelRow/DetailContainer" unique_id=137638969]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="DetailPanel" type="VBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin" unique_id=956736150]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="DetailName" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=989038001]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+text = "[EchoName]"
+horizontal_alignment = 1
+
+[node name="DetailShout" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=406763964]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 4
+horizontal_alignment = 1
+
+[node name="HPRow" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=1571681302]
+layout_mode = 2
+
+[node name="DetailHPLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/HPRow" unique_id=293555523]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "HP 0/0"
+
+[node name="DetailHPBar" type="ProgressBar" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/HPRow" unique_id=2117606848]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+size_flags_horizontal = 3
+value = 100.0
+show_percentage = false
+
+[node name="CallingRankRow" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=1955954356]
+layout_mode = 2
+
+[node name="CallingKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/CallingRankRow" unique_id=79906667]
+custom_minimum_size = Vector2(60, 0)
+layout_mode = 2
+text = "Calling"
+
+[node name="DetailCalling" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/CallingRankRow" unique_id=1805040208]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "—"
+
+[node name="CallingInfoBtn" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/CallingRankRow" unique_id=1720791396]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "ⓘ"
+flat = true
+
+[node name="RankKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/CallingRankRow" unique_id=1398091357]
+custom_minimum_size = Vector2(40, 0)
+layout_mode = 2
+text = "Rank"
+
+[node name="DetailRank" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/CallingRankRow" unique_id=1522522669]
+unique_name_in_owner = true
+layout_mode = 2
+text = "—"
+
+[node name="GradeLevelRow" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=153123727]
+layout_mode = 2
+
+[node name="GradeKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/GradeLevelRow" unique_id=1315830213]
+custom_minimum_size = Vector2(60, 0)
+layout_mode = 2
+text = "Grade"
+
+[node name="DetailGrade" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/GradeLevelRow" unique_id=1868813475]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "—"
+
+[node name="LevelKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/GradeLevelRow" unique_id=1397236627]
+custom_minimum_size = Vector2(40, 0)
+layout_mode = 2
+text = "Level"
+
+[node name="DetailLevel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/GradeLevelRow" unique_id=891696826]
+unique_name_in_owner = true
+layout_mode = 2
+text = "—"
+
+[node name="DominantVectorLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=1309280893]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 4
+horizontal_alignment = 1
+
+[node name="CallingEligibleBadge" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=208509166]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_type_variation = &"ButtonSecondary"
+text = "⚡ Path Awaits"
+
+[node name="AscendButton" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=1854947068]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_type_variation = &"ButtonPrimary"
+text = "▲ Ascend to Rank 2"
+
+[node name="XPRow" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=2064258046]
+layout_mode = 2
+
+[node name="DetailXPLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/XPRow" unique_id=1378846816]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+text = "XP 0/100"
+
+[node name="DetailXPBar" type="ProgressBar" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/XPRow" unique_id=2119270591]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+size_flags_horizontal = 3
+show_percentage = false
+
+[node name="DetailArchetype" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=1673995103]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Archetype: —"
+
+[node name="StatsHeader" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=1473953523]
+layout_mode = 2
+text = "Stats"
+
+[node name="DetailStatsGrid" type="GridContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=256095268]
+unique_name_in_owner = true
+layout_mode = 2
+columns = 2
+
+[node name="StatAttackLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=668659159]
+layout_mode = 2
+text = "Attack"
+
+[node name="StatAttackValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=95587098]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+horizontal_alignment = 2
+
+[node name="StatDefenseLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=186795674]
+layout_mode = 2
+text = "Defense"
+
+[node name="StatDefenseValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=79448244]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+horizontal_alignment = 2
+
+[node name="StatIntelligenceLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=1549510336]
+layout_mode = 2
+text = "Intelligence"
+
+[node name="StatIntelligenceValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=721559733]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+horizontal_alignment = 2
+
+[node name="StatAgilityLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=939156919]
+layout_mode = 2
+text = "Agility"
+
+[node name="StatAgilityValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=2080770725]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+horizontal_alignment = 2
+
+[node name="StatCharismaLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=277574668]
+layout_mode = 2
+text = "Charisma"
+
+[node name="StatCharismaValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=1661425838]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+horizontal_alignment = 2
+
+[node name="StatSpeedLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=988379765]
+layout_mode = 2
+text = "Speed"
+
+[node name="StatSpeedValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=23515989]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+horizontal_alignment = 2
+
+[node name="EmotionHeader" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=1998760993]
+layout_mode = 2
+text = "Emotional state"
+
+[node name="DetailEmotionStatus" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=119863424]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Normal"
+
+[node name="MoraleRow" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=638915197]
+layout_mode = 2
+
+[node name="MoraleKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/MoraleRow" unique_id=380900418]
+custom_minimum_size = Vector2(60, 0)
+layout_mode = 2
+text = "Morale"
+
+[node name="DetailMoraleBar" type="ProgressBar" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/MoraleRow" unique_id=1942569412]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+size_flags_horizontal = 3
+value = 50.0
+show_percentage = false
+
+[node name="FearRow" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=33292901]
+layout_mode = 2
+
+[node name="FearKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/FearRow" unique_id=380305941]
+custom_minimum_size = Vector2(60, 0)
+layout_mode = 2
+text = "Fear"
+
+[node name="DetailFearBar" type="ProgressBar" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/FearRow" unique_id=638270775]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+size_flags_horizontal = 3
+show_percentage = false
+
+[node name="SkillsTabContent" type="VBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=1624050337]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="SkillsTabHeader" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/SkillsTabContent" unique_id=1259181121]
+layout_mode = 2
+text = "Active skill slots"
+
+[node name="SkillSlotRow1" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/SkillsTabContent" unique_id=510178241]
+layout_mode = 2
+
+[node name="SkillSlotLabel1" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/SkillsTabContent/SkillSlotRow1" unique_id=1513452408]
+custom_minimum_size = Vector2(60, 0)
+layout_mode = 2
+text = "Skill 1"
+
+[node name="SkillSlotValue1" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/SkillsTabContent/SkillSlotRow1" unique_id=563567707]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = " "
+
+[node name="SkillSlotRow2" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/SkillsTabContent" unique_id=307480927]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="SkillSlotLabel2" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/SkillsTabContent/SkillSlotRow2" unique_id=282323010]
+custom_minimum_size = Vector2(60, 0)
+layout_mode = 2
+text = "Skill 2"
+
+[node name="SkillSlotValue2" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/SkillsTabContent/SkillSlotRow2" unique_id=23800344]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = " "
+
+[node name="TabStrip" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=224622164]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="TabBase" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/TabStrip" unique_id=821828102]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(60, 36)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"ButtonPrimary"
+text = "Base"
+
+[node name="TabSkills" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/TabStrip" unique_id=412098742]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(60, 36)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"ButtonSecondary"
+disabled = true
+text = "Skills"
+
+[node name="TabBonds" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/TabStrip" unique_id=19051126]
+custom_minimum_size = Vector2(60, 36)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"ButtonSecondary"
+disabled = true
+text = "Bonds"
+
+[node name="DetailCTAs" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=516321037]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="AssignPartyBtn" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailCTAs" unique_id=624618244]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"ButtonPrimary"
+text = "Assign to party"
+
+[node name="AssignJobBtn" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailCTAs" unique_id=1929763356]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"ButtonSecondary"
+text = "Assign job"
+
+[node name="PartyPanel" type="PanelContainer" parent="RootVBox/ThreePanelRow" unique_id=981152500]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="PartyMargin" type="MarginContainer" parent="RootVBox/ThreePanelRow/PartyPanel" unique_id=1713445256]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="PartyVBox" type="VBoxContainer" parent="RootVBox/ThreePanelRow/PartyPanel/PartyMargin" unique_id=1747137382]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="PartyTitle" type="Label" parent="RootVBox/ThreePanelRow/PartyPanel/PartyMargin/PartyVBox" unique_id=276142504]
+layout_mode = 2
+text = "Party"
+
+[node name="PartyCountLabel" type="Label" parent="RootVBox/ThreePanelRow/PartyPanel/PartyMargin/PartyVBox" unique_id=1181356595]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Party: 0/5"
+
+[node name="PartyScroll" type="ScrollContainer" parent="RootVBox/ThreePanelRow/PartyPanel/PartyMargin/PartyVBox" unique_id=256443232]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PartyCards" type="VBoxContainer" parent="RootVBox/ThreePanelRow/PartyPanel/PartyMargin/PartyVBox/PartyScroll" unique_id=991617253]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="Templates" type="Control" parent="RootVBox" unique_id=719236291]
+visible = false
+layout_mode = 2
+
+[node name="EchoRowTemplate" type="HBoxContainer" parent="RootVBox/Templates" unique_id=944264364]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 0
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="NameLabel" type="Label" parent="RootVBox/Templates/EchoRowTemplate" unique_id=1236477830]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Echo Name"
+
+[node name="CallingLabel" type="Label" parent="RootVBox/Templates/EchoRowTemplate" unique_id=1073789561]
+layout_mode = 2
+text = "Calling"
+
+[node name="LevelLabel" type="Label" parent="RootVBox/Templates/EchoRowTemplate" unique_id=1891575605]
+layout_mode = 2
+text = "Lv 1"
+
+[node name="RankLabel" type="Label" parent="RootVBox/Templates/EchoRowTemplate" unique_id=1825308552]
+layout_mode = 2
+text = "R1"
+
+[node name="PartyBadge" type="Label" parent="RootVBox/Templates/EchoRowTemplate" unique_id=1321207795]
+layout_mode = 2
+text = "★"
+
+[node name="SelectButton" type="Button" parent="RootVBox/Templates/EchoRowTemplate" unique_id=921692777]
+custom_minimum_size = Vector2(64, 40)
+layout_mode = 2
+theme_type_variation = &"ButtonSecondary"
+text = "View"
+
+[node name="PartyCardTemplate" type="PanelContainer" parent="RootVBox/Templates" unique_id=738282135]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(0, 120)
+layout_mode = 0
+size_flags_horizontal = 3
+
+[node name="CardMargin" type="MarginContainer" parent="RootVBox/Templates/PartyCardTemplate" unique_id=2109425122]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="CardRoot" type="HBoxContainer" parent="RootVBox/Templates/PartyCardTemplate/CardMargin" unique_id=277706099]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="ImagePlaceholder" type="PanelContainer" parent="RootVBox/Templates/PartyCardTemplate/CardMargin/CardRoot" unique_id=142153905]
+custom_minimum_size = Vector2(80, 80)
+layout_mode = 2
+
+[node name="ImageLabel" type="Label" parent="RootVBox/Templates/PartyCardTemplate/CardMargin/CardRoot/ImagePlaceholder" unique_id=2109212432]
+layout_mode = 2
+size_flags_horizontal = 4
+text = "IMG"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="CardInfo" type="VBoxContainer" parent="RootVBox/Templates/PartyCardTemplate/CardMargin/CardRoot" unique_id=262931387]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="CardNameLabel" type="Label" parent="RootVBox/Templates/PartyCardTemplate/CardMargin/CardRoot/CardInfo" unique_id=1779707597]
+layout_mode = 2
+text = "Echo Name"
+
+[node name="CardCallingLabel" type="Label" parent="RootVBox/Templates/PartyCardTemplate/CardMargin/CardRoot/CardInfo" unique_id=1664621461]
+layout_mode = 2
+text = "Calling"
+
+[node name="CardArchetypeLabel" type="Label" parent="RootVBox/Templates/PartyCardTemplate/CardMargin/CardRoot/CardInfo" unique_id=684963131]
+layout_mode = 2
+text = "Archetype"
+
+[node name="CardVectorLabel" type="Label" parent="RootVBox/Templates/PartyCardTemplate/CardMargin/CardRoot/CardInfo" unique_id=1529350613]
+layout_mode = 2
+text = "Vector"
+
+[node name="CardSelectButton" type="Button" parent="RootVBox/Templates/PartyCardTemplate/CardMargin/CardRoot/CardInfo" unique_id=2052891581]
+layout_mode = 2
+size_flags_horizontal = 0
+theme_type_variation = &"ButtonSecondary"
+text = "Select"
+
+[node name="RootPanel" type="PanelContainer" parent="." unique_id=527503702]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="RootPanel" unique_id=1469644914]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 64
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="CallingInfoOverlay" type="Control" parent="." unique_id=462871256]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Backdrop" type="ColorRect" parent="CallingInfoOverlay" unique_id=57534343]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.6)
+
+[node name="Center" type="CenterContainer" parent="CallingInfoOverlay" unique_id=1213136679]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="PanelContainer" type="PanelContainer" parent="CallingInfoOverlay/Center" unique_id=74537191]
+custom_minimum_size = Vector2(520, 0)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="CallingInfoOverlay/Center/PanelContainer" unique_id=1977916543]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Content" type="VBoxContainer" parent="CallingInfoOverlay/Center/PanelContainer/Margin" unique_id=536612825]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="CallingInfoTitle" type="Label" parent="CallingInfoOverlay/Center/PanelContainer/Margin/Content" unique_id=1886582866]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Calling"
+horizontal_alignment = 1
+
+[node name="CallingInfoDesc" type="Label" parent="CallingInfoOverlay/Center/PanelContainer/Margin/Content" unique_id=1325531195]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+autowrap_mode = 2
+
+[node name="CallingInfoCloseBtn" type="Button" parent="CallingInfoOverlay/Center/PanelContainer/Margin/Content" unique_id=1551677796]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_type_variation = &"ButtonPrimary"
+text = "Got it"

@@ -49,5 +49,5 @@ func setup(prep_entry: Dictionary) -> void:
 func _on_skill_picked(index: int) -> void:
 	if index < 0 or index >= _skill_ids.size():
 		return
-	var sid := _skill_ids[index]
+	var sid : Variant = _skill_ids[index]
 	skill_selected.emit(_echo_id, sid)

@@ -7,7 +7,7 @@ extends State
 # Computes runtime lock status from save_data["realms"] via RealmService.
 #
 # Realm card selection is per-row dispatch from UI (not in snapshot.actions),
-# consistent with the PartyManageScreen pattern.
+# consistent with other sanctum screens.
 # snapshot.actions only contains nav.back.
 
 func _init(id: String = FlowStateIds.REALM_SELECT) -> void:

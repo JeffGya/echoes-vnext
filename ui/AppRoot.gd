@@ -26,7 +26,7 @@ var flow_ctx: FlowContext
 var flow_machine: FlowStateMachine
 
 # INFRA-001: Two-shell router. All bespoke screens live inside their respective shell.
-# SanctumShell — flow.sanctum, flow.summon, flow.party_manage, flow.echo_manage, flow.realm_select
+# SanctumShell — flow.sanctum, flow.summon, flow.echo_party, flow.realm_select
 # RealmShell   — flow.stage_map, flow.stage, flow.encounter, flow.resolve
 var _sanctum_shell: SanctumShell
 var _sanctum_shell_scene := preload("res://ui/shells/SanctumShell.tscn")
@@ -673,8 +673,7 @@ func _run_currency_command(currency: String, parts: Array) -> void:
 const SANCTUM_FAMILY: Array = [
 	"flow.sanctum",
 	"flow.summon",
-	"flow.party_manage",
-	"flow.echo_manage",
+	"flow.echo_party",
 	"flow.realm_select",   # REALM-001
 ]
 const VENTURE_FAMILY: Array = [

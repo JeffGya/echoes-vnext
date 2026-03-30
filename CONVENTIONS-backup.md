@@ -221,8 +221,7 @@ Snapshot.data keys:
 Action slots (UI-002 — slot-keyed Dictionary, Feb 2026 standard):
 ```
 {
-  "nav.party_manage": { "type": "flow.go_state", "to": "flow.party_manage", "label": "Manage Party",  "slot": "nav.party_manage" },
-  "nav.echo_manage":  { "type": "flow.go_state", "to": "flow.echo_manage",  "label": "Manage Echoes", "slot": "nav.echo_manage"  },
+  "nav.echo_party":   { "type": "flow.go_state", "to": "flow.echo_party",   "label": "EchoParty",     "slot": "nav.echo_party"   },
   "nav.realm_select": { "type": "flow.go_state", "to": "flow.realm_select", "label": "Select Realm",  "slot": "nav.realm_select" },
   "nav.summon":       { "type": "flow.go_state", "to": "flow.summon",       "label": "Summon Echo",   "slot": "nav.summon"       },
   "cta.enter_stage":  { "type": "flow.go_state", "to": "flow.stage_map",    "label": "Enter Stage",   "slot": "cta.enter_stage",
@@ -233,16 +232,16 @@ Action slots (UI-002 — slot-keyed Dictionary, Feb 2026 standard):
 **Shell-cached nav pattern (UI-002)**
 SanctumShell owns the persistent nav bar — it is NOT injected into every sanctum-family snapshot.
 - On `flow.sanctum` snapshots: shell caches all `nav.*` and `cta.*` slots from `snap.actions` into `_cached_nav` and rebuilds the NavBar.
-- For all other sanctum-family types (flow.summon, flow.party_manage, etc.): NavBar renders from `_cached_nav` unchanged.
+- For all other sanctum-family types (flow.summon, flow.echo_party, etc.): NavBar renders from `_cached_nav` unchanged.
 - Cache is safe: `cta.enter_stage` (only conditional action) can only change via `flow.realm_select`, which always returns to `flow.sanctum` before the player sees the nav again.
-- This keeps SummonState, PartyManageState, EchoManageState, RealmSelectState free from nav injection.
+- This keeps SummonState, EchoPartyState, RealmSelectState free from nav injection.
 
 **Shell Routing Model (INFRA-001)**
 Two shells own all bespoke screens. AppRoot routes on `snapshot.type`:
 
 | Shell | Snapshot types | Character |
 |-------|---------------|-----------|
-| `SanctumShell` | `flow.sanctum`, `flow.summon`, `flow.party_manage`, `flow.echo_manage`, `flow.realm_select` | Non-linear hub — owns persistent NavBar + spatial layer |
+| `SanctumShell` | `flow.sanctum`, `flow.summon`, `flow.echo_party`, `flow.realm_select` | Non-linear hub — owns persistent NavBar + spatial layer |
 | `RealmShell` | `flow.stage_map`, `flow.stage`, `flow.encounter`, `flow.resolve` | Linear venture — lightweight pass-through, no shared chrome |
 
 Key differences:
@@ -250,15 +249,14 @@ Key differences:
 - RealmShell: No NavBar, no CanvasLayer, no SpatialLayer. Each venture screen is fullscreen and self-contained.
 - AppRoot only holds `_sanctum_shell` and `_realm_shell` — all screen preloading lives inside each shell.
 
-### Snapshot.data keys (Party Manage, SANCTUM-003)
+### Snapshot.data keys (EchoParty, SANCTUM-003)
 - title: String
 - max_party_size: int (from `balance.json data.sanctum.party_max_size`; default 5)
 - active_party_ids: Array[String] — INTERNAL transient pending selection (FlowContext.pending_party_ids); initialized from `save.sanctum.active_party_ids` on enter
 - roster: Array[Dictionary] — one row per echo: `{ id, name, rank, in_party: bool, level? }`
 
 Action slots:
-- `back` → `flow.go_state` to `flow.sanctum`
-- `primary` → `sanctum.party.confirm` with `enabled: bool` (true when pending ≥ 1)
+- `nav.back` → `flow.go_state` to `flow.sanctum`
 
 Per-row actions (dispatched directly by UI row, NOT in snapshot.actions):
 - `{ "type": "sanctum.party.toggle", "payload": { "echo_id": String } }`
@@ -404,8 +402,7 @@ This section captures canonical Flow decisions derived from the STATE-002 design
 Boot → Splash → Main Menu → Sanctum
 
 From Sanctum:
-- Party Manage
-- Echo Manage
+- EchoParty
 - Summon
 - Realm Select
 
@@ -442,7 +439,7 @@ Approved save triggers:
 - After a stage objective resolves (if multiple objectives exist)
 - Returning to Sanctum
 - After confirming Sanctum name
-- After confirming party selection (`sanctum.party.confirm`)
+- After party toggles (`sanctum.party.toggle`, immediate apply)
 
 Rules:
 - Not every state writes to save.
@@ -755,7 +752,6 @@ Action slots:
 
 ### Sanctum action types (SANCTUM-003 / ECONOMY-003)
 - `sanctum.party.toggle` — payload: `{ echo_id: String }`. Adds or removes echo from transient pending selection. Silently ignored if party is full and echo is not already in pending.
-- `sanctum.party.confirm` — no payload. Persists `pending_party_ids` → `save.sanctum.active_party_ids` and transitions back to `flow.sanctum`.
 - `sanctum.grade_select` — flat action (grade is a top-level field, not nested in payload): `{ "type": "sanctum.grade_select", "grade": "called" }`. Stores grade in `FlowContext.selected_summon_grade`, validates against `ase_cost_per_summon_by_grade` table, then rebuilds snapshot mid-state. Invalid grade keys are logged and silently ignored.
 
 ### Archetype log event types (9-archetype system)

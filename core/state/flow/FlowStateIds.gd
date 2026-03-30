@@ -8,8 +8,7 @@ const MAIN_MENU := "flow.main_menu"
 
 # Sanctum hub + sub-screens
 const SANCTUM := "flow.sanctum"
-const PARTY_MANAGE := "flow.party_manage"
-const ECHO_MANAGE := "flow.echo_manage"
+const ECHO_PARTY := "flow.echo_party"
 const REALM_SELECT := "flow.realm_select"
 const SUMMON := "flow.summon" # Sanctum-only
 

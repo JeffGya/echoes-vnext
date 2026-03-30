@@ -269,11 +269,8 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 		"sanctum.party.toggle":
 			_handle_sanctum_party_toggle(action, t)
-			
-		"sanctum.party.confirm":
-			_handle_sanctum_party_confirm(t)
 
-		# PROG-004: Keeper-confirmed rank-up from Echo Manage.
+		# PROG-004: Keeper-confirmed rank-up from EchoParty.
 		"sanctum.rank_up":
 			_handle_sanctum_rank_up(action, t)
 
@@ -1600,10 +1597,10 @@ func _get_party_max_size() -> int:
 	return int(s_cfg.get("party_max_size", 5))
 	
 func _handle_sanctum_party_toggle(action: Dictionary, t: int) -> void:
-	# Allow from Party Manage and Echo Manage; ignore elsewhere to avoid accidental mutations.
+	# Allow from EchoParty only; ignore elsewhere.
 	var snap_type := str(flow_ctx.last_snapshot.get("type", ""))
-	if snap_type != FlowStateIds.PARTY_MANAGE and snap_type != FlowStateIds.ECHO_MANAGE:
-		logger.debug(t, "sanctum.party.toggle.ignored", "Party toggle ignored (not in party/echo manage)", {
+	if snap_type != FlowStateIds.ECHO_PARTY:
+		logger.debug(t, "sanctum.party.toggle.ignored", "Party toggle ignored (not in echo party)", {
 			"snapshot_type": snap_type
 		})
 		return
@@ -1665,11 +1662,18 @@ func _handle_sanctum_party_toggle(action: Dictionary, t: int) -> void:
 		"max_party_size": max_party_size
 	})
 
-	# No flow transition — update UI immediately via the correct builder for current state.
-	if snap_type == FlowStateIds.ECHO_MANAGE:
-		flow_ctx.last_snapshot = FlowEchoManageState.build_snapshot(flow_ctx, t)
+	# Immediate apply: persist selection on each toggle.
+	if not flow_ctx.save_data.has("sanctum") or typeof(flow_ctx.save_data["sanctum"]) != TYPE_DICTIONARY:
+		flow_ctx.save_data["sanctum"] = {}
+	var sanctum_for_save: Dictionary = flow_ctx.save_data["sanctum"]
+	sanctum_for_save["active_party_ids"] = flow_ctx.pending_party_ids.duplicate()
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason != "":
+		flow_ctx.save_request_reason += "|sanctum.party.autosave"
 	else:
-		flow_ctx.last_snapshot = FlowPartyManageState.build_snapshot(flow_ctx, t)
+		flow_ctx.save_request_reason = "sanctum.party.autosave"
+
+	flow_ctx.last_snapshot = FlowEchoPartyState.build_snapshot(flow_ctx, t)
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 	
 ## PROG-001: one-time repair pass for echo fields added after draw-order v1.
@@ -1698,57 +1702,12 @@ func _repair_echo_schema(t: int) -> void:
 			"roster_size": roster.size()
 		})
 
-
-func _handle_sanctum_party_confirm(t: int) -> void:
-	# Only meaningful inside Party Manage
-	if str(flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.PARTY_MANAGE:
-		logger.debug(t, "sanctum.party.confirm.ignored", "Party confirm ignored (not in party_manage)", {
-			"snapshot_type": str(flow_ctx.last_snapshot.get("type", ""))
-		})
-		return
-
-	var max_party_size := _get_party_max_size()
-
-	var pending: Array = flow_ctx.pending_party_ids if flow_ctx.pending_party_ids is Array else []
-	if pending.size() < 1:
-		logger.debug(t, "sanctum.party.confirm.denied", "Party confirm denied (empty selection)", {})
-		return
-	if pending.size() > max_party_size:
-		logger.debug(t, "sanctum.party.confirm.denied", "Party confirm denied (over max)", {
-			"count": pending.size(),
-			"max_party_size": max_party_size
-		})
-		return
-
-	# Ensure sanctum dict exists
-	if not flow_ctx.save_data.has("sanctum") or typeof(flow_ctx.save_data["sanctum"]) != TYPE_DICTIONARY:
-		flow_ctx.save_data["sanctum"] = {}
-	var sanctum: Dictionary = flow_ctx.save_data["sanctum"]
-
-	# Persist selection
-	sanctum["active_party_ids"] = pending.duplicate()
-
-	flow_ctx.save_request = true
-	if flow_ctx.save_request_reason != "":
-		flow_ctx.save_request_reason += "|sanctum.party.confirm"
-	else:
-		flow_ctx.save_request_reason = "sanctum.party.confirm"
-
-	logger.info(t, "sanctum.party.confirm", "Party confirmed", {
-		"count": pending.size(),
-		"party_ids": pending
-	})
-
-	# Return to sanctum hub
-	flow_machine.transition(FlowStateIds.SANCTUM, flow_ctx, logger, t, "ui.sanctum.party.confirm")
-
-
 # PROG-004: Executes Keeper-confirmed rank-up for a single echo.
-# Only valid from ECHO_MANAGE snapshot. Guards: echo must exist in roster and be eligible.
+# Valid from ECHO_PARTY snapshots.
 func _handle_sanctum_rank_up(action: Dictionary, t: int) -> void:
 	var snap_type: String = str(flow_ctx.last_snapshot.get("type", ""))
-	if snap_type != FlowStateIds.ECHO_MANAGE:
-		logger.debug(t, "sanctum.rank_up.ignored", "Rank-up ignored (not in echo manage)", {
+	if snap_type != FlowStateIds.ECHO_PARTY:
+		logger.debug(t, "sanctum.rank_up.ignored", "Rank-up ignored (not in echo party)", {
 			"snapshot_type": snap_type
 		})
 		return
@@ -1821,8 +1780,8 @@ func _handle_sanctum_rank_up(action: Dictionary, t: int) -> void:
 	else:
 		flow_ctx.save_request_reason = "progression.rank_up"
 
-	# Rebuild Echo Manage snapshot with updated roster data.
-	flow_ctx.last_snapshot = FlowEchoManageState.build_snapshot(flow_ctx, t)
+	# Rebuild EchoParty snapshot with updated roster data.
+	flow_ctx.last_snapshot = FlowEchoPartyState.build_snapshot(flow_ctx, t)
 
 	# Attach the rank-up event to the snapshot data so the UI can drive the reveal overlay.
 	if flow_ctx.last_snapshot.has("data") and flow_ctx.last_snapshot["data"] is Dictionary:
@@ -1830,11 +1789,11 @@ func _handle_sanctum_rank_up(action: Dictionary, t: int) -> void:
 
 
 # PROG-007: Confirms a Keeper-chosen calling for an echo.
-# Only valid from ECHO_MANAGE snapshot. Guards: echo must exist in roster and have a calling pending.
+# Valid from ECHO_PARTY snapshots.
 func _handle_sanctum_calling_confirm(action: Dictionary, t: int) -> void:
 	var snap_type: String = str(flow_ctx.last_snapshot.get("type", ""))
-	if snap_type != FlowStateIds.ECHO_MANAGE:
-		logger.debug(t, "sanctum.calling.ignored", "Calling confirm ignored (not in echo manage)", {
+	if snap_type != FlowStateIds.ECHO_PARTY:
+		logger.debug(t, "sanctum.calling.ignored", "Calling confirm ignored (not in echo party)", {
 			"snapshot_type": snap_type
 		})
 		return
@@ -1898,8 +1857,8 @@ func _handle_sanctum_calling_confirm(action: Dictionary, t: int) -> void:
 	else:
 		flow_ctx.save_request_reason = "progression.calling.confirm"
 
-	# Rebuild Echo Manage snapshot.
-	flow_ctx.last_snapshot = FlowEchoManageState.build_snapshot(flow_ctx, t)
+	# Rebuild EchoParty snapshot.
+	flow_ctx.last_snapshot = FlowEchoPartyState.build_snapshot(flow_ctx, t)
 
 	# Attach calling_event so UI can react (clear pending indicator, etc.).
 	if flow_ctx.last_snapshot.has("data") and flow_ctx.last_snapshot["data"] is Dictionary:
