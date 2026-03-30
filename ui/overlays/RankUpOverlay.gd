@@ -24,6 +24,8 @@ signal confirm_requested(echo_id: String)
 signal calling_confirm_requested(echo_id: String, chosen_calling_id: String)
 signal dismissed()
 
+const _CALLING_OPTION_CARD_SCENE: PackedScene = preload("res://ui/components/CallingOptionCard.tscn")
+
 # ── Narrative constants (Anansi voice — no numbers ever) ──────────────────
 const _NARRATIVES: Dictionary = {
 	"courage_positive": "The weave remembers every blow struck without hesitation. {name}'s resolve deepens.",
@@ -58,7 +60,6 @@ const _BADGE_AMBIVALENT: String = "Ambivalent"
 # ── Scene refs — CallingPanel ───────────────────────────────────────────────
 @onready var calling_panel: VBoxContainer      = %CallingPanel
 @onready var calling_options_container: VBoxContainer = %CallingOptionsContainer
-@onready var calling_option_template: PanelContainer = %CallingOptionTemplate
 @onready var confirm_calling_button: Button    = %ConfirmCallingButton
 @onready var defer_button: Button              = %DeferButton
 
@@ -158,9 +159,9 @@ func show_calling(echo_id: String, calling_options: Array) -> void:
 ## Builds calling option rows dynamically from _calling_options.
 ## Clears container first — safe to call multiple times.
 func _build_calling_rows() -> void:
-	# Clear previously generated rows only. Static designer content stays intact.
+	# Clear previously generated rows.
 	for child in calling_options_container.get_children():
-		if bool(child.get_meta("generated_calling_option", false)):
+		if child.has_method("get_calling_id"):
 			child.queue_free()
 
 	for opt_v in _calling_options:
@@ -173,12 +174,6 @@ func _build_calling_rows() -> void:
 		var compatibility: String = str(opt.get("compatibility", ""))
 		var is_preferred: bool   = bool(opt.get("is_preferred", false))
 
-		var row := calling_option_template.duplicate() as PanelContainer
-		row.visible = true
-		row.modulate = Color(1, 1, 1)
-		var name_lbl := _calling_row_node(row, "CallingNameLabel") as Label
-		name_lbl.text = display_name
-
 		# Compatibility badge (preferred / compatible / ambivalent only — not for incompatible)
 		var badge_text: String = ""
 		var effective_compatibility: String = "preferred" if is_preferred else compatibility
@@ -186,23 +181,11 @@ func _build_calling_rows() -> void:
 			"preferred":  badge_text = _BADGE_PREFERRED
 			"compatible": badge_text = _BADGE_COMPATIBLE
 			"ambivalent": badge_text = _BADGE_AMBIVALENT
-		var badge_lbl := _calling_row_node(row, "CompatibilityBadgeLabel") as Label
-		badge_lbl.visible = not badge_text.is_empty()
-		badge_lbl.text = badge_text
 
-		# Description
-		var desc_lbl := _calling_row_node(row, "DescriptionLabel") as Label
-		desc_lbl.visible = not description.is_empty()
-		desc_lbl.text = description
-
-		# Tapping the row selects it
-		var select_btn := _calling_row_node(row, "SelectButton") as Button
-		select_btn.pressed.connect(_on_calling_row_pressed.bind(cid))
-
-		row.set_meta("generated_calling_option", true)
+		var row: Node = _CALLING_OPTION_CARD_SCENE.instantiate()
+		row.connect("selected", Callable(self, "_on_calling_row_pressed"))
 		calling_options_container.add_child(row)
-		# Store a ref so we can update highlight on selection
-		row.set_meta("calling_id", cid)
+		row.call("configure", cid, display_name, description, badge_text)
 
 
 func _on_calling_row_pressed(cid: String) -> void:
@@ -211,16 +194,9 @@ func _on_calling_row_pressed(cid: String) -> void:
 
 	# Highlight selected row; clear others
 	for child in calling_options_container.get_children():
-		if child is PanelContainer and bool(child.get_meta("generated_calling_option", false)):
-			var is_selected: bool = (str(child.get_meta("calling_id", "")) == cid)
-			# Toggle a simple modulate tint for selection feedback
-			child.modulate = Color(1.0, 0.85, 0.4) if is_selected else Color(1, 1, 1)
-
-
-func _calling_row_node(row: Node, node_name: String) -> Node:
-	var found := row.find_child(node_name, true, false)
-	assert(found != null, "RankUpOverlay: calling option template missing node '%s'" % node_name)
-	return found
+		if child.has_method("get_calling_id") and child.has_method("set_selected"):
+			var is_selected: bool = (str(child.call("get_calling_id")) == cid)
+			child.call("set_selected", is_selected)
 
 
 # ── Private button handlers ─────────────────────────────────────────────────

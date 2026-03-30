@@ -101,7 +101,36 @@ layout_mode = 1
 offset_left = 215.0
 offset_right = 285.0
 offset_bottom = 31.0
-text = "Auto"
+text = "Manual"
+
+[node name="SpeedBar" type="HBoxContainer" parent="." unique_id=100000018]
+layout_mode = 1
+anchors_preset = 0
+offset_left = 295.0
+offset_right = 475.0
+offset_bottom = 31.0
+theme_override_constants/separation = 6
+
+[node name="SpeedSlowButton" type="Button" parent="SpeedBar" unique_id=100000019]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(48, 26)
+theme_type_variation = "ButtonGhost"
+text = "Slow"
+
+[node name="SpeedNormalButton" type="Button" parent="SpeedBar" unique_id=100000020]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(60, 26)
+theme_type_variation = "ButtonGhost"
+text = "Normal"
+
+[node name="SpeedFastButton" type="Button" parent="SpeedBar" unique_id=100000021]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(48, 26)
+theme_type_variation = "ButtonGhost"
+text = "Fast"
 
 [node name="AutoTimer" type="Timer" parent="." unique_id=100000011]
 wait_time = 1.2
@@ -196,4 +225,3 @@ text = "Retreat"
 layout_mode = 2
 custom_minimum_size = Vector2(150, 50)
 text = "Enter Combat"
-
