@@ -25,6 +25,7 @@ static func register(runner: CoreTestRunner) -> void:
 	# UI-004 additions:
 	runner.register_test("snapshot/pre_combat_has_retreat_fields",       Callable(CombatSnapshotTests, "_t_pre_combat_has_retreat_fields"))
 	runner.register_test("snapshot/cta_retreat_absent_when_ineligible",  Callable(CombatSnapshotTests, "_t_cta_retreat_absent_when_ineligible"))
+	runner.register_test("snapshot/last_actor_action_retains_move_to_pos", Callable(CombatSnapshotTests, "_t_last_actor_action_retains_move_to_pos"))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -265,5 +266,36 @@ static func _t_cta_retreat_absent_when_ineligible() -> Dictionary:
 
 	if actions.has("cta.retreat"):
 		return { "ok": false, "error": "cta.retreat must not be present in actions when ineligible" }
+
+	return { "ok": true }
+
+
+# Test 9: last_actor_action_retains_move_to_pos
+# Setup: actor_turn snapshot with a move action already resolved in runtime state.
+# Expected: build_round_snapshot forwards last_actor_action unchanged, including to_pos.
+static func _t_last_actor_action_retains_move_to_pos() -> Dictionary:
+	var ctx: FlowContext = CombatSnapshotTests._make_pre_combat_ctx()
+	ctx.encounter_ctx.combat_state = {
+		"round_phase": "in_round",
+		"objective": "defeat_enemies",
+		"round_counter": 1,
+		"initiative_order": [],
+		"active_initiative_index": 0,
+	}
+	ctx.encounter_ctx.last_actor_action = {
+		"action_type": "actor.move",
+		"source_id": "echo_01",
+		"to_pos": { "col": 4, "row": 3 },
+	}
+
+	var snap: Dictionary = FlowEncounterState.build_round_snapshot(ctx, 2)
+	var action: Dictionary = snap.get("data", {}).get("last_actor_action", {})
+
+	if str(action.get("action_type", "")) != "actor.move":
+		return { "ok": false, "error": "Expected last_actor_action.action_type='actor.move', got %s" % str(action.get("action_type", "")) }
+	if int(action.get("to_pos", {}).get("col", -1)) != 4:
+		return { "ok": false, "error": "Expected last_actor_action.to_pos.col=4" }
+	if int(action.get("to_pos", {}).get("row", -1)) != 3:
+		return { "ok": false, "error": "Expected last_actor_action.to_pos.row=3" }
 
 	return { "ok": true }

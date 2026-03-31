@@ -268,6 +268,7 @@ func _run_tests(parts: Array) -> void:
 	CombatServiceTests.register(runner) # COMBAT-003
 	CombatRoundTests.register(runner)     # COMBAT-004
 	CombatSnapshotTests.register(runner) # COMBAT-007
+	load("res://tests/CombatTokenPresentationTests.gd").register(runner)
 	RetreatTests.register(runner)        # UI-004
 	ArchetypeTests.register(runner)      # 9-archetype personality system
 	SmartnessTierTests.register(runner)  # PROG-010

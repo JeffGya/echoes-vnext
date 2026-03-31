@@ -21,6 +21,7 @@ signal action_requested(action: Dictionary)
 const InitiativeRowScene := preload("res://ui/components/InitiativeRowItem.tscn")
 
 @onready var _board: TileMapLayer                   = $Board
+@onready var _move_telegraph_layer: Node2D          = $MoveTelegraphLayer
 @onready var _token_layer: CombatTokenLayer         = $TokenLayer
 @onready var _distance_layer: CombatDistanceLayer   = $DistanceLayer
 @onready var _back_button: Button                   = $BackButton
@@ -57,6 +58,12 @@ const _TILE_ATLAS_COORDS: Vector2i  = Vector2i(0, 0)
 const _SPEED_SLOW:   float = 3.0
 const _SPEED_NORMAL: float = 1.5
 const _SPEED_FAST:   float = 0.5
+const _MOVE_DURATION_SLOW: float = 0.72
+const _MOVE_DURATION_NORMAL: float = 0.36
+const _MOVE_DURATION_FAST: float = 0.20
+const _TELEGRAPH_DURATION_SLOW: float = 0.28
+const _TELEGRAPH_DURATION_NORMAL: float = 0.16
+const _TELEGRAPH_DURATION_FAST: float = 0.09
 
 var _current_cols: int       = 10
 var _current_rows: int       = 10
@@ -73,7 +80,8 @@ var _pending_retreat_action: Dictionary      = {}
 var _step_delay: float = _SPEED_NORMAL
 # Manual mode: when true, player clicks the CTA button instead of auto-dispatch.
 var _manual_mode: bool = false
-
+var _active_encounter_id: String = ""
+var _presentation_board_size: Vector2i = Vector2i.ZERO
 
 # -------------------------
 # Lifecycle
@@ -109,6 +117,7 @@ func _ready() -> void:
 	_speed_slow_button.pressed.connect(func(): _on_speed_pressed(_SPEED_SLOW))
 	_speed_normal_button.pressed.connect(func(): _on_speed_pressed(_SPEED_NORMAL))
 	_speed_fast_button.pressed.connect(func(): _on_speed_pressed(_SPEED_FAST))
+	_apply_visual_playback_for_delay(_SPEED_NORMAL)
 
 
 # -------------------------
@@ -118,15 +127,22 @@ func _ready() -> void:
 func set_snapshot(snap: Dictionary) -> void:
 	assert(snap.has("type"), "CombatBoardScreen: snapshot missing 'type'")
 	assert(snap.has("data"), "CombatBoardScreen: snapshot missing 'data'")
-	_clear()
-	_render(snap["data"], snap.get("actions", {}))
+	var data: Dictionary = snap["data"]
+	if _should_reset_presentation(data):
+		_reset_presentation_state()
+	_reset_transient_ui()
+	_render(data, snap.get("actions", {}))
+	_active_encounter_id = str(data.get("encounter_id", ""))
+	_presentation_board_size = Vector2i(
+		int(data.get("board_cols", 10)),
+		int(data.get("board_rows", 10))
+	)
 
-func _clear() -> void:
+func _reset_transient_ui() -> void:
 	_step_timer.stop()
 	_pending_dispatch_action = {}
 
 	_board.clear()
-	_token_layer.clear_tokens()
 	_distance_layer.clear_distances()
 	_back_button.visible     = false
 	_round_label.visible     = false
@@ -147,6 +163,24 @@ func _clear() -> void:
 	_pending_enter_combat_action     = {}
 	_pending_retreat_action          = {}
 
+
+func _reset_presentation_state() -> void:
+	_token_layer.reset_presentation()
+	_move_telegraph_layer.clear_telegraph()
+
+
+func _should_reset_presentation(data: Dictionary) -> bool:
+	var next_encounter_id: String = str(data.get("encounter_id", ""))
+	var next_board_size := Vector2i(
+		int(data.get("board_cols", 10)),
+		int(data.get("board_rows", 10))
+	)
+	if _active_encounter_id.is_empty():
+		return true
+	if next_encounter_id != _active_encounter_id:
+		return true
+	return next_board_size != _presentation_board_size
+
 func _render(data: Dictionary, actions: Dictionary) -> void:
 	_current_cols = int(data.get("board_cols", 10))
 	_current_rows = int(data.get("board_rows", 10))
@@ -158,6 +192,9 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	if not actors.is_empty():
 		_draw_tokens(actors, current_actor_id, data)
 		_distance_layer.update_distances(actors[0], _board, data)
+	else:
+		_token_layer.reset_presentation()
+		_move_telegraph_layer.clear_telegraph()
 
 	_round_label.text    = "Round: %d" % int(data.get("round", 0))
 	_round_label.visible = true
@@ -230,6 +267,7 @@ func _center_board(cols: int, rows: int) -> void:
 
 	var viewport_center: Vector2 = get_viewport_rect().size / 2.0
 	_board.position    = viewport_center - grid_center
+	_move_telegraph_layer.position = _board.position
 	_token_layer.position    = _board.position
 	_distance_layer.position = _board.position
 
@@ -288,10 +326,32 @@ func _on_step_timer_timeout() -> void:
 
 func _on_speed_pressed(delay: float) -> void:
 	_step_delay = delay
+	_apply_visual_playback_for_delay(delay)
 	# If a timer is already running (mid-auto), restart with new delay.
 	if _step_timer.time_left > 0.0 and not _pending_dispatch_action.is_empty():
 		_step_timer.wait_time = _step_delay
 		_step_timer.start()
+
+
+func _apply_visual_playback_for_delay(delay: float) -> void:
+	var move_duration: float = _MOVE_DURATION_NORMAL
+	var telegraph_duration: float = _TELEGRAPH_DURATION_NORMAL
+
+	if is_equal_approx(delay, _SPEED_SLOW):
+		move_duration = _MOVE_DURATION_SLOW
+		telegraph_duration = _TELEGRAPH_DURATION_SLOW
+	elif is_equal_approx(delay, _SPEED_FAST):
+		move_duration = _MOVE_DURATION_FAST
+		telegraph_duration = _TELEGRAPH_DURATION_FAST
+
+	if _token_layer != null and _token_layer.visual_config != null:
+		_token_layer.visual_config.move_duration = move_duration
+		_token_layer.visual_config.telegraph_lead_time = telegraph_duration
+	if _move_telegraph_layer != null and _move_telegraph_layer.get("visual_config") != null:
+		var telegraph_cfg: Variant = _move_telegraph_layer.get("visual_config")
+		if telegraph_cfg != null:
+			telegraph_cfg.move_duration = move_duration
+			telegraph_cfg.telegraph_lead_time = telegraph_duration
 
 
 func _on_manual_toggle_pressed(enabled: bool) -> void:
@@ -319,9 +379,56 @@ func _on_action(action: Dictionary) -> void:
 # Token rendering (GRID-002 + COMBAT-SEQ)
 # -------------------------
 
-## Converts the actor list into token descriptors and passes them to CombatTokenLayer.
-## current_actor_id: id of the actor currently acting — gets a yellow ring.
-## COMBAT-003: reads action_results from data to build a damage lookup by target_id.
+# Converts the actor list into token descriptors and passes them to CombatTokenLayer.
+# current_actor_id: id of the actor currently acting — gets a yellow ring.
+# COMBAT-003: reads action_results from data to build a damage lookup by target_id.
+#func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}) -> void:
+	#var damage_by_id: Dictionary = {}
+	#for result_v in data.get("action_results", []):
+		#if result_v is Dictionary and result_v.get("action_type", "") == "melee_attack":
+			#var tid: String = str(result_v.get("target_id", ""))
+			#var dmg: int    = int(result_v.get("damage", 0))
+			#if not tid.is_empty() and dmg > 0:
+				#damage_by_id[tid] = "-%d" % dmg
+#
+	#var tokens: Array[Dictionary] = []
+	#for actor in actors:
+		#var gp: Dictionary = actor.get("grid_pos", {})
+		#var col: int = gp.get("col", 0)
+		#var row: int = gp.get("row", 0)
+		#var cell_pos: Vector2 = _board.map_to_local(Vector2i(col, row))
+		#var faction: String   = actor.get("faction", "")
+		#var shape := "square" if actor.get("is_structure", false) else "circle"
+		#var name_str: String  = actor.get("name", "??")
+		#var actor_id: String  = str(actor.get("id", ""))
+#
+		## COMBAT-007: actors[] is now a projection — hp and max_hp are top-level fields.
+		#var max_hp: float   = float(actor.get("max_hp", 1))
+		#var cur_hp: float   = float(actor.get("hp", max_hp))
+		#var hp_ratio: float = clampf(cur_hp / max(max_hp, 1.0), 0.0, 1.0)
+		#var hp_color: Color
+		#if hp_ratio > 0.5:
+			#hp_color = Color.GREEN
+		#elif hp_ratio > 0.25:
+			#hp_color = Color.YELLOW
+		#else:
+			#hp_color = Color.RED
+#
+		#tokens.append({
+			#"pos":         cell_pos,
+			#"color":       _faction_color(faction),
+			#"shape":       shape,
+			#"label":       name_str.substr(0, 2).to_upper(),
+			#"hp_ratio":    hp_ratio,
+			#"hp_color":    hp_color,
+			#"damage_text": damage_by_id.get(actor_id, ""),
+			#"actor_id":    actor_id,   # COMBAT-SEQ: needed for yellow ring
+			#"fear":        int(actor.get("fear", 0)),
+			#"morale":      int(actor.get("morale", 50)),
+			#"is_structure": actor.get("is_structure", false),
+		#})
+	#_token_layer.update_tokens(tokens, current_actor_id)
+
 func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}) -> void:
 	var damage_by_id: Dictionary = {}
 	for result_v in data.get("action_results", []):
@@ -336,48 +443,41 @@ func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}
 		var gp: Dictionary = actor.get("grid_pos", {})
 		var col: int = gp.get("col", 0)
 		var row: int = gp.get("row", 0)
-		var cell_pos: Vector2 = _board.map_to_local(Vector2i(col, row))
-		var faction: String   = actor.get("faction", "")
-		var shape := "square" if actor.get("is_structure", false) else "circle"
-		var name_str: String  = actor.get("name", "??")
-		var actor_id: String  = str(actor.get("id", ""))
 
-		# COMBAT-007: actors[] is now a projection — hp and max_hp are top-level fields.
+		var cell_center: Vector2 = _board.map_to_local(Vector2i(col, row))
+		var actor_id: String     = str(actor.get("id", ""))
+
 		var max_hp: float   = float(actor.get("max_hp", 1))
 		var cur_hp: float   = float(actor.get("hp", max_hp))
 		var hp_ratio: float = clampf(cur_hp / max(max_hp, 1.0), 0.0, 1.0)
-		var hp_color: Color
-		if hp_ratio > 0.5:
-			hp_color = Color.GREEN
-		elif hp_ratio > 0.25:
-			hp_color = Color.YELLOW
-		else:
-			hp_color = Color.RED
 
 		tokens.append({
-			"pos":         cell_pos,
-			"color":       _faction_color(faction),
-			"shape":       shape,
-			"label":       name_str.substr(0, 2).to_upper(),
-			"hp_ratio":    hp_ratio,
-			"hp_color":    hp_color,
-			"damage_text": damage_by_id.get(actor_id, ""),
-			"actor_id":    actor_id,   # COMBAT-SEQ: needed for yellow ring
-			"fear":        int(actor.get("fear", 0)),
-			"morale":      int(actor.get("morale", 50)),
-			"is_structure": actor.get("is_structure", false),
+			"actor_id":      actor_id,
+			"grid_pos":      gp.duplicate(),
+			"cell_pos":      cell_center,
+			"faction":       str(actor.get("faction", "")),
+			"is_structure":  bool(actor.get("is_structure", false)),
+			"label":         str(actor.get("name", "??")).substr(0, 2).to_upper(),
+			"hp_ratio":      hp_ratio,
+			"damage_text":   damage_by_id.get(actor_id, ""),
+			"fear":          int(actor.get("fear", 0)),
+			"morale":        int(actor.get("morale", 50)),
 		})
-	_token_layer.update_tokens(tokens, current_actor_id)
 
+	var telegraph_event: Dictionary = _token_layer.apply_snapshot(
+		tokens,
+		current_actor_id,
+		data.get("last_actor_action", {})
+	)
+	if telegraph_event.is_empty():
+		_move_telegraph_layer.clear_telegraph()
+	else:
+		_move_telegraph_layer.show_move_telegraph(telegraph_event)
 
 ## Toggle the emotion debug overlay on the token layer.
 ## Called from AppRoot when the "combat_emotion" debug command fires.
 func set_emotion_debug(enabled: bool) -> void:
 	_token_layer.set_emotion_debug(enabled)
-
-
-func _faction_color(faction: String) -> Color:
-	return CombatTokenLayer.FACTION_COLORS.get(faction, Color.WHITE)
 
 
 # -------------------------
