@@ -4,6 +4,8 @@
 [ext_resource type="Texture2D" uid="uid://bitpbc4p75ue7" path="res://assets/sanctum/tiles/floor/sanctum_tile_floor_clay_base_128x96.png" id="2_tile"]
 [ext_resource type="Script" uid="uid://4pvmnr0qinn4" path="res://ui/screens/combat/CombatTokenLayer.gd" id="3_token_layer"]
 [ext_resource type="Script" uid="uid://dl4ku77tgom45" path="res://ui/screens/combat/CombatDistanceLayer.gd" id="4_distance_layer"]
+[ext_resource type="Script" path="res://ui/screens/combat/CombatMoveTelegraphLayer.gd" id="5_move_telegraph"]
+[ext_resource type="Script" path="res://ui/screens/combat/CombatTokenVisualConfig.gd" id="6_visual_config"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_board"]
 texture = ExtResource("2_tile")
@@ -45,6 +47,11 @@ corner_radius_top_right = 6
 corner_radius_bottom_right = 6
 corner_radius_bottom_left = 6
 
+[sub_resource type="Resource" id="Resource_combat_visual_config"]
+script = ExtResource("6_visual_config")
+move_duration = 0.18
+telegraph_lead_time = 0.1
+
 [node name="CombatBoardScreen" type="Control" unique_id=1420352690]
 layout_mode = 3
 anchors_preset = 15
@@ -58,22 +65,26 @@ script = ExtResource("1_script")
 y_sort_enabled = true
 tile_set = SubResource("TileSet_board")
 
+[node name="MoveTelegraphLayer" type="Node2D" parent="."]
+script = ExtResource("5_move_telegraph")
+visual_config = SubResource("Resource_combat_visual_config")
+
 [node name="TokenLayer" type="Node2D" parent="." unique_id=743928105]
 script = ExtResource("3_token_layer")
+visual_config = SubResource("Resource_combat_visual_config")
 
 [node name="DistanceLayer" type="Node2D" parent="." unique_id=394827651]
 script = ExtResource("4_distance_layer")
 
 [node name="BackButton" type="Button" parent="." unique_id=125887286]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 48)
 layout_mode = 1
-anchors_preset = 0
 offset_left = 16.0
 offset_top = 16.0
 offset_right = 96.0
 offset_bottom = 64.0
-custom_minimum_size = Vector2(80, 48)
-theme_type_variation = "ButtonGhost"
+theme_type_variation = &"ButtonGhost"
 text = "←"
 
 [node name="RoundLabel" type="Label" parent="." unique_id=100000004]
@@ -105,7 +116,6 @@ text = "Manual"
 
 [node name="SpeedBar" type="HBoxContainer" parent="." unique_id=100000018]
 layout_mode = 1
-anchors_preset = 0
 offset_left = 295.0
 offset_right = 475.0
 offset_bottom = 31.0
@@ -113,23 +123,23 @@ theme_override_constants/separation = 6
 
 [node name="SpeedSlowButton" type="Button" parent="SpeedBar" unique_id=100000019]
 unique_name_in_owner = true
-layout_mode = 2
 custom_minimum_size = Vector2(48, 26)
-theme_type_variation = "ButtonGhost"
+layout_mode = 2
+theme_type_variation = &"ButtonGhost"
 text = "Slow"
 
 [node name="SpeedNormalButton" type="Button" parent="SpeedBar" unique_id=100000020]
 unique_name_in_owner = true
-layout_mode = 2
 custom_minimum_size = Vector2(60, 26)
-theme_type_variation = "ButtonGhost"
+layout_mode = 2
+theme_type_variation = &"ButtonGhost"
 text = "Normal"
 
 [node name="SpeedFastButton" type="Button" parent="SpeedBar" unique_id=100000021]
 unique_name_in_owner = true
-layout_mode = 2
 custom_minimum_size = Vector2(48, 26)
-theme_type_variation = "ButtonGhost"
+layout_mode = 2
+theme_type_variation = &"ButtonGhost"
 text = "Fast"
 
 [node name="AutoTimer" type="Timer" parent="." unique_id=100000011]
@@ -193,8 +203,8 @@ visible = false
 layout_mode = 1
 anchors_preset = -1
 anchor_left = 0.5
-anchor_right = 0.5
 anchor_top = 0.05
+anchor_right = 0.5
 anchor_bottom = 0.05
 offset_left = -175.0
 offset_right = 175.0
@@ -208,8 +218,8 @@ theme_override_constants/separation = 8
 [node name="ObjectivePanelLabel" type="Label" parent="PrebattlePanel/PrebattleContent" unique_id=200000003]
 layout_mode = 2
 theme_override_font_sizes/font_size = 15
-horizontal_alignment = 1
 text = "[Battle objective]"
+horizontal_alignment = 1
 
 [node name="ButtonRow" type="HBoxContainer" parent="PrebattlePanel/PrebattleContent" unique_id=200000004]
 layout_mode = 2
@@ -217,11 +227,11 @@ theme_override_constants/separation = 12
 alignment = 1
 
 [node name="RetreatButton" type="Button" parent="PrebattlePanel/PrebattleContent/ButtonRow" unique_id=200000005]
-layout_mode = 2
 custom_minimum_size = Vector2(150, 50)
+layout_mode = 2
 text = "Retreat"
 
 [node name="EnterCombatButton" type="Button" parent="PrebattlePanel/PrebattleContent/ButtonRow" unique_id=200000006]
-layout_mode = 2
 custom_minimum_size = Vector2(150, 50)
+layout_mode = 2
 text = "Enter Combat"

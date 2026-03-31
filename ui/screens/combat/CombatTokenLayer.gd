@@ -1,28 +1,14 @@
 # res://ui/screens/combat/CombatTokenLayer.gd
 # GRID-002: Draws faction-coloured placeholder actor tokens on the combat board.
-#
-# This Node2D is a child of CombatBoardScreen and shares the board's coordinate
-# space — CombatBoardScreen sets _token_layer.position = _board.position after
-# centering, so map_to_local() positions passed in are already in the right space.
-#
-# _draw() is called by Godot whenever queue_redraw() is triggered.
-# Each token is a coloured circle (or gray rounded square for structures)
-# with a 2-letter name abbreviation centred inside.
-#
-# Token design is stable across all GRID stories; replaced by actor art
-# when art assets are ready (COMBAT phase or later).
 
 class_name CombatTokenLayer
 extends Node2D
 
-# Token geometry
-const TOKEN_RADIUS: float = 22.0   # fits inside 64px narrow face of isometric cell
-const TOKEN_HALF: float   = 22.0   # half-extent for square (structure) tokens
-const FONT_SIZE: int      = 14
+const CombatTokenVisualConfigScript := preload("res://ui/screens/combat/CombatTokenVisualConfig.gd")
+const CombatTokenPresentationStateScript := preload("res://ui/screens/combat/CombatTokenPresentationState.gd")
+const FONT_SIZE: int = 14
+const EM_FONT_SIZE: int = 10
 
-# Faction → fill colour mapping.
-# echo=blue, enemy=red, structure=gray, npc/ally=green.
-# White is the fallback for unknown factions.
 const FACTION_COLORS: Dictionary = {
 	"echo":      Color(0.20, 0.45, 0.90),
 	"enemy":     Color(0.90, 0.20, 0.20),
@@ -30,127 +16,184 @@ const FACTION_COLORS: Dictionary = {
 	"npc":       Color(0.20, 0.70, 0.35),
 }
 
-# Internal token list.
-# Each entry: { pos: Vector2, color: Color, shape: String, label: String,
-#               hp_ratio: float, hp_color: Color, damage_text: String, actor_id: String,
-#               fear: int, morale: int }
-# hp_ratio/hp_color/damage_text added in COMBAT-003 for HP bars and damage floats.
-# actor_id + active_actor_id added in COMBAT-SEQ for the yellow active-turn ring.
-# fear/morale added for the combat_emotion debug overlay.
+@export var visual_config = CombatTokenVisualConfigScript.new()
+
 var _tokens: Array[Dictionary] = []
-# COMBAT-SEQ: id of the actor whose turn it is; "" between turns / rounds.
 var _active_actor_id: String = ""
-# Debug: when true, renders F:<fear> and M:<morale> labels above each token.
 var _emotion_debug: bool = false
+var _presentation_state = CombatTokenPresentationStateScript.new()
 
 
-## Replace the token list and trigger a redraw.
-## active_actor_id: the actor currently acting — draws a yellow ring on their token.
-## Call this from CombatBoardScreen._render() after computing cell positions.
-func update_tokens(tokens: Array[Dictionary], active_actor_id: String = "") -> void:
-	_tokens = tokens
+func _ready() -> void:
+	if visual_config == null:
+		visual_config = CombatTokenVisualConfigScript.new()
+
+
+func apply_snapshot(tokens: Array[Dictionary], active_actor_id: String = "", last_actor_action: Dictionary = {}) -> Dictionary:
+	if visual_config == null:
+		visual_config = CombatTokenVisualConfigScript.new()
+
+	_tokens = _normalize_tokens(tokens)
 	_active_actor_id = active_actor_id
+	var telegraph_event: Dictionary = _presentation_state.apply_snapshot(
+		_tokens,
+		last_actor_action,
+		visual_config.telegraph_lead_time
+	)
 	queue_redraw()
+	return telegraph_event
 
 
-## Toggle the emotion debug overlay (F:<fear> / M:<morale> labels above each token).
-## Called from CombatBoardScreen in response to the "combat_emotion" debug command.
 func set_emotion_debug(enabled: bool) -> void:
 	_emotion_debug = enabled
 	queue_redraw()
 
 
-## Clear all tokens and trigger a redraw.
-## Call this from CombatBoardScreen._clear().
 func clear_tokens() -> void:
 	_tokens = []
 	_active_actor_id = ""
 	queue_redraw()
 
 
+func reset_presentation() -> void:
+	clear_tokens()
+	_presentation_state.reset()
+
+
+func _process(delta: float) -> void:
+	if _presentation_state.advance(delta):
+		queue_redraw()
+
+
 func _draw() -> void:
 	var font: Font = ThemeDB.fallback_font
 
 	for tok in _tokens:
-		var pos: Vector2   = tok["pos"]
-		var color: Color   = tok["color"]
-		var shape: String  = tok.get("shape", "circle")
-		var label: String  = tok.get("label", "??")
+		var actor_id: String = str(tok.get("actor_id", ""))
+		var is_structure: bool = bool(tok.get("is_structure", false))
+		var extent: float = _token_extent(tok)
+		var pos: Vector2 = _presentation_state.get_display_position(actor_id, tok.get("draw_pos", Vector2.ZERO))
+		var fill_color: Color = _faction_color(str(tok.get("faction", "")))
+		var hp_ratio: float = clampf(float(tok.get("hp_ratio", 1.0)), 0.0, 1.0)
 
-		# Draw shape
-		if shape == "circle":
-			draw_circle(pos, TOKEN_RADIUS, color)
+		if not is_structure:
+			draw_ellipse(
+				pos + visual_config.shadow_offset,
+				visual_config.shadow_size.x * 0.5,
+				visual_config.shadow_size.y * 0.5,
+				visual_config.shadow_color
+			)
+			draw_circle(pos, extent, fill_color)
+			draw_arc(pos, extent, 0.0, TAU, 32, Color(0, 0, 0, 0.7), 2.0, true)
 		else:
-			# Rounded square for structure actors
 			draw_rect(
-				Rect2(pos - Vector2(TOKEN_HALF, TOKEN_HALF),
-					  Vector2(TOKEN_HALF * 2.0, TOKEN_HALF * 2.0)),
-				color
+				Rect2(
+					pos - Vector2(extent, extent),
+					Vector2(extent * 2.0, extent * 2.0)
+				),
+				fill_color
 			)
 
-		# Draw 2-letter abbreviation centred on the token.
-		# HORIZONTAL_ALIGNMENT_CENTER requires x = left edge of the bounding box.
 		draw_string(
 			font,
-			Vector2(pos.x - TOKEN_RADIUS, pos.y + FONT_SIZE * 0.35),
-			label,
+			Vector2(pos.x - extent, pos.y + FONT_SIZE * 0.35),
+			str(tok.get("label", "??")),
 			HORIZONTAL_ALIGNMENT_CENTER,
-			TOKEN_RADIUS * 2.0,
+			extent * 2.0,
 			FONT_SIZE,
 			Color.WHITE
 		)
 
-		# COMBAT-SEQ: Yellow ring around the active actor's token while their turn plays out.
-		if not _active_actor_id.is_empty() and tok.get("actor_id", "") == _active_actor_id:
-			draw_arc(pos, TOKEN_RADIUS + 4.0, 0.0, TAU, 32, Color.YELLOW, 2.5)
+		if not _active_actor_id.is_empty() and actor_id == _active_actor_id:
+			draw_arc(
+				pos,
+				extent + visual_config.active_ring_padding,
+				0.0,
+				TAU,
+				32,
+				visual_config.active_ring_color,
+				visual_config.active_ring_width,
+				true
+			)
 
-		# COMBAT-003: HP bar — 44×4 px strip below the token.
-		var bar_w: float  = TOKEN_RADIUS * 2.0
-		var bar_y: float  = pos.y + TOKEN_RADIUS + 3.0
-		var bar_x: float  = pos.x - TOKEN_RADIUS
-		var hp_ratio: float = clampf(tok.get("hp_ratio", 1.0), 0.0, 1.0)
-		var hp_color: Color = tok.get("hp_color", Color.GREEN)
-		draw_rect(Rect2(bar_x, bar_y, bar_w, 4.0), Color(0.15, 0.15, 0.15))
+		var bar_w: float = extent * 2.0
+		var bar_x: float = pos.x - extent
+		var bar_y: float = pos.y - extent - visual_config.hp_bar_offset_y
+		draw_rect(
+			Rect2(bar_x, bar_y, bar_w, visual_config.hp_bar_height),
+			visual_config.hp_bar_background_color
+		)
 		if hp_ratio > 0.0:
-			draw_rect(Rect2(bar_x, bar_y, bar_w * hp_ratio, 4.0), hp_color)
+			draw_rect(
+				Rect2(bar_x, bar_y, bar_w * hp_ratio, visual_config.hp_bar_height),
+				_hp_color(hp_ratio)
+			)
 
-		# COMBAT-003: Damage float — red text above the token.
-		var dmg_text: String = tok.get("damage_text", "")
-		if not dmg_text.is_empty():
+		var damage_text: String = str(tok.get("damage_text", ""))
+		if not damage_text.is_empty():
 			draw_string(
 				font,
-				Vector2(pos.x - TOKEN_RADIUS, pos.y - TOKEN_RADIUS - 2.0),
-				dmg_text,
+				Vector2(pos.x - extent, pos.y - extent - 16.0),
+				damage_text,
 				HORIZONTAL_ALIGNMENT_CENTER,
-				TOKEN_RADIUS * 2.0,
+				extent * 2.0,
 				FONT_SIZE,
 				Color.RED
 			)
 
-		# Debug emotion overlay: F:<fear> and M:<morale> stacked above the token.
-		# Fear label on top (row -2), morale below it (row -1), both above the token circle.
-		# Only rendered when _emotion_debug is true (toggled via "combat_emotion" debug cmd).
-		if _emotion_debug and not tok.get("is_structure", false):
-			const EM_FONT_SIZE: int = 10
-			var fear_val: int   = int(tok.get("fear", 0))
-			var morale_val: int = int(tok.get("morale", 50))
-			var fear_y: float   = pos.y - TOKEN_RADIUS - 16.0
-			var morale_y: float = pos.y - TOKEN_RADIUS - 4.0
+		if _emotion_debug and not is_structure:
+			var fear_y: float = pos.y - extent - 30.0
+			var morale_y: float = pos.y - extent - 20.0
 			draw_string(
 				font,
-				Vector2(pos.x - TOKEN_RADIUS, fear_y),
-				"F:%d" % fear_val,
+				Vector2(pos.x - extent, fear_y),
+				"F:%d" % int(tok.get("fear", 0)),
 				HORIZONTAL_ALIGNMENT_CENTER,
-				TOKEN_RADIUS * 2.0,
+				extent * 2.0,
 				EM_FONT_SIZE,
-				Color(1.0, 0.45, 0.1)   # orange-red
+				Color(1.0, 0.45, 0.1)
 			)
 			draw_string(
 				font,
-				Vector2(pos.x - TOKEN_RADIUS, morale_y),
-				"M:%d" % morale_val,
+				Vector2(pos.x - extent, morale_y),
+				"M:%d" % int(tok.get("morale", 50)),
 				HORIZONTAL_ALIGNMENT_CENTER,
-				TOKEN_RADIUS * 2.0,
+				extent * 2.0,
 				EM_FONT_SIZE,
-				Color(0.3, 0.8, 1.0)    # cyan-blue
+				Color(0.3, 0.8, 1.0)
 			)
+
+
+func _normalize_tokens(tokens: Array[Dictionary]) -> Array[Dictionary]:
+	var normalized: Array[Dictionary] = []
+	for token in tokens:
+		var norm: Dictionary = token.duplicate(true)
+		norm["draw_pos"] = _draw_pos(norm)
+		norm["move_duration"] = max(float(norm.get("move_duration", visual_config.move_duration)), 0.001)
+		normalized.append(norm)
+	return normalized
+
+
+func _draw_pos(token: Dictionary) -> Vector2:
+	var cell_pos: Vector2 = token.get("cell_pos", Vector2.ZERO)
+	if bool(token.get("is_structure", false)):
+		return cell_pos
+	return cell_pos + Vector2(0.0, visual_config.feet_offset_y)
+
+
+func _token_extent(token: Dictionary) -> float:
+	if bool(token.get("is_structure", false)):
+		return visual_config.structure_half_size
+	return visual_config.token_radius
+
+
+func _faction_color(faction: String) -> Color:
+	return FACTION_COLORS.get(faction, Color.WHITE)
+
+
+func _hp_color(hp_ratio: float) -> Color:
+	if hp_ratio > 0.5:
+		return Color.GREEN
+	if hp_ratio > 0.25:
+		return Color.YELLOW
+	return Color.RED
