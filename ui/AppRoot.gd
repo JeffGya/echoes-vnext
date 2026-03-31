@@ -279,6 +279,7 @@ func _run_tests(parts: Array) -> void:
 	StageProgressionTests.register(runner)  # REALM-004
 	RealmRewardTests.register(runner)       # REALM-005
 	ProgressionTests.register(runner)       # PROG-003
+	load("res://tests/EchoPartyRadarTests.gd").register(runner)  # UI stat profile
 	CallingTests.register(runner)           # PROG-007
 	SkillDefinitionTests.register(runner)   # PROG-008
 	CallingBehaviorTests.register(runner)   # PROG-009

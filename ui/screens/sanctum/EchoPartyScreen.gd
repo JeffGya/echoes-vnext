@@ -3,6 +3,8 @@ extends Control
 signal action_requested(action: Dictionary)
 
 const _RANK_UP_OVERLAY_SCENE: PackedScene = preload("res://ui/overlays/RankUpOverlay.tscn")
+const _STAT_KEYS := ["atk", "def", "int", "agi", "cha", "speed"]
+const _RADAR_AXIS_MAX: float = 100.0
 
 @onready var echo_count_label: Label = %EchoCountLabel
 @onready var party_count_label: Label = %PartyCountLabel
@@ -30,6 +32,8 @@ const _RANK_UP_OVERLAY_SCENE: PackedScene = preload("res://ui/overlays/RankUpOve
 @onready var stat_agility_value: Label = %StatAgilityValue
 @onready var stat_charisma_value: Label = %StatCharismaValue
 @onready var stat_speed_value: Label = %StatSpeedValue
+@onready var stat_profile_chart: Control = %StatProfileChart
+@onready var compare_party_toggle: CheckButton = %ComparePartyToggle
 @onready var detail_emotion_status: Label = %DetailEmotionStatus
 @onready var detail_morale_bar: ProgressBar = %DetailMoraleBar
 @onready var detail_fear_bar: ProgressBar = %DetailFearBar
@@ -59,11 +63,13 @@ var _echoes: Array = []
 var _selected_echo_id: String = ""
 var _max_party_size: int = 5
 var _rank_up_overlay: RankUpOverlay = null
+var _show_party_average: bool = false
 
 
 func _ready() -> void:
 	detail_panel.visible = false
 	calling_info_overlay.visible = false
+	compare_party_toggle.button_pressed = false
 
 	if not back_button.pressed.is_connected(_on_back_pressed):
 		back_button.pressed.connect(_on_back_pressed)
@@ -84,12 +90,19 @@ func _ready() -> void:
 		calling_info_btn.pressed.connect(_on_calling_info_pressed)
 	if not calling_info_close_btn.pressed.is_connected(_on_calling_info_close_pressed):
 		calling_info_close_btn.pressed.connect(_on_calling_info_close_pressed)
+	if not compare_party_toggle.toggled.is_connected(_on_compare_party_toggled):
+		compare_party_toggle.toggled.connect(_on_compare_party_toggled)
 
 	_rank_up_overlay = _RANK_UP_OVERLAY_SCENE.instantiate() as RankUpOverlay
 	add_child(_rank_up_overlay)
 	_rank_up_overlay.confirm_requested.connect(_on_rank_up_confirm_requested)
 	_rank_up_overlay.dismissed.connect(_on_rank_up_dismissed)
 	_rank_up_overlay.calling_confirm_requested.connect(_on_calling_confirm_requested)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_VISIBILITY_CHANGED and visible and is_node_ready():
+		_reset_chart_ui_state()
 
 
 func set_snapshot(snap: Dictionary) -> void:
@@ -123,6 +136,7 @@ func set_snapshot(snap: Dictionary) -> void:
 	var selected := _echo_by_id(_selected_echo_id)
 	if selected.is_empty():
 		detail_panel.visible = false
+		stat_profile_chart.clear_chart()
 	else:
 		detail_panel.visible = true
 		_render_detail(selected)
@@ -206,6 +220,7 @@ func _on_echo_selected(echo_id: String) -> void:
 	var selected := _echo_by_id(echo_id)
 	if selected.is_empty():
 		detail_panel.visible = false
+		stat_profile_chart.clear_chart()
 		return
 	detail_panel.visible = true
 	_render_detail(selected)
@@ -290,6 +305,7 @@ func _render_detail(e: Dictionary) -> void:
 	stat_agility_value.text = str(int(stats.get("agi", 0)))
 	stat_charisma_value.text = str(int(stats.get("cha", 0)))
 	stat_speed_value.text = str(int(stats.get("speed", 0)))
+	_refresh_stat_profile(e)
 
 	detail_emotion_status.text = status
 	detail_morale_bar.max_value = 100
@@ -392,6 +408,15 @@ func _on_calling_info_close_pressed() -> void:
 	calling_info_overlay.visible = false
 
 
+func _on_compare_party_toggled(button_pressed: bool) -> void:
+	_show_party_average = button_pressed
+	var selected := _echo_by_id(_selected_echo_id)
+	if selected.is_empty():
+		stat_profile_chart.clear_chart()
+		return
+	_refresh_stat_profile(selected)
+
+
 func _echo_by_id(echo_id: String) -> Dictionary:
 	if echo_id.is_empty():
 		return {}
@@ -429,3 +454,83 @@ static func _vector_label(vector: String) -> String:
 		"pillar":    return "Pillar's steadiness"
 		"protector": return "Protector's shelter"
 		_:           return ""
+
+
+func _reset_chart_ui_state() -> void:
+	_show_party_average = false
+	compare_party_toggle.button_pressed = false
+	var selected := _echo_by_id(_selected_echo_id)
+	if selected.is_empty():
+		stat_profile_chart.clear_chart()
+		return
+	_refresh_stat_profile(selected)
+
+
+func _refresh_stat_profile(selected_echo: Dictionary) -> void:
+	var primary_stats: Dictionary = _extract_stats(selected_echo)
+	var axis_maxima: Dictionary = _fixed_axis_maxima()
+	var party_average_stats: Dictionary = _compute_party_average_stats(_echoes)
+	var show_comparison: bool = (
+		_show_party_average
+		and not party_average_stats.is_empty()
+		and not _is_redundant_party_average(selected_echo, _echoes)
+	)
+	stat_profile_chart.set_chart_data(primary_stats, party_average_stats, axis_maxima, show_comparison)
+
+
+static func _extract_stats(echo: Dictionary) -> Dictionary:
+	var stats_v: Variant = echo.get("stats", {})
+	var stats: Dictionary = stats_v if stats_v is Dictionary else {}
+	var result: Dictionary = {}
+	for key_v in _STAT_KEYS:
+		var key: String = str(key_v)
+		result[key] = float(stats.get(key, 0))
+	return result
+
+
+static func _fixed_axis_maxima() -> Dictionary:
+	var maxima: Dictionary = {}
+	for key_v in _STAT_KEYS:
+		var key: String = str(key_v)
+		maxima[key] = _RADAR_AXIS_MAX
+	return maxima
+
+
+static func _compute_party_average_stats(echoes: Array) -> Dictionary:
+	var sums: Dictionary = {}
+	for key_v in _STAT_KEYS:
+		var key: String = str(key_v)
+		sums[key] = 0.0
+
+	var party_count: int = 0
+	for echo_v in echoes:
+		if not (echo_v is Dictionary):
+			continue
+		var echo: Dictionary = echo_v as Dictionary
+		if not bool(echo.get("in_party", false)):
+			continue
+		var stats: Dictionary = _extract_stats(echo)
+		party_count += 1
+		for key_v in _STAT_KEYS:
+			var key: String = str(key_v)
+			sums[key] = float(sums.get(key, 0.0)) + float(stats.get(key, 0.0))
+
+	if party_count == 0:
+		return {}
+
+	var averages: Dictionary = {}
+	for key_v in _STAT_KEYS:
+		var key: String = str(key_v)
+		averages[key] = float(sums.get(key, 0.0)) / float(party_count)
+	return averages
+
+
+static func _is_redundant_party_average(selected_echo: Dictionary, echoes: Array) -> bool:
+	if selected_echo.is_empty() or not bool(selected_echo.get("in_party", false)):
+		return false
+
+	var party_count: int = 0
+	for echo_v in echoes:
+		if echo_v is Dictionary and bool((echo_v as Dictionary).get("in_party", false)):
+			party_count += 1
+	return party_count <= 1

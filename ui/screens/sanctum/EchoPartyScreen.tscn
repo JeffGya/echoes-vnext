@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://c0h5ruqbf4atx"]
 
 [ext_resource type="Script" uid="uid://cgvsh3u4gahcb" path="res://ui/screens/sanctum/EchoPartyScreen.gd" id="1_echo_party"]
+[ext_resource type="Script" uid="uid://bufxvuj0p7rrq" path="res://ui/components/RadarStatChart.gd" id="2_radar_chart"]
 
 [node name="EchoPartyScreen" type="Control" unique_id=521395711]
 layout_mode = 3
@@ -231,74 +232,150 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Archetype: —"
 
-[node name="StatsHeader" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=1473953523]
+[node name="StatsSection" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=2061895049]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 16
+
+[node name="StatsColumn" type="VBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection" unique_id=1451519508]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="StatsHeader" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn" unique_id=1473953523]
 layout_mode = 2
 text = "Stats"
 
-[node name="DetailStatsGrid" type="GridContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=256095268]
+[node name="DetailStatsGrid" type="GridContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn" unique_id=256095268]
 unique_name_in_owner = true
 layout_mode = 2
 columns = 2
 
-[node name="StatAttackLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=668659159]
+[node name="StatAttackLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=668659159]
 layout_mode = 2
 text = "Attack"
 
-[node name="StatAttackValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=95587098]
+[node name="StatAttackValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=95587098]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 horizontal_alignment = 2
 
-[node name="StatDefenseLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=186795674]
+[node name="StatDefenseLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=186795674]
 layout_mode = 2
 text = "Defense"
 
-[node name="StatDefenseValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=79448244]
+[node name="StatDefenseValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=79448244]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 horizontal_alignment = 2
 
-[node name="StatIntelligenceLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=1549510336]
+[node name="StatIntelligenceLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=1549510336]
 layout_mode = 2
 text = "Intelligence"
 
-[node name="StatIntelligenceValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=721559733]
+[node name="StatIntelligenceValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=721559733]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 horizontal_alignment = 2
 
-[node name="StatAgilityLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=939156919]
+[node name="StatAgilityLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=939156919]
 layout_mode = 2
 text = "Agility"
 
-[node name="StatAgilityValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=2080770725]
+[node name="StatAgilityValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=2080770725]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 horizontal_alignment = 2
 
-[node name="StatCharismaLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=277574668]
+[node name="StatCharismaLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=277574668]
 layout_mode = 2
 text = "Charisma"
 
-[node name="StatCharismaValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=1661425838]
+[node name="StatCharismaValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=1661425838]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 horizontal_alignment = 2
 
-[node name="StatSpeedLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=988379765]
+[node name="StatSpeedLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=988379765]
 layout_mode = 2
 text = "Speed"
 
-[node name="StatSpeedValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailStatsGrid" unique_id=23515989]
+[node name="StatSpeedValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=23515989]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 horizontal_alignment = 2
+
+[node name="StatProfileColumn" type="VBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection" unique_id=1456594538]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="StatProfileHeader" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn" unique_id=1066997277]
+layout_mode = 2
+text = "Stat profile"
+
+[node name="ComparePartyToggle" type="CheckButton" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn" unique_id=1387521910]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Compare to party avg"
+
+[node name="StatProfileFrame" type="PanelContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn" unique_id=1331427547]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="StatProfileMargin" type="MarginContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn/StatProfileFrame" unique_id=1402551624]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="StatProfileChart" type="Control" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn/StatProfileFrame/StatProfileMargin" unique_id=873559645]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(260, 260)
+layout_mode = 2
+size_flags_horizontal = 4
+script = ExtResource("2_radar_chart")
+
+[node name="StatProfileLegend" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn" unique_id=65728384]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="PrimaryLegend" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn/StatProfileLegend" unique_id=827077481]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="PrimaryLegendSwatch" type="ColorRect" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn/StatProfileLegend/PrimaryLegend" unique_id=1968353556]
+custom_minimum_size = Vector2(14, 14)
+layout_mode = 2
+color = Color(0.73, 0.52, 0.1, 1)
+
+[node name="PrimaryLegendLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn/StatProfileLegend/PrimaryLegend" unique_id=288385324]
+layout_mode = 2
+text = "Selected"
+
+[node name="PartyLegend" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn/StatProfileLegend" unique_id=272656880]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="PartyLegendSwatch" type="ColorRect" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn/StatProfileLegend/PartyLegend" unique_id=1905025770]
+custom_minimum_size = Vector2(14, 14)
+layout_mode = 2
+color = Color(0.33, 0.43, 0.31, 1)
+
+[node name="PartyLegendLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn/StatProfileLegend/PartyLegend" unique_id=947998296]
+layout_mode = 2
+text = "Party avg"
+
+[node name="StatProfileHint" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn" unique_id=2059735382]
+layout_mode = 2
+text = "Scale: 0–100"
 
 [node name="EmotionHeader" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=1998760993]
 layout_mode = 2
