@@ -2,6 +2,18 @@
 
 [ext_resource type="Script" uid="uid://cgvsh3u4gahcb" path="res://ui/screens/sanctum/EchoPartyScreen.gd" id="1_echo_party"]
 [ext_resource type="Script" uid="uid://bufxvuj0p7rrq" path="res://ui/components/RadarStatChart.gd" id="2_radar_chart"]
+[ext_resource type="PackedScene" uid="uid://bond_tier_bar" path="res://ui/components/BondTierBar.tscn" id="3_bond_tier_bar"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bond_tag"]
+bg_color = Color(0.38, 0.38, 0.38, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+content_margin_left = 6.0
+content_margin_right = 6.0
+content_margin_top = 3.0
+content_margin_bottom = 3.0
 
 [node name="EchoPartyScreen" type="Control" unique_id=521395711]
 layout_mode = 3
@@ -92,7 +104,10 @@ theme_override_constants/margin_top = 12
 theme_override_constants/margin_right = 12
 theme_override_constants/margin_bottom = 12
 
-[node name="DetailPanel" type="VBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin" unique_id=956736150]
+[node name="ScrollContainer" type="ScrollContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin" unique_id=1771836024]
+layout_mode = 2
+
+[node name="DetailPanel" type="VBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer" unique_id=956736150]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -100,30 +115,30 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 8
 
-[node name="DetailName" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=989038001]
+[node name="DetailName" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=989038001]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 text = "[EchoName]"
 horizontal_alignment = 1
 
-[node name="DetailShout" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=406763964]
+[node name="DetailShout" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=406763964]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 size_flags_horizontal = 4
 horizontal_alignment = 1
 
-[node name="HPRow" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=1571681302]
+[node name="HPRow" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=1571681302]
 layout_mode = 2
 
-[node name="DetailHPLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/HPRow" unique_id=293555523]
+[node name="DetailHPLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/HPRow" unique_id=293555523]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
 text = "HP 0/0"
 
-[node name="DetailHPBar" type="ProgressBar" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/HPRow" unique_id=2117606848]
+[node name="DetailHPBar" type="ProgressBar" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/HPRow" unique_id=2117606848]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
@@ -131,69 +146,69 @@ size_flags_horizontal = 3
 value = 100.0
 show_percentage = false
 
-[node name="CallingRankRow" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=1955954356]
+[node name="CallingRankRow" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=1955954356]
 layout_mode = 2
 
-[node name="CallingKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/CallingRankRow" unique_id=79906667]
+[node name="CallingKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/CallingRankRow" unique_id=79906667]
 custom_minimum_size = Vector2(60, 0)
 layout_mode = 2
 text = "Calling"
 
-[node name="DetailCalling" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/CallingRankRow" unique_id=1805040208]
+[node name="DetailCalling" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/CallingRankRow" unique_id=1805040208]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "—"
 
-[node name="CallingInfoBtn" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/CallingRankRow" unique_id=1720791396]
+[node name="CallingInfoBtn" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/CallingRankRow" unique_id=1720791396]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 text = "ⓘ"
 flat = true
 
-[node name="RankKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/CallingRankRow" unique_id=1398091357]
+[node name="RankKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/CallingRankRow" unique_id=1398091357]
 custom_minimum_size = Vector2(40, 0)
 layout_mode = 2
 text = "Rank"
 
-[node name="DetailRank" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/CallingRankRow" unique_id=1522522669]
+[node name="DetailRank" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/CallingRankRow" unique_id=1522522669]
 unique_name_in_owner = true
 layout_mode = 2
 text = "—"
 
-[node name="GradeLevelRow" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=153123727]
+[node name="GradeLevelRow" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=153123727]
 layout_mode = 2
 
-[node name="GradeKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/GradeLevelRow" unique_id=1315830213]
+[node name="GradeKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/GradeLevelRow" unique_id=1315830213]
 custom_minimum_size = Vector2(60, 0)
 layout_mode = 2
 text = "Grade"
 
-[node name="DetailGrade" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/GradeLevelRow" unique_id=1868813475]
+[node name="DetailGrade" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/GradeLevelRow" unique_id=1868813475]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "—"
 
-[node name="LevelKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/GradeLevelRow" unique_id=1397236627]
+[node name="LevelKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/GradeLevelRow" unique_id=1397236627]
 custom_minimum_size = Vector2(40, 0)
 layout_mode = 2
 text = "Level"
 
-[node name="DetailLevel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/GradeLevelRow" unique_id=891696826]
+[node name="DetailLevel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/GradeLevelRow" unique_id=891696826]
 unique_name_in_owner = true
 layout_mode = 2
 text = "—"
 
-[node name="DominantVectorLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=1309280893]
+[node name="DominantVectorLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=1309280893]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 size_flags_horizontal = 4
 horizontal_alignment = 1
 
-[node name="CallingEligibleBadge" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=208509166]
+[node name="CallingEligibleBadge" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=208509166]
 unique_name_in_owner = true
 visible = false
 custom_minimum_size = Vector2(0, 48)
@@ -202,7 +217,7 @@ size_flags_horizontal = 4
 theme_type_variation = &"ButtonSecondary"
 text = "⚡ Path Awaits"
 
-[node name="AscendButton" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=1854947068]
+[node name="AscendButton" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=1854947068]
 unique_name_in_owner = true
 visible = false
 custom_minimum_size = Vector2(0, 48)
@@ -211,190 +226,190 @@ size_flags_horizontal = 4
 theme_type_variation = &"ButtonPrimary"
 text = "▲ Ascend to Rank 2"
 
-[node name="XPRow" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=2064258046]
+[node name="XPRow" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=2064258046]
 layout_mode = 2
 
-[node name="DetailXPLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/XPRow" unique_id=1378846816]
+[node name="DetailXPLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/XPRow" unique_id=1378846816]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(100, 0)
 layout_mode = 2
 text = "XP 0/100"
 
-[node name="DetailXPBar" type="ProgressBar" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/XPRow" unique_id=2119270591]
+[node name="DetailXPBar" type="ProgressBar" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/XPRow" unique_id=2119270591]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 size_flags_horizontal = 3
 show_percentage = false
 
-[node name="DetailArchetype" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=1673995103]
+[node name="DetailArchetype" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=1673995103]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Archetype: —"
 
-[node name="StatsSection" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=2061895049]
+[node name="StatsSection" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=2061895049]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 16
 
-[node name="StatsColumn" type="VBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection" unique_id=1451519508]
+[node name="StatsColumn" type="VBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection" unique_id=1451519508]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 8
 
-[node name="StatsHeader" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn" unique_id=1473953523]
+[node name="StatsHeader" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatsColumn" unique_id=1473953523]
 layout_mode = 2
 text = "Stats"
 
-[node name="DetailStatsGrid" type="GridContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn" unique_id=256095268]
+[node name="DetailStatsGrid" type="GridContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatsColumn" unique_id=256095268]
 unique_name_in_owner = true
 layout_mode = 2
 columns = 2
 
-[node name="StatAttackLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=668659159]
+[node name="StatAttackLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=668659159]
 layout_mode = 2
 text = "Attack"
 
-[node name="StatAttackValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=95587098]
+[node name="StatAttackValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=95587098]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 horizontal_alignment = 2
 
-[node name="StatDefenseLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=186795674]
+[node name="StatDefenseLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=186795674]
 layout_mode = 2
 text = "Defense"
 
-[node name="StatDefenseValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=79448244]
+[node name="StatDefenseValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=79448244]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 horizontal_alignment = 2
 
-[node name="StatIntelligenceLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=1549510336]
+[node name="StatIntelligenceLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=1549510336]
 layout_mode = 2
 text = "Intelligence"
 
-[node name="StatIntelligenceValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=721559733]
+[node name="StatIntelligenceValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=721559733]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 horizontal_alignment = 2
 
-[node name="StatAgilityLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=939156919]
+[node name="StatAgilityLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=939156919]
 layout_mode = 2
 text = "Agility"
 
-[node name="StatAgilityValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=2080770725]
+[node name="StatAgilityValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=2080770725]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 horizontal_alignment = 2
 
-[node name="StatCharismaLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=277574668]
+[node name="StatCharismaLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=277574668]
 layout_mode = 2
 text = "Charisma"
 
-[node name="StatCharismaValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=1661425838]
+[node name="StatCharismaValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=1661425838]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 horizontal_alignment = 2
 
-[node name="StatSpeedLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=988379765]
+[node name="StatSpeedLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=988379765]
 layout_mode = 2
 text = "Speed"
 
-[node name="StatSpeedValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=23515989]
+[node name="StatSpeedValue" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatsColumn/DetailStatsGrid" unique_id=23515989]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 horizontal_alignment = 2
 
-[node name="StatProfileColumn" type="VBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection" unique_id=1456594538]
+[node name="StatProfileColumn" type="VBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection" unique_id=1456594538]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 8
 
-[node name="StatProfileHeader" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn" unique_id=1066997277]
+[node name="StatProfileHeader" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatProfileColumn" unique_id=1066997277]
 layout_mode = 2
 text = "Stat profile"
 
-[node name="ComparePartyToggle" type="CheckButton" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn" unique_id=1387521910]
+[node name="ComparePartyToggle" type="CheckButton" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatProfileColumn" unique_id=1387521910]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Compare to party avg"
 
-[node name="StatProfileFrame" type="PanelContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn" unique_id=1331427547]
+[node name="StatProfileFrame" type="PanelContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatProfileColumn" unique_id=1331427547]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="StatProfileMargin" type="MarginContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn/StatProfileFrame" unique_id=1402551624]
+[node name="StatProfileMargin" type="MarginContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatProfileColumn/StatProfileFrame" unique_id=1402551624]
 layout_mode = 2
 theme_override_constants/margin_left = 8
 theme_override_constants/margin_top = 8
 theme_override_constants/margin_right = 8
 theme_override_constants/margin_bottom = 8
 
-[node name="StatProfileChart" type="Control" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn/StatProfileFrame/StatProfileMargin" unique_id=873559645]
+[node name="StatProfileChart" type="Control" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatProfileColumn/StatProfileFrame/StatProfileMargin" unique_id=873559645]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(260, 260)
 layout_mode = 2
 size_flags_horizontal = 4
 script = ExtResource("2_radar_chart")
 
-[node name="StatProfileLegend" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn" unique_id=65728384]
+[node name="StatProfileLegend" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatProfileColumn" unique_id=65728384]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="PrimaryLegend" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn/StatProfileLegend" unique_id=827077481]
+[node name="PrimaryLegend" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatProfileColumn/StatProfileLegend" unique_id=827077481]
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="PrimaryLegendSwatch" type="ColorRect" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn/StatProfileLegend/PrimaryLegend" unique_id=1968353556]
+[node name="PrimaryLegendSwatch" type="ColorRect" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatProfileColumn/StatProfileLegend/PrimaryLegend" unique_id=1968353556]
 custom_minimum_size = Vector2(14, 14)
 layout_mode = 2
 color = Color(0.73, 0.52, 0.1, 1)
 
-[node name="PrimaryLegendLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn/StatProfileLegend/PrimaryLegend" unique_id=288385324]
+[node name="PrimaryLegendLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatProfileColumn/StatProfileLegend/PrimaryLegend" unique_id=288385324]
 layout_mode = 2
 text = "Selected"
 
-[node name="PartyLegend" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn/StatProfileLegend" unique_id=272656880]
+[node name="PartyLegend" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatProfileColumn/StatProfileLegend" unique_id=272656880]
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="PartyLegendSwatch" type="ColorRect" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn/StatProfileLegend/PartyLegend" unique_id=1905025770]
+[node name="PartyLegendSwatch" type="ColorRect" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatProfileColumn/StatProfileLegend/PartyLegend" unique_id=1905025770]
 custom_minimum_size = Vector2(14, 14)
 layout_mode = 2
 color = Color(0.33, 0.43, 0.31, 1)
 
-[node name="PartyLegendLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn/StatProfileLegend/PartyLegend" unique_id=947998296]
+[node name="PartyLegendLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatProfileColumn/StatProfileLegend/PartyLegend" unique_id=947998296]
 layout_mode = 2
 text = "Party avg"
 
-[node name="StatProfileHint" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/StatsSection/StatProfileColumn" unique_id=2059735382]
+[node name="StatProfileHint" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatProfileColumn" unique_id=2059735382]
 layout_mode = 2
 text = "Scale: 0–100"
 
-[node name="EmotionHeader" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=1998760993]
+[node name="EmotionHeader" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=1998760993]
 layout_mode = 2
 text = "Emotional state"
 
-[node name="DetailEmotionStatus" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=119863424]
+[node name="DetailEmotionStatus" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=119863424]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Normal"
 
-[node name="MoraleRow" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=638915197]
+[node name="MoraleRow" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=638915197]
 layout_mode = 2
 
-[node name="MoraleKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/MoraleRow" unique_id=380900418]
+[node name="MoraleKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/MoraleRow" unique_id=380900418]
 custom_minimum_size = Vector2(60, 0)
 layout_mode = 2
 text = "Morale"
 
-[node name="DetailMoraleBar" type="ProgressBar" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/MoraleRow" unique_id=1942569412]
+[node name="DetailMoraleBar" type="ProgressBar" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/MoraleRow" unique_id=1942569412]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
@@ -402,66 +417,108 @@ size_flags_horizontal = 3
 value = 50.0
 show_percentage = false
 
-[node name="FearRow" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=33292901]
+[node name="FearRow" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=33292901]
 layout_mode = 2
 
-[node name="FearKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/FearRow" unique_id=380305941]
+[node name="FearKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/FearRow" unique_id=380305941]
 custom_minimum_size = Vector2(60, 0)
 layout_mode = 2
 text = "Fear"
 
-[node name="DetailFearBar" type="ProgressBar" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/FearRow" unique_id=638270775]
+[node name="DetailFearBar" type="ProgressBar" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/FearRow" unique_id=638270775]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 size_flags_horizontal = 3
 show_percentage = false
 
-[node name="SkillsTabContent" type="VBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=1624050337]
+[node name="SkillsTabContent" type="VBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=1624050337]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="SkillsTabHeader" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/SkillsTabContent" unique_id=1259181121]
+[node name="SkillsTabHeader" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/SkillsTabContent" unique_id=1259181121]
 layout_mode = 2
 text = "Active skill slots"
 
-[node name="SkillSlotRow1" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/SkillsTabContent" unique_id=510178241]
+[node name="SkillSlotRow1" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/SkillsTabContent" unique_id=510178241]
 layout_mode = 2
 
-[node name="SkillSlotLabel1" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/SkillsTabContent/SkillSlotRow1" unique_id=1513452408]
+[node name="SkillSlotLabel1" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/SkillsTabContent/SkillSlotRow1" unique_id=1513452408]
 custom_minimum_size = Vector2(60, 0)
 layout_mode = 2
 text = "Skill 1"
 
-[node name="SkillSlotValue1" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/SkillsTabContent/SkillSlotRow1" unique_id=563567707]
+[node name="SkillSlotValue1" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/SkillsTabContent/SkillSlotRow1" unique_id=563567707]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = " "
 
-[node name="SkillSlotRow2" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/SkillsTabContent" unique_id=307480927]
+[node name="SkillSlotRow2" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/SkillsTabContent" unique_id=307480927]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 
-[node name="SkillSlotLabel2" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/SkillsTabContent/SkillSlotRow2" unique_id=282323010]
+[node name="SkillSlotLabel2" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/SkillsTabContent/SkillSlotRow2" unique_id=282323010]
 custom_minimum_size = Vector2(60, 0)
 layout_mode = 2
 text = "Skill 2"
 
-[node name="SkillSlotValue2" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/SkillsTabContent/SkillSlotRow2" unique_id=23800344]
+[node name="SkillSlotValue2" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/SkillsTabContent/SkillSlotRow2" unique_id=23800344]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = " "
 
-[node name="TabStrip" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=224622164]
+[node name="BondsTabContent" type="VBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=-1293967295]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="BondsEmptyLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/BondsTabContent" unique_id=-1293967294]
+unique_name_in_owner = true
+layout_mode = 2
+text = "No bonds yet. Party with other Echoes to form relationships."
+autowrap_mode = 3
+
+[node name="BondsList" type="VBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/BondsTabContent" unique_id=-1293967293]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="BondEntryTemplate" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/BondsTabContent" unique_id=-1293967292]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="BondNameTag" type="Panel" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/BondsTabContent/BondEntryTemplate"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_override_styles/panel = SubResource("StyleBoxFlat_bond_tag")
+
+[node name="BondEchoNameLabel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/BondsTabContent/BondEntryTemplate/BondNameTag" unique_id=-1293967291]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+text = "Echo Name"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="BondTierBar" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/BondsTabContent/BondEntryTemplate" instance=ExtResource("3_bond_tier_bar")]
+layout_mode = 2
+
+[node name="TabStrip" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=224622164]
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="TabBase" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/TabStrip" unique_id=821828102]
+[node name="TabBase" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/TabStrip" unique_id=821828102]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(60, 36)
 layout_mode = 2
@@ -469,7 +526,7 @@ size_flags_horizontal = 3
 theme_type_variation = &"ButtonPrimary"
 text = "Base"
 
-[node name="TabSkills" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/TabStrip" unique_id=412098742]
+[node name="TabSkills" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/TabStrip" unique_id=412098742]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(60, 36)
 layout_mode = 2
@@ -478,19 +535,19 @@ theme_type_variation = &"ButtonSecondary"
 disabled = true
 text = "Skills"
 
-[node name="TabBonds" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/TabStrip" unique_id=19051126]
+[node name="TabBonds" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/TabStrip" unique_id=19051126]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(60, 36)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"ButtonSecondary"
-disabled = true
 text = "Bonds"
 
-[node name="DetailCTAs" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel" unique_id=516321037]
+[node name="DetailCTAs" type="HBoxContainer" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=516321037]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="AssignPartyBtn" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailCTAs" unique_id=624618244]
+[node name="AssignPartyBtn" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/DetailCTAs" unique_id=624618244]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 48)
 layout_mode = 2
@@ -498,7 +555,7 @@ size_flags_horizontal = 3
 theme_type_variation = &"ButtonPrimary"
 text = "Assign to party"
 
-[node name="AssignJobBtn" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/DetailPanel/DetailCTAs" unique_id=1929763356]
+[node name="AssignJobBtn" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/DetailCTAs" unique_id=1929763356]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 48)
 layout_mode = 2
@@ -607,7 +664,7 @@ layout_mode = 2
 color = Color(0.164706, 0.176471, 0.211765, 1)
 
 [node name="ImageLabel" type="Label" parent="RootVBox/Templates/PartyCardTemplate/CardMargin/CardRoot/ImagePlaceholder" unique_id=2109212432]
-layout_mode = 2
+layout_mode = 0
 size_flags_horizontal = 4
 text = "IMG"
 horizontal_alignment = 1

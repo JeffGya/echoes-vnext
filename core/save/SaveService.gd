@@ -234,7 +234,9 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			"summon_count": 0,
 			"name": "",
 			"name_roll_index": 0,
-			"starter_granted": false
+			"starter_granted": false,
+			"bonds": [],
+			"party_encounters": [],
 		}
 		repaired = true
 		repaired_notes.append("sanctum added (roster + active_party_ids defaults; sanctum.ase legacy ignored)")
@@ -472,6 +474,18 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 				echo["skill_slots"] = [""]
 				repaired = true
 				repaired_notes.append("sanctum.roster[%d].skill_slots defaulted to ['']" % i)
+
+		# BOND-001: social graph edges
+		if not sanctum.has("bonds") or not (sanctum["bonds"] is Array):
+			sanctum["bonds"] = []
+			repaired = true
+			repaired_notes.append("sanctum.bonds set to [] default")
+
+		# BOND-001: party encounter registry
+		if not sanctum.has("party_encounters") or not (sanctum["party_encounters"] is Array):
+			sanctum["party_encounters"] = []
+			repaired = true
+			repaired_notes.append("sanctum.party_encounters set to [] default")
 
 	# ---- stage_context repairs (DIRECTIVE-001) ----
 	if not save.has("stage_context") or typeof(save["stage_context"]) != TYPE_DICTIONARY:

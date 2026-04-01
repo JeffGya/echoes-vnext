@@ -69,7 +69,37 @@
 			}
 		},
 		"sanctum": {
-			"party_max_size": 5.0
+			"party_max_size": 5.0,
+			"rival_archetypes": [
+				["proud", "empathic"],
+				["valiant", "stoic"],
+				["ambitious", "devout"],
+				["canny", "loyal"]
+			],
+			"bond_thresholds": {
+				"rival_max": -30,
+				"friend_min": 30
+			},
+			"bond_triggers": {
+				"_comment": "All values are integers. BOND-001 defines the schema only — triggers fire in BOND-002.",
+				"archetype_incompatible_shared_stage": -5,
+				"ko_incompatible_no_protect": -10,
+				"three_plus_stages_incompatible": -3,
+				"guard_withheld_ally_endangered": -4,
+				"reckless_advance_ally_exposed": -5,
+				"stage_defeat_shared": -3,
+				"vector_opposition_shared_stage": -2,
+				"directive_deviation_repeated": -3,
+				"morale_contagion_negative": -2,
+				"shared_stage_win": 3,
+				"shared_stage_win_streak_3": 5,
+				"protect_action_for_ally": 8,
+				"shared_combat_proximity": 1,
+				"near_wipe_survival_together": 10,
+				"same_calling_shared_stage": 2,
+				"adjacent_calling_shared_stage": 1,
+				"witnessed_ally_sacrifice": 12
+			}
 		},
 		"emotion": {
 			"drift": {

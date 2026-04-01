@@ -208,6 +208,44 @@ Pure static. Board 10×10 (from `balance.json data.grid`).
 - `move_toward(actor, target_pos, board_cfg) -> { from_pos, to_pos }` — 8-dir greedy, mutates `actor["grid_pos"]`
 - `is_valid_pos(pos, board_cfg) -> bool`
 
+### SocialGraphService (`core/sanctum/SocialGraphService.gd`)
+Pure-static `RefCounted`. BOND-001 social graph — 11-tier signed score (-100..+100) between Echo pairs.
+
+- `get_edge(bonds, a, b) -> Dictionary` — canonical edge or `{}`
+- `get_tier(strength) -> int` — -5..+5 per tier table
+- `get_tier_name(tier) -> String` — Nemesis/Rival/Resentful/Tense/Wary/Indifferent/Familiar/Friendly/Trusted/Bonded/Kindred
+- `get_bond_type(strength, thresholds) -> String` — "rival" | "neutral" | "friend"
+- `get_bonds_for_actor(bonds, actor_id) -> Array`
+- `get_encounters_for_actor(encounters, actor_id) -> Array`
+- `get_rival_pairs_in_party(bonds, party_ids, thresholds) -> Array`
+- `get_friend_pairs_in_party(bonds, party_ids, thresholds) -> Array`
+- `apply_score_delta(bonds, a, b, delta, thresholds, logger, t) -> Array` — only mutating fn; clamps ±100; logs `sanctum.bond_updated`; no-op if delta=0 or result=current
+- `is_rival_archetype_pair(arch_a, arch_b, rival_pairs) -> bool` — directional-agnostic
+- `record_encounter(encounters, a, b) -> Array` — adds canonical pair once; no duplicates
+
+**Save fields** (inside `save_data["sanctum"]`):
+- `bonds: []` — Array of `{ actor_a, actor_b, strength }`. Canonical: actor_a < actor_b alphabetically. `bond_type` and `tier` never stored — derived at read time.
+- `party_encounters: []` — Array of `[actor_a_id, actor_b_id]` canonical pairs. Written when two echoes first share a party slot. Never removed.
+
+**Tier table:**
+| Tier | Name | Strength range | bond_type |
+|------|------|----------------|-----------|
+| +5 | Kindred | 90..100 | friend |
+| +4 | Bonded | 70..89 | friend |
+| +3 | Trusted | 50..69 | friend |
+| +2 | Friendly | 30..49 | friend (friend_min=30) |
+| +1 | Familiar | 10..29 | neutral |
+| 0 | Indifferent | -9..9 | neutral |
+| -1 | Wary | -10..-29 | neutral |
+| -2 | Tense | -30..-49 | rival (rival_max=-30) |
+| -3 | Resentful | -50..-69 | rival |
+| -4 | Rival | -70..-89 | rival |
+| -5 | Nemesis | -90..-100 | rival |
+
+**`bond_entries` per echo** (in `flow.echo_party` snapshot): `Array[{ echo_id, name, tier, strength_before, bond_type_before }]` — sorted by tier ascending (most negative first). Empty when no party encounters recorded.
+
+**Bond triggers** (config only — fire in BOND-002): all integer values under `balance.data.sanctum.bond_triggers`. Balance also holds `rival_archetypes` pairs and `bond_thresholds { rival_max, friend_min }`.
+
 ### CombatState (`core/combat/CombatState.gd`)
 - `create(actors, objective, initiative_seed, init_cfg) -> Dictionary`
 - `check_end_condition(actors, objective) -> { over: bool, victory: bool, reason: String }`
@@ -240,7 +278,7 @@ Full field shapes live in each FlowState file (`core/state/flow/states/`).
 |--------|--------------|-----------------|-------------|
 | SanctumScreen | `flow.sanctum` | sanctum_name, ase_balance, roster_count, roster_preview (3 echoes + emotion), active_party_count, party_slots | nav.echo_party, nav.realm_select, nav.summon, cta.enter_stage (disabled when no realm) |
 | SummonScreen | `flow.summon` | ase_balance, selected_grade, summon_grade_options, summon_disabled, pending_summon_reveals | nav.back, cta.summon, overlay.dismiss_reveals |
-| EchoPartyScreen | `flow.echo_party` | max_party_size (5), echoes (id/name/rank/level/in_party/archetype/calling/calling_eligible/stats/xp), active_party_ids | nav.back (party toggles are immediate via sanctum.party.toggle) |
+| EchoPartyScreen | `flow.echo_party` | max_party_size (5), echoes (id/name/rank/level/in_party/archetype/calling/calling_eligible/stats/xp/bond_entries), active_party_ids | nav.back (party toggles are immediate via sanctum.party.toggle) |
 | CombatBoardScreen | `flow.encounter` | actors (projected), round, round_phase, initiative_order, objective_state, retreat fields (pre_combat only) | nav.back, cta.retreat (when eligible) |
 | ResolveScreen | `flow.resolve` | victory, reason, round_ended, actors (projected), objective_state, enemies_defeated, echoes_survived, ase_awarded, rank (S/A/B/C/D/F), reward_breakdown (Array of {label, delta}), xp_events (Array of XpEvent) | Victory: `cta.continue` → `flow.complete_stage` (destination=sanctum), `cta.next_stage` → `flow.complete_stage`. Defeat: `cta.continue` → `flow.go_state` (no stage advance). |
 | RealmSelectScreen | `flow.realm_select` | title, current_realm_id, realms[] (id/name/virtue/description/stage_count_min/max/status/locked) | nav.back |
@@ -390,6 +428,8 @@ Echo traits (resilience + leadership) use a **separate derived RNG** at path `<s
 - SANCTUM-005: **Echo Profile & Archetype Display.** Pure UI story — no new services or save_data keys. Three-tier calling display applied to all Sanctum-facing echo lists: (1) confirmed `echo["calling"]` → show calling name; (2) `calling_eligible=true` + no confirmed calling → "Calling Undecided"; (3) not yet eligible → hide calling section, archetype only. `calling_description` (one-liner from `balance.data.calling.definitions[id].description`) is surfaced in `flow.echo_party` per-echo detail data. `FlowEchoPartyState` rows include `archetype`, `calling`, and `calling_eligible`, and `EchoPartyScreen` detail panel renders the full profile.
 
 - XP Tuning (post PROG-004): **Option A thresholds** `[0, 100, 300, 600, 1000]` — all XP config is tunable in `balance.data.progression`. **Rank base shift:** `rank_level_base_shift` (default 50) — each per-level step cost is increased by `(rank-1) × shift`; first step for rank 2 = 150, rank 3 = 200. `ProgressionService.get_effective_thresholds(rank, prog_cfg) → Array` is the single source of truth for thresholds — **never** use the raw `level_thresholds` array directly for a rank > 1. **Realm XP multiplier:** `realm_xp_multiplier_per_realm` (default 0.15) applied to `clear_xp` and `realm_xp` in `award_post_combat_xp()`; multiplier = `1.0 + run_index × rate` where `run_index` comes from the realm model in `save_data["realms"]`. **Mid-combat kill XP:** `ProgressionService.apply_mid_combat_kill_xp(echo, actor, prog_cfg, birth_stats_cfg, realm_xp_multiplier, logger, t) → event_dict`. Called from `FlowRuntime._resolve_next_actor()` immediately after `kill_count += 1` — only for `echo`-faction actors. If a level threshold is crossed, `DerivedStatService.compute_stats()` runs on both the save_data roster entry and the live `actor` dict; `current_hp` raised by hp_gained, capped at new `max_hp`. **No double-counting:** `award_post_combat_xp()` accepts `skip_kill_xp: bool = false`; `build_final_snapshot()` passes `true` because kill XP was already applied mid-combat. Stage and realm completion XP are still awarded post-combat. **Snapshot XP fields:** `FlowEchoPartyState` includes `xp_in_level` and `xp_per_level` per echo so `EchoPartyScreen` can render the XP bar without client-side threshold math.
+
+- BOND-001: **Social Graph Contracts.** `SocialGraphService` is the single static API for all bond/encounter reads and writes. `bonds[]` + `party_encounters[]` live inside `save_data["sanctum"]` — additive, no schema_version bump. Party co-occurrence is recorded in `FlowRuntime._handle_sanctum_party_toggle` on every add (not remove). `bond_type` ("rival"/"neutral"/"friend") and `tier` are always derived at read time, never stored. All bond score triggers are config-defined in `balance.data.sanctum.bond_triggers` but fire only in BOND-002. The Bonds tab in EchoPartyScreen is always enabled (not gated by calling like Skills), showing `bond_entries[]` sorted most-negative first. `BondTierBar.tscn` is a fully .tscn-authored 11-cell visual bar — script only sets modulate + label text.
 
 ### Deferred
 - Full art: StageScreen, StageMapScreen (scaffolds built; deferred to UI-006+)

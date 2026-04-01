@@ -47,7 +47,8 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"name_roll_index": 0,
 			"starter_granted": false,
 			"summon_count": 0,
-
+			"bonds": [],            # BOND-001: signed score edges {actor_a, actor_b, strength}
+			"party_encounters": [], # BOND-001: canonical pairs who have shared a party slot
 		},
 		# DIRECTIVE-001: stage-level context (directive, future: stage seed, objective state)
 		"stage_context": {
