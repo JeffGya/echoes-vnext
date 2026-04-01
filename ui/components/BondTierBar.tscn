@@ -1,0 +1,116 @@
+[gd_scene format=3 uid="uid://bond_tier_bar"]
+
+[ext_resource type="Script" path="res://ui/components/BondTierBar.gd" id="1_btbar"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_N5"]
+bg_color = Color(0.5, 0.05, 0.05, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_N4"]
+bg_color = Color(0.65, 0.1, 0.1, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_N3"]
+bg_color = Color(0.78, 0.2, 0.15, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_N2"]
+bg_color = Color(0.88, 0.35, 0.2, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_N1"]
+bg_color = Color(0.95, 0.55, 0.3, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0"]
+bg_color = Color(0.55, 0.55, 0.55, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_P1"]
+bg_color = Color(0.3, 0.65, 0.35, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_P2"]
+bg_color = Color(0.2, 0.72, 0.35, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_P3"]
+bg_color = Color(0.1, 0.78, 0.35, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_P4"]
+bg_color = Color(0.05, 0.82, 0.38, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_P5"]
+bg_color = Color(0.0, 0.85, 0.42, 1)
+
+[node name="BondTierBar" type="VBoxContainer"]
+custom_minimum_size = Vector2(0, 28)
+script = ExtResource("1_btbar")
+
+[node name="TierBarRow" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="Cell_N5" type="Panel" parent="TierBarRow"]
+custom_minimum_size = Vector2(18, 12)
+layout_mode = 2
+modulate = Color(1, 1, 1, 0.2)
+theme_override_styles/panel = SubResource("StyleBoxFlat_N5")
+
+[node name="Cell_N4" type="Panel" parent="TierBarRow"]
+custom_minimum_size = Vector2(18, 12)
+layout_mode = 2
+modulate = Color(1, 1, 1, 0.2)
+theme_override_styles/panel = SubResource("StyleBoxFlat_N4")
+
+[node name="Cell_N3" type="Panel" parent="TierBarRow"]
+custom_minimum_size = Vector2(18, 12)
+layout_mode = 2
+modulate = Color(1, 1, 1, 0.2)
+theme_override_styles/panel = SubResource("StyleBoxFlat_N3")
+
+[node name="Cell_N2" type="Panel" parent="TierBarRow"]
+custom_minimum_size = Vector2(18, 12)
+layout_mode = 2
+modulate = Color(1, 1, 1, 0.2)
+theme_override_styles/panel = SubResource("StyleBoxFlat_N2")
+
+[node name="Cell_N1" type="Panel" parent="TierBarRow"]
+custom_minimum_size = Vector2(18, 12)
+layout_mode = 2
+modulate = Color(1, 1, 1, 0.2)
+theme_override_styles/panel = SubResource("StyleBoxFlat_N1")
+
+[node name="Cell_0" type="Panel" parent="TierBarRow"]
+custom_minimum_size = Vector2(18, 12)
+layout_mode = 2
+modulate = Color(1, 1, 1, 1)
+theme_override_styles/panel = SubResource("StyleBoxFlat_0")
+
+[node name="Cell_P1" type="Panel" parent="TierBarRow"]
+custom_minimum_size = Vector2(18, 12)
+layout_mode = 2
+modulate = Color(1, 1, 1, 0.2)
+theme_override_styles/panel = SubResource("StyleBoxFlat_P1")
+
+[node name="Cell_P2" type="Panel" parent="TierBarRow"]
+custom_minimum_size = Vector2(18, 12)
+layout_mode = 2
+modulate = Color(1, 1, 1, 0.2)
+theme_override_styles/panel = SubResource("StyleBoxFlat_P2")
+
+[node name="Cell_P3" type="Panel" parent="TierBarRow"]
+custom_minimum_size = Vector2(18, 12)
+layout_mode = 2
+modulate = Color(1, 1, 1, 0.2)
+theme_override_styles/panel = SubResource("StyleBoxFlat_P3")
+
+[node name="Cell_P4" type="Panel" parent="TierBarRow"]
+custom_minimum_size = Vector2(18, 12)
+layout_mode = 2
+modulate = Color(1, 1, 1, 0.2)
+theme_override_styles/panel = SubResource("StyleBoxFlat_P4")
+
+[node name="Cell_P5" type="Panel" parent="TierBarRow"]
+custom_minimum_size = Vector2(18, 12)
+layout_mode = 2
+modulate = Color(1, 1, 1, 0.2)
+theme_override_styles/panel = SubResource("StyleBoxFlat_P5")
+
+[node name="TierNameLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Indifferent"
+horizontal_alignment = 1

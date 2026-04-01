@@ -1655,6 +1655,19 @@ func _handle_sanctum_party_toggle(action: Dictionary, t: int) -> void:
 		flow_ctx.pending_party_ids.append(echo_id)
 		added = true
 
+		# BOND-001: record party encounter with all current party members (before this echo was added)
+		if not flow_ctx.save_data.has("sanctum") or not (flow_ctx.save_data["sanctum"] is Dictionary):
+			flow_ctx.save_data["sanctum"] = {}
+		var bond_sanctum: Dictionary = flow_ctx.save_data["sanctum"] as Dictionary
+		var enc_v = bond_sanctum.get("party_encounters", [])
+		var encounters: Array = enc_v if enc_v is Array else []
+		for existing_id_v in flow_ctx.pending_party_ids:
+			var existing_id: String = str(existing_id_v)
+			if existing_id == echo_id:
+				continue
+			encounters = SocialGraphService.record_encounter(encounters, echo_id, existing_id)
+		bond_sanctum["party_encounters"] = encounters
+
 	logger.debug(t, "sanctum.party.toggle", "Party toggled", {
 		"echo_id": echo_id,
 		"added": added,

@@ -56,8 +56,14 @@ func _ready():
 	
 	# Connect debug panel to AppRoot
 	debug_panel.command_submitted.connect(_on_debug_command)
-	
+
 	_flush_logs_to_console()
+
+	# Headless CI: run tests when launched with `-- tests` argument
+	var cmdline_args := OS.get_cmdline_user_args()
+	if cmdline_args.size() > 0 and cmdline_args[0].to_lower() in ["tests", "test"]:
+		_run_tests(cmdline_args)
+		get_tree().quit()
 
 # Economy bank timer.
 func _on_econ_bank_timer_timeout() -> void:
@@ -287,6 +293,7 @@ func _run_tests(parts: Array) -> void:
 	CooldownTests.register(runner)          # PROG-009
 	PassiveIdentityTests.register(runner)   # PROG-009
 	SkillLoadoutTests.register(runner)      # PROG-009
+	load("res://tests/SocialGraphTests.gd").register(runner)  # BOND-001
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [

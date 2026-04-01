@@ -48,6 +48,11 @@ const _RADAR_AXIS_MAX: float = 100.0
 @onready var skill_slot_value2: Label = %SkillSlotValue2
 @onready var tab_base: Button = %TabBase
 @onready var tab_skills: Button = %TabSkills
+@onready var tab_bonds: Button = %TabBonds
+@onready var bonds_tab_content: VBoxContainer = %BondsTabContent
+@onready var bonds_empty_label: Label = %BondsEmptyLabel
+@onready var bonds_list: VBoxContainer = %BondsList
+@onready var bond_entry_template: HBoxContainer = %BondEntryTemplate
 @onready var calling_info_btn: Button = %CallingInfoBtn
 @onready var calling_info_overlay: Control = %CallingInfoOverlay
 @onready var calling_info_title: Label = %CallingInfoTitle
@@ -86,6 +91,8 @@ func _ready() -> void:
 		tab_base.pressed.connect(_on_tab_base_pressed)
 	if not tab_skills.pressed.is_connected(_on_tab_skills_pressed):
 		tab_skills.pressed.connect(_on_tab_skills_pressed)
+	if not tab_bonds.pressed.is_connected(_on_tab_bonds_pressed):
+		tab_bonds.pressed.connect(_on_tab_bonds_pressed)
 	if not calling_info_btn.pressed.is_connected(_on_calling_info_pressed):
 		calling_info_btn.pressed.connect(_on_calling_info_pressed)
 	if not calling_info_close_btn.pressed.is_connected(_on_calling_info_close_pressed):
@@ -318,8 +325,10 @@ func _render_detail(e: Dictionary) -> void:
 	var calling_confirmed: bool = not str(e.get("calling", "")).is_empty()
 	tab_skills.disabled = not calling_confirmed
 	skills_tab_content.visible = false
+	bonds_tab_content.visible = false
 	tab_base.theme_type_variation = "ButtonPrimary"
 	tab_skills.theme_type_variation = "ButtonSecondary"
+	tab_bonds.theme_type_variation = "ButtonSecondary"
 
 	var skill_slots_v: Variant = e.get("skill_slots", [])
 	var skill_slots: Array = skill_slots_v if skill_slots_v is Array else []
@@ -328,6 +337,49 @@ func _render_detail(e: Dictionary) -> void:
 	skill_slot_row2.visible = has_slot2
 	if has_slot2:
 		skill_slot_value2.text = "\u2014" if str(skill_slots[1]).is_empty() else str(skill_slots[1])
+
+	# BOND-001: populate bonds tab from bond_entries
+	_rebuild_bonds_tab(e)
+
+
+func _rebuild_bonds_tab(e: Dictionary) -> void:
+	for c in bonds_list.get_children():
+		c.queue_free()
+
+	var entries_v: Variant = e.get("bond_entries", [])
+	var entries: Array = entries_v if entries_v is Array else []
+	bonds_empty_label.visible = entries.is_empty()
+
+	for entry_v in entries:
+		if not (entry_v is Dictionary):
+			continue
+		var entry: Dictionary = entry_v
+		var row := bond_entry_template.duplicate() as HBoxContainer
+		row.visible = true
+
+		var name_lbl := row.find_child("BondEchoNameLabel", true, false) as Label
+		if name_lbl != null:
+			name_lbl.text = str(entry.get("name", ""))
+
+		bonds_list.add_child(row)
+
+		var tier := int(entry.get("tier", 0))
+		var tag := row.find_child("BondNameTag", true, false) as Panel
+		if tag != null:
+			var base := tag.get_theme_stylebox("panel") as StyleBoxFlat
+			if base != null:
+				var style := base.duplicate() as StyleBoxFlat
+				if tier >= 2:
+					style.bg_color = Color(0.1, 0.55, 0.22, 1.0)
+				elif tier <= -2:
+					style.bg_color = Color(0.65, 0.12, 0.1, 1.0)
+				else:
+					style.bg_color = Color(0.38, 0.38, 0.38, 1.0)
+				tag.add_theme_stylebox_override("panel", style)
+
+		var bar := row.find_child("BondTierBar", true, false)
+		if bar != null and bar.has_method("set_tier"):
+			bar.set_tier(tier)
 
 
 func _on_back_pressed() -> void:
@@ -383,16 +435,28 @@ func _on_calling_confirm_requested(echo_id: String, chosen_calling_id: String) -
 
 func _on_tab_base_pressed() -> void:
 	skills_tab_content.visible = false
+	bonds_tab_content.visible = false
 	tab_base.theme_type_variation = "ButtonPrimary"
 	tab_skills.theme_type_variation = "ButtonSecondary"
+	tab_bonds.theme_type_variation = "ButtonSecondary"
 
 
 func _on_tab_skills_pressed() -> void:
 	if tab_skills.disabled:
 		return
 	skills_tab_content.visible = true
+	bonds_tab_content.visible = false
 	tab_base.theme_type_variation = "ButtonSecondary"
 	tab_skills.theme_type_variation = "ButtonPrimary"
+	tab_bonds.theme_type_variation = "ButtonSecondary"
+
+
+func _on_tab_bonds_pressed() -> void:
+	bonds_tab_content.visible = true
+	skills_tab_content.visible = false
+	tab_base.theme_type_variation = "ButtonSecondary"
+	tab_skills.theme_type_variation = "ButtonSecondary"
+	tab_bonds.theme_type_variation = "ButtonPrimary"
 
 
 func _on_calling_info_pressed() -> void:
