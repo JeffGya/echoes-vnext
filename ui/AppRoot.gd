@@ -211,8 +211,15 @@ func _on_debug_command(command: String) -> void:
 		_run_combat_emotion_command()
 		return
 
+	# -------------------------
+	# vow shortcuts (VOW-001 / debug only)
+	# -------------------------
+	if head == "vow":
+		_run_vow_command(parts)
+		return
+
 	_debug_print("Unknown command: " + cmd)
-	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective [purify_shrine|defeat_enemies] | combat_emotion")
+	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective [purify_shrine|defeat_enemies] | combat_emotion | vow unlock <vow_id>")
 	
 	_flush_logs_to_console()
 	
@@ -294,6 +301,7 @@ func _run_tests(parts: Array) -> void:
 	PassiveIdentityTests.register(runner)   # PROG-009
 	SkillLoadoutTests.register(runner)      # PROG-009
 	load("res://tests/SocialGraphTests.gd").register(runner)  # BOND-001
+	VowServiceTests.register(runner)  # VOW-001
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [
@@ -684,6 +692,7 @@ const SANCTUM_FAMILY: Array = [
 	"flow.summon",
 	"flow.echo_party",
 	"flow.realm_select",   # REALM-001
+	"flow.vow_manage",     # VOW-001
 ]
 const VENTURE_FAMILY: Array = [
 	"flow.stage_map",
@@ -728,6 +737,108 @@ func _show_screen(screen: Control) -> void:
 		_realm_shell.visible = false
 
 	screen.visible = true
+
+func _run_vow_command(parts: Array) -> void:
+	# Usage (VOW-001 debug only):
+	#   vow unlock <vow_id>      — unlock a vow at tier 1
+	#   vow pledge <vow_id>      — force-pledge a vow at tier 1 (bypasses realm check)
+	#   vow break                — force-break the active vow
+	#   vow status               — show active vow, unlocked list, realm block state
+	if parts.size() < 2:
+		_debug_print("Usage: vow unlock <vow_id> | vow pledge <vow_id> | vow break | vow status")
+		_flush_logs_to_console()
+		return
+
+	var op := str(parts[1]).to_lower()
+	var save_ref: Dictionary = runtime.get_save_data()
+	var t := 0
+	if runtime.has_method("get_tick"):
+		t = int(runtime.get_tick())
+
+	if op == "unlock":
+		if parts.size() < 3:
+			_debug_print("Usage: vow unlock <vow_id>  |  known: tikoro_nko_agyina")
+			_flush_logs_to_console()
+			return
+		var vow_id := str(parts[2])
+		var snap := runtime.dispatch({ "type": "debug.vow.unlock", "vow_id": vow_id })
+		_render_snapshot(snap)
+		_debug_print("Vow unlocked (tier 1): %s" % vow_id)
+		_debug_print("  Use 'vow pledge %s' to pledge it." % vow_id)
+
+	elif op == "pledge":
+		# Force-pledge: bypasses realm_in_progress check for testing.
+		if parts.size() < 3:
+			_debug_print("Usage: vow pledge <vow_id>  |  known: tikoro_nko_agyina")
+			_flush_logs_to_console()
+			return
+		var vow_id := str(parts[2])
+		var cfg: Dictionary = runtime.flow_ctx.config_service.get_balance()
+		var ok := VowService.pledge_vow(vow_id, 1, cfg, save_ref, runtime.flow_ctx, logger, t)
+		if ok:
+			var snap := runtime.dispatch({ "type": "debug.vow.unlock", "vow_id": vow_id })  # refresh snapshot
+			_render_snapshot(snap)
+			_debug_print("Vow pledged (tier 1): %s" % vow_id)
+		else:
+			_debug_print("Pledge failed — vow may not be unlocked yet or one is already active. Try 'vow unlock %s' first." % vow_id)
+
+	elif op == "break":
+		var cfg: Dictionary = runtime.flow_ctx.config_service.get_balance()
+		var summary := VowService.break_vow(cfg, save_ref, runtime.flow_ctx, runtime.econ, logger, t)
+		if summary.is_empty():
+			_debug_print("No active vow to break.")
+		else:
+			var snap := runtime.dispatch({ "type": "debug.vow.unlock", "vow_id": "" })  # refresh snapshot
+			_render_snapshot(snap)
+			_debug_print("Vow broken: %s (tier %d)" % [str(summary.get("vow_id", "?")), int(summary.get("tier", 1))])
+			_debug_print("  Ase lost: %d | Morale delta: %d | Fear delta: %d" % [
+				int(summary.get("ase_spent", 0)),
+				int(summary.get("morale_delta", 0)),
+				int(summary.get("fear_delta", 0))
+			])
+
+	elif op == "status":
+		var active := VowService.get_active_vow(save_ref)
+		var unlocked := VowService.get_unlocked_vows(save_ref)
+		if active.is_empty():
+			_debug_print("Active vow: none")
+		else:
+			_debug_print("Active vow: %s (tier %d, pledged at realm '%s')" % [
+				str(active.get("vow_id", "?")),
+				int(active.get("tier", 1)),
+				str(active.get("pledged_at_realm", "?"))
+			])
+		if unlocked.is_empty():
+			_debug_print("Unlocked vows: none")
+		else:
+			for entry_v in unlocked:
+				if not (entry_v is Dictionary):
+					continue
+				var entry: Dictionary = entry_v
+				_debug_print("  - %s (max tier %d, found at '%s')" % [
+					str(entry.get("vow_id", "?")),
+					int(entry.get("max_tier_unlocked", 1)),
+					str(entry.get("discovered_realm", "?"))
+				])
+		# Show whether pledging is currently blocked
+		var realm_blocked := false
+		var realms_v: Variant = save_ref.get("realms", {})
+		if realms_v is Dictionary:
+			var realms: Dictionary = realms_v
+			for rid in realms:
+				var rm_v: Variant = realms[rid]
+				if rm_v is Dictionary and str((rm_v as Dictionary).get("status", "")) == "active":
+					_debug_print("  ⚠ Realm '%s' is active — pledging blocked (use 'vow pledge <id>' to bypass)" % rid)
+					realm_blocked = true
+					break
+		if not realm_blocked and active.is_empty():
+			_debug_print("  Pledging is open.")
+	else:
+		_debug_print("Unknown vow op: %s" % op)
+		_debug_print("Usage: vow unlock <vow_id> | vow pledge <vow_id> | vow break | vow status")
+
+	_flush_logs_to_console()
+
 
 func _hide_bespoke_screens() -> void:
 	screen_host.visible = false

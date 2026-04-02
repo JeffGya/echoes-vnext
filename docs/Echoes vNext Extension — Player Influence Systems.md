@@ -336,61 +336,76 @@ Creates emergent stories:
 
 ---
 
-# System 5 — Vows & Burdens: Persistent Promises that Shape Runs (new)
+# System 5 — Vows & Burdens: Persistent Promises that Shape Runs
 
 ## 5.1 Player-facing concept
 
-The Keeper can set **Vows** (soft commandments) that shape culture and outcomes:
+The Keeper can pledge a **Vow** — a cultural doctrine that defines how the Sanctum operates. Each vow carries a proverb in Twi, a benefit that activates while the vow is held, and a tradeoff the Keeper accepts as constraint.
 
-- “No one dies alone”
-- “Always protect the objective”
-- “Never retreat”
-- “Seek truth over safety”
+Vows are discovered through play (realm events, scenario triggers). Until discovered, they appear as riddle-hinted mysteries on the Vow screen. Once discovered, the Keeper can pledge the vow at any time — not just at the start of a realm.
 
-Echoes interpret vows as cultural pressure. Breaking vows has consequences.
+Only one vow can be active at a time. A vow releases naturally when a realm run completes. Breaking a vow early applies the full penalty immediately.
 
-## 5.2 Tactical effect
+## 5.2 Tactical effect (VOW-001 foundation — behaviour hooks pending VOW-002+)
 
-- Vows bias Actor SM intent weights globally.
 - Breaking a vow triggers:
-    - morale hits
-    - fear spikes
-    - bond/rivalry shifts
-    - sanctum debuffs
+    - Ase cost (configurable per vow in `balance.json`)
+    - Morale delta applied to all roster echoes via `EmotionService`
+    - Fear delta applied to all roster echoes via `EmotionService`
+- Deferred: vow-in-effect hooks that bias Actor SM intent weights globally (VOW-002+)
 
 ## 5.3 Narrative effect
 
-Vows create identity:
+Vows create identity and doctrine:
 
-- Your Sanctum becomes a doctrine.
-- Your Echoes mirror your philosophy.
+- Pledging displays a “moment of reflection” overlay — proverb in Twi + English, “The web remembers.”
+- The active vow proverb is shown on the Sanctum screen as a mantra under the Sanctum name.
+- Breaking requires explicit confirmation with the full penalty shown before committing.
 
 ## 5.4 Slotting into GDD + vNext
 
-- **GDD alignment:** the Keeper’s guidance shapes meaning and legacy.
-- **vNext alignment:** a clean, systemic influence layer across combat + sanctum.
+- **GDD alignment:** the Keeper’s guidance shapes meaning and legacy. Vows are cultural memory.
+- **vNext alignment:** a systemic influence layer — unlock through play, commit to doctrine, face consequences.
 
-## 5.5 Required systems / state machines
+## 5.5 Built in VOW-001
 
-### Flow State Machine
-
-- Vows set primarily in Sanctum:
-    - `sanctum → vows → confirm`
-
-### Actor State Machine
-
-- Applies vow bias in both combat and sanctum contexts.
+### Flow State
+- `FlowVowState` (`core/state/flow/states/sanctum/FlowVowState.gd`) — static `build_snapshot()`. Snapshot type `flow.vow_manage`. Routed via `SanctumShell`.
 
 ### Services
+- **VowService** (`core/sanctum/VowService.gd`): unlock, pledge, break, release, snapshot builder.
+- Pledge timing: `pledged_at_realm` tracks which realm was active at pledge; `runs_at_pledge` handles Sanctum-only pledges.
 
-- **VowService**: vow definitions, active vows, doctrine strength.
-- **VowViolationTracker**: detects violations deterministically and emits events.
+### UI
+- `VowScreen.tscn/.gd` — two-panel layout: card list left, detail right.
+- `VowCard.tscn/.gd` — reusable card component. Undiscovered = `?` + riddle hint. Discovered = full detail.
+- `PledgeMomentOverlay` — dark indigo full-screen overlay, 250ms fade, proverb + “The web remembers.”
+- `BreakConfirmOverlay` — dark crimson full-screen overlay, 250ms fade, irreversible confirmation gate.
+- `VowMantraLabel` on SanctumScreen — active vow proverb in Akan Gold under Sanctum title.
+
+### Save schema additions
+- `sanctum.vows: {}` — Dict of discovered vow entries keyed by vow_id.
+- `sanctum.active_vow: {}` — active pledge state (`{}` when none).
+
+### Balance additions (`data.sanctum.vows`)
+- One vow defined: `tikoro_nko_agyina` (“Tikoro nko agyina” / “One head does not constitute a council”). Party-size doctrine.
+
+### Tests
+- `VowServiceTests.gd` — unlock, pledge, break, release, snapshot contracts.
 
 ## 5.6 Snapshot + Action contract
 
-- Snapshots include: active vows, doctrine strength, violation history.
-- Actions: `vow_set`, `vow_remove`, `accept_violation_consequence`.
+- `flow.vow_manage` snapshot: `can_pledge`, `active_vow`, `available_vows[]`
+- Actions: `vow.pledge { vow_id, tier }`, `vow.break`, `nav.back`
+- Debug (F1 panel): `vow unlock <id>`, `vow pledge <id>`, `vow break`, `vow status`
 
+## 5.7 Deferred to VOW-002+
+
+- Vow bias hooks into Actor SM intent weights (BehaviorArbiter integration)
+- `VowViolationTracker` — deterministic violation detection during combat rounds
+- Multiple vow tiers (VOW-001 implements tier 1 only)
+- Additional vow definitions beyond `tikoro_nko_agyina`
+- Vow unlock via in-game scenario triggers (currently debug-only)
 ---
 
 # 6) Integration Map — where these systems live in the loop

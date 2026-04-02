@@ -30,12 +30,12 @@ theme_override_constants/margin_bottom = 16
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="ScrollContainer" type="ScrollContainer" parent="RootPanel/MarginContainer/Root"]
+[node name="ScrollContainer" type="ScrollContainer" parent="RootPanel/MarginContainer/Root" unique_id=1356480626]
 layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="ContentVBox" type="VBoxContainer" parent="RootPanel/MarginContainer/Root/ScrollContainer"]
+[node name="ContentVBox" type="VBoxContainer" parent="RootPanel/MarginContainer/Root/ScrollContainer" unique_id=2067687349]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 16
@@ -115,17 +115,16 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(200, 48)
 layout_mode = 2
 size_flags_horizontal = 4
-theme_type_variation = "ButtonPrimary"
+theme_type_variation = &"ButtonPrimary"
 text = "Summon"
 
 [node name="BackButton" type="Button" parent="." unique_id=1421889307]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 48)
 layout_mode = 1
-anchors_preset = 0
 offset_left = 16.0
 offset_top = 16.0
 offset_right = 96.0
 offset_bottom = 64.0
-custom_minimum_size = Vector2(80, 48)
-theme_type_variation = "ButtonGhost"
+theme_type_variation = &"ButtonGhost"
 text = "←"

@@ -99,7 +99,7 @@ AppRoot routes `snapshot.type` → shell → bespoke screen.
 
 | Shell | File | Snapshot types |
 |-------|------|---------------|
-| `SanctumShell` | `ui/shells/SanctumShell.gd` | flow.sanctum, flow.summon, flow.echo_party, flow.realm_select |
+| `SanctumShell` | `ui/shells/SanctumShell.gd` | flow.sanctum, flow.summon, flow.echo_party, flow.realm_select, flow.vow_manage |
 | `RealmShell` | `ui/shells/RealmShell.gd` | flow.realm_init, flow.stage_map, flow.stage, flow.encounter, flow.resolve |
 
 **Shell-cached nav pattern (UI-002):**
@@ -246,6 +246,28 @@ Pure-static `RefCounted`. BOND-001 social graph — 11-tier signed score (-100..
 
 **Bond triggers** (config only — fire in BOND-002): all integer values under `balance.data.sanctum.bond_triggers`. Balance also holds `rival_archetypes` pairs and `bond_thresholds { rival_max, friend_min }`.
 
+### VowService (`core/sanctum/VowService.gd`)
+Pure-static `RefCounted`. VOW-001 vow doctrine system.
+
+- `unlock_vow(vow_id, discovered_realm, save_data, ctx, logger, t) -> bool` — marks vow as discovered in `sanctum.vows[vow_id]` at tier 1. Idempotent.
+- `pledge_vow(vow_id, tier, cfg, save_data, ctx, logger, t) -> bool` — sets `sanctum.active_vow`. Fails if vow already active or vow not unlocked. Records `pledged_at_realm` (empty string if pledged from Sanctum) and `runs_at_pledge` (total run_count across all realms at pledge time).
+- `break_vow(cfg, save_data, ctx, econ, logger, t) -> Dictionary` — clears `sanctum.active_vow`. Returns `{ morale_delta, fear_delta, ase_cost }` for caller to apply. Returns `{}` if no active vow.
+- `release_vow_if_due(save_data, ctx, logger, t) -> bool` — called on every `flow.sanctum` enter. Checks if vow release condition is met; if so clears `active_vow` and returns `true`. Release condition: if `pledged_at_realm` is non-empty → that realm is no longer active; if empty → total `run_count` across all realms > `runs_at_pledge`.
+- `get_vow_snapshot_data(save_data, cfg) -> Dictionary` — returns `{ can_pledge, active_vow, available_vows[] }` for snapshot injection.
+
+**Save fields** (inside `save_data["sanctum"]`):
+- `vows: {}` — Dict keyed by vow_id → `{ tier: int, discovered_realm: String }`. One entry per unlocked vow.
+- `active_vow: {}` — `{ vow_id, tier, pledged_at_realm, runs_at_pledge }` or `{}` when no active vow.
+
+**Balance fields** (inside `data.sanctum.vows[vow_id]`):
+- `vow_name`, `proverb_twi`, `proverb_en`, `description`, `benefit_label`, `tradeoff_label`, `breaking_cost_hint`, `unlock_description`
+- `break_cost_ase`, `break_morale_delta`, `break_fear_delta`
+
+**Release timing:**
+- Pledged during a realm: released when that realm's status is no longer `"active"` (i.e. completed or abandoned).
+- Pledged from Sanctum (no active realm): released when total `run_count` across all realms increases past `runs_at_pledge`.
+- Early break: always available via `cta.break` — applies full penalty.
+
 ### CombatState (`core/combat/CombatState.gd`)
 - `create(actors, objective, initiative_seed, init_cfg) -> Dictionary`
 - `check_end_condition(actors, objective) -> { over: bool, victory: bool, reason: String }`
@@ -285,6 +307,7 @@ Full field shapes live in each FlowState file (`core/state/flow/states/`).
 | ~~RealmInitScreen~~ | `flow.realm_init` | **Removed (UI-003)** — FlowRealmInitState now auto-advances to `flow.stage_map` on enter(); no screen rendered. | — |
 | StageMapScreen | `flow.stage_map` | realm_id, realm_name, current_stage_id, stages_completed_count, stages[] (id, name, status, stage_type, stage_description, objective_count, objectives[{obj_index, obj_type, obj_description}]), party_preview | cta.enter_stage, nav.back |
 | StageScreen | `flow.stage` | stage_id, stage_name, stage_type, stage_description, objective_count, objectives[] ({obj_index, obj_type, obj_description}), realm_id, party_preview | cta.start, nav.back |
+| VowScreen | `flow.vow_manage` | can_pledge (bool), active_vow ({vow_id, tier, proverb_twi, proverb_en}), available_vows[] ({vow_id, vow_name, proverb_twi, proverb_en, description, benefit_label, tradeoff_label, breaking_cost_hint, is_unlocked, max_tier_unlocked, is_active, discovered_realm, unlock_hint}) | nav.back, cta.pledge (disabled when vow already active), cta.break (disabled when no active vow) |
 
 **Projected actor shape** (FlowEncounterState._project_actor): `id, name, hp, max_hp, status` (dead/guarding/refusing/alive), `calling_origin`, `morale_status` (Normal/Shaken/Afraid/Broken from fear)
 
@@ -351,8 +374,14 @@ EncounterStateMachine phases (scaffold): `setup → blessing → rounds → reso
 | **flow** | `flow.select_realm` | selects a realm; triggers `RealmService.get_or_create`; transitions to `flow.realm_init`. Payload: `{ realm_id: String }` |
 | | `flow.select_stage` | sets `ctx.stage_id`, transitions to `flow.stage`. Payload: `{ stage_id: String }` |
 | | `flow.complete_stage` | REALM-004: advances `current_stage_index` via `RealmService.advance_stage()`; on realm complete routes to `flow.realm_select` (clears `ctx.realm_id`+`ctx.stage_id`); else routes to `flow.stage_map`. Optional `destination` field overrides routing for non-completed stages (e.g. `"flow.sanctum"` for victory "To Sanctum" path). |
+| **vow** | `vow.pledge` | payload: `{ vow_id, tier }`. Calls VowService.pledge_vow(). Saves `pledged_at_realm` + `runs_at_pledge`. |
+| | `vow.break` | Calls VowService.break_vow(). Applies morale/fear delta to all roster echoes. |
 | **debug** | `debug.seed.show/set/reset` | seed tooling (dev only, `t = -1`) |
 | | `debug.echo.gen_test` | generates test echo (dev only) |
+| | `debug.vow.unlock` | payload: `{ vow_id }`. Unlocks a vow at tier 1 without scenario trigger (dev only) |
+| | `debug.vow.pledge` | payload: `{ vow_id }`. Pledges a vow directly (dev only) |
+| | `debug.vow.break` | Breaks active vow without confirmation (dev only) |
+| | `debug.vow.status` | Logs current vow state to debug panel (dev only) |
 
 ---
 

@@ -246,6 +246,13 @@ func select_intent(context: Dictionary) -> Dictionary:
 	for c: Dictionary in candidates:
 		c["_score"] = _score(c["action_type"], actor, directive, board_summary, smartness_tier, calling_behavior, c)
 
+	# VOW-001: apply vow bias additively after base scoring.
+	# Vow bias is always additive, never overrides. Enemies are unaffected (faction != "echo").
+	var active_vow: Dictionary = context.get("active_vow", {})
+	if not active_vow.is_empty() and str(actor.get("faction", "")) == "echo":
+		var party_size: int = int(context.get("party_size", 0))
+		_apply_vow_bias(candidates, active_vow, party_size)
+
 	# COMBAT-006: actor.purify_shrine override — injected AFTER scoring so 9999 is never overwritten.
 	# Same pattern as Absolute Fear Rule: deterministic always-win when all conditions are met.
 	if context.get("is_purifier", false) \
@@ -931,6 +938,37 @@ func _resolve_skill_base(calling_origin: String, intent_weight_tag: String, bonu
 	var calling_row: Dictionary  = origin_table.get(calling_origin, origin_table.get("uncalled", {}))
 	var default_weight: float    = float(_cfg_get("default_intent_weight"))
 	return float(calling_row.get(intent_weight_tag, default_weight)) + bonus
+
+
+# VOW-001: Apply vow-specific intent bias additively to all candidates.
+# Each vow may boost or penalise specific action_types based on context.
+# Echo actors only — call site already guards faction == "echo".
+func _apply_vow_bias(candidates: Array, active_vow: Dictionary, party_size: int) -> void:
+	var vow_id := str(active_vow.get("vow_id", ""))
+	var tier   := int(active_vow.get("tier", 1))
+	var mul    := float(tier)  # tier 1=1×, tier 2=2×, … (raw; tuned per-vow below)
+
+	match vow_id:
+		"tikoro_nko_agyina":
+			# "One head does not constitute a council"
+			# Benefit: party ≥3 → protect_ally and actor.guard get a boost (cohesion)
+			# Tradeoff: party <3 → fear bias (solo disadvantage)
+			if party_size >= 3:
+				var protect_bonus := 8.0 * mul
+				var guard_bonus   := 4.0 * mul
+				for c: Dictionary in candidates:
+					var at: String = str(c.get("action_type", ""))
+					if at == "protect_ally":
+						c["_score"] = float(c.get("_score", 0.0)) + protect_bonus
+					elif at == "actor.guard":
+						c["_score"] = float(c.get("_score", 0.0)) + guard_bonus
+			else:
+				# Fear bias: active intents depressed (actor prefers idle/guard under doctrine strain)
+				var fear_bias := 6.0 * mul
+				for c: Dictionary in candidates:
+					var at: String = str(c.get("action_type", ""))
+					if at == "melee_attack" or at == "actor.move":
+						c["_score"] = float(c.get("_score", 0.0)) - fear_bias
 
 
 # PROG-010: Compute hp_ratio for any actor dict. Returns 1.0 if stats unavailable.

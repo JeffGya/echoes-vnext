@@ -49,6 +49,8 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"summon_count": 0,
 			"bonds": [],            # BOND-001: signed score edges {actor_a, actor_b, strength}
 			"party_encounters": [], # BOND-001: canonical pairs who have shared a party slot
+			"active_vow": {},       # VOW-001: active vow dict {vow_id, tier, pledged_at_realm} or {}
+			"unlocked_vows": [],    # VOW-001: [{vow_id, max_tier_unlocked, discovered_realm}]
 		},
 		# DIRECTIVE-001: stage-level context (directive, future: stage seed, objective state)
 		"stage_context": {

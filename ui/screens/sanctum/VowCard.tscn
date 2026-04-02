@@ -1,0 +1,57 @@
+[gd_scene format=3 uid="uid://s5kur2vx42w"]
+
+[ext_resource type="Script" path="res://ui/screens/sanctum/VowCard.gd" id="1_vowcrd"]
+
+[node name="VowCard" type="Button"]
+custom_minimum_size = Vector2(0, 72)
+size_flags_horizontal = 3
+flat = false
+script = ExtResource("1_vowcrd")
+
+[node name="Row" type="HBoxContainer" parent="."]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 10
+
+[node name="Thumb" type="ColorRect" parent="Row" unique_id=800000001]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(56, 56)
+layout_mode = 2
+mouse_filter = 2
+color = Color(0.10, 0.10, 0.12, 1)
+
+[node name="QuestionLabel" type="Label" parent="Row/Thumb" unique_id=800000002]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "?"
+theme_override_font_sizes/font_size = 28
+horizontal_alignment = 1
+vertical_alignment = 1
+mouse_filter = 2
+visible = false
+
+[node name="Info" type="VBoxContainer" parent="Row" unique_id=800000003]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="NameLabel" type="Label" parent="Row/Info" unique_id=800000004]
+unique_name_in_owner = true
+layout_mode = 2
+text = "???"
+theme_override_font_sizes/font_size = 13
+mouse_filter = 2
+
+[node name="ActiveBadge" type="Label" parent="Row/Info" unique_id=800000005]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Active"
+theme_override_colors/font_color = Color(1.0, 0.85, 0.3, 1)
+theme_override_font_sizes/font_size = 11
+mouse_filter = 2
+visible = false

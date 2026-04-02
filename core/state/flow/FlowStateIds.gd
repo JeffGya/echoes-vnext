@@ -18,5 +18,8 @@ const STAGE_MAP := "flow.stage_map"
 const STAGE := "flow.stage"
 const ENCOUNTER := "flow.encounter"
 
+# Sanctum sub-screens
+const VOW_MANAGE := "flow.vow_manage"  # VOW-001: vow doctrine screen
+
 # resolve / Aftermath
 const RESOLVE := "flow.resolve"
