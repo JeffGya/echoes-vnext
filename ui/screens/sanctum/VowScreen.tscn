@@ -1,0 +1,346 @@
+[gd_scene format=3 uid="uid://xryxuaq5615d"]
+
+[ext_resource type="Script" uid="uid://wn2kq7n2fqvw" path="res://ui/screens/sanctum/VowScreen.gd" id="1_vowscr"]
+
+[node name="VowScreen" type="Control" unique_id=643013376]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_vowscr")
+
+[node name="RootPanel" type="PanelContainer" parent="." unique_id=1440031832]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="RootPanel" unique_id=861744777]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 64
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Root" type="VBoxContainer" parent="RootPanel/MarginContainer" unique_id=728010947]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Header" type="HBoxContainer" parent="RootPanel/MarginContainer/Root" unique_id=1023056827]
+layout_mode = 2
+
+[node name="BackButton" type="Button" parent="RootPanel/MarginContainer/Root/Header" unique_id=217911086]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 48)
+layout_mode = 2
+text = "< Back"
+
+[node name="TitleLabel" type="Label" parent="RootPanel/MarginContainer/Root/Header" unique_id=1342345181]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 18
+text = "Vows"
+vertical_alignment = 1
+
+[node name="Spacer" type="Control" parent="RootPanel/MarginContainer/Root/Header" unique_id=1480078818]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="RealmLockedLabel" type="Label" parent="RootPanel/MarginContainer/Root" unique_id=1515680740]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.6, 0.3, 1)
+text = "A realm run is in progress. Return to Sanctum to pledge a new vow."
+
+[node name="ContentRow" type="HBoxContainer" parent="RootPanel/MarginContainer/Root" unique_id=599739349]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 16
+
+[node name="CardScroll" type="ScrollContainer" parent="RootPanel/MarginContainer/Root/ContentRow" unique_id=1554413241]
+custom_minimum_size = Vector2(248, 0)
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="VowCardContainer" type="VBoxContainer" parent="RootPanel/MarginContainer/Root/ContentRow/CardScroll" unique_id=1951712889]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="DetailPanel" type="PanelContainer" parent="RootPanel/MarginContainer/Root/ContentRow" unique_id=1228011626]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="DetailMargin" type="MarginContainer" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel" unique_id=1154707857]
+layout_mode = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="DetailScroll" type="ScrollContainer" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel/DetailMargin" unique_id=488763318]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="DetailStack" type="VBoxContainer" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel/DetailMargin/DetailScroll" unique_id=1405540528]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 14
+
+[node name="EmptyLabel" type="Label" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel/DetailMargin/DetailScroll/DetailStack" unique_id=816437124]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.5, 0.5, 0.5, 1)
+text = "Select a vow to learn more."
+
+[node name="HintContent" type="VBoxContainer" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel/DetailMargin/DetailScroll/DetailStack" unique_id=1882452766]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="HintImageRect" type="ColorRect" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel/DetailMargin/DetailScroll/DetailStack/HintContent" unique_id=732915189]
+custom_minimum_size = Vector2(128, 128)
+layout_mode = 2
+size_flags_horizontal = 0
+color = Color(0.1, 0.1, 0.12, 1)
+
+[node name="QuestionLabel" type="Label" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel/DetailMargin/DetailScroll/DetailStack/HintContent/HintImageRect" unique_id=1946232873]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 56
+text = "?"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HintLabel" type="Label" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel/DetailMargin/DetailScroll/DetailStack/HintContent" unique_id=682855172]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.55, 0.55, 0.55, 1)
+autowrap_mode = 3
+
+[node name="DiscoveredContent" type="VBoxContainer" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel/DetailMargin/DetailScroll/DetailStack" unique_id=1168407306]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="DetailImageRect" type="ColorRect" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel/DetailMargin/DetailScroll/DetailStack/DiscoveredContent" unique_id=1206967256]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(128, 128)
+layout_mode = 2
+size_flags_horizontal = 0
+color = Color(0.22, 0.18, 0.1, 1)
+
+[node name="ProverbTwiLabel" type="Label" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel/DetailMargin/DetailScroll/DetailStack/DiscoveredContent" unique_id=594208201]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+autowrap_mode = 3
+
+[node name="ProverbEnLabel" type="Label" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel/DetailMargin/DetailScroll/DetailStack/DiscoveredContent" unique_id=689328631]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.72, 0.72, 0.72, 1)
+autowrap_mode = 3
+
+[node name="DescriptionLabel" type="Label" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel/DetailMargin/DetailScroll/DetailStack/DiscoveredContent" unique_id=259314987]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.82, 0.8, 0.7, 1)
+autowrap_mode = 3
+
+[node name="Divider1" type="HSeparator" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel/DetailMargin/DetailScroll/DetailStack/DiscoveredContent" unique_id=42740969]
+layout_mode = 2
+
+[node name="BenefitLabel" type="Label" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel/DetailMargin/DetailScroll/DetailStack/DiscoveredContent" unique_id=999066531]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.4, 0.88, 0.4, 1)
+autowrap_mode = 3
+
+[node name="TradeoffLabel" type="Label" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel/DetailMargin/DetailScroll/DetailStack/DiscoveredContent" unique_id=1830653751]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.5, 0.4, 1)
+autowrap_mode = 3
+
+[node name="Divider2" type="HSeparator" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel/DetailMargin/DetailScroll/DetailStack/DiscoveredContent" unique_id=1827789563]
+layout_mode = 2
+
+[node name="BreakingCostLabel" type="Label" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel/DetailMargin/DetailScroll/DetailStack/DiscoveredContent" unique_id=1494541337]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.82, 0.52, 0.28, 1)
+autowrap_mode = 3
+
+[node name="ActionButton" type="Button" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel/DetailMargin/DetailScroll/DetailStack/DiscoveredContent" unique_id=1116512216]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Pledge Vow (Tier 1)"
+
+[node name="PledgeMomentOverlay" type="Control" parent="." unique_id=900000001]
+unique_name_in_owner = true
+visible = false
+z_index = 10
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="OverlayBg" type="ColorRect" parent="PledgeMomentOverlay" unique_id=900000002]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.05, 0.05, 0.12, 0.95)
+
+[node name="Center" type="CenterContainer" parent="PledgeMomentOverlay" unique_id=900000003]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="ContentBox" type="VBoxContainer" parent="PledgeMomentOverlay/Center" unique_id=900000004]
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="PledgeTwiLabel" type="Label" parent="PledgeMomentOverlay/Center/ContentBox" unique_id=900000005]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.784, 0.663, 0.431, 1)
+theme_override_font_sizes/font_size = 22
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="PledgeEnLabel" type="Label" parent="PledgeMomentOverlay/Center/ContentBox" unique_id=900000006]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.75, 0.75, 1)
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="PledgeSep" type="HSeparator" parent="PledgeMomentOverlay/Center/ContentBox" unique_id=900000007]
+layout_mode = 2
+
+[node name="PledgeTagline" type="Label" parent="PledgeMomentOverlay/Center/ContentBox" unique_id=900000008]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.55, 0.55, 0.55, 1)
+theme_override_font_sizes/font_size = 12
+text = "The web remembers."
+horizontal_alignment = 1
+
+[node name="PledgeDismissButton" type="Button" parent="PledgeMomentOverlay/Center/ContentBox" unique_id=900000009]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Continue"
+
+[node name="BreakConfirmOverlay" type="Control" parent="." unique_id=900000010]
+unique_name_in_owner = true
+visible = false
+z_index = 10
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="BreakOverlayBg" type="ColorRect" parent="BreakConfirmOverlay" unique_id=900000011]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.1, 0.03, 0.03, 0.95)
+
+[node name="Center" type="CenterContainer" parent="BreakConfirmOverlay" unique_id=900000012]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="ContentBox" type="VBoxContainer" parent="BreakConfirmOverlay/Center" unique_id=900000013]
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="BreakTitleLabel" type="Label" parent="BreakConfirmOverlay/Center/ContentBox" unique_id=900000014]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 20
+text = "Are you certain?"
+horizontal_alignment = 1
+
+[node name="BreakVowNameLabel" type="Label" parent="BreakConfirmOverlay/Center/ContentBox" unique_id=900000015]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.75, 0.75, 1)
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="BreakPenaltyLabel" type="Label" parent="BreakConfirmOverlay/Center/ContentBox" unique_id=900000016]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.82, 0.52, 0.28, 1)
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="BreakIrreversibleLabel" type="Label" parent="BreakConfirmOverlay/Center/ContentBox" unique_id=900000017]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.4, 0.4, 1)
+theme_override_font_sizes/font_size = 12
+text = "This cannot be undone."
+horizontal_alignment = 1
+
+[node name="ButtonRow" type="HBoxContainer" parent="BreakConfirmOverlay/Center/ContentBox" unique_id=900000018]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="BreakKeepButton" type="Button" parent="BreakConfirmOverlay/Center/ContentBox/ButtonRow" unique_id=900000019]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Keep My Word"
+
+[node name="BreakConfirmButton" type="Button" parent="BreakConfirmOverlay/Center/ContentBox/ButtonRow" unique_id=900000020]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.9, 0.4, 0.4, 1)
+text = "Break the Vow"

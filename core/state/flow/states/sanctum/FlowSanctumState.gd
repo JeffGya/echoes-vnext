@@ -7,7 +7,47 @@ func _init(id: String = FlowStateIds.SANCTUM) -> void:
 	
 func enter(ctx: RefCounted, t:int) -> void:
 	var flow_ctx := ctx as FlowContext
-	
+
+	# VOW-001: release active vow when returning to Sanctum after a realm run completes.
+	# Two cases:
+	#   pledged_at_realm != "" → release when that specific realm is no longer active.
+	#   pledged_at_realm == "" → pledged from Sanctum with no realm active;
+	#                            release when total run_count across all realms increases.
+	var _v_sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if _v_sanctum_v is Dictionary:
+		var _v_sanctum: Dictionary = _v_sanctum_v
+		var _av_v: Variant = _v_sanctum.get("active_vow", {})
+		if _av_v is Dictionary and not (_av_v as Dictionary).is_empty():
+			var _av: Dictionary = _av_v
+			var _pledged_realm := str(_av.get("pledged_at_realm", ""))
+			var _realms_check_v: Variant = flow_ctx.save_data.get("realms", {})
+			var _should_release := false
+
+			if _pledged_realm != "":
+				# Pledged during a realm — release once that realm is no longer active.
+				if _realms_check_v is Dictionary:
+					var _realm_entry_v: Variant = (_realms_check_v as Dictionary).get(_pledged_realm, {})
+					if _realm_entry_v is Dictionary:
+						var _still_active := str((_realm_entry_v as Dictionary).get("status", "")) == RealmModel.STATUS_ACTIVE
+						_should_release = not _still_active
+					else:
+						_should_release = true  # realm no longer exists — release
+			else:
+				# Pledged from Sanctum with no active realm.
+				# Release once total completed runs across all realms exceeds runs_at_pledge.
+				var _runs_at_pledge := int(_av.get("runs_at_pledge", 0))
+				var _current_runs := 0
+				if _realms_check_v is Dictionary:
+					var _realms_d: Dictionary = _realms_check_v
+					for _rid in _realms_d:
+						var _rm_v: Variant = _realms_d[_rid]
+						if _rm_v is Dictionary:
+							_current_runs += int((_rm_v as Dictionary).get("run_count", 0))
+				_should_release = _current_runs > _runs_at_pledge
+
+			if _should_release:
+				VowService.release_vow(flow_ctx.save_data, flow_ctx, flow_ctx.logger, t)
+
 	# REALM-001: check save_data["realms"] directly — survives Continue (realm_id restored in boot)
 	var _realms_v: Variant = flow_ctx.save_data.get("realms", {})
 	var _realms: Dictionary = _realms_v if _realms_v is Dictionary else {}
@@ -47,6 +87,13 @@ func enter(ctx: RefCounted, t:int) -> void:
 			"slot": "cta.enter_stage",
 			"disabled": not has_realm_locked_in,
 		},
+		# VOW-001: navigate to vow doctrine screen
+		"nav.vow_manage": {
+			"type":  "flow.go_state",
+			"to":    FlowStateIds.VOW_MANAGE,
+			"label": "Vows",
+			"slot":  "nav.vow_manage",
+		},
 	}
 		
 	# --- Sanctum roster (from save) ---
@@ -83,6 +130,22 @@ func enter(ctx: RefCounted, t:int) -> void:
 			},
 		})
 	
+	# VOW-001: read active vow for mantra display
+	var _av_display: Dictionary = {}
+	if flow_ctx.config_service != null:
+		var _av_raw := VowService.get_active_vow(flow_ctx.save_data)
+		if not _av_raw.is_empty():
+			var _av_cfg: Dictionary = flow_ctx.config_service.get_balance()
+			var _av_id := str(_av_raw.get("vow_id", ""))
+			var _av_defn := VowService.get_definition(_av_id, _av_cfg)
+			var _av_tier := int(_av_raw.get("tier", 1))
+			_av_display = {
+				"vow_id":      _av_id,
+				"proverb_twi": str(_av_defn.get("proverb_twi", "")),
+				"proverb_en":  str(_av_defn.get("proverb_en", "")),
+				"tier":        _av_tier,
+			}
+
 	# Base Sanctum snapshot. FlowStateMachine._rebuild_snapshot() enriches data with:
 	# - ase_balance, ekwan_balance (Economy)
 	# - roster_count, active_party_count (Sanctum)
@@ -94,6 +157,7 @@ func enter(ctx: RefCounted, t:int) -> void:
 		"encounter_id": flow_ctx.encounter_id,
 		"roster_count": roster.size(),
 		"roster_preview": roster_preview,
+		"active_vow": _av_display,  # VOW-001: mantra data for SanctumScreen header
 	}
 
 	flow_ctx.last_snapshot = {

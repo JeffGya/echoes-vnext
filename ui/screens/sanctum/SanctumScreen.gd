@@ -7,6 +7,7 @@ class_name SanctumScreen
 signal action_requested(action: Dictionary)
 
 @onready var title_label: Label = %TitleLabel
+@onready var vow_mantra_label: Label = %VowMantraLabel  # VOW-001: active vow proverb under title
 @onready var ase_label: Label = %AseLabel
 @onready var ase_rate_label: Label = %AseRateLabel
 @onready var ase_delta_label: Label = %AseDeltaLabel
@@ -44,6 +45,19 @@ func _render() -> void:
 	var suggested := str(data.get("sanctum_name_suggested", "Sanctum"))
 		
 	title_label.text = sanctum_name if sanctum_name != "" else "Sanctum"
+
+	# VOW-001: display active vow proverb as a mantra under the sanctum title
+	var av_v: Variant = data.get("active_vow", {})
+	var av: Dictionary = av_v if av_v is Dictionary else {}
+	if vow_mantra_label != null:
+		if not av.is_empty() and str(av.get("proverb_twi", "")) != "":
+			var twi := str(av.get("proverb_twi", ""))
+			var en  := str(av.get("proverb_en", ""))
+			vow_mantra_label.text = "%s — \"%s\"" % [twi, en]
+			vow_mantra_label.visible = true
+		else:
+			vow_mantra_label.visible = false
+
 	ase_label.text = "%d" % ase_balance
 	ase_rate_label.text = "~ %.1f p/h" % per_hour
 	echo_count_label.text = "%d echoes" % int(data.get("roster_count", 0))

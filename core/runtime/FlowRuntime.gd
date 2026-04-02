@@ -278,6 +278,16 @@ func dispatch(action: Dictionary) -> Dictionary:
 		"sanctum.calling.confirm":
 			_handle_sanctum_calling_confirm(action, t)
 
+		# ---- Vows (VOW-001) ----
+		"vow.pledge":
+			_handle_vow_pledge(action, t)
+
+		"vow.break":
+			_handle_vow_break(t)
+
+		"debug.vow.unlock":
+			_handle_debug_vow_unlock(action, t)
+
 		# ---- Directives (DIRECTIVE-001) ----
 		"directive.select":
 			_handle_directive_select(action, t)
@@ -845,6 +855,9 @@ func _resolve_next_actor(t: int) -> void:
 					shrine_hp_ratio = clampf(float(a_v.get("current_hp", s_max)) / float(s_max), 0.0, 1.0)
 				break
 
+	# VOW-001: pass active vow into per-turn context so BehaviorArbiter can apply vow bias.
+	var _vow_ctx := VowService.get_active_vow(flow_ctx.save_data)
+
 	# Build per-turn context — matches ActorStateMachine.advance_turn() contract.
 	var ctx: Dictionary = {
 		"actor":                   actor,
@@ -860,6 +873,10 @@ func _resolve_next_actor(t: int) -> void:
 		"shrine_hp_ratio":         shrine_hp_ratio,
 		"prefer_objective_target": actor.get("faction", "") == "enemy" \
 			and ectx.resolution_mode == EncounterResolutionModes.PURIFY_SHRINE,
+		# VOW-001: active vow dict (or {}) for BehaviorArbiter vow bias layer.
+		"active_vow":              _vow_ctx,
+		# VOW-001: echo party size for tikoro_nko_agyina party-size gate.
+		"party_size":              ectx.actors.filter(func(a): return str(a.get("faction","")) == "echo" and not bool(a.get("is_dead", false))).size(),
 	}
 
 	# Resolve this actor's turn.
@@ -2024,3 +2041,80 @@ func _get_realm_xp_multiplier() -> float:
 		return 1.0
 	var run_idx: int = int((realm_entry_v as Dictionary).get("run_index", 0))
 	return 1.0 + float(run_idx) * rate
+
+
+# ---------------------------------------------------------------------------
+# VOW-001 handlers
+# ---------------------------------------------------------------------------
+
+func _handle_vow_pledge(action: Dictionary, t: int) -> void:
+	var vow_id := str(action.get("vow_id", ""))
+	var tier   := int(action.get("tier", 1))
+
+	if vow_id.is_empty():
+		logger.debug(t, "vow.pledge_denied", "Missing vow_id in action", { "action": action })
+		flow_ctx.last_snapshot = FlowVowState.build_snapshot(flow_ctx, t)
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+		return
+
+	var cfg := config_service.get_balance()
+	var ok := VowService.pledge_vow(vow_id, tier, cfg, flow_ctx.save_data, flow_ctx, logger, t)
+	# Rebuild snapshot from current save_data so UI reflects the pledge outcome.
+	# refresh_snapshot() reads ctx.last_snapshot as-is for non-SANCTUM states — must
+	# assign the rebuilt snapshot first (same pattern as FlowSummonState.build_snapshot).
+	flow_ctx.last_snapshot = FlowVowState.build_snapshot(flow_ctx, t)
+	if ok:
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+	else:
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+func _handle_vow_break(t: int) -> void:
+	var cfg := config_service.get_balance()
+
+	var summary := VowService.break_vow(cfg, flow_ctx.save_data, flow_ctx, econ, logger, t)
+	if summary.is_empty():
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+		return
+
+	# Apply morale and fear deltas to all roster echoes via EmotionService
+	var morale_d := int(summary.get("morale_delta", 0))
+	var fear_d   := int(summary.get("fear_delta", 0))
+
+	if (morale_d != 0 or fear_d != 0) and flow_ctx.save_data.has("sanctum"):
+		var sanctum_v: Variant = flow_ctx.save_data["sanctum"]
+		if sanctum_v is Dictionary:
+			var roster_v: Variant = (sanctum_v as Dictionary).get("roster", [])
+			if roster_v is Array:
+				var roster: Array = roster_v
+				var cfg_em: Dictionary = cfg.get("emotion", {})
+				var fear_threshold := int(cfg_em.get("fear_threshold", 80))
+				for echo_v in roster:
+					if not (echo_v is Dictionary):
+						continue
+					var echo: Dictionary = echo_v
+					var eid := str(echo.get("id", ""))
+					if eid.is_empty():
+						continue
+					if morale_d != 0:
+						EmotionService.apply_morale_delta(
+							echo, morale_d, "vow.break", logger, t
+						)
+					if fear_d != 0:
+						EmotionService.apply_fear_delta(
+							echo, fear_d, "vow.break", fear_threshold, logger, t
+						)
+
+	# Rebuild snapshot from current save_data so UI reflects the break outcome.
+	flow_ctx.last_snapshot = FlowVowState.build_snapshot(flow_ctx, t)
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+func _handle_debug_vow_unlock(action: Dictionary, t: int) -> void:
+	var vow_id := str(action.get("vow_id", ""))
+	if vow_id.is_empty():
+		push_warning("debug.vow.unlock: missing vow_id")
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+		return
+	VowService.unlock_vow(vow_id, "debug", flow_ctx.save_data, flow_ctx, logger, t)
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)

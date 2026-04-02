@@ -15,6 +15,7 @@ func register_default_states() -> void:
 	register_state(FlowEchoPartyState.new())
 	register_state(FlowRealmSelectState.new())
 	register_state(FlowSummonState.new())
+	register_state(FlowVowState.new())  # VOW-001
 
 	register_state(FlowResolveState.new())
 	register_state(FlowRealmInitState.new())  # REALM-001

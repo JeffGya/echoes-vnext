@@ -1173,6 +1173,85 @@
 				"scaling_source":       "String — stat key that scales effect e.g. 'atk', 'cha'",
 				"intent_weight_tag":    "String — tag used by BehaviorArbiter weight lookup"
 			}
+		},
+		"vows": {
+			"definitions": {
+				"tikoro_nko_agyina": {
+					"vow_id": "tikoro_nko_agyina",
+					"proverb_twi": "Tikoro nko agyina",
+					"proverb_en": "One head does not constitute a council",
+					"vow_name": "Vow of Collective Counsel",
+					"benefit_label": "Full party deployments (3+) gain fear resistance and bond momentum.",
+					"tradeoff_label": "Deployments with fewer than 3 echoes incur a fear penalty.",
+					"benefit": {
+						"party_size_threshold": 3,
+						"fear_resistance_bonus": 15,
+						"morale_bonus_on_entry": 5,
+						"bond_formation_rate_bonus": 0.25
+					},
+					"tradeoff": {
+						"small_party_fear_penalty": 10
+					},
+					"tier_effects": {
+						"1": { "multiplier": 1.0 },
+						"2": { "multiplier": 1.5 },
+						"3": { "multiplier": 2.0 },
+						"4": { "multiplier": 3.0 }
+					},
+					"breaking_costs": {
+						"1": {
+							"ase": 60,
+							"morale_delta": -10,
+							"bond_score_delta": -10
+						},
+						"2": {
+							"ase": 120,
+							"ekwan": 20,
+							"fear_delta": 15,
+							"bond_score_delta": -20
+						},
+						"3": {
+							"ase": 250,
+							"ekwan": 50,
+							"fear_delta": 25,
+							"bond_score_delta": -30,
+							"realm_progress_cost": "stage_rollback"
+						},
+						"4": {
+							"ase": 500,
+							"ekwan": 100,
+							"fear_delta": 40,
+							"bond_score_delta": -50,
+							"echo_departure_risk": 0.3,
+							"realm_progress_cost": "stage_rollback"
+						}
+					},
+					"description": "One voice may carry conviction, but council is where wisdom is tested and truth survives. This vow binds the Keeper to the practice of collective strength — to send many is not doubt, it is respect. To go with few is to place the burden of the whole on shoulders not built to carry it alone.",
+					"breaking_cost_hint": "Breaking this vow costs 60 Ase. A morale dip ripples through every echo in your roster. Every bond between echoes suffers a penalty.",
+					"unlock_scenario": "small_party_all_survived",
+					"unlock_description": "The web holds a teaching for those who trust few with much — let the small number carry the weight, and let all return."
+				}
+			},
+			"tier_names": {
+				"1": "Whisper",
+				"2": "Oath",
+				"3": "Covenant",
+				"4": "Blood Vow"
+			},
+			"_contract": {
+				"vow_id":            "String — unique snake_case id matching proverb",
+				"proverb_twi":       "String — original Twi text",
+				"proverb_en":        "String — English translation",
+				"vow_name":          "String — player-facing doctrine name",
+				"benefit_label":     "String — one-line benefit description shown in UI",
+				"tradeoff_label":    "String — one-line tradeoff description shown in UI",
+				"benefit":           "Dict — numeric effect params read by VowService",
+				"tradeoff":          "Dict — numeric penalty params read by VowService",
+				"tier_effects":      "Dict keyed '1'-'4' — multiplier applied to benefit/tradeoff magnitudes",
+				"breaking_costs":    "Dict keyed '1'-'4' — penalty fields applied by VowService.break_vow()",
+				"unlock_scenario":   "String — scenario trigger id that reveals this vow to the Keeper",
+				"unlock_description":"String — human-readable unlock condition shown as hint"
+			}
 		}
 	}
 }
