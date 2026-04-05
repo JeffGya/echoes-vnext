@@ -1,0 +1,4 @@
+interface:
+  display_name: "Systems & Story Designer"
+  short_description: "Critique game systems, attachment, and UI"
+  default_prompt: "Use $systems-story-designer to review or repair this game concept, screen flow, or implemented game experience."
