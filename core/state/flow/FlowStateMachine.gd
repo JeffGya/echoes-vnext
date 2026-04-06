@@ -142,9 +142,9 @@ func _rebuild_snapshot(ctx: FlowContext, logger: StructuredLogger, t: int) -> vo
 				var echo: Dictionary = echo_v
 				if str(echo.get("id", "")) == pid:
 					party_slots.append({
-						"name": str(echo.get("name", "")),
-						"level": int(echo.get("level", 1)),
-						"rank": int(echo.get("rank", 1))
+						"name":     str(echo.get("name", "")),
+						"step":     int(echo.get("level", 1)),
+						"standing": int(echo.get("rank", 1))
 					})
 					break
 		data["party_slots"] = party_slots

@@ -139,8 +139,8 @@ static func _test_no_actions_clear_xp() -> Dictionary:
 		return { "ok": false, "error": "Expected at least one XpEvent" }
 	var ev: Dictionary = events[0]
 	var expected: int  = 40  # xp_stage_clear_base, no kill bonus, no virtue multiplier
-	if int(ev.get("xp_gained", 0)) != expected:
-		return { "ok": false, "error": "Expected xp_gained=%d got %d" % [expected, int(ev.get("xp_gained", 0))] }
+	if int(ev.get("storyweight_gained", 0)) != expected:
+		return { "ok": false, "error": "Expected storyweight_gained=%d got %d" % [expected, int(ev.get("storyweight_gained", 0))] }
 	return { "ok": true }
 
 
@@ -159,8 +159,8 @@ static func _test_kill_bonus() -> Dictionary:
 	var ev: Dictionary = events[0]
 	# kill_xp=25, clear_xp=40, virtue_mul = (2/2) * (60/100) * 0.20 = 0.12
 	# final = round(65 * 1.12) = round(72.8) = 73
-	if int(ev.get("xp_gained", 0)) < 60:
-		return { "ok": false, "error": "Kill bonus not reflected — xp_gained=%d" % int(ev.get("xp_gained", 0)) }
+	if int(ev.get("storyweight_gained", 0)) < 60:
+		return { "ok": false, "error": "Kill bonus not reflected — storyweight_gained=%d" % int(ev.get("storyweight_gained", 0)) }
 	return { "ok": true }
 
 
@@ -179,8 +179,8 @@ static func _test_stage_clear_shared() -> Dictionary:
 	if events.size() != 3:
 		return { "ok": false, "error": "Expected 3 events, got %d" % events.size() }
 	for ev in events:
-		if int(ev.get("xp_gained", 0)) < 40:
-			return { "ok": false, "error": "%s got only %d XP (expected >= 40)" % [ev.get("echo_name", "?"), int(ev.get("xp_gained", 0))] }
+		if int(ev.get("storyweight_gained", 0)) < 40:
+			return { "ok": false, "error": "%s got only %d Storyweight (expected >= 40)" % [ev.get("echo_name", "?"), int(ev.get("storyweight_gained", 0))] }
 	return { "ok": true }
 
 
@@ -201,8 +201,8 @@ static func _test_realm_completion_bonus() -> Dictionary:
 
 	if events_no_realm.is_empty() or events_with_realm.is_empty():
 		return { "ok": false, "error": "Expected events in both calls" }
-	var without := int(events_no_realm[0].get("xp_gained", 0))
-	var with_r  := int(events_with_realm[0].get("xp_gained", 0))
+	var without := int(events_no_realm[0].get("storyweight_gained", 0))
+	var with_r  := int(events_with_realm[0].get("storyweight_gained", 0))
 	if with_r <= without:
 		return { "ok": false, "error": "realm bonus not applied: with=%d without=%d" % [with_r, without] }
 	return { "ok": true }
@@ -227,10 +227,10 @@ static func _test_level_up_stat_recompute() -> Dictionary:
 	if events.is_empty():
 		return { "ok": false, "error": "No XpEvent returned" }
 	var ev: Dictionary = events[0]
-	if not bool(ev.get("leveled_up", false)):
-		return { "ok": false, "error": "Expected leveled_up=true, got false" }
-	if int(ev.get("new_level", 0)) != 2:
-		return { "ok": false, "error": "Expected new_level=2, got %d" % int(ev.get("new_level", 0)) }
+	if not bool(ev.get("stepped_up", false)):
+		return { "ok": false, "error": "Expected stepped_up=true, got false" }
+	if int(ev.get("new_step", 0)) != 2:
+		return { "ok": false, "error": "Expected new_step=2, got %d" % int(ev.get("new_step", 0)) }
 
 	var new_stats: Dictionary = save["sanctum"]["roster"][0]["stats"]
 	# At level 2, max_hp should be higher than at level 1 (hp_per_level=5.0)
@@ -257,10 +257,10 @@ static func _test_level_cap() -> Dictionary:
 	if events.is_empty():
 		return { "ok": false, "error": "No events" }
 	var ev: Dictionary = events[0]
-	if int(ev.get("new_level", 0)) > 5:
-		return { "ok": false, "error": "Level exceeded cap: got %d" % int(ev.get("new_level", 0)) }
-	if bool(ev.get("leveled_up", false)):
-		return { "ok": false, "error": "leveled_up should be false at cap" }
+	if int(ev.get("new_step", 0)) > 5:
+		return { "ok": false, "error": "Step exceeded cap: got %d" % int(ev.get("new_step", 0)) }
+	if bool(ev.get("stepped_up", false)):
+		return { "ok": false, "error": "stepped_up should be false at cap" }
 	return { "ok": true }
 
 
@@ -287,9 +287,9 @@ static func _test_virtue_multiplier() -> Dictionary:
 		return { "ok": false, "error": "No events" }
 	var ev: Dictionary = events[0]
 	# raw_xp = 40 (stage clear). multiplier = 1.0 * 0.80 * 0.20 = 0.16 → +6.4 → final = 47
-	# At minimum, xp_gained must be > 40
-	if int(ev.get("xp_gained", 0)) <= 40:
-		return { "ok": false, "error": "Virtue multiplier not applied: xp_gained=%d (expected > 40)" % int(ev.get("xp_gained", 0)) }
+	# At minimum, storyweight_gained must be > 40
+	if int(ev.get("storyweight_gained", 0)) <= 40:
+		return { "ok": false, "error": "Virtue multiplier not applied: storyweight_gained=%d (expected > 40)" % int(ev.get("storyweight_gained", 0)) }
 	return { "ok": true }
 
 
@@ -365,8 +365,8 @@ static func _test_rank_up_increments_rank() -> Dictionary:
 		return { "ok": false, "error": "Expected rank=2, got %d" % int(echo.get("rank", 0)) }
 	if int(echo.get("level", 0)) != 1:
 		return { "ok": false, "error": "Expected level reset to 1, got %d" % int(echo.get("level", 0)) }
-	if int(event.get("new_rank", 0)) != 2:
-		return { "ok": false, "error": "Event new_rank expected 2, got %d" % int(event.get("new_rank", 0)) }
+	if int(event.get("new_standing", 0)) != 2:
+		return { "ok": false, "error": "Event new_standing expected 2, got %d" % int(event.get("new_standing", 0)) }
 	return { "ok": true }
 
 

@@ -159,15 +159,15 @@ static func award_post_combat_xp(
 		var xp_to_next: int = get_xp_to_next(new_xp, eff_thresholds, max_level)
 
 		xp_events.append({
-			"echo_id":    echo_id,
-			"echo_name":  str(echo.get("name", "")),
-			"xp_gained":  final_xp,
-			"old_xp":     old_xp,
-			"new_xp":     new_xp,
-			"old_level":  old_level,
-			"new_level":  new_level,
-			"leveled_up": new_level > old_level,
-			"xp_to_next": xp_to_next,
+			"echo_id":             echo_id,
+			"echo_name":           str(echo.get("name", "")),
+			"storyweight_gained":  final_xp,
+			"old_xp":              old_xp,
+			"new_xp":              new_xp,
+			"old_step":            old_level,
+			"new_step":            new_level,
+			"stepped_up":          new_level > old_level,
+			"storyweight_to_next": xp_to_next,
 		})
 
 	return xp_events
@@ -341,8 +341,8 @@ static func execute_rank_up(
 	var event: Dictionary = {
 		"echo_id":          echo_id,
 		"echo_name":        echo_name,
-		"old_rank":         old_rank,
-		"new_rank":         new_rank,
+		"old_standing":     old_rank,
+		"new_standing":     new_rank,
 		"trait_key":        trait_key,
 		"direction":        direction,
 		"old_trait_value":  old_trait_val,
@@ -354,7 +354,7 @@ static func execute_rank_up(
 	}
 	if logger != null:
 		logger.info(t, "progression.rank_up",
-			"%s ascended to Rank %d" % [echo_name, new_rank],
+			"%s ascended to Standing %d" % [echo_name, new_rank],
 			event)
 
 	return event
@@ -444,15 +444,15 @@ static func apply_mid_combat_kill_xp(
 	var event: Dictionary = {
 		"echo_id":   echo_id,
 		"echo_name": echo_name,
-		"old_level": old_level,
-		"new_level": new_level,
+		"old_step":  old_level,
+		"new_step":  new_level,
 		"old_xp":    old_xp,
 		"new_xp":    new_xp,
 		"kill_xp":   kill_xp,
 	}
 	if logger != null:
 		logger.info(t, "progression.level_up",
-			"%s levelled up to %d (mid-combat)" % [echo_name, new_level],
+			"%s levelled up to Step %d (mid-combat)" % [echo_name, new_level],
 			event)
 	return event
 

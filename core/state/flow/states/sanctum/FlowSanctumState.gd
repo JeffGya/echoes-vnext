@@ -117,8 +117,8 @@ func enter(ctx: RefCounted, t:int) -> void:
 			"name":            str(echo.get("name", "")),
 			"calling_origin":  str(echo.get("calling_origin", "")),
 			"rarity":          str(echo.get("rarity", "")),
-			"rank":            int(echo.get("rank", 1)),
-			"level":           int(echo.get("level", 1)),  # PROG-001 addition
+			"standing":        int(echo.get("rank", 1)),
+			"step":            int(echo.get("level", 1)),
 			"archetype_birth": str(echo.get("archetype_birth", "")),
 			# EMOTION-002: emotion snapshot (computed tier, fear, last drift event)
 			"emotion": {

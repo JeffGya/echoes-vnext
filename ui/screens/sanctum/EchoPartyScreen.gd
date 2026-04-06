@@ -173,10 +173,10 @@ func _rebuild_echo_list() -> void:
 		calling_lbl.text = _calling_label(e)
 
 		var rank_lbl := _row_node(row, "RankLabel") as Label
-		rank_lbl.text = "R%d" % int(e.get("rank", 1))
+		rank_lbl.text = "S%d" % int(e.get("standing", 1))
 
 		var level_lbl := _row_node(row, "LevelLabel") as Label
-		level_lbl.text = "Lv %d" % int(e.get("level", 1))
+		level_lbl.text = "Step %d" % int(e.get("step", 1))
 
 		var party_badge := _row_node(row, "PartyBadge") as Label
 		party_badge.visible = bool(e.get("in_party", false))
@@ -237,10 +237,10 @@ func _on_echo_selected(echo_id: String) -> void:
 
 func _render_detail(e: Dictionary) -> void:
 	var name_str := str(e.get("name", ""))
-	var rank := int(e.get("rank", 1))
+	var standing := int(e.get("standing", 1))
 	var rarity := str(e.get("rarity", "uncalled"))
-	var level := int(e.get("level", 1))
-	var xp_to_next := int(e.get("xp_to_next", 0))
+	var step := int(e.get("step", 1))
+	var storyweight_to_next := int(e.get("storyweight_to_next", 0))
 	var archetype := str(e.get("archetype", ""))
 	var hp_max := int(e.get("hp_max", 0))
 	var morale := int(e.get("morale", 50))
@@ -259,13 +259,13 @@ func _render_detail(e: Dictionary) -> void:
 	detail_hp_bar.value = hp_max
 	detail_hp_label.text = "HP %d/%d" % [hp_max, hp_max]
 
-	detail_rank_label.text = "Rank %d" % rank
+	detail_rank_label.text = "Standing %d" % standing
 	detail_grade_label.text = rarity.capitalize()
-	detail_level_label.text = "Level %d" % level
+	detail_level_label.text = "Step %d" % step
 
 	var dominant_vector: String = str(e.get("dominant_vector", ""))
 	var calling_eligible: bool = bool(e.get("calling_eligible", false))
-	var rank_up_eligible: bool = bool(e.get("rank_up_eligible", false))
+	var standing_up_eligible: bool = bool(e.get("standing_up_eligible", false))
 
 	dominant_vector_label.visible = not dominant_vector.is_empty()
 	if not dominant_vector.is_empty():
@@ -289,20 +289,20 @@ func _render_detail(e: Dictionary) -> void:
 		calling_info_btn.visible = false
 		calling_eligible_badge.visible = false
 
-	ascend_button.visible = rank_up_eligible
-	if rank_up_eligible:
-		ascend_button.text = "▲ Ascend to Rank %d" % (rank + 1)
+	ascend_button.visible = standing_up_eligible
+	if standing_up_eligible:
+		ascend_button.text = "▲ Rise to Standing %d" % (standing + 1)
 
-	var xp_in_level: int = int(e.get("xp_in_level", 0))
-	var xp_per_level: int = int(e.get("xp_per_level", 100))
-	if xp_to_next > 0:
-		detail_xp_bar.max_value = maxi(1, xp_per_level)
-		detail_xp_bar.value = xp_in_level
-		detail_xp_label.text = "XP %d/%d" % [xp_in_level, xp_per_level]
+	var storyweight_in_step: int = int(e.get("storyweight_in_step", 0))
+	var storyweight_per_step: int = int(e.get("storyweight_per_step", 100))
+	if storyweight_to_next > 0:
+		detail_xp_bar.max_value = maxi(1, storyweight_per_step)
+		detail_xp_bar.value = storyweight_in_step
+		detail_xp_label.text = "Story %d/%d" % [storyweight_in_step, storyweight_per_step]
 	else:
 		detail_xp_bar.max_value = 1
 		detail_xp_bar.value = 1
-		detail_xp_label.text = "XP MAX"
+		detail_xp_label.text = "Story MAX"
 
 	detail_archetype_label.text = archetype.capitalize()
 

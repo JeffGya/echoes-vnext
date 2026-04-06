@@ -35,7 +35,7 @@ const _NARRATIVES: Dictionary = {
 	"faith_positive":   "The weave rewards those who endure. {name}'s spirit holds firm.",
 	"faith_negative":   "Carrying others' burdens leaves marks. {name}'s faith finds new ground.",
 }
-const _REVEAL_TEXT: String    = "{name} ascends to Rank {rank}. The weave shifts to hold what they have become."
+const _REVEAL_TEXT: String    = "{name} rises to Standing {standing}. The weave shifts to hold what they have become."
 const _CALLING_STIRS: String  = "★ A Calling stirs within {name}."
 
 # ── Compatibility badge labels ──────────────────────────────────────────────
@@ -108,16 +108,16 @@ func show_confirm(echo_data: Dictionary) -> void:
 func show_reveal(rank_up_event: Dictionary) -> void:
 	var echo_name: String      = str(rank_up_event.get("echo_name", "Unknown"))
 	var echo_id_from_event: String = str(rank_up_event.get("echo_id", ""))
-	var new_rank: int          = int(rank_up_event.get("new_rank", 2))
+	var new_standing: int      = int(rank_up_event.get("new_standing", 2))
 	var calling_eligible: bool = bool(rank_up_event.get("calling_eligible", false))
 	var options_v: Variant     = rank_up_event.get("calling_options", [])
 	var options: Array         = options_v if options_v is Array else []
 
-	rank_badge.text          = "Rank %d" % new_rank
+	rank_badge.text          = "Standing %d" % new_standing
 	reveal_name.text         = echo_name
 	reveal_text_label.text   = _REVEAL_TEXT \
 		.replace("{name}", echo_name) \
-		.replace("{rank}", str(new_rank))
+		.replace("{standing}", str(new_standing))
 
 	calling_stirs_label.text    = _CALLING_STIRS.replace("{name}", echo_name)
 	calling_stirs_label.visible = calling_eligible

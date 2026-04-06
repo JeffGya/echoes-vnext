@@ -87,6 +87,8 @@ data.progression.rank_up_trait_drift_magnitude
 | `balance.json progression` config keys | **Carryover** (values valid) → relabeled by V2-PROG-001 | V2-PROG-001 |
 | ActorSchema REQUIRED_FIELDS (`rank`, `xp_total`, `level`) | **Carryover** as compatibility aliases | V2-MIG-002 |
 
+> **V2-PROG-001 scope note:** Player-facing snapshot keys, UI strings, and event dict keys are renamed to V2 vocabulary (Storyweight / Standing / Step). `balance.json` progression config keys (`level_thresholds`, `xp_kill_bonus`, etc.) are **not renamed** in this story — `ProgressionService.gd` reads them internally and a rename requires a service rewrite. Config key relabeling is deferred to V2-PROG-004+ (ProgressionService rewrite).
+
 **Invariants:**
 - `EchoFactory` RNG draw order is **IMMUTABLE** — rank/level birth values must stay at the same draw positions (append-only rule)
 - Save repair must not lose existing `rank`/`level`/`xp_total` values; V2 bridge fields are additive only
@@ -469,7 +471,7 @@ These systems are already done and their save seams are live:
 ```
 V2-MIG-001 (this doc) ✅ Done
   ├── V2-MIG-002  Save schema bridge (additive V2 roots + repair) ✅ Done
-  ├── V2-PROG-001 Progression language rename (Storyweight / Standing / Step)
+  ├── V2-PROG-001 Progression language rename (Storyweight / Standing / Step) ✅ Done
   ├── V2-PROG-002 Calling seam unification (calling_origin ambiguity)
   │     └── V2-PROG-003 Vector expansion (4 → 10 virtue domains)
   │           └── V2-PROG-004+ Standing milestone system (S3/S6/S9 callings)

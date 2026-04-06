@@ -75,9 +75,9 @@ func _render() -> void:
 				continue
 			var s: Dictionary = s_v
 			var nm := str(s.get("name", "?"))
-			var lv := int(s.get("level", 1))
-			var rk := int(s.get("rank", 1))
-			lines.append("%s  Lv%d  Rank%d" % [nm, lv, rk])
+			var lv := int(s.get("step", 1))
+			var rk := int(s.get("standing", 1))
+			lines.append("%s  Step%d  S%d" % [nm, lv, rk])
 		party_slots_label.text = "Party:\n" + "\n".join(lines)
 
 	# Ase animate on change
