@@ -224,6 +224,24 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			repaired = true
 			repaired_notes.append("economy.last_offline_unix repaired invalid type")
 		
+	# ---- Economy V2 stubs (V2-MIG-002) ----
+	if not econ.has("relics") or (typeof(econ["relics"]) != TYPE_INT and typeof(econ["relics"]) != TYPE_FLOAT):
+		econ["relics"] = 0
+		repaired = true
+		repaired_notes.append("economy.relics set to 0 (V2 stub)")
+	if not econ.has("faith") or (typeof(econ["faith"]) != TYPE_INT and typeof(econ["faith"]) != TYPE_FLOAT):
+		econ["faith"] = 0
+		repaired = true
+		repaired_notes.append("economy.faith set to 0 (V2 stub)")
+	if not econ.has("harmony") or (typeof(econ["harmony"]) != TYPE_INT and typeof(econ["harmony"]) != TYPE_FLOAT):
+		econ["harmony"] = 0
+		repaired = true
+		repaired_notes.append("economy.harmony set to 0 (V2 stub)")
+	if not econ.has("favor") or (typeof(econ["favor"]) != TYPE_INT and typeof(econ["favor"]) != TYPE_FLOAT):
+		econ["favor"] = 0
+		repaired = true
+		repaired_notes.append("economy.favor set to 0 (V2 stub)")
+
 	# ---- Sanctum repairs (SANCTUM-001) ----
 	if not save.has("sanctum") or typeof(save["sanctum"]) != TYPE_DICTIONARY:
 		save["sanctum"] = {
@@ -475,6 +493,20 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 				repaired = true
 				repaired_notes.append("sanctum.roster[%d].skill_slots defaulted to ['']" % i)
 
+			# V2-MIG-002: Storyweight / Standing / Step bridge fields (mirror V1 values)
+			if not echo.has("storyweight") or (typeof(echo["storyweight"]) != TYPE_INT and typeof(echo["storyweight"]) != TYPE_FLOAT):
+				echo["storyweight"] = int(echo.get("xp_total", 0))
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].storyweight mirrored from xp_total" % i)
+			if not echo.has("standing") or (typeof(echo["standing"]) != TYPE_INT and typeof(echo["standing"]) != TYPE_FLOAT):
+				echo["standing"] = int(echo.get("rank", 1))
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].standing mirrored from rank" % i)
+			if not echo.has("step") or (typeof(echo["step"]) != TYPE_INT and typeof(echo["step"]) != TYPE_FLOAT):
+				echo["step"] = int(echo.get("level", 1))
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].step mirrored from level" % i)
+
 		# BOND-001: social graph edges
 		if not sanctum.has("bonds") or not (sanctum["bonds"] is Array):
 			sanctum["bonds"] = []
@@ -487,6 +519,47 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			repaired = true
 			repaired_notes.append("sanctum.party_encounters set to [] default")
 
+		# VOW-001: active_vow must be a Dict (not missing / wrong type)
+		if not sanctum.has("active_vow") or not (sanctum["active_vow"] is Dictionary):
+			sanctum["active_vow"] = {}
+			repaired = true
+			repaired_notes.append("sanctum.active_vow set to {} default")
+
+		# V2-MIG-002: vow key migration — unlocked_vows Array → vows Dict
+		# CONVENTIONS.md canonical shape: vows: { vow_id: { tier, discovered_realm } }
+		if sanctum.has("unlocked_vows") and sanctum["unlocked_vows"] is Array:
+			var old_arr: Array = sanctum["unlocked_vows"]
+			var new_dict: Dictionary = {}
+			for entry_v in old_arr:
+				if not (entry_v is Dictionary):
+					continue
+				var entry: Dictionary = entry_v
+				var vid := str(entry.get("vow_id", ""))
+				if vid.is_empty():
+					continue
+				new_dict[vid] = {
+					"tier":             int(entry.get("max_tier_unlocked", 1)),
+					"discovered_realm": str(entry.get("discovered_realm", "")),
+				}
+			sanctum["vows"] = new_dict
+			sanctum.erase("unlocked_vows")
+			repaired = true
+			repaired_notes.append("sanctum.unlocked_vows[] migrated to sanctum.vows{} (V2-MIG-002)")
+		elif not sanctum.has("vows") or not (sanctum["vows"] is Dictionary):
+			sanctum["vows"] = {}
+			repaired = true
+			repaired_notes.append("sanctum.vows set to {} default (V2-MIG-002)")
+
+		# V2-MIG-002: Sanctum growth spine + Thread reserve stubs
+		if not sanctum.has("continuity") or (typeof(sanctum["continuity"]) != TYPE_INT and typeof(sanctum["continuity"]) != TYPE_FLOAT):
+			sanctum["continuity"] = 0
+			repaired = true
+			repaired_notes.append("sanctum.continuity set to 0 (V2 stub)")
+		if not sanctum.has("threads") or not (sanctum["threads"] is Dictionary):
+			sanctum["threads"] = {}
+			repaired = true
+			repaired_notes.append("sanctum.threads set to {} (V2 stub)")
+
 	# ---- stage_context repairs (DIRECTIVE-001) ----
 	if not save.has("stage_context") or typeof(save["stage_context"]) != TYPE_DICTIONARY:
 		save["stage_context"] = { "active_directive_id": "directive.none" }
@@ -498,6 +571,11 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			sc["active_directive_id"] = "directive.none"
 			repaired = true
 			repaired_notes.append("stage_context.active_directive_id set to 'directive.none' default")
+		# V2-MIG-002: stage-intel persistence stub
+		if not sc.has("intel") or not (sc["intel"] is Dictionary):
+			sc["intel"] = {}
+			repaired = true
+			repaired_notes.append("stage_context.intel set to {} (V2 stub)")
 
 	# ---- REALM-001: realms repair ----
 	if not save.has("realms") or typeof(save["realms"]) != TYPE_DICTIONARY:

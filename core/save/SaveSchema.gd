@@ -34,10 +34,16 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 		"economy": {
 			"ase": 0,
 			"ekwan": 0,
-			
+
 			# ECONOMY-002 guards
 			"last_settle_unix": now,
-			"last_offline_unix": now
+			"last_offline_unix": now,
+
+			# V2-MIG-002: additive V2 currency + visible state stubs
+			"relics": 0,   # V2-ECONOMY-001+: rare artifact currency
+			"faith": 0,    # V2-ECONOMY-001+: sanctum-level visible state
+			"harmony": 0,  # V2-ECONOMY-001+: house social coherence state
+			"favor": 0,    # V2-ECONOMY-001+: sanctum-level visible state
 		},
 		"sanctum": {
 			"ase": 0, #legacy ignore. Backfill handled in repair function.
@@ -49,12 +55,17 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"summon_count": 0,
 			"bonds": [],            # BOND-001: signed score edges {actor_a, actor_b, strength}
 			"party_encounters": [], # BOND-001: canonical pairs who have shared a party slot
-			"active_vow": {},       # VOW-001: active vow dict {vow_id, tier, pledged_at_realm} or {}
-			"unlocked_vows": [],    # VOW-001: [{vow_id, max_tier_unlocked, discovered_realm}]
+			"active_vow": {},       # VOW-001: active vow dict {vow_id, tier, pledged_at_realm, runs_at_pledge} or {}
+			"vows": {},             # VOW-001 canonical: Dict keyed by vow_id → {tier, discovered_realm}
+
+			# V2-MIG-002: additive V2 sanctum stubs
+			"continuity": 0,  # V2-SANCTUM-001+: Sanctum growth spine
+			"threads": {},    # V2-WEAVE-001+: Thread reserve (keyed by thread_id)
 		},
 		# DIRECTIVE-001: stage-level context (directive, future: stage seed, objective state)
 		"stage_context": {
-			"active_directive_id": "directive.none"
+			"active_directive_id": "directive.none",
+			"intel": {},  # V2-MIG-002 / V2-INTEL-001+: stage-intel persistence stub
 		},
 		# REALM-001: generated realm models keyed by realm_id (e.g. "realm.01": { ...RealmModel fields })
 		"realms": {}

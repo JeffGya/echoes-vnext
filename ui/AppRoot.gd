@@ -302,6 +302,7 @@ func _run_tests(parts: Array) -> void:
 	SkillLoadoutTests.register(runner)      # PROG-009
 	load("res://tests/SocialGraphTests.gd").register(runner)  # BOND-001
 	VowServiceTests.register(runner)  # VOW-001
+	load("res://tests/SaveBridgeTests.gd").register(runner)  # V2-MIG-002
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [

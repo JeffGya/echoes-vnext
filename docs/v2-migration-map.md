@@ -1,8 +1,9 @@
 # Echoes vNext — V2 Migration Map
 
 > **Story:** V2-MIG-001 (Order 10 — first pickup in the Alignment wave)
-> **Status:** In Progress
+> **Status:** Done
 > **Created:** 2026-04-06
+> **V2-MIG-002 shipped:** 2026-04-06
 > **Source of truth:** `docs/Echoes vNext Working GDD.md`
 
 This document is the authoritative map from V1 (current code) to V2 (canonical design).
@@ -466,8 +467,8 @@ These systems are already done and their save seams are live:
 ## Story Dependency Order (Alignment Wave)
 
 ```
-V2-MIG-001 (this doc)
-  ├── V2-MIG-002  Save schema bridge (additive V2 roots + repair)
+V2-MIG-001 (this doc) ✅ Done
+  ├── V2-MIG-002  Save schema bridge (additive V2 roots + repair) ✅ Done
   ├── V2-PROG-001 Progression language rename (Storyweight / Standing / Step)
   ├── V2-PROG-002 Calling seam unification (calling_origin ambiguity)
   │     └── V2-PROG-003 Vector expansion (4 → 10 virtue domains)
@@ -484,6 +485,6 @@ PROG-001 and MIG-002 can proceed in parallel. All others depend on MIG-002 being
 ## Open Questions Before Implementation
 
 1. **V2 calling IDs:** The GDD describes 6 Standing-3 callings but does not give final string IDs. `docs/calling-reference.md` may need alignment to V2 names before V2-PROG-002/004 begin.
-2. **Virtue domain vector IDs:** What are the runtime string keys for the 10 virtue domains? (e.g. `"courage"`, `"wisdom"`, etc. — lowercased virtue names are the assumption but must be confirmed.)
+2. **Virtue domain vector IDs:** ✅ RESOLVED (V2-MIG-002). Vector keys remain lowercase vector names (`vanguard`, `protector`, `seeker`, `pillar`, + 6 new ones in V2-PROG-003). They are NOT the virtue names. Save repair in V2-MIG-002 ensures `vector_scores: {}` exists per echo; key expansion to all 10 vectors is V2-PROG-003's job (alongside balance.json update).
 3. **Standing count:** GDD says "5–10 Standings total" — exact number needs locking before V2-PROG-004.
 4. **Threads reserve vs Thread items:** The relationship between stage-level recovery segments and full Thread items (Realm completion) needs one more clarity pass before V2-WEAVE-001.

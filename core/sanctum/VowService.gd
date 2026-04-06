@@ -9,7 +9,7 @@ extends RefCounted
 
 const _KEY_SANCTUM    := "sanctum"
 const _KEY_ACTIVE_VOW := "active_vow"
-const _KEY_UNLOCKED   := "unlocked_vows"
+const _KEY_UNLOCKED   := "vows"  # V2-MIG-002: canonical Dict (keyed by vow_id). Was: "unlocked_vows" Array.
 
 # ---------------------------------------------------------------------------
 # Read API
@@ -43,28 +43,26 @@ static func get_active_vow(save_data: Dictionary) -> Dictionary:
 	return av_v
 
 
-## Returns the unlocked_vows array from save.
-static func get_unlocked_vows(save_data: Dictionary) -> Array:
+## Returns the vows dict from save: { vow_id: { tier, discovered_realm } } or {} if none.
+static func get_unlocked_vows(save_data: Dictionary) -> Dictionary:
 	var sanctum_v: Variant = save_data.get(_KEY_SANCTUM, {})
 	if not (sanctum_v is Dictionary):
-		return []
+		return {}
 	var sanctum: Dictionary = sanctum_v
-	var uv_v: Variant = sanctum.get(_KEY_UNLOCKED, [])
-	if not (uv_v is Array):
-		return []
+	var uv_v: Variant = sanctum.get(_KEY_UNLOCKED, {})
+	if not (uv_v is Dictionary):
+		return {}
 	return uv_v
 
 
-## Returns true if vow_id has been unlocked and the requested tier is within its max_tier_unlocked.
+## Returns true if vow_id has been unlocked and the requested tier is within its unlocked tier.
 static func is_tier_available(vow_id: String, tier: int, save_data: Dictionary) -> bool:
 	var unlocked := get_unlocked_vows(save_data)
-	for entry_v in unlocked:
-		if not (entry_v is Dictionary):
-			continue
-		var entry: Dictionary = entry_v
-		if str(entry.get("vow_id", "")) == vow_id:
-			return tier <= int(entry.get("max_tier_unlocked", 1))
-	return false
+	var entry_v: Variant = unlocked.get(vow_id, {})
+	if not (entry_v is Dictionary):
+		return false
+	var entry: Dictionary = entry_v
+	return tier <= int(entry.get("tier", 0))
 
 
 ## Returns a vow definition enriched with UI display fields, or {} if not found.
@@ -272,7 +270,7 @@ static func break_vow(
 
 
 ## Unlocks a vow for the Keeper (from a scenario trigger).
-## If already unlocked, bumps max_tier_unlocked to tier 1 (no-op beyond that in VOW-001).
+## If already unlocked, no-op (tier unlock ceiling handled in VOW-003+).
 ## Sets save_request on ctx.
 static func unlock_vow(
 	vow_id: String,
@@ -283,23 +281,18 @@ static func unlock_vow(
 	t: int
 ) -> void:
 	var sanctum := _ensure_sanctum(save_data)
-	var unlocked_v: Variant = sanctum.get(_KEY_UNLOCKED, [])
-	var unlocked: Array = unlocked_v if unlocked_v is Array else []
+	var unlocked_v: Variant = sanctum.get(_KEY_UNLOCKED, {})
+	var unlocked: Dictionary = unlocked_v if unlocked_v is Dictionary else {}
 
-	# Check if already unlocked
-	for entry_v in unlocked:
-		if not (entry_v is Dictionary):
-			continue
-		if str((entry_v as Dictionary).get("vow_id", "")) == vow_id:
-			# Already known — no-op for VOW-001 (tier unlocks handled in VOW-003)
-			return
+	# Check if already unlocked — no-op for VOW-001
+	if unlocked.has(vow_id):
+		return
 
-	# Add new unlock entry
-	unlocked.append({
-		"vow_id": vow_id,
-		"max_tier_unlocked": 1,  # VOW-001: all vows start at tier 1 ceiling
+	# Add new unlock entry keyed by vow_id
+	unlocked[vow_id] = {
+		"tier":             1,  # VOW-001: all vows start at tier 1 ceiling
 		"discovered_realm": discovered_realm,
-	})
+	}
 	sanctum[_KEY_UNLOCKED] = unlocked
 
 	_set_save_request(ctx, "vow.unlock")

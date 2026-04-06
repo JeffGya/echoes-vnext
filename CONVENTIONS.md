@@ -299,6 +299,24 @@ Initiative: composite score (`speed XOR seed`), stable descending sort.
 
 Crash-safe: write to `.tmp` → rename. Additive repair on load (adds missing fields with safe defaults).
 
+**V2-MIG-002 additive keys (added 2026-04-06):**
+
+| Location | Key | Type | Default | Purpose |
+|---|---|---|---|---|
+| `economy` | `relics` | int | 0 | V2-ECONOMY-001+: rare artifact currency stub |
+| `economy` | `faith` | int | 0 | V2-ECONOMY-001+: visible state stub |
+| `economy` | `harmony` | int | 0 | V2-ECONOMY-001+: visible state stub |
+| `economy` | `favor` | int | 0 | V2-ECONOMY-001+: visible state stub |
+| `sanctum` | `continuity` | int | 0 | V2-SANCTUM-001+: Sanctum growth spine stub |
+| `sanctum` | `threads` | Dict | {} | V2-WEAVE-001+: Thread reserve stub |
+| `stage_context` | `intel` | Dict | {} | V2-INTEL-001+: stage-intel persistence stub |
+| per echo | `storyweight` | int | mirrors `xp_total` | V2 bridge field (V2-PROG-001 uses for display) |
+| per echo | `standing` | int | mirrors `rank` | V2 bridge field (V2-PROG-001 uses for display) |
+| per echo | `step` | int | mirrors `level` | V2 bridge field (V2-PROG-001 uses for display) |
+
+**Vow key (canonical):** `sanctum.vows` — Dict keyed by `vow_id` → `{ tier: int, discovered_realm: String }`.
+The old `unlocked_vows: []` Array key is superseded. SaveService repair migrates old saves on load.
+
 ### Economy Settlement (`core/economy/EconomyService.gd` + `EconomyAccrualService.gd`)
 - No frame-based accrual. **Settle before every Ase spend.**
 - `economy.settle_time` action: computes elapsed, applies math, updates `last_settle_unix`. Does NOT save.

@@ -33,7 +33,7 @@ static func _make_save() -> Dictionary:
 			"bonds": [],
 			"party_encounters": [],
 			"active_vow": {},
-			"unlocked_vows": [],
+			"vows": {},  # V2-MIG-002: canonical Dict shape (keyed by vow_id)
 		},
 		"realms": {},
 	}
@@ -216,18 +216,22 @@ static func _test_is_tier_available() -> Dictionary:
 	return { "ok": true }
 
 
-## unlock_vow adds an entry to unlocked_vows; duplicate unlock is a no-op.
+## unlock_vow adds an entry to vows dict; duplicate unlock is a no-op.
 static func _test_unlock_adds_entry() -> Dictionary:
 	var save := _make_save()
 	var logger := _make_logger()
 
 	VowService.unlock_vow("tikoro_nko_agyina", "realm.01", save, null, logger, 0)
-	var unlocked := VowService.get_unlocked_vows(save)
+	var unlocked: Dictionary = VowService.get_unlocked_vows(save)
 
-	if unlocked.size() != 1:
-		return { "ok": false, "error": "Expected 1 unlocked vow, got %d" % unlocked.size() }
+	if not unlocked.has("tikoro_nko_agyina"):
+		return { "ok": false, "error": "Expected vow entry after unlock" }
+	if int(unlocked["tikoro_nko_agyina"].get("tier", 0)) != 1:
+		return { "ok": false, "error": "Expected tier 1 after unlock" }
+	if str(unlocked["tikoro_nko_agyina"].get("discovered_realm", "")) != "realm.01":
+		return { "ok": false, "error": "Expected discovered_realm 'realm.01'" }
 
-	# Duplicate unlock should be a no-op
+	# Duplicate unlock should be a no-op (discovered_realm stays original)
 	VowService.unlock_vow("tikoro_nko_agyina", "realm.02", save, null, logger, 1)
 	unlocked = VowService.get_unlocked_vows(save)
 	if unlocked.size() != 1:
