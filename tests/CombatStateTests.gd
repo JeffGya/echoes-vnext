@@ -27,6 +27,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("combat/initiative_sort_by_score",   Callable(CombatStateTests, "_t_initiative_sort_by_score"))
 	runner.register_test("combat/initiative_determinism",     Callable(CombatStateTests, "_t_initiative_determinism"))
 	runner.register_test("combat/initiative_tiebreak_order",  Callable(CombatStateTests, "_t_initiative_tiebreak_order"))
+	# V2-PROG-002: initiative uses confirmed calling modifier over birth origin
+	runner.register_test("combat/initiative_uses_confirmed_calling", Callable(CombatStateTests, "_t_initiative_uses_confirmed_calling"))
 
 
 # -------------------------
@@ -200,4 +202,49 @@ static func _t_initiative_tiebreak_order() -> Dictionary:
 		var expected_first: String = "first" if nudge_first > nudge_second else "second"
 		if first_id != expected_first:
 			return { "ok": false, "error": "score-based sort failed: expected '%s' first, got '%s'" % [expected_first, first_id] }
+	return { "ok": true }
+
+
+# -------------------------
+# V2-PROG-002: Calling seam — initiative test
+# -------------------------
+
+# COMBAT-002/V2-PROG-002: confirmed calling modifier takes priority over birth origin.
+# Actor A: calling_origin="seer", calling="warder"  → resolved key "warder" → +10 modifier.
+# Actor B: calling_origin="seer", calling=""         → resolved key "seer"   → +0 modifier.
+# Both have identical base stats (speed=5, agi=5 → base=25).
+# Actor A goes first due to confirmed calling modifier (+10 → score=35 vs 25).
+static func _t_initiative_uses_confirmed_calling() -> Dictionary:
+	var actor_a := {
+		"id":             "echo_seam_a",
+		"name":           "A",
+		"speed":          5,
+		"stats":          { "agi": 5 },
+		"calling_origin": "seer",
+		"calling":        "warder",  # confirmed — warder modifier (+10) should apply
+	}
+	var actor_b := {
+		"id":             "echo_seam_b",
+		"name":           "B",
+		"speed":          5,
+		"stats":          { "agi": 5 },
+		"calling_origin": "seer",
+		"calling":        "",  # unconfirmed — seer modifier (0) applies
+	}
+	var init_cfg := {
+		"by_calling_origin": { "warder": 10, "seer": 0 },
+		"by_archetype":      {},
+		"by_dominant_trait": {},
+		"by_dominant_vector": {},
+	}
+	var state: Dictionary = CombatState.create([actor_a, actor_b], "defeat_enemies", 0, init_cfg)
+	var order: Array = state["initiative_order"] as Array
+	if order.size() != 2:
+		return { "ok": false, "error": "Expected 2 actors in initiative order, got %d" % order.size() }
+	var first_id: String = str((order[0] as Dictionary).get("id", ""))
+	if first_id != "echo_seam_a":
+		return {
+			"ok": false,
+			"error": "Confirmed warder (A, +10 modifier) should go first. Got '%s' first — birth origin 'seer' must not override confirmed calling." % first_id,
+		}
 	return { "ok": true }

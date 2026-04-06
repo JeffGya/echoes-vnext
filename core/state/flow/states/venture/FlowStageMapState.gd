@@ -161,10 +161,10 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				var equipped_skill_id := str(pending_echo.get("0", ""))
 
 				party_prep.append({
-					"echo_id":          echo_id,
-					"echo_name":        str(echo.get("name", "")),
-					"calling_origin":   calling,  # confirmed calling id (e.g. "ranger"), used for display
-					"available_skills": available_skills,
+					"echo_id":           echo_id,
+					"echo_name":         str(echo.get("name", "")),
+					"calling_id":        calling,  # V2-PROG-002: confirmed calling id; renamed from calling_origin to avoid birth-bias confusion
+					"available_skills":  available_skills,
 					"equipped_skill_id": equipped_skill_id,
 				})
 			break
@@ -198,15 +198,16 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	}
 
 
-## PROG-009: Filters skill definitions by calling_requirement matching the echo's calling_origin.
+## PROG-009: Filters skill definitions by calling_requirement matching the echo's confirmed calling.
+## V2-PROG-002: parameter renamed calling_origin → calling_id to match confirmed identity semantics.
 ## Returns Array of { skill_id, display_name, action_type } dicts.
-static func filter_skills_for_calling(calling_origin: String, skill_defs: Dictionary) -> Array:
-	if calling_origin.is_empty() or skill_defs.is_empty():
+static func filter_skills_for_calling(calling_id: String, skill_defs: Dictionary) -> Array:
+	if calling_id.is_empty() or skill_defs.is_empty():
 		return []
 	var result: Array = []
 	for skill_id in skill_defs.keys():
 		var defn: Dictionary = skill_defs[skill_id]
-		if str(defn.get("calling_requirement", "")) == calling_origin:
+		if str(defn.get("calling_requirement", "")) == calling_id:
 			result.append({
 				"skill_id":    str(defn.get("skill_id",    skill_id)),
 				"display_name": str(defn.get("display_name", skill_id)),

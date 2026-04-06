@@ -507,6 +507,13 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 				repaired = true
 				repaired_notes.append("sanctum.roster[%d].step mirrored from level" % i)
 
+			# V2-PROG-002: calling — confirmed runtime identity (empty until Standing-3 milestone).
+			# Additive only — never overwrites an existing non-empty confirmed calling.
+			if not echo.has("calling") or typeof(echo["calling"]) != TYPE_STRING:
+				echo["calling"] = ""
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].calling initialised as empty" % i)
+
 		# BOND-001: social graph edges
 		if not sanctum.has("bonds") or not (sanctum["bonds"] is Array):
 			sanctum["bonds"] = []

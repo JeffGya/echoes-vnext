@@ -26,6 +26,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("situational/last_echo_standing_guards",              Callable(BehaviorArbiterTests, "_t_last_echo_standing_guards"))
 	runner.register_test("situational/enemy_type_is_aggressive",               Callable(BehaviorArbiterTests, "_t_enemy_type_is_aggressive"))
 	runner.register_test("situational/overwhelming_advantage_pushes_move",     Callable(BehaviorArbiterTests, "_t_overwhelming_advantage_pushes_move"))
+	# V2-PROG-002: confirmed calling drives behavior, not birth origin
+	runner.register_test("arbiter/confirmed_calling_overrides_birth_origin",  Callable(BehaviorArbiterTests, "_t_confirmed_calling_overrides_birth_origin"))
 
 
 # -------------------------
@@ -386,4 +388,52 @@ static func _t_overwhelming_advantage_pushes_move() -> Dictionary:
 	if str(intent.get("action_type", "")) != "actor.move":
 		return { "ok": false, "error": "Expected actor.move when overwhelming (move=43 > guard=20 > idle=14), got: %s" % str(intent.get("action_type")) }
 
+	return { "ok": true }
+
+
+# -------------------------
+# V2-PROG-002: Calling seam tests
+# -------------------------
+
+# Test 9: confirmed_calling_overrides_birth_origin
+# Setup: echo with calling_origin="warder" (protect_ally base=65) but calling="blade" (melee base=65).
+# Enemy adjacent at (1,0). Threatened ally at (2,0) with HP=40/100.
+# Without seam fix: warder birth origin → protect_ally=65 would win.
+# With seam fix: confirmed blade → melee_attack=65, protect_ally=10 → melee_attack wins.
+# Expected: melee_attack (confirmed calling drives behavior).
+static func _t_confirmed_calling_overrides_birth_origin() -> Dictionary:
+	var actor := {
+		"id":             "echo_seam_001",
+		"faction":        "echo",
+		"calling_origin": "warder",  # birth origin — would choose protect_ally if unchecked
+		"calling":        "blade",   # confirmed calling — must drive behavior
+		"actor_type":     "echo",
+		"traits":         { "courage": 55, "wisdom": 42, "faith": 38 },
+		"vector_scores":  {},
+		"fear":           0,
+		"morale":         50,
+		"grid_pos":       { "col": 0, "row": 0 },
+	}
+	var enemy := {
+		"id":       "enemy_seam_001",
+		"faction":  "enemy",
+		"is_dead":  false,
+		"grid_pos": { "col": 1, "row": 0 },
+	}
+	var ally := {
+		"id":         "echo_seam_002",
+		"faction":    "echo",
+		"is_dead":    false,
+		"current_hp": 40,
+		"stats":      { "max_hp": 100 },
+		"grid_pos":   { "col": 2, "row": 0 },
+	}
+	var arbiter := BehaviorArbiter.new({})
+	var context := { "actor": actor, "all_actors": [actor, enemy, ally], "t": 1 }
+	var intent: Dictionary = arbiter.select_intent(context)
+	if str(intent.get("action_type", "")) != "melee_attack":
+		return {
+			"ok": false,
+			"error": "Confirmed blade (melee=65) should win over warder birth origin (protect_ally=65). Got: %s" % str(intent.get("action_type")),
+		}
 	return { "ok": true }

@@ -329,7 +329,12 @@ func _generate_candidates(
 				break
 
 	var actor_type: String = str(actor.get("actor_type", "echo"))
-	var calling_origin: String = str(actor.get("calling_origin", "uncalled"))
+	# V2-PROG-002: prefer confirmed calling (runtime identity) over birth origin.
+	# Once an Echo has confirmed a calling, that identity drives behavior — not the birth weight.
+	var _confirmed_calling: String = str(actor.get("calling", ""))
+	var calling_origin: String = _confirmed_calling \
+		if not _confirmed_calling.is_empty() and _confirmed_calling != "uncalled" \
+		else str(actor.get("calling_origin", "uncalled"))
 	var my_pos: Dictionary = actor.get("grid_pos", { "col": 0, "row": 0 })
 
 	# PROG-010: Enemy Adept+ focus fire — prefer most-wounded echo over nearest.

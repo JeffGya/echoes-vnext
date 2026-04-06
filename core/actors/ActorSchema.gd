@@ -84,6 +84,7 @@ static func get_defaults() -> Dictionary:
 		"rarity":         "uncalled",
 		"rank":           1,
 		"calling_origin": "uncalled",
+		"calling":        "",  # V2-PROG-002: confirmed calling id (empty until Standing-3); not in REQUIRED_FIELDS — enemies have none
 		"stats":          { "max_hp": 0, "atk": 0, "def": 0, "agi": 0, "int": 0, "cha": 0 },
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
 		"xp_total":       0,

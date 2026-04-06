@@ -31,6 +31,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("calling_confirm_incompatible_fear_increase",  Callable(CallingTests, "_test_confirm_incompatible"))
 	# edge: zero score → incompatible not ambivalent
 	runner.register_test("calling_zero_vector_score_is_incompatible",   Callable(CallingTests, "_test_zero_score_incompatible"))
+	# V2-PROG-002: calling seam — EchoActor projects confirmed calling field into actor dict
+	runner.register_test("calling/seam_echo_actor_projects_calling_field", Callable(CallingTests, "_test_echo_actor_projects_calling"))
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -336,4 +338,40 @@ static func _test_zero_score_incompatible() -> Dictionary:
 	var steward := _find_option(opts, "steward")
 	if str(steward.get("compatibility")) != "incompatible":
 		return { "ok": false, "error": "Expected steward=incompatible (score=0), got: %s" % steward.get("compatibility") }
+	return { "ok": true }
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Tests — V2-PROG-002: calling seam
+# ────────────────────────────────────────────────────────────────────────────
+
+## EchoActor must project both calling_origin (birth bias) and calling (confirmed identity).
+## Verifies the seam: two distinct fields are now available in the actor dict.
+static func _test_echo_actor_projects_calling() -> Dictionary:
+	var echo := {
+		"id":               "echo_seam_001",
+		"name":             "Kofi",
+		"rarity":           "common",
+		"rank":             3,
+		"calling_origin":   "warder",
+		"calling":          "blade",  # confirmed calling — different from birth origin
+		"stats":            { "max_hp": 100, "atk": 10, "def": 8, "agi": 6, "int": 4, "cha": 5 },
+		"traits":           { "courage": 60, "wisdom": 30, "faith": 20 },
+		"xp_total":         500,
+		"level":            5,
+		"emotion":          { "morale_current": 60, "fear_current": 10 },
+		"vector_scores":    {},
+		"dominant_vector":  "vanguard",
+		"resilience_traits": [],
+		"leadership_traits": [],
+		"skill_slots":      [""],
+		"equipped_skills":  {},
+	}
+	var actor := EchoActor.from_echo(echo)
+	if not actor.has("calling"):
+		return { "ok": false, "error": "actor dict missing 'calling' field — EchoActor must project it" }
+	if str(actor.get("calling")) != "blade":
+		return { "ok": false, "error": "Expected calling='blade', got: %s" % str(actor.get("calling")) }
+	if str(actor.get("calling_origin")) != "warder":
+		return { "ok": false, "error": "calling_origin should remain 'warder' (birth bias), got: %s" % str(actor.get("calling_origin")) }
 	return { "ok": true }

@@ -85,8 +85,12 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 		# Archetype modifier.
 		var arch_mod: int = int(arch_table.get(str(actor.get("archetype_birth", "")), 0))
 
-		# Calling modifier.
-		var call_mod: int = int(call_table.get(str(actor.get("calling_origin", "")), 0))
+		# Calling modifier — V2-PROG-002: prefer confirmed calling over birth origin.
+		var _act_confirmed: String = str(actor.get("calling", ""))
+		var _call_key: String = _act_confirmed \
+			if not _act_confirmed.is_empty() and _act_confirmed != "uncalled" \
+			else str(actor.get("calling_origin", ""))
+		var call_mod: int = int(call_table.get(_call_key, 0))
 
 		# Dominant trait modifier — courage > faith > wisdom tiebreak.
 		var traits_v: Variant = actor.get("traits", {})

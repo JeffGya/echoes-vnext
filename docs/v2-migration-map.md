@@ -158,16 +158,24 @@ blade: 75, warder: 80, ranger: 80, steward: 85, seer: 85
 
 | Item | Action | Owner |
 |---|---|---|
-| `calling_origin` ambiguity (birth bias vs identity placeholder) | **Migration** — resolve to two clean fields | V2-PROG-002 |
+| `calling_origin` ambiguity (birth bias vs identity placeholder) | ~~Migration — resolve to two clean fields~~ **Resolved (V2-PROG-002)** | V2-PROG-002 |
 | Calling eligibility gate (rank 3 → Standing 3/6/9) | **Rewrite** | V2-PROG-004+ |
 | Calling names (V1 5 callings → V2 6 callings at S3) | **Rewrite** | V2-PROG-004+ |
-| `calling_eligible`/`calling_options` ephemeral fields | **Supersede** (safe to drop schema shape) | V2-PROG-002 |
+| `calling_eligible`/`calling_options` ephemeral fields | ~~Supersede (safe to drop schema shape)~~ **Superseded (V2-PROG-002)** | V2-PROG-002 |
 | Absolute fear thresholds by calling | **Carryover** → update values when S6/S9 callings added | V2-PROG-004+ |
 
-**Invariants:**
-- `calling_origin` is drawn at summon via `EchoFactory` — the draw itself is immutable; only the field's usage semantics change
-- `ActorSchema` currently validates `calling_origin` as a REQUIRED_FIELD — must remain valid during transition
-- `BehaviorArbiter` reads calling for behavior scoring — cannot rename until arbiter is also updated
+**V2-PROG-002 resolution (2026-04-06):**
+- `calling_origin` — immutable birth bias. Seeded at summon by EchoFactory. Never changes. Fallback only.
+- `calling` — confirmed runtime identity. Empty until Standing-3 milestone. Drives behavior, initiative, and prep snapshots.
+- `BehaviorArbiter`, `CombatState._calc_initiative()`, and `FlowStageMapState` all prefer `calling` (confirmed) when set; fall back to `calling_origin`.
+- `EchoActor.from_echo()` now projects both fields into the actor dict.
+- `SaveService` bridge repair initialises `calling: ""` on all existing roster echoes (additive only).
+- `calling_eligible` / `calling_options` are documented as ephemeral/deprecated — not the V2 gate shape.
+
+**Invariants (still hold):**
+- `calling_origin` is drawn at summon via `EchoFactory` — the draw order is immutable
+- `ActorSchema.REQUIRED_FIELDS` still includes `calling_origin` — do not remove
+- `calling` is NOT in REQUIRED_FIELDS (enemies/structures have none)
 
 ---
 
