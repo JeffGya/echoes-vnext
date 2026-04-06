@@ -1,0 +1,489 @@
+# Echoes vNext — V2 Migration Map
+
+> **Story:** V2-MIG-001 (Order 10 — first pickup in the Alignment wave)
+> **Status:** In Progress
+> **Created:** 2026-04-06
+> **Source of truth:** `docs/Echoes vNext Working GDD.md`
+
+This document is the authoritative map from V1 (current code) to V2 (canonical design).
+Every Alignment wave story traces back to this map. Implementation work should not begin until
+the relevant domain section here is agreed.
+
+**How to read each domain:**
+
+| Column | Meaning |
+|---|---|
+| V1 Current | What the code does today — exact field names, files, config keys |
+| V2 Target | What the GDD says it should become |
+| Migration Action | `Rewrite` / `Carryover` / `New Build` / `Supersede` |
+| Owner | The V2 story that implements the change |
+| Invariants | What must NOT break during the migration |
+
+**Migration Actions defined:**
+
+- **Rewrite** — existing system is reworked to match V2 spec; old code goes away
+- **Carryover** — existing code is valid and carries forward with minimal change
+- **New Build** — V2 requires a system that does not yet exist in V1
+- **Supersede** — old code or concept is retired; kept for history, do not build from it
+
+---
+
+## Domain 1 — Progression (Storyweight / Standing / Step)
+
+### V1 Current State
+
+**Service:** `core/progression/ProgressionService.gd`
+
+| Save field (per echo in `sanctum.roster[]`) | Type | Notes |
+|---|---|---|
+| `xp_total` | int | Cumulative XP |
+| `rank` | int (1–5) | Major progression tier (V1 "rank" = V2 "Standing") |
+| `level` | int (1–5) | Sub-progress within rank (V1 "level" = V2 "Step") |
+
+**XP sources (balance.json `progression` block):**
+- `xp_kill_bonus`: 25 per kill
+- `xp_stage_clear_base`: 40 per stage
+- `xp_realm_completion_bonus`: 100 on realm completion
+- Virtue multipliers up to ×0.20 each (courage/wisdom/faith weighted)
+
+**Level thresholds:** `[0, 100, 300, 600, 1000]` — 5 Steps per rank
+
+**Rank-up:** triggers at `level == max_level_per_rank (5)` — increments rank, resets level to 1, carries XP overflow
+
+**Config keys:**
+```
+data.progression.level_thresholds
+data.progression.max_level_per_rank
+data.progression.rank_level_base_shift
+data.progression.rank_up_trait_drift_magnitude
+```
+
+**Player-facing language in V1:** XP / Rank / Level (used in snapshot data, UI strings, overlay)
+
+---
+
+### V2 Target (GDD §11.5)
+
+| V2 concept | Maps from | Notes |
+|---|---|---|
+| `Storyweight` | `xp_total` | Main visible growth spine — represents reclaimed and integrated story |
+| `Standing` | `rank` | Major maturity threshold; 5–10 Standings total |
+| `Step` | `level` | Sub-progress within a Standing; 5–10 Steps per Standing |
+
+- Each Standing should contain 5–10 Steps
+- Steps are made from Storyweight gain and should be **visible to the player** — not a hidden internal value
+- All player-facing strings must use V2 language: `Storyweight`, `Standing`, `Step`
+- Internal save aliases (`rank`, `level`, `xp_total`) may persist during migration as compatibility fields (V2-MIG-002 adds the V2 bridge keys additively)
+
+---
+
+### Migration Action
+
+| Item | Action | Owner |
+|---|---|---|
+| Player-facing language (snapshots, UI, overlay strings) | **Rewrite** | V2-PROG-001 |
+| ProgressionService.gd internal logic (rank/level/xp) | **Carryover** during migration → **Rewrite** when milestone system ships | V2-PROG-004+ |
+| `balance.json progression` config keys | **Carryover** (values valid) → relabeled by V2-PROG-001 | V2-PROG-001 |
+| ActorSchema REQUIRED_FIELDS (`rank`, `xp_total`, `level`) | **Carryover** as compatibility aliases | V2-MIG-002 |
+
+**Invariants:**
+- `EchoFactory` RNG draw order is **IMMUTABLE** — rank/level birth values must stay at the same draw positions (append-only rule)
+- Save repair must not lose existing `rank`/`level`/`xp_total` values; V2 bridge fields are additive only
+- `DerivedStatService` uses `rank` for stat scaling — cannot rename until stat computation is also migrated
+
+---
+
+## Domain 2 — Calling
+
+### V1 Current State
+
+**Services:** `core/progression/CallingService.gd`, `core/progression/ProgressionService.gd`
+
+**Current callings (5):** `blade`, `warder`, `steward`, `ranger`, `seer`
+
+| Save field (per echo) | Type | Notes |
+|---|---|---|
+| `calling_origin` | String | Birth calling weight (seeded at summon) — **ambiguous**: used both as birth bias AND as identity placeholder before confirmed calling |
+| `calling` | String | Confirmed calling ID (empty string if not yet confirmed) |
+| `calling_eligible` | bool | Set `true` when `rank == 3` |
+| `calling_options` | Array | Temp ephemeral list during selection; erased on confirm |
+
+**Eligibility gate:** `rank == 3` — only one calling milestone exists in V1
+
+**Vector-to-calling map (balance.json):**
+```
+vanguard  → blade
+protector → warder
+pillar    → steward
+seeker    → ranger (courage >= wisdom) or seer (wisdom > courage)
+```
+
+**Absolute fear thresholds by calling (balance.json):**
+```
+blade: 75, warder: 80, ranger: 80, steward: 85, seer: 85
+```
+
+**Calling origin ambiguity (known seam):** `calling_origin` is seeded at birth as a bias weight, but it doubles as the pre-confirmation identity string in UI snapshots. This is the primary seam that V2-PROG-002 must resolve before any Standing milestone work can proceed.
+
+---
+
+### V2 Target (GDD §11.5, §11 calling reference)
+
+- Calling milestones at **Standing 3, Standing 6, Standing 9** (three-ring structure)
+- Standing 3 = core calling confirmation (clearest vector-alignment layer)
+- Standing 6 = deepening (allows drift and synthesis across adjacent calling families)
+- Standing 9 = culmination (loosened structure, cross-track movement is valid)
+- Calling names: V2 GDD §11 calling reference defines Standing-3 set — see `docs/calling-reference.md` for current list (note: may need alignment to V2 names)
+- `calling_origin` ambiguity must be resolved first: one canonical birth-origin field + one confirmed-calling field, no overlap
+
+**V2 Standing-3 calling set (GDD §11):**
+
+| Calling | Standing-3 description |
+|---|---|
+| (Warder equivalent) | bears danger for others and refuses collapse |
+| (Blade equivalent) | meets danger directly and turns courage into momentum |
+| (Steward equivalent) | sustains life, morale, and communal steadiness |
+| (Seer equivalent) | reads spirit, sign, and hidden meaning |
+| (Ranger equivalent) | reads path, distance, and shifting ground |
+| (Shadow/new) | moves through concealment, timing, and unseen openings |
+
+> Note: V2 has **6 callings at Standing 3** vs V1's 5. The sixth (concealment/shadow family) is new. Exact V2 calling IDs must be confirmed against `docs/calling-reference.md` and the GDD before V2-PROG-004 begins.
+
+---
+
+### Migration Action
+
+| Item | Action | Owner |
+|---|---|---|
+| `calling_origin` ambiguity (birth bias vs identity placeholder) | **Migration** — resolve to two clean fields | V2-PROG-002 |
+| Calling eligibility gate (rank 3 → Standing 3/6/9) | **Rewrite** | V2-PROG-004+ |
+| Calling names (V1 5 callings → V2 6 callings at S3) | **Rewrite** | V2-PROG-004+ |
+| `calling_eligible`/`calling_options` ephemeral fields | **Supersede** (safe to drop schema shape) | V2-PROG-002 |
+| Absolute fear thresholds by calling | **Carryover** → update values when S6/S9 callings added | V2-PROG-004+ |
+
+**Invariants:**
+- `calling_origin` is drawn at summon via `EchoFactory` — the draw itself is immutable; only the field's usage semantics change
+- `ActorSchema` currently validates `calling_origin` as a REQUIRED_FIELD — must remain valid during transition
+- `BehaviorArbiter` reads calling for behavior scoring — cannot rename until arbiter is also updated
+
+---
+
+## Domain 3 — Vectors (10 Virtue Domains)
+
+### V1 Current State
+
+**Service:** `core/actors/VectorService.gd`
+
+**Current vectors (4):** `protector`, `vanguard`, `seeker`, `pillar`
+
+| Save field (per echo) | Type | Notes |
+|---|---|---|
+| `vector_scores` | Dict (String → int 0–1000) | One entry per vector |
+| `dominant_vector` | String | Hysteresis-protected (3% threshold to switch) |
+
+**Initialization:** `balance.json data.vectors.archetype_init` → per-class_origin starting scores
+**Drift:** triggered at rank-up; weighted per `dominant_vector` (e.g. vanguard → courage 65%, wisdom 25%, faith 10%)
+
+**Config keys:**
+```
+data.vectors.archetype_init
+data.progression.vector_drift_weights
+```
+
+**Architecture note (migration-friendly):** VectorService uses **dynamic key iteration** — it does not hardcode the 4 vector names. Adding new vectors requires only `balance.json` changes. The code layer is config-driven. ✅
+
+---
+
+### V2 Target (GDD §13.1–§13.8)
+
+The V1 4-vector model is **replaced** by the 10 V2 virtue domains. These are the Thread domains — not a separate "vector list" but the same underlying identity layer renamed and expanded.
+
+**10 V2 virtue domains:**
+
+| # | Virtue | Restores | Pressures |
+|---|---|---|---|
+| 1 | Courage | resolve, action under fear, risk tolerance | recklessness, overreach, defiant pride |
+| 2 | Wisdom | discernment, interpretation, patience, judgment | hesitation, emotional distance, over-analysis |
+| 3 | Leadership | responsibility, guidance, social steadiness | control, ego, burden, domination |
+| 4 | Acceptance | grief processing, surrender to reality, peace with loss | passivity, fatalism, premature surrender |
+| 5 | Humility | perspective, teachability, respect for limits | self-erasure, timidity, reduced self-worth |
+| 6 | Forgiveness | release, repair, continuation after harm | naivety, repeated injury, unresolved resentment |
+| 7 | Truth | clarity, self-recognition, honesty | shame, rupture, unbearable revelation |
+| 8 | Generosity | offering, reciprocity, communal orientation | depletion, exploitation, self-neglect |
+| 9 | Compassion | care for suffering, tenderness, protective warmth | exhaustion, over-identification, refusal of necessary hardness |
+| 10 | Empathy | attunement, emotional understanding | blurred boundaries, emotional contagion, indecision |
+
+**Virtue affinity wheel** (GDD §13.7 — internal only, not shown to player):
+```
+Courage → Leadership → Truth → Wisdom → Humility → Acceptance →
+Forgiveness → Compassion → Empathy → Generosity → (loops back)
+```
+
+**Opposite-pair tensions (locked virtue pairings):**
+```
+Courage ↔ Acceptance
+Leadership ↔ Forgiveness
+Truth ↔ Compassion
+Wisdom ↔ Empathy
+Humility ↔ Generosity
+```
+
+**V2 vector-to-calling mapping:** The V1 `vector_to_calling` map must be rebuilt against the 10 virtue domains when V2-PROG-003 and V2-PROG-004 ship.
+
+---
+
+### Migration Action
+
+| Item | Action | Owner |
+|---|---|---|
+| `balance.json data.vectors.archetype_init` (4-vector init scores) | **Rewrite** — replace with 10-virtue domain init scores | V2-PROG-003 |
+| `balance.json data.progression.vector_drift_weights` (4 entries) | **Rewrite** — rebuild for 10 virtue domains | V2-PROG-003 |
+| `balance.json data.calling.vector_to_calling` map | **Rewrite** — remap to 10 virtue domains + V2 callings | V2-PROG-003 |
+| `VectorService.gd` code | **Carryover** ✅ — already config-driven; no code changes needed for expansion | V2-PROG-003 |
+| Existing `vector_scores` save data (4 old keys) | **Migration** — save repair converts old keys to V2 keys on load | V2-MIG-002 |
+| `dominant_vector` save field | **Carryover** — field name valid; value updated by repair | V2-MIG-002 |
+
+**Invariants:**
+- VectorService MUST remain config-driven — do not hardcode virtue names in GDScript
+- Old `vector_scores` keys (`protector`, `vanguard`, `seeker`, `pillar`) must be converted, not deleted in-place (save repair handles this)
+- `BehaviorArbiter` scoring that references vector names must be updated in the same story as `balance.json`
+
+---
+
+## Domain 4 — Directives
+
+### V1 Current State
+
+**Service:** `core/directives/DirectiveService.gd`
+
+**Registered directives (6):**
+
+| ID | Selectable | Intent weights |
+|---|---|---|
+| `directive.none` | ✅ Always | Baseline — no bias |
+| `directive.scout` | ✅ Always | survival_bias, avoid_overcommit, prefer_disengage, reporting_priority |
+| `directive.protect` | ❌ Locked | — |
+| `directive.push` | ❌ Locked | — |
+| `directive.preserve` | ❌ Locked | — |
+| `directive.focus` | ❌ Locked | — |
+
+**Save field:** `stage_context.active_directive_id` (String)
+
+**Architecture:** All 6 registered but only 2 selectable (`unlock_condition == "always"`). Intent weights are flat dicts consumed by `ActorStateMachine` Layer 4 (Context Bias).
+
+---
+
+### V2 Target (GDD §20.17)
+
+The V2 foundation directive pair is:
+- **`Scout Carefully`** — safer pathing, lower commitment, better survival/intel retention; best for returning with useful info from a failed/partial run
+- **`Seek Signs`** — stronger clue-seeking, higher chance of deeper intel at greater exposure risk; best for revealing hidden objective requirements, omen language, and readiness clues; worse on safety if run goes bad
+
+The two directives have **distinct risk profiles** — not just a toggle. The naming and intent-weight structure changes significantly from V1.
+
+Broader directive set (protect, push, preserve, focus) is **deferred to expansion**.
+
+---
+
+### Migration Action
+
+| Item | Action | Owner |
+|---|---|---|
+| `directive.scout` | **Rewrite** → `Scout Carefully` with V2 intent weights | V2-DIRECTIVE-001 |
+| `directive.none` | **Rewrite** → `Seek Signs` (or remap as the second option) | V2-DIRECTIVE-001 |
+| `directive.protect`, `directive.push`, `directive.preserve`, `directive.focus` | **Supersede** for now — remove or stub | V2-DIRECTIVE-001 |
+| `stage_context.active_directive_id` save field (String) | **Carryover** — key name and format stay valid | — |
+
+**Invariants:**
+- `active_directive_id` save key format (string) must remain stable — repair is not needed
+- Intent-weight key names within each directive are internal — can change freely
+- `ActorStateMachine` Layer 4 reads intent weights by key name → must be updated in the same story as the directive definitions
+
+---
+
+## Domain 5 — Sanctum
+
+### V1 Current State
+
+**Services/states:** `FlowSanctumState.gd`, `SanctumService.gd`, `SanctumShell.gd`, `SanctumScreen.gd`
+
+**What V1 Sanctum provides:**
+- Roster display (echoes with name/rank/calling)
+- Party management (up to 5 slots — toggle in/out)
+- Summon flow (Ase-gated)
+- Realm select (realm cards + runtime locks)
+- Bonds display (social graph — BOND-001 ✅ merged)
+- Vow management (doctrine pledges — VOW-001 ✅ merged)
+
+**What V1 Sanctum does NOT have:**
+- Building system (no Training Grounds, Council Hall, Hearth, Smith, Old Great Tree)
+- Job assignments (no Trainer, Mayor, Cook/Bartender, Armorer, Caretaker)
+- Continuity spine (no `continuity` field in save)
+- Ambient incident system
+- Spatial visualization (Echoes visible in house)
+
+**Save schema (V1):** `save_data["sanctum"]` contains: `roster`, `active_party_ids`, `name`, `starter_granted`, `bonds`, `party_encounters`, `active_vow`, `unlocked_vows`
+
+> **Schema discrepancy note:** `SaveSchema.gd` shows `unlocked_vows: []` (Array), but `CONVENTIONS.md` (updated post-BOND/VOW merge) shows `vows: {}` (Dict keyed by vow_id). The CONVENTIONS.md version is canonical (it is more recent). V2-MIG-002 save bridge should validate which shape is live and repair accordingly.
+
+---
+
+### V2 Target (GDD §20.17, §23.1)
+
+**Five foundation buildings + jobs:**
+
+| Building | Job | Primary role | Unlock timing |
+|---|---|---|---|
+| Hearth | Cook / Bartender | Recovery/morale, social mixing, high-frequency incidents | Early — first available |
+| Training Grounds | Trainer | Readiness/preparation, rivalry/status pressure, sharper incidents | Early — first available |
+| Council Hall | Mayor | Governance, broader house direction | Mid — after care layer |
+| Smith / Crafter | Armorer / Smith | Crafting, gear, build capacity | Mid |
+| Old Great Tree | Caretaker / Spirit Guide | Spiritual support, continuity meaning | Mid-to-late |
+
+**Continuity** (`continuity` save key — new): Sanctum growth spine measuring rootedness and cultural maturity through rituals, vow adherence, recovered Threads, relationship growth, Echo social density.
+
+**Ambient incident system:** Echoes visible in house, moving/lingering/working/arguing. Incidents surface through building+job state. Routine presentation primarily ambient.
+
+**Architecture invariants:**
+- `FlowSanctumState` snapshot shape (type/meta/data/actions) remains valid rail
+- `SanctumShell` + cached-nav pattern stays
+- Flow state IDs are unchanged — new building/Continuity states extend the SANCTUM family
+
+---
+
+### Migration Action
+
+| Item | Action | Owner |
+|---|---|---|
+| Flow state machine (FlowSanctumState, shell) | **Carryover** — valid rail | — |
+| Building system (5 buildings) | **New Build** | V2-SANCTUM-001+ |
+| Job system (5 jobs) | **New Build** | V2-SANCTUM-001+ |
+| Continuity save key + service | **New Build** | V2-SANCTUM-001+ |
+| Ambient incident system | **New Build** | V2-SANCTUM-001+ |
+| Spatial visualization (echo presence in house) | **New Build** | V2-SANCTUM-001+ (post-foundation) |
+| `save_data["sanctum"]` schema (additive) | **New Build** (additive fields only) | V2-MIG-002 |
+
+**Invariants:**
+- All new Sanctum save fields are **additive only** — never remove existing fields
+- `SanctumService.get_party_actors()` and `get_roster_actors()` are valid choke points
+- Bond/vow save keys already merged (BOND-001, VOW-001 Done) — do not re-add
+
+---
+
+## Domain 6 — Economy
+
+### V1 Current State
+
+**Services:** `core/economy/EconomyService.gd`, `core/economy/EconomyAccrualService.gd`
+
+**Current currencies:**
+
+| Key | Status | Role |
+|---|---|---|
+| `economy.ase` | ✅ Active | Primary spendable — summoning, rites, Thread handling |
+| `economy.ekwan` | ⚠️ Placeholder | Saved but no spend logic yet |
+
+**No V2 currencies in save schema:**
+- No `relics`
+- No `faith`
+- No `harmony`
+- No `favor`
+- No `threads` reserve
+- No `continuity` (see Domain 5)
+
+**Accrual model:** Settlement-based (not frame-based). Settle before every spend. Offline accrual applied once per session on Continue. Cap: 8hr.
+
+**Config (balance.json):**
+```
+data.economy.ase_online_per_min_base: 0.3
+data.economy.sanctum_bank_interval_seconds: 240
+data.economy.offline_cap_seconds: 28800
+data.summoning.grade_costs: { uncalled: 60, called: 150, chosen: 400 }
+```
+
+---
+
+### V2 Target (GDD §19.1–§19.2)
+
+**Spendable currencies (3):**
+
+| Currency | Role |
+|---|---|
+| `ase` | Life-source currency. Summoning, rites, Thread handling. Offline accrual tapers with Sanctum stability/strain. |
+| `ekwan` | Shaped matter and build capacity. Rooms/buildings, crafting, research/preparation. |
+| `relics` | Rare artifact layer. Equippable special artifacts or rare catalysts. Remains scarce — remembrance and weight. |
+
+**Visible states (not normal currencies — not spent like money):**
+
+| State | Role |
+|---|---|
+| `faith` | Sanctum-level visible state. Influences decisions and atmosphere. |
+| `harmony` | Sanctum-level visible state. House social coherence. |
+| `favor` | Sanctum-level visible state. |
+
+**Progression/readiness states (not spent):**
+
+| State | Role |
+|---|---|
+| `continuity` | Sanctum growth spine (see Domain 5) |
+| `threads` (reserve) | Crystallized story fragments returned from Realm completion; enter reserve before Weaving Rite |
+
+---
+
+### Migration Action
+
+| Item | Action | Owner |
+|---|---|---|
+| `economy.ase` (active) | **Carryover** — field name, service choke points all valid | — |
+| `economy.ekwan` (placeholder) | **Carryover** → activated when building/crafting system ships | V2-ECONOMY-001+ |
+| `EconomyService.spend_ase()` / `add_ase()` / `can_afford_ase()` | **Carryover** — valid single choke points | — |
+| Settlement model (no frame-based accrual) | **Carryover** | — |
+| Relics (new currency) | **New Build** | V2-ECONOMY-001+ |
+| Faith / Harmony / Favor (visible states) | **New Build** | V2-ECONOMY-001+ / V2-SANCTUM-001+ |
+| Threads reserve (save key) | **New Build** | V2-WEAVE-001+ |
+| Ase offline accrual degradation (Sanctum stability) | **Rewrite** — currently flat; V2 says strain/neglect weakens recovery toward near-zero | V2-ECONOMY-001+ |
+
+**Invariants:**
+- `economy.ase` and `economy.ekwan` keys must remain until migration is complete
+- All new economy keys are additive; handled by V2-MIG-002 save bridge
+- UI balance predictions remain non-authoritative (Core is always authoritative)
+
+---
+
+## Already-Merged V2 Work (Valid Rails — Do Not Overwrite)
+
+These systems are already done and their save seams are live:
+
+| Story | System | Save keys (in `save_data["sanctum"]`) |
+|---|---|---|
+| BOND-001 | Social graph | `bonds: []`, `party_encounters: []` |
+| VOW-001 | Vow doctrine | `vows: {}` (keyed by vow_id), `active_vow: {}` |
+
+> See CONVENTIONS.md `SocialGraphService` and `VowService` sections for full API contracts.
+
+---
+
+## Story Dependency Order (Alignment Wave)
+
+```
+V2-MIG-001 (this doc)
+  ├── V2-MIG-002  Save schema bridge (additive V2 roots + repair)
+  ├── V2-PROG-001 Progression language rename (Storyweight / Standing / Step)
+  ├── V2-PROG-002 Calling seam unification (calling_origin ambiguity)
+  │     └── V2-PROG-003 Vector expansion (4 → 10 virtue domains)
+  │           └── V2-PROG-004+ Standing milestone system (S3/S6/S9 callings)
+  ├── V2-DIRECTIVE-001 Directive rewrite (Scout Carefully / Seek Signs)
+  ├── V2-SANCTUM-001+  Building + Continuity system
+  └── V2-ECONOMY-001+  Economy expansion (Relics, Faith, Harmony, Favor)
+```
+
+PROG-001 and MIG-002 can proceed in parallel. All others depend on MIG-002 being done first for save bridge coverage.
+
+---
+
+## Open Questions Before Implementation
+
+1. **V2 calling IDs:** The GDD describes 6 Standing-3 callings but does not give final string IDs. `docs/calling-reference.md` may need alignment to V2 names before V2-PROG-002/004 begin.
+2. **Virtue domain vector IDs:** What are the runtime string keys for the 10 virtue domains? (e.g. `"courage"`, `"wisdom"`, etc. — lowercased virtue names are the assumption but must be confirmed.)
+3. **Standing count:** GDD says "5–10 Standings total" — exact number needs locking before V2-PROG-004.
+4. **Threads reserve vs Thread items:** The relationship between stage-level recovery segments and full Thread items (Realm completion) needs one more clarity pass before V2-WEAVE-001.

@@ -5,6 +5,21 @@
 
 ---
 
+## V2 Migration in Progress (Alignment Wave — started 2026-04-06)
+
+The codebase is currently being migrated from V1 design idioms to V2 canonical design.
+This file still documents V1 contracts — **the live running code**. As each system story ships,
+its section here will be updated to reflect V2 truth.
+
+**Migration map:** `docs/v2-migration-map.md` — authoritative domain-by-domain map of V1 → V2 targets.
+
+**Terminology reminder:**
+- `rank` / `level` / `xp_total` are V1 internal aliases — V2 player-facing terms are `Standing`, `Step`, `Storyweight`
+- 4 legacy vectors (`protector`, `vanguard`, `seeker`, `pillar`) are being replaced by 10 virtue domains
+- Each system story owns its own update to this file when the system is migrated
+
+---
+
 ## Architecture Principles (Non-Negotiable)
 
 ### Determinism
