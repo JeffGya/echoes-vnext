@@ -284,7 +284,7 @@ func _run_tests(parts: Array) -> void:
 	load("res://tests/CombatTokenPresentationTests.gd").register(runner)
 	RetreatTests.register(runner)        # UI-004
 	ArchetypeTests.register(runner)      # 9-archetype personality system
-	SmartnessTierTests.register(runner)  # PROG-010
+	load("res://tests/MaturityExpressionTests.gd").register(runner)  # V2-PROG-006
 	RealmModelTests.register(runner)     # REALM-001
 	ObjectiveModelTests.register(runner) # REALM-002
 	StageModelTests.register(runner)     # REALM-002

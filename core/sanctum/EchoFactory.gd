@@ -39,7 +39,7 @@ static func generate(
 	summon_index: int,
 	origin: String,
 	summoning_cfg: Dictionary,
-	smartness_cfg: Dictionary = {}
+	expression_cfg: Dictionary = {}
 ) -> Dictionary:
 	# Convert seed_root string -> deterministic int parent seed.
 	# NOTE: String.hash() is stable within Godot for deterministic use in this project.
@@ -84,13 +84,13 @@ static func generate(
 	# ---- archetype_birth derived from traits (no RNG draw) ----
 	var archetype_birth := _derive_archetype_birth(courage, wisdom, faith)
 
-	# ---- PROG-010 identity traits (separate derived RNG — never touches v1/v2 stream) ----
+	# ---- V2-PROG-006 identity traits (separate derived RNG — never touches v1/v2 stream) ----
 	var resilience_traits: Array = []
 	var leadership_traits: Array = []
-	if not smartness_cfg.is_empty():
+	if not expression_cfg.is_empty():
 		var trait_rng := CampaignSeed.get_rng_from(parent_seed, seed_path + ".echo_traits.v1")
-		resilience_traits = _draw_resilience_traits(trait_rng, calling_origin, archetype_birth, smartness_cfg)
-		leadership_traits = _draw_leadership_traits(trait_rng, calling_origin, archetype_birth, smartness_cfg)
+		resilience_traits = _draw_resilience_traits(trait_rng, calling_origin, archetype_birth, expression_cfg)
+		leadership_traits = _draw_leadership_traits(trait_rng, calling_origin, archetype_birth, expression_cfg)
 
 	# ---- (7) derived stats ---
 	var stats := _compute_birth_stats(courage, wisdom, faith, summoning_cfg.get("birth_stats", {}))
@@ -264,9 +264,9 @@ static func _draw_resilience_traits(
 	rng: RandomNumberGenerator,
 	calling_origin: String,
 	_archetype_birth: String,
-	smartness_cfg: Dictionary
+	expression_cfg: Dictionary
 ) -> Array:
-	var pool: Dictionary = smartness_cfg.get("resilience_trait_pool", {})
+	var pool: Dictionary = expression_cfg.get("resilience_trait_pool", {})
 	if pool.is_empty():
 		return []
 	# Build weighted dict: trait_id → weight from calling_origin column
@@ -291,9 +291,9 @@ static func _draw_leadership_traits(
 	rng: RandomNumberGenerator,
 	calling_origin: String,
 	_archetype_birth: String,
-	smartness_cfg: Dictionary
+	expression_cfg: Dictionary
 ) -> Array:
-	var pool: Dictionary = smartness_cfg.get("leadership_trait_pool", {})
+	var pool: Dictionary = expression_cfg.get("leadership_trait_pool", {})
 	if pool.is_empty():
 		return []
 	var trait_list: Variant = pool.get(calling_origin, pool.get("uncalled", []))

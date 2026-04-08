@@ -1,48 +1,48 @@
-# res://tests/SmartnessTierTests.gd
-# PROG-010: Tests for SmartnessTierService + behavior tier gates.
+# res://tests/MaturityExpressionTests.gd
+# V2-PROG-006: Tests for MaturityExpressionService + behavior expression-band gates.
 #
 # Tests:
-#   1. get_tier maps rank 1–5 to correct tier strings
+#   1. get_expression_band maps rank 1–5 to correct band strings
 #   2. get_calling_behavior uses calling_origin as fallback when calling is absent
-#   3. Novice echo: no actor.retreat candidate at any HP
-#   4. Adept warrior: no retreat candidate even at 10% HP
-#   5. Adept archer: retreat candidate present at 45% HP (< 50% threshold)
-#   6. Adept guardian: no retreat at 35%, retreat candidate at 25%
-#   7. Enemy Adept focus fire: targets most-wounded echo, not nearest
-#   8. Last-stand Veteran: fear gate raised to 88 (not 80)
-#   9. Last-stand Elite: fear gate raised to 95
-#  10. suppress_panic_spiral: raises gate by +5 above tier baseline
+#   3. Nascent echo: no actor.retreat candidate at any HP
+#   4. Forming warrior: no retreat candidate even at 10% HP
+#   5. Forming archer: retreat candidate present at 45% HP (< 50% threshold)
+#   6. Forming guardian: no retreat at 35%, retreat candidate at 25%
+#   7. Enemy Forming focus fire: targets most-wounded echo, not nearest
+#   8. Last-stand Grounded: fear gate raised to 88 (not 80)
+#   9. Last-stand Whole: fear gate raised to 95
+#  10. suppress_panic_spiral: raises gate by +5 above band baseline
 #  11. Balance: empathic echo near 20%-HP ally → protect_ally fires (threshold 0.50)
 #  12. Balance: empathic echo near 90%-HP ally → protect_ally NOT generated
-#  13. Veteran Blade: actor.taunt is a candidate vs nearest enemy
+#  13. Grounded aduro: actor.taunt is a candidate vs nearest enemy
 #  14. Bark: melee_attack → non-empty bark_line in snapshot
 #  15. Bark: actor.idle → empty bark_line in snapshot
-#  16. Snapshot: all 8 PROG-010 fields present after advance_turn()
+#  16. Snapshot: all V2-PROG-006 fields present after advance_turn()
 
 extends RefCounted
-class_name SmartnessTierTests
+class_name MaturityExpressionTests
 
-const _TIER_BY_RANK := {
-	"1": "novice", "2": "adept", "3": "veteran", "4": "elite", "5": "elite"
+const _BAND_BY_STANDING := {
+	"1": "nascent", "2": "forming", "3": "grounded", "4": "whole", "5": "whole"
 }
 
 const _CALLING_CFG := {
-	"warder":   { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 3 },
-	"blade":    { "retreat_threshold": null,  "press_advantage": true,  "directive_mul": 1.0, "leadership_radius": 3 },
-	"ranger":   { "retreat_threshold": 0.50, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 4 },
+	"okofor":   { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 3 },
+	"aduro":    { "retreat_threshold": null,  "press_advantage": true,  "directive_mul": 1.0, "leadership_radius": 3 },
+	"kra_soro": { "retreat_threshold": 0.50, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 4 },
 	"uncalled": { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.5, "leadership_radius": 3 },
 }
 
-const _SMART_CFG := {
-	"tier_by_rank":              { "1": "novice", "2": "adept", "3": "veteran", "4": "elite", "5": "elite" },
+const _EXPR_CFG := {
+	"band_by_standing":          { "1": "nascent", "2": "forming", "3": "grounded", "4": "whole", "5": "whole" },
 	"calling_behavior":          {
-		"warder":   { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 3 },
-		"blade":    { "retreat_threshold": null,  "press_advantage": true,  "directive_mul": 1.0, "leadership_radius": 3 },
-		"ranger":   { "retreat_threshold": 0.50, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 4 },
+		"okofor":   { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 3 },
+		"aduro":    { "retreat_threshold": null,  "press_advantage": true,  "directive_mul": 1.0, "leadership_radius": 3 },
+		"kra_soro": { "retreat_threshold": 0.50, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 4 },
 		"uncalled": { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.5, "leadership_radius": 3 },
 	},
-	"last_stand_fear_threshold": { "veteran": 88, "elite": 95 },
-	"last_stand_elite_morale_tick": 5,
+	"last_stand_fear_threshold": { "grounded": 88, "whole": 95 },
+	"last_stand_whole_morale_tick": 5,
 	"enemy_demoralize_fear_tick": 5,
 	"enemy_demoralize_radius": 3,
 	"resilience_trait_pool":    {},
@@ -52,16 +52,16 @@ const _SMART_CFG := {
 
 const _BALANCE_CFG := {
 	"data": {
-		"smartness": {
-			"tier_by_rank":              { "1": "novice", "2": "adept", "3": "veteran", "4": "elite", "5": "elite" },
+		"maturity_expression": {
+			"band_by_standing":          { "1": "nascent", "2": "forming", "3": "grounded", "4": "whole", "5": "whole" },
 			"calling_behavior":          {
-				"warder":   { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 3 },
-				"blade":    { "retreat_threshold": null,  "press_advantage": true,  "directive_mul": 1.0, "leadership_radius": 3 },
-				"ranger":   { "retreat_threshold": 0.50, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 4 },
+				"okofor":   { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 3 },
+				"aduro":    { "retreat_threshold": null,  "press_advantage": true,  "directive_mul": 1.0, "leadership_radius": 3 },
+				"kra_soro": { "retreat_threshold": 0.50, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 4 },
 				"uncalled": { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.5, "leadership_radius": 3 },
 			},
-			"last_stand_fear_threshold": { "veteran": 88, "elite": 95 },
-			"last_stand_elite_morale_tick": 5,
+			"last_stand_fear_threshold": { "grounded": 88, "whole": 95 },
+			"last_stand_whole_morale_tick": 5,
 			"enemy_demoralize_fear_tick": 5,
 			"enemy_demoralize_radius": 3,
 			"resilience_trait_pool":    {},
@@ -76,29 +76,29 @@ const _BALANCE_CFG := {
 }
 
 static func register(runner: CoreTestRunner) -> void:
-	runner.register_test("tier/get_tier_maps_ranks_1_to_5",          Callable(SmartnessTierTests, "_t_get_tier_maps_ranks"))
-	runner.register_test("tier/calling_behavior_proxy_fallback",      Callable(SmartnessTierTests, "_t_calling_behavior_proxy_fallback"))
-	runner.register_test("tier/novice_no_retreat",                    Callable(SmartnessTierTests, "_t_novice_no_retreat"))
-	runner.register_test("tier/adept_warrior_no_retreat",             Callable(SmartnessTierTests, "_t_adept_warrior_no_retreat"))
-	runner.register_test("tier/adept_archer_retreat_at_45pct",        Callable(SmartnessTierTests, "_t_adept_archer_retreat"))
-	runner.register_test("tier/adept_guardian_retreat_threshold",     Callable(SmartnessTierTests, "_t_adept_guardian_retreat_threshold"))
-	runner.register_test("tier/enemy_adept_focus_fire",               Callable(SmartnessTierTests, "_t_enemy_adept_focus_fire"))
-	runner.register_test("tier/last_stand_veteran_fear_threshold_88", Callable(SmartnessTierTests, "_t_last_stand_veteran_threshold"))
-	runner.register_test("tier/last_stand_elite_fear_threshold_95",   Callable(SmartnessTierTests, "_t_last_stand_elite_threshold"))
-	runner.register_test("tier/suppress_panic_spiral_adds_5",         Callable(SmartnessTierTests, "_t_suppress_panic_spiral"))
-	runner.register_test("tier/protect_ally_fires_at_20pct_hp",       Callable(SmartnessTierTests, "_t_protect_ally_fires_20pct"))
-	runner.register_test("tier/protect_ally_no_fire_at_90pct_hp",     Callable(SmartnessTierTests, "_t_protect_ally_no_fire_90pct"))
-	runner.register_test("tier/veteran_blade_taunt_candidate",        Callable(SmartnessTierTests, "_t_veteran_blade_taunt"))
-	runner.register_test("tier/bark_melee_nonempty",                  Callable(SmartnessTierTests, "_t_bark_melee_nonempty"))
-	runner.register_test("tier/bark_idle_empty",                      Callable(SmartnessTierTests, "_t_bark_idle_empty"))
-	runner.register_test("tier/snapshot_prog010_fields_present",      Callable(SmartnessTierTests, "_t_snapshot_fields_present"))
+	runner.register_test("expr/get_expression_band_maps_ranks_1_to_5",    Callable(MaturityExpressionTests, "_t_get_expression_band_maps_ranks"))
+	runner.register_test("expr/calling_behavior_proxy_fallback",           Callable(MaturityExpressionTests, "_t_calling_behavior_proxy_fallback"))
+	runner.register_test("expr/nascent_no_retreat",                        Callable(MaturityExpressionTests, "_t_nascent_no_retreat"))
+	runner.register_test("expr/forming_warrior_no_retreat",                Callable(MaturityExpressionTests, "_t_forming_warrior_no_retreat"))
+	runner.register_test("expr/forming_archer_retreat_at_45pct",           Callable(MaturityExpressionTests, "_t_forming_archer_retreat"))
+	runner.register_test("expr/forming_guardian_retreat_threshold",        Callable(MaturityExpressionTests, "_t_forming_guardian_retreat_threshold"))
+	runner.register_test("expr/enemy_forming_focus_fire",                  Callable(MaturityExpressionTests, "_t_enemy_forming_focus_fire"))
+	runner.register_test("expr/last_stand_grounded_fear_threshold_88",     Callable(MaturityExpressionTests, "_t_last_stand_grounded_threshold"))
+	runner.register_test("expr/last_stand_whole_fear_threshold_95",        Callable(MaturityExpressionTests, "_t_last_stand_whole_threshold"))
+	runner.register_test("expr/suppress_panic_spiral_adds_5",              Callable(MaturityExpressionTests, "_t_suppress_panic_spiral"))
+	runner.register_test("expr/protect_ally_fires_at_20pct_hp",            Callable(MaturityExpressionTests, "_t_protect_ally_fires_20pct"))
+	runner.register_test("expr/protect_ally_no_fire_at_90pct_hp",          Callable(MaturityExpressionTests, "_t_protect_ally_no_fire_90pct"))
+	runner.register_test("expr/grounded_aduro_taunt_candidate",            Callable(MaturityExpressionTests, "_t_grounded_aduro_taunt"))
+	runner.register_test("expr/bark_melee_nonempty",                       Callable(MaturityExpressionTests, "_t_bark_melee_nonempty"))
+	runner.register_test("expr/bark_idle_empty",                           Callable(MaturityExpressionTests, "_t_bark_idle_empty"))
+	runner.register_test("expr/snapshot_prog006_fields_present",           Callable(MaturityExpressionTests, "_t_snapshot_fields_present"))
 
 
 # ─── Test 1 ────────────────────────────────────────────────────────────────
-static func _t_get_tier_maps_ranks() -> Dictionary:
-	var expected := { 1: "novice", 2: "adept", 3: "veteran", 4: "elite", 5: "elite" }
+static func _t_get_expression_band_maps_ranks() -> Dictionary:
+	var expected := { 1: "nascent", 2: "forming", 3: "grounded", 4: "whole", 5: "whole" }
 	for rank in expected:
-		var got: String = SmartnessTierService.get_tier(rank, _TIER_BY_RANK)
+		var got: String = MaturityExpressionService.get_expression_band(rank, _BAND_BY_STANDING)
 		if got != expected[rank]:
 			return { "ok": false, "error": "rank %d: expected %s, got %s" % [rank, expected[rank], got] }
 	return { "ok": true }
@@ -107,43 +107,43 @@ static func _t_get_tier_maps_ranks() -> Dictionary:
 # ─── Test 2 ────────────────────────────────────────────────────────────────
 static func _t_calling_behavior_proxy_fallback() -> Dictionary:
 	# No "calling" key → should use calling_origin
-	var actor_no_calling := { "calling_origin": "ranger" }
-	var beh: Dictionary = SmartnessTierService.get_calling_behavior(actor_no_calling, _CALLING_CFG)
+	var actor_no_calling := { "calling_origin": "kra_soro" }
+	var beh: Dictionary = MaturityExpressionService.get_calling_behavior(actor_no_calling, _CALLING_CFG)
 	if float(beh.get("retreat_threshold", 0.0)) != 0.50:
 		return { "ok": false, "error": "Expected archer retreat_threshold=0.50, got: %s" % beh }
 	# Empty calling → fallback to uncalled
 	var actor_empty := { "calling_origin": "unknown_faction" }
-	var beh2: Dictionary = SmartnessTierService.get_calling_behavior(actor_empty, _CALLING_CFG)
+	var beh2: Dictionary = MaturityExpressionService.get_calling_behavior(actor_empty, _CALLING_CFG)
 	if float(beh2.get("directive_mul", 0.0)) != 1.5:
 		return { "ok": false, "error": "Expected uncalled fallback directive_mul=1.5, got: %s" % beh2 }
 	return { "ok": true }
 
 
-# ─── Test 3 — Novice echo: no retreat candidate ────────────────────────────
-static func _t_novice_no_retreat() -> Dictionary:
-	var actor := _make_echo("echo_n1", "ranger", 1, 5, 100)  # rank=1 (novice), HP=5%
+# ─── Test 3 — Nascent echo: no retreat candidate ────────────────────────────
+static func _t_nascent_no_retreat() -> Dictionary:
+	var actor := _make_echo("echo_n1", "kra_soro", 1, 5, 100)  # rank=1 (nascent), HP=5%
 	var enemy := _make_enemy("en1", { "col": 1, "row": 0 })
 	var arbiter := BehaviorArbiter.new({})
 	var context := {
 		"actor": actor, "all_actors": [enemy],
-		"smartness_tier": "novice",
-		"calling_behavior": _CALLING_CFG.get("ranger", {}),
+		"expression_band": "nascent",
+		"calling_behavior": _CALLING_CFG.get("kra_soro", {}),
 	}
 	var candidates := _get_candidates(arbiter, actor, [enemy], context)
 	if _has_action(candidates, "actor.retreat"):
-		return { "ok": false, "error": "Novice should never have retreat candidate" }
+		return { "ok": false, "error": "Nascent should never have retreat candidate" }
 	return { "ok": true }
 
 
-# ─── Test 4 — Adept warrior: no retreat ────────────────────────────────────
-static func _t_adept_warrior_no_retreat() -> Dictionary:
-	var actor := _make_echo("echo_w2", "blade", 2, 5, 100)  # rank=2 (adept), HP=5%
+# ─── Test 4 — Forming warrior: no retreat ────────────────────────────────────
+static func _t_forming_warrior_no_retreat() -> Dictionary:
+	var actor := _make_echo("echo_w2", "aduro", 2, 5, 100)  # rank=2 (forming), HP=5%
 	var enemy := _make_enemy("en2", { "col": 1, "row": 0 })
 	var arbiter := BehaviorArbiter.new({})
 	var context := {
 		"actor": actor, "all_actors": [enemy],
-		"smartness_tier": "adept",
-		"calling_behavior": _CALLING_CFG.get("blade", {}),
+		"expression_band": "forming",
+		"calling_behavior": _CALLING_CFG.get("aduro", {}),
 	}
 	var candidates := _get_candidates(arbiter, actor, [enemy], context)
 	if _has_action(candidates, "actor.retreat"):
@@ -151,44 +151,44 @@ static func _t_adept_warrior_no_retreat() -> Dictionary:
 	return { "ok": true }
 
 
-# ─── Test 5 — Adept archer: retreat at 45% HP ─────────────────────────────
-static func _t_adept_archer_retreat() -> Dictionary:
-	var actor := _make_echo("echo_a2", "ranger", 2, 45, 100)  # rank=2 (adept), HP=45%
+# ─── Test 5 — Forming archer: retreat at 45% HP ─────────────────────────────
+static func _t_forming_archer_retreat() -> Dictionary:
+	var actor := _make_echo("echo_a2", "kra_soro", 2, 45, 100)  # rank=2 (forming), HP=45%
 	var enemy := _make_enemy("en3", { "col": 3, "row": 0 })
 	var arbiter := BehaviorArbiter.new({})
 	var context := {
 		"actor": actor, "all_actors": [enemy],
-		"smartness_tier": "adept",
-		"calling_behavior": _CALLING_CFG.get("ranger", {}),
+		"expression_band": "forming",
+		"calling_behavior": _CALLING_CFG.get("kra_soro", {}),
 	}
 	var candidates := _get_candidates(arbiter, actor, [enemy], context)
 	if not _has_action(candidates, "actor.retreat"):
-		return { "ok": false, "error": "Adept archer at 45%% HP should have retreat candidate (threshold=50%%)" }
+		return { "ok": false, "error": "Forming archer at 45%% HP should have retreat candidate (threshold=50%%)" }
 	return { "ok": true }
 
 
-# ─── Test 6 — Adept guardian retreat threshold ────────────────────────────
-static func _t_adept_guardian_retreat_threshold() -> Dictionary:
+# ─── Test 6 — Forming guardian retreat threshold ────────────────────────────
+static func _t_forming_guardian_retreat_threshold() -> Dictionary:
 	var arbiter := BehaviorArbiter.new({})
 	var enemy := _make_enemy("en4", { "col": 3, "row": 0 })
 
 	# At 35% HP — above guardian threshold 30% — no retreat
-	var actor_35 := _make_echo("echo_g35", "warder", 2, 35, 100)
+	var actor_35 := _make_echo("echo_g35", "okofor", 2, 35, 100)
 	var ctx_35 := {
 		"actor": actor_35, "all_actors": [enemy],
-		"smartness_tier": "adept",
-		"calling_behavior": _CALLING_CFG.get("warder", {}),
+		"expression_band": "forming",
+		"calling_behavior": _CALLING_CFG.get("okofor", {}),
 	}
 	var cands_35 := _get_candidates(arbiter, actor_35, [enemy], ctx_35)
 	if _has_action(cands_35, "actor.retreat"):
 		return { "ok": false, "error": "Guardian at 35%% HP should NOT have retreat (threshold=30%%)" }
 
 	# At 25% HP — below threshold — retreat candidate expected
-	var actor_25 := _make_echo("echo_g25", "warder", 2, 25, 100)
+	var actor_25 := _make_echo("echo_g25", "okofor", 2, 25, 100)
 	var ctx_25 := {
 		"actor": actor_25, "all_actors": [enemy],
-		"smartness_tier": "adept",
-		"calling_behavior": _CALLING_CFG.get("warder", {}),
+		"expression_band": "forming",
+		"calling_behavior": _CALLING_CFG.get("okofor", {}),
 	}
 	var cands_25 := _get_candidates(arbiter, actor_25, [enemy], ctx_25)
 	if not _has_action(cands_25, "actor.retreat"):
@@ -197,10 +197,10 @@ static func _t_adept_guardian_retreat_threshold() -> Dictionary:
 	return { "ok": true }
 
 
-# ─── Test 7 — Enemy Adept focus fire: most wounded ─────────────────────────
-static func _t_enemy_adept_focus_fire() -> Dictionary:
+# ─── Test 7 — Enemy Forming focus fire: most wounded ─────────────────────────
+static func _t_enemy_forming_focus_fire() -> Dictionary:
 	var enemy_actor := {
-		"id": "enemy_adept", "faction": "enemy", "calling_origin": "enemy",
+		"id": "enemy_forming", "faction": "enemy", "calling_origin": "enemy",
 		"actor_type": "enemy", "rank": 2,
 		"traits": { "courage": 0, "wisdom": 0, "faith": 0 }, "vector_scores": {},
 		"fear": 0, "morale": 50, "grid_pos": { "col": 5, "row": 0 },
@@ -219,30 +219,30 @@ static func _t_enemy_adept_focus_fire() -> Dictionary:
 	var arbiter := BehaviorArbiter.new({})
 	var context := {
 		"actor": enemy_actor, "all_actors": [echo_near, echo_wounded],
-		"smartness_tier": "adept",
+		"expression_band": "forming",
 		"calling_behavior": {},
 	}
 	var intent: Dictionary = arbiter.select_intent(context)
-	# Adept enemy should target the wounded echo via focus fire, not the nearest
+	# Forming enemy should target the wounded echo via focus fire, not the nearest
 	if str(intent.get("target_id", "")) == "echo_wounded":
 		return { "ok": true }
 	# Also acceptable: if the enemy moves toward the wounded target
-	return { "ok": false, "error": "Enemy Adept should focus-fire wounded echo, got target: %s action: %s" % [intent.get("target_id", ""), intent.get("action_type", "")] }
+	return { "ok": false, "error": "Enemy Forming should focus-fire wounded echo, got target: %s action: %s" % [intent.get("target_id", ""), intent.get("action_type", "")] }
 
 
 # ─── Tests 8–10 — Fear threshold gates (ActorStateMachine) ─────────────────
-static func _t_last_stand_veteran_threshold() -> Dictionary:
-	# Veteran last-echo-standing: fear=85 should NOT trigger refuse (threshold=88)
-	var echo := ActorTests._make_test_echo("echo_vet", "Ama Kwei")
+static func _t_last_stand_grounded_threshold() -> Dictionary:
+	# Grounded last-echo-standing: fear=85 should NOT trigger refuse (threshold=88)
+	var echo := ActorTests._make_test_echo("echo_gnd", "Ama Kwei")
 	var actor: Dictionary = EchoActor.from_echo(echo)
-	actor["rank"]  = 3       # veteran
-	actor["fear"]  = 85      # above default 80, below veteran 88
+	actor["rank"]  = 3       # grounded
+	actor["fear"]  = 85      # above default 80, below grounded 88
 	actor["morale"] = 50
 	actor["grid_pos"] = { "col": 0, "row": 0 }
 	# Make this the last echo standing — no other echoes alive
 	var dead_ally := { "id": "echo_dead", "faction": "echo", "actor_type": "echo", "is_dead": true,
 		"grid_pos": { "col": 5, "row": 5 } }
-	var enemy := _make_enemy("en_vet", { "col": 1, "row": 0 })
+	var enemy := _make_enemy("en_gnd", { "col": 1, "row": 0 })
 
 	var sm := ActorStateMachine.new(actor)
 	var logger := StructuredLogger.new()
@@ -254,21 +254,21 @@ static func _t_last_stand_veteran_threshold() -> Dictionary:
 	var intent: Dictionary = sm.advance_turn(context, logger, 1)
 
 	if str(intent.get("action_type", "")) == "actor.refuse":
-		return { "ok": false, "error": "Veteran last-standing at fear=85 should NOT refuse (threshold=88)" }
+		return { "ok": false, "error": "Grounded last-standing at fear=85 should NOT refuse (threshold=88)" }
 	return { "ok": true }
 
 
-static func _t_last_stand_elite_threshold() -> Dictionary:
-	# Elite last-echo-standing: fear=92 should NOT trigger refuse (threshold=95)
-	var echo := ActorTests._make_test_echo("echo_eli", "Kwame Oto")
+static func _t_last_stand_whole_threshold() -> Dictionary:
+	# Whole last-echo-standing: fear=92 should NOT trigger refuse (threshold=95)
+	var echo := ActorTests._make_test_echo("echo_whl", "Kwame Oto")
 	var actor: Dictionary = EchoActor.from_echo(echo)
-	actor["rank"]  = 4       # elite
+	actor["rank"]  = 4       # whole
 	actor["fear"]  = 92
 	actor["morale"] = 50
 	actor["grid_pos"] = { "col": 0, "row": 0 }
 	var dead_ally := { "id": "echo_dead2", "faction": "echo", "actor_type": "echo", "is_dead": true,
 		"grid_pos": { "col": 5, "row": 5 } }
-	var enemy := _make_enemy("en_eli", { "col": 1, "row": 0 })
+	var enemy := _make_enemy("en_whl", { "col": 1, "row": 0 })
 
 	var sm := ActorStateMachine.new(actor)
 	var logger := StructuredLogger.new()
@@ -280,16 +280,16 @@ static func _t_last_stand_elite_threshold() -> Dictionary:
 	var intent: Dictionary = sm.advance_turn(context, logger, 1)
 
 	if str(intent.get("action_type", "")) == "actor.refuse":
-		return { "ok": false, "error": "Elite last-standing at fear=92 should NOT refuse (threshold=95)" }
+		return { "ok": false, "error": "Whole last-standing at fear=92 should NOT refuse (threshold=95)" }
 	return { "ok": true }
 
 
 static func _t_suppress_panic_spiral() -> Dictionary:
-	# suppress_panic_spiral on a veteran echo: adds +5 to threshold (88+5=93)
-	# Fear=90 with suppress_panic_spiral + veteran last-stand → should NOT refuse (93 > 90)
+	# suppress_panic_spiral on a grounded echo: adds +5 to threshold (88+5=93)
+	# Fear=90 with suppress_panic_spiral + grounded last-stand → should NOT refuse (93 > 90)
 	var echo := ActorTests._make_test_echo("echo_sps", "Abena Sarp")
 	var actor: Dictionary = EchoActor.from_echo(echo)
-	actor["rank"]  = 3       # veteran
+	actor["rank"]  = 3       # grounded
 	actor["fear"]  = 90
 	actor["morale"] = 50
 	actor["resilience_traits"] = ["suppress_panic_spiral"]
@@ -308,7 +308,7 @@ static func _t_suppress_panic_spiral() -> Dictionary:
 	var intent: Dictionary = sm.advance_turn(context, logger, 1)
 
 	if str(intent.get("action_type", "")) == "actor.refuse":
-		return { "ok": false, "error": "Veteran+suppress_panic_spiral at fear=90 should NOT refuse (threshold=88+5=93)" }
+		return { "ok": false, "error": "Grounded+suppress_panic_spiral at fear=90 should NOT refuse (threshold=88+5=93)" }
 	return { "ok": true }
 
 
@@ -316,7 +316,7 @@ static func _t_suppress_panic_spiral() -> Dictionary:
 static func _t_protect_ally_fires_20pct() -> Dictionary:
 	# Empathic echo + ally at 20% HP → protect_ally candidate generated (threshold=0.50)
 	var actor := {
-		"id": "echo_emp1", "faction": "echo", "calling_origin": "warder",
+		"id": "echo_emp1", "faction": "echo", "calling_origin": "okofor",
 		"actor_type": "echo", "archetype_birth": "empathic",
 		"traits": { "courage": 40, "wisdom": 40, "faith": 60 }, "vector_scores": {},
 		"fear": 0, "morale": 60, "grid_pos": { "col": 0, "row": 0 },
@@ -340,7 +340,7 @@ static func _t_protect_ally_fires_20pct() -> Dictionary:
 static func _t_protect_ally_no_fire_90pct() -> Dictionary:
 	# Empathic echo + ally at 90% HP → protect_ally NOT generated (threshold=0.50)
 	var actor := {
-		"id": "echo_emp2", "faction": "echo", "calling_origin": "warder",
+		"id": "echo_emp2", "faction": "echo", "calling_origin": "okofor",
 		"actor_type": "echo", "archetype_birth": "empathic",
 		"traits": { "courage": 40, "wisdom": 40, "faith": 60 }, "vector_scores": {},
 		"fear": 0, "morale": 60, "grid_pos": { "col": 0, "row": 0 },
@@ -360,10 +360,10 @@ static func _t_protect_ally_no_fire_90pct() -> Dictionary:
 	return { "ok": true }
 
 
-# ─── Test 13 — Veteran Blade: taunt candidate ─────────────────────────────
-static func _t_veteran_blade_taunt() -> Dictionary:
+# ─── Test 13 — Grounded aduro: taunt candidate ────────────────────────────
+static func _t_grounded_aduro_taunt() -> Dictionary:
 	var actor := {
-		"id": "echo_blade_vet", "faction": "echo", "calling_origin": "blade",
+		"id": "echo_aduro_gnd", "faction": "echo", "calling_origin": "aduro",
 		"actor_type": "echo",
 		"traits": { "courage": 60, "wisdom": 40, "faith": 30 }, "vector_scores": {},
 		"fear": 0, "morale": 65, "grid_pos": { "col": 0, "row": 0 },
@@ -372,12 +372,12 @@ static func _t_veteran_blade_taunt() -> Dictionary:
 	var arbiter := BehaviorArbiter.new({})
 	var context := {
 		"actor": actor, "all_actors": [enemy],
-		"smartness_tier": "veteran",
-		"calling_behavior": _CALLING_CFG.get("blade", {}),
+		"expression_band": "grounded",
+		"calling_behavior": _CALLING_CFG.get("aduro", {}),
 	}
 	var candidates := _get_candidates(arbiter, actor, [enemy], context)
 	if not _has_action(candidates, "actor.taunt"):
-		return { "ok": false, "error": "Veteran warrior should have actor.taunt candidate" }
+		return { "ok": false, "error": "Grounded aduro should have actor.taunt candidate" }
 	# Verify taunt target is the enemy
 	for c in candidates:
 		if c.get("action_type", "") == "actor.taunt":
@@ -391,7 +391,7 @@ static func _t_veteran_blade_taunt() -> Dictionary:
 static func _t_bark_melee_nonempty() -> Dictionary:
 	var echo := ActorTests._make_test_echo("echo_bk1", "Esi Owu")
 	var actor: Dictionary = EchoActor.from_echo(echo)
-	actor["rank"] = 2  # adept
+	actor["rank"] = 2  # forming
 	actor["fear"] = 0
 	actor["morale"] = 60
 	actor["grid_pos"] = { "col": 0, "row": 0 }
@@ -419,7 +419,7 @@ static func _t_bark_idle_empty() -> Dictionary:
 	# Actually idle happens when no enemy nearby.
 	var echo := ActorTests._make_test_echo("echo_bk2", "Kwesi Mensa")
 	var actor: Dictionary = EchoActor.from_echo(echo)
-	actor["rank"] = 1  # novice
+	actor["rank"] = 1  # nascent
 	actor["fear"] = 0
 	actor["morale"] = 50
 	actor["grid_pos"] = { "col": 0, "row": 0 }
@@ -437,7 +437,7 @@ static func _t_bark_idle_empty() -> Dictionary:
 	return { "ok": true }
 
 
-# ─── Test 16 — Snapshot: all PROG-010 fields present ──────────────────────
+# ─── Test 16 — Snapshot: all V2-PROG-006 fields present ──────────────────────
 static func _t_snapshot_fields_present() -> Dictionary:
 	var echo := ActorTests._make_test_echo("echo_snap", "Ama Darko")
 	var actor: Dictionary = EchoActor.from_echo(echo)
@@ -453,12 +453,12 @@ static func _t_snapshot_fields_present() -> Dictionary:
 	var snap: Dictionary = sm.get_snapshot()
 
 	var required_fields := [
-		"smartness_tier", "resilience_traits", "leadership_traits", "active_leadership",
+		"expression_band", "resilience_traits", "leadership_traits", "active_leadership",
 		"bark_line", "bark_context", "bark_tier", "bark_target_id"
 	]
 	for field in required_fields:
 		if not snap.has(field):
-			return { "ok": false, "error": "Snapshot missing PROG-010 field: %s" % field }
+			return { "ok": false, "error": "Snapshot missing V2-PROG-006 field: %s" % field }
 	return { "ok": true }
 
 
@@ -513,9 +513,9 @@ static func _get_candidates(arbiter: BehaviorArbiter, actor: Dictionary, all_act
 		ctx["all_actors"] = all_actors
 
 	# GDScript allows calling "private" methods (no enforcement) — use for test inspection.
-	var smartness_tier: String = str(ctx.get("smartness_tier", "novice"))
+	var expression_band: String = str(ctx.get("expression_band", "nascent"))
 	var calling_behavior: Dictionary = ctx.get("calling_behavior", {})
-	return arbiter._generate_candidates(actor, all_actors, ctx, smartness_tier, calling_behavior)
+	return arbiter._generate_candidates(actor, all_actors, ctx, expression_band, calling_behavior)
 
 
 static func _has_action(candidates: Array, action_type: String) -> bool:

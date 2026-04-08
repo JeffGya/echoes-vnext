@@ -16,6 +16,8 @@
 class_name ActorStateMachine
 extends RefCounted
 
+const MaturityExpressionService = preload("res://core/actors/MaturityExpressionService.gd")
+
 var _actor: Dictionary
 var _behavior_module: BehaviorModule
 var _last_intent: Dictionary = {}
@@ -24,8 +26,8 @@ var _movement_skipped: bool = false  # ACTOR-006: true when actor is_structure; 
 var _last_morale_tier: String = "steady"  # ACTOR-007: morale tier of the winning intent
 var _last_morale_modifier: int = 0        # ACTOR-007: flat score modifier applied by morale tier
 
-# PROG-010: per-turn computed state (reset each advance_turn)
-var _smartness_tier: String = "novice"
+# V2-PROG-006: per-turn computed state (reset each advance_turn)
+var _expression_band: String = "nascent"
 var _calling_behavior: Dictionary = {}
 var _active_leadership: String = ""
 var _bark_line: String = ""
@@ -99,13 +101,13 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 			"movement_skipped": true,
 		})
 
-	# PROG-010: compute smartness tier + calling behavior
+	# V2-PROG-006: compute maturity-expression band + calling behavior
 	var cfg_data: Dictionary = context.get("cfg", {}).get("data", {})
-	var smart_cfg: Dictionary = cfg_data.get("smartness", {})
-	var tier_by_rank: Dictionary = smart_cfg.get("tier_by_rank", {})
-	var calling_cfg: Dictionary = smart_cfg.get("calling_behavior", {})
-	_smartness_tier = SmartnessTierService.get_tier(int(_actor.get("rank", 1)), tier_by_rank)
-	_calling_behavior = SmartnessTierService.get_calling_behavior(_actor, calling_cfg)
+	var expr_cfg: Dictionary = cfg_data.get("maturity_expression", {})
+	var band_by_standing: Dictionary = expr_cfg.get("band_by_standing", {})
+	var calling_cfg: Dictionary = expr_cfg.get("calling_behavior", {})
+	_expression_band = MaturityExpressionService.get_expression_band(int(_actor.get("rank", 1)), band_by_standing)
+	_calling_behavior = MaturityExpressionService.get_calling_behavior(_actor, calling_cfg)
 
 	# PROG-010: read resilience + leadership traits
 	var resilience_traits: Array = _actor.get("resilience_traits", []) as Array
@@ -134,38 +136,38 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	if _actor.has("_withdraw_cooldown"):
 		_actor["_withdraw_cooldown"] = maxi(0, int(_actor["_withdraw_cooldown"]) - 1)
 
-	# COMBAT-003 + PROG-010: Absolute Fear Rule — dynamic threshold based on tier + last stand.
+	# COMBAT-003 + V2-PROG-006: Absolute Fear Rule — dynamic threshold based on expression band + last stand.
 	# PROG-009: per-calling override from calling_behavior.absolute_fear_threshold.
 	# GDD: "fear_current drives refusal/guard/retreat; can override ALL at extreme threshold."
 	var fear_threshold: int = int(_calling_behavior.get("absolute_fear_threshold", \
 		cfg_data.get("emotion", {}).get("fear_threshold", 80)))
 	if last_echo_standing:
-		var ls_thresholds: Dictionary = smart_cfg.get("last_stand_fear_threshold", {})
-		if _smartness_tier == "elite":
-			fear_threshold = int(ls_thresholds.get("elite", 95))
-		elif _smartness_tier == "veteran":
-			fear_threshold = int(ls_thresholds.get("veteran", 88))
-	# suppress_panic_spiral: raises threshold +5 on top of tier bonus
+		var ls_thresholds: Dictionary = expr_cfg.get("last_stand_fear_threshold", {})
+		if _expression_band == "whole":
+			fear_threshold = int(ls_thresholds.get("whole", 95))
+		elif _expression_band == "grounded":
+			fear_threshold = int(ls_thresholds.get("grounded", 88))
+	# suppress_panic_spiral: raises threshold +5 on top of band bonus
 	if "suppress_panic_spiral" in resilience_traits \
-			and (_smartness_tier == "veteran" or _smartness_tier == "elite"):
+			and (_expression_band == "grounded" or _expression_band == "whole"):
 		fear_threshold = min(fear_threshold + 5, 100)
 
-	# PROG-010: self_regulate tick — Veteran+ +3 morale per round
-	if (_smartness_tier == "veteran" or _smartness_tier == "elite") \
+	# V2-PROG-006: self_regulate tick — Grounded+ +3 morale per round
+	if (_expression_band == "grounded" or _expression_band == "whole") \
 			and "self_regulate" in resilience_traits:
 		_actor["morale"] = clampi(int(_actor.get("morale", 50)) + 3, 0, 100)
 
-	# PROG-010: Elite last-stand morale tick +5
-	if _smartness_tier == "elite" and last_echo_standing:
-		_actor["morale"] = clampi(int(_actor.get("morale", 50)) + int(smart_cfg.get("last_stand_elite_morale_tick", 5)), 0, 100)
-		logger.info(t, "actor.last_stand_morale_tick", "Elite last-stand morale tick", {
+	# V2-PROG-006: Whole last-stand morale tick +5
+	if _expression_band == "whole" and last_echo_standing:
+		_actor["morale"] = clampi(int(_actor.get("morale", 50)) + int(expr_cfg.get("last_stand_whole_morale_tick", 5)), 0, 100)
+		logger.info(t, "actor.last_stand_morale_tick", "Whole-band last-stand morale tick", {
 			"actor_id": _actor.get("id", ""),
 			"morale":   _actor["morale"],
 		})
 
-	# PROG-010: Elite leadership activation — apply radius effects to nearby allies
-	if _smartness_tier == "elite" and not leadership_traits.is_empty():
-		_active_leadership = _apply_leadership(leadership_traits, smart_cfg, context, logger, t)
+	# V2-PROG-006: Whole-band leadership activation — apply radius effects to nearby allies
+	if _expression_band == "whole" and not leadership_traits.is_empty():
+		_active_leadership = _apply_leadership(leadership_traits, expr_cfg, context, logger, t)
 
 	if int(_actor.get("fear", 0)) >= fear_threshold:
 		var refuse_intent: Dictionary = {
@@ -176,11 +178,11 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		}
 		_last_intent = refuse_intent
 		_last_action = refuse_intent.duplicate()
-		# PROG-010: bark for refuse
+		# V2-PROG-006: bark for refuse
 		var arch_r: String = str(_actor.get("archetype_birth", ""))
 		_bark_context = "combat_refuse"
-		_bark_tier = _smartness_tier
-		_bark_line = ShoutBank.get_tier_shout("combat_refuse", arch_r, _smartness_tier,
+		_bark_tier = _expression_band
+		_bark_line = ShoutBank.get_expression_shout("combat_refuse", arch_r, _expression_band,
 			str(_actor.get("calling_origin", "")))
 		if _bark_line.is_empty():
 			_bark_line = ShoutBank.get_shout("combat_refuse", arch_r, ShoutBank.get_tier(
@@ -196,9 +198,9 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		})
 		return refuse_intent
 
-	# PROG-010: inject tier + traits into context so BehaviorArbiter can use them
+	# V2-PROG-006: inject expression band + traits into context so BehaviorArbiter can use them
 	var augmented_context := context.duplicate()
-	augmented_context["smartness_tier"]   = _smartness_tier
+	augmented_context["expression_band"]  = _expression_band
 	augmented_context["calling_behavior"] = _calling_behavior
 	augmented_context["resilience_traits"] = resilience_traits
 	augmented_context["leadership_traits"] = leadership_traits
@@ -218,7 +220,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		"action_type": intent.get("action_type", ""),
 		"target_id": intent.get("target_id", ""),
 		"actor_id": _actor.get("id", ""),
-		"smartness_tier": _smartness_tier,
+		"expression_band": _expression_band,
 	})
 	# ACTOR-004: store last_action for snapshot and log actor.action
 	_last_action = {
@@ -347,8 +349,8 @@ func get_snapshot() -> Dictionary:
 		# ACTOR-008: death state fields
 		"status":      "dead" if _actor.get("is_dead", false) else "alive",
 		"death_round": int(_actor.get("death_round", 0)),
-		# PROG-010: smartness tier + identity traits
-		"smartness_tier":    _smartness_tier,
+		# V2-PROG-006: expression band + identity traits
+		"expression_band":   _expression_band,
 		"resilience_traits": (_actor.get("resilience_traits", []) as Array).duplicate(),
 		"leadership_traits": (_actor.get("leadership_traits", []) as Array).duplicate(),
 		"active_leadership": _active_leadership,
@@ -435,10 +437,10 @@ func _select_bark(
 		return
 
 	_bark_context = context_key
-	_bark_tier = _smartness_tier
+	_bark_tier = _expression_band
 
-	# Try tier-shout first (emotion × tier × archetype × calling)
-	var line := ShoutBank.get_tier_shout(context_key, arch, _smartness_tier, calling)
+	# Try expression-shout first (emotion × band × archetype × calling)
+	var line := ShoutBank.get_expression_shout(context_key, arch, _expression_band, calling)
 	if line.is_empty() or line == "I'll do my part.":
 		# Fall back to legacy get_shout for existing contexts
 		var trait_tier := ShoutBank.get_tier(
@@ -465,14 +467,14 @@ static func _morale_tier_rank(tier: String) -> int:
 # Returns the trait ID that fired, or "" if none.
 func _apply_leadership(
 	leadership_traits: Array,
-	smart_cfg: Dictionary,
+	expr_cfg: Dictionary,
 	context: Dictionary,
 	logger: StructuredLogger,
 	t: int
 ) -> String:
 	var my_pos: Dictionary = _actor.get("grid_pos", { "col": 0, "row": 0 })
 	var leadership_radius: int = int(_calling_behavior.get("leadership_radius", 3))
-	var effects_cfg: Dictionary = smart_cfg.get("leadership_trait_effects", {})
+	var effects_cfg: Dictionary = expr_cfg.get("leadership_trait_effects", {})
 
 	# Gather living allies within radius
 	var nearby_allies: Array = []

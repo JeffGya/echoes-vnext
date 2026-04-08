@@ -728,17 +728,17 @@
 				}
 			}
 		},
-		"smartness": {
-			"_comment": "PROG-010: Smartness Tier system. Tier derived from actor rank. Calling-specific behavior modifiers. All thresholds config-driven.",
-			"tier_by_rank": {
-				"1": "novice",
-				"2": "adept",
-				"3": "veteran",
-				"4": "elite",
-				"5": "elite"
+		"maturity_expression": {
+			"_comment": "V2-PROG-006: Maturity-Expression system. Expression band derived from actor rank (Standing). Replaces smartness-tier framing. Calling-specific behavior modifiers. All thresholds config-driven.",
+			"band_by_standing": {
+				"1": "nascent",
+				"2": "forming",
+				"3": "grounded",
+				"4": "whole",
+				"5": "whole"
 			},
 			"calling_behavior": {
-				"_comment": "Per-calling combat personality. retreat_threshold: HP ratio below which retreat is considered (null = never retreat). press_advantage: melee bonus when target hp < press_hp_threshold. directive_mul: multiplier on directive bonuses for this calling. leadership_radius: tile radius for Elite leadership trait effects. fear_move_bonus: flat bonus to move score per 10 fear points (kra_soro). idle_fear_aura: fear reduction applied to nearby allies when actor.idle wins (okomfo).",
+				"_comment": "Per-calling combat personality. retreat_threshold: HP ratio below which retreat is considered (null = never retreat). press_advantage: melee bonus when target hp < press_hp_threshold. directive_mul: multiplier on directive bonuses for this calling. leadership_radius: tile radius for Whole-band leadership trait effects. fear_move_bonus: flat bonus to move score per 10 fear points (kra_soro). idle_fear_aura: fear reduction applied to nearby allies when actor.idle wins (okomfo).",
 				"aduro": {
 					"retreat_threshold": 0.30,
 					"press_advantage": true,
@@ -793,82 +793,92 @@
 			},
 			"press_hp_threshold": 0.5,
 			"press_attack_bonus": 15.0,
-			"protect_ally_veteran_mul": 1.3,
-			"protect_ally_veteran_hp_threshold": 0.5,
+			"protect_ally_grounded_mul": 1.3,
+			"protect_ally_grounded_hp_threshold": 0.5,
 			"last_stand_fear_threshold": {
 				"_comment": "Absolute Fear Rule threshold override when last_echo_standing is active. Replaces default 80.",
-				"veteran": 88.0,
-				"elite": 95.0
+				"grounded": 88.0,
+				"whole": 95.0
 			},
-			"last_stand_elite_morale_tick": 5.0,
+			"last_stand_whole_morale_tick": 5.0,
 			"enemy_demoralize_fear_tick": 5.0,
 			"enemy_demoralize_radius": 3.0,
 			"resilience_trait_pool": {
 				"_comment": "Drawing weights per trait per calling_origin. Higher = more likely. All echoes draw 1-2 traits. Weighted by calling_origin then archetype.",
 				"resist_fear": {
-					"blade": 5.0,
-					"warder": 4.0,
-					"ranger": 2.0,
-					"steward": 3.0,
-					"seer": 1.0,
+					"aduro": 5.0,
+					"okofor": 4.0,
+					"kra_soro": 2.0,
+					"onyamesu": 3.0,
+					"okomfo": 1.0,
+					"sum_okwanfo": 3.0,
 					"uncalled": 2.0
 				},
 				"self_regulate": {
-					"blade": 1.0,
-					"warder": 2.0,
-					"ranger": 4.0,
-					"steward": 3.0,
-					"seer": 5.0,
+					"aduro": 1.0,
+					"okofor": 2.0,
+					"kra_soro": 4.0,
+					"onyamesu": 3.0,
+					"okomfo": 5.0,
+					"sum_okwanfo": 4.0,
 					"uncalled": 5.0
 				},
 				"suppress_panic_spiral": {
-					"blade": 2.0,
-					"warder": 2.0,
-					"ranger": 4.0,
-					"steward": 3.0,
-					"seer": 5.0,
+					"aduro": 2.0,
+					"okofor": 2.0,
+					"kra_soro": 4.0,
+					"onyamesu": 3.0,
+					"okomfo": 5.0,
+					"sum_okwanfo": 3.0,
 					"uncalled": 4.0
 				},
 				"ignore_broken_allies": {
-					"blade": 5.0,
-					"warder": 3.0,
-					"ranger": 2.0,
-					"steward": 3.0,
-					"seer": 1.0,
+					"aduro": 5.0,
+					"okofor": 3.0,
+					"kra_soro": 2.0,
+					"onyamesu": 3.0,
+					"okomfo": 1.0,
+					"sum_okwanfo": 2.0,
 					"uncalled": 2.0
 				}
 			},
 			"leadership_trait_pool": {
-				"_comment": "Available leadership traits per calling_origin. Each echo draws 1-2. Activated at Elite tier.",
-				"warder": [
+				"_comment": "Available leadership traits per calling_origin. Each echo draws 1-2. Activated at Whole band.",
+				"okofor": [
 					"inspire_aura",
 					"calm_fear",
 					"rally_call",
 					"block_contagion"
 				],
-				"blade": [
+				"aduro": [
 					"kill_momentum",
 					"aggression_field",
 					"challenge_call",
 					"fearless_example"
 				],
-				"ranger": [
+				"kra_soro": [
 					"mark_target",
 					"safe_path_read",
 					"threat_read",
 					"cover_positioning"
 				],
-				"steward": [
+				"onyamesu": [
 					"hold_formation",
 					"morale_anchor",
 					"steady_presence",
 					"position_lock"
 				],
-				"seer": [
+				"okomfo": [
 					"fear_read",
 					"morale_forecast",
 					"calm_transmission",
 					"directive_echo"
+				],
+				"sum_okwanfo": [
+					"threat_read",
+					"fearless_example",
+					"safe_path_read",
+					"cover_positioning"
 				],
 				"uncalled": [
 					"directive_amplify",

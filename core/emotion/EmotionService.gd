@@ -175,8 +175,8 @@ static func apply_morale_delta(echo: Dictionary, delta: int, cause: String, logg
 ## If fear_current >= fear_threshold after change, also logs emotion.fear.threshold_crossed.
 ## Stores _last_drift on the emotion block (transient; not saved to disk).
 ##
-## PROG-010: resilience_traits and smartness_tier are optional params.
-## If "resist_fear" is in resilience_traits AND smartness_tier is "veteran" or "elite",
+## V2-PROG-006: resilience_traits and expression_band are optional params.
+## If "resist_fear" is in resilience_traits AND expression_band is "grounded" or "whole",
 ## the incoming fear delta is reduced by 40%. Sets emotion._resilience_fired = true when
 ## a trait fires (cleared each turn by ActorStateMachine before advance_turn).
 static func apply_fear_delta(
@@ -187,17 +187,17 @@ static func apply_fear_delta(
 	logger: StructuredLogger,
 	t: int,
 	resilience_traits: Array = [],
-	smartness_tier: String = ""
+	expression_band: String = ""
 ) -> void:
 	_ensure_emotion_block(echo)
 	var emo: Dictionary = echo["emotion"]
 	var old_val := int(emo.get("fear_current", 0))
 
-	# PROG-010: resist_fear — reduce fear delta by 40% at Veteran+
+	# V2-PROG-006: resist_fear — reduce fear delta by 40% at Grounded+
 	var effective_delta := delta
 	var trait_fired := false
 	if delta > 0 and "resist_fear" in resilience_traits \
-			and (smartness_tier == "veteran" or smartness_tier == "elite"):
+			and (expression_band == "grounded" or expression_band == "whole"):
 		effective_delta = int(round(float(delta) * 0.60))
 		trait_fired = true
 

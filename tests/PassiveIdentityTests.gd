@@ -92,12 +92,12 @@ static func _distant_enemy() -> Dictionary:
 		"grid_pos": { "col": 2, "row": 0 },
 	}
 
-## Returns a calling_behavior config block for blade with broken_morale_override.
+## Returns a calling_behavior config block for aduro with broken_morale_override.
 static func _blade_cfg() -> Dictionary:
 	return {
-		"smartness": {
+		"maturity_expression": {
 			"calling_behavior": {
-				"blade": {
+				"aduro": {
 					"retreat_threshold": 0.30,
 					"press_advantage":   true,
 					"directive_mul":     1.0,

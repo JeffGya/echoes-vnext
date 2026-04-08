@@ -98,14 +98,14 @@ const _DEFAULTS := {
 	"fear_passive_actions":  ["actor.idle", "actor.guard"],
 	"threat_threshold":      0.50,  # 0.50 = ally must be below 50% HP to qualify as threatened
 	"guard_range":           1,     # enemy must be adjacent for guard to be a candidate (melee-only MVP)
-	# PROG-010: tier-based scoring defaults
-	"wound_chase_mul":              15.0,  # Adept+ finish-wounded score bonus multiplier
-	"surrounded_move_penalty":     -18.0, # Adept+ penalty for move into surrounded position
-	"formation_distance":            6,   # Veteran+ formation pull threshold (tiles)
-	"press_hp_threshold":            0.5, # Veteran+ calling bonus HP gate (target < 50%)
-	"press_attack_bonus":           15.0, # Veteran blade melee bonus vs wounded target
-	"protect_ally_veteran_mul":      1.3, # Veteran warder protect_ally score multiplier
-	"protect_ally_veteran_hp_threshold": 0.50, # HP gate for warder Veteran+ protect_ally mul
+	# V2-PROG-006: expression-band-based scoring defaults
+	"wound_chase_mul":              15.0,  # Forming+ finish-wounded score bonus multiplier
+	"surrounded_move_penalty":     -18.0, # Forming+ penalty for move into surrounded position
+	"formation_distance":            6,   # Grounded+ formation pull threshold (tiles)
+	"press_hp_threshold":            0.5, # Grounded+ calling bonus HP gate (target < 50%)
+	"press_attack_bonus":           15.0, # Grounded aduro melee bonus vs wounded target
+	"protect_ally_grounded_mul":     1.3, # Grounded okofor protect_ally score multiplier
+	"protect_ally_grounded_hp_threshold": 0.50, # HP gate for okofor Grounded+ protect_ally mul
 
 	# -------------------------
 	# Situational modifier tables
@@ -234,18 +234,18 @@ func select_intent(context: Dictionary) -> Dictionary:
 	var all_actors: Array     = context.get("all_actors", [])
 	var directive: Dictionary = context.get("directive", {})
 
-	# PROG-010: read tier + calling behavior injected by ActorStateMachine
-	var smartness_tier: String    = str(context.get("smartness_tier", "novice"))
+	# V2-PROG-006: read expression band + calling behavior injected by ActorStateMachine
+	var expression_band: String    = str(context.get("expression_band", "nascent"))
 	var calling_behavior: Dictionary = context.get("calling_behavior", {})
 
 	# Build board summary once — passed to _score() for every candidate to avoid re-computation.
-	var board_summary: Dictionary = _build_board_summary(actor, all_actors, context.get("board_cfg", {}), smartness_tier)
+	var board_summary: Dictionary = _build_board_summary(actor, all_actors, context.get("board_cfg", {}), expression_band)
 
-	var candidates: Array[Dictionary] = _generate_candidates(actor, all_actors, context, smartness_tier, calling_behavior)
+	var candidates: Array[Dictionary] = _generate_candidates(actor, all_actors, context, expression_band, calling_behavior)
 
 	# Score each candidate, then sort: highest score first; tiebreak alphabetically.
 	for c: Dictionary in candidates:
-		c["_score"] = _score(c["action_type"], actor, directive, board_summary, smartness_tier, calling_behavior, c)
+		c["_score"] = _score(c["action_type"], actor, directive, board_summary, expression_band, calling_behavior, c)
 
 	# VOW-001: apply vow bias additively after base scoring.
 	# Vow bias is always additive, never overrides. Enemies are unaffected (faction != "echo").
@@ -312,7 +312,7 @@ func _generate_candidates(
 	actor: Dictionary,
 	all_actors: Array,
 	context: Dictionary = {},
-	smartness_tier: String = "novice",
+	expression_band: String = "nascent",
 	calling_behavior: Dictionary = {}
 ) -> Array[Dictionary]:
 	var candidates: Array[Dictionary] = []
@@ -338,12 +338,12 @@ func _generate_candidates(
 		else str(actor.get("calling_origin", "uncalled"))
 	var my_pos: Dictionary = actor.get("grid_pos", { "col": 0, "row": 0 })
 
-	# PROG-010: Enemy Adept+ focus fire — prefer most-wounded echo over nearest.
+	# V2-PROG-006: Enemy Forming+ focus fire — prefer most-wounded echo over nearest.
 	# Echo actors use standard nearest-enemy selection.
 	var nearest_enemy: Dictionary
 	if shrine_override.is_empty():
 		if actor_type == "enemy" \
-				and (smartness_tier == "adept" or smartness_tier == "veteran" or smartness_tier == "elite"):
+				and (expression_band == "forming" or expression_band == "grounded" or expression_band == "whole"):
 			nearest_enemy = _get_most_wounded_enemy(actor, all_actors)
 			if nearest_enemy.is_empty():
 				nearest_enemy = ActorService.get_nearest_enemy(actor, all_actors)
@@ -410,10 +410,10 @@ func _generate_candidates(
 			"priority":          1.0,
 		})
 
-	# PROG-010: actor.retreat — calling-aware, Adept+ only. Aduro never retreats.
+	# V2-PROG-006: actor.retreat — calling-aware, Forming+ only. Aduro never retreats.
 	# Only echo actors can retreat.
 	if actor_type == "echo" \
-			and (smartness_tier == "adept" or smartness_tier == "veteran" or smartness_tier == "elite"):
+			and (expression_band == "forming" or expression_band == "grounded" or expression_band == "whole"):
 		var retreat_threshold: Variant = calling_behavior.get("retreat_threshold", null)
 		if retreat_threshold != null and calling_origin != "aduro":
 			var hp_r: float = _hp_ratio(actor)
@@ -424,10 +424,10 @@ func _generate_candidates(
 					"priority":    1.0,
 				})
 
-	# PROG-010: actor.taunt — Aduro calling Veteran+ only.
+	# V2-PROG-006: actor.taunt — Aduro calling Grounded+ only.
 	# Mechanical effect applied by combat loop (taunted_by set on enemy).
 	if actor_type == "echo" and calling_origin == "aduro" \
-			and (smartness_tier == "veteran" or smartness_tier == "elite") \
+			and (expression_band == "grounded" or expression_band == "whole") \
 			and not nearest_enemy.is_empty():
 		candidates.append({
 			"action_type": "actor.taunt",
@@ -585,7 +585,7 @@ func _generate_candidates(
 ##
 ## last_echo_standing sentinel: requires dead_allies > 0 so a designed 1v1 scenario
 ## (all_actors contains only enemies) never fires the condition.
-func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dictionary, smartness_tier: String = "novice") -> Dictionary:
+func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dictionary, expression_band: String = "nascent") -> Dictionary:
 	var my_id:      String = str(actor.get("id", ""))
 	var my_faction: String = str(actor.get("faction", ""))
 	var actor_type: String = str(actor.get("actor_type", "echo"))
@@ -665,10 +665,10 @@ func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dict
 		else:
 			active.append("enemy_advancing")
 
-	# PROG-010: echo_retreating — enemy Adept+ pursuit.
-	# Active when this enemy is Adept+ and any echo is retreating (last_intent == actor.retreat).
+	# V2-PROG-006: echo_retreating — enemy Forming+ pursuit.
+	# Active when this enemy is Forming+ and any echo is retreating (last_intent == actor.retreat).
 	if actor_type == "enemy" \
-			and (smartness_tier == "adept" or smartness_tier == "veteran" or smartness_tier == "elite"):
+			and (expression_band == "forming" or expression_band == "grounded" or expression_band == "whole"):
 		for a_v in all_actors:
 			if not (a_v is Dictionary):
 				continue
@@ -751,7 +751,7 @@ func _score(
 	actor: Dictionary,
 	directive: Dictionary,
 	board_summary: Dictionary = {},
-	smartness_tier: String = "novice",
+	expression_band: String = "nascent",
 	calling_behavior: Dictionary = {},
 	candidate: Dictionary = {}
 ) -> float:
@@ -819,9 +819,9 @@ func _score(
 	# 6. Directive bonus — generic loop over intent_weights (semantic keys).
 	var directive_bonus: float = _directive_bonus(action_type, directive)
 
-	# PROG-010: calling-aware score multipliers (Veteran+ only)
+	# V2-PROG-006: calling-aware score multipliers (Grounded+ only)
 	var calling_mul: float = 1.0
-	if smartness_tier == "veteran" or smartness_tier == "elite":
+	if expression_band == "grounded" or expression_band == "whole":
 		var actor_type_str: String = str(actor.get("actor_type", "echo"))
 		var calling_str: String = str(actor.get("calling_origin", "uncalled"))
 		if actor_type_str == "echo":
@@ -831,19 +831,19 @@ func _score(
 			match calling_str:
 				"okofor":
 					if action_type == "protect_ally":
-						var protect_mul: float = float(_cfg_get("protect_ally_veteran_mul") \
-							if _cfg.has("protect_ally_veteran_mul") else 1.3)
-						var protect_hp_gate: float = float(_cfg_get("protect_ally_veteran_hp_threshold") \
-							if _cfg.has("protect_ally_veteran_hp_threshold") else 0.50)
+						var protect_mul: float = float(_cfg_get("protect_ally_grounded_mul") \
+							if _cfg.has("protect_ally_grounded_mul") else 1.3)
+						var protect_hp_gate: float = float(_cfg_get("protect_ally_grounded_hp_threshold") \
+							if _cfg.has("protect_ally_grounded_hp_threshold") else 0.50)
 						if target_hp <= protect_hp_gate:
 							calling_mul = protect_mul
 				"aduro":
 					if action_type == "melee_attack" and target_hp <= press_threshold:
 						base += float(_cfg_get("press_attack_bonus") if _cfg.has("press_attack_bonus") else 15.0)
 
-	# PROG-010: Adept+ finish-the-wounded — melee_attack bonus for wounded targets
+	# V2-PROG-006: Forming+ finish-the-wounded — melee_attack bonus for wounded targets
 	if action_type == "melee_attack" \
-			and (smartness_tier == "adept" or smartness_tier == "veteran" or smartness_tier == "elite"):
+			and (expression_band == "forming" or expression_band == "grounded" or expression_band == "whole"):
 		var target_hp_r: float = float(candidate.get("target_hp_ratio", 1.0))
 		var wound_mul: float = float(_cfg_get("wound_chase_mul") if _cfg.has("wound_chase_mul") else 15.0)
 		base += (1.0 - target_hp_r) * wound_mul

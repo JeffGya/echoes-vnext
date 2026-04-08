@@ -470,7 +470,7 @@ Echo traits (resilience + leadership) use a **separate derived RNG** at path `<s
 - `is_dead` and `is_structure` are immutable once set
 - One save slot forever. Auto-save only at sanctioned boundaries (no manual save in MVP)
 - `static build_snapshot()` pattern for mid-state snapshot updates
-- `SmartnessTierService` is the single lookup point for tier (rank-based) + calling_behavior config
+- `MaturityExpressionService` is the single lookup point for expression_band (Standing-based) + calling_behavior config. Expression bands: nascent (S1), forming (S2), grounded (S3), whole (S4–5). `presence_strength`: 0.1 / 0.25 / 0.5 / 1.0. All downstream systems (BehaviorArbiter, EmotionService, ShoutBank) read `expression_band` from actor context — never `smartness_tier`. Config lives under `balance.data.maturity_expression`. (V2-PROG-006)
 - Echo traits (`resilience_traits` + `leadership_traits`) seeded at EchoFactory via derived RNG `.echo_traits.v1` — immutable, separate from v1/v2 draw sequence. Never reorder v1/v2.
 - Bark system (PROG-010): snapshot fields + ShoutBank expansion only. Reactive responses deferred to VOICE-001. Bark display deferred to VOICE-002.
 - `StageModel` + `ObjectiveModel` are immutable data contracts after REALM-002. Adding new objective types = add a constant + TYPE_DESCRIPTIONS entry in `ObjectiveModel.gd` only. Generator pre-boss pool (`_PRE_BOSS_POOL` in `RealmGenerator.gd`) must never be reordered (determinism). Append new types at the end only.

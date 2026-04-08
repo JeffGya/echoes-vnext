@@ -10,7 +10,7 @@ static func summon_paid_one(
 	summoning_cfg: Dictionary,
 	logger: StructuredLogger,
 	t: int,
-	smartness_cfg: Dictionary = {}
+	expression_cfg: Dictionary = {}
 ) -> Dictionary:
 	# Returns:
 	# { ok: bool, reason: String, echo_id: String, echo: Dictionary }
@@ -32,7 +32,7 @@ static func summon_paid_one(
 	var seed_path := "campaign.summon.%d" % summon_count
 	
 	# Generate echo (id assigned by caller/service, not factory)
-	var echo: Dictionary = EchoFactory.generate(seed_root, seed_path, summon_count, "summon", summoning_cfg, smartness_cfg)
+	var echo: Dictionary = EchoFactory.generate(seed_root, seed_path, summon_count, "summon", summoning_cfg, expression_cfg)
 	
 	var echo_id := "echo_%04d" % (roster.size() + 1)
 	echo["id"] = echo_id
@@ -63,7 +63,7 @@ static func summon_paid_many(
 	count: int,
 	logger: StructuredLogger,
 	t: int,
-	smartness_cfg: Dictionary = {}
+	expression_cfg: Dictionary = {}
 ) -> Dictionary:
 	# Returns:
 	# { ok: bool, reason: String, echoes: Array, echo_ids: Array }
@@ -91,7 +91,7 @@ static func summon_paid_many(
 		var idx := summon_count + i
 		var seed_path := "campaign.summon.%d" % idx
 
-		var echo: Dictionary = EchoFactory.generate(seed_root, seed_path, idx, "summon", summoning_cfg, smartness_cfg)
+		var echo: Dictionary = EchoFactory.generate(seed_root, seed_path, idx, "summon", summoning_cfg, expression_cfg)
 
 		var echo_id := "echo_%04d" % (roster.size() + 1)
 		echo["id"] = echo_id
