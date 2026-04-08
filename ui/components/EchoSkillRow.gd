@@ -17,8 +17,9 @@ var _skill_ids: Array = []  # parallel to OptionButton items
 
 func setup(prep_entry: Dictionary) -> void:
 	_echo_id = str(prep_entry.get("echo_id", ""))
-	_name_label.text    = str(prep_entry.get("echo_name",      "Echo"))
-	_calling_label.text = str(prep_entry.get("calling_origin", "—")).capitalize()
+	_name_label.text    = str(prep_entry.get("echo_name",  "Echo"))
+	# V2-PROG-002/005: confirmed calling id lives in calling_id, not calling_origin
+	_calling_label.text = str(prep_entry.get("calling_id", "—")).capitalize()
 
 	var skills_v: Variant = prep_entry.get("available_skills", [])
 	var skills: Array = skills_v if skills_v is Array else []
@@ -32,6 +33,10 @@ func setup(prep_entry: Dictionary) -> void:
 		var s: Dictionary = skills[i] if skills[i] is Dictionary else {}
 		var display := str(s.get("display_name", "?"))
 		var sid     := str(s.get("skill_id",     ""))
+		# V2-PROG-005: append family label so the Keeper sees which family the skill belongs to
+		var family  := str(s.get("skill_family", ""))
+		if not family.is_empty():
+			display = "%s [%s]" % [display, family.capitalize()]
 		_skill_picker.add_item(display, i + 1)
 		_skill_ids.append(sid)
 

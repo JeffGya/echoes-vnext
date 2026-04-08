@@ -1,6 +1,9 @@
 # res://core/progression/SkillDefinition.gd
-# PROG-008: Active skill data contract and validator.
-# PROG-009: Added tier_gate as a recognised optional field (empty in PROG-009; PROG-011 populates).
+# V2-PROG-005: Active skill data contract and validator.
+# PROG-008 original: slot system and calling_requirement gating.
+# V2-PROG-005: calling_requirement removed — V2 axis is skill_family.
+#              Skills belong to one of 6 global families (ward/break/veil/path/rite/root).
+#              Callings access skills via calling_family_alignment in balance.json.
 #
 # Skill slots hold ACTIVE skills only — skills that fire as intent actions in combat.
 # Passive skills (always-on trait effects) and stat bumps are never placed in slots.
@@ -22,11 +25,16 @@ extends RefCounted
 ## this constant mirrors it. Both must be kept in sync.
 const MAX_SKILL_SLOTS: int = 1
 
+## Valid skill family IDs. Documented here for reference; not enforced in validate()
+## to keep the validator lightweight. Enforcement added when family enum is locked.
+const VALID_FAMILIES: Array = ["ward", "break", "veil", "path", "rite", "root"]
+
 ## All 7 required fields for a valid SkillDefinition entry.
 ## Any definition loaded from balance.json data.skills.definitions must contain all of these.
+## V2-PROG-005: calling_requirement removed; skill_family is the V2 family axis.
 const REQUIRED_FIELDS: Array = [
 	"skill_id",
-	"calling_requirement",
+	"skill_family",
 	"target_type",
 	"action_type",
 	"cooldown_rounds",
@@ -44,7 +52,7 @@ static func validate(defn: Dictionary) -> bool:
 		return false
 	var string_fields: Array = [
 		"skill_id",
-		"calling_requirement",
+		"skill_family",
 		"target_type",
 		"action_type",
 		"scaling_source",

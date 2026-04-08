@@ -1,5 +1,6 @@
 # res://tests/SkillDefinitionTests.gd
-# PROG-008: Unit tests for SkillDefinition contract validator.
+# V2-PROG-005: Unit tests for SkillDefinition contract validator.
+# calling_requirement removed from REQUIRED_FIELDS; skill_family is the V2 axis.
 #
 # All tests are pure static — no save file, no FlowRuntime, no OS time.
 # Tests cover: valid definition, missing fields, wrong types, field count.
@@ -18,15 +19,16 @@ static func register(runner: CoreTestRunner) -> void:
 # ────────────────────────────────────────────────────────────────────────────
 
 ## Returns a valid skill definition with all 7 required fields.
+## V2-PROG-005: uses skill_family instead of calling_requirement.
 static func _valid_defn() -> Dictionary:
 	return {
-		"skill_id":            "skill.shield_bash",
-		"calling_requirement": "warder",
-		"target_type":         "enemy",
-		"action_type":         "melee.bash",
-		"cooldown_rounds":     2,
-		"scaling_source":      "atk",
-		"intent_weight_tag":   "aggressive",
+		"skill_id":          "skill.shield_bash",
+		"skill_family":      "ward",
+		"target_type":       "enemy",
+		"action_type":       "melee.bash",
+		"cooldown_rounds":   2,
+		"scaling_source":    "atk",
+		"intent_weight_tag": "aggressive",
 	}
 
 
@@ -73,7 +75,7 @@ static func _test_required_fields_count_is_seven() -> Dictionary:
 			"error": "Expected REQUIRED_FIELDS.size()==7, got %d" % SkillDefinition.REQUIRED_FIELDS.size()
 		}
 	var expected: Array = [
-		"skill_id", "calling_requirement", "target_type",
+		"skill_id", "skill_family", "target_type",
 		"action_type", "cooldown_rounds", "scaling_source", "intent_weight_tag",
 	]
 	for f in expected:

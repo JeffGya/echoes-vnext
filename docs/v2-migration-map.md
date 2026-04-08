@@ -490,7 +490,8 @@ V2-MIG-001 (this doc) ✅ Done
   ├── V2-PROG-002 Calling seam unification (calling_origin ambiguity) ✅ Done
   │     └── V2-PROG-003 Vector expansion (4 → 10 vectors) ✅ Done
   │           └── V2-PROG-004 V2 calling IDs (6 callings, save migration) ✅ Done
-  │                 └── V2-PROG-004+ Standing milestone UI system (S3/S6/S9 flow)
+  │                 └── V2-PROG-005 Skill family foundation (Ward/Break/Veil/Path/Rite/Root) ✅ Done
+  │                       └── V2-PROG-004+ Standing milestone UI system (S3/S6/S9 flow)
   ├── V2-DIRECTIVE-001 Directive rewrite (Scout Carefully / Seek Signs)
   ├── V2-SANCTUM-001+  Building + Continuity system
   └── V2-ECONOMY-001+  Economy expansion (Relics, Faith, Harmony, Favor)

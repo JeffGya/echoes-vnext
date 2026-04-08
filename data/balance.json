@@ -1261,12 +1261,29 @@
 			}
 		},
 		"skills": {
-			"_comment": "PROG-008: Active skill slot system. max_skill_slots is the loadout cap (MVP=1). Passive skills and stat bumps are NOT in slots — they are always-on effects handled elsewhere.",
+			"_comment": "V2-PROG-005: Family-based skill system. Skills belong to one of 6 global families (ward/break/veil/path/rite/root). Callings align to families via calling_family_alignment. calling_requirement is removed — access is determined by family alignment only.",
 			"max_skill_slots": 1,
+			"families": {
+				"ward":  { "name": "Ward",  "description": "Protection through guarding, holding, and stabilising danger before it breaks the line." },
+				"break": { "name": "Break", "description": "Pressure through force, disruption, momentum, and opening-making." },
+				"veil":  { "name": "Veil",  "description": "Concealment through misdirection, hidden intervention, sabotage, and surgical timing." },
+				"path":  { "name": "Path",  "description": "Mastery through route-reading, pursuit, angle control, repositioning, and field sense." },
+				"rite":  { "name": "Rite",  "description": "Influence through omen-reading, thresholds, sacred procedure, revelation, and spirit authority." },
+				"root":  { "name": "Root",  "description": "Endurance through care, morale, recovery, continuity, and communal steadiness." }
+			},
+			"calling_family_alignment": {
+				"_comment": "strong = primary families (2 per calling). light = adjacent family (1 per calling). Source: GDD §11.4.5.",
+				"okofor":      { "strong": ["ward", "root"],  "light": ["break"] },
+				"aduro":       { "strong": ["break", "ward"], "light": ["veil"] },
+				"sum_okwanfo": { "strong": ["veil", "break"], "light": ["path"] },
+				"kra_soro":    { "strong": ["path", "veil"],  "light": ["rite"] },
+				"okomfo":      { "strong": ["rite", "path"],  "light": ["root"] },
+				"onyamesu":    { "strong": ["root", "ward"],  "light": ["rite"] }
+			},
 			"definitions": {
 				"blade_resolve": {
 					"skill_id": "blade_resolve",
-					"calling_requirement": "aduro",
+					"skill_family": "break",
 					"target_type": "enemy",
 					"action_type": "actor.press",
 					"cooldown_rounds": 0,
@@ -1276,7 +1293,7 @@
 				},
 				"warders_vigil": {
 					"skill_id": "warders_vigil",
-					"calling_requirement": "okofor",
+					"skill_family": "ward",
 					"target_type": "ally",
 					"action_type": "actor.interpose",
 					"cooldown_rounds": 0,
@@ -1286,7 +1303,8 @@
 				},
 				"stewards_ground": {
 					"skill_id": "stewards_ground",
-					"calling_requirement": "onyamesu",
+					"skill_family": "ward",
+					"_family_note": "Hold the line: active area control before danger breaks through. Ward = danger management; Root = recovery after. Ground is pre-break, so Ward.",
 					"target_type": "area",
 					"action_type": "actor.hold_ground",
 					"cooldown_rounds": 0,
@@ -1296,7 +1314,7 @@
 				},
 				"stewards_call": {
 					"skill_id": "stewards_call",
-					"calling_requirement": "onyamesu",
+					"skill_family": "root",
 					"target_type": "area",
 					"action_type": "actor.steady_call",
 					"cooldown_rounds": 0,
@@ -1307,7 +1325,7 @@
 				},
 				"rangers_mark": {
 					"skill_id": "rangers_mark",
-					"calling_requirement": "kra_soro",
+					"skill_family": "path",
 					"target_type": "enemy",
 					"action_type": "actor.mark",
 					"cooldown_rounds": 0,
@@ -1317,7 +1335,7 @@
 				},
 				"rangers_withdraw": {
 					"skill_id": "rangers_withdraw",
-					"calling_requirement": "kra_soro",
+					"skill_family": "veil",
 					"target_type": "self",
 					"action_type": "actor.withdraw",
 					"cooldown_rounds": 1,
@@ -1327,7 +1345,7 @@
 				},
 				"seers_sight": {
 					"skill_id": "seers_sight",
-					"calling_requirement": "okomfo",
+					"skill_family": "rite",
 					"target_type": "area",
 					"action_type": "actor.read_field",
 					"cooldown_rounds": 0,
@@ -1339,7 +1357,7 @@
 				},
 				"seers_reveal": {
 					"skill_id": "seers_reveal",
-					"calling_requirement": "okomfo",
+					"skill_family": "rite",
 					"target_type": "enemy",
 					"action_type": "actor.reveal",
 					"cooldown_rounds": 0,
@@ -1350,14 +1368,14 @@
 				}
 			},
 			"_field_contract": {
-				"_comment": "SkillDefinition contract — active skills only. Each definition must have all 7 fields.",
-				"skill_id":             "String — unique id e.g. 'skill.shield_bash'",
-				"calling_requirement":  "String — calling_id required to equip, '' = any calling",
-				"target_type":          "String — 'self' | 'ally' | 'enemy' | 'area'",
-				"action_type":          "String — actor intent action_type dispatched when skill fires",
-				"cooldown_rounds":      "int    — rounds before skill can fire again; 0 = no cooldown",
-				"scaling_source":       "String — stat key that scales effect e.g. 'atk', 'cha'",
-				"intent_weight_tag":    "String — tag used by BehaviorArbiter weight lookup"
+				"_comment": "V2-PROG-005: SkillDefinition contract — 7 required fields. calling_requirement removed; skill_family is the V2 axis.",
+				"skill_id":          "String — unique id e.g. 'blade_resolve'",
+				"skill_family":      "String — one of: ward | break | veil | path | rite | root",
+				"target_type":       "String — 'self' | 'ally' | 'enemy' | 'area'",
+				"action_type":       "String — actor intent action_type dispatched when skill fires",
+				"cooldown_rounds":   "int    — rounds before skill can fire again; 0 = no cooldown",
+				"scaling_source":    "String — stat key that scales effect e.g. 'atk', 'cha'",
+				"intent_weight_tag": "String — tag used by BehaviorArbiter weight lookup"
 			}
 		},
 		"vows": {

@@ -109,16 +109,20 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"slot":     "cta.enter_stage",
 		}
 
-	# Read skill definitions from balance.json (needed for party_prep)
-	var skill_defs: Dictionary = {}
+	# Read skill definitions and family config from balance.json (needed for party_prep)
+	var skill_defs: Dictionary  = {}
+	var families_cfg: Dictionary = {}
 	if flow_ctx.config_service != null:
 		var bal: Dictionary = flow_ctx.config_service.get_balance()
 		var bd: Dictionary  = bal.get("data", {})
 		var skills_v: Variant = bd.get("skills", {})
 		if skills_v is Dictionary:
-			var defs_v: Variant = (skills_v as Dictionary).get("definitions", {})
+			var skills_block := skills_v as Dictionary
+			var defs_v: Variant = skills_block.get("definitions", {})
 			if defs_v is Dictionary:
 				skill_defs = defs_v as Dictionary
+			# V2-PROG-005: family config (families + calling_family_alignment)
+			families_cfg = skills_block
 
 	# Party data from save
 	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
@@ -154,16 +158,21 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			var calling := str(echo.get("calling", ""))
 			if not calling.is_empty() and calling != "uncalled":
 				any_called = true
-				var available_skills: Array = filter_skills_for_calling(calling, skill_defs)
+				# V2-PROG-005: family-based filter — calling → aligned families → skills in those families
+				var available_skills: Array = filter_skills_for_calling(calling, skill_defs, families_cfg)
 				# Equipped: in-session pending only — no pre-selection from save.
 				var pending_echo_v: Variant = flow_ctx.pending_equipped_skills.get(echo_id, {})
 				var pending_echo: Dictionary = pending_echo_v if pending_echo_v is Dictionary else {}
 				var equipped_skill_id := str(pending_echo.get("0", ""))
 
+				# Resolve calling_families for this echo (for UI grouping)
+				var calling_families: Dictionary = _resolve_calling_families(calling, families_cfg)
+
 				party_prep.append({
 					"echo_id":           echo_id,
 					"echo_name":         str(echo.get("name", "")),
-					"calling_id":        calling,  # V2-PROG-002: confirmed calling id; renamed from calling_origin to avoid birth-bias confusion
+					"calling_id":        calling,
+					"calling_families":  calling_families,
 					"available_skills":  available_skills,
 					"equipped_skill_id": equipped_skill_id,
 				})
@@ -198,22 +207,56 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	}
 
 
-## PROG-009: Filters skill definitions by calling_requirement matching the echo's confirmed calling.
-## V2-PROG-002: parameter renamed calling_origin → calling_id to match confirmed identity semantics.
-## Returns Array of { skill_id, display_name, action_type } dicts.
-static func filter_skills_for_calling(calling_id: String, skill_defs: Dictionary) -> Array:
+## V2-PROG-005: Filters skill definitions by family alignment.
+## A calling can access all skills whose skill_family is in its aligned families (strong + light).
+## calling_requirement is removed — access is determined by family alignment only.
+## Returns Array of { skill_id, display_name, action_type, skill_family, family_alignment } dicts.
+static func filter_skills_for_calling(calling_id: String, skill_defs: Dictionary, families_cfg: Dictionary) -> Array:
 	if calling_id.is_empty() or skill_defs.is_empty():
 		return []
+
+	var calling_families := _resolve_calling_families(calling_id, families_cfg)
+	var strong_v: Variant = calling_families.get("strong", [])
+	var light_v:  Variant = calling_families.get("light",  [])
+	var strong: Array = strong_v if strong_v is Array else []
+	var light:  Array = light_v  if light_v  is Array else []
+	var aligned: Array = strong + light
+
 	var result: Array = []
 	for skill_id in skill_defs.keys():
 		var defn: Dictionary = skill_defs[skill_id]
-		if str(defn.get("calling_requirement", "")) == calling_id:
-			result.append({
-				"skill_id":    str(defn.get("skill_id",    skill_id)),
-				"display_name": str(defn.get("display_name", skill_id)),
-				"action_type": str(defn.get("action_type", "")),
-			})
+		var family := str(defn.get("skill_family", ""))
+		if family.is_empty() or not aligned.has(family):
+			continue
+		var alignment := "strong" if strong.has(family) else "light"
+		result.append({
+			"skill_id":         str(defn.get("skill_id",     skill_id)),
+			"display_name":     str(defn.get("display_name", skill_id)),
+			"action_type":      str(defn.get("action_type",  "")),
+			"skill_family":     family,
+			"family_alignment": alignment,
+		})
 	return result
+
+
+## V2-PROG-005: Returns { strong: [], light: [] } for the given calling from families_cfg.
+## families_cfg is the full data.skills block from balance.json.
+## Returns empty arrays if the calling has no alignment entry (e.g. uncalled echoes).
+static func _resolve_calling_families(calling_id: String, families_cfg: Dictionary) -> Dictionary:
+	var empty := { "strong": [], "light": [] }
+	if calling_id.is_empty() or families_cfg.is_empty():
+		return empty
+	var align_v: Variant = families_cfg.get("calling_family_alignment", {})
+	if not (align_v is Dictionary):
+		return empty
+	var calling_v: Variant = (align_v as Dictionary).get(calling_id, {})
+	if not (calling_v is Dictionary):
+		return empty
+	var entry := calling_v as Dictionary
+	return {
+		"strong": entry.get("strong", []),
+		"light":  entry.get("light",  []),
+	}
 
 
 ## PROG-009: Clears pending_equipped_skills on enter so the Keeper always makes a fresh
