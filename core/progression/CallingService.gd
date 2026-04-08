@@ -3,7 +3,7 @@ extends RefCounted
 
 ## CallingService — pure static. No RNG, no OS time, no side effects.
 ##
-## Determines compatibility tiers for all 5 callings against a given echo's
+## Determines compatibility tiers for all 6 callings against a given echo's
 ## vector scores, and applies the emotional consequence when a calling is confirmed.
 ##
 ## Tier order (first match wins):
@@ -11,18 +11,6 @@ extends RefCounted
 ##   "compatible"   — calling maps from a vector with score >= threshold × total
 ##   "incompatible" — calling maps from a vector with score = 0
 ##   "ambivalent"   — catch-all (score > 0 but below threshold)
-
-
-## Returns the seeker-specific calling id based on the echo's trait split.
-## courage >= wisdom → ranger   |   wisdom > courage → seer
-static func _seeker_calling(traits: Dictionary, calling_cfg: Dictionary) -> String:
-	var split_v: Variant = calling_cfg.get("seeker_trait_split", {})
-	var split: Dictionary = split_v if split_v is Dictionary else {}
-	var courage: int = int(traits.get("courage", 0))
-	var wisdom: int  = int(traits.get("wisdom",  0))
-	if wisdom > courage:
-		return str(split.get("wisdom_gt_courage", "seer"))
-	return str(split.get("courage_gte_wisdom", "ranger"))
 
 
 ## Returns ALL calling options for the echo, each tagged with a compatibility tier.
@@ -39,8 +27,6 @@ static func _seeker_calling(traits: Dictionary, calling_cfg: Dictionary) -> Stri
 ##   is_preferred  bool  (true for the single most-aligned choice)
 static func compute_all_options(echo: Dictionary, calling_cfg: Dictionary) -> Array:
 	var dominant: String = str(echo.get("dominant_vector", ""))
-	var traits_v: Variant = echo.get("traits", {})
-	var traits: Dictionary = traits_v if traits_v is Dictionary else {}
 	var scores_v: Variant  = echo.get("vector_scores", {})
 	var scores: Dictionary = scores_v if scores_v is Dictionary else {}
 
@@ -58,11 +44,7 @@ static func compute_all_options(echo: Dictionary, calling_cfg: Dictionary) -> Ar
 		total_score += float(s)
 
 	# Preferred calling from dominant vector
-	var preferred_calling: String = ""
-	if dominant == "seeker":
-		preferred_calling = _seeker_calling(traits, calling_cfg)
-	else:
-		preferred_calling = str(v2c.get(dominant, ""))
+	var preferred_calling: String = str(v2c.get(dominant, ""))
 
 	# Non-dominant vectors that clear the compatibility threshold
 	var compatible_vectors: Array = []
@@ -87,8 +69,10 @@ static func compute_all_options(echo: Dictionary, calling_cfg: Dictionary) -> Ar
 			is_preferred  = true
 		elif vec in compatible_vectors:
 			compatibility = "compatible"
-		elif dominant == "seeker" and vec == "seeker":
-			# Non-preferred seeker path (ranger or seer) shares the seeker vector → compatible
+		elif vec == dominant:
+			# Calling shares the dominant vector but is not the preferred pick → compatible
+			# (e.g. kra_soro and okomfo both have vector=seeker; seeker-dominant gets okomfo
+			# as preferred and kra_soro as compatible)
 			compatibility = "compatible"
 		elif total_score <= 0.0 or float(scores.get(vec, 0)) <= 0.0:
 			# Vector has zero contribution → truly incompatible

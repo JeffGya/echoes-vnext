@@ -38,15 +38,16 @@ var _cfg: Dictionary
 # Used when _cfg is empty (no balance.json block passed in).
 const _DEFAULTS := {
 	"intent_weights_by_calling_origin": {
-		"warder":   { "melee_attack": 20, "protect_ally": 65, "actor.guard": 45, "actor.idle": 10, "actor.move": 25 },
-		"blade":    { "melee_attack": 65, "protect_ally": 10, "actor.guard": 15, "actor.idle": 10, "actor.move": 55 },
-		"ranger":   { "melee_attack": 45, "protect_ally": 10, "actor.guard": 20, "actor.idle": 10, "actor.move": 40 },
-		"steward":  { "melee_attack": 35, "protect_ally": 30, "actor.guard": 55, "actor.idle": 25, "actor.move": 20 },
-		"seer":     { "melee_attack": 25, "protect_ally": 20, "actor.guard": 30, "actor.idle": 40, "actor.move": 35 },
-		"uncalled": { "melee_attack": 50, "protect_ally": 15, "actor.guard": 25, "actor.idle": 20, "actor.move": 44 },
+		"okofor":      { "melee_attack": 20, "protect_ally": 65, "actor.guard": 45, "actor.idle": 10, "actor.move": 25 },
+		"aduro":       { "melee_attack": 65, "protect_ally": 10, "actor.guard": 15, "actor.idle": 10, "actor.move": 55 },
+		"kra_soro":    { "melee_attack": 40, "protect_ally": 10, "actor.guard": 15, "actor.idle":  5, "actor.move": 55 },
+		"onyamesu":    { "melee_attack": 35, "protect_ally": 30, "actor.guard": 55, "actor.idle": 25, "actor.move": 20 },
+		"okomfo":      { "melee_attack": 25, "protect_ally": 20, "actor.guard": 30, "actor.idle": 40, "actor.move": 35 },
+		"sum_okwanfo": { "melee_attack": 40, "protect_ally":  5, "actor.guard": 10, "actor.idle": 25, "actor.move": 55 },
+		"uncalled":    { "melee_attack": 50, "protect_ally": 15, "actor.guard": 25, "actor.idle": 20, "actor.move": 44 },
 		# Enemy baseline: aggressive. protect_ally=0 (enemies don't protect each other in MVP).
 		# guard/idle stay low so enemies almost never passively hold unless situationally forced.
-		"enemy":    { "melee_attack": 70, "protect_ally":  0, "actor.guard": 10, "actor.idle":  5, "actor.move": 60 },
+		"enemy":       { "melee_attack": 70, "protect_ally":  0, "actor.guard": 10, "actor.idle":  5, "actor.move": 60 },
 	},
 	"default_intent_weight": 5.0,
 	"trait_action_muls": {
@@ -409,12 +410,12 @@ func _generate_candidates(
 			"priority":          1.0,
 		})
 
-	# PROG-010: actor.retreat — calling-aware, Adept+ only. Warriors never retreat.
+	# PROG-010: actor.retreat — calling-aware, Adept+ only. Aduro never retreats.
 	# Only echo actors can retreat.
 	if actor_type == "echo" \
 			and (smartness_tier == "adept" or smartness_tier == "veteran" or smartness_tier == "elite"):
 		var retreat_threshold: Variant = calling_behavior.get("retreat_threshold", null)
-		if retreat_threshold != null and calling_origin != "blade":
+		if retreat_threshold != null and calling_origin != "aduro":
 			var hp_r: float = _hp_ratio(actor)
 			if hp_r < float(retreat_threshold):
 				candidates.append({
@@ -423,9 +424,9 @@ func _generate_candidates(
 					"priority":    1.0,
 				})
 
-	# PROG-010: actor.taunt — Blade calling Veteran+ only.
+	# PROG-010: actor.taunt — Aduro calling Veteran+ only.
 	# Mechanical effect applied by combat loop (taunted_by set on enemy).
-	if actor_type == "echo" and calling_origin == "blade" \
+	if actor_type == "echo" and calling_origin == "aduro" \
 			and (smartness_tier == "veteran" or smartness_tier == "elite") \
 			and not nearest_enemy.is_empty():
 		candidates.append({
@@ -678,7 +679,7 @@ func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dict
 					active.append("echo_retreating")
 					break
 
-	# PROG-009: Seer directive aura — any echo ally within 3 tiles of a living Seer gets a bonus.
+	# PROG-009: Okomfo directive aura — any echo ally within 3 tiles of a living Okomfo gets a bonus.
 	if actor_type == "echo":
 		for sa_v in all_actors:
 			if not (sa_v is Dictionary): continue
@@ -686,7 +687,7 @@ func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dict
 			if sa.get("is_dead", false): continue
 			if str(sa.get("id", "")) == my_id: continue
 			if str(sa.get("faction", "")) == my_faction \
-					and str(sa.get("calling_origin", "")) == "seer":
+					and str(sa.get("calling_origin", "")) == "okomfo":
 				var sa_pos: Dictionary = sa.get("grid_pos", {})
 				if not sa_pos.is_empty() and GridService.chebyshev_distance(my_pos, sa_pos) <= 3:
 					active.append("seer_directive_aura")
@@ -805,13 +806,13 @@ func _score(
 	var morale_tier: String       = EmotionService.get_morale_tier(int(actor.get("morale", 50)))
 	var ml_row: Dictionary        = morale_tables.get(action_type, {})
 	var morale_bonus: float       = float(ml_row.get(morale_tier, 0.0))
-	# PROG-009: Blade passive — broken morale → aggression override (override the default penalty).
-	if morale_tier == "broken" and calling_origin == "blade":
+	# PROG-009: Aduro passive — broken morale → aggression override (override the default penalty).
+	if morale_tier == "broken" and calling_origin == "aduro":
 		var bmo: Dictionary = calling_behavior.get("broken_morale_override", {})
 		if bmo.has(action_type):
 			morale_bonus = float(bmo[action_type])
-	# PROG-009: Warder passive — anchor bonus on guard/protect_ally per stationary round.
-	if calling_origin == "warder" and (action_type == "actor.guard" or action_type == "protect_ally"):
+	# PROG-009: Okofor passive — anchor bonus on guard/protect_ally per stationary round.
+	if calling_origin == "okofor" and (action_type == "actor.guard" or action_type == "protect_ally"):
 		var anchor_rounds: int = int(actor.get("_anchor_rounds", 0))
 		base += float(mini(anchor_rounds * 8, 24))
 
@@ -828,7 +829,7 @@ func _score(
 				else 0.5)
 			var target_hp: float = float(candidate.get("target_hp_ratio", 1.0))
 			match calling_str:
-				"warder":
+				"okofor":
 					if action_type == "protect_ally":
 						var protect_mul: float = float(_cfg_get("protect_ally_veteran_mul") \
 							if _cfg.has("protect_ally_veteran_mul") else 1.3)
@@ -836,7 +837,7 @@ func _score(
 							if _cfg.has("protect_ally_veteran_hp_threshold") else 0.50)
 						if target_hp <= protect_hp_gate:
 							calling_mul = protect_mul
-				"blade":
+				"aduro":
 					if action_type == "melee_attack" and target_hp <= press_threshold:
 						base += float(_cfg_get("press_attack_bonus") if _cfg.has("press_attack_bonus") else 15.0)
 
@@ -859,21 +860,21 @@ func _score(
 	# PROG-009: Calling emotional signatures — fear amplifies calling-specific tendencies.
 	if fear > 0.0:
 		match calling_origin:
-			"ranger":
+			"kra_soro":
 				# Fear → movement bonus (threat-sensitive repositioning); idle suppressed.
 				if action_type == "actor.move":
 					base += float(calling_behavior.get("fear_move_bonus", 0.0))
 				elif action_type == "actor.idle":
 					base -= 8.0
-			"seer":
-				# Fear → idle rises (Seer retreats into perception, not action).
+			"okomfo":
+				# Fear → idle rises (Okomfo retreats into perception, not action).
 				if action_type == "actor.idle":
 					base += fear * 0.15
-			"steward":
-				# Fear → move penalty (Steward holds ground under pressure).
+			"onyamesu":
+				# Fear → move penalty (Onyamesu holds ground under pressure).
 				if action_type == "actor.move":
 					base -= fear * 0.15
-			"warder":
+			"okofor":
 				# Fear → protect_ally bonus (defensive surge under pressure).
 				if action_type == "protect_ally":
 					base += fear * 0.1

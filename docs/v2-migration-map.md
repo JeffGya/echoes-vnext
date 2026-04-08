@@ -102,7 +102,7 @@ data.progression.rank_up_trait_drift_magnitude
 
 **Services:** `core/progression/CallingService.gd`, `core/progression/ProgressionService.gd`
 
-**Current callings (5):** `blade`, `warder`, `steward`, `ranger`, `seer`
+**Current callings (V1, superseded):** `blade`, `warder`, `steward`, `ranger`, `seer` → **V2-PROG-004 ✅ Done** — replaced with `okofor`, `onyamesu`, `aduro`, `sum_okwanfo`, `okomfo`, `kra_soro`
 
 | Save field (per echo) | Type | Notes |
 |---|---|---|
@@ -159,10 +159,11 @@ blade: 75, warder: 80, ranger: 80, steward: 85, seer: 85
 | Item | Action | Owner |
 |---|---|---|
 | `calling_origin` ambiguity (birth bias vs identity placeholder) | ~~Migration — resolve to two clean fields~~ **Resolved (V2-PROG-002)** | V2-PROG-002 |
-| Calling eligibility gate (rank 3 → Standing 3/6/9) | **Rewrite** | V2-PROG-004+ |
-| Calling names (V1 5 callings → V2 6 callings at S3) | **Rewrite** | V2-PROG-004+ |
+| Calling eligibility gate (rank 3 → Standing 3/6/9) | **Rewrite** (UI milestone flow — pending) | V2-PROG-004+ |
+| Calling names (V1 5 callings → V2 6 callings at S3) | ~~Rewrite~~ **Done (V2-PROG-004)** — 6 V2 IDs active in all backend systems | V2-PROG-004 ✅ |
 | `calling_eligible`/`calling_options` ephemeral fields | ~~Supersede (safe to drop schema shape)~~ **Superseded (V2-PROG-002)** | V2-PROG-002 |
-| Absolute fear thresholds by calling | **Carryover** → update values when S6/S9 callings added | V2-PROG-004+ |
+| Absolute fear thresholds by calling | ~~Carryover~~ **Done (V2-PROG-004)** — V2 values set in balance.json | V2-PROG-004 ✅ |
+| V1→V2 save migration (blade/warder/steward/ranger/seer) | **Done (V2-PROG-004)** — SaveService repair migrates on load | V2-PROG-004 ✅ |
 
 **V2-PROG-002 resolution (2026-04-06):**
 - `calling_origin` — immutable birth bias. Seeded at summon by EchoFactory. Never changes. Fallback only.
@@ -488,7 +489,8 @@ V2-MIG-001 (this doc) ✅ Done
   ├── V2-PROG-001 Progression language rename (Storyweight / Standing / Step) ✅ Done
   ├── V2-PROG-002 Calling seam unification (calling_origin ambiguity) ✅ Done
   │     └── V2-PROG-003 Vector expansion (4 → 10 vectors) ✅ Done
-  │           └── V2-PROG-004+ Standing milestone system (S3/S6/S9 callings)
+  │           └── V2-PROG-004 V2 calling IDs (6 callings, save migration) ✅ Done
+  │                 └── V2-PROG-004+ Standing milestone UI system (S3/S6/S9 flow)
   ├── V2-DIRECTIVE-001 Directive rewrite (Scout Carefully / Seek Signs)
   ├── V2-SANCTUM-001+  Building + Continuity system
   └── V2-ECONOMY-001+  Economy expansion (Relics, Faith, Harmony, Favor)
@@ -500,7 +502,7 @@ PROG-001 and MIG-002 can proceed in parallel. All others depend on MIG-002 being
 
 ## Open Questions Before Implementation
 
-1. **V2 calling IDs:** The GDD describes 6 Standing-3 callings but does not give final string IDs. `docs/calling-reference.md` may need alignment to V2 names before V2-PROG-002/004 begin.
+1. **V2 calling IDs:** ✅ RESOLVED (V2-PROG-004). Final IDs: `okofor`, `onyamesu`, `aduro`, `sum_okwanfo`, `okomfo`, `kra_soro`. See `docs/calling-reference.md` for full reference.
 2. **Virtue domain vector IDs:** ✅ RESOLVED (V2-MIG-002). Vector keys remain lowercase vector names (`vanguard`, `protector`, `seeker`, `pillar`, + 6 new ones in V2-PROG-003). They are NOT the virtue names. Save repair in V2-MIG-002 ensures `vector_scores: {}` exists per echo; key expansion to all 10 vectors is V2-PROG-003's job (alongside balance.json update).
 3. **Standing count:** GDD says "5–10 Standings total" — exact number needs locking before V2-PROG-004.
 4. **Threads reserve vs Thread items:** The relationship between stage-level recovery segments and full Thread items (Realm completion) needs one more clarity pass before V2-WEAVE-001.

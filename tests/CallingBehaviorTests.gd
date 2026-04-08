@@ -1,13 +1,13 @@
 # res://tests/CallingBehaviorTests.gd
-# PROG-009: Validates that all 5 callings have correct intent weight profiles in
-# BehaviorArbiter._DEFAULTS, and that the old key names no longer appear.
+# V2-PROG-004: Validates that all 6 V2 callings have correct intent weight profiles in
+# BehaviorArbiter._DEFAULTS, and that pre-V2 key names no longer appear.
 #
 # Tests:
-#   1. steward prefers actor.guard (base 55) — enemy at dist=2, guard_range=2 (no echo_in_melee noise).
-#   2. seer prefers actor.idle (base 40 vs move=35) — enemy at dist=2, no melee candidate.
-#   3. ranger prefers actor.move (base 55) when enemy at dist=2.
+#   1. onyamesu prefers actor.guard (base 55) — enemy at dist=2, guard_range=2 (no echo_in_melee noise).
+#   2. okomfo prefers actor.idle (base 40 vs move=35) — enemy at dist=2, no melee candidate.
+#   3. kra_soro prefers actor.move (base 55) when enemy at dist=2.
 #   4. Old calling keys ("warrior", "guardian", "archer") absent from arbiter DEFAULTS.
-#   5. All 5 new calling keys present in arbiter DEFAULTS.
+#   5. All 6 V2 calling keys present in arbiter DEFAULTS.
 #
 # Tests 1 and 5 use BehaviorArbiter.new({"guard_range": 2}) so actor.guard is a candidate at
 # dist=2 without triggering echo_in_melee (which only fires at dist<=1).
@@ -17,11 +17,11 @@ class_name CallingBehaviorTests
 extends RefCounted
 
 static func register(runner: CoreTestRunner) -> void:
-	runner.register_test("calling_behavior/steward_prefers_guard",    Callable(CallingBehaviorTests, "_t_steward_prefers_guard"))
-	runner.register_test("calling_behavior/seer_prefers_idle",        Callable(CallingBehaviorTests, "_t_seer_prefers_idle"))
-	runner.register_test("calling_behavior/ranger_prefers_move",      Callable(CallingBehaviorTests, "_t_ranger_prefers_move"))
+	runner.register_test("calling_behavior/onyamesu_prefers_guard",   Callable(CallingBehaviorTests, "_t_onyamesu_prefers_guard"))
+	runner.register_test("calling_behavior/okomfo_prefers_idle",      Callable(CallingBehaviorTests, "_t_okomfo_prefers_idle"))
+	runner.register_test("calling_behavior/kra_soro_prefers_move",    Callable(CallingBehaviorTests, "_t_kra_soro_prefers_move"))
 	runner.register_test("calling_behavior/old_keys_absent",          Callable(CallingBehaviorTests, "_t_old_keys_absent"))
-	runner.register_test("calling_behavior/all_five_callings_present", Callable(CallingBehaviorTests, "_t_all_five_callings_present"))
+	runner.register_test("calling_behavior/all_six_callings_present", Callable(CallingBehaviorTests, "_t_all_six_callings_present"))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -55,11 +55,11 @@ static func _make_enemy(col: int) -> Dictionary:
 # Tests
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Test 1: Steward prefers actor.guard (base 55) over actor.move (base 20) when enemy at dist=2.
+# Test 1: Onyamesu prefers actor.guard (base 55) over actor.move (base 20) when enemy at dist=2.
 # guard_range=2 so actor.guard IS a candidate at dist=2; echo_in_melee does NOT fire (dist>1).
 # Without echo_in_melee noise: guard(55) > idle(25) > move(20).
-static func _t_steward_prefers_guard() -> Dictionary:
-	var actor := _make_actor("steward")
+static func _t_onyamesu_prefers_guard() -> Dictionary:
+	var actor := _make_actor("onyamesu")
 	var enemy := _make_enemy(2)
 	var arbiter := BehaviorArbiter.new({"guard_range": 2})
 	var intent: Dictionary = arbiter.select_intent({ "actor": actor, "all_actors": [enemy], "t": 1 })
@@ -67,14 +67,14 @@ static func _t_steward_prefers_guard() -> Dictionary:
 	if str(intent.get("action_type", "")) != "actor.guard":
 		return {
 			"ok": false,
-			"error": "Expected actor.guard (steward base=55 > move=20, no melee at dist=2), got: %s" % str(intent.get("action_type"))
+			"error": "Expected actor.guard (onyamesu base=55 > move=20, no melee at dist=2), got: %s" % str(intent.get("action_type"))
 		}
 	return { "ok": true }
 
 
-# Test 2: Seer prefers actor.idle (base 40) over actor.move (base 35) when enemy at dist=2 (no melee candidate).
-static func _t_seer_prefers_idle() -> Dictionary:
-	var actor := _make_actor("seer")
+# Test 2: Okomfo prefers actor.idle (base 40) over actor.move (base 35) when enemy at dist=2 (no melee candidate).
+static func _t_okomfo_prefers_idle() -> Dictionary:
+	var actor := _make_actor("okomfo")
 	var enemy := _make_enemy(2)
 	var arbiter := BehaviorArbiter.new({})
 	var intent: Dictionary = arbiter.select_intent({ "actor": actor, "all_actors": [enemy], "t": 1 })
@@ -82,14 +82,14 @@ static func _t_seer_prefers_idle() -> Dictionary:
 	if str(intent.get("action_type", "")) != "actor.idle":
 		return {
 			"ok": false,
-			"error": "Expected actor.idle (seer base=40 > move=35, no melee at dist=2), got: %s" % str(intent.get("action_type"))
+			"error": "Expected actor.idle (okomfo base=40 > move=35, no melee at dist=2), got: %s" % str(intent.get("action_type"))
 		}
 	return { "ok": true }
 
 
-# Test 3: Ranger prefers actor.move (base 55) when enemy is at dist=2 (melee out of range).
-static func _t_ranger_prefers_move() -> Dictionary:
-	var actor := _make_actor("ranger")
+# Test 3: Kra_soro prefers actor.move (base 55) when enemy is at dist=2 (melee out of range).
+static func _t_kra_soro_prefers_move() -> Dictionary:
+	var actor := _make_actor("kra_soro")
 	var enemy := _make_enemy(2)
 	var arbiter := BehaviorArbiter.new({})
 	var intent: Dictionary = arbiter.select_intent({ "actor": actor, "all_actors": [enemy], "t": 1 })
@@ -97,7 +97,7 @@ static func _t_ranger_prefers_move() -> Dictionary:
 	if str(intent.get("action_type", "")) != "actor.move":
 		return {
 			"ok": false,
-			"error": "Expected actor.move (ranger base=55 when enemy dist=2), got: %s" % str(intent.get("action_type"))
+			"error": "Expected actor.move (kra_soro base=55 when enemy dist=2), got: %s" % str(intent.get("action_type"))
 		}
 	return { "ok": true }
 
@@ -119,34 +119,34 @@ static func _t_old_keys_absent() -> Dictionary:
 	return { "ok": true }
 
 
-# Test 5: All 5 new calling keys have a distinct intent profile via select_intent.
+# Test 5: All 6 V2 calling keys have a distinct intent profile via select_intent.
 # Verifies no "calling not found" fallback (i.e. they use their own weights, not uncalled).
-# blade: melee_attack base=65 → melee wins when adjacent enemy (uncalled base=40 would also pick melee, but blade is higher).
-# Distinct test: steward guard=55 > uncalled guard=25 — if steward falls back to uncalled, guard base is only 25 and move=35 wins.
-static func _t_all_five_callings_present() -> Dictionary:
-	# Steward guard=55 beats move=20 at dist=2 with guard_range=2. Uncalled guard=25 < move=35 — different winner.
+# onyamesu guard=55 > uncalled guard=25 — if onyamesu falls back to uncalled, guard base is only 25 and move=35 wins.
+# okomfo idle=40 > move=35, vs uncalled idle=20 < move=35 — different winner if okomfo falls back.
+static func _t_all_six_callings_present() -> Dictionary:
+	# Onyamesu guard=55 beats move=20 at dist=2 with guard_range=2. Uncalled guard=25 < move=35 — different winner.
 	# guard_range=2 so actor.guard is a candidate at dist=2; echo_in_melee does not fire (dist>1).
-	var steward := _make_actor("steward")
+	var onyamesu := _make_actor("onyamesu")
 	var enemy_dist2 := _make_enemy(2)
 	var arbiter := BehaviorArbiter.new({"guard_range": 2})
-	var intent_steward: Dictionary = arbiter.select_intent({
-		"actor": steward, "all_actors": [enemy_dist2], "t": 1
+	var intent_onyamesu: Dictionary = arbiter.select_intent({
+		"actor": onyamesu, "all_actors": [enemy_dist2], "t": 1
 	})
-	if str(intent_steward.get("action_type", "")) != "actor.guard":
+	if str(intent_onyamesu.get("action_type", "")) != "actor.guard":
 		return {
 			"ok": false,
-			"error": "steward entry missing from DEFAULTS (fell back to uncalled, got: %s)" % str(intent_steward.get("action_type"))
+			"error": "onyamesu entry missing from DEFAULTS (fell back to uncalled, got: %s)" % str(intent_onyamesu.get("action_type"))
 		}
 
-	# Seer idle=40 should beat seer move=35 at dist=2. Uncalled idle=20 < move=35 — different winner.
-	var seer := _make_actor("seer")
-	var intent_seer: Dictionary = arbiter.select_intent({
-		"actor": seer, "all_actors": [enemy_dist2], "t": 1
+	# Okomfo idle=40 should beat okomfo move=35 at dist=2. Uncalled idle=20 < move=35 — different winner.
+	var okomfo := _make_actor("okomfo")
+	var intent_okomfo: Dictionary = arbiter.select_intent({
+		"actor": okomfo, "all_actors": [enemy_dist2], "t": 1
 	})
-	if str(intent_seer.get("action_type", "")) != "actor.idle":
+	if str(intent_okomfo.get("action_type", "")) != "actor.idle":
 		return {
 			"ok": false,
-			"error": "seer entry missing from DEFAULTS (fell back to uncalled, got: %s)" % str(intent_seer.get("action_type"))
+			"error": "okomfo entry missing from DEFAULTS (fell back to uncalled, got: %s)" % str(intent_okomfo.get("action_type"))
 		}
 
 	return { "ok": true }

@@ -298,7 +298,8 @@ static func execute_rank_up(
 
 	# 1. Increment rank.
 	var new_rank: int = old_rank + 1
-	echo["rank"] = new_rank
+	echo["rank"]     = new_rank
+	echo["standing"] = new_rank  # V2-PROG-004: keep V2 bridge field in sync
 
 	# 2. Reset level.
 	echo["level"] = 1

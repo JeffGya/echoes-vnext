@@ -1,5 +1,6 @@
 # res://tests/CallingTests.gd
 # PROG-007: Unit tests for CallingService.
+# V2-PROG-004: Updated to V2 six-calling model (okofor/onyamesu/aduro/sum_okwanfo/okomfo/kra_soro).
 #
 # All tests are pure static — no save file, no FlowRuntime, no OS time.
 # Echo dicts are minimal stubs; calling_cfg is built from the canonical
@@ -8,80 +9,76 @@ class_name CallingTests
 extends RefCounted
 
 static func register(runner: CoreTestRunner) -> void:
-	# compute_all_options — preferred tier
-	runner.register_test("calling_vanguard_dominant_preferred_blade",   Callable(CallingTests, "_test_vanguard_preferred_blade"))
-	runner.register_test("calling_protector_dominant_preferred_warder", Callable(CallingTests, "_test_protector_preferred_warder"))
-	runner.register_test("calling_pillar_dominant_preferred_steward",   Callable(CallingTests, "_test_pillar_preferred_steward"))
-	runner.register_test("calling_seeker_courage_gte_wisdom_ranger",    Callable(CallingTests, "_test_seeker_ranger"))
-	runner.register_test("calling_seeker_wisdom_gt_courage_seer",       Callable(CallingTests, "_test_seeker_seer"))
-	runner.register_test("calling_seeker_tie_courage_wisdom_ranger",    Callable(CallingTests, "_test_seeker_tie_ranger"))
+	# compute_all_options — preferred tier (V2 six callings)
+	runner.register_test("calling_vanguard_dominant_preferred_aduro",      Callable(CallingTests, "_test_vanguard_preferred_aduro"))
+	runner.register_test("calling_protector_dominant_preferred_okofor",    Callable(CallingTests, "_test_protector_preferred_okofor"))
+	runner.register_test("calling_pillar_dominant_preferred_onyamesu",     Callable(CallingTests, "_test_pillar_preferred_onyamesu"))
+	runner.register_test("calling_seeker_dominant_preferred_okomfo",       Callable(CallingTests, "_test_seeker_preferred_okomfo"))
+	runner.register_test("calling_seeker_kra_soro_compatible_when_dominant", Callable(CallingTests, "_test_seeker_kra_soro_compatible"))
+	runner.register_test("calling_opportunist_dominant_preferred_sum_okwanfo", Callable(CallingTests, "_test_opportunist_preferred_sum_okwanfo"))
 	# extensibility
-	runner.register_test("calling_all_five_always_present",             Callable(CallingTests, "_test_all_five_present"))
+	runner.register_test("calling_all_six_always_present",                 Callable(CallingTests, "_test_all_six_present"))
 	# compatible / ambivalent / incompatible tiers
 	runner.register_test("calling_secondary_vector_above_threshold_compatible",  Callable(CallingTests, "_test_compatible_tier"))
 	runner.register_test("calling_secondary_vector_below_threshold_ambivalent",  Callable(CallingTests, "_test_ambivalent_tier"))
 	runner.register_test("calling_seeker_both_paths_compatible_when_dominant",   Callable(CallingTests, "_test_seeker_both_paths_compatible"))
 	# is_calling_pending
-	runner.register_test("calling_pending_false_when_not_eligible",     Callable(CallingTests, "_test_pending_false_not_eligible"))
-	runner.register_test("calling_pending_false_when_already_set",      Callable(CallingTests, "_test_pending_false_already_set"))
+	runner.register_test("calling_pending_false_when_not_eligible",        Callable(CallingTests, "_test_pending_false_not_eligible"))
+	runner.register_test("calling_pending_false_when_already_set",         Callable(CallingTests, "_test_pending_false_already_set"))
 	# confirm_calling consequences
-	runner.register_test("calling_confirm_preferred_morale_boost",      Callable(CallingTests, "_test_confirm_preferred"))
-	runner.register_test("calling_confirm_compatible_morale_dip",       Callable(CallingTests, "_test_confirm_compatible"))
-	runner.register_test("calling_confirm_ambivalent_dip_and_fear",     Callable(CallingTests, "_test_confirm_ambivalent"))
-	runner.register_test("calling_confirm_incompatible_fear_increase",  Callable(CallingTests, "_test_confirm_incompatible"))
+	runner.register_test("calling_confirm_preferred_morale_boost",         Callable(CallingTests, "_test_confirm_preferred"))
+	runner.register_test("calling_confirm_compatible_morale_dip",          Callable(CallingTests, "_test_confirm_compatible"))
+	runner.register_test("calling_confirm_ambivalent_dip_and_fear",        Callable(CallingTests, "_test_confirm_ambivalent"))
+	runner.register_test("calling_confirm_incompatible_fear_increase",     Callable(CallingTests, "_test_confirm_incompatible"))
 	# edge: zero score → incompatible not ambivalent
-	runner.register_test("calling_zero_vector_score_is_incompatible",   Callable(CallingTests, "_test_zero_score_incompatible"))
+	runner.register_test("calling_zero_vector_score_is_incompatible",      Callable(CallingTests, "_test_zero_score_incompatible"))
 	# V2-PROG-002: calling seam — EchoActor projects confirmed calling field into actor dict
 	runner.register_test("calling/seam_echo_actor_projects_calling_field", Callable(CallingTests, "_test_echo_actor_projects_calling"))
-	# V2-PROG-003: six new vector preferred-calling mappings
-	runner.register_test("calling_strategist_dominant_preferred_seer",     Callable(CallingTests, "_test_strategist_preferred_seer"))
-	runner.register_test("calling_skeptic_dominant_preferred_ranger",      Callable(CallingTests, "_test_skeptic_preferred_ranger"))
-	runner.register_test("calling_devoted_dominant_preferred_steward",     Callable(CallingTests, "_test_devoted_preferred_steward"))
-	runner.register_test("calling_opportunist_dominant_preferred_blade",   Callable(CallingTests, "_test_opportunist_preferred_blade"))
-	runner.register_test("calling_mediator_dominant_preferred_warder",     Callable(CallingTests, "_test_mediator_preferred_warder"))
-	runner.register_test("calling_nurturer_dominant_preferred_steward",    Callable(CallingTests, "_test_nurturer_preferred_steward"))
+	# V2-PROG-003: six new vector preferred-calling mappings (updated to V2 IDs in V2-PROG-004)
+	runner.register_test("calling_strategist_dominant_preferred_okomfo",   Callable(CallingTests, "_test_strategist_preferred_okomfo"))
+	runner.register_test("calling_skeptic_dominant_preferred_kra_soro",    Callable(CallingTests, "_test_skeptic_preferred_kra_soro"))
+	runner.register_test("calling_devoted_dominant_preferred_onyamesu",    Callable(CallingTests, "_test_devoted_preferred_onyamesu"))
+	runner.register_test("calling_mediator_dominant_preferred_okofor",     Callable(CallingTests, "_test_mediator_preferred_okofor"))
+	runner.register_test("calling_nurturer_dominant_preferred_onyamesu",   Callable(CallingTests, "_test_nurturer_preferred_onyamesu"))
 
 
 # ────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ────────────────────────────────────────────────────────────────────────────
 
-## Canonical config matching data/balance.json data.calling (V2-PROG-003: 10 vectors)
+## Canonical config matching data/balance.json data.calling (V2-PROG-004: 6 V2 callings)
 static func _calling_cfg() -> Dictionary:
 	return {
-		"compatibility_threshold":         0.15,
-		"calling_preferred_morale_boost":  10,
-		"calling_compatible_morale_dip":   5,
-		"calling_ambivalent_morale_dip":   3,
+		"compatibility_threshold":          0.15,
+		"calling_preferred_morale_boost":   10,
+		"calling_compatible_morale_dip":    5,
+		"calling_ambivalent_morale_dip":    3,
 		"calling_ambivalent_fear_increase": 3,
 		"calling_incompatible_fear_increase": 10,
 		"vector_to_calling": {
-			"vanguard":    "blade",
-			"protector":   "warder",
-			"pillar":      "steward",
-			"seeker":      "seeker",
-			"strategist":  "seer",
-			"skeptic":     "ranger",
-			"devoted":     "steward",
-			"opportunist": "blade",
-			"mediator":    "warder",
-			"nurturer":    "steward",
+			"vanguard":    "aduro",
+			"protector":   "okofor",
+			"pillar":      "onyamesu",
+			"seeker":      "okomfo",
+			"strategist":  "okomfo",
+			"skeptic":     "kra_soro",
+			"devoted":     "onyamesu",
+			"opportunist": "sum_okwanfo",
+			"mediator":    "okofor",
+			"nurturer":    "onyamesu",
 		},
-		"seeker_trait_split": {
-			"courage_gte_wisdom": "ranger",
-			"wisdom_gt_courage":  "seer",
-		},
-		"all_callings": ["blade", "warder", "steward", "ranger", "seer"],
+		"all_callings": ["okofor", "onyamesu", "aduro", "sum_okwanfo", "okomfo", "kra_soro"],
 		"definitions": {
-			"blade":   { "display_name": "The Blade",   "icon_key": "calling_blade",   "description": "", "benefits": [], "downsides": [], "vector": "vanguard"  },
-			"warder":  { "display_name": "The Warder",  "icon_key": "calling_warder",  "description": "", "benefits": [], "downsides": [], "vector": "protector" },
-			"steward": { "display_name": "The Steward", "icon_key": "calling_steward", "description": "", "benefits": [], "downsides": [], "vector": "pillar"    },
-			"ranger":  { "display_name": "The Ranger",  "icon_key": "calling_ranger",  "description": "", "benefits": [], "downsides": [], "vector": "seeker"    },
-			"seer":    { "display_name": "The Seer",    "icon_key": "calling_seer",    "description": "", "benefits": [], "downsides": [], "vector": "seeker"    },
+			"okofor":      { "display_name": "Oko Fo",      "icon_key": "calling_okofor",      "description": "", "benefits": [], "downsides": [], "vector": "protector"  },
+			"onyamesu":    { "display_name": "Onyame Su",   "icon_key": "calling_onyamesu",    "description": "", "benefits": [], "downsides": [], "vector": "pillar"      },
+			"aduro":       { "display_name": "Aduro",       "icon_key": "calling_aduro",       "description": "", "benefits": [], "downsides": [], "vector": "vanguard"    },
+			"sum_okwanfo": { "display_name": "Sum Okwanfo", "icon_key": "calling_sum_okwanfo", "description": "", "benefits": [], "downsides": [], "vector": "opportunist" },
+			"okomfo":      { "display_name": "Okomfo",      "icon_key": "calling_okomfo",      "description": "", "benefits": [], "downsides": [], "vector": "seeker"      },
+			"kra_soro":    { "display_name": "Kra Soro",    "icon_key": "calling_kra_soro",    "description": "", "benefits": [], "downsides": [], "vector": "seeker"      },
 		},
 	}
 
-## Minimal echo dict. V1 vector_scores sum to 400 (100 each); new V2 vectors default to 0.
+## Minimal echo dict. V2 vector_scores: old 4 at 100 each; new 6 default to 0.
 static func _make_echo(dominant: String, traits: Dictionary = {}, scores: Dictionary = {}) -> Dictionary:
 	var default_scores: Dictionary = {
 		"vanguard": 100, "protector": 100, "pillar": 100, "seeker": 100,
@@ -92,12 +89,12 @@ static func _make_echo(dominant: String, traits: Dictionary = {}, scores: Dictio
 	if traits.is_empty():
 		traits = { "courage": 50, "wisdom": 50, "faith": 50 }
 	return {
-		"id":             "test_echo",
+		"id":              "test_echo",
 		"dominant_vector": dominant,
-		"vector_scores":  default_scores,
-		"traits":         traits,
+		"vector_scores":   default_scores,
+		"traits":          traits,
 		"calling_eligible": true,
-		"emotion":        { "morale_current": 60, "fear_current": 10 },
+		"emotion":         { "morale_current": 60, "fear_current": 10 },
 	}
 
 ## Find an option by calling_id in the result array.
@@ -112,80 +109,71 @@ static func _find_option(options: Array, cid: String) -> Dictionary:
 # Tests — preferred tier
 # ────────────────────────────────────────────────────────────────────────────
 
-static func _test_vanguard_preferred_blade() -> Dictionary:
-	var echo := _make_echo("vanguard")
+static func _test_vanguard_preferred_aduro() -> Dictionary:
+	var echo  := _make_echo("vanguard")
 	var opts  := CallingService.compute_all_options(echo, _calling_cfg())
-	var blade := _find_option(opts, "blade")
-	if blade.is_empty():
-		return { "ok": false, "error": "blade option not found" }
-	if str(blade.get("compatibility")) != "preferred":
-		return { "ok": false, "error": "Expected blade=preferred, got: %s" % blade.get("compatibility") }
-	if not bool(blade.get("is_preferred", false)):
-		return { "ok": false, "error": "blade.is_preferred should be true" }
+	var aduro := _find_option(opts, "aduro")
+	if aduro.is_empty():
+		return { "ok": false, "error": "aduro option not found" }
+	if str(aduro.get("compatibility")) != "preferred":
+		return { "ok": false, "error": "Expected aduro=preferred, got: %s" % aduro.get("compatibility") }
+	if not bool(aduro.get("is_preferred", false)):
+		return { "ok": false, "error": "aduro.is_preferred should be true" }
 	return { "ok": true }
 
 
-static func _test_protector_preferred_warder() -> Dictionary:
+static func _test_protector_preferred_okofor() -> Dictionary:
 	var echo   := _make_echo("protector")
 	var opts   := CallingService.compute_all_options(echo, _calling_cfg())
-	var warder := _find_option(opts, "warder")
-	if str(warder.get("compatibility")) != "preferred":
-		return { "ok": false, "error": "Expected warder=preferred, got: %s" % warder.get("compatibility") }
-	if not bool(warder.get("is_preferred", false)):
-		return { "ok": false, "error": "warder.is_preferred should be true" }
+	var okofor := _find_option(opts, "okofor")
+	if str(okofor.get("compatibility")) != "preferred":
+		return { "ok": false, "error": "Expected okofor=preferred, got: %s" % okofor.get("compatibility") }
+	if not bool(okofor.get("is_preferred", false)):
+		return { "ok": false, "error": "okofor.is_preferred should be true" }
 	return { "ok": true }
 
 
-static func _test_pillar_preferred_steward() -> Dictionary:
-	var echo    := _make_echo("pillar")
-	var opts    := CallingService.compute_all_options(echo, _calling_cfg())
-	var steward := _find_option(opts, "steward")
-	if str(steward.get("compatibility")) != "preferred":
-		return { "ok": false, "error": "Expected steward=preferred, got: %s" % steward.get("compatibility") }
-	if not bool(steward.get("is_preferred", false)):
-		return { "ok": false, "error": "steward.is_preferred should be true" }
+static func _test_pillar_preferred_onyamesu() -> Dictionary:
+	var echo     := _make_echo("pillar")
+	var opts     := CallingService.compute_all_options(echo, _calling_cfg())
+	var onyamesu := _find_option(opts, "onyamesu")
+	if str(onyamesu.get("compatibility")) != "preferred":
+		return { "ok": false, "error": "Expected onyamesu=preferred, got: %s" % onyamesu.get("compatibility") }
+	if not bool(onyamesu.get("is_preferred", false)):
+		return { "ok": false, "error": "onyamesu.is_preferred should be true" }
 	return { "ok": true }
 
 
-static func _test_seeker_ranger() -> Dictionary:
-	# courage(60) >= wisdom(40) → ranger preferred
-	var echo   := _make_echo("seeker", { "courage": 60, "wisdom": 40, "faith": 50 })
+static func _test_seeker_preferred_okomfo() -> Dictionary:
+	# seeker dominant → okomfo is preferred (vector_to_calling["seeker"] = "okomfo")
+	var echo   := _make_echo("seeker")
 	var opts   := CallingService.compute_all_options(echo, _calling_cfg())
-	var ranger := _find_option(opts, "ranger")
-	if str(ranger.get("compatibility")) != "preferred":
-		return { "ok": false, "error": "Expected ranger=preferred, got: %s" % ranger.get("compatibility") }
-	if not bool(ranger.get("is_preferred", false)):
-		return { "ok": false, "error": "ranger.is_preferred should be true" }
-	# seer must be compatible (shares seeker vector)
-	var seer := _find_option(opts, "seer")
-	if str(seer.get("compatibility")) != "compatible":
-		return { "ok": false, "error": "Expected seer=compatible, got: %s" % seer.get("compatibility") }
+	var okomfo := _find_option(opts, "okomfo")
+	if str(okomfo.get("compatibility")) != "preferred":
+		return { "ok": false, "error": "Expected okomfo=preferred for seeker dominant, got: %s" % okomfo.get("compatibility") }
+	if not bool(okomfo.get("is_preferred", false)):
+		return { "ok": false, "error": "okomfo.is_preferred should be true" }
 	return { "ok": true }
 
 
-static func _test_seeker_seer() -> Dictionary:
-	# wisdom(60) > courage(40) → seer preferred
-	var echo := _make_echo("seeker", { "courage": 40, "wisdom": 60, "faith": 50 })
-	var opts := CallingService.compute_all_options(echo, _calling_cfg())
-	var seer  := _find_option(opts, "seer")
-	if str(seer.get("compatibility")) != "preferred":
-		return { "ok": false, "error": "Expected seer=preferred, got: %s" % seer.get("compatibility") }
-	if not bool(seer.get("is_preferred", false)):
-		return { "ok": false, "error": "seer.is_preferred should be true" }
-	# ranger must be compatible (shares seeker vector)
-	var ranger := _find_option(opts, "ranger")
-	if str(ranger.get("compatibility")) != "compatible":
-		return { "ok": false, "error": "Expected ranger=compatible, got: %s" % ranger.get("compatibility") }
+static func _test_seeker_kra_soro_compatible() -> Dictionary:
+	# seeker dominant → kra_soro shares vector=seeker → compatible (vec == dominant rule)
+	var echo     := _make_echo("seeker")
+	var opts     := CallingService.compute_all_options(echo, _calling_cfg())
+	var kra_soro := _find_option(opts, "kra_soro")
+	if str(kra_soro.get("compatibility")) != "compatible":
+		return { "ok": false, "error": "Expected kra_soro=compatible for seeker dominant, got: %s" % kra_soro.get("compatibility") }
 	return { "ok": true }
 
 
-static func _test_seeker_tie_ranger() -> Dictionary:
-	# courage(50) == wisdom(50) → tie → courage_gte_wisdom → ranger
-	var echo   := _make_echo("seeker", { "courage": 50, "wisdom": 50, "faith": 50 })
-	var opts   := CallingService.compute_all_options(echo, _calling_cfg())
-	var ranger := _find_option(opts, "ranger")
-	if str(ranger.get("compatibility")) != "preferred":
-		return { "ok": false, "error": "Expected ranger=preferred on tie, got: %s" % ranger.get("compatibility") }
+static func _test_opportunist_preferred_sum_okwanfo() -> Dictionary:
+	var echo        := _make_echo("opportunist", {}, { "opportunist": 400, "vanguard": 0, "protector": 0, "pillar": 0, "seeker": 0 })
+	var opts        := CallingService.compute_all_options(echo, _calling_cfg())
+	var sum_okwanfo := _find_option(opts, "sum_okwanfo")
+	if str(sum_okwanfo.get("compatibility")) != "preferred":
+		return { "ok": false, "error": "Expected sum_okwanfo=preferred for opportunist dominant, got: %s" % sum_okwanfo.get("compatibility") }
+	if not bool(sum_okwanfo.get("is_preferred", false)):
+		return { "ok": false, "error": "sum_okwanfo.is_preferred should be true" }
 	return { "ok": true }
 
 
@@ -193,15 +181,15 @@ static func _test_seeker_tie_ranger() -> Dictionary:
 # Tests — extensibility
 # ────────────────────────────────────────────────────────────────────────────
 
-static func _test_all_five_present() -> Dictionary:
+static func _test_all_six_present() -> Dictionary:
 	var echo := _make_echo("vanguard")
 	var opts  := CallingService.compute_all_options(echo, _calling_cfg())
-	if opts.size() != 5:
-		return { "ok": false, "error": "Expected 5 options, got %d" % opts.size() }
+	if opts.size() != 6:
+		return { "ok": false, "error": "Expected 6 options, got %d" % opts.size() }
 	var ids: Array = []
 	for o in opts:
 		ids.append(str(o.get("calling_id", "")))
-	for expected in ["blade", "warder", "steward", "ranger", "seer"]:
+	for expected in ["okofor", "onyamesu", "aduro", "sum_okwanfo", "okomfo", "kra_soro"]:
 		if not ids.has(expected):
 			return { "ok": false, "error": "Missing calling id: %s" % expected }
 	return { "ok": true }
@@ -212,36 +200,35 @@ static func _test_all_five_present() -> Dictionary:
 # ────────────────────────────────────────────────────────────────────────────
 
 static func _test_compatible_tier() -> Dictionary:
-	# vanguard dominant (400 total). protector score=100 → 100/400=0.25 >= 0.15 → compatible
+	# vanguard dominant (400 total). protector score=100 → 100/400=0.25 >= 0.15 → okofor compatible
 	var echo   := _make_echo("vanguard", {}, { "vanguard": 100, "protector": 100, "pillar": 100, "seeker": 100 })
 	var opts   := CallingService.compute_all_options(echo, _calling_cfg())
-	var warder := _find_option(opts, "warder")
-	if str(warder.get("compatibility")) != "compatible":
-		return { "ok": false, "error": "Expected warder=compatible, got: %s" % warder.get("compatibility") }
+	var okofor := _find_option(opts, "okofor")
+	if str(okofor.get("compatibility")) != "compatible":
+		return { "ok": false, "error": "Expected okofor=compatible, got: %s" % okofor.get("compatibility") }
 	return { "ok": true }
 
 
 static func _test_ambivalent_tier() -> Dictionary:
-	# vanguard dominant=350, pillar=20. pillar ratio=20/440=0.045 < 0.15 → ambivalent
-	var echo    := _make_echo("vanguard", {}, { "vanguard": 350, "protector": 40, "pillar": 20, "seeker": 30 })
-	var opts    := CallingService.compute_all_options(echo, _calling_cfg())
-	var steward := _find_option(opts, "steward")
-	if str(steward.get("compatibility")) != "ambivalent":
-		return { "ok": false, "error": "Expected steward=ambivalent, got: %s" % steward.get("compatibility") }
+	# vanguard dominant=350, pillar=20. pillar ratio=20/440=0.045 < 0.15 → onyamesu ambivalent
+	var echo     := _make_echo("vanguard", {}, { "vanguard": 350, "protector": 40, "pillar": 20, "seeker": 30 })
+	var opts     := CallingService.compute_all_options(echo, _calling_cfg())
+	var onyamesu := _find_option(opts, "onyamesu")
+	if str(onyamesu.get("compatibility")) != "ambivalent":
+		return { "ok": false, "error": "Expected onyamesu=ambivalent, got: %s" % onyamesu.get("compatibility") }
 	return { "ok": true }
 
 
 static func _test_seeker_both_paths_compatible() -> Dictionary:
-	# When seeker is dominant, both ranger and seer share seeker vector.
-	# Preferred one is tagged preferred; the other should be compatible.
-	var echo   := _make_echo("seeker", { "courage": 60, "wisdom": 40, "faith": 50 })
-	var opts   := CallingService.compute_all_options(echo, _calling_cfg())
-	var ranger := _find_option(opts, "ranger")
-	var seer   := _find_option(opts, "seer")
-	if str(ranger.get("compatibility")) != "preferred":
-		return { "ok": false, "error": "ranger should be preferred, got: %s" % ranger.get("compatibility") }
-	if str(seer.get("compatibility")) != "compatible":
-		return { "ok": false, "error": "seer should be compatible, got: %s" % seer.get("compatibility") }
+	# seeker dominant: okomfo = preferred, kra_soro = compatible (both share vector=seeker)
+	var echo     := _make_echo("seeker")
+	var opts     := CallingService.compute_all_options(echo, _calling_cfg())
+	var okomfo   := _find_option(opts, "okomfo")
+	var kra_soro := _find_option(opts, "kra_soro")
+	if str(okomfo.get("compatibility")) != "preferred":
+		return { "ok": false, "error": "okomfo should be preferred, got: %s" % okomfo.get("compatibility") }
+	if str(kra_soro.get("compatibility")) != "compatible":
+		return { "ok": false, "error": "kra_soro should be compatible, got: %s" % kra_soro.get("compatibility") }
 	return { "ok": true }
 
 
@@ -257,7 +244,7 @@ static func _test_pending_false_not_eligible() -> Dictionary:
 
 
 static func _test_pending_false_already_set() -> Dictionary:
-	var echo := { "calling_eligible": true, "calling": "blade" }
+	var echo := { "calling_eligible": true, "calling": "aduro" }
 	if CallingService.is_calling_pending(echo):
 		return { "ok": false, "error": "is_calling_pending should be false when calling is already set" }
 	return { "ok": true }
@@ -275,14 +262,14 @@ static func _make_echo_with_options(dominant: String, morale: int = 60, fear: in
 
 
 static func _test_confirm_preferred() -> Dictionary:
-	# vanguard dominant → blade is preferred → morale boost of 10
+	# vanguard dominant → aduro is preferred → morale boost of 10
 	var echo := _make_echo_with_options("vanguard")
 	var before_morale: int = int(echo["emotion"]["morale_current"])
-	var result := CallingService.confirm_calling(echo, "blade", _calling_cfg(), null, 0)
-	if result != "blade":
-		return { "ok": false, "error": "confirm_calling should return 'blade', got: %s" % result }
-	if str(echo.get("calling", "")) != "blade":
-		return { "ok": false, "error": "echo.calling should be 'blade'" }
+	var result := CallingService.confirm_calling(echo, "aduro", _calling_cfg(), null, 0)
+	if result != "aduro":
+		return { "ok": false, "error": "confirm_calling should return 'aduro', got: %s" % result }
+	if str(echo.get("calling", "")) != "aduro":
+		return { "ok": false, "error": "echo.calling should be 'aduro'" }
 	if echo.has("calling_options"):
 		return { "ok": false, "error": "calling_options should be erased after confirm" }
 	var after_morale: int = int(echo["emotion"]["morale_current"])
@@ -292,13 +279,13 @@ static func _test_confirm_preferred() -> Dictionary:
 
 
 static func _test_confirm_compatible() -> Dictionary:
-	# vanguard dominant. warder (protector vector) is compatible.
+	# vanguard dominant. okofor (protector vector) is compatible.
 	# All scores equal (100 each) → ratio 100/400=0.25 >= 0.15 → compatible.
 	var echo := _make_echo_with_options("vanguard", 60, 10)
 	var before_morale: int = int(echo["emotion"]["morale_current"])
-	var result := CallingService.confirm_calling(echo, "warder", _calling_cfg(), null, 0)
-	if result != "warder":
-		return { "ok": false, "error": "confirm_calling should return 'warder', got: %s" % result }
+	var result := CallingService.confirm_calling(echo, "okofor", _calling_cfg(), null, 0)
+	if result != "okofor":
+		return { "ok": false, "error": "confirm_calling should return 'okofor', got: %s" % result }
 	var after_morale: int = int(echo["emotion"]["morale_current"])
 	if after_morale != before_morale - 5:
 		return { "ok": false, "error": "Expected morale dip of 5, got %d→%d" % [before_morale, after_morale] }
@@ -306,15 +293,15 @@ static func _test_confirm_compatible() -> Dictionary:
 
 
 static func _test_confirm_ambivalent() -> Dictionary:
-	# vanguard dominant=350, pillar=20 → steward is ambivalent.
+	# vanguard dominant=350, pillar=20 → onyamesu is ambivalent.
 	var echo := _make_echo("vanguard", {}, { "vanguard": 350, "protector": 40, "pillar": 20, "seeker": 30 })
 	echo["emotion"] = { "morale_current": 60, "fear_current": 10 }
 	echo["calling_options"] = CallingService.compute_all_options(echo, _calling_cfg())
 	var before_morale: int = int(echo["emotion"]["morale_current"])
 	var before_fear: int   = int(echo["emotion"]["fear_current"])
-	var result := CallingService.confirm_calling(echo, "steward", _calling_cfg(), null, 0)
-	if result != "steward":
-		return { "ok": false, "error": "Expected 'steward', got: %s" % result }
+	var result := CallingService.confirm_calling(echo, "onyamesu", _calling_cfg(), null, 0)
+	if result != "onyamesu":
+		return { "ok": false, "error": "Expected 'onyamesu', got: %s" % result }
 	var after_morale: int = int(echo["emotion"]["morale_current"])
 	var after_fear: int   = int(echo["emotion"]["fear_current"])
 	if after_morale != before_morale - 3:
@@ -325,15 +312,15 @@ static func _test_confirm_ambivalent() -> Dictionary:
 
 
 static func _test_confirm_incompatible() -> Dictionary:
-	# vanguard dominant. Make seeker score=0 → ranger/seer incompatible.
+	# vanguard dominant. Make seeker score=0 → okomfo/kra_soro incompatible.
 	var echo := _make_echo("vanguard", {}, { "vanguard": 300, "protector": 0, "pillar": 0, "seeker": 0 })
 	echo["emotion"] = { "morale_current": 60, "fear_current": 10 }
 	echo["calling_options"] = CallingService.compute_all_options(echo, _calling_cfg())
 	var before_fear: int   = int(echo["emotion"]["fear_current"])
 	var before_morale: int = int(echo["emotion"]["morale_current"])
-	var result := CallingService.confirm_calling(echo, "ranger", _calling_cfg(), null, 0)
-	if result != "ranger":
-		return { "ok": false, "error": "Expected 'ranger', got: %s" % result }
+	var result := CallingService.confirm_calling(echo, "kra_soro", _calling_cfg(), null, 0)
+	if result != "kra_soro":
+		return { "ok": false, "error": "Expected 'kra_soro', got: %s" % result }
 	var after_fear: int   = int(echo["emotion"]["fear_current"])
 	var after_morale: int = int(echo["emotion"]["morale_current"])
 	if after_fear != before_fear + 10:
@@ -348,94 +335,18 @@ static func _test_confirm_incompatible() -> Dictionary:
 # ────────────────────────────────────────────────────────────────────────────
 
 static func _test_zero_score_incompatible() -> Dictionary:
-	# vanguard dominant, pillar score=0 → steward should be incompatible, not ambivalent
-	var echo := _make_echo("vanguard", {}, { "vanguard": 300, "protector": 50, "pillar": 0, "seeker": 50 })
-	var opts    := CallingService.compute_all_options(echo, _calling_cfg())
-	var steward := _find_option(opts, "steward")
-	if str(steward.get("compatibility")) != "incompatible":
-		return { "ok": false, "error": "Expected steward=incompatible (score=0), got: %s" % steward.get("compatibility") }
+	# vanguard dominant, pillar score=0 → onyamesu should be incompatible, not ambivalent
+	var echo     := _make_echo("vanguard", {}, { "vanguard": 300, "protector": 50, "pillar": 0, "seeker": 50 })
+	var opts     := CallingService.compute_all_options(echo, _calling_cfg())
+	var onyamesu := _find_option(opts, "onyamesu")
+	if str(onyamesu.get("compatibility")) != "incompatible":
+		return { "ok": false, "error": "Expected onyamesu=incompatible (score=0), got: %s" % onyamesu.get("compatibility") }
 	return { "ok": true }
 
 
 # ────────────────────────────────────────────────────────────────────────────
 # Tests — V2-PROG-002: calling seam
 # ────────────────────────────────────────────────────────────────────────────
-
-## ────────────────────────────────────────────────────────────────────────────
-## V2-PROG-003: six new vector → preferred calling tests
-## ────────────────────────────────────────────────────────────────────────────
-
-static func _test_strategist_preferred_seer() -> Dictionary:
-	var echo := _make_echo("strategist", {}, { "strategist": 400, "vanguard": 0, "protector": 0, "pillar": 0, "seeker": 0 })
-	var opts := CallingService.compute_all_options(echo, _calling_cfg())
-	var seer := _find_option(opts, "seer")
-	if seer.is_empty():
-		return { "ok": false, "error": "seer option not found" }
-	if str(seer.get("compatibility")) != "preferred":
-		return { "ok": false, "error": "Expected seer=preferred for strategist dominant, got: %s" % seer.get("compatibility") }
-	if not bool(seer.get("is_preferred", false)):
-		return { "ok": false, "error": "seer.is_preferred should be true for strategist dominant" }
-	return { "ok": true }
-
-
-static func _test_skeptic_preferred_ranger() -> Dictionary:
-	var echo := _make_echo("skeptic", {}, { "skeptic": 400, "vanguard": 0, "protector": 0, "pillar": 0, "seeker": 0 })
-	var opts   := CallingService.compute_all_options(echo, _calling_cfg())
-	var ranger := _find_option(opts, "ranger")
-	if str(ranger.get("compatibility")) != "preferred":
-		return { "ok": false, "error": "Expected ranger=preferred for skeptic dominant, got: %s" % ranger.get("compatibility") }
-	if not bool(ranger.get("is_preferred", false)):
-		return { "ok": false, "error": "ranger.is_preferred should be true for skeptic dominant" }
-	return { "ok": true }
-
-
-static func _test_devoted_preferred_steward() -> Dictionary:
-	var echo    := _make_echo("devoted", {}, { "devoted": 400, "vanguard": 0, "protector": 0, "pillar": 0, "seeker": 0 })
-	var opts    := CallingService.compute_all_options(echo, _calling_cfg())
-	var steward := _find_option(opts, "steward")
-	if str(steward.get("compatibility")) != "preferred":
-		return { "ok": false, "error": "Expected steward=preferred for devoted dominant, got: %s" % steward.get("compatibility") }
-	if not bool(steward.get("is_preferred", false)):
-		return { "ok": false, "error": "steward.is_preferred should be true for devoted dominant" }
-	return { "ok": true }
-
-
-static func _test_opportunist_preferred_blade() -> Dictionary:
-	var echo  := _make_echo("opportunist", {}, { "opportunist": 400, "vanguard": 0, "protector": 0, "pillar": 0, "seeker": 0 })
-	var opts  := CallingService.compute_all_options(echo, _calling_cfg())
-	var blade := _find_option(opts, "blade")
-	if str(blade.get("compatibility")) != "preferred":
-		return { "ok": false, "error": "Expected blade=preferred for opportunist dominant, got: %s" % blade.get("compatibility") }
-	if not bool(blade.get("is_preferred", false)):
-		return { "ok": false, "error": "blade.is_preferred should be true for opportunist dominant" }
-	return { "ok": true }
-
-
-static func _test_mediator_preferred_warder() -> Dictionary:
-	var echo   := _make_echo("mediator", {}, { "mediator": 400, "vanguard": 0, "protector": 0, "pillar": 0, "seeker": 0 })
-	var opts   := CallingService.compute_all_options(echo, _calling_cfg())
-	var warder := _find_option(opts, "warder")
-	if str(warder.get("compatibility")) != "preferred":
-		return { "ok": false, "error": "Expected warder=preferred for mediator dominant, got: %s" % warder.get("compatibility") }
-	if not bool(warder.get("is_preferred", false)):
-		return { "ok": false, "error": "warder.is_preferred should be true for mediator dominant" }
-	return { "ok": true }
-
-
-static func _test_nurturer_preferred_steward() -> Dictionary:
-	var echo    := _make_echo("nurturer", {}, { "nurturer": 400, "vanguard": 0, "protector": 0, "pillar": 0, "seeker": 0 })
-	var opts    := CallingService.compute_all_options(echo, _calling_cfg())
-	var steward := _find_option(opts, "steward")
-	if str(steward.get("compatibility")) != "preferred":
-		return { "ok": false, "error": "Expected steward=preferred for nurturer dominant, got: %s" % steward.get("compatibility") }
-	if not bool(steward.get("is_preferred", false)):
-		return { "ok": false, "error": "steward.is_preferred should be true for nurturer dominant" }
-	return { "ok": true }
-
-
-## ────────────────────────────────────────────────────────────────────────────
-## V2-PROG-002: calling seam
-## ────────────────────────────────────────────────────────────────────────────
 
 ## EchoActor must project both calling_origin (birth bias) and calling (confirmed identity).
 ## Verifies the seam: two distinct fields are now available in the actor dict.
@@ -445,8 +356,8 @@ static func _test_echo_actor_projects_calling() -> Dictionary:
 		"name":             "Kofi",
 		"rarity":           "common",
 		"rank":             3,
-		"calling_origin":   "warder",
-		"calling":          "blade",  # confirmed calling — different from birth origin
+		"calling_origin":   "okofor",
+		"calling":          "aduro",  # confirmed calling — different from birth origin
 		"stats":            { "max_hp": 100, "atk": 10, "def": 8, "agi": 6, "int": 4, "cha": 5 },
 		"traits":           { "courage": 60, "wisdom": 30, "faith": 20 },
 		"xp_total":         500,
@@ -462,8 +373,69 @@ static func _test_echo_actor_projects_calling() -> Dictionary:
 	var actor := EchoActor.from_echo(echo)
 	if not actor.has("calling"):
 		return { "ok": false, "error": "actor dict missing 'calling' field — EchoActor must project it" }
-	if str(actor.get("calling")) != "blade":
-		return { "ok": false, "error": "Expected calling='blade', got: %s" % str(actor.get("calling")) }
-	if str(actor.get("calling_origin")) != "warder":
-		return { "ok": false, "error": "calling_origin should remain 'warder' (birth bias), got: %s" % str(actor.get("calling_origin")) }
+	if str(actor.get("calling")) != "aduro":
+		return { "ok": false, "error": "Expected calling='aduro', got: %s" % str(actor.get("calling")) }
+	if str(actor.get("calling_origin")) != "okofor":
+		return { "ok": false, "error": "calling_origin should remain 'okofor' (birth bias), got: %s" % str(actor.get("calling_origin")) }
+	return { "ok": true }
+
+
+## ────────────────────────────────────────────────────────────────────────────
+## V2-PROG-003 (updated to V2 IDs in V2-PROG-004): six new vector → preferred calling tests
+## ────────────────────────────────────────────────────────────────────────────
+
+static func _test_strategist_preferred_okomfo() -> Dictionary:
+	var echo   := _make_echo("strategist", {}, { "strategist": 400, "vanguard": 0, "protector": 0, "pillar": 0, "seeker": 0 })
+	var opts   := CallingService.compute_all_options(echo, _calling_cfg())
+	var okomfo := _find_option(opts, "okomfo")
+	if okomfo.is_empty():
+		return { "ok": false, "error": "okomfo option not found" }
+	if str(okomfo.get("compatibility")) != "preferred":
+		return { "ok": false, "error": "Expected okomfo=preferred for strategist dominant, got: %s" % okomfo.get("compatibility") }
+	if not bool(okomfo.get("is_preferred", false)):
+		return { "ok": false, "error": "okomfo.is_preferred should be true for strategist dominant" }
+	return { "ok": true }
+
+
+static func _test_skeptic_preferred_kra_soro() -> Dictionary:
+	var echo     := _make_echo("skeptic", {}, { "skeptic": 400, "vanguard": 0, "protector": 0, "pillar": 0, "seeker": 0 })
+	var opts     := CallingService.compute_all_options(echo, _calling_cfg())
+	var kra_soro := _find_option(opts, "kra_soro")
+	if str(kra_soro.get("compatibility")) != "preferred":
+		return { "ok": false, "error": "Expected kra_soro=preferred for skeptic dominant, got: %s" % kra_soro.get("compatibility") }
+	if not bool(kra_soro.get("is_preferred", false)):
+		return { "ok": false, "error": "kra_soro.is_preferred should be true for skeptic dominant" }
+	return { "ok": true }
+
+
+static func _test_devoted_preferred_onyamesu() -> Dictionary:
+	var echo     := _make_echo("devoted", {}, { "devoted": 400, "vanguard": 0, "protector": 0, "pillar": 0, "seeker": 0 })
+	var opts     := CallingService.compute_all_options(echo, _calling_cfg())
+	var onyamesu := _find_option(opts, "onyamesu")
+	if str(onyamesu.get("compatibility")) != "preferred":
+		return { "ok": false, "error": "Expected onyamesu=preferred for devoted dominant, got: %s" % onyamesu.get("compatibility") }
+	if not bool(onyamesu.get("is_preferred", false)):
+		return { "ok": false, "error": "onyamesu.is_preferred should be true for devoted dominant" }
+	return { "ok": true }
+
+
+static func _test_mediator_preferred_okofor() -> Dictionary:
+	var echo   := _make_echo("mediator", {}, { "mediator": 400, "vanguard": 0, "protector": 0, "pillar": 0, "seeker": 0 })
+	var opts   := CallingService.compute_all_options(echo, _calling_cfg())
+	var okofor := _find_option(opts, "okofor")
+	if str(okofor.get("compatibility")) != "preferred":
+		return { "ok": false, "error": "Expected okofor=preferred for mediator dominant, got: %s" % okofor.get("compatibility") }
+	if not bool(okofor.get("is_preferred", false)):
+		return { "ok": false, "error": "okofor.is_preferred should be true for mediator dominant" }
+	return { "ok": true }
+
+
+static func _test_nurturer_preferred_onyamesu() -> Dictionary:
+	var echo     := _make_echo("nurturer", {}, { "nurturer": 400, "vanguard": 0, "protector": 0, "pillar": 0, "seeker": 0 })
+	var opts     := CallingService.compute_all_options(echo, _calling_cfg())
+	var onyamesu := _find_option(opts, "onyamesu")
+	if str(onyamesu.get("compatibility")) != "preferred":
+		return { "ok": false, "error": "Expected onyamesu=preferred for nurturer dominant, got: %s" % onyamesu.get("compatibility") }
+	if not bool(onyamesu.get("is_preferred", false)):
+		return { "ok": false, "error": "onyamesu.is_preferred should be true for nurturer dominant" }
 	return { "ok": true }

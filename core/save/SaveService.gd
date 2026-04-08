@@ -308,6 +308,12 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 		if typeof(_vc_v) == TYPE_DICTIONARY:
 			_vec_cfg = _vc_v
 
+		# V2-PROG-004: V1 → V2 calling ID map. Defined once here; applied inside the echo loop.
+		var _v1_to_v2_calling: Dictionary = {
+			"blade": "aduro", "warder": "okofor", "steward": "onyamesu",
+			"ranger": "kra_soro", "seer": "okomfo"
+		}
+
 		var roster: Array = sanctum.get("roster", [])
 		for i in range(roster.size()):
 			var item = roster[i]
@@ -526,6 +532,16 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 				echo["calling"] = ""
 				repaired = true
 				repaired_notes.append("sanctum.roster[%d].calling initialised as empty" % i)
+
+			# V2-PROG-004: migrate V1 calling IDs to V2 canonical IDs (one-time, idempotent).
+			# calling_origin immutability is a design invariant (player cannot change it);
+			# this is a system-level schema correction, not a player action.
+			for _field in ["calling_origin", "calling"]:
+				var _cv: String = str(echo.get(_field, ""))
+				if _v1_to_v2_calling.has(_cv):
+					echo[_field] = _v1_to_v2_calling[_cv]
+					repaired = true
+					repaired_notes.append("sanctum.roster[%d].%s migrated V1 id '%s' -> V2" % [i, _field, _cv])
 
 		# BOND-001: social graph edges
 		if not sanctum.has("bonds") or not (sanctum["bonds"] is Array):

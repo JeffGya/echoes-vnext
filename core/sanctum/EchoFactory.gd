@@ -218,13 +218,13 @@ static func repair_echo_fields(echo: Dictionary) -> bool:
 	if not echo.has("class_origin") or echo["class_origin"] == null:
 		# Best available approximation from calling_origin (always present in v1 echoes).
 		# Mapping: summoning lineage → nearest birth Vector bias.
+		# Includes both V1 IDs (pre-V2-PROG-004) and V2 IDs (post-migration).
 		var calling := str(echo.get("calling_origin", "uncalled"))
 		var class_map := {
-			"warder":   "protector",
-			"blade":    "vanguard",
-			"ranger":   "seeker",
-			"seer":     "seeker",
-			"steward":  "pillar",
+			"warder": "protector", "blade": "vanguard", "ranger": "seeker",
+			"seer":   "seeker",    "steward": "pillar",
+			"okofor": "protector", "aduro":  "vanguard", "kra_soro":    "seeker",
+			"okomfo": "seeker",    "onyamesu": "pillar",  "sum_okwanfo": "opportunist",
 			"uncalled": "pillar"
 		}
 		echo["class_origin"] = class_map.get(calling, "protector")

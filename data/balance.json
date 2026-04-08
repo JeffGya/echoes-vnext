@@ -17,10 +17,13 @@
 			"trait_min": 30.0,
 			"trait_max": 70.0,
 			"calling_weights": {
-				"uncalled": 9.0,
-				"warder": 0.333,
-				"blade": 0.333,
-				"ranger": 0.333
+				"uncalled":    9.0,
+				"okofor":      0.167,
+				"onyamesu":    0.167,
+				"aduro":       0.167,
+				"sum_okwanfo": 0.167,
+				"okomfo":      0.167,
+				"kra_soro":    0.167
 			},
 			"class_origin_weights": {
 				"protector":   1.0,
@@ -151,40 +154,47 @@
 				}
 			},
 			"intent_weights_by_calling_origin": {
-				"warder": {
+				"okofor": {
 					"melee_attack": 20.0,
 					"protect_ally": 65.0,
 					"actor.guard": 45.0,
 					"actor.idle": 10.0,
 					"actor.move": 25.0
 				},
-				"blade": {
+				"aduro": {
 					"melee_attack": 65.0,
 					"protect_ally": 10.0,
 					"actor.guard": 15.0,
 					"actor.idle": 10.0,
 					"actor.move": 55.0
 				},
-				"ranger": {
+				"kra_soro": {
 					"melee_attack": 40.0,
 					"protect_ally": 10.0,
 					"actor.guard": 15.0,
 					"actor.idle": 5.0,
 					"actor.move": 55.0
 				},
-				"steward": {
+				"onyamesu": {
 					"melee_attack": 35.0,
 					"protect_ally": 30.0,
 					"actor.guard": 55.0,
 					"actor.idle": 25.0,
 					"actor.move": 20.0
 				},
-				"seer": {
+				"okomfo": {
 					"melee_attack": 25.0,
 					"protect_ally": 20.0,
 					"actor.guard": 30.0,
 					"actor.idle": 40.0,
 					"actor.move": 35.0
+				},
+				"sum_okwanfo": {
+					"melee_attack": 40.0,
+					"protect_ally": 5.0,
+					"actor.guard": 10.0,
+					"actor.idle": 25.0,
+					"actor.move": 55.0
 				},
 				"uncalled": {
 					"melee_attack": 50.0,
@@ -728,44 +738,51 @@
 				"5": "elite"
 			},
 			"calling_behavior": {
-				"_comment": "Per-calling combat personality. retreat_threshold: HP ratio below which retreat is considered (null = never retreat). press_advantage: melee bonus when target hp < press_hp_threshold. directive_mul: multiplier on directive bonuses for this calling. leadership_radius: tile radius for Elite leadership trait effects. fear_move_bonus: flat bonus to move score per 10 fear points (ranger only). idle_fear_aura: fear reduction applied to nearby allies when actor.idle wins (seer only).",
-				"warder": {
-					"retreat_threshold": 0.3,
-					"press_advantage": false,
-					"directive_mul": 1.0,
-					"leadership_radius": 3.0,
-					"absolute_fear_threshold": 80
-				},
-				"blade": {
-					"retreat_threshold": null,
+				"_comment": "Per-calling combat personality. retreat_threshold: HP ratio below which retreat is considered (null = never retreat). press_advantage: melee bonus when target hp < press_hp_threshold. directive_mul: multiplier on directive bonuses for this calling. leadership_radius: tile radius for Elite leadership trait effects. fear_move_bonus: flat bonus to move score per 10 fear points (kra_soro). idle_fear_aura: fear reduction applied to nearby allies when actor.idle wins (okomfo).",
+				"aduro": {
+					"retreat_threshold": 0.30,
 					"press_advantage": true,
 					"directive_mul": 1.0,
 					"leadership_radius": 3.0,
 					"absolute_fear_threshold": 75,
 					"broken_morale_override": { "melee_attack": 8.0, "actor.guard": -5.0 }
 				},
-				"ranger": {
+				"sum_okwanfo": {
+					"retreat_threshold": 0.35,
+					"press_advantage": false,
+					"directive_mul": 1.2,
+					"leadership_radius": 3.0,
+					"absolute_fear_threshold": 70
+				},
+				"okofor": {
 					"retreat_threshold": 0.45,
 					"press_advantage": false,
-					"directive_mul": 1.3,
+					"directive_mul": 1.0,
 					"leadership_radius": 4.0,
-					"fear_move_bonus": 12.0,
 					"absolute_fear_threshold": 80
 				},
-				"steward": {
-					"retreat_threshold": null,
+				"onyamesu": {
+					"retreat_threshold": 0.45,
 					"press_advantage": false,
 					"directive_mul": 1.2,
 					"leadership_radius": 4.0,
 					"absolute_fear_threshold": 85
 				},
-				"seer": {
-					"retreat_threshold": 0.35,
+				"okomfo": {
+					"retreat_threshold": 0.40,
 					"press_advantage": false,
 					"directive_mul": 1.5,
 					"leadership_radius": 5.0,
 					"idle_fear_aura": 3.0,
 					"absolute_fear_threshold": 85
+				},
+				"kra_soro": {
+					"retreat_threshold": 0.35,
+					"press_advantage": false,
+					"directive_mul": 1.3,
+					"leadership_radius": 4.0,
+					"fear_move_bonus": 12.0,
+					"absolute_fear_threshold": 80
 				},
 				"uncalled": {
 					"retreat_threshold": 0.3,
@@ -988,12 +1005,13 @@
 					"reflective": -2.0
 				},
 				"by_calling_origin": {
-					"blade": 2.0,
-					"warder": -1.0,
-					"ranger": 0.0,
-					"steward": -2.0,
-					"seer": -1.0,
-					"uncalled": 0.0
+					"aduro":       3.0,
+					"sum_okwanfo": 2.0,
+					"okofor":      -1.0,
+					"onyamesu":    -2.0,
+					"okomfo":      0.0,
+					"kra_soro":    1.0,
+					"uncalled":    0.0
 				},
 				"by_dominant_trait": {
 					"_comment": "Dominant trait = highest value in actor.traits {courage, wisdom, faith}. Tiebreak: courage > faith > wisdom.",
@@ -1156,81 +1174,87 @@
 			"calling_ambivalent_fear_increase": 3,
 			"calling_incompatible_fear_increase": 10,
 			"vector_to_calling": {
-				"vanguard":    "blade",
-				"protector":   "warder",
-				"pillar":      "steward",
-				"seeker":      "seeker",
-				"strategist":  "seer",
-				"skeptic":     "ranger",
-				"devoted":     "steward",
-				"opportunist": "blade",
-				"mediator":    "warder",
-				"nurturer":    "steward"
+				"vanguard":    "aduro",
+				"protector":   "okofor",
+				"pillar":      "onyamesu",
+				"seeker":      "okomfo",
+				"strategist":  "okomfo",
+				"skeptic":     "kra_soro",
+				"devoted":     "onyamesu",
+				"opportunist": "sum_okwanfo",
+				"mediator":    "okofor",
+				"nurturer":    "onyamesu"
 			},
-			"seeker_trait_split": {
-				"courage_gte_wisdom": "ranger",
-				"wisdom_gt_courage":  "seer"
-			},
-			"all_callings": ["blade", "warder", "steward", "ranger", "seer"],
+			"all_callings": ["okofor", "onyamesu", "aduro", "sum_okwanfo", "okomfo", "kra_soro"],
 			"definitions": {
-				"blade": {
-					"display_name": "The Blade",
-					"icon_key":     "calling_blade",
-					"description":  "Decisive force. The Blade breaks through what others cannot.",
-					"benefits":     ["Increased melee damage output", "Higher aggression intent weighting"],
-					"downsides":    ["Reduced defensive instinct", "Lower foresight in positioning"],
-					"vector":       "vanguard",
-					"family":       "vanguard"
-				},
-				"warder": {
-					"display_name": "The Warder",
-					"icon_key":     "calling_warder",
-					"description":  "Unyielding shelter. The Warder stands where others fall back.",
+				"okofor": {
+					"display_name": "Oko Fo",
+					"icon_key":     "calling_okofor",
+					"description":  "Bears danger for others and refuses collapse.",
 					"benefits":     ["Guard actions more effective", "Faster ally-response selection"],
 					"downsides":    ["Reduced offensive pressure", "Slower at pressing advantages"],
 					"vector":       "protector",
-					"family":       "protector"
+					"family":       "anchor"
 				},
-				"steward": {
-					"display_name": "The Steward",
-					"icon_key":     "calling_steward",
-					"description":  "Enduring presence. The Steward holds what others abandon.",
+				"onyamesu": {
+					"display_name": "Onyame Su",
+					"icon_key":     "calling_onyamesu",
+					"description":  "Sustains life, morale, and communal steadiness.",
 					"benefits":     ["Objective control bonuses", "Morale stabilisation for nearby allies"],
 					"downsides":    ["Lower mobility", "Less reactive to shifting threats"],
 					"vector":       "pillar",
-					"family":       "pillar"
+					"family":       "anchor"
 				},
-				"ranger": {
-					"display_name": "The Ranger",
-					"icon_key":     "calling_ranger",
-					"description":  "Swift and prepared. The Ranger reads the field before others see it.",
-					"benefits":     ["Improved objective awareness", "Faster repositioning intent"],
-					"downsides":    ["Less effective in sustained melee", "Reduced frontal durability"],
-					"vector":       "seeker",
-					"family":       "seeker"
+				"aduro": {
+					"display_name": "Aduro",
+					"icon_key":     "calling_aduro",
+					"description":  "Meets danger directly and turns courage into momentum.",
+					"benefits":     ["Increased melee damage output", "Higher aggression intent weighting"],
+					"downsides":    ["Reduced defensive instinct", "Breaks harder when fear peaks"],
+					"vector":       "vanguard",
+					"family":       "edge"
 				},
-				"seer": {
-					"display_name": "The Seer",
-					"icon_key":     "calling_seer",
-					"description":  "Sight beyond sight. The Seer guides where others guess.",
+				"sum_okwanfo": {
+					"display_name": "Sum Okwanfo",
+					"icon_key":     "calling_sum_okwanfo",
+					"description":  "Moves through concealment, timing, and unseen openings.",
+					"benefits":     ["Higher initiative in ambush positioning", "Better directive interpretation for timing"],
+					"downsides":    ["Breaks sooner under sustained fear", "Lower direct confrontation output"],
+					"vector":       "opportunist",
+					"family":       "edge"
+				},
+				"okomfo": {
+					"display_name": "Okomfo",
+					"icon_key":     "calling_okomfo",
+					"description":  "Reads spirit, sign, and hidden meaning.",
 					"benefits":     ["Higher tactical foresight weighting", "Improved directive interpretation"],
 					"downsides":    ["Reduced raw combat output", "Lower aggression expression"],
 					"vector":       "seeker",
-					"family":       "seeker"
+					"family":       "sight"
+				},
+				"kra_soro": {
+					"display_name": "Kra Soro",
+					"icon_key":     "calling_kra_soro",
+					"description":  "Reads path, distance, and shifting ground.",
+					"benefits":     ["Improved objective awareness", "Faster repositioning intent"],
+					"downsides":    ["Less effective in sustained melee", "Reduced frontal durability"],
+					"vector":       "seeker",
+					"family":       "sight"
 				}
 			},
 			"absolute_fear_threshold_by_calling": {
-				"_comment": "Per-calling Absolute Fear threshold override. Default is data.emotion.drift.fear_threshold (80). Blade breaks first (recklessness); Steward and Seer break last (wisdom/pillar endurance).",
-				"blade":   75.0,
-				"warder":  80.0,
-				"ranger":  80.0,
-				"steward": 85.0,
-				"seer":    85.0,
-				"uncalled": 80.0
+				"_comment": "Per-calling Absolute Fear threshold override. Default is data.emotion.drift.fear_threshold (80). Edge callings break sooner (aduro 75, sum_okwanfo 70). Anchor and Sight callings endure longer (onyamesu 85, okomfo 85).",
+				"aduro":       75.0,
+				"sum_okwanfo": 70.0,
+				"okofor":      80.0,
+				"onyamesu":    85.0,
+				"okomfo":      85.0,
+				"kra_soro":    80.0,
+				"uncalled":    80.0
 			},
 			"broken_morale_overrides": {
-				"_comment": "Per-calling override of morale_action_muls at 'broken' tier. If a calling key is present, its values replace the standard broken-morale muls for that action. Blade charges when broken; does not collapse into guard.",
-				"blade": {
+				"_comment": "Per-calling override of morale_action_muls at 'broken' tier. If a calling key is present, its values replace the standard broken-morale muls for that action. Aduro charges when broken; does not collapse into guard.",
+				"aduro": {
 					"melee_attack": 8.0,
 					"actor.guard":  -5.0
 				}
@@ -1242,7 +1266,7 @@
 			"definitions": {
 				"blade_resolve": {
 					"skill_id": "blade_resolve",
-					"calling_requirement": "blade",
+					"calling_requirement": "aduro",
 					"target_type": "enemy",
 					"action_type": "actor.press",
 					"cooldown_rounds": 0,
@@ -1252,7 +1276,7 @@
 				},
 				"warders_vigil": {
 					"skill_id": "warders_vigil",
-					"calling_requirement": "warder",
+					"calling_requirement": "okofor",
 					"target_type": "ally",
 					"action_type": "actor.interpose",
 					"cooldown_rounds": 0,
@@ -1262,7 +1286,7 @@
 				},
 				"stewards_ground": {
 					"skill_id": "stewards_ground",
-					"calling_requirement": "steward",
+					"calling_requirement": "onyamesu",
 					"target_type": "area",
 					"action_type": "actor.hold_ground",
 					"cooldown_rounds": 0,
@@ -1272,7 +1296,7 @@
 				},
 				"stewards_call": {
 					"skill_id": "stewards_call",
-					"calling_requirement": "steward",
+					"calling_requirement": "onyamesu",
 					"target_type": "area",
 					"action_type": "actor.steady_call",
 					"cooldown_rounds": 0,
@@ -1283,7 +1307,7 @@
 				},
 				"rangers_mark": {
 					"skill_id": "rangers_mark",
-					"calling_requirement": "ranger",
+					"calling_requirement": "kra_soro",
 					"target_type": "enemy",
 					"action_type": "actor.mark",
 					"cooldown_rounds": 0,
@@ -1293,7 +1317,7 @@
 				},
 				"rangers_withdraw": {
 					"skill_id": "rangers_withdraw",
-					"calling_requirement": "ranger",
+					"calling_requirement": "kra_soro",
 					"target_type": "self",
 					"action_type": "actor.withdraw",
 					"cooldown_rounds": 1,
@@ -1303,7 +1327,7 @@
 				},
 				"seers_sight": {
 					"skill_id": "seers_sight",
-					"calling_requirement": "seer",
+					"calling_requirement": "okomfo",
 					"target_type": "area",
 					"action_type": "actor.read_field",
 					"cooldown_rounds": 0,
@@ -1315,7 +1339,7 @@
 				},
 				"seers_reveal": {
 					"skill_id": "seers_reveal",
-					"calling_requirement": "seer",
+					"calling_requirement": "okomfo",
 					"target_type": "enemy",
 					"action_type": "actor.reveal",
 					"cooldown_rounds": 0,
