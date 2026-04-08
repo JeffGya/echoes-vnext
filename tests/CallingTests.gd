@@ -33,13 +33,20 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("calling_zero_vector_score_is_incompatible",   Callable(CallingTests, "_test_zero_score_incompatible"))
 	# V2-PROG-002: calling seam — EchoActor projects confirmed calling field into actor dict
 	runner.register_test("calling/seam_echo_actor_projects_calling_field", Callable(CallingTests, "_test_echo_actor_projects_calling"))
+	# V2-PROG-003: six new vector preferred-calling mappings
+	runner.register_test("calling_strategist_dominant_preferred_seer",     Callable(CallingTests, "_test_strategist_preferred_seer"))
+	runner.register_test("calling_skeptic_dominant_preferred_ranger",      Callable(CallingTests, "_test_skeptic_preferred_ranger"))
+	runner.register_test("calling_devoted_dominant_preferred_steward",     Callable(CallingTests, "_test_devoted_preferred_steward"))
+	runner.register_test("calling_opportunist_dominant_preferred_blade",   Callable(CallingTests, "_test_opportunist_preferred_blade"))
+	runner.register_test("calling_mediator_dominant_preferred_warder",     Callable(CallingTests, "_test_mediator_preferred_warder"))
+	runner.register_test("calling_nurturer_dominant_preferred_steward",    Callable(CallingTests, "_test_nurturer_preferred_steward"))
 
 
 # ────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ────────────────────────────────────────────────────────────────────────────
 
-## Canonical config matching data/balance.json data.calling
+## Canonical config matching data/balance.json data.calling (V2-PROG-003: 10 vectors)
 static func _calling_cfg() -> Dictionary:
 	return {
 		"compatibility_threshold":         0.15,
@@ -49,10 +56,16 @@ static func _calling_cfg() -> Dictionary:
 		"calling_ambivalent_fear_increase": 3,
 		"calling_incompatible_fear_increase": 10,
 		"vector_to_calling": {
-			"vanguard":  "blade",
-			"protector": "warder",
-			"pillar":    "steward",
-			"seeker":    "seeker",
+			"vanguard":    "blade",
+			"protector":   "warder",
+			"pillar":      "steward",
+			"seeker":      "seeker",
+			"strategist":  "seer",
+			"skeptic":     "ranger",
+			"devoted":     "steward",
+			"opportunist": "blade",
+			"mediator":    "warder",
+			"nurturer":    "steward",
 		},
 		"seeker_trait_split": {
 			"courage_gte_wisdom": "ranger",
@@ -68,9 +81,12 @@ static func _calling_cfg() -> Dictionary:
 		},
 	}
 
-## Minimal echo dict. vector_scores sums to 400 (100 each) unless overridden.
+## Minimal echo dict. V1 vector_scores sum to 400 (100 each); new V2 vectors default to 0.
 static func _make_echo(dominant: String, traits: Dictionary = {}, scores: Dictionary = {}) -> Dictionary:
-	var default_scores: Dictionary = { "vanguard": 100, "protector": 100, "pillar": 100, "seeker": 100 }
+	var default_scores: Dictionary = {
+		"vanguard": 100, "protector": 100, "pillar": 100, "seeker": 100,
+		"strategist": 0, "skeptic": 0, "devoted": 0, "opportunist": 0, "mediator": 0, "nurturer": 0
+	}
 	for k in scores:
 		default_scores[k] = scores[k]
 	if traits.is_empty():
@@ -344,6 +360,82 @@ static func _test_zero_score_incompatible() -> Dictionary:
 # ────────────────────────────────────────────────────────────────────────────
 # Tests — V2-PROG-002: calling seam
 # ────────────────────────────────────────────────────────────────────────────
+
+## ────────────────────────────────────────────────────────────────────────────
+## V2-PROG-003: six new vector → preferred calling tests
+## ────────────────────────────────────────────────────────────────────────────
+
+static func _test_strategist_preferred_seer() -> Dictionary:
+	var echo := _make_echo("strategist", {}, { "strategist": 400, "vanguard": 0, "protector": 0, "pillar": 0, "seeker": 0 })
+	var opts := CallingService.compute_all_options(echo, _calling_cfg())
+	var seer := _find_option(opts, "seer")
+	if seer.is_empty():
+		return { "ok": false, "error": "seer option not found" }
+	if str(seer.get("compatibility")) != "preferred":
+		return { "ok": false, "error": "Expected seer=preferred for strategist dominant, got: %s" % seer.get("compatibility") }
+	if not bool(seer.get("is_preferred", false)):
+		return { "ok": false, "error": "seer.is_preferred should be true for strategist dominant" }
+	return { "ok": true }
+
+
+static func _test_skeptic_preferred_ranger() -> Dictionary:
+	var echo := _make_echo("skeptic", {}, { "skeptic": 400, "vanguard": 0, "protector": 0, "pillar": 0, "seeker": 0 })
+	var opts   := CallingService.compute_all_options(echo, _calling_cfg())
+	var ranger := _find_option(opts, "ranger")
+	if str(ranger.get("compatibility")) != "preferred":
+		return { "ok": false, "error": "Expected ranger=preferred for skeptic dominant, got: %s" % ranger.get("compatibility") }
+	if not bool(ranger.get("is_preferred", false)):
+		return { "ok": false, "error": "ranger.is_preferred should be true for skeptic dominant" }
+	return { "ok": true }
+
+
+static func _test_devoted_preferred_steward() -> Dictionary:
+	var echo    := _make_echo("devoted", {}, { "devoted": 400, "vanguard": 0, "protector": 0, "pillar": 0, "seeker": 0 })
+	var opts    := CallingService.compute_all_options(echo, _calling_cfg())
+	var steward := _find_option(opts, "steward")
+	if str(steward.get("compatibility")) != "preferred":
+		return { "ok": false, "error": "Expected steward=preferred for devoted dominant, got: %s" % steward.get("compatibility") }
+	if not bool(steward.get("is_preferred", false)):
+		return { "ok": false, "error": "steward.is_preferred should be true for devoted dominant" }
+	return { "ok": true }
+
+
+static func _test_opportunist_preferred_blade() -> Dictionary:
+	var echo  := _make_echo("opportunist", {}, { "opportunist": 400, "vanguard": 0, "protector": 0, "pillar": 0, "seeker": 0 })
+	var opts  := CallingService.compute_all_options(echo, _calling_cfg())
+	var blade := _find_option(opts, "blade")
+	if str(blade.get("compatibility")) != "preferred":
+		return { "ok": false, "error": "Expected blade=preferred for opportunist dominant, got: %s" % blade.get("compatibility") }
+	if not bool(blade.get("is_preferred", false)):
+		return { "ok": false, "error": "blade.is_preferred should be true for opportunist dominant" }
+	return { "ok": true }
+
+
+static func _test_mediator_preferred_warder() -> Dictionary:
+	var echo   := _make_echo("mediator", {}, { "mediator": 400, "vanguard": 0, "protector": 0, "pillar": 0, "seeker": 0 })
+	var opts   := CallingService.compute_all_options(echo, _calling_cfg())
+	var warder := _find_option(opts, "warder")
+	if str(warder.get("compatibility")) != "preferred":
+		return { "ok": false, "error": "Expected warder=preferred for mediator dominant, got: %s" % warder.get("compatibility") }
+	if not bool(warder.get("is_preferred", false)):
+		return { "ok": false, "error": "warder.is_preferred should be true for mediator dominant" }
+	return { "ok": true }
+
+
+static func _test_nurturer_preferred_steward() -> Dictionary:
+	var echo    := _make_echo("nurturer", {}, { "nurturer": 400, "vanguard": 0, "protector": 0, "pillar": 0, "seeker": 0 })
+	var opts    := CallingService.compute_all_options(echo, _calling_cfg())
+	var steward := _find_option(opts, "steward")
+	if str(steward.get("compatibility")) != "preferred":
+		return { "ok": false, "error": "Expected steward=preferred for nurturer dominant, got: %s" % steward.get("compatibility") }
+	if not bool(steward.get("is_preferred", false)):
+		return { "ok": false, "error": "steward.is_preferred should be true for nurturer dominant" }
+	return { "ok": true }
+
+
+## ────────────────────────────────────────────────────────────────────────────
+## V2-PROG-002: calling seam
+## ────────────────────────────────────────────────────────────────────────────
 
 ## EchoActor must project both calling_origin (birth bias) and calling (confirmed identity).
 ## Verifies the seam: two distinct fields are now available in the actor dict.

@@ -245,19 +245,25 @@ Humility ↔ Generosity
 
 ### Migration Action
 
-| Item | Action | Owner |
-|---|---|---|
-| `balance.json data.vectors.archetype_init` (4-vector init scores) | **Rewrite** — replace with 10-virtue domain init scores | V2-PROG-003 |
-| `balance.json data.progression.vector_drift_weights` (4 entries) | **Rewrite** — rebuild for 10 virtue domains | V2-PROG-003 |
-| `balance.json data.calling.vector_to_calling` map | **Rewrite** — remap to 10 virtue domains + V2 callings | V2-PROG-003 |
-| `VectorService.gd` code | **Carryover** ✅ — already config-driven; no code changes needed for expansion | V2-PROG-003 |
-| Existing `vector_scores` save data (4 old keys) | **Migration** — save repair converts old keys to V2 keys on load | V2-MIG-002 |
-| `dominant_vector` save field | **Carryover** — field name valid; value updated by repair | V2-MIG-002 |
+| Item | Action | Owner | Status |
+|---|---|---|---|
+| `balance.json data.vectors.archetype_init` (4-vector init scores) | **Rewrite** — replace with 10-vector init scores (10 class origins × 10 vector keys) | V2-PROG-003 | ✅ Done |
+| `balance.json data.progression.vector_drift_weights` (4 entries) | **Rewrite** — rebuilt for all 10 vectors | V2-PROG-003 | ✅ Done |
+| `balance.json data.calling.vector_to_calling` map | **Rewrite** — extended to all 10 vectors with V1 calling IDs (interim; full V2 remap in V2-PROG-004) | V2-PROG-003 | ✅ Done |
+| `balance.json data.actors.behavior.vector_action_muls` | **Rewrite** — 6 new vectors added to all 5 action types | V2-PROG-003 | ✅ Done |
+| `balance.json data.combat.shrine.purify_weight_by_vector` | **Rewrite** — 6 new vectors added | V2-PROG-003 | ✅ Done |
+| `balance.json data.grid.placement_modifiers.by_dominant_vector` | **Rewrite** — 6 new vectors added | V2-PROG-003 | ✅ Done |
+| `balance.json data.combat.initiative_modifiers.by_dominant_vector` | **Rewrite** — 6 new vectors added | V2-PROG-003 | ✅ Done |
+| `balance.json data.summoning.class_origin_weights` | **Rewrite** — 6 new class origins added at weight 1.0 | V2-PROG-003 | ✅ Done |
+| `VectorService.gd` code | **Carryover** ✅ — config-driven, no code changes for expansion; `backfill_vector_scores()` static method added | V2-PROG-003 | ✅ Done |
+| `SaveService.gd` vector repair | **Extend** — calls `VectorService.backfill_vector_scores()` to add 6 new keys to existing echo saves at 0 | V2-PROG-003 | ✅ Done |
+| Existing `vector_scores` save data (4 old keys) | **Migration** — V2-MIG-002 ensures `{}` exists; V2-PROG-003 backfill adds 6 new keys at 0 on load | V2-MIG-002 + V2-PROG-003 | ✅ Done |
+| `dominant_vector` save field | **Carryover** — field name valid; value preserved across backfill | V2-MIG-002 | ✅ Done |
 
-**Invariants:**
+**Invariants (unchanged):**
 - VectorService MUST remain config-driven — do not hardcode virtue names in GDScript
-- Old `vector_scores` keys (`protector`, `vanguard`, `seeker`, `pillar`) must be converted, not deleted in-place (save repair handles this)
-- `BehaviorArbiter` scoring that references vector names must be updated in the same story as `balance.json`
+- Old `vector_scores` keys (`protector`, `vanguard`, `seeker`, `pillar`) are preserved — backfill is additive only
+- `BehaviorArbiter` scoring that references vector names must stay in sync with balance.json
 
 ---
 
@@ -480,8 +486,8 @@ These systems are already done and their save seams are live:
 V2-MIG-001 (this doc) ✅ Done
   ├── V2-MIG-002  Save schema bridge (additive V2 roots + repair) ✅ Done
   ├── V2-PROG-001 Progression language rename (Storyweight / Standing / Step) ✅ Done
-  ├── V2-PROG-002 Calling seam unification (calling_origin ambiguity)
-  │     └── V2-PROG-003 Vector expansion (4 → 10 virtue domains)
+  ├── V2-PROG-002 Calling seam unification (calling_origin ambiguity) ✅ Done
+  │     └── V2-PROG-003 Vector expansion (4 → 10 vectors) ✅ Done
   │           └── V2-PROG-004+ Standing milestone system (S3/S6/S9 callings)
   ├── V2-DIRECTIVE-001 Directive rewrite (Scout Carefully / Seek Signs)
   ├── V2-SANCTUM-001+  Building + Continuity system

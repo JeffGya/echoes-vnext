@@ -135,6 +135,50 @@ static func compute_dominant(vector_scores: Dictionary, current_dominant: String
 	return current_dominant
 
 
+## Backfills any vector keys present in vec_cfg.archetype_init but absent from
+## echo.vector_scores. Missing keys are added at 0 (additive-only, never deletes).
+## Returns true if any key was added.
+## Designed to run at save-load repair time to expand old 4-key saves to 10 V2 keys.
+##
+## vec_cfg shape: { "archetype_init": { "<class_origin>": { "<vector_key>": float, ... } } }
+static func backfill_vector_scores(echo: Dictionary, vec_cfg: Dictionary, logger: StructuredLogger, t: int) -> bool:
+	var archetype_init: Dictionary = {}
+	var ai_v: Variant = vec_cfg.get("archetype_init", {})
+	if typeof(ai_v) == TYPE_DICTIONARY:
+		archetype_init = ai_v
+
+	# Collect union of all canonical vector keys across all class_origin entries.
+	# Config-driven: adding a new vector to archetype_init is sufficient.
+	var canonical_keys: Dictionary = {}
+	for origin_key in archetype_init:
+		var weights: Variant = archetype_init[origin_key]
+		if typeof(weights) == TYPE_DICTIONARY:
+			for vk in weights:
+				canonical_keys[vk] = true
+
+	if canonical_keys.is_empty():
+		return false
+
+	if not echo.has("vector_scores") or typeof(echo["vector_scores"]) != TYPE_DICTIONARY:
+		echo["vector_scores"] = {}
+
+	var scores: Dictionary = echo["vector_scores"]
+	var added: Array = []
+	for vk in canonical_keys:
+		if not scores.has(vk):
+			scores[vk] = 0
+			added.append(vk)
+
+	if added.is_empty():
+		return false
+
+	logger.info(t, "vector.backfill", "Backfilled missing vector keys", {
+		"echo_id": str(echo.get("id", "")),
+		"added_keys": added
+	})
+	return true
+
+
 ## Returns a snapshot-safe dict with current vector data for this echo.
 ## Shape: { "scores": Dictionary<String, int>, "dominant_vector": String }
 ## "scores" contains all keys from echo.vector_scores — no hardcoded key list.

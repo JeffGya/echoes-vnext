@@ -57,11 +57,11 @@ const _DEFAULTS := {
 		"actor.move":   { "courage": 0.35, "wisdom": 0.05, "faith": 0.00 },
 	},
 	"vector_action_muls": {
-		"melee_attack": { "vanguard": 0.40, "protector": 0.00, "seeker": 0.15, "pillar": 0.00 },
-		"protect_ally": { "vanguard": 0.00, "protector": 0.45, "seeker": 0.00, "pillar": 0.15 },
-		"actor.guard":  { "vanguard": 0.00, "protector": 0.15, "seeker": 0.00, "pillar": 0.10 },
-		"actor.idle":   { "vanguard": 0.00, "protector": 0.00, "seeker": 0.10, "pillar": 0.20 },
-		"actor.move":   { "vanguard": 0.40, "protector": 0.05, "seeker": 0.10, "pillar": 0.00 },
+		"melee_attack": { "vanguard": 0.40, "protector": 0.00, "seeker": 0.15, "pillar": 0.00, "strategist": 0.05, "skeptic": 0.00, "devoted": 0.00, "opportunist": 0.25, "mediator": 0.00, "nurturer": 0.00 },
+		"protect_ally": { "vanguard": 0.00, "protector": 0.45, "seeker": 0.00, "pillar": 0.15, "strategist": 0.05, "skeptic": 0.00, "devoted": 0.30, "opportunist": 0.00, "mediator": 0.25, "nurturer": 0.20 },
+		"actor.guard":  { "vanguard": 0.00, "protector": 0.15, "seeker": 0.00, "pillar": 0.10, "strategist": 0.10, "skeptic": 0.15, "devoted": 0.10, "opportunist": 0.00, "mediator": 0.05, "nurturer": 0.05 },
+		"actor.idle":   { "vanguard": 0.00, "protector": 0.00, "seeker": 0.10, "pillar": 0.20, "strategist": 0.15, "skeptic": 0.20, "devoted": 0.10, "opportunist": 0.05, "mediator": 0.15, "nurturer": 0.20 },
+		"actor.move":   { "vanguard": 0.40, "protector": 0.05, "seeker": 0.10, "pillar": 0.00, "strategist": 0.15, "skeptic": 0.05, "devoted": 0.00, "opportunist": 0.30, "mediator": 0.05, "nurturer": 0.00 },
 	},
 	# Flat archetype bonus — direct lookup by archetype_birth string (not a score, just a constant).
 	# Mirrors combat_bias() from PersonalityArchetype: aggressive→melee/move, steadfast→guard,

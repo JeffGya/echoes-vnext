@@ -23,10 +23,16 @@
 				"ranger": 0.333
 			},
 			"class_origin_weights": {
-				"protector": 1.0,
-				"vanguard": 1.0,
-				"seeker": 1.0,
-				"pillar": 1.0
+				"protector":   1.0,
+				"vanguard":    1.0,
+				"seeker":      1.0,
+				"pillar":      1.0,
+				"strategist":  1.0,
+				"skeptic":     1.0,
+				"devoted":     1.0,
+				"opportunist": 1.0,
+				"mediator":    1.0,
+				"nurturer":    1.0
 			},
 			"birth_stats": {
 				"hp_base": 80.0,
@@ -228,34 +234,64 @@
 			},
 			"vector_action_muls": {
 				"melee_attack": {
-					"vanguard": 0.4,
-					"protector": 0.0,
-					"seeker": 0.15,
-					"pillar": 0.0
+					"vanguard":    0.4,
+					"protector":   0.0,
+					"seeker":      0.15,
+					"pillar":      0.0,
+					"strategist":  0.05,
+					"skeptic":     0.0,
+					"devoted":     0.0,
+					"opportunist": 0.25,
+					"mediator":    0.0,
+					"nurturer":    0.0
 				},
 				"protect_ally": {
-					"vanguard": 0.0,
-					"protector": 0.45,
-					"seeker": 0.0,
-					"pillar": 0.15
+					"vanguard":    0.0,
+					"protector":   0.45,
+					"seeker":      0.0,
+					"pillar":      0.15,
+					"strategist":  0.05,
+					"skeptic":     0.0,
+					"devoted":     0.3,
+					"opportunist": 0.0,
+					"mediator":    0.25,
+					"nurturer":    0.2
 				},
 				"actor.guard": {
-					"vanguard": 0.0,
-					"protector": 0.15,
-					"seeker": 0.0,
-					"pillar": 0.1
+					"vanguard":    0.0,
+					"protector":   0.15,
+					"seeker":      0.0,
+					"pillar":      0.1,
+					"strategist":  0.1,
+					"skeptic":     0.15,
+					"devoted":     0.1,
+					"opportunist": 0.0,
+					"mediator":    0.05,
+					"nurturer":    0.05
 				},
 				"actor.idle": {
-					"vanguard": 0.0,
-					"protector": 0.0,
-					"seeker": 0.1,
-					"pillar": 0.2
+					"vanguard":    0.0,
+					"protector":   0.0,
+					"seeker":      0.1,
+					"pillar":      0.2,
+					"strategist":  0.15,
+					"skeptic":     0.2,
+					"devoted":     0.1,
+					"opportunist": 0.05,
+					"mediator":    0.15,
+					"nurturer":    0.2
 				},
 				"actor.move": {
-					"vanguard": 0.4,
-					"protector": 0.05,
-					"seeker": 0.1,
-					"pillar": 0.0
+					"vanguard":    0.4,
+					"protector":   0.05,
+					"seeker":      0.1,
+					"pillar":      0.0,
+					"strategist":  0.15,
+					"skeptic":     0.05,
+					"devoted":     0.0,
+					"opportunist": 0.3,
+					"mediator":    0.05,
+					"nurturer":    0.0
 				}
 			},
 			"_comment_archetype": "Flat constant added inside the fear-factor bracket. Encodes combat_bias from PersonalityArchetype: aggressive=valiant/proud→melee/move, steadfast=loyal/stoic/devout→guard, supportive=empathic→protect_ally, cautious=reflective→guard/idle.",
@@ -561,28 +597,124 @@
 			"_comment": "Per-class_origin starting vector weights. Keys match class_origin_weights keys exactly. Add new vectors here only — no GDScript changes needed.",
 			"archetype_init": {
 				"protector": {
-					"protector": 60.0,
-					"vanguard": 20.0,
-					"seeker": 10.0,
-					"pillar": 10.0
+					"protector":   60.0,
+					"vanguard":    20.0,
+					"seeker":      10.0,
+					"pillar":      10.0,
+					"strategist":  0.0,
+					"skeptic":     0.0,
+					"devoted":     0.0,
+					"opportunist": 0.0,
+					"mediator":    0.0,
+					"nurturer":    0.0
 				},
 				"vanguard": {
-					"protector": 10.0,
-					"vanguard": 60.0,
-					"seeker": 20.0,
-					"pillar": 10.0
+					"protector":   10.0,
+					"vanguard":    60.0,
+					"seeker":      20.0,
+					"pillar":      10.0,
+					"strategist":  0.0,
+					"skeptic":     0.0,
+					"devoted":     0.0,
+					"opportunist": 0.0,
+					"mediator":    0.0,
+					"nurturer":    0.0
 				},
 				"seeker": {
-					"protector": 10.0,
-					"vanguard": 20.0,
-					"seeker": 60.0,
-					"pillar": 10.0
+					"protector":   10.0,
+					"vanguard":    20.0,
+					"seeker":      60.0,
+					"pillar":      10.0,
+					"strategist":  0.0,
+					"skeptic":     0.0,
+					"devoted":     0.0,
+					"opportunist": 0.0,
+					"mediator":    0.0,
+					"nurturer":    0.0
 				},
 				"pillar": {
-					"protector": 10.0,
-					"vanguard": 20.0,
-					"seeker": 10.0,
-					"pillar": 60.0
+					"protector":   10.0,
+					"vanguard":    20.0,
+					"seeker":      10.0,
+					"pillar":      60.0,
+					"strategist":  0.0,
+					"skeptic":     0.0,
+					"devoted":     0.0,
+					"opportunist": 0.0,
+					"mediator":    0.0,
+					"nurturer":    0.0
+				},
+				"strategist": {
+					"protector":   0.0,
+					"vanguard":    5.0,
+					"seeker":      15.0,
+					"pillar":      0.0,
+					"strategist":  60.0,
+					"skeptic":     10.0,
+					"devoted":     0.0,
+					"opportunist": 10.0,
+					"mediator":    0.0,
+					"nurturer":    0.0
+				},
+				"skeptic": {
+					"protector":   0.0,
+					"vanguard":    0.0,
+					"seeker":      10.0,
+					"pillar":      10.0,
+					"strategist":  15.0,
+					"skeptic":     60.0,
+					"devoted":     0.0,
+					"opportunist": 0.0,
+					"mediator":    5.0,
+					"nurturer":    0.0
+				},
+				"devoted": {
+					"protector":   5.0,
+					"vanguard":    0.0,
+					"seeker":      0.0,
+					"pillar":      15.0,
+					"strategist":  0.0,
+					"skeptic":     0.0,
+					"devoted":     60.0,
+					"opportunist": 0.0,
+					"mediator":    5.0,
+					"nurturer":    15.0
+				},
+				"opportunist": {
+					"protector":   0.0,
+					"vanguard":    15.0,
+					"seeker":      15.0,
+					"pillar":      0.0,
+					"strategist":  5.0,
+					"skeptic":     5.0,
+					"devoted":     0.0,
+					"opportunist": 60.0,
+					"mediator":    0.0,
+					"nurturer":    0.0
+				},
+				"mediator": {
+					"protector":   15.0,
+					"vanguard":    0.0,
+					"seeker":      0.0,
+					"pillar":      5.0,
+					"strategist":  0.0,
+					"skeptic":     0.0,
+					"devoted":     10.0,
+					"opportunist": 0.0,
+					"mediator":    60.0,
+					"nurturer":    10.0
+				},
+				"nurturer": {
+					"protector":   5.0,
+					"vanguard":    0.0,
+					"seeker":      0.0,
+					"pillar":      5.0,
+					"strategist":  0.0,
+					"skeptic":     0.0,
+					"devoted":     15.0,
+					"opportunist": 0.0,
+					"mediator":    15.0,
+					"nurturer":    60.0
 				}
 			}
 		},
@@ -870,11 +1002,17 @@
 					"wisdom": -1.0
 				},
 				"by_dominant_vector": {
-					"_comment": "Dominant vector = highest value in actor.vector_scores {vanguard, protector, seeker, pillar}. Tiebreak: vanguard > seeker > protector > pillar.",
-					"vanguard": 2.0,
-					"seeker": 0.0,
-					"protector": -1.0,
-					"pillar": -2.0
+					"_comment": "Dominant vector = highest value in actor.vector_scores. All 10 V2 vectors listed. Tiebreak: vanguard > opportunist > strategist > seeker > skeptic > protector > mediator > devoted > pillar > nurturer.",
+					"vanguard":    2.0,
+					"opportunist": 1.5,
+					"strategist":  0.5,
+					"seeker":      0.0,
+					"skeptic":    -0.5,
+					"protector":  -1.0,
+					"mediator":   -1.0,
+					"devoted":    -1.5,
+					"pillar":     -2.0,
+					"nurturer":   -2.0
 				}
 			}
 		},
@@ -893,10 +1031,16 @@
 			"_comment_prog004": "PROG-004: Rank-up and trait drift. vector_drift_weights must sum to 1.0 per vector key. rank_up_trait_drift_magnitude = +-N applied to one trait per rank-up.",
 			"rank_up_trait_drift_magnitude": 1,
 			"vector_drift_weights": {
-				"vanguard":  { "courage": 0.65, "wisdom": 0.25, "faith": 0.10 },
-				"seeker":    { "courage": 0.15, "wisdom": 0.65, "faith": 0.20 },
-				"pillar":    { "courage": 0.10, "wisdom": 0.25, "faith": 0.65 },
-				"protector": { "courage": 0.35, "wisdom": 0.15, "faith": 0.50 }
+				"vanguard":    { "courage": 0.65, "wisdom": 0.25, "faith": 0.10 },
+				"seeker":      { "courage": 0.15, "wisdom": 0.65, "faith": 0.20 },
+				"pillar":      { "courage": 0.10, "wisdom": 0.25, "faith": 0.65 },
+				"protector":   { "courage": 0.35, "wisdom": 0.15, "faith": 0.50 },
+				"strategist":  { "courage": 0.15, "wisdom": 0.65, "faith": 0.20 },
+				"skeptic":     { "courage": 0.10, "wisdom": 0.55, "faith": 0.35 },
+				"devoted":     { "courage": 0.05, "wisdom": 0.20, "faith": 0.75 },
+				"opportunist": { "courage": 0.50, "wisdom": 0.40, "faith": 0.10 },
+				"mediator":    { "courage": 0.10, "wisdom": 0.30, "faith": 0.60 },
+				"nurturer":    { "courage": 0.05, "wisdom": 0.25, "faith": 0.70 }
 			}
 		},
 		"combat": {
@@ -910,10 +1054,16 @@
 				"purify_cooldown_rounds": 3.0,
 				"purify_weight_faith": 0.5,
 				"purify_weight_by_vector": {
-					"pillar": 20.0,
-					"protector": 10.0,
-					"seeker": 5.0,
-					"vanguard": 0.0
+					"pillar":      20.0,
+					"devoted":     20.0,
+					"protector":   10.0,
+					"nurturer":    15.0,
+					"mediator":    10.0,
+					"seeker":       5.0,
+					"strategist":   3.0,
+					"skeptic":      2.0,
+					"vanguard":     0.0,
+					"opportunist":  0.0
 				},
 				"morale_drain_per_wave": 5.0
 			},
@@ -984,11 +1134,17 @@
 					"wisdom": -1.0
 				},
 				"by_dominant_vector": {
-					"_comment": "Dominant vector = highest value in actor.vector_scores {vanguard, protector, seeker, pillar}. Tiebreak: vanguard > seeker > protector > pillar.",
-					"vanguard": 2.0,
-					"seeker": 1.0,
-					"protector": -1.0,
-					"pillar": -2.0
+					"_comment": "Dominant vector = highest value in actor.vector_scores. All 10 V2 vectors listed. Tiebreak: vanguard > opportunist > seeker > strategist > skeptic > protector > mediator > devoted > pillar > nurturer.",
+					"vanguard":    2.0,
+					"opportunist": 1.5,
+					"seeker":      1.0,
+					"strategist":  0.5,
+					"skeptic":    -0.5,
+					"protector":  -1.0,
+					"mediator":   -1.0,
+					"devoted":    -1.5,
+					"pillar":     -2.0,
+					"nurturer":   -2.0
 				}
 			}
 		},
@@ -1000,10 +1156,16 @@
 			"calling_ambivalent_fear_increase": 3,
 			"calling_incompatible_fear_increase": 10,
 			"vector_to_calling": {
-				"vanguard":  "blade",
-				"protector": "warder",
-				"pillar":    "steward",
-				"seeker":    "seeker"
+				"vanguard":    "blade",
+				"protector":   "warder",
+				"pillar":      "steward",
+				"seeker":      "seeker",
+				"strategist":  "seer",
+				"skeptic":     "ranger",
+				"devoted":     "steward",
+				"opportunist": "blade",
+				"mediator":    "warder",
+				"nurturer":    "steward"
 			},
 			"seeker_trait_split": {
 				"courage_gte_wisdom": "ranger",

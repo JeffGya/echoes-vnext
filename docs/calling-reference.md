@@ -18,6 +18,32 @@
 
 ---
 
+## V2 Vector Model (ten-vector — V2-PROG-003 ✅ Done)
+
+Ten vectors describe the shape of recovering selfhood. Each is a pairing of two virtue domains.
+Vector keys are lowercase identifiers stored in `echo["vector_scores"]` and `echo["dominant_vector"]`.
+
+| Vector ID | Virtue composition | V1 calling ID (interim until V2-PROG-004) | Calling family |
+|---|---|---|---|
+| `vanguard` | Courage + Leadership | `blade` | Edge |
+| `protector` | Courage + Compassion | `warder` | Anchor |
+| `seeker` | Wisdom + Truth | `ranger` / `seer` (trait split) | Sight |
+| `strategist` | Wisdom + Leadership | `seer` | Sight |
+| `skeptic` | Truth + Humility | `ranger` | Sight |
+| `pillar` | Acceptance + Humility | `steward` | Anchor |
+| `devoted` | Acceptance + Generosity | `steward` | Anchor |
+| `opportunist` | Courage + Wisdom | `blade` | Edge |
+| `mediator` | Empathy + Forgiveness | `warder` | Anchor |
+| `nurturer` | Generosity + Compassion | `steward` | Anchor |
+
+**Save fields:** `echo["vector_scores"]` (Dictionary<String, int> 0–1000 per key), `echo["dominant_vector"]` (String, hysteresis-protected at 3% margin).
+
+**Config source:** `data/balance.json data.vectors.archetype_init` — 10 class_origin entries, each with 10 vector keys. VectorService is fully config-driven; adding vectors requires no GDScript changes.
+
+**Save repair:** `VectorService.backfill_vector_scores()` adds any missing vector keys at 0 on load. Old 4-key saves are expanded to 10 keys automatically.
+
+---
+
 ## V1 Calling IDs (active until V2-PROG-004)
 
 These are the current values stored in save data and used by balance.json config. V2-PROG-004 will replace them with the V2 Twi-named set.

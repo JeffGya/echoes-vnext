@@ -300,6 +300,14 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 	
 		# SANCTUM-002: roster item additive repairs (Echo placeholder contract)
 		# Keep deterministic: no RNG, no OS time; only defaults + key migrations.
+
+		# V2-PROG-003: load vec_cfg once for vector backfill inside the echo loop.
+		var _balance_for_repair := JsonFileLoader.load_dict(ConfigService.PATH_BALANCE)
+		var _vec_cfg: Dictionary = {}
+		var _vc_v: Variant = _balance_for_repair.get("data", {}).get("vectors", {})
+		if typeof(_vc_v) == TYPE_DICTIONARY:
+			_vec_cfg = _vc_v
+
 		var roster: Array = sanctum.get("roster", [])
 		for i in range(roster.size()):
 			var item = roster[i]
@@ -456,6 +464,11 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 				echo["vector_scores"] = {}
 				repaired = true
 				repaired_notes.append("sanctum.roster[%d].vector_scores set to {} default" % i)
+
+			# V2-PROG-003: backfill any new vector keys missing from existing saves.
+			if VectorService.backfill_vector_scores(echo, _vec_cfg, logger, t):
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].vector_scores backfilled new V2 keys" % i)
 
 			# rarity (canonical tiers: uncalled/called/chosen; repair legacy 'common')
 			if not echo.has("rarity") or typeof(echo["rarity"]) != TYPE_STRING or str(echo["rarity"]).is_empty():

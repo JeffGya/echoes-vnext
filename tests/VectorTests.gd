@@ -21,6 +21,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("vector/archetype_init_from_config",Callable(VectorTests, "_t_archetype_init_from_config"))
 	runner.register_test("vector/accumulate_clamps_at_1000", Callable(VectorTests, "_t_accumulate_clamps_at_1000"))
 	runner.register_test("vector/dominant_changed_log_fires",Callable(VectorTests, "_t_dominant_changed_log_fires"))
+	# V2-PROG-003: backfill_vector_scores
+	runner.register_test("vector/backfill_adds_missing_keys", Callable(VectorTests, "_t_backfill_adds_missing_keys"))
+	runner.register_test("vector/backfill_idempotent",        Callable(VectorTests, "_t_backfill_idempotent"))
 
 
 # -------------------------
@@ -154,5 +157,94 @@ static func _t_dominant_changed_log_fires() -> Dictionary:
 			break
 	if not found:
 		return { "ok": false, "error": "No vector.dominant.changed log event found after dominant switch" }
+
+	return { "ok": true }
+
+
+# ── V2-PROG-003: backfill tests ──────────────────────────────────────────────
+
+# Test 6: backfill_adds_missing_keys
+# An echo with 4 old vector keys and a vec_cfg that defines 10 keys must have
+# the missing 6 keys added at 0 after backfill. Existing values must not change.
+static func _t_backfill_adds_missing_keys() -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("info")
+
+	var vec_cfg := {
+		"archetype_init": {
+			"vanguard":    { "vanguard": 60, "protector": 10, "seeker": 20, "pillar": 10, "strategist": 0, "skeptic": 0, "devoted": 0, "opportunist": 0, "mediator": 0, "nurturer": 0 },
+			"strategist":  { "vanguard": 5, "protector": 0, "seeker": 15, "pillar": 0, "strategist": 60, "skeptic": 10, "devoted": 0, "opportunist": 10, "mediator": 0, "nurturer": 0 },
+		}
+	}
+	# Simulate an old echo that only has 4 V1 keys (and existing values to preserve)
+	var echo := {
+		"id": "echo_backfill_test",
+		"vector_scores": { "vanguard": 120, "protector": 50, "seeker": 80, "pillar": 30 },
+		"dominant_vector": "vanguard"
+	}
+
+	var did_backfill: bool = VectorService.backfill_vector_scores(echo, vec_cfg, logger, 1)
+
+	if not did_backfill:
+		return { "ok": false, "error": "backfill_vector_scores returned false — expected true (keys were missing)" }
+
+	# Original values preserved
+	if int(echo["vector_scores"].get("vanguard", -1)) != 120:
+		return { "ok": false, "error": "vanguard score was mutated (expected 120)" }
+	if int(echo["vector_scores"].get("pillar", -1)) != 30:
+		return { "ok": false, "error": "pillar score was mutated (expected 30)" }
+
+	# New keys added at 0
+	for new_key in ["strategist", "skeptic", "devoted", "opportunist", "mediator", "nurturer"]:
+		if not echo["vector_scores"].has(new_key):
+			return { "ok": false, "error": "Missing new key after backfill: '%s'" % new_key }
+		if int(echo["vector_scores"][new_key]) != 0:
+			return { "ok": false, "error": "New key '%s' should be 0 after backfill, got: %d" % [new_key, int(echo["vector_scores"][new_key])] }
+
+	# Verify vector.backfill log event fired
+	var logs: Array = logger.get_logs()
+	var found := false
+	for entry in logs:
+		if str(entry.get("type", "")) == "vector.backfill":
+			found = true
+			break
+	if not found:
+		return { "ok": false, "error": "No vector.backfill log event found after backfill" }
+
+	return { "ok": true }
+
+
+# Test 7: backfill_idempotent
+# Calling backfill_vector_scores twice must not change values on the second call.
+static func _t_backfill_idempotent() -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+
+	var vec_cfg := {
+		"archetype_init": {
+			"vanguard": { "vanguard": 60, "strategist": 0, "skeptic": 0 }
+		}
+	}
+	var echo := {
+		"id": "echo_idem_test",
+		"vector_scores": { "vanguard": 60 },
+		"dominant_vector": "vanguard"
+	}
+
+	# First call: adds missing keys
+	var first: bool = VectorService.backfill_vector_scores(echo, vec_cfg, logger, 1)
+	if not first:
+		return { "ok": false, "error": "First backfill call returned false — expected true" }
+
+	# Second call: all keys already present → must return false (no-op)
+	var second: bool = VectorService.backfill_vector_scores(echo, vec_cfg, logger, 2)
+	if second:
+		return { "ok": false, "error": "Second backfill call returned true — expected false (idempotent)" }
+
+	# Values unchanged
+	if int(echo["vector_scores"].get("vanguard", -1)) != 60:
+		return { "ok": false, "error": "vanguard score should not change across backfill calls" }
+	if int(echo["vector_scores"].get("strategist", -1)) != 0:
+		return { "ok": false, "error": "strategist should remain 0 after second call" }
 
 	return { "ok": true }
