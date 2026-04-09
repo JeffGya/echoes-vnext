@@ -41,6 +41,10 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"meta": { "t": t },
 		}
 
+	# V2-WEAVE-001: Recovery segments for cord display
+	var segs_v: Variant = model.get("realm_recovery_segments", [])
+	var recovery_segments: Array = segs_v if segs_v is Array else []
+
 	# --- Build stage list from RealmModel ---
 	var raw_model_stages: Variant = model.get("stages", [])
 	var model_stages: Array = raw_model_stages if raw_model_stages is Array else []
@@ -192,6 +196,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"title":                  "Stage Map",
 			"realm_id":               flow_ctx.realm_id,
 			"realm_name":             realm_name,
+			"realm_virtue":           str(model.get("virtue", "")),  # V2-WEAVE-001: cord palette
 			"current_stage_id":       str(current_stage.get("id", "")),
 			"stages_completed_count": stages_completed_count,
 			"stage_count":            stage_count,
@@ -201,6 +206,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"party_preview":          party_preview,
 			"party_prep":             party_prep,
 			"has_called_echoes":      any_called,
+			"recovery_segments":      recovery_segments,  # V2-WEAVE-001: Array[{stage_index, quality_tier}]
 		},
 		"actions": actions,
 		"meta": { "t": t },

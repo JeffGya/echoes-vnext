@@ -23,6 +23,10 @@ signal action_requested(action: Dictionary)
 @onready var reroll_button: Button = %RerollButton
 @onready var confirm_button: Button = %ConfirmButton
 
+# V2-WEAVE-001: Thread Reserve Strip
+@onready var _thread_slots: HBoxContainer = %ThreadSlots
+const ThreadSlotItemScene: PackedScene = preload("res://ui/components/ThreadSlotItem.tscn")
+
 
 var _snapshot: Dictionary = {}
 var _name_dirty := false
@@ -88,6 +92,12 @@ func _render() -> void:
 
 	_last_ase_balance = ase_balance
 
+	# V2-WEAVE-001: Thread Reserve Strip
+	var thread_reserve_v: Variant = data.get("thread_reserve", [])
+	var thread_reserve: Array = thread_reserve_v if thread_reserve_v is Array else []
+	var reserve_cap: int = int(data.get("thread_reserve_cap", 4))
+	_rebuild_thread_reserve(thread_reserve, reserve_cap)
+
 	if sanctum_name == "":
 		# Modal opening edge: reset dirty so first suggestion shows and rerolls work
 		if not name_modal.visible:
@@ -117,6 +127,23 @@ func _on_reroll_pressed() -> void:
 
 func _on_confirm_pressed() -> void:
 		action_requested.emit({ "type": "sanctum.name.confirm", "name": name_edit.text })
+
+# V2-WEAVE-001: Rebuild the 4-slot Thread Reserve Strip from snapshot data.
+func _rebuild_thread_reserve(thread_reserve: Array, reserve_cap: int) -> void:
+	if _thread_slots == null:
+		return
+	for c in _thread_slots.get_children():
+		c.queue_free()
+	for i in range(reserve_cap):
+		var slot: ThreadSlotItem = ThreadSlotItemScene.instantiate()
+		_thread_slots.add_child(slot)
+		if i < thread_reserve.size():
+			var t_v: Variant = thread_reserve[i]
+			var t_d: Dictionary = t_v if t_v is Dictionary else {}
+			slot.setup_filled(str(t_d.get("virtue", "")), str(t_d.get("quality_tier", "broken")))
+		else:
+			slot.setup_empty()
+
 
 func _pulse_ase_label() -> void:
 	if _ase_tween != null and _ase_tween.is_running():

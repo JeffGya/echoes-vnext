@@ -9,12 +9,14 @@ extends Control
 
 signal action_requested(action: Dictionary)
 
-const StageRowScene   := preload("res://ui/components/StageRowItem.tscn")
-const ObjectiveScene  := preload("res://ui/components/ObjectiveItem.tscn")
+const StageRowScene     := preload("res://ui/components/StageRowItem.tscn")
+const ObjectiveScene    := preload("res://ui/components/ObjectiveItem.tscn")
 const EchoSkillRowScene := preload("res://ui/components/EchoSkillRow.tscn")
+const RealmRecoveryCordScene := preload("res://ui/components/RealmRecoveryCord.tscn")
 
 @onready var _title_label: Label            = %TitleLabel
 @onready var _subtitle_label: Label         = %SubtitleLabel
+@onready var _cord: RealmRecoveryCord       = %RecoveryCord
 @onready var _left_panel_title: Label       = %LeftPanelTitle
 @onready var _stage_list: VBoxContainer     = %StageList
 @onready var _prep_bar: PanelContainer      = %PrepBar
@@ -100,6 +102,14 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	else:
 		_enter_button.disabled = true
 		_enter_action = {}
+
+	# V2-WEAVE-001: Recovery Cord — per-stage quality track
+	var recovery_segments_v: Variant = data.get("recovery_segments", [])
+	var recovery_segments: Array = recovery_segments_v if recovery_segments_v is Array else []
+	var stage_count_c: int = int(data.get("stage_count", stages.size()))
+	var realm_virtue_c: String = str(data.get("realm_virtue", ""))
+	if _cord != null:
+		_cord.setup(stage_count_c, recovery_segments, realm_virtue_c)
 
 	# PROG-009: Party prep bar — skill selection for called echoes before entering the stage.
 	var party_prep_v: Variant = data.get("party_prep", [])

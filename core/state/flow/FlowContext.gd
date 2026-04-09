@@ -52,3 +52,8 @@ var last_transition_reason: String = ""
 # COMBAT-006 dev toggle: overrides encounter objective when non-empty.
 # Set via AppRoot debug command "combat_objective <mode>". Empty = use default.
 var dev_combat_objective: String = ""
+
+# V2-WEAVE-001: Threads crystallized from the most recently completed Realm (session-transient).
+# Populated by FlowRuntime._handle_complete_stage() on realm_complete.
+# Resets to [] on new game boot (FlowContext is freshly instantiated).
+var last_realm_threads_earned: Array = []

@@ -1,0 +1,31 @@
+[gd_scene load_steps=2 format=3 uid="uid://realm_recovery_cord"]
+
+[ext_resource type="Script" path="res://ui/components/RealmRecoveryCord.gd" id="1_cord"]
+
+[node name="RealmRecoveryCord" type="VBoxContainer"]
+theme_override_constants/separation = 6
+script = ExtResource("1_cord")
+
+[node name="CordCells" type="HBoxContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="CordLegend" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="LegendStrong" type="Label" parent="CordLegend"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "[●] Strong"
+
+[node name="LegendCompromised" type="Label" parent="CordLegend"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "[≋] Compromised"
+
+[node name="LegendWeak" type="Label" parent="CordLegend"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "[✕] Weak"

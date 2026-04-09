@@ -619,6 +619,20 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 		repaired = true
 		repaired_notes.append("realms added with empty dict default")
 
+	# V2-WEAVE-001: repair realm_recovery_segments on each existing realm model
+	var _realms_repair_v: Variant = save.get("realms", {})
+	if _realms_repair_v is Dictionary:
+		var _realms_repair: Dictionary = _realms_repair_v
+		for _realm_id in _realms_repair:
+			var _model_v: Variant = _realms_repair[_realm_id]
+			if not (_model_v is Dictionary):
+				continue
+			var _model: Dictionary = _model_v
+			if not _model.has("realm_recovery_segments") or not (_model["realm_recovery_segments"] is Array):
+				_model["realm_recovery_segments"] = []
+				repaired = true
+				repaired_notes.append("realm.%s.realm_recovery_segments defaulted to [] (V2-WEAVE-001)" % _realm_id)
+
 	# Get structured log if anything was repaired (uses injected t)
 	if repaired:
 		_log_info(logger, t, "save.schema.repair", "Applied additive save schema repairs", {

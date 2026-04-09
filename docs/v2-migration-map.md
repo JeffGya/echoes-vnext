@@ -476,6 +476,7 @@ These systems are already done and their save seams are live:
 |---|---|---|
 | BOND-001 | Social graph | `bonds: []`, `party_encounters: []` |
 | VOW-001 | Vow doctrine | `vows: {}` (keyed by vow_id), `active_vow: {}` |
+| V2-WEAVE-001 | Thread recovery model | `sanctum.threads: {}` (keyed by thread_id); `realms[id].realm_recovery_segments: []` |
 
 > See CONVENTIONS.md `SocialGraphService` and `VowService` sections for full API contracts.
 
@@ -495,7 +496,10 @@ V2-MIG-001 (this doc) ✅ Done
   │                       └── V2-PROG-004+ Standing milestone UI system (S3/S6/S9 flow)
   ├── V2-DIRECTIVE-001 Directive rewrite (Scout Carefully / Seek Signs)
   ├── V2-SANCTUM-001+  Building + Continuity system
-  └── V2-ECONOMY-001+  Economy expansion (Relics, Faith, Harmony, Favor)
+  ├── V2-ECONOMY-001+  Economy expansion (Relics, Faith, Harmony, Favor)
+  └── V2-WEAVE-001     Foundation Thread recovery model ✅ Done
+        (per-stage segments → Realm completion → Threads crystallize → sanctum.threads reserve)
+        (Thread Reserve Strip in Sanctum, Recovery Cord in StageMap)
 ```
 
 PROG-001 and MIG-002 can proceed in parallel. All others depend on MIG-002 being done first for save bridge coverage.
@@ -507,4 +511,4 @@ PROG-001 and MIG-002 can proceed in parallel. All others depend on MIG-002 being
 1. **V2 calling IDs:** ✅ RESOLVED (V2-PROG-004). Final IDs: `okofor`, `onyamesu`, `aduro`, `sum_okwanfo`, `okomfo`, `kra_soro`. See `docs/calling-reference.md` for full reference.
 2. **Virtue domain vector IDs:** ✅ RESOLVED (V2-MIG-002). Vector keys remain lowercase vector names (`vanguard`, `protector`, `seeker`, `pillar`, + 6 new ones in V2-PROG-003). They are NOT the virtue names. Save repair in V2-MIG-002 ensures `vector_scores: {}` exists per echo; key expansion to all 10 vectors is V2-PROG-003's job (alongside balance.json update).
 3. **Standing count:** GDD says "5–10 Standings total" — exact number needs locking before V2-PROG-004.
-4. **Threads reserve vs Thread items:** The relationship between stage-level recovery segments and full Thread items (Realm completion) needs one more clarity pass before V2-WEAVE-001.
+4. ~~**Threads reserve vs Thread items:** The relationship between stage-level recovery segments and full Thread items (Realm completion) needs one more clarity pass before V2-WEAVE-001.~~ **RESOLVED (V2-WEAVE-001 ✅ Done)** — stages contribute per-stage recovery segments (stored in `realm_recovery_segments`); full Threads crystallize only on Realm completion (1–3, always ≥1) and enter `sanctum.threads` reserve (cap=4). See CONVENTIONS.md `ThreadService` section for full API contract.

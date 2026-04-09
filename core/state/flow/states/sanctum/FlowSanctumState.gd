@@ -146,6 +146,29 @@ func enter(ctx: RefCounted, t:int) -> void:
 				"tier":        _av_tier,
 			}
 
+	# V2-WEAVE-001: Thread reserve for ThreadReserveRow display
+	var _threads_src_v: Variant = sanctum.get("threads", {})
+	var _threads_src: Dictionary = _threads_src_v if _threads_src_v is Dictionary else {}
+	var _thread_reserve: Array = []
+	for _tid in _threads_src:
+		var _th_v: Variant = _threads_src[_tid]
+		if _th_v is Dictionary:
+			var _th: Dictionary = _th_v
+			_thread_reserve.append({
+				"virtue":       str(_th.get("virtue", "unknown")),
+				"quality_tier": str(_th.get("quality_tier", "broken")),
+			})
+	# Read reserve cap from config if available, otherwise default 4
+	var _thread_reserve_cap := 4
+	if flow_ctx.config_service != null:
+		var _bal_th_v: Variant = flow_ctx.config_service.get_balance()
+		var _bal_th: Dictionary = _bal_th_v if _bal_th_v is Dictionary else {}
+		var _bd_th_v: Variant = _bal_th.get("data", {})
+		var _bd_th: Dictionary = _bd_th_v if _bd_th_v is Dictionary else {}
+		var _th_cfg_v: Variant = _bd_th.get("threads", {})
+		var _th_cfg: Dictionary = _th_cfg_v if _th_cfg_v is Dictionary else {}
+		_thread_reserve_cap = int(_th_cfg.get("base_reserve_cap", 4))
+
 	# Base Sanctum snapshot. FlowStateMachine._rebuild_snapshot() enriches data with:
 	# - ase_balance, ekwan_balance (Economy)
 	# - roster_count, active_party_count (Sanctum)
@@ -158,6 +181,8 @@ func enter(ctx: RefCounted, t:int) -> void:
 		"roster_count": roster.size(),
 		"roster_preview": roster_preview,
 		"active_vow": _av_display,  # VOW-001: mantra data for SanctumScreen header
+		"thread_reserve":     _thread_reserve,      # V2-WEAVE-001: Array[{virtue, quality_tier}]
+		"thread_reserve_cap": _thread_reserve_cap,  # V2-WEAVE-001: base reserve cap (default 4)
 	}
 
 	flow_ctx.last_snapshot = {

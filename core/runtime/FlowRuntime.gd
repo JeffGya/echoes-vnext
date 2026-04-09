@@ -505,8 +505,37 @@ func _handle_complete_stage(t: int, destination_override: String = "") -> void:
 	_apply_encounter_emotion_drift(outcome, t)
 	flow_ctx.encounter_ctx     = null
 	flow_ctx.encounter_machine = null
+
+	# V2-WEAVE-001: load thread config (read-only)
+	var _bal_v: Variant = flow_ctx.config_service.get_balance()
+	var _bal: Dictionary = _bal_v if _bal_v is Dictionary else {}
+	var _bal_data_v: Variant = _bal.get("data", {})
+	var _bal_data: Dictionary = _bal_data_v if _bal_data_v is Dictionary else {}
+	var _thread_cfg_v: Variant = _bal_data.get("threads", {})
+	var _thread_cfg: Dictionary = _thread_cfg_v if _thread_cfg_v is Dictionary else {}
+
+	# V2-WEAVE-001: contribute segment — grade from the final encounter snapshot
+	if not _thread_cfg.is_empty() and not flow_ctx.realm_id.is_empty():
+		var _snap_data_v: Variant = flow_ctx.last_snapshot.get("data", {})
+		var _snap_data: Dictionary = _snap_data_v if _snap_data_v is Dictionary else {}
+		var _combat_grade := str(_snap_data.get("rank", "F"))
+		RealmService.contribute_segment(flow_ctx, _combat_grade, _thread_cfg, t)
+
 	var result := RealmService.advance_stage(flow_ctx, t)  # sets save_request + logs internally
 	if result.get("is_completed", false):
+		# V2-WEAVE-001: crystallize Threads before clearing realm context
+		flow_ctx.last_realm_threads_earned = []
+		if not _thread_cfg.is_empty():
+			var _completed_realm_id := flow_ctx.realm_id  # capture BEFORE clearing
+			flow_ctx.last_realm_threads_earned = ThreadService.crystallize_threads(
+				_completed_realm_id, flow_ctx.save_data, _thread_cfg, t, flow_ctx.logger
+			)
+			flow_ctx.save_request = true
+			if flow_ctx.save_request_reason.is_empty():
+				flow_ctx.save_request_reason = "thread.crystallize"
+			else:
+				flow_ctx.save_request_reason += "|thread.crystallize"
+
 		# Clear stale context so re-entry into a new realm starts clean
 		flow_ctx.realm_id = ""
 		flow_ctx.stage_id = ""

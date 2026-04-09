@@ -1466,6 +1466,27 @@
 				"unlock_scenario":   "String — scenario trigger id that reveals this vow to the Keeper",
 				"unlock_description":"String — human-readable unlock condition shown as hint"
 			}
+		},
+		"threads": {
+			"base_reserve_cap": 4,
+			"segment_quality_by_grade": {
+				"S": "clean",
+				"A": "clean",
+				"B": "compromised",
+				"C": "compromised",
+				"D": "compromised",
+				"F": "broken"
+			},
+			"quality_tiers": {
+				"clean":       { "min_quality": 0.70, "weight": 1.0 },
+				"compromised": { "min_quality": 0.35, "weight": 0.5 },
+				"broken":      { "min_quality": 0.00, "weight": 0.1 }
+			},
+			"count_thresholds": {
+				"three": 0.75,
+				"two":   0.40,
+				"one":   0.00
+			}
 		}
 	}
 }

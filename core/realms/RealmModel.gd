@@ -9,7 +9,7 @@ extends RefCounted
 const REQUIRED_FIELDS: Array = [
 	"id", "name", "virtue", "description", "seed", "stage_count",
 	"current_stage_index", "is_completed", "status", "run_index", "run_count",
-	"stages"
+	"stages", "realm_recovery_segments"    # ← added V2-WEAVE-001
 ]
 
 # Status constants
@@ -43,7 +43,8 @@ static func make(
 		"status":               STATUS_ACTIVE,
 		"run_index":            run_index,
 		"run_count":            run_count,
-		"stages":               [],  # Populated by RealmService via RealmGenerator after make()
+		"stages":                    [],  # Populated by RealmService via RealmGenerator after make()
+		"realm_recovery_segments":   [],  # V2-WEAVE-001: Array[{stage_index, quality_tier}]
 	}
 
 

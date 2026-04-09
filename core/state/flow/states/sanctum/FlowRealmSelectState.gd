@@ -67,12 +67,22 @@ func enter(ctx: RefCounted, t: int) -> void:
 			"locked":      is_locked,
 		})
 
+	# V2-WEAVE-001: Thread count + last earned for post-realm feedback
+	var _sanctum_rs_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var _sanctum_rs: Dictionary = _sanctum_rs_v if _sanctum_rs_v is Dictionary else {}
+	var _threads_rs_v: Variant = _sanctum_rs.get("threads", {})
+	var _threads_rs: Dictionary = _threads_rs_v if _threads_rs_v is Dictionary else {}
+	var _thread_count: int = _threads_rs.size()
+	var _last_threads_earned: Array = flow_ctx.last_realm_threads_earned.duplicate()
+
 	flow_ctx.last_snapshot = {
 		"type": FlowStateIds.REALM_SELECT,
 		"data": {
-			"title":            "Select Realm",
-			"current_realm_id": flow_ctx.realm_id,
-			"realms":           realms_out,
+			"title":               "Select Realm",
+			"current_realm_id":    flow_ctx.realm_id,
+			"realms":              realms_out,
+			"thread_count":        _thread_count,         # V2-WEAVE-001: total Threads in reserve
+			"last_threads_earned": _last_threads_earned,  # V2-WEAVE-001: from most recent realm
 		},
 		"actions": {
 			"nav.back": {

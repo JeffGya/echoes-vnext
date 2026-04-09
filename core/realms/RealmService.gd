@@ -215,6 +215,34 @@ static func advance_stage(ctx: FlowContext, t: int) -> Dictionary:
 	return ctx.save_data["realms"][ctx.realm_id]
 
 
+## V2-WEAVE-001: Append a quality segment to the active realm's recovery track.
+## Call BEFORE advance_stage() so current_stage_index still reflects the stage just completed.
+## combat_grade: "S"/"A"/"B"/"C"/"D"/"F" from RewardCalc._compute_rank().
+## thread_cfg: data.threads block from balance.json.
+static func contribute_segment(ctx: FlowContext, combat_grade: String, thread_cfg: Dictionary, t: int) -> void:
+	var model := get_active(ctx)
+	if model.is_empty() or bool(model.get("is_completed", false)):
+		return
+
+	var grade_map_v: Variant = thread_cfg.get("segment_quality_by_grade", {})
+	var grade_map: Dictionary = grade_map_v if grade_map_v is Dictionary else {}
+	var quality_tier: String = str(grade_map.get(combat_grade, "broken"))
+
+	var segments_v: Variant = ctx.save_data["realms"][ctx.realm_id].get("realm_recovery_segments", [])
+	var segments: Array = segments_v if segments_v is Array else []
+	var stage_index := int(model.get("current_stage_index", 0))
+
+	segments.append({ "stage_index": stage_index, "quality_tier": quality_tier })
+	ctx.save_data["realms"][ctx.realm_id]["realm_recovery_segments"] = segments
+
+	ctx.logger.info(t, "realm.recovery.segment", "Recovery segment contributed", {
+		"realm_id":    ctx.realm_id,
+		"stage_index": stage_index,
+		"grade":       combat_grade,
+		"tier":        quality_tier,
+	})
+
+
 ## REALM-005: Pure static helper — computes virtue-based stage bonus from realm identity.
 ## No side effects. Same inputs → identical output every time (deterministic).
 ##

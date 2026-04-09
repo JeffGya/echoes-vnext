@@ -283,6 +283,23 @@ Pure-static `RefCounted`. VOW-001 vow doctrine system.
 - Pledged from Sanctum (no active realm): released when total `run_count` across all realms increases past `runs_at_pledge`.
 - Early break: always available via `cta.break` — applies full penalty.
 
+### ThreadService (`core/progression/ThreadService.gd`)
+Pure-static `RefCounted`. V2-WEAVE-001 Thread crystallization and per-stage recovery utilities.
+
+- `crystallize_threads(realm_id, save_data, cfg, t, logger) -> Array` — deterministic; no RNG. Reads `realm_recovery_segments`, derives weighted quality float, resolves count (1–3) and tier, writes Thread dicts into `save_data["sanctum"]["threads"]`. Returns Array of added Thread dicts. GDD §14.4: always ≥1 thread (`max(1, _resolve_count())`).
+- `get_recovery_band(segments, cfg) -> String` — returns `"strong"` / `"compromised"` / `"weak"` for display. Used by stage-map snapshots.
+
+**Call order:** `RealmService.contribute_segment()` BEFORE `RealmService.advance_stage()`. Then `ThreadService.crystallize_threads()` AFTER realm is confirmed complete (inside `FlowRuntime._handle_complete_stage()`).
+
+**Config block:** `balance.json data.threads` — `segment_quality_by_grade`, `quality_tiers` (min_quality + weight per tier), `count_thresholds` (three/two/one).
+
+**Thread dict shape:**
+```
+{ "id": "thread.realm.01.0", "virtue": "courage", "quality_tier": "clean", "realm_id": "realm.01", "run_index": 0 }
+```
+
+**Save location:** `save_data["sanctum"]["threads"]` — Dict keyed by thread ID.
+
 ### CombatState (`core/combat/CombatState.gd`)
 - `create(actors, objective, initiative_seed, init_cfg) -> Dictionary`
 - `check_end_condition(actors, objective) -> { over: bool, victory: bool, reason: String }`

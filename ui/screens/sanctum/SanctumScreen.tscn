@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://cb8hn28k3qlg6" path="res://ui/screens/sanctum/SanctumScreen.gd" id="1_55k7r"]
 [ext_resource type="Theme" uid="uid://8qssuuodths2" path="res://assets/theme/LivingTreeSystem.tres" id="2_gaxha"]
+[ext_resource type="PackedScene" path="res://ui/components/ThreadSlotItem.tscn" id="3_threadslot"]
 
 [sub_resource type="Theme" id="Theme_gaxha"]
 
@@ -207,6 +208,30 @@ layout_mode = 2
 theme_type_variation = &"StatsPanel"
 text = "1 echoes"
 horizontal_alignment = 2
+
+[node name="ThreadReservePanel" type="PanelContainer" parent="RightSidebar" unique_id=1380001001]
+layout_mode = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="RightSidebar/ThreadReservePanel" unique_id=1380001002]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 12
+
+[node name="VBoxContainer" type="VBoxContainer" parent="RightSidebar/ThreadReservePanel/MarginContainer" unique_id=1380001003]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ThreadReserveHeader" type="Label" parent="RightSidebar/ThreadReservePanel/MarginContainer/VBoxContainer" unique_id=1380001004]
+layout_mode = 2
+theme_type_variation = &"ContentBasePanel"
+text = "Thread Reserve"
+
+[node name="ThreadSlots" type="HBoxContainer" parent="RightSidebar/ThreadReservePanel/MarginContainer/VBoxContainer" unique_id=1380001005]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
 
 [node name="PartyInfoPanel" type="PanelContainer" parent="RightSidebar" unique_id=1270531692]
 layout_mode = 2
