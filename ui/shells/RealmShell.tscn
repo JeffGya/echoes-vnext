@@ -1,9 +1,9 @@
-[gd_scene load_steps=3 format=3 uid="uid://bwm4aksecsiyy"]
+[gd_scene format=3 uid="uid://bwm4aksecsiyy"]
 
 [ext_resource type="Script" uid="uid://c7smmm40nja3b" path="res://ui/shells/RealmShell.gd" id="1_realmshell"]
-[ext_resource type="PackedScene" path="res://ui/components/EchoCardItem.tscn" id="2_echocard"]
+[ext_resource type="PackedScene" uid="uid://cfpuypq3we4w1" path="res://ui/components/EchoCardItem.tscn" id="2_echocard"]
 
-[node name="RealmShell" type="Control"]
+[node name="RealmShell" type="Control" unique_id=257620160]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -12,7 +12,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_realmshell")
 
-[node name="OverlayRoot" type="Control" parent="."]
+[node name="OverlayRoot" type="Control" parent="." unique_id=28775265]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -21,7 +21,7 @@ offset_bottom = -133.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="EchoBar" type="HBoxContainer" parent="."]
+[node name="EchoBar" type="HBoxContainer" parent="." unique_id=1723066648]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = -1
@@ -31,7 +31,8 @@ anchor_bottom = 1.0
 offset_top = -88.0
 grow_horizontal = 2
 grow_vertical = 0
-theme_override_constants/separation = 4
+theme_override_constants/separation = 16
 
-[node name="EchoCardPlaceholder" parent="EchoBar" instance=ExtResource("2_echocard")]
+[node name="EchoCardPlaceholder" parent="EchoBar" unique_id=487317475 instance=ExtResource("2_echocard")]
+custom_minimum_size = Vector2(320, 0)
 layout_mode = 2

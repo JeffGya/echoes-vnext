@@ -304,6 +304,7 @@ func _run_tests(parts: Array) -> void:
 	VowServiceTests.register(runner)  # VOW-001
 	load("res://tests/SaveBridgeTests.gd").register(runner)  # V2-MIG-002
 	ThreadServiceTests.register(runner)                      # V2-WEAVE-001
+	load("res://tests/WeavingRiteTests.gd").register(runner)  # V2-WEAVE-002
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [
@@ -695,6 +696,7 @@ const SANCTUM_FAMILY: Array = [
 	"flow.echo_party",
 	"flow.realm_select",   # REALM-001
 	"flow.vow_manage",     # VOW-001
+	"flow.weaving_rite",   # V2-WEAVE-002
 ]
 const VENTURE_FAMILY: Array = [
 	"flow.stage_map",

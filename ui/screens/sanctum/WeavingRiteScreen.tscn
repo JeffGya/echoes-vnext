@@ -1,0 +1,438 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/screens/sanctum/WeavingRiteScreen.gd" id="1_weave"]
+
+[node name="WeavingRiteScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_weave")
+
+[node name="RootPanel" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="RootMargin" type="MarginContainer" parent="RootPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 64
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="MainVBox" type="VBoxContainer" parent="RootPanel/RootMargin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="HeaderBar" type="PanelContainer" parent="RootPanel/RootMargin/MainVBox"]
+layout_mode = 2
+
+[node name="HeaderMargin" type="MarginContainer" parent="RootPanel/RootMargin/MainVBox/HeaderBar"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 12
+
+[node name="HeaderRow" type="HBoxContainer" parent="RootPanel/RootMargin/MainVBox/HeaderBar/HeaderMargin"]
+layout_mode = 2
+
+[node name="TitleLabel" type="Label" parent="RootPanel/RootMargin/MainVBox/HeaderBar/HeaderMargin/HeaderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Weaving Rite"
+
+[node name="HeaderSpacer" type="Control" parent="RootPanel/RootMargin/MainVBox/HeaderBar/HeaderMargin/HeaderRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="PhaseLabel" type="Label" parent="RootPanel/RootMargin/MainVBox/HeaderBar/HeaderMargin/HeaderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Invitation"
+
+[node name="ContentArea" type="VBoxContainer" parent="RootPanel/RootMargin/MainVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 10
+
+[node name="ThreadPanel" type="VBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ThreadPanelTitle" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Choose a Thread"
+
+[node name="ThreadReserveList" type="VBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="ThreadRow1" type="HBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel/ThreadReserveList"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ThreadLabel1" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel/ThreadReserveList/ThreadRow1"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Thread"
+
+[node name="ThreadSelectButton1" type="Button" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel/ThreadReserveList/ThreadRow1"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+text = "Select"
+
+[node name="ThreadRow2" type="HBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel/ThreadReserveList"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ThreadLabel2" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel/ThreadReserveList/ThreadRow2"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Thread"
+
+[node name="ThreadSelectButton2" type="Button" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel/ThreadReserveList/ThreadRow2"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+text = "Select"
+
+[node name="ThreadRow3" type="HBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel/ThreadReserveList"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ThreadLabel3" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel/ThreadReserveList/ThreadRow3"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Thread"
+
+[node name="ThreadSelectButton3" type="Button" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel/ThreadReserveList/ThreadRow3"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+text = "Select"
+
+[node name="ThreadRow4" type="HBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel/ThreadReserveList"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ThreadLabel4" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel/ThreadReserveList/ThreadRow4"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Thread"
+
+[node name="ThreadSelectButton4" type="Button" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel/ThreadReserveList/ThreadRow4"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+text = "Select"
+
+[node name="ThreadRow5" type="HBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel/ThreadReserveList"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ThreadLabel5" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel/ThreadReserveList/ThreadRow5"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Thread"
+
+[node name="ThreadSelectButton5" type="Button" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel/ThreadReserveList/ThreadRow5"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+text = "Select"
+
+[node name="ThreadRow6" type="HBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel/ThreadReserveList"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ThreadLabel6" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel/ThreadReserveList/ThreadRow6"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Thread"
+
+[node name="ThreadSelectButton6" type="Button" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel/ThreadReserveList/ThreadRow6"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+text = "Select"
+
+[node name="EmptyThreadLabel" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/ThreadPanel"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "No Threads are currently in reserve."
+
+[node name="EchoPanel" type="VBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="EchoPanelTitle" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Choose an Echo"
+
+[node name="CandidateList" type="VBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="CandidateRow1" type="PanelContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="CandidateMargin1" type="MarginContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow1"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 10
+
+[node name="CandidateVBox1" type="VBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow1/CandidateMargin1"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="CandidateName1" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow1/CandidateMargin1/CandidateVBox1"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Echo"
+
+[node name="CandidateFit1" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow1/CandidateMargin1/CandidateVBox1"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Fit"
+
+[node name="CandidateReadiness1" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow1/CandidateMargin1/CandidateVBox1"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Readiness"
+
+[node name="CandidateStrain1" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow1/CandidateMargin1/CandidateVBox1"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Strain"
+
+[node name="CandidateSelectButton1" type="Button" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow1/CandidateMargin1/CandidateVBox1"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Select Echo"
+
+[node name="CandidateRow2" type="PanelContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="CandidateMargin2" type="MarginContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow2"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 10
+
+[node name="CandidateVBox2" type="VBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow2/CandidateMargin2"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="CandidateName2" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow2/CandidateMargin2/CandidateVBox2"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Echo"
+
+[node name="CandidateFit2" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow2/CandidateMargin2/CandidateVBox2"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Fit"
+
+[node name="CandidateReadiness2" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow2/CandidateMargin2/CandidateVBox2"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Readiness"
+
+[node name="CandidateStrain2" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow2/CandidateMargin2/CandidateVBox2"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Strain"
+
+[node name="CandidateSelectButton2" type="Button" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow2/CandidateMargin2/CandidateVBox2"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Select Echo"
+
+[node name="CandidateRow3" type="PanelContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="CandidateMargin3" type="MarginContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow3"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 10
+
+[node name="CandidateVBox3" type="VBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow3/CandidateMargin3"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="CandidateName3" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow3/CandidateMargin3/CandidateVBox3"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Echo"
+
+[node name="CandidateFit3" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow3/CandidateMargin3/CandidateVBox3"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Fit"
+
+[node name="CandidateReadiness3" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow3/CandidateMargin3/CandidateVBox3"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Readiness"
+
+[node name="CandidateStrain3" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow3/CandidateMargin3/CandidateVBox3"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Strain"
+
+[node name="CandidateSelectButton3" type="Button" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/CandidateList/CandidateRow3/CandidateMargin3/CandidateVBox3"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Select Echo"
+
+[node name="EmptyCandidateLabel" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "No Echoes currently resonate with this Thread."
+
+[node name="ResolutionPanel" type="VBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="OutcomeLabel" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/ResolutionPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Outcome"
+
+[node name="AftermathLinesVBox" type="VBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/ResolutionPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="AftermathLine1" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/ResolutionPanel/AftermathLinesVBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="AftermathLine2" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/ResolutionPanel/AftermathLinesVBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="AftermathLine3" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/ResolutionPanel/AftermathLinesVBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="AftermathLine4" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/ResolutionPanel/AftermathLinesVBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="NonChosenTitle" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/ResolutionPanel"]
+layout_mode = 2
+text = "Resonance Fallout"
+
+[node name="NonChosenVBox" type="VBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/ResolutionPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="NonChosenLine1" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/ResolutionPanel/NonChosenVBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="NonChosenLine2" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/ResolutionPanel/NonChosenVBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="NonChosenLine3" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/ResolutionPanel/NonChosenVBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="NonChosenLine4" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/ResolutionPanel/NonChosenVBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="ActionBar" type="HBoxContainer" parent="RootPanel/RootMargin/MainVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="BackButton" type="Button" parent="RootPanel/RootMargin/MainVBox/ActionBar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 48)
+layout_mode = 2
+text = "Back"
+
+[node name="BeginRiteButton" type="Button" parent="RootPanel/RootMargin/MainVBox/ActionBar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 48)
+layout_mode = 2
+text = "Begin Rite"
+
+[node name="ConfirmButton" type="Button" parent="RootPanel/RootMargin/MainVBox/ActionBar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 48)
+layout_mode = 2
+text = "Confirm"

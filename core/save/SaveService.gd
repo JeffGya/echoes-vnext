@@ -512,6 +512,16 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 				repaired = true
 				repaired_notes.append("sanctum.roster[%d].skill_slots defaulted to ['']" % i)
 
+			# V2-WEAVE-002: woven Threads + deferred memory marks (additive only).
+			if not echo.has("woven_threads") or not (echo["woven_threads"] is Array):
+				echo["woven_threads"] = []
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].woven_threads defaulted to []" % i)
+			if not echo.has("weave_memory_marks") or not (echo["weave_memory_marks"] is Array):
+				echo["weave_memory_marks"] = []
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].weave_memory_marks defaulted to []" % i)
+
 			# V2-MIG-002: Storyweight / Standing / Step bridge fields (mirror V1 values)
 			if not echo.has("storyweight") or (typeof(echo["storyweight"]) != TYPE_INT and typeof(echo["storyweight"]) != TYPE_FLOAT):
 				echo["storyweight"] = int(echo.get("xp_total", 0))

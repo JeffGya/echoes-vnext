@@ -45,12 +45,16 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var bonds: Array = []
 	var party_encounters: Array = []
 	var roster: Array = []
+	var thread_count := 0
 	var party_ids: Array = _read_active_party_ids(flow_ctx)
 	if flow_ctx.save_data.has("sanctum") and flow_ctx.save_data["sanctum"] is Dictionary:
 		var sanctum: Dictionary = flow_ctx.save_data["sanctum"]
 		var roster_v: Variant = sanctum.get("roster", [])
 		if roster_v is Array:
 			roster = roster_v
+		var threads_v: Variant = sanctum.get("threads", {})
+		if threads_v is Dictionary:
+			thread_count = (threads_v as Dictionary).size()
 		var bonds_v: Variant = sanctum.get("bonds", [])
 		bonds = bonds_v if bonds_v is Array else []
 		var enc_v: Variant = sanctum.get("party_encounters", [])
@@ -136,6 +140,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"max_party_size": _read_max_party_size(flow_ctx),
 			"active_party_ids": party_ids,
 			"party_count": party_ids.size(),
+			"thread_count": thread_count,
 		},
 		"actions": {
 			"nav.back": {

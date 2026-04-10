@@ -121,6 +121,48 @@
 				"fear_threshold": 80.0
 			}
 		},
+		"weaving_rite": {
+			"max_candidates": 3,
+			"fit_threshold_accept": 0.55,
+			"readiness_threshold_defer": 0.38,
+			"vector_to_virtue_primary": {
+				"vanguard": "courage",
+				"protector": "leadership",
+				"seeker": "wisdom",
+				"pillar": "acceptance",
+				"strategist": "truth",
+				"skeptic": "humility",
+				"devoted": "forgiveness",
+				"opportunist": "generosity",
+				"mediator": "compassion",
+				"nurturer": "empathy"
+			},
+			"clue_vocab": {
+				"fit": {
+					"high": "Drawn",
+					"medium": "Resonant",
+					"low": "Misaligned",
+					"false": "FalsePull"
+				},
+				"readiness": {
+					"high": "ClearEyed",
+					"medium": "Unsteady",
+					"low": "Trembling",
+					"blocked": "NotYet"
+				},
+				"strain": {
+					"low": "Settled",
+					"medium": "Contested",
+					"high": "Burdened"
+				}
+			},
+			"non_chosen_consequence_base_morale_delta": -8,
+			"non_chosen_consequence_base_fear_delta": 5,
+			"non_chosen_consequence_base_bond_delta": -8,
+			"non_chosen_outcome_mult_accept": 1.0,
+			"non_chosen_outcome_mult_reject": 0.75,
+			"non_chosen_outcome_mult_defer": 0.4
+		},
 		"actor": {
 			"_comment": "Behavior Arbitration Engine (ACTOR-005). All multipliers live here — no GDScript changes needed to tune game feel or add new actions/callings/vectors/directives.",
 			"enemy_types": {

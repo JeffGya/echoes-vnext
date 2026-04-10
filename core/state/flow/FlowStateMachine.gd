@@ -2,6 +2,8 @@ class_name FlowStateMachine
 
 extends StateMachine
 
+const FlowWeavingRiteStateScript := preload("res://core/state/flow/states/sanctum/FlowWeavingRiteState.gd")
+
 func _init() -> void:
 	super("state.flow")
 	
@@ -16,6 +18,7 @@ func register_default_states() -> void:
 	register_state(FlowRealmSelectState.new())
 	register_state(FlowSummonState.new())
 	register_state(FlowVowState.new())  # VOW-001
+	register_state(FlowWeavingRiteStateScript.new())  # V2-WEAVE-002
 
 	register_state(FlowResolveState.new())
 	register_state(FlowRealmInitState.new())  # REALM-001

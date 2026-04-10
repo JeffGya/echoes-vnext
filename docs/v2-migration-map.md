@@ -477,6 +477,7 @@ These systems are already done and their save seams are live:
 | BOND-001 | Social graph | `bonds: []`, `party_encounters: []` |
 | VOW-001 | Vow doctrine | `vows: {}` (keyed by vow_id), `active_vow: {}` |
 | V2-WEAVE-001 | Thread recovery model | `sanctum.threads: {}` (keyed by thread_id); `realms[id].realm_recovery_segments: []` |
+| V2-WEAVE-002 | Foundation Weaving Rite loop | per-echo `woven_threads: []`, per-echo `weave_memory_marks: []` |
 
 > See CONVENTIONS.md `SocialGraphService` and `VowService` sections for full API contracts.
 
@@ -500,6 +501,7 @@ V2-MIG-001 (this doc) ✅ Done
   └── V2-WEAVE-001     Foundation Thread recovery model ✅ Done
         (per-stage segments → Realm completion → Threads crystallize → sanctum.threads reserve)
         (Thread Reserve Strip in Sanctum, Recovery Cord in StageMap)
+        └── V2-WEAVE-002 Foundation Weaving Rite loop ✅ Done
 ```
 
 PROG-001 and MIG-002 can proceed in parallel. All others depend on MIG-002 being done first for save bridge coverage.

@@ -23,6 +23,14 @@ var pending_equipped_skills: Dictionary = {}
 # Reset to "uncalled" each time FlowSummonState.enter() runs — never persisted to save.
 var selected_summon_grade: String = "uncalled"
 
+# V2-WEAVE-002: selected Thread and Echo in the Weaving Rite flow.
+var selected_weave_thread_id: String = ""
+var selected_weave_echo_id: String = ""
+
+# V2-WEAVE-002: commitment lock and rite result payload.
+var weave_commit_locked: bool = false
+var weave_resolution: Dictionary = {}
+
 # ----
 
 # Session / run metadata (placeholders; filled in later)

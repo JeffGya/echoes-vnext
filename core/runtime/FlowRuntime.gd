@@ -2,6 +2,9 @@
 class_name FlowRuntime
 extends RefCounted
 
+const FlowWeavingRiteStateScript := preload("res://core/state/flow/states/sanctum/FlowWeavingRiteState.gd")
+const WeavingRiteServiceScript := preload("res://core/progression/WeavingRiteService.gd")
+
 var logger: StructuredLogger
 var config_service: ConfigService
 var flow_ctx: FlowContext
@@ -81,6 +84,13 @@ func boot() -> Dictionary:
 func dispatch(action: Dictionary) -> Dictionary:
 	var t := _next_tick()
 	var action_type := str(action.get("type", ""))
+	if flow_ctx.weave_commit_locked and action_type != "weave.confirm":
+		logger.debug(t, "weave.commit.locked", "Action blocked by weaving commitment lock", {
+			"blocked_action": action_type,
+		})
+		var locked_out := flow_ctx.last_snapshot
+		_log_snapshot_emitted(t, locked_out, "dispatch.weave_locked")
+		return locked_out
 
 	match action_type:
 		
@@ -98,6 +108,11 @@ func dispatch(action: Dictionary) -> Dictionary:
 			# EMOTION-002: sanctum recovery tick applies before snapshot rebuild
 			if to_state == FlowStateIds.SANCTUM:
 				_apply_sanctum_emotion_tick(t)
+			elif to_state == FlowStateIds.WEAVING_RITE:
+				flow_ctx.selected_weave_thread_id = ""
+				flow_ctx.selected_weave_echo_id = ""
+				flow_ctx.weave_commit_locked = false
+				flow_ctx.weave_resolution = {}
 			flow_machine.transition(to_state, flow_ctx, logger, t, "ui.flow.go_state")
 
 		"flow.select_realm":
@@ -269,6 +284,26 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 		"sanctum.party.toggle":
 			_handle_sanctum_party_toggle(action, t)
+
+		# ---- Weaving Rite (V2-WEAVE-002) ----
+		"weave.start_for_echo":
+			_handle_weave_start_for_echo(action, t)
+
+		"weave.select_thread":
+			if str(flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.WEAVING_RITE:
+				logger.debug(t, "weave.select_thread.ignored", "Selection ignored outside rite state", {})
+			else:
+				flow_ctx.selected_weave_thread_id = str(action.get("thread_id", ""))
+				flow_ctx.weave_resolution = {}
+				flow_ctx.weave_commit_locked = false
+				flow_ctx.last_snapshot = FlowWeavingRiteStateScript.build_snapshot(flow_ctx, t)
+				flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+		"weave.begin_rite":
+			_handle_weave_begin_rite(t)
+
+		"weave.confirm":
+			_handle_weave_confirm(t)
 
 		# PROG-004: Keeper-confirmed rank-up from EchoParty.
 		"sanctum.rank_up":
@@ -1734,6 +1769,235 @@ func _handle_sanctum_party_toggle(action: Dictionary, t: int) -> void:
 
 	flow_ctx.last_snapshot = FlowEchoPartyState.build_snapshot(flow_ctx, t)
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+func _handle_weave_start_for_echo(action: Dictionary, t: int) -> void:
+	var snap_type := str(flow_ctx.last_snapshot.get("type", ""))
+	if snap_type != FlowStateIds.ECHO_PARTY and snap_type != FlowStateIds.SANCTUM:
+		logger.debug(t, "weave.start_for_echo.ignored", "weave.start_for_echo ignored outside Sanctum family", {
+			"snapshot_type": snap_type,
+		})
+		return
+
+	var echo_id := str(action.get("echo_id", "")).strip_edges()
+	if echo_id.is_empty():
+		logger.debug(t, "weave.start_for_echo.denied", "Missing echo_id for rite start", {})
+		return
+
+	var echo_ref := _find_roster_echo(echo_id)
+	if echo_ref.is_empty():
+		logger.debug(t, "weave.start_for_echo.denied", "Echo not found in roster", {
+			"echo_id": echo_id,
+		})
+		return
+
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	var threads_v: Variant = sanctum.get("threads", {})
+	var threads: Dictionary = threads_v if threads_v is Dictionary else {}
+	if threads.is_empty():
+		logger.debug(t, "weave.start_for_echo.denied", "No threads in reserve", {
+			"echo_id": echo_id,
+		})
+		return
+
+	flow_ctx.selected_weave_echo_id = echo_id
+	flow_ctx.selected_weave_thread_id = ""
+	flow_ctx.weave_resolution = {}
+	flow_ctx.weave_commit_locked = false
+	flow_machine.transition(FlowStateIds.WEAVING_RITE, flow_ctx, logger, t, "ui.weave.start_for_echo")
+
+
+func _handle_weave_begin_rite(t: int) -> void:
+	if str(flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.WEAVING_RITE:
+		logger.debug(t, "weave.begin_rite.ignored", "weave.begin_rite ignored outside rite state", {})
+		return
+
+	var thread_id := str(flow_ctx.selected_weave_thread_id).strip_edges()
+	var echo_id := str(flow_ctx.selected_weave_echo_id).strip_edges()
+	if thread_id.is_empty() or echo_id.is_empty():
+		logger.debug(t, "weave.begin_rite.denied", "Missing selected thread or echo", {
+			"thread_id": thread_id,
+			"echo_id": echo_id,
+		})
+		flow_ctx.last_snapshot = FlowWeavingRiteStateScript.build_snapshot(flow_ctx, t)
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+		return
+
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	var threads_v: Variant = sanctum.get("threads", {})
+	var threads: Dictionary = threads_v if threads_v is Dictionary else {}
+	var roster_v: Variant = sanctum.get("roster", [])
+	var roster: Array = roster_v if roster_v is Array else []
+
+	var thread_v: Variant = threads.get(thread_id, {})
+	if not (thread_v is Dictionary):
+		logger.debug(t, "weave.begin_rite.denied", "Selected thread not found in reserve", {
+			"thread_id": thread_id,
+		})
+		flow_ctx.last_snapshot = FlowWeavingRiteStateScript.build_snapshot(flow_ctx, t)
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+		return
+	var thread: Dictionary = thread_v
+
+	var echo_ref := _find_roster_echo(echo_id)
+	if echo_ref.is_empty():
+		logger.debug(t, "weave.begin_rite.denied", "Selected echo not found in roster", {
+			"echo_id": echo_id,
+		})
+		flow_ctx.last_snapshot = FlowWeavingRiteStateScript.build_snapshot(flow_ctx, t)
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+		return
+
+	var rite_cfg := _get_weaving_rite_cfg()
+	var resonance_candidates: Array = WeavingRiteServiceScript.get_candidates(thread, roster, flow_ctx.save_data, rite_cfg)
+
+	var outcome: String = WeavingRiteServiceScript.resolve_outcome(echo_ref, thread, flow_ctx.save_data, rite_cfg)
+	flow_ctx.weave_commit_locked = true
+	WeavingRiteServiceScript.apply_outcome(outcome, echo_id, thread_id, flow_ctx.save_data, logger, t)
+
+	var non_chosen: Array = []
+	non_chosen = WeavingRiteServiceScript.get_non_chosen_consequences(resonance_candidates, echo_id, outcome, rite_cfg)
+	if not non_chosen.is_empty():
+		_apply_weave_non_chosen_consequences(non_chosen, echo_id, t)
+
+	flow_ctx.weave_resolution = {
+		"outcome": outcome,
+		"thread_id": thread_id,
+		"thread_virtue": str(thread.get("virtue", "unknown")),
+		"thread_quality_tier": str(thread.get("quality_tier", "broken")),
+		"echo_id": echo_id,
+		"echo_name": str(echo_ref.get("name", "")),
+		"non_chosen": non_chosen,
+		"aftermath_lines": _build_weave_aftermath_lines(outcome, echo_ref, thread, non_chosen),
+	}
+
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason != "":
+		flow_ctx.save_request_reason += "|weave.begin_rite"
+	else:
+		flow_ctx.save_request_reason = "weave.begin_rite"
+
+	flow_ctx.last_snapshot = FlowWeavingRiteStateScript.build_snapshot(flow_ctx, t)
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+func _handle_weave_confirm(t: int) -> void:
+	if str(flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.WEAVING_RITE:
+		logger.debug(t, "weave.confirm.ignored", "weave.confirm ignored outside rite state", {})
+		return
+
+	flow_ctx.selected_weave_thread_id = ""
+	flow_ctx.selected_weave_echo_id = ""
+	flow_ctx.weave_resolution = {}
+	flow_ctx.weave_commit_locked = false
+	flow_machine.transition(FlowStateIds.SANCTUM, flow_ctx, logger, t, "ui.weave.confirm")
+
+
+func _apply_weave_non_chosen_consequences(non_chosen: Array, chosen_id: String, t: int) -> void:
+	if non_chosen.is_empty():
+		return
+
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if not (sanctum_v is Dictionary):
+		return
+	var sanctum: Dictionary = sanctum_v
+
+	var bonds_v: Variant = sanctum.get("bonds", [])
+	var bonds: Array = bonds_v if bonds_v is Array else []
+	var thresholds := _get_bond_thresholds_cfg()
+
+	var drift := _get_drift_cfg()
+	var fear_threshold := int(drift.get("fear_threshold", 80))
+	var applied := 0
+	for c_v in non_chosen:
+		if not (c_v is Dictionary):
+			continue
+		var c: Dictionary = c_v
+		var target_id := str(c.get("echo_id", "")).strip_edges()
+		if target_id.is_empty() or target_id == chosen_id:
+			continue
+
+		var echo_ref := _find_roster_echo(target_id)
+		if echo_ref.is_empty():
+			continue
+
+		var morale_delta := int(c.get("morale_delta", 0))
+		var fear_delta := int(c.get("fear_delta", 0))
+		var bond_delta := int(c.get("bond_delta", 0))
+
+		if morale_delta != 0:
+			EmotionService.apply_morale_delta(echo_ref, morale_delta, "weave.non_chosen", logger, t)
+		if fear_delta != 0:
+			EmotionService.apply_fear_delta(echo_ref, fear_delta, "weave.non_chosen", fear_threshold, logger, t)
+		if bond_delta != 0:
+			bonds = SocialGraphService.apply_score_delta(
+				bonds,
+				chosen_id,
+				target_id,
+				bond_delta,
+				thresholds,
+				logger,
+				t
+			)
+		applied += 1
+
+	sanctum["bonds"] = bonds
+	flow_ctx.save_data["sanctum"] = sanctum
+
+	if applied > 0:
+		logger.info(t, "weave.non_chosen.applied", "Applied non-chosen weave consequences", {
+			"chosen_id": chosen_id,
+			"affected_count": applied,
+		})
+
+
+func _build_weave_aftermath_lines(outcome: String, echo: Dictionary, thread: Dictionary, non_chosen: Array) -> Array:
+	var echo_name := str(echo.get("name", "This echo"))
+	var virtue := str(thread.get("virtue", "story"))
+	var lines: Array = []
+	match outcome:
+		"accept":
+			lines.append("%s accepts the %s thread." % [echo_name, virtue])
+			lines.append("The weave settles and the reserve releases its hold.")
+			if not non_chosen.is_empty():
+				lines.append("The other resonant Echoes leave with tightened bonds and shaken hearts.")
+		"reject":
+			lines.append("%s rejects the %s thread." % [echo_name, virtue])
+			lines.append("The thread is consumed in refusal, and identity is clarified.")
+			if not non_chosen.is_empty():
+				lines.append("Others who leaned toward this thread take the refusal personally.")
+		"defer":
+			lines.append("%s defers the %s thread." % [echo_name, virtue])
+			lines.append("A memory mark remains; the thread returns to reserve.")
+			if not non_chosen.is_empty():
+				lines.append("The waiting unsettles nearby hearts, even without full rupture.")
+		_:
+			lines.append("The rite resolves without a clear outcome.")
+	return lines
+
+
+func _get_weaving_rite_cfg() -> Dictionary:
+	if config_service == null:
+		return {}
+	var balance: Dictionary = config_service.get_balance()
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var rite_v: Variant = data.get("weaving_rite", {})
+	return rite_v if rite_v is Dictionary else {}
+
+
+func _get_bond_thresholds_cfg() -> Dictionary:
+	if config_service == null:
+		return {}
+	var balance: Dictionary = config_service.get_balance()
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var sanctum_v: Variant = data.get("sanctum", {})
+	var sanctum_cfg: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	var thresholds_v: Variant = sanctum_cfg.get("bond_thresholds", {})
+	return thresholds_v if thresholds_v is Dictionary else {}
 	
 ## PROG-001: one-time repair pass for echo fields added after draw-order v1.
 ## Called on flow.continue — patches roster echoes missing class_origin / level.

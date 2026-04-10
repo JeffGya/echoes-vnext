@@ -1,54 +1,40 @@
-[gd_scene format=3 uid="uid://echo_card_item"]
+[gd_scene format=3 uid="uid://cfpuypq3we4w1"]
 
-[ext_resource type="Script" path="res://ui/components/EchoCardItem.gd" id="1_echocard"]
+[ext_resource type="Script" uid="uid://ecywjd7s8b8s" path="res://ui/components/EchoCardItem.gd" id="1_echocard"]
+[ext_resource type="FontFile" uid="uid://blbbegiykfr3v" path="res://assets/fonts/MadimiOne-Regular.ttf" id="2_gnycu"]
+[ext_resource type="FontFile" uid="uid://chwi6asl8nb0w" path="res://assets/fonts/IosevkaCharon-Regular.ttf" id="3_5bj6p"]
+[ext_resource type="FontFile" uid="uid://duxvkgd0jcs8h" path="res://assets/fonts/Spectral-SemiBoldItalic.ttf" id="4_qal5b"]
 
-[node name="EchoCardItem" type="PanelContainer"]
-custom_minimum_size = Vector2(130, 0)
+[node name="EchoCardItem" type="PanelContainer" unique_id=470777062]
+custom_minimum_size = Vector2(280, 0)
+offset_right = 130.0
+offset_bottom = 80.0
+size_flags_vertical = 0
 script = ExtResource("1_echocard")
 
-[node name="VBoxContainer" type="VBoxContainer" parent="."]
+[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=150890162]
 layout_mode = 2
 theme_override_constants/separation = 0
 
-[node name="HpBar" type="ProgressBar" parent="VBoxContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-show_percentage = false
-max_value = 100.0
-value = 100.0
-
-[node name="HpLabel" type="Label" parent="VBoxContainer/HpBar"]
-unique_name_in_owner = true
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-text = "HP 128/128"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="BodyMargin" type="MarginContainer" parent="VBoxContainer"]
+[node name="BodyMargin" type="MarginContainer" parent="VBoxContainer" unique_id=494246466]
 layout_mode = 2
 theme_override_constants/margin_left = 6
 theme_override_constants/margin_top = 6
 theme_override_constants/margin_right = 6
 theme_override_constants/margin_bottom = 6
 
-[node name="BodyRow" type="HBoxContainer" parent="VBoxContainer/BodyMargin"]
+[node name="BodyRow" type="HBoxContainer" parent="VBoxContainer/BodyMargin" unique_id=1991509182]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="PortraitPanel" type="ColorRect" parent="VBoxContainer/BodyMargin/BodyRow"]
+[node name="PortraitPanel" type="ColorRect" parent="VBoxContainer/BodyMargin/BodyRow" unique_id=1732342028]
 unique_name_in_owner = true
-layout_mode = 2
 custom_minimum_size = Vector2(40, 40)
+layout_mode = 2
 color = Color(0.172549, 0.180392, 0.211765, 1)
 
-[node name="PortraitLabel" type="Label" parent="VBoxContainer/BodyMargin/BodyRow/PortraitPanel"]
+[node name="PortraitLabel" type="Label" parent="VBoxContainer/BodyMargin/BodyRow/PortraitPanel" unique_id=424882850]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
@@ -60,21 +46,46 @@ text = "✕"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="InfoCol" type="VBoxContainer" parent="VBoxContainer/BodyMargin/BodyRow"]
+[node name="InfoCol" type="VBoxContainer" parent="VBoxContainer/BodyMargin/BodyRow" unique_id=1491086745]
 layout_mode = 2
 size_flags_horizontal = 3
-size_flags_vertical = 1
 theme_override_constants/separation = 2
 
-[node name="NameLabel" type="Label" parent="VBoxContainer/BodyMargin/BodyRow/InfoCol"]
+[node name="HpBar" type="ProgressBar" parent="VBoxContainer/BodyMargin/BodyRow/InfoCol" unique_id=334035574]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+value = 100.0
+fill_mode = 1
+show_percentage = false
+
+[node name="HpLabel" type="Label" parent="VBoxContainer/BodyMargin/BodyRow/InfoCol/HpBar" unique_id=1121921990]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_fonts/font = ExtResource("2_gnycu")
+theme_override_font_sizes/font_size = 14
+text = "HP 128/128"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="NameLabel" type="Label" parent="VBoxContainer/BodyMargin/BodyRow/InfoCol" unique_id=457191916]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_fonts/font = ExtResource("3_5bj6p")
+theme_override_font_sizes/font_size = 16
 text = "[EchoName]"
 clip_text = true
 
-[node name="StatusLabel" type="Label" parent="VBoxContainer/BodyMargin/BodyRow/InfoCol"]
+[node name="StatusLabel" type="Label" parent="VBoxContainer/BodyMargin/BodyRow/InfoCol" unique_id=2021664904]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_fonts/font = ExtResource("4_qal5b")
+theme_override_font_sizes/font_size = 14
 text = "Shaken"

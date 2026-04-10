@@ -67,6 +67,7 @@ var _action_back: Dictionary = {}
 var _echoes: Array = []
 var _selected_echo_id: String = ""
 var _max_party_size: int = 5
+var _thread_count: int = 0
 var _rank_up_overlay: RankUpOverlay = null
 var _show_party_average: bool = false
 
@@ -80,8 +81,8 @@ func _ready() -> void:
 		back_button.pressed.connect(_on_back_pressed)
 	if not detail_assign_party_btn.pressed.is_connected(_on_assign_party_pressed):
 		detail_assign_party_btn.pressed.connect(_on_assign_party_pressed)
-
-	detail_assign_job_btn.disabled = true
+	if not detail_assign_job_btn.pressed.is_connected(_on_begin_rite_pressed):
+		detail_assign_job_btn.pressed.connect(_on_begin_rite_pressed)
 
 	if not ascend_button.pressed.is_connected(_on_ascend_pressed):
 		ascend_button.pressed.connect(_on_ascend_pressed)
@@ -121,6 +122,7 @@ func set_snapshot(snap: Dictionary) -> void:
 
 	_echoes = data.get("echoes", []) if data.get("echoes") is Array else []
 	_max_party_size = int(data.get("max_party_size", 5))
+	_thread_count = int(data.get("thread_count", 0))
 
 	var back_v: Variant = actions.get("nav.back", {})
 	_action_back = back_v if back_v is Dictionary else {}
@@ -321,6 +323,8 @@ func _render_detail(e: Dictionary) -> void:
 	detail_fear_bar.value = fear
 
 	detail_assign_party_btn.text = "Remove from party" if in_party else "Assign to party"
+	detail_assign_job_btn.text = "Begin Weaving Rite"
+	detail_assign_job_btn.disabled = _thread_count <= 0
 
 	var calling_confirmed: bool = not str(e.get("calling", "")).is_empty()
 	tab_skills.disabled = not calling_confirmed
@@ -394,6 +398,18 @@ func _on_assign_party_pressed() -> void:
 	action_requested.emit({
 		"type": "sanctum.party.toggle",
 		"payload": { "echo_id": str(selected.get("id", "")) },
+	})
+
+
+func _on_begin_rite_pressed() -> void:
+	var selected := _echo_by_id(_selected_echo_id)
+	if selected.is_empty():
+		return
+	if _thread_count <= 0:
+		return
+	action_requested.emit({
+		"type": "weave.start_for_echo",
+		"echo_id": str(selected.get("id", "")),
 	})
 
 

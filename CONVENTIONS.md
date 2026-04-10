@@ -114,7 +114,7 @@ AppRoot routes `snapshot.type` → shell → bespoke screen.
 
 | Shell | File | Snapshot types |
 |-------|------|---------------|
-| `SanctumShell` | `ui/shells/SanctumShell.gd` | flow.sanctum, flow.summon, flow.echo_party, flow.realm_select, flow.vow_manage |
+| `SanctumShell` | `ui/shells/SanctumShell.gd` | flow.sanctum, flow.summon, flow.echo_party, flow.realm_select, flow.vow_manage, flow.weaving_rite |
 | `RealmShell` | `ui/shells/RealmShell.gd` | flow.realm_init, flow.stage_map, flow.stage, flow.encounter, flow.resolve |
 
 **Shell-cached nav pattern (UI-002):**
@@ -300,6 +300,19 @@ Pure-static `RefCounted`. V2-WEAVE-001 Thread crystallization and per-stage reco
 
 **Save location:** `save_data["sanctum"]["threads"]` — Dict keyed by thread ID.
 
+### WeavingRiteService (`core/progression/WeavingRiteService.gd`)
+Pure-static `RefCounted`. V2-WEAVE-002 foundation rite loop (deterministic; no RNG; no OS time).
+
+- `get_candidates(thread, roster, save_data, cfg) -> Array` — candidate list sorted by fit, capped at `cfg.max_candidates`
+- `resolve_outcome(echo, thread, save_data, cfg) -> "accept" | "reject" | "defer"`
+- `apply_outcome(outcome, echo_id, thread_id, save_data, logger, t) -> void`
+- `get_non_chosen_consequences(candidates, chosen_id, outcome, cfg) -> Array[{echo_id, name, morale_delta, fear_delta, bond_delta}]`
+
+**Outcome write contract:**
+- `accept` — removes thread from `sanctum.threads`, appends `{id, virtue, quality_tier}` to chosen echo `woven_threads`
+- `reject` — removes thread from `sanctum.threads`
+- `defer` — keeps thread in reserve, appends mark to chosen echo `weave_memory_marks`
+
 ### CombatState (`core/combat/CombatState.gd`)
 - `create(actors, objective, initiative_seed, init_cfg) -> Dictionary`
 - `check_end_condition(actors, objective) -> { over: bool, victory: bool, reason: String }`
@@ -330,6 +343,8 @@ Crash-safe: write to `.tmp` → rename. Additive repair on load (adds missing fi
 | per echo | `storyweight` | int | mirrors `xp_total` | V2 bridge field (V2-PROG-001 uses for display) |
 | per echo | `standing` | int | mirrors `rank` | V2 bridge field (V2-PROG-001 uses for display) |
 | per echo | `step` | int | mirrors `level` | V2 bridge field (V2-PROG-001 uses for display) |
+| per echo | `woven_threads` | Array | `[]` | V2-WEAVE-002: accepted Threads integrated into Echo identity |
+| per echo | `weave_memory_marks` | Array | `[]` | V2-WEAVE-002: deferred rite memory marks |
 
 **Vow key (canonical):** `sanctum.vows` — Dict keyed by `vow_id` → `{ tier: int, discovered_realm: String }`.
 The old `unlocked_vows: []` Array key is superseded. SaveService repair migrates old saves on load.
@@ -358,6 +373,7 @@ Full field shapes live in each FlowState file (`core/state/flow/states/`).
 | StageMapScreen | `flow.stage_map` | realm_id, realm_name, current_stage_id, stages_completed_count, stages[] (id, name, status, stage_type, stage_description, objective_count, objectives[{obj_index, obj_type, obj_description}]), party_preview | cta.enter_stage, nav.back |
 | StageScreen | `flow.stage` | stage_id, stage_name, stage_type, stage_description, objective_count, objectives[] ({obj_index, obj_type, obj_description}), realm_id, party_preview | cta.start, nav.back |
 | VowScreen | `flow.vow_manage` | can_pledge (bool), active_vow ({vow_id, tier, proverb_twi, proverb_en}), available_vows[] ({vow_id, vow_name, proverb_twi, proverb_en, description, benefit_label, tradeoff_label, breaking_cost_hint, is_unlocked, max_tier_unlocked, is_active, discovered_realm, unlock_hint}) | nav.back, cta.pledge (disabled when vow already active), cta.break (disabled when no active vow) |
+| WeavingRiteScreen | `flow.weaving_rite` | phase, selected_echo, thread_reserve, selected_thread_id, invitation_lines (prose clues), outcome, aftermath_lines, non_chosen | nav.back, cta.begin_rite, cta.confirm |
 
 **Projected actor shape** (FlowEncounterState._project_actor): `id, name, hp, max_hp, status` (dead/guarding/refusing/alive), `calling_origin`, `morale_status` (Normal/Shaken/Afraid/Broken from fear)
 
@@ -424,6 +440,10 @@ EncounterStateMachine phases (scaffold): `setup → blessing → rounds → reso
 | **flow** | `flow.select_realm` | selects a realm; triggers `RealmService.get_or_create`; transitions to `flow.realm_init`. Payload: `{ realm_id: String }` |
 | | `flow.select_stage` | sets `ctx.stage_id`, transitions to `flow.stage`. Payload: `{ stage_id: String }` |
 | | `flow.complete_stage` | REALM-004: advances `current_stage_index` via `RealmService.advance_stage()`; on realm complete routes to `flow.realm_select` (clears `ctx.realm_id`+`ctx.stage_id`); else routes to `flow.stage_map`. Optional `destination` field overrides routing for non-completed stages (e.g. `"flow.sanctum"` for victory "To Sanctum" path). |
+| **weave** | `weave.start_for_echo` | payload: `{ echo_id }`. Starts rite from an EchoParty/Sanctum-family interaction, seeds rite context with the chosen echo, transitions to `flow.weaving_rite`. |
+| | `weave.select_thread` | payload: `{ thread_id }`. Sets offered thread for the currently selected rite echo and refreshes rite snapshot. |
+| | `weave.begin_rite` | validates selection, resolves outcome, applies outcome + non-chosen consequences, locks rite until confirm. |
+| | `weave.confirm` | clears rite transients and returns to Sanctum. |
 | **vow** | `vow.pledge` | payload: `{ vow_id, tier }`. Calls VowService.pledge_vow(). Saves `pledged_at_realm` + `runs_at_pledge`. |
 | | `vow.break` | Calls VowService.break_vow(). Applies morale/fear delta to all roster echoes. |
 | **debug** | `debug.seed.show/set/reset` | seed tooling (dev only, `t = -1`) |

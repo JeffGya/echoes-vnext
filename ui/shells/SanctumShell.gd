@@ -39,6 +39,7 @@ var _summon_scene := preload("res://ui/screens/sanctum/SummonScreen.tscn")
 var _echo_party_scene := preload("res://ui/screens/sanctum/EchoPartyScreen.tscn")
 var _realm_scene := preload("res://ui/screens/realm/RealmSelectScreen.tscn")
 var _vow_scene := preload("res://ui/screens/sanctum/VowScreen.tscn")  # VOW-001
+var _weaving_rite_scene := preload("res://ui/screens/sanctum/WeavingRiteScreen.tscn")  # V2-WEAVE-002
 
 func _ready() -> void:
 	_scene_by_flow_type = {
@@ -47,6 +48,7 @@ func _ready() -> void:
 		"flow.echo_party": _echo_party_scene,
 		"flow.realm_select": _realm_scene,
 		"flow.vow_manage": _vow_scene,  # VOW-001
+		"flow.weaving_rite": _weaving_rite_scene,  # V2-WEAVE-002
 	}
 
 	_center_spatial_view()

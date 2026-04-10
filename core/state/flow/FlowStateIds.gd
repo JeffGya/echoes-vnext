@@ -20,6 +20,7 @@ const ENCOUNTER := "flow.encounter"
 
 # Sanctum sub-screens
 const VOW_MANAGE := "flow.vow_manage"  # VOW-001: vow doctrine screen
+const WEAVING_RITE := "flow.weaving_rite"  # V2-WEAVE-002: foundation weaving rite
 
 # resolve / Aftermath
 const RESOLVE := "flow.resolve"
