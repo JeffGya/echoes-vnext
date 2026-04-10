@@ -1,0 +1,154 @@
+[gd_scene load_steps=2 format=3 uid="uid://bx8mqfn7s2vp4"]
+
+[ext_resource type="Script" uid="uid://cd4r3ct1v30v1" path="res://ui/screens/venture/DirectiveSelectOverlay.gd" id="1_directive_overlay"]
+
+[node name="DirectiveSelectOverlay" type="Control"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_directive_overlay")
+
+[node name="Dim" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.701961)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(360, 0)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="Root" type="VBoxContainer" parent="Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="TagsRow" type="HBoxContainer" parent="Center/Panel/Margin/Root"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Tag0" type="Button" parent="Center/Panel/Margin/Root/TagsRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"ButtonSecondary"
+text = "Scout Carefully"
+
+[node name="Tag1" type="Button" parent="Center/Panel/Margin/Root/TagsRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"ButtonSecondary"
+text = "Seek Signs"
+
+[node name="DetailPanel" type="VBoxContainer" parent="Center/Panel/Margin/Root"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="NavRow" type="HBoxContainer" parent="Center/Panel/Margin/Root/DetailPanel"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="ArrowLeft" type="Button" parent="Center/Panel/Margin/Root/DetailPanel/NavRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(44, 44)
+layout_mode = 2
+theme_type_variation = &"ButtonGhost"
+text = "←"
+
+[node name="DirectiveTitle" type="Label" parent="Center/Panel/Margin/Root/DetailPanel/NavRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 18
+text = "Scout Carefully"
+horizontal_alignment = 1
+
+[node name="ArrowRight" type="Button" parent="Center/Panel/Margin/Root/DetailPanel/NavRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(44, 44)
+layout_mode = 2
+theme_type_variation = &"ButtonGhost"
+text = "→"
+
+[node name="DirectiveDescription" type="Label" parent="Center/Panel/Margin/Root/DetailPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "The land will speak if you give it time."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="ProsList" type="VBoxContainer" parent="Center/Panel/Margin/Root/DetailPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="ProsHeader" type="Label" parent="Center/Panel/Margin/Root/DetailPanel/ProsList"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "WHAT IT FAVOURS"
+
+[node name="Pro0" type="Label" parent="Center/Panel/Margin/Root/DetailPanel/ProsList"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "—"
+autowrap_mode = 2
+
+[node name="Pro1" type="Label" parent="Center/Panel/Margin/Root/DetailPanel/ProsList"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "—"
+autowrap_mode = 2
+
+[node name="ConsList" type="VBoxContainer" parent="Center/Panel/Margin/Root/DetailPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="ConsHeader" type="Label" parent="Center/Panel/Margin/Root/DetailPanel/ConsList"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "WHAT IT COSTS"
+
+[node name="Con0" type="Label" parent="Center/Panel/Margin/Root/DetailPanel/ConsList"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "—"
+autowrap_mode = 2
+
+[node name="Con1" type="Label" parent="Center/Panel/Margin/Root/DetailPanel/ConsList"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "—"
+autowrap_mode = 2
+
+[node name="SelectButton" type="Button" parent="Center/Panel/Margin/Root"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"ButtonPrimary"
+text = "Select Directive"

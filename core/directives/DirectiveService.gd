@@ -1,84 +1,63 @@
 class_name DirectiveService
 extends RefCounted
 
-# DIRECTIVE-001: Single choke point for all directive reads and mutations.
+# V2-DIRECTIVE-001: Single choke point for all directive reads and mutations.
 # Mirrors EconomyService pattern: instantiated in FlowRuntime.boot() with a save_data reference.
 #
-# Registry holds all known directive definitions keyed by stable ID string.
+# Registry holds known directive definitions keyed by stable ID string.
 # unlock_condition == "always"  → returned by get_available_directives() (player-selectable)
-# unlock_condition == "locked"  → in registry for contract validation; not yet selectable
 #
 # intent_weights is a shared vocabulary Dictionary. Keys not present = 0 / neutral.
-# Consumed by Actor SM Layer 4 (Context Bias) — ACTOR-004+.
+# Consumed by BehaviorArbiter via directive_action_muls translation table in balance.json.
+#
+# Each directive also carries:
+#   pros  — Array[String] of 2 player-facing benefit labels (game-tone, not mechanical)
+#   cons  — Array[String] of 2 player-facing risk labels (game-tone, not mechanical)
 
 const _REGISTRY: Dictionary = {
-	"directive.none": {
-		"id":             "directive.none",
-		"label":          "No Directive",
-		"description":    "Baseline — no intent bias applied.",
-		"intent_weights": {},
-		"unlock_condition": "always"
-	},
-	"directive.scout": {
-		"id":             "directive.scout",
-		"label":          "Scout",
-		"description":    "Survival-biased recon intent. Prioritise information gathering and safe withdrawal.",
+	"directive.scout_carefully": {
+		"id":          "directive.scout_carefully",
+		"label":       "Scout Carefully",
+		"description": "The land will speak if you give it time. Move with patience. Do not give more than the run asks of you.",
+		"pros": [
+			"Party more likely to return with what they know intact",
+			"Stronger footing when a run fails or turns partial"
+		],
+		"cons": [
+			"Progress toward objectives comes slower",
+			"Less likely to surface signs that require exposure to find"
+		],
 		"intent_weights": {
-			"survival_bias":       0.3,
-			"avoid_overcommit":    0.3,
-			"prefer_disengage":    0.2,
-			"reporting_priority":  0.2
+			"survival_bias":       0.40,
+			"avoid_overcommit":    0.30,
+			"prefer_disengage":    0.20,
+			"resource_efficiency": 0.10
 		},
 		"unlock_condition": "always"
 	},
-	# ---- Future directives (unlock_condition: "locked") ----
-	# Defined now to validate contract shape. unlock_condition change in DIRECTIVE-002+.
-	"directive.protect": {
-		"id":             "directive.protect",
-		"label":          "Protect",
-		"description":    "Shield the party — intercept threats to allies, guard formations, absorb hits.",
+	"directive.seek_signs": {
+		"id":          "directive.seek_signs",
+		"label":       "Seek Signs",
+		"description": "Something in this realm is waiting to be found. Push deeper. Stay alert. What is hidden will cost something to reach.",
+		"pros": [
+			"Higher chance of surfacing hidden readiness clues and omen-language",
+			"Deeper intel when the run goes well"
+		],
+		"cons": [
+			"Greater exposure to contact and open threat",
+			"A bad run becomes costlier than it needed to be"
+		],
 		"intent_weights": {
-			"ally_protection_bias": 0.4,
-			"threat_interception":  0.3,
-			"formation_cohesion":   0.2,
-			"survival_bias":        0.1
+			"clue_seeking_priority": 0.40,
+			"reporting_priority":    0.30,
+			"exposure_acceptance":   0.20,
+			"survival_bias":         0.10
 		},
-		"unlock_condition": "locked"
-	},
-	"directive.push": {
-		"id":             "directive.push",
-		"label":          "Push",
-		"description":    "Advance toward the stage objective. Engage only what blocks the path.",
-		"intent_weights": {
-			"objective_advance_priority": 0.5,
-			"engage_only_blockers":       0.3,
-			"avoid_side_engagement":      0.2
-		},
-		"unlock_condition": "locked"
-	},
-	"directive.preserve": {
-		"id":             "directive.preserve",
-		"label":          "Preserve",
-		"description":    "Resource-conscious play. Use minimum force — avoid waste of HP, skills, or Ase.",
-		"intent_weights": {
-			"resource_efficiency":    0.4,
-			"avoid_overcommit":       0.3,
-			"retreat_on_disadvantage": 0.2,
-			"survival_bias":          0.1
-		},
-		"unlock_condition": "locked"
-	},
-	"directive.focus": {
-		"id":             "directive.focus",
-		"label":          "Focus",
-		"description":    "Single-skill mastery. Each Echo leans into their dominant skill or vector for optimised, predictable execution.",
-		"intent_weights": {
-			"dominant_skill_bias":       0.5,
-			"consistency_priority":      0.3,
-			"vector_alignment_priority": 0.2
-		},
-		"unlock_condition": "locked"
+		"unlock_condition": "always"
 	}
+	# ---- Expansion directives (deferred — do not build from these) ----
+	# directive.protect, directive.push, directive.preserve, directive.focus
+	# → superseded for Foundation; will be introduced in a future DIRECTIVE story.
 }
 
 var _save_ref: Dictionary
@@ -119,10 +98,10 @@ func set_active_directive(id: String, logger: StructuredLogger, t: int) -> void:
 # Falls back to directive.none if the stored ID is missing or unknown.
 func get_active_directive() -> Dictionary:
 	var sc: Dictionary = _save_ref.get("stage_context", {})
-	var id := str(sc.get("active_directive_id", "directive.none"))
+	var id := str(sc.get("active_directive_id", "directive.scout_carefully"))
 	var defn: Dictionary = get_directive(id)
 	if defn.is_empty():
-		return get_directive("directive.none")
+		return get_directive("directive.scout_carefully")
 	return defn
 
 

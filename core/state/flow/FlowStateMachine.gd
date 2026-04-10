@@ -161,8 +161,8 @@ func _rebuild_snapshot(ctx: FlowContext, logger: StructuredLogger, t: int) -> vo
 		if ctx.save_data != null and ctx.save_data.has("stage_context") \
 				and typeof(ctx.save_data["stage_context"]) == TYPE_DICTIONARY:
 			stage_ctx_dir = ctx.save_data["stage_context"]
-		data["active_directive_id"] = str(stage_ctx_dir.get("active_directive_id", "directive.none"))
-		data["available_directives"] = ["directive.none", "directive.scout"]  # MVP static list
+		data["active_directive_id"] = str(stage_ctx_dir.get("active_directive_id", "directive.scout_carefully"))
+		data["available_directives"] = ["directive.scout_carefully", "directive.seek_signs"]
 
 	# Enforce snapshot contract (STATE-004 Subtask 5)
 	_validate_snapshot(snap, logger, t)

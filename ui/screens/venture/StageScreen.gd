@@ -1,6 +1,7 @@
 ## StageScreen
 ## Bespoke screen for flow.stage — stage overview before committing to encounter.
 ## Shows stage info panel and trigger button.
+## V2-DIRECTIVE-001: DirectiveSelectOverlay blocks all interaction until player confirms a directive.
 ## Hex map rendering deferred to a future story.
 ## See CONVENTIONS.md → "Bespoke Screen Contract" for the full interface spec.
 
@@ -13,15 +14,17 @@ const ObjectiveScene := preload("res://ui/components/ObjectiveItem.tscn")
 var _cached_start_action: Dictionary = {}
 var _cached_back_action:  Dictionary = {}
 
-@onready var _title_label:      Label         = %StageTitleLabel
-@onready var _objective_label:  Label         = %ObjectiveLabel
-@onready var _objectives_list:  VBoxContainer = %ObjectivesList
-@onready var _encounter_button: Button        = %EncounterButton
-@onready var _back_button:      Button        = %BackButton
+@onready var _title_label:          Label                   = %StageTitleLabel
+@onready var _objective_label:      Label                   = %ObjectiveLabel
+@onready var _objectives_list:      VBoxContainer           = %ObjectivesList
+@onready var _encounter_button:     Button                  = %EncounterButton
+@onready var _back_button:          Button                  = %BackButton
+@onready var _directive_overlay:    Control                 = %DirectiveSelectOverlay
 
 func _ready() -> void:
 	_back_button.pressed.connect(_on_back_pressed)
 	_encounter_button.pressed.connect(_on_encounter_pressed)
+	_directive_overlay.action_requested.connect(_on_overlay_action)
 
 # ---------------------------------------------------------------------------
 # Bespoke Screen Contract
@@ -32,6 +35,12 @@ func set_snapshot(snap: Dictionary) -> void:
 	assert(snap.has("data"), "Snapshot missing 'data' key")
 	_clear()
 	_render(snap["data"], snap.get("actions", {}))
+	# V2-DIRECTIVE-001: show directive overlay on every stage entry.
+	# Overlay hides itself after the player confirms a directive.
+	var dir_v: Variant = snap["data"].get("directive", {})
+	if dir_v is Dictionary and not (dir_v as Dictionary).is_empty():
+		_directive_overlay.populate(dir_v as Dictionary)
+		_directive_overlay.show()
 
 func _clear() -> void:
 	_title_label.text     = ""
@@ -83,6 +92,9 @@ func _on_back_pressed() -> void:
 func _on_encounter_pressed() -> void:
 	if not _cached_start_action.is_empty():
 		action_requested.emit(_cached_start_action)
+
+func _on_overlay_action(action: Dictionary) -> void:
+	action_requested.emit(action)
 
 func _format_objective(obj_type: String) -> String:
 	match obj_type:

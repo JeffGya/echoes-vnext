@@ -268,54 +268,46 @@ Humility ↔ Generosity
 
 ---
 
-## Domain 4 — Directives
+## Domain 4 — Directives ✅ Done (V2-DIRECTIVE-001)
 
-### V1 Current State
+### V2 Current State
 
 **Service:** `core/directives/DirectiveService.gd`
 
-**Registered directives (6):**
+**Registered directives (2 — V2 foundation pair):**
 
 | ID | Selectable | Intent weights |
 |---|---|---|
-| `directive.none` | ✅ Always | Baseline — no bias |
-| `directive.scout` | ✅ Always | survival_bias, avoid_overcommit, prefer_disengage, reporting_priority |
-| `directive.protect` | ❌ Locked | — |
-| `directive.push` | ❌ Locked | — |
-| `directive.preserve` | ❌ Locked | — |
-| `directive.focus` | ❌ Locked | — |
+| `directive.scout_carefully` | ✅ Always | survival_bias, avoid_overcommit, prefer_disengage, resource_efficiency |
+| `directive.seek_signs` | ✅ Always | clue_seeking_priority, reporting_priority, exposure_acceptance, survival_bias |
 
-**Save field:** `stage_context.active_directive_id` (String)
+Each directive also carries `pros: Array[String]` and `cons: Array[String]` (2 each, game-tone, for the selection overlay).
 
-**Architecture:** All 6 registered but only 2 selectable (`unlock_condition == "always"`). Intent weights are flat dicts consumed by `ActorStateMachine` Layer 4 (Context Bias).
+**Save field:** `stage_context.active_directive_id` (String) — carryover, field name unchanged.
 
----
+**Save repair (V2-DIRECTIVE-001):** `directive.none` → `directive.seek_signs`; `directive.scout` → `directive.scout_carefully`; all other V1 IDs → `directive.scout_carefully`.
 
-### V2 Target (GDD §20.17)
+**Directive selection:** Blocking overlay on `StageScreen` — appears on every stage entry. Player must confirm before interacting with the stage. Scene: `ui/screens/venture/DirectiveSelectOverlay.tscn`.
 
-The V2 foundation directive pair is:
-- **`Scout Carefully`** — safer pathing, lower commitment, better survival/intel retention; best for returning with useful info from a failed/partial run
-- **`Seek Signs`** — stronger clue-seeking, higher chance of deeper intel at greater exposure risk; best for revealing hidden objective requirements, omen language, and readiness clues; worse on safety if run goes bad
+**Intent-weight scoring:** `BehaviorArbiter._directive_bonus()` — generic loop over `balance.json data.actor.directive_action_muls`. No GDScript changes needed to add new directives. V2 semantic keys added: `avoid_overcommit`, `exposure_acceptance`, `clue_seeking_priority`, `reporting_priority`.
 
-The two directives have **distinct risk profiles** — not just a toggle. The naming and intent-weight structure changes significantly from V1.
-
-Broader directive set (protect, push, preserve, focus) is **deferred to expansion**.
+V1 locked directives (`protect`, `push`, `preserve`, `focus`) — **superseded**. Commented out in service. Deferred to a future expansion DIRECTIVE story.
 
 ---
 
-### Migration Action
+### Migration Action (resolved)
 
-| Item | Action | Owner |
+| Item | Action | Status |
 |---|---|---|
-| `directive.scout` | **Rewrite** → `Scout Carefully` with V2 intent weights | V2-DIRECTIVE-001 |
-| `directive.none` | **Rewrite** → `Seek Signs` (or remap as the second option) | V2-DIRECTIVE-001 |
-| `directive.protect`, `directive.push`, `directive.preserve`, `directive.focus` | **Supersede** for now — remove or stub | V2-DIRECTIVE-001 |
-| `stage_context.active_directive_id` save field (String) | **Carryover** — key name and format stay valid | — |
-
-**Invariants:**
-- `active_directive_id` save key format (string) must remain stable — repair is not needed
-- Intent-weight key names within each directive are internal — can change freely
-- `ActorStateMachine` Layer 4 reads intent weights by key name → must be updated in the same story as the directive definitions
+| `directive.scout` | **Rewrite** → `directive.scout_carefully` with V2 weights | ✅ Done |
+| `directive.none` | **Rewrite** → `directive.seek_signs` (remap) | ✅ Done |
+| `directive.protect`, `push`, `preserve`, `focus` | **Superseded** — removed from registry | ✅ Done |
+| `stage_context.active_directive_id` save field | **Carryover** — key name and format unchanged | ✅ Done |
+| V1→V2 save repair | Added migration block to `SaveService.gd` | ✅ Done |
+| `balance.json directive_action_muls` | V2 semantic keys added | ✅ Done |
+| `BehaviorArbiter._DEFAULTS` | Mirrored balance.json additions | ✅ Done |
+| `FlowStageState` snapshot | Added `data.directive` payload; refactored to `static build_snapshot()` | ✅ Done |
+| Selection UI | `DirectiveSelectOverlay.tscn` + `.gd` on `StageScreen` | ✅ Done |
 
 ---
 
@@ -495,7 +487,7 @@ V2-MIG-001 (this doc) ✅ Done
   │                 └── V2-PROG-005 Skill family foundation (Ward/Break/Veil/Path/Rite/Root) ✅ Done
   │                 └── V2-PROG-006 Maturity-expression seam (SmartnessTier → expression_band) ✅ Done
   │                       └── V2-PROG-004+ Standing milestone UI system (S3/S6/S9 flow)
-  ├── V2-DIRECTIVE-001 Directive rewrite (Scout Carefully / Seek Signs)
+  ├── V2-DIRECTIVE-001 Directive rewrite (Scout Carefully / Seek Signs) ✅ Done
   ├── V2-SANCTUM-001+  Building + Continuity system
   ├── V2-ECONOMY-001+  Economy expansion (Relics, Faith, Harmony, Favor)
   └── V2-WEAVE-001     Foundation Thread recovery model ✅ Done

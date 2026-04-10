@@ -80,11 +80,11 @@ const _DEFAULTS := {
 		                  "empathic": 0, "ambitious": -4, "valiant": -8, "proud": -8 },
 	},
 	"directive_action_muls": {
-		"melee_attack": { "objective_advance_priority": 1.0, "engage_only_blockers": 1.0 },
+		"melee_attack": { "objective_advance_priority": 1.0, "engage_only_blockers": 1.0, "avoid_overcommit": -0.5, "exposure_acceptance": 0.4 },
 		"protect_ally": { "ally_protection_bias": 1.0, "threat_interception": 1.0 },
-		"actor.guard":  { "ally_protection_bias": 1.0, "survival_bias": 1.0 },
-		"actor.idle":   { "survival_bias": 1.0, "prefer_disengage": 1.0, "resource_efficiency": 1.0 },
-		"actor.move":   { "objective_advance_priority": 1.0, "engage_only_blockers": 1.0 },
+		"actor.guard":  { "ally_protection_bias": 1.0, "survival_bias": 1.0, "avoid_overcommit": 0.5, "exposure_acceptance": -0.3 },
+		"actor.idle":   { "survival_bias": 1.0, "prefer_disengage": 1.0, "resource_efficiency": 1.0, "exposure_acceptance": -0.2, "clue_seeking_priority": 0.5, "reporting_priority": 0.3 },
+		"actor.move":   { "objective_advance_priority": 1.0, "engage_only_blockers": 1.0, "clue_seeking_priority": 1.0, "reporting_priority": 1.0 },
 	},
 	"morale_action_muls": {
 		"melee_attack": { "broken": -20, "shaken": -3, "steady": 0, "inspired": 12 },

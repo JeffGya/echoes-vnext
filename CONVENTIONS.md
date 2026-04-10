@@ -356,6 +356,27 @@ The old `unlocked_vows: []` Array key is superseded. SaveService repair migrates
 - UI may predict/animate balance; Core commits. Core is authoritative if they disagree.
 - Ase summon costs (grade-based): uncalled=60, called=150, chosen=400
 
+### DirectiveService (`core/directives/DirectiveService.gd`) — V2 (V2-DIRECTIVE-001)
+
+**V2 registry (2 entries only):**
+| ID | Label | Fallback |
+|----|-------|---------|
+| `directive.scout_carefully` | Scout Carefully | ✓ default |
+| `directive.seek_signs` | Seek Signs | — |
+
+The 4 locked V1 entries (`protect`, `push`, `preserve`, `focus`) and `directive.none` / `directive.scout` are removed. A comment in the registry marks them as deferred to a future expansion DIRECTIVE story.
+
+**Required keys per entry:** `id`, `label`, `description`, `pros` (Array[2]), `cons` (Array[2]), `intent_weights`, `unlock_condition`.
+
+**V1→V2 save migration:** `SaveService.gd` repair block migrates old IDs on load:
+- `directive.none` → `directive.seek_signs`
+- `directive.scout`, `directive.protect`, `directive.push`, `directive.preserve`, `directive.focus` → `directive.scout_carefully`
+- Unknown IDs reset to `directive.scout_carefully`
+
+**Directive selection UI:** A `DirectiveSelectOverlay` blocks all StageScreen interaction at every stage entry. Player must confirm a directive before the stage begins. Overlay hides itself on confirm; emits `directive.select` action via the inherited `action_requested` signal.
+
+**Intent weights → BehaviorArbiter:** Semantic keys in `intent_weights` match keys in `balance.json → directive_action_muls`. Scout Carefully favours `survival_bias`, `avoid_overcommit`, `prefer_disengage`. Seek Signs favours `clue_seeking_priority`, `reporting_priority`, `exposure_acceptance`.
+
 ---
 
 ## Per-Screen Snapshot Summaries
@@ -371,7 +392,7 @@ Full field shapes live in each FlowState file (`core/state/flow/states/`).
 | RealmSelectScreen | `flow.realm_select` | title, current_realm_id, realms[] (id/name/virtue/description/stage_count_min/max/status/locked) | nav.back |
 | ~~RealmInitScreen~~ | `flow.realm_init` | **Removed (UI-003)** — FlowRealmInitState now auto-advances to `flow.stage_map` on enter(); no screen rendered. | — |
 | StageMapScreen | `flow.stage_map` | realm_id, realm_name, current_stage_id, stages_completed_count, stages[] (id, name, status, stage_type, stage_description, objective_count, objectives[{obj_index, obj_type, obj_description}]), party_preview | cta.enter_stage, nav.back |
-| StageScreen | `flow.stage` | stage_id, stage_name, stage_type, stage_description, objective_count, objectives[] ({obj_index, obj_type, obj_description}), realm_id, party_preview | cta.start, nav.back |
+| StageScreen | `flow.stage` | stage_id, stage_name, stage_type, stage_description, objective_count, objectives[] ({obj_index, obj_type, obj_description}), realm_id, party_preview, directive ({active_id, directives[]}) | cta.start, nav.back |
 | VowScreen | `flow.vow_manage` | can_pledge (bool), active_vow ({vow_id, tier, proverb_twi, proverb_en}), available_vows[] ({vow_id, vow_name, proverb_twi, proverb_en, description, benefit_label, tradeoff_label, breaking_cost_hint, is_unlocked, max_tier_unlocked, is_active, discovered_realm, unlock_hint}) | nav.back, cta.pledge (disabled when vow already active), cta.break (disabled when no active vow) |
 | WeavingRiteScreen | `flow.weaving_rite` | phase, selected_echo, thread_reserve, selected_thread_id, invitation_lines (prose clues), outcome, aftermath_lines, non_chosen | nav.back, cta.begin_rite, cta.confirm |
 

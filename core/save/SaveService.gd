@@ -606,17 +606,36 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			repaired = true
 			repaired_notes.append("sanctum.threads set to {} (V2 stub)")
 
-	# ---- stage_context repairs (DIRECTIVE-001) ----
+	# ---- stage_context repairs (DIRECTIVE-001 / V2-DIRECTIVE-001) ----
 	if not save.has("stage_context") or typeof(save["stage_context"]) != TYPE_DICTIONARY:
-		save["stage_context"] = { "active_directive_id": "directive.none" }
+		save["stage_context"] = { "active_directive_id": "directive.scout_carefully" }
 		repaired = true
 		repaired_notes.append("stage_context added with default active_directive_id")
 	else:
 		var sc: Dictionary = save["stage_context"]
 		if not sc.has("active_directive_id") or typeof(sc["active_directive_id"]) != TYPE_STRING:
-			sc["active_directive_id"] = "directive.none"
+			sc["active_directive_id"] = "directive.scout_carefully"
 			repaired = true
-			repaired_notes.append("stage_context.active_directive_id set to 'directive.none' default")
+			repaired_notes.append("stage_context.active_directive_id set to 'directive.scout_carefully' default")
+		# V2-DIRECTIVE-001: migrate V1 directive IDs to V2 canonical IDs
+		var _v1_dir_map: Dictionary = {
+			"directive.none":     "directive.seek_signs",
+			"directive.scout":    "directive.scout_carefully",
+			"directive.protect":  "directive.scout_carefully",
+			"directive.push":     "directive.scout_carefully",
+			"directive.preserve": "directive.scout_carefully",
+			"directive.focus":    "directive.scout_carefully"
+		}
+		var cur_dir_id := str(sc.get("active_directive_id", ""))
+		if _v1_dir_map.has(cur_dir_id):
+			var migrated: String = str(_v1_dir_map[cur_dir_id])
+			sc["active_directive_id"] = migrated
+			repaired = true
+			repaired_notes.append("directive V1→V2: %s → %s" % [cur_dir_id, migrated])
+		elif cur_dir_id not in ["directive.scout_carefully", "directive.seek_signs"]:
+			sc["active_directive_id"] = "directive.scout_carefully"
+			repaired = true
+			repaired_notes.append("unknown directive '%s' reset to scout_carefully" % cur_dir_id)
 		# V2-MIG-002: stage-intel persistence stub
 		if not sc.has("intel") or not (sc["intel"] is Dictionary):
 			sc["intel"] = {}

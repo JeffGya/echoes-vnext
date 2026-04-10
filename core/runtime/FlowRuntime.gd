@@ -2191,7 +2191,7 @@ func _handle_sanctum_calling_confirm(action: Dictionary, t: int) -> void:
 		}
 
 
-# DIRECTIVE-001: writes the chosen directive to stage_context, requests save, refreshes snapshot.
+# V2-DIRECTIVE-001: writes the chosen directive to stage_context, requests save, refreshes snapshot.
 func _handle_directive_select(action: Dictionary, t: int) -> void:
 	var id := str(action.get("directive_id", ""))
 	directive_service.set_active_directive(id, logger, t)
@@ -2200,6 +2200,10 @@ func _handle_directive_select(action: Dictionary, t: int) -> void:
 		flow_ctx.save_request_reason += "|directive.select"
 	else:
 		flow_ctx.save_request_reason = "directive.select"
+	# Lesson 9: non-SANCTUM states read ctx.last_snapshot as-is on refresh.
+	# STAGE uses static build_snapshot() — rebuild before refresh so snapshot reflects the new choice.
+	if flow_ctx.last_snapshot.get("type", "") == FlowStateIds.STAGE:
+		flow_ctx.last_snapshot = FlowStageState.build_snapshot(flow_ctx, t)
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 

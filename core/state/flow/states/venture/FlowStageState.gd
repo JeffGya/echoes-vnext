@@ -7,7 +7,15 @@ func _init(id: String = FlowStateIds.STAGE) -> void:
 
 func enter(ctx: RefCounted, t: int) -> void:
 	var flow_ctx := ctx as FlowContext
+	flow_ctx.last_snapshot = build_snapshot(flow_ctx, t)
 
+func exit(ctx: RefCounted, t: int) -> void:
+	pass
+
+
+# Static builder — called by enter() and by FlowRuntime on directive.select refresh.
+# Follows the same pattern as FlowSummonState and FlowStageMapState.
+static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# Load active realm and resolve the current stage from stage_id
 	var model := RealmService.get_active(flow_ctx)
 	var raw_model_stages: Variant = model.get("stages", [])
@@ -70,6 +78,20 @@ func enter(ctx: RefCounted, t: int) -> void:
 				})
 				break
 
+	# V2-DIRECTIVE-001: directive selection payload for the blocking overlay
+	var sc_dir := str(flow_ctx.save_data.get("stage_context", {}).get("active_directive_id", "directive.scout_carefully"))
+	var dir_svc := DirectiveService.new(flow_ctx.save_data)
+	var dir_list: Array = []
+	for dir_id in ["directive.scout_carefully", "directive.seek_signs"]:
+		var d := dir_svc.get_directive(dir_id)
+		dir_list.append({
+			"id":          d.get("id",          dir_id),
+			"label":       d.get("label",       dir_id),
+			"description": d.get("description", ""),
+			"pros":        d.get("pros",        []),
+			"cons":        d.get("cons",        []),
+		})
+
 	var actions: Dictionary = {
 		"cta.start": {
 			"type":  "flow.go_state",
@@ -85,7 +107,7 @@ func enter(ctx: RefCounted, t: int) -> void:
 		},
 	}
 
-	flow_ctx.last_snapshot = {
+	return {
 		"type": FlowStateIds.STAGE,
 		"data": {
 			"stage_id":          flow_ctx.stage_id,
@@ -96,10 +118,11 @@ func enter(ctx: RefCounted, t: int) -> void:
 			"objectives":        projected_objs,
 			"realm_id":          flow_ctx.realm_id,
 			"party_preview":     party_preview,
+			"directive": {
+				"active_id":  sc_dir,
+				"directives": dir_list,
+			},
 		},
 		"actions": actions,
 		"meta": { "t": t },
 	}
-
-func exit(ctx: RefCounted, t: int) -> void:
-	pass
