@@ -2,6 +2,8 @@ extends RefCounted
 
 class_name SaveService
 
+const StageExploreModelScript := preload("res://core/realms/StageExploreModel.gd")  # V2-STAGE-001
+
 # SaveService owns persistence (file IO)
 # It should stay UI-free and Node-free.
 
@@ -648,7 +650,7 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 		repaired = true
 		repaired_notes.append("realms added with empty dict default")
 
-	# V2-WEAVE-001: repair realm_recovery_segments on each existing realm model
+	# V2-WEAVE-001 + V2-STAGE-001: repair per-realm model fields
 	var _realms_repair_v: Variant = save.get("realms", {})
 	if _realms_repair_v is Dictionary:
 		var _realms_repair: Dictionary = _realms_repair_v
@@ -657,10 +659,25 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			if not (_model_v is Dictionary):
 				continue
 			var _model: Dictionary = _model_v
+
+			# V2-WEAVE-001: realm_recovery_segments
 			if not _model.has("realm_recovery_segments") or not (_model["realm_recovery_segments"] is Array):
 				_model["realm_recovery_segments"] = []
 				repaired = true
 				repaired_notes.append("realm.%s.realm_recovery_segments defaulted to [] (V2-WEAVE-001)" % _realm_id)
+
+			# V2-STAGE-001: explore_map on each stage
+			var _stages_v: Variant = _model.get("stages", [])
+			if _stages_v is Array:
+				var _stages: Array = _stages_v
+				for _stage_v in _stages:
+					if not (_stage_v is Dictionary):
+						continue
+					var _stage: Dictionary = _stage_v
+					if not _stage.has("explore_map") or not (_stage["explore_map"] is Dictionary):
+						_stage["explore_map"] = StageExploreModelScript.make_default()
+						repaired = true
+						repaired_notes.append("realm.%s.stage.%s.explore_map defaulted (V2-STAGE-001)" % [_realm_id, str(_stage.get("index", "?"))])
 
 	# Get structured log if anything was repaired (uses injected t)
 	if repaired:

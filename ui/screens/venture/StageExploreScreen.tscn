@@ -1,0 +1,273 @@
+[gd_scene format=3 uid="uid://stgexplscr001"]
+
+[ext_resource type="Script" uid="uid://stgexplscr_gd" path="res://ui/screens/venture/StageExploreScreen.gd" id="1_script"]
+[ext_resource type="Texture2D" uid="uid://bitpbc4p75ue7" path="res://assets/sanctum/tiles/floor/sanctum_tile_floor_clay_base_128x96.png" id="2_tile"]
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_explore"]
+texture = ExtResource("2_tile")
+texture_region_size = Vector2i(128, 96)
+0:0/0 = 0
+0:0/0/texture_origin = Vector2i(0, -16)
+1:0/0 = 0
+1:0/0/texture_origin = Vector2i(0, -16)
+0:1/0 = 0
+0:1/0/texture_origin = Vector2i(0, -16)
+1:1/0 = 0
+1:1/0/texture_origin = Vector2i(0, -16)
+
+[sub_resource type="TileSet" id="TileSet_explore"]
+tile_shape = 1
+tile_size = Vector2i(128, 64)
+sources/0 = SubResource("TileSetAtlasSource_explore")
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+content_margin_left = 24.0
+content_margin_top = 24.0
+content_margin_right = 24.0
+content_margin_bottom = 24.0
+bg_color = Color(0.05, 0.05, 0.1, 0.92)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.6, 0.6, 0.6, 0.8)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hud"]
+content_margin_left = 12.0
+content_margin_top = 8.0
+content_margin_right = 12.0
+content_margin_bottom = 8.0
+bg_color = Color(0, 0, 0, 0.55)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hidden_circle"]
+bg_color = Color(0.35, 0.35, 0.45, 0.9)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_revealed_circle"]
+bg_color = Color(0.25, 0.55, 0.85, 0.9)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_resolved_circle"]
+bg_color = Color(0.35, 0.35, 0.35, 0.55)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_party_token"]
+bg_color = Color(0.9, 0.75, 0.2, 1.0)
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+
+[node name="StageExploreScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+
+[node name="Board" type="TileMapLayer" parent="."]
+y_sort_enabled = true
+tile_set = SubResource("TileSet_explore")
+
+[node name="SituationLayer" type="Node2D" parent="."]
+
+[node name="HiddenMarkerTemplate" type="Control" parent="SituationLayer"]
+visible = false
+custom_minimum_size = Vector2(40, 40)
+offset_left = -20.0
+offset_top = -20.0
+offset_right = 20.0
+offset_bottom = 20.0
+
+[node name="HiddenCircle" type="PanelContainer" parent="SituationLayer/HiddenMarkerTemplate"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_hidden_circle")
+
+[node name="HiddenLabel" type="Label" parent="SituationLayer/HiddenMarkerTemplate/HiddenCircle"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 20
+text = "?"
+
+[node name="RevealedMarkerTemplate" type="Control" parent="SituationLayer"]
+visible = false
+custom_minimum_size = Vector2(40, 40)
+offset_left = -20.0
+offset_top = -20.0
+offset_right = 20.0
+offset_bottom = 20.0
+
+[node name="RevealedCircle" type="PanelContainer" parent="SituationLayer/RevealedMarkerTemplate"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_revealed_circle")
+
+[node name="TypeLabel" type="Label" parent="SituationLayer/RevealedMarkerTemplate/RevealedCircle"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 11
+text = "?"
+
+[node name="ResolvedMarkerTemplate" type="Control" parent="SituationLayer"]
+visible = false
+custom_minimum_size = Vector2(40, 40)
+offset_left = -20.0
+offset_top = -20.0
+offset_right = 20.0
+offset_bottom = 20.0
+
+[node name="ResolvedCircle" type="PanelContainer" parent="SituationLayer/ResolvedMarkerTemplate"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_resolved_circle")
+
+[node name="ResolvedLabel" type="Label" parent="SituationLayer/ResolvedMarkerTemplate/ResolvedCircle"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 16
+text = "✓"
+
+[node name="PartyToken" type="PanelContainer" parent="."]
+custom_minimum_size = Vector2(32, 32)
+offset_left = -16.0
+offset_top = -16.0
+offset_right = 16.0
+offset_bottom = 16.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_party_token")
+
+[node name="HudStrip" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 56.0
+grow_horizontal = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_hud")
+
+[node name="HudContent" type="HBoxContainer" parent="HudStrip"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="TurnLabel" type="Label" parent="HudStrip/HudContent"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Turn 0"
+
+[node name="ObjectivesLabel" type="Label" parent="HudStrip/HudContent"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 14
+text = "Objectives: 0 / 0"
+
+[node name="PartyStateLabel" type="Label" parent="HudStrip/HudContent"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Exploring"
+
+[node name="ActionBar" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -80.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_constants/separation = 12
+
+[node name="AdvanceButton" type="Button" parent="ActionBar"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(160, 56)
+size_flags_horizontal = 3
+theme_type_variation = "ButtonPrimary"
+text = "Advance →"
+
+[node name="ReturnButton" type="Button" parent="ActionBar"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(140, 56)
+theme_type_variation = "ButtonGhost"
+text = "Return Home"
+
+[node name="SituationOverlay" type="PanelContainer" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -160.0
+offset_right = 200.0
+offset_bottom = 160.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="OverlayContent" type="VBoxContainer" parent="SituationOverlay"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="SituationTypeLabel" type="Label" parent="SituationOverlay/OverlayContent"]
+unique_name_in_owner = true
+layout_mode = 2
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 22
+text = "Situation"
+
+[node name="SituationResultLabel" type="Label" parent="SituationOverlay/OverlayContent"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_alignment = 1
+autowrap_mode = 3
+text = ""
+
+[node name="DismissButton" type="Button" parent="SituationOverlay/OverlayContent"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(120, 48)
+size_flags_horizontal = 4
+theme_type_variation = "ButtonPrimary"
+text = "Continue"

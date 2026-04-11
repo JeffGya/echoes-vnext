@@ -2,7 +2,8 @@ class_name FlowStateMachine
 
 extends StateMachine
 
-const FlowWeavingRiteStateScript := preload("res://core/state/flow/states/sanctum/FlowWeavingRiteState.gd")
+const FlowWeavingRiteStateScript  := preload("res://core/state/flow/states/sanctum/FlowWeavingRiteState.gd")
+const FlowStageExploreStateScript := preload("res://core/state/flow/states/venture/FlowStageExploreState.gd")  # V2-STAGE-001
 
 func _init() -> void:
 	super("state.flow")
@@ -24,6 +25,7 @@ func register_default_states() -> void:
 	register_state(FlowRealmInitState.new())  # REALM-001
 	register_state(FlowStageMapState.new())
 	register_state(FlowStageState.new())
+	register_state(FlowStageExploreStateScript.new())  # V2-STAGE-001
 	register_state(FlowEncounterState.new())
 	
 # Deterministic entry point for Flow.

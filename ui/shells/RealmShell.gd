@@ -7,6 +7,7 @@ var _active_overlay: Control = null
 
 var _stage_map_scene      := preload("res://ui/screens/venture/StageMapScreen.tscn")
 var _stage_scene          := preload("res://ui/screens/venture/StageScreen.tscn")
+var _stage_explore_scene  := preload("res://ui/screens/venture/StageExploreScreen.tscn")  # V2-STAGE-001
 var _combat_board_scene   := preload("res://ui/screens/combat/CombatBoardScreen.tscn")
 var _resolve_scene        := preload("res://ui/screens/venture/ResolveScreen.tscn")
 
@@ -19,10 +20,11 @@ var _scene_by_flow_type: Dictionary = {}
 
 func _ready() -> void:
 	_scene_by_flow_type = {
-		"flow.stage_map":    _stage_map_scene,
-		"flow.stage":        _stage_scene,
-		"flow.encounter":    _combat_board_scene,
-		"flow.resolve":      _resolve_scene,
+		"flow.stage_map":     _stage_map_scene,
+		"flow.stage":         _stage_scene,
+		"flow.stage_explore": _stage_explore_scene,  # V2-STAGE-001
+		"flow.encounter":     _combat_board_scene,
+		"flow.resolve":       _resolve_scene,
 	}
 
 func set_snapshot(snap: Dictionary) -> void:
@@ -46,7 +48,7 @@ func _update_echo_bar(snap: Dictionary) -> void:
 			for a in data.get("actors", []):
 				if a is Dictionary and str(a.get("faction", "")) == "echo":
 					party.append(a)
-		"flow.stage", "flow.stage_map":
+		"flow.stage", "flow.stage_map", "flow.stage_explore":
 			# Stage snapshots include party_preview: { name, rank, calling_origin }
 			var preview: Variant = data.get("party_preview", [])
 			if preview is Array:

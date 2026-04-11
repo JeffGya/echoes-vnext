@@ -551,6 +551,50 @@ Echo traits (resilience + leadership) use a **separate derived RNG** at path `<s
 
 - BOND-001: **Social Graph Contracts.** `SocialGraphService` is the single static API for all bond/encounter reads and writes. `bonds[]` + `party_encounters[]` live inside `save_data["sanctum"]` — additive, no schema_version bump. Party co-occurrence is recorded in `FlowRuntime._handle_sanctum_party_toggle` on every add (not remove). `bond_type` ("rival"/"neutral"/"friend") and `tier` are always derived at read time, never stored. All bond score triggers are config-defined in `balance.data.sanctum.bond_triggers` but fire only in BOND-002. The Bonds tab in EchoPartyScreen is always enabled (not gated by calling like Skills), showing `bond_entries[]` sorted most-negative first. `BondTierBar.tscn` is a fully .tscn-authored 11-cell visual bar — script only sets modulate + label text.
 
+### V2-STAGE-001 — Exploration Stage Map Foundation (New Build)
+
+`SituationModel` (`core/realms/SituationModel.gd`) — pure data factory.
+- `make(id, type, col, row, seed, is_objective) → Dict` — produces one situation dict.
+- Fields: `id`, `type`, `pos: {col, row}`, `seed`, `revealed: false`, `resolved: false`, `is_objective`, `intel_clues: []`
+- Types: `TYPE_COMBAT`, `TYPE_NPC`, `TYPE_LOOT`, `TYPE_MONEY`. `SITUATION_TYPE_POOL` weighted array (combat×3, npc×2, loot×2, money×1).
+- `validate(sit) → bool` checks `REQUIRED_FIELDS`.
+
+`StageExploreModel` (`core/realms/StageExploreModel.gd`) — pure data factory.
+- `make(width, height, situations) → Dict` — produces one explore_map dict (attached to `stages[i]["explore_map"]`).
+- `make_default() → Dict` — safe empty defaults for SaveService repair (`locked: false`).
+- Constants: `MIN_WIDTH = 30`, `MIN_HEIGHT = 30`, `STATE_EXPLORING`, `STATE_ESCAPED`, `STATE_COMPLETE`.
+- `validate(map) → bool` checks `REQUIRED_FIELDS`.
+
+`FlowStageExploreState` (`core/state/flow/states/venture/FlowStageExploreState.gd`) — flow state `flow.stage_explore`.
+- `enter(ctx, t)` → locks map on first entry (`locked=true`, `save_request=true`), builds snapshot.
+- `static build_snapshot(flow_ctx, t) → Dictionary` — projects explore_map data; hidden situations shown as `type: "hidden"`, `is_objective: false` (information never leaked while hidden).
+- Action slots: `cta.advance_turn` (disabled when not `STATE_EXPLORING`), `cta.return_home`, `nav.back` (disabled while exploring).
+
+**Explore map size rules:**
+- Each stage gets a random asymmetric size; width and height picked independently.
+- Minimum 30 tiles per dimension. Driven by per-realm config keys in `realms.json`: `map_width_min/max`, `map_height_min/max`.
+- `_MAP_SIZE_STAGE_BUMP = 2` — each subsequent stage in same realm gets +2 per min/max dimension.
+- Earlier realms use smaller ranges (realm 1: 30–45 × 30–40); later realms larger (realm 2: 50–70 × 45–65).
+
+**Dispatch actions:**
+- `stage.advance_turn` — moves party to nearest unresolved situation (directive-guided). `scout_carefully` → nearest; `seek_signs` → nearest objective first.
+- `stage.return_home` — stub escape check (roll > 40 = success → `flow.stage_map`; fail → `data.return_failed = true`).
+- `stage.engage_situation` — marks situation resolved/revealed; increments `objectives_found`; routes by type (combat → `flow.encounter`; npc/loot/money → `data.situation_overlay` stub).
+
+**Invariants:**
+- `stages[i].objectives` array is unchanged (explore_map is additive only).
+- Existing `RealmGenerator` RNG draw paths NOT reordered — explore seed path (`"stage.N.explore.*"`) appended after all existing draws.
+- All situations start `revealed: false`, `resolved: false`, `intel_clues: []`.
+- `intel_clues: []` is an extensibility slot for V2-INTEL-001 — always empty in foundation.
+- `map_to_local(Vector2i)` is the grid-to-screen conversion (same as `CombatBoardScreen`).
+
+**Screen summary entry:**
+| StageExploreScreen | `flow.stage_explore` | map_width, map_height, party_pos, turn_count, party_state, objectives_found, objectives_total, situations[] (hidden: `{id, pos, revealed: false, type: "hidden"}`; revealed: `{id, pos, revealed: true, type, is_objective, resolved}`), party_preview, [situation_overlay] | cta.advance_turn, cta.return_home, nav.back |
+
+**RealmShell routing:** `flow.stage_explore` → `StageExploreScreen.tscn`. EchoBar reads `data.party_preview` (same as `flow.stage`).
+
+---
+
 ### Deferred
 - Full art: StageScreen, StageMapScreen (scaffolds built; deferred to UI-006+)
 - HP progress bar in RealmShell EchoBar (text label is current; bar deferred to UX pass)

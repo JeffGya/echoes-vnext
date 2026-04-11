@@ -18,7 +18,13 @@
         "stage_count_min": 3,
         "stage_count_max": 4,
         "obj_count_min": 1,
-        "obj_count_max": 2
+        "obj_count_max": 2,
+        "sit_count_min": 4,
+        "sit_count_max": 6,
+        "map_width_min": 30,
+        "map_width_max": 45,
+        "map_height_min": 30,
+        "map_height_max": 40
       },
 
       "realm.02": {
@@ -32,7 +38,13 @@
         "stage_count_min": 5,
         "stage_count_max": 7,
         "obj_count_min": 2,
-        "obj_count_max": 3
+        "obj_count_max": 3,
+        "sit_count_min": 5,
+        "sit_count_max": 8,
+        "map_width_min": 50,
+        "map_width_max": 70,
+        "map_height_min": 45,
+        "map_height_max": 65
       }
 
     }

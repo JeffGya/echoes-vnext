@@ -2,6 +2,8 @@ class_name RealmService
 
 extends RefCounted
 
+const StageExploreModelScript := preload("res://core/realms/StageExploreModel.gd")  # V2-STAGE-001
+
 # REALM-001: Single choke point for realm creation and access.
 # All realm mutations go through this service — mirrors EconomyService style.
 # Realm models are stored in save_data["realms"] keyed by realm_id.
@@ -49,6 +51,16 @@ static func get_or_create(realm_id: String, ctx: FlowContext, t: int) -> Diction
 	var obj_min     := int(cfg.get("obj_count_min", 1))
 	var obj_max     := int(cfg.get("obj_count_max", 2))
 
+	# V2-STAGE-001: exploration map config (passed to RealmGenerator)
+	var explore_cfg := {
+		"sit_count_min":   int(cfg.get("sit_count_min",   4)),
+		"sit_count_max":   int(cfg.get("sit_count_max",   6)),
+		"map_width_min":   int(cfg.get("map_width_min",   StageExploreModelScript.MIN_WIDTH)),
+		"map_width_max":   int(cfg.get("map_width_max",   45)),
+		"map_height_min":  int(cfg.get("map_height_min",  StageExploreModelScript.MIN_HEIGHT)),
+		"map_height_max":  int(cfg.get("map_height_max",  40)),
+	}
+
 	# Determine run_count (0 for new, old+1 for re-run)
 	var run_count := 0
 	if save_realms.has(realm_id):
@@ -80,7 +92,8 @@ static func get_or_create(realm_id: String, ctx: FlowContext, t: int) -> Diction
 	)
 
 	# Generate deterministic stages and wire them into the model
-	var stages := RealmGenerator.generate(realm_seed, stage_count, obj_min, obj_max)
+	# V2-STAGE-001: pass explore_cfg so each stage gets a procedural exploration map
+	var stages := RealmGenerator.generate(realm_seed, stage_count, obj_min, obj_max, explore_cfg)
 	model["stages"] = stages
 
 	# Store in save_data

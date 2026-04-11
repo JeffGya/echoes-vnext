@@ -2,8 +2,11 @@
 class_name FlowRuntime
 extends RefCounted
 
-const FlowWeavingRiteStateScript := preload("res://core/state/flow/states/sanctum/FlowWeavingRiteState.gd")
-const WeavingRiteServiceScript := preload("res://core/progression/WeavingRiteService.gd")
+const FlowWeavingRiteStateScript  := preload("res://core/state/flow/states/sanctum/FlowWeavingRiteState.gd")
+const WeavingRiteServiceScript    := preload("res://core/progression/WeavingRiteService.gd")
+const FlowStageExploreStateScript := preload("res://core/state/flow/states/venture/FlowStageExploreState.gd")  # V2-STAGE-001
+const StageExploreModelScript     := preload("res://core/realms/StageExploreModel.gd")                          # V2-STAGE-001
+const SituationModelScript        := preload("res://core/realms/SituationModel.gd")                             # V2-STAGE-001
 
 var logger: StructuredLogger
 var config_service: ConfigService
@@ -333,6 +336,16 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 		"skill.unassign":
 			_handle_skill_unassign(action, t)
+
+		# ---- Stage Exploration (V2-STAGE-001) ----
+		"stage.advance_turn":
+			_handle_stage_advance_turn(action, t)
+
+		"stage.return_home":
+			_handle_stage_return_home(action, t)
+
+		"stage.engage_situation":
+			_handle_stage_engage_situation(action, t)
 
 		# UI actions
 		"ui.dismiss_summon_reveals":
@@ -2415,3 +2428,294 @@ func _handle_debug_vow_unlock(action: Dictionary, t: int) -> void:
 		return
 	VowService.unlock_vow(vow_id, "debug", flow_ctx.save_data, flow_ctx, logger, t)
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# V2-STAGE-001: Stage exploration handlers
+# ────────────────────────────────────────────────────────────────────────────
+
+## Move the party to the nearest unresolved situation (directive-guided).
+## On arrival: runs a stub reveal check.
+##   - High roll (>50): situation is revealed; snapshot rebuilt to show type.
+##   - Low roll (<=50): party stumbles in blind → dispatch stage.engage_situation.
+## If situation was already revealed on arrival → dispatch stage.engage_situation.
+func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
+	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
+	if stage.is_empty():
+		logger.debug(t, "stage.advance.no_stage", "advance_turn: no active stage", {})
+		return
+
+	var map_v: Variant = stage.get("explore_map", {})
+	var explore_map: Dictionary = map_v if map_v is Dictionary else {}
+
+	if str(explore_map.get("party_state", "")) != StageExploreModelScript.STATE_EXPLORING:
+		logger.debug(t, "stage.advance.not_exploring", "advance_turn: party not in exploring state", {
+			"party_state": explore_map.get("party_state", "")
+		})
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+		return
+
+	# Find target situation based on active directive
+	var active_dir := str(flow_ctx.save_data.get("stage_context", {}).get("active_directive_id", "directive.scout_carefully"))
+	var target_sit := _find_target_situation(explore_map, active_dir)
+
+	if target_sit.is_empty():
+		# No unresolved situations left — should not normally reach here; guard gracefully
+		logger.debug(t, "stage.advance.no_target", "advance_turn: no unresolved situations found", {})
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+		return
+
+	# Move party to situation position
+	var sit_pos_v: Variant = target_sit.get("pos", { "col": 0, "row": 0 })
+	var sit_pos: Dictionary = sit_pos_v if sit_pos_v is Dictionary else { "col": 0, "row": 0 }
+	explore_map["party_pos"] = sit_pos
+	explore_map["turn_count"] = int(explore_map.get("turn_count", 0)) + 1
+	explore_map["last_situation_id"] = str(target_sit.get("id", ""))
+
+	stage["explore_map"] = explore_map
+	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+	flow_ctx.save_request = true
+	flow_ctx.save_request_reason = "stage.advance_turn"
+
+	logger.info(t, "stage.advance_turn", "Party moved to situation", {
+		"stage_id":    flow_ctx.stage_id,
+		"situation_id": str(target_sit.get("id", "")),
+		"turn_count":  explore_map["turn_count"],
+	})
+
+	# If already revealed → go straight to engagement
+	if bool(target_sit.get("revealed", false)):
+		_handle_stage_engage_situation({ "situation_id": str(target_sit.get("id", "")) }, t)
+		return
+
+	# Stub reveal check: seeded roll
+	var sit_id    := str(target_sit.get("id", "sit.0"))
+	var turn_count := int(explore_map.get("turn_count", 0))
+	var rng := CampaignSeed.get_rng_from(
+		int(flow_ctx.save_data.get("realms", {}).get(flow_ctx.realm_id, {}).get("seed", 0)),
+		"stage.reveal.%s.%d" % [sit_id, turn_count]
+	)
+	var roll := rng.randi_range(0, 100)
+
+	if roll > 50:
+		# Reveal the situation — party scouted it before committing
+		_mark_situation_revealed(stage, sit_id, t)
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+	else:
+		# Party stumbled in blind — immediate engagement
+		_handle_stage_engage_situation({ "situation_id": sit_id }, t)
+
+
+## Party attempts to return home before completing all objectives.
+## Stub escape check: seeded roll > 40 = success.
+## Success → party_state = "escaped", transition to flow.stage_map.
+## Failure → return_failed flag in snapshot (full mechanic deferred to V2-INTEL-002).
+func _handle_stage_return_home(_action: Dictionary, t: int) -> void:
+	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
+	if stage.is_empty():
+		logger.debug(t, "stage.return.no_stage", "return_home: no active stage", {})
+		return
+
+	var map_v: Variant = stage.get("explore_map", {})
+	var explore_map: Dictionary = map_v if map_v is Dictionary else {}
+
+	var turn_count := int(explore_map.get("turn_count", 0))
+	var realm_seed := int(flow_ctx.save_data.get("realms", {}).get(flow_ctx.realm_id, {}).get("seed", 0))
+
+	var rng := CampaignSeed.get_rng_from(
+		realm_seed,
+		"stage.escape.%s.%d" % [flow_ctx.stage_id, turn_count]
+	)
+	var roll := rng.randi_range(0, 100)
+	var success := roll > 40
+
+	logger.info(t, "stage.return_home", "Party return home attempt", {
+		"stage_id":   flow_ctx.stage_id,
+		"roll":       roll,
+		"success":    success,
+		"turn_count": turn_count,
+	})
+
+	if success:
+		explore_map["party_state"] = StageExploreModelScript.STATE_ESCAPED
+		stage["explore_map"] = explore_map
+		FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+		flow_ctx.save_request = true
+		flow_ctx.save_request_reason = "stage.escaped"
+		flow_machine.transition(FlowStateIds.STAGE_MAP, flow_ctx, logger, t, "stage.return_home.success")
+	else:
+		# Escape failed — rebuild snapshot with return_failed flag for UI feedback
+		# Full consequence mechanic deferred to V2-INTEL-002
+		stage["explore_map"] = explore_map
+		FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+		var snap := FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
+		snap["data"]["return_failed"] = true
+		flow_ctx.last_snapshot = snap
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+## Resolve a situation the party has reached.
+## Marks situation resolved + revealed. Increments objectives_found if applicable.
+## Routes: combat → flow.encounter; npc/loot/money → inline overlay stub.
+## All objectives found → flow.complete_stage.
+func _handle_stage_engage_situation(action: Dictionary, t: int) -> void:
+	var sit_id := str(action.get("situation_id", ""))
+	if sit_id.is_empty():
+		logger.debug(t, "stage.engage.no_id", "engage_situation: missing situation_id", {})
+		return
+
+	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
+	if stage.is_empty():
+		return
+
+	var map_v: Variant = stage.get("explore_map", {})
+	var explore_map: Dictionary = map_v if map_v is Dictionary else {}
+	var sits_v: Variant = explore_map.get("situations", [])
+	var situations: Array = sits_v if sits_v is Array else []
+
+	# Find and mutate the situation
+	var sit: Dictionary = {}
+	for i in range(situations.size()):
+		var s_v: Variant = situations[i]
+		if s_v is Dictionary and str((s_v as Dictionary).get("id", "")) == sit_id:
+			var s: Dictionary = s_v
+			s["resolved"] = true
+			s["revealed"] = true
+			situations[i] = s
+			sit = s
+			break
+
+	if sit.is_empty():
+		logger.debug(t, "stage.engage.not_found", "engage_situation: situation not found", {
+			"situation_id": sit_id
+		})
+		return
+
+	# Update objectives_found
+	if bool(sit.get("is_objective", false)):
+		explore_map["objectives_found"] = int(explore_map.get("objectives_found", 0)) + 1
+
+	explore_map["situations"] = situations
+	stage["explore_map"] = explore_map
+	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+	flow_ctx.save_request = true
+	flow_ctx.save_request_reason = "stage.engage_situation"
+
+	logger.info(t, "stage.engage_situation", "Party engaged situation", {
+		"stage_id":      flow_ctx.stage_id,
+		"situation_id":  sit_id,
+		"type":          str(sit.get("type", "")),
+		"is_objective":  sit.get("is_objective", false),
+		"obj_found":     explore_map.get("objectives_found", 0),
+		"obj_total":     explore_map.get("objectives_total", 0),
+	})
+
+	# Check if all objectives are found → complete the stage
+	var obj_found := int(explore_map.get("objectives_found", 0))
+	var obj_total := int(explore_map.get("objectives_total", 0))
+	if obj_total > 0 and obj_found >= obj_total:
+		explore_map["party_state"] = StageExploreModelScript.STATE_COMPLETE
+		stage["explore_map"] = explore_map
+		FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+		_handle_complete_stage(t, "")
+		return
+
+	# Route by situation type
+	var sit_type := str(sit.get("type", ""))
+	match sit_type:
+		SituationModelScript.TYPE_COMBAT:
+			flow_machine.transition(FlowStateIds.ENCOUNTER, flow_ctx, logger, t, "stage.engage.combat")
+		_:
+			# NPC / loot / money — inline placeholder overlay (V2-STAGE-003 / V2-STAGE-004 will replace)
+			var result_text := _stub_situation_result(sit_type)
+			var snap := FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
+			snap["data"]["situation_overlay"] = {
+				"situation_id": sit_id,
+				"type":         sit_type,
+				"result_text":  result_text,
+			}
+			flow_ctx.last_snapshot = snap
+			flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# V2-STAGE-001 private helpers
+# ────────────────────────────────────────────────────────────────────────────
+
+# Find the best next unresolved situation based on active directive.
+# scout_carefully → nearest unresolved (Chebyshev from party_pos)
+# seek_signs      → nearest unresolved objective first; fallback nearest unresolved
+func _find_target_situation(explore_map: Dictionary, directive_id: String) -> Dictionary:
+	var sits_v: Variant = explore_map.get("situations", [])
+	var situations: Array = sits_v if sits_v is Array else []
+	var party_pos_v: Variant = explore_map.get("party_pos", { "col": 0, "row": 0 })
+	var party_pos: Dictionary = party_pos_v if party_pos_v is Dictionary else { "col": 0, "row": 0 }
+	var px := int(party_pos.get("col", 0))
+	var py := int(party_pos.get("row", 0))
+
+	var best_obj: Dictionary  = {}
+	var best_any: Dictionary  = {}
+	var best_obj_dist := 999999
+	var best_any_dist := 999999
+
+	for sit_v in situations:
+		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
+		if bool(sit.get("resolved", false)):
+			continue
+		var pos_v: Variant = sit.get("pos", { "col": 0, "row": 0 })
+		var pos: Dictionary = pos_v if pos_v is Dictionary else { "col": 0, "row": 0 }
+		var sx := int(pos.get("col", 0))
+		var sy := int(pos.get("row", 0))
+		var dist: int = max(abs(sx - px), abs(sy - py))  # Chebyshev
+
+		if dist < best_any_dist:
+			best_any_dist = dist
+			best_any = sit
+		if bool(sit.get("is_objective", false)) and dist < best_obj_dist:
+			best_obj_dist = dist
+			best_obj = sit
+
+	if directive_id == "directive.seek_signs" and not best_obj.is_empty():
+		return best_obj
+	return best_any
+
+
+# Mark a specific situation as revealed in save_data.
+func _mark_situation_revealed(stage: Dictionary, sit_id: String, t: int) -> void:
+	var map_v: Variant = stage.get("explore_map", {})
+	var explore_map: Dictionary = map_v if map_v is Dictionary else {}
+	var sits_v: Variant = explore_map.get("situations", [])
+	var situations: Array = sits_v if sits_v is Array else []
+
+	for i in range(situations.size()):
+		var s_v: Variant = situations[i]
+		if s_v is Dictionary and str((s_v as Dictionary).get("id", "")) == sit_id:
+			var s: Dictionary = s_v
+			s["revealed"] = true
+			situations[i] = s
+			break
+
+	explore_map["situations"] = situations
+	stage["explore_map"] = explore_map
+	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+	flow_ctx.save_request = true
+	flow_ctx.save_request_reason = "stage.reveal"
+
+	logger.info(t, "stage.situation.revealed", "Situation revealed before engagement", {
+		"stage_id":     flow_ctx.stage_id,
+		"situation_id": sit_id,
+	})
+
+
+# Returns a stub result text for non-combat situation types.
+# Real outcomes deferred to V2-STAGE-003 (NPC) and V2-STAGE-004 (loot/money).
+func _stub_situation_result(sit_type: String) -> String:
+	match sit_type:
+		SituationModelScript.TYPE_NPC:
+			return "A presence stirs. The party watches, unseen. Nothing more for now."
+		SituationModelScript.TYPE_LOOT:
+			return "Something left behind. The party gathers what they can."
+		SituationModelScript.TYPE_MONEY:
+			return "An offering, unclaimed. The party takes it quietly."
+		_:
+			return "The party finds something unexpected. More will be known in time."

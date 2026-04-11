@@ -10,7 +10,7 @@ extends RefCounted
 #   - Any pre-boss objective is "shrine" → stage type = "purification"
 #   - All pre-boss objectives are "combat"  → stage type = "combat"
 
-const REQUIRED_FIELDS: Array = ["index", "type", "seed", "objectives"]
+const REQUIRED_FIELDS: Array = ["index", "type", "seed", "objectives", "explore_map"]
 
 # Stage summary type constants (derived at generation — never set manually)
 const TYPE_COMBAT       := "combat"
@@ -26,13 +26,15 @@ const TYPE_DESCRIPTIONS: Dictionary = {
 
 
 # Build a new StageModel dict.
-# objectives: pre-built Array of ObjectiveModel dicts (created by RealmGenerator).
-static func make(index: int, type: String, seed: int, objectives: Array) -> Dictionary:
+# objectives:   pre-built Array of ObjectiveModel dicts (created by RealmGenerator).
+# explore_map:  V2-STAGE-001 StageExploreModel dict (created by RealmGenerator). Default {} for legacy.
+static func make(index: int, type: String, seed: int, objectives: Array, explore_map: Dictionary = {}) -> Dictionary:
 	return {
-		"index":      index,
-		"type":       type,
-		"seed":       seed,
-		"objectives": objectives,
+		"index":       index,
+		"type":        type,
+		"seed":        seed,
+		"objectives":  objectives,
+		"explore_map": explore_map,
 	}
 
 

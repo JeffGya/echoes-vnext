@@ -100,14 +100,18 @@ Four project-specific skills are installed. Use them proactively — they are au
 | CombatBoardScreen | `ui/screens/CombatBoardScreen.gd` | Isometric TileMap. InitiativePanel, PrebattlePanel, PartyBar, CombatTokenLayer, CombatDistanceLayer. |
 | RealmModel | `core/realms/RealmModel.gd` | Pure data factory. Fields: id/name/virtue/description/seed/stage_count/current_stage_index/is_completed/status/run_index/run_count/stages. |
 | RealmService | `core/realms/RealmService.gd` | `get_or_create()`, `get_active()`, `compute_runtime_locks()`, `advance_stage()→Dict`. |
-| RealmGenerator | `core/realms/RealmGenerator.gd` | `generate(realm_seed, stage_count, obj_min, obj_max)` → deterministic stages Array. |
+| RealmGenerator | `core/realms/RealmGenerator.gd` | `generate(realm_seed, stage_count, obj_min, obj_max, explore_cfg)` → deterministic stages Array with `explore_map` per stage (V2-STAGE-001). |
+| SituationModel | `core/realms/SituationModel.gd` | Pure data factory for exploration map situations. `make(id, type, col, row, seed, is_objective)`. Types: combat/npc/loot/money. (V2-STAGE-001) |
+| StageExploreModel | `core/realms/StageExploreModel.gd` | Pure data factory for `stages[i]["explore_map"]`. `make(w, h, situations)`, `make_default()`. MIN 30×30. (V2-STAGE-001) |
 | FlowRealmSelectState | `core/state/flow/states/sanctum/FlowRealmSelectState.gd` | Realm card list + runtime locks. Per-row dispatch. `nav.back` → SANCTUM. |
 | FlowStageMapState | `core/state/flow/states/venture/FlowStageMapState.gd` | Stage progress list + party prep. Static `build_snapshot()`. |
-| FlowStageState | `core/state/flow/states/venture/FlowStageState.gd` | Single-stage overview. `cta.start` → ENCOUNTER directly. |
+| FlowStageState | `core/state/flow/states/venture/FlowStageState.gd` | Single-stage overview. `cta.start` → STAGE_EXPLORE (V2-STAGE-001). |
+| FlowStageExploreState | `core/state/flow/states/venture/FlowStageExploreState.gd` | Exploration map state `flow.stage_explore`. Locks map on first entry. Directive-guided party movement. (V2-STAGE-001) |
+| StageExploreScreen | `ui/screens/venture/StageExploreScreen.gd` + `.tscn` | Isometric TileMap exploration board. Situation markers (hidden=?, revealed=type, resolved=✓), party token, HUD strip, action bar, situation overlay. (V2-STAGE-001) |
 | ResolveScreen | `ui/screens/ResolveScreen.gd` | VICTORY/DEFEAT. Actor roster. `cta.continue` → sanctum. `cta.next_stage` → dispatches `flow.complete_stage`. |
 | SkillDefinition | `core/progression/SkillDefinition.gd` | Active skill data contract + validator. `MAX_SKILL_SLOTS=1`. |
 
-**Tests (197 total, 30 suites):** EconomyTests, SanctumSummonTests, PartyTests, ActorTests, EchoSchemaTests, ActorStatInitTests, DerivedStatTests, BehaviorModuleTests, MeleeTests, BehaviorArbiterTests, StructureTests, MoraleInfluenceTests, KODeathTests, EmotionTests, VectorTests, DirectiveTests, GridTests, CombatStateTests, CombatServiceTests, CombatRoundTests, CombatSnapshotTests, RetreatTests, ArchetypeTests, StageProgressionTests, SkillDefinitionTests, CallingBehaviorTests, ExclusiveActionTests, CooldownTests, PassiveIdentityTests, SkillLoadoutTests, MaturityExpressionTests
+**Tests (210 total, 31 suites):** EconomyTests, SanctumSummonTests, PartyTests, ActorTests, EchoSchemaTests, ActorStatInitTests, DerivedStatTests, BehaviorModuleTests, MeleeTests, BehaviorArbiterTests, StructureTests, MoraleInfluenceTests, KODeathTests, EmotionTests, VectorTests, DirectiveTests, GridTests, CombatStateTests, CombatServiceTests, CombatRoundTests, CombatSnapshotTests, RetreatTests, ArchetypeTests, StageProgressionTests, SkillDefinitionTests, CallingBehaviorTests, ExclusiveActionTests, CooldownTests, PassiveIdentityTests, SkillLoadoutTests, MaturityExpressionTests, StageExploreTests (V2-STAGE-001)
 
 ---
 

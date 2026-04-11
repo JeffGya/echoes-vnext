@@ -17,6 +17,7 @@ const REALM_INIT := "flow.realm_init"  # REALM-001: overview card shown after re
 const STAGE_MAP := "flow.stage_map"
 const STAGE := "flow.stage"
 const ENCOUNTER := "flow.encounter"
+const STAGE_EXPLORE := "flow.stage_explore"  # V2-STAGE-001: procedural exploration map
 
 # Sanctum sub-screens
 const VOW_MANAGE := "flow.vow_manage"  # VOW-001: vow doctrine screen

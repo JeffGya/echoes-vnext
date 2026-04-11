@@ -95,7 +95,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var actions: Dictionary = {
 		"cta.start": {
 			"type":  "flow.go_state",
-			"to":    FlowStateIds.ENCOUNTER,
+			"to":    FlowStateIds.STAGE_EXPLORE,  # V2-STAGE-001: enters exploration map
 			"label": "Begin",
 			"slot":  "cta.start",
 		},

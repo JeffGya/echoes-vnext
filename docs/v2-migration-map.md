@@ -475,6 +475,69 @@ These systems are already done and their save seams are live:
 
 ---
 
+## Domain 7 — Stage System (Exploration Map)
+
+### V1 Current State
+
+**Services/states:** `FlowStageState.gd`, `RealmGenerator.gd`, `StageModel.gd`, `ObjectiveModel.gd`
+
+**What V1 Stage provides:**
+- Linear `stages[i].objectives[]` array — all objectives visible upfront
+- No exploration map; stage is a pre-combat screen that routes directly to `flow.encounter`
+- No hidden situation state, no party movement, no intel layer
+
+**Save schema (V1):** `save_data["realms"][id].stages[]` — each stage has `index`, `type`, `seed`, `objectives[]`
+
+---
+
+### V2 Target (GDD — Stage System)
+
+**Procedural exploration tilemap** — party navigates a lockable isometric map with scattered hidden "situations".
+
+**Key V2 stage concepts:**
+- Party moves as one guided group token (player is a guide, not commander)
+- Directive-guided AI movement: `scout_carefully` → nearest unresolved; `seek_signs` → nearest objective first
+- Situations hidden by default (`revealed: false`); rendered as '?' until revealed
+- Situation types: `combat` (→ encounter), `npc` / `loot` / `money` (→ inline overlay in foundation)
+- Map locks on first entry and persists (deterministic re-entry via `CampaignSeed`)
+- `intel_clues: []` extensibility slot on every situation (V2-INTEL-001 reads/writes here)
+- Map size: random asymmetric per stage, minimum 30×30; earlier realms smaller, later realms larger
+
+**New models:**
+| Model | File | Purpose |
+|---|---|---|
+| `SituationModel` | `core/realms/SituationModel.gd` | Single situation dict factory |
+| `StageExploreModel` | `core/realms/StageExploreModel.gd` | Exploration map dict factory; attached as `stages[i]["explore_map"]` |
+
+**New flow state:** `flow.stage_explore` — `core/state/flow/states/venture/FlowStageExploreState.gd`
+
+---
+
+### Migration Action
+
+| Item | Action | Owner | Status |
+|---|---|---|---|
+| `stages[i].objectives[]` array | **Carryover** — unchanged, additive only | — | ✅ Done |
+| `stages[i]["explore_map"]` field | **New Build** — added by `RealmGenerator`; default injected by `SaveService` repair | V2-STAGE-001 | ✅ Done |
+| `StageModel.REQUIRED_FIELDS` | **Extend** — added `"explore_map"` | V2-STAGE-001 | ✅ Done |
+| `RealmGenerator.generate()` | **Extend** — appended `_generate_explore_map()` after all existing RNG draws | V2-STAGE-001 | ✅ Done |
+| `FlowStageState.cta.start` | **Rewrite** — routes to `STAGE_EXPLORE` instead of `ENCOUNTER` | V2-STAGE-001 | ✅ Done |
+| `FlowStageExploreState` | **New Build** | V2-STAGE-001 | ✅ Done |
+| Situation type taxonomy | **New Build stub** — combat/npc/loot/money stubs; full V2 objective taxonomy deferred | V2-STAGE-002 | Draft |
+| Intel persistence across runs | **Deferred** — `intel_clues: []` slot present; persistence deferred | V2-INTEL-001 | Draft |
+| NPC contact actor framework | **Deferred** — inline overlay placeholder only | V2-STAGE-003 | Draft |
+| Loot/money full outcomes | **Deferred** — inline overlay stubs only | V2-STAGE-004 | Draft |
+| Individual party units | **Deferred** — group token only in foundation | V2-STAGE-101 | Draft |
+| Escape mechanic (full) | **Deferred** — stub roll > 40 in foundation | V2-INTEL-002 | Draft |
+
+**Invariants:**
+- `stages[i].objectives[]` array NEVER touched by explore_map work (additive only)
+- `RealmGenerator` RNG draw order NOT reordered — explore paths appended after all existing draws
+- All situations start `revealed: false`, `resolved: false`, `intel_clues: []`
+- `SaveService` repair is additive — missing `explore_map` gets `StageExploreModel.make_default()`, never removed
+
+---
+
 ## Story Dependency Order (Alignment Wave)
 
 ```
@@ -490,6 +553,14 @@ V2-MIG-001 (this doc) ✅ Done
   ├── V2-DIRECTIVE-001 Directive rewrite (Scout Carefully / Seek Signs) ✅ Done
   ├── V2-SANCTUM-001+  Building + Continuity system
   ├── V2-ECONOMY-001+  Economy expansion (Relics, Faith, Harmony, Favor)
+  ├── V2-DIRECTIVE-001 Directive rewrite (Scout Carefully / Seek Signs) ✅ Done
+  │     └── V2-STAGE-001 Exploration stage map foundation ✅ Done
+  │           ├── V2-INTEL-001  Intel persistence + intel_clues
+  │           ├── V2-INTEL-002  Full escape / scouting sacrifice mechanic
+  │           ├── V2-STAGE-002  Full V2 objective taxonomy (Scout/Reveal, etc.)
+  │           ├── V2-STAGE-003  NPC contact actor framework
+  │           ├── V2-STAGE-004  Loot/money full outcomes
+  │           └── V2-STAGE-101  Individual party units / roaming enemies
   └── V2-WEAVE-001     Foundation Thread recovery model ✅ Done
         (per-stage segments → Realm completion → Threads crystallize → sanctum.threads reserve)
         (Thread Reserve Strip in Sanctum, Recovery Cord in StageMap)
