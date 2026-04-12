@@ -600,6 +600,7 @@ After `advance_turn`, party is at situation but does not engage automatically. `
 ---
 
 ### Deferred
+- `objectives_found` persistence across stage entries: currently reset to 0 on every entry. Should persist so previously completed objectives are not re-counted on re-entry. Deferred to V2-STAGE-002 or a dedicated stage persistence story.
 - Full art: StageScreen, StageMapScreen (scaffolds built; deferred to UI-006+)
 - HP progress bar in RealmShell EchoBar (text label is current; bar deferred to UX pass)
 - Voice reactive system: VOICE-001 (reactive bark responses — other actors respond to barks, deferred). Bark display: VOICE-002 (deferred). Bark snapshot fields + ShoutBank expansion: DONE (PROG-010).

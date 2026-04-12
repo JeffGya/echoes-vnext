@@ -47,6 +47,8 @@ static func _reset_session_state(flow_ctx: FlowContext, t: int) -> void:
 
 	# Preserve map geometry only — width, height, objectives_total, locked, situation positions.
 	# All runtime state is wiped clean so every entry starts fresh.
+	# DEFERRED (V2-STAGE-002 or later): objectives_found should persist across entries so
+	# previously completed objectives are not re-counted. Currently reset to 0 each entry.
 	var width       := int(explore_map.get("width",  StageExploreModelScript.MIN_WIDTH))
 	var height      := int(explore_map.get("height", StageExploreModelScript.MIN_HEIGHT))
 	var obj_total   := int(explore_map.get("objectives_total", 0))
