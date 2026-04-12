@@ -347,6 +347,14 @@ func dispatch(action: Dictionary) -> Dictionary:
 		"stage.engage_situation":
 			_handle_stage_engage_situation(action, t)
 
+		"stage.confirm_return_home":
+			flow_machine.transition(FlowStateIds.STAGE_MAP, flow_ctx, logger, t, "stage.return_home.confirmed")
+
+		"stage.dismiss_overlay":
+			var _stg := FlowStageExploreStateScript._get_current_stage(flow_ctx)
+			if not _stg.is_empty():
+				flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
 		# UI actions
 		"ui.dismiss_summon_reveals":
 			flow_ctx.pending_summon_reveals.clear()
@@ -2544,17 +2552,25 @@ func _handle_stage_return_home(_action: Dictionary, t: int) -> void:
 		explore_map["party_state"] = StageExploreModelScript.STATE_ESCAPED
 		stage["explore_map"] = explore_map
 		FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
-		flow_ctx.save_request = true
+		flow_ctx.save_request        = true
 		flow_ctx.save_request_reason = "stage.escaped"
-		flow_machine.transition(FlowStateIds.STAGE_MAP, flow_ctx, logger, t, "stage.return_home.success")
+		var snap_ok := FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
+		snap_ok["data"]["return_home_result"] = {
+			"success": true,
+			"message": "The party slips away into the dark and finds the path home.",
+		}
+		flow_ctx.last_snapshot = snap_ok
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
 	else:
-		# Escape failed — rebuild snapshot with return_failed flag for UI feedback
-		# Full consequence mechanic deferred to V2-INTEL-002
+		# Escape failed — show overlay. Full consequence mechanic deferred to V2-INTEL-002.
 		stage["explore_map"] = explore_map
 		FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
-		var snap := FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
-		snap["data"]["return_failed"] = true
-		flow_ctx.last_snapshot = snap
+		var snap_fail := FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
+		snap_fail["data"]["return_home_result"] = {
+			"success": false,
+			"message": "The way is blocked. The party cannot leave yet.",
+		}
+		flow_ctx.last_snapshot = snap_fail
 		flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 

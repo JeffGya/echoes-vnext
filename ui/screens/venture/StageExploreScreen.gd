@@ -212,13 +212,17 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 	_back_btn.hide()
 	_directive_overlay.hide()
 
-	# Overlay: pending engagement wins over non-combat result
-	var pending_v: Variant   = data.get("situation_pending", {})
-	var pending: Dictionary  = pending_v if pending_v is Dictionary else {}
-	var eng_v: Variant       = actions.get("cta.engage_situation", {})
-	var eng: Dictionary      = eng_v if eng_v is Dictionary else {}
+	# Overlay priority: return_home_result > pending engagement > non-combat result
+	var rhr_v: Variant      = data.get("return_home_result", {})
+	var rhr: Dictionary     = rhr_v if rhr_v is Dictionary else {}
+	var pending_v: Variant  = data.get("situation_pending", {})
+	var pending: Dictionary = pending_v if pending_v is Dictionary else {}
+	var eng_v: Variant      = actions.get("cta.engage_situation", {})
+	var eng: Dictionary     = eng_v if eng_v is Dictionary else {}
 
-	if not pending.is_empty() and not eng.is_empty():
+	if not rhr.is_empty():
+		_show_return_home_overlay(rhr)
+	elif not pending.is_empty() and not eng.is_empty():
 		_show_pending_overlay(pending, eng)
 	elif data.has("situation_overlay"):
 		var ov_v: Variant   = data.get("situation_overlay", {})
@@ -250,6 +254,21 @@ func _show_result_overlay(result: Dictionary) -> void:
 	_sit_result_label.text  = str(result.get("result_text", ""))
 	_dismiss_btn.text       = "Continue"
 	_cached_overlay_action  = { "type": "stage.dismiss_overlay" }
+	_sit_overlay.show()
+
+
+func _show_return_home_overlay(result: Dictionary) -> void:
+	var success := bool(result.get("success", false))
+	_sit_header_label.text = "Return Home"
+	if success:
+		_sit_type_label.text   = "Escaped"
+		_dismiss_btn.text      = "Leave"
+		_cached_overlay_action = { "type": "stage.confirm_return_home" }
+	else:
+		_sit_type_label.text   = "Blocked"
+		_dismiss_btn.text      = "Continue"
+		_cached_overlay_action = { "type": "stage.dismiss_overlay" }
+	_sit_result_label.text = str(result.get("message", ""))
 	_sit_overlay.show()
 
 
