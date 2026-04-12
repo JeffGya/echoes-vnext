@@ -2,6 +2,8 @@
 
 [ext_resource type="Script" uid="uid://stgexplscr_gd" path="res://ui/screens/venture/StageExploreScreen.gd" id="1_script"]
 [ext_resource type="Texture2D" uid="uid://bitpbc4p75ue7" path="res://assets/sanctum/tiles/floor/sanctum_tile_floor_clay_base_128x96.png" id="2_tile"]
+[ext_resource type="Script" path="res://ui/screens/venture/PartyTokenLayer.gd" id="3_ptl"]
+[ext_resource type="PackedScene" path="res://ui/screens/venture/DirectiveSelectOverlay.tscn" id="4_directive_overlay"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_explore"]
 texture = ExtResource("2_tile")
@@ -43,6 +45,15 @@ content_margin_right = 12.0
 content_margin_bottom = 8.0
 bg_color = Color(0, 0, 0, 0.55)
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_info"]
+content_margin_left = 16.0
+content_margin_top = 12.0
+content_margin_right = 16.0
+content_margin_bottom = 12.0
+bg_color = Color(0.04, 0.04, 0.08, 0.88)
+border_width_bottom = 1
+border_color = Color(0.5, 0.5, 0.6, 0.5)
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hidden_circle"]
 bg_color = Color(0.35, 0.35, 0.45, 0.9)
 corner_radius_top_left = 20
@@ -64,13 +75,6 @@ corner_radius_top_right = 20
 corner_radius_bottom_right = 20
 corner_radius_bottom_left = 20
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_party_token"]
-bg_color = Color(0.9, 0.75, 0.2, 1.0)
-corner_radius_top_left = 16
-corner_radius_top_right = 16
-corner_radius_bottom_right = 16
-corner_radius_bottom_left = 16
-
 [node name="StageExploreScreen" type="Control"]
 layout_mode = 3
 anchors_preset = 15
@@ -84,9 +88,9 @@ script = ExtResource("1_script")
 y_sort_enabled = true
 tile_set = SubResource("TileSet_explore")
 
-[node name="SituationLayer" type="Node2D" parent="."]
+[node name="SituationLayer" type="Node2D" parent="Board"]
 
-[node name="HiddenMarkerTemplate" type="Control" parent="SituationLayer"]
+[node name="HiddenMarkerTemplate" type="Control" parent="Board/SituationLayer"]
 visible = false
 custom_minimum_size = Vector2(40, 40)
 offset_left = -20.0
@@ -94,7 +98,7 @@ offset_top = -20.0
 offset_right = 20.0
 offset_bottom = 20.0
 
-[node name="HiddenCircle" type="PanelContainer" parent="SituationLayer/HiddenMarkerTemplate"]
+[node name="HiddenCircle" type="PanelContainer" parent="Board/SituationLayer/HiddenMarkerTemplate"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -103,7 +107,7 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_hidden_circle")
 
-[node name="HiddenLabel" type="Label" parent="SituationLayer/HiddenMarkerTemplate/HiddenCircle"]
+[node name="HiddenLabel" type="Label" parent="Board/SituationLayer/HiddenMarkerTemplate/HiddenCircle"]
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
@@ -112,7 +116,7 @@ vertical_alignment = 1
 theme_override_font_sizes/font_size = 20
 text = "?"
 
-[node name="RevealedMarkerTemplate" type="Control" parent="SituationLayer"]
+[node name="RevealedMarkerTemplate" type="Control" parent="Board/SituationLayer"]
 visible = false
 custom_minimum_size = Vector2(40, 40)
 offset_left = -20.0
@@ -120,7 +124,7 @@ offset_top = -20.0
 offset_right = 20.0
 offset_bottom = 20.0
 
-[node name="RevealedCircle" type="PanelContainer" parent="SituationLayer/RevealedMarkerTemplate"]
+[node name="RevealedCircle" type="PanelContainer" parent="Board/SituationLayer/RevealedMarkerTemplate"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -129,7 +133,7 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_revealed_circle")
 
-[node name="TypeLabel" type="Label" parent="SituationLayer/RevealedMarkerTemplate/RevealedCircle"]
+[node name="TypeLabel" type="Label" parent="Board/SituationLayer/RevealedMarkerTemplate/RevealedCircle"]
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
@@ -138,7 +142,7 @@ vertical_alignment = 1
 theme_override_font_sizes/font_size = 11
 text = "?"
 
-[node name="ResolvedMarkerTemplate" type="Control" parent="SituationLayer"]
+[node name="ResolvedMarkerTemplate" type="Control" parent="Board/SituationLayer"]
 visible = false
 custom_minimum_size = Vector2(40, 40)
 offset_left = -20.0
@@ -146,7 +150,7 @@ offset_top = -20.0
 offset_right = 20.0
 offset_bottom = 20.0
 
-[node name="ResolvedCircle" type="PanelContainer" parent="SituationLayer/ResolvedMarkerTemplate"]
+[node name="ResolvedCircle" type="PanelContainer" parent="Board/SituationLayer/ResolvedMarkerTemplate"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -155,7 +159,7 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_resolved_circle")
 
-[node name="ResolvedLabel" type="Label" parent="SituationLayer/ResolvedMarkerTemplate/ResolvedCircle"]
+[node name="ResolvedLabel" type="Label" parent="Board/SituationLayer/ResolvedMarkerTemplate/ResolvedCircle"]
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
@@ -164,13 +168,8 @@ vertical_alignment = 1
 theme_override_font_sizes/font_size = 16
 text = "✓"
 
-[node name="PartyToken" type="PanelContainer" parent="."]
-custom_minimum_size = Vector2(32, 32)
-offset_left = -16.0
-offset_top = -16.0
-offset_right = 16.0
-offset_bottom = 16.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_party_token")
+[node name="PartyTokenLayer" type="Node2D" parent="Board"]
+script = ExtResource("3_ptl")
 
 [node name="HudStrip" type="PanelContainer" parent="."]
 layout_mode = 1
@@ -229,6 +228,15 @@ custom_minimum_size = Vector2(140, 56)
 theme_type_variation = "ButtonGhost"
 text = "Return Home"
 
+[node name="BeginButton" type="Button" parent="ActionBar"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+custom_minimum_size = Vector2(160, 56)
+size_flags_horizontal = 3
+theme_type_variation = "ButtonPrimary"
+text = "Begin"
+
 [node name="SituationOverlay" type="PanelContainer" parent="."]
 visible = false
 layout_mode = 1
@@ -238,16 +246,23 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -200.0
-offset_top = -160.0
+offset_top = -180.0
 offset_right = 200.0
-offset_bottom = 160.0
+offset_bottom = 180.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
 
 [node name="OverlayContent" type="VBoxContainer" parent="SituationOverlay"]
 layout_mode = 2
-theme_override_constants/separation = 16
+theme_override_constants/separation = 12
+
+[node name="SituationHeaderLabel" type="Label" parent="SituationOverlay/OverlayContent"]
+unique_name_in_owner = true
+layout_mode = 2
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 14
+text = "Situation Ahead"
 
 [node name="SituationTypeLabel" type="Label" parent="SituationOverlay/OverlayContent"]
 unique_name_in_owner = true
@@ -271,3 +286,63 @@ custom_minimum_size = Vector2(120, 48)
 size_flags_horizontal = 4
 theme_type_variation = "ButtonPrimary"
 text = "Continue"
+
+[node name="StageInfoPanel" type="PanelContainer" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 112.0
+grow_horizontal = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_info")
+
+[node name="InfoVBox" type="VBoxContainer" parent="StageInfoPanel"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="StageTitleLabel" type="Label" parent="StageInfoPanel/InfoVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 20
+horizontal_alignment = 1
+text = ""
+
+[node name="ObjectiveTitleLabel" type="Label" parent="StageInfoPanel/InfoVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 13
+horizontal_alignment = 1
+text = ""
+
+[node name="DirectiveLabel" type="Label" parent="StageInfoPanel/InfoVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 12
+horizontal_alignment = 1
+text = ""
+
+[node name="BackButton" type="Button" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 96.0
+offset_bottom = 64.0
+custom_minimum_size = Vector2(80, 48)
+theme_type_variation = "ButtonGhost"
+text = "←"
+
+[node name="DirectiveSelectOverlay" parent="." instance=ExtResource("4_directive_overlay")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2

@@ -2468,42 +2468,46 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 	# Move party to situation position
 	var sit_pos_v: Variant = target_sit.get("pos", { "col": 0, "row": 0 })
 	var sit_pos: Dictionary = sit_pos_v if sit_pos_v is Dictionary else { "col": 0, "row": 0 }
-	explore_map["party_pos"] = sit_pos
-	explore_map["turn_count"] = int(explore_map.get("turn_count", 0)) + 1
+	explore_map["party_pos"]         = sit_pos
+	explore_map["turn_count"]        = int(explore_map.get("turn_count", 0)) + 1
 	explore_map["last_situation_id"] = str(target_sit.get("id", ""))
 
+	var sit_id     := str(target_sit.get("id", "sit.0"))
+	var turn_count := int(explore_map.get("turn_count", 0))
+
+	# Reveal check — run before save so result is persisted in one write
+	if not bool(target_sit.get("revealed", false)):
+		var rng := CampaignSeed.get_rng_from(
+			int(flow_ctx.save_data.get("realms", {}).get(flow_ctx.realm_id, {}).get("seed", 0)),
+			"stage.reveal.%s.%d" % [sit_id, turn_count]
+		)
+		if rng.randi_range(0, 100) > 50:
+			# Scout roll succeeded — mark revealed before the engagement popup
+			var sits_v2: Variant = explore_map.get("situations", [])
+			var sits_arr: Array  = sits_v2 if sits_v2 is Array else []
+			for _si in range(sits_arr.size()):
+				var s_v2: Variant = sits_arr[_si]
+				if s_v2 is Dictionary and str((s_v2 as Dictionary).get("id", "")) == sit_id:
+					var s2: Dictionary = s_v2
+					s2["revealed"] = true
+					sits_arr[_si]  = s2
+					break
+			explore_map["situations"] = sits_arr
+
+	# Park the party — player confirms engagement via situation popup
+	explore_map["pending_situation_id"] = sit_id
 	stage["explore_map"] = explore_map
 	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
-	flow_ctx.save_request = true
+	flow_ctx.save_request        = true
 	flow_ctx.save_request_reason = "stage.advance_turn"
 
-	logger.info(t, "stage.advance_turn", "Party moved to situation", {
-		"stage_id":    flow_ctx.stage_id,
-		"situation_id": str(target_sit.get("id", "")),
-		"turn_count":  explore_map["turn_count"],
+	logger.info(t, "stage.advance_turn", "Party moved to situation (pending engagement)", {
+		"stage_id":     flow_ctx.stage_id,
+		"situation_id": sit_id,
+		"turn_count":   explore_map["turn_count"],
 	})
 
-	# If already revealed → go straight to engagement
-	if bool(target_sit.get("revealed", false)):
-		_handle_stage_engage_situation({ "situation_id": str(target_sit.get("id", "")) }, t)
-		return
-
-	# Stub reveal check: seeded roll
-	var sit_id    := str(target_sit.get("id", "sit.0"))
-	var turn_count := int(explore_map.get("turn_count", 0))
-	var rng := CampaignSeed.get_rng_from(
-		int(flow_ctx.save_data.get("realms", {}).get(flow_ctx.realm_id, {}).get("seed", 0)),
-		"stage.reveal.%s.%d" % [sit_id, turn_count]
-	)
-	var roll := rng.randi_range(0, 100)
-
-	if roll > 50:
-		# Reveal the situation — party scouted it before committing
-		_mark_situation_revealed(stage, sit_id, t)
-		flow_machine.refresh_snapshot(flow_ctx, logger, t)
-	else:
-		# Party stumbled in blind — immediate engagement
-		_handle_stage_engage_situation({ "situation_id": sit_id }, t)
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 
 ## Party attempts to return home before completing all objectives.
@@ -2570,6 +2574,8 @@ func _handle_stage_engage_situation(action: Dictionary, t: int) -> void:
 
 	var map_v: Variant = stage.get("explore_map", {})
 	var explore_map: Dictionary = map_v if map_v is Dictionary else {}
+	# Clear pending state — engagement is now committed
+	explore_map["pending_situation_id"] = ""
 	var sits_v: Variant = explore_map.get("situations", [])
 	var situations: Array = sits_v if sits_v is Array else []
 

@@ -135,6 +135,29 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				"resolved": false,
 			})
 
+	# Pending situation — set by advance_turn, cleared by engage_situation
+	var pending_sit_id := str(explore_map.get("pending_situation_id", ""))
+	var pending_sit: Dictionary = {}
+	if not pending_sit_id.is_empty():
+		for sit_v2 in situations_raw:
+			var sit2: Dictionary = sit_v2 if sit_v2 is Dictionary else {}
+			if str(sit2.get("id", "")) == pending_sit_id and not bool(sit2.get("resolved", false)):
+				pending_sit = sit2
+				break
+
+	var has_pending := not pending_sit.is_empty()
+
+	# Build situation_pending payload for the UI engagement popup
+	var situation_pending: Dictionary = {}
+	if has_pending:
+		var pend_revealed: bool = bool(pending_sit.get("revealed", false))
+		situation_pending = {
+			"situation_id": pending_sit_id,
+			"revealed":     pend_revealed,
+			"type":         str(pending_sit.get("type", "unknown")) if pend_revealed else "hidden",
+			"is_objective": bool(pending_sit.get("is_objective", false)) if pend_revealed else false,
+		}
+
 	# Party preview (same shape as flow.stage and flow.stage_map)
 	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
 	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
@@ -164,12 +187,13 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"type":     "stage.advance_turn",
 			"label":    "Advance",
 			"slot":     "cta.advance_turn",
-			"disabled": not is_exploring,
+			"disabled": not is_exploring or has_pending,
 		},
 		"cta.return_home": {
-			"type":  "stage.return_home",
-			"label": "Return Home",
-			"slot":  "cta.return_home",
+			"type":     "stage.return_home",
+			"label":    "Return Home",
+			"slot":     "cta.return_home",
+			"disabled": has_pending,
 		},
 		"nav.back": {
 			"type":     "flow.go_state",
@@ -179,6 +203,14 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"disabled": is_exploring,  # Party is in the field — can't teleport back
 		},
 	}
+
+	if has_pending:
+		actions["cta.engage_situation"] = {
+			"type":         "stage.engage_situation",
+			"situation_id": pending_sit_id,
+			"label":        "Enter",
+			"slot":         "cta.engage_situation",
+		}
 
 	return {
 		"type": FlowStateIds.STAGE_EXPLORE,
@@ -192,8 +224,9 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"turn_count":       turn_count,
 			"objectives_found": obj_found,
 			"objectives_total": obj_total,
-			"situations":       situations,
-			"party_preview":    party_preview,
+			"situations":        situations,
+			"situation_pending": situation_pending,
+			"party_preview":     party_preview,
 		},
 		"actions": actions,
 		"meta": { "t": t },

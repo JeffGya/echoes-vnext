@@ -1,41 +1,74 @@
 # res://ui/screens/venture/StageExploreScreen.gd
-# Logic only — all visual structure is in StageExploreScreen.tscn.
-# V2-STAGE-001: Procedural exploration map screen for flow.stage_explore.
+# Merged screen for both flow.stage (preview mode) and flow.stage_explore (explore mode).
+# Single Board TileMapLayer is shared across both modes — no scene swap occurs.
+# RealmShell's scene-reuse logic ensures the same instance persists through the
+# flow.stage → flow.stage_explore transition, so the Begin zoom tween plays on
+# the actual board the player will use.
 #
-# Contract (UI-001):
-# - set_snapshot(snap: Dictionary) → updates all @onready refs from snapshot data
-# - action_requested signal for all player interactions
-# - Never reads sim internals directly
-# - No Node.new() or StyleBox in .gd — visual authoring is the .tscn's job
+# Preview mode  (snap.type == "flow.stage"):
+#   Board scaled to fit screen; ? markers for all situations; stage info + directive overlay shown.
+#   Begin button triggers zoom tween → emits cta.start → backend transitions to flow.stage_explore.
+#
+# Explore mode (snap.type == "flow.stage_explore"):
+#   Board at 1:1 scale, centered on party pos; HUD visible; Advance + Return buttons.
+#   situation_pending data → shows engagement popup (combat confirmation).
+#   situation_overlay data → shows non-combat result popup.
+#
+# Contract (UI-001): set_snapshot / action_requested signal. No sim state access.
 
 class_name StageExploreScreen
 extends Control
 
 signal action_requested(action: Dictionary)
 
-# ─── Tile constants (same source as CombatBoardScreen) ───────────────────────
+# ─── Tile constants ───────────────────────────────────────────────────────────
 const _TILE_SOURCE_ID:    int      = 0
 const _TILE_ATLAS_COORDS: Vector2i = Vector2i(0, 0)
 
-# ─── @onready refs ────────────────────────────────────────────────────────────
-@onready var _board:             TileMapLayer   = $Board
-@onready var _situation_layer:   Node2D         = $SituationLayer
-@onready var _hidden_template:   Control        = $SituationLayer/HiddenMarkerTemplate
-@onready var _revealed_template: Control        = $SituationLayer/RevealedMarkerTemplate
-@onready var _resolved_template: Control        = $SituationLayer/ResolvedMarkerTemplate
-@onready var _party_token:       Control        = $PartyToken
-@onready var _turn_label:        Label          = %TurnLabel
-@onready var _objectives_label:  Label          = %ObjectivesLabel
-@onready var _party_state_label: Label          = %PartyStateLabel
-@onready var _advance_btn:       Button         = %AdvanceButton
-@onready var _return_btn:        Button         = %ReturnButton
-@onready var _sit_overlay:       PanelContainer = $SituationOverlay
-@onready var _sit_type_label:    Label          = %SituationTypeLabel
-@onready var _sit_result_label:  Label          = %SituationResultLabel
-@onready var _dismiss_btn:       Button         = %DismissButton
+# ─── Zoom tween constants (preview → explore transition) ─────────────────────
+const _ZOOM_DURATION:  float = 0.35
+const _ZOOM_SCALE_MUL: float = 3.0
 
-# Tracks dynamically duplicated situation markers so they can be freed on redraw
+# ─── Cached actions ───────────────────────────────────────────────────────────
+var _cached_start_action:   Dictionary = {}
+var _cached_back_action:    Dictionary = {}
+var _cached_advance_action: Dictionary = {}
+var _cached_return_action:  Dictionary = {}
+var _cached_overlay_action: Dictionary = {}
+
+# ─── Preview state ────────────────────────────────────────────────────────────
+var _preview_scale:  float   = 1.0
+var _preview_center: Vector2 = Vector2.ZERO
+var _is_zooming:     bool    = false
+
+# ─── Situation marker tracking ────────────────────────────────────────────────
 var _situation_markers: Array = []
+
+# ─── @onready refs ────────────────────────────────────────────────────────────
+@onready var _board:              TileMapLayer   = $Board
+@onready var _situation_layer:    Node2D         = $Board/SituationLayer
+@onready var _hidden_template:    Control        = $Board/SituationLayer/HiddenMarkerTemplate
+@onready var _revealed_template:  Control        = $Board/SituationLayer/RevealedMarkerTemplate
+@onready var _resolved_template:  Control        = $Board/SituationLayer/ResolvedMarkerTemplate
+@onready var _party_layer:        Node2D         = $Board/PartyTokenLayer
+@onready var _hud_strip:          PanelContainer = $HudStrip
+@onready var _turn_label:         Label          = %TurnLabel
+@onready var _objectives_label:   Label          = %ObjectivesLabel
+@onready var _party_state_label:  Label          = %PartyStateLabel
+@onready var _advance_btn:        Button         = %AdvanceButton
+@onready var _return_btn:         Button         = %ReturnButton
+@onready var _begin_btn:          Button         = %BeginButton
+@onready var _stage_info:         PanelContainer = $StageInfoPanel
+@onready var _stage_title:        Label          = %StageTitleLabel
+@onready var _obj_title:          Label          = %ObjectiveTitleLabel
+@onready var _directive_label:    Label          = %DirectiveLabel
+@onready var _back_btn:           Button         = %BackButton
+@onready var _sit_overlay:        PanelContainer = $SituationOverlay
+@onready var _sit_header_label:   Label          = %SituationHeaderLabel
+@onready var _sit_type_label:     Label          = %SituationTypeLabel
+@onready var _sit_result_label:   Label          = %SituationResultLabel
+@onready var _dismiss_btn:        Button         = %DismissButton
+@onready var _directive_overlay:  Control        = %DirectiveSelectOverlay
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -44,62 +77,182 @@ func _ready() -> void:
 	_revealed_template.visible = false
 	_resolved_template.visible = false
 	_sit_overlay.visible       = false
+	_directive_overlay.visible = false
 
 	_advance_btn.pressed.connect(_on_advance_pressed)
 	_return_btn.pressed.connect(_on_return_pressed)
+	_begin_btn.pressed.connect(_on_begin_pressed)
+	_back_btn.pressed.connect(_on_back_pressed)
 	_dismiss_btn.pressed.connect(_on_dismiss_pressed)
+	_directive_overlay.action_requested.connect(_on_overlay_action)
 
-	# Fade in — counterpart to StageScreen's fade-out zoom transition
+
+# ─── Bespoke Screen Contract ─────────────────────────────────────────────────
+
+func set_snapshot(snap: Dictionary) -> void:
+	var snap_type := str(snap.get("type", ""))
+	var data: Dictionary    = snap.get("data", {})
+	var actions: Dictionary = snap.get("actions", {})
+
+	match snap_type:
+		"flow.stage":
+			_enter_preview_mode(data, actions)
+		_:  # flow.stage_explore
+			_enter_explore_mode(data, actions)
+
+
+# ─── Preview mode ─────────────────────────────────────────────────────────────
+
+func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
+	_is_zooming = false
+
+	# Fill board tiles and scale to fit the screen body
+	var cols := int(data.get("map_width",  30))
+	var rows := int(data.get("map_height", 30))
+	_fill_board(cols, rows)
+	_build_preview(cols, rows)
+
+	# Situation markers — all hidden in preview (positions only)
+	var raw_sits: Variant = data.get("map_situations", [])
+	var map_sits: Array   = raw_sits if raw_sits is Array else []
+	_rebuild_situations_preview(map_sits)
+
+	# Party token at entry position (instant snap, no animation)
+	var entry_v: Variant    = data.get("map_entry_pos", { "col": 0, "row": 0 })
+	var entry: Dictionary   = entry_v if entry_v is Dictionary else { "col": 0, "row": 0 }
+	var entry_local: Vector2 = _board.map_to_local(Vector2i(int(entry.get("col", 0)), int(entry.get("row", 0))))
+	_party_layer.call("init_position", entry_local)
+
+	# Stage info
+	_stage_title.text = str(data.get("stage_name", "Stage"))
+	var obj_count := int(data.get("objective_count", 0))
+	_obj_title.text   = "%d Objective%s" % [obj_count, "s" if obj_count != 1 else ""]
+	var dir_v: Variant      = data.get("directive", {})
+	var dir_data: Dictionary = dir_v if dir_v is Dictionary else {}
+	_directive_label.text   = "Directive: " + _label_for_directive(str(dir_data.get("active_id", "")))
+
+	# Cache actions
+	var start_v: Variant = actions.get("cta.start", {})
+	_cached_start_action = start_v if start_v is Dictionary else {}
+	var back_v: Variant  = actions.get("nav.back", {})
+	_cached_back_action  = back_v if back_v is Dictionary else {}
+
+	# UI mode: preview
+	_hud_strip.hide()
+	_advance_btn.hide()
+	_return_btn.hide()
+	_begin_btn.show()
+	_begin_btn.disabled = _cached_start_action.is_empty()
+	_stage_info.show()
+	_back_btn.show()
+	_sit_overlay.hide()
+
+	# Directive blocking overlay — auto-shown on every stage entry
+	if not dir_data.is_empty():
+		_directive_overlay.call("populate", dir_data)
+		_directive_overlay.show()
+
+	# Fade in (first entry into screen or returning from explore)
 	modulate = Color(1, 1, 1, 0)
 	var tween := create_tween()
 	tween.tween_property(self, "modulate", Color(1, 1, 1, 1), 0.25)
 
-func set_snapshot(snap: Dictionary) -> void:
-	var data: Dictionary    = snap.get("data", {})
-	var actions: Dictionary = snap.get("actions", {})
 
-	# ── HUD labels ──────────────────────────────────────────────────────────
+# ─── Explore mode ─────────────────────────────────────────────────────────────
+
+func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
+	var cols := int(data.get("map_width",  30))
+	var rows := int(data.get("map_height", 30))
+	_fill_board(cols, rows)
+
+	# Reset board to 1:1 scale, center party on screen
+	var ppos_v: Variant    = data.get("party_pos", { "col": 0, "row": 0 })
+	var ppos: Dictionary   = ppos_v if ppos_v is Dictionary else { "col": 0, "row": 0 }
+	var pcol := int(ppos.get("col", 0))
+	var prow := int(ppos.get("row", 0))
+	_board.scale    = Vector2.ONE
+	var party_local := _board.map_to_local(Vector2i(pcol, prow))
+	_board.position = Vector2(size.x * 0.5, size.y * 0.5) - party_local
+
+	# Animate party token to new position (lerp — combat board style)
+	_party_layer.call("set_party_position", party_local)
+
+	# Situation markers (full state — hidden / revealed / resolved)
+	var sits_v: Variant  = data.get("situations", [])
+	var situations: Array = sits_v if sits_v is Array else []
+	_rebuild_situations(situations)
+
+	# HUD
 	_turn_label.text       = "Turn %d" % int(data.get("turn_count", 0))
 	_objectives_label.text = "Objectives: %d / %d" % [
 		int(data.get("objectives_found", 0)),
-		int(data.get("objectives_total", 0))
+		int(data.get("objectives_total", 0)),
 	]
 	if data.get("return_failed", false):
 		_party_state_label.text = "Couldn't escape..."
 	else:
 		_party_state_label.text = str(data.get("party_state", "exploring")).capitalize()
 
-	# ── Floor tiles ─────────────────────────────────────────────────────────
-	_fill_board(int(data.get("map_width", 30)), int(data.get("map_height", 30)))
-
-	# ── Party token ─────────────────────────────────────────────────────────
-	var ppos: Dictionary = data.get("party_pos", { "col": 0, "row": 0 })
-	_party_token.position = _board.map_to_local(
-		Vector2i(int(ppos.get("col", 0)), int(ppos.get("row", 0)))
-	)
-
-	# ── Situation markers ────────────────────────────────────────────────────
-	_rebuild_situations(data.get("situations", []))
-
-	# ── Button states ────────────────────────────────────────────────────────
-	var adv: Dictionary = actions.get("cta.advance_turn", {})
+	# Button states
+	var adv_v: Variant   = actions.get("cta.advance_turn", {})
+	var adv: Dictionary  = adv_v if adv_v is Dictionary else {}
 	_advance_btn.disabled = bool(adv.get("disabled", false))
+	_cached_advance_action = { "type": "stage.advance_turn" }
+	_cached_return_action  = { "type": "stage.return_home" }
 
-	# ── Situation overlay ────────────────────────────────────────────────────
-	if data.has("situation_overlay"):
-		var ov: Dictionary     = data.get("situation_overlay", {})
-		_sit_type_label.text   = str(ov.get("type", "")).capitalize()
-		_sit_result_label.text = str(ov.get("result_text", ""))
-		_sit_overlay.visible   = true
+	# UI mode: explore
+	_hud_strip.show()
+	_advance_btn.show()
+	_return_btn.show()
+	_begin_btn.hide()
+	_stage_info.hide()
+	_back_btn.hide()
+	_directive_overlay.hide()
+
+	# Overlay: pending engagement wins over non-combat result
+	var pending_v: Variant   = data.get("situation_pending", {})
+	var pending: Dictionary  = pending_v if pending_v is Dictionary else {}
+	var eng_v: Variant       = actions.get("cta.engage_situation", {})
+	var eng: Dictionary      = eng_v if eng_v is Dictionary else {}
+
+	if not pending.is_empty() and not eng.is_empty():
+		_show_pending_overlay(pending, eng)
+	elif data.has("situation_overlay"):
+		var ov_v: Variant   = data.get("situation_overlay", {})
+		var ov: Dictionary  = ov_v if ov_v is Dictionary else {}
+		_show_result_overlay(ov)
 	else:
-		_sit_overlay.visible = false
+		_sit_overlay.hide()
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Floor rendering
-# ─────────────────────────────────────────────────────────────────────────────
+
+# ─── Situation overlays ──────────────────────────────────────────────────────
+
+func _show_pending_overlay(pending: Dictionary, engage_action: Dictionary) -> void:
+	var revealed := bool(pending.get("revealed", false))
+	_sit_header_label.text = "Situation Ahead"
+	if revealed:
+		_sit_type_label.text   = str(pending.get("type", "")).capitalize()
+		_sit_result_label.text = "The party stands before the situation. Commit to engage?"
+	else:
+		_sit_type_label.text   = "Unknown"
+		_sit_result_label.text = "The party senses something ahead. Enter to discover what awaits."
+	_dismiss_btn.text      = "Enter"
+	_cached_overlay_action = engage_action
+	_sit_overlay.show()
+
+
+func _show_result_overlay(result: Dictionary) -> void:
+	_sit_header_label.text  = "Situation"
+	_sit_type_label.text    = str(result.get("type", "")).capitalize()
+	_sit_result_label.text  = str(result.get("result_text", ""))
+	_dismiss_btn.text       = "Continue"
+	_cached_overlay_action  = { "type": "stage.dismiss_overlay" }
+	_sit_overlay.show()
+
+
+# ─── Board rendering ─────────────────────────────────────────────────────────
 
 func _fill_board(cols: int, rows: int) -> void:
-	# Only redraw when dimensions actually change to avoid thrashing
 	if _board.get_used_cells().size() == cols * rows:
 		return
 	_board.clear()
@@ -107,22 +260,66 @@ func _fill_board(cols: int, rows: int) -> void:
 		for r in range(rows):
 			_board.set_cell(Vector2i(c, r), _TILE_SOURCE_ID, _TILE_ATLAS_COORDS)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Situation markers
-# ─────────────────────────────────────────────────────────────────────────────
 
+## Scale and center the board to fit the screen body area (preview mode).
+## Body: below StageInfoPanel (~112px top), above ActionBar (80px bottom), 24px margins.
+func _build_preview(cols: int, rows: int) -> void:
+	var tl: Vector2 = _board.map_to_local(Vector2i(0,        0       ))
+	var tr: Vector2 = _board.map_to_local(Vector2i(cols - 1, 0       ))
+	var bl: Vector2 = _board.map_to_local(Vector2i(0,        rows - 1))
+	var br: Vector2 = _board.map_to_local(Vector2i(cols - 1, rows - 1))
+
+	var map_pixel_w: float = max(tr.x, br.x) - min(tl.x, bl.x)
+	var map_pixel_h: float = max(bl.y, br.y) - min(tl.y, tr.y)
+
+	var available_w: float = size.x - 48.0
+	var available_h: float = (size.y - 80.0) - 112.0 - 48.0
+
+	if map_pixel_w <= 0.0 or map_pixel_h <= 0.0 or available_w <= 0.0 or available_h <= 0.0:
+		return
+
+	_preview_scale = min(available_w / map_pixel_w, available_h / map_pixel_h)
+	_board.scale   = Vector2(_preview_scale, _preview_scale)
+
+	var map_center_local := (tl + tr + bl + br) / 4.0
+	var body_center_y: float = 112.0 + (size.y - 80.0 - 112.0) / 2.0
+	_preview_center = Vector2(size.x / 2.0, body_center_y)
+	_board.position = _preview_center - map_center_local * _preview_scale
+
+
+# ─── Situation markers ───────────────────────────────────────────────────────
+
+## Preview mode — all markers shown as hidden ? circles.
+func _rebuild_situations_preview(map_situations: Array) -> void:
+	for m in _situation_markers:
+		if is_instance_valid(m):
+			m.queue_free()
+	_situation_markers.clear()
+
+	for sit_v in map_situations:
+		var sit: Dictionary   = sit_v if sit_v is Dictionary else {}
+		var pos_v: Variant    = sit.get("pos", { "col": 0, "row": 0 })
+		var pos_d: Dictionary = pos_v if pos_v is Dictionary else { "col": 0, "row": 0 }
+		var marker: Control   = _hidden_template.duplicate() as Control
+		marker.position       = _board.map_to_local(Vector2i(int(pos_d.get("col", 0)), int(pos_d.get("row", 0))))
+		marker.visible        = true
+		_situation_layer.add_child(marker)
+		_situation_markers.append(marker)
+
+
+## Explore mode — markers reflect actual revealed / resolved state.
 func _rebuild_situations(situations: Array) -> void:
-	# Free all previously duplicated markers
 	for m in _situation_markers:
 		if is_instance_valid(m):
 			m.queue_free()
 	_situation_markers.clear()
 
 	for sit_v in situations:
-		var sit: Dictionary  = sit_v if sit_v is Dictionary else {}
-		var pos: Dictionary  = sit.get("pos", { "col": 0, "row": 0 })
-		var revealed: bool   = bool(sit.get("revealed", false))
-		var resolved: bool   = bool(sit.get("resolved", false))
+		var sit: Dictionary   = sit_v if sit_v is Dictionary else {}
+		var pos_v: Variant    = sit.get("pos", { "col": 0, "row": 0 })
+		var pos_d: Dictionary = pos_v if pos_v is Dictionary else { "col": 0, "row": 0 }
+		var revealed: bool    = bool(sit.get("revealed", false))
+		var resolved: bool    = bool(sit.get("resolved", false))
 
 		var template: Control
 		if resolved:
@@ -133,29 +330,80 @@ func _rebuild_situations(situations: Array) -> void:
 			template = _hidden_template
 
 		var marker: Control = template.duplicate() as Control
-		marker.visible  = true
-		marker.position = _board.map_to_local(
-			Vector2i(int(pos.get("col", 0)), int(pos.get("row", 0)))
-		)
+		marker.position     = _board.map_to_local(Vector2i(int(pos_d.get("col", 0)), int(pos_d.get("row", 0))))
+		marker.visible      = true
 
-		# Stamp type name on revealed (non-resolved) markers
 		if revealed and not resolved:
-			var type_lbl: Label = marker.get_node_or_null("TypeLabel")
+			var type_lbl: Label = marker.get_node_or_null("RevealedCircle/TypeLabel")
 			if type_lbl != null:
 				type_lbl.text = str(sit.get("type", "")).capitalize()
 
 		_situation_layer.add_child(marker)
 		_situation_markers.append(marker)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Button handlers
-# ─────────────────────────────────────────────────────────────────────────────
+
+# ─── Button handlers ─────────────────────────────────────────────────────────
 
 func _on_advance_pressed() -> void:
-	action_requested.emit({ "type": "stage.advance_turn" })
+	if not _cached_advance_action.is_empty():
+		action_requested.emit(_cached_advance_action)
+
 
 func _on_return_pressed() -> void:
-	action_requested.emit({ "type": "stage.return_home" })
+	if not _cached_return_action.is_empty():
+		action_requested.emit(_cached_return_action)
+
+
+func _on_begin_pressed() -> void:
+	if _cached_start_action.is_empty() or _is_zooming:
+		return
+	_is_zooming        = true
+	_begin_btn.disabled = true
+
+	# Zoom-in tween: same approach as StageScreen — scales the board up while
+	# fading the stage info panel out. No scene swap: the board stays in this
+	# screen instance for the explore mode that follows.
+	var tween := create_tween()
+	tween.set_ease(Tween.EASE_IN)
+	tween.set_trans(Tween.TRANS_QUAD)
+
+	var target_scale := Vector2(_preview_scale * _ZOOM_SCALE_MUL, _preview_scale * _ZOOM_SCALE_MUL)
+	var current_pos  := _board.position
+	var map_offset   := _preview_center - current_pos
+	var target_pos   := _preview_center - map_offset * _ZOOM_SCALE_MUL
+
+	tween.parallel().tween_property(_board,      "scale",    target_scale,          _ZOOM_DURATION)
+	tween.parallel().tween_property(_board,      "position", target_pos,            _ZOOM_DURATION)
+	tween.parallel().tween_property(_stage_info, "modulate", Color(1, 1, 1, 0),     _ZOOM_DURATION)
+	tween.parallel().tween_property(_back_btn,   "modulate", Color(1, 1, 1, 0),     _ZOOM_DURATION)
+
+	tween.finished.connect(_on_zoom_finished)
+
+
+func _on_zoom_finished() -> void:
+	action_requested.emit(_cached_start_action)
+
+
+func _on_back_pressed() -> void:
+	if not _cached_back_action.is_empty():
+		action_requested.emit(_cached_back_action)
+
 
 func _on_dismiss_pressed() -> void:
-	action_requested.emit({ "type": "stage.dismiss_overlay" })
+	_sit_overlay.hide()
+	if not _cached_overlay_action.is_empty():
+		action_requested.emit(_cached_overlay_action)
+		_cached_overlay_action = {}
+
+
+func _on_overlay_action(action: Dictionary) -> void:
+	action_requested.emit(action)
+
+
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+
+func _label_for_directive(dir_id: String) -> String:
+	match dir_id:
+		"directive.scout_carefully": return "Scout Carefully"
+		"directive.seek_signs":      return "Seek Signs"
+		_: return dir_id.capitalize() if not dir_id.is_empty() else "None"

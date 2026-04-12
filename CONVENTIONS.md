@@ -392,7 +392,7 @@ Full field shapes live in each FlowState file (`core/state/flow/states/`).
 | RealmSelectScreen | `flow.realm_select` | title, current_realm_id, realms[] (id/name/virtue/description/stage_count_min/max/status/locked) | nav.back |
 | ~~RealmInitScreen~~ | `flow.realm_init` | **Removed (UI-003)** — FlowRealmInitState now auto-advances to `flow.stage_map` on enter(); no screen rendered. | — |
 | StageMapScreen | `flow.stage_map` | realm_id, realm_name, current_stage_id, stages_completed_count, stages[] (id, name, status, stage_type, stage_description, objective_count, objectives[{obj_index, obj_type, obj_description}]), party_preview | cta.enter_stage, nav.back |
-| StageScreen | `flow.stage` | stage_id, stage_name, stage_type, stage_description, objective_count, objectives[] ({obj_index, obj_type, obj_description}), realm_id, party_preview, directive ({active_id, directives[]}) | cta.start, nav.back |
+| StageExploreScreen (preview mode) | `flow.stage` | stage_id, stage_name, stage_type, stage_description, objective_count, objectives[] ({obj_index, obj_type, obj_description}), realm_id, party_preview, directive ({active_id, directives[]}), map_width, map_height, map_entry_pos, map_situations[] ({pos}) | cta.start, nav.back |
 | VowScreen | `flow.vow_manage` | can_pledge (bool), active_vow ({vow_id, tier, proverb_twi, proverb_en}), available_vows[] ({vow_id, vow_name, proverb_twi, proverb_en, description, benefit_label, tradeoff_label, breaking_cost_hint, is_unlocked, max_tier_unlocked, is_active, discovered_realm, unlock_hint}) | nav.back, cta.pledge (disabled when vow already active), cta.break (disabled when no active vow) |
 | WeavingRiteScreen | `flow.weaving_rite` | phase, selected_echo, thread_reserve, selected_thread_id, invitation_lines (prose clues), outcome, aftermath_lines, non_chosen | nav.back, cta.begin_rite, cta.confirm |
 
@@ -567,8 +567,8 @@ Echo traits (resilience + leadership) use a **separate derived RNG** at path `<s
 
 `FlowStageExploreState` (`core/state/flow/states/venture/FlowStageExploreState.gd`) — flow state `flow.stage_explore`.
 - `enter(ctx, t)` → locks map on first entry (`locked=true`, `save_request=true`), builds snapshot.
-- `static build_snapshot(flow_ctx, t) → Dictionary` — projects explore_map data; hidden situations shown as `type: "hidden"`, `is_objective: false` (information never leaked while hidden).
-- Action slots: `cta.advance_turn` (disabled when not `STATE_EXPLORING`), `cta.return_home`, `nav.back` (disabled while exploring).
+- `static build_snapshot(flow_ctx, t) → Dictionary` — projects explore_map data; hidden situations shown as `type: "hidden"`, `is_objective: false` (information never leaked while hidden). Includes `situation_pending` when `pending_situation_id` is set.
+- Action slots: `cta.advance_turn` (disabled when not `STATE_EXPLORING` or pending), `cta.return_home` (disabled when pending), `nav.back` (disabled while exploring), `cta.engage_situation` (only when pending).
 
 **Explore map size rules:**
 - Each stage gets a random asymmetric size; width and height picked independently.
@@ -577,9 +577,12 @@ Echo traits (resilience + leadership) use a **separate derived RNG** at path `<s
 - Earlier realms use smaller ranges (realm 1: 30–45 × 30–40); later realms larger (realm 2: 50–70 × 45–65).
 
 **Dispatch actions:**
-- `stage.advance_turn` — moves party to nearest unresolved situation (directive-guided). `scout_carefully` → nearest; `seek_signs` → nearest objective first.
+- `stage.advance_turn` — moves party to nearest unresolved situation (directive-guided), runs reveal check (seeded roll > 50 → `revealed=true`), parks party at situation with `pending_situation_id` set. Rebuilds snapshot; player confirms via popup.
+- `stage.engage_situation` — clears `pending_situation_id`, marks situation resolved/revealed, increments `objectives_found`; routes by type (combat → `flow.encounter`; npc/loot/money → `data.situation_overlay` stub).
 - `stage.return_home` — stub escape check (roll > 40 = success → `flow.stage_map`; fail → `data.return_failed = true`).
-- `stage.engage_situation` — marks situation resolved/revealed; increments `objectives_found`; routes by type (combat → `flow.encounter`; npc/loot/money → `data.situation_overlay` stub).
+
+**Pending situation flow (added post-foundation):**
+After `advance_turn`, party is at situation but does not engage automatically. `explore_map["pending_situation_id"]` is set. Snapshot includes `data.situation_pending` `{ situation_id, revealed, type, is_objective }` and `actions["cta.engage_situation"]`. UI shows engagement popup; player presses Enter → `stage.engage_situation` dispatched.
 
 **Invariants:**
 - `stages[i].objectives` array is unchanged (explore_map is additive only).
@@ -589,9 +592,10 @@ Echo traits (resilience + leadership) use a **separate derived RNG** at path `<s
 - `map_to_local(Vector2i)` is the grid-to-screen conversion (same as `CombatBoardScreen`).
 
 **Screen summary entry:**
-| StageExploreScreen | `flow.stage_explore` | map_width, map_height, party_pos, turn_count, party_state, objectives_found, objectives_total, situations[] (hidden: `{id, pos, revealed: false, type: "hidden"}`; revealed: `{id, pos, revealed: true, type, is_objective, resolved}`), party_preview, [situation_overlay] | cta.advance_turn, cta.return_home, nav.back |
+| StageExploreScreen | `flow.stage` (preview) | stage_name, objective_count, directive, map_width, map_height, map_entry_pos, map_situations[] ({pos}) | cta.start, nav.back |
+| StageExploreScreen | `flow.stage_explore` | map_width, map_height, party_pos, turn_count, party_state, objectives_found, objectives_total, situations[], party_preview, [situation_pending], [situation_overlay] | cta.advance_turn, cta.return_home, nav.back, [cta.engage_situation] |
 
-**RealmShell routing:** `flow.stage_explore` → `StageExploreScreen.tscn`. EchoBar reads `data.party_preview` (same as `flow.stage`).
+**RealmShell routing:** Both `flow.stage` AND `flow.stage_explore` → `StageExploreScreen.tscn`. Shell scene-reuse logic ensures the same instance persists across the preview→explore transition; the zoom tween plays on the actual board. `StageScreen.tscn` is retained but no longer routed to.
 
 ---
 
