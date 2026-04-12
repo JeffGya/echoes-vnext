@@ -42,6 +42,7 @@ func set_party_position(draw_pos: Vector2) -> void:
 		"move_duration": MOVE_DURATION,
 	}]
 	_pstate.apply_snapshot(token, {}, 0.0)
+	queue_redraw()
 
 
 func _process(delta: float) -> void:

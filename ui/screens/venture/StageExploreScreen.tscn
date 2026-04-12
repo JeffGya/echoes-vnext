@@ -88,9 +88,9 @@ script = ExtResource("1_script")
 y_sort_enabled = true
 tile_set = SubResource("TileSet_explore")
 
-[node name="SituationLayer" type="Node2D" parent="Board"]
+[node name="SituationLayer" type="Node2D" parent="."]
 
-[node name="HiddenMarkerTemplate" type="Control" parent="Board/SituationLayer"]
+[node name="HiddenMarkerTemplate" type="Control" parent="SituationLayer"]
 visible = false
 custom_minimum_size = Vector2(40, 40)
 offset_left = -20.0
@@ -98,7 +98,7 @@ offset_top = -20.0
 offset_right = 20.0
 offset_bottom = 20.0
 
-[node name="HiddenCircle" type="PanelContainer" parent="Board/SituationLayer/HiddenMarkerTemplate"]
+[node name="HiddenCircle" type="PanelContainer" parent="SituationLayer/HiddenMarkerTemplate"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -107,7 +107,7 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_hidden_circle")
 
-[node name="HiddenLabel" type="Label" parent="Board/SituationLayer/HiddenMarkerTemplate/HiddenCircle"]
+[node name="HiddenLabel" type="Label" parent="SituationLayer/HiddenMarkerTemplate/HiddenCircle"]
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
@@ -116,7 +116,7 @@ vertical_alignment = 1
 theme_override_font_sizes/font_size = 20
 text = "?"
 
-[node name="RevealedMarkerTemplate" type="Control" parent="Board/SituationLayer"]
+[node name="RevealedMarkerTemplate" type="Control" parent="SituationLayer"]
 visible = false
 custom_minimum_size = Vector2(40, 40)
 offset_left = -20.0
@@ -124,7 +124,7 @@ offset_top = -20.0
 offset_right = 20.0
 offset_bottom = 20.0
 
-[node name="RevealedCircle" type="PanelContainer" parent="Board/SituationLayer/RevealedMarkerTemplate"]
+[node name="RevealedCircle" type="PanelContainer" parent="SituationLayer/RevealedMarkerTemplate"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -133,7 +133,7 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_revealed_circle")
 
-[node name="TypeLabel" type="Label" parent="Board/SituationLayer/RevealedMarkerTemplate/RevealedCircle"]
+[node name="TypeLabel" type="Label" parent="SituationLayer/RevealedMarkerTemplate/RevealedCircle"]
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
@@ -142,7 +142,7 @@ vertical_alignment = 1
 theme_override_font_sizes/font_size = 11
 text = "?"
 
-[node name="ResolvedMarkerTemplate" type="Control" parent="Board/SituationLayer"]
+[node name="ResolvedMarkerTemplate" type="Control" parent="SituationLayer"]
 visible = false
 custom_minimum_size = Vector2(40, 40)
 offset_left = -20.0
@@ -150,7 +150,7 @@ offset_top = -20.0
 offset_right = 20.0
 offset_bottom = 20.0
 
-[node name="ResolvedCircle" type="PanelContainer" parent="Board/SituationLayer/ResolvedMarkerTemplate"]
+[node name="ResolvedCircle" type="PanelContainer" parent="SituationLayer/ResolvedMarkerTemplate"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -159,7 +159,7 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_resolved_circle")
 
-[node name="ResolvedLabel" type="Label" parent="Board/SituationLayer/ResolvedMarkerTemplate/ResolvedCircle"]
+[node name="ResolvedLabel" type="Label" parent="SituationLayer/ResolvedMarkerTemplate/ResolvedCircle"]
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
@@ -168,7 +168,7 @@ vertical_alignment = 1
 theme_override_font_sizes/font_size = 16
 text = "✓"
 
-[node name="PartyTokenLayer" type="Node2D" parent="Board"]
+[node name="PartyTokenLayer" type="Node2D" parent="."]
 script = ExtResource("3_ptl")
 
 [node name="HudStrip" type="PanelContainer" parent="."]

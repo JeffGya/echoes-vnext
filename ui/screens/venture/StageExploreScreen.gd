@@ -46,11 +46,11 @@ var _situation_markers: Array = []
 
 # ─── @onready refs ────────────────────────────────────────────────────────────
 @onready var _board:              TileMapLayer   = $Board
-@onready var _situation_layer:    Node2D         = $Board/SituationLayer
-@onready var _hidden_template:    Control        = $Board/SituationLayer/HiddenMarkerTemplate
-@onready var _revealed_template:  Control        = $Board/SituationLayer/RevealedMarkerTemplate
-@onready var _resolved_template:  Control        = $Board/SituationLayer/ResolvedMarkerTemplate
-@onready var _party_layer:        Node2D         = $Board/PartyTokenLayer
+@onready var _situation_layer:    Node2D         = $SituationLayer
+@onready var _hidden_template:    Control        = $SituationLayer/HiddenMarkerTemplate
+@onready var _revealed_template:  Control        = $SituationLayer/RevealedMarkerTemplate
+@onready var _resolved_template:  Control        = $SituationLayer/ResolvedMarkerTemplate
+@onready var _party_layer:        Node2D         = $PartyTokenLayer
 @onready var _hud_strip:          PanelContainer = $HudStrip
 @onready var _turn_label:         Label          = %TurnLabel
 @onready var _objectives_label:   Label          = %ObjectivesLabel
@@ -121,7 +121,7 @@ func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 	var entry_v: Variant    = data.get("map_entry_pos", { "col": 0, "row": 0 })
 	var entry: Dictionary   = entry_v if entry_v is Dictionary else { "col": 0, "row": 0 }
 	var entry_local: Vector2 = _board.map_to_local(Vector2i(int(entry.get("col", 0)), int(entry.get("row", 0))))
-	_party_layer.call("init_position", entry_local)
+	_party_layer.call("init_position", _board_to_screen(entry_local))
 
 	# Stage info
 	_stage_title.text = str(data.get("stage_name", "Stage"))
@@ -172,10 +172,13 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 	var prow := int(ppos.get("row", 0))
 	_board.scale    = Vector2.ONE
 	var party_local := _board.map_to_local(Vector2i(pcol, prow))
-	_board.position = Vector2(size.x * 0.5, size.y * 0.5) - party_local
+	# Use viewport rect — safe before layout pass (size may be zero on first call)
+	var screen_size := get_viewport_rect().size
+	_board.position = Vector2(screen_size.x * 0.5, screen_size.y * 0.5) - party_local
 
 	# Animate party token to new position (lerp — combat board style)
-	_party_layer.call("set_party_position", party_local)
+	# _board_to_screen() must be called AFTER board position is set above
+	_party_layer.call("set_party_position", _board_to_screen(party_local))
 
 	# Situation markers (full state — hidden / revealed / resolved)
 	var sits_v: Variant  = data.get("situations", [])
@@ -272,8 +275,9 @@ func _build_preview(cols: int, rows: int) -> void:
 	var map_pixel_w: float = max(tr.x, br.x) - min(tl.x, bl.x)
 	var map_pixel_h: float = max(bl.y, br.y) - min(tl.y, tr.y)
 
-	var available_w: float = size.x - 48.0
-	var available_h: float = (size.y - 80.0) - 112.0 - 48.0
+	var vp_size := get_viewport_rect().size
+	var available_w: float = vp_size.x - 48.0
+	var available_h: float = (vp_size.y - 80.0) - 112.0 - 48.0
 
 	if map_pixel_w <= 0.0 or map_pixel_h <= 0.0 or available_w <= 0.0 or available_h <= 0.0:
 		return
@@ -282,8 +286,9 @@ func _build_preview(cols: int, rows: int) -> void:
 	_board.scale   = Vector2(_preview_scale, _preview_scale)
 
 	var map_center_local := (tl + tr + bl + br) / 4.0
-	var body_center_y: float = 112.0 + (size.y - 80.0 - 112.0) / 2.0
-	_preview_center = Vector2(size.x / 2.0, body_center_y)
+	var vp_size := get_viewport_rect().size
+	var body_center_y: float = 112.0 + (vp_size.y - 80.0 - 112.0) / 2.0
+	_preview_center = Vector2(vp_size.x / 2.0, body_center_y)
 	_board.position = _preview_center - map_center_local * _preview_scale
 
 
@@ -301,7 +306,8 @@ func _rebuild_situations_preview(map_situations: Array) -> void:
 		var pos_v: Variant    = sit.get("pos", { "col": 0, "row": 0 })
 		var pos_d: Dictionary = pos_v if pos_v is Dictionary else { "col": 0, "row": 0 }
 		var marker: Control   = _hidden_template.duplicate() as Control
-		marker.position       = _board.map_to_local(Vector2i(int(pos_d.get("col", 0)), int(pos_d.get("row", 0))))
+		var board_local := _board.map_to_local(Vector2i(int(pos_d.get("col", 0)), int(pos_d.get("row", 0))))
+		marker.position       = _board_to_screen(board_local)
 		marker.visible        = true
 		_situation_layer.add_child(marker)
 		_situation_markers.append(marker)
@@ -329,9 +335,10 @@ func _rebuild_situations(situations: Array) -> void:
 		else:
 			template = _hidden_template
 
-		var marker: Control = template.duplicate() as Control
-		marker.position     = _board.map_to_local(Vector2i(int(pos_d.get("col", 0)), int(pos_d.get("row", 0))))
-		marker.visible      = true
+		var marker: Control  = template.duplicate() as Control
+		var board_local := _board.map_to_local(Vector2i(int(pos_d.get("col", 0)), int(pos_d.get("row", 0))))
+		marker.position      = _board_to_screen(board_local)
+		marker.visible       = true
 
 		if revealed and not resolved:
 			var type_lbl: Label = marker.get_node_or_null("RevealedCircle/TypeLabel")
@@ -401,6 +408,13 @@ func _on_overlay_action(action: Dictionary) -> void:
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
+
+## Convert a board-local position to screen position, accounting for
+## the board's current position and scale. Used to place root-level
+## markers and token that live outside the Board node hierarchy.
+func _board_to_screen(board_local: Vector2) -> Vector2:
+	return _board.position + board_local * _board.scale.x
+
 
 func _label_for_directive(dir_id: String) -> String:
 	match dir_id:
