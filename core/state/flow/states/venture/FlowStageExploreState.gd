@@ -30,7 +30,38 @@ func enter(ctx: RefCounted, t: int) -> void:
 	# Lock the map on first entry so the layout persists across revisits.
 	_lock_map_if_needed(flow_ctx, t)
 
+	# Reset transient session state on every entry.
+	# Map layout (situation positions, revealed flags) is preserved.
+	# Position and pending engagement are NOT — the party always starts fresh.
+	_reset_session_state(flow_ctx, t)
+
 	flow_ctx.last_snapshot = build_snapshot(flow_ctx, t)
+
+
+static func _reset_session_state(flow_ctx: FlowContext, t: int) -> void:
+	var stage := _get_current_stage(flow_ctx)
+	if stage.is_empty():
+		return
+	var map_v: Variant = stage.get("explore_map", {})
+	var explore_map: Dictionary = map_v if map_v is Dictionary else {}
+
+	var height := int(explore_map.get("height", StageExploreModelScript.MIN_HEIGHT))
+	# Entry point: left edge, vertically centered
+	explore_map["party_pos"]            = { "col": 0, "row": height / 2 }
+	explore_map["pending_situation_id"] = ""
+
+	stage["explore_map"] = explore_map
+	_write_stage_back(flow_ctx, stage)
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason.is_empty():
+		flow_ctx.save_request_reason = "stage.explore.session_reset"
+	else:
+		flow_ctx.save_request_reason += "|stage.explore.session_reset"
+
+	if flow_ctx.logger != null:
+		flow_ctx.logger.debug(t, "stage.explore.session_reset", "Party position and pending state reset on entry", {
+			"stage_id": flow_ctx.stage_id,
+		})
 
 func exit(ctx: RefCounted, t: int) -> void:
 	pass
