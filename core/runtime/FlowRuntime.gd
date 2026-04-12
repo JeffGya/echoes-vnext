@@ -555,12 +555,55 @@ func _handle_sanctum_grade_select(action: Dictionary, t: int) -> void:
 func _handle_complete_stage(t: int, destination_override: String = "") -> void:
 	# Fix BUG-003: read outcome BEFORE nulling encounter_ctx so drift reflects the actual result.
 	var outcome := "loss"
+	var is_combat_victory := false
 	if flow_ctx.encounter_ctx != null:
 		var victory := bool(flow_ctx.encounter_ctx.combat_result.get("victory", false))
 		outcome = "win" if victory else "loss"
+		is_combat_victory = victory
 	_apply_encounter_emotion_drift(outcome, t)
 	flow_ctx.encounter_ctx     = null
 	flow_ctx.encounter_machine = null
+
+	# On combat victory: resolve the situation that triggered the encounter.
+	# engage_situation deliberately left it unresolved so a defeat allows retry.
+	if is_combat_victory and not flow_ctx.stage_id.is_empty():
+		var _vstage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
+		if not _vstage.is_empty():
+			var _vmap_v: Variant = _vstage.get("explore_map", {})
+			var _vmap: Dictionary = _vmap_v if _vmap_v is Dictionary else {}
+			var _vsit_id := str(_vmap.get("last_situation_id", ""))
+			if not _vsit_id.is_empty():
+				var _vsits_v: Variant = _vmap.get("situations", [])
+				var _vsits: Array = _vsits_v if _vsits_v is Array else []
+				for _vi in range(_vsits.size()):
+					var _vsv: Variant = _vsits[_vi]
+					if _vsv is Dictionary and str((_vsv as Dictionary).get("id", "")) == _vsit_id:
+						var _vs: Dictionary = _vsv
+						_vs["resolved"] = true
+						_vs["revealed"] = true
+						_vsits[_vi] = _vs
+						if bool(_vs.get("is_objective", false)):
+							_vmap["objectives_found"] = int(_vmap.get("objectives_found", 0)) + 1
+						break
+				_vmap["situations"] = _vsits
+				# Check stage completion after resolving
+				var _vobj_found := int(_vmap.get("objectives_found", 0))
+				var _vobj_total := int(_vmap.get("objectives_total", 0))
+				if _vobj_total > 0 and _vobj_found >= _vobj_total:
+					_vmap["party_state"] = StageExploreModelScript.STATE_COMPLETE
+				_vstage["explore_map"] = _vmap
+				FlowStageExploreStateScript._write_stage_back(flow_ctx, _vstage)
+				flow_ctx.save_request = true
+				if flow_ctx.save_request_reason.is_empty():
+					flow_ctx.save_request_reason = "stage.combat_resolved"
+				else:
+					flow_ctx.save_request_reason += "|stage.combat_resolved"
+				logger.info(t, "stage.combat_resolved", "Combat situation resolved on victory", {
+					"stage_id":     flow_ctx.stage_id,
+					"situation_id": _vsit_id,
+					"obj_found":    _vmap.get("objectives_found", 0),
+					"obj_total":    _vmap.get("objectives_total", 0),
+				})
 
 	# V2-WEAVE-001: load thread config (read-only)
 	var _bal_v: Variant = flow_ctx.config_service.get_balance()
@@ -2632,23 +2675,39 @@ func _handle_stage_engage_situation(action: Dictionary, t: int) -> void:
 		"obj_total":     explore_map.get("objectives_total", 0),
 	})
 
-	# Check if all objectives are found → complete the stage
-	var obj_found := int(explore_map.get("objectives_found", 0))
-	var obj_total := int(explore_map.get("objectives_total", 0))
-	if obj_total > 0 and obj_found >= obj_total:
-		explore_map["party_state"] = StageExploreModelScript.STATE_COMPLETE
-		stage["explore_map"] = explore_map
-		FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
-		_handle_complete_stage(t, "")
-		return
-
-	# Route by situation type
+	# Route by situation type.
+	# IMPORTANT: for combat situations, do NOT mark resolved or increment objectives_found here.
+	# Combat resolution is async — victory is confirmed via ResolveScreen → flow.complete_stage.
+	# _handle_complete_stage reads last_situation_id to finalize the situation on victory.
+	# On defeat, the situation remains unresolved so the player can retry it.
 	var sit_type := str(sit.get("type", ""))
 	match sit_type:
 		SituationModelScript.TYPE_COMBAT:
+			# Undo the resolved/revealed mutation made above — combat outcome is not yet known
+			for _ri in range(situations.size()):
+				var _sv: Variant = situations[_ri]
+				if _sv is Dictionary and str((_sv as Dictionary).get("id", "")) == sit_id:
+					var _s: Dictionary = _sv
+					_s["resolved"] = false
+					_s["revealed"] = bool(_s.get("revealed", false))  # keep reveal state
+					situations[_ri] = _s
+					break
+			if bool(sit.get("is_objective", false)):
+				explore_map["objectives_found"] = max(int(explore_map.get("objectives_found", 0)) - 1, 0)
+			explore_map["situations"] = situations
+			stage["explore_map"] = explore_map
+			FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
 			flow_machine.transition(FlowStateIds.ENCOUNTER, flow_ctx, logger, t, "stage.engage.combat")
 		_:
 			# NPC / loot / money — inline placeholder overlay (V2-STAGE-003 / V2-STAGE-004 will replace)
+			var obj_found := int(explore_map.get("objectives_found", 0))
+			var obj_total := int(explore_map.get("objectives_total", 0))
+			if obj_total > 0 and obj_found >= obj_total:
+				explore_map["party_state"] = StageExploreModelScript.STATE_COMPLETE
+				stage["explore_map"] = explore_map
+				FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+				_handle_complete_stage(t, "")
+				return
 			var result_text := _stub_situation_result(sit_type)
 			var snap := FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
 			snap["data"]["situation_overlay"] = {
