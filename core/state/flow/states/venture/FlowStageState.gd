@@ -78,6 +78,14 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				})
 				break
 
+	# V2-STAGE-001: expose explore map dimensions for StageScreen overview preview
+	var explore_map_v: Variant = stage.get("explore_map", {})
+	var explore_map_s: Dictionary = explore_map_v if explore_map_v is Dictionary else {}
+	var preview_width:  int = int(explore_map_s.get("width",  30))
+	var preview_height: int = int(explore_map_s.get("height", 30))
+	var entry_pos_v: Variant = explore_map_s.get("party_pos", { "col": 0, "row": preview_height / 2 })
+	var entry_pos: Dictionary = entry_pos_v if entry_pos_v is Dictionary else { "col": 0, "row": preview_height / 2 }
+
 	# V2-DIRECTIVE-001: directive selection payload for the blocking overlay
 	var sc_dir := str(flow_ctx.save_data.get("stage_context", {}).get("active_directive_id", "directive.scout_carefully"))
 	var dir_svc := DirectiveService.new(flow_ctx.save_data)
@@ -118,6 +126,10 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"objectives":        projected_objs,
 			"realm_id":          flow_ctx.realm_id,
 			"party_preview":     party_preview,
+			# V2-STAGE-001: map overview data for StageScreen preview board
+			"map_width":         preview_width,
+			"map_height":        preview_height,
+			"map_entry_pos":     entry_pos,
 			"directive": {
 				"active_id":  sc_dir,
 				"directives": dir_list,

@@ -702,6 +702,7 @@ const SANCTUM_FAMILY: Array = [
 const VENTURE_FAMILY: Array = [
 	"flow.stage_map",
 	"flow.stage",
+	"flow.stage_explore",  # V2-STAGE-001
 	"flow.encounter",
 	"flow.resolve",
 ]

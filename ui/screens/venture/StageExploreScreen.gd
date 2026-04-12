@@ -49,6 +49,11 @@ func _ready() -> void:
 	_return_btn.pressed.connect(_on_return_pressed)
 	_dismiss_btn.pressed.connect(_on_dismiss_pressed)
 
+	# Fade in — counterpart to StageScreen's fade-out zoom transition
+	modulate = Color(1, 1, 1, 0)
+	var tween := create_tween()
+	tween.tween_property(self, "modulate", Color(1, 1, 1, 1), 0.25)
+
 func set_snapshot(snap: Dictionary) -> void:
 	var data: Dictionary    = snap.get("data", {})
 	var actions: Dictionary = snap.get("actions", {})
