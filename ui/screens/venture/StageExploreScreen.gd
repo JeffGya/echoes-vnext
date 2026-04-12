@@ -286,7 +286,6 @@ func _build_preview(cols: int, rows: int) -> void:
 	_board.scale   = Vector2(_preview_scale, _preview_scale)
 
 	var map_center_local := (tl + tr + bl + br) / 4.0
-	var vp_size := get_viewport_rect().size
 	var body_center_y: float = 112.0 + (vp_size.y - 80.0 - 112.0) / 2.0
 	_preview_center = Vector2(vp_size.x / 2.0, body_center_y)
 	_board.position = _preview_center - map_center_local * _preview_scale
