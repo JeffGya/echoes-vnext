@@ -353,6 +353,9 @@ func dispatch(action: Dictionary) -> Dictionary:
 		"stage.dismiss_overlay":
 			var _stg := FlowStageExploreStateScript._get_current_stage(flow_ctx)
 			if not _stg.is_empty():
+				# Rebuild from save_data so overlay data (return_home_result, situation_overlay)
+				# is stripped — refresh_snapshot() alone just re-validates the stale snapshot.
+				flow_ctx.last_snapshot = FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
 				flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 		# UI actions
@@ -2558,6 +2561,10 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 		"turn_count":   explore_map["turn_count"],
 	})
 
+	# Build fresh snapshot from mutated save_data so the pending popup and disabled
+	# advance button are reflected in the returned snapshot. refresh_snapshot() alone
+	# only re-validates ctx.last_snapshot — it does not rebuild from save_data.
+	flow_ctx.last_snapshot = FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 
