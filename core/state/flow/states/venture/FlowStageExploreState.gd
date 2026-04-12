@@ -45,10 +45,38 @@ static func _reset_session_state(flow_ctx: FlowContext, t: int) -> void:
 	var map_v: Variant = stage.get("explore_map", {})
 	var explore_map: Dictionary = map_v if map_v is Dictionary else {}
 
-	var height := int(explore_map.get("height", StageExploreModelScript.MIN_HEIGHT))
-	# Entry point: left edge, vertically centered
-	explore_map["party_pos"]            = { "col": 0, "row": height / 2 }
-	explore_map["pending_situation_id"] = ""
+	# Preserve map geometry only — width, height, objectives_total, locked, situation positions.
+	# All runtime state is wiped clean so every entry starts fresh.
+	var width       := int(explore_map.get("width",  StageExploreModelScript.MIN_WIDTH))
+	var height      := int(explore_map.get("height", StageExploreModelScript.MIN_HEIGHT))
+	var obj_total   := int(explore_map.get("objectives_total", 0))
+	var locked      := bool(explore_map.get("locked", false))
+
+	# Strip revealed/resolved flags from every situation — positions preserved, state wiped.
+	var raw_sits: Variant = explore_map.get("situations", [])
+	var situations_in: Array = raw_sits if raw_sits is Array else []
+	var situations_clean: Array = []
+	for sit_v in situations_in:
+		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
+		var clean: Dictionary = sit.duplicate(true)
+		clean["revealed"] = false
+		clean["resolved"] = false
+		situations_clean.append(clean)
+
+	# Rebuild explore_map — geometry kept, all runtime fields zeroed.
+	explore_map = {
+		"width":               width,
+		"height":              height,
+		"party_pos":           { "col": 0, "row": height / 2 },
+		"situations":          situations_clean,
+		"locked":              locked,
+		"party_state":         StageExploreModelScript.STATE_EXPLORING,
+		"turn_count":          0,
+		"objectives_found":    0,
+		"objectives_total":    obj_total,
+		"last_situation_id":   "",
+		"pending_situation_id": "",
+	}
 
 	stage["explore_map"] = explore_map
 	_write_stage_back(flow_ctx, stage)
@@ -59,7 +87,7 @@ static func _reset_session_state(flow_ctx: FlowContext, t: int) -> void:
 		flow_ctx.save_request_reason += "|stage.explore.session_reset"
 
 	if flow_ctx.logger != null:
-		flow_ctx.logger.debug(t, "stage.explore.session_reset", "Party position and pending state reset on entry", {
+		flow_ctx.logger.debug(t, "stage.explore.session_reset", "Explore map session state wiped on entry", {
 			"stage_id": flow_ctx.stage_id,
 		})
 
