@@ -86,12 +86,20 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var entry_pos_v: Variant = explore_map_s.get("party_pos", { "col": 0, "row": preview_height / 2 })
 	var entry_pos: Dictionary = entry_pos_v if entry_pos_v is Dictionary else { "col": 0, "row": preview_height / 2 }
 
-	# Project situation positions for preview ? markers (positions only — types always hidden)
+	# V2-INTEL-001: Project situation positions with revealed/resolved/type for the preview.
+	# Previously scouted situations show their type marker rather than '?' on re-entry.
 	var raw_map_sits: Variant = explore_map_s.get("situations", [])
 	var map_situations: Array = []
 	for msit_v in (raw_map_sits if raw_map_sits is Array else []):
 		var msit: Dictionary = msit_v if msit_v is Dictionary else {}
-		map_situations.append({ "pos": msit.get("pos", { "col": 0, "row": 0 }) })
+		var msit_revealed := bool(msit.get("revealed", false))
+		var msit_resolved := bool(msit.get("resolved", false))
+		map_situations.append({
+			"pos":      msit.get("pos", { "col": 0, "row": 0 }),
+			"revealed": msit_revealed,
+			"resolved": msit_resolved,
+			"type":     str(msit.get("type", "hidden")) if msit_revealed else "hidden",
+		})
 
 	# V2-DIRECTIVE-001: directive selection payload for the blocking overlay
 	var sc_dir := str(flow_ctx.save_data.get("stage_context", {}).get("active_directive_id", "directive.scout_carefully"))

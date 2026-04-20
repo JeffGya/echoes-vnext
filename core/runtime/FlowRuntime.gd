@@ -2529,14 +2529,21 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 	var sit_id     := str(target_sit.get("id", "sit.0"))
 	var turn_count := int(explore_map.get("turn_count", 0))
 
+	# V2-INTEL-001: Seek Signs grants a +15pt reveal bonus (65% vs 50% base).
+	var _sc_d: Variant = flow_ctx.save_data.get("stage_context", {})
+	var _sc: Dictionary = _sc_d if _sc_d is Dictionary else {}
+	var _active_dir := str(_sc.get("active_directive_id", "directive.scout_carefully"))
+	var reveal_threshold := 35 if _active_dir == "directive.seek_signs" else 50
+
 	# Reveal check — run before save so result is persisted in one write
 	if not bool(target_sit.get("revealed", false)):
 		var rng := CampaignSeed.get_rng_from(
 			int(flow_ctx.save_data.get("realms", {}).get(flow_ctx.realm_id, {}).get("seed", 0)),
 			"stage.reveal.%s.%d" % [sit_id, turn_count]
 		)
-		if rng.randi_range(0, 100) > 50:
-			# Scout roll succeeded — mark revealed before the engagement popup
+		var roll := rng.randi_range(0, 100)
+		if roll > reveal_threshold:
+			# Scout roll succeeded — mark revealed and populate intel before the engagement popup
 			var sits_v2: Variant = explore_map.get("situations", [])
 			var sits_arr: Array  = sits_v2 if sits_v2 is Array else []
 			for _si in range(sits_arr.size()):
@@ -2544,6 +2551,13 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 				if s_v2 is Dictionary and str((s_v2 as Dictionary).get("id", "")) == sit_id:
 					var s2: Dictionary = s_v2
 					s2["revealed"] = true
+					# V2-INTEL-001: write intel_clues + quality on first reveal
+					var clues_v: Variant = s2.get("intel_clues", [])
+					var clues: Array = clues_v if clues_v is Array else []
+					if clues.is_empty():
+						clues.append(_intel_clue_for_type(str(s2.get("type", ""))))
+					s2["intel_clues"]   = clues
+					s2["intel_quality"] = "precise" if roll > 75 else "rough"
 					sits_arr[_si]  = s2
 					break
 			explore_map["situations"] = sits_arr
@@ -2653,6 +2667,14 @@ func _handle_stage_engage_situation(action: Dictionary, t: int) -> void:
 			var s: Dictionary = s_v
 			s["resolved"] = true
 			s["revealed"] = true
+			# V2-INTEL-001: write firsthand intel on direct engagement if not already scouted
+			var eng_clues_v: Variant = s.get("intel_clues", [])
+			var eng_clues: Array = eng_clues_v if eng_clues_v is Array else []
+			if eng_clues.is_empty():
+				eng_clues.append(_intel_clue_for_type(str(s.get("type", ""))))
+			s["intel_clues"] = eng_clues
+			if str(s.get("intel_quality", "")).is_empty():
+				s["intel_quality"] = "rough"
 			situations[i] = s
 			sit = s
 			break
@@ -2807,3 +2829,14 @@ func _stub_situation_result(sit_type: String) -> String:
 			return "An offering, unclaimed. The party takes it quietly."
 		_:
 			return "The party finds something unexpected. More will be known in time."
+
+
+# V2-INTEL-001: Returns the atmospheric intel clue written to a situation on first scout reveal.
+# Not called on direct engagement — engagement-reveal is firsthand, not prior intel.
+func _intel_clue_for_type(sit_type: String) -> String:
+	match sit_type:
+		SituationModelScript.TYPE_COMBAT: return "Tracks in the earth. Something passed through here with intent."
+		SituationModelScript.TYPE_NPC:    return "Warmth lingers — a firepit, a scent, the sense of someone waiting."
+		SituationModelScript.TYPE_LOOT:   return "A cache left behind. The kind made in haste, not ceremony."
+		SituationModelScript.TYPE_MONEY:  return "A ritual trace — coins or marks, left as offering or warning."
+		_:                                return "Something is present here."

@@ -577,30 +577,32 @@ Echo traits (resilience + leadership) use a **separate derived RNG** at path `<s
 - Earlier realms use smaller ranges (realm 1: 30–45 × 30–40); later realms larger (realm 2: 50–70 × 45–65).
 
 **Dispatch actions:**
-- `stage.advance_turn` — moves party to nearest unresolved situation (directive-guided), runs reveal check (seeded roll > 50 → `revealed=true`), parks party at situation with `pending_situation_id` set. Rebuilds snapshot; player confirms via popup.
-- `stage.engage_situation` — clears `pending_situation_id`, marks situation resolved/revealed, increments `objectives_found`; routes by type (combat → `flow.encounter`; npc/loot/money → `data.situation_overlay` stub).
+- `stage.advance_turn` — moves party to nearest unresolved situation (directive-guided), runs reveal check (roll > 50 base, > 35 with Seek Signs → `revealed=true`; writes `intel_clues` + `intel_quality` on success), parks party at situation with `pending_situation_id` set. Rebuilds snapshot; player confirms via popup.
+- `stage.engage_situation` — clears `pending_situation_id`, marks situation resolved/revealed, writes firsthand `intel_clues` + `intel_quality="rough"` if not already scouted, increments `objectives_found`; routes by type (combat → `flow.encounter`; npc/loot/money → `data.situation_overlay` stub).
 - `stage.return_home` — stub escape check (roll > 40 = success → `flow.stage_map`; fail → `data.return_failed = true`).
 
 **Pending situation flow (added post-foundation):**
-After `advance_turn`, party is at situation but does not engage automatically. `explore_map["pending_situation_id"]` is set. Snapshot includes `data.situation_pending` `{ situation_id, revealed, type, is_objective }` and `actions["cta.engage_situation"]`. UI shows engagement popup; player presses Enter → `stage.engage_situation` dispatched.
+After `advance_turn`, party is at situation but does not engage automatically. `explore_map["pending_situation_id"]` is set. Snapshot includes `data.situation_pending` `{ situation_id, revealed, type, is_objective, intel_clues, intel_quality, enemy_estimate }` and `actions["cta.engage_situation"]`. UI shows engagement popup; player presses Enter → `stage.engage_situation` dispatched. `enemy_estimate` is non-empty only for revealed combat situations (precise: figure count from seed; rough: generic language).
 
 **Invariants:**
 - `stages[i].objectives` array is unchanged (explore_map is additive only).
 - Existing `RealmGenerator` RNG draw paths NOT reordered — explore seed path (`"stage.N.explore.*"`) appended after all existing draws.
 - All situations start `revealed: false`, `resolved: false`, `intel_clues: []`.
-- `intel_clues: []` is an extensibility slot for V2-INTEL-001 — always empty in foundation.
+- `revealed` and `resolved` persist across session entries — `_reset_session_state` carries them forward via `sit.duplicate(true)`.
+- `intel_clues` (Array[String]) and `intel_quality` (`"precise"` | `"rough"`) are written at reveal time (scout roll) or on direct engagement. Never cleared on session reset.
+- `objectives_found` is recomputed on every session entry from `is_objective=true AND resolved=true` — never stored stale.
+- `stage_context.intel` dict is reserved for future cross-stage intel aggregation (V2-INTEL-101+). Not used in V2-INTEL-001.
 - `map_to_local(Vector2i)` is the grid-to-screen conversion (same as `CombatBoardScreen`).
 
 **Screen summary entry:**
-| StageExploreScreen | `flow.stage` (preview) | stage_name, objective_count, directive, map_width, map_height, map_entry_pos, map_situations[] ({pos}) | cta.start, nav.back |
-| StageExploreScreen | `flow.stage_explore` | map_width, map_height, party_pos, turn_count, party_state, objectives_found, objectives_total, situations[], party_preview, [situation_pending], [situation_overlay] | cta.advance_turn, cta.return_home, nav.back, [cta.engage_situation] |
+| StageExploreScreen | `flow.stage` (preview) | stage_name, objective_count, directive, map_width, map_height, map_entry_pos, map_situations[] ({pos, revealed, resolved, type}) | cta.start, nav.back |
+| StageExploreScreen | `flow.stage_explore` | map_width, map_height, party_pos, turn_count, party_state, objectives_found, objectives_total, situations[] ({id, pos, revealed, resolved, type}), party_preview, [situation_pending ({situation_id, revealed, type, is_objective, intel_clues, intel_quality, enemy_estimate})], [situation_overlay] | cta.advance_turn, cta.return_home, nav.back, [cta.engage_situation] |
 
 **RealmShell routing:** Both `flow.stage` AND `flow.stage_explore` → `StageExploreScreen.tscn`. Shell scene-reuse logic ensures the same instance persists across the preview→explore transition; the zoom tween plays on the actual board. `StageScreen.tscn` is retained but no longer routed to.
 
 ---
 
 ### Deferred
-- `objectives_found` persistence across stage entries: currently reset to 0 on every entry. Should persist so previously completed objectives are not re-counted on re-entry. Deferred to V2-STAGE-002 or a dedicated stage persistence story.
 - Full art: StageScreen, StageMapScreen (scaffolds built; deferred to UI-006+)
 - HP progress bar in RealmShell EchoBar (text label is current; bar deferred to UX pass)
 - Voice reactive system: VOICE-001 (reactive bark responses — other actors respond to barks, deferred). Bark display: VOICE-002 (deferred). Bark snapshot fields + ShoutBank expansion: DONE (PROG-010).

@@ -524,7 +524,7 @@ These systems are already done and their save seams are live:
 | `FlowStageState.cta.start` | **Rewrite** — routes to `STAGE_EXPLORE` instead of `ENCOUNTER` | V2-STAGE-001 | ✅ Done |
 | `FlowStageExploreState` | **New Build** | V2-STAGE-001 | ✅ Done |
 | Situation type taxonomy | **New Build stub** — combat/npc/loot/money stubs; full V2 objective taxonomy deferred | V2-STAGE-002 | Draft |
-| Intel persistence across runs | **Deferred** — `intel_clues: []` slot present; persistence deferred | V2-INTEL-001 | Draft |
+| Intel persistence across runs | **Done** — `revealed`/`resolved` persist across sessions; `intel_clues` + `intel_quality` written on reveal/engagement; `objectives_found` recomputed from flags on entry; Seek Signs +15pt threshold | V2-INTEL-001 | ✅ Done |
 | NPC contact actor framework | **Deferred** — inline overlay placeholder only | V2-STAGE-003 | Draft |
 | Loot/money full outcomes | **Deferred** — inline overlay stubs only | V2-STAGE-004 | Draft |
 | Individual party units | **Deferred** — group token only in foundation | V2-STAGE-101 | Draft |
@@ -555,7 +555,7 @@ V2-MIG-001 (this doc) ✅ Done
   ├── V2-ECONOMY-001+  Economy expansion (Relics, Faith, Harmony, Favor)
   ├── V2-DIRECTIVE-001 Directive rewrite (Scout Carefully / Seek Signs) ✅ Done
   │     └── V2-STAGE-001 Exploration stage map foundation ✅ Done
-  │           ├── V2-INTEL-001  Intel persistence + intel_clues
+  │           ├── V2-INTEL-001  Intel persistence + intel_clues ✅ Done
   │           ├── V2-INTEL-002  Full escape / scouting sacrifice mechanic
   │           ├── V2-STAGE-002  Full V2 objective taxonomy (Scout/Reveal, etc.)
   │           ├── V2-STAGE-003  NPC contact actor framework

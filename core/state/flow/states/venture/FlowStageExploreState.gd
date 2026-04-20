@@ -3,6 +3,7 @@ class_name FlowStageExploreState
 extends State
 
 const StageExploreModelScript := preload("res://core/realms/StageExploreModel.gd")  # V2-STAGE-001
+const SituationModelScript    := preload("res://core/realms/SituationModel.gd")      # V2-INTEL-001
 
 # V2-STAGE-001: Exploration stage map flow state.
 #
@@ -45,27 +46,29 @@ static func _reset_session_state(flow_ctx: FlowContext, t: int) -> void:
 	var map_v: Variant = stage.get("explore_map", {})
 	var explore_map: Dictionary = map_v if map_v is Dictionary else {}
 
-	# Preserve map geometry only — width, height, objectives_total, locked, situation positions.
-	# All runtime state is wiped clean so every entry starts fresh.
-	# DEFERRED (V2-STAGE-002 or later): objectives_found should persist across entries so
-	# previously completed objectives are not re-counted. Currently reset to 0 each entry.
+	# Preserve map geometry and all situation intel across session entries.
+	# Only session-transient fields are reset: party position, state, turn count, pending engagement.
 	var width       := int(explore_map.get("width",  StageExploreModelScript.MIN_WIDTH))
 	var height      := int(explore_map.get("height", StageExploreModelScript.MIN_HEIGHT))
 	var obj_total   := int(explore_map.get("objectives_total", 0))
 	var locked      := bool(explore_map.get("locked", false))
 
-	# Strip revealed/resolved flags from every situation — positions preserved, state wiped.
+	# V2-INTEL-001: Carry forward revealed/resolved/intel_clues/intel_quality per situation.
+	# Positions preserved; session-transient fields (party_pos, turn_count, etc.) wiped below.
 	var raw_sits: Variant = explore_map.get("situations", [])
 	var situations_in: Array = raw_sits if raw_sits is Array else []
 	var situations_clean: Array = []
 	for sit_v in situations_in:
 		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
-		var clean: Dictionary = sit.duplicate(true)
-		clean["revealed"] = false
-		clean["resolved"] = false
-		situations_clean.append(clean)
+		situations_clean.append(sit.duplicate(true))
 
-	# Rebuild explore_map — geometry kept, all runtime fields zeroed.
+	# V2-INTEL-001: Recompute objectives_found from persisted resolved flags.
+	var obj_found := 0
+	for s in situations_clean:
+		if bool(s.get("is_objective", false)) and bool(s.get("resolved", false)):
+			obj_found += 1
+
+	# Rebuild explore_map — geometry + intel kept; session state zeroed.
 	explore_map = {
 		"width":               width,
 		"height":              height,
@@ -74,7 +77,7 @@ static func _reset_session_state(flow_ctx: FlowContext, t: int) -> void:
 		"locked":              locked,
 		"party_state":         StageExploreModelScript.STATE_EXPLORING,
 		"turn_count":          0,
-		"objectives_found":    0,
+		"objectives_found":    obj_found,
 		"objectives_total":    obj_total,
 		"last_situation_id":   "",
 		"pending_situation_id": "",
@@ -212,11 +215,23 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var situation_pending: Dictionary = {}
 	if has_pending:
 		var pend_revealed: bool = bool(pending_sit.get("revealed", false))
+		# V2-INTEL-001: include intel_clues + enemy_estimate for previously scouted situations
+		var sit_clues_v: Variant = pending_sit.get("intel_clues", [])
+		var sit_clues: Array = sit_clues_v if sit_clues_v is Array else []
+		var sit_quality := str(pending_sit.get("intel_quality", ""))
+		var enemy_estimate := ""
+		if str(pending_sit.get("type", "")) == SituationModelScript.TYPE_COMBAT and pend_revealed:
+			match sit_quality:
+				"precise": enemy_estimate = "You make out %d figures." % (int(pending_sit.get("seed", 0)) % 5 + 1)
+				"rough":   enemy_estimate = "Hard to tell — could be a few, could be several."
 		situation_pending = {
-			"situation_id": pending_sit_id,
-			"revealed":     pend_revealed,
-			"type":         str(pending_sit.get("type", "unknown")) if pend_revealed else "hidden",
-			"is_objective": bool(pending_sit.get("is_objective", false)) if pend_revealed else false,
+			"situation_id":   pending_sit_id,
+			"revealed":       pend_revealed,
+			"type":           str(pending_sit.get("type", "unknown")) if pend_revealed else "hidden",
+			"is_objective":   bool(pending_sit.get("is_objective", false)) if pend_revealed else false,
+			"intel_clues":    sit_clues,
+			"intel_quality":  sit_quality,
+			"enemy_estimate": enemy_estimate,
 		}
 
 	# Party preview (same shape as flow.stage and flow.stage_map)

@@ -63,11 +63,13 @@ var _situation_markers: Array = []
 @onready var _obj_title:          Label          = %ObjectiveTitleLabel
 @onready var _directive_label:    Label          = %DirectiveLabel
 @onready var _back_btn:           Button         = %BackButton
-@onready var _sit_overlay:        PanelContainer = $SituationOverlay
-@onready var _sit_header_label:   Label          = %SituationHeaderLabel
-@onready var _sit_type_label:     Label          = %SituationTypeLabel
-@onready var _sit_result_label:   Label          = %SituationResultLabel
-@onready var _dismiss_btn:        Button         = %DismissButton
+@onready var _sit_overlay:          PanelContainer = $SituationOverlay
+@onready var _sit_header_label:     Label          = %SituationHeaderLabel
+@onready var _sit_type_label:       Label          = %SituationTypeLabel
+@onready var _sit_result_label:     Label          = %SituationResultLabel
+@onready var _intel_clue_label:     Label          = %IntelClueLabel
+@onready var _enemy_estimate_label: Label          = %EnemyEstimateLabel
+@onready var _dismiss_btn:          Button         = %DismissButton
 @onready var _directive_overlay:  Control        = %DirectiveSelectOverlay
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -243,6 +245,14 @@ func _show_pending_overlay(pending: Dictionary, engage_action: Dictionary) -> vo
 	else:
 		_sit_type_label.text   = "Unknown"
 		_sit_result_label.text = "The party senses something ahead. Enter to discover what awaits."
+	# V2-INTEL-001: show prior-run intel clue and enemy estimate if available
+	var intel_clues_v: Variant = pending.get("intel_clues", [])
+	var intel_clues: Array = intel_clues_v if intel_clues_v is Array else []
+	_intel_clue_label.text    = str(intel_clues[0]) if not intel_clues.is_empty() else ""
+	_intel_clue_label.visible = not intel_clues.is_empty()
+	var enemy_est := str(pending.get("enemy_estimate", ""))
+	_enemy_estimate_label.text    = enemy_est
+	_enemy_estimate_label.visible = not enemy_est.is_empty()
 	_dismiss_btn.text      = "Enter"
 	_cached_overlay_action = engage_action
 	_sit_overlay.show()
@@ -252,6 +262,8 @@ func _show_result_overlay(result: Dictionary) -> void:
 	_sit_header_label.text  = "Situation"
 	_sit_type_label.text    = str(result.get("type", "")).capitalize()
 	_sit_result_label.text  = str(result.get("result_text", ""))
+	_intel_clue_label.visible     = false
+	_enemy_estimate_label.visible = false
 	_dismiss_btn.text       = "Continue"
 	_cached_overlay_action  = { "type": "stage.dismiss_overlay" }
 	_sit_overlay.show()
@@ -268,7 +280,9 @@ func _show_return_home_overlay(result: Dictionary) -> void:
 		_sit_type_label.text   = "Blocked"
 		_dismiss_btn.text      = "Continue"
 		_cached_overlay_action = { "type": "stage.dismiss_overlay" }
-	_sit_result_label.text = str(result.get("message", ""))
+	_sit_result_label.text        = str(result.get("message", ""))
+	_intel_clue_label.visible     = false
+	_enemy_estimate_label.visible = false
 	_sit_overlay.show()
 
 
@@ -312,7 +326,8 @@ func _build_preview(cols: int, rows: int) -> void:
 
 # ─── Situation markers ───────────────────────────────────────────────────────
 
-## Preview mode — all markers shown as hidden ? circles.
+## Preview mode — V2-INTEL-001: previously scouted situations show their type marker.
+## Resolved situations show the resolved marker. Unknown situations show the hidden ? marker.
 func _rebuild_situations_preview(map_situations: Array) -> void:
 	for m in _situation_markers:
 		if is_instance_valid(m):
@@ -323,10 +338,23 @@ func _rebuild_situations_preview(map_situations: Array) -> void:
 		var sit: Dictionary   = sit_v if sit_v is Dictionary else {}
 		var pos_v: Variant    = sit.get("pos", { "col": 0, "row": 0 })
 		var pos_d: Dictionary = pos_v if pos_v is Dictionary else { "col": 0, "row": 0 }
-		var marker: Control   = _hidden_template.duplicate() as Control
+		var revealed: bool    = bool(sit.get("revealed", false))
+		var resolved: bool    = bool(sit.get("resolved", false))
+		var template: Control
+		if resolved:
+			template = _resolved_template
+		elif revealed:
+			template = _revealed_template
+		else:
+			template = _hidden_template
+		var marker: Control  = template.duplicate() as Control
 		var board_local := _board.map_to_local(Vector2i(int(pos_d.get("col", 0)), int(pos_d.get("row", 0))))
-		marker.position       = _board_to_screen(board_local)
-		marker.visible        = true
+		marker.position      = _board_to_screen(board_local)
+		marker.visible       = true
+		if revealed and not resolved:
+			var type_lbl: Label = marker.get_node_or_null("RevealedCircle/TypeLabel")
+			if type_lbl != null:
+				type_lbl.text = str(sit.get("type", "")).capitalize()
 		_situation_layer.add_child(marker)
 		_situation_markers.append(marker)
 
