@@ -27,7 +27,8 @@ signal action_requested(action: Dictionary)
 @export var rank_color_d: Color = Color("#b08040")  # amber dim
 @export var rank_color_f: Color = Color("#c04040")  # red
 
-const RewardEntryScene := preload("res://ui/components/RewardEntryItem.tscn")
+const RewardEntryScene    := preload("res://ui/components/RewardEntryItem.tscn")
+const EmotionEntryScene   := preload("res://ui/components/EmotionEntryItem.tscn")
 
 @onready var _banner:            Label         = %BannerLabel
 @onready var _reason:            Label         = %ReasonLabel
@@ -39,6 +40,7 @@ const RewardEntryScene := preload("res://ui/components/RewardEntryItem.tscn")
 @onready var _rounds_value:      Label         = %RoundsValue
 @onready var _sanctum_button:    Button        = %SanctumButton
 @onready var _next_stage_button: Button        = %NextStageButton
+@onready var _emotion_list:      VBoxContainer = %EmotionList
 
 var _sanctum_action:    Dictionary = {}
 var _next_stage_action: Dictionary = {}
@@ -65,6 +67,8 @@ func _clear() -> void:
 	_ase_value.text  = "0"
 	for child in _breakdown_section.get_children():
 		child.queue_free()
+	for child in _emotion_list.get_children():
+		child.queue_free()
 
 
 func _render(data: Dictionary, actions: Dictionary) -> void:
@@ -89,6 +93,19 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	var breakdown_v: Variant = data.get("reward_breakdown", [])
 	var breakdown: Array = breakdown_v if breakdown_v is Array else []
 	_build_breakdown(breakdown, int(data.get("ase_awarded", 0)))
+
+	# V2-EMOTION-001: per-echo emotion summary.
+	var emotion_summary_v: Variant = data.get("emotion_summary", [])
+	var emotion_summary: Array = emotion_summary_v if emotion_summary_v is Array else []
+	for entry_v in emotion_summary:
+		var entry: Dictionary = entry_v if entry_v is Dictionary else {}
+		var row: Node = EmotionEntryScene.instantiate()
+		row.get_node("%EchoNameLabel").text     = str(entry.get("name", ""))
+		row.get_node("%MoraleChangeLabel").text = \
+			"%s → %s" % [entry.get("pre_morale_tier", ""), entry.get("post_morale_tier", "")]
+		row.get_node("%FearSignalLabel").text   = str(entry.get("fear_signal", "calm")).capitalize()
+		row.get_node("%RefusedLabel").visible   = bool(entry.get("refused", false))
+		_emotion_list.add_child(row)
 
 	# Wire CTA buttons from snapshot actions.
 	if actions.has("cta.continue"):

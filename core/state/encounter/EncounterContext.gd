@@ -47,5 +47,9 @@ var final_snapshot: Dictionary = {}
 # Initialised fresh per EncounterContext instance (i.e. once per combat). Never persisted.
 var echo_action_logs: Dictionary = {}
 
+# V2-EMOTION-001: echo_id → morale_current at encounter entry. Populated by
+# FlowEncounterState.enter(). Used by build_final_snapshot() for delta computation.
+var pre_encounter_morale: Dictionary = {}
+
 # Optional deterministic notes for debugging / temporary tests
 var notes: Array[String] = []

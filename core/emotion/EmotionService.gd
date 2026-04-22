@@ -148,6 +148,18 @@ static func get_morale_tier(morale_current: int) -> String:
 	return "broken"
 
 
+## Returns a player-facing fear signal from fear_current: calm / rising / critical / refusing.
+## Pure — no dict required. Safe to call with any int.
+static func get_fear_signal(fear_current: int) -> String:
+	if fear_current >= 80:
+		return "refusing"
+	elif fear_current >= 40:
+		return "critical"
+	elif fear_current > 0:
+		return "rising"
+	return "calm"
+
+
 # ---------------------------------------------------------------------------
 # Drift methods (EMOTION-002)
 # ---------------------------------------------------------------------------

@@ -2,6 +2,8 @@ class_name FlowEncounterState
 
 extends State
 
+const FEAR_THRESHOLD_DEFAULT: int = 80
+
 func _init(id: String = FlowStateIds.ENCOUNTER) -> void:
 	super(id)
 
@@ -45,6 +47,13 @@ func enter(ctx: RefCounted, t: int) -> void:
 			for echo in roster:
 				if echo.get("id", "") in party_ids:
 					echo_actors.append(EchoActor.from_echo(echo))
+			# V2-EMOTION-001: capture pre-encounter morale per echo for resolve delta.
+			for echo_v2 in roster:
+				var echo_2: Dictionary = echo_v2 if echo_v2 is Dictionary else {}
+				if str(echo_2.get("id", "")) in party_ids:
+					var _emo_e: Dictionary = echo_2.get("emotion", {})
+					flow_ctx.encounter_ctx.pre_encounter_morale[str(echo_2.get("id", ""))] = \
+						int(_emo_e.get("morale_current", 50))
 		echo_actors.sort_custom(func(a, b): return a["id"] < b["id"])
 
 		# GRID-002: build enemy actor list (hardcoded stubs — actors.json is empty in MVP).
@@ -218,6 +227,10 @@ static func _project_actor(actor: Dictionary) -> Dictionary:
 		# UI-004: added for party strip and pre-battle overlay.
 		"calling_origin": str(actor.get("calling_origin", "")),
 		"morale_status":  FlowEncounterState._derive_morale_status(fear),
+		# V2-EMOTION-001: player-facing emotion readability fields.
+		"morale_tier":    EmotionService.get_morale_tier(int(actor.get("morale", 50))),
+		"fear_signal":    EmotionService.get_fear_signal(fear),
+		"refuse_cause":   "absolute_fear_rule" if fear >= FEAR_THRESHOLD_DEFAULT else "",
 		# PROG-008: active skill slots forwarded for pre-battle and resolve screens.
 		"skill_slots": (actor.get("skill_slots", [""]) as Array).duplicate(),
 	}
@@ -589,6 +602,27 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 					em_roster[i]["emotion"]["morale_current"] = int(actor_v.get("morale", 0))
 					break
 
+	# V2-EMOTION-001: per-echo emotion delta summary for resolve screen.
+	var pre_morale_map: Dictionary = ectx.pre_encounter_morale if ectx != null else {}
+	var emotion_summary: Array = []
+	for a_v in raw_actors:
+		if not (a_v is Dictionary): continue
+		var ea: Dictionary = a_v
+		if str(ea.get("faction", "")) != "echo": continue
+		var eid: String     = str(ea.get("id", ""))
+		var pre_morale: int  = int(pre_morale_map.get(eid, 50))
+		var post_morale: int = int(ea.get("morale", 50))
+		var post_fear: int   = int(ea.get("fear", 0))
+		emotion_summary.append({
+			"echo_id":          eid,
+			"name":             str(ea.get("name", "")),
+			"pre_morale_tier":  EmotionService.get_morale_tier(pre_morale),
+			"post_morale_tier": EmotionService.get_morale_tier(post_morale),
+			"morale_delta":     post_morale - pre_morale,
+			"fear_signal":      EmotionService.get_fear_signal(post_fear),
+			"refused":          post_fear >= FEAR_THRESHOLD_DEFAULT,
+		})
+
 	return {
 		"type": FlowStateIds.RESOLVE,
 		"data": {
@@ -608,6 +642,8 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"relics":           [],
 			# PROG-003: per-echo XP events for ResolveScreen and EchoParty display.
 			"xp_events":        xp_events,
+			# V2-EMOTION-001: per-echo emotion delta for ResolveScreen.
+			"emotion_summary":  emotion_summary,
 		},
 		"actions": _build_resolve_actions(victory),
 		"meta": { "t": t },

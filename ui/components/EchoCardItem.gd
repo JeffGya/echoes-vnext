@@ -1,8 +1,8 @@
 # res://ui/components/EchoCardItem.gd
 # UI-003: Echo status card for RealmShell bottom bar.
 # Handles two data shapes:
-#   Encounter/Resolve: { name, hp, max_hp, morale_status, faction }
-#   Stage/StageMap:    { name, rank, calling_origin }
+#   Encounter/Resolve: { name, hp, max_hp, morale_tier, morale_status, fear_signal, faction }
+#   Stage/StageMap:    { name, rank, calling_origin, morale_tier, fear_signal }
 # Data bind only — no colors. All styling via Godot theme.
 
 class_name EchoCardItem
@@ -13,6 +13,7 @@ extends PanelContainer
 @onready var portrait_label: Label   = %PortraitLabel
 @onready var name_label: Label       = %NameLabel
 @onready var status_label: Label     = %StatusLabel
+@onready var fear_badge: Label       = %FearBadge
 
 func setup(actor: Dictionary) -> void:
 	var name_str := str(actor.get("name", "?"))
@@ -29,13 +30,23 @@ func setup(actor: Dictionary) -> void:
 	else:
 		hp_bar.visible = false
 
-	if actor.has("morale_status"):
+	# V2-EMOTION-001: morale_tier (morale-derived) takes priority over legacy morale_status (fear-derived).
+	if actor.has("morale_tier"):
+		var tier := str(actor.get("morale_tier", "steady")).to_lower()
+		status_label.text = _morale_text(tier)
+		status_label.theme_type_variation = _morale_theme_key(tier)
+	elif actor.has("morale_status"):
 		var morale_status := str(actor.get("morale_status", "steady")).to_lower()
 		status_label.text = _morale_text(morale_status)
 		status_label.theme_type_variation = _morale_theme_key(morale_status)
 	else:
 		status_label.text = str(actor.get("calling_origin", "Ready"))
 		status_label.theme_type_variation = &"EmotionBadge.Ready"
+
+	# V2-EMOTION-001: fear signal badge — only shown when fear is above calm.
+	var fear_signal := str(actor.get("fear_signal", "calm"))
+	fear_badge.visible = fear_signal != "" and fear_signal != "calm"
+	fear_badge.text    = fear_signal.capitalize()
 
 func _morale_text(morale_status: String) -> String:
 	match morale_status:

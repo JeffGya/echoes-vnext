@@ -184,9 +184,9 @@ static func _t_situations_min_distance() -> Dictionary:
 				var sb: Dictionary = sits[b] if sits[b] is Dictionary else {}
 				var pa: Dictionary = sa.get("pos", { "col": 0, "row": 0 })
 				var pb: Dictionary = sb.get("pos", { "col": 0, "row": 0 })
-				var dc := abs(int(pa.get("col", 0)) - int(pb.get("col", 0)))
-				var dr := abs(int(pa.get("row", 0)) - int(pb.get("row", 0)))
-				var dist := max(dc, dr)
+				var dc: int = abs(int(pa.get("col", 0)) - int(pb.get("col", 0)))
+				var dr: int = abs(int(pa.get("row", 0)) - int(pb.get("row", 0)))
+				var dist: int = max(dc, dr)
 				# RealmGenerator._MIN_SIT_DISTANCE is 4 — fallback placement may be closer
 				# We only enforce 0 overlap (same cell check) since fallback relaxes distance
 				if dc == 0 and dr == 0:

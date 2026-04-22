@@ -127,6 +127,24 @@ text = "0"
 theme_override_font_sizes/font_size = 14
 horizontal_alignment = 2
 
+[node name="EmotionSection" type="VBoxContainer" parent="CenterContainer/ResultCard/CardContent"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="EmotionHeader" type="Label" parent="CenterContainer/ResultCard/CardContent/EmotionSection"]
+layout_mode = 2
+text = "Echo Emotion"
+theme_override_font_sizes/font_size = 14
+
+[node name="EmotionSeparator" type="HSeparator" parent="CenterContainer/ResultCard/CardContent/EmotionSection"]
+layout_mode = 2
+
+[node name="EmotionList" type="VBoxContainer" parent="CenterContainer/ResultCard/CardContent/EmotionSection"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
 [node name="ButtonRow" type="HBoxContainer" parent="CenterContainer/ResultCard/CardContent"]
 layout_mode = 2
 alignment = 1

@@ -110,14 +110,14 @@ static func _t_revealed_survives_session_reset() -> Dictionary:
 	# Session reset — should preserve revealed
 	FlowStageExploreStateScript._reset_session_state(ctx, 2)
 
-	var val := _get_situation_field(ctx, "sit.0", "revealed")
+	var val: Variant = _get_situation_field(ctx, "sit.0", "revealed")
 	if val == null:
 		return { "ok": false, "error": "sit.0 not found after reset" }
 	if not bool(val):
 		return { "ok": false, "error": "revealed was wiped to false — intel persistence broken" }
 
 	# sit.1 should still be false (was never revealed)
-	var val1 := _get_situation_field(ctx, "sit.1", "revealed")
+	var val1: Variant = _get_situation_field(ctx, "sit.1", "revealed")
 	if bool(val1):
 		return { "ok": false, "error": "sit.1 should still be hidden" }
 
@@ -136,7 +136,7 @@ static func _t_resolved_survives_session_reset() -> Dictionary:
 	_set_situation_flag(ctx, "sit.0", "resolved", true)
 	FlowStageExploreStateScript._reset_session_state(ctx, 2)
 
-	var val := _get_situation_field(ctx, "sit.0", "resolved")
+	var val: Variant = _get_situation_field(ctx, "sit.0", "resolved")
 	if val == null:
 		return { "ok": false, "error": "sit.0 not found after reset" }
 	if not bool(val):
@@ -190,13 +190,13 @@ static func _t_intel_clues_carried_forward() -> Dictionary:
 
 	FlowStageExploreStateScript._reset_session_state(ctx, 2)
 
-	var clues := _get_situation_field(ctx, "sit.0", "intel_clues")
+	var clues: Variant = _get_situation_field(ctx, "sit.0", "intel_clues")
 	if clues == null or not (clues is Array) or (clues as Array).is_empty():
 		return { "ok": false, "error": "intel_clues lost after session reset" }
 	if str((clues as Array)[0]) != "Tracks in the earth. Something passed through here with intent.":
 		return { "ok": false, "error": "intel_clues content changed after reset" }
 
-	var quality := _get_situation_field(ctx, "sit.0", "intel_quality")
+	var quality: Variant = _get_situation_field(ctx, "sit.0", "intel_quality")
 	if str(quality) != "precise":
 		return { "ok": false, "error": "intel_quality lost after reset, got: %s" % str(quality) }
 

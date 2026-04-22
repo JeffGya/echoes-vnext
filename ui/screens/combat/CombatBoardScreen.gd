@@ -513,6 +513,12 @@ func _draw_initiative_panel(data: Dictionary) -> void:
 			if not sid.is_empty():
 				action_by_id[sid] = _format_action(result_v)
 
+	# V2-EMOTION-001: build actor lookup for emotion fields.
+	var actor_by_id: Dictionary = {}
+	for actor_v in data.get("actors", []):
+		if actor_v is Dictionary:
+			actor_by_id[str(actor_v.get("id", ""))] = actor_v
+
 	for child in _initiative_list.get_children():
 		child.queue_free()
 
@@ -532,6 +538,14 @@ func _draw_initiative_panel(data: Dictionary) -> void:
 			is_dead,
 			_action_color_for_text(action_text)
 		)
+		# V2-EMOTION-001: set morale tier + refusing indicator per actor row.
+		var actor_d: Dictionary = actor_by_id.get(actor_id, {})
+		var morale_tier_str: String = str(actor_d.get("morale_tier", ""))
+		if not morale_tier_str.is_empty():
+			row.get_node("%MoraleBadge").text    = morale_tier_str.capitalize()
+			row.get_node("%MoraleBadge").visible = true
+		var refusing: bool = str(actor_d.get("refuse_cause", "")) != ""
+		row.get_node("%RefusingLabel").visible = refusing
 
 	_initiative_panel.visible = true
 

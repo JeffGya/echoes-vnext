@@ -16,7 +16,9 @@ signal action_requested(action: Dictionary)
 @onready var echo_preview_1: Label = %EchoPreview1
 @onready var echo_preview_2: Label = %EchoPreview2
 @onready var echo_preview_3: Label = %EchoPreview3
-@onready var party_slots_label: Label = %PartySlots
+@onready var party_slots_label: Label        = %PartySlots
+@onready var _party_slot_list: VBoxContainer = %PartySlotList
+@onready var _house_state_list: VBoxContainer = %HouseStateList
 
 @onready var name_modal: Control = %NameModal
 @onready var name_edit: LineEdit = %NameEdit
@@ -67,22 +69,48 @@ func _render() -> void:
 	echo_count_label.text = "%d echoes" % int(data.get("roster_count", 0))
 	
 
-	# Party slots (SANCTUM-003 Subtask 4)
+	# Party slots (SANCTUM-003 Subtask 4 + V2-EMOTION-001 morale)
 	var slots_v: Variant = data.get("party_slots", [])
 	var slots: Array = slots_v if slots_v is Array else []
 	if slots.is_empty():
 		party_slots_label.text = "No party set"
 	else:
-		var lines: Array = []
-		for s_v in slots:
-			if not (s_v is Dictionary):
-				continue
-			var s: Dictionary = s_v
-			var nm := str(s.get("name", "?"))
-			var lv := int(s.get("step", 1))
-			var rk := int(s.get("standing", 1))
-			lines.append("%s  Step%d  S%d" % [nm, lv, rk])
-		party_slots_label.text = "Party:\n" + "\n".join(lines)
+		party_slots_label.text = "Party: %d" % slots.size()
+	for child in _party_slot_list.get_children():
+		child.queue_free()
+	for s_v in slots:
+		if not (s_v is Dictionary):
+			continue
+		var s: Dictionary = s_v
+		var nm := str(s.get("name", "?"))
+		var tier := str(s.get("morale_tier", ""))
+		var lbl := Label.new()
+		lbl.text = "%s — [%s]" % [nm, tier] if tier != "" else nm
+		lbl.theme_type_variation = &"ContentBasePanel"
+		_party_slot_list.add_child(lbl)
+
+	# V2-EMOTION-001: House State strip — roster_preview first 3 echoes.
+	for child in _house_state_list.get_children():
+		child.queue_free()
+	var preview_v: Variant = data.get("roster_preview", [])
+	var preview: Array = preview_v if preview_v is Array else []
+	var house_limit: int = mini(3, preview.size())
+	for i in range(house_limit):
+		var p_v: Variant = preview[i]
+		if not (p_v is Dictionary):
+			continue
+		var p: Dictionary = p_v
+		var p_nm := str(p.get("name", "?"))
+		var p_emo_v: Variant = p.get("emotion", {})
+		var p_emo: Dictionary = p_emo_v if p_emo_v is Dictionary else {}
+		var p_tier := str(p_emo.get("morale_tier", ""))
+		var p_fear := int(p_emo.get("fear_current", 0))
+		var p_signal := EmotionService.get_fear_signal(p_fear)
+		var lbl2 := Label.new()
+		var fear_part := (" [%s]" % p_signal) if p_signal != "calm" else ""
+		lbl2.text = "%s — [%s]%s" % [p_nm, p_tier, fear_part] if p_tier != "" else p_nm
+		lbl2.theme_type_variation = &"ContentBasePanel"
+		_house_state_list.add_child(lbl2)
 
 	# Ase animate on change
 	if _last_ase_balance != -1 and ase_balance != _last_ase_balance:
