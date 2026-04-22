@@ -94,17 +94,16 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	var breakdown: Array = breakdown_v if breakdown_v is Array else []
 	_build_breakdown(breakdown, int(data.get("ase_awarded", 0)))
 
-	# V2-EMOTION-001: per-echo emotion summary.
+	# V2-EMOTION-002: per-echo emotion summary (unified emotional status arc).
 	var emotion_summary_v: Variant = data.get("emotion_summary", [])
 	var emotion_summary: Array = emotion_summary_v if emotion_summary_v is Array else []
 	for entry_v in emotion_summary:
 		var entry: Dictionary = entry_v if entry_v is Dictionary else {}
 		var row: Node = EmotionEntryScene.instantiate()
-		row.get_node("%EchoNameLabel").text     = str(entry.get("name", ""))
-		row.get_node("%MoraleChangeLabel").text = \
-			"%s → %s" % [entry.get("pre_morale_tier", ""), entry.get("post_morale_tier", "")]
-		row.get_node("%FearSignalLabel").text   = str(entry.get("fear_signal", "calm")).capitalize()
-		row.get_node("%RefusedLabel").visible   = bool(entry.get("refused", false))
+		row.get_node("%EchoNameLabel").text    = str(entry.get("name", ""))
+		row.get_node("%EmotionArcLabel").text  = \
+			"%s → %s" % [entry.get("pre_emotional_status", "").capitalize(), entry.get("post_emotional_status", "").capitalize()]
+		row.get_node("%RefusedLabel").visible  = bool(entry.get("refused", false))
 		_emotion_list.add_child(row)
 
 	# Wire CTA buttons from snapshot actions.

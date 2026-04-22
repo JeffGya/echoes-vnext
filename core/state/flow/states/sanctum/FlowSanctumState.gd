@@ -120,13 +120,16 @@ func enter(ctx: RefCounted, t:int) -> void:
 			"standing":        int(echo.get("rank", 1)),
 			"step":            int(echo.get("level", 1)),
 			"archetype_birth": str(echo.get("archetype_birth", "")),
-			# EMOTION-002: emotion snapshot (computed tier, fear, last drift event)
+			# EMOTION-002: emotion snapshot (V2-EMOTION-002: morale_tier → emotional_status)
 			"emotion": {
-				"faith":            int(_emo.get("faith",          50)),
-				"morale_current":   int(_emo.get("morale_current", 50)),
-				"morale_tier":      EmotionService.get_morale_tier(int(_emo.get("morale_current", 50))),
-				"fear_current":     int(_emo.get("fear_current",   0)),
-				"last_drift_event": _last_drift_v if _last_drift_v is Dictionary else {},
+				"faith":             int(_emo.get("faith",          50)),
+				"morale_current":    int(_emo.get("morale_current", 50)),
+				"fear_current":      int(_emo.get("fear_current",   0)),
+				"emotional_status":  EmotionService.get_emotional_status(
+					int(_emo.get("morale_current", 50)),
+					int(_emo.get("fear_current",   0))
+				),
+				"last_drift_event":  _last_drift_v if _last_drift_v is Dictionary else {},
 			},
 		})
 	

@@ -148,12 +148,14 @@ func _rebuild_snapshot(ctx: FlowContext, logger: StructuredLogger, t: int) -> vo
 				if str(echo.get("id", "")) == pid:
 					var _emo_p: Dictionary = echo.get("emotion", {})
 					party_slots.append({
-						"name":        str(echo.get("name", "")),
-						"step":        int(echo.get("level", 1)),
-						"standing":    int(echo.get("rank", 1)),
-						# V2-EMOTION-001: emotion fields for SanctumScreen party list.
-						"morale_tier": EmotionService.get_morale_tier(int(_emo_p.get("morale_current", 50))),
-						"fear_signal": EmotionService.get_fear_signal(int(_emo_p.get("fear_current", 0))),
+						"name":             str(echo.get("name", "")),
+						"step":             int(echo.get("level", 1)),
+						"standing":         int(echo.get("rank", 1)),
+						# V2-EMOTION-002: unified emotional status.
+						"emotional_status": EmotionService.get_emotional_status(
+							int(_emo_p.get("morale_current", 50)),
+							int(_emo_p.get("fear_current", 0))
+						),
 					})
 					break
 		data["party_slots"] = party_slots

@@ -27,14 +27,13 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("emotion/drift_fear_threshold",       Callable(EmotionTests, "_t_drift_fear_threshold"))
 	runner.register_test("emotion/drift_combat_exit_win",      Callable(EmotionTests, "_t_drift_combat_exit_win"))
 	runner.register_test("emotion/drift_determinism",          Callable(EmotionTests, "_t_drift_determinism"))
-	# V2-EMOTION-001 tests
-	runner.register_test("emotion/fear_signal_calm",           Callable(EmotionTests, "_t_fear_signal_calm"))
-	runner.register_test("emotion/fear_signal_rising",         Callable(EmotionTests, "_t_fear_signal_rising"))
-	runner.register_test("emotion/fear_signal_critical",       Callable(EmotionTests, "_t_fear_signal_critical"))
-	runner.register_test("emotion/fear_signal_refusing",       Callable(EmotionTests, "_t_fear_signal_refusing"))
-	runner.register_test("emotion/project_actor_morale_tier",  Callable(EmotionTests, "_t_project_actor_morale_tier"))
-	runner.register_test("emotion/project_actor_refuse_cause", Callable(EmotionTests, "_t_project_actor_refuse_cause"))
-	runner.register_test("emotion/resolve_emotion_summary",    Callable(EmotionTests, "_t_resolve_emotion_summary"))
+	# V2-EMOTION-002 tests
+	runner.register_test("emotion/emotional_status_radiant",         Callable(EmotionTests, "_t_emotional_status_radiant"))
+	runner.register_test("emotion/emotional_status_burdened",        Callable(EmotionTests, "_t_emotional_status_burdened"))
+	runner.register_test("emotion/emotional_status_pressed",         Callable(EmotionTests, "_t_emotional_status_pressed"))
+	runner.register_test("emotion/emotional_status_hollow",          Callable(EmotionTests, "_t_emotional_status_hollow"))
+	runner.register_test("emotion/project_actor_emotional_status",   Callable(EmotionTests, "_t_project_actor_emotional_status"))
+	runner.register_test("emotion/resolve_emotion_summary_unified",  Callable(EmotionTests, "_t_resolve_emotion_summary_unified"))
 
 
 # -------------------------
@@ -357,44 +356,49 @@ static func _t_drift_determinism() -> Dictionary:
 
 
 # -------------------------
-# V2-EMOTION-001 Tests
+# V2-EMOTION-002 Tests
 # -------------------------
 
-# Test 10: fear_signal_calm
-static func _t_fear_signal_calm() -> Dictionary:
-	var got := EmotionService.get_fear_signal(0)
-	if got != "calm":
-		return { "ok": false, "error": "get_fear_signal(0): expected 'calm', got '%s'" % got }
+# Test 10: emotional_status_radiant
+# morale=80, fear=10 → "radiant"
+static func _t_emotional_status_radiant() -> Dictionary:
+	var got := EmotionService.get_emotional_status(80, 10)
+	if got != "radiant":
+		return { "ok": false, "error": "get_emotional_status(80, 10): expected 'radiant', got '%s'" % got }
 	return { "ok": true }
 
 
-# Test 11: fear_signal_rising
-static func _t_fear_signal_rising() -> Dictionary:
-	var got := EmotionService.get_fear_signal(25)
-	if got != "rising":
-		return { "ok": false, "error": "get_fear_signal(25): expected 'rising', got '%s'" % got }
+# Test 11: emotional_status_burdened
+# morale=35, fear=35 → "burdened" (catch-all: morale<40 so grounded doesn't apply, fear<45 so pressed doesn't apply)
+static func _t_emotional_status_burdened() -> Dictionary:
+	var got := EmotionService.get_emotional_status(35, 35)
+	if got != "burdened":
+		return { "ok": false, "error": "get_emotional_status(35, 35): expected 'burdened', got '%s'" % got }
 	return { "ok": true }
 
 
-# Test 12: fear_signal_critical
-static func _t_fear_signal_critical() -> Dictionary:
-	var got := EmotionService.get_fear_signal(55)
-	if got != "critical":
-		return { "ok": false, "error": "get_fear_signal(55): expected 'critical', got '%s'" % got }
+# Test 12: emotional_status_pressed
+# morale=50, fear=50 → "pressed" (fear outpacing morale)
+static func _t_emotional_status_pressed() -> Dictionary:
+	var got := EmotionService.get_emotional_status(50, 50)
+	if got != "pressed":
+		return { "ok": false, "error": "get_emotional_status(50, 50): expected 'pressed', got '%s'" % got }
 	return { "ok": true }
 
 
-# Test 13: fear_signal_refusing
-static func _t_fear_signal_refusing() -> Dictionary:
-	var got := EmotionService.get_fear_signal(80)
-	if got != "refusing":
-		return { "ok": false, "error": "get_fear_signal(80): expected 'refusing', got '%s'" % got }
+# Test 13: emotional_status_hollow
+# morale=30, fear=80 → "hollow" (fear ≥ 75)
+static func _t_emotional_status_hollow() -> Dictionary:
+	var got := EmotionService.get_emotional_status(30, 80)
+	if got != "hollow":
+		return { "ok": false, "error": "get_emotional_status(30, 80): expected 'hollow', got '%s'" % got }
 	return { "ok": true }
 
 
-# Test 14: project_actor_morale_tier
-# _project_actor() with morale=60, fear=20 → morale_tier=="steady", fear_signal=="rising", refuse_cause==""
-static func _t_project_actor_morale_tier() -> Dictionary:
+# Test 14: project_actor_emotional_status
+# _project_actor() with morale=60, fear=20 → emotional_status=="whole"
+# (morale=60 ≥ 55 AND fear=20 ≤ 30 → "whole" per the 8-tier derivation)
+static func _t_project_actor_emotional_status() -> Dictionary:
 	var actor := {
 		"id": "echo_01", "name": "Test", "faction": "echo",
 		"current_hp": 80, "stats": { "max_hp": 100 },
@@ -404,50 +408,27 @@ static func _t_project_actor_morale_tier() -> Dictionary:
 		"calling_origin": "Okofor", "skill_slots": [""],
 	}
 	var proj := FlowEncounterState._project_actor(actor)
-	if str(proj.get("morale_tier", "")) != "steady":
-		return { "ok": false, "error": "Expected morale_tier='steady' for morale=60, got '%s'" % proj.get("morale_tier", "") }
-	if str(proj.get("fear_signal", "")) != "rising":
-		return { "ok": false, "error": "Expected fear_signal='rising' for fear=20, got '%s'" % proj.get("fear_signal", "") }
-	if str(proj.get("refuse_cause", "x")) != "":
-		return { "ok": false, "error": "Expected refuse_cause='' for fear=20, got '%s'" % proj.get("refuse_cause", "") }
+	if str(proj.get("emotional_status", "")) != "whole":
+		return { "ok": false, "error": "Expected emotional_status='whole' for morale=60/fear=20, got '%s'" % proj.get("emotional_status", "") }
 	return { "ok": true }
 
 
-# Test 15: project_actor_refuse_cause
-# _project_actor() with fear=85 → refuse_cause=="absolute_fear_rule", fear_signal=="refusing"
-static func _t_project_actor_refuse_cause() -> Dictionary:
-	var actor := {
-		"id": "echo_02", "name": "Test", "faction": "echo",
-		"current_hp": 80, "stats": { "max_hp": 100 },
-		"grid_pos": { "col": 0, "row": 0 },
-		"is_dead": false, "guard_state": false, "is_structure": false,
-		"morale": 30, "fear": 85,
-		"calling_origin": "Okofor", "skill_slots": [""],
-	}
-	var proj := FlowEncounterState._project_actor(actor)
-	if str(proj.get("refuse_cause", "")) != "absolute_fear_rule":
-		return { "ok": false, "error": "Expected refuse_cause='absolute_fear_rule' for fear=85, got '%s'" % proj.get("refuse_cause", "") }
-	if str(proj.get("fear_signal", "")) != "refusing":
-		return { "ok": false, "error": "Expected fear_signal='refusing' for fear=85, got '%s'" % proj.get("fear_signal", "") }
-	return { "ok": true }
-
-
-# Test 16: resolve_emotion_summary
-# build_final_snapshot() must include emotion_summary with correct per-echo delta.
-static func _t_resolve_emotion_summary() -> Dictionary:
+# Test 15: resolve_emotion_summary_unified
+# build_final_snapshot() must include emotion_summary with pre/post_emotional_status + refused.
+# Pre: morale=60, fear=0 → "whole". Post: morale=30, fear=70 → "fraying". refused=false (fear<80).
+static func _t_resolve_emotion_summary_unified() -> Dictionary:
 	var ctx := FlowContext.new()
 	ctx.config_service = null
 	var ectx := EncounterContext.new()
-	ectx.encounter_id   = "test_enc_003"
-	ectx.combat_result  = { "victory": true, "reason": "all_enemies_defeated", "round_ended": 2 }
-	ectx.combat_state   = { "combat_over": true, "objective": "defeat_enemies", "round_counter": 2 }
-	# Echo actor: morale=30, fear=85 (post-combat state)
+	ectx.encounter_id  = "test_enc_003"
+	ectx.combat_result = { "victory": true, "reason": "all_enemies_defeated", "round_ended": 2 }
+	ectx.combat_state  = { "combat_over": true, "objective": "defeat_enemies", "round_counter": 2 }
 	ectx.actors = [{
 		"id": "echo_01", "name": "Kojo", "faction": "echo",
 		"current_hp": 80, "stats": { "max_hp": 100 },
 		"grid_pos": { "col": 0, "row": 0 },
 		"is_dead": false, "guard_state": false, "is_structure": false,
-		"morale": 30, "fear": 85,
+		"morale": 30, "fear": 70,
 		"calling_origin": "Okofor", "skill_slots": [""],
 	}]
 	ectx.pre_encounter_morale["echo_01"] = 60
@@ -464,15 +445,13 @@ static func _t_resolve_emotion_summary() -> Dictionary:
 		return { "ok": false, "error": "Expected emotion_summary.size()==1, got %d" % es.size() }
 
 	var row: Dictionary = es[0]
-	if str(row.get("pre_morale_tier", "")) != "steady":
-		return { "ok": false, "error": "Expected pre_morale_tier='steady' (morale=60), got '%s'" % row.get("pre_morale_tier", "") }
-	if str(row.get("post_morale_tier", "")) != "shaken":
-		return { "ok": false, "error": "Expected post_morale_tier='shaken' (morale=30), got '%s'" % row.get("post_morale_tier", "") }
+	if str(row.get("pre_emotional_status", "")) != "whole":
+		return { "ok": false, "error": "Expected pre_emotional_status='whole' (morale=60/fear=0), got '%s'" % row.get("pre_emotional_status", "") }
+	if str(row.get("post_emotional_status", "")) != "fraying":
+		return { "ok": false, "error": "Expected post_emotional_status='fraying' (morale=30/fear=70), got '%s'" % row.get("post_emotional_status", "") }
 	if int(row.get("morale_delta", 0)) != -30:
 		return { "ok": false, "error": "Expected morale_delta==-30, got %d" % int(row.get("morale_delta", 0)) }
-	if str(row.get("fear_signal", "")) != "refusing":
-		return { "ok": false, "error": "Expected fear_signal='refusing' (fear=85), got '%s'" % row.get("fear_signal", "") }
-	if not bool(row.get("refused", false)):
-		return { "ok": false, "error": "Expected refused==true for fear=85" }
+	if bool(row.get("refused", true)):
+		return { "ok": false, "error": "Expected refused==false for fear=70 (threshold is 80)" }
 
 	return { "ok": true }

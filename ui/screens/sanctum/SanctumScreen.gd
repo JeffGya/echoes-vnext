@@ -83,13 +83,14 @@ func _render() -> void:
 			continue
 		var s: Dictionary = s_v
 		var nm := str(s.get("name", "?"))
-		var tier := str(s.get("morale_tier", ""))
+		# V2-EMOTION-002: unified emotional_status replaces morale_tier.
+		var es := str(s.get("emotional_status", ""))
 		var lbl := Label.new()
-		lbl.text = "%s — [%s]" % [nm, tier] if tier != "" else nm
+		lbl.text = "%s — [%s]" % [nm, es.capitalize()] if es != "" else nm
 		lbl.theme_type_variation = &"ContentBasePanel"
 		_party_slot_list.add_child(lbl)
 
-	# V2-EMOTION-001: House State strip — roster_preview first 3 echoes.
+	# V2-EMOTION-002: House State strip — roster_preview first 3 echoes.
 	for child in _house_state_list.get_children():
 		child.queue_free()
 	var preview_v: Variant = data.get("roster_preview", [])
@@ -103,12 +104,9 @@ func _render() -> void:
 		var p_nm := str(p.get("name", "?"))
 		var p_emo_v: Variant = p.get("emotion", {})
 		var p_emo: Dictionary = p_emo_v if p_emo_v is Dictionary else {}
-		var p_tier := str(p_emo.get("morale_tier", ""))
-		var p_fear := int(p_emo.get("fear_current", 0))
-		var p_signal := EmotionService.get_fear_signal(p_fear)
+		var p_es := str(p_emo.get("emotional_status", ""))
 		var lbl2 := Label.new()
-		var fear_part := (" [%s]" % p_signal) if p_signal != "calm" else ""
-		lbl2.text = "%s — [%s]%s" % [p_nm, p_tier, fear_part] if p_tier != "" else p_nm
+		lbl2.text = "%s — [%s]" % [p_nm, p_es.capitalize()] if p_es != "" else p_nm
 		lbl2.theme_type_variation = &"ContentBasePanel"
 		_house_state_list.add_child(lbl2)
 
