@@ -35,8 +35,6 @@ const _RADAR_AXIS_MAX: float = 100.0
 @onready var stat_profile_chart: Control = %StatProfileChart
 @onready var compare_party_toggle: CheckButton = %ComparePartyToggle
 @onready var detail_emotion_status: Label = %DetailEmotionStatus
-@onready var detail_morale_bar: ProgressBar = %DetailMoraleBar
-@onready var detail_fear_bar: ProgressBar = %DetailFearBar
 @onready var detail_assign_party_btn: Button = %AssignPartyBtn
 @onready var detail_assign_job_btn: Button = %AssignJobBtn
 @onready var dominant_vector_label: Label = %DominantVectorLabel
@@ -245,9 +243,8 @@ func _render_detail(e: Dictionary) -> void:
 	var storyweight_to_next := int(e.get("storyweight_to_next", 0))
 	var archetype := str(e.get("archetype", ""))
 	var hp_max := int(e.get("hp_max", 0))
-	var morale := int(e.get("morale", 50))
-	var fear := int(e.get("fear", 0))
-	var status := str(e.get("morale_status", "Normal"))
+	# V2-EMOTION-002: unified emotional status (morale + fear bars removed).
+	var status := str(e.get("emotional_status", "burdened"))
 	var in_party := bool(e.get("in_party", false))
 	var shout := str(e.get("current_shout", ""))
 	var stats_v: Variant = e.get("stats", {})
@@ -316,11 +313,7 @@ func _render_detail(e: Dictionary) -> void:
 	stat_speed_value.text = str(int(stats.get("speed", 0)))
 	_refresh_stat_profile(e)
 
-	detail_emotion_status.text = status
-	detail_morale_bar.max_value = 100
-	detail_morale_bar.value = morale
-	detail_fear_bar.max_value = 100
-	detail_fear_bar.value = fear
+	detail_emotion_status.text = status.capitalize()
 
 	detail_assign_party_btn.text = "Remove from party" if in_party else "Assign to party"
 	detail_assign_job_btn.text = "Begin Weaving Rite"

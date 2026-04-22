@@ -10,20 +10,12 @@ custom_minimum_size = Vector2(100, 0)
 theme_override_font_sizes/font_size = 14
 clip_text = true
 
-[node name="MoraleChangeLabel" type="Label" parent="."]
+[node name="EmotionArcLabel" type="Label" parent="."]
 unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(120, 0)
+custom_minimum_size = Vector2(160, 0)
 theme_override_font_sizes/font_size = 14
-text = "steady → steady"
-clip_text = true
-
-[node name="FearSignalLabel" type="Label" parent="."]
-unique_name_in_owner = true
-layout_mode = 2
-custom_minimum_size = Vector2(55, 0)
-theme_override_font_sizes/font_size = 13
-text = "calm"
+text = "grounded → fraying"
 clip_text = true
 
 [node name="RefusedLabel" type="Label" parent="."]

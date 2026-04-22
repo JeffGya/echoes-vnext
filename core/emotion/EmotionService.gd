@@ -10,11 +10,17 @@
 #     "fear_current":   int,  # 0–100, clamped. Resets to 0 each venture.
 #   }
 #
-# Morale tiers (computed, not stored):
+# Morale tiers (computed, not stored — internal sim use only):
 #   0–24   → "broken"
 #   25–49  → "shaken"
 #   50–74  → "steady"
 #   75–100 → "inspired"
+#
+# Emotional status tiers (computed, not stored — player-facing, V2-EMOTION-002):
+#   Derived from BOTH morale_current and fear_current.
+#   8 tiers: radiant / whole / grounded / burdened / pressed / strained / fraying / hollow
+#   Morale language dominates the top; fear language dominates the bottom.
+#   Never build separate morale and fear display fields — use get_emotional_status() only.
 #
 # Rules (EMOTION-001/002):
 # - Never write echo["emotion"] directly — always use these setters.
@@ -148,16 +154,33 @@ static func get_morale_tier(morale_current: int) -> String:
 	return "broken"
 
 
-## Returns a player-facing fear signal from fear_current: calm / rising / critical / refusing.
-## Pure — no dict required. Safe to call with any int.
-static func get_fear_signal(fear_current: int) -> String:
-	if fear_current >= 80:
-		return "refusing"
-	elif fear_current >= 40:
-		return "critical"
-	elif fear_current > 0:
-		return "rising"
-	return "calm"
+## Returns the unified player-facing emotional status from morale_current + fear_current.
+## 8 tiers (worst-first derivation; burdened is the catch-all middle):
+##   hollow   — fear ≥ 75, or fear ≥ 55 with morale ≤ 20
+##   fraying  — fear ≥ 65 and morale ≤ 35
+##   strained — fear ≥ 55 and morale ≤ 45
+##   pressed  — fear ≥ 45 and morale ≤ 55
+##   radiant  — morale ≥ 70 and fear ≤ 15
+##   whole    — morale ≥ 55 and fear ≤ 30
+##   grounded — morale ≥ 40 and fear ≤ 45
+##   burdened — catch-all (neither side dominant)
+## Pure — no dict required. Safe to call with any ints.
+static func get_emotional_status(morale: int, fear: int) -> String:
+	if fear >= 75 or (fear >= 55 and morale <= 20):
+		return "hollow"
+	if fear >= 65 and morale <= 35:
+		return "fraying"
+	if fear >= 55 and morale <= 45:
+		return "strained"
+	if fear >= 45 and morale <= 55:
+		return "pressed"
+	if morale >= 70 and fear <= 15:
+		return "radiant"
+	if morale >= 55 and fear <= 30:
+		return "whole"
+	if morale >= 40 and fear <= 45:
+		return "grounded"
+	return "burdened"
 
 
 # ---------------------------------------------------------------------------

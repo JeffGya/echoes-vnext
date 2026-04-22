@@ -538,14 +538,11 @@ func _draw_initiative_panel(data: Dictionary) -> void:
 			is_dead,
 			_action_color_for_text(action_text)
 		)
-		# V2-EMOTION-001: set morale tier + refusing indicator per actor row.
+		# V2-EMOTION-002: set unified emotional status per actor row.
 		var actor_d: Dictionary = actor_by_id.get(actor_id, {})
-		var morale_tier_str: String = str(actor_d.get("morale_tier", ""))
-		if not morale_tier_str.is_empty():
-			row.get_node("%MoraleBadge").text    = morale_tier_str.capitalize()
-			row.get_node("%MoraleBadge").visible = true
-		var refusing: bool = str(actor_d.get("refuse_cause", "")) != ""
-		row.get_node("%RefusingLabel").visible = refusing
+		var emotion_str: String = str(actor_d.get("emotional_status", ""))
+		row.get_node("%EmotionLabel").text    = emotion_str.capitalize()
+		row.get_node("%EmotionLabel").visible = not emotion_str.is_empty()
 
 	_initiative_panel.visible = true
 

@@ -114,9 +114,8 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				"cha":   int(stats.get("cha",   0)),
 				"speed": int(stats.get("speed", 0)),
 			},
-			"morale":                morale,
-			"fear":                  fear,
-			"morale_status":         _derive_morale_status(fear),
+			# V2-EMOTION-002: unified emotional status (replaces morale + fear + morale_status).
+			"emotional_status":      EmotionService.get_emotional_status(morale, fear),
 			"in_party":              str(e.get("id", "")) in party_ids,
 			"current_shout":         "",
 			"standing_up_eligible":  rank_up_eligible,
@@ -210,16 +209,6 @@ static func _resolve_skill_slots(echo: Dictionary, skill_defs: Dictionary) -> Ar
 		if str(defn.get("calling_requirement", "")) == calling:
 			result.append(str(defn.get("display_name", skill_id)))
 	return result
-
-
-static func _derive_morale_status(fear: int) -> String:
-	if fear >= 80:
-		return "Broken"
-	if fear >= 40:
-		return "Afraid"
-	if fear > 0:
-		return "Shaken"
-	return "Normal"
 
 
 # BOND-001: Build bond entries for the Bonds tab from the echo's party encounter history.

@@ -72,13 +72,15 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			var echo: Dictionary = echo_v if echo_v is Dictionary else {}
 			if str(echo.get("id", "")) == str(echo_id):
 				var _emo_s: Dictionary = echo.get("emotion", {})
-				var _fear_s: int = int(_emo_s.get("fear_current", 0))
 				party_preview.append({
-					"name":           str(echo.get("name", "")),
-					"rank":           int(echo.get("rank", 1)),
-					"calling_origin": str(echo.get("calling_origin", "")),
-					"morale_tier":    EmotionService.get_morale_tier(int(_emo_s.get("morale_current", 50))),
-					"fear_signal":    EmotionService.get_fear_signal(_fear_s),
+					"name":             str(echo.get("name", "")),
+					"rank":             int(echo.get("rank", 1)),
+					"calling_origin":   str(echo.get("calling_origin", "")),
+					# V2-EMOTION-002: unified emotional status.
+					"emotional_status": EmotionService.get_emotional_status(
+						int(_emo_s.get("morale_current", 50)),
+						int(_emo_s.get("fear_current", 0))
+					),
 				})
 				break
 

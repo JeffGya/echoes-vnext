@@ -19,19 +19,10 @@ custom_minimum_size = Vector2(70, 0)
 theme_override_font_sizes/font_size = 12
 clip_text = true
 
-[node name="MoraleBadge" type="Label" parent="."]
+[node name="EmotionLabel" type="Label" parent="."]
 unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(60, 0)
+custom_minimum_size = Vector2(70, 0)
 theme_override_font_sizes/font_size = 11
-clip_text = true
-visible = false
-
-[node name="RefusingLabel" type="Label" parent="."]
-unique_name_in_owner = true
-layout_mode = 2
-custom_minimum_size = Vector2(55, 0)
-theme_override_font_sizes/font_size = 11
-text = "refusing"
 clip_text = true
 visible = false

@@ -225,12 +225,10 @@ static func _project_actor(actor: Dictionary) -> Dictionary:
 		"fear":           fear,
 		"morale":         int(actor.get("morale", 50)),
 		# UI-004: added for party strip and pre-battle overlay.
-		"calling_origin": str(actor.get("calling_origin", "")),
-		"morale_status":  FlowEncounterState._derive_morale_status(fear),
-		# V2-EMOTION-001: player-facing emotion readability fields.
-		"morale_tier":    EmotionService.get_morale_tier(int(actor.get("morale", 50))),
-		"fear_signal":    EmotionService.get_fear_signal(fear),
-		"refuse_cause":   "absolute_fear_rule" if fear >= FEAR_THRESHOLD_DEFAULT else "",
+		"calling_origin":    str(actor.get("calling_origin", "")),
+		"morale_status":     FlowEncounterState._derive_morale_status(fear),
+		# V2-EMOTION-002: unified player-facing emotional status (replaces morale_tier + fear_signal + refuse_cause).
+		"emotional_status":  EmotionService.get_emotional_status(int(actor.get("morale", 50)), fear),
 		# PROG-008: active skill slots forwarded for pre-battle and resolve screens.
 		"skill_slots": (actor.get("skill_slots", [""]) as Array).duplicate(),
 	}
@@ -614,13 +612,13 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		var post_morale: int = int(ea.get("morale", 50))
 		var post_fear: int   = int(ea.get("fear", 0))
 		emotion_summary.append({
-			"echo_id":          eid,
-			"name":             str(ea.get("name", "")),
-			"pre_morale_tier":  EmotionService.get_morale_tier(pre_morale),
-			"post_morale_tier": EmotionService.get_morale_tier(post_morale),
-			"morale_delta":     post_morale - pre_morale,
-			"fear_signal":      EmotionService.get_fear_signal(post_fear),
-			"refused":          post_fear >= FEAR_THRESHOLD_DEFAULT,
+			"echo_id":               eid,
+			"name":                  str(ea.get("name", "")),
+			# V2-EMOTION-002: unified status arc (replaces pre/post morale_tier + fear_signal).
+			"pre_emotional_status":  EmotionService.get_emotional_status(pre_morale, 0),
+			"post_emotional_status": EmotionService.get_emotional_status(post_morale, post_fear),
+			"morale_delta":          post_morale - pre_morale,
+			"refused":               post_fear >= FEAR_THRESHOLD_DEFAULT,
 		})
 
 	return {

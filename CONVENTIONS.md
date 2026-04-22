@@ -207,10 +207,32 @@ Emotion block stored at `echo["emotion"]`:
 ```
 { faith: int, morale_base: int, morale_current: int, fear_current: int }
 ```
-- `init_echo(echo, logger, t)` — idempotent. `morale_base` = 25–74 from `traits.courage` + archetype modifier (brave+5, sage−5, devout+0)
+- `init_echo(echo, logger, t)` — idempotent. `morale_base` = 25–74 from `traits.courage` + archetype modifier
 - `apply_morale_delta(echo, delta, cause, logger, t)` — only valid drift entry
 - `apply_fear_delta(echo, delta, cause, fear_threshold, logger, t)` — only valid drift entry
-- `get_morale_tier(morale_current)` → `"inspired"` / `"steady"` / `"shaken"` / `"broken"`
+- `get_morale_tier(morale_current)` → `"inspired"` / `"steady"` / `"shaken"` / `"broken"` — **internal sim use only** (BehaviorArbiter, ActorStateMachine). Do NOT use for player-facing display.
+- `get_emotional_status(morale, fear)` → unified player-facing tier (V2-EMOTION-002) — **the only emotion display field**
+
+**Emotional status tiers (8):** derived from both `morale_current` and `fear_current`. Morale language at top; fear language at bottom.
+
+| Tier | Morale | Fear |
+|---|---|---|
+| `radiant` | ≥ 70 | ≤ 15 |
+| `whole` | ≥ 55 | ≤ 30 |
+| `grounded` | ≥ 40 | ≤ 45 |
+| `burdened` | catch-all | catch-all |
+| `pressed` | ≤ 55 | ≥ 45 |
+| `strained` | ≤ 45 | ≥ 55 |
+| `fraying` | ≤ 35 | ≥ 65 |
+| `hollow` | ≤ 20 or any | ≥ 75 |
+
+**Rule: Never build separate morale and fear display fields.** `emotional_status` is the single player-facing emotion field in all snapshots. All screens read this one field. Dual display (morale_tier + fear_signal) is explicitly forbidden.
+
+**Snapshot contract:** every actor/echo/party entry that surfaces emotion to the UI carries:
+```
+"emotional_status": String  # one of the 8 tiers above
+```
+The `refused` bool in `emotion_summary` (Resolve) is kept as a factual combat outcome — it is not a display tier.
 
 **Mid-combat:** direct dict writes only — EmotionService NOT called. Exit deltas applied at combat end.
 

@@ -470,7 +470,8 @@ These systems are already done and their save seams are live:
 | VOW-001 | Vow doctrine | `vows: {}` (keyed by vow_id), `active_vow: {}` |
 | V2-WEAVE-001 | Thread recovery model | `sanctum.threads: {}` (keyed by thread_id); `realms[id].realm_recovery_segments: []` |
 | V2-WEAVE-002 | Foundation Weaving Rite loop | per-echo `woven_threads: []`, per-echo `weave_memory_marks: []` |
-| V2-EMOTION-001 | Fear & Morale Readability | No new save keys — snapshot-only. `EmotionService.get_fear_signal()` added. `EncounterContext.pre_encounter_morale` added. `emotion_summary` in resolve snapshot. `morale_tier` + `fear_signal` in party_preview, party_slots, and actor dicts. `FearBadge` on EchoCardItem. `MoraleBadge` + `RefusingLabel` on InitiativeRowItem. `EmotionSection` + `EmotionEntryItem` on ResolveScreen. Party morale + House State strip on SanctumScreen. |
+| V2-EMOTION-001 | Fear & Morale Readability | Shipped dual `morale_tier` + `fear_signal` display. Unified to single `emotional_status` in V2-EMOTION-002. |
+| V2-EMOTION-002 | Unified Emotional Status | Replaced dual display with 8-tier `emotional_status` (radiant → hollow). `get_fear_signal()` removed. `get_emotional_status(morale, fear)` added. EchoParty morale/fear bars removed. All emotion surfaces now use single field. Documented in CONVENTIONS.md with no-dual-display rule. |
 
 > See CONVENTIONS.md `SocialGraphService` and `VowService` sections for full API contracts.
 
