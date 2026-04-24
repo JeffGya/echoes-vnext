@@ -111,14 +111,6 @@ static func init_echo(echo: Dictionary, logger: StructuredLogger, t: int) -> voi
 		"win_streak":     0,
 		"loss_streak":    0,
 	}
-	# TEMP DEBUG — EMOTION-003 (remove before ship)
-	push_warning("[EMOTION-003 BIRTH] %s | archetype=%s courage=%s | morale_base=%d fear_base=%d" % [
-		str(echo.get("name", echo.get("id", "?"))),
-		str(echo.get("archetype_birth", "?")),
-		str(echo.get("traits", {}).get("courage", "?")),
-		birth_morale, birth_fear_base
-	])
-
 	logger.info(t, "emotion.init", "Emotion block initialised", {
 		"echo_id":         echo.get("id", ""),
 		"faith":           birth_faith,
