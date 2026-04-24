@@ -1701,7 +1701,7 @@ func _apply_encounter_emotion_drift(outcome: String, t: int) -> void:
 		echo_v["emotion"]["loss_streak"] = loss_streak
 		# TEMP DEBUG — EMOTION-003 (remove before ship)
 		var emo_after := EmotionService.get_emotion(echo_v)
-		print("[EMOTION-003 DRIFT] %s | outcome=%s | fear_base=%d morale_base=%d | win_streak=%d loss_streak=%d" % [
+		push_warning("[EMOTION-003 DRIFT] %s | outcome=%s | fear_base=%d morale_base=%d | win_streak=%d loss_streak=%d" % [
 			str(echo_v.get("name", echo_v.get("id", "?"))),
 			outcome,
 			int(emo_after.get("fear_base", 0)),
@@ -1747,7 +1747,7 @@ func _apply_sanctum_emotion_tick(t: int) -> void:
 			EmotionService.apply_fear_delta(echo_v, delta, "sanctum_tick", 999, logger, t)
 		# TEMP DEBUG — EMOTION-003 (remove before ship)
 		var fear_after := int(EmotionService.get_emotion(echo_v).get("fear_current", 0))
-		print("[EMOTION-003 TICK] %s | fear_current %d → %d (base=%d) morale_current=%d (base=%d)" % [
+		push_warning("[EMOTION-003 TICK] %s | fear_current %d → %d (base=%d) morale_current=%d (base=%d)" % [
 			str(echo_v.get("name", echo_v.get("id", "?"))),
 			fear_current, fear_after, fear_base,
 			int(emo.get("morale_current", 50)), morale_base
