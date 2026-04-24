@@ -1646,21 +1646,69 @@ func _get_drift_cfg() -> Dictionary:
 	return drift_v if drift_v is Dictionary else {}
 
 
-# EMOTION-002: applies combat win/loss morale+fear deltas to all roster echoes.
+# EMOTION-002/003: applies combat win/loss morale+fear deltas + fear_base mutation + morale streak tracking.
 func _apply_encounter_emotion_drift(outcome: String, t: int) -> void:
 	var drift := _get_drift_cfg()
-	var fear_threshold := int(drift.get("fear_threshold", 80))
+	var fear_threshold        := int(drift.get("fear_threshold",            80))
+	var fear_base_per_win     := int(drift.get("fear_base_per_win",          1))
+	var fear_base_per_loss    := int(drift.get("fear_base_per_loss",         1))
+	var fear_base_max         := int(drift.get("fear_base_max",             40))
+	var streak_threshold      := int(drift.get("morale_base_streak_threshold", 3))
+	var morale_base_delta     := int(drift.get("morale_base_delta",          1))
+	var morale_base_max       := int(drift.get("morale_base_max",           90))
+	var morale_base_min       := int(drift.get("morale_base_min",           10))
 	var roster_v: Variant = flow_ctx.save_data.get("sanctum", {}).get("roster", [])
 	var roster: Array = roster_v if roster_v is Array else []
 	for echo_v in roster:
 		if not echo_v is Dictionary:
 			continue
+		# Morale + fear current deltas (unchanged from EMOTION-002)
 		if outcome == "win":
 			EmotionService.apply_morale_delta(echo_v, int(drift.get("combat_exit_win_morale",   10)), "combat_exit_win",  logger, t)
 			EmotionService.apply_fear_delta(  echo_v, int(drift.get("combat_exit_win_fear",      -5)), "combat_exit_win",  fear_threshold, logger, t)
 		else:
 			EmotionService.apply_morale_delta(echo_v, int(drift.get("combat_exit_loss_morale", -15)), "combat_exit_loss", logger, t)
 			EmotionService.apply_fear_delta(  echo_v, int(drift.get("combat_exit_loss_fear",    20)), "combat_exit_loss", fear_threshold, logger, t)
+
+		# EMOTION-003: mutate fear_base per outcome
+		var emo := EmotionService.get_emotion(echo_v)
+		var fb := int(emo.get("fear_base", 0))
+		if outcome == "win":
+			fb = maxi(0, fb - fear_base_per_win)
+		else:
+			fb = mini(fear_base_max, fb + fear_base_per_loss)
+		EmotionService.set_fear_base(echo_v, fb, logger, t)
+
+		# EMOTION-003: streak tracking for morale_base mutation
+		var win_streak  := int(emo.get("win_streak",  0))
+		var loss_streak := int(emo.get("loss_streak", 0))
+		if outcome == "win":
+			win_streak  += 1
+			loss_streak  = 0
+			if win_streak >= streak_threshold:
+				var mb := clampi(int(emo.get("morale_base", 50)) + morale_base_delta, morale_base_min, morale_base_max)
+				EmotionService.set_morale_base(echo_v, mb, logger, t)
+				win_streak = 0
+		else:
+			loss_streak += 1
+			win_streak   = 0
+			if loss_streak >= streak_threshold:
+				var mb := clampi(int(emo.get("morale_base", 50)) - morale_base_delta, morale_base_min, morale_base_max)
+				EmotionService.set_morale_base(echo_v, mb, logger, t)
+				loss_streak = 0
+		# Write streak counters back directly (no setter needed — they're transient accumulators)
+		echo_v["emotion"]["win_streak"]  = win_streak
+		echo_v["emotion"]["loss_streak"] = loss_streak
+		# TEMP DEBUG — EMOTION-003 (remove before ship)
+		var emo_after := EmotionService.get_emotion(echo_v)
+		print("[EMOTION-003 DRIFT] %s | outcome=%s | fear_base=%d morale_base=%d | win_streak=%d loss_streak=%d" % [
+			str(echo_v.get("name", echo_v.get("id", "?"))),
+			outcome,
+			int(emo_after.get("fear_base", 0)),
+			int(emo_after.get("morale_base", 50)),
+			win_streak, loss_streak
+		])
+
 	flow_ctx.save_request = true
 	if flow_ctx.save_request_reason != "":
 		flow_ctx.save_request_reason += "|encounter.emotion_drift"
@@ -1668,10 +1716,12 @@ func _apply_encounter_emotion_drift(outcome: String, t: int) -> void:
 		flow_ctx.save_request_reason = "encounter.emotion_drift"
 
 
-# EMOTION-002: applies sanctum morale recovery tick to echoes below their base.
+# EMOTION-002/003: applies sanctum morale recovery and bidirectional fear recovery toward each echo's base.
 func _apply_sanctum_emotion_tick(t: int) -> void:
 	var drift := _get_drift_cfg()
-	var tick_delta := int(drift.get("sanctum_tick_morale", 2))
+	var tick_morale  := int(drift.get("sanctum_tick_morale", 2))
+	# EMOTION-003: abs value used — direction determined by position relative to fear_base
+	var tick_fear_abs := abs(int(drift.get("sanctum_tick_fear", -3)))
 	var roster_v: Variant = flow_ctx.save_data.get("sanctum", {}).get("roster", [])
 	var roster: Array = roster_v if roster_v is Array else []
 	for echo_v in roster:
@@ -1680,9 +1730,28 @@ func _apply_sanctum_emotion_tick(t: int) -> void:
 		var emo := EmotionService.get_emotion(echo_v)
 		var morale_base    := int(emo.get("morale_base",    50))
 		var morale_current := int(emo.get("morale_current", 50))
-		# Recovery only moves morale toward base — never above it
+		# Morale: recovery only moves toward base — never above it
 		if morale_current < morale_base:
-			EmotionService.apply_morale_delta(echo_v, tick_delta, "sanctum_tick", logger, t)
+			EmotionService.apply_morale_delta(echo_v, tick_morale, "sanctum_tick", logger, t)
+
+		# EMOTION-003: Fear — bidirectional recovery toward fear_base; never overshoots
+		var fear_base    := int(emo.get("fear_base",    0))
+		var fear_current := int(emo.get("fear_current", 0))
+		if fear_current > fear_base:
+			# Too high — tick down; clamp so result doesn't go below fear_base
+			var delta := -mini(tick_fear_abs, fear_current - fear_base)
+			EmotionService.apply_fear_delta(echo_v, delta, "sanctum_tick", 999, logger, t)
+		elif fear_current < fear_base:
+			# Below base (kill euphoria) — tick back up; clamp so result doesn't exceed fear_base
+			var delta := mini(tick_fear_abs, fear_base - fear_current)
+			EmotionService.apply_fear_delta(echo_v, delta, "sanctum_tick", 999, logger, t)
+		# TEMP DEBUG — EMOTION-003 (remove before ship)
+		var fear_after := int(EmotionService.get_emotion(echo_v).get("fear_current", 0))
+		print("[EMOTION-003 TICK] %s | fear_current %d → %d (base=%d) morale_current=%d (base=%d)" % [
+			str(echo_v.get("name", echo_v.get("id", "?"))),
+			fear_current, fear_after, fear_base,
+			int(emo.get("morale_current", 50)), morale_base
+		])
 
 
 func _get_balance_economy_cfg() -> Dictionary:

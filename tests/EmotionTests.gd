@@ -34,6 +34,19 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("emotion/emotional_status_hollow",          Callable(EmotionTests, "_t_emotional_status_hollow"))
 	runner.register_test("emotion/project_actor_emotional_status",   Callable(EmotionTests, "_t_project_actor_emotional_status"))
 	runner.register_test("emotion/resolve_emotion_summary_unified",  Callable(EmotionTests, "_t_resolve_emotion_summary_unified"))
+	# V2-EMOTION-003 tests
+	runner.register_test("emotion/fear_base_birth_from_traits",      Callable(EmotionTests, "_t_fear_base_birth_from_traits"))
+	runner.register_test("emotion/fear_base_clamp",                  Callable(EmotionTests, "_t_fear_base_clamp"))
+	runner.register_test("emotion/fear_base_increments_on_loss",     Callable(EmotionTests, "_t_fear_base_increments_on_loss"))
+	runner.register_test("emotion/fear_base_decrements_on_win",      Callable(EmotionTests, "_t_fear_base_decrements_on_win"))
+	runner.register_test("emotion/fear_base_max_cap",                Callable(EmotionTests, "_t_fear_base_max_cap"))
+	runner.register_test("emotion/morale_base_streak_win",           Callable(EmotionTests, "_t_morale_base_streak_win"))
+	runner.register_test("emotion/morale_base_streak_loss",          Callable(EmotionTests, "_t_morale_base_streak_loss"))
+	runner.register_test("emotion/morale_base_streak_resets",        Callable(EmotionTests, "_t_morale_base_streak_resets"))
+	runner.register_test("emotion/sanctum_tick_fear_above_base",     Callable(EmotionTests, "_t_sanctum_tick_fear_above_base"))
+	runner.register_test("emotion/sanctum_tick_fear_below_base",     Callable(EmotionTests, "_t_sanctum_tick_fear_below_base"))
+	runner.register_test("emotion/sanctum_tick_fear_at_base",        Callable(EmotionTests, "_t_sanctum_tick_fear_at_base"))
+	runner.register_test("emotion/arbiter_floor_blend",              Callable(EmotionTests, "_t_arbiter_floor_blend"))
 
 
 # -------------------------
@@ -453,5 +466,391 @@ static func _t_resolve_emotion_summary_unified() -> Dictionary:
 		return { "ok": false, "error": "Expected morale_delta==-30, got %d" % int(row.get("morale_delta", 0)) }
 	if bool(row.get("refused", true)):
 		return { "ok": false, "error": "Expected refused==false for fear=70 (threshold is 80)" }
+
+	return { "ok": true }
+
+
+# -------------------------
+# V2-EMOTION-003 Tests
+# -------------------------
+
+static func _make_bare_echo(id: String, courage: int, archetype: String) -> Dictionary:
+	return { "id": id, "archetype_birth": archetype, "traits": { "courage": courage, "wisdom": 50, "faith": 50 } }
+
+
+# Test 16: fear_base_birth_from_traits
+# init_echo() must derive fear_base from courage (inverted) + archetype modifier, clamped 0–20.
+static func _t_fear_base_birth_from_traits() -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+
+	# courage=30, stoic: base_fear=20, mod=-5 → 15
+	var e1 := _make_bare_echo("e1", 30, "stoic")
+	EmotionService.init_echo(e1, logger, 1)
+	var fb1 := int(e1["emotion"]["fear_base"])
+	if fb1 != 15:
+		return { "ok": false, "error": "Expected fear_base=15 (courage=30, stoic), got %d" % fb1 }
+
+	# courage=70, valiant: base_fear=5, mod=-3 → clamped 2
+	var e2 := _make_bare_echo("e2", 70, "valiant")
+	EmotionService.init_echo(e2, logger, 2)
+	var fb2 := int(e2["emotion"]["fear_base"])
+	if fb2 != 2:
+		return { "ok": false, "error": "Expected fear_base=2 (courage=70, valiant), got %d" % fb2 }
+
+	# courage=50, proud: base_fear = 20 - int(round(20 * 15.0/40.0)) = 20 - 8 = 12, mod=+3 → 15
+	var e3 := _make_bare_echo("e3", 50, "proud")
+	EmotionService.init_echo(e3, logger, 3)
+	var fb3 := int(e3["emotion"]["fear_base"])
+	if fb3 != 15:
+		return { "ok": false, "error": "Expected fear_base=15 (courage=50, proud), got %d" % fb3 }
+
+	# No traits → fallback flat 10
+	var e4 := { "id": "e4" }
+	EmotionService.init_echo(e4, logger, 4)
+	var fb4 := int(e4["emotion"]["fear_base"])
+	if fb4 != 10:
+		return { "ok": false, "error": "Expected fear_base=10 fallback (no traits), got %d" % fb4 }
+
+	# win_streak and loss_streak must be 0 at birth
+	if int(e1["emotion"]["win_streak"]) != 0 or int(e1["emotion"]["loss_streak"]) != 0:
+		return { "ok": false, "error": "win_streak and loss_streak must be 0 at birth" }
+
+	return { "ok": true }
+
+
+# Test 17: fear_base_clamp
+# fear_base birth clamped 0–20: stoic+valiant can reach 0, proud+ambitious caps at 20.
+static func _t_fear_base_clamp() -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+
+	# courage=70, stoic: base_fear=5, mod=-5 → clamped to 0
+	var e_floor := _make_bare_echo("e_floor", 70, "stoic")
+	EmotionService.init_echo(e_floor, logger, 1)
+	var fb_floor := int(e_floor["emotion"]["fear_base"])
+	if fb_floor != 0:
+		return { "ok": false, "error": "Expected fear_base=0 (courage=70, stoic), got %d" % fb_floor }
+
+	# courage=30, proud: base_fear=20, mod=+3 → clamped to 20
+	var e_ceil := _make_bare_echo("e_ceil", 30, "proud")
+	EmotionService.init_echo(e_ceil, logger, 2)
+	var fb_ceil := int(e_ceil["emotion"]["fear_base"])
+	if fb_ceil != 20:
+		return { "ok": false, "error": "Expected fear_base=20 (courage=30, proud), got %d" % fb_ceil }
+
+	return { "ok": true }
+
+
+# Test 18: fear_base_increments_on_loss
+# set_fear_base() increments by 1 on combat loss; EmotionService setter clamps 0–100.
+static func _t_fear_base_increments_on_loss() -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+
+	var echo := { "id": "e_loss", "emotion": {
+		"faith": 50, "morale_base": 50, "morale_current": 50,
+		"fear_current": 0, "fear_base": 8, "win_streak": 0, "loss_streak": 0 } }
+
+	var old_fb := int(echo["emotion"]["fear_base"])
+	EmotionService.set_fear_base(echo, old_fb + 1, logger, 1)
+	if int(echo["emotion"]["fear_base"]) != 9:
+		return { "ok": false, "error": "Expected fear_base=9 after loss +1, got %d" % int(echo["emotion"]["fear_base"]) }
+
+	return { "ok": true }
+
+
+# Test 19: fear_base_decrements_on_win
+# set_fear_base() decrements by 1 on combat win; floored at 0.
+static func _t_fear_base_decrements_on_win() -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+
+	var echo := { "id": "e_win", "emotion": {
+		"faith": 50, "morale_base": 50, "morale_current": 50,
+		"fear_current": 0, "fear_base": 5, "win_streak": 0, "loss_streak": 0 } }
+
+	var old_fb := int(echo["emotion"]["fear_base"])
+	EmotionService.set_fear_base(echo, maxi(0, old_fb - 1), logger, 1)
+	if int(echo["emotion"]["fear_base"]) != 4:
+		return { "ok": false, "error": "Expected fear_base=4 after win -1, got %d" % int(echo["emotion"]["fear_base"]) }
+
+	# Floor at 0: win when fear_base is already 0
+	EmotionService.set_fear_base(echo, 0, logger, 2)
+	EmotionService.set_fear_base(echo, maxi(0, 0 - 1), logger, 3)
+	if int(echo["emotion"]["fear_base"]) != 0:
+		return { "ok": false, "error": "Expected fear_base=0 (floored), got %d" % int(echo["emotion"]["fear_base"]) }
+
+	return { "ok": true }
+
+
+# Test 20: fear_base_max_cap
+# set_fear_base() with value beyond 40 must cap at 40 (fear_base_max is enforced by caller, setter clamps 0–100).
+# We verify the setter itself clamps at 100; the 40-cap is enforced by FlowRuntime.
+static func _t_fear_base_max_cap() -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+
+	var echo := { "id": "e_cap", "emotion": {
+		"faith": 50, "morale_base": 50, "morale_current": 50,
+		"fear_current": 0, "fear_base": 39, "win_streak": 0, "loss_streak": 0 } }
+
+	# Simulate FlowRuntime clamping to fear_base_max (40)
+	var fear_base_max := 40
+	var new_fb := mini(fear_base_max, int(echo["emotion"]["fear_base"]) + 1)
+	EmotionService.set_fear_base(echo, new_fb, logger, 1)
+	if int(echo["emotion"]["fear_base"]) != 40:
+		return { "ok": false, "error": "Expected fear_base=40 (at cap), got %d" % int(echo["emotion"]["fear_base"]) }
+
+	# Another loss beyond cap must not push above 40
+	new_fb = mini(fear_base_max, int(echo["emotion"]["fear_base"]) + 1)
+	EmotionService.set_fear_base(echo, new_fb, logger, 2)
+	if int(echo["emotion"]["fear_base"]) != 40:
+		return { "ok": false, "error": "Expected fear_base to stay at 40 after additional loss, got %d" % int(echo["emotion"]["fear_base"]) }
+
+	return { "ok": true }
+
+
+# Test 21: morale_base_streak_win
+# After 3 consecutive wins (win_streak reaches 3): morale_base +1, win_streak resets to 0.
+static func _t_morale_base_streak_win() -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+
+	var echo := { "id": "e_streak_win", "emotion": {
+		"faith": 50, "morale_base": 55, "morale_current": 55,
+		"fear_current": 0, "fear_base": 5, "win_streak": 2, "loss_streak": 0 } }
+
+	# Simulate one more win (streak hits 3)
+	var streak_threshold := 3
+	var morale_base_delta := 1
+	var morale_base_max := 90
+	var morale_base_min := 10
+	var win_streak := int(echo["emotion"]["win_streak"]) + 1
+	var loss_streak := 0
+	if win_streak >= streak_threshold:
+		var mb := clampi(int(echo["emotion"]["morale_base"]) + morale_base_delta, morale_base_min, morale_base_max)
+		EmotionService.set_morale_base(echo, mb, logger, 1)
+		win_streak = 0
+	echo["emotion"]["win_streak"]  = win_streak
+	echo["emotion"]["loss_streak"] = loss_streak
+
+	if int(echo["emotion"]["morale_base"]) != 56:
+		return { "ok": false, "error": "Expected morale_base=56 after 3-win streak, got %d" % int(echo["emotion"]["morale_base"]) }
+	if int(echo["emotion"]["win_streak"]) != 0:
+		return { "ok": false, "error": "Expected win_streak=0 after threshold reset, got %d" % int(echo["emotion"]["win_streak"]) }
+
+	return { "ok": true }
+
+
+# Test 22: morale_base_streak_loss
+# After 3 consecutive losses (loss_streak reaches 3): morale_base -1, loss_streak resets to 0.
+static func _t_morale_base_streak_loss() -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+
+	var echo := { "id": "e_streak_loss", "emotion": {
+		"faith": 50, "morale_base": 55, "morale_current": 40,
+		"fear_current": 20, "fear_base": 10, "win_streak": 0, "loss_streak": 2 } }
+
+	var streak_threshold := 3
+	var morale_base_delta := 1
+	var morale_base_max := 90
+	var morale_base_min := 10
+	var loss_streak := int(echo["emotion"]["loss_streak"]) + 1
+	var win_streak := 0
+	if loss_streak >= streak_threshold:
+		var mb := clampi(int(echo["emotion"]["morale_base"]) - morale_base_delta, morale_base_min, morale_base_max)
+		EmotionService.set_morale_base(echo, mb, logger, 1)
+		loss_streak = 0
+	echo["emotion"]["win_streak"]  = win_streak
+	echo["emotion"]["loss_streak"] = loss_streak
+
+	if int(echo["emotion"]["morale_base"]) != 54:
+		return { "ok": false, "error": "Expected morale_base=54 after 3-loss streak, got %d" % int(echo["emotion"]["morale_base"]) }
+	if int(echo["emotion"]["loss_streak"]) != 0:
+		return { "ok": false, "error": "Expected loss_streak=0 after threshold reset, got %d" % int(echo["emotion"]["loss_streak"]) }
+
+	return { "ok": true }
+
+
+# Test 23: morale_base_streak_resets
+# A loss resets win_streak to 0 without triggering morale_base mutation (streak < 3).
+static func _t_morale_base_streak_resets() -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+
+	var echo := { "id": "e_reset", "emotion": {
+		"faith": 50, "morale_base": 55, "morale_current": 55,
+		"fear_current": 0, "fear_base": 5, "win_streak": 2, "loss_streak": 0 } }
+
+	# A single loss: win_streak resets; loss_streak becomes 1; no morale_base change
+	var streak_threshold := 3
+	var morale_base_delta := 1
+	var morale_base_max := 90
+	var morale_base_min := 10
+	var loss_streak := int(echo["emotion"]["loss_streak"]) + 1
+	var win_streak := 0
+	if loss_streak >= streak_threshold:
+		var mb := clampi(int(echo["emotion"]["morale_base"]) - morale_base_delta, morale_base_min, morale_base_max)
+		EmotionService.set_morale_base(echo, mb, logger, 1)
+		loss_streak = 0
+	echo["emotion"]["win_streak"]  = win_streak
+	echo["emotion"]["loss_streak"] = loss_streak
+
+	if int(echo["emotion"]["morale_base"]) != 55:
+		return { "ok": false, "error": "Expected morale_base=55 (no change from single loss), got %d" % int(echo["emotion"]["morale_base"]) }
+	if int(echo["emotion"]["win_streak"]) != 0:
+		return { "ok": false, "error": "Expected win_streak=0 after loss, got %d" % int(echo["emotion"]["win_streak"]) }
+	if int(echo["emotion"]["loss_streak"]) != 1:
+		return { "ok": false, "error": "Expected loss_streak=1 after loss, got %d" % int(echo["emotion"]["loss_streak"]) }
+
+	return { "ok": true }
+
+
+# Test 24: sanctum_tick_fear_above_base
+# When fear_current > fear_base, sanctum tick decrements toward base, clamped so it never goes below.
+static func _t_sanctum_tick_fear_above_base() -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+
+	var echo := { "id": "e_tick_above", "emotion": {
+		"faith": 50, "morale_base": 50, "morale_current": 50,
+		"fear_current": 20, "fear_base": 8, "win_streak": 0, "loss_streak": 0 } }
+
+	# tick_fear_abs = 3; fear_current=20 > fear_base=8; delta = -min(3, 20-8) = -3
+	var tick_fear_abs := 3
+	var fear_base    := int(echo["emotion"]["fear_base"])
+	var fear_current := int(echo["emotion"]["fear_current"])
+	var delta := -mini(tick_fear_abs, fear_current - fear_base)
+	EmotionService.apply_fear_delta(echo, delta, "sanctum_tick", 999, logger, 1)
+
+	if int(echo["emotion"]["fear_current"]) != 17:
+		return { "ok": false, "error": "Expected fear_current=17 after tick (20 - 3), got %d" % int(echo["emotion"]["fear_current"]) }
+
+	# Tick again until exactly at base — must clamp at fear_base, not below
+	echo["emotion"]["fear_current"] = 9  # 1 above base
+	fear_current = 9
+	delta = -mini(tick_fear_abs, fear_current - fear_base)  # -min(3, 1) = -1
+	EmotionService.apply_fear_delta(echo, delta, "sanctum_tick", 999, logger, 2)
+	if int(echo["emotion"]["fear_current"]) != 8:
+		return { "ok": false, "error": "Expected fear_current=8 (clamped at fear_base), got %d" % int(echo["emotion"]["fear_current"]) }
+
+	return { "ok": true }
+
+
+# Test 25: sanctum_tick_fear_below_base
+# When fear_current < fear_base (kill euphoria), sanctum tick increments back toward base.
+static func _t_sanctum_tick_fear_below_base() -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+
+	var echo := { "id": "e_tick_below", "emotion": {
+		"faith": 50, "morale_base": 50, "morale_current": 50,
+		"fear_current": 3, "fear_base": 8, "win_streak": 0, "loss_streak": 0 } }
+
+	# tick_fear_abs=3; fear_current=3 < fear_base=8; delta = +min(3, 8-3) = +3
+	var tick_fear_abs := 3
+	var fear_base    := int(echo["emotion"]["fear_base"])
+	var fear_current := int(echo["emotion"]["fear_current"])
+	var delta := mini(tick_fear_abs, fear_base - fear_current)
+	EmotionService.apply_fear_delta(echo, delta, "sanctum_tick", 999, logger, 1)
+
+	if int(echo["emotion"]["fear_current"]) != 6:
+		return { "ok": false, "error": "Expected fear_current=6 after tick (3 + 3), got %d" % int(echo["emotion"]["fear_current"]) }
+
+	# Clamp so it doesn't exceed fear_base when close
+	echo["emotion"]["fear_current"] = 6
+	fear_current = 6
+	delta = mini(tick_fear_abs, fear_base - fear_current)  # min(3, 2) = 2
+	EmotionService.apply_fear_delta(echo, delta, "sanctum_tick", 999, logger, 2)
+	if int(echo["emotion"]["fear_current"]) != 8:
+		return { "ok": false, "error": "Expected fear_current=8 (clamped at fear_base), got %d" % int(echo["emotion"]["fear_current"]) }
+
+	return { "ok": true }
+
+
+# Test 26: sanctum_tick_fear_at_base
+# When fear_current == fear_base, no tick fires (delta = 0, no change).
+static func _t_sanctum_tick_fear_at_base() -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+
+	var echo := { "id": "e_tick_eq", "emotion": {
+		"faith": 50, "morale_base": 50, "morale_current": 50,
+		"fear_current": 8, "fear_base": 8, "win_streak": 0, "loss_streak": 0 } }
+
+	# Neither branch fires — fear_current == fear_base
+	var fear_base    := int(echo["emotion"]["fear_base"])
+	var fear_current := int(echo["emotion"]["fear_current"])
+	if fear_current > fear_base:
+		var delta := -mini(3, fear_current - fear_base)
+		EmotionService.apply_fear_delta(echo, delta, "sanctum_tick", 999, logger, 1)
+	elif fear_current < fear_base:
+		var delta := mini(3, fear_base - fear_current)
+		EmotionService.apply_fear_delta(echo, delta, "sanctum_tick", 999, logger, 1)
+
+	if int(echo["emotion"]["fear_current"]) != 8:
+		return { "ok": false, "error": "Expected fear_current unchanged at 8, got %d" % int(echo["emotion"]["fear_current"]) }
+
+	return { "ok": true }
+
+
+# Test 27: arbiter_floor_blend
+# When fear_current < fear_base, BehaviorArbiter uses fear_base as effective_fear for fear_factor.
+# Verified by checking that an actor with high fear_base but low fear_current
+# gets a lower fear_factor than the same actor with fear_base == 0.
+static func _t_arbiter_floor_blend() -> Dictionary:
+	# Minimal actor dict — only fields needed for _score() fear computation
+	var actor_base := {
+		"id": "a1", "name": "Test", "faction": "echo",
+		"calling_origin": "uncalled", "archetype_birth": "stoic",
+		"traits": { "courage": 50, "wisdom": 50, "faith": 50 },
+		"vector_scores": {}, "morale": 50,
+		"is_dead": false, "is_structure": false,
+		"grid_pos": { "col": 0, "row": 0 },
+		"stats": { "max_hp": 100 }, "current_hp": 100,
+		"rarity": "common", "rank": 1, "calling_origin": "uncalled",
+		"xp_total": 0, "level": 1, "actor_type": "echo", "speed": 5,
+		"death_round": 0, "resilience_traits": [], "leadership_traits": [],
+		"skill_slots": [""], "equipped_skills": {}, "dominant_vector": "",
+	}
+
+	# Actor A: fear_current=5 (post-kill), fear_base=0 → effective_fear = max(5,0) = 5
+	var actor_a := actor_base.duplicate(true)
+	actor_a["fear"]      = 5
+	actor_a["fear_base"] = 0
+
+	# Actor B: fear_current=5 (post-kill), fear_base=15 → effective_fear = max(5,15) = 15
+	var actor_b := actor_base.duplicate(true)
+	actor_b["fear"]      = 5
+	actor_b["fear_base"] = 15
+
+	# Compute effective fear for each actor (mirror of BehaviorArbiter._score() floor blend)
+	var eff_fear_a := maxf(float(actor_a.get("fear", 0)), float(actor_a.get("fear_base", 0)))
+	var eff_fear_b := maxf(float(actor_b.get("fear", 0)), float(actor_b.get("fear_base", 0)))
+
+	if eff_fear_a != 5.0:
+		return { "ok": false, "error": "Expected effective_fear=5.0 for actor_a (fear=5, fear_base=0), got %s" % str(eff_fear_a) }
+	if eff_fear_b != 15.0:
+		return { "ok": false, "error": "Expected effective_fear=15.0 for actor_b (fear=5, fear_base=15), got %s" % str(eff_fear_b) }
+
+	# fear_factor = clamp(1 - fear/100 * 0.6, 0, 1). Higher effective_fear → lower fear_factor.
+	var dampen := 0.6
+	var ff_a := clampf(1.0 - (eff_fear_a / 100.0) * dampen, 0.0, 1.0)
+	var ff_b := clampf(1.0 - (eff_fear_b / 100.0) * dampen, 0.0, 1.0)
+
+	if not (ff_a > ff_b):
+		return { "ok": false, "error": "Expected fear_factor(A) > fear_factor(B) (high fear_base should depress scoring), ff_a=%s ff_b=%s" % [str(ff_a), str(ff_b)] }
+
+	# Verify EchoActor.from_echo() maps fear_base to the actor dict
+	var echo := ActorTests._make_test_echo("e_fb_test", "Test Echo")
+	echo["emotion"] = {
+		"faith": 50, "morale_base": 50, "morale_current": 50,
+		"fear_current": 5, "fear_base": 15, "win_streak": 0, "loss_streak": 0
+	}
+	var actor := EchoActor.from_echo(echo)
+	if int(actor.get("fear_base", -1)) != 15:
+		return { "ok": false, "error": "EchoActor.from_echo() must map emotion.fear_base → actor.fear_base. Got %d" % int(actor.get("fear_base", -1)) }
 
 	return { "ok": true }

@@ -55,6 +55,7 @@ static func from_echo(echo: Dictionary) -> Dictionary:
 		"speed":          echo_stats.get("speed", 5),  # formula-derived; fallback 5 for saves pre-BALANCE-001
 		"morale":         int(echo.get("emotion", {}).get("morale_current", 50)),  # EMOTION-001
 		"fear":           int(echo.get("emotion", {}).get("fear_current",   0)),  # EMOTION-001
+		"fear_base":      int(echo.get("emotion", {}).get("fear_base",      0)),  # EMOTION-003
 		# PROG-005: vector data — read-only view of save data; deep copy for isolation
 		"vector_scores":   echo_vector_scores.duplicate(true),
 		"dominant_vector": str(echo.get("dominant_vector", "")),
