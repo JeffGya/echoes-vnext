@@ -758,7 +758,10 @@ func _score(
 	var calling_origin: String = str(actor.get("calling_origin", "uncalled"))
 	var traits: Dictionary     = actor.get("traits", {})
 	var vectors: Dictionary    = actor.get("vector_scores", {})
-	var fear: float            = float(actor.get("fear", 0))
+	# EMOTION-003: floor blend — background dread can't be suppressed below fear_base even by a kill
+	var fear_current_val: float = float(actor.get("fear", 0))
+	var fear_base_val: float    = float(actor.get("fear_base", 0))
+	var fear: float             = maxf(fear_current_val, fear_base_val)
 
 	# 1. Base weight from calling_origin table.
 	# Skill-gated candidates carry skill_base_bonus (pre-resolved via intent_weight_tag + bonus);
