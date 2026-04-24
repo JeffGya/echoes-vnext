@@ -1721,7 +1721,7 @@ func _apply_sanctum_emotion_tick(t: int) -> void:
 	var drift := _get_drift_cfg()
 	var tick_morale  := int(drift.get("sanctum_tick_morale", 2))
 	# EMOTION-003: abs value used — direction determined by position relative to fear_base
-	var tick_fear_abs := abs(int(drift.get("sanctum_tick_fear", -3)))
+	var tick_fear_abs: Variant = abs(int(drift.get("sanctum_tick_fear", -3)))
 	var roster_v: Variant = flow_ctx.save_data.get("sanctum", {}).get("roster", [])
 	var roster: Array = roster_v if roster_v is Array else []
 	for echo_v in roster:

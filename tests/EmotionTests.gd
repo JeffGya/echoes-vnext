@@ -810,7 +810,7 @@ static func _t_arbiter_floor_blend() -> Dictionary:
 		"is_dead": false, "is_structure": false,
 		"grid_pos": { "col": 0, "row": 0 },
 		"stats": { "max_hp": 100 }, "current_hp": 100,
-		"rarity": "common", "rank": 1, "calling_origin": "uncalled",
+		"rarity": "common", "rank": 1,
 		"xp_total": 0, "level": 1, "actor_type": "echo", "speed": 5,
 		"death_round": 0, "resilience_traits": [], "leadership_traits": [],
 		"skill_slots": [""], "equipped_skills": {}, "dominant_vector": "",
