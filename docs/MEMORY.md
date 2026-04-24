@@ -85,7 +85,7 @@ Four project-specific skills are installed. Use them proactively — they are au
 | ActorService | `core/actors/ActorService.gd` | `get_nearest_enemy()` + `get_threatened_ally()`. Filters `is_dead` + `is_structure`. |
 | DerivedStatService | `core/actors/DerivedStatService.gd` | Pure static `compute_stats(traits, rank, level, stat_cfg)`. 7 stats incl. speed. |
 | VectorService | `core/actors/VectorService.gd` | Tracks `vector_scores` + `dominant_vector`. 3% hysteresis to switch dominant. CLAMP_MAX=1000. |
-| EmotionService | `core/emotion/EmotionService.gd` | `init_echo()` idempotent. `apply_morale_delta()` / `apply_fear_delta()`. Morale tiers: inspired/steady/shaken/broken. |
+| EmotionService | `core/emotion/EmotionService.gd` | `init_echo()` idempotent. `apply_morale_delta()` / `apply_fear_delta()` / `set_fear_base()`. Emotion block: faith, morale_base, morale_current, fear_current, fear_base, win_streak, loss_streak. fear_base born from traits/archetype (0–20), rises +1 per loss, falls -1 per win, capped 0–40. morale_base mutates via streaks (3-win: +1, 3-loss: -1, range 10–90). Sanctum tick bidirectional for fear (toward fear_base). BehaviorArbiter uses max(fear_current, fear_base) as effective fear. Morale tiers: inspired/steady/shaken/broken. 8 emotional status tiers. (V2-EMOTION-003) |
 | GridService | `core/grid/GridService.gd` | `place_actors()`, `manhattan_distance()`, `move_toward()` (8-dir greedy). Board 10×10. |
 | CombatState | `core/combat/CombatState.gd` | `create()` + `check_end_condition()`. End priority: all_enemies_defeated → shrine_destroyed → all_echoes_dead. |
 | CombatService | `core/combat/CombatService.gd` | `resolve_action(type, attacker, defender, round)` → result dict. Melee: guard doubles eff_def. |
