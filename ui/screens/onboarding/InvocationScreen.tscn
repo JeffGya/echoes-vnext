@@ -1,0 +1,74 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://ui/screens/onboarding/InvocationScreen.gd" id="1_script"]
+[ext_resource type="Script" path="res://ui/screens/onboarding/WebDrawControl.gd" id="2_web"]
+[ext_resource type="Theme" uid="uid://8qssuuodths2" path="res://assets/theme/LivingTreeSystem.tres" id="3_theme"]
+
+[node name="InvocationScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("3_theme")
+script = ExtResource("1_script")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.23921569, 0.35294118, 0.27843137, 1)
+
+[node name="Web" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("2_web")
+
+[node name="TitleLabel" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -280.0
+offset_top = -52.0
+offset_right = 280.0
+offset_bottom = 24.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_type_variation = &"HeaderTitle"
+theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+theme_override_font_sizes/font_size = 44
+text = "Echoes of Sankofa"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HintLabel" type="Label" parent="." unique_id=1001]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -220.0
+offset_top = -84.0
+offset_right = 220.0
+offset_bottom = -44.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+theme_override_font_sizes/font_size = 16
+text = "CLICK ANYWHERE OR PRESS ANY BUTTON"
+horizontal_alignment = 1
+vertical_alignment = 1

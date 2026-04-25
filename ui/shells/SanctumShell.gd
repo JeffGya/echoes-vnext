@@ -26,8 +26,8 @@ var _is_panning := false
 var _last_pointer_pos := Vector2.ZERO
 
 # Camera clamp (Phase B)
-const TILE_W := 128.0
-const TILE_H := 64.0
+const TILE_W := 72.0
+const TILE_H := 36.0
 const FLOOR_PAD := Vector2(160.0, 160.0) # allow some "void" around edges
 
 var _floor_bounds_sv := Rect2(Vector2.ZERO, Vector2.ZERO) # floor bounds in SpatialView-local pixels
@@ -74,6 +74,7 @@ func set_snapshot(snap: Dictionary) -> void:
 	# For now this is a stub. Later we will add proper renderer script.
 	if spatial_renderer != null and spatial_renderer.has_method("render"):
 		spatial_renderer.call("render", snap)
+		_center_camera_on_floor()
 
 	# 2) Swap overlay UI based on flow snapshot type
 	var snap_type := str(snap.get("type", ""))

@@ -11,13 +11,13 @@ extends RefCounted
 # ---------------------------------------------------------------------------
 
 static func register(runner: CoreTestRunner) -> void:
-	runner.register_test("vow_pledge_sets_active_vow",           Callable(VowServiceTests, "_test_pledge_sets_active_vow"))
-	runner.register_test("vow_pledge_denied_no_unlock",          Callable(VowServiceTests, "_test_pledge_denied_not_unlocked"))
-	runner.register_test("vow_break_applies_ase_penalty",        Callable(VowServiceTests, "_test_break_applies_ase_penalty"))
-	runner.register_test("vow_release_clears_no_penalty",        Callable(VowServiceTests, "_test_release_no_penalty"))
-	runner.register_test("vow_is_tier_available",                Callable(VowServiceTests, "_test_is_tier_available"))
-	runner.register_test("vow_unlock_adds_entry",                Callable(VowServiceTests, "_test_unlock_adds_entry"))
-	runner.register_test("vow_pledge_denied_already_active",     Callable(VowServiceTests, "_test_pledge_denied_already_active"))
+	runner.register_test("vow/pledge_sets_active_vow",           Callable(VowServiceTests, "_test_pledge_sets_active_vow"))
+	runner.register_test("vow/pledge_denied_no_unlock",          Callable(VowServiceTests, "_test_pledge_denied_not_unlocked"))
+	runner.register_test("vow/break_applies_ase_penalty",        Callable(VowServiceTests, "_test_break_applies_ase_penalty"))
+	runner.register_test("vow/release_clears_no_penalty",        Callable(VowServiceTests, "_test_release_no_penalty"))
+	runner.register_test("vow/is_tier_available",                Callable(VowServiceTests, "_test_is_tier_available"))
+	runner.register_test("vow/unlock_adds_entry",                Callable(VowServiceTests, "_test_unlock_adds_entry"))
+	runner.register_test("vow/pledge_denied_already_active",     Callable(VowServiceTests, "_test_pledge_denied_already_active"))
 
 
 # ---------------------------------------------------------------------------

@@ -104,6 +104,23 @@ static func ensure_save_dir_exists(path: String) -> void:
 		
 static func _has_dict_key(d: Dictionary, key:String) -> bool:
 	return d.has(key) and d[key] != null
+
+static func _starter_occupants_need_repair(sanctum: Dictionary) -> bool:
+	var roster_v: Variant = sanctum.get("roster", [])
+	var roster: Array = roster_v if roster_v is Array else []
+	var occupants_v: Variant = sanctum.get("occupants", [])
+	var occupants: Array = occupants_v if occupants_v is Array else []
+	if roster.is_empty():
+		return not occupants.is_empty()
+	if occupants.size() != 1:
+		return true
+	if not (roster[0] is Dictionary) or not (occupants[0] is Dictionary):
+		return true
+	var echo: Dictionary = roster[0]
+	var occupant: Dictionary = occupants[0]
+	return str(occupant.get("id", "")) != str(echo.get("id", "")) \
+		or int(occupant.get("x", 99)) != 0 \
+		or int(occupant.get("y", 99)) != 0
 		
 static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: StructuredLogger = null, t: int = -1) -> bool:
 	if save == null or save.is_empty():
@@ -262,6 +279,46 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 		repaired = true
 		repaired_notes.append("economy.favor set to 0 (V2 stub)")
 
+	# ---- Onboarding repairs (Chapter I) ----
+	if not save.has("onboarding") or typeof(save["onboarding"]) != TYPE_DICTIONARY:
+		var _legacy_complete := not bool(save.get("first_boot", true))
+		save["onboarding"] = {
+			"chapter_one_complete": _legacy_complete,
+			"chapter_one_step": "invocation",
+			"fragment_options": [],
+			"heard_fragments": [],
+			"selected_fragment": "",
+			"name_options": [],
+		}
+		repaired = true
+		repaired_notes.append("onboarding added (Chapter I defaults)")
+	else:
+		var onboarding: Dictionary = save["onboarding"]
+		if not onboarding.has("chapter_one_complete") or typeof(onboarding["chapter_one_complete"]) != TYPE_BOOL:
+			onboarding["chapter_one_complete"] = false
+			repaired = true
+			repaired_notes.append("onboarding.chapter_one_complete set to false")
+		if not onboarding.has("chapter_one_step") or typeof(onboarding["chapter_one_step"]) != TYPE_STRING:
+			onboarding["chapter_one_step"] = "invocation"
+			repaired = true
+			repaired_notes.append("onboarding.chapter_one_step set to invocation")
+		if not onboarding.has("fragment_options") or not (onboarding["fragment_options"] is Array):
+			onboarding["fragment_options"] = []
+			repaired = true
+			repaired_notes.append("onboarding.fragment_options set to []")
+		if not onboarding.has("heard_fragments") or not (onboarding["heard_fragments"] is Array):
+			onboarding["heard_fragments"] = []
+			repaired = true
+			repaired_notes.append("onboarding.heard_fragments set to []")
+		if not onboarding.has("selected_fragment") or typeof(onboarding["selected_fragment"]) != TYPE_STRING:
+			onboarding["selected_fragment"] = ""
+			repaired = true
+			repaired_notes.append("onboarding.selected_fragment set to empty")
+		if not onboarding.has("name_options") or not (onboarding["name_options"] is Array):
+			onboarding["name_options"] = []
+			repaired = true
+			repaired_notes.append("onboarding.name_options set to []")
+
 	# ---- Sanctum repairs (SANCTUM-001) ----
 	if not save.has("sanctum") or typeof(save["sanctum"]) != TYPE_DICTIONARY:
 		save["sanctum"] = {
@@ -273,8 +330,11 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			"name": "",
 			"name_roll_index": 0,
 			"starter_granted": false,
+			"layout": SanctumLayoutService.make_starter_layout(),
+			"occupants": [],
 			"bonds": [],
 			"party_encounters": [],
+			"rival_incidents": [],
 		}
 		repaired = true
 		repaired_notes.append("sanctum added (roster + active_party_ids defaults; sanctum.ase legacy ignored)")
@@ -317,6 +377,36 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			repaired_notes.append("sanctum.summon_count set to int default")
 		else:
 			sanctum["summon_count"] = int(sanctum["summon_count"])
+
+		if not sanctum.has("layout") or not (sanctum["layout"] is Dictionary):
+			sanctum["layout"] = SanctumLayoutService.make_starter_layout()
+			repaired = true
+			repaired_notes.append("sanctum.layout set to starter 3x3 diamond default")
+		else:
+			var layout: Dictionary = sanctum["layout"]
+			if not layout.has("tiles") or not (layout["tiles"] is Array) or (layout["tiles"] as Array).is_empty():
+				sanctum["layout"] = SanctumLayoutService.make_starter_layout()
+				repaired = true
+				repaired_notes.append("sanctum.layout repaired to starter 3x3 diamond default")
+			elif not layout.has("version") or (typeof(layout["version"]) != TYPE_INT and typeof(layout["version"]) != TYPE_FLOAT):
+				sanctum["layout"] = SanctumLayoutService.make_starter_layout()
+				repaired = true
+				repaired_notes.append("sanctum.layout repaired to current starter version")
+			else:
+				layout["version"] = int(layout["version"])
+				if int(layout["version"]) < SanctumLayoutService.LAYOUT_VERSION:
+					sanctum["layout"] = SanctumLayoutService.make_starter_layout()
+					repaired = true
+					repaired_notes.append("sanctum.layout migrated to starter 3x3 diamond")
+			if not (sanctum["layout"] as Dictionary).has("origin") or not ((sanctum["layout"] as Dictionary)["origin"] is Dictionary):
+				(sanctum["layout"] as Dictionary)["origin"] = { "x": 0, "y": 0 }
+				repaired = true
+				repaired_notes.append("sanctum.layout.origin set to center default")
+
+		if not sanctum.has("occupants") or not (sanctum["occupants"] is Array):
+			sanctum["occupants"] = []
+			repaired = true
+			repaired_notes.append("sanctum.occupants set to array default")
 	
 		# SANCTUM-002: roster item additive repairs (Echo placeholder contract)
 		# Keep deterministic: no RNG, no OS time; only defaults + key migrations.
@@ -607,6 +697,12 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			repaired = true
 			repaired_notes.append("sanctum.party_encounters set to [] default")
 
+		# BOND-002: rival incident seeds (for SANCTUM-005)
+		if not sanctum.has("rival_incidents") or not (sanctum["rival_incidents"] is Array):
+			sanctum["rival_incidents"] = []
+			repaired = true
+			repaired_notes.append("sanctum.rival_incidents set to [] default")
+
 		# VOW-001: active_vow must be a Dict (not missing / wrong type)
 		if not sanctum.has("active_vow") or not (sanctum["active_vow"] is Dictionary):
 			sanctum["active_vow"] = {}
@@ -647,6 +743,11 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			sanctum["threads"] = {}
 			repaired = true
 			repaired_notes.append("sanctum.threads set to {} (V2 stub)")
+
+		if _starter_occupants_need_repair(sanctum):
+			SanctumLayoutService.ensure_starter_occupant(save)
+			repaired = true
+			repaired_notes.append("sanctum.occupants repaired to starter placement")
 
 	# ---- stage_context repairs (DIRECTIVE-001 / V2-DIRECTIVE-001) ----
 	if not save.has("stage_context") or typeof(save["stage_context"]) != TYPE_DICTIONARY:

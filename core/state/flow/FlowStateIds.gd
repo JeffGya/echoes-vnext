@@ -6,6 +6,14 @@ extends RefCounted
 const SPLASH := "flow.splash"
 const MAIN_MENU := "flow.main_menu"
 
+# Chapter I onboarding
+const ONBOARDING_INVOCATION := "flow.onboarding_invocation"
+const ONBOARDING_ANANSI := "flow.onboarding_anansi"
+const ONBOARDING_CHOOSE_NAME := "flow.onboarding_choose_name"
+const ONBOARDING_MEETING := "flow.onboarding_meeting"
+const ONBOARDING_EMPTY_SANCTUM := "flow.onboarding_empty_sanctum"
+const ONBOARDING_NAME_SANCTUM := "flow.onboarding_name_sanctum"
+
 # Sanctum hub + sub-screens
 const SANCTUM := "flow.sanctum"
 const ECHO_PARTY := "flow.echo_party"

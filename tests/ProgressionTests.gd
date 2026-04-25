@@ -8,28 +8,28 @@ class_name ProgressionTests
 extends RefCounted
 
 static func register(runner: CoreTestRunner) -> void:
-	runner.register_test("prog_no_actions_gets_clear_xp_only",         Callable(ProgressionTests, "_test_no_actions_clear_xp"))
-	runner.register_test("prog_kill_bonus_awarded_to_attacker",        Callable(ProgressionTests, "_test_kill_bonus"))
-	runner.register_test("prog_stage_clear_shared_all_party_echoes",   Callable(ProgressionTests, "_test_stage_clear_shared"))
-	runner.register_test("prog_realm_completion_bonus_on_final_stage", Callable(ProgressionTests, "_test_realm_completion_bonus"))
-	runner.register_test("prog_level_up_triggers_stat_recompute",      Callable(ProgressionTests, "_test_level_up_stat_recompute"))
-	runner.register_test("prog_level_capped_at_max_per_rank",          Callable(ProgressionTests, "_test_level_cap"))
-	runner.register_test("prog_virtue_multiplier_courage",             Callable(ProgressionTests, "_test_virtue_multiplier"))
-	runner.register_test("prog_xp_persisted_to_save_data",            Callable(ProgressionTests, "_test_xp_persisted"))
+	runner.register_test("prog/no_actions_gets_clear_xp_only",         Callable(ProgressionTests, "_test_no_actions_clear_xp"))
+	runner.register_test("prog/kill_bonus_awarded_to_attacker",        Callable(ProgressionTests, "_test_kill_bonus"))
+	runner.register_test("prog/stage_clear_shared_all_party_echoes",   Callable(ProgressionTests, "_test_stage_clear_shared"))
+	runner.register_test("prog/realm_completion_bonus_on_final_stage", Callable(ProgressionTests, "_test_realm_completion_bonus"))
+	runner.register_test("prog/level_up_triggers_stat_recompute",      Callable(ProgressionTests, "_test_level_up_stat_recompute"))
+	runner.register_test("prog/level_capped_at_max_per_rank",          Callable(ProgressionTests, "_test_level_cap"))
+	runner.register_test("prog/virtue_multiplier_courage",             Callable(ProgressionTests, "_test_virtue_multiplier"))
+	runner.register_test("prog/xp_persisted_to_save_data",            Callable(ProgressionTests, "_test_xp_persisted"))
 	# PROG-004:
-	runner.register_test("prog_wisdom_multiplier_guard_share",         Callable(ProgressionTests, "_test_wisdom_multiplier"))
-	runner.register_test("prog_faith_multiplier_survival_bonus",       Callable(ProgressionTests, "_test_faith_multiplier"))
-	runner.register_test("prog_rank_up_eligible_at_max_level",         Callable(ProgressionTests, "_test_rank_up_eligible"))
-	runner.register_test("prog_rank_up_increments_rank",               Callable(ProgressionTests, "_test_rank_up_increments_rank"))
-	runner.register_test("prog_rank_up_xp_carry_overflow",             Callable(ProgressionTests, "_test_rank_up_xp_carry"))
-	runner.register_test("prog_rank_up_trait_drift_deterministic",     Callable(ProgressionTests, "_test_rank_up_drift_deterministic"))
-	runner.register_test("prog_rank_up_calling_eligible_at_rank_3",   Callable(ProgressionTests, "_test_rank_up_calling_eligible"))
+	runner.register_test("prog/wisdom_multiplier_guard_share",         Callable(ProgressionTests, "_test_wisdom_multiplier"))
+	runner.register_test("prog/faith_multiplier_survival_bonus",       Callable(ProgressionTests, "_test_faith_multiplier"))
+	runner.register_test("prog/rank_up_eligible_at_max_level",         Callable(ProgressionTests, "_test_rank_up_eligible"))
+	runner.register_test("prog/rank_up_increments_rank",               Callable(ProgressionTests, "_test_rank_up_increments_rank"))
+	runner.register_test("prog/rank_up_xp_carry_overflow",             Callable(ProgressionTests, "_test_rank_up_xp_carry"))
+	runner.register_test("prog/rank_up_trait_drift_deterministic",     Callable(ProgressionTests, "_test_rank_up_drift_deterministic"))
+	runner.register_test("prog/rank_up_calling_eligible_at_rank_3",   Callable(ProgressionTests, "_test_rank_up_calling_eligible"))
 	# XP tuning (ST7):
-	runner.register_test("prog_rank2_effective_thresholds_shift",          Callable(ProgressionTests, "_test_rank2_effective_thresholds"))
-	runner.register_test("prog_realm_multiplier_scales_stage_xp",          Callable(ProgressionTests, "_test_realm_multiplier_scales_xp"))
-	runner.register_test("prog_mid_combat_kill_xp_updates_xp_total",       Callable(ProgressionTests, "_test_mid_combat_kill_xp_total"))
-	runner.register_test("prog_mid_combat_level_up_updates_actor_stats",   Callable(ProgressionTests, "_test_mid_combat_level_up_stats"))
-	runner.register_test("prog_kill_xp_skipped_in_post_combat",            Callable(ProgressionTests, "_test_skip_kill_xp_flag"))
+	runner.register_test("prog/rank2_effective_thresholds_shift",          Callable(ProgressionTests, "_test_rank2_effective_thresholds"))
+	runner.register_test("prog/realm_multiplier_scales_stage_xp",          Callable(ProgressionTests, "_test_realm_multiplier_scales_xp"))
+	runner.register_test("prog/mid_combat_kill_xp_updates_xp_total",       Callable(ProgressionTests, "_test_mid_combat_kill_xp_total"))
+	runner.register_test("prog/mid_combat_level_up_updates_actor_stats",   Callable(ProgressionTests, "_test_mid_combat_level_up_stats"))
+	runner.register_test("prog/kill_xp_skipped_in_post_combat",            Callable(ProgressionTests, "_test_skip_kill_xp_flag"))
 
 
 # ────────────────────────────────────────────────────────────────────────────

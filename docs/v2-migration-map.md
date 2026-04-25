@@ -467,6 +467,8 @@ These systems are already done and their save seams are live:
 | Story | System | Save keys (in `save_data["sanctum"]`) |
 |---|---|---|
 | BOND-001 | Social graph | `bonds: []`, `party_encounters: []` |
+| V2-BOND-001 ✅ | Bond graph seam audit & lock | `bond_entries` snapshot shape locked to `{ echo_id, name, tier, tier_name, strength, bond_type }`. All call sites in FlowRuntime + VowService verified. Save repair confirmed. 3 new tests added (rival/friend pairs in party, noop delta). BOND-002 and COMBAT-001 can be picked up without touching SocialGraphService internals. |
+| V2-BOND-002 ✅ | Bond trigger wiring + combat behavior + aftermath | All 8 stage-level triggers wired in FlowRuntime `_apply_combat_bond_triggers()`. Bond-aware BehaviorArbiter bias (`_apply_bond_bias()`) — friend protect bonus +12, rival protect penalty -10. Grief/survival aftermath modifiers via `_apply_bond_aftermath_modifiers()`. `rival_incidents[]` seeded for SANCTUM-005. 8 new BondTriggerTests. Save keys: `rival_incidents: []` in `sanctum`. |
 | VOW-001 | Vow doctrine | `vows: {}` (keyed by vow_id), `active_vow: {}` |
 | V2-WEAVE-001 | Thread recovery model | `sanctum.threads: {}` (keyed by thread_id); `realms[id].realm_recovery_segments: []` |
 | V2-WEAVE-002 | Foundation Weaving Rite loop | per-echo `woven_threads: []`, per-echo `weave_memory_marks: []` |

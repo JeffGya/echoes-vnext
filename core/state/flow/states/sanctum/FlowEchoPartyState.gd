@@ -248,6 +248,8 @@ static func _build_bond_entries(
 			"name":      name_by_id.get(partner_id, ""),
 			"tier":      tier,
 			"tier_name": SocialGraphService.get_tier_name(tier),
+			"strength":  strength,
+			"bond_type": SocialGraphService.get_bond_type(strength, bond_thresholds),
 		})
 
 	# Sort by tier ascending — most negative (rival) first

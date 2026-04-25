@@ -1,0 +1,321 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://ui/screens/onboarding/ForgottenNameScreen.gd" id="1_script"]
+[ext_resource type="Script" path="res://ui/screens/onboarding/VirtueOrbControl.gd" id="2_orb"]
+[ext_resource type="Theme" uid="uid://8qssuuodths2" path="res://assets/theme/LivingTreeSystem.tres" id="3_theme"]
+
+[node name="ForgottenNameScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("3_theme")
+script = ExtResource("1_script")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.23921569, 0.35294118, 0.27843137, 1)
+
+[node name="ChoiceRoot" type="Control" parent="." unique_id=1010]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Title" type="Label" parent="ChoiceRoot"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -320.0
+offset_top = 44.0
+offset_right = 320.0
+offset_bottom = 92.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+theme_override_font_sizes/font_size = 30
+text = "Three names are trying to return"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="ChoiceRoot"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -240.0
+offset_top = 96.0
+offset_right = 240.0
+offset_bottom = 124.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.83137256, 0.68627451, 0.21568627, 1)
+theme_override_font_sizes/font_size = 15
+text = "TAP EACH TO HEAR THEM SPEAK"
+horizontal_alignment = 1
+
+[node name="OrbRow" type="HBoxContainer" parent="ChoiceRoot"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -420.0
+offset_top = -72.0
+offset_right = 420.0
+offset_bottom = 210.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 70
+
+[node name="OrbSlot1" type="VBoxContainer" parent="ChoiceRoot/OrbRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="Bark1" type="Label" parent="ChoiceRoot/OrbRow/OrbSlot1" unique_id=1011]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 64)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="OrbButton1" type="Button" parent="ChoiceRoot/OrbRow/OrbSlot1" unique_id=1012]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(170, 170)
+layout_mode = 2
+flat = true
+
+[node name="Orb1" type="Control" parent="ChoiceRoot/OrbRow/OrbSlot1/OrbButton1" unique_id=1013]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("2_orb")
+
+[node name="Name1" type="Label" parent="ChoiceRoot/OrbRow/OrbSlot1" unique_id=1014]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 32)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+horizontal_alignment = 1
+
+[node name="OrbSlot2" type="VBoxContainer" parent="ChoiceRoot/OrbRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="Bark2" type="Label" parent="ChoiceRoot/OrbRow/OrbSlot2" unique_id=1021]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 64)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="OrbButton2" type="Button" parent="ChoiceRoot/OrbRow/OrbSlot2" unique_id=1022]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(170, 170)
+layout_mode = 2
+flat = true
+
+[node name="Orb2" type="Control" parent="ChoiceRoot/OrbRow/OrbSlot2/OrbButton2" unique_id=1023]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("2_orb")
+
+[node name="Name2" type="Label" parent="ChoiceRoot/OrbRow/OrbSlot2" unique_id=1024]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 32)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+horizontal_alignment = 1
+
+[node name="OrbSlot3" type="VBoxContainer" parent="ChoiceRoot/OrbRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="Bark3" type="Label" parent="ChoiceRoot/OrbRow/OrbSlot3" unique_id=1031]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 64)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="OrbButton3" type="Button" parent="ChoiceRoot/OrbRow/OrbSlot3" unique_id=1032]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(170, 170)
+layout_mode = 2
+flat = true
+
+[node name="Orb3" type="Control" parent="ChoiceRoot/OrbRow/OrbSlot3/OrbButton3" unique_id=1033]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("2_orb")
+
+[node name="Name3" type="Label" parent="ChoiceRoot/OrbRow/OrbSlot3" unique_id=1034]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 32)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+horizontal_alignment = 1
+
+[node name="CommitButton" type="Button" parent="ChoiceRoot" unique_id=1040]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 52)
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -110.0
+offset_top = -86.0
+offset_right = 110.0
+offset_bottom = -34.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_type_variation = &"ButtonPrimary"
+text = "COMMIT TO ONE"
+
+[node name="MeetingRoot" type="Control" parent="." unique_id=1050]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MeetingTitle" type="Label" parent="MeetingRoot"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -260.0
+offset_top = 34.0
+offset_right = 260.0
+offset_bottom = 84.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+theme_override_font_sizes/font_size = 30
+text = "A name has returned"
+horizontal_alignment = 1
+
+[node name="InfoPanel" type="PanelContainer" parent="MeetingRoot"]
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = 40.0
+offset_top = -210.0
+offset_right = 390.0
+offset_bottom = 210.0
+grow_vertical = 2
+
+[node name="InfoMargin" type="MarginContainer" parent="MeetingRoot/InfoPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 22
+theme_override_constants/margin_top = 22
+theme_override_constants/margin_right = 22
+theme_override_constants/margin_bottom = 22
+
+[node name="InfoVBox" type="VBoxContainer" parent="MeetingRoot/InfoPanel/InfoMargin"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="EchoName" type="Label" parent="MeetingRoot/InfoPanel/InfoMargin/InfoVBox" unique_id=1051]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HeaderLargePanel"
+text = "Echo"
+autowrap_mode = 3
+
+[node name="EchoMeta" type="Label" parent="MeetingRoot/InfoPanel/InfoMargin/InfoVBox" unique_id=1052]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ContentBasePanel"
+autowrap_mode = 3
+
+[node name="EchoTraits" type="Label" parent="MeetingRoot/InfoPanel/InfoMargin/InfoVBox" unique_id=1053]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ContentBasePanel"
+
+[node name="EchoStats" type="Label" parent="MeetingRoot/InfoPanel/InfoMargin/InfoVBox" unique_id=1054]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ContentBasePanel"
+
+[node name="EchoPlaceholder" type="Panel" parent="MeetingRoot"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.68
+anchor_top = 0.5
+anchor_right = 0.68
+anchor_bottom = 0.5
+offset_left = -80.0
+offset_top = -145.0
+offset_right = 80.0
+offset_bottom = 145.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="PlaceholderLabel" type="Label" parent="MeetingRoot/EchoPlaceholder"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+text = "Echo"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="MeetingContinue" type="Button" parent="MeetingRoot" unique_id=1055]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 52)
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -260.0
+offset_top = -86.0
+offset_right = -40.0
+offset_bottom = -34.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_type_variation = &"ButtonPrimary"
+text = "Continue"
