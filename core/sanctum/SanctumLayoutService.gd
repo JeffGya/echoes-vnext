@@ -2,16 +2,15 @@ extends RefCounted
 
 class_name SanctumLayoutService
 
-const LAYOUT_VERSION := 2
+const LAYOUT_VERSION := 4
 const CENTER_CELL := Vector2i(0, 0)
-const STARTER_RADIUS := 2
+const STARTER_HALF_SIZE := 1
 
 
 static func make_starter_layout() -> Dictionary:
 	var tiles: Array = []
-	for y in range(-STARTER_RADIUS, STARTER_RADIUS + 1):
-		var width: int = STARTER_RADIUS - absi(y)
-		for x in range(-width, width + 1):
+	for y in range(-STARTER_HALF_SIZE, STARTER_HALF_SIZE + 1):
+		for x in range(-STARTER_HALF_SIZE, STARTER_HALF_SIZE + 1):
 			tiles.append({
 				"x": x,
 				"y": y,
