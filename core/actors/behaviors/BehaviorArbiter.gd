@@ -254,6 +254,13 @@ func select_intent(context: Dictionary) -> Dictionary:
 		var party_size: int = int(context.get("party_size", 0))
 		_apply_vow_bias(candidates, active_vow, party_size)
 
+	# BOND-002: apply bond bias additively after vow bias. Echo faction only.
+	var bonds_ctx: Array = context.get("bonds", []) as Array
+	var bond_thresholds_ctx: Dictionary = context.get("bond_thresholds", {})
+	var bond_behavior_cfg: Dictionary = context.get("bond_behavior_cfg", {})
+	if not bonds_ctx.is_empty() and str(actor.get("faction", "")) == "echo":
+		_apply_bond_bias(candidates, actor, bonds_ctx, bond_thresholds_ctx, bond_behavior_cfg)
+
 	# COMBAT-006: actor.purify_shrine override — injected AFTER scoring so 9999 is never overwritten.
 	# Same pattern as Absolute Fear Rule: deterministic always-win when all conditions are met.
 	if context.get("is_purifier", false) \
@@ -978,6 +985,37 @@ func _apply_vow_bias(candidates: Array, active_vow: Dictionary, party_size: int)
 					var at: String = str(c.get("action_type", ""))
 					if at == "melee_attack" or at == "actor.move":
 						c["_score"] = float(c.get("_score", 0.0)) - fear_bias
+
+
+# BOND-002: Additive bond score bias for protect_ally candidates.
+# Friend target: boost protect_ally score. Rival target: penalise protect_ally score.
+# Mirrors _apply_vow_bias pattern — never overwrites _score, always +=.
+# Only called for echo faction actors when bonds array is non-empty.
+# all_actors param reserved for future guard bias; not used in MVP (protect_ally has explicit target_id).
+func _apply_bond_bias(
+	candidates: Array,
+	actor: Dictionary,
+	bonds: Array,
+	thresholds: Dictionary,
+	bond_cfg: Dictionary
+) -> void:
+	var actor_id := str(actor.get("id", ""))
+	var friend_bonus := float(bond_cfg.get("friend_protect_weight_bonus", 12.0))
+	var rival_penalty := float(bond_cfg.get("rival_protect_penalty", -10.0))
+	for c: Dictionary in candidates:
+		var at: String = str(c.get("action_type", ""))
+		var target_id: String = str(c.get("target_id", ""))
+		if at != "protect_ally" or target_id.is_empty():
+			continue
+		var edge := SocialGraphService.get_edge(bonds, actor_id, target_id)
+		if edge.is_empty():
+			continue
+		var strength := int(edge.get("strength", 0))
+		var bond_type := SocialGraphService.get_bond_type(strength, thresholds)
+		if bond_type == "friend":
+			c["_score"] = float(c.get("_score", 0.0)) + friend_bonus
+		elif bond_type == "rival":
+			c["_score"] = float(c.get("_score", 0.0)) + rival_penalty
 
 
 # PROG-010: Compute hp_ratio for any actor dict. Returns 1.0 if stats unavailable.

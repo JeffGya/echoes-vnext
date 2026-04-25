@@ -281,7 +281,22 @@ Pure-static `RefCounted`. BOND-001 social graph — 11-tier signed score (-100..
 
 **`bond_entries` per echo** (in `flow.echo_party` snapshot): `Array[{ echo_id, name, tier, tier_name, strength, bond_type }]` — sorted by tier ascending (most negative first). Empty when no party encounters recorded.
 
-**Bond triggers** (config only — fire in BOND-002): all integer values under `balance.data.sanctum.bond_triggers`. Balance also holds `rival_archetypes` pairs and `bond_thresholds { rival_max, friend_min }`.
+**Bond triggers** (wired in BOND-002 — `FlowRuntime._apply_combat_bond_triggers()`):
+
+| Trigger key | Delta | Condition |
+|---|---|---|
+| `shared_combat_proximity` | +1 | All echo pairs sharing a stage, always |
+| `shared_stage_win` | +3 | All echo pairs on victory |
+| `stage_defeat_shared` | -3 | All echo pairs on defeat |
+| `archetype_incompatible_shared_stage` | -5 | Incompatible archetype pair sharing a stage |
+| `ko_incompatible_no_protect` | -10 | Incompatible pair + one KO'd + neither guarded |
+| `protect_action_for_ally` | +8 | Friend-tier pair where either had guard_count > 0 |
+| `witnessed_ally_sacrifice` | +12 | One bonded (non-neutral) echo KO'd, partner survived |
+| `near_wipe_survival_together` | +10 | Victory + ≥1 echo KO'd + both pair members survived |
+
+Deferred triggers (config stubs only, not fired yet): `same_calling_shared_stage`, `adjacent_calling_shared_stage`, `guard_withheld_ally_endangered`, `reckless_advance_ally_exposed`, `vector_opposition_shared_stage`, `directive_deviation_repeated`, `morale_contagion_negative`, `three_plus_stages_incompatible`.
+
+**`rival_incidents`** (BOND-002, seed for SANCTUM-005): canonical `[a_id, b_id]` pairs appended to `sanctum["rival_incidents"]` when a rival-tier pair shares a stage. Never cleared. Never duplicated.
 
 ### VowService (`core/sanctum/VowService.gd`)
 Pure-static `RefCounted`. VOW-001 vow doctrine system.

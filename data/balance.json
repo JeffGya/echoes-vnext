@@ -144,7 +144,16 @@
 				"modifier_ko_morale_mul": 0.5,
 				"modifier_survived_morale_mul": 1.25,
 				"modifier_vow_break_fear_mul": 0.5,
-				"_comment_stubs": "vow_break + building modifiers are stubs — not applied yet (V2-SANCTUM-002, VOW-002, BOND-002)"
+				"_comment_stubs": "vow_break + building modifiers are stubs — not applied yet (V2-SANCTUM-002, VOW-002)",
+				"bonds": {
+					"_comment": "BOND-002: grief and shared-survival recovery modifiers applied after combat based on bond outcomes.",
+					"grief_morale_mul": 0.5,
+					"grief_fear_mul": 1.5,
+					"grief_ticks": 3,
+					"shared_survival_morale_mul": 1.5,
+					"shared_survival_fear_mul": 0.7,
+					"shared_survival_ticks": 2
+				}
 			}
 		},
 		"weaving_rite": {
@@ -191,6 +200,11 @@
 		},
 		"actor": {
 			"_comment": "Behavior Arbitration Engine (ACTOR-005). All multipliers live here — no GDScript changes needed to tune game feel or add new actions/callings/vectors/directives.",
+			"bond_behavior": {
+				"_comment": "BOND-002: additive score adjustments applied to BehaviorArbiter candidates based on social graph bonds.",
+				"friend_protect_weight_bonus": 12.0,
+				"rival_protect_penalty": -10.0
+			},
 			"enemy_types": {
 				"_comment": "Per-type trait values — fed to DerivedStatService using the same birth_stats formula as echoes. Add new types here; no GDScript changes needed.",
 				"guardian": {
