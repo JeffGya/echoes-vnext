@@ -26,8 +26,8 @@ var _is_panning := false
 var _last_pointer_pos := Vector2.ZERO
 
 # Camera clamp (Phase B)
-const TILE_W := 128.0
-const TILE_H := 64.0
+const TILE_W := 72.0
+const TILE_H := 36.0
 const FLOOR_PAD := Vector2(160.0, 160.0) # allow some "void" around edges
 
 var _floor_bounds_sv := Rect2(Vector2.ZERO, Vector2.ZERO) # floor bounds in SpatialView-local pixels

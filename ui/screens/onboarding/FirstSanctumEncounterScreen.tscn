@@ -25,7 +25,7 @@ color = Color(0.23921569, 0.35294118, 0.27843137, 1)
 
 [node name="SpatialView" type="Node2D" parent="."]
 position = Vector2(640, 320)
-scale = Vector2(1.45, 1.45)
+scale = Vector2(2.15, 2.15)
 
 [node name="SanctumSpatialRenderer" parent="SpatialView" unique_id=1060 instance=ExtResource("2_sanctum")]
 unique_name_in_owner = true
