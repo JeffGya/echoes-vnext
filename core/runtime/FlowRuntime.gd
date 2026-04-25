@@ -1028,7 +1028,7 @@ func _resolve_next_actor(t: int) -> void:
 		"melee_attack":
 			var target_id: String = str(intent.get("target_id", ""))
 			var target: Dictionary = _find_actor_by_id(ectx.actors, target_id)
-			if not target.is_empty():
+			if not target.is_empty() and not target.get("is_dead", false):
 				var result: Dictionary = CombatService.resolve_action("melee_attack", actor, target, round)
 				if not result.is_empty():
 					result["source_name"] = str(actor.get("name", ""))
@@ -1072,6 +1072,22 @@ func _resolve_next_actor(t: int) -> void:
 								"morale_delta": morale_ripple,
 								"fear_delta":   -fear_ripple,
 							})
+			else:
+				# Target was dead or missing when this actor's turn resolved — log and skip.
+				logger.info(t, "combat.attack_invalid_target",
+					"%s's attack target already dead — turn skipped" % actor.get("name", "?"), {
+					"actor_id":  str(actor.get("id", "")),
+					"target_id": target_id,
+				})
+				ectx.last_round_results.append({
+					"action_type": "actor.idle",
+					"source_id":   str(actor.get("id", "")),
+					"source_name": str(actor.get("name", "")),
+					"target_id":   "",
+					"target_name": "",
+					"damage":      0,
+					"is_kill":     false,
+				})
 		"actor.guard":
 			var guard_result: Dictionary = CombatService.resolve_action("actor.guard", actor, {}, round)
 			if not guard_result.is_empty():

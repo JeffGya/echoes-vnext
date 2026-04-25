@@ -69,6 +69,7 @@ static func from_definition(defn: Dictionary, t: int, cfg: Dictionary = {}) -> D
 		"speed":      computed.get("speed",  5),   # formula-derived via DerivedStatService
 		"morale":     50,                           # flat placeholder — EMOTION-001 supersedes this
 		"fear":       0,                            # flat placeholder — EMOTION-001 supersedes this
+		"fear_base":  0,                            # EMOTION-003: enemies have no resting fear floor
 		# ACTOR-004: faction + grid_pos placeholder until GRID-001 places actors on board
 		"faction":  defn.get("faction", "enemy"),
 		"grid_pos": { "col": 0, "row": 0 },

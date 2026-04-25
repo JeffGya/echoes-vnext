@@ -38,16 +38,16 @@ var _cfg: Dictionary
 # Used when _cfg is empty (no balance.json block passed in).
 const _DEFAULTS := {
 	"intent_weights_by_calling_origin": {
-		"okofor":      { "melee_attack": 20, "protect_ally": 65, "actor.guard": 45, "actor.idle": 10, "actor.move": 25 },
-		"aduro":       { "melee_attack": 65, "protect_ally": 10, "actor.guard": 15, "actor.idle": 10, "actor.move": 55 },
-		"kra_soro":    { "melee_attack": 40, "protect_ally": 10, "actor.guard": 15, "actor.idle":  5, "actor.move": 55 },
-		"onyamesu":    { "melee_attack": 35, "protect_ally": 30, "actor.guard": 55, "actor.idle": 25, "actor.move": 20 },
-		"okomfo":      { "melee_attack": 25, "protect_ally": 20, "actor.guard": 30, "actor.idle": 40, "actor.move": 35 },
-		"sum_okwanfo": { "melee_attack": 40, "protect_ally":  5, "actor.guard": 10, "actor.idle": 25, "actor.move": 55 },
-		"uncalled":    { "melee_attack": 50, "protect_ally": 15, "actor.guard": 25, "actor.idle": 20, "actor.move": 44 },
+		"okofor":      { "melee_attack": 20, "protect_ally": 65, "actor.guard": 45, "actor.idle":  5, "actor.move": 25 },
+		"aduro":       { "melee_attack": 65, "protect_ally": 10, "actor.guard": 15, "actor.idle":  3, "actor.move": 55 },
+		"kra_soro":    { "melee_attack": 40, "protect_ally": 10, "actor.guard": 15, "actor.idle":  3, "actor.move": 55 },
+		"onyamesu":    { "melee_attack": 35, "protect_ally": 30, "actor.guard": 55, "actor.idle":  8, "actor.move": 20 },
+		"okomfo":      { "melee_attack": 25, "protect_ally": 20, "actor.guard": 30, "actor.idle": 12, "actor.move": 35 },
+		"sum_okwanfo": { "melee_attack": 40, "protect_ally":  5, "actor.guard": 10, "actor.idle":  5, "actor.move": 55 },
+		"uncalled":    { "melee_attack": 50, "protect_ally": 15, "actor.guard": 25, "actor.idle":  8, "actor.move": 44 },
 		# Enemy baseline: aggressive. protect_ally=0 (enemies don't protect each other in MVP).
 		# guard/idle stay low so enemies almost never passively hold unless situationally forced.
-		"enemy":       { "melee_attack": 70, "protect_ally":  0, "actor.guard": 10, "actor.idle":  5, "actor.move": 60 },
+		"enemy":       { "melee_attack": 70, "protect_ally":  0, "actor.guard": 10, "actor.idle":  2, "actor.move": 60 },
 	},
 	"default_intent_weight": 5.0,
 	"trait_action_muls": {
@@ -94,7 +94,7 @@ const _DEFAULTS := {
 		"actor.move":   { "broken": -20, "shaken": -3, "steady": 0, "inspired": 10 },
 	},
 	"directive_base_bonus":  20.0,
-	"fear_active_dampen":    0.6,
+	"fear_active_dampen":    0.45,
 	"fear_passive_actions":  ["actor.idle", "actor.guard"],
 	"threat_threshold":      0.50,  # 0.50 = ally must be below 50% HP to qualify as threatened
 	"guard_range":           1,     # enemy must be adjacent for guard to be a candidate (melee-only MVP)

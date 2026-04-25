@@ -46,6 +46,7 @@ static func from_definition(defn: Dictionary, t: int) -> Dictionary:
 		"speed":          0,
 		"morale":         50,
 		"fear":           0,
+		"fear_base":      0,  # EMOTION-003: structures have no resting fear floor
 		"faction":        str(defn.get("faction", "structure")),
 		"grid_pos":       defn.get("grid_pos", { "col": 0, "row": 0 }),
 		# PROG-010: structures have no identity traits
