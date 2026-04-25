@@ -40,17 +40,17 @@ static func _make_logger() -> StructuredLogger:
 # ---------------------------------------------------------------------------
 
 static func register(runner: CoreTestRunner) -> void:
-	runner.register_test("thread_crystallize_one_all_broken",      Callable(ThreadServiceTests, "_test_crystallize_one_thread_all_broken"))
-	runner.register_test("thread_crystallize_two_mixed",           Callable(ThreadServiceTests, "_test_crystallize_two_threads_mixed"))
-	runner.register_test("thread_crystallize_three_all_clean",     Callable(ThreadServiceTests, "_test_crystallize_three_threads_all_clean"))
-	runner.register_test("thread_crystallize_populates_sanctum",   Callable(ThreadServiceTests, "_test_crystallize_populates_sanctum_threads"))
-	runner.register_test("thread_crystallize_empty_no_segments",   Callable(ThreadServiceTests, "_test_crystallize_empty_when_no_segments"))
-	runner.register_test("thread_contribute_grade_s_maps_clean",   Callable(ThreadServiceTests, "_test_contribute_segment_grade_s_maps_clean"))
-	runner.register_test("thread_contribute_grade_f_maps_broken",  Callable(ThreadServiceTests, "_test_contribute_segment_grade_f_maps_broken"))
-	runner.register_test("thread_contribute_ignores_completed",    Callable(ThreadServiceTests, "_test_contribute_segment_ignores_completed_realm"))
-	runner.register_test("thread_derive_quality_all_clean",        Callable(ThreadServiceTests, "_test_derive_quality_all_clean"))
-	runner.register_test("thread_get_recovery_band_strong",        Callable(ThreadServiceTests, "_test_get_recovery_band_returns_strong"))
-	runner.register_test("thread_id_collision_guard",              Callable(ThreadServiceTests, "_test_thread_id_collision_guard"))
+	runner.register_test("thread/crystallize_one_all_broken",      Callable(ThreadServiceTests, "_test_crystallize_one_thread_all_broken"))
+	runner.register_test("thread/crystallize_two_mixed",           Callable(ThreadServiceTests, "_test_crystallize_two_threads_mixed"))
+	runner.register_test("thread/crystallize_three_all_clean",     Callable(ThreadServiceTests, "_test_crystallize_three_threads_all_clean"))
+	runner.register_test("thread/crystallize_populates_sanctum",   Callable(ThreadServiceTests, "_test_crystallize_populates_sanctum_threads"))
+	runner.register_test("thread/crystallize_empty_no_segments",   Callable(ThreadServiceTests, "_test_crystallize_empty_when_no_segments"))
+	runner.register_test("thread/contribute_grade_s_maps_clean",   Callable(ThreadServiceTests, "_test_contribute_segment_grade_s_maps_clean"))
+	runner.register_test("thread/contribute_grade_f_maps_broken",  Callable(ThreadServiceTests, "_test_contribute_segment_grade_f_maps_broken"))
+	runner.register_test("thread/contribute_ignores_completed",    Callable(ThreadServiceTests, "_test_contribute_segment_ignores_completed_realm"))
+	runner.register_test("thread/derive_quality_all_clean",        Callable(ThreadServiceTests, "_test_derive_quality_all_clean"))
+	runner.register_test("thread/get_recovery_band_strong",        Callable(ThreadServiceTests, "_test_get_recovery_band_returns_strong"))
+	runner.register_test("thread/id_collision_guard",              Callable(ThreadServiceTests, "_test_thread_id_collision_guard"))
 
 # ---------------------------------------------------------------------------
 # Crystallize tests

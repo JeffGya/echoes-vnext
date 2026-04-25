@@ -10,36 +10,36 @@ extends RefCounted
 
 static func register(runner: CoreTestRunner) -> void:
 	# compute_all_options — preferred tier (V2 six callings)
-	runner.register_test("calling_vanguard_dominant_preferred_aduro",      Callable(CallingTests, "_test_vanguard_preferred_aduro"))
-	runner.register_test("calling_protector_dominant_preferred_okofor",    Callable(CallingTests, "_test_protector_preferred_okofor"))
-	runner.register_test("calling_pillar_dominant_preferred_onyamesu",     Callable(CallingTests, "_test_pillar_preferred_onyamesu"))
-	runner.register_test("calling_seeker_dominant_preferred_okomfo",       Callable(CallingTests, "_test_seeker_preferred_okomfo"))
-	runner.register_test("calling_seeker_kra_soro_compatible_when_dominant", Callable(CallingTests, "_test_seeker_kra_soro_compatible"))
-	runner.register_test("calling_opportunist_dominant_preferred_sum_okwanfo", Callable(CallingTests, "_test_opportunist_preferred_sum_okwanfo"))
+	runner.register_test("calling/vanguard_dominant_preferred_aduro",      Callable(CallingTests, "_test_vanguard_preferred_aduro"))
+	runner.register_test("calling/protector_dominant_preferred_okofor",    Callable(CallingTests, "_test_protector_preferred_okofor"))
+	runner.register_test("calling/pillar_dominant_preferred_onyamesu",     Callable(CallingTests, "_test_pillar_preferred_onyamesu"))
+	runner.register_test("calling/seeker_dominant_preferred_okomfo",       Callable(CallingTests, "_test_seeker_preferred_okomfo"))
+	runner.register_test("calling/seeker_kra_soro_compatible_when_dominant", Callable(CallingTests, "_test_seeker_kra_soro_compatible"))
+	runner.register_test("calling/opportunist_dominant_preferred_sum_okwanfo", Callable(CallingTests, "_test_opportunist_preferred_sum_okwanfo"))
 	# extensibility
-	runner.register_test("calling_all_six_always_present",                 Callable(CallingTests, "_test_all_six_present"))
+	runner.register_test("calling/all_six_always_present",                 Callable(CallingTests, "_test_all_six_present"))
 	# compatible / ambivalent / incompatible tiers
-	runner.register_test("calling_secondary_vector_above_threshold_compatible",  Callable(CallingTests, "_test_compatible_tier"))
-	runner.register_test("calling_secondary_vector_below_threshold_ambivalent",  Callable(CallingTests, "_test_ambivalent_tier"))
-	runner.register_test("calling_seeker_both_paths_compatible_when_dominant",   Callable(CallingTests, "_test_seeker_both_paths_compatible"))
+	runner.register_test("calling/secondary_vector_above_threshold_compatible",  Callable(CallingTests, "_test_compatible_tier"))
+	runner.register_test("calling/secondary_vector_below_threshold_ambivalent",  Callable(CallingTests, "_test_ambivalent_tier"))
+	runner.register_test("calling/seeker_both_paths_compatible_when_dominant",   Callable(CallingTests, "_test_seeker_both_paths_compatible"))
 	# is_calling_pending
-	runner.register_test("calling_pending_false_when_not_eligible",        Callable(CallingTests, "_test_pending_false_not_eligible"))
-	runner.register_test("calling_pending_false_when_already_set",         Callable(CallingTests, "_test_pending_false_already_set"))
+	runner.register_test("calling/pending_false_when_not_eligible",        Callable(CallingTests, "_test_pending_false_not_eligible"))
+	runner.register_test("calling/pending_false_when_already_set",         Callable(CallingTests, "_test_pending_false_already_set"))
 	# confirm_calling consequences
-	runner.register_test("calling_confirm_preferred_morale_boost",         Callable(CallingTests, "_test_confirm_preferred"))
-	runner.register_test("calling_confirm_compatible_morale_dip",          Callable(CallingTests, "_test_confirm_compatible"))
-	runner.register_test("calling_confirm_ambivalent_dip_and_fear",        Callable(CallingTests, "_test_confirm_ambivalent"))
-	runner.register_test("calling_confirm_incompatible_fear_increase",     Callable(CallingTests, "_test_confirm_incompatible"))
+	runner.register_test("calling/confirm_preferred_morale_boost",         Callable(CallingTests, "_test_confirm_preferred"))
+	runner.register_test("calling/confirm_compatible_morale_dip",          Callable(CallingTests, "_test_confirm_compatible"))
+	runner.register_test("calling/confirm_ambivalent_dip_and_fear",        Callable(CallingTests, "_test_confirm_ambivalent"))
+	runner.register_test("calling/confirm_incompatible_fear_increase",     Callable(CallingTests, "_test_confirm_incompatible"))
 	# edge: zero score → incompatible not ambivalent
-	runner.register_test("calling_zero_vector_score_is_incompatible",      Callable(CallingTests, "_test_zero_score_incompatible"))
+	runner.register_test("calling/zero_vector_score_is_incompatible",      Callable(CallingTests, "_test_zero_score_incompatible"))
 	# V2-PROG-002: calling seam — EchoActor projects confirmed calling field into actor dict
 	runner.register_test("calling/seam_echo_actor_projects_calling_field", Callable(CallingTests, "_test_echo_actor_projects_calling"))
 	# V2-PROG-003: six new vector preferred-calling mappings (updated to V2 IDs in V2-PROG-004)
-	runner.register_test("calling_strategist_dominant_preferred_okomfo",   Callable(CallingTests, "_test_strategist_preferred_okomfo"))
-	runner.register_test("calling_skeptic_dominant_preferred_kra_soro",    Callable(CallingTests, "_test_skeptic_preferred_kra_soro"))
-	runner.register_test("calling_devoted_dominant_preferred_onyamesu",    Callable(CallingTests, "_test_devoted_preferred_onyamesu"))
-	runner.register_test("calling_mediator_dominant_preferred_okofor",     Callable(CallingTests, "_test_mediator_preferred_okofor"))
-	runner.register_test("calling_nurturer_dominant_preferred_onyamesu",   Callable(CallingTests, "_test_nurturer_preferred_onyamesu"))
+	runner.register_test("calling/strategist_dominant_preferred_okomfo",   Callable(CallingTests, "_test_strategist_preferred_okomfo"))
+	runner.register_test("calling/skeptic_dominant_preferred_kra_soro",    Callable(CallingTests, "_test_skeptic_preferred_kra_soro"))
+	runner.register_test("calling/devoted_dominant_preferred_onyamesu",    Callable(CallingTests, "_test_devoted_preferred_onyamesu"))
+	runner.register_test("calling/mediator_dominant_preferred_okofor",     Callable(CallingTests, "_test_mediator_preferred_okofor"))
+	runner.register_test("calling/nurturer_dominant_preferred_onyamesu",   Callable(CallingTests, "_test_nurturer_preferred_onyamesu"))
 
 
 # ────────────────────────────────────────────────────────────────────────────

@@ -3,8 +3,8 @@ class_name EconomyTests
 extends RefCounted
 
 static func register(runner: CoreTestRunner) -> void:
-	runner.register_test("economy_add_spend", Callable(EconomyTests, "_test_add_spend"))
-	runner.register_test("economy_denied_spend_no_mutation", Callable(EconomyTests, "_test_denied_spend"))
+	runner.register_test("economy/add_spend", Callable(EconomyTests, "_test_add_spend"))
+	runner.register_test("economy/denied_spend_no_mutation", Callable(EconomyTests, "_test_denied_spend"))
 	# Roundtrip test can be added after we decide test save path strategy.
 
 static func _test_add_spend() -> Dictionary:

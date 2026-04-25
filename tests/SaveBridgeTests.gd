@@ -12,14 +12,14 @@ extends RefCounted
 # ---------------------------------------------------------------------------
 
 static func register(runner: CoreTestRunner) -> void:
-	runner.register_test("bridge_new_save_has_v2_economy_roots",    Callable(SaveBridgeTests, "_test_new_save_economy_stubs"))
-	runner.register_test("bridge_new_save_has_v2_sanctum_roots",    Callable(SaveBridgeTests, "_test_new_save_sanctum_stubs"))
-	runner.register_test("bridge_new_save_has_stage_intel_stub",    Callable(SaveBridgeTests, "_test_new_save_intel_stub"))
-	runner.register_test("bridge_repair_progression_mirrors",       Callable(SaveBridgeTests, "_test_repair_progression_mirrors"))
-	runner.register_test("bridge_repair_economy_v2_stubs",         Callable(SaveBridgeTests, "_test_repair_economy_stubs"))
-	runner.register_test("bridge_repair_sanctum_v2_stubs",         Callable(SaveBridgeTests, "_test_repair_sanctum_stubs"))
-	runner.register_test("bridge_repair_migrates_vow_array",       Callable(SaveBridgeTests, "_test_repair_migrates_vow_array"))
-	runner.register_test("bridge_repair_is_idempotent",            Callable(SaveBridgeTests, "_test_repair_idempotent"))
+	runner.register_test("bridge/new_save_has_v2_economy_roots",    Callable(SaveBridgeTests, "_test_new_save_economy_stubs"))
+	runner.register_test("bridge/new_save_has_v2_sanctum_roots",    Callable(SaveBridgeTests, "_test_new_save_sanctum_stubs"))
+	runner.register_test("bridge/new_save_has_stage_intel_stub",    Callable(SaveBridgeTests, "_test_new_save_intel_stub"))
+	runner.register_test("bridge/repair_progression_mirrors",       Callable(SaveBridgeTests, "_test_repair_progression_mirrors"))
+	runner.register_test("bridge/repair_economy_v2_stubs",         Callable(SaveBridgeTests, "_test_repair_economy_stubs"))
+	runner.register_test("bridge/repair_sanctum_v2_stubs",         Callable(SaveBridgeTests, "_test_repair_sanctum_stubs"))
+	runner.register_test("bridge/repair_migrates_vow_array",       Callable(SaveBridgeTests, "_test_repair_migrates_vow_array"))
+	runner.register_test("bridge/repair_is_idempotent",            Callable(SaveBridgeTests, "_test_repair_idempotent"))
 
 
 # ---------------------------------------------------------------------------
