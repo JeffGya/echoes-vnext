@@ -38,6 +38,8 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			# ECONOMY-002 guards
 			"last_settle_unix": now,
 			"last_offline_unix": now,
+			# V2-SANCTUM-001: emotion recovery settlement timestamp (mirrors last_settle_unix)
+			"last_emotion_settle_unix": now,
 
 			# V2-MIG-002: additive V2 currency + visible state stubs
 			"relics": 0,   # V2-ECONOMY-001+: rare artifact currency

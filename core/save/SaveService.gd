@@ -226,6 +226,24 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			repaired = true
 			repaired_notes.append("economy.last_offline_unix repaired invalid type")
 		
+	# V2-SANCTUM-001: emotion recovery settlement timestamp
+	if not econ.has("last_emotion_settle_unix"):
+		econ["last_emotion_settle_unix"] = now_unix
+		repaired = true
+		repaired_notes.append("economy.last_emotion_settle_unix set to unix default")
+	else:
+		var _esv = econ["last_emotion_settle_unix"]
+		var _esvi := int(_esv)
+		if typeof(_esv) == TYPE_FLOAT:
+			if _esv != float(_esvi):
+				econ["last_emotion_settle_unix"] = _esvi
+				repaired = true
+				repaired_notes.append("economy.last_emotion_settle_unix normalized float->int")
+		elif typeof(_esv) != TYPE_INT:
+			econ["last_emotion_settle_unix"] = _esvi
+			repaired = true
+			repaired_notes.append("economy.last_emotion_settle_unix repaired invalid type")
+
 	# ---- Economy V2 stubs (V2-MIG-002) ----
 	if not econ.has("relics") or (typeof(econ["relics"]) != TYPE_INT and typeof(econ["relics"]) != TYPE_FLOAT):
 		econ["relics"] = 0
@@ -506,6 +524,28 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 						echo["emotion"][_k] = _e_def[_k]
 						repaired = true
 						repaired_notes.append("sanctum.roster[%d].emotion.%s set to default" % [i, _k])
+
+			# V2-SANCTUM-001: per-echo recovery modifier block (additive — never overwrites existing)
+			if not echo.has("recovery_modifiers") or typeof(echo["recovery_modifiers"]) != TYPE_DICTIONARY:
+				echo["recovery_modifiers"] = { "morale_multiplier": 1.0, "fear_multiplier": 1.0, "ticks_remaining": 0 }
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].recovery_modifiers defaulted" % i)
+			else:
+				var _rm: Dictionary = echo["recovery_modifiers"]
+				if not _rm.has("morale_multiplier") or (typeof(_rm["morale_multiplier"]) != TYPE_FLOAT and typeof(_rm["morale_multiplier"]) != TYPE_INT):
+					_rm["morale_multiplier"] = 1.0
+					repaired = true
+					repaired_notes.append("sanctum.roster[%d].recovery_modifiers.morale_multiplier set to 1.0" % i)
+				if not _rm.has("fear_multiplier") or (typeof(_rm["fear_multiplier"]) != TYPE_FLOAT and typeof(_rm["fear_multiplier"]) != TYPE_INT):
+					_rm["fear_multiplier"] = 1.0
+					repaired = true
+					repaired_notes.append("sanctum.roster[%d].recovery_modifiers.fear_multiplier set to 1.0" % i)
+				if not _rm.has("ticks_remaining") or (typeof(_rm["ticks_remaining"]) != TYPE_INT and typeof(_rm["ticks_remaining"]) != TYPE_FLOAT):
+					_rm["ticks_remaining"] = 0
+					repaired = true
+					repaired_notes.append("sanctum.roster[%d].recovery_modifiers.ticks_remaining set to 0" % i)
+				else:
+					_rm["ticks_remaining"] = int(_rm["ticks_remaining"])
 
 			# PROG-008: skill_slots — Array of active skill_id strings. One slot per calling (MVP=1).
 			# Initialise as [""] so the slot exists but is empty. Future rank 6 story appends "".
