@@ -279,7 +279,7 @@ Pure-static `RefCounted`. BOND-001 social graph — 11-tier signed score (-100..
 | -4 | Rival | -70..-89 | rival |
 | -5 | Nemesis | -90..-100 | rival |
 
-**`bond_entries` per echo** (in `flow.echo_party` snapshot): `Array[{ echo_id, name, tier, strength_before, bond_type_before }]` — sorted by tier ascending (most negative first). Empty when no party encounters recorded.
+**`bond_entries` per echo** (in `flow.echo_party` snapshot): `Array[{ echo_id, name, tier, tier_name, strength, bond_type }]` — sorted by tier ascending (most negative first). Empty when no party encounters recorded.
 
 **Bond triggers** (config only — fire in BOND-002): all integer values under `balance.data.sanctum.bond_triggers`. Balance also holds `rival_archetypes` pairs and `bond_thresholds { rival_max, friend_min }`.
 

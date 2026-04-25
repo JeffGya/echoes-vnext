@@ -11,8 +11,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("social_graph/apply_delta_clamp_max",           Callable(SocialGraphTests, "_t_apply_delta_clamp_max"))
 	runner.register_test("social_graph/apply_delta_clamp_min",           Callable(SocialGraphTests, "_t_apply_delta_clamp_min"))
 	runner.register_test("social_graph/apply_delta_creates_edge",        Callable(SocialGraphTests, "_t_apply_delta_creates_edge"))
+	runner.register_test("social_graph/apply_delta_noop_zero",           Callable(SocialGraphTests, "_t_apply_delta_noop_zero"))
 	runner.register_test("social_graph/record_encounter_no_duplicate",   Callable(SocialGraphTests, "_t_record_encounter_no_duplicate"))
 	runner.register_test("social_graph/archetype_pair_bidirectional",    Callable(SocialGraphTests, "_t_archetype_pair_bidirectional"))
+	runner.register_test("social_graph/rival_pairs_in_party",            Callable(SocialGraphTests, "_t_rival_pairs_in_party"))
+	runner.register_test("social_graph/friend_pairs_in_party",           Callable(SocialGraphTests, "_t_friend_pairs_in_party"))
 
 
 static func _thresholds() -> Dictionary:
@@ -124,4 +127,52 @@ static func _t_archetype_pair_bidirectional() -> Dictionary:
 		return { "ok": false, "error": "empathic+proud (reversed) not recognised as rival pair" }
 	if SocialGraphService.is_rival_archetype_pair("proud", "loyal", pairs):
 		return { "ok": false, "error": "proud+loyal incorrectly flagged as rival pair" }
+	return { "ok": true }
+
+
+# 9 — apply_score_delta with delta=0 is a no-op (bonds unchanged, no new edge)
+static func _t_apply_delta_noop_zero() -> Dictionary:
+	var bonds: Array = [{ "actor_a": "alpha", "actor_b": "beta", "strength": 20 }]
+	var before_size := bonds.size()
+	bonds = SocialGraphService.apply_score_delta(bonds, "alpha", "beta", 0, _thresholds(), null, 0)
+	if bonds.size() != before_size:
+		return { "ok": false, "error": "Expected no change in bonds size for delta=0, got %d" % bonds.size() }
+	var edge := SocialGraphService.get_edge(bonds, "alpha", "beta")
+	if int(edge.get("strength", -1)) != 20:
+		return { "ok": false, "error": "Expected strength=20 unchanged, got %d" % int(edge.get("strength", -1)) }
+	return { "ok": true }
+
+
+# 10 — get_rival_pairs_in_party returns only pairs where both actors are in party and bond_type=="rival"
+static func _t_rival_pairs_in_party() -> Dictionary:
+	# alpha+beta at -40 (rival), beta+gamma at +40 (friend), gamma not bonded to alpha
+	var bonds: Array = [
+		{ "actor_a": "alpha", "actor_b": "beta",  "strength": -40 },
+		{ "actor_a": "beta",  "actor_b": "gamma", "strength": 40  },
+	]
+	var party := ["alpha", "beta", "gamma"]
+	var rival_pairs := SocialGraphService.get_rival_pairs_in_party(bonds, party, _thresholds())
+	if rival_pairs.size() != 1:
+		return { "ok": false, "error": "Expected 1 rival pair, got %d" % rival_pairs.size() }
+	var p: Array = rival_pairs[0]
+	if not ("alpha" in p and "beta" in p):
+		return { "ok": false, "error": "Expected [alpha, beta] as rival pair, got %s" % str(p) }
+	# gamma excluded (not a rival pair with anyone)
+	return { "ok": true }
+
+
+# 11 — get_friend_pairs_in_party returns only pairs where both actors are in party and bond_type=="friend"
+static func _t_friend_pairs_in_party() -> Dictionary:
+	# alpha+beta at +40 (friend), beta+gamma at -40 (rival)
+	var bonds: Array = [
+		{ "actor_a": "alpha", "actor_b": "beta",  "strength": 40  },
+		{ "actor_a": "beta",  "actor_b": "gamma", "strength": -40 },
+	]
+	var party := ["alpha", "beta", "gamma"]
+	var friend_pairs := SocialGraphService.get_friend_pairs_in_party(bonds, party, _thresholds())
+	if friend_pairs.size() != 1:
+		return { "ok": false, "error": "Expected 1 friend pair, got %d" % friend_pairs.size() }
+	var p: Array = friend_pairs[0]
+	if not ("alpha" in p and "beta" in p):
+		return { "ok": false, "error": "Expected [alpha, beta] as friend pair, got %s" % str(p) }
 	return { "ok": true }
