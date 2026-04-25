@@ -34,6 +34,16 @@ var _sanctum_shell_scene := preload("res://ui/shells/SanctumShell.tscn")
 var _realm_shell: RealmShell
 var _realm_shell_scene := preload("res://ui/shells/RealmShell.tscn")
 
+var _active_onboarding_screen: Control
+var _onboarding_scene_by_type: Dictionary = {
+	"flow.onboarding_invocation": preload("res://ui/screens/onboarding/InvocationScreen.tscn"),
+	"flow.onboarding_anansi": preload("res://ui/screens/onboarding/AnansiWebScreen.tscn"),
+	"flow.onboarding_choose_name": preload("res://ui/screens/onboarding/ForgottenNameScreen.tscn"),
+	"flow.onboarding_meeting": preload("res://ui/screens/onboarding/ForgottenNameScreen.tscn"),
+	"flow.onboarding_empty_sanctum": preload("res://ui/screens/onboarding/FirstSanctumEncounterScreen.tscn"),
+	"flow.onboarding_name_sanctum": preload("res://ui/screens/onboarding/SanctumNamingScreen.tscn"),
+}
+
 func _ready():
 	# Bind renderer to UI elements it can update.
 	renderer.bind_view(snapshot_view, actions_container)
@@ -301,12 +311,14 @@ func _run_tests(parts: Array) -> void:
 	PassiveIdentityTests.register(runner)   # PROG-009
 	SkillLoadoutTests.register(runner)      # PROG-009
 	load("res://tests/SocialGraphTests.gd").register(runner)  # BOND-001
+	load("res://tests/BondTriggerTests.gd").register(runner)  # BOND-002
 	VowServiceTests.register(runner)  # VOW-001
 	load("res://tests/SaveBridgeTests.gd").register(runner)  # V2-MIG-002
 	ThreadServiceTests.register(runner)                      # V2-WEAVE-001
 	load("res://tests/WeavingRiteTests.gd").register(runner)  # V2-WEAVE-002
 	load("res://tests/StageExploreTests.gd").register(runner)    # V2-STAGE-001
 	load("res://tests/IntelPersistenceTests.gd").register(runner) # V2-INTEL-001
+	load("res://tests/OnboardingTests.gd").register(runner)
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [
@@ -316,13 +328,35 @@ func _run_tests(parts: Array) -> void:
 	])
 
 	var results: Array = result.get("results", [])
+
+	# Group by suite prefix (text before first "/") for compact, scannable output.
+	var suite_order: Array = []
+	var suite_map: Dictionary = {}  # suite → { passed, failed, failures[] }
 	for r in results:
-		var ok := bool(r.get("ok", false))
-		var name := str(r.get("name", "unnamed"))
-		if ok:
-			_debug_print("✅ " + name)
+		var rname := str(r.get("name", "unnamed"))
+		var slash_idx := rname.find("/")
+		var suite := rname.substr(0, slash_idx) if slash_idx >= 0 else rname
+		if not suite_map.has(suite):
+			suite_order.append(suite)
+			suite_map[suite] = { "passed": 0, "failed": 0, "failures": [] }
+		if bool(r.get("ok", false)):
+			suite_map[suite]["passed"] += 1
 		else:
-			_debug_print("❌ " + name + " — " + str(r.get("error", "unknown error")))
+			suite_map[suite]["failed"] += 1
+			(suite_map[suite]["failures"] as Array).append(
+				"  ❌ " + rname + " — " + str(r.get("error", "unknown error"))
+			)
+
+	for suite in suite_order:
+		var s: Dictionary = suite_map[suite]
+		var n_pass := int(s.get("passed", 0))
+		var n_fail := int(s.get("failed", 0))
+		if n_fail == 0:
+			_debug_print("✅ %s — %d passed" % [suite, n_pass])
+		else:
+			_debug_print("❌ %s — %d passed, %d failed" % [suite, n_pass, n_fail])
+			for fail_line in (s.get("failures", []) as Array):
+				_debug_print(str(fail_line))
 			
 	_flush_logs_to_console()
 
@@ -707,9 +741,36 @@ const VENTURE_FAMILY: Array = [
 	"flow.encounter",
 	"flow.resolve",
 ]
+const ONBOARDING_FAMILY: Array = [
+	"flow.onboarding_invocation",
+	"flow.onboarding_anansi",
+	"flow.onboarding_choose_name",
+	"flow.onboarding_meeting",
+	"flow.onboarding_empty_sanctum",
+	"flow.onboarding_name_sanctum",
+]
 
 func _render_snapshot(snap: Dictionary) -> void:
 	var snap_type := str(snap.get("type", ""))
+
+	if snap_type in ONBOARDING_FAMILY:
+		var packed_v: Variant = _onboarding_scene_by_type.get(snap_type, null)
+		var packed: PackedScene = packed_v if packed_v is PackedScene else null
+		if packed == null:
+			push_warning("AppRoot: no onboarding scene mapped for snapshot type: " + snap_type)
+			return
+		if _active_onboarding_screen == null or _active_onboarding_screen.scene_file_path != packed.resource_path:
+			if _active_onboarding_screen != null:
+				_active_onboarding_screen.queue_free()
+				_active_onboarding_screen = null
+			_active_onboarding_screen = packed.instantiate() as Control
+			screen_host.add_child(_active_onboarding_screen)
+			if _active_onboarding_screen.has_signal("action_requested"):
+				_active_onboarding_screen.connect("action_requested", Callable(self, "_on_ui_action_selected"))
+		_show_screen(_active_onboarding_screen)
+		if _active_onboarding_screen.has_method("set_snapshot"):
+			_active_onboarding_screen.call("set_snapshot", snap)
+		return
 
 	if snap_type in SANCTUM_FAMILY:
 		if _sanctum_shell == null:
@@ -742,6 +803,8 @@ func _show_screen(screen: Control) -> void:
 		_sanctum_shell.visible = false
 	if _realm_shell != null:
 		_realm_shell.visible = false
+	if _active_onboarding_screen != null:
+		_active_onboarding_screen.visible = false
 
 	screen.visible = true
 
@@ -855,3 +918,5 @@ func _hide_bespoke_screens() -> void:
 		_sanctum_shell.visible = false
 	if _realm_shell != null:
 		_realm_shell.visible = false
+	if _active_onboarding_screen != null:
+		_active_onboarding_screen.visible = false

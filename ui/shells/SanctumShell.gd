@@ -74,6 +74,7 @@ func set_snapshot(snap: Dictionary) -> void:
 	# For now this is a stub. Later we will add proper renderer script.
 	if spatial_renderer != null and spatial_renderer.has_method("render"):
 		spatial_renderer.call("render", snap)
+		_center_camera_on_floor()
 
 	# 2) Swap overlay UI based on flow snapshot type
 	var snap_type := str(snap.get("type", ""))

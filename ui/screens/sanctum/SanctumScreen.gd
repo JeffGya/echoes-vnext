@@ -124,20 +124,7 @@ func _render() -> void:
 	var reserve_cap: int = int(data.get("thread_reserve_cap", 4))
 	_rebuild_thread_reserve(thread_reserve, reserve_cap)
 
-	if sanctum_name == "":
-		# Modal opening edge: reset dirty so first suggestion shows and rerolls work
-		if not name_modal.visible:
-			_name_dirty = false
-
-		name_modal.visible = true
-
-		# Keep synced to suggestion unless user has started typing
-		if not _name_dirty:
-			name_edit.text = suggested
-
-		name_edit.grab_focus()
-	else:
-		name_modal.visible = false
+	name_modal.visible = false
 
 func _ready() -> void:
 	reroll_button.pressed.connect(_on_reroll_pressed)

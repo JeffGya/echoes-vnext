@@ -31,6 +31,14 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"state": "flow.splash",
 			"context": {}
 		},
+		"onboarding": {
+			"chapter_one_complete": false,
+			"chapter_one_step": "invocation",
+			"fragment_options": [],
+			"heard_fragments": [],
+			"selected_fragment": "",
+			"name_options": [],
+		},
 		"economy": {
 			"ase": 0,
 			"ekwan": 0,
@@ -55,8 +63,11 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"name_roll_index": 0,
 			"starter_granted": false,
 			"summon_count": 0,
+			"layout": SanctumLayoutService.make_starter_layout(),
+			"occupants": [],
 			"bonds": [],            # BOND-001: signed score edges {actor_a, actor_b, strength}
 			"party_encounters": [], # BOND-001: canonical pairs who have shared a party slot
+			"rival_incidents": [],  # BOND-002: canonical rival pairs that shared a stage (seed for SANCTUM-005)
 			"active_vow": {},       # VOW-001: active vow dict {vow_id, tier, pledged_at_realm, runs_at_pledge} or {}
 			"vows": {},             # VOW-001 canonical: Dict keyed by vow_id → {tier, discovered_realm}
 

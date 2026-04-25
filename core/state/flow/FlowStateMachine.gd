@@ -4,6 +4,7 @@ extends StateMachine
 
 const FlowWeavingRiteStateScript  := preload("res://core/state/flow/states/sanctum/FlowWeavingRiteState.gd")
 const FlowStageExploreStateScript := preload("res://core/state/flow/states/venture/FlowStageExploreState.gd")  # V2-STAGE-001
+const FlowOnboardingStateScript := preload("res://core/state/flow/states/onboarding/FlowOnboardingState.gd")
 
 func _init() -> void:
 	super("state.flow")
@@ -13,6 +14,12 @@ func register_default_states() -> void:
 	# registrations will be placed here.
 	register_state(FlowSplashState.new())
 	register_state(FlowMainMenuState.new())
+	register_state(FlowOnboardingStateScript.new(FlowStateIds.ONBOARDING_INVOCATION, OnboardingService.STEP_INVOCATION))
+	register_state(FlowOnboardingStateScript.new(FlowStateIds.ONBOARDING_ANANSI, OnboardingService.STEP_ANANSI))
+	register_state(FlowOnboardingStateScript.new(FlowStateIds.ONBOARDING_CHOOSE_NAME, OnboardingService.STEP_CHOOSE_NAME))
+	register_state(FlowOnboardingStateScript.new(FlowStateIds.ONBOARDING_MEETING, OnboardingService.STEP_MEETING))
+	register_state(FlowOnboardingStateScript.new(FlowStateIds.ONBOARDING_EMPTY_SANCTUM, OnboardingService.STEP_EMPTY_SANCTUM))
+	register_state(FlowOnboardingStateScript.new(FlowStateIds.ONBOARDING_NAME_SANCTUM, OnboardingService.STEP_NAME_SANCTUM))
 	
 	register_state(FlowSanctumState.new())
 	register_state(FlowEchoPartyState.new())

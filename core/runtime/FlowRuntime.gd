@@ -100,7 +100,7 @@ func dispatch(action: Dictionary) -> Dictionary:
 		# ---- Flow ----
 		"flow.new_game":
 			_handle_new_game(t)
-			flow_machine.transition(FlowStateIds.SANCTUM, flow_ctx, logger, t, "ui.flow.new_game")
+			flow_machine.transition(FlowStateIds.ONBOARDING_INVOCATION, flow_ctx, logger, t, "ui.flow.new_game")
 			
 		"flow.advance":
 			var to_state := str(action.get("to", ""))
@@ -152,13 +152,41 @@ func dispatch(action: Dictionary) -> Dictionary:
 			# PROG-001: patch old echo dicts that pre-date draw-order v2 fields
 			_repair_echo_schema(t)
 
-			flow_machine.transition(FlowStateIds.SANCTUM, flow_ctx, logger, t, "ui.flow.continue")
+			var _continue_cfg := config_service.get_balance()
+			var _continue_step := OnboardingService.current_step(flow_ctx.save_data, _continue_cfg)
+			if not OnboardingService.is_chapter_one_complete(flow_ctx.save_data) \
+					and _continue_step != OnboardingService.STEP_COMPLETE:
+				flow_machine.transition(
+					OnboardingService.step_to_flow_id(_continue_step),
+					flow_ctx,
+					logger,
+					t,
+					"ui.flow.continue.onboarding"
+				)
+			else:
+				flow_machine.transition(FlowStateIds.SANCTUM, flow_ctx, logger, t, "ui.flow.continue")
 
 		"flow.settings":
 			logger.debug(t, "ui.flow.settings", "Settings not implemented (MVP).", {})
 
 		"flow.quit":
 			logger.debug(t, "ui.flow.quit", "Quit not implemented (MVP).", {})
+
+		# ---- Chapter I onboarding ----
+		"onboarding.advance":
+			_handle_onboarding_advance(t)
+
+		"onboarding.fragment.hear":
+			_handle_onboarding_fragment_hear(action, t)
+
+		"onboarding.fragment.select":
+			_handle_onboarding_fragment_select(action, t)
+
+		"onboarding.fragment.confirm":
+			_handle_onboarding_fragment_confirm(t)
+
+		"onboarding.name.confirm":
+			_handle_onboarding_name_confirm(action, t)
 
 		# ---- Debug Seed (SANCTUM-002) ----
 		"debug.seed.show":
@@ -564,6 +592,10 @@ func _handle_complete_stage(t: int, destination_override: String = "") -> void:
 		outcome = "win" if victory else "loss"
 		is_combat_victory = victory
 	_apply_encounter_emotion_drift(outcome, t)
+	# BOND-002: fire stage-level bond triggers + aftermath modifiers BEFORE nulling encounter context.
+	_apply_combat_bond_triggers(t, outcome)
+	_apply_bond_aftermath_modifiers(t, outcome)
+	_seed_rival_stage_incidents(t)
 	flow_ctx.encounter_ctx     = null
 	flow_ctx.encounter_machine = null
 
@@ -664,54 +696,9 @@ func _handle_new_game(t: int) -> void:
 
 	# This is a brand-new run (menu first boot should not persist)
 	save["first_boot"] = false
-
-	# Ensure sanctum dict exists
-	if not save.has("sanctum") or typeof(save["sanctum"]) != TYPE_DICTIONARY:
-		save["sanctum"] = {}
-	var sanctum: Dictionary = save["sanctum"]
-	
-	if not sanctum.has("roster") or typeof(sanctum["roster"]) != TYPE_ARRAY:
-		sanctum["roster"] = []
-
-	var roster: Array = sanctum["roster"] as Array
-	
-	# Deterministic starter Echo (no placeholder)
 	var balance := config_service.get_balance()
-	var data_v: Variant = balance.get("data", {})
-	var data: Dictionary = data_v if data_v is Dictionary else {}
-	var summ_v: Variant = data.get("summoning", {})
-	var summ_cfg: Dictionary = summ_v if summ_v is Dictionary else {}
-
-	var seed_path := "campaign.starter.0"
-
-	# NOTE: EchoFactory leaves "id" blank on purpose (id is assigned by caller)
-	var echo: Dictionary = EchoFactory.generate(
-		seed_root,
-		seed_path,
-		0,
-		"starter",
-		summ_cfg
-	)
-
-	# Assign stable id outside factory (does NOT affect determinism)
-	var echo_id := "echo_%04d" % (roster.size() + 1)
-	echo["id"] = echo_id
-
-	# EMOTION-001: initialise emotion block before the echo enters the roster
-	EmotionService.init_echo(echo, logger, t)
-	# PROG-005: initialise vector scores from archetype_init config
-	var vec_cfg_ng_v: Variant = data.get("vectors", {})
-	var vec_cfg_ng: Dictionary = vec_cfg_ng_v if vec_cfg_ng_v is Dictionary else {}
-	VectorService.init_vectors(echo, vec_cfg_ng, logger, t)
-
-	roster.append(echo)
-	sanctum["starter_granted"] = true
-
-	logger.info(t, "sanctum.starter.grant", "Starter Echo granted", {
-		"echo_id": echo_id,
-		"seed_path": seed_path,
-		"seed_root": seed_root
-	})
+	OnboardingService.ensure_onboarding(save, balance)
+	SanctumLayoutService.ensure_layout(save)
 
 	# Install save into runtime + rebuild economy service
 	flow_ctx.save_data = save
@@ -733,6 +720,142 @@ func _handle_new_game(t: int) -> void:
 
 	# IMPORTANT: no transition has occurred yet when this runs, so refresh snapshot after mutation
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+func _handle_onboarding_advance(t: int) -> void:
+	var cfg := config_service.get_balance()
+	var step := OnboardingService.current_step(flow_ctx.save_data, cfg)
+	var next := OnboardingService.next_step(step)
+	if next == OnboardingService.STEP_COMPLETE:
+		return
+
+	OnboardingService.set_step(flow_ctx.save_data, cfg, next)
+	_mark_save_requested("onboarding.advance")
+	flow_machine.transition(OnboardingService.step_to_flow_id(next), flow_ctx, logger, t, "ui.onboarding.advance")
+
+func _handle_onboarding_fragment_hear(action: Dictionary, t: int) -> void:
+	var cfg := config_service.get_balance()
+	var virtue := str(action.get("virtue", "")).strip_edges().to_lower()
+	OnboardingService.mark_heard(flow_ctx.save_data, cfg, virtue)
+	_mark_save_requested("onboarding.fragment.hear")
+	_rebuild_current_onboarding_snapshot(t)
+
+func _handle_onboarding_fragment_select(action: Dictionary, t: int) -> void:
+	var cfg := config_service.get_balance()
+	var virtue := str(action.get("virtue", "")).strip_edges().to_lower()
+	OnboardingService.mark_heard(flow_ctx.save_data, cfg, virtue)
+	OnboardingService.select_fragment(flow_ctx.save_data, cfg, virtue)
+	_mark_save_requested("onboarding.fragment.select")
+	_rebuild_current_onboarding_snapshot(t)
+
+func _handle_onboarding_fragment_confirm(t: int) -> void:
+	var cfg := config_service.get_balance()
+	var selected := OnboardingService.selected_fragment(flow_ctx.save_data, cfg)
+	if selected.is_empty():
+		logger.debug(t, "onboarding.fragment.confirm.denied", "No fragment selected", {})
+		_rebuild_current_onboarding_snapshot(t)
+		return
+
+	_grant_starter_echo_for_fragment(selected, t)
+	OnboardingService.set_step(flow_ctx.save_data, cfg, OnboardingService.STEP_MEETING)
+	_mark_save_requested("onboarding.fragment.confirm")
+	flow_machine.transition(FlowStateIds.ONBOARDING_MEETING, flow_ctx, logger, t, "ui.onboarding.fragment.confirm")
+
+func _handle_onboarding_name_confirm(action: Dictionary, t: int) -> void:
+	var cfg := config_service.get_balance()
+	var raw := str(action.get("name", "")).strip_edges()
+	var name := raw
+	if name.length() < 2:
+		var options_v: Variant = OnboardingService.ensure_onboarding(flow_ctx.save_data, cfg).get("name_options", [])
+		var options: Array = options_v if options_v is Array else []
+		if not options.is_empty() and options[0] is Dictionary:
+			name = str((options[0] as Dictionary).get("name", "Sanctum"))
+		else:
+			name = "Sanctum"
+	if name.length() > 24:
+		name = name.substr(0, 24)
+
+	if not flow_ctx.save_data.has("sanctum") or not (flow_ctx.save_data["sanctum"] is Dictionary):
+		flow_ctx.save_data["sanctum"] = {}
+	var sanctum: Dictionary = flow_ctx.save_data["sanctum"]
+	sanctum["name"] = name
+	OnboardingService.mark_complete(flow_ctx.save_data, cfg)
+	_mark_save_requested("onboarding.name.confirm")
+
+	logger.info(t, "onboarding.name.confirm", "Chapter I complete; Sanctum name set", {
+		"name": name
+	})
+
+	flow_machine.transition(FlowStateIds.SANCTUM, flow_ctx, logger, t, "ui.onboarding.name.confirm")
+
+func _grant_starter_echo_for_fragment(fragment: Dictionary, t: int) -> void:
+	if not flow_ctx.save_data.has("sanctum") or not (flow_ctx.save_data["sanctum"] is Dictionary):
+		flow_ctx.save_data["sanctum"] = {}
+	var sanctum: Dictionary = flow_ctx.save_data["sanctum"]
+	if not sanctum.has("roster") or not (sanctum["roster"] is Array):
+		sanctum["roster"] = []
+	var roster: Array = sanctum["roster"]
+	if bool(sanctum.get("starter_granted", false)) and not roster.is_empty():
+		return
+
+	var balance := config_service.get_balance()
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var summ_v: Variant = data.get("summoning", {})
+	var summ_cfg: Dictionary = summ_v if summ_v is Dictionary else {}
+	var expr_v: Variant = data.get("maturity_expression", {})
+	var expression_cfg: Dictionary = expr_v if expr_v is Dictionary else {}
+	var vec_cfg_v: Variant = data.get("vectors", {})
+	var vec_cfg: Dictionary = vec_cfg_v if vec_cfg_v is Dictionary else {}
+
+	var camp_v: Variant = flow_ctx.save_data.get("campaign", {})
+	var camp: Dictionary = camp_v if camp_v is Dictionary else {}
+	var seed_root := str(camp.get("seed_root", "")).strip_edges()
+	var seed_path := "campaign.starter.0"
+	var echo := EchoFactory.generate(seed_root, seed_path, 0, "starter", summ_cfg, expression_cfg)
+
+	var selected_virtue := str(fragment.get("virtue", ""))
+	var selected_vector := str(fragment.get("vector", ""))
+	if selected_vector.is_empty():
+		selected_vector = OnboardingService.vector_for_virtue(balance, selected_virtue)
+	if not selected_vector.is_empty():
+		echo["class_origin"] = selected_vector
+	var gen_ctx_v: Variant = echo.get("generation_context", {})
+	var gen_ctx: Dictionary = gen_ctx_v if gen_ctx_v is Dictionary else {}
+	var mods_v: Variant = gen_ctx.get("modifiers", {})
+	var mods: Dictionary = mods_v if mods_v is Dictionary else {}
+	mods["starter_virtue"] = selected_virtue
+	mods["starter_vector"] = selected_vector
+	gen_ctx["modifiers"] = mods
+	echo["generation_context"] = gen_ctx
+
+	var echo_id := "echo_%04d" % (roster.size() + 1)
+	echo["id"] = echo_id
+	EmotionService.init_echo(echo, logger, t)
+	VectorService.init_vectors(echo, vec_cfg, logger, t)
+	roster.append(echo)
+	sanctum["starter_granted"] = true
+	SanctumLayoutService.ensure_starter_occupant(flow_ctx.save_data)
+
+	logger.info(t, "onboarding.starter.grant", "Starter Echo granted from Chapter I fragment", {
+		"echo_id": echo_id,
+		"seed_path": seed_path,
+		"virtue": selected_virtue,
+		"vector": selected_vector,
+	})
+
+func _rebuild_current_onboarding_snapshot(t: int) -> void:
+	var cfg := config_service.get_balance()
+	var step := OnboardingService.current_step(flow_ctx.save_data, cfg)
+	var flow_id := OnboardingService.step_to_flow_id(step)
+	flow_ctx.last_snapshot = FlowOnboardingState.build_snapshot(flow_ctx, t, step, flow_id)
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+func _mark_save_requested(reason: String) -> void:
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason != "":
+		flow_ctx.save_request_reason += "|" + reason
+	else:
+		flow_ctx.save_request_reason = reason
 
 
 # Helpers
@@ -989,6 +1112,11 @@ func _resolve_next_actor(t: int) -> void:
 	# VOW-001: pass active vow into per-turn context so BehaviorArbiter can apply vow bias.
 	var _vow_ctx := VowService.get_active_vow(flow_ctx.save_data)
 
+	# BOND-002: pass social graph into per-turn context for bond-aware behavior bias.
+	var _bond_sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var _bond_sanctum: Dictionary = _bond_sanctum_v if _bond_sanctum_v is Dictionary else {}
+	var _bonds_for_ctx: Array = _bond_sanctum.get("bonds", []) as Array
+
 	# Build per-turn context — matches ActorStateMachine.advance_turn() contract.
 	var ctx: Dictionary = {
 		"actor":                   actor,
@@ -1008,6 +1136,10 @@ func _resolve_next_actor(t: int) -> void:
 		"active_vow":              _vow_ctx,
 		# VOW-001: echo party size for tikoro_nko_agyina party-size gate.
 		"party_size":              ectx.actors.filter(func(a): return str(a.get("faction","")) == "echo" and not bool(a.get("is_dead", false))).size(),
+		# BOND-002: social graph for bond-aware behavior bias (BehaviorArbiter._apply_bond_bias).
+		"bonds":                   _bonds_for_ctx,
+		"bond_thresholds":         _get_bond_thresholds_cfg(),
+		"bond_behavior_cfg":       _get_bond_behavior_cfg(),
 	}
 
 	# Resolve this actor's turn.
@@ -2133,7 +2265,333 @@ func _get_bond_thresholds_cfg() -> Dictionary:
 	var sanctum_cfg: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
 	var thresholds_v: Variant = sanctum_cfg.get("bond_thresholds", {})
 	return thresholds_v if thresholds_v is Dictionary else {}
-	
+
+
+# BOND-002: reads balance.data.sanctum.bond_triggers (all delta values).
+func _get_bond_triggers_cfg() -> Dictionary:
+	if config_service == null:
+		return {}
+	var balance: Dictionary = config_service.get_balance()
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var sanctum_v: Variant = data.get("sanctum", {})
+	var sanctum_cfg: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	var triggers_v: Variant = sanctum_cfg.get("bond_triggers", {})
+	return triggers_v if triggers_v is Dictionary else {}
+
+
+# BOND-002: reads balance.data.actor.bond_behavior (combat score bias values).
+func _get_bond_behavior_cfg() -> Dictionary:
+	if config_service == null:
+		return {}
+	var balance: Dictionary = config_service.get_balance()
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var actor_v: Variant = data.get("actor", {})
+	var actor_cfg: Dictionary = actor_v if actor_v is Dictionary else {}
+	var behavior_v: Variant = actor_cfg.get("bond_behavior", {})
+	return behavior_v if behavior_v is Dictionary else {}
+
+
+# BOND-002: reads balance.data.sanctum.rival_archetypes (pairs list).
+func _get_rival_archetypes_cfg() -> Array:
+	if config_service == null:
+		return []
+	var balance: Dictionary = config_service.get_balance()
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var sanctum_v: Variant = data.get("sanctum", {})
+	var sanctum_cfg: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	var pairs_v: Variant = sanctum_cfg.get("rival_archetypes", [])
+	return pairs_v if pairs_v is Array else []
+
+
+# BOND-002: reads balance.data.emotion.recovery.bonds (grief/survival modifier values).
+func _get_bond_recovery_cfg() -> Dictionary:
+	if config_service == null:
+		return {}
+	var balance: Dictionary = config_service.get_balance()
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var emo_v: Variant = data.get("emotion", {})
+	var emo_cfg: Dictionary = emo_v if emo_v is Dictionary else {}
+	var rec_v: Variant = emo_cfg.get("recovery", {})
+	var rec_cfg: Dictionary = rec_v if rec_v is Dictionary else {}
+	var bonds_v: Variant = rec_cfg.get("bonds", {})
+	return bonds_v if bonds_v is Dictionary else {}
+
+
+# BOND-002: Fires all stage-level bond score deltas after a combat stage ends.
+# Must be called BEFORE encounter_ctx is nulled (reads ectx.actors + echo_action_logs).
+func _apply_combat_bond_triggers(t: int, outcome: String) -> void:
+	if flow_ctx.encounter_ctx == null:
+		return
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+
+	var bond_cfg := _get_bond_triggers_cfg()
+	var thresholds := _get_bond_thresholds_cfg()
+	var rival_pairs_cfg := _get_rival_archetypes_cfg()
+
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if not (sanctum_v is Dictionary):
+		return
+	var sanctum: Dictionary = sanctum_v
+	var bonds_v: Variant = sanctum.get("bonds", [])
+	var bonds: Array = bonds_v if bonds_v is Array else []
+
+	var is_victory := outcome == "win"
+
+	# Collect echo actors + classify KO'd vs surviving
+	var echo_actors: Array = []
+	var ko_echo_ids: Array = []
+	var surviving_echo_ids: Array = []
+	for a_v in ectx.actors:
+		if not (a_v is Dictionary):
+			continue
+		var a: Dictionary = a_v
+		if str(a.get("faction", "")) != "echo":
+			continue
+		echo_actors.append(a)
+		var aid := str(a.get("id", ""))
+		if a.get("is_dead", false):
+			ko_echo_ids.append(aid)
+		else:
+			surviving_echo_ids.append(aid)
+
+	# Near-wipe: victory AND at least one echo KO'd (party survived but took losses)
+	var near_wipe := is_victory and not ko_echo_ids.is_empty()
+
+	# Iterate all canonical pairs of echo actors
+	for i in range(echo_actors.size()):
+		for j in range(i + 1, echo_actors.size()):
+			var a: Dictionary = echo_actors[i]
+			var b: Dictionary = echo_actors[j]
+			var a_id := str(a.get("id", ""))
+			var b_id := str(b.get("id", ""))
+
+			var a_arch := str(a.get("archetype_birth", ""))
+			var b_arch := str(b.get("archetype_birth", ""))
+			var is_incompat := SocialGraphService.is_rival_archetype_pair(a_arch, b_arch, rival_pairs_cfg)
+
+			# shared_combat_proximity: +1 for all pairs that shared the board
+			var proximity_delta := int(bond_cfg.get("shared_combat_proximity", 1))
+			bonds = SocialGraphService.apply_score_delta(bonds, a_id, b_id, proximity_delta, thresholds, logger, t)
+
+			# shared_stage_win (+3) or stage_defeat_shared (-3): all pairs, every stage
+			if is_victory:
+				var win_delta := int(bond_cfg.get("shared_stage_win", 3))
+				bonds = SocialGraphService.apply_score_delta(bonds, a_id, b_id, win_delta, thresholds, logger, t)
+			else:
+				var loss_delta := int(bond_cfg.get("stage_defeat_shared", -3))
+				bonds = SocialGraphService.apply_score_delta(bonds, a_id, b_id, loss_delta, thresholds, logger, t)
+
+			# archetype_incompatible_shared_stage: -5 for incompatible archetype pairs
+			if is_incompat:
+				var incompat_delta := int(bond_cfg.get("archetype_incompatible_shared_stage", -5))
+				bonds = SocialGraphService.apply_score_delta(bonds, a_id, b_id, incompat_delta, thresholds, logger, t)
+
+			# ko_incompatible_no_protect: -10 if incompatible pair, one KO'd, neither guarded
+			var a_ko := a_id in ko_echo_ids
+			var b_ko := b_id in ko_echo_ids
+			if is_incompat and (a_ko or b_ko):
+				var a_guards := int(ectx.echo_action_logs.get(a_id, {}).get("guard_count", 0))
+				var b_guards := int(ectx.echo_action_logs.get(b_id, {}).get("guard_count", 0))
+				if a_guards == 0 and b_guards == 0:
+					var incompat_ko_delta := int(bond_cfg.get("ko_incompatible_no_protect", -10))
+					bonds = SocialGraphService.apply_score_delta(bonds, a_id, b_id, incompat_ko_delta, thresholds, logger, t)
+
+			# protect_action_for_ally: +8 if friend-tier pair and either guarded during stage
+			var edge_now := SocialGraphService.get_edge(bonds, a_id, b_id)
+			var strength_now := int(edge_now.get("strength", 0))
+			var bond_type_now := SocialGraphService.get_bond_type(strength_now, thresholds)
+			if bond_type_now == "friend":
+				var a_guards_p := int(ectx.echo_action_logs.get(a_id, {}).get("guard_count", 0))
+				var b_guards_p := int(ectx.echo_action_logs.get(b_id, {}).get("guard_count", 0))
+				if a_guards_p > 0 or b_guards_p > 0:
+					var protect_delta := int(bond_cfg.get("protect_action_for_ally", 8))
+					bonds = SocialGraphService.apply_score_delta(bonds, a_id, b_id, protect_delta, thresholds, logger, t)
+
+			# witnessed_ally_sacrifice: +12 when one bonded (non-neutral) echo was KO'd
+			if (a_ko or b_ko) and not (a_ko and b_ko):
+				var edge_sac := SocialGraphService.get_edge(bonds, a_id, b_id)
+				if not edge_sac.is_empty():
+					var strength_sac := int(edge_sac.get("strength", 0))
+					var bond_type_sac := SocialGraphService.get_bond_type(strength_sac, thresholds)
+					if bond_type_sac != "neutral":
+						var sac_delta := int(bond_cfg.get("witnessed_ally_sacrifice", 12))
+						bonds = SocialGraphService.apply_score_delta(bonds, a_id, b_id, sac_delta, thresholds, logger, t)
+
+			# near_wipe_survival_together: +10 if victory, ≥1 KO'd elsewhere, both in this pair survived
+			if near_wipe and not a_ko and not b_ko:
+				var nw_delta := int(bond_cfg.get("near_wipe_survival_together", 10))
+				bonds = SocialGraphService.apply_score_delta(bonds, a_id, b_id, nw_delta, thresholds, logger, t)
+
+	sanctum["bonds"] = bonds
+	flow_ctx.save_data["sanctum"] = sanctum
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason.is_empty():
+		flow_ctx.save_request_reason = "bond.combat_triggers"
+	else:
+		flow_ctx.save_request_reason += "|bond.combat_triggers"
+
+	logger.info(t, "bond.combat_triggers.applied", "Combat bond triggers fired", {
+		"outcome":           outcome,
+		"echo_count":        echo_actors.size(),
+		"ko_count":          ko_echo_ids.size(),
+		"near_wipe":         near_wipe,
+	})
+
+
+# BOND-002: Applies EmotionRecoveryService modifiers to surviving roster echoes after combat.
+# Grief: bonded echo (non-neutral) was KO'd → slowed morale recovery, heightened fear recovery.
+# Shared survival bonus: near-wipe victory AND bonded friend also survived → improved recovery.
+# Must be called BEFORE encounter_ctx is nulled.
+func _apply_bond_aftermath_modifiers(t: int, outcome: String) -> void:
+	if flow_ctx.encounter_ctx == null:
+		return
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+
+	var thresholds := _get_bond_thresholds_cfg()
+	var bond_rec_cfg := _get_bond_recovery_cfg()
+	if bond_rec_cfg.is_empty():
+		return
+
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if not (sanctum_v is Dictionary):
+		return
+	var sanctum: Dictionary = sanctum_v
+	var bonds_v: Variant = sanctum.get("bonds", [])
+	var bonds: Array = bonds_v if bonds_v is Array else []
+	var roster_v: Variant = sanctum.get("roster", [])
+	var roster: Array = roster_v if roster_v is Array else []
+
+	var is_victory := outcome == "win"
+
+	# Collect KO'd and surviving echo IDs from encounter actors
+	var ko_ids: Array = []
+	var surviving_ids: Array = []
+	for a_v in ectx.actors:
+		if not (a_v is Dictionary):
+			continue
+		var a: Dictionary = a_v
+		if str(a.get("faction", "")) != "echo":
+			continue
+		var aid := str(a.get("id", ""))
+		if a.get("is_dead", false):
+			ko_ids.append(aid)
+		else:
+			surviving_ids.append(aid)
+
+	var near_wipe := is_victory and not ko_ids.is_empty()
+
+	# Apply modifiers to surviving roster echoes (not runtime actor dicts)
+	for echo_v in roster:
+		if not (echo_v is Dictionary):
+			continue
+		var echo: Dictionary = echo_v
+		var echo_id := str(echo.get("id", ""))
+		if not (echo_id in surviving_ids):
+			continue
+
+		# Grief: check if any bonded (non-neutral) echo was KO'd
+		var bonded_ko := false
+		for ko_id in ko_ids:
+			var edge := SocialGraphService.get_edge(bonds, echo_id, ko_id)
+			if edge.is_empty():
+				continue
+			var strength := int(edge.get("strength", 0))
+			if SocialGraphService.get_bond_type(strength, thresholds) != "neutral":
+				bonded_ko = true
+				break
+
+		if bonded_ko:
+			var grief_morale_mul := float(bond_rec_cfg.get("grief_morale_mul", 0.5))
+			var grief_fear_mul   := float(bond_rec_cfg.get("grief_fear_mul",   1.5))
+			var grief_ticks      := int(bond_rec_cfg.get("grief_ticks",        3))
+			EmotionRecoveryService.set_modifier(echo, grief_morale_mul, grief_fear_mul, grief_ticks, logger, t)
+		elif near_wipe:
+			# Shared survival bonus: bonded friend also survived the near-wipe
+			var bonded_friend_survived := false
+			for surv_id in surviving_ids:
+				if surv_id == echo_id:
+					continue
+				var edge := SocialGraphService.get_edge(bonds, echo_id, surv_id)
+				if edge.is_empty():
+					continue
+				var strength := int(edge.get("strength", 0))
+				if SocialGraphService.get_bond_type(strength, thresholds) == "friend":
+					bonded_friend_survived = true
+					break
+			if bonded_friend_survived:
+				var surv_morale_mul := float(bond_rec_cfg.get("shared_survival_morale_mul", 1.5))
+				var surv_fear_mul   := float(bond_rec_cfg.get("shared_survival_fear_mul",   0.7))
+				var surv_ticks      := int(bond_rec_cfg.get("shared_survival_ticks",         2))
+				EmotionRecoveryService.set_modifier(echo, surv_morale_mul, surv_fear_mul, surv_ticks, logger, t)
+
+
+# BOND-002: Seeds rival_incidents[] for V2-SANCTUM-005 (incident system).
+# For each rival-tier pair among encounter actors: appends canonical [a_id, b_id] if not present.
+# Must be called BEFORE encounter_ctx is nulled.
+func _seed_rival_stage_incidents(t: int) -> void:
+	if flow_ctx.encounter_ctx == null:
+		return
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+
+	var thresholds := _get_bond_thresholds_cfg()
+
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if not (sanctum_v is Dictionary):
+		return
+	var sanctum: Dictionary = sanctum_v
+	var bonds_v: Variant = sanctum.get("bonds", [])
+	var bonds: Array = bonds_v if bonds_v is Array else []
+	var incidents_v: Variant = sanctum.get("rival_incidents", [])
+	var incidents: Array = incidents_v if incidents_v is Array else []
+
+	# Collect echo actor IDs from this encounter
+	var echo_ids: Array = []
+	for a_v in ectx.actors:
+		if a_v is Dictionary and str(a_v.get("faction", "")) == "echo":
+			echo_ids.append(str(a_v.get("id", "")))
+
+	var added := 0
+	for i in range(echo_ids.size()):
+		for j in range(i + 1, echo_ids.size()):
+			var a_id: String = echo_ids[i]
+			var b_id: String = echo_ids[j]
+			var edge := SocialGraphService.get_edge(bonds, a_id, b_id)
+			if edge.is_empty():
+				continue
+			var strength := int(edge.get("strength", 0))
+			if SocialGraphService.get_bond_type(strength, thresholds) != "rival":
+				continue
+			# Canonical pair (alphabetical)
+			var pair: Array = [a_id, b_id] if a_id < b_id else [b_id, a_id]
+			var already_seeded := false
+			for inc_v in incidents:
+				if (inc_v is Array) and (inc_v as Array).size() >= 2:
+					var inc: Array = inc_v
+					if str(inc[0]) == pair[0] and str(inc[1]) == pair[1]:
+						already_seeded = true
+						break
+			if not already_seeded:
+				incidents.append(pair)
+				added += 1
+
+	if added > 0:
+		sanctum["rival_incidents"] = incidents
+		flow_ctx.save_data["sanctum"] = sanctum
+		flow_ctx.save_request = true
+		if flow_ctx.save_request_reason.is_empty():
+			flow_ctx.save_request_reason = "bond.rival_incidents"
+		else:
+			flow_ctx.save_request_reason += "|bond.rival_incidents"
+		logger.info(t, "bond.rival_incidents.seeded", "Rival incident seeds written", {
+			"added": added,
+			"total": incidents.size(),
+		})
+
+
 ## PROG-001: one-time repair pass for echo fields added after draw-order v1.
 ## Called on flow.continue — patches roster echoes missing class_origin / level.
 ## If any echoes were patched, requests a save flush so defaults persist.

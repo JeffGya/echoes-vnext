@@ -186,6 +186,8 @@ func enter(ctx: RefCounted, t:int) -> void:
 		"active_vow": _av_display,  # VOW-001: mantra data for SanctumScreen header
 		"thread_reserve":     _thread_reserve,      # V2-WEAVE-001: Array[{virtue, quality_tier}]
 		"thread_reserve_cap": _thread_reserve_cap,  # V2-WEAVE-001: base reserve cap (default 4)
+		"sanctum_layout": SanctumLayoutService.snapshot_layout(flow_ctx.save_data),
+		"sanctum_occupants": SanctumLayoutService.snapshot_occupants(flow_ctx.save_data),
 	}
 
 	flow_ctx.last_snapshot = {
