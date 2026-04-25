@@ -9,7 +9,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("onboarding/starter_dominant_virtue_matches_fragment", Callable(OnboardingTests, "_t_starter_virtue_matches"))
 	runner.register_test("onboarding/name_confirm_completes_and_routes_sanctum", Callable(OnboardingTests, "_t_name_confirm_completes"))
 	runner.register_test("onboarding/continue_resume_incomplete_skip_complete", Callable(OnboardingTests, "_t_continue_resume_logic"))
-	runner.register_test("onboarding/starter_layout_has_nine_tiles", Callable(OnboardingTests, "_t_starter_layout_has_nine_tiles"))
+	runner.register_test("onboarding/starter_layout_has_thirteen_tiles", Callable(OnboardingTests, "_t_starter_layout_has_thirteen_tiles"))
+	runner.register_test("onboarding/starter_layout_is_diamond", Callable(OnboardingTests, "_t_starter_layout_is_diamond"))
 	runner.register_test("onboarding/starter_occupant_centered", Callable(OnboardingTests, "_t_starter_occupant_centered"))
 	runner.register_test("onboarding/missing_layout_repairs_to_starter", Callable(OnboardingTests, "_t_missing_layout_repairs"))
 	runner.register_test("onboarding/sanctum_snapshots_share_layout", Callable(OnboardingTests, "_t_sanctum_snapshots_share_layout"))
@@ -147,12 +148,28 @@ static func _t_continue_resume_logic() -> Dictionary:
 		return { "ok": false, "error": "Expected completed onboarding to skip resume" }
 	return { "ok": true }
 
-static func _t_starter_layout_has_nine_tiles() -> Dictionary:
+static func _t_starter_layout_has_thirteen_tiles() -> Dictionary:
 	var save := SaveSchema.make_new_save(321)
 	var layout := SanctumLayoutService.snapshot_layout(save)
 	var tiles: Array = layout.get("tiles", [])
-	if tiles.size() != 9:
-		return { "ok": false, "error": "Expected 9 starter tiles, got %d" % tiles.size() }
+	if tiles.size() != 13:
+		return { "ok": false, "error": "Expected 13 starter diamond tiles, got %d" % tiles.size() }
+	return { "ok": true }
+
+static func _t_starter_layout_is_diamond() -> Dictionary:
+	var save := SaveSchema.make_new_save(322)
+	var layout := SanctumLayoutService.snapshot_layout(save)
+	var tiles: Array = layout.get("tiles", [])
+	var row_counts: Dictionary = {}
+	for tile_v in tiles:
+		if not (tile_v is Dictionary):
+			continue
+		var tile: Dictionary = tile_v
+		var y := int(tile.get("y", 0))
+		row_counts[y] = int(row_counts.get(y, 0)) + 1
+	var expected := { -2: 1, -1: 3, 0: 5, 1: 3, 2: 1 }
+	if JSON.stringify(row_counts) != JSON.stringify(expected):
+		return { "ok": false, "error": "Expected diamond row counts %s, got %s" % [JSON.stringify(expected), JSON.stringify(row_counts)] }
 	return { "ok": true }
 
 static func _t_starter_occupant_centered() -> Dictionary:
@@ -180,8 +197,8 @@ static func _t_missing_layout_repairs() -> Dictionary:
 		return { "ok": false, "error": "Expected missing layout repair to report repaired" }
 	var layout: Dictionary = save.get("sanctum", {}).get("layout", {})
 	var tiles: Array = layout.get("tiles", [])
-	if tiles.size() != 9:
-		return { "ok": false, "error": "Expected repaired layout with 9 tiles, got %d" % tiles.size() }
+	if tiles.size() != 13:
+		return { "ok": false, "error": "Expected repaired layout with 13 diamond tiles, got %d" % tiles.size() }
 	return { "ok": true }
 
 static func _t_sanctum_snapshots_share_layout() -> Dictionary:

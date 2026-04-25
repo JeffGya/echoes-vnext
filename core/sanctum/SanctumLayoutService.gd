@@ -2,14 +2,16 @@ extends RefCounted
 
 class_name SanctumLayoutService
 
-const LAYOUT_VERSION := 1
+const LAYOUT_VERSION := 2
 const CENTER_CELL := Vector2i(0, 0)
+const STARTER_RADIUS := 2
 
 
 static func make_starter_layout() -> Dictionary:
 	var tiles: Array = []
-	for y in range(-1, 2):
-		for x in range(-1, 2):
+	for y in range(-STARTER_RADIUS, STARTER_RADIUS + 1):
+		var width: int = STARTER_RADIUS - absi(y)
+		for x in range(-width, width + 1):
 			tiles.append({
 				"x": x,
 				"y": y,
@@ -28,10 +30,14 @@ static func ensure_layout(save_data: Dictionary) -> Dictionary:
 		sanctum["layout"] = make_starter_layout()
 	else:
 		var layout: Dictionary = sanctum["layout"]
+		var version := 0
 		if not layout.has("version") or (typeof(layout["version"]) != TYPE_INT and typeof(layout["version"]) != TYPE_FLOAT):
-			layout["version"] = LAYOUT_VERSION
+			version = 0
 		else:
-			layout["version"] = int(layout["version"])
+			version = int(layout["version"])
+		if version < LAYOUT_VERSION:
+			sanctum["layout"] = make_starter_layout()
+			return sanctum["layout"] as Dictionary
 		if not layout.has("origin") or not (layout["origin"] is Dictionary):
 			layout["origin"] = { "x": 0, "y": 0 }
 		if not layout.has("tiles") or not (layout["tiles"] is Array) or (layout["tiles"] as Array).is_empty():

@@ -381,19 +381,23 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 		if not sanctum.has("layout") or not (sanctum["layout"] is Dictionary):
 			sanctum["layout"] = SanctumLayoutService.make_starter_layout()
 			repaired = true
-			repaired_notes.append("sanctum.layout set to starter 3x3 default")
+			repaired_notes.append("sanctum.layout set to starter diamond default")
 		else:
 			var layout: Dictionary = sanctum["layout"]
 			if not layout.has("tiles") or not (layout["tiles"] is Array) or (layout["tiles"] as Array).is_empty():
 				sanctum["layout"] = SanctumLayoutService.make_starter_layout()
 				repaired = true
-				repaired_notes.append("sanctum.layout repaired to starter 3x3 default")
+				repaired_notes.append("sanctum.layout repaired to starter diamond default")
 			elif not layout.has("version") or (typeof(layout["version"]) != TYPE_INT and typeof(layout["version"]) != TYPE_FLOAT):
-				layout["version"] = SanctumLayoutService.LAYOUT_VERSION
+				sanctum["layout"] = SanctumLayoutService.make_starter_layout()
 				repaired = true
-				repaired_notes.append("sanctum.layout.version set to starter version")
+				repaired_notes.append("sanctum.layout repaired to current starter version")
 			else:
 				layout["version"] = int(layout["version"])
+				if int(layout["version"]) < SanctumLayoutService.LAYOUT_VERSION:
+					sanctum["layout"] = SanctumLayoutService.make_starter_layout()
+					repaired = true
+					repaired_notes.append("sanctum.layout migrated to starter diamond")
 			if not (sanctum["layout"] as Dictionary).has("origin") or not ((sanctum["layout"] as Dictionary)["origin"] is Dictionary):
 				(sanctum["layout"] as Dictionary)["origin"] = { "x": 0, "y": 0 }
 				repaired = true
