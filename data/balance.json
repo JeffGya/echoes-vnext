@@ -17,25 +17,25 @@
 			"trait_min": 30.0,
 			"trait_max": 70.0,
 			"calling_weights": {
-				"uncalled":    9.0,
-				"okofor":      0.167,
-				"onyamesu":    0.167,
-				"aduro":       0.167,
+				"uncalled": 9.0,
+				"okofor": 0.167,
+				"onyamesu": 0.167,
+				"aduro": 0.167,
 				"sum_okwanfo": 0.167,
-				"okomfo":      0.167,
-				"kra_soro":    0.167
+				"okomfo": 0.167,
+				"kra_soro": 0.167
 			},
 			"class_origin_weights": {
-				"protector":   1.0,
-				"vanguard":    1.0,
-				"seeker":      1.0,
-				"pillar":      1.0,
-				"strategist":  1.0,
-				"skeptic":     1.0,
-				"devoted":     1.0,
+				"protector": 1.0,
+				"vanguard": 1.0,
+				"seeker": 1.0,
+				"pillar": 1.0,
+				"strategist": 1.0,
+				"skeptic": 1.0,
+				"devoted": 1.0,
 				"opportunist": 1.0,
-				"mediator":    1.0,
-				"nurturer":    1.0
+				"mediator": 1.0,
+				"nurturer": 1.0
 			},
 			"birth_stats": {
 				"hp_base": 80.0,
@@ -80,10 +80,22 @@
 		"sanctum": {
 			"party_max_size": 5.0,
 			"rival_archetypes": [
-				["proud", "empathic"],
-				["valiant", "stoic"],
-				["ambitious", "devout"],
-				["canny", "loyal"]
+				[
+					"proud",
+					"empathic"
+				],
+				[
+					"valiant",
+					"stoic"
+				],
+				[
+					"ambitious",
+					"devout"
+				],
+				[
+					"canny",
+					"loyal"
+				]
 			],
 			"bond_thresholds": {
 				"rival_max": -30,
@@ -130,8 +142,15 @@
 			},
 			"arch_fear_mod": {
 				"_comment": "Archetype modifier applied to fear_base at birth (EMOTION-003). Added to stage-1 inverted courage value; result clamped 0–20.",
-				"stoic": -5, "valiant": -3, "loyal": -2, "devout": -2,
-				"empathic": 1, "reflective": 0, "canny": 0, "ambitious": 2, "proud": 3
+				"stoic": -5,
+				"valiant": -3,
+				"loyal": -2,
+				"devout": -2,
+				"empathic": 1,
+				"reflective": 0,
+				"canny": 0,
+				"ambitious": 2,
+				"proud": 3
 			},
 			"recovery": {
 				"_comment": "V2-SANCTUM-001: time-based recovery rates and run-outcome modifiers. Stubs marked for future systems.",
@@ -144,7 +163,7 @@
 				"modifier_ko_morale_mul": 0.5,
 				"modifier_survived_morale_mul": 1.25,
 				"modifier_vow_break_fear_mul": 0.5,
-				"_comment_stubs": "vow_break + building modifiers are stubs — not applied yet (V2-SANCTUM-002, VOW-002)",
+				"_comment_stubs": "building modifiers are stubs — not applied yet (V2-SANCTUM-002, VOW-002)",
 				"bonds": {
 					"_comment": "BOND-002: grief and shared-survival recovery modifiers applied after combat based on bond outcomes.",
 					"grief_morale_mul": 0.5,
@@ -153,7 +172,8 @@
 					"shared_survival_morale_mul": 1.5,
 					"shared_survival_fear_mul": 0.7,
 					"shared_survival_ticks": 2
-				}
+				},
+				"modifier_vow_break_morale_mul": 0.5
 			}
 		},
 		"weaving_rite": {
@@ -368,64 +388,64 @@
 			},
 			"vector_action_muls": {
 				"melee_attack": {
-					"vanguard":    0.4,
-					"protector":   0.0,
-					"seeker":      0.15,
-					"pillar":      0.0,
-					"strategist":  0.05,
-					"skeptic":     0.0,
-					"devoted":     0.0,
+					"vanguard": 0.4,
+					"protector": 0.0,
+					"seeker": 0.15,
+					"pillar": 0.0,
+					"strategist": 0.05,
+					"skeptic": 0.0,
+					"devoted": 0.0,
 					"opportunist": 0.25,
-					"mediator":    0.0,
-					"nurturer":    0.0
+					"mediator": 0.0,
+					"nurturer": 0.0
 				},
 				"protect_ally": {
-					"vanguard":    0.0,
-					"protector":   0.45,
-					"seeker":      0.0,
-					"pillar":      0.15,
-					"strategist":  0.05,
-					"skeptic":     0.0,
-					"devoted":     0.3,
+					"vanguard": 0.0,
+					"protector": 0.45,
+					"seeker": 0.0,
+					"pillar": 0.15,
+					"strategist": 0.05,
+					"skeptic": 0.0,
+					"devoted": 0.3,
 					"opportunist": 0.0,
-					"mediator":    0.25,
-					"nurturer":    0.2
+					"mediator": 0.25,
+					"nurturer": 0.2
 				},
 				"actor.guard": {
-					"vanguard":    0.0,
-					"protector":   0.15,
-					"seeker":      0.0,
-					"pillar":      0.1,
-					"strategist":  0.1,
-					"skeptic":     0.15,
-					"devoted":     0.1,
+					"vanguard": 0.0,
+					"protector": 0.15,
+					"seeker": 0.0,
+					"pillar": 0.1,
+					"strategist": 0.1,
+					"skeptic": 0.15,
+					"devoted": 0.1,
 					"opportunist": 0.0,
-					"mediator":    0.05,
-					"nurturer":    0.05
+					"mediator": 0.05,
+					"nurturer": 0.05
 				},
 				"actor.idle": {
-					"vanguard":    0.0,
-					"protector":   0.0,
-					"seeker":      0.1,
-					"pillar":      0.2,
-					"strategist":  0.15,
-					"skeptic":     0.2,
-					"devoted":     0.1,
+					"vanguard": 0.0,
+					"protector": 0.0,
+					"seeker": 0.1,
+					"pillar": 0.2,
+					"strategist": 0.15,
+					"skeptic": 0.2,
+					"devoted": 0.1,
 					"opportunist": 0.05,
-					"mediator":    0.15,
-					"nurturer":    0.2
+					"mediator": 0.15,
+					"nurturer": 0.2
 				},
 				"actor.move": {
-					"vanguard":    0.4,
-					"protector":   0.05,
-					"seeker":      0.1,
-					"pillar":      0.0,
-					"strategist":  0.15,
-					"skeptic":     0.05,
-					"devoted":     0.0,
+					"vanguard": 0.4,
+					"protector": 0.05,
+					"seeker": 0.1,
+					"pillar": 0.0,
+					"strategist": 0.15,
+					"skeptic": 0.05,
+					"devoted": 0.0,
 					"opportunist": 0.3,
-					"mediator":    0.05,
-					"nurturer":    0.0
+					"mediator": 0.05,
+					"nurturer": 0.0
 				}
 			},
 			"_comment_archetype": "Flat constant added inside the fear-factor bracket. Encodes combat_bias from PersonalityArchetype: aggressive=valiant/proud→melee/move, steadfast=loyal/stoic/devout→guard, supportive=empathic→protect_ally, cautious=reflective→guard/idle.",
@@ -740,124 +760,124 @@
 			"_comment": "Per-class_origin starting vector weights. Keys match class_origin_weights keys exactly. Add new vectors here only — no GDScript changes needed.",
 			"archetype_init": {
 				"protector": {
-					"protector":   60.0,
-					"vanguard":    20.0,
-					"seeker":      10.0,
-					"pillar":      10.0,
-					"strategist":  0.0,
-					"skeptic":     0.0,
-					"devoted":     0.0,
+					"protector": 60.0,
+					"vanguard": 20.0,
+					"seeker": 10.0,
+					"pillar": 10.0,
+					"strategist": 0.0,
+					"skeptic": 0.0,
+					"devoted": 0.0,
 					"opportunist": 0.0,
-					"mediator":    0.0,
-					"nurturer":    0.0
+					"mediator": 0.0,
+					"nurturer": 0.0
 				},
 				"vanguard": {
-					"protector":   10.0,
-					"vanguard":    60.0,
-					"seeker":      20.0,
-					"pillar":      10.0,
-					"strategist":  0.0,
-					"skeptic":     0.0,
-					"devoted":     0.0,
+					"protector": 10.0,
+					"vanguard": 60.0,
+					"seeker": 20.0,
+					"pillar": 10.0,
+					"strategist": 0.0,
+					"skeptic": 0.0,
+					"devoted": 0.0,
 					"opportunist": 0.0,
-					"mediator":    0.0,
-					"nurturer":    0.0
+					"mediator": 0.0,
+					"nurturer": 0.0
 				},
 				"seeker": {
-					"protector":   10.0,
-					"vanguard":    20.0,
-					"seeker":      60.0,
-					"pillar":      10.0,
-					"strategist":  0.0,
-					"skeptic":     0.0,
-					"devoted":     0.0,
+					"protector": 10.0,
+					"vanguard": 20.0,
+					"seeker": 60.0,
+					"pillar": 10.0,
+					"strategist": 0.0,
+					"skeptic": 0.0,
+					"devoted": 0.0,
 					"opportunist": 0.0,
-					"mediator":    0.0,
-					"nurturer":    0.0
+					"mediator": 0.0,
+					"nurturer": 0.0
 				},
 				"pillar": {
-					"protector":   10.0,
-					"vanguard":    20.0,
-					"seeker":      10.0,
-					"pillar":      60.0,
-					"strategist":  0.0,
-					"skeptic":     0.0,
-					"devoted":     0.0,
+					"protector": 10.0,
+					"vanguard": 20.0,
+					"seeker": 10.0,
+					"pillar": 60.0,
+					"strategist": 0.0,
+					"skeptic": 0.0,
+					"devoted": 0.0,
 					"opportunist": 0.0,
-					"mediator":    0.0,
-					"nurturer":    0.0
+					"mediator": 0.0,
+					"nurturer": 0.0
 				},
 				"strategist": {
-					"protector":   0.0,
-					"vanguard":    5.0,
-					"seeker":      15.0,
-					"pillar":      0.0,
-					"strategist":  60.0,
-					"skeptic":     10.0,
-					"devoted":     0.0,
+					"protector": 0.0,
+					"vanguard": 5.0,
+					"seeker": 15.0,
+					"pillar": 0.0,
+					"strategist": 60.0,
+					"skeptic": 10.0,
+					"devoted": 0.0,
 					"opportunist": 10.0,
-					"mediator":    0.0,
-					"nurturer":    0.0
+					"mediator": 0.0,
+					"nurturer": 0.0
 				},
 				"skeptic": {
-					"protector":   0.0,
-					"vanguard":    0.0,
-					"seeker":      10.0,
-					"pillar":      10.0,
-					"strategist":  15.0,
-					"skeptic":     60.0,
-					"devoted":     0.0,
+					"protector": 0.0,
+					"vanguard": 0.0,
+					"seeker": 10.0,
+					"pillar": 10.0,
+					"strategist": 15.0,
+					"skeptic": 60.0,
+					"devoted": 0.0,
 					"opportunist": 0.0,
-					"mediator":    5.0,
-					"nurturer":    0.0
+					"mediator": 5.0,
+					"nurturer": 0.0
 				},
 				"devoted": {
-					"protector":   5.0,
-					"vanguard":    0.0,
-					"seeker":      0.0,
-					"pillar":      15.0,
-					"strategist":  0.0,
-					"skeptic":     0.0,
-					"devoted":     60.0,
+					"protector": 5.0,
+					"vanguard": 0.0,
+					"seeker": 0.0,
+					"pillar": 15.0,
+					"strategist": 0.0,
+					"skeptic": 0.0,
+					"devoted": 60.0,
 					"opportunist": 0.0,
-					"mediator":    5.0,
-					"nurturer":    15.0
+					"mediator": 5.0,
+					"nurturer": 15.0
 				},
 				"opportunist": {
-					"protector":   0.0,
-					"vanguard":    15.0,
-					"seeker":      15.0,
-					"pillar":      0.0,
-					"strategist":  5.0,
-					"skeptic":     5.0,
-					"devoted":     0.0,
+					"protector": 0.0,
+					"vanguard": 15.0,
+					"seeker": 15.0,
+					"pillar": 0.0,
+					"strategist": 5.0,
+					"skeptic": 5.0,
+					"devoted": 0.0,
 					"opportunist": 60.0,
-					"mediator":    0.0,
-					"nurturer":    0.0
+					"mediator": 0.0,
+					"nurturer": 0.0
 				},
 				"mediator": {
-					"protector":   15.0,
-					"vanguard":    0.0,
-					"seeker":      0.0,
-					"pillar":      5.0,
-					"strategist":  0.0,
-					"skeptic":     0.0,
-					"devoted":     10.0,
+					"protector": 15.0,
+					"vanguard": 0.0,
+					"seeker": 0.0,
+					"pillar": 5.0,
+					"strategist": 0.0,
+					"skeptic": 0.0,
+					"devoted": 10.0,
 					"opportunist": 0.0,
-					"mediator":    60.0,
-					"nurturer":    10.0
+					"mediator": 60.0,
+					"nurturer": 10.0
 				},
 				"nurturer": {
-					"protector":   5.0,
-					"vanguard":    0.0,
-					"seeker":      0.0,
-					"pillar":      5.0,
-					"strategist":  0.0,
-					"skeptic":     0.0,
-					"devoted":     15.0,
+					"protector": 5.0,
+					"vanguard": 0.0,
+					"seeker": 0.0,
+					"pillar": 5.0,
+					"strategist": 0.0,
+					"skeptic": 0.0,
+					"devoted": 15.0,
 					"opportunist": 0.0,
-					"mediator":    15.0,
-					"nurturer":    60.0
+					"mediator": 15.0,
+					"nurturer": 60.0
 				}
 			}
 		},
@@ -873,12 +893,15 @@
 			"calling_behavior": {
 				"_comment": "Per-calling combat personality. retreat_threshold: HP ratio below which retreat is considered (null = never retreat). press_advantage: melee bonus when target hp < press_hp_threshold. directive_mul: multiplier on directive bonuses for this calling. leadership_radius: tile radius for Whole-band leadership trait effects. fear_move_bonus: flat bonus to move score per 10 fear points (kra_soro). idle_fear_aura: fear reduction applied to nearby allies when actor.idle wins (okomfo).",
 				"aduro": {
-					"retreat_threshold": 0.30,
+					"retreat_threshold": 0.3,
 					"press_advantage": true,
 					"directive_mul": 1.0,
 					"leadership_radius": 3.0,
 					"absolute_fear_threshold": 75,
-					"broken_morale_override": { "melee_attack": 8.0, "actor.guard": -5.0 }
+					"broken_morale_override": {
+						"melee_attack": 8.0,
+						"actor.guard": -5.0
+					}
 				},
 				"sum_okwanfo": {
 					"retreat_threshold": 0.35,
@@ -902,7 +925,7 @@
 					"absolute_fear_threshold": 85
 				},
 				"okomfo": {
-					"retreat_threshold": 0.40,
+					"retreat_threshold": 0.4,
 					"press_advantage": false,
 					"directive_mul": 1.5,
 					"leadership_radius": 5.0,
@@ -1058,9 +1081,7 @@
 				"threat_read": {
 					"retreat_threshold_reduction": 0.1
 				},
-				"cover_positioning": {
-
-				},
+				"cover_positioning": {},
 				"fear_read": {
 					"fear_reduction_per_round": 5.0
 				},
@@ -1104,17 +1125,17 @@
 			"objective_weights": {
 				"combat": 30,
 				"shrine": 40,
-				"boss":   60
+				"boss": 60
 			},
-			"enemy_defeated_bonus":  5,
-			"echo_survived_bonus":   10,
-			"speed_bonus_pct":       0.15,
+			"enemy_defeated_bonus": 5,
+			"echo_survived_bonus": 10,
+			"speed_bonus_pct": 0.15,
 			"speed_bonus_threshold": 5,
-			"redo_penalty_per_run":  0.10,
-			"redo_penalty_floor":    0.50,
-			"defeat_factor":         0.25,
+			"redo_penalty_per_run": 0.1,
+			"redo_penalty_floor": 0.5,
+			"defeat_factor": 0.25,
 			"rank_thresholds": {
-				"S": 0.90,
+				"S": 0.9,
 				"A": 0.75,
 				"B": 0.55,
 				"C": 0.35,
@@ -1123,10 +1144,10 @@
 			"_comment_realm005": "REALM-005: Virtue-based stage bonus. Formula: roundi((virtue_bonuses[virtue] + stage_index * stage_index_bonus_per) * (base + run_index * step)). Victory-only.",
 			"virtue_bonuses": {
 				"courage": 10,
-				"wisdom":  15,
-				"faith":   20
+				"wisdom": 15,
+				"faith": 20
 			},
-			"stage_index_bonus_per":       5,
+			"stage_index_bonus_per": 5,
 			"realm_order_multiplier_base": 1.0,
 			"realm_order_multiplier_step": 0.5
 		},
@@ -1148,13 +1169,13 @@
 					"reflective": -2.0
 				},
 				"by_calling_origin": {
-					"aduro":       3.0,
+					"aduro": 3.0,
 					"sum_okwanfo": 2.0,
-					"okofor":      -1.0,
-					"onyamesu":    -2.0,
-					"okomfo":      0.0,
-					"kra_soro":    1.0,
-					"uncalled":    0.0
+					"okofor": -1.0,
+					"onyamesu": -2.0,
+					"okomfo": 0.0,
+					"kra_soro": 1.0,
+					"uncalled": 0.0
 				},
 				"by_dominant_trait": {
 					"_comment": "Dominant trait = highest value in actor.traits {courage, wisdom, faith}. Tiebreak: courage > faith > wisdom.",
@@ -1164,16 +1185,16 @@
 				},
 				"by_dominant_vector": {
 					"_comment": "Dominant vector = highest value in actor.vector_scores. All 10 V2 vectors listed. Tiebreak: vanguard > opportunist > strategist > seeker > skeptic > protector > mediator > devoted > pillar > nurturer.",
-					"vanguard":    2.0,
+					"vanguard": 2.0,
 					"opportunist": 1.5,
-					"strategist":  0.5,
-					"seeker":      0.0,
-					"skeptic":    -0.5,
-					"protector":  -1.0,
-					"mediator":   -1.0,
-					"devoted":    -1.5,
-					"pillar":     -2.0,
-					"nurturer":   -2.0
+					"strategist": 0.5,
+					"seeker": 0.0,
+					"skeptic": -0.5,
+					"protector": -1.0,
+					"mediator": -1.0,
+					"devoted": -1.5,
+					"pillar": -2.0,
+					"nurturer": -2.0
 				}
 			}
 		},
@@ -1182,26 +1203,72 @@
 			"xp_kill_bonus": 25,
 			"xp_stage_clear_base": 40,
 			"xp_realm_completion_bonus": 100,
-			"virtue_xp_multiplier_max": 0.20,
-			"wisdom_xp_multiplier_max": 0.20,
-			"faith_xp_multiplier_max": 0.20,
-			"level_thresholds": [0, 100, 300, 600, 1000],
+			"virtue_xp_multiplier_max": 0.2,
+			"wisdom_xp_multiplier_max": 0.2,
+			"faith_xp_multiplier_max": 0.2,
+			"level_thresholds": [
+				0,
+				100,
+				300,
+				600,
+				1000
+			],
 			"max_level_per_rank": 5,
 			"rank_level_base_shift": 50,
 			"realm_xp_multiplier_per_realm": 0.15,
 			"_comment_prog004": "PROG-004: Rank-up and trait drift. vector_drift_weights must sum to 1.0 per vector key. rank_up_trait_drift_magnitude = +-N applied to one trait per rank-up.",
 			"rank_up_trait_drift_magnitude": 1,
 			"vector_drift_weights": {
-				"vanguard":    { "courage": 0.65, "wisdom": 0.25, "faith": 0.10 },
-				"seeker":      { "courage": 0.15, "wisdom": 0.65, "faith": 0.20 },
-				"pillar":      { "courage": 0.10, "wisdom": 0.25, "faith": 0.65 },
-				"protector":   { "courage": 0.35, "wisdom": 0.15, "faith": 0.50 },
-				"strategist":  { "courage": 0.15, "wisdom": 0.65, "faith": 0.20 },
-				"skeptic":     { "courage": 0.10, "wisdom": 0.55, "faith": 0.35 },
-				"devoted":     { "courage": 0.05, "wisdom": 0.20, "faith": 0.75 },
-				"opportunist": { "courage": 0.50, "wisdom": 0.40, "faith": 0.10 },
-				"mediator":    { "courage": 0.10, "wisdom": 0.30, "faith": 0.60 },
-				"nurturer":    { "courage": 0.05, "wisdom": 0.25, "faith": 0.70 }
+				"vanguard": {
+					"courage": 0.65,
+					"wisdom": 0.25,
+					"faith": 0.1
+				},
+				"seeker": {
+					"courage": 0.15,
+					"wisdom": 0.65,
+					"faith": 0.2
+				},
+				"pillar": {
+					"courage": 0.1,
+					"wisdom": 0.25,
+					"faith": 0.65
+				},
+				"protector": {
+					"courage": 0.35,
+					"wisdom": 0.15,
+					"faith": 0.5
+				},
+				"strategist": {
+					"courage": 0.15,
+					"wisdom": 0.65,
+					"faith": 0.2
+				},
+				"skeptic": {
+					"courage": 0.1,
+					"wisdom": 0.55,
+					"faith": 0.35
+				},
+				"devoted": {
+					"courage": 0.05,
+					"wisdom": 0.2,
+					"faith": 0.75
+				},
+				"opportunist": {
+					"courage": 0.5,
+					"wisdom": 0.4,
+					"faith": 0.1
+				},
+				"mediator": {
+					"courage": 0.1,
+					"wisdom": 0.3,
+					"faith": 0.6
+				},
+				"nurturer": {
+					"courage": 0.05,
+					"wisdom": 0.25,
+					"faith": 0.7
+				}
 			}
 		},
 		"combat": {
@@ -1215,16 +1282,16 @@
 				"purify_cooldown_rounds": 3.0,
 				"purify_weight_faith": 0.5,
 				"purify_weight_by_vector": {
-					"pillar":      20.0,
-					"devoted":     20.0,
-					"protector":   10.0,
-					"nurturer":    15.0,
-					"mediator":    10.0,
-					"seeker":       5.0,
-					"strategist":   3.0,
-					"skeptic":      2.0,
-					"vanguard":     0.0,
-					"opportunist":  0.0
+					"pillar": 20.0,
+					"devoted": 20.0,
+					"protector": 10.0,
+					"nurturer": 15.0,
+					"mediator": 10.0,
+					"seeker": 5.0,
+					"strategist": 3.0,
+					"skeptic": 2.0,
+					"vanguard": 0.0,
+					"opportunist": 0.0
 				},
 				"morale_drain_per_wave": 5.0
 			},
@@ -1296,16 +1363,16 @@
 				},
 				"by_dominant_vector": {
 					"_comment": "Dominant vector = highest value in actor.vector_scores. All 10 V2 vectors listed. Tiebreak: vanguard > opportunist > seeker > strategist > skeptic > protector > mediator > devoted > pillar > nurturer.",
-					"vanguard":    2.0,
+					"vanguard": 2.0,
 					"opportunist": 1.5,
-					"seeker":      1.0,
-					"strategist":  0.5,
-					"skeptic":    -0.5,
-					"protector":  -1.0,
-					"mediator":   -1.0,
-					"devoted":    -1.5,
-					"pillar":     -2.0,
-					"nurturer":   -2.0
+					"seeker": 1.0,
+					"strategist": 0.5,
+					"skeptic": -0.5,
+					"protector": -1.0,
+					"mediator": -1.0,
+					"devoted": -1.5,
+					"pillar": -2.0,
+					"nurturer": -2.0
 				}
 			}
 		},
@@ -1317,89 +1384,132 @@
 			"calling_ambivalent_fear_increase": 3,
 			"calling_incompatible_fear_increase": 10,
 			"vector_to_calling": {
-				"vanguard":    "aduro",
-				"protector":   "okofor",
-				"pillar":      "onyamesu",
-				"seeker":      "okomfo",
-				"strategist":  "okomfo",
-				"skeptic":     "kra_soro",
-				"devoted":     "onyamesu",
+				"vanguard": "aduro",
+				"protector": "okofor",
+				"pillar": "onyamesu",
+				"seeker": "okomfo",
+				"strategist": "okomfo",
+				"skeptic": "kra_soro",
+				"devoted": "onyamesu",
 				"opportunist": "sum_okwanfo",
-				"mediator":    "okofor",
-				"nurturer":    "onyamesu"
+				"mediator": "okofor",
+				"nurturer": "onyamesu"
 			},
-			"all_callings": ["okofor", "onyamesu", "aduro", "sum_okwanfo", "okomfo", "kra_soro"],
+			"all_callings": [
+				"okofor",
+				"onyamesu",
+				"aduro",
+				"sum_okwanfo",
+				"okomfo",
+				"kra_soro"
+			],
 			"definitions": {
 				"okofor": {
 					"display_name": "Oko Fo",
-					"icon_key":     "calling_okofor",
-					"description":  "Bears danger for others and refuses collapse.",
-					"benefits":     ["Guard actions more effective", "Faster ally-response selection"],
-					"downsides":    ["Reduced offensive pressure", "Slower at pressing advantages"],
-					"vector":       "protector",
-					"family":       "anchor"
+					"icon_key": "calling_okofor",
+					"description": "Bears danger for others and refuses collapse.",
+					"benefits": [
+						"Guard actions more effective",
+						"Faster ally-response selection"
+					],
+					"downsides": [
+						"Reduced offensive pressure",
+						"Slower at pressing advantages"
+					],
+					"vector": "protector",
+					"family": "anchor"
 				},
 				"onyamesu": {
 					"display_name": "Onyame Su",
-					"icon_key":     "calling_onyamesu",
-					"description":  "Sustains life, morale, and communal steadiness.",
-					"benefits":     ["Objective control bonuses", "Morale stabilisation for nearby allies"],
-					"downsides":    ["Lower mobility", "Less reactive to shifting threats"],
-					"vector":       "pillar",
-					"family":       "anchor"
+					"icon_key": "calling_onyamesu",
+					"description": "Sustains life, morale, and communal steadiness.",
+					"benefits": [
+						"Objective control bonuses",
+						"Morale stabilisation for nearby allies"
+					],
+					"downsides": [
+						"Lower mobility",
+						"Less reactive to shifting threats"
+					],
+					"vector": "pillar",
+					"family": "anchor"
 				},
 				"aduro": {
 					"display_name": "Aduro",
-					"icon_key":     "calling_aduro",
-					"description":  "Meets danger directly and turns courage into momentum.",
-					"benefits":     ["Increased melee damage output", "Higher aggression intent weighting"],
-					"downsides":    ["Reduced defensive instinct", "Breaks harder when fear peaks"],
-					"vector":       "vanguard",
-					"family":       "edge"
+					"icon_key": "calling_aduro",
+					"description": "Meets danger directly and turns courage into momentum.",
+					"benefits": [
+						"Increased melee damage output",
+						"Higher aggression intent weighting"
+					],
+					"downsides": [
+						"Reduced defensive instinct",
+						"Breaks harder when fear peaks"
+					],
+					"vector": "vanguard",
+					"family": "edge"
 				},
 				"sum_okwanfo": {
 					"display_name": "Sum Okwanfo",
-					"icon_key":     "calling_sum_okwanfo",
-					"description":  "Moves through concealment, timing, and unseen openings.",
-					"benefits":     ["Higher initiative in ambush positioning", "Better directive interpretation for timing"],
-					"downsides":    ["Breaks sooner under sustained fear", "Lower direct confrontation output"],
-					"vector":       "opportunist",
-					"family":       "edge"
+					"icon_key": "calling_sum_okwanfo",
+					"description": "Moves through concealment, timing, and unseen openings.",
+					"benefits": [
+						"Higher initiative in ambush positioning",
+						"Better directive interpretation for timing"
+					],
+					"downsides": [
+						"Breaks sooner under sustained fear",
+						"Lower direct confrontation output"
+					],
+					"vector": "opportunist",
+					"family": "edge"
 				},
 				"okomfo": {
 					"display_name": "Okomfo",
-					"icon_key":     "calling_okomfo",
-					"description":  "Reads spirit, sign, and hidden meaning.",
-					"benefits":     ["Higher tactical foresight weighting", "Improved directive interpretation"],
-					"downsides":    ["Reduced raw combat output", "Lower aggression expression"],
-					"vector":       "seeker",
-					"family":       "sight"
+					"icon_key": "calling_okomfo",
+					"description": "Reads spirit, sign, and hidden meaning.",
+					"benefits": [
+						"Higher tactical foresight weighting",
+						"Improved directive interpretation"
+					],
+					"downsides": [
+						"Reduced raw combat output",
+						"Lower aggression expression"
+					],
+					"vector": "seeker",
+					"family": "sight"
 				},
 				"kra_soro": {
 					"display_name": "Kra Soro",
-					"icon_key":     "calling_kra_soro",
-					"description":  "Reads path, distance, and shifting ground.",
-					"benefits":     ["Improved objective awareness", "Faster repositioning intent"],
-					"downsides":    ["Less effective in sustained melee", "Reduced frontal durability"],
-					"vector":       "seeker",
-					"family":       "sight"
+					"icon_key": "calling_kra_soro",
+					"description": "Reads path, distance, and shifting ground.",
+					"benefits": [
+						"Improved objective awareness",
+						"Faster repositioning intent"
+					],
+					"downsides": [
+						"Less effective in sustained melee",
+						"Reduced frontal durability"
+					],
+					"vector": "seeker",
+					"family": "sight"
 				}
 			},
 			"absolute_fear_threshold_by_calling": {
 				"_comment": "Per-calling Absolute Fear threshold override. Default is data.emotion.drift.fear_threshold (80). Edge callings break sooner (aduro 75, sum_okwanfo 70). Anchor and Sight callings endure longer (onyamesu 85, okomfo 85).",
-				"aduro":       75.0,
+				"aduro": 75.0,
 				"sum_okwanfo": 70.0,
-				"okofor":      80.0,
-				"onyamesu":    85.0,
-				"okomfo":      85.0,
-				"kra_soro":    80.0,
-				"uncalled":    80.0
+				"okofor": 80.0,
+				"onyamesu": 85.0,
+				"okomfo": 85.0,
+				"kra_soro": 80.0,
+				"uncalled": 80.0
 			},
 			"broken_morale_overrides": {
 				"_comment": "Per-calling override of morale_action_muls at 'broken' tier. If a calling key is present, its values replace the standard broken-morale muls for that action. Aduro charges when broken; does not collapse into guard.",
 				"aduro": {
 					"melee_attack": 8.0,
-					"actor.guard":  -5.0
+					"actor.guard": -5.0
 				}
 			}
 		},
@@ -1407,21 +1517,87 @@
 			"_comment": "V2-PROG-005: Family-based skill system. Skills belong to one of 6 global families (ward/break/veil/path/rite/root). Callings align to families via calling_family_alignment. calling_requirement is removed — access is determined by family alignment only.",
 			"max_skill_slots": 1,
 			"families": {
-				"ward":  { "name": "Ward",  "description": "Protection through guarding, holding, and stabilising danger before it breaks the line." },
-				"break": { "name": "Break", "description": "Pressure through force, disruption, momentum, and opening-making." },
-				"veil":  { "name": "Veil",  "description": "Concealment through misdirection, hidden intervention, sabotage, and surgical timing." },
-				"path":  { "name": "Path",  "description": "Mastery through route-reading, pursuit, angle control, repositioning, and field sense." },
-				"rite":  { "name": "Rite",  "description": "Influence through omen-reading, thresholds, sacred procedure, revelation, and spirit authority." },
-				"root":  { "name": "Root",  "description": "Endurance through care, morale, recovery, continuity, and communal steadiness." }
+				"ward": {
+					"name": "Ward",
+					"description": "Protection through guarding, holding, and stabilising danger before it breaks the line."
+				},
+				"break": {
+					"name": "Break",
+					"description": "Pressure through force, disruption, momentum, and opening-making."
+				},
+				"veil": {
+					"name": "Veil",
+					"description": "Concealment through misdirection, hidden intervention, sabotage, and surgical timing."
+				},
+				"path": {
+					"name": "Path",
+					"description": "Mastery through route-reading, pursuit, angle control, repositioning, and field sense."
+				},
+				"rite": {
+					"name": "Rite",
+					"description": "Influence through omen-reading, thresholds, sacred procedure, revelation, and spirit authority."
+				},
+				"root": {
+					"name": "Root",
+					"description": "Endurance through care, morale, recovery, continuity, and communal steadiness."
+				}
 			},
 			"calling_family_alignment": {
 				"_comment": "strong = primary families (2 per calling). light = adjacent family (1 per calling). Source: GDD §11.4.5.",
-				"okofor":      { "strong": ["ward", "root"],  "light": ["break"] },
-				"aduro":       { "strong": ["break", "ward"], "light": ["veil"] },
-				"sum_okwanfo": { "strong": ["veil", "break"], "light": ["path"] },
-				"kra_soro":    { "strong": ["path", "veil"],  "light": ["rite"] },
-				"okomfo":      { "strong": ["rite", "path"],  "light": ["root"] },
-				"onyamesu":    { "strong": ["root", "ward"],  "light": ["rite"] }
+				"okofor": {
+					"strong": [
+						"ward",
+						"root"
+					],
+					"light": [
+						"break"
+					]
+				},
+				"aduro": {
+					"strong": [
+						"break",
+						"ward"
+					],
+					"light": [
+						"veil"
+					]
+				},
+				"sum_okwanfo": {
+					"strong": [
+						"veil",
+						"break"
+					],
+					"light": [
+						"path"
+					]
+				},
+				"kra_soro": {
+					"strong": [
+						"path",
+						"veil"
+					],
+					"light": [
+						"rite"
+					]
+				},
+				"okomfo": {
+					"strong": [
+						"rite",
+						"path"
+					],
+					"light": [
+						"root"
+					]
+				},
+				"onyamesu": {
+					"strong": [
+						"root",
+						"ward"
+					],
+					"light": [
+						"rite"
+					]
+				}
 			},
 			"definitions": {
 				"blade_resolve": {
@@ -1512,12 +1688,12 @@
 			},
 			"_field_contract": {
 				"_comment": "V2-PROG-005: SkillDefinition contract — 7 required fields. calling_requirement removed; skill_family is the V2 axis.",
-				"skill_id":          "String — unique id e.g. 'blade_resolve'",
-				"skill_family":      "String — one of: ward | break | veil | path | rite | root",
-				"target_type":       "String — 'self' | 'ally' | 'enemy' | 'area'",
-				"action_type":       "String — actor intent action_type dispatched when skill fires",
-				"cooldown_rounds":   "int    — rounds before skill can fire again; 0 = no cooldown",
-				"scaling_source":    "String — stat key that scales effect e.g. 'atk', 'cha'",
+				"skill_id": "String — unique id e.g. 'blade_resolve'",
+				"skill_family": "String — one of: ward | break | veil | path | rite | root",
+				"target_type": "String — 'self' | 'ally' | 'enemy' | 'area'",
+				"action_type": "String — actor intent action_type dispatched when skill fires",
+				"cooldown_rounds": "int    — rounds before skill can fire again; 0 = no cooldown",
+				"scaling_source": "String — stat key that scales effect e.g. 'atk', 'cha'",
 				"intent_weight_tag": "String — tag used by BehaviorArbiter weight lookup"
 			}
 		},
@@ -1540,10 +1716,18 @@
 						"small_party_fear_penalty": 10
 					},
 					"tier_effects": {
-						"1": { "multiplier": 1.0 },
-						"2": { "multiplier": 1.5 },
-						"3": { "multiplier": 2.0 },
-						"4": { "multiplier": 3.0 }
+						"1": {
+							"multiplier": 1.0
+						},
+						"2": {
+							"multiplier": 1.5
+						},
+						"3": {
+							"multiplier": 2.0
+						},
+						"4": {
+							"multiplier": 3.0
+						}
 					},
 					"breaking_costs": {
 						"1": {
@@ -1577,6 +1761,99 @@
 					"breaking_cost_hint": "Breaking this vow costs 60 Ase. A morale dip ripples through every echo in your roster. Every bond between echoes suffers a penalty.",
 					"unlock_scenario": "small_party_all_survived",
 					"unlock_description": "The web holds a teaching for those who trust few with much — let the small number carry the weight, and let all return."
+				},
+				"praye_wokabomu": {
+					"vow_id": "praye_wokabomu",
+					"proverb_twi": "Praye, se woyi baako a na ebu; wokabomu a emmu",
+					"proverb_en": "When you remove one broomstick it breaks, but together they do not break",
+					"vow_name": "Vow of United Strength",
+					"benefit_label": "Parties with 2+ different callings gain morale and fear resistance on stage entry.",
+					"tradeoff_label": "A party sharing a single calling origin incurs a fear penalty on stage entry.",
+					"benefit": {
+						"calling_diversity_threshold": 2,
+						"morale_bonus_on_entry": 3,
+						"fear_resistance_bonus": 5
+					},
+					"tradeoff": {
+						"single_calling_fear_penalty": 8
+					},
+					"tier_effects": {
+						"1": {
+							"multiplier": 1.0
+						},
+						"2": {
+							"multiplier": 1.5
+						},
+						"3": {
+							"multiplier": 2.0
+						},
+						"4": {
+							"multiplier": 3.0
+						}
+					},
+					"breaking_costs": {
+						"1": {
+							"ase": 60,
+							"morale_delta": -10,
+							"bond_score_delta": -10
+						},
+						"2": {
+							"ase": 120,
+							"ekwan": 20,
+							"fear_delta": 15,
+							"bond_score_delta": -20
+						}
+					},
+					"description": "The broom is a humble thing — each strand alone will snap under pressure. But bound together, they hold. This vow asks the Keeper to honour the full weight of the sanctum: to bring many voices into the field, not the same hands over and over. Strength is not a gift of the individual — it is woven from difference.",
+					"breaking_cost_hint": "Breaking this vow costs 60 Ase. A morale penalty touches the whole roster. Every bond between echoes suffers.",
+					"unlock_scenario": "full_roster_diversity",
+					"unlock_description": "The web shows something to those who trust different hands with the same burden — let three paths share a stage, and let all return."
+				},
+				"obi_nnim_kyere": {
+					"vow_id": "obi_nnim_kyere",
+					"proverb_twi": "Obi nnim a, obi kyere",
+					"proverb_en": "If someone does not know, someone teaches",
+					"vow_name": "Vow of Earned Knowledge",
+					"benefit_label": "Engaging a revealed situation grants morale to the party. Full-scout stages award a bonus.",
+					"tradeoff_label": "Engaging an unrevealed situation in the dark inflicts fear on the deployed echoes.",
+					"benefit": {
+						"revealed_engagement_morale_bonus": 3,
+						"full_scout_morale_bonus": 5
+					},
+					"tradeoff": {
+						"blind_engagement_fear_penalty": 8
+					},
+					"tier_effects": {
+						"1": {
+							"multiplier": 1.0
+						},
+						"2": {
+							"multiplier": 1.5
+						},
+						"3": {
+							"multiplier": 2.0
+						},
+						"4": {
+							"multiplier": 3.0
+						}
+					},
+					"breaking_costs": {
+						"1": {
+							"ase": 60,
+							"morale_delta": -8,
+							"bond_score_delta": -8
+						},
+						"2": {
+							"ase": 100,
+							"ekwan": 15,
+							"fear_delta": 12,
+							"bond_score_delta": -15
+						}
+					},
+					"description": "Knowledge is not a private inheritance — it is passed. This vow asks the Keeper to resist the temptation of haste, to look before stepping, to learn what waits before disturbing it. The echo who walks into the unknown unprepared carries the weight of everyone who trusted them to know better.",
+					"breaking_cost_hint": "Breaking this vow costs 60 Ase. The roster carries the guilt of ignored counsel as a morale dip.",
+					"unlock_scenario": "all_situations_scouted",
+					"unlock_description": "When the party reads every shadow before entering it, and all return having seen everything — the web opens a deeper teaching."
 				}
 			},
 			"tier_names": {
@@ -1586,18 +1863,18 @@
 				"4": "Blood Vow"
 			},
 			"_contract": {
-				"vow_id":            "String — unique snake_case id matching proverb",
-				"proverb_twi":       "String — original Twi text",
-				"proverb_en":        "String — English translation",
-				"vow_name":          "String — player-facing doctrine name",
-				"benefit_label":     "String — one-line benefit description shown in UI",
-				"tradeoff_label":    "String — one-line tradeoff description shown in UI",
-				"benefit":           "Dict — numeric effect params read by VowService",
-				"tradeoff":          "Dict — numeric penalty params read by VowService",
-				"tier_effects":      "Dict keyed '1'-'4' — multiplier applied to benefit/tradeoff magnitudes",
-				"breaking_costs":    "Dict keyed '1'-'4' — penalty fields applied by VowService.break_vow()",
-				"unlock_scenario":   "String — scenario trigger id that reveals this vow to the Keeper",
-				"unlock_description":"String — human-readable unlock condition shown as hint"
+				"vow_id": "String — unique snake_case id matching proverb",
+				"proverb_twi": "String — original Twi text",
+				"proverb_en": "String — English translation",
+				"vow_name": "String — player-facing doctrine name",
+				"benefit_label": "String — one-line benefit description shown in UI",
+				"tradeoff_label": "String — one-line tradeoff description shown in UI",
+				"benefit": "Dict — numeric effect params read by VowService",
+				"tradeoff": "Dict — numeric penalty params read by VowService",
+				"tier_effects": "Dict keyed '1'-'4' — multiplier applied to benefit/tradeoff magnitudes",
+				"breaking_costs": "Dict keyed '1'-'4' — penalty fields applied by VowService.break_vow()",
+				"unlock_scenario": "String — scenario trigger id that reveals this vow to the Keeper",
+				"unlock_description": "String — human-readable unlock condition shown as hint"
 			}
 		},
 		"threads": {
@@ -1611,14 +1888,23 @@
 				"F": "broken"
 			},
 			"quality_tiers": {
-				"clean":       { "min_quality": 0.70, "weight": 1.0 },
-				"compromised": { "min_quality": 0.35, "weight": 0.5 },
-				"broken":      { "min_quality": 0.00, "weight": 0.1 }
+				"clean": {
+					"min_quality": 0.7,
+					"weight": 1.0
+				},
+				"compromised": {
+					"min_quality": 0.35,
+					"weight": 0.5
+				},
+				"broken": {
+					"min_quality": 0.0,
+					"weight": 0.1
+				}
 			},
 			"count_thresholds": {
 				"three": 0.75,
-				"two":   0.40,
-				"one":   0.00
+				"two": 0.4,
+				"one": 0.0
 			}
 		}
 	}

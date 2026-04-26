@@ -65,19 +65,17 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			continue
 		var defn: Dictionary = defn_v
 
-		# Determine unlock state
+		# Determine unlock state. `unlocked` is Dict keyed by vow_id → {tier, discovered_realm}.
 		var is_unlocked := false
 		var max_tier := 0
 		var discovered_realm := ""
-		for entry_v in unlocked:
-			if not (entry_v is Dictionary):
-				continue
-			var entry: Dictionary = entry_v
-			if str(entry.get("vow_id", "")) == str(vow_id):
+		if unlocked.has(vow_id):
+			var entry_v: Variant = unlocked[vow_id]
+			if entry_v is Dictionary:
+				var entry: Dictionary = entry_v
 				is_unlocked = true
-				max_tier = int(entry.get("max_tier_unlocked", 1))
+				max_tier = int(entry.get("tier", 1))
 				discovered_realm = str(entry.get("discovered_realm", ""))
-				break
 
 		var is_active := str(active_vow.get("vow_id", "")) == str(vow_id)
 
