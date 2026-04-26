@@ -8,45 +8,9 @@ func _init(id: String = FlowStateIds.SANCTUM) -> void:
 func enter(ctx: RefCounted, t:int) -> void:
 	var flow_ctx := ctx as FlowContext
 
-	# VOW-001: release active vow when returning to Sanctum after a realm run completes.
-	# Two cases:
-	#   pledged_at_realm != "" → release when that specific realm is no longer active.
-	#   pledged_at_realm == "" → pledged from Sanctum with no realm active;
-	#                            release when total run_count across all realms increases.
-	var _v_sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
-	if _v_sanctum_v is Dictionary:
-		var _v_sanctum: Dictionary = _v_sanctum_v
-		var _av_v: Variant = _v_sanctum.get("active_vow", {})
-		if _av_v is Dictionary and not (_av_v as Dictionary).is_empty():
-			var _av: Dictionary = _av_v
-			var _pledged_realm := str(_av.get("pledged_at_realm", ""))
-			var _realms_check_v: Variant = flow_ctx.save_data.get("realms", {})
-			var _should_release := false
-
-			if _pledged_realm != "":
-				# Pledged during a realm — release once that realm is no longer active.
-				if _realms_check_v is Dictionary:
-					var _realm_entry_v: Variant = (_realms_check_v as Dictionary).get(_pledged_realm, {})
-					if _realm_entry_v is Dictionary:
-						var _still_active := str((_realm_entry_v as Dictionary).get("status", "")) == RealmModel.STATUS_ACTIVE
-						_should_release = not _still_active
-					else:
-						_should_release = true  # realm no longer exists — release
-			else:
-				# Pledged from Sanctum with no active realm.
-				# Release once total completed runs across all realms exceeds runs_at_pledge.
-				var _runs_at_pledge := int(_av.get("runs_at_pledge", 0))
-				var _current_runs := 0
-				if _realms_check_v is Dictionary:
-					var _realms_d: Dictionary = _realms_check_v
-					for _rid in _realms_d:
-						var _rm_v: Variant = _realms_d[_rid]
-						if _rm_v is Dictionary:
-							_current_runs += int((_rm_v as Dictionary).get("run_count", 0))
-				_should_release = _current_runs > _runs_at_pledge
-
-			if _should_release:
-				VowService.release_vow(flow_ctx.save_data, flow_ctx, flow_ctx.logger, t)
+	# VOW-001: release active vow when returning to Sanctum if the release condition is met.
+	# Condition logic is in VowService.release_vow_if_due (testable in isolation).
+	VowService.release_vow_if_due(flow_ctx.save_data, flow_ctx, flow_ctx.logger, t)
 
 	# REALM-001: check save_data["realms"] directly — survives Continue (realm_id restored in boot)
 	var _realms_v: Variant = flow_ctx.save_data.get("realms", {})

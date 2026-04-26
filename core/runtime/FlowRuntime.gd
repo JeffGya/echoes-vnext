@@ -131,6 +131,8 @@ func dispatch(action: Dictionary) -> Dictionary:
 			flow_ctx.encounter_id = flow_ctx.realm_id + "." + stage_id  # BUG-003: was always ""
 			# PROG-009: persist skill loadout to save before entering the stage
 			_persist_equipped_skills(t)
+			# VOW-001: evaluate stage-entry condition (party size / calling diversity).
+			_apply_vow_stage_entry_condition(t)
 			logger.info(t, "state.stage_select", "Stage selected", { "stage_id": stage_id })
 			flow_machine.transition(FlowStateIds.STAGE, flow_ctx, logger, t, "ui.flow.select_stage")
 
@@ -596,6 +598,10 @@ func _handle_complete_stage(t: int, destination_override: String = "") -> void:
 	_apply_combat_bond_triggers(t, outcome)
 	_apply_bond_aftermath_modifiers(t, outcome)
 	_seed_rival_stage_incidents(t)
+	# VOW-001: post-stage complete benefit (obi_nnim_kyere full-scout bonus).
+	_apply_vow_stage_complete_benefit(t)
+	# VOW-001: check if any vow discovery scenario was triggered this stage.
+	_check_vow_discovery(t)
 	flow_ctx.encounter_ctx     = null
 	flow_ctx.encounter_machine = null
 
@@ -2967,33 +2973,8 @@ func _handle_vow_break(t: int) -> void:
 		flow_machine.refresh_snapshot(flow_ctx, logger, t)
 		return
 
-	# Apply morale and fear deltas to all roster echoes via EmotionService
-	var morale_d := int(summary.get("morale_delta", 0))
-	var fear_d   := int(summary.get("fear_delta", 0))
-
-	if (morale_d != 0 or fear_d != 0) and flow_ctx.save_data.has("sanctum"):
-		var sanctum_v: Variant = flow_ctx.save_data["sanctum"]
-		if sanctum_v is Dictionary:
-			var roster_v: Variant = (sanctum_v as Dictionary).get("roster", [])
-			if roster_v is Array:
-				var roster: Array = roster_v
-				var cfg_em: Dictionary = cfg.get("emotion", {})
-				var fear_threshold := int(cfg_em.get("fear_threshold", 80))
-				for echo_v in roster:
-					if not (echo_v is Dictionary):
-						continue
-					var echo: Dictionary = echo_v
-					var eid := str(echo.get("id", ""))
-					if eid.is_empty():
-						continue
-					if morale_d != 0:
-						EmotionService.apply_morale_delta(
-							echo, morale_d, "vow.break", logger, t
-						)
-					if fear_d != 0:
-						EmotionService.apply_fear_delta(
-							echo, fear_d, "vow.break", fear_threshold, logger, t
-						)
+	# Apply morale/fear deltas + EmotionRecovery modifier to all roster echoes.
+	_apply_vow_break_aftermath(summary, cfg, t)
 
 	# Rebuild snapshot from current save_data so UI reflects the break outcome.
 	flow_ctx.last_snapshot = FlowVowState.build_snapshot(flow_ctx, t)
@@ -3008,6 +2989,298 @@ func _handle_debug_vow_unlock(action: Dictionary, t: int) -> void:
 		return
 	VowService.unlock_vow(vow_id, "debug", flow_ctx.save_data, flow_ctx, logger, t)
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+# VOW-001: Check if any vow was discovered by a scenario condition during this stage.
+# Called from _handle_complete_stage after stage data is finalized.
+func _check_vow_discovery(t: int) -> void:
+	var cfg := config_service.get_balance()
+	var defs := VowService.get_definitions(cfg)
+	if defs.is_empty():
+		return
+
+	var unlocked := VowService.get_unlocked_vows(flow_ctx.save_data)
+
+	# Gather data needed for scenario checks.
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var roster: Array = []
+	var party_ids: Array = []
+	if sanctum_v is Dictionary:
+		var r_v: Variant = (sanctum_v as Dictionary).get("roster", [])
+		if r_v is Array:
+			roster = r_v
+		var p_v: Variant = (sanctum_v as Dictionary).get("active_party_ids", [])
+		if p_v is Array:
+			party_ids = p_v
+
+	# Determine combat outcome.
+	var _last_snap_data_v: Variant = flow_ctx.last_snapshot.get("data", {})
+	var _last_snap_data: Dictionary = _last_snap_data_v if _last_snap_data_v is Dictionary else {}
+	var is_victory := bool(_last_snap_data.get("victory", false))
+
+	# Collect party echoes that survived (not dead) for scenario checks.
+	var party_echoes: Array = []
+	for echo_v in roster:
+		if not (echo_v is Dictionary):
+			continue
+		var echo: Dictionary = echo_v
+		if party_ids.has(str(echo.get("id", ""))):
+			party_echoes.append(echo)
+
+	# Gather current stage situations.
+	var situations: Array = []
+	if not flow_ctx.stage_id.is_empty():
+		var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
+		if not stage.is_empty():
+			var map_v: Variant = stage.get("explore_map", {})
+			if map_v is Dictionary:
+				var sits_v: Variant = (map_v as Dictionary).get("situations", [])
+				if sits_v is Array:
+					situations = sits_v
+
+	for vow_id in defs:
+		# Skip already-unlocked vows.
+		if unlocked.has(vow_id):
+			continue
+
+		var defn_v: Variant = defs[vow_id]
+		if not (defn_v is Dictionary):
+			continue
+		var defn: Dictionary = defn_v
+		var scenario := str(defn.get("unlock_scenario", ""))
+
+		var triggered := false
+		match scenario:
+			"small_party_all_survived":
+				# Small party (< 3) where all deployed echoes survived and there was a victory.
+				var size := party_echoes.size()
+				if size > 0 and size < 3 and is_victory:
+					var all_alive := true
+					for pe in party_echoes:
+						if bool((pe as Dictionary).get("is_dead", false)):
+							all_alive = false
+							break
+					triggered = all_alive
+
+			"full_roster_diversity":
+				# Stage completed with echoes from 3+ distinct calling_origins, all surviving.
+				if is_victory:
+					var calling_set: Dictionary = {}
+					var all_alive := true
+					for pe in party_echoes:
+						if bool((pe as Dictionary).get("is_dead", false)):
+							all_alive = false
+							break
+						calling_set[str((pe as Dictionary).get("calling_origin", "uncalled"))] = true
+					triggered = all_alive and calling_set.size() >= 3
+
+			"all_situations_scouted":
+				# All situations in the stage were revealed before engagement.
+				if situations.size() > 0:
+					var all_revealed := true
+					for sit_v in situations:
+						if not (sit_v is Dictionary):
+							continue
+						if not bool((sit_v as Dictionary).get("revealed", false)):
+							all_revealed = false
+							break
+					triggered = all_revealed
+
+		if triggered:
+			VowService.unlock_vow(vow_id, flow_ctx.realm_id, flow_ctx.save_data, flow_ctx, logger, t)
+
+
+# VOW-001: Apply stage-entry vow condition (party size / calling diversity).
+# Called from flow.select_stage handler before transition.
+func _apply_vow_stage_entry_condition(t: int) -> void:
+	var av := VowService.get_active_vow(flow_ctx.save_data)
+	if av.is_empty():
+		return
+
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if not (sanctum_v is Dictionary):
+		return
+	var sanctum: Dictionary = sanctum_v
+	var party_ids_v: Variant = sanctum.get("active_party_ids", [])
+	var party_ids: Array = party_ids_v if party_ids_v is Array else []
+
+	var cfg := config_service.get_balance()
+	var result := VowService.evaluate_stage_condition(flow_ctx.save_data, party_ids, cfg)
+
+	var status := str(result.get("status", "none"))
+	if status == "none":
+		return
+
+	# Apply morale / fear deltas to all party echoes
+	var morale_d := int(result.get("morale_delta", 0))
+	var fear_d   := int(result.get("fear_delta", 0))
+	_apply_vow_emotion_to_party(party_ids, morale_d, fear_d, "vow.condition." + status, cfg, t)
+
+	var should_break := bool(result.get("should_auto_break", false))
+
+	var log_type := "vow.condition.auto_break" if should_break else ("vow.condition." + status)
+	logger.info(t, log_type, "Vow stage condition evaluated", {
+		"vow_id":      str(av.get("vow_id", "")),
+		"status":      status,
+		"party_size":  party_ids.size(),
+		"auto_break":  should_break,
+	})
+	flow_ctx.save_request = true
+
+	if should_break:
+		var summary := VowService.break_vow(cfg, flow_ctx.save_data, flow_ctx, econ, logger, t)
+		if not summary.is_empty():
+			_apply_vow_break_aftermath(summary, cfg, t)
+
+
+# VOW-001: Apply situation-engagement vow condition (obi_nnim_kyere revealed check).
+# sit_was_revealed: captured BEFORE the engagement mutation sets revealed=true.
+func _apply_vow_engage_condition(sit_was_revealed: bool, t: int) -> void:
+	var av := VowService.get_active_vow(flow_ctx.save_data)
+	if av.is_empty():
+		return
+
+	# Build a minimal situation dict reflecting the pre-engagement revealed state.
+	var sit_peek := { "revealed": sit_was_revealed }
+	var cfg := config_service.get_balance()
+	var result := VowService.evaluate_engage_condition(
+		flow_ctx.save_data, sit_peek, flow_ctx.stage_id, cfg
+	)
+
+	var status := str(result.get("status", "none"))
+	if status == "none":
+		return
+
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var party_ids: Array = []
+	if sanctum_v is Dictionary:
+		var party_v: Variant = (sanctum_v as Dictionary).get("active_party_ids", [])
+		if party_v is Array:
+			party_ids = party_v
+
+	var morale_d := int(result.get("morale_delta", 0))
+	var fear_d   := int(result.get("fear_delta", 0))
+	_apply_vow_emotion_to_party(party_ids, morale_d, fear_d, "vow.engage." + status, cfg, t)
+
+	var should_break := bool(result.get("should_auto_break", false))
+	logger.info(t, "vow.engage." + status, "Vow engage condition evaluated", {
+		"vow_id":     str(av.get("vow_id", "")),
+		"status":     status,
+		"revealed":   sit_was_revealed,
+		"auto_break": should_break,
+	})
+	flow_ctx.save_request = true
+
+	if should_break:
+		var summary := VowService.break_vow(cfg, flow_ctx.save_data, flow_ctx, econ, logger, t)
+		if not summary.is_empty():
+			_apply_vow_break_aftermath(summary, cfg, t)
+
+
+# VOW-001: Apply post-stage completion vow benefit (obi_nnim_kyere full-scout bonus).
+func _apply_vow_stage_complete_benefit(t: int) -> void:
+	var av := VowService.get_active_vow(flow_ctx.save_data)
+	if av.is_empty():
+		return
+
+	var cfg := config_service.get_balance()
+
+	# Gather current stage situations for the full-scout check.
+	var situations: Array = []
+	if not flow_ctx.stage_id.is_empty():
+		var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
+		if not stage.is_empty():
+			var map_v: Variant = stage.get("explore_map", {})
+			if map_v is Dictionary:
+				var sits_v: Variant = (map_v as Dictionary).get("situations", [])
+				if sits_v is Array:
+					situations = sits_v
+
+	var result := VowService.evaluate_stage_complete_benefit(flow_ctx.save_data, situations, cfg)
+	var morale_d := int(result.get("morale_delta", 0))
+	if morale_d == 0:
+		return
+
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var party_ids: Array = []
+	if sanctum_v is Dictionary:
+		var party_v: Variant = (sanctum_v as Dictionary).get("active_party_ids", [])
+		if party_v is Array:
+			party_ids = party_v
+
+	_apply_vow_emotion_to_party(party_ids, morale_d, 0, "vow.stage_complete.benefit", cfg, t)
+	logger.info(t, "vow.stage_complete.benefit", "Vow full-scout bonus applied", {
+		"vow_id":      str(av.get("vow_id", "")),
+		"morale_delta": morale_d,
+	})
+	flow_ctx.save_request = true
+
+
+# VOW-001: Shared helper — applies morale/fear deltas to party echoes via EmotionService.
+func _apply_vow_emotion_to_party(
+	party_ids: Array,
+	morale_d:  int,
+	fear_d:    int,
+	cause:     String,
+	cfg:       Dictionary,
+	t:         int
+) -> void:
+	if morale_d == 0 and fear_d == 0:
+		return
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if not (sanctum_v is Dictionary):
+		return
+	var roster_v: Variant = (sanctum_v as Dictionary).get("roster", [])
+	if not (roster_v is Array):
+		return
+	var fear_threshold := int(cfg.get("data", {}).get("emotion", {}).get("fear_threshold", 80))
+	for echo_v in (roster_v as Array):
+		if not (echo_v is Dictionary):
+			continue
+		var echo: Dictionary = echo_v
+		if not party_ids.has(str(echo.get("id", ""))):
+			continue
+		if morale_d != 0:
+			EmotionService.apply_morale_delta(echo, morale_d, cause, logger, t)
+		if fear_d != 0:
+			EmotionService.apply_fear_delta(echo, fear_d, cause, fear_threshold, logger, t)
+
+
+# VOW-001: Apply EmotionRecoveryService.set_modifier on vow break (shared between manual and auto-break).
+func _apply_vow_break_aftermath(summary: Dictionary, cfg: Dictionary, t: int) -> void:
+	# Also apply immediate morale/fear to roster (same as _handle_vow_break manual path).
+	var morale_d := int(summary.get("morale_delta", 0))
+	var fear_d   := int(summary.get("fear_delta", 0))
+	var recovery_cfg_v: Variant = cfg.get("data", {})
+	var recovery_cfg: Dictionary = {}
+	if recovery_cfg_v is Dictionary:
+		var em_v: Variant = (recovery_cfg_v as Dictionary).get("emotion", {})
+		if em_v is Dictionary:
+			var rec_v: Variant = (em_v as Dictionary).get("recovery", {})
+			if rec_v is Dictionary:
+				recovery_cfg = rec_v
+
+	var vow_morale_mul := float(recovery_cfg.get("modifier_vow_break_morale_mul", 0.5))
+	var vow_fear_mul   := float(recovery_cfg.get("modifier_vow_break_fear_mul", 0.5))
+	var mod_ticks      := int(recovery_cfg.get("modifier_ticks_duration", 120))
+	var fear_threshold := int(cfg.get("data", {}).get("emotion", {}).get("fear_threshold", 80))
+
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if not (sanctum_v is Dictionary):
+		return
+	var roster_v: Variant = (sanctum_v as Dictionary).get("roster", [])
+	if not (roster_v is Array):
+		return
+
+	for echo_v in (roster_v as Array):
+		if not (echo_v is Dictionary):
+			continue
+		var echo: Dictionary = echo_v
+		if morale_d != 0:
+			EmotionService.apply_morale_delta(echo, morale_d, "vow.break", logger, t)
+		if fear_d != 0:
+			EmotionService.apply_fear_delta(echo, fear_d, "vow.break", fear_threshold, logger, t)
+		EmotionRecoveryService.set_modifier(echo, vow_morale_mul, vow_fear_mul, mod_ticks, logger, t)
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -3185,6 +3458,13 @@ func _handle_stage_engage_situation(action: Dictionary, t: int) -> void:
 	var sits_v: Variant = explore_map.get("situations", [])
 	var situations: Array = sits_v if sits_v is Array else []
 
+	# VOW-001: capture revealed state before engagement mutation so obi_nnim_kyere can check it.
+	var _sit_was_revealed := false
+	for _sv_peek in situations:
+		if _sv_peek is Dictionary and str((_sv_peek as Dictionary).get("id", "")) == sit_id:
+			_sit_was_revealed = bool((_sv_peek as Dictionary).get("revealed", false))
+			break
+
 	# Find and mutate the situation
 	var sit: Dictionary = {}
 	for i in range(situations.size()):
@@ -3220,6 +3500,9 @@ func _handle_stage_engage_situation(action: Dictionary, t: int) -> void:
 	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
 	flow_ctx.save_request = true
 	flow_ctx.save_request_reason = "stage.engage_situation"
+
+	# VOW-001: evaluate engage condition (obi_nnim_kyere revealed check).
+	_apply_vow_engage_condition(_sit_was_revealed, t)
 
 	logger.info(t, "stage.engage_situation", "Party engaged situation", {
 		"stage_id":      flow_ctx.stage_id,

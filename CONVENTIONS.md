@@ -304,21 +304,32 @@ Pure-static `RefCounted`. VOW-001 vow doctrine system.
 - `unlock_vow(vow_id, discovered_realm, save_data, ctx, logger, t) -> bool` — marks vow as discovered in `sanctum.vows[vow_id]` at tier 1. Idempotent.
 - `pledge_vow(vow_id, tier, cfg, save_data, ctx, logger, t) -> bool` — sets `sanctum.active_vow`. Fails if vow already active or vow not unlocked. Records `pledged_at_realm` (empty string if pledged from Sanctum) and `runs_at_pledge` (total run_count across all realms at pledge time).
 - `break_vow(cfg, save_data, ctx, econ, logger, t) -> Dictionary` — clears `sanctum.active_vow`. Returns `{ morale_delta, fear_delta, ase_cost }` for caller to apply. Returns `{}` if no active vow.
-- `release_vow_if_due(save_data, ctx, logger, t) -> bool` — called on every `flow.sanctum` enter. Checks if vow release condition is met; if so clears `active_vow` and returns `true`. Release condition: if `pledged_at_realm` is non-empty → that realm is no longer active; if empty → total `run_count` across all realms > `runs_at_pledge`.
+- `release_vow(save_data, ctx, logger, t) -> void` — clears `active_vow` with no penalty. Used by natural release path.
+- `release_vow_if_due(save_data, ctx, logger, t) -> bool` — called on every `flow.sanctum` enter. Checks if vow release condition is met; if so calls `release_vow()` and returns `true`. Release condition: if `pledged_at_realm` is non-empty → that realm is no longer `"active"`; if empty → total `run_count` across all realms > `runs_at_pledge`.
+- `evaluate_stage_condition(save_data, party_echo_ids, cfg) -> Dictionary` — called at stage entry. Returns `{ status, morale_delta, fear_delta, should_auto_break }`. `status` is `"compliant"`, `"violated"`, or `"none"` (no active vow). Mutates `active_vow.consecutive_small_deployments` / `consecutive_same_calling_deployments` in save_data. Supports `tikoro_nko_agyina` and `praye_wokabomu`.
+- `evaluate_engage_condition(save_data, situation, stage_id, cfg) -> Dictionary` — called at situation engagement (before `revealed` is set). Returns `{ status, morale_delta, fear_delta, should_auto_break }`. Tracks `consecutive_blind_engagements` in `active_vow`; resets on new `stage_id` via `blind_stage_id`. Supports `obi_nnim_kyere`.
+- `evaluate_stage_complete_benefit(save_data, situations, cfg) -> Dictionary` — called at stage completion. Returns `{ morale_delta, fear_delta }`. Grants bonus morale if all situations were revealed before engagement (`obi_nnim_kyere`).
 - `get_vow_snapshot_data(save_data, cfg) -> Dictionary` — returns `{ can_pledge, active_vow, available_vows[] }` for snapshot injection.
 
 **Save fields** (inside `save_data["sanctum"]`):
 - `vows: {}` — Dict keyed by vow_id → `{ tier: int, discovered_realm: String }`. One entry per unlocked vow.
-- `active_vow: {}` — `{ vow_id, tier, pledged_at_realm, runs_at_pledge }` or `{}` when no active vow.
+- `active_vow: {}` — `{ vow_id, tier, pledged_at_realm, runs_at_pledge }` + runtime tracking fields `consecutive_small_deployments`, `consecutive_same_calling_deployments`, `consecutive_blind_engagements`, `blind_stage_id`. All tracking fields default to `0`/`""` via `.get(..., 0)` — no new top-level save keys needed.
 
-**Balance fields** (inside `data.sanctum.vows[vow_id]`):
-- `vow_name`, `proverb_twi`, `proverb_en`, `description`, `benefit_label`, `tradeoff_label`, `breaking_cost_hint`, `unlock_description`
-- `break_cost_ase`, `break_morale_delta`, `break_fear_delta`
+**Balance fields** (inside `data.vows.definitions[vow_id]`):
+- `vow_name`, `proverb_twi`, `proverb_en`, `description`, `benefit_label`, `tradeoff_label`, `breaking_cost_hint`, `unlock_description`, `unlock_scenario`
+- `benefit`, `tradeoff` — Dicts with vow-specific condition thresholds and deltas
+- `tier_effects` — Dict keyed by tier string → `{ multiplier: float }` (scales deltas)
+- `breaking_costs` — Dict keyed by tier string → `{ ase, morale_delta, fear_delta, bond_score_delta, ekwan }`
+
+**Vow definitions (V2-VOW-001):**
+- `tikoro_nko_agyina` — "One head does not constitute a council". Stage-entry check: party ≥ 3 → morale bonus; party < 3 → fear penalty. Auto-break on second consecutive small deployment. Unlock: `small_party_all_survived`.
+- `praye_wokabomu` — "When you remove one broomstick it breaks, but together they do not break". Stage-entry check: 2+ distinct `calling_origin` values → morale bonus; all same calling → fear penalty. Unlock: `full_roster_diversity`.
+- `obi_nnim_kyere` — "If someone does not know, someone teaches". Engage check: revealed situation → morale bonus, blind → fear penalty. Stage-complete bonus if all situations scouted. Auto-break on second consecutive blind engagement in same stage. Unlock: `all_situations_scouted`.
 
 **Release timing:**
 - Pledged during a realm: released when that realm's status is no longer `"active"` (i.e. completed or abandoned).
 - Pledged from Sanctum (no active realm): released when total `run_count` across all realms increases past `runs_at_pledge`.
-- Early break: always available via `cta.break` — applies full penalty.
+- Early break: always available via `cta.break` — applies full penalty + EmotionRecoveryService.set_modifier on all roster echoes.
 
 ### ThreadService (`core/progression/ThreadService.gd`)
 Pure-static `RefCounted`. V2-WEAVE-001 Thread crystallization and per-stage recovery utilities.
