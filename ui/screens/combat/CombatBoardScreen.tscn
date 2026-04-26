@@ -4,8 +4,8 @@
 [ext_resource type="Texture2D" uid="uid://bitpbc4p75ue7" path="res://assets/sanctum/tiles/floor/sanctum_tile_floor_clay_base_128x96.png" id="2_tile"]
 [ext_resource type="Script" uid="uid://4pvmnr0qinn4" path="res://ui/screens/combat/CombatTokenLayer.gd" id="3_token_layer"]
 [ext_resource type="Script" uid="uid://dl4ku77tgom45" path="res://ui/screens/combat/CombatDistanceLayer.gd" id="4_distance_layer"]
-[ext_resource type="Script" path="res://ui/screens/combat/CombatMoveTelegraphLayer.gd" id="5_move_telegraph"]
-[ext_resource type="Script" path="res://ui/screens/combat/CombatTokenVisualConfig.gd" id="6_visual_config"]
+[ext_resource type="Script" uid="uid://bwbb53y8827ra" path="res://ui/screens/combat/CombatMoveTelegraphLayer.gd" id="5_move_telegraph"]
+[ext_resource type="Script" uid="uid://cb8j2g1nyt3or" path="res://ui/screens/combat/CombatTokenVisualConfig.gd" id="6_visual_config"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_board"]
 texture = ExtResource("2_tile")
@@ -21,8 +21,13 @@ texture_region_size = Vector2i(128, 96)
 
 [sub_resource type="TileSet" id="TileSet_board"]
 tile_shape = 1
+tile_layout = 4
+tile_offset_axis = 1
 tile_size = Vector2i(128, 64)
 sources/0 = SubResource("TileSetAtlasSource_board")
+
+[sub_resource type="Resource" id="Resource_combat_visual_config"]
+script = ExtResource("6_visual_config")
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_initiative"]
 content_margin_left = 8.0
@@ -47,11 +52,6 @@ corner_radius_top_right = 6
 corner_radius_bottom_right = 6
 corner_radius_bottom_left = 6
 
-[sub_resource type="Resource" id="Resource_combat_visual_config"]
-script = ExtResource("6_visual_config")
-move_duration = 0.18
-telegraph_lead_time = 0.1
-
 [node name="CombatBoardScreen" type="Control" unique_id=1420352690]
 layout_mode = 3
 anchors_preset = 15
@@ -65,7 +65,7 @@ script = ExtResource("1_script")
 y_sort_enabled = true
 tile_set = SubResource("TileSet_board")
 
-[node name="MoveTelegraphLayer" type="Node2D" parent="."]
+[node name="MoveTelegraphLayer" type="Node2D" parent="." unique_id=502557425]
 script = ExtResource("5_move_telegraph")
 visual_config = SubResource("Resource_combat_visual_config")
 
