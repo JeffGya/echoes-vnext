@@ -91,9 +91,10 @@ static func apply_recovery_from_elapsed(
 				rm["morale_multiplier"] = 1.0
 				rm["fear_multiplier"]   = 1.0
 				rm["ticks_remaining"]   = 0
-				logger.info(t, "emotion.recovery.modifier.expired", "Recovery modifier expired", {
-					"echo_id": str(echo.get("id", ""))
-				})
+				if logger != null:
+					logger.info(t, "emotion.recovery.modifier.expired", "Recovery modifier expired", {
+						"echo_id": str(echo.get("id", ""))
+					})
 
 		if morale_applied != 0 or fear_applied != 0:
 			results.append({
@@ -121,12 +122,13 @@ static func set_modifier(
 	rm["morale_multiplier"] = morale_mul
 	rm["fear_multiplier"]   = fear_mul
 	rm["ticks_remaining"]   = maxi(ticks, 0)
-	logger.info(t, "emotion.recovery.modifier.set", "Recovery modifier set", {
-		"echo_id":           str(echo.get("id", "")),
-		"morale_multiplier": morale_mul,
-		"fear_multiplier":   fear_mul,
-		"ticks_remaining":   ticks,
-	})
+	if logger != null:
+		logger.info(t, "emotion.recovery.modifier.set", "Recovery modifier set", {
+			"echo_id":           str(echo.get("id", "")),
+			"morale_multiplier": morale_mul,
+			"fear_multiplier":   fear_mul,
+			"ticks_remaining":   ticks,
+		})
 
 
 # Two-step decay model (mirrors Ase offline accrual):
