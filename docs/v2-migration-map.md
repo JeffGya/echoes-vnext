@@ -475,6 +475,7 @@ These systems are already done and their save seams are live:
 | V2-WEAVE-002 | Foundation Weaving Rite loop | per-echo `woven_threads: []`, per-echo `weave_memory_marks: []` |
 | V2-EMOTION-001 | Fear & Morale Readability | Shipped dual `morale_tier` + `fear_signal` display. Unified to single `emotional_status` in V2-EMOTION-002. |
 | V2-EMOTION-002 | Unified Emotional Status | Replaced dual display with 8-tier `emotional_status` (radiant → hollow). `get_fear_signal()` removed. `get_emotional_status(morale, fear)` added. EchoParty morale/fear bars removed. All emotion surfaces now use single field. Documented in CONVENTIONS.md with no-dual-display rule. |
+| V2-VOICE-001 ✅ | Real-time bark/voice system | Full voice system: combat bark popups above actor tokens (BarkPopupLayer), reactive barks (forming+ actors respond to high-signal ally barks), bark tier priority display (max 3 originals/round; Tier 1 always shown, Tier 3 dropped first), calling-inflected lines (arch×calling combos), new bark contexts (combat_ko, combat_calling_skill, combat_rally_ally, sanctum arrival/broken/calling_settled/bond_formed, rite accept/reject/defer, vow benefit/penalty, progress.rank_up, resolve victory/defeat). Save key: `_sanctum_bark: { line, context }` on echo save entries. Config: `balance.data.voice`. Spatial sanctum bark popup deferred to V2-SANCTUM-005. 5 new VoiceTests. |
 
 > See CONVENTIONS.md `SocialGraphService` and `VowService` sections for full API contracts.
 

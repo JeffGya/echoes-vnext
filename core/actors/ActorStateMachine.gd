@@ -34,6 +34,7 @@ var _bark_line: String = ""
 var _bark_context: String = ""
 var _bark_tier: String = ""
 var _bark_target_id: String = ""
+var _bark_is_response: bool = false  # V2-VOICE-001: true when this bark is a reaction to an ally's bark
 
 
 ## actor_dict: the actor's full dict (from EchoActor.from_echo or EnemyActor.from_definition).
@@ -119,6 +120,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	_bark_context = ""
 	_bark_tier = ""
 	_bark_target_id = ""
+	_bark_is_response = false  # V2-VOICE-001
 	if _actor.has("emotion"):
 		(_actor["emotion"] as Dictionary).erase("_resilience_fired")
 
@@ -180,16 +182,17 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		_last_action = refuse_intent.duplicate()
 		# V2-PROG-006: bark for refuse
 		var arch_r: String = str(_actor.get("archetype_birth", ""))
+		var vk_r: int = (t + str(_actor.get("id", "")).hash()) % 997
 		_bark_context = "combat_refuse"
 		_bark_tier = _expression_band
 		_bark_line = ShoutBank.get_expression_shout("combat_refuse", arch_r, _expression_band,
-			str(_actor.get("calling_origin", "")))
+			str(_actor.get("calling_origin", "")), vk_r)
 		if _bark_line.is_empty():
 			_bark_line = ShoutBank.get_shout("combat_refuse", arch_r, ShoutBank.get_tier(
 				int(_actor.get("traits", {}).get("courage", 50)),
 				int(_actor.get("traits", {}).get("wisdom",  50)),
 				int(_actor.get("traits", {}).get("faith",   50))
-			))
+			), vk_r)
 		logger.info(t, "actor.refused", "Absolute Fear Rule triggered", {
 			"actor_id": str(_actor.get("id", "")),
 			"fear":     int(_actor.get("fear", 0)),
@@ -241,7 +244,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		"archetype_modifier":     int(intent.get("archetype_modifier", 0)),
 	})
 
-	# PROG-010: emotional event detection + bark selection
+	# PROG-010 / V2-VOICE-001: emotional event detection + bark selection
 	var end_fear: int = int(_actor.get("fear", 0))
 	var end_morale: int = int(_actor.get("morale", 50))
 	var end_morale_tier: String = EmotionService.get_morale_tier(end_morale)
@@ -249,8 +252,18 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	var action_type: String = str(intent.get("action_type", ""))
 	var arch: String = str(_actor.get("archetype_birth", ""))
 	var calling: String = str(_actor.get("calling_origin", ""))
+	# V2-VOICE-001: deterministic variation key — no RNG, same inputs → same line
+	var variation_key: int = (t + str(_actor.get("id", "")).hash()) % 997
 	_select_bark(arch, calling, action_type, start_fear, end_fear, start_morale_tier, end_morale_tier,
-		last_echo_standing, resilience_fired, intent.get("target_id", ""))
+		last_echo_standing, resilience_fired, intent.get("target_id", ""), variation_key)
+	# V2-VOICE-001: check if this actor should react to an ally's high-signal bark
+	_check_reactive_bark(augmented_context, variation_key)
+	# V2-VOICE-001: write bark fields to actor dict so round_bark_events pipeline can read them
+	_actor["_bark_line"]        = _bark_line
+	_actor["_bark_context"]     = _bark_context
+	_actor["_bark_tier"]        = _bark_tier
+	_actor["_bark_target_id"]   = _bark_target_id
+	_actor["_bark_is_response"] = _bark_is_response
 	# PROG-009: Ranger passive — threat-minimising move.
 	# When a Ranger chooses actor.move (or actor.withdraw), redirect target_pos
 	# away from the nearest enemy so they reposition rather than advance.
@@ -354,11 +367,12 @@ func get_snapshot() -> Dictionary:
 		"resilience_traits": (_actor.get("resilience_traits", []) as Array).duplicate(),
 		"leadership_traits": (_actor.get("leadership_traits", []) as Array).duplicate(),
 		"active_leadership": _active_leadership,
-		# PROG-010: bark fields (surfaceable to UI via VOICE-002)
-		"bark_line":      _bark_line,
-		"bark_context":   _bark_context,
-		"bark_tier":      _bark_tier,
-		"bark_target_id": _bark_target_id,
+		# PROG-010 / V2-VOICE-001: bark fields
+		"bark_line":        _bark_line,
+		"bark_context":     _bark_context,
+		"bark_tier":        _bark_tier,
+		"bark_target_id":   _bark_target_id,
+		"bark_is_response": _bark_is_response,
 	}
 
 
@@ -392,7 +406,8 @@ func _select_bark(
 	end_morale_tier: String,
 	last_echo_standing: bool,
 	resilience_fired: bool,
-	target_id: Variant
+	target_id: Variant,
+	variation_key: int = 0
 ) -> void:
 	var context_key := ""
 	var target := str(target_id) if target_id != null else ""
@@ -424,6 +439,10 @@ func _select_bark(
 	elif int(_actor.get("fear", 0)) < 30 \
 			and (end_morale_tier == "steady" or end_morale_tier == "inspired"):
 		context_key = "combat_banter"
+	# Priority 8.5: combat_calling_skill — actor used a calling-specific skill action
+	elif action_type in ["actor.interpose", "actor.hold_ground", "actor.steady_call",
+			"actor.mark", "actor.withdraw", "actor.read_field", "actor.reveal"]:
+		context_key = "combat_calling_skill"
 	# Priority 9: combat_attack
 	elif action_type == "melee_attack":
 		context_key = "combat_attack"
@@ -439,17 +458,17 @@ func _select_bark(
 	_bark_context = context_key
 	_bark_tier = _expression_band
 
-	# Try expression-shout first (emotion × band × archetype × calling)
-	var line := ShoutBank.get_expression_shout(context_key, arch, _expression_band, calling)
-	if line.is_empty() or line == "I'll do my part.":
-		# Fall back to legacy get_shout for existing contexts
+	# Try expression-shout first (emotion × band × archetype × calling); V2-VOICE-001: variation_key
+	var line := ShoutBank.get_expression_shout(context_key, arch, _expression_band, calling, variation_key)
+	if line.is_empty() or line == ShoutBank._FALLBACK:
+		# Fall back to legacy get_shout for tier-based contexts (arrival, combat stubs)
 		var trait_tier := ShoutBank.get_tier(
 			int(_actor.get("traits", {}).get("courage", 50)),
 			int(_actor.get("traits", {}).get("wisdom",  50)),
 			int(_actor.get("traits", {}).get("faith",   50))
 		)
-		var legacy := ShoutBank.get_shout(context_key, arch, trait_tier)
-		if not legacy.is_empty():
+		var legacy := ShoutBank.get_shout(context_key, arch, trait_tier, variation_key)
+		if not legacy.is_empty() and legacy != ShoutBank._FALLBACK:
 			line = legacy
 	_bark_line = line
 
@@ -461,6 +480,84 @@ static func _morale_tier_rank(tier: String) -> int:
 		"steady":   return 2
 		"shaken":   return 1
 	return 0  # broken
+
+
+## V2-VOICE-001: Called by FlowRuntime after CombatService.resolve_action() resolves.
+## Overrides bark with combat_ko when this turn's attack was a kill — unless a Tier 1
+## bark (last_stand / fear_extreme / resilient) is already set for this actor.
+func finalize_combat_bark(is_kill: bool, variation_key: int) -> void:
+	if not is_kill:
+		return
+	# Tier 1 barks are never overridden by ko
+	const _TIER1: Array = ["combat_last_stand", "combat_fear_extreme", "combat_resilient"]
+	if _bark_context in _TIER1:
+		return
+	var arch: String = str(_actor.get("archetype_birth", ""))
+	var calling: String = str(_actor.get("calling_origin", ""))
+	_bark_context = "combat_ko"
+	_bark_tier    = _expression_band
+	var line := ShoutBank.get_expression_shout("combat_ko", arch, _expression_band, calling, variation_key)
+	if line.is_empty() or line == ShoutBank._FALLBACK:
+		line = ShoutBank.get_shout("combat_ko", arch, ShoutBank.get_tier(
+			int(_actor.get("traits", {}).get("courage", 50)),
+			int(_actor.get("traits", {}).get("wisdom",  50)),
+			int(_actor.get("traits", {}).get("faith",   50))
+		), variation_key)
+	_bark_line = line
+	# Mirror back to actor dict so FlowRuntime sees the updated bark
+	_actor["_bark_line"]    = _bark_line
+	_actor["_bark_context"] = _bark_context
+	_actor["_bark_tier"]    = _bark_tier
+
+
+## V2-VOICE-001: Check if this actor should respond to a high-signal bark from a same-faction ally.
+## Only fires for forming+ expression bands. Does NOT override Tier 1 own barks.
+## Sets _bark_is_response = true and uses combat_rally_ally context when triggered.
+func _check_reactive_bark(context: Dictionary, variation_key: int) -> void:
+	# Nascent actors don't react
+	if _expression_band == "nascent":
+		return
+	# Tier 1 own barks are never overridden
+	const _TIER1_R: Array = ["combat_last_stand", "combat_fear_extreme", "combat_resilient", "combat_ko"]
+	if _bark_context in _TIER1_R:
+		return
+	var round_bark_events: Array = context.get("round_bark_events", [])
+	if round_bark_events.is_empty():
+		return
+	var voice_cfg: Dictionary = context.get("cfg", {}).get("data", {}).get("voice", {})
+	var reactive_range: int   = int(voice_cfg.get("reactive_range", 4))
+	var high_signal: Array    = voice_cfg.get("reactive_high_signal_contexts", [
+		"combat_last_stand", "combat_fear_extreme", "combat_resilient", "combat_taunt", "combat_ko"
+	])
+	var my_faction: String    = str(_actor.get("faction", ""))
+	var my_pos: Dictionary    = _actor.get("grid_pos", {})
+	for event_v in round_bark_events:
+		if not (event_v is Dictionary):
+			continue
+		var event := event_v as Dictionary
+		if not (str(event.get("bark_context", "")) in high_signal):
+			continue
+		if str(event.get("faction", "")) != my_faction:
+			continue
+		var their_pos_v: Variant = event.get("grid_pos")
+		if not (their_pos_v is Dictionary):
+			continue
+		var their_pos := their_pos_v as Dictionary
+		var dc: int = absi(int(my_pos.get("col", 0)) - int(their_pos.get("col", 0)))
+		var dr: int = absi(int(my_pos.get("row", 0)) - int(their_pos.get("row", 0)))
+		if maxi(dc, dr) > reactive_range:
+			continue
+		# Qualifying event — fire rally_ally reaction
+		var arch: String    = str(_actor.get("archetype_birth", ""))
+		var calling: String = str(_actor.get("calling_origin", ""))
+		var line := ShoutBank.get_expression_shout("combat_rally_ally", arch, _expression_band, calling, variation_key)
+		if not line.is_empty() and line != ShoutBank._FALLBACK:
+			_bark_context     = "combat_rally_ally"
+			_bark_tier        = _expression_band
+			_bark_line        = line
+			_bark_target_id   = str(event.get("actor_id", ""))
+			_bark_is_response = true
+		break  # React to first qualifying event only
 
 
 # Activates the first applicable leadership trait and applies radius effects.

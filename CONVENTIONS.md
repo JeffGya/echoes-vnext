@@ -446,8 +446,8 @@ Full field shapes live in each FlowState file (`core/state/flow/states/`).
 
 **Projected actor shape** (FlowEncounterState._project_actor): `id, name, hp, max_hp, status` (dead/guarding/refusing/alive), `calling_origin`, `morale_status` (Normal/Shaken/Afraid/Broken from fear)
 
-**Extended actor snapshot fields** (ActorStateMachine.get_snapshot() — PROG-010):
-`smartness_tier` (novice/adept/veteran/elite), `resilience_traits: Array`, `leadership_traits: Array`, `active_leadership: String` (trait fired this turn), `bark_line: String`, `bark_context: String`, `bark_tier: String`, `bark_target_id: String`
+**Extended actor snapshot fields** (ActorStateMachine.get_snapshot() — PROG-010 + V2-VOICE-001):
+`smartness_tier` (novice/adept/veteran/elite), `resilience_traits: Array`, `leadership_traits: Array`, `active_leadership: String` (trait fired this turn), `bark_line: String`, `bark_context: String`, `bark_tier: String`, `bark_target_id: String`, `bark_is_response: bool` (true = reactive/reply bark)
 
 ---
 
@@ -578,7 +578,15 @@ Echo traits (resilience + leadership) use a **separate derived RNG** at path `<s
 - `static build_snapshot()` pattern for mid-state snapshot updates
 - `MaturityExpressionService` is the single lookup point for expression_band (Standing-based) + calling_behavior config. Expression bands: nascent (S1), forming (S2), grounded (S3), whole (S4–5). `presence_strength`: 0.1 / 0.25 / 0.5 / 1.0. All downstream systems (BehaviorArbiter, EmotionService, ShoutBank) read `expression_band` from actor context — never `smartness_tier`. Config lives under `balance.data.maturity_expression`. (V2-PROG-006)
 - Echo traits (`resilience_traits` + `leadership_traits`) seeded at EchoFactory via derived RNG `.echo_traits.v1` — immutable, separate from v1/v2 draw sequence. Never reorder v1/v2.
-- Bark system (PROG-010): snapshot fields + ShoutBank expansion only. Reactive responses deferred to VOICE-001. Bark display deferred to VOICE-002.
+- **Voice system (V2-VOICE-001):** Real-time bark display + reactive barks + priority display. Full contracts below.
+  - **Actor dict bark fields** (written by `ActorStateMachine.advance_turn()` + `finalize_combat_bark()`; reset at turn start): `_bark_line: String`, `_bark_context: String`, `_bark_tier: String` (1/2/3), `_bark_target_id: String`, `_bark_is_response: bool`.
+  - **`round_bark_events: Array`** on `EncounterContext` — reset at round start; each entry `{ actor_id, faction, bark_context, grid_pos }`. Appended to by `FlowRuntime._resolve_next_actor()` for high-signal barks (`combat_last_stand`, `combat_fear_extreme`, `combat_resilient`, `combat_taunt`, `combat_ko`). Passed to every actor's `advance_turn()` ctx so forming+ band actors can react.
+  - **`_sanctum_bark: Dictionary`** on echo save-data entries — shape: `{ "line": String, "context": String }`. Written by `FlowRuntime._select_sanctum_bark_for_*()` helpers. Read by `FlowSanctumState` (→ `roster_preview[i].sanctum_bark`), `FlowEncounterState.build_final_snapshot()` (→ actor `arrival_bark`), and `SanctumScreen` (text quote below emotional_status). Spatial popup above echo tokens deferred to V2-SANCTUM-005.
+  - **`data.voice` config** (balance.json): `reactive_range` (4), `reactive_high_signal_contexts[]`, `reactive_min_expression_band` ("forming"), `reactions_exceed_cap` (true), `max_reactions_per_original` (1), `max_barks_per_round` (3), `bark_tiers` (1/2/3 keyed → context arrays), `sanctum_max_barkers` (2).
+  - **Bark tier system** — Tier 1 (critical: always show), Tier 2 (emotional: max 2/round), Tier 3 (situational: max 1/round, dropped first); `combat_rally_ally` reaction barks bypass cap entirely. Per-round cap = `max_barks_per_round` originals; reactions are interleaved after their trigger (up to 1 per original shown).
+  - **New bark contexts** — `combat_ko` (killing blow), `combat_calling_skill` (calling ability used), `combat_rally_ally` (reactive response), `sanctum.arrival_victory`, `sanctum.arrival_defeat`, `sanctum.broken`, `sanctum.calling_settled`, `sanctum.bond_formed`, `sanctum.idle` (stub only), `rite.thread_accept`, `rite.thread_reject`, `rite.thread_defer`, `vow.benefit`, `vow.penalty`, `progress.rank_up`, `resolve.victory`, `resolve.defeat`.
+  - **ShoutBank variation** — `get_expression_shout(ctx, arch, band, calling, variation_key: int = 0)`. Array data entries → `variation_key % size()`. Deterministic selection; no RNG. `variation_key = (t + str(actor_id).hash()) % 997`. All contexts have ≥3 lines per arch/band combo. Arch×calling combos in `data/bark/combat_callings.json`.
+  - **`finalize_combat_bark(is_kill, variation_key)`** — separate method on `ActorStateMachine`, called by `FlowRuntime` AFTER `CombatService.resolve_action()` returns (kill only known post-resolution). Promotes bark to `combat_ko` context if `is_kill=true`.
 - `StageModel` + `ObjectiveModel` are immutable data contracts after REALM-002. Adding new objective types = add a constant + TYPE_DESCRIPTIONS entry in `ObjectiveModel.gd` only. Generator pre-boss pool (`_PRE_BOSS_POOL` in `RealmGenerator.gd`) must never be reordered (determinism). Append new types at the end only.
 - `objective_params: {}` on ObjectiveModel is the extension point for post-MVP stage content (roaming intel map, escort targets, etc.). Not in REQUIRED_FIELDS — always read via `.get("params", {})`.
 - Stage IDs use format `"stage.%d"` (zero-based index), e.g. `"stage.0"`, `"stage.1"`. Set on `flow_ctx.stage_id` by `flow.select_stage` action handler in FlowRuntime.
@@ -653,6 +661,6 @@ After `advance_turn`, party is at situation but does not engage automatically. `
 ### Deferred
 - Full art: StageScreen, StageMapScreen (scaffolds built; deferred to UI-006+)
 - HP progress bar in RealmShell EchoBar (text label is current; bar deferred to UX pass)
-- Voice reactive system: VOICE-001 (reactive bark responses — other actors respond to barks, deferred). Bark display: VOICE-002 (deferred). Bark snapshot fields + ShoutBank expansion: DONE (PROG-010).
+- Sanctum bark spatial popup above echo tokens: deferred to V2-SANCTUM-005 (Phase D Alive Layer). Data pipeline (`_sanctum_bark` dict on echo save entries + `roster_preview.sanctum_bark`) is fully built by V2-VOICE-001. Text display in SanctumScreen roster cards ships in VOICE-001. Spatial positioning requires per-echo node identity which doesn't exist until SANCTUM-005.
 - Multiple save slots (one slot is the current contract)
 - Sanctuary upgrades affecting trait rolls (`generation_context` reserved for future modifiers)

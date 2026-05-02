@@ -109,6 +109,17 @@ func _render() -> void:
 		lbl2.text = "%s — [%s]" % [p_nm, p_es.capitalize()] if p_es != "" else p_nm
 		lbl2.theme_type_variation = &"ContentBasePanel"
 		_house_state_list.add_child(lbl2)
+		# V2-VOICE-001: show sanctum bark below emotional_status if present.
+		var bark_v: Variant = p.get("sanctum_bark", {})
+		if bark_v is Dictionary:
+			var bark_line := str((bark_v as Dictionary).get("line", ""))
+			if not bark_line.is_empty():
+				var bark_lbl := Label.new()
+				bark_lbl.text = "\"%s\"" % bark_line
+				bark_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6, 1.0))
+				bark_lbl.add_theme_font_size_override("font_size", 12)
+				bark_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+				_house_state_list.add_child(bark_lbl)
 
 	# Ase animate on change
 	if _last_ase_balance != -1 and ase_balance != _last_ase_balance:

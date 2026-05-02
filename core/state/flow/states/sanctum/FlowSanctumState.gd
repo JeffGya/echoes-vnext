@@ -95,6 +95,8 @@ func enter(ctx: RefCounted, t:int) -> void:
 				),
 				"last_drift_event":  _last_drift_v if _last_drift_v is Dictionary else {},
 			},
+			# V2-VOICE-001: sanctum bark for this echo (written by FlowRuntime bark helpers).
+			"sanctum_bark": echo.get("_sanctum_bark", {}),
 		})
 	
 	# VOW-001: read active vow for mantra display

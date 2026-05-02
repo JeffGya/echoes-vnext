@@ -1054,6 +1054,7 @@ func _handle_combat_confirm_round(t: int) -> void:
 			actor_v["guard_state"] = false
 	ectx.last_round_results = []
 	ectx.last_actor_action  = {}
+	ectx.round_bark_events  = []  # V2-VOICE-001: reset reactive bark queue each round
 
 	# 3. Advance round counter, reset actor pointer, mark round active.
 	combat_state["round_counter"]        = prev_round + 1
@@ -1146,12 +1147,27 @@ func _resolve_next_actor(t: int) -> void:
 		"bonds":                   _bonds_for_ctx,
 		"bond_thresholds":         _get_bond_thresholds_cfg(),
 		"bond_behavior_cfg":       _get_bond_behavior_cfg(),
+		# V2-VOICE-001: reactive bark queue — read-only; actors read this to fire rally_ally barks.
+		"round_bark_events":       ectx.round_bark_events,
 	}
 
 	# Resolve this actor's turn.
 	var asm := ActorStateMachine.new(actor, null, actor_cfg)
 	var intent: Dictionary = asm.advance_turn(ctx, logger, t)
 	var action_type: String = intent.get("action_type", "actor.idle")
+
+	# V2-VOICE-001: after advance_turn, if actor produced a high-signal bark, append to round queue.
+	# Reactive barks in subsequent actors' turns read this queue via ctx["round_bark_events"].
+	var _bark_ctx_post: String = str(actor.get("_bark_context", ""))
+	if not _bark_ctx_post.is_empty() and _bark_ctx_post in [
+		"combat_last_stand", "combat_fear_extreme", "combat_resilient", "combat_taunt", "combat_ko"
+	]:
+		ectx.round_bark_events.append({
+			"actor_id":    str(actor.get("id", "")),
+			"faction":     str(actor.get("faction", "")),
+			"bark_context": _bark_ctx_post,
+			"grid_pos":    actor.get("grid_pos", {}),
+		})
 
 	logger.debug(t, "combat.actor_turn", "%s → %s" % [actor.get("name", "?"), action_type], {
 		"round":       round,
@@ -1210,6 +1226,17 @@ func _resolve_next_actor(t: int) -> void:
 								"morale_delta": morale_ripple,
 								"fear_delta":   -fear_ripple,
 							})
+					# V2-VOICE-001: kill is now confirmed — upgrade bark to combat_ko if eligible.
+					var _ko_vk: int = (t + str(actor.get("id", "")).hash()) % 997
+					asm.finalize_combat_bark(result.get("is_kill", false), _ko_vk)
+					# If finalize promoted bark to combat_ko, add it to round_bark_events.
+					if str(actor.get("_bark_context", "")) == "combat_ko":
+						ectx.round_bark_events.append({
+							"actor_id":     str(actor.get("id", "")),
+							"faction":      str(actor.get("faction", "")),
+							"bark_context": "combat_ko",
+							"grid_pos":     actor.get("grid_pos", {}),
+						})
 			else:
 				# Target was dead or missing when this actor's turn resolved — log and skip.
 				logger.info(t, "combat.attack_invalid_target",
@@ -1462,6 +1489,10 @@ func _end_round(t: int) -> void:
 
 	# COMBAT-007: build the appropriate snapshot and persist it in-memory on ectx.
 	if bool(combat_state.get("combat_over", false)):
+		# V2-VOICE-001: write arrival barks to ≤2 party echo save entries BEFORE final snapshot
+		# so build_final_snapshot() can read them via echo["_sanctum_bark"].
+		var _arr_victory: bool = bool(ectx.combat_result.get("victory", false))
+		_select_arrival_barks_for_party(_arr_victory, t)
 		# FinalCombatSnapshot — emits type "flow.resolve"; stored on ectx.final_snapshot.
 		var final_snap: Dictionary = FlowEncounterState.build_final_snapshot(flow_ctx, t)
 		ectx.final_snapshot    = final_snap
@@ -2135,6 +2166,14 @@ func _handle_weave_begin_rite(t: int) -> void:
 	if not non_chosen.is_empty():
 		_apply_weave_non_chosen_consequences(non_chosen, echo_id, t)
 
+	# V2-VOICE-001: select rite bark for chosen echo.
+	var _rite_ctx_key := "rite.thread_" + outcome
+	var _rite_arch := str(echo_ref.get("archetype_birth", "loyal"))
+	var _rite_calling := str(echo_ref.get("calling_origin", ""))
+	var _rite_band := _get_expression_band_for_echo(echo_ref)
+	var _rite_vk: int = (t + str(echo_id).hash()) % 997
+	var _rite_line := ShoutBank.get_expression_shout(_rite_ctx_key, _rite_arch, _rite_band, _rite_calling, _rite_vk)
+
 	flow_ctx.weave_resolution = {
 		"outcome": outcome,
 		"thread_id": thread_id,
@@ -2144,6 +2183,8 @@ func _handle_weave_begin_rite(t: int) -> void:
 		"echo_name": str(echo_ref.get("name", "")),
 		"non_chosen": non_chosen,
 		"aftermath_lines": _build_weave_aftermath_lines(outcome, echo_ref, thread, non_chosen),
+		# V2-VOICE-001: rite bark line for WeavingRiteScreen outcome display.
+		"echo_bark": { "line": _rite_line, "context": _rite_ctx_key },
 	}
 
 	flow_ctx.save_request = true
@@ -2345,6 +2386,10 @@ func _apply_combat_bond_triggers(t: int, outcome: String) -> void:
 	var bonds_v: Variant = sanctum.get("bonds", [])
 	var bonds: Array = bonds_v if bonds_v is Array else []
 
+	# V2-VOICE-001: snapshot pre-combat friend pairs (before any deltas are applied).
+	# Used at end of function to detect newly-formed bonds.
+	var _pre_friend_pair_keys: Dictionary = {}  # "id_a|id_b" → true
+
 	var is_victory := outcome == "win"
 
 	# Collect echo actors + classify KO'd vs surviving
@@ -2366,6 +2411,19 @@ func _apply_combat_bond_triggers(t: int, outcome: String) -> void:
 
 	# Near-wipe: victory AND at least one echo KO'd (party survived but took losses)
 	var near_wipe := is_victory and not ko_echo_ids.is_empty()
+
+	# V2-VOICE-001: snapshot pre-combat friend pairs (before any bond deltas are applied).
+	# Bonds array is mutated in place by apply_score_delta, so we must capture this BEFORE the loop.
+	for _pre_i in range(echo_actors.size()):
+		for _pre_j in range(_pre_i + 1, echo_actors.size()):
+			var _pre_a_id := str((echo_actors[_pre_i] as Dictionary).get("id", ""))
+			var _pre_b_id := str((echo_actors[_pre_j] as Dictionary).get("id", ""))
+			var _pre_edge := SocialGraphService.get_edge(bonds, _pre_a_id, _pre_b_id)
+			if not _pre_edge.is_empty():
+				var _pre_str := int(_pre_edge.get("strength", 0))
+				if SocialGraphService.get_bond_type(_pre_str, thresholds) == "friend":
+					var _pair_key: String = _pre_a_id + "|" + _pre_b_id if _pre_a_id < _pre_b_id else _pre_b_id + "|" + _pre_a_id
+					_pre_friend_pair_keys[_pair_key] = true
 
 	# Iterate all canonical pairs of echo actors
 	for i in range(echo_actors.size()):
@@ -2432,6 +2490,25 @@ func _apply_combat_bond_triggers(t: int, outcome: String) -> void:
 				var nw_delta := int(bond_cfg.get("near_wipe_survival_together", 10))
 				bonds = SocialGraphService.apply_score_delta(bonds, a_id, b_id, nw_delta, thresholds, logger, t)
 
+	# V2-VOICE-001: detect newly-formed friend bonds (crossed threshold this combat).
+	# Compare post-combat friend pairs against the pre-combat snapshot captured above.
+	var _new_friend_pairs: Array = []
+	for _i in range(echo_actors.size()):
+		for _j in range(_i + 1, echo_actors.size()):
+			var _fa: Dictionary = echo_actors[_i]
+			var _fb: Dictionary = echo_actors[_j]
+			var _fa_id := str(_fa.get("id", ""))
+			var _fb_id := str(_fb.get("id", ""))
+			var _edge := SocialGraphService.get_edge(bonds, _fa_id, _fb_id)
+			if _edge.is_empty():
+				continue
+			var _str_now := int(_edge.get("strength", 0))
+			var _bond_now := SocialGraphService.get_bond_type(_str_now, thresholds)
+			if _bond_now == "friend":
+				var _pair_key: String = _fa_id + "|" + _fb_id if _fa_id < _fb_id else _fb_id + "|" + _fa_id
+				if not _pre_friend_pair_keys.has(_pair_key):
+					_new_friend_pairs.append([_fa, _fb])
+
 	sanctum["bonds"] = bonds
 	flow_ctx.save_data["sanctum"] = sanctum
 	flow_ctx.save_request = true
@@ -2446,6 +2523,24 @@ func _apply_combat_bond_triggers(t: int, outcome: String) -> void:
 		"ko_count":          ko_echo_ids.size(),
 		"near_wipe":         near_wipe,
 	})
+
+	# V2-VOICE-001: write bond_formed barks for newly-formed friend pairs.
+	var _roster_v2: Variant = (flow_ctx.save_data.get("sanctum", {}) as Dictionary).get("roster", [])
+	var _roster_arr: Array = _roster_v2 if _roster_v2 is Array else []
+	for _pair_v in _new_friend_pairs:
+		var _pair: Array = _pair_v
+		if _pair.size() < 2:
+			continue
+		_select_sanctum_bark_for_actor_and_write(_pair[0], "sanctum.bond_formed", t, _roster_arr)
+		_select_sanctum_bark_for_actor_and_write(_pair[1], "sanctum.bond_formed", t, _roster_arr)
+		logger.debug(t, "voice.bond_formed_bark", "Bond formed bark written", {
+			"actor_a": str((_pair[0] as Dictionary).get("id", "")),
+			"actor_b": str((_pair[1] as Dictionary).get("id", "")),
+		})
+	if not _new_friend_pairs.is_empty():
+		var _sanctum_mut: Variant = flow_ctx.save_data.get("sanctum", {})
+		if _sanctum_mut is Dictionary:
+			(_sanctum_mut as Dictionary)["roster"] = _roster_arr
 
 
 # BOND-002: Applies EmotionRecoveryService modifiers to surviving roster echoes after combat.
@@ -2702,6 +2797,13 @@ func _handle_sanctum_rank_up(action: Dictionary, t: int) -> void:
 	else:
 		flow_ctx.save_request_reason = "progression.rank_up"
 
+	# V2-VOICE-001: write progress.rank_up bark to the echo's save entry.
+	var _ru_roster_v: Variant = sanctum.get("roster", [])
+	var _ru_roster: Array = _ru_roster_v if _ru_roster_v is Array else []
+	_select_sanctum_bark_for_echo_data_and_write(echo_ref, "progress.rank_up", t, _ru_roster)
+	sanctum["roster"] = _ru_roster
+	flow_ctx.save_data["sanctum"] = sanctum
+
 	# Rebuild EchoParty snapshot with updated roster data.
 	flow_ctx.last_snapshot = FlowEchoPartyState.build_snapshot(flow_ctx, t)
 
@@ -2778,6 +2880,14 @@ func _handle_sanctum_calling_confirm(action: Dictionary, t: int) -> void:
 		flow_ctx.save_request_reason += "|progression.calling.confirm"
 	else:
 		flow_ctx.save_request_reason = "progression.calling.confirm"
+
+	# V2-VOICE-001: write calling_settled bark to the echo's save entry.
+	var _cs_roster_v: Variant = (flow_ctx.save_data.get("sanctum", {}) as Dictionary).get("roster", [])
+	var _cs_roster: Array = _cs_roster_v if _cs_roster_v is Array else []
+	_select_sanctum_bark_for_echo_data_and_write(echo_ref, "sanctum.calling_settled", t, _cs_roster)
+	var _cs_sanctum_m: Variant = flow_ctx.save_data.get("sanctum", {})
+	if _cs_sanctum_m is Dictionary:
+		(_cs_sanctum_m as Dictionary)["roster"] = _cs_roster
 
 	# Rebuild EchoParty snapshot.
 	flow_ctx.last_snapshot = FlowEchoPartyState.build_snapshot(flow_ctx, t)
@@ -3115,6 +3225,25 @@ func _apply_vow_stage_entry_condition(t: int) -> void:
 	var morale_d := int(result.get("morale_delta", 0))
 	var fear_d   := int(result.get("fear_delta", 0))
 	_apply_vow_emotion_to_party(party_ids, morale_d, fear_d, "vow.condition." + status, cfg, t)
+
+	# V2-VOICE-001: vow stage-entry bark from party leader (or first party echo).
+	if status in ["benefit", "penalty"]:
+		var _vow_bark_ctx := "vow." + status
+		var _vow_roster_v: Variant = sanctum.get("roster", [])
+		var _vow_roster: Array = _vow_roster_v if _vow_roster_v is Array else []
+		# Find party leader (first echo in active_party_ids that is in roster).
+		var _vow_speaker: Dictionary = {}
+		for _pid in party_ids:
+			for _re in _vow_roster:
+				if _re is Dictionary and str((_re as Dictionary).get("id", "")) == str(_pid):
+					_vow_speaker = _re
+					break
+			if not _vow_speaker.is_empty():
+				break
+		if not _vow_speaker.is_empty():
+			_select_sanctum_bark_for_echo_data_and_write(_vow_speaker, _vow_bark_ctx, t, _vow_roster)
+			sanctum["roster"] = _vow_roster
+			flow_ctx.save_data["sanctum"] = sanctum
 
 	var should_break := bool(result.get("should_auto_break", false))
 
@@ -3649,3 +3778,163 @@ func _intel_clue_for_type(sit_type: String) -> String:
 		SituationModelScript.TYPE_LOOT:   return "A cache left behind. The kind made in haste, not ceremony."
 		SituationModelScript.TYPE_MONEY:  return "A ritual trace — coins or marks, left as offering or warning."
 		_:                                return "Something is present here."
+
+
+# ── V2-VOICE-001: Sanctum bark helpers ───────────────────────────────────────
+
+## Selects up to `voice.sanctum_max_barkers` (default 2) party echoes to receive a sanctum bark.
+## Step 1: event echo (most directly involved). Step 2: urgency tiebreaker.
+## party_actors: Array of runtime actor dicts (faction=echo, from ectx.actors).
+## Returns Array[Dictionary] of ≤2 actor dicts.
+func _select_sanctum_barkers(party_actors: Array, event_echo_id: String, t: int) -> Array:
+	var voice_cfg: Dictionary = config_service.get_balance().get("data", {}).get("voice", {})
+	var max_barkers: int = int(voice_cfg.get("sanctum_max_barkers", 2))
+	if party_actors.is_empty():
+		return []
+
+	var result: Array = []
+	var remaining: Array = []
+
+	# Step 1: prioritise the event echo.
+	for a_v in party_actors:
+		var a: Dictionary = a_v
+		if str(a.get("id", "")) == event_echo_id:
+			result.append(a)
+		else:
+			remaining.append(a)
+
+	if result.is_empty():
+		remaining = party_actors.duplicate()
+
+	if result.size() >= max_barkers or remaining.is_empty():
+		return result
+
+	# Step 2: urgency tiebreaker — highest urgency score wins.
+	var urgency_sorted: Array = remaining.duplicate()
+	urgency_sorted.sort_custom(func(aa, bb):
+		return _voice_urgency_score(aa) > _voice_urgency_score(bb)
+	)
+	result.append(urgency_sorted[0])
+	return result
+
+
+## Urgency score for sanctum barker selection.
+## (morale_tier == "broken" ? 30 : 0) + fear_current - morale_current
+func _voice_urgency_score(actor: Dictionary) -> int:
+	var morale: int = int(actor.get("morale", 50))
+	var fear: int   = int(actor.get("fear",   0))
+	var broken_bonus: int = 30 if morale < 25 else 0
+	return broken_bonus + fear - morale
+
+
+## Computes expression_band for a save-data echo dict using rank + config.
+## Falls back to "nascent" if config is missing.
+func _get_expression_band_for_echo(echo: Dictionary) -> String:
+	var bal: Dictionary = config_service.get_balance()
+	var maturity_cfg: Dictionary = bal.get("data", {}).get("maturity_expression", {})
+	var band_by_standing: Dictionary = maturity_cfg.get("band_by_standing", {})
+	if band_by_standing.is_empty():
+		return "nascent"
+	var rank: int = int(echo.get("rank", 1))
+	return MaturityExpressionService.get_expression_band(rank, band_by_standing)
+
+
+## Selects a sanctum bark for a runtime actor dict and writes `_sanctum_bark` to
+## the matching save-data roster entry.
+## actor: runtime actor dict (has id, archetype_birth, calling_origin, morale, fear).
+## roster: save-data Array (mutated in place).
+func _select_sanctum_bark_for_actor_and_write(actor: Dictionary, context_key: String, t: int, roster: Array) -> void:
+	var arch    := str(actor.get("archetype_birth", "loyal"))
+	var calling := str(actor.get("calling_origin", ""))
+	var band    := str(actor.get("expression_band", "nascent"))
+	var vk: int = (t + str(actor.get("id", "")).hash()) % 997
+	var line    := ShoutBank.get_expression_shout(context_key, arch, band, calling, vk)
+	if line.is_empty():
+		return
+	var bark := { "line": line, "context": context_key }
+	var actor_id := str(actor.get("id", ""))
+	for i in range(roster.size()):
+		if roster[i] is Dictionary and str((roster[i] as Dictionary).get("id", "")) == actor_id:
+			(roster[i] as Dictionary)["_sanctum_bark"] = bark
+			return
+
+
+## Selects a sanctum bark for a save-data echo dict and writes `_sanctum_bark` to
+## the matching roster entry.
+## echo_data: save-data echo dict (has id, archetype_birth, calling_origin, rank).
+## roster: save-data Array (mutated in place).
+func _select_sanctum_bark_for_echo_data_and_write(echo_data: Dictionary, context_key: String, t: int, roster: Array) -> void:
+	var arch    := str(echo_data.get("archetype_birth", "loyal"))
+	var calling := str(echo_data.get("calling_origin", ""))
+	var band    := _get_expression_band_for_echo(echo_data)
+	var vk: int = (t + str(echo_data.get("id", "")).hash()) % 997
+	var line    := ShoutBank.get_expression_shout(context_key, arch, band, calling, vk)
+	if line.is_empty():
+		return
+	var bark := { "line": line, "context": context_key }
+	var echo_id := str(echo_data.get("id", ""))
+	for i in range(roster.size()):
+		if roster[i] is Dictionary and str((roster[i] as Dictionary).get("id", "")) == echo_id:
+			(roster[i] as Dictionary)["_sanctum_bark"] = bark
+			return
+
+
+## Selects arrival barks for up to 2 party echoes and writes them to save-data roster entries.
+## Called in _end_round() BEFORE build_final_snapshot() so the snapshot can include arrival_bark.
+## is_victory: true = victory context, false = defeat.
+func _select_arrival_barks_for_party(is_victory: bool, t: int) -> void:
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	if ectx == null:
+		return
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if not (sanctum_v is Dictionary):
+		return
+	var sanctum: Dictionary = sanctum_v
+	var roster_v: Variant  = sanctum.get("roster", [])
+	var roster: Array      = roster_v if roster_v is Array else []
+	var party_ids_v: Variant = sanctum.get("active_party_ids", [])
+	var party_ids: Array   = party_ids_v if party_ids_v is Array else []
+
+	# Collect alive party echo actors from ectx (runtime, post-combat values).
+	var party_actors: Array = []
+	for a_v in ectx.actors:
+		if not (a_v is Dictionary):
+			continue
+		var a: Dictionary = a_v
+		if str(a.get("faction", "")) != "echo":
+			continue
+		if not (str(a.get("id", "")) in party_ids):
+			continue
+		party_actors.append(a)
+
+	if party_actors.is_empty():
+		return
+
+	# Event echo: on defeat, the echo with highest fear; on victory, none (urgency only).
+	var event_echo_id := ""
+	if not is_victory:
+		var max_fear := -1
+		for a_v in party_actors:
+			var a: Dictionary = a_v
+			var f: int = int(a.get("fear", 0))
+			if f > max_fear:
+				max_fear = f
+				event_echo_id = str(a.get("id", ""))
+
+	var base_ctx := "sanctum.arrival_victory" if is_victory else "sanctum.arrival_defeat"
+	var barkers: Array = _select_sanctum_barkers(party_actors, event_echo_id, t)
+
+	for actor_v in barkers:
+		var actor: Dictionary = actor_v
+		# Overlay broken bark if morale < 25 (broken tier).
+		var bark_ctx := base_ctx
+		if int(actor.get("morale", 50)) < 25:
+			bark_ctx = "sanctum.broken"
+		_select_sanctum_bark_for_actor_and_write(actor, bark_ctx, t, roster)
+
+	sanctum["roster"] = roster
+	flow_ctx.save_data["sanctum"] = sanctum
+	logger.debug(t, "voice.arrival_barks_written", "Arrival barks written", {
+		"is_victory":   is_victory,
+		"barker_count": barkers.size(),
+	})

@@ -6,6 +6,7 @@
 [ext_resource type="Script" uid="uid://dl4ku77tgom45" path="res://ui/screens/combat/CombatDistanceLayer.gd" id="4_distance_layer"]
 [ext_resource type="Script" uid="uid://bwbb53y8827ra" path="res://ui/screens/combat/CombatMoveTelegraphLayer.gd" id="5_move_telegraph"]
 [ext_resource type="Script" uid="uid://cb8j2g1nyt3or" path="res://ui/screens/combat/CombatTokenVisualConfig.gd" id="6_visual_config"]
+[ext_resource type="PackedScene" uid="uid://voice001_bark_popup_layer" path="res://ui/screens/combat/BarkPopupLayer.tscn" id="7_bark_popup_layer"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_board"]
 texture = ExtResource("2_tile")
@@ -235,3 +236,12 @@ text = "Retreat"
 custom_minimum_size = Vector2(150, 50)
 layout_mode = 2
 text = "Enter Combat"
+
+[node name="BarkPopupLayer" parent="." instance=ExtResource("7_bark_popup_layer")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2

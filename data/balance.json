@@ -1906,6 +1906,22 @@
 				"two": 0.4,
 				"one": 0.0
 			}
+		},
+		"voice": {
+			"reactive_range": 4,
+			"reactive_high_signal_contexts": [
+				"combat_last_stand", "combat_fear_extreme", "combat_resilient", "combat_taunt", "combat_ko"
+			],
+			"reactive_min_expression_band": "forming",
+			"reactions_exceed_cap": true,
+			"max_reactions_per_original": 1,
+			"max_barks_per_round": 3,
+			"bark_tiers": {
+				"1": ["combat_last_stand", "combat_fear_extreme", "combat_ko", "combat_resilient"],
+				"2": ["combat_fear_rising", "combat_morale_falling", "combat_inspired", "combat_taunt", "combat_calling_skill"],
+				"3": ["combat_attack", "combat_guard", "combat_banter"]
+			},
+			"sanctum_max_barkers": 2
 		}
 	}
 }

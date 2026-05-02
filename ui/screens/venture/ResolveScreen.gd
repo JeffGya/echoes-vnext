@@ -94,9 +94,22 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	var breakdown: Array = breakdown_v if breakdown_v is Array else []
 	_build_breakdown(breakdown, int(data.get("ase_awarded", 0)))
 
+	# V2-VOICE-001: build arrival_bark lookup from actors list (echo faction only).
+	var _arrival_barks: Dictionary = {}
+	var _actors_v: Variant = data.get("actors", [])
+	if _actors_v is Array:
+		for _a_v in (_actors_v as Array):
+			if _a_v is Dictionary:
+				var _a: Dictionary = _a_v
+				if str(_a.get("faction", "")) == "echo":
+					var _ab := str(_a.get("arrival_bark", ""))
+					if not _ab.is_empty():
+						_arrival_barks[str(_a.get("id", ""))] = _ab
+
 	# V2-EMOTION-002: per-echo emotion summary (unified emotional status arc).
 	var emotion_summary_v: Variant = data.get("emotion_summary", [])
 	var emotion_summary: Array = emotion_summary_v if emotion_summary_v is Array else []
+	var _bark_rows: Array = []  # Array of [Label, String] for staggered animation
 	for entry_v in emotion_summary:
 		var entry: Dictionary = entry_v if entry_v is Dictionary else {}
 		var row: Node = EmotionEntryScene.instantiate()
@@ -105,6 +118,26 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 			"%s → %s" % [entry.get("pre_emotional_status", "").capitalize(), entry.get("post_emotional_status", "").capitalize()]
 		row.get_node("%RefusedLabel").visible  = bool(entry.get("refused", false))
 		_emotion_list.add_child(row)
+		# V2-VOICE-001: add arrival bark label below this row if present.
+		var _echo_id := str(entry.get("echo_id", ""))
+		if _arrival_barks.has(_echo_id):
+			var _bark_lbl := Label.new()
+			_bark_lbl.text = "\"%s\"" % _arrival_barks[_echo_id]
+			_bark_lbl.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55, 1.0))
+			_bark_lbl.add_theme_font_size_override("font_size", 12)
+			_bark_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+			_bark_lbl.modulate.a = 0.0  # starts invisible for stagger animation
+			_emotion_list.add_child(_bark_lbl)
+			_bark_rows.append(_bark_lbl)
+
+	# V2-VOICE-001: staggered fade-in of arrival bark labels (0.3s each, 0.6s stagger).
+	if not _bark_rows.is_empty():
+		for _bi in range(_bark_rows.size()):
+			var _bl: Label = _bark_rows[_bi]
+			var _delay: float = float(_bi) * 0.6
+			var _tween: Tween = create_tween()
+			_tween.tween_interval(_delay)
+			_tween.tween_property(_bl, "modulate:a", 1.0, 0.3)
 
 	# Wire CTA buttons from snapshot actions.
 	if actions.has("cta.continue"):

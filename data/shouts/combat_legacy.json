@@ -1,0 +1,59 @@
+{
+  "shouts": {
+    "combat_attack": {
+      "loyal":      { "moderate": ["Hold nothing back!", "Press the attack!", "For the cause!"] },
+      "proud":      { "moderate": ["This ends now.", "Precisely.", "Watch this."] },
+      "reflective": { "moderate": ["It must be done.", "No other way.", "Forward."] },
+      "valiant":    { "moderate": ["Forward!", "PRESS ON!", "NOW!"] },
+      "canny":      { "moderate": ["Calculated.", "As planned.", "One move."] },
+      "devout":     { "moderate": ["Asé protect me.", "For the ancestors.", "By the Keeper's will."] },
+      "stoic":      { "moderate": ["…", ".", "Move."] },
+      "empathic":   { "moderate": ["For the others!", "For all of them!", "For you!"] },
+      "ambitious":  { "moderate": ["Watch this.", "My moment.", "Here we go."] }
+    },
+    "combat_guard": {
+      "loyal":      { "moderate": ["I won't let you through.", "Not past me.", "Hold here."] },
+      "proud":      { "moderate": ["You'll have to earn that.", "Not today.", "Come, then."] },
+      "reflective": { "moderate": ["Patience.", "Wait.", "Not yet."] },
+      "valiant":    { "moderate": ["Come at me.", "BRING IT.", "Here!"] },
+      "canny":      { "moderate": ["Not so fast.", "I see you.", "Adjusting."] },
+      "devout":     { "moderate": ["The way is closed.", "Asé holds this ground.", "Not through."] },
+      "stoic":      { "moderate": ["Steady.", "Holding.", "…"] },
+      "empathic":   { "moderate": ["Stay behind me.", "I've got you.", "I'm here."] },
+      "ambitious":  { "moderate": ["Defend? Fine.", "Even this I'll do.", "Not here."] }
+    },
+    "combat_refuse": {
+      "loyal":      { "moderate": ["I… I can't move.", "Not now…", "I'm trying."] },
+      "proud":      { "moderate": ["Something is wrong.", "This isn't—", "No."] },
+      "reflective": { "moderate": ["I need a moment.", "Wait.", "Not yet."] },
+      "valiant":    { "moderate": ["Not now…", "NO—", "Get up."] },
+      "canny":      { "moderate": ["I'm frozen.", "Can't calculate.", "Wrong."] },
+      "devout":     { "moderate": ["Forgive me.", "Keeper…", "Not like this."] },
+      "stoic":      { "moderate": ["I'm slipping.", "…can't.", "Still."] },
+      "empathic":   { "moderate": ["Too much…", "All of it—", "I feel everything."] },
+      "ambitious":  { "moderate": ["No. Not yet.", "Not NOW.", "Wrong."] }
+    },
+    "combat_ko": {
+      "loyal":      { "moderate": ["One down.", "For them.", "Clean."] },
+      "proud":      { "moderate": ["As expected.", "Precisely.", "Done."] },
+      "reflective": { "moderate": ["Had to be done.", "Done.", "Now."] },
+      "valiant":    { "moderate": ["YES!", "DOWN!", "Next!"] },
+      "canny":      { "moderate": ["One move.", "Efficient.", "Done."] },
+      "devout":     { "moderate": ["For the Keeper.", "Asé.", "Done."] },
+      "stoic":      { "moderate": [".", "Done.", "Next."] },
+      "empathic":   { "moderate": ["For you.", "Safe now.", "Done."] },
+      "ambitious":  { "moderate": ["Watch this.", "My moment.", "History."] }
+    },
+    "sanctum_idle": {
+      "loyal":      { "moderate": ["Whenever you're ready.", "I'm here.", "Say the word."] },
+      "proud":      { "moderate": ["Don't keep me waiting long.", "I'm ready.", "When you're prepared."] },
+      "reflective": { "moderate": ["I find myself thinking…", "Still here.", "Waiting."] },
+      "valiant":    { "moderate": ["Ready when you are.", "Say the word.", "Waiting to move."] },
+      "canny":      { "moderate": ["I've been running the numbers.", "Thinking ahead.", "Ready."] },
+      "devout":     { "moderate": ["The Sanctum feels alive today.", "Asé is close.", "I feel it."] },
+      "stoic":      { "moderate": ["…", "Here.", "Ready."] },
+      "empathic":   { "moderate": ["How are the others holding up?", "Everyone alright?", "I'm watching."] },
+      "ambitious":  { "moderate": ["What's the next move?", "Ready for anything.", "Let's go."] }
+    }
+  }
+}

@@ -182,6 +182,23 @@ func _render_resolution(data: Dictionary) -> void:
 			label.text = ""
 			label.visible = false
 
+	# V2-VOICE-001: show rite bark below aftermath lines if present.
+	var echo_bark_v: Variant = data.get("echo_bark", {})
+	if echo_bark_v is Dictionary:
+		var bark_line := str((echo_bark_v as Dictionary).get("line", ""))
+		if not bark_line.is_empty() and _resolution_panel != null:
+			# Find or create a RiteBarkLabel in the resolution panel.
+			var _rite_bark_lbl: Label = _resolution_panel.get_node_or_null("RiteBarkLabel")
+			if _rite_bark_lbl == null:
+				_rite_bark_lbl = Label.new()
+				_rite_bark_lbl.name = "RiteBarkLabel"
+				_rite_bark_lbl.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55, 1.0))
+				_rite_bark_lbl.add_theme_font_size_override("font_size", 12)
+				_rite_bark_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+				_resolution_panel.add_child(_rite_bark_lbl)
+			_rite_bark_lbl.text = "\"%s\"" % bark_line
+			_rite_bark_lbl.visible = true
+
 
 func _apply_phase_visibility(phase: String) -> void:
 	_thread_panel.visible = phase == "thread_select" or phase == "invitation" or phase == "echo_missing"
