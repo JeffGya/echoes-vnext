@@ -1,0 +1,39 @@
+[gd_scene format=3 uid="uid://voice001_bark_popup_layer"]
+
+[ext_resource type="Script" uid="uid://voice001_bark_popup_layer_script" path="res://ui/screens/combat/BarkPopupLayer.gd" id="1_bpl_script"]
+
+[node name="BarkPopupLayer" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_bpl_script")
+
+[node name="BarkPopupOriginal" type="PanelContainer" parent="."]
+visible = false
+custom_minimum_size = Vector2(200, 40)
+layout_mode = 0
+self_modulate = Color(0.239, 0.353, 0.278, 0.85)
+
+[node name="BarkLabel" type="Label" parent="BarkPopupOriginal"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1.0, 0.973, 0.863, 1.0)
+theme_override_font_sizes/font_size = 14
+autowrap_mode = 2
+text = ""
+
+[node name="BarkPopupReaction" type="PanelContainer" parent="."]
+visible = false
+custom_minimum_size = Vector2(180, 36)
+layout_mode = 0
+self_modulate = Color(0.961, 0.902, 0.827, 0.9)
+
+[node name="BarkLabel" type="Label" parent="BarkPopupReaction"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.239, 0.157, 0.090, 1.0)
+theme_override_font_sizes/font_size = 14
+autowrap_mode = 2
+text = ""

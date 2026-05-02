@@ -51,5 +51,10 @@ var echo_action_logs: Dictionary = {}
 # FlowEncounterState.enter(). Used by build_final_snapshot() for delta computation.
 var pre_encounter_morale: Dictionary = {}
 
+# V2-VOICE-001: round bark events — accumulated per round for reactive bark system.
+# Shape: Array[{ "actor_id": String, "bark_context": String, "bark_tier": int, "grid_pos": Vector2i }]
+# Reset to [] at the start of each round. Passed via ctx["round_bark_events"] to advance_turn().
+var round_bark_events: Array = []
+
 # Optional deterministic notes for debugging / temporary tests
 var notes: Array[String] = []

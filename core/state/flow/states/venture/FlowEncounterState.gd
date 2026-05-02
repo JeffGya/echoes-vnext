@@ -231,6 +231,12 @@ static func _project_actor(actor: Dictionary) -> Dictionary:
 		"emotional_status":  EmotionService.get_emotional_status(int(actor.get("morale", 50)), fear),
 		# PROG-008: active skill slots forwarded for pre-battle and resolve screens.
 		"skill_slots": (actor.get("skill_slots", [""]) as Array).duplicate(),
+		# V2-VOICE-001: bark fields — written by ActorStateMachine, read by CombatBoardScreen.
+		"bark_line":        str(actor.get("_bark_line",        "")),
+		"bark_context":     str(actor.get("_bark_context",     "")),
+		"bark_tier":        str(actor.get("_bark_tier",        "")),
+		"bark_target_id":   str(actor.get("_bark_target_id",   "")),
+		"bark_is_response": bool(actor.get("_bark_is_response", false)),
 	}
 
 
@@ -620,6 +626,25 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"morale_delta":          post_morale - pre_morale,
 			"refused":               post_fear >= FEAR_THRESHOLD_DEFAULT,
 		})
+
+	# V2-VOICE-001: enrich each echo actor row with arrival_bark from save-data roster.
+	# _select_arrival_barks_for_party() writes _sanctum_bark to roster entries before this call.
+	var _arb_sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if _arb_sanctum_v is Dictionary:
+		var _arb_roster_v: Variant = (_arb_sanctum_v as Dictionary).get("roster", [])
+		var _arb_roster: Array = _arb_roster_v if _arb_roster_v is Array else []
+		for _pa_v in projected_actors:
+			if not (_pa_v is Dictionary):
+				continue
+			var _pa: Dictionary = _pa_v
+			if str(_pa.get("faction", "")) != "echo":
+				continue
+			var _pa_id := str(_pa.get("id", ""))
+			for _re_v in _arb_roster:
+				if _re_v is Dictionary and str((_re_v as Dictionary).get("id", "")) == _pa_id:
+					var _bark_v: Variant = (_re_v as Dictionary).get("_sanctum_bark", {})
+					_pa["arrival_bark"] = str(_bark_v.get("line", "")) if _bark_v is Dictionary else ""
+					break
 
 	return {
 		"type": FlowStateIds.RESOLVE,

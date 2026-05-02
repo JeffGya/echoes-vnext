@@ -319,6 +319,7 @@ func _run_tests(parts: Array) -> void:
 	load("res://tests/StageExploreTests.gd").register(runner)    # V2-STAGE-001
 	load("res://tests/IntelPersistenceTests.gd").register(runner) # V2-INTEL-001
 	load("res://tests/OnboardingTests.gd").register(runner)
+	load("res://tests/VoiceTests.gd").register(runner)           # V2-VOICE-001
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [

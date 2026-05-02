@@ -79,7 +79,9 @@ Four project-specific skills are installed. Use them proactively — they are au
 | EchoActor | `core/actors/EchoActor.gd` | `from_echo(echo)` → deep-copied actor dict. Reads `echo["emotion"]` for morale/fear. |
 | EnemyActor | `core/actors/EnemyActor.gd` | `from_definition(defn, t)` → actor dict. Level-scaled via DerivedStatService. |
 | StructureActor | `core/actors/StructureActor.gd` | `from_definition(defn)` → actor dict (`is_structure=true`, idle behavior). |
-| ActorStateMachine | `core/actors/ActorStateMachine.gd` | `advance_turn()`: death guards → Absolute Fear Rule (fear≥80→refuse) → module dispatch → move resolver. |
+| ActorStateMachine | `core/actors/ActorStateMachine.gd` | `advance_turn()`: death guards → Absolute Fear Rule (fear≥80→refuse) → module dispatch → move resolver. `finalize_combat_bark(is_kill, vk)` called post-resolution for `combat_ko` promotion. `_check_reactive_bark(ctx, t)` fires `combat_rally_ally` for forming+ actors. Bark fields written to `_actor` dict: `_bark_line`, `_bark_context`, `_bark_tier`, `_bark_target_id`, `_bark_is_response`. |
+| ShoutBank | `core/echoes/ShoutBank.gd` | Lazy-loading bark line registry. JSON-backed (`data/bark/*.json`). `get_expression_shout(ctx, arch, band, calling, variation_key)` → deterministic line from Array. `variation_key = (t + actor_id_hash) % 997`. (V2-VOICE-001) |
+| BarkPopupLayer | `ui/screens/combat/BarkPopupLayer.gd` + `.tscn` | Sequential bark popup queue above actor tokens. Two visual variants (original dark green, reaction warm light with ↩ prefix). `enqueue_barks(Array)` receives pre-sorted interleaved list from CombatBoardScreen. (V2-VOICE-001) |
 | MaturityExpressionService | `core/actors/MaturityExpressionService.gd` | `get_expression_band(rank, band_by_standing)` → nascent/forming/grounded/whole. `get_presence_strength(band)` → 0.1/0.25/0.5/1.0. `get_expression(actor, cfg_data)` → full dict. Config: `balance.data.maturity_expression`. (V2-PROG-006) |
 | BehaviorArbiter | `core/actors/behaviors/BehaviorArbiter.gd` | Data-driven weighted scoring. `score=(base+trait+vector)×fear_factor+directive`. module_id="arbiter". Reads `expression_band` from context. |
 | ActorService | `core/actors/ActorService.gd` | `get_nearest_enemy()` + `get_threatened_ally()`. Filters `is_dead` + `is_structure`. |
@@ -111,7 +113,7 @@ Four project-specific skills are installed. Use them proactively — they are au
 | ResolveScreen | `ui/screens/ResolveScreen.gd` | VICTORY/DEFEAT. Actor roster. `cta.continue` → sanctum. `cta.next_stage` → dispatches `flow.complete_stage`. |
 | SkillDefinition | `core/progression/SkillDefinition.gd` | Active skill data contract + validator. `MAX_SKILL_SLOTS=1`. |
 
-**Tests (210 total, 31 suites):** EconomyTests, SanctumSummonTests, PartyTests, ActorTests, EchoSchemaTests, ActorStatInitTests, DerivedStatTests, BehaviorModuleTests, MeleeTests, BehaviorArbiterTests, StructureTests, MoraleInfluenceTests, KODeathTests, EmotionTests, VectorTests, DirectiveTests, GridTests, CombatStateTests, CombatServiceTests, CombatRoundTests, CombatSnapshotTests, RetreatTests, ArchetypeTests, StageProgressionTests, SkillDefinitionTests, CallingBehaviorTests, ExclusiveActionTests, CooldownTests, PassiveIdentityTests, SkillLoadoutTests, MaturityExpressionTests, StageExploreTests (V2-STAGE-001)
+**Tests (215 total, 32 suites):** EconomyTests, SanctumSummonTests, PartyTests, ActorTests, EchoSchemaTests, ActorStatInitTests, DerivedStatTests, BehaviorModuleTests, MeleeTests, BehaviorArbiterTests, StructureTests, MoraleInfluenceTests, KODeathTests, EmotionTests, VectorTests, DirectiveTests, GridTests, CombatStateTests, CombatServiceTests, CombatRoundTests, CombatSnapshotTests, RetreatTests, ArchetypeTests, StageProgressionTests, SkillDefinitionTests, CallingBehaviorTests, ExclusiveActionTests, CooldownTests, PassiveIdentityTests, SkillLoadoutTests, MaturityExpressionTests, StageExploreTests (V2-STAGE-001), VoiceTests (V2-VOICE-001)
 
 ---
 
@@ -144,7 +146,7 @@ Exact values and cadences are open — see Working GDD `Economy` section for des
 ## Memory Files
 - `feedback_visual_playable_end.md` — Every story must end with a visual/playable in-game update; broaden existing stories rather than writing new ones
 - `feedback_notion_page_content.md` — Add content to Notion page body (not comments)
-- `project_voice001_deferred.md` — Reactive bark responses deferred to VOICE-001 (no event bus yet)
+- `project_voice001_deferred.md` — ✅ Resolved: V2-VOICE-001 Done. `_sanctum_bark` dict on echo save entries; `round_bark_events` on EncounterContext; BarkPopupLayer in CombatBoardScreen. Spatial sanctum bark popup deferred to V2-SANCTUM-005.
 - `feedback_godot_terminal.md` — Godot brew path + headless check-only command for compile verification
 - `feedback_story_verification_workflow.md` — End-of-story sequence: Godot terminal tests → pause for Jeff in-game test → docs + commit
 

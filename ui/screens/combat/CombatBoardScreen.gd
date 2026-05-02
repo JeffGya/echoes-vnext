@@ -23,6 +23,8 @@ const InitiativeRowScene := preload("res://ui/components/InitiativeRowItem.tscn"
 @onready var _board: TileMapLayer                   = $Board
 @onready var _move_telegraph_layer: Node2D          = $MoveTelegraphLayer
 @onready var _token_layer: CombatTokenLayer         = $TokenLayer
+# V2-VOICE-001: bark popup layer — optional; null-checked before use.
+@onready var _bark_popup_layer: BarkPopupLayer      = $BarkPopupLayer if has_node("BarkPopupLayer") else null
 @onready var _distance_layer: CombatDistanceLayer   = $DistanceLayer
 @onready var _back_button: Button                   = $BackButton
 @onready var _round_label: Label                    = $RoundLabel
@@ -192,6 +194,8 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	if not actors.is_empty():
 		_draw_tokens(actors, current_actor_id, data)
 		_distance_layer.update_distances(actors[0], _board, data)
+		# V2-VOICE-001: assemble and enqueue bark popups for this actor snapshot.
+		_enqueue_bark_popups(actors, data)
 	else:
 		_token_layer.reset_presentation()
 		_move_telegraph_layer.clear_telegraph()
@@ -478,6 +482,84 @@ func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}
 ## Called from AppRoot when the "combat_emotion" debug command fires.
 func set_emotion_debug(enabled: bool) -> void:
 	_token_layer.set_emotion_debug(enabled)
+
+
+# V2-VOICE-001: Assembles the interleaved bark queue for this snapshot and passes it
+# to _bark_popup_layer.enqueue_barks().
+#
+# Priority sort (plan spec):
+#   Tier 1: combat_last_stand, combat_fear_extreme, combat_ko, combat_resilient — always shown
+#   Tier 2: combat_fear_rising, combat_morale_falling, combat_inspired, combat_taunt, combat_calling_skill
+#   Tier 3: combat_attack, combat_guard, combat_banter, combat_rally_ally (situational)
+# Cap: max_barks_per_round originals (default 3). Reactions do NOT count against cap.
+# Queue order: [orig1, reaction_to_1, orig2, reaction_to_2, ...]
+func _enqueue_bark_popups(actors: Array, data: Dictionary) -> void:
+	if _bark_popup_layer == null:
+		return
+
+	var max_per_round: int = 3
+	var tier_map: Dictionary = {
+		"combat_last_stand":    1, "combat_fear_extreme": 1,
+		"combat_ko":            1, "combat_resilient":    1,
+		"combat_fear_rising":   2, "combat_morale_falling": 2,
+		"combat_inspired":      2, "combat_taunt":          2,
+		"combat_calling_skill": 2,
+		"combat_attack":        3, "combat_guard":          3,
+		"combat_banter":        3,
+	}
+
+	# Separate originals and reactions; skip empty bark lines.
+	var originals: Array = []
+	var reactions: Array = []
+	for actor_v in actors:
+		if not (actor_v is Dictionary):
+			continue
+		var actor: Dictionary = actor_v
+		var bark_line: String = str(actor.get("bark_line", ""))
+		if bark_line.is_empty():
+			continue
+		var gp: Dictionary = actor.get("grid_pos", {})
+		var col: int = gp.get("col", 0)
+		var row: int = gp.get("row", 0)
+		var cell_pos: Vector2 = _board.map_to_local(Vector2i(col, row))
+		var screen_pos: Vector2 = cell_pos + _board.position
+		var ev: Dictionary = {
+			"actor_id":    str(actor.get("id", "")),
+			"bark_line":   bark_line,
+			"bark_context": str(actor.get("bark_context", "")),
+			"bark_tier":   str(actor.get("bark_tier", "")),
+			"bark_target_id": str(actor.get("bark_target_id", "")),
+			"is_response": bool(actor.get("bark_is_response", false)),
+			"screen_pos":  screen_pos,
+		}
+		if ev["is_response"]:
+			reactions.append(ev)
+		else:
+			originals.append(ev)
+
+	# Sort originals: tier ascending (1 first), then initiative order (array order).
+	originals.sort_custom(func(a, b):
+		var ta: int = int(tier_map.get(str(a.get("bark_context", "")), 3))
+		var tb: int = int(tier_map.get(str(b.get("bark_context", "")), 3))
+		return ta < tb
+	)
+
+	# Cap originals at max_per_round (drop Tier 3 first, already at end after sort).
+	if originals.size() > max_per_round:
+		originals = originals.slice(0, max_per_round)
+
+	# Build interleaved queue: orig → matching reaction → next orig → ...
+	var interleaved: Array = []
+	for orig in originals:
+		interleaved.append(orig)
+		var orig_id: String = str(orig.get("actor_id", ""))
+		for reaction in reactions:
+			if str(reaction.get("bark_target_id", "")) == orig_id:
+				interleaved.append(reaction)
+				break  # max 1 reaction per original
+
+	if not interleaved.is_empty():
+		_bark_popup_layer.enqueue_barks(interleaved)
 
 
 # -------------------------
