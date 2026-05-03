@@ -6,6 +6,14 @@
 class_name VowServiceTests
 extends RefCounted
 
+## Minimal RefCounted stand-in for FlowContext.
+## VowService._set_save_request uses Object.get() / Object.set() on the ctx;
+## a plain Dictionary cannot satisfy the `ctx: RefCounted` type hint in GDScript 4.
+class _TestCtx extends RefCounted:
+	var realm_id: String = ""
+	var save_request: bool = false
+	var save_request_reason: String = ""
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
@@ -81,12 +89,12 @@ static func _make_cfg() -> Dictionary:
 	}
 
 
-static func _make_ctx(save: Dictionary) -> Dictionary:
-	# Lightweight ctx stand-in (Dictionary mimics RefCounted property access via dict keys).
-	# VowService._set_save_request uses ctx.get() / ctx.set() — a Dictionary works here
-	# because GDScript's ctx.get("key") falls back to null for plain Dicts.
-	# We just verify save_data directly in tests.
-	return { "save_request": false, "save_request_reason": "", "realm_id": "realm.01" }
+static func _make_ctx(_save: Dictionary) -> _TestCtx:
+	# Returns a RefCounted-compatible ctx with realm_id = "realm.01".
+	# Satisfies VowService's `ctx: RefCounted` type hint.
+	var ctx := _TestCtx.new()
+	ctx.realm_id = "realm.01"
+	return ctx
 
 
 static func _make_logger() -> StructuredLogger:
@@ -270,8 +278,11 @@ static func _test_release_if_due_realm_completed() -> Dictionary:
 	var cfg    := _make_cfg()
 	var logger := _make_logger()
 
+	# Pass _make_ctx(save) so pledge_vow can read realm_id = "realm.01".
+	# Tests passing null get pledged_at_realm="" which bypasses the realm-completion check.
+	var ctx := _make_ctx(save)
 	VowService.unlock_vow("tikoro_nko_agyina", "realm.01", save, null, logger, 0)
-	VowService.pledge_vow("tikoro_nko_agyina", 1, cfg, save, null, logger, 1)
+	VowService.pledge_vow("tikoro_nko_agyina", 1, cfg, save, ctx, logger, 1)
 	# Verify pledged_at_realm is set.
 	var av_before := VowService.get_active_vow(save)
 	if str(av_before.get("pledged_at_realm", "")) != "realm.01":

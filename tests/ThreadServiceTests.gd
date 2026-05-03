@@ -265,8 +265,11 @@ static func _test_get_recovery_band_returns_strong() -> Dictionary:
 ## When a thread ID already exists, _gen_thread_id appends a run suffix.
 static func _test_thread_id_collision_guard() -> Dictionary:
 	var cfg := _make_cfg()
+	# Use "broken" quality so _resolve_count → 1 thread (quality=0.1, threshold one=0.00).
+	# A "clean" segment gives quality=1.0 → count=3, which is correct but complicates the
+	# collision test (we only want to verify the ID guard, not the count logic).
 	var segments := [
-		{ "stage_index": 0, "quality_tier": "clean" },
+		{ "stage_index": 0, "quality_tier": "broken" },
 	]
 	var realm_id := "realm.cg1"
 	# Pre-populate sanctum.threads with the base ID to force a collision.

@@ -65,7 +65,7 @@
       "ambitious":  { "grounded": ["You're wasting your time on them.", "I'm the priority target. Come find out why.", "The story is over here."], "whole": ["You want to win? You have to go through me.", "All the stories end with me. Come.", "I'm the problem you should have started with."] }
     },
     "combat_rally_ally": {
-      "loyal":      { "grounded": ["Hold, friend! I'm coming!", "I SEE YOU. Hold on!", "Don't give up!"], "whole": ["You're not alone in this — I've got you.", "I would never leave you.", "HOLD. I'M THERE."] },
+      "loyal":      { "nascent": ["I see you. I'm coming.", "Hold on!", "Don't give in."], "forming": ["Stay with us!", "Hold on — I'm right here.", "Together — don't break now!"], "grounded": ["Hold, friend! I'm coming!", "I SEE YOU. Hold on!", "Don't give up!"], "whole": ["You're not alone in this — I've got you.", "I would never leave you.", "HOLD. I'M THERE."] },
       "empathic":   { "grounded": ["I see you struggling. Hold on!", "I FEEL it. I'm coming.", "Stay with us!"], "whole": ["I feel your fear. Hold it together — we do this together.", "Your fear is mine. We carry it together. Hold.", "I'm with you."] },
       "proud":      { "grounded": ["Pull yourself together.", "This is not the time.", "Focus."], "whole": ["We don't fall here. That is not an option.", "Not here. Not us. Not today.", "Unacceptable. Stand up."] },
       "valiant":    { "grounded": ["Stay with us! We're not done yet!", "GET UP! WE NEED YOU!", "YOU'RE NOT DONE!"], "whole": ["Get up. Now. We end this.", "I WILL NOT LEAVE YOU.", "ON YOUR FEET. NOW."] },

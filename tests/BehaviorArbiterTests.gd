@@ -42,7 +42,7 @@ static func _t_guardian_origin_prefers_protect_ally() -> Dictionary:
 	var actor := {
 		"id":             "echo_001",
 		"faction":        "echo",
-		"calling_origin": "warder",
+		"calling_origin": "okofor",   # V2 name for warder (protect_ally base=65)
 		"traits":         { "courage": 55, "wisdom": 42, "faith": 38 },
 		"vector_scores":  {},
 		"fear":           0,
@@ -67,7 +67,7 @@ static func _t_guardian_origin_prefers_protect_ally() -> Dictionary:
 	var intent: Dictionary = arbiter.select_intent(context)
 
 	if str(intent.get("action_type", "")) != "protect_ally":
-		return { "ok": false, "error": "Expected protect_ally (warder base=65), got: %s" % str(intent.get("action_type")) }
+		return { "ok": false, "error": "Expected protect_ally (okofor base=65), got: %s" % str(intent.get("action_type")) }
 	if str(intent.get("target_id", "")) != "echo_002":
 		return { "ok": false, "error": "Expected target_id='echo_002', got: %s" % str(intent.get("target_id")) }
 	if str(intent.get("protected_actor_id", "")) != "echo_002":
@@ -89,7 +89,7 @@ static func _t_high_faith_warrior_can_guard() -> Dictionary:
 	var actor := {
 		"id":             "echo_003",
 		"faction":        "echo",
-		"calling_origin": "blade",
+		"calling_origin": "aduro",   # V2 name for blade (melee base=65, move=55)
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 70 },
 		"vector_scores":  { "protector": 80 },
 		"fear":           0,
@@ -129,10 +129,12 @@ static func _t_high_faith_warrior_can_guard() -> Dictionary:
 #   guard:  (base=25) × 1.0 (passive, in fear_passive_actions) = 25.0
 # Demonstrates: fear dampens active intents — guard is the preferred passive action (COMBAT-003).
 static func _t_high_fear_idles_despite_adjacent_enemy() -> Dictionary:
+	# onyamesu calling: guard base=55. At fear=100 (dampen=0.45, factor=0.55) + echo_in_melee:
+	# guard: 55×1.0 − 5 = 50; melee: 35×0.55 + 18 = 37.25 → guard wins.
 	var actor := {
 		"id":             "echo_005",
 		"faction":        "echo",
-		"calling_origin": "uncalled",
+		"calling_origin": "onyamesu",
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
 		"vector_scores":  {},
 		"fear":           100,
@@ -148,9 +150,9 @@ static func _t_high_fear_idles_despite_adjacent_enemy() -> Dictionary:
 	var context := { "actor": actor, "all_actors": [enemy], "t": 1 }
 	var intent: Dictionary = arbiter.select_intent(context)
 
-	# COMBAT-003: actor.guard (base=25 passive) > actor.idle (base=20 passive) > melee (16 dampened).
+	# onyamesu guard (50) > melee (37.25) at fear=100 + echo_in_melee.
 	if str(intent.get("action_type", "")) != "actor.guard":
-		return { "ok": false, "error": "Expected actor.guard at fear=100 (guard=25 > idle=20 > melee=16), got: %s" % str(intent.get("action_type")) }
+		return { "ok": false, "error": "Expected actor.guard at fear=100 (onyamesu guard=50 > melee=37), got: %s" % str(intent.get("action_type")) }
 
 	return { "ok": true }
 
@@ -174,7 +176,7 @@ static func _t_advance_turn_logs_arbiter_intent_and_action() -> Dictionary:
 	# ActorStateMachine without explicit module → defaults to BehaviorArbiter for echo actors.
 	var sm := ActorStateMachine.new(actor)
 	var logger := StructuredLogger.new()
-	logger.set_level("info")
+	logger.set_level("debug")
 
 	var context := { "actor": actor, "all_actors": [enemy], "t": 20 }
 	var intent: Dictionary = sm.advance_turn(context, logger, 20)
@@ -233,10 +235,14 @@ static func _t_advance_turn_logs_arbiter_intent_and_action() -> Dictionary:
 #   actor.idle:  base(20) + own_hp_low(+8)  = 28
 # Demonstrates: situational HP condition overrides personality-based aggression.
 static func _t_own_hp_low_prefers_guard() -> Dictionary:
+	# onyamesu calling, enemy adjacent (dist=1) so guard is a candidate (guard_range=1).
+	# own_hp_low fires (hp_ratio=0.25 < 0.35 threshold).
+	# guard: 55 + own_hp_low(12) − echo_in_melee(5) = 62;
+	# melee: 35 + own_hp_low(-8) + echo_in_melee(18) = 45 → guard wins.
 	var actor := {
 		"id":             "echo_sit_001",
 		"faction":        "echo",
-		"calling_origin": "uncalled",
+		"calling_origin": "onyamesu",
 		"actor_type":     "echo",
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
 		"vector_scores":  {},
@@ -250,7 +256,7 @@ static func _t_own_hp_low_prefers_guard() -> Dictionary:
 		"id":       "enemy_sit_001",
 		"faction":  "enemy",
 		"is_dead":  false,
-		"grid_pos": { "col": 2, "row": 0 },
+		"grid_pos": { "col": 1, "row": 0 },  # adjacent — guard_range=1 satisfied
 	}
 
 	var arbiter := BehaviorArbiter.new({})
@@ -258,7 +264,7 @@ static func _t_own_hp_low_prefers_guard() -> Dictionary:
 	var intent: Dictionary = arbiter.select_intent(context)
 
 	if str(intent.get("action_type", "")) != "actor.guard":
-		return { "ok": false, "error": "Expected actor.guard at 25%% HP (guard=37 > move=30 > idle=28), got: %s" % str(intent.get("action_type")) }
+		return { "ok": false, "error": "Expected actor.guard at 25%% HP (onyamesu guard=62 > melee=45), got: %s" % str(intent.get("action_type")) }
 
 	return { "ok": true }
 
@@ -272,10 +278,13 @@ static func _t_own_hp_low_prefers_guard() -> Dictionary:
 #   melee_attack:  base(40) + last_echo_standing(-15) = 25
 # Demonstrates: final-survivor condition pushes even an uncalled echo to defend.
 static func _t_last_echo_standing_guards() -> Dictionary:
+	# onyamesu calling: guard base=55.
+	# last_echo_standing: guard+20, melee-15; echo_in_melee: melee+18, guard-5.
+	# guard: 55 + 20 - 5 = 70; melee: (35-15) + 18 = 38 → guard wins.
 	var actor := {
 		"id":             "echo_sit_002",
 		"faction":        "echo",
-		"calling_origin": "uncalled",
+		"calling_origin": "onyamesu",
 		"actor_type":     "echo",
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
 		"vector_scores":  {},
@@ -301,7 +310,7 @@ static func _t_last_echo_standing_guards() -> Dictionary:
 	var intent: Dictionary = arbiter.select_intent(context)
 
 	if str(intent.get("action_type", "")) != "actor.guard":
-		return { "ok": false, "error": "Expected actor.guard when last echo standing (guard=45 > idle=35 > melee=25), got: %s" % str(intent.get("action_type")) }
+		return { "ok": false, "error": "Expected actor.guard when last echo standing (onyamesu guard=70 > melee=38), got: %s" % str(intent.get("action_type")) }
 
 	return { "ok": true }
 
@@ -405,8 +414,8 @@ static func _t_confirmed_calling_overrides_birth_origin() -> Dictionary:
 	var actor := {
 		"id":             "echo_seam_001",
 		"faction":        "echo",
-		"calling_origin": "warder",  # birth origin — would choose protect_ally if unchecked
-		"calling":        "blade",   # confirmed calling — must drive behavior
+		"calling_origin": "okofor",  # V2 birth origin (warder) — protect_ally=65 if unchecked
+		"calling":        "aduro",   # V2 confirmed calling (blade) — melee=65 drives behavior
 		"actor_type":     "echo",
 		"traits":         { "courage": 55, "wisdom": 42, "faith": 38 },
 		"vector_scores":  {},
@@ -434,6 +443,6 @@ static func _t_confirmed_calling_overrides_birth_origin() -> Dictionary:
 	if str(intent.get("action_type", "")) != "melee_attack":
 		return {
 			"ok": false,
-			"error": "Confirmed blade (melee=65) should win over warder birth origin (protect_ally=65). Got: %s" % str(intent.get("action_type")),
+			"error": "Confirmed aduro (melee=65) should win over okofor birth origin (protect_ally=65). Got: %s" % str(intent.get("action_type")),
 		}
 	return { "ok": true }

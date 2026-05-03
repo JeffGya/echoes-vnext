@@ -255,7 +255,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	# V2-VOICE-001: deterministic variation key — no RNG, same inputs → same line
 	var variation_key: int = (t + str(_actor.get("id", "")).hash()) % 997
 	_select_bark(arch, calling, action_type, start_fear, end_fear, start_morale_tier, end_morale_tier,
-		last_echo_standing, resilience_fired, intent.get("target_id", ""), variation_key)
+		last_echo_standing, resilience_fired, intent.get("target_id", ""), variation_key, t)
 	# V2-VOICE-001: check if this actor should react to an ally's high-signal bark
 	_check_reactive_bark(augmented_context, variation_key)
 	# V2-VOICE-001: write bark fields to actor dict so round_bark_events pipeline can read them
@@ -407,7 +407,8 @@ func _select_bark(
 	last_echo_standing: bool,
 	resilience_fired: bool,
 	target_id: Variant,
-	variation_key: int = 0
+	variation_key: int = 0,
+	t: int = 0
 ) -> void:
 	var context_key := ""
 	var target := str(target_id) if target_id != null else ""
@@ -455,6 +456,16 @@ func _select_bark(
 	if context_key.is_empty():
 		return
 
+	# V2-VOICE-002: cooldown gate — routine barks suppressed until _bark_next_t.
+	# High-priority contexts always fire and reset the cooldown.
+	const _HIGH_PRIORITY_BARK: Array = [
+		"combat_last_stand", "combat_resilient",
+		"combat_fear_extreme", "combat_fear_rising", "combat_morale_falling"
+	]
+	if not _HIGH_PRIORITY_BARK.has(context_key):
+		if t < int(_actor.get("_bark_next_t", 0)):
+			return
+
 	_bark_context = context_key
 	_bark_tier = _expression_band
 
@@ -470,7 +481,9 @@ func _select_bark(
 		var legacy := ShoutBank.get_shout(context_key, arch, trait_tier, variation_key)
 		if not legacy.is_empty() and legacy != ShoutBank._FALLBACK:
 			line = legacy
-	_bark_line = line
+	if not line.is_empty() and line != ShoutBank._FALLBACK:
+		_bark_line = line
+		_actor["_bark_next_t"] = t + _compute_bark_cooldown()
 
 
 # Returns an ordinal rank for morale tiers (higher = better).
@@ -480,6 +493,19 @@ static func _morale_tier_rank(tier: String) -> int:
 		"steady":   return 2
 		"shaken":   return 1
 	return 0  # broken
+
+
+# V2-VOICE-002: Tick gap before next routine bark (~3–6 rounds at 7 ticks/round).
+func _compute_bark_cooldown() -> int:
+	var morale: String = str(_actor.get("morale", "steady"))
+	var fear: int = int(_actor.get("fear", 0))
+	if morale == "inspired" or fear >= 60:
+		return 14   # ~2 rounds
+	elif morale == "broken":
+		return 35   # ~5 rounds
+	elif morale == "shaken" or fear >= 40:
+		return 21   # ~3 rounds
+	return 28       # ~4 rounds (default steady)
 
 
 ## V2-VOICE-001: Called by FlowRuntime after CombatService.resolve_action() resolves.

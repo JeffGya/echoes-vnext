@@ -39,8 +39,9 @@ static func from_echo(echo: Dictionary) -> Dictionary:
 		"name":           echo.get("name",           defaults["name"]),
 		"rarity":         echo.get("rarity",         defaults["rarity"]),
 		"rank":           echo.get("rank",           defaults["rank"]),
-		"calling_origin": echo.get("calling_origin", defaults["calling_origin"]),
-		"calling":        echo.get("calling",        ""),  # V2-PROG-002: confirmed runtime identity (empty until Standing-3)
+		"calling_origin":  echo.get("calling_origin",  defaults["calling_origin"]),
+		"calling":         echo.get("calling",         ""),  # V2-PROG-002: confirmed runtime identity (empty until Standing-3)
+		"archetype_birth": echo.get("archetype_birth", ""),  # V2-VOICE-001: bark lookup key
 		"stats":          echo_stats.duplicate(true),
 		"traits":         echo_traits.duplicate(true),
 		"xp_total":       echo.get("xp_total",       defaults["xp_total"]),

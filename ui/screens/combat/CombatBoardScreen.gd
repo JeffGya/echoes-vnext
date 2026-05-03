@@ -83,6 +83,8 @@ var _step_delay: float = _SPEED_NORMAL
 # Manual mode: when true, player clicks the CTA button instead of auto-dispatch.
 var _manual_mode: bool = false
 var _active_encounter_id: String = ""
+# V2-VOICE-002: last bark line shown — prevents back-to-back identical lines across echoes.
+var _last_bark_line: String = ""
 var _presentation_board_size: Vector2i = Vector2i.ZERO
 
 # -------------------------
@@ -169,6 +171,9 @@ func _reset_transient_ui() -> void:
 func _reset_presentation_state() -> void:
 	_token_layer.reset_presentation()
 	_move_telegraph_layer.clear_telegraph()
+	if _bark_popup_layer != null:
+		_bark_popup_layer.clear_all()
+	_last_bark_line = ""
 
 
 func _should_reset_presentation(data: Dictionary) -> bool:
@@ -194,8 +199,9 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	if not actors.is_empty():
 		_draw_tokens(actors, current_actor_id, data)
 		_distance_layer.update_distances(actors[0], _board, data)
-		# V2-VOICE-001: assemble and enqueue bark popups for this actor snapshot.
-		_enqueue_bark_popups(actors, data)
+		# V2-VOICE-002: show new barks + reposition all active bubbles to follow tokens.
+		_show_bark_popups(actors, data)
+		_update_bark_positions(actors)
 	else:
 		_token_layer.reset_presentation()
 		_move_telegraph_layer.clear_telegraph()
@@ -484,20 +490,21 @@ func set_emotion_debug(enabled: bool) -> void:
 	_token_layer.set_emotion_debug(enabled)
 
 
-# V2-VOICE-001: Assembles the interleaved bark queue for this snapshot and passes it
-# to _bark_popup_layer.enqueue_barks().
+# V2-VOICE-002: Assembles new bark events for this snapshot and passes them to
+# _bark_popup_layer.show_barks(). Called every render; only actors with a non-empty
+# bark_line produce an event (bark is consumed on first projection in FlowEncounterState).
 #
-# Priority sort (plan spec):
+# Priority sort:
 #   Tier 1: combat_last_stand, combat_fear_extreme, combat_ko, combat_resilient — always shown
 #   Tier 2: combat_fear_rising, combat_morale_falling, combat_inspired, combat_taunt, combat_calling_skill
 #   Tier 3: combat_attack, combat_guard, combat_banter, combat_rally_ally (situational)
-# Cap: max_barks_per_round originals (default 3). Reactions do NOT count against cap.
-# Queue order: [orig1, reaction_to_1, orig2, reaction_to_2, ...]
-func _enqueue_bark_popups(actors: Array, data: Dictionary) -> void:
+# Cap: max 3 originals. Reactions do NOT count against cap.
+# Originals shown immediately; reactions shown after REACTION_DELAY (in BarkPopupLayer).
+func _show_bark_popups(actors: Array, _data: Dictionary) -> void:
 	if _bark_popup_layer == null:
 		return
 
-	var max_per_round: int = 3
+	var max_originals: int = 3
 	var tier_map: Dictionary = {
 		"combat_last_stand":    1, "combat_fear_extreme": 1,
 		"combat_ko":            1, "combat_resilient":    1,
@@ -508,7 +515,6 @@ func _enqueue_bark_popups(actors: Array, data: Dictionary) -> void:
 		"combat_banter":        3,
 	}
 
-	# Separate originals and reactions; skip empty bark lines.
 	var originals: Array = []
 	var reactions: Array = []
 	for actor_v in actors:
@@ -518,37 +524,31 @@ func _enqueue_bark_popups(actors: Array, data: Dictionary) -> void:
 		var bark_line: String = str(actor.get("bark_line", ""))
 		if bark_line.is_empty():
 			continue
-		var gp: Dictionary = actor.get("grid_pos", {})
-		var col: int = gp.get("col", 0)
-		var row: int = gp.get("row", 0)
-		var cell_pos: Vector2 = _board.map_to_local(Vector2i(col, row))
-		var screen_pos: Vector2 = cell_pos + _board.position
+		var screen_pos: Vector2 = _actor_screen_pos(actor)
 		var ev: Dictionary = {
-			"actor_id":    str(actor.get("id", "")),
-			"bark_line":   bark_line,
-			"bark_context": str(actor.get("bark_context", "")),
-			"bark_tier":   str(actor.get("bark_tier", "")),
+			"actor_id":      str(actor.get("id", "")),
+			"bark_line":     bark_line,
+			"bark_context":  str(actor.get("bark_context", "")),
+			"bark_tier":     str(actor.get("bark_tier", "")),
 			"bark_target_id": str(actor.get("bark_target_id", "")),
-			"is_response": bool(actor.get("bark_is_response", false)),
-			"screen_pos":  screen_pos,
+			"is_response":   bool(actor.get("bark_is_response", false)),
+			"screen_pos":    screen_pos,
 		}
 		if ev["is_response"]:
 			reactions.append(ev)
 		else:
 			originals.append(ev)
 
-	# Sort originals: tier ascending (1 first), then initiative order (array order).
+	# Sort originals by tier (1 = highest priority shown first).
 	originals.sort_custom(func(a, b):
 		var ta: int = int(tier_map.get(str(a.get("bark_context", "")), 3))
 		var tb: int = int(tier_map.get(str(b.get("bark_context", "")), 3))
 		return ta < tb
 	)
+	if originals.size() > max_originals:
+		originals = originals.slice(0, max_originals)
 
-	# Cap originals at max_per_round (drop Tier 3 first, already at end after sort).
-	if originals.size() > max_per_round:
-		originals = originals.slice(0, max_per_round)
-
-	# Build interleaved queue: orig → matching reaction → next orig → ...
+	# Interleave: orig → its reaction (if any) → next orig → ...
 	var interleaved: Array = []
 	for orig in originals:
 		interleaved.append(orig)
@@ -556,10 +556,44 @@ func _enqueue_bark_popups(actors: Array, data: Dictionary) -> void:
 		for reaction in reactions:
 			if str(reaction.get("bark_target_id", "")) == orig_id:
 				interleaved.append(reaction)
-				break  # max 1 reaction per original
+				break
 
-	if not interleaved.is_empty():
-		_bark_popup_layer.enqueue_barks(interleaved)
+	# Remove any event whose line matches the one immediately before it (or the last shown).
+	var deduped: Array = []
+	var prev_line: String = _last_bark_line
+	for ev in interleaved:
+		var line: String = str(ev.get("bark_line", ""))
+		if line != prev_line:
+			deduped.append(ev)
+			prev_line = line
+	if not deduped.is_empty():
+		_last_bark_line = str(deduped.back().get("bark_line", ""))
+		_bark_popup_layer.show_barks(deduped)
+
+
+# V2-VOICE-002: Pushes current actor positions to BarkPopupLayer so speech bubbles
+# follow their token each render pass. Also prunes popups for dead/gone actors.
+func _update_bark_positions(actors: Array) -> void:
+	if _bark_popup_layer == null:
+		return
+	var positions: Dictionary = {}
+	for actor_v in actors:
+		if not (actor_v is Dictionary):
+			continue
+		var actor: Dictionary = actor_v
+		var actor_id: String = str(actor.get("id", ""))
+		if not actor_id.is_empty():
+			positions[actor_id] = _actor_screen_pos(actor)
+	_bark_popup_layer.update_actor_positions(positions)
+
+
+# Converts an actor's grid_pos to BarkPopupLayer local space.
+# Control has no to_local(); use get_global_transform().affine_inverse() instead.
+func _actor_screen_pos(actor: Dictionary) -> Vector2:
+	var gp: Dictionary = actor.get("grid_pos", {})
+	var cell_pos: Vector2 = _board.map_to_local(Vector2i(gp.get("col", 0), gp.get("row", 0)))
+	var world_pos: Vector2 = _board.to_global(cell_pos)
+	return _bark_popup_layer.get_global_transform().affine_inverse() * world_pos
 
 
 # -------------------------

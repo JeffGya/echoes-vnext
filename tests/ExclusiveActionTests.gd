@@ -29,7 +29,7 @@ static func _skills_cfg() -> Dictionary:
 		"definitions": {
 			"blade_resolve": {
 				"skill_id":            "blade_resolve",
-				"calling_requirement": "blade",
+				"calling_requirement": "aduro",
 				"display_name":        "Blade's Resolve",
 				"target_type":         "enemy",
 				"action_type":         "actor.press",
@@ -40,7 +40,7 @@ static func _skills_cfg() -> Dictionary:
 			},
 			"warders_vigil": {
 				"skill_id":            "warders_vigil",
-				"calling_requirement": "warder",
+				"calling_requirement": "okofor",
 				"display_name":        "Warder's Vigil",
 				"target_type":         "ally",
 				"action_type":         "actor.interpose",
@@ -56,7 +56,7 @@ static func _blade_actor(equipped_skill_id: String = "") -> Dictionary:
 	var actor := {
 		"id":                     "echo_blade_01",
 		"faction":                "echo",
-		"calling_origin":         "blade",
+		"calling_origin":         "aduro",
 		"traits":                 { "courage": 0, "wisdom": 0, "faith": 0 },
 		"vector_scores":          {},
 		"fear":                   0,
@@ -74,7 +74,7 @@ static func _warder_actor(equipped_skill_id: String = "") -> Dictionary:
 	var actor := {
 		"id":             "echo_warder_01",
 		"faction":        "echo",
-		"calling_origin": "warder",
+		"calling_origin": "okofor",
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
 		"vector_scores":  {},
 		"fear":           0,

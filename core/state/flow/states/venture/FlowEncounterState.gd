@@ -213,6 +213,9 @@ static func _project_actor(actor: Dictionary) -> Dictionary:
 	var stats: Dictionary = actor.get("stats", {})
 	var max_hp: int = int(stats.get("max_hp", 1))
 	var fear: int = int(actor.get("fear", 0))
+	# V2-VOICE-002: consume bark on first projection — prevents re-enqueueing across subsequent snapshots.
+	var bark_line_val: String = str(actor.get("_bark_line", ""))
+	actor["_bark_line"] = ""
 	return {
 		"id":             str(actor.get("id", "")),
 		"name":           str(actor.get("name", "")),
@@ -232,7 +235,7 @@ static func _project_actor(actor: Dictionary) -> Dictionary:
 		# PROG-008: active skill slots forwarded for pre-battle and resolve screens.
 		"skill_slots": (actor.get("skill_slots", [""]) as Array).duplicate(),
 		# V2-VOICE-001: bark fields — written by ActorStateMachine, read by CombatBoardScreen.
-		"bark_line":        str(actor.get("_bark_line",        "")),
+		"bark_line":        bark_line_val,
 		"bark_context":     str(actor.get("_bark_context",     "")),
 		"bark_tier":        str(actor.get("_bark_tier",        "")),
 		"bark_target_id":   str(actor.get("_bark_target_id",   "")),
