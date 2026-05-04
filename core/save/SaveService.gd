@@ -289,6 +289,12 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			"heard_fragments": [],
 			"selected_fragment": "",
 			"name_options": [],
+			"keeper_intro_complete": _legacy_complete,
+			"keeper_intro_step": "complete" if _legacy_complete else "",
+			"keeper_trial_phase": "ready",
+			"keeper_trial_rewind_used": false,
+			"first_thread_id": "",
+			"awakening_choice": "",
 		}
 		repaired = true
 		repaired_notes.append("onboarding added (Chapter I defaults)")
@@ -318,6 +324,30 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			onboarding["name_options"] = []
 			repaired = true
 			repaired_notes.append("onboarding.name_options set to []")
+		if not onboarding.has("keeper_intro_complete") or typeof(onboarding["keeper_intro_complete"]) != TYPE_BOOL:
+			onboarding["keeper_intro_complete"] = bool(onboarding.get("chapter_one_complete", false))
+			repaired = true
+			repaired_notes.append("onboarding.keeper_intro_complete backfilled")
+		if not onboarding.has("keeper_intro_step") or typeof(onboarding["keeper_intro_step"]) != TYPE_STRING:
+			onboarding["keeper_intro_step"] = "complete" if bool(onboarding.get("keeper_intro_complete", false)) else ""
+			repaired = true
+			repaired_notes.append("onboarding.keeper_intro_step backfilled")
+		if not onboarding.has("keeper_trial_phase") or typeof(onboarding["keeper_trial_phase"]) != TYPE_STRING:
+			onboarding["keeper_trial_phase"] = "ready"
+			repaired = true
+			repaired_notes.append("onboarding.keeper_trial_phase set to ready")
+		if not onboarding.has("keeper_trial_rewind_used") or typeof(onboarding["keeper_trial_rewind_used"]) != TYPE_BOOL:
+			onboarding["keeper_trial_rewind_used"] = false
+			repaired = true
+			repaired_notes.append("onboarding.keeper_trial_rewind_used set to false")
+		if not onboarding.has("first_thread_id") or typeof(onboarding["first_thread_id"]) != TYPE_STRING:
+			onboarding["first_thread_id"] = ""
+			repaired = true
+			repaired_notes.append("onboarding.first_thread_id set to empty")
+		if not onboarding.has("awakening_choice") or typeof(onboarding["awakening_choice"]) != TYPE_STRING:
+			onboarding["awakening_choice"] = ""
+			repaired = true
+			repaired_notes.append("onboarding.awakening_choice set to empty")
 
 	# ---- Sanctum repairs (SANCTUM-001) ----
 	if not save.has("sanctum") or typeof(save["sanctum"]) != TYPE_DICTIONARY:
@@ -335,6 +365,11 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			"bonds": [],
 			"party_encounters": [],
 			"rival_incidents": [],
+			"ase_flame": {
+				"awakened": false,
+				"boost_remaining_seconds": 0,
+				"boost_per_bank_tick": 0,
+			},
 		}
 		repaired = true
 		repaired_notes.append("sanctum added (roster + active_party_ids defaults; sanctum.ase legacy ignored)")
@@ -743,7 +778,32 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			sanctum["threads"] = {}
 			repaired = true
 			repaired_notes.append("sanctum.threads set to {} (V2 stub)")
-
+		if not sanctum.has("ase_flame") or not (sanctum["ase_flame"] is Dictionary):
+			sanctum["ase_flame"] = {
+				"awakened": bool(save.get("onboarding", {}).get("keeper_intro_complete", false)),
+				"boost_remaining_seconds": 0,
+				"boost_per_bank_tick": 0,
+			}
+			repaired = true
+			repaired_notes.append("sanctum.ase_flame added")
+		else:
+			var flame: Dictionary = sanctum["ase_flame"]
+			if not flame.has("awakened") or typeof(flame["awakened"]) != TYPE_BOOL:
+				flame["awakened"] = bool(save.get("onboarding", {}).get("keeper_intro_complete", false))
+				repaired = true
+				repaired_notes.append("sanctum.ase_flame.awakened backfilled")
+			if not flame.has("boost_remaining_seconds") or (typeof(flame["boost_remaining_seconds"]) != TYPE_INT and typeof(flame["boost_remaining_seconds"]) != TYPE_FLOAT):
+				flame["boost_remaining_seconds"] = 0
+				repaired = true
+				repaired_notes.append("sanctum.ase_flame.boost_remaining_seconds set to 0")
+			else:
+				flame["boost_remaining_seconds"] = int(flame["boost_remaining_seconds"])
+			if not flame.has("boost_per_bank_tick") or (typeof(flame["boost_per_bank_tick"]) != TYPE_INT and typeof(flame["boost_per_bank_tick"]) != TYPE_FLOAT):
+				flame["boost_per_bank_tick"] = 0
+				repaired = true
+				repaired_notes.append("sanctum.ase_flame.boost_per_bank_tick set to 0")
+			else:
+				flame["boost_per_bank_tick"] = int(flame["boost_per_bank_tick"])
 		if _starter_occupants_need_repair(sanctum):
 			SanctumLayoutService.ensure_starter_occupant(save)
 			repaired = true

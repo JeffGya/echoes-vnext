@@ -302,6 +302,10 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var combat_state: Dictionary = ectx.combat_state if ectx != null else {}
 	var encounter_id: String = ectx.encounter_id if ectx != null else ""
 	var placement_seed: int = ectx.placement_seed if ectx != null else 0
+	var combat_over: bool = bool(combat_state.get("combat_over", false))
+	if encounter_id == "keeper_intro.first_trial":
+		board_cols = 5
+		board_rows = 5
 
 	var round: int = 0
 	var initiative_order: Array = []
@@ -332,14 +336,14 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		if a_v is Dictionary:
 			projected_actors.append(FlowEncounterState._project_actor(a_v))
 
-	var actions: Dictionary = {
-		"nav.back": {
+	var actions: Dictionary = {}
+	if encounter_id != "keeper_intro.first_trial":
+		actions["nav.back"] = {
 			"type":  "flow.go_state",
 			"to":    FlowStateIds.SANCTUM,
 			"label": "← Back",
 			"slot":  "nav.back",
-		},
-	}
+		}
 
 	# UI-004: Retreat eligibility — computed pre_combat only; inert in all other phases.
 	var retreat_eligible:    bool   = false
@@ -388,7 +392,7 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			}
 
 	return {
-		"type": FlowStateIds.ENCOUNTER,
+		"type": FlowStateIds.KEEPER_TRIAL if encounter_id == "keeper_intro.first_trial" else FlowStateIds.ENCOUNTER,
 		"data": {
 			"title":                   "Encounter",
 			"encounter_id":            encounter_id,
@@ -404,7 +408,7 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"current_actor_id":        current_actor_id,
 			"last_actor_action":       last_actor_action_v,
 			"round_phase":             round_phase,
-			"combat_over":             false,
+			"combat_over":             combat_over,
 			# UI-004: always present; non-zero/non-empty only in pre_combat phase.
 			"retreat_eligible":        retreat_eligible,
 			"retreat_ase_cost":        retreat_ase_cost,

@@ -7,6 +7,13 @@
 			"offline_cap_seconds": 28800.0,
 			"sanctum_bank_interval_seconds": 240.0
 		},
+		"keeper_intro": {
+			"first_trial_ase_reward": 40.0,
+			"first_weave_storyweight": 10.0,
+			"awakening_boost_per_bank_tick": 5.0,
+			"awakening_boost_duration_seconds": 600.0,
+			"awakening_boost_bank_interval_seconds": 240.0
+		},
 		"summoning": {
 			"ase_cost_per_summon": 60.0,
 			"ase_cost_per_summon_by_grade": {
@@ -239,6 +246,13 @@
 						"courage": 50.0,
 						"wisdom": 30.0,
 						"faith": 45.0
+					}
+				},
+				"fragment_wound": {
+					"traits": {
+						"courage": 35.0,
+						"wisdom": 25.0,
+						"faith": 20.0
 					}
 				},
 				"dust_wanderer": {

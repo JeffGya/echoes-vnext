@@ -196,4 +196,11 @@ static func _make_runtime_env() -> Dictionary:
 	if not runtime.has_method("get_save_data"):
 		return { "ok": false, "error": "FlowRuntime.get_save_data() missing" }
 
+	var save_ref: Dictionary = runtime.get_save_data()
+	var onboarding_v: Variant = save_ref.get("onboarding", {})
+	if onboarding_v is Dictionary:
+		var onboarding: Dictionary = onboarding_v
+		onboarding["keeper_intro_complete"] = true
+		onboarding["keeper_intro_step"] = "complete"
+
 	return { "ok": true, "runtime": runtime }

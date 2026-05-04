@@ -7,6 +7,7 @@
 [ext_resource type="Script" uid="uid://bwbb53y8827ra" path="res://ui/screens/combat/CombatMoveTelegraphLayer.gd" id="5_move_telegraph"]
 [ext_resource type="Script" uid="uid://cb8j2g1nyt3or" path="res://ui/screens/combat/CombatTokenVisualConfig.gd" id="6_visual_config"]
 [ext_resource type="PackedScene" uid="uid://voice001_bark_popup_layer" path="res://ui/screens/combat/BarkPopupLayer.tscn" id="7_bark_popup_layer"]
+[ext_resource type="PackedScene" path="res://ui/screens/venture/DirectiveSelectOverlay.tscn" id="8_directive_overlay"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_board"]
 texture = ExtResource("2_tile")
@@ -245,3 +246,13 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
+
+[node name="DirectiveSelectOverlay" parent="." unique_id=200000007 instance=ExtResource("8_directive_overlay")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2

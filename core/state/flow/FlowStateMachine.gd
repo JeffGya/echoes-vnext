@@ -5,6 +5,8 @@ extends StateMachine
 const FlowWeavingRiteStateScript  := preload("res://core/state/flow/states/sanctum/FlowWeavingRiteState.gd")
 const FlowStageExploreStateScript := preload("res://core/state/flow/states/venture/FlowStageExploreState.gd")  # V2-STAGE-001
 const FlowOnboardingStateScript := preload("res://core/state/flow/states/onboarding/FlowOnboardingState.gd")
+const FlowKeeperIntroStateScript := preload("res://core/state/flow/states/onboarding/FlowKeeperIntroState.gd")
+const KeeperIntroServiceScript := preload("res://core/onboarding/KeeperIntroService.gd")
 
 func _init() -> void:
 	super("state.flow")
@@ -20,6 +22,13 @@ func register_default_states() -> void:
 	register_state(FlowOnboardingStateScript.new(FlowStateIds.ONBOARDING_MEETING, OnboardingService.STEP_MEETING))
 	register_state(FlowOnboardingStateScript.new(FlowStateIds.ONBOARDING_EMPTY_SANCTUM, OnboardingService.STEP_EMPTY_SANCTUM))
 	register_state(FlowOnboardingStateScript.new(FlowStateIds.ONBOARDING_NAME_SANCTUM, OnboardingService.STEP_NAME_SANCTUM))
+	register_state(FlowKeeperIntroStateScript.new(FlowStateIds.KEEPER_CALL, KeeperIntroServiceScript.STEP_CALL))
+	register_state(FlowKeeperIntroStateScript.new(FlowStateIds.KEEPER_TRIAL, KeeperIntroServiceScript.STEP_TRIAL))
+	register_state(FlowKeeperIntroStateScript.new(FlowStateIds.KEEPER_REWIND, KeeperIntroServiceScript.STEP_REWIND))
+	register_state(FlowKeeperIntroStateScript.new(FlowStateIds.KEEPER_THREAD_RETURN, KeeperIntroServiceScript.STEP_THREAD_RETURN))
+	register_state(FlowKeeperIntroStateScript.new(FlowStateIds.KEEPER_AWAKENING, KeeperIntroServiceScript.STEP_AWAKENING))
+	register_state(FlowKeeperIntroStateScript.new(FlowStateIds.KEEPER_WEAVING, KeeperIntroServiceScript.STEP_WEAVING))
+	register_state(FlowKeeperIntroStateScript.new(FlowStateIds.KEEPER_KEEPING, KeeperIntroServiceScript.STEP_KEEPING))
 	
 	register_state(FlowSanctumState.new())
 	register_state(FlowEchoPartyState.new())
@@ -91,6 +100,9 @@ func _rebuild_snapshot(ctx: FlowContext, logger: StructuredLogger, t: int) -> vo
 		var econ: Dictionary = {}
 		if ctx.save_data != null and ctx.save_data.has("economy") and typeof(ctx.save_data["economy"]) == TYPE_DICTIONARY:
 			econ = ctx.save_data["economy"]
+		var sanctum: Dictionary = {}
+		if ctx.save_data != null and ctx.save_data.has("sanctum") and typeof(ctx.save_data["sanctum"]) == TYPE_DICTIONARY:
+			sanctum = ctx.save_data["sanctum"]
 			
 		# SANCTUM-001: Ase rate hint (NOT a balance prediction)
 		# Used only for UI text like: "~ 1.2 Ase gathered p/h"
@@ -108,15 +120,16 @@ func _rebuild_snapshot(ctx: FlowContext, logger: StructuredLogger, t: int) -> vo
 
 		data["ase_balance"] = int(econ.get("ase", 0))
 		data["ekwan_balance"] = int(econ.get("ekwan", 0))
+		var flame_v: Variant = sanctum.get("ase_flame", {})
+		var flame: Dictionary = flame_v if flame_v is Dictionary else {}
+		if not bool(flame.get("awakened", false)):
+			ase_per_min_base = 0.0
 		# per_hour = per_min * 60
 		data["ase_rate_per_hour_hint"] = ase_per_min_base * 60.0 * multiplier
+		data["ase_flame"] = flame.duplicate(true)
 		
 		
 		# SANCTUM-001: surface sanctum hub info (snapshot-only UI contract)
-		var sanctum: Dictionary = {}
-		if ctx.save_data != null and ctx.save_data.has("sanctum") and typeof(ctx.save_data["sanctum"]) == TYPE_DICTIONARY:
-			sanctum = ctx.save_data["sanctum"]
-			
 		var roster: Array = []
 		if sanctum.has("roster") and sanctum["roster"] is Array:
 			roster = sanctum["roster"]

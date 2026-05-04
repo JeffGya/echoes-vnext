@@ -24,6 +24,7 @@ func _ready() -> void:
 		"flow.stage":         _stage_explore_scene,   # V2-STAGE-001: merged into StageExploreScreen
 		"flow.stage_explore": _stage_explore_scene,   # V2-STAGE-001
 		"flow.encounter":     _combat_board_scene,
+		"flow.keeper_trial":  _combat_board_scene,
 		"flow.resolve":       _resolve_scene,
 	}
 
@@ -43,7 +44,7 @@ func _update_echo_bar(snap: Dictionary) -> void:
 
 	var party: Array = []
 	match snap_type:
-		"flow.encounter", "flow.resolve":
+		"flow.encounter", "flow.keeper_trial", "flow.resolve":
 			# Encounter snapshots include all combatants — filter for echoes only.
 			for a in data.get("actors", []):
 				if a is Dictionary and str(a.get("faction", "")) == "echo":
