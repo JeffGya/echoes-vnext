@@ -78,6 +78,7 @@ static func _test_reactive_bark_fires_forming() -> Dictionary:
 	}
 
 	var asm := ActorStateMachine.new(actor, null, _make_actor_cfg())
+	asm._expression_band = "forming"  # Must be set manually when calling outside advance_turn()
 	asm._check_reactive_bark(context, 42)
 
 	if not asm._bark_is_response:
@@ -133,7 +134,7 @@ static func _test_reactive_bark_silent_nascent() -> Dictionary:
 
 ## Same inputs → same bark line every time (no RNG, deterministic variation_key).
 static func _test_reactive_bark_deterministic() -> Dictionary:
-	var actor := _make_echo_actor("e3", "grounded", "onyamesu", "echo", 5, 70, "grounded", 1, 1)
+	var actor := _make_echo_actor("e3", "loyal", "onyamesu", "echo", 5, 70, "grounded", 1, 1)
 	var context := {
 		"actor":            actor,
 		"all_actors":       [actor],
@@ -162,10 +163,12 @@ static func _test_reactive_bark_deterministic() -> Dictionary:
 	}
 
 	var asm1 := ActorStateMachine.new(actor.duplicate(true), null, _make_actor_cfg())
+	asm1._expression_band = "grounded"  # Must be set manually when calling outside advance_turn()
 	asm1._check_reactive_bark(context, 55)
 	var line1 := asm1._bark_line
 
 	var asm2 := ActorStateMachine.new(actor.duplicate(true), null, _make_actor_cfg())
+	asm2._expression_band = "grounded"  # Must be set manually when calling outside advance_turn()
 	asm2._check_reactive_bark(context, 55)
 	var line2 := asm2._bark_line
 

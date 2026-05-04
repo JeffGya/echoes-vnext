@@ -52,7 +52,7 @@ static func _t_actorsm_advance_turn_logs_intent() -> Dictionary:
 	var sm := ActorStateMachine.new(actor) # defaults to IdleBehaviorModule
 
 	var logger := StructuredLogger.new()
-	logger.set_level("info") # capture events for assertion
+	logger.set_level("debug") # capture events for assertion
 
 	var context := { "actor": actor, "all_actors": [], "t": 5 }
 	var intent: Dictionary = sm.advance_turn(context, logger, 5)

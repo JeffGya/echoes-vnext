@@ -1,6 +1,39 @@
 [gd_scene format=3 uid="uid://voice001_bark_popup_layer"]
 
 [ext_resource type="Script" uid="uid://voice001_bark_popup_layer_script" path="res://ui/screens/combat/BarkPopupLayer.gd" id="1_bpl_script"]
+[ext_resource type="Script" path="res://ui/screens/combat/BarkTail.gd" id="2_bark_tail_script"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_orig"]
+bg_color = Color(0.239, 0.353, 0.278, 0.85)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.831, 0.686, 0.216, 1.0)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_left = 8
+corner_radius_bottom_right = 8
+content_margin_left = 10.0
+content_margin_right = 10.0
+content_margin_top = 8.0
+content_margin_bottom = 8.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_react"]
+bg_color = Color(0.961, 0.902, 0.827, 0.9)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.690, 0.502, 0.251, 1.0)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_left = 8
+corner_radius_bottom_right = 8
+content_margin_left = 10.0
+content_margin_right = 10.0
+content_margin_top = 8.0
+content_margin_bottom = 8.0
 
 [node name="BarkPopupLayer" type="Control"]
 layout_mode = 3
@@ -12,28 +45,52 @@ grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("1_bpl_script")
 
-[node name="BarkPopupOriginal" type="PanelContainer" parent="."]
+[node name="BarkPopupOriginal" type="VBoxContainer" parent="."]
 visible = false
-custom_minimum_size = Vector2(200, 40)
 layout_mode = 0
-self_modulate = Color(0.239, 0.353, 0.278, 0.85)
+theme_override_constants/separation = 0
 
-[node name="BarkLabel" type="Label" parent="BarkPopupOriginal"]
+[node name="BarkPanel" type="PanelContainer" parent="BarkPopupOriginal"]
+custom_minimum_size = Vector2(200, 40)
+layout_mode = 2
+size_flags_horizontal = 1
+theme_override_styles/panel = SubResource("StyleBoxFlat_orig")
+
+[node name="BarkLabel" type="Label" parent="BarkPopupOriginal/BarkPanel"]
 layout_mode = 2
 theme_override_colors/font_color = Color(1.0, 0.973, 0.863, 1.0)
 theme_override_font_sizes/font_size = 14
 autowrap_mode = 2
 text = ""
 
-[node name="BarkPopupReaction" type="PanelContainer" parent="."]
-visible = false
-custom_minimum_size = Vector2(180, 36)
-layout_mode = 0
-self_modulate = Color(0.961, 0.902, 0.827, 0.9)
+[node name="BarkTail" type="Control" parent="BarkPopupOriginal"]
+custom_minimum_size = Vector2(14, 9)
+layout_mode = 2
+size_flags_horizontal = 4
+script = ExtResource("2_bark_tail_script")
+color = Color(0.239, 0.353, 0.278, 0.85)
 
-[node name="BarkLabel" type="Label" parent="BarkPopupReaction"]
+[node name="BarkPopupReaction" type="VBoxContainer" parent="."]
+visible = false
+layout_mode = 0
+theme_override_constants/separation = 0
+
+[node name="BarkPanel" type="PanelContainer" parent="BarkPopupReaction"]
+custom_minimum_size = Vector2(180, 36)
+layout_mode = 2
+size_flags_horizontal = 1
+theme_override_styles/panel = SubResource("StyleBoxFlat_react")
+
+[node name="BarkLabel" type="Label" parent="BarkPopupReaction/BarkPanel"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.239, 0.157, 0.090, 1.0)
 theme_override_font_sizes/font_size = 14
 autowrap_mode = 2
 text = ""
+
+[node name="BarkTail" type="Control" parent="BarkPopupReaction"]
+custom_minimum_size = Vector2(14, 9)
+layout_mode = 2
+size_flags_horizontal = 4
+script = ExtResource("2_bark_tail_script")
+color = Color(0.961, 0.902, 0.827, 0.9)

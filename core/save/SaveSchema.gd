@@ -38,6 +38,12 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"heard_fragments": [],
 			"selected_fragment": "",
 			"name_options": [],
+			"keeper_intro_complete": false,
+			"keeper_intro_step": "",
+			"keeper_trial_phase": "ready",
+			"keeper_trial_rewind_used": false,
+			"first_thread_id": "",
+			"awakening_choice": "",
 		},
 		"economy": {
 			"ase": 0,
@@ -74,6 +80,11 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			# V2-MIG-002: additive V2 sanctum stubs
 			"continuity": 0,  # V2-SANCTUM-001+: Sanctum growth spine
 			"threads": {},    # V2-WEAVE-001+: Thread reserve (keyed by thread_id)
+			"ase_flame": {
+				"awakened": false,
+				"boost_remaining_seconds": 0,
+				"boost_per_bank_tick": 0,
+			},
 		},
 		# DIRECTIVE-001: stage-level context (directive, future: stage seed, objective state)
 		"stage_context": {

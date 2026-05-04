@@ -30,7 +30,7 @@ static func _make_warder(anchor_rounds: int) -> Dictionary:
 	var actor := {
 		"id":             "echo_warder_p_01",
 		"faction":        "echo",
-		"calling_origin": "warder",
+		"calling_origin": "okofor",   # V2 name for warder (protect_ally base=65, anchor passive)
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
 		"vector_scores":  {},
 		"fear":           0,
@@ -47,7 +47,7 @@ static func _make_blade_broken() -> Dictionary:
 	return {
 		"id":             "echo_blade_p_01",
 		"faction":        "echo",
-		"calling_origin": "blade",
+		"calling_origin": "aduro",   # V2 name for blade (melee base=65, broken_morale_override passive)
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
 		"vector_scores":  {},
 		"fear":           0,
@@ -61,7 +61,7 @@ static func _make_seer_ally() -> Dictionary:
 	return {
 		"id":             "echo_seer_aura_01",
 		"faction":        "echo",
-		"calling_origin": "seer",
+		"calling_origin": "okomfo",   # V2 name for seer (seer_directive_aura fires for okomfo)
 		"is_dead":        false,
 		"grid_pos":       { "col": 2, "row": 0 },
 	}
@@ -70,7 +70,7 @@ static func _make_ranger(fear: int) -> Dictionary:
 	return {
 		"id":             "echo_ranger_p_01",
 		"faction":        "echo",
-		"calling_origin": "ranger",
+		"calling_origin": "kra_soro",   # V2 name for ranger (move bias, fear_move_bonus passive)
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
 		"vector_scores":  {},
 		"fear":           fear,
@@ -153,7 +153,12 @@ static func _t_blade_broken_morale_override() -> Dictionary:
 	var actor  := _make_blade_broken()
 	var enemy  := _adjacent_enemy()
 	var arbiter := BehaviorArbiter.new(_blade_cfg())
-	var ctx := { "actor": actor, "all_actors": [enemy], "t": 1 }
+	var ctx := {
+		"actor": actor, "all_actors": [enemy], "t": 1,
+		# calling_behavior must be injected manually — BehaviorArbiter reads it from context,
+		# not from cfg_data. ActorStateMachine normally injects this in advance_turn().
+		"calling_behavior": _blade_cfg().get("maturity_expression", {}).get("calling_behavior", {}).get("aduro", {}),
+	}
 	var intent: Dictionary = arbiter.select_intent(ctx)
 
 	# Blade broken morale override: melee +8 bonus → melee wins even in broken state.

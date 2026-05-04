@@ -14,6 +14,15 @@ const ONBOARDING_MEETING := "flow.onboarding_meeting"
 const ONBOARDING_EMPTY_SANCTUM := "flow.onboarding_empty_sanctum"
 const ONBOARDING_NAME_SANCTUM := "flow.onboarding_name_sanctum"
 
+# Keeper intro after Chapter I
+const KEEPER_CALL := "flow.keeper_call"
+const KEEPER_TRIAL := "flow.keeper_trial"
+const KEEPER_REWIND := "flow.keeper_rewind"
+const KEEPER_THREAD_RETURN := "flow.keeper_thread_return"
+const KEEPER_AWAKENING := "flow.keeper_awakening"
+const KEEPER_WEAVING := "flow.keeper_weaving"
+const KEEPER_KEEPING := "flow.keeper_keeping"
+
 # Sanctum hub + sub-screens
 const SANCTUM := "flow.sanctum"
 const ECHO_PARTY := "flow.echo_party"

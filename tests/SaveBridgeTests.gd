@@ -129,6 +129,8 @@ static func _test_new_save_sanctum_stubs() -> Dictionary:
 		return { "ok": false, "error": "sanctum.continuity expected 0" }
 	if not sanctum.has("threads") or not (sanctum["threads"] is Dictionary):
 		return { "ok": false, "error": "sanctum missing 'threads' Dict" }
+	if not sanctum.has("ase_flame") or not (sanctum["ase_flame"] is Dictionary):
+		return { "ok": false, "error": "sanctum missing 'ase_flame' Dict" }
 
 	return { "ok": true }
 
@@ -194,6 +196,10 @@ static func _test_repair_sanctum_stubs() -> Dictionary:
 		return { "ok": false, "error": "sanctum.continuity missing or not 0 after repair" }
 	if not sanctum.has("threads") or not (sanctum["threads"] is Dictionary):
 		return { "ok": false, "error": "sanctum.threads missing or wrong type after repair" }
+	if not sanctum.has("ase_flame") or not (sanctum["ase_flame"] is Dictionary):
+		return { "ok": false, "error": "sanctum.ase_flame missing or wrong type after repair" }
+	if not bool((sanctum["ase_flame"] as Dictionary).get("awakened", false)):
+		return { "ok": false, "error": "old completed save should backfill awakened Ase flame" }
 
 	var sc: Dictionary = save.get("stage_context", {})
 	if not sc.has("intel") or not (sc["intel"] is Dictionary):

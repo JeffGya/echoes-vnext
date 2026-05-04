@@ -102,7 +102,7 @@ static func _t_advance_turn_logs_actor_action_events() -> Dictionary:
 
 	var sm := ActorStateMachine.new(actor, MeleeBehaviorModule.new())
 	var logger := StructuredLogger.new()
-	logger.set_level("info")
+	logger.set_level("debug")
 
 	var context := { "actor": actor, "all_actors": [enemy], "t": 10 }
 	var intent: Dictionary = sm.advance_turn(context, logger, 10)

@@ -5,6 +5,8 @@ extends RefCounted
 const FlowWeavingRiteStateScript  := preload("res://core/state/flow/states/sanctum/FlowWeavingRiteState.gd")
 const WeavingRiteServiceScript    := preload("res://core/progression/WeavingRiteService.gd")
 const FlowStageExploreStateScript := preload("res://core/state/flow/states/venture/FlowStageExploreState.gd")  # V2-STAGE-001
+const FlowKeeperIntroStateScript  := preload("res://core/state/flow/states/onboarding/FlowKeeperIntroState.gd")
+const KeeperIntroServiceScript    := preload("res://core/onboarding/KeeperIntroService.gd")
 const StageExploreModelScript     := preload("res://core/realms/StageExploreModel.gd")                          # V2-STAGE-001
 const SituationModelScript        := preload("res://core/realms/SituationModel.gd")                             # V2-STAGE-001
 
@@ -108,6 +110,7 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 		"flow.go_state":
 			var to_state := str(action.get("to", ""))
+			to_state = _gate_state_for_keeper_intro(to_state)
 			# EMOTION-002: sanctum recovery tick applies before snapshot rebuild
 			if to_state == FlowStateIds.SANCTUM:
 				_apply_sanctum_emotion_tick(t)
@@ -165,6 +168,18 @@ func dispatch(action: Dictionary) -> Dictionary:
 					t,
 					"ui.flow.continue.onboarding"
 				)
+			elif not KeeperIntroServiceScript.is_complete(flow_ctx.save_data):
+				var _keeper_step: String = KeeperIntroServiceScript.current_step(flow_ctx.save_data, _continue_cfg)
+				if _keeper_step == KeeperIntroServiceScript.STEP_TRIAL and flow_ctx.encounter_ctx == null:
+					KeeperIntroServiceScript.ensure_starter_party(flow_ctx.save_data)
+					_setup_keeper_intro_trial_encounter(t)
+				flow_machine.transition(
+					KeeperIntroServiceScript.step_to_flow_id(_keeper_step),
+					flow_ctx,
+					logger,
+					t,
+					"ui.flow.continue.keeper_intro"
+				)
 			else:
 				flow_machine.transition(FlowStateIds.SANCTUM, flow_ctx, logger, t, "ui.flow.continue")
 
@@ -189,6 +204,28 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 		"onboarding.name.confirm":
 			_handle_onboarding_name_confirm(action, t)
+
+		# ---- Keeper intro after Chapter I ----
+		"keeper_intro.call.answer":
+			_handle_keeper_intro_call_answer(t)
+
+		"keeper_intro.trial.finish":
+			_handle_keeper_intro_trial_finish(t)
+
+		"keeper_intro.rewind.continue":
+			_handle_keeper_intro_rewind_continue(t)
+
+		"keeper_intro.thread.continue":
+			_handle_keeper_intro_thread_continue(t)
+
+		"keeper_intro.awakening.choose":
+			_handle_keeper_intro_awakening(action, t)
+
+		"keeper_intro.weave.complete":
+			_handle_keeper_intro_weave(t)
+
+		"keeper_intro.complete":
+			_handle_keeper_intro_complete(t)
 
 		# ---- Debug Seed (SANCTUM-002) ----
 		"debug.seed.show":
@@ -785,13 +822,217 @@ func _handle_onboarding_name_confirm(action: Dictionary, t: int) -> void:
 	var sanctum: Dictionary = flow_ctx.save_data["sanctum"]
 	sanctum["name"] = name
 	OnboardingService.mark_complete(flow_ctx.save_data, cfg)
+	KeeperIntroServiceScript.start_after_chapter_one(flow_ctx.save_data, cfg)
 	_mark_save_requested("onboarding.name.confirm")
 
 	logger.info(t, "onboarding.name.confirm", "Chapter I complete; Sanctum name set", {
 		"name": name
 	})
 
-	flow_machine.transition(FlowStateIds.SANCTUM, flow_ctx, logger, t, "ui.onboarding.name.confirm")
+	flow_machine.transition(FlowStateIds.KEEPER_CALL, flow_ctx, logger, t, "ui.onboarding.name.confirm")
+
+func _gate_state_for_keeper_intro(to_state: String) -> String:
+	if to_state in [
+		FlowStateIds.SANCTUM,
+		FlowStateIds.SUMMON,
+		FlowStateIds.ECHO_PARTY,
+		FlowStateIds.REALM_SELECT,
+		FlowStateIds.VOW_MANAGE,
+		FlowStateIds.WEAVING_RITE,
+	]:
+		var cfg := config_service.get_balance()
+		if OnboardingService.is_chapter_one_complete(flow_ctx.save_data) \
+				and not KeeperIntroServiceScript.is_complete(flow_ctx.save_data):
+			var step: String = KeeperIntroServiceScript.current_step(flow_ctx.save_data, cfg)
+			if step == KeeperIntroServiceScript.STEP_TRIAL and flow_ctx.encounter_ctx == null:
+				KeeperIntroServiceScript.ensure_starter_party(flow_ctx.save_data)
+				_setup_keeper_intro_trial_encounter(flow_ctx.sim_tick)
+			return KeeperIntroServiceScript.step_to_flow_id(step)
+	return to_state
+
+
+func _handle_keeper_intro_call_answer(t: int) -> void:
+	var cfg := config_service.get_balance()
+	KeeperIntroServiceScript.ensure_starter_party(flow_ctx.save_data)
+	_setup_keeper_intro_trial_encounter(t)
+	KeeperIntroServiceScript.set_step(flow_ctx.save_data, cfg, KeeperIntroServiceScript.STEP_TRIAL)
+	var onboarding: Dictionary = flow_ctx.save_data.get("onboarding", {})
+	onboarding["keeper_trial_phase"] = KeeperIntroServiceScript.TRIAL_READY
+	_mark_save_requested("keeper_intro.call.answer")
+	flow_machine.transition(FlowStateIds.KEEPER_TRIAL, flow_ctx, logger, t, "keeper_intro.call.answer")
+
+
+func _setup_keeper_intro_trial_encounter(t: int) -> void:
+	var echo := OnboardingService.get_starter_echo(flow_ctx.save_data)
+	if echo.is_empty():
+		return
+	var balance := config_service.get_balance()
+	var bd: Dictionary = balance.get("data", {})
+	var actor_cfg := {
+		"birth_stats": bd.get("summoning", {}).get("birth_stats", {}),
+		"enemy_types": bd.get("actor", {}).get("enemy_types", {}),
+	}
+	var echo_actor := EchoActor.from_echo(echo)
+	echo_actor["grid_pos"] = { "col": 0, "row": 2 }
+	var onboarding_v: Variant = flow_ctx.save_data.get("onboarding", {})
+	var onboarding: Dictionary = onboarding_v if onboarding_v is Dictionary else {}
+	var rewind_used := bool(onboarding.get("keeper_trial_rewind_used", false))
+	echo_actor["_bark_line"] = "The wound knows us. I can still stand." if not rewind_used else "Again, then. I remember the edge."
+	echo_actor["_bark_context"] = "combat_taunt"
+	echo_actor["_bark_tier"] = "nascent"
+	var wound := EnemyActor.from_definition({
+		"id": "fragment_wound",
+		"name": "Fragment Wound",
+		"type": "fragment_wound",
+		"level": 1,
+		"faction": "enemy",
+	}, t, actor_cfg)
+	wound["grid_pos"] = { "col": 4, "row": 2 }
+	wound["stats"]["max_hp"] = 18 if rewind_used else 28
+	wound["stats"]["atk"] = 10 if rewind_used else 18
+	wound["stats"]["def"] = 0 if rewind_used else 1
+	wound["stats"]["agi"] = 2
+	wound["current_hp"] = int(wound["stats"]["max_hp"])
+	wound["speed"] = 2
+	flow_ctx.encounter_ctx = EncounterContext.new()
+	flow_ctx.encounter_ctx.encounter_id = "keeper_intro.first_trial"
+	flow_ctx.encounter_ctx.resolution_mode = EncounterResolutionModes.COMBAT
+	flow_ctx.encounter_ctx.actors = [echo_actor, wound]
+	flow_ctx.encounter_ctx.placement_seed = 0
+	flow_ctx.encounter_machine = EncounterStateMachine.new()
+	flow_ctx.encounter_machine.register_default_states()
+	var combat_cfg: Dictionary = bd.get("combat", {})
+	flow_ctx.encounter_ctx.initiative_cfg = combat_cfg.get("initiative_modifiers", {})
+	flow_ctx.encounter_id = "keeper_intro.first_trial"
+	flow_ctx.stage_id = ""
+	flow_ctx.realm_id = ""
+
+
+func _is_keeper_intro_trial_active() -> bool:
+	return flow_ctx.encounter_ctx != null and flow_ctx.encounter_ctx.encounter_id == "keeper_intro.first_trial"
+
+
+func _keeper_intro_trial_lethal_echo_ids() -> Array[String]:
+	var lethal_ids: Array[String] = []
+	if not _is_keeper_intro_trial_active():
+		return lethal_ids
+	for actor_v in flow_ctx.encounter_ctx.actors:
+		if not (actor_v is Dictionary):
+			continue
+		var actor: Dictionary = actor_v
+		if str(actor.get("faction", "")) != "echo":
+			continue
+		if int(actor.get("current_hp", 1)) <= 0 or bool(actor.get("is_dead", false)):
+			lethal_ids.append(str(actor.get("id", "")))
+	return lethal_ids
+
+
+func _keeper_intro_trial_enemy_defeated() -> bool:
+	if not _is_keeper_intro_trial_active():
+		return false
+	for actor_v in flow_ctx.encounter_ctx.actors:
+		if not (actor_v is Dictionary):
+			continue
+		var actor: Dictionary = actor_v
+		if str(actor.get("faction", "")) == "enemy" and bool(actor.get("is_dead", false)):
+			return true
+	return false
+
+
+func _keeper_intro_restore_echo_after_second_attempt(t: int, lethal_ids: Array[String]) -> void:
+	for actor_v in flow_ctx.encounter_ctx.actors:
+		if not (actor_v is Dictionary):
+			continue
+		var actor: Dictionary = actor_v
+		if str(actor.get("id", "")) in lethal_ids:
+			actor["current_hp"] = 1
+			actor["is_dead"] = false
+			actor["death_round"] = 0
+			actor["_bark_line"] = "Still here. Finish it."
+			actor["_bark_context"] = "combat_resilient"
+			actor["_bark_tier"] = "nascent"
+	logger.info(t, "keeper_intro.trial.second_attempt.protected", "Second attempt Echo KO prevented without granting rewards", {
+		"lethal_echo_ids": lethal_ids,
+	})
+
+
+func _handle_keeper_intro_trial_rewind(t: int, lethal_ids: Array[String]) -> void:
+	var cfg := config_service.get_balance()
+	var onboarding: Dictionary = KeeperIntroServiceScript.ensure_intro(flow_ctx.save_data, cfg)
+	onboarding["keeper_trial_rewind_used"] = true
+	onboarding["keeper_trial_phase"] = "rewind"
+	KeeperIntroServiceScript.set_step(flow_ctx.save_data, cfg, KeeperIntroServiceScript.STEP_REWIND)
+	flow_ctx.encounter_ctx = null
+	flow_ctx.encounter_machine = null
+	flow_ctx.encounter_id = ""
+	_mark_save_requested("keeper_intro.trial.rewind")
+	logger.info(t, "keeper_intro.trial.rewind", "Anansi rewinds the first trial", {
+		"lethal_echo_ids": lethal_ids,
+	})
+	flow_machine.transition(FlowStateIds.KEEPER_REWIND, flow_ctx, logger, t, "keeper_intro.trial.rewind")
+
+
+func _handle_keeper_intro_rewind_continue(t: int) -> void:
+	var cfg := config_service.get_balance()
+	KeeperIntroServiceScript.ensure_starter_party(flow_ctx.save_data)
+	KeeperIntroServiceScript.set_step(flow_ctx.save_data, cfg, KeeperIntroServiceScript.STEP_TRIAL)
+	var onboarding: Dictionary = KeeperIntroServiceScript.ensure_intro(flow_ctx.save_data, cfg)
+	onboarding["keeper_trial_phase"] = KeeperIntroServiceScript.TRIAL_READY
+	_setup_keeper_intro_trial_encounter(t)
+	_mark_save_requested("keeper_intro.rewind.continue")
+	flow_machine.transition(FlowStateIds.KEEPER_TRIAL, flow_ctx, logger, t, "keeper_intro.rewind.continue")
+
+
+func _handle_keeper_intro_trial_finish(t: int) -> void:
+	if _is_keeper_intro_trial_active() and not _keeper_intro_trial_enemy_defeated():
+		logger.info(t, "keeper_intro.trial.finish.blocked", "First trial rewards blocked until the Fragment Wound is defeated", {})
+		flow_ctx.last_snapshot = FlowEncounterState.build_round_snapshot(flow_ctx, t)
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+		return
+	var cfg := config_service.get_balance()
+	KeeperIntroServiceScript.grant_trial_rewards(flow_ctx.save_data, cfg, econ, logger, t)
+	flow_ctx.encounter_ctx = null
+	flow_ctx.encounter_machine = null
+	flow_ctx.encounter_id = ""
+	KeeperIntroServiceScript.set_step(flow_ctx.save_data, cfg, KeeperIntroServiceScript.STEP_THREAD_RETURN)
+	_mark_save_requested("keeper_intro.trial.finish")
+	flow_machine.transition(FlowStateIds.KEEPER_THREAD_RETURN, flow_ctx, logger, t, "keeper_intro.trial.finish")
+
+
+func _handle_keeper_intro_thread_continue(t: int) -> void:
+	var cfg := config_service.get_balance()
+	KeeperIntroServiceScript.set_step(flow_ctx.save_data, cfg, KeeperIntroServiceScript.STEP_AWAKENING)
+	_mark_save_requested("keeper_intro.thread.continue")
+	flow_machine.transition(FlowStateIds.KEEPER_AWAKENING, flow_ctx, logger, t, "keeper_intro.thread.continue")
+
+
+func _handle_keeper_intro_awakening(action: Dictionary, t: int) -> void:
+	var cfg := config_service.get_balance()
+	var choice := str(action.get("choice", "")).strip_edges()
+	KeeperIntroServiceScript.awaken_flame(flow_ctx.save_data, cfg, choice, logger, t)
+	var econ_data_v: Variant = flow_ctx.save_data.get("economy", {})
+	if econ_data_v is Dictionary:
+		var econ_data: Dictionary = econ_data_v
+		econ_data["last_settle_unix"] = int(Time.get_unix_time_from_system())
+	KeeperIntroServiceScript.set_step(flow_ctx.save_data, cfg, KeeperIntroServiceScript.STEP_WEAVING)
+	_mark_save_requested("keeper_intro.awakening")
+	flow_machine.transition(FlowStateIds.KEEPER_WEAVING, flow_ctx, logger, t, "keeper_intro.awakening")
+
+
+func _handle_keeper_intro_weave(t: int) -> void:
+	var cfg := config_service.get_balance()
+	KeeperIntroServiceScript.apply_first_weave(flow_ctx.save_data, cfg, logger, t)
+	KeeperIntroServiceScript.set_step(flow_ctx.save_data, cfg, KeeperIntroServiceScript.STEP_KEEPING)
+	_mark_save_requested("keeper_intro.weave")
+	flow_machine.transition(FlowStateIds.KEEPER_KEEPING, flow_ctx, logger, t, "keeper_intro.weave")
+
+
+func _handle_keeper_intro_complete(t: int) -> void:
+	var cfg := config_service.get_balance()
+	KeeperIntroServiceScript.mark_complete(flow_ctx.save_data, cfg)
+	_mark_save_requested("keeper_intro.complete")
+	_apply_sanctum_emotion_tick(t)
+	flow_machine.transition(FlowStateIds.SANCTUM, flow_ctx, logger, t, "keeper_intro.complete")
 
 func _grant_starter_echo_for_fragment(fragment: Dictionary, t: int) -> void:
 	if not flow_ctx.save_data.has("sanctum") or not (flow_ctx.save_data["sanctum"] is Dictionary):
@@ -1149,6 +1390,7 @@ func _resolve_next_actor(t: int) -> void:
 		"bond_behavior_cfg":       _get_bond_behavior_cfg(),
 		# V2-VOICE-001: reactive bark queue — read-only; actors read this to fire rally_ally barks.
 		"round_bark_events":       ectx.round_bark_events,
+		"directive":               {} if _is_keeper_intro_trial_active() else (directive_service.get_active_directive() if directive_service != null else {}),
 	}
 
 	# Resolve this actor's turn.
@@ -1309,7 +1551,19 @@ func _resolve_next_actor(t: int) -> void:
 				"is_kill":     false,
 			})
 
-	# Store the most recent result for per-actor snapshot display.
+	if _is_keeper_intro_trial_active():
+		var lethal_ids: Array[String] = _keeper_intro_trial_lethal_echo_ids()
+		if not lethal_ids.is_empty():
+			var onboarding_v: Variant = flow_ctx.save_data.get("onboarding", {})
+			var onboarding: Dictionary = onboarding_v if onboarding_v is Dictionary else {}
+			if not bool(onboarding.get("keeper_trial_rewind_used", false)):
+				_handle_keeper_intro_trial_rewind(t, lethal_ids)
+				return
+			_keeper_intro_restore_echo_after_second_attempt(t, lethal_ids)
+		if _keeper_intro_trial_enemy_defeated():
+			_handle_keeper_intro_trial_finish(t)
+			return
+
 	if not ectx.last_round_results.is_empty():
 		ectx.last_actor_action = ectx.last_round_results.back().duplicate()
 
@@ -1461,6 +1715,10 @@ func _end_round(t: int) -> void:
 			"round": round,
 			"delta": -morale_decay_amt,
 		})
+
+	if _is_keeper_intro_trial_active() and _keeper_intro_trial_enemy_defeated():
+		_handle_keeper_intro_trial_finish(t)
+		return
 
 	# Check end condition.
 	var end_check: Dictionary = CombatState.check_end_condition(ectx.actors, ectx.resolution_mode)
@@ -1663,6 +1921,8 @@ func _handle_economy_settle_time(action: Dictionary, t: int) -> void:
 	# Read balance knobs
 	var econ_cfg := _get_balance_economy_cfg()
 	var ase_per_min := float(econ_cfg.get("ase_online_per_min_base", 0.0))
+	if not _is_ase_flame_awakened():
+		ase_per_min = 0.0
 	var rate_per_sec := ase_per_min / 60.0
 	
 	# Multiplier seam (Faith later) - optional input, default 1.0
@@ -1681,6 +1941,9 @@ func _handle_economy_settle_time(action: Dictionary, t: int) -> void:
 	if gain > 0:
 		# Replace this call with your EconomyService signature if different.
 		econ.add_ase(gain, settle_reason, logger, t)
+	var boost_gain: int = KeeperIntroServiceScript.apply_ase_boost_from_save(flow_ctx.save_data, config_service.get_balance(), delta_seconds)
+	if boost_gain > 0:
+		econ.add_ase(boost_gain, "keeper_intro.ase_flame_boost", logger, t)
 	
 	# Update settle guard even if gain=0 (prevents re-settling same window)
 	econ_data["last_settle_unix"] = now_unix
@@ -1704,13 +1967,24 @@ func _handle_economy_settle_time(action: Dictionary, t: int) -> void:
 		"note": note,
 		"ase_per_min_base": ase_per_min,
 		"multiplier": multiplier,
-		"gain": gain,
+		"gain": gain + boost_gain,
+		"base_gain": gain,
+		"boost_gain": boost_gain,
 		"ase_after": int(econ_data.get("ase", 0)),
 	})
 	
 	# IMPORTANT: settle_time can occur without a flow transition (e.g., Sanctum bank interval),
 	# so we must refresh snapshot so UI updates immediately.
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+func _is_ase_flame_awakened() -> bool:
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if not (sanctum_v is Dictionary):
+		return false
+	var flame_v: Variant = (sanctum_v as Dictionary).get("ase_flame", {})
+	var flame: Dictionary = flame_v if flame_v is Dictionary else {}
+	return bool(flame.get("awakened", false))
 	
 func _apply_offline_accrual_if_needed(t: int, source: String) -> int:
 	# Offline accrual must only happen when the player enters the session (flow.continue),
@@ -2913,6 +3187,8 @@ func _handle_directive_select(action: Dictionary, t: int) -> void:
 	# STAGE uses static build_snapshot() — rebuild before refresh so snapshot reflects the new choice.
 	if flow_ctx.last_snapshot.get("type", "") == FlowStateIds.STAGE:
 		flow_ctx.last_snapshot = FlowStageState.build_snapshot(flow_ctx, t)
+	elif flow_ctx.last_snapshot.get("type", "") == FlowStateIds.KEEPER_TRIAL:
+		flow_ctx.last_snapshot = FlowKeeperIntroStateScript.build_trial_snapshot(flow_ctx, t)
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 

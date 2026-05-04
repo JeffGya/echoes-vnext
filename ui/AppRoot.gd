@@ -42,6 +42,12 @@ var _onboarding_scene_by_type: Dictionary = {
 	"flow.onboarding_meeting": preload("res://ui/screens/onboarding/ForgottenNameScreen.tscn"),
 	"flow.onboarding_empty_sanctum": preload("res://ui/screens/onboarding/FirstSanctumEncounterScreen.tscn"),
 	"flow.onboarding_name_sanctum": preload("res://ui/screens/onboarding/SanctumNamingScreen.tscn"),
+	"flow.keeper_call": preload("res://ui/screens/onboarding/KeeperIntroScreen.tscn"),
+	"flow.keeper_rewind": preload("res://ui/screens/onboarding/KeeperIntroScreen.tscn"),
+	"flow.keeper_thread_return": preload("res://ui/screens/onboarding/KeeperIntroScreen.tscn"),
+	"flow.keeper_awakening": preload("res://ui/screens/onboarding/KeeperIntroScreen.tscn"),
+	"flow.keeper_weaving": preload("res://ui/screens/onboarding/KeeperIntroScreen.tscn"),
+	"flow.keeper_keeping": preload("res://ui/screens/onboarding/KeeperIntroScreen.tscn"),
 }
 
 func _ready():
@@ -740,6 +746,7 @@ const VENTURE_FAMILY: Array = [
 	"flow.stage",
 	"flow.stage_explore",  # V2-STAGE-001
 	"flow.encounter",
+	"flow.keeper_trial",
 	"flow.resolve",
 ]
 const ONBOARDING_FAMILY: Array = [
@@ -749,6 +756,12 @@ const ONBOARDING_FAMILY: Array = [
 	"flow.onboarding_meeting",
 	"flow.onboarding_empty_sanctum",
 	"flow.onboarding_name_sanctum",
+	"flow.keeper_call",
+	"flow.keeper_rewind",
+	"flow.keeper_thread_return",
+	"flow.keeper_awakening",
+	"flow.keeper_weaving",
+	"flow.keeper_keeping",
 ]
 
 func _render_snapshot(snap: Dictionary) -> void:

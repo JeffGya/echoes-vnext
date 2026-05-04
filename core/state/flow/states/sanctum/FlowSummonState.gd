@@ -44,6 +44,12 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			if bal_data.has("economy") and typeof(bal_data["economy"]) == TYPE_DICTIONARY:
 				var econ_cfg: Dictionary = bal_data["economy"]
 				var ase_per_min_base := float(econ_cfg.get("ase_online_per_min_base", 0.0))
+				var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+				var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+				var flame_v: Variant = sanctum.get("ase_flame", {})
+				var flame: Dictionary = flame_v if flame_v is Dictionary else {}
+				if not bool(flame.get("awakened", false)):
+					ase_per_min_base = 0.0
 				ase_rate_per_hour_hint = ase_per_min_base * 60.0
 
 			# Summon costs come from data.summoning (ECONOMY-003)

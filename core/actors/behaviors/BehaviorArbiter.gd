@@ -762,7 +762,10 @@ func _score(
 	calling_behavior: Dictionary = {},
 	candidate: Dictionary = {}
 ) -> float:
-	var calling_origin: String = str(actor.get("calling_origin", "uncalled"))
+	var _confirmed_calling: String = str(actor.get("calling", ""))
+	var calling_origin: String = _confirmed_calling \
+		if not _confirmed_calling.is_empty() and _confirmed_calling != "uncalled" \
+		else str(actor.get("calling_origin", "uncalled"))
 	var traits: Dictionary     = actor.get("traits", {})
 	var vectors: Dictionary    = actor.get("vector_scores", {})
 	# EMOTION-003: floor blend — background dread can't be suppressed below fear_base even by a kill

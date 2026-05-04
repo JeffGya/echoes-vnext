@@ -39,10 +39,12 @@ static func register(runner: CoreTestRunner) -> void:
 # Expected: actor.guard wins — broken morale heavily favours a defensive stance.
 # Demonstrates: morale_bonus is inside the pre-fear bracket and affects candidate ranking.
 static func _t_broken_morale_idles_despite_adjacent_enemy() -> Dictionary:
+	# onyamesu calling has guard base=55 — at broken morale (guard+20, melee-20) + echo_in_melee
+	# guard: (55+20)×1.0 − 5 = 70; melee: (35−20)×1.0 + 18 = 33 → guard wins.
 	var actor := {
 		"id":             "echo_morale_001",
 		"faction":        "echo",
-		"calling_origin": "uncalled",
+		"calling_origin": "onyamesu",
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
 		"vector_scores":  {},
 		"fear":           0,
@@ -59,7 +61,7 @@ static func _t_broken_morale_idles_despite_adjacent_enemy() -> Dictionary:
 	var context := { "actor": actor, "all_actors": [enemy], "t": 1 }
 	var intent: Dictionary = arbiter.select_intent(context)
 
-	# COMBAT-003: actor.guard (25+20=45) > actor.idle (20+15=35) > melee (40−20=20).
+	# onyamesu guard (70) > melee (33) > idle at broken morale + echo_in_melee.
 	if str(intent.get("action_type", "")) != "actor.guard":
 		return {
 			"ok": false,
@@ -125,14 +127,15 @@ static func _t_morale_modifier_carried_in_intent() -> Dictionary:
 # Expected: actor.action log entry has morale_tier="broken" and action_weight_modifier=20.
 # Demonstrates: ActorStateMachine reads morale metadata from intent and writes it to the action log.
 static func _t_advance_turn_action_log_has_morale_fields() -> Dictionary:
+	# onyamesu calling: guard wins at broken morale (see test 1 score math).
 	var actor := {
 		"id":             "echo_morale_003",
 		"faction":        "echo",
-		"calling_origin": "uncalled",
+		"calling_origin": "onyamesu",
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
 		"vector_scores":  {},
 		"fear":           0,
-		"morale":         10,  # broken tier → guard morale_bonus = +20 → action_weight_modifier = 20 (COMBAT-003)
+		"morale":         10,  # broken tier → guard morale_bonus = +20 → action_weight_modifier = 20
 		"grid_pos":       { "col": 0, "row": 0 },
 	}
 	var enemy := {
@@ -143,7 +146,7 @@ static func _t_advance_turn_action_log_has_morale_fields() -> Dictionary:
 
 	var sm := ActorStateMachine.new(actor, BehaviorArbiter.new({}))
 	var logger := StructuredLogger.new()
-	logger.set_level("info")
+	logger.set_level("debug")
 
 	var context := { "actor": actor, "all_actors": [enemy], "t": 3 }
 	sm.advance_turn(context, logger, 3)
@@ -185,14 +188,15 @@ static func _t_advance_turn_action_log_has_morale_fields() -> Dictionary:
 # Expected: get_snapshot() after advance_turn() returns morale_tier="broken" and action_weight_modifier=20.
 # Demonstrates: ActorStateMachine exposes morale fields in the debug snapshot.
 static func _t_snapshot_has_morale_tier_and_modifier() -> Dictionary:
+	# onyamesu calling: guard wins at broken morale (see test 1 score math).
 	var actor := {
 		"id":             "echo_morale_004",
 		"faction":        "echo",
-		"calling_origin": "uncalled",
+		"calling_origin": "onyamesu",
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
 		"vector_scores":  {},
 		"fear":           0,
-		"morale":         10,  # broken tier → guard wins → action_weight_modifier = 20 (COMBAT-003)
+		"morale":         10,  # broken tier → guard wins → action_weight_modifier = 20
 		"grid_pos":       { "col": 0, "row": 0 },
 	}
 	var enemy := {
@@ -203,7 +207,7 @@ static func _t_snapshot_has_morale_tier_and_modifier() -> Dictionary:
 
 	var sm := ActorStateMachine.new(actor, BehaviorArbiter.new({}))
 	var logger := StructuredLogger.new()
-	logger.set_level("info")
+	logger.set_level("debug")
 
 	var context := { "actor": actor, "all_actors": [enemy], "t": 4 }
 	sm.advance_turn(context, logger, 4)

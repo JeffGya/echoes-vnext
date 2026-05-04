@@ -13,6 +13,7 @@ signal action_requested(action: Dictionary)
 
 @onready var _echo_panel_title: Label = %EchoPanelTitle
 @onready var _outcome_label: Label = %OutcomeLabel
+@onready var _rite_bark_label: Label = %RiteBarkLabel
 
 @onready var _back_button: Button = %BackButton
 @onready var _begin_rite_button: Button = %BeginRiteButton
@@ -21,6 +22,7 @@ signal action_requested(action: Dictionary)
 var _last_snapshot: Dictionary = {}
 var _thread_items: Array = []
 
+var _thread_cards: Array = []
 var _thread_rows: Array = []
 var _invitation_labels: Array = []
 var _aftermath_labels: Array = []
@@ -39,6 +41,14 @@ func _ready() -> void:
 	for i in range(_thread_rows.size()):
 		var button: Button = _thread_rows[i]["button"]
 		button.pressed.connect(_on_thread_row_pressed.bind(i))
+		(_thread_rows[i]["row"] as HBoxContainer).visible = false
+
+	_thread_cards = [%ThreadCard1, %ThreadCard2, %ThreadCard3, %ThreadCard4, %ThreadCard5, %ThreadCard6]
+	for card_v in _thread_cards:
+		if card_v is Node:
+			var card: Node = card_v
+			if card.has_signal("selected"):
+				card.connect("selected", Callable(self, "_on_thread_card_selected"))
 
 	_invitation_labels = [%CandidateName1, %CandidateFit1, %CandidateReadiness1, %CandidateStrain1]
 	_aftermath_labels = [%AftermathLine1, %AftermathLine2, %AftermathLine3, %AftermathLine4]
@@ -70,6 +80,28 @@ func _render_threads(data: Dictionary) -> void:
 	var reserve_v: Variant = data.get("thread_reserve", [])
 	_thread_items = reserve_v if reserve_v is Array else []
 	var selected_thread_id := str(data.get("selected_thread_id", ""))
+
+	if not _thread_cards.is_empty():
+		for i in range(_thread_cards.size()):
+			var card_v: Variant = _thread_cards[i]
+			if not (card_v is Node):
+				continue
+			var card: Node = card_v
+			if i >= _thread_items.size():
+				card.visible = false
+				continue
+			var card_item_v: Variant = _thread_items[i]
+			if not (card_item_v is Dictionary):
+				card.visible = false
+				continue
+			var card_item: Dictionary = card_item_v
+			var card_id := str(card_item.get("id", ""))
+			card.call("bind_thread", card_item, card_id == selected_thread_id, "Offer")
+			card.call("set_selectable", true)
+		for row_info in _thread_rows:
+			(row_info["row"] as HBoxContainer).visible = false
+		_empty_thread_label.visible = _thread_items.is_empty()
+		return
 
 	for i in range(_thread_rows.size()):
 		var row: HBoxContainer = _thread_rows[i]["row"]
@@ -184,20 +216,11 @@ func _render_resolution(data: Dictionary) -> void:
 
 	# V2-VOICE-001: show rite bark below aftermath lines if present.
 	var echo_bark_v: Variant = data.get("echo_bark", {})
+	var bark_line := ""
 	if echo_bark_v is Dictionary:
-		var bark_line := str((echo_bark_v as Dictionary).get("line", ""))
-		if not bark_line.is_empty() and _resolution_panel != null:
-			# Find or create a RiteBarkLabel in the resolution panel.
-			var _rite_bark_lbl: Label = _resolution_panel.get_node_or_null("RiteBarkLabel")
-			if _rite_bark_lbl == null:
-				_rite_bark_lbl = Label.new()
-				_rite_bark_lbl.name = "RiteBarkLabel"
-				_rite_bark_lbl.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55, 1.0))
-				_rite_bark_lbl.add_theme_font_size_override("font_size", 12)
-				_rite_bark_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
-				_resolution_panel.add_child(_rite_bark_lbl)
-			_rite_bark_lbl.text = "\"%s\"" % bark_line
-			_rite_bark_lbl.visible = true
+		bark_line = str((echo_bark_v as Dictionary).get("line", ""))
+	_rite_bark_label.text = "\"%s\"" % bark_line if not bark_line.is_empty() else ""
+	_rite_bark_label.visible = not bark_line.is_empty()
 
 
 func _apply_phase_visibility(phase: String) -> void:
@@ -245,6 +268,15 @@ func _on_thread_row_pressed(index: int) -> void:
 	action_requested.emit({
 		"type": "weave.select_thread",
 		"thread_id": str(item.get("id", "")),
+	})
+
+
+func _on_thread_card_selected(thread_id: String) -> void:
+	if thread_id.is_empty():
+		return
+	action_requested.emit({
+		"type": "weave.select_thread",
+		"thread_id": thread_id,
 	})
 
 
