@@ -41,6 +41,12 @@ func set_snapshot(snap):
 Allowed in `.gd`: `.text = ...`, `.modulate = ...`, `.visible = ...`, `.disabled = ...`, `.value = ...`
 Forbidden in `.gd`: `Node.new()`, `add_child()`, `StyleBoxFlat.new()` (except modal overlays with no persistent scene ref)
 
+### Theme-first styling
+- Reused visual treatments belong in `assets/theme/LivingTreeSystem.tres`, not as repeated per-scene overrides.
+- When adding a new surface, first check whether an existing theme variation covers it.
+- If it does not, add the smallest new variation needed for the current screen story and reuse it immediately.
+- Do not rebuild the same card, badge, chip, or text treatment locally across multiple scenes.
+
 ---
 
 ## Screen Contract

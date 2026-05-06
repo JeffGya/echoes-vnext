@@ -33,37 +33,79 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_bottom = -116.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 1
 
-[node name="NavBar" type="FoldableContainer" parent="UILayer/Control" unique_id=100000001]
+[node name="BottomRail" type="PanelContainer" parent="UILayer/Control" unique_id=100000001]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(0, 100)
 layout_mode = 1
-anchors_preset = 3
-anchor_left = 1.0
+anchors_preset = 12
+anchor_left = 0.125
 anchor_top = 1.0
-anchor_right = 1.0
+anchor_right = 0.875
 anchor_bottom = 1.0
-offset_left = -220.0
-offset_top = -48.0
-grow_horizontal = 0
+offset_left = 0.0
+offset_top = -108.0
+offset_right = 0.0
+offset_bottom = -20.0
+grow_horizontal = 2
 grow_vertical = 0
 theme = ExtResource("2_q4uf4")
-folded = true
-title = "Sanctum Actions"
-title_position = 1
+theme_type_variation = &"SanctumRail"
 
-[node name="VBoxContainer" type="VBoxContainer" parent="UILayer/Control/NavBar" unique_id=100000002]
-visible = false
-custom_minimum_size = Vector2(0, 48)
+[node name="MarginContainer" type="MarginContainer" parent="UILayer/Control/BottomRail" unique_id=100000002]
 layout_mode = 2
+theme_override_constants/margin_left = 26
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 26
+theme_override_constants/margin_bottom = 18
 
-[node name="NavButtons" type="VBoxContainer" parent="UILayer/Control/NavBar/VBoxContainer" unique_id=100000003]
+[node name="RailButtons" type="HBoxContainer" parent="UILayer/Control/BottomRail/MarginContainer" unique_id=100000003]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="PartyButton" type="Button" parent="UILayer/Control/BottomRail/MarginContainer/RailButtons"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"ButtonSecondary"
+text = "Party"
+
+[node name="SummonButton" type="Button" parent="UILayer/Control/BottomRail/MarginContainer/RailButtons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"ButtonSecondary"
+text = "Summon"
+
+[node name="RealmButton" type="Button" parent="UILayer/Control/BottomRail/MarginContainer/RailButtons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Choose Realm"
+
+[node name="VowsButton" type="Button" parent="UILayer/Control/BottomRail/MarginContainer/RailButtons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"ButtonSecondary"
+text = "Vows"
+
+[node name="WeavingButton" type="Button" parent="UILayer/Control/BottomRail/MarginContainer/RailButtons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+disabled = true
+theme_type_variation = &"ButtonSecondary"
+text = "Weaving"
 
 [node name="SpatialLayer" type="Control" parent="." unique_id=296146589]
 layout_mode = 1

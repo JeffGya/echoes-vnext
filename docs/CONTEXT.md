@@ -78,6 +78,11 @@ The player is the **Ase Keeper** — they run a Sanctum, summon Echoes (returnin
 2. **Pause and ask Jeff to test in-game** — do not proceed until Jeff confirms the change feels correct in the running game.
 3. **Docs + Commit** — only after Jeff signs off on the in-game test.
 
+### Sanctum Screen Stories
+- Sanctum UI overhaul work is **visible layers only** and must ship **one screen story at a time**.
+- Use `docs/screens.md` as the authoritative ledger for current screen order, scope, regressions, and signoff.
+- If the running game reveals a clash between the approved screen spec and engine reality, stop and re-spec with Jeff.
+
 ### Elegance (Balanced)
 - For non-trivial changes: pause and ask "is there a more elegant solution?"
 - If a fix feels hacky, rebuild it properly.
@@ -132,7 +137,8 @@ tests/  — Lightweight, deterministic. Run via Debug Panel `tests` command.
 ### UI Rules
 - Build visual structure in `.tscn`, not `.gd`. Scripts only set values: `modulate`, `text`, `visible`, `disabled`.
 - Never create, layout, or style UI nodes programmatically in `.gd` files.
-- All layout, sizing, text defaults, theme variations belong in `.tscn` so Jeff can style in the Godot editor.
+- All layout, sizing, text defaults, and node-level theme variation hooks belong in `.tscn` so Jeff can style in the Godot editor.
+- Reused cards, badges, chips, and text treatments should be added to `assets/theme/LivingTreeSystem.tres` incrementally instead of rebuilt locally in each screen.
 
 ---
 

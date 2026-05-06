@@ -31,6 +31,128 @@ corner_radius_bottom_right = 3
 corner_radius_bottom_left = 3
 corner_detail = 5
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_header_card"]
+bg_color = Color(0.1019608, 0.15294118, 0.11764706, 0.82)
+border_width_left = 2
+border_width_top = 3
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.83137256, 0.6862745, 0.21568628, 0.7)
+corner_radius_top_left = 28
+corner_radius_top_right = 6
+corner_radius_bottom_right = 22
+corner_radius_bottom_left = 10
+corner_detail = 1
+shadow_color = Color(0.039215688, 0.05490196, 0.047058824, 0.42)
+shadow_size = 14
+shadow_offset = Vector2(0, 5)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_card"]
+bg_color = Color(0.9529412, 0.90588236, 0.827451, 0.9)
+border_width_left = 2
+border_width_top = 3
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.627451, 0.49019608, 0.24313726, 0.64)
+corner_radius_top_left = 18
+corner_radius_top_right = 5
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 8
+corner_detail = 1
+shadow_color = Color(0.16470589, 0.16470589, 0.22745098, 0.18)
+shadow_size = 10
+shadow_offset = Vector2(0, 4)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_rail"]
+bg_color = Color(0.1019608, 0.15294118, 0.11764706, 0.88)
+border_width_left = 2
+border_width_top = 3
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.83137256, 0.6862745, 0.21568628, 0.68)
+corner_radius_top_left = 18
+corner_radius_top_right = 18
+corner_radius_bottom_right = 18
+corner_radius_bottom_left = 18
+corner_detail = 1
+shadow_color = Color(0.039215688, 0.05490196, 0.047058824, 0.4)
+shadow_size = 14
+shadow_offset = Vector2(0, 5)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_rule_gold"]
+bg_color = Color(0.83137256, 0.6862745, 0.21568628, 0.9)
+corner_radius_top_left = 1
+corner_radius_top_right = 1
+corner_radius_bottom_right = 1
+corner_radius_bottom_left = 1
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_rule_soft"]
+bg_color = Color(0.23921569, 0.15686275, 0.09019608, 0.14)
+corner_radius_top_left = 1
+corner_radius_top_right = 1
+corner_radius_bottom_right = 1
+corner_radius_bottom_left = 1
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_emotion_ready"]
+bg_color = Color(0.8627451, 0.80784315, 0.70980394, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.627451, 0.49019608, 0.24313726, 0.55)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_emotion_inspired"]
+bg_color = Color(0.87058824, 0.92941177, 0.8901961, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.23921569, 0.3529412, 0.2784314, 0.5)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_emotion_steady"]
+bg_color = Color(0.93333334, 0.8980392, 0.8392157, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.627451, 0.49019608, 0.24313726, 0.45)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_emotion_shaken"]
+bg_color = Color(0.9647059, 0.8627451, 0.79607844, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.78431374, 0.3529412, 0.32941177, 0.45)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_emotion_broken"]
+bg_color = Color(0.8745098, 0.84313726, 0.83137256, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.16470589, 0.16470589, 0.22745098, 0.55)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
 [resource]
 Button/colors/font_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
 Button/colors/font_disabled_color = Color(0.54509807, 0.4509804, 0.33333334, 1)
@@ -62,6 +184,36 @@ FoldableContainer/styles/title_collapsed_hover_panel = ExtResource("3_2q63t")
 FoldableContainer/styles/title_collapsed_panel = ExtResource("1_6mgck")
 FoldableContainer/styles/title_hover_panel = ExtResource("3_2q63t")
 FoldableContainer/styles/title_panel = ExtResource("1_6mgck")
+EmotionChipBroken/base_type = &"PanelContainer"
+EmotionChipBroken/styles/panel = SubResource("StyleBoxFlat_emotion_broken")
+EmotionChipInspired/base_type = &"PanelContainer"
+EmotionChipInspired/styles/panel = SubResource("StyleBoxFlat_emotion_inspired")
+EmotionChipLabelBroken/base_type = &"Label"
+EmotionChipLabelBroken/colors/font_color = Color(0.16470589, 0.16470589, 0.22745098, 1)
+EmotionChipLabelBroken/font_sizes/font_size = 14
+EmotionChipLabelBroken/fonts/font = ExtResource("11_r5n68")
+EmotionChipLabelInspired/base_type = &"Label"
+EmotionChipLabelInspired/colors/font_color = Color(0.23921569, 0.3529412, 0.2784314, 1)
+EmotionChipLabelInspired/font_sizes/font_size = 14
+EmotionChipLabelInspired/fonts/font = ExtResource("11_r5n68")
+EmotionChipLabelReady/base_type = &"Label"
+EmotionChipLabelReady/colors/font_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
+EmotionChipLabelReady/font_sizes/font_size = 14
+EmotionChipLabelReady/fonts/font = ExtResource("11_r5n68")
+EmotionChipLabelShaken/base_type = &"Label"
+EmotionChipLabelShaken/colors/font_color = Color(0.627451, 0.23529412, 0.21176471, 1)
+EmotionChipLabelShaken/font_sizes/font_size = 14
+EmotionChipLabelShaken/fonts/font = ExtResource("11_r5n68")
+EmotionChipLabelSteady/base_type = &"Label"
+EmotionChipLabelSteady/colors/font_color = Color(0.47058824, 0.36078432, 0.16862746, 1)
+EmotionChipLabelSteady/font_sizes/font_size = 14
+EmotionChipLabelSteady/fonts/font = ExtResource("11_r5n68")
+EmotionChipReady/base_type = &"PanelContainer"
+EmotionChipReady/styles/panel = SubResource("StyleBoxFlat_emotion_ready")
+EmotionChipShaken/base_type = &"PanelContainer"
+EmotionChipShaken/styles/panel = SubResource("StyleBoxFlat_emotion_shaken")
+EmotionChipSteady/base_type = &"PanelContainer"
+EmotionChipSteady/styles/panel = SubResource("StyleBoxFlat_emotion_steady")
 HeaderLarge/colors/font_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
 HeaderLarge/font_sizes/font_size = 36
 HeaderLarge/fonts/font = ExtResource("1_8hwob")
@@ -70,6 +222,36 @@ HeaderLargePanel/base_type = &"Label"
 HeaderLargePanel/colors/font_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
 HeaderLargePanel/font_sizes/font_size = 48
 HeaderLargePanel/fonts/font = ExtResource("1_8hwob")
+SanctumAseKicker/base_type = &"Label"
+SanctumAseKicker/colors/font_color = Color(0.47058824, 0.36078432, 0.16862746, 1)
+SanctumAseKicker/font_sizes/font_size = 12
+SanctumAseKicker/fonts/font = ExtResource("11_r5n68")
+SanctumCard/base_type = &"PanelContainer"
+SanctumCard/styles/panel = SubResource("StyleBoxFlat_sanctum_card")
+SanctumHeaderCard/base_type = &"PanelContainer"
+SanctumHeaderCard/styles/panel = SubResource("StyleBoxFlat_sanctum_header_card")
+SanctumHeaderText/base_type = &"Label"
+SanctumHeaderText/colors/font_color = Color(0.827451, 0.84705883, 0.827451, 0.92)
+SanctumHeaderText/font_sizes/font_size = 16
+SanctumHeaderText/fonts/font = ExtResource("1_k333i")
+SanctumHeaderTitle/base_type = &"Label"
+SanctumHeaderTitle/colors/font_color = Color(0.9607843, 0.94509804, 0.90588236, 1)
+SanctumHeaderTitle/font_sizes/font_size = 36
+SanctumHeaderTitle/fonts/font = ExtResource("1_8hwob")
+SanctumKicker/base_type = &"Label"
+SanctumKicker/colors/font_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+SanctumKicker/font_sizes/font_size = 11
+SanctumKicker/fonts/font = ExtResource("11_r5n68")
+SanctumMuted/base_type = &"Label"
+SanctumMuted/colors/font_color = Color(0.42745098, 0.42745098, 0.42745098, 1)
+SanctumMuted/font_sizes/font_size = 15
+SanctumMuted/fonts/font = ExtResource("1_k333i")
+SanctumRail/base_type = &"PanelContainer"
+SanctumRail/styles/panel = SubResource("StyleBoxFlat_sanctum_rail")
+SanctumRuleGold/base_type = &"PanelContainer"
+SanctumRuleGold/styles/panel = SubResource("StyleBoxFlat_sanctum_rule_gold")
+SanctumRuleSoft/base_type = &"PanelContainer"
+SanctumRuleSoft/styles/panel = SubResource("StyleBoxFlat_sanctum_rule_soft")
 HeaderMedium/font_sizes/font_size = 16
 HeaderSmall/font_sizes/font_size = 16
 HeaderTitle/base_type = &"Label"

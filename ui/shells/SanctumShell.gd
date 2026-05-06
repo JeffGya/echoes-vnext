@@ -7,8 +7,13 @@ class_name SanctumShell
 @onready var spatial_view: Node2D = $SpatialLayer/SpatialView
 @onready var camera: Camera2D = $SpatialLayer/SpatialView/Camera2D
 @onready var spatial_renderer: Node2D = $SpatialLayer/SpatialView/SanctumSpatialRenderer2
-@onready var _nav_buttons: VBoxContainer = %NavButtons
 @onready var _ui_layer: CanvasLayer = $UILayer
+@onready var _bottom_rail: Control = %BottomRail
+@onready var _party_button: Button = %PartyButton
+@onready var _summon_button: Button = %SummonButton
+@onready var _realm_button: Button = %RealmButton
+@onready var _vows_button: Button = %VowsButton
+@onready var _weaving_button: Button = %WeavingButton
 
 signal action_requested(action: Dictionary)
 
@@ -60,6 +65,7 @@ func _ready() -> void:
 	# CanvasLayer does not inherit visibility from its Control parent.
 	# Sync UILayer visibility whenever SanctumShell is shown/hidden.
 	visibility_changed.connect(_sync_ui_layer_visibility)
+	_bind_nav_bar()
 
 func _sync_ui_layer_visibility() -> void:
 	_ui_layer.visible = visible
@@ -94,7 +100,8 @@ func set_snapshot(snap: Dictionary) -> void:
 					var val: Variant = actions_dict[k]
 					if val is Dictionary:
 						_cached_nav[k] = val
-			_rebuild_nav_bar()
+			_bind_nav_bar()
+	_update_rail_tone(snap_type)
 	
 func _show_overlay_for_type(snap_type: String, snap: Dictionary) -> void:
 	if not _scene_by_flow_type.has(snap_type):
@@ -183,24 +190,64 @@ func _unhandled_input(event: InputEvent) -> void:
 func _on_overlay_action_requested(action: Dictionary) -> void:
 	action_requested.emit(action)
 
-func _rebuild_nav_bar() -> void:
-	# Clear previous buttons
-	for c in _nav_buttons.get_children():
-		c.queue_free()
-	# Build one button per cached nav/cta slot
-	for k: String in _cached_nav.keys():
-		var action_v: Variant = _cached_nav[k]
-		if not (action_v is Dictionary):
-			continue
-		var action: Dictionary = action_v
-		var b := Button.new()
-		b.text = str(action.get("label", "Action"))
-		b.disabled = bool(action.get("disabled", false))
-		b.custom_minimum_size = Vector2(80, 48)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.theme_type_variation = "ButtonSecondary"
-		b.pressed.connect(_on_overlay_action_requested.bind(action))
-		_nav_buttons.add_child(b)
+func _bind_nav_bar() -> void:
+	_bind_button(_party_button, _action_for_slot("nav.echo_party"), "Party")
+	_bind_button(_summon_button, _action_for_slot("nav.summon"), "Summon")
+	_bind_realm_button()
+	_bind_button(_vows_button, _action_for_slot("nav.vow_manage"), "Vows")
+	_bind_button(_weaving_button, {}, "Weaving", "Choose an Echo first.")
+
+
+func _bind_button(button: Button, action: Dictionary, fallback_label: String, tooltip: String = "") -> void:
+	if button == null:
+		return
+
+	var desired_text := fallback_label
+	var disabled := true
+	if not action.is_empty():
+		desired_text = str(action.get("label", fallback_label))
+		disabled = bool(action.get("disabled", false))
+
+	button.text = desired_text
+	button.disabled = disabled
+	button.tooltip_text = tooltip
+
+	var pressed_list: Array = button.pressed.get_connections()
+	for conn_v in pressed_list:
+		if conn_v is Dictionary:
+			var callable_v: Variant = (conn_v as Dictionary).get("callable", Callable())
+			if callable_v is Callable:
+				var callable: Callable = callable_v
+				if callable.is_valid():
+					button.pressed.disconnect(callable)
+
+	if not disabled and not action.is_empty():
+		button.pressed.connect(_on_overlay_action_requested.bind(action))
+
+
+func _bind_realm_button() -> void:
+	var enter_action := _action_for_slot("cta.enter_stage")
+	var realm_select_action := _action_for_slot("nav.realm_select")
+	if not enter_action.is_empty() and not bool(enter_action.get("disabled", false)):
+		_bind_button(_realm_button, enter_action, "Resume Trial")
+		_realm_button.text = "Resume Trial"
+		_realm_button.tooltip_text = ""
+		return
+
+	_bind_button(_realm_button, realm_select_action, "Choose Realm")
+	_realm_button.text = "Choose Realm"
+	_realm_button.tooltip_text = ""
+
+
+func _action_for_slot(slot: String) -> Dictionary:
+	var action_v: Variant = _cached_nav.get(slot, {})
+	return action_v if action_v is Dictionary else {}
+
+
+func _update_rail_tone(snap_type: String) -> void:
+	if _bottom_rail == null:
+		return
+	_bottom_rail.modulate = Color(1, 1, 1, 1.0 if snap_type == "flow.sanctum" else 0.86)
 
 func _pan_by_delta(screen_delta: Vector2) -> void:
 	# Camera moves opposite to drag direction for "grab world" feel.

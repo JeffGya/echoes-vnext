@@ -156,6 +156,7 @@ Action type format: `domain.subdomain.verb` e.g. `flow.go_state`, `sanctum.party
 
 - **Build structure in `.tscn`** — scripts only set values: `text`, `modulate`, `visible`, `disabled`
 - Never create, layout, or style UI nodes programmatically in `.gd`
+- Reusable visual treatments belong in `assets/theme/LivingTreeSystem.tres`; extend the theme instead of restyling the same patterns per scene
 - `ScreenTemplate.gd` is the canonical base for all new screens
 - `SanctumShell` owns the NavBar via `_cached_nav` — do NOT inject nav into snapshots
 - `RealmShell` owns the EchoBar (bottom 88px) — do NOT render it in individual screens
@@ -227,6 +228,8 @@ Full lesson history: `docs/LESSONS.md`
 - **Read the repo first** — never write subtasks or a plan without reading relevant files
 - **Backend before frontend** — complete all `core/` changes before touching `ui/`
 - **Confirm contracts first** — verify snapshot shape, action types, and service interfaces before implementing
+- **Sanctum UI overhaul:** visible layers only, one screen story at a time, and use `docs/screens.md` as the authoritative screen ledger
+- **If Sanctum implementation reality clashes with the approved screen spec:** stop and re-spec with Jeff before continuing
 - **Every story ends with:** compile check → Jeff tests in-game → docs update → git commit
 - **No speculative abstractions** — implement exactly what is asked, no more
 
