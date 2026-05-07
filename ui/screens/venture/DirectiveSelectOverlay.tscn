@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3 uid="uid://bx8mqfn7s2vp4"]
 
-[ext_resource type="Script" uid="uid://cd4r3ct1v30v1" path="res://ui/screens/venture/DirectiveSelectOverlay.gd" id="1_directive_overlay"]
+[ext_resource type="Script" path="res://ui/screens/venture/DirectiveSelectOverlay.gd" id="1_directive_overlay"]
 
 [node name="DirectiveSelectOverlay" type="Control"]
 visible = false

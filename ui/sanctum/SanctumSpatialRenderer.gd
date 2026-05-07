@@ -2,7 +2,6 @@ extends Node2D
 class_name SanctumSpatialRenderer
 
 @onready var floor: TileMapLayer = $Floor
-@onready var floor2: TileMapLayer = $Floor2
 @onready var occupants: SanctumOccupantLayer = $Occupants
 
 var _occupant_cache: Array = []
@@ -18,8 +17,6 @@ func _render_layout(layout_v: Variant) -> void:
 	if floor == null:
 		return
 	floor.clear()
-	if floor2 != null:
-		floor2.clear()
 
 	var layout: Dictionary = layout_v if layout_v is Dictionary else {}
 	var tiles_v: Variant = layout.get("tiles", [])
