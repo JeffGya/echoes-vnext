@@ -1,10 +1,12 @@
-[gd_scene load_steps=3 format=3 uid="uid://bu3o3n582e5j2"]
+[gd_scene format=3 uid="uid://bu3o3n582e5j2"]
 
 [ext_resource type="Script" uid="uid://cb8hn28k3qlg6" path="res://ui/screens/sanctum/SanctumScreen.gd" id="1_55k7r"]
 [ext_resource type="Theme" uid="uid://8qssuuodths2" path="res://assets/theme/LivingTreeSystem.tres" id="2_gaxha"]
-[ext_resource type="PackedScene" path="res://ui/components/EmotionChip.tscn" id="3_emotionchip"]
+[ext_resource type="PackedScene" uid="uid://dahk08c2p4mgn" path="res://ui/components/EmotionChip.tscn" id="3_emotionchip"]
 
-[node name="SanctumScreen" type="Control"]
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_qeq33"]
+
+[node name="SanctumScreen" type="Control" unique_id=218783654]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -14,7 +16,7 @@ grow_vertical = 2
 theme = ExtResource("2_gaxha")
 script = ExtResource("1_55k7r")
 
-[node name="RootMargin" type="MarginContainer" parent="."]
+[node name="RootMargin" type="MarginContainer" parent="." unique_id=1280524352]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -26,12 +28,13 @@ theme_override_constants/margin_top = 24
 theme_override_constants/margin_right = 24
 theme_override_constants/margin_bottom = 24
 
-[node name="LayoutRoot" type="Control" parent="RootMargin"]
+[node name="LayoutRoot" type="Control" parent="RootMargin" unique_id=500445284]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
-[node name="TopBand" type="HBoxContainer" parent="RootMargin/LayoutRoot"]
+[node name="TopBand" type="HBoxContainer" parent="RootMargin/LayoutRoot" unique_id=115444396]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
@@ -39,112 +42,115 @@ offset_bottom = 120.0
 grow_horizontal = 2
 theme_override_constants/separation = 10
 
-[node name="HeaderCard" type="PanelContainer" parent="RootMargin/LayoutRoot/TopBand"]
+[node name="HeaderCard" type="PanelContainer" parent="RootMargin/LayoutRoot/TopBand" unique_id=2119712830]
 custom_minimum_size = Vector2(420, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"SanctumHeaderCard"
 
-[node name="HeaderMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/TopBand/HeaderCard"]
+[node name="HeaderMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/TopBand/HeaderCard" unique_id=1141269355]
 layout_mode = 2
 theme_override_constants/margin_left = 16
 theme_override_constants/margin_top = 12
 theme_override_constants/margin_right = 16
 theme_override_constants/margin_bottom = 10
 
-[node name="HeaderStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin"]
+[node name="HeaderStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin" unique_id=972548784]
 layout_mode = 2
 theme_override_constants/separation = 2
 
-[node name="HeaderKicker" type="Label" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack"]
+[node name="HeaderKicker" type="Label" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack" unique_id=971607428]
 layout_mode = 2
 theme_type_variation = &"SanctumKicker"
 text = "The Sanctum"
 
-[node name="HeaderRuleRow" type="HBoxContainer" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack"]
+[node name="HeaderRuleRow" type="HBoxContainer" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack" unique_id=1751065516]
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="HeaderRuleLead" type="PanelContainer" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack/HeaderRuleRow"]
+[node name="HeaderRuleLead" type="PanelContainer" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack/HeaderRuleRow" unique_id=652512834]
 custom_minimum_size = Vector2(40, 2)
 layout_mode = 2
 theme_type_variation = &"SanctumRuleGold"
 
-[node name="HeaderRuleTrail" type="PanelContainer" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack/HeaderRuleRow"]
+[node name="HeaderRuleTrail" type="PanelContainer" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack/HeaderRuleRow" unique_id=505486299]
 custom_minimum_size = Vector2(0, 2)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"SanctumRuleSoft"
 
-[node name="TitleLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack"]
+[node name="TitleLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack" unique_id=430550256]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"SanctumHeaderTitle"
 text = "Sanctum"
 autowrap_mode = 3
 
-[node name="VowMantraLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack"]
+[node name="VowMantraLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack" unique_id=143815225]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 theme_type_variation = &"SanctumHeaderText"
 autowrap_mode = 3
 
-[node name="GuidanceLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack"]
+[node name="GuidanceLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack" unique_id=1235301259]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"SanctumHeaderText"
 text = "Choose where the house reaches outward next."
 autowrap_mode = 3
 
-[node name="TopSpacer" type="Control" parent="RootMargin/LayoutRoot/TopBand"]
+[node name="TopSpacer" type="Control" parent="RootMargin/LayoutRoot/TopBand" unique_id=1333580464]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="AseCard" type="PanelContainer" parent="RootMargin/LayoutRoot/TopBand"]
+[node name="AseCard" type="PanelContainer" parent="RootMargin/LayoutRoot/TopBand" unique_id=1636904382]
 custom_minimum_size = Vector2(260, 0)
 layout_mode = 2
+size_flags_vertical = 0
 theme_type_variation = &"SanctumCard"
 
-[node name="AseMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/TopBand/AseCard"]
+[node name="AseMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/TopBand/AseCard" unique_id=801787541]
 layout_mode = 2
+size_flags_vertical = 0
 theme_override_constants/margin_left = 16
 theme_override_constants/margin_top = 10
 theme_override_constants/margin_right = 16
 theme_override_constants/margin_bottom = 10
 
-[node name="AseStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin"]
+[node name="AseStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin" unique_id=1504173024]
 layout_mode = 2
 theme_override_constants/separation = 0
 
-[node name="AseRule" type="PanelContainer" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin/AseStack"]
-custom_minimum_size = Vector2(0, 2)
+[node name="HBoxContainer" type="HBoxContainer" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin/AseStack" unique_id=1498555147]
+layout_direction = 3
 layout_mode = 2
-theme_type_variation = &"SanctumRuleGold"
 
-[node name="AseKickerLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin/AseStack"]
+[node name="AseKickerLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin/AseStack/HBoxContainer" unique_id=1280470279]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_vertical = 1
 theme_type_variation = &"SanctumAseKicker"
 text = "Ase"
 horizontal_alignment = 2
+vertical_alignment = 2
 
-[node name="AseLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin/AseStack"]
+[node name="AseLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin/AseStack/HBoxContainer" unique_id=1730325798]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 theme_type_variation = &"StatsPanel"
-theme_override_font_sizes/font_size = 50
+theme_override_font_sizes/font_size = 48
 text = "0"
-horizontal_alignment = 2
 
-[node name="AseRateLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin/AseStack"]
+[node name="AseRateLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin/AseStack" unique_id=1746548666]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
 text = "~ 0.0 per hour"
 horizontal_alignment = 2
 
-[node name="AseDeltaLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin/AseStack"]
+[node name="AseDeltaLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin/AseStack" unique_id=2030588075]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -153,153 +159,609 @@ theme_override_font_sizes/font_size = 14
 text = "+0"
 horizontal_alignment = 2
 
-[node name="LeftStack" type="VBoxContainer" parent="RootMargin/LayoutRoot"]
+[node name="LeftStack" type="VBoxContainer" parent="RootMargin/LayoutRoot" unique_id=1730058239]
+unique_name_in_owner = true
 layout_mode = 1
-anchors_preset = 0
-offset_top = 188.0
+offset_top = 154.0
 offset_right = 360.0
-offset_bottom = 560.0
-grow_vertical = 0
+offset_bottom = 514.0
 theme_override_constants/separation = 8
 
-[node name="PartyPanel" type="PanelContainer" parent="RootMargin/LayoutRoot/LeftStack"]
+[node name="PartyPanel" type="PanelContainer" parent="RootMargin/LayoutRoot/LeftStack" unique_id=1588270523]
 layout_mode = 2
 theme_type_variation = &"SanctumCard"
 
-[node name="PartyMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel"]
+[node name="PartyMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel" unique_id=1001628870]
 layout_mode = 2
 theme_override_constants/margin_left = 16
 theme_override_constants/margin_top = 12
 theme_override_constants/margin_right = 16
 theme_override_constants/margin_bottom = 10
 
-[node name="PartyStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin"]
+[node name="PartyStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin" unique_id=113183548]
 layout_mode = 2
 theme_override_constants/separation = 5
 
-[node name="PartyHeader" type="Label" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack"]
+[node name="PartyHeader" type="Label" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack" unique_id=428789072]
 layout_mode = 2
 theme_type_variation = &"ContentBasePanel"
 text = "Departure Party"
 
-[node name="PartyRule" type="PanelContainer" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack"]
+[node name="PartyRule" type="PanelContainer" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack" unique_id=1329551002]
 custom_minimum_size = Vector2(0, 2)
 layout_mode = 2
 theme_type_variation = &"SanctumRuleGold"
 
-[node name="PartySummaryLabel" type="Label" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack"]
+[node name="PartySummaryLabel" type="Label" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack" unique_id=829692228]
 unique_name_in_owner = true
 layout_mode = 2
 text = "No departure party is set."
 autowrap_mode = 3
 
-[node name="PartyEmptyLabel" type="Label" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack"]
+[node name="PartyEmptyLabel" type="Label" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack" unique_id=228878606]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"SanctumMuted"
 text = "No active party. Open Party to choose who departs."
 autowrap_mode = 3
 
-[node name="PartyScroll" type="ScrollContainer" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack"]
+[node name="PartyScroll" type="ScrollContainer" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack" unique_id=1290295753]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 0)
 layout_mode = 2
 size_flags_vertical = 0
 horizontal_scroll_mode = 0
 
-[node name="PartyList" type="VBoxContainer" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack/PartyScroll"]
+[node name="PartyList" type="VBoxContainer" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack/PartyScroll" unique_id=426570922]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 4
 
-[node name="PartyEntryTemplate" type="HBoxContainer" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack/PartyScroll/PartyList"]
+[node name="PartyEntryTemplate" type="HBoxContainer" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack/PartyScroll/PartyList" unique_id=1086378747]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 6
 
-[node name="EntryNameLabel" type="Label" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack/PartyScroll/PartyList/PartyEntryTemplate"]
+[node name="EntryNameLabel" type="Label" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack/PartyScroll/PartyList/PartyEntryTemplate" unique_id=1229598869]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Echo"
 
-[node name="EntryMoodChip" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack/PartyScroll/PartyList/PartyEntryTemplate" instance=ExtResource("3_emotionchip")]
+[node name="EntryMoodChip" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack/PartyScroll/PartyList/PartyEntryTemplate" unique_id=128451656 instance=ExtResource("3_emotionchip")]
 layout_mode = 2
 
-[node name="EntryStepLabel" type="Label" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack/PartyScroll/PartyList/PartyEntryTemplate"]
+[node name="EntryStepLabel" type="Label" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack/PartyScroll/PartyList/PartyEntryTemplate" unique_id=1173292374]
 layout_mode = 2
 theme_type_variation = &"SanctumMuted"
 text = "Standing 1  Step 1"
 
-[node name="RightStack" type="VBoxContainer" parent="RootMargin/LayoutRoot"]
+[node name="RightStack" type="VBoxContainer" parent="RootMargin/LayoutRoot" unique_id=958951822]
+unique_name_in_owner = true
 layout_mode = 1
-anchors_preset = 3
+anchors_preset = -1
 anchor_left = 1.0
-anchor_top = 1.0
+anchor_top = 0.128
 anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = -320.0
-offset_top = -196.0
-offset_bottom = -16.0
+anchor_bottom = 0.128
+offset_left = -258.0
+offset_top = -0.0960083
+offset_bottom = 215.90399
 grow_horizontal = 0
-grow_vertical = 0
 theme_override_constants/separation = 8
 
-[node name="ThreadPanel" type="PanelContainer" parent="RootMargin/LayoutRoot/RightStack"]
+[node name="ThreadPanel" type="PanelContainer" parent="RootMargin/LayoutRoot/RightStack" unique_id=141392106]
 layout_mode = 2
 size_flags_vertical = 3
 theme_type_variation = &"SanctumCard"
 
-[node name="ThreadMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/RightStack/ThreadPanel"]
+[node name="ThreadMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/RightStack/ThreadPanel" unique_id=1902285329]
 layout_mode = 2
 theme_override_constants/margin_left = 16
 theme_override_constants/margin_top = 12
 theme_override_constants/margin_right = 16
 theme_override_constants/margin_bottom = 10
 
-[node name="ThreadStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/RightStack/ThreadPanel/ThreadMargin"]
+[node name="ThreadStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/RightStack/ThreadPanel/ThreadMargin" unique_id=1559044045]
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 5
 
-[node name="ThreadHeader" type="Label" parent="RootMargin/LayoutRoot/RightStack/ThreadPanel/ThreadMargin/ThreadStack"]
+[node name="ThreadHeader" type="Label" parent="RootMargin/LayoutRoot/RightStack/ThreadPanel/ThreadMargin/ThreadStack" unique_id=1019757634]
 layout_mode = 2
 theme_type_variation = &"ContentBasePanel"
 text = "Thread Reserve"
 
-[node name="ThreadRule" type="PanelContainer" parent="RootMargin/LayoutRoot/RightStack/ThreadPanel/ThreadMargin/ThreadStack"]
+[node name="ThreadRule" type="PanelContainer" parent="RootMargin/LayoutRoot/RightStack/ThreadPanel/ThreadMargin/ThreadStack" unique_id=1492732926]
 custom_minimum_size = Vector2(0, 2)
 layout_mode = 2
 theme_type_variation = &"SanctumRuleGold"
 
-[node name="ThreadCountLabel" type="Label" parent="RootMargin/LayoutRoot/RightStack/ThreadPanel/ThreadMargin/ThreadStack"]
+[node name="ThreadCountLabel" type="Label" parent="RootMargin/LayoutRoot/RightStack/ThreadPanel/ThreadMargin/ThreadStack" unique_id=604285264]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0 threads held in reserve."
 autowrap_mode = 3
 
-[node name="ThreadEmptyLabel" type="Label" parent="RootMargin/LayoutRoot/RightStack/ThreadPanel/ThreadMargin/ThreadStack"]
+[node name="ThreadEmptyLabel" type="Label" parent="RootMargin/LayoutRoot/RightStack/ThreadPanel/ThreadMargin/ThreadStack" unique_id=1596995408]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"SanctumMuted"
 text = "No threads are resting in the reserve."
 autowrap_mode = 3
 
-[node name="ThreadSlots" type="HBoxContainer" parent="RootMargin/LayoutRoot/RightStack/ThreadPanel/ThreadMargin/ThreadStack"]
+[node name="ThreadSlots" type="HBoxContainer" parent="RootMargin/LayoutRoot/RightStack/ThreadPanel/ThreadMargin/ThreadStack" unique_id=1111494862]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="ThreadNoteLabel" type="Label" parent="RootMargin/LayoutRoot/RightStack/ThreadPanel/ThreadMargin/ThreadStack"]
+[node name="ThreadNoteLabel" type="Label" parent="RootMargin/LayoutRoot/RightStack/ThreadPanel/ThreadMargin/ThreadStack" unique_id=453092976]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"SanctumMuted"
 text = "Weaving begins from an Echo's rite path."
 autowrap_mode = 3
 
-[node name="NameModal" type="Control" parent="."]
+[node name="EchoDetailPanel" type="PanelContainer" parent="RootMargin/LayoutRoot" unique_id=725212570]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(640, 0)
+layout_mode = 1
+anchors_preset = -1
+anchor_left = -0.013
+anchor_top = -0.023000002
+anchor_right = 0.4
+anchor_bottom = 1.023
+offset_left = 0.33600044
+offset_top = -0.26399803
+offset_right = -72.79999
+offset_bottom = 0.2640381
+grow_vertical = 2
+theme = ExtResource("2_gaxha")
+theme_override_styles/panel = SubResource("StyleBoxEmpty_qeq33")
+
+[node name="DetailMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel" unique_id=2007553795]
+layout_mode = 2
+
+[node name="DetailStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin" unique_id=1001883495]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="DetailHeaderRow" type="HBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack" unique_id=457223111]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="DetailBackButton" type="Button" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/DetailHeaderRow" unique_id=1485371070]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(144, 48)
+layout_mode = 2
+theme_type_variation = &"SanctumBackButton"
+text = "Back to Sanctum"
+
+[node name="DetailHeaderSpacer" type="Control" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/DetailHeaderRow" unique_id=660223111]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="DetailPrevButton" type="Button" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/DetailHeaderRow" unique_id=1918741619]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+theme_type_variation = &"SanctumTertiaryButton"
+text = "‹"
+
+[node name="DetailNextButton" type="Button" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/DetailHeaderRow" unique_id=194818421]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+theme_type_variation = &"SanctumTertiaryButton"
+text = "›"
+
+[node name="PanelContainer" type="PanelContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack" unique_id=941606916]
+layout_mode = 2
+size_flags_vertical = 3
+theme = ExtResource("2_gaxha")
+theme_type_variation = &"SanctumDrawerRail"
+
+[node name="DetailBodyRow" type="HBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer" unique_id=138374186]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 0
+
+[node name="DetailTabs" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow" unique_id=994210487]
+custom_minimum_size = Vector2(232, 0)
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="HeaderMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/DetailTabs" unique_id=1726389757]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_bottom = 24
+
+[node name="HeaderWrapper" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/DetailTabs/HeaderMargin" unique_id=307463912]
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_constants/separation = 0
+
+[node name="DetailVectorLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/DetailTabs/HeaderMargin/HeaderWrapper" unique_id=1149297743]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumKicker"
+text = "Pillar"
+autowrap_mode = 3
+
+[node name="DetailNameLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/DetailTabs/HeaderMargin/HeaderWrapper" unique_id=1742987431]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumHeaderTitle"
+text = "Echo"
+autowrap_mode = 3
+
+[node name="DetailCallingRow" type="HBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/DetailTabs/HeaderMargin/HeaderWrapper" unique_id=693882767]
+layout_mode = 2
+
+[node name="DetailArchetypeLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/DetailTabs/HeaderMargin/HeaderWrapper/DetailCallingRow" unique_id=1933382740]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumDrawerMeta"
+text = "Weaver"
+autowrap_mode = 3
+
+[node name="DetailCallingLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/DetailTabs/HeaderMargin/HeaderWrapper/DetailCallingRow" unique_id=314857474]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumDrawerMeta"
+text = "Undecided"
+horizontal_alignment = 2
+autowrap_mode = 3
+
+[node name="DetailFeelingRow" type="HBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/DetailTabs/HeaderMargin/HeaderWrapper" unique_id=1613160791]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="DetailEmotionChip" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/DetailTabs/HeaderMargin/HeaderWrapper/DetailFeelingRow" unique_id=1124096173 instance=ExtResource("3_emotionchip")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="DetailBarkLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/DetailTabs/HeaderMargin/HeaderWrapper" unique_id=943403158]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumDrawerMeta"
+text = " "
+autowrap_mode = 3
+
+[node name="HeaderDivider" type="PanelContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/DetailTabs" unique_id=855140774]
+custom_minimum_size = Vector2(0, 1)
+layout_mode = 2
+theme_type_variation = &"SanctumRuleSoft"
+
+[node name="TabOverview" type="Button" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/DetailTabs" unique_id=1112885714]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumDrawerTabButtonActive"
+text = "Overview"
+alignment = 0
+
+[node name="TabBonds" type="Button" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/DetailTabs" unique_id=750275550]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumDrawerTabButton"
+text = "Bonds"
+alignment = 0
+
+[node name="TabSkills" type="Button" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/DetailTabs" unique_id=732715848]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumDrawerTabButton"
+text = "Skills"
+alignment = 0
+
+[node name="ContentRow" type="HBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow" unique_id=1913063508]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 0
+
+[node name="PagePanel" type="PanelContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow" unique_id=1573546588]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_type_variation = &"SanctumDetailPanel"
+
+[node name="PagePanelMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel" unique_id=68601549]
+layout_mode = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="PagePanelStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin" unique_id=236573603]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 16
+
+[node name="DetailPages" type="Control" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack" unique_id=921140178]
+clip_contents = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="DetailPagesScroll" type="ScrollContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages" unique_id=330795116]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+horizontal_scroll_mode = 0
+
+[node name="DetailPagesStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll" unique_id=568062636]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="OverviewPage" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack" unique_id=645791755]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="ProgressionHeaderRow" type="HBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage" unique_id=1552182964]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ProgressionHeader" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/ProgressionHeaderRow" unique_id=113731390]
+layout_mode = 2
+theme_type_variation = &"SanctumKicker"
+text = "PROGRESSION"
+
+[node name="ProgressionRuleTrail" type="PanelContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/ProgressionHeaderRow" unique_id=1815655926]
+custom_minimum_size = Vector2(0, 1)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_type_variation = &"SanctumRuleSoft"
+
+[node name="ProgressionRows" type="GridContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage" unique_id=1768967524]
+layout_mode = 2
+theme_override_constants/v_separation = 0
+columns = 2
+
+[node name="StandingKeyLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/ProgressionRows" unique_id=1577950968]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumMuted"
+text = "Standing"
+
+[node name="DetailStandingLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/ProgressionRows" unique_id=1430311543]
+unique_name_in_owner = true
+layout_mode = 2
+text = "1"
+horizontal_alignment = 2
+
+[node name="StepKeyLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/ProgressionRows" unique_id=2092254831]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumMuted"
+text = "Step"
+
+[node name="DetailStepLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/ProgressionRows" unique_id=380325072]
+unique_name_in_owner = true
+layout_mode = 2
+text = "1 / 5"
+horizontal_alignment = 2
+
+[node name="StoryweightKeyLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/ProgressionRows" unique_id=278616046]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumMuted"
+text = "Storyweight"
+
+[node name="DetailStoryweightLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/ProgressionRows" unique_id=798735558]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Storyweight 0"
+
+[node name="DetailStoryweightBar" type="ProgressBar" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage" unique_id=1203173730]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+theme_type_variation = &"SanctumStoryweightBar"
+show_percentage = false
+
+[node name="StatsHeaderRow" type="HBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage" unique_id=1650585110]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="StatsHeader" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/StatsHeaderRow" unique_id=797135624]
+layout_mode = 2
+theme_type_variation = &"SanctumKicker"
+text = "KEY STATS"
+
+[node name="StatsRuleTrail" type="PanelContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/StatsHeaderRow" unique_id=194562034]
+custom_minimum_size = Vector2(0, 1)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_type_variation = &"SanctumRuleSoft"
+
+[node name="StatsGrid" type="GridContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage" unique_id=1984483621]
+layout_mode = 2
+columns = 2
+
+[node name="StatAttackLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/StatsGrid" unique_id=1283668251]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumMuted"
+text = "Attack"
+
+[node name="DetailStatAttackValue" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/StatsGrid" unique_id=779984963]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+horizontal_alignment = 2
+
+[node name="StatDefenseLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/StatsGrid" unique_id=1606661805]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumMuted"
+text = "Defense"
+
+[node name="DetailStatDefenseValue" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/StatsGrid" unique_id=269824516]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+horizontal_alignment = 2
+
+[node name="StatIntelligenceLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/StatsGrid" unique_id=1693974771]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumMuted"
+text = "Intelligence"
+
+[node name="DetailStatIntelligenceValue" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/StatsGrid" unique_id=1909698282]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+horizontal_alignment = 2
+
+[node name="StatAgilityLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/StatsGrid" unique_id=1002477592]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumMuted"
+text = "Agility"
+
+[node name="DetailStatAgilityValue" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/StatsGrid" unique_id=237146668]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+horizontal_alignment = 2
+
+[node name="StatCharismaLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/StatsGrid" unique_id=621203962]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumMuted"
+text = "Charisma"
+
+[node name="DetailStatCharismaValue" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/StatsGrid" unique_id=1094628651]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+horizontal_alignment = 2
+
+[node name="StatSpeedLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/StatsGrid" unique_id=1586112207]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumMuted"
+text = "Speed"
+
+[node name="DetailStatSpeedValue" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/StatsGrid" unique_id=318974766]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+horizontal_alignment = 2
+
+[node name="StatMaxHealthLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/StatsGrid" unique_id=510318995]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumMuted"
+text = "Max Health"
+
+[node name="DetailStatMaxHealthValue" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/StatsGrid" unique_id=1211092267]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+horizontal_alignment = 2
+
+[node name="ActionDivider" type="PanelContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage" unique_id=638189604]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 1)
+layout_mode = 2
+theme_type_variation = &"SanctumRuleSoft"
+
+[node name="DetailPartyAction" type="PanelContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage" unique_id=1224852146]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumRouteAction"
+
+[node name="DetailPartyActionMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/DetailPartyAction" unique_id=1088497815]
+layout_mode = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 14
+
+[node name="DetailPartyActionRow" type="HBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/DetailPartyAction/DetailPartyActionMargin" unique_id=700079203]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="DetailPartyActionGlyph" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/DetailPartyAction/DetailPartyActionMargin/DetailPartyActionRow" unique_id=1227390468]
+layout_mode = 2
+theme_type_variation = &"SanctumRouteGlyph"
+text = "◉"
+vertical_alignment = 1
+
+[node name="DetailPartyActionText" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/DetailPartyAction/DetailPartyActionMargin/DetailPartyActionRow" unique_id=1226089010]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 2
+
+[node name="DetailPartyActionTitle" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/DetailPartyAction/DetailPartyActionMargin/DetailPartyActionRow/DetailPartyActionText" unique_id=744409551]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumRouteTitle"
+text = "Assign to Party"
+
+[node name="DetailPartyActionSubtitle" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/DetailPartyAction/DetailPartyActionMargin/DetailPartyActionRow/DetailPartyActionText" unique_id=1489201437]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumRouteSubtitle"
+text = "Add to your departure."
+autowrap_mode = 3
+
+[node name="DetailPartyActionChevron" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/DetailPartyAction/DetailPartyActionMargin/DetailPartyActionRow" unique_id=1325026613]
+layout_mode = 2
+theme_type_variation = &"SanctumRouteGlyph"
+text = "›"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="DetailPartyActionButton" type="Button" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/DetailPartyAction" unique_id=1103779490]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 82)
+layout_mode = 2
+text = " "
+flat = true
+
+[node name="BondsPage" type="Control" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack" unique_id=828076333]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(0, 320)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="SkillsPage" type="Control" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack" unique_id=1522500596]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(0, 320)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="NameModal" type="Control" parent="." unique_id=1159712664]
 unique_name_in_owner = true
 visible = false
 layout_mode = 1
@@ -309,7 +771,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="NameModalShade" type="ColorRect" parent="NameModal"]
+[node name="NameModalShade" type="ColorRect" parent="NameModal" unique_id=1987547515]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -318,7 +780,7 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0, 0, 0, 0.5)
 
-[node name="NameModalPanel" type="PanelContainer" parent="NameModal"]
+[node name="NameModalPanel" type="PanelContainer" parent="NameModal" unique_id=286113151]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -332,39 +794,39 @@ offset_bottom = 156.5
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="NameModalMargin" type="MarginContainer" parent="NameModal/NameModalPanel"]
+[node name="NameModalMargin" type="MarginContainer" parent="NameModal/NameModalPanel" unique_id=1705057272]
 layout_mode = 2
 theme_override_constants/margin_left = 24
 theme_override_constants/margin_top = 24
 theme_override_constants/margin_right = 24
 theme_override_constants/margin_bottom = 24
 
-[node name="NameModalStack" type="VBoxContainer" parent="NameModal/NameModalPanel/NameModalMargin"]
+[node name="NameModalStack" type="VBoxContainer" parent="NameModal/NameModalPanel/NameModalMargin" unique_id=964503526]
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="ModalTitle" type="Label" parent="NameModal/NameModalPanel/NameModalMargin/NameModalStack"]
+[node name="ModalTitle" type="Label" parent="NameModal/NameModalPanel/NameModalMargin/NameModalStack" unique_id=87472706]
 layout_mode = 2
 theme_type_variation = &"HeaderLargePanel"
 text = "Name your sanctum"
 autowrap_mode = 3
 
-[node name="ModalSubtitle" type="Label" parent="NameModal/NameModalPanel/NameModalMargin/NameModalStack"]
+[node name="ModalSubtitle" type="Label" parent="NameModal/NameModalPanel/NameModalMargin/NameModalStack" unique_id=1734272402]
 layout_mode = 2
 theme_type_variation = &"ContentBasePanel"
 text = "Akwaaba Keeper. Choose the name that will hold this house."
 autowrap_mode = 3
 
-[node name="NameEdit" type="LineEdit" parent="NameModal/NameModalPanel/NameModalMargin/NameModalStack"]
+[node name="NameEdit" type="LineEdit" parent="NameModal/NameModalPanel/NameModalMargin/NameModalStack" unique_id=186628622]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(48, 48)
 layout_mode = 2
 
-[node name="NameButtons" type="HBoxContainer" parent="NameModal/NameModalPanel/NameModalMargin/NameModalStack"]
+[node name="NameButtons" type="HBoxContainer" parent="NameModal/NameModalPanel/NameModalMargin/NameModalStack" unique_id=1752759006]
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="RerollButton" type="Button" parent="NameModal/NameModalPanel/NameModalMargin/NameModalStack/NameButtons"]
+[node name="RerollButton" type="Button" parent="NameModal/NameModalPanel/NameModalMargin/NameModalStack/NameButtons" unique_id=1572119912]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 48)
 layout_mode = 2
@@ -372,7 +834,7 @@ size_flags_horizontal = 3
 theme_type_variation = &"ButtonSecondary"
 text = "Reroll"
 
-[node name="ConfirmButton" type="Button" parent="NameModal/NameModalPanel/NameModalMargin/NameModalStack/NameButtons"]
+[node name="ConfirmButton" type="Button" parent="NameModal/NameModalPanel/NameModalMargin/NameModalStack/NameButtons" unique_id=1878175708]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 48)
 layout_mode = 2

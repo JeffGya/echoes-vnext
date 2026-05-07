@@ -7,6 +7,17 @@ func _init(id: String = FlowStateIds.SANCTUM) -> void:
 	
 func enter(ctx: RefCounted, t:int) -> void:
 	var flow_ctx := ctx as FlowContext
+	var prog_cfg: Dictionary = {}
+	var max_level: int = 5
+	if flow_ctx.config_service != null:
+		var balance_v: Variant = flow_ctx.config_service.get_balance()
+		var balance: Dictionary = balance_v if balance_v is Dictionary else {}
+		var balance_data_v: Variant = balance.get("data", {})
+		var balance_data: Dictionary = balance_data_v if balance_data_v is Dictionary else {}
+		var progression_v: Variant = balance_data.get("progression", {})
+		if progression_v is Dictionary:
+			prog_cfg = progression_v as Dictionary
+			max_level = int(prog_cfg.get("max_level_per_rank", 5))
 
 	# VOW-001: release active vow when returning to Sanctum if the release condition is met.
 	# Condition logic is in VowService.release_vow_if_due (testable in isolation).
@@ -66,9 +77,17 @@ func enter(ctx: RefCounted, t:int) -> void:
 
 	var roster_v: Variant = sanctum.get("roster", [])
 	var roster: Array = roster_v if roster_v is Array else []
+	var active_party_ids_v: Variant = sanctum.get("active_party_ids", [])
+	var active_party_ids: Array = active_party_ids_v if active_party_ids_v is Array else []
 
 	# Build a small preview list (first 3)
 	var roster_preview: Array = []
+	var echo_detail_roster: Array = _build_echo_detail_roster(
+		roster,
+		active_party_ids,
+		prog_cfg,
+		max_level
+	)
 	var limit : Variant = min(3, roster.size())
 	for i in range(limit):
 		var echo_v: Variant = roster[i]
@@ -98,7 +117,7 @@ func enter(ctx: RefCounted, t:int) -> void:
 			# V2-VOICE-001: sanctum bark for this echo (written by FlowRuntime bark helpers).
 			"sanctum_bark": echo.get("_sanctum_bark", {}),
 		})
-	
+
 	# VOW-001: read active vow for mantra display
 	var _av_display: Dictionary = {}
 	if flow_ctx.config_service != null:
@@ -154,6 +173,8 @@ func enter(ctx: RefCounted, t:int) -> void:
 		"thread_reserve_cap": _thread_reserve_cap,  # V2-WEAVE-001: base reserve cap (default 4)
 		"sanctum_layout": SanctumLayoutService.snapshot_layout(flow_ctx.save_data),
 		"sanctum_occupants": SanctumLayoutService.snapshot_occupants(flow_ctx.save_data),
+		"echo_detail_roster": echo_detail_roster,
+		"featured_echo_id": str((echo_detail_roster[0] as Dictionary).get("id", "")) if not echo_detail_roster.is_empty() and echo_detail_roster[0] is Dictionary else "",
 	}
 
 	flow_ctx.last_snapshot = {
@@ -167,3 +188,61 @@ func enter(ctx: RefCounted, t:int) -> void:
 	
 func exit(ctx: RefCounted, t: int) -> void:
 	pass
+
+
+static func _build_echo_detail_roster(
+	roster: Array,
+	active_party_ids: Array,
+	prog_cfg: Dictionary,
+	max_level: int
+) -> Array:
+	var out: Array = []
+	for echo_v in roster:
+		if not (echo_v is Dictionary):
+			continue
+		var echo: Dictionary = echo_v
+		var emotion_v: Variant = echo.get("emotion", {})
+		var emotion: Dictionary = emotion_v if emotion_v is Dictionary else {}
+		var stats_v: Variant = echo.get("stats", {})
+		var stats: Dictionary = stats_v if stats_v is Dictionary else {}
+		var rank := int(echo.get("rank", 1))
+		var step := int(echo.get("level", 1))
+		var storyweight := int(echo.get("xp_total", 0))
+		var thresholds: Array = ProgressionService.get_effective_thresholds(rank, prog_cfg)
+		var storyweight_to_next := ProgressionService.get_xp_to_next(storyweight, thresholds, max_level)
+		var level_idx := maxi(0, step - 1)
+		var next_idx := mini(step, thresholds.size() - 1)
+		var storyweight_in_step := storyweight - int(thresholds[level_idx]) if level_idx < thresholds.size() else 0
+		var storyweight_per_step := int(thresholds[next_idx]) - int(thresholds[level_idx]) if storyweight_to_next > 0 else 0
+		var bark_v: Variant = echo.get("_sanctum_bark", {})
+		var bark: Dictionary = bark_v if bark_v is Dictionary else {}
+		out.append({
+			"id": str(echo.get("id", "")),
+			"name": str(echo.get("name", "")),
+			"archetype_birth": str(echo.get("archetype_birth", "")),
+			"calling_origin": str(echo.get("calling_origin", "Uncalled")),
+			"standing": rank,
+			"step": step,
+			"step_max": max_level,
+			"storyweight": storyweight,
+			"storyweight_to_next": storyweight_to_next,
+			"storyweight_in_step": storyweight_in_step,
+			"storyweight_per_step": storyweight_per_step,
+			"dominant_vector": str(echo.get("dominant_vector", "")),
+			"stats": {
+				"max_hp": int(stats.get("max_hp", 0)),
+				"atk": int(stats.get("atk", 0)),
+				"def": int(stats.get("def", 0)),
+				"agi": int(stats.get("agi", 0)),
+				"int": int(stats.get("int", 0)),
+				"cha": int(stats.get("cha", 0)),
+				"speed": int(stats.get("speed", 0)),
+			},
+			"emotional_status": EmotionService.get_emotional_status(
+				int(emotion.get("morale_current", 50)),
+				int(emotion.get("fear_current", 0))
+			),
+			"sanctum_bark": str(bark.get("line", "")),
+			"in_party": str(echo.get("id", "")) in active_party_ids,
+		})
+	return out
