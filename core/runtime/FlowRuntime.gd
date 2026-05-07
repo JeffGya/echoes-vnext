@@ -3322,8 +3322,6 @@ func _handle_directive_select(action: Dictionary, t: int) -> void:
 	# STAGE uses static build_snapshot() — rebuild before refresh so snapshot reflects the new choice.
 	if flow_ctx.last_snapshot.get("type", "") == FlowStateIds.STAGE:
 		flow_ctx.last_snapshot = FlowStageState.build_snapshot(flow_ctx, t)
-	elif flow_ctx.last_snapshot.get("type", "") == FlowStateIds.KEEPER_TRIAL:
-		flow_ctx.last_snapshot = FlowKeeperIntroStateScript.build_trial_snapshot(flow_ctx, t)
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 

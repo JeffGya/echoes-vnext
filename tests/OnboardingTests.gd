@@ -12,6 +12,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("onboarding/name_confirm_completes_and_routes_keeper_intro", Callable(OnboardingTests, "_t_name_confirm_completes"))
 	runner.register_test("onboarding/keeper_call_assigns_starter_party", Callable(OnboardingTests, "_t_keeper_call_assigns_party"))
 	runner.register_test("onboarding/keeper_trial_uses_real_combat", Callable(OnboardingTests, "_t_keeper_trial_real_combat"))
+	runner.register_test("onboarding/keeper_trial_victory_routes_resolve", Callable(OnboardingTests, "_t_keeper_trial_victory_routes_resolve"))
 	runner.register_test("onboarding/keeper_trial_rewind_restarts_debuffed", Callable(OnboardingTests, "_t_keeper_trial_rewind_restarts_debuffed"))
 	runner.register_test("onboarding/keeper_trial_returns_rewards", Callable(OnboardingTests, "_t_keeper_trial_rewards"))
 	runner.register_test("onboarding/awakening_starts_flame_and_emotion", Callable(OnboardingTests, "_t_awakening_starts_flame"))
@@ -229,6 +230,34 @@ static func _t_keeper_trial_rewind_restarts_debuffed() -> Dictionary:
 		return { "ok": false, "error": "Expected rewound Wound max_hp debuffed" }
 	return { "ok": true }
 
+static func _t_keeper_trial_victory_routes_resolve() -> Dictionary:
+	var runtime := _prepare_named_runtime()
+	runtime.call("_handle_keeper_intro_call_answer", 6)
+	_defeat_trial_wound(runtime)
+	var result := {
+		"victory": true,
+		"reason": "all_enemies_defeated",
+		"round_ended": 1,
+	}
+	runtime.flow_ctx.encounter_ctx.combat_result = result
+	runtime.flow_ctx.encounter_ctx.combat_state["combat_over"] = true
+	runtime.flow_ctx.last_snapshot = FlowEncounterState.build_final_snapshot(runtime.flow_ctx, 7)
+	if str(runtime.flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.RESOLVE:
+		return { "ok": false, "error": "Expected first trial to use normal resolve snapshot" }
+	var data: Dictionary = runtime.flow_ctx.last_snapshot.get("data", {})
+	var actors: Array = data.get("actors", [])
+	var echo_count := 0
+	for actor_v in actors:
+		if actor_v is Dictionary and str((actor_v as Dictionary).get("faction", "")) == "echo":
+			echo_count += 1
+	if echo_count != 1:
+		return { "ok": false, "error": "Expected resolve actors to include starter Echo for EchoBar" }
+	var actions: Dictionary = runtime.flow_ctx.last_snapshot.get("actions", {})
+	var continue_action: Dictionary = actions.get("cta.continue", {})
+	if str(continue_action.get("type", "")) != "keeper_intro.trial.finish":
+		return { "ok": false, "error": "Expected resolve continue to enter thread return beat" }
+	return { "ok": true }
+
 static func _t_keeper_trial_rewards() -> Dictionary:
 	var runtime := _prepare_named_runtime()
 	runtime.call("_handle_keeper_intro_call_answer", 6)
@@ -241,6 +270,12 @@ static func _t_keeper_trial_rewards() -> Dictionary:
 	var threads: Dictionary = sanctum.get("threads", {})
 	if not threads.has(KeeperIntroServiceScript.FIRST_THREAD_ID):
 		return { "ok": false, "error": "Expected First Thread in reserve" }
+	var prologue_count := 0
+	for thread_id_v in threads.keys():
+		if str(thread_id_v).begins_with("thread.prologue.first."):
+			prologue_count += 1
+	if prologue_count != 1:
+		return { "ok": false, "error": "Expected exactly one prologue First Thread, got %d" % prologue_count }
 	if str(runtime.flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.KEEPER_THREAD_RETURN:
 		return { "ok": false, "error": "Expected thread return route" }
 	return { "ok": true }

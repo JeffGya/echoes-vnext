@@ -1,10 +1,10 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene format=3 uid="uid://bkk5c5an22gs3"]
 
-[ext_resource type="Script" path="res://ui/screens/onboarding/ForgottenNameScreen.gd" id="1_script"]
-[ext_resource type="Script" path="res://ui/screens/onboarding/VirtueOrbControl.gd" id="2_orb"]
+[ext_resource type="Script" uid="uid://de3fvw7vbafgr" path="res://ui/screens/onboarding/ForgottenNameScreen.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://dp5fpaa3v8ixn" path="res://ui/screens/onboarding/VirtueOrbControl.gd" id="2_orb"]
 [ext_resource type="Theme" uid="uid://8qssuuodths2" path="res://assets/theme/LivingTreeSystem.tres" id="3_theme"]
 
-[node name="ForgottenNameScreen" type="Control"]
+[node name="ForgottenNameScreen" type="Control" unique_id=18812544]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -14,14 +14,14 @@ grow_vertical = 2
 theme = ExtResource("3_theme")
 script = ExtResource("1_script")
 
-[node name="Background" type="ColorRect" parent="."]
+[node name="Background" type="ColorRect" parent="." unique_id=1745219151]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.23921569, 0.35294118, 0.27843137, 1)
+color = Color(0.23921569, 0.3529412, 0.27843136, 1)
 
 [node name="ChoiceRoot" type="Control" parent="." unique_id=1010]
 unique_name_in_owner = true
@@ -32,7 +32,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Title" type="Label" parent="ChoiceRoot"]
+[node name="Title" type="Label" parent="ChoiceRoot" unique_id=78113447]
 layout_mode = 1
 anchors_preset = 5
 anchor_left = 0.5
@@ -42,12 +42,12 @@ offset_top = 44.0
 offset_right = 320.0
 offset_bottom = 92.0
 grow_horizontal = 2
-theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+theme_override_colors/font_color = Color(0.9607843, 0.9019608, 0.827451, 1)
 theme_override_font_sizes/font_size = 30
 text = "Three names are trying to return"
 horizontal_alignment = 1
 
-[node name="Subtitle" type="Label" parent="ChoiceRoot"]
+[node name="Subtitle" type="Label" parent="ChoiceRoot" unique_id=1124855636]
 layout_mode = 1
 anchors_preset = 5
 anchor_left = 0.5
@@ -57,12 +57,12 @@ offset_top = 96.0
 offset_right = 240.0
 offset_bottom = 124.0
 grow_horizontal = 2
-theme_override_colors/font_color = Color(0.83137256, 0.68627451, 0.21568627, 1)
+theme_override_colors/font_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
 theme_override_font_sizes/font_size = 15
 text = "TAP EACH TO HEAR THEM SPEAK"
 horizontal_alignment = 1
 
-[node name="OrbRow" type="HBoxContainer" parent="ChoiceRoot"]
+[node name="OrbRow" type="HBoxContainer" parent="ChoiceRoot" unique_id=2069287098]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -77,7 +77,7 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 70
 
-[node name="OrbSlot1" type="VBoxContainer" parent="ChoiceRoot/OrbRow"]
+[node name="OrbSlot1" type="VBoxContainer" parent="ChoiceRoot/OrbRow" unique_id=619345596]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 8
@@ -86,7 +86,7 @@ theme_override_constants/separation = 8
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 64)
 layout_mode = 2
-theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+theme_override_colors/font_color = Color(0.9607843, 0.9019608, 0.827451, 1)
 horizontal_alignment = 1
 autowrap_mode = 3
 
@@ -111,10 +111,10 @@ script = ExtResource("2_orb")
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 32)
 layout_mode = 2
-theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+theme_override_colors/font_color = Color(0.9607843, 0.9019608, 0.827451, 1)
 horizontal_alignment = 1
 
-[node name="OrbSlot2" type="VBoxContainer" parent="ChoiceRoot/OrbRow"]
+[node name="OrbSlot2" type="VBoxContainer" parent="ChoiceRoot/OrbRow" unique_id=1477397731]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 8
@@ -123,7 +123,7 @@ theme_override_constants/separation = 8
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 64)
 layout_mode = 2
-theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+theme_override_colors/font_color = Color(0.9607843, 0.9019608, 0.827451, 1)
 horizontal_alignment = 1
 autowrap_mode = 3
 
@@ -148,10 +148,10 @@ script = ExtResource("2_orb")
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 32)
 layout_mode = 2
-theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+theme_override_colors/font_color = Color(0.9607843, 0.9019608, 0.827451, 1)
 horizontal_alignment = 1
 
-[node name="OrbSlot3" type="VBoxContainer" parent="ChoiceRoot/OrbRow"]
+[node name="OrbSlot3" type="VBoxContainer" parent="ChoiceRoot/OrbRow" unique_id=1542237667]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 8
@@ -160,7 +160,7 @@ theme_override_constants/separation = 8
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 64)
 layout_mode = 2
-theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+theme_override_colors/font_color = Color(0.9607843, 0.9019608, 0.827451, 1)
 horizontal_alignment = 1
 autowrap_mode = 3
 
@@ -185,7 +185,7 @@ script = ExtResource("2_orb")
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 32)
 layout_mode = 2
-theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+theme_override_colors/font_color = Color(0.9607843, 0.9019608, 0.827451, 1)
 horizontal_alignment = 1
 
 [node name="CommitButton" type="Button" parent="ChoiceRoot" unique_id=1040]
@@ -216,7 +216,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="MeetingTitle" type="Label" parent="MeetingRoot"]
+[node name="MeetingTitle" type="Label" parent="MeetingRoot" unique_id=1807471124]
 layout_mode = 1
 anchors_preset = 5
 anchor_left = 0.5
@@ -226,12 +226,12 @@ offset_top = 34.0
 offset_right = 260.0
 offset_bottom = 84.0
 grow_horizontal = 2
-theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+theme_override_colors/font_color = Color(0.9607843, 0.9019608, 0.827451, 1)
 theme_override_font_sizes/font_size = 30
 text = "A name has returned"
 horizontal_alignment = 1
 
-[node name="InfoPanel" type="PanelContainer" parent="MeetingRoot"]
+[node name="InfoPanel" type="PanelContainer" parent="MeetingRoot" unique_id=1409805966]
 layout_mode = 1
 anchors_preset = 4
 anchor_top = 0.5
@@ -242,14 +242,14 @@ offset_right = 390.0
 offset_bottom = 210.0
 grow_vertical = 2
 
-[node name="InfoMargin" type="MarginContainer" parent="MeetingRoot/InfoPanel"]
+[node name="InfoMargin" type="MarginContainer" parent="MeetingRoot/InfoPanel" unique_id=1754404124]
 layout_mode = 2
 theme_override_constants/margin_left = 22
 theme_override_constants/margin_top = 22
 theme_override_constants/margin_right = 22
 theme_override_constants/margin_bottom = 22
 
-[node name="InfoVBox" type="VBoxContainer" parent="MeetingRoot/InfoPanel/InfoMargin"]
+[node name="InfoVBox" type="VBoxContainer" parent="MeetingRoot/InfoPanel/InfoMargin" unique_id=1314205992]
 layout_mode = 2
 theme_override_constants/separation = 14
 
@@ -276,9 +276,9 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"ContentBasePanel"
 
-[node name="EchoPlaceholder" type="Panel" parent="MeetingRoot"]
+[node name="EchoPlaceholder" type="Panel" parent="MeetingRoot" unique_id=259478176]
 layout_mode = 1
-anchors_preset = 8
+anchors_preset = -1
 anchor_left = 0.68
 anchor_top = 0.5
 anchor_right = 0.68
@@ -290,14 +290,14 @@ offset_bottom = 145.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="PlaceholderLabel" type="Label" parent="MeetingRoot/EchoPlaceholder"]
+[node name="PlaceholderLabel" type="Label" parent="MeetingRoot/EchoPlaceholder" unique_id=958780723]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_colors/font_color = Color(0.96078431, 0.90196078, 0.82745098, 1)
+theme_override_colors/font_color = Color(0.9607843, 0.9019608, 0.827451, 1)
 text = "Echo"
 horizontal_alignment = 1
 vertical_alignment = 1

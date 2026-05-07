@@ -157,7 +157,6 @@ Action type format: `domain.subdomain.verb` e.g. `flow.go_state`, `sanctum.party
 - **Build structure in `.tscn`** — scripts only set values: `text`, `modulate`, `visible`, `disabled`
 - Never create, layout, or style UI nodes programmatically in `.gd`
 - Reusable visual treatments belong in `assets/theme/LivingTreeSystem.tres`; extend the theme instead of restyling the same patterns per scene
-- `ScreenTemplate.gd` is the canonical base for all new screens
 - `SanctumShell` owns the NavBar via `_cached_nav` — do NOT inject nav into snapshots
 - `RealmShell` owns the EchoBar (bottom 88px) — do NOT render it in individual screens
 - No IDs in player-facing display — show names, standings, callings only
@@ -169,7 +168,7 @@ Action type format: `domain.subdomain.verb` e.g. `flow.go_state`, `sanctum.party
 | Shell | Snapshot types |
 |-------|---------------|
 | `SanctumShell` | `flow.sanctum`, `flow.summon`, `flow.echo_party`, `flow.realm_select`, `flow.vow_manage` |
-| `RealmShell` | `flow.realm_init`, `flow.stage_map`, `flow.stage`, `flow.encounter`, `flow.resolve` |
+| `RealmShell` | `flow.stage_map`, `flow.stage`, `flow.stage_explore`, `flow.encounter`, `flow.keeper_trial`, `flow.resolve` |
 
 AppRoot routes on `snapshot.type`. Shell routes to bespoke screen.
 

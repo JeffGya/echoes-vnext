@@ -429,6 +429,8 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var combat_state: Dictionary = ectx.combat_state if ectx != null else {}
 	var encounter_id: String = ectx.encounter_id if ectx != null else ""
 	var combat_result: Dictionary = ectx.combat_result if ectx != null else {}
+	var victory := bool(combat_result.get("victory", false))
+	var round_ended := int(combat_result.get("round_ended", 0))
 
 	# Project actors to clean render shape.
 	var projected_actors: Array = []
@@ -452,6 +454,19 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			total_echoes += 1
 			if status != "dead":
 				echoes_survived += 1
+
+	if encounter_id == "keeper_intro.first_trial":
+		return _build_keeper_intro_final_snapshot(
+			flow_ctx,
+			t,
+			ectx,
+			combat_state,
+			combat_result,
+			projected_actors,
+			enemies_defeated,
+			echoes_survived,
+			round_ended
+		)
 
 	# ECONOMY-004: Read reward config from balance.json
 	var reward_cfg: Dictionary = {}
@@ -494,9 +509,6 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 
 	# ECONOMY-004: Compute and pay reward
 	var run_count := int(realm_model.get("run_count", 0))
-	var victory   := bool(combat_result.get("victory", false))
-	var round_ended := int(combat_result.get("round_ended", 0))
-
 	var reward_data: Dictionary = RewardCalc.compute(
 		victory,
 		stage_objectives,
@@ -705,3 +717,89 @@ static func _build_resolve_actions(victory: bool) -> Dictionary:
 			"slot":  "cta.continue",
 		}
 	return actions
+
+
+static func _build_keeper_intro_final_snapshot(
+	flow_ctx: FlowContext,
+	t: int,
+	ectx: EncounterContext,
+	combat_state: Dictionary,
+	combat_result: Dictionary,
+	projected_actors: Array,
+	enemies_defeated: int,
+	echoes_survived: int,
+	round_ended: int
+) -> Dictionary:
+	var ase_reward := 40
+	if flow_ctx.config_service != null:
+		var balance: Dictionary = flow_ctx.config_service.get_balance()
+		var data_v: Variant = balance.get("data", {})
+		var data: Dictionary = data_v if data_v is Dictionary else {}
+		var intro_v: Variant = data.get("keeper_intro", {})
+		var intro: Dictionary = intro_v if intro_v is Dictionary else {}
+		ase_reward = int(intro.get("first_trial_ase_reward", ase_reward))
+	var victory := bool(combat_result.get("victory", false))
+	return {
+		"type": FlowStateIds.RESOLVE,
+		"data": {
+			"title": "Result",
+			"encounter_id": "keeper_intro.first_trial",
+			"actors": projected_actors,
+			"objective_state": FlowEncounterState._build_objective_state(ectx, combat_state),
+			"victory": victory,
+			"reason": str(combat_result.get("reason", "")),
+			"round_ended": round_ended,
+			"enemies_defeated": enemies_defeated,
+			"echoes_survived": echoes_survived,
+			"ase_awarded": ase_reward if victory else 0,
+			"rank": "A" if victory else "F",
+			"reward_breakdown": [
+				{ "label": "First Trial", "delta": ase_reward }
+			] if victory else [],
+			"formula_inputs": {},
+			"relics": [],
+			"xp_events": [],
+			"emotion_summary": _build_keeper_intro_emotion_summary(ectx),
+		},
+		"actions": {
+			"cta.continue": {
+				"type": "keeper_intro.trial.finish",
+				"label": "Carry It Home",
+				"slot": "cta.continue",
+			}
+		} if victory else {
+			"cta.continue": {
+				"type": "flow.go_state",
+				"to": FlowStateIds.KEEPER_TRIAL,
+				"label": "Try Again",
+				"slot": "cta.continue",
+			}
+		},
+		"meta": { "t": t },
+	}
+
+
+static func _build_keeper_intro_emotion_summary(ectx: EncounterContext) -> Array:
+	var summary: Array = []
+	if ectx == null:
+		return summary
+	var pre_morale_map: Dictionary = ectx.pre_encounter_morale
+	for a_v in ectx.actors:
+		if not (a_v is Dictionary):
+			continue
+		var actor: Dictionary = a_v
+		if str(actor.get("faction", "")) != "echo":
+			continue
+		var eid := str(actor.get("id", ""))
+		var pre_morale := int(pre_morale_map.get(eid, 50))
+		var post_morale := int(actor.get("morale", 50))
+		var post_fear := int(actor.get("fear", 0))
+		summary.append({
+			"echo_id": eid,
+			"name": str(actor.get("name", "")),
+			"pre_emotional_status": EmotionService.get_emotional_status(pre_morale, 0),
+			"post_emotional_status": EmotionService.get_emotional_status(post_morale, post_fear),
+			"morale_delta": post_morale - pre_morale,
+			"refused": post_fear >= FEAR_THRESHOLD_DEFAULT,
+		})
+	return summary

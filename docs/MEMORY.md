@@ -97,7 +97,6 @@ Four project-specific skills are installed. Use them proactively — they are au
 | AppRoot | `ui/AppRoot.gd` | Routes `snapshot.type` → SanctumShell or RealmShell. Bank timer. Debug panel (F1). Test runner. |
 | SanctumShell | `ui/shells/SanctumShell.gd` | Hub family host. Owns persistent NavBar via `_cached_nav`. Shell-cached nav pattern. |
 | RealmShell | `ui/shells/RealmShell.gd` | Venture family host. Routes stage_map/stage/encounter/resolve. No shared chrome. |
-| ScreenTemplate | `ui/screens/ScreenTemplate.gd` | Canonical starting point for all new bespoke screens. |
 | SanctumScreen | `ui/screens/SanctumScreen.gd` | Hub: Ase, roster preview, party slots, name modal. No nav buttons (in shell). |
 | CombatBoardScreen | `ui/screens/CombatBoardScreen.gd` | Isometric TileMap. InitiativePanel, PrebattlePanel, PartyBar, CombatTokenLayer, CombatDistanceLayer. |
 | RealmModel | `core/realms/RealmModel.gd` | Pure data factory. Fields: id/name/virtue/description/seed/stage_count/current_stage_index/is_completed/status/run_index/run_count/stages. |

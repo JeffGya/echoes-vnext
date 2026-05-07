@@ -287,7 +287,7 @@ Each directive also carries `pros: Array[String]` and `cons: Array[String]` (2 e
 
 **Save repair (V2-DIRECTIVE-001):** `directive.none` → `directive.seek_signs`; `directive.scout` → `directive.scout_carefully`; all other V1 IDs → `directive.scout_carefully`.
 
-**Directive selection:** Blocking overlay on `StageScreen` — appears on every stage entry. Player must confirm before interacting with the stage. Scene: `ui/screens/venture/DirectiveSelectOverlay.tscn`.
+**Directive selection:** Blocking overlay on the stage preview — appears on every stage entry. Player must confirm before interacting with the stage. Scene: `ui/screens/venture/DirectiveSelectOverlay.tscn`.
 
 **Intent-weight scoring:** `BehaviorArbiter._directive_bonus()` — generic loop over `balance.json data.actor.directive_action_muls`. No GDScript changes needed to add new directives. V2 semantic keys added: `avoid_overcommit`, `exposure_acceptance`, `clue_seeking_priority`, `reporting_priority`.
 
@@ -307,7 +307,7 @@ V1 locked directives (`protect`, `push`, `preserve`, `focus`) — **superseded**
 | `balance.json directive_action_muls` | V2 semantic keys added | ✅ Done |
 | `BehaviorArbiter._DEFAULTS` | Mirrored balance.json additions | ✅ Done |
 | `FlowStageState` snapshot | Added `data.directive` payload; refactored to `static build_snapshot()` | ✅ Done |
-| Selection UI | `DirectiveSelectOverlay.tscn` + `.gd` on `StageScreen` | ✅ Done |
+| Selection UI | `DirectiveSelectOverlay.tscn` + `.gd` on `StageExploreScreen` preview mode | ✅ Done |
 
 ---
 
@@ -476,6 +476,7 @@ These systems are already done and their save seams are live:
 | V2-EMOTION-001 | Fear & Morale Readability | Shipped dual `morale_tier` + `fear_signal` display. Unified to single `emotional_status` in V2-EMOTION-002. |
 | V2-EMOTION-002 | Unified Emotional Status | Replaced dual display with 8-tier `emotional_status` (radiant → hollow). `get_fear_signal()` removed. `get_emotional_status(morale, fear)` added. EchoParty morale/fear bars removed. All emotion surfaces now use single field. Documented in CONVENTIONS.md with no-dual-display rule. |
 | V2-VOICE-001 ✅ | Real-time bark/voice system | Full voice system: combat bark popups above actor tokens (BarkPopupLayer), reactive barks (forming+ actors respond to high-signal ally barks), bark tier priority display (max 3 originals/round; Tier 1 always shown, Tier 3 dropped first), calling-inflected lines (arch×calling combos), new bark contexts (combat_ko, combat_calling_skill, combat_rally_ally, sanctum arrival/broken/calling_settled/bond_formed, rite accept/reject/defer, vow benefit/penalty, progress.rank_up, resolve victory/defeat). Save key: `_sanctum_bark: { line, context }` on echo save entries. Config: `balance.data.voice`. Spatial sanctum bark popup deferred to V2-SANCTUM-005. 5 new VoiceTests. |
+| V2-VOICE-002 ✅ | Simultaneous speech bubbles + bark cadence | Replaced sequential BarkPopupLayer queue with per-actor popup dict (`_active_popups`). Each echo now shows its own simultaneous speech bubble (rounded panel + BarkTail triangle drawn via `_draw()`). Bubbles follow token via `update_actor_positions()` called every render pass; coordinate transform fixed (`get_global_transform().affine_inverse()`). Per-actor bark cooldown on actor dict (`_bark_next_t`): `_compute_bark_cooldown()` returns 14–35 ticks modulated by morale/fear; high-priority contexts always bypass. `_bark_line` consumed on first projection in `FlowEncounterState._project_actor()` to prevent re-enqueueing. `_last_bark_line` dedup in `CombatBoardScreen._show_bark_popups()` prevents back-to-back identical lines across echoes. Bugs fixed in same session: EchoActor missing `archetype_birth` field; BehaviorArbiter confirmed-calling override; PartyTests double-toggle roster selection. |
 
 > See CONVENTIONS.md `SocialGraphService` and `VowService` sections for full API contracts.
 

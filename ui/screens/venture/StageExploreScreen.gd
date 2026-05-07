@@ -413,7 +413,7 @@ func _on_begin_pressed() -> void:
 	_is_zooming        = true
 	_begin_btn.disabled = true
 
-	# Zoom-in tween: same approach as StageScreen — scales the board up while
+	# Zoom-in tween for preview mode — scales the board up while
 	# fading the stage info panel out. No scene swap: the board stays in this
 	# screen instance for the explore mode that follows.
 	var tween := create_tween()

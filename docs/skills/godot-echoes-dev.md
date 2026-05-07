@@ -17,17 +17,18 @@
 ## Reference Knowledge
 
 ### Flow State IDs (FlowStateIds.gd)
-10 canonical state IDs:
+Current canonical flow state IDs include:
 - `SANCTUM` — hub home screen
 - `SUMMON` — summon screen
-- `PARTY_MANAGE` — party management
+- `ECHO_PARTY` — party management
 - `REALM_SELECT` — realm selection
 - `STAGE_MAP` — stage progress + party prep
-- `STAGE` — single-stage overview (reserved for future visual exploration)
+- `STAGE` — stage preview
+- `STAGE_EXPLORE` — exploration map
 - `ENCOUNTER` — combat board
 - `RESOLVE` — post-combat resolve screen
-- `TITLE` — title/start screen
-- `NEW_GAME` — new game setup
+- `SPLASH` — splash/title entry
+- `MAIN_MENU` — main menu / continue gate
 
 ### Action Type Format
 All actions follow `domain.subdomain.verb` format:

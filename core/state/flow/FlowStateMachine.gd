@@ -38,7 +38,6 @@ func register_default_states() -> void:
 	register_state(FlowWeavingRiteStateScript.new())  # V2-WEAVE-002
 
 	register_state(FlowResolveState.new())
-	register_state(FlowRealmInitState.new())  # REALM-001
 	register_state(FlowStageMapState.new())
 	register_state(FlowStageState.new())
 	register_state(FlowStageExploreStateScript.new())  # V2-STAGE-001

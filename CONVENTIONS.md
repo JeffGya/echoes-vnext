@@ -91,7 +91,6 @@ Slot naming: `nav.*` (navigation), `cta.*` (primary call-to-action), `overlay.*`
 **Per-row interactions** (e.g. party toggle) are dispatched directly by the UI row component — NOT listed in `snapshot.actions`.
 
 ### Bespoke Screen Contract (UI-001)
-Template: `res://ui/screens/ScreenTemplate.gd`
 
 **Entry:** `func set_snapshot(snap: Dictionary) -> void`
 **Exit:** `signal action_requested(action: Dictionary)`
@@ -101,7 +100,7 @@ Rules:
 - Screens **never** call `dispatch()` directly
 - Screens **never** read `FlowContext`, `SanctumState`, `SaveService`, or any sim internal
 - `UISnapshotRenderer` is fallback-only for unknown snapshot types — **not** a base class
-- All new screens start from `ScreenTemplate.gd`
+- All new screens implement the bespoke screen contract directly
 
 **UI node discipline (short form):**
 - Prefer scene-authored structure + theme variations over runtime-created UI nodes.
@@ -115,7 +114,7 @@ AppRoot routes `snapshot.type` → shell → bespoke screen.
 | Shell | File | Snapshot types |
 |-------|------|---------------|
 | `SanctumShell` | `ui/shells/SanctumShell.gd` | flow.sanctum, flow.summon, flow.echo_party, flow.realm_select, flow.vow_manage, flow.weaving_rite |
-| `RealmShell` | `ui/shells/RealmShell.gd` | flow.realm_init, flow.stage_map, flow.stage, flow.encounter, flow.resolve |
+| `RealmShell` | `ui/shells/RealmShell.gd` | flow.stage_map, flow.stage, flow.stage_explore, flow.encounter, flow.keeper_trial, flow.resolve |
 
 **Shell-cached nav pattern (UI-002):**
 - SanctumShell owns the persistent NavBar — NOT injected into every sanctum-family snapshot
@@ -421,7 +420,7 @@ The 4 locked V1 entries (`protect`, `push`, `preserve`, `focus`) and `directive.
 - `directive.scout`, `directive.protect`, `directive.push`, `directive.preserve`, `directive.focus` → `directive.scout_carefully`
 - Unknown IDs reset to `directive.scout_carefully`
 
-**Directive selection UI:** A `DirectiveSelectOverlay` blocks all StageScreen interaction at every stage entry. Player must confirm a directive before the stage begins. Overlay hides itself on confirm; emits `directive.select` action via the inherited `action_requested` signal.
+**Directive selection UI:** A `DirectiveSelectOverlay` blocks stage preview interaction at every stage entry. Player must confirm a directive before the stage begins. Overlay hides itself on confirm; emits `directive.select` action via the inherited `action_requested` signal.
 
 **Intent weights → BehaviorArbiter:** Semantic keys in `intent_weights` match keys in `balance.json → directive_action_muls`. Scout Carefully favours `survival_bias`, `avoid_overcommit`, `prefer_disengage`. Seek Signs favours `clue_seeking_priority`, `reporting_priority`, `exposure_acceptance`.
 
@@ -506,7 +505,7 @@ EncounterStateMachine phases (scaffold): `setup → blessing → rounds → reso
 | | `encounter.advance` | advances encounter phase (`to: String`) |
 | **directive** | `directive.select` | sets active directive in save |
 | **ui** | `ui.dismiss_summon_reveals` | clears pending reveal queue |
-| **flow** | `flow.select_realm` | selects a realm; triggers `RealmService.get_or_create`; transitions to `flow.realm_init`. Payload: `{ realm_id: String }` |
+| **flow** | `flow.select_realm` | selects a realm; triggers `RealmService.get_or_create`; transitions to `flow.stage_map`. Payload: `{ realm_id: String }` |
 | | `flow.select_stage` | sets `ctx.stage_id`, transitions to `flow.stage`. Payload: `{ stage_id: String }` |
 | | `flow.complete_stage` | REALM-004: advances `current_stage_index` via `RealmService.advance_stage()`; on realm complete routes to `flow.realm_select` (clears `ctx.realm_id`+`ctx.stage_id`); else routes to `flow.stage_map`. Optional `destination` field overrides routing for non-completed stages (e.g. `"flow.sanctum"` for victory "To Sanctum" path). |
 | **weave** | `weave.start_for_echo` | payload: `{ echo_id }`. Starts rite from an EchoParty/Sanctum-family interaction, seeds rite context with the chosen echo, transitions to `flow.weaving_rite`. |
@@ -591,7 +590,7 @@ Echo traits (resilience + leadership) use a **separate derived RNG** at path `<s
 - `objective_params: {}` on ObjectiveModel is the extension point for post-MVP stage content (roaming intel map, escort targets, etc.). Not in REQUIRED_FIELDS — always read via `.get("params", {})`.
 - Stage IDs use format `"stage.%d"` (zero-based index), e.g. `"stage.0"`, `"stage.1"`. Set on `flow_ctx.stage_id` by `flow.select_stage` action handler in FlowRuntime.
 - ECONOMY-004: Stage reward is paid once inside `build_final_snapshot()` — no `reward_paid` guard needed since this function is called exactly once per combat end. `RewardCalc` is a pure static helper with zero side effects. Rank uses board totals (`total_enemies`, `total_echoes`) for `max_possible` so rank reflects missed opportunities. Defeat uses `base × defeat_factor` as rank numerator — defeat naturally scores C or lower. All reward config lives in `balance.data.rewards`.
-- REALM-003 delivered as part of REALM-002: deterministic stage generation (`RealmGenerator.generate()`), `stages[]` in `RealmInitSnapshot`, stage UI (RealmInitScreen, StageMapScreen, StageScreen), and `LOG_REALM_CREATED` with full stage list are all complete. REALM-003 Notion card is Done — no additional code needed.
+- REALM-003 delivered as part of REALM-002: deterministic stage generation (`RealmGenerator.generate()`), stage progression UI (`StageMapScreen` plus the shared `StageExploreScreen` preview/explore flow), and `LOG_REALM_CREATED` with full stage list are all complete. REALM-003 Notion card is Done — no additional code needed.
 - REALM-004: `RealmService.advance_stage(ctx, t) → Dictionary` increments `current_stage_index` in save; detects realm complete (`new_index >= stage_count`) and writes `is_completed=true`, `status="completed"`; always sets `save_request=true`; idempotent if already complete. Called by `flow.complete_stage` handler in FlowRuntime. `cta.next_stage` in resolve snapshot dispatches `flow.complete_stage` (not `flow.go_state`). On realm complete, FlowRuntime clears `ctx.realm_id`+`ctx.stage_id` before routing to `REALM_SELECT`. `FlowStageMapState` emits `stages_remaining`, `realm_complete`, `stage_count` in snapshot data; gates `cta.enter_stage` when `realm_complete==true`; guards empty model with redirect snapshot (not scaffold).
 - REALM-005: `RealmService.calculate_stage_reward(stage_index, realm_virtue, run_index, reward_cfg)` is a pure static helper. Formula: `roundi((virtue_bonuses[virtue] + stage_index × stage_index_bonus_per) × (realm_order_multiplier_base + run_index × realm_order_multiplier_step))`. Scales ×0.5 per realm entered (no cap). Victory-only — defeat gets existing 25% consolation, no virtue bonus. Added to total after redo multiplier (flat bonus, not subject to redo penalty). Logged via `economy.stage.reward` with `formula_inputs`. Config in `balance.data.rewards`. `formula_inputs` + `relics: []` stub (ITEM-001 attachment point) added to `flow.resolve` snapshot data in `build_final_snapshot()`. `StructuredLogger.warn()` added (maps to `info` severity).
 - Combat-stage pipeline fixes (post REALM-004): Three bugs fixed. (1) `_handle_complete_stage()` now nulls `encounter_ctx`+`encounter_machine` before advancing stage — fixes stale board actors on next stage entry. (2) `FlowEncounterState.enter()` now calls `_resolve_mode_from_stage()` instead of hardcoding `PURIFY_SHRINE` — reads stage's first objective type (`combat`→`COMBAT`, `shrine`→`PURIFY_SHRINE`) from the realm model. (3) `flow.select_stage` handler now sets `encounter_id = realm_id + "." + stage_id` — fixes identical actor placement across all encounters. Win-path emotion drift (`_apply_encounter_emotion_drift("win", t)`) is now called in `_handle_complete_stage()` before nulling the encounter, wiring the EMOTION-002 drift that was silently skipped in the `build_final_snapshot()` path.
@@ -654,12 +653,12 @@ After `advance_turn`, party is at situation but does not engage automatically. `
 | StageExploreScreen | `flow.stage` (preview) | stage_name, objective_count, directive, map_width, map_height, map_entry_pos, map_situations[] ({pos, revealed, resolved, type}) | cta.start, nav.back |
 | StageExploreScreen | `flow.stage_explore` | map_width, map_height, party_pos, turn_count, party_state, objectives_found, objectives_total, situations[] ({id, pos, revealed, resolved, type}), party_preview, [situation_pending ({situation_id, revealed, type, is_objective, intel_clues, intel_quality, enemy_estimate})], [situation_overlay] | cta.advance_turn, cta.return_home, nav.back, [cta.engage_situation] |
 
-**RealmShell routing:** Both `flow.stage` AND `flow.stage_explore` → `StageExploreScreen.tscn`. Shell scene-reuse logic ensures the same instance persists across the preview→explore transition; the zoom tween plays on the actual board. `StageScreen.tscn` is retained but no longer routed to.
+**RealmShell routing:** Both `flow.stage` AND `flow.stage_explore` → `StageExploreScreen.tscn`. Shell scene-reuse logic ensures the same instance persists across the preview→explore transition; the zoom tween plays on the actual board.
 
 ---
 
 ### Deferred
-- Full art: StageScreen, StageMapScreen (scaffolds built; deferred to UI-006+)
+- Full art: StageExploreScreen preview/explore states, StageMapScreen (scaffolds built; deferred to UI-006+)
 - HP progress bar in RealmShell EchoBar (text label is current; bar deferred to UX pass)
 - Sanctum bark spatial popup above echo tokens: deferred to V2-SANCTUM-005 (Phase D Alive Layer). Data pipeline (`_sanctum_bark` dict on echo save entries + `roster_preview.sanctum_bark`) is fully built by V2-VOICE-001. Text display in SanctumScreen roster cards ships in VOICE-001. Spatial positioning requires per-echo node identity which doesn't exist until SANCTUM-005.
 - Multiple save slots (one slot is the current contract)

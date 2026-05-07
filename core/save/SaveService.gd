@@ -294,6 +294,7 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			"keeper_trial_phase": "ready",
 			"keeper_trial_rewind_used": false,
 			"first_thread_id": "",
+			"first_trial_rewards_granted": false,
 			"awakening_choice": "",
 		}
 		repaired = true
@@ -344,6 +345,10 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			onboarding["first_thread_id"] = ""
 			repaired = true
 			repaired_notes.append("onboarding.first_thread_id set to empty")
+		if not onboarding.has("first_trial_rewards_granted") or typeof(onboarding["first_trial_rewards_granted"]) != TYPE_BOOL:
+			onboarding["first_trial_rewards_granted"] = false
+			repaired = true
+			repaired_notes.append("onboarding.first_trial_rewards_granted set to false")
 		if not onboarding.has("awakening_choice") or typeof(onboarding["awakening_choice"]) != TYPE_STRING:
 			onboarding["awakening_choice"] = ""
 			repaired = true

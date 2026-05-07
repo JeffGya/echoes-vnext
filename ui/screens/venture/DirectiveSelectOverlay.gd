@@ -1,5 +1,5 @@
 # res://ui/screens/venture/DirectiveSelectOverlay.gd
-# V2-DIRECTIVE-001: Directive selection overlay for StageScreen.
+# V2-DIRECTIVE-001: Directive selection overlay for the stage preview screen.
 # Shown at every stage entry — player must confirm a directive before the stage can begin.
 # Layout and style authored in DirectiveSelectOverlay.tscn. This script only sets values.
 
@@ -32,7 +32,7 @@ func _ready() -> void:
 	_select_btn.pressed.connect(_on_select_pressed)
 
 
-# Called by StageScreen.set_snapshot() with snap["data"]["directive"].
+# Called by StageExploreScreen preview mode with snap["data"]["directive"].
 func populate(directive_data: Dictionary) -> void:
 	_directives  = directive_data.get("directives", [])
 	_active_id   = directive_data.get("active_id", "")

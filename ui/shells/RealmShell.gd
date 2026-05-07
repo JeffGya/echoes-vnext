@@ -6,7 +6,6 @@ signal action_requested(action: Dictionary)
 var _active_overlay: Control = null
 
 var _stage_map_scene      := preload("res://ui/screens/venture/StageMapScreen.tscn")
-var _stage_scene          := preload("res://ui/screens/venture/StageScreen.tscn")
 var _stage_explore_scene  := preload("res://ui/screens/venture/StageExploreScreen.tscn")  # V2-STAGE-001
 var _combat_board_scene   := preload("res://ui/screens/combat/CombatBoardScreen.tscn")
 var _resolve_scene        := preload("res://ui/screens/venture/ResolveScreen.tscn")

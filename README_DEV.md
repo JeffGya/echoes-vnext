@@ -90,12 +90,11 @@ Rendering only. UI must be snapshot-driven.
   - SanctumShell.gd/.tscn — Hub shell: persistent NavBar (FoldableContainer) + CanvasLayer + SpatialLayer. Routes: flow.sanctum, flow.summon, flow.echo_party, flow.realm_select
   - RealmShell.gd/.tscn   — Venture shell: lightweight pass-through, no shared chrome. Routes: flow.stage_map, flow.stage, flow.encounter, flow.resolve (INFRA-001)
 - ui/screens/ — High-level screens (Sanctum, Realm Select, Combat, Resolve, Debug)
-  - ScreenTemplate.gd         — Canonical starting point for all new bespoke screens (UI-001)
   - SanctumScreen.gd/.tscn    — Sanctum hub (Ase, roster preview, party slots, name modal)
   - SummonScreen.gd/.tscn     — Summon screen (grade select, cost, reveal overlay)
   - EchoPartyScreen.gd/.tscn  — Combined echo + party management (list, detail, active party)
   - StageMapScreen.gd/.tscn   — Stage progress map (two-panel: stage list + detail) (INFRA-001)
-  - StageScreen.gd/.tscn      — Stage overview before encounter (info panel + party bar) (INFRA-001)
+  - StageExploreScreen.gd/.tscn — Shared stage preview + exploration map flow (INFRA-001 / V2-STAGE-001)
   - CombatBoardScreen.gd/.tscn— Isometric combat board (token layer, initiative panel)
   - ResolveScreen.gd/.tscn    — Post-combat resolve (victory/defeat, actor roster)
 - ui/components/ — Reusable UI components (ActionList, LogView, Panels)

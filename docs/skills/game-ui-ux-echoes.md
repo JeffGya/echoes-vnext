@@ -51,7 +51,7 @@ No shared chrome — each screen is self-contained.
 | Screen | Flow State | Purpose |
 |--------|-----------|---------|
 | StageMapScreen | `STAGE_MAP` | Stage progress list, party prep, future: skill/directive selection |
-| StageScreen | `STAGE` | Reserved for future visual stage exploration — do not add prep UI here |
+| StageExploreScreen | `STAGE` / `STAGE_EXPLORE` | Stage preview plus exploration flow — keep prep UI on StageMap |
 | CombatBoardScreen | `ENCOUNTER` | Isometric TileMap, initiative panel, prebattle panel, party bar |
 | ResolveScreen | `RESOLVE` | Victory/defeat, actor roster, continue or next stage |
 
@@ -68,7 +68,8 @@ Every screen reads a snapshot of shape `{ type, meta, data, actions }`:
 | `PARTY_MANAGE` | PartyManageScreen (inside SanctumShell) |
 | `REALM_SELECT` | RealmSelectScreen |
 | `STAGE_MAP` | StageMapScreen |
-| `STAGE` | StageScreen |
+| `STAGE` | StageExploreScreen (preview mode) |
+| `STAGE_EXPLORE` | StageExploreScreen (explore mode) |
 | `ENCOUNTER` | CombatBoardScreen |
 | `RESOLVE` | ResolveScreen |
 

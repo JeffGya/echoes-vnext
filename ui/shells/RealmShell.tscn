@@ -1,8 +1,6 @@
 [gd_scene format=3 uid="uid://bwm4aksecsiyy"]
 
 [ext_resource type="Script" uid="uid://c7smmm40nja3b" path="res://ui/shells/RealmShell.gd" id="1_realmshell"]
-[ext_resource type="PackedScene" uid="uid://cfpuypq3we4w1" path="res://ui/components/EchoCardItem.tscn" id="2_echocard"]
-
 [node name="RealmShell" type="Control" unique_id=257620160]
 layout_mode = 3
 anchors_preset = 15
@@ -32,7 +30,3 @@ offset_top = -88.0
 grow_horizontal = 2
 grow_vertical = 0
 theme_override_constants/separation = 16
-
-[node name="EchoCardPlaceholder" parent="EchoBar" unique_id=487317475 instance=ExtResource("2_echocard")]
-custom_minimum_size = Vector2(320, 0)
-layout_mode = 2

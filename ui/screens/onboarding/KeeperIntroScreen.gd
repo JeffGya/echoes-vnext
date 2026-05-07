@@ -14,8 +14,10 @@ signal action_requested(action: Dictionary)
 
 var _cta_action: Dictionary = {}
 var _choice_actions: Array[Dictionary] = []
+var _lines: Array[String] = []
+var _line_index := 0
 var _typing_tween: Tween
-var _defer_actions_until_text_done: bool = false
+var _line_is_typing := false
 
 
 func _ready() -> void:
@@ -35,16 +37,13 @@ func set_snapshot(snap: Dictionary) -> void:
 	_title_label.text = str(data.get("title", ""))
 	var lines_v: Variant = data.get("lines", [])
 	var lines: Array = lines_v if lines_v is Array else []
-	var body_lines: Array[String] = []
+	_lines.clear()
 	for line_v in lines:
-		body_lines.append(str(line_v))
-	var body_text := "\n\n".join(body_lines)
+		_lines.append(str(line_v))
+	if _lines.is_empty():
+		_lines.append("")
+	_line_index = 0
 	var step := str(data.get("step", ""))
-	if step == "anansi_rewind":
-		_start_typewriter(body_text)
-	else:
-		_stop_typewriter()
-		_body_label.text = body_text
 
 	_thread_card.visible = step == "thread_returns" or step == "first_weaving"
 	if _thread_card.visible:
@@ -73,18 +72,19 @@ func set_snapshot(snap: Dictionary) -> void:
 		_choice_actions.append(action)
 		_choice_buttons[i].text = str(action.get("label", ""))
 		_choice_buttons[i].disabled = bool(action.get("disabled", false))
-	_sync_action_visibility()
+	_show_current_line()
 
 
-func _start_typewriter(text: String) -> void:
+func _show_current_line() -> void:
 	_stop_typewriter()
-	_defer_actions_until_text_done = true
+	_line_is_typing = true
 	_body_label.text = ""
 	_sync_action_visibility()
 	_typing_tween = create_tween()
+	var text := _lines[_line_index] if _line_index < _lines.size() else ""
 	for i in range(text.length()):
 		_typing_tween.tween_callback(func(idx := i): _body_label.text = text.substr(0, idx + 1))
-		_typing_tween.tween_interval(0.018)
+		_typing_tween.tween_interval(0.02)
 	_typing_tween.tween_callback(Callable(self, "_on_typewriter_finished"))
 
 
@@ -92,23 +92,29 @@ func _stop_typewriter() -> void:
 	if _typing_tween != null and _typing_tween.is_running():
 		_typing_tween.kill()
 	_typing_tween = null
-	_defer_actions_until_text_done = false
+	_line_is_typing = false
 
 
 func _on_typewriter_finished() -> void:
-	_defer_actions_until_text_done = false
+	_line_is_typing = false
 	_sync_action_visibility()
 
 
 func _sync_action_visibility() -> void:
-	var can_show_actions := not _defer_actions_until_text_done
-	_cta_button.visible = can_show_actions and not _cta_action.is_empty()
+	var can_show_actions := not _line_is_typing
+	var has_more_lines := _line_index < _lines.size() - 1
+	_cta_button.visible = can_show_actions and (has_more_lines or not _cta_action.is_empty())
+	_cta_button.text = "Continue" if has_more_lines else str(_cta_action.get("label", "Continue"))
 	for i in range(_choice_buttons.size()):
 		var has_action := i < _choice_actions.size() and not _choice_actions[i].is_empty()
-		_choice_buttons[i].visible = can_show_actions and has_action
+		_choice_buttons[i].visible = can_show_actions and not has_more_lines and has_action
 
 
 func _on_cta_pressed() -> void:
+	if _line_index < _lines.size() - 1:
+		_line_index += 1
+		_show_current_line()
+		return
 	if not _cta_action.is_empty():
 		action_requested.emit(_cta_action)
 

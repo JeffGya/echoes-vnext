@@ -78,11 +78,11 @@ Reviewed at the start of each session.
 
 ---
 
-### 4 — StageScreen is reserved for future visual/exploration — never pre-fill it
+### 4 — Keep pre-stage prep off the stage preview screen
 
-**Rule:** The StageScreen (`flow.stage`) is reserved for a future feature: a visual representation of the stage that allows echoes to explore before combat. Do not add party prep, directives, or skill selection UI to it.
-**Why:** Jeff clarified that StageScreen will show a visual of the stage and let echoes explore. Adding prep UI there would conflict with that future design.
-**How to apply:** Any pre-stage prep (skill selection, directives, party review) belongs on StageMap. When in doubt about where a "before you enter" feature belongs, default to StageMap and confirm with Jeff.
+**Rule:** `flow.stage` is the stage preview entry into the exploration flow. Keep party prep and other pre-stage management off this screen; that work belongs on `StageMap`.
+**Why:** Jeff clarified that the stage screen should stay focused on the visual entry into exploration/combat. Overloading it with prep UI makes the flow muddier and duplicates StageMap responsibilities.
+**How to apply:** Any pre-stage prep (skill selection, party review, broader management) belongs on StageMap. Stage preview may still show the directive confirmation overlay because that is part of entering the stage, not a separate management surface.
 **Mistake count:** 1
 
 ---

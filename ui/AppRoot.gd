@@ -14,10 +14,6 @@ var _last_log_index: int = 0
 
 var _econ_timer_started: bool = false
 
-# current_snapshot to be deleted after STATE-002 has been implemented properly.
-var current_snapshot: Dictionary = {}
-var current_save: Dictionary = {}
-
 var logger: StructuredLogger
 var config_service: ConfigService
 
@@ -297,10 +293,10 @@ func _run_tests(parts: Array) -> void:
 	CombatServiceTests.register(runner) # COMBAT-003
 	CombatRoundTests.register(runner)     # COMBAT-004
 	CombatSnapshotTests.register(runner) # COMBAT-007
-	load("res://tests/CombatTokenPresentationTests.gd").register(runner)
+	CombatTokenPresentationTests.register(runner)
 	RetreatTests.register(runner)        # UI-004
 	ArchetypeTests.register(runner)      # 9-archetype personality system
-	load("res://tests/MaturityExpressionTests.gd").register(runner)  # V2-PROG-006
+	MaturityExpressionTests.register(runner)  # V2-PROG-006
 	RealmModelTests.register(runner)     # REALM-001
 	ObjectiveModelTests.register(runner) # REALM-002
 	StageModelTests.register(runner)     # REALM-002
@@ -308,7 +304,7 @@ func _run_tests(parts: Array) -> void:
 	StageProgressionTests.register(runner)  # REALM-004
 	RealmRewardTests.register(runner)       # REALM-005
 	ProgressionTests.register(runner)       # PROG-003
-	load("res://tests/EchoPartyRadarTests.gd").register(runner)  # UI stat profile
+	EchoPartyRadarTests.register(runner)  # UI stat profile
 	CallingTests.register(runner)           # PROG-007
 	SkillDefinitionTests.register(runner)   # PROG-008
 	CallingBehaviorTests.register(runner)   # PROG-009
@@ -316,16 +312,16 @@ func _run_tests(parts: Array) -> void:
 	CooldownTests.register(runner)          # PROG-009
 	PassiveIdentityTests.register(runner)   # PROG-009
 	SkillLoadoutTests.register(runner)      # PROG-009
-	load("res://tests/SocialGraphTests.gd").register(runner)  # BOND-001
-	load("res://tests/BondTriggerTests.gd").register(runner)  # BOND-002
+	SocialGraphTests.register(runner)  # BOND-001
+	BondTriggerTests.register(runner)  # BOND-002
 	VowServiceTests.register(runner)  # VOW-001
-	load("res://tests/SaveBridgeTests.gd").register(runner)  # V2-MIG-002
+	SaveBridgeTests.register(runner)  # V2-MIG-002
 	ThreadServiceTests.register(runner)                      # V2-WEAVE-001
-	load("res://tests/WeavingRiteTests.gd").register(runner)  # V2-WEAVE-002
-	load("res://tests/StageExploreTests.gd").register(runner)    # V2-STAGE-001
-	load("res://tests/IntelPersistenceTests.gd").register(runner) # V2-INTEL-001
-	load("res://tests/OnboardingTests.gd").register(runner)
-	load("res://tests/VoiceTests.gd").register(runner)           # V2-VOICE-001
+	WeavingRiteTests.register(runner)  # V2-WEAVE-002
+	StageExploreTests.register(runner)    # V2-STAGE-001
+	IntelPersistenceTests.register(runner) # V2-INTEL-001
+	OnboardingTests.register(runner)
+	VoiceTests.register(runner)           # V2-VOICE-001
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [

@@ -1,5 +1,5 @@
 # res://ui/components/ObjectiveItem.gd
-# UI-003: Objective line item for StageScreen and StageMapScreen right panel.
+# UI-003: Objective line item for StageMapScreen stage detail lists.
 # Data bind only — no colors.
 
 class_name ObjectiveItem

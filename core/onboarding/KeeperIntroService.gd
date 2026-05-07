@@ -41,6 +41,8 @@ static func ensure_intro(save_data: Dictionary, cfg: Dictionary = {}) -> Diction
 		onboarding["keeper_trial_rewind_used"] = false
 	if not onboarding.has("first_thread_id") or typeof(onboarding["first_thread_id"]) != TYPE_STRING:
 		onboarding["first_thread_id"] = ""
+	if not onboarding.has("first_trial_rewards_granted") or typeof(onboarding["first_trial_rewards_granted"]) != TYPE_BOOL:
+		onboarding["first_trial_rewards_granted"] = false
 	if not onboarding.has("awakening_choice") or typeof(onboarding["awakening_choice"]) != TYPE_STRING:
 		onboarding["awakening_choice"] = ""
 	_ensure_sanctum_intro_fields(save_data)
@@ -54,6 +56,7 @@ static func start_after_chapter_one(save_data: Dictionary, cfg: Dictionary) -> v
 	onboarding["keeper_trial_phase"] = TRIAL_READY
 	onboarding["keeper_trial_rewind_used"] = false
 	onboarding["first_thread_id"] = ""
+	onboarding["first_trial_rewards_granted"] = false
 	onboarding["awakening_choice"] = ""
 	_ensure_sanctum_intro_fields(save_data)
 
@@ -133,17 +136,21 @@ static func ensure_starter_party(save_data: Dictionary) -> String:
 
 static func grant_trial_rewards(save_data: Dictionary, cfg: Dictionary, econ: EconomyService, logger: StructuredLogger, t: int) -> void:
 	_ensure_sanctum_intro_fields(save_data)
+	var onboarding := ensure_intro(save_data, cfg)
+	if bool(onboarding.get("first_trial_rewards_granted", false)):
+		_prune_extra_first_threads(save_data)
+		return
 	var intro_cfg := get_intro_cfg(cfg)
 	var ase_reward := int(intro_cfg.get("first_trial_ase_reward", 40))
 	if econ != null and ase_reward > 0:
 		econ.add_ase(ase_reward, "keeper_intro.first_trial", logger, t)
 
-	var onboarding := ensure_intro(save_data, cfg)
 	var virtue := get_selected_virtue(save_data, cfg)
 	if virtue.is_empty():
 		virtue = "story"
 	_grant_first_thread_via_thread_service(save_data, cfg, virtue, logger, t)
 	onboarding["first_thread_id"] = FIRST_THREAD_ID
+	onboarding["first_trial_rewards_granted"] = true
 
 
 static func awaken_flame(save_data: Dictionary, cfg: Dictionary, choice: String, logger: StructuredLogger, t: int) -> void:
@@ -199,15 +206,6 @@ static func mark_complete(save_data: Dictionary, cfg: Dictionary) -> void:
 	onboarding["keeper_intro_step"] = STEP_COMPLETE
 
 
-static func apply_ase_boost(econ_data: Dictionary, cfg: Dictionary, delta_seconds: int) -> int:
-	if delta_seconds <= 0:
-		return 0
-	var sanctum_v: Variant = econ_data.get("_sanctum_ref", {})
-	if not (sanctum_v is Dictionary):
-		return 0
-	return 0
-
-
 static func apply_ase_boost_from_save(save_data: Dictionary, cfg: Dictionary, delta_seconds: int) -> int:
 	if delta_seconds <= 0:
 		return 0
@@ -250,6 +248,14 @@ static func _ensure_sanctum_intro_fields(save_data: Dictionary) -> void:
 
 
 static func _grant_first_thread_via_thread_service(save_data: Dictionary, cfg: Dictionary, virtue: String, logger: StructuredLogger, t: int) -> void:
+	_prune_extra_first_threads(save_data)
+	var sanctum_existing_v: Variant = save_data.get("sanctum", {})
+	var sanctum_existing: Dictionary = sanctum_existing_v if sanctum_existing_v is Dictionary else {}
+	var existing_threads_v: Variant = sanctum_existing.get("threads", {})
+	var existing_threads: Dictionary = existing_threads_v if existing_threads_v is Dictionary else {}
+	if existing_threads.has(FIRST_THREAD_ID):
+		return
+
 	var realms_v: Variant = save_data.get("realms", {})
 	var realms: Dictionary = realms_v if realms_v is Dictionary else {}
 	realms["prologue.first"] = {
@@ -270,7 +276,13 @@ static func _grant_first_thread_via_thread_service(save_data: Dictionary, cfg: D
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	var threads_cfg_v: Variant = data.get("threads", {})
 	var threads_cfg: Dictionary = threads_cfg_v if threads_cfg_v is Dictionary else {}
-	ThreadService.crystallize_threads("prologue.first", save_data, threads_cfg, t, logger)
+	var prologue_threads_cfg := threads_cfg.duplicate(true)
+	prologue_threads_cfg["count_thresholds"] = {
+		"one": 0.0,
+		"two": 2.0,
+		"three": 3.0,
+	}
+	ThreadService.crystallize_threads("prologue.first", save_data, prologue_threads_cfg, t, logger)
 
 	var sanctum_v: Variant = save_data.get("sanctum", {})
 	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
@@ -281,5 +293,22 @@ static func _grant_first_thread_via_thread_service(save_data: Dictionary, cfg: D
 		thread["display_name"] = "First Thread"
 		thread["prologue"] = true
 		threads[FIRST_THREAD_ID] = thread
+	sanctum["threads"] = threads
+	save_data["sanctum"] = sanctum
+
+
+static func _prune_extra_first_threads(save_data: Dictionary) -> void:
+	var sanctum_v: Variant = save_data.get("sanctum", {})
+	if not (sanctum_v is Dictionary):
+		return
+	var sanctum: Dictionary = sanctum_v
+	var threads_v: Variant = sanctum.get("threads", {})
+	if not (threads_v is Dictionary):
+		return
+	var threads: Dictionary = threads_v
+	for thread_id_v in threads.keys():
+		var thread_id := str(thread_id_v)
+		if thread_id.begins_with("thread.prologue.first.") and thread_id != FIRST_THREAD_ID:
+			threads.erase(thread_id)
 	sanctum["threads"] = threads
 	save_data["sanctum"] = sanctum

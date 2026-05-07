@@ -52,7 +52,6 @@ const InitiativeRowScene := preload("res://ui/components/InitiativeRowItem.tscn"
 @onready var _speed_slow_button: Button             = %SpeedSlowButton
 @onready var _speed_normal_button: Button           = %SpeedNormalButton
 @onready var _speed_fast_button: Button             = %SpeedFastButton
-@onready var _directive_overlay: Control            = %DirectiveSelectOverlay
 
 # Clay floor tile: source 0, atlas position (0, 0)
 const _TILE_SOURCE_ID:    int       = 0
@@ -123,10 +122,6 @@ func _ready() -> void:
 	_speed_normal_button.pressed.connect(func(): _on_speed_pressed(_SPEED_NORMAL))
 	_speed_fast_button.pressed.connect(func(): _on_speed_pressed(_SPEED_FAST))
 	_apply_visual_playback_for_delay(_SPEED_NORMAL)
-	if _directive_overlay != null:
-		_directive_overlay.visible = false
-		if _directive_overlay.has_signal("action_requested"):
-			_directive_overlay.connect("action_requested", Callable(self, "_on_action"))
 
 
 # -------------------------
@@ -171,8 +166,6 @@ func _reset_transient_ui() -> void:
 	_prebattle_panel.visible         = false
 	_pending_enter_combat_action     = {}
 	_pending_retreat_action          = {}
-	if _directive_overlay != null:
-		_directive_overlay.visible = false
 
 
 func _reset_presentation_state() -> void:
@@ -722,7 +715,6 @@ func _show_prebattle_panel(data: Dictionary, actions: Dictionary) -> void:
 	# Hide the main HUD labels — pre_combat uses its own panel.
 	_round_label.visible     = false
 	_objective_label.visible = false
-	_show_directive_overlay_if_needed(data)
 
 	# Objective label.
 	var obj_state: Dictionary = data.get("objective_state", {})
@@ -754,23 +746,6 @@ func _show_prebattle_panel(data: Dictionary, actions: Dictionary) -> void:
 		_retreat_button.text     = "Retreat is not possible"
 
 	_prebattle_panel.visible = true
-
-
-func _show_directive_overlay_if_needed(data: Dictionary) -> void:
-	if _directive_overlay == null:
-		return
-	var directive_v: Variant = data.get("directive", {})
-	if not (directive_v is Dictionary):
-		_directive_overlay.visible = false
-		return
-	var directive: Dictionary = directive_v
-	if not bool(directive.get("require_selection", false)):
-		_directive_overlay.visible = false
-		return
-	if _directive_overlay.has_method("populate"):
-		_directive_overlay.call("populate", directive)
-	_directive_overlay.visible = true
-
 
 ## Maps objective type string to a player-facing label.
 func _format_objective_label(obj_type: String) -> String:

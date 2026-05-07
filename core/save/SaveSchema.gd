@@ -43,6 +43,7 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"keeper_trial_phase": "ready",
 			"keeper_trial_rewind_used": false,
 			"first_thread_id": "",
+			"first_trial_rewards_granted": false,
 			"awakening_choice": "",
 		},
 		"economy": {

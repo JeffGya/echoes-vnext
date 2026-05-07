@@ -70,7 +70,7 @@ Screens never call `dispatch()`. They emit `action_requested` → shell → AppR
 | Shell | Handles |
 |-------|---------|
 | `SanctumShell.gd` | `flow.sanctum`, `flow.summon`, `flow.echo_party`, `flow.realm_select`, `flow.vow_manage` |
-| `RealmShell.gd` | `flow.realm_init`, `flow.stage_map`, `flow.stage`, `flow.encounter`, `flow.resolve` |
+| `RealmShell.gd` | `flow.stage_map`, `flow.stage`, `flow.stage_explore`, `flow.encounter`, `flow.keeper_trial`, `flow.resolve` |
 
 AppRoot routes on `snapshot.type` → shell. Shell routes to screen.
 
@@ -124,19 +124,19 @@ func _on_toggle_pressed():
 ## Adding a New Screen
 
 1. Create `XxxScreen.tscn` — full node tree, theme properties, StyleBoxFlat resources authored here
-2. Create `XxxScreen.gd` extending `ScreenTemplate.gd` — `set_snapshot()` + `action_requested` signal only
+2. Create `XxxScreen.gd` implementing `set_snapshot()` + `action_requested` signal only
 3. Use `unique_name_in_owner = true` on nodes referenced by script
 4. Wire in the appropriate shell's routing logic
 5. Add scene to `ui/screens/`
 
 ---
 
-## StageScreen Warning
+## Stage Preview Warning
 
-`flow.stage` is **reserved** for a future visual exploration feature. Do NOT add:
+`flow.stage` is the stage preview entry into `StageExploreScreen`. Do NOT add:
 - Party prep UI
 - Skill selection
-- Directives
+- unrelated pre-stage management
 
 Pre-stage prep belongs on `StageMapScreen`. When in doubt, ask Jeff before adding anything to StageScreen.
 

@@ -7,7 +7,7 @@ const SituationModelScript    := preload("res://core/realms/SituationModel.gd") 
 
 # V2-STAGE-001: Exploration stage map flow state.
 #
-# This state activates when the party enters a stage from the StageScreen.
+# This state activates when the party enters a stage from the stage preview flow.
 # It drives a procedural exploration tilemap where hidden situations are
 # scattered across the map and the party (as one guided group unit) moves
 # toward them based on the active directive.
