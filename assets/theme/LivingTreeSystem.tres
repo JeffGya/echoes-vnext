@@ -13,6 +13,66 @@
 [ext_resource type="StyleBox" uid="uid://d0s4btm4t6fhs" path="res://assets/theme/LineEditFocus.tres" id="9_hukpj"]
 [ext_resource type="FontFile" uid="uid://chwi6asl8nb0w" path="res://assets/fonts/IosevkaCharon-Regular.ttf" id="11_r5n68"]
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_emotion_broken"]
+bg_color = Color(0.8745098, 0.84313726, 0.83137256, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.16470589, 0.16470589, 0.22745098, 0.55)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_emotion_inspired"]
+bg_color = Color(0.87058824, 0.92941177, 0.8901961, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.23921569, 0.3529412, 0.2784314, 0.5)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_emotion_ready"]
+bg_color = Color(0.8627451, 0.80784315, 0.70980394, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.627451, 0.49019608, 0.24313726, 0.55)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_emotion_shaken"]
+bg_color = Color(0.9647059, 0.8627451, 0.79607844, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.78431374, 0.3529412, 0.32941177, 0.45)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_emotion_steady"]
+bg_color = Color(0.93333334, 0.8980392, 0.8392157, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.627451, 0.49019608, 0.24313726, 0.45)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
 [sub_resource type="DPITexture" id="DPITexture_r5n68"]
 _source = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\"><path fill=\"#fff\" fill-opacity=\".75\" d=\"m1 3 2-2 5 5 5-5 2 2-5 5 5 5-2 2-5-5-5 5-2-2 5-5z\"/></svg>
 "
@@ -31,21 +91,7 @@ corner_radius_bottom_right = 3
 corner_radius_bottom_left = 3
 corner_detail = 5
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_header_card"]
-bg_color = Color(0.1019608, 0.15294118, 0.11764706, 0.82)
-border_width_left = 2
-border_width_top = 3
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(0.83137256, 0.6862745, 0.21568628, 0.7)
-corner_radius_top_left = 28
-corner_radius_top_right = 6
-corner_radius_bottom_right = 22
-corner_radius_bottom_left = 10
-corner_detail = 1
-shadow_color = Color(0.039215688, 0.05490196, 0.047058824, 0.42)
-shadow_size = 14
-shadow_offset = Vector2(0, 5)
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_sanctum_back"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_card"]
 bg_color = Color(0.9529412, 0.90588236, 0.827451, 0.9)
@@ -63,6 +109,57 @@ shadow_color = Color(0.16470589, 0.16470589, 0.22745098, 0.18)
 shadow_size = 10
 shadow_offset = Vector2(0, 4)
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_detail_panel"]
+bg_color = Color(0.95686275, 0.92156863, 0.85490197, 0.97)
+border_color = Color(0.627451, 0.49019608, 0.24313726, 0.64)
+corner_detail = 1
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_drawer_rail"]
+bg_color = Color(0.1019608, 0.15294118, 0.11764706, 0.94)
+border_width_top = 2
+border_width_right = 1
+border_width_bottom = 2
+border_color = Color(0.5137255, 0.42745098, 0.19215687, 0.35)
+corner_detail = 1
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_drawer_tab"]
+content_margin_left = 16.0
+content_margin_top = 14.0
+content_margin_right = 16.0
+content_margin_bottom = 14.0
+bg_color = Color(0.78431374, 0.3529412, 0.32941177, 0.1)
+border_width_left = 2
+border_width_bottom = 1
+border_color = Color(0.78431374, 0.3529412, 0.32941177, 0.35)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_drawer_tab_active"]
+content_margin_left = 16.0
+content_margin_top = 14.0
+content_margin_right = 16.0
+content_margin_bottom = 14.0
+bg_color = Color(0.78431374, 0.3529412, 0.32941177, 0.22)
+border_width_left = 2
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.78431374, 0.3529412, 0.32941177, 0.75)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_header_card"]
+bg_color = Color(0.1019608, 0.15294118, 0.11764706, 0.82)
+border_width_left = 2
+border_width_top = 3
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.83137256, 0.6862745, 0.21568628, 0.7)
+corner_radius_top_left = 28
+corner_radius_top_right = 6
+corner_radius_bottom_right = 22
+corner_radius_bottom_left = 10
+corner_detail = 1
+shadow_color = Color(0.039215688, 0.05490196, 0.047058824, 0.42)
+shadow_size = 14
+shadow_offset = Vector2(0, 5)
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_rail"]
 bg_color = Color(0.1019608, 0.15294118, 0.11764706, 0.88)
 border_width_left = 2
@@ -79,6 +176,35 @@ shadow_color = Color(0.039215688, 0.05490196, 0.047058824, 0.4)
 shadow_size = 14
 shadow_offset = Vector2(0, 5)
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_return_notice"]
+bg_color = Color(0.9607843, 0.9019608, 0.827451, 0.96)
+border_width_left = 2
+border_width_top = 4
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.47843137, 0.70980394, 0.78431374, 0.92)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+corner_detail = 1
+shadow_color = Color(0.039215688, 0.05490196, 0.047058824, 0.26)
+shadow_size = 18
+shadow_offset = Vector2(0, 6)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_route_action"]
+bg_color = Color(0.16470589, 0.16470589, 0.15294118, 0.96)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.627451, 0.49019608, 0.24313726, 0.8)
+corner_radius_top_left = 14
+corner_radius_top_right = 8
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 8
+corner_detail = 1
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_rule_gold"]
 bg_color = Color(0.83137256, 0.6862745, 0.21568628, 0.9)
 corner_radius_top_left = 1
@@ -93,32 +219,35 @@ corner_radius_top_right = 1
 corner_radius_bottom_right = 1
 corner_radius_bottom_left = 1
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_emotion_ready"]
-bg_color = Color(0.8627451, 0.80784315, 0.70980394, 1)
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_progress_bg"]
+content_margin_left = 1.0
+content_margin_top = 1.0
+content_margin_right = 1.0
+content_margin_bottom = 1.0
+bg_color = Color(0.11764706, 0.10196079, 0.08627451, 0.95)
 border_width_left = 1
 border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
-border_color = Color(0.627451, 0.49019608, 0.24313726, 0.55)
-corner_radius_top_left = 14
-corner_radius_top_right = 14
-corner_radius_bottom_right = 14
-corner_radius_bottom_left = 14
+border_color = Color(0.8039216, 0.63529414, 0.2627451, 0.92)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_emotion_inspired"]
-bg_color = Color(0.87058824, 0.92941177, 0.8901961, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.23921569, 0.3529412, 0.2784314, 0.5)
-corner_radius_top_left = 14
-corner_radius_top_right = 14
-corner_radius_bottom_right = 14
-corner_radius_bottom_left = 14
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_progress_fill"]
+bg_color = Color(0.8039216, 0.63529414, 0.2627451, 0.95)
+corner_radius_top_left = 7
+corner_radius_top_right = 7
+corner_radius_bottom_right = 7
+corner_radius_bottom_left = 7
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_emotion_steady"]
-bg_color = Color(0.93333334, 0.8980392, 0.8392157, 1)
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_tab"]
+content_margin_left = 12.0
+content_margin_top = 8.0
+content_margin_right = 12.0
+content_margin_bottom = 8.0
+bg_color = Color(0.93333334, 0.8980392, 0.8392157, 0.64)
 border_width_left = 1
 border_width_top = 1
 border_width_right = 1
@@ -129,29 +258,33 @@ corner_radius_top_right = 14
 corner_radius_bottom_right = 14
 corner_radius_bottom_left = 14
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_emotion_shaken"]
-bg_color = Color(0.9647059, 0.8627451, 0.79607844, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.78431374, 0.3529412, 0.32941177, 0.45)
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_tab_active"]
+content_margin_left = 12.0
+content_margin_top = 8.0
+content_margin_right = 12.0
+content_margin_bottom = 8.0
+bg_color = Color(0.1019608, 0.15294118, 0.11764706, 0.88)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.83137256, 0.6862745, 0.21568628, 0.68)
 corner_radius_top_left = 14
 corner_radius_top_right = 14
 corner_radius_bottom_right = 14
 corner_radius_bottom_left = 14
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_emotion_broken"]
-bg_color = Color(0.8745098, 0.84313726, 0.83137256, 1)
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_tertiary"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+bg_color = Color(0.78431374, 0.3529412, 0.32941177, 0.08)
 border_width_left = 1
 border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
-border_color = Color(0.16470589, 0.16470589, 0.22745098, 0.55)
-corner_radius_top_left = 14
-corner_radius_top_right = 14
-corner_radius_bottom_right = 14
-corner_radius_bottom_left = 14
+border_color = Color(0.78431374, 0.3529412, 0.32941177, 0.45)
 
 [resource]
 Button/colors/font_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
@@ -174,16 +307,6 @@ ContentBasePanel/colors/font_color = Color(0.23921569, 0.15686275, 0.09019608, 1
 ContentBasePanel/constants/line_spacing = -5
 ContentBasePanel/font_sizes/font_size = 20
 ContentBasePanel/fonts/font = ExtResource("1_k333i")
-FoldableContainer/colors/collapsed_font_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
-FoldableContainer/colors/font_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
-FoldableContainer/colors/hover_font_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
-FoldableContainer/fonts/font = ExtResource("1_0ml50")
-FoldableContainer/styles/focus = ExtResource("9_hukpj")
-FoldableContainer/styles/panel = ExtResource("1_6mgck")
-FoldableContainer/styles/title_collapsed_hover_panel = ExtResource("3_2q63t")
-FoldableContainer/styles/title_collapsed_panel = ExtResource("1_6mgck")
-FoldableContainer/styles/title_hover_panel = ExtResource("3_2q63t")
-FoldableContainer/styles/title_panel = ExtResource("1_6mgck")
 EmotionChipBroken/base_type = &"PanelContainer"
 EmotionChipBroken/styles/panel = SubResource("StyleBoxFlat_emotion_broken")
 EmotionChipInspired/base_type = &"PanelContainer"
@@ -214,45 +337,25 @@ EmotionChipShaken/base_type = &"PanelContainer"
 EmotionChipShaken/styles/panel = SubResource("StyleBoxFlat_emotion_shaken")
 EmotionChipSteady/base_type = &"PanelContainer"
 EmotionChipSteady/styles/panel = SubResource("StyleBoxFlat_emotion_steady")
+FoldableContainer/colors/collapsed_font_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
+FoldableContainer/colors/font_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
+FoldableContainer/colors/hover_font_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
+FoldableContainer/fonts/font = ExtResource("1_0ml50")
+FoldableContainer/styles/focus = ExtResource("9_hukpj")
+FoldableContainer/styles/panel = ExtResource("1_6mgck")
+FoldableContainer/styles/title_collapsed_hover_panel = ExtResource("3_2q63t")
+FoldableContainer/styles/title_collapsed_panel = ExtResource("1_6mgck")
+FoldableContainer/styles/title_hover_panel = ExtResource("3_2q63t")
+FoldableContainer/styles/title_panel = ExtResource("1_6mgck")
 HeaderLarge/colors/font_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
-HeaderLarge/font_sizes/font_size = 36
+HeaderLarge/font_sizes/font_size = 32
 HeaderLarge/fonts/font = ExtResource("1_8hwob")
 HeaderLarge/styles/normal = null
 HeaderLargePanel/base_type = &"Label"
 HeaderLargePanel/colors/font_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
-HeaderLargePanel/font_sizes/font_size = 48
+HeaderLargePanel/font_sizes/font_size = 36
 HeaderLargePanel/fonts/font = ExtResource("1_8hwob")
-SanctumAseKicker/base_type = &"Label"
-SanctumAseKicker/colors/font_color = Color(0.47058824, 0.36078432, 0.16862746, 1)
-SanctumAseKicker/font_sizes/font_size = 12
-SanctumAseKicker/fonts/font = ExtResource("11_r5n68")
-SanctumCard/base_type = &"PanelContainer"
-SanctumCard/styles/panel = SubResource("StyleBoxFlat_sanctum_card")
-SanctumHeaderCard/base_type = &"PanelContainer"
-SanctumHeaderCard/styles/panel = SubResource("StyleBoxFlat_sanctum_header_card")
-SanctumHeaderText/base_type = &"Label"
-SanctumHeaderText/colors/font_color = Color(0.827451, 0.84705883, 0.827451, 0.92)
-SanctumHeaderText/font_sizes/font_size = 16
-SanctumHeaderText/fonts/font = ExtResource("1_k333i")
-SanctumHeaderTitle/base_type = &"Label"
-SanctumHeaderTitle/colors/font_color = Color(0.9607843, 0.94509804, 0.90588236, 1)
-SanctumHeaderTitle/font_sizes/font_size = 36
-SanctumHeaderTitle/fonts/font = ExtResource("1_8hwob")
-SanctumKicker/base_type = &"Label"
-SanctumKicker/colors/font_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
-SanctumKicker/font_sizes/font_size = 11
-SanctumKicker/fonts/font = ExtResource("11_r5n68")
-SanctumMuted/base_type = &"Label"
-SanctumMuted/colors/font_color = Color(0.42745098, 0.42745098, 0.42745098, 1)
-SanctumMuted/font_sizes/font_size = 15
-SanctumMuted/fonts/font = ExtResource("1_k333i")
-SanctumRail/base_type = &"PanelContainer"
-SanctumRail/styles/panel = SubResource("StyleBoxFlat_sanctum_rail")
-SanctumRuleGold/base_type = &"PanelContainer"
-SanctumRuleGold/styles/panel = SubResource("StyleBoxFlat_sanctum_rule_gold")
-SanctumRuleSoft/base_type = &"PanelContainer"
-SanctumRuleSoft/styles/panel = SubResource("StyleBoxFlat_sanctum_rule_soft")
-HeaderMedium/font_sizes/font_size = 16
+HeaderMedium/font_sizes/font_size = 24
 HeaderSmall/font_sizes/font_size = 16
 HeaderTitle/base_type = &"Label"
 HeaderTitle/colors/font_color = Color(0.9607843, 0.9019608, 0.827451, 1)
@@ -277,6 +380,167 @@ LineEdit/styles/focus = ExtResource("9_hukpj")
 LineEdit/styles/normal = ExtResource("9_2q63t")
 LineEdit/styles/read_only = SubResource("StyleBoxFlat_blgyb")
 PanelContainer/styles/panel = ExtResource("8_hukpj")
+SanctumAseKicker/base_type = &"Label"
+SanctumAseKicker/colors/font_color = Color(0.47058824, 0.36078432, 0.16862746, 1)
+SanctumAseKicker/font_sizes/font_size = 16
+SanctumAseKicker/fonts/font = ExtResource("11_r5n68")
+SanctumBackButton/base_type = &"Button"
+SanctumBackButton/colors/font_color = Color(0.83137256, 0.6862745, 0.21568628, 0.92)
+SanctumBackButton/colors/font_disabled_color = Color(0.83137256, 0.6862745, 0.21568628, 0.45)
+SanctumBackButton/colors/font_focus_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+SanctumBackButton/colors/font_hover_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+SanctumBackButton/colors/font_hover_pressed_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+SanctumBackButton/font_sizes/font_size = 16
+SanctumBackButton/fonts/font = ExtResource("11_r5n68")
+SanctumBackButton/styles/disabled = SubResource("StyleBoxEmpty_sanctum_back")
+SanctumBackButton/styles/focus = SubResource("StyleBoxEmpty_sanctum_back")
+SanctumBackButton/styles/hover = SubResource("StyleBoxEmpty_sanctum_back")
+SanctumBackButton/styles/hover_pressed = SubResource("StyleBoxEmpty_sanctum_back")
+SanctumBackButton/styles/normal = SubResource("StyleBoxEmpty_sanctum_back")
+SanctumBackButton/styles/pressed = SubResource("StyleBoxEmpty_sanctum_back")
+SanctumCard/base_type = &"PanelContainer"
+SanctumCard/styles/panel = SubResource("StyleBoxFlat_sanctum_card")
+SanctumDetailPanel/base_type = &"PanelContainer"
+SanctumDetailPanel/styles/panel = SubResource("StyleBoxFlat_sanctum_detail_panel")
+SanctumDetailTitle/base_type = &"Label"
+SanctumDetailTitle/colors/font_color = Color(0.1764706, 0.11372549, 0.06666667, 1)
+SanctumDetailTitle/font_sizes/font_size = 34
+SanctumDetailTitle/fonts/font = ExtResource("1_0ml50")
+SanctumDrawerMeta/base_type = &"Label"
+SanctumDrawerMeta/colors/font_color = Color(0.9607843, 0.94509804, 0.90588236, 0.84)
+SanctumDrawerMeta/font_sizes/font_size = 16
+SanctumDrawerMeta/fonts/font = ExtResource("1_k333i")
+SanctumDrawerRail/base_type = &"PanelContainer"
+SanctumDrawerRail/styles/panel = SubResource("StyleBoxFlat_sanctum_drawer_rail")
+SanctumDrawerTabButton/base_type = &"Button"
+SanctumDrawerTabButton/colors/font_color = Color(0.83137256, 0.6862745, 0.21568628, 0.92)
+SanctumDrawerTabButton/colors/font_disabled_color = Color(0.83137256, 0.6862745, 0.21568628, 0.45)
+SanctumDrawerTabButton/colors/font_focus_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+SanctumDrawerTabButton/colors/font_hover_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+SanctumDrawerTabButton/colors/font_hover_pressed_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+SanctumDrawerTabButton/font_sizes/font_size = 18
+SanctumDrawerTabButton/fonts/font = ExtResource("11_r5n68")
+SanctumDrawerTabButton/styles/disabled = SubResource("StyleBoxFlat_sanctum_drawer_tab")
+SanctumDrawerTabButton/styles/focus = SubResource("StyleBoxFlat_sanctum_drawer_tab")
+SanctumDrawerTabButton/styles/hover = SubResource("StyleBoxFlat_sanctum_drawer_tab")
+SanctumDrawerTabButton/styles/hover_pressed = SubResource("StyleBoxFlat_sanctum_drawer_tab")
+SanctumDrawerTabButton/styles/normal = SubResource("StyleBoxFlat_sanctum_drawer_tab")
+SanctumDrawerTabButton/styles/pressed = SubResource("StyleBoxFlat_sanctum_drawer_tab")
+SanctumDrawerTabButtonActive/base_type = &"Button"
+SanctumDrawerTabButtonActive/colors/font_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+SanctumDrawerTabButtonActive/colors/font_disabled_color = Color(0.83137256, 0.6862745, 0.21568628, 0.5)
+SanctumDrawerTabButtonActive/colors/font_focus_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+SanctumDrawerTabButtonActive/colors/font_hover_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+SanctumDrawerTabButtonActive/colors/font_hover_pressed_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+SanctumDrawerTabButtonActive/font_sizes/font_size = 18
+SanctumDrawerTabButtonActive/fonts/font = ExtResource("11_r5n68")
+SanctumDrawerTabButtonActive/styles/disabled = SubResource("StyleBoxFlat_sanctum_drawer_tab_active")
+SanctumDrawerTabButtonActive/styles/focus = SubResource("StyleBoxFlat_sanctum_drawer_tab_active")
+SanctumDrawerTabButtonActive/styles/hover = SubResource("StyleBoxFlat_sanctum_drawer_tab_active")
+SanctumDrawerTabButtonActive/styles/hover_pressed = SubResource("StyleBoxFlat_sanctum_drawer_tab_active")
+SanctumDrawerTabButtonActive/styles/normal = SubResource("StyleBoxFlat_sanctum_drawer_tab_active")
+SanctumDrawerTabButtonActive/styles/pressed = SubResource("StyleBoxFlat_sanctum_drawer_tab_active")
+SanctumHeaderCard/base_type = &"PanelContainer"
+SanctumHeaderCard/styles/panel = SubResource("StyleBoxFlat_sanctum_header_card")
+SanctumHeaderText/base_type = &"Label"
+SanctumHeaderText/colors/font_color = Color(0.827451, 0.84705883, 0.827451, 0.92)
+SanctumHeaderText/font_sizes/font_size = 16
+SanctumHeaderText/fonts/font = ExtResource("1_k333i")
+SanctumHeaderTitle/base_type = &"Label"
+SanctumHeaderTitle/colors/font_color = Color(0.9607843, 0.94509804, 0.90588236, 1)
+SanctumHeaderTitle/font_sizes/font_size = 32
+SanctumHeaderTitle/fonts/font = ExtResource("1_8hwob")
+SanctumKicker/base_type = &"Label"
+SanctumKicker/colors/font_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+SanctumKicker/font_sizes/font_size = 14
+SanctumKicker/fonts/font = ExtResource("11_r5n68")
+SanctumMuted/base_type = &"Label"
+SanctumMuted/colors/font_color = Color(0.42745098, 0.42745098, 0.42745098, 1)
+SanctumMuted/font_sizes/font_size = 15
+SanctumMuted/fonts/font = ExtResource("1_k333i")
+SanctumProgressMarker/base_type = &"Label"
+SanctumProgressMarker/colors/font_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+SanctumProgressMarker/font_sizes/font_size = 18
+SanctumProgressMarker/fonts/font = ExtResource("11_r5n68")
+SanctumRail/base_type = &"PanelContainer"
+SanctumRail/styles/panel = SubResource("StyleBoxFlat_sanctum_rail")
+SanctumReturnAmount/base_type = &"Label"
+SanctumReturnAmount/colors/font_color = Color(0.1764706, 0.41568628, 0.30980393, 1)
+SanctumReturnAmount/font_sizes/font_size = 16
+SanctumReturnAmount/fonts/font = ExtResource("11_r5n68")
+SanctumReturnBody/base_type = &"Label"
+SanctumReturnBody/colors/font_color = Color(0.23921569, 0.15686275, 0.09019608, 0.9)
+SanctumReturnBody/font_sizes/font_size = 15
+SanctumReturnBody/fonts/font = ExtResource("1_k333i")
+SanctumReturnNotice/base_type = &"PanelContainer"
+SanctumReturnNotice/styles/panel = SubResource("StyleBoxFlat_sanctum_return_notice")
+SanctumReturnTitle/base_type = &"Label"
+SanctumReturnTitle/colors/font_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
+SanctumReturnTitle/font_sizes/font_size = 24
+SanctumReturnTitle/fonts/font = ExtResource("1_8hwob")
+SanctumRouteAction/base_type = &"PanelContainer"
+SanctumRouteAction/styles/panel = SubResource("StyleBoxFlat_sanctum_route_action")
+SanctumRouteGlyph/base_type = &"Label"
+SanctumRouteGlyph/colors/font_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+SanctumRouteGlyph/font_sizes/font_size = 24
+SanctumRouteGlyph/fonts/font = ExtResource("1_0ml50")
+SanctumRouteSubtitle/base_type = &"Label"
+SanctumRouteSubtitle/colors/font_color = Color(0.9607843, 0.94509804, 0.90588236, 0.82)
+SanctumRouteSubtitle/font_sizes/font_size = 14
+SanctumRouteSubtitle/fonts/font = ExtResource("11_r5n68")
+SanctumRouteTitle/base_type = &"Label"
+SanctumRouteTitle/colors/font_color = Color(0.9607843, 0.94509804, 0.90588236, 1)
+SanctumRouteTitle/font_sizes/font_size = 24
+SanctumRouteTitle/fonts/font = ExtResource("1_0ml50")
+SanctumRuleGold/base_type = &"PanelContainer"
+SanctumRuleGold/styles/panel = SubResource("StyleBoxFlat_sanctum_rule_gold")
+SanctumRuleSoft/base_type = &"PanelContainer"
+SanctumRuleSoft/styles/panel = SubResource("StyleBoxFlat_sanctum_rule_soft")
+SanctumStoryweightBar/base_type = &"ProgressBar"
+SanctumStoryweightBar/styles/background = SubResource("StyleBoxFlat_sanctum_progress_bg")
+SanctumStoryweightBar/styles/fill = SubResource("StyleBoxFlat_sanctum_progress_fill")
+SanctumTabButton/base_type = &"Button"
+SanctumTabButton/colors/font_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
+SanctumTabButton/colors/font_disabled_color = Color(0.54509807, 0.4509804, 0.33333334, 1)
+SanctumTabButton/colors/font_focus_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
+SanctumTabButton/colors/font_hover_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
+SanctumTabButton/colors/font_hover_pressed_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
+SanctumTabButton/font_sizes/font_size = 15
+SanctumTabButton/fonts/font = ExtResource("11_r5n68")
+SanctumTabButton/styles/disabled = SubResource("StyleBoxFlat_sanctum_tab")
+SanctumTabButton/styles/focus = SubResource("StyleBoxFlat_sanctum_tab")
+SanctumTabButton/styles/hover = SubResource("StyleBoxFlat_sanctum_tab")
+SanctumTabButton/styles/hover_pressed = SubResource("StyleBoxFlat_sanctum_tab")
+SanctumTabButton/styles/normal = SubResource("StyleBoxFlat_sanctum_tab")
+SanctumTabButton/styles/pressed = SubResource("StyleBoxFlat_sanctum_tab")
+SanctumTabButtonActive/base_type = &"Button"
+SanctumTabButtonActive/colors/font_color = Color(0.9607843, 0.94509804, 0.90588236, 1)
+SanctumTabButtonActive/colors/font_disabled_color = Color(0.9607843, 0.94509804, 0.90588236, 0.65)
+SanctumTabButtonActive/colors/font_focus_color = Color(0.9607843, 0.94509804, 0.90588236, 1)
+SanctumTabButtonActive/colors/font_hover_color = Color(0.9607843, 0.94509804, 0.90588236, 1)
+SanctumTabButtonActive/colors/font_hover_pressed_color = Color(0.9607843, 0.94509804, 0.90588236, 1)
+SanctumTabButtonActive/font_sizes/font_size = 15
+SanctumTabButtonActive/fonts/font = ExtResource("11_r5n68")
+SanctumTabButtonActive/styles/disabled = SubResource("StyleBoxFlat_sanctum_tab_active")
+SanctumTabButtonActive/styles/focus = SubResource("StyleBoxFlat_sanctum_tab_active")
+SanctumTabButtonActive/styles/hover = SubResource("StyleBoxFlat_sanctum_tab_active")
+SanctumTabButtonActive/styles/hover_pressed = SubResource("StyleBoxFlat_sanctum_tab_active")
+SanctumTabButtonActive/styles/normal = SubResource("StyleBoxFlat_sanctum_tab_active")
+SanctumTabButtonActive/styles/pressed = SubResource("StyleBoxFlat_sanctum_tab_active")
+SanctumTertiaryButton/base_type = &"Button"
+SanctumTertiaryButton/colors/font_color = Color(0.83137256, 0.6862745, 0.21568628, 0.92)
+SanctumTertiaryButton/colors/font_disabled_color = Color(0.83137256, 0.6862745, 0.21568628, 0.45)
+SanctumTertiaryButton/colors/font_focus_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+SanctumTertiaryButton/colors/font_hover_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+SanctumTertiaryButton/colors/font_hover_pressed_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+SanctumTertiaryButton/font_sizes/font_size = 16
+SanctumTertiaryButton/fonts/font = ExtResource("11_r5n68")
+SanctumTertiaryButton/styles/disabled = SubResource("StyleBoxFlat_sanctum_tertiary")
+SanctumTertiaryButton/styles/focus = SubResource("StyleBoxFlat_sanctum_tertiary")
+SanctumTertiaryButton/styles/hover = SubResource("StyleBoxFlat_sanctum_tertiary")
+SanctumTertiaryButton/styles/hover_pressed = SubResource("StyleBoxFlat_sanctum_tertiary")
+SanctumTertiaryButton/styles/normal = SubResource("StyleBoxFlat_sanctum_tertiary")
+SanctumTertiaryButton/styles/pressed = SubResource("StyleBoxFlat_sanctum_tertiary")
 StatsPanel/base_type = &"Label"
 StatsPanel/colors/font_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
 StatsPanel/fonts/font = ExtResource("11_r5n68")

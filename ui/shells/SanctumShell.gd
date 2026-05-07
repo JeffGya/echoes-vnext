@@ -8,6 +8,12 @@ class_name SanctumShell
 @onready var camera: Camera2D = $SpatialLayer/SpatialView/Camera2D
 @onready var spatial_renderer: Node2D = $SpatialLayer/SpatialView/SanctumSpatialRenderer2
 @onready var _ui_layer: CanvasLayer = $UILayer
+@onready var _return_notice_layer: CanvasLayer = $ReturnNoticeLayer
+@onready var _return_notice: PanelContainer = %ReturnNotice
+@onready var _return_notice_title: Label = %ReturnNoticeTitle
+@onready var _return_notice_body: Label = %ReturnNoticeBody
+@onready var _return_notice_amount: Label = %ReturnNoticeAmount
+@onready var _return_notice_dismiss: Button = %ReturnNoticeDismiss
 @onready var _bottom_rail: Control = %BottomRail
 @onready var _party_button: Button = %PartyButton
 @onready var _summon_button: Button = %SummonButton
@@ -29,6 +35,14 @@ var _pan_speed  := 2.5
 
 var _is_panning := false
 var _last_pointer_pos := Vector2.ZERO
+var _current_snap_type := ""
+var _echo_detail_open := false
+var _saved_camera_position := Vector2.ZERO
+var _saved_camera_zoom := Vector2.ONE
+var _detail_zoom := Vector2(2.9, 2.9)
+var _camera_tween: Tween
+var _return_notice_tween: Tween
+var _current_return_notice_id: String = ""
 
 # Camera clamp (Phase B)
 const TILE_W := 72.0
@@ -66,9 +80,13 @@ func _ready() -> void:
 	# Sync UILayer visibility whenever SanctumShell is shown/hidden.
 	visibility_changed.connect(_sync_ui_layer_visibility)
 	_bind_nav_bar()
+	_return_notice.visible = false
+	_return_notice.modulate.a = 0.0
+	_return_notice_dismiss.pressed.connect(_dismiss_return_notice)
 
 func _sync_ui_layer_visibility() -> void:
 	_ui_layer.visible = visible
+	_return_notice_layer.visible = visible
 	# Camera2D.enabled is independent of node visibility in Godot 4.
 	# Disable it when SanctumShell is hidden so it does not affect the viewport
 	# while RealmShell (or any other screen) is active.
@@ -76,21 +94,23 @@ func _sync_ui_layer_visibility() -> void:
 
 
 func set_snapshot(snap: Dictionary) -> void:
+	_current_snap_type = str(snap.get("type", ""))
+
 	# 1) Update spatial background (read-only visual layer)
 	# For now this is a stub. Later we will add proper renderer script.
 	if spatial_renderer != null and spatial_renderer.has_method("render"):
 		spatial_renderer.call("render", snap)
-		_center_camera_on_floor()
+		if not _echo_detail_open:
+			_center_camera_on_floor()
 
 	# 2) Swap overlay UI based on flow snapshot type
-	var snap_type := str(snap.get("type", ""))
-	_show_overlay_for_type(snap_type, snap)
+	_show_overlay_for_type(_current_snap_type, snap)
 
 	# 3) Cache nav actions from flow.sanctum and rebuild the persistent shell nav bar.
 	# The cache is safe: cta.enter_stage (only conditional action) can only change via
 	# flow.realm_select, which always returns to flow.sanctum before the player sees the
 	# nav again — so the cache is never stale.
-	if snap_type == "flow.sanctum":
+	if _current_snap_type == "flow.sanctum":
 		var actions_v: Variant = snap.get("actions", {})
 		if actions_v is Dictionary:
 			_cached_nav = {}
@@ -101,7 +121,10 @@ func set_snapshot(snap: Dictionary) -> void:
 					if val is Dictionary:
 						_cached_nav[k] = val
 			_bind_nav_bar()
-	_update_rail_tone(snap_type)
+	elif _echo_detail_open:
+		_restore_echo_detail_shell_state()
+	_update_rail_tone(_current_snap_type)
+	_maybe_show_return_notice(snap)
 	
 func _show_overlay_for_type(snap_type: String, snap: Dictionary) -> void:
 	if not _scene_by_flow_type.has(snap_type):
@@ -120,6 +143,8 @@ func _show_overlay_for_type(snap_type: String, snap: Dictionary) -> void:
 	
 	# Otherwise replace overlay
 	if _active_overlay != null:
+		if _echo_detail_open:
+			_restore_echo_detail_shell_state()
 		_active_overlay.queue_free()
 		_active_overlay = null
 		
@@ -132,6 +157,10 @@ func _show_overlay_for_type(snap_type: String, snap: Dictionary) -> void:
 		var ok := _active_overlay.connect("action_requested", Callable(self, "_on_overlay_action_requested"))
 		if ok != OK:
 			push_warning("SanctumShell: failed to connect overlay action_requested (err=%d)" % ok)
+	if _active_overlay != null and _active_overlay.has_signal("echo_detail_closed"):
+		var close_ok := _active_overlay.connect("echo_detail_closed", Callable(self, "_on_overlay_echo_detail_closed"))
+		if close_ok != OK:
+			push_warning("SanctumShell: failed to connect echo_detail_closed (err=%d)" % close_ok)
 		
 	# Give snapshot to overlay
 	if _active_overlay != null and _active_overlay.has_method("set_snapshot"):
@@ -144,6 +173,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	# --- Zoom wheel (dev convenience) ---
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
+
+		if _echo_detail_open:
+			return
 
 		if mb.pressed and (mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN):
 			_toggle_zoom(mb.button_index == MOUSE_BUTTON_WHEEL_UP)
@@ -162,6 +194,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 	
 	if event is InputEventPanGesture:
+		if _echo_detail_open:
+			return
 		var pg := event as InputEventPanGesture
 		# pg.delta is already a screen-space delta
 		_pan_by_delta(pg.delta)
@@ -169,6 +203,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventMouseMotion:
+		if _echo_detail_open:
+			return
 		if _is_panning:
 			var mm := event as InputEventMouseMotion
 			_pan_by_delta(mm.relative)
@@ -177,6 +213,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	# Z toggles zoom levels
 	if event is InputEventKey and event.pressed and not event.echo:
+		if _echo_detail_open:
+			return
 		var k := event as InputEventKey
 		if k.keycode == KEY_Z:
 			_zoom_index = 1 - _zoom_index
@@ -186,9 +224,29 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 
 
+func _input(event: InputEvent) -> void:
+	if _echo_detail_open:
+		return
+	if _current_snap_type != "flow.sanctum":
+		return
+	if not (event is InputEventMouseButton):
+		return
+	var mb := event as InputEventMouseButton
+	if not mb.pressed or mb.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if Input.is_key_pressed(KEY_SPACE):
+		return
+	if _try_open_echo_detail_at_viewport_point(mb.position):
+		get_viewport().set_input_as_handled()
+
+
 # ---- HELPERS ----
 func _on_overlay_action_requested(action: Dictionary) -> void:
 	action_requested.emit(action)
+
+
+func _on_overlay_echo_detail_closed() -> void:
+	_restore_echo_detail_shell_state()
 
 func _bind_nav_bar() -> void:
 	_bind_button(_party_button, _action_for_slot("nav.echo_party"), "Party")
@@ -196,6 +254,50 @@ func _bind_nav_bar() -> void:
 	_bind_realm_button()
 	_bind_button(_vows_button, _action_for_slot("nav.vow_manage"), "Vows")
 	_bind_button(_weaving_button, {}, "Weaving", "Choose an Echo first.")
+
+func _maybe_show_return_notice(snap: Dictionary) -> void:
+	if _current_snap_type != "flow.sanctum":
+		return
+	var data_v: Variant = snap.get("data", {})
+	if not (data_v is Dictionary):
+		return
+	var notice_v: Variant = (data_v as Dictionary).get("return_notification", {})
+	if not (notice_v is Dictionary):
+		return
+	var notice: Dictionary = notice_v
+	var notice_id := str(notice.get("id", ""))
+	if notice_id.is_empty() or notice_id == _current_return_notice_id:
+		return
+	_current_return_notice_id = notice_id
+	_return_notice_title.text = str(notice.get("title", "The Flame Held"))
+	_return_notice_body.text = str(notice.get("body", "A little charge remained in your absence."))
+	var gain := int(notice.get("ase_gain", 0))
+	_return_notice_amount.text = ("+%d Ase retained" % gain) if gain > 0 else "No charge was retained"
+	_show_return_notice(float(notice.get("duration_seconds", 4.2)))
+
+func _show_return_notice(duration_seconds: float) -> void:
+	if _return_notice_tween != null and _return_notice_tween.is_running():
+		_return_notice_tween.kill()
+	_return_notice.visible = true
+	_return_notice.modulate.a = 0.0
+	_return_notice_tween = create_tween()
+	_return_notice_tween.tween_property(_return_notice, "modulate:a", 1.0, 0.22)
+	_return_notice_tween.tween_interval(maxf(duration_seconds, 1.5))
+	_return_notice_tween.tween_property(_return_notice, "modulate:a", 0.0, 0.25)
+	_return_notice_tween.tween_callback(func():
+		_return_notice.visible = false
+	)
+
+func _dismiss_return_notice() -> void:
+	if not _return_notice.visible:
+		return
+	if _return_notice_tween != null and _return_notice_tween.is_running():
+		_return_notice_tween.kill()
+	var tw := create_tween()
+	tw.tween_property(_return_notice, "modulate:a", 0.0, 0.18)
+	tw.tween_callback(func():
+		_return_notice.visible = false
+	)
 
 
 func _bind_button(button: Button, action: Dictionary, fallback_label: String, tooltip: String = "") -> void:
@@ -247,6 +349,9 @@ func _action_for_slot(slot: String) -> Dictionary:
 func _update_rail_tone(snap_type: String) -> void:
 	if _bottom_rail == null:
 		return
+	if _echo_detail_open:
+		_bottom_rail.modulate = Color(1, 1, 1, 0.72)
+		return
 	_bottom_rail.modulate = Color(1, 1, 1, 1.0 if snap_type == "flow.sanctum" else 0.86)
 
 func _pan_by_delta(screen_delta: Vector2) -> void:
@@ -267,6 +372,68 @@ func _toggle_zoom(zoom_in: bool) -> void:
 		
 	camera.zoom = _zoom_levels[_zoom_index]
 	_clamp_camera_to_floor()
+
+
+func _try_open_echo_detail_at_viewport_point(viewport_point: Vector2) -> bool:
+	if _active_overlay == null or not _active_overlay.has_method("open_echo_detail"):
+		return false
+	if spatial_renderer == null or not spatial_renderer.has_method("find_occupant_at_viewport_point"):
+		return false
+	var hit_v: Variant = spatial_renderer.call("find_occupant_at_viewport_point", viewport_point)
+	var hit: Dictionary = hit_v if hit_v is Dictionary else {}
+	if hit.is_empty():
+		return false
+	var occupant_id := str(hit.get("id", ""))
+	if occupant_id.is_empty():
+		return false
+	_saved_camera_position = camera.position
+	_saved_camera_zoom = camera.zoom
+	_echo_detail_open = true
+	_active_overlay.call("open_echo_detail", occupant_id)
+	if spatial_renderer.has_method("set_featured_occupant"):
+		spatial_renderer.call("set_featured_occupant", occupant_id)
+	_focus_camera_for_echo_detail(true)
+	_update_rail_tone(_current_snap_type)
+	return true
+
+
+func _focus_camera_for_echo_detail(animated: bool) -> void:
+	if spatial_renderer == null or not spatial_renderer.has_method("get_primary_occupant_position"):
+		return
+	var occupant_pos_v: Variant = spatial_renderer.call("get_primary_occupant_position")
+	if not (occupant_pos_v is Vector2):
+		return
+	var occupant_pos: Vector2 = occupant_pos_v
+	var safe_zoom := Vector2(max(_detail_zoom.x, 0.001), max(_detail_zoom.y, 0.001))
+	var horizontal_shift := (spatial_layer.size.x / safe_zoom.x) * 0.20
+	var target_position := occupant_pos - Vector2(horizontal_shift, 0.0)
+	_animate_camera_to(target_position, _detail_zoom, animated)
+
+
+func _restore_echo_detail_shell_state() -> void:
+	if not _echo_detail_open:
+		return
+	_echo_detail_open = false
+	if spatial_renderer != null and spatial_renderer.has_method("set_featured_occupant"):
+		spatial_renderer.call("set_featured_occupant", "")
+	_animate_camera_to(_saved_camera_position, _saved_camera_zoom, true)
+	_update_rail_tone(_current_snap_type)
+
+
+func _animate_camera_to(target_position: Vector2, target_zoom: Vector2, animated: bool) -> void:
+	if _camera_tween != null and _camera_tween.is_running():
+		_camera_tween.kill()
+	if not animated:
+		camera.position = target_position
+		camera.zoom = target_zoom
+		_clamp_camera_to_floor()
+		return
+	_camera_tween = create_tween()
+	_camera_tween.set_trans(Tween.TRANS_SINE)
+	_camera_tween.set_ease(Tween.EASE_OUT)
+	_camera_tween.parallel().tween_property(camera, "zoom", target_zoom, 0.42)
+	_camera_tween.parallel().tween_property(camera, "position", target_position, 0.42)
+	_camera_tween.tween_callback(_clamp_camera_to_floor)
 	
 func _center_camera_on_floor() -> void:
 	if spatial_renderer == null:

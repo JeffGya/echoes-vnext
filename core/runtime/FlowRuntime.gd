@@ -1560,9 +1560,6 @@ func _resolve_next_actor(t: int) -> void:
 				_handle_keeper_intro_trial_rewind(t, lethal_ids)
 				return
 			_keeper_intro_restore_echo_after_second_attempt(t, lethal_ids)
-		if _keeper_intro_trial_enemy_defeated():
-			_handle_keeper_intro_trial_finish(t)
-			return
 
 	if not ectx.last_round_results.is_empty():
 		ectx.last_actor_action = ectx.last_round_results.back().duplicate()
@@ -1715,10 +1712,6 @@ func _end_round(t: int) -> void:
 			"round": round,
 			"delta": -morale_decay_amt,
 		})
-
-	if _is_keeper_intro_trial_active() and _keeper_intro_trial_enemy_defeated():
-		_handle_keeper_intro_trial_finish(t)
-		return
 
 	# Check end condition.
 	var end_check: Dictionary = CombatState.check_end_condition(ectx.actors, ectx.resolution_mode)
@@ -2019,21 +2012,56 @@ func _apply_offline_accrual_if_needed(t: int, source: String) -> int:
 
 	# Read balance knobs
 	var econ_cfg := _get_balance_economy_cfg()
+	if not _is_ase_flame_awakened():
+		logger.debug(t, "economy.offline.skip", "Offline accrual skipped (Ase Flame dormant)", {
+			"source": source,
+			"now_unix": now_unix,
+			"last_offline_unix": last_offline,
+			"raw_delta_seconds": raw_delta
+		})
+		econ_data["last_offline_unix"] = now_unix
+		econ_data["last_settle_unix"] = now_unix
+		flow_ctx.save_request = true
+		if flow_ctx.save_request_reason != "":
+			flow_ctx.save_request_reason += "|economy.offline_guard"
+		else:
+			flow_ctx.save_request_reason = "economy.offline_guard"
+		return 0
+
 	var ase_per_min := float(econ_cfg.get("ase_online_per_min_base", 0.0))
 	var rate_per_sec := ase_per_min / 60.0
+	var offline_start_factor := float(econ_cfg.get("offline_start_factor", 0.06))
+	var base_offline_cap_seconds := int(econ_cfg.get("offline_cap_seconds", 151200))
+	var continuity_cap_bonus_seconds := int(econ_cfg.get("offline_continuity_cap_bonus_seconds", 14400))
+	var stability_cap_bonus_seconds := int(econ_cfg.get("offline_stability_cap_bonus_seconds", 7200))
+	var stability_cap_penalty_seconds := int(econ_cfg.get("offline_stability_cap_penalty_seconds", 43200))
+	var continuity_multiplier_bonus := float(econ_cfg.get("offline_continuity_multiplier_bonus", 0.25))
+	var stability_multiplier_bonus := float(econ_cfg.get("offline_stability_multiplier_bonus", 0.15))
+	var stability_multiplier_penalty := float(econ_cfg.get("offline_stability_multiplier_penalty", 0.45))
+	var min_multiplier := float(econ_cfg.get("offline_min_multiplier", 0.05))
+	var max_multiplier := float(econ_cfg.get("offline_max_multiplier", 1.2))
+	var min_cap_seconds := int(econ_cfg.get("offline_min_cap_seconds", 108000))
+	var max_cap_seconds := int(econ_cfg.get("offline_max_cap_seconds", 172800))
 
-	var offline_start_factor := float(econ_cfg.get("offline_start_factor", 0.5))
-	var offline_cap_seconds := int(econ_cfg.get("offline_cap_seconds", 28800))
+	var retention_ctx := _build_offline_retention_context()
+	var continuity_norm := float(retention_ctx.get("continuity_norm", 0.0))
+	var stability_score := float(retention_ctx.get("stability_score", 0.0))
+	var continuity_bonus := continuity_norm * continuity_multiplier_bonus
+	var stability_multiplier_delta := stability_score * (stability_multiplier_bonus if stability_score >= 0.0 else stability_multiplier_penalty)
+	var multiplier := clampf(0.8 + continuity_bonus + stability_multiplier_delta, min_multiplier, max_multiplier)
+	var cap_adjust := roundi(continuity_norm * float(continuity_cap_bonus_seconds))
+	if stability_score >= 0.0:
+		cap_adjust += roundi(stability_score * float(stability_cap_bonus_seconds))
+	else:
+		cap_adjust -= roundi(absf(stability_score) * float(stability_cap_penalty_seconds))
+	var offline_cap_seconds := clampi(base_offline_cap_seconds + cap_adjust, min_cap_seconds, max_cap_seconds)
 
-	# Clamp forward jumps to cap (anti-cheat MVP)
+	# Clamp elapsed to the dynamic taper window. Time beyond the window carries no further charge.
 	var delta_seconds := raw_delta
 	var clamped_cap := false
 	if offline_cap_seconds > 0 and delta_seconds > offline_cap_seconds:
 		delta_seconds = offline_cap_seconds
 		clamped_cap = true
-
-	# Multiplier seam (Faith later). Economy stays emotion-agnostic.
-	var multiplier := 1.0
 
 	var ase_before := int(econ_data.get("ase", 0))
 
@@ -2059,6 +2087,8 @@ func _apply_offline_accrual_if_needed(t: int, source: String) -> int:
 			"offline_cap_seconds": offline_cap_seconds,
 			"ase_per_min_base": ase_per_min,
 			"multiplier": multiplier,
+			"continuity_norm": continuity_norm,
+			"stability_score": stability_score,
 			"gain": gain,
 			"ase_before": ase_before,
 			"ase_after": int(econ_data.get("ase", 0)),
@@ -2075,8 +2105,19 @@ func _apply_offline_accrual_if_needed(t: int, source: String) -> int:
 			"offline_cap_seconds": offline_cap_seconds,
 			"ase_per_min_base": ase_per_min,
 			"multiplier": multiplier,
+			"continuity_norm": continuity_norm,
+			"stability_score": stability_score,
 			"gain": gain,
 		})
+
+	if gain > 0 or bool(retention_ctx.get("severe_disorder", false)):
+		flow_ctx.pending_return_notification = _build_offline_return_notification(
+			gain,
+			retention_ctx,
+			raw_delta,
+			multiplier,
+			now_unix
+		)
 
 	# Update guards ONLY here (so we don't re-award next launch)
 	econ_data["last_offline_unix"] = now_unix
@@ -2092,6 +2133,100 @@ func _apply_offline_accrual_if_needed(t: int, source: String) -> int:
 		flow_ctx.save_request_reason = "economy.offline_accrual"
 	
 	return gain
+
+func _build_offline_retention_context() -> Dictionary:
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	var continuity_raw := clampi(int(sanctum.get("continuity", 0)), 0, 100)
+	var continuity_norm := clampf(float(continuity_raw) / 100.0, 0.0, 1.0)
+
+	var roster_v: Variant = sanctum.get("roster", [])
+	var roster: Array = roster_v if roster_v is Array else []
+	var morale_total := 0.0
+	var fear_total := 0.0
+	var counted := 0
+	for echo_v in roster:
+		if not (echo_v is Dictionary):
+			continue
+		var echo: Dictionary = echo_v
+		var emo_v: Variant = echo.get("emotion", {})
+		var emo: Dictionary = emo_v if emo_v is Dictionary else {}
+		morale_total += float(int(emo.get("morale_current", 50)))
+		fear_total += float(int(emo.get("fear_current", 0)))
+		counted += 1
+
+	var avg_morale := 50.0
+	var avg_fear := 0.0
+	if counted > 0:
+		avg_morale = morale_total / float(counted)
+		avg_fear = fear_total / float(counted)
+
+	var morale_score := clampf((avg_morale - 50.0) / 50.0, -1.0, 1.0)
+	var fear_score := clampf((avg_fear - 20.0) / 80.0, -1.0, 1.0)
+	var emotion_score := clampf((morale_score * 0.7) - (fear_score * 0.85), -1.0, 1.0)
+
+	var vow_v: Variant = sanctum.get("active_vow", {})
+	var active_vow: Dictionary = vow_v if vow_v is Dictionary else {}
+	var vow_score := 0.0
+	var violation_streak := 0
+	if not active_vow.is_empty():
+		var streak_keys := [
+			"consecutive_small_deployments",
+			"consecutive_same_calling_deployments",
+			"consecutive_blind_engagements",
+		]
+		for key: String in streak_keys:
+			violation_streak = maxi(violation_streak, int(active_vow.get(key, 0)))
+		if violation_streak <= 0:
+			vow_score = 0.08
+		elif violation_streak == 1:
+			vow_score = -0.18
+		else:
+			vow_score = -0.55
+
+	var stability_score := clampf(emotion_score + vow_score, -1.0, 1.0)
+	var severe_disorder := violation_streak >= 2 or avg_morale <= 35.0 or avg_fear >= 70.0 or stability_score <= -0.65
+	return {
+		"continuity_norm": continuity_norm,
+		"avg_morale": avg_morale,
+		"avg_fear": avg_fear,
+		"stability_score": stability_score,
+		"violation_streak": violation_streak,
+		"severe_disorder": severe_disorder,
+	}
+
+func _build_offline_return_notification(
+	gain: int,
+	retention_ctx: Dictionary,
+	raw_delta_seconds: int,
+	retention_multiplier: float,
+	now_unix: int
+) -> Dictionary:
+	var severe_disorder := bool(retention_ctx.get("severe_disorder", false))
+	var stability_score := float(retention_ctx.get("stability_score", 0.0))
+	var title := "The Flame Held"
+	var body := "A little charge remained in your absence."
+	var tone := "steady"
+	if severe_disorder and gain <= 0:
+		title = "The Flame Faltered"
+		body = "The Sanctum could not hold much charge in your absence."
+		tone = "disorder"
+	elif gain <= 3 or stability_score < -0.15 or retention_multiplier < 0.8:
+		title = "The Flame Guttered"
+		body = "Only a little charge remained while you were away."
+		tone = "weak"
+	elif gain >= 12 or stability_score > 0.25 or retention_multiplier >= 1.0:
+		title = "The Flame Held Steady"
+		body = "The Sanctum kept a faithful charge in your absence."
+		tone = "strong"
+	return {
+		"id": "offline.%d.%d" % [now_unix, raw_delta_seconds],
+		"title": title,
+		"body": body,
+		"ase_gain": gain,
+		"tone": tone,
+		"duration_seconds": 4.2,
+	}
 	
 func _get_drift_cfg() -> Dictionary:
 	var balance := config_service.get_balance()

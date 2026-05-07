@@ -127,6 +127,9 @@ func _rebuild_snapshot(ctx: FlowContext, logger: StructuredLogger, t: int) -> vo
 		# per_hour = per_min * 60
 		data["ase_rate_per_hour_hint"] = ase_per_min_base * 60.0 * multiplier
 		data["ase_flame"] = flame.duplicate(true)
+		if not ctx.pending_return_notification.is_empty():
+			data["return_notification"] = ctx.pending_return_notification.duplicate(true)
+			ctx.pending_return_notification = {}
 		
 		
 		# SANCTUM-001: surface sanctum hub info (snapshot-only UI contract)

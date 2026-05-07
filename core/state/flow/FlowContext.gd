@@ -65,3 +65,7 @@ var dev_combat_objective: String = ""
 # Populated by FlowRuntime._handle_complete_stage() on realm_complete.
 # Resets to [] on new game boot (FlowContext is freshly instantiated).
 var last_realm_threads_earned: Array = []
+
+# ECONOMY-005: one-shot Sanctum return notification payload, surfaced through the next
+# flow.sanctum snapshot and then cleared.
+var pending_return_notification: Dictionary = {}
