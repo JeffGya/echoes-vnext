@@ -774,6 +774,28 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			repaired = true
 			repaired_notes.append("sanctum.vows set to {} default (V2-MIG-002)")
 
+		# V2-VOW-002: lifetime vow adherence stats
+		if not sanctum.has("vow_stats") or not (sanctum["vow_stats"] is Dictionary):
+			sanctum["vow_stats"] = {"honors": 0, "breaks": 0}
+			repaired = true
+			repaired_notes.append("sanctum.vow_stats defaulted")
+		else:
+			var _vs: Dictionary = sanctum["vow_stats"]
+			if not _vs.has("honors"):
+				_vs["honors"] = 0
+				repaired = true
+				repaired_notes.append("sanctum.vow_stats.honors defaulted")
+			if not _vs.has("breaks"):
+				_vs["breaks"] = 0
+				repaired = true
+				repaired_notes.append("sanctum.vow_stats.breaks defaulted")
+
+		# V2-VOW-002: persisted broken vow debuff chip
+		if not sanctum.has("pending_broken_vow_effect") or not (sanctum["pending_broken_vow_effect"] is Dictionary):
+			sanctum["pending_broken_vow_effect"] = {}
+			repaired = true
+			repaired_notes.append("sanctum.pending_broken_vow_effect defaulted")
+
 		# V2-MIG-002: Sanctum growth spine + Thread reserve stubs
 		if not sanctum.has("continuity") or (typeof(sanctum["continuity"]) != TYPE_INT and typeof(sanctum["continuity"]) != TYPE_FLOAT):
 			sanctum["continuity"] = 0

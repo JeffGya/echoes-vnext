@@ -3672,12 +3672,12 @@ func _apply_vow_stage_entry_condition(t: int) -> void:
 				_av_s["compliance_count"] = _new_count
 				(_s_v as Dictionary)["active_vow"] = _av_s
 				flow_ctx.save_data["sanctum"] = _s_v
-			# Increment lifetime vow_stats.honors.
-			var _vstats_c_v: Variant = (_s_v as Dictionary).get("vow_stats", {})
-			if _vstats_c_v is Dictionary:
-				(_vstats_c_v as Dictionary)["honors"] = int((_vstats_c_v as Dictionary).get("honors", 0)) + 1
-			else:
-				(_s_v as Dictionary)["vow_stats"] = {"honors": 1, "breaks": 0}
+			# Increment lifetime vow_stats.honors (direct index — .get() returns a temp copy).
+			var _sanc_h: Dictionary = _s_v as Dictionary
+			if not _sanc_h.has("vow_stats") or not (_sanc_h["vow_stats"] is Dictionary):
+				_sanc_h["vow_stats"] = {"honors": 0, "breaks": 0}
+			var _vstats_h: Dictionary = _sanc_h["vow_stats"]
+			_vstats_h["honors"] = int(_vstats_h.get("honors", 0)) + 1
 		# Store vow_outcome for the ResolveScreen (compliant event).
 		if flow_ctx.vow_outcome.is_empty():
 			var _vow_id := str(av.get("vow_id", ""))
@@ -3887,13 +3887,13 @@ func _apply_vow_break_aftermath(summary: Dictionary, cfg: Dictionary, t: int) ->
 	var _pbe_sanc_v: Variant = flow_ctx.save_data.get("sanctum", {})
 	if _pbe_sanc_v is Dictionary:
 		(_pbe_sanc_v as Dictionary)["pending_broken_vow_effect"] = flow_ctx.session_broken_vow_effect.duplicate()
-	# V2-VOW-002: increment lifetime breaks count.
+	# V2-VOW-002: increment lifetime breaks count (direct index — .get() returns a temp copy).
 	if _pbe_sanc_v is Dictionary:
-		var _vstats_v: Variant = (_pbe_sanc_v as Dictionary).get("vow_stats", {})
-		if _vstats_v is Dictionary:
-			(_vstats_v as Dictionary)["breaks"] = int((_vstats_v as Dictionary).get("breaks", 0)) + 1
-		else:
-			(_pbe_sanc_v as Dictionary)["vow_stats"] = {"honors": 0, "breaks": 1}
+		var _sanc_b: Dictionary = _pbe_sanc_v as Dictionary
+		if not _sanc_b.has("vow_stats") or not (_sanc_b["vow_stats"] is Dictionary):
+			_sanc_b["vow_stats"] = {"honors": 0, "breaks": 0}
+		var _vstats_b: Dictionary = _sanc_b["vow_stats"]
+		_vstats_b["breaks"] = int(_vstats_b.get("breaks", 0)) + 1
 
 	# Also apply immediate morale/fear to roster (same as _handle_vow_break manual path).
 	var morale_d := int(summary.get("morale_delta", 0))
