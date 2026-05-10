@@ -119,6 +119,10 @@ func dispatch(action: Dictionary) -> Dictionary:
 				flow_ctx.selected_weave_echo_id = ""
 				flow_ctx.weave_commit_locked = false
 				flow_ctx.weave_resolution = {}
+			elif to_state == FlowStateIds.STAGE_EXPLORE:
+				# V2-VOW-002: evaluate vow condition on actual stage entry (covers first entry
+				# via "Begin" and re-entry after defeat — both route through go_state→STAGE_EXPLORE).
+				_apply_vow_stage_entry_condition(t)
 			flow_machine.transition(to_state, flow_ctx, logger, t, "ui.flow.go_state")
 
 		"flow.select_realm":
@@ -134,8 +138,7 @@ func dispatch(action: Dictionary) -> Dictionary:
 			flow_ctx.encounter_id = flow_ctx.realm_id + "." + stage_id  # BUG-003: was always ""
 			# PROG-009: persist skill loadout to save before entering the stage
 			_persist_equipped_skills(t)
-			# VOW-001: evaluate stage-entry condition (party size / calling diversity).
-			_apply_vow_stage_entry_condition(t)
+			# VOW-001: vow condition evaluated on actual entry (go_state→STAGE_EXPLORE), not here.
 			logger.info(t, "state.stage_select", "Stage selected", { "stage_id": stage_id })
 			flow_machine.transition(FlowStateIds.STAGE, flow_ctx, logger, t, "ui.flow.select_stage")
 
@@ -3607,11 +3610,29 @@ func _check_vow_discovery(t: int) -> void:
 
 		if triggered:
 			VowService.unlock_vow(vow_id, flow_ctx.realm_id, flow_ctx.save_data, flow_ctx, logger, t)
+			# V2-VOW-002: record in session list for "Discovered" badge and ResolveScreen reveal.
+			var _cfg_disc: Dictionary = config_service.get_balance()
+			var _defn_disc := VowService.get_definition(vow_id, _cfg_disc)
+			flow_ctx.session_unlocked_vows.append({
+				"vow_id":      vow_id,
+				"vow_name":    str(_defn_disc.get("vow_name", "")),
+				"proverb_twi": str(_defn_disc.get("proverb_twi", "")),
+				"proverb_en":  str(_defn_disc.get("proverb_en", "")),
+			})
 
 
-# VOW-001: Apply stage-entry vow condition (party size / calling diversity).
-# Called from flow.select_stage handler before transition.
+# VOW-001 / V2-VOW-002: Apply stage-entry vow condition (party size / calling diversity).
+# Called from flow.go_state→STAGE_EXPLORE (covers first entry and re-entry after defeat).
 func _apply_vow_stage_entry_condition(t: int) -> void:
+	# V2-VOW-002: tick guard — prevent double-fire if two paths both enter STAGE_EXPLORE at same tick.
+	if t == flow_ctx.vow_entry_check_t:
+		return
+	flow_ctx.vow_entry_check_t = t
+
+	# V2-VOW-002: clear transient state from previous stage entry.
+	flow_ctx.vow_outcome = {}
+	flow_ctx.session_broken_vow_effect = {}
+
 	var av := VowService.get_active_vow(flow_ctx.save_data)
 	if av.is_empty():
 		return
@@ -3623,12 +3644,37 @@ func _apply_vow_stage_entry_condition(t: int) -> void:
 	var party_ids_v: Variant = sanctum.get("active_party_ids", [])
 	var party_ids: Array = party_ids_v if party_ids_v is Array else []
 
-	var cfg := config_service.get_balance()
+	var cfg: Dictionary = config_service.get_balance()
 	var result := VowService.evaluate_stage_condition(flow_ctx.save_data, party_ids, cfg)
 
 	var status := str(result.get("status", "none"))
 	if status == "none":
 		return
+
+	# V2-VOW-002: on compliant entry, increment compliance_count in save_data.
+	if status == "compliant":
+		var _s_v: Variant = flow_ctx.save_data.get("sanctum", {})
+		if _s_v is Dictionary:
+			var _av_s: Dictionary = (_s_v as Dictionary).get("active_vow", {})
+			if not _av_s.is_empty():
+				var _new_count := int(_av_s.get("compliance_count", 0)) + 1
+				_av_s["compliance_count"] = _new_count
+				(_s_v as Dictionary)["active_vow"] = _av_s
+				flow_ctx.save_data["sanctum"] = _s_v
+		# Store vow_outcome for the ResolveScreen (compliant event).
+		if flow_ctx.vow_outcome.is_empty():
+			var _vow_id := str(av.get("vow_id", ""))
+			var _defn   := VowService.get_definition(_vow_id, cfg)
+			flow_ctx.vow_outcome = {
+				"event":       "compliant",
+				"vow_id":      _vow_id,
+				"vow_name":    str(_defn.get("vow_name", "")),
+				"tier":        int(av.get("tier", 1)),
+				"morale_delta": int(result.get("morale_delta", 0)),
+				"fear_delta":   int(result.get("fear_delta", 0)),
+				"compliance_count": int(flow_ctx.save_data.get("sanctum", {})
+					.get("active_vow", {}).get("compliance_count", 0)),
+			}
 
 	# Apply morale / fear deltas to all party echoes
 	var morale_d := int(result.get("morale_delta", 0))
@@ -3786,6 +3832,31 @@ func _apply_vow_emotion_to_party(
 
 # VOW-001: Apply EmotionRecoveryService.set_modifier on vow break (shared between manual and auto-break).
 func _apply_vow_break_aftermath(summary: Dictionary, cfg: Dictionary, t: int) -> void:
+	# V2-VOW-002: write vow_outcome for ResolveScreen "The promise fractured." section.
+	var _break_vow_id := str(summary.get("vow_id", ""))
+	var _break_defn   := VowService.get_definition(_break_vow_id, cfg)
+	var _break_name   := str(_break_defn.get("vow_name", ""))
+	flow_ctx.vow_outcome = {
+		"event":       "break",
+		"vow_id":      _break_vow_id,
+		"vow_name":    _break_name,
+		"tier":        int(summary.get("tier", 1)),
+		"morale_delta": int(summary.get("morale_delta", 0)),
+		"fear_delta":   int(summary.get("fear_delta", 0)),
+		"ase_delta":    -int(summary.get("ase_spent", 0)),
+	}
+	# V2-VOW-002: transient debuff chip for the Sanctum Active Effects panel.
+	# Cleared on the next stage entry (_apply_vow_stage_entry_condition).
+	flow_ctx.session_broken_vow_effect = {
+		"effect_id":    "vow_broken",
+		"label":        _break_name,
+		"direction":    "debuff",
+		"headline":     "Vow Broken — " + _break_name,
+		"body":         "The promise fractured. Fear fell upon the house.",
+		"duration_hint": "Clears when you re-enter a stage.",
+		"source":       "vow",
+	}
+
 	# Also apply immediate morale/fear to roster (same as _handle_vow_break manual path).
 	var morale_d := int(summary.get("morale_delta", 0))
 	var fear_d   := int(summary.get("fear_delta", 0))

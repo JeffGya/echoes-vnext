@@ -135,6 +135,7 @@ static func pledge_vow(
 		"tier":             tier,
 		"pledged_at_realm": realm_id,
 		"runs_at_pledge":   runs_at_pledge,
+		"compliance_count": 0,  # V2-VOW-002: incremented each compliant stage entry
 	}
 
 	_set_save_request(ctx, "vow.pledge")
@@ -672,3 +673,67 @@ static func _eval_obi_nnim_kyere_complete(
 		return { "morale_delta": morale_bonus, "fear_delta": 0 }
 
 	return { "morale_delta": 0, "fear_delta": 0 }
+
+
+## V2-VOW-002: Pure preview of the stage-entry condition status — no mutations to save_data.
+## Used by FlowStageState to build an atmospheric condition hint for the stage overview UI.
+## Returns { status: "met" | "at_risk" | "none", hint: String }
+## "none" = no active vow, or vow uses an engagement-based condition (obi_nnim_kyere).
+static func preview_stage_condition_hint(
+	save_data:      Dictionary,
+	party_echo_ids: Array,
+	cfg:            Dictionary
+) -> Dictionary:
+	var av := get_active_vow(save_data)
+	if av.is_empty():
+		return { "status": "none", "hint": "" }
+
+	var vow_id := str(av.get("vow_id", ""))
+	var defs   := get_definitions(cfg)
+	var defn_v: Variant = defs.get(vow_id, {})
+	var defn: Dictionary = defn_v if defn_v is Dictionary else {}
+	var condition_type := str(defn.get("condition_type", ""))
+
+	match condition_type:
+		"party_size":
+			var threshold := int(defn.get("condition", {}).get("party_size_min", 3))
+			var party_size := party_echo_ids.size()
+			if party_size >= threshold:
+				return {
+					"status": "met",
+					"hint":   "The vow calls for %d. The house answers." % threshold,
+				}
+			else:
+				return {
+					"status": "at_risk",
+					"hint":   "The vow calls for %d. %d go forward." % [threshold, party_size],
+				}
+		"calling_diversity":
+			# Build roster to check calling_origin count
+			var sanctum_v: Variant = save_data.get("sanctum", {})
+			var roster: Array = []
+			if sanctum_v is Dictionary:
+				var r_v: Variant = (sanctum_v as Dictionary).get("roster", [])
+				if r_v is Array:
+					roster = r_v
+			var calling_set: Dictionary = {}
+			for echo_v in roster:
+				if not (echo_v is Dictionary):
+					continue
+				var echo: Dictionary = echo_v
+				if party_echo_ids.has(str(echo.get("id", ""))):
+					calling_set[str(echo.get("calling_origin", "uncalled"))] = true
+			var threshold_div := int(defn.get("condition", {}).get("distinct_callings_min", 2))
+			if calling_set.size() >= threshold_div:
+				return {
+					"status": "met",
+					"hint":   "Different callings walk together. The vow is honored.",
+				}
+			else:
+				return {
+					"status": "at_risk",
+					"hint":   "The vow asks for varied paths. One calling carries all.",
+				}
+		_:
+			# obi_nnim_kyere and any future engagement-based vow — condition checked at engagement
+			return { "status": "none", "hint": "" }

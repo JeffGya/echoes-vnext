@@ -69,3 +69,19 @@ var last_realm_threads_earned: Array = []
 # ECONOMY-005: one-shot Sanctum return notification payload, surfaced through the next
 # flow.sanctum snapshot and then cleared.
 var pending_return_notification: Dictionary = {}
+
+# VOW-001: resolved vow outcome for the current stage (break or benefit).
+# Written by FlowRuntime; read by FlowEncounterState.build_final_snapshot().
+# Cleared at the start of each stage entry check so break takes precedence over compliant.
+var vow_outcome: Dictionary = {}
+
+# V2-VOW-002: session-transient list of vows unlocked this session (for "Discovered" badge).
+# Populated by FlowRuntime._check_vow_discovery(). Resets on new FlowContext instantiation.
+var session_unlocked_vows: Array = []  # Array[Dictionary] {vow_id, vow_name, proverb_twi, proverb_en}
+
+# V2-VOW-002: tick of last vow entry condition check (guard against double-fire on re-entry).
+var vow_entry_check_t: int = -1
+
+# V2-VOW-002: transient debuff chip shown after a vow break — cleared on next stage entry.
+# Shape: { effect_id, label, direction, headline, body, duration_hint, source }
+var session_broken_vow_effect: Dictionary = {}

@@ -686,6 +686,10 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"xp_events":        xp_events,
 			# V2-EMOTION-001: per-echo emotion delta for ResolveScreen.
 			"emotion_summary":  emotion_summary,
+			# VOW-001 / V2-VOW-002: vow break/benefit/compliance outcome for ResolveScreen.
+			"vow_outcome":      flow_ctx.vow_outcome.duplicate() if not flow_ctx.vow_outcome.is_empty() else {},
+			# V2-VOW-002: vows unlocked during this stage for ResolveScreen "Vow Revealed" section.
+			"newly_unlocked_vows": flow_ctx.session_unlocked_vows.duplicate(),
 		},
 		"actions": _build_resolve_actions(victory),
 		"meta": { "t": t },

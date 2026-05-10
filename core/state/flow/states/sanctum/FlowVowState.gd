@@ -78,6 +78,12 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				discovered_realm = str(entry.get("discovered_realm", ""))
 
 		var is_active := str(active_vow.get("vow_id", "")) == str(vow_id)
+		# V2-VOW-002: "Discovered" badge — true if vow was unlocked during this session.
+		var is_new := false
+		for uv in flow_ctx.session_unlocked_vows:
+			if (uv as Dictionary).get("vow_id", "") == vow_id:
+				is_new = true
+				break
 
 		available_vows.append({
 			"vow_id":             str(vow_id),
@@ -93,6 +99,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"is_active":          is_active,
 			"discovered_realm":   discovered_realm,
 			"unlock_hint":        str(defn.get("unlock_description", "")),
+			"is_new":             is_new,  # V2-VOW-002: "Discovered" badge on VowCard
 		})
 
 	# --- Active vow enriched with UI display fields ---
@@ -111,6 +118,9 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"tier_name":       str(tier_name_v),
 			"benefit_label":   str(av_defn.get("benefit_label", "")),
 			"tradeoff_label":  str(av_defn.get("tradeoff_label", "")),
+			# V2-VOW-002: compliance history and benefit condition label for VowScreen display.
+			"compliance_count":        int(active_vow.get("compliance_count", 0)),
+			"benefit_condition_label": str(av_defn.get("benefit_label", "")),
 		}
 
 	# --- Actions (slot-keyed dict) ---
