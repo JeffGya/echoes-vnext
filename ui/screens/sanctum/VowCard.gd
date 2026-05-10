@@ -32,3 +32,13 @@ func setup(entry: Dictionary) -> void:
 	question_label.visible = not is_unlocked
 	name_label.text        = vow_name if is_unlocked else "???"
 	active_badge.visible   = is_active
+
+	# V2-VOW-002: "Discovered" badge — shown when vow was unlocked during this session.
+	var is_new: bool = bool(entry.get("is_new", false))
+	if is_new:
+		var disc_lbl := Label.new()
+		disc_lbl.text = "Discovered"
+		disc_lbl.add_theme_font_size_override("font_size", 10)
+		disc_lbl.add_theme_color_override("font_color", Color("#7AB5C8"))  # Mist Blue — The Loom accent
+		disc_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		get_node("Row/Info").add_child(disc_lbl)

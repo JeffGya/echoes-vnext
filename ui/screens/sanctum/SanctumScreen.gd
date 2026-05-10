@@ -29,12 +29,26 @@ signal action_requested(action: Dictionary)
 @onready var _thread_slots: HBoxContainer = %ThreadSlots
 const ThreadSlotItemScene: PackedScene = preload("res://ui/components/ThreadSlotItem.tscn")
 
+# V2-VOW-002: ST-H — Generic Active Effects Panel (RightSidebar, between Economy and ThreadReserve)
+@onready var _effects_panel: PanelContainer = %ActiveEffectsPanel
+@onready var _effects_list:  HBoxContainer  = %ActiveEffectsList
+# V2-VOW-002: ST-H — Effect detail popout (floating overlay at screen root)
+@onready var _effect_detail:   PanelContainer = %EffectDetailPanel
+@onready var _detail_headline: Label           = %EffectDetailHeadline
+@onready var _detail_body:     Label           = %EffectDetailBody
+@onready var _detail_duration: Label           = %EffectDetailDuration
+
 
 var _snapshot: Dictionary = {}
 var _name_dirty := false
 
 var _last_ase_balance: int = -1
 var _ase_tween: Tween
+
+# V2-VOW-002: ST-E — compliance count label (lazily created, positioned below VowMantraLabel)
+var _vow_compliance_lbl: Label = null
+# V2-VOW-002: ST-H — currently open chip Button (for toggle-close detection)
+var _active_chip_effect_id: String = ""
 
 
 func set_snapshot(snap: Dictionary) -> void:
@@ -63,6 +77,30 @@ func _render() -> void:
 			vow_mantra_label.visible = true
 		else:
 			vow_mantra_label.visible = false
+
+	# V2-VOW-002 ST-E: compliance count label — "N stages honored" below the mantra proverb.
+	# Created once, reused each render; positioned below VowMantraLabel (offset_top ~70).
+	if _vow_compliance_lbl == null:
+		_vow_compliance_lbl = Label.new()
+		_vow_compliance_lbl.add_theme_font_size_override("font_size", 12)
+		_vow_compliance_lbl.add_theme_color_override("font_color", Color("#A8865A"))  # Warm Brass
+		_vow_compliance_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		add_child(_vow_compliance_lbl)
+		_vow_compliance_lbl.layout_mode = 1
+		_vow_compliance_lbl.anchor_left  = 0.5
+		_vow_compliance_lbl.anchor_right  = 0.5
+		_vow_compliance_lbl.anchor_top    = 0.0
+		_vow_compliance_lbl.anchor_bottom = 0.0
+		_vow_compliance_lbl.offset_left   = -175.0
+		_vow_compliance_lbl.offset_top    = 70.0
+		_vow_compliance_lbl.offset_right  = 175.0
+		_vow_compliance_lbl.offset_bottom = 86.0
+	var _comp_count := int(av.get("compliance_count", 0))
+	if not av.is_empty() and vow_mantra_label.visible and _comp_count > 0:
+		_vow_compliance_lbl.text    = "%d stage%s honored" % [_comp_count, "s" if _comp_count != 1 else ""]
+		_vow_compliance_lbl.visible = true
+	else:
+		_vow_compliance_lbl.visible = false
 
 	ase_label.text = "%d" % ase_balance
 	ase_rate_label.text = "~ %.1f p/h" % per_hour
@@ -135,6 +173,25 @@ func _render() -> void:
 	var reserve_cap: int = int(data.get("thread_reserve_cap", 4))
 	_rebuild_thread_reserve(thread_reserve, reserve_cap)
 
+	# V2-VOW-002 ST-H: Active Effects Panel — generic chip row in RightSidebar.
+	# Clears chip children each render; shows panel only when ≥1 effect present.
+	for _ec in _effects_list.get_children():
+		_ec.queue_free()
+	var effects_v: Variant = data.get("active_effects", [])
+	var effects: Array = effects_v if effects_v is Array else []
+	if effects.size() > 0:
+		for eff_v in effects:
+			if eff_v is Dictionary:
+				_effects_list.add_child(_build_effect_chip(eff_v as Dictionary))
+		_effects_panel.visible = true
+		_apply_panel_style(_effects_panel)
+	else:
+		_effects_panel.visible = false
+	# Close detail popout if effects cleared (e.g. vow broken then re-entered stage)
+	if effects.is_empty():
+		_effect_detail.visible = false
+		_active_chip_effect_id = ""
+
 	name_modal.visible = false
 
 func _ready() -> void:
@@ -167,6 +224,121 @@ func _rebuild_thread_reserve(thread_reserve: Array, reserve_cap: int) -> void:
 			slot.setup_filled(str(t_d.get("virtue", "")), str(t_d.get("quality_tier", "broken")))
 		else:
 			slot.setup_empty()
+
+
+# ─────────────────────────────────────────────────────────────
+# V2-VOW-002 ST-H: Active Effects Panel helpers
+# ─────────────────────────────────────────────────────────────
+
+## Builds a 72×72 Ghost-style chip Button for one active effect entry.
+## Symbol-only: ▲ (buff / Akan Gold) | ▼ (debuff / Ohene Red) | ● (neutral / Mist Blue).
+## TODO: replace symbol Text with 24×24 TextureRect icon once assets delivered (Jeff).
+func _build_effect_chip(effect: Dictionary) -> Button:
+	var direction := str(effect.get("direction", "neutral"))
+	var effect_id := str(effect.get("effect_id", ""))
+
+	# Direction → symbol + color
+	var symbol: String
+	var chip_color: Color
+	match direction:
+		"buff":
+			symbol     = "▲"
+			chip_color = Color("#C8A96E")  # Akan Gold
+		"debuff":
+			symbol     = "▼"
+			chip_color = Color("#E8412A")  # Ohene Red
+		_:
+			symbol     = "●"
+			chip_color = Color("#7AB5C8")  # Mist Blue (The Loom accent / neutral)
+
+	var btn := Button.new()
+	btn.text = symbol
+	btn.custom_minimum_size = Vector2(72, 72)
+	btn.add_theme_color_override("font_color", chip_color)
+	btn.add_theme_font_size_override("font_size", 20)
+
+	# Ghost style: transparent background, direction-coloured 1px border, corner_radius=8
+	var chip_style := StyleBoxFlat.new()
+	chip_style.bg_color = Color(0, 0, 0, 0)
+	chip_style.border_color = chip_color
+	chip_style.set_border_width_all(1)
+	chip_style.set_corner_radius_all(8)
+	btn.add_theme_stylebox_override("normal", chip_style)
+	btn.add_theme_stylebox_override("hover",  chip_style)
+	btn.add_theme_stylebox_override("pressed", chip_style)
+
+	btn.set_meta("effect_id", effect_id)
+	btn.pressed.connect(_toggle_effect_detail.bind(effect, btn))
+	return btn
+
+
+## Toggles the EffectDetailPanel popout for the tapped chip.
+## Opens to the left of the chip; fades in over 250ms. Tap same chip → closes.
+func _toggle_effect_detail(effect: Dictionary, chip: Button) -> void:
+	var effect_id := str(effect.get("effect_id", ""))
+
+	# Toggle: if already showing this effect's detail, close it.
+	if _effect_detail.visible and _active_chip_effect_id == effect_id:
+		_effect_detail.visible = false
+		_active_chip_effect_id = ""
+		return
+
+	# Apply Ash Smoke panel style (elevated surface, matches modal depth)
+	var detail_style := StyleBoxFlat.new()
+	detail_style.bg_color     = Color("#3E3E58")  # Ash Smoke
+	detail_style.border_color = Color("#A8865A")  # Warm Brass
+	detail_style.set_border_width_all(1)
+	detail_style.set_corner_radius_all(8)
+	detail_style.shadow_color = Color(0, 0, 0, 0.4)
+	detail_style.shadow_size  = 4
+	_effect_detail.add_theme_stylebox_override("panel", detail_style)
+
+	# Populate labels
+	_detail_headline.text = str(effect.get("headline", ""))
+	_detail_body.text     = str(effect.get("body",     ""))
+	_detail_duration.text = str(effect.get("duration_hint", ""))
+
+	# Position: open to the left of the chip, or fall back near chip
+	_effect_detail.visible    = false
+	_effect_detail.modulate.a = 0.0
+	_effect_detail.visible    = true
+	await get_tree().process_frame  # let Godot compute panel size
+	var chip_gpos := chip.global_position
+	var panel_w   := _effect_detail.size.x
+	_effect_detail.global_position = Vector2(
+		chip_gpos.x - panel_w - 8.0,
+		chip_gpos.y
+	)
+
+	_active_chip_effect_id = effect_id
+
+	# 250ms fade-in (matches screen swap budget)
+	var tw := create_tween()
+	tw.tween_property(_effect_detail, "modulate:a", 1.0, 0.25)
+
+
+## Applies Dusk Slate + Warm Brass border panel style to the effects panel.
+## Called each render to keep styling in sync (no .tscn StyleBoxFlat dependency).
+func _apply_panel_style(panel: PanelContainer) -> void:
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color     = Color("#2D2D44")  # Dusk Slate
+	panel_style.border_color = Color("#A8865A")  # Warm Brass
+	panel_style.set_border_width_all(1)
+	panel_style.set_corner_radius_all(8)
+	panel.add_theme_stylebox_override("panel", panel_style)
+
+
+## Closes the EffectDetailPanel on any click/tap outside of it.
+func _unhandled_input(event: InputEvent) -> void:
+	if not _effect_detail.visible:
+		return
+	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
+		# Close if tap lands outside the panel rect
+		var panel_rect := _effect_detail.get_global_rect()
+		if not panel_rect.has_point((event as InputEventMouseButton).global_position):
+			_effect_detail.visible = false
+			_active_chip_effect_id = ""
+			get_viewport().set_input_as_handled()
 
 
 func _pulse_ase_label() -> void:

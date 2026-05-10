@@ -41,6 +41,11 @@ const EmotionEntryScene   := preload("res://ui/components/EmotionEntryItem.tscn"
 @onready var _sanctum_button:    Button        = %SanctumButton
 @onready var _next_stage_button: Button        = %NextStageButton
 @onready var _emotion_list:      VBoxContainer = %EmotionList
+@onready var _vow_section:            VBoxContainer = %VowOutcomeSection
+@onready var _vow_list:               VBoxContainer = %VowOutcomeList
+# V2-VOW-002: discovery section (vows unlocked during this stage)
+@onready var _vow_discovered_section: VBoxContainer = %VowDiscoveredSection
+@onready var _vow_discovered_list:    VBoxContainer = %VowDiscoveredList
 
 var _sanctum_action:    Dictionary = {}
 var _next_stage_action: Dictionary = {}
@@ -68,6 +73,13 @@ func _clear() -> void:
 	for child in _breakdown_section.get_children():
 		child.queue_free()
 	for child in _emotion_list.get_children():
+		child.queue_free()
+	_vow_section.visible = false
+	for child in _vow_list.get_children():
+		child.queue_free()
+	# V2-VOW-002: discovery section reset
+	_vow_discovered_section.visible = false
+	for child in _vow_discovered_list.get_children():
 		child.queue_free()
 
 
@@ -139,6 +151,20 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 			_tween.tween_interval(_delay)
 			_tween.tween_property(_bl, "modulate:a", 1.0, 0.3)
 
+	# V2-VOW-002: vow fallout section — "The promise fractured." / "The promise held." / "The promise holds."
+	var vow_outcome_v: Variant = data.get("vow_outcome", {})
+	var vow_outcome: Dictionary = vow_outcome_v if vow_outcome_v is Dictionary else {}
+	if not vow_outcome.is_empty():
+		_build_vow_section(vow_outcome)
+		_vow_section.visible = true
+
+	# V2-VOW-002: vow discovery section — vows unlocked during this stage.
+	var newly_unlocked_v: Variant = data.get("newly_unlocked_vows", [])
+	var newly_unlocked: Array = newly_unlocked_v if newly_unlocked_v is Array else []
+	if not newly_unlocked.is_empty():
+		_build_vow_discovered_section(newly_unlocked)
+		_vow_discovered_section.visible = true
+
 	# Wire CTA buttons from snapshot actions.
 	if actions.has("cta.continue"):
 		var act_v: Variant = actions["cta.continue"]
@@ -174,6 +200,99 @@ func _build_breakdown(breakdown: Array, total_ase: int) -> void:
 		var total_lbl := Label.new()
 		total_lbl.text = "= %d Ase" % total_ase
 		_breakdown_section.add_child(total_lbl)
+
+
+# ─────────────────────────────────────────────────────────────
+# V2-VOW-002: Vow fallout renderer
+# ─────────────────────────────────────────────────────────────
+
+## Populates _vow_list with narrative header, vow name, and signed deltas.
+## GDD: vows = "structure, pressure, and moral shape"; broken vow = strongest Continuity harm.
+func _build_vow_section(outcome: Dictionary) -> void:
+	var event := str(outcome.get("event", ""))
+	var headline: String
+	match event:
+		"break":     headline = "The promise fractured."
+		"compliant": headline = "The promise holds."
+		_:           headline = "The promise held."
+
+	var headline_lbl := Label.new()
+	headline_lbl.text = headline
+	headline_lbl.add_theme_font_size_override("font_size", 13)
+	_vow_list.add_child(headline_lbl)
+
+	var vow_name := str(outcome.get("vow_name", ""))
+	if not vow_name.is_empty():
+		var name_lbl := Label.new()
+		name_lbl.text = vow_name
+		name_lbl.add_theme_font_size_override("font_size", 12)
+		_vow_list.add_child(name_lbl)
+
+	# V2-VOW-002: compliance count line for "compliant" event.
+	if event == "compliant":
+		var count := int(outcome.get("compliance_count", 0))
+		if count > 0:
+			var count_lbl := Label.new()
+			count_lbl.text = "%d stage%s honored" % [count, "s" if count != 1 else ""]
+			count_lbl.add_theme_font_size_override("font_size", 12)
+			count_lbl.add_theme_color_override("font_color", Color("#A8865A"))  # Warm Brass
+			_vow_list.add_child(count_lbl)
+
+	# Signed deltas — only non-zero values shown, joined with " · "
+	var morale_d := int(outcome.get("morale_delta", 0))
+	var fear_d   := int(outcome.get("fear_delta", 0))
+	var ase_d    := int(outcome.get("ase_delta", 0))
+
+	var parts: Array = []
+	if morale_d != 0:
+		parts.append("Morale %s%d" % ["+" if morale_d > 0 else "", morale_d])
+	if fear_d != 0:
+		parts.append("Fear %s%d" % ["+" if fear_d > 0 else "", fear_d])
+	if ase_d != 0:
+		parts.append("Ase %s%d" % ["+" if ase_d > 0 else "", ase_d])
+
+	if not parts.is_empty():
+		var delta_lbl := Label.new()
+		delta_lbl.text = " · ".join(parts)
+		delta_lbl.add_theme_font_size_override("font_size", 12)
+		_vow_list.add_child(delta_lbl)
+
+
+# ─────────────────────────────────────────────────────────────
+# V2-VOW-002: Vow discovery renderer
+# ─────────────────────────────────────────────────────────────
+
+## Builds the list of vows revealed during this stage.
+## Each entry shows: vow_name (13, Akan Gold), proverb_twi (12, Pale Kente), proverb_en (12, Warm Brass muted).
+func _build_vow_discovered_section(vows: Array) -> void:
+	for vow_v in vows:
+		var vow: Dictionary = vow_v if vow_v is Dictionary else {}
+		var vow_name := str(vow.get("vow_name", ""))
+		var twi      := str(vow.get("proverb_twi", ""))
+		var en       := str(vow.get("proverb_en", ""))
+
+		if not vow_name.is_empty():
+			var name_lbl := Label.new()
+			name_lbl.text = vow_name
+			name_lbl.add_theme_font_size_override("font_size", 13)
+			name_lbl.add_theme_color_override("font_color", Color("#C8A96E"))  # Akan Gold
+			_vow_discovered_list.add_child(name_lbl)
+
+		if not twi.is_empty():
+			var twi_lbl := Label.new()
+			twi_lbl.text = twi
+			twi_lbl.add_theme_font_size_override("font_size", 12)
+			twi_lbl.add_theme_color_override("font_color", Color("#E8D0A0"))  # Pale Kente
+			twi_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+			_vow_discovered_list.add_child(twi_lbl)
+
+		if not en.is_empty():
+			var en_lbl := Label.new()
+			en_lbl.text = en
+			en_lbl.add_theme_font_size_override("font_size", 12)
+			en_lbl.add_theme_color_override("font_color", Color("#A8865A"))  # Warm Brass (muted)
+			en_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+			_vow_discovered_list.add_child(en_lbl)
 
 
 # ─────────────────────────────────────────────────────────────

@@ -145,6 +145,44 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 4
 
+[node name="VowOutcomeSection" type="VBoxContainer" parent="CenterContainer/ResultCard/CardContent"]
+unique_name_in_owner = true
+layout_mode = 2
+visible = false
+theme_override_constants/separation = 4
+
+[node name="VowOutcomeSeparator" type="HSeparator" parent="CenterContainer/ResultCard/CardContent/VowOutcomeSection"]
+layout_mode = 2
+
+[node name="VowOutcomeHeader" type="Label" parent="CenterContainer/ResultCard/CardContent/VowOutcomeSection"]
+layout_mode = 2
+text = "Vow"
+theme_override_font_sizes/font_size = 14
+
+[node name="VowOutcomeList" type="VBoxContainer" parent="CenterContainer/ResultCard/CardContent/VowOutcomeSection"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="VowDiscoveredSection" type="VBoxContainer" parent="CenterContainer/ResultCard/CardContent"]
+unique_name_in_owner = true
+layout_mode = 2
+visible = false
+theme_override_constants/separation = 4
+
+[node name="VowDiscoveredSeparator" type="HSeparator" parent="CenterContainer/ResultCard/CardContent/VowDiscoveredSection"]
+layout_mode = 2
+
+[node name="VowDiscoveredHeader" type="Label" parent="CenterContainer/ResultCard/CardContent/VowDiscoveredSection"]
+layout_mode = 2
+text = "Vow Revealed"
+theme_override_font_sizes/font_size = 14
+
+[node name="VowDiscoveredList" type="VBoxContainer" parent="CenterContainer/ResultCard/CardContent/VowDiscoveredSection"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
 [node name="ButtonRow" type="HBoxContainer" parent="CenterContainer/ResultCard/CardContent"]
 layout_mode = 2
 alignment = 1
