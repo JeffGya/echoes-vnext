@@ -94,10 +94,11 @@ func spend_ase(amount: int, reason: String, logger: StructuredLogger, t: int) ->
 # ---- Stage Reward API ----
 
 ## ECONOMY-004 + REALM-005: Compute and pay out stage reward after encounter end.
-## Builds a breakdown Array of {label: String, delta: int} — absolute Ase only, no percentages.
+## Builds a breakdown Array of {label, delta, currency} entries.
 ## enemies_defeated / echoes_survived: raw counts for descriptive labels.
 ## virtue_bonus: flat Ase bonus from realm virtue + stage index (REALM-005). Added on victory only.
-## Returns reward_result dict with ase_awarded, rank, victory, breakdown.
+## ekwan_factor: fraction of final Ase to award as Ekwan (V2-ECONOMY-001). Pass 0.0 for no Ekwan.
+## Returns reward_result dict with ase_awarded, ekwan_awarded, rank, victory, breakdown.
 func reward_stage_complete(
 	victory: bool,
 	base_reward: int,
@@ -109,11 +110,12 @@ func reward_stage_complete(
 	redo_multiplier: float,
 	rank: String,
 	virtue_bonus: int,
+	ekwan_factor: float,
 	logger: StructuredLogger,
 	t: int
 ) -> Dictionary:
 	var total: int
-	var breakdown: Array  # Array of {label: String, delta: int}
+	var breakdown: Array  # Array of {label: String, delta: int, currency: String}
 
 	if victory:
 		var pre_redo := base_reward + enemy_bonus + echo_bonus + speed_bonus
@@ -121,19 +123,19 @@ func reward_stage_complete(
 		var redo_penalty := roundi(float(pre_redo) * redo_multiplier) - pre_redo  # negative or 0
 
 		breakdown = []
-		breakdown.append({ "label": "Base objectives", "delta": base_reward })
+		breakdown.append({ "label": "Base objectives", "delta": base_reward, "currency": "ase" })
 		if enemy_bonus > 0:
 			var e_label := "%d %s defeated" % [enemies_defeated, "enemy" if enemies_defeated == 1 else "enemies"]
-			breakdown.append({ "label": e_label, "delta": enemy_bonus })
+			breakdown.append({ "label": e_label, "delta": enemy_bonus, "currency": "ase" })
 		if echo_bonus > 0:
 			var ec_label := "%d %s survived" % [echoes_survived, "echo" if echoes_survived == 1 else "echoes"]
-			breakdown.append({ "label": ec_label, "delta": echo_bonus })
+			breakdown.append({ "label": ec_label, "delta": echo_bonus, "currency": "ase" })
 		if speed_bonus > 0:
-			breakdown.append({ "label": "Speed bonus", "delta": speed_bonus })
+			breakdown.append({ "label": "Speed bonus", "delta": speed_bonus, "currency": "ase" })
 		if redo_penalty < 0:
-			breakdown.append({ "label": "Redo penalty", "delta": redo_penalty })
+			breakdown.append({ "label": "Redo penalty", "delta": redo_penalty, "currency": "ase" })
 		if virtue_bonus > 0:
-			breakdown.append({ "label": "Realm virtue", "delta": virtue_bonus })
+			breakdown.append({ "label": "Realm virtue", "delta": virtue_bonus, "currency": "ase" })
 	else:
 		total = roundi(float(base_reward) * 0.25 * redo_multiplier)
 		var base_consolation := roundi(float(base_reward) * 0.25)
@@ -141,19 +143,26 @@ func reward_stage_complete(
 		var redo_penalty     := total - base_consolation        # negative or 0
 
 		breakdown = []
-		breakdown.append({ "label": "Base objectives", "delta": base_reward })
-		breakdown.append({ "label": "Defeat penalty", "delta": defeat_penalty })
+		breakdown.append({ "label": "Base objectives", "delta": base_reward, "currency": "ase" })
+		breakdown.append({ "label": "Defeat penalty", "delta": defeat_penalty, "currency": "ase" })
 		if redo_penalty < 0:
-			breakdown.append({ "label": "Redo penalty", "delta": redo_penalty })
+			breakdown.append({ "label": "Redo penalty", "delta": redo_penalty, "currency": "ase" })
 
 	if total > 0:
 		add_ase(total, "stage_reward", logger, t)
 
+	# V2-ECONOMY-001: Ekwan — scales off final Ase awarded (post-redo, post-virtue)
+	var ekwan_total := roundi(float(total) * maxf(ekwan_factor, 0.0))
+	if ekwan_total > 0:
+		add_ekwan(ekwan_total, "stage_reward", logger, t)
+		breakdown.append({ "label": "Sanctum share", "delta": ekwan_total, "currency": "ekwan" })
+
 	return {
-		"ase_awarded": total,
-		"rank":        rank,
-		"victory":     victory,
-		"breakdown":   breakdown,
+		"ase_awarded":   total,
+		"ekwan_awarded": ekwan_total,
+		"rank":          rank,
+		"victory":       victory,
+		"breakdown":     breakdown,
 	}
 
 # ---- Mutation API (Ekwan) ----

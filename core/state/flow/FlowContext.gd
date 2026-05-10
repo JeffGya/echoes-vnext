@@ -85,3 +85,8 @@ var vow_entry_check_t: int = -1
 # Written by _apply_vow_break_aftermath; cleared on next stage entry.
 var session_broken_vow_effect: Dictionary = {}
 # Shape: { effect_id, label, direction, headline, body, duration_hint, source }
+
+# V2-ECONOMY-001: transient economy cadence flags (never persisted to save)
+var pending_awakening_banner: bool = false         # true once after Ase Flame awakens
+var pending_scout_return_ase: int = 0              # partial Ase earned on retreat/return_home
+var pending_scout_return_intel_count: int = 0      # situations revealed on retreat/return_home

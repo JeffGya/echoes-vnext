@@ -84,6 +84,12 @@ func _clear() -> void:
 
 
 func _render(data: Dictionary, actions: Dictionary) -> void:
+	# V2-ECONOMY-001: scout_return path — partial Ase, no rank/vow/next_stage
+	var run_type := str(data.get("run_type", ""))
+	if run_type == "scout_return":
+		_render_scout_return(data, actions)
+		return
+
 	var victory: bool = bool(data.get("victory", false))
 
 	_banner.text = "VICTORY" if victory else "DEFEAT"
@@ -193,8 +199,12 @@ func _build_breakdown(breakdown: Array, total_ase: int) -> void:
 		var item: RewardEntryItem = RewardEntryScene.instantiate()
 		_breakdown_section.add_child(item)
 		item.setup(entry)
+		# V2-ECONOMY-001: Ekwan entries in Amber; Ase entries keep default theme color
+		if str(entry.get("currency", "ase")) == "ekwan":
+			item.add_theme_color_override("font_color", Color("#E8A030"))
 
-	if not breakdown.is_empty():
+	# V2-ECONOMY-001: skip total line on scout_return (total_ase == 0 signals no total)
+	if total_ase > 0:
 		var sep := HSeparator.new()
 		_breakdown_section.add_child(sep)
 		var total_lbl := Label.new()
@@ -293,6 +303,50 @@ func _build_vow_discovered_section(vows: Array) -> void:
 			en_lbl.add_theme_color_override("font_color", Color("#A8865A"))  # Warm Brass (muted)
 			en_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
 			_vow_discovered_list.add_child(en_lbl)
+
+
+# ─────────────────────────────────────────────────────────────
+# V2-ECONOMY-001: Scout Return renderer
+# ─────────────────────────────────────────────────────────────
+
+func _render_scout_return(data: Dictionary, actions: Dictionary) -> void:
+	_banner.text = "Scout Return"
+	_banner.add_theme_color_override("font_color", Color("#7AB5C8"))  # Mist Blue — neutral info
+
+	var intel := int(data.get("intel_count", 0))
+	_reason.text = "%d situation%s revealed" % [intel, "s" if intel != 1 else ""]
+
+	_rank_badge.visible              = false
+	_vow_section.visible             = false
+	_vow_discovered_section.visible  = false
+	_next_stage_button.visible       = false
+
+	_ase_value.text = "%d" % int(data.get("ase_awarded", 0))
+
+	var breakdown_v: Variant = data.get("reward_breakdown", [])
+	var breakdown: Array = breakdown_v if breakdown_v is Array else []
+	_build_breakdown(breakdown, 0)
+
+	# Actor preview — show name + emotional state (no pre/post arc on scout return)
+	var actors_v: Variant = data.get("actors", [])
+	var actors: Array = actors_v if actors_v is Array else []
+	for actor_v in actors:
+		if not actor_v is Dictionary:
+			continue
+		var actor: Dictionary = actor_v
+		var nm := str(actor.get("name", ""))
+		var es := str(actor.get("emotional_status", ""))
+		var lbl := Label.new()
+		lbl.text = "%s — [%s]" % [nm, es.capitalize()] if es != "" else nm
+		lbl.add_theme_font_size_override("font_size", 14)
+		_emotion_list.add_child(lbl)
+
+	if actions.has("cta.continue"):
+		var act_v: Variant = actions["cta.continue"]
+		if act_v is Dictionary:
+			_sanctum_action = act_v
+			_sanctum_button.text    = str(act_v.get("label", "Return to Sanctum"))
+			_sanctum_button.visible = true
 
 
 # ─────────────────────────────────────────────────────────────

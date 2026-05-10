@@ -74,6 +74,13 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			# V2-MIG-002: additive V2 sanctum stubs
 			"continuity": 0,  # V2-SANCTUM-001+: Sanctum growth spine
 			"threads": {},    # V2-WEAVE-001+: Thread reserve (keyed by thread_id)
+
+			# V2-ECONOMY-001: Ase Flame state (dormant until awakening at end of onboarding)
+			"ase_flame": {
+				"awakened":                false,
+				"boost_remaining_seconds": 0,
+				"boost_per_bank_tick":     0,
+			},
 		},
 		# DIRECTIVE-001: stage-level context (directive, future: stage seed, objective state)
 		"stage_context": {

@@ -9,8 +9,12 @@ signal action_requested(action: Dictionary)
 @onready var title_label: Label = %TitleLabel
 @onready var vow_mantra_label: Label = %VowMantraLabel  # VOW-001: active vow proverb under title
 @onready var ase_label: Label = %AseLabel
-@onready var ase_rate_label: Label = %AseRateLabel
+@onready var ase_flame_tip: Label = %AseFlameTip
 @onready var ase_delta_label: Label = %AseDeltaLabel
+@onready var ekwan_label: Label = %EkwanLabel
+@onready var _awakening_overlay: Control = %AwakeningOverlay
+@onready var _awakening_grant_label: Label = %AwakeningGrantLabel
+@onready var _awakening_dismiss: Button = %AwakeningDismiss
 @onready var echo_count_label : Label = %EchoCountLabel
 
 @onready var echo_preview_1: Label = %EchoPreview1
@@ -103,7 +107,19 @@ func _render() -> void:
 		_vow_compliance_lbl.visible = false
 
 	ase_label.text = "%d" % ase_balance
-	ase_rate_label.text = "~ %.1f p/h" % per_hour
+
+	# V2-ECONOMY-001: AseFlameTip replaces AseRateLabel — combined flame state + rate
+	var ase_flame_awakened := bool(data.get("ase_flame_awakened", false))
+	if ase_flame_awakened:
+		ase_flame_tip.text = "Ase Flame recovering (~%.1f p/h)" % per_hour
+		ase_flame_tip.add_theme_color_override("font_color", Color("#E8A030"))
+	else:
+		ase_flame_tip.text = "House dormant — Flame unlit"
+		ase_flame_tip.add_theme_color_override("font_color", Color("#7A7A8A"))
+
+	# V2-ECONOMY-001: Ekwan balance
+	ekwan_label.text = "%d" % int(data.get("ekwan_balance", 0))
+
 	echo_count_label.text = "%d echoes" % int(data.get("roster_count", 0))
 	
 
@@ -194,10 +210,17 @@ func _render() -> void:
 
 	name_modal.visible = false
 
+	# V2-ECONOMY-001: Awakening overlay — one-shot on first Sanctum entry after awakening
+	if bool(data.get("show_awakening_overlay", false)):
+		_awakening_grant_label.text = "+%d Ase" % int(data.get("awakening_grant", 40))
+		_show_awakening_overlay()
+
 func _ready() -> void:
 	reroll_button.pressed.connect(_on_reroll_pressed)
 	confirm_button.pressed.connect(_on_confirm_pressed)
 	name_edit.text_changed.connect(_on_name_edit_changed)
+	_awakening_dismiss.pressed.connect(_on_awakening_dismiss_pressed)
+	_apply_awakening_panel_style()
 
 # Helpers
 func _on_name_edit_changed(_new_text: String) -> void:
@@ -364,4 +387,29 @@ func _show_ase_delta(delta: int) -> void:
 		ase_delta_label.visible = false
 		ase_delta_label.position.y = start_y
 	)
+
+
+# ─────────────────────────────────────────────────────────────
+# V2-ECONOMY-001: Awakening overlay helpers
+# ─────────────────────────────────────────────────────────────
+
+func _apply_awakening_panel_style() -> void:
+	var inner_panel := _awakening_overlay.find_child("InnerPanel", true, false)
+	if inner_panel == null or not (inner_panel is PanelContainer):
+		return
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("#3E3E58")
+	style.set_corner_radius_all(8)
+	(inner_panel as PanelContainer).add_theme_stylebox_override("panel", style)
+
+func _show_awakening_overlay() -> void:
+	_awakening_overlay.modulate.a = 0.0
+	_awakening_overlay.visible = true
+	var tw := create_tween()
+	tw.tween_property(_awakening_overlay, "modulate:a", 1.0, 0.25)
+
+func _on_awakening_dismiss_pressed() -> void:
+	var tw := create_tween()
+	tw.tween_property(_awakening_overlay, "modulate:a", 0.0, 0.2)
+	tw.tween_callback(func(): _awakening_overlay.visible = false)
 	

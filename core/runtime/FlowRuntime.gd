@@ -154,6 +154,8 @@ func dispatch(action: Dictionary) -> Dictionary:
 				flow_ctx.save_request_reason = "continue_first_boot"
 
 			_apply_offline_accrual_if_needed(t, "flow.continue")
+			# V2-ECONOMY-001: synchronize emotion tick at settlement (same choke point as accrual)
+			_apply_sanctum_emotion_tick(t)
 
 			# PROG-001: patch old echo dicts that pre-date draw-order v2 fields
 			_repair_echo_schema(t)
@@ -792,6 +794,18 @@ func _handle_onboarding_name_confirm(action: Dictionary, t: int) -> void:
 	var sanctum: Dictionary = flow_ctx.save_data["sanctum"]
 	sanctum["name"] = name
 	OnboardingService.mark_complete(flow_ctx.save_data, cfg)
+
+	# V2-ECONOMY-001: Ase Flame awakening — set flag + grant 40 Ase + queue banner (first time only)
+	var _aw_flame_v: Variant = sanctum.get("ase_flame", {})
+	var _aw_flame: Dictionary = _aw_flame_v if _aw_flame_v is Dictionary else {}
+	if not bool(_aw_flame.get("awakened", false)):
+		_aw_flame["awakened"] = true
+		sanctum["ase_flame"] = _aw_flame
+		var _grant := int(_get_balance_economy_cfg().get("awakening_ase_grant", 40))
+		econ.add_ase(_grant, "economy.awakening_grant", logger, t)
+		flow_ctx.pending_awakening_banner = true
+		logger.info(t, "economy.ase_flame.awakened", "Ase Flame awakened", { "grant": _grant })
+
 	_mark_save_requested("onboarding.name.confirm")
 
 	logger.info(t, "onboarding.name.confirm", "Chapter I complete; Sanctum name set", {
@@ -984,13 +998,25 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 	})
 
 	if success:
+		# V2-ECONOMY-001: Intel-gated partial Ase award before clearing encounter context.
+		var _intel_count := _count_revealed_situations()
+		var _partial_ase := 0
+		if _intel_count > 0:
+			var _pf := float(_get_balance_rewards_cfg().get("partial_intel_reward_factor", 0.12))
+			_partial_ase = roundi(float(_get_stage_base_reward()) * _pf)
+			if _partial_ase > 0:
+				econ.add_ase(_partial_ase, "retreat_intel_partial", logger, t)
+		flow_ctx.pending_scout_return_ase         = _partial_ase
+		flow_ctx.pending_scout_return_intel_count = _intel_count
+
 		# Clear encounter context — no emotion drift on retreat.
 		flow_ctx.encounter_ctx    = null
 		flow_ctx.encounter_machine = null
 		flow_ctx.save_request      = true
 		flow_ctx.save_request_reason = "encounter.retreat"
 		_apply_sanctum_emotion_tick(t)
-		flow_machine.transition(FlowStateIds.SANCTUM, flow_ctx, logger, t, "encounter.retreat.success")
+		flow_ctx.last_snapshot = _build_scout_return_snapshot(t)
+		flow_machine.transition(FlowStateIds.RESOLVE, flow_ctx, logger, t, "encounter.retreat.scout_return")
 	else:
 		logger.info(t, "encounter.retreat.failed", "Retreat failed — combat begins", {
 			"encounter_id": encounter_id,
@@ -1731,6 +1757,15 @@ func _apply_offline_accrual_if_needed(t: int, source: String) -> int:
 		flow_ctx.save_data["economy"] = {}
 	var econ_data := flow_ctx.save_data["economy"] as Dictionary
 
+	# V2-ECONOMY-001: gate on ase_flame.awakened — house is dormant before onboarding completes
+	var _sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var _sanctum_gate: Dictionary = _sanctum_v if _sanctum_v is Dictionary else {}
+	var _flame_v: Variant = _sanctum_gate.get("ase_flame", {})
+	var _flame_gate: Dictionary = _flame_v if _flame_v is Dictionary else {}
+	if not bool(_flame_gate.get("awakened", false)):
+		logger.debug(t, "economy.offline.noop", "Offline accrual skipped (house dormant)", { "source": source })
+		return 0
+
 	var last_offline := int(econ_data.get("last_offline_unix", now_unix))
 	var raw_delta := now_unix - last_offline
 
@@ -1769,6 +1804,9 @@ func _apply_offline_accrual_if_needed(t: int, source: String) -> int:
 
 	# Multiplier seam (Faith later). Economy stays emotion-agnostic.
 	var multiplier := 1.0
+	# V2-ECONOMY-001: boost stub — no-op now, extensibility hook for future bank-tick boost system
+	var _boost := float(_flame_gate.get("boost_per_bank_tick", 0.0))
+	multiplier += _boost
 
 	var ase_before := int(econ_data.get("ase", 0))
 
@@ -1943,6 +1981,108 @@ func _get_balance_economy_cfg() -> Dictionary:
 	var econ_cfg: Dictionary = econ_v as Dictionary if econ_v is Dictionary else {}
 
 	return econ_cfg
+
+func _get_balance_rewards_cfg() -> Dictionary:
+	var balance := config_service.get_balance()
+	if balance.is_empty():
+		return {}
+	var data_v = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var rewards_v = data.get("rewards", {})
+	return rewards_v if rewards_v is Dictionary else {}
+
+# V2-ECONOMY-001: Count how many situations in the current stage have been revealed.
+func _count_revealed_situations() -> int:
+	if flow_ctx.realm_id.is_empty() or flow_ctx.stage_id.is_empty():
+		return 0
+	var _stage_idx := int(flow_ctx.stage_id.replace("stage.", ""))
+	var _realm_v: Variant = flow_ctx.save_data.get("realms", {}).get(flow_ctx.realm_id, {})
+	var _realm: Dictionary = _realm_v if _realm_v is Dictionary else {}
+	var _stages_v: Variant = _realm.get("stages", [])
+	var _stages: Array = _stages_v if _stages_v is Array else []
+	if _stage_idx >= _stages.size() or not _stages[_stage_idx] is Dictionary:
+		return 0
+	var _stage: Dictionary = _stages[_stage_idx]
+	var _emap_v: Variant = _stage.get("explore_map", {})
+	var _emap: Dictionary = _emap_v if _emap_v is Dictionary else {}
+	var _sits_v: Variant = _emap.get("situations", [])
+	var _sits: Array = _sits_v if _sits_v is Array else []
+	var count := 0
+	for s in _sits:
+		if s is Dictionary and bool((s as Dictionary).get("revealed", false)):
+			count += 1
+	return count
+
+# V2-ECONOMY-001: Get the base reward for the current stage's primary objective type.
+func _get_stage_base_reward() -> int:
+	var _stage_idx := int(flow_ctx.stage_id.replace("stage.", ""))
+	var _realm_v: Variant = flow_ctx.save_data.get("realms", {}).get(flow_ctx.realm_id, {})
+	var _realm: Dictionary = _realm_v if _realm_v is Dictionary else {}
+	var _stages_v: Variant = _realm.get("stages", [])
+	var _stages: Array = _stages_v if _stages_v is Array else []
+	var _obj_type := "combat"
+	if _stage_idx < _stages.size() and _stages[_stage_idx] is Dictionary:
+		var _stage: Dictionary = _stages[_stage_idx]
+		var _objs_v: Variant = _stage.get("objectives", [])
+		var _objs: Array = _objs_v if _objs_v is Array else []
+		if not _objs.is_empty() and _objs[0] is Dictionary:
+			_obj_type = str((_objs[0] as Dictionary).get("obj_type", "combat"))
+	var _w_v: Variant = _get_balance_rewards_cfg().get("objective_weights", {})
+	var _w: Dictionary = _w_v if _w_v is Dictionary else {}
+	return int(_w.get(_obj_type, _w.get("combat", 30)))
+
+# V2-ECONOMY-001: Build the scout-return resolve snapshot for retreat / return_home.
+func _build_scout_return_snapshot(t: int) -> Dictionary:
+	var _ase   := flow_ctx.pending_scout_return_ase
+	var _intel := flow_ctx.pending_scout_return_intel_count
+	var breakdown: Array = []
+	if _ase > 0:
+		breakdown.append({ "label": "Scout return", "delta": _ase, "currency": "ase" })
+
+	var actor_preview: Array = []
+	var _sanctum_svc := SanctumService.new(flow_ctx.save_data)
+	var _party_actors := _sanctum_svc.get_party_actors()
+	for _a_v in _party_actors:
+		if not _a_v is Dictionary:
+			continue
+		var _a: Dictionary = _a_v
+		var _emo_v: Variant = _a.get("emotion", {})
+		var _emo: Dictionary = _emo_v if _emo_v is Dictionary else {}
+		actor_preview.append({
+			"id":               str(_a.get("id", "")),
+			"name":             str(_a.get("name", "")),
+			"calling_origin":   str(_a.get("calling_origin", "")),
+			"emotional_status": EmotionService.get_emotional_status(
+				int(_emo.get("morale_current", 50)),
+				int(_emo.get("fear_current",   0))
+			),
+		})
+
+	flow_ctx.pending_scout_return_ase         = 0
+	flow_ctx.pending_scout_return_intel_count = 0
+
+	return {
+		"type": FlowStateIds.RESOLVE,
+		"meta": { "sim_tick": t },
+		"data": {
+			"run_type":        "scout_return",
+			"ase_awarded":     _ase,
+			"ekwan_awarded":   0,
+			"intel_count":     _intel,
+			"reward_breakdown": breakdown,
+			"actors":          actor_preview,
+			"victory":         false,
+			"rank":            "",
+		},
+		"actions": {
+			"cta.continue": {
+				"type":  "flow.go_state",
+				"to":    FlowStateIds.SANCTUM,
+				"label": "Return to Sanctum",
+				"slot":  "cta.continue",
+			}
+		}
+	}
 	
 func _get_max_online_settle_delta_seconds() -> int:
 	# Online settle guard. Offline accrual has its own capped window.
@@ -3602,13 +3742,21 @@ func _handle_stage_return_home(_action: Dictionary, t: int) -> void:
 		FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
 		flow_ctx.save_request        = true
 		flow_ctx.save_request_reason = "stage.escaped"
-		var snap_ok := FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
-		snap_ok["data"]["return_home_result"] = {
-			"success": true,
-			"message": "The party slips away into the dark and finds the path home.",
-		}
-		flow_ctx.last_snapshot = snap_ok
-		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+		# V2-ECONOMY-001: Intel-gated partial Ase award.
+		var _intel_count := _count_revealed_situations()
+		var _partial_ase := 0
+		if _intel_count > 0:
+			var _pf := float(_get_balance_rewards_cfg().get("partial_intel_reward_factor", 0.12))
+			_partial_ase = roundi(float(_get_stage_base_reward()) * _pf)
+			if _partial_ase > 0:
+				econ.add_ase(_partial_ase, "return_home_intel_partial", logger, t)
+		flow_ctx.pending_scout_return_ase         = _partial_ase
+		flow_ctx.pending_scout_return_intel_count = _intel_count
+
+		_apply_sanctum_emotion_tick(t)
+		flow_ctx.last_snapshot = _build_scout_return_snapshot(t)
+		flow_machine.transition(FlowStateIds.RESOLVE, flow_ctx, logger, t, "stage.return_home.scout_return")
 	else:
 		# Escape failed — show overlay. Full consequence mechanic deferred to V2-INTEL-002.
 		stage["explore_map"] = explore_map

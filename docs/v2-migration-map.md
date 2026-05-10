@@ -380,7 +380,7 @@ V1 locked directives (`protect`, `push`, `preserve`, `focus`) — **superseded**
 
 ---
 
-## Domain 6 — Economy
+## Domain 6 — Economy ✅ Done (V2-ECONOMY-001)
 
 ### V1 Current State
 
@@ -445,13 +445,16 @@ data.summoning.grade_costs: { uncalled: 60, called: 150, chosen: 400 }
 | Item | Action | Owner |
 |---|---|---|
 | `economy.ase` (active) | **Carryover** — field name, service choke points all valid | — |
-| `economy.ekwan` (placeholder) | **Carryover** → activated when building/crafting system ships | V2-ECONOMY-001+ |
+| `economy.ekwan` (placeholder) | ✅ **Done (V2-ECONOMY-001)** — Ekwan wired to stage rewards; displayed on Sanctum hub | — |
 | `EconomyService.spend_ase()` / `add_ase()` / `can_afford_ase()` | **Carryover** — valid single choke points | — |
+| `EconomyService.reward_stage_complete()` | ✅ **Done (V2-ECONOMY-001)** — now takes `ekwan_factor`; awards Ekwan; `reward_breakdown` entries include `currency` field | — |
 | Settlement model (no frame-based accrual) | **Carryover** | — |
+| Ase Flame dormancy gate | ✅ **Done (V2-ECONOMY-001)** — `sanctum.ase_flame.awakened` gates offline accrual; set on onboarding completion; 40 Ase granted | — |
+| Scout-return resolve screen | ✅ **Done (V2-ECONOMY-001)** — retreat/return_home always routes to RESOLVE with intel-gated partial Ase | — |
 | Relics (new currency) | **New Build** | V2-ECONOMY-001+ |
 | Faith / Harmony / Favor (visible states) | **New Build** | V2-ECONOMY-001+ / V2-SANCTUM-001+ |
 | Threads reserve (save key) | **New Build** | V2-WEAVE-001+ |
-| Ase offline accrual degradation (Sanctum stability) | **Rewrite** — currently flat; V2 says strain/neglect weakens recovery toward near-zero | V2-ECONOMY-001+ |
+| Ase offline accrual degradation (Sanctum stability) | **Deferred** — currently flat; V2 says strain/neglect weakens recovery toward near-zero | V2-ECONOMY-002+ |
 
 **Invariants:**
 - `economy.ase` and `economy.ekwan` keys must remain until migration is complete

@@ -110,6 +110,33 @@ func _rebuild_snapshot(ctx: FlowContext, logger: StructuredLogger, t: int) -> vo
 		data["ekwan_balance"] = int(econ.get("ekwan", 0))
 		# per_hour = per_min * 60
 		data["ase_rate_per_hour_hint"] = ase_per_min_base * 60.0 * multiplier
+		data["ase_rate_per_hour"] = ase_per_min_base * 60.0 * multiplier
+
+		# V2-ECONOMY-001: Ase Flame state + awakening overlay (one-shot consume)
+		var _sanctum_fl: Dictionary = {}
+		if ctx.save_data != null and ctx.save_data.has("sanctum") and typeof(ctx.save_data["sanctum"]) == TYPE_DICTIONARY:
+			_sanctum_fl = ctx.save_data["sanctum"]
+		var _fl_v: Variant = _sanctum_fl.get("ase_flame", {})
+		var _fl: Dictionary = _fl_v if _fl_v is Dictionary else {}
+		data["ase_flame_awakened"] = bool(_fl.get("awakened", false))
+
+		# Consume pending_awakening_banner — true once, then cleared.
+		var _show_overlay := false
+		if ctx is FlowContext and (ctx as FlowContext).pending_awakening_banner:
+			_show_overlay = true
+			(ctx as FlowContext).pending_awakening_banner = false
+		data["show_awakening_overlay"] = _show_overlay
+
+		# Awakening grant amount for overlay label (read from balance config).
+		var _aw_grant := 40
+		if ctx.config_service != null:
+			var _aw_bal: Dictionary = ctx.config_service.get_balance()
+			var _aw_data_v: Variant = _aw_bal.get("data", {})
+			var _aw_data: Dictionary = _aw_data_v if _aw_data_v is Dictionary else {}
+			var _aw_econ_v: Variant = _aw_data.get("economy", {})
+			var _aw_econ: Dictionary = _aw_econ_v if _aw_econ_v is Dictionary else {}
+			_aw_grant = int(_aw_econ.get("awakening_ase_grant", 40))
+		data["awakening_grant"] = _aw_grant
 		
 		
 		# SANCTUM-001: surface sanctum hub info (snapshot-only UI contract)
