@@ -109,10 +109,12 @@ func enter(ctx: RefCounted, t:int) -> void:
 			var _av_defn := VowService.get_definition(_av_id, _av_cfg)
 			var _av_tier := int(_av_raw.get("tier", 1))
 			_av_display = {
-				"vow_id":      _av_id,
-				"proverb_twi": str(_av_defn.get("proverb_twi", "")),
-				"proverb_en":  str(_av_defn.get("proverb_en", "")),
-				"tier":        _av_tier,
+				"vow_id":           _av_id,
+				"proverb_twi":      str(_av_defn.get("proverb_twi", "")),
+				"proverb_en":       str(_av_defn.get("proverb_en", "")),
+				"tier":             _av_tier,
+				# V2-VOW-002: compliance count for "N stages honored" label under proverb.
+				"compliance_count": int(_av_raw.get("compliance_count", 0)),
 			}
 
 	# V2-WEAVE-001: Thread reserve for ThreadReserveRow display
@@ -149,7 +151,9 @@ func enter(ctx: RefCounted, t:int) -> void:
 		"encounter_id": flow_ctx.encounter_id,
 		"roster_count": roster.size(),
 		"roster_preview": roster_preview,
-		"active_vow": _av_display,  # VOW-001: mantra data for SanctumScreen header
+		"active_vow":    _av_display,  # VOW-001: mantra data for SanctumScreen header
+		# V2-VOW-002: generic active effects for ActiveEffectsPanel (chips with popout).
+		"active_effects": _build_active_effects(flow_ctx),
 		"thread_reserve":     _thread_reserve,      # V2-WEAVE-001: Array[{virtue, quality_tier}]
 		"thread_reserve_cap": _thread_reserve_cap,  # V2-WEAVE-001: base reserve cap (default 4)
 		"sanctum_layout": SanctumLayoutService.snapshot_layout(flow_ctx.save_data),
@@ -167,3 +171,45 @@ func enter(ctx: RefCounted, t:int) -> void:
 	
 func exit(ctx: RefCounted, t: int) -> void:
 	pass
+
+
+## V2-VOW-002: Builds the active_effects array for the Sanctum ActiveEffectsPanel.
+## Shape per entry: { effect_id, label, direction, headline, body, duration_hint, source }
+## direction: "buff" | "debuff" | "neutral"
+## First consumer: vow doctrine (active vow) and vow-break debuff chip.
+## Future stories append entries here without changing the UI consumer.
+static func _build_active_effects(flow_ctx: FlowContext) -> Array:
+	var effects: Array = []
+
+	# Debuff chip takes priority — if vow just broke this session, show the break indicator.
+	if not flow_ctx.session_broken_vow_effect.is_empty():
+		effects.append(flow_ctx.session_broken_vow_effect.duplicate())
+		return effects
+
+	# Active vow doctrine chip.
+	var av := VowService.get_active_vow(flow_ctx.save_data)
+	if av.is_empty():
+		return effects
+
+	var vow_name := ""
+	var proverb_twi := ""
+	var proverb_en := ""
+	if flow_ctx.config_service != null:
+		var defn := VowService.get_definition(str(av.get("vow_id", "")), flow_ctx.config_service.get_balance())
+		vow_name    = str(defn.get("vow_name", ""))
+		proverb_twi = str(defn.get("proverb_twi", ""))
+		proverb_en  = str(defn.get("proverb_en", ""))
+
+	var compliance_count := int(av.get("compliance_count", 0))
+	var direction := "buff" if compliance_count > 0 else "neutral"
+
+	effects.append({
+		"effect_id":    "vow_active",
+		"label":        vow_name,
+		"direction":    direction,
+		"headline":     vow_name,
+		"body":         proverb_twi + "\n" + proverb_en if not proverb_twi.is_empty() else proverb_en,
+		"duration_hint": "Active until the run ends.",
+		"source":       "vow",
+	})
+	return effects

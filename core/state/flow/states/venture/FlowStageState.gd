@@ -156,7 +156,30 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				"active_id":  sc_dir,
 				"directives": dir_list,
 			},
+			# V2-VOW-002: passive mantra + condition hint for atmospheric display on stage overview.
+			# Shape: { vow_id, vow_name, proverb_twi, proverb_en, tier, condition_status, condition_hint } or {}.
+			"active_vow": _build_active_vow_with_hint(flow_ctx),
 		},
 		"actions": actions,
 		"meta": { "t": t },
 	}
+
+
+## V2-VOW-002: Builds active_vow dict for stage overview, extending the mantra with condition hint.
+## Returns {} if no active vow.
+static func _build_active_vow_with_hint(flow_ctx: FlowContext) -> Dictionary:
+	var cfg: Dictionary = flow_ctx.config_service.get_balance() if flow_ctx.config_service != null else {}
+	var mantra := VowService.get_active_vow_mantra(flow_ctx.save_data, cfg)
+	if mantra.is_empty():
+		return {}
+	# Get party ids for hint preview.
+	var party_ids: Array = []
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if sanctum_v is Dictionary:
+		var p_v: Variant = (sanctum_v as Dictionary).get("active_party_ids", [])
+		if p_v is Array:
+			party_ids = p_v
+	var hint := VowService.preview_stage_condition_hint(flow_ctx.save_data, party_ids, cfg)
+	mantra["condition_status"] = str(hint.get("status", "none"))
+	mantra["condition_hint"]   = str(hint.get("hint", ""))
+	return mantra

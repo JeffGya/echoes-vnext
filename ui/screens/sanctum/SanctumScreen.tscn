@@ -209,6 +209,23 @@ theme_type_variation = &"StatsPanel"
 text = "1 echoes"
 horizontal_alignment = 2
 
+[node name="ActiveEffectsPanel" type="PanelContainer" parent="RightSidebar"]
+unique_name_in_owner = true
+layout_mode = 2
+visible = false
+
+[node name="MarginContainer" type="MarginContainer" parent="RightSidebar/ActiveEffectsPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="ActiveEffectsList" type="HBoxContainer" parent="RightSidebar/ActiveEffectsPanel/MarginContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 6
+
 [node name="ThreadReservePanel" type="PanelContainer" parent="RightSidebar" unique_id=1380001001]
 layout_mode = 2
 
@@ -274,6 +291,45 @@ text = "House State"
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 2
+
+[node name="EffectDetailPanel" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+z_index = 10
+visible = false
+offset_right = 220.0
+offset_bottom = 150.0
+
+[node name="MarginContainer" type="MarginContainer" parent="EffectDetailPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="VBoxContainer" type="VBoxContainer" parent="EffectDetailPanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="EffectDetailHeadline" type="Label" parent="EffectDetailPanel/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.784, 0.663, 0.431, 1)
+autowrap_mode = 3
+
+[node name="EffectDetailBody" type="Label" parent="EffectDetailPanel/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.91, 0.816, 0.627, 1)
+autowrap_mode = 3
+
+[node name="EffectDetailDuration" type="Label" parent="EffectDetailPanel/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.659, 0.525, 0.353, 1)
 
 [node name="SnapShotView" type="RichTextLabel" parent="." unique_id=1171635051]
 unique_name_in_owner = true
