@@ -380,7 +380,7 @@ V1 locked directives (`protect`, `push`, `preserve`, `focus`) — **superseded**
 
 ---
 
-## Domain 6 — Economy
+## Domain 6 — Economy ✅ Done (V2-ECONOMY-001)
 
 ### V1 Current State
 
@@ -445,13 +445,16 @@ data.summoning.grade_costs: { uncalled: 60, called: 150, chosen: 400 }
 | Item | Action | Owner |
 |---|---|---|
 | `economy.ase` (active) | **Carryover** — field name, service choke points all valid | — |
-| `economy.ekwan` (placeholder) | **Carryover** → activated when building/crafting system ships | V2-ECONOMY-001+ |
+| `economy.ekwan` (placeholder) | ✅ **Done (V2-ECONOMY-001)** — Ekwan wired to stage rewards; displayed on Sanctum hub | — |
 | `EconomyService.spend_ase()` / `add_ase()` / `can_afford_ase()` | **Carryover** — valid single choke points | — |
+| `EconomyService.reward_stage_complete()` | ✅ **Done (V2-ECONOMY-001)** — now takes `ekwan_factor`; awards Ekwan; `reward_breakdown` entries include `currency` field | — |
 | Settlement model (no frame-based accrual) | **Carryover** | — |
+| Ase Flame dormancy gate | ✅ **Done (V2-ECONOMY-001)** — `sanctum.ase_flame.awakened` gates offline accrual; set on onboarding completion; 40 Ase granted | — |
+| Scout-return resolve screen | ✅ **Done (V2-ECONOMY-001)** — retreat/return_home always routes to RESOLVE with intel-gated partial Ase | — |
 | Relics (new currency) | **New Build** | V2-ECONOMY-001+ |
 | Faith / Harmony / Favor (visible states) | **New Build** | V2-ECONOMY-001+ / V2-SANCTUM-001+ |
 | Threads reserve (save key) | **New Build** | V2-WEAVE-001+ |
-| Ase offline accrual degradation (Sanctum stability) | **Rewrite** — currently flat; V2 says strain/neglect weakens recovery toward near-zero | V2-ECONOMY-001+ |
+| Ase offline accrual degradation (Sanctum stability) | **Deferred** — currently flat; V2 says strain/neglect weakens recovery toward near-zero | V2-ECONOMY-002+ |
 
 **Invariants:**
 - `economy.ase` and `economy.ekwan` keys must remain until migration is complete
@@ -471,6 +474,7 @@ These systems are already done and their save seams are live:
 | V2-BOND-002 ✅ | Bond trigger wiring + combat behavior + aftermath | All 8 stage-level triggers wired in FlowRuntime `_apply_combat_bond_triggers()`. Bond-aware BehaviorArbiter bias (`_apply_bond_bias()`) — friend protect bonus +12, rival protect penalty -10. Grief/survival aftermath modifiers via `_apply_bond_aftermath_modifiers()`. `rival_incidents[]` seeded for SANCTUM-005. 8 new BondTriggerTests. Save keys: `rival_incidents: []` in `sanctum`. |
 | VOW-001 | Vow doctrine | `vows: {}` (keyed by vow_id), `active_vow: {}` |
 | V2-VOW-001 ✅ | Vow condition evaluation, release, aftermath + 2 new vows + discovery | Condition eval wired at stage-entry (`tikoro_nko_agyina`, `praye_wokabomu`), situation-engage (`obi_nnim_kyere`), and stage-complete (obi bonus). Auto-break on second consecutive violation. EmotionRecoveryService.set_modifier applied on break. Discovery mechanic auto-unlocks vows via `small_party_all_survived`, `full_roster_diversity`, `all_situations_scouted` scenarios. FlowVowState snapshot iteration bug fixed (unlock now reflects in UI). `release_vow_if_due` extracted from FlowSanctumState into VowService. 9 new VowServiceTests. 2 new vow definitions in balance.json: `praye_wokabomu`, `obi_nnim_kyere`. |
+| V2-VOW-002 ✅ | Vow pressure display & outcome capture | Passive proverb mantra (`active_vow: { vow_id, vow_name, proverb_twi, proverb_en, tier }`) added to `flow.stage` snapshot. `vow_outcome` transient field added to `FlowContext`; cleared on stage entry; populated by `_apply_vow_break_aftermath()` (break) and `_store_vow_benefit_preview()` + `_apply_vow_stage_complete_benefit()` (benefit). `vow_outcome` added to `flow.resolve` final snapshot. `ResolveScreen` shows "The promise fractured." / "The promise held." + vow name + signed deltas (morale/fear/ase). No vow data during combat (design decision). 3 new deterministic VowServiceTests: mantra_projection_active_vow, outcome_shape_from_break, no_mantra_no_active_vow. |
 | V2-WEAVE-001 | Thread recovery model | `sanctum.threads: {}` (keyed by thread_id); `realms[id].realm_recovery_segments: []` |
 | V2-WEAVE-002 | Foundation Weaving Rite loop | per-echo `woven_threads: []`, per-echo `weave_memory_marks: []` |
 | V2-EMOTION-001 | Fear & Morale Readability | Shipped dual `morale_tier` + `fear_signal` display. Unified to single `emotional_status` in V2-EMOTION-002. |

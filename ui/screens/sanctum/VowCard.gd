@@ -45,5 +45,6 @@ func setup(entry: Dictionary) -> void:
 		badge.name = "_discovered_badge"
 		badge.text = "Discovered"
 		badge.add_theme_font_size_override("font_size", 10)
-		badge.add_theme_color_override("font_color", Color("#7AB5C8"))  # Mist Blue
+		badge.add_theme_color_override("font_color", Color("#7AB5C8"))  # Mist Blue — The Loom accent
+		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_info.add_child(badge)

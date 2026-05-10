@@ -65,6 +65,27 @@ static func is_tier_available(vow_id: String, tier: int, save_data: Dictionary) 
 	return tier <= int(entry.get("tier", 0))
 
 
+## V2-VOW-002: Returns the passive mantra dict for the stage snapshot, or {} if no active vow.
+## Shape: { vow_id, vow_name, proverb_twi, proverb_en, tier }
+## Used by FlowStageState to surface the active vow as atmospheric context (no condition state).
+static func get_active_vow_mantra(save_data: Dictionary, cfg: Dictionary) -> Dictionary:
+	var av := get_active_vow(save_data)
+	if av.is_empty():
+		return {}
+	var vow_id := str(av.get("vow_id", ""))
+	var tier   := int(av.get("tier", 1))
+	var defn   := get_definition(vow_id, cfg)
+	if defn.is_empty():
+		return {}
+	return {
+		"vow_id":      vow_id,
+		"vow_name":    str(defn.get("vow_name", "")),
+		"proverb_twi": str(defn.get("proverb_twi", "")),
+		"proverb_en":  str(defn.get("proverb_en", "")),
+		"tier":        tier,
+	}
+
+
 ## Returns a vow definition enriched with UI display fields, or {} if not found.
 ## Enriched fields: vow_id, proverb_twi, proverb_en, vow_name, benefit_label,
 ##   tradeoff_label, tier_effects, breaking_costs, unlock_scenario, unlock_description.
@@ -74,6 +95,141 @@ static func get_definition(vow_id: String, cfg: Dictionary) -> Dictionary:
 	if not (def_v is Dictionary):
 		return {}
 	return def_v
+
+
+# ---------------------------------------------------------------------------
+# Discovery scenario evaluation
+# ---------------------------------------------------------------------------
+
+## Pure static helper — evaluates whether a discovery scenario was triggered.
+## Called by FlowRuntime._check_vow_discovery() after combat resolution.
+##
+## Parameters:
+##   scenario      — unlock_scenario string from the vow definition
+##   party_actors  — Array of actor dicts from ectx.actors (faction == "echo", in party)
+##                   Each dict has: id (String), is_dead (bool), calling_origin (String)
+##   situations    — Array of situation dicts from explore_map.situations
+##                   Each dict has: revealed (bool)
+##   is_victory    — true if the stage ended in combat victory
+##
+## Returns true if the scenario condition is met, false otherwise.
+static func evaluate_discovery_scenario(
+	scenario:     String,
+	party_actors: Array,
+	situations:   Array,
+	is_victory:   bool,
+) -> bool:
+	match scenario:
+		"small_party_all_survived":
+			# Small party (1–2 echoes) where all survived and the stage was won.
+			var size := party_actors.size()
+			if size <= 0 or size >= 3 or not is_victory:
+				return false
+			for a_v in party_actors:
+				if (a_v as Dictionary).get("is_dead", false):
+					return false
+			return true
+
+		"full_roster_diversity":
+			# Victory with 3+ distinct calling_origins and no echo lost.
+			if not is_victory:
+				return false
+			var calling_set: Dictionary = {}
+			for a_v in party_actors:
+				var a: Dictionary = a_v
+				if a.get("is_dead", false):
+					return false
+				calling_set[str(a.get("calling_origin", "uncalled"))] = true
+			return calling_set.size() >= 3
+
+		"all_situations_scouted":
+			# Every situation in the stage was revealed (scouted) before or during this stage.
+			if situations.is_empty():
+				return false
+			for sit_v in situations:
+				if not (sit_v is Dictionary):
+					continue
+				if not bool((sit_v as Dictionary).get("revealed", false)):
+					return false
+			return true
+
+	return false
+
+
+# ---------------------------------------------------------------------------
+# Stage-entry condition preview (pure read — no mutations)
+# ---------------------------------------------------------------------------
+
+## Pure preview of the active vow's stage-entry condition status.
+## Used by FlowStageState to build the atmospheric condition hint line on Stage Overview.
+## Returns { status: "met"|"at_risk"|"none", hint: String }
+##   "none"  = no active vow, or condition is situation-based (obi_nnim_kyere — can't preview).
+##   "met"   = current party satisfies the vow condition.
+##   "at_risk" = current party does NOT satisfy the vow condition.
+## Never mutates save_data.
+static func preview_stage_condition_hint(
+	save_data:      Dictionary,
+	party_echo_ids: Array,
+	cfg:            Dictionary
+) -> Dictionary:
+	var av := get_active_vow(save_data)
+	if av.is_empty():
+		return { "status": "none", "hint": "" }
+
+	var vow_id := str(av.get("vow_id", ""))
+	var defn   := get_definition(vow_id, cfg)
+	if defn.is_empty():
+		return { "status": "none", "hint": "" }
+
+	match vow_id:
+		"tikoro_nko_agyina":
+			var benefit_v: Variant = defn.get("benefit", {})
+			var benefit: Dictionary = benefit_v if benefit_v is Dictionary else {}
+			var threshold := int(benefit.get("party_size_threshold", 3))
+			var party_size := party_echo_ids.size()
+			if party_size >= threshold:
+				return {
+					"status": "met",
+					"hint":   "The vow calls for three. The house answers.",
+				}
+			else:
+				return {
+					"status": "at_risk",
+					"hint":   "The vow calls for three. %d go forward." % party_size,
+				}
+
+		"praye_wokabomu":
+			var benefit_v: Variant = defn.get("benefit", {})
+			var benefit: Dictionary = benefit_v if benefit_v is Dictionary else {}
+			var threshold := int(benefit.get("calling_diversity_threshold", 2))
+			# Count distinct calling_origins among party echoes from the save roster.
+			var calling_origins: Dictionary = {}
+			var roster_v: Variant = save_data.get("sanctum", {})
+			if roster_v is Dictionary:
+				var roster_arr_v: Variant = (roster_v as Dictionary).get("roster", [])
+				if roster_arr_v is Array:
+					for echo_v in (roster_arr_v as Array):
+						if not (echo_v is Dictionary):
+							continue
+						var echo: Dictionary = echo_v
+						if party_echo_ids.has(str(echo.get("id", ""))):
+							var co := str(echo.get("calling_origin", "uncalled"))
+							calling_origins[co] = true
+			var distinct := calling_origins.size()
+			if distinct >= threshold:
+				return {
+					"status": "met",
+					"hint":   "Different callings walk together. The vow is honored.",
+				}
+			else:
+				return {
+					"status": "at_risk",
+					"hint":   "The vow asks for varied paths. One calling carries all.",
+				}
+
+		_:
+			# obi_nnim_kyere and any future situation-based vows — cannot preview from party alone.
+			return { "status": "none", "hint": "" }
 
 
 # ---------------------------------------------------------------------------

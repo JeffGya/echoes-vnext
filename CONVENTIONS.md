@@ -151,7 +151,7 @@ Every `transition()` MUST emit:
 
 ### FlowRuntime + FlowContext (`core/runtime/FlowRuntime.gd` + `core/state/flow/FlowContext.gd`)
 - `FlowRuntime.dispatch(action)` — single choke point for all state mutations
-- Key FlowContext fields: `sim_tick`, `last_snapshot`, `pending_party_ids`, `selected_summon_grade`, `encounter_ctx`, `encounter_machine`, `encounter_id`, `save_data`, `save_request`, `logger`, `dev_combat_objective`
+- Key FlowContext fields: `sim_tick`, `last_snapshot`, `pending_party_ids`, `selected_summon_grade`, `encounter_ctx`, `encounter_machine`, `encounter_id`, `save_data`, `save_request`, `logger`, `dev_combat_objective`, `vow_outcome` (V2-VOW-002: transient vow break/benefit dict for ResolveScreen; cleared on every stage entry)
 - `encounter_id` format: `"realm_id.stage_id"` (e.g. `"realm.01.stage.0"`). Set in `flow.select_stage` handler before transition. Used to derive unique placement seed path `"combat.placement.<encounter_id>"`. Never assign in FlowEncounterState — read-only there.
 - `refresh_snapshot()` reads `ctx.last_snapshot` as-is for non-SANCTUM states
 - For mid-state snapshot updates: use static `build_snapshot()` pattern, then call `refresh_snapshot()`
@@ -393,15 +393,24 @@ Crash-safe: write to `.tmp` → rename. Additive repair on load (adds missing fi
 | per echo | `woven_threads` | Array | `[]` | V2-WEAVE-002: accepted Threads integrated into Echo identity |
 | per echo | `weave_memory_marks` | Array | `[]` | V2-WEAVE-002: deferred rite memory marks |
 
+**V2-ECONOMY-001 additive keys (added 2026-05-10):**
+
+| Location | Key | Type | Default | Purpose |
+|---|---|---|---|---|
+| `sanctum` | `ase_flame` | Dict | `{awakened:false, boost_remaining_seconds:0, boost_per_bank_tick:0}` | V2-ECONOMY-001: Ase Flame dormancy gate; awakened by onboarding completion |
+
 **Vow key (canonical):** `sanctum.vows` — Dict keyed by `vow_id` → `{ tier: int, discovered_realm: String }`.
 The old `unlocked_vows: []` Array key is superseded. SaveService repair migrates old saves on load.
 
 ### Economy Settlement (`core/economy/EconomyService.gd` + `EconomyAccrualService.gd`)
 - No frame-based accrual. **Settle before every Ase spend.**
 - `economy.settle_time` action: computes elapsed, applies math, updates `last_settle_unix`. Does NOT save.
-- Offline accrual: 50% decay → 0 over 8hr cap. Applied once per session on Continue.
+- Offline accrual: 50% decay → 0 over 8hr cap. Applied once per session on Continue. **Gated by `sanctum.ase_flame.awakened`** — no Ase accrues while house is dormant (V2-ECONOMY-001).
 - UI may predict/animate balance; Core commits. Core is authoritative if they disagree.
 - Ase summon costs (grade-based): uncalled=60, called=150, chosen=400
+- **Ekwan** is awarded on stage completion only. Scales off final Ase awarded (post-redo, post-virtue) via `ekwan_base_factor` and `ekwan_shrine_multiplier` in `balance.json → data.rewards`.
+- **Partial Ase** awarded on retreat/return_home when ≥1 situation revealed (intel-gated). Factor: `partial_intel_reward_factor` × stage base reward. No Ekwan on partial runs.
+- **reward_breakdown** entries now include `"currency": "ase" | "ekwan"` field. UI colors Ekwan entries in Amber `#E8A030`.
 
 ### DirectiveService (`core/directives/DirectiveService.gd`) — V2 (V2-DIRECTIVE-001)
 
@@ -431,15 +440,15 @@ Full field shapes live in each FlowState file (`core/state/flow/states/`).
 
 | Screen | Snapshot type | Key data fields | Action slots |
 |--------|--------------|-----------------|-------------|
-| SanctumScreen | `flow.sanctum` | sanctum_name, ase_balance, roster_count, roster_preview (3 echoes + emotion), active_party_count, party_slots | nav.echo_party, nav.realm_select, nav.summon, cta.enter_stage (disabled when no realm) |
+| SanctumScreen | `flow.sanctum` | sanctum_name, ase_balance, ekwan_balance, ase_rate_per_hour, ase_flame_awakened, show_awakening_overlay (one-shot bool), awakening_grant (int), roster_count, roster_preview (3 echoes + emotion), active_party_count, party_slots | nav.echo_party, nav.realm_select, nav.summon, cta.enter_stage (disabled when no realm) |
 | SummonScreen | `flow.summon` | ase_balance, selected_grade, summon_grade_options, summon_disabled, pending_summon_reveals | nav.back, cta.summon, overlay.dismiss_reveals |
 | EchoPartyScreen | `flow.echo_party` | max_party_size (5), echoes (id/name/rank/level/in_party/archetype/calling/calling_eligible/stats/xp/bond_entries), active_party_ids | nav.back (party toggles are immediate via sanctum.party.toggle) |
 | CombatBoardScreen | `flow.encounter` | actors (projected), round, round_phase, initiative_order, objective_state, retreat fields (pre_combat only) | nav.back, cta.retreat (when eligible) |
-| ResolveScreen | `flow.resolve` | victory, reason, round_ended, actors (projected), objective_state, enemies_defeated, echoes_survived, ase_awarded, rank (S/A/B/C/D/F), reward_breakdown (Array of {label, delta}), xp_events (Array of XpEvent) | Victory: `cta.continue` → `flow.complete_stage` (destination=sanctum), `cta.next_stage` → `flow.complete_stage`. Defeat: `cta.continue` → `flow.go_state` (no stage advance). |
+| ResolveScreen | `flow.resolve` | victory, reason, round_ended, actors (projected), objective_state, enemies_defeated, echoes_survived, ase_awarded, ekwan_awarded, rank (S/A/B/C/D/F), reward_breakdown (Array of {label, delta, currency}), xp_events (Array of XpEvent), emotion_summary (Array of per-echo emotion arc), vow_outcome ({event, vow_id, vow_name, proverb_twi, tier, morale_delta, fear_delta, ase_delta, echoes_affected} or {}), **run_type** ("" for combat, "scout_return" for retreat/return_home) | Victory: `cta.continue` → `flow.complete_stage` (destination=sanctum), `cta.next_stage` → `flow.complete_stage`. Defeat: `cta.continue` → `flow.go_state` (no stage advance). Scout return: `cta.continue` → `flow.go_state` (→ sanctum). `run_type="scout_return"` hides rank_badge, vow sections, next_stage; banner = "Scout Return" in Mist Blue. |
 | RealmSelectScreen | `flow.realm_select` | title, current_realm_id, realms[] (id/name/virtue/description/stage_count_min/max/status/locked) | nav.back |
 | ~~RealmInitScreen~~ | `flow.realm_init` | **Removed (UI-003)** — FlowRealmInitState now auto-advances to `flow.stage_map` on enter(); no screen rendered. | — |
 | StageMapScreen | `flow.stage_map` | realm_id, realm_name, current_stage_id, stages_completed_count, stages[] (id, name, status, stage_type, stage_description, objective_count, objectives[{obj_index, obj_type, obj_description}]), party_preview | cta.enter_stage, nav.back |
-| StageExploreScreen (preview mode) | `flow.stage` | stage_id, stage_name, stage_type, stage_description, objective_count, objectives[] ({obj_index, obj_type, obj_description}), realm_id, party_preview, directive ({active_id, directives[]}), map_width, map_height, map_entry_pos, map_situations[] ({pos}) | cta.start, nav.back |
+| StageExploreScreen (preview mode) | `flow.stage` | stage_id, stage_name, stage_type, stage_description, objective_count, objectives[] ({obj_index, obj_type, obj_description}), realm_id, party_preview, directive ({active_id, directives[]}), map_width, map_height, map_entry_pos, map_situations[] ({pos}), active_vow ({vow_id, vow_name, proverb_twi, proverb_en, tier} or {}) | cta.start, nav.back |
 | VowScreen | `flow.vow_manage` | can_pledge (bool), active_vow ({vow_id, tier, proverb_twi, proverb_en}), available_vows[] ({vow_id, vow_name, proverb_twi, proverb_en, description, benefit_label, tradeoff_label, breaking_cost_hint, is_unlocked, max_tier_unlocked, is_active, discovered_realm, unlock_hint}) | nav.back, cta.pledge (disabled when vow already active), cta.break (disabled when no active vow) |
 | WeavingRiteScreen | `flow.weaving_rite` | phase, selected_echo, thread_reserve, selected_thread_id, invitation_lines (prose clues), outcome, aftermath_lines, non_chosen | nav.back, cta.begin_rite, cta.confirm |
 

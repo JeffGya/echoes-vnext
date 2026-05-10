@@ -145,7 +145,8 @@ func dispatch(action: Dictionary) -> Dictionary:
 			flow_ctx.encounter_id = flow_ctx.realm_id + "." + stage_id  # BUG-003: was always ""
 			# PROG-009: persist skill loadout to save before entering the stage
 			_persist_equipped_skills(t)
-			# VOW-001: vow condition evaluated on actual entry (go_state→STAGE_EXPLORE), not here.
+			# VOW-001 / V2-VOW-002: vow entry condition evaluated on actual entry (go_state→STAGE_EXPLORE),
+			# not here — covers first entry and re-entry after defeat.
 			logger.info(t, "state.stage_select", "Stage selected", { "stage_id": stage_id })
 			flow_machine.transition(FlowStateIds.STAGE, flow_ctx, logger, t, "ui.flow.select_stage")
 
@@ -163,6 +164,8 @@ func dispatch(action: Dictionary) -> Dictionary:
 				flow_ctx.save_request_reason = "continue_first_boot"
 
 			_apply_offline_accrual_if_needed(t, "flow.continue")
+			# V2-ECONOMY-001: synchronize emotion tick at settlement (same choke point as accrual)
+			_apply_sanctum_emotion_tick(t)
 
 			# PROG-001: patch old echo dicts that pre-date draw-order v2 fields
 			_repair_echo_schema(t)
@@ -655,10 +658,6 @@ func _handle_complete_stage(t: int, destination_override: String = "") -> void:
 
 	# VOW-001: post-stage complete benefit (obi_nnim_kyere full-scout bonus).
 	_apply_vow_stage_complete_benefit(t)
-	# VOW-001: check if any vow discovery scenario was triggered this stage.
-	_check_vow_discovery(t)
-	flow_ctx.encounter_ctx     = null
-	flow_ctx.encounter_machine = null
 
 	# On combat victory: resolve the situation that triggered the encounter.
 	# engage_situation deliberately left it unresolved so a defeat allows retry.
@@ -700,6 +699,13 @@ func _handle_complete_stage(t: int, destination_override: String = "") -> void:
 					"obj_found":    _vmap.get("objectives_found", 0),
 					"obj_total":    _vmap.get("objectives_total", 0),
 				})
+
+	# VOW-001: discovery check runs AFTER the combat-victory situation write-back so
+	# all_situations_scouted reads the correct revealed state. ectx is still non-null
+	# here so _check_vow_discovery can read is_dead from ectx.actors; nulled right after.
+	_check_vow_discovery(t)
+	flow_ctx.encounter_ctx     = null
+	flow_ctx.encounter_machine = null
 
 	# V2-WEAVE-001: load thread config (read-only)
 	var _bal_v: Variant = flow_ctx.config_service.get_balance()
@@ -841,6 +847,18 @@ func _handle_onboarding_name_confirm(action: Dictionary, t: int) -> void:
 	sanctum["name"] = name
 	OnboardingService.mark_complete(flow_ctx.save_data, cfg)
 	KeeperIntroServiceScript.start_after_chapter_one(flow_ctx.save_data, cfg)
+
+	# V2-ECONOMY-001: Ase Flame awakening — set flag + grant 40 Ase + queue banner (first time only)
+	var _aw_flame_v: Variant = sanctum.get("ase_flame", {})
+	var _aw_flame: Dictionary = _aw_flame_v if _aw_flame_v is Dictionary else {}
+	if not bool(_aw_flame.get("awakened", false)):
+		_aw_flame["awakened"] = true
+		sanctum["ase_flame"] = _aw_flame
+		var _grant := int(_get_balance_economy_cfg().get("awakening_ase_grant", 40))
+		econ.add_ase(_grant, "economy.awakening_grant", logger, t)
+		flow_ctx.pending_awakening_banner = true
+		logger.info(t, "economy.ase_flame.awakened", "Ase Flame awakened", { "grant": _grant })
+
 	_mark_save_requested("onboarding.name.confirm")
 
 	logger.info(t, "onboarding.name.confirm", "Chapter I complete; Sanctum name set", {
@@ -1236,13 +1254,25 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 	})
 
 	if success:
+		# V2-ECONOMY-001: Intel-gated partial Ase award before clearing encounter context.
+		var _intel_count := _count_revealed_situations()
+		var _partial_ase := 0
+		if _intel_count > 0:
+			var _pf := float(_get_balance_rewards_cfg().get("partial_intel_reward_factor", 0.12))
+			_partial_ase = roundi(float(_get_stage_base_reward()) * _pf)
+			if _partial_ase > 0:
+				econ.add_ase(_partial_ase, "retreat_intel_partial", logger, t)
+		flow_ctx.pending_scout_return_ase         = _partial_ase
+		flow_ctx.pending_scout_return_intel_count = _intel_count
+
 		# Clear encounter context — no emotion drift on retreat.
 		flow_ctx.encounter_ctx    = null
 		flow_ctx.encounter_machine = null
 		flow_ctx.save_request      = true
 		flow_ctx.save_request_reason = "encounter.retreat"
 		_apply_sanctum_emotion_tick(t)
-		flow_machine.transition(FlowStateIds.SANCTUM, flow_ctx, logger, t, "encounter.retreat.success")
+		flow_ctx.last_snapshot = _build_scout_return_snapshot(t)
+		flow_machine.transition(FlowStateIds.RESOLVE, flow_ctx, logger, t, "encounter.retreat.scout_return")
 	else:
 		logger.info(t, "encounter.retreat.failed", "Retreat failed — combat begins", {
 			"encounter_id": encounter_id,
@@ -1762,6 +1792,8 @@ func _end_round(t: int) -> void:
 		# so build_final_snapshot() can read them via echo["_sanctum_bark"].
 		var _arr_victory: bool = bool(ectx.combat_result.get("victory", false))
 		_select_arrival_barks_for_party(_arr_victory, t)
+		# V2-VOW-002: probe benefit before final snapshot so resolve screen can include it.
+		_store_vow_benefit_preview(t)
 		# FinalCombatSnapshot — emits type "flow.resolve"; stored on ectx.final_snapshot.
 		var final_snap: Dictionary = FlowEncounterState.build_final_snapshot(flow_ctx, t)
 		ectx.final_snapshot    = final_snap
@@ -2007,6 +2039,15 @@ func _apply_offline_accrual_if_needed(t: int, source: String) -> int:
 		flow_ctx.save_data["economy"] = {}
 	var econ_data := flow_ctx.save_data["economy"] as Dictionary
 
+	# V2-ECONOMY-001: gate on ase_flame.awakened — house is dormant before onboarding completes
+	var _sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var _sanctum_gate: Dictionary = _sanctum_v if _sanctum_v is Dictionary else {}
+	var _flame_v: Variant = _sanctum_gate.get("ase_flame", {})
+	var _flame_gate: Dictionary = _flame_v if _flame_v is Dictionary else {}
+	if not bool(_flame_gate.get("awakened", false)):
+		logger.debug(t, "economy.offline.noop", "Offline accrual skipped (house dormant)", { "source": source })
+		return 0
+
 	var last_offline := int(econ_data.get("last_offline_unix", now_unix))
 	var raw_delta := now_unix - last_offline
 
@@ -2080,6 +2121,13 @@ func _apply_offline_accrual_if_needed(t: int, source: String) -> int:
 	if offline_cap_seconds > 0 and delta_seconds > offline_cap_seconds:
 		delta_seconds = offline_cap_seconds
 		clamped_cap = true
+
+	# Multiplier seam (Faith later). Economy stays emotion-agnostic.
+	var multiplier := 1.0
+	# V2-ECONOMY-001: boost stub — no-op now, extensibility hook for future bank-tick boost system
+	var _boost := float(_flame_gate.get("boost_per_bank_tick", 0.0))
+	multiplier += _boost
+
 
 	var ase_before := int(econ_data.get("ase", 0))
 
@@ -2361,6 +2409,108 @@ func _get_balance_economy_cfg() -> Dictionary:
 	var econ_cfg: Dictionary = econ_v as Dictionary if econ_v is Dictionary else {}
 
 	return econ_cfg
+
+func _get_balance_rewards_cfg() -> Dictionary:
+	var balance := config_service.get_balance()
+	if balance.is_empty():
+		return {}
+	var data_v = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var rewards_v = data.get("rewards", {})
+	return rewards_v if rewards_v is Dictionary else {}
+
+# V2-ECONOMY-001: Count how many situations in the current stage have been revealed.
+func _count_revealed_situations() -> int:
+	if flow_ctx.realm_id.is_empty() or flow_ctx.stage_id.is_empty():
+		return 0
+	var _stage_idx := int(flow_ctx.stage_id.replace("stage.", ""))
+	var _realm_v: Variant = flow_ctx.save_data.get("realms", {}).get(flow_ctx.realm_id, {})
+	var _realm: Dictionary = _realm_v if _realm_v is Dictionary else {}
+	var _stages_v: Variant = _realm.get("stages", [])
+	var _stages: Array = _stages_v if _stages_v is Array else []
+	if _stage_idx >= _stages.size() or not _stages[_stage_idx] is Dictionary:
+		return 0
+	var _stage: Dictionary = _stages[_stage_idx]
+	var _emap_v: Variant = _stage.get("explore_map", {})
+	var _emap: Dictionary = _emap_v if _emap_v is Dictionary else {}
+	var _sits_v: Variant = _emap.get("situations", [])
+	var _sits: Array = _sits_v if _sits_v is Array else []
+	var count := 0
+	for s in _sits:
+		if s is Dictionary and bool((s as Dictionary).get("revealed", false)):
+			count += 1
+	return count
+
+# V2-ECONOMY-001: Get the base reward for the current stage's primary objective type.
+func _get_stage_base_reward() -> int:
+	var _stage_idx := int(flow_ctx.stage_id.replace("stage.", ""))
+	var _realm_v: Variant = flow_ctx.save_data.get("realms", {}).get(flow_ctx.realm_id, {})
+	var _realm: Dictionary = _realm_v if _realm_v is Dictionary else {}
+	var _stages_v: Variant = _realm.get("stages", [])
+	var _stages: Array = _stages_v if _stages_v is Array else []
+	var _obj_type := "combat"
+	if _stage_idx < _stages.size() and _stages[_stage_idx] is Dictionary:
+		var _stage: Dictionary = _stages[_stage_idx]
+		var _objs_v: Variant = _stage.get("objectives", [])
+		var _objs: Array = _objs_v if _objs_v is Array else []
+		if not _objs.is_empty() and _objs[0] is Dictionary:
+			_obj_type = str((_objs[0] as Dictionary).get("obj_type", "combat"))
+	var _w_v: Variant = _get_balance_rewards_cfg().get("objective_weights", {})
+	var _w: Dictionary = _w_v if _w_v is Dictionary else {}
+	return int(_w.get(_obj_type, _w.get("combat", 30)))
+
+# V2-ECONOMY-001: Build the scout-return resolve snapshot for retreat / return_home.
+func _build_scout_return_snapshot(t: int) -> Dictionary:
+	var _ase   := flow_ctx.pending_scout_return_ase
+	var _intel := flow_ctx.pending_scout_return_intel_count
+	var breakdown: Array = []
+	if _ase > 0:
+		breakdown.append({ "label": "Scout return", "delta": _ase, "currency": "ase" })
+
+	var actor_preview: Array = []
+	var _sanctum_svc := SanctumService.new(flow_ctx.save_data)
+	var _party_actors := _sanctum_svc.get_party_actors()
+	for _a_v in _party_actors:
+		if not _a_v is Dictionary:
+			continue
+		var _a: Dictionary = _a_v
+		var _emo_v: Variant = _a.get("emotion", {})
+		var _emo: Dictionary = _emo_v if _emo_v is Dictionary else {}
+		actor_preview.append({
+			"id":               str(_a.get("id", "")),
+			"name":             str(_a.get("name", "")),
+			"calling_origin":   str(_a.get("calling_origin", "")),
+			"emotional_status": EmotionService.get_emotional_status(
+				int(_emo.get("morale_current", 50)),
+				int(_emo.get("fear_current",   0))
+			),
+		})
+
+	flow_ctx.pending_scout_return_ase         = 0
+	flow_ctx.pending_scout_return_intel_count = 0
+
+	return {
+		"type": FlowStateIds.RESOLVE,
+		"meta": { "sim_tick": t },
+		"data": {
+			"run_type":        "scout_return",
+			"ase_awarded":     _ase,
+			"ekwan_awarded":   0,
+			"intel_count":     _intel,
+			"reward_breakdown": breakdown,
+			"actors":          actor_preview,
+			"victory":         false,
+			"rank":            "",
+		},
+		"actions": {
+			"cta.continue": {
+				"type":  "flow.go_state",
+				"to":    FlowStateIds.SANCTUM,
+				"label": "Return to Sanctum",
+				"slot":  "cta.continue",
+			}
+		}
+	}
 	
 func _get_max_online_settle_delta_seconds() -> int:
 	# Online settle guard. Offline accrual has its own capped window.
@@ -3538,33 +3688,32 @@ func _check_vow_discovery(t: int) -> void:
 
 	var unlocked := VowService.get_unlocked_vows(flow_ctx.save_data)
 
-	# Gather data needed for scenario checks.
-	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
-	var roster: Array = []
-	var party_ids: Array = []
-	if sanctum_v is Dictionary:
-		var r_v: Variant = (sanctum_v as Dictionary).get("roster", [])
-		if r_v is Array:
-			roster = r_v
-		var p_v: Variant = (sanctum_v as Dictionary).get("active_party_ids", [])
-		if p_v is Array:
-			party_ids = p_v
-
-	# Determine combat outcome.
+	# Determine combat outcome from the final resolve snapshot.
 	var _last_snap_data_v: Variant = flow_ctx.last_snapshot.get("data", {})
 	var _last_snap_data: Dictionary = _last_snap_data_v if _last_snap_data_v is Dictionary else {}
 	var is_victory := bool(_last_snap_data.get("victory", false))
 
-	# Collect party echoes that survived (not dead) for scenario checks.
-	var party_echoes: Array = []
-	for echo_v in roster:
-		if not (echo_v is Dictionary):
-			continue
-		var echo: Dictionary = echo_v
-		if party_ids.has(str(echo.get("id", ""))):
-			party_echoes.append(echo)
+	# Collect party actor dicts from ectx.actors — use runtime actors (not save roster) so
+	# is_dead reflects actual combat deaths (is_dead is runtime-only, never written to save).
+	# ectx is still non-null here; it is nulled immediately after _check_vow_discovery returns.
+	var party_ids: Array = []
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if sanctum_v is Dictionary:
+		var p_v: Variant = (sanctum_v as Dictionary).get("active_party_ids", [])
+		if p_v is Array:
+			party_ids = p_v
 
-	# Gather current stage situations.
+	var party_actors: Array = []
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	if ectx != null:
+		for a_v in ectx.actors:
+			if not (a_v is Dictionary):
+				continue
+			var a: Dictionary = a_v
+			if str(a.get("faction", "")) == "echo" and party_ids.has(str(a.get("id", ""))):
+				party_actors.append(a)
+
+	# Gather current stage situations (already updated by situation write-back before this call).
 	var situations: Array = []
 	if not flow_ctx.stage_id.is_empty():
 		var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
@@ -3576,70 +3725,30 @@ func _check_vow_discovery(t: int) -> void:
 					situations = sits_v
 
 	for vow_id in defs:
-		# Skip already-unlocked vows.
 		if unlocked.has(vow_id):
 			continue
-
 		var defn_v: Variant = defs[vow_id]
 		if not (defn_v is Dictionary):
 			continue
-		var defn: Dictionary = defn_v
-		var scenario := str(defn.get("unlock_scenario", ""))
-
-		var triggered := false
-		match scenario:
-			"small_party_all_survived":
-				# Small party (< 3) where all deployed echoes survived and there was a victory.
-				var size := party_echoes.size()
-				if size > 0 and size < 3 and is_victory:
-					var all_alive := true
-					for pe in party_echoes:
-						if bool((pe as Dictionary).get("is_dead", false)):
-							all_alive = false
-							break
-					triggered = all_alive
-
-			"full_roster_diversity":
-				# Stage completed with echoes from 3+ distinct calling_origins, all surviving.
-				if is_victory:
-					var calling_set: Dictionary = {}
-					var all_alive := true
-					for pe in party_echoes:
-						if bool((pe as Dictionary).get("is_dead", false)):
-							all_alive = false
-							break
-						calling_set[str((pe as Dictionary).get("calling_origin", "uncalled"))] = true
-					triggered = all_alive and calling_set.size() >= 3
-
-			"all_situations_scouted":
-				# All situations in the stage were revealed before engagement.
-				if situations.size() > 0:
-					var all_revealed := true
-					for sit_v in situations:
-						if not (sit_v is Dictionary):
-							continue
-						if not bool((sit_v as Dictionary).get("revealed", false)):
-							all_revealed = false
-							break
-					triggered = all_revealed
-
-		if triggered:
+		var scenario := str((defn_v as Dictionary).get("unlock_scenario", ""))
+		if VowService.evaluate_discovery_scenario(scenario, party_actors, situations, is_victory):
 			VowService.unlock_vow(vow_id, flow_ctx.realm_id, flow_ctx.save_data, flow_ctx, logger, t)
 			# V2-VOW-002: record in session list for "Discovered" badge and ResolveScreen reveal.
-			var _cfg_disc: Dictionary = config_service.get_balance()
-			var _defn_disc := VowService.get_definition(vow_id, _cfg_disc)
-			flow_ctx.session_unlocked_vows.append({
-				"vow_id":      vow_id,
-				"vow_name":    str(_defn_disc.get("vow_name", "")),
-				"proverb_twi": str(_defn_disc.get("proverb_twi", "")),
-				"proverb_en":  str(_defn_disc.get("proverb_en", "")),
-			})
+			# and "Discovered" badge on VowScreen. Resets on new FlowContext (new boot).
+			var _disc_defn := VowService.get_definition(vow_id, cfg)
+			if not _disc_defn.is_empty():
+				flow_ctx.session_unlocked_vows.append({
+					"vow_id":      vow_id,
+					"vow_name":    str(_disc_defn.get("vow_name", "")),
+					"proverb_twi": str(_disc_defn.get("proverb_twi", "")),
+					"proverb_en":  str(_disc_defn.get("proverb_en", "")),
+				})
 
 
 # VOW-001 / V2-VOW-002: Apply stage-entry vow condition (party size / calling diversity).
-# Called from flow.go_state→STAGE_EXPLORE (covers first entry and re-entry after defeat).
+# Called from flow.go_state → STAGE_EXPLORE (covers first entry and re-entry after defeat).
 func _apply_vow_stage_entry_condition(t: int) -> void:
-	# V2-VOW-002: tick guard — prevent double-fire if two paths both enter STAGE_EXPLORE at same tick.
+	# V2-VOW-002: tick guard — prevents double-fire if two paths both route through STAGE_EXPLORE.
 	if t == flow_ctx.vow_entry_check_t:
 		return
 	flow_ctx.vow_entry_check_t = t
@@ -3705,6 +3814,34 @@ func _apply_vow_stage_entry_condition(t: int) -> void:
 	var morale_d := int(result.get("morale_delta", 0))
 	var fear_d   := int(result.get("fear_delta", 0))
 	_apply_vow_emotion_to_party(party_ids, morale_d, fear_d, "vow.condition." + status, cfg, t)
+
+	# V2-VOW-002: compliance tracking — increment count and record outcome for resolve screen.
+	if status == "compliant":
+		var _s_v: Variant = flow_ctx.save_data.get("sanctum", {})
+		var _new_count := 0
+		if _s_v is Dictionary:
+			var _av_s: Dictionary = (_s_v as Dictionary).get("active_vow", {})
+			if not _av_s.is_empty():
+				_new_count = int(_av_s.get("compliance_count", 0)) + 1
+				_av_s["compliance_count"] = _new_count
+				(_s_v as Dictionary)["active_vow"] = _av_s
+		# Store compliant vow_outcome only if break hasn't already set it (break takes precedence).
+		if flow_ctx.vow_outcome.is_empty():
+			var _av_c := VowService.get_active_vow(flow_ctx.save_data)
+			var _defn_c := VowService.get_definition(str(_av_c.get("vow_id", "")), cfg)
+			flow_ctx.vow_outcome = {
+				"event":            "compliant",
+				"vow_id":           str(_av_c.get("vow_id", "")),
+				"vow_name":         str(_defn_c.get("vow_name", "")),
+				"proverb_twi":      str(_defn_c.get("proverb_twi", "")),
+				"tier":             int(_av_c.get("tier", 1)),
+				"morale_delta":     morale_d,
+				"fear_delta":       0,
+				"bond_score_delta": 0,
+				"ase_delta":        0,
+				"echoes_affected":  party_ids,
+				"compliance_count": _new_count,
+			}
 
 	# V2-VOICE-001: vow stage-entry bark from party leader (or first party echo).
 	if status in ["benefit", "penalty"]:
@@ -3822,6 +3959,20 @@ func _apply_vow_stage_complete_benefit(t: int) -> void:
 		"vow_id":      str(av.get("vow_id", "")),
 		"morale_delta": morale_d,
 	})
+	# V2-VOW-002: store vow_outcome for resolve screen (overwrites preview set by _store_vow_benefit_preview).
+	var _defn_b := VowService.get_definition(str(av.get("vow_id", "")), cfg)
+	flow_ctx.vow_outcome = {
+		"event":            "benefit",
+		"vow_id":           str(av.get("vow_id", "")),
+		"vow_name":         str(_defn_b.get("vow_name", "")),
+		"proverb_twi":      str(_defn_b.get("proverb_twi", "")),
+		"tier":             int(av.get("tier", 1)),
+		"morale_delta":     morale_d,
+		"fear_delta":       0,
+		"bond_score_delta": 0,
+		"ase_delta":        0,
+		"echoes_affected":  party_ids,
+	}
 	flow_ctx.save_request = true
 
 
@@ -3946,6 +4097,34 @@ func _apply_vow_break_aftermath(summary: Dictionary, cfg: Dictionary, t: int) ->
 		if fear_d != 0:
 			EmotionService.apply_fear_delta(echo, fear_d, "vow.break", fear_threshold, logger, t)
 		EmotionRecoveryService.set_modifier(echo, vow_morale_mul, vow_fear_mul, mod_ticks, logger, t)
+
+	# V2-VOW-002: store vow_outcome for resolve screen display.
+	if not summary.is_empty():
+		var _vow_defn := VowService.get_definition(str(summary.get("vow_id", "")), cfg)
+		var _break_name := str(_vow_defn.get("vow_name", ""))
+		flow_ctx.vow_outcome = {
+			"event":            "break",
+			"vow_id":           str(summary.get("vow_id", "")),
+			"vow_name":         _break_name,
+			"proverb_twi":      str(_vow_defn.get("proverb_twi", "")),
+			"tier":             int(summary.get("tier", 1)),
+			"morale_delta":     int(summary.get("morale_delta", 0)),
+			"fear_delta":       int(summary.get("fear_delta", 0)),
+			"bond_score_delta": int(summary.get("bond_score_delta", 0)),
+			"ase_delta":        -int(summary.get("ase_spent", 0)),
+			"echoes_affected":  _get_roster_echo_ids(),
+		}
+		# V2-VOW-002: store transient debuff chip for Sanctum ActiveEffectsPanel.
+		# Cleared on next stage entry (_apply_vow_stage_entry_condition).
+		flow_ctx.session_broken_vow_effect = {
+			"effect_id":    "vow_broken",
+			"label":        _break_name,
+			"direction":    "debuff",
+			"headline":     "Vow Broken — " + _break_name,
+			"body":         "The promise fractured. Fear fell upon the house.",
+			"duration_hint": "Clears when you re-enter a stage.",
+			"source":       "vow",
+		}
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -4082,13 +4261,21 @@ func _handle_stage_return_home(_action: Dictionary, t: int) -> void:
 		FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
 		flow_ctx.save_request        = true
 		flow_ctx.save_request_reason = "stage.escaped"
-		var snap_ok := FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
-		snap_ok["data"]["return_home_result"] = {
-			"success": true,
-			"message": "The party slips away into the dark and finds the path home.",
-		}
-		flow_ctx.last_snapshot = snap_ok
-		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+		# V2-ECONOMY-001: Intel-gated partial Ase award.
+		var _intel_count := _count_revealed_situations()
+		var _partial_ase := 0
+		if _intel_count > 0:
+			var _pf := float(_get_balance_rewards_cfg().get("partial_intel_reward_factor", 0.12))
+			_partial_ase = roundi(float(_get_stage_base_reward()) * _pf)
+			if _partial_ase > 0:
+				econ.add_ase(_partial_ase, "return_home_intel_partial", logger, t)
+		flow_ctx.pending_scout_return_ase         = _partial_ase
+		flow_ctx.pending_scout_return_intel_count = _intel_count
+
+		_apply_sanctum_emotion_tick(t)
+		flow_ctx.last_snapshot = _build_scout_return_snapshot(t)
+		flow_machine.transition(FlowStateIds.RESOLVE, flow_ctx, logger, t, "stage.return_home.scout_return")
 	else:
 		# Escape failed — show overlay. Full consequence mechanic deferred to V2-INTEL-002.
 		stage["explore_map"] = explore_map
@@ -4474,3 +4661,65 @@ func _select_arrival_barks_for_party(is_victory: bool, t: int) -> void:
 		"is_victory":   is_victory,
 		"barker_count": barkers.size(),
 	})
+
+
+## V2-VOW-002: Pure probe — evaluates whether a stage-complete vow benefit is due and stores a
+## provisional vow_outcome on FlowContext so build_final_snapshot() can include it in the
+## resolve snapshot. No emotion mutations here; actual deltas are applied later by
+## _apply_vow_stage_complete_benefit() inside _handle_complete_stage().
+func _store_vow_benefit_preview(t: int) -> void:
+	var av := VowService.get_active_vow(flow_ctx.save_data)
+	if av.is_empty():
+		return
+	# Do not overwrite a break outcome already stored this stage.
+	if not flow_ctx.vow_outcome.is_empty():
+		return
+	var cfg := config_service.get_balance()
+	var situations: Array = []
+	if not flow_ctx.stage_id.is_empty():
+		var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
+		if not stage.is_empty():
+			var map_v: Variant = stage.get("explore_map", {})
+			if map_v is Dictionary:
+				var sits_v: Variant = (map_v as Dictionary).get("situations", [])
+				if sits_v is Array:
+					situations = sits_v
+	var result := VowService.evaluate_stage_complete_benefit(flow_ctx.save_data, situations, cfg)
+	var morale_d := int(result.get("morale_delta", 0))
+	if morale_d == 0:
+		return  # no benefit due — leave vow_outcome empty
+	var defn := VowService.get_definition(str(av.get("vow_id", "")), cfg)
+	var party_ids: Array = []
+	var sanctum_vp: Variant = flow_ctx.save_data.get("sanctum", {})
+	if sanctum_vp is Dictionary:
+		var p_v: Variant = (sanctum_vp as Dictionary).get("active_party_ids", [])
+		if p_v is Array:
+			party_ids = p_v
+	flow_ctx.vow_outcome = {
+		"event":            "benefit",
+		"vow_id":           str(av.get("vow_id", "")),
+		"vow_name":         str(defn.get("vow_name", "")),
+		"proverb_twi":      str(defn.get("proverb_twi", "")),
+		"tier":             int(av.get("tier", 1)),
+		"morale_delta":     morale_d,
+		"fear_delta":       0,
+		"bond_score_delta": 0,
+		"ase_delta":        0,
+		"echoes_affected":  party_ids,
+	}
+
+
+## V2-VOW-002: Returns Array of echo id Strings from the save-data roster.
+## Used by _apply_vow_break_aftermath() to populate vow_outcome.echoes_affected.
+func _get_roster_echo_ids() -> Array:
+	var ids: Array = []
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if not (sanctum_v is Dictionary):
+		return ids
+	var roster_v: Variant = (sanctum_v as Dictionary).get("roster", [])
+	if not (roster_v is Array):
+		return ids
+	for echo_v in (roster_v as Array):
+		if echo_v is Dictionary:
+			ids.append(str((echo_v as Dictionary).get("id", "")))
+	return ids

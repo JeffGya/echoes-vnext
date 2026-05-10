@@ -811,6 +811,8 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			sanctum["threads"] = {}
 			repaired = true
 			repaired_notes.append("sanctum.threads set to {} (V2 stub)")
+
+		# V2-ECONOMY-001: ase_flame — dormancy gate for offline Ase accrual
 		if not sanctum.has("ase_flame") or not (sanctum["ase_flame"] is Dictionary):
 			sanctum["ase_flame"] = {
 				"awakened": bool(save.get("onboarding", {}).get("keeper_intro_complete", false)),
@@ -820,23 +822,23 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			repaired = true
 			repaired_notes.append("sanctum.ase_flame added")
 		else:
-			var flame: Dictionary = sanctum["ase_flame"]
-			if not flame.has("awakened") or typeof(flame["awakened"]) != TYPE_BOOL:
-				flame["awakened"] = bool(save.get("onboarding", {}).get("keeper_intro_complete", false))
+			var _flame: Dictionary = sanctum["ase_flame"]
+			if not _flame.has("awakened") or typeof(_flame["awakened"]) != TYPE_BOOL:
+				_flame["awakened"] = bool(save.get("onboarding", {}).get("keeper_intro_complete", false))
 				repaired = true
 				repaired_notes.append("sanctum.ase_flame.awakened backfilled")
-			if not flame.has("boost_remaining_seconds") or (typeof(flame["boost_remaining_seconds"]) != TYPE_INT and typeof(flame["boost_remaining_seconds"]) != TYPE_FLOAT):
-				flame["boost_remaining_seconds"] = 0
+			if not _flame.has("boost_remaining_seconds") or (typeof(_flame["boost_remaining_seconds"]) != TYPE_INT and typeof(_flame["boost_remaining_seconds"]) != TYPE_FLOAT):
+				_flame["boost_remaining_seconds"] = 0
 				repaired = true
 				repaired_notes.append("sanctum.ase_flame.boost_remaining_seconds set to 0")
 			else:
-				flame["boost_remaining_seconds"] = int(flame["boost_remaining_seconds"])
-			if not flame.has("boost_per_bank_tick") or (typeof(flame["boost_per_bank_tick"]) != TYPE_INT and typeof(flame["boost_per_bank_tick"]) != TYPE_FLOAT):
-				flame["boost_per_bank_tick"] = 0
+				_flame["boost_remaining_seconds"] = int(_flame["boost_remaining_seconds"])
+			if not _flame.has("boost_per_bank_tick") or (typeof(_flame["boost_per_bank_tick"]) != TYPE_INT and typeof(_flame["boost_per_bank_tick"]) != TYPE_FLOAT):
+				_flame["boost_per_bank_tick"] = 0
 				repaired = true
 				repaired_notes.append("sanctum.ase_flame.boost_per_bank_tick set to 0")
 			else:
-				flame["boost_per_bank_tick"] = int(flame["boost_per_bank_tick"])
+				_flame["boost_per_bank_tick"] = int(_flame["boost_per_bank_tick"])
 		if _starter_occupants_need_repair(sanctum):
 			SanctumLayoutService.ensure_starter_occupant(save)
 			repaired = true

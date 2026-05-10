@@ -113,16 +113,16 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		var av_tier := int(active_vow.get("tier", 1))
 		var tier_name_v: Variant = tier_names.get(str(av_tier), "Whisper")
 		active_display = {
-			"vow_id":          av_id,
-			"proverb_twi":     str(av_defn.get("proverb_twi", "")),
-			"proverb_en":      str(av_defn.get("proverb_en", "")),
-			"vow_name":        str(av_defn.get("vow_name", "")),
-			"tier":            av_tier,
-			"tier_name":       str(tier_name_v),
-			"benefit_label":   str(av_defn.get("benefit_label", "")),
-			"tradeoff_label":  str(av_defn.get("tradeoff_label", "")),
+			"vow_id":                 av_id,
+			"proverb_twi":            str(av_defn.get("proverb_twi", "")),
+			"proverb_en":             str(av_defn.get("proverb_en", "")),
+			"vow_name":               str(av_defn.get("vow_name", "")),
+			"tier":                   av_tier,
+			"tier_name":              str(tier_name_v),
+			"benefit_label":          str(av_defn.get("benefit_label", "")),
+			"tradeoff_label":         str(av_defn.get("tradeoff_label", "")),
 			# V2-VOW-002: compliance history and benefit condition label for VowScreen display.
-			"compliance_count":        int(active_vow.get("compliance_count", 0)),
+			"compliance_count":       int(active_vow.get("compliance_count", 0)),
 			"benefit_condition_label": str(av_defn.get("benefit_label", "")),
 		}
 

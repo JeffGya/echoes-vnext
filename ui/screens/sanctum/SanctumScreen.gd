@@ -13,9 +13,14 @@ const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.t
 @onready var guidance_label: Label = %GuidanceLabel
 @onready var ase_kicker_label: Label = %AseKickerLabel
 @onready var ase_label: Label = %AseLabel
-@onready var ase_rate_label: Label = %AseRateLabel
+@onready var ase_flame_tip: Label = %AseFlameTip
 @onready var ase_delta_label: Label = %AseDeltaLabel
 @onready var top_band: HBoxContainer = %TopBand
+@onready var ekwan_label: Label = %EkwanLabel
+@onready var _awakening_overlay: Control = %AwakeningOverlay
+@onready var _awakening_grant_label: Label = %AwakeningGrantLabel
+@onready var _awakening_dismiss: Button = %AwakeningDismiss
+@onready var echo_count_label : Label = %EchoCountLabel
 
 @onready var party_summary_label: Label = %PartySummaryLabel
 @onready var party_empty_label: Label = %PartyEmptyLabel
@@ -67,6 +72,7 @@ const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.t
 @onready var name_edit: LineEdit = %NameEdit
 @onready var reroll_button: Button = %RerollButton
 @onready var confirm_button: Button = %ConfirmButton
+
 # V2-VOW-002: ActiveEffectsPanel + EffectDetailPanel
 @onready var _effects_panel:    PanelContainer = %ActiveEffectsPanel
 @onready var _effects_list:     HBoxContainer  = %ActiveEffectsList
@@ -74,6 +80,7 @@ const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.t
 @onready var _detail_headline:  Label          = %EffectDetailHeadline
 @onready var _detail_body:      Label          = %EffectDetailBody
 @onready var _detail_duration:  Label          = %EffectDetailDuration
+
 
 var _snapshot: Dictionary = {}
 var _name_dirty := false
@@ -84,6 +91,12 @@ var _detail_tab := "overview"
 var _selected_echo_id := ""
 # V2-VOW-002: compliance count label under mantra (created in _ready, positioned after vow_mantra_label).
 var _vow_compliance_label: Label = null
+
+# V2-VOW-002: ST-E — compliance count label (lazily created, positioned below VowMantraLabel)
+var _vow_compliance_lbl: Label = null
+# V2-VOW-002: ST-H — currently open chip Button (for toggle-close detection)
+var _active_chip_effect_id: String = ""
+
 
 
 func _ready() -> void:
@@ -96,7 +109,9 @@ func _ready() -> void:
 	tab_overview.pressed.connect(_on_tab_selected.bind("overview"))
 	tab_bonds.pressed.connect(_on_tab_selected.bind("bonds"))
 	tab_skills.pressed.connect(_on_tab_selected.bind("skills"))
-	detail_party_action_button.pressed.connect(_on_detail_party_pressed)
+	detail_party_action_button.pressed.connect(_on_detail_party_pressed)	_awakening_dismiss.pressed.connect(_on_awakening_dismiss_pressed)
+	_apply_awakening_panel_style()
+
 
 	# V2-VOW-002: compliance count label — sibling of vow_mantra_label in HeaderStack.
 	_vow_compliance_label = Label.new()
@@ -439,6 +454,120 @@ func _on_detail_party_pressed() -> void:
 		"type": "sanctum.party.toggle",
 		"payload": { "echo_id": str(selected.get("id", "")) },
 	})
+# ─────────────────────────────────────────────────────────────
+# V2-VOW-002 ST-H: Active Effects Panel helpers
+# ─────────────────────────────────────────────────────────────
+
+## Builds a 72×72 Ghost-style chip Button for one active effect entry.
+## Symbol-only: ▲ (buff / Akan Gold) | ▼ (debuff / Ohene Red) | ● (neutral / Mist Blue).
+## TODO: replace symbol Text with 24×24 TextureRect icon once assets delivered (Jeff).
+func _build_effect_chip(effect: Dictionary) -> Button:
+	var direction := str(effect.get("direction", "neutral"))
+	var effect_id := str(effect.get("effect_id", ""))
+
+	# Direction → symbol + color
+	var symbol: String
+	var chip_color: Color
+	match direction:
+		"buff":
+			symbol     = "▲"
+			chip_color = Color("#C8A96E")  # Akan Gold
+		"debuff":
+			symbol     = "▼"
+			chip_color = Color("#E8412A")  # Ohene Red
+		_:
+			symbol     = "●"
+			chip_color = Color("#7AB5C8")  # Mist Blue (The Loom accent / neutral)
+
+	var btn := Button.new()
+	btn.text = symbol
+	btn.custom_minimum_size = Vector2(72, 72)
+	btn.add_theme_color_override("font_color", chip_color)
+	btn.add_theme_font_size_override("font_size", 20)
+
+	# Ghost style: transparent background, direction-coloured 1px border, corner_radius=8
+	var chip_style := StyleBoxFlat.new()
+	chip_style.bg_color = Color(0, 0, 0, 0)
+	chip_style.border_color = chip_color
+	chip_style.set_border_width_all(1)
+	chip_style.set_corner_radius_all(8)
+	btn.add_theme_stylebox_override("normal", chip_style)
+	btn.add_theme_stylebox_override("hover",  chip_style)
+	btn.add_theme_stylebox_override("pressed", chip_style)
+
+	btn.set_meta("effect_id", effect_id)
+	btn.pressed.connect(_toggle_effect_detail.bind(effect, btn))
+	return btn
+
+
+## Toggles the EffectDetailPanel popout for the tapped chip.
+## Opens to the left of the chip; fades in over 250ms. Tap same chip → closes.
+func _toggle_effect_detail(effect: Dictionary, chip: Button) -> void:
+	var effect_id := str(effect.get("effect_id", ""))
+
+	# Toggle: if already showing this effect's detail, close it.
+	if _effect_detail.visible and _active_chip_effect_id == effect_id:
+		_effect_detail.visible = false
+		_active_chip_effect_id = ""
+		return
+
+	# Apply Ash Smoke panel style (elevated surface, matches modal depth)
+	var detail_style := StyleBoxFlat.new()
+	detail_style.bg_color     = Color("#3E3E58")  # Ash Smoke
+	detail_style.border_color = Color("#A8865A")  # Warm Brass
+	detail_style.set_border_width_all(1)
+	detail_style.set_corner_radius_all(8)
+	detail_style.shadow_color = Color(0, 0, 0, 0.4)
+	detail_style.shadow_size  = 4
+	_effect_detail.add_theme_stylebox_override("panel", detail_style)
+
+	# Populate labels
+	_detail_headline.text = str(effect.get("headline", ""))
+	_detail_body.text     = str(effect.get("body",     ""))
+	_detail_duration.text = str(effect.get("duration_hint", ""))
+
+	# Position: open to the left of the chip, or fall back near chip
+	_effect_detail.visible    = false
+	_effect_detail.modulate.a = 0.0
+	_effect_detail.visible    = true
+	await get_tree().process_frame  # let Godot compute panel size
+	var chip_gpos := chip.global_position
+	var panel_w   := _effect_detail.size.x
+	_effect_detail.global_position = Vector2(
+		chip_gpos.x - panel_w - 8.0,
+		chip_gpos.y
+	)
+
+	_active_chip_effect_id = effect_id
+
+	# 250ms fade-in (matches screen swap budget)
+	var tw := create_tween()
+	tw.tween_property(_effect_detail, "modulate:a", 1.0, 0.25)
+
+
+## Applies Dusk Slate + Warm Brass border panel style to the effects panel.
+## Called each render to keep styling in sync (no .tscn StyleBoxFlat dependency).
+func _apply_panel_style(panel: PanelContainer) -> void:
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color     = Color("#2D2D44")  # Dusk Slate
+	panel_style.border_color = Color("#A8865A")  # Warm Brass
+	panel_style.set_border_width_all(1)
+	panel_style.set_corner_radius_all(8)
+	panel.add_theme_stylebox_override("panel", panel_style)
+
+
+## Closes the EffectDetailPanel on any click/tap outside of it.
+func _unhandled_input(event: InputEvent) -> void:
+	if not _effect_detail.visible:
+		return
+	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
+		# Close if tap lands outside the panel rect
+		var panel_rect := _effect_detail.get_global_rect()
+		if not panel_rect.has_point((event as InputEventMouseButton).global_position):
+			_effect_detail.visible = false
+			_active_chip_effect_id = ""
+			get_viewport().set_input_as_handled()
+
 
 
 func _pulse_ase_label() -> void:
@@ -568,3 +697,27 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
 		_effect_detail.visible = false
+# V2-ECONOMY-001: Awakening overlay helpers
+# ─────────────────────────────────────────────────────────────
+
+func _apply_awakening_panel_style() -> void:
+	var inner_panel := _awakening_overlay.find_child("InnerPanel", true, false)
+	if inner_panel == null or not (inner_panel is PanelContainer):
+		return
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("#3E3E58")
+	style.set_corner_radius_all(8)
+	(inner_panel as PanelContainer).add_theme_stylebox_override("panel", style)
+
+func _show_awakening_overlay() -> void:
+	_awakening_overlay.modulate.a = 0.0
+	_awakening_overlay.visible = true
+	var tw := create_tween()
+	tw.tween_property(_awakening_overlay, "modulate:a", 1.0, 0.25)
+
+func _on_awakening_dismiss_pressed() -> void:
+	var tw := create_tween()
+	tw.tween_property(_awakening_overlay, "modulate:a", 0.0, 0.2)
+	tw.tween_callback(func(): _awakening_overlay.visible = false)
+	
+

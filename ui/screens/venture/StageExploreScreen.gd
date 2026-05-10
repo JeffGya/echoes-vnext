@@ -47,6 +47,10 @@ var _is_zooming:     bool    = false
 # ─── Situation marker tracking ────────────────────────────────────────────────
 var _situation_markers: Array = []
 
+# V2-VOW-002 ST-F: active vow proverb + condition hint labels in StageInfoPanel (lazily created)
+var _stage_proverb_lbl:   Label = null
+var _stage_condition_lbl: Label = null
+
 # ─── @onready refs ────────────────────────────────────────────────────────────
 @onready var _board:              TileMapLayer   = $Board
 @onready var _situation_layer:    Node2D         = $SituationLayer
@@ -136,6 +140,40 @@ func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 	var dir_v: Variant      = data.get("directive", {})
 	var dir_data: Dictionary = dir_v if dir_v is Dictionary else {}
 	_directive_label.text   = "Directive: " + _label_for_directive(str(dir_data.get("active_id", "")))
+
+	# V2-VOW-002 ST-F: active vow proverb (ambient) + condition hint (atmospheric, not a warning).
+	# Labels are appended to InfoVBox once and reused; hidden when no active vow.
+	var av_sf_v: Variant = data.get("active_vow", {})
+	var av_sf: Dictionary = av_sf_v if av_sf_v is Dictionary else {}
+	var _info_vbox: Node = _directive_label.get_parent()
+	if _stage_proverb_lbl == null and _info_vbox != null:
+		_stage_proverb_lbl = Label.new()
+		_stage_proverb_lbl.add_theme_font_size_override("font_size", 12)
+		_stage_proverb_lbl.add_theme_color_override("font_color", Color("#A8865A"))  # Warm Brass
+		_stage_proverb_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+		_info_vbox.add_child(_stage_proverb_lbl)
+	if _stage_condition_lbl == null and _info_vbox != null:
+		_stage_condition_lbl = Label.new()
+		_stage_condition_lbl.add_theme_font_size_override("font_size", 12)
+		_stage_condition_lbl.add_theme_color_override("font_color", Color(0.55, 0.55, 0.65, 1.0))  # muted neutral
+		_stage_condition_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+		_info_vbox.add_child(_stage_condition_lbl)
+	var _sf_twi := str(av_sf.get("proverb_twi", ""))
+	var _sf_en  := str(av_sf.get("proverb_en", ""))
+	if _stage_proverb_lbl != null:
+		if not av_sf.is_empty() and (not _sf_twi.is_empty() or not _sf_en.is_empty()):
+			_stage_proverb_lbl.text = "%s — \"%s\"" % [_sf_twi, _sf_en] if not _sf_twi.is_empty() else '"%s"' % _sf_en
+			_stage_proverb_lbl.visible = true
+		else:
+			_stage_proverb_lbl.visible = false
+	if _stage_condition_lbl != null:
+		var _sf_status := str(av_sf.get("condition_status", "none"))
+		var _sf_hint   := str(av_sf.get("condition_hint", ""))
+		if _sf_status != "none" and not _sf_hint.is_empty():
+			_stage_condition_lbl.text    = _sf_hint
+			_stage_condition_lbl.visible = true
+		else:
+			_stage_condition_lbl.visible = false
 
 	# Cache actions
 	var start_v: Variant = actions.get("cta.start", {})

@@ -66,22 +66,32 @@ var dev_combat_objective: String = ""
 # Resets to [] on new game boot (FlowContext is freshly instantiated).
 var last_realm_threads_earned: Array = []
 
+
 # ECONOMY-005: one-shot Sanctum return notification payload, surfaced through the next
 # flow.sanctum snapshot and then cleared.
 var pending_return_notification: Dictionary = {}
 
-# VOW-001: resolved vow outcome for the current stage (break or benefit).
-# Written by FlowRuntime; read by FlowEncounterState.build_final_snapshot().
-# Cleared at the start of each stage entry check so break takes precedence over compliant.
+# VOW-001 / V2-VOW-002: transient vow consequence for resolve screen.
+# Cleared on every stage enter (_apply_vow_stage_entry_condition).
+# Set by _apply_vow_break_aftermath (break events) or _store_vow_benefit_preview (benefit probe).
 var vow_outcome: Dictionary = {}
 
-# V2-VOW-002: session-transient list of vows unlocked this session (for "Discovered" badge).
-# Populated by FlowRuntime._check_vow_discovery(). Resets on new FlowContext instantiation.
+# V2-VOW-002: session-transient list of vows unlocked this session (for "Discovered" badge on
+# VowScreen and "Vow Revealed" section on ResolveScreen).
+# Populated by _check_vow_discovery when a vow is unlocked during a run.
+# Resets on new FlowContext instantiation (new game boot).
 var session_unlocked_vows: Array = []  # Array[Dictionary] {vow_id, vow_name, proverb_twi, proverb_en}
 
-# V2-VOW-002: tick of last vow entry condition check (guard against double-fire on re-entry).
+# V2-VOW-002: monotonic tick of the last vow stage-entry condition check.
+# Guards against double-fire when re-entry paths both route through flow.go_state → STAGE_EXPLORE.
 var vow_entry_check_t: int = -1
 
-# V2-VOW-002: transient debuff chip shown after a vow break — cleared on next stage entry.
+# V2-VOW-002: transient debuff chip shown in the Sanctum ActiveEffectsPanel after a vow breaks.
+# Written by _apply_vow_break_aftermath; cleared on next stage entry.
 # Shape: { effect_id, label, direction, headline, body, duration_hint, source }
 var session_broken_vow_effect: Dictionary = {}
+
+# V2-ECONOMY-001: transient economy cadence flags (never persisted to save)
+var pending_awakening_banner: bool = false         # true once after Ase Flame awakens
+var pending_scout_return_ase: int = 0              # partial Ase earned on retreat/return_home
+var pending_scout_return_intel_count: int = 0      # situations revealed on retreat/return_home

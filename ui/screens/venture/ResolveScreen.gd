@@ -84,6 +84,12 @@ func _clear() -> void:
 
 
 func _render(data: Dictionary, actions: Dictionary) -> void:
+	# V2-ECONOMY-001: scout_return path — partial Ase, no rank/vow/next_stage
+	var run_type := str(data.get("run_type", ""))
+	if run_type == "scout_return":
+		_render_scout_return(data, actions)
+		return
+
 	var victory: bool = bool(data.get("victory", false))
 
 	_banner.text = "VICTORY" if victory else "DEFEAT"
@@ -183,13 +189,154 @@ func _build_breakdown(breakdown: Array, total_ase: int) -> void:
 		var item: RewardEntryItem = RewardEntryScene.instantiate()
 		_breakdown_section.add_child(item)
 		item.setup(entry)
+		# V2-ECONOMY-001: Ekwan entries in Amber; Ase entries keep default theme color
+		if str(entry.get("currency", "ase")) == "ekwan":
+			item.add_theme_color_override("font_color", Color("#E8A030"))
 
-	if not breakdown.is_empty():
+	# V2-ECONOMY-001: skip total line on scout_return (total_ase == 0 signals no total)
+	if total_ase > 0:
 		var sep := HSeparator.new()
 		_breakdown_section.add_child(sep)
 		var total_lbl := Label.new()
 		total_lbl.text = "= %d Ase" % total_ase
 		_breakdown_section.add_child(total_lbl)
+
+
+# ─────────────────────────────────────────────────────────────
+# V2-VOW-002: Vow fallout renderer
+# ─────────────────────────────────────────────────────────────
+
+## Populates _vow_list with narrative header, vow name, and signed deltas.
+## GDD: vows = "structure, pressure, and moral shape"; broken vow = strongest Continuity harm.
+func _build_vow_section(outcome: Dictionary) -> void:
+	var event := str(outcome.get("event", ""))
+	var headline: String
+	match event:
+		"break":     headline = "The promise fractured."
+		"compliant": headline = "The promise holds."
+		_:           headline = "The promise held."
+
+	var headline_lbl := Label.new()
+	headline_lbl.text = headline
+	headline_lbl.add_theme_font_size_override("font_size", 13)
+	_vow_list.add_child(headline_lbl)
+
+	var vow_name := str(outcome.get("vow_name", ""))
+	if not vow_name.is_empty():
+		var name_lbl := Label.new()
+		name_lbl.text = vow_name
+		name_lbl.add_theme_font_size_override("font_size", 12)
+		_vow_list.add_child(name_lbl)
+
+	# V2-VOW-002: compliance count line for "compliant" event.
+	if event == "compliant":
+		var count := int(outcome.get("compliance_count", 0))
+		if count > 0:
+			var count_lbl := Label.new()
+			count_lbl.text = "%d stage%s honored" % [count, "s" if count != 1 else ""]
+			count_lbl.add_theme_font_size_override("font_size", 12)
+			count_lbl.add_theme_color_override("font_color", Color("#A8865A"))  # Warm Brass
+			_vow_list.add_child(count_lbl)
+
+	# Signed deltas — only non-zero values shown, joined with " · "
+	var morale_d := int(outcome.get("morale_delta", 0))
+	var fear_d   := int(outcome.get("fear_delta", 0))
+	var ase_d    := int(outcome.get("ase_delta", 0))
+
+	var parts: Array = []
+	if morale_d != 0:
+		parts.append("Morale %s%d" % ["+" if morale_d > 0 else "", morale_d])
+	if fear_d != 0:
+		parts.append("Fear %s%d" % ["+" if fear_d > 0 else "", fear_d])
+	if ase_d != 0:
+		parts.append("Ase %s%d" % ["+" if ase_d > 0 else "", ase_d])
+
+	if not parts.is_empty():
+		var delta_lbl := Label.new()
+		delta_lbl.text = " · ".join(parts)
+		delta_lbl.add_theme_font_size_override("font_size", 12)
+		_vow_list.add_child(delta_lbl)
+
+
+# ─────────────────────────────────────────────────────────────
+# V2-VOW-002: Vow discovery renderer
+# ─────────────────────────────────────────────────────────────
+
+## Builds the list of vows revealed during this stage.
+## Each entry shows: vow_name (13, Akan Gold), proverb_twi (12, Pale Kente), proverb_en (12, Warm Brass muted).
+func _build_vow_discovered_section(vows: Array) -> void:
+	for vow_v in vows:
+		var vow: Dictionary = vow_v if vow_v is Dictionary else {}
+		var vow_name := str(vow.get("vow_name", ""))
+		var twi      := str(vow.get("proverb_twi", ""))
+		var en       := str(vow.get("proverb_en", ""))
+
+		if not vow_name.is_empty():
+			var name_lbl := Label.new()
+			name_lbl.text = vow_name
+			name_lbl.add_theme_font_size_override("font_size", 13)
+			name_lbl.add_theme_color_override("font_color", Color("#C8A96E"))  # Akan Gold
+			_vow_discovered_list.add_child(name_lbl)
+
+		if not twi.is_empty():
+			var twi_lbl := Label.new()
+			twi_lbl.text = twi
+			twi_lbl.add_theme_font_size_override("font_size", 12)
+			twi_lbl.add_theme_color_override("font_color", Color("#E8D0A0"))  # Pale Kente
+			twi_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+			_vow_discovered_list.add_child(twi_lbl)
+
+		if not en.is_empty():
+			var en_lbl := Label.new()
+			en_lbl.text = en
+			en_lbl.add_theme_font_size_override("font_size", 12)
+			en_lbl.add_theme_color_override("font_color", Color("#A8865A"))  # Warm Brass (muted)
+			en_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+			_vow_discovered_list.add_child(en_lbl)
+
+
+# ─────────────────────────────────────────────────────────────
+# V2-ECONOMY-001: Scout Return renderer
+# ─────────────────────────────────────────────────────────────
+
+func _render_scout_return(data: Dictionary, actions: Dictionary) -> void:
+	_banner.text = "Scout Return"
+	_banner.add_theme_color_override("font_color", Color("#7AB5C8"))  # Mist Blue — neutral info
+
+	var intel := int(data.get("intel_count", 0))
+	_reason.text = "%d situation%s revealed" % [intel, "s" if intel != 1 else ""]
+
+	_rank_badge.visible              = false
+	_vow_section.visible             = false
+	_vow_discovered_section.visible  = false
+	_next_stage_button.visible       = false
+
+	_ase_value.text = "%d" % int(data.get("ase_awarded", 0))
+
+	var breakdown_v: Variant = data.get("reward_breakdown", [])
+	var breakdown: Array = breakdown_v if breakdown_v is Array else []
+	_build_breakdown(breakdown, 0)
+
+	# Actor preview — show name + emotional state (no pre/post arc on scout return)
+	var actors_v: Variant = data.get("actors", [])
+	var actors: Array = actors_v if actors_v is Array else []
+	for actor_v in actors:
+		if not actor_v is Dictionary:
+			continue
+		var actor: Dictionary = actor_v
+		var nm := str(actor.get("name", ""))
+		var es := str(actor.get("emotional_status", ""))
+		var lbl := Label.new()
+		lbl.text = "%s — [%s]" % [nm, es.capitalize()] if es != "" else nm
+		lbl.add_theme_font_size_override("font_size", 14)
+		_emotion_list.add_child(lbl)
+
+	if actions.has("cta.continue"):
+		var act_v: Variant = actions["cta.continue"]
+		if act_v is Dictionary:
+			_sanctum_action = act_v
+			_sanctum_button.text    = str(act_v.get("label", "Return to Sanctum"))
+			_sanctum_button.visible = true
 
 
 # ─────────────────────────────────────────────────────────────

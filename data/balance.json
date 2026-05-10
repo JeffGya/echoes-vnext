@@ -15,7 +15,8 @@
 			"offline_stability_multiplier_penalty": 0.45,
 			"offline_min_multiplier": 0.05,
 			"offline_max_multiplier": 1.2,
-			"sanctum_bank_interval_seconds": 240.0
+			"sanctum_bank_interval_seconds": 240.0,
+			"awakening_ase_grant": 40
 		},
 		"keeper_intro": {
 			"first_trial_ase_reward": 40.0,
@@ -1173,7 +1174,10 @@
 			},
 			"stage_index_bonus_per": 5,
 			"realm_order_multiplier_base": 1.0,
-			"realm_order_multiplier_step": 0.5
+			"realm_order_multiplier_step": 0.5,
+			"ekwan_base_factor": 0.12,
+			"ekwan_shrine_multiplier": 1.5,
+			"partial_intel_reward_factor": 0.12
 		},
 		"grid": {
 			"_comment": "Combat board dimensions — immutable mid-combat; read by GridService. GRID-001. Default 10x10 for MVP (range 6x6–30x30 depending on tier — tier scaling deferred to future GRID/COMBAT story).",

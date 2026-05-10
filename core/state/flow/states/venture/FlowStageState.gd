@@ -181,6 +181,7 @@ static func _build_active_vow_with_hint(flow_ctx: FlowContext) -> Dictionary:
 		"proverb_en":  str(defn.get("proverb_en", "")),
 		"tier":        int(av.get("tier", 1)),
 	}
+	# Get party ids for hint preview.
 	var party_ids: Array = []
 	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
 	if sanctum_v is Dictionary:

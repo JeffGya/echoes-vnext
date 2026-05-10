@@ -157,6 +157,11 @@ func _show_detail(entry: Dictionary) -> void:
 	hint_content.visible       = false
 	discovered_content.visible = true
 
+	# V2-VOW-002: remove any previously added dynamic labels before re-populating.
+	for _dc in discovered_content.get_children():
+		if _dc.name == "ComplianceCountLabel":
+			_dc.free()
+
 	proverb_twi_label.text   = str(entry.get("proverb_twi", ""))
 	proverb_en_label.text    = '"%s"' % str(entry.get("proverb_en", ""))
 	description_label.text   = str(entry.get("description", ""))
@@ -182,6 +187,19 @@ func _show_detail(entry: Dictionary) -> void:
 		discovered_content.move_child(cc_lbl, benefit_label.get_index() + 1)
 	var data_v: Variant = _last_snapshot.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
+
+	# V2-VOW-002: compliance count — shown below benefit line when vow is active.
+	if is_active:
+		var av_v: Variant = data.get("active_vow", {})
+		var av: Dictionary = av_v if av_v is Dictionary else {}
+		var comp_count := int(av.get("compliance_count", 0))
+		if comp_count > 0:
+			var comp_lbl := Label.new()
+			comp_lbl.name = "ComplianceCountLabel"
+			comp_lbl.text = "%d stage%s honored" % [comp_count, "s" if comp_count != 1 else ""]
+			comp_lbl.add_theme_font_size_override("font_size", 12)
+			comp_lbl.add_theme_color_override("font_color", Color("#A8865A"))  # Warm Brass
+			discovered_content.add_child_below_node(benefit_label, comp_lbl)
 	var can_pledge: bool = bool(data.get("can_pledge", false))
 	var cooldown_remaining := int(data.get("pledge_cooldown_remaining", 0))
 

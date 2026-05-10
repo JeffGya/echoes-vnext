@@ -256,10 +256,11 @@ static func _build_echo_detail_roster(
 ## Shape per entry: { effect_id, label, direction, headline, body, duration_hint, source }
 ## direction: "buff" | "debuff" | "neutral"
 ## Debuff chip (vow broken this session) takes priority over active doctrine chip.
+## Future stories append entries here without changing the UI consumer.
 static func _build_active_effects(flow_ctx: FlowContext) -> Array:
 	var effects: Array = []
 
-	# Debuff chip — shown after a vow break until the player re-enters a stage.
+	# Debuff chip takes priority — if vow just broke this session, show the break indicator.
 	if not flow_ctx.session_broken_vow_effect.is_empty():
 		effects.append(flow_ctx.session_broken_vow_effect.duplicate())
 		return effects
@@ -272,11 +273,15 @@ static func _build_active_effects(flow_ctx: FlowContext) -> Array:
 	var vow_name       := ""
 	var benefit_label  := ""
 	var tradeoff_label := ""
+	var proverb_twi    := ""
+	var proverb_en     := ""
 	if flow_ctx.config_service != null:
 		var defn := VowService.get_definition(str(av.get("vow_id", "")), flow_ctx.config_service.get_balance())
 		vow_name       = str(defn.get("vow_name", ""))
 		benefit_label  = str(defn.get("benefit_label", ""))
 		tradeoff_label = str(defn.get("tradeoff_label", ""))
+		proverb_twi    = str(defn.get("proverb_twi", ""))
+		proverb_en     = str(defn.get("proverb_en", ""))
 
 	var compliance_count := int(av.get("compliance_count", 0))
 	var direction        := "buff" if compliance_count > 0 else "neutral"
@@ -289,6 +294,8 @@ static func _build_active_effects(flow_ctx: FlowContext) -> Array:
 		if not _body.is_empty():
 			_body += "\n\n"
 		_body += "Violation: " + tradeoff_label
+	if _body.is_empty() and not proverb_twi.is_empty():
+		_body = proverb_twi + "\n" + proverb_en
 
 	var _duration_hint := ""
 	if compliance_count > 0:

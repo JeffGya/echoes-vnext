@@ -521,6 +521,14 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		reward_cfg
 	)
 
+	# V2-ECONOMY-001: pre-compute ekwan_factor from first stage objective type
+	var _obj_type := "combat"
+	if not stage_objectives.is_empty() and stage_objectives[0] is Dictionary:
+		_obj_type = str((stage_objectives[0] as Dictionary).get("obj_type", "combat"))
+	var _ekwan_factor := float(reward_cfg.get("ekwan_base_factor", 0.12))
+	if _obj_type == "shrine":
+		_ekwan_factor *= float(reward_cfg.get("ekwan_shrine_multiplier", 1.5))
+
 	var economy_svc := EconomyService.new(flow_ctx.save_data)
 	var reward_result: Dictionary = economy_svc.reward_stage_complete(
 		victory,
@@ -533,6 +541,7 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		float(reward_data.get("redo_multiplier", 1.0)),
 		str(reward_data.get("rank", "F")),
 		virtue_bonus,
+		_ekwan_factor,
 		flow_ctx.logger,
 		t
 	)
@@ -678,6 +687,7 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"enemies_defeated": enemies_defeated,
 			"echoes_survived":  echoes_survived,
 			"ase_awarded":      int(reward_result.get("ase_awarded", 0)),
+			"ekwan_awarded":    int(reward_result.get("ekwan_awarded", 0)),
 			"rank":             str(reward_result.get("rank", "F")),
 			"reward_breakdown": reward_result.get("breakdown", []),
 			"formula_inputs":   formula_inputs,
