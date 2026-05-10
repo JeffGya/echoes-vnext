@@ -35,6 +35,9 @@ var _cached_back_action:    Dictionary = {}
 var _cached_advance_action: Dictionary = {}
 var _cached_return_action:  Dictionary = {}
 var _cached_overlay_action: Dictionary = {}
+# V2-VOW-002: dynamic vow proverb + condition hint labels in preview panel.
+var _vow_proverb_label: Label = null
+var _vow_hint_label:    Label = null
 
 # ─── Preview state ────────────────────────────────────────────────────────────
 var _preview_scale:  float   = 1.0
@@ -62,6 +65,7 @@ var _situation_markers: Array = []
 @onready var _stage_title:        Label          = %StageTitleLabel
 @onready var _obj_title:          Label          = %ObjectiveTitleLabel
 @onready var _directive_label:    Label          = %DirectiveLabel
+@onready var _info_vbox:          VBoxContainer  = $StageInfoPanel/InfoVBox
 @onready var _back_btn:           Button         = %BackButton
 @onready var _sit_overlay:          PanelContainer = $SituationOverlay
 @onready var _sit_header_label:     Label          = %SituationHeaderLabel
@@ -153,6 +157,36 @@ func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 	if not dir_data.is_empty():
 		_directive_overlay.call("populate", dir_data)
 		_directive_overlay.show()
+
+	# V2-VOW-002: vow proverb + condition hint in preview panel.
+	# Remove previous dynamic labels if present.
+	if _vow_proverb_label != null:
+		_vow_proverb_label.queue_free()
+		_vow_proverb_label = null
+	if _vow_hint_label != null:
+		_vow_hint_label.queue_free()
+		_vow_hint_label = null
+	var av_v: Variant = data.get("active_vow", {})
+	var av: Dictionary = av_v if av_v is Dictionary else {}
+	if not av.is_empty():
+		var proverb_twi := str(av.get("proverb_twi", ""))
+		var proverb_en  := str(av.get("proverb_en", ""))
+		if not proverb_twi.is_empty() or not proverb_en.is_empty():
+			_vow_proverb_label = Label.new()
+			_vow_proverb_label.text = "%s - \"%s\"" % [proverb_twi, proverb_en] if not proverb_twi.is_empty() else '"%s"' % proverb_en
+			_vow_proverb_label.add_theme_font_size_override("font_size", 11)
+			_vow_proverb_label.add_theme_color_override("font_color", Color("#C8A96E"))  # Akan Gold
+			_vow_proverb_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+			_info_vbox.add_child(_vow_proverb_label)
+		var condition_status := str(av.get("condition_status", "none"))
+		var condition_hint   := str(av.get("condition_hint",   ""))
+		if condition_status != "none" and not condition_hint.is_empty():
+			_vow_hint_label = Label.new()
+			_vow_hint_label.text = condition_hint
+			_vow_hint_label.add_theme_font_size_override("font_size", 11)
+			_vow_hint_label.add_theme_color_override("font_color", Color("#A8865A"))  # Warm Brass — atmospheric, not a warning
+			_vow_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+			_info_vbox.add_child(_vow_hint_label)
 
 	# Fade in (first entry into screen or returning from explore)
 	modulate = Color(1, 1, 1, 0)

@@ -252,6 +252,24 @@ offset_bottom = 215.90399
 grow_horizontal = 0
 theme_override_constants/separation = 8
 
+[node name="ActiveEffectsPanel" type="PanelContainer" parent="RootMargin/LayoutRoot/RightStack" unique_id=999000001]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"SanctumCard"
+
+[node name="ActiveEffectsMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/RightStack/ActiveEffectsPanel" unique_id=999000002]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="ActiveEffectsList" type="HBoxContainer" parent="RootMargin/LayoutRoot/RightStack/ActiveEffectsPanel/ActiveEffectsMargin" unique_id=999000003]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 6
+
 [node name="ThreadPanel" type="PanelContainer" parent="RootMargin/LayoutRoot/RightStack" unique_id=141392106]
 layout_mode = 2
 size_flags_vertical = 3
@@ -841,3 +859,42 @@ custom_minimum_size = Vector2(80, 48)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Choose"
+
+[node name="EffectDetailPanel" type="PanelContainer" parent="." unique_id=999000004]
+unique_name_in_owner = true
+visible = false
+z_index = 10
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 1
+anchors_preset = -1
+anchor_right = 0.0
+anchor_bottom = 0.0
+grow_horizontal = 0
+grow_vertical = 0
+
+[node name="EffectDetailMargin" type="MarginContainer" parent="EffectDetailPanel" unique_id=999000005]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="EffectDetailStack" type="VBoxContainer" parent="EffectDetailPanel/EffectDetailMargin" unique_id=999000006]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="EffectDetailHeadline" type="Label" parent="EffectDetailPanel/EffectDetailMargin/EffectDetailStack" unique_id=999000007]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+
+[node name="EffectDetailBody" type="Label" parent="EffectDetailPanel/EffectDetailMargin/EffectDetailStack" unique_id=999000008]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 3
+theme_override_font_sizes/font_size = 14
+
+[node name="EffectDetailDuration" type="Label" parent="EffectDetailPanel/EffectDetailMargin/EffectDetailStack" unique_id=999000009]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12

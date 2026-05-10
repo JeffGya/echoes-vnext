@@ -145,6 +145,22 @@ func _show_detail(entry: Dictionary) -> void:
 	breaking_cost_label.text = str(entry.get("breaking_cost_hint", ""))
 
 	var is_active: bool = bool(entry.get("is_active", false))
+
+	# V2-VOW-002: compliance count ("N stages honored") — shown when active + count > 0.
+	# Clear any previously-created dynamic nodes before rebuilding.
+	for _dyn in discovered_content.get_children():
+		if _dyn.name.begins_with("_dyn_"):
+			_dyn.queue_free()
+	var compliance_count := int(entry.get("compliance_count", 0))
+	if is_active and compliance_count > 0:
+		var cc_lbl := Label.new()
+		cc_lbl.name = "_dyn_compliance"
+		cc_lbl.text = "%d stage%s honored" % [compliance_count, "s" if compliance_count != 1 else ""]
+		cc_lbl.add_theme_font_size_override("font_size", 12)
+		cc_lbl.add_theme_color_override("font_color", Color("#C8A96E"))  # Akan Gold
+		# Insert after benefit_label
+		discovered_content.add_child(cc_lbl)
+		discovered_content.move_child(cc_lbl, benefit_label.get_index() + 1)
 	var data_v: Variant = _last_snapshot.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	var can_pledge: bool = bool(data.get("can_pledge", false))

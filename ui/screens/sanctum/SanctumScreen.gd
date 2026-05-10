@@ -67,6 +67,13 @@ const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.t
 @onready var name_edit: LineEdit = %NameEdit
 @onready var reroll_button: Button = %RerollButton
 @onready var confirm_button: Button = %ConfirmButton
+# V2-VOW-002: ActiveEffectsPanel + EffectDetailPanel
+@onready var _effects_panel:    PanelContainer = %ActiveEffectsPanel
+@onready var _effects_list:     HBoxContainer  = %ActiveEffectsList
+@onready var _effect_detail:    PanelContainer = %EffectDetailPanel
+@onready var _detail_headline:  Label          = %EffectDetailHeadline
+@onready var _detail_body:      Label          = %EffectDetailBody
+@onready var _detail_duration:  Label          = %EffectDetailDuration
 
 var _snapshot: Dictionary = {}
 var _name_dirty := false
@@ -75,6 +82,8 @@ var _ase_tween: Tween
 var _echo_detail_open := false
 var _detail_tab := "overview"
 var _selected_echo_id := ""
+# V2-VOW-002: compliance count label under mantra (created in _ready, positioned after vow_mantra_label).
+var _vow_compliance_label: Label = null
 
 
 func _ready() -> void:
@@ -88,6 +97,16 @@ func _ready() -> void:
 	tab_bonds.pressed.connect(_on_tab_selected.bind("bonds"))
 	tab_skills.pressed.connect(_on_tab_selected.bind("skills"))
 	detail_party_action_button.pressed.connect(_on_detail_party_pressed)
+
+	# V2-VOW-002: compliance count label — sibling of vow_mantra_label in HeaderStack.
+	_vow_compliance_label = Label.new()
+	_vow_compliance_label.add_theme_font_size_override("font_size", 12)
+	_vow_compliance_label.add_theme_color_override("font_color", Color("#A8865A"))  # Warm Brass
+	_vow_compliance_label.visible = false
+	var _header_stack: VBoxContainer = vow_mantra_label.get_parent() as VBoxContainer
+	if _header_stack != null:
+		_header_stack.add_child(_vow_compliance_label)
+		_header_stack.move_child(_vow_compliance_label, vow_mantra_label.get_index() + 1)
 
 
 func set_snapshot(snap: Dictionary) -> void:
@@ -122,8 +141,18 @@ func _render() -> void:
 		var proverb_en := str(active_vow.get("proverb_en", ""))
 		vow_mantra_label.text = "%s - \"%s\"" % [proverb_twi, proverb_en]
 		vow_mantra_label.visible = not proverb_twi.is_empty() or not proverb_en.is_empty()
+		# V2-VOW-002: compliance count under mantra — "N stages honored" when count > 0.
+		if _vow_compliance_label != null:
+			var cc := int(active_vow.get("compliance_count", 0))
+			if cc > 0:
+				_vow_compliance_label.text = "%d stage%s honored" % [cc, "s" if cc != 1 else ""]
+				_vow_compliance_label.visible = true
+			else:
+				_vow_compliance_label.visible = false
 	else:
 		vow_mantra_label.visible = false
+		if _vow_compliance_label != null:
+			_vow_compliance_label.visible = false
 
 	ase_label.text = str(ase_balance)
 	ase_rate_label.text = "~ %.1f per hour" % per_hour
@@ -132,6 +161,8 @@ func _render() -> void:
 	_rebuild_party_list(party_slots)
 	_rebuild_thread_reserve(thread_reserve, reserve_cap)
 	_render_echo_detail(detail_roster, str(data.get("featured_echo_id", "")))
+	# V2-VOW-002: rebuild active effects chips
+	_render_active_effects(data)
 
 	if _last_ase_balance != -1 and ase_balance != _last_ase_balance:
 		var delta := ase_balance - _last_ase_balance
@@ -433,3 +464,107 @@ func _show_ase_delta(delta: int) -> void:
 		ase_delta_label.visible = false
 		ase_delta_label.position.y = start_y
 	)
+
+
+# ─────────────────────────────────────────────────────────────
+# V2-VOW-002: Active effects panel
+# ─────────────────────────────────────────────────────────────
+
+func _render_active_effects(data: Dictionary) -> void:
+	# Clear previous chips.
+	for _ch in _effects_list.get_children():
+		_ch.queue_free()
+	_effect_detail.visible = false
+
+	var effects_v: Variant = data.get("active_effects", [])
+	var effects: Array = effects_v if effects_v is Array else []
+	if effects.is_empty():
+		_effects_panel.visible = false
+		return
+
+	for eff_v in effects:
+		var eff: Dictionary = eff_v if eff_v is Dictionary else {}
+		if eff.is_empty():
+			continue
+		_effects_list.add_child(_build_effect_chip(eff))
+	_effects_panel.visible = true
+
+
+func _build_effect_chip(effect: Dictionary) -> Button:
+	var direction := str(effect.get("direction", "neutral"))
+	var chip := Button.new()
+	chip.custom_minimum_size = Vector2(72, 72)
+	chip.focus_mode = Control.FOCUS_NONE
+	# Symbol per direction (TODO: replace with 24×24 TextureRect icon once assets delivered — Jeff)
+	match direction:
+		"buff":
+			chip.text = "▲"
+			chip.add_theme_color_override("font_color", Color("#C8A96E"))  # Akan Gold
+		"debuff":
+			chip.text = "▼"
+			chip.add_theme_color_override("font_color", Color("#E8412A"))  # Ohene Red
+		_:
+			chip.text = "●"
+			chip.add_theme_color_override("font_color", Color("#7AB5C8"))  # Mist Blue
+	# Ghost style — transparent bg, direction-coloured border
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0, 0, 0, 0)
+	match direction:
+		"buff":    style.border_color = Color("#C8A96E")
+		"debuff":  style.border_color = Color("#E8412A")
+		_:         style.border_color = Color("#7AB5C8")
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(8)
+	chip.add_theme_stylebox_override("normal", style)
+	chip.add_theme_stylebox_override("hover", style)
+	chip.add_theme_stylebox_override("pressed", style)
+	chip.pressed.connect(_toggle_effect_detail.bind(effect, chip))
+	return chip
+
+
+func _toggle_effect_detail(effect: Dictionary, chip: Button) -> void:
+	var effect_id := str(effect.get("effect_id", ""))
+	# Toggle off if same chip tapped again.
+	if _effect_detail.visible and str(_effect_detail.get_meta("active_effect_id", "")) == effect_id:
+		_effect_detail.visible = false
+		return
+
+	# Apply elevated surface style.
+	var detail_style := StyleBoxFlat.new()
+	detail_style.bg_color = Color("#3E3E58")
+	detail_style.border_color = Color("#A8865A")
+	detail_style.set_border_width_all(1)
+	detail_style.set_corner_radius_all(8)
+	detail_style.shadow_color = Color(0, 0, 0, 0.4)
+	detail_style.shadow_size = 4
+	_effect_detail.add_theme_stylebox_override("panel", detail_style)
+
+	# Populate content.
+	_detail_headline.text = str(effect.get("headline", ""))
+	_detail_headline.add_theme_color_override("font_color", Color("#C8A96E"))
+	_detail_body.text = str(effect.get("body", ""))
+	_detail_body.add_theme_color_override("font_color", Color("#E8D0A0"))
+	_detail_duration.text = str(effect.get("duration_hint", ""))
+	_detail_duration.add_theme_color_override("font_color", Color("#A8865A"))
+
+	_effect_detail.set_meta("active_effect_id", effect_id)
+	# Position: to the left of the chip, flush with the right sidebar edge.
+	await get_tree().process_frame  # ensure size is known
+	var chip_gpos := chip.global_position
+	_effect_detail.global_position = Vector2(chip_gpos.x - _effect_detail.size.x - 8.0, chip_gpos.y)
+	# Clamp to screen bounds
+	var vp_size := get_viewport_rect().size
+	_effect_detail.global_position.x = clampf(_effect_detail.global_position.x, 0.0, vp_size.x - _effect_detail.size.x)
+	_effect_detail.global_position.y = clampf(_effect_detail.global_position.y, 0.0, vp_size.y - _effect_detail.size.y)
+
+	_effect_detail.modulate.a = 0.0
+	_effect_detail.visible = true
+	var tw := create_tween()
+	tw.tween_property(_effect_detail, "modulate:a", 1.0, 0.25)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not _effect_detail.visible:
+		return
+	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
+		_effect_detail.visible = false

@@ -41,9 +41,14 @@ const EmotionEntryScene   := preload("res://ui/components/EmotionEntryItem.tscn"
 @onready var _sanctum_button:    Button        = %SanctumButton
 @onready var _next_stage_button: Button        = %NextStageButton
 @onready var _emotion_list:      VBoxContainer = %EmotionList
+# CardContent — parent of all card sections, used for dynamic vow nodes.
+@onready var _card_content:      VBoxContainer = $CenterContainer/ResultCard/CardContent
 
 var _sanctum_action:    Dictionary = {}
 var _next_stage_action: Dictionary = {}
+# V2-VOW-002: dynamically-created vow sections (freed on _clear).
+var _vow_outcome_node:    Node = null
+var _vow_discovered_node: Node = null
 
 
 # ─────────────────────────────────────────────────────────────
@@ -69,6 +74,13 @@ func _clear() -> void:
 		child.queue_free()
 	for child in _emotion_list.get_children():
 		child.queue_free()
+	# V2-VOW-002: free dynamic vow sections
+	if _vow_outcome_node != null:
+		_vow_outcome_node.queue_free()
+		_vow_outcome_node = null
+	if _vow_discovered_node != null:
+		_vow_discovered_node.queue_free()
+		_vow_discovered_node = null
 
 
 func _render(data: Dictionary, actions: Dictionary) -> void:
@@ -139,6 +151,10 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 			_tween.tween_interval(_delay)
 			_tween.tween_property(_bl, "modulate:a", 1.0, 0.3)
 
+	# V2-VOW-002: vow outcome + discovery sections (inserted before ButtonRow).
+	_build_vow_section(data)
+	_build_vow_discovered_section(data)
+
 	# Wire CTA buttons from snapshot actions.
 	if actions.has("cta.continue"):
 		var act_v: Variant = actions["cta.continue"]
@@ -207,6 +223,111 @@ func _rank_color(rank: String) -> Color:
 		"C": return rank_color_c
 		"D": return rank_color_d
 		_:   return rank_color_f
+
+
+# ─────────────────────────────────────────────────────────────
+# V2-VOW-002: Vow outcome section (break / compliant / benefit)
+# ─────────────────────────────────────────────────────────────
+
+func _build_vow_section(data: Dictionary) -> void:
+	var vow_v: Variant = data.get("vow_outcome", {})
+	var vow: Dictionary = vow_v if vow_v is Dictionary else {}
+	if vow.is_empty():
+		return
+
+	var event := str(vow.get("event", ""))
+	var section := VBoxContainer.new()
+	section.add_theme_constant_override("separation", 4)
+
+	var sep := HSeparator.new()
+	section.add_child(sep)
+
+	var headline := Label.new()
+	headline.add_theme_font_size_override("font_size", 15)
+	match event:
+		"break":
+			headline.text = "The promise fractured."
+			headline.add_theme_color_override("font_color", Color("#E8412A"))  # Ohene Red
+		"benefit":
+			headline.text = "The promise held."
+			headline.add_theme_color_override("font_color", Color("#C8A96E"))  # Akan Gold
+		"compliant":
+			headline.text = "The promise holds."
+			headline.add_theme_color_override("font_color", Color("#C8A96E"))  # Akan Gold
+		_:
+			headline.text = ""
+	section.add_child(headline)
+
+	# Sub-line for compliance count or penalty hint
+	if event == "compliant":
+		var count := int(vow.get("compliance_count", 0))
+		if count > 0:
+			var count_lbl := Label.new()
+			count_lbl.text = "%d stage%s honored" % [count, "s" if count != 1 else ""]
+			count_lbl.add_theme_font_size_override("font_size", 12)
+			count_lbl.add_theme_color_override("font_color", Color("#A8865A"))  # Warm Brass
+			section.add_child(count_lbl)
+	elif event == "break":
+		var morale := int(vow.get("morale_delta", 0))
+		var fear   := int(vow.get("fear_delta",   0))
+		if morale != 0 or fear != 0:
+			var pen_lbl := Label.new()
+			pen_lbl.text = "Morale %+d  Fear %+d" % [morale, fear]
+			pen_lbl.add_theme_font_size_override("font_size", 12)
+			pen_lbl.add_theme_color_override("font_color", Color("#E8D0A0"))  # Pale Kente
+			section.add_child(pen_lbl)
+
+	# Insert before ButtonRow (last child of CardContent).
+	_card_content.add_child(section)
+	_card_content.move_child(section, _card_content.get_child_count() - 2)
+	_vow_outcome_node = section
+
+
+# V2-VOW-002: Vow discovery section — shows vows unlocked this stage.
+func _build_vow_discovered_section(data: Dictionary) -> void:
+	var vows_v: Variant = data.get("newly_unlocked_vows", [])
+	var vows: Array = vows_v if vows_v is Array else []
+	if vows.is_empty():
+		return
+
+	var section := VBoxContainer.new()
+	section.add_theme_constant_override("separation", 4)
+
+	var sep := HSeparator.new()
+	section.add_child(sep)
+
+	var header := Label.new()
+	header.text = "Vow Revealed"
+	header.add_theme_font_size_override("font_size", 14)
+	header.add_theme_color_override("font_color", Color("#7AB5C8"))  # Mist Blue
+	section.add_child(header)
+
+	for vow_v in vows:
+		var vow: Dictionary = vow_v if vow_v is Dictionary else {}
+		var name_lbl := Label.new()
+		name_lbl.text = str(vow.get("vow_name", ""))
+		name_lbl.add_theme_font_size_override("font_size", 13)
+		name_lbl.add_theme_color_override("font_color", Color("#E8D0A0"))
+		section.add_child(name_lbl)
+
+		var twi_lbl := Label.new()
+		twi_lbl.text = str(vow.get("proverb_twi", ""))
+		twi_lbl.add_theme_font_size_override("font_size", 12)
+		twi_lbl.add_theme_color_override("font_color", Color("#C8A96E"))
+		twi_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+		section.add_child(twi_lbl)
+
+		var en_lbl := Label.new()
+		en_lbl.text = '"%s"' % str(vow.get("proverb_en", ""))
+		en_lbl.add_theme_font_size_override("font_size", 12)
+		en_lbl.add_theme_color_override("font_color", Color("#A8865A"))
+		en_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+		section.add_child(en_lbl)
+
+	# Insert before ButtonRow.
+	_card_content.add_child(section)
+	_card_content.move_child(section, _card_content.get_child_count() - 2)
+	_vow_discovered_node = section
 
 
 func _ready() -> void:
