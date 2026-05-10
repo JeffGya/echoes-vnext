@@ -166,8 +166,7 @@ func _show_detail(entry: Dictionary) -> void:
 
 	var is_active: bool = bool(entry.get("is_active", false))
 
-	# V2-VOW-002: compliance count ("N stages honored") — shown when active + count > 0.
-	# Clear any previously-created dynamic nodes before rebuilding.
+	# V2-VOW-002: clear all dynamic nodes (compliance, cooldown) before rebuilding.
 	for _dyn in discovered_content.get_children():
 		if _dyn.name.begins_with("_dyn_"):
 			_dyn.queue_free()
@@ -184,6 +183,7 @@ func _show_detail(entry: Dictionary) -> void:
 	var data_v: Variant = _last_snapshot.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	var can_pledge: bool = bool(data.get("can_pledge", false))
+	var cooldown_remaining := int(data.get("pledge_cooldown_remaining", 0))
 
 	if is_active:
 		var actions_v: Variant = _last_snapshot.get("actions", {})
@@ -197,6 +197,19 @@ func _show_detail(entry: Dictionary) -> void:
 		action_button.text     = "Pledge Vow (Tier 1)"
 		action_button.disabled = false
 		action_button.visible  = true
+	elif cooldown_remaining > 0:
+		# V2-VOW-002: pledge cooldown — show wait message, hide button.
+		var cd_lbl := Label.new()
+		cd_lbl.name = "_dyn_cooldown"
+		cd_lbl.text = "Complete %d more stage%s before pledging again." % [
+			cooldown_remaining, "s" if cooldown_remaining != 1 else ""
+		]
+		cd_lbl.add_theme_font_size_override("font_size", 12)
+		cd_lbl.add_theme_color_override("font_color", Color("#A8865A"))  # Warm Brass
+		cd_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		discovered_content.add_child(cd_lbl)
+		discovered_content.move_child(cd_lbl, breaking_cost_label.get_index() + 1)
+		action_button.visible = false
 	else:
 		action_button.visible = false
 

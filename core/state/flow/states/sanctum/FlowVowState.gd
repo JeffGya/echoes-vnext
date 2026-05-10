@@ -127,8 +127,11 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		}
 
 	# --- Actions (slot-keyed dict) ---
-	# Pledging is allowed at any time — during a realm or in Sanctum — as long as no vow is active.
-	var can_pledge := active_vow.is_empty()
+	# V2-VOW-002: pledge cooldown — must complete N stages after breaking before re-pledging.
+	var _sanc_cd_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var _sanc_cd: Dictionary = _sanc_cd_v if _sanc_cd_v is Dictionary else {}
+	var pledge_cooldown_remaining := int(_sanc_cd.get("pledge_cooldown_stages_remaining", 0))
+	var can_pledge := active_vow.is_empty() and pledge_cooldown_remaining == 0
 	var can_break  := not active_vow.is_empty()
 
 	var actions: Dictionary = {
@@ -165,11 +168,12 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		"type": FlowStateIds.VOW_MANAGE,
 		"meta": { "sim_tick": t },
 		"data": {
-			"active_vow":        active_display,
-			"available_vows":    available_vows,
-			"can_pledge":        can_pledge,
-			"realm_in_progress": realm_in_progress,
-			"vow_stats":         vow_stats,  # V2-VOW-002: {honors, breaks} lifetime counts
+			"active_vow":                active_display,
+			"available_vows":            available_vows,
+			"can_pledge":                can_pledge,
+			"pledge_cooldown_remaining": pledge_cooldown_remaining,  # V2-VOW-002: stages left before re-pledging allowed
+			"realm_in_progress":         realm_in_progress,
+			"vow_stats":                 vow_stats,  # V2-VOW-002: {honors, breaks} lifetime counts
 		},
 		"actions": actions,
 	}

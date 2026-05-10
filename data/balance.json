@@ -1722,6 +1722,7 @@
 			}
 		},
 		"vows": {
+			"pledge_cooldown_stages": 1,
 			"definitions": {
 				"tikoro_nko_agyina": {
 					"vow_id": "tikoro_nko_agyina",

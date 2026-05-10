@@ -645,6 +645,14 @@ func _handle_complete_stage(t: int, destination_override: String = "") -> void:
 	_apply_combat_bond_triggers(t, outcome)
 	_apply_bond_aftermath_modifiers(t, outcome)
 	_seed_rival_stage_incidents(t)
+	# V2-VOW-002: decrement pledge cooldown on stage completion (victory only).
+	var _cd_sanc_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if _cd_sanc_v is Dictionary:
+		var _cd_sanc: Dictionary = _cd_sanc_v as Dictionary
+		var _cd_rem := int(_cd_sanc.get("pledge_cooldown_stages_remaining", 0))
+		if _cd_rem > 0:
+			_cd_sanc["pledge_cooldown_stages_remaining"] = _cd_rem - 1
+
 	# VOW-001: post-stage complete benefit (obi_nnim_kyere full-scout bonus).
 	_apply_vow_stage_complete_benefit(t)
 	# VOW-001: check if any vow discovery scenario was triggered this stage.
@@ -3887,6 +3895,16 @@ func _apply_vow_break_aftermath(summary: Dictionary, cfg: Dictionary, t: int) ->
 	var _pbe_sanc_v: Variant = flow_ctx.save_data.get("sanctum", {})
 	if _pbe_sanc_v is Dictionary:
 		(_pbe_sanc_v as Dictionary)["pending_broken_vow_effect"] = flow_ctx.session_broken_vow_effect.duplicate()
+		# Set pledge cooldown from config (tuneable: data.vows.pledge_cooldown_stages).
+		var _cd_vows_v: Variant = cfg.get("data", {})
+		var _cd_vows: Dictionary = {}
+		if _cd_vows_v is Dictionary:
+			var _cd_data: Dictionary = _cd_vows_v as Dictionary
+			var _cd_v: Variant = _cd_data.get("vows", {})
+			if _cd_v is Dictionary:
+				_cd_vows = _cd_v as Dictionary
+		var _cd_stages := int(_cd_vows.get("pledge_cooldown_stages", 1))
+		(_pbe_sanc_v as Dictionary)["pledge_cooldown_stages_remaining"] = _cd_stages
 	# V2-VOW-002: increment lifetime breaks count (direct index — .get() returns a temp copy).
 	if _pbe_sanc_v is Dictionary:
 		var _sanc_b: Dictionary = _pbe_sanc_v as Dictionary

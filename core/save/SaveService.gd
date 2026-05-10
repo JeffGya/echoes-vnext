@@ -796,6 +796,12 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			repaired = true
 			repaired_notes.append("sanctum.pending_broken_vow_effect defaulted")
 
+		# V2-VOW-002: pledge re-entry cooldown counter
+		if not sanctum.has("pledge_cooldown_stages_remaining") or typeof(sanctum["pledge_cooldown_stages_remaining"]) != TYPE_INT:
+			sanctum["pledge_cooldown_stages_remaining"] = 0
+			repaired = true
+			repaired_notes.append("sanctum.pledge_cooldown_stages_remaining defaulted")
+
 		# V2-MIG-002: Sanctum growth spine + Thread reserve stubs
 		if not sanctum.has("continuity") or (typeof(sanctum["continuity"]) != TYPE_INT and typeof(sanctum["continuity"]) != TYPE_FLOAT):
 			sanctum["continuity"] = 0
