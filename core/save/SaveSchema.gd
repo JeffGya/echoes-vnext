@@ -77,6 +77,8 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"rival_incidents": [],  # BOND-002: canonical rival pairs that shared a stage (seed for SANCTUM-005)
 			"active_vow": {},       # VOW-001: active vow dict {vow_id, tier, pledged_at_realm, runs_at_pledge} or {}
 			"vows": {},             # VOW-001 canonical: Dict keyed by vow_id → {tier, discovered_realm}
+			"vow_stats": {"honors": 0, "breaks": 0},  # V2-VOW-002: lifetime adherence history
+			"pending_broken_vow_effect": {},            # V2-VOW-002: persisted debuff chip (clears on next stage entry)
 
 			# V2-MIG-002: additive V2 sanctum stubs
 			"continuity": 0,  # V2-SANCTUM-001+: Sanctum growth spine

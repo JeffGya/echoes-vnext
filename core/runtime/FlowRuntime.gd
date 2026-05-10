@@ -59,6 +59,13 @@ func boot() -> Dictionary:
 
 	flow_ctx.save_data = save
 
+	# V2-VOW-002: restore broken vow debuff chip from save (survives restarts).
+	var _boot_sanc_v: Variant = save.get("sanctum", {})
+	if _boot_sanc_v is Dictionary:
+		var _boot_pbe_v: Variant = (_boot_sanc_v as Dictionary).get("pending_broken_vow_effect", {})
+		if _boot_pbe_v is Dictionary and not (_boot_pbe_v as Dictionary).is_empty():
+			flow_ctx.session_broken_vow_effect = (_boot_pbe_v as Dictionary).duplicate()
+
 	# REALM-001: populate campaign_seed from save (was always null before this story)
 	var _boot_camp_v: Variant = flow_ctx.save_data.get("campaign", {})
 	var _boot_camp: Dictionary = _boot_camp_v if _boot_camp_v is Dictionary else {}
@@ -3632,6 +3639,10 @@ func _apply_vow_stage_entry_condition(t: int) -> void:
 	# V2-VOW-002: clear transient state from previous stage entry.
 	flow_ctx.vow_outcome = {}
 	flow_ctx.session_broken_vow_effect = {}
+	# Also clear the persisted debuff chip from save_data.
+	var _clear_sanc_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if _clear_sanc_v is Dictionary:
+		(_clear_sanc_v as Dictionary).erase("pending_broken_vow_effect")
 
 	var av := VowService.get_active_vow(flow_ctx.save_data)
 	if av.is_empty():
@@ -3651,7 +3662,7 @@ func _apply_vow_stage_entry_condition(t: int) -> void:
 	if status == "none":
 		return
 
-	# V2-VOW-002: on compliant entry, increment compliance_count in save_data.
+	# V2-VOW-002: on compliant entry, increment compliance_count + lifetime honors.
 	if status == "compliant":
 		var _s_v: Variant = flow_ctx.save_data.get("sanctum", {})
 		if _s_v is Dictionary:
@@ -3661,6 +3672,12 @@ func _apply_vow_stage_entry_condition(t: int) -> void:
 				_av_s["compliance_count"] = _new_count
 				(_s_v as Dictionary)["active_vow"] = _av_s
 				flow_ctx.save_data["sanctum"] = _s_v
+			# Increment lifetime vow_stats.honors.
+			var _vstats_c_v: Variant = (_s_v as Dictionary).get("vow_stats", {})
+			if _vstats_c_v is Dictionary:
+				(_vstats_c_v as Dictionary)["honors"] = int((_vstats_c_v as Dictionary).get("honors", 0)) + 1
+			else:
+				(_s_v as Dictionary)["vow_stats"] = {"honors": 1, "breaks": 0}
 		# Store vow_outcome for the ResolveScreen (compliant event).
 		if flow_ctx.vow_outcome.is_empty():
 			var _vow_id := str(av.get("vow_id", ""))
@@ -3847,15 +3864,36 @@ func _apply_vow_break_aftermath(summary: Dictionary, cfg: Dictionary, t: int) ->
 	}
 	# V2-VOW-002: transient debuff chip for the Sanctum Active Effects panel.
 	# Cleared on the next stage entry (_apply_vow_stage_entry_condition).
+	var _break_morale := int(summary.get("morale_delta", 0))
+	var _break_fear   := int(summary.get("fear_delta",   0))
+	var _break_ase    := -int(summary.get("ase_spent",   0))
+	var _break_body   := "Applied to all echoes in your roster:"
+	if _break_morale != 0:
+		_break_body += "\nMorale %+d" % _break_morale
+	if _break_fear != 0:
+		_break_body += "\nFear %+d" % _break_fear
+	if _break_ase != 0:
+		_break_body += "\n%+d Ase" % _break_ase
 	flow_ctx.session_broken_vow_effect = {
 		"effect_id":    "vow_broken",
 		"label":        _break_name,
 		"direction":    "debuff",
 		"headline":     "Vow Broken — " + _break_name,
-		"body":         "The promise fractured. Fear fell upon the house.",
+		"body":         _break_body,
 		"duration_hint": "Clears when you re-enter a stage.",
 		"source":       "vow",
 	}
+	# V2-VOW-002: persist the debuff chip to save_data so it survives restarts.
+	var _pbe_sanc_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if _pbe_sanc_v is Dictionary:
+		(_pbe_sanc_v as Dictionary)["pending_broken_vow_effect"] = flow_ctx.session_broken_vow_effect.duplicate()
+	# V2-VOW-002: increment lifetime breaks count.
+	if _pbe_sanc_v is Dictionary:
+		var _vstats_v: Variant = (_pbe_sanc_v as Dictionary).get("vow_stats", {})
+		if _vstats_v is Dictionary:
+			(_vstats_v as Dictionary)["breaks"] = int((_vstats_v as Dictionary).get("breaks", 0)) + 1
+		else:
+			(_pbe_sanc_v as Dictionary)["vow_stats"] = {"honors": 0, "breaks": 1}
 
 	# Also apply immediate morale/fear to roster (same as _handle_vow_break manual path).
 	var morale_d := int(summary.get("morale_delta", 0))

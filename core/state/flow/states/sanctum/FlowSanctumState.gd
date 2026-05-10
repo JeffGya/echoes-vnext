@@ -269,25 +269,40 @@ static func _build_active_effects(flow_ctx: FlowContext) -> Array:
 	if av.is_empty():
 		return effects
 
-	var vow_name    := ""
-	var proverb_twi := ""
-	var proverb_en  := ""
+	var vow_name       := ""
+	var benefit_label  := ""
+	var tradeoff_label := ""
 	if flow_ctx.config_service != null:
 		var defn := VowService.get_definition(str(av.get("vow_id", "")), flow_ctx.config_service.get_balance())
-		vow_name    = str(defn.get("vow_name", ""))
-		proverb_twi = str(defn.get("proverb_twi", ""))
-		proverb_en  = str(defn.get("proverb_en", ""))
+		vow_name       = str(defn.get("vow_name", ""))
+		benefit_label  = str(defn.get("benefit_label", ""))
+		tradeoff_label = str(defn.get("tradeoff_label", ""))
 
 	var compliance_count := int(av.get("compliance_count", 0))
 	var direction        := "buff" if compliance_count > 0 else "neutral"
+
+	# Body spells out the mechanical effect — the proverb is already on the mantra label.
+	var _body := ""
+	if not benefit_label.is_empty():
+		_body += "Benefit: " + benefit_label
+	if not tradeoff_label.is_empty():
+		if not _body.is_empty():
+			_body += "\n\n"
+		_body += "Violation: " + tradeoff_label
+
+	var _duration_hint := ""
+	if compliance_count > 0:
+		_duration_hint = "%d stage%s honored. Active until the run ends." % [compliance_count, "s" if compliance_count != 1 else ""]
+	else:
+		_duration_hint = "Honor the vow to activate the benefit."
 
 	effects.append({
 		"effect_id":    "vow_active",
 		"label":        vow_name,
 		"direction":    direction,
 		"headline":     vow_name,
-		"body":         proverb_twi + "\n" + proverb_en if not proverb_twi.is_empty() else proverb_en,
-		"duration_hint": "Active until the run ends.",
+		"body":         _body,
+		"duration_hint": _duration_hint,
 		"source":       "vow",
 	})
 	return effects

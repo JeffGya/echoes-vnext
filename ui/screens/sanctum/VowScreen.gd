@@ -48,6 +48,8 @@ var _vow_card_scene := preload("res://ui/screens/sanctum/VowCard.tscn")
 
 var _last_snapshot: Dictionary = {}
 var _selected_vow_id: String   = ""
+# V2-VOW-002: lifetime stats label (created in _ready, always visible).
+var _vow_stats_label: Label = null
 
 
 func _ready() -> void:
@@ -59,11 +61,29 @@ func _ready() -> void:
 	break_keep_button.pressed.connect(_on_cancel_break_pressed)
 	break_confirm_button.pressed.connect(_on_confirm_break_pressed)
 
+	# V2-VOW-002: lifetime stats label — above the card list, always visible.
+	_vow_stats_label = Label.new()
+	_vow_stats_label.add_theme_font_size_override("font_size", 12)
+	_vow_stats_label.add_theme_color_override("font_color", Color("#A8865A"))  # Warm Brass
+	_vow_stats_label.text = "Honored: 0  |  Broken: 0"
+	var _card_parent: VBoxContainer = vow_card_container.get_parent() as VBoxContainer
+	if _card_parent != null:
+		_card_parent.add_child(_vow_stats_label)
+		_card_parent.move_child(_vow_stats_label, vow_card_container.get_index())
+
 
 func set_snapshot(snapshot: Dictionary) -> void:
 	_last_snapshot = snapshot
 	var data_v: Variant = snapshot.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
+
+	# V2-VOW-002: update lifetime stats label.
+	if _vow_stats_label != null:
+		var stats_v: Variant = data.get("vow_stats", {})
+		var stats: Dictionary = stats_v if stats_v is Dictionary else {}
+		var honors := int(stats.get("honors", 0))
+		var breaks  := int(stats.get("breaks",  0))
+		_vow_stats_label.text = "Honored: %d  |  Broken: %d" % [honors, breaks]
 
 	_render_realm_locked(data)
 	_render_cards(data)

@@ -84,6 +84,8 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			if (uv as Dictionary).get("vow_id", "") == vow_id:
 				is_new = true
 				break
+		# V2-VOW-002: pass compliance_count for the active vow so VowScreen can display it.
+		var entry_compliance := int(active_vow.get("compliance_count", 0)) if is_active else 0
 
 		available_vows.append({
 			"vow_id":             str(vow_id),
@@ -97,6 +99,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"is_unlocked":        is_unlocked,
 			"max_tier_unlocked":  max_tier,
 			"is_active":          is_active,
+			"compliance_count":   entry_compliance,  # V2-VOW-002: stages honored for this vow
 			"discovered_realm":   discovered_realm,
 			"unlock_hint":        str(defn.get("unlock_description", "")),
 			"is_new":             is_new,  # V2-VOW-002: "Discovered" badge on VowCard
@@ -148,14 +151,25 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		},
 	}
 
+	# V2-VOW-002: lifetime vow adherence stats.
+	var _stats_src_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var _stats_src: Dictionary = _stats_src_v if _stats_src_v is Dictionary else {}
+	var _stats_v: Variant = _stats_src.get("vow_stats", {})
+	var _stats: Dictionary = _stats_v if _stats_v is Dictionary else {}
+	var vow_stats := {
+		"honors": int(_stats.get("honors", 0)),
+		"breaks": int(_stats.get("breaks", 0)),
+	}
+
 	return {
 		"type": FlowStateIds.VOW_MANAGE,
 		"meta": { "sim_tick": t },
 		"data": {
-			"active_vow":       active_display,
-			"available_vows":   available_vows,
-			"can_pledge":       can_pledge,
+			"active_vow":        active_display,
+			"available_vows":    available_vows,
+			"can_pledge":        can_pledge,
 			"realm_in_progress": realm_in_progress,
+			"vow_stats":         vow_stats,  # V2-VOW-002: {honors, breaks} lifetime counts
 		},
 		"actions": actions,
 	}
