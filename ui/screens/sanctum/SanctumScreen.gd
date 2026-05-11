@@ -20,7 +20,6 @@ const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.t
 @onready var _awakening_overlay: Control = %AwakeningOverlay
 @onready var _awakening_grant_label: Label = %AwakeningGrantLabel
 @onready var _awakening_dismiss: Button = %AwakeningDismiss
-@onready var echo_count_label : Label = %EchoCountLabel
 
 @onready var party_summary_label: Label = %PartySummaryLabel
 @onready var party_empty_label: Label = %PartyEmptyLabel
