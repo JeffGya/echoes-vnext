@@ -173,8 +173,10 @@ func _render() -> void:
 		ase_flame_tip.text = "House dormant — Flame unlit"
 		ase_flame_tip.add_theme_color_override("font_color", Color("#7A7A8A"))
 
-	# V2-ECONOMY-001: Ekwan balance
-	ekwan_label.text = "%d" % int(data.get("ekwan_balance", 0))
+	# V2-ECONOMY-001: Ekwan balance — show once any Ekwan has been earned
+	var ekwan_balance := int(data.get("ekwan_balance", 0))
+	ekwan_label.text    = "%d Ekwan" % ekwan_balance
+	ekwan_label.visible = ekwan_balance > 0
 
 	party_summary_label.text = "Chosen echoes for the next departure." if not party_slots.is_empty() else "No departure party is set."
 	_rebuild_party_list(party_slots)
