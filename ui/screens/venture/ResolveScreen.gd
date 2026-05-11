@@ -189,9 +189,6 @@ func _build_breakdown(breakdown: Array, total_ase: int) -> void:
 		var item: RewardEntryItem = RewardEntryScene.instantiate()
 		_breakdown_section.add_child(item)
 		item.setup(entry)
-		# V2-ECONOMY-001: Ekwan entries in Amber; Ase entries keep default theme color
-		if str(entry.get("currency", "ase")) == "ekwan":
-			item.add_theme_color_override("font_color", Color("#E8A030"))
 
 	# V2-ECONOMY-001: skip total line on scout_return (total_ase == 0 signals no total)
 	if total_ase > 0:
