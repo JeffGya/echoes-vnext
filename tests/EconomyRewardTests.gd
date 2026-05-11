@@ -147,11 +147,13 @@ static func _t_redo_multiplier_partial() -> Dictionary:
 
 # ─── Test 9 — defeat: total = round(base×0.25×redo_mul) ─────────────────────
 static func _t_defeat_payout() -> Dictionary:
-	var save := _make_save()
-	var svc  := EconomyService.new(save)
+	var save   := _make_save()
+	var svc    := EconomyService.new(save)
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
 	# base = 30, redo_mul = 1.0 (run_count=0), defeat total = round(30×0.25×1.0) = 8
 	var result := svc.reward_stage_complete(
-		false, 30, 0, 0, 0, 0, 0, 1.0, "F", 0, null, 0
+		false, 30, 0, 0, 0, 0, 0, 1.0, "F", 0, 0.0, logger, 0
 	)
 	var expected := roundi(30.0 * 0.25 * 1.0)
 	if int(result.get("ase_awarded", -1)) != expected:
@@ -190,12 +192,14 @@ static func _t_rank_F_poor_performance() -> Dictionary:
 
 # ─── Test 12 — reward_stage_complete() adds correct Ase to save ──────────────
 static func _t_economy_service_adds_ase() -> Dictionary:
-	var save := _make_save()
-	var svc  := EconomyService.new(save)
+	var save   := _make_save()
+	var svc    := EconomyService.new(save)
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
 	# victory, base=30, 2 enemy bonus=10, 1 echo bonus=10, no speed, redo=1.0
 	# total = (30+10+10) × 1.0 = 50
 	var result := svc.reward_stage_complete(
-		true, 30, 10, 2, 10, 1, 0, 1.0, "B", 0, null, 0
+		true, 30, 10, 2, 10, 1, 0, 1.0, "B", 0, 0.0, logger, 0
 	)
 	var ase_after := int(save.get("economy", {}).get("ase", -1))
 	if ase_after != 50:

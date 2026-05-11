@@ -2122,8 +2122,6 @@ func _apply_offline_accrual_if_needed(t: int, source: String) -> int:
 		delta_seconds = offline_cap_seconds
 		clamped_cap = true
 
-	# Multiplier seam (Faith later). Economy stays emotion-agnostic.
-	var multiplier := 1.0
 	# V2-ECONOMY-001: boost stub — no-op now, extensibility hook for future bank-tick boost system
 	var _boost := float(_flame_gate.get("boost_per_bank_tick", 0.0))
 	multiplier += _boost
@@ -4098,33 +4096,10 @@ func _apply_vow_break_aftermath(summary: Dictionary, cfg: Dictionary, t: int) ->
 			EmotionService.apply_fear_delta(echo, fear_d, "vow.break", fear_threshold, logger, t)
 		EmotionRecoveryService.set_modifier(echo, vow_morale_mul, vow_fear_mul, mod_ticks, logger, t)
 
-	# V2-VOW-002: store vow_outcome for resolve screen display.
-	if not summary.is_empty():
-		var _vow_defn := VowService.get_definition(str(summary.get("vow_id", "")), cfg)
-		var _break_name := str(_vow_defn.get("vow_name", ""))
-		flow_ctx.vow_outcome = {
-			"event":            "break",
-			"vow_id":           str(summary.get("vow_id", "")),
-			"vow_name":         _break_name,
-			"proverb_twi":      str(_vow_defn.get("proverb_twi", "")),
-			"tier":             int(summary.get("tier", 1)),
-			"morale_delta":     int(summary.get("morale_delta", 0)),
-			"fear_delta":       int(summary.get("fear_delta", 0)),
-			"bond_score_delta": int(summary.get("bond_score_delta", 0)),
-			"ase_delta":        -int(summary.get("ase_spent", 0)),
-			"echoes_affected":  _get_roster_echo_ids(),
-		}
-		# V2-VOW-002: store transient debuff chip for Sanctum ActiveEffectsPanel.
-		# Cleared on next stage entry (_apply_vow_stage_entry_condition).
-		flow_ctx.session_broken_vow_effect = {
-			"effect_id":    "vow_broken",
-			"label":        _break_name,
-			"direction":    "debuff",
-			"headline":     "Vow Broken — " + _break_name,
-			"body":         "The promise fractured. Fear fell upon the house.",
-			"duration_hint": "Clears when you re-enter a stage.",
-			"source":       "vow",
-		}
+	# V2-VOW-002: enrich vow_outcome with proverb_twi, bond_score_delta, echoes_affected.
+	flow_ctx.vow_outcome["proverb_twi"]      = str(_break_defn.get("proverb_twi", ""))
+	flow_ctx.vow_outcome["bond_score_delta"] = int(summary.get("bond_score_delta", 0))
+	flow_ctx.vow_outcome["echoes_affected"]  = _get_roster_echo_ids()
 
 
 # ────────────────────────────────────────────────────────────────────────────
