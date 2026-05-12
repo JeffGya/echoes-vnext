@@ -102,39 +102,38 @@ static func _test_offline_continuity_dominance() -> Dictionary:
 # V2-ECONOMY-001: Ase Flame awakening gate + Ekwan cadence
 # ─────────────────────────────────────────────────────────────
 
-## (a) Offline accrual guard: house dormant → gate returns false, Ase unchanged.
+## (a) Offline accrual guard: house dormant → FlowRuntime returns 0 gain, Ase unchanged.
 static func _test_offline_gate_blocked() -> Dictionary:
-	var save := {
-		"economy":  { "ase": 0, "ekwan": 0 },
-		"sanctum":  { "ase_flame": { "awakened": false } }
-	}
-	var _sanctum_v: Variant = save.get("sanctum", {})
-	var _sanctum: Dictionary = _sanctum_v if _sanctum_v is Dictionary else {}
-	var _flame_v: Variant = _sanctum.get("ase_flame", {})
-	var _flame: Dictionary = _flame_v if _flame_v is Dictionary else {}
-	var gate_open := bool(_flame.get("awakened", false))
-
-	if gate_open:
-		return { "ok": false, "error": "Gate should be closed when ase_flame.awakened = false" }
-	if int(save["economy"]["ase"]) != 0:
-		return { "ok": false, "error": "Ase must be unchanged when gate is closed" }
+	var runtime := OnboardingTests._make_runtime()
+	var now_unix := int(Time.get_unix_time_from_system())
+	# Fresh save has ase_flame.awakened = false by default.
+	var econ_data: Dictionary = runtime.flow_ctx.save_data.get("economy", {})
+	econ_data["ase"] = 0
+	econ_data["last_offline_unix"] = now_unix - (8 * 3600)
+	econ_data["last_settle_unix"]  = now_unix - (8 * 3600)
+	var gain := int(runtime.call("_apply_offline_accrual_if_needed", 2, "test.offline.gate_blocked"))
+	if gain != 0:
+		return { "ok": false, "error": "Dormant flame must block offline gain; got %d" % gain }
+	if int(econ_data.get("ase", 0)) != 0:
+		return { "ok": false, "error": "Ase must be unchanged when flame is dormant" }
 	return { "ok": true }
 
 
-## (b) Offline accrual guard: house awakened → gate returns true.
+## (b) Offline accrual guard: house awakened → FlowRuntime returns gain > 0.
 static func _test_offline_gate_passes() -> Dictionary:
-	var save := {
-		"economy": { "ase": 0, "ekwan": 0 },
-		"sanctum": { "ase_flame": { "awakened": true } }
-	}
-	var _sanctum_v: Variant = save.get("sanctum", {})
-	var _sanctum: Dictionary = _sanctum_v if _sanctum_v is Dictionary else {}
-	var _flame_v: Variant = _sanctum.get("ase_flame", {})
-	var _flame: Dictionary = _flame_v if _flame_v is Dictionary else {}
-	var gate_open := bool(_flame.get("awakened", false))
-
-	if not gate_open:
-		return { "ok": false, "error": "Gate should be open when ase_flame.awakened = true" }
+	var runtime := OnboardingTests._make_runtime()
+	var now_unix := int(Time.get_unix_time_from_system())
+	var sanctum: Dictionary = runtime.flow_ctx.save_data.get("sanctum", {})
+	var flame: Dictionary   = sanctum.get("ase_flame", {})
+	flame["awakened"] = true
+	sanctum["ase_flame"] = flame
+	var econ_data: Dictionary = runtime.flow_ctx.save_data.get("economy", {})
+	econ_data["ase"] = 0
+	econ_data["last_offline_unix"] = now_unix - (8 * 3600)
+	econ_data["last_settle_unix"]  = now_unix - (8 * 3600)
+	var gain := int(runtime.call("_apply_offline_accrual_if_needed", 2, "test.offline.gate_passes"))
+	if gain <= 0:
+		return { "ok": false, "error": "Awakened flame must allow offline gain; got %d" % gain }
 	return { "ok": true }
 
 
@@ -169,27 +168,24 @@ static func _test_ekwan_awarded() -> Dictionary:
 	return { "ok": true }
 
 
-## (d) Awakening trigger sets ase_flame.awakened = true and grants 40 Ase.
+## (d) Awakening trigger: dispatches name confirm through FlowRuntime; checks flag + grant.
 static func _test_awakening_trigger() -> Dictionary:
-	var save := {
-		"economy": { "ase": 0, "ekwan": 0 },
-		"sanctum": { "ase_flame": { "awakened": false } }
-	}
-	var logger := StructuredLogger.new()
-	logger.set_level("off")
-	var econ := EconomyService.new(save)
+	var runtime := OnboardingTests._make_runtime()
+	runtime.call("_handle_new_game", 2)
+	var cfg := runtime.config_service.get_balance()
+	OnboardingService.set_step(runtime.flow_ctx.save_data, cfg, OnboardingService.STEP_NAME_SANCTUM)
+	runtime.flow_machine.transition(
+		FlowStateIds.ONBOARDING_NAME_SANCTUM, runtime.flow_ctx, runtime.logger, 3, "test"
+	)
+	runtime.call("_handle_onboarding_name_confirm", { "name": "Sankofa" }, 4)
 
-	# Simulate awakening trigger: set flag + grant
-	save["sanctum"]["ase_flame"]["awakened"] = true
-	econ.add_ase(40, "economy.awakening_grant", logger, 0)
+	var sanctum: Dictionary = runtime.flow_ctx.save_data.get("sanctum", {})
+	var flame: Dictionary   = sanctum.get("ase_flame", {})
+	var ase := int(runtime.flow_ctx.save_data.get("economy", {}).get("ase", 0))
 
-	var flag := bool(save["sanctum"]["ase_flame"]["awakened"])
-	var ase  := int(save["economy"]["ase"])
-
-	if not flag:
-		return { "ok": false, "error": "ase_flame.awakened must be true after awakening" }
-	if ase != 40:
-		return { "ok": false, "error": "Expected ase=40 after awakening grant, got %d" % ase }
-
+	if not bool(flame.get("awakened", false)):
+		return { "ok": false, "error": "ase_flame.awakened must be true after name confirm" }
+	if ase <= 0:
+		return { "ok": false, "error": "Expected Ase grant > 0 after awakening, got %d" % ase }
 	return { "ok": true }
 

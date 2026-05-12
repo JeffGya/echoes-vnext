@@ -6,22 +6,6 @@
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_qeq33"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_gaxha"]
-content_margin_left = 0.0
-content_margin_top = 0.0
-content_margin_right = 0.0
-content_margin_bottom = 0.0
-bg_color = Color(0.9607843, 0.9019608, 0.827451, 1)
-border_width_left = 4
-border_width_top = 4
-border_width_right = 4
-border_width_bottom = 4
-border_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
-corner_radius_top_left = 40
-corner_radius_top_right = 8
-corner_radius_bottom_right = 8
-corner_radius_bottom_left = 40
-corner_detail = 4
 
 [node name="SanctumScreen" type="Control" unique_id=218783654]
 layout_mode = 3
@@ -153,13 +137,14 @@ horizontal_alignment = 2
 vertical_alignment = 2
 
 [node name="AseLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin/AseStack/HBoxContainer" unique_id=1730325798]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"StatsPanel"
 theme_override_font_sizes/font_size = 48
 text = "0"
 
-[node name="AseRateLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin/AseStack" unique_id=1746548666]
+[node name="AseFlameTip" type="Label" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin/AseStack" unique_id=1746548666]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
@@ -167,12 +152,23 @@ text = "~ 0.0 per hour"
 horizontal_alignment = 2
 
 [node name="AseDeltaLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin/AseStack" unique_id=2030588075]
+unique_name_in_owner = true
 visible = false
 layout_mode = 2
 theme_override_colors/font_color = Color(0.36078432, 0.6, 0.36078432, 1)
 theme_override_font_sizes/font_size = 14
 text = "+0"
 horizontal_alignment = 2
+
+[node name="EkwanLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin/AseStack" unique_id=1156631202]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"StatsPanel"
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.91, 0.627, 0.188, 1)
+text = ""
+horizontal_alignment = 2
+visible = false
 
 [node name="LeftStack" type="VBoxContainer" parent="RootMargin/LayoutRoot" unique_id=1730058239]
 unique_name_in_owner = true
@@ -890,114 +886,6 @@ layout_mode = 2
 size_flags_vertical = 0
 theme_override_constants/margin_left = 12
 
-[node name="RightSidebar" type="VBoxContainer" parent="." unique_id=1283973613]
-layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -141.0
-offset_bottom = 263.0
-grow_horizontal = 0
-
-[node name="Economy" type="PanelContainer" parent="RightSidebar" unique_id=1507197648]
-layout_mode = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_gaxha")
-
-[node name="MarginContainer" type="MarginContainer" parent="RightSidebar/Economy" unique_id=864755987]
-layout_mode = 2
-theme = ExtResource("2_gaxha")
-theme_override_constants/margin_left = 16
-theme_override_constants/margin_top = 16
-theme_override_constants/margin_right = 16
-theme_override_constants/margin_bottom = 16
-
-[node name="VBoxContainer" type="VBoxContainer" parent="RightSidebar/Economy/MarginContainer" unique_id=1781193527]
-layout_mode = 2
-
-[node name="Ase" type="VBoxContainer" parent="RightSidebar/Economy/MarginContainer/VBoxContainer" unique_id=29242349]
-layout_mode = 2
-theme_override_constants/separation = 0
-
-[node name="AseLabel" type="Label" parent="RightSidebar/Economy/MarginContainer/VBoxContainer/Ase" unique_id=63832903]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"StatsPanel"
-theme_override_font_sizes/font_size = 40
-text = "500"
-horizontal_alignment = 2
-
-[node name="AseFlameTip" type="Label" parent="RightSidebar/Economy/MarginContainer/VBoxContainer/Ase" unique_id=1156631093]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"StatsPanel"
-theme_override_font_sizes/font_size = 16
-text = "House dormant — Flame unlit"
-horizontal_alignment = 2
-
-[node name="AseDeltaLabel" type="Label" parent="RightSidebar/Economy/MarginContainer/VBoxContainer/Ase" unique_id=1358080709]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"StatsPanel"
-theme_override_font_sizes/font_size = 16
-text = " ~ 0.2 Ase p/h"
-horizontal_alignment = 2
-
-[node name="Ekwan" type="VBoxContainer" parent="RightSidebar/Economy/MarginContainer/VBoxContainer" unique_id=1156631200]
-layout_mode = 2
-theme_override_constants/separation = 0
-
-[node name="EkwanHeader" type="Label" parent="RightSidebar/Economy/MarginContainer/VBoxContainer/Ekwan" unique_id=1156631201]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"StatsPanel"
-theme_override_font_sizes/font_size = 16
-theme_override_colors/font_color = Color(0.91, 0.627, 0.188, 1)
-text = "Ekwan"
-horizontal_alignment = 2
-
-[node name="EkwanLabel" type="Label" parent="RightSidebar/Economy/MarginContainer/VBoxContainer/Ekwan" unique_id=1156631202]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"StatsPanel"
-theme_override_font_sizes/font_size = 28
-theme_override_colors/font_color = Color(0.91, 0.627, 0.188, 1)
-text = "0"
-horizontal_alignment = 2
-
-[node name="EchoCountLabel" type="Label" parent="RightSidebar/Economy/MarginContainer/VBoxContainer" unique_id=850487838]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"StatsPanel"
-text = "1 echoes"
-horizontal_alignment = 2
-
-[node name="ActiveEffectsPanel" type="PanelContainer" parent="RightSidebar"]
-unique_name_in_owner = true
-layout_mode = 2
-visible = false
-
-[node name="MarginContainer" type="MarginContainer" parent="RightSidebar/ActiveEffectsPanel"]
-layout_mode = 2
-theme_override_constants/margin_left = 8
-theme_override_constants/margin_top = 8
-theme_override_constants/margin_right = 8
-theme_override_constants/margin_bottom = 8
-
-[node name="ActiveEffectsList" type="HBoxContainer" parent="RightSidebar/ActiveEffectsPanel/MarginContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_constants/separation = 6
-
-[node name="ThreadReservePanel" type="PanelContainer" parent="RightSidebar" unique_id=1380001001]
-layout_mode = 2
-
-[node name="MarginContainer" type="MarginContainer" parent="RightSidebar/ThreadReservePanel" unique_id=1380001002]
-layout_mode = 2
-theme_override_constants/margin_left = 16
-
-theme_override_constants/margin_top = 12
-theme_override_constants/margin_right = 12
-theme_override_constants/margin_bottom = 12
 
 [node name="EffectDetailStack" type="VBoxContainer" parent="EffectDetailPanel/EffectDetailMargin" unique_id=999000006]
 layout_mode = 2
@@ -1019,59 +907,7 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
 
-theme_override_constants/separation = 2
 
-[node name="HouseStateSep" type="HSeparator" parent="RightSidebar/PartyInfoPanel/MarginContainer/VBoxContainer"]
-layout_mode = 2
-
-[node name="HouseStateHeader" type="Label" parent="RightSidebar/PartyInfoPanel/MarginContainer/VBoxContainer"]
-layout_mode = 2
-theme_type_variation = &"ContentBasePanel"
-text = "House State"
-
-[node name="HouseStateList" type="VBoxContainer" parent="RightSidebar/PartyInfoPanel/MarginContainer/VBoxContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_constants/separation = 2
-
-[node name="EffectDetailPanel" type="PanelContainer" parent="."]
-unique_name_in_owner = true
-layout_mode = 0
-z_index = 10
-visible = false
-offset_right = 220.0
-offset_bottom = 150.0
-
-[node name="MarginContainer" type="MarginContainer" parent="EffectDetailPanel"]
-layout_mode = 2
-theme_override_constants/margin_left = 12
-theme_override_constants/margin_top = 12
-theme_override_constants/margin_right = 12
-theme_override_constants/margin_bottom = 12
-
-[node name="VBoxContainer" type="VBoxContainer" parent="EffectDetailPanel/MarginContainer"]
-layout_mode = 2
-theme_override_constants/separation = 6
-
-[node name="EffectDetailHeadline" type="Label" parent="EffectDetailPanel/MarginContainer/VBoxContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 16
-theme_override_colors/font_color = Color(0.784, 0.663, 0.431, 1)
-autowrap_mode = 3
-
-[node name="EffectDetailBody" type="Label" parent="EffectDetailPanel/MarginContainer/VBoxContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 14
-theme_override_colors/font_color = Color(0.91, 0.816, 0.627, 1)
-autowrap_mode = 3
-
-[node name="EffectDetailDuration" type="Label" parent="EffectDetailPanel/MarginContainer/VBoxContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 12
-theme_override_colors/font_color = Color(0.659, 0.525, 0.353, 1)
 
 [node name="AwakeningOverlay" type="Control" parent="." unique_id=1156631300]
 unique_name_in_owner = true

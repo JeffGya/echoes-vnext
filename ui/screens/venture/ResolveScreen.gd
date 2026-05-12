@@ -34,6 +34,8 @@ const EmotionEntryScene   := preload("res://ui/components/EmotionEntryItem.tscn"
 @onready var _reason:            Label         = %ReasonLabel
 @onready var _rank_badge:        Label         = %RankBadge
 @onready var _ase_value:         Label         = %AseValue
+@onready var _ekwan_row:         HBoxContainer = %EkwanRow
+@onready var _ekwan_value:       Label         = %EkwanValue
 @onready var _breakdown_section: VBoxContainer = %BreakdownSection
 @onready var _enemies_value:     Label         = %EnemiesDefeatedValue
 @onready var _echoes_value:      Label         = %EchoesAliveValue
@@ -69,7 +71,9 @@ func _clear() -> void:
 	_next_stage_button.visible = false
 	_rank_badge.text = "—"
 	_rank_badge.remove_theme_color_override("font_color")
-	_ase_value.text  = "0"
+	_ase_value.text     = "0"
+	_ekwan_row.visible  = false
+	_ekwan_value.text   = "0"
 	for child in _breakdown_section.get_children():
 		child.queue_free()
 	for child in _emotion_list.get_children():
@@ -106,6 +110,11 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 
 	# Ase earned
 	_ase_value.text = str(data.get("ase_awarded", 0)) + " Ase"
+
+	# V2-ECONOMY-001: Ekwan earned — show row only when > 0
+	var ekwan_awarded := int(data.get("ekwan_awarded", 0))
+	_ekwan_row.visible = ekwan_awarded > 0
+	_ekwan_value.text  = str(ekwan_awarded) + " Ekwan"
 
 	# Reward breakdown
 	var breakdown_v: Variant = data.get("reward_breakdown", [])
@@ -189,9 +198,6 @@ func _build_breakdown(breakdown: Array, total_ase: int) -> void:
 		var item: RewardEntryItem = RewardEntryScene.instantiate()
 		_breakdown_section.add_child(item)
 		item.setup(entry)
-		# V2-ECONOMY-001: Ekwan entries in Amber; Ase entries keep default theme color
-		if str(entry.get("currency", "ase")) == "ekwan":
-			item.add_theme_color_override("font_color", Color("#E8A030"))
 
 	# V2-ECONOMY-001: skip total line on scout_return (total_ase == 0 signals no total)
 	if total_ase > 0:
