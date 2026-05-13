@@ -8,7 +8,8 @@
 #   effective   = _apply_decay(elapsed_seconds, offline_cap_seconds)
 #     - elapsed ≤ cap/2 → full rate; elapsed > cap/2 → extra seconds count at 50%
 #   morale_delta = roundi(morale_rate * effective)  → clamps at morale_base (ceiling)
-#   fear_delta   = roundi(fear_rate   * effective)  → clamps at fear_base (resting floor, V2-EMOTION-003)
+#   fear_delta   = roundi(fear_rate   * effective)  → clamps at 0 (floor)
+#   # SANCTUM-FEAR-BASE: swap 0 → echo["emotion"]["fear_base"] when that lands
 #
 # Modifier tick: after each apply, ticks_remaining decrements by 1.
 #   When it hits 0, both multipliers reset to 1.0.
@@ -74,12 +75,12 @@ static func apply_recovery_from_elapsed(
 					EmotionService.apply_morale_delta(echo, clamped, "recovery.settle", logger, t)
 					morale_applied = clamped
 
-		# Fear recovers toward fear_base (resting floor — V2-EMOTION-003)
-		var fear_floor := int(emo.get("fear_base", 0))
-		if fear_rate > 0.0 and fear_current > fear_floor:
+		# Fear recovers toward 0 (floor)
+		# SANCTUM-FEAR-BASE: swap 0 → echo["emotion"]["fear_base"] when that lands
+		if fear_rate > 0.0 and fear_current > 0:
 			var raw_delta := roundi(fear_rate * float(effective))
 			if raw_delta > 0:
-				var clamped := fear_current - maxi(fear_current - raw_delta, fear_floor)
+				var clamped := fear_current - maxi(fear_current - raw_delta, 0)
 				if clamped > 0:
 					EmotionService.apply_fear_delta(echo, -clamped, "recovery.settle", fear_threshold, logger, t)
 					fear_applied = clamped
@@ -91,10 +92,9 @@ static func apply_recovery_from_elapsed(
 				rm["morale_multiplier"] = 1.0
 				rm["fear_multiplier"]   = 1.0
 				rm["ticks_remaining"]   = 0
-				if logger != null:
-					logger.info(t, "emotion.recovery.modifier.expired", "Recovery modifier expired", {
-						"echo_id": str(echo.get("id", ""))
-					})
+				logger.info(t, "emotion.recovery.modifier.expired", "Recovery modifier expired", {
+					"echo_id": str(echo.get("id", ""))
+				})
 
 		if morale_applied != 0 or fear_applied != 0:
 			results.append({
@@ -122,13 +122,12 @@ static func set_modifier(
 	rm["morale_multiplier"] = morale_mul
 	rm["fear_multiplier"]   = fear_mul
 	rm["ticks_remaining"]   = maxi(ticks, 0)
-	if logger != null:
-		logger.info(t, "emotion.recovery.modifier.set", "Recovery modifier set", {
-			"echo_id":           str(echo.get("id", "")),
-			"morale_multiplier": morale_mul,
-			"fear_multiplier":   fear_mul,
-			"ticks_remaining":   ticks,
-		})
+	logger.info(t, "emotion.recovery.modifier.set", "Recovery modifier set", {
+		"echo_id":           str(echo.get("id", "")),
+		"morale_multiplier": morale_mul,
+		"fear_multiplier":   fear_mul,
+		"ticks_remaining":   ticks,
+	})
 
 
 # Two-step decay model (mirrors Ase offline accrual):

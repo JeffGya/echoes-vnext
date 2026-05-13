@@ -8,12 +8,14 @@ class_name SanctumShell
 @onready var camera: Camera2D = $SpatialLayer/SpatialView/Camera2D
 @onready var spatial_renderer: Node2D = $SpatialLayer/SpatialView/SanctumSpatialRenderer2
 @onready var _ui_layer: CanvasLayer = $UILayer
-@onready var _return_notice_layer: CanvasLayer = $ReturnNoticeLayer
-@onready var _return_notice: PanelContainer = %ReturnNotice
-@onready var _return_notice_title: Label = %ReturnNoticeTitle
-@onready var _return_notice_body: Label = %ReturnNoticeBody
-@onready var _return_notice_amount: Label = %ReturnNoticeAmount
-@onready var _return_notice_dismiss: Button = %ReturnNoticeDismiss
+@onready var _notification_layer: CanvasLayer = $NotificationLayer
+@onready var _notification_overlay: ColorRect = %NotificationOverlay
+@onready var _notification_panel: PanelContainer = %NotificationPanel
+@onready var _notification_title: Label = %NotificationTitle
+@onready var _notification_body: Label = %NotificationBody
+@onready var _notification_detail: Label = %NotificationDetail
+@onready var _notification_amount: Label = %NotificationAmount
+@onready var _notification_dismiss: Button = %NotificationDismiss
 @onready var _bottom_rail: Control = %BottomRail
 @onready var _party_button: Button = %PartyButton
 @onready var _summon_button: Button = %SummonButton
@@ -41,8 +43,28 @@ var _saved_camera_position := Vector2.ZERO
 var _saved_camera_zoom := Vector2.ONE
 var _detail_zoom := Vector2(2.9, 2.9)
 var _camera_tween: Tween
-var _return_notice_tween: Tween
-var _current_return_notice_id: String = ""
+var _notification_tween: Tween
+var _notification_queue: Array = []
+var _current_notification_id: String = ""
+
+const _TONE_VARIATIONS: Dictionary = {
+	"neutral":  &"SanctumNoticeNeutral",
+	"positive": &"SanctumNoticePositive",
+	"warning":  &"SanctumNoticeWarning",
+	"negative": &"SanctumNoticeNegative",
+}
+const _TONE_AMOUNT_COLORS: Dictionary = {
+	"neutral":  Color(0.176, 0.416, 0.310, 1),
+	"positive": Color(0.176, 0.416, 0.310, 1),
+	"warning":  Color(0.478, 0.310, 0.059, 1),
+	"negative": Color(0.549, 0.157, 0.141, 1),
+}
+const _TONE_OVERLAY_COLORS: Dictionary = {
+	"neutral":  Color(0.12, 0.20, 0.22, 0.45),
+	"positive": Color(0.08, 0.18, 0.10, 0.45),
+	"warning":  Color(0.22, 0.16, 0.04, 0.45),
+	"negative": Color(0.22, 0.08, 0.06, 0.45),
+}
 
 # Camera clamp (Phase B)
 const TILE_W := 72.0
@@ -80,13 +102,14 @@ func _ready() -> void:
 	# Sync UILayer visibility whenever SanctumShell is shown/hidden.
 	visibility_changed.connect(_sync_ui_layer_visibility)
 	_bind_nav_bar()
-	_return_notice.visible = false
-	_return_notice.modulate.a = 0.0
-	_return_notice_dismiss.pressed.connect(_dismiss_return_notice)
+	_notification_panel.visible = false
+	_notification_panel.modulate.a = 0.0
+	_notification_overlay.visible = false
+	_notification_dismiss.pressed.connect(_dismiss_notification)
 
 func _sync_ui_layer_visibility() -> void:
 	_ui_layer.visible = visible
-	_return_notice_layer.visible = visible
+	_notification_layer.visible = visible
 	# Camera2D.enabled is independent of node visibility in Godot 4.
 	# Disable it when SanctumShell is hidden so it does not affect the viewport
 	# while RealmShell (or any other screen) is active.
@@ -262,42 +285,76 @@ func _maybe_show_return_notice(snap: Dictionary) -> void:
 	if not (data_v is Dictionary):
 		return
 	var notice_v: Variant = (data_v as Dictionary).get("return_notification", {})
-	if not (notice_v is Dictionary):
+	if not (notice_v is Dictionary) or (notice_v as Dictionary).is_empty():
 		return
-	var notice: Dictionary = notice_v
-	var notice_id := str(notice.get("id", ""))
-	if notice_id.is_empty() or notice_id == _current_return_notice_id:
-		return
-	_current_return_notice_id = notice_id
-	_return_notice_title.text = str(notice.get("title", "The Flame Held"))
-	_return_notice_body.text = str(notice.get("body", "A little charge remained in your absence."))
-	var gain := int(notice.get("ase_gain", 0))
-	_return_notice_amount.text = ("+%d Ase retained" % gain) if gain > 0 else "No charge was retained"
-	_show_return_notice(float(notice.get("duration_seconds", 4.2)))
+	push_notification(notice_v as Dictionary)
 
-func _show_return_notice(duration_seconds: float) -> void:
-	if _return_notice_tween != null and _return_notice_tween.is_running():
-		_return_notice_tween.kill()
-	_return_notice.visible = true
-	_return_notice.modulate.a = 0.0
-	_return_notice_tween = create_tween()
-	_return_notice_tween.tween_property(_return_notice, "modulate:a", 1.0, 0.22)
-	_return_notice_tween.tween_interval(maxf(duration_seconds, 1.5))
-	_return_notice_tween.tween_property(_return_notice, "modulate:a", 0.0, 0.25)
-	_return_notice_tween.tween_callback(func():
-		_return_notice.visible = false
-	)
-
-func _dismiss_return_notice() -> void:
-	if not _return_notice.visible:
+func push_notification(notif: Dictionary) -> void:
+	var notif_id := str(notif.get("id", ""))
+	if notif_id.is_empty() or notif_id == _current_notification_id:
 		return
-	if _return_notice_tween != null and _return_notice_tween.is_running():
-		_return_notice_tween.kill()
+	for queued: Variant in _notification_queue:
+		if str((queued as Dictionary).get("id", "")) == notif_id:
+			return
+	if _notification_panel.visible:
+		_notification_queue.append(notif)
+	else:
+		_show_notification(notif)
+
+func _show_notification(notif: Dictionary) -> void:
+	_current_notification_id = str(notif.get("id", ""))
+
+	_notification_title.text = str(notif.get("title", ""))
+	_notification_body.text = str(notif.get("body", ""))
+	var detail := str(notif.get("detail", ""))
+	_notification_detail.text = detail
+	_notification_detail.visible = not detail.is_empty()
+	var amount := str(notif.get("amount", ""))
+	_notification_amount.text = amount
+	_notification_amount.visible = not amount.is_empty()
+
+	var tone := str(notif.get("tone", "neutral"))
+	var variation: StringName = _TONE_VARIATIONS.get(tone, &"SanctumNoticeNeutral")
+	_notification_panel.theme_type_variation = variation
+	var amount_color: Color = _TONE_AMOUNT_COLORS.get(tone, Color(0.176, 0.416, 0.310, 1))
+	_notification_amount.add_theme_color_override("font_color", amount_color)
+
+	var blocking := bool(notif.get("blocking_overlay", false))
+	if blocking:
+		_notification_overlay.color = _TONE_OVERLAY_COLORS.get(tone, Color(0.12, 0.20, 0.22, 0.45))
+		_notification_overlay.visible = true
+	else:
+		_notification_overlay.visible = false
+
+	if _notification_tween != null and _notification_tween.is_running():
+		_notification_tween.kill()
+	_notification_panel.visible = true
+	_notification_panel.modulate.a = 0.0
+	_notification_tween = create_tween()
+	_notification_tween.tween_property(_notification_panel, "modulate:a", 1.0, 0.22)
+
+	var auto_dismiss := bool(notif.get("auto_dismiss", true))
+	if auto_dismiss:
+		var duration := maxf(float(notif.get("duration_seconds", 4.2)), 1.5)
+		_notification_tween.tween_interval(duration)
+		_notification_tween.tween_property(_notification_panel, "modulate:a", 0.0, 0.25)
+		_notification_tween.tween_callback(_on_notification_hidden)
+
+func _on_notification_hidden() -> void:
+	_notification_panel.visible = false
+	_notification_overlay.visible = false
+	_current_notification_id = ""
+	if not _notification_queue.is_empty():
+		_show_notification(_notification_queue.pop_front() as Dictionary)
+
+func _dismiss_notification() -> void:
+	if not _notification_panel.visible:
+		return
+	if _notification_tween != null and _notification_tween.is_running():
+		_notification_tween.kill()
 	var tw := create_tween()
-	tw.tween_property(_return_notice, "modulate:a", 0.0, 0.18)
-	tw.tween_callback(func():
-		_return_notice.visible = false
-	)
+	tw.tween_property(_notification_panel, "modulate:a", 0.0, 0.18)
+	tw.tween_callback(_on_notification_hidden)
 
 
 func _bind_button(button: Button, action: Dictionary, fallback_label: String, tooltip: String = "") -> void:

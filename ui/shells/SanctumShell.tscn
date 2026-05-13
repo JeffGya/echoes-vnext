@@ -19,10 +19,22 @@ script = ExtResource("1_1eqo0")
 [node name="UILayer" type="CanvasLayer" parent="." unique_id=2051671050]
 layer = 10
 
-[node name="ReturnNoticeLayer" type="CanvasLayer" parent="." unique_id=154086409]
+[node name="NotificationLayer" type="CanvasLayer" parent="." unique_id=154086409]
 layer = 25
 
-[node name="Control" type="Control" parent="ReturnNoticeLayer" unique_id=201864101]
+[node name="NotificationOverlay" type="ColorRect" parent="NotificationLayer" unique_id=2031447722]
+unique_name_in_owner = true
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+color = Color(0.12, 0.20, 0.22, 0.45)
+
+[node name="NotificationControl" type="Control" parent="NotificationLayer" unique_id=201864101]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -31,7 +43,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="ReturnNoticeAnchor" type="MarginContainer" parent="ReturnNoticeLayer/Control"]
+[node name="NotificationAnchor" type="MarginContainer" parent="NotificationLayer/NotificationControl"]
 layout_mode = 1
 anchors_preset = 10
 anchor_left = 0.5
@@ -40,7 +52,7 @@ anchor_bottom = 0.0
 offset_left = -320.0
 offset_top = 72.0
 offset_right = 320.0
-offset_bottom = 244.0
+offset_bottom = 260.0
 grow_horizontal = 2
 theme_override_constants/margin_left = 12
 theme_override_constants/margin_top = 0
@@ -48,56 +60,63 @@ theme_override_constants/margin_right = 12
 theme_override_constants/margin_bottom = 0
 mouse_filter = 2
 
-[node name="ReturnNotice" type="PanelContainer" parent="ReturnNoticeLayer/Control/ReturnNoticeAnchor"]
+[node name="NotificationPanel" type="PanelContainer" parent="NotificationLayer/NotificationControl/NotificationAnchor"]
 unique_name_in_owner = true
 visible = false
-custom_minimum_size = Vector2(0, 0)
 layout_mode = 2
 mouse_filter = 1
 theme = ExtResource("2_q4uf4")
-theme_type_variation = &"SanctumReturnNotice"
+theme_type_variation = &"SanctumNoticeNeutral"
 
-[node name="Margin" type="MarginContainer" parent="ReturnNoticeLayer/Control/ReturnNoticeAnchor/ReturnNotice"]
+[node name="Margin" type="MarginContainer" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel"]
 layout_mode = 2
 theme_override_constants/margin_left = 18
 theme_override_constants/margin_top = 14
 theme_override_constants/margin_right = 14
 theme_override_constants/margin_bottom = 14
 
-[node name="Root" type="VBoxContainer" parent="ReturnNoticeLayer/Control/ReturnNoticeAnchor/ReturnNotice/Margin"]
+[node name="Root" type="VBoxContainer" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="HeaderRow" type="HBoxContainer" parent="ReturnNoticeLayer/Control/ReturnNoticeAnchor/ReturnNotice/Margin/Root"]
+[node name="HeaderRow" type="HBoxContainer" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin/Root"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="ReturnNoticeTitle" type="Label" parent="ReturnNoticeLayer/Control/ReturnNoticeAnchor/ReturnNotice/Margin/Root/HeaderRow"]
+[node name="NotificationTitle" type="Label" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin/Root/HeaderRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-theme_type_variation = &"SanctumReturnTitle"
+theme_type_variation = &"SanctumNoticeTitle"
 text = "The Flame Held"
 
-[node name="ReturnNoticeDismiss" type="Button" parent="ReturnNoticeLayer/Control/ReturnNoticeAnchor/ReturnNotice/Margin/Root/HeaderRow"]
+[node name="NotificationDismiss" type="Button" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin/Root/HeaderRow"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(48, 48)
 layout_mode = 2
 theme_type_variation = &"SanctumBackButton"
 text = "Dismiss"
 
-[node name="ReturnNoticeBody" type="Label" parent="ReturnNoticeLayer/Control/ReturnNoticeAnchor/ReturnNotice/Margin/Root"]
+[node name="NotificationBody" type="Label" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin/Root"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_type_variation = &"SanctumReturnBody"
+theme_type_variation = &"SanctumNoticeBody"
 text = "A little charge remained in your absence."
 autowrap_mode = 2
 
-[node name="ReturnNoticeAmount" type="Label" parent="ReturnNoticeLayer/Control/ReturnNoticeAnchor/ReturnNotice/Margin/Root"]
+[node name="NotificationDetail" type="Label" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin/Root"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"SanctumNoticeDetail"
+text = ""
+autowrap_mode = 2
+
+[node name="NotificationAmount" type="Label" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin/Root"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_type_variation = &"SanctumReturnAmount"
-text = "+0 Ase retained"
+theme_type_variation = &"SanctumNoticeAmount"
+text = ""
 
 [node name="Control" type="Control" parent="UILayer" unique_id=829806780]
 layout_mode = 3
