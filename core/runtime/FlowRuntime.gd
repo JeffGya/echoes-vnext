@@ -859,16 +859,13 @@ func _handle_onboarding_name_confirm(action: Dictionary, t: int) -> void:
 	OnboardingService.mark_complete(flow_ctx.save_data, cfg)
 	KeeperIntroServiceScript.start_after_chapter_one(flow_ctx.save_data, cfg)
 
-	# V2-ECONOMY-001: Ase Flame awakening — set flag + grant 40 Ase + queue banner (first time only)
+	# V2-ECONOMY-001: Ase Flame awakening — set flag only (Ase granted on trial completion, not here)
 	var _aw_flame_v: Variant = sanctum.get("ase_flame", {})
 	var _aw_flame: Dictionary = _aw_flame_v if _aw_flame_v is Dictionary else {}
 	if not bool(_aw_flame.get("awakened", false)):
 		_aw_flame["awakened"] = true
 		sanctum["ase_flame"] = _aw_flame
-		var _grant := int(_get_balance_economy_cfg().get("awakening_ase_grant", 40))
-		econ.add_ase(_grant, "economy.awakening_grant", logger, t)
-		flow_ctx.pending_awakening_banner = true
-		logger.info(t, "economy.ase_flame.awakened", "Ase Flame awakened", { "grant": _grant })
+		logger.info(t, "economy.ase_flame.awakened", "Ase Flame awakened", {})
 
 	_mark_save_requested("onboarding.name.confirm")
 
