@@ -9,7 +9,7 @@ const FlowKeeperIntroStateScript  := preload("res://core/state/flow/states/onboa
 const KeeperIntroServiceScript    := preload("res://core/onboarding/KeeperIntroService.gd")
 const StageExploreModelScript     := preload("res://core/realms/StageExploreModel.gd")                          # V2-STAGE-001
 const SituationModelScript        := preload("res://core/realms/SituationModel.gd")                             # V2-STAGE-001
-const ConsequencePassServiceScript := preload("res://core/sanctum/ConsequencePassService.gd")                    # V2-SANCTUM-001
+## ConsequencePassService kept on disk for future use; not preloaded here.
 const EmotionRecoveryServiceScript := preload("res://core/emotion/EmotionRecoveryService.gd")                    # V2-SANCTUM-001
 
 var logger: StructuredLogger
@@ -121,15 +121,10 @@ func dispatch(action: Dictionary) -> Dictionary:
 			var to_state := str(action.get("to", ""))
 			to_state = _gate_state_for_keeper_intro(to_state)
 			if to_state == FlowStateIds.SANCTUM:
-				# V2-SANCTUM-001: defeat path — collect consequence when returning from RESOLVE.
-				# Other go_state→SANCTUM paths (keep intro complete, etc.) use the old tick.
+				# V2-SANCTUM-001: defeat path — apply emotion modifiers + vow release on RESOLVE→SANCTUM.
 				if str(flow_machine._current_state_id) == FlowStateIds.RESOLVE:
 					_apply_run_emotion_modifiers("defeat", t)
-					var _vow_rel_def := _check_vow_release_condition(t)
-					var _rc_def := ConsequencePassServiceScript.collect(
-						flow_ctx.last_snapshot, "defeat",
-						flow_ctx.save_data, _vow_rel_def, config_service.get_balance())
-					flow_ctx.pending_return_notification = _build_run_consequence_notification(_rc_def, t)
+					_check_vow_release_condition(t)
 				else:
 					_apply_sanctum_emotion_tick(t)
 			elif to_state == FlowStateIds.WEAVING_RITE:
@@ -755,14 +750,10 @@ func _handle_complete_stage(t: int, destination_override: String = "") -> void:
 		flow_machine.transition(FlowStateIds.REALM_SELECT, flow_ctx, logger, t, "realm.complete")
 	else:
 		var dest: String = destination_override if destination_override != "" else FlowStateIds.STAGE_MAP
-		# V2-SANCTUM-001: victory consequence when routing back to Sanctum
+		# V2-SANCTUM-001: victory — apply emotion modifiers + vow release when routing back to Sanctum
 		if dest == FlowStateIds.SANCTUM:
 			_apply_run_emotion_modifiers("victory", t)
-			var _vow_rel_vic := _check_vow_release_condition(t)
-			var _rc_vic := ConsequencePassServiceScript.collect(
-				flow_ctx.last_snapshot, "victory",
-				flow_ctx.save_data, _vow_rel_vic, config_service.get_balance())
-			flow_ctx.pending_return_notification = _build_run_consequence_notification(_rc_vic, t)
+			_check_vow_release_condition(t)
 		flow_machine.transition(dest, flow_ctx, logger, t, "realm.stage_complete")
 
 
@@ -1290,13 +1281,9 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 		flow_ctx.encounter_machine = null
 		flow_ctx.save_request      = true
 		flow_ctx.save_request_reason = "encounter.retreat"
-		# V2-SANCTUM-001: withdrawal consequence + modifiers
+		# V2-SANCTUM-001: withdrawal — apply emotion modifiers + vow release before resolve.
 		_apply_run_emotion_modifiers("withdrawal", t)
-		var _vow_rel_ret := _check_vow_release_condition(t)
-		var _rc_ret := ConsequencePassServiceScript.collect(
-			flow_ctx.last_snapshot, "withdrawal",
-			flow_ctx.save_data, _vow_rel_ret, config_service.get_balance())
-		flow_ctx.pending_return_notification = _build_run_consequence_notification(_rc_ret, t)
+		_check_vow_release_condition(t)
 		flow_ctx.last_snapshot = _build_scout_return_snapshot(t)
 		flow_machine.transition(FlowStateIds.RESOLVE, flow_ctx, logger, t, "encounter.retreat.scout_return")
 	else:
@@ -4857,61 +4844,4 @@ func _check_vow_release_condition(t: int) -> bool:
 	return false
 
 
-func _build_run_consequence_notification(rc: Dictionary, t: int) -> Dictionary:
-	var outcome := str(rc.get("run_outcome", "defeat"))
-	var groups_v: Variant = rc.get("groups", [])
-	var groups: Array = groups_v if groups_v is Array else []
-
-	var tone: String
-	var title: String
-	match outcome:
-		"victory":
-			title = "The battle is won."
-			tone  = "positive"
-		"defeat":
-			title = "The echoes fell."
-			tone  = "negative"
-		_:
-			title = "The echoes withdraw."
-			tone  = "warning"
-
-	var body_parts: Array  = []
-	var detail_parts: Array = []
-	var amount_str := ""
-
-	for g_v in groups:
-		if not (g_v is Dictionary):
-			continue
-		var g: Dictionary = g_v as Dictionary
-		match str(g.get("type", "")):
-			"economy":
-				for e_v in (g.get("entries", []) as Array):
-					if not (e_v is Dictionary):
-						continue
-					var summary := str((e_v as Dictionary).get("summary", ""))
-					if summary.begins_with("+") or summary.begins_with("No"):
-						amount_str = summary
-					elif not summary.is_empty():
-						body_parts.append(summary)
-			"emotion":
-				for e_v in (g.get("entries", []) as Array):
-					if not (e_v is Dictionary):
-						continue
-					body_parts.append(str((e_v as Dictionary).get("summary", "")))
-			"vow", "intel":
-				for e_v in (g.get("entries", []) as Array):
-					if not (e_v is Dictionary):
-						continue
-					detail_parts.append(str((e_v as Dictionary).get("summary", "")))
-
-	return {
-		"id":               "run.consequence.%d" % t,
-		"title":            title,
-		"body":             "  ·  ".join(body_parts),
-		"detail":           "  ·  ".join(detail_parts),
-		"amount":           amount_str,
-		"tone":             tone,
-		"auto_dismiss":     false,
-		"blocking_overlay": true,
-		"duration_seconds": 0.0,
-	}
+## _build_run_consequence_notification removed — Resolve screen already presents this data.
