@@ -4,19 +4,18 @@
 [ext_resource type="Theme" uid="uid://8qssuuodths2" path="res://assets/theme/LivingTreeSystem.tres" id="2_gaxha"]
 [ext_resource type="PackedScene" uid="uid://dahk08c2p4mgn" path="res://ui/components/EmotionChip.tscn" id="3_emotionchip"]
 
-[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_qeq33"]
-
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ase_tip"]
+content_margin_left = 6.0
+content_margin_top = 2.0
+content_margin_right = 6.0
+content_margin_bottom = 2.0
 bg_color = Color(0.16, 0.09, 0.04, 0.8)
 corner_radius_top_left = 3
 corner_radius_top_right = 3
 corner_radius_bottom_right = 3
 corner_radius_bottom_left = 3
-content_margin_left = 6.0
-content_margin_top = 2.0
-content_margin_right = 6.0
-content_margin_bottom = 2.0
 
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_qeq33"]
 
 [node name="SanctumScreen" type="Control" unique_id=218783654]
 layout_mode = 3
@@ -105,7 +104,7 @@ layout_mode = 2
 theme_type_variation = &"SanctumHeaderText"
 autowrap_mode = 3
 
-[node name="VowComplianceLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack" unique_id=2200000001]
+[node name="VowComplianceLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack" unique_id=-2094967295]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -148,7 +147,6 @@ layout_mode = 2
 [node name="AseKickerLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin/AseStack/HBoxContainer" unique_id=1280470279]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_vertical = 1
 theme_type_variation = &"SanctumAseKicker"
 text = "Ase"
 horizontal_alignment = 2
@@ -159,13 +157,15 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"StatsPanel"
-theme_override_font_sizes/font_size = 48
+theme_override_font_sizes/font_size = 32
 text = "0"
 
 [node name="AseFlameTip" type="Label" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin/AseStack" unique_id=1746548666]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 8
 theme_type_variation = &"SanctumHeaderText"
+theme_override_font_sizes/font_size = 13
 theme_override_styles/normal = SubResource("StyleBoxFlat_ase_tip")
 text = "~ 0.0 per hour"
 horizontal_alignment = 2
@@ -183,11 +183,10 @@ horizontal_alignment = 2
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"StatsPanel"
-theme_override_font_sizes/font_size = 14
-theme_override_colors/font_color = Color(0.478, 0.271, 0.0, 1)
-text = ""
+theme_override_colors/font_color = Color(0.478, 0.271, 0, 1)
+theme_override_font_sizes/font_size = 16
+text = "0 ekw"
 horizontal_alignment = 2
-visible = false
 
 [node name="LeftStack" type="VBoxContainer" parent="RootMargin/LayoutRoot" unique_id=1730058239]
 unique_name_in_owner = true
@@ -905,7 +904,6 @@ layout_mode = 2
 size_flags_vertical = 0
 theme_override_constants/margin_left = 12
 
-
 [node name="EffectDetailStack" type="VBoxContainer" parent="EffectDetailPanel/EffectDetailMargin" unique_id=999000006]
 layout_mode = 2
 theme_override_constants/separation = 6
@@ -926,37 +924,37 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
 
-
-
 [node name="AwakeningOverlay" type="Control" parent="." unique_id=1156631300]
 unique_name_in_owner = true
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_right = 0.0
-offset_bottom = 0.0
-mouse_filter = 0
-visible = false
+grow_horizontal = 2
+grow_vertical = 2
 
 [node name="OverlayBg" type="ColorRect" parent="AwakeningOverlay" unique_id=1156631301]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 color = Color(0.102, 0.102, 0.18, 0.75)
-mouse_filter = 0
 
 [node name="OverlayCenterContainer" type="CenterContainer" parent="AwakeningOverlay" unique_id=1156631302]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
 
 [node name="InnerPanel" type="PanelContainer" parent="AwakeningOverlay/OverlayCenterContainer" unique_id=1156631303]
-layout_mode = 2
 custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
 
 [node name="MarginContainer" type="MarginContainer" parent="AwakeningOverlay/OverlayCenterContainer/InnerPanel" unique_id=1156631304]
 layout_mode = 2
@@ -971,8 +969,8 @@ theme_override_constants/separation = 16
 
 [node name="AwakeningTitle" type="Label" parent="AwakeningOverlay/OverlayCenterContainer/InnerPanel/MarginContainer/VBoxContainer" unique_id=1156631306]
 layout_mode = 2
-theme_override_font_sizes/font_size = 32
 theme_override_colors/font_color = Color(0.784, 0.663, 0.431, 1)
+theme_override_font_sizes/font_size = 32
 text = "The Ase Flame Stirs"
 horizontal_alignment = 1
 autowrap_mode = 3
@@ -987,15 +985,15 @@ autowrap_mode = 3
 [node name="AwakeningGrantLabel" type="Label" parent="AwakeningOverlay/OverlayCenterContainer/InnerPanel/MarginContainer/VBoxContainer" unique_id=1156631308]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 24
 theme_override_colors/font_color = Color(0.298, 0.686, 0.447, 1)
+theme_override_font_sizes/font_size = 24
 text = "+40 Ase"
 horizontal_alignment = 1
 
 [node name="AwakeningDismiss" type="Button" parent="AwakeningOverlay/OverlayCenterContainer/InnerPanel/MarginContainer/VBoxContainer" unique_id=1156631309]
 unique_name_in_owner = true
-layout_mode = 2
 custom_minimum_size = Vector2(0, 72)
+layout_mode = 2
 text = "Continue"
 
 [node name="SnapShotView" type="RichTextLabel" parent="." unique_id=1171635051]
@@ -1003,4 +1001,3 @@ unique_name_in_owner = true
 layout_mode = 0
 offset_right = 40.0
 offset_bottom = 40.0
-
