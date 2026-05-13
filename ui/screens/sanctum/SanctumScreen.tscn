@@ -105,6 +105,13 @@ layout_mode = 2
 theme_type_variation = &"SanctumHeaderText"
 autowrap_mode = 3
 
+[node name="VowComplianceLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack" unique_id=2200000001]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"SanctumHeaderText"
+autowrap_mode = 3
+
 [node name="GuidanceLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack" unique_id=1235301259]
 unique_name_in_owner = true
 layout_mode = 2

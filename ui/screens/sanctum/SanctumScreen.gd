@@ -10,6 +10,7 @@ const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.t
 
 @onready var title_label: Label = %TitleLabel
 @onready var vow_mantra_label: Label = %VowMantraLabel
+@onready var _vow_compliance_label: Label = %VowComplianceLabel
 @onready var guidance_label: Label = %GuidanceLabel
 @onready var ase_kicker_label: Label = %AseKickerLabel
 @onready var ase_label: Label = %AseLabel
@@ -88,9 +89,6 @@ var _ase_tween: Tween
 var _echo_detail_open := false
 var _detail_tab := "overview"
 var _selected_echo_id := ""
-# V2-VOW-002: compliance count label under mantra (created in _ready, positioned after vow_mantra_label).
-var _vow_compliance_label: Label = null
-
 
 func _ready() -> void:
 	reroll_button.pressed.connect(_on_reroll_pressed)
@@ -105,16 +103,6 @@ func _ready() -> void:
 	detail_party_action_button.pressed.connect(_on_detail_party_pressed)
 	_awakening_dismiss.pressed.connect(_on_awakening_dismiss_pressed)
 	_apply_awakening_panel_style()
-
-	# V2-VOW-002: compliance count label — sibling of vow_mantra_label in HeaderStack.
-	_vow_compliance_label = Label.new()
-	_vow_compliance_label.add_theme_font_size_override("font_size", 12)
-	_vow_compliance_label.add_theme_color_override("font_color", Color("#A8865A"))  # Warm Brass
-	_vow_compliance_label.visible = false
-	var _header_stack: VBoxContainer = vow_mantra_label.get_parent() as VBoxContainer
-	if _header_stack != null:
-		_header_stack.add_child(_vow_compliance_label)
-		_header_stack.move_child(_vow_compliance_label, vow_mantra_label.get_index() + 1)
 
 
 func set_snapshot(snap: Dictionary) -> void:
@@ -150,17 +138,15 @@ func _render() -> void:
 		vow_mantra_label.text = "%s - \"%s\"" % [proverb_twi, proverb_en]
 		vow_mantra_label.visible = not proverb_twi.is_empty() or not proverb_en.is_empty()
 		# V2-VOW-002: compliance count under mantra — "N stages honored" when count > 0.
-		if _vow_compliance_label != null:
-			var cc := int(active_vow.get("compliance_count", 0))
-			if cc > 0:
-				_vow_compliance_label.text = "%d stage%s honored" % [cc, "s" if cc != 1 else ""]
-				_vow_compliance_label.visible = true
-			else:
-				_vow_compliance_label.visible = false
+		var cc := int(active_vow.get("compliance_count", 0))
+		if cc > 0:
+			_vow_compliance_label.text = "%d stage%s honored" % [cc, "s" if cc != 1 else ""]
+			_vow_compliance_label.visible = true
+		else:
+			_vow_compliance_label.visible = false
 	else:
 		vow_mantra_label.visible = false
-		if _vow_compliance_label != null:
-			_vow_compliance_label.visible = false
+		_vow_compliance_label.visible = false
 
 	ase_label.text = str(ase_balance)
 

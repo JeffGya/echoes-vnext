@@ -175,6 +175,7 @@ theme_override_constants/separation = 4
 layout_mode = 2
 
 [node name="VowOutcomeHeader" type="Label" parent="CenterContainer/ResultCard/CardContent/VowOutcomeSection"]
+unique_name_in_owner = true
 layout_mode = 2
 text = "Vow"
 theme_override_font_sizes/font_size = 14
@@ -197,6 +198,7 @@ layout_mode = 2
 layout_mode = 2
 text = "Vow Revealed"
 theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.478431, 0.709804, 0.784314, 1)
 
 [node name="VowDiscoveredList" type="VBoxContainer" parent="CenterContainer/ResultCard/CardContent/VowDiscoveredSection"]
 unique_name_in_owner = true
