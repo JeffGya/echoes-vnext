@@ -192,6 +192,70 @@ shadow_color = Color(0.039215688, 0.05490196, 0.047058824, 0.26)
 shadow_size = 18
 shadow_offset = Vector2(0, 6)
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_notice_neutral"]
+bg_color = Color(0.9607843, 0.9019608, 0.827451, 0.96)
+border_width_left = 2
+border_width_top = 4
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.47843137, 0.70980394, 0.78431374, 0.92)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+corner_detail = 1
+shadow_color = Color(0.039215688, 0.05490196, 0.047058824, 0.26)
+shadow_size = 18
+shadow_offset = Vector2(0, 6)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_notice_positive"]
+bg_color = Color(0.9607843, 0.9019608, 0.827451, 0.96)
+border_width_left = 2
+border_width_top = 4
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.239, 0.529, 0.278, 0.92)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+corner_detail = 1
+shadow_color = Color(0.039215688, 0.05490196, 0.047058824, 0.26)
+shadow_size = 18
+shadow_offset = Vector2(0, 6)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_notice_warning"]
+bg_color = Color(0.9607843, 0.9019608, 0.827451, 0.96)
+border_width_left = 2
+border_width_top = 4
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.627, 0.490, 0.243, 0.92)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+corner_detail = 1
+shadow_color = Color(0.039215688, 0.05490196, 0.047058824, 0.26)
+shadow_size = 18
+shadow_offset = Vector2(0, 6)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_notice_negative"]
+bg_color = Color(0.9607843, 0.9019608, 0.827451, 0.96)
+border_width_left = 2
+border_width_top = 4
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.784, 0.353, 0.329, 0.92)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+corner_detail = 1
+shadow_color = Color(0.039215688, 0.05490196, 0.047058824, 0.26)
+shadow_size = 18
+shadow_offset = Vector2(0, 6)
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sanctum_route_action"]
 bg_color = Color(0.16470589, 0.16470589, 0.15294118, 0.96)
 border_width_left = 2
@@ -458,6 +522,29 @@ SanctumMuted/base_type = &"Label"
 SanctumMuted/colors/font_color = Color(0.42745098, 0.42745098, 0.42745098, 1)
 SanctumMuted/font_sizes/font_size = 15
 SanctumMuted/fonts/font = ExtResource("1_k333i")
+SanctumNoticeAmount/base_type = &"Label"
+SanctumNoticeAmount/font_sizes/font_size = 16
+SanctumNoticeAmount/fonts/font = ExtResource("11_r5n68")
+SanctumNoticeBody/base_type = &"Label"
+SanctumNoticeBody/colors/font_color = Color(0.23921569, 0.15686275, 0.09019608, 0.9)
+SanctumNoticeBody/font_sizes/font_size = 15
+SanctumNoticeBody/fonts/font = ExtResource("1_k333i")
+SanctumNoticeDetail/base_type = &"Label"
+SanctumNoticeDetail/colors/font_color = Color(0.23921569, 0.15686275, 0.09019608, 0.65)
+SanctumNoticeDetail/font_sizes/font_size = 14
+SanctumNoticeDetail/fonts/font = ExtResource("11_r5n68")
+SanctumNoticeNegative/base_type = &"PanelContainer"
+SanctumNoticeNegative/styles/panel = SubResource("StyleBoxFlat_notice_negative")
+SanctumNoticeNeutral/base_type = &"PanelContainer"
+SanctumNoticeNeutral/styles/panel = SubResource("StyleBoxFlat_notice_neutral")
+SanctumNoticePositive/base_type = &"PanelContainer"
+SanctumNoticePositive/styles/panel = SubResource("StyleBoxFlat_notice_positive")
+SanctumNoticeTitle/base_type = &"Label"
+SanctumNoticeTitle/colors/font_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
+SanctumNoticeTitle/font_sizes/font_size = 24
+SanctumNoticeTitle/fonts/font = ExtResource("1_8hwob")
+SanctumNoticeWarning/base_type = &"PanelContainer"
+SanctumNoticeWarning/styles/panel = SubResource("StyleBoxFlat_notice_warning")
 SanctumProgressMarker/base_type = &"Label"
 SanctumProgressMarker/colors/font_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
 SanctumProgressMarker/font_sizes/font_size = 18

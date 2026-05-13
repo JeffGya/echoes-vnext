@@ -9,6 +9,8 @@ const FlowKeeperIntroStateScript  := preload("res://core/state/flow/states/onboa
 const KeeperIntroServiceScript    := preload("res://core/onboarding/KeeperIntroService.gd")
 const StageExploreModelScript     := preload("res://core/realms/StageExploreModel.gd")                          # V2-STAGE-001
 const SituationModelScript        := preload("res://core/realms/SituationModel.gd")                             # V2-STAGE-001
+const ConsequencePassServiceScript := preload("res://core/sanctum/ConsequencePassService.gd")                    # V2-SANCTUM-001
+const EmotionRecoveryServiceScript := preload("res://core/emotion/EmotionRecoveryService.gd")                    # V2-SANCTUM-001
 
 var logger: StructuredLogger
 var config_service: ConfigService
@@ -118,9 +120,18 @@ func dispatch(action: Dictionary) -> Dictionary:
 		"flow.go_state":
 			var to_state := str(action.get("to", ""))
 			to_state = _gate_state_for_keeper_intro(to_state)
-			# EMOTION-002: sanctum recovery tick applies before snapshot rebuild
 			if to_state == FlowStateIds.SANCTUM:
-				_apply_sanctum_emotion_tick(t)
+				# V2-SANCTUM-001: defeat path — collect consequence when returning from RESOLVE.
+				# Other go_state→SANCTUM paths (keep intro complete, etc.) use the old tick.
+				if str(flow_machine._current_state_id) == FlowStateIds.RESOLVE:
+					_apply_run_emotion_modifiers("defeat", t)
+					var _vow_rel_def := _check_vow_release_condition(t)
+					var _rc_def := ConsequencePassServiceScript.collect(
+						flow_ctx.last_snapshot, "defeat",
+						flow_ctx.save_data, _vow_rel_def, config_service.get_balance())
+					flow_ctx.pending_return_notification = _build_run_consequence_notification(_rc_def, t)
+				else:
+					_apply_sanctum_emotion_tick(t)
 			elif to_state == FlowStateIds.WEAVING_RITE:
 				flow_ctx.selected_weave_thread_id = ""
 				flow_ctx.selected_weave_echo_id = ""
@@ -164,8 +175,9 @@ func dispatch(action: Dictionary) -> Dictionary:
 				flow_ctx.save_request_reason = "continue_first_boot"
 
 			_apply_offline_accrual_if_needed(t, "flow.continue")
-			# V2-ECONOMY-001: synchronize emotion tick at settlement (same choke point as accrual)
-			_apply_sanctum_emotion_tick(t)
+			# V2-SANCTUM-001: time-based emotion recovery catch-up on session continue
+			var _cont_unix := int(Time.get_unix_time_from_system())
+			_apply_emotion_recovery_if_needed(_cont_unix, t)
 
 			# PROG-001: patch old echo dicts that pre-date draw-order v2 fields
 			_repair_echo_schema(t)
@@ -743,6 +755,14 @@ func _handle_complete_stage(t: int, destination_override: String = "") -> void:
 		flow_machine.transition(FlowStateIds.REALM_SELECT, flow_ctx, logger, t, "realm.complete")
 	else:
 		var dest: String = destination_override if destination_override != "" else FlowStateIds.STAGE_MAP
+		# V2-SANCTUM-001: victory consequence when routing back to Sanctum
+		if dest == FlowStateIds.SANCTUM:
+			_apply_run_emotion_modifiers("victory", t)
+			var _vow_rel_vic := _check_vow_release_condition(t)
+			var _rc_vic := ConsequencePassServiceScript.collect(
+				flow_ctx.last_snapshot, "victory",
+				flow_ctx.save_data, _vow_rel_vic, config_service.get_balance())
+			flow_ctx.pending_return_notification = _build_run_consequence_notification(_rc_vic, t)
 		flow_machine.transition(dest, flow_ctx, logger, t, "realm.stage_complete")
 
 
@@ -1270,7 +1290,13 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 		flow_ctx.encounter_machine = null
 		flow_ctx.save_request      = true
 		flow_ctx.save_request_reason = "encounter.retreat"
-		_apply_sanctum_emotion_tick(t)
+		# V2-SANCTUM-001: withdrawal consequence + modifiers
+		_apply_run_emotion_modifiers("withdrawal", t)
+		var _vow_rel_ret := _check_vow_release_condition(t)
+		var _rc_ret := ConsequencePassServiceScript.collect(
+			flow_ctx.last_snapshot, "withdrawal",
+			flow_ctx.save_data, _vow_rel_ret, config_service.get_balance())
+		flow_ctx.pending_return_notification = _build_run_consequence_notification(_rc_ret, t)
 		flow_ctx.last_snapshot = _build_scout_return_snapshot(t)
 		flow_machine.transition(FlowStateIds.RESOLVE, flow_ctx, logger, t, "encounter.retreat.scout_return")
 	else:
@@ -2016,6 +2042,9 @@ func _handle_economy_settle_time(action: Dictionary, t: int) -> void:
 		"ase_after": int(econ_data.get("ase", 0)),
 	})
 	
+	# V2-SANCTUM-001: piggyback emotion recovery on the bank timer settle
+	_apply_emotion_recovery_if_needed(now_unix, t)
+
 	# IMPORTANT: settle_time can occur without a flow transition (e.g., Sanctum bank interval),
 	# so we must refresh snapshot so UI updates immediately.
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
@@ -2270,25 +2299,29 @@ func _build_offline_return_notification(
 	var stability_score := float(retention_ctx.get("stability_score", 0.0))
 	var title := "The Flame Held"
 	var body := "A little charge remained in your absence."
-	var tone := "steady"
+	var tone := "neutral"
 	if severe_disorder and gain <= 0:
 		title = "The Flame Faltered"
 		body = "The Sanctum could not hold much charge in your absence."
-		tone = "disorder"
+		tone = "negative"
 	elif gain <= 3 or stability_score < -0.15 or retention_multiplier < 0.8:
 		title = "The Flame Guttered"
 		body = "Only a little charge remained while you were away."
-		tone = "weak"
+		tone = "warning"
 	elif gain >= 12 or stability_score > 0.25 or retention_multiplier >= 1.0:
 		title = "The Flame Held Steady"
 		body = "The Sanctum kept a faithful charge in your absence."
-		tone = "strong"
+		tone = "positive"
+	var amount := ("+%d Ase retained" % gain) if gain > 0 else "No charge was retained"
 	return {
-		"id": "offline.%d.%d" % [now_unix, raw_delta_seconds],
-		"title": title,
-		"body": body,
-		"ase_gain": gain,
-		"tone": tone,
+		"id":               "offline.%d.%d" % [now_unix, raw_delta_seconds],
+		"title":            title,
+		"body":             body,
+		"detail":           "",
+		"amount":           amount,
+		"tone":             tone,
+		"auto_dismiss":     true,
+		"blocking_overlay": true,
 		"duration_seconds": 4.2,
 	}
 	
@@ -4698,3 +4731,187 @@ func _get_roster_echo_ids() -> Array:
 		if echo_v is Dictionary:
 			ids.append(str((echo_v as Dictionary).get("id", "")))
 	return ids
+
+
+# ---------------------------------------------------------------------------
+# V2-SANCTUM-001 — Emotion recovery + consequence helpers
+# ---------------------------------------------------------------------------
+
+func _get_emotion_recovery_cfg() -> Dictionary:
+	var balance := config_service.get_balance()
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var emo_v: Variant = data.get("emotion", {})
+	var emo: Dictionary = emo_v if emo_v is Dictionary else {}
+	var rec_v: Variant = emo.get("recovery", {})
+	return rec_v if rec_v is Dictionary else {}
+
+
+func _get_fear_threshold() -> int:
+	var drift := _get_drift_cfg()
+	return int(drift.get("fear_threshold", 80))
+
+
+func _apply_emotion_recovery_if_needed(now_unix: int, t: int) -> void:
+	var econ_v: Variant = flow_ctx.save_data.get("economy", {})
+	if not (econ_v is Dictionary):
+		return
+	var econ_data: Dictionary = econ_v as Dictionary
+	var last_settle := int(econ_data.get("last_emotion_settle_unix", 0))
+	if last_settle <= 0:
+		econ_data["last_emotion_settle_unix"] = now_unix
+		return
+
+	var elapsed := now_unix - last_settle
+	if elapsed <= 0:
+		return
+
+	var cfg := _get_emotion_recovery_cfg()
+	if cfg.is_empty():
+		return
+
+	var fear_threshold := _get_fear_threshold()
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if not (sanctum_v is Dictionary):
+		return
+	var sanctum: Dictionary = sanctum_v as Dictionary
+	var roster_v: Variant = sanctum.get("roster", [])
+	var roster: Array = roster_v if roster_v is Array else []
+
+	var changed := EmotionRecoveryServiceScript.apply_recovery_from_elapsed(
+		roster, elapsed, cfg, fear_threshold, logger, t)
+
+	if changed.size() > 0:
+		sanctum["roster"] = roster
+		flow_ctx.save_request = true
+		if flow_ctx.save_request_reason.is_empty():
+			flow_ctx.save_request_reason = "emotion.recovery"
+		else:
+			flow_ctx.save_request_reason += "|emotion.recovery"
+		logger.info(t, "emotion.recovery", "Emotion recovery applied", {
+			"elapsed_seconds": elapsed,
+			"echoes_changed":  changed.size(),
+		})
+
+	econ_data["last_emotion_settle_unix"] = now_unix
+
+
+func _apply_run_emotion_modifiers(outcome: String, t: int) -> void:
+	var cfg := _get_emotion_recovery_cfg()
+	if cfg.is_empty():
+		return
+
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	if not (sanctum_v is Dictionary):
+		return
+	var sanctum: Dictionary = sanctum_v as Dictionary
+	var roster_v: Variant = sanctum.get("roster", [])
+	var roster: Array = roster_v if roster_v is Array else []
+	if roster.is_empty():
+		return
+
+	var party_ids_v: Variant = sanctum.get("active_party_ids", [])
+	var party_ids: Array = party_ids_v if party_ids_v is Array else []
+
+	var ticks := int(cfg.get("modifier_ticks_duration", 3))
+
+	for echo_v in roster:
+		if not (echo_v is Dictionary):
+			continue
+		var echo: Dictionary = echo_v as Dictionary
+		if not party_ids.has(str(echo.get("id", ""))):
+			continue
+		var morale_mul := 1.0
+		var fear_mul   := 1.0
+		match outcome:
+			"victory":
+				morale_mul = float(cfg.get("modifier_victory_morale_mul",  1.5))
+			"defeat":
+				fear_mul   = float(cfg.get("modifier_defeat_fear_mul",     0.5))
+			"withdrawal":
+				morale_mul = float(cfg.get("modifier_survived_morale_mul", 1.25))
+		EmotionRecoveryServiceScript.set_modifier(echo, morale_mul, fear_mul, ticks, logger, t)
+
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason.is_empty():
+		flow_ctx.save_request_reason = "emotion.run_modifier"
+	else:
+		flow_ctx.save_request_reason += "|emotion.run_modifier"
+
+
+func _check_vow_release_condition(t: int) -> bool:
+	var active_vow := VowService.get_active_vow(flow_ctx.save_data)
+	if active_vow.is_empty():
+		return false
+	var vow_outcome_v: Variant = flow_ctx.save_data.get("flow", {})
+	if vow_outcome_v is Dictionary:
+		var vow_outcome_dict: Dictionary = (vow_outcome_v as Dictionary).get("vow_outcome", {})
+		if str(vow_outcome_dict.get("event", "")) == "benefit":
+			VowService.release_vow(flow_ctx.save_data, null, logger, t)
+			flow_ctx.save_request = true
+			if flow_ctx.save_request_reason.is_empty():
+				flow_ctx.save_request_reason = "vow.released"
+			else:
+				flow_ctx.save_request_reason += "|vow.released"
+			return true
+	return false
+
+
+func _build_run_consequence_notification(rc: Dictionary, t: int) -> Dictionary:
+	var outcome := str(rc.get("run_outcome", "defeat"))
+	var groups_v: Variant = rc.get("groups", [])
+	var groups: Array = groups_v if groups_v is Array else []
+
+	var tone: String
+	var title: String
+	match outcome:
+		"victory":
+			title = "The battle is won."
+			tone  = "positive"
+		"defeat":
+			title = "The echoes fell."
+			tone  = "negative"
+		_:
+			title = "The echoes withdraw."
+			tone  = "warning"
+
+	var body_parts: Array  = []
+	var detail_parts: Array = []
+	var amount_str := ""
+
+	for g_v in groups:
+		if not (g_v is Dictionary):
+			continue
+		var g: Dictionary = g_v as Dictionary
+		match str(g.get("type", "")):
+			"economy":
+				for e_v in (g.get("entries", []) as Array):
+					if not (e_v is Dictionary):
+						continue
+					var summary := str((e_v as Dictionary).get("summary", ""))
+					if summary.begins_with("+") or summary.begins_with("No"):
+						amount_str = summary
+					elif not summary.is_empty():
+						body_parts.append(summary)
+			"emotion":
+				for e_v in (g.get("entries", []) as Array):
+					if not (e_v is Dictionary):
+						continue
+					body_parts.append(str((e_v as Dictionary).get("summary", "")))
+			"vow", "intel":
+				for e_v in (g.get("entries", []) as Array):
+					if not (e_v is Dictionary):
+						continue
+					detail_parts.append(str((e_v as Dictionary).get("summary", "")))
+
+	return {
+		"id":               "run.consequence.%d" % t,
+		"title":            title,
+		"body":             "  ·  ".join(body_parts),
+		"detail":           "  ·  ".join(detail_parts),
+		"amount":           amount_str,
+		"tone":             tone,
+		"auto_dismiss":     false,
+		"blocking_overlay": true,
+		"duration_seconds": 0.0,
+	}

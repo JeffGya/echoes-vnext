@@ -6,6 +6,17 @@
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_qeq33"]
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ase_tip"]
+bg_color = Color(0.16, 0.09, 0.04, 0.8)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+content_margin_left = 6.0
+content_margin_top = 2.0
+content_margin_right = 6.0
+content_margin_bottom = 2.0
+
 
 [node name="SanctumScreen" type="Control" unique_id=218783654]
 layout_mode = 3
@@ -147,7 +158,8 @@ text = "0"
 [node name="AseFlameTip" type="Label" parent="RootMargin/LayoutRoot/TopBand/AseCard/AseMargin/AseStack" unique_id=1746548666]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 14
+theme_type_variation = &"SanctumHeaderText"
+theme_override_styles/normal = SubResource("StyleBoxFlat_ase_tip")
 text = "~ 0.0 per hour"
 horizontal_alignment = 2
 
@@ -165,7 +177,7 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"StatsPanel"
 theme_override_font_sizes/font_size = 14
-theme_override_colors/font_color = Color(0.91, 0.627, 0.188, 1)
+theme_override_colors/font_color = Color(0.478, 0.271, 0.0, 1)
 text = ""
 horizontal_alignment = 2
 visible = false
