@@ -951,25 +951,27 @@ func _run_institution_command(parts: Array) -> void:
 	var targets: Array = KNOWN_IDS if target == "all" or target.is_empty() else [target]
 
 	if op == "unlock":
+		# "unlock" means make it a candidate — Continuity threshold met, not yet placed.
+		# The player still goes through the full Establish → placement flow.
 		if target.is_empty():
 			_debug_print("Usage: institution unlock <hearth|training_grounds|all>")
 			_flush_logs_to_console()
 			return
+		# Set Continuity high enough for all requested institutions.
+		# training_grounds needs 2; hearth needs 1.
+		var needed_continuity := 1
+		for iid in targets:
+			if iid == "training_grounds":
+				needed_continuity = 2
+		var current_continuity := int(sanctum.get("continuity", 0))
+		if current_continuity < needed_continuity:
+			sanctum["continuity"] = needed_continuity
+			_debug_print("Continuity set to %d (was %d)" % [needed_continuity, current_continuity])
 		for iid in targets:
 			if not institutions.has(iid):
 				_debug_print("Unknown institution: %s  (known: %s)" % [iid, ", ".join(KNOWN_IDS)])
 				continue
-			var inst: Dictionary = institutions[iid]
-			inst["unlocked"] = true
-			inst["condition"] = "neglected"
-			# Give it a sensible default position if none stored yet.
-			if not inst.has("position") or not (inst["position"] is Dictionary):
-				inst["position"] = { "x": 3, "y": 0 } if iid == "hearth" else { "x": -3, "y": 0 }
-			_debug_print("Institution unlocked (debug): %s at (%d, %d)" % [
-				iid,
-				int(inst["position"].get("x", 0)),
-				int(inst["position"].get("y", 0))
-			])
+			_debug_print("Institution now a candidate: %s — tap Establish in the panel to place it." % iid)
 		var snap := runtime.dispatch({ "type": "flow.go_state", "to": "flow.sanctum" })
 		_render_snapshot(snap)
 
