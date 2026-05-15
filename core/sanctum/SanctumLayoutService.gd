@@ -277,7 +277,7 @@ static func _bridge_cells(target: Vector2i, floor_cells: Dictionary) -> Array:
 	var best_dist := 999999
 	for cell_v in floor_cells:
 		var cell: Vector2i = cell_v
-		var dist := abs(target.x - cell.x) + abs(target.y - cell.y)
+		var dist: int = abs(target.x - cell.x) + abs(target.y - cell.y)
 		if dist < best_dist:
 			best_dist = dist
 			nearest = cell
