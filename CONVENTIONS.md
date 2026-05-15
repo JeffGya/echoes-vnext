@@ -244,6 +244,29 @@ Pure static. Board 10×10 (from `balance.json data.grid`).
 - `move_toward(actor, target_pos, board_cfg) -> { from_pos, to_pos }` — 8-dir greedy, mutates `actor["grid_pos"]`
 - `is_valid_pos(pos, board_cfg) -> bool`
 
+### SanctumLayoutService (`core/sanctum/SanctumLayoutService.gd`)
+Pure-static `RefCounted`. V2-SANCTUM-002. No Nodes, no UI refs.
+
+**Signatures:**
+- `snapshot_layout(save_data, inst_snapshot: Array = []) -> Dictionary` — returns `{ tiles: Array }`. Each tile: `{ x, y, kind }`. Kind values: `"floor"`, `"ase_flame"`, `"institution"`.
+- `snapshot_occupants(save_data, roster: Array = [], active_party_ids: Array = [], inst_snapshot: Array = []) -> Array` — returns Array of occupant dicts. Each occupant carries `kind`, `id`, `name`, `x`, `y`. Echo occupants also carry `morale_tier: String`.
+- `compute_valid_placement_cells(save_data, inst_snapshot: Array = []) -> Array` — returns `Array[Vector2i]`. Valid cells are adjacent (8-dir) to an existing floor tile, not occupied, not already a floor tile, and not within Chebyshev-2 of any institution or the Ase Flame.
+- `ensure_layout(save_data, inst_snapshot: Array = []) -> void` — ensures Ase Flame tile at (0,0), institution tiles at their stored positions, and bridge floor tiles.
+- `ensure_starter_occupant(save_data, roster: Array = [], active_party_ids: Array = [], inst_snapshot: Array = []) -> void`
+
+**`sanctum_occupants` kind values:**
+| Kind | Meaning |
+|---|---|
+| `"ase_flame"` | Permanent spiritual anchor at (0,0). Always first entry. |
+| `"institution"` | Established or candidate institution marker. |
+| `"echo"` | Roster echo. Carries `morale_tier` field (inspired/steady/shaken/broken). |
+
+**`morale_tier` in echo occupants:** computed at snapshot time via `EmotionService.get_morale_tier(morale_current)` — not stored in save. Used by `SanctumOccupantLayer` to pick fill color for the token.
+
+**Ase Flame:** hardcoded at `Vector2i(0, 0)`. Never goes through `InstitutionService`. Never in valid placement cells.
+
+**Institution positions:** stored in `save_data.sanctum.institutions[inst_id].position` as `{ "x": int, "y": int }`. Added by `InstitutionService.establish()` when placement is confirmed. Safe default `{ x:0, y:0 }` added by `SaveSchema` repair.
+
 ### SocialGraphService (`core/sanctum/SocialGraphService.gd`)
 Pure-static `RefCounted`. BOND-001 social graph — 11-tier signed score (-100..+100) between Echo pairs.
 
@@ -517,7 +540,7 @@ EncounterStateMachine phases (scaffold): `setup → blessing → rounds → reso
 | **flow** | `flow.select_realm` | selects a realm; triggers `RealmService.get_or_create`; transitions to `flow.stage_map`. Payload: `{ realm_id: String }` |
 | | `flow.select_stage` | sets `ctx.stage_id`, transitions to `flow.stage`. Payload: `{ stage_id: String }` |
 | | `flow.complete_stage` | REALM-004: advances `current_stage_index` via `RealmService.advance_stage()`; on realm complete routes to `flow.realm_select` (clears `ctx.realm_id`+`ctx.stage_id`); else routes to `flow.stage_map`. Optional `destination` field overrides routing for non-completed stages (e.g. `"flow.sanctum"` for victory "To Sanctum" path). |
-| **sanctum (institutions)** | `sanctum.institution.establish` | payload: `{ institution_id }`. Spends Ekwan, unlocks institution. Gated by Continuity threshold + Ekwan affordability. |
+| **sanctum (institutions)** | `sanctum.institution.establish` | payload: `{ institution_id, position: { x: int, y: int } }`. Spends Ekwan, unlocks institution at free-placed position. Gated by Continuity threshold + Ekwan affordability. Position dispatched by `SanctumScreen` confirm flow after player selects a valid cell. |
 | | `sanctum.institution.assign_echo` | payload: `{ institution_id, echo_id }`. Spends Ase, adds echo to occupant_ids. Auto-removes echo from active_party_ids if present. |
 | | `sanctum.institution.remove_echo` | payload: `{ institution_id, echo_id }`. Spends Ekwan, removes echo, drops condition one tier. Applies morale/fear delta if echo was natural_fit. |
 | **weave** | `weave.start_for_echo` | payload: `{ echo_id }`. Starts rite from an EchoParty/Sanctum-family interaction, seeds rite context with the chosen echo, transitions to `flow.weaving_rite`. |
@@ -589,6 +612,7 @@ Echo traits (resilience + leadership) use a **separate derived RNG** at path `<s
 - `static build_snapshot()` pattern for mid-state snapshot updates
 - `MaturityExpressionService` is the single lookup point for expression_band (Standing-based) + calling_behavior config. Expression bands: nascent (S1), forming (S2), grounded (S3), whole (S4–5). `presence_strength`: 0.1 / 0.25 / 0.5 / 1.0. All downstream systems (BehaviorArbiter, EmotionService, ShoutBank) read `expression_band` from actor context — never `smartness_tier`. Config lives under `balance.data.maturity_expression`. (V2-PROG-006)
 - Echo traits (`resilience_traits` + `leadership_traits`) seeded at EchoFactory via derived RNG `.echo_traits.v1` — immutable, separate from v1/v2 draw sequence. Never reorder v1/v2.
+- **Sanctum spatial layer architecture (V2-SANCTUM-002):** Three dedicated `Node2D` layers defined in `SanctumSpatialRenderer.tscn` (never created in code). `SanctumBuildingLayer` (z=1): Ase Flame marker + institution established/candidate markers. `SanctumOccupantLayer` (z=2): echo tokens only — combat-board circle style with morale_tier fill color. `SanctumPlacementLayer` (z=3): valid cell highlights + ghost building; shown/hidden atomically during placement mode. `SanctumSpatialRenderer.gd` coordinates all three — receives snapshot data, pre-converts tile coords to pixel positions, calls each layer's setter. `SanctumGroundScene` was deleted — do not recreate it.
 - **Voice system (V2-VOICE-001):** Real-time bark display + reactive barks + priority display. Full contracts below.
   - **Actor dict bark fields** (written by `ActorStateMachine.advance_turn()` + `finalize_combat_bark()`; reset at turn start): `_bark_line: String`, `_bark_context: String`, `_bark_tier: String` (1/2/3), `_bark_target_id: String`, `_bark_is_response: bool`.
   - **`round_bark_events: Array`** on `EncounterContext` — reset at round start; each entry `{ actor_id, faction, bark_context, grid_pos }`. Appended to by `FlowRuntime._resolve_next_actor()` for high-signal barks (`combat_last_stand`, `combat_fear_extreme`, `combat_resilient`, `combat_taunt`, `combat_ko`). Passed to every actor's `advance_turn()` ctx so forming+ band actors can react.

@@ -2,6 +2,8 @@
 
 [ext_resource type="Script" uid="uid://dgemo2ngk3ytp" path="res://ui/sanctum/SanctumSpatialRenderer.gd" id="0_script"]
 [ext_resource type="Script" uid="uid://d18umf7lng10g" path="res://ui/sanctum/SanctumOccupantLayer.gd" id="3_occupants"]
+[ext_resource type="Script" path="res://ui/sanctum/SanctumBuildingLayer.gd" id="5_buildings"]
+[ext_resource type="Script" path="res://ui/sanctum/SanctumPlacementLayer.gd" id="6_placement"]
 [ext_resource type="Texture2D" uid="uid://bxussq8t1us8q" path="res://assets/sanctum/tiles/floor/stoneTile96x96.png" id="4_stone"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_stone"]
@@ -20,9 +22,20 @@ sources/0 = SubResource("TileSetAtlasSource_stone")
 script = ExtResource("0_script")
 
 [node name="Floor" type="TileMapLayer" parent="." unique_id=960502667]
+z_index = 0
 y_sort_enabled = true
 tile_set = SubResource("TileSet_stone")
 
+[node name="SanctumBuildingLayer" type="Node2D" parent="."]
+z_index = 1
+script = ExtResource("5_buildings")
+
 [node name="Occupants" type="Node2D" parent="." unique_id=561559638]
+z_index = 2
 y_sort_enabled = true
 script = ExtResource("3_occupants")
+
+[node name="SanctumPlacementLayer" type="Node2D" parent="."]
+z_index = 3
+visible = false
+script = ExtResource("6_placement")

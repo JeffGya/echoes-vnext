@@ -93,6 +93,7 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 					"condition":           "neglected",
 					"last_activated_unix": 0,
 					"occupant_ids":        [],
+					"position":            { "x": 0, "y": 0 },
 				},
 				"training_grounds": {
 					"unlocked":            false,
@@ -100,6 +101,7 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 					"condition":           "neglected",
 					"last_activated_unix": 0,
 					"occupant_ids":        [],
+					"position":            { "x": 0, "y": 0 },
 				},
 			},
 

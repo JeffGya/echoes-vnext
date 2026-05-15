@@ -92,7 +92,7 @@ static func get_compatibility_hint(echo_name: String, inst_id: String, compat_ti
 
 # ---- Actions ----
 
-static func establish(inst_id: String, save_data: Dictionary, econ: EconomyService, inst_cfg: Dictionary, logger: StructuredLogger, t: int) -> bool:
+static func establish(inst_id: String, save_data: Dictionary, econ: EconomyService, inst_cfg: Dictionary, logger: StructuredLogger, t: int, position: Vector2i = Vector2i(0, 0)) -> bool:
 	if not is_candidate(inst_id, save_data, inst_cfg):
 		logger.info(t, "sanctum.institution.establish.blocked", "not a candidate", { "id": inst_id })
 		return false
@@ -105,7 +105,8 @@ static func establish(inst_id: String, save_data: Dictionary, econ: EconomyServi
 	inst["unlocked"]            = true
 	inst["last_activated_unix"] = 0
 	inst["condition"]           = CONDITION_NEGLECTED
-	logger.info(t, "sanctum.institution.established", inst_id, { "id": inst_id, "ekwan_spent": cost })
+	inst["position"]            = { "x": position.x, "y": position.y }
+	logger.info(t, "sanctum.institution.established", inst_id, { "id": inst_id, "ekwan_spent": cost, "position": inst["position"] })
 	return true
 
 
@@ -352,3 +353,71 @@ static func _set_condition(inst: Dictionary, new_cond: String, inst_id: String, 
 	inst["condition"] = new_cond
 	if old_cond != new_cond:
 		logger.info(t, "sanctum.institution.condition_updated", inst_id, { "id": inst_id, "old": old_cond, "new": new_cond })
+
+
+# ---- Passive effects (fired at economy.settle_time cadence) ----
+
+# Applies institution passive effects to ALL roster echoes (social gravity).
+# Rates: hearth -> morale_per_hour, training_grounds -> storyweight_per_hour.
+# All echoes benefit at the base rate; job amplification is V2-SANCTUM-003.
+static func apply_passive_effects(save_data: Dictionary, hours_elapsed: float, inst_cfg: Dictionary, logger: StructuredLogger, t: int) -> void:
+	var all_echo_ids := _get_all_roster_echo_ids(save_data)
+	if all_echo_ids.is_empty():
+		return
+
+	for inst_id in ALL_INSTITUTIONS:
+		var inst: Dictionary = _get_inst(inst_id, save_data)
+		if not bool(inst.get("unlocked", false)):
+			continue
+
+		var cfg_v: Variant = inst_cfg.get(inst_id, {})
+		var cfg: Dictionary = cfg_v if cfg_v is Dictionary else {}
+
+		match inst_id:
+			HEARTH:
+				var rate := float(cfg.get("morale_per_hour", 2))
+				var delta := int(hours_elapsed * rate)
+				if delta <= 0:
+					continue
+				var sanctum_v: Variant = save_data.get("sanctum", {})
+				var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+				var roster_v: Variant = sanctum.get("roster", [])
+				var roster: Array = roster_v if roster_v is Array else []
+				for echo_v in roster:
+					if not (echo_v is Dictionary):
+						continue
+					var echo: Dictionary = echo_v
+					EmotionService.apply_morale_delta(echo, delta, "hearth.passive", logger, t)
+				logger.info(t, "sanctum.institution.hearth.passive", "morale applied to all roster echoes", { "delta": delta, "hours": hours_elapsed })
+
+			TRAINING_GROUNDS:
+				var rate := float(cfg.get("storyweight_per_hour", 1))
+				var delta := int(hours_elapsed * rate)
+				if delta <= 0:
+					continue
+				var sanctum_v: Variant = save_data.get("sanctum", {})
+				var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+				var roster_v: Variant = sanctum.get("roster", [])
+				var roster: Array = roster_v if roster_v is Array else []
+				for echo_v in roster:
+					if not (echo_v is Dictionary):
+						continue
+					var echo: Dictionary = echo_v
+					var current := int(echo.get("xp_total", 0))
+					echo["xp_total"] = current + delta
+				logger.info(t, "sanctum.institution.training_grounds.passive", "storyweight applied to all roster echoes", { "delta": delta, "hours": hours_elapsed })
+
+
+static func _get_all_roster_echo_ids(save_data: Dictionary) -> Array:
+	var sanctum_v: Variant = save_data.get("sanctum", {})
+	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	var roster_v: Variant = sanctum.get("roster", [])
+	var roster: Array = roster_v if roster_v is Array else []
+	var ids: Array = []
+	for echo_v in roster:
+		if not (echo_v is Dictionary):
+			continue
+		var id := str((echo_v as Dictionary).get("id", ""))
+		if not id.is_empty():
+			ids.append(id)
+	return ids

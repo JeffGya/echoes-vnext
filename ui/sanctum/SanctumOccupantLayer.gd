@@ -2,11 +2,25 @@ extends Node2D
 
 class_name SanctumOccupantLayer
 
-const SILHOUETTE_FILL := Color("#2D1F1A")
-const SILHOUETTE_EDGE := Color("#D4AF37")
-const NAME_COLOR := Color("#F5E6D3")
-const FEATURE_GLOW := Color(0.95686275, 0.9019608, 0.7294118, 0.2)
-const FEATURE_RING := Color(0.83137256, 0.6862745, 0.21568628, 0.9)
+# Echoes only. Circle tokens matching combat board style.
+# Fill color driven by morale_tier (supplied per-echo by SanctumLayoutService).
+
+# Morale tier fill colors (match combat board token palette)
+const FILL_INSPIRED := Color("#D4A827E6")  # warm amber, 90% alpha
+const FILL_STEADY   := Color("#2A5C45E6")  # jade green, 90% alpha
+const FILL_SHAKEN   := Color("#4A5568E6")  # cool grey-blue, 90% alpha
+const FILL_BROKEN   := Color("#3D1515E6")  # dark rust, 90% alpha
+
+const COLOR_OUTLINE      := Color("#D4AF37")          # Akan Gold
+const COLOR_NAME         := Color("#F5E6D3")          # cream
+const COLOR_SHADOW       := Color(0.0, 0.0, 0.0, 0.28)
+const COLOR_FEATURE_GLOW := Color(0.957, 0.902, 0.729, 0.2)
+const COLOR_FEATURE_RING := Color(0.831, 0.686, 0.216, 0.9)
+
+const ECHO_RADIUS := 14.0
+const FEATURE_RADIUS := 18.0
+const SHADOW_OFFSET := Vector2(0.0, 10.0)
+const TOKEN_OFFSET  := Vector2(0.0, -6.0)
 
 var _occupants: Array = []
 var _featured_id: String = ""
@@ -28,28 +42,51 @@ func _draw() -> void:
 		if not (occupant_v is Dictionary):
 			continue
 		var occupant: Dictionary = occupant_v
+
+		# Skip non-echo kinds — buildings/ase_flame drawn by SanctumBuildingLayer
+		if str(occupant.get("kind", "echo")) != "echo":
+			continue
+
 		var pos_v: Variant = occupant.get("position", Vector2.ZERO)
 		var pos: Vector2 = pos_v if pos_v is Vector2 else Vector2.ZERO
-		var name := str(occupant.get("name", ""))
-		var occupant_id := str(occupant.get("id", ""))
+		var echo_id := str(occupant.get("id", ""))
+		var name    := str(occupant.get("name", ""))
+		var morale_tier := str(occupant.get("morale_tier", "steady"))
+		var is_featured := (not _featured_id.is_empty() and echo_id == _featured_id)
 
-		if not _featured_id.is_empty() and occupant_id == _featured_id:
-			draw_circle(pos + Vector2(0.0, -6.0), 28.0, FEATURE_GLOW)
-			draw_arc(pos + Vector2(0.0, -6.0), 28.0, 0.0, TAU, 40, FEATURE_RING, 2.0, true)
+		var center := pos + TOKEN_OFFSET
+		var fill_col := _fill_for_morale_tier(morale_tier)
 
-		draw_ellipse(pos + Vector2(-18.0, 10.0), 18.0, 8.0, Color(0, 0, 0, 0.28))
-		draw_circle(pos + Vector2(0.0, -22.0), 12.0, SILHOUETTE_FILL)
-		draw_arc(pos + Vector2(0.0, -22.0), 12.0, 0.0, TAU, 32, SILHOUETTE_EDGE, 1.5, true)
-		draw_ellipse(pos + Vector2(-14.0, -10.0), 14.0, 22.0, SILHOUETTE_FILL)
-		draw_arc(pos + Vector2(0.0, 12.0), 18.0, PI, TAU, 24, SILHOUETTE_EDGE, 1.25, true)
+		# Featured glow ring (drawn first, behind token)
+		if is_featured:
+			draw_circle(center, FEATURE_RADIUS + 4.0, COLOR_FEATURE_GLOW)
+			draw_arc(center, FEATURE_RADIUS, 0.0, TAU, 40, COLOR_FEATURE_RING, 2.0, true)
 
+		# Shadow ellipse
+		draw_ellipse(pos + SHADOW_OFFSET, 10.0, 4.0, COLOR_SHADOW)
+
+		# Filled circle with emotion color
+		draw_circle(center, ECHO_RADIUS, fill_col)
+
+		# Gold arc outline
+		draw_arc(center, ECHO_RADIUS, 0.0, TAU, 40, COLOR_OUTLINE, 1.5, true)
+
+		# Name label below token
 		if not name.is_empty():
 			draw_string(
 				font,
-				pos + Vector2(-54.0, 44.0),
+				pos + Vector2(-40.0, 22.0),
 				name,
 				HORIZONTAL_ALIGNMENT_CENTER,
-				108.0,
-				12,
-				NAME_COLOR
+				80.0,
+				10,
+				COLOR_NAME
 			)
+
+
+static func _fill_for_morale_tier(tier: String) -> Color:
+	match tier:
+		"inspired": return FILL_INSPIRED
+		"shaken":   return FILL_SHAKEN
+		"broken":   return FILL_BROKEN
+		_:          return FILL_STEADY

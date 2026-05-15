@@ -81,8 +81,7 @@ const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.t
 @onready var _detail_body:      Label          = %EffectDetailBody
 @onready var _detail_duration:  Label          = %EffectDetailDuration
 
-# V2-SANCTUM-002: ground scene + institution panels
-@onready var _ground_scene:          SanctumGroundScene = %SanctumGroundSceneInstance
+# V2-SANCTUM-002: institution panels
 @onready var _inst_detail_panel:     PanelContainer     = %InstitutionDetailPanel
 @onready var _inst_detail_name:      Label              = %InstDetailName
 @onready var _inst_detail_condition: Label              = %InstDetailCondition
@@ -96,10 +95,21 @@ const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.t
 @onready var _picker_row_template:   Button             = %PickerRowTemplate
 @onready var _picker_cancel_btn:     Button             = %PickerCancelButton
 
+# V2-SANCTUM-002: institutions overlay + placement bar
+@onready var _sanctum_mgmt_btn:      Button             = %SanctumMgmtBtn
+@onready var _institutions_overlay:  PanelContainer     = %InstitutionsOverlay
+@onready var _inst_list:             VBoxContainer      = %InstitutionList
+@onready var _inst_overlay_back_btn: Button             = %InstOverlayBackBtn
+@onready var _placement_bar:         HBoxContainer      = %PlacementConfirmBar
+@onready var _placement_label:       Label              = %PlacementLabel
+@onready var _placement_confirm_btn: Button             = %PlacementConfirmBtn
+@onready var _placement_cancel_btn:  Button             = %PlacementCancelBtn
+
 
 var _snapshot: Dictionary = {}
 var _name_dirty := false
 var _current_institution_id := ""
+var _placement_cell: Variant = null   # Vector2i or null — the cell selected in placement mode
 var _last_ase_balance: int = -1
 var _ase_tween: Tween
 var _echo_detail_open := false
@@ -120,12 +130,23 @@ func _ready() -> void:
 	_awakening_dismiss.pressed.connect(_on_awakening_dismiss_pressed)
 	_apply_awakening_panel_style()
 	# V2-SANCTUM-002: institution wiring
-	_ground_scene.institution_selected.connect(_on_ground_institution_selected)
-	_ground_scene.echo_selected.connect(_on_ground_echo_selected)
 	_inst_back_btn.pressed.connect(_on_inst_detail_back_pressed)
 	_inst_assign_btn.pressed.connect(_on_inst_assign_pressed)
 	_inst_establish_btn.pressed.connect(_on_inst_establish_pressed)
 	_picker_cancel_btn.pressed.connect(_on_picker_cancel_pressed)
+	# Institutions overlay + placement bar
+	if _sanctum_mgmt_btn != null:
+		_sanctum_mgmt_btn.pressed.connect(show_institutions_panel)
+	if _inst_overlay_back_btn != null:
+		_inst_overlay_back_btn.pressed.connect(hide_institutions_panel)
+	if _placement_confirm_btn != null:
+		_placement_confirm_btn.pressed.connect(_on_placement_confirmed)
+	if _placement_cancel_btn != null:
+		_placement_cancel_btn.pressed.connect(_on_placement_cancelled)
+	if _institutions_overlay != null:
+		_institutions_overlay.visible = false
+	if _placement_bar != null:
+		_placement_bar.visible = false
 
 
 func set_snapshot(snap: Dictionary) -> void:
@@ -193,10 +214,8 @@ func _render() -> void:
 	_render_echo_detail(detail_roster, str(data.get("featured_echo_id", "")))
 	# V2-VOW-002: rebuild active effects chips
 	_render_active_effects(data)
-	# V2-SANCTUM-002: forward ground data + refresh institution detail if open
-	var ground_v: Variant = data.get("sanctum_ground", {})
-	if ground_v is Dictionary:
-		_ground_scene.set_ground_data(ground_v as Dictionary)
+	# V2-SANCTUM-002: render institutions overlay + refresh detail if open
+	_render_institutions(data)
 	if _inst_detail_panel.visible and not _current_institution_id.is_empty():
 		_refresh_institution_detail(data)
 
@@ -634,13 +653,177 @@ func _on_awakening_dismiss_pressed() -> void:
 # V2-SANCTUM-002: Institution handlers
 # ─────────────────────────────────────────────────────────────
 
-func _on_ground_institution_selected(institution_id: String) -> void:
+# ---- Institutions overlay ----
+
+func show_institutions_panel() -> void:
+	if _institutions_overlay == null:
+		return
+	_institutions_overlay.visible = true
+	_render_institutions(_snapshot.get("data", {}) if _snapshot.get("data", {}) is Dictionary else {})
+
+
+func hide_institutions_panel() -> void:
+	if _institutions_overlay == null:
+		return
+	_institutions_overlay.visible = false
+
+
+func show_placement_bar(inst_id: String) -> void:
+	if _placement_bar == null:
+		return
+	var display := inst_id.replace("_", " ").capitalize()
+	if _placement_label != null:
+		_placement_label.text = "Tap a glowing cell to place " + display
+	if _placement_confirm_btn != null:
+		_placement_confirm_btn.disabled = true
+	_placement_bar.visible = true
+	_placement_cell = null
+
+
+func hide_placement_bar() -> void:
+	if _placement_bar != null:
+		_placement_bar.visible = false
+	_placement_cell = null
+
+
+func on_placement_cell_selected(cell: Vector2i) -> void:
+	_placement_cell = cell
+	if _placement_confirm_btn != null:
+		_placement_confirm_btn.disabled = false
+
+
+func open_institution_detail(institution_id: String) -> void:
+	if institution_id == "ase_flame":
+		show_institutions_panel()
+		return
 	_current_institution_id = institution_id
 	var data_v: Variant = _snapshot.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	_refresh_institution_detail(data)
 	_inst_detail_panel.visible = true
 	_assign_picker.visible = false
+
+
+func _render_institutions(data: Dictionary) -> void:
+	if _inst_list == null or not _institutions_overlay.visible:
+		return
+	var actions_v: Variant = _snapshot.get("actions", {})
+	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
+	var institutions_v: Variant = data.get("institutions", [])
+	var institutions: Array = institutions_v if institutions_v is Array else []
+	var ekwan_balance := int(data.get("ekwan_balance", 0))
+
+	# Clear existing dynamic rows
+	for child in _inst_list.get_children():
+		child.queue_free()
+
+	# Ase Flame row (always first, no action button)
+	var flame_row := _build_inst_row_label("Ase Flame", "Spiritual anchor", "Always active", false)
+	_inst_list.add_child(flame_row)
+
+	for inst_v in institutions:
+		if not (inst_v is Dictionary):
+			continue
+		var inst: Dictionary = inst_v
+		var inst_id    := str(inst.get("id", ""))
+		var is_unlocked := bool(inst.get("is_unlocked", false))
+		var is_candidate := bool(inst.get("is_candidate", false))
+		var condition  := str(inst.get("condition", "neglected"))
+		var display    := inst_id.replace("_", " ").capitalize()
+		var identity   := _INSTITUTION_IDENTITY.get(inst_id, "")
+
+		if is_unlocked:
+			var cond_label := condition.capitalize()
+			var row := _build_inst_row_label(display, identity, cond_label, true)
+			var btn := Button.new()
+			btn.text = "Manage"
+			btn.pressed.connect(open_institution_detail.bind(inst_id))
+			row.add_child(btn)
+			_inst_list.add_child(row)
+		elif is_candidate:
+			var slot_key := "cta.establish." + inst_id
+			var action_v: Variant = actions.get(slot_key, {})
+			var action: Dictionary = action_v if action_v is Dictionary else {}
+			var cost := int(action.get("payload", {}).get("cost", 0)) if not action.is_empty() else 0
+			var can_afford := ekwan_balance >= cost if cost > 0 else true
+			var cost_str := ("%d Ekwan" % cost) if cost > 0 else ""
+			var row := _build_inst_row_label(display, identity, cost_str, true)
+			var btn := Button.new()
+			btn.text = "Establish"
+			btn.disabled = not can_afford
+			if not btn.disabled:
+				btn.pressed.connect(_on_inst_overlay_establish_pressed.bind(inst_id))
+			row.add_child(btn)
+			_inst_list.add_child(row)
+		else:
+			# Threshold not met — disabled row with lock icon
+			var row := _build_inst_row_label(display, identity, "", false)
+			var lock_lbl := Label.new()
+			lock_lbl.text = "🔒"
+			row.add_child(lock_lbl)
+			row.modulate = Color(1, 1, 1, 0.45)
+			_inst_list.add_child(row)
+
+
+func _build_inst_row_label(title: String, subtitle: String, detail: String, enabled: bool) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	var vbox := VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var title_lbl := Label.new()
+	title_lbl.text = title
+	vbox.add_child(title_lbl)
+	if not subtitle.is_empty():
+		var sub_lbl := Label.new()
+		sub_lbl.text = subtitle
+		vbox.add_child(sub_lbl)
+	if not detail.is_empty():
+		var det_lbl := Label.new()
+		det_lbl.text = detail
+		vbox.add_child(det_lbl)
+	row.add_child(vbox)
+	if not enabled:
+		row.modulate = Color(1, 1, 1, 0.6)
+	return row
+
+
+func _on_inst_overlay_establish_pressed(inst_id: String) -> void:
+	_current_institution_id = inst_id
+	# Forward valid_placement_cells from snapshot data to SanctumShell via action.
+	var data_v: Variant = _snapshot.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var cells_v: Variant = data.get("valid_placement_cells", [])
+	action_requested.emit({
+		"type":    "ui.enter_placement_mode",
+		"payload": { "institution_id": inst_id, "valid_cells": cells_v },
+	})
+
+
+func _on_placement_confirmed() -> void:
+	if _current_institution_id.is_empty() or _placement_cell == null:
+		return
+	var cell: Vector2i = _placement_cell
+	action_requested.emit({
+		"type":    "sanctum.institution.establish",
+		"payload": {
+			"institution_id": _current_institution_id,
+			"position":       { "x": cell.x, "y": cell.y },
+		},
+	})
+	action_requested.emit({ "type": "ui.exit_placement_mode" })
+
+
+func _on_placement_cancelled() -> void:
+	action_requested.emit({ "type": "ui.exit_placement_mode" })
+
+
+const _INSTITUTION_IDENTITY: Dictionary = {
+	"hearth":           "Care & Belonging",
+	"training_grounds": "Readiness & Discipline",
+}
+
+
+func _on_ground_institution_selected(institution_id: String) -> void:
+	open_institution_detail(institution_id)
 
 
 func _on_ground_echo_selected(echo_id: String) -> void:
@@ -688,6 +871,22 @@ func _on_inst_establish_btn_from_picker(echo_id: String) -> void:
 	_assign_picker.visible = false
 
 
+const _INSTITUTION_CONDITION_COLORS: Dictionary = {
+	"healthy":  Color("#D4AF37"),  # Akan Gold
+	"strained": Color("#C87941"),  # Amber
+	"neglected": Color("#5A5A6A"), # Grey
+}
+const _INSTITUTION_CONDITION_PHRASES: Dictionary = {
+	"healthy":  "Thriving",
+	"strained": "Under strain",
+	"neglected": "Neglected",
+}
+const _INSTITUTION_PASSIVE_EFFECT: Dictionary = {
+	"hearth":           "All echoes in the Sanctum recover +2 morale per hour",
+	"training_grounds": "All echoes in the Sanctum gain +1 storyweight per hour",
+}
+
+
 func _refresh_institution_detail(data: Dictionary) -> void:
 	var institutions_v: Variant = data.get("institutions", [])
 	var institutions: Array = institutions_v if institutions_v is Array else []
@@ -704,10 +903,20 @@ func _refresh_institution_detail(data: Dictionary) -> void:
 
 	var display_name := _current_institution_id.replace("_", " ").capitalize()
 	_inst_detail_name.text = display_name
-	var cond := str(inst_data.get("condition", "neglected")).capitalize()
-	_inst_detail_condition.text = cond
 
-	# Occupant rows
+	# Social identity label (V2 language)
+	var identity := _INSTITUTION_IDENTITY.get(_current_institution_id, "")
+
+	var condition := str(inst_data.get("condition", "neglected"))
+	var cond_phrase := _INSTITUTION_CONDITION_PHRASES.get(condition, condition.capitalize())
+	var cond_color := _INSTITUTION_CONDITION_COLORS.get(condition, Color.WHITE)
+	_inst_detail_condition.text = ("%s — %s" % [identity, cond_phrase]) if not identity.is_empty() else cond_phrase
+	_inst_detail_condition.modulate = cond_color
+
+	# Passive effect description (V2 language)
+	var passive_effect := _INSTITUTION_PASSIVE_EFFECT.get(_current_institution_id, "")
+
+	# Occupant rows (also shows morale tier dot per echo)
 	for child in _inst_occupant_list.get_children():
 		if child == _occupant_row_template:
 			continue
@@ -717,15 +926,33 @@ func _refresh_institution_detail(data: Dictionary) -> void:
 	for oid_v in (inst_data.get("occupant_ids", []) as Array):
 		var oid := str(oid_v)
 		var echo_name := oid
+		var echo_morale_tier := "steady"
 		for er_v in detail_roster:
-			if er_v is Dictionary and str((er_v as Dictionary).get("id", "")) == oid:
-				echo_name = str((er_v as Dictionary).get("name", oid))
+			if not (er_v is Dictionary):
+				continue
+			var er: Dictionary = er_v
+			if str(er.get("id", "")) == oid:
+				echo_name = str(er.get("name", oid))
+				var emo_v: Variant = er.get("emotion", {})
+				if emo_v is Dictionary:
+					var morale_current := int((emo_v as Dictionary).get("morale_current", 50))
+					echo_morale_tier = EmotionService.get_morale_tier(morale_current)
 				break
 		var row := _occupant_row_template.duplicate() as HBoxContainer
 		row.visible = true
-		(row.find_child("OccupantName", true, false) as Label).text = echo_name
-		var remove_btn := row.find_child("OccupantRemoveButton", true, false) as Button
-		remove_btn.pressed.connect(_on_occupant_remove_pressed.bind(oid))
+		var name_label := row.find_child("OccupantName", true, false)
+		if name_label is Label:
+			(name_label as Label).text = echo_name
+		# Morale tier indicator dot (modulate the row to reflect emotion state)
+		var dot_color := SanctumOccupantLayer._fill_for_morale_tier(echo_morale_tier)
+		var dot_lbl := Label.new()
+		dot_lbl.text = "●"
+		dot_lbl.modulate = dot_color
+		row.add_child(dot_lbl)
+		row.move_child(dot_lbl, 0)
+		var remove_btn := row.find_child("OccupantRemoveButton", true, false)
+		if remove_btn is Button:
+			(remove_btn as Button).pressed.connect(_on_occupant_remove_pressed.bind(oid))
 		_inst_occupant_list.add_child(row)
 
 	# Show/hide buttons

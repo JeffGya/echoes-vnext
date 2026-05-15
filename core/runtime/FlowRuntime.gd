@@ -2052,6 +2052,13 @@ func _handle_economy_settle_time(action: Dictionary, t: int) -> void:
 		InstitutionServiceScript.apply_institution_modifiers(
 			flow_ctx.save_data, _bldg_cfg_b, _inst_cfg_b, logger, t)
 
+	# V2-SANCTUM-002: apply passive institution effects to all roster echoes (social gravity).
+	# Hearth → morale/hr for all echoes; Training Grounds → storyweight/hr for all echoes.
+	var _hours_elapsed := float(delta_seconds) / 3600.0
+	if _hours_elapsed > 0.0:
+		InstitutionServiceScript.apply_passive_effects(
+			flow_ctx.save_data, _hours_elapsed, _inst_cfg_b, logger, t)
+
 	# IMPORTANT: settle_time can occur without a flow transition (e.g., Sanctum bank interval),
 	# so we must refresh snapshot so UI updates immediately.
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
@@ -3669,11 +3676,15 @@ func _get_realm_xp_multiplier() -> float:
 # ---------------------------------------------------------------------------
 
 func _handle_sanctum_institution_establish(action: Dictionary, t: int) -> void:
-	var inst_id := str(action.get("payload", {}).get("institution_id", ""))
+	var payload: Dictionary = action.get("payload", {})
+	var inst_id := str(payload.get("institution_id", ""))
 	if inst_id.is_empty():
 		return
+	var pos_dict_v: Variant = payload.get("position", { "x": 0, "y": 0 })
+	var pos_dict: Dictionary = pos_dict_v if pos_dict_v is Dictionary else { "x": 0, "y": 0 }
+	var position := Vector2i(int(pos_dict.get("x", 0)), int(pos_dict.get("y", 0)))
 	var inst_cfg := _get_institutions_cfg()
-	if InstitutionServiceScript.establish(inst_id, flow_ctx.save_data, econ, inst_cfg, logger, t):
+	if InstitutionServiceScript.establish(inst_id, flow_ctx.save_data, econ, inst_cfg, logger, t, position):
 		flow_ctx.save_request = true
 		flow_ctx.save_request_reason = "institution.establish"
 		flow_machine.refresh_snapshot(flow_ctx, logger, t)
