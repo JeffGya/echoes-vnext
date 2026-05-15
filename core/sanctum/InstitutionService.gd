@@ -2,6 +2,8 @@ extends RefCounted
 
 class_name InstitutionService
 
+const EmotionServiceScript := preload("res://core/emotion/EmotionService.gd")
+
 # ---- Constants ----
 
 const HEARTH           := "hearth"
@@ -171,7 +173,7 @@ static func remove_echo(inst_id: String, echo_id: String, save_data: Dictionary,
 			if morale_delta != 0:
 				EmotionService.apply_morale_delta(echo, morale_delta, "institution.unassign.natural_fit", logger, t)
 			if fear_delta != 0:
-				EmotionService.apply_fear_delta(echo, fear_delta, "institution.unassign.natural_fit", logger, t)
+				EmotionService.apply_fear_delta(echo, fear_delta, "institution.unassign.natural_fit", 999, logger, t)
 	logger.info(t, "sanctum.institution.echo_removed", inst_id, { "id": inst_id, "echo_id": echo_id, "condition_drop": old_cond + "->" + new_cond })
 	return true
 
@@ -288,7 +290,9 @@ static func get_ground_data(save_data: Dictionary, inst_cfg: Dictionary, roster:
 			var emo_status := ""
 			if not echo.is_empty():
 				var emo: Dictionary = echo.get("emotion", {}) as Dictionary
-				emo_status = str(emo.get("emotional_status", ""))
+				var morale := int(emo.get("morale_current", 50))
+				var fear   := int(emo.get("fear_current", 0))
+				emo_status = EmotionServiceScript.get_emotional_status(morale, fear)
 			echo_slots.append({
 				"echo_id":          str(eid),
 				"zone":             str(zone_id),

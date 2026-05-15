@@ -100,10 +100,7 @@ static func _make_echo(id: String, vector: String = "", calling: String = "") ->
 
 
 static func _make_econ(save: Dictionary) -> EconomyService:
-	var logger := _make_logger()
-	var econ := EconomyService.new()
-	econ.init(save, logger)
-	return econ
+	return EconomyService.new(save)
 
 
 # ---------------------------------------------------------------------------

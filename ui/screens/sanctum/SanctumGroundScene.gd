@@ -253,20 +253,21 @@ func _check_building_tap(inst_id: String, group: Control, tap_pos: Vector2) -> v
 # ---- Zone anchor builder ----
 
 func _build_zone_anchors() -> void:
-	# Reads Marker2D child positions from EchoTokenLayer
+	# Reads Marker2D child positions from EchoTokenLayer.
+	# Uses child.position (local to EchoTokenLayer) — valid immediately in _ready(),
+	# unlike global_position which requires a layout pass first.
 	# Naming convention: HearthAnchor0..3, TrainingAnchor0..3, PartyAnchor0..4, RoamAnchor0..5
-	var layer_pos: Vector2 = _token_layer.global_position
 	_zone_anchors = { "hearth": [], "training_grounds": [], "party": [], "roaming": [] }
 	for child in _token_layer.get_children():
 		if not (child is Marker2D):
 			continue
 		var n := child.name as String
-		var world_pos: Vector2 = (child as Marker2D).global_position - layer_pos
+		var local_pos: Vector2 = (child as Marker2D).position
 		if n.begins_with("HearthAnchor"):
-			_zone_anchors["hearth"].append(world_pos)
+			_zone_anchors["hearth"].append(local_pos)
 		elif n.begins_with("TrainingAnchor"):
-			_zone_anchors["training_grounds"].append(world_pos)
+			_zone_anchors["training_grounds"].append(local_pos)
 		elif n.begins_with("PartyAnchor"):
-			_zone_anchors["party"].append(world_pos)
+			_zone_anchors["party"].append(local_pos)
 		elif n.begins_with("RoamAnchor"):
-			_zone_anchors["roaming"].append(world_pos)
+			_zone_anchors["roaming"].append(local_pos)
