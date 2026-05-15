@@ -108,32 +108,26 @@ static func ensure_starter_occupant(save_data: Dictionary, roster: Array = [], a
 		"y":    ASE_FLAME_CELL.y,
 	})
 
-	# Institution markers (unlocked or candidate).
+	# Institution markers — only show ESTABLISHED institutions on the map.
+	# Candidates are shown in the Institutions panel UI only, not spatially.
 	var institutions_v: Variant = (sanctum as Dictionary).get("institutions", {})
 	var institutions: Dictionary = institutions_v if institutions_v is Dictionary else {}
-	var candidate_offset := 0
 	for inst_id in institutions:
 		var inst_v: Variant = institutions.get(inst_id, {})
 		var inst: Dictionary = inst_v if inst_v is Dictionary else {}
 		var is_unlocked := bool(inst.get("unlocked", false))
-
-		var cell: Vector2i
-		if is_unlocked:
-			var pos_v: Variant = inst.get("position", { "x": 0, "y": 0 })
-			var pos: Dictionary = pos_v if pos_v is Dictionary else { "x": 0, "y": 0 }
-			cell = Vector2i(int(pos.get("x", 0)), int(pos.get("y", 0)))
-		else:
-			# Suggest a candidate hint position — not binding, visual hint only.
-			candidate_offset += 1
-			cell = Vector2i(STARTER_HALF_SIZE + candidate_offset + 1, 0)
-
+		if not is_unlocked:
+			continue  # Candidates not drawn on the map.
+		var pos_v: Variant = inst.get("position", { "x": 0, "y": 0 })
+		var pos: Dictionary = pos_v if pos_v is Dictionary else { "x": 0, "y": 0 }
+		var cell := Vector2i(int(pos.get("x", 0)), int(pos.get("y", 0)))
 		occupants.append({
 			"id":          inst_id,
 			"name":        inst_id.capitalize().replace("_", " "),
 			"kind":        "institution",
 			"x":           cell.x,
 			"y":           cell.y,
-			"is_unlocked": is_unlocked,
+			"is_unlocked": true,
 			"condition":   str(inst.get("condition", "neglected")),
 		})
 
@@ -172,8 +166,8 @@ static func ensure_starter_occupant(save_data: Dictionary, roster: Array = [], a
 			# Party member — front-of-Ase-Flame zone (y+1 direction).
 			cell = Vector2i((echo_index % 3) - 1, ASE_FLAME_CELL.y + 1)
 		else:
-			# Roaming echo — adjacent to Ase Flame.
-			cell = Vector2i((echo_index % 3) - 1, ASE_FLAME_CELL.y)
+			# Roaming echo — row above Ase Flame (y-1) to avoid overlapping it.
+			cell = Vector2i((echo_index % 3) - 1, ASE_FLAME_CELL.y - 1)
 
 		# Compute morale_tier at render time (not stored in save).
 		var morale_tier := "steady"

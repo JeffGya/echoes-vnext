@@ -91,12 +91,25 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"SanctumRuleSoft"
 
-[node name="TitleLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack" unique_id=430550256]
+[node name="TitleRow" type="HBoxContainer" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="TitleLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack/TitleRow" unique_id=430550256]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 theme_type_variation = &"SanctumHeaderTitle"
 text = "Sanctum"
 autowrap_mode = 3
+
+[node name="SanctumMgmtBtn" type="Button" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack/TitleRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"SanctumTertiaryButton"
+text = "Institutions"
 
 [node name="VowMantraLabel" type="Label" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack" unique_id=143815225]
 unique_name_in_owner = true
@@ -118,12 +131,6 @@ layout_mode = 2
 theme_type_variation = &"SanctumHeaderText"
 text = "Choose where the house reaches outward next."
 autowrap_mode = 3
-
-[node name="SanctumMgmtBtn" type="Button" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Sanctum"
-flat = true
 
 [node name="TopSpacer" type="Control" parent="RootMargin/LayoutRoot/TopBand" unique_id=1333580464]
 layout_mode = 2
@@ -1133,45 +1140,64 @@ custom_minimum_size = Vector2(0, 72)
 layout_mode = 2
 text = "Continue"
 
-[node name="InstitutionsOverlay" type="PanelContainer" parent="."]
+[node name="InstitutionsOverlay" type="PanelContainer" parent="RootMargin/LayoutRoot"]
 unique_name_in_owner = true
 layout_mode = 1
-anchors_preset = 0
+anchors_preset = -1
+anchor_left = -0.013
+anchor_top = -0.023
 anchor_right = 0.4
-anchor_bottom = 1.0
-offset_top = 56
-grow_horizontal = 2
+anchor_bottom = 1.023
+offset_left = 0.336
+offset_top = -0.264
+offset_right = -72.8
+offset_bottom = 0.264
 grow_vertical = 2
+theme = ExtResource("2_gaxha")
+theme_override_styles/panel = SubResource("StyleBoxEmpty_qeq33")
 visible = false
 
-[node name="InstOverlayMargin" type="MarginContainer" parent="InstitutionsOverlay"]
-layout_mode = 2
-theme_override_constants/margin_left = 12
-theme_override_constants/margin_top = 12
-theme_override_constants/margin_right = 12
-theme_override_constants/margin_bottom = 12
-
-[node name="InstOverlayStack" type="VBoxContainer" parent="InstitutionsOverlay/InstOverlayMargin"]
+[node name="InstOverlayMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/InstitutionsOverlay"]
 layout_mode = 2
 
-[node name="InstOverlayHeader" type="HBoxContainer" parent="InstitutionsOverlay/InstOverlayMargin/InstOverlayStack"]
-layout_mode = 2
-
-[node name="InstOverlayTitle" type="Label" parent="InstitutionsOverlay/InstOverlayMargin/InstOverlayStack/InstOverlayHeader"]
+[node name="InstOverlayStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/InstitutionsOverlay/InstOverlayMargin"]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Institutions"
+size_flags_vertical = 3
+theme_override_constants/separation = 8
 
-[node name="InstOverlayBackBtn" type="Button" parent="InstitutionsOverlay/InstOverlayMargin/InstOverlayStack/InstOverlayHeader"]
-unique_name_in_owner = true
+[node name="InstOverlayHeader" type="HBoxContainer" parent="RootMargin/LayoutRoot/InstitutionsOverlay/InstOverlayMargin/InstOverlayStack"]
 layout_mode = 2
-text = "← Back"
-flat = true
+theme_override_constants/separation = 8
 
-[node name="InstitutionList" type="VBoxContainer" parent="InstitutionsOverlay/InstOverlayMargin/InstOverlayStack"]
+[node name="InstOverlayBackBtn" type="Button" parent="RootMargin/LayoutRoot/InstitutionsOverlay/InstOverlayMargin/InstOverlayStack/InstOverlayHeader"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(144, 48)
+layout_mode = 2
+theme_type_variation = &"SanctumBackButton"
+text = "Back to Sanctum"
+
+[node name="InstOverlayHeaderSpacer" type="Control" parent="RootMargin/LayoutRoot/InstitutionsOverlay/InstOverlayMargin/InstOverlayStack/InstOverlayHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="InstitutionsDrawer" type="PanelContainer" parent="RootMargin/LayoutRoot/InstitutionsOverlay/InstOverlayMargin/InstOverlayStack"]
 layout_mode = 2
 size_flags_vertical = 3
+theme = ExtResource("2_gaxha")
+theme_type_variation = &"SanctumDrawerRail"
+
+[node name="DrawerScroll" type="ScrollContainer" parent="RootMargin/LayoutRoot/InstitutionsOverlay/InstOverlayMargin/InstOverlayStack/InstitutionsDrawer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="InstitutionList" type="VBoxContainer" parent="RootMargin/LayoutRoot/InstitutionsOverlay/InstOverlayMargin/InstOverlayStack/InstitutionsDrawer/DrawerScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
 
 [node name="PlacementConfirmBar" type="HBoxContainer" parent="."]
 unique_name_in_owner = true
