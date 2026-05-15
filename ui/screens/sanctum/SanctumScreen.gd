@@ -730,7 +730,7 @@ func _render_institutions(data: Dictionary) -> void:
 		var is_candidate := bool(inst.get("is_candidate", false))
 		var condition  := str(inst.get("condition", "neglected"))
 		var display    := inst_id.replace("_", " ").capitalize()
-		var identity   := _INSTITUTION_IDENTITY.get(inst_id, "")
+		var identity   := str(_INSTITUTION_IDENTITY.get(inst_id, ""))
 
 		if is_unlocked:
 			var cond_label := condition.capitalize()
@@ -905,16 +905,16 @@ func _refresh_institution_detail(data: Dictionary) -> void:
 	_inst_detail_name.text = display_name
 
 	# Social identity label (V2 language)
-	var identity := _INSTITUTION_IDENTITY.get(_current_institution_id, "")
+	var identity := str(_INSTITUTION_IDENTITY.get(_current_institution_id, ""))
 
 	var condition := str(inst_data.get("condition", "neglected"))
-	var cond_phrase := _INSTITUTION_CONDITION_PHRASES.get(condition, condition.capitalize())
-	var cond_color := _INSTITUTION_CONDITION_COLORS.get(condition, Color.WHITE)
+	var cond_phrase := str(_INSTITUTION_CONDITION_PHRASES.get(condition, condition.capitalize()))
+	var cond_color: Color = _INSTITUTION_CONDITION_COLORS.get(condition, Color.WHITE)
 	_inst_detail_condition.text = ("%s — %s" % [identity, cond_phrase]) if not identity.is_empty() else cond_phrase
 	_inst_detail_condition.modulate = cond_color
 
 	# Passive effect description (V2 language)
-	var passive_effect := _INSTITUTION_PASSIVE_EFFECT.get(_current_institution_id, "")
+	var passive_effect := str(_INSTITUTION_PASSIVE_EFFECT.get(_current_institution_id, ""))
 
 	# Occupant rows (also shows morale tier dot per echo)
 	for child in _inst_occupant_list.get_children():
