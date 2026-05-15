@@ -140,7 +140,7 @@ static func _t_echo_near_institution(_ctx: Dictionary) -> Dictionary:
 			var ex := int(occ.get("x", -99))
 			var ey := int(occ.get("y", -99))
 			# Echo should be within 2 tiles of hearth at (3,0)
-			var dist := max(abs(ex - 3), abs(ey - 0))
+			var dist: int = max(abs(ex - 3), abs(ey - 0))
 			if dist <= 2:
 				return { "ok": true }
 			return { "ok": false, "error": "echo e1 at (%d,%d) is not near hearth at (3,0)" % [ex, ey] }
