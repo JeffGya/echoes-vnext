@@ -713,33 +713,34 @@ func _render_institutions(data: Dictionary) -> void:
 	var institutions: Array = institutions_v if institutions_v is Array else []
 	var ekwan_balance := int(data.get("ekwan_balance", 0))
 
-	# Clear existing dynamic rows
+	# Clear existing dynamic rows and reset alternating index.
 	for child in _inst_list.get_children():
 		child.queue_free()
+	_inst_row_index = 0
 
 	# Ase Flame row (always first, no action button)
-	var flame_row := _build_inst_row_label("Ase Flame", "Spiritual anchor", "Always active", false)
-	_inst_list.add_child(flame_row)
+	_inst_list.add_child(_build_inst_row_label("Ase Flame", "Spiritual anchor", "Always active", false))
 
 	for inst_v in institutions:
 		if not (inst_v is Dictionary):
 			continue
 		var inst: Dictionary = inst_v
-		var inst_id    := str(inst.get("id", ""))
-		var is_unlocked := bool(inst.get("is_unlocked", false))
+		var inst_id      := str(inst.get("id", ""))
+		var is_unlocked  := bool(inst.get("is_unlocked", false))
 		var is_candidate := bool(inst.get("is_candidate", false))
-		var condition  := str(inst.get("condition", "neglected"))
-		var display    := inst_id.replace("_", " ").capitalize()
-		var identity   := str(_INSTITUTION_IDENTITY.get(inst_id, ""))
+		var condition    := str(inst.get("condition", "neglected"))
+		var display      := inst_id.replace("_", " ").capitalize()
+		var identity     := str(_INSTITUTION_IDENTITY.get(inst_id, ""))
 
 		if is_unlocked:
-			var cond_label := condition.capitalize()
-			var row := _build_inst_row_label(display, identity, cond_label, true)
+			var panel := _build_inst_row_label(display, identity, condition.capitalize(), true)
+			var inner_row: HBoxContainer = panel.get_meta("inner_row")
 			var btn := Button.new()
 			btn.text = "Manage"
+			btn.theme_type_variation = &"SanctumTertiaryButton"
 			btn.pressed.connect(open_institution_detail.bind(inst_id))
-			row.add_child(btn)
-			_inst_list.add_child(row)
+			inner_row.add_child(btn)
+			_inst_list.add_child(panel)
 		elif is_candidate:
 			var slot_key := "cta.establish." + inst_id
 			var action_v: Variant = actions.get(slot_key, {})
@@ -747,43 +748,79 @@ func _render_institutions(data: Dictionary) -> void:
 			var cost := int(action.get("payload", {}).get("cost", 0)) if not action.is_empty() else 0
 			var can_afford := ekwan_balance >= cost if cost > 0 else true
 			var cost_str := ("%d Ekwan" % cost) if cost > 0 else ""
-			var row := _build_inst_row_label(display, identity, cost_str, true)
+			var panel := _build_inst_row_label(display, identity, cost_str, true)
+			var inner_row: HBoxContainer = panel.get_meta("inner_row")
 			var btn := Button.new()
 			btn.text = "Establish"
+			btn.theme_type_variation = &"SanctumTertiaryButton"
 			btn.disabled = not can_afford
 			if not btn.disabled:
 				btn.pressed.connect(_on_inst_overlay_establish_pressed.bind(inst_id))
-			row.add_child(btn)
-			_inst_list.add_child(row)
+			inner_row.add_child(btn)
+			_inst_list.add_child(panel)
 		else:
 			# Threshold not met — disabled row with lock icon
-			var row := _build_inst_row_label(display, identity, "", false)
+			var panel := _build_inst_row_label(display, identity, "", false)
+			var inner_row: HBoxContainer = panel.get_meta("inner_row")
 			var lock_lbl := Label.new()
 			lock_lbl.text = "🔒"
-			row.add_child(lock_lbl)
-			row.modulate = Color(1, 1, 1, 0.45)
-			_inst_list.add_child(row)
+			lock_lbl.theme_type_variation = &"SanctumMuted"
+			inner_row.add_child(lock_lbl)
+			_inst_list.add_child(panel)
 
+
+var _inst_row_index := 0
 
 func _build_inst_row_label(title: String, subtitle: String, detail: String, enabled: bool) -> HBoxContainer:
+	# Alternate between SanctumDrawerRow and SanctumDrawerRowAlt for two-tone readability.
+	var variation: StringName = &"SanctumDrawerRow" if (_inst_row_index % 2 == 0) else &"SanctumDrawerRowAlt"
+	_inst_row_index += 1
+
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.theme_type_variation = variation
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 12)
+	margin.add_theme_constant_override("margin_top", 10)
+	margin.add_theme_constant_override("margin_right", 12)
+	margin.add_theme_constant_override("margin_bottom", 10)
+	panel.add_child(margin)
+
 	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	margin.add_child(row)
+
 	var vbox := VBoxContainer.new()
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.add_theme_constant_override("separation", 2)
+	row.add_child(vbox)
+
 	var title_lbl := Label.new()
 	title_lbl.text = title
+	title_lbl.theme_type_variation = &"ContentBasePanel"
 	vbox.add_child(title_lbl)
+
 	if not subtitle.is_empty():
 		var sub_lbl := Label.new()
 		sub_lbl.text = subtitle
+		sub_lbl.theme_type_variation = &"SanctumDrawerMeta"
+		sub_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		vbox.add_child(sub_lbl)
+
 	if not detail.is_empty():
 		var det_lbl := Label.new()
 		det_lbl.text = detail
+		det_lbl.theme_type_variation = &"SanctumMuted"
 		vbox.add_child(det_lbl)
-	row.add_child(vbox)
+
 	if not enabled:
-		row.modulate = Color(1, 1, 1, 0.6)
-	return row
+		panel.modulate = Color(1.0, 1.0, 1.0, 0.5)
+
+	# Return the panel as the root; callers add buttons via row.add_child().
+	# We expose the inner row via metadata so callers can append action buttons.
+	panel.set_meta("inner_row", row)
+	return panel
 
 
 func _on_inst_overlay_establish_pressed(inst_id: String) -> void:

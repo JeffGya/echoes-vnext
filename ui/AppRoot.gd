@@ -230,8 +230,15 @@ func _on_debug_command(command: String) -> void:
 		_run_vow_command(parts)
 		return
 
+	# -------------------------
+	# institution shortcuts (V2-SANCTUM-002 / debug only)
+	# -------------------------
+	if head == "institution" or head == "inst":
+		_run_institution_command(parts)
+		return
+
 	_debug_print("Unknown command: " + cmd)
-	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective [purify_shrine|defeat_enemies] | combat_emotion | vow unlock <vow_id>")
+	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective [purify_shrine|defeat_enemies] | combat_emotion | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all>")
 	
 	_flush_logs_to_console()
 	
@@ -918,6 +925,86 @@ func _run_vow_command(parts: Array) -> void:
 	else:
 		_debug_print("Unknown vow op: %s" % op)
 		_debug_print("Usage: vow unlock <vow_id> | vow pledge <vow_id> | vow break | vow status")
+
+	_flush_logs_to_console()
+
+
+func _run_institution_command(parts: Array) -> void:
+	# Usage (V2-SANCTUM-002 debug only):
+	#   institution unlock <hearth|training_grounds|all>
+	#   institution lock   <hearth|training_grounds|all>
+	#   institution status
+	const KNOWN_IDS := ["hearth", "training_grounds"]
+	if parts.size() < 2:
+		_debug_print("Usage: institution unlock <hearth|training_grounds|all> | institution lock <id|all> | institution status")
+		_flush_logs_to_console()
+		return
+
+	var op := str(parts[1]).to_lower()
+	var save_ref: Dictionary = runtime.get_save_data()
+	var sanctum_v: Variant = save_ref.get("sanctum", {})
+	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	var institutions_v: Variant = sanctum.get("institutions", {})
+	var institutions: Dictionary = institutions_v if institutions_v is Dictionary else {}
+
+	var target := str(parts[2]).to_lower() if parts.size() >= 3 else ""
+	var targets: Array = KNOWN_IDS if target == "all" or target.is_empty() else [target]
+
+	if op == "unlock":
+		if target.is_empty():
+			_debug_print("Usage: institution unlock <hearth|training_grounds|all>")
+			_flush_logs_to_console()
+			return
+		for iid in targets:
+			if not institutions.has(iid):
+				_debug_print("Unknown institution: %s  (known: %s)" % [iid, ", ".join(KNOWN_IDS)])
+				continue
+			var inst: Dictionary = institutions[iid]
+			inst["unlocked"] = true
+			inst["condition"] = "neglected"
+			# Give it a sensible default position if none stored yet.
+			if not inst.has("position") or not (inst["position"] is Dictionary):
+				inst["position"] = { "x": 3, "y": 0 } if iid == "hearth" else { "x": -3, "y": 0 }
+			_debug_print("Institution unlocked (debug): %s at (%d, %d)" % [
+				iid,
+				int(inst["position"].get("x", 0)),
+				int(inst["position"].get("y", 0))
+			])
+		var snap := runtime.dispatch({ "type": "flow.go_state", "to": "flow.sanctum" })
+		_render_snapshot(snap)
+
+	elif op == "lock":
+		if target.is_empty():
+			_debug_print("Usage: institution lock <hearth|training_grounds|all>")
+			_flush_logs_to_console()
+			return
+		for iid in targets:
+			if not institutions.has(iid):
+				_debug_print("Unknown institution: %s" % iid)
+				continue
+			institutions[iid]["unlocked"] = false
+			_debug_print("Institution locked: %s" % iid)
+		var snap := runtime.dispatch({ "type": "flow.go_state", "to": "flow.sanctum" })
+		_render_snapshot(snap)
+
+	elif op == "status":
+		for iid in KNOWN_IDS:
+			if institutions.has(iid):
+				var inst: Dictionary = institutions[iid]
+				var pos_v: Variant = inst.get("position", {})
+				var pos: Dictionary = pos_v if pos_v is Dictionary else {}
+				_debug_print("  %s — unlocked=%s condition=%s pos=(%d,%d)" % [
+					iid,
+					str(inst.get("unlocked", false)),
+					str(inst.get("condition", "neglected")),
+					int(pos.get("x", 0)),
+					int(pos.get("y", 0))
+				])
+			else:
+				_debug_print("  %s — not in save_data" % iid)
+	else:
+		_debug_print("Unknown institution op: %s" % op)
+		_debug_print("Usage: institution unlock <hearth|training_grounds|all> | institution lock <id|all> | institution status")
 
 	_flush_logs_to_console()
 
