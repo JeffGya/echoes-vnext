@@ -41,6 +41,7 @@ func _render_occupants(occupants_v: Variant) -> void:
 
 	var buildings: Array = []
 	var echoes: Array    = []
+	var all_with_positions: Array = []
 
 	for occupant_v in source:
 		if not (occupant_v is Dictionary):
@@ -48,13 +49,15 @@ func _render_occupants(occupants_v: Variant) -> void:
 		var occupant: Dictionary = (occupant_v as Dictionary).duplicate(true)
 		var cell := Vector2i(int(occupant.get("x", 0)), int(occupant.get("y", 0)))
 		occupant["position"] = floor.position + floor.map_to_local(cell)
+		all_with_positions.append(occupant)
 		var kind := str(occupant.get("kind", "echo"))
 		if kind in ["ase_flame", "institution"]:
 			buildings.append(occupant)
 		else:
 			echoes.append(occupant)
 
-	_occupant_cache = source.duplicate()
+	# Cache the position-enriched copies so hit detection works correctly.
+	_occupant_cache = all_with_positions
 
 	if _building_layer != null:
 		_building_layer.set_buildings(buildings)
