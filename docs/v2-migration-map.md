@@ -1,5 +1,11 @@
 # Echoes vNext — V2 Migration Map
 
+> **Migration complete.** All Alignment wave stories have shipped. Active story tracking has moved to [`docs/integration-map.md`](integration-map.md).
+
+---
+
+
+
 > **Story:** V2-MIG-001 (Order 10 — first pickup in the Alignment wave)
 > **Status:** Done
 > **Created:** 2026-04-06

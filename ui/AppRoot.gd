@@ -322,6 +322,7 @@ func _run_tests(parts: Array) -> void:
 	IntelPersistenceTests.register(runner) # V2-INTEL-001
 	OnboardingTests.register(runner)
 	VoiceTests.register(runner)           # V2-VOICE-001
+	InstitutionTests.register(runner)     # V2-SANCTUM-002
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [

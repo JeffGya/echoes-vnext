@@ -159,6 +159,58 @@ func enter(ctx: RefCounted, t:int) -> void:
 		var _th_cfg: Dictionary = _th_cfg_v if _th_cfg_v is Dictionary else {}
 		_thread_reserve_cap = int(_th_cfg.get("base_reserve_cap", 4))
 
+	# V2-SANCTUM-002: institution config + ground data
+	var _inst_cfg_s: Dictionary = {}
+	var _bonds_s: Array = sanctum.get("bonds", []) as Array
+	var _econ_s: Dictionary = (flow_ctx.save_data.get("economy", {}) as Dictionary)
+	var _ekwan_balance_s := int(_econ_s.get("ekwan", 0))
+	if flow_ctx.config_service != null:
+		var _bal_s: Dictionary = flow_ctx.config_service.get_balance()
+		var _bd_s: Dictionary = _bal_s.get("data", {}) as Dictionary
+		var _ic_v: Variant = _bd_s.get("institutions", {})
+		_inst_cfg_s = _ic_v if _ic_v is Dictionary else {}
+	var _inst_snapshot := InstitutionService.get_snapshot_data(flow_ctx.save_data, _inst_cfg_s, t)
+	var _ground_data := InstitutionService.get_ground_data(
+		flow_ctx.save_data, _inst_cfg_s, roster, active_party_ids, _bonds_s)
+	# Compatibility hints for all roster echoes (keyed inst_id -> echo_id -> hint string)
+	var _compat_hints: Dictionary = {}
+	for _inst_entry in _inst_snapshot:
+		if not (_inst_entry is Dictionary):
+			continue
+		var _iid := str((_inst_entry as Dictionary).get("id", ""))
+		if _iid.is_empty():
+			continue
+		var _hints_cfg_v: Variant = _inst_cfg_s.get("compatibility_hints", {})
+		var _hints_cfg: Dictionary = _hints_cfg_v if _hints_cfg_v is Dictionary else {}
+		var _echo_hints: Dictionary = {}
+		for _e_v in roster:
+			if not (_e_v is Dictionary):
+				continue
+			var _e: Dictionary = _e_v
+			var _eid := str(_e.get("id", ""))
+			var _ename := str(_e.get("name", ""))
+			if _eid.is_empty():
+				continue
+			var _tier := InstitutionService.compute_compatibility(_e, _iid, _inst_cfg_s)
+			_echo_hints[_eid] = InstitutionService.get_compatibility_hint(_ename, _iid, _tier, _hints_cfg)
+		_compat_hints[_iid] = _echo_hints
+	# Establish CTA slots for institution candidates
+	for _inst_e in _inst_snapshot:
+		if not (_inst_e is Dictionary):
+			continue
+		var _inst_e_dict: Dictionary = _inst_e
+		if bool(_inst_e_dict.get("is_candidate", false)):
+			var _eid2 := str(_inst_e_dict.get("id", ""))
+			var _slot_key := "cta.establish." + _eid2
+			var _ecost := int((_inst_cfg_s.get(_eid2, {}) as Dictionary).get("establish_ekwan_cost", 10))
+			actions[_slot_key] = {
+				"type":    "sanctum.institution.establish",
+				"slot":    _slot_key,
+				"label":   "Establish " + _eid2.replace("_", " ").capitalize(),
+				"payload": { "institution_id": _eid2 },
+				"disabled": _ekwan_balance_s < _ecost,
+			}
+
 	# Base Sanctum snapshot. FlowStateMachine._rebuild_snapshot() enriches data with:
 	# - ase_balance, ekwan_balance (Economy)
 	# - roster_count, active_party_count (Sanctum)
@@ -179,6 +231,10 @@ func enter(ctx: RefCounted, t:int) -> void:
 		"sanctum_occupants": SanctumLayoutService.snapshot_occupants(flow_ctx.save_data),
 		"echo_detail_roster": echo_detail_roster,
 		"featured_echo_id": str((echo_detail_roster[0] as Dictionary).get("id", "")) if not echo_detail_roster.is_empty() and echo_detail_roster[0] is Dictionary else "",
+		# V2-SANCTUM-002
+		"institutions":           _inst_snapshot,
+		"sanctum_ground":         _ground_data,
+		"institution_compat_hints": _compat_hints,
 	}
 
 	flow_ctx.last_snapshot = {

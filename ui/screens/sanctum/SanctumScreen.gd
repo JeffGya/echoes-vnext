@@ -81,9 +81,25 @@ const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.t
 @onready var _detail_body:      Label          = %EffectDetailBody
 @onready var _detail_duration:  Label          = %EffectDetailDuration
 
+# V2-SANCTUM-002: ground scene + institution panels
+@onready var _ground_scene:          SanctumGroundScene = %SanctumGroundSceneInstance
+@onready var _inst_detail_panel:     PanelContainer     = %InstitutionDetailPanel
+@onready var _inst_detail_name:      Label              = %InstDetailName
+@onready var _inst_detail_condition: Label              = %InstDetailCondition
+@onready var _inst_occupant_list:    VBoxContainer      = %InstDetailOccupantList
+@onready var _occupant_row_template: HBoxContainer      = %OccupantRowTemplate
+@onready var _inst_assign_btn:       Button             = %InstDetailAssignButton
+@onready var _inst_establish_btn:    Button             = %InstDetailEstablishButton
+@onready var _inst_back_btn:         Button             = %InstDetailBackButton
+@onready var _assign_picker:         PanelContainer     = %EchoAssignPicker
+@onready var _picker_list:           VBoxContainer      = %PickerList
+@onready var _picker_row_template:   Button             = %PickerRowTemplate
+@onready var _picker_cancel_btn:     Button             = %PickerCancelButton
+
 
 var _snapshot: Dictionary = {}
 var _name_dirty := false
+var _current_institution_id := ""
 var _last_ase_balance: int = -1
 var _ase_tween: Tween
 var _echo_detail_open := false
@@ -103,6 +119,13 @@ func _ready() -> void:
 	detail_party_action_button.pressed.connect(_on_detail_party_pressed)
 	_awakening_dismiss.pressed.connect(_on_awakening_dismiss_pressed)
 	_apply_awakening_panel_style()
+	# V2-SANCTUM-002: institution wiring
+	_ground_scene.institution_selected.connect(_on_ground_institution_selected)
+	_ground_scene.echo_selected.connect(_on_ground_echo_selected)
+	_inst_back_btn.pressed.connect(_on_inst_detail_back_pressed)
+	_inst_assign_btn.pressed.connect(_on_inst_assign_pressed)
+	_inst_establish_btn.pressed.connect(_on_inst_establish_pressed)
+	_picker_cancel_btn.pressed.connect(_on_picker_cancel_pressed)
 
 
 func set_snapshot(snap: Dictionary) -> void:
@@ -170,6 +193,12 @@ func _render() -> void:
 	_render_echo_detail(detail_roster, str(data.get("featured_echo_id", "")))
 	# V2-VOW-002: rebuild active effects chips
 	_render_active_effects(data)
+	# V2-SANCTUM-002: forward ground data + refresh institution detail if open
+	var ground_v: Variant = data.get("sanctum_ground", {})
+	if ground_v is Dictionary:
+		_ground_scene.set_ground_data(ground_v as Dictionary)
+	if _inst_detail_panel.visible and not _current_institution_id.is_empty():
+		_refresh_institution_detail(data)
 
 	if _last_ase_balance != -1 and ase_balance != _last_ase_balance:
 		var delta := ase_balance - _last_ase_balance
@@ -599,3 +628,164 @@ func _on_awakening_dismiss_pressed() -> void:
 	var tw := create_tween()
 	tw.tween_property(_awakening_overlay, "modulate:a", 0.0, 0.2)
 	tw.tween_callback(func(): _awakening_overlay.visible = false)
+
+
+# ─────────────────────────────────────────────────────────────
+# V2-SANCTUM-002: Institution handlers
+# ─────────────────────────────────────────────────────────────
+
+func _on_ground_institution_selected(institution_id: String) -> void:
+	_current_institution_id = institution_id
+	var data_v: Variant = _snapshot.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	_refresh_institution_detail(data)
+	_inst_detail_panel.visible = true
+	_assign_picker.visible = false
+
+
+func _on_ground_echo_selected(echo_id: String) -> void:
+	open_echo_detail(echo_id)
+
+
+func _on_inst_detail_back_pressed() -> void:
+	_inst_detail_panel.visible = false
+	_assign_picker.visible = false
+	_current_institution_id = ""
+
+
+func _on_inst_assign_pressed() -> void:
+	if _current_institution_id.is_empty():
+		return
+	var data_v: Variant = _snapshot.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	_populate_assign_picker(data)
+	_assign_picker.visible = true
+
+
+func _on_inst_establish_pressed() -> void:
+	if _current_institution_id.is_empty():
+		return
+	var actions_v: Variant = _snapshot.get("actions", {})
+	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
+	var slot_key := "cta.establish." + _current_institution_id
+	var action_v: Variant = actions.get(slot_key, {})
+	if not (action_v is Dictionary) or (action_v as Dictionary).is_empty():
+		return
+	action_requested.emit(action_v as Dictionary)
+
+
+func _on_picker_cancel_pressed() -> void:
+	_assign_picker.visible = false
+
+
+func _on_inst_establish_btn_from_picker(echo_id: String) -> void:
+	if _current_institution_id.is_empty():
+		return
+	action_requested.emit({
+		"type":    "sanctum.institution.assign_echo",
+		"payload": { "institution_id": _current_institution_id, "echo_id": echo_id },
+	})
+	_assign_picker.visible = false
+
+
+func _refresh_institution_detail(data: Dictionary) -> void:
+	var institutions_v: Variant = data.get("institutions", [])
+	var institutions: Array = institutions_v if institutions_v is Array else []
+	var inst_data: Dictionary = {}
+	for entry_v in institutions:
+		if not (entry_v is Dictionary):
+			continue
+		var entry: Dictionary = entry_v
+		if str(entry.get("id", "")) == _current_institution_id:
+			inst_data = entry
+			break
+	if inst_data.is_empty():
+		return
+
+	var display_name := _current_institution_id.replace("_", " ").capitalize()
+	_inst_detail_name.text = display_name
+	var cond := str(inst_data.get("condition", "neglected")).capitalize()
+	_inst_detail_condition.text = cond
+
+	# Occupant rows
+	for child in _inst_occupant_list.get_children():
+		if child == _occupant_row_template:
+			continue
+		child.queue_free()
+	var detail_roster_v: Variant = data.get("echo_detail_roster", [])
+	var detail_roster: Array = detail_roster_v if detail_roster_v is Array else []
+	for oid_v in (inst_data.get("occupant_ids", []) as Array):
+		var oid := str(oid_v)
+		var echo_name := oid
+		for er_v in detail_roster:
+			if er_v is Dictionary and str((er_v as Dictionary).get("id", "")) == oid:
+				echo_name = str((er_v as Dictionary).get("name", oid))
+				break
+		var row := _occupant_row_template.duplicate() as HBoxContainer
+		row.visible = true
+		(row.find_child("OccupantName", true, false) as Label).text = echo_name
+		var remove_btn := row.find_child("OccupantRemoveButton", true, false) as Button
+		remove_btn.pressed.connect(_on_occupant_remove_pressed.bind(oid))
+		_inst_occupant_list.add_child(row)
+
+	# Show/hide buttons
+	var is_unlocked := bool(inst_data.get("unlocked", false))
+	var is_candidate := bool(inst_data.get("is_candidate", false))
+	var occupant_count := (inst_data.get("occupant_ids", []) as Array).size()
+	var capacity := 4  # default; actual is in config
+	_inst_assign_btn.visible   = is_unlocked and occupant_count < capacity
+	_inst_establish_btn.visible = is_candidate and not is_unlocked
+	# Disable establish if insufficient Ekwan (the action slot carries disabled flag)
+	var actions_v: Variant = _snapshot.get("actions", {})
+	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
+	var slot_key := "cta.establish." + _current_institution_id
+	var action_dict_v: Variant = actions.get(slot_key, {})
+	if action_dict_v is Dictionary and not (action_dict_v as Dictionary).is_empty():
+		_inst_establish_btn.disabled = bool((action_dict_v as Dictionary).get("disabled", false))
+		_inst_establish_btn.text = "Establish (%d Ekwan)" % int(
+			((action_dict_v as Dictionary).get("payload", {}) as Dictionary).get("establish_ekwan_cost", 10))
+
+
+func _populate_assign_picker(data: Dictionary) -> void:
+	for child in _picker_list.get_children():
+		if child == _picker_row_template:
+			continue
+		child.queue_free()
+
+	var detail_roster_v: Variant = data.get("echo_detail_roster", [])
+	var detail_roster: Array = detail_roster_v if detail_roster_v is Array else []
+	var compat_hints_v: Variant = data.get("institution_compat_hints", {})
+	var compat_hints: Dictionary = compat_hints_v if compat_hints_v is Dictionary else {}
+	var inst_hints: Dictionary = compat_hints.get(_current_institution_id, {}) as Dictionary
+
+	# Exclude echoes already assigned to any institution
+	var institutions_v: Variant = data.get("institutions", [])
+	var institutions: Array = institutions_v if institutions_v is Array else []
+	var assigned_ids: Array = []
+	for entry_v in institutions:
+		if not (entry_v is Dictionary):
+			continue
+		for oid in ((entry_v as Dictionary).get("occupant_ids", []) as Array):
+			assigned_ids.append(str(oid))
+
+	for echo_v in detail_roster:
+		if not (echo_v is Dictionary):
+			continue
+		var echo: Dictionary = echo_v
+		var eid := str(echo.get("id", ""))
+		if eid.is_empty() or assigned_ids.has(eid):
+			continue
+		var ename := str(echo.get("name", "Echo"))
+		var hint := str(inst_hints.get(eid, ""))
+		var row := _picker_row_template.duplicate() as Button
+		row.visible = true
+		row.text = ename + ("\n" + hint if not hint.is_empty() else "")
+		row.pressed.connect(_on_inst_establish_btn_from_picker.bind(eid))
+		_picker_list.add_child(row)
+
+
+func _on_occupant_remove_pressed(echo_id: String) -> void:
+	action_requested.emit({
+		"type":    "sanctum.institution.remove_echo",
+		"payload": { "institution_id": _current_institution_id, "echo_id": echo_id },
+	})
