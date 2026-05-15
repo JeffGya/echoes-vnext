@@ -3,7 +3,6 @@
 [ext_resource type="Script" uid="uid://cb8hn28k3qlg6" path="res://ui/screens/sanctum/SanctumScreen.gd" id="1_55k7r"]
 [ext_resource type="Theme" uid="uid://8qssuuodths2" path="res://assets/theme/LivingTreeSystem.tres" id="2_gaxha"]
 [ext_resource type="PackedScene" uid="uid://dahk08c2p4mgn" path="res://ui/components/EmotionChip.tscn" id="3_emotionchip"]
-[ext_resource type="PackedScene" path="res://ui/screens/sanctum/SanctumGroundScene.tscn" id="4_groundscene"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ase_tip"]
 content_margin_left = 6.0
@@ -28,13 +27,6 @@ grow_vertical = 2
 theme = ExtResource("2_gaxha")
 script = ExtResource("1_55k7r")
 
-[node name="SanctumGroundSceneInstance" parent="." instance=ExtResource("4_groundscene")]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-z_index = -1
-unique_name_in_owner = true
 
 [node name="RootMargin" type="MarginContainer" parent="." unique_id=1280524352]
 layout_mode = 1
@@ -126,6 +118,12 @@ layout_mode = 2
 theme_type_variation = &"SanctumHeaderText"
 text = "Choose where the house reaches outward next."
 autowrap_mode = 3
+
+[node name="SanctumMgmtBtn" type="Button" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Sanctum"
+flat = true
 
 [node name="TopSpacer" type="Control" parent="RootMargin/LayoutRoot/TopBand" unique_id=1333580464]
 layout_mode = 2
@@ -1134,6 +1132,75 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 72)
 layout_mode = 2
 text = "Continue"
+
+[node name="InstitutionsOverlay" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 0
+anchor_right = 0.4
+anchor_bottom = 1.0
+offset_top = 56
+grow_horizontal = 2
+grow_vertical = 2
+visible = false
+
+[node name="InstOverlayMargin" type="MarginContainer" parent="InstitutionsOverlay"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="InstOverlayStack" type="VBoxContainer" parent="InstitutionsOverlay/InstOverlayMargin"]
+layout_mode = 2
+
+[node name="InstOverlayHeader" type="HBoxContainer" parent="InstitutionsOverlay/InstOverlayMargin/InstOverlayStack"]
+layout_mode = 2
+
+[node name="InstOverlayTitle" type="Label" parent="InstitutionsOverlay/InstOverlayMargin/InstOverlayStack/InstOverlayHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Institutions"
+
+[node name="InstOverlayBackBtn" type="Button" parent="InstitutionsOverlay/InstOverlayMargin/InstOverlayStack/InstOverlayHeader"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "← Back"
+flat = true
+
+[node name="InstitutionList" type="VBoxContainer" parent="InstitutionsOverlay/InstOverlayMargin/InstOverlayStack"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PlacementConfirmBar" type="HBoxContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -64
+grow_horizontal = 2
+grow_vertical = 0
+visible = false
+
+[node name="PlacementLabel" type="Label" parent="PlacementConfirmBar"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Tap a glowing cell to place"
+
+[node name="PlacementConfirmBtn" type="Button" parent="PlacementConfirmBar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Confirm"
+disabled = true
+
+[node name="PlacementCancelBtn" type="Button" parent="PlacementConfirmBar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Cancel"
 
 [node name="SnapShotView" type="RichTextLabel" parent="." unique_id=1171635051]
 unique_name_in_owner = true

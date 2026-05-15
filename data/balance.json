@@ -1980,7 +1980,8 @@
 				"strained_max_elapsed_seconds": 10800,
 				"primary_vectors":             ["pillar"],
 				"primary_callings":            ["onyamesu", "okomfo"],
-				"primary_archetypes":          []
+				"primary_archetypes":          [],
+				"morale_per_hour":             2
 			},
 			"training_grounds": {
 				"unlock_continuity_threshold": 2,
@@ -1992,7 +1993,8 @@
 				"strained_max_elapsed_seconds": 10800,
 				"primary_vectors":             ["vanguard"],
 				"primary_callings":            ["aduro", "okofor", "kra_soro"],
-				"primary_archetypes":          []
+				"primary_archetypes":          [],
+				"storyweight_per_hour":        1
 			},
 			"unassign_natural_fit_morale_delta": -5,
 			"unassign_natural_fit_fear_delta":    5,

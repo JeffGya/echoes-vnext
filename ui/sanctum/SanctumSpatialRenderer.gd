@@ -1,8 +1,10 @@
 extends Node2D
 class_name SanctumSpatialRenderer
 
-@onready var floor: TileMapLayer = $Floor
-@onready var occupants: SanctumOccupantLayer = $Occupants
+@onready var floor: TileMapLayer          = $Floor
+@onready var occupants: SanctumOccupantLayer    = $Occupants
+@onready var _building_layer: SanctumBuildingLayer  = $SanctumBuildingLayer
+@onready var _placement_layer: SanctumPlacementLayer = $SanctumPlacementLayer
 
 var _occupant_cache: Array = []
 
@@ -26,24 +28,82 @@ func _render_layout(layout_v: Variant) -> void:
 			continue
 		var tile: Dictionary = tile_v
 		var cell := Vector2i(int(tile.get("x", 0)), int(tile.get("y", 0)))
-		floor.set_cell(cell, 0, Vector2i(0, 0), 0)
+		var kind := str(tile.get("kind", "floor"))
+		# Only floor tiles go into the TileMapLayer; other kinds are drawn by layer scripts.
+		if kind == "floor":
+			floor.set_cell(cell, 0, Vector2i(0, 0), 0)
 
 
 func _render_occupants(occupants_v: Variant) -> void:
-	if occupants == null or floor == null:
+	if floor == null:
 		return
 	var source: Array = occupants_v if occupants_v is Array else []
-	var out: Array = []
+
+	var buildings: Array = []
+	var echoes: Array    = []
+
 	for occupant_v in source:
 		if not (occupant_v is Dictionary):
 			continue
 		var occupant: Dictionary = (occupant_v as Dictionary).duplicate(true)
 		var cell := Vector2i(int(occupant.get("x", 0)), int(occupant.get("y", 0)))
 		occupant["position"] = floor.position + floor.map_to_local(cell)
-		out.append(occupant)
-	_occupant_cache = out
-	occupants.set_occupants(out)
+		var kind := str(occupant.get("kind", "echo"))
+		if kind in ["ase_flame", "institution"]:
+			buildings.append(occupant)
+		else:
+			echoes.append(occupant)
 
+	_occupant_cache = source.duplicate()
+
+	if _building_layer != null:
+		_building_layer.set_buildings(buildings)
+	if occupants != null:
+		occupants.set_occupants(echoes)
+
+
+# --- Placement mode API ---
+
+func set_valid_placement_cells(tile_cells: Array) -> void:
+	if _placement_layer == null or floor == null:
+		return
+	var pixel_positions: Array = []
+	for cell_v in tile_cells:
+		if cell_v is Vector2i:
+			pixel_positions.append(floor.position + floor.map_to_local(cell_v as Vector2i))
+	_placement_layer.set_valid_cells(pixel_positions)
+
+
+func set_ghost_building(tile_cell: Vector2i, inst_id: String) -> void:
+	if _placement_layer == null or floor == null:
+		return
+	var pixel_pos := floor.position + floor.map_to_local(tile_cell)
+	_placement_layer.set_ghost(pixel_pos, inst_id)
+
+
+func clear_placement_mode() -> void:
+	if _placement_layer != null:
+		_placement_layer.clear()
+
+
+# Returns the tile cell at the given viewport point that lies within the valid
+# placement highlights, or Vector2i(-999, -999) if none is within radius.
+func find_valid_cell_at_viewport_point(vp_point: Vector2, radius: float = 42.0) -> Vector2i:
+	if _placement_layer == null:
+		return Vector2i(-999, -999)
+	for pos_v in _placement_layer._valid_positions:
+		if not (pos_v is Vector2):
+			continue
+		var pos: Vector2 = pos_v
+		var screen_pos := _screen_position_for_local(pos)
+		if screen_pos.distance_to(vp_point) <= radius:
+			# Convert pixel position back to tile cell
+			var local_pos := pos - floor.position
+			return floor.local_to_map(local_pos)
+	return Vector2i(-999, -999)
+
+
+# --- Existing helpers (unchanged) ---
 
 func get_primary_occupant_id() -> String:
 	if _occupant_cache.is_empty():
@@ -65,7 +125,7 @@ func get_primary_occupant_position() -> Vector2:
 
 
 func get_primary_occupant_screen_position() -> Vector2:
-	return _screen_position_for_occupant(get_primary_occupant_position())
+	return _screen_position_for_local(get_primary_occupant_position())
 
 
 func find_occupant_at_global_point(global_point: Vector2, radius: float = 28.0) -> Dictionary:
@@ -88,7 +148,7 @@ func find_occupant_at_viewport_point(viewport_point: Vector2, radius: float = 42
 		var occupant: Dictionary = occupant_v
 		var pos_v: Variant = occupant.get("position", Vector2.ZERO)
 		var pos: Vector2 = pos_v if pos_v is Vector2 else Vector2.ZERO
-		var screen_pos := _screen_position_for_occupant(pos)
+		var screen_pos := _screen_position_for_local(pos)
 		if screen_pos.distance_to(viewport_point) <= radius:
 			return occupant
 	return {}
@@ -100,5 +160,10 @@ func set_featured_occupant(occupant_id: String) -> void:
 	occupants.set_featured_occupant(occupant_id)
 
 
-func _screen_position_for_occupant(local_position: Vector2) -> Vector2:
+func _screen_position_for_local(local_position: Vector2) -> Vector2:
 	return get_global_transform_with_canvas() * local_position
+
+
+# Kept for backward compatibility (was named differently in some call sites).
+func _screen_position_for_occupant(local_position: Vector2) -> Vector2:
+	return _screen_position_for_local(local_position)

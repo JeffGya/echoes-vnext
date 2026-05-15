@@ -39,6 +39,10 @@ var _is_panning := false
 var _last_pointer_pos := Vector2.ZERO
 var _current_snap_type := ""
 var _echo_detail_open := false
+var _institutions_open := false
+var _placement_mode := false
+var _placement_building_id := ""
+var _placement_selected_cell: Variant = null  # Vector2i or null
 var _saved_camera_position := Vector2.ZERO
 var _saved_camera_zoom := Vector2.ONE
 var _detail_zoom := Vector2(2.9, 2.9)
@@ -216,6 +220,17 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 				return
 	
+	# Pinch-to-zoom (mobile)
+	if event is InputEventMagnifyGesture:
+		if _echo_detail_open or _placement_mode or _institutions_open:
+			return
+		var factor := (event as InputEventMagnifyGesture).factor
+		var new_zoom := (camera.zoom * factor).clamp(_zoom_levels[0], _zoom_levels[_zoom_levels.size() - 1])
+		camera.zoom = new_zoom
+		_clamp_camera_to_floor()
+		get_viewport().set_input_as_handled()
+		return
+
 	if event is InputEventPanGesture:
 		if _echo_detail_open:
 			return
@@ -259,12 +274,31 @@ func _input(event: InputEvent) -> void:
 		return
 	if Input.is_key_pressed(KEY_SPACE):
 		return
-	if _try_open_echo_detail_at_viewport_point(mb.position):
+
+	# Placement mode: route taps to placement handler; swallow all others.
+	if _placement_mode:
+		if _try_placement_tap(mb.position):
+			get_viewport().set_input_as_handled()
+		return
+
+	# Normal mode: check hit, route by kind.
+	if _try_open_occupant_at_viewport_point(mb.position):
 		get_viewport().set_input_as_handled()
 
 
 # ---- HELPERS ----
 func _on_overlay_action_requested(action: Dictionary) -> void:
+	var action_type := str(action.get("type", ""))
+	# Intercept placement mode lifecycle — do NOT forward to FlowRuntime.
+	if action_type == "ui.enter_placement_mode":
+		var inst_id   := str(action.get("payload", {}).get("institution_id", ""))
+		var cells_v: Variant = action.get("payload", {}).get("valid_cells", [])
+		var cells: Array = cells_v if cells_v is Array else []
+		_enter_placement_mode(inst_id, cells)
+		return
+	if action_type == "ui.exit_placement_mode":
+		_exit_placement_mode()
+		return
 	action_requested.emit(action)
 
 
@@ -431,14 +465,40 @@ func _toggle_zoom(zoom_in: bool) -> void:
 	_clamp_camera_to_floor()
 
 
-func _try_open_echo_detail_at_viewport_point(viewport_point: Vector2) -> bool:
-	if _active_overlay == null or not _active_overlay.has_method("open_echo_detail"):
-		return false
+# Routes a tap to the correct handler based on the hit occupant kind.
+func _try_open_occupant_at_viewport_point(viewport_point: Vector2) -> bool:
 	if spatial_renderer == null or not spatial_renderer.has_method("find_occupant_at_viewport_point"):
 		return false
 	var hit_v: Variant = spatial_renderer.call("find_occupant_at_viewport_point", viewport_point)
 	var hit: Dictionary = hit_v if hit_v is Dictionary else {}
 	if hit.is_empty():
+		return false
+	var kind := str(hit.get("kind", "echo"))
+	var occupant_id := str(hit.get("id", ""))
+	if occupant_id.is_empty():
+		return false
+
+	if kind == "ase_flame" or kind == "institution":
+		open_institutions_panel()
+		return true
+
+	# Echo tap — existing flow
+	return _try_open_echo_detail_at_viewport_point_from_hit(hit)
+
+
+# Legacy helper kept for backward compatibility and clarity.
+func _try_open_echo_detail_at_viewport_point(viewport_point: Vector2) -> bool:
+	if spatial_renderer == null or not spatial_renderer.has_method("find_occupant_at_viewport_point"):
+		return false
+	var hit_v: Variant = spatial_renderer.call("find_occupant_at_viewport_point", viewport_point)
+	var hit: Dictionary = hit_v if hit_v is Dictionary else {}
+	if hit.is_empty():
+		return false
+	return _try_open_echo_detail_at_viewport_point_from_hit(hit)
+
+
+func _try_open_echo_detail_at_viewport_point_from_hit(hit: Dictionary) -> bool:
+	if _active_overlay == null or not _active_overlay.has_method("open_echo_detail"):
 		return false
 	var occupant_id := str(hit.get("id", ""))
 	if occupant_id.is_empty():
@@ -447,10 +507,68 @@ func _try_open_echo_detail_at_viewport_point(viewport_point: Vector2) -> bool:
 	_saved_camera_zoom = camera.zoom
 	_echo_detail_open = true
 	_active_overlay.call("open_echo_detail", occupant_id)
-	if spatial_renderer.has_method("set_featured_occupant"):
+	if spatial_renderer != null and spatial_renderer.has_method("set_featured_occupant"):
 		spatial_renderer.call("set_featured_occupant", occupant_id)
 	_focus_camera_for_echo_detail(true)
 	_update_rail_tone(_current_snap_type)
+	return true
+
+
+# ---- Institutions panel ----
+
+func open_institutions_panel() -> void:
+	if _institutions_open:
+		return
+	_institutions_open = true
+	if _active_overlay != null and _active_overlay.has_method("show_institutions_panel"):
+		_active_overlay.call("show_institutions_panel")
+
+
+func close_institutions_panel() -> void:
+	if not _institutions_open:
+		return
+	_institutions_open = false
+	if _active_overlay != null and _active_overlay.has_method("hide_institutions_panel"):
+		_active_overlay.call("hide_institutions_panel")
+
+
+# ---- Placement mode ----
+
+func _enter_placement_mode(inst_id: String, valid_cells: Array) -> void:
+	close_institutions_panel()
+	_placement_mode = true
+	_placement_building_id = inst_id
+	_placement_selected_cell = null
+	if spatial_renderer != null and spatial_renderer.has_method("set_valid_placement_cells"):
+		spatial_renderer.call("set_valid_placement_cells", valid_cells)
+	if _active_overlay != null and _active_overlay.has_method("show_placement_bar"):
+		_active_overlay.call("show_placement_bar", inst_id)
+
+
+func _exit_placement_mode() -> void:
+	_placement_mode = false
+	_placement_building_id = ""
+	_placement_selected_cell = null
+	if spatial_renderer != null and spatial_renderer.has_method("clear_placement_mode"):
+		spatial_renderer.call("clear_placement_mode")
+	if _active_overlay != null and _active_overlay.has_method("hide_placement_bar"):
+		_active_overlay.call("hide_placement_bar")
+
+
+func _try_placement_tap(viewport_point: Vector2) -> bool:
+	if spatial_renderer == null or not spatial_renderer.has_method("find_valid_cell_at_viewport_point"):
+		return false
+	var cell_v: Variant = spatial_renderer.call("find_valid_cell_at_viewport_point", viewport_point)
+	if not (cell_v is Vector2i):
+		return false
+	var cell: Vector2i = cell_v
+	if cell == Vector2i(-999, -999):
+		return false
+	_placement_selected_cell = cell
+	if spatial_renderer.has_method("set_ghost_building"):
+		spatial_renderer.call("set_ghost_building", cell, _placement_building_id)
+	if _active_overlay != null and _active_overlay.has_method("on_placement_cell_selected"):
+		_active_overlay.call("on_placement_cell_selected", cell)
 	return true
 
 

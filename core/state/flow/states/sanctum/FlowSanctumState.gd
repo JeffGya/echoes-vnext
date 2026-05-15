@@ -170,8 +170,6 @@ func enter(ctx: RefCounted, t:int) -> void:
 		var _ic_v: Variant = _bd_s.get("institutions", {})
 		_inst_cfg_s = _ic_v if _ic_v is Dictionary else {}
 	var _inst_snapshot := InstitutionService.get_snapshot_data(flow_ctx.save_data, _inst_cfg_s, t)
-	var _ground_data := InstitutionService.get_ground_data(
-		flow_ctx.save_data, _inst_cfg_s, roster, active_party_ids, _bonds_s)
 	# Compatibility hints for all roster echoes (keyed inst_id -> echo_id -> hint string)
 	var _compat_hints: Dictionary = {}
 	for _inst_entry in _inst_snapshot:
@@ -227,14 +225,14 @@ func enter(ctx: RefCounted, t:int) -> void:
 		"active_effects": _build_active_effects(flow_ctx),
 		"thread_reserve":     _thread_reserve,      # V2-WEAVE-001: Array[{virtue, quality_tier}]
 		"thread_reserve_cap": _thread_reserve_cap,  # V2-WEAVE-001: base reserve cap (default 4)
-		"sanctum_layout": SanctumLayoutService.snapshot_layout(flow_ctx.save_data),
-		"sanctum_occupants": SanctumLayoutService.snapshot_occupants(flow_ctx.save_data),
+		"sanctum_layout": SanctumLayoutService.snapshot_layout(flow_ctx.save_data, _inst_snapshot),
+		"sanctum_occupants": SanctumLayoutService.snapshot_occupants(flow_ctx.save_data, roster, active_party_ids, _inst_snapshot),
 		"echo_detail_roster": echo_detail_roster,
 		"featured_echo_id": str((echo_detail_roster[0] as Dictionary).get("id", "")) if not echo_detail_roster.is_empty() and echo_detail_roster[0] is Dictionary else "",
 		# V2-SANCTUM-002
-		"institutions":           _inst_snapshot,
-		"sanctum_ground":         _ground_data,
-		"institution_compat_hints": _compat_hints,
+		"institutions":              _inst_snapshot,
+		"valid_placement_cells":     SanctumLayoutService.compute_valid_placement_cells(flow_ctx.save_data, _inst_snapshot),
+		"institution_compat_hints":  _compat_hints,
 	}
 
 	flow_ctx.last_snapshot = {
