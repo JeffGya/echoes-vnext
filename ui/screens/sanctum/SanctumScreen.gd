@@ -771,7 +771,7 @@ func _render_institutions(data: Dictionary) -> void:
 
 var _inst_row_index := 0
 
-func _build_inst_row_label(title: String, subtitle: String, detail: String, enabled: bool) -> HBoxContainer:
+func _build_inst_row_label(title: String, subtitle: String, detail: String, enabled: bool) -> PanelContainer:
 	# Alternate between SanctumDrawerRow and SanctumDrawerRowAlt for two-tone readability.
 	var variation: StringName = &"SanctumDrawerRow" if (_inst_row_index % 2 == 0) else &"SanctumDrawerRowAlt"
 	_inst_row_index += 1
