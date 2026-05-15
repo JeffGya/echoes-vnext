@@ -839,6 +839,38 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 				repaired_notes.append("sanctum.ase_flame.boost_per_bank_tick set to 0")
 			else:
 				_flame["boost_per_bank_tick"] = int(_flame["boost_per_bank_tick"])
+		# V2-SANCTUM-002: institution model
+		if not sanctum.has("institutions") or not (sanctum["institutions"] is Dictionary):
+			sanctum["institutions"] = {
+				"hearth":           { "unlocked": false, "tier": 0, "condition": "neglected", "last_activated_unix": 0, "occupant_ids": [] },
+				"training_grounds": { "unlocked": false, "tier": 0, "condition": "neglected", "last_activated_unix": 0, "occupant_ids": [] },
+			}
+			repaired = true
+			repaired_notes.append("sanctum.institutions initialised (V2-SANCTUM-002)")
+		else:
+			for _inst_id in ["hearth", "training_grounds"]:
+				var _inst_v: Variant = sanctum["institutions"].get(_inst_id, null)
+				if not (_inst_v is Dictionary):
+					sanctum["institutions"][_inst_id] = { "unlocked": false, "tier": 0, "condition": "neglected", "last_activated_unix": 0, "occupant_ids": [] }
+					repaired = true
+					repaired_notes.append("sanctum.institutions.%s repaired" % _inst_id)
+				else:
+					var _inst: Dictionary = _inst_v
+					if not _inst.has("last_activated_unix") or (typeof(_inst["last_activated_unix"]) != TYPE_INT and typeof(_inst["last_activated_unix"]) != TYPE_FLOAT):
+						_inst["last_activated_unix"] = 0
+						repaired = true
+						repaired_notes.append("sanctum.institutions.%s.last_activated_unix defaulted" % _inst_id)
+					else:
+						_inst["last_activated_unix"] = int(_inst["last_activated_unix"])
+					if not _inst.has("occupant_ids") or not (_inst["occupant_ids"] is Array):
+						_inst["occupant_ids"] = []
+						repaired = true
+						repaired_notes.append("sanctum.institutions.%s.occupant_ids defaulted" % _inst_id)
+					if not _inst.has("condition") or typeof(_inst["condition"]) != TYPE_STRING:
+						_inst["condition"] = "neglected"
+						repaired = true
+						repaired_notes.append("sanctum.institutions.%s.condition defaulted" % _inst_id)
+
 		if _starter_occupants_need_repair(sanctum):
 			SanctumLayoutService.ensure_starter_occupant(save)
 			repaired = true

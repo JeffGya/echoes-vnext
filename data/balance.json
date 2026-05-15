@@ -181,7 +181,23 @@
 				"modifier_ko_morale_mul": 0.5,
 				"modifier_survived_morale_mul": 1.25,
 				"modifier_vow_break_fear_mul": 0.5,
-				"_comment_stubs": "building modifiers are stubs — not applied yet (V2-SANCTUM-002, VOW-002)",
+				"buildings": {
+					"_comment": "V2-SANCTUM-002: institution emotion-recovery multipliers by condition tier. Neglected → no modifier (gated in InstitutionService).",
+					"hearth": {
+						"morale_mul_healthy":  1.5,
+						"morale_mul_strained": 1.2,
+						"fear_mul_healthy":    1.0,
+						"fear_mul_strained":   1.0,
+						"ticks": 4
+					},
+					"training_grounds": {
+						"morale_mul_healthy":  1.0,
+						"morale_mul_strained": 1.0,
+						"fear_mul_healthy":    1.5,
+						"fear_mul_strained":   1.2,
+						"ticks": 4
+					}
+				},
 				"bonds": {
 					"_comment": "BOND-002: grief and shared-survival recovery modifiers applied after combat based on bond outcomes.",
 					"grief_morale_mul": 0.5,
@@ -1951,6 +1967,47 @@
 				"3": ["combat_attack", "combat_guard", "combat_banter"]
 			},
 			"sanctum_max_barkers": 2
+		},
+		"institutions": {
+			"_comment_foundation": "Foundation exception: Hearth + Training Grounds unlock early without virtue gate. Fuller gating deferred to V2-CONTINUITY-001+.",
+			"hearth": {
+				"unlock_continuity_threshold": 1,
+				"establish_ekwan_cost":        10,
+				"assign_ase_cost":             5,
+				"unassign_ekwan_cost":         3,
+				"capacity":                    4,
+				"healthy_max_elapsed_seconds": 3600,
+				"strained_max_elapsed_seconds": 10800,
+				"primary_vectors":             ["pillar"],
+				"primary_callings":            ["onyamesu", "okomfo"],
+				"primary_archetypes":          []
+			},
+			"training_grounds": {
+				"unlock_continuity_threshold": 2,
+				"establish_ekwan_cost":        15,
+				"assign_ase_cost":             5,
+				"unassign_ekwan_cost":         3,
+				"capacity":                    4,
+				"healthy_max_elapsed_seconds": 3600,
+				"strained_max_elapsed_seconds": 10800,
+				"primary_vectors":             ["vanguard"],
+				"primary_callings":            ["aduro", "okofor", "kra_soro"],
+				"primary_archetypes":          []
+			},
+			"unassign_natural_fit_morale_delta": -5,
+			"unassign_natural_fit_fear_delta":    5,
+			"compatibility_hints": {
+				"hearth": {
+					"natural_fit": "The Hearth recognizes something in {name}. They will settle here as if they never left.",
+					"compatible":  "{name} may find the Hearth quieter than expected. But stillness has its own instruction.",
+					"poor_fit":    "Something restless in {name} may not take easily to the care work here. They can try — watch carefully."
+				},
+				"training_grounds": {
+					"natural_fit": "The Training Grounds will sharpen {name} into something formidable. This is their kind of pressure.",
+					"compatible":  "{name} will find their footing here. Readiness takes many shapes.",
+					"poor_fit":    "The Grounds may ask more of {name} than their nature offers. Not impossible — but the cost will show."
+				}
+			}
 		}
 	}
 }

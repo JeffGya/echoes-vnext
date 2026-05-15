@@ -85,6 +85,24 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"continuity": 0,  # V2-SANCTUM-001+: Sanctum growth spine
 			"threads": {},    # V2-WEAVE-001+: Thread reserve (keyed by thread_id)
 
+			# V2-SANCTUM-002: institution model (Foundation exception — Hearth + Training Grounds)
+			"institutions": {
+				"hearth": {
+					"unlocked":            false,
+					"tier":                0,
+					"condition":           "neglected",
+					"last_activated_unix": 0,
+					"occupant_ids":        [],
+				},
+				"training_grounds": {
+					"unlocked":            false,
+					"tier":                0,
+					"condition":           "neglected",
+					"last_activated_unix": 0,
+					"occupant_ids":        [],
+				},
+			},
+
 			# V2-ECONOMY-001: Ase Flame state (dormant until awakening at end of onboarding)
 			"ase_flame": {
 				"awakened":                false,

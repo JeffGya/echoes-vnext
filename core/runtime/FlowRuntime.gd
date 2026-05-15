@@ -11,6 +11,7 @@ const StageExploreModelScript     := preload("res://core/realms/StageExploreMode
 const SituationModelScript        := preload("res://core/realms/SituationModel.gd")                             # V2-STAGE-001
 ## ConsequencePassService kept on disk for future use; not preloaded here.
 const EmotionRecoveryServiceScript := preload("res://core/emotion/EmotionRecoveryService.gd")                    # V2-SANCTUM-001
+const InstitutionServiceScript     := preload("res://core/sanctum/InstitutionService.gd")                         # V2-SANCTUM-002
 
 var logger: StructuredLogger
 var config_service: ConfigService
@@ -402,6 +403,16 @@ func dispatch(action: Dictionary) -> Dictionary:
 		# PROG-007: Keeper confirms a calling for an echo (may be deferred after rank-up).
 		"sanctum.calling.confirm":
 			_handle_sanctum_calling_confirm(action, t)
+
+		# ---- Institutions (V2-SANCTUM-002) ----
+		"sanctum.institution.establish":
+			_handle_sanctum_institution_establish(action, t)
+
+		"sanctum.institution.assign_echo":
+			_handle_sanctum_institution_assign_echo(action, t)
+
+		"sanctum.institution.remove_echo":
+			_handle_sanctum_institution_remove_echo(action, t)
 
 		# ---- Vows (VOW-001) ----
 		"vow.pledge":
@@ -2029,6 +2040,18 @@ func _handle_economy_settle_time(action: Dictionary, t: int) -> void:
 	# V2-SANCTUM-001: piggyback emotion recovery on the bank timer settle
 	_apply_emotion_recovery_if_needed(now_unix, t)
 
+	# V2-SANCTUM-002: update institution conditions + apply bank-tick modifiers
+	var _inst_cfg_b := _get_institutions_cfg()
+	var _bldg_cfg_b := _get_buildings_cfg()
+	if not _inst_cfg_b.is_empty():
+		for _inst_id_b in InstitutionServiceScript.ALL_INSTITUTIONS:
+			InstitutionServiceScript.update_condition(
+				_inst_id_b, flow_ctx.save_data,
+				_inst_cfg_b.get(_inst_id_b, {}) as Dictionary,
+				now_unix, logger, t)
+		InstitutionServiceScript.apply_institution_modifiers(
+			flow_ctx.save_data, _bldg_cfg_b, _inst_cfg_b, logger, t)
+
 	# IMPORTANT: settle_time can occur without a flow transition (e.g., Sanctum bank interval),
 	# so we must refresh snapshot so UI updates immediately.
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
@@ -3642,6 +3665,63 @@ func _get_realm_xp_multiplier() -> float:
 
 
 # ---------------------------------------------------------------------------
+# V2-SANCTUM-002 institution handlers
+# ---------------------------------------------------------------------------
+
+func _handle_sanctum_institution_establish(action: Dictionary, t: int) -> void:
+	var inst_id := str(action.get("payload", {}).get("institution_id", ""))
+	if inst_id.is_empty():
+		return
+	var inst_cfg := _get_institutions_cfg()
+	if InstitutionServiceScript.establish(inst_id, flow_ctx.save_data, econ, inst_cfg, logger, t):
+		flow_ctx.save_request = true
+		flow_ctx.save_request_reason = "institution.establish"
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+func _handle_sanctum_institution_assign_echo(action: Dictionary, t: int) -> void:
+	var payload   := action.get("payload", {}) as Dictionary
+	var inst_id   := str(payload.get("institution_id", ""))
+	var echo_id   := str(payload.get("echo_id", ""))
+	if inst_id.is_empty() or echo_id.is_empty():
+		return
+	var inst_cfg := _get_institutions_cfg()
+	if InstitutionServiceScript.assign_echo(inst_id, echo_id, flow_ctx.save_data, econ, inst_cfg, logger, t):
+		flow_ctx.save_request = true
+		flow_ctx.save_request_reason = "institution.assign_echo"
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+func _handle_sanctum_institution_remove_echo(action: Dictionary, t: int) -> void:
+	var payload := action.get("payload", {}) as Dictionary
+	var inst_id := str(payload.get("institution_id", ""))
+	var echo_id := str(payload.get("echo_id", ""))
+	if inst_id.is_empty() or echo_id.is_empty():
+		return
+	var inst_cfg := _get_institutions_cfg()
+	if InstitutionServiceScript.remove_echo(inst_id, echo_id, flow_ctx.save_data, econ, inst_cfg, logger, t):
+		flow_ctx.save_request = true
+		flow_ctx.save_request_reason = "institution.remove_echo"
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+func _get_institutions_cfg() -> Dictionary:
+	var data_v: Variant = config_service.get_balance().get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var inst_v: Variant = data.get("institutions", {})
+	return inst_v if inst_v is Dictionary else {}
+
+
+func _get_buildings_cfg() -> Dictionary:
+	var data_v: Variant = config_service.get_balance().get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var emotion_v: Variant = (data.get("emotion", {}) as Dictionary).get("recovery", {})
+	var recovery: Dictionary = emotion_v if emotion_v is Dictionary else {}
+	var bldg_v: Variant = recovery.get("buildings", {})
+	return bldg_v if bldg_v is Dictionary else {}
+
+
+# ---------------------------------------------------------------------------
 # VOW-001 handlers
 # ---------------------------------------------------------------------------
 
@@ -4815,6 +4895,32 @@ func _apply_run_emotion_modifiers(outcome: String, t: int) -> void:
 			"withdrawal":
 				morale_mul = float(cfg.get("modifier_survived_morale_mul", 1.25))
 		EmotionRecoveryServiceScript.set_modifier(echo, morale_mul, fear_mul, ticks, logger, t)
+
+	# V2-SANCTUM-002: compose institution modifiers with run-outcome modifiers for party echoes
+	var _inst_cfg := _get_institutions_cfg()
+	var _bldg_cfg := _get_buildings_cfg()
+	if not _inst_cfg.is_empty() and not _bldg_cfg.is_empty():
+		for echo_v2 in roster:
+			if not (echo_v2 is Dictionary):
+				continue
+			var echo2: Dictionary = echo_v2 as Dictionary
+			var echo2_id := str(echo2.get("id", ""))
+			if not party_ids.has(echo2_id):
+				continue
+			var inst_for := InstitutionServiceScript.find_institution_for_echo(echo2_id, flow_ctx.save_data)
+			if inst_for.is_empty():
+				continue
+			var cond := InstitutionServiceScript.get_condition(inst_for, flow_ctx.save_data)
+			if cond == InstitutionServiceScript.CONDITION_NEGLECTED:
+				continue
+			var b_cfg: Dictionary = _bldg_cfg.get(inst_for, {}) as Dictionary
+			var inst_morale := float(b_cfg.get("morale_mul_" + cond, 1.0))
+			var inst_fear   := float(b_cfg.get("fear_mul_"   + cond, 1.0))
+			var inst_ticks  := int(b_cfg.get("ticks", ticks))
+			var rm: Dictionary = echo2.get("recovery_modifiers", {}) as Dictionary
+			var existing_morale := float(rm.get("morale_multiplier", 1.0))
+			var existing_fear   := float(rm.get("fear_multiplier",   1.0))
+			EmotionRecoveryServiceScript.set_modifier(echo2, existing_morale * inst_morale, existing_fear * inst_fear, inst_ticks, logger, t)
 
 	flow_ctx.save_request = true
 	if flow_ctx.save_request_reason.is_empty():

@@ -517,6 +517,9 @@ EncounterStateMachine phases (scaffold): `setup → blessing → rounds → reso
 | **flow** | `flow.select_realm` | selects a realm; triggers `RealmService.get_or_create`; transitions to `flow.stage_map`. Payload: `{ realm_id: String }` |
 | | `flow.select_stage` | sets `ctx.stage_id`, transitions to `flow.stage`. Payload: `{ stage_id: String }` |
 | | `flow.complete_stage` | REALM-004: advances `current_stage_index` via `RealmService.advance_stage()`; on realm complete routes to `flow.realm_select` (clears `ctx.realm_id`+`ctx.stage_id`); else routes to `flow.stage_map`. Optional `destination` field overrides routing for non-completed stages (e.g. `"flow.sanctum"` for victory "To Sanctum" path). |
+| **sanctum (institutions)** | `sanctum.institution.establish` | payload: `{ institution_id }`. Spends Ekwan, unlocks institution. Gated by Continuity threshold + Ekwan affordability. |
+| | `sanctum.institution.assign_echo` | payload: `{ institution_id, echo_id }`. Spends Ase, adds echo to occupant_ids. Auto-removes echo from active_party_ids if present. |
+| | `sanctum.institution.remove_echo` | payload: `{ institution_id, echo_id }`. Spends Ekwan, removes echo, drops condition one tier. Applies morale/fear delta if echo was natural_fit. |
 | **weave** | `weave.start_for_echo` | payload: `{ echo_id }`. Starts rite from an EchoParty/Sanctum-family interaction, seeds rite context with the chosen echo, transitions to `flow.weaving_rite`. |
 | | `weave.select_thread` | payload: `{ thread_id }`. Sets offered thread for the currently selected rite echo and refreshes rite snapshot. |
 | | `weave.begin_rite` | validates selection, resolves outcome, applies outcome + non-chosen consequences, locks rite until confirm. |

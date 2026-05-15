@@ -1,0 +1,251 @@
+[gd_scene load_steps=4 format=3 uid="uid://bsanctumground001"]
+
+[ext_resource type="Script" path="res://ui/screens/sanctum/SanctumGroundScene.gd" id="1_groundscript"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_token"]
+bg_color = Color(0.784, 0.663, 0.431, 1)
+corner_radius_top_left = 24
+corner_radius_top_right = 24
+corner_radius_bottom_right = 24
+corner_radius_bottom_left = 24
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+bg_color = Color(0.133, 0.133, 0.176, 0.6)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[node name="SanctumGroundScene" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("1_groundscript")
+unique_name_in_owner = true
+
+[node name="GroundBase" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.227, 0.227, 0.282, 1.0)
+unique_name_in_owner = true
+
+[node name="ContentRoot" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+unique_name_in_owner = true
+
+[node name="HearthGroup" type="Control" parent="ContentRoot"]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 80.0
+offset_right = 189.0
+offset_bottom = 280.0
+visible = false
+unique_name_in_owner = true
+
+[node name="HearthBuilding" type="ColorRect" parent="ContentRoot/HearthGroup"]
+layout_mode = 0
+offset_right = 173.0
+offset_bottom = 200.0
+color = Color(0.42, 0.32, 0.22, 1.0)
+
+[node name="HearthHealthyLayer" type="Control" parent="ContentRoot/HearthGroup"]
+layout_mode = 0
+offset_right = 173.0
+offset_bottom = 200.0
+visible = true
+unique_name_in_owner = true
+
+[node name="HearthLabel" type="Label" parent="ContentRoot/HearthGroup/HearthHealthyLayer"]
+layout_mode = 0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = 169.0
+offset_bottom = 28.0
+text = "Hearth"
+label_settings = null
+
+[node name="HearthStrainedLayer" type="Control" parent="ContentRoot/HearthGroup"]
+layout_mode = 0
+offset_right = 173.0
+offset_bottom = 200.0
+visible = false
+unique_name_in_owner = true
+
+[node name="HearthStrainedLabel" type="Label" parent="ContentRoot/HearthGroup/HearthStrainedLayer"]
+layout_mode = 0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = 169.0
+offset_bottom = 28.0
+text = "Hearth (strained)"
+
+[node name="HearthNeglectedLayer" type="Control" parent="ContentRoot/HearthGroup"]
+layout_mode = 0
+offset_right = 173.0
+offset_bottom = 200.0
+visible = false
+unique_name_in_owner = true
+
+[node name="HearthNeglectedLabel" type="Label" parent="ContentRoot/HearthGroup/HearthNeglectedLayer"]
+layout_mode = 0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = 169.0
+offset_bottom = 28.0
+text = "Hearth (neglected)"
+
+[node name="TrainingGroundsGroup" type="Control" parent="ContentRoot"]
+layout_mode = 0
+offset_left = 207.0
+offset_top = 80.0
+offset_right = 380.0
+offset_bottom = 280.0
+visible = false
+unique_name_in_owner = true
+
+[node name="TrainingBuilding" type="ColorRect" parent="ContentRoot/TrainingGroundsGroup"]
+layout_mode = 0
+offset_right = 173.0
+offset_bottom = 200.0
+color = Color(0.22, 0.32, 0.42, 1.0)
+
+[node name="TrainingHealthyLayer" type="Control" parent="ContentRoot/TrainingGroundsGroup"]
+layout_mode = 0
+offset_right = 173.0
+offset_bottom = 200.0
+visible = true
+unique_name_in_owner = true
+
+[node name="TrainingLabel" type="Label" parent="ContentRoot/TrainingGroundsGroup/TrainingHealthyLayer"]
+layout_mode = 0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = 169.0
+offset_bottom = 28.0
+text = "Training Grounds"
+
+[node name="TrainingStrainedLayer" type="Control" parent="ContentRoot/TrainingGroundsGroup"]
+layout_mode = 0
+offset_right = 173.0
+offset_bottom = 200.0
+visible = false
+unique_name_in_owner = true
+
+[node name="TrainingStrainedLabel" type="Label" parent="ContentRoot/TrainingGroundsGroup/TrainingStrainedLayer"]
+layout_mode = 0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = 169.0
+offset_bottom = 28.0
+text = "Training Grounds (strained)"
+
+[node name="TrainingNeglectedLayer" type="Control" parent="ContentRoot/TrainingGroundsGroup"]
+layout_mode = 0
+offset_right = 173.0
+offset_bottom = 200.0
+visible = false
+unique_name_in_owner = true
+
+[node name="TrainingNeglectedLabel" type="Label" parent="ContentRoot/TrainingGroundsGroup/TrainingNeglectedLayer"]
+layout_mode = 0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = 169.0
+offset_bottom = 28.0
+text = "Training Grounds (neglected)"
+
+[node name="EchoTokenLayer" type="Control" parent="ContentRoot"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+unique_name_in_owner = true
+
+[node name="HearthAnchor0" type="Marker2D" parent="ContentRoot/EchoTokenLayer"]
+position = Vector2(40, 130)
+
+[node name="HearthAnchor1" type="Marker2D" parent="ContentRoot/EchoTokenLayer"]
+position = Vector2(90, 130)
+
+[node name="HearthAnchor2" type="Marker2D" parent="ContentRoot/EchoTokenLayer"]
+position = Vector2(40, 185)
+
+[node name="HearthAnchor3" type="Marker2D" parent="ContentRoot/EchoTokenLayer"]
+position = Vector2(90, 185)
+
+[node name="TrainingAnchor0" type="Marker2D" parent="ContentRoot/EchoTokenLayer"]
+position = Vector2(220, 115)
+
+[node name="TrainingAnchor1" type="Marker2D" parent="ContentRoot/EchoTokenLayer"]
+position = Vector2(270, 115)
+
+[node name="TrainingAnchor2" type="Marker2D" parent="ContentRoot/EchoTokenLayer"]
+position = Vector2(315, 140)
+
+[node name="TrainingAnchor3" type="Marker2D" parent="ContentRoot/EchoTokenLayer"]
+position = Vector2(245, 175)
+
+[node name="PartyAnchor0" type="Marker2D" parent="ContentRoot/EchoTokenLayer"]
+position = Vector2(40, 340)
+
+[node name="PartyAnchor1" type="Marker2D" parent="ContentRoot/EchoTokenLayer"]
+position = Vector2(112, 340)
+
+[node name="PartyAnchor2" type="Marker2D" parent="ContentRoot/EchoTokenLayer"]
+position = Vector2(184, 340)
+
+[node name="PartyAnchor3" type="Marker2D" parent="ContentRoot/EchoTokenLayer"]
+position = Vector2(256, 340)
+
+[node name="PartyAnchor4" type="Marker2D" parent="ContentRoot/EchoTokenLayer"]
+position = Vector2(328, 340)
+
+[node name="RoamAnchor0" type="Marker2D" parent="ContentRoot/EchoTokenLayer"]
+position = Vector2(60, 460)
+
+[node name="RoamAnchor1" type="Marker2D" parent="ContentRoot/EchoTokenLayer"]
+position = Vector2(140, 480)
+
+[node name="RoamAnchor2" type="Marker2D" parent="ContentRoot/EchoTokenLayer"]
+position = Vector2(220, 455)
+
+[node name="RoamAnchor3" type="Marker2D" parent="ContentRoot/EchoTokenLayer"]
+position = Vector2(300, 475)
+
+[node name="RoamAnchor4" type="Marker2D" parent="ContentRoot/EchoTokenLayer"]
+position = Vector2(100, 545)
+
+[node name="RoamAnchor5" type="Marker2D" parent="ContentRoot/EchoTokenLayer"]
+position = Vector2(260, 535)
+
+[node name="EchoTokenTemplate" type="Control" parent="ContentRoot/EchoTokenLayer"]
+layout_mode = 0
+offset_right = 48.0
+offset_bottom = 48.0
+visible = false
+unique_name_in_owner = true
+
+[node name="TokenCircle" type="ColorRect" parent="ContentRoot/EchoTokenLayer/EchoTokenTemplate"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.784, 0.663, 0.431, 1.0)
+theme_override_styles/panel = SubResource("StyleBoxFlat_token")
+
+[node name="TokenLabel" type="Label" parent="ContentRoot/EchoTokenLayer/EchoTokenTemplate"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+horizontal_alignment = 1
+vertical_alignment = 1
