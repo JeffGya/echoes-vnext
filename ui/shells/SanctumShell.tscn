@@ -19,105 +19,6 @@ script = ExtResource("1_1eqo0")
 [node name="UILayer" type="CanvasLayer" parent="." unique_id=2051671050]
 layer = 10
 
-[node name="NotificationLayer" type="CanvasLayer" parent="." unique_id=154086409]
-layer = 25
-
-[node name="NotificationOverlay" type="ColorRect" parent="NotificationLayer" unique_id=2031447722]
-unique_name_in_owner = true
-visible = false
-layout_mode = 3
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 0
-color = Color(0.12, 0.20, 0.22, 0.45)
-
-[node name="NotificationControl" type="Control" parent="NotificationLayer" unique_id=201864101]
-layout_mode = 3
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-
-[node name="NotificationAnchor" type="MarginContainer" parent="NotificationLayer/NotificationControl"]
-layout_mode = 1
-anchors_preset = 10
-anchor_left = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.0
-offset_left = -320.0
-offset_top = 72.0
-offset_right = 320.0
-offset_bottom = 260.0
-grow_horizontal = 2
-theme_override_constants/margin_left = 12
-theme_override_constants/margin_top = 0
-theme_override_constants/margin_right = 12
-theme_override_constants/margin_bottom = 0
-mouse_filter = 2
-
-[node name="NotificationPanel" type="PanelContainer" parent="NotificationLayer/NotificationControl/NotificationAnchor"]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-mouse_filter = 1
-theme = ExtResource("2_q4uf4")
-theme_type_variation = &"SanctumNoticeNeutral"
-
-[node name="Margin" type="MarginContainer" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel"]
-layout_mode = 2
-theme_override_constants/margin_left = 18
-theme_override_constants/margin_top = 14
-theme_override_constants/margin_right = 14
-theme_override_constants/margin_bottom = 14
-
-[node name="Root" type="VBoxContainer" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="HeaderRow" type="HBoxContainer" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin/Root"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="NotificationTitle" type="Label" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin/Root/HeaderRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-theme_type_variation = &"SanctumNoticeTitle"
-text = "The Flame Held"
-
-[node name="NotificationDismiss" type="Button" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin/Root/HeaderRow"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(48, 48)
-layout_mode = 2
-theme_type_variation = &"SanctumBackButton"
-text = "Dismiss"
-
-[node name="NotificationBody" type="Label" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin/Root"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"SanctumNoticeBody"
-text = "A little charge remained in your absence."
-autowrap_mode = 2
-
-[node name="NotificationDetail" type="Label" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin/Root"]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-theme_type_variation = &"SanctumNoticeDetail"
-text = ""
-autowrap_mode = 2
-
-[node name="NotificationAmount" type="Label" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin/Root"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"SanctumNoticeAmount"
-text = ""
-
 [node name="Control" type="Control" parent="UILayer" unique_id=829806780]
 layout_mode = 3
 anchors_preset = 15
@@ -132,7 +33,6 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_bottom = 0.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
@@ -141,14 +41,12 @@ mouse_filter = 2
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 100)
 layout_mode = 1
-anchors_preset = 12
+anchors_preset = -1
 anchor_left = 0.125
 anchor_top = 1.0
 anchor_right = 0.875
 anchor_bottom = 1.0
-offset_left = 0.0
 offset_top = -108.0
-offset_right = 0.0
 offset_bottom = -20.0
 grow_horizontal = 2
 grow_vertical = 0
@@ -166,7 +64,7 @@ theme_override_constants/margin_bottom = 18
 layout_mode = 2
 theme_override_constants/separation = 14
 
-[node name="PartyButton" type="Button" parent="UILayer/Control/BottomRail/MarginContainer/RailButtons"]
+[node name="PartyButton" type="Button" parent="UILayer/Control/BottomRail/MarginContainer/RailButtons" unique_id=1271814168]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
@@ -174,7 +72,7 @@ size_flags_horizontal = 3
 theme_type_variation = &"ButtonSecondary"
 text = "Party"
 
-[node name="SummonButton" type="Button" parent="UILayer/Control/BottomRail/MarginContainer/RailButtons"]
+[node name="SummonButton" type="Button" parent="UILayer/Control/BottomRail/MarginContainer/RailButtons" unique_id=549635371]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
@@ -182,14 +80,14 @@ size_flags_horizontal = 3
 theme_type_variation = &"ButtonSecondary"
 text = "Summon"
 
-[node name="RealmButton" type="Button" parent="UILayer/Control/BottomRail/MarginContainer/RailButtons"]
+[node name="RealmButton" type="Button" parent="UILayer/Control/BottomRail/MarginContainer/RailButtons" unique_id=510986260]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Choose Realm"
 
-[node name="VowsButton" type="Button" parent="UILayer/Control/BottomRail/MarginContainer/RailButtons"]
+[node name="VowsButton" type="Button" parent="UILayer/Control/BottomRail/MarginContainer/RailButtons" unique_id=2135373360]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
@@ -197,14 +95,108 @@ size_flags_horizontal = 3
 theme_type_variation = &"ButtonSecondary"
 text = "Vows"
 
-[node name="WeavingButton" type="Button" parent="UILayer/Control/BottomRail/MarginContainer/RailButtons"]
+[node name="WeavingButton" type="Button" parent="UILayer/Control/BottomRail/MarginContainer/RailButtons" unique_id=771599621]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
 size_flags_horizontal = 3
-disabled = true
 theme_type_variation = &"ButtonSecondary"
+disabled = true
 text = "Weaving"
+
+[node name="NotificationLayer" type="CanvasLayer" parent="." unique_id=154086409]
+layer = 25
+
+[node name="NotificationOverlay" type="ColorRect" parent="NotificationLayer" unique_id=2031447722]
+unique_name_in_owner = true
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.12, 0.2, 0.22, 0.45)
+
+[node name="NotificationControl" type="Control" parent="NotificationLayer" unique_id=201864101]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="NotificationAnchor" type="MarginContainer" parent="NotificationLayer/NotificationControl" unique_id=1650881236]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -320.0
+offset_top = 72.0
+offset_right = 320.0
+offset_bottom = 260.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 0
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 0
+
+[node name="NotificationPanel" type="PanelContainer" parent="NotificationLayer/NotificationControl/NotificationAnchor" unique_id=1586917240]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+mouse_filter = 1
+theme = ExtResource("2_q4uf4")
+theme_type_variation = &"SanctumNoticeNeutral"
+
+[node name="Margin" type="MarginContainer" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel" unique_id=1521866336]
+layout_mode = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 14
+
+[node name="Root" type="VBoxContainer" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin" unique_id=17163526]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="HeaderRow" type="HBoxContainer" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin/Root" unique_id=1945747359]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="NotificationTitle" type="Label" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin/Root/HeaderRow" unique_id=1806165860]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumNoticeTitle"
+text = "The Flame Held"
+
+[node name="NotificationDismiss" type="Button" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin/Root/HeaderRow" unique_id=1786742593]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+theme_type_variation = &"SanctumBackButton"
+text = "Dismiss"
+
+[node name="NotificationBody" type="Label" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin/Root" unique_id=1462917235]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumNoticeBody"
+text = "A little charge remained in your absence."
+autowrap_mode = 2
+
+[node name="NotificationDetail" type="Label" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin/Root" unique_id=26073897]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"SanctumNoticeDetail"
+autowrap_mode = 2
+
+[node name="NotificationAmount" type="Label" parent="NotificationLayer/NotificationControl/NotificationAnchor/NotificationPanel/Margin/Root" unique_id=243226362]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumNoticeAmount"
 
 [node name="SpatialLayer" type="Control" parent="." unique_id=296146589]
 layout_mode = 1
@@ -219,10 +211,14 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_left = -1666.8463
+offset_top = -937.0
+offset_right = 1666.0356
+offset_bottom = 937.7461
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 2
 scale = Vector2(1.0002433, 0.999602)
+mouse_filter = 2
 color = Color(0.23921569, 0.3529412, 0.2784314, 1)
 
 [node name="SpatialView" type="Node2D" parent="SpatialLayer" unique_id=1063782013]

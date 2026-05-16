@@ -96,6 +96,7 @@ const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.t
 @onready var _picker_cancel_btn:     Button             = %PickerCancelButton
 
 # V2-SANCTUM-002: institutions overlay + placement bar
+@onready var _header_card:           PanelContainer     = %HeaderCard
 @onready var _sanctum_mgmt_btn:      Button             = %SanctumMgmtBtn
 @onready var _institutions_overlay:  PanelContainer     = %InstitutionsOverlay
 @onready var _inst_list:             VBoxContainer      = %InstitutionList
@@ -691,6 +692,13 @@ func show_placement_bar(inst_id: String) -> void:
 		_placement_confirm_btn.disabled = true
 	_placement_bar.visible = true
 	_placement_cell = null
+	# Clear panels — only the economy (Ase/Ekwan) card stays visible in placement mode.
+	if _header_card != null:
+		_header_card.visible = false
+	if left_stack != null:
+		left_stack.visible = false
+	if right_stack != null:
+		right_stack.visible = false
 	# Minimise institutions panel to compact strip — keeps context visible.
 	_minimise_institutions_panel()
 
@@ -711,6 +719,13 @@ func hide_placement_bar() -> void:
 		_placement_toast.visible = false
 	_toast_timer = null
 	_placement_cell = null
+	# Restore panels that were hidden on placement entry.
+	if _header_card != null:
+		_header_card.visible = true
+	if left_stack != null:
+		left_stack.visible = true
+	if right_stack != null:
+		right_stack.visible = true
 	# Re-expand institutions panel so player lands back where they were.
 	_expand_institutions_panel()
 
