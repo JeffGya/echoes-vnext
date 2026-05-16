@@ -287,7 +287,7 @@ func _input(event: InputEvent) -> void:
 		# caught here regardless of what Controls are in the scene tree.
 		# Use gui_get_hover_control() to detect when the cursor is over a UI button
 		# (Cancel, Confirm, strip) and let it handle its own click via _gui_input.
-		var hover: Control = get_viewport().gui_get_hover_control()
+		var hover: Control = get_viewport().gui_get_hovered_control()
 		if hover is BaseButton:
 			return  # Let the button's _gui_input handle it.
 		if _try_placement_tap(mb.position):
