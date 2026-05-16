@@ -3687,6 +3687,9 @@ func _handle_sanctum_institution_establish(action: Dictionary, t: int) -> void:
 	if InstitutionServiceScript.establish(inst_id, flow_ctx.save_data, econ, inst_cfg, logger, t, position):
 		flow_ctx.save_request = true
 		flow_ctx.save_request_reason = "institution.establish"
+		# reenter() re-runs FlowSanctumState.enter() so sanctum_layout + sanctum_occupants
+		# reflect the newly established institution before refresh_snapshot() emits the UI update.
+		flow_machine.reenter(flow_ctx, logger, t)
 		flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 
@@ -3700,6 +3703,7 @@ func _handle_sanctum_institution_assign_echo(action: Dictionary, t: int) -> void
 	if InstitutionServiceScript.assign_echo(inst_id, echo_id, flow_ctx.save_data, econ, inst_cfg, logger, t):
 		flow_ctx.save_request = true
 		flow_ctx.save_request_reason = "institution.assign_echo"
+		flow_machine.reenter(flow_ctx, logger, t)
 		flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 
@@ -3713,6 +3717,7 @@ func _handle_sanctum_institution_remove_echo(action: Dictionary, t: int) -> void
 	if InstitutionServiceScript.remove_echo(inst_id, echo_id, flow_ctx.save_data, econ, inst_cfg, logger, t):
 		flow_ctx.save_request = true
 		flow_ctx.save_request_reason = "institution.remove_echo"
+		flow_machine.reenter(flow_ctx, logger, t)
 		flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 

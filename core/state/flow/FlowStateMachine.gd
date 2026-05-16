@@ -58,7 +58,15 @@ func transition(to_state_id: String, ctx: RefCounted, logger: StructuredLogger, 
 	
 func refresh_snapshot(ctx: FlowContext, logger: StructuredLogger, t: int) -> void:
 	_rebuild_snapshot(ctx, logger, t)
-	
+
+
+# Re-runs the current state's enter() without a state transition.
+# Used when save_data changes mid-state and the full snapshot needs a complete rebuild
+# (e.g. after sanctum.institution.establish updates layout + occupants).
+func reenter(ctx: FlowContext, logger: StructuredLogger, t: int) -> void:
+	if _current_state != null:
+		_current_state.enter(ctx, t)
+
 # A set of helpers
 func _rebuild_snapshot(ctx: FlowContext, logger: StructuredLogger, t: int) -> void:
 	var snap: Dictionary = {}
@@ -150,6 +158,8 @@ func _rebuild_snapshot(ctx: FlowContext, logger: StructuredLogger, t: int) -> vo
 		data["awakening_grant"] = _aw_grant
 
 		# ECONOMY-005: one-shot return notification (VOW-002 path).
+		# Always erase first so stale data from previous emissions does not re-fire.
+		data.erase("return_notification")
 		if ctx is FlowContext and not (ctx as FlowContext).pending_return_notification.is_empty():
 			data["return_notification"] = (ctx as FlowContext).pending_return_notification.duplicate(true)
 			(ctx as FlowContext).pending_return_notification = {}
