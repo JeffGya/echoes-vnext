@@ -8,6 +8,7 @@ class_name SanctumShell
 @onready var camera: Camera2D = $SpatialLayer/SpatialView/Camera2D
 @onready var spatial_renderer: Node2D = $SpatialLayer/SpatialView/SanctumSpatialRenderer2
 @onready var _ui_layer: CanvasLayer = $UILayer
+@onready var _overlay_container: Control = $UILayer/Control
 @onready var _notification_layer: CanvasLayer = $NotificationLayer
 @onready var _notification_overlay: ColorRect = %NotificationOverlay
 @onready var _notification_panel: PanelContainer = %NotificationPanel
@@ -599,6 +600,13 @@ func _enter_placement_mode(inst_id: String, valid_cells: Array, floor_cells: Arr
 	_placement_valid_cells    = valid_cells
 	_placement_floor_cells    = floor_cells
 	_placement_occupied_cells = occupied_cells
+	# Allow map taps to reach _unhandled_input: set UI container and overlay to PASS
+	# so clicks on empty space pass through. Buttons inside the overlay still
+	# have their own STOP filter and capture their own clicks as normal.
+	if _overlay_container != null:
+		_overlay_container.mouse_filter = Control.MOUSE_FILTER_PASS
+	if _active_overlay != null:
+		_active_overlay.mouse_filter = Control.MOUSE_FILTER_PASS
 	if spatial_renderer != null and spatial_renderer.has_method("set_valid_placement_cells"):
 		spatial_renderer.call("set_valid_placement_cells", valid_cells)
 	if _active_overlay != null and _active_overlay.has_method("show_placement_bar"):
@@ -612,6 +620,11 @@ func _exit_placement_mode() -> void:
 	_placement_valid_cells    = []
 	_placement_floor_cells    = []
 	_placement_occupied_cells = []
+	# Restore normal mouse blocking so UI panels capture clicks as intended.
+	if _overlay_container != null:
+		_overlay_container.mouse_filter = Control.MOUSE_FILTER_STOP
+	if _active_overlay != null:
+		_active_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	if spatial_renderer != null and spatial_renderer.has_method("clear_placement_mode"):
 		spatial_renderer.call("clear_placement_mode")
 	if _active_overlay != null and _active_overlay.has_method("hide_placement_bar"):
