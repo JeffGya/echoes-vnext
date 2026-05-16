@@ -84,13 +84,22 @@ static func ensure_layout(save_data: Dictionary, inst_snapshot: Array = []) -> D
 		var pos: Dictionary = pos_v if pos_v is Dictionary else { "x": 0, "y": 0 }
 		var cell := Vector2i(int(pos.get("x", 0)), int(pos.get("y", 0)))
 		inst_tiles.append({ "x": cell.x, "y": cell.y, "kind": "institution", "inst_id": inst_id })
-		# Add two bridge floor tiles connecting institution to nearest existing floor tile.
+		# Bridge: connect from nearest existing floor tile to the institution.
 		var bridge := _bridge_cells(cell, floor_cells)
 		for b in bridge:
 			var bc: Vector2i = b
 			if not floor_cells.has(bc):
 				base_tiles.append({ "x": bc.x, "y": bc.y, "kind": "floor" })
 				floor_cells[bc] = true
+		# Ring: 3×3 floor plaza around the institution (8 surrounding tiles).
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				if dx == 0 and dy == 0:
+					continue  # Institution tile itself — not a floor tile.
+				var ring_cell := cell + Vector2i(dx, dy)
+				if not floor_cells.has(ring_cell):
+					base_tiles.append({ "x": ring_cell.x, "y": ring_cell.y, "kind": "floor" })
+					floor_cells[ring_cell] = true
 
 	# Compose final tile list: floor base + ase_flame + institutions.
 	var final_tiles: Array = base_tiles.duplicate()
@@ -315,6 +324,28 @@ static func get_bridge_preview_from_floor(target: Vector2i, floor_cells: Array) 
 		if c is Vector2i:
 			floor_dict[c] = true
 	return _bridge_cells(target, floor_dict)
+
+
+# Returns ALL floor tiles that would be auto-generated when placing an institution
+# at `target`: the full bridge path from the nearest floor tile + the 3×3 ring
+# of floor tiles surrounding the institution. Used for the placement ghost preview
+# so the player sees the full floor expansion before confirming.
+static func get_placement_floor_preview(target: Vector2i, floor_cells: Array) -> Array:
+	var floor_dict: Dictionary = {}
+	for c in floor_cells:
+		if c is Vector2i:
+			floor_dict[c] = true
+	# Start with the bridge path.
+	var preview: Array = _bridge_cells(target, floor_dict).duplicate()
+	# Add the 3×3 ring around the institution (8 surrounding tiles).
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			if dx == 0 and dy == 0:
+				continue  # Institution tile itself — not previewed as floor.
+			var ring_cell := target + Vector2i(dx, dy)
+			if not floor_dict.has(ring_cell) and not preview.has(ring_cell):
+				preview.append(ring_cell)
+	return preview
 
 
 # --- Private helpers ---

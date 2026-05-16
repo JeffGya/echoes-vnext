@@ -657,10 +657,10 @@ func _try_placement_tap(viewport_point: Vector2) -> bool:
 	var is_valid: bool = bool(validity.get("valid", false))
 	var reason: String = str(validity.get("reason", ""))
 
-	# Compute bridge preview only for valid cells.
+	# Compute full floor preview (bridge + 3×3 ring) only for valid cells.
 	var bridge_cells: Array = []
 	if is_valid:
-		bridge_cells = SanctumLayoutService.get_bridge_preview_from_floor(
+		bridge_cells = SanctumLayoutService.get_placement_floor_preview(
 			cell, _placement_floor_cells)
 
 	# Store selection (null when invalid — Confirm must stay disabled).
