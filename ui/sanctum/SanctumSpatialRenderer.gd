@@ -74,14 +74,43 @@ func set_valid_placement_cells(tile_cells: Array) -> void:
 	for cell_v in tile_cells:
 		if cell_v is Vector2i:
 			pixel_positions.append(floor.position + floor.map_to_local(cell_v as Vector2i))
-	_placement_layer.set_valid_cells(pixel_positions)
+	# Also initialise the grid overlay from the current floor state.
+	var floor_pixels := get_floor_pixel_cells()
+	var ts := Vector2(72.0, 36.0)
+	if floor.tile_set != null:
+		ts = Vector2(floor.tile_set.tile_size)
+	_placement_layer.set_grid(floor_pixels, ts)
 
 
-func set_ghost_building(tile_cell: Vector2i, inst_id: String) -> void:
+func set_ghost_building(tile_cell: Vector2i, inst_id: String, is_valid: bool = true, bridge_cells: Array = []) -> void:
 	if _placement_layer == null or floor == null:
 		return
 	var pixel_pos := floor.position + floor.map_to_local(tile_cell)
-	_placement_layer.set_ghost(pixel_pos, inst_id)
+	var bridge_pixels: Array = []
+	for bc_v in bridge_cells:
+		if bc_v is Vector2i:
+			bridge_pixels.append(floor.position + floor.map_to_local(bc_v as Vector2i))
+	_placement_layer.set_ghost(pixel_pos, inst_id, is_valid, bridge_pixels)
+
+
+# Returns the tile cell at the given viewport point, with NO validity filter.
+# Returns Vector2i(-999, -999) if the floor node is unavailable.
+func cell_at_viewport_point(vp_point: Vector2) -> Vector2i:
+	if floor == null:
+		return Vector2i(-999, -999)
+	var local_pt := get_global_transform_with_canvas().affine_inverse() * vp_point
+	var map_pt := local_pt - floor.position
+	return floor.local_to_map(map_pt)
+
+
+# Returns pixel positions for every cell currently painted in the floor TileMapLayer.
+func get_floor_pixel_cells() -> Array:
+	if floor == null:
+		return []
+	var result: Array = []
+	for cell in floor.get_used_cells():
+		result.append(floor.position + floor.map_to_local(cell))
+	return result
 
 
 func clear_placement_mode() -> void:

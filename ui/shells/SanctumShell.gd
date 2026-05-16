@@ -31,8 +31,8 @@ var _active_overlay: Control = null
 var _cached_nav: Dictionary = {}
 
 # Camera config (Phase B)
-var _zoom_levels := [Vector2(1.0, 1.0), Vector2(1.5, 1.5)]
-var _zoom_index := 1 # Start at 1.5
+var _zoom_levels := [Vector2(0.5, 0.5), Vector2(1.0, 1.0), Vector2(1.5, 1.5), Vector2(2.0, 2.0)]
+var _zoom_index := 2 # Start at 1.5× (index 2)
 var _pan_speed  := 2.5
 
 var _is_panning := false
@@ -43,6 +43,9 @@ var _institutions_open := false
 var _placement_mode := false
 var _placement_building_id := ""
 var _placement_selected_cell: Variant = null  # Vector2i or null
+var _placement_valid_cells: Array = []
+var _placement_floor_cells: Array = []
+var _placement_occupied_cells: Array = []
 var _saved_camera_position := Vector2.ZERO
 var _saved_camera_zoom := Vector2.ONE
 var _detail_zoom := Vector2(2.9, 2.9)
@@ -73,7 +76,7 @@ const _TONE_OVERLAY_COLORS: Dictionary = {
 # Camera clamp (Phase B)
 const TILE_W := 72.0
 const TILE_H := 36.0
-const FLOOR_PAD := Vector2(160.0, 160.0) # allow some "void" around edges
+const FLOOR_PAD := Vector2(240.0, 240.0) # wide enough to show full valid placement zone beyond floor edges
 
 var _floor_bounds_sv := Rect2(Vector2.ZERO, Vector2.ZERO) # floor bounds in SpatialView-local pixels
  
@@ -127,6 +130,7 @@ func set_snapshot(snap: Dictionary) -> void:
 	# For now this is a stub. Later we will add proper renderer script.
 	if spatial_renderer != null and spatial_renderer.has_method("render"):
 		spatial_renderer.call("render", snap)
+		_recompute_floor_bounds()
 		if not _echo_detail_open:
 			_center_camera_on_floor()
 
@@ -220,12 +224,13 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 				return
 	
-	# Pinch-to-zoom (mobile)
+	# Pinch-to-zoom (mobile) — smooth continuous zoom, NOT snap-to-level.
+	# Works in both normal view and placement mode.
 	if event is InputEventMagnifyGesture:
-		if _echo_detail_open or _placement_mode or _institutions_open:
+		if _echo_detail_open:
 			return
 		var factor := (event as InputEventMagnifyGesture).factor
-		var new_zoom := (camera.zoom * factor).clamp(_zoom_levels[0], _zoom_levels[_zoom_levels.size() - 1])
+		var new_zoom := (camera.zoom * factor).clamp(Vector2(0.5, 0.5), Vector2(2.0, 2.0))
 		camera.zoom = new_zoom
 		_clamp_camera_to_floor()
 		get_viewport().set_input_as_handled()
@@ -255,7 +260,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		var k := event as InputEventKey
 		if k.keycode == KEY_Z:
-			_zoom_index = 1 - _zoom_index
+			_zoom_index = (_zoom_index + 1) % _zoom_levels.size()
 			camera.zoom = _zoom_levels[_zoom_index]
 			_clamp_camera_to_floor()
 			get_viewport().set_input_as_handled()
@@ -291,10 +296,16 @@ func _on_overlay_action_requested(action: Dictionary) -> void:
 	var action_type := str(action.get("type", ""))
 	# Intercept placement mode lifecycle — do NOT forward to FlowRuntime.
 	if action_type == "ui.enter_placement_mode":
-		var inst_id   := str(action.get("payload", {}).get("institution_id", ""))
-		var cells_v: Variant = action.get("payload", {}).get("valid_cells", [])
-		var cells: Array = cells_v if cells_v is Array else []
-		_enter_placement_mode(inst_id, cells)
+		var payload_v: Variant = action.get("payload", {})
+		var payload: Dictionary = payload_v if payload_v is Dictionary else {}
+		var inst_id    := str(payload.get("institution_id", ""))
+		var cells_v: Variant  = payload.get("valid_cells", [])
+		var floor_v: Variant  = payload.get("floor_cells", [])
+		var occ_v: Variant    = payload.get("occupied_cells", [])
+		var cells: Array      = cells_v if cells_v is Array else []
+		var floor_cells: Array = floor_v if floor_v is Array else []
+		var occ_cells: Array   = occ_v if occ_v is Array else []
+		_enter_placement_mode(inst_id, cells, floor_cells, occ_cells)
 		return
 	if action_type == "ui.exit_placement_mode":
 		_exit_placement_mode()
@@ -534,11 +545,43 @@ func close_institutions_panel() -> void:
 
 # ---- Placement mode ----
 
-func _enter_placement_mode(inst_id: String, valid_cells: Array) -> void:
+func dismiss_nav_bar(animated: bool = true) -> void:
+	if _bottom_rail == null:
+		return
+	if animated:
+		var tw := create_tween()
+		tw.set_trans(Tween.TRANS_SINE)
+		tw.set_ease(Tween.EASE_IN)
+		tw.parallel().tween_property(_bottom_rail, "offset_top", 20.0, 0.2)
+		tw.parallel().tween_property(_bottom_rail, "offset_bottom", 108.0, 0.2)
+	else:
+		_bottom_rail.offset_top = 20.0
+		_bottom_rail.offset_bottom = 108.0
+
+
+func restore_nav_bar(animated: bool = true) -> void:
+	if _bottom_rail == null:
+		return
+	if animated:
+		var tw := create_tween()
+		tw.set_trans(Tween.TRANS_SINE)
+		tw.set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(_bottom_rail, "offset_top", -108.0, 0.2)
+		tw.parallel().tween_property(_bottom_rail, "offset_bottom", -20.0, 0.2)
+	else:
+		_bottom_rail.offset_top = -108.0
+		_bottom_rail.offset_bottom = -20.0
+
+
+func _enter_placement_mode(inst_id: String, valid_cells: Array, floor_cells: Array = [], occupied_cells: Array = []) -> void:
 	close_institutions_panel()
+	dismiss_nav_bar()
 	_placement_mode = true
 	_placement_building_id = inst_id
 	_placement_selected_cell = null
+	_placement_valid_cells    = valid_cells
+	_placement_floor_cells    = floor_cells
+	_placement_occupied_cells = occupied_cells
 	if spatial_renderer != null and spatial_renderer.has_method("set_valid_placement_cells"):
 		spatial_renderer.call("set_valid_placement_cells", valid_cells)
 	if _active_overlay != null and _active_overlay.has_method("show_placement_bar"):
@@ -549,26 +592,50 @@ func _exit_placement_mode() -> void:
 	_placement_mode = false
 	_placement_building_id = ""
 	_placement_selected_cell = null
+	_placement_valid_cells    = []
+	_placement_floor_cells    = []
+	_placement_occupied_cells = []
 	if spatial_renderer != null and spatial_renderer.has_method("clear_placement_mode"):
 		spatial_renderer.call("clear_placement_mode")
 	if _active_overlay != null and _active_overlay.has_method("hide_placement_bar"):
 		_active_overlay.call("hide_placement_bar")
+	restore_nav_bar()
 
 
 func _try_placement_tap(viewport_point: Vector2) -> bool:
-	if spatial_renderer == null or not spatial_renderer.has_method("find_valid_cell_at_viewport_point"):
+	if spatial_renderer == null or not spatial_renderer.has_method("cell_at_viewport_point"):
 		return false
-	var cell_v: Variant = spatial_renderer.call("find_valid_cell_at_viewport_point", viewport_point)
+
+	var cell_v: Variant = spatial_renderer.call("cell_at_viewport_point", viewport_point)
 	if not (cell_v is Vector2i):
 		return false
 	var cell: Vector2i = cell_v
 	if cell == Vector2i(-999, -999):
 		return false
-	_placement_selected_cell = cell
+
+	# Check validity from pre-computed arrays (no save_data needed in UI layer).
+	var validity: Dictionary = SanctumLayoutService.check_placement_validity_from_data(
+		cell, _placement_floor_cells, _placement_occupied_cells)
+	var is_valid: bool = bool(validity.get("valid", false))
+	var reason: String = str(validity.get("reason", ""))
+
+	# Compute bridge preview only for valid cells.
+	var bridge_cells: Array = []
+	if is_valid:
+		bridge_cells = SanctumLayoutService.get_bridge_preview_from_floor(
+			cell, _placement_floor_cells)
+
+	# Store selection (null when invalid — Confirm must stay disabled).
+	_placement_selected_cell = cell if is_valid else null
+
+	# Show ghost at tapped cell regardless of validity (red-tinted if invalid).
 	if spatial_renderer.has_method("set_ghost_building"):
-		spatial_renderer.call("set_ghost_building", cell, _placement_building_id)
+		spatial_renderer.call("set_ghost_building", cell, _placement_building_id, is_valid, bridge_cells)
+
+	# Notify the active overlay (SanctumScreen) so it can update label + toast.
 	if _active_overlay != null and _active_overlay.has_method("on_placement_cell_selected"):
-		_active_overlay.call("on_placement_cell_selected", cell)
+		_active_overlay.call("on_placement_cell_selected", cell, is_valid, reason)
+
 	return true
 
 
