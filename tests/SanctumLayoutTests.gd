@@ -10,12 +10,12 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("sanctum.layout/echo_occupant_has_morale_tier",      Callable(SanctumLayoutTests, "_t_echo_has_morale_tier"))
 	runner.register_test("sanctum.layout/echo_near_placed_institution",       Callable(SanctumLayoutTests, "_t_echo_near_institution"))
 	runner.register_test("sanctum.layout/valid_cells_exclude_occupied",       Callable(SanctumLayoutTests, "_t_valid_cells_exclude_occupied"))
-	runner.register_test("sanctum.layout/valid_cells_adjacent_to_floor",      Callable(SanctumLayoutTests, "_t_valid_cells_adjacent_to_floor"))
+	runner.register_test("sanctum.layout/valid_cells_not_in_exclusion",       Callable(SanctumLayoutTests, "_t_valid_cells_not_in_exclusion"))
 	# check_placement_validity_from_data — one test per rule
 	runner.register_test("sanctum.layout/validity_already_occupied",          Callable(SanctumLayoutTests, "_t_validity_already_occupied"))
 	runner.register_test("sanctum.layout/validity_already_floor",             Callable(SanctumLayoutTests, "_t_validity_already_floor"))
 	runner.register_test("sanctum.layout/validity_exclusion_zone",            Callable(SanctumLayoutTests, "_t_validity_exclusion_zone"))
-	runner.register_test("sanctum.layout/validity_not_adjacent",              Callable(SanctumLayoutTests, "_t_validity_not_adjacent"))
+	runner.register_test("sanctum.layout/validity_far_cell_is_valid",         Callable(SanctumLayoutTests, "_t_validity_far_cell_is_valid"))
 	runner.register_test("sanctum.layout/validity_valid_cell",                Callable(SanctumLayoutTests, "_t_validity_valid_cell"))
 	# get_bridge_preview_from_floor
 	runner.register_test("sanctum.layout/bridge_preview_returns_cells",       Callable(SanctumLayoutTests, "_t_bridge_preview_returns_cells"))
@@ -170,36 +170,21 @@ static func _t_valid_cells_exclude_occupied(_ctx: Dictionary) -> Dictionary:
 	return { "ok": true }
 
 
-# 8. All valid placement cells are adjacent (8-dir) to an existing floor tile
-static func _t_valid_cells_adjacent_to_floor(_ctx: Dictionary) -> Dictionary:
+# 8. All valid placement cells are outside the exclusion zone of every occupied tile
+static func _t_valid_cells_not_in_exclusion(_ctx: Dictionary) -> Dictionary:
 	var save := _make_save()
-	var layout := SanctumLayoutService.snapshot_layout(save)
-	var tiles: Array = layout.get("tiles", [])
-	var floor_cells: Dictionary = {}
-	for tile_v in tiles:
-		if tile_v is Dictionary:
-			var tile: Dictionary = tile_v
-			if str(tile.get("kind", "")) == "floor":
-				floor_cells[Vector2i(int(tile.get("x",0)), int(tile.get("y",0)))] = true
-
-	var dirs := [
-		Vector2i(-1,-1), Vector2i(0,-1), Vector2i(1,-1),
-		Vector2i(-1, 0),                 Vector2i(1, 0),
-		Vector2i(-1, 1), Vector2i(0, 1), Vector2i(1, 1),
-	]
-
 	var cells: Array = SanctumLayoutService.compute_valid_placement_cells(save)
+	if cells.is_empty():
+		return { "ok": false, "error": "valid cells is empty — expected non-empty for 5×5 starter layout" }
+	# Ase Flame at (0,0) with exclusion radius 2: no valid cell should be
+	# within Chebyshev distance 2 of (0,0).
+	const EXCL := SanctumLayoutService.PLACEMENT_EXCLUSION_RADIUS
 	for cell_v in cells:
-		if not (cell_v is Vector2i):
-			continue
+		if not (cell_v is Vector2i): continue
 		var cell: Vector2i = cell_v
-		var adjacent := false
-		for d in dirs:
-			if floor_cells.has(cell + d):
-				adjacent = true
-				break
-		if not adjacent:
-			return { "ok": false, "error": "valid cell (%d,%d) has no adjacent floor tile" % [cell.x, cell.y] }
+		var cheb := maxi(abs(cell.x), abs(cell.y))
+		if cheb <= EXCL:
+			return { "ok": false, "error": "valid cell (%d,%d) is within Ase Flame exclusion zone" % [cell.x, cell.y] }
 	return { "ok": true }
 
 
@@ -247,17 +232,15 @@ static func _t_validity_exclusion_zone(_ctx: Dictionary) -> Dictionary:
 	return { "ok": true }
 
 
-# 12. Cell not adjacent to any floor tile returns "Must be adjacent to the Sanctum floor"
-static func _t_validity_not_adjacent(_ctx: Dictionary) -> Dictionary:
+# 12. A far cell outside the exclusion zone is now valid (no adjacency requirement)
+static func _t_validity_far_cell_is_valid(_ctx: Dictionary) -> Dictionary:
 	var floor_cells: Array = [Vector2i(5, 0)]
 	var occupied_cells: Array = [Vector2i(0, 0)]
-	# (10,10) is far from both floor and occupied — not adjacent to anything
+	# (10,10) is far from floor and outside all exclusion zones — should be valid.
 	var result := SanctumLayoutService.check_placement_validity_from_data(
 		Vector2i(10, 10), floor_cells, occupied_cells)
-	if bool(result.get("valid", true)):
-		return { "ok": false, "error": "expected invalid for non-adjacent cell, got valid" }
-	if str(result.get("reason", "")) != "Must be adjacent to the Sanctum floor":
-		return { "ok": false, "error": "wrong reason: %s" % result.get("reason", "") }
+	if not bool(result.get("valid", false)):
+		return { "ok": false, "error": "expected valid for far cell (10,10), got: %s" % result.get("reason", "") }
 	return { "ok": true }
 
 
@@ -278,17 +261,19 @@ static func _t_validity_valid_cell(_ctx: Dictionary) -> Dictionary:
 
 # --- get_bridge_preview_from_floor tests ---
 
-# 14. Target 3 tiles away in x returns 1 bridge cell (one x-step)
+# 14. Target 3 tiles away in x returns a full connecting path
 static func _t_bridge_preview_returns_cells(_ctx: Dictionary) -> Dictionary:
 	var floor_cells: Array = [Vector2i(0, 0)]
-	# target at (3,0): nearest floor cell is (0,0), dist = 3 > 1
-	# _bridge_cells steps x first: (1,0) added; y is already equal → done
+	# target at (3,0): nearest floor = (0,0), dist = 3.
+	# Full path: (1,0) → (2,0) → stop before target (3,0).
 	var bridge: Array = SanctumLayoutService.get_bridge_preview_from_floor(
 		Vector2i(3, 0), floor_cells)
 	if bridge.is_empty():
 		return { "ok": false, "error": "expected bridge cells for target (3,0), got empty" }
 	if not bridge.has(Vector2i(1, 0)):
 		return { "ok": false, "error": "expected (1,0) in bridge, got %s" % str(bridge) }
+	if not bridge.has(Vector2i(2, 0)):
+		return { "ok": false, "error": "expected (2,0) in bridge, got %s" % str(bridge) }
 	return { "ok": true }
 
 

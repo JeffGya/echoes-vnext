@@ -2,25 +2,33 @@ extends RefCounted
 
 class_name SanctumLayoutService
 
-const LAYOUT_VERSION := 4
+const LAYOUT_VERSION := 5
 const CENTER_CELL := Vector2i(0, 0)
-const STARTER_HALF_SIZE := 1
 const ASE_FLAME_CELL := Vector2i(0, 0)
 
 # Chebyshev exclusion radius around any placed institution or the Ase Flame.
 # No new institution may be placed within this distance of an existing one.
 const PLACEMENT_EXCLUSION_RADIUS := 2
 
+# Starter layout shape:
+#   5×5 main sanctum — Ase Flame at center (0,0), x/y in [-2..2]
+#   3×3 party staging area — connected below the main sanctum, y in [3..5], x in [-1..1]
+const MAIN_SANCTUM_HALF := 2
+const PARTY_HALF := 1
+const PARTY_Y_START := 3
+const PARTY_Y_END := 5
+
 
 static func make_starter_layout() -> Dictionary:
 	var tiles: Array = []
-	for y in range(-STARTER_HALF_SIZE, STARTER_HALF_SIZE + 1):
-		for x in range(-STARTER_HALF_SIZE, STARTER_HALF_SIZE + 1):
-			tiles.append({
-				"x": x,
-				"y": y,
-				"kind": "floor",
-			})
+	# 5×5 main sanctum — Ase Flame anchored at (0,0).
+	for y in range(-MAIN_SANCTUM_HALF, MAIN_SANCTUM_HALF + 1):
+		for x in range(-MAIN_SANCTUM_HALF, MAIN_SANCTUM_HALF + 1):
+			tiles.append({ "x": x, "y": y, "kind": "floor" })
+	# 3×3 party staging area — connected directly below the main sanctum.
+	for y in range(PARTY_Y_START, PARTY_Y_END + 1):
+		for x in range(-PARTY_HALF, PARTY_HALF + 1):
+			tiles.append({ "x": x, "y": y, "kind": "floor" })
 	return {
 		"version": LAYOUT_VERSION,
 		"origin": { "x": 0, "y": 0 },
@@ -163,8 +171,8 @@ static func ensure_starter_occupant(save_data: Dictionary, roster: Array = [], a
 			var base_cell := Vector2i(int(pos.get("x", 0)), int(pos.get("y", 0)))
 			cell = Vector2i(base_cell.x + (echo_index % 3) - 1, base_cell.y + 1)
 		elif party_set.has(echo_id):
-			# Party member — front-of-Ase-Flame zone (y+1 direction).
-			cell = Vector2i((echo_index % 3) - 1, ASE_FLAME_CELL.y + 1)
+			# Party member — staged in the 3×3 staging area below the main sanctum.
+			cell = Vector2i((echo_index % 3) - 1, PARTY_Y_START)
 		else:
 			# Roaming echo — row above Ase Flame (y-1) to avoid overlapping it.
 			cell = Vector2i((echo_index % 3) - 1, ASE_FLAME_CELL.y - 1)
@@ -223,28 +231,26 @@ static func compute_valid_placement_cells(save_data: Dictionary, inst_snapshot: 
 			for dx in range(-PLACEMENT_EXCLUSION_RADIUS, PLACEMENT_EXCLUSION_RADIUS + 1):
 				exclusion[center + Vector2i(dx, dy)] = true
 
-	# Collect candidates: adjacent to floor, not occupied, not floor, not in exclusion.
-	var candidates: Dictionary = {}
-	var directions := [
-		Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1),
-		Vector2i(-1,  0),                   Vector2i(1,  0),
-		Vector2i(-1,  1), Vector2i(0,  1), Vector2i(1,  1),
-	]
+	# No floor-adjacency requirement: bridge tiles auto-connect any valid placement.
+	# Search within a bounding box around the current floor + a margin.
+	const SEARCH_MARGIN := 5
+	var min_x := 999999; var max_x := -999999
+	var min_y := 999999; var max_y := -999999
 	for cell_v in floor_cells:
-		var floor_cell: Vector2i = cell_v
-		for dir in directions:
-			var neighbor: Vector2i = floor_cell + dir
-			if floor_cells.has(neighbor):
-				continue
-			if occupied_cells.has(neighbor):
-				continue
-			if exclusion.has(neighbor):
-				continue
-			candidates[neighbor] = true
+		var cell: Vector2i = cell_v
+		if cell.x < min_x: min_x = cell.x
+		if cell.x > max_x: max_x = cell.x
+		if cell.y < min_y: min_y = cell.y
+		if cell.y > max_y: max_y = cell.y
 
 	var result: Array = []
-	for cell_v in candidates:
-		result.append(cell_v)
+	for y in range(min_y - SEARCH_MARGIN, max_y + SEARCH_MARGIN + 1):
+		for x in range(min_x - SEARCH_MARGIN, max_x + SEARCH_MARGIN + 1):
+			var cell := Vector2i(x, y)
+			if floor_cells.has(cell): continue
+			if occupied_cells.has(cell): continue
+			if exclusion.has(cell): continue
+			result.append(cell)
 	return result
 
 
@@ -295,17 +301,9 @@ static func check_placement_validity_from_data(
 	if exclusion.has(cell):
 		return { "valid": false, "reason": "Too close to an existing building" }
 
-	# Rule: must be adjacent (8-dir) to existing floor tile
-	var dirs := [
-		Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1),
-		Vector2i(-1,  0),                   Vector2i(1,  0),
-		Vector2i(-1,  1), Vector2i(0,  1), Vector2i(1,  1),
-	]
-	for dir in dirs:
-		if floor_set.has(cell + dir):
-			return { "valid": true, "reason": "" }
-
-	return { "valid": false, "reason": "Must be adjacent to the Sanctum floor" }
+	# No floor-adjacency requirement: bridge tiles auto-connect the new institution
+	# to the nearest existing floor tile, so any cell outside the exclusion zone is valid.
+	return { "valid": true, "reason": "" }
 
 
 # Returns the bridge floor cells that would be auto-generated if a building were
@@ -327,8 +325,9 @@ static func _ensure_sanctum(save_data: Dictionary) -> Dictionary:
 	return save_data["sanctum"] as Dictionary
 
 
-# Returns up to 2 bridge floor cells connecting a new institution cell to the
-# nearest existing floor tile, walking one axis at a time.
+# Returns bridge floor cells connecting a new institution cell to the nearest
+# existing floor tile. Walks the full L-shaped path (x-axis first, then y-axis)
+# so any placement distance is fully connected — not just adjacent placements.
 static func _bridge_cells(target: Vector2i, floor_cells: Dictionary) -> Array:
 	var nearest := Vector2i(0, 0)
 	var best_dist := 999999
@@ -341,19 +340,17 @@ static func _bridge_cells(target: Vector2i, floor_cells: Dictionary) -> Array:
 	if best_dist <= 1:
 		return []
 	var bridge: Array = []
-	# Step along x first, then y.
 	var cx := nearest.x
 	var cy := nearest.y
-	var tx := target.x
-	var ty := target.y
-	if cx != tx:
-		cx += sign(tx - cx)
+	# Walk x first, then y, until we reach the cell adjacent to the target.
+	while cx != target.x or cy != target.y:
+		if cx != target.x:
+			cx += sign(target.x - cx)
+		elif cy != target.y:
+			cy += sign(target.y - cy)
 		var step := Vector2i(cx, cy)
-		if not floor_cells.has(step):
-			bridge.append(step)
-	if cy != ty:
-		cy += sign(ty - cy)
-		var step := Vector2i(cx, cy)
+		if step == target:
+			break  # Never add the institution cell itself as a bridge tile.
 		if not floor_cells.has(step):
 			bridge.append(step)
 	return bridge
