@@ -44,6 +44,12 @@ const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.t
 @onready var overview_page: Control = %OverviewPage
 @onready var bonds_page: Control = %BondsPage
 @onready var skills_page: Control = %SkillsPage
+@onready var bonds_empty_label: Label = %BondsEmptyLabel
+@onready var bonds_list: VBoxContainer = %BondsList
+@onready var bond_entry_template: PanelContainer = %BondEntryTemplate
+@onready var skills_empty_label: Label = %SkillsEmptyLabel
+@onready var skills_list: VBoxContainer = %SkillsList
+@onready var skill_entry_template: PanelContainer = %SkillEntryTemplate
 @onready var detail_pages_scroll: ScrollContainer = %DetailPagesScroll
 @onready var detail_name_label: Label = %DetailNameLabel
 @onready var detail_archetype_label: Label = %DetailArchetypeLabel
@@ -386,6 +392,8 @@ func _render_echo_detail(detail_roster: Array, featured_echo_id: String) -> void
 	detail_stat_charisma_value.text = str(int(stats.get("cha", 0)))
 	detail_stat_speed_value.text = str(int(stats.get("speed", 0)))
 	detail_stat_max_health_value.text = str(int(stats.get("max_hp", 0)))
+	_rebuild_bonds_page(selected)
+	_rebuild_skills_page(selected)
 	if bool(selected.get("in_party", false)):
 		detail_party_action_title.text = "Remove from Party"
 		detail_party_action_subtitle.text = "Return this Echo from the departure."
@@ -404,6 +412,106 @@ func _apply_tab_state() -> void:
 	detail_action_divider.visible = _detail_tab == "overview"
 	detail_party_action.visible = _detail_tab == "overview"
 	detail_pages_scroll.scroll_vertical = 0
+
+
+func _rebuild_bonds_page(selected: Dictionary) -> void:
+	for child in bonds_list.get_children():
+		if child == bond_entry_template:
+			continue
+		child.queue_free()
+
+	var entries_v: Variant = selected.get("bond_entries", [])
+	var entries: Array = entries_v if entries_v is Array else []
+	bonds_empty_label.visible = entries.is_empty()
+	bonds_list.visible = not entries.is_empty()
+
+	for entry_v in entries:
+		if not (entry_v is Dictionary):
+			continue
+		var entry: Dictionary = entry_v
+		var row := bond_entry_template.duplicate() as PanelContainer
+		row.visible = true
+
+		var name_label := row.find_child("BondEchoNameLabel", true, false) as Label
+		if name_label != null:
+			var partner_name := str(entry.get("name", "")).strip_edges()
+			name_label.text = partner_name if not partner_name.is_empty() else "Unknown Echo"
+
+		var tier_label := row.find_child("BondTierLabel", true, false) as Label
+		if tier_label != null:
+			tier_label.text = str(entry.get("tier_name", "Indifferent"))
+			tier_label.add_theme_color_override("font_color", _bond_tier_color(int(entry.get("tier", 0))))
+
+		var bar := row.find_child("BondTierBar", true, false)
+		if bar != null and bar.has_method("set_tier"):
+			bar.call("set_tier", int(entry.get("tier", 0)))
+			var tier_name := bar.find_child("TierNameLabel", true, false) as Label
+			if tier_name != null:
+				tier_name.visible = false
+
+		bonds_list.add_child(row)
+
+
+func _bond_tier_color(tier: int) -> Color:
+	if tier <= -1:
+		return Color("#9A4C36")
+	if tier >= 1:
+		return Color("#4B6D36")
+	return Color("#6E583A")
+
+
+func _rebuild_skills_page(selected: Dictionary) -> void:
+	for child in skills_list.get_children():
+		if child == skill_entry_template:
+			continue
+		child.queue_free()
+
+	var entries_v: Variant = selected.get("skill_entries", [])
+	var entries: Array = entries_v if entries_v is Array else []
+	var calling_id := str(selected.get("calling", "")).strip_edges()
+
+	if entries.is_empty():
+		skills_list.visible = false
+		skills_empty_label.visible = true
+		if calling_id.is_empty() or calling_id == "uncalled":
+			skills_empty_label.text = "No calling is confirmed yet. Skills will appear here once this Echo has associated techniques."
+		else:
+			skills_empty_label.text = "No associated skills are surfaced for this Echo yet."
+		return
+
+	skills_empty_label.visible = false
+	skills_list.visible = true
+
+	for entry_v in entries:
+		if not (entry_v is Dictionary):
+			continue
+		var entry: Dictionary = entry_v
+		var row := skill_entry_template.duplicate() as PanelContainer
+		row.visible = true
+
+		var name_label := row.find_child("SkillNameLabel", true, false) as Label
+		if name_label != null:
+			name_label.text = str(entry.get("name", "Unknown Technique"))
+
+		var family_label := row.find_child("SkillFamilyLabel", true, false) as Label
+		if family_label != null:
+			family_label.text = "%s technique" % str(entry.get("family_name", "Associated"))
+
+		var note_label := row.find_child("SkillNoteLabel", true, false) as Label
+		if note_label != null:
+			note_label.text = _skill_alignment_copy(str(entry.get("alignment", "")))
+
+		skills_list.add_child(row)
+
+
+func _skill_alignment_copy(alignment: String) -> String:
+	match alignment:
+		"strong":
+			return "Strongly aligned with this Echo's calling."
+		"light":
+			return "Lightly aligned with this Echo's calling."
+		_:
+			return "Associated with this Echo's calling."
 
 
 func _detail_roster() -> Array:

@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://cb8hn28k3qlg6" path="res://ui/screens/sanctum/SanctumScreen.gd" id="1_55k7r"]
 [ext_resource type="Theme" uid="uid://8qssuuodths2" path="res://assets/theme/LivingTreeSystem.tres" id="2_gaxha"]
 [ext_resource type="PackedScene" uid="uid://dahk08c2p4mgn" path="res://ui/components/EmotionChip.tscn" id="3_emotionchip"]
+[ext_resource type="PackedScene" uid="uid://bond_tier_bar" path="res://ui/components/BondTierBar.tscn" id="4_bondtier"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ase_tip"]
 content_margin_left = 6.0
@@ -16,6 +17,33 @@ corner_radius_bottom_right = 3
 corner_radius_bottom_left = 3
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_qeq33"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bond_row"]
+bg_color = Color(0.956863, 0.929412, 0.87451, 0.96)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.627451, 0.490196, 0.243137, 0.48)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+shadow_color = Color(0.164706, 0.164706, 0.227451, 0.08)
+shadow_size = 4
+shadow_offset = Vector2(0, 2)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bond_list"]
+bg_color = Color(0.976471, 0.94902, 0.894118, 0.52)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.627451, 0.490196, 0.243137, 0.22)
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
 
 [node name="SanctumScreen" type="Control" unique_id=218783654]
 layout_mode = 3
@@ -810,19 +838,205 @@ layout_mode = 2
 text = " "
 flat = true
 
-[node name="BondsPage" type="Control" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack" unique_id=828076333]
+[node name="BondsPage" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack" unique_id=828076333]
 unique_name_in_owner = true
 visible = false
 custom_minimum_size = Vector2(0, 320)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 14
+
+[node name="BondsHeader" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/BondsPage" unique_id=100100001]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ContentBasePanel"
+text = "Living Bonds"
+
+[node name="BondsSummary" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/BondsPage" unique_id=100100002]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.356863, 0.25098, 0.14902, 0.86)
+theme_override_font_sizes/font_size = 16
+text = "Known ties shaped by shared trials. Some steady. Some strain."
+autowrap_mode = 3
+
+[node name="BondsListPanel" type="PanelContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/BondsPage" unique_id=100100003]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_bond_list")
+
+[node name="BondsListMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/BondsPage/BondsListPanel" unique_id=100100004]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 14
+
+[node name="BondsListStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/BondsPage/BondsListPanel/BondsListMargin" unique_id=100100005]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="BondsEmptyLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/BondsPage/BondsListPanel/BondsListMargin/BondsListStack" unique_id=100100006]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"SanctumMuted"
+text = "No known ties yet. Send this Echo with others on shared trials."
+autowrap_mode = 3
+
+[node name="BondsList" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/BondsPage/BondsListPanel/BondsListMargin/BondsListStack" unique_id=100100007]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="BondEntryTemplate" type="PanelContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/BondsPage/BondsListPanel/BondsListMargin/BondsListStack/BondsList" unique_id=100100008]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_bond_row")
+
+[node name="BondEntryMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/BondsPage/BondsListPanel/BondsListMargin/BondsListStack/BondsList/BondEntryTemplate" unique_id=100100009]
+layout_mode = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 18
+
+[node name="BondEntryRow" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/BondsPage/BondsListPanel/BondsListMargin/BondsListStack/BondsList/BondEntryTemplate/BondEntryMargin" unique_id=100100010]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="BondTextColumn" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/BondsPage/BondsListPanel/BondsListMargin/BondsListStack/BondsList/BondEntryTemplate/BondEntryMargin/BondEntryRow" unique_id=100100011]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="BondEchoNameLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/BondsPage/BondsListPanel/BondsListMargin/BondsListStack/BondsList/BondEntryTemplate/BondEntryMargin/BondEntryRow/BondTextColumn" unique_id=100100012]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ContentBasePanel"
+text = "Echo"
+
+[node name="BondTierLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/BondsPage/BondsListPanel/BondsListMargin/BondsListStack/BondsList/BondEntryTemplate/BondEntryMargin/BondEntryRow/BondTextColumn" unique_id=100100013]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.356863, 0.25098, 0.14902, 0.86)
+theme_override_font_sizes/font_size = 18
+text = "Indifferent"
+
+[node name="BondDivider" type="PanelContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/BondsPage/BondsListPanel/BondsListMargin/BondsListStack/BondsList/BondEntryTemplate/BondEntryMargin/BondEntryRow" unique_id=100100014]
+visible = false
+custom_minimum_size = Vector2(0, 0)
+layout_mode = 2
+theme_type_variation = &"SanctumRuleSoft"
+
+[node name="BondMeterWrap" type="MarginContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/BondsPage/BondsListPanel/BondsListMargin/BondsListStack/BondsList/BondEntryTemplate/BondEntryMargin/BondEntryRow" unique_id=100100015]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/margin_left = 0
+theme_override_constants/margin_top = 2
+theme_override_constants/margin_right = 0
+theme_override_constants/margin_bottom = 0
+
+[node name="BondTierBar" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/BondsPage/BondsListPanel/BondsListMargin/BondsListStack/BondsList/BondEntryTemplate/BondEntryMargin/BondEntryRow/BondMeterWrap" unique_id=100100016 instance=ExtResource("4_bondtier")]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="SkillsPage" type="Control" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack" unique_id=1522500596]
+[node name="BondsFooter" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/BondsPage" unique_id=100100017]
+layout_mode = 2
+theme_type_variation = &"SanctumMuted"
+text = "Support, strain, and neutrality are known through shared trials."
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="SkillsPage" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack" unique_id=1522500596]
 unique_name_in_owner = true
 visible = false
 custom_minimum_size = Vector2(0, 320)
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_constants/separation = 14
+
+[node name="SkillsHeader" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage"]
+layout_mode = 2
+theme_type_variation = &"ContentBasePanel"
+text = "Associated Skills"
+
+[node name="SkillsSummary" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.356863, 0.25098, 0.14902, 0.86)
+theme_override_font_sizes/font_size = 16
+text = "Only techniques associated with this Echo's confirmed calling are surfaced here."
+autowrap_mode = 3
+
+[node name="SkillsListPanel" type="PanelContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_bond_list")
+
+[node name="SkillsListMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 14
+
+[node name="SkillsListStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel/SkillsListMargin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="SkillsEmptyLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel/SkillsListMargin/SkillsListStack"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"SanctumMuted"
+text = "No associated skills are surfaced for this Echo yet."
+autowrap_mode = 3
+
+[node name="SkillsList" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel/SkillsListMargin/SkillsListStack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="SkillEntryTemplate" type="PanelContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel/SkillsListMargin/SkillsListStack/SkillsList"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_bond_row")
+
+[node name="SkillEntryMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel/SkillsListMargin/SkillsListStack/SkillsList/SkillEntryTemplate"]
+layout_mode = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 18
+
+[node name="SkillEntryStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel/SkillsListMargin/SkillsListStack/SkillsList/SkillEntryTemplate/SkillEntryMargin"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="SkillNameLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel/SkillsListMargin/SkillsListStack/SkillsList/SkillEntryTemplate/SkillEntryMargin/SkillEntryStack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ContentBasePanel"
+text = "Technique"
+
+[node name="SkillFamilyLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel/SkillsListMargin/SkillsListStack/SkillsList/SkillEntryTemplate/SkillEntryMargin/SkillEntryStack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.556863, 0.42098, 0.21902, 0.9)
+theme_override_font_sizes/font_size = 17
+text = "Associated technique"
+
+[node name="SkillNoteLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel/SkillsListMargin/SkillsListStack/SkillsList/SkillEntryTemplate/SkillEntryMargin/SkillEntryStack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumMuted"
+text = "Associated with this Echo's calling."
+autowrap_mode = 3
 
 [node name="InstitutionDetailPanel" type="PanelContainer" parent="."]
 unique_name_in_owner = true

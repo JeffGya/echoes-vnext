@@ -2,115 +2,179 @@
 
 [ext_resource type="Script" path="res://ui/components/BondTierBar.gd" id="1_btbar"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_N5"]
-bg_color = Color(0.5, 0.05, 0.05, 1)
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_N4"]
-bg_color = Color(0.65, 0.1, 0.1, 1)
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_N3"]
-bg_color = Color(0.78, 0.2, 0.15, 1)
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_N2"]
-bg_color = Color(0.88, 0.35, 0.2, 1)
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_N1"]
-bg_color = Color(0.95, 0.55, 0.3, 1)
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0"]
-bg_color = Color(0.55, 0.55, 0.55, 1)
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_P1"]
-bg_color = Color(0.3, 0.65, 0.35, 1)
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_P2"]
-bg_color = Color(0.2, 0.72, 0.35, 1)
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_P3"]
-bg_color = Color(0.1, 0.78, 0.35, 1)
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_P4"]
-bg_color = Color(0.05, 0.82, 0.38, 1)
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_P5"]
-bg_color = Color(0.0, 0.85, 0.42, 1)
-
 [node name="BondTierBar" type="VBoxContainer"]
-custom_minimum_size = Vector2(0, 28)
+custom_minimum_size = Vector2(0, 48)
 script = ExtResource("1_btbar")
 
-[node name="TierBarRow" type="HBoxContainer" parent="."]
+[node name="MeterRow" type="HBoxContainer" parent="."]
 layout_mode = 2
-theme_override_constants/separation = 2
+size_flags_horizontal = 3
+alignment = 1
+theme_override_constants/separation = 0
 
-[node name="Cell_N5" type="Panel" parent="TierBarRow"]
-custom_minimum_size = Vector2(18, 12)
+[node name="Cell_N5" type="Label" parent="MeterRow"]
+custom_minimum_size = Vector2(26, 26)
 layout_mode = 2
-modulate = Color(1, 1, 1, 0.2)
-theme_override_styles/panel = SubResource("StyleBoxFlat_N5")
+theme_override_colors/font_color = Color(0.694118, 0.337255, 0.243137, 1)
+theme_override_font_sizes/font_size = 26
+text = "◆"
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="Cell_N4" type="Panel" parent="TierBarRow"]
-custom_minimum_size = Vector2(18, 12)
+[node name="Rule_N4" type="ColorRect" parent="MeterRow"]
+custom_minimum_size = Vector2(4, 2)
 layout_mode = 2
-modulate = Color(1, 1, 1, 0.2)
-theme_override_styles/panel = SubResource("StyleBoxFlat_N4")
+size_flags_vertical = 4
+color = Color(0.662745, 0.513725, 0.32549, 0.42)
 
-[node name="Cell_N3" type="Panel" parent="TierBarRow"]
-custom_minimum_size = Vector2(18, 12)
+[node name="Cell_N4" type="Label" parent="MeterRow"]
+custom_minimum_size = Vector2(26, 26)
 layout_mode = 2
-modulate = Color(1, 1, 1, 0.2)
-theme_override_styles/panel = SubResource("StyleBoxFlat_N3")
+theme_override_colors/font_color = Color(0.760784, 0.415686, 0.278431, 1)
+theme_override_font_sizes/font_size = 26
+text = "◆"
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="Cell_N2" type="Panel" parent="TierBarRow"]
-custom_minimum_size = Vector2(18, 12)
+[node name="Rule_N3" type="ColorRect" parent="MeterRow"]
+custom_minimum_size = Vector2(4, 2)
 layout_mode = 2
-modulate = Color(1, 1, 1, 0.2)
-theme_override_styles/panel = SubResource("StyleBoxFlat_N2")
+size_flags_vertical = 4
+color = Color(0.67451, 0.537255, 0.356863, 0.42)
 
-[node name="Cell_N1" type="Panel" parent="TierBarRow"]
-custom_minimum_size = Vector2(18, 12)
+[node name="Cell_N3" type="Label" parent="MeterRow"]
+custom_minimum_size = Vector2(26, 26)
 layout_mode = 2
-modulate = Color(1, 1, 1, 0.2)
-theme_override_styles/panel = SubResource("StyleBoxFlat_N1")
+theme_override_colors/font_color = Color(0.780392, 0.498039, 0.298039, 1)
+theme_override_font_sizes/font_size = 26
+text = "◆"
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="Cell_0" type="Panel" parent="TierBarRow"]
-custom_minimum_size = Vector2(18, 12)
+[node name="Rule_N2" type="ColorRect" parent="MeterRow"]
+custom_minimum_size = Vector2(4, 2)
 layout_mode = 2
-modulate = Color(1, 1, 1, 1)
-theme_override_styles/panel = SubResource("StyleBoxFlat_0")
+size_flags_vertical = 4
+color = Color(0.694118, 0.556863, 0.372549, 0.42)
 
-[node name="Cell_P1" type="Panel" parent="TierBarRow"]
-custom_minimum_size = Vector2(18, 12)
+[node name="Cell_N2" type="Label" parent="MeterRow"]
+custom_minimum_size = Vector2(26, 26)
 layout_mode = 2
-modulate = Color(1, 1, 1, 0.2)
-theme_override_styles/panel = SubResource("StyleBoxFlat_P1")
+theme_override_colors/font_color = Color(0.792157, 0.576471, 0.364706, 1)
+theme_override_font_sizes/font_size = 26
+text = "◆"
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="Cell_P2" type="Panel" parent="TierBarRow"]
-custom_minimum_size = Vector2(18, 12)
+[node name="Rule_N1" type="ColorRect" parent="MeterRow"]
+custom_minimum_size = Vector2(4, 2)
 layout_mode = 2
-modulate = Color(1, 1, 1, 0.2)
-theme_override_styles/panel = SubResource("StyleBoxFlat_P2")
+size_flags_vertical = 4
+color = Color(0.705882, 0.572549, 0.392157, 0.42)
 
-[node name="Cell_P3" type="Panel" parent="TierBarRow"]
-custom_minimum_size = Vector2(18, 12)
+[node name="Cell_N1" type="Label" parent="MeterRow"]
+custom_minimum_size = Vector2(26, 26)
 layout_mode = 2
-modulate = Color(1, 1, 1, 0.2)
-theme_override_styles/panel = SubResource("StyleBoxFlat_P3")
+theme_override_colors/font_color = Color(0.803922, 0.639216, 0.431373, 1)
+theme_override_font_sizes/font_size = 26
+text = "◆"
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="Cell_P4" type="Panel" parent="TierBarRow"]
-custom_minimum_size = Vector2(18, 12)
+[node name="Rule_0L" type="ColorRect" parent="MeterRow"]
+custom_minimum_size = Vector2(4, 2)
 layout_mode = 2
-modulate = Color(1, 1, 1, 0.2)
-theme_override_styles/panel = SubResource("StyleBoxFlat_P4")
+size_flags_vertical = 4
+color = Color(0.717647, 0.603922, 0.439216, 0.42)
 
-[node name="Cell_P5" type="Panel" parent="TierBarRow"]
-custom_minimum_size = Vector2(18, 12)
+[node name="Cell_0" type="Label" parent="MeterRow"]
+custom_minimum_size = Vector2(26, 26)
 layout_mode = 2
-modulate = Color(1, 1, 1, 0.2)
-theme_override_styles/panel = SubResource("StyleBoxFlat_P5")
+theme_override_colors/font_color = Color(0.847059, 0.721569, 0.509804, 1)
+theme_override_font_sizes/font_size = 26
+text = "◆"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Rule_P1" type="ColorRect" parent="MeterRow"]
+custom_minimum_size = Vector2(4, 2)
+layout_mode = 2
+size_flags_vertical = 4
+color = Color(0.678431, 0.611765, 0.407843, 0.42)
+
+[node name="Cell_P1" type="Label" parent="MeterRow"]
+custom_minimum_size = Vector2(26, 26)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.666667, 0.619608, 0.364706, 1)
+theme_override_font_sizes/font_size = 26
+text = "◆"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Rule_P2" type="ColorRect" parent="MeterRow"]
+custom_minimum_size = Vector2(4, 2)
+layout_mode = 2
+size_flags_vertical = 4
+color = Color(0.572549, 0.607843, 0.356863, 0.42)
+
+[node name="Cell_P2" type="Label" parent="MeterRow"]
+custom_minimum_size = Vector2(26, 26)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.533333, 0.611765, 0.333333, 1)
+theme_override_font_sizes/font_size = 26
+text = "◆"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Rule_P3" type="ColorRect" parent="MeterRow"]
+custom_minimum_size = Vector2(4, 2)
+layout_mode = 2
+size_flags_vertical = 4
+color = Color(0.490196, 0.596078, 0.333333, 0.42)
+
+[node name="Cell_P3" type="Label" parent="MeterRow"]
+custom_minimum_size = Vector2(26, 26)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.435294, 0.592157, 0.321569, 1)
+theme_override_font_sizes/font_size = 26
+text = "◆"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Rule_P4" type="ColorRect" parent="MeterRow"]
+custom_minimum_size = Vector2(4, 2)
+layout_mode = 2
+size_flags_vertical = 4
+color = Color(0.427451, 0.580392, 0.329412, 0.42)
+
+[node name="Cell_P4" type="Label" parent="MeterRow"]
+custom_minimum_size = Vector2(26, 26)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.384314, 0.576471, 0.313726, 1)
+theme_override_font_sizes/font_size = 26
+text = "◆"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Rule_P5" type="ColorRect" parent="MeterRow"]
+custom_minimum_size = Vector2(4, 2)
+layout_mode = 2
+size_flags_vertical = 4
+color = Color(0.380392, 0.560784, 0.317647, 0.42)
+
+[node name="Cell_P5" type="Label" parent="MeterRow"]
+custom_minimum_size = Vector2(26, 26)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.337255, 0.545098, 0.305882, 1)
+theme_override_font_sizes/font_size = 26
+text = "◆"
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="TierNameLabel" type="Label" parent="."]
 unique_name_in_owner = true
 layout_mode = 2
+theme_override_colors/font_color = Color(0.356863, 0.25098, 0.14902, 0.88)
+theme_override_font_sizes/font_size = 14
 text = "Indifferent"
 horizontal_alignment = 1
