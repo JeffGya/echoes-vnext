@@ -225,19 +225,6 @@ func _unhandled_input(event: InputEvent) -> void:
 				_is_panning = false
 				get_viewport().set_input_as_handled()
 				return
-
-		# Placement mode spatial taps — handled here in _unhandled_input so that
-		# UI buttons (Cancel, Confirm, compact strip) can consume their clicks first
-		# via _gui_input before this fires.
-		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
-			if _echo_detail_open or Input.is_key_pressed(KEY_SPACE):
-				return
-			if _current_snap_type != "flow.sanctum":
-				return
-			if _placement_mode:
-				if _try_placement_tap(mb.position):
-					get_viewport().set_input_as_handled()
-				return
 	
 	# Pinch-to-zoom (mobile) — smooth continuous zoom, NOT snap-to-level.
 	# Works in both normal view and placement mode.
@@ -287,14 +274,24 @@ func _input(event: InputEvent) -> void:
 		return
 	if _current_snap_type != "flow.sanctum":
 		return
-	if _placement_mode:
-		return  # Placement taps handled in _unhandled_input — don't steal button clicks here.
 	if not (event is InputEventMouseButton):
 		return
 	var mb := event as InputEventMouseButton
 	if not mb.pressed or mb.button_index != MOUSE_BUTTON_LEFT:
 		return
 	if Input.is_key_pressed(KEY_SPACE):
+		return
+
+	if _placement_mode:
+		# _input() fires before GUI/mouse_filter processing, so placement taps are
+		# caught here regardless of what Controls are in the scene tree.
+		# Use gui_get_hover_control() to detect when the cursor is over a UI button
+		# (Cancel, Confirm, strip) and let it handle its own click via _gui_input.
+		var hover: Control = get_viewport().gui_get_hover_control()
+		if hover is BaseButton:
+			return  # Let the button's _gui_input handle it.
+		if _try_placement_tap(mb.position):
+			get_viewport().set_input_as_handled()
 		return
 
 	# Normal mode: check hit, route by kind.

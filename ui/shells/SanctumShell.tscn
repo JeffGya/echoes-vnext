@@ -221,6 +221,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 2
 scale = Vector2(1.0002433, 0.999602)
 color = Color(0.23921569, 0.3529412, 0.2784314, 1)
 
