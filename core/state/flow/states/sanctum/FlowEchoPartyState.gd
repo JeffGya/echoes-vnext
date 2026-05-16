@@ -91,7 +91,13 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			drift_preview = ProgressionService.compute_trait_drift_preview(e, flow_ctx.campaign_seed, prog_cfg)
 
 		# BOND-001: build bond entries from party encounter history
-		var bond_entries: Array = _build_bond_entries(str(e.get("id", "")), roster, bonds, party_encounters, bond_thresholds)
+		var bond_entries: Array = SocialGraphService.build_bond_entries_for_actor(
+			str(e.get("id", "")),
+			roster,
+			bonds,
+			party_encounters,
+			bond_thresholds
+		)
 
 		echo_entries.append({
 			"id":                    str(e.get("id", "")),
@@ -209,51 +215,3 @@ static func _resolve_skill_slots(echo: Dictionary, skill_defs: Dictionary) -> Ar
 		if str(defn.get("calling_requirement", "")) == calling:
 			result.append(str(defn.get("display_name", skill_id)))
 	return result
-
-
-# BOND-001: Build bond entries for the Bonds tab from the echo's party encounter history.
-# Returns an Array of {echo_id, name, tier, tier_name} sorted by tier ascending (most negative first).
-static func _build_bond_entries(
-	echo_id: String,
-	roster: Array,
-	bonds: Array,
-	party_encounters: Array,
-	bond_thresholds: Dictionary
-) -> Array:
-	if echo_id.is_empty():
-		return []
-
-	var partner_ids: Array = SocialGraphService.get_encounters_for_actor(party_encounters, echo_id)
-	if partner_ids.is_empty():
-		return []
-
-	# Build a name lookup from roster
-	var name_by_id: Dictionary = {}
-	for r_v in roster:
-		if not (r_v is Dictionary):
-			continue
-		var r: Dictionary = r_v
-		name_by_id[str(r.get("id", ""))] = str(r.get("name", ""))
-
-	var entries: Array = []
-	for partner_id_v in partner_ids:
-		var partner_id: String = str(partner_id_v)
-		var edge := SocialGraphService.get_edge(bonds, echo_id, partner_id)
-		var strength: int = 0
-		if not edge.is_empty():
-			strength = int(edge.get("strength", 0))
-		var tier: int = SocialGraphService.get_tier(strength)
-		entries.append({
-			"echo_id":   partner_id,
-			"name":      name_by_id.get(partner_id, ""),
-			"tier":      tier,
-			"tier_name": SocialGraphService.get_tier_name(tier),
-			"strength":  strength,
-			"bond_type": SocialGraphService.get_bond_type(strength, bond_thresholds),
-		})
-
-	# Sort by tier ascending — most negative (rival) first
-	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return int(a.get("tier", 0)) < int(b.get("tier", 0))
-	)
-	return entries

@@ -7,17 +7,22 @@ func _init(id: String = FlowStateIds.SANCTUM) -> void:
 	
 func enter(ctx: RefCounted, t:int) -> void:
 	var flow_ctx := ctx as FlowContext
+	var balance_data: Dictionary = {}
 	var prog_cfg: Dictionary = {}
+	var skills_cfg: Dictionary = {}
 	var max_level: int = 5
 	if flow_ctx.config_service != null:
 		var balance_v: Variant = flow_ctx.config_service.get_balance()
 		var balance: Dictionary = balance_v if balance_v is Dictionary else {}
 		var balance_data_v: Variant = balance.get("data", {})
-		var balance_data: Dictionary = balance_data_v if balance_data_v is Dictionary else {}
+		balance_data = balance_data_v if balance_data_v is Dictionary else {}
 		var progression_v: Variant = balance_data.get("progression", {})
 		if progression_v is Dictionary:
 			prog_cfg = progression_v as Dictionary
 			max_level = int(prog_cfg.get("max_level_per_rank", 5))
+		var skills_v: Variant = balance_data.get("skills", {})
+		if skills_v is Dictionary:
+			skills_cfg = skills_v as Dictionary
 
 	# VOW-001: release active vow when returning to Sanctum if the release condition is met.
 	# Condition logic is in VowService.release_vow_if_due (testable in isolation).
@@ -79,12 +84,29 @@ func enter(ctx: RefCounted, t:int) -> void:
 	var roster: Array = roster_v if roster_v is Array else []
 	var active_party_ids_v: Variant = sanctum.get("active_party_ids", [])
 	var active_party_ids: Array = active_party_ids_v if active_party_ids_v is Array else []
+	var bonds_v: Variant = sanctum.get("bonds", [])
+	var bonds: Array = bonds_v if bonds_v is Array else []
+	var party_encounters_v: Variant = sanctum.get("party_encounters", [])
+	var party_encounters: Array = party_encounters_v if party_encounters_v is Array else []
+	var bond_thresholds: Dictionary = {}
+	if flow_ctx.config_service != null:
+		var _bond_bal: Dictionary = flow_ctx.config_service.get_balance()
+		var _bond_data_v: Variant = _bond_bal.get("data", {})
+		var _bond_data: Dictionary = _bond_data_v if _bond_data_v is Dictionary else {}
+		var _bond_sanctum_v: Variant = _bond_data.get("sanctum", {})
+		var _bond_sanctum: Dictionary = _bond_sanctum_v if _bond_sanctum_v is Dictionary else {}
+		var _bond_thresholds_v: Variant = _bond_sanctum.get("bond_thresholds", {})
+		bond_thresholds = _bond_thresholds_v if _bond_thresholds_v is Dictionary else {}
 
 	# Build a small preview list (first 3)
 	var roster_preview: Array = []
 	var echo_detail_roster: Array = _build_echo_detail_roster(
 		roster,
 		active_party_ids,
+		bonds,
+		party_encounters,
+		bond_thresholds,
+		skills_cfg,
 		prog_cfg,
 		max_level
 	)
@@ -270,6 +292,10 @@ func exit(ctx: RefCounted, t: int) -> void:
 static func _build_echo_detail_roster(
 	roster: Array,
 	active_party_ids: Array,
+	bonds: Array,
+	party_encounters: Array,
+	bond_thresholds: Dictionary,
+	skills_cfg: Dictionary,
 	prog_cfg: Dictionary,
 	max_level: int
 ) -> Array:
@@ -298,6 +324,7 @@ static func _build_echo_detail_roster(
 			"name": str(echo.get("name", "")),
 			"archetype_birth": str(echo.get("archetype_birth", "")),
 			"calling_origin": str(echo.get("calling_origin", "Uncalled")),
+			"calling": str(echo.get("calling", "")),
 			"standing": rank,
 			"step": step,
 			"step_max": max_level,
@@ -321,8 +348,89 @@ static func _build_echo_detail_roster(
 			),
 			"sanctum_bark": str(bark.get("line", "")),
 			"in_party": str(echo.get("id", "")) in active_party_ids,
-		})
+			"skill_entries": _build_skill_entries_for_echo(echo, skills_cfg),
+			"bond_entries": SocialGraphService.build_bond_entries_for_actor(
+				str(echo.get("id", "")),
+				roster,
+				bonds,
+				party_encounters,
+				bond_thresholds
+			),
+	})
 	return out
+
+
+static func _build_skill_entries_for_echo(echo: Dictionary, skills_cfg: Dictionary) -> Array:
+	var calling := str(echo.get("calling", "")).strip_edges()
+	if calling.is_empty() or calling == "uncalled" or skills_cfg.is_empty():
+		return []
+
+	var alignments_v: Variant = skills_cfg.get("calling_family_alignment", {})
+	var alignments: Dictionary = alignments_v if alignments_v is Dictionary else {}
+	if not alignments.has(calling):
+		return []
+
+	var alignment_v: Variant = alignments.get(calling, {})
+	var alignment: Dictionary = alignment_v if alignment_v is Dictionary else {}
+	var strong_families_v: Variant = alignment.get("strong", [])
+	var strong_families: Array = strong_families_v if strong_families_v is Array else []
+	var light_families_v: Variant = alignment.get("light", [])
+	var light_families: Array = light_families_v if light_families_v is Array else []
+
+	var families_v: Variant = skills_cfg.get("families", {})
+	var families: Dictionary = families_v if families_v is Dictionary else {}
+	var defs_v: Variant = skills_cfg.get("definitions", {})
+	var defs: Dictionary = defs_v if defs_v is Dictionary else {}
+
+	var entries: Array = []
+	for skill_id in defs.keys():
+		var defn_v: Variant = defs.get(skill_id, {})
+		if not (defn_v is Dictionary):
+			continue
+		var defn: Dictionary = defn_v
+		var family_id := str(defn.get("skill_family", ""))
+		var alignment_strength := ""
+		if family_id in strong_families:
+			alignment_strength = "strong"
+		elif family_id in light_families:
+			alignment_strength = "light"
+		else:
+			continue
+
+		var family_v: Variant = families.get(family_id, {})
+		var family: Dictionary = family_v if family_v is Dictionary else {}
+		entries.append({
+			"skill_id": skill_id,
+			"name": _humanize_skill_name(str(skill_id)),
+			"family_id": family_id,
+			"family_name": str(family.get("name", _humanize_skill_name(family_id))),
+			"alignment": alignment_strength,
+		})
+
+	entries.sort_custom(Callable(FlowSanctumState, "_sort_skill_entries"))
+	return entries
+
+
+static func _sort_skill_entries(a: Dictionary, b: Dictionary) -> bool:
+	var a_rank := 0 if str(a.get("alignment", "")) == "strong" else 1
+	var b_rank := 0 if str(b.get("alignment", "")) == "strong" else 1
+	if a_rank != b_rank:
+		return a_rank < b_rank
+	var a_family := str(a.get("family_name", ""))
+	var b_family := str(b.get("family_name", ""))
+	if a_family != b_family:
+		return a_family.naturalnocasecmp_to(b_family) < 0
+	return str(a.get("name", "")).naturalnocasecmp_to(str(b.get("name", ""))) < 0
+
+
+static func _humanize_skill_name(value: String) -> String:
+	var parts: PackedStringArray = value.split("_")
+	var words: Array[String] = []
+	for part in parts:
+		if part.is_empty():
+			continue
+		words.append(part.capitalize())
+	return " ".join(words)
 
 
 ## V2-VOW-002: Builds the active_effects array for the Sanctum ActiveEffectsPanel.

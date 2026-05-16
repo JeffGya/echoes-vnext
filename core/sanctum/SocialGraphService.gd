@@ -123,6 +123,56 @@ static func get_encounters_for_actor(encounters: Array, actor_id: String) -> Arr
 	return result
 
 
+## Builds read-only bond entries for a single echo from shared party encounter history.
+## Returns an Array[{ echo_id, name, tier, tier_name, strength, bond_type }]
+## sorted by tier ascending (most negative first).
+static func build_bond_entries_for_actor(
+	actor_id: String,
+	roster: Array,
+	bonds: Array,
+	party_encounters: Array,
+	bond_thresholds: Dictionary
+) -> Array:
+	if actor_id.is_empty():
+		return []
+
+	var partner_ids: Array = get_encounters_for_actor(party_encounters, actor_id)
+	if partner_ids.is_empty():
+		return []
+
+	var name_by_id: Dictionary = {}
+	for r_v in roster:
+		if not (r_v is Dictionary):
+			continue
+		var r: Dictionary = r_v
+		name_by_id[str(r.get("id", ""))] = str(r.get("name", ""))
+
+	var entries: Array = []
+	for partner_id_v in partner_ids:
+		var partner_id: String = str(partner_id_v)
+		var edge := get_edge(bonds, actor_id, partner_id)
+		var strength := 0
+		if not edge.is_empty():
+			strength = int(edge.get("strength", 0))
+		var tier := get_tier(strength)
+		var partner_name := str(name_by_id.get(partner_id, "")).strip_edges()
+		if partner_name.is_empty():
+			partner_name = "Unknown Echo"
+		entries.append({
+			"echo_id": partner_id,
+			"name": partner_name,
+			"tier": tier,
+			"tier_name": get_tier_name(tier),
+			"strength": strength,
+			"bond_type": get_bond_type(strength, bond_thresholds),
+		})
+
+	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.get("tier", 0)) < int(b.get("tier", 0))
+	)
+	return entries
+
+
 ## Returns rival bond pairs where both actors are in party_ids.
 ## Each element is [actor_a_id, actor_b_id].
 static func get_rival_pairs_in_party(bonds: Array, party_ids: Array, thresholds: Dictionary) -> Array:
