@@ -1228,6 +1228,40 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Cancel"
 
+[node name="PlacementToast" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -108.0
+offset_right = -16.0
+offset_bottom = -72.0
+grow_horizontal = 2
+grow_vertical = 0
+visible = false
+horizontal_alignment = 1
+text = ""
+
+[node name="InstitutionsCompactStrip" type="Button" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 1
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 1.0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 40.0
+offset_bottom = 0.0
+grow_horizontal = 1
+grow_vertical = 2
+visible = false
+clip_text = false
+text = "▶"
+
 [node name="SnapShotView" type="RichTextLabel" parent="." unique_id=1171635051]
 unique_name_in_owner = true
 layout_mode = 0

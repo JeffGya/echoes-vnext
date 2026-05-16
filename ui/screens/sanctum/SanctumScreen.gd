@@ -104,12 +104,17 @@ const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.t
 @onready var _placement_label:       Label              = %PlacementLabel
 @onready var _placement_confirm_btn: Button             = %PlacementConfirmBtn
 @onready var _placement_cancel_btn:  Button             = %PlacementCancelBtn
+@onready var _placement_toast:       Label              = %PlacementToast
+@onready var _inst_compact_strip:    Button             = %InstitutionsCompactStrip
 
 
 var _snapshot: Dictionary = {}
 var _name_dirty := false
 var _current_institution_id := ""
 var _placement_cell: Variant = null   # Vector2i or null — the cell selected in placement mode
+var _toast_timer: SceneTreeTimer = null
+var _strip_confirm_pending: bool = false
+var _strip_confirm_timer: SceneTreeTimer = null
 var _last_ase_balance: int = -1
 var _ase_tween: Tween
 var _echo_detail_open := false
@@ -147,6 +152,11 @@ func _ready() -> void:
 		_institutions_overlay.visible = false
 	if _placement_bar != null:
 		_placement_bar.visible = false
+	if _placement_toast != null:
+		_placement_toast.visible = false
+	if _inst_compact_strip != null:
+		_inst_compact_strip.visible = false
+		_inst_compact_strip.pressed.connect(_on_inst_compact_strip_pressed)
 
 
 func set_snapshot(snap: Dictionary) -> void:
@@ -673,23 +683,103 @@ func show_placement_bar(inst_id: String) -> void:
 		return
 	var display := inst_id.replace("_", " ").capitalize()
 	if _placement_label != null:
-		_placement_label.text = "Tap a glowing cell to place " + display
+		_placement_label.text = "Tap a location to place " + display
 	if _placement_confirm_btn != null:
 		_placement_confirm_btn.disabled = true
 	_placement_bar.visible = true
 	_placement_cell = null
+	# Minimise institutions panel to compact strip — keeps context visible.
+	_minimise_institutions_panel()
+
+
+func _minimise_institutions_panel() -> void:
+	if _institutions_overlay != null:
+		_institutions_overlay.visible = false
+	if _inst_compact_strip != null:
+		_inst_compact_strip.visible = true
+	_strip_confirm_pending = false
+	_strip_confirm_timer = null
 
 
 func hide_placement_bar() -> void:
 	if _placement_bar != null:
 		_placement_bar.visible = false
+	if _placement_toast != null:
+		_placement_toast.visible = false
+	_toast_timer = null
 	_placement_cell = null
+	# Re-expand institutions panel so player lands back where they were.
+	_expand_institutions_panel()
 
 
-func on_placement_cell_selected(cell: Vector2i) -> void:
-	_placement_cell = cell
+func _expand_institutions_panel() -> void:
+	if _inst_compact_strip != null:
+		_inst_compact_strip.visible = false
+	_strip_confirm_pending = false
+	_strip_confirm_timer = null
+	if _institutions_overlay != null:
+		_institutions_overlay.visible = true
+
+
+func _on_inst_compact_strip_pressed() -> void:
+	if _placement_cell == null:
+		# No valid cell selected — exit placement immediately.
+		action_requested.emit({ "type": "ui.exit_placement_mode" })
+		return
+
+	if _strip_confirm_pending:
+		# Second tap within the 2s window — exit placement.
+		_strip_confirm_pending = false
+		_strip_confirm_timer = null
+		action_requested.emit({ "type": "ui.exit_placement_mode" })
+		return
+
+	# First tap with a valid cell selected — show inline "tap again to cancel".
+	_strip_confirm_pending = true
+	var prev_label_text := ""
+	if _placement_label != null:
+		prev_label_text = _placement_label.text
+		_placement_label.text = "Tap again to cancel placement"
+	_strip_confirm_timer = get_tree().create_timer(2.0)
+	var captured := _strip_confirm_timer
+	_strip_confirm_timer.timeout.connect(func() -> void:
+		if _strip_confirm_timer == captured:
+			_strip_confirm_pending = false
+			_strip_confirm_timer = null
+			if _placement_label != null:
+				_placement_label.text = "Tap Confirm to place"
+	, CONNECT_ONE_SHOT)
+
+
+func on_placement_cell_selected(cell: Vector2i, is_valid: bool = true, reason: String = "") -> void:
+	_placement_cell = cell if is_valid else null
 	if _placement_confirm_btn != null:
-		_placement_confirm_btn.disabled = false
+		_placement_confirm_btn.disabled = not is_valid
+	if _placement_label != null:
+		if is_valid:
+			_placement_label.text = "Tap Confirm to place"
+		else:
+			_placement_label.text = reason if not reason.is_empty() else "Cannot place here"
+	if not is_valid and not reason.is_empty():
+		_show_reason_toast(reason)
+
+
+func _show_reason_toast(reason: String) -> void:
+	if _placement_toast == null:
+		return
+	_placement_toast.text = reason
+	_placement_toast.visible = true
+	# Cancel previous timer by dropping the reference — its timeout is ignored via null check.
+	_toast_timer = null
+	_toast_timer = get_tree().create_timer(2.0)
+	var captured_timer := _toast_timer
+	_toast_timer.timeout.connect(func() -> void:
+		# Only hide if this timer is still the active one (prevents stale callbacks).
+		if _toast_timer == captured_timer:
+			if _placement_toast != null:
+				_placement_toast.visible = false
+			_toast_timer = null
+	, CONNECT_ONE_SHOT)
 
 
 func open_institution_detail(institution_id: String) -> void:
@@ -825,13 +915,20 @@ func _build_inst_row_label(title: String, subtitle: String, detail: String, enab
 
 func _on_inst_overlay_establish_pressed(inst_id: String) -> void:
 	_current_institution_id = inst_id
-	# Forward valid_placement_cells from snapshot data to SanctumShell via action.
+	# Forward placement context arrays from snapshot data to SanctumShell via action.
 	var data_v: Variant = _snapshot.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	var cells_v: Variant = data.get("valid_placement_cells", [])
+	var floor_v: Variant = data.get("placement_floor_cells", [])
+	var occ_v: Variant   = data.get("placement_occupied_cells", [])
 	action_requested.emit({
 		"type":    "ui.enter_placement_mode",
-		"payload": { "institution_id": inst_id, "valid_cells": cells_v },
+		"payload": {
+			"institution_id": inst_id,
+			"valid_cells":    cells_v,
+			"floor_cells":    floor_v,
+			"occupied_cells": occ_v,
+		},
 	})
 
 

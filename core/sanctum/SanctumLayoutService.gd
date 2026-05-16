@@ -256,6 +256,69 @@ static func snapshot_occupants(save_data: Dictionary, roster: Array = [], active
 	return ensure_starter_occupant(save_data, roster, active_party_ids, inst_snapshot).duplicate(true)
 
 
+# Returns { "valid": bool, "reason": String } for a given candidate cell.
+# Takes pre-computed floor_cells and occupied_cells arrays — no save_data needed.
+# Used by SanctumShell during placement taps to check any tapped cell in real time.
+static func check_placement_validity_from_data(
+		cell: Vector2i,
+		floor_cells: Array,      # Array[Vector2i] — all floor tiles
+		occupied_cells: Array    # Array[Vector2i] — all non-floor tiles (institutions, ase_flame)
+) -> Dictionary:
+	var floor_set: Dictionary = {}
+	for c in floor_cells:
+		if c is Vector2i:
+			floor_set[c] = true
+	var occupied_set: Dictionary = {}
+	for c in occupied_cells:
+		if c is Vector2i:
+			occupied_set[c] = true
+
+	# Rule: already occupied by institution or Ase Flame
+	if occupied_set.has(cell):
+		return { "valid": false, "reason": "Already occupied" }
+
+	# Rule: already a floor tile
+	if floor_set.has(cell):
+		return { "valid": false, "reason": "Already part of the floor" }
+
+	# Build exclusion zone (Chebyshev PLACEMENT_EXCLUSION_RADIUS from any occupied cell)
+	var exclusion: Dictionary = {}
+	for oc in occupied_cells:
+		if not (oc is Vector2i):
+			continue
+		var center: Vector2i = oc
+		for dy in range(-PLACEMENT_EXCLUSION_RADIUS, PLACEMENT_EXCLUSION_RADIUS + 1):
+			for dx in range(-PLACEMENT_EXCLUSION_RADIUS, PLACEMENT_EXCLUSION_RADIUS + 1):
+				exclusion[center + Vector2i(dx, dy)] = true
+
+	# Rule: within exclusion zone of an existing building or Ase Flame
+	if exclusion.has(cell):
+		return { "valid": false, "reason": "Too close to an existing building" }
+
+	# Rule: must be adjacent (8-dir) to existing floor tile
+	var dirs := [
+		Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1),
+		Vector2i(-1,  0),                   Vector2i(1,  0),
+		Vector2i(-1,  1), Vector2i(0,  1), Vector2i(1,  1),
+	]
+	for dir in dirs:
+		if floor_set.has(cell + dir):
+			return { "valid": true, "reason": "" }
+
+	return { "valid": false, "reason": "Must be adjacent to the Sanctum floor" }
+
+
+# Returns the bridge floor cells that would be auto-generated if a building were
+# placed at `target`. Takes a pre-computed floor_cells array — no save_data needed.
+# Used for placement preview only — does not mutate any state.
+static func get_bridge_preview_from_floor(target: Vector2i, floor_cells: Array) -> Array:
+	var floor_dict: Dictionary = {}
+	for c in floor_cells:
+		if c is Vector2i:
+			floor_dict[c] = true
+	return _bridge_cells(target, floor_dict)
+
+
 # --- Private helpers ---
 
 static func _ensure_sanctum(save_data: Dictionary) -> Dictionary:

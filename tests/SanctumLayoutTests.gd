@@ -11,6 +11,15 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("sanctum.layout/echo_near_placed_institution",       Callable(SanctumLayoutTests, "_t_echo_near_institution"))
 	runner.register_test("sanctum.layout/valid_cells_exclude_occupied",       Callable(SanctumLayoutTests, "_t_valid_cells_exclude_occupied"))
 	runner.register_test("sanctum.layout/valid_cells_adjacent_to_floor",      Callable(SanctumLayoutTests, "_t_valid_cells_adjacent_to_floor"))
+	# check_placement_validity_from_data — one test per rule
+	runner.register_test("sanctum.layout/validity_already_occupied",          Callable(SanctumLayoutTests, "_t_validity_already_occupied"))
+	runner.register_test("sanctum.layout/validity_already_floor",             Callable(SanctumLayoutTests, "_t_validity_already_floor"))
+	runner.register_test("sanctum.layout/validity_exclusion_zone",            Callable(SanctumLayoutTests, "_t_validity_exclusion_zone"))
+	runner.register_test("sanctum.layout/validity_not_adjacent",              Callable(SanctumLayoutTests, "_t_validity_not_adjacent"))
+	runner.register_test("sanctum.layout/validity_valid_cell",                Callable(SanctumLayoutTests, "_t_validity_valid_cell"))
+	# get_bridge_preview_from_floor
+	runner.register_test("sanctum.layout/bridge_preview_returns_cells",       Callable(SanctumLayoutTests, "_t_bridge_preview_returns_cells"))
+	runner.register_test("sanctum.layout/bridge_preview_adjacent_is_empty",   Callable(SanctumLayoutTests, "_t_bridge_preview_adjacent_is_empty"))
 
 
 static func _make_save(roster: Array = [], institutions: Dictionary = {}) -> Dictionary:
@@ -191,4 +200,110 @@ static func _t_valid_cells_adjacent_to_floor(_ctx: Dictionary) -> Dictionary:
 				break
 		if not adjacent:
 			return { "ok": false, "error": "valid cell (%d,%d) has no adjacent floor tile" % [cell.x, cell.y] }
+	return { "ok": true }
+
+
+# --- check_placement_validity_from_data tests ---
+# Test setup: a single floor tile at (5,0), Ase Flame occupant at (0,0).
+# This gives a clear scenario with no overlap between floor and exclusion zones.
+
+# 9. Already-occupied cell returns "Already occupied"
+static func _t_validity_already_occupied(_ctx: Dictionary) -> Dictionary:
+	var floor_cells: Array = [Vector2i(5, 0)]
+	var occupied_cells: Array = [Vector2i(0, 0)]
+	var result := SanctumLayoutService.check_placement_validity_from_data(
+		Vector2i(0, 0), floor_cells, occupied_cells)
+	if bool(result.get("valid", true)):
+		return { "ok": false, "error": "expected invalid for occupied cell, got valid" }
+	if str(result.get("reason", "")) != "Already occupied":
+		return { "ok": false, "error": "wrong reason: %s" % result.get("reason", "") }
+	return { "ok": true }
+
+
+# 10. Floor-tile cell returns "Already part of the floor"
+static func _t_validity_already_floor(_ctx: Dictionary) -> Dictionary:
+	var floor_cells: Array = [Vector2i(5, 0)]
+	var occupied_cells: Array = [Vector2i(0, 0)]
+	var result := SanctumLayoutService.check_placement_validity_from_data(
+		Vector2i(5, 0), floor_cells, occupied_cells)
+	if bool(result.get("valid", true)):
+		return { "ok": false, "error": "expected invalid for floor cell, got valid" }
+	if str(result.get("reason", "")) != "Already part of the floor":
+		return { "ok": false, "error": "wrong reason: %s" % result.get("reason", "") }
+	return { "ok": true }
+
+
+# 11. Cell within Chebyshev-2 of occupied returns "Too close to an existing building"
+static func _t_validity_exclusion_zone(_ctx: Dictionary) -> Dictionary:
+	var floor_cells: Array = [Vector2i(5, 0)]
+	var occupied_cells: Array = [Vector2i(0, 0)]
+	# (2,0) is Chebyshev distance 2 from (0,0) — inside the exclusion zone
+	var result := SanctumLayoutService.check_placement_validity_from_data(
+		Vector2i(2, 0), floor_cells, occupied_cells)
+	if bool(result.get("valid", true)):
+		return { "ok": false, "error": "expected invalid for exclusion-zone cell, got valid" }
+	if str(result.get("reason", "")) != "Too close to an existing building":
+		return { "ok": false, "error": "wrong reason: %s" % result.get("reason", "") }
+	return { "ok": true }
+
+
+# 12. Cell not adjacent to any floor tile returns "Must be adjacent to the Sanctum floor"
+static func _t_validity_not_adjacent(_ctx: Dictionary) -> Dictionary:
+	var floor_cells: Array = [Vector2i(5, 0)]
+	var occupied_cells: Array = [Vector2i(0, 0)]
+	# (10,10) is far from both floor and occupied — not adjacent to anything
+	var result := SanctumLayoutService.check_placement_validity_from_data(
+		Vector2i(10, 10), floor_cells, occupied_cells)
+	if bool(result.get("valid", true)):
+		return { "ok": false, "error": "expected invalid for non-adjacent cell, got valid" }
+	if str(result.get("reason", "")) != "Must be adjacent to the Sanctum floor":
+		return { "ok": false, "error": "wrong reason: %s" % result.get("reason", "") }
+	return { "ok": true }
+
+
+# 13. A valid cell returns { "valid": true, "reason": "" }
+static func _t_validity_valid_cell(_ctx: Dictionary) -> Dictionary:
+	var floor_cells: Array = [Vector2i(5, 0)]
+	var occupied_cells: Array = [Vector2i(0, 0)]
+	# (6,0) is adjacent to (5,0), not in floor, not occupied,
+	# and Chebyshev distance from (0,0) = 6 — well outside exclusion zone
+	var result := SanctumLayoutService.check_placement_validity_from_data(
+		Vector2i(6, 0), floor_cells, occupied_cells)
+	if not bool(result.get("valid", false)):
+		return { "ok": false, "error": "expected valid for (6,0), got invalid: %s" % result.get("reason", "") }
+	if str(result.get("reason", "")) != "":
+		return { "ok": false, "error": "expected empty reason for valid cell, got: %s" % result.get("reason", "") }
+	return { "ok": true }
+
+
+# --- get_bridge_preview_from_floor tests ---
+
+# 14. Target 3 tiles away in x returns 1 bridge cell (one x-step)
+static func _t_bridge_preview_returns_cells(_ctx: Dictionary) -> Dictionary:
+	var floor_cells: Array = [Vector2i(0, 0)]
+	# target at (3,0): nearest floor cell is (0,0), dist = 3 > 1
+	# _bridge_cells steps x first: (1,0) added; y is already equal → done
+	var bridge: Array = SanctumLayoutService.get_bridge_preview_from_floor(
+		Vector2i(3, 0), floor_cells)
+	if bridge.is_empty():
+		return { "ok": false, "error": "expected bridge cells for target (3,0), got empty" }
+	if not bridge.has(Vector2i(1, 0)):
+		return { "ok": false, "error": "expected (1,0) in bridge, got %s" % str(bridge) }
+	return { "ok": true }
+
+
+# 15. Target already adjacent to floor returns empty bridge
+static func _t_bridge_preview_adjacent_is_empty(_ctx: Dictionary) -> Dictionary:
+	var floor_cells: Array = [Vector2i(0, 0)]
+	# (1,1) is diagonally adjacent to (0,0) — manhattan distance 2 but Chebyshev 1
+	# _bridge_cells uses manhattan (abs(dx)+abs(dy)) for nearest, then returns [] if dist<=1
+	# Actually _bridge_cells checks abs(dx)+abs(dy): abs(1)+abs(1)=2, so best_dist=2>1
+	# Step x: cx=1, step=(1,0). Not in floor. bridge=[(1,0)]
+	# Step y: cy=1, step=(1,1). Not in floor. bridge=[(1,0),(1,1)]
+	# So (1,1) returns 2 bridge cells. Use (0,1) instead:
+	# (0,1): abs(0)+abs(1)=1 → best_dist=1 ≤ 1 → return []
+	var bridge: Array = SanctumLayoutService.get_bridge_preview_from_floor(
+		Vector2i(0, 1), floor_cells)
+	if not bridge.is_empty():
+		return { "ok": false, "error": "expected empty bridge for adjacent target (0,1), got %s" % str(bridge) }
 	return { "ok": true }

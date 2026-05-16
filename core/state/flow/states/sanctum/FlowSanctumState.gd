@@ -209,6 +209,23 @@ func enter(ctx: RefCounted, t:int) -> void:
 				"disabled": _ekwan_balance_s < _ecost,
 			}
 
+	# Placement context — floor and occupied cell arrays for SanctumShell validity checks.
+	# Derived from ensure_layout() so SanctumShell never needs save_data directly.
+	var _pl_layout := SanctumLayoutService.ensure_layout(flow_ctx.save_data, _inst_snapshot)
+	var _pl_tiles: Array = _pl_layout.get("tiles", [])
+	var _pl_floor: Array = []
+	var _pl_occupied: Array = []
+	for _pl_tile_v in _pl_tiles:
+		if not (_pl_tile_v is Dictionary):
+			continue
+		var _pl_tile: Dictionary = _pl_tile_v
+		var _pl_kind := str(_pl_tile.get("kind", ""))
+		var _pl_cell := Vector2i(int(_pl_tile.get("x", 0)), int(_pl_tile.get("y", 0)))
+		if _pl_kind == "floor":
+			_pl_floor.append(_pl_cell)
+		else:
+			_pl_occupied.append(_pl_cell)
+
 	# Base Sanctum snapshot. FlowStateMachine._rebuild_snapshot() enriches data with:
 	# - ase_balance, ekwan_balance (Economy)
 	# - roster_count, active_party_count (Sanctum)
@@ -232,6 +249,8 @@ func enter(ctx: RefCounted, t:int) -> void:
 		# V2-SANCTUM-002
 		"institutions":              _inst_snapshot,
 		"valid_placement_cells":     SanctumLayoutService.compute_valid_placement_cells(flow_ctx.save_data, _inst_snapshot),
+		"placement_floor_cells":     _pl_floor,    # Array[Vector2i] — all floor tiles; for SanctumShell placement checks
+		"placement_occupied_cells":  _pl_occupied, # Array[Vector2i] — all non-floor tiles (ase_flame, institutions)
 		"institution_compat_hints":  _compat_hints,
 	}
 
