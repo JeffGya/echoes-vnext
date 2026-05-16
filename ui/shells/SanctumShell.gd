@@ -50,6 +50,7 @@ var _saved_camera_position := Vector2.ZERO
 var _saved_camera_zoom := Vector2.ONE
 var _detail_zoom := Vector2(2.9, 2.9)
 var _camera_tween: Tween
+var _nav_bar_tween: Tween
 var _notification_tween: Tween
 var _notification_queue: Array = []
 var _current_notification_id: String = ""
@@ -223,6 +224,19 @@ func _unhandled_input(event: InputEvent) -> void:
 				_is_panning = false
 				get_viewport().set_input_as_handled()
 				return
+
+		# Placement mode spatial taps — handled here in _unhandled_input so that
+		# UI buttons (Cancel, Confirm, compact strip) can consume their clicks first
+		# via _gui_input before this fires.
+		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
+			if _echo_detail_open or Input.is_key_pressed(KEY_SPACE):
+				return
+			if _current_snap_type != "flow.sanctum":
+				return
+			if _placement_mode:
+				if _try_placement_tap(mb.position):
+					get_viewport().set_input_as_handled()
+				return
 	
 	# Pinch-to-zoom (mobile) — smooth continuous zoom, NOT snap-to-level.
 	# Works in both normal view and placement mode.
@@ -272,18 +286,14 @@ func _input(event: InputEvent) -> void:
 		return
 	if _current_snap_type != "flow.sanctum":
 		return
+	if _placement_mode:
+		return  # Placement taps handled in _unhandled_input — don't steal button clicks here.
 	if not (event is InputEventMouseButton):
 		return
 	var mb := event as InputEventMouseButton
 	if not mb.pressed or mb.button_index != MOUSE_BUTTON_LEFT:
 		return
 	if Input.is_key_pressed(KEY_SPACE):
-		return
-
-	# Placement mode: route taps to placement handler; swallow all others.
-	if _placement_mode:
-		if _try_placement_tap(mb.position):
-			get_viewport().set_input_as_handled()
 		return
 
 	# Normal mode: check hit, route by kind.
@@ -309,6 +319,9 @@ func _on_overlay_action_requested(action: Dictionary) -> void:
 		return
 	if action_type == "ui.exit_placement_mode":
 		_exit_placement_mode()
+		return
+	if action_type == "ui.close_institutions_panel":
+		close_institutions_panel()
 		return
 	action_requested.emit(action)
 
@@ -548,12 +561,14 @@ func close_institutions_panel() -> void:
 func dismiss_nav_bar(animated: bool = true) -> void:
 	if _bottom_rail == null:
 		return
+	if _nav_bar_tween != null and _nav_bar_tween.is_running():
+		_nav_bar_tween.kill()
 	if animated:
-		var tw := create_tween()
-		tw.set_trans(Tween.TRANS_SINE)
-		tw.set_ease(Tween.EASE_IN)
-		tw.parallel().tween_property(_bottom_rail, "offset_top", 20.0, 0.2)
-		tw.parallel().tween_property(_bottom_rail, "offset_bottom", 108.0, 0.2)
+		_nav_bar_tween = create_tween()
+		_nav_bar_tween.set_trans(Tween.TRANS_SINE)
+		_nav_bar_tween.set_ease(Tween.EASE_IN)
+		_nav_bar_tween.parallel().tween_property(_bottom_rail, "offset_top", 20.0, 0.2)
+		_nav_bar_tween.parallel().tween_property(_bottom_rail, "offset_bottom", 108.0, 0.2)
 	else:
 		_bottom_rail.offset_top = 20.0
 		_bottom_rail.offset_bottom = 108.0
@@ -562,12 +577,14 @@ func dismiss_nav_bar(animated: bool = true) -> void:
 func restore_nav_bar(animated: bool = true) -> void:
 	if _bottom_rail == null:
 		return
+	if _nav_bar_tween != null and _nav_bar_tween.is_running():
+		_nav_bar_tween.kill()
 	if animated:
-		var tw := create_tween()
-		tw.set_trans(Tween.TRANS_SINE)
-		tw.set_ease(Tween.EASE_OUT)
-		tw.parallel().tween_property(_bottom_rail, "offset_top", -108.0, 0.2)
-		tw.parallel().tween_property(_bottom_rail, "offset_bottom", -20.0, 0.2)
+		_nav_bar_tween = create_tween()
+		_nav_bar_tween.set_trans(Tween.TRANS_SINE)
+		_nav_bar_tween.set_ease(Tween.EASE_OUT)
+		_nav_bar_tween.parallel().tween_property(_bottom_rail, "offset_top", -108.0, 0.2)
+		_nav_bar_tween.parallel().tween_property(_bottom_rail, "offset_bottom", -20.0, 0.2)
 	else:
 		_bottom_rail.offset_top = -108.0
 		_bottom_rail.offset_bottom = -20.0
@@ -600,6 +617,8 @@ func _exit_placement_mode() -> void:
 	if _active_overlay != null and _active_overlay.has_method("hide_placement_bar"):
 		_active_overlay.call("hide_placement_bar")
 	restore_nav_bar()
+	# Sync flag — panel is re-expanded by hide_placement_bar → _expand_institutions_panel.
+	_institutions_open = true
 
 
 func _try_placement_tap(viewport_point: Vector2) -> bool:

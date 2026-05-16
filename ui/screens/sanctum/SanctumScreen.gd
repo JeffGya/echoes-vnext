@@ -143,7 +143,10 @@ func _ready() -> void:
 	if _sanctum_mgmt_btn != null:
 		_sanctum_mgmt_btn.pressed.connect(show_institutions_panel)
 	if _inst_overlay_back_btn != null:
-		_inst_overlay_back_btn.pressed.connect(hide_institutions_panel)
+		# Route through shell so _institutions_open stays in sync.
+		_inst_overlay_back_btn.pressed.connect(func() -> void:
+			action_requested.emit({ "type": "ui.close_institutions_panel" })
+		)
 	if _placement_confirm_btn != null:
 		_placement_confirm_btn.pressed.connect(_on_placement_confirmed)
 	if _placement_cancel_btn != null:
@@ -835,7 +838,7 @@ func _render_institutions(data: Dictionary) -> void:
 			var slot_key := "cta.establish." + inst_id
 			var action_v: Variant = actions.get(slot_key, {})
 			var action: Dictionary = action_v if action_v is Dictionary else {}
-			var cost := int(action.get("payload", {}).get("cost", 0)) if not action.is_empty() else 0
+			var cost := int(action.get("payload", {}).get("establish_ekwan_cost", 0)) if not action.is_empty() else 0
 			var can_afford := ekwan_balance >= cost if cost > 0 else true
 			var cost_str := ("%d Ekwan" % cost) if cost > 0 else ""
 			var panel := _build_inst_row_label(display, identity, cost_str, true)

@@ -161,7 +161,7 @@ func enter(ctx: RefCounted, t:int) -> void:
 
 	# V2-SANCTUM-002: institution config + ground data
 	var _inst_cfg_s: Dictionary = {}
-	var _bonds_s: Array = sanctum.get("bonds", []) as Array
+
 	var _econ_s: Dictionary = (flow_ctx.save_data.get("economy", {}) as Dictionary)
 	var _ekwan_balance_s := int(_econ_s.get("ekwan", 0))
 	if flow_ctx.config_service != null:
@@ -205,7 +205,7 @@ func enter(ctx: RefCounted, t:int) -> void:
 				"type":    "sanctum.institution.establish",
 				"slot":    _slot_key,
 				"label":   "Establish " + _eid2.replace("_", " ").capitalize(),
-				"payload": { "institution_id": _eid2 },
+				"payload": { "institution_id": _eid2, "establish_ekwan_cost": _ecost },
 				"disabled": _ekwan_balance_s < _ecost,
 			}
 

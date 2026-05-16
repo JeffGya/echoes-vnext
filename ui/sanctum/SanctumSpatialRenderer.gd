@@ -67,18 +67,17 @@ func _render_occupants(occupants_v: Variant) -> void:
 
 # --- Placement mode API ---
 
-func set_valid_placement_cells(tile_cells: Array) -> void:
+func set_valid_placement_cells(_tile_cells: Array) -> void:
 	if _placement_layer == null or floor == null:
 		return
-	var pixel_positions: Array = []
-	for cell_v in tile_cells:
-		if cell_v is Vector2i:
-			pixel_positions.append(floor.position + floor.map_to_local(cell_v as Vector2i))
-	# Also initialise the grid overlay from the current floor state.
+	# Initialise the grid overlay from the current floor state.
+	# Valid-cell-only highlights have been replaced by any-cell-tap with validity tinting,
+	# so we only need the grid — not individual valid cell positions.
 	var floor_pixels := get_floor_pixel_cells()
 	var ts := Vector2(72.0, 36.0)
 	if floor.tile_set != null:
 		ts = Vector2(floor.tile_set.tile_size)
+	_placement_layer.visible = true
 	_placement_layer.set_grid(floor_pixels, ts)
 
 
@@ -95,10 +94,16 @@ func set_ghost_building(tile_cell: Vector2i, inst_id: String, is_valid: bool = t
 
 # Returns the tile cell at the given viewport point, with NO validity filter.
 # Returns Vector2i(-999, -999) if the floor node is unavailable.
+# Uses the viewport canvas transform (which incorporates Camera2D zoom + position)
+# to correctly map screen coordinates to world space at any zoom level.
 func cell_at_viewport_point(vp_point: Vector2) -> Vector2i:
 	if floor == null:
 		return Vector2i(-999, -999)
-	var local_pt := get_global_transform_with_canvas().affine_inverse() * vp_point
+	# Step 1: screen → world (accounts for Camera2D zoom and pan)
+	var world_pt := get_viewport().get_canvas_transform().affine_inverse() * vp_point
+	# Step 2: world → SanctumSpatialRenderer local space
+	var local_pt := get_global_transform().affine_inverse() * world_pt
+	# Step 3: renderer-local → TileMapLayer cell
 	var map_pt := local_pt - floor.position
 	return floor.local_to_map(map_pt)
 
@@ -116,22 +121,12 @@ func get_floor_pixel_cells() -> Array:
 func clear_placement_mode() -> void:
 	if _placement_layer != null:
 		_placement_layer.clear()
+		_placement_layer.visible = false
 
 
-# Returns the tile cell at the given viewport point that lies within the valid
-# placement highlights, or Vector2i(-999, -999) if none is within radius.
-func find_valid_cell_at_viewport_point(vp_point: Vector2, radius: float = 42.0) -> Vector2i:
-	if _placement_layer == null:
-		return Vector2i(-999, -999)
-	for pos_v in _placement_layer._valid_positions:
-		if not (pos_v is Vector2):
-			continue
-		var pos: Vector2 = pos_v
-		var screen_pos := _screen_position_for_local(pos)
-		if screen_pos.distance_to(vp_point) <= radius:
-			# Convert pixel position back to tile cell
-			var local_pos := pos - floor.position
-			return floor.local_to_map(local_pos)
+# Kept for backward compatibility — superseded by cell_at_viewport_point().
+# Always returns sentinel; _valid_positions no longer exists in SanctumPlacementLayer.
+func find_valid_cell_at_viewport_point(_vp_point: Vector2, _radius: float = 42.0) -> Vector2i:
 	return Vector2i(-999, -999)
 
 

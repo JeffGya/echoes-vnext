@@ -41,7 +41,7 @@ static func ensure_layout(save_data: Dictionary, inst_snapshot: Array = []) -> D
 			version = int(layout["version"])
 		if version < LAYOUT_VERSION:
 			sanctum["layout"] = make_starter_layout()
-			return sanctum["layout"] as Dictionary
+			# Do NOT early-return — fall through so Ase Flame + institution tiles are added.
 		if not layout.has("origin") or not (layout["origin"] is Dictionary):
 			layout["origin"] = { "x": 0, "y": 0 }
 		if not layout.has("tiles") or not (layout["tiles"] is Array) or (layout["tiles"] as Array).is_empty():
