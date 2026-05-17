@@ -1,6 +1,15 @@
 # res://core/combat/CombatState.gd
 # COMBAT-001: Centralized combat state container.
-# COMBAT-002: Initiative order added — composite scoring mirroring GridService._placement_score().
+# COMBAT-002: Initiative order added — composite readiness scoring mirroring GridService._placement_score().
+# V2-COMBAT-001: "initiative score" renamed to "readiness score" — reflects tactical attributes + emotional readiness.
+#
+# Readiness formula (per actor):
+#   score = (speed * 3 + agi * 2)
+#           + archetype_mod + calling_mod + trait_mod + vector_mod
+#           + morale_mod    (by_morale_tier — inspired +4, steady 0, shaken -3, broken -6)
+#           + seed_nudge
+#
+# Calculated ONCE at combat start. Mid-combat morale recovery does not re-sort.
 #
 # Shape: {
 #   "actors":                  Array,   # deep copy of placed actors at combat start
@@ -48,25 +57,27 @@ static func validate(state: Dictionary) -> bool:
 	return true
 
 
-## Calculates initiative order for all actors.
+## Calculates readiness order for all actors.
 ##
 ## Formula (per actor):
 ##   score = (speed * 3 + agi * 2)
 ##           + archetype_mod + calling_mod + trait_mod + vector_mod
-##           + seed_nudge
+##           + morale_mod + seed_nudge
 ##
+## morale_mod = by_morale_tier[_morale_tier_from_score(actor.morale)] (default 0)
 ## seed_nudge = CampaignSeed.derive_from(seed, actor_id) % 10
-## Ensures same speeds + same seed -> identical order (determinism).
+## Calculated once at combat start — mid-combat morale recovery does not re-sort.
 ##
 ## Sort: descending by score.
 ## Tiebreak: original list position (stable — echoes before enemies = party list order).
 ##
 ## Returns: [{ "id": String, "name": String }, ...]
 static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array:
-	var arch_table: Dictionary  = cfg.get("by_archetype",       {})
-	var call_table: Dictionary  = cfg.get("by_calling_origin",  {})
-	var trait_table: Dictionary = cfg.get("by_dominant_trait",  {})
-	var vec_table: Dictionary   = cfg.get("by_dominant_vector", {})
+	var arch_table: Dictionary   = cfg.get("by_archetype",       {})
+	var call_table: Dictionary   = cfg.get("by_calling_origin",  {})
+	var trait_table: Dictionary  = cfg.get("by_dominant_trait",  {})
+	var vec_table: Dictionary    = cfg.get("by_dominant_vector", {})
+	var morale_table: Dictionary = cfg.get("by_morale_tier",     {})
 
 	# Build scored list with original index for stable tiebreak.
 	var scored: Array = []
@@ -104,11 +115,15 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 		var dom_vec: String = _dominant_key(vectors, ["vanguard", "seeker", "protector", "pillar"])
 		var vec_mod: int = int(vec_table.get(dom_vec, 0))
 
+		# Morale-tier readiness modifier — emotional state at combat start.
+		var morale_val: int = int(actor.get("morale", 50))
+		var morale_mod: int = int(morale_table.get(_morale_tier_from_score(morale_val), 0))
+
 		# Deterministic seed nudge (0-9) for remaining ties.
 		var actor_id: String = str(actor.get("id", ""))
 		var nudge: int = int(CampaignSeed.derive_from(seed, actor_id) % 10)
 
-		var score: int = base + arch_mod + call_mod + trait_mod + vec_mod + nudge
+		var score: int = base + arch_mod + call_mod + trait_mod + vec_mod + morale_mod + nudge
 
 		scored.append({
 			"id":    actor_id,
@@ -168,6 +183,16 @@ static func _find_shrine(actors: Array) -> Dictionary:
 		if actor.get("is_structure", false):
 			return actor
 	return {}
+
+
+## Maps a raw morale value to a tier string.
+## Mirrors EmotionService.get_morale_tier() thresholds — kept inline to avoid
+## coupling CombatState (pure static RefCounted) to a service dependency.
+static func _morale_tier_from_score(morale: int) -> String:
+	if morale >= 75: return "inspired"
+	if morale >= 50: return "steady"
+	if morale >= 25: return "shaken"
+	return "broken"
 
 
 ## Returns the key with the highest integer value in a Dictionary.

@@ -124,6 +124,9 @@ func dispatch(action: Dictionary) -> Dictionary:
 			if to_state == FlowStateIds.SANCTUM:
 				# V2-SANCTUM-001: defeat path — apply emotion modifiers + vow release on RESOLVE→SANCTUM.
 				if str(flow_machine._current_state_id) == FlowStateIds.RESOLVE:
+					# V2-COMBAT-001: defeat path — null ctx so re-entry initialises a fresh encounter.
+					flow_ctx.encounter_ctx     = null
+					flow_ctx.encounter_machine = null
 					_apply_run_emotion_modifiers("defeat", t)
 					_check_vow_release_condition(t)
 				else:
@@ -1537,6 +1540,33 @@ func _resolve_next_actor(t: int) -> void:
 								"morale_delta": morale_ripple,
 								"fear_delta":   -fear_ripple,
 							})
+					# Trigger 5b: guard absorb — guarding Echo absorbs a hit and gains morale.
+					var guard_absorb_morale: int = int(combat_emo_cfg.get("morale_on_guard_absorb", 4))
+					if result.get("damage", 0) > 0 \
+							and target.get("guard_state", false) \
+							and not result.get("is_kill", false):
+						target["morale"] = mini(100, int(target.get("morale", 50)) + guard_absorb_morale)
+						logger.info(t, "actor.guard_absorb_morale", "Guard absorbed hit — morale tick", {
+							"actor_id": str(target.get("id", "")),
+							"morale":   target["morale"],
+							"delta":    guard_absorb_morale,
+						})
+					# Triggers 2+6: near-death — first HP drop to ≤ 25% fires morale+fear once per actor.
+					var nd_max_hp: int = int(target.get("max_hp", 1))
+					if nd_max_hp > 0 \
+							and not target.get("_near_death_morale_fired", false) \
+							and int(target.get("current_hp", 1)) * 4 <= nd_max_hp \
+							and int(target.get("current_hp", 1)) > 0:
+						target["_near_death_morale_fired"] = true
+						var nd_morale: int = int(combat_emo_cfg.get("morale_on_near_death", 7))
+						var nd_fear:   int = int(combat_emo_cfg.get("fear_on_near_death", 8))
+						target["morale"] = mini(100, int(target.get("morale", 50)) + nd_morale)
+						target["fear"]   = mini(100, int(target.get("fear",   0))  + nd_fear)
+						logger.info(t, "actor.near_death", "Near-death trigger — morale+fear tick", {
+							"actor_id": str(target.get("id", "")),
+							"morale":   target["morale"],
+							"fear":     target["fear"],
+						})
 					# V2-VOICE-001: kill is now confirmed — upgrade bark to combat_ko if eligible.
 					var _ko_vk: int = (t + str(actor.get("id", "")).hash()) % 997
 					asm.finalize_combat_bark(result.get("is_kill", false), _ko_vk)
@@ -1781,6 +1811,101 @@ func _end_round(t: int) -> void:
 			"round": round,
 			"delta": -morale_decay_amt,
 		})
+
+	# D) Outnumbering advantage (T5): Echoes outnumbering enemies reduces fear at end of round.
+	var t5_living_echoes: Array = []
+	var t5_living_enemies: Array = []
+	for t5_a in ectx.actors:
+		if not (t5_a is Dictionary) or t5_a.get("is_dead", false) or t5_a.get("is_structure", false):
+			continue
+		if str(t5_a.get("faction", "")) == "echo":
+			t5_living_echoes.append(t5_a)
+		elif str(t5_a.get("faction", "")) == "enemy":
+			t5_living_enemies.append(t5_a)
+	if t5_living_echoes.size() > t5_living_enemies.size() and not t5_living_echoes.is_empty():
+		var outnumber_fear: int = int(emo_tick_cfg.get("fear_reduce_on_outnumber", 2))
+		for t5_echo in t5_living_echoes:
+			t5_echo["fear"] = maxi(0, int(t5_echo.get("fear", 0)) - outnumber_fear)
+		logger.debug(t, "combat.emotion.outnumber", "Echoes outnumber enemies — fear reduction", {
+			"echo_count":  t5_living_echoes.size(),
+			"enemy_count": t5_living_enemies.size(),
+			"delta":       -outnumber_fear,
+		})
+
+	# E) Witness ally refuse (T7): nearby Echoes gain fear when a comrade freezes this round.
+	var witness_fear: int   = int(emo_tick_cfg.get("fear_on_witness_refuse", 4))
+	var witness_radius: int = int(emo_tick_cfg.get("witness_refuse_radius", 3))
+	for t7_res in ectx.last_round_results:
+		if not (t7_res is Dictionary): continue
+		if str(t7_res.get("action_type", "")) != "actor.refuse": continue
+		var t7_refuser_id: String = str(t7_res.get("source_id", ""))
+		var t7_refuser_pos: Dictionary = {}
+		for t7_a in ectx.actors:
+			if t7_a is Dictionary and str(t7_a.get("id", "")) == t7_refuser_id:
+				t7_refuser_pos = t7_a.get("grid_pos", {})
+				break
+		if t7_refuser_pos.is_empty(): continue
+		for t7_obs in ectx.actors:
+			if not (t7_obs is Dictionary): continue
+			if t7_obs.get("is_dead", false): continue
+			if str(t7_obs.get("faction", "")) != "echo": continue
+			if str(t7_obs.get("id", "")) == t7_refuser_id: continue
+			var t7_obs_pos: Dictionary = t7_obs.get("grid_pos", {})
+			if GridService.manhattan_distance(t7_refuser_pos, t7_obs_pos) <= witness_radius:
+				t7_obs["fear"] = mini(100, int(t7_obs.get("fear", 0)) + witness_fear)
+				logger.debug(t, "combat.emotion.witness_refuse", "Witness ally freeze — fear tick", {
+					"observer_id": str(t7_obs.get("id", "")),
+					"refuser_id":  t7_refuser_id,
+					"delta":       witness_fear,
+				})
+
+	# F) Overwhelmed (T8): Echo targeted by 2+ attackers in one round gains fear.
+	var overwhelm_threshold: int = int(emo_tick_cfg.get("overwhelmed_threshold", 2))
+	var overwhelm_fear: int      = int(emo_tick_cfg.get("fear_on_overwhelmed", 5))
+	var t8_attack_counts: Dictionary = {}
+	for t8_res in ectx.last_round_results:
+		if not (t8_res is Dictionary): continue
+		if str(t8_res.get("action_type", "")) != "melee_attack": continue
+		var t8_tid: String = str(t8_res.get("target_id", ""))
+		if t8_tid.is_empty(): continue
+		t8_attack_counts[t8_tid] = t8_attack_counts.get(t8_tid, 0) + 1
+	for t8_tid in t8_attack_counts:
+		if t8_attack_counts[t8_tid] >= overwhelm_threshold:
+			var t8_victim: Dictionary = _find_actor_by_id(ectx.actors, t8_tid)
+			if t8_victim.is_empty() or t8_victim.get("is_dead", false): continue
+			t8_victim["fear"] = mini(100, int(t8_victim.get("fear", 0)) + overwhelm_fear)
+			logger.info(t, "combat.emotion.overwhelmed", "Echo overwhelmed by multiple attackers", {
+				"actor_id":       t8_tid,
+				"attacker_count": t8_attack_counts[t8_tid],
+				"delta":          overwhelm_fear,
+			})
+
+	# G) Consecutive no-damage (T9): Echo that dealt no damage for N rounds loses morale.
+	var no_dmg_threshold: int = int(emo_tick_cfg.get("consecutive_no_damage_threshold", 2))
+	var no_dmg_morale: int    = int(emo_tick_cfg.get("morale_on_consecutive_no_damage", -3))
+	for t9_a in ectx.actors:
+		if not (t9_a is Dictionary): continue
+		if t9_a.get("is_dead", false): continue
+		if str(t9_a.get("faction", "")) != "echo": continue
+		var t9_id: String = str(t9_a.get("id", ""))
+		var t9_dealt: bool = false
+		for t9_res in ectx.last_round_results:
+			if t9_res is Dictionary \
+					and str(t9_res.get("source_id", "")) == t9_id \
+					and int(t9_res.get("damage", 0)) > 0:
+				t9_dealt = true
+				break
+		if t9_dealt:
+			t9_a["_no_damage_streak"] = 0
+		else:
+			t9_a["_no_damage_streak"] = int(t9_a.get("_no_damage_streak", 0)) + 1
+			if int(t9_a["_no_damage_streak"]) >= no_dmg_threshold:
+				t9_a["morale"] = maxi(0, int(t9_a.get("morale", 50)) + no_dmg_morale)
+				logger.debug(t, "combat.emotion.no_damage_streak", "Echo helplessness — morale decay", {
+					"actor_id": t9_id,
+					"streak":   t9_a["_no_damage_streak"],
+					"delta":    no_dmg_morale,
+				})
 
 	# Check end condition.
 	var end_check: Dictionary = CombatState.check_end_condition(ectx.actors, ectx.resolution_mode)

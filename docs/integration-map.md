@@ -83,6 +83,14 @@
 
 ---
 
+## Foundation Wave — Combat Systems
+
+| Story | Wave | Status | Ships | Notes |
+|-------|------|--------|-------|-------|
+| **V2-COMBAT-001** — Readiness score, hesitation band, defeat bug fix, enemy count scaling | Foundation | Done | `CombatState.gd`, `ActorStateMachine.gd`, `FlowEncounterState.gd`, `FlowRuntime.gd`, `balance.json`, `tests/CombatInitiativeTests.gd`, `tests/CombatConsequenceTests.gd` | Morale-tier initiative modifier (inspired +4 … broken −6); "hesitating" status band (fear ≥ 40); guard self-set fix; defeat re-entry bug fixed (encounter_ctx nulled on defeat path); enemy count config-driven via spawn groups (1/2/3 base by realm completion index); 8 new bidirectional emotion triggers (guard absorb, near-death, shrine purify, outnumbering, witness refuse, overwhelmed, consecutive no-damage). V2-COMBAT-002 required for tonal realm differentiation (type variety). V2-INFRA-005 required before permadeath. |
+
+---
+
 ## Upcoming (Foundation — next pickup order)
 
 | Story | Wave | Priority | Notes |
