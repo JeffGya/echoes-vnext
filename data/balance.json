@@ -1349,7 +1349,41 @@
 				"morale_per_kill": 25.0,
 				"fear_reduce_per_kill": 15.0,
 				"morale_ripple_per_kill": 10.0,
-				"fear_ripple_per_kill": 5.0
+				"fear_ripple_per_kill": 5.0,
+				"_comment_combat001": "V2-COMBAT-001: New bidirectional triggers. Target balance: party landing one kill per round-pair stays below fear=40 in a standard 5-round fight.",
+				"morale_on_guard_absorb": 4,
+				"morale_on_interpose": 5,
+				"morale_on_near_death": 7,
+				"fear_on_near_death": 8,
+				"morale_on_shrine_purify": 5,
+				"morale_ripple_shrine_purify": 2,
+				"fear_reduce_on_outnumber": 2,
+				"fear_on_witness_refuse": 4,
+				"witness_refuse_radius": 3,
+				"fear_on_overwhelmed": 5,
+				"overwhelmed_threshold": 2,
+				"morale_on_consecutive_no_damage": -3,
+				"consecutive_no_damage_threshold": 2
+			},
+			"enemy_spawn_config": {
+				"_comment": "V2-COMBAT-001: Config-driven enemy count and group selection. base_count_by_completion_index: HOW MANY enemies (by how many realms completed). group_by_completion_index: WHICH enemy group. Completion index clamped to max available key. Count bonuses apply cumulatively within max_count cap.",
+				"base_count_by_completion_index": {
+					"0": 1,
+					"1": 2,
+					"2": 3
+				},
+				"default_base_count": 1,
+				"group_by_completion_index": {
+					"0": "group.vale_patrol_sm",
+					"1": "group.vale_patrol_md",
+					"2": "group.hollow_scouts"
+				},
+				"default_group": "group.vale_patrol_sm",
+				"stage_mid_threshold": 2,
+				"stage_late_threshold": 3,
+				"mid_count_bonus": 1,
+				"late_count_bonus": 1,
+				"max_count": 4
 			},
 			"retreat_ase_cost": 30.0,
 			"retreat_agi_tiers": [
@@ -1417,6 +1451,13 @@
 					"devoted": -1.5,
 					"pillar": -2.0,
 					"nurturer": -2.0
+				},
+				"by_morale_tier": {
+					"_comment": "V2-COMBAT-001: Readiness modifier by morale tier at combat start. Mirrors EmotionService.get_morale_tier() thresholds (inspired>=75, steady>=50, shaken>=25, broken<25). Calculated once at combat start — mid-combat morale recovery does not re-sort.",
+					"inspired":  4,
+					"steady":    0,
+					"shaken":   -3,
+					"broken":   -6
 				}
 			}
 		},

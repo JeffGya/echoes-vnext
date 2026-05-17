@@ -56,9 +56,11 @@ func enter(ctx: RefCounted, t: int) -> void:
 						int(_emo_e.get("morale_current", 50))
 		echo_actors.sort_custom(func(a, b): return a["id"] < b["id"])
 
-		# GRID-002: build enemy actor list (hardcoded stubs — actors.json is empty in MVP).
+		# V2-COMBAT-001: config-driven enemy spawn via actors.json spawn groups.
 		# BALANCE-001: pass birth_stats + enemy_types cfg so EnemyActor uses DerivedStatService.
 		var actor_cfg: Dictionary = {}
+		var spawn_cfg: Dictionary = {}
+		var actors_json: Dictionary = {}
 		if flow_ctx.config_service != null:
 			var bal: Dictionary  = flow_ctx.config_service.get_balance()
 			var bd: Dictionary   = bal.get("data", {})
@@ -66,13 +68,74 @@ func enter(ctx: RefCounted, t: int) -> void:
 				"birth_stats": bd.get("summoning", {}).get("birth_stats", {}),
 				"enemy_types": bd.get("actor", {}).get("enemy_types", {}),
 			}
-		var enemy_defs: Array = [
-			{ "id": "enemy_guardian_01", "name": "Guardian", "type": "guardian", "faction": "enemy" },
-			{ "id": "enemy_shadow_01",   "name": "Shadow",   "type": "shadow",   "faction": "enemy" },
-		]
+			spawn_cfg = bd.get("combat", {}).get("enemy_spawn_config", {})
+			actors_json = flow_ctx.config_service.get_actors()
+
+		# Derive realm completion index (how many realms fully completed).
+		var completion_index: int = 0
+		var realms_data: Dictionary = flow_ctx.save_data.get("realms", {})
+		for realm_id_key in realms_data:
+			var rm: Dictionary = realms_data[realm_id_key] if realms_data[realm_id_key] is Dictionary else {}
+			if rm.get("is_completed", false):
+				completion_index += 1
+		var idx_key: String = str(mini(completion_index, 2))
+
+		# Derive stage index from stage_id ("stage.N" format).
+		var stage_index: int = 0
+		var sid := str(flow_ctx.stage_id)
+		var dot_pos: int = sid.rfind(".")
+		if dot_pos >= 0:
+			stage_index = int(sid.substr(dot_pos + 1))
+
+		# Compute enemy count from config.
+		var base_count: int = int(spawn_cfg.get("base_count_by_completion_index", {}).get(idx_key, \
+			spawn_cfg.get("default_base_count", 1)))
+		var mid_thresh: int  = int(spawn_cfg.get("stage_mid_threshold", 2))
+		var late_thresh: int = int(spawn_cfg.get("stage_late_threshold", 3))
+		var max_count: int   = int(spawn_cfg.get("max_count", 4))
+		if stage_index >= mid_thresh:
+			base_count += int(spawn_cfg.get("mid_count_bonus", 1))
+		if stage_index >= late_thresh:
+			base_count += int(spawn_cfg.get("late_count_bonus", 1))
+		var enemy_count: int = mini(base_count, max_count)
+
+		# Select spawn group and build enemy actors.
+		var actors_data: Dictionary = actors_json.get("data", {})
+		var enemies_dict: Dictionary = actors_data.get("enemies", {})
+		var groups_dict: Dictionary  = actors_data.get("groups", {})
+		var group_id: String = str(spawn_cfg.get("group_by_completion_index", {}).get(idx_key, \
+			spawn_cfg.get("default_group", "group.vale_patrol_sm")))
+		var group_def: Dictionary = groups_dict.get(group_id, {})
 		var enemy_actors: Array = []
-		for defn in enemy_defs:
-			enemy_actors.append(EnemyActor.from_definition(defn, t, actor_cfg))
+		if not group_def.is_empty():
+			var spawns: Array = group_def.get("spawns", [])
+			var built: int = 0
+			for spawn_v in spawns:
+				if built >= enemy_count: break
+				if not (spawn_v is Dictionary): continue
+				var template_id: String = str(spawn_v.get("template_id", ""))
+				var spawn_count: int = int(spawn_v.get("count", 1))
+				var tmpl: Dictionary = enemies_dict.get(template_id, {})
+				if tmpl.is_empty(): continue
+				for _si in range(spawn_count):
+					if built >= enemy_count: break
+					# EnemyActor.from_definition() needs "type" to look up in balance.json enemy_types.
+					# actors.json ID is "enemy.X" — strip prefix to get the balance.json key.
+					var type_key: String = template_id
+					if type_key.begins_with("enemy."):
+						type_key = type_key.substr(6)
+					var defn: Dictionary = {
+						"id":      template_id + "_" + str(built + 1),
+						"name":    str(tmpl.get("name", template_id)),
+						"type":    type_key,
+						"faction": "enemy",
+					}
+					enemy_actors.append(EnemyActor.from_definition(defn, t, actor_cfg))
+					built += 1
+		if enemy_actors.is_empty():
+			# Fallback: use hardcoded stub if spawn groups not yet populated.
+			enemy_actors.append(EnemyActor.from_definition(
+				{ "id": "enemy_guardian_01", "name": "Guardian", "type": "guardian", "faction": "enemy" }, t, actor_cfg))
 		enemy_actors.sort_custom(func(a, b): return a["id"] < b["id"])
 
 		# GRID-003: deterministic seeded placement.
@@ -195,14 +258,20 @@ static func _resolve_mode_from_stage(flow_ctx: FlowContext) -> String:
 # ────────────────────────────────────────────────────────────────────────────
 
 ## Derives a player-facing status string from a runtime actor dict.
-## Priority: dead > guarding > refusing (fear ≥ 80) > alive
+## Priority: dead > guarding > refusing (fear ≥ 80) > hesitating (fear ≥ 40) > alive
+## Note: 80 is the base display boundary. Per-actor absolute_fear_threshold may be higher (veteran/elite
+## traits), but this display boundary stays fixed. Hesitating uses fear axis (immediate threat response),
+## not morale axis (openness-of-spirit used for initiative readiness).
 static func _derive_status(actor: Dictionary) -> String:
 	if actor.get("is_dead", false):
 		return "dead"
 	if actor.get("guard_state", false):
 		return "guarding"
-	if int(actor.get("fear", 0)) >= 80:
+	var fear: int = int(actor.get("fear", 0))
+	if fear >= 80:
 		return "refusing"
+	if fear >= 40:
+		return "hesitating"
 	return "alive"
 
 

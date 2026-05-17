@@ -394,7 +394,36 @@ End condition priority:
 2. `shrine_destroyed` → defeat (purify_shrine objective only)
 3. `all_echoes_dead` → defeat
 
-Initiative: composite score (`speed XOR seed`), stable descending sort.
+**Readiness score** (V2-COMBAT-001): determines turn order — asks "how ready is this Echo *right now*?"
+
+Formula: `score = (speed × 3 + agi × 2) + archetype_mod + calling_mod + trait_mod + vector_mod + morale_mod + seed_nudge`
+
+- `morale_mod` — from `balance.json → data.combat.initiative_modifiers.by_morale_tier`: inspired +4, steady 0, shaken −3, broken −6. Morale reflects openness-of-spirit at encounter start; a high-morale Echo reacts faster.
+- `seed_nudge` — `CampaignSeed.derive_from(seed, actor_id) % 10` (deterministic tiebreak, 0–9)
+- **Calculated once at combat start — mid-combat morale recovery does NOT re-sort.**
+
+Sort: descending by score. Tiebreak: input list position (stable — party echoes act before enemies on a tie).
+
+**Morale vs fear — design split:**
+- `morale_mod` in readiness uses **morale** (openness-of-spirit, a pre-encounter measure). A high-morale Echo is more ready to act.
+- Hesitation status uses **fear** (immediate threat response during the encounter). Fear accumulates in combat and degrades intent.
+- **Do not conflate these axes.** A broken Echo can have low fear at combat start; a high-morale Echo can accumulate fear mid-fight.
+
+**Consequence bands** (three named tiers — do not collapse):
+
+| Consequence type | Trigger | Effect |
+|---|---|---|
+| **Normal** | fear < 40 | Full intent scoring; no modifier. |
+| **Hesitating** | 40 ≤ fear < 80 (display boundary) | `_derive_status()` returns "hesitating"; `fear_factor` already degrades aggressive scoring in BehaviorArbiter. |
+| **Refusing** | fear ≥ fear_threshold (dynamic per-actor) | Absolute Fear Rule fires; `actor.refuse` returned before behavior module called. |
+
+Guard consequence types:
+- **Guard** — `actor.guard` intent → `guard_state = true` on the acting Echo (self)
+- **Interpose** — `actor.interpose` intent → `guard_state = true` on the protected ally
+
+**V2-INFRA-005 dependency:** Must ship before any permadeath story. Owns `fear_base` permanent raise, grief consequences, and the emotional safety net after Echo death. Do not ship permadeath without it.
+
+**V2-COMBAT-002 dependency:** Required for tonal realm differentiation. V2-COMBAT-001 scales enemy count only — type variety (making realms feel distinct in pressure and tone) belongs to V2-COMBAT-002.
 
 ### Save Schema (`core/save/SaveSchema.gd` + `SaveService.gd`)
 9 top-level keys: `schema_version`, `first_boot`, `meta`, `campaign`, `flow`, `economy`, `sanctum`, `stage_context`, `realms`
@@ -477,7 +506,7 @@ Full field shapes live in each FlowState file (`core/state/flow/states/`).
 | VowScreen | `flow.vow_manage` | can_pledge (bool), active_vow ({vow_id, tier, proverb_twi, proverb_en}), available_vows[] ({vow_id, vow_name, proverb_twi, proverb_en, description, benefit_label, tradeoff_label, breaking_cost_hint, is_unlocked, max_tier_unlocked, is_active, discovered_realm, unlock_hint}) | nav.back, cta.pledge (disabled when vow already active), cta.break (disabled when no active vow) |
 | WeavingRiteScreen | `flow.weaving_rite` | phase, selected_echo, thread_reserve, selected_thread_id, invitation_lines (prose clues), outcome, aftermath_lines, non_chosen | nav.back, cta.begin_rite, cta.confirm |
 
-**Projected actor shape** (FlowEncounterState._project_actor): `id, name, hp, max_hp, status` (dead/guarding/refusing/alive), `calling_origin`, `morale_status` (Normal/Shaken/Afraid/Broken from fear)
+**Projected actor shape** (FlowEncounterState._project_actor): `id, name, hp, max_hp, status` (dead/guarding/refusing/**hesitating**/alive — V2-COMBAT-001: hesitating = fear ≥ 40), `calling_origin`, `morale_status` (Normal/Shaken/Afraid/Broken from fear)
 
 **Extended actor snapshot fields** (ActorStateMachine.get_snapshot() — PROG-010 + V2-VOICE-001):
 `smartness_tier` (novice/adept/veteran/elite), `resilience_traits: Array`, `leadership_traits: Array`, `active_leadership: String` (trait fired this turn), `bark_line: String`, `bark_context: String`, `bark_tier: String`, `bark_target_id: String`, `bark_is_response: bool` (true = reactive/reply bark)

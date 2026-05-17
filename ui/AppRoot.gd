@@ -296,7 +296,9 @@ func _run_tests(parts: Array) -> void:
 	VectorTests.register(runner)
 	DirectiveTests.register(runner)  # DIRECTIVE-001
 	GridTests.register(runner)       # GRID-001
-	CombatStateTests.register(runner)   # COMBAT-001 + COMBAT-002
+	CombatStateTests.register(runner)        # COMBAT-001 + COMBAT-002
+	CombatInitiativeTests.register(runner)   # V2-COMBAT-001: readiness score (morale-tier)
+	CombatConsequenceTests.register(runner)  # V2-COMBAT-001: guard routing, hesitation band
 	CombatServiceTests.register(runner) # COMBAT-003
 	CombatRoundTests.register(runner)     # COMBAT-004
 	CombatSnapshotTests.register(runner) # COMBAT-007

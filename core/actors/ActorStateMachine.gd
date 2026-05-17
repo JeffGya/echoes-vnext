@@ -171,6 +171,14 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	if _expression_band == "whole" and not leadership_traits.is_empty():
 		_active_leadership = _apply_leadership(leadership_traits, expr_cfg, context, logger, t)
 
+	# Consequence bands (three named tiers — do not collapse):
+	#   Normal     (fear < 40):              full intent scoring; no modifier.
+	#   Hesitating (40 <= fear < threshold): fear_factor degrades aggressive scoring in BehaviorArbiter;
+	#                                         _derive_status() returns "hesitating". Note: threshold
+	#                                         here is the dynamic per-actor value; display boundary
+	#                                         in FlowEncounterState._derive_status() uses base value (80).
+	#   Refusing   (fear >= threshold):      Absolute Fear Rule fires; actor.refuse returned
+	#                                         before behavior module is called.
 	if int(_actor.get("fear", 0)) >= fear_threshold:
 		var refuse_intent: Dictionary = {
 			"action_type": "actor.refuse",
@@ -325,6 +333,18 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 				"stacks_count": shrine_ref.get("purify_stacks", []).size(),
 				"cooldown_set": _actor.get("purify_cooldown", 0),
 			})
+			# Trigger 4: shrine purify morale — purifier gains boost; allies receive ripple.
+			var emo_cfg_sh: Dictionary = context.get("cfg", {}).get("data", {}).get("combat", {}).get("emotion", {})
+			var shrine_morale: int = int(emo_cfg_sh.get("morale_on_shrine_purify", 5))
+			var shrine_ripple: int = int(emo_cfg_sh.get("morale_ripple_shrine_purify", 2))
+			_actor["morale"] = mini(100, int(_actor.get("morale", 50)) + shrine_morale)
+			for rp_v in context.get("all_actors", []):
+				if not (rp_v is Dictionary): continue
+				var rp_a: Dictionary = rp_v
+				if str(rp_a.get("id", "")) != str(_actor.get("id", "")) \
+						and str(rp_a.get("faction", "")) == "echo" \
+						and not rp_a.get("is_dead", false):
+					rp_a["morale"] = mini(100, int(rp_a.get("morale", 50)) + shrine_ripple)
 
 	# PROG-009: update per-round passive counters and skill state flags.
 	_update_passive_state(intent, context, t)
@@ -784,8 +804,14 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int) -> v
 					if not sc_pos.is_empty() and GridService.chebyshev_distance(my_pos_sc, sc_pos) <= sc_radius:
 						sc_a["fear"] = clampi(int(sc_a.get("fear", 0)) - sc_fear_red, 0, 100)
 
-	# Apply interpose effects (Warder — grant guard_state to protected ally)
+	# Guard: set guard_state on self (interpose sets it on the protected ally below).
+	if action == "actor.guard":
+		_actor["guard_state"] = true
+
+	# Apply interpose effects (Warder — grant guard_state to protected ally + morale boost to interposer).
 	if action == "actor.interpose":
+		var emo_cfg_ip: Dictionary = context.get("cfg", {}).get("data", {}).get("combat", {}).get("emotion", {})
+		var interpose_morale: int = int(emo_cfg_ip.get("morale_on_interpose", 5))
 		var interpose_target: String = str(intent.get("target_id", ""))
 		if not interpose_target.is_empty():
 			for ip_v in context.get("all_actors", []):
@@ -794,6 +820,7 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int) -> v
 				if str(ip_a.get("id", "")) == interpose_target:
 					ip_a["guard_state"] = true
 					break
+		_actor["morale"] = mini(100, int(_actor.get("morale", 50)) + interpose_morale)
 
 	if t > 0:  # suppress unused-variable warning for t in Godot
 		pass
