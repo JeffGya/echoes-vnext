@@ -123,7 +123,8 @@ func dispatch(action: Dictionary) -> Dictionary:
 			to_state = _gate_state_for_keeper_intro(to_state)
 			if to_state == FlowStateIds.SANCTUM:
 				# V2-SANCTUM-001: defeat path — apply emotion modifiers + vow release on RESOLVE→SANCTUM.
-				if str(flow_machine._current_state_id) == FlowStateIds.RESOLVE:
+				var _from_id: String = str(flow_machine._current_state_id)
+				if _from_id == FlowStateIds.RESOLVE or _from_id == FlowStateIds.ENCOUNTER:
 					# V2-COMBAT-001: defeat path — null ctx so re-entry initialises a fresh encounter.
 					flow_ctx.encounter_ctx     = null
 					flow_ctx.encounter_machine = null
