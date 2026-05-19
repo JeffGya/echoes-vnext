@@ -81,28 +81,47 @@ static func _t_steady_has_zero_morale_modifier() -> Dictionary:
 # Test 3: active_directive field on actor has no effect on initiative order.
 # Documents that directive bonuses live in BehaviorArbiter, not _calc_initiative().
 static func _t_directives_do_not_affect_order() -> Dictionary:
-	var actor_a := {
+	# Give echo_a a speed edge so it reliably leads regardless of seed nudge.
+	# The test verifies that adding active_directive to echo_b does NOT change
+	# the order relative to the same pair without directive.
+	var actor_a_with_dir := {
 		"id":               "echo_a",
 		"name":             "Echo A",
-		"speed":            5,
+		"speed":            7,
 		"stats":            { "agi": 5 },
 		"morale":           60,
 		"active_directive": "push",
 	}
-	var actor_b := {
+	var actor_b_no_dir := {
 		"id":    "echo_b",
 		"name":  "Echo B",
 		"speed": 5,
 		"stats": { "agi": 5 },
 		"morale": 60,
 	}
-	var state: Dictionary = CombatState.create([actor_a, actor_b], "defeat_enemies", 0, _morale_cfg())
-	var order: Array = state.get("initiative_order", [])
-	if order.size() < 2:
+	# Baseline: same actors, neither has directive.
+	var actor_a_no_dir := actor_a_with_dir.duplicate()
+	actor_a_no_dir.erase("active_directive")
+
+	var state_with_dir: Dictionary = CombatState.create(
+		[actor_a_with_dir, actor_b_no_dir], "defeat_enemies", 0, _morale_cfg())
+	var state_no_dir: Dictionary = CombatState.create(
+		[actor_a_no_dir, actor_b_no_dir], "defeat_enemies", 0, _morale_cfg())
+
+	var order_with: Array = state_with_dir.get("initiative_order", [])
+	var order_without: Array = state_no_dir.get("initiative_order", [])
+	if order_with.size() < 2 or order_without.size() < 2:
 		return { "ok": false, "error": "initiative_order too short" }
-	# Identical stats + morale — tiebreak preserves input order (a before b).
-	if str(order[0].get("id", "")) != "echo_a":
-		return { "ok": false, "error": "Directive field must not affect order; tiebreak should put a first, got: %s" % str(order[0].get("id", "")) }
+	# echo_a has higher speed — must lead in both states.
+	if str(order_with[0].get("id", "")) != "echo_a":
+		return { "ok": false, "error": "Directive field must not affect order; expected echo_a first (with directive), got: %s" % str(order_with[0].get("id", "")) }
+	if str(order_without[0].get("id", "")) != "echo_a":
+		return { "ok": false, "error": "Directive field must not affect order; expected echo_a first (no directive), got: %s" % str(order_without[0].get("id", "")) }
+	# Order must be identical whether or not echo_a carries a directive.
+	var ids_with:    Array = order_with.map(func(a): return a.get("id", ""))
+	var ids_without: Array = order_without.map(func(a): return a.get("id", ""))
+	if ids_with != ids_without:
+		return { "ok": false, "error": "Directive changed initiative order: %s vs %s" % [str(ids_with), str(ids_without)] }
 	return { "ok": true }
 
 

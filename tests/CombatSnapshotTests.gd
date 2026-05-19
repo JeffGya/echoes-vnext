@@ -160,13 +160,15 @@ static func _t_actor_projection_fields() -> Dictionary:
 
 
 # Test 4: status_derivation
-# Setup: four actor dicts covering all branches.
-# Expected: dead→"dead", guard_state→"guarding", fear≥80→"refusing", else→"alive".
+# Setup: five actor dicts covering all branches (V2-COMBAT-001 added "hesitating").
+# Expected: dead→"dead", guard_state→"guarding", fear≥80→"refusing",
+#           40≤fear<80→"hesitating", fear<40→"alive".
 static func _t_status_derivation() -> Dictionary:
-	var dead_actor:     Dictionary = { "is_dead": true, "guard_state": false, "fear": 0 }
-	var guard_actor:    Dictionary = { "is_dead": false, "guard_state": true,  "fear": 0 }
-	var refuse_actor:   Dictionary = { "is_dead": false, "guard_state": false, "fear": 80 }
-	var alive_actor:    Dictionary = { "is_dead": false, "guard_state": false, "fear": 50 }
+	var dead_actor:        Dictionary = { "is_dead": true,  "guard_state": false, "fear": 0  }
+	var guard_actor:       Dictionary = { "is_dead": false, "guard_state": true,  "fear": 0  }
+	var refuse_actor:      Dictionary = { "is_dead": false, "guard_state": false, "fear": 80 }
+	var hesitating_actor:  Dictionary = { "is_dead": false, "guard_state": false, "fear": 50 }
+	var alive_actor:       Dictionary = { "is_dead": false, "guard_state": false, "fear": 39 }
 
 	if FlowEncounterState._derive_status(dead_actor) != "dead":
 		return { "ok": false, "error": "Expected 'dead' for is_dead=true, got: %s" % FlowEncounterState._derive_status(dead_actor) }
@@ -174,8 +176,10 @@ static func _t_status_derivation() -> Dictionary:
 		return { "ok": false, "error": "Expected 'guarding' for guard_state=true, got: %s" % FlowEncounterState._derive_status(guard_actor) }
 	if FlowEncounterState._derive_status(refuse_actor) != "refusing":
 		return { "ok": false, "error": "Expected 'refusing' for fear=80, got: %s" % FlowEncounterState._derive_status(refuse_actor) }
+	if FlowEncounterState._derive_status(hesitating_actor) != "hesitating":
+		return { "ok": false, "error": "Expected 'hesitating' for fear=50, got: %s" % FlowEncounterState._derive_status(hesitating_actor) }
 	if FlowEncounterState._derive_status(alive_actor) != "alive":
-		return { "ok": false, "error": "Expected 'alive' for normal actor, got: %s" % FlowEncounterState._derive_status(alive_actor) }
+		return { "ok": false, "error": "Expected 'alive' for fear=39, got: %s" % FlowEncounterState._derive_status(alive_actor) }
 
 	return { "ok": true }
 
@@ -225,9 +229,10 @@ static func _t_field_count_is_nonzero() -> Dictionary:
 	if final_field_count <= 0:
 		return { "ok": false, "error": "final_snapshot field_count must be > 0, got: %d" % final_field_count }
 
-	# Round snapshot carries more display fields (board_cols, initiative, etc.) than final.
-	if round_field_count <= final_field_count:
-		return { "ok": false, "error": "round_snapshot should have more fields than final (%d vs %d)" % [round_field_count, final_field_count] }
+	# Round snapshot carries at least as many fields as final (board_cols, initiative, etc.).
+	# V2-COMBAT-001 added emotion delta fields to final, equalising counts — use >= not >.
+	if round_field_count < final_field_count:
+		return { "ok": false, "error": "round_snapshot should not have fewer fields than final (%d vs %d)" % [round_field_count, final_field_count] }
 
 	return { "ok": true }
 
