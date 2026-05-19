@@ -42,7 +42,7 @@ static func _make_echo(id_str: String, morale: int = 50) -> Dictionary:
 
 
 # 1. Layout always contains ase_flame tile at (0,0)
-static func _t_ase_flame_in_layout(_ctx: Dictionary) -> Dictionary:
+static func _t_ase_flame_in_layout() -> Dictionary:
 	var save := _make_save()
 	var layout := SanctumLayoutService.snapshot_layout(save)
 	var tiles: Array = layout.get("tiles", [])
@@ -56,7 +56,7 @@ static func _t_ase_flame_in_layout(_ctx: Dictionary) -> Dictionary:
 
 
 # 2. Occupants always contain ase_flame as first entry
-static func _t_ase_flame_in_occupants(_ctx: Dictionary) -> Dictionary:
+static func _t_ase_flame_in_occupants() -> Dictionary:
 	var save := _make_save()
 	var occupants := SanctumLayoutService.snapshot_occupants(save)
 	if occupants.is_empty():
@@ -71,7 +71,7 @@ static func _t_ase_flame_in_occupants(_ctx: Dictionary) -> Dictionary:
 
 
 # 3. Established institution appears in layout tiles
-static func _t_institution_tile_after_establish(_ctx: Dictionary) -> Dictionary:
+static func _t_institution_tile_after_establish() -> Dictionary:
 	var hearth := {
 		"unlocked": true,
 		"tier": 0,
@@ -94,7 +94,7 @@ static func _t_institution_tile_after_establish(_ctx: Dictionary) -> Dictionary:
 
 
 # 4. All roster echoes appear as occupants
-static func _t_all_echoes_placed(_ctx: Dictionary) -> Dictionary:
+static func _t_all_echoes_placed() -> Dictionary:
 	var roster := [_make_echo("e1"), _make_echo("e2"), _make_echo("e3")]
 	var save := _make_save(roster)
 	var occupants := SanctumLayoutService.snapshot_occupants(save, roster, [])
@@ -112,7 +112,7 @@ static func _t_all_echoes_placed(_ctx: Dictionary) -> Dictionary:
 
 
 # 5. Each echo occupant has morale_tier string
-static func _t_echo_has_morale_tier(_ctx: Dictionary) -> Dictionary:
+static func _t_echo_has_morale_tier() -> Dictionary:
 	var roster := [_make_echo("e1", 80)]  # 80 morale = inspired
 	var save := _make_save(roster)
 	var occupants := SanctumLayoutService.snapshot_occupants(save, roster, [])
@@ -129,7 +129,7 @@ static func _t_echo_has_morale_tier(_ctx: Dictionary) -> Dictionary:
 
 
 # 6. Echo assigned to institution appears adjacent to its tile
-static func _t_echo_near_institution(_ctx: Dictionary) -> Dictionary:
+static func _t_echo_near_institution() -> Dictionary:
 	var hearth := {
 		"unlocked": true,
 		"tier": 0,
@@ -157,7 +157,7 @@ static func _t_echo_near_institution(_ctx: Dictionary) -> Dictionary:
 
 
 # 7. Valid placement cells don't include occupied positions (Ase Flame at 0,0)
-static func _t_valid_cells_exclude_occupied(_ctx: Dictionary) -> Dictionary:
+static func _t_valid_cells_exclude_occupied() -> Dictionary:
 	var save := _make_save()
 	var cells: Array = SanctumLayoutService.compute_valid_placement_cells(save)
 	for cell_v in cells:
@@ -171,7 +171,7 @@ static func _t_valid_cells_exclude_occupied(_ctx: Dictionary) -> Dictionary:
 
 
 # 8. All valid placement cells are outside the exclusion zone of every occupied tile
-static func _t_valid_cells_not_in_exclusion(_ctx: Dictionary) -> Dictionary:
+static func _t_valid_cells_not_in_exclusion() -> Dictionary:
 	var save := _make_save()
 	var cells: Array = SanctumLayoutService.compute_valid_placement_cells(save)
 	if cells.is_empty():
@@ -193,7 +193,7 @@ static func _t_valid_cells_not_in_exclusion(_ctx: Dictionary) -> Dictionary:
 # This gives a clear scenario with no overlap between floor and exclusion zones.
 
 # 9. Already-occupied cell returns "Already occupied"
-static func _t_validity_already_occupied(_ctx: Dictionary) -> Dictionary:
+static func _t_validity_already_occupied() -> Dictionary:
 	var floor_cells: Array = [Vector2i(5, 0)]
 	var occupied_cells: Array = [Vector2i(0, 0)]
 	var result := SanctumLayoutService.check_placement_validity_from_data(
@@ -206,7 +206,7 @@ static func _t_validity_already_occupied(_ctx: Dictionary) -> Dictionary:
 
 
 # 10. Floor-tile cell returns "Already part of the floor"
-static func _t_validity_already_floor(_ctx: Dictionary) -> Dictionary:
+static func _t_validity_already_floor() -> Dictionary:
 	var floor_cells: Array = [Vector2i(5, 0)]
 	var occupied_cells: Array = [Vector2i(0, 0)]
 	var result := SanctumLayoutService.check_placement_validity_from_data(
@@ -219,7 +219,7 @@ static func _t_validity_already_floor(_ctx: Dictionary) -> Dictionary:
 
 
 # 11. Cell within Chebyshev-2 of occupied returns "Too close to an existing building"
-static func _t_validity_exclusion_zone(_ctx: Dictionary) -> Dictionary:
+static func _t_validity_exclusion_zone() -> Dictionary:
 	var floor_cells: Array = [Vector2i(5, 0)]
 	var occupied_cells: Array = [Vector2i(0, 0)]
 	# (2,0) is Chebyshev distance 2 from (0,0) — inside the exclusion zone
@@ -233,7 +233,7 @@ static func _t_validity_exclusion_zone(_ctx: Dictionary) -> Dictionary:
 
 
 # 12. A far cell outside the exclusion zone is now valid (no adjacency requirement)
-static func _t_validity_far_cell_is_valid(_ctx: Dictionary) -> Dictionary:
+static func _t_validity_far_cell_is_valid() -> Dictionary:
 	var floor_cells: Array = [Vector2i(5, 0)]
 	var occupied_cells: Array = [Vector2i(0, 0)]
 	# (10,10) is far from floor and outside all exclusion zones — should be valid.
@@ -245,7 +245,7 @@ static func _t_validity_far_cell_is_valid(_ctx: Dictionary) -> Dictionary:
 
 
 # 13. A valid cell returns { "valid": true, "reason": "" }
-static func _t_validity_valid_cell(_ctx: Dictionary) -> Dictionary:
+static func _t_validity_valid_cell() -> Dictionary:
 	var floor_cells: Array = [Vector2i(5, 0)]
 	var occupied_cells: Array = [Vector2i(0, 0)]
 	# (6,0) is adjacent to (5,0), not in floor, not occupied,
@@ -262,7 +262,7 @@ static func _t_validity_valid_cell(_ctx: Dictionary) -> Dictionary:
 # --- get_bridge_preview_from_floor tests ---
 
 # 14. Target 3 tiles away in x returns a full connecting path
-static func _t_bridge_preview_returns_cells(_ctx: Dictionary) -> Dictionary:
+static func _t_bridge_preview_returns_cells() -> Dictionary:
 	var floor_cells: Array = [Vector2i(0, 0)]
 	# target at (3,0): nearest floor = (0,0), dist = 3.
 	# Full path: (1,0) → (2,0) → stop before target (3,0).
@@ -278,7 +278,7 @@ static func _t_bridge_preview_returns_cells(_ctx: Dictionary) -> Dictionary:
 
 
 # 15. Target already adjacent to floor returns empty bridge
-static func _t_bridge_preview_adjacent_is_empty(_ctx: Dictionary) -> Dictionary:
+static func _t_bridge_preview_adjacent_is_empty() -> Dictionary:
 	var floor_cells: Array = [Vector2i(0, 0)]
 	# (1,1) is diagonally adjacent to (0,0) — manhattan distance 2 but Chebyshev 1
 	# _bridge_cells uses manhattan (abs(dx)+abs(dy)) for nearest, then returns [] if dist<=1
