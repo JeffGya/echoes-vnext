@@ -8,6 +8,9 @@
 extends RefCounted
 class_name BondTriggerTests
 
+static func _make_logger() -> StructuredLogger:
+	return StructuredLogger.new()
+
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("bond_trigger/stage_win_applies_delta",           Callable(BondTriggerTests, "_t_stage_win_applies_delta"))
 	runner.register_test("bond_trigger/stage_defeat_applies_delta",        Callable(BondTriggerTests, "_t_stage_defeat_applies_delta"))
@@ -151,7 +154,7 @@ static func _t_grief_modifier_on_bonded_ko() -> Dictionary:
 	var grief_morale_mul := 0.5
 	var grief_fear_mul   := 1.5
 	var grief_ticks      := 3
-	EmotionRecoveryService.set_modifier(echo, grief_morale_mul, grief_fear_mul, grief_ticks, null, 0)
+	EmotionRecoveryService.set_modifier(echo, grief_morale_mul, grief_fear_mul, grief_ticks, _make_logger(), 0)
 
 	var rm_v: Variant = echo.get("recovery_modifiers", {})
 	if not (rm_v is Dictionary):
