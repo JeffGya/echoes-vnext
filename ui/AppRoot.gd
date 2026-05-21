@@ -333,6 +333,7 @@ func _run_tests(parts: Array) -> void:
 	VoiceTests.register(runner)           # V2-VOICE-001
 	InstitutionTests.register(runner)     # V2-SANCTUM-002
 	SanctumLayoutTests.register(runner)  # V2-SANCTUM-002: layout + occupant placement
+	ContinuityTests.register(runner)     # V2-CONTINUITY-001
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [

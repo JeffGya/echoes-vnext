@@ -4,6 +4,7 @@
 [ext_resource type="Theme" uid="uid://8qssuuodths2" path="res://assets/theme/LivingTreeSystem.tres" id="2_gaxha"]
 [ext_resource type="PackedScene" uid="uid://dahk08c2p4mgn" path="res://ui/components/EmotionChip.tscn" id="3_emotionchip"]
 [ext_resource type="PackedScene" uid="uid://bond_tier_bar" path="res://ui/components/BondTierBar.tscn" id="4_bondtier"]
+[ext_resource type="Script" path="res://ui/screens/sanctum/ContinuityFlameControl.gd" id="5_contflame"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ase_tip"]
 content_margin_left = 6.0
@@ -131,6 +132,14 @@ size_flags_horizontal = 3
 theme_type_variation = &"SanctumHeaderTitle"
 text = "Sanctum"
 autowrap_mode = 3
+
+[node name="ContinuityFlame" type="Control" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack/TitleRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(20, 24)
+layout_mode = 2
+size_flags_vertical = 4
+visible = false
+script = ExtResource("5_contflame")
 
 [node name="SanctumMgmtBtn" type="Button" parent="RootMargin/LayoutRoot/TopBand/HeaderCard/HeaderMargin/HeaderStack/TitleRow"]
 unique_name_in_owner = true

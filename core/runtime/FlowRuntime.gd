@@ -2909,6 +2909,17 @@ func _handle_weave_begin_rite(t: int) -> void:
 	flow_ctx.weave_commit_locked = true
 	WeavingRiteServiceScript.apply_outcome(outcome, echo_id, thread_id, flow_ctx.save_data, logger, t)
 
+	# V2-CONTINUITY-001: Thread outcome drives Continuity.
+	var _cont_cfg := _get_continuity_cfg()
+	if outcome == "accept":
+		var _cont_pts := int(_cont_cfg.get("thread_integration_points", 5))
+		ContinuityService.add_points(flow_ctx.save_data, _cont_pts, "thread.integration", logger, t)
+	elif outcome == "reject":
+		var _rej_base := int(_cont_cfg.get("thread_reject_base_penalty", 2))
+		var _rej_max  := int(_cont_cfg.get("thread_reject_max_penalty", 10))
+		ContinuityService.apply_reject_penalty(flow_ctx.save_data, echo_id, _rej_base, _rej_max, "thread.reject", logger, t)
+	# "defer" → no Continuity change
+
 	var non_chosen: Array = []
 	non_chosen = WeavingRiteServiceScript.get_non_chosen_consequences(resonance_candidates, echo_id, outcome, rite_cfg)
 	if not non_chosen.is_empty():
@@ -3048,6 +3059,17 @@ func _get_weaving_rite_cfg() -> Dictionary:
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	var rite_v: Variant = data.get("weaving_rite", {})
 	return rite_v if rite_v is Dictionary else {}
+
+
+# V2-CONTINUITY-001
+func _get_continuity_cfg() -> Dictionary:
+	if config_service == null:
+		return {}
+	var balance: Dictionary = config_service.get_balance()
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var cont_v: Variant = data.get("continuity", {})
+	return cont_v if cont_v is Dictionary else {}
 
 
 func _get_bond_thresholds_cfg() -> Dictionary:
@@ -4339,6 +4361,11 @@ func _apply_vow_break_aftermath(summary: Dictionary, cfg: Dictionary, t: int) ->
 	flow_ctx.vow_outcome["proverb_twi"]      = str(_break_defn.get("proverb_twi", ""))
 	flow_ctx.vow_outcome["bond_score_delta"] = int(summary.get("bond_score_delta", 0))
 	flow_ctx.vow_outcome["echoes_affected"]  = _get_roster_echo_ids()
+
+	# V2-CONTINUITY-001: Vow break costs Continuity. Stacks every time.
+	var _vb_cont_cfg := _get_continuity_cfg()
+	var _vb_pen      := int(_vb_cont_cfg.get("vow_break_penalty", 3))
+	ContinuityService.apply_penalty(flow_ctx.save_data, _vb_pen, "vow.break", logger, t)
 
 
 # ────────────────────────────────────────────────────────────────────────────

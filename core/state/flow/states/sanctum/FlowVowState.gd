@@ -25,6 +25,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# --- Config ---
 	var vow_cfg: Dictionary = {}
 	var tier_names: Dictionary = {}
+	var _cont_break_penalty := 3  # V2-CONTINUITY-001: default, overwritten below if config present
 	if flow_ctx.config_service != null:
 		var bal: Dictionary = flow_ctx.config_service.get_balance()
 		vow_cfg = bal
@@ -37,6 +38,10 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				var tn_v: Variant = vows.get("tier_names", {})
 				if tn_v is Dictionary:
 					tier_names = tn_v
+			# V2-CONTINUITY-001: read vow break Continuity cost for player warning.
+			var cont_v: Variant = data.get("continuity", {})
+			if cont_v is Dictionary:
+				_cont_break_penalty = int((cont_v as Dictionary).get("vow_break_penalty", 3))
 
 	# --- Active vow ---
 	var active_vow := VowService.get_active_vow(flow_ctx.save_data)
@@ -95,7 +100,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"description":        str(defn.get("description", "")),
 			"benefit_label":      str(defn.get("benefit_label", "")),
 			"tradeoff_label":     str(defn.get("tradeoff_label", "")),
-			"breaking_cost_hint": str(defn.get("breaking_cost_hint", "")),
+			"breaking_cost_hint": _build_breaking_cost_hint(str(defn.get("breaking_cost_hint", "")), _cont_break_penalty),
 			"is_unlocked":        is_unlocked,
 			"max_tier_unlocked":  max_tier,
 			"is_active":          is_active,
@@ -177,3 +182,11 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		},
 		"actions": actions,
 	}
+
+
+# V2-CONTINUITY-001: Appends Continuity break cost to the existing hint string.
+static func _build_breaking_cost_hint(base_hint: String, cont_penalty: int) -> String:
+	var cont_line := "Breaking this vow costs %d Continuity — and stacks each time." % cont_penalty
+	if base_hint.is_empty():
+		return cont_line
+	return base_hint + "\n" + cont_line

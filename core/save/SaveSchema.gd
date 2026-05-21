@@ -82,8 +82,9 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"pledge_cooldown_stages_remaining": 0,      # V2-VOW-002: stages remaining before re-pledging after a break
 
 			# V2-MIG-002: additive V2 sanctum stubs
-			"continuity": 0,  # V2-SANCTUM-001+: Sanctum growth spine
-			"threads": {},    # V2-WEAVE-001+: Thread reserve (keyed by thread_id)
+			"continuity": 0,          # V2-SANCTUM-001+: Sanctum growth spine
+			"threads": {},            # V2-WEAVE-001+: Thread reserve (keyed by thread_id)
+			"rejection_counts": {},   # V2-CONTINUITY-001: Thread reject count per echo_id (escalating penalty)
 
 			# V2-SANCTUM-002: institution model (Foundation exception — Hearth + Training Grounds)
 			"institutions": {

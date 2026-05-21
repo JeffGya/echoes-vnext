@@ -248,6 +248,16 @@ func enter(ctx: RefCounted, t:int) -> void:
 		else:
 			_pl_occupied.append(_pl_cell)
 
+	# V2-CONTINUITY-001: Continuity band + points for TitleRow flame indicator.
+	var _cont_cfg: Dictionary = {}
+	if flow_ctx.config_service != null:
+		var _b: Dictionary = flow_ctx.config_service.get_balance()
+		var _bd := _b.get("data", {}) as Dictionary
+		var _cv: Variant = _bd.get("continuity", {})
+		_cont_cfg = _cv if _cv is Dictionary else {}
+	var _cont_pts  := ContinuityService.get_points(flow_ctx.save_data)
+	var _cont_band := ContinuityService.get_band(_cont_pts, _cont_cfg)
+
 	# Base Sanctum snapshot. FlowStateMachine._rebuild_snapshot() enriches data with:
 	# - ase_balance, ekwan_balance (Economy)
 	# - roster_count, active_party_count (Sanctum)
@@ -268,6 +278,9 @@ func enter(ctx: RefCounted, t:int) -> void:
 		"sanctum_occupants": SanctumLayoutService.snapshot_occupants(flow_ctx.save_data, roster, active_party_ids, _inst_snapshot),
 		"echo_detail_roster": echo_detail_roster,
 		"featured_echo_id": str((echo_detail_roster[0] as Dictionary).get("id", "")) if not echo_detail_roster.is_empty() and echo_detail_roster[0] is Dictionary else "",
+		# V2-CONTINUITY-001
+		"continuity_points": _cont_pts,
+		"continuity_band":   _cont_band,
 		# V2-SANCTUM-002
 		"institutions":              _inst_snapshot,
 		"valid_placement_cells":     SanctumLayoutService.compute_valid_placement_cells(flow_ctx.save_data, _inst_snapshot),
