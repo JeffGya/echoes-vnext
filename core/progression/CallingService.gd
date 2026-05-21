@@ -154,3 +154,75 @@ static func confirm_calling(
 		})
 
 	return chosen_calling_id
+
+
+## Returns the two adjacent calling IDs in the adjacency ring for calling_id.
+## Returns [] if calling_id is not present in the adjacency config.
+static func get_adjacent_callings(calling_id: String, calling_cfg: Dictionary) -> Array:
+	var adj_v: Variant = calling_cfg.get("adjacency", {})
+	var adj: Dictionary = adj_v if adj_v is Dictionary else {}
+	var neighbours_v: Variant = adj.get(calling_id, [])
+	return neighbours_v if neighbours_v is Array else []
+
+
+## Returns true if entry["parent_calling"] is a recognised foundational calling.
+## Rejects entries whose parent_calling is absent, empty, or not in all_callings.
+static func validate_standing_6_entry(entry: Dictionary, calling_cfg: Dictionary) -> bool:
+	var parent: String = str(entry.get("parent_calling", ""))
+	if parent.is_empty():
+		return false
+	var all_ids_v: Variant = calling_cfg.get("all_callings", [])
+	var all_ids: Array = all_ids_v if all_ids_v is Array else []
+	return parent in all_ids
+
+
+## Returns true if entry["parent_standing_6"] matches a valid standing_6.id
+## across all calling definitions in calling_cfg.
+## Returns false for empty, absent, or unrecognised parent_standing_6 values.
+static func validate_standing_9_entry(entry: Dictionary, calling_cfg: Dictionary) -> bool:
+	var parent_s6: String = str(entry.get("parent_standing_6", ""))
+	if parent_s6.is_empty():
+		return false
+	var defns_v: Variant = calling_cfg.get("definitions", {})
+	var defns: Dictionary = defns_v if defns_v is Dictionary else {}
+	for cid_v in defns:
+		var defn_v: Variant = defns.get(cid_v, {})
+		var defn: Dictionary = defn_v if defn_v is Dictionary else {}
+		var s6_v: Variant = defn.get("standing_6", [])
+		var s6: Array = s6_v if s6_v is Array else []
+		for expr_v in s6:
+			if expr_v is Dictionary and str(expr_v.get("id", "")) == parent_s6:
+				return true
+	return false
+
+
+## Validates all standing_6 and standing_9 entries in calling_cfg.
+## Logs a warning for each malformed entry. Returns true only if all entries are valid.
+## Call once at boot (via ConfigValidator or FlowRuntime) to catch config errors early.
+static func validate_config_integrity(calling_cfg: Dictionary, logger, t: int) -> bool:
+	var all_valid := true
+	var defns_v: Variant = calling_cfg.get("definitions", {})
+	var defns: Dictionary = defns_v if defns_v is Dictionary else {}
+
+	for cid_v in defns:
+		var cid: String = str(cid_v)
+		var defn_v: Variant = defns.get(cid, {})
+		var defn: Dictionary = defn_v if defn_v is Dictionary else {}
+
+		var s6_v: Variant = defn.get("standing_6", [])
+		for entry_v in (s6_v if s6_v is Array else []):
+			if not (entry_v is Dictionary) or not validate_standing_6_entry(entry_v, calling_cfg):
+				if logger != null:
+					logger.info(t, "calling.config.warn",
+						"Invalid standing_6 entry in %s" % cid, {"entry": str(entry_v)})
+				all_valid = false
+
+		var s9_v: Variant = defn.get("standing_9", [])
+		for entry_v in (s9_v if s9_v is Array else []):
+			if not (entry_v is Dictionary) or not validate_standing_9_entry(entry_v, calling_cfg):
+				if logger != null:
+					logger.info(t, "calling.config.warn",
+						"Invalid standing_9 entry in %s" % cid, {"entry": str(entry_v)})
+				all_valid = false
+
+	return all_valid

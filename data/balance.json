@@ -1502,7 +1502,53 @@
 						"Slower at pressing advantages"
 					],
 					"vector": "protector",
-					"family": "anchor"
+					"family": "anchor",
+					"standing_6": [
+						{
+							"id": "okyefo_kesee",
+							"display_name": "Ɔkyɛfo Kɛseɛ",
+							"english_scaffold": "Great Ward",
+							"descriptor": "deepens into greater protection and wider safeguarding",
+							"parent_calling": "okofor"
+						},
+						{
+							"id": "asa_okyefo",
+							"display_name": "Asa-Ɔkyɛfo",
+							"english_scaffold": "Storm Guard",
+							"descriptor": "hardens protection into forceful answer and counter-pressure",
+							"parent_calling": "okofor"
+						}
+					],
+					"standing_9": [
+						{
+							"id": "nyamedua_okyefo",
+							"display_name": "Nyamedua Ɔkyɛfo",
+							"english_scaffold": "Nyamedua's Ward",
+							"parent_standing_6": "okyefo_kesee",
+							"twi_provisional": false
+						},
+						{
+							"id": "grove_bastion",
+							"display_name": "",
+							"english_scaffold": "Grove Bastion",
+							"parent_standing_6": "okyefo_kesee",
+							"twi_provisional": true
+						},
+						{
+							"id": "storm_crown",
+							"display_name": "",
+							"english_scaffold": "Storm Crown",
+							"parent_standing_6": "asa_okyefo",
+							"twi_provisional": true
+						},
+						{
+							"id": "war_ward_sentinel",
+							"display_name": "",
+							"english_scaffold": "War-Ward Sentinel",
+							"parent_standing_6": "asa_okyefo",
+							"twi_provisional": true
+						}
+					]
 				},
 				"onyamesu": {
 					"display_name": "Onyame Su",
@@ -1517,7 +1563,53 @@
 						"Less reactive to shifting threats"
 					],
 					"vector": "pillar",
-					"family": "anchor"
+					"family": "anchor",
+					"standing_6": [
+						{
+							"id": "opanyin",
+							"display_name": "Opanyin",
+							"english_scaffold": "Elder",
+							"descriptor": "deepens care into communal memory, moral weight, and elder presence",
+							"parent_calling": "onyamesu"
+						},
+						{
+							"id": "sunsum_kyere",
+							"display_name": "Sunsum Kyerɛ",
+							"english_scaffold": "Soulbinder",
+							"descriptor": "turns sustaining care toward memory-binding, threshold tending, and the living-dead bridge",
+							"parent_calling": "onyamesu"
+						}
+					],
+					"standing_9": [
+						{
+							"id": "abosom_tena_ho",
+							"display_name": "Abosom Tena Hɔ",
+							"english_scaffold": "Abosom Anchor",
+							"parent_standing_6": "opanyin",
+							"twi_provisional": false
+						},
+						{
+							"id": "root_elder",
+							"display_name": "",
+							"english_scaffold": "Root Elder",
+							"parent_standing_6": "opanyin",
+							"twi_provisional": true
+						},
+						{
+							"id": "samanfo_nkyen",
+							"display_name": "Samanfo Nkyɛn",
+							"english_scaffold": "Ancestor Vessel",
+							"parent_standing_6": "sunsum_kyere",
+							"twi_provisional": false
+						},
+						{
+							"id": "bridge_of_names",
+							"display_name": "",
+							"english_scaffold": "Bridge of Names",
+							"parent_standing_6": "sunsum_kyere",
+							"twi_provisional": true
+						}
+					]
 				},
 				"aduro": {
 					"display_name": "Aduro",
@@ -1532,7 +1624,53 @@
 						"Breaks harder when fear peaks"
 					],
 					"vector": "vanguard",
-					"family": "edge"
+					"family": "edge",
+					"standing_6": [
+						{
+							"id": "asafo",
+							"display_name": "Asafo",
+							"english_scaffold": "War Captain",
+							"descriptor": "deepens into collective courage and war-company momentum",
+							"parent_calling": "aduro"
+						},
+						{
+							"id": "twaese",
+							"display_name": "Twaesɛ",
+							"english_scaffold": "Splitfang",
+							"descriptor": "turns force toward disruption, timing, and opening-breaking",
+							"parent_calling": "aduro"
+						}
+					],
+					"standing_9": [
+						{
+							"id": "asante_ohene_kobo",
+							"display_name": "Asante Ɔhene Kɔbɔ",
+							"english_scaffold": "Asante War-Chief",
+							"parent_standing_6": "asafo",
+							"twi_provisional": false
+						},
+						{
+							"id": "asafohene",
+							"display_name": "Asafohene",
+							"english_scaffold": "War Captain",
+							"parent_standing_6": "asafo",
+							"twi_provisional": false
+						},
+						{
+							"id": "red_fang",
+							"display_name": "",
+							"english_scaffold": "Red Fang",
+							"parent_standing_6": "twaese",
+							"twi_provisional": true
+						},
+						{
+							"id": "web_cleaver",
+							"display_name": "",
+							"english_scaffold": "Web-Cleaver",
+							"parent_standing_6": "twaese",
+							"twi_provisional": true
+						}
+					]
 				},
 				"sum_okwanfo": {
 					"display_name": "Sum Okwanfo",
@@ -1547,7 +1685,53 @@
 						"Lower direct confrontation output"
 					],
 					"vector": "opportunist",
-					"family": "edge"
+					"family": "edge",
+					"standing_6": [
+						{
+							"id": "ntontamfafo",
+							"display_name": "Ntontamfafo",
+							"english_scaffold": "Web-Passer",
+							"descriptor": "deepens concealment into web-path mastery and unseen passage",
+							"parent_calling": "sum_okwanfo"
+						},
+						{
+							"id": "sunsum_ahoma",
+							"display_name": "Sunsum Ahoma",
+							"english_scaffold": "Shadow Thread",
+							"descriptor": "leans into sabotage, hidden intervention, and surgical disruption",
+							"parent_calling": "sum_okwanfo"
+						}
+					],
+					"standing_9": [
+						{
+							"id": "veiled_passage",
+							"display_name": "",
+							"english_scaffold": "Veiled Passage",
+							"parent_standing_6": "ntontamfafo",
+							"twi_provisional": true
+						},
+						{
+							"id": "hidden_web",
+							"display_name": "",
+							"english_scaffold": "Hidden Web",
+							"parent_standing_6": "ntontamfafo",
+							"twi_provisional": true
+						},
+						{
+							"id": "shadow_web",
+							"display_name": "",
+							"english_scaffold": "Shadow Web",
+							"parent_standing_6": "sunsum_ahoma",
+							"twi_provisional": true
+						},
+						{
+							"id": "whisper_knot",
+							"display_name": "",
+							"english_scaffold": "Whisper Knot",
+							"parent_standing_6": "sunsum_ahoma",
+							"twi_provisional": true
+						}
+					]
 				},
 				"okomfo": {
 					"display_name": "Okomfo",
@@ -1562,7 +1746,53 @@
 						"Lower aggression expression"
 					],
 					"vector": "seeker",
-					"family": "sight"
+					"family": "sight",
+					"standing_6": [
+						{
+							"id": "kranimfo",
+							"display_name": "Kranimfo",
+							"english_scaffold": "Spirit Knower",
+							"descriptor": "deepens spirit-reading into omen authority and hidden-truth knowing",
+							"parent_calling": "okomfo"
+						},
+						{
+							"id": "ogyafo",
+							"display_name": "Ogyafo",
+							"english_scaffold": "Flame Keeper",
+							"descriptor": "turns insight toward sacred thresholds, ritual control, and keeping the flame",
+							"parent_calling": "okomfo"
+						}
+					],
+					"standing_9": [
+						{
+							"id": "spirit_sage",
+							"display_name": "",
+							"english_scaffold": "Spirit Sage",
+							"parent_standing_6": "kranimfo",
+							"twi_provisional": true
+						},
+						{
+							"id": "memory_listener",
+							"display_name": "",
+							"english_scaffold": "Memory Listener",
+							"parent_standing_6": "kranimfo",
+							"twi_provisional": true
+						},
+						{
+							"id": "ananse_kasa",
+							"display_name": "Ananse Kasa",
+							"english_scaffold": "Anansi's Voice",
+							"parent_standing_6": "ogyafo",
+							"twi_provisional": false
+						},
+						{
+							"id": "flame_of_thresholds",
+							"display_name": "",
+							"english_scaffold": "Flame of Thresholds",
+							"parent_standing_6": "ogyafo",
+							"twi_provisional": true
+						}
+					]
 				},
 				"kra_soro": {
 					"display_name": "Kra Soro",
@@ -1577,8 +1807,62 @@
 						"Reduced frontal durability"
 					],
 					"vector": "seeker",
-					"family": "sight"
+					"family": "sight",
+					"standing_6": [
+						{
+							"id": "okwansoani",
+							"display_name": "Ɔkwansoani",
+							"english_scaffold": "Pathfinder",
+							"descriptor": "deepens field-reading into route mastery and recon precision",
+							"parent_calling": "kra_soro"
+						},
+						{
+							"id": "wiemhwefo",
+							"display_name": "Wiemhwɛfo",
+							"english_scaffold": "Sky Watcher",
+							"descriptor": "turns field sense toward anticipation, range control, and far-seeing watch",
+							"parent_calling": "kra_soro"
+						}
+					],
+					"standing_9": [
+						{
+							"id": "sankofa_wanderer",
+							"display_name": "",
+							"english_scaffold": "Sankofa Wanderer",
+							"parent_standing_6": "okwansoani",
+							"twi_provisional": true
+						},
+						{
+							"id": "far_road_captain",
+							"display_name": "",
+							"english_scaffold": "Far Road Captain",
+							"parent_standing_6": "okwansoani",
+							"twi_provisional": true
+						},
+						{
+							"id": "star_watch",
+							"display_name": "",
+							"english_scaffold": "Star Watch",
+							"parent_standing_6": "wiemhwefo",
+							"twi_provisional": true
+						},
+						{
+							"id": "horizon_judge",
+							"display_name": "",
+							"english_scaffold": "Horizon Judge",
+							"parent_standing_6": "wiemhwefo",
+							"twi_provisional": true
+						}
+					]
 				}
+			},
+			"adjacency": {
+				"okofor":      ["onyamesu", "aduro"],
+				"aduro":       ["okofor", "sum_okwanfo"],
+				"sum_okwanfo": ["aduro", "kra_soro"],
+				"kra_soro":    ["sum_okwanfo", "okomfo"],
+				"okomfo":      ["kra_soro", "onyamesu"],
+				"onyamesu":    ["okomfo", "okofor"]
 			},
 			"absolute_fear_threshold_by_calling": {
 				"_comment": "Per-calling Absolute Fear threshold override. Default is data.emotion.drift.fear_threshold (80). Edge callings break sooner (aduro 75, sum_okwanfo 70). Anchor and Sight callings endure longer (onyamesu 85, okomfo 85).",
