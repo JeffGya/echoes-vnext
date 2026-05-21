@@ -44,7 +44,10 @@
 | **V2-MIG-001 / V2-MIG-002** — Save bridge + repair | Alignment | Done | `SaveSchema.gd`, `SaveService.gd` | V2 save root keys added additively alongside V1 aliases |
 | **V2-PROG-001** — Progression language rename | Alignment | Done | `FlowSanctumState`, snapshots | Standing/Step/Storyweight labels canonical |
 | **V2-PROG-002** — Calling seam unification | Alignment | Done | `calling-reference.md`, `EchoFactory` | 6 callings, Twi names documented as target |
+| **V2-PROG-003** — Vector expansion (4 → 10 virtue domains) | Alignment | Done | `VectorService.gd`, `balance.json`, `SaveService.gd` | 10 vector keys canonical; backfill repair on load |
+| **V2-PROG-004** — Calling V1 → V2 ID migration | Alignment | Done | `CallingService.gd`, `SaveService.gd`, `balance.json` | V2 calling IDs active; V1 IDs migrated on load |
 | **V2-PROG-006** — Maturity Expression | Foundation | Done | `MaturityExpressionService.gd` | `expression_band` → nascent/forming/grounded/whole; `presence_strength` 0.1–1.0 |
+| **V2-PROG-007** — Calling lattice: Standing-6 + Standing-9 data + adjacency ring | Foundation | Done | `balance.json` (12 S6 expressions, 24 S9 culminations, adjacency ring), `CallingService.gd` (4 new static functions), `ConfigService.gd` (config integrity guard on load), `CallingTests.gd` (11 new tests, 34 total), `calling-reference.md` | Standing-6/9 names from GDD §11 now in config. Adjacency data-driven. `validate_config_integrity()` called at balance load. Standing-9 `twi_provisional` flag for names needing cultural validation (14 of 24). Vector/archetype fit computation at S6 deferred to V2-PROG-009 — noted in that story's Notion page. |
 
 ---
 
@@ -104,8 +107,7 @@
 | Story | Wave | Priority | Notes |
 |-------|------|----------|-------|
 | **V2-DIRECTIVE-001** | Foundation | Next | Directive rewrite (Scout Carefully / Seek Signs) |
-| **V2-PROG-003** | Alignment | — | Vector expansion (4 → 10 virtue domains) |
-| **V2-PROG-004** | Alignment | — | Calling V1→V2 ID migration |
+| **V2-PROG-008** | Foundation | — | Calling lattice model (Standing-6 selection flow, runtime service) |
 
 ---
 

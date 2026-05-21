@@ -40,6 +40,18 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("calling/devoted_dominant_preferred_onyamesu",    Callable(CallingTests, "_test_devoted_preferred_onyamesu"))
 	runner.register_test("calling/mediator_dominant_preferred_okofor",     Callable(CallingTests, "_test_mediator_preferred_okofor"))
 	runner.register_test("calling/nurturer_dominant_preferred_onyamesu",   Callable(CallingTests, "_test_nurturer_preferred_onyamesu"))
+	# V2-PROG-007: Standing-6 / Standing-9 data + adjacency ring
+	runner.register_test("calling/standing_6_exists_for_all_callings",          Callable(CallingTests, "_test_standing_6_exists_for_all_callings"))
+	runner.register_test("calling/standing_6_entries_have_required_fields",     Callable(CallingTests, "_test_standing_6_entries_have_required_fields"))
+	runner.register_test("calling/standing_6_parent_matches_calling_id",        Callable(CallingTests, "_test_standing_6_parent_matches_calling_id"))
+	runner.register_test("calling/adjacency_ring_complete",                     Callable(CallingTests, "_test_adjacency_ring_complete"))
+	runner.register_test("calling/adjacency_lookup_correct_okofor",             Callable(CallingTests, "_test_adjacency_lookup_correct_okofor"))
+	runner.register_test("calling/adjacency_lookup_correct_kra_soro",           Callable(CallingTests, "_test_adjacency_lookup_correct_kra_soro"))
+	runner.register_test("calling/validator_rejects_invalid_standing_6_parent", Callable(CallingTests, "_test_validator_rejects_invalid_standing_6_parent"))
+	runner.register_test("calling/standing_9_count_per_calling",                Callable(CallingTests, "_test_standing_9_count_per_calling"))
+	runner.register_test("calling/standing_9_entries_have_required_fields",     Callable(CallingTests, "_test_standing_9_entries_have_required_fields"))
+	runner.register_test("calling/standing_9_parent_s6_references_valid_entry", Callable(CallingTests, "_test_standing_9_parent_s6_references_valid_entry"))
+	runner.register_test("calling/validator_rejects_invalid_standing_9_parent", Callable(CallingTests, "_test_validator_rejects_invalid_standing_9_parent"))
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -438,4 +450,178 @@ static func _test_nurturer_preferred_onyamesu() -> Dictionary:
 		return { "ok": false, "error": "Expected onyamesu=preferred for nurturer dominant, got: %s" % onyamesu.get("compatibility") }
 	if not bool(onyamesu.get("is_preferred", false)):
 		return { "ok": false, "error": "onyamesu.is_preferred should be true for nurturer dominant" }
+	return { "ok": true }
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# V2-PROG-007: Standing-6 / Standing-9 data + adjacency ring
+# All lattice data tests load from the real balance.json via ConfigService.
+# Validator rejection tests use inline stubs.
+# ────────────────────────────────────────────────────────────────────────────
+
+static func _load_real_calling_cfg() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal := cs.get_balance()
+	var data_v: Variant = bal.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var calling_v: Variant = data.get("calling", {})
+	return calling_v if calling_v is Dictionary else {}
+
+
+static func _test_standing_6_exists_for_all_callings() -> Dictionary:
+	var cfg  := _load_real_calling_cfg()
+	var defns_v: Variant = cfg.get("definitions", {})
+	var defns: Dictionary = defns_v if defns_v is Dictionary else {}
+	var all_ids: Array = ["okofor", "onyamesu", "aduro", "sum_okwanfo", "okomfo", "kra_soro"]
+	for cid in all_ids:
+		var defn_v: Variant = defns.get(cid, {})
+		var defn: Dictionary = defn_v if defn_v is Dictionary else {}
+		var s6_v: Variant = defn.get("standing_6", [])
+		var s6: Array = s6_v if s6_v is Array else []
+		if s6.size() != 2:
+			return { "ok": false, "error": "%s should have 2 standing_6 entries, got %d" % [cid, s6.size()] }
+	return { "ok": true }
+
+
+static func _test_standing_6_entries_have_required_fields() -> Dictionary:
+	var cfg  := _load_real_calling_cfg()
+	var defns_v: Variant = cfg.get("definitions", {})
+	var defns: Dictionary = defns_v if defns_v is Dictionary else {}
+	var required := ["id", "display_name", "english_scaffold", "descriptor", "parent_calling"]
+	for cid_v in defns:
+		var defn_v: Variant = defns.get(cid_v, {})
+		var defn: Dictionary = defn_v if defn_v is Dictionary else {}
+		var s6_v: Variant = defn.get("standing_6", [])
+		for entry_v in (s6_v if s6_v is Array else []):
+			if not (entry_v is Dictionary):
+				return { "ok": false, "error": "standing_6 entry in %s is not a Dictionary" % str(cid_v) }
+			for field in required:
+				if not entry_v.has(field):
+					return { "ok": false, "error": "standing_6 entry in %s missing field: %s" % [str(cid_v), field] }
+	return { "ok": true }
+
+
+static func _test_standing_6_parent_matches_calling_id() -> Dictionary:
+	var cfg  := _load_real_calling_cfg()
+	var defns_v: Variant = cfg.get("definitions", {})
+	var defns: Dictionary = defns_v if defns_v is Dictionary else {}
+	for cid_v in defns:
+		var cid: String = str(cid_v)
+		var defn_v: Variant = defns.get(cid, {})
+		var defn: Dictionary = defn_v if defn_v is Dictionary else {}
+		var s6_v: Variant = defn.get("standing_6", [])
+		for entry_v in (s6_v if s6_v is Array else []):
+			if entry_v is Dictionary:
+				var parent: String = str(entry_v.get("parent_calling", ""))
+				if parent != cid:
+					return { "ok": false, "error": "standing_6 entry '%s' in %s has wrong parent_calling: '%s'" % [str(entry_v.get("id", "")), cid, parent] }
+	return { "ok": true }
+
+
+static func _test_adjacency_ring_complete() -> Dictionary:
+	var cfg := _load_real_calling_cfg()
+	var adj_v: Variant = cfg.get("adjacency", {})
+	var adj: Dictionary = adj_v if adj_v is Dictionary else {}
+	var expected_ids := ["okofor", "onyamesu", "aduro", "sum_okwanfo", "okomfo", "kra_soro"]
+	if adj.size() != 6:
+		return { "ok": false, "error": "adjacency should have 6 callings, got %d" % adj.size() }
+	for cid in expected_ids:
+		if not adj.has(cid):
+			return { "ok": false, "error": "adjacency missing calling: %s" % cid }
+		var neighbours_v: Variant = adj.get(cid, [])
+		var neighbours: Array = neighbours_v if neighbours_v is Array else []
+		if neighbours.size() != 2:
+			return { "ok": false, "error": "%s should have 2 adjacency neighbours, got %d" % [cid, neighbours.size()] }
+	return { "ok": true }
+
+
+static func _test_adjacency_lookup_correct_okofor() -> Dictionary:
+	var cfg       := _load_real_calling_cfg()
+	var neighbours := CallingService.get_adjacent_callings("okofor", cfg)
+	if neighbours.size() != 2:
+		return { "ok": false, "error": "Expected 2 neighbours for okofor, got %d" % neighbours.size() }
+	if str(neighbours[0]) != "onyamesu" or str(neighbours[1]) != "aduro":
+		return { "ok": false, "error": "Expected [onyamesu, aduro], got %s" % str(neighbours) }
+	return { "ok": true }
+
+
+static func _test_adjacency_lookup_correct_kra_soro() -> Dictionary:
+	var cfg       := _load_real_calling_cfg()
+	var neighbours := CallingService.get_adjacent_callings("kra_soro", cfg)
+	if neighbours.size() != 2:
+		return { "ok": false, "error": "Expected 2 neighbours for kra_soro, got %d" % neighbours.size() }
+	if str(neighbours[0]) != "sum_okwanfo" or str(neighbours[1]) != "okomfo":
+		return { "ok": false, "error": "Expected [sum_okwanfo, okomfo], got %s" % str(neighbours) }
+	return { "ok": true }
+
+
+static func _test_validator_rejects_invalid_standing_6_parent() -> Dictionary:
+	var cfg   := _calling_cfg()
+	var bogus := { "id": "bogus_s6", "parent_calling": "completely_bogus_calling" }
+	if CallingService.validate_standing_6_entry(bogus, cfg):
+		return { "ok": false, "error": "Validator should reject entry with non-existent parent_calling" }
+	return { "ok": true }
+
+
+static func _test_standing_9_count_per_calling() -> Dictionary:
+	var cfg  := _load_real_calling_cfg()
+	var defns_v: Variant = cfg.get("definitions", {})
+	var defns: Dictionary = defns_v if defns_v is Dictionary else {}
+	var all_ids: Array = ["okofor", "onyamesu", "aduro", "sum_okwanfo", "okomfo", "kra_soro"]
+	for cid in all_ids:
+		var defn_v: Variant = defns.get(cid, {})
+		var defn: Dictionary = defn_v if defn_v is Dictionary else {}
+		var s9_v: Variant = defn.get("standing_9", [])
+		var s9: Array = s9_v if s9_v is Array else []
+		if s9.size() != 4:
+			return { "ok": false, "error": "%s should have 4 standing_9 entries, got %d" % [cid, s9.size()] }
+	return { "ok": true }
+
+
+static func _test_standing_9_entries_have_required_fields() -> Dictionary:
+	var cfg  := _load_real_calling_cfg()
+	var defns_v: Variant = cfg.get("definitions", {})
+	var defns: Dictionary = defns_v if defns_v is Dictionary else {}
+	var required := ["id", "english_scaffold", "parent_standing_6", "twi_provisional"]
+	for cid_v in defns:
+		var defn_v: Variant = defns.get(cid_v, {})
+		var defn: Dictionary = defn_v if defn_v is Dictionary else {}
+		var s9_v: Variant = defn.get("standing_9", [])
+		for entry_v in (s9_v if s9_v is Array else []):
+			if not (entry_v is Dictionary):
+				return { "ok": false, "error": "standing_9 entry in %s is not a Dictionary" % str(cid_v) }
+			for field in required:
+				if not entry_v.has(field):
+					return { "ok": false, "error": "standing_9 entry in %s missing field: %s" % [str(cid_v), field] }
+	return { "ok": true }
+
+
+static func _test_standing_9_parent_s6_references_valid_entry() -> Dictionary:
+	var cfg := _load_real_calling_cfg()
+	var defns_v: Variant = cfg.get("definitions", {})
+	var defns: Dictionary = defns_v if defns_v is Dictionary else {}
+	var s6_ids: Array = []
+	for defn_v in defns.values():
+		var defn: Dictionary = defn_v if defn_v is Dictionary else {}
+		for e_v in (defn.get("standing_6", []) if defn.get("standing_6", []) is Array else []):
+			if e_v is Dictionary:
+				s6_ids.append(str(e_v.get("id", "")))
+	for cid_v in defns:
+		var defn_v: Variant = defns.get(cid_v, {})
+		var defn: Dictionary = defn_v if defn_v is Dictionary else {}
+		var s9_v: Variant = defn.get("standing_9", [])
+		for entry_v in (s9_v if s9_v is Array else []):
+			if entry_v is Dictionary:
+				var parent_s6: String = str(entry_v.get("parent_standing_6", ""))
+				if not s6_ids.has(parent_s6):
+					return { "ok": false, "error": "standing_9 entry '%s' in %s has unresolvable parent_standing_6: '%s'" % [str(entry_v.get("id", "")), str(cid_v), parent_s6] }
+	return { "ok": true }
+
+
+static func _test_validator_rejects_invalid_standing_9_parent() -> Dictionary:
+	var cfg   := _load_real_calling_cfg()
+	var bogus := { "id": "bogus_s9", "parent_standing_6": "completely_bogus_s6_id", "twi_provisional": true }
+	if CallingService.validate_standing_9_entry(bogus, cfg):
+		return { "ok": false, "error": "Validator should reject entry with non-existent parent_standing_6" }
 	return { "ok": true }
