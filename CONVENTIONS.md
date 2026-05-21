@@ -447,6 +447,12 @@ Crash-safe: write to `.tmp` → rename. Additive repair on load (adds missing fi
 | per echo | `woven_threads` | Array | `[]` | V2-WEAVE-002: accepted Threads integrated into Echo identity |
 | per echo | `weave_memory_marks` | Array | `[]` | V2-WEAVE-002: deferred rite memory marks |
 
+**V2-CONTINUITY-001 additive keys (added 2026-05-21):**
+
+| Location | Key | Type | Default | Purpose |
+|---|---|---|---|---|
+| `sanctum` | `rejection_counts` | Dict | `{}` | V2-CONTINUITY-001: per-echo Thread rejection counts for escalating penalty calculation |
+
 **V2-ECONOMY-001 additive keys (added 2026-05-10):**
 
 | Location | Key | Type | Default | Purpose |
@@ -455,6 +461,33 @@ Crash-safe: write to `.tmp` → rename. Additive repair on load (adds missing fi
 
 **Vow key (canonical):** `sanctum.vows` — Dict keyed by `vow_id` → `{ tier: int, discovered_realm: String }`.
 The old `unlocked_vows: []` Array key is superseded. SaveService repair migrates old saves on load.
+
+### ContinuityService (`core/sanctum/ContinuityService.gd`) — V2-CONTINUITY-001
+Pure-static `RefCounted`. Single choke point for all Continuity mutations.
+
+- `get_points(save_data) -> int` — reads `save_data["sanctum"]["continuity"]`
+- `add_points(save_data, delta, reason, logger, t) -> void` — adds delta; clamps to ≥ 0; logs `sanctum.continuity.change`
+- `apply_penalty(save_data, delta, reason, logger, t) -> void` — subtracts delta; clamps to ≥ 0
+- `apply_reject_penalty(save_data, echo_id, cfg, logger, t) -> void` — escalating penalty per echo, capped by config; increments `sanctum.rejection_counts[echo_id]`
+- `get_echo_rejection_count(save_data, echo_id) -> int` — reads `sanctum.rejection_counts.get(echo_id, 0)`
+- `get_band(save_data, bands_cfg) -> String` — returns band name for current continuity_points (e.g. `"awakening"`, `"habit"`, `"role"`, `"governance"`, `"differentiation"`, `"cultural_maturity"`)
+
+**Save keys (added V2-CONTINUITY-001):**
+- `sanctum.continuity` — `int`, default `0`. Never shown as raw number to player.
+- `sanctum.rejection_counts` — `Dict` keyed by `echo_id`, default `{}`. Tracks per-echo rejection count for escalating penalty calculation.
+
+**Continuity drivers:**
+| Event | Delta | Notes |
+|-------|-------|-------|
+| Thread accept (Weaving Rite) | +5 | Primary growth driver |
+| Thread reject | Escalating per echo | Capped; penalises repeated rejection by the same echo |
+| Vow break | −3 | Costs continuity when the house breaks its word |
+
+**Band config:** `balance.json → data.continuity.bands` — Array of `{ name, threshold }` objects sorted ascending by threshold. Six bands: Awakening (0), Habit (5), Role (15), Governance (30), Differentiation (50), Cultural Maturity (75).
+
+**Gating:** `InstitutionService.get_snapshot_data()` adds `blocker_reason: String` per institution entry when `continuity_points < threshold`. UI reads this field to show lock state — no other gating mechanism exists at this layer.
+
+**Visual:** `ContinuityFlameControl` (`ui/screens/sanctum/ContinuityFlameControl.gd`) — ember-toned flame indicator in TitleRow beside Sanctum name. API: `set_band(band: String)`, `set_settled(t: float)`. Hidden when `continuity_points == 0`. Asset migration path: drop `res://ui/assets/continuity/flame_{band}.png` — auto-activates. See `docs/continuity-visual-design.md` for full design rationale, band characters, and Ase Flame distinction.
 
 ### Economy Settlement (`core/economy/EconomyService.gd` + `EconomyAccrualService.gd`)
 - No frame-based accrual. **Settle before every Ase spend.**

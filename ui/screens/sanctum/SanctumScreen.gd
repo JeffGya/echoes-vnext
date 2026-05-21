@@ -9,6 +9,7 @@ const ThreadSlotItemScene: PackedScene = preload("res://ui/components/ThreadSlot
 const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.tscn")
 
 @onready var title_label: Label = %TitleLabel
+@onready var _continuity_flame: ContinuityFlameControl = %ContinuityFlame  # V2-CONTINUITY-001
 @onready var vow_mantra_label: Label = %VowMantraLabel
 @onready var _vow_compliance_label: Label = %VowComplianceLabel
 @onready var guidance_label: Label = %GuidanceLabel
@@ -195,6 +196,14 @@ func _render() -> void:
 	title_label.text = sanctum_name if not sanctum_name.is_empty() else suggested
 	guidance_label.text = "Resume the active trial from the courtyard." if has_active_realm else "Choose where the house reaches outward next."
 	ase_kicker_label.text = "Ase"
+
+	# V2-CONTINUITY-001: Household Fire indicator in TitleRow.
+	var cont_pts  := int(data.get("continuity_points", 0))
+	var cont_band := str(data.get("continuity_band", "awakening"))
+	_continuity_flame.visible = cont_pts > 0
+	if cont_pts > 0:
+		_continuity_flame.set_band(cont_band)
+		_continuity_flame.set_settled(float(data.get("continuity_band_fill", 0.0)))
 
 	if not active_vow.is_empty():
 		var proverb_twi := str(active_vow.get("proverb_twi", ""))
@@ -975,13 +984,19 @@ func _render_institutions(data: Dictionary) -> void:
 			inner_row.add_child(btn)
 			_inst_list.add_child(panel)
 		else:
-			# Threshold not met — disabled row with lock icon
+			# Threshold not met — disabled row with lock icon + blocker reason.
+			var _blocker := str(inst.get("blocker_reason", ""))
 			var panel := _build_inst_row_label(display, identity, "", false)
 			var inner_row: HBoxContainer = panel.get_meta("inner_row")
 			var lock_lbl := Label.new()
 			lock_lbl.text = "🔒"
 			lock_lbl.theme_type_variation = &"SanctumMuted"
 			inner_row.add_child(lock_lbl)
+			if not _blocker.is_empty():
+				var blocker_lbl := Label.new()
+				blocker_lbl.text = _blocker
+				blocker_lbl.theme_type_variation = &"SanctumMuted"
+				inner_row.add_child(blocker_lbl)
 			_inst_list.add_child(panel)
 
 

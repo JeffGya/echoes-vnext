@@ -224,14 +224,24 @@ static func find_institution_for_echo(echo_id: String, save_data: Dictionary) ->
 
 static func get_snapshot_data(save_data: Dictionary, inst_cfg: Dictionary, _t: int) -> Array:
 	var result: Array = []
+	var cont_current := int((_get_sanctum(save_data) as Dictionary).get("continuity", 0))
 	for inst_id in ALL_INSTITUTIONS:
 		var inst: Dictionary = _get_inst(inst_id, save_data)
+		var _unlocked := bool(inst.get("unlocked", false))
+		var _candidate := is_candidate(inst_id, save_data, inst_cfg)
+		# V2-CONTINUITY-001: surface blocker reason when threshold unmet.
+		var _blocker := ""
+		if not _unlocked and not _candidate:
+			var _threshold := int((inst_cfg.get(inst_id, {}) as Dictionary).get("unlock_continuity_threshold", 999))
+			if cont_current < _threshold:
+				_blocker = "The ground is not ready"
 		result.append({
-			"id":          inst_id,
-			"unlocked":    bool(inst.get("unlocked", false)),
-			"condition":   str(inst.get("condition", CONDITION_NEGLECTED)),
+			"id":           inst_id,
+			"unlocked":     _unlocked,
+			"condition":    str(inst.get("condition", CONDITION_NEGLECTED)),
 			"occupant_ids": inst.get("occupant_ids", []).duplicate(),
-			"is_candidate": is_candidate(inst_id, save_data, inst_cfg),
+			"is_candidate": _candidate,
+			"blocker_reason": _blocker,
 		})
 	return result
 

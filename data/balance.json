@@ -2009,6 +2009,21 @@
 			},
 			"sanctum_max_barkers": 2
 		},
+		"continuity": {
+			"thread_integration_points":  5,
+			"thread_reject_base_penalty": 2,
+			"thread_reject_max_penalty":  10,
+			"vow_break_penalty":          3,
+			"pulse_fallout_penalty":      2,
+			"bands": [
+				{ "name": "awakening",         "min_points": 0  },
+				{ "name": "habit",             "min_points": 5  },
+				{ "name": "role",              "min_points": 15 },
+				{ "name": "governance",        "min_points": 30 },
+				{ "name": "differentiation",   "min_points": 50 },
+				{ "name": "cultural_maturity", "min_points": 75 }
+			]
+		},
 		"institutions": {
 			"_comment_foundation": "Foundation exception: Hearth + Training Grounds unlock early without virtue gate. Fuller gating deferred to V2-CONTINUITY-001+.",
 			"hearth": {

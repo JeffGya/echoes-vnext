@@ -91,12 +91,19 @@
 
 ---
 
+## Foundation Wave — Continuity Systems
+
+| Story | Wave | Status | Ships | Notes |
+|-------|------|--------|-------|-------|
+| **V2-CONTINUITY-001** — Continuity Flame + Institution Gating | Foundation | Done | `ContinuityService.gd`, `ContinuityFlameControl.gd`, `FlowSanctumState.gd` (continuity_points + continuity_band in snapshot data), `InstitutionService.gd` (blocker_reason), `SaveSchema.gd` (sanctum.rejection_counts), `balance.json` (data.continuity.bands), `docs/continuity-visual-design.md` | Household Fire visual system — 6 bands (Awakening → Cultural Maturity), ember-toned TitleRow indicator distinct from Ase Flame. ContinuityService is single choke for all mutations. Thread accept +5, thread reject escalating (capped), vow break −3. Institution virtue gating via blocker_reason. Band transition ceremonial moment deferred to V2-CONTINUITY-003. Visual design record: `docs/continuity-visual-design.md`. |
+
+---
+
 ## Upcoming (Foundation — next pickup order)
 
 | Story | Wave | Priority | Notes |
 |-------|------|----------|-------|
-| **V2-CONTINUITY-001** | Foundation | Next | Fuller Continuity progression spine + institution virtue gating |
-| **V2-DIRECTIVE-001** | Foundation | — | Directive rewrite (Scout Carefully / Seek Signs) |
+| **V2-DIRECTIVE-001** | Foundation | Next | Directive rewrite (Scout Carefully / Seek Signs) |
 | **V2-PROG-003** | Alignment | — | Vector expansion (4 → 10 virtue domains) |
 | **V2-PROG-004** | Alignment | — | Calling V1→V2 ID migration |
 
