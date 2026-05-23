@@ -62,6 +62,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("calling/s9_options_empty_for_unknown_id",          Callable(CallingTests, "_test_s9_options_empty_for_unknown_id"))
 	runner.register_test("calling/count_integrity_passes_on_real_config",    Callable(CallingTests, "_test_count_integrity_passes_on_real_config"))
 	runner.register_test("calling/count_integrity_fails_for_wrong_s6_count", Callable(CallingTests, "_test_count_integrity_fails_for_wrong_s6_count"))
+	runner.register_test("calling/count_integrity_catches_cross_calling_s9_duplicate", Callable(CallingTests, "_test_count_integrity_catches_cross_calling_s9_duplicate"))
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -732,4 +733,25 @@ static func _test_count_integrity_fails_for_wrong_s6_count() -> Dictionary:
 	cfg["definitions"] = defns
 	if CallingService.validate_count_integrity(cfg, null, 0):
 		return { "ok": false, "error": "validate_count_integrity should return false when okofor has only 1 S6 entry" }
+	return { "ok": true }
+
+
+static func _test_count_integrity_catches_cross_calling_s9_duplicate() -> Dictionary:
+	# Reproduces the reviewer-identified gap: an S9 entry for okyefo_kesee placed
+	# inside aduro's standing_9 block gives a global count of 3 for that S6 expression.
+	# The old local-only scan would have missed this; the global scan must catch it.
+	var cfg := _load_real_calling_cfg()
+	var defns_v: Variant = cfg.get("definitions", {})
+	var defns: Dictionary = defns_v if defns_v is Dictionary else {}
+	var aduro_v: Variant = defns.get("aduro", {})
+	var aduro: Dictionary = (aduro_v if aduro_v is Dictionary else {}).duplicate(true)
+	var aduro_s9_v: Variant = aduro.get("standing_9", [])
+	var aduro_s9: Array = (aduro_s9_v if aduro_s9_v is Array else []).duplicate(true)
+	# Inject a rogue S9 entry that claims to belong to okofor's S6 expression
+	aduro_s9.append({ "id": "rogue_s9", "parent_standing_6": "okyefo_kesee", "twi_provisional": true, "english_scaffold": "Rogue" })
+	aduro["standing_9"] = aduro_s9
+	defns["aduro"] = aduro
+	cfg["definitions"] = defns
+	if CallingService.validate_count_integrity(cfg, null, 0):
+		return { "ok": false, "error": "validate_count_integrity should catch cross-calling S9 duplicate (global count = 3 for okyefo_kesee)" }
 	return { "ok": true }
