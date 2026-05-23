@@ -156,6 +156,58 @@ static func confirm_calling(
 	return chosen_calling_id
 
 
+## Returns the two Standing-6 expressions for a given foundational calling.
+## Returns [] for an unknown calling_id — no crash.
+##
+## Return shape (raw from config — each entry):
+##   id              String   — canonical S6 expression ID
+##   display_name    String   — Twi name (may be empty if twi_provisional)
+##   english_scaffold String  — English scaffold name
+##   descriptor      String   — one-line description of the expression
+##   parent_calling  String   — the foundational calling this expression belongs to
+##
+## Note: this is a pure data getter. Entry shape validation is validate_standing_6_entry()'s job.
+## Eligibility (standing >= 6) is always checked by the caller — not here.
+static func get_standing_6_options(calling_id: String, calling_cfg: Dictionary) -> Array:
+	var defns_v: Variant = calling_cfg.get("definitions", {})
+	var defns: Dictionary = defns_v if defns_v is Dictionary else {}
+	var defn_v: Variant = defns.get(calling_id, {})
+	var defn: Dictionary = defn_v if defn_v is Dictionary else {}
+	var s6_v: Variant = defn.get("standing_6", [])
+	return s6_v if s6_v is Array else []
+
+
+## Returns the full 6-option Standing-6 selection pool for an echo.
+## Pool: 2 entries from the echo's own confirmed calling + 2 from each of the 2 adjacent callings.
+##
+## Anchor resolution:
+##   1. echo["calling"] if non-empty and not "uncalled"
+##   2. echo["calling_origin"] as fallback
+##   3. Returns [] if both resolve to "" or "uncalled" — see design contract below.
+##
+## Return shape: Array of S6 entry dicts (raw from config, same as get_standing_6_options).
+## Downstream callers (V2-PROG-009, V2-PROG-012) own eligibility gating.
+static func compute_standing_6_pool(echo: Dictionary, calling_cfg: Dictionary) -> Array:
+	var calling: String = str(echo.get("calling", ""))
+	if calling.is_empty() or calling == "uncalled":
+		calling = str(echo.get("calling_origin", ""))
+
+	if calling.is_empty() or calling == "uncalled":
+		# Design contract: uncalled echo at S6 → empty pool.
+		# Intended resolution: forced confirmation screen (Option C) triggered by caller before
+		# invoking this function. Fear accumulation for late callings is also deferred design debt.
+		# Do NOT auto-confirm calling_origin here. See V2-PROG-008 plan.
+		return []
+
+	var pool: Array = []
+	pool.append_array(get_standing_6_options(calling, calling_cfg))
+	var neighbours: Array = get_adjacent_callings(calling, calling_cfg)
+	for neighbour_v in neighbours:
+		var neighbour: String = str(neighbour_v)
+		pool.append_array(get_standing_6_options(neighbour, calling_cfg))
+	return pool
+
+
 ## Returns the two adjacent calling IDs in the adjacency ring for calling_id.
 ## Returns [] if calling_id is not present in the adjacency config.
 static func get_adjacent_callings(calling_id: String, calling_cfg: Dictionary) -> Array:
@@ -163,6 +215,34 @@ static func get_adjacent_callings(calling_id: String, calling_cfg: Dictionary) -
 	var adj: Dictionary = adj_v if adj_v is Dictionary else {}
 	var neighbours_v: Variant = adj.get(calling_id, [])
 	return neighbours_v if neighbours_v is Array else []
+
+
+## Returns the two Standing-9 culminations for a given Standing-6 expression ID.
+## Returns [] for an unknown s6_id — no crash.
+##
+## Implementation: inline scan across all calling definitions (O(6 × 4) = 24 reads max).
+## A flat lookup map is not used — this function is called at most a handful of times per session
+## and the scan cost is negligible.
+##
+## Return shape (raw from config — each entry):
+##   id               String   — canonical S9 culmination ID
+##   display_name     String   — Twi name (empty when twi_provisional = true)
+##   english_scaffold  String   — English scaffold name
+##   parent_standing_6 String   — the S6 expression this culmination belongs to
+##   twi_provisional  bool     — true when Twi name needs cultural validation before ship
+static func get_standing_9_options(s6_id: String, calling_cfg: Dictionary) -> Array:
+	var defns_v: Variant = calling_cfg.get("definitions", {})
+	var defns: Dictionary = defns_v if defns_v is Dictionary else {}
+	var result: Array = []
+	for cid_v in defns:
+		var defn_v: Variant = defns.get(cid_v, {})
+		var defn: Dictionary = defn_v if defn_v is Dictionary else {}
+		var s9_v: Variant = defn.get("standing_9", [])
+		var s9: Array = s9_v if s9_v is Array else []
+		for entry_v in s9:
+			if entry_v is Dictionary and str(entry_v.get("parent_standing_6", "")) == s6_id:
+				result.append(entry_v)
+	return result
 
 
 ## Returns true if entry["parent_calling"] is a recognised foundational calling.
@@ -194,6 +274,53 @@ static func validate_standing_9_entry(entry: Dictionary, calling_cfg: Dictionary
 			if expr_v is Dictionary and str(expr_v.get("id", "")) == parent_s6:
 				return true
 	return false
+
+
+## Validates that every calling has exactly 2 Standing-6 entries,
+## and every S6 expression has exactly 2 Standing-9 entries.
+## Logs a warning for each miscounted entry. Returns true only if all counts are correct.
+##
+## This is a COUNT-only guard. Shape/parent-ref validation is validate_config_integrity()'s job.
+## Both are called at balance load in ConfigService.
+static func validate_count_integrity(calling_cfg: Dictionary, logger, t: int) -> bool:
+	var all_valid := true
+	var defns_v: Variant = calling_cfg.get("definitions", {})
+	var defns: Dictionary = defns_v if defns_v is Dictionary else {}
+	var all_ids_v: Variant = calling_cfg.get("all_callings", [])
+	var all_ids: Array = all_ids_v if all_ids_v is Array else []
+
+	for cid_v in all_ids:
+		var cid: String = str(cid_v)
+		var defn_v: Variant = defns.get(cid, {})
+		var defn: Dictionary = defn_v if defn_v is Dictionary else {}
+		var s6_v: Variant = defn.get("standing_6", [])
+		var s6: Array = s6_v if s6_v is Array else []
+
+		if s6.size() != 2:
+			if logger != null:
+				logger.info(t, "calling.config.warn",
+					"Expected 2 standing_6 entries for %s, got %d" % [cid, s6.size()], {})
+			all_valid = false
+
+		for expr_v in s6:
+			if not (expr_v is Dictionary):
+				continue
+			var s6_id: String = str(expr_v.get("id", ""))
+			if s6_id.is_empty():
+				continue
+			var s9_v: Variant = defn.get("standing_9", [])
+			var s9: Array = s9_v if s9_v is Array else []
+			var count: int = 0
+			for s9_entry_v in s9:
+				if s9_entry_v is Dictionary and str(s9_entry_v.get("parent_standing_6", "")) == s6_id:
+					count += 1
+			if count != 2:
+				if logger != null:
+					logger.info(t, "calling.config.warn",
+						"Expected 2 standing_9 entries for S6 '%s' in %s, got %d" % [s6_id, cid, count], {})
+				all_valid = false
+
+	return all_valid
 
 
 ## Validates all standing_6 and standing_9 entries in calling_cfg.

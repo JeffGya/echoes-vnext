@@ -143,7 +143,7 @@ Higher-Standing Echoes let **calling / identity consistency lead** over situatio
 
 Two expressions per foundational calling. Selection pool at S6 = 2 from own calling + 2 from each adjacent calling = 6 total options. Adjacency ring governs availability; vectors provide the secondary fit signal (V2-PROG-009 work).
 
-Data in `balance.json data.calling.definitions.[id].standing_6`. Queryable via calling definition block — no dedicated service function yet (V2-PROG-008).
+Data in `balance.json data.calling.definitions.[id].standing_6`. Queryable via `CallingService` (V2-PROG-008 ✅ Done — see API table below).
 
 | Calling | ID | Twi name | English scaffold | Descriptor |
 |---|---|---|---|---|
@@ -194,6 +194,31 @@ Data in `balance.json data.calling.definitions.[id].standing_9`.
 | `opanyin` | `root_elder` | _(needs Twi)_ | Root Elder | true |
 | `sunsum_kyere` | `samanfo_nkyen` | Samanfo Nkyɛn | Ancestor Vessel | false |
 | `sunsum_kyere` | `bridge_of_names` | _(needs Twi)_ | Bridge of Names | true |
+
+---
+
+## CallingService API (V2-PROG-008 ✅ Done)
+
+All functions are pure static — no save writes, no RNG, no OS time. Eligibility gating is always the caller's responsibility.
+
+| Function | Returns | On unknown input |
+|---|---|---|
+| `get_standing_6_options(calling_id, cfg)` | `Array[Dict]` — S6 entry dicts (`id`, `display_name`, `english_scaffold`, `descriptor`, `parent_calling`) | `[]`, no crash |
+| `compute_standing_6_pool(echo, cfg)` | `Array[Dict]` — 6 entries (own 2 + adj 2 + adj 2). Anchor: `echo["calling"]` → fallback `echo["calling_origin"]` | `[]` if both unresolvable |
+| `get_standing_9_options(s6_id, cfg)` | `Array[Dict]` — S9 entry dicts (`id`, `display_name`, `english_scaffold`, `parent_standing_6`, `twi_provisional`) | `[]`, no crash |
+| `validate_count_integrity(cfg, logger, t)` | `bool` — `true` if every calling has exactly 2 S6 entries and every S6 expression has exactly 2 S9 entries | `false` + logged warnings |
+
+Also available (V2-PROG-007):
+
+| Function | Returns | On unknown input |
+|---|---|---|
+| `get_adjacent_callings(calling_id, cfg)` | `Array[String]` — the 2 ring neighbours | `[]` |
+| `validate_config_integrity(cfg, logger, t)` | `bool` — shape + parent-ref validation | `false` + logged warnings |
+| `validate_count_integrity(cfg, logger, t)` | `bool` — count validation (S6 = 2, S9 = 2) | `false` + logged warnings |
+
+Both integrity guards are called at balance load via `ConfigService.load_balance()`.
+
+**V2-PROG-009 caller contract:** `compute_standing_6_pool` is the primary entry point for the S6 selection UI. `get_standing_9_options` is called per-option to show culmination previews. PROG-009 owns all eligibility gating and result projection — CallingService returns raw config entry dicts unchanged.
 
 ---
 
