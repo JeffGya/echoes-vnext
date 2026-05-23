@@ -304,7 +304,7 @@ static func apply_fear_delta(
 ## Ensures echo["emotion"] exists and all 4 default fields are present.
 ## Does NOT overwrite fields that are already set.
 static func _ensure_emotion_block(echo: Dictionary) -> void:
-	if not echo.has("emotion"):
+	if not echo.has("emotion") or not (echo["emotion"] is Dictionary):
 		echo["emotion"] = DEFAULTS.duplicate()
 		return
 	for key in DEFAULTS:

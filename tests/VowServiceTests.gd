@@ -88,6 +88,8 @@ static func _make_cfg() -> Dictionary:
 						"vow_name":        "Vow of Collective Counsel",
 						"benefit_label":   "Full party deployments (3+) gain fear resistance.",
 						"tradeoff_label":  "Small deployments incur a fear penalty.",
+						"condition_type":  "party_size",
+						"condition":       { "party_size_min": 3 },
 						"benefit":         { "party_size_threshold": 3, "fear_resistance_bonus": 15 },
 						"tradeoff":        { "small_party_fear_penalty": 10 },
 						"tier_effects":    { "1": { "multiplier": 1.0 }, "2": { "multiplier": 1.5 } },
