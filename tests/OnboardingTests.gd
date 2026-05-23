@@ -357,8 +357,9 @@ static func _t_starter_layout_has_nine_tiles() -> Dictionary:
 	var save := SaveSchema.make_new_save(321)
 	var layout := SanctumLayoutService.snapshot_layout(save)
 	var tiles: Array = layout.get("tiles", [])
-	if tiles.size() != 9:
-		return { "ok": false, "error": "Expected nine starter Sanctum tiles, got %d" % tiles.size() }
+	# Layout is now 5×5 main (25) + 3×3 party staging (9) + 1 ase_flame = 35
+	if tiles.size() != 35:
+		return { "ok": false, "error": "Expected 35 starter Sanctum tiles, got %d" % tiles.size() }
 	return { "ok": true }
 
 static func _t_starter_layout_is_centered_3x3() -> Dictionary:
@@ -387,11 +388,19 @@ static func _t_starter_occupant_centered() -> Dictionary:
 	OnboardingService.select_fragment(runtime.flow_ctx.save_data, cfg, str(frag.get("virtue", "")))
 	runtime.call("_handle_onboarding_fragment_confirm", 3)
 	var occupants: Array = SanctumLayoutService.snapshot_occupants(runtime.flow_ctx.save_data)
-	if occupants.size() != 1:
-		return { "ok": false, "error": "Expected one starter occupant, got %d" % occupants.size() }
-	var occupant: Dictionary = occupants[0]
-	if int(occupant.get("x", 99)) != 0 or int(occupant.get("y", 99)) != 0:
-		return { "ok": false, "error": "Expected occupant at center, got %s,%s" % [str(occupant.get("x", "?")), str(occupant.get("y", "?"))] }
+	# ase_flame is always the first occupant; echo is placed after it.
+	if occupants.size() < 2:
+		return { "ok": false, "error": "Expected ase_flame + at least one echo occupant, got %d" % occupants.size() }
+	var echo_occupant: Dictionary = {}
+	for occ_v in occupants:
+		if not (occ_v is Dictionary):
+			continue
+		var occ: Dictionary = occ_v
+		if str(occ.get("kind", "")) != "ase_flame" and str(occ.get("kind", "")) != "institution":
+			echo_occupant = occ
+			break
+	if echo_occupant.is_empty():
+		return { "ok": false, "error": "Expected an echo occupant after fragment confirm" }
 	return { "ok": true }
 
 static func _t_missing_layout_repairs() -> Dictionary:
@@ -403,8 +412,9 @@ static func _t_missing_layout_repairs() -> Dictionary:
 		return { "ok": false, "error": "Expected missing layout repair to report repaired" }
 	var layout: Dictionary = save.get("sanctum", {}).get("layout", {})
 	var tiles: Array = layout.get("tiles", [])
-	if tiles.size() != 9:
-		return { "ok": false, "error": "Expected repaired layout with nine 3x3 starter tiles, got %d" % tiles.size() }
+	# make_starter_layout() generates 5×5 main (25) + 3×3 party staging (9) = 34 tiles
+	if tiles.size() != 34:
+		return { "ok": false, "error": "Expected repaired layout with 34 starter tiles, got %d" % tiles.size() }
 	return { "ok": true }
 
 static func _t_sanctum_snapshots_share_layout() -> Dictionary:

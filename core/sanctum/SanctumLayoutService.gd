@@ -180,11 +180,11 @@ static func ensure_starter_occupant(save_data: Dictionary, roster: Array = [], a
 			var base_cell := Vector2i(int(pos.get("x", 0)), int(pos.get("y", 0)))
 			cell = Vector2i(base_cell.x + (echo_index % 3) - 1, base_cell.y + 1)
 		elif party_set.has(echo_id):
-			# Party member — staged in the 3×3 staging area below the main sanctum.
-			cell = Vector2i((echo_index % 3) - 1, PARTY_Y_START)
+			# Party member — staged in the 3×3 staging area; overflow into deeper rows.
+			cell = Vector2i((echo_index % 3) - 1, PARTY_Y_START + (echo_index / 3))
 		else:
-			# Roaming echo — row above Ase Flame (y-1) to avoid overlapping it.
-			cell = Vector2i((echo_index % 3) - 1, ASE_FLAME_CELL.y - 1)
+			# Roaming echo — rows above Ase Flame; overflow into higher rows.
+			cell = Vector2i((echo_index % 3) - 1, ASE_FLAME_CELL.y - 1 - (echo_index / 3))
 
 		# Compute morale_tier at render time (not stored in save).
 		var morale_tier := "steady"
