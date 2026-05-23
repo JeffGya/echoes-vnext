@@ -52,6 +52,16 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("calling/standing_9_entries_have_required_fields",     Callable(CallingTests, "_test_standing_9_entries_have_required_fields"))
 	runner.register_test("calling/standing_9_parent_s6_references_valid_entry", Callable(CallingTests, "_test_standing_9_parent_s6_references_valid_entry"))
 	runner.register_test("calling/validator_rejects_invalid_standing_9_parent", Callable(CallingTests, "_test_validator_rejects_invalid_standing_9_parent"))
+	# V2-PROG-008: Standing-6 / Standing-9 service query functions
+	runner.register_test("calling/s6_options_returns_2_per_calling",         Callable(CallingTests, "_test_s6_options_returns_2_per_calling"))
+	runner.register_test("calling/s6_pool_returns_6_for_confirmed_echo",     Callable(CallingTests, "_test_s6_pool_returns_6_for_confirmed_echo"))
+	runner.register_test("calling/s6_pool_falls_back_to_calling_origin",     Callable(CallingTests, "_test_s6_pool_falls_back_to_calling_origin"))
+	runner.register_test("calling/s6_pool_returns_empty_for_uncalled_echo",  Callable(CallingTests, "_test_s6_pool_returns_empty_for_uncalled_echo"))
+	runner.register_test("calling/s9_options_returns_2_per_s6",              Callable(CallingTests, "_test_s9_options_returns_2_per_s6"))
+	runner.register_test("calling/s6_options_empty_for_unknown_id",          Callable(CallingTests, "_test_s6_options_empty_for_unknown_id"))
+	runner.register_test("calling/s9_options_empty_for_unknown_id",          Callable(CallingTests, "_test_s9_options_empty_for_unknown_id"))
+	runner.register_test("calling/count_integrity_passes_on_real_config",    Callable(CallingTests, "_test_count_integrity_passes_on_real_config"))
+	runner.register_test("calling/count_integrity_fails_for_wrong_s6_count", Callable(CallingTests, "_test_count_integrity_fails_for_wrong_s6_count"))
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -624,4 +634,102 @@ static func _test_validator_rejects_invalid_standing_9_parent() -> Dictionary:
 	var bogus := { "id": "bogus_s9", "parent_standing_6": "completely_bogus_s6_id", "twi_provisional": true }
 	if CallingService.validate_standing_9_entry(bogus, cfg):
 		return { "ok": false, "error": "Validator should reject entry with non-existent parent_standing_6" }
+	return { "ok": true }
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# V2-PROG-008: Standing-6 / Standing-9 service query functions
+# ────────────────────────────────────────────────────────────────────────────
+
+static func _test_s6_options_returns_2_per_calling() -> Dictionary:
+	var cfg := _load_real_calling_cfg()
+	var all_ids := ["okofor", "onyamesu", "aduro", "sum_okwanfo", "okomfo", "kra_soro"]
+	for cid in all_ids:
+		var opts := CallingService.get_standing_6_options(cid, cfg)
+		if opts.size() != 2:
+			return { "ok": false, "error": "%s: expected 2 S6 options, got %d" % [cid, opts.size()] }
+	return { "ok": true }
+
+
+static func _test_s6_pool_returns_6_for_confirmed_echo() -> Dictionary:
+	var cfg  := _load_real_calling_cfg()
+	var echo := { "calling": "okofor", "calling_origin": "aduro" }
+	var pool := CallingService.compute_standing_6_pool(echo, cfg)
+	if pool.size() != 6:
+		return { "ok": false, "error": "Expected pool size 6 for confirmed calling, got %d" % pool.size() }
+	return { "ok": true }
+
+
+static func _test_s6_pool_falls_back_to_calling_origin() -> Dictionary:
+	var cfg  := _load_real_calling_cfg()
+	var echo := { "calling": "", "calling_origin": "okofor" }
+	var pool := CallingService.compute_standing_6_pool(echo, cfg)
+	if pool.size() != 6:
+		return { "ok": false, "error": "Expected pool size 6 via calling_origin fallback, got %d" % pool.size() }
+	return { "ok": true }
+
+
+static func _test_s6_pool_returns_empty_for_uncalled_echo() -> Dictionary:
+	var cfg  := _calling_cfg()
+	var echo := { "calling": "", "calling_origin": "" }
+	var pool := CallingService.compute_standing_6_pool(echo, cfg)
+	if pool.size() != 0:
+		return { "ok": false, "error": "Expected empty pool for uncalled echo, got %d" % pool.size() }
+	return { "ok": true }
+
+
+static func _test_s9_options_returns_2_per_s6() -> Dictionary:
+	var cfg     := _load_real_calling_cfg()
+	var defns_v: Variant = cfg.get("definitions", {})
+	var defns: Dictionary = defns_v if defns_v is Dictionary else {}
+	var s6_ids: Array = []
+	for defn_v in defns.values():
+		var defn: Dictionary = defn_v if defn_v is Dictionary else {}
+		var s6_v: Variant = defn.get("standing_6", [])
+		for entry_v in (s6_v if s6_v is Array else []):
+			if entry_v is Dictionary:
+				s6_ids.append(str(entry_v.get("id", "")))
+	if s6_ids.size() != 12:
+		return { "ok": false, "error": "Expected 12 S6 IDs in real config, got %d" % s6_ids.size() }
+	for s6_id in s6_ids:
+		var opts := CallingService.get_standing_9_options(s6_id, cfg)
+		if opts.size() != 2:
+			return { "ok": false, "error": "%s: expected 2 S9 options, got %d" % [s6_id, opts.size()] }
+	return { "ok": true }
+
+
+static func _test_s6_options_empty_for_unknown_id() -> Dictionary:
+	var cfg  := _calling_cfg()
+	var opts := CallingService.get_standing_6_options("completely_bogus_calling", cfg)
+	if opts.size() != 0:
+		return { "ok": false, "error": "Expected empty array for unknown calling ID, got %d" % opts.size() }
+	return { "ok": true }
+
+
+static func _test_s9_options_empty_for_unknown_id() -> Dictionary:
+	var cfg  := _calling_cfg()
+	var opts := CallingService.get_standing_9_options("completely_bogus_s6_id", cfg)
+	if opts.size() != 0:
+		return { "ok": false, "error": "Expected empty array for unknown S6 ID, got %d" % opts.size() }
+	return { "ok": true }
+
+
+static func _test_count_integrity_passes_on_real_config() -> Dictionary:
+	var cfg := _load_real_calling_cfg()
+	if not CallingService.validate_count_integrity(cfg, null, 0):
+		return { "ok": false, "error": "validate_count_integrity returned false on real config" }
+	return { "ok": true }
+
+
+static func _test_count_integrity_fails_for_wrong_s6_count() -> Dictionary:
+	var cfg: Dictionary = _calling_cfg().duplicate(true)
+	var defns_v: Variant = cfg.get("definitions", {})
+	var defns: Dictionary = defns_v if defns_v is Dictionary else {}
+	var okofor_v: Variant = defns.get("okofor", {})
+	var okofor: Dictionary = (okofor_v if okofor_v is Dictionary else {}).duplicate(true)
+	okofor["standing_6"] = [{ "id": "only_one", "parent_calling": "okofor" }]
+	defns["okofor"] = okofor
+	cfg["definitions"] = defns
+	if CallingService.validate_count_integrity(cfg, null, 0):
+		return { "ok": false, "error": "validate_count_integrity should return false when okofor has only 1 S6 entry" }
 	return { "ok": true }

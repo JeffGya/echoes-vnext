@@ -21,6 +21,7 @@ func load_balance(logger: StructuredLogger= null, t: int = -1) -> bool:
 	var calling_cfg_v: Variant = bal_data.get("calling", {})
 	var calling_cfg: Dictionary = calling_cfg_v if calling_cfg_v is Dictionary else {}
 	CallingService.validate_config_integrity(calling_cfg, logger, t)
+	CallingService.validate_count_integrity(calling_cfg, logger, t)
 	_balance = root
 	return true
 
