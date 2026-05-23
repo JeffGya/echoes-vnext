@@ -2076,6 +2076,8 @@
 					"vow_name": "Vow of Collective Counsel",
 					"benefit_label": "Full party deployments (3+) gain fear resistance and bond momentum.",
 					"tradeoff_label": "Deployments with fewer than 3 echoes incur a fear penalty.",
+					"condition_type": "party_size",
+					"condition": { "party_size_min": 3 },
 					"benefit": {
 						"party_size_threshold": 3,
 						"fear_resistance_bonus": 15,

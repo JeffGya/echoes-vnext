@@ -181,11 +181,10 @@ static func _test_awakening_trigger() -> Dictionary:
 
 	var sanctum: Dictionary = runtime.flow_ctx.save_data.get("sanctum", {})
 	var flame: Dictionary   = sanctum.get("ase_flame", {})
-	var ase := int(runtime.flow_ctx.save_data.get("economy", {}).get("ase", 0))
 
+	# Name confirm sets the awakened flag only — Ase boost is applied later
+	# via KeeperIntroServiceScript.apply_ase_boost_from_save on time-based settle.
 	if not bool(flame.get("awakened", false)):
 		return { "ok": false, "error": "ase_flame.awakened must be true after name confirm" }
-	if ase <= 0:
-		return { "ok": false, "error": "Expected Ase grant > 0 after awakening, got %d" % ase }
 	return { "ok": true }
 
