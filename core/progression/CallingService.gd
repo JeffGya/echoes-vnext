@@ -308,12 +308,17 @@ static func validate_count_integrity(calling_cfg: Dictionary, logger, t: int) ->
 			var s6_id: String = str(expr_v.get("id", ""))
 			if s6_id.is_empty():
 				continue
-			var s9_v: Variant = defn.get("standing_9", [])
-			var s9: Array = s9_v if s9_v is Array else []
+			# Global scan — mirrors get_standing_9_options() so the count reflects
+			# entries from ALL calling definitions, not just the current one.
 			var count: int = 0
-			for s9_entry_v in s9:
-				if s9_entry_v is Dictionary and str(s9_entry_v.get("parent_standing_6", "")) == s6_id:
-					count += 1
+			for cid_inner_v in defns:
+				var defn_inner_v: Variant = defns.get(cid_inner_v, {})
+				var defn_inner: Dictionary = defn_inner_v if defn_inner_v is Dictionary else {}
+				var s9_inner_v: Variant = defn_inner.get("standing_9", [])
+				var s9_inner: Array = s9_inner_v if s9_inner_v is Array else []
+				for s9_entry_v in s9_inner:
+					if s9_entry_v is Dictionary and str(s9_entry_v.get("parent_standing_6", "")) == s6_id:
+						count += 1
 			if count != 2:
 				if logger != null:
 					logger.info(t, "calling.config.warn",
