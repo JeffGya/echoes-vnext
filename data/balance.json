@@ -1977,7 +1977,15 @@
 					"cooldown_rounds": 0,
 					"scaling_source": "atk",
 					"intent_weight_tag": "melee_attack",
-					"tier_gate": ""
+					"tier_gate": "",
+					"type": "active",
+					"description": "Aduro's momentum made form. A strike that doesn't stop at contact — it carries the weight of every step taken to reach this moment.",
+					"unlock_conditions": {
+						"min_standing": 3,
+						"storyweight_threshold": 0,
+						"ase_cost": 40,
+						"lived_condition": ""
+					}
 				},
 				"warders_vigil": {
 					"skill_id": "warders_vigil",
@@ -1987,7 +1995,15 @@
 					"cooldown_rounds": 0,
 					"scaling_source": "def",
 					"intent_weight_tag": "protect_ally",
-					"tier_gate": ""
+					"tier_gate": "",
+					"type": "active",
+					"description": "To stand between a broken ally and what threatens them. Not a decision made in the moment — a position held from the first.",
+					"unlock_conditions": {
+						"min_standing": 3,
+						"storyweight_threshold": 0,
+						"ase_cost": 40,
+						"lived_condition": ""
+					}
 				},
 				"stewards_ground": {
 					"skill_id": "stewards_ground",
@@ -1998,7 +2014,15 @@
 					"cooldown_rounds": 0,
 					"scaling_source": "cha",
 					"intent_weight_tag": "actor.guard",
-					"tier_gate": ""
+					"tier_gate": "",
+					"type": "utility",
+					"description": "Mark this line. Hold it. The echo who knows where the house ends and danger begins can defend both without surrendering either.",
+					"unlock_conditions": {
+						"min_standing": 3,
+						"storyweight_threshold": 0,
+						"ase_cost": 40,
+						"lived_condition": ""
+					}
 				},
 				"stewards_call": {
 					"skill_id": "stewards_call",
@@ -2009,7 +2033,15 @@
 					"scaling_source": "cha",
 					"intent_weight_tag": "protect_ally",
 					"tier_gate": "",
-					"once_per_combat": true
+					"once_per_combat": true,
+					"type": "passive",
+					"description": "A voice steady enough to carry into panic. Onyamesu does not shout — they call, and those nearby find something to hold onto.",
+					"unlock_conditions": {
+						"min_standing": 3,
+						"storyweight_threshold": 0,
+						"ase_cost": 40,
+						"lived_condition": ""
+					}
 				},
 				"rangers_mark": {
 					"skill_id": "rangers_mark",
@@ -2019,7 +2051,15 @@
 					"cooldown_rounds": 0,
 					"scaling_source": "agi",
 					"intent_weight_tag": "melee_attack",
-					"tier_gate": ""
+					"tier_gate": "",
+					"type": "utility",
+					"description": "Read the field, find the thread. The mark isn't paint — it's a name spoken into the air that turns every allied eye toward the right target.",
+					"unlock_conditions": {
+						"min_standing": 3,
+						"storyweight_threshold": 0,
+						"ase_cost": 40,
+						"lived_condition": ""
+					}
 				},
 				"rangers_withdraw": {
 					"skill_id": "rangers_withdraw",
@@ -2029,7 +2069,15 @@
 					"cooldown_rounds": 1,
 					"scaling_source": "agi",
 					"intent_weight_tag": "actor.move",
-					"tier_gate": ""
+					"tier_gate": "",
+					"type": "utility",
+					"description": "The body knows the path out before the mind finishes deciding. A clean withdrawal that makes the void look intentional.",
+					"unlock_conditions": {
+						"min_standing": 3,
+						"storyweight_threshold": 0,
+						"ase_cost": 40,
+						"lived_condition": ""
+					}
 				},
 				"seers_sight": {
 					"skill_id": "seers_sight",
@@ -2041,7 +2089,15 @@
 					"intent_weight_tag": "actor.idle",
 					"tier_gate": "",
 					"read_field_max_streak": 3,
-					"read_field_cooldown_rounds": 1
+					"read_field_cooldown_rounds": 1,
+					"type": "passive",
+					"description": "The field is always speaking. Okomfo learns to hear it — a low, persistent reading that surfaces the hidden weights of any ground they stand on.",
+					"unlock_conditions": {
+						"min_standing": 3,
+						"storyweight_threshold": 0,
+						"ase_cost": 40,
+						"lived_condition": ""
+					}
 				},
 				"seers_reveal": {
 					"skill_id": "seers_reveal",
@@ -2052,18 +2108,163 @@
 					"scaling_source": "cha",
 					"intent_weight_tag": "melee_attack",
 					"tier_gate": "",
-					"once_per_combat": true
+					"once_per_combat": true,
+					"type": "active",
+					"description": "What the darkness hides, the Seer names once. A moment of forced clarity that strips concealment from the target it touches.",
+					"unlock_conditions": {
+						"min_standing": 3,
+						"storyweight_threshold": 0,
+						"ase_cost": 40,
+						"lived_condition": ""
+					}
+				},
+				"okofor_steadfast_hold": {
+					"skill_id": "okofor_steadfast_hold",
+					"skill_family": "ward",
+					"target_type": "self",
+					"action_type": "actor.idle",
+					"cooldown_rounds": 0,
+					"scaling_source": "def",
+					"intent_weight_tag": "actor.guard",
+					"type": "passive",
+					"description": "Some presences don't move. Okofor learns to be the thing that stays — not through resistance alone, but through a stillness that reshapes what pressure means.",
+					"unlock_conditions": {
+						"min_standing": 3,
+						"storyweight_threshold": 0,
+						"ase_cost": 40,
+						"lived_condition": ""
+					}
+				},
+				"aduro_iron_momentum": {
+					"skill_id": "aduro_iron_momentum",
+					"skill_family": "break",
+					"target_type": "self",
+					"action_type": "actor.idle",
+					"cooldown_rounds": 0,
+					"scaling_source": "atk",
+					"intent_weight_tag": "melee_attack",
+					"type": "passive",
+					"description": "The first hit opens something. The second follows through it. Aduro builds a rhythm others cannot interrupt — force compounding on force.",
+					"unlock_conditions": {
+						"min_standing": 3,
+						"storyweight_threshold": 0,
+						"ase_cost": 40,
+						"lived_condition": ""
+					}
+				},
+				"sum_okwanfo_shadow_step": {
+					"skill_id": "sum_okwanfo_shadow_step",
+					"skill_family": "veil",
+					"target_type": "self",
+					"action_type": "actor.idle",
+					"cooldown_rounds": 0,
+					"scaling_source": "agi",
+					"intent_weight_tag": "actor.move",
+					"type": "utility",
+					"description": "Not hiding — choosing when to exist. The Veilrunner doesn't vanish; they step into the space between looks and arrive somewhere unexpected.",
+					"unlock_conditions": {
+						"min_standing": 3,
+						"storyweight_threshold": 0,
+						"ase_cost": 40,
+						"lived_condition": ""
+					}
+				},
+				"kra_soro_open_ground": {
+					"skill_id": "kra_soro_open_ground",
+					"skill_family": "path",
+					"target_type": "self",
+					"action_type": "actor.idle",
+					"cooldown_rounds": 0,
+					"scaling_source": "agi",
+					"intent_weight_tag": "actor.move",
+					"type": "utility",
+					"description": "The Ranger reads the field and sees pathways others call walls. A repositioning that isn't escape — it's preparation.",
+					"unlock_conditions": {
+						"min_standing": 3,
+						"storyweight_threshold": 0,
+						"ase_cost": 40,
+						"lived_condition": ""
+					}
+				},
+				"okomfo_spirit_sight": {
+					"skill_id": "okomfo_spirit_sight",
+					"skill_family": "rite",
+					"target_type": "self",
+					"action_type": "actor.idle",
+					"cooldown_rounds": 0,
+					"scaling_source": "cha",
+					"intent_weight_tag": "actor.idle",
+					"type": "passive",
+					"description": "The spirit world overlaps every stage. Okomfo learns to see the weight of what each enemy carries — a passive knowing that sharpens every read they make.",
+					"unlock_conditions": {
+						"min_standing": 3,
+						"storyweight_threshold": 0,
+						"ase_cost": 40,
+						"lived_condition": ""
+					}
+				},
+				"onyamesu_steadfast_care": {
+					"skill_id": "onyamesu_steadfast_care",
+					"skill_family": "root",
+					"target_type": "self",
+					"action_type": "actor.idle",
+					"cooldown_rounds": 0,
+					"scaling_source": "cha",
+					"intent_weight_tag": "protect_ally",
+					"type": "passive",
+					"description": "The Steward carries without collapsing. A presence that doesn't ask what others can give — it simply adds to what is already there.",
+					"unlock_conditions": {
+						"min_standing": 3,
+						"storyweight_threshold": 0,
+						"ase_cost": 40,
+						"lived_condition": ""
+					}
+				}
+			},
+			"calling_constellation": {
+				"_comment": "V2-PROG-009: Radial skill tree layout config. Maps each calling × family → per-tier angle arrays (degrees, 0°=right clockwise). s3_angles length must match S3 skill count for that family. s6/s9 arrays are structural ghost-node placeholders (2 per strong family, 1 per light). Strong family 1 = upper-right (0–90°), strong family 2 = upper-left (270–360°), light = downward (~270°).",
+				"okofor": {
+					"ward":  { "strong": true,  "s3_angles": [8,  32, 57], "s6_angles": [15, 50], "s9_angles": [10, 53] },
+					"root":  { "strong": true,  "s3_angles": [303, 335],   "s6_angles": [315, 347], "s9_angles": [310, 350] },
+					"break": { "strong": false, "s3_angles": [260, 280],   "s6_angles": [270],    "s9_angles": [270] }
+				},
+				"aduro": {
+					"break": { "strong": true,  "s3_angles": [10, 45],      "s6_angles": [20, 55],   "s9_angles": [15, 50] },
+					"ward":  { "strong": true,  "s3_angles": [303, 328, 353], "s6_angles": [312, 345], "s9_angles": [308, 348] },
+					"veil":  { "strong": false, "s3_angles": [260, 280],    "s6_angles": [270],      "s9_angles": [270] }
+				},
+				"sum_okwanfo": {
+					"veil":  { "strong": true,  "s3_angles": [5,  40],    "s6_angles": [15, 50],   "s9_angles": [10, 45] },
+					"break": { "strong": true,  "s3_angles": [305, 340],  "s6_angles": [318, 352], "s9_angles": [312, 348] },
+					"path":  { "strong": false, "s3_angles": [260, 280],  "s6_angles": [270],      "s9_angles": [270] }
+				},
+				"kra_soro": {
+					"path":  { "strong": true,  "s3_angles": [8,  42],    "s6_angles": [18, 52],   "s9_angles": [12, 47] },
+					"veil":  { "strong": true,  "s3_angles": [308, 342],  "s6_angles": [320, 355], "s9_angles": [315, 350] },
+					"rite":  { "strong": false, "s3_angles": [255, 270, 285], "s6_angles": [270],  "s9_angles": [270] }
+				},
+				"okomfo": {
+					"rite":  { "strong": true,  "s3_angles": [10, 32, 55], "s6_angles": [18, 47],   "s9_angles": [12, 50] },
+					"path":  { "strong": true,  "s3_angles": [305, 337],   "s6_angles": [315, 348], "s9_angles": [310, 345] },
+					"root":  { "strong": false, "s3_angles": [260, 280],   "s6_angles": [270],      "s9_angles": [270] }
+				},
+				"onyamesu": {
+					"root":  { "strong": true,  "s3_angles": [12, 45],      "s6_angles": [22, 55],   "s9_angles": [18, 50] },
+					"ward":  { "strong": true,  "s3_angles": [305, 328, 350], "s6_angles": [315, 345], "s9_angles": [310, 348] },
+					"rite":  { "strong": false, "s3_angles": [255, 270, 285], "s6_angles": [270],    "s9_angles": [270] }
 				}
 			},
 			"_field_contract": {
-				"_comment": "V2-PROG-005: SkillDefinition contract — 7 required fields. calling_requirement removed; skill_family is the V2 axis.",
+				"_comment": "V2-PROG-009: SkillDefinition contract — 9 required fields (was 7; added type + description). calling_requirement removed; skill_family is the V2 axis.",
 				"skill_id": "String — unique id e.g. 'blade_resolve'",
 				"skill_family": "String — one of: ward | break | veil | path | rite | root",
 				"target_type": "String — 'self' | 'ally' | 'enemy' | 'area'",
 				"action_type": "String — actor intent action_type dispatched when skill fires",
 				"cooldown_rounds": "int    — rounds before skill can fire again; 0 = no cooldown",
 				"scaling_source": "String — stat key that scales effect e.g. 'atk', 'cha'",
-				"intent_weight_tag": "String — tag used by BehaviorArbiter weight lookup"
+				"intent_weight_tag": "String — tag used by BehaviorArbiter weight lookup",
+				"type": "String — 'active' | 'passive' | 'utility'. GDD milestone package: 1 active + 1 passive + 1 utility equip cap per Standing.",
+				"description": "String — 1-2 sentence atmospheric description shown in constellation detail strip. May be empty string."
 			}
 		},
 		"vows": {

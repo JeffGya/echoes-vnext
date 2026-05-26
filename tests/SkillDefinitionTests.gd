@@ -11,15 +11,16 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("skill/valid_definition_passes",         Callable(SkillDefinitionTests, "_test_valid_definition_passes"))
 	runner.register_test("skill/missing_required_field_fails",    Callable(SkillDefinitionTests, "_test_missing_required_field_fails"))
 	runner.register_test("skill/wrong_type_on_field_fails",       Callable(SkillDefinitionTests, "_test_wrong_type_on_field_fails"))
-	runner.register_test("skill/required_fields_count_is_seven",  Callable(SkillDefinitionTests, "_test_required_fields_count_is_seven"))
+	runner.register_test("skill/required_fields_count_is_nine",   Callable(SkillDefinitionTests, "_test_required_fields_count_is_nine"))
 
 
 # ────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ────────────────────────────────────────────────────────────────────────────
 
-## Returns a valid skill definition with all 7 required fields.
+## Returns a valid skill definition with all 9 required fields.
 ## V2-PROG-005: uses skill_family instead of calling_requirement.
+## V2-PROG-009: added type (active/passive/utility) and description.
 static func _valid_defn() -> Dictionary:
 	return {
 		"skill_id":          "skill.shield_bash",
@@ -29,6 +30,8 @@ static func _valid_defn() -> Dictionary:
 		"cooldown_rounds":   2,
 		"scaling_source":    "atk",
 		"intent_weight_tag": "aggressive",
+		"type":              "active",
+		"description":       "A forceful bash that rattles the enemy's defences.",
 	}
 
 
@@ -68,15 +71,16 @@ static func _test_wrong_type_on_field_fails() -> Dictionary:
 	return { "ok": true }
 
 
-static func _test_required_fields_count_is_seven() -> Dictionary:
-	if SkillDefinition.REQUIRED_FIELDS.size() != 7:
+static func _test_required_fields_count_is_nine() -> Dictionary:
+	if SkillDefinition.REQUIRED_FIELDS.size() != 9:
 		return {
 			"ok": false,
-			"error": "Expected REQUIRED_FIELDS.size()==7, got %d" % SkillDefinition.REQUIRED_FIELDS.size()
+			"error": "Expected REQUIRED_FIELDS.size()==9, got %d. V2-PROG-009 added 'type' and 'description'." % SkillDefinition.REQUIRED_FIELDS.size()
 		}
 	var expected: Array = [
 		"skill_id", "skill_family", "target_type",
 		"action_type", "cooldown_rounds", "scaling_source", "intent_weight_tag",
+		"type", "description",
 	]
 	for f in expected:
 		if not SkillDefinition.REQUIRED_FIELDS.has(f):

@@ -5,6 +5,7 @@
 [ext_resource type="PackedScene" uid="uid://dahk08c2p4mgn" path="res://ui/components/EmotionChip.tscn" id="3_emotionchip"]
 [ext_resource type="PackedScene" uid="uid://bond_tier_bar" path="res://ui/components/BondTierBar.tscn" id="4_bondtier"]
 [ext_resource type="Script" path="res://ui/screens/sanctum/ContinuityFlameControl.gd" id="5_contflame"]
+[ext_resource type="Script" path="res://ui/screens/sanctum/ConstellationLines.gd" id="6_constlines"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ase_tip"]
 content_margin_left = 6.0
@@ -45,6 +46,34 @@ corner_radius_top_left = 16
 corner_radius_top_right = 16
 corner_radius_bottom_right = 16
 corner_radius_bottom_left = 16
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_calling_node"]
+bg_color = Color(0.788, 0.659, 0.298, 1.0)
+corner_radius_top_left = 26
+corner_radius_top_right = 26
+corner_radius_bottom_right = 26
+corner_radius_bottom_left = 26
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_skill_locked"]
+bg_color = Color(0.14, 0.12, 0.10, 0.75)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.5, 0.42, 0.3, 0.45)
+corner_radius_top_left = 22
+corner_radius_top_right = 22
+corner_radius_bottom_right = 22
+corner_radius_bottom_left = 22
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_detail_strip"]
+bg_color = Color(0.10, 0.08, 0.06, 0.90)
+border_width_top = 1
+border_color = Color(0.788, 0.659, 0.298, 0.18)
+corner_radius_top_left = 0
+corner_radius_top_right = 0
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
 
 [node name="SanctumScreen" type="Control" unique_id=218783654]
 layout_mode = 3
@@ -963,89 +992,207 @@ autowrap_mode = 3
 [node name="SkillsPage" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack" unique_id=1522500596]
 unique_name_in_owner = true
 visible = false
+custom_minimum_size = Vector2(0, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 12
+
+[node name="SkillsEmptyLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage" unique_id=2200000001]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumMuted"
+text = "This Echo has not yet found their path. Skills will be available when their calling is confirmed."
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="ConstellationPanel" type="PanelContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage" unique_id=2200000002]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxEmpty_qeq33")
+
+[node name="ConstellationStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="ConstellationMap" type="Control" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack" unique_id=2200000003]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 320)
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/separation = 14
+clip_contents = true
 
-[node name="SkillsHeader" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage"]
+[node name="ConstellationLines" type="Node2D" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/ConstellationMap" unique_id=2200000004]
+unique_name_in_owner = true
+script = ExtResource("6_constlines")
+
+[node name="CallingNode" type="PanelContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/ConstellationMap" unique_id=2200000005]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(52, 52)
+layout_mode = 1
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_left = 154.0
+offset_top = 134.0
+offset_right = 206.0
+offset_bottom = 186.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_calling_node")
+
+[node name="CallingNodeLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/ConstellationMap/CallingNode" unique_id=2200000006]
+unique_name_in_owner = true
 layout_mode = 2
-theme_type_variation = &"ContentBasePanel"
-text = "Associated Skills"
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.08, 0.05, 0.02, 1.0)
+text = "·"
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="SkillsSummary" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.356863, 0.25098, 0.14902, 0.86)
-theme_override_font_sizes/font_size = 16
-text = "Only techniques associated with this Echo's confirmed calling are surfaced here."
-autowrap_mode = 3
-
-[node name="SkillsListPanel" type="PanelContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_styles/panel = SubResource("StyleBoxFlat_bond_list")
-
-[node name="SkillsListMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel"]
-layout_mode = 2
-theme_override_constants/margin_left = 14
-theme_override_constants/margin_top = 14
-theme_override_constants/margin_right = 14
-theme_override_constants/margin_bottom = 14
-
-[node name="SkillsListStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel/SkillsListMargin"]
-layout_mode = 2
-theme_override_constants/separation = 10
-
-[node name="SkillsEmptyLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel/SkillsListMargin/SkillsListStack"]
+[node name="SkillNodeTemplate" type="Button" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/ConstellationMap" unique_id=2200000007]
 unique_name_in_owner = true
 visible = false
+custom_minimum_size = Vector2(44, 44)
+layout_mode = 1
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_right = 44.0
+offset_bottom = 44.0
+theme_override_styles/normal = SubResource("StyleBoxFlat_skill_locked")
+theme_override_styles/hover = SubResource("StyleBoxFlat_skill_locked")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_skill_locked")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_skill_locked")
+
+[node name="SkillNodeLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/ConstellationMap/SkillNodeTemplate"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = ""
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ExpandButton" type="Button" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/ConstellationMap" unique_id=2200000008]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 1
+anchor_left = 1.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 0.0
+offset_left = -36.0
+offset_top = 4.0
+offset_right = -4.0
+offset_bottom = 36.0
+theme_type_variation = &"SanctumTertiaryButton"
+text = "⛶"
+
+[node name="DetailStrip" type="PanelContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack" unique_id=2200000009]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 130)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_detail_strip")
+
+[node name="DetailStripMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/DetailStrip"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="DetailStripStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/DetailStrip/DetailStripMargin"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="DetailEmptyLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/DetailStrip/DetailStripMargin/DetailStripStack" unique_id=2200000010]
+unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"SanctumMuted"
-text = "No associated skills are surfaced for this Echo yet."
-autowrap_mode = 3
+text = "Tap a node to learn its secret"
+horizontal_alignment = 1
 
-[node name="SkillsList" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel/SkillsListMargin/SkillsListStack"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_constants/separation = 10
-
-[node name="SkillEntryTemplate" type="PanelContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel/SkillsListMargin/SkillsListStack/SkillsList"]
+[node name="DetailContentStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/DetailStrip/DetailStripMargin/DetailStripStack" unique_id=2200000011]
 unique_name_in_owner = true
 visible = false
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_styles/panel = SubResource("StyleBoxFlat_bond_row")
-
-[node name="SkillEntryMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel/SkillsListMargin/SkillsListStack/SkillsList/SkillEntryTemplate"]
-layout_mode = 2
-theme_override_constants/margin_left = 18
-theme_override_constants/margin_top = 18
-theme_override_constants/margin_right = 18
-theme_override_constants/margin_bottom = 18
-
-[node name="SkillEntryStack" type="VBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel/SkillsListMargin/SkillsListStack/SkillsList/SkillEntryTemplate/SkillEntryMargin"]
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="SkillNameLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel/SkillsListMargin/SkillsListStack/SkillsList/SkillEntryTemplate/SkillEntryMargin/SkillEntryStack"]
+[node name="DetailNameRow" type="HBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/DetailStrip/DetailStripMargin/DetailStripStack/DetailContentStack"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="DetailSkillName" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/DetailStrip/DetailStripMargin/DetailStripStack/DetailContentStack/DetailNameRow" unique_id=2200000012]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 theme_type_variation = &"ContentBasePanel"
 text = "Technique"
 
-[node name="SkillFamilyLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel/SkillsListMargin/SkillsListStack/SkillsList/SkillEntryTemplate/SkillEntryMargin/SkillEntryStack"]
+[node name="DetailFamilyBadge" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/DetailStrip/DetailStripMargin/DetailStripStack/DetailContentStack/DetailNameRow" unique_id=2200000013]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_colors/font_color = Color(0.556863, 0.42098, 0.21902, 0.9)
-theme_override_font_sizes/font_size = 17
-text = "Associated technique"
+size_flags_vertical = 4
+theme_type_variation = &"SanctumKicker"
+text = "WARD"
 
-[node name="SkillNoteLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/SkillsListPanel/SkillsListMargin/SkillsListStack/SkillsList/SkillEntryTemplate/SkillEntryMargin/SkillEntryStack"]
+[node name="DetailBadgeRow" type="HBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/DetailStrip/DetailStripMargin/DetailStripStack/DetailContentStack"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="DetailTierBadge" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/DetailStrip/DetailStripMargin/DetailStripStack/DetailContentStack/DetailBadgeRow" unique_id=2200000014]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"SanctumMuted"
-text = "Associated with this Echo's calling."
+theme_override_font_sizes/font_size = 14
+text = "S3 Foundation"
+
+[node name="DetailTypeBadge" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/DetailStrip/DetailStripMargin/DetailStripStack/DetailContentStack/DetailBadgeRow" unique_id=2200000015]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumMuted"
+theme_override_font_sizes/font_size = 14
+text = "Active"
+
+[node name="DetailDescription" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/DetailStrip/DetailStripMargin/DetailStripStack/DetailContentStack" unique_id=2200000016]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumMuted"
+theme_override_font_sizes/font_size = 15
 autowrap_mode = 3
+
+[node name="DetailActionRow" type="HBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/DetailStrip/DetailStripMargin/DetailStripStack/DetailContentStack"]
+layout_mode = 2
+
+[node name="SkillUnlockButton" type="Button" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/DetailStrip/DetailStripMargin/DetailStripStack/DetailContentStack/DetailActionRow" unique_id=2200000017]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumTertiaryButton"
+text = "40 Ase"
+
+[node name="SkillLearnedLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/DetailStrip/DetailStripMargin/DetailStripStack/DetailContentStack/DetailActionRow" unique_id=2200000018]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.4, 0.7, 0.4, 1.0)
+theme_override_font_sizes/font_size = 15
+text = "Learned"
+horizontal_alignment = 1
+
+[node name="SkillFutureLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/DetailStrip/DetailStripMargin/DetailStripStack/DetailContentStack/DetailActionRow" unique_id=2200000019]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumMuted"
+theme_override_font_sizes/font_size = 14
+text = "Unlocks at Standing 6"
+horizontal_alignment = 1
 
 [node name="InstitutionDetailPanel" type="PanelContainer" parent="."]
 unique_name_in_owner = true

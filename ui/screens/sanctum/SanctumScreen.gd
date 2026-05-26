@@ -49,8 +49,25 @@ const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.t
 @onready var bonds_list: VBoxContainer = %BondsList
 @onready var bond_entry_template: PanelContainer = %BondEntryTemplate
 @onready var skills_empty_label: Label = %SkillsEmptyLabel
-@onready var skills_list: VBoxContainer = %SkillsList
-@onready var skill_entry_template: PanelContainer = %SkillEntryTemplate
+# V2-PROG-009: Constellation Web refs
+@onready var _constellation_panel: PanelContainer = %ConstellationPanel
+@onready var _constellation_map: Control = %ConstellationMap
+@onready var _constellation_lines: Node2D = %ConstellationLines
+@onready var _calling_node: PanelContainer = %CallingNode
+@onready var _calling_node_label: Label = %CallingNodeLabel
+@onready var _skill_node_template: Button = %SkillNodeTemplate
+@onready var _expand_btn: Button = %ExpandButton
+@onready var _detail_strip: PanelContainer = %DetailStrip
+@onready var _detail_empty_lbl: Label = %DetailEmptyLabel
+@onready var _detail_content: VBoxContainer = %DetailContentStack
+@onready var _detail_skill_name: Label = %DetailSkillName
+@onready var _detail_family_badge: Label = %DetailFamilyBadge
+@onready var _detail_tier_badge: Label = %DetailTierBadge
+@onready var _detail_type_badge: Label = %DetailTypeBadge
+@onready var _detail_description: Label = %DetailDescription
+@onready var _detail_unlock_btn: Button = %SkillUnlockButton
+@onready var _detail_learned_lbl: Label = %SkillLearnedLabel
+@onready var _detail_future_lbl: Label = %SkillFutureLabel
 @onready var detail_pages_scroll: ScrollContainer = %DetailPagesScroll
 @onready var detail_name_label: Label = %DetailNameLabel
 @onready var detail_archetype_label: Label = %DetailArchetypeLabel
@@ -129,6 +146,15 @@ var _echo_detail_open := false
 var _detail_tab := "overview"
 var _selected_echo_id := ""
 
+# V2-PROG-009: Constellation Web state
+var _constellation_expanded: bool = false
+var _unlock_callable: Callable = Callable()
+# Skill node visual states — circular styleboxes created in _init_skill_node_styles()
+var _skill_style_unlocked: StyleBoxFlat = null
+var _skill_style_affordable: StyleBoxFlat = null
+var _skill_style_locked: StyleBoxFlat = null
+var _skill_style_future: StyleBoxFlat = null
+
 func _ready() -> void:
 	reroll_button.pressed.connect(_on_reroll_pressed)
 	confirm_button.pressed.connect(_on_confirm_pressed)
@@ -168,6 +194,9 @@ func _ready() -> void:
 	if _inst_compact_strip != null:
 		_inst_compact_strip.visible = false
 		_inst_compact_strip.pressed.connect(_on_inst_compact_strip_pressed)
+	# V2-PROG-009: constellation wiring
+	_expand_btn.pressed.connect(_on_constellation_expand_pressed)
+	_init_skill_node_styles()
 
 
 func set_snapshot(snap: Dictionary) -> void:
@@ -469,58 +498,234 @@ func _bond_tier_color(tier: int) -> Color:
 	return Color("#6E583A")
 
 
+# V2-PROG-009: Constellation Web rebuild
 func _rebuild_skills_page(selected: Dictionary) -> void:
-	for child in skills_list.get_children():
-		if child == skill_entry_template:
+	var skill_entries_v: Variant = selected.get("skill_entries", [])
+	var skill_entries: Array = skill_entries_v if skill_entries_v is Array else []
+	var calling_confirmed := bool(selected.get("calling_confirmed", false))
+
+	skills_empty_label.visible = not calling_confirmed
+	_constellation_panel.visible = calling_confirmed
+
+	if not calling_confirmed:
+		return
+
+	# Clear previously spawned skill nodes (keep ConstellationLines, CallingNode,
+	# SkillNodeTemplate, and ExpandButton — all others are spawned clones)
+	for child in _constellation_map.get_children():
+		if child == _constellation_lines or child == _calling_node \
+				or child == _skill_node_template or child == _expand_btn:
 			continue
 		child.queue_free()
 
-	var entries_v: Variant = selected.get("skill_entries", [])
-	var entries: Array = entries_v if entries_v is Array else []
-	var calling_id := str(selected.get("calling", "")).strip_edges()
+	# Centre of the 360×320 map
+	var cx := 180.0
+	var cy := 160.0
 
-	if entries.is_empty():
-		skills_list.visible = false
-		skills_empty_label.visible = true
-		if calling_id.is_empty() or calling_id == "uncalled":
-			skills_empty_label.text = "No calling is confirmed yet. Skills will appear here once this Echo has associated techniques."
-		else:
-			skills_empty_label.text = "No associated skills are surfaced for this Echo yet."
-		return
+	# Position calling node at centre (CallingNode is 52×52)
+	_calling_node.offset_left   = cx - 26.0
+	_calling_node.offset_top    = cy - 26.0
+	_calling_node.offset_right  = cx + 26.0
+	_calling_node.offset_bottom = cy + 26.0
+	_calling_node_label.text = str(selected.get("calling", "·")).replace("_", " ").capitalize()
 
-	skills_empty_label.visible = false
-	skills_list.visible = true
+	# Reset detail strip to empty state
+	_detail_empty_lbl.visible = true
+	_detail_content.visible   = false
 
-	for entry_v in entries:
+	# Spawn one node per skill entry
+	var line_data: Array = []
+	for entry_v in skill_entries:
 		if not (entry_v is Dictionary):
 			continue
 		var entry: Dictionary = entry_v
-		var row := skill_entry_template.duplicate() as PanelContainer
-		row.visible = true
+		var angle_deg := float(entry.get("constellation_angle", 270.0))
+		var radius    := float(entry.get("constellation_radius", 70.0))
+		var is_strong := str(entry.get("alignment", "")) == "strong"
+		var node_size := 44.0 if is_strong else 34.0
+		var half      := node_size / 2.0
 
-		var name_label := row.find_child("SkillNameLabel", true, false) as Label
-		if name_label != null:
-			name_label.text = str(entry.get("name", "Unknown Technique"))
+		var nx := cx + radius * cos(deg_to_rad(angle_deg))
+		var ny := cy + radius * sin(deg_to_rad(angle_deg))
 
-		var family_label := row.find_child("SkillFamilyLabel", true, false) as Label
-		if family_label != null:
-			family_label.text = "%s technique" % str(entry.get("family_name", "Associated"))
+		var node := _skill_node_template.duplicate() as Button
+		node.visible = true
+		node.custom_minimum_size = Vector2(node_size, node_size)
+		node.anchor_left   = 0.0
+		node.anchor_top    = 0.0
+		node.anchor_right  = 0.0
+		node.anchor_bottom = 0.0
+		node.offset_left   = nx - half
+		node.offset_top    = ny - half
+		node.offset_right  = nx + half
+		node.offset_bottom = ny + half
 
-		var note_label := row.find_child("SkillNoteLabel", true, false) as Label
-		if note_label != null:
-			note_label.text = _skill_alignment_copy(str(entry.get("alignment", "")))
+		var tier        := int(entry.get("tier", 3))
+		var is_unlocked := bool(entry.get("is_unlocked", false))
+		var can_afford  := bool(entry.get("can_afford", false))
 
-		skills_list.add_child(row)
+		if is_unlocked:
+			node.add_theme_stylebox_override("normal",   _skill_style_unlocked)
+			node.add_theme_stylebox_override("hover",    _skill_style_unlocked)
+			node.add_theme_stylebox_override("pressed",  _skill_style_unlocked)
+			node.add_theme_stylebox_override("disabled", _skill_style_unlocked)
+		elif tier > 3:
+			# Ghost — visual only, mouse passthrough
+			node.add_theme_stylebox_override("normal",   _skill_style_future)
+			node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_constellation_map.add_child(node)
+			line_data.append({
+				"pos":       Vector2(nx, ny),
+				"tier":      tier,
+				"family":    str(entry.get("family_id", "")),
+				"alignment": str(entry.get("alignment", "strong")),
+			})
+			continue
+		elif can_afford:
+			node.add_theme_stylebox_override("normal",   _skill_style_affordable)
+			node.add_theme_stylebox_override("hover",    _skill_style_affordable)
+			node.add_theme_stylebox_override("pressed",  _skill_style_affordable)
+			node.add_theme_stylebox_override("disabled", _skill_style_affordable)
+		else:
+			node.add_theme_stylebox_override("normal",   _skill_style_locked)
+			node.add_theme_stylebox_override("hover",    _skill_style_locked)
+			node.add_theme_stylebox_override("pressed",  _skill_style_locked)
+			node.add_theme_stylebox_override("disabled", _skill_style_locked)
+
+		var sid := str(entry.get("skill_id", ""))
+		node.pressed.connect(func(): _on_skill_node_tapped(sid, skill_entries), CONNECT_ONE_SHOT)
+		_constellation_map.add_child(node)
+		line_data.append({
+			"pos":       Vector2(nx, ny),
+			"tier":      tier,
+			"family":    str(entry.get("family_id", "")),
+			"alignment": str(entry.get("alignment", "strong")),
+		})
+
+	# Feed line geometry to ConstellationLines for _draw()
+	_constellation_lines.set_data(line_data, Vector2(cx, cy))
+	_constellation_lines.queue_redraw()
 
 
-func _skill_alignment_copy(alignment: String) -> String:
-	match alignment:
-		"strong":
-			return "Strongly aligned with this Echo's calling."
-		"light":
-			return "Lightly aligned with this Echo's calling."
-		_:
-			return "Associated with this Echo's calling."
+func _on_skill_node_tapped(skill_id: String, all_entries: Array) -> void:
+	var entry := {}
+	for e_v in all_entries:
+		if not (e_v is Dictionary):
+			continue
+		var e: Dictionary = e_v
+		if str(e.get("skill_id", "")) == skill_id:
+			entry = e
+			break
+	if entry.is_empty():
+		return
+
+	_detail_empty_lbl.visible = false
+	_detail_content.visible   = true
+
+	_detail_skill_name.text   = str(entry.get("name", skill_id))
+	_detail_family_badge.text = str(entry.get("family_name", "")).to_upper()
+
+	var tier := int(entry.get("tier", 3))
+	var tier_labels: Array = ["Foundation", "Growth", "Culmination"]
+	var tier_idx := clampi(tier / 3 - 1, 0, 2)
+	_detail_tier_badge.text = "S%d %s" % [tier, tier_labels[tier_idx]]
+	_detail_type_badge.text = str(entry.get("type_label", ""))
+	_detail_description.text = str(entry.get("description", ""))
+
+	var is_unlocked := bool(entry.get("is_unlocked", false))
+	var can_afford  := bool(entry.get("can_afford", false))
+	var future      := tier > 3
+
+	_detail_unlock_btn.visible  = not is_unlocked and not future
+	_detail_learned_lbl.visible = is_unlocked
+	_detail_future_lbl.visible  = future
+
+	# Disconnect any lingering unlock callable before wiring new one
+	if not _unlock_callable.is_null():
+		if _detail_unlock_btn.pressed.is_connected(_unlock_callable):
+			_detail_unlock_btn.pressed.disconnect(_unlock_callable)
+		_unlock_callable = Callable()
+
+	if _detail_unlock_btn.visible:
+		_detail_unlock_btn.text     = "%d Ase" % int(entry.get("ase_cost", 40))
+		_detail_unlock_btn.disabled = not can_afford
+		var eid := _selected_echo_id
+		var sid := skill_id
+		_unlock_callable = func():
+			action_requested.emit({
+				"type":    "sanctum.unlock_skill",
+				"payload": { "echo_id": eid, "skill_id": sid },
+			})
+		_detail_unlock_btn.pressed.connect(_unlock_callable)
+
+	if future:
+		var standing_needed := 6 if tier == 6 else 9
+		_detail_future_lbl.text = "Unlocks at Standing %d" % standing_needed
+
+
+func _on_constellation_expand_pressed() -> void:
+	_constellation_expanded = not _constellation_expanded
+	_apply_constellation_expand_state()
+
+
+func _apply_constellation_expand_state() -> void:
+	if _constellation_expanded:
+		_detail_strip.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		_detail_strip.custom_minimum_size = Vector2(0, 0)
+		_expand_btn.text = "✕"
+	else:
+		_detail_strip.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		_detail_strip.custom_minimum_size = Vector2(0, 130)
+		_expand_btn.text = "⛶"
+
+
+func _init_skill_node_styles() -> void:
+	# UNLOCKED — Akan Gold filled
+	_skill_style_unlocked = StyleBoxFlat.new()
+	_skill_style_unlocked.bg_color = Color(0.788, 0.659, 0.298, 0.95)
+	_skill_style_unlocked.corner_radius_top_left     = 99
+	_skill_style_unlocked.corner_radius_top_right    = 99
+	_skill_style_unlocked.corner_radius_bottom_right = 99
+	_skill_style_unlocked.corner_radius_bottom_left  = 99
+
+	# AFFORDABLE — gold outline with translucent fill
+	_skill_style_affordable = StyleBoxFlat.new()
+	_skill_style_affordable.bg_color = Color(0.788, 0.659, 0.298, 0.22)
+	_skill_style_affordable.border_width_left   = 2
+	_skill_style_affordable.border_width_top    = 2
+	_skill_style_affordable.border_width_right  = 2
+	_skill_style_affordable.border_width_bottom = 2
+	_skill_style_affordable.border_color = Color(0.788, 0.659, 0.298, 0.85)
+	_skill_style_affordable.corner_radius_top_left     = 99
+	_skill_style_affordable.corner_radius_top_right    = 99
+	_skill_style_affordable.corner_radius_bottom_right = 99
+	_skill_style_affordable.corner_radius_bottom_left  = 99
+
+	# LOCKED / UNAFFORDABLE — dark, muted border
+	_skill_style_locked = StyleBoxFlat.new()
+	_skill_style_locked.bg_color = Color(0.14, 0.12, 0.10, 0.75)
+	_skill_style_locked.border_width_left   = 1
+	_skill_style_locked.border_width_top    = 1
+	_skill_style_locked.border_width_right  = 1
+	_skill_style_locked.border_width_bottom = 1
+	_skill_style_locked.border_color = Color(0.5, 0.42, 0.3, 0.45)
+	_skill_style_locked.corner_radius_top_left     = 99
+	_skill_style_locked.corner_radius_top_right    = 99
+	_skill_style_locked.corner_radius_bottom_right = 99
+	_skill_style_locked.corner_radius_bottom_left  = 99
+
+	# FUTURE / GHOST — barely visible dim circle
+	_skill_style_future = StyleBoxFlat.new()
+	_skill_style_future.bg_color = Color(0.239, 0.255, 0.333, 0.20)
+	_skill_style_future.border_width_left   = 1
+	_skill_style_future.border_width_top    = 1
+	_skill_style_future.border_width_right  = 1
+	_skill_style_future.border_width_bottom = 1
+	_skill_style_future.border_color = Color(0.239, 0.255, 0.333, 0.45)
+	_skill_style_future.corner_radius_top_left     = 99
+	_skill_style_future.corner_radius_top_right    = 99
+	_skill_style_future.corner_radius_bottom_right = 99
+	_skill_style_future.corner_radius_bottom_left  = 99
 
 
 func _detail_roster() -> Array:
