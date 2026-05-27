@@ -47,33 +47,6 @@ corner_radius_top_right = 16
 corner_radius_bottom_right = 16
 corner_radius_bottom_left = 16
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_calling_node"]
-bg_color = Color(0.788, 0.659, 0.298, 1.0)
-corner_radius_top_left = 26
-corner_radius_top_right = 26
-corner_radius_bottom_right = 26
-corner_radius_bottom_left = 26
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_skill_locked"]
-bg_color = Color(0.14, 0.12, 0.10, 0.75)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.5, 0.42, 0.3, 0.45)
-corner_radius_top_left = 22
-corner_radius_top_right = 22
-corner_radius_bottom_right = 22
-corner_radius_bottom_left = 22
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_detail_strip"]
-bg_color = Color(0.10, 0.08, 0.06, 0.90)
-border_width_top = 1
-border_color = Color(0.788, 0.659, 0.298, 0.18)
-corner_radius_top_left = 0
-corner_radius_top_right = 0
-corner_radius_bottom_right = 10
-corner_radius_bottom_left = 10
 
 [node name="SanctumScreen" type="Control" unique_id=218783654]
 layout_mode = 3
@@ -1039,7 +1012,7 @@ offset_left = 154.0
 offset_top = 134.0
 offset_right = 206.0
 offset_bottom = 186.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_calling_node")
+theme_type_variation = &"SkillCallingNode"
 
 [node name="CallingNodeLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/ConstellationMap/CallingNode" unique_id=2200000006]
 unique_name_in_owner = true
@@ -1061,10 +1034,7 @@ anchor_right = 0.0
 anchor_bottom = 0.0
 offset_right = 44.0
 offset_bottom = 44.0
-theme_override_styles/normal = SubResource("StyleBoxFlat_skill_locked")
-theme_override_styles/hover = SubResource("StyleBoxFlat_skill_locked")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_skill_locked")
-theme_override_styles/disabled = SubResource("StyleBoxFlat_skill_locked")
+theme_type_variation = &"SkillNodeLocked"
 
 [node name="SkillNodeLabel" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/ConstellationMap/SkillNodeTemplate"]
 layout_mode = 2
@@ -1086,14 +1056,14 @@ offset_top = 4.0
 offset_right = -4.0
 offset_bottom = 36.0
 theme_type_variation = &"SanctumTertiaryButton"
-text = "⛶"
+text = "+"
 
 [node name="DetailStrip" type="PanelContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack" unique_id=2200000009]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 130)
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_styles/panel = SubResource("StyleBoxFlat_detail_strip")
+theme_type_variation = &"SkillDetailStrip"
 
 [node name="DetailStripMargin" type="MarginContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/DetailStrip"]
 layout_mode = 2
@@ -1127,7 +1097,7 @@ theme_override_constants/separation = 6
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-theme_type_variation = &"ContentBasePanel"
+theme_type_variation = &"SanctumDrawerMeta"
 text = "Technique"
 
 [node name="DetailFamilyBadge" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/SkillsPage/ConstellationPanel/ConstellationStack/DetailStrip/DetailStripMargin/DetailStripStack/DetailContentStack/DetailNameRow" unique_id=2200000013]

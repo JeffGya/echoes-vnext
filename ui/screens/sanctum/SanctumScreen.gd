@@ -149,11 +149,16 @@ var _selected_echo_id := ""
 # V2-PROG-009: Constellation Web state
 var _constellation_expanded: bool = false
 var _unlock_callable: Callable = Callable()
-# Skill node visual states — circular styleboxes created in _init_skill_node_styles()
-var _skill_style_unlocked: StyleBoxFlat = null
-var _skill_style_affordable: StyleBoxFlat = null
-var _skill_style_locked: StyleBoxFlat = null
-var _skill_style_future: StyleBoxFlat = null
+
+# Family abbreviations shown inside skill nodes
+const FAMILY_ABBREV: Dictionary = {
+	"ward":  "W",
+	"break": "B",
+	"veil":  "V",
+	"path":  "P",
+	"rite":  "Ri",
+	"root":  "Ro",
+}
 
 func _ready() -> void:
 	reroll_button.pressed.connect(_on_reroll_pressed)
@@ -196,7 +201,6 @@ func _ready() -> void:
 		_inst_compact_strip.pressed.connect(_on_inst_compact_strip_pressed)
 	# V2-PROG-009: constellation wiring
 	_expand_btn.pressed.connect(_on_constellation_expand_pressed)
-	_init_skill_node_styles()
 
 
 func set_snapshot(snap: Dictionary) -> void:
@@ -563,34 +567,31 @@ func _rebuild_skills_page(selected: Dictionary) -> void:
 		var tier        := int(entry.get("tier", 3))
 		var is_unlocked := bool(entry.get("is_unlocked", false))
 		var can_afford  := bool(entry.get("can_afford", false))
+		var family_id   := str(entry.get("family_id", ""))
+
+		# Set family abbreviation on the child label (readable at all node sizes)
+		var node_lbl := node.find_child("SkillNodeLabel", false, false) as Label
+		if node_lbl != null:
+			node_lbl.text = FAMILY_ABBREV.get(family_id, "·")
 
 		if is_unlocked:
-			node.add_theme_stylebox_override("normal",   _skill_style_unlocked)
-			node.add_theme_stylebox_override("hover",    _skill_style_unlocked)
-			node.add_theme_stylebox_override("pressed",  _skill_style_unlocked)
-			node.add_theme_stylebox_override("disabled", _skill_style_unlocked)
+			node.theme_type_variation = &"SkillNodeUnlocked"
 		elif tier > 3:
 			# Ghost — visual only, mouse passthrough
-			node.add_theme_stylebox_override("normal",   _skill_style_future)
+			node.theme_type_variation = &"SkillNodeFuture"
 			node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			_constellation_map.add_child(node)
 			line_data.append({
 				"pos":       Vector2(nx, ny),
 				"tier":      tier,
-				"family":    str(entry.get("family_id", "")),
+				"family":    family_id,
 				"alignment": str(entry.get("alignment", "strong")),
 			})
 			continue
 		elif can_afford:
-			node.add_theme_stylebox_override("normal",   _skill_style_affordable)
-			node.add_theme_stylebox_override("hover",    _skill_style_affordable)
-			node.add_theme_stylebox_override("pressed",  _skill_style_affordable)
-			node.add_theme_stylebox_override("disabled", _skill_style_affordable)
+			node.theme_type_variation = &"SkillNodeAffordable"
 		else:
-			node.add_theme_stylebox_override("normal",   _skill_style_locked)
-			node.add_theme_stylebox_override("hover",    _skill_style_locked)
-			node.add_theme_stylebox_override("pressed",  _skill_style_locked)
-			node.add_theme_stylebox_override("disabled", _skill_style_locked)
+			node.theme_type_variation = &"SkillNodeLocked"
 
 		var sid := str(entry.get("skill_id", ""))
 		node.pressed.connect(func(): _on_skill_node_tapped(sid, skill_entries), CONNECT_ONE_SHOT)
@@ -672,60 +673,11 @@ func _apply_constellation_expand_state() -> void:
 	if _constellation_expanded:
 		_detail_strip.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		_detail_strip.custom_minimum_size = Vector2(0, 0)
-		_expand_btn.text = "✕"
+		_expand_btn.text = "x"
 	else:
 		_detail_strip.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 		_detail_strip.custom_minimum_size = Vector2(0, 130)
-		_expand_btn.text = "⛶"
-
-
-func _init_skill_node_styles() -> void:
-	# UNLOCKED — Akan Gold filled
-	_skill_style_unlocked = StyleBoxFlat.new()
-	_skill_style_unlocked.bg_color = Color(0.788, 0.659, 0.298, 0.95)
-	_skill_style_unlocked.corner_radius_top_left     = 99
-	_skill_style_unlocked.corner_radius_top_right    = 99
-	_skill_style_unlocked.corner_radius_bottom_right = 99
-	_skill_style_unlocked.corner_radius_bottom_left  = 99
-
-	# AFFORDABLE — gold outline with translucent fill
-	_skill_style_affordable = StyleBoxFlat.new()
-	_skill_style_affordable.bg_color = Color(0.788, 0.659, 0.298, 0.22)
-	_skill_style_affordable.border_width_left   = 2
-	_skill_style_affordable.border_width_top    = 2
-	_skill_style_affordable.border_width_right  = 2
-	_skill_style_affordable.border_width_bottom = 2
-	_skill_style_affordable.border_color = Color(0.788, 0.659, 0.298, 0.85)
-	_skill_style_affordable.corner_radius_top_left     = 99
-	_skill_style_affordable.corner_radius_top_right    = 99
-	_skill_style_affordable.corner_radius_bottom_right = 99
-	_skill_style_affordable.corner_radius_bottom_left  = 99
-
-	# LOCKED / UNAFFORDABLE — dark, muted border
-	_skill_style_locked = StyleBoxFlat.new()
-	_skill_style_locked.bg_color = Color(0.14, 0.12, 0.10, 0.75)
-	_skill_style_locked.border_width_left   = 1
-	_skill_style_locked.border_width_top    = 1
-	_skill_style_locked.border_width_right  = 1
-	_skill_style_locked.border_width_bottom = 1
-	_skill_style_locked.border_color = Color(0.5, 0.42, 0.3, 0.45)
-	_skill_style_locked.corner_radius_top_left     = 99
-	_skill_style_locked.corner_radius_top_right    = 99
-	_skill_style_locked.corner_radius_bottom_right = 99
-	_skill_style_locked.corner_radius_bottom_left  = 99
-
-	# FUTURE / GHOST — barely visible dim circle
-	_skill_style_future = StyleBoxFlat.new()
-	_skill_style_future.bg_color = Color(0.239, 0.255, 0.333, 0.20)
-	_skill_style_future.border_width_left   = 1
-	_skill_style_future.border_width_top    = 1
-	_skill_style_future.border_width_right  = 1
-	_skill_style_future.border_width_bottom = 1
-	_skill_style_future.border_color = Color(0.239, 0.255, 0.333, 0.45)
-	_skill_style_future.corner_radius_top_left     = 99
-	_skill_style_future.corner_radius_top_right    = 99
-	_skill_style_future.corner_radius_bottom_right = 99
-	_skill_style_future.corner_radius_bottom_left  = 99
+		_expand_btn.text = "+"
 
 
 func _detail_roster() -> Array:
