@@ -187,6 +187,14 @@ func enter(ctx: RefCounted, t:int) -> void:
 		var _th_cfg: Dictionary = _th_cfg_v if _th_cfg_v is Dictionary else {}
 		_thread_reserve_cap = int(_th_cfg.get("base_reserve_cap", 4))
 
+	# V2-WEAVE-002: Weaving Rite nav — enabled only when threads are available
+	actions["nav.weaving_rite"] = {
+		"type":     "weave.enter_rite",
+		"label":    "Weaving",
+		"slot":     "nav.weaving_rite",
+		"disabled": _thread_reserve.is_empty(),
+	}
+
 	# V2-SANCTUM-002: institution config + ground data
 	var _inst_cfg_s: Dictionary = {}
 

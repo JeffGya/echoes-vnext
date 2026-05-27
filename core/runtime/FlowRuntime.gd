@@ -403,6 +403,26 @@ func dispatch(action: Dictionary) -> Dictionary:
 		"weave.confirm":
 			_handle_weave_confirm(t)
 
+		"weave.enter_rite":
+			flow_ctx.selected_weave_echo_id = ""
+			flow_ctx.selected_weave_thread_id = ""
+			flow_ctx.weave_resolution = {}
+			flow_ctx.weave_commit_locked = false
+			flow_machine.transition(FlowStateIds.WEAVING_RITE, flow_ctx, logger, t, "ui.weave.enter_rite")
+
+		"weave.pick_echo":
+			if str(flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.WEAVING_RITE:
+				return
+			var echo_id := str(action.get("echo_id", "")).strip_edges()
+			if echo_id.is_empty():
+				return
+			flow_ctx.selected_weave_echo_id = echo_id
+			flow_ctx.selected_weave_thread_id = ""
+			flow_ctx.weave_resolution = {}
+			flow_ctx.weave_commit_locked = false
+			flow_ctx.last_snapshot = FlowWeavingRiteStateScript.build_snapshot(flow_ctx, t)
+			flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
 		# PROG-004: Keeper-confirmed rank-up from EchoParty.
 		"sanctum.rank_up":
 			_handle_sanctum_rank_up(action, t)

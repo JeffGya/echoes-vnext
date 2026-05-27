@@ -92,11 +92,6 @@ const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.t
 @onready var detail_party_action_subtitle: Label = %DetailPartyActionSubtitle
 @onready var detail_party_action_button: Button = %DetailPartyActionButton
 
-@onready var name_modal: Control = %NameModal
-@onready var name_edit: LineEdit = %NameEdit
-@onready var reroll_button: Button = %RerollButton
-@onready var confirm_button: Button = %ConfirmButton
-
 # V2-VOW-002: ActiveEffectsPanel + EffectDetailPanel
 @onready var _effects_panel:    PanelContainer = %ActiveEffectsPanel
 @onready var _effects_list:     HBoxContainer  = %ActiveEffectsList
@@ -134,7 +129,6 @@ const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.t
 
 
 var _snapshot: Dictionary = {}
-var _name_dirty := false
 var _current_institution_id := ""
 var _placement_cell: Variant = null   # Vector2i or null — the cell selected in placement mode
 var _toast_timer: SceneTreeTimer = null
@@ -161,9 +155,6 @@ const FAMILY_ABBREV: Dictionary = {
 }
 
 func _ready() -> void:
-	reroll_button.pressed.connect(_on_reroll_pressed)
-	confirm_button.pressed.connect(_on_confirm_pressed)
-	name_edit.text_changed.connect(_on_name_edit_changed)
 	detail_back_button.pressed.connect(_on_detail_close_pressed)
 	detail_prev_button.pressed.connect(_on_detail_prev_pressed)
 	detail_next_button.pressed.connect(_on_detail_next_pressed)
@@ -286,16 +277,6 @@ func _render() -> void:
 		_show_ase_delta(delta)
 		_pulse_ase_label()
 	_last_ase_balance = ase_balance
-
-	if sanctum_name.is_empty():
-		name_modal.visible = true
-		if not _name_dirty:
-			name_edit.text = suggested
-			_name_dirty = false
-		confirm_button.disabled = name_edit.text.strip_edges().is_empty()
-	else:
-		name_modal.visible = false
-		_name_dirty = false
 
 	# V2-ECONOMY-001: Awakening overlay — one-shot on first Sanctum entry after awakening
 	if bool(data.get("show_awakening_overlay", false)):
@@ -745,19 +726,6 @@ func _vector_phrase(vector_id: String) -> String:
 			return "Nurturer's care"
 		_:
 			return _title_case(vector_id)
-
-
-func _on_name_edit_changed(new_text: String) -> void:
-	_name_dirty = true
-	confirm_button.disabled = new_text.strip_edges().is_empty()
-
-
-func _on_reroll_pressed() -> void:
-	action_requested.emit({"type": "sanctum.name.reroll"})
-
-
-func _on_confirm_pressed() -> void:
-	action_requested.emit({"type": "sanctum.name.confirm", "name": name_edit.text.strip_edges()})
 
 
 func _on_detail_prev_pressed() -> void:
@@ -1266,6 +1234,7 @@ func _on_inst_detail_back_pressed() -> void:
 	_inst_detail_panel.visible = false
 	_assign_picker.visible = false
 	_current_institution_id = ""
+	show_institutions_panel()
 
 
 func _on_inst_assign_pressed() -> void:

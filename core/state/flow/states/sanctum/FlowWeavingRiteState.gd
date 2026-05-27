@@ -88,6 +88,22 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"ripple_line": _no_ripple_line(outcome),
 		})
 
+	var echo_candidates: Array = []
+	if phase == "echo_missing":
+		for e_v in roster:
+			if not (e_v is Dictionary):
+				continue
+			var e: Dictionary = e_v
+			var calling := str(e.get("calling", ""))
+			var origin  := str(e.get("calling_origin", ""))
+			echo_candidates.append({
+				"id":             str(e.get("id", "")),
+				"name":           str(e.get("name", "")),
+				"standing":       int(e.get("standing", e.get("rank", 1))),
+				"calling":        calling,
+				"calling_origin": origin,
+			})
+
 	var begin_disabled := true
 	if phase == "invitation":
 		begin_disabled = false
@@ -128,6 +144,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"outcome": outcome,
 			"aftermath_lines": aftermath_lines,
 			"non_chosen": non_chosen,
+			"echo_candidates": echo_candidates,
 		},
 		"actions": actions,
 	}
