@@ -27,6 +27,7 @@ var _thread_cards: Array = []
 var _thread_rows: Array = []
 var _echo_picker_rows: Array = []
 var _echo_picker_ids: Array = []
+var _echo_picker_extra_rows: Array = []  # dynamically created for rosters > 6
 var _invitation_labels: Array = []
 var _aftermath_labels: Array = []
 var _non_chosen_labels: Array = []
@@ -204,23 +205,30 @@ func _render_invitation(data: Dictionary, phase: String) -> void:
 
 
 func _render_echo_picker(data: Dictionary, phase: String) -> void:
+	# Free any extra rows created in a previous render for oversized rosters.
+	for xr_v in _echo_picker_extra_rows:
+		if xr_v is Node and is_instance_valid(xr_v):
+			xr_v.queue_free()
+	_echo_picker_extra_rows.clear()
+
 	_echo_picker_ids.clear()
 	if phase != "echo_missing":
 		_echo_picker_section.visible = false
 		for rd in _echo_picker_rows:
 			(rd["row"] as HBoxContainer).visible = false
 		return
+
 	var candidates_v: Variant = data.get("echo_candidates", [])
 	var candidates: Array = candidates_v if candidates_v is Array else []
 	_echo_picker_ids.resize(candidates.size())
-	for i in range(_echo_picker_rows.size()):
-		var rd: Dictionary = _echo_picker_rows[i]
-		if i >= candidates.size():
-			(rd["row"] as HBoxContainer).visible = false
-			continue
+
+	# Populate all candidates. Pre-built rows handle the first 6.
+	# For candidates at index 6+, duplicate the first pre-built row to create extra rows.
+	for i in range(candidates.size()):
 		var c_v: Variant = candidates[i]
 		if not (c_v is Dictionary):
-			(rd["row"] as HBoxContainer).visible = false
+			if i < _echo_picker_rows.size():
+				(_echo_picker_rows[i]["row"] as HBoxContainer).visible = false
 			continue
 		var c: Dictionary = c_v
 		var echo_id := str(c.get("id", ""))
@@ -229,9 +237,34 @@ func _render_echo_picker(data: Dictionary, phase: String) -> void:
 		var label_text := echo_name
 		if not calling.is_empty():
 			label_text = "%s • %s" % [echo_name, _title_case(calling)]
-		(rd["label"] as Label).text = label_text
 		_echo_picker_ids[i] = echo_id
-		(rd["row"] as HBoxContainer).visible = true
+
+		if i < _echo_picker_rows.size():
+			# Pre-built row
+			var rd: Dictionary = _echo_picker_rows[i]
+			(rd["label"] as Label).text = label_text
+			(rd["row"] as HBoxContainer).visible = true
+		else:
+			# Extra row — duplicate the first pre-built row as a template.
+			# Connections are established fresh on each duplicate; no CONNECT_ONE_SHOT issues.
+			var template_row: HBoxContainer = _echo_picker_rows[0]["row"] as HBoxContainer
+			var extra_row: HBoxContainer = template_row.duplicate() as HBoxContainer
+			extra_row.visible = true
+			var extra_label: Label = extra_row.get_child(0) as Label
+			var extra_btn: Button  = extra_row.get_child(1) as Button
+			if extra_label != null:
+				extra_label.text = label_text
+			if extra_btn != null:
+				var idx_capture := i
+				extra_btn.pressed.connect(_on_echo_picker_row_pressed.bind(idx_capture))
+			_echo_picker_section.add_child(extra_row)
+			_echo_picker_extra_rows.append(extra_row)
+
+	# Hide pre-built rows that have no candidate.
+	for i in range(_echo_picker_rows.size()):
+		if i >= candidates.size():
+			(_echo_picker_rows[i]["row"] as HBoxContainer).visible = false
+
 	_echo_picker_section.visible = not candidates.is_empty()
 
 

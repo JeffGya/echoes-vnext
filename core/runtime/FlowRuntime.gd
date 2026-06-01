@@ -2894,6 +2894,28 @@ func _handle_sanctum_unlock_skill(action: Dictionary, t: int) -> void:
 		logger.debug(t, "sanctum.unlock_skill.denied", "Calling not confirmed", { "echo_id": echo_id })
 		return
 
+	# Skill family must be accessible for the echo's calling (strong or light alignment).
+	# Guards against stale / bypassed payloads that reference skills outside the calling's constellation.
+	var defn: Dictionary = defs.get(skill_id, {}) as Dictionary
+	var skill_family := str(defn.get("skill_family", ""))
+	var echo_calling := str(echo_ref.get("calling", ""))
+	var align_table_v: Variant = skills_cfg.get("calling_family_alignment", {})
+	var align_table: Dictionary = align_table_v if align_table_v is Dictionary else {}
+	var calling_align_v: Variant = align_table.get(echo_calling, {})
+	var calling_align: Dictionary = calling_align_v if calling_align_v is Dictionary else {}
+	var accessible: Array = []
+	for fid_v in calling_align.get("strong", []):
+		accessible.append(str(fid_v))
+	for fid_v in calling_align.get("light", []):
+		accessible.append(str(fid_v))
+	if not skill_family.is_empty() and not accessible.is_empty() \
+			and not (skill_family in accessible):
+		logger.debug(t, "sanctum.unlock_skill.denied", "Skill family not accessible for calling", {
+			"echo_id": echo_id, "skill_id": skill_id,
+			"skill_family": skill_family, "accessible": accessible,
+		})
+		return
+
 	# Not already unlocked
 	var ul_v: Variant = echo_ref.get("unlocked_skills", [])
 	var ul: Array = ul_v if ul_v is Array else []
@@ -2901,8 +2923,7 @@ func _handle_sanctum_unlock_skill(action: Dictionary, t: int) -> void:
 		logger.debug(t, "sanctum.unlock_skill.denied", "Already unlocked", { "skill_id": skill_id })
 		return
 
-	# Get Ase cost from unlock_conditions
-	var defn: Dictionary = defs.get(skill_id, {}) as Dictionary
+	# Ase cost from unlock_conditions (defn already loaded above)
 	var uc_v: Variant = defn.get("unlock_conditions", {})
 	var uc: Dictionary = uc_v if uc_v is Dictionary else {}
 	var ase_cost := int(uc.get("ase_cost", 0))

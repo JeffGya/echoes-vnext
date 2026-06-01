@@ -605,7 +605,9 @@ func _rebuild_skills_page(selected: Dictionary) -> void:
 			node.theme_type_variation = &"SkillNodeLocked"
 
 		var sid := str(entry.get("skill_id", ""))
-		node.pressed.connect(func(): _on_skill_node_tapped(sid, skill_entries), CONNECT_ONE_SHOT)
+		# No CONNECT_ONE_SHOT — cloned nodes are freed on each rebuild, so connections are
+		# cleaned up automatically. ONE_SHOT made the node dead after the first tap.
+		node.pressed.connect(func(): _on_skill_node_tapped(sid, skill_entries))
 		_constellation_map.add_child(node)
 		line_data.append({
 			"pos":       Vector2(nx, ny),

@@ -26,6 +26,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("skill_unlock/unlock_spends_ase_and_writes",    Callable(SkillUnlockTests, "_t_unlock_skill_spends_ase"))
 	runner.register_test("skill_unlock/unlock_denied_when_already_done", Callable(SkillUnlockTests, "_t_unlock_denied_when_already_unlocked"))
 	runner.register_test("skill_unlock/unlock_denied_when_uncalled",     Callable(SkillUnlockTests, "_t_unlock_denied_when_uncalled"))
+	runner.register_test("skill_unlock/unlock_denied_wrong_family",     Callable(SkillUnlockTests, "_t_unlock_denied_wrong_family"))
 	runner.register_test("skill_unlock/party_toggle_works_from_sanctum", Callable(SkillUnlockTests, "_t_party_toggle_from_sanctum"))
 
 
@@ -339,6 +340,55 @@ static func _t_unlock_denied_when_already_unlocked() -> Dictionary:
 # ---------------------------------------------------------------------------
 # T7: sanctum.unlock_skill denied when echo has no confirmed calling
 # ---------------------------------------------------------------------------
+
+## T7b: sanctum.unlock_skill denied when skill family is not accessible for calling.
+## okofor (ward/root strong, break light) must not unlock a path family skill.
+static func _t_unlock_denied_wrong_family() -> Dictionary:
+	var env := _make_runtime_env()
+	if not bool(env.get("ok", false)):
+		return env
+	var runtime: FlowRuntime = env["runtime"]
+
+	var save: Dictionary = runtime.get_save_data()
+	var roster := _get_roster(save)
+	if roster.is_empty():
+		return { "ok": false, "error": "Roster is empty after boot" }
+
+	var echo := _first_echo(roster)
+	if echo.is_empty():
+		return { "ok": false, "error": "roster[0] is not a Dictionary" }
+
+	echo["calling"]         = "okofor"   # okofor: strong=ward/root, light=break — path is inaccessible
+	echo["unlocked_skills"] = []
+	var echo_id := str(echo.get("id", ""))
+
+	var econ := _get_economy(save)
+	econ["ase"]              = 100
+	econ["last_settle_unix"] = int(Time.get_unix_time_from_system())
+
+	# rangers_mark has skill_family=path — NOT in okofor's families
+	runtime.dispatch({
+		"type":    "sanctum.unlock_skill",
+		"payload": { "echo_id": echo_id, "skill_id": "rangers_mark" },
+	})
+
+	var save_after: Dictionary = runtime.get_save_data()
+	var econ_after := _get_economy(save_after)
+	var ase_after := int(econ_after.get("ase", -1))
+	if ase_after != 100:
+		return {
+			"ok":    false,
+			"error": "Ase should be unchanged when skill family is inaccessible. Expected 100, got %d" % ase_after,
+		}
+
+	var echo_after := _find_echo(save_after, echo_id)
+	var ul_v: Variant = echo_after.get("unlocked_skills", [])
+	var ul: Array = ul_v if ul_v is Array else []
+	if ul.has("rangers_mark"):
+		return { "ok": false, "error": "rangers_mark (path) should not be unlockable for okofor calling" }
+
+	return { "ok": true }
+
 
 static func _t_unlock_denied_when_uncalled() -> Dictionary:
 	var env := _make_runtime_env()
