@@ -19,15 +19,16 @@ extends RefCounted
 # ---------------------------------------------------------------------------
 
 static func register(runner: CoreTestRunner) -> void:
-	runner.register_test("skill_unlock/all_defs_have_unlock_conditions", Callable(SkillUnlockTests, "_t_unlock_conditions_on_all_definitions"))
-	runner.register_test("skill_unlock/okofor_families_present",         Callable(SkillUnlockTests, "_t_skill_families_for_okofor"))
-	runner.register_test("skill_unlock/uncalled_echo_returns_empty",     Callable(SkillUnlockTests, "_t_uncalled_echo_returns_empty"))
-	runner.register_test("skill_unlock/unlocked_skills_repaired",        Callable(SkillUnlockTests, "_t_unlocked_skills_after_repair"))
-	runner.register_test("skill_unlock/unlock_spends_ase_and_writes",    Callable(SkillUnlockTests, "_t_unlock_skill_spends_ase"))
-	runner.register_test("skill_unlock/unlock_denied_when_already_done", Callable(SkillUnlockTests, "_t_unlock_denied_when_already_unlocked"))
-	runner.register_test("skill_unlock/unlock_denied_when_uncalled",     Callable(SkillUnlockTests, "_t_unlock_denied_when_uncalled"))
-	runner.register_test("skill_unlock/unlock_denied_wrong_family",     Callable(SkillUnlockTests, "_t_unlock_denied_wrong_family"))
-	runner.register_test("skill_unlock/party_toggle_works_from_sanctum", Callable(SkillUnlockTests, "_t_party_toggle_from_sanctum"))
+	runner.register_test("skill_unlock/all_defs_have_unlock_conditions",     Callable(SkillUnlockTests, "_t_unlock_conditions_on_all_definitions"))
+	runner.register_test("skill_unlock/okofor_families_present",             Callable(SkillUnlockTests, "_t_skill_families_for_okofor"))
+	runner.register_test("skill_unlock/uncalled_echo_returns_empty",         Callable(SkillUnlockTests, "_t_uncalled_echo_returns_empty"))
+	runner.register_test("skill_unlock/unlocked_skills_repaired",            Callable(SkillUnlockTests, "_t_unlocked_skills_after_repair"))
+	runner.register_test("skill_unlock/unlock_spends_ase_and_writes",        Callable(SkillUnlockTests, "_t_unlock_skill_spends_ase"))
+	runner.register_test("skill_unlock/unlock_denied_when_already_done",     Callable(SkillUnlockTests, "_t_unlock_denied_when_already_unlocked"))
+	runner.register_test("skill_unlock/unlock_denied_when_uncalled",         Callable(SkillUnlockTests, "_t_unlock_denied_when_uncalled"))
+	runner.register_test("skill_unlock/unlock_denied_wrong_family",          Callable(SkillUnlockTests, "_t_unlock_denied_wrong_family"))
+	runner.register_test("skill_unlock/party_toggle_works_from_sanctum",     Callable(SkillUnlockTests, "_t_party_toggle_from_sanctum"))
+	runner.register_test("skill_unlock/party_prep_filters_to_unlocked_only", Callable(SkillUnlockTests, "_t_party_prep_only_shows_unlocked_skills"))
 
 
 # ---------------------------------------------------------------------------
@@ -487,6 +488,74 @@ static func _t_party_toggle_from_sanctum() -> Dictionary:
 			"ok":    false,
 			"error": "active_party_ids does not contain echo_id=%s after toggle from flow.sanctum" % echo_id,
 		}
+
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# T9: party_prep available_skills filters to unlocked skills only
+# ---------------------------------------------------------------------------
+# Verifies the PROG-009 fix: filter_skills_for_calling returns ALL calling-accessible
+# skills, but build_snapshot must apply a second filter so only skills in echo.unlocked_skills
+# appear in party_prep. Tests both the positive case (one unlocked skill) and the negative
+# (no unlocked skills → empty list + has_unlocked_skills:false).
+
+static func _t_party_prep_only_shows_unlocked_skills() -> Dictionary:
+	var cfg_result := _load_real_skills_cfg()
+	if not bool(cfg_result.get("ok", false)):
+		return cfg_result
+
+	var skills_cfg: Dictionary = cfg_result["skills_cfg"] as Dictionary
+	var defs_v: Variant = skills_cfg.get("definitions", {})
+	var skill_defs: Dictionary = defs_v if defs_v is Dictionary else {}
+
+	if skill_defs.is_empty():
+		return { "ok": false, "error": "skills.definitions is empty — cannot build test" }
+
+	# --- Positive case: okofor echo with one unlocked skill ---
+	var all_accessible: Array = FlowStageMapState.filter_skills_for_calling("okofor", skill_defs, skills_cfg)
+	if all_accessible.is_empty():
+		return { "ok": false, "error": "filter_skills_for_calling returned [] for okofor — check balance.json" }
+
+	# Pick the first accessible skill as the "unlocked" one
+	var target_skill := str((all_accessible[0] as Dictionary).get("skill_id", ""))
+	if target_skill.is_empty():
+		return { "ok": false, "error": "First accessible skill has empty skill_id" }
+
+	var unlocked_ids: Array = [target_skill]
+	var filtered_positive: Array = all_accessible.filter(
+		func(s: Dictionary) -> bool: return unlocked_ids.has(str(s.get("skill_id", "")))
+	)
+
+	if filtered_positive.size() != 1:
+		return {
+			"ok":    false,
+			"error": "Expected 1 skill after filtering to unlocked=[%s], got %d" % [target_skill, filtered_positive.size()],
+		}
+	if str((filtered_positive[0] as Dictionary).get("skill_id", "")) != target_skill:
+		return {
+			"ok":    false,
+			"error": "Filtered skill_id mismatch. Expected '%s', got '%s'" % [target_skill, (filtered_positive[0] as Dictionary).get("skill_id", "")],
+		}
+
+	# --- Negative case: no unlocked skills → empty ---
+	var filtered_negative: Array = all_accessible.filter(
+		func(s: Dictionary) -> bool: return [].has(str(s.get("skill_id", "")))
+	)
+	if not filtered_negative.is_empty():
+		return {
+			"ok":    false,
+			"error": "Expected empty Array when unlocked_skills=[], got %d entries" % filtered_negative.size(),
+		}
+
+	# --- has_unlocked_skills flag ---
+	var has_positive: bool = not filtered_positive.is_empty()   # should be true
+	var has_negative: bool = not filtered_negative.is_empty()   # should be false
+
+	if not has_positive:
+		return { "ok": false, "error": "has_unlocked_skills should be true when one skill is unlocked" }
+	if has_negative:
+		return { "ok": false, "error": "has_unlocked_skills should be false when unlocked_skills=[]" }
 
 	return { "ok": true }
 

@@ -24,8 +24,17 @@ func setup(prep_entry: Dictionary) -> void:
 	var skills_v: Variant = prep_entry.get("available_skills", [])
 	var skills: Array = skills_v if skills_v is Array else []
 
+	# PROG-009 fix: if echo has no unlocked skills, disable picker with a clear prompt.
+	var has_unlocked: bool = bool(prep_entry.get("has_unlocked_skills", not skills.is_empty()))
 	_skill_picker.clear()
 	_skill_ids.clear()
+	if not has_unlocked:
+		_skill_picker.add_item("No skills unlocked", 0)
+		_skill_ids.append("")
+		_skill_picker.disabled = true
+		return
+
+	_skill_picker.disabled = false
 	_skill_picker.add_item("Pick skill", 0)
 	_skill_ids.append("")  # index 0 = no selection
 
