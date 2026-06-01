@@ -446,8 +446,10 @@ static func _t_party_toggle_from_sanctum() -> Dictionary:
 # ---------------------------------------------------------------------------
 
 ## Loads ConfigService and returns { "ok": true, "skills_cfg": Dictionary }
+## V2-PROG-009 fix: load_balance() must be called explicitly; ConfigService.new() does not auto-load.
 static func _load_real_skills_cfg() -> Dictionary:
 	var config := ConfigService.new()
+	config.load_balance()   # required — _balance is {} until this is called
 	var balance := config.get_balance()
 	var data_v: Variant = balance.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
@@ -484,13 +486,18 @@ static func _make_runtime_env() -> Dictionary:
 	if not runtime.has_method("get_save_data"):
 		return { "ok": false, "error": "FlowRuntime.get_save_data() missing" }
 
-	# Mark onboarding complete so tests are not blocked by intro state
+	# Mark onboarding complete so tests are not blocked by intro state.
+	# Must happen before navigating to sanctum so _gate_state_for_keeper_intro allows it.
 	var save_ref: Dictionary = runtime.get_save_data()
 	var onboarding_v: Variant = save_ref.get("onboarding", {})
 	if onboarding_v is Dictionary:
 		var ob: Dictionary = onboarding_v as Dictionary
 		ob["keeper_intro_complete"] = true
 		ob["keeper_intro_step"]     = "complete"
+
+	# Navigate to flow.sanctum — boot may have landed on flow.splash if save was fresh.
+	# _gate_state_for_keeper_intro allows sanctum once keeper_intro_complete=true.
+	runtime.dispatch({ "type": "flow.go_state", "to": "flow.sanctum" })
 
 	return { "ok": true, "runtime": runtime }
 
