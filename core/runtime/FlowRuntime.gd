@@ -411,17 +411,14 @@ func dispatch(action: Dictionary) -> Dictionary:
 			flow_machine.transition(FlowStateIds.WEAVING_RITE, flow_ctx, logger, t, "ui.weave.enter_rite")
 
 		"weave.pick_echo":
-			if str(flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.WEAVING_RITE:
-				return
 			var echo_id := str(action.get("echo_id", "")).strip_edges()
-			if echo_id.is_empty():
-				return
-			flow_ctx.selected_weave_echo_id = echo_id
-			flow_ctx.selected_weave_thread_id = ""
-			flow_ctx.weave_resolution = {}
-			flow_ctx.weave_commit_locked = false
-			flow_ctx.last_snapshot = FlowWeavingRiteStateScript.build_snapshot(flow_ctx, t)
-			flow_machine.refresh_snapshot(flow_ctx, logger, t)
+			if str(flow_ctx.last_snapshot.get("type", "")) == FlowStateIds.WEAVING_RITE and not echo_id.is_empty():
+				flow_ctx.selected_weave_echo_id = echo_id
+				flow_ctx.selected_weave_thread_id = ""
+				flow_ctx.weave_resolution = {}
+				flow_ctx.weave_commit_locked = false
+				flow_ctx.last_snapshot = FlowWeavingRiteStateScript.build_snapshot(flow_ctx, t)
+				flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 		# PROG-004: Keeper-confirmed rank-up from EchoParty.
 		"sanctum.rank_up":
@@ -5125,8 +5122,12 @@ func _apply_emotion_recovery_if_needed(now_unix: int, t: int) -> void:
 	var roster_v: Variant = sanctum.get("roster", [])
 	var roster: Array = roster_v if roster_v is Array else []
 
+	# V2-PROG-010: pass full cfg_data so EmotionRecoveryService can apply rank-based fear bonus.
+	var _emo_cfg_data: Dictionary = {}
+	if flow_ctx.config_service != null:
+		_emo_cfg_data = flow_ctx.config_service.get_balance().get("data", {})
 	var changed := EmotionRecoveryServiceScript.apply_recovery_from_elapsed(
-		roster, elapsed, cfg, fear_threshold, logger, t)
+		roster, elapsed, cfg, fear_threshold, logger, t, _emo_cfg_data)
 
 	if changed.size() > 0:
 		sanctum["roster"] = roster

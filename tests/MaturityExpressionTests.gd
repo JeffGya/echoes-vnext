@@ -37,7 +37,7 @@ const _EXPR_CFG := {
 	"band_by_standing":          { "1": "nascent", "2": "forming", "3": "grounded", "4": "whole", "5": "whole" },
 	"calling_behavior":          {
 		"okofor":   { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 3 },
-		"aduro":    { "retreat_threshold": null,  "press_advantage": true,  "directive_mul": 1.0, "leadership_radius": 3 },
+		"aduro":    { "retreat_threshold": null,  "press_advantage": true,  "directive_mul": 1.0, "leadership_radius": 3, "absolute_fear_threshold": 75 },
 		"kra_soro": { "retreat_threshold": 0.50, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 4 },
 		"uncalled": { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.5, "leadership_radius": 3 },
 	},
@@ -48,6 +48,23 @@ const _EXPR_CFG := {
 	"resilience_trait_pool":    {},
 	"leadership_trait_pool":    {},
 	"leadership_trait_effects": {},
+	# V2-PROG-010 additions
+	"rank_strength_scale":       { "max_rank": 9 },
+	"refusal_thresholds_by_band": { "nascent": 65, "forming": 72, "grounded": 80, "whole": 90 },
+	"identity_weight_scale":     { "trait": 0.6, "vector": 0.6 },
+	"presence_dampen_scale":     { "value": 0.4 },
+	"fear_self_recovery": {
+		"passive_max": 3,
+		"active_spike_min": 3,
+		"active_spike_max": 12,
+		"identity_threshold_calling": 30,
+		"identity_threshold_vector": 0.15,
+	},
+	"sanctum_fear_recovery_bonus": { "mid_rank_start": 5, "bonus_max": 4, "identity_calling_bonus": 1, "identity_vector_bonus": 1 },
+	"directive_band_mul":         { "nascent": 1.30, "forming": 1.10, "grounded": 0.90, "whole": 0.75 },
+	"rank_benefits_config": {
+		"fear_recovery": { "min_rank": 5, "label": "Settles Quickly", "description": "This Echo steadies between ventures." },
+	},
 }
 
 const _BALANCE_CFG := {
@@ -56,7 +73,7 @@ const _BALANCE_CFG := {
 			"band_by_standing":          { "1": "nascent", "2": "forming", "3": "grounded", "4": "whole", "5": "whole" },
 			"calling_behavior":          {
 				"okofor":   { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 3 },
-				"aduro":    { "retreat_threshold": null,  "press_advantage": true,  "directive_mul": 1.0, "leadership_radius": 3 },
+				"aduro":    { "retreat_threshold": null,  "press_advantage": true,  "directive_mul": 1.0, "leadership_radius": 3, "absolute_fear_threshold": 75 },
 				"kra_soro": { "retreat_threshold": 0.50, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 4 },
 				"uncalled": { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.5, "leadership_radius": 3 },
 			},
@@ -67,6 +84,23 @@ const _BALANCE_CFG := {
 			"resilience_trait_pool":    {},
 			"leadership_trait_pool":    {},
 			"leadership_trait_effects": {},
+			# V2-PROG-010 additions
+			"rank_strength_scale":       { "max_rank": 9 },
+			"refusal_thresholds_by_band": { "nascent": 65, "forming": 72, "grounded": 80, "whole": 90 },
+			"identity_weight_scale":     { "trait": 0.6, "vector": 0.6 },
+			"presence_dampen_scale":     { "value": 0.4 },
+			"fear_self_recovery": {
+				"passive_max": 3,
+				"active_spike_min": 3,
+				"active_spike_max": 12,
+				"identity_threshold_calling": 30,
+				"identity_threshold_vector": 0.15,
+			},
+			"sanctum_fear_recovery_bonus": { "mid_rank_start": 5, "bonus_max": 4, "identity_calling_bonus": 1, "identity_vector_bonus": 1 },
+			"directive_band_mul":         { "nascent": 1.30, "forming": 1.10, "grounded": 0.90, "whole": 0.75 },
+			"rank_benefits_config": {
+				"fear_recovery": { "min_rank": 5, "label": "Settles Quickly", "description": "This Echo steadies between ventures." },
+			},
 		},
 		"emotion": { "fear_threshold": 80 },
 		"actor":   {
@@ -92,6 +126,14 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("expr/bark_melee_nonempty",                       Callable(MaturityExpressionTests, "_t_bark_melee_nonempty"))
 	runner.register_test("expr/bark_idle_empty",                           Callable(MaturityExpressionTests, "_t_bark_idle_empty"))
 	runner.register_test("expr/snapshot_prog006_fields_present",           Callable(MaturityExpressionTests, "_t_snapshot_fields_present"))
+	# V2-PROG-010 tests
+	runner.register_test("expr/nascent_refuses_before_whole",              Callable(MaturityExpressionTests, "_t_nascent_refuses_before_whole"))
+	runner.register_test("expr/rank_strength_scale_0_to_1",               Callable(MaturityExpressionTests, "_t_rank_strength_scale"))
+	runner.register_test("expr/identity_weight_scales_with_rank",         Callable(MaturityExpressionTests, "_t_identity_weight_scales_with_rank"))
+	runner.register_test("expr/composure_rank9_vs_rank1_under_fear",      Callable(MaturityExpressionTests, "_t_composure_rank9_vs_rank1"))
+	runner.register_test("expr/identity_spike_fires_on_calling_vector",   Callable(MaturityExpressionTests, "_t_identity_spike_fires"))
+	runner.register_test("expr/no_spike_on_non_identity_action",          Callable(MaturityExpressionTests, "_t_no_spike_on_non_identity"))
+	runner.register_test("expr/rank_benefits_build_correct_entries",      Callable(MaturityExpressionTests, "_t_rank_benefits_build"))
 
 
 # ─── Test 1 ────────────────────────────────────────────────────────────────
@@ -523,3 +565,176 @@ static func _has_action(candidates: Array, action_type: String) -> bool:
 		if c is Dictionary and str(c.get("action_type", "")) == action_type:
 			return true
 	return false
+
+
+# ─── V2-PROG-010 Tests ───────────────────────────────────────────────────────
+
+# Test 17 — nascent refuses before whole under identical fear
+static func _t_nascent_refuses_before_whole() -> Dictionary:
+	# Rank 1 (nascent, no calling override) and rank 9 (whole, no calling override).
+	# Fear=68: above nascent threshold (65), below whole threshold (90).
+	var echo_n := ActorTests._make_test_echo("echo_n17", "Aba Kofi")
+	var actor_n: Dictionary = EchoActor.from_echo(echo_n)
+	actor_n["rank"]     = 1
+	actor_n["fear"]     = 68
+	actor_n["morale"]   = 50
+	actor_n["grid_pos"] = { "col": 0, "row": 0 }
+
+	var echo_w := ActorTests._make_test_echo("echo_w17", "Kweku Asante")
+	var actor_w: Dictionary = EchoActor.from_echo(echo_w)
+	actor_w["rank"]     = 9
+	actor_w["fear"]     = 68
+	actor_w["morale"]   = 50
+	actor_w["grid_pos"] = { "col": 0, "row": 0 }
+
+	var enemy := _make_enemy("en17", { "col": 1, "row": 0 })
+	var logger := StructuredLogger.new()
+	logger.set_level("info")
+
+	var sm_n := ActorStateMachine.new(actor_n)
+	var intent_n := sm_n.advance_turn({ "actor": actor_n, "all_actors": [enemy], "cfg": _BALANCE_CFG, "t": 1 }, logger, 1)
+	if str(intent_n.get("action_type", "")) != "actor.refuse":
+		return { "ok": false, "error": "Nascent at fear=68 should refuse (threshold=65), got: %s" % intent_n.get("action_type", "") }
+
+	var sm_w := ActorStateMachine.new(actor_w)
+	var intent_w := sm_w.advance_turn({ "actor": actor_w, "all_actors": [enemy], "cfg": _BALANCE_CFG, "t": 1 }, logger, 1)
+	if str(intent_w.get("action_type", "")) == "actor.refuse":
+		return { "ok": false, "error": "Whole at fear=68 should NOT refuse (threshold=90), got: actor.refuse" }
+
+	return { "ok": true }
+
+
+# Test 18 — rank_strength scalar 0.0 → 1.0
+static func _t_rank_strength_scale() -> Dictionary:
+	var rs1: float = MaturityExpressionService.get_rank_strength(1, 9)
+	var rs9: float = MaturityExpressionService.get_rank_strength(9, 9)
+	var rs5: float = MaturityExpressionService.get_rank_strength(5, 9)
+
+	if not is_equal_approx(rs1, 0.0):
+		return { "ok": false, "error": "rank_strength(1,9) should be 0.0, got %.4f" % rs1 }
+	if not is_equal_approx(rs9, 1.0):
+		return { "ok": false, "error": "rank_strength(9,9) should be 1.0, got %.4f" % rs9 }
+	if rs5 < 0.49 or rs5 > 0.51:
+		return { "ok": false, "error": "rank_strength(5,9) should be ~0.5, got %.4f" % rs5 }
+	return { "ok": true }
+
+
+# Test 19 — identity weight scales trait+vector contribution with rank
+static func _t_identity_weight_scales_with_rank() -> Dictionary:
+	# Aduro echo at rank 1 vs rank 9. Fear=0 so fear_factor=1.0 for both.
+	# rank 9 should score melee_attack higher (trait+vector amplified).
+	var actor_base := {
+		"id": "echo_iw1", "faction": "echo", "calling_origin": "aduro",
+		"actor_type": "echo", "archetype_birth": "valiant",
+		"traits": { "courage": 60, "wisdom": 40, "faith": 20 },
+		"vector_scores": { "vanguard": 80, "protector": 10 },
+		"fear": 0, "fear_base": 0, "morale": 60,
+		"grid_pos": { "col": 0, "row": 0 }, "rank": 1,
+	}
+	var enemy := _make_enemy("en19", { "col": 1, "row": 0 })
+
+	var arbiter := BehaviorArbiter.new({})
+
+	var actor_r1 := actor_base.duplicate(true)
+	actor_r1["rank"] = 1
+	var context_r1 := {
+		"actor": actor_r1, "all_actors": [enemy],
+		"expression_band": "nascent", "calling_behavior": {},
+		"presence_strength": 0.1, "rank_strength": 0.0,
+	}
+	var score_r1: float = arbiter._score("melee_attack", actor_r1, {}, {}, "nascent", {}, {}, 0.1, 0.0)
+
+	var actor_r9 := actor_base.duplicate(true)
+	actor_r9["rank"] = 9
+	var score_r9: float = arbiter._score("melee_attack", actor_r9, {}, {}, "whole", {}, {}, 1.0, 1.0)
+
+	if score_r9 <= score_r1:
+		return { "ok": false, "error": "Rank 9 melee_attack score (%.2f) should be > rank 1 (%.2f)" % [score_r9, score_r1] }
+	return { "ok": true }
+
+
+# Test 20 — composure: rank 9 scores higher under fear than rank 1
+static func _t_composure_rank9_vs_rank1() -> Dictionary:
+	var actor_base := {
+		"id": "echo_cmp", "faction": "echo", "calling_origin": "aduro",
+		"actor_type": "echo", "archetype_birth": "valiant",
+		"traits": { "courage": 60, "wisdom": 40, "faith": 20 },
+		"vector_scores": { "vanguard": 80, "protector": 10 },
+		"fear": 60, "fear_base": 0, "morale": 50,
+		"grid_pos": { "col": 0, "row": 0 },
+	}
+	var arbiter := BehaviorArbiter.new({})
+
+	var score_r1: float = arbiter._score("melee_attack", actor_base, {}, {}, "nascent", {}, {}, 0.1, 0.0)
+	var score_r9: float = arbiter._score("melee_attack", actor_base, {}, {}, "whole",   {}, {}, 1.0, 1.0)
+
+	if score_r9 <= score_r1:
+		return { "ok": false, "error": "At fear=60, rank 9 (%.2f) should score > rank 1 (%.2f)" % [score_r9, score_r1] }
+	return { "ok": true }
+
+
+# Test 21 — active fear spike fires on identity-consistent action (aduro + vanguard → melee_attack)
+static func _t_identity_spike_fires() -> Dictionary:
+	var echo := ActorTests._make_test_echo("echo_spk21", "Kofi Mensah")
+	var actor: Dictionary = EchoActor.from_echo(echo)
+	actor["rank"]           = 7
+	actor["calling_origin"] = "aduro"
+	actor["dominant_vector"] = "vanguard"
+	actor["fear"]           = 50
+	actor["morale"]         = 60
+	actor["grid_pos"]       = { "col": 0, "row": 0 }
+
+	var enemy := _make_enemy("en21", { "col": 1, "row": 0 })
+	var logger := StructuredLogger.new()
+	logger.set_level("info")
+	var sm := ActorStateMachine.new(actor)
+	sm.advance_turn({ "actor": actor, "all_actors": [enemy], "cfg": _BALANCE_CFG, "t": 1 }, logger, 1)
+
+	# Fear should have decreased due to passive tick + spike
+	if int(actor.get("fear", 50)) >= 50:
+		return { "ok": false, "error": "Fear should decrease after turn for rank-7 aduro+vanguard, got: %d" % actor.get("fear", 50) }
+	return { "ok": true }
+
+
+# Test 22 — no spike on non-identity action (idle when no enemies)
+static func _t_no_spike_on_non_identity() -> Dictionary:
+	var echo := ActorTests._make_test_echo("echo_nospk22", "Ama Frema")
+	var actor: Dictionary = EchoActor.from_echo(echo)
+	actor["rank"]            = 7
+	actor["calling_origin"]  = "aduro"
+	actor["dominant_vector"] = "vanguard"
+	actor["fear"]            = 50
+	actor["morale"]          = 60
+	actor["grid_pos"]        = { "col": 0, "row": 0 }
+
+	# No enemies → only actor.idle candidate → not identity-consistent for aduro+vanguard
+	var logger := StructuredLogger.new()
+	logger.set_level("info")
+	var sm := ActorStateMachine.new(actor)
+	sm.advance_turn({ "actor": actor, "all_actors": [], "cfg": _BALANCE_CFG, "t": 1 }, logger, 1)
+
+	# _fear_spike_fired should be false (spike should not have fired)
+	if bool(actor.get("_fear_spike_fired", false)):
+		return { "ok": false, "error": "_fear_spike_fired should be false after idle action, was true" }
+	return { "ok": true }
+
+
+# Test 23 — rank_benefits build: rank < min_rank returns [], rank >= min_rank returns entry
+static func _t_rank_benefits_build() -> Dictionary:
+	# Rank 4 — below min_rank_start=5 → empty
+	var echo_r4 := { "rank": 4, "calling": "", "dominant_vector": "" }
+	var benefits_r4: Array = FlowSanctumState._build_rank_benefits(echo_r4, _BALANCE_CFG["data"])
+	if benefits_r4.size() != 0:
+		return { "ok": false, "error": "Rank 4 should have 0 benefits, got %d" % benefits_r4.size() }
+
+	# Rank 6 — above min_rank_start=5 → fear_recovery benefit present
+	var echo_r6 := { "rank": 6, "calling": "aduro", "dominant_vector": "vanguard" }
+	var benefits_r6: Array = FlowSanctumState._build_rank_benefits(echo_r6, _BALANCE_CFG["data"])
+	if benefits_r6.size() == 0:
+		return { "ok": false, "error": "Rank 6 should have ≥1 benefit, got 0" }
+	var b: Dictionary = benefits_r6[0]
+	if str(b.get("id", "")) != "fear_recovery":
+		return { "ok": false, "error": "Expected benefit id 'fear_recovery', got: %s" % b.get("id", "") }
+	if str(b.get("label", "")).is_empty():
+		return { "ok": false, "error": "Benefit label should not be empty" }
+	return { "ok": true }

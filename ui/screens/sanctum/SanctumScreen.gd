@@ -43,6 +43,8 @@ const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.t
 @onready var tab_bonds: Button = %TabBonds
 @onready var tab_skills: Button = %TabSkills
 @onready var overview_page: Control = %OverviewPage
+# V2-PROG-010: earned rank benefits container
+@onready var _rank_benefits_container: HFlowContainer = %RankBenefitsContainer
 @onready var bonds_page: Control = %BondsPage
 @onready var skills_page: Control = %SkillsPage
 @onready var bonds_empty_label: Label = %BondsEmptyLabel
@@ -415,6 +417,8 @@ func _render_echo_detail(detail_roster: Array, featured_echo_id: String) -> void
 	detail_stat_charisma_value.text = str(int(stats.get("cha", 0)))
 	detail_stat_speed_value.text = str(int(stats.get("speed", 0)))
 	detail_stat_max_health_value.text = str(int(stats.get("max_hp", 0)))
+	# V2-PROG-010: populate earned rank benefit glyphs (persistent, not part of emotional state)
+	_rebuild_rank_benefits(selected)
 	_rebuild_bonds_page(selected)
 	_rebuild_skills_page(selected)
 	if bool(selected.get("in_party", false)):
@@ -435,6 +439,32 @@ func _apply_tab_state() -> void:
 	detail_action_divider.visible = _detail_tab == "overview"
 	detail_party_action.visible = _detail_tab == "overview"
 	detail_pages_scroll.scroll_vertical = 0
+
+
+# V2-PROG-010: Shows earned rank benefit glyphs on the Echo detail card.
+# Uses pre-built EchoRankBenefitGlyph nodes in RankBenefitsContainer.
+# Scripts only set values — never add_child() or create visual nodes.
+func _rebuild_rank_benefits(selected: Dictionary) -> void:
+	if _rank_benefits_container == null:
+		return
+	var benefits_v: Variant = selected.get("rank_benefits", [])
+	var benefits: Array = benefits_v if benefits_v is Array else []
+	var glyph_nodes: Array = _rank_benefits_container.get_children()
+
+	# Hide all glyphs first
+	for g in glyph_nodes:
+		g.visible = false
+
+	# Show and populate earned ones, up to the number of pre-built slots
+	var count := mini(benefits.size(), glyph_nodes.size())
+	for i in range(count):
+		var glyph: Node = glyph_nodes[i]
+		var b: Dictionary = benefits[i] if benefits[i] is Dictionary else {}
+		if glyph.has_method("set_benefit"):
+			glyph.call("set_benefit", str(b.get("label", "")), str(b.get("description", "")))
+		glyph.visible = true
+
+	_rank_benefits_container.visible = count > 0
 
 
 func _rebuild_bonds_page(selected: Dictionary) -> void:

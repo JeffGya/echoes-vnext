@@ -81,6 +81,42 @@ static func get_expression(actor: Dictionary, cfg_data: Dictionary) -> Dictionar
 	}
 
 
+# ── Rank strength (continuous scalar) ────────────────────────────────────────
+
+# V2-PROG-010: Continuous rank scalar. 0.0 at rank 1 → 1.0 at rank 9.
+# max_rank from config (data.maturity_expression.rank_strength_scale.max_rank); defaults to 9.
+# Used for all rank-scaled effects: identity weight, composure, fear recovery.
+static func get_rank_strength(rank: int, max_rank: int = 9) -> float:
+	if max_rank <= 1:
+		return 0.0
+	return clampf(float(rank - 1) / float(max_rank - 1), 0.0, 1.0)
+
+
+# ── Sanctum fear recovery bonus ───────────────────────────────────────────────
+
+# V2-PROG-010: Bonus fear reduction applied per sanctum recovery tick.
+# Starts at mid_rank_start (default 5), scales with rank_strength.
+# Identity-based: calling (confirmed) and dominant_vector each add a small bonus.
+# Returns integer bonus to add onto the base fear recovery delta.
+static func compute_sanctum_fear_recovery_bonus(echo: Dictionary, cfg_data: Dictionary) -> int:
+	var expr_cfg: Dictionary     = cfg_data.get("maturity_expression", {})
+	var recovery_cfg: Dictionary = expr_cfg.get("sanctum_fear_recovery_bonus", {})
+	var mid_rank:  int = int(recovery_cfg.get("mid_rank_start", 5))
+	var bonus_max: int = int(recovery_cfg.get("bonus_max", 4))
+	var rank: int = int(echo.get("rank", 1))
+	if rank < mid_rank:
+		return 0
+	var max_rank: int  = int(expr_cfg.get("rank_strength_scale", {}).get("max_rank", 9))
+	var rs: float      = get_rank_strength(rank, max_rank)
+	var bonus: int     = int(round(float(bonus_max) * rs))
+	# Identity contribution — calling confirmed + dominant_vector present
+	var call_bonus: int = int(recovery_cfg.get("identity_calling_bonus", 1)) \
+		if str(echo.get("calling", "")) != "" else 0
+	var vec_bonus: int  = int(recovery_cfg.get("identity_vector_bonus", 1)) \
+		if str(echo.get("dominant_vector", "")) != "" else 0
+	return clampi(bonus + call_bonus + vec_bonus, 0, bonus_max + 2)
+
+
 # ── Calling behavior ──────────────────────────────────────────────────────────
 
 # Returns the calling_behavior entry for this actor.

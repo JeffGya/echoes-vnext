@@ -114,7 +114,8 @@ func enter(ctx: RefCounted, t:int) -> void:
 		skills_cfg,
 		prog_cfg,
 		max_level,
-		_ase_balance
+		_ase_balance,
+		balance_data  # V2-PROG-010: cfg_data for rank_benefits + maturity expression fields
 	)
 	var limit : Variant = min(3, roster.size())
 	for i in range(limit):
@@ -325,7 +326,8 @@ static func _build_echo_detail_roster(
 	skills_cfg: Dictionary,
 	prog_cfg: Dictionary,
 	max_level: int,
-	ase_balance: int = 0
+	ase_balance: int = 0,
+	cfg_data: Dictionary = {}  # V2-PROG-010: full balance data for rank_benefits + maturity fields
 ) -> Array:
 	var out: Array = []
 	for echo_v in roster:
@@ -385,8 +387,35 @@ static func _build_echo_detail_roster(
 				party_encounters,
 				bond_thresholds
 			),
+			# V2-PROG-010: maturity expression fields (simulation-internal — not displayed as labels)
+			"expression_band":  MaturityExpressionService.get_expression_band(
+				rank, cfg_data.get("maturity_expression", {}).get("band_by_standing", {})),
+			"rank_strength":    MaturityExpressionService.get_rank_strength(
+				rank, int(cfg_data.get("maturity_expression", {}).get("rank_strength_scale", {}).get("max_rank", 9))),
+			# V2-PROG-010: earned rank benefits — persistent glyphs on Echo detail card
+			"rank_benefits":    _build_rank_benefits(echo, cfg_data),
 	})
 	return out
+
+
+# V2-PROG-010: Builds the list of earned rank benefits for display on the Echo detail card.
+# Each benefit is unlocked at a minimum rank. Prose only — no numbers.
+static func _build_rank_benefits(echo: Dictionary, cfg_data: Dictionary) -> Array:
+	var rank: int = int(echo.get("rank", 1))
+	var benefits_cfg: Dictionary = cfg_data.get("maturity_expression", {}).get("rank_benefits_config", {})
+	var result: Array = []
+	for benefit_id in benefits_cfg:
+		var b_v: Variant = benefits_cfg[benefit_id]
+		if not (b_v is Dictionary):
+			continue
+		var b: Dictionary = b_v as Dictionary
+		if rank >= int(b.get("min_rank", 999)):
+			result.append({
+				"id":          benefit_id,
+				"label":       str(b.get("label", "")),
+				"description": str(b.get("description", "")),
+			})
+	return result
 
 
 # V2-PROG-009: signature updated — ase_balance needed for can_afford field.

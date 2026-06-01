@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://bu3o3n582e5j2"]
 
 [ext_resource type="Script" uid="uid://cb8hn28k3qlg6" path="res://ui/screens/sanctum/SanctumScreen.gd" id="1_55k7r"]
+[ext_resource type="PackedScene" path="res://ui/screens/sanctum/EchoRankBenefitGlyph.tscn" id="7_rankbenefit"]
 [ext_resource type="Theme" uid="uid://8qssuuodths2" path="res://assets/theme/LivingTreeSystem.tres" id="2_gaxha"]
 [ext_resource type="PackedScene" uid="uid://dahk08c2p4mgn" path="res://ui/components/EmotionChip.tscn" id="3_emotionchip"]
 [ext_resource type="PackedScene" uid="uid://bond_tier_bar" path="res://ui/components/BondTierBar.tscn" id="4_bondtier"]
@@ -684,6 +685,22 @@ custom_minimum_size = Vector2(0, 22)
 layout_mode = 2
 theme_type_variation = &"SanctumStoryweightBar"
 show_percentage = false
+
+[node name="RankBenefitsContainer" type="HFlowContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage" unique_id=3010150001]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 4
+visible = false
+
+[node name="RankBenefitGlyph0" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/RankBenefitsContainer" instance=ExtResource("7_rankbenefit")]
+visible = false
+
+[node name="RankBenefitGlyph1" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/RankBenefitsContainer" instance=ExtResource("7_rankbenefit")]
+visible = false
+
+[node name="RankBenefitGlyph2" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage/RankBenefitsContainer" instance=ExtResource("7_rankbenefit")]
+visible = false
 
 [node name="StatsHeaderRow" type="HBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/ContentRow/PagePanel/PagePanelMargin/PagePanelStack/DetailPages/DetailPagesScroll/DetailPagesStack/OverviewPage" unique_id=1650585110]
 layout_mode = 2

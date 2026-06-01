@@ -22,13 +22,15 @@ extends RefCounted
 ## Applies time-based fear/morale recovery to all roster echoes.
 ## Reads per-echo recovery_modifiers multipliers; decrements ticks_remaining.
 ## Returns Array of { echo_id, morale_delta, fear_delta } — positive values indicate improvement.
+## V2-PROG-010: cfg_data (full balance data block) optional — enables rank-based fear recovery bonus.
 static func apply_recovery_from_elapsed(
 	roster:          Array,
 	elapsed_seconds: int,
 	cfg:             Dictionary,
 	fear_threshold:  int,
 	logger:          StructuredLogger,
-	t:               int
+	t:               int,
+	cfg_data:        Dictionary = {}
 ) -> Array:
 	var results: Array = []
 	if elapsed_seconds <= 0 or roster.is_empty():
@@ -77,8 +79,11 @@ static func apply_recovery_from_elapsed(
 
 		# Fear recovers toward 0 (floor)
 		# SANCTUM-FEAR-BASE: swap 0 → echo["emotion"]["fear_base"] when that lands
+		# V2-PROG-010: rank-based fear recovery bonus for mid-to-high rank echoes.
+		var rank_fear_bonus: int = MaturityExpressionService.compute_sanctum_fear_recovery_bonus(echo, cfg_data) \
+			if not cfg_data.is_empty() else 0
 		if fear_rate > 0.0 and fear_current > 0:
-			var raw_delta := roundi(fear_rate * float(effective))
+			var raw_delta := roundi(fear_rate * float(effective)) + rank_fear_bonus
 			if raw_delta > 0:
 				var clamped := fear_current - maxi(fear_current - raw_delta, 0)
 				if clamped > 0:

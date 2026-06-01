@@ -998,6 +998,56 @@
 				"whole": 95.0
 			},
 			"last_stand_whole_morale_tick": 5.0,
+			"rank_strength_scale": {
+				"_comment": "V2-PROG-010: rank_strength = (rank-1)/(max_rank-1). Rank 1=0.0, rank 9=1.0. Used for all rank-scaled effects.",
+				"max_rank": 9
+			},
+			"refusal_thresholds_by_band": {
+				"_comment": "V2-PROG-010: Base Absolute Fear Rule threshold by expression band, before calling-specific absolute_fear_threshold override. Nascent breaks sooner, whole holds longer.",
+				"nascent": 65,
+				"forming": 72,
+				"grounded": 80,
+				"whole": 90
+			},
+			"identity_weight_scale": {
+				"_comment": "V2-PROG-010: Additional multiplier on trait_bonus and vector_bonus at rank 9 (rank_strength=1.0). At rank 1 multiplier=1.0x; at rank 9 multiplier=1.0+scale.",
+				"trait": 0.6,
+				"vector": 0.6
+			},
+			"presence_dampen_scale": {
+				"_comment": "V2-PROG-010: Max reduction to fear_active_dampen at rank 9. 0.4 = 40% less fear disruption at rank 9 vs rank 1.",
+				"value": 0.4
+			},
+			"fear_self_recovery": {
+				"_comment": "V2-PROG-010: Passive per-round fear tick-down + active spike on identity-consistent action. Both scale with rank_strength. Identity-consistent = calling AND dominant_vector both aligned.",
+				"passive_max": 3,
+				"active_spike_min": 3,
+				"active_spike_max": 12,
+				"identity_threshold_calling": 30,
+				"identity_threshold_vector": 0.15
+			},
+			"sanctum_fear_recovery_bonus": {
+				"_comment": "V2-PROG-010: Bonus fear reduction per sanctum recovery tick. Starts at mid_rank_start, scales with rank_strength. calling+dominant_vector each add a small identity bonus.",
+				"mid_rank_start": 5,
+				"bonus_max": 4,
+				"identity_calling_bonus": 1,
+				"identity_vector_bonus": 1
+			},
+			"directive_band_mul": {
+				"_comment": "V2-PROG-010: Multiplier on directive bonus contribution by expression band. Nascent follows directives more literally (>1.0); whole interprets through own judgment (<1.0).",
+				"nascent": 1.30,
+				"forming": 1.10,
+				"grounded": 0.90,
+				"whole": 0.75
+			},
+			"rank_benefits_config": {
+				"_comment": "V2-PROG-010: Earned benefit definitions shown as persistent glyphs on Echo detail card. Unlocked at min_rank. Label and description are prose only — no numbers.",
+				"fear_recovery": {
+					"min_rank": 5,
+					"label": "Settles Quickly",
+					"description": "This Echo steadies between ventures. Fear lifts faster when they are home."
+				}
+			},
 			"enemy_demoralize_fear_tick": 5.0,
 			"enemy_demoralize_radius": 3.0,
 			"resilience_trait_pool": {

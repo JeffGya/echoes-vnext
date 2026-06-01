@@ -99,6 +99,11 @@ const _DEFAULTS := {
 	"threat_threshold":      0.50,  # 0.50 = ally must be below 50% HP to qualify as threatened
 	"guard_range":           1,     # enemy must be adjacent for guard to be a candidate (melee-only MVP)
 	# V2-PROG-006: expression-band-based scoring defaults
+	# V2-PROG-010: identity weight scaling + composure + directive band tables
+	"identity_weight_scale":  { "trait": 0.6, "vector": 0.6 },
+	"presence_dampen_scale":  { "value": 0.4 },
+	"directive_band_mul":     { "nascent": 1.30, "forming": 1.10, "grounded": 0.90, "whole": 0.75 },
+
 	"wound_chase_mul":              15.0,  # Forming+ finish-wounded score bonus multiplier
 	"surrounded_move_penalty":     -18.0, # Forming+ penalty for move into surrounded position
 	"formation_distance":            6,   # Grounded+ formation pull threshold (tiles)
@@ -235,8 +240,11 @@ func select_intent(context: Dictionary) -> Dictionary:
 	var directive: Dictionary = context.get("directive", {})
 
 	# V2-PROG-006: read expression band + calling behavior injected by ActorStateMachine
-	var expression_band: String    = str(context.get("expression_band", "nascent"))
+	var expression_band: String      = str(context.get("expression_band", "nascent"))
 	var calling_behavior: Dictionary = context.get("calling_behavior", {})
+	# V2-PROG-010: rank-strength and presence_strength for identity scaling + composure
+	var presence_strength: float = float(context.get("presence_strength", 0.1))
+	var rank_strength: float     = float(context.get("rank_strength", 0.0))
 
 	# Build board summary once — passed to _score() for every candidate to avoid re-computation.
 	var board_summary: Dictionary = _build_board_summary(actor, all_actors, context.get("board_cfg", {}), expression_band)
@@ -245,7 +253,7 @@ func select_intent(context: Dictionary) -> Dictionary:
 
 	# Score each candidate, then sort: highest score first; tiebreak alphabetically.
 	for c: Dictionary in candidates:
-		c["_score"] = _score(c["action_type"], actor, directive, board_summary, expression_band, calling_behavior, c)
+		c["_score"] = _score(c["action_type"], actor, directive, board_summary, expression_band, calling_behavior, c, presence_strength, rank_strength)
 
 	# VOW-001: apply vow bias additively after base scoring.
 	# Vow bias is always additive, never overrides. Enemies are unaffected (faction != "echo").
@@ -760,7 +768,9 @@ func _score(
 	board_summary: Dictionary = {},
 	expression_band: String = "nascent",
 	calling_behavior: Dictionary = {},
-	candidate: Dictionary = {}
+	candidate: Dictionary = {},
+	presence_strength: float = 0.1,  # V2-PROG-010
+	rank_strength: float = 0.0       # V2-PROG-010
 ) -> float:
 	var _confirmed_calling: String = str(actor.get("calling", ""))
 	var calling_origin: String = _confirmed_calling \
@@ -799,6 +809,12 @@ func _score(
 	for vector_key: String in v_row:
 		vector_bonus += float(vectors.get(vector_key, 0)) * float(v_row[vector_key])
 
+	# V2-PROG-010: identity weight scaling — trait and vector contributions amplify with rank.
+	# At rank 1 (rank_strength=0.0): scale=1.0x (baseline). At rank 9: scale=1.0+identity_weight_scale.
+	var id_scale: Dictionary = _cfg_get("identity_weight_scale")
+	trait_bonus  *= 1.0 + rank_strength * float(id_scale.get("trait",  0.6))
+	vector_bonus *= 1.0 + rank_strength * float(id_scale.get("vector", 0.6))
+
 	# 3b. Archetype bonus — flat constant lookup by archetype_birth string (not a continuous score).
 	#     Encodes personality combat tendency (combat_bias): aggressive→melee/move, steadfast→guard, etc.
 	var arch_tables: Dictionary = _cfg_get("archetype_action_muls")
@@ -807,11 +823,14 @@ func _score(
 	var archetype_bonus: float  = float(a_row.get(archetype, 0.0))
 
 	# 4. Fear factor: dampens active intents; passive intents (actor.idle) are unaffected.
+	# V2-PROG-010: composure — fear disrupts scoring less at higher ranks (lower effective dampen).
 	var passive_actions: Array = _cfg_get("fear_passive_actions")
 	var fear_factor: float     = 1.0
 	if action_type not in passive_actions:
-		var dampen: float  = float(_cfg_get("fear_active_dampen"))
-		fear_factor        = clamp(1.0 - (fear / 100.0) * dampen, 0.0, 1.0)
+		var dampen: float   = float(_cfg_get("fear_active_dampen"))
+		var d_scale: float  = float((_cfg_get("presence_dampen_scale") as Dictionary).get("value", 0.4))
+		var eff_dampen: float = dampen * (1.0 - rank_strength * d_scale)
+		fear_factor = clamp(1.0 - (fear / 100.0) * eff_dampen, 0.0, 1.0)
 
 	# 5. Morale bonus — flat integer modifier based on tier; steady tier = 0 (neutral baseline).
 	#    Lives inside the pre-fear bracket so fear can dampen morale-influenced scores too.
@@ -830,7 +849,8 @@ func _score(
 		base += float(mini(anchor_rounds * 8, 24))
 
 	# 6. Directive bonus — generic loop over intent_weights (semantic keys).
-	var directive_bonus: float = _directive_bonus(action_type, directive)
+	# V2-PROG-010: pass expression_band + calling_behavior for mul modulation.
+	var directive_bonus: float = _directive_bonus(action_type, directive, expression_band, calling_behavior)
 
 	# V2-PROG-006: calling-aware score multipliers (Grounded+ only)
 	var calling_mul: float = 1.0
@@ -898,7 +918,8 @@ func _score(
 ## Maps directive semantic intent_weights keys → action bonus.
 ## Uses directive_action_muls translation table (balance.json) so new directive keys
 ## and new action types can be added without touching this function.
-func _directive_bonus(action_type: String, directive: Dictionary) -> float:
+## V2-PROG-010: expression_band and calling_behavior modulate the effective bonus.
+func _directive_bonus(action_type: String, directive: Dictionary, expression_band: String = "nascent", calling_behavior: Dictionary = {}) -> float:
 	if directive.is_empty():
 		return 0.0
 
@@ -909,7 +930,15 @@ func _directive_bonus(action_type: String, directive: Dictionary) -> float:
 	var dir_muls_table: Dictionary = _cfg_get("directive_action_muls")
 	var d_row: Dictionary          = dir_muls_table.get(action_type, {})
 	var base_bonus: float          = float(_cfg_get("directive_base_bonus"))
-	var bonus: float               = 0.0
+
+	# V2-PROG-010: calling directive_mul (wiring existing config — was declared but never applied)
+	var call_dir_mul: float = float(calling_behavior.get("directive_mul", 1.0))
+	# V2-PROG-010: band-level directive modulation — nascent follows literally, whole interprets independently
+	var band_mul_table: Dictionary = _cfg_get("directive_band_mul") as Dictionary
+	var dir_band_mul: float        = float(band_mul_table.get(expression_band, 1.0))
+	base_bonus = base_bonus * call_dir_mul * dir_band_mul
+
+	var bonus: float = 0.0
 
 	# Generic loop: for each semantic key that boosts this action_type,
 	# add the directive's weight for that key × directive_base_bonus.
