@@ -163,7 +163,13 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			if not calling.is_empty() and calling != "uncalled":
 				any_called = true
 				# V2-PROG-005: family-based filter — calling → aligned families → skills in those families
-				var available_skills: Array = filter_skills_for_calling(calling, skill_defs, families_cfg)
+				# PROG-009 fix: filter further to only skills the Echo has actually unlocked
+				var all_accessible: Array = filter_skills_for_calling(calling, skill_defs, families_cfg)
+				var unlocked_ids_v: Variant = echo.get("unlocked_skills", [])
+				var unlocked_ids: Array = unlocked_ids_v if unlocked_ids_v is Array else []
+				var available_skills: Array = all_accessible.filter(
+					func(s: Dictionary) -> bool: return unlocked_ids.has(str(s.get("skill_id", "")))
+				)
 				# Equipped: in-session pending only — no pre-selection from save.
 				var pending_echo_v: Variant = flow_ctx.pending_equipped_skills.get(echo_id, {})
 				var pending_echo: Dictionary = pending_echo_v if pending_echo_v is Dictionary else {}
@@ -173,12 +179,13 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				var calling_families: Dictionary = _resolve_calling_families(calling, families_cfg)
 
 				party_prep.append({
-					"echo_id":           echo_id,
-					"echo_name":         str(echo.get("name", "")),
-					"calling_id":        calling,
-					"calling_families":  calling_families,
-					"available_skills":  available_skills,
-					"equipped_skill_id": equipped_skill_id,
+					"echo_id":              echo_id,
+					"echo_name":            str(echo.get("name", "")),
+					"calling_id":           calling,
+					"calling_families":     calling_families,
+					"available_skills":     available_skills,
+					"equipped_skill_id":    equipped_skill_id,
+					"has_unlocked_skills":  not available_skills.is_empty(),
 				})
 			break
 
