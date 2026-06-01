@@ -684,6 +684,14 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 				repaired = true
 				repaired_notes.append("sanctum.roster[%d].skill_slots defaulted to ['']" % i)
 
+			# V2-PROG-009: unlocked skill IDs — pool of techniques the Keeper has paid to unlock.
+			# Equipping (placing in active slot) is a separate action, out of scope for this story.
+			# No unlock cap — Keeper can unlock as many S3 skills as they can afford.
+			if not echo.has("unlocked_skills") or typeof(echo["unlocked_skills"]) != TYPE_ARRAY:
+				echo["unlocked_skills"] = []
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].unlocked_skills defaulted to []" % i)
+
 			# V2-WEAVE-002: woven Threads + deferred memory marks (additive only).
 			if not echo.has("woven_threads") or not (echo["woven_threads"] is Array):
 				echo["woven_threads"] = []

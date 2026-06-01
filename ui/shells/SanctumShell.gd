@@ -332,7 +332,7 @@ func _bind_nav_bar() -> void:
 	_bind_button(_summon_button, _action_for_slot("nav.summon"), "Summon")
 	_bind_realm_button()
 	_bind_button(_vows_button, _action_for_slot("nav.vow_manage"), "Vows")
-	_bind_button(_weaving_button, {}, "Weaving", "Choose an Echo first.")
+	_bind_button(_weaving_button, _action_for_slot("nav.weaving_rite"), "Weaving")
 
 func _maybe_show_return_notice(snap: Dictionary) -> void:
 	if _current_snap_type != "flow.sanctum":

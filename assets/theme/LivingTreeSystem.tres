@@ -350,6 +350,65 @@ border_width_right = 1
 border_width_bottom = 1
 border_color = Color(0.78431374, 0.3529412, 0.32941177, 0.45)
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_skill_node_unlocked"]
+bg_color = Color(0.788, 0.659, 0.298, 0.95)
+corner_radius_top_left = 99
+corner_radius_top_right = 99
+corner_radius_bottom_right = 99
+corner_radius_bottom_left = 99
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_skill_node_affordable"]
+bg_color = Color(0.788, 0.659, 0.298, 0.18)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.788, 0.659, 0.298, 0.85)
+corner_radius_top_left = 99
+corner_radius_top_right = 99
+corner_radius_bottom_right = 99
+corner_radius_bottom_left = 99
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_skill_node_locked"]
+bg_color = Color(0.14, 0.12, 0.10, 0.75)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.5, 0.42, 0.3, 0.45)
+corner_radius_top_left = 99
+corner_radius_top_right = 99
+corner_radius_bottom_right = 99
+corner_radius_bottom_left = 99
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_skill_node_future"]
+bg_color = Color(0.239, 0.255, 0.333, 0.20)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.239, 0.255, 0.333, 0.45)
+corner_radius_top_left = 99
+corner_radius_top_right = 99
+corner_radius_bottom_right = 99
+corner_radius_bottom_left = 99
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_skill_calling_node"]
+bg_color = Color(0.788, 0.659, 0.298, 1.0)
+corner_radius_top_left = 26
+corner_radius_top_right = 26
+corner_radius_bottom_right = 26
+corner_radius_bottom_left = 26
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_skill_detail_strip"]
+bg_color = Color(0.10, 0.08, 0.06, 0.90)
+border_width_top = 1
+border_color = Color(0.788, 0.659, 0.298, 0.18)
+corner_radius_top_left = 0
+corner_radius_top_right = 0
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
 [resource]
 Button/colors/font_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
 Button/colors/font_disabled_color = Color(0.54509807, 0.4509804, 0.33333334, 1)
@@ -628,6 +687,66 @@ SanctumTertiaryButton/styles/hover = SubResource("StyleBoxFlat_sanctum_tertiary"
 SanctumTertiaryButton/styles/hover_pressed = SubResource("StyleBoxFlat_sanctum_tertiary")
 SanctumTertiaryButton/styles/normal = SubResource("StyleBoxFlat_sanctum_tertiary")
 SanctumTertiaryButton/styles/pressed = SubResource("StyleBoxFlat_sanctum_tertiary")
+SkillCallingNode/base_type = &"PanelContainer"
+SkillCallingNode/styles/panel = SubResource("StyleBoxFlat_skill_calling_node")
+SkillDetailStrip/base_type = &"PanelContainer"
+SkillDetailStrip/styles/panel = SubResource("StyleBoxFlat_skill_detail_strip")
+SkillNodeAffordable/base_type = &"Button"
+SkillNodeAffordable/colors/font_color = Color(0.83137256, 0.6862745, 0.21568628, 0.9)
+SkillNodeAffordable/colors/font_disabled_color = Color(0.83137256, 0.6862745, 0.21568628, 0.45)
+SkillNodeAffordable/colors/font_focus_color = Color(0.83137256, 0.6862745, 0.21568628, 1.0)
+SkillNodeAffordable/colors/font_hover_color = Color(0.83137256, 0.6862745, 0.21568628, 1.0)
+SkillNodeAffordable/colors/font_hover_pressed_color = Color(0.83137256, 0.6862745, 0.21568628, 1.0)
+SkillNodeAffordable/font_sizes/font_size = 11
+SkillNodeAffordable/fonts/font = ExtResource("11_r5n68")
+SkillNodeAffordable/styles/disabled = SubResource("StyleBoxFlat_skill_node_affordable")
+SkillNodeAffordable/styles/focus = SubResource("StyleBoxFlat_skill_node_affordable")
+SkillNodeAffordable/styles/hover = SubResource("StyleBoxFlat_skill_node_affordable")
+SkillNodeAffordable/styles/hover_pressed = SubResource("StyleBoxFlat_skill_node_affordable")
+SkillNodeAffordable/styles/normal = SubResource("StyleBoxFlat_skill_node_affordable")
+SkillNodeAffordable/styles/pressed = SubResource("StyleBoxFlat_skill_node_affordable")
+SkillNodeFuture/base_type = &"Button"
+SkillNodeFuture/colors/font_color = Color(0.239, 0.255, 0.333, 0.45)
+SkillNodeFuture/colors/font_disabled_color = Color(0.239, 0.255, 0.333, 0.25)
+SkillNodeFuture/colors/font_focus_color = Color(0.239, 0.255, 0.333, 0.45)
+SkillNodeFuture/colors/font_hover_color = Color(0.239, 0.255, 0.333, 0.45)
+SkillNodeFuture/colors/font_hover_pressed_color = Color(0.239, 0.255, 0.333, 0.45)
+SkillNodeFuture/font_sizes/font_size = 11
+SkillNodeFuture/fonts/font = ExtResource("11_r5n68")
+SkillNodeFuture/styles/disabled = SubResource("StyleBoxFlat_skill_node_future")
+SkillNodeFuture/styles/focus = SubResource("StyleBoxFlat_skill_node_future")
+SkillNodeFuture/styles/hover = SubResource("StyleBoxFlat_skill_node_future")
+SkillNodeFuture/styles/hover_pressed = SubResource("StyleBoxFlat_skill_node_future")
+SkillNodeFuture/styles/normal = SubResource("StyleBoxFlat_skill_node_future")
+SkillNodeFuture/styles/pressed = SubResource("StyleBoxFlat_skill_node_future")
+SkillNodeLocked/base_type = &"Button"
+SkillNodeLocked/colors/font_color = Color(0.5, 0.42, 0.3, 0.65)
+SkillNodeLocked/colors/font_disabled_color = Color(0.5, 0.42, 0.3, 0.35)
+SkillNodeLocked/colors/font_focus_color = Color(0.5, 0.42, 0.3, 0.8)
+SkillNodeLocked/colors/font_hover_color = Color(0.5, 0.42, 0.3, 0.8)
+SkillNodeLocked/colors/font_hover_pressed_color = Color(0.5, 0.42, 0.3, 0.8)
+SkillNodeLocked/font_sizes/font_size = 11
+SkillNodeLocked/fonts/font = ExtResource("11_r5n68")
+SkillNodeLocked/styles/disabled = SubResource("StyleBoxFlat_skill_node_locked")
+SkillNodeLocked/styles/focus = SubResource("StyleBoxFlat_skill_node_locked")
+SkillNodeLocked/styles/hover = SubResource("StyleBoxFlat_skill_node_locked")
+SkillNodeLocked/styles/hover_pressed = SubResource("StyleBoxFlat_skill_node_locked")
+SkillNodeLocked/styles/normal = SubResource("StyleBoxFlat_skill_node_locked")
+SkillNodeLocked/styles/pressed = SubResource("StyleBoxFlat_skill_node_locked")
+SkillNodeUnlocked/base_type = &"Button"
+SkillNodeUnlocked/colors/font_color = Color(0.08, 0.05, 0.02, 1.0)
+SkillNodeUnlocked/colors/font_disabled_color = Color(0.08, 0.05, 0.02, 0.55)
+SkillNodeUnlocked/colors/font_focus_color = Color(0.08, 0.05, 0.02, 1.0)
+SkillNodeUnlocked/colors/font_hover_color = Color(0.08, 0.05, 0.02, 1.0)
+SkillNodeUnlocked/colors/font_hover_pressed_color = Color(0.08, 0.05, 0.02, 1.0)
+SkillNodeUnlocked/font_sizes/font_size = 11
+SkillNodeUnlocked/fonts/font = ExtResource("11_r5n68")
+SkillNodeUnlocked/styles/disabled = SubResource("StyleBoxFlat_skill_node_unlocked")
+SkillNodeUnlocked/styles/focus = SubResource("StyleBoxFlat_skill_node_unlocked")
+SkillNodeUnlocked/styles/hover = SubResource("StyleBoxFlat_skill_node_unlocked")
+SkillNodeUnlocked/styles/hover_pressed = SubResource("StyleBoxFlat_skill_node_unlocked")
+SkillNodeUnlocked/styles/normal = SubResource("StyleBoxFlat_skill_node_unlocked")
+SkillNodeUnlocked/styles/pressed = SubResource("StyleBoxFlat_skill_node_unlocked")
 StatsPanel/base_type = &"Label"
 StatsPanel/colors/font_color = Color(0.23921569, 0.15686275, 0.09019608, 1)
 StatsPanel/fonts/font = ExtResource("11_r5n68")

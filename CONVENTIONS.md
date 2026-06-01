@@ -608,6 +608,8 @@ EncounterStateMachine phases (scaffold): `setup → blessing → rounds → reso
 | | `sanctum.institution.assign_echo` | payload: `{ institution_id, echo_id }`. Spends Ase, adds echo to occupant_ids. Auto-removes echo from active_party_ids if present. |
 | | `sanctum.institution.remove_echo` | payload: `{ institution_id, echo_id }`. Spends Ekwan, removes echo, drops condition one tier. Applies morale/fear delta if echo was natural_fit. |
 | **weave** | `weave.start_for_echo` | payload: `{ echo_id }`. Starts rite from an EchoParty/Sanctum-family interaction, seeds rite context with the chosen echo, transitions to `flow.weaving_rite`. |
+| | `weave.enter_rite` | No payload. Clears stale rite context (echo_id, thread_id, resolution, locked) and transitions fresh to `flow.weaving_rite`. Entry point from BottomRail Weaving button. |
+| | `weave.pick_echo` | payload: `{ echo_id }`. Per-row dispatch from echo picker in `echo_missing` phase. Sets selected echo, clears thread/resolution, rebuilds rite snapshot. |
 | | `weave.select_thread` | payload: `{ thread_id }`. Sets offered thread for the currently selected rite echo and refreshes rite snapshot. |
 | | `weave.begin_rite` | validates selection, resolves outcome, applies outcome + non-chosen consequences, locks rite until confirm. |
 | | `weave.confirm` | clears rite transients and returns to Sanctum. |

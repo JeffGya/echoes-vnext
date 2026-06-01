@@ -7,6 +7,7 @@ signal action_requested(action: Dictionary)
 
 @onready var _thread_panel: VBoxContainer = %ThreadPanel
 @onready var _echo_panel: VBoxContainer = %EchoPanel
+@onready var _echo_picker_section: VBoxContainer = %EchoPickerSection
 @onready var _resolution_panel: VBoxContainer = %ResolutionPanel
 @onready var _empty_thread_label: Label = %EmptyThreadLabel
 @onready var _empty_candidate_label: Label = %EmptyCandidateLabel
@@ -24,6 +25,9 @@ var _thread_items: Array = []
 
 var _thread_cards: Array = []
 var _thread_rows: Array = []
+var _echo_picker_rows: Array = []
+var _echo_picker_ids: Array = []
+var _echo_picker_extra_rows: Array = []  # dynamically created for rosters > 6
 var _invitation_labels: Array = []
 var _aftermath_labels: Array = []
 var _non_chosen_labels: Array = []
@@ -50,6 +54,19 @@ func _ready() -> void:
 			if card.has_signal("selected"):
 				card.connect("selected", Callable(self, "_on_thread_card_selected"))
 
+	_echo_picker_rows = [
+		{ "row": %EchoPickerRow1, "label": %EchoPickerLabel1, "button": %EchoPickerButton1 },
+		{ "row": %EchoPickerRow2, "label": %EchoPickerLabel2, "button": %EchoPickerButton2 },
+		{ "row": %EchoPickerRow3, "label": %EchoPickerLabel3, "button": %EchoPickerButton3 },
+		{ "row": %EchoPickerRow4, "label": %EchoPickerLabel4, "button": %EchoPickerButton4 },
+		{ "row": %EchoPickerRow5, "label": %EchoPickerLabel5, "button": %EchoPickerButton5 },
+		{ "row": %EchoPickerRow6, "label": %EchoPickerLabel6, "button": %EchoPickerButton6 },
+	]
+	for i in range(_echo_picker_rows.size()):
+		var button: Button = _echo_picker_rows[i]["button"]
+		button.pressed.connect(_on_echo_picker_row_pressed.bind(i))
+		(_echo_picker_rows[i]["row"] as HBoxContainer).visible = false
+
 	_invitation_labels = [%CandidateName1, %CandidateFit1, %CandidateReadiness1, %CandidateStrain1]
 	_aftermath_labels = [%AftermathLine1, %AftermathLine2, %AftermathLine3, %AftermathLine4]
 	_non_chosen_labels = [%NonChosenLine1, %NonChosenLine2, %NonChosenLine3, %NonChosenLine4]
@@ -71,6 +88,7 @@ func set_snapshot(snapshot: Dictionary) -> void:
 	_apply_phase_visibility(phase)
 
 	_render_threads(data)
+	_render_echo_picker(data, phase)
 	_render_invitation(data, phase)
 	_render_resolution(data)
 	_apply_action_slots(actions)
@@ -148,7 +166,9 @@ func _render_invitation(data: Dictionary, phase: String) -> void:
 		lines = invitation_v
 
 	if phase == "echo_missing":
-		lines = ["Select an Echo from Echo Party to begin this rite."]
+		if _echo_panel_title != null:
+			_echo_panel_title.text = "Choose an Echo"
+		lines = []
 	elif phase == "thread_select":
 		lines = ["Choose one Thread to offer.", "The house will answer once the rite begins."]
 
@@ -169,7 +189,7 @@ func _render_invitation(data: Dictionary, phase: String) -> void:
 	var select_2: Node = %CandidateSelectButton2
 	var select_3: Node = %CandidateSelectButton3
 	if row_1 != null:
-		row_1.visible = true
+		row_1.visible = phase != "echo_missing"
 	if row_2 != null:
 		row_2.visible = false
 	if row_3 != null:
@@ -181,7 +201,71 @@ func _render_invitation(data: Dictionary, phase: String) -> void:
 	if select_3 != null:
 		select_3.visible = false
 
-	_empty_candidate_label.visible = lines.is_empty()
+	_empty_candidate_label.visible = lines.is_empty() and phase != "echo_missing"
+
+
+func _render_echo_picker(data: Dictionary, phase: String) -> void:
+	# Free any extra rows created in a previous render for oversized rosters.
+	for xr_v in _echo_picker_extra_rows:
+		if xr_v is Node and is_instance_valid(xr_v):
+			xr_v.queue_free()
+	_echo_picker_extra_rows.clear()
+
+	_echo_picker_ids.clear()
+	if phase != "echo_missing":
+		_echo_picker_section.visible = false
+		for rd in _echo_picker_rows:
+			(rd["row"] as HBoxContainer).visible = false
+		return
+
+	var candidates_v: Variant = data.get("echo_candidates", [])
+	var candidates: Array = candidates_v if candidates_v is Array else []
+	_echo_picker_ids.resize(candidates.size())
+
+	# Populate all candidates. Pre-built rows handle the first 6.
+	# For candidates at index 6+, duplicate the first pre-built row to create extra rows.
+	for i in range(candidates.size()):
+		var c_v: Variant = candidates[i]
+		if not (c_v is Dictionary):
+			if i < _echo_picker_rows.size():
+				(_echo_picker_rows[i]["row"] as HBoxContainer).visible = false
+			continue
+		var c: Dictionary = c_v
+		var echo_id := str(c.get("id", ""))
+		var echo_name := str(c.get("name", "Echo"))
+		var calling := str(c.get("calling", ""))
+		var label_text := echo_name
+		if not calling.is_empty():
+			label_text = "%s • %s" % [echo_name, _title_case(calling)]
+		_echo_picker_ids[i] = echo_id
+
+		if i < _echo_picker_rows.size():
+			# Pre-built row
+			var rd: Dictionary = _echo_picker_rows[i]
+			(rd["label"] as Label).text = label_text
+			(rd["row"] as HBoxContainer).visible = true
+		else:
+			# Extra row — duplicate the first pre-built row as a template.
+			# Connections are established fresh on each duplicate; no CONNECT_ONE_SHOT issues.
+			var template_row: HBoxContainer = _echo_picker_rows[0]["row"] as HBoxContainer
+			var extra_row: HBoxContainer = template_row.duplicate() as HBoxContainer
+			extra_row.visible = true
+			var extra_label: Label = extra_row.get_child(0) as Label
+			var extra_btn: Button  = extra_row.get_child(1) as Button
+			if extra_label != null:
+				extra_label.text = label_text
+			if extra_btn != null:
+				var idx_capture := i
+				extra_btn.pressed.connect(_on_echo_picker_row_pressed.bind(idx_capture))
+			_echo_picker_section.add_child(extra_row)
+			_echo_picker_extra_rows.append(extra_row)
+
+	# Hide pre-built rows that have no candidate.
+	for i in range(_echo_picker_rows.size()):
+		if i >= candidates.size():
+			(_echo_picker_rows[i]["row"] as HBoxContainer).visible = false
+
+	_echo_picker_section.visible = not candidates.is_empty()
 
 
 func _render_resolution(data: Dictionary) -> void:
@@ -224,8 +308,8 @@ func _render_resolution(data: Dictionary) -> void:
 
 
 func _apply_phase_visibility(phase: String) -> void:
-	_thread_panel.visible = phase == "thread_select" or phase == "invitation" or phase == "echo_missing"
-	_echo_panel.visible = phase == "thread_select" or phase == "invitation" or phase == "echo_missing"
+	_thread_panel.visible = phase == "thread_select" or phase == "invitation"
+	_echo_panel.visible = phase == "echo_missing" or phase == "thread_select" or phase == "invitation"
 	_resolution_panel.visible = phase == "aftermath"
 
 
@@ -278,6 +362,15 @@ func _on_thread_card_selected(thread_id: String) -> void:
 		"type": "weave.select_thread",
 		"thread_id": thread_id,
 	})
+
+
+func _on_echo_picker_row_pressed(index: int) -> void:
+	if index < 0 or index >= _echo_picker_ids.size():
+		return
+	var echo_id := str(_echo_picker_ids[index])
+	if echo_id.is_empty():
+		return
+	action_requested.emit({ "type": "weave.pick_echo", "echo_id": echo_id })
 
 
 func _emit_slot_action(slot: String) -> void:

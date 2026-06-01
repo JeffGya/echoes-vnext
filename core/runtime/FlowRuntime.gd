@@ -380,6 +380,9 @@ func dispatch(action: Dictionary) -> Dictionary:
 		"sanctum.party.toggle":
 			_handle_sanctum_party_toggle(action, t)
 
+		"sanctum.unlock_skill":
+			_handle_sanctum_unlock_skill(action, t)
+
 		# ---- Weaving Rite (V2-WEAVE-002) ----
 		"weave.start_for_echo":
 			_handle_weave_start_for_echo(action, t)
@@ -399,6 +402,23 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 		"weave.confirm":
 			_handle_weave_confirm(t)
+
+		"weave.enter_rite":
+			flow_ctx.selected_weave_echo_id = ""
+			flow_ctx.selected_weave_thread_id = ""
+			flow_ctx.weave_resolution = {}
+			flow_ctx.weave_commit_locked = false
+			flow_machine.transition(FlowStateIds.WEAVING_RITE, flow_ctx, logger, t, "ui.weave.enter_rite")
+
+		"weave.pick_echo":
+			var echo_id := str(action.get("echo_id", "")).strip_edges()
+			if str(flow_ctx.last_snapshot.get("type", "")) == FlowStateIds.WEAVING_RITE and not echo_id.is_empty():
+				flow_ctx.selected_weave_echo_id = echo_id
+				flow_ctx.selected_weave_thread_id = ""
+				flow_ctx.weave_resolution = {}
+				flow_ctx.weave_commit_locked = false
+				flow_ctx.last_snapshot = FlowWeavingRiteStateScript.build_snapshot(flow_ctx, t)
+				flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 		# PROG-004: Keeper-confirmed rank-up from EchoParty.
 		"sanctum.rank_up":
@@ -2730,10 +2750,10 @@ func _get_party_max_size() -> int:
 	return int(s_cfg.get("party_max_size", 5))
 	
 func _handle_sanctum_party_toggle(action: Dictionary, t: int) -> void:
-	# Allow from EchoParty only; ignore elsewhere.
+	# Allow from EchoParty and Sanctum (EchoDetail party button); ignore elsewhere.
 	var snap_type := str(flow_ctx.last_snapshot.get("type", ""))
-	if snap_type != FlowStateIds.ECHO_PARTY:
-		logger.debug(t, "sanctum.party.toggle.ignored", "Party toggle ignored (not in echo party)", {
+	if snap_type != FlowStateIds.ECHO_PARTY and snap_type != FlowStateIds.SANCTUM:
+		logger.debug(t, "sanctum.party.toggle.ignored", "Party toggle ignored (outside sanctum family)", {
 			"snapshot_type": snap_type
 		})
 		return
@@ -2751,6 +2771,14 @@ func _handle_sanctum_party_toggle(action: Dictionary, t: int) -> void:
 		flow_ctx.pending_party_ids = []
 	if not (flow_ctx.pending_party_ids is Array):
 		flow_ctx.pending_party_ids = []
+
+	# V2-PROG-009: When toggling from flow.sanctum (EchoDetail party button), sync
+	# pending_party_ids from active_party_ids so the toggle operates on the current list.
+	if snap_type == FlowStateIds.SANCTUM:
+		var _s_v: Variant = flow_ctx.save_data.get("sanctum", {})
+		var _s: Dictionary = _s_v if _s_v is Dictionary else {}
+		var _ap_v: Variant = _s.get("active_party_ids", [])
+		flow_ctx.pending_party_ids = (_ap_v if _ap_v is Array else []).duplicate()
 
 	# Validate echo_id exists in roster (prevent selecting ghost ids)
 	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
@@ -2819,8 +2847,112 @@ func _handle_sanctum_party_toggle(action: Dictionary, t: int) -> void:
 	else:
 		flow_ctx.save_request_reason = "sanctum.party.autosave"
 
-	flow_ctx.last_snapshot = FlowEchoPartyState.build_snapshot(flow_ctx, t)
-	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+	# V2-PROG-009: Rebuild the appropriate snapshot.
+	# SANCTUM: full reenter so echo_detail_roster reflects updated in_party flags.
+	# ECHO_PARTY: build party snapshot as before.
+	if snap_type == FlowStateIds.SANCTUM:
+		flow_machine.reenter(flow_ctx, logger, t)
+	else:
+		flow_ctx.last_snapshot = FlowEchoPartyState.build_snapshot(flow_ctx, t)
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+# V2-PROG-009: Unlock a skill from the constellation skill tree.
+# Validates: SANCTUM state, skill exists, calling confirmed, not already unlocked, can afford.
+# Spends 40 Ase, appends skill_id to echo["unlocked_skills"], triggers save + reenter.
+func _handle_sanctum_unlock_skill(action: Dictionary, t: int) -> void:
+	var snap_type := str(flow_ctx.last_snapshot.get("type", ""))
+	if snap_type != FlowStateIds.SANCTUM:
+		return
+
+	var payload_v: Variant = action.get("payload", {})
+	var payload: Dictionary = payload_v if payload_v is Dictionary else {}
+	var echo_id  := str(payload.get("echo_id",  "")).strip_edges()
+	var skill_id := str(payload.get("skill_id", "")).strip_edges()
+	if echo_id.is_empty() or skill_id.is_empty():
+		return
+
+	# Validate skill exists in config
+	var balance: Dictionary = flow_ctx.config_service.get_balance()
+	var bal_data_v: Variant = balance.get("data", {})
+	var bal_data: Dictionary = bal_data_v if bal_data_v is Dictionary else {}
+	var skills_cfg_v: Variant = bal_data.get("skills", {})
+	var skills_cfg: Dictionary = skills_cfg_v if skills_cfg_v is Dictionary else {}
+	var defs_v: Variant = skills_cfg.get("definitions", {})
+	var defs: Dictionary = defs_v if defs_v is Dictionary else {}
+	if not defs.has(skill_id):
+		logger.debug(t, "sanctum.unlock_skill.denied", "Unknown skill_id", { "skill_id": skill_id })
+		return
+
+	# Find echo in roster (mutable reference — Dictionary is a reference type in GDScript)
+	var echo_ref := _find_roster_echo(echo_id)
+	if echo_ref.is_empty():
+		return
+
+	# Calling must be confirmed
+	if SkillDefinition.get_slot_count(echo_ref, skills_cfg) < 1:
+		logger.debug(t, "sanctum.unlock_skill.denied", "Calling not confirmed", { "echo_id": echo_id })
+		return
+
+	# Skill family must be accessible for the echo's calling (strong or light alignment).
+	# Guards against stale / bypassed payloads that reference skills outside the calling's constellation.
+	var defn: Dictionary = defs.get(skill_id, {}) as Dictionary
+	var skill_family := str(defn.get("skill_family", ""))
+	var echo_calling := str(echo_ref.get("calling", ""))
+	var align_table_v: Variant = skills_cfg.get("calling_family_alignment", {})
+	var align_table: Dictionary = align_table_v if align_table_v is Dictionary else {}
+	var calling_align_v: Variant = align_table.get(echo_calling, {})
+	var calling_align: Dictionary = calling_align_v if calling_align_v is Dictionary else {}
+	var accessible: Array = []
+	for fid_v in calling_align.get("strong", []):
+		accessible.append(str(fid_v))
+	for fid_v in calling_align.get("light", []):
+		accessible.append(str(fid_v))
+	if not skill_family.is_empty() and not accessible.is_empty() \
+			and not (skill_family in accessible):
+		logger.debug(t, "sanctum.unlock_skill.denied", "Skill family not accessible for calling", {
+			"echo_id": echo_id, "skill_id": skill_id,
+			"skill_family": skill_family, "accessible": accessible,
+		})
+		return
+
+	# Not already unlocked
+	var ul_v: Variant = echo_ref.get("unlocked_skills", [])
+	var ul: Array = ul_v if ul_v is Array else []
+	if skill_id in ul:
+		logger.debug(t, "sanctum.unlock_skill.denied", "Already unlocked", { "skill_id": skill_id })
+		return
+
+	# Ase cost from unlock_conditions (defn already loaded above)
+	var uc_v: Variant = defn.get("unlock_conditions", {})
+	var uc: Dictionary = uc_v if uc_v is Dictionary else {}
+	var ase_cost := int(uc.get("ase_cost", 0))
+
+	# Settle time so accrued Ase is applied before the afford check
+	_handle_economy_settle_time({ "type": "economy.settle_time", "now_unix": int(Time.get_unix_time_from_system()) }, t)
+
+	if not econ.can_afford_ase(ase_cost):
+		logger.debug(t, "sanctum.unlock_skill.denied", "Insufficient Ase", {
+			"echo_id": echo_id, "skill_id": skill_id, "cost": ase_cost
+		})
+		return
+
+	econ.spend_ase(ase_cost, "skill.unlock", logger, t)
+
+	ul.append(skill_id)
+	echo_ref["unlocked_skills"] = ul
+
+	logger.info(t, "sanctum.skill.unlock", "Skill unlocked", {
+		"echo_id": echo_id, "skill_id": skill_id, "ase_cost": ase_cost
+	})
+
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason != "":
+		flow_ctx.save_request_reason += "|skill.unlock"
+	else:
+		flow_ctx.save_request_reason = "skill.unlock"
+
+	flow_machine.reenter(flow_ctx, logger, t)
 
 
 func _handle_weave_start_for_echo(action: Dictionary, t: int) -> void:
@@ -5011,8 +5143,12 @@ func _apply_emotion_recovery_if_needed(now_unix: int, t: int) -> void:
 	var roster_v: Variant = sanctum.get("roster", [])
 	var roster: Array = roster_v if roster_v is Array else []
 
+	# V2-PROG-010: pass full cfg_data so EmotionRecoveryService can apply rank-based fear bonus.
+	var _emo_cfg_data: Dictionary = {}
+	if flow_ctx.config_service != null:
+		_emo_cfg_data = flow_ctx.config_service.get_balance().get("data", {})
 	var changed := EmotionRecoveryServiceScript.apply_recovery_from_elapsed(
-		roster, elapsed, cfg, fear_threshold, logger, t)
+		roster, elapsed, cfg, fear_threshold, logger, t, _emo_cfg_data)
 
 	if changed.size() > 0:
 		sanctum["roster"] = roster

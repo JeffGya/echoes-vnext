@@ -109,6 +109,15 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	var calling_cfg: Dictionary = expr_cfg.get("calling_behavior", {})
 	_expression_band = MaturityExpressionService.get_expression_band(int(_actor.get("rank", 1)), band_by_standing)
 	_calling_behavior = MaturityExpressionService.get_calling_behavior(_actor, calling_cfg)
+	# V2-PROG-010: continuous rank scalar + presence_strength for identity scaling and composure
+	var rank_scale_cfg: Dictionary = expr_cfg.get("rank_strength_scale", {})
+	var max_rank: int              = int(rank_scale_cfg.get("max_rank", 9))
+	var rank_strength: float       = MaturityExpressionService.get_rank_strength(int(_actor.get("rank", 1)), max_rank)
+	var presence_strength: float   = MaturityExpressionService.get_presence_strength(_expression_band)
+	# Write back to actor dict so _project_actor() can include them in snapshots
+	_actor["_expression_band"]   = _expression_band
+	_actor["_presence_strength"] = presence_strength
+	_actor["_rank_strength"]     = rank_strength
 
 	# PROG-010: read resilience + leadership traits
 	var resilience_traits: Array = _actor.get("resilience_traits", []) as Array
@@ -138,11 +147,13 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	if _actor.has("_withdraw_cooldown"):
 		_actor["_withdraw_cooldown"] = maxi(0, int(_actor["_withdraw_cooldown"]) - 1)
 
-	# COMBAT-003 + V2-PROG-006: Absolute Fear Rule — dynamic threshold based on expression band + last stand.
-	# PROG-009: per-calling override from calling_behavior.absolute_fear_threshold.
-	# GDD: "fear_current drives refusal/guard/retreat; can override ALL at extreme threshold."
-	var fear_threshold: int = int(_calling_behavior.get("absolute_fear_threshold", \
+	# COMBAT-003 + V2-PROG-006 + V2-PROG-010: Absolute Fear Rule — dynamic threshold.
+	# Priority chain: calling_behavior.absolute_fear_threshold → band base → global fallback (80).
+	# V2-PROG-010: band base from refusal_thresholds_by_band (nascent=65, forming=72, grounded=80, whole=90).
+	var refusal_by_band: Dictionary = expr_cfg.get("refusal_thresholds_by_band", {})
+	var band_base_threshold: int    = int(refusal_by_band.get(_expression_band, \
 		cfg_data.get("emotion", {}).get("fear_threshold", 80)))
+	var fear_threshold: int = int(_calling_behavior.get("absolute_fear_threshold", band_base_threshold))
 	if last_echo_standing:
 		var ls_thresholds: Dictionary = expr_cfg.get("last_stand_fear_threshold", {})
 		if _expression_band == "whole":
@@ -210,9 +221,12 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		return refuse_intent
 
 	# V2-PROG-006: inject expression band + traits into context so BehaviorArbiter can use them
+	# V2-PROG-010: also inject presence_strength + rank_strength for identity scaling and composure
 	var augmented_context := context.duplicate()
-	augmented_context["expression_band"]  = _expression_band
-	augmented_context["calling_behavior"] = _calling_behavior
+	augmented_context["expression_band"]   = _expression_band
+	augmented_context["calling_behavior"]  = _calling_behavior
+	augmented_context["presence_strength"] = presence_strength
+	augmented_context["rank_strength"]     = rank_strength
 	augmented_context["resilience_traits"] = resilience_traits
 	augmented_context["leadership_traits"] = leadership_traits
 
@@ -251,6 +265,27 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		"archetype_birth":        str(intent.get("archetype_birth", "")),
 		"archetype_modifier":     int(intent.get("archetype_modifier", 0)),
 	})
+
+	# V2-PROG-010: passive fear tick — small per-round fear reduction for echo faction, rank-scaled.
+	var recovery_cfg: Dictionary = expr_cfg.get("fear_self_recovery", {})
+	var passive_max: int = int(recovery_cfg.get("passive_max", 3))
+	if str(_actor.get("actor_type", "")) == "echo" and passive_max > 0:
+		var passive_tick: int = int(round(float(passive_max) * rank_strength))
+		if passive_tick > 0:
+			_actor["fear"] = clampi(int(_actor.get("fear", 0)) - passive_tick, 0, 100)
+
+	# V2-PROG-010: active fear spike — fires when intent is identity-consistent (calling ∩ dominant_vector).
+	_actor["_fear_spike_fired"] = false
+	if str(_actor.get("actor_type", "")) == "echo":
+		var spike: int = _compute_identity_fear_spike(intent, rank_strength, expr_cfg, cfg_data.get("actor", {}))
+		if spike > 0:
+			_actor["fear"] = clampi(int(_actor.get("fear", 0)) - spike, 0, 100)
+			_actor["_fear_spike_fired"] = true
+			logger.info(t, "actor.fear_spike", "Identity-consistent action reduced fear", {
+				"actor_id":    str(_actor.get("id", "")),
+				"action_type": str(intent.get("action_type", "")),
+				"spike":       spike,
+			})
 
 	# PROG-010 / V2-VOICE-001: emotional event detection + bark selection
 	var end_fear: int = int(_actor.get("fear", 0))
@@ -398,6 +433,37 @@ func get_snapshot() -> Dictionary:
 
 # ─── PROG-010 private helpers ────────────────────────────────────────────────
 
+# V2-PROG-010: Computes active fear spike when winning intent is identity-consistent.
+# Identity-consistent = calling base weight >= call_threshold AND dominant_vector mul >= vector_threshold.
+# Returns 0 if conditions not met. Scales spike linearly from spike_min (rank 1) to spike_max (rank 9).
+func _compute_identity_fear_spike(intent: Dictionary, rank_strength: float, expr_cfg: Dictionary, actor_cfg: Dictionary) -> int:
+	var recovery_cfg: Dictionary  = expr_cfg.get("fear_self_recovery", {})
+	var call_threshold: float     = float(recovery_cfg.get("identity_threshold_calling", 30))
+	var vector_threshold: float   = float(recovery_cfg.get("identity_threshold_vector", 0.15))
+	var spike_min: int            = int(recovery_cfg.get("active_spike_min", 3))
+	var spike_max: int            = int(recovery_cfg.get("active_spike_max", 12))
+
+	var action_type: String       = str(intent.get("action_type", ""))
+	var calling_origin: String    = str(_actor.get("calling_origin", "uncalled"))
+	var dominant_vector: String   = str(_actor.get("dominant_vector", ""))
+
+	# Calling alignment — base weight in intent_weights_by_calling_origin
+	var origin_table: Dictionary  = actor_cfg.get("intent_weights_by_calling_origin", {})
+	var call_row: Dictionary      = origin_table.get(calling_origin, {})
+	var calling_aligned: bool     = float(call_row.get(action_type, 0.0)) >= call_threshold
+
+	# Vector alignment — dominant_vector multiplier in vector_action_muls
+	var vector_aligned: bool = false
+	if not dominant_vector.is_empty():
+		var vec_table: Dictionary = actor_cfg.get("vector_action_muls", {})
+		var v_row: Dictionary     = vec_table.get(action_type, {})
+		vector_aligned = float(v_row.get(dominant_vector, 0.0)) >= vector_threshold
+
+	if not (calling_aligned and vector_aligned):
+		return 0
+	return int(round(float(spike_min) + float(spike_max - spike_min) * rank_strength))
+
+
 # Returns true if this echo is the only living echo on the board.
 func _is_last_echo_standing(context: Dictionary) -> bool:
 	if _actor.get("actor_type", "") != "echo":
@@ -464,6 +530,10 @@ func _select_bark(
 	elif action_type in ["actor.interpose", "actor.hold_ground", "actor.steady_call",
 			"actor.mark", "actor.withdraw", "actor.read_field", "actor.reveal"]:
 		context_key = "combat_calling_skill"
+	# Priority 8.6: combat_identity_spike — V2-PROG-010: identity-consistent action reduced fear
+	elif bool(_actor.get("_fear_spike_fired", false)):
+		context_key = "combat_identity_spike"
+		_actor["_fear_spike_fired"] = false
 	# Priority 9: combat_attack
 	elif action_type == "melee_attack":
 		context_key = "combat_attack"

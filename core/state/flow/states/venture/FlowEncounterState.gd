@@ -309,6 +309,9 @@ static func _project_actor(actor: Dictionary) -> Dictionary:
 		"bark_tier":        str(actor.get("_bark_tier",        "")),
 		"bark_target_id":   str(actor.get("_bark_target_id",   "")),
 		"bark_is_response": bool(actor.get("_bark_is_response", false)),
+		# V2-PROG-010: maturity expression — written by ActorStateMachine.advance_turn()
+		"expression_band":   str(actor.get("_expression_band",   "")),
+		"presence_strength": float(actor.get("_presence_strength", 0.1)),
 	}
 
 

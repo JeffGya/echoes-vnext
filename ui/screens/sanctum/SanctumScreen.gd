@@ -43,14 +43,33 @@ const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.t
 @onready var tab_bonds: Button = %TabBonds
 @onready var tab_skills: Button = %TabSkills
 @onready var overview_page: Control = %OverviewPage
+# V2-PROG-010: earned rank benefits container
+@onready var _rank_benefits_container: HFlowContainer = %RankBenefitsContainer
 @onready var bonds_page: Control = %BondsPage
 @onready var skills_page: Control = %SkillsPage
 @onready var bonds_empty_label: Label = %BondsEmptyLabel
 @onready var bonds_list: VBoxContainer = %BondsList
 @onready var bond_entry_template: PanelContainer = %BondEntryTemplate
 @onready var skills_empty_label: Label = %SkillsEmptyLabel
-@onready var skills_list: VBoxContainer = %SkillsList
-@onready var skill_entry_template: PanelContainer = %SkillEntryTemplate
+# V2-PROG-009: Constellation Web refs
+@onready var _constellation_panel: PanelContainer = %ConstellationPanel
+@onready var _constellation_map: Control = %ConstellationMap
+@onready var _constellation_lines: Node2D = %ConstellationLines
+@onready var _calling_node: PanelContainer = %CallingNode
+@onready var _calling_node_label: Label = %CallingNodeLabel
+@onready var _skill_node_template: Button = %SkillNodeTemplate
+@onready var _expand_btn: Button = %ExpandButton
+@onready var _detail_strip: PanelContainer = %DetailStrip
+@onready var _detail_empty_lbl: Label = %DetailEmptyLabel
+@onready var _detail_content: VBoxContainer = %DetailContentStack
+@onready var _detail_skill_name: Label = %DetailSkillName
+@onready var _detail_family_badge: Label = %DetailFamilyBadge
+@onready var _detail_tier_badge: Label = %DetailTierBadge
+@onready var _detail_type_badge: Label = %DetailTypeBadge
+@onready var _detail_description: Label = %DetailDescription
+@onready var _detail_unlock_btn: Button = %SkillUnlockButton
+@onready var _detail_learned_lbl: Label = %SkillLearnedLabel
+@onready var _detail_future_lbl: Label = %SkillFutureLabel
 @onready var detail_pages_scroll: ScrollContainer = %DetailPagesScroll
 @onready var detail_name_label: Label = %DetailNameLabel
 @onready var detail_archetype_label: Label = %DetailArchetypeLabel
@@ -74,11 +93,6 @@ const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.t
 @onready var detail_party_action_title: Label = %DetailPartyActionTitle
 @onready var detail_party_action_subtitle: Label = %DetailPartyActionSubtitle
 @onready var detail_party_action_button: Button = %DetailPartyActionButton
-
-@onready var name_modal: Control = %NameModal
-@onready var name_edit: LineEdit = %NameEdit
-@onready var reroll_button: Button = %RerollButton
-@onready var confirm_button: Button = %ConfirmButton
 
 # V2-VOW-002: ActiveEffectsPanel + EffectDetailPanel
 @onready var _effects_panel:    PanelContainer = %ActiveEffectsPanel
@@ -117,7 +131,6 @@ const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.t
 
 
 var _snapshot: Dictionary = {}
-var _name_dirty := false
 var _current_institution_id := ""
 var _placement_cell: Variant = null   # Vector2i or null — the cell selected in placement mode
 var _toast_timer: SceneTreeTimer = null
@@ -129,10 +142,21 @@ var _echo_detail_open := false
 var _detail_tab := "overview"
 var _selected_echo_id := ""
 
+# V2-PROG-009: Constellation Web state
+var _constellation_expanded: bool = false
+var _unlock_callable: Callable = Callable()
+
+# Family abbreviations shown inside skill nodes
+const FAMILY_ABBREV: Dictionary = {
+	"ward":  "W",
+	"break": "B",
+	"veil":  "V",
+	"path":  "P",
+	"rite":  "Ri",
+	"root":  "Ro",
+}
+
 func _ready() -> void:
-	reroll_button.pressed.connect(_on_reroll_pressed)
-	confirm_button.pressed.connect(_on_confirm_pressed)
-	name_edit.text_changed.connect(_on_name_edit_changed)
 	detail_back_button.pressed.connect(_on_detail_close_pressed)
 	detail_prev_button.pressed.connect(_on_detail_prev_pressed)
 	detail_next_button.pressed.connect(_on_detail_next_pressed)
@@ -168,6 +192,8 @@ func _ready() -> void:
 	if _inst_compact_strip != null:
 		_inst_compact_strip.visible = false
 		_inst_compact_strip.pressed.connect(_on_inst_compact_strip_pressed)
+	# V2-PROG-009: constellation wiring
+	_expand_btn.pressed.connect(_on_constellation_expand_pressed)
 
 
 func set_snapshot(snap: Dictionary) -> void:
@@ -253,16 +279,6 @@ func _render() -> void:
 		_show_ase_delta(delta)
 		_pulse_ase_label()
 	_last_ase_balance = ase_balance
-
-	if sanctum_name.is_empty():
-		name_modal.visible = true
-		if not _name_dirty:
-			name_edit.text = suggested
-			_name_dirty = false
-		confirm_button.disabled = name_edit.text.strip_edges().is_empty()
-	else:
-		name_modal.visible = false
-		_name_dirty = false
 
 	# V2-ECONOMY-001: Awakening overlay — one-shot on first Sanctum entry after awakening
 	if bool(data.get("show_awakening_overlay", false)):
@@ -401,6 +417,8 @@ func _render_echo_detail(detail_roster: Array, featured_echo_id: String) -> void
 	detail_stat_charisma_value.text = str(int(stats.get("cha", 0)))
 	detail_stat_speed_value.text = str(int(stats.get("speed", 0)))
 	detail_stat_max_health_value.text = str(int(stats.get("max_hp", 0)))
+	# V2-PROG-010: populate earned rank benefit glyphs (persistent, not part of emotional state)
+	_rebuild_rank_benefits(selected)
 	_rebuild_bonds_page(selected)
 	_rebuild_skills_page(selected)
 	if bool(selected.get("in_party", false)):
@@ -421,6 +439,32 @@ func _apply_tab_state() -> void:
 	detail_action_divider.visible = _detail_tab == "overview"
 	detail_party_action.visible = _detail_tab == "overview"
 	detail_pages_scroll.scroll_vertical = 0
+
+
+# V2-PROG-010: Shows earned rank benefit glyphs on the Echo detail card.
+# Uses pre-built EchoRankBenefitGlyph nodes in RankBenefitsContainer.
+# Scripts only set values — never add_child() or create visual nodes.
+func _rebuild_rank_benefits(selected: Dictionary) -> void:
+	if _rank_benefits_container == null:
+		return
+	var benefits_v: Variant = selected.get("rank_benefits", [])
+	var benefits: Array = benefits_v if benefits_v is Array else []
+	var glyph_nodes: Array = _rank_benefits_container.get_children()
+
+	# Hide all glyphs first
+	for g in glyph_nodes:
+		g.visible = false
+
+	# Show and populate earned ones, up to the number of pre-built slots
+	var count := mini(benefits.size(), glyph_nodes.size())
+	for i in range(count):
+		var glyph: Node = glyph_nodes[i]
+		var b: Dictionary = benefits[i] if benefits[i] is Dictionary else {}
+		if glyph.has_method("set_benefit"):
+			glyph.call("set_benefit", str(b.get("label", "")), str(b.get("description", "")))
+		glyph.visible = true
+
+	_rank_benefits_container.visible = count > 0
 
 
 func _rebuild_bonds_page(selected: Dictionary) -> void:
@@ -469,58 +513,184 @@ func _bond_tier_color(tier: int) -> Color:
 	return Color("#6E583A")
 
 
+# V2-PROG-009: Constellation Web rebuild
 func _rebuild_skills_page(selected: Dictionary) -> void:
-	for child in skills_list.get_children():
-		if child == skill_entry_template:
+	var skill_entries_v: Variant = selected.get("skill_entries", [])
+	var skill_entries: Array = skill_entries_v if skill_entries_v is Array else []
+	var calling_confirmed := bool(selected.get("calling_confirmed", false))
+
+	skills_empty_label.visible = not calling_confirmed
+	_constellation_panel.visible = calling_confirmed
+
+	if not calling_confirmed:
+		return
+
+	# Clear previously spawned skill nodes (keep ConstellationLines, CallingNode,
+	# SkillNodeTemplate, and ExpandButton — all others are spawned clones)
+	for child in _constellation_map.get_children():
+		if child == _constellation_lines or child == _calling_node \
+				or child == _skill_node_template or child == _expand_btn:
 			continue
 		child.queue_free()
 
-	var entries_v: Variant = selected.get("skill_entries", [])
-	var entries: Array = entries_v if entries_v is Array else []
-	var calling_id := str(selected.get("calling", "")).strip_edges()
+	# Centre of the 360×320 map
+	var cx := 180.0
+	var cy := 160.0
 
-	if entries.is_empty():
-		skills_list.visible = false
-		skills_empty_label.visible = true
-		if calling_id.is_empty() or calling_id == "uncalled":
-			skills_empty_label.text = "No calling is confirmed yet. Skills will appear here once this Echo has associated techniques."
-		else:
-			skills_empty_label.text = "No associated skills are surfaced for this Echo yet."
-		return
+	# Position calling node at centre (CallingNode is 52×52)
+	_calling_node.offset_left   = cx - 26.0
+	_calling_node.offset_top    = cy - 26.0
+	_calling_node.offset_right  = cx + 26.0
+	_calling_node.offset_bottom = cy + 26.0
+	_calling_node_label.text = str(selected.get("calling", "·")).replace("_", " ").capitalize()
 
-	skills_empty_label.visible = false
-	skills_list.visible = true
+	# Reset detail strip to empty state
+	_detail_empty_lbl.visible = true
+	_detail_content.visible   = false
 
-	for entry_v in entries:
+	# Spawn one node per skill entry
+	var line_data: Array = []
+	for entry_v in skill_entries:
 		if not (entry_v is Dictionary):
 			continue
 		var entry: Dictionary = entry_v
-		var row := skill_entry_template.duplicate() as PanelContainer
-		row.visible = true
+		var angle_deg := float(entry.get("constellation_angle", 270.0))
+		var radius    := float(entry.get("constellation_radius", 70.0))
+		var is_strong := str(entry.get("alignment", "")) == "strong"
+		var node_size := 44.0 if is_strong else 34.0
+		var half      := node_size / 2.0
 
-		var name_label := row.find_child("SkillNameLabel", true, false) as Label
-		if name_label != null:
-			name_label.text = str(entry.get("name", "Unknown Technique"))
+		var nx := cx + radius * cos(deg_to_rad(angle_deg))
+		var ny := cy + radius * sin(deg_to_rad(angle_deg))
 
-		var family_label := row.find_child("SkillFamilyLabel", true, false) as Label
-		if family_label != null:
-			family_label.text = "%s technique" % str(entry.get("family_name", "Associated"))
+		var node := _skill_node_template.duplicate() as Button
+		node.visible = true
+		node.custom_minimum_size = Vector2(node_size, node_size)
+		node.anchor_left   = 0.0
+		node.anchor_top    = 0.0
+		node.anchor_right  = 0.0
+		node.anchor_bottom = 0.0
+		node.offset_left   = nx - half
+		node.offset_top    = ny - half
+		node.offset_right  = nx + half
+		node.offset_bottom = ny + half
 
-		var note_label := row.find_child("SkillNoteLabel", true, false) as Label
-		if note_label != null:
-			note_label.text = _skill_alignment_copy(str(entry.get("alignment", "")))
+		var tier        := int(entry.get("tier", 3))
+		var is_unlocked := bool(entry.get("is_unlocked", false))
+		var can_afford  := bool(entry.get("can_afford", false))
+		var family_id   := str(entry.get("family_id", ""))
 
-		skills_list.add_child(row)
+		# Set family abbreviation on the child label (readable at all node sizes)
+		var node_lbl := node.find_child("SkillNodeLabel", false, false) as Label
+		if node_lbl != null:
+			node_lbl.text = FAMILY_ABBREV.get(family_id, "·")
+
+		if is_unlocked:
+			node.theme_type_variation = &"SkillNodeUnlocked"
+		elif tier > 3:
+			# Ghost — visual only, mouse passthrough
+			node.theme_type_variation = &"SkillNodeFuture"
+			node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_constellation_map.add_child(node)
+			line_data.append({
+				"pos":       Vector2(nx, ny),
+				"tier":      tier,
+				"family":    family_id,
+				"alignment": str(entry.get("alignment", "strong")),
+			})
+			continue
+		elif can_afford:
+			node.theme_type_variation = &"SkillNodeAffordable"
+		else:
+			node.theme_type_variation = &"SkillNodeLocked"
+
+		var sid := str(entry.get("skill_id", ""))
+		# No CONNECT_ONE_SHOT — cloned nodes are freed on each rebuild, so connections are
+		# cleaned up automatically. ONE_SHOT made the node dead after the first tap.
+		node.pressed.connect(func(): _on_skill_node_tapped(sid, skill_entries))
+		_constellation_map.add_child(node)
+		line_data.append({
+			"pos":       Vector2(nx, ny),
+			"tier":      tier,
+			"family":    str(entry.get("family_id", "")),
+			"alignment": str(entry.get("alignment", "strong")),
+		})
+
+	# Feed line geometry to ConstellationLines for _draw()
+	_constellation_lines.set_data(line_data, Vector2(cx, cy))
+	_constellation_lines.queue_redraw()
 
 
-func _skill_alignment_copy(alignment: String) -> String:
-	match alignment:
-		"strong":
-			return "Strongly aligned with this Echo's calling."
-		"light":
-			return "Lightly aligned with this Echo's calling."
-		_:
-			return "Associated with this Echo's calling."
+func _on_skill_node_tapped(skill_id: String, all_entries: Array) -> void:
+	var entry := {}
+	for e_v in all_entries:
+		if not (e_v is Dictionary):
+			continue
+		var e: Dictionary = e_v
+		if str(e.get("skill_id", "")) == skill_id:
+			entry = e
+			break
+	if entry.is_empty():
+		return
+
+	_detail_empty_lbl.visible = false
+	_detail_content.visible   = true
+
+	_detail_skill_name.text   = str(entry.get("name", skill_id))
+	_detail_family_badge.text = str(entry.get("family_name", "")).to_upper()
+
+	var tier := int(entry.get("tier", 3))
+	var tier_labels: Array = ["Foundation", "Growth", "Culmination"]
+	var tier_idx := clampi(tier / 3 - 1, 0, 2)
+	_detail_tier_badge.text = "S%d %s" % [tier, tier_labels[tier_idx]]
+	_detail_type_badge.text = str(entry.get("type_label", ""))
+	_detail_description.text = str(entry.get("description", ""))
+
+	var is_unlocked := bool(entry.get("is_unlocked", false))
+	var can_afford  := bool(entry.get("can_afford", false))
+	var future      := tier > 3
+
+	_detail_unlock_btn.visible  = not is_unlocked and not future
+	_detail_learned_lbl.visible = is_unlocked
+	_detail_future_lbl.visible  = future
+
+	# Disconnect any lingering unlock callable before wiring new one
+	if not _unlock_callable.is_null():
+		if _detail_unlock_btn.pressed.is_connected(_unlock_callable):
+			_detail_unlock_btn.pressed.disconnect(_unlock_callable)
+		_unlock_callable = Callable()
+
+	if _detail_unlock_btn.visible:
+		_detail_unlock_btn.text     = "%d Ase" % int(entry.get("ase_cost", 40))
+		_detail_unlock_btn.disabled = not can_afford
+		var eid := _selected_echo_id
+		var sid := skill_id
+		_unlock_callable = func():
+			action_requested.emit({
+				"type":    "sanctum.unlock_skill",
+				"payload": { "echo_id": eid, "skill_id": sid },
+			})
+		_detail_unlock_btn.pressed.connect(_unlock_callable)
+
+	if future:
+		var standing_needed := 6 if tier == 6 else 9
+		_detail_future_lbl.text = "Unlocks at Standing %d" % standing_needed
+
+
+func _on_constellation_expand_pressed() -> void:
+	_constellation_expanded = not _constellation_expanded
+	_apply_constellation_expand_state()
+
+
+func _apply_constellation_expand_state() -> void:
+	if _constellation_expanded:
+		_detail_strip.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		_detail_strip.custom_minimum_size = Vector2(0, 0)
+		_expand_btn.text = "x"
+	else:
+		_detail_strip.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		_detail_strip.custom_minimum_size = Vector2(0, 130)
+		_expand_btn.text = "+"
 
 
 func _detail_roster() -> Array:
@@ -588,19 +758,6 @@ func _vector_phrase(vector_id: String) -> String:
 			return "Nurturer's care"
 		_:
 			return _title_case(vector_id)
-
-
-func _on_name_edit_changed(new_text: String) -> void:
-	_name_dirty = true
-	confirm_button.disabled = new_text.strip_edges().is_empty()
-
-
-func _on_reroll_pressed() -> void:
-	action_requested.emit({"type": "sanctum.name.reroll"})
-
-
-func _on_confirm_pressed() -> void:
-	action_requested.emit({"type": "sanctum.name.confirm", "name": name_edit.text.strip_edges()})
 
 
 func _on_detail_prev_pressed() -> void:
@@ -1109,6 +1266,7 @@ func _on_inst_detail_back_pressed() -> void:
 	_inst_detail_panel.visible = false
 	_assign_picker.visible = false
 	_current_institution_id = ""
+	show_institutions_panel()
 
 
 func _on_inst_assign_pressed() -> void:

@@ -29,9 +29,10 @@ const MAX_SKILL_SLOTS: int = 1
 ## to keep the validator lightweight. Enforcement added when family enum is locked.
 const VALID_FAMILIES: Array = ["ward", "break", "veil", "path", "rite", "root"]
 
-## All 7 required fields for a valid SkillDefinition entry.
+## All 9 required fields for a valid SkillDefinition entry.
 ## Any definition loaded from balance.json data.skills.definitions must contain all of these.
 ## V2-PROG-005: calling_requirement removed; skill_family is the V2 family axis.
+## V2-PROG-009: added `type` (active/passive/utility) and `description` (may be empty string).
 const REQUIRED_FIELDS: Array = [
 	"skill_id",
 	"skill_family",
@@ -40,12 +41,15 @@ const REQUIRED_FIELDS: Array = [
 	"cooldown_rounds",
 	"scaling_source",
 	"intent_weight_tag",
+	"type",
+	"description",
 ]
 
 
-## Returns true when defn contains all 7 required fields with correct types.
+## Returns true when defn contains all 9 required fields with correct types.
 ## String fields must be String. cooldown_rounds must be int or float
 ## (JSON.parse_string returns numeric values as float in Godot 4).
+## description may be an empty string but must be present.
 ## Fails fast on the first missing or wrong-type field.
 static func validate(defn: Dictionary) -> bool:
 	if defn.is_empty():
@@ -57,6 +61,8 @@ static func validate(defn: Dictionary) -> bool:
 		"action_type",
 		"scaling_source",
 		"intent_weight_tag",
+		"type",
+		"description",
 	]
 	for f in string_fields:
 		if not defn.has(f):

@@ -379,6 +379,120 @@ visible = false
 layout_mode = 2
 text = "No Echoes currently resonate with this Thread."
 
+[node name="EchoPickerSection" type="VBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="EchoPickerRow1" type="HBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/EchoPickerSection"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="EchoPickerLabel1" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/EchoPickerSection/EchoPickerRow1"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Echo"
+
+[node name="EchoPickerButton1" type="Button" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/EchoPickerSection/EchoPickerRow1"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 48)
+layout_mode = 2
+text = "Choose"
+
+[node name="EchoPickerRow2" type="HBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/EchoPickerSection"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="EchoPickerLabel2" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/EchoPickerSection/EchoPickerRow2"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Echo"
+
+[node name="EchoPickerButton2" type="Button" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/EchoPickerSection/EchoPickerRow2"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 48)
+layout_mode = 2
+text = "Choose"
+
+[node name="EchoPickerRow3" type="HBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/EchoPickerSection"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="EchoPickerLabel3" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/EchoPickerSection/EchoPickerRow3"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Echo"
+
+[node name="EchoPickerButton3" type="Button" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/EchoPickerSection/EchoPickerRow3"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 48)
+layout_mode = 2
+text = "Choose"
+
+[node name="EchoPickerRow4" type="HBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/EchoPickerSection"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="EchoPickerLabel4" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/EchoPickerSection/EchoPickerRow4"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Echo"
+
+[node name="EchoPickerButton4" type="Button" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/EchoPickerSection/EchoPickerRow4"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 48)
+layout_mode = 2
+text = "Choose"
+
+[node name="EchoPickerRow5" type="HBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/EchoPickerSection"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="EchoPickerLabel5" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/EchoPickerSection/EchoPickerRow5"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Echo"
+
+[node name="EchoPickerButton5" type="Button" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/EchoPickerSection/EchoPickerRow5"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 48)
+layout_mode = 2
+text = "Choose"
+
+[node name="EchoPickerRow6" type="HBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/EchoPickerSection"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="EchoPickerLabel6" type="Label" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/EchoPickerSection/EchoPickerRow6"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Echo"
+
+[node name="EchoPickerButton6" type="Button" parent="RootPanel/RootMargin/MainVBox/ContentArea/EchoPanel/EchoPickerSection/EchoPickerRow6"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 48)
+layout_mode = 2
+text = "Choose"
+
 [node name="ResolutionPanel" type="VBoxContainer" parent="RootPanel/RootMargin/MainVBox/ContentArea"]
 unique_name_in_owner = true
 visible = false

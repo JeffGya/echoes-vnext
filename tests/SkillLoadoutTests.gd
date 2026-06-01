@@ -137,7 +137,7 @@ static func _make_ctx(calling_id: String, skill_defs: Dictionary, pending: Dicti
 	ctx.pending_equipped_skills = pending.duplicate()
 	return ctx
 
-## Returns all 8 V2-PROG-005 skill definitions (calling_requirement removed; skill_family added).
+## Returns all 8 V2-PROG-005 skill definitions. V2-PROG-009: added type + description (9 required fields).
 static func _all_eight_skill_defs() -> Dictionary:
 	return {
 		"blade_resolve": {
@@ -150,6 +150,8 @@ static func _all_eight_skill_defs() -> Dictionary:
 			"scaling_source":    "atk",
 			"intent_weight_tag": "melee_attack",
 			"tier_gate":         "",
+			"type":              "active",
+			"description":       "Strike that carries momentum beyond contact.",
 		},
 		"warders_vigil": {
 			"skill_id":          "warders_vigil",
@@ -161,6 +163,8 @@ static func _all_eight_skill_defs() -> Dictionary:
 			"scaling_source":    "def",
 			"intent_weight_tag": "protect_ally",
 			"tier_gate":         "",
+			"type":              "active",
+			"description":       "Step between a wounded ally and what threatens them.",
 		},
 		"stewards_ground": {
 			"skill_id":          "stewards_ground",
@@ -172,6 +176,8 @@ static func _all_eight_skill_defs() -> Dictionary:
 			"scaling_source":    "cha",
 			"intent_weight_tag": "actor.guard",
 			"tier_gate":         "",
+			"type":              "utility",
+			"description":       "Mark a line. Hold it.",
 		},
 		"stewards_call": {
 			"skill_id":          "stewards_call",
@@ -184,6 +190,8 @@ static func _all_eight_skill_defs() -> Dictionary:
 			"scaling_source":    "cha",
 			"intent_weight_tag": "protect_ally",
 			"tier_gate":         "",
+			"type":              "passive",
+			"description":       "A steady voice into panic.",
 		},
 		"rangers_mark": {
 			"skill_id":          "rangers_mark",
@@ -195,6 +203,8 @@ static func _all_eight_skill_defs() -> Dictionary:
 			"scaling_source":    "agi",
 			"intent_weight_tag": "melee_attack",
 			"tier_gate":         "",
+			"type":              "active",
+			"description":       "Mark a target so every ally hits harder.",
 		},
 		"rangers_withdraw": {
 			"skill_id":          "rangers_withdraw",
@@ -206,6 +216,8 @@ static func _all_eight_skill_defs() -> Dictionary:
 			"scaling_source":    "agi",
 			"intent_weight_tag": "actor.move",
 			"tier_gate":         "",
+			"type":              "active",
+			"description":       "Disengage when surrounded.",
 		},
 		"seers_sight": {
 			"skill_id":                   "seers_sight",
@@ -219,6 +231,8 @@ static func _all_eight_skill_defs() -> Dictionary:
 			"scaling_source":             "cha",
 			"intent_weight_tag":          "actor.idle",
 			"tier_gate":                  "",
+			"type":                       "passive",
+			"description":                "Read the field and find openings others cannot.",
 		},
 		"seers_reveal": {
 			"skill_id":          "seers_reveal",
@@ -231,6 +245,8 @@ static func _all_eight_skill_defs() -> Dictionary:
 			"scaling_source":    "cha",
 			"intent_weight_tag": "melee_attack",
 			"tier_gate":         "",
+			"type":              "active",
+			"description":       "Expose a hidden enemy to all allies.",
 		},
 	}
 
