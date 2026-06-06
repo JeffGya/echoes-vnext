@@ -5021,7 +5021,21 @@ func _find_target_situation(explore_map: Dictionary, directive_id: String) -> Di
 
 	if directive_id == "directive.seek_signs" and not best_obj.is_empty():
 		return best_obj
-	return best_any
+	if not best_any.is_empty():
+		return best_any
+
+	# Fallback: the only remaining unresolved situation(s) are at dist == 0 (party parked
+	# after ignoring them). Allow re-targeting so the player can re-engage rather than
+	# being permanently stuck with no advance target.
+	for sit_v in situations:
+		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
+		if bool(sit.get("resolved", false)):
+			continue
+		if directive_id == "directive.seek_signs" and bool(sit.get("is_objective", false)):
+			return sit
+		return sit
+
+	return {}
 
 
 # Mark a specific situation as revealed in save_data.

@@ -108,7 +108,7 @@ static func generate(
 		var boss_idx := pre_boss_count
 		var boss_rng := CampaignSeed.get_rng_from(realm_seed, "stage.%d.obj.%d" % [i, boss_idx])
 		var boss_seed := boss_rng.randi()
-		objectives.append(ObjectiveModel.make(boss_idx, ObjectiveModel.TYPE_BOSS, boss_seed, {}, false, true))
+		objectives.append(ObjectiveModel.make(boss_idx, ObjectiveModel.TYPE_BOSS, boss_seed, {}, false, false))
 
 		# Derive stage summary type from pre-boss composition
 		var stage_type: String = _derive_stage_type(objectives, pre_boss_count)
