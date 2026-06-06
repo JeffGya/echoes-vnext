@@ -4,6 +4,7 @@ extends State
 
 const StageExploreModelScript := preload("res://core/realms/StageExploreModel.gd")  # V2-STAGE-001
 const SituationModelScript    := preload("res://core/realms/SituationModel.gd")      # V2-INTEL-001
+const ObjectiveModelScript    := preload("res://core/realms/ObjectiveModel.gd")      # V2-STAGE-002
 
 # V2-STAGE-001: Exploration stage map flow state.
 #
@@ -68,15 +69,23 @@ static func _reset_session_state(flow_ctx: FlowContext, t: int) -> void:
 		if bool(s.get("is_objective", false)) and bool(s.get("resolved", false)):
 			obj_found += 1
 
-	# Rebuild explore_map — geometry + intel kept; session state zeroed.
+	# V2-STAGE-002: preserve party_pos and turn_count if re-entering a locked stage
+	# (returning from combat mid-run). Only reset them when the stage first locks
+	# (first entry) so the party holds their position between encounters.
+	var preserve_pos := locked  # locked=true means this is a re-entry, not a fresh start
+	var preserved_pos_v: Variant = explore_map.get("party_pos", { "col": 0, "row": height / 2 })
+	var preserved_pos: Dictionary = preserved_pos_v if preserved_pos_v is Dictionary else { "col": 0, "row": height / 2 }
+	var preserved_turns := int(explore_map.get("turn_count", 0))
+
+	# Rebuild explore_map — geometry + intel kept; pending engagement always cleared.
 	explore_map = {
 		"width":               width,
 		"height":              height,
-		"party_pos":           { "col": 0, "row": height / 2 },
+		"party_pos":           preserved_pos if preserve_pos else { "col": 0, "row": height / 2 },
 		"situations":          situations_clean,
 		"locked":              locked,
 		"party_state":         StageExploreModelScript.STATE_EXPLORING,
-		"turn_count":          0,
+		"turn_count":          preserved_turns if preserve_pos else 0,
 		"objectives_found":    obj_found,
 		"objectives_total":    obj_total,
 		"last_situation_id":   "",
@@ -258,6 +267,21 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 
 	var is_exploring := party_state == StageExploreModelScript.STATE_EXPLORING
 
+	# V2-STAGE-002: project stage objectives with label, reveal_hint, completed, required.
+	var objectives: Array = _build_objective_entries(flow_ctx, stage, explore_map)
+	var objectives_remaining := 0
+	for _obj_entry_v in objectives:
+		var _oe: Dictionary = _obj_entry_v if _obj_entry_v is Dictionary else {}
+		if bool(_oe.get("required", true)) and not bool(_oe.get("completed", false)):
+			objectives_remaining += 1
+
+	# V2-STAGE-002: calling-action bonuses + fear-based actions.
+	var party_calling_actions: Array = []
+	var calling_action_slots: Dictionary = _build_calling_actions(flow_ctx, stage, party_calling_actions)
+
+	# V2-STAGE-002: party return request — fires when avg party fear > threshold.
+	var party_requesting_return := _check_party_return_request(flow_ctx)
+
 	var actions: Dictionary = {
 		"cta.advance_turn": {
 			"type":     "stage.advance_turn",
@@ -287,22 +311,53 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"label":        "Enter",
 			"slot":         "cta.engage_situation",
 		}
+		# V2-STAGE-002: player can dismiss the engagement popup without resolving the situation.
+		actions["cta.ignore_situation"] = {
+			"type":         "stage.ignore_situation",
+			"situation_id": pending_sit_id,
+			"label":        "Ignore",
+			"slot":         "cta.ignore_situation",
+		}
+
+	# V2-STAGE-002: stage-complete gate — all required objectives done.
+	if is_exploring and not has_pending and objectives_remaining == 0 and obj_total > 0:
+		actions["cta.proceed_to_stage_map"] = {
+			"type":  "flow.complete_stage",
+			"label": "Stage Complete",
+			"slot":  "cta.proceed_to_stage_map",
+		}
+
+	# V2-STAGE-002: party return request notification action (separate from player-initiated).
+	if party_requesting_return and is_exploring:
+		actions["cta.party_return_request"] = {
+			"type":  "ui.show_return_confirm",
+			"label": "Party Requests Return",
+			"slot":  "cta.party_return_request",
+		}
+
+	# Add calling-action bonus slots to actions dict.
+	for _slot_key in calling_action_slots:
+		actions[_slot_key] = calling_action_slots[_slot_key]
 
 	return {
 		"type": FlowStateIds.STAGE_EXPLORE,
 		"data": {
-			"stage_id":         flow_ctx.stage_id,
-			"realm_id":         flow_ctx.realm_id,
-			"map_width":        map_width,
-			"map_height":       map_height,
-			"party_pos":        party_pos,
-			"party_state":      party_state,
-			"turn_count":       turn_count,
-			"objectives_found": obj_found,
-			"objectives_total": obj_total,
-			"situations":        situations,
-			"situation_pending": situation_pending,
-			"party_preview":     party_preview,
+			"stage_id":               flow_ctx.stage_id,
+			"realm_id":               flow_ctx.realm_id,
+			"map_width":              map_width,
+			"map_height":             map_height,
+			"party_pos":              party_pos,
+			"party_state":            party_state,
+			"turn_count":             turn_count,
+			"objectives_found":       obj_found,
+			"objectives_total":       obj_total,
+			"objectives":             objectives,
+			"objectives_remaining":   objectives_remaining,
+			"situations":             situations,
+			"situation_pending":      situation_pending,
+			"party_preview":          party_preview,
+			"party_calling_actions":  party_calling_actions,
+			"party_requesting_return": party_requesting_return,
 		},
 		"actions": actions,
 		"meta": { "t": t },
@@ -351,3 +406,232 @@ static func _write_stage_back(flow_ctx: FlowContext, stage: Dictionary) -> void:
 		if s_v is Dictionary and int((s_v as Dictionary).get("index", -1)) == stage_index:
 			stages[i] = stage
 			return
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# V2-STAGE-002 helpers
+# ────────────────────────────────────────────────────────────────────────────
+
+# Project stage.objectives into the snapshot with display fields.
+# reveal_hint is only shown when the objective's linked situation has been revealed.
+static func _build_objective_entries(
+	flow_ctx: FlowContext, stage: Dictionary, explore_map: Dictionary
+) -> Array:
+	var entries: Array = []
+	var objs_v: Variant = stage.get("objectives", [])
+	if not (objs_v is Array):
+		return entries
+
+	# Read stages config for label + reveal_hint
+	var stages_cfg: Dictionary = {}
+	if flow_ctx.config_service != null:
+		var bal_v: Variant = flow_ctx.config_service.get_balance()
+		var bal: Dictionary = bal_v if bal_v is Dictionary else {}
+		var bd_v: Variant = bal.get("data", {})
+		var bd: Dictionary = bd_v if bd_v is Dictionary else {}
+		var sc_v: Variant = bd.get("stages", {})
+		var sc: Dictionary = sc_v if sc_v is Dictionary else {}
+		var ot_v: Variant = sc.get("objective_types", {})
+		stages_cfg = ot_v if ot_v is Dictionary else {}
+
+	# Build a set of objective indices whose situations have been scouted/resolved.
+	var scouted_obj_indices: Array = []
+	var sits_v: Variant = explore_map.get("situations", [])
+	if sits_v is Array:
+		for sit_v in (sits_v as Array):
+			var sit: Dictionary = sit_v if sit_v is Dictionary else {}
+			if bool(sit.get("revealed", false)) or bool(sit.get("resolved", false)):
+				var oi := int(sit.get("objective_index", -1))
+				if oi >= 0 and oi not in scouted_obj_indices:
+					scouted_obj_indices.append(oi)
+
+	var objs: Array = objs_v
+	for obj_v in objs:
+		var obj: Dictionary = obj_v if obj_v is Dictionary else {}
+		var obj_type := str(obj.get("type", ""))
+		var obj_idx  := int(obj.get("index", -1))
+		var is_completed := bool(obj.get("completed", false))
+		var is_required  := bool(obj.get("required",  true))
+		var type_cfg_v: Variant = stages_cfg.get(obj_type, {})
+		var type_cfg: Dictionary = type_cfg_v if type_cfg_v is Dictionary else {}
+
+		# Reveal hint shown only when the situation has been scouted or completed.
+		var show_hint := is_completed or (obj_idx in scouted_obj_indices)
+		entries.append({
+			"type":        obj_type,
+			"label":       str(type_cfg.get("label", obj_type.capitalize())),
+			"reveal_hint": str(type_cfg.get("reveal_hint", "")) if show_hint else "",
+			"completed":   is_completed,
+			"required":    is_required,
+		})
+	return entries
+
+
+# Build calling-action bonus action slots.
+# Reads roster callings + party fear; returns slots dict + populates party_calling_actions array.
+static func _build_calling_actions(
+	flow_ctx: FlowContext, stage: Dictionary, party_calling_actions: Array
+) -> Dictionary:
+	var slots: Dictionary = {}
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	var party_ids_v: Variant = sanctum.get("active_party_ids", [])
+	var party_ids: Array = party_ids_v if party_ids_v is Array else []
+	var roster_v: Variant = sanctum.get("roster", [])
+	var roster: Array = roster_v if roster_v is Array else []
+
+	if party_ids.is_empty():
+		return slots
+
+	# Read stages config for calling_action_bonuses
+	var calling_bonuses: Dictionary = {}
+	var cautious_threshold := 50
+	if flow_ctx.config_service != null:
+		var bal_v: Variant = flow_ctx.config_service.get_balance()
+		var bal: Dictionary = bal_v if bal_v is Dictionary else {}
+		var bd_v: Variant = bal.get("data", {})
+		var bd: Dictionary = bd_v if bd_v is Dictionary else {}
+		var sc_v: Variant = bd.get("stages", {})
+		var sc: Dictionary = sc_v if sc_v is Dictionary else {}
+		var cb_v: Variant = sc.get("calling_action_bonuses", {})
+		calling_bonuses = cb_v if cb_v is Dictionary else {}
+		cautious_threshold = int(sc.get("cautious_advance_fear_threshold", 50))
+
+	# Gather callings and average fear from active party echoes.
+	var callings_in_party: Array = []
+	var total_fear := 0
+	var echo_count := 0
+	var has_protect_objective := false
+
+	for echo_v in roster:
+		var echo: Dictionary = echo_v if echo_v is Dictionary else {}
+		if str(echo.get("id", "")) not in party_ids:
+			continue
+		var calling := str(echo.get("calling", ""))
+		var calling_origin := str(echo.get("calling_origin", ""))
+		var effective_calling := calling if not calling.is_empty() else calling_origin
+		if not effective_calling.is_empty() and effective_calling not in callings_in_party:
+			callings_in_party.append(effective_calling)
+		var emo_v: Variant = echo.get("emotion", {})
+		var emo: Dictionary = emo_v if emo_v is Dictionary else {}
+		total_fear += int(emo.get("fear_current", 0))
+		echo_count += 1
+
+	var avg_fear: int = total_fear / max(echo_count, 1)
+
+	# Check for unresolved protect objective.
+	var objs_v: Variant = stage.get("objectives", [])
+	if objs_v is Array:
+		for obj_v in (objs_v as Array):
+			var obj: Dictionary = obj_v if obj_v is Dictionary else {}
+			if str(obj.get("type", "")) == ObjectiveModelScript.TYPE_PROTECT \
+					and not bool(obj.get("completed", false)):
+				has_protect_objective = true
+				break
+
+	# ranger → reveal_adjacent
+	if "ranger" in callings_in_party:
+		var actions_v: Variant = calling_bonuses.get("ranger", [])
+		if actions_v is Array and "reveal_adjacent" in (actions_v as Array):
+			party_calling_actions.append({
+				"calling":     "ranger",
+				"action_type": "reveal_adjacent",
+				"label":       "[Ranger] Scout Ahead",
+				"slot":        "cta.calling_reveal_adjacent",
+			})
+			slots["cta.calling_reveal_adjacent"] = {
+				"type":  "stage.calling_action",
+				"action_type": "reveal_adjacent",
+				"label": "[Ranger] Scout Ahead",
+				"slot":  "cta.calling_reveal_adjacent",
+			}
+
+	# okofor → fortify_position (only when there is an unresolved protect objective)
+	if "okofor" in callings_in_party and has_protect_objective:
+		var actions_v: Variant = calling_bonuses.get("okofor", [])
+		if actions_v is Array and "fortify_position" in (actions_v as Array):
+			party_calling_actions.append({
+				"calling":     "okofor",
+				"action_type": "fortify_position",
+				"label":       "[Okofor] Fortify Position",
+				"slot":        "cta.calling_fortify_position",
+			})
+			slots["cta.calling_fortify_position"] = {
+				"type":  "stage.calling_action",
+				"action_type": "fortify_position",
+				"label": "[Okofor] Fortify Position",
+				"slot":  "cta.calling_fortify_position",
+			}
+
+	# aduro → inspire_push
+	if "aduro" in callings_in_party:
+		var actions_v: Variant = calling_bonuses.get("aduro", [])
+		if actions_v is Array and "inspire_push" in (actions_v as Array):
+			party_calling_actions.append({
+				"calling":     "aduro",
+				"action_type": "inspire_push",
+				"label":       "[Aduro] Inspire Push",
+				"slot":        "cta.calling_inspire_push",
+			})
+			slots["cta.calling_inspire_push"] = {
+				"type":  "stage.calling_action",
+				"action_type": "inspire_push",
+				"label": "[Aduro] Inspire Push",
+				"slot":  "cta.calling_inspire_push",
+			}
+
+	# Fear-based: cautious_advance (not calling-gated — any party with high avg fear).
+	if avg_fear >= cautious_threshold:
+		party_calling_actions.append({
+			"calling":     "",
+			"action_type": "cautious_advance",
+			"label":       "Cautious Advance",
+			"slot":        "cta.cautious_advance",
+		})
+		slots["cta.cautious_advance"] = {
+			"type":  "stage.calling_action",
+			"action_type": "cautious_advance",
+			"label": "Cautious Advance",
+			"slot":  "cta.cautious_advance",
+		}
+
+	return slots
+
+
+# Check if the party's average fear exceeds the return threshold.
+# Returns true when party_requesting_return should be surfaced in the snapshot.
+static func _check_party_return_request(flow_ctx: FlowContext) -> bool:
+	var threshold := 60
+	if flow_ctx.config_service != null:
+		var bal_v: Variant = flow_ctx.config_service.get_balance()
+		var bal: Dictionary = bal_v if bal_v is Dictionary else {}
+		var bd_v: Variant = bal.get("data", {})
+		var bd: Dictionary = bd_v if bd_v is Dictionary else {}
+		var sc_v: Variant = bd.get("stages", {})
+		var sc: Dictionary = sc_v if sc_v is Dictionary else {}
+		threshold = int(sc.get("party_return_fear_threshold", 60))
+
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	var party_ids_v: Variant = sanctum.get("active_party_ids", [])
+	var party_ids: Array = party_ids_v if party_ids_v is Array else []
+	var roster_v: Variant = sanctum.get("roster", [])
+	var roster: Array = roster_v if roster_v is Array else []
+
+	if party_ids.is_empty():
+		return false
+
+	var total_fear := 0
+	var count := 0
+	for echo_v in roster:
+		var echo: Dictionary = echo_v if echo_v is Dictionary else {}
+		if str(echo.get("id", "")) not in party_ids:
+			continue
+		var emo_v: Variant = echo.get("emotion", {})
+		var emo: Dictionary = emo_v if emo_v is Dictionary else {}
+		total_fear += int(emo.get("fear_current", 0))
+		count += 1
+
+	if count == 0:
+		return false
+	return (total_fear / count) > threshold

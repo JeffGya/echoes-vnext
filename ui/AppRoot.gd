@@ -328,6 +328,7 @@ func _run_tests(parts: Array) -> void:
 	ThreadServiceTests.register(runner)                      # V2-WEAVE-001
 	WeavingRiteTests.register(runner)  # V2-WEAVE-002
 	StageExploreTests.register(runner)    # V2-STAGE-001
+	StageObjectiveTests.register(runner)  # V2-STAGE-002
 	IntelPersistenceTests.register(runner) # V2-INTEL-001
 	OnboardingTests.register(runner)
 	VoiceTests.register(runner)           # V2-VOICE-001

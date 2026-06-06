@@ -24,7 +24,8 @@
         "map_width_min": 30,
         "map_width_max": 45,
         "map_height_min": 30,
-        "map_height_max": 40
+        "map_height_max": 40,
+        "objective_pool": ["combat", "shrine"]
       },
 
       "realm.02": {
@@ -44,7 +45,8 @@
         "map_width_min": 50,
         "map_width_max": 70,
         "map_height_min": 45,
-        "map_height_max": 65
+        "map_height_max": 65,
+        "objective_pool": ["combat", "shrine", "recover", "protect"]
       }
 
     }

@@ -15,7 +15,14 @@ extends RefCounted
 #
 # Do NOT reorder type pool entries — determinism rule.
 
-const REQUIRED_FIELDS: Array = ["id", "type", "pos", "seed", "revealed", "is_objective", "resolved", "intel_clues"]
+# V2-STAGE-003: "role" field (npc/contact/ritual/obstacle) deferred.
+# When ready, add: "role": "" as default in make(), and "role" to REQUIRED_FIELDS.
+
+const REQUIRED_FIELDS: Array = [
+	"id", "type", "pos", "seed", "revealed",
+	"is_objective", "resolved", "intel_clues",
+	"objective_index",  # V2-STAGE-002: -1 for non-objective situations
+]
 
 # Situation type constants
 const TYPE_COMBAT := "combat"
@@ -57,17 +64,19 @@ static func make(
 	col: int,
 	row: int,
 	seed: int,
-	is_objective: bool
+	is_objective: bool,
+	objective_index: int = -1  # V2-STAGE-002: index into stage.objectives[]; -1 if not an objective
 ) -> Dictionary:
 	return {
-		"id":           id,
-		"type":         sit_type,
-		"pos":          { "col": col, "row": row },
-		"seed":         seed,
-		"revealed":     false,
-		"is_objective": is_objective,
-		"resolved":     false,
-		"intel_clues":  [],  # V2-INTEL-001 extensibility slot
+		"id":              id,
+		"type":            sit_type,
+		"pos":             { "col": col, "row": row },
+		"seed":            seed,
+		"revealed":        false,
+		"is_objective":    is_objective,
+		"resolved":        false,
+		"intel_clues":     [],  # V2-INTEL-001 extensibility slot
+		"objective_index": objective_index,
 	}
 
 

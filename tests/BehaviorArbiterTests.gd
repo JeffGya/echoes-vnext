@@ -28,6 +28,13 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("situational/overwhelming_advantage_pushes_move",     Callable(BehaviorArbiterTests, "_t_overwhelming_advantage_pushes_move"))
 	# V2-PROG-002: confirmed calling drives behavior, not birth origin
 	runner.register_test("arbiter/confirmed_calling_overrides_birth_origin",  Callable(BehaviorArbiterTests, "_t_confirmed_calling_overrides_birth_origin"))
+	# COMBAT-BUG-001: purifier shrine pathing fixes
+	runner.register_test("arbiter/purifier_moves_toward_shrine_not_enemy",    Callable(BehaviorArbiterTests, "_t_purifier_moves_toward_shrine_not_enemy"))
+	runner.register_test("arbiter/purifier_purifies_when_adjacent_to_shrine", Callable(BehaviorArbiterTests, "_t_purifier_purifies_when_adjacent_to_shrine"))
+	runner.register_test("arbiter/purifier_no_purify_when_on_cooldown",       Callable(BehaviorArbiterTests, "_t_purifier_no_purify_when_on_cooldown"))
+	runner.register_test("arbiter/purifier_attacks_enemy_when_adjacent",      Callable(BehaviorArbiterTests, "_t_purifier_attacks_enemy_when_adjacent"))
+	# COMBAT-BUG-002: guard deadlock fix
+	runner.register_test("arbiter/repeated_guard_breaks_to_melee",            Callable(BehaviorArbiterTests, "_t_repeated_guard_breaks_to_melee"))
 
 
 # -------------------------
@@ -445,4 +452,382 @@ static func _t_confirmed_calling_overrides_birth_origin() -> Dictionary:
 			"ok": false,
 			"error": "Confirmed aduro (melee=65) should win over okofor birth origin (protect_ally=65). Got: %s" % str(intent.get("action_type")),
 		}
+	return { "ok": true }
+
+
+# -------------------------
+# COMBAT-BUG-001: Purifier shrine pathing tests
+# -------------------------
+
+# Test A1: purifier_moves_shrine_hp_aware
+# Shrine HP gates the purifier's movement redirect.
+#
+# Part A: shrine HP < 50% AND purifier not adjacent → move toward shrine.
+#   The purifier must return to the shrine to purify.
+#
+# Part B: shrine HP ≥ 50% AND purifier not adjacent → move toward enemy.
+#   Shrine is healthy; purifier should intercept the enemy instead.
+#   Without this gate the purifier oscillates: one step toward enemy takes it 2 tiles
+#   from shrine → redirect fires → one step back → adjacent again → redirect off → repeat.
+static func _t_purifier_moves_toward_shrine_not_enemy() -> Dictionary:
+	# --- Part A: shrine below 50% — redirect to shrine ---
+	var purifier_a := {
+		"id":             "echo_pur_001a",
+		"faction":        "echo",
+		"calling_origin": "okofor",
+		"actor_type":     "echo",
+		"traits":         { "courage": 40, "wisdom": 30, "faith": 50 },
+		"vector_scores":  {},
+		"fear":           0,
+		"morale":         50,
+		"grid_pos":       { "col": 0, "row": 0 },
+		"purify_cooldown": 2,
+	}
+	var shrine_a := {
+		"id": "shrine_001", "faction": "structure",
+		"is_structure": true, "is_dead": false,
+		"current_hp": 40, "stats": { "max_hp": 100 },
+		"grid_pos": { "col": 9, "row": 9 },
+	}
+	var enemy_a := {
+		"id": "enemy_pur_001a", "faction": "enemy",
+		"is_dead": false, "grid_pos": { "col": 5, "row": 5 },
+	}
+	var intent_a: Dictionary = BehaviorArbiter.new({}).select_intent({
+		"actor": purifier_a, "all_actors": [purifier_a, shrine_a, enemy_a],
+		"t": 1, "is_purifier": true, "shrine_alive": true, "shrine_hp_ratio": 0.40,
+	})
+	if str(intent_a.get("action_type", "")) != "actor.move":
+		return { "ok": false, "error": "Part A: expected actor.move toward shrine (HP=40%%), got: %s" % str(intent_a.get("action_type")) }
+	var tpos_a: Dictionary = intent_a.get("target_pos", {})
+	if int(tpos_a.get("col", -1)) != 9 or int(tpos_a.get("row", -1)) != 9:
+		return { "ok": false, "error": "Part A: expected target shrine {col:9,row:9}, got: %s" % str(tpos_a) }
+
+	# --- Part B: shrine above 50% — pursue enemy, no oscillation ---
+	var purifier_b := {
+		"id":             "echo_pur_001b",
+		"faction":        "echo",
+		"calling_origin": "okofor",
+		"actor_type":     "echo",
+		"traits":         { "courage": 40, "wisdom": 30, "faith": 50 },
+		"vector_scores":  {},
+		"fear":           0,
+		"morale":         50,
+		"grid_pos":       { "col": 0, "row": 0 },
+		"purify_cooldown": 2,
+	}
+	var shrine_b := {
+		"id": "shrine_001", "faction": "structure",
+		"is_structure": true, "is_dead": false,
+		"current_hp": 80, "stats": { "max_hp": 100 },
+		"grid_pos": { "col": 9, "row": 9 },
+	}
+	var enemy_b := {
+		"id": "enemy_pur_001b", "faction": "enemy",
+		"is_dead": false, "grid_pos": { "col": 5, "row": 5 },
+	}
+	var intent_b: Dictionary = BehaviorArbiter.new({}).select_intent({
+		"actor": purifier_b, "all_actors": [purifier_b, shrine_b, enemy_b],
+		"t": 1, "is_purifier": true, "shrine_alive": true, "shrine_hp_ratio": 0.80,
+	})
+	if str(intent_b.get("action_type", "")) != "actor.move":
+		return { "ok": false, "error": "Part B: expected actor.move toward enemy (HP=80%%), got: %s" % str(intent_b.get("action_type")) }
+	var tpos_b: Dictionary = intent_b.get("target_pos", {})
+	if int(tpos_b.get("col", -1)) != 5 or int(tpos_b.get("row", -1)) != 5:
+		return { "ok": false, "error": "Part B: expected target enemy {col:5,row:5} not shrine, got: %s" % str(tpos_b) }
+
+	return { "ok": true }
+
+
+# Test A2: purifier_purifies_when_adjacent_and_shrine_below_50pct
+# The HP gate is intentional: purify only fires when shrine HP < 50%.
+# At full/healthy HP the purifier should be intercepting the enemy, not purifying.
+#
+# Part A: shrine at 40% HP → purify fires (adjacent, cooldown=0, HP below threshold).
+# Part B: shrine at 80% HP → purify does NOT fire (HP above threshold despite adjacency).
+static func _t_purifier_purifies_when_adjacent_to_shrine() -> Dictionary:
+	# --- Part A: shrine below 50% — purify fires ---
+	var purifier_a := {
+		"id":             "echo_pur_002a",
+		"faction":        "echo",
+		"calling_origin": "okofor",
+		"actor_type":     "echo",
+		"traits":         { "courage": 40, "wisdom": 30, "faith": 50 },
+		"vector_scores":  {},
+		"fear":           0,
+		"morale":         50,
+		"grid_pos":       { "col": 4, "row": 4 },
+		"purify_cooldown": 0,
+	}
+	var shrine_a := {
+		"id":           "shrine_001",
+		"faction":      "structure",
+		"is_structure": true,
+		"is_dead":      false,
+		"current_hp":   40,
+		"stats":        { "max_hp": 100 },
+		"grid_pos":     { "col": 5, "row": 5 },
+	}
+	var enemy_a := {
+		"id": "enemy_pur_002a", "faction": "enemy",
+		"is_dead": false, "grid_pos": { "col": 0, "row": 0 },
+	}
+	var intent_a: Dictionary = BehaviorArbiter.new({}).select_intent({
+		"actor": purifier_a, "all_actors": [purifier_a, shrine_a, enemy_a],
+		"t": 1, "is_purifier": true, "shrine_alive": true, "shrine_hp_ratio": 0.40,
+	})
+	if str(intent_a.get("action_type", "")) != "actor.purify_shrine":
+		return { "ok": false, "error": "Expected actor.purify_shrine at shrine HP=40%%, got: %s" % str(intent_a.get("action_type")) }
+
+	# --- Part B: shrine above 50% — purify must NOT fire ---
+	var purifier_b := {
+		"id":             "echo_pur_002b",
+		"faction":        "echo",
+		"calling_origin": "okofor",
+		"actor_type":     "echo",
+		"traits":         { "courage": 40, "wisdom": 30, "faith": 50 },
+		"vector_scores":  {},
+		"fear":           0,
+		"morale":         50,
+		"grid_pos":       { "col": 4, "row": 4 },
+		"purify_cooldown": 0,
+	}
+	var shrine_b := {
+		"id":           "shrine_001",
+		"faction":      "structure",
+		"is_structure": true,
+		"is_dead":      false,
+		"current_hp":   80,
+		"stats":        { "max_hp": 100 },
+		"grid_pos":     { "col": 5, "row": 5 },
+	}
+	var enemy_b := {
+		"id": "enemy_pur_002b", "faction": "enemy",
+		"is_dead": false, "grid_pos": { "col": 0, "row": 0 },
+	}
+	var intent_b: Dictionary = BehaviorArbiter.new({}).select_intent({
+		"actor": purifier_b, "all_actors": [purifier_b, shrine_b, enemy_b],
+		"t": 1, "is_purifier": true, "shrine_alive": true, "shrine_hp_ratio": 0.80,
+	})
+	if str(intent_b.get("action_type", "")) == "actor.purify_shrine":
+		return { "ok": false, "error": "Expected no purify at shrine HP=80%% (HP gate must hold), got: actor.purify_shrine" }
+
+	return { "ok": true }
+
+
+# Test A3: purifier_no_purify_when_on_cooldown
+# Setup: same as A2 (adjacent to shrine) but purify_cooldown=3.
+# Expected: NOT actor.purify_shrine — override never fires when cooldown > 0.
+static func _t_purifier_no_purify_when_on_cooldown() -> Dictionary:
+	var purifier := {
+		"id":             "echo_pur_003",
+		"faction":        "echo",
+		"calling_origin": "okofor",
+		"actor_type":     "echo",
+		"traits":         { "courage": 40, "wisdom": 30, "faith": 50 },
+		"vector_scores":  {},
+		"fear":           0,
+		"morale":         50,
+		"grid_pos":       { "col": 4, "row": 4 },
+		"purify_cooldown": 3,
+	}
+	var shrine := {
+		"id":           "shrine_001",
+		"faction":      "structure",
+		"is_structure": true,
+		"is_dead":      false,
+		"current_hp":   80,
+		"stats":        { "max_hp": 100 },
+		"grid_pos":     { "col": 5, "row": 5 },
+	}
+	var enemy := {
+		"id":       "enemy_pur_003",
+		"faction":  "enemy",
+		"is_dead":  false,
+		"grid_pos": { "col": 0, "row": 0 },
+	}
+
+	var arbiter := BehaviorArbiter.new({})
+	var context := {
+		"actor":           purifier,
+		"all_actors":      [purifier, shrine, enemy],
+		"t":               1,
+		"is_purifier":     true,
+		"shrine_alive":    true,
+		"shrine_hp_ratio": 0.80,
+	}
+	var intent: Dictionary = arbiter.select_intent(context)
+
+	if str(intent.get("action_type", "")) == "actor.purify_shrine":
+		return { "ok": false, "error": "Expected no purify_shrine when cooldown=3, got: actor.purify_shrine" }
+
+	return { "ok": true }
+
+
+# Test A4: purifier_attacks_enemy_when_adjacent
+# Setup: purifier at (0,0), enemy adjacent at (1,0), shrine far at (9,9).
+# Expected: melee_attack — enemy adjacency generates melee_attack candidate which scores higher.
+# Demonstrates: purifier still fights enemies in the way; shrine-move only fires when not adjacent to enemy.
+static func _t_purifier_attacks_enemy_when_adjacent() -> Dictionary:
+	var purifier := {
+		"id":             "echo_pur_004",
+		"faction":        "echo",
+		"calling_origin": "aduro",
+		"actor_type":     "echo",
+		"traits":         { "courage": 55, "wisdom": 20, "faith": 20 },
+		"vector_scores":  {},
+		"fear":           0,
+		"morale":         50,
+		"grid_pos":       { "col": 0, "row": 0 },
+		"purify_cooldown": 0,
+	}
+	var enemy := {
+		"id":       "enemy_pur_004",
+		"faction":  "enemy",
+		"is_dead":  false,
+		"grid_pos": { "col": 1, "row": 0 },
+	}
+	var shrine := {
+		"id":           "shrine_001",
+		"faction":      "structure",
+		"is_structure": true,
+		"is_dead":      false,
+		"current_hp":   80,
+		"stats":        { "max_hp": 100 },
+		"grid_pos":     { "col": 9, "row": 9 },
+	}
+
+	var arbiter := BehaviorArbiter.new({})
+	var context := {
+		"actor":           purifier,
+		"all_actors":      [purifier, shrine, enemy],
+		"t":               1,
+		"is_purifier":     true,
+		"shrine_alive":    true,
+		"shrine_hp_ratio": 0.80,
+	}
+	var intent: Dictionary = arbiter.select_intent(context)
+
+	if str(intent.get("action_type", "")) != "melee_attack":
+		return { "ok": false, "error": "Expected melee_attack (enemy adjacent, aduro base=65), got: %s" % str(intent.get("action_type")) }
+
+	return { "ok": true }
+
+
+# -------------------------
+# COMBAT-BUG-002: Guard deadlock fix test
+# -------------------------
+
+# Test B1: repeated_guard_suppressed_for_all_callings
+# Verifies that candidate suppression + score penalty work together across callings.
+#
+# Part 1 — Suppression: guard must be excluded from the candidate pool after one guard round
+# when HP is not critical. Tested for all three calling extremes:
+#   uncalled (guard base=25), onyamesu (guard base=55), aduro (guard base=15).
+# Score-based approaches alone fail for onyamesu at broken morale + high fear (gap ~68 pts).
+# Candidate suppression is the hard guarantee regardless of calling or morale/fear state.
+#
+# Part 2 — Score penalty: on the suppressed turn (guard not in pool), melee_attack should
+# beat actor.idle even under last_echo_standing pressure. The +15 melee / -5 idle penalty
+# ensures the echo attacks rather than idles when guard is forcibly excluded.
+#
+# Part 3 — Critical HP exception: guard must remain available (and win) at HP ≤ 20%
+# even after a guard round, so a dying echo can still try to survive.
+static func _t_repeated_guard_breaks_to_melee() -> Dictionary:
+	# --- Part 1: suppression works for all callings ---
+	var callings := ["uncalled", "onyamesu", "aduro"]
+	for calling in callings:
+		var actor := {
+			"id":             "echo_gd_001",
+			"faction":        "echo",
+			"calling_origin": calling,
+			"actor_type":     "echo",
+			"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
+			"vector_scores":  {},
+			"fear":           80,
+			"morale":         10,  # broken tier — worst-case that previously caused deadlock
+			"grid_pos":       { "col": 0, "row": 0 },
+			"current_hp":     100,
+			"stats":          { "max_hp": 100 },
+			"last_intent":    { "action_type": "actor.guard" },
+		}
+		var enemy := {
+			"id": "enemy_gd_001", "faction": "enemy",
+			"is_dead": false, "grid_pos": { "col": 1, "row": 0 },
+		}
+		var arbiter := BehaviorArbiter.new({})
+		var intent: Dictionary = arbiter.select_intent({ "actor": actor, "all_actors": [enemy], "t": 1 })
+		if str(intent.get("action_type", "")) == "actor.guard":
+			return {
+				"ok": false,
+				"error": "calling='%s': guard must be suppressed (HP=100%%, broken morale, fear=80), got: actor.guard" % calling,
+			}
+
+	# --- Part 2: score penalty ensures melee beats idle when guard is suppressed ---
+	# last_echo_standing fires (dead_allies=1, living_allies=0) → idle gets +15, melee gets -15.
+	# Without the +15 melee bonus from repeated_guard_penalty, idle would win over melee.
+	# uncalled: guard suppressed; pool = [melee, idle].
+	#   idle (passive): base(20) + last_echo_standing(+15) = 35; repeated_guard_penalty(-5) → 30
+	#   melee (fear=60, factor=0.73): base(40) + last_echo_standing(-15) = 25 × 0.73 + echo_in_melee(+18) + repeated_guard(+15) = 51.25
+	var actor_p2 := {
+		"id":             "echo_gd_p2",
+		"faction":        "echo",
+		"calling_origin": "uncalled",
+		"actor_type":     "echo",
+		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
+		"vector_scores":  {},
+		"fear":           60,
+		"morale":         10,  # broken
+		"grid_pos":       { "col": 0, "row": 0 },
+		"current_hp":     100,
+		"stats":          { "max_hp": 100 },
+		"last_intent":    { "action_type": "actor.guard" },
+	}
+	var dead_ally_p2 := {
+		"id": "echo_dead_p2", "faction": "echo",
+		"is_dead": true, "grid_pos": { "col": 2, "row": 0 },
+	}
+	var enemy_p2 := {
+		"id": "enemy_p2", "faction": "enemy",
+		"is_dead": false, "grid_pos": { "col": 1, "row": 0 },
+	}
+	var arbiter_p2 := BehaviorArbiter.new({})
+	var intent_p2: Dictionary = arbiter_p2.select_intent({
+		"actor": actor_p2, "all_actors": [dead_ally_p2, enemy_p2], "t": 1
+	})
+	if str(intent_p2.get("action_type", "")) != "melee_attack":
+		return {
+			"ok": false,
+			"error": "last_echo_standing + guard suppressed: expected melee_attack (repeated_guard_penalty+15 beats idle), got: %s" % str(intent_p2.get("action_type")),
+		}
+
+	# --- Part 3: guard allowed at critical HP ≤ 20% ---
+	var actor_crit := {
+		"id":             "echo_gd_crit",
+		"faction":        "echo",
+		"calling_origin": "onyamesu",
+		"actor_type":     "echo",
+		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
+		"vector_scores":  {},
+		"fear":           80,
+		"morale":         10,
+		"grid_pos":       { "col": 0, "row": 0 },
+		"current_hp":     20,
+		"stats":          { "max_hp": 100 },  # 20% HP — at threshold; guard stays available
+		"last_intent":    { "action_type": "actor.guard" },
+	}
+	var enemy_crit := {
+		"id": "enemy_crit", "faction": "enemy",
+		"is_dead": false, "grid_pos": { "col": 1, "row": 0 },
+	}
+	var arbiter_crit := BehaviorArbiter.new({})
+	var intent_crit: Dictionary = arbiter_crit.select_intent({
+		"actor": actor_crit, "all_actors": [enemy_crit], "t": 1
+	})
+	if str(intent_crit.get("action_type", "")) != "actor.guard":
+		return {
+			"ok": false,
+			"error": "critical HP (20%%): guard must stay available after guard round (onyamesu, broken, fear=80), got: %s" % str(intent_crit.get("action_type")),
+		}
+
 	return { "ok": true }

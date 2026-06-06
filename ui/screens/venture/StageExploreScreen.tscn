@@ -217,6 +217,15 @@ grow_horizontal = 2
 grow_vertical = 0
 theme_override_constants/separation = 12
 
+[node name="StageCompleteButton" type="Button" parent="ActionBar" unique_id=1357924680]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(180, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"ButtonPrimary"
+text = "Stage Complete"
+
 [node name="AdvanceButton" type="Button" parent="ActionBar" unique_id=176855801]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(160, 56)
@@ -308,6 +317,15 @@ layout_mode = 2
 size_flags_horizontal = 4
 theme_type_variation = &"ButtonPrimary"
 text = "Continue"
+
+[node name="IgnoreButton" type="Button" parent="SituationOverlay/OverlayContent" unique_id=1234567890]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(120, 48)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_type_variation = &"ButtonGhost"
+text = "Pass"
 
 [node name="StageInfoPanel" type="PanelContainer" parent="." unique_id=552207879]
 visible = false

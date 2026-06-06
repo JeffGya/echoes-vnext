@@ -12,16 +12,23 @@ extends RefCounted
 
 const REQUIRED_FIELDS: Array = ["index", "type", "seed", "objectives", "explore_map"]
 
-# Stage summary type constants (derived at generation — never set manually)
+# Stage summary type constants (derived at generation — never set manually).
+# V2-STAGE-002: expanded to cover new objective compositions.
+# NOTE: stage.type is a DISPLAY-ONLY summary. FlowEncounterState reads the specific
+# objective type (via objective_index), not stage.type, to determine resolution_mode.
 const TYPE_COMBAT       := "combat"
 const TYPE_PURIFICATION := "purification"
-const VALID_TYPES: Array = [TYPE_COMBAT, TYPE_PURIFICATION]
+const TYPE_RECOVERY     := "recovery"    # V2-STAGE-002: stages primarily focused on recover/retrieve
+const TYPE_PROTECTION   := "protection"  # V2-STAGE-002: stages primarily focused on protect/escort
+const VALID_TYPES: Array = [TYPE_COMBAT, TYPE_PURIFICATION, TYPE_RECOVERY, TYPE_PROTECTION]
 
 # Stage-level summary descriptions for UI display.
 # Extend when new stage configurations emerge post-MVP.
 const TYPE_DESCRIPTIONS: Dictionary = {
 	"combat":       "A series of battles awaits.",
 	"purification": "Corruption must be cleansed along the way.",
+	"recovery":     "Something must be retrieved from this place.",
+	"protection":   "A presence here must not be lost.",
 }
 
 

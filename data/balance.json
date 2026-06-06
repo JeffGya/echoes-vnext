@@ -699,12 +699,12 @@
 					"actor.move": 15.0
 				},
 				"near_friendly_structure": {
-					"_comment": "COMBAT-006: Shrine/Totem alive — soft defensive bonus for echo actors only. No move penalty so echoes advance freely to intercept.",
+					"_comment": "COMBAT-006: Shrine/Totem alive — soft defensive bonus for echo actors only. Small move bonus nudges echoes toward the shrine area.",
 					"melee_attack": -5.0,
 					"protect_ally": 8.0,
 					"actor.guard": 3.0,
 					"actor.idle": 0.0,
-					"actor.move": 0.0,
+					"actor.move": 4.0,
 					"actor.purify_shrine": 10.0
 				},
 				"near_hostile_structure": {
@@ -793,6 +793,14 @@
 					"protect_ally": 0.0,
 					"actor.guard": 0.0,
 					"actor.idle": 0.0,
+					"actor.move": 0.0
+				},
+				"repeated_guard_penalty": {
+					"_comment": "COMBAT-BUG-002: fires when echo guarded last round AND enemy adjacent. Works with candidate suppression: suppression removes guard from pool; this penalty pushes melee above idle/protect_ally on the forced-action turn, and discourages guard when it re-enters the pool (HP critical exception).",
+					"melee_attack": 15.0,
+					"protect_ally": 0.0,
+					"actor.guard": -20.0,
+					"actor.idle": -5.0,
 					"actor.move": 0.0
 				}
 			}
@@ -2602,6 +2610,36 @@
 					"compatible":  "{name} will find their footing here. Readiness takes many shapes.",
 					"poor_fit":    "The Grounds may ask more of {name} than their nature offers. Not impossible — but the cost will show."
 				}
+			}
+		},
+
+		"stages": {
+			"_note": "V2-STAGE-002: Objective taxonomy, generation config, and explore action config.",
+
+			"objective_types": {
+				"combat":  { "label": "Clear",   "required": true,  "reveal_hint": "Threat detected nearby." },
+				"shrine":  { "label": "Purify",  "required": true,  "reveal_hint": "A corrupted presence lingers here." },
+				"recover": { "label": "Recover", "required": true,  "reveal_hint": "Something of value is hidden in this area." },
+				"protect": { "label": "Protect", "required": true,  "reveal_hint": "A presence here needs guarding." },
+				"endure":  { "label": "Endure",  "required": true,  "reveal_hint": "The pressure here does not relent." },
+				"pursue":  { "label": "Pursue",  "required": false, "reveal_hint": "Something is moving through this area." }
+			},
+
+			"foundation_objective_pool": ["combat", "shrine", "recover", "protect"],
+
+			"calling_action_bonuses": {
+				"ranger":  ["reveal_adjacent"],
+				"okofor":  ["fortify_position"],
+				"aduro":   ["inspire_push"]
+			},
+
+			"party_return_fear_threshold": 60,
+			"cautious_advance_fear_threshold": 50,
+
+			"situation_emotion_effects": {
+				"loot":   { "fear_delta": -5, "morale_delta": 0 },
+				"npc":    { "fear_delta":  0, "morale_delta": 8 },
+				"money":  { "fear_delta": -3, "morale_delta": 5 }
 			}
 		}
 	}

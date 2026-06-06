@@ -9,6 +9,7 @@ const FlowKeeperIntroStateScript  := preload("res://core/state/flow/states/onboa
 const KeeperIntroServiceScript    := preload("res://core/onboarding/KeeperIntroService.gd")
 const StageExploreModelScript     := preload("res://core/realms/StageExploreModel.gd")                          # V2-STAGE-001
 const SituationModelScript        := preload("res://core/realms/SituationModel.gd")                             # V2-STAGE-001
+const ObjectiveModelScript        := preload("res://core/realms/ObjectiveModel.gd")                             # V2-STAGE-002
 ## ConsequencePassService kept on disk for future use; not preloaded here.
 const EmotionRecoveryServiceScript := preload("res://core/emotion/EmotionRecoveryService.gd")                    # V2-SANCTUM-001
 const InstitutionServiceScript     := preload("res://core/sanctum/InstitutionService.gd")                         # V2-SANCTUM-002
@@ -154,6 +155,7 @@ func dispatch(action: Dictionary) -> Dictionary:
 			var stage_id := str(action.get("stage_id", ""))
 			flow_ctx.stage_id     = stage_id
 			flow_ctx.encounter_id = flow_ctx.realm_id + "." + stage_id  # BUG-003: was always ""
+			flow_ctx.active_encounter_objective_index = -1  # V2-STAGE-002: reset on stage entry
 			# PROG-009: persist skill loadout to save before entering the stage
 			_persist_equipped_skills(t)
 			# VOW-001 / V2-VOW-002: vow entry condition evaluated on actual entry (go_state→STAGE_EXPLORE),
@@ -469,6 +471,9 @@ func dispatch(action: Dictionary) -> Dictionary:
 		"stage.engage_situation":
 			_handle_stage_engage_situation(action, t)
 
+		"stage.ignore_situation":  # V2-STAGE-002: clear pending without resolving
+			_handle_stage_ignore_situation(action, t)
+
 		"stage.confirm_return_home":
 			flow_machine.transition(FlowStateIds.STAGE_MAP, flow_ctx, logger, t, "stage.return_home.confirmed")
 
@@ -721,6 +726,15 @@ func _handle_complete_stage(t: int, destination_override: String = "") -> void:
 						_vsits[_vi] = _vs
 						if bool(_vs.get("is_objective", false)):
 							_vmap["objectives_found"] = int(_vmap.get("objectives_found", 0)) + 1
+							# V2-STAGE-002: mark the associated objective completed
+							var _vobj_idx := int(_vs.get("objective_index", -1))
+							if _vobj_idx >= 0:
+								var _vstage_objs_v: Variant = _vstage.get("objectives", [])
+								if _vstage_objs_v is Array:
+									var _vstage_objs: Array = _vstage_objs_v
+									if _vobj_idx < _vstage_objs.size() and _vstage_objs[_vobj_idx] is Dictionary:
+										_vstage_objs[_vobj_idx]["completed"] = true
+									_vstage["objectives"] = _vstage_objs
 						break
 				_vmap["situations"] = _vsits
 				# Check stage completion after resolving
@@ -748,6 +762,7 @@ func _handle_complete_stage(t: int, destination_override: String = "") -> void:
 	_check_vow_discovery(t)
 	flow_ctx.encounter_ctx     = null
 	flow_ctx.encounter_machine = null
+	flow_ctx.active_encounter_objective_index = -1  # V2-STAGE-002: reset after combat resolves
 
 	# V2-WEAVE-001: load thread config (read-only)
 	var _bal_v: Variant = flow_ctx.config_service.get_balance()
@@ -1955,9 +1970,16 @@ func _end_round(t: int) -> void:
 
 	# COMBAT-007: build the appropriate snapshot and persist it in-memory on ectx.
 	if bool(combat_state.get("combat_over", false)):
+		var _arr_victory: bool = bool(ectx.combat_result.get("victory", false))
+
+		# V2-STAGE-002: on victory, resolve the situation AND mark objective complete BEFORE
+		# the final snapshot so objectives_remaining is accurate AND the situation is not
+		# re-targeted if the player returns to stage_explore.
+		if _arr_victory:
+			_resolve_combat_situation_and_objective(flow_ctx, t)
+
 		# V2-VOICE-001: write arrival barks to ≤2 party echo save entries BEFORE final snapshot
 		# so build_final_snapshot() can read them via echo["_sanctum_bark"].
-		var _arr_victory: bool = bool(ectx.combat_result.get("victory", false))
 		_select_arrival_barks_for_party(_arr_victory, t)
 		# V2-VOW-002: probe benefit before final snapshot so resolve screen can include it.
 		_store_vow_benefit_preview(t)
@@ -4729,57 +4751,229 @@ func _handle_stage_engage_situation(action: Dictionary, t: int) -> void:
 	# VOW-001: evaluate engage condition (obi_nnim_kyere revealed check).
 	_apply_vow_engage_condition(_sit_was_revealed, t)
 
+	# V2-STAGE-002: set active objective index for encounter resolution mode lookup.
+	var _sit_obj_index := int(sit.get("objective_index", -1))
+	flow_ctx.active_encounter_objective_index = _sit_obj_index
+
 	logger.info(t, "stage.engage_situation", "Party engaged situation", {
-		"stage_id":      flow_ctx.stage_id,
-		"situation_id":  sit_id,
-		"type":          str(sit.get("type", "")),
-		"is_objective":  sit.get("is_objective", false),
-		"obj_found":     explore_map.get("objectives_found", 0),
-		"obj_total":     explore_map.get("objectives_total", 0),
+		"stage_id":        flow_ctx.stage_id,
+		"situation_id":    sit_id,
+		"type":            str(sit.get("type", "")),
+		"is_objective":    sit.get("is_objective", false),
+		"objective_index": _sit_obj_index,
+		"obj_found":       explore_map.get("objectives_found", 0),
+		"obj_total":       explore_map.get("objectives_total", 0),
 	})
 
 	# Route by situation type.
-	# IMPORTANT: for combat situations, do NOT mark resolved or increment objectives_found here.
+	# IMPORTANT: for combat/shrine situations, do NOT mark resolved or complete objective here.
 	# Combat resolution is async — victory is confirmed via ResolveScreen → flow.complete_stage.
 	# _handle_complete_stage reads last_situation_id to finalize the situation on victory.
 	# On defeat, the situation remains unresolved so the player can retry it.
 	var sit_type := str(sit.get("type", ""))
-	match sit_type:
-		SituationModelScript.TYPE_COMBAT:
-			# Undo the resolved/revealed mutation made above — combat outcome is not yet known
-			for _ri in range(situations.size()):
-				var _sv: Variant = situations[_ri]
-				if _sv is Dictionary and str((_sv as Dictionary).get("id", "")) == sit_id:
-					var _s: Dictionary = _sv
-					_s["resolved"] = false
-					_s["revealed"] = bool(_s.get("revealed", false))  # keep reveal state
-					situations[_ri] = _s
-					break
-			if bool(sit.get("is_objective", false)):
-				explore_map["objectives_found"] = max(int(explore_map.get("objectives_found", 0)) - 1, 0)
-			explore_map["situations"] = situations
-			stage["explore_map"] = explore_map
-			FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
-			flow_machine.transition(FlowStateIds.ENCOUNTER, flow_ctx, logger, t, "stage.engage.combat")
-		_:
-			# NPC / loot / money — inline placeholder overlay (V2-STAGE-003 / V2-STAGE-004 will replace)
-			var obj_found := int(explore_map.get("objectives_found", 0))
-			var obj_total := int(explore_map.get("objectives_total", 0))
-			if obj_total > 0 and obj_found >= obj_total:
-				explore_map["party_state"] = StageExploreModelScript.STATE_COMPLETE
-				stage["explore_map"] = explore_map
-				FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
-				_handle_complete_stage(t, "")
-				return
-			var result_text := _stub_situation_result(sit_type)
-			var snap := FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
-			snap["data"]["situation_overlay"] = {
-				"situation_id": sit_id,
-				"type":         sit_type,
-				"result_text":  result_text,
-			}
-			flow_ctx.last_snapshot = snap
-			flow_machine.refresh_snapshot(flow_ctx, logger, t)
+	# V2-STAGE-002: combat AND shrine situations route to flow.encounter.
+	# Shrine uses PURIFY_SHRINE resolution mode (determined by _resolve_mode_from_stage
+	# via active_encounter_objective_index). Both are async — resolved in _handle_complete_stage.
+	if sit_type == SituationModelScript.TYPE_COMBAT or sit_type == ObjectiveModelScript.TYPE_SHRINE:
+		# Undo the resolved/revealed mutation made above — encounter outcome is not yet known.
+		# On defeat the situation stays unresolved so the player can retry.
+		for _ri in range(situations.size()):
+			var _sv: Variant = situations[_ri]
+			if _sv is Dictionary and str((_sv as Dictionary).get("id", "")) == sit_id:
+				var _s: Dictionary = _sv
+				_s["resolved"] = false
+				_s["revealed"] = bool(_s.get("revealed", false))  # keep reveal state
+				situations[_ri] = _s
+				break
+		if bool(sit.get("is_objective", false)):
+			explore_map["objectives_found"] = max(int(explore_map.get("objectives_found", 0)) - 1, 0)
+		explore_map["situations"] = situations
+		stage["explore_map"] = explore_map
+		FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+		var _engage_reason := "stage.engage.shrine" if sit_type == ObjectiveModelScript.TYPE_SHRINE \
+			else "stage.engage.combat"
+		flow_machine.transition(FlowStateIds.ENCOUNTER, flow_ctx, logger, t, _engage_reason)
+
+	else:
+		# NPC / loot / money / recover / protect / endure / pursue — stub overlay
+		# V2-STAGE-002: read stages config for emotion effects
+		var _sit_bal_v: Variant = config_service.get_balance().get("data", {})
+		var _sit_bal: Dictionary = _sit_bal_v if _sit_bal_v is Dictionary else {}
+		var _stages_cfg_v: Variant = _sit_bal.get("stages", {})
+		var _stages_cfg: Dictionary = _stages_cfg_v if _stages_cfg_v is Dictionary else {}
+		var _emo_effects_v: Variant = _stages_cfg.get("situation_emotion_effects", {})
+		var _emo_effects: Dictionary = _emo_effects_v if _emo_effects_v is Dictionary else {}
+
+		# V2-STAGE-002: stub-complete objectives for types with no encounter runtime yet.
+		# V2-STAGE-004 will replace this with proper resolution paths.
+		var _is_stub_objective := bool(sit.get("is_objective", false)) and sit_type in [
+			ObjectiveModelScript.TYPE_RECOVER,
+			ObjectiveModelScript.TYPE_PROTECT,
+			ObjectiveModelScript.TYPE_ENDURE,
+			ObjectiveModelScript.TYPE_PURSUE,
+		]
+		if _is_stub_objective:
+			_mark_stage_objective_completed(flow_ctx, _sit_obj_index, t)
+			logger.info(t, "stage.objective.stub_complete",
+				"Objective stub-completed (V2-STAGE-004 will replace)",
+				{ "objective_index": _sit_obj_index, "type": sit_type }
+			)
+
+		# V2-STAGE-002: apply emotion effects for non-combat situations (loot/npc/money).
+		var _type_emo_v: Variant = _emo_effects.get(sit_type, {})
+		var _type_emo: Dictionary = _type_emo_v if _type_emo_v is Dictionary else {}
+		var _fear_delta:  int = int(_type_emo.get("fear_delta",  0))
+		var _morale_delta: int = int(_type_emo.get("morale_delta", 0))
+		if _fear_delta != 0 or _morale_delta != 0:
+			var _emo_sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+			var _emo_sanctum: Dictionary = _emo_sanctum_v if _emo_sanctum_v is Dictionary else {}
+			var _emo_roster_v: Variant = _emo_sanctum.get("roster", [])
+			var _emo_roster: Array = _emo_roster_v if _emo_roster_v is Array else []
+			var _emo_party_ids_v: Variant = _emo_sanctum.get("active_party_ids", [])
+			var _emo_party_ids: Array = _emo_party_ids_v if _emo_party_ids_v is Array else []
+			for _emo_echo_v in _emo_roster:
+				if not (_emo_echo_v is Dictionary):
+					continue
+				var _emo_echo: Dictionary = _emo_echo_v
+				if str(_emo_echo.get("id", "")) not in _emo_party_ids:
+					continue
+				if _fear_delta != 0:
+					EmotionService.apply_fear_delta(_emo_echo, _fear_delta,
+						"situation." + sit_type, 80, logger, t)
+				if _morale_delta != 0:
+					EmotionService.apply_morale_delta(_emo_echo, _morale_delta,
+						"situation." + sit_type, logger, t)
+			logger.info(t, "stage.situation.emotion_effect",
+				"Non-combat situation applied emotion effect",
+				{ "type": sit_type, "fear_delta": _fear_delta, "morale_delta": _morale_delta }
+			)
+
+		var result_text := _stub_situation_result(sit_type)
+		var snap := FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
+		snap["data"]["situation_overlay"] = {
+			"situation_id": sit_id,
+			"type":         sit_type,
+			"result_text":  result_text,
+		}
+		flow_ctx.last_snapshot = snap
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# V2-STAGE-002 private helpers
+# ────────────────────────────────────────────────────────────────────────────
+
+# V2-STAGE-002: Dismiss the engagement popup without resolving the situation.
+# Clears pending_situation_id — intel gathered (revealed state) is preserved.
+# Party stays parked at the situation's position; the next Advance will naturally
+# bypass it (distance = 0 is skipped in _find_target_situation) and move on.
+func _handle_stage_ignore_situation(_action: Dictionary, t: int) -> void:
+	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
+	if stage.is_empty():
+		return
+	var map_v: Variant = stage.get("explore_map", {})
+	var explore_map: Dictionary = map_v if map_v is Dictionary else {}
+
+	var sit_id := str(explore_map.get("pending_situation_id", ""))
+	explore_map["pending_situation_id"] = ""
+	stage["explore_map"] = explore_map
+	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+	flow_ctx.save_request = true
+	flow_ctx.save_request_reason = "stage.ignore_situation"
+
+	logger.debug(t, "stage.explore.situation_ignored", "Engagement popup dismissed — situation not resolved", {
+		"stage_id":     flow_ctx.stage_id,
+		"situation_id": sit_id,
+	})
+
+	flow_ctx.last_snapshot = FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+# V2-STAGE-002: On combat victory, mark the situation resolved AND the objective completed
+# in one operation. Called from _end_round() before build_final_snapshot() so that:
+# (a) objectives_remaining is accurate in the resolve snapshot, and
+# (b) if the player returns to stage_explore, the situation is already resolved and will
+#     not be re-targeted by advance_turn.
+func _resolve_combat_situation_and_objective(flow_ctx_arg: FlowContext, t: int) -> void:
+	if flow_ctx_arg.stage_id.is_empty():
+		return
+	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx_arg)
+	if stage.is_empty():
+		return
+	var map_v: Variant = stage.get("explore_map", {})
+	var vmap: Dictionary = map_v if map_v is Dictionary else {}
+	var vsit_id := str(vmap.get("last_situation_id", ""))
+	if vsit_id.is_empty():
+		return
+	var vsits_v: Variant = vmap.get("situations", [])
+	if not (vsits_v is Array):
+		return
+	var vsits: Array = vsits_v
+	for _vi in range(vsits.size()):
+		var _vsv: Variant = vsits[_vi]
+		if not (_vsv is Dictionary):
+			continue
+		if str((_vsv as Dictionary).get("id", "")) != vsit_id:
+			continue
+		var _vs: Dictionary = _vsv
+		if bool(_vs.get("resolved", false)):
+			break  # Already resolved (e.g. _handle_complete_stage ran first) — no-op
+		_vs["resolved"] = true
+		_vs["revealed"]  = true
+		vsits[_vi] = _vs
+		if bool(_vs.get("is_objective", false)):
+			vmap["objectives_found"] = int(vmap.get("objectives_found", 0)) + 1
+			# Mark the objective completed
+			var _vobj_idx := int(_vs.get("objective_index", -1))
+			if _vobj_idx >= 0:
+				var _vstage_objs_v: Variant = stage.get("objectives", [])
+				if _vstage_objs_v is Array:
+					var _vstage_objs: Array = _vstage_objs_v
+					if _vobj_idx < _vstage_objs.size() and _vstage_objs[_vobj_idx] is Dictionary:
+						_vstage_objs[_vobj_idx]["completed"] = true
+					stage["objectives"] = _vstage_objs
+		vmap["situations"] = vsits
+		stage["explore_map"] = vmap
+		FlowStageExploreStateScript._write_stage_back(flow_ctx_arg, stage)
+		flow_ctx_arg.save_request = true
+		if flow_ctx_arg.save_request_reason.is_empty():
+			flow_ctx_arg.save_request_reason = "stage.combat_resolved"
+		else:
+			flow_ctx_arg.save_request_reason += "|stage.combat_resolved"
+		logger.info(t, "stage.combat_resolved", "Combat situation resolved on victory (pre-snapshot)", {
+			"stage_id":     flow_ctx_arg.stage_id,
+			"situation_id": vsit_id,
+			"objective_index": int(_vsv.get("objective_index", -1) if _vsv is Dictionary else -1),
+		})
+		break
+
+
+# V2-STAGE-002: Mark stage.objectives[objective_index].completed = true in save_data.
+# Used for stub-completed types (recover/protect/endure/pursue) and after combat victory.
+func _mark_stage_objective_completed(flow_ctx_arg: FlowContext, objective_index: int, t: int) -> void:
+	if objective_index < 0:
+		return
+	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx_arg)
+	if stage.is_empty():
+		return
+	var objs_v: Variant = stage.get("objectives", [])
+	if not (objs_v is Array):
+		return
+	var objs: Array = objs_v
+	if objective_index < objs.size() and objs[objective_index] is Dictionary:
+		objs[objective_index]["completed"] = true
+		stage["objectives"] = objs
+		FlowStageExploreStateScript._write_stage_back(flow_ctx_arg, stage)
+		flow_ctx_arg.save_request = true
+		if flow_ctx_arg.save_request_reason.is_empty():
+			flow_ctx_arg.save_request_reason = "stage.objective.completed"
+		else:
+			flow_ctx_arg.save_request_reason += "|stage.objective.completed"
+		logger.debug(t, "stage.objective.completed", "Stage objective marked completed", {
+			"stage_id":        flow_ctx_arg.stage_id,
+			"objective_index": objective_index,
+		})
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -4789,6 +4983,8 @@ func _handle_stage_engage_situation(action: Dictionary, t: int) -> void:
 # Find the best next unresolved situation based on active directive.
 # scout_carefully → nearest unresolved (Chebyshev from party_pos)
 # seek_signs      → nearest unresolved objective first; fallback nearest unresolved
+# Situations at distance 0 (party already parked there after a Pass) are skipped so
+# the next Advance always moves the party to a genuinely new location.
 func _find_target_situation(explore_map: Dictionary, directive_id: String) -> Dictionary:
 	var sits_v: Variant = explore_map.get("situations", [])
 	var situations: Array = sits_v if sits_v is Array else []
@@ -4811,6 +5007,10 @@ func _find_target_situation(explore_map: Dictionary, directive_id: String) -> Di
 		var sx := int(pos.get("col", 0))
 		var sy := int(pos.get("row", 0))
 		var dist: int = max(abs(sx - px), abs(sy - py))  # Chebyshev
+
+		# Skip situations the party is already standing on — they were passed this turn.
+		if dist == 0:
+			continue
 
 		if dist < best_any_dist:
 			best_any_dist = dist
@@ -4861,6 +5061,15 @@ func _stub_situation_result(sit_type: String) -> String:
 			return "Something left behind. The party gathers what they can."
 		SituationModelScript.TYPE_MONEY:
 			return "An offering, unclaimed. The party takes it quietly."
+		# V2-STAGE-002: new objective types — stub results until V2-STAGE-004 wires them fully
+		ObjectiveModelScript.TYPE_RECOVER:
+			return "The party searches the area. Something is retrieved — for now, they carry it forward."
+		ObjectiveModelScript.TYPE_PROTECT:
+			return "The presence here is acknowledged. The party holds its ground."
+		ObjectiveModelScript.TYPE_ENDURE:
+			return "Pressure bears down. The party holds their position long enough. They do not break."
+		ObjectiveModelScript.TYPE_PURSUE:
+			return "A trace of movement. The party acts quickly — the window does not stay open long."
 		_:
 			return "The party finds something unexpected. More will be known in time."
 
@@ -4869,11 +5078,16 @@ func _stub_situation_result(sit_type: String) -> String:
 # Not called on direct engagement — engagement-reveal is firsthand, not prior intel.
 func _intel_clue_for_type(sit_type: String) -> String:
 	match sit_type:
-		SituationModelScript.TYPE_COMBAT: return "Tracks in the earth. Something passed through here with intent."
-		SituationModelScript.TYPE_NPC:    return "Warmth lingers — a firepit, a scent, the sense of someone waiting."
-		SituationModelScript.TYPE_LOOT:   return "A cache left behind. The kind made in haste, not ceremony."
-		SituationModelScript.TYPE_MONEY:  return "A ritual trace — coins or marks, left as offering or warning."
-		_:                                return "Something is present here."
+		SituationModelScript.TYPE_COMBAT:      return "Tracks in the earth. Something passed through here with intent."
+		SituationModelScript.TYPE_NPC:         return "Warmth lingers — a firepit, a scent, the sense of someone waiting."
+		SituationModelScript.TYPE_LOOT:        return "A cache left behind. The kind made in haste, not ceremony."
+		SituationModelScript.TYPE_MONEY:       return "A ritual trace — coins or marks, left as offering or warning."
+		# V2-STAGE-002: new objective types
+		ObjectiveModelScript.TYPE_RECOVER:     return "Something was taken here. The absence is palpable — a hollow where something should be."
+		ObjectiveModelScript.TYPE_PROTECT:     return "A fragile presence holds out nearby. It will not endure without help."
+		ObjectiveModelScript.TYPE_ENDURE:      return "The pressure does not stop. Whatever is here does not yield easily."
+		ObjectiveModelScript.TYPE_PURSUE:      return "Movement — recent. Something is moving through this space with purpose."
+		_:                                     return "Something is present here."
 
 
 # ── V2-VOICE-001: Sanctum bark helpers ───────────────────────────────────────
