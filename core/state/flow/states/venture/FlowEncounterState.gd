@@ -209,7 +209,10 @@ func enter(ctx: RefCounted, t: int) -> void:
 	flow_ctx.last_snapshot = FlowEncounterState.build_round_snapshot(flow_ctx, t)
 
 func exit(ctx: RefCounted, t: int) -> void:
-	pass
+	var flow_ctx := ctx as FlowContext
+	flow_ctx.encounter_ctx = null
+	flow_ctx.encounter_machine = null
+	flow_ctx.active_encounter_objective_index = -1
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -220,7 +223,7 @@ func exit(ctx: RefCounted, t: int) -> void:
 static func _resolve_mode_from_stage(flow_ctx: FlowContext) -> String:
 	var model := RealmService.get_active(flow_ctx)
 	if model.is_empty():
-		return EncounterResolutionModes.PURIFY_SHRINE
+		return EncounterResolutionModes.COMBAT
 
 	# Parse stage index from "stage.N" — same pattern as FlowStageState
 	var stage_index := 0
@@ -240,17 +243,27 @@ static func _resolve_mode_from_stage(flow_ctx: FlowContext) -> String:
 			break
 
 	if stage.is_empty():
-		return EncounterResolutionModes.PURIFY_SHRINE
+		return EncounterResolutionModes.COMBAT
 
-	# Fix BUG-002: use stage.type (set by RealmGenerator from any shrine objective)
-	# not objectives[0].type (which only checks the first objective and misses mixed stages).
-	match str(stage.get("type", "")):
-		StageModel.TYPE_PURIFICATION:
-			return EncounterResolutionModes.PURIFY_SHRINE
-		StageModel.TYPE_COMBAT:
-			return EncounterResolutionModes.COMBAT
-		_:
-			return EncounterResolutionModes.COMBAT
+	# V2-STAGE-002: Read the specific objective type via active_encounter_objective_index.
+	# stage.type is a display-only summary field — resolution mode must reflect the actual objective.
+	var obj_index := flow_ctx.active_encounter_objective_index
+	var objs_v: Variant = stage.get("objectives", [])
+	var objs: Array = objs_v if objs_v is Array else []
+
+	if obj_index >= 0 and obj_index < objs.size() and objs[obj_index] is Dictionary:
+		var obj_type := str((objs[obj_index] as Dictionary).get("type", ""))
+		match obj_type:
+			ObjectiveModel.TYPE_SHRINE:
+				return EncounterResolutionModes.PURIFY_SHRINE
+			_:
+				return EncounterResolutionModes.COMBAT
+
+	# V2-STAGE-002: No objective linked (non-objective situation, or pre-V2-STAGE-002 save).
+	# ALWAYS use COMBAT. Never read stage.type here — stage.type is a display-only summary
+	# and using it caused non-objective combat situations on purification stages to incorrectly
+	# spawn shrine actors and drain the party.
+	return EncounterResolutionModes.COMBAT
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -486,6 +499,8 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"retreat_ase_cost":        retreat_ase_cost,
 			"retreat_tier_label":      retreat_tier_label,
 			"retreat_success_pct":     retreat_success_pct,
+			# V2-STAGE-002: remaining required objectives (informational during combat).
+			"objectives_remaining":    FlowEncounterState._count_remaining_required_objectives(flow_ctx),
 		},
 		"actions": actions,
 		"meta":    { "t": t },
@@ -746,6 +761,9 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 					_pa["arrival_bark"] = str(_bark_v.get("line", "")) if _bark_v is Dictionary else ""
 					break
 
+	# V2-STAGE-002: count required objectives not yet completed (post-victory mark).
+	var objectives_remaining := _count_remaining_required_objectives(flow_ctx)
+
 	return {
 		"type": FlowStateIds.RESOLVE,
 		"data": {
@@ -772,29 +790,42 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"vow_outcome":      flow_ctx.vow_outcome.duplicate() if not flow_ctx.vow_outcome.is_empty() else {},
 			# V2-VOW-002: vows unlocked during this stage for ResolveScreen "Vow Revealed" section.
 			"newly_unlocked_vows": flow_ctx.session_unlocked_vows.duplicate(),
+			# V2-STAGE-002: remaining required objectives (drives resolve routing).
+			"objectives_remaining": objectives_remaining,
 		},
-		"actions": _build_resolve_actions(victory),
+		"actions": _build_resolve_actions(victory, objectives_remaining),
 		"meta": { "t": t },
 	}
 
 
-# Fix BUG-004: cta.next_stage only offered on victory — defeat should not advance the stage.
-# Bug fix: on victory, cta.continue also advances the stage (destination overrides routing to SANCTUM).
-# On defeat, cta.continue is a plain go_state — no stage advance.
-static func _build_resolve_actions(victory: bool) -> Dictionary:
+# V2-STAGE-002: objectives_remaining controls routing from the resolve screen.
+# - Victory, all objectives done  → cta.next_stage advances the stage; cta.continue goes to Sanctum
+# - Victory, objectives remain   → cta.continue returns to exploration (no stage advance yet)
+# - Defeat                       → cta.continue goes to Sanctum (unchanged)
+static func _build_resolve_actions(victory: bool, objectives_remaining: int = 0) -> Dictionary:
 	var actions: Dictionary = {}
 	if victory:
-		actions["cta.continue"] = {
-			"type":        "flow.complete_stage",
-			"destination": FlowStateIds.SANCTUM,
-			"label":       "To Sanctum",
-			"slot":        "cta.continue",
-		}
-		actions["cta.next_stage"] = {
-			"type":  "flow.complete_stage",
-			"label": "Next Stage",
-			"slot":  "cta.next_stage",
-		}
+		if objectives_remaining == 0:
+			# All required objectives complete — advance stage
+			actions["cta.continue"] = {
+				"type":        "flow.complete_stage",
+				"destination": FlowStateIds.SANCTUM,
+				"label":       "To Sanctum",
+				"slot":        "cta.continue",
+			}
+			actions["cta.next_stage"] = {
+				"type":  "flow.complete_stage",
+				"label": "Next Stage",
+				"slot":  "cta.next_stage",
+			}
+		else:
+			# More objectives to find — return to exploration
+			actions["cta.continue"] = {
+				"type":  "flow.go_state",
+				"to":    FlowStateIds.STAGE_EXPLORE,
+				"label": "Return to Exploration",
+				"slot":  "cta.continue",
+			}
 	else:
 		actions["cta.continue"] = {
 			"type":  "flow.go_state",
@@ -803,6 +834,37 @@ static func _build_resolve_actions(victory: bool) -> Dictionary:
 			"slot":  "cta.continue",
 		}
 	return actions
+
+
+# V2-STAGE-002: Count required objectives in the current stage that are not yet completed.
+# Returns 0 when all required objectives are done (or no stage/objectives exist).
+static func _count_remaining_required_objectives(flow_ctx: FlowContext) -> int:
+	var model := RealmService.get_active(flow_ctx)
+	if model.is_empty():
+		return 0
+	var stage_index := 0
+	var sid := str(flow_ctx.stage_id)
+	if sid.contains("."):
+		var parts := sid.split(".")
+		stage_index = int(parts[parts.size() - 1])
+	var stages_v: Variant = model.get("stages", [])
+	var stages: Array = stages_v if stages_v is Array else []
+	var stage: Dictionary = {}
+	for s_v in stages:
+		var s: Dictionary = s_v if s_v is Dictionary else {}
+		if int(s.get("index", -1)) == stage_index:
+			stage = s
+			break
+	if stage.is_empty():
+		return 0
+	var objs_v: Variant = stage.get("objectives", [])
+	var objs: Array = objs_v if objs_v is Array else []
+	var remaining := 0
+	for obj_v in objs:
+		var obj: Dictionary = obj_v if obj_v is Dictionary else {}
+		if bool(obj.get("required", true)) and not bool(obj.get("completed", false)):
+			remaining += 1
+	return remaining
 
 
 static func _build_keeper_intro_final_snapshot(

@@ -44,16 +44,33 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var sname  := "Stage %d — %s" % [stage_index + 1, stype.capitalize()]
 	var sdesc  := str(StageModel.TYPE_DESCRIPTIONS.get(stype, ""))
 
+	# V2-STAGE-002: read stages config for reveal_hint per objective type
+	var stages_obj_types: Dictionary = {}
+	if flow_ctx.config_service != null:
+		var _sc_bal: Dictionary = flow_ctx.config_service.get_balance()
+		var _sc_bd_v: Variant = _sc_bal.get("data", {})
+		var _sc_bd: Dictionary = _sc_bd_v if _sc_bd_v is Dictionary else {}
+		var _sc_st_v: Variant = _sc_bd.get("stages", {})
+		var _sc_st: Dictionary = _sc_st_v if _sc_st_v is Dictionary else {}
+		var _sc_ot_v: Variant = _sc_st.get("objective_types", {})
+		stages_obj_types = _sc_ot_v if _sc_ot_v is Dictionary else {}
+
 	# Project objectives for snapshot
 	var raw_objs: Variant = stage.get("objectives", [])
 	var objs: Array = raw_objs if raw_objs is Array else []
 	var projected_objs: Array = []
 	for obj_v in objs:
 		var obj: Dictionary = obj_v if obj_v is Dictionary else {}
+		var obj_type := str(obj.get("type", ""))
+		var type_cfg_v: Variant = stages_obj_types.get(obj_type, {})
+		var type_cfg: Dictionary = type_cfg_v if type_cfg_v is Dictionary else {}
 		projected_objs.append({
 			"obj_index":       int(obj.get("index", 0)),
-			"obj_type":        str(obj.get("type", "")),
-			"obj_description": str(ObjectiveModel.TYPE_DESCRIPTIONS.get(obj.get("type", ""), "")),
+			"obj_type":        obj_type,
+			"obj_description": str(ObjectiveModel.TYPE_DESCRIPTIONS.get(obj_type, "")),
+			"reveal_hint":     str(type_cfg.get("reveal_hint", "")),
+			"required":        bool(obj.get("required",  true)),
+			"completed":       bool(obj.get("completed", false)),
 		})
 
 	# Party preview (from save)

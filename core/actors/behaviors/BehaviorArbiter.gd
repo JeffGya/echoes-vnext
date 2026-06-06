@@ -220,6 +220,17 @@ const _DEFAULTS := {
 		"repeated_move_penalty": {
 			"melee_attack": 0, "protect_ally": 0, "actor.guard": 5, "actor.idle": 5, "actor.move": -12,
 		},
+		# COMBAT-BUG-002: score pressure that fires on the SAME condition as candidate suppression
+		# (last_intent == guard, enemy adjacent, echo).
+		# Primary role: on the suppressed turn, guard is not in the pool but idle/protect_ally
+		# still compete with melee_attack. The +15 melee bonus ensures melee beats idle even
+		# under last_echo_standing or high-fear states where idle would otherwise win.
+		# Secondary role: when guard IS in the pool (HP critical exception), reduces guard's score
+		# so a critically-wounded echo doesn't guard as reflexively as a healthy one.
+		# Values are intentionally moderate — candidate suppression is the hard guarantee.
+		"repeated_guard_penalty": {
+			"melee_attack": 15, "protect_ally": 0, "actor.guard": -20, "actor.idle": -5, "actor.move": 0,
+		},
 	},
 }
 
@@ -270,17 +281,26 @@ func select_intent(context: Dictionary) -> Dictionary:
 		_apply_bond_bias(candidates, actor, bonds_ctx, bond_thresholds_ctx, bond_behavior_cfg)
 
 	# COMBAT-006: actor.purify_shrine override — injected AFTER scoring so 9999 is never overwritten.
-	# Same pattern as Absolute Fear Rule: deterministic always-win when all conditions are met.
+	# Fires when shrine HP drops below 50%, the purifier is adjacent, and cooldown is 0.
+	# HP gate is intentional: purifying at full shrine HP wastes a turn that should be spent
+	# intercepting the enemy. The purifier moves toward the enemy while shrine HP is healthy
+	# and purifies only when the shrine is actually taking meaningful drain damage.
+	# Adjacency check added (COMBAT-BUG-001): prevents a wasted no-op purify from far away.
 	if context.get("is_purifier", false) \
 			and context.get("shrine_alive", false) \
 			and float(context.get("shrine_hp_ratio", 1.0)) < 0.5 \
 			and int(actor.get("purify_cooldown", 0)) == 0:
-		candidates.append({
-			"action_type": "actor.purify_shrine",
-			"target_id":   "",
-			"priority":    1.0,
-			"_score":      9999.0,
-		})
+		var my_pos_pu: Dictionary = actor.get("grid_pos", {})
+		for a_v in all_actors:
+			if a_v is Dictionary and a_v.get("is_structure", false) and not a_v.get("is_dead", false):
+				if GridService.is_adjacent(my_pos_pu, a_v.get("grid_pos", {})):
+					candidates.append({
+						"action_type": "actor.purify_shrine",
+						"target_id":   "",
+						"priority":    1.0,
+						"_score":      9999.0,
+					})
+				break
 
 	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		if a["_score"] != b["_score"]:
@@ -344,6 +364,15 @@ func _generate_candidates(
 				shrine_override = a_v
 				break
 
+	# COMBAT-BUG-001: purifier shrine lookup — when this echo is the designated purifier,
+	# remember the shrine actor so movement can be directed toward it instead of the nearest enemy.
+	var purifier_shrine_actor: Dictionary = {}
+	if context.get("is_purifier", false) and context.get("shrine_alive", false):
+		for a_v in all_actors:
+			if a_v is Dictionary and a_v.get("is_structure", false) and not a_v.get("is_dead", false):
+				purifier_shrine_actor = a_v
+				break
+
 	var actor_type: String = str(actor.get("actor_type", "echo"))
 	# V2-PROG-002: prefer confirmed calling (runtime identity) over birth origin.
 	# Once an Echo has confirmed a calling, that identity drives behavior — not the birth weight.
@@ -397,20 +426,63 @@ func _generate_candidates(
 				"_reveal_bonus":   _reveal_bonus,
 			})
 		else:
-			candidates.append({
-				"action_type":     "actor.move",
-				"target_id":       str(nearest_enemy.get("id", "")),
-				"target_pos":      t_pos,
-				"target_distance": enemy_dist,
-				"target_hp_ratio": target_hp_ratio,
-				"priority":        1.0,
-			})
+			# COMBAT-BUG-001: shrine-HP-aware purifier movement.
+			# Shrine healthy (≥ 50%): pursue enemy — no shrine redirect.
+			#   Without this HP gate, the purifier oscillates: adjacent to shrine → steps toward
+			#   enemy → now 2 tiles from shrine → steps back → adjacent again → repeat forever.
+			# Shrine low (< 50%) AND not yet adjacent: return to shrine to purify.
+			# Shrine low (< 50%) AND already adjacent: fight enemy while cooldown runs down;
+			#   the purify override (score 9999) handles the turn when cooldown reaches 0.
+			var shrine_hp_ratio_ctx: float = float(context.get("shrine_hp_ratio", 1.0))
+			if not purifier_shrine_actor.is_empty() \
+					and shrine_hp_ratio_ctx < 0.5 \
+					and not GridService.is_adjacent(my_pos, purifier_shrine_actor.get("grid_pos", {})):
+				var shrine_pos: Dictionary = purifier_shrine_actor.get("grid_pos", {})
+				candidates.append({
+					"action_type":     "actor.move",
+					"target_id":       str(purifier_shrine_actor.get("id", "")),
+					"target_pos":      shrine_pos,
+					"target_distance": GridService.chebyshev_distance(my_pos, shrine_pos),
+					"target_hp_ratio": 1.0,
+					"priority":        1.0,
+				})
+			else:
+				candidates.append({
+					"action_type":     "actor.move",
+					"target_id":       str(nearest_enemy.get("id", "")),
+					"target_pos":      t_pos,
+					"target_distance": enemy_dist,
+					"target_hp_ratio": target_hp_ratio,
+					"priority":        1.0,
+				})
 
 	# actor.guard — only meaningful when an enemy is within guard_range tiles.
 	# No nearby threat → guarding is pointless; omit so scorer never picks it.
+	#
+	# COMBAT-BUG-002: guard candidate suppression after consecutive guard turns.
+	# Guard is a passive action (fear never dampens it), and broken morale adds +20 guard / -20 melee.
+	# Under sustained hits that add fear but deal 0 damage (guard doubles def), the score gap
+	# widens every round until guard wins permanently → combat never resolves → actor.refuse.
+	# Score-based penalties alone are insufficient: for high-guard callings (onyamesu base=55)
+	# the morale swing (+40 net) cannot be reliably overcome without over-correcting for other echoes.
+	#
+	# Hard rule: if the echo guarded last round and HP is not critical (> 20%), suppress guard.
+	# This works for ALL callings and morale/fear states. At critical HP (≤ 20%) guard remains
+	# available so a dying echo can try to survive rather than being forced to attack.
 	var guard_range: int = int(_cfg_get("guard_range"))
 	if not nearest_enemy.is_empty() and enemy_dist <= guard_range:
-		candidates.append({ "action_type": "actor.guard", "target_id": "", "priority": 0.0 })
+		var allow_guard: bool = true
+		if actor_type == "echo":
+			var last_i_g_v: Variant = actor.get("last_intent", {})
+			var last_i_g: Dictionary = last_i_g_v if last_i_g_v is Dictionary else {}
+			if str(last_i_g.get("action_type", "")) == "actor.guard":
+				# Suppress unless critically wounded — dying echoes may legitimately need to guard.
+				var crit_threshold: float = float(
+					(_cfg_get("situational_muls") as Dictionary).get("own_hp_critical", {}).get("threshold", 0.20)
+				)
+				allow_guard = _hp_ratio(actor) <= crit_threshold
+		if allow_guard:
+			candidates.append({ "action_type": "actor.guard", "target_id": "", "priority": 0.0 })
 
 	# protect_ally — only when a same-faction ally has taken any damage (current_hp < max_hp).
 	# threshold=0.50 means ally must be below 50% HP (missing ≥50% HP) to qualify as threatened.
@@ -715,6 +787,19 @@ func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dict
 		var last_i: Dictionary = last_i_v if last_i_v is Dictionary else {}
 		if str(last_i.get("action_type", "")) == "actor.move":
 			active.append("repeated_move_penalty")
+
+	# COMBAT-BUG-002: repeated_guard_penalty — fires when echo guarded last round AND enemy is adjacent.
+	# Works in tandem with candidate suppression in _generate_candidates():
+	# - Suppression (hard): guard removed from candidate pool → echo cannot guard again consecutively.
+	# - This penalty (soft): on the suppressed turn, melee_attack gets +15 over idle/protect_ally,
+	#   ensuring the echo attacks rather than idling. Also fires when guard re-enters the pool
+	#   (HP critical exception) to moderately discourage it vs melee.
+	if actor_type == "echo" and enemy_dist <= 1:
+		var last_i_rg_v: Variant = actor.get("last_intent", {})
+		var last_i_rg: Dictionary = last_i_rg_v if last_i_rg_v is Dictionary else {}
+		if str(last_i_rg.get("action_type", "")) == "actor.guard":
+			active.append("repeated_guard_penalty")
+
 
 	# COMBAT-006: near_friendly_structure / near_hostile_structure based on actor faction.
 	# Echoes get a soft defensive bonus near the shrine; enemies get an aggression boost toward it.

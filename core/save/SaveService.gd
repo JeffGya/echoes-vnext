@@ -942,7 +942,7 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 				repaired = true
 				repaired_notes.append("realm.%s.realm_recovery_segments defaulted to [] (V2-WEAVE-001)" % _realm_id)
 
-			# V2-STAGE-001: explore_map on each stage
+			# V2-STAGE-001/002: repairs on each stage
 			var _stages_v: Variant = _model.get("stages", [])
 			if _stages_v is Array:
 				var _stages: Array = _stages_v
@@ -950,10 +950,45 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 					if not (_stage_v is Dictionary):
 						continue
 					var _stage: Dictionary = _stage_v
+					var _stage_label: String = str(_stage.get("index", "?"))
+
+					# V2-STAGE-001: explore_map
 					if not _stage.has("explore_map") or not (_stage["explore_map"] is Dictionary):
 						_stage["explore_map"] = StageExploreModelScript.make_default()
 						repaired = true
-						repaired_notes.append("realm.%s.stage.%s.explore_map defaulted (V2-STAGE-001)" % [_realm_id, str(_stage.get("index", "?"))])
+						repaired_notes.append("realm.%s.stage.%s.explore_map defaulted (V2-STAGE-001)" % [_realm_id, _stage_label])
+
+					# V2-STAGE-002: objective completed + required fields
+					var _objs_repair_v: Variant = _stage.get("objectives", [])
+					if _objs_repair_v is Array:
+						for _obj_repair_v in (_objs_repair_v as Array):
+							if not (_obj_repair_v is Dictionary):
+								continue
+							var _obj_repair: Dictionary = _obj_repair_v
+							if not _obj_repair.has("completed"):
+								_obj_repair["completed"] = false
+								repaired = true
+							if not _obj_repair.has("required"):
+								_obj_repair["required"] = true
+								repaired = true
+					if repaired:
+						repaired_notes.append("realm.%s.stage.%s objectives completed/required defaulted (V2-STAGE-002)" % [_realm_id, _stage_label])
+
+					# V2-STAGE-002: objective_index on explore_map situations
+					var _emap_v: Variant = _stage.get("explore_map", {})
+					if _emap_v is Dictionary:
+						var _emap: Dictionary = _emap_v
+						var _sits_v: Variant = _emap.get("situations", [])
+						if _sits_v is Array:
+							for _sit_v in (_sits_v as Array):
+								if not (_sit_v is Dictionary):
+									continue
+								var _sit: Dictionary = _sit_v
+								if not _sit.has("objective_index"):
+									_sit["objective_index"] = -1
+									repaired = true
+						if repaired:
+							repaired_notes.append("realm.%s.stage.%s situations objective_index defaulted (V2-STAGE-002)" % [_realm_id, _stage_label])
 
 	# Get structured log if anything was repaired (uses injected t)
 	if repaired:

@@ -61,6 +61,12 @@ var last_transition_reason: String = ""
 # Set via AppRoot debug command "combat_objective <mode>". Empty = use default.
 var dev_combat_objective: String = ""
 
+# V2-STAGE-002: index into stage.objectives[] for the currently active encounter.
+# Set by FlowRuntime when stage.engage_situation transitions to ENCOUNTER.
+# Read by FlowEncounterState._resolve_mode_from_stage() to pick encounter resolution mode.
+# Reset to -1 on flow.select_stage and after objective is marked complete.
+var active_encounter_objective_index: int = -1
+
 # V2-WEAVE-001: Threads crystallized from the most recently completed Realm (session-transient).
 # Populated by FlowRuntime._handle_complete_stage() on realm_complete.
 # Resets to [] on new game boot (FlowContext is freshly instantiated).

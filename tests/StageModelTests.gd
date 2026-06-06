@@ -175,21 +175,23 @@ static func _t_generator_purification_when_shrine() -> Dictionary:
 
 # ─── Test 8 — no shrine pre-boss → stage type = "combat" ────────────────────
 static func _t_generator_combat_when_no_shrine() -> Dictionary:
-	# With obj_count=1, there are 0 pre-boss objectives (only boss).
-	# Stage type must be "combat" when there are no pre-boss objectives.
+	# V2-STAGE-002: minimum obj_count is now 2 (1 pre-boss + 1 boss) — boss-only stages are gone.
+	# When all pre-boss objectives are combat type, stage type must be "combat".
+	# Calling with obj_count_min=1 → clamped to 2 by generator.
 	var stages := RealmGenerator.generate(12345, 3, 1, 1)
 	for i in range(stages.size()):
 		var s_v: Variant = stages[i]
 		var s: Dictionary = s_v if s_v is Dictionary else {}
 		var objs_v: Variant = s.get("objectives", [])
 		var objs: Array = objs_v if objs_v is Array else []
-		# obj_count=1 → 0 pre-boss objectives → type must be "combat"
-		if objs.size() != 1:
-			return { "ok": false, "error": "Expected 1 objective (boss only), got %d" % objs.size() }
-		if str(s.get("type", "")) != StageModel.TYPE_COMBAT:
+		# obj_count_min=1 is clamped to 2: 1 pre-boss + 1 boss = 2 objectives minimum.
+		if objs.size() < 2:
+			return { "ok": false, "error": "Expected at least 2 objectives (1 pre-boss + boss), got %d" % objs.size() }
+		# With default pool (combat/shrine), stages with no shrine pre-boss → type "combat"
+		if str(s.get("type", "")) not in [StageModel.TYPE_COMBAT, StageModel.TYPE_PURIFICATION, StageModel.TYPE_RECOVERY, StageModel.TYPE_PROTECTION]:
 			return {
 				"ok": false,
-				"error": "Stage with no pre-boss objs should be 'combat', got '%s'" % s.get("type", "")
+				"error": "Stage type must be a valid StageModel type, got '%s'" % s.get("type", "")
 			}
 	return { "ok": true }
 

@@ -237,6 +237,11 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 
 	var intent: Dictionary = _behavior_module.select_intent(augmented_context)
 	_last_intent = intent
+	# Persist last_intent to actor dict so _build_board_summary() can read it next turn.
+	# ActorStateMachine is recreated each turn (FlowRuntime.new per actor), so _last_intent
+	# would otherwise reset to {} on every turn — meaning situational conditions that depend
+	# on the previous action (repeated_move_penalty, repeated_guard_penalty) never fire.
+	_actor["last_intent"] = { "action_type": str(intent.get("action_type", "")) }
 	# ACTOR-007: read morale metadata annotated by BehaviorArbiter onto the winner.
 	_last_morale_tier     = str(intent.get("morale_tier",     "steady"))
 	_last_morale_modifier = int(intent.get("morale_modifier", 0))

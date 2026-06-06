@@ -51,7 +51,7 @@ static func get_or_create(realm_id: String, ctx: FlowContext, t: int) -> Diction
 	var obj_min     := int(cfg.get("obj_count_min", 1))
 	var obj_max     := int(cfg.get("obj_count_max", 2))
 
-	# V2-STAGE-001: exploration map config (passed to RealmGenerator)
+	# V2-STAGE-001/002: exploration map + objective config (passed to RealmGenerator)
 	var explore_cfg := {
 		"sit_count_min":   int(cfg.get("sit_count_min",   4)),
 		"sit_count_max":   int(cfg.get("sit_count_max",   6)),
@@ -60,6 +60,18 @@ static func get_or_create(realm_id: String, ctx: FlowContext, t: int) -> Diction
 		"map_height_min":  int(cfg.get("map_height_min",  StageExploreModelScript.MIN_HEIGHT)),
 		"map_height_max":  int(cfg.get("map_height_max",  40)),
 	}
+	# V2-STAGE-002: realm-level objective pool override (from realms.json)
+	var realm_obj_pool_v: Variant = cfg.get("objective_pool", null)
+	if realm_obj_pool_v is Array:
+		explore_cfg["objective_pool"] = realm_obj_pool_v as Array
+
+	# V2-STAGE-002: balance.json data.stages block (foundation_objective_pool fallback)
+	var stages_cfg: Dictionary = {}
+	if ctx.config_service != null and ctx.config_service.has_method("get_balance"):
+		var bal_data_v: Variant = ctx.config_service.get_balance().get("data", {})
+		var bal_data: Dictionary = bal_data_v if bal_data_v is Dictionary else {}
+		var stages_cfg_v: Variant = bal_data.get("stages", {})
+		stages_cfg = stages_cfg_v if stages_cfg_v is Dictionary else {}
 
 	# Determine run_count (0 for new, old+1 for re-run)
 	var run_count := 0
@@ -92,8 +104,8 @@ static func get_or_create(realm_id: String, ctx: FlowContext, t: int) -> Diction
 	)
 
 	# Generate deterministic stages and wire them into the model
-	# V2-STAGE-001: pass explore_cfg so each stage gets a procedural exploration map
-	var stages := RealmGenerator.generate(realm_seed, stage_count, obj_min, obj_max, explore_cfg)
+	# V2-STAGE-001/002: pass explore_cfg + stages_cfg for map and objective pool config
+	var stages := RealmGenerator.generate(realm_seed, stage_count, obj_min, obj_max, explore_cfg, stages_cfg)
 	model["stages"] = stages
 
 	# Store in save_data
