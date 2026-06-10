@@ -93,6 +93,28 @@ var _vow_hint_label:      Label = null
 @onready var _ignore_btn:           Button         = %IgnoreButton
 @onready var _directive_overlay:  Control        = %DirectiveSelectOverlay
 
+# ─── Contact conversation @onready refs ──────────────────────────────────────
+@onready var _dim_overlay:             ColorRect      = $DimOverlay
+@onready var _contact_panel:           PanelContainer = $ContactPanel
+@onready var _npc_zone:                PanelContainer = %NPCZone
+@onready var _npc_role_badge:          Label          = %NPCRoleBadge
+@onready var _npc_name_label:          Label          = %NPCNameLabel
+@onready var _npc_disposition_lbl:     Label          = %NPCDispositionLabel
+@onready var _npc_line_label:          Label          = %NPCLineLabel
+@onready var _npc_reaction_label:      Label          = %NPCReactionLabel
+@onready var _turn_counter_label:      Label          = %TurnCounterLabel
+@onready var _disengage_btn:           Button         = %DisengageButton
+@onready var _echo_chips_container:    HBoxContainer  = %EchoChipsContainer
+@onready var _confirm_selection_btn:   Button         = %ConfirmSelectionButton
+
+# ─── Contact conversation state ───────────────────────────────────────────────
+var _contact_disengage_action:  Dictionary = {}
+var _contact_speak_actions:     Dictionary = {}   # echo_id → action dict
+var _contact_consult_action:    Dictionary = {}
+var _picker_selected_ids:       Array      = []   # consultation picker selection
+var _picker_chip_nodes:         Dictionary = {}   # echo_id → chip PanelContainer
+var _is_picker_mode:            bool       = false
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
@@ -103,6 +125,11 @@ func _ready() -> void:
 	_ignore_btn.visible        = false
 	_directive_overlay.visible = false
 
+	_dim_overlay.visible           = false
+	_contact_panel.visible         = false
+	_npc_reaction_label.visible    = false
+	_confirm_selection_btn.visible = false
+
 	_stage_complete_btn.pressed.connect(_on_stage_complete_pressed)
 	_advance_btn.pressed.connect(_on_advance_pressed)
 	_return_btn.pressed.connect(_on_return_pressed)
@@ -111,6 +138,8 @@ func _ready() -> void:
 	_dismiss_btn.pressed.connect(_on_dismiss_pressed)
 	_ignore_btn.pressed.connect(_on_ignore_pressed)
 	_directive_overlay.action_requested.connect(_on_overlay_action)
+	_disengage_btn.pressed.connect(_on_disengage_pressed)
+	_confirm_selection_btn.pressed.connect(_on_confirm_selection_pressed)
 
 
 func _process(_delta: float) -> void:
@@ -342,6 +371,18 @@ func _apply_pending_overlay() -> void:
 
 
 func _apply_overlay_from(data: Dictionary, actions: Dictionary) -> void:
+	# Contact conversation takes priority over all other overlays
+	var cp_v: Variant = data.get("contact_pending", {})
+	var cp: Dictionary = cp_v if cp_v is Dictionary else {}
+
+	if not cp.is_empty():
+		_show_contact_panel(cp, data, actions)
+		_sit_overlay.hide()
+		_ignore_btn.visible = false
+		return
+
+	_hide_contact_panel()
+
 	var rhr_v: Variant      = data.get("return_home_result", {})
 	var rhr: Dictionary     = rhr_v if rhr_v is Dictionary else {}
 	var pending_v: Variant  = data.get("situation_pending", {})
@@ -612,3 +653,354 @@ func _label_for_directive(dir_id: String) -> String:
 		"directive.scout_carefully": return "Scout Carefully"
 		"directive.seek_signs":      return "Seek Signs"
 		_: return dir_id.capitalize() if not dir_id.is_empty() else "None"
+
+
+# ─── Contact conversation ─────────────────────────────────────────────────────
+
+func _show_contact_panel(contact: Dictionary, data: Dictionary, actions: Dictionary) -> void:
+	var role        := str(contact.get("role", ""))
+	var role_label  := str(contact.get("role_label", role.capitalize()))
+	var npc_name    := str(contact.get("name", "Unknown"))
+	var disposition := str(contact.get("disposition", ""))
+	var fear        := int(contact.get("fear",   50))
+	var morale      := int(contact.get("morale", 50))
+	var turn_cur    := int(contact.get("turn_current", 0))
+	var turn_tot    := int(contact.get("turn_count",   2))
+
+	_npc_role_badge.text         = role_label
+	_npc_name_label.text         = npc_name
+	_npc_disposition_lbl.text    = _disposition_cue(disposition)
+	var npc_line := str(contact.get("npc_line", ""))
+	_npc_line_label.text         = npc_line if not npc_line.is_empty() else "..."
+	_turn_counter_label.hide()
+
+	# Ambient tint on NPC zone — emotional state communicated as colour, no numbers
+	var npc_style := StyleBoxFlat.new()
+	npc_style.bg_color = _npc_ambient_color(fear, morale)
+	npc_style.set_corner_radius_all(6)
+	npc_style.content_margin_left   = 12.0
+	npc_style.content_margin_top    = 10.0
+	npc_style.content_margin_right  = 12.0
+	npc_style.content_margin_bottom = 10.0
+	_npc_zone.add_theme_stylebox_override("panel", npc_style)
+
+	# Show reaction word (NPC's emotional response from previous turn) with fade-in
+	var reaction_word := str(contact.get("npc_reaction_word", ""))
+	if not reaction_word.is_empty():
+		_npc_reaction_label.text      = reaction_word
+		_npc_reaction_label.modulate  = Color(1.0, 1.0, 1.0, 0.0)
+		_npc_reaction_label.visible   = true
+		var rw_tween := create_tween()
+		rw_tween.tween_property(_npc_reaction_label, "modulate:a", 1.0, 0.35)
+	else:
+		_npc_reaction_label.visible = false
+
+	# Determine echo chip mode
+	var responses_v: Variant = data.get("contact_responses", [])
+	var responses: Array = responses_v if responses_v is Array else []
+	var bids_v: Variant = data.get("contact_echo_bids", [])
+	var bids: Array = bids_v if bids_v is Array else []
+
+	var consult_v: Variant = actions.get("cta.consult_echoes", {})
+	_contact_consult_action = consult_v if consult_v is Dictionary else {}
+	var dis_v: Variant = actions.get("cta.disengage_contact", {})
+	_contact_disengage_action = dis_v if dis_v is Dictionary else {}
+
+	_is_picker_mode = responses.is_empty() and not _contact_consult_action.is_empty()
+	if _is_picker_mode:
+		_build_picker_chips(bids)
+		_confirm_selection_btn.visible = true
+	else:
+		_build_response_chips(responses, actions)
+		_confirm_selection_btn.visible = false
+
+	# Disable advance/return while conversation is active
+	_advance_btn.disabled = true
+	_return_btn.disabled  = true
+
+	_dim_overlay.visible   = true
+	_contact_panel.visible = true
+
+
+func _hide_contact_panel() -> void:
+	_dim_overlay.visible    = false
+	_contact_panel.visible  = false
+	_contact_disengage_action.clear()
+	_contact_speak_actions.clear()
+	_contact_consult_action.clear()
+	_picker_selected_ids.clear()
+	_picker_chip_nodes.clear()
+	_is_picker_mode = false
+
+
+func _npc_ambient_color(fear: int, morale: int) -> Color:
+	if fear > 65:
+		return Color(0.20, 0.06, 0.06, 0.90)   # deep red — frightened
+	elif fear > 45:
+		return Color(0.20, 0.12, 0.04, 0.90)   # amber — unsettled
+	elif morale >= 60 and fear <= 30:
+		return Color(0.05, 0.18, 0.10, 0.90)   # jade — settled / calm
+	else:
+		return Color(0.07, 0.07, 0.12, 0.90)   # neutral dark
+
+
+func _disposition_cue(disposition: String) -> String:
+	match disposition:
+		"bold":       return "speaks directly"
+		"reflective": return "chooses words carefully"
+		"protective": return "stands with arms crossed"
+		"wary":       return "eyes keep moving"
+		"grieving":   return "voice is very still"
+		"proud":      return "holds their ground"
+		_:            return ""
+
+
+
+
+func _build_response_chips(responses: Array, actions: Dictionary) -> void:
+	for child in _echo_chips_container.get_children():
+		child.queue_free()
+	_contact_speak_actions.clear()
+	_picker_chip_nodes.clear()
+
+	for resp_v in responses:
+		var resp: Dictionary = resp_v if resp_v is Dictionary else {}
+		var echo_id           := str(resp.get("echo_id", ""))
+		var calling           := str(resp.get("calling", ""))
+		var readiness         := str(resp.get("emotional_status", resp.get("emotional_readiness", "")))
+		var response_text     := str(resp.get("response_text", ""))
+		var stat_texture      := str(resp.get("stat_texture", ""))
+		var bid_type          := str(resp.get("bid_type", ""))
+
+		if echo_id.is_empty():
+			continue
+
+		var act_v: Variant = actions.get("cta.speak_response." + echo_id, {})
+		var act: Dictionary = act_v if act_v is Dictionary else {}
+		_contact_speak_actions[echo_id] = act
+
+		var chip: PanelContainer = _build_echo_chip(
+			echo_id, calling, readiness, response_text, stat_texture, bid_type, false
+		)
+		_echo_chips_container.add_child(chip)
+		_picker_chip_nodes[echo_id] = chip
+
+		var chip_btn: Button = chip.get_node_or_null("ChipButton") as Button
+		if chip_btn != null:
+			chip_btn.pressed.connect(_on_chip_speak.bind(echo_id))
+
+
+func _build_picker_chips(bids: Array) -> void:
+	for child in _echo_chips_container.get_children():
+		child.queue_free()
+	_contact_speak_actions.clear()
+	_picker_chip_nodes.clear()
+	_picker_selected_ids.clear()
+	_confirm_selection_btn.disabled = true
+
+	for bid_v in bids:
+		var bid: Dictionary = bid_v if bid_v is Dictionary else {}
+		var echo_id          := str(bid.get("echo_id",          ""))
+		var echo_name        := str(bid.get("echo_name",        ""))
+		var calling          := str(bid.get("calling",          ""))
+		var emotional_status := str(bid.get("emotional_status", ""))
+		var hint             := str(bid.get("hint",             ""))
+		var bid_type         := str(bid.get("bid_type",         ""))
+
+		if echo_id.is_empty():
+			continue
+
+		# Build chip — calling in calling slot, hint in response_text slot, emotional_status drives dot.
+		var chip: PanelContainer = _build_echo_chip(
+			echo_id, calling, emotional_status, hint, "", bid_type, false
+		)
+
+		# Inject echo name as the first label in the chip's content VBox.
+		var content_vbox: VBoxContainer = chip.get_child(0) as VBoxContainer
+		if content_vbox != null:
+			var name_lbl := Label.new()
+			name_lbl.text = echo_name
+			name_lbl.add_theme_font_size_override("font_size", 13)
+			name_lbl.add_theme_color_override("font_color", Color("#E8D8B0"))
+			name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			name_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+			content_vbox.add_child(name_lbl)
+			content_vbox.move_child(name_lbl, 0)
+
+		_echo_chips_container.add_child(chip)
+		_picker_chip_nodes[echo_id] = chip
+
+		var chip_btn: Button = chip.get_node_or_null("ChipButton") as Button
+		if chip_btn != null:
+			chip_btn.pressed.connect(_on_chip_toggle_picker.bind(echo_id))
+
+
+func _build_echo_chip(
+	echo_id:       String,
+	calling:       String,
+	readiness:     String,
+	response_text: String,
+	stat_texture:  String,
+	bid_type:      String,
+	_selected:     bool
+) -> PanelContainer:
+	var chip := PanelContainer.new()
+	chip.custom_minimum_size = Vector2(140, 190)
+
+	var chip_style := StyleBoxFlat.new()
+	chip_style.bg_color = Color(0.08, 0.08, 0.14, 1.0)
+	chip_style.set_corner_radius_all(6)
+	chip_style.content_margin_left   = 10.0
+	chip_style.content_margin_top    = 10.0
+	chip_style.content_margin_right  = 10.0
+	chip_style.content_margin_bottom = 10.0
+	chip.add_theme_stylebox_override("panel", chip_style)
+
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", 6)
+	chip.add_child(content)
+
+	# Portrait placeholder — coloured circle by readiness tier
+	var portrait_holder := Control.new()
+	portrait_holder.custom_minimum_size = Vector2(56, 56)
+	portrait_holder.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	content.add_child(portrait_holder)
+
+	# Calling label beneath portrait
+	var calling_lbl := Label.new()
+	calling_lbl.text = calling
+	calling_lbl.add_theme_font_size_override("font_size", 11)
+	calling_lbl.add_theme_color_override("font_color", Color("#A8865A"))
+	calling_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	calling_lbl.autowrap_mode = TextServer.AUTOWRAP_OFF
+	content.add_child(calling_lbl)
+
+	# Readiness dot
+	var readiness_dot := Label.new()
+	readiness_dot.text = "●"
+	readiness_dot.add_theme_font_size_override("font_size", 10)
+	readiness_dot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	match readiness:
+		"radiant":  readiness_dot.add_theme_color_override("font_color", Color("#D4A832"))
+		"whole":    readiness_dot.add_theme_color_override("font_color", Color("#3A8C5C"))
+		"grounded": readiness_dot.add_theme_color_override("font_color", Color("#2A5C45"))
+		"burdened": readiness_dot.add_theme_color_override("font_color", Color("#7A6E5A"))
+		"pressed":  readiness_dot.add_theme_color_override("font_color", Color("#5A6878"))
+		"strained": readiness_dot.add_theme_color_override("font_color", Color("#4A5568"))
+		"fraying":  readiness_dot.add_theme_color_override("font_color", Color("#8C5030"))
+		"hollow":   readiness_dot.add_theme_color_override("font_color", Color("#3D1515"))
+		_:          readiness_dot.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5, 1.0))
+	content.add_child(readiness_dot)
+
+	# Response text
+	var response_lbl := Label.new()
+	response_lbl.text = response_text
+	response_lbl.add_theme_font_size_override("font_size", 12)
+	response_lbl.add_theme_color_override("font_color", Color("#D0C0A0"))
+	response_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	response_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+	response_lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content.add_child(response_lbl)
+
+	# Stat texture pill
+	if not stat_texture.is_empty():
+		var pill_lbl := Label.new()
+		pill_lbl.text = stat_texture
+		pill_lbl.add_theme_font_size_override("font_size", 10)
+		pill_lbl.add_theme_color_override("font_color", Color(0.533, 0.533, 0.6, 1.0))
+		pill_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		content.add_child(pill_lbl)
+
+	# Bid badge
+	if not bid_type.is_empty():
+		var bid_badge := Label.new()
+		bid_badge.text = "⬥"
+		bid_badge.add_theme_font_size_override("font_size", 10)
+		bid_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		match bid_type:
+			"alignment": bid_badge.add_theme_color_override("font_color", Color("#C8A96E"))
+			"reactive":  bid_badge.add_theme_color_override("font_color", Color("#C87830"))
+			_:           bid_badge.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5, 1.0))
+		content.add_child(bid_badge)
+
+	# Invisible full-coverage button on top — tap portrait = tap button
+	var chip_btn := Button.new()
+	chip_btn.name = "ChipButton"
+	chip_btn.flat = true
+	chip_btn.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	chip.add_child(chip_btn)
+
+	# Store echo_id as metadata for later reference
+	chip.set_meta("echo_id", echo_id)
+
+	return chip
+
+
+func _refresh_picker_chip_states() -> void:
+	var selected_count: int = _picker_selected_ids.size()
+	for eid_v: Variant in _picker_chip_nodes:
+		var eid: String = str(eid_v)
+		var chip_v: Variant = _picker_chip_nodes[eid]
+		var chip: PanelContainer = chip_v as PanelContainer
+		if chip == null or not is_instance_valid(chip):
+			continue
+		var chip_style := StyleBoxFlat.new()
+		chip_style.set_corner_radius_all(6)
+		chip_style.content_margin_left   = 10.0
+		chip_style.content_margin_top    = 10.0
+		chip_style.content_margin_right  = 10.0
+		chip_style.content_margin_bottom = 10.0
+		if eid in _picker_selected_ids:
+			chip_style.bg_color = Color(0.15, 0.28, 0.20, 1.0)
+			chip.modulate.a = 1.0
+		elif selected_count >= 3:
+			chip_style.bg_color = Color(0.08, 0.08, 0.14, 1.0)
+			chip.modulate.a = 0.4
+		else:
+			chip_style.bg_color = Color(0.08, 0.08, 0.14, 1.0)
+			chip.modulate.a = 1.0
+		chip.add_theme_stylebox_override("panel", chip_style)
+
+
+# ─── Contact button handlers ──────────────────────────────────────────────────
+
+func _on_chip_speak(echo_id: String) -> void:
+	var act_v: Variant = _contact_speak_actions.get(echo_id, {})
+	var act: Dictionary = act_v if act_v is Dictionary else {}
+	if act.is_empty():
+		return
+	# Dim unchosen echo chips
+	for eid_v: Variant in _picker_chip_nodes:
+		var eid: String = str(eid_v)
+		if eid != echo_id:
+			var chip_v: Variant = _picker_chip_nodes[eid]
+			var chip: PanelContainer = chip_v as PanelContainer
+			if chip != null and is_instance_valid(chip):
+				chip.modulate.a = 0.4
+	action_requested.emit(act)
+
+
+func _on_chip_toggle_picker(echo_id: String) -> void:
+	if echo_id in _picker_selected_ids:
+		_picker_selected_ids.erase(echo_id)
+	elif _picker_selected_ids.size() < 3:
+		_picker_selected_ids.append(echo_id)
+	_refresh_picker_chip_states()
+	_confirm_selection_btn.disabled = _picker_selected_ids.is_empty()
+
+
+func _on_confirm_selection_pressed() -> void:
+	if _picker_selected_ids.is_empty() or _contact_consult_action.is_empty():
+		return
+	var act: Dictionary = _contact_consult_action.duplicate()
+	act["echo_ids"] = _picker_selected_ids.duplicate()
+	action_requested.emit(act)
+	_picker_selected_ids.clear()
+
+
+func _on_disengage_pressed() -> void:
+	if not _contact_disengage_action.is_empty():
+		action_requested.emit(_contact_disengage_action)
+	_hide_contact_panel()
+
+

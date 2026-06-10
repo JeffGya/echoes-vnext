@@ -15,13 +15,11 @@ extends RefCounted
 #
 # Do NOT reorder type pool entries — determinism rule.
 
-# V2-STAGE-003: "role" field (npc/contact/ritual/obstacle) deferred.
-# When ready, add: "role": "" as default in make(), and "role" to REQUIRED_FIELDS.
-
 const REQUIRED_FIELDS: Array = [
 	"id", "type", "pos", "seed", "revealed",
 	"is_objective", "resolved", "intel_clues",
 	"objective_index",  # V2-STAGE-002: -1 for non-objective situations
+	"role",             # contact role for NPC situations; "" for non-NPC types
 ]
 
 # Situation type constants
@@ -77,6 +75,7 @@ static func make(
 		"resolved":        false,
 		"intel_clues":     [],  # V2-INTEL-001 extensibility slot
 		"objective_index": objective_index,
+		"role":            "",
 	}
 
 

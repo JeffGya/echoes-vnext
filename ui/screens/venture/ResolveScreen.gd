@@ -97,6 +97,10 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	if run_type == "scout_return":
 		_render_scout_return(data, actions)
 		return
+	# V2-STAGE-003: contact_result path — NPC conversation outcome
+	if run_type == "contact_result":
+		_render_contact_result(data, actions)
+		return
 
 	var victory: bool = bool(data.get("victory", false))
 
@@ -210,6 +214,36 @@ func _build_breakdown(breakdown: Array, total_ase: int) -> void:
 		var total_lbl := Label.new()
 		total_lbl.text = "= %d Ase" % total_ase
 		_breakdown_section.add_child(total_lbl)
+
+
+# ─────────────────────────────────────────────────────────────
+# V2-STAGE-003: Contact Result renderer
+# ─────────────────────────────────────────────────────────────
+
+func _render_contact_result(data: Dictionary, actions: Dictionary) -> void:
+	var outcome    := str(data.get("outcome",    ""))
+	var role_label := str(data.get("role_label", "Contact"))
+	var outcome_text := str(data.get("outcome_text", "The conversation has ended."))
+
+	_banner.text = role_label.to_upper()
+	match outcome:
+		"good":    _banner.add_theme_color_override("font_color", Color("#4CAF72"))
+		"partial": _banner.add_theme_color_override("font_color", Color("#C8A96E"))
+		"failed":  _banner.add_theme_color_override("font_color", Color("#C05050"))
+		_:         _banner.remove_theme_color_override("font_color")
+
+	_reason.text = outcome_text
+
+	# Repurpose rank badge as outcome level chip — hide it to keep layout clean
+	_rank_badge.visible = false
+
+	# Wire continue button (reuses _sanctum_button)
+	if actions.has("cta.continue"):
+		var act_v: Variant = actions["cta.continue"]
+		if act_v is Dictionary:
+			_sanctum_action         = act_v
+			_sanctum_button.text    = str(act_v.get("label", "Continue"))
+			_sanctum_button.visible = true
 
 
 # ─────────────────────────────────────────────────────────────

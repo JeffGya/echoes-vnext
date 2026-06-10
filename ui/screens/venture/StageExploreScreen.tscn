@@ -76,6 +76,44 @@ bg_color = Color(0.04, 0.04, 0.08, 0.88)
 border_width_bottom = 1
 border_color = Color(0.5, 0.5, 0.6, 0.5)
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_contact_panel"]
+content_margin_left = 20.0
+content_margin_top = 16.0
+content_margin_right = 20.0
+content_margin_bottom = 16.0
+bg_color = Color(0.04, 0.04, 0.08, 0.96)
+border_width_top = 1
+border_color = Color(0.784, 0.663, 0.431, 1.0)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_contact_result"]
+content_margin_left = 24.0
+content_margin_top = 24.0
+content_margin_right = 24.0
+content_margin_bottom = 24.0
+bg_color = Color(0.05, 0.05, 0.1, 0.92)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.6, 0.6, 0.6, 0.8)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_npc_zone"]
+content_margin_left = 12.0
+content_margin_top = 10.0
+content_margin_right = 12.0
+content_margin_bottom = 10.0
+bg_color = Color(0.07, 0.07, 0.12, 0.90)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
 [node name="StageExploreScreen" type="Control" unique_id=2119076133]
 layout_mode = 3
 anchors_preset = 15
@@ -376,3 +414,174 @@ text = "←"
 [node name="DirectiveSelectOverlay" parent="." unique_id=401029283 instance=ExtResource("4_directive_overlay")]
 unique_name_in_owner = true
 layout_mode = 1
+
+[node name="DimOverlay" type="ColorRect" parent="." unique_id=3100000001]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.55)
+mouse_filter = 2
+
+[node name="ContactPanel" type="PanelContainer" parent="." unique_id=3100000002]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 120.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_contact_panel")
+
+[node name="ContactContent" type="VBoxContainer" parent="ContactPanel" unique_id=3100000003]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="NPCZone" type="PanelContainer" parent="ContactPanel/ContactContent" unique_id=3100000004]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_npc_zone")
+
+[node name="NPCZoneContent" type="VBoxContainer" parent="ContactPanel/ContactContent/NPCZone" unique_id=3100000005]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="NPCHeader" type="HBoxContainer" parent="ContactPanel/ContactContent/NPCZone/NPCZoneContent" unique_id=3100000006]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="NPCPortraitHolder" type="Control" parent="ContactPanel/ContactContent/NPCZone/NPCZoneContent/NPCHeader" unique_id=3100000007]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+
+[node name="NPCInfoCol" type="VBoxContainer" parent="ContactPanel/ContactContent/NPCZone/NPCZoneContent/NPCHeader" unique_id=3100000008]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="NPCRoleBadge" type="Label" parent="ContactPanel/ContactContent/NPCZone/NPCZoneContent/NPCHeader/NPCInfoCol" unique_id=3100000009]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.659, 0.525, 0.353, 1.0)
+text = "A Witness"
+
+[node name="NPCNameLabel" type="Label" parent="ContactPanel/ContactContent/NPCZone/NPCZoneContent/NPCHeader/NPCInfoCol" unique_id=3100000010]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "Name"
+
+[node name="NPCDispositionLabel" type="Label" parent="ContactPanel/ContactContent/NPCZone/NPCZoneContent/NPCHeader/NPCInfoCol" unique_id=3100000011]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.533, 0.533, 0.6, 1.0)
+text = ""
+
+[node name="NPCLineLabel" type="Label" parent="ContactPanel/ContactContent/NPCZone/NPCZoneContent" unique_id=3100000012]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.816, 0.753, 0.627, 1.0)
+text = ""
+autowrap_mode = 3
+
+[node name="NPCReactionLabel" type="Label" parent="ContactPanel/ContactContent/NPCZone/NPCZoneContent" unique_id=3100000013]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.784, 0.663, 0.431, 1.0)
+text = ""
+horizontal_alignment = 1
+
+[node name="TurnDisengageRow" type="HBoxContainer" parent="ContactPanel/ContactContent" unique_id=3100000014]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="TurnCounterLabel" type="Label" parent="ContactPanel/ContactContent/TurnDisengageRow" unique_id=3100000015]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.533, 0.533, 0.6, 1.0)
+text = "Turn 1 of 2"
+
+[node name="DisengageButton" type="Button" parent="ContactPanel/ContactContent/TurnDisengageRow" unique_id=3100000016]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 44)
+layout_mode = 2
+theme_type_variation = &"ButtonGhost"
+text = "× Disengage"
+
+[node name="EchoScrollContainer" type="ScrollContainer" parent="ContactPanel/ContactContent" unique_id=3100000017]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 200)
+scroll_horizontal_enabled = true
+scroll_vertical_enabled = false
+
+[node name="EchoChipsContainer" type="HBoxContainer" parent="ContactPanel/ContactContent/EchoScrollContainer" unique_id=3100000018]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 12
+
+[node name="ConfirmSelectionButton" type="Button" parent="ContactPanel/ContactContent" unique_id=3100000019]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(200, 48)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_type_variation = &"ButtonPrimary"
+text = "Hear Them Out"
+
+[node name="ContactResultOverlay" type="PanelContainer" parent="." unique_id=3100000020]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -190.0
+offset_top = -120.0
+offset_right = 190.0
+offset_bottom = 120.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_contact_result")
+
+[node name="ResultContent" type="VBoxContainer" parent="ContactResultOverlay" unique_id=3100000021]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="OutcomeLevelLabel" type="Label" parent="ContactResultOverlay/ResultContent" unique_id=3100000022]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "GOOD"
+horizontal_alignment = 1
+
+[node name="OutcomeTextLabel" type="Label" parent="ContactResultOverlay/ResultContent" unique_id=3100000023]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_font_sizes/font_size = 14
+text = ""
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="ContinueResultButton" type="Button" parent="ContactResultOverlay/ResultContent" unique_id=3100000024]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 48)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_type_variation = &"ButtonPrimary"
+text = "Continue"

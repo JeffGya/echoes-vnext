@@ -990,6 +990,41 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 						if repaired:
 							repaired_notes.append("realm.%s.stage.%s situations objective_index defaulted (V2-STAGE-002)" % [_realm_id, _stage_label])
 
+					# V2-STAGE-003: role + contact fields on each situation; pending_contact + contact_responses on explore_map
+					var _003_repaired := false
+					var _emap_003_v: Variant = _stage.get("explore_map", {})
+					if _emap_003_v is Dictionary:
+						var _emap_003: Dictionary = _emap_003_v
+						# per-situation repairs
+						var _sits_003_v: Variant = _emap_003.get("situations", [])
+						if _sits_003_v is Array:
+							for _sit_003_v in (_sits_003_v as Array):
+								if not (_sit_003_v is Dictionary):
+									continue
+								var _sit_003: Dictionary = _sit_003_v
+								if not _sit_003.has("role"):
+									_sit_003["role"] = ""
+									_003_repaired = true
+								if not _sit_003.has("contact"):
+									_sit_003["contact"] = {}
+									_003_repaired = true
+						# per-explore_map repairs
+						if not _emap_003.has("pending_contact"):
+							_emap_003["pending_contact"] = {}
+							_003_repaired = true
+						if not _emap_003.has("contact_responses"):
+							_emap_003["contact_responses"] = []
+							_003_repaired = true
+						if not _emap_003.has("contact_fail_count"):
+							_emap_003["contact_fail_count"] = 0
+							_003_repaired = true
+						if not _emap_003.has("contact_result"):
+							_emap_003["contact_result"] = {}
+							_003_repaired = true
+					if _003_repaired:
+						repaired = true
+						repaired_notes.append("realm.%s.stage.%s contact fields defaulted (V2-STAGE-003)" % [_realm_id, _stage_label])
+
 	# Get structured log if anything was repaired (uses injected t)
 	if repaired:
 		_log_info(logger, t, "save.schema.repair", "Applied additive save schema repairs", {
