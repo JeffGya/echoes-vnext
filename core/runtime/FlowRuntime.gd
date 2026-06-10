@@ -141,6 +141,61 @@ func dispatch(action: Dictionary) -> Dictionary:
 				flow_ctx.weave_commit_locked = false
 				flow_ctx.weave_resolution = {}
 			elif to_state == FlowStateIds.STAGE_EXPLORE:
+				# P1-FIX: non-final objective victory returns to stage_explore via go_state.
+				# apply post-combat effects here (same as _handle_complete_stage minus advance_stage)
+				# before encounter_ctx is cleared by the state exit.
+				var _ncv_from: String = str(flow_machine._current_state_id)
+				if _ncv_from == FlowStateIds.ENCOUNTER and flow_ctx.encounter_ctx != null:
+					var _ncv_victory := bool(flow_ctx.encounter_ctx.combat_result.get("victory", false))
+					if _ncv_victory:
+						var _ncv_outcome := "win"
+						_apply_encounter_emotion_drift(_ncv_outcome, t)
+						_apply_combat_bond_triggers(t, _ncv_outcome)
+						_apply_bond_aftermath_modifiers(t, _ncv_outcome)
+						_seed_rival_stage_incidents(t)
+						# Resolve the combat situation in the save (marks objective completed)
+						if not flow_ctx.stage_id.is_empty():
+							var _ncv_stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
+							if not _ncv_stage.is_empty():
+								var _ncv_map_v: Variant = _ncv_stage.get("explore_map", {})
+								var _ncv_map: Dictionary = _ncv_map_v if _ncv_map_v is Dictionary else {}
+								var _ncv_sit_id := str(_ncv_map.get("last_situation_id", ""))
+								if not _ncv_sit_id.is_empty():
+									var _ncv_sits_v: Variant = _ncv_map.get("situations", [])
+									var _ncv_sits: Array = _ncv_sits_v if _ncv_sits_v is Array else []
+									for _ncv_i in range(_ncv_sits.size()):
+										var _ncv_sv: Variant = _ncv_sits[_ncv_i]
+										if _ncv_sv is Dictionary and str((_ncv_sv as Dictionary).get("id", "")) == _ncv_sit_id:
+											var _ncv_s: Dictionary = _ncv_sv
+											_ncv_s["resolved"] = true
+											_ncv_s["revealed"] = true
+											_ncv_sits[_ncv_i] = _ncv_s
+											if bool(_ncv_s.get("is_objective", false)):
+												_ncv_map["objectives_found"] = int(_ncv_map.get("objectives_found", 0)) + 1
+												var _ncv_obj_idx := int(_ncv_s.get("objective_index", -1))
+												if _ncv_obj_idx >= 0:
+													var _ncv_objs_v: Variant = _ncv_stage.get("objectives", [])
+													if _ncv_objs_v is Array:
+														var _ncv_objs: Array = _ncv_objs_v
+														if _ncv_obj_idx < _ncv_objs.size() and _ncv_objs[_ncv_obj_idx] is Dictionary:
+															_ncv_objs[_ncv_obj_idx]["completed"] = true
+														_ncv_stage["objectives"] = _ncv_objs
+											break
+									_ncv_map["situations"] = _ncv_sits
+									_ncv_stage["explore_map"] = _ncv_map
+									FlowStageExploreStateScript._write_stage_back(flow_ctx, _ncv_stage)
+									flow_ctx.save_request = true
+									flow_ctx.save_request_reason = "stage.combat_resolved" \
+										if flow_ctx.save_request_reason.is_empty() \
+										else flow_ctx.save_request_reason + "|stage.combat_resolved"
+									logger.info(t, "stage.combat_resolved.nonfinal", "Non-final objective resolved on victory", {
+										"stage_id": flow_ctx.stage_id, "situation_id": _ncv_sit_id,
+									})
+						# Vow discovery reads is_dead from ectx.actors — must run before null
+						_check_vow_discovery(t)
+						flow_ctx.encounter_ctx     = null
+						flow_ctx.encounter_machine = null
+						flow_ctx.active_encounter_objective_index = -1
 				# V2-VOW-002: evaluate vow condition on actual stage entry (covers first entry
 				# via "Begin" and re-entry after defeat — both route through go_state→STAGE_EXPLORE).
 				_apply_vow_stage_entry_condition(t)
@@ -5351,9 +5406,9 @@ func _apply_contact_outcome(
 		"guide":
 			if outcome in ["good", "partial"]:
 				var reveal_n := 2 if outcome == "good" else 1
-				# Directive: seek_signs adds +1 reveal
-				var _dir_id2 := str(flow_ctx.save_data.get("flow", {}).get("active_directive", "") \
-					if flow_ctx.save_data.get("flow", null) is Dictionary else "")
+				# Directive: seek_signs adds +1 reveal — persisted at stage_context.active_directive_id
+				var _dir_id2 := str(flow_ctx.save_data.get("stage_context", {}).get("active_directive_id", "") \
+					if flow_ctx.save_data.get("stage_context", null) is Dictionary else "")
 				if "seek_signs" in _dir_id2:
 					var dir_fx_v: Variant = contact_cfg.get("directive_effects", {}).get("seek_signs", {})
 					var dir_fx: Dictionary = dir_fx_v if dir_fx_v is Dictionary else {}
