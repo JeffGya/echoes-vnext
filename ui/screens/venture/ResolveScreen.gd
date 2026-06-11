@@ -29,6 +29,7 @@ signal action_requested(action: Dictionary)
 
 const RewardEntryScene    := preload("res://ui/components/RewardEntryItem.tscn")
 const EmotionEntryScene   := preload("res://ui/components/EmotionEntryItem.tscn")
+const EffectChipScene     := preload("res://ui/components/EffectChip.tscn")
 
 @onready var _banner:            Label         = %BannerLabel
 @onready var _reason:            Label         = %ReasonLabel
@@ -43,6 +44,9 @@ const EmotionEntryScene   := preload("res://ui/components/EmotionEntryItem.tscn"
 @onready var _sanctum_button:    Button        = %SanctumButton
 @onready var _next_stage_button: Button        = %NextStageButton
 @onready var _emotion_list:            VBoxContainer = %EmotionList
+# Phase 1 Close — new nodes (authored in .tscn).
+@onready var _summary_label:           Label         = %SummaryLabel
+@onready var _effects_rail:            HFlowContainer = %EffectsRail
 # CardContent — parent of all card sections, used for dynamic vow nodes.
 @onready var _card_content:            VBoxContainer = $CenterContainer/ResultCard/CardContent
 # V2-VOW-002: vow outcome section nodes (authored in .tscn).
@@ -81,6 +85,12 @@ func _clear() -> void:
 		child.queue_free()
 	for child in _emotion_list.get_children():
 		child.queue_free()
+	# Phase 1 Close: reset new nodes
+	_summary_label.text    = ""
+	_summary_label.visible = false
+	for child in _effects_rail.get_children():
+		child.queue_free()
+	_effects_rail.visible = false
 	# V2-VOW-002: reset template-based vow sections
 	_vow_section.visible = false
 	_vow_outcome_header.remove_theme_color_override("font_color")
@@ -101,11 +111,21 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	if run_type == "contact_result":
 		_render_contact_result(data, actions)
 		return
+	# Phase 1 Close: situation_result path — in-explore situation outcome
+	if run_type == "situation_result":
+		_render_situation_result(data, actions)
+		return
 
 	var victory: bool = bool(data.get("victory", false))
 
 	_banner.text = "VICTORY" if victory else "DEFEAT"
 	_reason.text = _format_reason(str(data.get("reason", "")))
+
+	# Phase 1 Close: Summary zone
+	var summary_line := str(data.get("summary_line", ""))
+	if not summary_line.is_empty():
+		_summary_label.text    = summary_line
+		_summary_label.visible = true
 
 	_enemies_value.text = str(data.get("enemies_defeated", 0))
 	_echoes_value.text  = str(data.get("echoes_survived", 0))
@@ -152,6 +172,8 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 		row.get_node("%EmotionArcLabel").text  = \
 			"%s → %s" % [entry.get("pre_emotional_status", "").capitalize(), entry.get("post_emotional_status", "").capitalize()]
 		row.get_node("%RefusedLabel").visible  = bool(entry.get("refused", false))
+		# Phase 1 Close: token + direction cue + KO tag
+		_populate_emotion_row_extras(row, entry)
 		_emotion_list.add_child(row)
 		# V2-VOICE-001: add arrival bark label below this row if present.
 		var _echo_id := str(entry.get("echo_id", ""))
@@ -178,6 +200,9 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	_build_vow_section(data)
 	_build_vow_discovered_section(data)
 
+	# Phase 1 Close: effects rail (Ase, Ekwan, objective, vow, + effects[] extras).
+	_build_effects_rail(data)
+
 	# Wire CTA buttons from snapshot actions.
 	if actions.has("cta.continue"):
 		var act_v: Variant = actions["cta.continue"]
@@ -192,6 +217,189 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 			_next_stage_action         = act_v
 			_next_stage_button.text    = str(act_v.get("label", "Next Stage"))
 			_next_stage_button.visible = true
+
+
+# ─────────────────────────────────────────────────────────────
+# Phase 1 Close: Situation Result renderer
+# ─────────────────────────────────────────────────────────────
+
+func _render_situation_result(data: Dictionary, actions: Dictionary) -> void:
+	var surface := str(data.get("surface", "Situation"))
+	_banner.text = surface.replace("_", " ").capitalize()
+	_banner.remove_theme_color_override("font_color")
+
+	# Verdict badge (non-combat grade slot)
+	var verdict := str(data.get("verdict", ""))
+	if not verdict.is_empty():
+		_rank_badge.visible = true
+		_rank_badge.text    = verdict.capitalize()
+		_rank_badge.add_theme_color_override("font_color", _verdict_color(verdict))
+	else:
+		_rank_badge.visible = false
+
+	# Summary zone
+	var summary_line := str(data.get("summary_line", ""))
+	if not summary_line.is_empty():
+		_summary_label.text    = summary_line
+		_summary_label.visible = true
+
+	# Echo stage rows
+	var emotion_summary_v: Variant = data.get("emotion_summary", [])
+	var emotion_summary: Array = emotion_summary_v if emotion_summary_v is Array else []
+	for entry_v in emotion_summary:
+		var entry: Dictionary = entry_v if entry_v is Dictionary else {}
+		var row: Node = EmotionEntryScene.instantiate()
+		row.get_node("%EchoNameLabel").text   = str(entry.get("name", ""))
+		row.get_node("%EmotionArcLabel").text = \
+			"%s → %s" % [entry.get("pre_emotional_status", "").capitalize(), entry.get("post_emotional_status", "").capitalize()]
+		row.get_node("%RefusedLabel").visible = bool(entry.get("refused", false))
+		_populate_emotion_row_extras(row, entry)
+		_emotion_list.add_child(row)
+		# Per-echo bark (situation bark field)
+		var bark := str(entry.get("bark", ""))
+		if not bark.is_empty():
+			var bark_lbl := Label.new()
+			bark_lbl.text = "\"%s\"" % bark
+			bark_lbl.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55, 1.0))
+			bark_lbl.add_theme_font_size_override("font_size", 12)
+			bark_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+			_emotion_list.add_child(bark_lbl)
+
+	# Effects rail
+	_build_effects_rail(data)
+
+	# Wire continue button (returns to stage explore)
+	if actions.has("cta.continue"):
+		var act_v: Variant = actions["cta.continue"]
+		if act_v is Dictionary:
+			_sanctum_action         = act_v
+			_sanctum_button.text    = str(act_v.get("label", "Continue"))
+			_sanctum_button.visible = true
+
+
+# ─────────────────────────────────────────────────────────────
+# Phase 1 Close: emotion row extras (token + direction cue + KO)
+# Called for both combat and situation_result rows.
+# ─────────────────────────────────────────────────────────────
+
+func _populate_emotion_row_extras(row: Node, entry: Dictionary) -> void:
+	# Token: first letter of name, colored by direction
+	var token_label_node: Node = row.get_node_or_null("%TokenLabel")
+	if token_label_node is Label:
+		var name_str := str(entry.get("name", ""))
+		(token_label_node as Label).text = name_str.left(1).to_upper() if not name_str.is_empty() else "?"
+	var token_circle: Node = row.get_node_or_null("TokenCircle")
+	if token_circle is PanelContainer:
+		(token_circle as PanelContainer).self_modulate = _token_color_for_direction(
+			str(entry.get("direction", "")),
+			str(entry.get("tag", ""))
+		)
+
+	# Direction cue label
+	var dir_node: Node = row.get_node_or_null("%DirectionCueLabel")
+	if dir_node is Label:
+		var dir := str(entry.get("direction", ""))
+		var cue_text: String
+		match dir:
+			"lift":   cue_text = "spirits lift ↑"
+			"ease":   cue_text = "fear eases ↓"
+			"steady": cue_text = "— steady"
+			"fall":   cue_text = "shaken ↓"
+			_:        cue_text = ""
+		(dir_node as Label).text    = cue_text
+		(dir_node as Label).visible = not cue_text.is_empty()
+
+	# KO tag
+	var ko_node: Node = row.get_node_or_null("%KoTagLabel")
+	if ko_node is Label:
+		(ko_node as Label).visible = str(entry.get("tag", "")) == "ko"
+
+
+func _token_color_for_direction(direction: String, tag: String) -> Color:
+	if tag == "ko":
+		return Color("#7A5A4A")   # rust — KO / fallen
+	match direction:
+		"lift":   return Color("#E8A030")   # Amber — morale rising
+		"steady": return Color("#E8A030")   # Amber — holding
+		"ease":   return Color("#7AB5C8")   # Mist Blue — fear easing
+		"fall":   return Color("#6E8FA8")   # grey-blue — shaken
+		_:        return Color("#A8865A")   # Warm Brass — default
+
+
+# ─────────────────────────────────────────────────────────────
+# Phase 1 Close: Effects Rail builder
+# Dual-source: existing fields (ase_awarded, ekwan_awarded, enemies_defeated,
+# vow_outcome) + new effects[] array for item/intel/continuity extras.
+# ─────────────────────────────────────────────────────────────
+
+func _build_effects_rail(data: Dictionary) -> void:
+	var chips_added := 0
+
+	# Ase chip
+	var ase := int(data.get("ase_awarded", 0))
+	if ase > 0:
+		var chip: Node = EffectChipScene.instantiate()
+		_effects_rail.add_child(chip)
+		chip.call("setup", "ase", "+%d Ase" % ase, "", "partial")
+		chips_added += 1
+
+	# Ekwan chip
+	var ekwan := int(data.get("ekwan_awarded", 0))
+	if ekwan > 0:
+		var chip: Node = EffectChipScene.instantiate()
+		_effects_rail.add_child(chip)
+		chip.call("setup", "ekwan", "+%d Ekwan" % ekwan, "", "warn")
+		chips_added += 1
+
+	# Objective chip (combat: enemies defeated out of survived)
+	var enemies_defeated := int(data.get("enemies_defeated", 0))
+	if enemies_defeated > 0:
+		var chip: Node = EffectChipScene.instantiate()
+		_effects_rail.add_child(chip)
+		chip.call("setup", "objective", "%d defeated" % enemies_defeated, "", "good")
+		chips_added += 1
+
+	# Vow chip
+	var vow_v: Variant = data.get("vow_outcome", {})
+	var vow: Dictionary = vow_v if vow_v is Dictionary else {}
+	var vow_event := str(vow.get("event", ""))
+	if vow_event == "break":
+		var chip: Node = EffectChipScene.instantiate()
+		_effects_rail.add_child(chip)
+		chip.call("setup", "vow", "vow fractured", "", "bad")
+		chips_added += 1
+	elif vow_event == "benefit" or vow_event == "compliant":
+		var chip: Node = EffectChipScene.instantiate()
+		_effects_rail.add_child(chip)
+		chip.call("setup", "vow", "vow held", "", "good")
+		chips_added += 1
+
+	# effects[] extras (item, intel, continuity, storyweight, etc.)
+	var effects_v: Variant = data.get("effects", [])
+	var effects: Array = effects_v if effects_v is Array else []
+	for fx_v in effects:
+		var fx: Dictionary = fx_v if fx_v is Dictionary else {}
+		var kind  := str(fx.get("kind",  ""))
+		var label := str(fx.get("label", ""))
+		var value: String = str(fx.get("value", ""))
+		var tone  := str(fx.get("tone",  ""))
+		if label.is_empty():
+			continue
+		var chip: Node = EffectChipScene.instantiate()
+		_effects_rail.add_child(chip)
+		chip.call("setup", kind, label, value, tone)
+		chips_added += 1
+
+	_effects_rail.visible = chips_added > 0
+
+
+func _verdict_color(verdict: String) -> Color:
+	match verdict:
+		"carried", "good": return Color("#4CAF72")   # Akan Green
+		"passed":          return Color("#C8A96E")   # Akan Gold
+		"partial":         return Color("#E8A030")   # Amber
+		"missed", "failed":return Color("#C05050")   # muted red
+		_:                 return Color("#E8D0A0")   # Pale Kente default
 
 
 # ─────────────────────────────────────────────────────────────
@@ -234,6 +442,12 @@ func _render_contact_result(data: Dictionary, actions: Dictionary) -> void:
 
 	_reason.text = outcome_text
 
+	# Phase 1 Close: optional summary_line enrichment (harmless if absent)
+	var summary_line := str(data.get("summary_line", ""))
+	if not summary_line.is_empty():
+		_summary_label.text    = summary_line
+		_summary_label.visible = true
+
 	# Repurpose rank badge as outcome level chip — hide it to keep layout clean
 	_rank_badge.visible = false
 
@@ -256,6 +470,12 @@ func _render_scout_return(data: Dictionary, actions: Dictionary) -> void:
 
 	var intel := int(data.get("intel_count", 0))
 	_reason.text = "%d situation%s revealed" % [intel, "s" if intel != 1 else ""]
+
+	# Phase 1 Close: optional summary_line enrichment (harmless if absent)
+	var summary_line := str(data.get("summary_line", ""))
+	if not summary_line.is_empty():
+		_summary_label.text    = summary_line
+		_summary_label.visible = true
 
 	_rank_badge.visible        = false
 	_next_stage_button.visible = false

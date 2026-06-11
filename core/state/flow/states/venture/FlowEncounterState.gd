@@ -501,6 +501,9 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"retreat_success_pct":     retreat_success_pct,
 			# V2-STAGE-002: remaining required objectives (informational during combat).
 			"objectives_remaining":    FlowEncounterState._count_remaining_required_objectives(flow_ctx),
+			# P1 CLOSE: stub fields to keep round field_count >= final field_count.
+			"surface":        "",
+			"summary_line":   "",
 		},
 		"actions": actions,
 		"meta":    { "t": t },
@@ -732,14 +735,38 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		var pre_morale: int  = int(pre_morale_map.get(eid, 50))
 		var post_morale: int = int(ea.get("morale", 50))
 		var post_fear: int   = int(ea.get("fear", 0))
+		# P1 CLOSE: compute pre/post status for direction comparison.
+		var _pre_status  := EmotionService.get_emotional_status(pre_morale, 0)
+		var _post_status := EmotionService.get_emotional_status(post_morale, post_fear)
+		var _pre_rank  := FlowEncounterState._emotional_status_rank(_pre_status)
+		var _post_rank := FlowEncounterState._emotional_status_rank(_post_status)
+		var _direction: String
+		if _post_rank > _pre_rank:
+			_direction = "lift"
+		elif _post_rank < _pre_rank:
+			_direction = "fall"
+		else:
+			_direction = "steady"
+		# P1 CLOSE: tag — "ko" if dead, "refused" if existing refused flag, else "".
+		var _is_dead := bool(ea.get("is_dead", false))
+		var _tag: String
+		if _is_dead:
+			_tag = "ko"
+		elif post_fear >= FEAR_THRESHOLD_DEFAULT:
+			_tag = "refused"
+		else:
+			_tag = ""
 		emotion_summary.append({
 			"echo_id":               eid,
 			"name":                  str(ea.get("name", "")),
 			# V2-EMOTION-002: unified status arc (replaces pre/post morale_tier + fear_signal).
-			"pre_emotional_status":  EmotionService.get_emotional_status(pre_morale, 0),
-			"post_emotional_status": EmotionService.get_emotional_status(post_morale, post_fear),
+			"pre_emotional_status":  _pre_status,
+			"post_emotional_status": _post_status,
 			"morale_delta":          post_morale - pre_morale,
 			"refused":               post_fear >= FEAR_THRESHOLD_DEFAULT,
+			# P1 CLOSE: additive fields for unified Resolve component.
+			"direction":             _direction,
+			"tag":                   _tag,
 		})
 
 	# V2-VOICE-001: enrich each echo actor row with arrival_bark from save-data roster.
@@ -763,6 +790,19 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 
 	# V2-STAGE-002: count required objectives not yet completed (post-victory mark).
 	var objectives_remaining := _count_remaining_required_objectives(flow_ctx)
+
+	# P1 CLOSE: surface — use the first objective type when known, else "combat" or "shrine".
+	var _combat_surface := _obj_type if not _obj_type.is_empty() else "combat"
+
+	# P1 CLOSE: summary_line — synthesize from reason and victory.
+	var _raw_reason := str(combat_result.get("reason", ""))
+	var _summary_line: String
+	if victory:
+		_summary_line = "The line held — %s." % _raw_reason if not _raw_reason.is_empty() \
+			else "The line held."
+	else:
+		_summary_line = "%s." % _raw_reason if not _raw_reason.is_empty() \
+			else "The line broke."
 
 	return {
 		"type": FlowStateIds.RESOLVE,
@@ -792,6 +832,9 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"newly_unlocked_vows": flow_ctx.session_unlocked_vows.duplicate(),
 			# V2-STAGE-002: remaining required objectives (drives resolve routing).
 			"objectives_remaining": objectives_remaining,
+			# P1 CLOSE: additive fields for unified Resolve component.
+			"surface":          _combat_surface,
+			"summary_line":     _summary_line,
 		},
 		"actions": _build_resolve_actions(victory, objectives_remaining),
 		"meta": { "t": t },
@@ -951,3 +994,19 @@ static func _build_keeper_intro_emotion_summary(ectx: EncounterContext) -> Array
 			"refused": post_fear >= FEAR_THRESHOLD_DEFAULT,
 		})
 	return summary
+
+
+# P1 CLOSE: maps emotional status string to a rank index (higher = better).
+# Used to compute direction in emotion_summary entries.
+# radiant > whole > grounded > burdened > pressed > strained > fraying > hollow
+static func _emotional_status_rank(status: String) -> int:
+	match status:
+		"radiant":  return 7
+		"whole":    return 6
+		"grounded": return 5
+		"burdened": return 4
+		"pressed":  return 3
+		"strained": return 2
+		"fraying":  return 1
+		"hollow":   return 0
+	return 4  # default: burdened (middle)

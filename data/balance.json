@@ -2637,9 +2637,75 @@
 			"cautious_advance_fear_threshold": 50,
 
 			"situation_emotion_effects": {
-				"loot":   { "fear_delta": -5, "morale_delta": 0 },
-				"npc":    { "fear_delta":  0, "morale_delta": 8 },
-				"money":  { "fear_delta": -3, "morale_delta": 5 }
+				"loot":      { "fear_delta": -5, "morale_delta":  0 },
+				"npc":       { "fear_delta":  0, "morale_delta":  8 },
+				"money":     { "fear_delta": -3, "morale_delta":  5 },
+				"omen":      { "fear_delta":  2, "morale_delta": -3 },
+				"ritual":    { "fear_delta": -4, "morale_delta":  4 },
+				"obstacle":  { "fear_delta":  0, "morale_delta":  0 },
+				"structure": { "fear_delta":  0, "morale_delta":  0 }
+			},
+			"situation_resolution": {
+				"omen": {
+					"panel_kind": "acknowledge",
+					"result_text": [
+						"The sign has been read. The party moves on, carrying what it means.",
+						"Some marks are left not to warn, but to remind. The party does not forget."
+					]
+				},
+				"ritual": {
+					"panel_kind": "leave",
+					"result_text": [
+						"The old rite runs its course. Something settles in the air.",
+						"Ground that has been prayed over does not forget. The party rests, then walks."
+					]
+				},
+				"loot": {
+					"panel_kind": "take",
+					"result_text": [
+						"Something left behind. The party gathers what they can.",
+						"It was not abandoned — it was waiting. The party takes it.",
+						"Not everything lost is gone. The party finds what remains."
+					],
+					"loot": { "kinds": ["herb_bundle", "cloth_scrap", "carved_token"] }
+				},
+				"money": {
+					"panel_kind": "take",
+					"result_text": [
+						"Ase — misplaced, perhaps, or left as passage. The party accepts it.",
+						"An offering with no one left to receive it. The party carries it forward."
+					],
+					"money": { "ase_min": 8, "ase_max": 20 }
+				},
+				"npc": {
+					"panel_kind": "acknowledge",
+					"result_text": [
+						"The encounter has passed. What was said stays with the party.",
+						"Not every meeting leaves a gift. This one leaves a mark."
+					]
+				},
+				"obstacle": {
+					"panel_kind": "choice",
+					"result_text_by_choice": {
+						"push_through": "They did not yield. The path opened — bruised but unblocked.",
+						"find_route":   "A longer road, but a clear one. The party reads the land and finds another way."
+					},
+					"choices": [
+						{ "id": "push_through", "label_key": "Push Through", "fear_delta": 0, "morale_delta": -6, "turn_cost": 0 },
+						{ "id": "find_route",   "label_key": "Find a Route",  "fear_delta": 0, "morale_delta":  0, "turn_cost": 1 }
+					]
+				},
+				"structure": {
+					"panel_kind": "choice",
+					"result_text_by_choice": {
+						"enter":   "The party steps inside. The walls hold old air — and old intention.",
+						"observe": "They do not enter. They circle once, read what can be read, and move."
+					},
+					"choices": [
+						{ "id": "enter",   "label_key": "Enter",   "fear_delta":  3, "morale_delta": 6, "turn_cost": 0 },
+						{ "id": "observe", "label_key": "Observe", "fear_delta": -2, "morale_delta": 2, "turn_cost": 0 }
+					]
+				}
 			}
 		},
 

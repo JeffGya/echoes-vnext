@@ -86,6 +86,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("explore/combat_situation_routes_encounter", Callable(StageExploreTests, "_t_combat_situation_routes_encounter"))
 	runner.register_test("explore/objectives_found_increments",     Callable(StageExploreTests, "_t_objectives_found_increments"))
 	runner.register_test("explore/all_objectives_triggers_complete", Callable(StageExploreTests, "_t_all_objectives_triggers_complete"))
+	# V2-STAGE-004 zero-regression assertions
+	runner.register_test("explore/situation_pool_first_8_unchanged", Callable(StageExploreTests, "_t_situation_pool_first_8_unchanged"))
+	runner.register_test("explore/situation_pool_size_12",           Callable(StageExploreTests, "_t_situation_pool_size_12"))
+	runner.register_test("explore/valid_types_contains_all_8",       Callable(StageExploreTests, "_t_valid_types_contains_all_8"))
 
 
 # ─── Test 1 — SituationModelScript.make() shape ───────────────────────────────────
@@ -449,4 +453,37 @@ static func _t_all_objectives_triggers_complete() -> Dictionary:
 	if not bool(advance.get("disabled", false)):
 		return { "ok": false, "error": "cta.advance_turn should be disabled when complete" }
 
+	return { "ok": true }
+
+
+# ─── V2-STAGE-004 Zero-Regression Tests ──────────────────────────────────────
+
+# Test 14 — First 8 entries of SITUATION_TYPE_POOL unchanged (determinism guard)
+static func _t_situation_pool_first_8_unchanged() -> Dictionary:
+	var expected_first_8 := ["combat", "combat", "combat", "npc", "npc", "loot", "loot", "money"]
+	var pool: Array = SituationModelScript.SITUATION_TYPE_POOL
+	if pool.size() < 8:
+		return { "ok": false, "error": "SITUATION_TYPE_POOL has fewer than 8 entries (size=%d)" % pool.size() }
+	var actual_first_8 := pool.slice(0, 8)
+	for i in range(8):
+		if str(actual_first_8[i]) != str(expected_first_8[i]):
+			return { "ok": false, "error": "Pool entry %d changed: expected '%s', got '%s'" % [i, expected_first_8[i], actual_first_8[i]] }
+	return { "ok": true }
+
+
+# Test 15 — SITUATION_TYPE_POOL has exactly 12 entries (4 V2-STAGE-004 types appended)
+static func _t_situation_pool_size_12() -> Dictionary:
+	var pool: Array = SituationModelScript.SITUATION_TYPE_POOL
+	if pool.size() != 12:
+		return { "ok": false, "error": "Expected SITUATION_TYPE_POOL.size() == 12, got %d" % pool.size() }
+	return { "ok": true }
+
+
+# Test 16 — VALID_TYPES contains all 8 types (combat/npc/loot/money + omen/obstacle/ritual/structure)
+static func _t_valid_types_contains_all_8() -> Dictionary:
+	var required := ["combat", "npc", "loot", "money", "omen", "obstacle", "ritual", "structure"]
+	var valid: Array = SituationModelScript.VALID_TYPES
+	for t in required:
+		if not (t in valid):
+			return { "ok": false, "error": "VALID_TYPES missing expected type '%s'" % t }
 	return { "ok": true }

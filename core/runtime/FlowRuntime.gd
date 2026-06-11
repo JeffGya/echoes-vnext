@@ -12,6 +12,7 @@ const SituationModelScript        := preload("res://core/realms/SituationModel.g
 const ObjectiveModelScript        := preload("res://core/realms/ObjectiveModel.gd")                             # V2-STAGE-002
 const ConversationServiceScript    := preload("res://core/realms/ConversationService.gd")    # V2-STAGE-003
 const ContactModelScript           := preload("res://core/realms/ContactModel.gd")            # V2-STAGE-003
+const SituationResolutionServiceScript := preload("res://core/realms/SituationResolutionService.gd")  # V2-STAGE-004
 ## ConsequencePassService kept on disk for future use; not preloaded here.
 const EmotionRecoveryServiceScript := preload("res://core/emotion/EmotionRecoveryService.gd")                    # V2-SANCTUM-001
 const InstitutionServiceScript     := preload("res://core/sanctum/InstitutionService.gd")                         # V2-SANCTUM-002
@@ -527,6 +528,9 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 		"stage.engage_situation":
 			_handle_stage_engage_situation(action, t)
+
+		"stage.resolve_situation_choice":  # V2-STAGE-004: player picked a choice overlay option
+			_handle_stage_resolve_situation_choice(action, t)
 
 		"stage.ignore_situation":  # V2-STAGE-002: clear pending without resolving
 			_handle_stage_ignore_situation(action, t)
@@ -2769,6 +2773,7 @@ func _build_scout_return_snapshot(t: int) -> Dictionary:
 	flow_ctx.pending_scout_return_ase         = 0
 	flow_ctx.pending_scout_return_intel_count = 0
 
+	var _intel_plural := "s" if _intel != 1 else ""
 	return {
 		"type": FlowStateIds.RESOLVE,
 		"meta": { "sim_tick": t },
@@ -2781,6 +2786,10 @@ func _build_scout_return_snapshot(t: int) -> Dictionary:
 			"actors":          actor_preview,
 			"victory":         false,
 			"rank":            "",
+			# P1 CLOSE: additive fields for unified Resolve component.
+			"surface":       "scout_return",
+			"verdict":       "",
+			"summary_line":  "%d crossing%s mapped." % [_intel, _intel_plural],
 		},
 		"actions": {
 			"cta.continue": {
@@ -4779,13 +4788,12 @@ func _handle_stage_engage_situation(action: Dictionary, t: int) -> void:
 			_sit_was_revealed = bool((_sv_peek as Dictionary).get("revealed", false))
 			break
 
-	# Find and mutate the situation
+	# Find and mutate the situation — set ONLY revealed (not resolved).
 	var sit: Dictionary = {}
 	for i in range(situations.size()):
 		var s_v: Variant = situations[i]
 		if s_v is Dictionary and str((s_v as Dictionary).get("id", "")) == sit_id:
 			var s: Dictionary = s_v
-			s["resolved"] = true
 			s["revealed"] = true
 			# V2-INTEL-001: write firsthand intel on direct engagement if not already scouted
 			var eng_clues_v: Variant = s.get("intel_clues", [])
@@ -4805,10 +4813,6 @@ func _handle_stage_engage_situation(action: Dictionary, t: int) -> void:
 		})
 		return
 
-	# Update objectives_found
-	if bool(sit.get("is_objective", false)):
-		explore_map["objectives_found"] = int(explore_map.get("objectives_found", 0)) + 1
-
 	explore_map["situations"] = situations
 	stage["explore_map"] = explore_map
 	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
@@ -4822,192 +4826,467 @@ func _handle_stage_engage_situation(action: Dictionary, t: int) -> void:
 	var _sit_obj_index := int(sit.get("objective_index", -1))
 	flow_ctx.active_encounter_objective_index = _sit_obj_index
 
+	var sit_type := str(sit.get("type", ""))
+
 	logger.info(t, "stage.engage_situation", "Party engaged situation", {
 		"stage_id":        flow_ctx.stage_id,
 		"situation_id":    sit_id,
-		"type":            str(sit.get("type", "")),
+		"type":            sit_type,
 		"is_objective":    sit.get("is_objective", false),
 		"objective_index": _sit_obj_index,
 		"obj_found":       explore_map.get("objectives_found", 0),
 		"obj_total":       explore_map.get("objectives_total", 0),
 	})
 
-	# Route by situation type.
-	# IMPORTANT: for combat/shrine situations, do NOT mark resolved or complete objective here.
-	# Combat resolution is async — victory is confirmed via ResolveScreen → flow.complete_stage.
-	# _handle_complete_stage reads last_situation_id to finalize the situation on victory.
-	# On defeat, the situation remains unresolved so the player can retry it.
-	var sit_type := str(sit.get("type", ""))
-	# V2-STAGE-002: combat AND shrine situations route to flow.encounter.
-	# Shrine uses PURIFY_SHRINE resolution mode (determined by _resolve_mode_from_stage
-	# via active_encounter_objective_index). Both are async — resolved in _handle_complete_stage.
-	if sit_type == SituationModelScript.TYPE_COMBAT or sit_type == ObjectiveModelScript.TYPE_SHRINE:
-		# Undo the resolved/revealed mutation made above — encounter outcome is not yet known.
-		# On defeat the situation stays unresolved so the player can retry.
-		for _ri in range(situations.size()):
-			var _sv: Variant = situations[_ri]
-			if _sv is Dictionary and str((_sv as Dictionary).get("id", "")) == sit_id:
-				var _s: Dictionary = _sv
-				_s["resolved"] = false
-				_s["revealed"] = bool(_s.get("revealed", false))  # keep reveal state
-				situations[_ri] = _s
-				break
-		if bool(sit.get("is_objective", false)):
-			explore_map["objectives_found"] = max(int(explore_map.get("objectives_found", 0)) - 1, 0)
-		explore_map["situations"] = situations
-		stage["explore_map"] = explore_map
-		FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+	# V2-STAGE-004: route via SituationResolutionService.
+	var _track := SituationResolutionServiceScript.route(sit_type, bool(sit.get("is_objective", false)))
+
+	if _track == "async":
+		# Compute encounter_approach context before handing off.
+		var _ea_sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+		var _ea_sanctum: Dictionary = _ea_sanctum_v if _ea_sanctum_v is Dictionary else {}
+		var _ea_roster_v: Variant = _ea_sanctum.get("roster", [])
+		var _ea_roster: Array = _ea_roster_v if _ea_roster_v is Array else []
+		var _ea_party_ids_v: Variant = _ea_sanctum.get("active_party_ids", [])
+		var _ea_party_ids: Array = _ea_party_ids_v if _ea_party_ids_v is Array else []
+		var _ea_fear_sum  := 0
+		var _ea_morale_sum := 0
+		var _ea_count := 0
+		for _ea_echo_v in _ea_roster:
+			if not (_ea_echo_v is Dictionary):
+				continue
+			var _ea_echo: Dictionary = _ea_echo_v
+			if str(_ea_echo.get("id", "")) not in _ea_party_ids:
+				continue
+			var _ea_emo_v: Variant = _ea_echo.get("emotion", {})
+			var _ea_emo: Dictionary = _ea_emo_v if _ea_emo_v is Dictionary else {}
+			_ea_fear_sum   += int(_ea_emo.get("fear_current",   0))
+			_ea_morale_sum += int(_ea_emo.get("morale_current", 0))
+			_ea_count += 1
+		var _ea_avg_fear   := (_ea_fear_sum   / _ea_count) if _ea_count > 0 else 0
+		var _ea_avg_morale := (_ea_morale_sum / _ea_count) if _ea_count > 0 else 0
+		var _ea_flow_v: Variant = flow_ctx.save_data.get("flow", {})
+		var _ea_flow: Dictionary = _ea_flow_v if _ea_flow_v is Dictionary else {}
+		var _ea_directive := str(_ea_flow.get("active_directive", "directive.scout_carefully"))
+		var _stage_ctx_v: Variant = flow_ctx.save_data.get("stage_context", {})
+		var _stage_ctx: Dictionary = _stage_ctx_v if _stage_ctx_v is Dictionary else {}
+		_stage_ctx["encounter_approach"] = {
+			"turns_taken":             int(explore_map.get("turn_count", 0)),
+			"directive_id":            _ea_directive,
+			"situation_was_revealed":  _sit_was_revealed,
+			"party_avg_fear":          _ea_avg_fear,
+			"party_avg_morale":        _ea_avg_morale,
+		}
+		flow_ctx.save_data["stage_context"] = _stage_ctx
+		flow_ctx.save_request = true
+		flow_ctx.save_request_reason = "stage.encounter_approach"
+
 		var _engage_reason := "stage.engage.shrine" if sit_type == ObjectiveModelScript.TYPE_SHRINE \
 			else "stage.engage.combat"
 		flow_machine.transition(FlowStateIds.ENCOUNTER, flow_ctx, logger, t, _engage_reason)
+		return
 
-	else:
-		# V2-STAGE-002: read stages config for emotion effects
-		var _sit_bal_v: Variant = config_service.get_balance().get("data", {})
-		var _sit_bal: Dictionary = _sit_bal_v if _sit_bal_v is Dictionary else {}
-		var _stages_cfg_v: Variant = _sit_bal.get("stages", {})
-		var _stages_cfg: Dictionary = _stages_cfg_v if _stages_cfg_v is Dictionary else {}
-		var _emo_effects_v: Variant = _stages_cfg.get("situation_emotion_effects", {})
-		var _emo_effects: Dictionary = _emo_effects_v if _emo_effects_v is Dictionary else {}
+	# in_explore branch
+	# V2-STAGE-003: NPC with contact dict → start conversation.
+	if sit_type == SituationModelScript.TYPE_NPC:
+		var _contact_dict_v: Variant = sit.get("contact", {})
+		var _contact_dict: Dictionary = _contact_dict_v if _contact_dict_v is Dictionary else {}
+		if not _contact_dict.is_empty():
+			_start_contact_conversation(sit, sit_id, explore_map, stage, t)
+			return
 
-		# V2-STAGE-002: stub-complete objectives for types with no encounter runtime yet.
-		# V2-STAGE-004 will replace this with proper resolution paths.
-		var _is_stub_objective := bool(sit.get("is_objective", false)) and sit_type in [
-			ObjectiveModelScript.TYPE_RECOVER,
-			ObjectiveModelScript.TYPE_PROTECT,
-			ObjectiveModelScript.TYPE_ENDURE,
-			ObjectiveModelScript.TYPE_PURSUE,
-		]
-		if _is_stub_objective:
-			_mark_stage_objective_completed(flow_ctx, _sit_obj_index, t)
-			logger.info(t, "stage.objective.stub_complete",
-				"Objective stub-completed (V2-STAGE-004 will replace)",
-				{ "objective_index": _sit_obj_index, "type": sit_type }
-			)
+	# V2-STAGE-004: resolve in-explore via SituationResolutionService.
+	var _realm_seed := int(flow_ctx.save_data.get("realms", {}).get(flow_ctx.realm_id, {}).get("seed", 0))
+	var _res_rng := CampaignSeed.get_rng_from(_realm_seed, "stage.resolution.%s" % sit_id)
 
-		# V2-STAGE-003: if this is an NPC situation with a contact dict, start conversation.
-		# Otherwise fall through to the legacy stub overlay.
-		if sit_type == SituationModelScript.TYPE_NPC:
-			var contact_dict_v: Variant = sit.get("contact", {})
-			var contact_dict: Dictionary = contact_dict_v if contact_dict_v is Dictionary else {}
-			if not contact_dict.is_empty():
-				# Undo resolved/revealed mutation — conversation is async
-				for _ci in range(situations.size()):
-					var _cv: Variant = situations[_ci]
-					if _cv is Dictionary and str((_cv as Dictionary).get("id", "")) == sit_id:
-						var _cs: Dictionary = _cv
-						_cs["resolved"] = false
-						_cs["revealed"] = bool(_cs.get("revealed", false))
-						situations[_ci] = _cs
-						break
-				if bool(sit.get("is_objective", false)):
-					explore_map["objectives_found"] = max(int(explore_map.get("objectives_found", 0)) - 1, 0)
-				explore_map["situations"] = situations
+	var _sit_bal_v: Variant = config_service.get_balance().get("data", {})
+	var _sit_bal: Dictionary = _sit_bal_v if _sit_bal_v is Dictionary else {}
+	var _stages_cfg_v: Variant = _sit_bal.get("stages", {})
+	var _stages_cfg: Dictionary = _stages_cfg_v if _stages_cfg_v is Dictionary else {}
 
-				# Apply turn-count modifier based on NPC starting emotion
-				var contact_work := contact_dict.duplicate(true)
-				var npc_fear  := int(contact_work.get("fear",   50))
-				var npc_morale := int(contact_work.get("morale", 50))
-				var tc := int(contact_work.get("turn_count", 2))
-				if npc_fear > 60:
-					tc = max(1, tc - 1)
-				elif npc_morale < 30:
-					tc += 1
-				contact_work["turn_count"] = tc
+	var _r := SituationResolutionServiceScript.resolve_in_explore(sit, _stages_cfg, _res_rng)
 
-				# Load contact_responses data
-				var response_data := _load_contact_responses()
-
-				# Load contact config
-				var contact_cfg_bal_v: Variant = _sit_bal.get("contact", {})
-				var contact_cfg_bal: Dictionary = contact_cfg_bal_v if contact_cfg_bal_v is Dictionary else {}
-
-				# Read active directive
-				var _dir_id := str(flow_ctx.save_data.get("flow", {}).get("active_directive", "directive.scout_carefully") \
-					if flow_ctx.save_data.get("flow", null) is Dictionary else "directive.scout_carefully")
-
-				# Build party echoes (active party only)
-				var _party_echoes := _get_active_party_echoes()
-
-				# Compute initial bids
-				var bid_state := ConversationServiceScript.compute_bids(
-					_party_echoes, contact_work, _dir_id, contact_cfg_bal
-				)
-
-				# Set NPC opening line from burden_variant (authored in contact_responses.json)
-				var _bv := str(contact_work.get("burden_variant", ""))
-				var _bv_role_data_v: Variant = response_data.get(str(contact_work.get("role", "")), {})
-				var _bv_role_data: Dictionary = _bv_role_data_v if _bv_role_data_v is Dictionary else {}
-				var _bv_variants_v: Variant = _bv_role_data.get("burden_variants", {})
-				var _bv_variants: Dictionary = _bv_variants_v if _bv_variants_v is Dictionary else {}
-				var _bv_variant_v: Variant = _bv_variants.get(_bv, {})
-				var _bv_variant: Dictionary = _bv_variant_v if _bv_variant_v is Dictionary else {}
-				contact_work["npc_line"] = str(_bv_variant.get("opening", ""))
-
-				# Auto-generate responses if party ≤ 3
-				var contact_responses: Array = []
-				if _party_echoes.size() <= 3:
-					contact_responses = ConversationServiceScript.generate_responses(
-						_party_echoes, contact_work, contact_cfg_bal, response_data, t, bid_state
-					)
-
-				explore_map["pending_contact"] = contact_work
-				explore_map["contact_responses"] = contact_responses
-				stage["explore_map"] = explore_map
-				FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
-				flow_ctx.save_request = true
-				flow_ctx.save_request_reason = "stage.contact.start"
-
-				logger.info(t, "stage.contact.start", "NPC conversation started", {
-					"stage_id":    flow_ctx.stage_id,
-					"situation_id": sit_id,
-					"role":        str(contact_work.get("role", "")),
-					"name":        str(contact_work.get("name", "")),
-				})
-
-				flow_ctx.last_snapshot = FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
-				flow_machine.refresh_snapshot(flow_ctx, logger, t)
-				return
-
-		# Legacy stub overlay path (loot / money / stub NPC without contact / recover / protect / endure / pursue)
-		# V2-STAGE-002: apply emotion effects for non-combat situations (loot/npc/money).
-		var _type_emo_v: Variant = _emo_effects.get(sit_type, {})
-		var _type_emo: Dictionary = _type_emo_v if _type_emo_v is Dictionary else {}
-		var _fear_delta:  int = int(_type_emo.get("fear_delta",  0))
-		var _morale_delta: int = int(_type_emo.get("morale_delta", 0))
-		if _fear_delta != 0 or _morale_delta != 0:
-			var _emo_sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
-			var _emo_sanctum: Dictionary = _emo_sanctum_v if _emo_sanctum_v is Dictionary else {}
-			var _emo_roster_v: Variant = _emo_sanctum.get("roster", [])
-			var _emo_roster: Array = _emo_roster_v if _emo_roster_v is Array else []
-			var _emo_party_ids_v: Variant = _emo_sanctum.get("active_party_ids", [])
-			var _emo_party_ids: Array = _emo_party_ids_v if _emo_party_ids_v is Array else []
-			for _emo_echo_v in _emo_roster:
-				if not (_emo_echo_v is Dictionary):
-					continue
-				var _emo_echo: Dictionary = _emo_echo_v
-				if str(_emo_echo.get("id", "")) not in _emo_party_ids:
-					continue
-				if _fear_delta != 0:
-					EmotionService.apply_fear_delta(_emo_echo, _fear_delta,
-						"situation." + sit_type, 80, logger, t)
-				if _morale_delta != 0:
-					EmotionService.apply_morale_delta(_emo_echo, _morale_delta,
-						"situation." + sit_type, logger, t)
-			logger.info(t, "stage.situation.emotion_effect",
-				"Non-combat situation applied emotion effect",
-				{ "type": sit_type, "fear_delta": _fear_delta, "morale_delta": _morale_delta }
-			)
-
-		var result_text := _stub_situation_result(sit_type)
-		var snap := FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
-		snap["data"]["situation_overlay"] = {
+	if str(_r.get("panel_kind", "")) == "choice":
+		# Do not resolve — player must pick a choice first.
+		var _snap := FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
+		_snap["data"]["situation_overlay"] = {
 			"situation_id": sit_id,
 			"type":         sit_type,
-			"result_text":  result_text,
+			"result_text":  "",
+			"panel_kind":   "choice",
+			"choices":      _r.get("choices", []),
 		}
-		flow_ctx.last_snapshot = snap
+		flow_ctx.last_snapshot = _snap
 		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+		return
+
+	# acknowledge / take / leave — apply effects, resolve, then route to RESOLVE screen.
+	var _in_sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var _in_sanctum: Dictionary = _in_sanctum_v if _in_sanctum_v is Dictionary else {}
+	var _in_roster_v: Variant = _in_sanctum.get("roster", [])
+	var _in_roster: Array = _in_roster_v if _in_roster_v is Array else []
+	var _in_party_ids_v: Variant = _in_sanctum.get("active_party_ids", [])
+	var _in_party_ids: Array = _in_party_ids_v if _in_party_ids_v is Array else []
+	var _in_fear_delta:   int = int(_r.get("fear_delta",   0))
+	var _in_morale_delta: int = int(_r.get("morale_delta", 0))
+
+	# P1 CLOSE: Capture pre-emotion status for each affected active party echo.
+	var _in_pre_status: Dictionary = {}
+	for _in_pre_v in _in_roster:
+		if not (_in_pre_v is Dictionary):
+			continue
+		var _in_pre_e: Dictionary = _in_pre_v
+		var _in_pre_id := str(_in_pre_e.get("id", ""))
+		if _in_pre_id not in _in_party_ids:
+			continue
+		if _in_fear_delta == 0 and _in_morale_delta == 0:
+			continue
+		var _in_pre_emo_v: Variant = _in_pre_e.get("emotion", {})
+		var _in_pre_emo: Dictionary = _in_pre_emo_v if _in_pre_emo_v is Dictionary else {}
+		_in_pre_status[_in_pre_id] = EmotionService.get_emotional_status(
+			int(_in_pre_emo.get("morale_current", 50)),
+			int(_in_pre_emo.get("fear_current",   0))
+		)
+
+	for _in_echo_v in _in_roster:
+		if not (_in_echo_v is Dictionary):
+			continue
+		var _in_echo: Dictionary = _in_echo_v
+		if str(_in_echo.get("id", "")) not in _in_party_ids:
+			continue
+		if _in_fear_delta != 0:
+			EmotionService.apply_fear_delta(_in_echo, _in_fear_delta,
+				"situation." + sit_type, 80, logger, t)
+		if _in_morale_delta != 0:
+			EmotionService.apply_morale_delta(_in_echo, _in_morale_delta,
+				"situation." + sit_type, logger, t)
+
+	if int(_r.get("ase_delta", 0)) > 0:
+		econ.add_ase(int(_r.get("ase_delta", 0)), "situation.money", logger, t)
+
+	var _loot_results_v: Variant = _r.get("loot_results", [])
+	var _loot_results: Array = _loot_results_v if _loot_results_v is Array else []
+	if _loot_results.size() > 0:
+		var _em_loot_v: Variant = explore_map.get("loot_results", [])
+		var _em_loot: Array = _em_loot_v if _em_loot_v is Array else []
+		for _loot_entry in _loot_results:
+			_em_loot.append(_loot_entry)
+		explore_map["loot_results"] = _em_loot
+
+	# Mark resolved and update objectives if applicable.
+	for _ri2 in range(situations.size()):
+		var _sv2: Variant = situations[_ri2]
+		if _sv2 is Dictionary and str((_sv2 as Dictionary).get("id", "")) == sit_id:
+			var _s2: Dictionary = _sv2
+			_s2["resolved"] = true
+			situations[_ri2] = _s2
+			break
+	if bool(sit.get("is_objective", false)):
+		explore_map["objectives_found"] = int(explore_map.get("objectives_found", 0)) + 1
+	explore_map["situations"] = situations
+	stage["explore_map"] = explore_map
+	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+	flow_ctx.save_request = true
+	flow_ctx.save_request_reason = "stage.resolve_in_explore"
+
+	# P1 CLOSE: Build emotion_summary (post deltas applied).
+	var _in_emotion_summary: Array = []
+	# Compute direction from the situation's deltas (uniform for all echoes).
+	var _in_direction: String
+	if _in_morale_delta > 0:
+		_in_direction = "lift"
+	elif _in_fear_delta < 0:
+		_in_direction = "ease"
+	elif _in_morale_delta < 0 or _in_fear_delta > 0:
+		_in_direction = "fall"
+	else:
+		_in_direction = "steady"
+	for _in_post_v in _in_roster:
+		if not (_in_post_v is Dictionary):
+			continue
+		var _in_post_e: Dictionary = _in_post_v
+		var _in_post_id := str(_in_post_e.get("id", ""))
+		if _in_post_id not in _in_party_ids:
+			continue
+		if not _in_pre_status.has(_in_post_id):
+			continue
+		var _in_post_emo_v: Variant = _in_post_e.get("emotion", {})
+		var _in_post_emo: Dictionary = _in_post_emo_v if _in_post_emo_v is Dictionary else {}
+		_in_emotion_summary.append({
+			"echo_id":               _in_post_id,
+			"name":                  str(_in_post_e.get("name", "")),
+			"pre_emotional_status":  _in_pre_status[_in_post_id],
+			"post_emotional_status": EmotionService.get_emotional_status(
+				int(_in_post_emo.get("morale_current", 50)),
+				int(_in_post_emo.get("fear_current",   0))
+			),
+			"direction": _in_direction,
+			"tag":       "",
+		})
+
+	# P1 CLOSE: Build effects array.
+	var _in_effects: Array = []
+	# Loot kind chips.
+	for _loot_chip in _loot_results:
+		if _loot_chip is Dictionary:
+			var _loot_kind := str((_loot_chip as Dictionary).get("kind", ""))
+			if not _loot_kind.is_empty():
+				_in_effects.append({
+					"kind":  "item",
+					"label": _loot_kind.capitalize(),
+					"value": "",
+					"tone":  "item",
+				})
+	# Intel clue chip (first clue, if any).
+	var _in_clues_v: Variant = sit.get("intel_clues", [])
+	var _in_clues: Array = _in_clues_v if _in_clues_v is Array else []
+	if _in_clues.size() > 0 and not str(_in_clues[0]).is_empty():
+		_in_effects.append({
+			"kind":  "intel",
+			"label": str(_in_clues[0]),
+			"value": "",
+			"tone":  "intel",
+		})
+
+	# P1 CLOSE: Transition to RESOLVE screen instead of overlay.
+	_resolve_situation_to_screen(
+		sit, sit_id, _in_emotion_summary, _in_effects,
+		str(_r.get("result_text", "")), int(_r.get("ase_delta", 0)), t
+	)
+
+
+# V2-STAGE-003: NPC conversation setup — extracted from _handle_stage_engage_situation.
+# Called when sit_type == TYPE_NPC and contact dict is non-empty.
+# Behavior is byte-identical to the inlined V2-STAGE-003 block (no resolved undo needed
+# since we no longer set resolved up front in the engage handler).
+func _start_contact_conversation(sit: Dictionary, sit_id: String, explore_map: Dictionary, stage: Dictionary, t: int) -> void:
+	var contact_dict_v: Variant = sit.get("contact", {})
+	var contact_dict: Dictionary = contact_dict_v if contact_dict_v is Dictionary else {}
+
+	var _sit_bal_v: Variant = config_service.get_balance().get("data", {})
+	var _sit_bal: Dictionary = _sit_bal_v if _sit_bal_v is Dictionary else {}
+
+	# Apply turn-count modifier based on NPC starting emotion
+	var contact_work := contact_dict.duplicate(true)
+	var npc_fear  := int(contact_work.get("fear",   50))
+	var npc_morale := int(contact_work.get("morale", 50))
+	var tc := int(contact_work.get("turn_count", 2))
+	if npc_fear > 60:
+		tc = max(1, tc - 1)
+	elif npc_morale < 30:
+		tc += 1
+	contact_work["turn_count"] = tc
+
+	# Load contact_responses data
+	var response_data := _load_contact_responses()
+
+	# Load contact config
+	var contact_cfg_bal_v: Variant = _sit_bal.get("contact", {})
+	var contact_cfg_bal: Dictionary = contact_cfg_bal_v if contact_cfg_bal_v is Dictionary else {}
+
+	# Read active directive
+	var _dir_id := str(flow_ctx.save_data.get("flow", {}).get("active_directive", "directive.scout_carefully") \
+		if flow_ctx.save_data.get("flow", null) is Dictionary else "directive.scout_carefully")
+
+	# Build party echoes (active party only)
+	var _party_echoes := _get_active_party_echoes()
+
+	# Compute initial bids
+	var bid_state := ConversationServiceScript.compute_bids(
+		_party_echoes, contact_work, _dir_id, contact_cfg_bal
+	)
+
+	# Set NPC opening line from burden_variant (authored in contact_responses.json)
+	var _bv := str(contact_work.get("burden_variant", ""))
+	var _bv_role_data_v: Variant = response_data.get(str(contact_work.get("role", "")), {})
+	var _bv_role_data: Dictionary = _bv_role_data_v if _bv_role_data_v is Dictionary else {}
+	var _bv_variants_v: Variant = _bv_role_data.get("burden_variants", {})
+	var _bv_variants: Dictionary = _bv_variants_v if _bv_variants_v is Dictionary else {}
+	var _bv_variant_v: Variant = _bv_variants.get(_bv, {})
+	var _bv_variant: Dictionary = _bv_variant_v if _bv_variant_v is Dictionary else {}
+	contact_work["npc_line"] = str(_bv_variant.get("opening", ""))
+
+	# Auto-generate responses if party ≤ 3
+	var contact_responses: Array = []
+	if _party_echoes.size() <= 3:
+		contact_responses = ConversationServiceScript.generate_responses(
+			_party_echoes, contact_work, contact_cfg_bal, response_data, t, bid_state
+		)
+
+	explore_map["pending_contact"] = contact_work
+	explore_map["contact_responses"] = contact_responses
+	stage["explore_map"] = explore_map
+	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+	flow_ctx.save_request = true
+	flow_ctx.save_request_reason = "stage.contact.start"
+
+	logger.info(t, "stage.contact.start", "NPC conversation started", {
+		"stage_id":    flow_ctx.stage_id,
+		"situation_id": sit_id,
+		"role":        str(contact_work.get("role", "")),
+		"name":        str(contact_work.get("name", "")),
+	})
+
+	flow_ctx.last_snapshot = FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# V2-STAGE-004: Resolve a choice-overlay option (obstacle / structure).
+# ────────────────────────────────────────────────────────────────────────────
+
+# Payload: { "situation_id": String, "choice_id": String }
+func _handle_stage_resolve_situation_choice(action: Dictionary, t: int) -> void:
+	var sit_id    := str(action.get("situation_id", ""))
+	var choice_id := str(action.get("choice_id", ""))
+	if sit_id.is_empty() or choice_id.is_empty():
+		logger.debug(t, "stage.resolve_choice.invalid", "resolve_situation_choice: missing payload", {
+			"situation_id": sit_id, "choice_id": choice_id
+		})
+		return
+
+	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
+	if stage.is_empty():
+		return
+
+	var map_v: Variant = stage.get("explore_map", {})
+	var explore_map: Dictionary = map_v if map_v is Dictionary else {}
+	var sits_v: Variant = explore_map.get("situations", [])
+	var situations: Array = sits_v if sits_v is Array else []
+
+	# Find the situation.
+	var sit: Dictionary = {}
+	for _sv in situations:
+		if _sv is Dictionary and str((_sv as Dictionary).get("id", "")) == sit_id:
+			sit = _sv
+			break
+
+	if sit.is_empty():
+		logger.debug(t, "stage.resolve_choice.not_found", "resolve_situation_choice: situation not found", {
+			"situation_id": sit_id
+		})
+		return
+
+	var sit_type := str(sit.get("type", ""))
+
+	# Seeded rng — same namespace as resolve_in_explore (no draws made in resolve_choice currently).
+	var _realm_seed := int(flow_ctx.save_data.get("realms", {}).get(flow_ctx.realm_id, {}).get("seed", 0))
+	var _rng := CampaignSeed.get_rng_from(_realm_seed, "stage.resolution.%s" % sit_id)
+
+	var _sit_bal_v: Variant = config_service.get_balance().get("data", {})
+	var _sit_bal: Dictionary = _sit_bal_v if _sit_bal_v is Dictionary else {}
+	var _stages_cfg_v: Variant = _sit_bal.get("stages", {})
+	var _stages_cfg: Dictionary = _stages_cfg_v if _stages_cfg_v is Dictionary else {}
+
+	var _c := SituationResolutionServiceScript.resolve_choice(sit, choice_id, _stages_cfg, _rng)
+
+	# P1 CLOSE: Capture pre-emotion status before applying choice deltas.
+	var _rc_sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var _rc_sanctum: Dictionary = _rc_sanctum_v if _rc_sanctum_v is Dictionary else {}
+	var _rc_roster_v: Variant = _rc_sanctum.get("roster", [])
+	var _rc_roster: Array = _rc_roster_v if _rc_roster_v is Array else []
+	var _rc_party_ids_v: Variant = _rc_sanctum.get("active_party_ids", [])
+	var _rc_party_ids: Array = _rc_party_ids_v if _rc_party_ids_v is Array else []
+	var _rc_fear_delta:   int = int(_c.get("fear_delta",   0))
+	var _rc_morale_delta: int = int(_c.get("morale_delta", 0))
+
+	var _rc_pre_status: Dictionary = {}
+	for _rc_pre_v in _rc_roster:
+		if not (_rc_pre_v is Dictionary):
+			continue
+		var _rc_pre_e: Dictionary = _rc_pre_v
+		var _rc_pre_id := str(_rc_pre_e.get("id", ""))
+		if _rc_pre_id not in _rc_party_ids:
+			continue
+		if _rc_fear_delta == 0 and _rc_morale_delta == 0:
+			continue
+		var _rc_pre_emo_v: Variant = _rc_pre_e.get("emotion", {})
+		var _rc_pre_emo: Dictionary = _rc_pre_emo_v if _rc_pre_emo_v is Dictionary else {}
+		_rc_pre_status[_rc_pre_id] = EmotionService.get_emotional_status(
+			int(_rc_pre_emo.get("morale_current", 50)),
+			int(_rc_pre_emo.get("fear_current",   0))
+		)
+
+	# Apply emotion effects to active party.
+	for _rc_echo_v in _rc_roster:
+		if not (_rc_echo_v is Dictionary):
+			continue
+		var _rc_echo: Dictionary = _rc_echo_v
+		if str(_rc_echo.get("id", "")) not in _rc_party_ids:
+			continue
+		if _rc_fear_delta != 0:
+			EmotionService.apply_fear_delta(_rc_echo, _rc_fear_delta,
+				"situation." + sit_type, 80, logger, t)
+		if _rc_morale_delta != 0:
+			EmotionService.apply_morale_delta(_rc_echo, _rc_morale_delta,
+				"situation." + sit_type, logger, t)
+
+	# Advance turn count by choice's turn_cost.
+	explore_map["turn_count"] = int(explore_map.get("turn_count", 0)) + int(_c.get("turn_cost", 0))
+
+	# Mark situation resolved.
+	for _ri3 in range(situations.size()):
+		var _sv3: Variant = situations[_ri3]
+		if _sv3 is Dictionary and str((_sv3 as Dictionary).get("id", "")) == sit_id:
+			var _s3: Dictionary = _sv3
+			_s3["resolved"] = true
+			situations[_ri3] = _s3
+			break
+	explore_map["situations"] = situations
+	stage["explore_map"] = explore_map
+	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+	flow_ctx.save_request = true
+	flow_ctx.save_request_reason = "stage.resolve_choice"
+
+	# P1 CLOSE: Build emotion_summary and effects, then route to RESOLVE screen.
+	var _rc_emotion_summary: Array = []
+	var _rc_direction: String
+	if _rc_morale_delta > 0:
+		_rc_direction = "lift"
+	elif _rc_fear_delta < 0:
+		_rc_direction = "ease"
+	elif _rc_morale_delta < 0 or _rc_fear_delta > 0:
+		_rc_direction = "fall"
+	else:
+		_rc_direction = "steady"
+	for _rc_post_v in _rc_roster:
+		if not (_rc_post_v is Dictionary):
+			continue
+		var _rc_post_e: Dictionary = _rc_post_v
+		var _rc_post_id := str(_rc_post_e.get("id", ""))
+		if _rc_post_id not in _rc_party_ids:
+			continue
+		if not _rc_pre_status.has(_rc_post_id):
+			continue
+		var _rc_post_emo_v: Variant = _rc_post_e.get("emotion", {})
+		var _rc_post_emo: Dictionary = _rc_post_emo_v if _rc_post_emo_v is Dictionary else {}
+		_rc_emotion_summary.append({
+			"echo_id":               _rc_post_id,
+			"name":                  str(_rc_post_e.get("name", "")),
+			"pre_emotional_status":  _rc_pre_status[_rc_post_id],
+			"post_emotional_status": EmotionService.get_emotional_status(
+				int(_rc_post_emo.get("morale_current", 50)),
+				int(_rc_post_emo.get("fear_current",   0))
+			),
+			"direction": _rc_direction,
+			"tag":       "",
+		})
+
+	# Turn-cost chip for find_route / any turn_cost > 0.
+	var _rc_effects: Array = []
+	var _rc_turn_cost := int(_c.get("turn_cost", 0))
+	if _rc_turn_cost > 0 or choice_id == "find_route":
+		_rc_effects.append({
+			"kind":  "objective",
+			"label": "+%d turn" % _rc_turn_cost,
+			"value": "",
+			"tone":  "objective",
+		})
+
+	_resolve_situation_to_screen(
+		sit, sit_id, _rc_emotion_summary, _rc_effects,
+		str(_c.get("result_text", "")), 0, t
+	)
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -5590,6 +5869,13 @@ func _build_contact_resolve_snapshot(
 	var continue_to := FlowStateIds.STAGE_EXPLORE if go_back_to_stage else FlowStateIds.SANCTUM
 	var continue_label := "Return to Stage" if go_back_to_stage else "Return to Sanctum"
 
+	var _contact_verdict: String
+	match outcome:
+		"good":    _contact_verdict = "good"
+		"partial": _contact_verdict = "partial"
+		"failed":  _contact_verdict = "missed"
+		_:         _contact_verdict = ""
+
 	return {
 		"type": FlowStateIds.RESOLVE,
 		"data": {
@@ -5598,6 +5884,10 @@ func _build_contact_resolve_snapshot(
 			"role_label":  role_label,
 			"outcome":     outcome,
 			"outcome_text": outcome_text,
+			# P1 CLOSE: additive fields for unified Resolve component.
+			"surface":      "npc_contact",
+			"verdict":      _contact_verdict,
+			"summary_line": outcome_text,
 		},
 		"actions": {
 			"cta.continue": {
@@ -5609,6 +5899,74 @@ func _build_contact_resolve_snapshot(
 		},
 		"meta": { "t": t },
 	}
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# P1 CLOSE: Unified Resolve snapshot builder for in-explore situation outcomes.
+# Mirrors _build_contact_resolve_snapshot. Called by _resolve_situation_to_screen.
+# ────────────────────────────────────────────────────────────────────────────
+func _build_situation_resolve_snapshot(
+		sit: Dictionary,
+		summary_line: String,
+		emotion_summary: Array,
+		effects: Array,
+		ase_awarded: int,
+		t: int
+) -> Dictionary:
+	var sit_type := str(sit.get("type", ""))
+
+	# verdict: take-types → "carried"; acknowledge/leave (omen/ritual/npc) → "passed";
+	# choice-resolved (obstacle/structure) → "passed".
+	var _verdict: String
+	match sit_type:
+		SituationModelScript.TYPE_LOOT, SituationModelScript.TYPE_MONEY:
+			_verdict = "carried"
+		_:
+			_verdict = "passed"
+
+	var _breakdown: Array = []
+	if ase_awarded > 0:
+		_breakdown.append({ "label": "Found", "delta": ase_awarded, "currency": "ase" })
+
+	return {
+		"type": FlowStateIds.RESOLVE,
+		"meta": { "t": t },
+		"data": {
+			"run_type":        "situation_result",
+			"surface":         sit_type,
+			"verdict":         _verdict,
+			"summary_line":    summary_line,
+			"emotion_summary": emotion_summary,
+			"effects":         effects,
+			"ase_awarded":     ase_awarded,
+			"ekwan_awarded":   0,
+			"reward_breakdown": _breakdown,
+		},
+		"actions": {
+			"cta.continue": {
+				"type":  "flow.go_state",
+				"to":    FlowStateIds.STAGE_EXPLORE,
+				"label": "Return to Stage",
+				"slot":  "cta.continue",
+			},
+		},
+	}
+
+
+# P1 CLOSE: Shared helper — transitions to RESOLVE screen for a resolved in-explore situation.
+# Keeps: resolved=true + save already set by caller. Only the OUTPUT (snapshot + transition) changes.
+func _resolve_situation_to_screen(
+		sit: Dictionary,
+		_sit_id: String,
+		emotion_summary: Array,
+		effects: Array,
+		summary_line: String,
+		ase_awarded: int,
+		t: int
+) -> void:
+	var _snap := _build_situation_resolve_snapshot(sit, summary_line, emotion_summary, effects, ase_awarded, t)
+	flow_ctx.last_snapshot = _snap
+	flow_machine.transition(FlowStateIds.RESOLVE, flow_ctx, logger, t, "stage.situation.resolve_screen")
 
 
 # Maps a turn_score to a reaction word that keys into npc_followup in contact_responses.json.
@@ -5847,29 +6205,6 @@ func _mark_situation_revealed(stage: Dictionary, sit_id: String, t: int) -> void
 	})
 
 
-# Returns a stub result text for non-combat situation types.
-# Real outcomes deferred to V2-STAGE-003 (NPC) and V2-STAGE-004 (loot/money).
-func _stub_situation_result(sit_type: String) -> String:
-	match sit_type:
-		SituationModelScript.TYPE_NPC:
-			return "A presence stirs. The party watches, unseen. Nothing more for now."
-		SituationModelScript.TYPE_LOOT:
-			return "Something left behind. The party gathers what they can."
-		SituationModelScript.TYPE_MONEY:
-			return "An offering, unclaimed. The party takes it quietly."
-		# V2-STAGE-002: new objective types — stub results until V2-STAGE-004 wires them fully
-		ObjectiveModelScript.TYPE_RECOVER:
-			return "The party searches the area. Something is retrieved — for now, they carry it forward."
-		ObjectiveModelScript.TYPE_PROTECT:
-			return "The presence here is acknowledged. The party holds its ground."
-		ObjectiveModelScript.TYPE_ENDURE:
-			return "Pressure bears down. The party holds their position long enough. They do not break."
-		ObjectiveModelScript.TYPE_PURSUE:
-			return "A trace of movement. The party acts quickly — the window does not stay open long."
-		_:
-			return "The party finds something unexpected. More will be known in time."
-
-
 # V2-INTEL-001: Returns the atmospheric intel clue written to a situation on first scout reveal.
 # Not called on direct engagement — engagement-reveal is firsthand, not prior intel.
 func _intel_clue_for_type(sit_type: String) -> String:
@@ -5883,6 +6218,11 @@ func _intel_clue_for_type(sit_type: String) -> String:
 		ObjectiveModelScript.TYPE_PROTECT:     return "A fragile presence holds out nearby. It will not endure without help."
 		ObjectiveModelScript.TYPE_ENDURE:      return "The pressure does not stop. Whatever is here does not yield easily."
 		ObjectiveModelScript.TYPE_PURSUE:      return "Movement — recent. Something is moving through this space with purpose."
+		# V2-STAGE-004: new in-explore situation types
+		SituationModelScript.TYPE_OMEN:        return "A wrongness in the air — birds gone quiet, a chill with no wind."
+		SituationModelScript.TYPE_OBSTACLE:    return "The way narrows and snags. Whatever lies ahead will not yield easily to a careless step."
+		SituationModelScript.TYPE_RITUAL:      return "Worn ground and old ash. Hands have tended this place, again and again."
+		SituationModelScript.TYPE_STRUCTURE:   return "Walls, deliberate and standing. Someone raised this — and may yet return to it."
 		_:                                     return "Something is present here."
 
 

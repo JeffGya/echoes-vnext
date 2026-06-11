@@ -919,6 +919,11 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			sc["intel"] = {}
 			repaired = true
 			repaired_notes.append("stage_context.intel set to {} (V2 stub)")
+		# V2-STAGE-004: encounter_approach stores choice results from non-combat situations
+		if not sc.has("encounter_approach"):
+			sc["encounter_approach"] = {}
+			repaired = true
+			repaired_notes.append("stage_context.encounter_approach defaulted to {} (V2-STAGE-004)")
 
 	# ---- REALM-001: realms repair ----
 	if not save.has("realms") or typeof(save["realms"]) != TYPE_DICTIONARY:
@@ -971,6 +976,10 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 							if not _obj_repair.has("required"):
 								_obj_repair["required"] = true
 								repaired = true
+							# V2-STAGE-004: params defensive default (ObjectiveModel.make already sets it)
+							if not _obj_repair.has("params"):
+								_obj_repair["params"] = {}
+								repaired = true
 					if repaired:
 						repaired_notes.append("realm.%s.stage.%s objectives completed/required defaulted (V2-STAGE-002)" % [_realm_id, _stage_label])
 
@@ -1020,6 +1029,10 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 							_003_repaired = true
 						if not _emap_003.has("contact_result"):
 							_emap_003["contact_result"] = {}
+							_003_repaired = true
+						# V2-STAGE-004: loot_results accumulates resolved loot situation pickups
+						if not _emap_003.has("loot_results"):
+							_emap_003["loot_results"] = []
 							_003_repaired = true
 					if _003_repaired:
 						repaired = true
