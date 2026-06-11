@@ -66,12 +66,19 @@ static func get_or_create(realm_id: String, ctx: FlowContext, t: int) -> Diction
 		explore_cfg["objective_pool"] = realm_obj_pool_v as Array
 
 	# V2-STAGE-002: balance.json data.stages block (foundation_objective_pool fallback)
+	# V2-STAGE-003: contact config + realm identifiers for NPC contact generation
 	var stages_cfg: Dictionary = {}
+	var contact_cfg: Dictionary = {}
 	if ctx.config_service != null and ctx.config_service.has_method("get_balance"):
 		var bal_data_v: Variant = ctx.config_service.get_balance().get("data", {})
 		var bal_data: Dictionary = bal_data_v if bal_data_v is Dictionary else {}
 		var stages_cfg_v: Variant = bal_data.get("stages", {})
 		stages_cfg = stages_cfg_v if stages_cfg_v is Dictionary else {}
+		var contact_bal_v: Variant = bal_data.get("contact", {})
+		contact_cfg = contact_bal_v if contact_bal_v is Dictionary else {}
+	# Inject realm identity so contact RNG paths and name pools are realm-keyed
+	contact_cfg["realm_id"]      = realm_id
+	contact_cfg["realm_virtue"]  = str(cfg.get("virtue", ""))
 
 	# Determine run_count (0 for new, old+1 for re-run)
 	var run_count := 0
@@ -105,7 +112,8 @@ static func get_or_create(realm_id: String, ctx: FlowContext, t: int) -> Diction
 
 	# Generate deterministic stages and wire them into the model
 	# V2-STAGE-001/002: pass explore_cfg + stages_cfg for map and objective pool config
-	var stages := RealmGenerator.generate(realm_seed, stage_count, obj_min, obj_max, explore_cfg, stages_cfg)
+	# V2-STAGE-003: pass contact_cfg so NPC situations get contact dicts generated
+	var stages := RealmGenerator.generate(realm_seed, stage_count, obj_min, obj_max, explore_cfg, stages_cfg, contact_cfg)
 	model["stages"] = stages
 
 	# Store in save_data

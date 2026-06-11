@@ -2637,10 +2637,152 @@
 			"cautious_advance_fear_threshold": 50,
 
 			"situation_emotion_effects": {
-				"loot":   { "fear_delta": -5, "morale_delta": 0 },
-				"npc":    { "fear_delta":  0, "morale_delta": 8 },
-				"money":  { "fear_delta": -3, "morale_delta": 5 }
+				"loot":      { "fear_delta": -5, "morale_delta":  0 },
+				"npc":       { "fear_delta":  0, "morale_delta":  8 },
+				"money":     { "fear_delta": -3, "morale_delta":  5 },
+				"omen":      { "fear_delta":  2, "morale_delta": -3 },
+				"ritual":    { "fear_delta": -4, "morale_delta":  4 },
+				"obstacle":  { "fear_delta":  0, "morale_delta":  0 },
+				"structure": { "fear_delta":  0, "morale_delta":  0 }
+			},
+			"situation_resolution": {
+				"omen": {
+					"panel_kind": "acknowledge",
+					"result_text": [
+						"The sign has been read. The party moves on, carrying what it means.",
+						"Some marks are left not to warn, but to remind. The party does not forget."
+					]
+				},
+				"ritual": {
+					"panel_kind": "leave",
+					"result_text": [
+						"The old rite runs its course. Something settles in the air.",
+						"Ground that has been prayed over does not forget. The party rests, then walks."
+					]
+				},
+				"loot": {
+					"panel_kind": "take",
+					"result_text": [
+						"Something left behind. The party gathers what they can.",
+						"It was not abandoned — it was waiting. The party takes it.",
+						"Not everything lost is gone. The party finds what remains."
+					],
+					"loot": { "kinds": ["herb_bundle", "cloth_scrap", "carved_token"] }
+				},
+				"money": {
+					"panel_kind": "take",
+					"result_text": [
+						"Ase — misplaced, perhaps, or left as passage. The party accepts it.",
+						"An offering with no one left to receive it. The party carries it forward."
+					],
+					"money": { "ase_min": 8, "ase_max": 20 }
+				},
+				"npc": {
+					"panel_kind": "acknowledge",
+					"result_text": [
+						"The encounter has passed. What was said stays with the party.",
+						"Not every meeting leaves a gift. This one leaves a mark."
+					]
+				},
+				"obstacle": {
+					"panel_kind": "choice",
+					"result_text_by_choice": {
+						"push_through": "They did not yield. The path opened — bruised but unblocked.",
+						"find_route":   "A longer road, but a clear one. The party reads the land and finds another way."
+					},
+					"choices": [
+						{ "id": "push_through", "label_key": "Push Through", "fear_delta": 0, "morale_delta": -6, "turn_cost": 0 },
+						{ "id": "find_route",   "label_key": "Find a Route",  "fear_delta": 0, "morale_delta":  0, "turn_cost": 1 }
+					]
+				},
+				"structure": {
+					"panel_kind": "choice",
+					"result_text_by_choice": {
+						"enter":   "The party steps inside. The walls hold old air — and old intention.",
+						"observe": "They do not enter. They circle once, read what can be read, and move."
+					},
+					"choices": [
+						{ "id": "enter",   "label_key": "Enter",   "fear_delta":  3, "morale_delta": 6, "turn_cost": 0 },
+						{ "id": "observe", "label_key": "Observe", "fear_delta": -2, "morale_delta": 2, "turn_cost": 0 }
+					]
+				}
 			}
+		},
+
+		"contact": {
+			"roles": {
+				"witness":        { "fear_range": [20, 40], "morale_range": [50, 70], "turn_count_base": 2, "label": "A Witness" },
+				"guide":          { "fear_range": [15, 35], "morale_range": [55, 75], "turn_count_base": 2, "label": "A Guide" },
+				"charge":         { "fear_range": [50, 80], "morale_range": [20, 45], "turn_count_base": 3, "label": "Someone in Need" },
+				"claimant":       { "fear_range": [10, 30], "morale_range": [30, 55], "turn_count_base": 3, "label": "A Claimant" },
+				"temporary_ally": { "fear_range": [20, 50], "morale_range": [40, 65], "turn_count_base": 3, "label": "A Potential Ally" }
+			},
+			"outcome_thresholds": {
+				"good":    { "npc_fear_max": 35, "npc_morale_min": 60 },
+				"partial": { "npc_fear_max": 60, "npc_morale_min": 35 },
+				"failed":  { "description": "anything worse than partial" }
+			},
+			"failure_thresholds_by_role": {
+				"claimant":       { "fear_floor": 0,  "morale_floor": 15 },
+				"charge":         { "fear_ceiling": 90 },
+				"witness":        { "morale_floor": 20 },
+				"guide":          { "morale_floor": 25 },
+				"temporary_ally": { "morale_floor": 30 }
+			},
+			"resonance_weights": { "primary": 1.0, "secondary": 0.7, "two_steps": 0.4, "opposite": 0.1 },
+			"emotional_fit_modifiers": {
+				"bold":       { "direct": 0.2, "excessive_gentle": -0.1 },
+				"wary":       { "patient_early": 0.1, "patient_firm": 0.2, "direct_only": -0.1 },
+				"grieving":   { "honest": 0.2, "false_comfort": -0.2 },
+				"proud":      { "respectful": 0.2, "condescension": -0.3 },
+				"protective": { "grounding": 0.2, "aggression": -0.2 },
+				"reflective": { "layered": 0.2, "bluntness": -0.2 },
+				"high_fear_grounding_bonus": 0.1,
+				"high_fear_aggressive_penalty": -0.15
+			},
+			"social_effects": {
+				"consulted_morale_delta": 3,
+				"not_consulted_morale_delta": -1,
+				"speaker_morale_delta": 5,
+				"speaker_good_outcome_bonus": 3,
+				"speaker_failure_penalty": -2,
+				"rival_jealousy_morale_delta": -3,
+				"friend_pride_morale_delta": 3,
+				"rival_jealousy_bond_delta": -2,
+				"friend_pride_bond_delta": 2
+			},
+			"combat_fear_bleed": 8,
+			"storyweight_speak_partial_step": 0.2,
+			"storyweight_speak_threshold": 0.5,
+			"continuity_temporary_ally_good": 5,
+			"directive_effects": {
+				"seek_signs": {
+					"witness_resonance_bonus": 0.1,
+					"guide_reveal_bonus": 1
+				},
+				"scout_carefully": {
+					"bid_suppression": ["aduro", "sum_okwanfo"],
+					"bid_boost": ["onyamesu", "okomfo"]
+				}
+			},
+			"disposition_pool_by_role": {
+				"witness":        ["reflective", "wary", "reflective", "grieving"],
+				"guide":          ["reflective", "bold", "protective"],
+				"charge":         ["protective", "grieving", "wary"],
+				"claimant":       ["proud", "wary", "proud", "bold"],
+				"temporary_ally": ["bold", "wary", "protective", "reflective"]
+			},
+			"name_pool_by_realm": {
+				"realm.01": ["The Wanderer", "A Bound Spirit", "The Last Keeper", "An Elder's Echo", "A Frightened Shade"],
+				"realm.02": ["The Hollow Watcher", "A Grieving Presence", "The Wise Remnant", "An Ashen Voice", "The Still One"]
+			},
+			"name_pool_fallback": ["An Unknown Presence", "A Lingering Spirit", "A Silent Witness", "The One Who Waits"],
+			"role_pool_by_realm": {
+				"realm.01": ["witness", "guide", "witness", "charge"],
+				"realm.02": ["witness", "claimant", "guide", "charge", "temporary_ally"]
+			},
+			"role_pool_fallback": ["witness", "witness", "guide", "charge"],
+			"virtue_wheel": ["courage","leadership","truth","wisdom","humility","acceptance","forgiveness","compassion","empathy","generosity"]
 		}
 	}
 }

@@ -15,42 +15,52 @@ extends RefCounted
 #
 # Do NOT reorder type pool entries — determinism rule.
 
-# V2-STAGE-003: "role" field (npc/contact/ritual/obstacle) deferred.
-# When ready, add: "role": "" as default in make(), and "role" to REQUIRED_FIELDS.
-
 const REQUIRED_FIELDS: Array = [
 	"id", "type", "pos", "seed", "revealed",
 	"is_objective", "resolved", "intel_clues",
 	"objective_index",  # V2-STAGE-002: -1 for non-objective situations
+	"role",             # contact role for NPC situations; "" for non-NPC types
 ]
 
 # Situation type constants
-const TYPE_COMBAT := "combat"
-const TYPE_NPC    := "npc"
-const TYPE_LOOT   := "loot"
-const TYPE_MONEY  := "money"
+const TYPE_COMBAT    := "combat"
+const TYPE_NPC       := "npc"
+const TYPE_LOOT      := "loot"
+const TYPE_MONEY     := "money"
+const TYPE_OMEN      := "omen"      # V2-STAGE-004
+const TYPE_OBSTACLE  := "obstacle"  # V2-STAGE-004
+const TYPE_RITUAL    := "ritual"    # V2-STAGE-004
+const TYPE_STRUCTURE := "structure" # V2-STAGE-004
 
-const VALID_TYPES: Array = [TYPE_COMBAT, TYPE_NPC, TYPE_LOOT, TYPE_MONEY]
+const VALID_TYPES: Array = [TYPE_COMBAT, TYPE_NPC, TYPE_LOOT, TYPE_MONEY, TYPE_OMEN, TYPE_OBSTACLE, TYPE_RITUAL, TYPE_STRUCTURE]
 
 # Weighted type pool for random situation generation.
 # Do NOT reorder — determinism guarantee. Append new types at end only.
 const SITUATION_TYPE_POOL: Array = [
-	TYPE_COMBAT,  # weight 3
+	TYPE_COMBAT,    # weight 3
 	TYPE_COMBAT,
 	TYPE_COMBAT,
-	TYPE_NPC,     # weight 2
+	TYPE_NPC,       # weight 2
 	TYPE_NPC,
-	TYPE_LOOT,    # weight 2
+	TYPE_LOOT,      # weight 2
 	TYPE_LOOT,
-	TYPE_MONEY,   # weight 1
+	TYPE_MONEY,     # weight 1
+	TYPE_OMEN,      # weight 1 — V2-STAGE-004
+	TYPE_OBSTACLE,  # weight 1 — V2-STAGE-004
+	TYPE_RITUAL,    # weight 1 — V2-STAGE-004
+	TYPE_STRUCTURE, # weight 1 — V2-STAGE-004
 ]
 
 # Short player-facing descriptions (revealed situations only).
 const TYPE_DESCRIPTIONS: Dictionary = {
-	"combat": "Signs of conflict ahead.",
-	"npc":    "A presence lingers here.",
-	"loot":   "Something left behind.",
-	"money":  "A trace of offering.",
+	"combat":    "Signs of conflict ahead.",
+	"npc":       "A presence lingers here.",
+	"loot":      "Something left behind.",
+	"money":     "A trace of offering.",
+	"omen":      "An ill wind has passed through here.",      # V2-STAGE-004
+	"obstacle":  "Something blocks the path forward.",         # V2-STAGE-004
+	"ritual":    "Old ceremony breathes in this ground.",      # V2-STAGE-004
+	"structure": "A standing place — someone built this.",     # V2-STAGE-004
 }
 
 
@@ -77,6 +87,7 @@ static func make(
 		"resolved":        false,
 		"intel_clues":     [],  # V2-INTEL-001 extensibility slot
 		"objective_index": objective_index,
+		"role":            "",
 	}
 
 

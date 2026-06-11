@@ -4,6 +4,22 @@ extends RefCounted
 
 const SituationModelScript    := preload("res://core/realms/SituationModel.gd")     # V2-STAGE-001
 const StageExploreModelScript := preload("res://core/realms/StageExploreModel.gd")  # V2-STAGE-001
+const ContactModelScript      := preload("res://core/realms/ContactModel.gd")       # V2-STAGE-003
+
+# Lesson 8: data-heavy content in JSON, loaded once into a static cache.
+static var _npc_lines_loaded: bool = false
+static var _npc_lines: Dictionary = {}
+
+static func _ensure_npc_lines_loaded() -> void:
+	if _npc_lines_loaded:
+		return
+	var f := FileAccess.open("res://data/conversations/npc_opening_lines.json", FileAccess.READ)
+	if f != null:
+		var parsed: Variant = JSON.parse_string(f.get_as_text())
+		f.close()
+		if parsed is Dictionary:
+			_npc_lines = parsed
+	_npc_lines_loaded = true
 
 # REALM-002: Deterministic stage list generator for a realm run.
 # Pure static — no side effects, no ctx, no OS calls.
@@ -40,6 +56,16 @@ const _PRE_BOSS_POOL_FALLBACK: Array = [
 	ObjectiveModel.TYPE_SHRINE,  # weight 1
 ]
 
+# Burden variant keys per role — must stay in sync with contact_responses.json burden_variants.
+# IMMUTABLE order: determinism guarantee. Append new keys at end only.
+const _BURDEN_VARIANTS_BY_ROLE: Dictionary = {
+	"witness":        ["still_waiting", "grateful_to_be_found"],
+	"guide":          ["knows_too_much", "reluctant_helper"],
+	"charge":         ["hiding_fear", "refusing_danger"],
+	"claimant":       ["defending_what_is_lost", "testing_the_newcomers"],
+	"temporary_ally": ["measuring_worth", "waiting_for_the_right_sign"],
+}
+
 # Minimum Chebyshev distance between any two situations.
 const _MIN_SIT_DISTANCE: int = 4
 
@@ -71,7 +97,8 @@ static func generate(
 	obj_count_min: int,
 	obj_count_max: int,
 	explore_cfg: Dictionary = {},
-	stages_cfg: Dictionary = {}
+	stages_cfg: Dictionary = {},
+	contact_cfg: Dictionary = {}
 ) -> Array:
 	# Resolve the pre-boss objective pool (config-driven, realm override wins).
 	var obj_pool: Array = _resolve_objective_pool(explore_cfg, stages_cfg)
@@ -115,7 +142,7 @@ static func generate(
 
 		# V2-STAGE-001/002: Generate exploration map for this stage.
 		# Seed paths are appended after all existing draws — never reorder.
-		var explore_map := _generate_explore_map(realm_seed, i, explore_cfg, objectives)
+		var explore_map := _generate_explore_map(realm_seed, i, explore_cfg, objectives, contact_cfg)
 
 		stages.append(StageModel.make(i, stage_type, stage_seed, objectives, explore_map))
 
@@ -166,7 +193,8 @@ static func _generate_explore_map(
 	realm_seed: int,
 	stage_index: int,
 	cfg: Dictionary,
-	objectives: Array = []
+	objectives: Array = [],
+	contact_cfg: Dictionary = {}
 ) -> Dictionary:
 	# --- Map dimensions ---
 	var size_rng := CampaignSeed.get_rng_from(realm_seed, "stage.%d.explore.map_size" % stage_index)
@@ -205,7 +233,7 @@ static func _generate_explore_map(
 
 	# --- Situation placement ---
 	var situations: Array = _place_situations(
-		realm_seed, stage_index, width, height, sit_count, obj_count, objectives
+		realm_seed, stage_index, width, height, sit_count, obj_count, objectives, contact_cfg
 	)
 
 	return StageExploreModelScript.make(width, height, situations)
@@ -222,7 +250,8 @@ static func _place_situations(
 	height: int,
 	sit_count: int,
 	obj_count: int,
-	objectives: Array = []
+	objectives: Array = [],
+	contact_cfg: Dictionary = {}
 ) -> Array:
 	var situations: Array = []
 	var placed_positions: Array = []  # Array[{col, row}]
@@ -281,6 +310,14 @@ static func _place_situations(
 			bound_obj_index  # V2-STAGE-002: bind to objective
 		))
 
+		# V2-STAGE-003: generate and attach contact for NPC situations
+		if sit_type == SituationModelScript.TYPE_NPC and not contact_cfg.is_empty():
+			var contact := _generate_contact(
+				realm_seed, stage_index, idx, "sit.%d" % idx, contact_cfg, 0
+			)
+			situations[situations.size() - 1]["contact"] = contact
+			situations[situations.size() - 1]["role"] = str(contact.get("role", ""))
+
 	return situations
 
 
@@ -293,3 +330,106 @@ static func _is_far_enough(col: int, row: int, placed: Array) -> bool:
 		if max(dc, dr) < _MIN_SIT_DISTANCE:
 			return false
 	return true
+
+
+# V2-STAGE-003: Generate a deterministic ContactModel dict for one NPC situation.
+# fail_count is appended as a version suffix to all seed paths so NPC re-seeds on retry.
+# All paths under "stage.N.explore.sit.M.contact.vF.*" — appended after existing draws, never reorder.
+static func _generate_contact(
+	realm_seed: int,
+	stage_index: int,
+	sit_index: int,
+	sit_id: String,
+	contact_cfg: Dictionary,
+	fail_count: int = 0
+) -> Dictionary:
+	var v := "v%d" % fail_count
+	var ns := "stage.%d.explore.sit.%d.contact.%s" % [stage_index, sit_index, v]
+
+	# Role: pick from realm's role_pool
+	# realm_id comes from contact_cfg["realm_id"] when caller knows it; fallback to stage_index hint
+	var realm_id: String = str(contact_cfg.get("realm_id", "realm.%02d" % (stage_index + 1)))
+	var role_pools_v: Variant = contact_cfg.get("role_pool_by_realm", {})
+	var role_pools: Dictionary = role_pools_v if role_pools_v is Dictionary else {}
+	var role_pool_v: Variant = role_pools.get(realm_id, [])
+	var role_pool: Array = role_pool_v if (role_pool_v is Array and not (role_pool_v as Array).is_empty()) else []
+	if role_pool.is_empty():
+		var fb_pool_v: Variant = contact_cfg.get("role_pool_fallback", [])
+		role_pool = fb_pool_v if (fb_pool_v is Array and not (fb_pool_v as Array).is_empty()) else ["witness"]
+	var role_rng := CampaignSeed.get_rng_from(realm_seed, ns + ".role")
+	var role: String = str(role_pool[role_rng.randi_range(0, role_pool.size() - 1)])
+
+	# Primary virtue: from realm config (passed via contact_cfg["realm_virtue"] or fallback "courage")
+	var virtue_primary: String = str(contact_cfg.get("realm_virtue", "courage"))
+
+	# Secondary virtue: pick from adjacent virtues of primary
+	var virtue_wheel_v: Variant = contact_cfg.get("virtue_wheel", [])
+	var virtue_wheel: Array = virtue_wheel_v if virtue_wheel_v is Array else []
+	var virtue_secondary: String = virtue_primary
+	if virtue_wheel.size() >= 3:
+		var idx_in_wheel := virtue_wheel.find(virtue_primary)
+		if idx_in_wheel >= 0:
+			var wheel_size := virtue_wheel.size()
+			var adj_left  := str(virtue_wheel[(idx_in_wheel - 1 + wheel_size) % wheel_size])
+			var adj_right := str(virtue_wheel[(idx_in_wheel + 1) % wheel_size])
+			var virt_rng := CampaignSeed.get_rng_from(realm_seed, ns + ".virtue")
+			virtue_secondary = adj_left if virt_rng.randi() % 2 == 0 else adj_right
+
+	# Disposition: pick from disposition_pool_by_role
+	var disp_pools_v: Variant = contact_cfg.get("disposition_pool_by_role", {})
+	var disp_pools: Dictionary = disp_pools_v if disp_pools_v is Dictionary else {}
+	var disp_pool_v: Variant = disp_pools.get(role, [])
+	var disp_pool: Array = disp_pool_v if (disp_pool_v is Array and not (disp_pool_v as Array).is_empty()) else ["reflective"]
+	var disp_rng := CampaignSeed.get_rng_from(realm_seed, ns + ".disposition")
+	var disposition: String = str(disp_pool[disp_rng.randi_range(0, disp_pool.size() - 1)])
+
+	# Name: pick from realm name_pool
+	var name_pools_v: Variant = contact_cfg.get("name_pool_by_realm", {})
+	var name_pools: Dictionary = name_pools_v if name_pools_v is Dictionary else {}
+	var name_pool_v: Variant = name_pools.get(realm_id, [])
+	var name_pool: Array = name_pool_v if (name_pool_v is Array and not (name_pool_v as Array).is_empty()) else []
+	if name_pool.is_empty():
+		var fb_name_v: Variant = contact_cfg.get("name_pool_fallback", [])
+		name_pool = fb_name_v if (fb_name_v is Array and not (fb_name_v as Array).is_empty()) else ["An Unknown Presence"]
+	var name_rng := CampaignSeed.get_rng_from(realm_seed, ns + ".name")
+	var npc_name: String = str(name_pool[name_rng.randi_range(0, name_pool.size() - 1)])
+
+	# Fear / morale: pick within role's fear_range / morale_range
+	var roles_cfg_v: Variant = contact_cfg.get("roles", {})
+	var roles_cfg: Dictionary = roles_cfg_v if roles_cfg_v is Dictionary else {}
+	var role_cfg_v: Variant = roles_cfg.get(role, {})
+	var role_cfg: Dictionary = role_cfg_v if role_cfg_v is Dictionary else {}
+	var fear_range_v: Variant = role_cfg.get("fear_range", [20, 50])
+	var fear_range: Array = fear_range_v if (fear_range_v is Array and not (fear_range_v as Array).is_empty()) else [20, 50]
+	var morale_range_v: Variant = role_cfg.get("morale_range", [30, 60])
+	var morale_range: Array = morale_range_v if (morale_range_v is Array and not (morale_range_v as Array).is_empty()) else [30, 60]
+	var emo_rng := CampaignSeed.get_rng_from(realm_seed, ns + ".emotion")
+	var fear: int   = emo_rng.randi_range(int(fear_range[0]),   int(fear_range[fear_range.size()-1]))
+	var morale: int = emo_rng.randi_range(int(morale_range[0]), int(morale_range[morale_range.size()-1]))
+
+	# Turn count: from role config
+	var turn_count_base: int = int(role_cfg.get("turn_count_base", 2))
+
+	var contact := ContactModelScript.make(
+		sit_id, role, virtue_primary, virtue_secondary, fear, morale, disposition, npc_name, turn_count_base
+	)
+
+	# Pick burden variant (NPC opening-line archetype) deterministically.
+	var bv_pool_v: Variant = _BURDEN_VARIANTS_BY_ROLE.get(role, [])
+	var bv_pool: Array = bv_pool_v if bv_pool_v is Array else []
+	if not bv_pool.is_empty():
+		var bv_rng := CampaignSeed.get_rng_from(realm_seed, ns + ".burden_variant")
+		contact["burden_variant"] = str(bv_pool[bv_rng.randi_range(0, bv_pool.size() - 1)])
+
+	# Select opening line deterministically — embeds virtue signal in prose (no explicit label).
+	# Pool: npc_opening_lines.json → role → virtue_primary → Array[String].
+	_ensure_npc_lines_loaded()
+	var role_pool_lines_v: Variant = _npc_lines.get(role, {})
+	var role_pool_lines: Dictionary = role_pool_lines_v if role_pool_lines_v is Dictionary else {}
+	var virtue_lines_v: Variant = role_pool_lines.get(virtue_primary, [])
+	var virtue_lines: Array = virtue_lines_v if virtue_lines_v is Array else []
+	if not virtue_lines.is_empty():
+		var line_rng := CampaignSeed.get_rng_from(realm_seed, ns + ".npc_line")
+		contact["npc_line"] = str(virtue_lines[line_rng.randi_range(0, virtue_lines.size() - 1)])
+
+	return contact
