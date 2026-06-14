@@ -1034,6 +1034,24 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 						if not _emap_003.has("loot_results"):
 							_emap_003["loot_results"] = []
 							_003_repaired = true
+						# V2-STAGE-004 Phase 2: traversal state fields
+						if not _emap_003.has("terrain"):
+							_emap_003["terrain"] = {}
+							_003_repaired = true
+						if not _emap_003.has("in_transit"):
+							_emap_003["in_transit"] = false
+							_003_repaired = true
+						if not _emap_003.has("target_situation_id"):
+							_emap_003["target_situation_id"] = ""
+							_003_repaired = true
+						# V2-STAGE-004-P2: presentation-only path for UI chained tween
+						if not _emap_003.has("last_traveled_path"):
+							_emap_003["last_traveled_path"] = []
+						# V2-STAGE-004 Phase 2.5: durable fog-of-war discovered-tile set.
+						# Dict used as set: { "col,row": true }. Additive — never reset.
+						if not _emap_003.has("explored_cells"):
+							_emap_003["explored_cells"] = {}
+							_003_repaired = true
 					if _003_repaired:
 						repaired = true
 						repaired_notes.append("realm.%s.stage.%s contact fields defaulted (V2-STAGE-003)" % [_realm_id, _stage_label])

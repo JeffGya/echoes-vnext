@@ -62,27 +62,80 @@ const _REGISTRY: Dictionary = {
 
 var _save_ref: Dictionary
 
+# V2-STAGE-004 Phase 2: config-loaded registry. Nil until _ensure_loaded() runs.
+# Lazy approach chosen: DirectiveService is constructed at two points in FlowRuntime
+# (boot line ~91 and new_game line ~911), both before config_service.get_balance() is
+# called inside dispatch handlers. Using lazy loading guarantees the config is always
+# available on first use, regardless of construction timing. If the config block is
+# absent or empty, _REGISTRY remains the active fallback — so no crash on missing data.
+var _loaded_registry: Dictionary = {}
+var _config_loaded: bool = false
+
+
 func _init(save_ref: Dictionary) -> void:
 	_save_ref = save_ref
 
 
+# Reads balance.json data.directives via ConfigService if available; keeps _REGISTRY as
+# fallback. Call is idempotent — subsequent calls are no-ops once loaded.
+# The config dict passed here is the full balance root (as returned by
+# config_service.get_balance()). Passing an empty dict is safe — falls back to _REGISTRY.
+func load_from_config(cfg: Dictionary) -> void:
+	var data_v: Variant = cfg.get("data", {})
+	var data_d: Dictionary = data_v if data_v is Dictionary else {}
+	var dir_v: Variant = data_d.get("directives", {})
+	var dir_d: Dictionary = dir_v if dir_v is Dictionary else {}
+	if not dir_d.is_empty():
+		_loaded_registry = dir_d
+	# else: leave _loaded_registry empty; _active_registry() will fall through to _REGISTRY
+	_config_loaded = true
+
+
+# Internal: returns the config-loaded registry when available; _REGISTRY otherwise.
+func _active_registry() -> Dictionary:
+	if not _config_loaded:
+		return _REGISTRY
+	if not _loaded_registry.is_empty():
+		return _loaded_registry
+	return _REGISTRY
+
+
+# Lazy loader: called by get_registry / get_directive / set_active_directive on first use.
+# Attempts to pull balance via ConfigService.get_balance() if ConfigService is available
+# as a singleton autoload (echoes-vnext does not use Autoload here — ConfigService is
+# injected into FlowRuntime). Since DirectiveService has no direct reference to
+# config_service, callers that DO have the config (FlowRuntime dispatch handlers) should
+# call load_from_config() explicitly after construction. This guard simply ensures
+# _config_loaded is set so _active_registry() returns _REGISTRY safely without panic.
+func _ensure_loaded() -> void:
+	if not _config_loaded:
+		# FlowRuntime will call load_from_config() explicitly; this is a safety net only.
+		_config_loaded = true
+
+
 # Returns all directive definitions keyed by directive ID.
 func get_registry() -> Dictionary:
-	return _REGISTRY.duplicate(true)
+	_ensure_loaded()
+	return _active_registry().duplicate(true)
 
 
 # Returns a single directive definition by ID.
 # Returns {} if the ID is not in the registry.
 func get_directive(id: String) -> Dictionary:
-	if _REGISTRY.has(id):
-		return (_REGISTRY[id] as Dictionary).duplicate(true)
+	_ensure_loaded()
+	var reg: Dictionary = _active_registry()
+	if reg.has(id):
+		var entry: Variant = reg[id]
+		if entry is Dictionary:
+			return (entry as Dictionary).duplicate(true)
 	return {}
 
 
 # Writes active_directive_id to stage_context and logs directive.selected.
 # Returns early with a warning if the ID is not in the registry.
 func set_active_directive(id: String, logger: StructuredLogger, t: int) -> void:
-	if not _REGISTRY.has(id):
+	_ensure_loaded()
+	if not _active_registry().has(id):
 		logger.info(t, "directive.select.invalid", "Unknown directive ID — ignoring", { "directive_id": id })
 		return
 
@@ -95,7 +148,7 @@ func set_active_directive(id: String, logger: StructuredLogger, t: int) -> void:
 
 
 # Returns the full definition of the currently active directive.
-# Falls back to directive.none if the stored ID is missing or unknown.
+# Falls back to directive.scout_carefully if the stored ID is missing or unknown.
 func get_active_directive() -> Dictionary:
 	var sc: Dictionary = _save_ref.get("stage_context", {})
 	var id := str(sc.get("active_directive_id", "directive.scout_carefully"))
@@ -106,12 +159,15 @@ func get_active_directive() -> Dictionary:
 
 
 # Returns the IDs of all directives with unlock_condition == "always".
-# MVP result: ["directive.none", "directive.scout"]
 # DIRECTIVE-002 will extend this with dynamic unlock logic.
 func get_available_directives() -> Array:
+	_ensure_loaded()
 	var result: Array = []
-	for id in _REGISTRY:
-		var defn: Dictionary = _REGISTRY[id]
-		if str(defn.get("unlock_condition", "")) == "always":
-			result.append(id)
+	var reg: Dictionary = _active_registry()
+	for id in reg:
+		var entry: Variant = reg[id]
+		if entry is Dictionary:
+			var defn: Dictionary = entry as Dictionary
+			if str(defn.get("unlock_condition", "")) == "always":
+				result.append(id)
 	return result

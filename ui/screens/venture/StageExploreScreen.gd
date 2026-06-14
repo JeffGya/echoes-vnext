@@ -28,6 +28,14 @@ const _TILE_ATLAS_COORDS: Vector2i = Vector2i(0, 0)
 const _ZOOM_DURATION:  float = 0.35
 const _ZOOM_SCALE_MUL: float = 3.0
 
+# ─── Explore initial scale ────────────────────────────────────────────────────
+# At 1:1 scale on a 30×30 map the board far exceeds the screen and only the
+# party's immediate neighbours are visible — the surrounding void that defines
+# the island silhouette is off-screen. A modest zoom-out reveals the terrain
+# shape around the party's starting area without losing the sense of traversal.
+# Applied on first entry (not on subsequent advance-turn snapshot updates).
+const _EXPLORE_INITIAL_SCALE: float = 0.55
+
 # ─── Travel animation ─────────────────────────────────────────────────────────
 const _TRAVEL_DURATION: float = 0.5
 
@@ -55,6 +63,15 @@ var _travel_tween:            Tween      = null
 var _pending_overlay_data:    Dictionary = {}
 var _pending_overlay_actions: Dictionary = {}
 
+# ─── Board repaint guard ──────────────────────────────────────────────────────
+# Single composite key that encodes every dimension that can change the painted
+# board: realm_id · stage_id · terrain content hash · mode · walkable cell count
+# · explored cell count. Any single change forces a clean repaint + fog rebuild.
+# Using a content hash of the full terrain dict means different realms/reruns with
+# the same walkable-cell count (but different island shapes) always get a fresh
+# paint, eliminating the cross-realm/cross-rerun stale-board bug (Finding 1).
+var _last_paint_key: String = ""
+
 # V2-VOW-002 ST-F: dynamic labels in StageInfoPanel and preview panel
 var _stage_proverb_lbl:   Label = null
 var _stage_condition_lbl: Label = null
@@ -63,6 +80,7 @@ var _vow_hint_label:      Label = null
 
 # ─── @onready refs ────────────────────────────────────────────────────────────
 @onready var _board:              TileMapLayer   = $Board
+@onready var _fog_layer:          TileMapLayer   = $FogLayer
 @onready var _situation_layer:    Node2D         = $SituationLayer
 # Preview-mode marker templates (Control nodes, absolute screen-space positioning)
 @onready var _hidden_template:    Control        = $SituationLayer/HiddenMarkerTemplate
@@ -144,9 +162,33 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	# During board scroll, keep situation markers locked to the board by mirroring
-	# the board's current position onto the situation layer each frame.
+	# the board's current position (and scale) onto the situation layer each frame.
 	if _travel_tween != null and _travel_tween.is_valid():
-		_situation_layer.position = _board.position
+		_sync_situation_layer()
+	# Keep fog layer in sync with board at all times (position + scale must match).
+	_sync_fog_layer()
+
+
+# Sync fog layer position and scale to match the board exactly.
+# Called from _process() and after any explicit board position/scale change.
+func _sync_fog_layer() -> void:
+	if _fog_layer == null:
+		return
+	_fog_layer.position = _board.position
+	_fog_layer.scale    = _board.scale
+
+
+# Sync situation marker layer position and scale to match the board exactly.
+# Markers are placed in board-local tile space so the layer must share the board's
+# full transform (position + scale) for markers to land on the correct screen pixels.
+# Called from _process() and after any explicit board position/scale change in explore mode.
+# NOTE: in preview mode the situation layer stays at (0,0) / scale(1,1) because
+# _rebuild_situations_preview uses _board_to_screen() which manually applies the transform.
+func _sync_situation_layer() -> void:
+	if _situation_layer == null:
+		return
+	_situation_layer.position = _board.position
+	_situation_layer.scale    = _board.scale
 
 
 # ─── Bespoke Screen Contract ─────────────────────────────────────────────────
@@ -170,7 +212,7 @@ func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 
 	var cols := int(data.get("map_width",  30))
 	var rows := int(data.get("map_height", 30))
-	_fill_board(cols, rows)
+	_fill_board(cols, rows, data, "preview")
 	_build_preview(cols, rows)
 
 	# Situation layer in absolute screen-space for preview (board does not scroll here).
@@ -282,20 +324,31 @@ func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 	var cols := int(data.get("map_width",  30))
 	var rows := int(data.get("map_height", 30))
-	_fill_board(cols, rows)
+	_fill_board(cols, rows, data, "explore")
 
 	var ppos_v: Variant    = data.get("party_pos", { "col": 0, "row": 0 })
 	var ppos: Dictionary   = ppos_v if ppos_v is Dictionary else { "col": 0, "row": 0 }
 	var pcol := int(ppos.get("col", 0))
 	var prow := int(ppos.get("row", 0))
 
-	_board.scale = Vector2.ONE
+	# On first entry (coming from preview), use a modest zoom-out so the island
+	# silhouette and surrounding void are visible around the party's start.
+	# On subsequent advance-turn updates keep whatever scale the player has set
+	# (pinch-zoom state is preserved in _board.scale between snapshot updates).
+	var is_first_entry := (_last_party_col < 0)
+	if is_first_entry:
+		_board.scale = Vector2(_EXPLORE_INITIAL_SCALE, _EXPLORE_INITIAL_SCALE)
+		_sync_fog_layer()
+		_sync_situation_layer()
+	# else: do not reset scale — preserve the player's current zoom level
+
+	var board_scale   := _board.scale.x
 	var party_local   := _board.map_to_local(Vector2i(pcol, prow))
 	var screen_size   := get_viewport_rect().size
 	var screen_center := Vector2(screen_size.x * 0.5, screen_size.y * 0.5)
-	var board_target  := screen_center - party_local
+	var board_target  := screen_center - party_local * board_scale
 
-	var is_travel := (_last_party_col >= 0) and (pcol != _last_party_col or prow != _last_party_row)
+	var is_travel := (not is_first_entry) and (pcol != _last_party_col or prow != _last_party_row)
 	_last_party_col = pcol
 	_last_party_row = prow
 
@@ -308,15 +361,41 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 		if _travel_tween != null and _travel_tween.is_valid():
 			_travel_tween.kill()
 
-		# Situation layer anchored to current (pre-scroll) board position.
-		# _process() will sync it to _board.position each frame during the tween.
-		_situation_layer.position = _board.position
+		# Situation layer anchored to current (pre-scroll) board position + scale.
+		# _process() will sync its full transform to the board each frame during the tween.
+		_sync_situation_layer()
 		_rebuild_situations(situations)
 
 		_travel_tween = create_tween()
 		_travel_tween.set_ease(Tween.EASE_IN_OUT)
 		_travel_tween.set_trans(Tween.TRANS_SINE)
-		_travel_tween.tween_property(_board, "position", board_target, _TRAVEL_DURATION)
+
+		# V2-STAGE-004-P2: chained tween through each cell in traveled_path so the board
+		# scroll follows the walkable route and never cuts across void.
+		# traveled_path = pre-advance cell + each stepped cell (≥2 entries when movement occurred).
+		# Segment duration = _TRAVEL_DURATION / segment_count so total time is unchanged.
+		var tp_v: Variant = data.get("traveled_path", [])
+		var traveled_path: Array = tp_v if tp_v is Array else []
+		# Note: board_scale is already declared above in this function scope.
+
+		# Only use chained path when we have ≥2 entries (pre-cell + at least one step).
+		if traveled_path.size() >= 2:
+			var seg_count: int = traveled_path.size() - 1
+			var seg_dur: float = _TRAVEL_DURATION / float(seg_count)
+			# Skip the first entry (pre-advance cell — already the current board position).
+			# Chain one tween segment per subsequent step cell.
+			for _seg_i in range(1, traveled_path.size()):
+				var step_v: Variant = traveled_path[_seg_i]
+				var step: Dictionary = step_v if step_v is Dictionary else {}
+				var step_local: Vector2 = _board.map_to_local(
+					Vector2i(int(step.get("col", 0)), int(step.get("row", 0)))
+				)
+				var step_target: Vector2 = screen_center - step_local * board_scale
+				_travel_tween.tween_property(_board, "position", step_target, seg_dur)
+		else:
+			# Fallback: single straight tween (no path data or single-cell move).
+			_travel_tween.tween_property(_board, "position", board_target, _TRAVEL_DURATION)
+
 		_party_layer.call("init_position", screen_center)
 
 		_pending_overlay_data    = data
@@ -324,7 +403,8 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 		_travel_tween.finished.connect(_apply_pending_overlay, CONNECT_ONE_SHOT)
 	else:
 		_board.position = board_target
-		_situation_layer.position = board_target
+		_sync_fog_layer()
+		_sync_situation_layer()
 		_rebuild_situations(situations)
 		_party_layer.call("init_position", screen_center)
 		_pending_overlay_data    = {}
@@ -474,13 +554,82 @@ func _show_return_home_overlay(result: Dictionary) -> void:
 
 # ─── Board rendering ─────────────────────────────────────────────────────────
 
-func _fill_board(cols: int, rows: int) -> void:
-	if _board.get_used_cells().size() == cols * rows:
+func _fill_board(cols: int, rows: int, data: Dictionary = {}, mode: String = "") -> void:
+	# Compute the walkable set from terrain data (if any).
+	# StageTerrain.walkable_set returns {} when terrain is absent/empty — that is
+	# the legacy sentinel meaning "all cells walkable".
+	var terrain_v: Variant = data.get("terrain", {})
+	var terrain: Dictionary = terrain_v if terrain_v is Dictionary else {}
+	var walkable: Dictionary = StageTerrain.walkable_set(terrain)
+
+	# Fog-of-war: explored_cells is the discovered tile set.
+	# Empty dict = no explored data (treat as all discovered for legacy stages).
+	var explored_v: Variant = data.get("explored_cells", {})
+	var explored: Dictionary = explored_v if explored_v is Dictionary else {}
+
+	# Determine how many cells will be painted so we can detect change.
+	var expected_count: int
+	if walkable.is_empty():
+		# Legacy path: full cols×rows rectangle.
+		expected_count = cols * rows
+	else:
+		expected_count = walkable.size()
+
+	# Composite change-detection guard.
+	# Encodes: realm_id · stage_id · terrain content hash · mode · walkable count · explored count.
+	# terrain content hash catches different island shapes that happen to share the same
+	# walkable-cell count (e.g. two realms, two reruns) — prevents stale-board bleed across
+	# realm switches or rerun regenerations.
+	var stage_id:       String = str(data.get("stage_id", ""))
+	var realm_id:       String = str(data.get("realm_id", ""))
+	var terrain_sig:    int    = str(terrain).hash()   # deterministic content signature
+	var explored_size:  int    = explored.size()
+	var paint_key: String = "%s|%s|%d|%s|%d|%d" % [realm_id, stage_id, terrain_sig, mode, expected_count, explored_size]
+	if paint_key == _last_paint_key:
 		return
+
 	_board.clear()
-	for c in range(cols):
-		for r in range(rows):
-			_board.set_cell(Vector2i(c, r), _TILE_SOURCE_ID, _TILE_ATLAS_COORDS)
+	_fog_layer.clear()
+	_last_paint_key = paint_key
+
+	if walkable.is_empty():
+		# Legacy / no-terrain path: paint every cell in the bounding rectangle.
+		# No fog — all cells treated as discovered (backward compat).
+		for c in range(cols):
+			for r in range(rows):
+				_board.set_cell(Vector2i(c, r), _TILE_SOURCE_ID, _TILE_ATLAS_COORDS)
+		# FogLayer stays empty: legacy mode has no fog.
+	else:
+		# THREE-STATE RENDER:
+		#   Void (not in walkable)      → no tile on Board, no tile on FogLayer.
+		#   Walkable + discovered       → normal tile on Board only.
+		#   Walkable + undiscovered     → normal tile on Board (so it's a dim land shape,
+		#                                  not void) + fog tile on FogLayer (dark overlay).
+		#
+		# When explored is empty (terrain present but no explored data yet — shouldn't
+		# happen in practice because the backend seeds entry vicinity on lock, but handle
+		# gracefully): all walkable cells rendered as fogged.
+		#
+		# The FogLayer sits at z_index=1 above the Board, modulated to Color(0,0,0,0.65),
+		# so fogged cells look dark while discovered cells are clear.
+		# Void stays completely absent (no tile = transparent gap).
+		var all_fog: bool = explored.is_empty()
+
+		for key_v in walkable:
+			var key: String = str(key_v)
+			var parts := key.split(",")
+			if parts.size() != 2:
+				continue
+			var c: int = int(parts[0])
+			var r: int = int(parts[1])
+			var cell_v: Vector2i = Vector2i(c, r)
+			# Paint land tile on Board for every walkable cell (discovered or not).
+			# This ensures fog cells are visually land-shaped, never invisible (void).
+			_board.set_cell(cell_v, _TILE_SOURCE_ID, _TILE_ATLAS_COORDS)
+			# Fog overlay: paint on FogLayer if NOT discovered.
+			var is_discovered: bool = (not all_fog) and explored.has(key)
+			if not is_discovered:
+				_fog_layer.set_cell(cell_v, _TILE_SOURCE_ID, _TILE_ATLAS_COORDS)
 
 
 func _build_preview(cols: int, rows: int) -> void:
@@ -506,6 +655,7 @@ func _build_preview(cols: int, rows: int) -> void:
 	var body_center_y: float = 112.0 + (vp_size.y - 80.0 - 112.0) / 2.0
 	_preview_center = Vector2(vp_size.x / 2.0, body_center_y)
 	_board.position = _preview_center - map_center_local * _preview_scale
+	_sync_fog_layer()
 
 
 # ─── Situation markers ───────────────────────────────────────────────────────

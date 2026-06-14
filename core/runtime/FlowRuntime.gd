@@ -13,6 +13,7 @@ const ObjectiveModelScript        := preload("res://core/realms/ObjectiveModel.g
 const ConversationServiceScript    := preload("res://core/realms/ConversationService.gd")    # V2-STAGE-003
 const ContactModelScript           := preload("res://core/realms/ContactModel.gd")            # V2-STAGE-003
 const SituationResolutionServiceScript := preload("res://core/realms/SituationResolutionService.gd")  # V2-STAGE-004
+const StageTerrainScript               := preload("res://core/realms/StageTerrain.gd")                  # V2-STAGE-004-P2
 ## ConsequencePassService kept on disk for future use; not preloaded here.
 const EmotionRecoveryServiceScript := preload("res://core/emotion/EmotionRecoveryService.gd")                    # V2-SANCTUM-001
 const InstitutionServiceScript     := preload("res://core/sanctum/InstitutionService.gd")                         # V2-SANCTUM-002
@@ -89,6 +90,7 @@ func boot() -> Dictionary:
 
 	econ = EconomyService.new(flow_ctx.save_data)
 	directive_service = DirectiveService.new(flow_ctx.save_data)  # DIRECTIVE-001
+	directive_service.load_from_config(config_service.get_balance())  # V2-STAGE-004-P2: wire traversal fields
 
 	# Flow state machine
 	flow_machine = FlowStateMachine.new()
@@ -909,6 +911,7 @@ func _handle_new_game(t: int) -> void:
 
 	econ = EconomyService.new(flow_ctx.save_data)
 	directive_service = DirectiveService.new(flow_ctx.save_data)  # DIRECTIVE-001
+	directive_service.load_from_config(config_service.get_balance())  # V2-STAGE-004-P2: wire traversal fields
 
 	# Request save flush via Flow-owned choke point
 	flow_ctx.save_request = true
@@ -4623,70 +4626,190 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 		flow_machine.refresh_snapshot(flow_ctx, logger, t)
 		return
 
-	# Find target situation based on active directive
-	var active_dir := str(flow_ctx.save_data.get("stage_context", {}).get("active_directive_id", "directive.scout_carefully"))
-	var target_sit := _find_target_situation(explore_map, active_dir)
+	# V2-STAGE-004-P2: resolve directive once for this turn
+	var directive := directive_service.get_active_directive()
+	var step_budget := int(directive.get("step_budget", 3))
+	# V2-STAGE-004 Phase 2.5: reveal_radius replaces passive_reveal_radius as the primary fog lever.
+	# Both directives always reveal (radius is the differentiator — Scout wide, Seek narrow).
+	var reveal_radius := int(directive.get("reveal_radius", directive.get("passive_reveal_radius", 2)))
 
-	if target_sit.is_empty():
-		# No unresolved situations left — should not normally reach here; guard gracefully
-		logger.debug(t, "stage.advance.no_target", "advance_turn: no unresolved situations found", {})
+	# V2-STAGE-004-P2: build walkable set once (supports both terrain maps and legacy saves)
+	var walkable := _explore_walkable(explore_map)
+
+	# V2-STAGE-004 Phase 2.5: load durable explored_cells set (fog state).
+	var explored_cells_v: Variant = explore_map.get("explored_cells", {})
+	var explored_cells: Dictionary = explored_cells_v if explored_cells_v is Dictionary else {}
+
+	# V2-STAGE-004 Phase 2.5 (Finding 2): entry-fog seed delegated to the shared static helper.
+	# Idempotent (empty-guard inside); no-op when already seeded by _reset_session_state.
+	# Passing precise_intel_bias from the resolved directive keeps intel quality consistent.
+	var _adv_precise_bias := int(directive.get("precise_intel_bias", 0))
+	var _adv_realm_seed   := int(flow_ctx.save_data.get("realms", {}).get(flow_ctx.realm_id, {}).get("seed", 0))
+	FlowStageExploreStateScript.seed_entry_fog_if_needed(
+		explore_map, walkable, reveal_radius, _adv_precise_bias, _adv_realm_seed,
+		flow_ctx.stage_id, logger, t
+	)
+	# Re-read explored_cells after the seed (may have been populated by the helper above).
+	var _ec_post_v: Variant = explore_map.get("explored_cells", {})
+	explored_cells = _ec_post_v if _ec_post_v is Dictionary else {}
+
+	# V2-STAGE-004 Phase 2.5: fog-of-war 3-tier target selection (replaces category-only _find_target_situation).
+	var target := _find_explore_target(explore_map, directive, walkable, explored_cells)
+
+	if target.is_empty():
+		# All walkable cells explored and no discovered unresolved situations — nothing left.
+		logger.debug(t, "stage.advance.no_target", "advance_turn: no target found (all explored, all resolved)", {})
 		flow_machine.refresh_snapshot(flow_ctx, logger, t)
 		return
 
-	# Move party to situation position
-	var sit_pos_v: Variant = target_sit.get("pos", { "col": 0, "row": 0 })
-	var sit_pos: Dictionary = sit_pos_v if sit_pos_v is Dictionary else { "col": 0, "row": 0 }
-	explore_map["party_pos"]         = sit_pos
-	explore_map["turn_count"]        = int(explore_map.get("turn_count", 0)) + 1
-	explore_map["last_situation_id"] = str(target_sit.get("id", ""))
+	# One explore-turn consumed per Advance call
+	explore_map["turn_count"] = int(explore_map.get("turn_count", 0)) + 1
 
-	var sit_id     := str(target_sit.get("id", "sit.0"))
-	var turn_count := int(explore_map.get("turn_count", 0))
+	var target_pos_v: Variant = target.get("pos", { "col": 0, "row": 0 })
+	var target_pos: Dictionary = target_pos_v if target_pos_v is Dictionary else { "col": 0, "row": 0 }
+	var is_frontier := bool(target.get("is_frontier", false))
+	var target_sit_id := str(target.get("id", ""))
 
-	# V2-INTEL-001: Seek Signs grants a +15pt reveal bonus (65% vs 50% base).
-	var _sc_d: Variant = flow_ctx.save_data.get("stage_context", {})
-	var _sc: Dictionary = _sc_d if _sc_d is Dictionary else {}
-	var _active_dir := str(_sc.get("active_directive_id", "directive.scout_carefully"))
-	var reveal_threshold := 35 if _active_dir == "directive.seek_signs" else 50
+	# V2-STAGE-004-P2: partial-move toward target up to step_budget steps
+	var dist_field: Dictionary = {}
+	if not walkable.is_empty():
+		dist_field = StageTerrainScript.bfs_distance_field(target_pos, walkable)
 
-	# Reveal check — run before save so result is persisted in one write
-	if not bool(target_sit.get("revealed", false)):
-		var rng := CampaignSeed.get_rng_from(
-			int(flow_ctx.save_data.get("realms", {}).get(flow_ctx.realm_id, {}).get("seed", 0)),
-			"stage.reveal.%s.%d" % [sit_id, turn_count]
-		)
-		var roll := rng.randi_range(0, 100)
-		if roll > reveal_threshold:
-			# Scout roll succeeded — mark revealed and populate intel before the engagement popup
-			var sits_v2: Variant = explore_map.get("situations", [])
-			var sits_arr: Array  = sits_v2 if sits_v2 is Array else []
-			for _si in range(sits_arr.size()):
-				var s_v2: Variant = sits_arr[_si]
-				if s_v2 is Dictionary and str((s_v2 as Dictionary).get("id", "")) == sit_id:
-					var s2: Dictionary = s_v2
-					s2["revealed"] = true
-					# V2-INTEL-001: write intel_clues + quality on first reveal
-					var clues_v: Variant = s2.get("intel_clues", [])
-					var clues: Array = clues_v if clues_v is Array else []
-					if clues.is_empty():
-						clues.append(_intel_clue_for_type(str(s2.get("type", ""))))
-					s2["intel_clues"]   = clues
-					s2["intel_quality"] = "precise" if roll > 75 else "rough"
-					sits_arr[_si]  = s2
-					break
-			explore_map["situations"] = sits_arr
+	# Capture pre-advance party position as the first entry in the traveled path.
+	var _pre_move_v: Variant = explore_map.get("party_pos", { "col": 0, "row": 0 })
+	var _pre_move: Dictionary = _pre_move_v if _pre_move_v is Dictionary else { "col": 0, "row": 0 }
 
-	# Park the party — player confirms engagement via situation popup
-	explore_map["pending_situation_id"] = sit_id
+	var stepped: Array = []
+	var steps := 0
+	while steps < step_budget:
+		var here_v: Variant = explore_map.get("party_pos", { "col": 0, "row": 0 })
+		var here: Dictionary = here_v if here_v is Dictionary else { "col": 0, "row": 0 }
+		if int(here.get("col", 0)) == int(target_pos.get("col", 0)) \
+				and int(here.get("row", 0)) == int(target_pos.get("row", 0)):
+			break
+		var nxt: Dictionary
+		if dist_field.is_empty():
+			# Corruption-safety only: _explore_walkable always returns a populated set
+			# (terrain or full WxH rect), so dist_field is empty ONLY if the target cell
+			# itself is non-walkable (a malformed map). Step directly rather than hang.
+			nxt = target_pos
+		else:
+			nxt = StageTerrainScript.next_step(here, dist_field, walkable)
+		# Dead-end safety: next_step returns from_cell unchanged
+		if int(nxt.get("col", 0)) == int(here.get("col", 0)) \
+				and int(nxt.get("row", 0)) == int(here.get("row", 0)):
+			break
+		explore_map["party_pos"] = nxt
+		stepped.append(nxt)
+		steps += 1
+
+	# V2-STAGE-004-P2: stash full path walked this turn for UI chained-tween animation.
+	# Shape: Array of { col, row } — pre-advance cell followed by each stepped cell.
+	# Presentation-only; does not affect determinism. Cleared by next advance or session reset.
+	if stepped.is_empty():
+		explore_map["last_traveled_path"] = []
+	else:
+		var _path: Array = [{ "col": int(_pre_move.get("col", 0)), "row": int(_pre_move.get("row", 0)) }]
+		for _sp in stepped:
+			var _sp_d: Dictionary = _sp if _sp is Dictionary else {}
+			_path.append({ "col": int(_sp_d.get("col", 0)), "row": int(_sp_d.get("row", 0)) })
+		explore_map["last_traveled_path"] = _path
+
+	var party_pos_v: Variant = explore_map.get("party_pos", { "col": 0, "row": 0 })
+	var party_pos: Dictionary = party_pos_v if party_pos_v is Dictionary else { "col": 0, "row": 0 }
+
+	# V2-STAGE-004 Phase 2.5: ALWAYS-ON fog lift for every stepped cell.
+	# Both directives lift fog; reveal_radius is the lever (Scout wide, Seek narrow).
+	# Run BEFORE arrival check so the cell we land on is always in explored_cells.
+	var _all_stepped_cells: Array = [party_pos]  # final party cell always included
+	for _fstep in stepped:
+		var _fstep_d: Dictionary = _fstep if _fstep is Dictionary else {}
+		_all_stepped_cells.append(_fstep_d)
+
+	for _step_cell_v in _all_stepped_cells:
+		var _step_cell: Dictionary = _step_cell_v if _step_cell_v is Dictionary else {}
+		# Lift fog: add every walkable cell within reveal_radius of this stepped cell.
+		var _fog_cells := StageTerrainScript.cells_within_radius(_step_cell, reveal_radius, walkable)
+		for _fc_v in _fog_cells:
+			var _fc: Dictionary = _fc_v if _fc_v is Dictionary else {}
+			explored_cells["%d,%d" % [int(_fc.get("col", 0)), int(_fc.get("row", 0))]] = true
+
+	explore_map["explored_cells"] = explored_cells
+
+	# Tile-based discovery sweep: reveal every unresolved situation whose cell is now in
+	# explored_cells. This is a superset of the old radius check — any situation whose tile
+	# was fog-lifted during movement (within reveal_radius of any stepped cell) is guaranteed
+	# revealed. Invariant: tile in explored_cells ⟺ situation on it is revealed.
+	FlowStageExploreStateScript._reveal_explored_situations_static(explore_map, explored_cells, _adv_precise_bias, _adv_realm_seed, flow_ctx.stage_id, logger, t)
+
+	# V2-STAGE-004 Phase 2.5: arrival/engage check — check whether the final party cell
+	# holds a discovered, unresolved, non-frontier situation (includes situations discovered
+	# en route during this advance via the fog-lift pass above).
+	var _party_key: String = "%d,%d" % [int(party_pos.get("col", 0)), int(party_pos.get("row", 0))]
+	var _arrived_sit_id := ""
+	var _arrived_real_sit := false
+
+	# Check if any discovered+unresolved situation is at party's final position.
+	# V2-STAGE-004 Phase 2.5 (pass-fix): only trigger engagement for a passed node when it
+	# is the current deliberate target (Tier-4 re-offer).  Walking PAST a passed node en route
+	# to the frontier must NOT re-prompt — that is the key fix for the "return to same node" bug.
+	var sits_check_v: Variant = explore_map.get("situations", [])
+	var sits_check: Array = sits_check_v if sits_check_v is Array else []
+	for _acs_v in sits_check:
+		var _acs: Dictionary = _acs_v if _acs_v is Dictionary else {}
+		if bool(_acs.get("resolved", false)):
+			continue
+		if not bool(_acs.get("revealed", false)):
+			continue
+		# Skip passed nodes unless this is exactly the node we deliberately re-targeted
+		# (Tier-4 re-offer puts the objective's id into target_sit_id before this check).
+		var _acs_id := str(_acs.get("id", ""))
+		if bool(_acs.get("passed", false)) and _acs_id != target_sit_id:
+			continue
+		var _acp_v: Variant = _acs.get("pos", { "col": 0, "row": 0 })
+		var _acp: Dictionary = _acp_v if _acp_v is Dictionary else { "col": 0, "row": 0 }
+		var _ack: String = "%d,%d" % [int(_acp.get("col", 0)), int(_acp.get("row", 0))]
+		if _ack == _party_key:
+			_arrived_sit_id   = _acs_id
+			_arrived_real_sit = true
+			break
+
+	var arrived := _arrived_real_sit \
+		or (not is_frontier \
+			and int(party_pos.get("col", 0)) == int(target_pos.get("col", 0)) \
+			and int(party_pos.get("row", 0)) == int(target_pos.get("row", 0)) \
+			and not target_sit_id.is_empty())
+
+	if _arrived_real_sit:
+		# Parked on a discovered+unresolved real situation — queue engagement popup.
+		explore_map["last_situation_id"]   = _arrived_sit_id
+		explore_map["pending_situation_id"] = _arrived_sit_id
+		explore_map["in_transit"]           = false
+		explore_map["target_situation_id"]  = ""
+	elif arrived and not target_sit_id.is_empty():
+		# Reached the targeted real situation by position (dist==0 case).
+		explore_map["last_situation_id"]   = target_sit_id
+		explore_map["pending_situation_id"] = target_sit_id
+		explore_map["in_transit"]           = false
+		explore_map["target_situation_id"]  = ""
+	else:
+		# IN-TRANSIT toward frontier or mid-way to a real situation; no engagement popup.
+		explore_map["in_transit"]          = true
+		explore_map["target_situation_id"] = target_sit_id if not is_frontier else ""
+
 	stage["explore_map"] = explore_map
 	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
 	flow_ctx.save_request        = true
 	flow_ctx.save_request_reason = "stage.advance_turn"
 
-	logger.info(t, "stage.advance_turn", "Party moved to situation (pending engagement)", {
-		"stage_id":     flow_ctx.stage_id,
-		"situation_id": sit_id,
-		"turn_count":   explore_map["turn_count"],
+	logger.info(t, "stage.advance_turn", "Party advanced", {
+		"stage_id":           flow_ctx.stage_id,
+		"target_id":          target_sit_id,
+		"is_frontier":        is_frontier,
+		"arrived":            arrived,
+		"steps_taken":        steps,
+		"turn_count":         int(explore_map.get("turn_count", 0)),
+		"explored_count":     explored_cells.size(),
 	})
 
 	# Build fresh snapshot from mutated save_data so the pending popup and disabled
@@ -4697,9 +4820,9 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 
 
 ## Party attempts to return home before completing all objectives.
-## Stub escape check: seeded roll > 40 = success.
+## Escape check: seeded roll > (40 - directive.escape_bonus) = success.
 ## Success → party_state = "escaped", transition to flow.stage_map.
-## Failure → return_failed flag in snapshot (full mechanic deferred to V2-INTEL-002).
+## Failure → return_failed flag in snapshot (full consequence deferred to V2-INTEL-002).
 func _handle_stage_return_home(_action: Dictionary, t: int) -> void:
 	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
 	if stage.is_empty():
@@ -4712,18 +4835,23 @@ func _handle_stage_return_home(_action: Dictionary, t: int) -> void:
 	var turn_count := int(explore_map.get("turn_count", 0))
 	var realm_seed := int(flow_ctx.save_data.get("realms", {}).get(flow_ctx.realm_id, {}).get("seed", 0))
 
+	# V2-STAGE-004-P2: directive-driven escape threshold
+	var directive := directive_service.get_active_directive()
+	var escape_threshold := maxi(0, 40 - int(directive.get("escape_bonus", 0)))
+
 	var rng := CampaignSeed.get_rng_from(
 		realm_seed,
 		"stage.escape.%s.%d" % [flow_ctx.stage_id, turn_count]
 	)
 	var roll := rng.randi_range(0, 100)
-	var success := roll > 40
+	var success := roll > escape_threshold
 
 	logger.info(t, "stage.return_home", "Party return home attempt", {
-		"stage_id":   flow_ctx.stage_id,
-		"roll":       roll,
-		"success":    success,
-		"turn_count": turn_count,
+		"stage_id":        flow_ctx.stage_id,
+		"roll":            roll,
+		"escape_threshold": escape_threshold,
+		"success":         success,
+		"turn_count":      turn_count,
 	})
 
 	if success:
@@ -4734,11 +4862,19 @@ func _handle_stage_return_home(_action: Dictionary, t: int) -> void:
 		flow_ctx.save_request_reason = "stage.escaped"
 
 		# V2-ECONOMY-001: Intel-gated partial Ase award.
+		# V2-STAGE-004-P2: intel_retention keeps full revealed-count value (no penalty on withdrawal).
 		var _intel_count := _count_revealed_situations()
 		var _partial_ase := 0
 		if _intel_count > 0:
 			var _pf := float(_get_balance_rewards_cfg().get("partial_intel_reward_factor", 0.12))
-			_partial_ase = roundi(float(_get_stage_base_reward()) * _pf)
+			# V2-STAGE-004-P2: intel_retention — a directive that retains intel on a failed/partial
+			# withdrawal multiplies the partial reward by its `intel_retention_bonus` (data-driven,
+			# default 1.0 = no change). Scout (retention true, bonus 1.5) keeps more of the value it
+			# gathered; Seek (false) does not. Magnitude is tunable in data.directives.
+			var _retention_mul := 1.0
+			if bool(directive.get("intel_retention", false)):
+				_retention_mul = float(directive.get("intel_retention_bonus", 1.0))
+			_partial_ase = roundi(float(_get_stage_base_reward()) * _pf * _retention_mul)
 			if _partial_ase > 0:
 				econ.add_ase(_partial_ase, "return_home_intel_partial", logger, t)
 		flow_ctx.pending_scout_return_ase         = _partial_ase
@@ -5305,13 +5441,31 @@ func _handle_stage_ignore_situation(_action: Dictionary, t: int) -> void:
 	var explore_map: Dictionary = map_v if map_v is Dictionary else {}
 
 	var sit_id := str(explore_map.get("pending_situation_id", ""))
+
+	# V2-STAGE-004 Phase 2.5 (pass-fix): mark the ignored situation as passed=true
+	# so _find_explore_target skips it in Tiers 1–2 and the party explores the frontier
+	# instead of immediately re-targeting the same node.  revealed stays true (it remains
+	# visible on the map).  A passed OBJECTIVE is re-offered once the map is fully explored
+	# (Tier 4) so the stage stays completable.
+	if not sit_id.is_empty():
+		var _pass_sits_v: Variant = explore_map.get("situations", [])
+		var _pass_sits: Array = _pass_sits_v if _pass_sits_v is Array else []
+		for _ps_v in _pass_sits:
+			if not (_ps_v is Dictionary):
+				continue
+			var _ps: Dictionary = _ps_v
+			if str(_ps.get("id", "")) == sit_id:
+				_ps["passed"] = true
+				break
+		explore_map["situations"] = _pass_sits
+
 	explore_map["pending_situation_id"] = ""
 	stage["explore_map"] = explore_map
 	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
 	flow_ctx.save_request = true
 	flow_ctx.save_request_reason = "stage.ignore_situation"
 
-	logger.debug(t, "stage.explore.situation_ignored", "Engagement popup dismissed — situation not resolved", {
+	logger.debug(t, "stage.explore.situation_ignored", "Engagement popup dismissed — situation marked passed", {
 		"stage_id":     flow_ctx.stage_id,
 		"situation_id": sit_id,
 	})
@@ -6117,64 +6271,272 @@ func _mark_stage_objective_completed(flow_ctx_arg: FlowContext, objective_index:
 
 
 # ────────────────────────────────────────────────────────────────────────────
-# V2-STAGE-001 private helpers
+# V2-STAGE-001 private helpers  (V2-STAGE-004-P2: rewritten — directive-weighted BFS scoring)
 # ────────────────────────────────────────────────────────────────────────────
 
-# Find the best next unresolved situation based on active directive.
-# scout_carefully → nearest unresolved (Chebyshev from party_pos)
-# seek_signs      → nearest unresolved objective first; fallback nearest unresolved
-# Situations at distance 0 (party already parked there after a Pass) are skipped so
-# the next Advance always moves the party to a genuinely new location.
-func _find_target_situation(explore_map: Dictionary, directive_id: String) -> Dictionary:
+# Build the walkable set for an explore_map.
+# Returns the StageTerrain-derived set when terrain is present.
+# Falls back to a full width×height rectangle for legacy/empty saves so BFS
+# and step movement work uniformly on all maps.
+func _explore_walkable(explore_map: Dictionary) -> Dictionary:
+	var terrain_v: Variant = explore_map.get("terrain", {})
+	var terrain: Dictionary = terrain_v if terrain_v is Dictionary else {}
+	var walkable: Dictionary = StageTerrainScript.walkable_set(terrain)
+	if not walkable.is_empty():
+		return walkable
+	# Legacy or empty terrain — fill a full rectangle so movement costs turns
+	var w := int(explore_map.get("width",  30))
+	var h := int(explore_map.get("height", 30))
+	var full: Dictionary = {}
+	for c in range(w):
+		for r in range(h):
+			full["%d,%d" % [c, r]] = true
+	return full
+
+
+# Find the best next unresolved situation using directive-weighted BFS scoring.
+# Inputs:
+#   explore_map  — current stage explore map
+#   directive    — full directive dict (from DirectiveService.get_active_directive())
+#   walkable     — pre-built walkable set (from _explore_walkable); empty = legacy all-open
+# Scoring: weight = target_preference[category] * (1 / (bfs_distance + 1))
+# Situations at BFS distance 0 are skipped (party parked on them) unless all remaining
+# are at distance 0, in which case the highest-weighted one is returned so re-engagement works.
+func _find_target_situation(explore_map: Dictionary, directive: Dictionary, walkable: Dictionary) -> Dictionary:
 	var sits_v: Variant = explore_map.get("situations", [])
 	var situations: Array = sits_v if sits_v is Array else []
 	var party_pos_v: Variant = explore_map.get("party_pos", { "col": 0, "row": 0 })
 	var party_pos: Dictionary = party_pos_v if party_pos_v is Dictionary else { "col": 0, "row": 0 }
-	var px := int(party_pos.get("col", 0))
-	var py := int(party_pos.get("row", 0))
 
-	var best_obj: Dictionary  = {}
-	var best_any: Dictionary  = {}
-	var best_obj_dist := 999999
-	var best_any_dist := 999999
+	# Resolve situation_category map from balance config
+	var sit_cat_map: Dictionary = {}
+	if config_service != null:
+		var _b_v: Variant = config_service.get_balance()
+		var _b: Dictionary = _b_v if _b_v is Dictionary else {}
+		var _bd_v: Variant = _b.get("data", {})
+		var _bd: Dictionary = _bd_v if _bd_v is Dictionary else {}
+		var _bs_v: Variant = _bd.get("stages", {})
+		var _bs: Dictionary = _bs_v if _bs_v is Dictionary else {}
+		var _sc_v: Variant = _bs.get("situation_category", {})
+		sit_cat_map = _sc_v if _sc_v is Dictionary else {}
+
+	var target_pref_v: Variant = directive.get("target_preference", {})
+	var target_pref: Dictionary = target_pref_v if target_pref_v is Dictionary else {}
+
+	# BFS distance field from party position
+	var dist_from_party: Dictionary = {}
+	if not walkable.is_empty():
+		dist_from_party = StageTerrainScript.bfs_distance_field(party_pos, walkable)
+
+	var best_sit: Dictionary = {}
+	var best_score := -1.0
+	var best_d0_sit: Dictionary = {}
+	var best_d0_score := -1.0
 
 	for sit_v in situations:
 		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
 		if bool(sit.get("resolved", false)):
 			continue
+
 		var pos_v: Variant = sit.get("pos", { "col": 0, "row": 0 })
 		var pos: Dictionary = pos_v if pos_v is Dictionary else { "col": 0, "row": 0 }
-		var sx := int(pos.get("col", 0))
-		var sy := int(pos.get("row", 0))
-		var dist: int = max(abs(sx - px), abs(sy - py))  # Chebyshev
 
-		# Skip situations the party is already standing on — they were passed this turn.
-		if dist == 0:
-			continue
+		# Determine BFS distance (fallback to Chebyshev for legacy all-open maps)
+		var d: int
+		if dist_from_party.is_empty():
+			d = GridService.chebyshev_distance(party_pos, pos)
+		else:
+			var pk: String = "%d,%d" % [int(pos.get("col", 0)), int(pos.get("row", 0))]
+			var d_v: Variant = dist_from_party.get(pk, -1)
+			d = int(d_v)
+			if d < 0:
+				continue  # Unreachable — skip
 
-		if dist < best_any_dist:
-			best_any_dist = dist
-			best_any = sit
-		if bool(sit.get("is_objective", false)) and dist < best_obj_dist:
-			best_obj_dist = dist
-			best_obj = sit
+		# Determine category generically (no directive id names allowed)
+		var sit_type := str(sit.get("type", ""))
+		var category: String
+		if bool(sit.get("is_objective", false)):
+			category = "objective"
+		else:
+			category = str(sit_cat_map.get(sit_type, "intel"))
 
-	if directive_id == "directive.seek_signs" and not best_obj.is_empty():
-		return best_obj
-	if not best_any.is_empty():
-		return best_any
+		var weight := float(target_pref.get(category, 1.0))
+		var score := weight * (1.0 / (float(d) + 1.0))
 
-	# Fallback: the only remaining unresolved situation(s) are at dist == 0 (party parked
-	# after ignoring them). Allow re-targeting so the player can re-engage rather than
-	# being permanently stuck with no advance target.
+		if d == 0:
+			# Collect best d==0 candidate separately for the fallback path
+			if score > best_d0_score:
+				best_d0_score = score
+				best_d0_sit   = sit
+		else:
+			if score > best_score:
+				best_score = score
+				best_sit   = sit
+
+	if not best_sit.is_empty():
+		return best_sit
+
+	# Fallback: all remaining unresolved situations are at d==0.
+	# Return the highest-weighted one so re-engagement is always possible.
+	if not best_d0_sit.is_empty():
+		return best_d0_sit
+
+	return {}
+
+
+# V2-STAGE-004 Phase 2.5: Four-tier fog-of-war target selection.
+# Replaces _find_target_situation as the sole caller in _handle_stage_advance_turn.
+#
+# Priority:
+#   Tier 1 — nearest DISCOVERED unresolved OBJECTIVE situation (BFS distance),
+#             excluding nodes where passed==true (player skipped them; let them explore).
+#   Tier 2 — best DISCOVERED unresolved non-objective situation scored by directive
+#             target_preference[category], excluding passed==true nodes,
+#             only when score >= 1.0 and reachable.
+#   Tier 3 — FRONTIER: nearest walkable cell not yet in explored_cells (BFS, deterministic).
+#             Returns synthetic { "id": "", "pos": <cell>, "is_frontier": true }.
+#   Tier 4 — FRONTIER EXHAUSTED (nearest_unexplored == party_pos, i.e. whole map explored):
+#             Re-offer the nearest unresolved OBJECTIVE including passed ones — so the stage
+#             remains completable when all optional nodes were skipped.
+#             Non-objective passed nodes are NEVER re-offered (player dismissed them on purpose).
+#             If no objective exists either, returns {} (nothing left; party parks).
+#
+# No directive ID may be named here. All behaviour comes from reading directive fields.
+func _find_explore_target(
+	explore_map: Dictionary,
+	directive: Dictionary,
+	walkable: Dictionary,
+	explored_cells: Dictionary
+) -> Dictionary:
+	var sits_v: Variant = explore_map.get("situations", [])
+	var situations: Array = sits_v if sits_v is Array else []
+	var party_pos_v: Variant = explore_map.get("party_pos", { "col": 0, "row": 0 })
+	var party_pos: Dictionary = party_pos_v if party_pos_v is Dictionary else { "col": 0, "row": 0 }
+
+	# BFS distance field from party position (used for Tier 1 and Tier 2 BFS distances).
+	var dist_from_party: Dictionary = {}
+	if not walkable.is_empty():
+		dist_from_party = StageTerrainScript.bfs_distance_field(party_pos, walkable)
+
+	# ---- Tier 1: discovered, unresolved OBJECTIVE situations (not passed) ----
+	var best_obj_sit: Dictionary = {}
+	var best_obj_dist: int = 999999
 	for sit_v in situations:
 		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
 		if bool(sit.get("resolved", false)):
 			continue
-		if directive_id == "directive.seek_signs" and bool(sit.get("is_objective", false)):
-			return sit
-		return sit
+		if not bool(sit.get("is_objective", false)):
+			continue
+		if not bool(sit.get("revealed", false)):
+			continue  # undiscovered — fog; not targetable
+		if bool(sit.get("passed", false)):
+			continue  # player skipped it — do not re-target until Tier 4
+		var pos_v: Variant = sit.get("pos", { "col": 0, "row": 0 })
+		var pos: Dictionary = pos_v if pos_v is Dictionary else { "col": 0, "row": 0 }
+		var d: int
+		if dist_from_party.is_empty():
+			d = GridService.chebyshev_distance(party_pos, pos)
+		else:
+			var pk: String = "%d,%d" % [int(pos.get("col", 0)), int(pos.get("row", 0))]
+			var d_v: Variant = dist_from_party.get(pk, -1)
+			if int(d_v) < 0:
+				continue  # unreachable
+			d = int(d_v)
+		if d < best_obj_dist:
+			best_obj_dist = d
+			best_obj_sit  = sit
+	if not best_obj_sit.is_empty():
+		return best_obj_sit
 
+	# ---- Tier 2: discovered, unresolved non-objective situations (directive-biased, not passed) ----
+	var sit_cat_map: Dictionary = {}
+	if config_service != null:
+		var _b_v: Variant = config_service.get_balance()
+		var _b: Dictionary = _b_v if _b_v is Dictionary else {}
+		var _bd_v: Variant = _b.get("data", {})
+		var _bd: Dictionary = _bd_v if _bd_v is Dictionary else {}
+		var _bs_v: Variant = _bd.get("stages", {})
+		var _bs: Dictionary = _bs_v if _bs_v is Dictionary else {}
+		var _sc_v: Variant = _bs.get("situation_category", {})
+		sit_cat_map = _sc_v if _sc_v is Dictionary else {}
+
+	var target_pref_v: Variant = directive.get("target_preference", {})
+	var target_pref: Dictionary = target_pref_v if target_pref_v is Dictionary else {}
+
+	var best_sit: Dictionary = {}
+	var best_score := -1.0
+	for sit_v in situations:
+		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
+		if bool(sit.get("resolved", false)):
+			continue
+		if bool(sit.get("is_objective", false)):
+			continue  # handled in Tier 1
+		if not bool(sit.get("revealed", false)):
+			continue  # undiscovered — fog; not targetable
+		if bool(sit.get("passed", false)):
+			continue  # player skipped it; never re-target non-objective passed nodes
+		var pos_v: Variant = sit.get("pos", { "col": 0, "row": 0 })
+		var pos: Dictionary = pos_v if pos_v is Dictionary else { "col": 0, "row": 0 }
+		var d: int
+		if dist_from_party.is_empty():
+			d = GridService.chebyshev_distance(party_pos, pos)
+		else:
+			var pk: String = "%d,%d" % [int(pos.get("col", 0)), int(pos.get("row", 0))]
+			var d_v: Variant = dist_from_party.get(pk, -1)
+			if int(d_v) < 0:
+				continue  # unreachable
+			d = int(d_v)
+		var sit_type := str(sit.get("type", ""))
+		var category := str(sit_cat_map.get(sit_type, "intel"))
+		var weight := float(target_pref.get(category, 1.0))
+		var score := weight * (1.0 / (float(d) + 1.0))
+		if score > best_score:
+			best_score = score
+			best_sit   = sit
+	# Only commit to a discovered node if the directive meaningfully prefers it (weight >= 1.0).
+	if not best_sit.is_empty() and best_score >= 1.0:
+		return best_sit
+
+	# ---- Tier 3: frontier — nearest walkable unexplored cell ----
+	var frontier_cell := StageTerrainScript.nearest_unexplored(party_pos, walkable, explored_cells)
+	var fk: String = "%d,%d" % [int(frontier_cell.get("col", 0)), int(frontier_cell.get("row", 0))]
+	var pk_party: String = "%d,%d" % [int(party_pos.get("col", 0)), int(party_pos.get("row", 0))]
+	if fk != pk_party:
+		# There is still unexplored frontier — head there.
+		return { "id": "", "pos": frontier_cell, "is_frontier": true }
+
+	# ---- Tier 4: frontier exhausted — re-offer nearest unresolved OBJECTIVE (including passed) ----
+	# The whole reachable map is explored. If the player had previously passed an objective,
+	# the stage cannot be completed until they engage it — re-offer it here so the stage stays
+	# completable. Non-objective passed nodes are NOT re-offered.
+	var best_obj4_sit: Dictionary = {}
+	var best_obj4_dist: int = 999999
+	for sit_v in situations:
+		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
+		if bool(sit.get("resolved", false)):
+			continue
+		if not bool(sit.get("is_objective", false)):
+			continue  # only objectives are re-offered (non-objective passed nodes stay skipped)
+		if not bool(sit.get("revealed", false)):
+			continue  # still fog — cannot target
+		var pos_v: Variant = sit.get("pos", { "col": 0, "row": 0 })
+		var pos: Dictionary = pos_v if pos_v is Dictionary else { "col": 0, "row": 0 }
+		var d: int
+		if dist_from_party.is_empty():
+			d = GridService.chebyshev_distance(party_pos, pos)
+		else:
+			var pk4: String = "%d,%d" % [int(pos.get("col", 0)), int(pos.get("row", 0))]
+			var d_v: Variant = dist_from_party.get(pk4, -1)
+			if int(d_v) < 0:
+				continue  # unreachable
+			d = int(d_v)
+		if d < best_obj4_dist:
+			best_obj4_dist = d
+			best_obj4_sit  = sit
+	if not best_obj4_sit.is_empty():
+		return best_obj4_sit
+
+	# Nothing left — whole map explored and nothing actionable remains (or all situations resolved).
 	return {}
 
 
@@ -6207,23 +6569,9 @@ func _mark_situation_revealed(stage: Dictionary, sit_id: String, t: int) -> void
 
 # V2-INTEL-001: Returns the atmospheric intel clue written to a situation on first scout reveal.
 # Not called on direct engagement — engagement-reveal is firsthand, not prior intel.
+# Delegates to the static in FlowStageExploreState (single source of truth for the match table).
 func _intel_clue_for_type(sit_type: String) -> String:
-	match sit_type:
-		SituationModelScript.TYPE_COMBAT:      return "Tracks in the earth. Something passed through here with intent."
-		SituationModelScript.TYPE_NPC:         return "Warmth lingers — a firepit, a scent, the sense of someone waiting."
-		SituationModelScript.TYPE_LOOT:        return "A cache left behind. The kind made in haste, not ceremony."
-		SituationModelScript.TYPE_MONEY:       return "A ritual trace — coins or marks, left as offering or warning."
-		# V2-STAGE-002: new objective types
-		ObjectiveModelScript.TYPE_RECOVER:     return "Something was taken here. The absence is palpable — a hollow where something should be."
-		ObjectiveModelScript.TYPE_PROTECT:     return "A fragile presence holds out nearby. It will not endure without help."
-		ObjectiveModelScript.TYPE_ENDURE:      return "The pressure does not stop. Whatever is here does not yield easily."
-		ObjectiveModelScript.TYPE_PURSUE:      return "Movement — recent. Something is moving through this space with purpose."
-		# V2-STAGE-004: new in-explore situation types
-		SituationModelScript.TYPE_OMEN:        return "A wrongness in the air — birds gone quiet, a chill with no wind."
-		SituationModelScript.TYPE_OBSTACLE:    return "The way narrows and snags. Whatever lies ahead will not yield easily to a careless step."
-		SituationModelScript.TYPE_RITUAL:      return "Worn ground and old ash. Hands have tended this place, again and again."
-		SituationModelScript.TYPE_STRUCTURE:   return "Walls, deliberate and standing. Someone raised this — and may yet return to it."
-		_:                                     return "Something is present here."
+	return FlowStageExploreStateScript._intel_clue_for_type_static(sit_type)
 
 
 # ── V2-VOICE-001: Sanctum bark helpers ───────────────────────────────────────

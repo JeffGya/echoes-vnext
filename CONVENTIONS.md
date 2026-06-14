@@ -533,6 +533,30 @@ The 4 locked V1 entries (`protect`, `push`, `preserve`, `focus`) and `directive.
 
 **Intent weights → BehaviorArbiter:** Semantic keys in `intent_weights` match keys in `balance.json → directive_action_muls`. Scout Carefully favours `survival_bias`, `avoid_overcommit`, `prefer_disengage`. Seek Signs favours `clue_seeking_priority`, `reporting_priority`, `exposure_acceptance`.
 
+**V2-STAGE-004 P2 — registry now data-driven + extensible:** The registry moved from the GDScript `const _REGISTRY` to `balance.json → data.directives`. `DirectiveService.load_from_config(cfg)` loads it at boot (wired right after each `DirectiveService.new(...)` in `FlowRuntime`); the const stays as a boot-order fallback. **No directive ID may be named in exploration/traversal GDScript** — all behaviour reads directive *fields* with `.get(field, default)`. Adding a directive is a new JSON block, zero code (guarded by a `DirectiveConfigTests` synthetic-directive case). `intent_weights`/`pros`/`cons`/`unlock_condition` are preserved verbatim → combat (V2-DIRECTIVE-001) is byte-identical.
+
+**V2-STAGE-004 P2.5 — directives are exploration STYLE (not combat-only — Lesson #18):** new traversal fields per directive: `step_budget`, `reveal_radius` (fog-lift lever), `passive_reveal`, `target_preference` (per-`situation_category` weights — light bias over *discovered* nodes only), `exposure_tolerance`, `escape_bonus` (→ `_handle_stage_return_home` threshold), `intel_retention` + `intel_retention_bonus` (→ partial-run reward). Scout Carefully = short steps / wide `reveal_radius` / safe escape / keeps intel; Seek Signs = long steps / narrow radius / high exposure / worse escape. (`reveal_threshold` was removed — discovery is now unconditional within radius.)
+
+---
+
+### Stage Exploration — Terrain, Traversal & Fog-of-War (V2-STAGE-004 Phase 2 + 2.5)
+
+**Terrain (`core/realms/StageTerrain.gd`, pure-static):** stages are irregular landscapes — 2–4 organic plateaus (seeded border-erosion blobs, `plateau.cells`), ≥2-wide connectivity bridges, stragglers; everything else is **uncrossable void**. Generated deterministically from a **per-realm landscape signature**. `walkable_set(terrain)` (empty terrain ⇒ legacy full-rect), `bfs_distance_field`/`next_step` (walkable-aware pathing — the party never enters void or dead-ends), `cells_within_radius`, `nearest_unexplored`. New append-only RNG: `stage.N.explore.terrain.{bounds,plateau.K,plateau.K.shape,bridge.K,straggler.K}`, `…sit.N.wpos.K`.
+
+**Per-realm landscape signatures (`balance.json → data.stages.map_shape`):** `default` + `by_virtue` with all **10** virtue-keyed signatures (the 10 Realms map 1:1 to the 10 virtue domains; only realm.01 Courage + realm.02 Wisdom exist in `realms.json` today — the rest inherit by virtue). `RealmGenerator._resolve_terrain_signature(realm_cfg, stages_cfg)` order: realm-entry `terrain_signature` override → `by_virtue[virtue]` → `default`. Each signature carries plateau count/size/shape-bias, bridge width/density, straggler count, and a **`relief` descriptor string RESERVED for future per-realm visual assets** — **art will key off realm.id / virtue + `relief`; do not lose or rename this seam.** Stages within a realm vary deterministically off the stage seed (no two identical) yet share the realm's character.
+
+**Traversal (`FlowRuntime._handle_stage_advance_turn`):** "Guidance over Control" — the player sets a directive + engages/ignores/returns; the party moves **autonomously** up to `step_budget` walkable tiles per Advance along a BFS path (UI animates a chained tween that follows the path). Explore-turns never tick during combat (hard one-way door).
+
+**Fog-of-war (P2.5):** situations AND terrain tiles start hidden; the party **discovers by exploring**. `explore_map.explored_cells` (Dict set `{ "col,row": true }`) is the single source of truth — drives both the **three-state tile render** (void = no tile; discovered = clear; undiscovered = dim `FogLayer` overlay tile, placeholder swappable for art) and **frontier targeting**. Discovery is **tile-tied**: `_reveal_explored_situations` reveals any situation whose tile is in `explored_cells`, so **tile discovered ⟺ situation revealed → the objective is always discoverable → the stage is always completable.** Discovery is unconditional within `reveal_radius` (Scout wide, Seek narrow); `precise_intel_bias` governs only intel quality.
+
+**Frontier targeting (`_find_explore_target`, 4-tier):** (1) nearest discovered unresolved objective (not passed) → (2) light-biased discovered non-objective (not passed) → (3) nearest **unexplored** frontier cell → (4) re-offer an objective once the map is fully explored (completability guarantee). **Pass = `passed`:** ignoring a situation marks it `passed` so the party keeps exploring instead of returning; passed nodes stay visible; objectives are re-offered at full exploration; ambient passed nodes stay skipped. Walking *past* a passed node never re-prompts.
+
+**Durable run-state:** `explored_cells`, `revealed`, `resolved`, `passed` persist across `return_home` → re-entry (and a different party) — `FlowStageExploreState._reset_session_state` carries them; only transients (`pending_situation_id`, `in_transit`, `target_situation_id`, `last_traveled_path`) clear. Reset on stage regeneration (realm replay).
+
+**Snapshot (`flow.stage_explore` + overview `flow.stage`):** `data.terrain`, `data.explored_cells`, `data.situations` (only **revealed** entries, each with `passed`), `step_budget`, `steps_to_target`, `in_transit`, `target_situation_id`, `traveled_path`. The overview emits no situation markers + the discovered-fog map + objective briefing (objective positions never exposed pre-entry).
+
+**Save (additive, `if not has`):** `explore_map.terrain {}`, `explored_cells {}`, `in_transit false`, `target_situation_id ""`, `last_traveled_path []`; per-situation `passed` defaults false via `.get`.
+
 ---
 
 ## Per-Screen Snapshot Summaries

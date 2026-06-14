@@ -5,6 +5,7 @@ extends RefCounted
 const SituationModelScript    := preload("res://core/realms/SituationModel.gd")     # V2-STAGE-001
 const StageExploreModelScript := preload("res://core/realms/StageExploreModel.gd")  # V2-STAGE-001
 const ContactModelScript      := preload("res://core/realms/ContactModel.gd")       # V2-STAGE-003
+const StageTerrainScript      := preload("res://core/realms/StageTerrain.gd")       # V2-STAGE-004
 
 # Lesson 8: data-heavy content in JSON, loaded once into a static cache.
 static var _npc_lines_loaded: bool = false
@@ -91,6 +92,9 @@ const _MAP_SIZE_STAGE_BUMP: int = 2
 #                  (optional — safe defaults applied when missing)
 #
 # Returns Array of stage Dicts (each is a valid StageModel with explore_map).
+# V2-STAGE-004 Phase 2: realm_cfg passes realm metadata for terrain signature resolution.
+# realm_cfg keys consumed: "virtue" (String), "terrain_signature" (Dictionary, optional override).
+# Backward-compatible: omitting realm_cfg (or passing {}) produces legacy all-walkable terrain.
 static func generate(
 	realm_seed: int,
 	stage_count: int,
@@ -98,10 +102,20 @@ static func generate(
 	obj_count_max: int,
 	explore_cfg: Dictionary = {},
 	stages_cfg: Dictionary = {},
-	contact_cfg: Dictionary = {}
+	contact_cfg: Dictionary = {},
+	realm_cfg: Dictionary = {}
 ) -> Array:
 	# Resolve the pre-boss objective pool (config-driven, realm override wins).
 	var obj_pool: Array = _resolve_objective_pool(explore_cfg, stages_cfg)
+
+	# V2-STAGE-004 Phase 2: Resolve terrain signature once per realm run.
+	# Resolution order:
+	#   1. realm_cfg["terrain_signature"] (explicit realm override, if present and non-empty)
+	#   2. stages_cfg["map_shape"]["by_virtue"][virtue] (balance.json per-virtue entry)
+	#   3. stages_cfg["map_shape"]["default"] (balance.json global default)
+	#   4. StageTerrain._FALLBACK_SIGNATURE (hardcoded safe fallback — keeps generation working
+	#      if balance.json hasn't been updated yet by the config agent)
+	var terrain_signature: Dictionary = _resolve_terrain_signature(realm_cfg, stages_cfg)
 
 	var stages: Array = []
 
@@ -142,11 +156,47 @@ static func generate(
 
 		# V2-STAGE-001/002: Generate exploration map for this stage.
 		# Seed paths are appended after all existing draws — never reorder.
-		var explore_map := _generate_explore_map(realm_seed, i, explore_cfg, objectives, contact_cfg)
+		var explore_map := _generate_explore_map(
+			realm_seed, i, explore_cfg, objectives, contact_cfg, terrain_signature
+		)
 
 		stages.append(StageModel.make(i, stage_type, stage_seed, objectives, explore_map))
 
 	return stages
+
+
+# V2-STAGE-004 Phase 2: Resolve terrain signature from realm + balance config.
+# Resolution order (first non-empty dict wins):
+#   1. realm_cfg["terrain_signature"]
+#   2. stages_cfg["map_shape"]["by_virtue"][virtue]
+#   3. stages_cfg["map_shape"]["default"]
+#   4. {} (StageTerrain will fill in its own _FALLBACK_SIGNATURE)
+static func _resolve_terrain_signature(realm_cfg: Dictionary, stages_cfg: Dictionary) -> Dictionary:
+	# 1. Explicit realm override
+	var override_v: Variant = realm_cfg.get("terrain_signature", null)
+	if override_v is Dictionary and not (override_v as Dictionary).is_empty():
+		return override_v as Dictionary
+
+	# 2. Per-virtue entry from balance.json map_shape block
+	var map_shape_v: Variant = stages_cfg.get("map_shape", null)
+	if map_shape_v is Dictionary:
+		var map_shape: Dictionary = map_shape_v as Dictionary
+		var virtue: String = str(realm_cfg.get("virtue", ""))
+		if virtue != "":
+			var by_virtue_v: Variant = map_shape.get("by_virtue", null)
+			if by_virtue_v is Dictionary:
+				var by_virtue: Dictionary = by_virtue_v as Dictionary
+				var virtue_sig_v: Variant = by_virtue.get(virtue, null)
+				if virtue_sig_v is Dictionary and not (virtue_sig_v as Dictionary).is_empty():
+					return virtue_sig_v as Dictionary
+
+		# 3. Balance.json global default
+		var default_v: Variant = map_shape.get("default", null)
+		if default_v is Dictionary and not (default_v as Dictionary).is_empty():
+			return default_v as Dictionary
+
+	# 4. Empty dict — StageTerrain._FALLBACK_SIGNATURE will fill the gaps
+	return {}
 
 
 # Resolve the objective pool for pre-boss generation.
@@ -189,12 +239,14 @@ static func _derive_stage_type(objectives: Array, pre_boss_count: int) -> String
 # V2-STAGE-001/002: Generate a deterministic StageExploreModel dict for one stage.
 # All RNG paths use the "stage.N.explore.*" namespace — appended after existing draws.
 # objectives: pre-generated Array of ObjectiveModel dicts (for binding situation types).
+# terrain_signature: resolved landscape signature for StageTerrain generation (V2-STAGE-004).
 static func _generate_explore_map(
 	realm_seed: int,
 	stage_index: int,
 	cfg: Dictionary,
 	objectives: Array = [],
-	contact_cfg: Dictionary = {}
+	contact_cfg: Dictionary = {},
+	terrain_signature: Dictionary = {}
 ) -> Dictionary:
 	# --- Map dimensions ---
 	var size_rng := CampaignSeed.get_rng_from(realm_seed, "stage.%d.explore.map_size" % stage_index)
@@ -231,17 +283,38 @@ static func _generate_explore_map(
 			pre_boss_obj_count += 1
 	var obj_count := mini(1 if sit_count <= 3 else 2, pre_boss_obj_count)
 
+	# --- Terrain generation (V2-STAGE-004 Phase 2) ---
+	# terrain_signature comes from _resolve_terrain_signature (realm override → by_virtue →
+	# default → {}).  StageTerrain fills missing keys from its own _FALLBACK_SIGNATURE.
+	# Terrain RNG paths ("stage.N.explore.terrain.*") are APPENDED after all existing draws.
+	var bounds: Dictionary = { "w": width, "h": height }
+	var terrain: Dictionary = StageTerrainScript.generate(realm_seed, stage_index, terrain_signature, bounds)
+
+	# Compute the walkable set for constrained situation placement.
+	var walkable: Dictionary = StageTerrainScript.walkable_set(terrain)
+
+	# Compute party entry cell from terrain.
+	var entry: Dictionary = StageTerrainScript.entry_cell(walkable, bounds)
+
 	# --- Situation placement ---
+	# Situations are now constrained to walkable cells (see _place_situations).
+	# Existing "stage.N.explore.sit.M.pos.P" paths are UNCHANGED.
+	# New "stage.N.explore.sit.M.wpos.P" paths are used only when the candidate
+	# cell is not walkable (i.e., the existing pos path selected an off-terrain cell).
 	var situations: Array = _place_situations(
-		realm_seed, stage_index, width, height, sit_count, obj_count, objectives, contact_cfg
+		realm_seed, stage_index, width, height, sit_count, obj_count, objectives, contact_cfg, walkable
 	)
 
-	return StageExploreModelScript.make(width, height, situations)
+	return StageExploreModelScript.make(width, height, situations, terrain, entry)
 
 
 # Place situations deterministically on the map with minimum distance enforcement.
 # V2-STAGE-002: objective situations now derive their type from the matching objective,
 # and carry objective_index to bind them to stage.objectives[idx].
+# V2-STAGE-004: walkable dict (from StageTerrain.walkable_set) constrains placement.
+#   Existing "stage.N.explore.sit.M.pos.P" paths are UNCHANGED (determinism guarantee).
+#   When the selected cell is not walkable, a new "stage.N.explore.sit.M.wpos.P" path
+#   provides an additional attempt against the walkable set. This path is APPENDED ONLY.
 # Returns Array of SituationModel dicts.
 static func _place_situations(
 	realm_seed: int,
@@ -251,7 +324,8 @@ static func _place_situations(
 	sit_count: int,
 	obj_count: int,
 	objectives: Array = [],
-	contact_cfg: Dictionary = {}
+	contact_cfg: Dictionary = {},
+	walkable: Dictionary = {}
 ) -> Array:
 	var situations: Array = []
 	var placed_positions: Array = []  # Array[{col, row}]
@@ -275,7 +349,9 @@ static func _place_situations(
 				var obj: Dictionary = objectives[idx]
 				sit_type = str(obj.get("type", SituationModelScript.TYPE_COMBAT))
 
-		# Find a valid position — retry up to 20 times before relaxing constraint
+		# Find a valid position — retry up to 20 times before relaxing constraint.
+		# Existing pos.P paths are UNCHANGED (determinism guarantee).
+		# If the chosen cell is not walkable, a new wpos.P path tries again on walkable cells.
 		var col := 0
 		var row := 0
 		var placed := false
@@ -287,17 +363,44 @@ static func _place_situations(
 			var c := try_rng.randi_range(2, width - 1)
 			var r := try_rng.randi_range(0, height - 1)
 
-			if _is_far_enough(c, r, placed_positions):
+			# V2-STAGE-004: also require walkability (empty walkable = legacy all-walkable).
+			var walkable_ok: bool = walkable.is_empty() or walkable.has("%d,%d" % [c, r])
+			if _is_far_enough(c, r, placed_positions) and walkable_ok:
 				col = c
 				row = r
 				placed = true
 				break
+
+		# V2-STAGE-004: if pos attempts all landed off-terrain, try wpos paths on walkable cells.
+		# wpos paths are APPEND-ONLY — never existed before V2-STAGE-004.
+		if not placed and not walkable.is_empty():
+			var wpos_attempts := 20
+			for attempt in range(wpos_attempts):
+				var wpos_rng := CampaignSeed.get_rng_from(realm_seed, "stage.%d.explore.sit.%d.wpos.%d" % [stage_index, idx, attempt])
+				var c := wpos_rng.randi_range(2, width - 1)
+				var r := wpos_rng.randi_range(0, height - 1)
+				if walkable.has("%d,%d" % [c, r]) and _is_far_enough(c, r, placed_positions):
+					col = c
+					row = r
+					placed = true
+					break
 
 		if not placed:
 			# Relaxed fallback: just pick any unoccupied cell
 			var fb_rng := CampaignSeed.get_rng_from(realm_seed, "stage.%d.explore.sit.%d.fallback" % [stage_index, idx])
 			col = fb_rng.randi_range(2, width - 1)
 			row = fb_rng.randi_range(0, height - 1)
+			# V2-STAGE-004 Phase 2: fallback must stay on walkable terrain (void cells are unreachable).
+			# When a walkable set exists, replace the fallback cell with a walkable one.
+			# New append-only RNG path "stage.N.explore.sit.M.fallback_walkable" — never existed before.
+			if not walkable.is_empty():
+				var wk_keys: Array = walkable.keys()
+				var fw_rng := CampaignSeed.get_rng_from(realm_seed, "stage.%d.explore.sit.%d.fallback_walkable" % [stage_index, idx])
+				var picked_key: String = str(wk_keys[fw_rng.randi_range(0, wk_keys.size() - 1)])
+				var key_parts := picked_key.split(",")
+				if key_parts.size() == 2:
+					col = int(key_parts[0])
+					row = int(key_parts[1])
 
 		placed_positions.append({ "col": col, "row": row })
 		situations.append(SituationModelScript.make(

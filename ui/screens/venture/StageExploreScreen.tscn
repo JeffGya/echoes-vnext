@@ -127,6 +127,11 @@ script = ExtResource("1_script")
 y_sort_enabled = true
 tile_set = SubResource("TileSet_explore")
 
+[node name="FogLayer" type="TileMapLayer" parent="." unique_id=2125377736]
+y_sort_enabled = true
+tile_set = SubResource("TileSet_explore")
+self_modulate = Color(0, 0, 0, 0.65)
+
 [node name="SituationLayer" type="Node2D" parent="." unique_id=478481283]
 
 [node name="HiddenMarkerTemplate" type="Control" parent="SituationLayer" unique_id=1933236967]

@@ -113,7 +113,9 @@ static func get_or_create(realm_id: String, ctx: FlowContext, t: int) -> Diction
 	# Generate deterministic stages and wire them into the model
 	# V2-STAGE-001/002: pass explore_cfg + stages_cfg for map and objective pool config
 	# V2-STAGE-003: pass contact_cfg so NPC situations get contact dicts generated
-	var stages := RealmGenerator.generate(realm_seed, stage_count, obj_min, obj_max, explore_cfg, stages_cfg, contact_cfg)
+	# V2-STAGE-004 Phase 2: pass realm cfg (carries `virtue` + optional `terrain_signature`
+	# override) so RealmGenerator resolves this realm's landscape signature.
+	var stages := RealmGenerator.generate(realm_seed, stage_count, obj_min, obj_max, explore_cfg, stages_cfg, contact_cfg, cfg)
 	model["stages"] = stages
 
 	# Store in save_data
