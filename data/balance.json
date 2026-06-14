@@ -1,6 +1,69 @@
 {
 	"schema_version": 1.0,
 	"data": {
+		"directives": {
+			"directive.scout_carefully": {
+				"id": "directive.scout_carefully",
+				"label": "Scout Carefully",
+				"description": "Moves carefully, scouts widely, withdraws safely, keeps intel.",
+				"intent_weights": {
+					"survival_bias":       0.40,
+					"avoid_overcommit":    0.30,
+					"prefer_disengage":    0.20,
+					"resource_efficiency": 0.10
+				},
+				"unlock_condition": "always",
+				"pros": [
+					"Party more likely to return with what they know intact",
+					"Stronger footing when a run fails or turns partial"
+				],
+				"cons": [
+					"Progress toward objectives comes slower",
+					"Less likely to surface signs that require exposure to find"
+				],
+				"step_budget": 3,
+				"reveal_radius": 3,
+				"passive_reveal": true,
+				"passive_reveal_radius": 3,
+				"target_preference": { "intel": 1.4, "objective": 1.2, "combat": 0.4, "reward": 1.2 },
+				"precise_intel_bias": 25,
+				"exposure_tolerance": 0.3,
+				"escape_bonus": 20,
+				"intel_retention": true,
+				"intel_retention_bonus": 1.5
+			},
+			"directive.seek_signs": {
+				"id": "directive.seek_signs",
+				"label": "Seek Signs",
+				"description": "Presses forward, deals with whatever it runs into.",
+				"intent_weights": {
+					"clue_seeking_priority": 0.40,
+					"reporting_priority":    0.30,
+					"exposure_acceptance":   0.20,
+					"survival_bias":         0.10
+				},
+				"unlock_condition": "always",
+				"pros": [
+					"Higher chance of surfacing hidden readiness clues and omen-language",
+					"Deeper intel when the run goes well"
+				],
+				"cons": [
+					"Greater exposure to contact and open threat",
+					"A bad run becomes costlier than it needed to be"
+				],
+				"step_budget": 6,
+				"reveal_radius": 1,
+				"passive_reveal": true,
+				"passive_reveal_radius": 1,
+				"target_preference": { "intel": 0.9, "objective": 1.6, "combat": 1.4, "reward": 0.9 },
+				"precise_intel_bias": 75,
+				"exposure_tolerance": 0.8,
+				"escape_bonus": 0,
+				"intel_retention": false,
+				"intel_retention_bonus": 1.0
+			}
+		},
+
 		"economy": {
 			"ase_online_per_min_base": 0.3,
 			"offline_start_factor": 0.06,
@@ -2706,10 +2769,125 @@
 						{ "id": "observe", "label_key": "Observe", "fear_delta": -2, "morale_delta": 2, "turn_cost": 0 }
 					]
 				}
+			},
+
+			"map_shape": {
+				"default": {
+					"relief": "default_relief",
+					"plateau_count_min": 2, "plateau_count_max": 4,
+					"plateau_w_min": 6, "plateau_w_max": 12, "plateau_h_min": 6, "plateau_h_max": 12,
+					"plateau_shape_bias": "blocky",
+					"bridge_width": 2,
+					"bridge_density": 0.2,
+					"straggler_count_min": 1, "straggler_count_max": 2
+				},
+				"by_virtue": {
+					"courage": {
+						"relief": "open_flats",
+						"plateau_count_min": 2, "plateau_count_max": 3,
+						"plateau_w_min": 10, "plateau_w_max": 16, "plateau_h_min": 8, "plateau_h_max": 14,
+						"plateau_shape_bias": "long",
+						"bridge_width": 2,
+						"bridge_density": 0.0,
+						"straggler_count_min": 0, "straggler_count_max": 1
+					},
+					"wisdom": {
+						"relief": "sunken_archipelago",
+						"plateau_count_min": 5, "plateau_count_max": 6,
+						"plateau_w_min": 5, "plateau_w_max": 8, "plateau_h_min": 5, "plateau_h_max": 8,
+						"plateau_shape_bias": "small",
+						"bridge_width": 2,
+						"bridge_density": 0.6,
+						"straggler_count_min": 2, "straggler_count_max": 4
+					},
+					"leadership": {
+						"relief": "central_hub",
+						"plateau_count_min": 4, "plateau_count_max": 5,
+						"plateau_w_min": 6, "plateau_w_max": 14, "plateau_h_min": 6, "plateau_h_max": 14,
+						"plateau_shape_bias": "blocky",
+						"bridge_width": 2,
+						"bridge_density": 0.3,
+						"straggler_count_min": 1, "straggler_count_max": 2
+					},
+					"acceptance": {
+						"relief": "settled_plains",
+						"plateau_count_min": 2, "plateau_count_max": 3,
+						"plateau_w_min": 10, "plateau_w_max": 16, "plateau_h_min": 8, "plateau_h_max": 14,
+						"plateau_shape_bias": "blocky",
+						"bridge_width": 2,
+						"bridge_density": 0.1,
+						"straggler_count_min": 0, "straggler_count_max": 0
+					},
+					"humility": {
+						"relief": "scattered_low",
+						"plateau_count_min": 4, "plateau_count_max": 6,
+						"plateau_w_min": 5, "plateau_w_max": 8, "plateau_h_min": 5, "plateau_h_max": 8,
+						"plateau_shape_bias": "small",
+						"bridge_width": 2,
+						"bridge_density": 0.2,
+						"straggler_count_min": 3, "straggler_count_max": 5
+					},
+					"forgiveness": {
+						"relief": "two_shores",
+						"plateau_count_min": 2, "plateau_count_max": 2,
+						"plateau_w_min": 10, "plateau_w_max": 16, "plateau_h_min": 8, "plateau_h_max": 14,
+						"plateau_shape_bias": "blocky",
+						"bridge_width": 3,
+						"bridge_density": 0.2,
+						"straggler_count_min": 1, "straggler_count_max": 2
+					},
+					"truth": {
+						"relief": "stark_expanse",
+						"plateau_count_min": 1, "plateau_count_max": 2,
+						"plateau_w_min": 12, "plateau_w_max": 16, "plateau_h_min": 8, "plateau_h_max": 14,
+						"plateau_shape_bias": "long",
+						"bridge_width": 2,
+						"bridge_density": 0.0,
+						"straggler_count_min": 0, "straggler_count_max": 0
+					},
+					"generosity": {
+						"relief": "rich_sprawl",
+						"plateau_count_min": 4, "plateau_count_max": 6,
+						"plateau_w_min": 7, "plateau_w_max": 12, "plateau_h_min": 7, "plateau_h_max": 12,
+						"plateau_shape_bias": "blocky",
+						"bridge_width": 2,
+						"bridge_density": 0.5,
+						"straggler_count_min": 2, "straggler_count_max": 3
+					},
+					"compassion": {
+						"relief": "sheltered_cluster",
+						"plateau_count_min": 3, "plateau_count_max": 4,
+						"plateau_w_min": 7, "plateau_w_max": 12, "plateau_h_min": 7, "plateau_h_max": 12,
+						"plateau_shape_bias": "blocky",
+						"bridge_width": 2,
+						"bridge_density": 0.4,
+						"straggler_count_min": 1, "straggler_count_max": 2
+					},
+					"empathy": {
+						"relief": "connection_web",
+						"plateau_count_min": 4, "plateau_count_max": 6,
+						"plateau_w_min": 6, "plateau_w_max": 11, "plateau_h_min": 6, "plateau_h_max": 11,
+						"plateau_shape_bias": "blocky",
+						"bridge_width": 2,
+						"bridge_density": 0.7,
+						"straggler_count_min": 2, "straggler_count_max": 3
+					}
+				}
+			},
+
+			"situation_category": {
+				"combat":    "combat",
+				"npc":       "intel",
+				"loot":      "reward",
+				"money":     "reward",
+				"omen":      "intel",
+				"ritual":    "intel",
+				"obstacle":  "intel",
+				"structure": "intel"
 			}
 		},
 
-		"contact": {
+			"contact": {
 			"roles": {
 				"witness":        { "fear_range": [20, 40], "morale_range": [50, 70], "turn_count_base": 2, "label": "A Witness" },
 				"guide":          { "fear_range": [15, 35], "morale_range": [55, 75], "turn_count_base": 2, "label": "A Guide" },

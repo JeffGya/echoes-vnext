@@ -3,6 +3,8 @@
   "data": {
     "_note": "Realm model config. Stages are NOT preset here — they are generated deterministically at runtime by RealmService/RealmGenerator using CampaignSeed + stage_count_min/max. The generator caches results in save_data[\"realms\"] so a player always sees the same stages on the same run. seed_namespace is the CampaignSeed path prefix for this realm.",
 
+    "_terrain_signature_note": "Each realm inherits its landscape signature by virtue from balance.json data.stages.map_shape.by_virtue (keyed by realm.virtue). A realm MAY override this by adding a 'terrain_signature' object directly on its entry — this object must conform to the same schema as the by_virtue entries (relief, plateau_count_min/max, plateau_w/h_min/max, plateau_shape_bias, bridge_width, bridge_density, straggler_count_min/max). Future per-realm visual assets key off realm id + virtue + the signature's 'relief' descriptor. realm.01 (courage) and realm.02 (wisdom) inherit by virtue and do NOT set terrain_signature here.",
+
     "realm_order": ["realm.01", "realm.02"],
 
     "realms": {

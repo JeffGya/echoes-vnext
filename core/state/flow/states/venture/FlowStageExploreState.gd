@@ -6,6 +6,7 @@ const StageExploreModelScript := preload("res://core/realms/StageExploreModel.gd
 const SituationModelScript    := preload("res://core/realms/SituationModel.gd")      # V2-INTEL-001
 const ObjectiveModelScript    := preload("res://core/realms/ObjectiveModel.gd")      # V2-STAGE-002
 const EmotionServiceScript    := preload("res://core/emotion/EmotionService.gd")
+const StageTerrainScript      := preload("res://core/realms/StageTerrain.gd")        # V2-STAGE-004-P2
 
 # V2-STAGE-001: Exploration stage map flow state.
 #
@@ -54,6 +55,13 @@ static func _reset_session_state(flow_ctx: FlowContext, t: int) -> void:
 	var height      := int(explore_map.get("height", StageExploreModelScript.MIN_HEIGHT))
 	var obj_total   := int(explore_map.get("objectives_total", 0))
 	var locked      := bool(explore_map.get("locked", false))
+	# V2-STAGE-004-P2: terrain dict is permanent geometry — must survive session reset.
+	var terrain_v: Variant = explore_map.get("terrain", {})
+	var terrain: Dictionary = terrain_v if terrain_v is Dictionary else {}
+	# V2-STAGE-004 Phase 2.5: explored_cells is durable run-state (persists across return_home→re-entry
+	# and across different parties). NOT wiped on session reset — preserved like terrain and revealed flags.
+	var explored_cells_v: Variant = explore_map.get("explored_cells", {})
+	var explored_cells: Dictionary = explored_cells_v if explored_cells_v is Dictionary else {}
 
 	# V2-INTEL-001: Carry forward revealed/resolved/intel_clues/intel_quality per situation.
 	# Positions preserved; session-transient fields (party_pos, turn_count, etc.) wiped below.
@@ -93,6 +101,9 @@ static func _reset_session_state(flow_ctx: FlowContext, t: int) -> void:
 		"pending_situation_id": "",
 		"pending_contact":      {},   # V2-STAGE-003: cleared on session reset; active contact persists in save
 		"contact_responses":    [],   # V2-STAGE-003: cleared on session reset
+		"terrain":             terrain, # V2-STAGE-004-P2: permanent geometry, never cleared on reset
+		"last_traveled_path":  [],   # V2-STAGE-004-P2: presentation-only path for UI chained tween; cleared on session reset
+		"explored_cells":      explored_cells, # V2-STAGE-004 Phase 2.5: durable fog-of-war set; NOT a transient
 	}
 
 	stage["explore_map"] = explore_map
@@ -186,7 +197,9 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var map_width    := int(explore_map.get("width",  StageExploreModelScript.MIN_WIDTH))
 	var map_height   := int(explore_map.get("height", StageExploreModelScript.MIN_HEIGHT))
 
-	# Project situations — hidden ones show only position and "hidden" type
+	# V2-STAGE-004 Phase 2.5 — fog-of-war projection: emit ONLY discovered (revealed==true)
+	# situations. Undiscovered situations are absent entirely — true fog (UI cannot draw what
+	# it isn't given). Hidden placeholders dropped; the snapshot is the authoritative contract.
 	var raw_sits: Variant = explore_map.get("situations", [])
 	var situations_raw: Array = raw_sits if raw_sits is Array else []
 	var situations: Array = []
@@ -200,16 +213,11 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				"type":         str(sit.get("type", "")),
 				"is_objective": bool(sit.get("is_objective", false)),
 				"resolved":     bool(sit.get("resolved", false)),
+				# V2-STAGE-004 Phase 2.5 (pass-fix): passed nodes remain visible on the map
+				# but the UI can style them differently (e.g. dimmed icon).
+				"passed":       bool(sit.get("passed", false)),
 			})
-		else:
-			situations.append({
-				"id":       str(sit.get("id", "")),
-				"pos":      sit.get("pos", { "col": 0, "row": 0 }),
-				"revealed": false,
-				"type":     "hidden",
-				"is_objective": false,  # Never leak this while hidden
-				"resolved": false,
-			})
+		# Undiscovered situations: no entry emitted (true fog of war)
 
 	# Pending situation — set by advance_turn, cleared by engage_situation
 	var pending_sit_id := str(explore_map.get("pending_situation_id", ""))
@@ -482,6 +490,46 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	for _slot_key in calling_action_slots:
 		actions[_slot_key] = calling_action_slots[_slot_key]
 
+	# V2-STAGE-004-P2: resolve directive fields for snapshot projection.
+	# Reads active_directive_id from save_data → looks up directive dict from balance config.
+	# Mirrors DirectiveService.get_active_directive() without needing the service instance.
+	var _sc_snap_v: Variant = flow_ctx.save_data.get("stage_context", {})
+	var _sc_snap: Dictionary = _sc_snap_v if _sc_snap_v is Dictionary else {}
+	var _dir_id_snap := str(_sc_snap.get("active_directive_id", "directive.scout_carefully"))
+	var _dir_snap: Dictionary = {}
+	if flow_ctx.config_service != null:
+		var _bal_snap_v: Variant = flow_ctx.config_service.get_balance()
+		var _bal_snap: Dictionary = _bal_snap_v if _bal_snap_v is Dictionary else {}
+		var _bsd_v: Variant = _bal_snap.get("data", {})
+		var _bsd: Dictionary = _bsd_v if _bsd_v is Dictionary else {}
+		var _bdd_v: Variant = _bsd.get("directives", {})
+		var _bdd: Dictionary = _bdd_v if _bdd_v is Dictionary else {}
+		var _de_v: Variant = _bdd.get(_dir_id_snap, {})
+		_dir_snap = _de_v if _de_v is Dictionary else {}
+	var _step_budget_snap := int(_dir_snap.get("step_budget", 3))
+
+	# steps_to_target: BFS distance from party to the in-transit target situation.
+	var _steps_to_target := 0
+	var _target_sit_id_snap := str(explore_map.get("target_situation_id", ""))
+	if not _target_sit_id_snap.is_empty():
+		var _tsit_pos_v: Variant = { "col": 0, "row": 0 }
+		for _sn_v in situations_raw:
+			var _sn: Dictionary = _sn_v if _sn_v is Dictionary else {}
+			if str(_sn.get("id", "")) == _target_sit_id_snap:
+				var _snp_v: Variant = _sn.get("pos", { "col": 0, "row": 0 })
+				_tsit_pos_v = _snp_v if _snp_v is Dictionary else { "col": 0, "row": 0 }
+				break
+		var _tsit_pos: Dictionary = _tsit_pos_v if _tsit_pos_v is Dictionary else { "col": 0, "row": 0 }
+		var _terrain_snap_v: Variant = explore_map.get("terrain", {})
+		var _terrain_snap: Dictionary = _terrain_snap_v if _terrain_snap_v is Dictionary else {}
+		var _wk_snap: Dictionary = StageTerrainScript.walkable_set(_terrain_snap)
+		if not _wk_snap.is_empty():
+			var _df_snap: Dictionary = StageTerrainScript.bfs_distance_field(_tsit_pos, _wk_snap)
+			var _pk_snap: String = "%d,%d" % [int(party_pos.get("col", 0)), int(party_pos.get("row", 0))]
+			_steps_to_target = int(_df_snap.get(_pk_snap, 0))
+		else:
+			_steps_to_target = GridService.chebyshev_distance(party_pos, _tsit_pos)
+
 	return {
 		"type": FlowStateIds.STAGE_EXPLORE,
 		"data": {
@@ -504,6 +552,19 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"contact_pending":         contact_pending,
 			"contact_responses":       contact_responses_out,
 			"contact_echo_bids":       contact_echo_bids,
+			# V2-STAGE-004-P2 traversal fields
+			"step_budget":             _step_budget_snap,
+			"steps_to_target":         _steps_to_target,
+			"in_transit":              bool(explore_map.get("in_transit", false)),
+			"target_situation_id":     str(explore_map.get("target_situation_id", "")),
+			"terrain":                 explore_map.get("terrain", {}),
+			# traveled_path: Array of {col,row} dicts — pre-advance cell + each stepped cell this turn.
+			# Empty when no movement occurred (non-advance refreshes). UI uses this for chained tween.
+			"traveled_path":           _project_traveled_path(explore_map),
+			# V2-STAGE-004 Phase 2.5: discovered-tile set { "col,row": true } for fog-of-war rendering.
+			# Three tile states: void (not walkable) = no tile; walkable + in explored_cells = normal;
+			# walkable + NOT in explored_cells = fog tile. Drives both overview and in-exploration views.
+			"explored_cells":          explore_map.get("explored_cells", {}),
 		},
 		"actions": actions,
 		"meta": { "t": t },
@@ -789,6 +850,25 @@ static func _check_party_return_request(flow_ctx: FlowContext) -> bool:
 # differentiates same-calling echoes and uncalled echoes individually.
 # Used by contact_echo_bids entries so the UI can inform the player's choice.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# V2-STAGE-004-P2: traveled_path projection helper
+# Projects explore_map["last_traveled_path"] into the snapshot as an Array of
+# {col,row} dicts.  Returns [] when the field is missing or empty (non-advance
+# refreshes — contact turns, situation overlays, session resets).
+# This is presentation-only data; it must never affect sim determinism.
+# ---------------------------------------------------------------------------
+static func _project_traveled_path(explore_map: Dictionary) -> Array:
+	var raw_v: Variant = explore_map.get("last_traveled_path", [])
+	var raw: Array = raw_v if raw_v is Array else []
+	if raw.is_empty():
+		return []
+	var out: Array = []
+	for cell_v in raw:
+		var cell: Dictionary = cell_v if cell_v is Dictionary else {}
+		out.append({ "col": int(cell.get("col", 0)), "row": int(cell.get("row", 0)) })
+	return out
+
+
 static func _echo_picker_hint(bid_type: String, dominant_vector: String) -> String:
 	if bid_type == "reactive":
 		return "Speaking from fear"

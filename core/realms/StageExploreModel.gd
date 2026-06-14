@@ -37,19 +37,37 @@ const MIN_HEIGHT: int = 30
 # Build a new StageExploreModel dict.
 # width, height: deterministic random dimensions (caller derives from config + seed).
 # situations: pre-built Array of SituationModel dicts (from RealmGenerator).
+# terrain: StageTerrain dict (V2-STAGE-004 Phase 2). Pass {} for legacy all-walkable.
+# party_pos: entry cell {col,row} from StageTerrain.entry_cell(). Pass {} to use the
+#            default centre-left fallback {col:0, row:height/2}.
 # objectives_total: count of is_objective=true situations.
-static func make(width: int, height: int, situations: Array) -> Dictionary:
+static func make(
+	width: int,
+	height: int,
+	situations: Array,
+	terrain: Dictionary = {},
+	party_pos: Dictionary = {}
+) -> Dictionary:
 	var obj_total := 0
 	for sit_v in situations:
 		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
 		if sit.get("is_objective", false):
 			obj_total += 1
 
+	# Determine entry position: use caller-supplied party_pos if non-empty,
+	# otherwise fall back to the legacy centre-left cell.
+	var entry: Dictionary = {}
+	if not party_pos.is_empty():
+		entry = party_pos
+	else:
+		entry = { "col": 0, "row": max(height, MIN_HEIGHT) / 2 }
+
 	return {
 		"width":            max(width,  MIN_WIDTH),
 		"height":           max(height, MIN_HEIGHT),
-		"party_pos":        { "col": 0, "row": max(height, MIN_HEIGHT) / 2 },
+		"party_pos":        entry,
 		"situations":       situations,
+		"terrain":          terrain,
 		"locked":           false,
 		"party_state":      STATE_EXPLORING,
 		"turn_count":       0,
@@ -66,6 +84,7 @@ static func make_default() -> Dictionary:
 		"height":           MIN_HEIGHT,
 		"party_pos":        { "col": 0, "row": MIN_HEIGHT / 2 },
 		"situations":       [],
+		"terrain":          {},
 		"locked":           false,
 		"party_state":      STATE_EXPLORING,
 		"turn_count":       0,
