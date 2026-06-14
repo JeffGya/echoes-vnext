@@ -291,6 +291,8 @@ static func register(runner: CoreTestRunner) -> void:
 	# pass-fix tests
 	runner.register_test("traversal/pass_fix_non_obj_not_retargeted",        Callable(TraversalModelTests, "_t_pass_fix_non_obj_not_retargeted"))
 	runner.register_test("traversal/pass_fix_obj_reoffered_at_exhaustion",   Callable(TraversalModelTests, "_t_pass_fix_obj_reoffered_at_exhaustion"))
+	# Finding 2 fix: entry fog seeded before first snapshot
+	runner.register_test("traversal/fog_entry_seeded_before_first_snapshot", Callable(TraversalModelTests, "_t_fog_entry_seeded_before_first_snapshot"))
 
 
 # ─── Test 1 — NO TELEPORT: advance_turn moves ≤ step_budget tiles ─────────────
@@ -1665,3 +1667,119 @@ static func _t_pass_fix_obj_reoffered_at_exhaustion() -> Dictionary:
 			new_pending, new_target, new_pk, obj_pk
 		]
 	}
+
+
+# ─── Test 24 — ENTRY FOG SEEDED BEFORE FIRST SNAPSHOT (Finding 2 fix) ────────
+# Verifies that the first flow.stage_explore snapshot (before any stage.advance_turn)
+# already has non-empty explored_cells AND the entry-cell situation has revealed==true.
+# Proves the entry seed runs in _reset_session_state, not deferred to advance_turn.
+static func _t_fog_entry_seeded_before_first_snapshot() -> Dictionary:
+	var runtime := _make_runtime("directive.scout_carefully")
+
+	# Inject a terrain stage; override sit.0 position to the entry cell so
+	# it is guaranteed inside the reveal_radius=3 neighbourhood.
+	var terrain := _inject_terrain_stage(runtime, 55, 0, [{ "col": 1, "row": 1 }], true)
+	var walkable: Dictionary = StageTerrainScript.walkable_set(terrain)
+	var bounds := { "w": 30, "h": 30 }
+	var entry: Dictionary = StageTerrainScript.entry_cell(walkable, bounds)
+
+	# Move sit.0 and party_pos to the entry cell.
+	var realms_raw: Variant = runtime.flow_ctx.save_data.get("realms", {})
+	var realms_d: Dictionary = realms_raw if realms_raw is Dictionary else {}
+	var realm_d: Dictionary = realms_d.get("realm.01", {})
+	var stages_raw: Variant = realm_d.get("stages", [])
+	var stages_arr: Array = stages_raw if stages_raw is Array else []
+	if stages_arr.is_empty():
+		return { "ok": false, "error": "No stages injected" }
+	var stage_d: Dictionary = stages_arr[0] if stages_arr[0] is Dictionary else {}
+	var em_raw: Variant = stage_d.get("explore_map", {})
+	var em_d: Dictionary = em_raw if em_raw is Dictionary else {}
+	var sits_raw: Variant = em_d.get("situations", [])
+	var sits_arr: Array = sits_raw if sits_raw is Array else []
+	if sits_arr.is_empty():
+		return { "ok": false, "error": "No situations in stage" }
+	var s0: Dictionary = sits_arr[0] if sits_arr[0] is Dictionary else {}
+	s0["pos"] = entry.duplicate()
+	sits_arr[0] = s0
+	em_d["situations"] = sits_arr
+	em_d["party_pos"]  = entry.duplicate()
+	stage_d["explore_map"] = em_d
+	stages_arr[0] = stage_d
+	runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"] = stages_arr
+
+	runtime.flow_ctx.realm_id = "realm.01"
+	runtime.flow_ctx.stage_id = "stage.0"
+	runtime.flow_ctx.last_snapshot = {
+		"type": FlowStateIds.STAGE_EXPLORE, "data": {}, "actions": {}, "meta": { "t": 0 },
+	}
+
+	# Simulate enter(): lock -> reset_session_state -> build_snapshot. NO advance_turn dispatch.
+	FlowStageExploreStateScript._lock_map_if_needed(runtime.flow_ctx, 1)
+	FlowStageExploreStateScript._reset_session_state(runtime.flow_ctx, 1)
+	var snap: Dictionary = FlowStageExploreStateScript.build_snapshot(runtime.flow_ctx, 1)
+
+	# 1. Snapshot explored_cells must be non-empty before any advance.
+	var snap_data_v: Variant = snap.get("data", {})
+	var snap_data: Dictionary = snap_data_v if snap_data_v is Dictionary else {}
+	var snap_ec_v: Variant = snap_data.get("explored_cells", {})
+	var snap_ec: Dictionary = snap_ec_v if snap_ec_v is Dictionary else {}
+	if snap_ec.is_empty():
+		return {
+			"ok": false,
+			"error": "First snapshot has empty explored_cells before any advance_turn — entry fog not seeded"
+		}
+
+	# 2. save_data explored_cells must also be non-empty (durable, not just snapshot projection).
+	var save_ec := _read_explored_cells(runtime)
+	if save_ec.is_empty():
+		return {
+			"ok": false,
+			"error": "save_data explored_cells empty after _reset_session_state — entry seed did not persist"
+		}
+
+	# 3. Entry cell must be in explored_cells.
+	var entry_key: String = "%d,%d" % [int(entry.get("col", 0)), int(entry.get("row", 0))]
+	if not save_ec.has(entry_key):
+		return {
+			"ok": false,
+			"error": "Entry cell '%s' not in explored_cells — radius seeding broken" % entry_key
+		}
+
+	# 4. sit.0 (placed at entry cell) must be revealed==true in save_data.
+	var up_stages_raw: Variant = runtime.flow_ctx.save_data.get("realms", {}).get("realm.01", {}).get("stages", []) if runtime.flow_ctx.save_data.get("realms", null) is Dictionary else []
+	var up_stages: Array = up_stages_raw if up_stages_raw is Array else []
+	var up_sits: Array = []
+	if not up_stages.is_empty():
+		var us0: Dictionary = up_stages[0] if up_stages[0] is Dictionary else {}
+		var uem_v: Variant  = us0.get("explore_map", {})
+		var uem: Dictionary = uem_v if uem_v is Dictionary else {}
+		var usits_v: Variant = uem.get("situations", [])
+		up_sits = usits_v if usits_v is Array else []
+	var sit0_revealed := false
+	for sv in up_sits:
+		var sd: Dictionary = sv if sv is Dictionary else {}
+		if str(sd.get("id", "")) == "sit.0" and bool(sd.get("revealed", false)):
+			sit0_revealed = true
+			break
+	if not sit0_revealed:
+		return {
+			"ok": false,
+			"error": "sit.0 at entry cell not revealed==true in save_data — entry-fog reveal not fired"
+		}
+
+	# 5. sit.0 must appear in snapshot data.situations (revealed projection picks it up).
+	var snap_sits_v: Variant = snap_data.get("situations", [])
+	var snap_sits: Array = snap_sits_v if snap_sits_v is Array else []
+	var sit0_in_snap := false
+	for ssv in snap_sits:
+		var ssd: Dictionary = ssv if ssv is Dictionary else {}
+		if str(ssd.get("id", "")) == "sit.0":
+			sit0_in_snap = true
+			break
+	if not sit0_in_snap:
+		return {
+			"ok": false,
+			"error": "sit.0 absent from first snapshot situations — fog projection missing entry-seed reveal"
+		}
+
+	return { "ok": true }

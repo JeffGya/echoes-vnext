@@ -4640,23 +4640,18 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 	var explored_cells_v: Variant = explore_map.get("explored_cells", {})
 	var explored_cells: Dictionary = explored_cells_v if explored_cells_v is Dictionary else {}
 
-	# V2-STAGE-004 Phase 2.5: seed explored_cells on first entry (explored_cells empty = first-ever entry).
-	# Reveal the entry cell + its reveal_radius neighbourhood so the player sees their surroundings.
-	if explored_cells.is_empty():
-		var _entry_pos_v: Variant = explore_map.get("party_pos", { "col": 0, "row": 0 })
-		var _entry_pos: Dictionary = _entry_pos_v if _entry_pos_v is Dictionary else { "col": 0, "row": 0 }
-		var _seed_cells := StageTerrainScript.cells_within_radius(_entry_pos, reveal_radius, walkable)
-		for _sc_v in _seed_cells:
-			var _sc: Dictionary = _sc_v if _sc_v is Dictionary else {}
-			explored_cells["%d,%d" % [int(_sc.get("col", 0)), int(_sc.get("row", 0))]] = true
-		explore_map["explored_cells"] = explored_cells
-		logger.debug(t, "stage.explore.fog_seed", "explored_cells seeded on first entry", {
-			"stage_id":        flow_ctx.stage_id,
-			"seeded_count":    explored_cells.size(),
-			"reveal_radius":   reveal_radius,
-		})
-		# Tile-based discovery: reveal any situations whose cell is now in explored_cells.
-		_reveal_explored_situations(explore_map, explored_cells, directive, t)
+	# V2-STAGE-004 Phase 2.5 (Finding 2): entry-fog seed delegated to the shared static helper.
+	# Idempotent (empty-guard inside); no-op when already seeded by _reset_session_state.
+	# Passing precise_intel_bias from the resolved directive keeps intel quality consistent.
+	var _adv_precise_bias := int(directive.get("precise_intel_bias", 0))
+	var _adv_realm_seed   := int(flow_ctx.save_data.get("realms", {}).get(flow_ctx.realm_id, {}).get("seed", 0))
+	FlowStageExploreStateScript.seed_entry_fog_if_needed(
+		explore_map, walkable, reveal_radius, _adv_precise_bias, _adv_realm_seed,
+		flow_ctx.stage_id, logger, t
+	)
+	# Re-read explored_cells after the seed (may have been populated by the helper above).
+	var _ec_post_v: Variant = explore_map.get("explored_cells", {})
+	explored_cells = _ec_post_v if _ec_post_v is Dictionary else {}
 
 	# V2-STAGE-004 Phase 2.5: fog-of-war 3-tier target selection (replaces category-only _find_target_situation).
 	var target := _find_explore_target(explore_map, directive, walkable, explored_cells)
@@ -4745,7 +4740,7 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 	# explored_cells. This is a superset of the old radius check — any situation whose tile
 	# was fog-lifted during movement (within reveal_radius of any stepped cell) is guaranteed
 	# revealed. Invariant: tile in explored_cells ⟺ situation on it is revealed.
-	_reveal_explored_situations(explore_map, explored_cells, directive, t)
+	FlowStageExploreStateScript._reveal_explored_situations_static(explore_map, explored_cells, _adv_precise_bias, _adv_realm_seed, flow_ctx.stage_id, logger, t)
 
 	# V2-STAGE-004 Phase 2.5: arrival/engage check — check whether the final party cell
 	# holds a discovered, unresolved, non-frontier situation (includes situations discovered
@@ -6299,71 +6294,6 @@ func _explore_walkable(explore_map: Dictionary) -> Dictionary:
 	return full
 
 
-# Tile-based discovery sweep: reveal every unresolved situation whose cell key is in
-# explored_cells. Call this (a) after entry-seed populates explored_cells, and (b)
-# after each per-turn fog lift. Invariant: tile in explored_cells ⟺ situation revealed.
-func _reveal_explored_situations(explore_map: Dictionary, explored_cells: Dictionary, directive: Dictionary, t: int) -> void:
-	var sits_v: Variant = explore_map.get("situations", [])
-	var sits: Array = sits_v if sits_v is Array else []
-	for sit_v in sits:
-		if not (sit_v is Dictionary):
-			continue
-		var sit: Dictionary = sit_v
-		if bool(sit.get("resolved", false)):
-			continue
-		if bool(sit.get("revealed", false)):
-			continue
-		var sp_v: Variant = sit.get("pos", { "col": 0, "row": 0 })
-		var sp: Dictionary = sp_v if sp_v is Dictionary else { "col": 0, "row": 0 }
-		var cell_key: String = "%d,%d" % [int(sp.get("col", 0)), int(sp.get("row", 0))]
-		if explored_cells.has(cell_key):
-			_reveal_situation(explore_map, sit, directive, t)
-			# Re-read situations after mutation (in-place; sits reference may be stale)
-			var updated_v: Variant = explore_map.get("situations", [])
-			sits = updated_v if updated_v is Array else sits
-
-
-# Reveal a single situation in explore_map once its tile enters explored_cells.
-# Uses precise_intel_bias for intel quality only — discovery is unconditional.
-# Mutates explore_map["situations"] in place. Idempotent — skips already-revealed.
-# RNG key: "stage.reveal.<sit_id>" (append-only; used for quality roll only).
-func _reveal_situation(explore_map: Dictionary, sit: Dictionary, directive: Dictionary, t: int) -> void:
-	if bool(sit.get("revealed", false)):
-		return  # Already revealed — nothing to do
-	var sit_id := str(sit.get("id", ""))
-	var realm_seed := int(flow_ctx.save_data.get("realms", {}).get(flow_ctx.realm_id, {}).get("seed", 0))
-	var rng := CampaignSeed.get_rng_from(realm_seed, "stage.reveal.%s" % sit_id)
-	# Discovery is UNCONDITIONAL once the tile is in explored_cells.
-	# The first rng draw is kept for intel quality so the RNG sequence is append-only.
-	var bias_roll := rng.randi_range(0, 100)
-	var sits_v: Variant = explore_map.get("situations", [])
-	var sits: Array      = sits_v if sits_v is Array else []
-	for _ri in range(sits.size()):
-		var _rs_v: Variant = sits[_ri]
-		if not (_rs_v is Dictionary):
-			continue
-		var _rs: Dictionary = _rs_v
-		if str(_rs.get("id", "")) != sit_id:
-			continue
-		_rs["revealed"] = true
-		# V2-INTEL-001: write intel_clues + quality on first reveal
-		var clues_v: Variant = _rs.get("intel_clues", [])
-		var clues: Array = clues_v if clues_v is Array else []
-		if clues.is_empty():
-			clues.append(_intel_clue_for_type(str(_rs.get("type", ""))))
-		_rs["intel_clues"] = clues
-		# precise_intel_bias: 0..100 — roll below this value yields "precise"
-		var precise_bias := int(directive.get("precise_intel_bias", 0))
-		_rs["intel_quality"] = "precise" if bias_roll < precise_bias else "rough"
-		sits[_ri] = _rs
-		break
-	explore_map["situations"] = sits
-	logger.debug(t, "stage.situation.revealed", "Situation revealed by tile discovery", {
-		"stage_id":     flow_ctx.stage_id,
-		"situation_id": sit_id,
-	})
-
-
 # Find the best next unresolved situation using directive-weighted BFS scoring.
 # Inputs:
 #   explore_map  — current stage explore map
@@ -6639,23 +6569,9 @@ func _mark_situation_revealed(stage: Dictionary, sit_id: String, t: int) -> void
 
 # V2-INTEL-001: Returns the atmospheric intel clue written to a situation on first scout reveal.
 # Not called on direct engagement — engagement-reveal is firsthand, not prior intel.
+# Delegates to the static in FlowStageExploreState (single source of truth for the match table).
 func _intel_clue_for_type(sit_type: String) -> String:
-	match sit_type:
-		SituationModelScript.TYPE_COMBAT:      return "Tracks in the earth. Something passed through here with intent."
-		SituationModelScript.TYPE_NPC:         return "Warmth lingers — a firepit, a scent, the sense of someone waiting."
-		SituationModelScript.TYPE_LOOT:        return "A cache left behind. The kind made in haste, not ceremony."
-		SituationModelScript.TYPE_MONEY:       return "A ritual trace — coins or marks, left as offering or warning."
-		# V2-STAGE-002: new objective types
-		ObjectiveModelScript.TYPE_RECOVER:     return "Something was taken here. The absence is palpable — a hollow where something should be."
-		ObjectiveModelScript.TYPE_PROTECT:     return "A fragile presence holds out nearby. It will not endure without help."
-		ObjectiveModelScript.TYPE_ENDURE:      return "The pressure does not stop. Whatever is here does not yield easily."
-		ObjectiveModelScript.TYPE_PURSUE:      return "Movement — recent. Something is moving through this space with purpose."
-		# V2-STAGE-004: new in-explore situation types
-		SituationModelScript.TYPE_OMEN:        return "A wrongness in the air — birds gone quiet, a chill with no wind."
-		SituationModelScript.TYPE_OBSTACLE:    return "The way narrows and snags. Whatever lies ahead will not yield easily to a careless step."
-		SituationModelScript.TYPE_RITUAL:      return "Worn ground and old ash. Hands have tended this place, again and again."
-		SituationModelScript.TYPE_STRUCTURE:   return "Walls, deliberate and standing. Someone raised this — and may yet return to it."
-		_:                                     return "Something is present here."
+	return FlowStageExploreStateScript._intel_clue_for_type_static(sit_type)
 
 
 # ── V2-VOICE-001: Sanctum bark helpers ───────────────────────────────────────

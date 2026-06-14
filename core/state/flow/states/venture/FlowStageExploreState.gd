@@ -119,6 +119,49 @@ static func _reset_session_state(flow_ctx: FlowContext, t: int) -> void:
 			"stage_id": flow_ctx.stage_id,
 		})
 
+	# V2-STAGE-004 Phase 2.5 (Finding 2): seed entry-fog BEFORE build_snapshot so the
+	# first snapshot already shows the party's immediate surroundings unfogged.
+	# Only runs when explored_cells is empty (first-ever entry); idempotent otherwise.
+	# Resolve directive reveal_radius + precise_intel_bias from config (same pattern as build_snapshot).
+	var _rss_dir_id := "directive.scout_carefully"  # fallback
+	var _rss_sc_v: Variant = flow_ctx.save_data.get("stage_context", {})
+	if _rss_sc_v is Dictionary:
+		_rss_dir_id = str((_rss_sc_v as Dictionary).get("active_directive_id", _rss_dir_id))
+	var _rss_dir: Dictionary = {}
+	if flow_ctx.config_service != null:
+		var _rss_bal_v: Variant = flow_ctx.config_service.get_balance()
+		var _rss_bal: Dictionary = _rss_bal_v if _rss_bal_v is Dictionary else {}
+		var _rss_bsd_v: Variant = _rss_bal.get("data", {})
+		var _rss_bsd: Dictionary = _rss_bsd_v if _rss_bsd_v is Dictionary else {}
+		var _rss_dirs_v: Variant = _rss_bsd.get("directives", {})
+		var _rss_dirs: Dictionary = _rss_dirs_v if _rss_dirs_v is Dictionary else {}
+		var _rss_de_v: Variant = _rss_dirs.get(_rss_dir_id, {})
+		_rss_dir = _rss_de_v if _rss_de_v is Dictionary else {}
+	var _rss_reveal_radius    := int(_rss_dir.get("reveal_radius", _rss_dir.get("passive_reveal_radius", 2)))
+	var _rss_precise_bias     := int(_rss_dir.get("precise_intel_bias", 0))
+	var _rss_realm_seed       := int(flow_ctx.save_data.get("realms", {}).get(flow_ctx.realm_id, {}).get("seed", 0))
+	var _rss_walkable         := StageTerrainScript.walkable_set(terrain)
+	if _rss_walkable.is_empty():
+		# Legacy: full rectangle
+		for _rss_c in range(width):
+			for _rss_r in range(height):
+				_rss_walkable["%d,%d" % [_rss_c, _rss_r]] = true
+	# Re-read explore_map from stage after write-back so mutations are on the live reference.
+	var _rss_em_v2: Variant = stage.get("explore_map", {})
+	var _rss_em2: Dictionary = _rss_em_v2 if _rss_em_v2 is Dictionary else {}
+	seed_entry_fog_if_needed(
+		_rss_em2,
+		_rss_walkable,
+		_rss_reveal_radius,
+		_rss_precise_bias,
+		_rss_realm_seed,
+		flow_ctx.stage_id,
+		flow_ctx.logger,
+		t
+	)
+	stage["explore_map"] = _rss_em2
+	_write_stage_back(flow_ctx, stage)
+
 func exit(ctx: RefCounted, t: int) -> void:
 	pass
 
@@ -889,5 +932,160 @@ static func _echo_picker_hint(bid_type: String, dominant_vector: String) -> Stri
 	if bid_type == "alignment":
 		return "Natural fit — " + direction.to_lower()
 	return direction
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# V2-STAGE-004 Phase 2.5: Entry-fog seed (Finding 2 fix)
+# ────────────────────────────────────────────────────────────────────────────
+#
+# Seeds the entry-vicinity fog BEFORE the first snapshot is emitted, so the
+# player's immediate surroundings are never fully fogged on initial entry.
+#
+# Idempotent: the empty-guard prevents re-seeding on subsequent entries
+# (explored_cells is durable and survives session reset).
+#
+# Call sites:
+#   (A) FlowStageExploreState._reset_session_state — seeds before build_snapshot
+#   (B) FlowRuntime._handle_stage_advance_turn     — same guard, no-op when already seeded
+#
+# Parameters
+#   explore_map        — mutable explore_map dict (in-place: writes explored_cells + situations)
+#   walkable           — pre-built walkable set from StageTerrain.walkable_set (or full rect)
+#   reveal_radius      — neighbourhood radius to seed (from active directive)
+#   precise_intel_bias — 0..100 intel quality bias (from directive)
+#   realm_seed         — int seed for RNG keying (from save_data.realms[realm_id].seed)
+#   stage_id           — String id used in logger (flow_ctx.stage_id)
+#   logger             — StructuredLogger (may be null)
+#   t                  — sim tick
+
+static func seed_entry_fog_if_needed(
+		explore_map:        Dictionary,
+		walkable:           Dictionary,
+		reveal_radius:      int,
+		precise_intel_bias: int,
+		realm_seed:         int,
+		stage_id:           String,
+		logger,                       # StructuredLogger (untyped to avoid hard dep from state script)
+		t:                  int
+) -> void:
+	# Guard: already seeded on a prior entry — explored_cells is durable.
+	var ec_v: Variant = explore_map.get("explored_cells", {})
+	var explored_cells: Dictionary = ec_v if ec_v is Dictionary else {}
+	if not explored_cells.is_empty():
+		return
+
+	# Seed the entry-cell neighbourhood.
+	var entry_pos_v: Variant = explore_map.get("party_pos", { "col": 0, "row": 0 })
+	var entry_pos: Dictionary = entry_pos_v if entry_pos_v is Dictionary else { "col": 0, "row": 0 }
+	var seed_cells: Array = StageTerrainScript.cells_within_radius(entry_pos, reveal_radius, walkable)
+	for sc_v in seed_cells:
+		var sc: Dictionary = sc_v if sc_v is Dictionary else {}
+		explored_cells["%d,%d" % [int(sc.get("col", 0)), int(sc.get("row", 0))]] = true
+	explore_map["explored_cells"] = explored_cells
+
+	if logger != null:
+		logger.debug(t, "stage.explore.fog_seed", "explored_cells seeded on first entry", {
+			"stage_id":      stage_id,
+			"seeded_count":  explored_cells.size(),
+			"reveal_radius": reveal_radius,
+		})
+
+	# Tile-based discovery: reveal any entry-area situations now in explored_cells.
+	# Uses the same invariant as the advance-turn path: tile in explored_cells ⟹ situation revealed.
+	_reveal_explored_situations_static(explore_map, explored_cells, precise_intel_bias, realm_seed, stage_id, logger, t)
+
+
+# Tile-based discovery sweep (static companion to FlowRuntime._reveal_explored_situations).
+# Reveals every unresolved situation whose cell key is present in explored_cells.
+# Idempotent: skips already-revealed situations.
+static func _reveal_explored_situations_static(
+		explore_map:        Dictionary,
+		explored_cells:     Dictionary,
+		precise_intel_bias: int,
+		realm_seed:         int,
+		stage_id:           String,
+		logger,
+		t:                  int
+) -> void:
+	var sits_v: Variant = explore_map.get("situations", [])
+	var sits: Array = sits_v if sits_v is Array else []
+	for sit_v in sits:
+		if not (sit_v is Dictionary):
+			continue
+		var sit: Dictionary = sit_v
+		if bool(sit.get("resolved", false)):
+			continue
+		if bool(sit.get("revealed", false)):
+			continue
+		var sp_v: Variant = sit.get("pos", { "col": 0, "row": 0 })
+		var sp: Dictionary = sp_v if sp_v is Dictionary else { "col": 0, "row": 0 }
+		var cell_key: String = "%d,%d" % [int(sp.get("col", 0)), int(sp.get("row", 0))]
+		if explored_cells.has(cell_key):
+			_reveal_situation_static(explore_map, sit, precise_intel_bias, realm_seed, stage_id, logger, t)
+			# Re-read situations after mutation
+			var updated_v: Variant = explore_map.get("situations", [])
+			sits = updated_v if updated_v is Array else sits
+
+
+# Single-situation reveal (static companion to FlowRuntime._reveal_situation).
+# RNG key: "stage.reveal.<sit_id>" — append-only, unchanged from advance path.
+# Writes revealed=true, intel_clues, intel_quality onto the situation in explore_map.
+static func _reveal_situation_static(
+		explore_map:        Dictionary,
+		sit:                Dictionary,
+		precise_intel_bias: int,
+		realm_seed:         int,
+		stage_id:           String,
+		logger,
+		t:                  int
+) -> void:
+	if bool(sit.get("revealed", false)):
+		return
+	var sit_id := str(sit.get("id", ""))
+	var rng := CampaignSeed.get_rng_from(realm_seed, "stage.reveal.%s" % sit_id)
+	var bias_roll := rng.randi_range(0, 100)
+	var sits_v: Variant = explore_map.get("situations", [])
+	var sits: Array = sits_v if sits_v is Array else []
+	for _ri in range(sits.size()):
+		var _rs_v: Variant = sits[_ri]
+		if not (_rs_v is Dictionary):
+			continue
+		var _rs: Dictionary = _rs_v
+		if str(_rs.get("id", "")) != sit_id:
+			continue
+		_rs["revealed"] = true
+		var clues_v: Variant = _rs.get("intel_clues", [])
+		var clues: Array = clues_v if clues_v is Array else []
+		if clues.is_empty():
+			clues.append(_intel_clue_for_type_static(str(_rs.get("type", ""))))
+		_rs["intel_clues"]    = clues
+		_rs["intel_quality"]  = "precise" if bias_roll < precise_intel_bias else "rough"
+		sits[_ri] = _rs
+		break
+	explore_map["situations"] = sits
+	if logger != null:
+		logger.debug(t, "stage.situation.revealed", "Situation revealed by entry-fog seed", {
+			"stage_id":     stage_id,
+			"situation_id": sit_id,
+		})
+
+
+# Intel clue text by situation type (mirrors FlowRuntime._intel_clue_for_type).
+# Kept in sync manually; type constants are stable (determinism rule: no reorder).
+static func _intel_clue_for_type_static(sit_type: String) -> String:
+	match sit_type:
+		SituationModelScript.TYPE_COMBAT:           return "Tracks in the earth. Something passed through here with intent."
+		SituationModelScript.TYPE_NPC:              return "Warmth lingers — a firepit, a scent, the sense of someone waiting."
+		SituationModelScript.TYPE_LOOT:             return "A cache left behind. The kind made in haste, not ceremony."
+		SituationModelScript.TYPE_MONEY:            return "A ritual trace — coins or marks, left as offering or warning."
+		ObjectiveModelScript.TYPE_RECOVER:          return "Something was taken here. The absence is palpable — a hollow where something should be."
+		ObjectiveModelScript.TYPE_PROTECT:          return "A fragile presence holds out nearby. It will not endure without help."
+		ObjectiveModelScript.TYPE_ENDURE:           return "The pressure does not stop. Whatever is here does not yield easily."
+		ObjectiveModelScript.TYPE_PURSUE:           return "Movement — recent. Something is moving through this space with purpose."
+		SituationModelScript.TYPE_OMEN:             return "A wrongness in the air — birds gone quiet, a chill with no wind."
+		SituationModelScript.TYPE_OBSTACLE:         return "The way narrows and snags. Whatever lies ahead will not yield easily to a careless step."
+		SituationModelScript.TYPE_RITUAL:           return "Worn ground and old ash. Hands have tended this place, again and again."
+		SituationModelScript.TYPE_STRUCTURE:        return "Walls, deliberate and standing. Someone raised this — and may yet return to it."
+		_:                                          return "Something is present here."
 
 

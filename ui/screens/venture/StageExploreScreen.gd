@@ -64,15 +64,13 @@ var _pending_overlay_data:    Dictionary = {}
 var _pending_overlay_actions: Dictionary = {}
 
 # ─── Board repaint guard ──────────────────────────────────────────────────────
-# Tracks the stage id + mode that was last painted so we repaint on stage change
-# OR on mode change (preview → explore), even when terrain count is identical.
-# Terrain-aware painting: stores the painted walkable cell count to detect
-# terrain changes within the same stage.
-# Fog-aware: also tracks the discovered cell count so fog lifts as explored grows.
-var _last_painted_stage_id:       String = ""
-var _last_painted_cell_count:     int    = -1
-var _last_painted_mode:           String = ""  # "preview" or "explore"
-var _last_painted_explored_size:  int    = -1
+# Single composite key that encodes every dimension that can change the painted
+# board: realm_id · stage_id · terrain content hash · mode · walkable cell count
+# · explored cell count. Any single change forces a clean repaint + fog rebuild.
+# Using a content hash of the full terrain dict means different realms/reruns with
+# the same walkable-cell count (but different island shapes) always get a fresh
+# paint, eliminating the cross-realm/cross-rerun stale-board bug (Finding 1).
+var _last_paint_key: String = ""
 
 # V2-VOW-002 ST-F: dynamic labels in StageInfoPanel and preview panel
 var _stage_proverb_lbl:   Label = null
@@ -577,22 +575,22 @@ func _fill_board(cols: int, rows: int, data: Dictionary = {}, mode: String = "")
 	else:
 		expected_count = walkable.size()
 
-	# Change-detection guard: repaint if the stage id, cell count, mode, OR explored
-	# count changed. The explored-size check ensures fog lifts as discovered grows.
-	var stage_id: String = str(data.get("stage_id", ""))
-	var explored_size: int = explored.size()
-	if (stage_id == _last_painted_stage_id
-			and expected_count == _last_painted_cell_count
-			and mode == _last_painted_mode
-			and explored_size == _last_painted_explored_size):
+	# Composite change-detection guard.
+	# Encodes: realm_id · stage_id · terrain content hash · mode · walkable count · explored count.
+	# terrain content hash catches different island shapes that happen to share the same
+	# walkable-cell count (e.g. two realms, two reruns) — prevents stale-board bleed across
+	# realm switches or rerun regenerations.
+	var stage_id:       String = str(data.get("stage_id", ""))
+	var realm_id:       String = str(data.get("realm_id", ""))
+	var terrain_sig:    int    = str(terrain).hash()   # deterministic content signature
+	var explored_size:  int    = explored.size()
+	var paint_key: String = "%s|%s|%d|%s|%d|%d" % [realm_id, stage_id, terrain_sig, mode, expected_count, explored_size]
+	if paint_key == _last_paint_key:
 		return
 
 	_board.clear()
 	_fog_layer.clear()
-	_last_painted_stage_id      = stage_id
-	_last_painted_cell_count    = expected_count
-	_last_painted_mode          = mode
-	_last_painted_explored_size = explored_size
+	_last_paint_key = paint_key
 
 	if walkable.is_empty():
 		# Legacy / no-terrain path: paint every cell in the bounding rectangle.
