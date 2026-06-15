@@ -36,10 +36,12 @@ const REQUIRED_FIELDS := [
 ## initiative_seed: derived from ectx.placement_seed (pass 0 in tests for seed-agnostic checks).
 ## init_cfg: data.combat.initiative_modifiers from balance.json (pass {} for modifier-free checks).
 static func create(actors: Array, objective: String,
-		initiative_seed: int = 0, init_cfg: Dictionary = {}) -> Dictionary:
+		initiative_seed: int = 0, init_cfg: Dictionary = {},
+		objective_params: Dictionary = {}) -> Dictionary:
 	return {
 		"actors":                  actors.duplicate(true),
 		"objective":               objective,
+		"objective_params":        objective_params,
 		"round_counter":           0,
 		"initiative_order":        _calc_initiative(actors, initiative_seed, init_cfg),
 		"active_initiative_index": 0,

@@ -1547,11 +1547,25 @@ func _resolve_next_actor(t: int) -> void:
 	var _bond_sanctum: Dictionary = _bond_sanctum_v if _bond_sanctum_v is Dictionary else {}
 	var _bonds_for_ctx: Array = _bond_sanctum.get("bonds", []) as Array
 
+	# V2-STAGE-004 P3a: thread terrain walkable set + board dims into movement board_cfg.
+	# Only when encounter_ctx.terrain is non-empty (i.e. irregular terrain was generated).
+	# Absent terrain → board_cfg is the raw grid_cfg → legacy 10×10 behaviour unchanged.
+	var movement_board_cfg: Dictionary = grid_cfg
+	if ectx != null and not ectx.terrain.is_empty():
+		var _mv_walkable: Dictionary = StageTerrain.walkable_set(ectx.terrain)
+		var _mv_bounds: Dictionary   = ectx.terrain.get("bounds", {})
+		movement_board_cfg = grid_cfg.duplicate(true)
+		movement_board_cfg["walkable"]   = _mv_walkable
+		if _mv_bounds.has("w"):
+			movement_board_cfg["board_cols"] = int(_mv_bounds["w"])
+		if _mv_bounds.has("h"):
+			movement_board_cfg["board_rows"] = int(_mv_bounds["h"])
+
 	# Build per-turn context — matches ActorStateMachine.advance_turn() contract.
 	var ctx: Dictionary = {
 		"actor":                   actor,
 		"all_actors":              ectx.actors,
-		"board_cfg":               grid_cfg,
+		"board_cfg":               movement_board_cfg,
 		"cfg":                     balance,
 		"t":                       t,
 		"round":                   round,

@@ -343,6 +343,8 @@ func _run_tests(parts: Array) -> void:
 	StageTerrainTests.register(runner)       # V2-STAGE-004-P2: terrain generation + connectivity
 	DirectiveConfigTests.register(runner)    # V2-STAGE-004-P2: directive traversal config
 	TraversalModelTests.register(runner)     # V2-STAGE-004-P2: party traversal + step_budget
+	# V2-STAGE-004 Phase 3a
+	CombatTerrainTests.register(runner)      # V2-STAGE-004-P3a: combat-terrain placement + movement
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [
