@@ -191,7 +191,9 @@ func _should_reset_presentation(data: Dictionary) -> bool:
 func _render(data: Dictionary, actions: Dictionary) -> void:
 	_current_cols = int(data.get("board_cols", 10))
 	_current_rows = int(data.get("board_rows", 10))
-	_draw_board(_current_cols, _current_rows)
+	var terrain_v: Variant = data.get("terrain", {})
+	var terrain: Dictionary = terrain_v if terrain_v is Dictionary else {}
+	_draw_board(_current_cols, _current_rows, terrain)
 	_center_board(_current_cols, _current_rows)
 
 	var actors: Array = data.get("actors", [])
@@ -260,10 +262,31 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 # Board rendering
 # -------------------------
 
-func _draw_board(cols: int, rows: int) -> void:
-	for col in range(cols):
-		for row in range(rows):
-			_board.set_cell(Vector2i(col, row), _TILE_SOURCE_ID, _TILE_ATLAS_COORDS)
+func _draw_board(cols: int, rows: int, terrain: Dictionary = {}) -> void:
+	# Compute walkable set from terrain data.
+	# StageTerrain.walkable_set returns {} when terrain is absent/empty — that is
+	# the legacy sentinel meaning "all cells walkable".
+	var walkable: Dictionary = StageTerrain.walkable_set(terrain)
+
+	_board.clear()
+
+	if walkable.is_empty():
+		# Legacy / no-terrain path: paint every cell in the bounding rectangle.
+		# Byte-identical behaviour to the original — existing encounters are unaffected.
+		for col in range(cols):
+			for row in range(rows):
+				_board.set_cell(Vector2i(col, row), _TILE_SOURCE_ID, _TILE_ATLAS_COORDS)
+	else:
+		# Terrain-aware path: paint ONLY walkable cells; void cells get no tile.
+		# Combat has no fog layer — the full walkable shape is always revealed.
+		for key_v in walkable:
+			var key: String = str(key_v)
+			var parts := key.split(",")
+			if parts.size() != 2:
+				continue
+			var c: int = int(parts[0])
+			var r: int = int(parts[1])
+			_board.set_cell(Vector2i(c, r), _TILE_SOURCE_ID, _TILE_ATLAS_COORDS)
 
 
 func _center_board(cols: int, rows: int) -> void:

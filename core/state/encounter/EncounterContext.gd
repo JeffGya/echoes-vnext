@@ -56,5 +56,9 @@ var pre_encounter_morale: Dictionary = {}
 # Reset to [] at the start of each round. Passed via ctx["round_bark_events"] to advance_turn().
 var round_bark_events: Array = []
 
+# V2-STAGE-004 P3a: irregular combat-board terrain — transient, never persisted.
+# Shape: { bounds:{w,h}, plateaus:[…], bridges:[…], stragglers:[…] } or {} (legacy).
+var terrain: Dictionary = {}
+
 # Optional deterministic notes for debugging / temporary tests
 var notes: Array[String] = []

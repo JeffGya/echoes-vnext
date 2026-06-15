@@ -19,6 +19,14 @@ extends RefCounted
 #   the ONLY place that maps a virtue→signature; the asset layer plugs in here
 #   without touching generation logic.  Do NOT collapse or rename `relief`.
 #
+#   rng_namespace param (optional, default ""):
+#     ""  (default) → prefix = "stage.{stage_index}.explore.terrain" — identical
+#         to the legacy exploration paths; exploration behaviour is UNCHANGED.
+#     non-empty     → prefix = rng_namespace verbatim, supplied by caller.
+#         Intended for reuse on the combat board under a caller-owned namespace
+#         (e.g. "combat.terrain.<encounter_id>") so the same generator can
+#         produce a combat map without colliding with or altering exploration RNG.
+#
 # OUTPUT SHAPE (frozen — never change field names):
 #   {
 #     "bounds":    { "w": int, "h": int },
@@ -50,11 +58,14 @@ extends RefCounted
 #   }
 #
 # RNG PATHS — all APPEND-ONLY (never reorder existing RealmGenerator paths):
-#   "stage.{i}.explore.terrain.bounds"                  — (currently unused draw; reserved)
-#   "stage.{i}.explore.terrain.plateau.{k}"             — size + position of plateau k
-#   "stage.{i}.explore.terrain.plateau.{k}.shape"       — irregular blob erosion draws (NEW, append-only)
-#   "stage.{i}.explore.terrain.bridge.{k}"              — connectivity bridge k
-#   "stage.{i}.explore.terrain.straggler.{k}"           — straggler tile k
+#   The prefix below is "stage.{i}.explore.terrain" when rng_namespace=="".
+#   When rng_namespace is non-empty the prefix equals rng_namespace verbatim.
+#   "{prefix}.bounds"                  — (currently unused draw; reserved)
+#   "{prefix}.plateau.{k}"             — size + position of plateau k
+#   "{prefix}.plateau.{k}.shape"       — irregular blob erosion draws (NEW, append-only)
+#   "{prefix}.bridge.{k}"              — connectivity bridge k
+#   "{prefix}.straggler.count"         — straggler count draw
+#   "{prefix}.straggler.{k}"           — straggler tile k
 #
 # IRREGULARIZATION METHOD — seeded border erosion:
 #   After placing each plateau's bounding box, we generate an irregular blob via one
@@ -113,12 +124,23 @@ const _ERODE_MIN_FILL_PERCENT: int = 60
 ## Generate a deterministic terrain dict for (realm_seed, stage_index).
 ## bounds = { "w": int, "h": int } — chosen by the caller (RealmGenerator).
 ## signature — see file header; missing keys fall back to _FALLBACK_SIGNATURE.
+## rng_namespace — optional RNG prefix override.
+##   ""  (default) → uses "stage.{stage_index}.explore.terrain" — byte-identical
+##       to legacy exploration paths; exploration behaviour is fully unchanged.
+##   non-empty     → uses rng_namespace verbatim as the prefix (e.g. a caller
+##       supplying "combat.terrain.<encounter_id>" to reuse this generator for
+##       the combat board without touching exploration RNG draws).
 static func generate(
 	realm_seed: int,
 	stage_index: int,
 	signature: Dictionary,
-	bounds: Dictionary
+	bounds: Dictionary,
+	rng_namespace: String = ""
 ) -> Dictionary:
+	# Compute the single RNG prefix once — all internal path strings are built from it.
+	# Default ("") reproduces the legacy exploration prefix byte-for-byte.
+	var prefix: String = rng_namespace if rng_namespace != "" else "stage.%d.explore.terrain" % stage_index
+
 	var w: int = max(int(bounds.get("w", 30)), 10)
 	var h: int = max(int(bounds.get("h", 30)), 10)
 
@@ -135,7 +157,7 @@ static func generate(
 	# ---- Plateau count ----
 	var count_min: int = max(int(sig.get("plateau_count_min", 3)), 1)
 	var count_max: int = max(int(sig.get("plateau_count_max", 5)), count_min)
-	var count_rng := CampaignSeed.get_rng_from(realm_seed, "stage.%d.explore.terrain.bounds" % stage_index)
+	var count_rng := CampaignSeed.get_rng_from(realm_seed, prefix + ".bounds")
 	var plateau_count: int = count_rng.randi_range(count_min, count_max)
 
 	# ---- Place plateaus ----
@@ -147,7 +169,7 @@ static func generate(
 	var shape_bias: String = str(sig.get("plateau_shape_bias", "blocky"))
 
 	for k in range(plateau_count):
-		var p_rng := CampaignSeed.get_rng_from(realm_seed, "stage.%d.explore.terrain.plateau.%d" % [stage_index, k])
+		var p_rng := CampaignSeed.get_rng_from(realm_seed, prefix + ".plateau.%d" % k)
 
 		# Determine size from shape_bias
 		var pw: int
@@ -202,7 +224,7 @@ static func generate(
 			pr = p_rng.randi_range(_BORDER_MARGIN, max(_BORDER_MARGIN, max_row))
 
 		# ---- Generate irregular blob for this plateau ----
-		var shape_rng := CampaignSeed.get_rng_from(realm_seed, "stage.%d.explore.terrain.plateau.%d.shape" % [stage_index, k])
+		var shape_rng := CampaignSeed.get_rng_from(realm_seed, prefix + ".plateau.%d.shape" % k)
 		var blob_cells: Array = _erode_plateau_blob(pc, pr, pw, ph, shape_rng)
 		plateaus.append({ "col": pc, "row": pr, "w": pw, "h": ph, "cells": blob_cells })
 
@@ -247,7 +269,7 @@ static func generate(
 						best_b_comp_idx = b_idx
 
 		# Draw a mandatory bridge between best_a_cell and best_b_cell.
-		var bridge_rng := CampaignSeed.get_rng_from(realm_seed, "stage.%d.explore.terrain.bridge.%d" % [stage_index, bridge_k])
+		var bridge_rng := CampaignSeed.get_rng_from(realm_seed, prefix + ".bridge.%d" % bridge_k)
 		bridge_k += 1
 
 		var a_parts := (best_a_cell as String).split(",")
@@ -272,7 +294,7 @@ static func generate(
 	# We skip extra bridges if plateau_count <= 1 (nothing useful to bridge).
 	if plateaus.size() >= 2:
 		for k in range(plateaus.size() - 1):
-			var extra_rng := CampaignSeed.get_rng_from(realm_seed, "stage.%d.explore.terrain.bridge.%d" % [stage_index, bridge_k])
+			var extra_rng := CampaignSeed.get_rng_from(realm_seed, prefix + ".bridge.%d" % bridge_k)
 			bridge_k += 1
 			var roll: float = float(extra_rng.randi_range(0, 999)) / 1000.0
 			if roll < bridge_density:
@@ -294,7 +316,7 @@ static func generate(
 	var strag_min: int = max(int(sig.get("straggler_count_min", 2)), 0)
 	var strag_max: int = max(int(sig.get("straggler_count_max", 5)), strag_min)
 	var strag_count_rng := CampaignSeed.get_rng_from(
-		realm_seed, "stage.%d.explore.terrain.straggler.count" % stage_index
+		realm_seed, prefix + ".straggler.count"
 	)
 	var strag_count: int = strag_count_rng.randi_range(strag_min, strag_max)
 
@@ -302,7 +324,7 @@ static func generate(
 	# that are not already walkable and are within bounds.
 	var stragglers: Array = []
 	for sk in range(strag_count):
-		var s_rng := CampaignSeed.get_rng_from(realm_seed, "stage.%d.explore.terrain.straggler.%d" % [stage_index, sk])
+		var s_rng := CampaignSeed.get_rng_from(realm_seed, prefix + ".straggler.%d" % sk)
 		var candidate_cells: Array = _adjacent_candidates(walkable_cells, w, h)
 		if candidate_cells.is_empty():
 			break

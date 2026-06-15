@@ -138,8 +138,59 @@ func enter(ctx: RefCounted, t: int) -> void:
 				{ "id": "enemy_guardian_01", "name": "Guardian", "type": "guardian", "faction": "enemy" }, t, actor_cfg))
 		enemy_actors.sort_custom(func(a, b): return a["id"] < b["id"])
 
+		# V2-STAGE-004 P3a: Generate irregular combat-board terrain.
+		# Guard: keeper_intro and any encounter without an active realm model fall back to
+		# the legacy path (no terrain generated, grid_cfg used as-is → legacy 10×10).
+		var grid_cfg_for_placement: Dictionary = grid_cfg
+		var active_realm_model: Dictionary = RealmService.get_active(flow_ctx)
+		if not active_realm_model.is_empty() \
+				and flow_ctx.encounter_ctx.encounter_id != "keeper_intro.first_trial":
+			# Read realm_seed and virtue from the stored model.
+			var cb_realm_seed: int    = int(active_realm_model.get("seed", 0))
+			var cb_realm_virtue: String = str(active_realm_model.get("virtue", ""))
+
+			# Resolve terrain signature the same way RealmGenerator does.
+			var cb_stages_cfg: Dictionary = {}
+			if flow_ctx.config_service != null:
+				var cb_bal: Dictionary = flow_ctx.config_service.get_balance()
+				cb_stages_cfg = cb_bal.get("data", {}).get("stages", {})
+			var cb_realm_cfg: Dictionary = { "virtue": cb_realm_virtue }
+			var cb_signature: Dictionary = RealmGenerator._resolve_terrain_signature(cb_realm_cfg, cb_stages_cfg)
+
+			# Compute board bounds scaled by realm completion order.
+			# completion_index (already computed above) = number of fully completed realms.
+			var cb_board_cfg_block: Dictionary = {}
+			if flow_ctx.config_service != null:
+				var cb_bal2: Dictionary = flow_ctx.config_service.get_balance()
+				cb_board_cfg_block = cb_bal2.get("data", {}).get("combat", {}).get("board", {})
+			var cb_base_cols: int = int(cb_board_cfg_block.get("base_cols",          12))
+			var cb_base_rows: int = int(cb_board_cfg_block.get("base_rows",          12))
+			var cb_growth:    int = int(cb_board_cfg_block.get("growth_per_completion", 1))
+			var cb_max_cols:  int = int(cb_board_cfg_block.get("max_cols",            22))
+			var cb_max_rows:  int = int(cb_board_cfg_block.get("max_rows",            22))
+			var cb_cols: int = mini(cb_base_cols + completion_index * cb_growth, cb_max_cols)
+			var cb_rows: int = mini(cb_base_rows + completion_index * cb_growth, cb_max_rows)
+			var cb_bounds: Dictionary = { "w": cb_cols, "h": cb_rows }
+
+			# Generate terrain on a separate append-only RNG namespace.
+			var cb_terrain: Dictionary = StageTerrain.generate(
+				cb_realm_seed,
+				stage_index,
+				cb_signature,
+				cb_bounds,
+				"combat.terrain." + flow_ctx.encounter_ctx.encounter_id
+			)
+			flow_ctx.encounter_ctx.terrain = cb_terrain
+
+			# Build terrain-aware grid_cfg (duplicate so original is untouched).
+			var cb_walkable: Dictionary = StageTerrain.walkable_set(cb_terrain)
+			grid_cfg_for_placement = grid_cfg.duplicate(true)
+			grid_cfg_for_placement["walkable"]   = cb_walkable
+			grid_cfg_for_placement["board_cols"] = cb_cols
+			grid_cfg_for_placement["board_rows"] = cb_rows
+
 		# GRID-003: deterministic seeded placement.
-		var place_cfg: Dictionary = grid_cfg.get("placement_modifiers", {})
+		var place_cfg: Dictionary = grid_cfg_for_placement.get("placement_modifiers", {})
 		var placement_seed: int = 0
 		var rng := RandomNumberGenerator.new()
 		if flow_ctx.campaign_seed != null:
@@ -150,7 +201,7 @@ func enter(ctx: RefCounted, t: int) -> void:
 		else:
 			rng.seed = hash(flow_ctx.encounter_ctx.encounter_id)
 
-		GridService.place_actors(echo_actors, enemy_actors, grid_cfg, rng, place_cfg)
+		GridService.place_actors(echo_actors, enemy_actors, grid_cfg_for_placement, rng, place_cfg)
 
 		# COMBAT-006: spawn shrine actor if objective is purify_shrine.
 		var shrine_actor: Dictionary = {}
@@ -168,6 +219,81 @@ func enter(ctx: RefCounted, t: int) -> void:
 				"grid_pos": { "col": 0, "row": 4 }
 			})
 			shrine_actor = StructureActor.from_definition(shrine_def, t)
+			# V2-STAGE-004 P3a/P3b: When irregular terrain is present, relocate the shrine to a
+			# deterministic walkable cell rather than the hardcoded grid_pos (col 0 is almost
+			# always VOID after border erosion).  Empty terrain (legacy 10×10, keeper_intro,
+			# no active realm) is left byte-identical — the hardcoded grid_pos is untouched.
+			# P3b: depth is interpolated by realm completion_index so early realms get a
+			# central shrine (reachable) and late realms get the deep-enemy side (hard).
+			var _shrine_terrain: Dictionary = flow_ctx.encounter_ctx.terrain
+			if not _shrine_terrain.is_empty():
+				var _shrine_walkable: Dictionary = StageTerrain.walkable_set(_shrine_terrain)
+				# Collect already-occupied cells from echo + enemy actors (placed just above).
+				var _shrine_occupied: Dictionary = {}
+				for _so_v in echo_actors:
+					if _so_v is Dictionary:
+						var _so_gp: Dictionary = _so_v.get("grid_pos", {})
+						var _so_key: String = str(int(_so_gp.get("col", -1))) + "," + str(int(_so_gp.get("row", -1)))
+						_shrine_occupied[_so_key] = true
+				for _so_v in enemy_actors:
+					if _so_v is Dictionary:
+						var _so_gp: Dictionary = _so_v.get("grid_pos", {})
+						var _so_key: String = str(int(_so_gp.get("col", -1))) + "," + str(int(_so_gp.get("row", -1)))
+						_shrine_occupied[_so_key] = true
+				# Build a sorted list of candidates so iteration order is deterministic.
+				var _shrine_candidates: Array = []
+				for _sc_key in _shrine_walkable:
+					if not _shrine_occupied.has(_sc_key):
+						var _sc_parts: Array = str(_sc_key).split(",")
+						if _sc_parts.size() == 2:
+							_shrine_candidates.append({ "col": int(_sc_parts[0]), "row": int(_sc_parts[1]) })
+
+				# P3b: read depth-scale config from balance.json; safe in-code defaults.
+				var _op_cfg: Dictionary = {}
+				if flow_ctx.config_service != null:
+					var _op_bal: Dictionary = flow_ctx.config_service.get_balance()
+					_op_cfg = _op_bal.get("data", {}).get("combat", {}).get("objective_placement", {})
+				var _op_min_frac:  float = float(_op_cfg.get("depth_min_frac",      0.35))
+				var _op_max_frac:  float = float(_op_cfg.get("depth_max_frac",      1.0))
+				var _op_full_at:   float = float(_op_cfg.get("completion_full_at",  6.0))
+
+				# Depth fraction: 0 = echo/left side; 1 = enemy/right (max-col) side.
+				var _op_f: float = clampf(float(completion_index) / _op_full_at, _op_min_frac, _op_max_frac)
+
+				# Derive walkable column range.
+				var _op_min_col: int = 999999
+				var _op_max_col: int = -1
+				for _opc_v in _shrine_candidates:
+					var _opc: Dictionary = _opc_v
+					if _opc["col"] < _op_min_col: _op_min_col = _opc["col"]
+					if _opc["col"] > _op_max_col: _op_max_col = _opc["col"]
+
+				# Target column for this completion_index.
+				var _op_target_col: int = roundi(_op_min_col + _op_f * float(_op_max_col - _op_min_col))
+
+				# Board vertical centre for tiebreak.
+				var _shrine_board_h: int = int(_shrine_terrain.get("bounds", {}).get("h", 12))
+				var _shrine_mid_row: float = float(_shrine_board_h - 1) * 0.5
+
+				# Stable sort: nearest to target_col first; tiebreak row nearest mid; then lowest col; then lowest row.
+				_shrine_candidates.sort_custom(func(a, b):
+					var da_col: int = abs(a["col"] - _op_target_col)
+					var db_col: int = abs(b["col"] - _op_target_col)
+					if da_col != db_col:
+						return da_col < db_col
+					var da_row: float = abs(float(a["row"]) - _shrine_mid_row)
+					var db_row: float = abs(float(b["row"]) - _shrine_mid_row)
+					if da_row != db_row:
+						return da_row < db_row
+					if a["col"] != b["col"]:
+						return a["col"] < b["col"]
+					return a["row"] < b["row"]
+				)
+				if not _shrine_candidates.is_empty():
+					shrine_actor["grid_pos"] = {
+						"col": _shrine_candidates[0]["col"],
+						"row": _shrine_candidates[0]["row"],
+					}
 			# Runtime-only shrine fields — not in ActorSchema REQUIRED_FIELDS.
 			shrine_actor["purify_stacks"] = []
 
@@ -379,10 +505,12 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		var balance: Dictionary = flow_ctx.config_service.get_balance()
 		var bdata: Dictionary = balance.get("data", {})
 		grid_cfg = bdata.get("grid", {})
-	var board_cols: int = GridService.get_board_cols(grid_cfg)
-	var board_rows: int = GridService.get_board_rows(grid_cfg)
-
 	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	# V2-STAGE-004 P3a: use terrain bounds when available, else legacy grid_cfg.
+	var _snap_terrain: Dictionary = ectx.terrain if ectx != null else {}
+	var _snap_bounds: Dictionary  = _snap_terrain.get("bounds", {}) if not _snap_terrain.is_empty() else {}
+	var board_cols: int = int(_snap_bounds["w"]) if _snap_bounds.has("w") else GridService.get_board_cols(grid_cfg)
+	var board_rows: int = int(_snap_bounds["h"]) if _snap_bounds.has("h") else GridService.get_board_rows(grid_cfg)
 	var raw_actors: Array = ectx.actors if ectx != null else []
 	var combat_state: Dictionary = ectx.combat_state if ectx != null else {}
 	var encounter_id: String = ectx.encounter_id if ectx != null else ""
@@ -501,6 +629,9 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"retreat_success_pct":     retreat_success_pct,
 			# V2-STAGE-002: remaining required objectives (informational during combat).
 			"objectives_remaining":    FlowEncounterState._count_remaining_required_objectives(flow_ctx),
+			# V2-STAGE-004 P3a: irregular terrain dict for CombatBoardScreen tilemap.
+			# {} when no terrain (legacy 10×10 path).
+			"terrain":        (ectx.terrain if ectx != null else {}),
 			# P1 CLOSE: stub fields to keep round field_count >= final field_count.
 			"surface":        "",
 			"summary_line":   "",

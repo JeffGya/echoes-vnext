@@ -13,6 +13,18 @@
 #   GRID-003 — place_actors() with seeded RNG              ← implemented here
 #   GRID-004 — manhattan_distance()              ← implemented here
 #   GRID-005 — move_toward()                    ← implemented here
+#
+# V2-STAGE-004 walkable terrain (combat board):
+#   board_cfg["walkable"] — optional Dictionary of "col,row" keys (StageTerrain.walkable_set output).
+#   Empty / absent key ⇒ LEGACY all-walkable sentinel (byte-identical behaviour, no code change).
+#   Non-empty ⇒ terrain-aware placement and movement via StageTerrain helpers.
+#
+# RNG handling for place_actors (walkable branch):
+#   The placement RNG is NOT reused after place_actors returns (verified: FlowEncounterState
+#   creates a local rng, calls place_actors, then discards it). Therefore, when walkable is
+#   non-empty, _pack_faction is NOT called — the walkable branch performs a direct, purely
+#   deterministic assignment from sorted walkable cells with NO RNG draws. This is simpler
+#   and correct; no parity guarantee is needed because there is no downstream RNG consumer.
 
 class_name GridService
 extends RefCounted
@@ -89,12 +101,50 @@ static func is_adjacent(a: Dictionary, b: Dictionary) -> bool:
 ## Pure except for the actor mutation — no RNG, no logging.
 ## If no valid neighbour exists (degenerate board), actor is not moved.
 ## occupied_positions: Array of { col, row } dicts for cells already taken by living actors.
+##
+## Walkable-terrain branch (board_cfg["walkable"] non-empty):
+##   Uses StageTerrain.bfs_distance_field + next_step for walkable-aware pathfinding.
+##   Builds effective_walkable = walkable minus occupied cells (but always keeps target_pos
+##   so the BFS can root there even when the target stands on it).
+##   If no walkable path exists (actor cornered), actor stays in place — never enters void.
+##
+## Empty walkable ⇒ identical-to-today _greedy_step path (LEGACY, byte-identical).
 static func move_toward(actor: Dictionary, target_pos: Dictionary,
 		board_cfg: Dictionary = {}, occupied_positions: Array = []) -> Dictionary:
 	var from_pos: Dictionary = actor.get("grid_pos", { "col": 0, "row": 0 }).duplicate()
-	var best: Dictionary = _greedy_step(from_pos, target_pos, board_cfg, occupied_positions)
-	if best != from_pos:
-		assign_grid_pos(actor, int(best.get("col", 0)), int(best.get("row", 0)))
+
+	var walkable: Dictionary = board_cfg.get("walkable", {})
+
+	if walkable.is_empty():
+		# LEGACY path — greedy step, byte-identical to before.
+		var best: Dictionary = _greedy_step(from_pos, target_pos, board_cfg, occupied_positions)
+		if best != from_pos:
+			assign_grid_pos(actor, int(best.get("col", 0)), int(best.get("row", 0)))
+	else:
+		# WALKABLE TERRAIN path — BFS-based, never enters void.
+		# Build effective_walkable: remove occupied cells but keep target_pos's cell so
+		# the distance field can root there (target is our destination even when occupied).
+		var target_key: String = "%d,%d" % [int(target_pos.get("col", 0)), int(target_pos.get("row", 0))]
+		var effective_walkable: Dictionary = walkable.duplicate()
+		for occ_v in occupied_positions:
+			if occ_v is Dictionary:
+				var occ_key: String = "%d,%d" % [int(occ_v.get("col", -1)), int(occ_v.get("row", -1))]
+				# Always keep the target cell so BFS can root there.
+				if occ_key != target_key:
+					effective_walkable.erase(occ_key)
+
+		# Also remove the actor's own current cell from occupied checks (it will vacate it).
+		# No additional action needed — _greedy_step excluded self, but BFS doesn't include self.
+
+		var dist_field: Dictionary = StageTerrain.bfs_distance_field(target_pos, effective_walkable)
+		var step: Dictionary = StageTerrain.next_step(from_pos, dist_field, effective_walkable)
+
+		# next_step returns from_cell unchanged when no progressing neighbour exists (dead-end safety).
+		if step.get("col", from_pos.get("col", 0)) != from_pos.get("col", 0) \
+				or step.get("row", from_pos.get("row", 0)) != from_pos.get("row", 0):
+			assign_grid_pos(actor, int(step.get("col", 0)), int(step.get("row", 0)))
+		# else: actor stays — already at target or no walkable path available.
+
 	return { "from_pos": from_pos, "to_pos": actor["grid_pos"].duplicate() }
 
 
@@ -191,11 +241,103 @@ static func place_actors(echo_actors: Array, enemy_actors: Array,
 		return str(a.get("id", "")) < str(b.get("id", ""))
 	)
 
-	# Echoes fill from col=1 inward (col=1 = back, col=2 = more forward, etc.)
-	_pack_faction(sorted_echoes, 1, 1, rows, rng)
+	# Read the optional walkable set. Empty / absent ⇒ LEGACY path (byte-identical).
+	var walkable: Dictionary = board_cfg.get("walkable", {})
 
-	# Enemies fill from col=cols-2 inward (col=cols-2 = back, col=cols-3 = forward)
-	_pack_faction(sorted_enemies, cols - 2, -1, rows, rng)
+	if walkable.is_empty():
+		# LEGACY path — unchanged. Echoes fill from col=1 inward; enemies from col=cols-2 inward.
+		_pack_faction(sorted_echoes, 1, 1, rows, rng)
+		_pack_faction(sorted_enemies, cols - 2, -1, rows, rng)
+	else:
+		# WALKABLE TERRAIN path — direct deterministic assignment; NO RNG draws.
+		# (The placement rng is not reused after this function returns, so no parity draw is needed.)
+		#
+		# Collect unique integer columns and build per-column cell lists (row-ascending).
+		# Using integer sorts throughout for correct numeric ordering.
+		var col_set: Dictionary = {}
+		for k in walkable:
+			var parts := (k as String).split(",")
+			col_set[int(parts[0])] = true
+		var sorted_cols: Array = col_set.keys()
+		sorted_cols.sort()  # ascending int sort
+
+		# Build per-column cell lists sorted by row ascending (integer sort).
+		var cells_by_col: Dictionary = {}
+		for k in walkable:
+			var parts := (k as String).split(",")
+			var c: int = int(parts[0])
+			var r: int = int(parts[1])
+			if not cells_by_col.has(c):
+				cells_by_col[c] = []
+			cells_by_col[c].append({ "col": c, "row": r })
+		# Sort each column's cell list by row ascending for determinism.
+		for c in cells_by_col:
+			(cells_by_col[c] as Array).sort_custom(func(a, b): return int(a["row"]) < int(b["row"]))
+
+		# Assign echoes: iterate columns left→right, filling actors in score-ascending order.
+		var echo_cells: Array = []
+		for c in sorted_cols:
+			for cell in cells_by_col[c]:
+				echo_cells.append(cell)
+		_assign_walkable_faction(sorted_echoes, echo_cells, walkable)
+
+		# Assign enemies: iterate columns right→left, filling actors in score-ascending order.
+		var enemy_cols: Array = sorted_cols.duplicate()
+		enemy_cols.reverse()  # descending col order
+		var enemy_cells: Array = []
+		for c in enemy_cols:
+			# Within each column keep rows ascending for determinism.
+			for cell in cells_by_col[c]:
+				enemy_cells.append(cell)
+		_assign_walkable_faction(sorted_enemies, enemy_cells, walkable)
+
+
+## Assigns grid positions for one faction into a pre-ordered list of walkable cells.
+## actors: sorted Array of actor dicts (score-ascending, id tiebreak).
+## ordered_cells: walkable cells in the desired fill order for this faction.
+## walkable: the full walkable set (used as fallback pool when ordered_cells are exhausted).
+## If ordered_cells has fewer entries than actors, falls back to the nearest remaining
+## walkable cells (those not yet assigned) to ensure every actor gets a cell — never void.
+## Purely deterministic; no RNG.
+static func _assign_walkable_faction(actors: Array, ordered_cells: Array, walkable: Dictionary) -> void:
+	if actors.is_empty():
+		return
+
+	# Track assigned cells to prevent two actors sharing a cell.
+	var assigned: Dictionary = {}
+
+	# Pass 1: fill actors from ordered_cells in sequence.
+	var cell_idx: int = 0
+	var actor_idx: int = 0
+	while actor_idx < actors.size() and cell_idx < ordered_cells.size():
+		var cell: Dictionary = ordered_cells[cell_idx]
+		var key: String = "%d,%d" % [int(cell.get("col", 0)), int(cell.get("row", 0))]
+		cell_idx += 1
+		if assigned.has(key):
+			continue  # already taken (shouldn't happen with well-formed input, but guard it)
+		assign_grid_pos(actors[actor_idx], int(cell.get("col", 0)), int(cell.get("row", 0)))
+		assigned[key] = true
+		actor_idx += 1
+
+	# Pass 2: if ordered_cells were exhausted before all actors placed, drain remaining
+	# walkable cells in sorted key order (col asc, row asc) as a deterministic fallback.
+	if actor_idx < actors.size():
+		var fallback_keys: Array = walkable.keys()
+		fallback_keys.sort()
+		for fk in fallback_keys:
+			if actor_idx >= actors.size():
+				break
+			if assigned.has(fk):
+				continue
+			var parts := (fk as String).split(",")
+			var fc: int = int(parts[0])
+			var fr: int = int(parts[1])
+			assign_grid_pos(actors[actor_idx], fc, fr)
+			assigned[fk] = true
+			actor_idx += 1
+	# If walkable itself is exhausted (more actors than walkable cells), the remaining actors
+	# keep whatever grid_pos they had from the last assign_grid_pos call — this is a
+	# degenerate edge case that cannot crash and will be caught by combat validation.
 
 
 ## Assigns grid positions for one faction's actors into columns starting at start_col,

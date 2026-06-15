@@ -241,13 +241,23 @@ The `refused` bool in `emotion_summary` (Resolve) is kept as a factual combat ou
 **Mid-combat:** direct dict writes only — EmotionService NOT called. Exit deltas applied at combat end.
 
 ### GridService (`core/grid/GridService.gd`)
-Pure static. Board 10×10 (from `balance.json data.grid`).
+Pure static. Default board 10×10 (from `balance.json data.grid`); **irregular landscape boards** since V2-STAGE-004 P3a (see below).
 - `place_actors(echo_actors, enemy_actors, board_cfg, rng)` → deterministic faction placement
 - `manhattan_distance(a, b) -> int` — direction heuristic used by `_greedy_step()` internally; do NOT use for range checks
 - `chebyshev_distance(a, b) -> int` — true step cost for 8-dir movement; use for all range checks and AI distance awareness
 - `is_adjacent(a, b) -> bool` — Chebyshev == 1; use for melee range, engagement checks
 - `move_toward(actor, target_pos, board_cfg) -> { from_pos, to_pos }` — 8-dir greedy, mutates `actor["grid_pos"]`
 - `is_valid_pos(pos, board_cfg) -> bool`
+
+**Walkable terrain (V2-STAGE-004 P3a):** combat boards are now irregular `StageTerrain` landscapes. The walkable set rides inside `board_cfg["walkable"]` — a `Dictionary` of `"col,row"` string keys (output of `StageTerrain.walkable_set(terrain)`). **Empty/absent `"walkable"` ⇒ LEGACY all-walkable rectangle, byte-identical to before (the regression keystone).** When present:
+- `place_actors` packs each faction onto walkable cells only (echoes leftmost cols, enemies rightmost); the walkable branch makes **zero RNG draws** (the placement `rng` is not reused downstream — no draw-order shift).
+- `move_toward` steps over walkable terrain via `StageTerrain.bfs_distance_field`/`next_step` (never enters void; routes over bridges).
+The walkable set is threaded by `FlowEncounterState.enter()` (placement) and `FlowRuntime._resolve_next_actor()` (movement). See "Combat resolution modes & boards" below and `docs/combat-modes.md`.
+
+### Combat resolution modes & boards (V2-STAGE-004 P3a)
+`EncounterResolutionModes.gd` defines the **closed set of seven** combat modes, one `combat` family, const names = string values **1:1 with objective types**: `COMBAT`, `PURIFY_SHRINE`, `RECOVER`, `PROTECT`, `ENDURE`, `PURSUE`, `GUIDE_SPIRIT`. (Renamed from V1 stubs: `SURVIVAL`→`ENDURE`, `PROTECT_TOTEM`→`PROTECT`.) Authored per-mode mechanics live in `docs/combat-modes.md`. `FlowEncounterState._resolve_mode_from_stage()` maps `objective.type` → mode (P3a wires shrine→PURIFY_SHRINE, all else→COMBAT; recover/protect/endure/pursue/guide win-conditions land in Phase 3/3b/3c).
+
+**Irregular combat boards:** `FlowEncounterState.enter()` generates the board via `StageTerrain.generate(realm_seed, stage_index, signature, bounds, "combat.terrain." + encounter_id)` — same generator as exploration, append-only RNG namespace, keyed to the realm's **virtue signature** (`data.stages.map_shape.by_virtue`). Board **bounds scale with realm completion order** (`data.combat.board`: base 12×12 → +growth/completion → max 22×22). Terrain stored transiently on `EncounterContext.terrain` (not saved). Objective-actor placement (shrine now; relic/entity/quarry/npc later) scales **depth by completion order** via `data.combat.objective_placement` (early realm → central/reachable; late realm → deep among enemies). `CombatBoardScreen` paints only walkable cells (void = no tile, no fog). `CombatState.create(..., objective_params={})` carries per-mode tuning.
 
 ### SanctumLayoutService (`core/sanctum/SanctumLayoutService.gd`)
 Pure-static `RefCounted`. V2-SANCTUM-002. No Nodes, no UI refs.

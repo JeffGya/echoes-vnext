@@ -1437,6 +1437,20 @@
 			}
 		},
 		"combat": {
+			"board": {
+				"_comment": "V2-STAGE-004 P3a: irregular combat-board sizing. Bounds = base + growth_per_completion * realm_completion_index, clamped to [base, max]. Read by FlowEncounterState; terrain generated via StageTerrain per realm virtue signature.",
+				"base_cols": 12.0,
+				"base_rows": 12.0,
+				"growth_per_completion": 1.0,
+				"max_cols": 22.0,
+				"max_rows": 22.0
+			},
+			"objective_placement": {
+				"_comment": "V2-STAGE-004 P3a: depth-scaled objective-actor placement (shrine now; relic/entity/quarry/npc in P3/3b/3c). f = clamp(completion_index / completion_full_at, depth_min_frac, depth_max_frac). target_col = round(min_walkable_col + f * (max_walkable_col - min_walkable_col)). depth_min_frac=0.35 → first realm places shrine roughly central; depth_max_frac=1.0 → after completion_full_at completions shrine is at max-col (enemy deep). No RNG; deterministic by terrain + completion_index.",
+				"depth_min_frac": 0.35,
+				"depth_max_frac": 1.0,
+				"completion_full_at": 6.0
+			},
 			"_comment": "COMBAT-002: Initiative scoring modifiers. Formula: (speed*3 + agi*2) + arch_mod + calling_mod + trait_mod + vec_mod + nudge. Sort descending. Tiebreak: party list order. Nudge: CampaignSeed.derive_from(placement_seed, actor_id) % 10. All values tunable without code changes.",
 			"shrine": {
 				"_comment": "COMBAT-006: Purify Shrine objective config. Drain runs after all actor turns each round. Purify slows drain — it does not heal. Purifier = highest (faith × weight_faith + vector_bonus) echo, selected once at combat init.",

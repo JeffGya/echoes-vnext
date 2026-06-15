@@ -1,0 +1,60 @@
+# Combat Resolution Modes — Design Spec
+
+> The seven combat resolution modes are one family under the `combat` parent. Constants + terse comments
+> live in `core/state/encounter/EncounterResolutionModes.gd`; the **authored design mechanics** live here.
+> All seven play on **irregular landscape boards** (reusing `StageTerrain`) sized/scaled by **realm
+> completion order**. Killing all enemies is a **universal win** in every mode. Introduced/expanded by
+> V2-STAGE-004 Phase 3 (sub-phases 3a → 3 → 3b → 3c).
+
+| Mode (const = value) | Objective type | Sub-phase |
+|---|---|---|
+| `COMBAT` = "combat" | combat | 3a (already live) |
+| `PURIFY_SHRINE` = "purify_shrine" | shrine | already live |
+| `RECOVER` = "recover" | recover | 3 |
+| `PROTECT` = "protect" | protect | 3 |
+| `ENDURE` = "endure" | endure | 3 |
+| `PURSUE` = "pursue" | pursue | 3b |
+| `GUIDE_SPIRIT` = "guide_spirit" | guide/escort | 3c |
+
+## Mode mechanics (authored design canon)
+
+- **COMBAT** — not wave-based; beat a set of enemies. **Win:** all enemies defeated.
+
+- **ENDURE** (was `SURVIVAL`) — survive a number of enemy waves; kill-all is **not** required. **Win:** at
+  least one echo survives to the final round.
+
+- **PURIFY_SHRINE** — a shrine sits at a random/hidden location; echoes must **first find** the hidden
+  shrine, then protect it from enemy waves trying to destroy it. **Win:** shrine HP > 0 **and** ≥1 echo
+  alive after all waves. Echoes with the right stats can **purify** (restore shrine health) as an action
+  instead of attacking/defending — **only while the shrine is below 50% health**.
+
+- **PROTECT** (was `PROTECT_TOTEM`) — like purify-shrine, but a **totem** that **can be carried (60% chance
+  it is carryable)**. The carried totem **debuffs its holder**; specific classes/states **reduce the
+  debuff**. Enemy waves try to destroy the totem, and **enemies can steal it — then deal double damage**.
+  A game of placement and defence. **Win:** totem has health **and** ≥1 echo alive. After the stage there
+  is a **chance the totem is rewarded to the player as an item** (V2-ITEM-002 seam).
+
+- **PURSUE** (new, 3b) — a fleeing quarry (`FleeBehaviorModule`) runs from the party across the board.
+  **Win:** contain it (hold an echo adjacent) for `contain_rounds` before its escape `window_turns` closes.
+  **Lose:** window hits 0, or all echoes dead.
+
+- **GUIDE_SPIRIT** / escort (new, 3c) — find the spirit, then either **protect it in place** or
+  **guide/escort it to a destination**. On escort, **50% chance the spirit joins the battle with a 75%
+  damage debuff**. **Win:** spirit alive **and** ≥1 echo alive, **or** successful escort to the destination
+  **and** ≥1 echo alive. There is a **chance the player gets the spirit as a free summon if it was protected
+  successfully**. The board is long/winding, scaled to realm completion order.
+
+- **RECOVER** (new, 3) — a relic (`StructureActor`) is placed deep with enemies between. **Win:** hold an
+  echo adjacent to the relic for `hold_rounds`. **Lose:** all echoes dead.
+
+## Surprise (unscouted approach)
+On an **unrevealed** approach (`stage_context.encounter_approach.situation_was_revealed == false`), apply a
+small **party-fear bump at combat start** (`data.combat.encounter_approach.surprise_fear`). It degrades
+readiness/intent through existing fear mechanics — **no initiative re-sort** (readiness is computed once,
+V2-COMBAT-001).
+
+## Tuning
+Per-mode tuning lives in `balance.json → data.combat.objective_modes.<mode>` (read by resolution mode at
+encounter start; a populated `ObjectiveModel.params` overrides it), with values scaling by realm completion
+order. Board size/shape comes from `StageTerrain` + `data.stages.map_shape.by_virtue` + `data.combat.board`
+(completion-order sizing).
