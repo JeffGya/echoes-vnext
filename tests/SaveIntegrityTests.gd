@@ -6,6 +6,8 @@ const TEST_PATH := "/tmp/echoes-vnext-tests/save_integrity_slot.json"
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("save_integrity/rotates_three_generations", Callable(SaveIntegrityTests, "_test_rotates_three_generations"))
 	runner.register_test("save_integrity/chooses_newest_valid_artifact", Callable(SaveIntegrityTests, "_test_chooses_newest_valid_artifact"))
+	runner.register_test("save_integrity/recovered_tmp_survives_pending_write_failure", Callable(SaveIntegrityTests, "_test_recovered_tmp_survives_pending_write_failure"))
+	runner.register_test("save_integrity/recovered_pending_survives_other_slot_failure", Callable(SaveIntegrityTests, "_test_recovered_pending_survives_other_slot_failure"))
 	runner.register_test("save_integrity/recovers_corrupt_primary_from_backup", Callable(SaveIntegrityTests, "_test_recovers_corrupt_primary_from_backup"))
 	runner.register_test("save_integrity/all_invalid_is_non_destructive", Callable(SaveIntegrityTests, "_test_all_invalid_is_non_destructive"))
 	runner.register_test("save_integrity/missing_is_distinct_from_error", Callable(SaveIntegrityTests, "_test_missing_is_distinct_from_error"))
@@ -20,9 +22,11 @@ static func _logger() -> StructuredLogger:
 	return logger
 
 static func _cleanup() -> void:
-	for suffix_v in ["", ".tmp", ".bak1", ".bak2", ".bak3", ".corrupt"]:
+	for suffix_v in ["", ".pending_a", ".pending_b", ".tmp", ".bak1", ".bak2", ".bak3", ".corrupt"]:
 		var artifact_path: String = TEST_PATH + str(suffix_v)
 		if FileAccess.file_exists(artifact_path):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(artifact_path))
+		elif DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(artifact_path)):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(artifact_path))
 
 static func _save(name: String, generation: int = 0) -> Dictionary:
@@ -108,6 +112,50 @@ static func _test_recovers_corrupt_primary_from_backup() -> Dictionary:
 		return {"ok": false, "error": "recovered backup was not promoted"}
 	if not corrupt_archived:
 		return {"ok": false, "error": "corrupt primary was not archived for diagnosis"}
+	return {"ok": true}
+
+static func _test_recovered_tmp_survives_pending_write_failure() -> Dictionary:
+	_cleanup()
+	_write_raw(TEST_PATH, _save("Older Primary", 5))
+	_write_raw(TEST_PATH + ".tmp", _save("Newest Interrupted Save", 6))
+	var tmp_before := FileAccess.get_file_as_bytes(TEST_PATH + ".tmp")
+	var pending_abs := ProjectSettings.globalize_path(TEST_PATH + ".pending_a")
+	if DirAccess.make_dir_recursive_absolute(pending_abs) != OK:
+		_cleanup()
+		return {"ok": false, "error": "could not create blocking pending directory"}
+
+	var result := SaveService.load_from_file(TEST_PATH, _logger(), 0)
+	var tmp_unchanged := FileAccess.file_exists(TEST_PATH + ".tmp") \
+		and FileAccess.get_file_as_bytes(TEST_PATH + ".tmp") == tmp_before
+	_cleanup()
+	if str(result.get("status", "")) != SaveService.LOAD_RECOVERED:
+		return {"ok": false, "error": "expected recovered status when tmp is newest"}
+	if not bool(result.get("needs_save_retry", false)):
+		return {"ok": false, "error": "failed recovery persistence did not request retry"}
+	if not tmp_unchanged:
+		return {"ok": false, "error": "selected tmp was modified by failed recovery persistence"}
+	return {"ok": true}
+
+static func _test_recovered_pending_survives_other_slot_failure() -> Dictionary:
+	_cleanup()
+	_write_raw(TEST_PATH, _save("Older Primary", 5))
+	_write_raw(TEST_PATH + ".pending_a", _save("Newest Pending Save", 7))
+	var pending_before := FileAccess.get_file_as_bytes(TEST_PATH + ".pending_a")
+	var blocked_abs := ProjectSettings.globalize_path(TEST_PATH + ".pending_b")
+	if DirAccess.make_dir_recursive_absolute(blocked_abs) != OK:
+		_cleanup()
+		return {"ok": false, "error": "could not create blocking alternate-pending directory"}
+
+	var result := SaveService.load_from_file(TEST_PATH, _logger(), 0)
+	var pending_unchanged := FileAccess.file_exists(TEST_PATH + ".pending_a") \
+		and FileAccess.get_file_as_bytes(TEST_PATH + ".pending_a") == pending_before
+	_cleanup()
+	if str(result.get("source", "")) != "pending_a":
+		return {"ok": false, "error": "newest pending slot was not selected"}
+	if not bool(result.get("needs_save_retry", false)):
+		return {"ok": false, "error": "failed alternate-slot write did not request retry"}
+	if not pending_unchanged:
+		return {"ok": false, "error": "newest pending source was modified after alternate-slot failure"}
 	return {"ok": true}
 
 static func _test_all_invalid_is_non_destructive() -> Dictionary:

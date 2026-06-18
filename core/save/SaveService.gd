@@ -24,8 +24,8 @@ const LOAD_MISSING := "missing"
 const LOAD_ERROR := "error"
 
 static func save_to_file(path: String, data: Dictionary, logger: StructuredLogger = null, t: int = -1) -> bool:
-	# Transactional snapshot write. At every interruption point at least one verified
-	# candidate remains among current, tmp, and the three backup generations.
+	# Transactional snapshot write. Alternating pending slots are distinct from the
+	# recoverable legacy `.tmp`; the newest valid pending slot is never overwritten.
 	if not validate(data):
 		_log_info(logger, t, "save.write.fail", "Refused to write invalid save data", {"path": path})
 		return false
@@ -39,22 +39,22 @@ static func save_to_file(path: String, data: Dictionary, logger: StructuredLogge
 	meta["last_saved_at_unix"] = int(Time.get_unix_time_from_system())
 	candidate["meta"] = meta
 
-	var tmp_path := path + ".tmp"
-	if not _write_json(tmp_path, candidate):
+	var pending_path := _select_pending_write_path(path)
+	if not _write_json(pending_path, candidate):
 		_log_info(logger, t, "save.write.fail", "Failed to write temporary save", {
 			"path": path,
-			"tmp_path": tmp_path,
+			"pending_path": pending_path,
 			"generation": generation,
 		})
 		return false
 
-	var verified_tmp := _read_candidate(tmp_path, "tmp", 3)
-	if not bool(verified_tmp.get("valid", false)) or int(verified_tmp.get("generation", -1)) != generation:
+	var verified_pending := _read_candidate(pending_path, "pending", 4)
+	if not bool(verified_pending.get("valid", false)) or int(verified_pending.get("generation", -1)) != generation:
 		_log_info(logger, t, "save.write.fail", "Temporary save verification failed", {
 			"path": path,
-			"tmp_path": tmp_path,
+			"pending_path": pending_path,
 			"generation": generation,
-			"reason": str(verified_tmp.get("reason", "unknown")),
+			"reason": str(verified_pending.get("reason", "unknown")),
 		})
 		return false
 
@@ -68,13 +68,18 @@ static func save_to_file(path: String, data: Dictionary, logger: StructuredLogge
 	if not _archive_invalid_primary(path):
 		return _log_rotation_failure(logger, t, path, "invalid_primary", generation)
 
-	if not _replace_with_rename(tmp_path, path):
+	if not _replace_with_rename(pending_path, path):
 		_log_info(logger, t, "save.write.fail", "Failed to promote verified temporary save", {
 			"path": path,
-			"tmp_path": tmp_path,
+			"pending_path": pending_path,
 			"generation": generation,
 		})
 		return false
+
+	# A legacy/interrupted `.tmp` is obsolete only after the newer primary exists.
+	_remove_artifact_if_present(path + ".pending_a")
+	_remove_artifact_if_present(path + ".pending_b")
+	_remove_artifact_if_present(path + ".tmp")
 
 	# Publish committed metadata back to the authoritative in-memory dictionary.
 	data["meta"] = meta.duplicate(true)
@@ -166,12 +171,25 @@ static func _load_result(
 
 static func _artifact_paths(path: String) -> Array:
 	return [
-		{"path": path, "source": "primary", "priority": 4},
+		{"path": path, "source": "primary", "priority": 6},
+		{"path": path + ".pending_a", "source": "pending_a", "priority": 5},
+		{"path": path + ".pending_b", "source": "pending_b", "priority": 4},
 		{"path": path + ".tmp", "source": "tmp", "priority": 3},
 		{"path": path + ".bak1", "source": "bak1", "priority": 2},
 		{"path": path + ".bak2", "source": "bak2", "priority": 1},
 		{"path": path + ".bak3", "source": "bak3", "priority": 0},
 	]
+
+static func _select_pending_write_path(path: String) -> String:
+	var pending_a := _read_candidate(path + ".pending_a", "pending_a", 5)
+	var pending_b := _read_candidate(path + ".pending_b", "pending_b", 4)
+	if not bool(pending_a.get("valid", false)):
+		return path + ".pending_a"
+	if not bool(pending_b.get("valid", false)):
+		return path + ".pending_b"
+	if int(pending_a.get("generation", 0)) <= int(pending_b.get("generation", 0)):
+		return path + ".pending_a"
+	return path + ".pending_b"
 
 static func _read_candidate(path: String, source: String, priority: int) -> Dictionary:
 	var result := {
@@ -260,6 +278,10 @@ static func _replace_with_rename(source_path: String, destination_path: String) 
 		if remove_error != OK:
 			return false
 	return DirAccess.rename_absolute(source_abs, destination_abs) == OK
+
+static func _remove_artifact_if_present(path: String) -> void:
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 static func _log_rotation_failure(
 	logger: StructuredLogger,
