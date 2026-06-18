@@ -259,6 +259,37 @@ The walkable set is threaded by `FlowEncounterState.enter()` (placement) and `Fl
 
 **Irregular combat boards:** `FlowEncounterState.enter()` generates the board via `StageTerrain.generate(realm_seed, stage_index, signature, bounds, "combat.terrain." + encounter_id)` — same generator as exploration, append-only RNG namespace, keyed to the realm's **virtue signature** (`data.stages.map_shape.by_virtue`). Board **bounds scale with realm completion order** (`data.combat.board`: base 12×12 → +growth/completion → max 22×22). Terrain stored transiently on `EncounterContext.terrain` (not saved). Objective-actor placement (shrine now; relic/entity/quarry/npc later) scales **depth by completion order** via `data.combat.objective_placement` (early realm → central/reachable; late realm → deep among enemies). `CombatBoardScreen` paints only walkable cells (void = no tile, no fog). `CombatState.create(..., objective_params={})` carries per-mode tuning.
 
+**Per-mode win/lose conditions (V2-STAGE-004 Phase 3 — `CombatState.check_end_condition(actors, objective, combat_state={})`):**
+
+`all_enemies_defeated` is the **universal first win** check — fires before any mode-specific check. COMBAT and PURIFY_SHRINE are byte-identical to pre-P3 (pass empty `combat_state={}`). Mode-specific branches:
+
+| Mode | Win condition | Lose condition |
+|------|--------------|---------------|
+| RECOVER | `combat_state["relic_secured"]` = true (`hold_counter ≥ hold_rounds`) | `all_echoes_dead` |
+| PROTECT | `combat_state["protected"]` = true (`round_counter ≥ duration_turns`) | `combat_state["entity_lost"]` = true (entity structure hp → 0) OR `all_echoes_dead` |
+| ENDURE | `combat_state["endured"]` = true (`round_counter ≥ duration_turns`) | `all_echoes_dead` |
+| PURSUE | — (Phase 3b) | — |
+| GUIDE_SPIRIT | — (Phase 3c) | — |
+
+**Objective-actor spawn (`FlowEncounterState`):** RECOVER relic placed **deep** (high `objective_depth`); PROTECT entity placed **mid-field**; both spawn as `StructureActor` on walkable cells. Depth scales via `data.combat.objective_placement` by realm completion order. Unscouted approach triggers a **surprise party-fear bump** (`data.combat.encounter_approach.surprise_fear`, fear only — NO initiative re-sort).
+
+**`_resolve_mode_from_stage(stage)` mapping:** `recover` → RECOVER; `protect` → PROTECT; `endure` → ENDURE; all others → COMBAT (shrine handled separately in encounter_approach routing). `resolve_objective_params(mode_key, mode_cfg, completion_index, stage_params)` is pure static — floats scaled by completion order, clamped, stage `params` override.
+
+**ENDURE wave spawn (`FlowRuntime._end_round`):** deterministic wave actors appended each round via `combat.wave.<id>.<round>` (append-only RNG namespace); appended to END of `initiative_order` — no re-sort. `hold_counter` (RECOVER) also incremented here for echoes adjacent to relic. Both paths pass `combat_state` to `check_end_condition`.
+
+**Known limitation:** ENDURE can end early on an empty-wave-lull because `all_enemies_defeated` is the universal first check. Full distinctiveness pass (win-only-via-all-waves + no transient-lull + no defensive-default) is tracked as a follow-up to Phase 3.
+
+**`next_step` target-directed pathing contract (V2-STAGE-004 Phase 3, `StageTerrain.next_step(from, dist_field, walkable, target={})`):**
+Among neighbours that share the minimum BFS distance, `next_step` tiebreaks **toward the target** (chebyshev-distance → then manhattan → then stable sort). The `target` dict (`{"col":int,"row":int}`) is threaded from both callers — `GridService.move_toward` (combat movement) and `FlowRuntime._handle_stage_advance_turn` (exploration). Without the target, equal-BFS neighbours were resolved by sort order, producing a systematic up-left/top-left drift visible in both game modes. **Contract: never call `next_step` without a target when directional fidelity matters.**
+
+**Actor-id uniqueness invariant (V2-STAGE-004 Phase 3):**
+Combat requires every actor to have a **unique, non-empty id**. Duplicate or empty ids freeze the id-keyed round loop. Enforcement is three-layer:
+1. `SaveService` — repairs empty/duplicate echo ids at load, preserving id→roster attribution.
+2. `ActorSchema.validate()` — fails on empty `id` field (use `has_all_required_fields()` for structural-only checks that should not fail on empty id).
+3. `FlowEncounterState._ensure_unique_actor_ids()` — guards at encounter assembly before actors are passed to `CombatState.create()`.
+
+`EchoActor.from_echo(echo)` uses `has_all_required_fields()` as a build-assert (structural check only). Never call `validate()` on a freshly-built EchoActor dict before its id is assigned.
+
 ### SanctumLayoutService (`core/sanctum/SanctumLayoutService.gd`)
 Pure-static `RefCounted`. V2-SANCTUM-002. No Nodes, no UI refs.
 

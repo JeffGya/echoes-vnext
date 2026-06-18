@@ -601,17 +601,31 @@ static func nearest_unexplored(from_cell: Dictionary, walkable: Dictionary, expl
 
 ## Among the 8-dir walkable neighbours of from_cell, picks the one with the smallest
 ## dist_field value (strictly less than from_cell's own distance).
-## Deterministic tiebreak: lowest row, then lowest col.
+##
+## Tiebreak (when several progressing neighbours share the minimal BFS distance):
+##   1. smallest chebyshev distance to `target`  (geometrically closest along the
+##      straight line — removes the up-left directional bias on open terrain)
+##   2. smallest manhattan distance to `target`
+##   3. stable fallback: lowest row, then lowest col (fully deterministic).
+## When `target` is empty (unknown), falls back to the legacy lowest-row/col tiebreak.
+##
 ## Returns from_cell unchanged if no progressing neighbour (dead-end safety).
-static func next_step(from_cell: Dictionary, dist_field: Dictionary, walkable: Dictionary) -> Dictionary:
+## Pure / deterministic — no RNG, no OS time.
+static func next_step(from_cell: Dictionary, dist_field: Dictionary, walkable: Dictionary, target: Dictionary = {}) -> Dictionary:
 	var fc: int = int(from_cell.get("col", 0))
 	var fr: int = int(from_cell.get("row", 0))
 	var from_key: String = "%d,%d" % [fc, fr]
 	var from_dist: int = dist_field.get(from_key, 999999) if dist_field.has(from_key) else 999999
 
+	var has_target: bool = not target.is_empty()
+	var tc: int = int(target.get("col", 0))
+	var tr: int = int(target.get("row", 0))
+
 	var best_col: int = fc
 	var best_row: int = fr
 	var best_dist: int = from_dist
+	var best_cheb: int = 0
+	var best_man: int = 0
 	var found: bool = false
 
 	# Deterministic 8-direction: row delta outer, col delta inner (ascending).
@@ -627,12 +641,39 @@ static func next_step(from_cell: Dictionary, dist_field: Dictionary, walkable: D
 			if not dist_field.has(nk):
 				continue
 			var nd: int = int(dist_field[nk])
-			if nd < from_dist:
-				if not found or nd < best_dist or (nd == best_dist and (nr < best_row or (nr == best_row and nc < best_col))):
-					best_dist = nd
-					best_col = nc
-					best_row = nr
-					found = true
+			if nd >= from_dist:
+				continue
+
+			# Geometry-to-target tiebreak metrics (only meaningful when target known).
+			var dcol: int = abs(nc - tc)
+			var drow: int = abs(nr - tr)
+			var cheb: int = max(dcol, drow)
+			var man: int = dcol + drow
+
+			var better: bool = false
+			if not found:
+				better = true
+			elif nd < best_dist:
+				better = true
+			elif nd == best_dist:
+				if has_target:
+					if cheb < best_cheb:
+						better = true
+					elif cheb == best_cheb and man < best_man:
+						better = true
+					elif cheb == best_cheb and man == best_man and (nr < best_row or (nr == best_row and nc < best_col)):
+						better = true
+				elif nr < best_row or (nr == best_row and nc < best_col):
+					# Legacy tiebreak when target unknown.
+					better = true
+
+			if better:
+				best_dist = nd
+				best_col = nc
+				best_row = nr
+				best_cheb = cheb
+				best_man = man
+				found = true
 
 	return { "col": best_col, "row": best_row }
 

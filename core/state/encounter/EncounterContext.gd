@@ -60,5 +60,9 @@ var round_bark_events: Array = []
 # Shape: { bounds:{w,h}, plateaus:[…], bridges:[…], stragglers:[…] } or {} (legacy).
 var terrain: Dictionary = {}
 
+# V2-STAGE-004 P3: scaled objective parameters — transient, never persisted.
+# Populated by FlowEncounterState.enter() for RECOVER/PROTECT/ENDURE modes; {} otherwise.
+var objective_params: Dictionary = {}
+
 # Optional deterministic notes for debugging / temporary tests
 var notes: Array[String] = []

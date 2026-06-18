@@ -297,10 +297,210 @@ func enter(ctx: RefCounted, t: int) -> void:
 			# Runtime-only shrine fields — not in ActorSchema REQUIRED_FIELDS.
 			shrine_actor["purify_stacks"] = []
 
+		# V2-STAGE-004 P3: Compute scaled objective_params for RECOVER/PROTECT/ENDURE modes.
+		# For COMBAT/PURIFY_SHRINE/others: objective_params stays {}.
+		# Uses resolve_objective_params() pure static helper (float growth + roundi to avoid int(0.5)==0 truncation).
+		var _obj_mode_key: String = ""
+		match flow_ctx.encounter_ctx.resolution_mode:
+			EncounterResolutionModes.RECOVER:  _obj_mode_key = "recover"
+			EncounterResolutionModes.PROTECT:  _obj_mode_key = "protect"
+			EncounterResolutionModes.ENDURE:   _obj_mode_key = "endure"
+		if not _obj_mode_key.is_empty():
+			var _om_data: Dictionary = {}
+			if flow_ctx.config_service != null:
+				var _om_bal: Dictionary = flow_ctx.config_service.get_balance()
+				_om_data = _om_bal.get("data", {})
+			var _om_cfg: Dictionary = _om_data.get("combat", {}).get("objective_modes", {}).get(_obj_mode_key, {})
+			# Read stage-level objective params override (non-empty overrides scaled values).
+			var _om_stage_params: Dictionary = {}
+			var _om_realm_model: Dictionary = RealmService.get_active(flow_ctx)
+			if not _om_realm_model.is_empty():
+				var _om_sid := str(flow_ctx.stage_id)
+				var _om_stage_index: int = 0
+				if _om_sid.contains("."):
+					var _om_parts := _om_sid.split(".")
+					_om_stage_index = int(_om_parts[_om_parts.size() - 1])
+				var _om_stages_v: Variant = _om_realm_model.get("stages", [])
+				var _om_stages: Array = _om_stages_v if _om_stages_v is Array else []
+				var _om_obj_idx: int = flow_ctx.active_encounter_objective_index
+				for _om_sv in _om_stages:
+					var _om_s: Dictionary = _om_sv if _om_sv is Dictionary else {}
+					if int(_om_s.get("index", -1)) == _om_stage_index:
+						var _om_objs_v: Variant = _om_s.get("objectives", [])
+						var _om_objs: Array = _om_objs_v if _om_objs_v is Array else []
+						if _om_obj_idx >= 0 and _om_obj_idx < _om_objs.size() and _om_objs[_om_obj_idx] is Dictionary:
+							var _om_op_v: Variant = (_om_objs[_om_obj_idx] as Dictionary).get("params", {})
+							if _om_op_v is Dictionary and not (_om_op_v as Dictionary).is_empty():
+								_om_stage_params = _om_op_v as Dictionary
+						break
+			flow_ctx.encounter_ctx.objective_params = \
+				FlowEncounterState.resolve_objective_params(_obj_mode_key, _om_cfg, completion_index, _om_stage_params)
+
+		# V2-STAGE-004 P3: Spawn objective structure actor for RECOVER / PROTECT modes.
+		# ENDURE spawns no objective actor (wave-only). Shrine path is unchanged above.
+		var objective_actor: Dictionary = {}
+		var _op_cfg_p3: Dictionary = {}
+		if flow_ctx.config_service != null:
+			var _opal_bal: Dictionary = flow_ctx.config_service.get_balance()
+			_op_cfg_p3 = _opal_bal.get("data", {}).get("combat", {}).get("objective_placement", {})
+		var _op_min_frac_p3: float  = float(_op_cfg_p3.get("depth_min_frac",      0.35))
+		var _op_max_frac_p3: float  = float(_op_cfg_p3.get("depth_max_frac",      1.0))
+		var _op_full_at_p3:  float  = float(_op_cfg_p3.get("completion_full_at",  6.0))
+		var _op_f_p3: float = clampf(float(completion_index) / _op_full_at_p3, _op_min_frac_p3, _op_max_frac_p3)
+
+		match flow_ctx.encounter_ctx.resolution_mode:
+			EncounterResolutionModes.RECOVER:
+				# Spawn relic structure — placed deep (enemy-side) like the shrine.
+				var _rec_obj_params: Dictionary = flow_ctx.encounter_ctx.objective_params
+				var _rec_def_id: String     = str(_rec_obj_params.get("relic_def_id", "recover_relic"))
+				var _rec_name: String       = str(_rec_obj_params.get("relic_name",   "Ancestral Relic"))
+				var _rec_max_hp: int        = int(_rec_obj_params.get("relic_max_hp", 150))
+				var _rec_struct_cfg: Dictionary = {}
+				if flow_ctx.config_service != null:
+					var _rb: Dictionary = flow_ctx.config_service.get_balance()
+					_rec_struct_cfg = _rb.get("data", {}).get("actor", {}).get("structures", {})
+				var _rec_def: Dictionary = _rec_struct_cfg.get(_rec_def_id, {
+					"id": _rec_def_id + "_01", "name": _rec_name,
+					"faction": "structure", "max_hp": _rec_max_hp,
+					"grid_pos": { "col": 0, "row": 4 }
+				})
+				objective_actor = StructureActor.from_definition(_rec_def, t)
+				objective_actor["is_objective_relic"] = true
+				# Place deep (high column = enemy side) on irregular terrain; legacy: use grid_pos.
+				var _rec_terrain: Dictionary = flow_ctx.encounter_ctx.terrain
+				if not _rec_terrain.is_empty():
+					var _rec_walkable: Dictionary = StageTerrain.walkable_set(_rec_terrain)
+					var _rec_occupied: Dictionary = {}
+					for _ro_v in echo_actors:
+						if _ro_v is Dictionary:
+							var _rg: Dictionary = _ro_v.get("grid_pos", {})
+							_rec_occupied[str(int(_rg.get("col",-1))) + "," + str(int(_rg.get("row",-1)))] = true
+					for _ro_v in enemy_actors:
+						if _ro_v is Dictionary:
+							var _rg: Dictionary = _ro_v.get("grid_pos", {})
+							_rec_occupied[str(int(_rg.get("col",-1))) + "," + str(int(_rg.get("row",-1)))] = true
+					var _rec_candidates: Array = []
+					for _rc_key in _rec_walkable:
+						if not _rec_occupied.has(_rc_key):
+							var _rc_p: Array = str(_rc_key).split(",")
+							if _rc_p.size() == 2:
+								_rec_candidates.append({ "col": int(_rc_p[0]), "row": int(_rc_p[1]) })
+					var _rec_min_col: int = 999999
+					var _rec_max_col: int = -1
+					for _rc_v in _rec_candidates:
+						if _rc_v["col"] < _rec_min_col: _rec_min_col = _rc_v["col"]
+						if _rc_v["col"] > _rec_max_col: _rec_max_col = _rc_v["col"]
+					var _rec_target_col: int = roundi(_rec_min_col + _op_f_p3 * float(_rec_max_col - _rec_min_col))
+					var _rec_board_h: int = int(_rec_terrain.get("bounds", {}).get("h", 12))
+					var _rec_mid_row: float = float(_rec_board_h - 1) * 0.5
+					# Stable sort: nearest target_col first; tiebreak row nearest mid; lowest col; lowest row.
+					_rec_candidates.sort_custom(func(a, b):
+						var da: int = abs(a["col"] - _rec_target_col)
+						var db: int = abs(b["col"] - _rec_target_col)
+						if da != db: return da < db
+						var dra: float = abs(float(a["row"]) - _rec_mid_row)
+						var drb: float = abs(float(b["row"]) - _rec_mid_row)
+						if dra != drb: return dra < drb
+						if a["col"] != b["col"]: return a["col"] < b["col"]
+						return a["row"] < b["row"]
+					)
+					if not _rec_candidates.is_empty():
+						objective_actor["grid_pos"] = { "col": _rec_candidates[0]["col"], "row": _rec_candidates[0]["row"] }
+
+			EncounterResolutionModes.PROTECT:
+				# Spawn entity structure — placed mid-field (nearest cell to board-centre column).
+				var _prt_obj_params: Dictionary = flow_ctx.encounter_ctx.objective_params
+				var _prt_def_id: String  = str(_prt_obj_params.get("entity_def_id", "protect_entity"))
+				var _prt_name: String    = str(_prt_obj_params.get("entity_name",   "Protected One"))
+				var _prt_max_hp: int     = int(_prt_obj_params.get("entity_max_hp", 100))
+				var _prt_struct_cfg: Dictionary = {}
+				if flow_ctx.config_service != null:
+					var _pb: Dictionary = flow_ctx.config_service.get_balance()
+					_prt_struct_cfg = _pb.get("data", {}).get("actor", {}).get("structures", {})
+				var _prt_def: Dictionary = _prt_struct_cfg.get(_prt_def_id, {
+					"id": _prt_def_id + "_01", "name": _prt_name,
+					"faction": "structure", "max_hp": _prt_max_hp,
+					"grid_pos": { "col": 4, "row": 4 }
+				})
+				# Patch scaled max_hp into the def before building (config def may have base HP).
+				var _prt_def_copy: Dictionary = _prt_def.duplicate(true)
+				_prt_def_copy["max_hp"] = _prt_max_hp
+				_prt_def_copy["name"]   = _prt_name
+				objective_actor = StructureActor.from_definition(_prt_def_copy, t)
+				# Place mid-field: nearest unoccupied walkable cell to centre column.
+				var _prt_terrain: Dictionary = flow_ctx.encounter_ctx.terrain
+				if not _prt_terrain.is_empty():
+					var _prt_walkable: Dictionary = StageTerrain.walkable_set(_prt_terrain)
+					var _prt_occupied: Dictionary = {}
+					for _po_v in echo_actors:
+						if _po_v is Dictionary:
+							var _pg: Dictionary = _po_v.get("grid_pos", {})
+							_prt_occupied[str(int(_pg.get("col",-1))) + "," + str(int(_pg.get("row",-1)))] = true
+					for _po_v in enemy_actors:
+						if _po_v is Dictionary:
+							var _pg: Dictionary = _po_v.get("grid_pos", {})
+							_prt_occupied[str(int(_pg.get("col",-1))) + "," + str(int(_pg.get("row",-1)))] = true
+					var _prt_candidates: Array = []
+					for _pc_key in _prt_walkable:
+						if not _prt_occupied.has(_pc_key):
+							var _pc_p: Array = str(_pc_key).split(",")
+							if _pc_p.size() == 2:
+								_prt_candidates.append({ "col": int(_pc_p[0]), "row": int(_pc_p[1]) })
+					# Derive centre column from walkable bounds.
+					var _prt_min_col: int = 999999
+					var _prt_max_col: int = -1
+					var _prt_board_h: int = int(_prt_terrain.get("bounds", {}).get("h", 12))
+					var _prt_mid_row: float = float(_prt_board_h - 1) * 0.5
+					for _pc_v in _prt_candidates:
+						if _pc_v["col"] < _prt_min_col: _prt_min_col = _pc_v["col"]
+						if _pc_v["col"] > _prt_max_col: _prt_max_col = _pc_v["col"]
+					var _prt_centre_col: int = (_prt_min_col + _prt_max_col) / 2
+					# Stable sort: nearest centre column first; tiebreak nearest mid row; lowest col; lowest row.
+					_prt_candidates.sort_custom(func(a, b):
+						var da: int = abs(a["col"] - _prt_centre_col)
+						var db: int = abs(b["col"] - _prt_centre_col)
+						if da != db: return da < db
+						var dra: float = abs(float(a["row"]) - _prt_mid_row)
+						var drb: float = abs(float(b["row"]) - _prt_mid_row)
+						if dra != drb: return dra < drb
+						if a["col"] != b["col"]: return a["col"] < b["col"]
+						return a["row"] < b["row"]
+					)
+					if not _prt_candidates.is_empty():
+						objective_actor["grid_pos"] = { "col": _prt_candidates[0]["col"], "row": _prt_candidates[0]["row"] }
+				# Legacy path (no terrain): grid_pos from def used as-is — no relocation needed.
+
+		# V2-STAGE-004 P3: Surprise fear bump — unscouted encounter approach.
+		# Applied to echo actors only, after they are built and before all_actors assembly.
+		# Guard: approach dict must be non-empty AND situation_was_revealed must be false.
+		var _ea_approach_ctx: Dictionary = flow_ctx.save_data.get("stage_context", {}).get("encounter_approach", {})
+		if not _ea_approach_ctx.is_empty() and not bool(_ea_approach_ctx.get("situation_was_revealed", true)):
+			var _ea_data: Dictionary = {}
+			if flow_ctx.config_service != null:
+				var _ea_bal: Dictionary = flow_ctx.config_service.get_balance()
+				_ea_data = _ea_bal.get("data", {})
+			var _ea_bump: int = int(_ea_data.get("combat", {}).get("encounter_approach", {}).get("surprise_fear", 0))
+			if _ea_bump > 0:
+				for _ea_i in range(echo_actors.size()):
+					var _ea_actor: Dictionary = echo_actors[_ea_i]
+					echo_actors[_ea_i]["fear"] = clampi(int(_ea_actor.get("fear", 0)) + _ea_bump, 0, 100)
+
 		# COMBAT-001: store placed actors and seed on ectx for snapshot rebuilds.
 		var all_actors: Array = echo_actors + enemy_actors
 		if not shrine_actor.is_empty():
 			all_actors.append(shrine_actor)
+		if not objective_actor.is_empty():
+			all_actors.append(objective_actor)
+
+		# Safety net: the combat round loop is id-keyed (CombatState builds initiative_order
+		# from actor ids; FlowRuntime._resolve_next_actor looks the actor back up via
+		# _find_actor_by_id, which returns the FIRST match). If two actors enter with the
+		# same id (most commonly an empty "") every duplicate initiative slot resolves the
+		# SAME actor, so all but one duplicate FREEZE at spawn for the whole fight.
+		# Deterministically repair any empty or duplicate id BEFORE initiative is built.
+		# No-op when all ids are already unique + non-empty (legacy behaviour preserved).
+		_ensure_unique_actor_ids(all_actors, flow_ctx.logger, t)
+
 		flow_ctx.encounter_ctx.actors = all_actors.duplicate(true)
 		flow_ctx.encounter_ctx.placement_seed = placement_seed
 
@@ -339,6 +539,38 @@ func exit(ctx: RefCounted, t: int) -> void:
 	flow_ctx.encounter_ctx = null
 	flow_ctx.encounter_machine = null
 	flow_ctx.active_encounter_objective_index = -1
+
+
+# Deterministic guard against the id-keyed round-loop freeze. Scans the assembled
+# actor list in stable order; the first time an id is empty or already seen, it is
+# replaced in-place with a collision-free "<faction>_<index>" fallback (bumped if the
+# fallback itself collides). Logs each repair via the structured logger (t injected).
+# When every id is already unique + non-empty, this mutates nothing and is a no-op —
+# combat behaviour is byte-identical to before. Mutates `actors` in place.
+static func _ensure_unique_actor_ids(actors: Array, logger, t: int) -> void:
+	var seen: Dictionary = {}
+	for idx in range(actors.size()):
+		var a_v: Variant = actors[idx]
+		if typeof(a_v) != TYPE_DICTIONARY:
+			continue
+		var a: Dictionary = a_v
+		var id: String = str(a.get("id", ""))
+		if id != "" and not seen.has(id):
+			seen[id] = true
+			continue
+		# Empty or duplicate id — assign a deterministic, unique fallback.
+		var faction: String = str(a.get("faction", "actor"))
+		if faction.is_empty():
+			faction = "actor"
+		var new_id: String = "%s_%d" % [faction, idx]
+		while seen.has(new_id) or new_id == "":
+			new_id += "_d"
+		a["id"] = new_id
+		seen[new_id] = true
+		if logger != null:
+			logger.warn(t, "combat.actor.id_conflict",
+				"Actor entered combat with an empty or duplicate id; repaired to avoid round-loop freeze",
+				{ "index": idx, "bad_id": id, "repaired_id": new_id, "faction": faction })
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -382,6 +614,12 @@ static func _resolve_mode_from_stage(flow_ctx: FlowContext) -> String:
 		match obj_type:
 			ObjectiveModel.TYPE_SHRINE:
 				return EncounterResolutionModes.PURIFY_SHRINE
+			ObjectiveModel.TYPE_RECOVER:
+				return EncounterResolutionModes.RECOVER
+			ObjectiveModel.TYPE_PROTECT:
+				return EncounterResolutionModes.PROTECT
+			ObjectiveModel.TYPE_ENDURE:
+				return EncounterResolutionModes.ENDURE
 			_:
 				return EncounterResolutionModes.COMBAT
 
@@ -390,6 +628,66 @@ static func _resolve_mode_from_stage(flow_ctx: FlowContext) -> String:
 	# and using it caused non-objective combat situations on purification stages to incorrectly
 	# spawn shrine actors and drain the party.
 	return EncounterResolutionModes.COMBAT
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# V2-STAGE-004 P3: Pure static helper — scales objective params by completion order.
+#
+# Fixes float truncation bug: config growth values like 0.5 must be read as float
+# and rounded (not int()-truncated, which collapses 0.5 → 0 making scaling a no-op).
+#
+# Generic scaling pattern per field:
+#   base   := int(mode_cfg.get(field, base_default))
+#   growth := float(mode_cfg.get(field+"_growth_per_completion", 0.0))
+#   maxv   := int(mode_cfg.get(field+"_max", base))
+#   scaled := clampi(base + roundi(growth * float(completion_index)), base, maxv)
+#
+# stage_params (non-empty) are merged on top as overrides — caller passes {} when none.
+# Returns {} for any mode_key outside {"recover","protect","endure"}.
+# ────────────────────────────────────────────────────────────────────────────
+static func resolve_objective_params(
+	mode_key: String,
+	mode_cfg: Dictionary,
+	completion_index: int,
+	stage_params: Dictionary
+) -> Dictionary:
+	var params: Dictionary = {}
+	match mode_key:
+		"recover":
+			var _r_base:   int   = int(mode_cfg.get("hold_rounds",                         2))
+			var _r_growth: float = float(mode_cfg.get("hold_rounds_growth_per_completion",  0.0))
+			var _r_max:    int   = int(mode_cfg.get("hold_rounds_max",                      4))
+			params["hold_rounds"]  = clampi(_r_base + roundi(_r_growth * float(completion_index)), _r_base, _r_max)
+			params["relic_def_id"] = str(mode_cfg.get("relic_def_id",  "recover_relic"))
+			params["relic_name"]   = str(mode_cfg.get("relic_name",    "Ancestral Relic"))
+			params["relic_max_hp"] = int(mode_cfg.get("relic_max_hp",  150))
+		"protect":
+			var _p_base:      int   = int(mode_cfg.get("duration_turns",                        4))
+			var _p_growth:    float = float(mode_cfg.get("duration_growth_per_completion",       0.0))
+			var _p_max:       int   = int(mode_cfg.get("duration_max",                           8))
+			var _p_hp_base:   int   = int(mode_cfg.get("entity_max_hp",                          70))
+			var _p_hp_growth: float = float(mode_cfg.get("entity_hp_growth_per_completion",      0.0))
+			params["duration_turns"] = clampi(_p_base + roundi(_p_growth * float(completion_index)), _p_base, _p_max)
+			params["entity_def_id"]  = str(mode_cfg.get("entity_def_id",  "protect_entity"))
+			params["entity_name"]    = str(mode_cfg.get("entity_name",    "Protected One"))
+			params["entity_max_hp"]  = _p_hp_base + roundi(_p_hp_growth * float(completion_index))
+		"endure":
+			var _e_base:      int   = int(mode_cfg.get("duration_turns",                        5))
+			var _e_growth:    float = float(mode_cfg.get("duration_growth_per_completion",       0.0))
+			var _e_max:       int   = int(mode_cfg.get("duration_max",                           9))
+			var _e_ws_base:   int   = int(mode_cfg.get("wave_size",                              2))
+			var _e_ws_growth: float = float(mode_cfg.get("wave_size_growth_per_completion",      0.0))
+			var _e_ws_max:    int   = int(mode_cfg.get("wave_size_max",                          4))
+			params["duration_turns"] = clampi(_e_base + roundi(_e_growth * float(completion_index)), _e_base, _e_max)
+			params["wave_interval"]  = int(mode_cfg.get("wave_interval", 2))
+			params["wave_size"]      = clampi(_e_ws_base + roundi(_e_ws_growth * float(completion_index)), _e_ws_base, _e_ws_max)
+			params["wave_group"]     = str(mode_cfg.get("wave_group", ""))
+		_:
+			return {}
+	# Stage-level overrides applied last (non-empty only).
+	if not stage_params.is_empty():
+		params.merge(stage_params, true)  # true = overwrite existing keys
+	return params
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -466,7 +764,9 @@ static func _derive_morale_status(fear: int) -> String:
 
 
 ## Builds the objective_state sub-dict from ectx and combat_state.
-## type: objective string; shrine_hp: current shrine HP (0 if N/A); shrine_alive: bool.
+## type: objective string; shrine_hp/shrine_alive: back-compat structure fields.
+## V2-STAGE-004 P3: additive fields — objective_hp, objective_alive, round,
+## rounds_required, hold_progress, hold_required. All read defensively; zero when N/A.
 static func _build_objective_state(ectx: EncounterContext, combat_state: Dictionary) -> Dictionary:
 	var obj_type: String = ""
 	if not combat_state.is_empty():
@@ -474,19 +774,39 @@ static func _build_objective_state(ectx: EncounterContext, combat_state: Diction
 	elif ectx != null:
 		obj_type = str(ectx.resolution_mode)
 
-	var shrine_hp: int    = 0
+	var shrine_hp: int     = 0
 	var shrine_alive: bool = false
+	var objective_hp: int  = 0
+	var objective_alive: bool = false
 	if ectx != null:
 		for a_v in ectx.actors:
 			if a_v is Dictionary and a_v.get("is_structure", false):
-				shrine_hp    = int(a_v.get("current_hp", 0))
-				shrine_alive = not bool(a_v.get("is_dead", false))
+				var _struct_hp:    int  = int(a_v.get("current_hp", 0))
+				var _struct_alive: bool = not bool(a_v.get("is_dead", false))
+				shrine_hp    = _struct_hp
+				shrine_alive = _struct_alive
+				objective_hp    = _struct_hp
+				objective_alive = _struct_alive
 				break
 
+	# V2-STAGE-004 P3: read round progress from combat_state; objective_params from ectx.
+	var _obj_params: Dictionary = combat_state.get("objective_params", {}) if not combat_state.is_empty() else {}
+	var _round: int          = int(combat_state.get("round_counter", 0)) if not combat_state.is_empty() else 0
+	var _rounds_required: int = int(_obj_params.get("duration_turns", 0))
+	var _hold_progress: int  = int(combat_state.get("hold_counter", 0)) if not combat_state.is_empty() else 0
+	var _hold_required: int  = int(_obj_params.get("hold_rounds", 0))
+
 	return {
-		"type":         obj_type,
-		"shrine_hp":    shrine_hp,
-		"shrine_alive": shrine_alive,
+		"type":            obj_type,
+		"shrine_hp":       shrine_hp,
+		"shrine_alive":    shrine_alive,
+		# V2-STAGE-004 P3: enriched fields (back-compat: zero when N/A).
+		"objective_hp":    objective_hp,
+		"objective_alive": objective_alive,
+		"round":           _round,
+		"rounds_required": _rounds_required,
+		"hold_progress":   _hold_progress,
+		"hold_required":   _hold_required,
 	}
 
 

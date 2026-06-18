@@ -104,8 +104,9 @@ static func is_adjacent(a: Dictionary, b: Dictionary) -> bool:
 ##
 ## Walkable-terrain branch (board_cfg["walkable"] non-empty):
 ##   Uses StageTerrain.bfs_distance_field + next_step for walkable-aware pathfinding.
-##   Builds effective_walkable = walkable minus occupied cells (but always keeps target_pos
-##   so the BFS can root there even when the target stands on it).
+##   Distance field is rooted over the FULL walkable set (target is always reachable via BFS).
+##   Step set is walkable minus ALL occupied cells (no target-key exception) so the mover
+##   advances toward the target without stepping onto any occupied cell.
 ##   If no walkable path exists (actor cornered), actor stays in place — never enters void.
 ##
 ## Empty walkable ⇒ identical-to-today _greedy_step path (LEGACY, byte-identical).
@@ -122,22 +123,25 @@ static func move_toward(actor: Dictionary, target_pos: Dictionary,
 			assign_grid_pos(actor, int(best.get("col", 0)), int(best.get("row", 0)))
 	else:
 		# WALKABLE TERRAIN path — BFS-based, never enters void.
-		# Build effective_walkable: remove occupied cells but keep target_pos's cell so
-		# the distance field can root there (target is our destination even when occupied).
-		var target_key: String = "%d,%d" % [int(target_pos.get("col", 0)), int(target_pos.get("row", 0))]
+		#
+		# Root the distance field over the FULL walkable set so the shortest-path
+		# direction toward target is always known, even when allies cluster around it.
+		# Build effective_walkable separately (walkable minus ALL occupied cells) and
+		# pass it to next_step so the mover never physically steps onto an occupied cell.
+		# The target-key exception is intentionally removed: we do NOT want to step
+		# onto the target's cell (behaviour arbiter handles melee when adjacent).
+
+		# Distance field: full walkable — target is on a walkable cell, BFS always roots.
+		var dist_field: Dictionary = StageTerrain.bfs_distance_field(target_pos, walkable)
+
+		# Step set: walkable minus every occupied cell (no exceptions).
 		var effective_walkable: Dictionary = walkable.duplicate()
 		for occ_v in occupied_positions:
 			if occ_v is Dictionary:
 				var occ_key: String = "%d,%d" % [int(occ_v.get("col", -1)), int(occ_v.get("row", -1))]
-				# Always keep the target cell so BFS can root there.
-				if occ_key != target_key:
-					effective_walkable.erase(occ_key)
+				effective_walkable.erase(occ_key)
 
-		# Also remove the actor's own current cell from occupied checks (it will vacate it).
-		# No additional action needed — _greedy_step excluded self, but BFS doesn't include self.
-
-		var dist_field: Dictionary = StageTerrain.bfs_distance_field(target_pos, effective_walkable)
-		var step: Dictionary = StageTerrain.next_step(from_pos, dist_field, effective_walkable)
+		var step: Dictionary = StageTerrain.next_step(from_pos, dist_field, effective_walkable, target_pos)
 
 		# next_step returns from_cell unchanged when no progressing neighbour exists (dead-end safety).
 		if step.get("col", from_pos.get("col", 0)) != from_pos.get("col", 0) \

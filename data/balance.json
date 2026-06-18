@@ -399,7 +399,9 @@
 						"col": 0.0,
 						"row": 4.0
 					}
-				}
+				},
+				"recover_relic": { "id": "recover_relic_01", "name": "Severed Relic", "faction": "structure", "max_hp": 9999, "grid_pos": { "col": 0, "row": 4 } },
+				"protect_entity": { "id": "protect_entity_01", "name": "The Charge", "faction": "structure", "max_hp": 70, "grid_pos": { "col": 0, "row": 4 } }
 			},
 			"intent_weights_by_calling_origin": {
 				"okofor": {
@@ -1594,6 +1596,40 @@
 					"shaken":   -3,
 					"broken":   -6
 				}
+			},
+			"objective_modes": {
+				"_comment": "V2-STAGE-004 Phase 3: per-mode combat tuning. Read by FlowEncounterState at encounter start (data.combat.objective_modes[mode]); scaled by realm completion order; a populated ObjectiveModel.params overrides. recover=hold a relic; protect=keep entity alive N rounds; endure=survive N rounds of waves.",
+				"recover": {
+					"hold_rounds": 2,
+					"hold_rounds_growth_per_completion": 0.5,
+					"hold_rounds_max": 4,
+					"relic_def_id": "recover_relic",
+					"relic_name": "Severed Relic",
+					"relic_max_hp": 9999
+				},
+				"protect": {
+					"duration_turns": 4,
+					"duration_growth_per_completion": 0.5,
+					"duration_max": 8,
+					"entity_def_id": "protect_entity",
+					"entity_name": "The Charge",
+					"entity_max_hp": 70,
+					"entity_hp_growth_per_completion": 10
+				},
+				"endure": {
+					"duration_turns": 5,
+					"duration_growth_per_completion": 0.5,
+					"duration_max": 9,
+					"wave_interval": 2,
+					"wave_size": 2,
+					"wave_size_growth_per_completion": 0.5,
+					"wave_size_max": 4,
+					"wave_group": "group.vale_patrol_sm"
+				}
+			},
+			"encounter_approach": {
+				"_comment": "V2-STAGE-004 Phase 3: on an UNSCOUTED approach (stage_context.encounter_approach.situation_was_revealed == false), bump each echo's fear at combat start. Degrades readiness/intent via existing fear mechanics — NO initiative re-sort (readiness computed once).",
+				"surprise_fear": 12
 			}
 		},
 		"calling": {
@@ -2702,7 +2738,7 @@
 				"pursue":  { "label": "Pursue",  "required": false, "reveal_hint": "Something is moving through this area." }
 			},
 
-			"foundation_objective_pool": ["combat", "shrine", "recover", "protect"],
+			"foundation_objective_pool": ["combat", "shrine", "recover", "protect", "endure"],
 
 			"calling_action_bonuses": {
 				"ranger":  ["reveal_adjacent"],

@@ -13,6 +13,7 @@
 #   9.  terrain/bfs_target_dist0          — BFS from target: target key has dist 0
 #   10. terrain/bfs_entry_reachable       — BFS field includes the entry cell
 #   11. terrain/next_step_reaches_target  — repeated next_step from entry reaches target
+#   11b. terrain/next_step_no_lateral_drift — next_step heads directly (no up-left bias)
 #   12. terrain/empty_terrain_walkable    — walkable_set({}) == {}
 #   13. terrain/is_walkable_empty_true    — is_walkable(any, {}) == true
 
@@ -160,6 +161,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("terrain/bfs_target_dist0",          Callable(StageTerrainTests, "_t_bfs_target_dist0"))
 	runner.register_test("terrain/bfs_entry_reachable",       Callable(StageTerrainTests, "_t_bfs_entry_reachable"))
 	runner.register_test("terrain/next_step_reaches_target",  Callable(StageTerrainTests, "_t_next_step_reaches_target"))
+	runner.register_test("terrain/next_step_no_lateral_drift", Callable(StageTerrainTests, "_t_next_step_no_lateral_drift"))
 	runner.register_test("terrain/empty_terrain_walkable",    Callable(StageTerrainTests, "_t_empty_terrain_walkable"))
 	runner.register_test("terrain/is_walkable_empty_true",    Callable(StageTerrainTests, "_t_is_walkable_empty_true"))
 	# New irregularity tests (V2-STAGE-004 Phase 2).
@@ -393,7 +395,7 @@ static func _t_next_step_reaches_target() -> Dictionary:
 		var cur_key: String = "%d,%d" % [int(cur.get("col", 0)), int(cur.get("row", 0))]
 		if cur_key == target_key:
 			return { "ok": true }
-		var next_v: Dictionary = StageTerrain.next_step(cur, dist_field, walkable)
+		var next_v: Dictionary = StageTerrain.next_step(cur, dist_field, walkable, target)
 		var next_key: String = "%d,%d" % [int(next_v.get("col", 0)), int(next_v.get("row", 0))]
 		if next_key == cur_key:
 			# No progress — at a dead end before reaching target
@@ -401,6 +403,61 @@ static func _t_next_step_reaches_target() -> Dictionary:
 		cur = next_v
 
 	return { "ok": false, "error": "Did not reach target '%s' within %d steps" % [target_key, max_steps] }
+
+
+# ─── Test 11b — NEXT_STEP ANTI-DRIFT: no lateral bias on open terrain ───────
+# Regression guard for the up-left tiebreak bias (game-wide movement drift).
+# On a full open board, next_step toward an off-axis target must head DIRECTLY:
+# every step may not increase the |Δrow| or |Δcol| distance to the target while
+# that axis still has distance to close. The old "lowest row, then lowest col"
+# tiebreak collapsed movement onto row 0 early (e.g. (1,4)→…→(5,0)→(6,0)…),
+# overshooting the target row — exactly what this assertion catches.
+static func _t_next_step_no_lateral_drift() -> Dictionary:
+	# Full 12×12 walkable set (no void) — the open-terrain case where ties abound.
+	var walkable: Dictionary = {}
+	for c in range(0, 12):
+		for r in range(0, 12):
+			walkable["%d,%d" % [c, r]] = true
+
+	var target := { "col": 10, "row": 1 }
+	var dist_field: Dictionary = StageTerrain.bfs_distance_field(target, walkable)
+
+	var cur := { "col": 1, "row": 4 }
+	var max_steps := walkable.size() + 5
+	for _step in range(max_steps):
+		var ccol := int(cur.get("col", 0))
+		var crow := int(cur.get("row", 0))
+		if ccol == int(target.col) and crow == int(target.row):
+			# Reached target with no drift detected.
+			# Sanity: confirm we did NOT pre-collapse to the top edge (row 0)
+			# on the way — for target row 1, a direct path never visits row 0.
+			return { "ok": true }
+
+		var prev_dcol: int = abs(ccol - int(target.col))
+		var prev_drow: int = abs(crow - int(target.row))
+
+		var next_v: Dictionary = StageTerrain.next_step(cur, dist_field, walkable, target)
+		var ncol := int(next_v.get("col", 0))
+		var nrow := int(next_v.get("row", 0))
+		if ncol == ccol and nrow == crow:
+			return { "ok": false, "error": "next_step stuck at (%d,%d) before reaching target" % [ccol, crow] }
+
+		var new_dcol: int = abs(ncol - int(target.col))
+		var new_drow: int = abs(nrow - int(target.row))
+
+		# Anti-drift: while an axis still has distance to close, the step must not
+		# move AWAY along that axis (no lateral/vertical overshoot).
+		if prev_dcol > 0 and new_dcol > prev_dcol:
+			return { "ok": false, "error": "lateral drift: col distance grew %d→%d at step from (%d,%d)" % [prev_dcol, new_dcol, ccol, crow] }
+		if prev_drow > 0 and new_drow > prev_drow:
+			return { "ok": false, "error": "vertical drift: row distance grew %d→%d at step from (%d,%d)" % [prev_drow, new_drow, ccol, crow] }
+		# Overshoot guard: must never enter row 0 when target row is 1 (top-edge hugging).
+		if nrow == 0 and int(target.row) >= 1:
+			return { "ok": false, "error": "top-edge overshoot: stepped onto row 0 toward target row %d" % int(target.row) }
+
+		cur = next_v
+
+	return { "ok": false, "error": "did not reach target within %d steps" % max_steps }
 
 
 # ─── Test 12 — LEGACY: walkable_set({}) == {} ────────────────────────────────

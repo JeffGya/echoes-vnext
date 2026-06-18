@@ -69,12 +69,23 @@ const REQUIRED_FIELDS: Array = [
 ]
 
 ## Returns false if actor is missing any required field or has a null value.
-static func validate(actor: Dictionary) -> bool:
+## Does NOT check value ranges or id emptiness — that is field-presence only.
+static func has_all_required_fields(actor: Dictionary) -> bool:
 	for field in REQUIRED_FIELDS:
 		if not actor.has(field):
 			return false
 		if actor[field] == null:
 			return false
+	return true
+
+## Returns false if actor is missing any required field or has a null value.
+## Also fails when `id` is an empty string: the combat round loop is id-keyed, and a
+## blank id collides with any other blank-id actor, freezing all but one at spawn.
+static func validate(actor: Dictionary) -> bool:
+	if not has_all_required_fields(actor):
+		return false
+	if typeof(actor["id"]) != TYPE_STRING or str(actor["id"]).is_empty():
+		return false
 	return true
 
 ## Returns a fully populated Actor dict with safe zero/empty defaults.

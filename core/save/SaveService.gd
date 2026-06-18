@@ -493,7 +493,11 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			var echo: Dictionary = item
 
 			# id
-			if not echo.has("id") or typeof(echo["id"]) != TYPE_STRING:
+			# Must be a NON-EMPTY string. An empty id ("") is a string and would slip
+			# past a type-only check, but two roster echoes sharing "" collide in the
+			# id-keyed combat round loop (CombatState initiative + _find_actor_by_id),
+			# freezing every duplicate at spawn. Treat empty as missing.
+			if not echo.has("id") or typeof(echo["id"]) != TYPE_STRING or str(echo["id"]).is_empty():
 				echo["id"] = "echo_repaired_%04d" % i
 				repaired = true
 				repaired_notes.append("sanctum.roster[%d].id set to string default" % i)
@@ -732,6 +736,29 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 					echo[_field] = _v1_to_v2_calling[_cv]
 					repaired = true
 					repaired_notes.append("sanctum.roster[%d].%s migrated V1 id '%s' -> V2" % [i, _field, _cv])
+
+		# Roster id uniqueness — guarantees the id-keyed combat round loop can never
+		# resolve two roster echoes to the same actor. Empty ids were already repaired
+		# above; this catches legacy/corrupt saves where two echoes share a NON-empty id.
+		# Deterministic: scan in stable roster order, keep the first occurrence, rename
+		# later duplicates to a collision-free "echo_repaired_<i>".
+		var _seen_ids: Dictionary = {}
+		for i in range(roster.size()):
+			var _re_v: Variant = roster[i]
+			if typeof(_re_v) != TYPE_DICTIONARY:
+				continue
+			var _re: Dictionary = _re_v
+			var _rid: String = str(_re.get("id", ""))
+			if _seen_ids.has(_rid):
+				var _new_id: String = "echo_repaired_%04d" % i
+				while _seen_ids.has(_new_id):
+					_new_id += "_d"
+				_re["id"] = _new_id
+				_seen_ids[_new_id] = true
+				repaired = true
+				repaired_notes.append("sanctum.roster[%d].id '%s' was a duplicate; renamed to '%s'" % [i, _rid, _new_id])
+			else:
+				_seen_ids[_rid] = true
 
 		# BOND-001: social graph edges
 		if not sanctum.has("bonds") or not (sanctum["bonds"] is Array):
