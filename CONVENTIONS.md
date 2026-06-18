@@ -43,7 +43,9 @@ its section here will be updated to reflect V2 truth.
 - Additive-only schema — never remove or rename existing fields
 - Add new fields with safe defaults; old fields stay until migration
 - `flow_ctx.save_request = true` → FlowRuntime flushes once per dispatch tick
-- Crash-safe: write to `.tmp` → rename to final path
+- Transactional: verify `.tmp`, rotate three validated backups, then promote to final
+- Boot loads the highest valid `meta.save_generation`; invalid saves are never replaced by a new campaign
+- Failed flushes remain queued for retry; tests must inject an isolated save path
 
 ### Naming Conventions
 - Folders: `snake_case` (e.g. `core/state`, `ui/screens`)
@@ -474,7 +476,7 @@ Guard consequence types:
 ### Save Schema (`core/save/SaveSchema.gd` + `SaveService.gd`)
 9 top-level keys: `schema_version`, `first_boot`, `meta`, `campaign`, `flow`, `economy`, `sanctum`, `stage_context`, `realms`
 
-Crash-safe: write to `.tmp` → rename. Additive repair on load (adds missing fields with safe defaults).
+Transactional persistence uses `slot_01.json`, verified `.tmp`, and `.bak1`–`.bak3`. Each successful write increments additive `meta.save_generation`, updates `meta.last_saved_at_unix`, verifies the temporary JSON before rotation, and retains at least one valid generation across interruption points. Boot scans all artifacts and recovers the highest valid generation; corrupt primaries are archived as `.corrupt`. A new campaign is created only when no save artifacts exist. Additive repairs run only after structural validation.
 
 **V2-MIG-002 additive keys (added 2026-04-06):**
 

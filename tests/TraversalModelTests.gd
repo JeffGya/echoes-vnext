@@ -50,7 +50,7 @@ static func _make_logger() -> StructuredLogger:
 # Instead we construct the minimal state inline.
 static func _make_runtime(directive_id: String = "directive.scout_carefully") -> FlowRuntime:
 	var logger := _make_logger()
-	var runtime := FlowRuntime.new(logger, ConfigService.new())
+	var runtime := FlowRuntime.new(logger, ConfigService.new(), "/tmp/echoes-vnext-tests/traversal_slot.json")
 
 	runtime.flow_ctx          = FlowContext.new()
 	runtime.flow_ctx.logger   = logger

@@ -23,6 +23,8 @@
 extends RefCounted
 class_name UnifiedResolveTests
 
+const TEST_SAVE_PATH := "/tmp/echoes-vnext-tests/unified_resolve_slot.json"
+
 
 # ─── Preloads ────────────────────────────────────────────────────────────────
 
@@ -38,7 +40,7 @@ const FlowStateIds_            := preload("res://core/state/flow/FlowStateIds.gd
 # not corrupt whatever save file exists on the developer's machine.
 
 static func _capture_save() -> Dictionary:
-	var path: String = SaveSchema.DEFAULT_SAVE_PATH
+	var path: String = TEST_SAVE_PATH
 	if FileAccess.file_exists(path):
 		var bytes := FileAccess.get_file_as_bytes(path)
 		return { "existed": true, "bytes": bytes }
@@ -46,7 +48,7 @@ static func _capture_save() -> Dictionary:
 
 
 static func _restore_save(snapshot: Dictionary) -> void:
-	var path: String = SaveSchema.DEFAULT_SAVE_PATH
+	var path: String = TEST_SAVE_PATH
 	if snapshot.get("existed", false):
 		var f := FileAccess.open(path, FileAccess.WRITE)
 		if f:
@@ -169,7 +171,7 @@ static func _make_save_with_sit(sit_type: String, sit_id: String = "sit.t1") -> 
 # Wire up a FlowRuntime with the given save_data and set realm/stage context.
 # Returns { "ok": true, "runtime": FlowRuntime } or { "ok": false, "error": ... }.
 static func _make_runtime(save_data: Dictionary) -> Dictionary:
-	var runtime := FlowRuntime.new(_make_logger(), ConfigService.new())
+	var runtime := FlowRuntime.new(_make_logger(), ConfigService.new(), TEST_SAVE_PATH)
 
 	# Replace save_data before boot so configs are loaded but save is overridden.
 	# We call boot() first to get configs and state machine wired, then swap save.

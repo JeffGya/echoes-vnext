@@ -24,10 +24,16 @@ var flow_ctx: FlowContext
 var flow_machine: FlowStateMachine
 var econ: EconomyService
 var directive_service: DirectiveService  # DIRECTIVE-001
+var save_path: String
 
-func _init(_logger: StructuredLogger, _config_service: ConfigService) -> void:
+func _init(
+	_logger: StructuredLogger,
+	_config_service: ConfigService,
+	_save_path: String = SaveSchema.DEFAULT_SAVE_PATH
+) -> void:
 	logger = _logger
 	config_service = _config_service
+	save_path = _save_path
 
 func _next_tick() -> int:
 	var t := flow_ctx.sim_tick
@@ -59,13 +65,36 @@ func boot() -> Dictionary:
 		flow_ctx.last_snapshot = snap
 		return snap
 
-	# Save load/create
-	var save := SaveService.load_from_file(SaveSchema.DEFAULT_SAVE_PATH, logger, _next_tick())
-	if save.is_empty():
+	# Save load/create. Only a genuinely absent save may create a new campaign.
+	var load_result := SaveService.load_from_file(save_path, logger, _next_tick())
+	var load_status := str(load_result.get("status", SaveService.LOAD_ERROR))
+	var save: Dictionary = {}
+	if load_status == SaveService.LOAD_MISSING:
 		save = SaveService.make_new_save(12346)
-		SaveService.save_to_file(SaveSchema.DEFAULT_SAVE_PATH, save, logger, _next_tick())
+		if not SaveService.save_to_file(save_path, save, logger, _next_tick()):
+			return _build_save_error_snapshot(
+				"The game could not create a verified save. Your campaign was not started.",
+				load_result
+			)
+	elif load_status == SaveService.LOAD_ERROR:
+		return _build_save_error_snapshot(
+			"Your save files could not be verified. They were left untouched so recovery remains possible.",
+			load_result
+		)
+	else:
+		var loaded_data_v: Variant = load_result.get("data", {})
+		if loaded_data_v is Dictionary:
+			save = loaded_data_v
+		if save.is_empty():
+			return _build_save_error_snapshot(
+				"A save was detected but no verified campaign data could be loaded.",
+				load_result
+			)
 
 	flow_ctx.save_data = save
+	if bool(load_result.get("needs_save_retry", false)):
+		flow_ctx.save_request = true
+		flow_ctx.save_request_reason = "save.recovery_retry"
 
 	# V2-VOW-002: restore broken vow debuff chip from save (survives restarts).
 	var _boot_sanc_v: Variant = save.get("sanctum", {})
@@ -99,8 +128,36 @@ func boot() -> Dictionary:
 
 	# Flow should have placed last_snapshot already
 	var out := flow_ctx.last_snapshot
+	if load_status == SaveService.LOAD_RECOVERED:
+		var out_meta_v: Variant = out.get("meta", {})
+		var out_meta: Dictionary = out_meta_v if out_meta_v is Dictionary else {}
+		out_meta["save_recovery"] = {
+			"source": str(load_result.get("source", "backup")),
+			"generation": int(load_result.get("generation", 0)),
+			"message": "Your campaign was recovered from a verified backup. Your latest action may need repeating.",
+		}
+		out["meta"] = out_meta
+		flow_ctx.last_snapshot = out
 	_log_snapshot_emitted(flow_ctx.sim_tick, out, "boot.complete")
 	return out
+
+func _build_save_error_snapshot(message: String, load_result: Dictionary) -> Dictionary:
+	var snap := {
+		"type": "flow.save_error",
+		"meta": {
+			"t": flow_ctx.sim_tick,
+			"save_status": str(load_result.get("status", SaveService.LOAD_ERROR)),
+		},
+		"data": {
+			"title": "Campaign Save Needs Attention",
+			"message": message,
+			"detail": "Do not delete or replace the files. Restart once storage is available, or keep them for support recovery.",
+		},
+		"actions": {},
+	}
+	flow_ctx.last_snapshot = snap
+	_log_snapshot_emitted(flow_ctx.sim_tick, snap, "boot.save_error")
+	return snap
 
 func dispatch(action: Dictionary) -> Dictionary:
 	var t := _next_tick()
@@ -579,7 +636,7 @@ func dispatch(action: Dictionary) -> Dictionary:
 	if flow_ctx.save_request:
 		var reason := str(flow_ctx.save_request_reason)
 		var ok := SaveService.save_to_file(
-			SaveSchema.DEFAULT_SAVE_PATH,
+			save_path,
 			flow_ctx.save_data,
 			logger,
 			t
@@ -590,9 +647,10 @@ func dispatch(action: Dictionary) -> Dictionary:
 			"reason": reason
 		})
 
-		# Always clear request so we don't spam saves on repeated dispatch
-		flow_ctx.save_request = false
-		flow_ctx.save_request_reason = ""
+		# A failed flush remains queued and retries at the next dispatch boundary.
+		if ok:
+			flow_ctx.save_request = false
+			flow_ctx.save_request_reason = ""
 
 	# IMPORTANT: Subtask 2 will keep behavior identical:
 	# return whatever Flow decided is current

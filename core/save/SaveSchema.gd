@@ -19,6 +19,7 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 		"meta": {
 			"created_at_unix": now,
 			"last_saved_at_unix": now,
+			"save_generation": 0,
 			"app_version": app_version
 		},
 		"campaign": {

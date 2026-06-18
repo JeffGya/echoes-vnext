@@ -73,7 +73,7 @@ Four project-specific skills are installed. Use them proactively — they are au
 | SanctumService | `core/sanctum/SanctumService.gd` | `get_party_actors()` + `get_roster_actors()` → read-only actor dicts. |
 | SummonService | `core/sanctum/SummonService.gd` | `summon_paid_one()` / `summon_paid_many()`. Transactional (settle→validate→spend→generate→save). |
 | EconomyService | `core/economy/EconomyService.gd` | `spend_ase()`, `add_ase()`, `can_afford_ase()`, `get_ase()`. Single choke for Ase mutations. |
-| SaveService + Schema | `core/save/` | Crash-safe (tmp→rename). Additive repair. 8 top-level keys: schema_version/first_boot/meta/campaign/flow/economy/sanctum/stage_context. |
+| SaveService + Schema | `core/save/` | Transactional verified tmp + three rotating backups. Highest-generation recovery, corrupt-primary archive, additive repair after validation. Runtime save path is injectable for test isolation. |
 | ConfigService | `core/config/ConfigService.gd` | Loads `data/balance.json`. Read-only. |
 | ActorSchema | `core/actors/ActorSchema.gd` | `validate()` checks 18 REQUIRED_FIELDS. `get_defaults()` adds `guard_state:false` (runtime only). |
 | EchoActor | `core/actors/EchoActor.gd` | `from_echo(echo)` → deep-copied actor dict. Reads `echo["emotion"]` for morale/fear. |

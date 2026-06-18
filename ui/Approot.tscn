@@ -19,8 +19,39 @@ script = ExtResource("2_fv0kl")
 
 [node name="EconBankTimer" type="Timer" parent="." unique_id=1889882999]
 
+[node name="SaveRecoveryTimer" type="Timer" parent="." unique_id=1957896412]
+unique_name_in_owner = true
+wait_time = 8.0
+one_shot = true
+
 [node name="OverlayRoot" type="CanvasLayer" parent="." unique_id=1206220084]
 layer = 128
+
+[node name="SaveRecoveryNotice" type="PanelContainer" parent="OverlayRoot" unique_id=1035846901]
+unique_name_in_owner = true
+visible = false
+anchors_preset = 10
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -520.0
+offset_top = 32.0
+offset_right = 520.0
+offset_bottom = 128.0
+grow_horizontal = 2
+
+[node name="Margin" type="MarginContainer" parent="OverlayRoot/SaveRecoveryNotice" unique_id=1609274382]
+layout_mode = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 16
+
+[node name="SaveRecoveryMessage" type="Label" parent="OverlayRoot/SaveRecoveryNotice/Margin" unique_id=877341962]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Your campaign was recovered from a verified backup."
+horizontal_alignment = 1
+autowrap_mode = 2
 
 [node name="DebugOverlay" type="Control" parent="OverlayRoot" unique_id=2042280526]
 unique_name_in_owner = true

@@ -18,87 +18,272 @@ static func _log_info(logger: StructuredLogger, t: int, type: String, msg: Strin
 static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> Dictionary:
 	return SaveSchema.make_new_save(root_seed, app_version)
 
-static func save_to_file(path: String, data: Dictionary, logger: StructuredLogger = null, t: int = -1) -> bool:	# Crash-safe approach: write to temp file then rename.
-	# Returns true on success, false on failure.
+const LOAD_LOADED := "loaded"
+const LOAD_RECOVERED := "recovered"
+const LOAD_MISSING := "missing"
+const LOAD_ERROR := "error"
+
+static func save_to_file(path: String, data: Dictionary, logger: StructuredLogger = null, t: int = -1) -> bool:
+	# Transactional snapshot write. At every interruption point at least one verified
+	# candidate remains among current, tmp, and the three backup generations.
+	if not validate(data):
+		_log_info(logger, t, "save.write.fail", "Refused to write invalid save data", {"path": path})
+		return false
+
 	ensure_save_dir_exists(path)
-	
+	var candidate: Dictionary = data.duplicate(true)
+	var meta_v: Variant = candidate.get("meta", {})
+	var meta: Dictionary = meta_v if meta_v is Dictionary else {}
+	var generation: int = max(_get_generation(candidate), _highest_valid_generation(path)) + 1
+	meta["save_generation"] = generation
+	meta["last_saved_at_unix"] = int(Time.get_unix_time_from_system())
+	candidate["meta"] = meta
+
 	var tmp_path := path + ".tmp"
-	var json_text := JSON.stringify(data, "\t")
-	
-	var f := FileAccess.open(tmp_path, FileAccess.WRITE)
-	if f == null:
-		push_error("[SaveService] Failed to open temp save for writing: " + tmp_path)
-		_log_info(logger, t, "save.write.fail", "Failed to open temp save for writing", {"path": path, "tmp_path": tmp_path})
+	if not _write_json(tmp_path, candidate):
+		_log_info(logger, t, "save.write.fail", "Failed to write temporary save", {
+			"path": path,
+			"tmp_path": tmp_path,
+			"generation": generation,
+		})
 		return false
-		
-	f.store_string(json_text)
-	f.flush()
-	f.close()
-	
-	# Best effort replace: remove existing file then rename temp into place.
-	if FileAccess.file_exists(path):
-		var err_remove := DirAccess.remove_absolute(path)
-		if err_remove != OK:
-			push_error("[SaveService] Failed to remove existing save: " + path + "( error code: " + str(err_remove) + ")" )
-			_log_info(logger, t, "save.write.fail", "Failed to remove existing save", {"path": path, "error_code": err_remove})
-			return false
-	
-	var err_rename := DirAccess.rename_absolute(tmp_path, path)
-	if err_rename != OK:
-		push_error("[SaveService] Failed to rename temp save to final: " + tmp_path + " -> " + path + " (error " + str(err_rename) + ")" )
-		_log_info(logger, t, "save.write.fail", "Failed to rename temp save to final", {"path": path, "tmp_path": tmp_path, "error_code": err_rename})
+
+	var verified_tmp := _read_candidate(tmp_path, "tmp", 3)
+	if not bool(verified_tmp.get("valid", false)) or int(verified_tmp.get("generation", -1)) != generation:
+		_log_info(logger, t, "save.write.fail", "Temporary save verification failed", {
+			"path": path,
+			"tmp_path": tmp_path,
+			"generation": generation,
+			"reason": str(verified_tmp.get("reason", "unknown")),
+		})
 		return false
-	
-	_log_info(logger, t, "save.write", "Saved to " + path, {
+
+	# Rotate oldest to newest. Invalid artifacts are never promoted into the chain.
+	if not _rotate_valid_artifact(path + ".bak2", path + ".bak3", "bak2"):
+		return _log_rotation_failure(logger, t, path, "bak2", generation)
+	if not _rotate_valid_artifact(path + ".bak1", path + ".bak2", "bak1"):
+		return _log_rotation_failure(logger, t, path, "bak1", generation)
+	if not _rotate_valid_artifact(path, path + ".bak1", "primary"):
+		return _log_rotation_failure(logger, t, path, "primary", generation)
+	if not _archive_invalid_primary(path):
+		return _log_rotation_failure(logger, t, path, "invalid_primary", generation)
+
+	if not _replace_with_rename(tmp_path, path):
+		_log_info(logger, t, "save.write.fail", "Failed to promote verified temporary save", {
+			"path": path,
+			"tmp_path": tmp_path,
+			"generation": generation,
+		})
+		return false
+
+	# Publish committed metadata back to the authoritative in-memory dictionary.
+	data["meta"] = meta.duplicate(true)
+	_log_info(logger, t, "save.write", "Saved transactional snapshot", {
 		"path": path,
-		"schema_version": int(data.get("schema_version", 0))
+		"schema_version": int(data.get("schema_version", 0)),
+		"generation": generation,
 	})
 	return true
 
 static func load_from_file(path: String, logger: StructuredLogger = null, t: int = -1) -> Dictionary:
-	if not FileAccess.file_exists(path):
-		_log_info(logger, t, "save.load", "No save found", {"path": path})
-		return {}
+	var artifacts := _artifact_paths(path)
+	var valid_candidates: Array = []
+	var diagnostics: Array = []
+	var any_exists := false
+
+	for artifact_v in artifacts:
+		var artifact: Dictionary = artifact_v
+		var candidate := _read_candidate(
+			str(artifact.get("path", "")),
+			str(artifact.get("source", "")),
+			int(artifact.get("priority", 0))
+		)
+		if bool(candidate.get("exists", false)):
+			any_exists = true
+		if bool(candidate.get("valid", false)):
+			valid_candidates.append(candidate)
+		elif bool(candidate.get("exists", false)):
+			diagnostics.append({
+				"source": candidate.get("source", ""),
+				"path": candidate.get("path", ""),
+				"reason": candidate.get("reason", "invalid"),
+			})
+
+	if valid_candidates.is_empty():
+		if not any_exists:
+			_log_info(logger, t, "save.load", "No save artifacts found", {"path": path})
+			return _load_result(LOAD_MISSING, {}, "", -1, diagnostics, false)
+		_log_info(logger, t, "save.load.fail", "No valid save generation found", {
+			"path": path,
+			"diagnostics": diagnostics,
+		})
+		return _load_result(LOAD_ERROR, {}, "", -1, diagnostics, false)
+
+	valid_candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var generation_a := int(a.get("generation", 0))
+		var generation_b := int(b.get("generation", 0))
+		if generation_a != generation_b:
+			return generation_a > generation_b
+		return int(a.get("priority", 0)) > int(b.get("priority", 0))
+	)
+
+	var selected: Dictionary = valid_candidates[0]
+	var selected_data: Dictionary = (selected.get("data", {}) as Dictionary).duplicate(true)
+	var source := str(selected.get("source", ""))
+	var recovered := source != "primary"
+	var repaired := _apply_additive_defaults_and_repairs(selected_data, logger, t)
+	var persist_ok := true
+	if recovered or repaired:
+		persist_ok = save_to_file(path, selected_data, logger, t)
+
+	var status := LOAD_RECOVERED if recovered else LOAD_LOADED
+	var generation := _get_generation(selected_data)
+	_log_info(logger, t, "save.load", "Loaded validated save generation", {
+		"path": path,
+		"source": source,
+		"generation": generation,
+		"recovered": recovered,
+		"repair_persisted": persist_ok,
+	})
+	return _load_result(status, selected_data, source, generation, diagnostics, not persist_ok)
+
+static func _load_result(
+	status: String,
+	data: Dictionary,
+	source: String,
+	generation: int,
+	diagnostics: Array,
+	needs_save_retry: bool
+) -> Dictionary:
+	return {
+		"status": status,
+		"data": data,
+		"source": source,
+		"generation": generation,
+		"diagnostics": diagnostics,
+		"needs_save_retry": needs_save_retry,
+	}
+
+static func _artifact_paths(path: String) -> Array:
+	return [
+		{"path": path, "source": "primary", "priority": 4},
+		{"path": path + ".tmp", "source": "tmp", "priority": 3},
+		{"path": path + ".bak1", "source": "bak1", "priority": 2},
+		{"path": path + ".bak2", "source": "bak2", "priority": 1},
+		{"path": path + ".bak3", "source": "bak3", "priority": 0},
+	]
+
+static func _read_candidate(path: String, source: String, priority: int) -> Dictionary:
+	var result := {
+		"path": path,
+		"source": source,
+		"priority": priority,
+		"exists": FileAccess.file_exists(path),
+		"valid": false,
+		"generation": -1,
+		"data": {},
+		"reason": "missing",
+	}
+	if not bool(result["exists"]):
+		return result
 
 	var f := FileAccess.open(path, FileAccess.READ)
 	if f == null:
-		push_error("[SaveService] Failed to open save for reading: " + path)
-		_log_info(logger, t, "save.load.fail", "Failed to open save for reading", {"path": path})
-		return {}
-
+		result["reason"] = "open_failed"
+		return result
 	var text := f.get_as_text()
 	f.close()
+	var json := JSON.new()
+	if json.parse(text) != OK:
+		result["reason"] = "json_invalid"
+		return result
+	var parsed: Variant = json.data
+	if not (parsed is Dictionary):
+		result["reason"] = "json_invalid"
+		return result
+	var parsed_dict: Dictionary = parsed
+	if not validate(parsed_dict, false):
+		result["reason"] = "schema_invalid"
+		return result
+	result["valid"] = true
+	result["generation"] = _get_generation(parsed_dict)
+	result["data"] = parsed_dict
+	result["reason"] = ""
+	return result
 
-	var parsed = JSON.parse_string(text)
-	if typeof(parsed) != TYPE_DICTIONARY:
-		push_error(("[SaveService] Save file JSON did not parse into Dictionary: " + path))
-		_log_info(logger, t, "save.load.fail", "Save JSON did not parse into Dictionary", {"path": path})
-		return {}
-	
-	var repaired := _apply_additive_defaults_and_repairs(parsed, logger, t)
-	if repaired:
-		save_to_file(path, parsed, logger, t)
-	
-	if not validate(parsed):
-		_log_info(logger, t, "save.validate.fail", "Save validation failed", {"path": path})
-		return {}
-		
-	_log_info(logger, t, "save.load", "Loaded save from path: " + path, {
-	"path": path,
-	"schema_version": int(parsed.get("schema_version", 0))
+static func _get_generation(data: Dictionary) -> int:
+	var meta_v: Variant = data.get("meta", {})
+	var meta: Dictionary = meta_v if meta_v is Dictionary else {}
+	return max(0, int(meta.get("save_generation", 0)))
+
+static func _highest_valid_generation(path: String) -> int:
+	var highest := -1
+	for artifact_v in _artifact_paths(path):
+		var artifact: Dictionary = artifact_v
+		var candidate := _read_candidate(
+			str(artifact.get("path", "")),
+			str(artifact.get("source", "")),
+			int(artifact.get("priority", 0))
+		)
+		if bool(candidate.get("valid", false)):
+			highest = max(highest, int(candidate.get("generation", 0)))
+	return highest
+
+static func _write_json(path: String, data: Dictionary) -> bool:
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		return false
+	f.store_string(JSON.stringify(data, "\t"))
+	f.flush()
+	f.close()
+	return true
+
+static func _rotate_valid_artifact(source_path: String, destination_path: String, source: String) -> bool:
+	var candidate := _read_candidate(source_path, source, 0)
+	if not bool(candidate.get("exists", false)):
+		return true
+	if not bool(candidate.get("valid", false)):
+		return true
+	return _replace_with_rename(source_path, destination_path)
+
+static func _archive_invalid_primary(path: String) -> bool:
+	var candidate := _read_candidate(path, "primary", 0)
+	if not bool(candidate.get("exists", false)) or bool(candidate.get("valid", false)):
+		return true
+	return _replace_with_rename(path, path + ".corrupt")
+
+static func _replace_with_rename(source_path: String, destination_path: String) -> bool:
+	var source_abs := ProjectSettings.globalize_path(source_path)
+	var destination_abs := ProjectSettings.globalize_path(destination_path)
+	if FileAccess.file_exists(destination_path):
+		var remove_error := DirAccess.remove_absolute(destination_abs)
+		if remove_error != OK:
+			return false
+	return DirAccess.rename_absolute(source_abs, destination_abs) == OK
+
+static func _log_rotation_failure(
+	logger: StructuredLogger,
+	t: int,
+	path: String,
+	artifact: String,
+	generation: int
+) -> bool:
+	_log_info(logger, t, "save.write.fail", "Failed to rotate validated save artifact", {
+		"path": path,
+		"artifact": artifact,
+		"generation": generation,
 	})
-	return parsed
+	return false
 
 static func ensure_save_dir_exists(path: String) -> void:
 	# Ensure directory for an absolute path like "user://saves/slot_01.json".
 	var dir_path := path.get_base_dir()
 	if dir_path.is_empty():
 		return 
-	
-	if DirAccess.dir_exists_absolute(dir_path):
+	var dir_path_abs := ProjectSettings.globalize_path(dir_path)
+	if DirAccess.dir_exists_absolute(dir_path_abs):
 		return
-	
-	var err := DirAccess.make_dir_recursive_absolute(dir_path)
+	var err := DirAccess.make_dir_recursive_absolute(dir_path_abs)
 	if err != OK:
 		push_error("[SaveService] Failed to create save directory: " + dir_path + " (error code: " + str(err) + " )")
 		
@@ -110,17 +295,34 @@ static func _starter_occupants_need_repair(sanctum: Dictionary) -> bool:
 	var roster: Array = roster_v if roster_v is Array else []
 	var occupants_v: Variant = sanctum.get("occupants", [])
 	var occupants: Array = occupants_v if occupants_v is Array else []
-	if roster.is_empty():
-		return not occupants.is_empty()
-	if occupants.size() != 1:
+	var expected_ids: Dictionary = {"ase_flame": true}
+	for echo_v in roster:
+		if echo_v is Dictionary:
+			var echo_id := str((echo_v as Dictionary).get("id", ""))
+			if not echo_id.is_empty():
+				expected_ids[echo_id] = true
+	var institutions_v: Variant = sanctum.get("institutions", {})
+	var institutions: Dictionary = institutions_v if institutions_v is Dictionary else {}
+	for institution_id in institutions:
+		var institution_v: Variant = institutions.get(institution_id, {})
+		if institution_v is Dictionary and bool((institution_v as Dictionary).get("unlocked", false)):
+			expected_ids[str(institution_id)] = true
+	if occupants.size() != expected_ids.size():
 		return true
-	if not (roster[0] is Dictionary) or not (occupants[0] is Dictionary):
-		return true
-	var echo: Dictionary = roster[0]
-	var occupant: Dictionary = occupants[0]
-	return str(occupant.get("id", "")) != str(echo.get("id", "")) \
-		or int(occupant.get("x", 99)) != 0 \
-		or int(occupant.get("y", 99)) != 0
+	var found_ids: Dictionary = {}
+	for occupant_v in occupants:
+		if not (occupant_v is Dictionary):
+			return true
+		var occupant: Dictionary = occupant_v
+		var occupant_id := str(occupant.get("id", ""))
+		if not expected_ids.has(occupant_id) or found_ids.has(occupant_id):
+			return true
+		if occupant_id == "ase_flame" and (
+			int(occupant.get("x", 99)) != 0 or int(occupant.get("y", 99)) != 0
+		):
+			return true
+		found_ids[occupant_id] = true
+	return found_ids.size() != expected_ids.size()
 		
 static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: StructuredLogger = null, t: int = -1) -> bool:
 	if save == null or save.is_empty():
@@ -832,10 +1034,15 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			repaired_notes.append("sanctum.pending_broken_vow_effect defaulted")
 
 		# V2-VOW-002: pledge re-entry cooldown counter
-		if not sanctum.has("pledge_cooldown_stages_remaining") or typeof(sanctum["pledge_cooldown_stages_remaining"]) != TYPE_INT:
+		if not sanctum.has("pledge_cooldown_stages_remaining") or (
+			typeof(sanctum["pledge_cooldown_stages_remaining"]) != TYPE_INT
+			and typeof(sanctum["pledge_cooldown_stages_remaining"]) != TYPE_FLOAT
+		):
 			sanctum["pledge_cooldown_stages_remaining"] = 0
 			repaired = true
 			repaired_notes.append("sanctum.pledge_cooldown_stages_remaining defaulted")
+		else:
+			sanctum["pledge_cooldown_stages_remaining"] = int(sanctum["pledge_cooldown_stages_remaining"])
 
 		# V2-MIG-002: Sanctum growth spine + Thread reserve stubs
 		if not sanctum.has("continuity") or (typeof(sanctum["continuity"]) != TYPE_INT and typeof(sanctum["continuity"]) != TYPE_FLOAT):
@@ -1092,31 +1299,35 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 		
 	return repaired
 	
-static func validate(data: Dictionary) -> bool:
+static func validate(data: Dictionary, report_errors: bool = true) -> bool:
 	if data.is_empty():
 		return false
 		
 	# schema_version must exist and be supported
 	if not data.has("schema_version"):
-		push_error("[SaveService] Invalid save: missing schema_version")
-		return false
+		return _validation_failure("Invalid save: missing schema_version", report_errors)
 		
 	var v_raw = data["schema_version"]
 	if typeof(v_raw) != TYPE_INT and typeof(v_raw) != TYPE_FLOAT:
-		push_error("[SaveService] Invalid save: schema_version is not a number")
-		return false
+		return _validation_failure("Invalid save: schema_version is not a number", report_errors)
 		
 	var version := int(v_raw)
 	if version != SaveSchema.SCHEMA_VERSION:
-		push_error("[SaveService] Unsupported save schema_version: " + str(version))
-		push_error("[SaveService] Expected schema_version: " + str(SaveSchema.SCHEMA_VERSION))
-		return false
+		return _validation_failure(
+			"Unsupported save schema_version %d; expected %d" % [version, SaveSchema.SCHEMA_VERSION],
+			report_errors
+		)
 		
 	# Required top-level keys
 	for k in ["meta", "campaign", "flow", "sanctum", "economy"]:
 		if not data.has(k) or typeof(data[k]) != TYPE_DICTIONARY:
-			push_error("[SaveService] Invalid save: missing or invalid top-level key: " + k)
-			return false
+			return _validation_failure("Invalid save: missing or invalid top-level key: " + k, report_errors)
+
+	var meta: Dictionary = data["meta"]
+	if meta.has("save_generation"):
+		var generation_v: Variant = meta["save_generation"]
+		if (typeof(generation_v) != TYPE_INT and typeof(generation_v) != TYPE_FLOAT) or int(generation_v) < 0:
+			return _validation_failure("Invalid save: meta.save_generation must be a non-negative number", report_errors)
 			
 	# Required nested keys (SANCTUM-002)
 	var camp: Dictionary = data["campaign"]
@@ -1126,17 +1337,19 @@ static func validate(data: Dictionary) -> bool:
 	var has_root_seed := camp.has("root_seed")
 
 	if not has_seed_root and not has_root_seed:
-		push_error("[SaveService] Invalid save: missing campaign.seed_root (and legacy root_seed)")
-		return false
+		return _validation_failure("Invalid save: missing campaign.seed_root (and legacy root_seed)", report_errors)
 
 	# If seed_root exists, seed_source must exist too
 	if has_seed_root:
 		if not camp.has("seed_source") or typeof(camp["seed_source"]) != TYPE_STRING:
-			push_error("[SaveService] Invalid save: missing campaign.seed_source")
-			return false
+			return _validation_failure("Invalid save: missing campaign.seed_source", report_errors)
 		
 	if not data["flow"].has("state"):
-		push_error("[SaveService] invalid save: missing flow.state")
-		return false
+		return _validation_failure("Invalid save: missing flow.state", report_errors)
 		
 	return true
+
+static func _validation_failure(message: String, report_errors: bool) -> bool:
+	if report_errors:
+		push_error("[SaveService] " + message)
+	return false
