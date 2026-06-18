@@ -120,6 +120,19 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(CombatTerrainTests, "_t_objective_params_stored_correctly"))
 	runner.register_test("combat_terrain/objective_params_legacy_4arg_call",
 		Callable(CombatTerrainTests, "_t_objective_params_legacy_4arg_call"))
+	# --- Pathfinding regression tests (bug: BFS rooted over wrong walkable set) ---
+	runner.register_test("combat_terrain/pathing_clustered_target_advances",
+		Callable(CombatTerrainTests, "_t_pathing_clustered_target_advances"))
+	runner.register_test("combat_terrain/pathing_open_path_advances",
+		Callable(CombatTerrainTests, "_t_pathing_open_path_advances"))
+	runner.register_test("combat_terrain/pathing_never_steps_occupied_or_void",
+		Callable(CombatTerrainTests, "_t_pathing_never_steps_occupied_or_void"))
+	runner.register_test("combat_terrain/pathing_dead_end_stay",
+		Callable(CombatTerrainTests, "_t_pathing_dead_end_stay"))
+	runner.register_test("combat_terrain/pathing_legacy_empty_walkable_unchanged",
+		Callable(CombatTerrainTests, "_t_pathing_legacy_empty_walkable_unchanged"))
+	runner.register_test("combat_terrain/pathing_determinism",
+		Callable(CombatTerrainTests, "_t_pathing_determinism"))
 
 
 # ─── Test 1 — Walkable placement: every actor lands on a walkable cell ───────
@@ -544,5 +557,301 @@ static func _t_objective_params_legacy_4arg_call() -> Dictionary:
 			"ok": false,
 			"error": "4-arg call: highest-speed actor should be first (got '%s')" % first_id
 		}
+
+	return { "ok": true }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PATHFINDING REGRESSION TESTS  (tests 11–16)
+# Exercises the fix: bfs_distance_field now rooted over full walkable, not the
+# occupied-minus set.  All tests are deterministic; no RNG / OS time.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Build a simple solid N×M walkable rectangle as a Dictionary of "col,row" keys.
+static func _make_rect_walkable(cols: int, rows: int) -> Dictionary:
+	var w: Dictionary = {}
+	for c in range(cols):
+		for r in range(rows):
+			w["%d,%d" % [c, r]] = true
+	return w
+
+
+# ─── Test 11 — Clustered-target repro (THE BUG) ──────────────────────────────
+# Echo at col 0, row 2; target enemy at col 7, row 2.
+# Three ally actors occupy the three cells immediately left/above/below the target
+# (col 6 row 1, col 6 row 2, col 6 row 3), creating a cluster around it, but the
+# approach lane along row 2 from the left (col 5, row 2) is free.
+# With the old code the BFS from the target cannot spread past the cluster so
+# dist_field doesn't cover the mover's area — step == from_pos (stuck).
+# After the fix the distance field is rooted over full walkable — echo advances.
+# Asserts: Chebyshev distance to target STRICTLY DECREASES (echo advanced).
+static func _t_pathing_clustered_target_advances() -> Dictionary:
+	var walkable := _make_rect_walkable(10, 5)
+	var board    := _board_cfg(walkable)
+
+	var echo: Dictionary = _make_actor("e1")
+	GridService.assign_grid_pos(echo, 0, 2)
+
+	var target := { "col": 7, "row": 2 }
+
+	# Allies cluster around target: col 6 rows 1-3 + col 7 rows 1/3.
+	var occupied: Array = [
+		{ "col": 6, "row": 1 },
+		{ "col": 6, "row": 2 },
+		{ "col": 6, "row": 3 },
+		{ "col": 7, "row": 1 },
+		{ "col": 7, "row": 3 },
+	]
+
+	var dist_before: int = GridService.chebyshev_distance(echo.get("grid_pos", {}), target)
+	GridService.move_toward(echo, target, board, occupied)
+	var gp_after: Dictionary = echo.get("grid_pos", {})
+	var dist_after: int = GridService.chebyshev_distance(gp_after, target)
+
+	# Verify the echo actually moved (did not stay stuck).
+	if dist_after >= dist_before:
+		return {
+			"ok": false,
+			"error": ("Clustered-target repro FAILED: distance did not decrease "
+				+ "(before=%d after=%d). Echo stuck at col=%d,row=%d. "
+				+ "This confirms the BFS-rooted-over-wrong-walkable bug.") \
+				% [dist_before, dist_after,
+				   int(gp_after.get("col", -1)), int(gp_after.get("row", -1))]
+		}
+
+	# Verify the new cell is in walkable, not occupied, not the target itself.
+	var gp_key: String = "%d,%d" % [int(gp_after.get("col", -1)), int(gp_after.get("row", -1))]
+	if not walkable.has(gp_key):
+		return { "ok": false, "error": "Echo stepped onto void cell: %s" % gp_key }
+
+	for occ_v in occupied:
+		if occ_v is Dictionary:
+			var occ_key: String = "%d,%d" % [int(occ_v.get("col", -1)), int(occ_v.get("row", -1))]
+			if gp_key == occ_key:
+				return { "ok": false, "error": "Echo stepped onto occupied cell: %s" % gp_key }
+
+	var target_key: String = "%d,%d" % [int(target.get("col", -1)), int(target.get("row", -1))]
+	if gp_key == target_key:
+		return { "ok": false, "error": "Echo stepped onto the target's own cell: %s" % gp_key }
+
+	# Must not be (0,0) — that would indicate a fallback-default bug.
+	if int(gp_after.get("col", -1)) == 0 and int(gp_after.get("row", -1)) == 0:
+		return { "ok": false, "error": "Echo snapped to (0,0) — default fallback fired" }
+
+	return { "ok": true }
+
+
+# ─── Test 12 — Open path: echo advances each call, never overlaps target ─────
+# No occupied positions.  Echo at (0,2), target at (9,2).
+# Each move_toward call must not increase the Chebyshev distance to target,
+# and there must be at least one decrease.
+static func _t_pathing_open_path_advances() -> Dictionary:
+	var walkable := _make_rect_walkable(10, 5)
+	var board    := _board_cfg(walkable)
+
+	var echo: Dictionary = _make_actor("e1")
+	GridService.assign_grid_pos(echo, 0, 2)
+	var target := { "col": 9, "row": 2 }
+	var prev_dist: int = GridService.chebyshev_distance(echo.get("grid_pos", {}), target)
+	var any_progress: bool = false
+
+	for _i in range(20):
+		var gp: Dictionary = echo.get("grid_pos", {})
+		if GridService.chebyshev_distance(gp, target) <= 1:
+			break
+		GridService.move_toward(echo, target, board, [])
+		var gp_after: Dictionary = echo.get("grid_pos", {})
+		var dist_after: int = GridService.chebyshev_distance(gp_after, target)
+
+		if dist_after > prev_dist:
+			return {
+				"ok": false,
+				"error": "Distance increased on open board: was %d now %d at col=%d,row=%d" \
+					% [prev_dist, dist_after,
+					   int(gp_after.get("col", -1)), int(gp_after.get("row", -1))]
+			}
+		if dist_after < prev_dist:
+			any_progress = true
+		prev_dist = dist_after
+
+	if not any_progress:
+		return { "ok": false, "error": "Echo made zero progress toward target on open board" }
+
+	return { "ok": true }
+
+
+# ─── Test 13 — Never steps onto occupied or void ─────────────────────────────
+# Walks echo from (0,0) toward (9,4) across a 10×5 rect with scattered occupied cells.
+# Every step must land on a walkable, unoccupied cell.
+static func _t_pathing_never_steps_occupied_or_void() -> Dictionary:
+	var walkable := _make_rect_walkable(10, 5)
+	var board    := _board_cfg(walkable)
+
+	var occupied: Array = [
+		{ "col": 3, "row": 2 },
+		{ "col": 5, "row": 1 },
+		{ "col": 7, "row": 3 },
+	]
+
+	var echo: Dictionary = _make_actor("e1")
+	GridService.assign_grid_pos(echo, 0, 0)
+	var target := { "col": 9, "row": 4 }
+
+	for _i in range(25):
+		var gp: Dictionary = echo.get("grid_pos", {})
+		if GridService.chebyshev_distance(gp, target) <= 1:
+			break
+		GridService.move_toward(echo, target, board, occupied)
+		var gp_after: Dictionary = echo.get("grid_pos", {})
+		var gp_key: String = "%d,%d" % [int(gp_after.get("col", -1)), int(gp_after.get("row", -1))]
+
+		if not walkable.has(gp_key):
+			return { "ok": false, "error": "Step landed on void: %s" % gp_key }
+
+		for occ_v in occupied:
+			if occ_v is Dictionary:
+				var occ_key: String = "%d,%d" % [int(occ_v.get("col", -1)), int(occ_v.get("row", -1))]
+				if gp_key == occ_key:
+					return { "ok": false, "error": "Step landed on occupied cell: %s" % gp_key }
+
+	return { "ok": true }
+
+
+# ─── Test 14 — Dead-end stay: surrounded actor stays put ─────────────────────
+# Echo at (5,2) in a 10×5 rect; all 8 neighbours occupied.
+# move_toward must return from_pos unchanged (no snap to (0,0)).
+static func _t_pathing_dead_end_stay() -> Dictionary:
+	var walkable := _make_rect_walkable(10, 5)
+	var board    := _board_cfg(walkable)
+
+	var echo: Dictionary = _make_actor("e1")
+	GridService.assign_grid_pos(echo, 5, 2)
+
+	var occupied: Array = []
+	for dc in [-1, 0, 1]:
+		for dr in [-1, 0, 1]:
+			if dc == 0 and dr == 0:
+				continue
+			occupied.append({ "col": 5 + dc, "row": 2 + dr })
+
+	var target := { "col": 9, "row": 4 }
+	var result: Dictionary = GridService.move_toward(echo, target, board, occupied)
+
+	var to_pos: Dictionary = result.get("to_pos", {})
+	if int(to_pos.get("col", -1)) != 5 or int(to_pos.get("row", -1)) != 2:
+		return {
+			"ok": false,
+			"error": "Surrounded actor should stay at (5,2) but moved to col=%d,row=%d" \
+				% [int(to_pos.get("col", -1)), int(to_pos.get("row", -1))]
+		}
+
+	var gp: Dictionary = echo.get("grid_pos", {})
+	if int(gp.get("col", -1)) != 5 or int(gp.get("row", -1)) != 2:
+		return {
+			"ok": false,
+			"error": "Actor grid_pos mutated despite being surrounded: col=%d,row=%d" \
+				% [int(gp.get("col", -1)), int(gp.get("row", -1))]
+		}
+
+	return { "ok": true }
+
+
+# ─── Test 15 — Legacy (empty walkable) path is byte-identical ─────────────────
+# board_cfg with walkable:{} must produce the exact same to_pos as no walkable key.
+static func _t_pathing_legacy_empty_walkable_unchanged() -> Dictionary:
+	var cfg_no_key   := { "board_cols": 10, "board_rows": 10 }
+	var cfg_empty_wk := { "board_cols": 10, "board_rows": 10, "walkable": {} }
+
+	var cases: Array = [
+		{ "from": { "col": 1, "row": 1 }, "target": { "col": 8, "row": 8 }, "occ": [] },
+		{ "from": { "col": 0, "row": 0 }, "target": { "col": 9, "row": 0 }, "occ": [{ "col": 1, "row": 0 }] },
+		{ "from": { "col": 5, "row": 5 }, "target": { "col": 5, "row": 5 }, "occ": [] },
+	]
+
+	for case_v in cases:
+		var c: Dictionary = case_v as Dictionary
+		var from_pos: Dictionary = c.get("from",   { "col": 0, "row": 0 })
+		var tgt:      Dictionary = c.get("target", { "col": 5, "row": 5 })
+		var occ:      Array      = c.get("occ",    []) as Array
+
+		var actor_a: Dictionary = _make_actor("a")
+		GridService.assign_grid_pos(actor_a, int(from_pos.get("col", 0)), int(from_pos.get("row", 0)))
+		var res_a: Dictionary = GridService.move_toward(actor_a, tgt, cfg_no_key, occ)
+
+		var actor_b: Dictionary = _make_actor("b")
+		GridService.assign_grid_pos(actor_b, int(from_pos.get("col", 0)), int(from_pos.get("row", 0)))
+		var res_b: Dictionary = GridService.move_toward(actor_b, tgt, cfg_empty_wk, occ)
+
+		var to_a: Dictionary = res_a.get("to_pos", {})
+		var to_b: Dictionary = res_b.get("to_pos", {})
+		if not _pos_equal(to_a, to_b):
+			return {
+				"ok": false,
+				"error": "Legacy mismatch from(%d,%d)→(%d,%d): no-key=(%d,%d) empty-wk=(%d,%d)" \
+					% [int(from_pos.get("col",0)), int(from_pos.get("row",0)),
+					   int(tgt.get("col",0)),      int(tgt.get("row",0)),
+					   int(to_a.get("col",-1)),    int(to_a.get("row",-1)),
+					   int(to_b.get("col",-1)),    int(to_b.get("row",-1))]
+			}
+
+	return { "ok": true }
+
+
+# ─── Test 16 — Determinism: same inputs → same step twice ────────────────────
+# Calls move_toward twice with identical inputs (resetting actor pos between calls).
+# Both calls must return identical to_pos.
+static func _t_pathing_determinism() -> Dictionary:
+	var walkable_rect := _make_rect_walkable(10, 5)
+	var walkable_bridge := _make_bridge_walkable()
+
+	var cases: Array = [
+		# Clustered case (the bug repro).
+		{
+			"from":     { "col": 0, "row": 2 },
+			"target":   { "col": 7, "row": 2 },
+			"occupied": [
+				{ "col": 6, "row": 1 }, { "col": 6, "row": 2 }, { "col": 6, "row": 3 },
+				{ "col": 7, "row": 1 }, { "col": 7, "row": 3 },
+			],
+			"walkable": walkable_rect,
+		},
+		# Open path.
+		{
+			"from": { "col": 0, "row": 0 }, "target": { "col": 9, "row": 4 },
+			"occupied": [], "walkable": walkable_rect,
+		},
+		# Bridge terrain.
+		{
+			"from": { "col": 2, "row": 1 }, "target": { "col": 10, "row": 1 },
+			"occupied": [], "walkable": walkable_bridge,
+		},
+	]
+
+	for case_v in cases:
+		var c: Dictionary = case_v as Dictionary
+		var from_pos: Dictionary = c.get("from",     { "col": 0, "row": 0 })
+		var tgt:      Dictionary = c.get("target",   { "col": 5, "row": 2 })
+		var occ:      Array      = c.get("occupied", []) as Array
+		var wk: Dictionary       = c.get("walkable", walkable_rect)
+		var cfg: Dictionary      = _board_cfg(wk)
+
+		var actor_1: Dictionary = _make_actor("d1")
+		GridService.assign_grid_pos(actor_1, int(from_pos.get("col", 0)), int(from_pos.get("row", 0)))
+		var res_1: Dictionary = GridService.move_toward(actor_1, tgt, cfg, occ)
+
+		var actor_2: Dictionary = _make_actor("d2")
+		GridService.assign_grid_pos(actor_2, int(from_pos.get("col", 0)), int(from_pos.get("row", 0)))
+		var res_2: Dictionary = GridService.move_toward(actor_2, tgt, cfg, occ)
+
+		var to_1: Dictionary = res_1.get("to_pos", {})
+		var to_2: Dictionary = res_2.get("to_pos", {})
+		if not _pos_equal(to_1, to_2):
+			return {
+				"ok": false,
+				"error": "Non-deterministic: from(%d,%d) run1=(%d,%d) run2=(%d,%d)" \
+					% [int(from_pos.get("col",0)), int(from_pos.get("row",0)),
+					   int(to_1.get("col",-1)),    int(to_1.get("row",-1)),
+					   int(to_2.get("col",-1)),    int(to_2.get("row",-1))]
+			}
 
 	return { "ok": true }

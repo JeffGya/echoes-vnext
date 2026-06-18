@@ -345,6 +345,9 @@ func _run_tests(parts: Array) -> void:
 	TraversalModelTests.register(runner)     # V2-STAGE-004-P2: party traversal + step_budget
 	# V2-STAGE-004 Phase 3a
 	CombatTerrainTests.register(runner)      # V2-STAGE-004-P3a: combat-terrain placement + movement
+	# V2-STAGE-004 Phase 3 — per-mode win/lose (RECOVER / PROTECT / ENDURE)
+	ObjectiveCombatTests.register(runner)    # V2-STAGE-004-P3: objective win/lose conditions
+	CombatRoundtripIntegrationTests.register(runner)  # V2-STAGE-004-P3: real combat round loop on irregular terrain (id-keyed wiring)
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [
@@ -621,17 +624,24 @@ func _run_hero_info_command(parts: Array) -> void:
 
 
 # COMBAT-006: dev toggle for encounter objective.
-# Usage: combat_objective purify_shrine | combat_objective defeat_enemies | combat_objective show
+# Usage: combat_objective <combat|purify_shrine|recover|protect|endure|show>
+# pursue and guide_spirit are intentionally excluded — win-conditions land in Phase 3b/3c.
 func _run_combat_objective_command(parts: Array) -> void:
-	var valid_modes: Array = [EncounterResolutionModes.PURIFY_SHRINE, "defeat_enemies"]
+	var valid_modes: Array = [
+		EncounterResolutionModes.COMBAT,
+		EncounterResolutionModes.PURIFY_SHRINE,
+		EncounterResolutionModes.RECOVER,
+		EncounterResolutionModes.PROTECT,
+		EncounterResolutionModes.ENDURE,
+	]
 	if parts.size() < 2:
-		_debug_print("Usage: combat_objective <purify_shrine|defeat_enemies|show>")
+		_debug_print("Usage: combat_objective <combat|purify_shrine|recover|protect|endure|show>")
 		return
 	var op: String = parts[1].to_lower()
 	if op == "show":
 		var current: String = runtime.flow_ctx.dev_combat_objective
 		if current.is_empty():
-			_debug_print("combat_objective: using default (purify_shrine)")
+			_debug_print("combat_objective: using default (resolved from stage objective)")
 		else:
 			_debug_print("combat_objective: override = %s" % current)
 		return
@@ -642,7 +652,7 @@ func _run_combat_objective_command(parts: Array) -> void:
 		runtime.flow_ctx.encounter_machine = null
 		_debug_print("combat_objective set to: %s — encounter reset, re-enter combat to apply" % op)
 	else:
-		_debug_print("Unknown mode '%s'. Use: purify_shrine | defeat_enemies" % op)
+		_debug_print("Unknown mode '%s'. Use: combat|purify_shrine|recover|protect|endure" % op)
 	_flush_logs_to_console()
 
 

@@ -1575,7 +1575,8 @@ func _resolve_next_actor(t: int) -> void:
 		"shrine_alive":            shrine_alive,
 		"shrine_hp_ratio":         shrine_hp_ratio,
 		"prefer_objective_target": actor.get("faction", "") == "enemy" \
-			and ectx.resolution_mode == EncounterResolutionModes.PURIFY_SHRINE,
+			and (ectx.resolution_mode == EncounterResolutionModes.PURIFY_SHRINE \
+				or ectx.resolution_mode == EncounterResolutionModes.PROTECT),
 		# VOW-001: active vow dict (or {}) for BehaviorArbiter vow bias layer.
 		"active_vow":              _vow_ctx,
 		# VOW-001: echo party size for tikoro_nko_agyina party-size gate.
@@ -2031,8 +2032,167 @@ func _end_round(t: int) -> void:
 					"delta":    no_dmg_morale,
 				})
 
-	# Check end condition.
-	var end_check: Dictionary = CombatState.check_end_condition(ectx.actors, ectx.resolution_mode)
+	# V2-STAGE-004 P3a — RECOVER: update hold_counter based on echo adjacency to the relic.
+	# Gate: RECOVER only; COMBAT / PURIFY_SHRINE / other modes are byte-identical.
+	if ectx.resolution_mode == EncounterResolutionModes.RECOVER:
+		# Locate the relic: first living is_structure actor.
+		var _relic: Dictionary = {}
+		for _ra in ectx.actors:
+			if _ra is Dictionary and bool(_ra.get("is_structure", false)) \
+					and not bool(_ra.get("is_dead", false)):
+				_relic = _ra
+				break
+		if not _relic.is_empty():
+			var _relic_pos: Dictionary = _relic.get("grid_pos", {})
+			var _any_adjacent: bool = false
+			for _re_a in ectx.actors:
+				if not (_re_a is Dictionary): continue
+				if bool(_re_a.get("is_dead", false)): continue
+				if str(_re_a.get("faction", "")) != "echo": continue
+				if GridService.is_adjacent(_re_a.get("grid_pos", {}), _relic_pos):
+					_any_adjacent = true
+					break
+			if _any_adjacent:
+				combat_state["hold_counter"] = int(combat_state.get("hold_counter", 0)) + 1
+			else:
+				combat_state["hold_counter"] = 0
+			logger.debug(t, "combat.recover.hold", "RECOVER hold_counter updated", {
+				"round":        round,
+				"hold_counter": int(combat_state.get("hold_counter", 0)),
+				"adjacent":     _any_adjacent,
+			})
+
+	# V2-STAGE-004 P3a — ENDURE: spawn an enemy wave at the configured interval.
+	# Gate: ENDURE only; COMBAT / PURIFY_SHRINE / other modes are byte-identical.
+	if ectx.resolution_mode == EncounterResolutionModes.ENDURE:
+		var _end_obj: Dictionary = combat_state.get("objective_params", {})
+		var _wave_interval: int = int(_end_obj.get("wave_interval", 2))
+		var _wave_size: int     = int(_end_obj.get("wave_size", 2))
+		var _wave_group: String = str(_end_obj.get("wave_group", "group.vale_patrol_sm"))
+		var _duration_turns: int = int(_end_obj.get("duration_turns", 5))
+		var _round_no: int = int(combat_state.get("round_counter", 0))
+		# Spawn when: not round 0, divisible by interval, and before the final/winning round.
+		if _round_no > 0 and _wave_interval > 0 \
+				and _round_no % _wave_interval == 0 \
+				and _round_no < _duration_turns:
+			# Build actor_cfg same as FlowEncounterState.enter() does.
+			var _w_actor_cfg: Dictionary = {}
+			var _w_actors_json: Dictionary = {}
+			if flow_ctx.config_service != null:
+				var _w_bal: Dictionary = flow_ctx.config_service.get_balance()
+				var _w_bd: Dictionary  = _w_bal.get("data", {})
+				_w_actor_cfg = {
+					"birth_stats": _w_bd.get("summoning", {}).get("birth_stats", {}),
+					"enemy_types": _w_bd.get("actor", {}).get("enemy_types", {}),
+				}
+				_w_actors_json = flow_ctx.config_service.get_actors()
+			var _w_actors_data: Dictionary = _w_actors_json.get("data", {})
+			var _w_enemies_dict: Dictionary = _w_actors_data.get("enemies", {})
+			var _w_groups_dict: Dictionary  = _w_actors_data.get("groups", {})
+			var _w_group_def: Dictionary    = _w_groups_dict.get(_wave_group, {})
+			# Collect spawn templates from the group, repeating to fill wave_size.
+			var _w_spawns: Array = _w_group_def.get("spawns", []) if not _w_group_def.is_empty() else []
+			var _w_new_actors: Array = []
+			var _w_built: int = 0
+			var _w_tmpl_idx: int = 0
+			while _w_built < _wave_size and not _w_spawns.is_empty():
+				var _w_sp: Dictionary = _w_spawns[_w_tmpl_idx % _w_spawns.size()]
+				_w_tmpl_idx += 1
+				if not (_w_sp is Dictionary): continue
+				var _w_template_id: String = str(_w_sp.get("template_id", ""))
+				var _w_tmpl: Dictionary = _w_enemies_dict.get(_w_template_id, {})
+				if _w_tmpl.is_empty(): continue
+				var _w_type_key: String = _w_template_id
+				if _w_type_key.begins_with("enemy."):
+					_w_type_key = _w_type_key.substr(6)
+				var _w_defn: Dictionary = {
+					"id":      "wave_%d_%d" % [_round_no, _w_built],
+					"name":   str(_w_tmpl.get("name", _w_template_id)),
+					"type":   _w_type_key,
+					"faction": "enemy",
+				}
+				_w_new_actors.append(EnemyActor.from_definition(_w_defn, t, _w_actor_cfg))
+				_w_built += 1
+
+			# Determine walkable cells; use ENEMY-SIDE (highest columns) for placement.
+			# Purely deterministic: sort walkable cells descending by col, tiebreak row then col.
+			var _w_walkable: Dictionary = StageTerrain.walkable_set(ectx.terrain) \
+				if not ectx.terrain.is_empty() else {}
+			# Build occupied set from all living actors.
+			var _w_occupied: Dictionary = {}
+			for _w_oa in ectx.actors:
+				if _w_oa is Dictionary and not bool(_w_oa.get("is_dead", false)):
+					var _w_op: Dictionary = _w_oa.get("grid_pos", {})
+					if not _w_op.is_empty():
+						_w_occupied["%d,%d" % [int(_w_op.get("col", 0)), int(_w_op.get("row", 0))]] = true
+			if not _w_walkable.is_empty():
+				# Build candidate cells sorted descending by col (highest col = enemy side),
+				# tiebreak row asc then col asc for full determinism.
+				var _w_candidate_keys: Array = []
+				for _w_k in _w_walkable:
+					if not _w_occupied.has(_w_k):
+						_w_candidate_keys.append(_w_k)
+				_w_candidate_keys.sort_custom(func(a: String, b: String) -> bool:
+					var _ap := a.split(","); var _bp := b.split(",")
+					var _ac: int = int(_ap[0]); var _bc: int = int(_bp[0])
+					if _ac != _bc: return _ac > _bc  # highest col first (enemy side)
+					var _ar: int = int(_ap[1]); var _br: int = int(_bp[1])
+					if _ar != _br: return _ar < _br   # row asc tiebreak
+					return _ac < _bc                  # col asc final tiebreak
+				)
+				var _w_cell_idx: int = 0
+				for _w_na in _w_new_actors:
+					if _w_cell_idx >= _w_candidate_keys.size():
+						break
+					var _w_ck: String = _w_candidate_keys[_w_cell_idx]
+					var _w_ck_parts := _w_ck.split(",")
+					GridService.assign_grid_pos(_w_na,
+						int(_w_ck_parts[0]), int(_w_ck_parts[1]))
+					_w_occupied[_w_ck] = true
+					_w_cell_idx += 1
+			else:
+				# Legacy path (no terrain): mirror GridService enemy packing — rightmost columns.
+				var _w_bal_leg: Dictionary = {}
+				if flow_ctx.config_service != null:
+					_w_bal_leg = flow_ctx.config_service.get_balance()
+				var _w_grid_leg: Dictionary = _w_bal_leg.get("data", {}).get("grid", {})
+				var _w_cols: int = GridService.get_board_cols(_w_grid_leg)
+				var _w_rows: int = GridService.get_board_rows(_w_grid_leg)
+				# Collect unoccupied rightmost cells: descending col, ascending row.
+				var _w_leg_cells: Array = []
+				for _w_leg_c in range(_w_cols - 1, -1, -1):
+					for _w_leg_r in range(_w_rows):
+						var _w_leg_k: String = "%d,%d" % [_w_leg_c, _w_leg_r]
+						if not _w_occupied.has(_w_leg_k):
+							_w_leg_cells.append({ "col": _w_leg_c, "row": _w_leg_r })
+				var _w_leg_idx: int = 0
+				for _w_na in _w_new_actors:
+					if _w_leg_idx >= _w_leg_cells.size():
+						break
+					var _w_leg_cell: Dictionary = _w_leg_cells[_w_leg_idx]
+					GridService.assign_grid_pos(_w_na,
+						int(_w_leg_cell.get("col", 0)), int(_w_leg_cell.get("row", 0)))
+					_w_occupied["%d,%d" % [int(_w_leg_cell.get("col", 0)), int(_w_leg_cell.get("row", 0))]] = true
+					_w_leg_idx += 1
+
+			# Append new actors to ectx.actors and their ids to the END of initiative_order.
+			# Never re-sort — "readiness computed once" invariant (V2-COMBAT-001) preserved.
+			var _w_init_order: Array = combat_state.get("initiative_order", [])
+			for _w_na in _w_new_actors:
+				ectx.actors.append(_w_na)
+				_w_init_order.append({ "id": str(_w_na.get("id", "")), "name": str(_w_na.get("name", "")) })
+			combat_state["initiative_order"] = _w_init_order
+			logger.info(t, "combat.wave.spawned", "ENDURE wave spawned", {
+				"round":      _round_no,
+				"count":      _w_new_actors.size(),
+				"wave_group": _wave_group,
+			})
+
+	# Check end condition — pass combat_state so RECOVER/PROTECT/ENDURE checks read
+	# round_counter, hold_counter, and objective_params.
+	# COMBAT and PURIFY_SHRINE omit combat_state in the old call but the 3-arg form is
+	# byte-identical for those modes (new branches are gated on their objective strings).
+	var end_check: Dictionary = CombatState.check_end_condition(ectx.actors, ectx.resolution_mode, combat_state)
 	if end_check.get("over", false):
 		combat_state["combat_over"] = true
 		# COMBAT-005: store result on ectx so build_snapshot() can surface it.
@@ -4708,7 +4868,7 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 			# itself is non-walkable (a malformed map). Step directly rather than hang.
 			nxt = target_pos
 		else:
-			nxt = StageTerrainScript.next_step(here, dist_field, walkable)
+			nxt = StageTerrainScript.next_step(here, dist_field, walkable, target_pos)
 		# Dead-end safety: next_step returns from_cell unchanged
 		if int(nxt.get("col", 0)) == int(here.get("col", 0)) \
 				and int(nxt.get("row", 0)) == int(here.get("row", 0)):

@@ -153,25 +153,65 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 ##   1. all_enemies_defeated → victory  (runs first — echoes that kill the last enemy win
 ##      even if the shrine falls the same round)
 ##   2. shrine_destroyed (purify_shrine objective only) → defeat
-##   3. all_echoes_dead → defeat
-static func check_end_condition(actors: Array, objective: String) -> Dictionary:
-	# 1. Victory: all enemies dead.
+##   3. PROTECT entity lost → defeat  (structure actor dead)
+##   4. all_echoes_dead → defeat
+##   5. RECOVER secured → victory  (hold_counter >= hold_rounds)
+##   6. PROTECT survived → victory  (round_counter >= duration_turns)
+##   7. ENDURE survived → victory   (round_counter >= duration_turns)
+##
+## combat_state carries round_counter, objective_params, and hold_counter.
+## Callers that omit combat_state (COMBAT / PURIFY_SHRINE) receive byte-identical results
+## to the previous 2-arg signature — no new branches fire for those modes.
+static func check_end_condition(actors: Array, objective: String,
+		combat_state: Dictionary = {}) -> Dictionary:
+	# Read combat_state fields with safe defaults.
+	var round_counter: int     = int(combat_state.get("round_counter", 0))
+	var obj_params: Dictionary = combat_state.get("objective_params", {})
+	var hold_counter: int      = int(combat_state.get("hold_counter", 0))
+
+	# 1. Victory: all enemies dead (universal, unchanged).
 	var living_enemies := actors.filter(func(a: Dictionary) -> bool:
 		return a.get("faction", "") == "enemy" and not a.get("is_dead", false))
 	if living_enemies.is_empty():
 		return { "over": true, "victory": true, "reason": "all_enemies_defeated" }
 
-	# 2. Shrine destroyed (purify_shrine objective only).
+	# 2. Shrine destroyed (purify_shrine objective only, unchanged).
 	if objective == EncounterResolutionModes.PURIFY_SHRINE:
 		var shrine: Dictionary = _find_shrine(actors)
 		if not shrine.is_empty() and shrine.get("is_dead", false):
 			return { "over": true, "victory": false, "reason": "shrine_destroyed" }
 
-	# 3. Defeat: all echoes dead.
+	# 3. PROTECT: guarded entity destroyed → immediate defeat.
+	#    Uses same structure-finder as PURIFY_SHRINE; RECOVER's relic is also is_structure
+	#    but this branch is gated on the PROTECT objective string so it cannot misfire.
+	if objective == EncounterResolutionModes.PROTECT:
+		var entity: Dictionary = _find_shrine(actors)
+		if not entity.is_empty() and entity.get("is_dead", false):
+			return { "over": true, "victory": false, "reason": "entity_lost" }
+
+	# 4. Defeat: all echoes dead (unchanged).
 	var living_echoes := actors.filter(func(a: Dictionary) -> bool:
 		return a.get("faction", "") == "echo" and not a.get("is_dead", false))
 	if living_echoes.is_empty():
 		return { "over": true, "victory": false, "reason": "all_echoes_dead" }
+
+	# 5. RECOVER: relic held for required number of rounds → victory.
+	if objective == EncounterResolutionModes.RECOVER:
+		var hold_rounds: int = int(obj_params.get("hold_rounds", 2))
+		if hold_counter >= hold_rounds:
+			return { "over": true, "victory": true, "reason": "relic_secured" }
+
+	# 6. PROTECT: survived the required wave duration → victory.
+	if objective == EncounterResolutionModes.PROTECT:
+		var duration_turns: int = int(obj_params.get("duration_turns", 4))
+		if round_counter >= duration_turns:
+			return { "over": true, "victory": true, "reason": "protected" }
+
+	# 7. ENDURE: survived the required wave duration → victory.
+	if objective == EncounterResolutionModes.ENDURE:
+		var duration_turns: int = int(obj_params.get("duration_turns", 5))
+		if round_counter >= duration_turns:
+			return { "over": true, "victory": true, "reason": "endured" }
 
 	return { "over": false, "victory": false, "reason": "" }
 
