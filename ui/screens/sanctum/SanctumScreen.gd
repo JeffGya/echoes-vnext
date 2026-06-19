@@ -7,6 +7,7 @@ signal echo_detail_closed
 
 const ThreadSlotItemScene: PackedScene = preload("res://ui/components/ThreadSlotItem.tscn")
 const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.tscn")
+const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
 
 @onready var title_label: Label = %TitleLabel
 @onready var _continuity_flame: ContinuityFlameControl = %ContinuityFlame  # V2-CONTINUITY-001
@@ -394,7 +395,7 @@ func _render_echo_detail(detail_roster: Array, featured_echo_id: String) -> void
 	detail_archetype_label.text = archetype_birth
 	detail_calling_label.text = _title_case(str(selected.get("calling_origin", "Uncalled")))
 	detail_vector_label.text = _vector_phrase(str(selected.get("dominant_vector", "")))
-	detail_emotion_chip.setup(str(selected.get("emotional_status", "burdened")))
+	detail_emotion_chip.setup(str(selected.get("emotional_status", "")))
 	var bark := str(selected.get("sanctum_bark", ""))
 	detail_bark_label.visible = not bark.is_empty()
 	detail_bark_label.text = "\"%s\"" % bark
@@ -1349,7 +1350,7 @@ func _refresh_institution_detail(data: Dictionary) -> void:
 	# Passive effect description (V2 language)
 	var passive_effect := str(_INSTITUTION_PASSIVE_EFFECT.get(_current_institution_id, ""))
 
-	# Occupant rows (also shows morale tier dot per echo)
+	# Occupant rows show the same emotional-status color used throughout the UI.
 	for child in _inst_occupant_list.get_children():
 		if child == _occupant_row_template:
 			continue
@@ -1359,25 +1360,22 @@ func _refresh_institution_detail(data: Dictionary) -> void:
 	for oid_v in (inst_data.get("occupant_ids", []) as Array):
 		var oid := str(oid_v)
 		var echo_name := oid
-		var echo_morale_tier := "steady"
+		var emotional_status := EmotionPresentation.DEFAULT_STATUS
 		for er_v in detail_roster:
 			if not (er_v is Dictionary):
 				continue
 			var er: Dictionary = er_v
 			if str(er.get("id", "")) == oid:
 				echo_name = str(er.get("name", oid))
-				var emo_v: Variant = er.get("emotion", {})
-				if emo_v is Dictionary:
-					var morale_current := int((emo_v as Dictionary).get("morale_current", 50))
-					echo_morale_tier = EmotionService.get_morale_tier(morale_current)
+				emotional_status = EmotionPresentation.normalize(str(er.get("emotional_status", "")))
 				break
 		var row := _occupant_row_template.duplicate() as HBoxContainer
 		row.visible = true
 		var name_label := row.find_child("OccupantName", true, false)
 		if name_label is Label:
 			(name_label as Label).text = echo_name
-		# Morale tier indicator dot (modulate the row to reflect emotion state)
-		var dot_color := SanctumOccupantLayer._fill_for_morale_tier(echo_morale_tier)
+		# Emotional-status indicator dot.
+		var dot_color := SanctumOccupantLayer.fill_for_emotional_status(emotional_status)
 		var dot_lbl := Label.new()
 		dot_lbl.text = "●"
 		dot_lbl.modulate = dot_color

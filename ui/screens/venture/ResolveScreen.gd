@@ -29,6 +29,7 @@ signal action_requested(action: Dictionary)
 
 const RewardEntryScene    := preload("res://ui/components/RewardEntryItem.tscn")
 const EmotionEntryScene   := preload("res://ui/components/EmotionEntryItem.tscn")
+const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
 const EffectChipScene     := preload("res://ui/components/EffectChip.tscn")
 
 @onready var _banner:            Label         = %BannerLabel
@@ -169,8 +170,10 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 		var entry: Dictionary = entry_v if entry_v is Dictionary else {}
 		var row: Node = EmotionEntryScene.instantiate()
 		row.get_node("%EchoNameLabel").text    = str(entry.get("name", ""))
-		row.get_node("%EmotionArcLabel").text  = \
-			"%s → %s" % [entry.get("pre_emotional_status", "").capitalize(), entry.get("post_emotional_status", "").capitalize()]
+		row.get_node("%EmotionArcLabel").text = "%s → %s" % [
+			EmotionPresentation.display_name(str(entry.get("pre_emotional_status", ""))),
+			EmotionPresentation.display_name(str(entry.get("post_emotional_status", ""))),
+		]
 		row.get_node("%RefusedLabel").visible  = bool(entry.get("refused", false))
 		# Phase 1 Close: token + direction cue + KO tag
 		_populate_emotion_row_extras(row, entry)
@@ -250,8 +253,10 @@ func _render_situation_result(data: Dictionary, actions: Dictionary) -> void:
 		var entry: Dictionary = entry_v if entry_v is Dictionary else {}
 		var row: Node = EmotionEntryScene.instantiate()
 		row.get_node("%EchoNameLabel").text   = str(entry.get("name", ""))
-		row.get_node("%EmotionArcLabel").text = \
-			"%s → %s" % [entry.get("pre_emotional_status", "").capitalize(), entry.get("post_emotional_status", "").capitalize()]
+		row.get_node("%EmotionArcLabel").text = "%s → %s" % [
+			EmotionPresentation.display_name(str(entry.get("pre_emotional_status", ""))),
+			EmotionPresentation.display_name(str(entry.get("post_emotional_status", ""))),
+		]
 		row.get_node("%RefusedLabel").visible = bool(entry.get("refused", false))
 		_populate_emotion_row_extras(row, entry)
 		_emotion_list.add_child(row)
@@ -496,7 +501,9 @@ func _render_scout_return(data: Dictionary, actions: Dictionary) -> void:
 		var nm := str(actor.get("name", ""))
 		var es := str(actor.get("emotional_status", ""))
 		var lbl := Label.new()
-		lbl.text = "%s — [%s]" % [nm, es.capitalize()] if es != "" else nm
+		lbl.text = "%s — [%s]" % [nm, EmotionPresentation.display_name(es)] if es != "" else nm
+		if es != "":
+			lbl.theme_type_variation = EmotionPresentation.text_theme(es)
 		lbl.add_theme_font_size_override("font_size", 14)
 		_emotion_list.add_child(lbl)
 

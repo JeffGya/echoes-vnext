@@ -32,6 +32,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("emotion/emotional_status_burdened",        Callable(EmotionTests, "_t_emotional_status_burdened"))
 	runner.register_test("emotion/emotional_status_pressed",         Callable(EmotionTests, "_t_emotional_status_pressed"))
 	runner.register_test("emotion/emotional_status_hollow",          Callable(EmotionTests, "_t_emotional_status_hollow"))
+	runner.register_test("emotion/emotional_status_ten_tier_boundaries", Callable(EmotionTests, "_t_emotional_status_ten_tier_boundaries"))
 	runner.register_test("emotion/project_actor_emotional_status",   Callable(EmotionTests, "_t_project_actor_emotional_status"))
 	runner.register_test("emotion/resolve_emotion_summary_unified",  Callable(EmotionTests, "_t_resolve_emotion_summary_unified"))
 	# V2-EMOTION-003 tests
@@ -382,29 +383,52 @@ static func _t_emotional_status_radiant() -> Dictionary:
 
 
 # Test 11: emotional_status_burdened
-# morale=35, fear=35 → "burdened" (catch-all: morale<40 so grounded doesn't apply, fear<45 so pressed doesn't apply)
+# morale=50, fear=45 → "burdened"
 static func _t_emotional_status_burdened() -> Dictionary:
-	var got := EmotionService.get_emotional_status(35, 35)
+	var got := EmotionService.get_emotional_status(50, 45)
 	if got != "burdened":
-		return { "ok": false, "error": "get_emotional_status(35, 35): expected 'burdened', got '%s'" % got }
+		return { "ok": false, "error": "get_emotional_status(50, 45): expected 'burdened', got '%s'" % got }
 	return { "ok": true }
 
 
 # Test 12: emotional_status_pressed
-# morale=50, fear=50 → "pressed" (fear outpacing morale)
+# morale=50, fear=55 → "pressed"
 static func _t_emotional_status_pressed() -> Dictionary:
-	var got := EmotionService.get_emotional_status(50, 50)
+	var got := EmotionService.get_emotional_status(50, 55)
 	if got != "pressed":
-		return { "ok": false, "error": "get_emotional_status(50, 50): expected 'pressed', got '%s'" % got }
+		return { "ok": false, "error": "get_emotional_status(50, 55): expected 'pressed', got '%s'" % got }
 	return { "ok": true }
 
 
 # Test 13: emotional_status_hollow
-# morale=30, fear=80 → "hollow" (fear ≥ 75)
+# morale=30, fear=85 → "hollow"
 static func _t_emotional_status_hollow() -> Dictionary:
-	var got := EmotionService.get_emotional_status(30, 80)
+	var got := EmotionService.get_emotional_status(30, 85)
 	if got != "hollow":
-		return { "ok": false, "error": "get_emotional_status(30, 80): expected 'hollow', got '%s'" % got }
+		return { "ok": false, "error": "get_emotional_status(30, 85): expected 'hollow', got '%s'" % got }
+	return { "ok": true }
+
+
+static func _t_emotional_status_ten_tier_boundaries() -> Dictionary:
+	var cases: Array = [
+		[70, 15, "radiant"], [69, 15, "whole"],
+		[55, 30, "whole"], [54, 30, "grounded"],
+		[40, 40, "grounded"], [39, 40, "uncertain"],
+		[35, 44, "uncertain"], [34, 44, "hesitant"],
+		[25, 44, "hesitant"], [24, 0, "burdened"],
+		[50, 45, "burdened"], [50, 54, "burdened"],
+		[50, 55, "pressed"], [50, 64, "pressed"],
+		[50, 65, "strained"], [50, 74, "strained"],
+		[50, 75, "fraying"], [50, 84, "fraying"],
+		[50, 85, "hollow"], [5, 0, "hollow"],
+		[80, 70, "strained"], # high morale cannot hide refusal-range fear
+		[25, 0, "hesitant"],  # minimum birth morale remains readable, not burdened
+	]
+	for case_v in cases:
+		var case: Array = case_v
+		var got := EmotionService.get_emotional_status(int(case[0]), int(case[1]))
+		if got != str(case[2]):
+			return { "ok": false, "error": "status(%d,%d): expected %s, got %s" % [case[0], case[1], case[2], got] }
 	return { "ok": true }
 
 
@@ -428,7 +452,7 @@ static func _t_project_actor_emotional_status() -> Dictionary:
 
 # Test 15: resolve_emotion_summary_unified
 # build_final_snapshot() must include emotion_summary with pre/post_emotional_status + refused.
-# Pre: morale=60, fear=0 → "whole". Post: morale=30, fear=70 → "fraying". refused=false (fear<80).
+# Pre: morale=60, fear=0 → "whole". Post: morale=30, fear=70 → "strained". refused=false (fear<80).
 static func _t_resolve_emotion_summary_unified() -> Dictionary:
 	var ctx := FlowContext.new()
 	ctx.config_service = null
@@ -460,8 +484,8 @@ static func _t_resolve_emotion_summary_unified() -> Dictionary:
 	var row: Dictionary = es[0]
 	if str(row.get("pre_emotional_status", "")) != "whole":
 		return { "ok": false, "error": "Expected pre_emotional_status='whole' (morale=60/fear=0), got '%s'" % row.get("pre_emotional_status", "") }
-	if str(row.get("post_emotional_status", "")) != "fraying":
-		return { "ok": false, "error": "Expected post_emotional_status='fraying' (morale=30/fear=70), got '%s'" % row.get("post_emotional_status", "") }
+	if str(row.get("post_emotional_status", "")) != "strained":
+		return { "ok": false, "error": "Expected post_emotional_status='strained' (morale=30/fear=70), got '%s'" % row.get("post_emotional_status", "") }
 	if int(row.get("morale_delta", 0)) != -30:
 		return { "ok": false, "error": "Expected morale_delta==-30, got %d" % int(row.get("morale_delta", 0)) }
 	if bool(row.get("refused", true)):

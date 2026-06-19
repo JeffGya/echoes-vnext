@@ -26,6 +26,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("sanctum_pulse/modifier_ticks_down",                          Callable(SanctumPulseTests, "_t_modifier_ticks_down"))
 	runner.register_test("sanctum_pulse/defeat_modifier_slows_fear_recovery",          Callable(SanctumPulseTests, "_t_defeat_modifier_slows_fear_recovery"))
 	runner.register_test("sanctum_pulse/victory_modifier_speeds_morale_recovery",      Callable(SanctumPulseTests, "_t_victory_modifier_speeds_morale_recovery"))
+	runner.register_test("sanctum_pulse/recovery_clock_consumed_when_delta_rounds_zero", Callable(SanctumPulseTests, "_t_recovery_clock_consumed_when_delta_rounds_zero"))
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +97,24 @@ static func _make_recovery_cfg(morale_per_min: float = 1.0, fear_per_min: float 
 		"modifier_ko_morale_mul":      0.5,
 		"modifier_survived_morale_mul": 1.25,
 	}
+
+
+static func _t_recovery_clock_consumed_when_delta_rounds_zero() -> Dictionary:
+	var runtime := FlowRuntime.new(_make_logger(), ConfigService.new(),
+		"/tmp/echoes-vnext-tests/emotion_recovery_clock_slot.json")
+	var save: Dictionary = runtime.get_save_data()
+	var economy: Dictionary = save.get("economy", {})
+	economy["last_emotion_settle_unix"] = 100
+	save["economy"] = economy
+	save["sanctum"] = save.get("sanctum", {})
+	(save["sanctum"] as Dictionary)["roster"] = [_make_echo("clock", 50, 0, 50)]
+	runtime.flow_ctx.save_request = false
+	runtime._apply_emotion_recovery_if_needed(101, 1)
+	if int((save["economy"] as Dictionary).get("last_emotion_settle_unix", 0)) != 101:
+		return { "ok": false, "error": "recovery clock did not consume elapsed window" }
+	if not runtime.flow_ctx.save_request:
+		return { "ok": false, "error": "consumed recovery clock was not queued for persistence" }
+	return { "ok": true }
 
 
 # ---------------------------------------------------------------------------

@@ -93,7 +93,7 @@ static func generate_responses(
 		if calling.is_empty():
 			calling = str(echo.get("calling_origin", ""))
 
-		# Emotional status — canonical 8-tier system from EmotionService
+		# Emotional status — canonical 10-tier system from EmotionService
 		var emo_v: Variant = echo.get("emotion", {})
 		var emo: Dictionary = emo_v if emo_v is Dictionary else {}
 		var fear_current := int(emo.get("fear_current", 0))
@@ -238,7 +238,7 @@ static func _compute_emotional_fit(
 	var mods_v: Variant = cfg.get("emotional_fit_modifiers", {})
 	var mods: Dictionary = mods_v if mods_v is Dictionary else {}
 
-	# Map canonical 8-tier status to 3 scoring bands used in disposition checks
+	# Map canonical 10-tier status to 3 scoring bands used in disposition checks
 	var band := _emotional_fit_band(emotional_status)
 
 	var base := 0.0
@@ -560,12 +560,12 @@ static func _resolve_calling_register(calling: String) -> String:
 	return calling  # already S3 or "uncalled"
 
 
-# Map canonical 8-tier emotional_status to 3 scoring bands for resonance computation.
-# Text selection uses the full 8 tiers. Resonance scoring uses these 3 bands.
+# Map canonical 10-tier emotional_status to 3 scoring bands for resonance computation.
+# Text selection uses the full 10 tiers. Resonance scoring uses these 3 bands.
 static func _emotional_fit_band(status: String) -> String:
 	match status:
-		"radiant", "whole", "grounded": return "grounded"
-		"pressed", "burdened", "strained": return "strained"
+		"radiant", "whole", "grounded", "uncertain": return "grounded"
+		"hesitant", "burdened", "pressed", "strained": return "strained"
 	return "broken"  # fraying, hollow
 
 

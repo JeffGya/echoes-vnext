@@ -113,8 +113,8 @@ static func _t_final_snapshot_has_required_fields() -> Dictionary:
 
 # Test 3: actor_projection_fields
 # Setup: full runtime actor dict with traits, xp_total, archetype_birth, stats block, current_hp.
-# Expected: _project_actor returns { id, name, hp, max_hp, status, grid_pos, faction, is_structure, fear, morale }.
-#           No traits, xp_total, archetype_birth keys.
+# Expected: _project_actor preserves render and operational fields, exposes emotional_status only,
+#           and strips raw/legacy emotion plus other internal fields.
 static func _t_actor_projection_fields() -> Dictionary:
 	var actor: Dictionary = {
 		"id":             "echo_a",
@@ -138,9 +138,9 @@ static func _t_actor_projection_fields() -> Dictionary:
 
 	var proj: Dictionary = FlowEncounterState._project_actor(actor)
 
-	# Required keys must be present (UI-004 added calling_origin + morale_status).
+	# Player-facing emotion uses the canonical emotional_status only.
 	for key in ["id", "name", "hp", "max_hp", "status", "grid_pos", "faction",
-				"is_structure", "fear", "morale", "calling_origin", "morale_status"]:
+				"is_structure", "calling_origin", "emotional_status"]:
 		if not proj.has(key):
 			return { "ok": false, "error": "projection missing key: '%s'" % key }
 
@@ -148,6 +148,12 @@ static func _t_actor_projection_fields() -> Dictionary:
 	for key in ["traits", "xp_total", "archetype_birth"]:
 		if proj.has(key):
 			return { "ok": false, "error": "projection contains internal key that should be stripped: '%s'" % key }
+	for legacy_key in [
+		"fear", "morale", "morale_status", "fear_signal",
+		"emotional_readiness", "morale_tier", "refuse_cause",
+	]:
+		if proj.has(legacy_key):
+			return { "ok": false, "error": "projection exposes raw or legacy emotion key: %s" % legacy_key }
 
 	if int(proj.get("hp", -1)) != 60:
 		return { "ok": false, "error": "Expected hp=60 (from current_hp), got: %s" % str(proj.get("hp")) }
@@ -155,14 +161,14 @@ static func _t_actor_projection_fields() -> Dictionary:
 		return { "ok": false, "error": "Expected max_hp=100, got: %s" % str(proj.get("max_hp")) }
 	if str(proj.get("status", "")) != "alive":
 		return { "ok": false, "error": "Expected status='alive', got: %s" % str(proj.get("status")) }
+	if str(proj.get("emotional_status", "")) != "whole":
+		return { "ok": false, "error": "Expected emotional_status='whole', got: %s" % str(proj.get("emotional_status")) }
 
 	return { "ok": true }
 
 
 # Test 4: status_derivation
-# Setup: five actor dicts covering all branches (V2-COMBAT-001 added "hesitating").
-# Expected: dead→"dead", guard_state→"guarding", fear≥80→"refusing",
-#           40≤fear<80→"hesitating", fear<40→"alive".
+# Operational status is independent from emotional state.
 static func _t_status_derivation() -> Dictionary:
 	var dead_actor:        Dictionary = { "is_dead": true,  "guard_state": false, "fear": 0  }
 	var guard_actor:       Dictionary = { "is_dead": false, "guard_state": true,  "fear": 0  }
@@ -174,10 +180,10 @@ static func _t_status_derivation() -> Dictionary:
 		return { "ok": false, "error": "Expected 'dead' for is_dead=true, got: %s" % FlowEncounterState._derive_status(dead_actor) }
 	if FlowEncounterState._derive_status(guard_actor) != "guarding":
 		return { "ok": false, "error": "Expected 'guarding' for guard_state=true, got: %s" % FlowEncounterState._derive_status(guard_actor) }
-	if FlowEncounterState._derive_status(refuse_actor) != "refusing":
-		return { "ok": false, "error": "Expected 'refusing' for fear=80, got: %s" % FlowEncounterState._derive_status(refuse_actor) }
-	if FlowEncounterState._derive_status(hesitating_actor) != "hesitating":
-		return { "ok": false, "error": "Expected 'hesitating' for fear=50, got: %s" % FlowEncounterState._derive_status(hesitating_actor) }
+	if FlowEncounterState._derive_status(refuse_actor) != "alive":
+		return { "ok": false, "error": "Fear must not replace operational status" }
+	if FlowEncounterState._derive_status(hesitating_actor) != "alive":
+		return { "ok": false, "error": "Hesitation must be expressed through emotional_status" }
 	if FlowEncounterState._derive_status(alive_actor) != "alive":
 		return { "ok": false, "error": "Expected 'alive' for fear=39, got: %s" % FlowEncounterState._derive_status(alive_actor) }
 

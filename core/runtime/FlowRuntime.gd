@@ -17,6 +17,7 @@ const StageTerrainScript               := preload("res://core/realms/StageTerrai
 ## ConsequencePassService kept on disk for future use; not preloaded here.
 const EmotionRecoveryServiceScript := preload("res://core/emotion/EmotionRecoveryService.gd")                    # V2-SANCTUM-001
 const InstitutionServiceScript     := preload("res://core/sanctum/InstitutionService.gd")                         # V2-SANCTUM-002
+const LeadershipEmotionServiceScript := preload("res://core/combat/LeadershipEmotionService.gd")
 
 var logger: StructuredLogger
 var config_service: ConfigService
@@ -1579,6 +1580,7 @@ func _resolve_next_actor(t: int) -> void:
 	# Read config blocks.
 	var balance: Dictionary = config_service.get_balance()
 	var bdata: Dictionary = balance.get("data", {})
+	var leadership_expr_cfg: Dictionary = bdata.get("maturity_expression", {})
 	var grid_cfg: Dictionary = bdata.get("grid", {})
 	var actor_cfg: Dictionary = bdata.get("actor", {})
 	var prog_cfg_block: Dictionary    = bdata.get("progression", {})
@@ -1691,14 +1693,17 @@ func _resolve_next_actor(t: int) -> void:
 					# In-combat fear accumulation: each hit adds fear pressure to the defender (runtime dict only).
 					var combat_emo_cfg: Dictionary = bdata.get("combat", {}).get("emotion", {})
 					var fear_per_hit: int = int(combat_emo_cfg.get("fear_per_hit", 2))
-					target["fear"] = mini(100, int(target.get("fear", 0)) + fear_per_hit)
+					var hit_fear_applied := LeadershipEmotionServiceScript.apply_fear_gain(
+						target, fear_per_hit, ectx.actors, leadership_expr_cfg)
+					target["fear"] = mini(100, int(target.get("fear", 0)) + hit_fear_applied)
 					logger.debug(t, "combat.fear.hit", "%s gains fear from hit" % target.get("name", "?"), {
 						"actor_id": str(target.get("id", "")),
-						"delta":    fear_per_hit,
+						"delta":    hit_fear_applied,
 						"new_fear": int(target.get("fear", 0)),
 					})
 					# Kill bonus: killer gets morale + fear reduction; living Echo allies get a ripple.
 					if result.get("is_kill", false):
+						_apply_kill_momentum(actor, ectx.actors, leadership_expr_cfg, t)
 						var morale_per_kill: int      = int(combat_emo_cfg.get("morale_per_kill",       25))
 						var fear_reduce_per_kill: int = int(combat_emo_cfg.get("fear_reduce_per_kill",  15))
 						var morale_ripple: int         = int(combat_emo_cfg.get("morale_ripple_per_kill", 10))
@@ -1744,11 +1749,14 @@ func _resolve_next_actor(t: int) -> void:
 						var nd_morale: int = int(combat_emo_cfg.get("morale_on_near_death", 7))
 						var nd_fear:   int = int(combat_emo_cfg.get("fear_on_near_death", 8))
 						target["morale"] = mini(100, int(target.get("morale", 50)) + nd_morale)
-						target["fear"]   = mini(100, int(target.get("fear",   0))  + nd_fear)
+						var nd_fear_applied := LeadershipEmotionServiceScript.apply_fear_gain(
+							target, nd_fear, ectx.actors, leadership_expr_cfg)
+						target["fear"]   = mini(100, int(target.get("fear", 0)) + nd_fear_applied)
 						logger.info(t, "actor.near_death", "Near-death trigger — morale+fear tick", {
 							"actor_id": str(target.get("id", "")),
 							"morale":   target["morale"],
 							"fear":     target["fear"],
+							"fear_delta": nd_fear_applied,
 						})
 					# V2-VOICE-001: kill is now confirmed — upgrade bark to combat_ko if eligible.
 					var _ko_vk: int = (t + str(actor.get("id", "")).hash()) % 997
@@ -1887,6 +1895,8 @@ func _end_round(t: int) -> void:
 	var ectx: EncounterContext = flow_ctx.encounter_ctx
 	var combat_state: Dictionary = ectx.combat_state
 	var round: int = int(combat_state.get("round_counter", 0))
+	var leadership_expr_cfg: Dictionary = config_service.get_balance().get(
+		"data", {}).get("maturity_expression", {})
 
 	# Build remaining_actors list (living — for round_end log).
 	var remaining_actors: Array = []
@@ -1929,7 +1939,9 @@ func _end_round(t: int) -> void:
 				for em_a in ectx.actors:
 					if em_a is Dictionary and not em_a.get("is_dead", false) \
 							and em_a.get("faction", "") == "echo":
-						em_a["morale"] = maxi(0, int(em_a.get("morale", 50)) - morale_drain_wave)
+						var applied_drain := LeadershipEmotionServiceScript.apply_morale_loss(
+							em_a, morale_drain_wave, ectx.actors, leadership_expr_cfg, round)
+						em_a["morale"] = maxi(0, int(em_a.get("morale", 50)) - applied_drain)
 						shrine_morale_affected += 1
 				if shrine_morale_affected > 0:
 					logger.info(t, "combat.shrine.morale_drain", "Shrine wave drains echo morale", {
@@ -1962,7 +1974,9 @@ func _end_round(t: int) -> void:
 						and str(sp_a.get("id", "")) != ko_id \
 						and str(sp_a.get("faction", "")) == ko_faction \
 						and not sp_a.get("is_structure", false):
-					sp_a["fear"] = mini(100, int(sp_a.get("fear", 0)) + fear_per_ally_ko)
+					var ko_fear_applied := LeadershipEmotionServiceScript.apply_fear_gain(
+						sp_a, fear_per_ally_ko, ectx.actors, leadership_expr_cfg, true)
+					sp_a["fear"] = mini(100, int(sp_a.get("fear", 0)) + ko_fear_applied)
 					ko_spread_count += 1
 			if ko_spread_count > 0:
 				logger.info(t, "combat.fear.ally_ko", "Ally KO spreads fear to survivors", {
@@ -1976,7 +1990,9 @@ func _end_round(t: int) -> void:
 	for tick_a in ectx.actors:
 		if tick_a is Dictionary and not tick_a.get("is_dead", false) \
 				and not tick_a.get("is_structure", false):
-			tick_a["fear"] = mini(100, int(tick_a.get("fear", 0)) + fear_per_round)
+			var round_fear_applied := LeadershipEmotionServiceScript.apply_fear_gain(
+				tick_a, fear_per_round, ectx.actors, leadership_expr_cfg)
+			tick_a["fear"] = mini(100, int(tick_a.get("fear", 0)) + round_fear_applied)
 	logger.debug(t, "combat.emotion.tick", "Round fear tick applied", {
 		"round":      round,
 		"fear_delta": fear_per_round,
@@ -1989,7 +2005,9 @@ func _end_round(t: int) -> void:
 		for dec_a in ectx.actors:
 			if dec_a is Dictionary and not dec_a.get("is_dead", false) \
 					and dec_a.get("faction", "") == "echo":
-				dec_a["morale"] = maxi(0, int(dec_a.get("morale", 50)) - morale_decay_amt)
+				var decay_applied := LeadershipEmotionServiceScript.apply_morale_loss(
+					dec_a, morale_decay_amt, ectx.actors, leadership_expr_cfg, round)
+				dec_a["morale"] = maxi(0, int(dec_a.get("morale", 50)) - decay_applied)
 		logger.debug(t, "combat.emotion.morale_decay", "Round morale decay applied", {
 			"round": round,
 			"delta": -morale_decay_amt,
@@ -2035,7 +2053,9 @@ func _end_round(t: int) -> void:
 			if str(t7_obs.get("id", "")) == t7_refuser_id: continue
 			var t7_obs_pos: Dictionary = t7_obs.get("grid_pos", {})
 			if GridService.manhattan_distance(t7_refuser_pos, t7_obs_pos) <= witness_radius:
-				t7_obs["fear"] = mini(100, int(t7_obs.get("fear", 0)) + witness_fear)
+				var witness_fear_applied := LeadershipEmotionServiceScript.apply_fear_gain(
+					t7_obs, witness_fear, ectx.actors, leadership_expr_cfg, true)
+				t7_obs["fear"] = mini(100, int(t7_obs.get("fear", 0)) + witness_fear_applied)
 				logger.debug(t, "combat.emotion.witness_refuse", "Witness ally freeze — fear tick", {
 					"observer_id": str(t7_obs.get("id", "")),
 					"refuser_id":  t7_refuser_id,
@@ -2056,7 +2076,9 @@ func _end_round(t: int) -> void:
 		if t8_attack_counts[t8_tid] >= overwhelm_threshold:
 			var t8_victim: Dictionary = _find_actor_by_id(ectx.actors, t8_tid)
 			if t8_victim.is_empty() or t8_victim.get("is_dead", false): continue
-			t8_victim["fear"] = mini(100, int(t8_victim.get("fear", 0)) + overwhelm_fear)
+			var overwhelm_applied := LeadershipEmotionServiceScript.apply_fear_gain(
+				t8_victim, overwhelm_fear, ectx.actors, leadership_expr_cfg)
+			t8_victim["fear"] = mini(100, int(t8_victim.get("fear", 0)) + overwhelm_applied)
 			logger.info(t, "combat.emotion.overwhelmed", "Echo overwhelmed by multiple attackers", {
 				"actor_id":       t8_tid,
 				"attacker_count": t8_attack_counts[t8_tid],
@@ -2083,7 +2105,9 @@ func _end_round(t: int) -> void:
 		else:
 			t9_a["_no_damage_streak"] = int(t9_a.get("_no_damage_streak", 0)) + 1
 			if int(t9_a["_no_damage_streak"]) >= no_dmg_threshold:
-				t9_a["morale"] = maxi(0, int(t9_a.get("morale", 50)) + no_dmg_morale)
+				var no_damage_loss := LeadershipEmotionServiceScript.apply_morale_loss(
+					t9_a, abs(no_dmg_morale), ectx.actors, leadership_expr_cfg, round)
+				t9_a["morale"] = maxi(0, int(t9_a.get("morale", 50)) - no_damage_loss)
 				logger.debug(t, "combat.emotion.no_damage_streak", "Echo helplessness — morale decay", {
 					"actor_id": t9_id,
 					"streak":   t9_a["_no_damage_streak"],
@@ -2299,6 +2323,36 @@ func _end_round(t: int) -> void:
 		ectx.last_round_snapshot = round_snap
 		flow_ctx.last_snapshot   = round_snap
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+func _apply_kill_momentum(
+	source: Dictionary,
+	actors: Array,
+	expr_cfg: Dictionary,
+	t: int
+) -> void:
+	if not LeadershipEmotionServiceScript.is_whole_leader(source, expr_cfg):
+		return
+	var traits: Array = source.get("leadership_traits", []) as Array
+	if not ("kill_momentum" in traits):
+		return
+	var effect := LeadershipEmotionServiceScript.get_trait_effect("kill_momentum", expr_cfg)
+	var morale_boost := int(effect.get("morale_boost", 0))
+	var radius := LeadershipEmotionServiceScript.get_trait_radius(
+		source, "kill_momentum", expr_cfg)
+	var allies := LeadershipEmotionServiceScript.get_nearby_living_echo_allies(
+		source, actors, radius)
+	if morale_boost <= 0 or allies.is_empty():
+		return
+	for ally_v in allies:
+		var ally: Dictionary = ally_v
+		ally["morale"] = clampi(int(ally.get("morale", 50)) + morale_boost, 0, 100)
+	logger.info(t, "actor.leadership.kill_momentum", "Leadership kill momentum fired", {
+		"actor_id": source.get("id", ""),
+		"morale_boost": morale_boost,
+		"radius": radius,
+		"allies_affected": allies.size(),
+	})
 
 
 ## COMBAT-SEQ: scans initiative_order from current_actor_index forward.
@@ -7055,6 +7109,7 @@ func _apply_emotion_recovery_if_needed(now_unix: int, t: int) -> void:
 	var last_settle := int(econ_data.get("last_emotion_settle_unix", 0))
 	if last_settle <= 0:
 		econ_data["last_emotion_settle_unix"] = now_unix
+		_mark_save_requested("emotion.recovery_clock")
 		return
 
 	var elapsed := now_unix - last_settle
@@ -7093,6 +7148,9 @@ func _apply_emotion_recovery_if_needed(now_unix: int, t: int) -> void:
 		})
 
 	econ_data["last_emotion_settle_unix"] = now_unix
+	# Persist the consumed recovery window even when rounding/clamps produced no
+	# emotion delta; otherwise a later dispatch can settle the same elapsed time twice.
+	_mark_save_requested("emotion.recovery_clock")
 
 
 func _apply_run_emotion_modifiers(outcome: String, t: int) -> void:

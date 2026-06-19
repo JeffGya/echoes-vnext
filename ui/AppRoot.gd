@@ -1,6 +1,7 @@
 extends Control
 
 const SaveIntegrityTestsScript := preload("res://tests/SaveIntegrityTests.gd")
+const LeadershipEmotionTestsScript := preload("res://tests/LeadershipEmotionTests.gd")
 
 @onready var snapshot_view: RichTextLabel = %SnapshotView
 @onready var renderer: UISnapshotRenderer = %UISnapshotRenderer
@@ -322,6 +323,7 @@ func _run_tests(parts: Array) -> void:
 	MoraleInfluenceTests.register(runner)  # ACTOR-007
 	KODeathTests.register(runner)          # ACTOR-008
 	EmotionTests.register(runner)
+	LeadershipEmotionTestsScript.register(runner)
 	VectorTests.register(runner)
 	DirectiveTests.register(runner)  # DIRECTIVE-001
 	GridTests.register(runner)       # GRID-001
