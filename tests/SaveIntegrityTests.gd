@@ -13,6 +13,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("save_integrity/missing_is_distinct_from_error", Callable(SaveIntegrityTests, "_test_missing_is_distinct_from_error"))
 	runner.register_test("save_integrity/invalid_write_preserves_current", Callable(SaveIntegrityTests, "_test_invalid_write_preserves_current"))
 	runner.register_test("save_integrity/legacy_generation_defaults_to_zero", Callable(SaveIntegrityTests, "_test_legacy_generation_defaults_to_zero"))
+	runner.register_test("save_integrity/repairs_same_version_incomplete_candidate", Callable(SaveIntegrityTests, "_test_repairs_same_version_incomplete_candidate"))
+	runner.register_test("save_integrity/rejects_unsupported_schema_before_repairs", Callable(SaveIntegrityTests, "_test_rejects_unsupported_schema_before_repairs"))
 	runner.register_test("save_integrity/runtime_boot_surfaces_recovery", Callable(SaveIntegrityTests, "_test_runtime_boot_surfaces_recovery"))
 	runner.register_test("save_integrity/failed_flush_remains_queued", Callable(SaveIntegrityTests, "_test_failed_flush_remains_queued"))
 
@@ -219,6 +221,48 @@ static func _test_legacy_generation_defaults_to_zero() -> Dictionary:
 		return {"ok": false, "error": "legacy save did not load"}
 	if int(result.get("generation", -1)) != 0:
 		return {"ok": false, "error": "legacy generation should default to zero"}
+	return {"ok": true}
+
+static func _test_repairs_same_version_incomplete_candidate() -> Dictionary:
+	_cleanup()
+	var incomplete := _save("Repairable Legacy", 3)
+	incomplete.erase("economy")
+	_write_raw(TEST_PATH, incomplete)
+	var result := SaveService.load_from_file(TEST_PATH, _logger(), 0)
+	var data_v: Variant = result.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var economy_v: Variant = data.get("economy", {})
+	var economy: Dictionary = economy_v if economy_v is Dictionary else {}
+	var persisted := _read_json(TEST_PATH)
+	_cleanup()
+	if str(result.get("status", "")) != SaveService.LOAD_LOADED:
+		return {"ok": false, "error": "repairable same-version save did not load"}
+	if str(result.get("source", "")) != "primary":
+		return {"ok": false, "error": "repairable primary was not selected"}
+	if int(economy.get("ase", -1)) != 0 or int(economy.get("ekwan", -1)) != 0:
+		return {"ok": false, "error": "missing economy block was not repaired"}
+	if not (persisted.get("economy", {}) is Dictionary):
+		return {"ok": false, "error": "repaired candidate was not persisted"}
+	return {"ok": true}
+
+static func _test_rejects_unsupported_schema_before_repairs() -> Dictionary:
+	_cleanup()
+	var unsupported := _save("Unsupported", 4)
+	unsupported["schema_version"] = SaveSchema.SCHEMA_VERSION + 1
+	unsupported.erase("economy")
+	_write_raw(TEST_PATH, unsupported)
+	var before := FileAccess.get_file_as_bytes(TEST_PATH)
+	var result := SaveService.load_from_file(TEST_PATH, _logger(), 0)
+	var diagnostics_v: Variant = result.get("diagnostics", [])
+	var diagnostics: Array = diagnostics_v if diagnostics_v is Array else []
+	var unchanged := FileAccess.get_file_as_bytes(TEST_PATH) == before
+	_cleanup()
+	if str(result.get("status", "")) != SaveService.LOAD_ERROR:
+		return {"ok": false, "error": "unsupported schema was accepted"}
+	if diagnostics.is_empty() or str((diagnostics[0] as Dictionary).get("reason", "")) != "schema_invalid":
+		return {"ok": false, "error": "unsupported schema did not report schema_invalid"}
+	if not unchanged:
+		return {"ok": false, "error": "unsupported save was mutated during rejection"}
 	return {"ok": true}
 
 static func _test_runtime_boot_surfaces_recovery() -> Dictionary:

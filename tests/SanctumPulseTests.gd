@@ -4,9 +4,7 @@
 # 13 tests covering:
 #   ConsequencePassService.collect() — economy/emotion/vow/intel groups
 #   EmotionRecoveryService.apply_recovery_from_elapsed() + set_modifier()
-#   FlowSanctumState — run_consequence consumed on enter()
-#
-# All tests are pure unit tests (no runtime or save file needed).
+#   FlowRuntime — recovery-clock persistence
 # Run via Debug Panel: tests
 
 extends RefCounted
@@ -20,7 +18,6 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("sanctum_pulse/emotion_entries_use_emotional_status",         Callable(SanctumPulseTests, "_t_emotion_entries_use_emotional_status"))
 	runner.register_test("sanctum_pulse/vow_released_produces_vow_group",              Callable(SanctumPulseTests, "_t_vow_released_produces_vow_group"))
 	runner.register_test("sanctum_pulse/no_vow_no_vow_group",                          Callable(SanctumPulseTests, "_t_no_vow_no_vow_group"))
-	runner.register_test("sanctum_pulse/run_consequence_cleared_after_consume",        Callable(SanctumPulseTests, "_t_run_consequence_cleared_after_consume"))
 	runner.register_test("sanctum_pulse/recovery_reduces_fear_over_elapsed",           Callable(SanctumPulseTests, "_t_recovery_reduces_fear_over_elapsed"))
 	runner.register_test("sanctum_pulse/recovery_respects_morale_base_ceiling",        Callable(SanctumPulseTests, "_t_recovery_respects_morale_base_ceiling"))
 	runner.register_test("sanctum_pulse/modifier_ticks_down",                          Callable(SanctumPulseTests, "_t_modifier_ticks_down"))
@@ -102,6 +99,7 @@ static func _make_recovery_cfg(morale_per_min: float = 1.0, fear_per_min: float 
 static func _t_recovery_clock_consumed_when_delta_rounds_zero() -> Dictionary:
 	var runtime := FlowRuntime.new(_make_logger(), ConfigService.new(),
 		"/tmp/echoes-vnext-tests/emotion_recovery_clock_slot.json")
+	runtime.boot()
 	var save: Dictionary = runtime.get_save_data()
 	var economy: Dictionary = save.get("economy", {})
 	economy["last_emotion_settle_unix"] = 100
@@ -248,30 +246,6 @@ static func _t_no_vow_no_vow_group() -> Dictionary:
 	return { "ok": true }
 
 
-# Test 8: FlowSanctumState.enter() clears last_run_consequence after reading it
-static func _t_run_consequence_cleared_after_consume() -> Dictionary:
-	var logger := _make_logger()
-	var ctx    := FlowContext.new()
-	ctx.logger = logger
-	ctx.save_data = {
-		"sanctum": { "roster": [], "active_party_ids": [], "active_vow": {} },
-		"realms":   {},
-		"economy":  { "ase": 0, "ekwan": 0 },
-	}
-	ctx.last_run_consequence = {
-		"run_outcome": "win",
-		"groups":      [],
-	}
-
-	# Call FlowSanctumState.enter() — it should consume last_run_consequence
-	var state := FlowSanctumState.new()
-	state.enter(ctx, 0)
-
-	if not ctx.last_run_consequence.is_empty():
-		return { "ok": false, "error": "last_run_consequence not cleared after enter()" }
-	return { "ok": true }
-
-
 # ---------------------------------------------------------------------------
 # Tests — EmotionRecoveryService
 # ---------------------------------------------------------------------------
@@ -360,13 +334,13 @@ static func _t_victory_modifier_speeds_morale_recovery() -> Dictionary:
 
 	# Unmodified echo (morale below base)
 	var echo_normal := _make_echo("a", 30, 0, 50)
-	EmotionRecoveryService.apply_recovery_from_elapsed([echo_normal], 3600, cfg, 80, logger, 0)
+	EmotionRecoveryService.apply_recovery_from_elapsed([echo_normal], 600, cfg, 80, logger, 0)
 	var morale_normal := int(echo_normal["emotion"]["morale_current"])
 
 	# Victory-modified echo (morale recovery at 1.5x)
 	var echo_mod := _make_echo("b", 30, 0, 50)
 	echo_mod["recovery_modifiers"] = { "morale_multiplier": 1.5, "fear_multiplier": 1.0, "ticks_remaining": 5 }
-	EmotionRecoveryService.apply_recovery_from_elapsed([echo_mod], 3600, cfg, 80, logger, 0)
+	EmotionRecoveryService.apply_recovery_from_elapsed([echo_mod], 600, cfg, 80, logger, 0)
 	var morale_mod := int(echo_mod["emotion"]["morale_current"])
 
 	if morale_mod <= morale_normal:

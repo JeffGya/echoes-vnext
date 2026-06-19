@@ -137,6 +137,7 @@ static func load_from_file(path: String, logger: StructuredLogger = null, t: int
 	var source := str(selected.get("source", ""))
 	var recovered := source != "primary"
 	var repaired := _apply_additive_defaults_and_repairs(selected_data, logger, t)
+	repaired = repaired or bool(selected.get("repaired", false))
 	var persist_ok := true
 	if recovered or repaired:
 		persist_ok = save_to_file(path, selected_data, logger, t)
@@ -220,12 +221,27 @@ static func _read_candidate(path: String, source: String, priority: int) -> Dict
 		result["reason"] = "json_invalid"
 		return result
 	var parsed_dict: Dictionary = parsed
-	if not validate(parsed_dict, false):
+	if not parsed_dict.has("schema_version"):
+		result["reason"] = "schema_invalid"
+		return result
+	var schema_version_v: Variant = parsed_dict["schema_version"]
+	if typeof(schema_version_v) != TYPE_INT and typeof(schema_version_v) != TYPE_FLOAT:
+		result["reason"] = "schema_invalid"
+		return result
+	if int(schema_version_v) != SaveSchema.SCHEMA_VERSION:
+		result["reason"] = "schema_invalid"
+		return result
+	var repaired_candidate: Dictionary = parsed_dict.duplicate(true)
+	var repair_logger := StructuredLogger.new()
+	repair_logger.set_level("off")
+	var repaired := _apply_additive_defaults_and_repairs(repaired_candidate, repair_logger)
+	if not validate(repaired_candidate, false):
 		result["reason"] = "schema_invalid"
 		return result
 	result["valid"] = true
-	result["generation"] = _get_generation(parsed_dict)
-	result["data"] = parsed_dict
+	result["generation"] = _get_generation(repaired_candidate)
+	result["data"] = repaired_candidate
+	result["repaired"] = repaired
 	result["reason"] = ""
 	return result
 
