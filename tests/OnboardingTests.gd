@@ -34,7 +34,7 @@ static func _make_runtime() -> FlowRuntime:
 	var logger := _make_logger()
 	var config := ConfigService.new()
 	config.load_balance(logger, 0)
-	var runtime := FlowRuntime.new(logger, config)
+	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/onboarding_slot.json")
 	runtime.flow_ctx = FlowContext.new()
 	runtime.flow_ctx.sim_tick = 0
 	runtime.flow_ctx.config_service = config
@@ -412,9 +412,9 @@ static func _t_missing_layout_repairs() -> Dictionary:
 		return { "ok": false, "error": "Expected missing layout repair to report repaired" }
 	var layout: Dictionary = save.get("sanctum", {}).get("layout", {})
 	var tiles: Array = layout.get("tiles", [])
-	# make_starter_layout() generates 5×5 main (25) + 3×3 party staging (9) = 34 tiles
-	if tiles.size() != 34:
-		return { "ok": false, "error": "Expected repaired layout with 34 starter tiles, got %d" % tiles.size() }
+	# 34 floor tiles plus the permanent Ase Flame tile at the origin.
+	if tiles.size() != 35:
+		return { "ok": false, "error": "Expected repaired layout with 35 tiles, got %d" % tiles.size() }
 	return { "ok": true }
 
 static func _t_sanctum_snapshots_share_layout() -> Dictionary:

@@ -2,14 +2,10 @@ extends Node2D
 
 class_name SanctumOccupantLayer
 
-# Echoes only. Circle tokens matching combat board style.
-# Fill color driven by morale_tier (supplied per-echo by SanctumLayoutService).
+const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
 
-# Morale tier fill colors (match combat board token palette)
-const FILL_INSPIRED := Color("#D4A827E6")  # warm amber, 90% alpha
-const FILL_STEADY   := Color("#2A5C45E6")  # jade green, 90% alpha
-const FILL_SHAKEN   := Color("#4A5568E6")  # cool grey-blue, 90% alpha
-const FILL_BROKEN   := Color("#3D1515E6")  # dark rust, 90% alpha
+# Echoes only. Circle tokens matching combat board style.
+# Fill color is driven by the canonical emotional_status supplied per Echo.
 
 const COLOR_OUTLINE      := Color("#D4AF37")          # Akan Gold
 const COLOR_NAME         := Color("#F5E6D3")          # cream
@@ -51,11 +47,11 @@ func _draw() -> void:
 		var pos: Vector2 = pos_v if pos_v is Vector2 else Vector2.ZERO
 		var echo_id := str(occupant.get("id", ""))
 		var name    := str(occupant.get("name", ""))
-		var morale_tier := str(occupant.get("morale_tier", "steady"))
+		var emotional_status := str(occupant.get("emotional_status", ""))
 		var is_featured := (not _featured_id.is_empty() and echo_id == _featured_id)
 
 		var center := pos + TOKEN_OFFSET
-		var fill_col := _fill_for_morale_tier(morale_tier)
+		var fill_col := fill_for_emotional_status(emotional_status)
 
 		# Featured glow ring (drawn first, behind token)
 		if is_featured:
@@ -84,9 +80,7 @@ func _draw() -> void:
 			)
 
 
-static func _fill_for_morale_tier(tier: String) -> Color:
-	match tier:
-		"inspired": return FILL_INSPIRED
-		"shaken":   return FILL_SHAKEN
-		"broken":   return FILL_BROKEN
-		_:          return FILL_STEADY
+static func fill_for_emotional_status(status: String) -> Color:
+	var fill := EmotionPresentation.color(status)
+	fill.a = 0.9
+	return fill

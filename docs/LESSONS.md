@@ -15,6 +15,15 @@ Reviewed at the start of each session.
 
 ---
 
+### 12 — Tests and load failures must never share the production save path
+
+**Rule:** Every runtime test must inject an isolated save path. Persistence must distinguish a genuinely missing save from an unreadable or invalid save, and only the missing case may create a new campaign.
+**Why:** Runtime tests could flush controlled test dictionaries into the player's real slot. Separately, any load failure returned `{}`, which boot interpreted as first launch and immediately overwrote with a new campaign.
+**How to apply:** Keep production as the default `FlowRuntime` save path, inject `/tmp` paths in tests, validate temporary writes before rotating, retain multiple validated generations, and surface a non-destructive error when no artifact validates.
+**Mistake count:** 1
+
+---
+
 ### 11 — Grade table lives under `data.summoning`, not `data.economy`
 
 **Rule:** Always verify where `FlowRuntime` actually reads a config key before placing it in `balance.json`. Do not trust Notion story descriptions for key location — read the codebase.

@@ -484,7 +484,8 @@ These systems are already done and their save seams are live:
 | V2-WEAVE-001 | Thread recovery model | `sanctum.threads: {}` (keyed by thread_id); `realms[id].realm_recovery_segments: []` |
 | V2-WEAVE-002 | Foundation Weaving Rite loop | per-echo `woven_threads: []`, per-echo `weave_memory_marks: []` |
 | V2-EMOTION-001 | Fear & Morale Readability | Shipped dual `morale_tier` + `fear_signal` display. Unified to single `emotional_status` in V2-EMOTION-002. |
-| V2-EMOTION-002 | Unified Emotional Status | Replaced dual display with 8-tier `emotional_status` (radiant → hollow). `get_fear_signal()` removed. `get_emotional_status(morale, fear)` added. EchoParty morale/fear bars removed. All emotion surfaces now use single field. Documented in CONVENTIONS.md with no-dual-display rule. |
+| V2-EMOTION-002 | Unified Emotional Status | Replaced dual display with the ten-tier `emotional_status` ladder: radiant → whole → grounded → uncertain → hesitant → burdened → pressed → strained → fraying → hollow. It is the only player-facing feeling field; hidden morale tiers are simulation-only. Sanctum occupants use `emotional_status`; combat projections omit raw fear/morale and legacy emotion fields. Shared UI mapping lives in `EmotionPresentation.gd` + `LivingTreeSystem.tres`. |
+| Emotion + Whole-band Leadership integration ✅ | Persistent combat emotion, recovery, and mature social influence | Final combat fear/morale is copied back to the roster before Resolve actions, so Continue and stage-completion paths preserve it. Bank/Continue settlement applies Sanctum recovery (morale +1/min toward base, fear −0.5/min toward zero) and persists every consumed recovery-clock window. Whole-band leadership emotion traits are config-driven; strongest reductions never multiply, while direct recovery from separate leaders stacks. Covered by `LeadershipEmotionTests`; full suite is 736 tests. |
 | V2-VOICE-001 ✅ | Real-time bark/voice system | Full voice system: combat bark popups above actor tokens (BarkPopupLayer), reactive barks (forming+ actors respond to high-signal ally barks), bark tier priority display (max 3 originals/round; Tier 1 always shown, Tier 3 dropped first), calling-inflected lines (arch×calling combos), new bark contexts (combat_ko, combat_calling_skill, combat_rally_ally, sanctum arrival/broken/calling_settled/bond_formed, rite accept/reject/defer, vow benefit/penalty, progress.rank_up, resolve victory/defeat). Save key: `_sanctum_bark: { line, context }` on echo save entries. Config: `balance.data.voice`. Spatial sanctum bark popup deferred to V2-SANCTUM-005. 5 new VoiceTests. |
 | V2-VOICE-002 ✅ | Simultaneous speech bubbles + bark cadence | Replaced sequential BarkPopupLayer queue with per-actor popup dict (`_active_popups`). Each echo now shows its own simultaneous speech bubble (rounded panel + BarkTail triangle drawn via `_draw()`). Bubbles follow token via `update_actor_positions()` called every render pass; coordinate transform fixed (`get_global_transform().affine_inverse()`). Per-actor bark cooldown on actor dict (`_bark_next_t`): `_compute_bark_cooldown()` returns 14–35 ticks modulated by morale/fear; high-priority contexts always bypass. `_bark_line` consumed on first projection in `FlowEncounterState._project_actor()` to prevent re-enqueueing. `_last_bark_line` dedup in `CombatBoardScreen._show_bark_popups()` prevents back-to-back identical lines across echoes. Bugs fixed in same session: EchoActor missing `archetype_birth` field; BehaviorArbiter confirmed-calling override; PartyTests double-toggle roster selection. |
 
@@ -579,10 +580,8 @@ V2-MIG-001 (this doc) ✅ Done
   │           ├── V2-STAGE-004  Loot/money full outcomes
   │           └── V2-STAGE-101  Individual party units / roaming enemies
   ├── V2-EMOTION-001   Fear & Morale Readability ✅ Done
-  │     (get_fear_signal() · morale_tier/fear_signal in party_preview/party_slots/actor dicts)
-  │     (EchoCardItem FearBadge · InitiativeRowItem MoraleBadge+RefusingLabel)
-  │     (ResolveScreen EmotionSection · SanctumScreen House State strip)
-  │     └── V2-SANCTUM-001+ Fear & morale recovery in Sanctum (open design)
+  │     └── V2-EMOTION-002 Unified ten-tier emotional_status + Whole-band leadership ✅ Done
+  │           └── V2-SANCTUM-001 Bank/Continue fear & morale recovery ✅ Done
   └── V2-WEAVE-001     Foundation Thread recovery model ✅ Done
         (per-stage segments → Realm completion → Threads crystallize → sanctum.threads reserve)
         (Thread Reserve Strip in Sanctum, Recovery Cord in StageMap)

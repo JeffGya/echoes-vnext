@@ -154,7 +154,7 @@ static func ensure_starter_occupant(save_data: Dictionary, roster: Array = [], a
 		var roster_v: Variant = sanctum.get("roster", [])
 		use_roster = roster_v if roster_v is Array else []
 
-	# Place all roster echoes with morale_tier for emotion color coding.
+	# Place all roster echoes with the canonical player-facing emotional status.
 	var party_set: Dictionary = {}
 	for pid in active_party_ids:
 		party_set[str(pid)] = true
@@ -186,13 +186,14 @@ static func ensure_starter_occupant(save_data: Dictionary, roster: Array = [], a
 			# Roaming echo — rows above Ase Flame; overflow into higher rows.
 			cell = Vector2i((echo_index % 3) - 1, ASE_FLAME_CELL.y - 1 - (echo_index / 3))
 
-		# Compute morale_tier at render time (not stored in save).
-		var morale_tier := "steady"
+		# Compute emotional_status at snapshot time (not stored in save).
+		var emotional_status := "grounded"
 		var emotion_v: Variant = echo.get("emotion", {})
 		if emotion_v is Dictionary:
 			var emotion: Dictionary = emotion_v
 			var morale_current := int(emotion.get("morale_current", 50))
-			morale_tier = EmotionService.get_morale_tier(morale_current)
+			var fear_current := int(emotion.get("fear_current", 0))
+			emotional_status = EmotionService.get_emotional_status(morale_current, fear_current)
 
 		occupants.append({
 			"id":          echo_id,
@@ -200,7 +201,7 @@ static func ensure_starter_occupant(save_data: Dictionary, roster: Array = [], a
 			"kind":        "echo",
 			"x":           cell.x,
 			"y":           cell.y,
-			"morale_tier": morale_tier,
+			"emotional_status": emotional_status,
 		})
 		echo_index += 1
 

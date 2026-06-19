@@ -43,7 +43,9 @@ its section here will be updated to reflect V2 truth.
 - Additive-only schema — never remove or rename existing fields
 - Add new fields with safe defaults; old fields stay until migration
 - `flow_ctx.save_request = true` → FlowRuntime flushes once per dispatch tick
-- Crash-safe: write to `.tmp` → rename to final path
+- Transactional: verify alternating `.pending_a`/`.pending_b`, rotate three validated backups, then promote; legacy `.tmp` remains recoverable
+- Boot loads the highest valid `meta.save_generation`; invalid saves are never replaced by a new campaign
+- Failed flushes remain queued for retry; tests must inject an isolated save path
 
 ### Naming Conventions
 - Folders: `snake_case` (e.g. `core/state`, `ui/screens`)
@@ -134,7 +136,7 @@ AppRoot routes `snapshot.type` → shell → bespoke screen.
   - `flow.encounter` / `flow.resolve` → filters `data.actors` by `faction == "echo"`
   - `flow.stage` / `flow.stage_map`   → reads `data.party_preview` (pre-combat shape: name, rank, calling_origin)
 - HP label shown only when `hp`/`max_hp` fields are present (encounter/resolve only)
-- Morale label: `morale_status` in combat; `calling_origin` pre-combat (defaults to "Ready")
+- Emotion label: `emotional_status` in combat; `calling_origin` pre-combat (defaults to "Ready")
 - `OverlayRoot` (where screens attach) is sized to stop 88px above bottom — bar never overlaps content
 
 ### State Machine Transition Logging (required for all SM transitions)
@@ -217,28 +219,56 @@ Emotion block stored at `echo["emotion"]`:
 - `get_morale_tier(morale_current)` → `"inspired"` / `"steady"` / `"shaken"` / `"broken"` — **internal sim use only** (BehaviorArbiter, ActorStateMachine). Do NOT use for player-facing display.
 - `get_emotional_status(morale, fear)` → unified player-facing tier (V2-EMOTION-002) — **the only emotion display field**
 
-**Emotional status tiers (8):** derived from both `morale_current` and `fear_current`. Morale language at top; fear language at bottom.
+**Emotional status tiers (10, best → worst):** derived from both `morale_current` and `fear_current`. The derivation evaluates the five severe conditions first, then the positive conditions, with `hesitant` as fallback. This ordering means severe fear or low morale always overrides a positive threshold.
 
-| Tier | Morale | Fear |
-|---|---|---|
-| `radiant` | ≥ 70 | ≤ 15 |
-| `whole` | ≥ 55 | ≤ 30 |
-| `grounded` | ≥ 40 | ≤ 45 |
-| `burdened` | catch-all | catch-all |
-| `pressed` | ≤ 55 | ≥ 45 |
-| `strained` | ≤ 45 | ≥ 55 |
-| `fraying` | ≤ 35 | ≥ 65 |
-| `hollow` | ≤ 20 or any | ≥ 75 |
+| Order | Tier | Exact derivation condition |
+|---:|---|---|
+| 1 | `radiant` | morale ≥ 70 and fear ≤ 15 |
+| 2 | `whole` | morale ≥ 55 and fear ≤ 30 |
+| 3 | `grounded` | morale ≥ 40 and fear ≤ 40 |
+| 4 | `uncertain` | morale ≥ 35 and fear < 45 |
+| 5 | `hesitant` | fallback after all other conditions |
+| 6 | `burdened` | fear ≥ 45 or morale ≤ 24 |
+| 7 | `pressed` | fear ≥ 55 or morale ≤ 20 |
+| 8 | `strained` | fear ≥ 65 or morale ≤ 15 |
+| 9 | `fraying` | fear ≥ 75 or morale ≤ 10 |
+| 10 | `hollow` | fear ≥ 85 or morale ≤ 5 |
 
 **Rule: Never build separate morale and fear display fields.** `emotional_status` is the single player-facing emotion field in all snapshots. All screens read this one field. Dual display (morale_tier + fear_signal) is explicitly forbidden.
 
 **Snapshot contract:** every actor/echo/party entry that surfaces emotion to the UI carries:
 ```
-"emotional_status": String  # one of the 8 tiers above
+"emotional_status": String  # one of the 10 tiers above
 ```
 The `refused` bool in `emotion_summary` (Resolve) is kept as a factual combat outcome — it is not a display tier.
 
-**Mid-combat:** direct dict writes only — EmotionService NOT called. Exit deltas applied at combat end.
+**Combat persistence and projection:** mid-combat morale/fear mutate runtime actor dicts directly. `FlowEncounterState.build_final_snapshot()` copies each Echo actor's final `fear` and `morale` back to the roster before resolve actions are offered, so both `cta.continue` and stage-completion/next-stage paths retain the combat state. Combat actor projections expose `emotional_status` only: raw `fear`/`morale` and legacy `morale_status`, `fear_signal`, `emotional_readiness`, `morale_tier`, and `refuse_cause` are omitted. Projected `status` is operational only: `dead`, `guarding`, or `alive`; fear never changes that field.
+
+**Shared UI presentation:** `ui/components/EmotionPresentation.gd` is the single status normalizer and maps all ten statuses to display names and theme variations. Colors and chip/text treatments come from `assets/theme/LivingTreeSystem.tres` (`EmotionChip*`, `EmotionChipLabel*`, `EmotionStatus*`). UI screens and token layers must use this shared presentation source, not local status palettes.
+
+### LeadershipEmotionService (`core/combat/LeadershipEmotionService.gd`)
+Pure deterministic helpers for configured Whole-band combat emotion effects. A leader must be a living Echo whose hidden maturity-expression band resolves to `whole`; leaders never affect themselves, dead actors, non-Echo actors, or allies outside the configured Chebyshev radius. A trait-specific `radius` overrides the calling's `leadership_radius`.
+
+Configured emotion traits:
+
+| Trait | Effect |
+|---|---|
+| `inspire_aura` | +3 morale per leader turn to nearby living Echo allies |
+| `steady_presence` | +2 morale per leader turn to nearby living Echo allies within radius 2 |
+| `calm_fear` | −15 fear from the most fearful nearby living Echo ally |
+| `fear_read` | −5 fear per leader turn from the most fearful nearby living Echo ally |
+| `rally_call` | +10 morale to nearby living Echo allies, once per combat |
+| `kill_momentum` | +8 morale to living Echo allies within radius 1 when the leader gets a kill |
+| `fearless_example` | incoming fear ×0.7 for living Echo allies within radius 2 |
+| `calm_transmission` | propagated fear ×0.3 for living Echo allies within radius 3 |
+| `block_contagion` | blocks propagated fear for living Echo allies within radius 2 |
+| `morale_anchor` | morale loss ×0.5 for living Echo allies within radius 2 |
+| `morale_forecast` | prevents morale loss for three inclusive rounds, once per combat |
+
+**Combination rules:** overlapping fear/morale reductions use the strongest applicable factor; they never multiply. `block_contagion` therefore wins for propagated fear, and an active `morale_forecast` wins over `morale_anchor`. Positive direct recovery from separate leaders stacks, while all values remain clamped to 0–100. The shared fear-gain path covers hit fear, surprise fear, round fear, near-death fear, ally-KO/witness propagation, and overwhelm; the shared morale-loss path covers shrine drain, periodic decay, and no-damage helplessness.
+
+### EmotionRecoveryService (`core/emotion/EmotionRecoveryService.gd`)
+Sanctum recovery piggybacks on `economy.settle_time`, including the four-minute bank interval and Continue/session settlement. Base rates are config-driven: +1 morale/min toward `morale_base` and −0.5 fear/min toward zero. Recovery uses the offline cap/decay model, per-Echo recovery modifiers, and the configured maturity fear-recovery bonus. `economy.last_emotion_settle_unix` is persisted whenever an elapsed window is consumed—even when rounding or clamps produce no emotion delta—so that window cannot be settled twice.
 
 ### GridService (`core/grid/GridService.gd`)
 Pure static. Default board 10×10 (from `balance.json data.grid`); **irregular landscape boards** since V2-STAGE-004 P3a (see below).
@@ -295,7 +325,7 @@ Pure-static `RefCounted`. V2-SANCTUM-002. No Nodes, no UI refs.
 
 **Signatures:**
 - `snapshot_layout(save_data, inst_snapshot: Array = []) -> Dictionary` — returns `{ tiles: Array }`. Each tile: `{ x, y, kind }`. Kind values: `"floor"`, `"ase_flame"`, `"institution"`.
-- `snapshot_occupants(save_data, roster: Array = [], active_party_ids: Array = [], inst_snapshot: Array = []) -> Array` — returns Array of occupant dicts. Each occupant carries `kind`, `id`, `name`, `x`, `y`. Echo occupants also carry `morale_tier: String`.
+- `snapshot_occupants(save_data, roster: Array = [], active_party_ids: Array = [], inst_snapshot: Array = []) -> Array` — returns Array of occupant dicts. Each occupant carries `kind`, `id`, `name`, `x`, `y`. Echo occupants also carry `emotional_status: String`.
 - `compute_valid_placement_cells(save_data, inst_snapshot: Array = []) -> Array` — returns `Array[Vector2i]`. Valid cells are adjacent (8-dir) to an existing floor tile, not occupied, not already a floor tile, and not within Chebyshev-2 of any institution or the Ase Flame.
 - `ensure_layout(save_data, inst_snapshot: Array = []) -> void` — ensures Ase Flame tile at (0,0), institution tiles at their stored positions, and bridge floor tiles.
 - `ensure_starter_occupant(save_data, roster: Array = [], active_party_ids: Array = [], inst_snapshot: Array = []) -> void`
@@ -307,9 +337,9 @@ Pure-static `RefCounted`. V2-SANCTUM-002. No Nodes, no UI refs.
 |---|---|
 | `"ase_flame"` | Permanent spiritual anchor at (0,0). Always first entry. |
 | `"institution"` | Established or candidate institution marker. |
-| `"echo"` | Roster echo. Carries `morale_tier` field (inspired/steady/shaken/broken). |
+| `"echo"` | Roster echo. Carries the canonical player-facing `emotional_status` field. |
 
-**`morale_tier` in echo occupants:** computed at snapshot time via `EmotionService.get_morale_tier(morale_current)` — not stored in save. Used by `SanctumOccupantLayer` to pick fill color for the token.
+**`emotional_status` in echo occupants:** computed at snapshot time via `EmotionService.get_emotional_status(morale_current, fear_current)` — not stored in save. `SanctumOccupantLayer` resolves token fill through `EmotionPresentation`; `morale_tier` must not appear in the occupant projection.
 
 **Ase Flame:** hardcoded at `Vector2i(0, 0)`. Never goes through `InstitutionService`. Never in valid placement cells.
 
@@ -474,7 +504,7 @@ Guard consequence types:
 ### Save Schema (`core/save/SaveSchema.gd` + `SaveService.gd`)
 9 top-level keys: `schema_version`, `first_boot`, `meta`, `campaign`, `flow`, `economy`, `sanctum`, `stage_context`, `realms`
 
-Crash-safe: write to `.tmp` → rename. Additive repair on load (adds missing fields with safe defaults).
+Transactional persistence uses `slot_01.json`, alternating verified `.pending_a`/`.pending_b`, recoverable legacy `.tmp`, and `.bak1`–`.bak3`. Each successful write increments additive `meta.save_generation`, updates `meta.last_saved_at_unix`, writes to the absent or older pending slot, verifies it before rotation, and retains the newest pending source across interruption points. Boot scans all artifacts and recovers the highest valid generation without rewriting its source; corrupt primaries are archived as `.corrupt`. A new campaign is created only when no save artifacts exist. Additive repairs run only after structural validation.
 
 **V2-MIG-002 additive keys (added 2026-04-06):**
 

@@ -46,7 +46,7 @@ static func _setup(seed_tag: String, assign_ids: bool) -> Dictionary:
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
 	var config := ConfigService.new()
-	var runtime := FlowRuntime.new(logger, config)
+	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/combat_roundtrip_slot.json")
 	runtime.boot()
 	var flow_ctx: FlowContext = runtime.flow_ctx
 	var t: int = 0

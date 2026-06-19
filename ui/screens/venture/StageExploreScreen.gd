@@ -18,6 +18,8 @@
 class_name StageExploreScreen
 extends Control
 
+const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
+
 signal action_requested(action: Dictionary)
 
 # ─── Tile constants ───────────────────────────────────────────────────────────
@@ -917,7 +919,7 @@ func _build_response_chips(responses: Array, actions: Dictionary) -> void:
 		var resp: Dictionary = resp_v if resp_v is Dictionary else {}
 		var echo_id           := str(resp.get("echo_id", ""))
 		var calling           := str(resp.get("calling", ""))
-		var readiness         := str(resp.get("emotional_status", resp.get("emotional_readiness", "")))
+		var emotional_status  := str(resp.get("emotional_status", ""))
 		var response_text     := str(resp.get("response_text", ""))
 		var stat_texture      := str(resp.get("stat_texture", ""))
 		var bid_type          := str(resp.get("bid_type", ""))
@@ -930,7 +932,7 @@ func _build_response_chips(responses: Array, actions: Dictionary) -> void:
 		_contact_speak_actions[echo_id] = act
 
 		var chip: PanelContainer = _build_echo_chip(
-			echo_id, calling, readiness, response_text, stat_texture, bid_type, false
+			echo_id, calling, emotional_status, response_text, stat_texture, bid_type, false
 		)
 		_echo_chips_container.add_child(chip)
 		_picker_chip_nodes[echo_id] = chip
@@ -988,7 +990,7 @@ func _build_picker_chips(bids: Array) -> void:
 func _build_echo_chip(
 	echo_id:       String,
 	calling:       String,
-	readiness:     String,
+	emotional_status: String,
 	response_text: String,
 	stat_texture:  String,
 	bid_type:      String,
@@ -1010,7 +1012,7 @@ func _build_echo_chip(
 	content.add_theme_constant_override("separation", 6)
 	chip.add_child(content)
 
-	# Portrait placeholder — coloured circle by readiness tier
+	# Portrait placeholder — the status treatment below carries emotional meaning.
 	var portrait_holder := Control.new()
 	portrait_holder.custom_minimum_size = Vector2(56, 56)
 	portrait_holder.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -1025,22 +1027,12 @@ func _build_echo_chip(
 	calling_lbl.autowrap_mode = TextServer.AUTOWRAP_OFF
 	content.add_child(calling_lbl)
 
-	# Readiness dot
-	var readiness_dot := Label.new()
-	readiness_dot.text = "●"
-	readiness_dot.add_theme_font_size_override("font_size", 10)
-	readiness_dot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	match readiness:
-		"radiant":  readiness_dot.add_theme_color_override("font_color", Color("#D4A832"))
-		"whole":    readiness_dot.add_theme_color_override("font_color", Color("#3A8C5C"))
-		"grounded": readiness_dot.add_theme_color_override("font_color", Color("#2A5C45"))
-		"burdened": readiness_dot.add_theme_color_override("font_color", Color("#7A6E5A"))
-		"pressed":  readiness_dot.add_theme_color_override("font_color", Color("#5A6878"))
-		"strained": readiness_dot.add_theme_color_override("font_color", Color("#4A5568"))
-		"fraying":  readiness_dot.add_theme_color_override("font_color", Color("#8C5030"))
-		"hollow":   readiness_dot.add_theme_color_override("font_color", Color("#3D1515"))
-		_:          readiness_dot.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5, 1.0))
-	content.add_child(readiness_dot)
+	var emotion_dot := Label.new()
+	emotion_dot.text = "● %s" % EmotionPresentation.display_name(emotional_status)
+	emotion_dot.add_theme_font_size_override("font_size", 10)
+	emotion_dot.add_theme_color_override("font_color", EmotionPresentation.color(emotional_status))
+	emotion_dot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	content.add_child(emotion_dot)
 
 	# Response text
 	var response_lbl := Label.new()
@@ -1152,5 +1144,3 @@ func _on_disengage_pressed() -> void:
 	if not _contact_disengage_action.is_empty():
 		action_requested.emit(_contact_disengage_action)
 	_hide_contact_panel()
-
-

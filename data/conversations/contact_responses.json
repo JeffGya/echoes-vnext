@@ -412,6 +412,36 @@
         "She says: the distance just changed. I noticed. I am not filling it. But I am not leaving either."
       ]
     },
+    "uncertain": {
+      "courage": ["She says: I can read the danger, but not the whole approach yet. Tell me what you see.", "The Kra-Soro says: the path is unclear, not closed. What is the first reliable marker?", "She says: you have not turned away. Let us verify the ground before you move."],
+      "wisdom": ["She says: the outline is there, but parts of it keep shifting. What remains true?", "The Kra-Soro says: I have a partial read. Give me yours and we can compare.", "She says: something nearly fits. Name the piece you trust most."],
+      "leadership": ["She says: people are reading you while you are still finding your own position. What needs deciding first?", "The Kra-Soro says: you do not need the whole route to give the next direction.", "She says: I see the weight gathering. Let us identify what is actually yours."],
+      "compassion": ["She says: I am not certain what will help, so I am staying close enough to learn.", "The Kra-Soro says: the hurt is clear even if the answer is not. What do you need now?", "She says: I noticed you looked outward first. Tell me what happened to you too."],
+      "acceptance": ["She says: the ground changed. I am still learning its shape with you.", "The Kra-Soro says: you do not have to approve of the new position to read it honestly.", "She says: let us name what is different before deciding what it means."],
+      "humility": ["She says: my read may be incomplete. Show me the angle I am missing.", "The Kra-Soro says: certainty would be convenient here, but accuracy matters more.", "She says: I can revise my position. Tell me what you see from yours."],
+      "forgiveness": ["She says: the old terrain is still affecting this read. We can move carefully.", "The Kra-Soro says: I cannot tell yet what belongs to then and what belongs to now.", "She says: something has loosened, but not enough to call the path clear."],
+      "truth": ["She says: the account is nearly level, but one piece still shifts. What is missing?", "The Kra-Soro says: I do not think you are hiding it. I think you are still finding it.", "She says: give me the uncertain version. We can verify it together."],
+      "generosity": ["She says: you are deciding whether the ground is safe enough to offer something.", "The Kra-Soro says: I can use what you share, but I will not rush the decision.", "She says: tell me what condition would make giving feel sound."],
+      "empathy": ["She says: I can read the reach, but I cannot yet tell where it landed.", "The Kra-Soro says: you are trying to make contact. What response did you notice?", "She says: stay near the signal a moment longer. Something is coming through."],
+      "_reactive": ["She says: I lost the line. Give me one fixed point.", "The Kra-Soro scans again. She says: something shifted; say the key part once more.", "She says: I am still reading. I need a clearer marker."],
+      "_alignment": {"courage": ["She says: the approach is uncertain, but you are still facing it.", "The Kra-Soro says: choose one reliable step. I will read ahead."], "wisdom": ["She says: partial knowledge is enough to begin a careful read.", "The Kra-Soro says: show me what holds when the rest shifts."], "leadership": ["She says: give the next clear direction, not the whole route.", "The Kra-Soro says: they need your presence while the picture forms."], "compassion": ["She says: the pain is visible. I will not wait for certainty to stay.", "The Kra-Soro says: I can hold the perimeter while we learn what helps."], "acceptance": ["She says: read the ground that is here, even before it feels familiar.", "The Kra-Soro says: uncertainty is part of the current position."], "humility": ["She says: revising the read is precision, not weakness.", "The Kra-Soro says: your second look opened the approach."], "forgiveness": ["She says: the old ground is separating from the new, slowly.", "The Kra-Soro says: keep noticing which terrain you are on."], "truth": ["She says: the uncertain truth is still worth saying.", "The Kra-Soro says: name the gap and the picture steadies."], "generosity": ["She says: offer only what the ground can hold.", "The Kra-Soro says: careful giving still changes the situation."], "empathy": ["She says: the reach is not clear yet, but it is real.", "The Kra-Soro says: stay present while the signal settles."]},
+      "_npc_withdrawn": ["The Kra-Soro says: you stepped back. I am holding the last clear marker.", "She says: I will not follow into uncertain ground. I will remain visible."]
+    },
+    "hesitant": {
+      "courage": ["She says: I see you measuring every step. Choose the safest true one.", "The Kra-Soro says: the approach is there, but your body is resisting it.", "She says: you can pause without abandoning the line."],
+      "wisdom": ["She says: the read keeps breaking under pressure. Give me only what you trust.", "The Kra-Soro says: you are checking the same ground twice. What are you afraid you missed?", "She says: narrow the picture. One fact at a time."],
+      "leadership": ["She says: you are waiting for certainty your people cannot wait for. Name the next safe move.", "The Kra-Soro says: the weight is bending your read. Let someone share it.", "She says: you can lead from a pause, but not from silence."],
+      "compassion": ["She says: you want to reach them, but you keep stopping short.", "The Kra-Soro says: care does not need a perfect approach. Stay near.", "She says: name what you can offer without overextending."],
+      "acceptance": ["She says: you see the new ground, but you have not trusted it yet.", "The Kra-Soro says: resistance is keeping you between positions.", "She says: set one foot where things actually are."],
+      "humility": ["She says: you may be wrong. That does not mean you must disappear.", "The Kra-Soro says: caution has become a shelter. Step out enough to be heard.", "She says: offer the partial read and let it be corrected."],
+      "forgiveness": ["She says: the old terrain keeps pulling you back from the new path.", "The Kra-Soro says: you do not have to cross all of it today.", "She says: find the point where you can loosen your grip safely."],
+      "truth": ["She says: the truth is at the edge of your voice. Say the smallest honest part.", "The Kra-Soro says: withholding the gap is distorting the read.", "She says: I can work with a trembling signal. Send it."],
+      "generosity": ["She says: you keep extending the offer and pulling it back.", "The Kra-Soro says: decide what you can give without resentment.", "She says: a smaller honest offering is enough."],
+      "empathy": ["She says: you feel the distance and are afraid to cross it.", "The Kra-Soro says: do not guess their whole position. Ask for one marker.", "She says: stay within reach even if contact is incomplete."],
+      "_reactive": ["She says: too many lines. Give me one.", "The Kra-Soro says: I am hesitating. Hold the position.", "She says: do not move yet. I need the read back."],
+      "_alignment": {"courage": ["She says: pause, then take the smallest true step.", "The Kra-Soro says: fear is slowing the approach, not erasing it."], "wisdom": ["She says: one reliable fact is enough for now.", "The Kra-Soro says: stop rereading everything; choose what holds."], "leadership": ["She says: they need one direction while you steady.", "The Kra-Soro says: let someone carry part of the map."], "compassion": ["She says: stay close even if you cannot fix it.", "The Kra-Soro says: careful presence still reaches them."], "acceptance": ["She says: the ground is real before you feel ready for it.", "The Kra-Soro says: stop between positions and breathe."], "humility": ["She says: offer the partial read without hiding behind it.", "The Kra-Soro says: being corrected will not erase you."], "forgiveness": ["She says: loosen one old marker at a time.", "The Kra-Soro says: the new route does not require forgetting."], "truth": ["She says: send the trembling signal.", "The Kra-Soro says: the smallest honest piece clears the line."], "generosity": ["She says: give only what you can release cleanly.", "The Kra-Soro says: a careful offer is still an offer."], "empathy": ["She says: ask where they are instead of guessing.", "The Kra-Soro says: hold contact without forcing closeness."]},
+      "_npc_withdrawn": ["The Kra-Soro says: you pulled away. I will not close the distance for you.", "She says: I am holding position. Return when the ground feels possible."]
+    },
     "burdened": {
       "courage": [
         "The Kra-Soro speaks after a pause. She says: I am tracking something underneath what you are saying. You are still moving toward it. I want you to know I see both things.",
@@ -1142,6 +1172,36 @@
         "Take your time. I am not going anywhere."
       ]
     },
+    "uncertain": {
+      "wisdom": ["She says: I see part of it. Tell me where your understanding stops.", "The question has another shape underneath it. Try that one.", "Say what you know and mark what you do not."],
+      "courage": ["She says: You have not left. What would make the next step possible?", "Fear is here. So are you. Tell me what you need.", "You came close to the edge. What are you waiting to see?"],
+      "truth": ["She says: The account is incomplete, not false. Give me the uncertain part.", "There is a sentence you have not finished. Finish it.", "Say what might be true. We can hold the doubt."],
+      "humility": ["She says: You do not know yet. Good. Start there.", "Leave the gap open. What can you say honestly around it?", "You changed your mind halfway through. Tell me why."],
+      "acceptance": ["She says: You are near peace, but not inside it. What remains unsettled?", "You know what changed. You do not know what it means yet.", "Stay where you are. Tell me what is still moving."],
+      "forgiveness": ["She says: You loosened your hold, then took it back. What frightened you?", "You are not ready to release all of it. Name what you can.", "The past is quieter, not gone. I hear the difference."],
+      "compassion": ["She says: You pointed toward her, then stopped. Where is she?", "I hear concern under the uncertainty. Tell me who needs us.", "Start with the person you keep looking toward."],
+      "empathy": ["She says: You feel something from them but cannot place it. Describe the edge.", "Whose feeling are you carrying right now?", "You reached them partly. Tell me what came back."],
+      "leadership": ["She says: They are waiting on you. What is the next thing you know?", "You do not need the whole answer. Give the direction you trust.", "Who can help hold this while you decide?"],
+      "generosity": ["She says: You want to offer something. What makes you pause?", "Name what you can give without guessing.", "The offer can be incomplete and still honest."],
+      "_reactive": ["She says: Wait. Say the last part again.", "I am here. I am finding the question.", "Give me the simplest version."],
+      "_alignment": {"wisdom": ["She says: Mark the edge of what you know.", "The gap is useful. Leave it visible."], "empathy": ["She says: Tell me what reached you.", "You feel them. We can name it slowly."], "truth": ["She says: Say the uncertain truth.", "The unfinished version is the one I need."], "acceptance": ["She says: You are between resistance and peace.", "Stay there long enough to understand it."]},
+      "_npc_withdrawn": ["She says: You pulled back. I will wait at the edge.", "You do not have to return with an answer."]
+    },
+    "hesitant": {
+      "wisdom": ["She says: You keep stopping before the thought finishes. Say one piece.", "The question is frightening you. Ask it anyway, quietly.", "Tell me only what you are sure enough to risk."],
+      "courage": ["She says: You want to move and cannot yet. What is holding you?", "Fear has your attention. Let me have one part of it.", "You came this far. Do not force the next step; name it."],
+      "truth": ["She says: The truth is caught behind caution. Give me one sentence.", "Do not soften it further. Say the small hard thing.", "You know enough to begin. Begin."],
+      "humility": ["She says: Uncertainty is not permission to disappear.", "You can be wrong and still speak.", "Offer the limit plainly. That is enough."],
+      "acceptance": ["She says: You are braced against what already happened.", "Stop arguing with the shape for one breath.", "You do not have to like it. Let it be real."],
+      "forgiveness": ["She says: You reach for release, then close again.", "Set down one part. Keep the rest if you must.", "The door is open. You do not have to cross today."],
+      "compassion": ["She says: You are afraid of making it worse. Stay near her.", "Care can be quiet. Tell me where she is.", "Do not solve it. Show up."],
+      "empathy": ["She says: Their feeling reached you and you recoiled. What was it?", "You are losing your own edge. Find it before reaching again.", "Name what is theirs and what is yours."],
+      "leadership": ["She says: Silence is becoming a decision. Give them one direction.", "Ask someone to stand beside you before you answer.", "You can hesitate openly. Do not leave them guessing."],
+      "generosity": ["She says: Do not promise what fear will make you reclaim.", "Offer less. Mean it fully.", "Tell me what you can release without pulling back."],
+      "_reactive": ["She says: Wait.", "Not all of it. One thing.", "I am still here."],
+      "_alignment": {"wisdom": ["She says: Finish one thought.", "Name the limit and keep going."], "empathy": ["She says: Find your edge before reaching again.", "Tell me whose weight this is."], "truth": ["She says: One honest sentence.", "Do not soften the smallest true thing."], "acceptance": ["She says: Let it be real for one breath.", "You can stop fighting without surrendering."]},
+      "_npc_withdrawn": ["She says: You pulled away. I will not pull you back.", "The space can stay open."]
+    },
     "burdened": {
       "wisdom": [
         "She says: There is a shape to what you know. Tell me where it starts to blur.",
@@ -1692,11 +1752,170 @@
           "You offered first and I am not going to waste it. Say what fair looks like."
         ]
       },
+     "_npc_withdrawn": [
+       "You pulled back. I am still here. Say it when you are ready.",
+       "I am not going anywhere. Take what you need and then talk to me."
+     ]
+   },
+    "uncertain": {
+      "wisdom": [
+        "The Aduro shifts forward, then checks the impulse. Two readings still fit. Which one has held up for you?",
+        "They keep their weight toward action without choosing the strike yet. I have part of the pattern, not enough to settle it. What remains true?",
+        "The Aduro tests the next move instead of claiming it. My understanding stops at the gap. Could we examine that part together?"
+      ],
+      "courage": [
+        "The Aduro shifts forward, then checks the impulse. Fear has not closed this, but I need to see the first honest step.",
+        "They keep their weight toward action without choosing the strike yet. I can face this much. What would make the next move sound?",
+        "The Aduro tests the next move instead of claiming it. The danger is real, and so is the possibility. Which part should we meet first?"
+      ],
+      "truth": [
+        "The Aduro shifts forward, then checks the impulse. I hear something true that has not found its whole sentence. Can you try the unfinished version?",
+        "They keep their weight toward action without choosing the strike yet. The account feels incomplete rather than false. What part are you still testing?",
+        "The Aduro tests the next move instead of claiming it. I do not want a cleaner answer than the one you have. What might be true?"
+      ],
+      "humility": [
+        "The Aduro shifts forward, then checks the impulse. My view may be partial. What angle am I missing?",
+        "They keep their weight toward action without choosing the strike yet. I could be wrong about this, so give me the part you trust.",
+        "The Aduro tests the next move instead of claiming it. I am leaving room to revise my read. Where does yours differ?"
+      ],
+      "acceptance": [
+        "The Aduro shifts forward, then checks the impulse. The shape has changed, and I am still learning how to stand inside it.",
+        "They keep their weight toward action without choosing the strike yet. I can name what is here without deciding how I feel about it yet.",
+        "The Aduro tests the next move instead of claiming it. This may be the new ground. What still feels unsettled to you?"
+      ],
+      "forgiveness": [
+        "The Aduro shifts forward, then checks the impulse. The old hurt is quieter, not gone. Which part still belongs to now?",
+        "They keep their weight toward action without choosing the strike yet. Something has loosened, though I would not call it released. Can we start there?",
+        "The Aduro tests the next move instead of claiming it. I can see a path beyond what happened, but not all the way through it."
+      ],
+      "compassion": [
+        "The Aduro shifts forward, then checks the impulse. The hurt is clear even if the help is not. Who needs us closest?",
+        "They keep their weight toward action without choosing the strike yet. I want to respond without deciding for them. What have they asked for?",
+        "The Aduro tests the next move instead of claiming it. Care is pulling me toward them. Tell me what would actually help."
+      ],
+      "empathy": [
+        "The Aduro shifts forward, then checks the impulse. Something reached across the distance, but I cannot place it yet. What did you feel?",
+        "They keep their weight toward action without choosing the strike yet. I can sense the weight without knowing whose it is. Help me separate it.",
+        "The Aduro tests the next move instead of claiming it. Contact is there, incomplete but real. What came back to you?"
+      ],
+      "leadership": [
+        "The Aduro shifts forward, then checks the impulse. The whole route is not clear, but the next direction may be. What must be decided first?",
+        "They keep their weight toward action without choosing the strike yet. People are looking for a bearing while the picture forms. Which point can we trust?",
+        "The Aduro tests the next move instead of claiming it. I see responsibility gathering around you. What part is truly yours to carry?"
+      ],
+      "generosity": [
+        "The Aduro shifts forward, then checks the impulse. The wish to offer is real, though its right measure is not settled. What can leave your hands cleanly?",
+        "They keep their weight toward action without choosing the strike yet. I do not want giving to outrun consent. What would make the offer sound?",
+        "The Aduro tests the next move instead of claiming it. There is something available here, but we should name its limit before giving it."
+      ],
+      "_reactive": [
+        "The Aduro's answer comes quickly, then slows. \"That struck harder than I expected. Give me a breath to choose my response.\"",
+        "They shift their stance. \"I am with you, but I have not settled what this asks of me.\"",
+        "The Aduro exhales through the first impulse. \"Say the key part again. I want to meet the right thing.\""
+      ],
+      "_alignment": {
+        "courage": [
+          "They face the pressure while their direction is still forming. I can face this much. What would make the next move sound?",
+          "The Aduro gathers momentum, but leaves room to turn. The danger is real, and so is the possibility. Which part should we meet first?"
+        ],
+        "truth": [
+          "They face the pressure while their direction is still forming. The account feels incomplete rather than false. What part are you still testing?",
+          "The Aduro gathers momentum, but leaves room to turn. I do not want a cleaner answer than the one you have. What might be true?"
+        ],
+        "leadership": [
+          "They face the pressure while their direction is still forming. People are looking for a bearing while the picture forms. Which point can we trust?",
+          "The Aduro gathers momentum, but leaves room to turn. I see responsibility gathering around you. What part is truly yours to carry?"
+        ],
+        "generosity": [
+          "They face the pressure while their direction is still forming. I do not want giving to outrun consent. What would make the offer sound?",
+          "The Aduro gathers momentum, but leaves room to turn. There is something available here, but we should name its limit before giving it."
+        ]
+      },
       "_npc_withdrawn": [
-        "You pulled back. I am still here. Say it when you are ready.",
-        "I am not going anywhere. Take what you need and then talk to me."
+        "The Aduro watches the distance open. \"I will not charge after you. Show me if you want me closer.\"",
+        "They hold where they are. \"You stepped back. I am leaving the next move with you.\""
       ]
     },
+    "hesitant": {
+      "wisdom": [
+        "The Aduro starts forward and stops short. My thoughts keep breaking under the pressure. Give me one fact to hold.",
+        "Their will is present, but the follow-through catches. I am circling the same question. Could you help me narrow it?",
+        "The Aduro narrows the next move to what they can risk. I cannot carry the whole pattern right now. Start with the smallest reliable piece."
+      ],
+      "courage": [
+        "The Aduro starts forward and stops short. I want to move, but fear is catching my follow-through. Stay beside me for the first step.",
+        "Their will is present, but the follow-through catches. I can face the edge, not cross it yet. Help me choose one smaller action.",
+        "The Aduro narrows the next move to what they can risk. The danger has my body braced. I need a steady voice before I continue."
+      ],
+      "truth": [
+        "The Aduro starts forward and stops short. The honest words are close, but I keep stopping them. Let me try one sentence.",
+        "Their will is present, but the follow-through catches. I cannot give the whole account yet. Ask me for the smallest true part.",
+        "The Aduro narrows the next move to what they can risk. I am afraid of what the truth will set in motion. Hold the space while I name it."
+      ],
+      "humility": [
+        "The Aduro starts forward and stops short. I may be wrong, and that fear is making me disappear. Let me offer only the limit.",
+        "Their will is present, but the follow-through catches. Correction feels heavier than it should today. Could you meet the partial answer gently?",
+        "The Aduro narrows the next move to what they can risk. I cannot defend a full position. I can say where my knowledge ends."
+      ],
+      "acceptance": [
+        "The Aduro starts forward and stops short. I see the ground as it is, but I have not stopped bracing against it.",
+        "Their will is present, but the follow-through catches. I cannot make peace with all of this today. Let me admit one part is real.",
+        "The Aduro narrows the next move to what they can risk. The change has happened; my body is still refusing the shape. Stay while I breathe."
+      ],
+      "forgiveness": [
+        "The Aduro starts forward and stops short. I reach toward release and close again. I can set down one piece if you help me.",
+        "Their will is present, but the follow-through catches. The old hurt keeps pulling my hand back. Do not ask me to open it all at once.",
+        "The Aduro narrows the next move to what they can risk. I cannot cross beyond what happened yet. I can stop feeding one part of it."
+      ],
+      "compassion": [
+        "The Aduro starts forward and stops short. I want to reach them, but I am afraid of making the hurt worse. Come with me.",
+        "Their will is present, but the follow-through catches. Care is present; my hands are not steady enough to act alone.",
+        "The Aduro narrows the next move to what they can risk. I cannot promise a remedy. Help me offer quiet company instead."
+      ],
+      "empathy": [
+        "The Aduro starts forward and stops short. Their feeling reached me too strongly. Help me find my own edge before I answer.",
+        "Their will is present, but the follow-through catches. I can sense the distance, but I am afraid to cross it. Ask them for one clear sign.",
+        "The Aduro narrows the next move to what they can risk. The weight is blurring whose pain is whose. Stay with me while I separate it."
+      ],
+      "leadership": [
+        "The Aduro starts forward and stops short. Silence is becoming its own direction. Help me give them one smaller instruction.",
+        "Their will is present, but the follow-through catches. The responsibility is bending my voice. Could someone stand beside me while I speak?",
+        "The Aduro narrows the next move to what they can risk. I cannot hold the whole group steady. Give me one decision and share the rest."
+      ],
+      "generosity": [
+        "The Aduro starts forward and stops short. I keep extending the offer and pulling it back. Let me name a smaller gift.",
+        "Their will is present, but the follow-through catches. I cannot give cleanly at this size. Help me reduce the promise.",
+        "The Aduro narrows the next move to what they can risk. I want to offer something, but I need permission to keep what I cannot spare."
+      ],
+      "_reactive": [
+        "The Aduro starts to answer and stops. \"One breath. I cannot move on the first impulse.\"",
+        "Their stance tightens. \"Stay with me. I need the next step made smaller.\"",
+        "The Aduro keeps facing you. \"I have not withdrawn, but I cannot promise the move yet.\""
+      ],
+      "_alignment": {
+        "courage": [
+          "They hold at the edge of action and ask for support. I can face the edge, not cross it yet. Help me choose one smaller action.",
+          "The Aduro keeps facing the pressure, though they cannot advance alone. The danger has my body braced. I need a steady voice before I continue."
+        ],
+        "truth": [
+          "They hold at the edge of action and ask for support. I cannot give the whole account yet. Ask me for the smallest true part.",
+          "The Aduro keeps facing the pressure, though they cannot advance alone. I am afraid of what the truth will set in motion. Hold the space while I name it."
+        ],
+        "leadership": [
+          "They hold at the edge of action and ask for support. The responsibility is bending my voice. Could someone stand beside me while I speak?",
+          "The Aduro keeps facing the pressure, though they cannot advance alone. I cannot hold the whole group steady. Give me one decision and share the rest."
+        ],
+        "generosity": [
+          "They hold at the edge of action and ask for support. I cannot give cleanly at this size. Help me reduce the promise.",
+          "The Aduro keeps facing the pressure, though they cannot advance alone. I want to offer something, but I need permission to keep what I cannot spare."
+        ]
+      },
+      "_npc_withdrawn": [
+        "The Aduro lowers their hands. \"I cannot close that distance for both of us.\"",
+        "They remain visible, but do not advance. \"If you return, start with one word.\""
+      ]
+    },
+
     "pressed": {
       "wisdom": [
         "That is not the whole story. Something is left out.",
@@ -2326,11 +2545,170 @@
           "I am in it with you. Not around it."
         ]
       },
+     "_npc_withdrawn": [
+       "She says: You do not have to stay. I am here if you come back.",
+       "The offer stands."
+     ]
+   },
+    "uncertain": {
+      "wisdom": [
+        "The Onyamesu listens for where care can truly land. Two readings still fit. Which one has held up for you?",
+        "She stays close while the need becomes clearer. I have part of the pattern, not enough to settle it. What remains true?",
+        "The Onyamesu makes room for the feeling before naming a remedy. My understanding stops at the gap. Could we examine that part together?"
+      ],
+      "courage": [
+        "The Onyamesu listens for where care can truly land. Fear has not closed this, but I need to see the first honest step.",
+        "She stays close while the need becomes clearer. I can face this much. What would make the next move sound?",
+        "The Onyamesu makes room for the feeling before naming a remedy. The danger is real, and so is the possibility. Which part should we meet first?"
+      ],
+      "truth": [
+        "The Onyamesu listens for where care can truly land. I hear something true that has not found its whole sentence. Can you try the unfinished version?",
+        "She stays close while the need becomes clearer. The account feels incomplete rather than false. What part are you still testing?",
+        "The Onyamesu makes room for the feeling before naming a remedy. I do not want a cleaner answer than the one you have. What might be true?"
+      ],
+      "humility": [
+        "The Onyamesu listens for where care can truly land. My view may be partial. What angle am I missing?",
+        "She stays close while the need becomes clearer. I could be wrong about this, so give me the part you trust.",
+        "The Onyamesu makes room for the feeling before naming a remedy. I am leaving room to revise my read. Where does yours differ?"
+      ],
+      "acceptance": [
+        "The Onyamesu listens for where care can truly land. The shape has changed, and I am still learning how to stand inside it.",
+        "She stays close while the need becomes clearer. I can name what is here without deciding how I feel about it yet.",
+        "The Onyamesu makes room for the feeling before naming a remedy. This may be the new ground. What still feels unsettled to you?"
+      ],
+      "forgiveness": [
+        "The Onyamesu listens for where care can truly land. The old hurt is quieter, not gone. Which part still belongs to now?",
+        "She stays close while the need becomes clearer. Something has loosened, though I would not call it released. Can we start there?",
+        "The Onyamesu makes room for the feeling before naming a remedy. I can see a path beyond what happened, but not all the way through it."
+      ],
+      "compassion": [
+        "The Onyamesu listens for where care can truly land. The hurt is clear even if the help is not. Who needs us closest?",
+        "She stays close while the need becomes clearer. I want to respond without deciding for them. What have they asked for?",
+        "The Onyamesu makes room for the feeling before naming a remedy. Care is pulling me toward them. Tell me what would actually help."
+      ],
+      "empathy": [
+        "The Onyamesu listens for where care can truly land. Something reached across the distance, but I cannot place it yet. What did you feel?",
+        "She stays close while the need becomes clearer. I can sense the weight without knowing whose it is. Help me separate it.",
+        "The Onyamesu makes room for the feeling before naming a remedy. Contact is there, incomplete but real. What came back to you?"
+      ],
+      "leadership": [
+        "The Onyamesu listens for where care can truly land. The whole route is not clear, but the next direction may be. What must be decided first?",
+        "She stays close while the need becomes clearer. People are looking for a bearing while the picture forms. Which point can we trust?",
+        "The Onyamesu makes room for the feeling before naming a remedy. I see responsibility gathering around you. What part is truly yours to carry?"
+      ],
+      "generosity": [
+        "The Onyamesu listens for where care can truly land. The wish to offer is real, though its right measure is not settled. What can leave your hands cleanly?",
+        "She stays close while the need becomes clearer. I do not want giving to outrun consent. What would make the offer sound?",
+        "The Onyamesu makes room for the feeling before naming a remedy. There is something available here, but we should name its limit before giving it."
+      ],
+      "_reactive": [
+        "The Onyamesu goes quiet. \"That reached somewhere tender. Let me listen before I tend it.\"",
+        "She keeps her voice low. \"I am here; I am still finding what kind of care this needs.\"",
+        "The Onyamesu takes one breath with you. \"Could you say the central part again?\""
+      ],
+      "_alignment": {
+        "compassion": [
+          "She studies what is fraying and what remains held. I want to respond without deciding for them. What have they asked for?",
+          "The Onyamesu offers presence while she finds the useful form of care. Care is pulling me toward them. Tell me what would actually help."
+        ],
+        "empathy": [
+          "She studies what is fraying and what remains held. I can sense the weight without knowing whose it is. Help me separate it.",
+          "The Onyamesu offers presence while she finds the useful form of care. Contact is there, incomplete but real. What came back to you?"
+        ],
+        "generosity": [
+          "She studies what is fraying and what remains held. I do not want giving to outrun consent. What would make the offer sound?",
+          "The Onyamesu offers presence while she finds the useful form of care. There is something available here, but we should name its limit before giving it."
+        ],
+        "acceptance": [
+          "She studies what is fraying and what remains held. I can name what is here without deciding how I feel about it yet.",
+          "The Onyamesu offers presence while she finds the useful form of care. This may be the new ground. What still feels unsettled to you?"
+        ]
+      },
       "_npc_withdrawn": [
-        "She says: You do not have to stay. I am here if you come back.",
-        "The offer stands."
+        "The Onyamesu notices the retreat. \"I will keep a place open without filling it for you.\"",
+        "She softens her presence. \"You may take distance. Tell me if company would help.\""
       ]
     },
+    "hesitant": {
+      "wisdom": [
+        "The Onyamesu reaches out, then lets her hand rest between you. My thoughts keep breaking under the pressure. Give me one fact to hold.",
+        "She stays near, but strain has narrowed what she can offer. I am circling the same question. Could you help me narrow it?",
+        "The Onyamesu takes a breath before tending the next hurt. I cannot carry the whole pattern right now. Start with the smallest reliable piece."
+      ],
+      "courage": [
+        "The Onyamesu reaches out, then lets her hand rest between you. I want to move, but fear is catching my follow-through. Stay beside me for the first step.",
+        "She stays near, but strain has narrowed what she can offer. I can face the edge, not cross it yet. Help me choose one smaller action.",
+        "The Onyamesu takes a breath before tending the next hurt. The danger has my body braced. I need a steady voice before I continue."
+      ],
+      "truth": [
+        "The Onyamesu reaches out, then lets her hand rest between you. The honest words are close, but I keep stopping them. Let me try one sentence.",
+        "She stays near, but strain has narrowed what she can offer. I cannot give the whole account yet. Ask me for the smallest true part.",
+        "The Onyamesu takes a breath before tending the next hurt. I am afraid of what the truth will set in motion. Hold the space while I name it."
+      ],
+      "humility": [
+        "The Onyamesu reaches out, then lets her hand rest between you. I may be wrong, and that fear is making me disappear. Let me offer only the limit.",
+        "She stays near, but strain has narrowed what she can offer. Correction feels heavier than it should today. Could you meet the partial answer gently?",
+        "The Onyamesu takes a breath before tending the next hurt. I cannot defend a full position. I can say where my knowledge ends."
+      ],
+      "acceptance": [
+        "The Onyamesu reaches out, then lets her hand rest between you. I see the ground as it is, but I have not stopped bracing against it.",
+        "She stays near, but strain has narrowed what she can offer. I cannot make peace with all of this today. Let me admit one part is real.",
+        "The Onyamesu takes a breath before tending the next hurt. The change has happened; my body is still refusing the shape. Stay while I breathe."
+      ],
+      "forgiveness": [
+        "The Onyamesu reaches out, then lets her hand rest between you. I reach toward release and close again. I can set down one piece if you help me.",
+        "She stays near, but strain has narrowed what she can offer. The old hurt keeps pulling my hand back. Do not ask me to open it all at once.",
+        "The Onyamesu takes a breath before tending the next hurt. I cannot cross beyond what happened yet. I can stop feeding one part of it."
+      ],
+      "compassion": [
+        "The Onyamesu reaches out, then lets her hand rest between you. I want to reach them, but I am afraid of making the hurt worse. Come with me.",
+        "She stays near, but strain has narrowed what she can offer. Care is present; my hands are not steady enough to act alone.",
+        "The Onyamesu takes a breath before tending the next hurt. I cannot promise a remedy. Help me offer quiet company instead."
+      ],
+      "empathy": [
+        "The Onyamesu reaches out, then lets her hand rest between you. Their feeling reached me too strongly. Help me find my own edge before I answer.",
+        "She stays near, but strain has narrowed what she can offer. I can sense the distance, but I am afraid to cross it. Ask them for one clear sign.",
+        "The Onyamesu takes a breath before tending the next hurt. The weight is blurring whose pain is whose. Stay with me while I separate it."
+      ],
+      "leadership": [
+        "The Onyamesu reaches out, then lets her hand rest between you. Silence is becoming its own direction. Help me give them one smaller instruction.",
+        "She stays near, but strain has narrowed what she can offer. The responsibility is bending my voice. Could someone stand beside me while I speak?",
+        "The Onyamesu takes a breath before tending the next hurt. I cannot hold the whole group steady. Give me one decision and share the rest."
+      ],
+      "generosity": [
+        "The Onyamesu reaches out, then lets her hand rest between you. I keep extending the offer and pulling it back. Let me name a smaller gift.",
+        "She stays near, but strain has narrowed what she can offer. I cannot give cleanly at this size. Help me reduce the promise.",
+        "The Onyamesu takes a breath before tending the next hurt. I want to offer something, but I need permission to keep what I cannot spare."
+      ],
+      "_reactive": [
+        "The Onyamesu's hand hovers, then lowers. \"I want to help, but I need a moment before touch becomes care.\"",
+        "She stays close. \"Please carry the next sentence slowly; I cannot hold all of it at once.\"",
+        "The Onyamesu protects the silence. \"I can remain here. I cannot mend this yet.\""
+      ],
+      "_alignment": {
+        "compassion": [
+          "She asks for help carrying the care she cannot complete alone. Care is present; my hands are not steady enough to act alone.",
+          "The Onyamesu protects a small pocket of steadiness and promises no more. I cannot promise a remedy. Help me offer quiet company instead."
+        ],
+        "empathy": [
+          "She asks for help carrying the care she cannot complete alone. I can sense the distance, but I am afraid to cross it. Ask them for one clear sign.",
+          "The Onyamesu protects a small pocket of steadiness and promises no more. The weight is blurring whose pain is whose. Stay with me while I separate it."
+        ],
+        "generosity": [
+          "She asks for help carrying the care she cannot complete alone. I cannot give cleanly at this size. Help me reduce the promise.",
+          "The Onyamesu protects a small pocket of steadiness and promises no more. I want to offer something, but I need permission to keep what I cannot spare."
+        ],
+        "acceptance": [
+          "She asks for help carrying the care she cannot complete alone. I cannot make peace with all of this today. Let me admit one part is real.",
+          "The Onyamesu protects a small pocket of steadiness and promises no more. The change has happened; my body is still refusing the shape. Stay while I breathe."
+        ]
+      },
+      "_npc_withdrawn": [
+        "The Onyamesu does not follow. \"I cannot reach into a space you have closed.\"",
+        "She waits without promise. \"If you come back, let us begin with what feels safest.\""
+      ]
+    },
+
     "pressed": {
       "wisdom": [
         "That's not a small thing to carry. What do you think it means for the people around you?",
@@ -3032,11 +3410,170 @@
           "She says: I see where you actually are."
         ]
       },
+     "_npc_withdrawn": [
+       "She says: Closed. I know where it was.",
+       "She says: It'll open again."
+     ]
+   },
+    "uncertain": {
+      "wisdom": [
+        "The Sum-Okwanfo watches the opening change shape. Two readings still fit. Which one has held up for you?",
+        "She tests the quiet route without committing to it. I have part of the pattern, not enough to settle it. What remains true?",
+        "The Sum-Okwanfo weighs timing against what the silence may hide. My understanding stops at the gap. Could we examine that part together?"
+      ],
+      "courage": [
+        "The Sum-Okwanfo watches the opening change shape. Fear has not closed this, but I need to see the first honest step.",
+        "She tests the quiet route without committing to it. I can face this much. What would make the next move sound?",
+        "The Sum-Okwanfo weighs timing against what the silence may hide. The danger is real, and so is the possibility. Which part should we meet first?"
+      ],
+      "truth": [
+        "The Sum-Okwanfo watches the opening change shape. I hear something true that has not found its whole sentence. Can you try the unfinished version?",
+        "She tests the quiet route without committing to it. The account feels incomplete rather than false. What part are you still testing?",
+        "The Sum-Okwanfo weighs timing against what the silence may hide. I do not want a cleaner answer than the one you have. What might be true?"
+      ],
+      "humility": [
+        "The Sum-Okwanfo watches the opening change shape. My view may be partial. What angle am I missing?",
+        "She tests the quiet route without committing to it. I could be wrong about this, so give me the part you trust.",
+        "The Sum-Okwanfo weighs timing against what the silence may hide. I am leaving room to revise my read. Where does yours differ?"
+      ],
+      "acceptance": [
+        "The Sum-Okwanfo watches the opening change shape. The shape has changed, and I am still learning how to stand inside it.",
+        "She tests the quiet route without committing to it. I can name what is here without deciding how I feel about it yet.",
+        "The Sum-Okwanfo weighs timing against what the silence may hide. This may be the new ground. What still feels unsettled to you?"
+      ],
+      "forgiveness": [
+        "The Sum-Okwanfo watches the opening change shape. The old hurt is quieter, not gone. Which part still belongs to now?",
+        "She tests the quiet route without committing to it. Something has loosened, though I would not call it released. Can we start there?",
+        "The Sum-Okwanfo weighs timing against what the silence may hide. I can see a path beyond what happened, but not all the way through it."
+      ],
+      "compassion": [
+        "The Sum-Okwanfo watches the opening change shape. The hurt is clear even if the help is not. Who needs us closest?",
+        "She tests the quiet route without committing to it. I want to respond without deciding for them. What have they asked for?",
+        "The Sum-Okwanfo weighs timing against what the silence may hide. Care is pulling me toward them. Tell me what would actually help."
+      ],
+      "empathy": [
+        "The Sum-Okwanfo watches the opening change shape. Something reached across the distance, but I cannot place it yet. What did you feel?",
+        "She tests the quiet route without committing to it. I can sense the weight without knowing whose it is. Help me separate it.",
+        "The Sum-Okwanfo weighs timing against what the silence may hide. Contact is there, incomplete but real. What came back to you?"
+      ],
+      "leadership": [
+        "The Sum-Okwanfo watches the opening change shape. The whole route is not clear, but the next direction may be. What must be decided first?",
+        "She tests the quiet route without committing to it. People are looking for a bearing while the picture forms. Which point can we trust?",
+        "The Sum-Okwanfo weighs timing against what the silence may hide. I see responsibility gathering around you. What part is truly yours to carry?"
+      ],
+      "generosity": [
+        "The Sum-Okwanfo watches the opening change shape. The wish to offer is real, though its right measure is not settled. What can leave your hands cleanly?",
+        "She tests the quiet route without committing to it. I do not want giving to outrun consent. What would make the offer sound?",
+        "The Sum-Okwanfo weighs timing against what the silence may hide. There is something available here, but we should name its limit before giving it."
+      ],
+      "_reactive": [
+        "The Sum-Okwanfo loses the opening and stills. \"Something shifted. Give me the signal again.\"",
+        "She glances toward the quiet edge. \"That landed differently than I read it. Let me check the hidden side.\"",
+        "The Sum-Okwanfo waits. \"I am not gone; I am making sure I do not move on a false opening.\""
+      ],
+      "_alignment": {
+        "generosity": [
+          "She sees a possible break, not yet a clean one. I do not want giving to outrun consent. What would make the offer sound?",
+          "The Sum-Okwanfo lets the moment breathe while she checks the unseen side. There is something available here, but we should name its limit before giving it."
+        ],
+        "truth": [
+          "She sees a possible break, not yet a clean one. The account feels incomplete rather than false. What part are you still testing?",
+          "The Sum-Okwanfo lets the moment breathe while she checks the unseen side. I do not want a cleaner answer than the one you have. What might be true?"
+        ],
+        "acceptance": [
+          "She sees a possible break, not yet a clean one. I can name what is here without deciding how I feel about it yet.",
+          "The Sum-Okwanfo lets the moment breathe while she checks the unseen side. This may be the new ground. What still feels unsettled to you?"
+        ],
+        "empathy": [
+          "She sees a possible break, not yet a clean one. I can sense the weight without knowing whose it is. Help me separate it.",
+          "The Sum-Okwanfo lets the moment breathe while she checks the unseen side. Contact is there, incomplete but real. What came back to you?"
+        ]
+      },
       "_npc_withdrawn": [
-        "She says: Closed. I know where it was.",
-        "She says: It'll open again."
+        "The Sum-Okwanfo marks where you vanished from contact. \"I will stay visible if you choose another opening.\"",
+        "She does not pursue. \"The route back remains possible, not assumed.\""
       ]
     },
+    "hesitant": {
+      "wisdom": [
+        "The Sum-Okwanfo finds the opening, but her body does not take it. My thoughts keep breaking under the pressure. Give me one fact to hold.",
+        "She remains under cover and reduces the choice to one small motion. I am circling the same question. Could you help me narrow it?",
+        "The Sum-Okwanfo waits a beat too long, then asks for a signal. I cannot carry the whole pattern right now. Start with the smallest reliable piece."
+      ],
+      "courage": [
+        "The Sum-Okwanfo finds the opening, but her body does not take it. I want to move, but fear is catching my follow-through. Stay beside me for the first step.",
+        "She remains under cover and reduces the choice to one small motion. I can face the edge, not cross it yet. Help me choose one smaller action.",
+        "The Sum-Okwanfo waits a beat too long, then asks for a signal. The danger has my body braced. I need a steady voice before I continue."
+      ],
+      "truth": [
+        "The Sum-Okwanfo finds the opening, but her body does not take it. The honest words are close, but I keep stopping them. Let me try one sentence.",
+        "She remains under cover and reduces the choice to one small motion. I cannot give the whole account yet. Ask me for the smallest true part.",
+        "The Sum-Okwanfo waits a beat too long, then asks for a signal. I am afraid of what the truth will set in motion. Hold the space while I name it."
+      ],
+      "humility": [
+        "The Sum-Okwanfo finds the opening, but her body does not take it. I may be wrong, and that fear is making me disappear. Let me offer only the limit.",
+        "She remains under cover and reduces the choice to one small motion. Correction feels heavier than it should today. Could you meet the partial answer gently?",
+        "The Sum-Okwanfo waits a beat too long, then asks for a signal. I cannot defend a full position. I can say where my knowledge ends."
+      ],
+      "acceptance": [
+        "The Sum-Okwanfo finds the opening, but her body does not take it. I see the ground as it is, but I have not stopped bracing against it.",
+        "She remains under cover and reduces the choice to one small motion. I cannot make peace with all of this today. Let me admit one part is real.",
+        "The Sum-Okwanfo waits a beat too long, then asks for a signal. The change has happened; my body is still refusing the shape. Stay while I breathe."
+      ],
+      "forgiveness": [
+        "The Sum-Okwanfo finds the opening, but her body does not take it. I reach toward release and close again. I can set down one piece if you help me.",
+        "She remains under cover and reduces the choice to one small motion. The old hurt keeps pulling my hand back. Do not ask me to open it all at once.",
+        "The Sum-Okwanfo waits a beat too long, then asks for a signal. I cannot cross beyond what happened yet. I can stop feeding one part of it."
+      ],
+      "compassion": [
+        "The Sum-Okwanfo finds the opening, but her body does not take it. I want to reach them, but I am afraid of making the hurt worse. Come with me.",
+        "She remains under cover and reduces the choice to one small motion. Care is present; my hands are not steady enough to act alone.",
+        "The Sum-Okwanfo waits a beat too long, then asks for a signal. I cannot promise a remedy. Help me offer quiet company instead."
+      ],
+      "empathy": [
+        "The Sum-Okwanfo finds the opening, but her body does not take it. Their feeling reached me too strongly. Help me find my own edge before I answer.",
+        "She remains under cover and reduces the choice to one small motion. I can sense the distance, but I am afraid to cross it. Ask them for one clear sign.",
+        "The Sum-Okwanfo waits a beat too long, then asks for a signal. The weight is blurring whose pain is whose. Stay with me while I separate it."
+      ],
+      "leadership": [
+        "The Sum-Okwanfo finds the opening, but her body does not take it. Silence is becoming its own direction. Help me give them one smaller instruction.",
+        "She remains under cover and reduces the choice to one small motion. The responsibility is bending my voice. Could someone stand beside me while I speak?",
+        "The Sum-Okwanfo waits a beat too long, then asks for a signal. I cannot hold the whole group steady. Give me one decision and share the rest."
+      ],
+      "generosity": [
+        "The Sum-Okwanfo finds the opening, but her body does not take it. I keep extending the offer and pulling it back. Let me name a smaller gift.",
+        "She remains under cover and reduces the choice to one small motion. I cannot give cleanly at this size. Help me reduce the promise.",
+        "The Sum-Okwanfo waits a beat too long, then asks for a signal. I want to offer something, but I need permission to keep what I cannot spare."
+      ],
+      "_reactive": [
+        "The Sum-Okwanfo sees the break and cannot take it. \"Mark the far side for me.\"",
+        "She remains concealed. \"One signal only. More than that will scatter my timing.\"",
+        "The Sum-Okwanfo's breath catches. \"I need you to hold the opening while I decide whether I can cross.\""
+      ],
+      "_alignment": {
+        "generosity": [
+          "She sees where to move, yet needs someone to hold the far side. I cannot give cleanly at this size. Help me reduce the promise.",
+          "The Sum-Okwanfo's timing catches on doubt. I want to offer something, but I need permission to keep what I cannot spare."
+        ],
+        "truth": [
+          "She sees where to move, yet needs someone to hold the far side. I cannot give the whole account yet. Ask me for the smallest true part.",
+          "The Sum-Okwanfo's timing catches on doubt. I am afraid of what the truth will set in motion. Hold the space while I name it."
+        ],
+        "acceptance": [
+          "She sees where to move, yet needs someone to hold the far side. I cannot make peace with all of this today. Let me admit one part is real.",
+          "The Sum-Okwanfo's timing catches on doubt. The change has happened; my body is still refusing the shape. Stay while I breathe."
+        ],
+        "empathy": [
+          "She sees where to move, yet needs someone to hold the far side. I can sense the distance, but I am afraid to cross it. Ask them for one clear sign.",
+          "The Sum-Okwanfo's timing catches on doubt. The weight is blurring whose pain is whose. Stay with me while I separate it."
+        ]
+      },
+      "_npc_withdrawn": [
+        "The Sum-Okwanfo lets the opening close. \"I cannot follow without a signal from you.\"",
+        "She keeps to the edge. \"If contact returns, make it small and clear.\""
+      ]
+    },
+
     "pressed": {
       "courage": [
         "I hear what you are carrying. I will not pretend it is small. Let me stay close to it with you for a moment.",
@@ -3858,11 +4395,218 @@
           "She says: I feel the weight of this place. I am not stepping back from it."
         ]
       },
+     "_npc_withdrawn": [
+       "The Okofor says: You pulled away. I am not chasing. But I am not gone. I am right here.",
+       "She says: Take the distance you need. I will hold the ground on this side until you come back."
+     ]
+   },
+    "uncertain": {
+      "courage": [
+        "The Okofor tests the ground before placing their full weight. Fear has not closed this, but I need to see the first honest step.",
+        "She stays beside the line, deciding what can safely be held. I can face this much. What would make the next move sound?",
+        "The Okofor braces lightly while the burden takes shape. The danger is real, and so is the possibility. Which part should we meet first?"
+      ],
+      "wisdom": [
+        "The Okofor tests the ground before placing their full weight. Two readings still fit. Which one has held up for you?",
+        "She stays beside the line, deciding what can safely be held. I have part of the pattern, not enough to settle it. What remains true?",
+        "The Okofor braces lightly while the burden takes shape. My understanding stops at the gap. Could we examine that part together?"
+      ],
+      "leadership": [
+        "The Okofor tests the ground before placing their full weight. The whole route is not clear, but the next direction may be. What must be decided first?",
+        "She stays beside the line, deciding what can safely be held. People are looking for a bearing while the picture forms. Which point can we trust?",
+        "The Okofor braces lightly while the burden takes shape. I see responsibility gathering around you. What part is truly yours to carry?"
+      ],
+      "compassion": [
+        "The Okofor tests the ground before placing their full weight. The hurt is clear even if the help is not. Who needs us closest?",
+        "She stays beside the line, deciding what can safely be held. I want to respond without deciding for them. What have they asked for?",
+        "The Okofor braces lightly while the burden takes shape. Care is pulling me toward them. Tell me what would actually help."
+      ],
+      "acceptance": [
+        "The Okofor tests the ground before placing their full weight. The shape has changed, and I am still learning how to stand inside it.",
+        "She stays beside the line, deciding what can safely be held. I can name what is here without deciding how I feel about it yet.",
+        "The Okofor braces lightly while the burden takes shape. This may be the new ground. What still feels unsettled to you?"
+      ],
+      "humility": [
+        "The Okofor tests the ground before placing their full weight. My view may be partial. What angle am I missing?",
+        "She stays beside the line, deciding what can safely be held. I could be wrong about this, so give me the part you trust.",
+        "The Okofor braces lightly while the burden takes shape. I am leaving room to revise my read. Where does yours differ?"
+      ],
+      "forgiveness": [
+        "The Okofor tests the ground before placing their full weight. The old hurt is quieter, not gone. Which part still belongs to now?",
+        "She stays beside the line, deciding what can safely be held. Something has loosened, though I would not call it released. Can we start there?",
+        "The Okofor braces lightly while the burden takes shape. I can see a path beyond what happened, but not all the way through it."
+      ],
+      "truth": [
+        "The Okofor tests the ground before placing their full weight. I hear something true that has not found its whole sentence. Can you try the unfinished version?",
+        "She stays beside the line, deciding what can safely be held. The account feels incomplete rather than false. What part are you still testing?",
+        "The Okofor braces lightly while the burden takes shape. I do not want a cleaner answer than the one you have. What might be true?"
+      ],
+      "generosity": [
+        "The Okofor tests the ground before placing their full weight. The wish to offer is real, though its right measure is not settled. What can leave your hands cleanly?",
+        "She stays beside the line, deciding what can safely be held. I do not want giving to outrun consent. What would make the offer sound?",
+        "The Okofor braces lightly while the burden takes shape. There is something available here, but we should name its limit before giving it."
+      ],
+      "empathy": [
+        "The Okofor tests the ground before placing their full weight. Something reached across the distance, but I cannot place it yet. What did you feel?",
+        "She stays beside the line, deciding what can safely be held. I can sense the weight without knowing whose it is. Help me separate it.",
+        "The Okofor braces lightly while the burden takes shape. Contact is there, incomplete but real. What came back to you?"
+      ],
+      "_reactive": [
+        "The Okofor shifts their weight. \"That found a weak place in my footing. Give me a moment to set it honestly.\"",
+        "She keeps one hand on the line. \"I am with this, though I do not yet know what it needs me to hold.\"",
+        "The Okofor looks for firmer ground. \"Say the central weight again.\""
+      ],
+      "_alignment": {
+        "courage": [
+          "She studies where support is needed and where it might intrude. I can face this much. What would make the next move sound?",
+          "The Okofor keeps contact without declaring the position secure. The danger is real, and so is the possibility. Which part should we meet first?"
+        ],
+        "wisdom": [
+          "She studies where support is needed and where it might intrude. I have part of the pattern, not enough to settle it. What remains true?",
+          "The Okofor keeps contact without declaring the position secure. My understanding stops at the gap. Could we examine that part together?"
+        ],
+        "leadership": [
+          "She studies where support is needed and where it might intrude. People are looking for a bearing while the picture forms. Which point can we trust?",
+          "The Okofor keeps contact without declaring the position secure. I see responsibility gathering around you. What part is truly yours to carry?"
+        ],
+        "compassion": [
+          "She studies where support is needed and where it might intrude. I want to respond without deciding for them. What have they asked for?",
+          "The Okofor keeps contact without declaring the position secure. Care is pulling me toward them. Tell me what would actually help."
+        ],
+        "acceptance": [
+          "She studies where support is needed and where it might intrude. I can name what is here without deciding how I feel about it yet.",
+          "The Okofor keeps contact without declaring the position secure. This may be the new ground. What still feels unsettled to you?"
+        ],
+        "humility": [
+          "She studies where support is needed and where it might intrude. I could be wrong about this, so give me the part you trust.",
+          "The Okofor keeps contact without declaring the position secure. I am leaving room to revise my read. Where does yours differ?"
+        ],
+        "forgiveness": [
+          "She studies where support is needed and where it might intrude. Something has loosened, though I would not call it released. Can we start there?",
+          "The Okofor keeps contact without declaring the position secure. I can see a path beyond what happened, but not all the way through it."
+        ],
+        "truth": [
+          "She studies where support is needed and where it might intrude. The account feels incomplete rather than false. What part are you still testing?",
+          "The Okofor keeps contact without declaring the position secure. I do not want a cleaner answer than the one you have. What might be true?"
+        ],
+        "generosity": [
+          "She studies where support is needed and where it might intrude. I do not want giving to outrun consent. What would make the offer sound?",
+          "The Okofor keeps contact without declaring the position secure. There is something available here, but we should name its limit before giving it."
+        ],
+        "empathy": [
+          "She studies where support is needed and where it might intrude. I can sense the weight without knowing whose it is. Help me separate it.",
+          "The Okofor keeps contact without declaring the position secure. Contact is there, incomplete but real. What came back to you?"
+        ]
+      },
       "_npc_withdrawn": [
-        "The Okofor says: You pulled away. I am not chasing. But I am not gone. I am right here.",
-        "She says: Take the distance you need. I will hold the ground on this side until you come back."
+        "The Okofor notices the distance. \"I will hold this side without deciding when you return.\"",
+        "She remains at the last shared point. \"If you need support, show me where to place it.\""
       ]
     },
+    "hesitant": {
+      "courage": [
+        "The Okofor sets their feet, but the weight makes them pause. I want to move, but fear is catching my follow-through. Stay beside me for the first step.",
+        "She keeps one hand on the line and asks someone else to steady it. I can face the edge, not cross it yet. Help me choose one smaller action.",
+        "The Okofor narrows the promise to what can be held this breath. The danger has my body braced. I need a steady voice before I continue."
+      ],
+      "wisdom": [
+        "The Okofor sets their feet, but the weight makes them pause. My thoughts keep breaking under the pressure. Give me one fact to hold.",
+        "She keeps one hand on the line and asks someone else to steady it. I am circling the same question. Could you help me narrow it?",
+        "The Okofor narrows the promise to what can be held this breath. I cannot carry the whole pattern right now. Start with the smallest reliable piece."
+      ],
+      "leadership": [
+        "The Okofor sets their feet, but the weight makes them pause. Silence is becoming its own direction. Help me give them one smaller instruction.",
+        "She keeps one hand on the line and asks someone else to steady it. The responsibility is bending my voice. Could someone stand beside me while I speak?",
+        "The Okofor narrows the promise to what can be held this breath. I cannot hold the whole group steady. Give me one decision and share the rest."
+      ],
+      "compassion": [
+        "The Okofor sets their feet, but the weight makes them pause. I want to reach them, but I am afraid of making the hurt worse. Come with me.",
+        "She keeps one hand on the line and asks someone else to steady it. Care is present; my hands are not steady enough to act alone.",
+        "The Okofor narrows the promise to what can be held this breath. I cannot promise a remedy. Help me offer quiet company instead."
+      ],
+      "acceptance": [
+        "The Okofor sets their feet, but the weight makes them pause. I see the ground as it is, but I have not stopped bracing against it.",
+        "She keeps one hand on the line and asks someone else to steady it. I cannot make peace with all of this today. Let me admit one part is real.",
+        "The Okofor narrows the promise to what can be held this breath. The change has happened; my body is still refusing the shape. Stay while I breathe."
+      ],
+      "humility": [
+        "The Okofor sets their feet, but the weight makes them pause. I may be wrong, and that fear is making me disappear. Let me offer only the limit.",
+        "She keeps one hand on the line and asks someone else to steady it. Correction feels heavier than it should today. Could you meet the partial answer gently?",
+        "The Okofor narrows the promise to what can be held this breath. I cannot defend a full position. I can say where my knowledge ends."
+      ],
+      "forgiveness": [
+        "The Okofor sets their feet, but the weight makes them pause. I reach toward release and close again. I can set down one piece if you help me.",
+        "She keeps one hand on the line and asks someone else to steady it. The old hurt keeps pulling my hand back. Do not ask me to open it all at once.",
+        "The Okofor narrows the promise to what can be held this breath. I cannot cross beyond what happened yet. I can stop feeding one part of it."
+      ],
+      "truth": [
+        "The Okofor sets their feet, but the weight makes them pause. The honest words are close, but I keep stopping them. Let me try one sentence.",
+        "She keeps one hand on the line and asks someone else to steady it. I cannot give the whole account yet. Ask me for the smallest true part.",
+        "The Okofor narrows the promise to what can be held this breath. I am afraid of what the truth will set in motion. Hold the space while I name it."
+      ],
+      "generosity": [
+        "The Okofor sets their feet, but the weight makes them pause. I keep extending the offer and pulling it back. Let me name a smaller gift.",
+        "She keeps one hand on the line and asks someone else to steady it. I cannot give cleanly at this size. Help me reduce the promise.",
+        "The Okofor narrows the promise to what can be held this breath. I want to offer something, but I need permission to keep what I cannot spare."
+      ],
+      "empathy": [
+        "The Okofor sets their feet, but the weight makes them pause. Their feeling reached me too strongly. Help me find my own edge before I answer.",
+        "She keeps one hand on the line and asks someone else to steady it. I can sense the distance, but I am afraid to cross it. Ask them for one clear sign.",
+        "The Okofor narrows the promise to what can be held this breath. The weight is blurring whose pain is whose. Stay with me while I separate it."
+      ],
+      "_reactive": [
+        "The Okofor braces and does not advance. \"I can hold this breath. I need help with the next.\"",
+        "She keeps contact with the line. \"Do not place all of it on me yet.\"",
+        "The Okofor's stance strains. \"Give me one weight at a time, and stay beside me.\""
+      ],
+      "_alignment": {
+        "courage": [
+          "She does not leave, though she cannot take the full burden yet. I can face the edge, not cross it yet. Help me choose one smaller action.",
+          "The Okofor's stance holds while their follow-through strains. The danger has my body braced. I need a steady voice before I continue."
+        ],
+        "wisdom": [
+          "She does not leave, though she cannot take the full burden yet. I am circling the same question. Could you help me narrow it?",
+          "The Okofor's stance holds while their follow-through strains. I cannot carry the whole pattern right now. Start with the smallest reliable piece."
+        ],
+        "leadership": [
+          "She does not leave, though she cannot take the full burden yet. The responsibility is bending my voice. Could someone stand beside me while I speak?",
+          "The Okofor's stance holds while their follow-through strains. I cannot hold the whole group steady. Give me one decision and share the rest."
+        ],
+        "compassion": [
+          "She does not leave, though she cannot take the full burden yet. Care is present; my hands are not steady enough to act alone.",
+          "The Okofor's stance holds while their follow-through strains. I cannot promise a remedy. Help me offer quiet company instead."
+        ],
+        "acceptance": [
+          "She does not leave, though she cannot take the full burden yet. I cannot make peace with all of this today. Let me admit one part is real.",
+          "The Okofor's stance holds while their follow-through strains. The change has happened; my body is still refusing the shape. Stay while I breathe."
+        ],
+        "humility": [
+          "She does not leave, though she cannot take the full burden yet. Correction feels heavier than it should today. Could you meet the partial answer gently?",
+          "The Okofor's stance holds while their follow-through strains. I cannot defend a full position. I can say where my knowledge ends."
+        ],
+        "forgiveness": [
+          "She does not leave, though she cannot take the full burden yet. The old hurt keeps pulling my hand back. Do not ask me to open it all at once.",
+          "The Okofor's stance holds while their follow-through strains. I cannot cross beyond what happened yet. I can stop feeding one part of it."
+        ],
+        "truth": [
+          "She does not leave, though she cannot take the full burden yet. I cannot give the whole account yet. Ask me for the smallest true part.",
+          "The Okofor's stance holds while their follow-through strains. I am afraid of what the truth will set in motion. Hold the space while I name it."
+        ],
+        "generosity": [
+          "She does not leave, though she cannot take the full burden yet. I cannot give cleanly at this size. Help me reduce the promise.",
+          "The Okofor's stance holds while their follow-through strains. I want to offer something, but I need permission to keep what I cannot spare."
+        ],
+        "empathy": [
+          "She does not leave, though she cannot take the full burden yet. I can sense the distance, but I am afraid to cross it. Ask them for one clear sign.",
+          "The Okofor's stance holds while their follow-through strains. The weight is blurring whose pain is whose. Stay with me while I separate it."
+        ]
+      },
+      "_npc_withdrawn": [
+        "The Okofor does not follow. \"I cannot carry you back across the distance.\"",
+        "She keeps one point of contact open. \"Return only as far as you can sustain.\""
+      ]
+    },
+
     "pressed": {
       "wisdom": [
         "The Okofor says: You are working through something. I can feel it.",
@@ -4492,11 +5236,170 @@
           "The echo says directly: I only know how to be honest. I have not learned the other things yet. So — honestly — I see what you are carrying. I am not going to look away."
         ]
       },
+     "_npc_withdrawn": [
+       "They say: I notice you pulled back. I am not going to follow you into it. I am staying right here.",
+       "The echo stays where they are. They say: something just made this feel less safe. I am not going to pretend I don't see that. I am still here when you are ready."
+     ]
+   },
+    "uncertain": {
+      "wisdom": [
+        "The echo turns the thought over, engaged but not yet anchored. Two readings still fit. Which one has held up for you?",
+        "They stay with the question while their own meaning forms. I have part of the pattern, not enough to settle it. What remains true?",
+        "The echo watches closely, testing what feels true. My understanding stops at the gap. Could we examine that part together?"
+      ],
+      "courage": [
+        "The echo turns the thought over, engaged but not yet anchored. Fear has not closed this, but I need to see the first honest step.",
+        "They stay with the question while their own meaning forms. I can face this much. What would make the next move sound?",
+        "The echo watches closely, testing what feels true. The danger is real, and so is the possibility. Which part should we meet first?"
+      ],
+      "truth": [
+        "The echo turns the thought over, engaged but not yet anchored. I hear something true that has not found its whole sentence. Can you try the unfinished version?",
+        "They stay with the question while their own meaning forms. The account feels incomplete rather than false. What part are you still testing?",
+        "The echo watches closely, testing what feels true. I do not want a cleaner answer than the one you have. What might be true?"
+      ],
+      "humility": [
+        "The echo turns the thought over, engaged but not yet anchored. My view may be partial. What angle am I missing?",
+        "They stay with the question while their own meaning forms. I could be wrong about this, so give me the part you trust.",
+        "The echo watches closely, testing what feels true. I am leaving room to revise my read. Where does yours differ?"
+      ],
+      "acceptance": [
+        "The echo turns the thought over, engaged but not yet anchored. The shape has changed, and I am still learning how to stand inside it.",
+        "They stay with the question while their own meaning forms. I can name what is here without deciding how I feel about it yet.",
+        "The echo watches closely, testing what feels true. This may be the new ground. What still feels unsettled to you?"
+      ],
+      "forgiveness": [
+        "The echo turns the thought over, engaged but not yet anchored. The old hurt is quieter, not gone. Which part still belongs to now?",
+        "They stay with the question while their own meaning forms. Something has loosened, though I would not call it released. Can we start there?",
+        "The echo watches closely, testing what feels true. I can see a path beyond what happened, but not all the way through it."
+      ],
+      "compassion": [
+        "The echo turns the thought over, engaged but not yet anchored. The hurt is clear even if the help is not. Who needs us closest?",
+        "They stay with the question while their own meaning forms. I want to respond without deciding for them. What have they asked for?",
+        "The echo watches closely, testing what feels true. Care is pulling me toward them. Tell me what would actually help."
+      ],
+      "empathy": [
+        "The echo turns the thought over, engaged but not yet anchored. Something reached across the distance, but I cannot place it yet. What did you feel?",
+        "They stay with the question while their own meaning forms. I can sense the weight without knowing whose it is. Help me separate it.",
+        "The echo watches closely, testing what feels true. Contact is there, incomplete but real. What came back to you?"
+      ],
+      "leadership": [
+        "The echo turns the thought over, engaged but not yet anchored. The whole route is not clear, but the next direction may be. What must be decided first?",
+        "They stay with the question while their own meaning forms. People are looking for a bearing while the picture forms. Which point can we trust?",
+        "The echo watches closely, testing what feels true. I see responsibility gathering around you. What part is truly yours to carry?"
+      ],
+      "generosity": [
+        "The echo turns the thought over, engaged but not yet anchored. The wish to offer is real, though its right measure is not settled. What can leave your hands cleanly?",
+        "They stay with the question while their own meaning forms. I do not want giving to outrun consent. What would make the offer sound?",
+        "The echo watches closely, testing what feels true. There is something available here, but we should name its limit before giving it."
+      ],
+      "_reactive": [
+        "The echo blinks and searches for words. \"That changed something. I do not know what yet.\"",
+        "They stay with the feeling. \"Could you say it once more while I find where I stand?\"",
+        "The echo answers carefully. \"I am listening; my response has not formed.\""
+      ],
+      "_alignment": {
+        "wisdom": [
+          "They offer a tentative read and leave room to revise it. I have part of the pattern, not enough to settle it. What remains true?",
+          "The echo leans into the contact without naming what they are yet. My understanding stops at the gap. Could we examine that part together?"
+        ],
+        "courage": [
+          "They offer a tentative read and leave room to revise it. I can face this much. What would make the next move sound?",
+          "The echo leans into the contact without naming what they are yet. The danger is real, and so is the possibility. Which part should we meet first?"
+        ],
+        "compassion": [
+          "They offer a tentative read and leave room to revise it. I want to respond without deciding for them. What have they asked for?",
+          "The echo leans into the contact without naming what they are yet. Care is pulling me toward them. Tell me what would actually help."
+        ],
+        "truth": [
+          "They offer a tentative read and leave room to revise it. The account feels incomplete rather than false. What part are you still testing?",
+          "The echo leans into the contact without naming what they are yet. I do not want a cleaner answer than the one you have. What might be true?"
+        ]
+      },
       "_npc_withdrawn": [
-        "They say: I notice you pulled back. I am not going to follow you into it. I am staying right here.",
-        "The echo stays where they are. They say: something just made this feel less safe. I am not going to pretend I don't see that. I am still here when you are ready."
+        "The echo notices you pull away. \"I will wait here without guessing what the distance means.\"",
+        "They leave the space open. \"You do not have to return with an answer.\""
       ]
     },
+    "hesitant": {
+      "wisdom": [
+        "The echo begins, pauses, and tries again more quietly. My thoughts keep breaking under the pressure. Give me one fact to hold.",
+        "They remain present, but ask for one smaller step. I am circling the same question. Could you help me narrow it?",
+        "The echo's intention gathers without becoming action. I cannot carry the whole pattern right now. Start with the smallest reliable piece."
+      ],
+      "courage": [
+        "The echo begins, pauses, and tries again more quietly. I want to move, but fear is catching my follow-through. Stay beside me for the first step.",
+        "They remain present, but ask for one smaller step. I can face the edge, not cross it yet. Help me choose one smaller action.",
+        "The echo's intention gathers without becoming action. The danger has my body braced. I need a steady voice before I continue."
+      ],
+      "truth": [
+        "The echo begins, pauses, and tries again more quietly. The honest words are close, but I keep stopping them. Let me try one sentence.",
+        "They remain present, but ask for one smaller step. I cannot give the whole account yet. Ask me for the smallest true part.",
+        "The echo's intention gathers without becoming action. I am afraid of what the truth will set in motion. Hold the space while I name it."
+      ],
+      "humility": [
+        "The echo begins, pauses, and tries again more quietly. I may be wrong, and that fear is making me disappear. Let me offer only the limit.",
+        "They remain present, but ask for one smaller step. Correction feels heavier than it should today. Could you meet the partial answer gently?",
+        "The echo's intention gathers without becoming action. I cannot defend a full position. I can say where my knowledge ends."
+      ],
+      "acceptance": [
+        "The echo begins, pauses, and tries again more quietly. I see the ground as it is, but I have not stopped bracing against it.",
+        "They remain present, but ask for one smaller step. I cannot make peace with all of this today. Let me admit one part is real.",
+        "The echo's intention gathers without becoming action. The change has happened; my body is still refusing the shape. Stay while I breathe."
+      ],
+      "forgiveness": [
+        "The echo begins, pauses, and tries again more quietly. I reach toward release and close again. I can set down one piece if you help me.",
+        "They remain present, but ask for one smaller step. The old hurt keeps pulling my hand back. Do not ask me to open it all at once.",
+        "The echo's intention gathers without becoming action. I cannot cross beyond what happened yet. I can stop feeding one part of it."
+      ],
+      "compassion": [
+        "The echo begins, pauses, and tries again more quietly. I want to reach them, but I am afraid of making the hurt worse. Come with me.",
+        "They remain present, but ask for one smaller step. Care is present; my hands are not steady enough to act alone.",
+        "The echo's intention gathers without becoming action. I cannot promise a remedy. Help me offer quiet company instead."
+      ],
+      "empathy": [
+        "The echo begins, pauses, and tries again more quietly. Their feeling reached me too strongly. Help me find my own edge before I answer.",
+        "They remain present, but ask for one smaller step. I can sense the distance, but I am afraid to cross it. Ask them for one clear sign.",
+        "The echo's intention gathers without becoming action. The weight is blurring whose pain is whose. Stay with me while I separate it."
+      ],
+      "leadership": [
+        "The echo begins, pauses, and tries again more quietly. Silence is becoming its own direction. Help me give them one smaller instruction.",
+        "They remain present, but ask for one smaller step. The responsibility is bending my voice. Could someone stand beside me while I speak?",
+        "The echo's intention gathers without becoming action. I cannot hold the whole group steady. Give me one decision and share the rest."
+      ],
+      "generosity": [
+        "The echo begins, pauses, and tries again more quietly. I keep extending the offer and pulling it back. Let me name a smaller gift.",
+        "They remain present, but ask for one smaller step. I cannot give cleanly at this size. Help me reduce the promise.",
+        "The echo's intention gathers without becoming action. I want to offer something, but I need permission to keep what I cannot spare."
+      ],
+      "_reactive": [
+        "The echo begins twice. \"Please slow down. I can hold one part, not all of it.\"",
+        "They remain near, visibly unsure. \"I need help finding the next word.\"",
+        "The echo looks down. \"I have not left. I cannot promise more than that yet.\""
+      ],
+      "_alignment": {
+        "wisdom": [
+          "They pull the commitment closer, offering only what they can sustain. I am circling the same question. Could you help me narrow it?",
+          "The echo needs another voice beside theirs before continuing. I cannot carry the whole pattern right now. Start with the smallest reliable piece."
+        ],
+        "courage": [
+          "They pull the commitment closer, offering only what they can sustain. I can face the edge, not cross it yet. Help me choose one smaller action.",
+          "The echo needs another voice beside theirs before continuing. The danger has my body braced. I need a steady voice before I continue."
+        ],
+        "compassion": [
+          "They pull the commitment closer, offering only what they can sustain. Care is present; my hands are not steady enough to act alone.",
+          "The echo needs another voice beside theirs before continuing. I cannot promise a remedy. Help me offer quiet company instead."
+        ],
+        "truth": [
+          "They pull the commitment closer, offering only what they can sustain. I cannot give the whole account yet. Ask me for the smallest true part.",
+          "The echo needs another voice beside theirs before continuing. I am afraid of what the truth will set in motion. Hold the space while I name it."
+        ]
+      },
+      "_npc_withdrawn": [
+        "The echo does not follow. \"I do not know how to close that distance safely.\"",
+        "They stay where you last saw them. \"If you return, please make the first step small.\""
+      ]
+    },
+
     "pressed": {
       "courage": [
         "The echo is strained but does not step back. They say: I do not have a name to stand behind right now. I have the decision to be here. I have made it.",

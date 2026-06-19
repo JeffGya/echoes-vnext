@@ -19,6 +19,7 @@ extends Control
 signal action_requested(action: Dictionary)
 
 const InitiativeRowScene := preload("res://ui/components/InitiativeRowItem.tscn")
+const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
 
 @onready var _board: TileMapLayer                   = $Board
 @onready var _move_telegraph_layer: Node2D          = $MoveTelegraphLayer
@@ -417,53 +418,6 @@ func _on_action(action: Dictionary) -> void:
 # Converts the actor list into token descriptors and passes them to CombatTokenLayer.
 # current_actor_id: id of the actor currently acting — gets a yellow ring.
 # COMBAT-003: reads action_results from data to build a damage lookup by target_id.
-#func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}) -> void:
-	#var damage_by_id: Dictionary = {}
-	#for result_v in data.get("action_results", []):
-		#if result_v is Dictionary and result_v.get("action_type", "") == "melee_attack":
-			#var tid: String = str(result_v.get("target_id", ""))
-			#var dmg: int    = int(result_v.get("damage", 0))
-			#if not tid.is_empty() and dmg > 0:
-				#damage_by_id[tid] = "-%d" % dmg
-#
-	#var tokens: Array[Dictionary] = []
-	#for actor in actors:
-		#var gp: Dictionary = actor.get("grid_pos", {})
-		#var col: int = gp.get("col", 0)
-		#var row: int = gp.get("row", 0)
-		#var cell_pos: Vector2 = _board.map_to_local(Vector2i(col, row))
-		#var faction: String   = actor.get("faction", "")
-		#var shape := "square" if actor.get("is_structure", false) else "circle"
-		#var name_str: String  = actor.get("name", "??")
-		#var actor_id: String  = str(actor.get("id", ""))
-#
-		## COMBAT-007: actors[] is now a projection — hp and max_hp are top-level fields.
-		#var max_hp: float   = float(actor.get("max_hp", 1))
-		#var cur_hp: float   = float(actor.get("hp", max_hp))
-		#var hp_ratio: float = clampf(cur_hp / max(max_hp, 1.0), 0.0, 1.0)
-		#var hp_color: Color
-		#if hp_ratio > 0.5:
-			#hp_color = Color.GREEN
-		#elif hp_ratio > 0.25:
-			#hp_color = Color.YELLOW
-		#else:
-			#hp_color = Color.RED
-#
-		#tokens.append({
-			#"pos":         cell_pos,
-			#"color":       _faction_color(faction),
-			#"shape":       shape,
-			#"label":       name_str.substr(0, 2).to_upper(),
-			#"hp_ratio":    hp_ratio,
-			#"hp_color":    hp_color,
-			#"damage_text": damage_by_id.get(actor_id, ""),
-			#"actor_id":    actor_id,   # COMBAT-SEQ: needed for yellow ring
-			#"fear":        int(actor.get("fear", 0)),
-			#"morale":      int(actor.get("morale", 50)),
-			#"is_structure": actor.get("is_structure", false),
-		#})
-	#_token_layer.update_tokens(tokens, current_actor_id)
-
 func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}) -> void:
 	var damage_by_id: Dictionary = {}
 	for result_v in data.get("action_results", []):
@@ -495,8 +449,7 @@ func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}
 			"label":         str(actor.get("name", "??")).substr(0, 2).to_upper(),
 			"hp_ratio":      hp_ratio,
 			"damage_text":   damage_by_id.get(actor_id, ""),
-			"fear":          int(actor.get("fear", 0)),
-			"morale":        int(actor.get("morale", 50)),
+			"emotional_status": str(actor.get("emotional_status", "")),
 		})
 
 	var telegraph_event: Dictionary = _token_layer.apply_snapshot(
@@ -509,7 +462,7 @@ func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}
 	else:
 		_move_telegraph_layer.show_move_telegraph(telegraph_event)
 
-## Toggle the emotion debug overlay on the token layer.
+## The legacy raw emotion overlay is unavailable from player-facing snapshots.
 ## Called from AppRoot when the "combat_emotion" debug command fires.
 func set_emotion_debug(enabled: bool) -> void:
 	_token_layer.set_emotion_debug(enabled)
@@ -682,8 +635,10 @@ func _draw_initiative_panel(data: Dictionary) -> void:
 		# V2-EMOTION-002: set unified emotional status per actor row.
 		var actor_d: Dictionary = actor_by_id.get(actor_id, {})
 		var emotion_str: String = str(actor_d.get("emotional_status", ""))
-		row.get_node("%EmotionLabel").text    = emotion_str.capitalize()
-		row.get_node("%EmotionLabel").visible = not emotion_str.is_empty()
+		var emotion_label := row.get_node("%EmotionLabel") as Label
+		emotion_label.text = EmotionPresentation.display_name(emotion_str)
+		emotion_label.theme_type_variation = EmotionPresentation.text_theme(emotion_str)
+		emotion_label.visible = not emotion_str.is_empty()
 
 	_initiative_panel.visible = true
 

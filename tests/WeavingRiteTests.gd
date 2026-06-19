@@ -252,7 +252,7 @@ static func _test_same_virtue_overspecialisation_lowers_readiness() -> Dictionar
 
 static func _test_non_chosen_consequences_applied_on_accept() -> Dictionary:
 	var logger := _make_logger()
-	var runtime := FlowRuntime.new(logger, ConfigService.new())
+	var runtime := FlowRuntime.new(logger, ConfigService.new(), "/tmp/echoes-vnext-tests/weaving_rite_slot.json")
 	runtime.flow_ctx = FlowContext.new()
 	runtime.flow_ctx.save_data = _make_save("courage")
 
@@ -300,7 +300,7 @@ static func _test_non_chosen_consequences_exist_for_reject_and_defer() -> Dictio
 
 static func _test_commitment_lock_blocks_non_confirm_runtime_actions() -> Dictionary:
 	var logger := _make_logger()
-	var runtime := FlowRuntime.new(logger, ConfigService.new())
+	var runtime := FlowRuntime.new(logger, ConfigService.new(), "/tmp/echoes-vnext-tests/weaving_rite_slot.json")
 	runtime.flow_ctx = FlowContext.new()
 	runtime.flow_ctx.sim_tick = 0
 	runtime.flow_ctx.weave_commit_locked = true
@@ -326,7 +326,7 @@ static func _test_commitment_lock_blocks_non_confirm_runtime_actions() -> Dictio
 
 static func _test_start_for_echo_transitions_to_rite() -> Dictionary:
 	var logger := _make_logger()
-	var runtime := FlowRuntime.new(logger, ConfigService.new())
+	var runtime := FlowRuntime.new(logger, ConfigService.new(), "/tmp/echoes-vnext-tests/weaving_rite_slot.json")
 	runtime.flow_ctx = FlowContext.new()
 	runtime.flow_ctx.sim_tick = 0
 	runtime.flow_ctx.save_data = _make_save("courage")

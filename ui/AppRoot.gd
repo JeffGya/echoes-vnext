@@ -1,5 +1,9 @@
 extends Control
 
+const SaveIntegrityTestsScript := preload("res://tests/SaveIntegrityTests.gd")
+const LeadershipEmotionTestsScript := preload("res://tests/LeadershipEmotionTests.gd")
+const SanctumPulseTestsScript := preload("res://tests/SanctumPulseTests.gd")
+
 @onready var snapshot_view: RichTextLabel = %SnapshotView
 @onready var renderer: UISnapshotRenderer = %UISnapshotRenderer
 @onready var debug_overlay: Control = %DebugOverlay
@@ -7,6 +11,9 @@ extends Control
 @onready var actions_container: Control = %ActionsContainer
 @onready var econ_bank_timer: Timer = $EconBankTimer
 @onready var screen_host: Control = %ScreenHost
+@onready var save_recovery_notice: Control = %SaveRecoveryNotice
+@onready var save_recovery_message: Label = %SaveRecoveryMessage
+@onready var save_recovery_timer: Timer = %SaveRecoveryTimer
 
 var runtime: FlowRuntime
 
@@ -31,6 +38,8 @@ var _realm_shell: RealmShell
 var _realm_shell_scene := preload("res://ui/shells/RealmShell.tscn")
 
 var _active_onboarding_screen: Control
+var _save_error_screen: Control
+var _save_error_scene := preload("res://ui/screens/boot/SaveErrorScreen.tscn")
 var _onboarding_scene_by_type: Dictionary = {
 	"flow.onboarding_invocation": preload("res://ui/screens/onboarding/InvocationScreen.tscn"),
 	"flow.onboarding_anansi": preload("res://ui/screens/onboarding/AnansiWebScreen.tscn"),
@@ -47,6 +56,10 @@ var _onboarding_scene_by_type: Dictionary = {
 }
 
 func _ready():
+	var cmdline_args := OS.get_cmdline_user_args()
+	var is_test_run := cmdline_args.size() > 0 and cmdline_args[0].to_lower() in ["tests", "test"]
+	var runtime_save_path := "/tmp/echoes-vnext-tests/headless_runtime_slot.json" if is_test_run else SaveSchema.DEFAULT_SAVE_PATH
+
 	# Bind renderer to UI elements it can update.
 	renderer.bind_view(snapshot_view, actions_container)
 	renderer.action_selected.connect(_on_ui_action_selected)
@@ -56,13 +69,15 @@ func _ready():
 	logger.set_level("debug")
 	
 	config_service = ConfigService.new()
-	runtime = FlowRuntime.new(logger, config_service)
+	runtime = FlowRuntime.new(logger, config_service, runtime_save_path)
 	var snap := runtime.boot()
 	_render_snapshot(snap)
+	_show_save_recovery_notice(snap)
 	
 	var interval := _get_sanctum_bank_interval_seconds()
 	econ_bank_timer.wait_time = float(interval)
 	econ_bank_timer.timeout.connect(_on_econ_bank_timer_timeout)
+	save_recovery_timer.timeout.connect(_hide_save_recovery_notice)
 	_maybe_start_econ_timer_from_snapshot(snap)
 	_maybe_stop_econ_timer_from_snapshot(snap)
 	
@@ -72,10 +87,26 @@ func _ready():
 	_flush_logs_to_console()
 
 	# Headless CI: run tests when launched with `-- tests` argument
-	var cmdline_args := OS.get_cmdline_user_args()
-	if cmdline_args.size() > 0 and cmdline_args[0].to_lower() in ["tests", "test"]:
+	if is_test_run:
 		_run_tests(cmdline_args)
 		get_tree().quit()
+
+func _show_save_recovery_notice(snap: Dictionary) -> void:
+	var meta_v: Variant = snap.get("meta", {})
+	var meta: Dictionary = meta_v if meta_v is Dictionary else {}
+	var recovery_v: Variant = meta.get("save_recovery", {})
+	if not (recovery_v is Dictionary) or (recovery_v as Dictionary).is_empty():
+		return
+	var recovery: Dictionary = recovery_v
+	save_recovery_message.text = str(recovery.get(
+		"message",
+		"Your campaign was recovered from a verified backup."
+	))
+	save_recovery_notice.visible = true
+	save_recovery_timer.start()
+
+func _hide_save_recovery_notice() -> void:
+	save_recovery_notice.visible = false
 
 # Economy bank timer.
 func _on_econ_bank_timer_timeout() -> void:
@@ -293,6 +324,8 @@ func _run_tests(parts: Array) -> void:
 	MoraleInfluenceTests.register(runner)  # ACTOR-007
 	KODeathTests.register(runner)          # ACTOR-008
 	EmotionTests.register(runner)
+	LeadershipEmotionTestsScript.register(runner)
+	SanctumPulseTestsScript.register(runner)
 	VectorTests.register(runner)
 	DirectiveTests.register(runner)  # DIRECTIVE-001
 	GridTests.register(runner)       # GRID-001
@@ -325,6 +358,7 @@ func _run_tests(parts: Array) -> void:
 	BondTriggerTests.register(runner)  # BOND-002
 	VowServiceTests.register(runner)  # VOW-001
 	SaveBridgeTests.register(runner)  # V2-MIG-002
+	SaveIntegrityTestsScript.register(runner)
 	ThreadServiceTests.register(runner)                      # V2-WEAVE-001
 	WeavingRiteTests.register(runner)  # V2-WEAVE-002
 	StageExploreTests.register(runner)    # V2-STAGE-001
@@ -795,6 +829,13 @@ const ONBOARDING_FAMILY: Array = [
 
 func _render_snapshot(snap: Dictionary) -> void:
 	var snap_type := str(snap.get("type", ""))
+	if snap_type == "flow.save_error":
+		if _save_error_screen == null:
+			_save_error_screen = _save_error_scene.instantiate() as Control
+			screen_host.add_child(_save_error_screen)
+		_show_screen(_save_error_screen)
+		_save_error_screen.call("set_snapshot", snap)
+		return
 
 	if snap_type in ONBOARDING_FAMILY:
 		var packed_v: Variant = _onboarding_scene_by_type.get(snap_type, null)
@@ -848,6 +889,8 @@ func _show_screen(screen: Control) -> void:
 		_realm_shell.visible = false
 	if _active_onboarding_screen != null:
 		_active_onboarding_screen.visible = false
+	if _save_error_screen != null:
+		_save_error_screen.visible = false
 
 	screen.visible = true
 
@@ -1045,3 +1088,5 @@ func _hide_bespoke_screens() -> void:
 		_realm_shell.visible = false
 	if _active_onboarding_screen != null:
 		_active_onboarding_screen.visible = false
+	if _save_error_screen != null:
+		_save_error_screen.visible = false

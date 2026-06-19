@@ -4,6 +4,8 @@ class_name ForgottenNameScreen
 
 signal action_requested(action: Dictionary)
 
+const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
+
 const VIRTUE_COLORS := {
 	"courage": Color("#E8D5B0"),
 	"wisdom": Color("#E8EDE8"),
@@ -97,7 +99,7 @@ func _render_meeting(data: Dictionary, actions: Dictionary) -> void:
 		int(echo.get("storyweight", 0)),
 		str(echo.get("archetype_birth", "")).capitalize(),
 		str(echo.get("dominant_vector", "")).capitalize(),
-		str(echo.get("emotional_status", "")).capitalize(),
+		EmotionPresentation.display_name(str(echo.get("emotional_status", ""))),
 	]
 	var traits_v: Variant = echo.get("traits", {})
 	var traits: Dictionary = traits_v if traits_v is Dictionary else {}

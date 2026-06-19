@@ -22,12 +22,12 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(CombatConsequenceTests, "_t_guard_sets_guard_state_on_self"))
 	runner.register_test("consequence/interpose_sets_guard_state_on_ally_not_self",
 		Callable(CombatConsequenceTests, "_t_interpose_sets_guard_state_on_ally_not_self"))
-	runner.register_test("consequence/hesitating_status_at_fear_40",
-		Callable(CombatConsequenceTests, "_t_hesitating_status_at_fear_40"))
+	runner.register_test("consequence/alive_status_at_fear_40",
+		Callable(CombatConsequenceTests, "_t_alive_status_at_fear_40"))
 	runner.register_test("consequence/alive_status_at_fear_39",
 		Callable(CombatConsequenceTests, "_t_alive_status_at_fear_39"))
-	runner.register_test("consequence/refusing_status_at_fear_80",
-		Callable(CombatConsequenceTests, "_t_refusing_status_at_fear_80"))
+	runner.register_test("consequence/alive_status_at_fear_80",
+		Callable(CombatConsequenceTests, "_t_alive_status_at_fear_80"))
 	runner.register_test("consequence/neutral_bond_no_protect_bias",
 		Callable(CombatConsequenceTests, "_t_neutral_bond_no_protect_bias"))
 	runner.register_test("consequence/bond_friend_raises_protect_score",
@@ -75,12 +75,12 @@ static func _t_interpose_sets_guard_state_on_ally_not_self() -> Dictionary:
 # Tests 3–5: Hesitation band (_derive_status) — V2-COMBAT-001
 # -------------------------
 
-# Test 3: fear=40 → "hesitating" (new band, between alive and refusing).
-static func _t_hesitating_status_at_fear_40() -> Dictionary:
+# Test 3: fear does not replace the operational actor status.
+static func _t_alive_status_at_fear_40() -> Dictionary:
 	var actor := { "is_dead": false, "guard_state": false, "fear": 40 }
 	var status: String = FlowEncounterState._derive_status(actor)
-	if status != "hesitating":
-		return { "ok": false, "error": "Expected 'hesitating' at fear=40, got: '%s'" % status }
+	if status != "alive":
+		return { "ok": false, "error": "Fear must not replace operational status; got: '%s'" % status }
 	return { "ok": true }
 
 
@@ -93,12 +93,12 @@ static func _t_alive_status_at_fear_39() -> Dictionary:
 	return { "ok": true }
 
 
-# Test 5: fear=80 → "refusing" (at base display boundary).
-static func _t_refusing_status_at_fear_80() -> Dictionary:
+# Test 5: refusal is an action/event, not an operational actor status.
+static func _t_alive_status_at_fear_80() -> Dictionary:
 	var actor := { "is_dead": false, "guard_state": false, "fear": 80 }
 	var status: String = FlowEncounterState._derive_status(actor)
-	if status != "refusing":
-		return { "ok": false, "error": "Expected 'refusing' at fear=80, got: '%s'" % status }
+	if status != "alive":
+		return { "ok": false, "error": "Refusal must not replace operational status; got: '%s'" % status }
 	return { "ok": true }
 
 

@@ -261,7 +261,7 @@ static func _emotional_status_to_signal(status: String) -> String:
 	match status:
 		"radiant", "whole":
 			return "gain"
-		"grounded", "burdened":
+		"grounded", "uncertain":
 			return "neutral"
 		_:
 			return "warning"

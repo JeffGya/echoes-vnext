@@ -2,6 +2,8 @@ extends Control
 
 signal action_requested(action: Dictionary)
 
+const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
+
 const _RANK_UP_OVERLAY_SCENE: PackedScene = preload("res://ui/overlays/RankUpOverlay.tscn")
 const _STAT_KEYS := ["atk", "def", "int", "agi", "cha", "speed"]
 const _RADAR_AXIS_MAX: float = 100.0
@@ -244,7 +246,7 @@ func _render_detail(e: Dictionary) -> void:
 	var archetype := str(e.get("archetype", ""))
 	var hp_max := int(e.get("hp_max", 0))
 	# V2-EMOTION-002: unified emotional status (morale + fear bars removed).
-	var status := str(e.get("emotional_status", "burdened"))
+	var status := EmotionPresentation.normalize(str(e.get("emotional_status", "")))
 	var in_party := bool(e.get("in_party", false))
 	var shout := str(e.get("current_shout", ""))
 	var stats_v: Variant = e.get("stats", {})
@@ -313,7 +315,8 @@ func _render_detail(e: Dictionary) -> void:
 	stat_speed_value.text = str(int(stats.get("speed", 0)))
 	_refresh_stat_profile(e)
 
-	detail_emotion_status.text = status.capitalize()
+	detail_emotion_status.text = EmotionPresentation.display_name(status)
+	detail_emotion_status.theme_type_variation = EmotionPresentation.text_theme(status)
 
 	detail_assign_party_btn.text = "Remove from party" if in_party else "Assign to party"
 	detail_assign_job_btn.text = "Begin Weaving Rite"
