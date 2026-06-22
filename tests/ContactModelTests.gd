@@ -32,12 +32,56 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("contact/validate_fails_missing_name",     Callable(ContactModelTests, "_t_validate_fails_missing_name"))
 	runner.register_test("contact/valid_roles_contains_five",       Callable(ContactModelTests, "_t_valid_roles_contains_five"))
 	runner.register_test("contact/valid_dispositions_contains_six", Callable(ContactModelTests, "_t_valid_dispositions_contains_six"))
+	runner.register_test("contact/canonical_status_libraries_complete", Callable(ContactModelTests, "_t_canonical_status_libraries_complete"))
+	runner.register_test("contact/uncertain_hesitant_band_mapping", Callable(ContactModelTests, "_t_uncertain_hesitant_band_mapping"))
+	runner.register_test("contact/uncertain_hesitant_consequence_signals", Callable(ContactModelTests, "_t_uncertain_hesitant_consequence_signals"))
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 static func _make_valid() -> Dictionary:
 	return ContactModel.make("c_001", "witness", "Courage", "Wisdom", 10, 60, "bold", "Kofi", 3)
+
+
+static func _t_canonical_status_libraries_complete() -> Dictionary:
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(
+		"res://data/conversations/contact_responses.json"))
+	if not (parsed is Dictionary):
+		return { "ok": false, "error": "contact_responses.json did not parse" }
+	var data: Dictionary = parsed
+	var registers := ["kra_soro", "okomfo", "aduro", "onyamesu", "sum_okwanfo", "okofor", "uncalled"]
+	var statuses := ["radiant", "whole", "grounded", "uncertain", "hesitant", "burdened", "pressed", "strained", "fraying", "hollow"]
+	var required_pools := ["courage", "wisdom", "leadership", "acceptance", "humility", "forgiveness", "truth", "generosity", "compassion", "empathy", "_reactive", "_alignment", "_npc_withdrawn"]
+	for register_id in registers:
+		var register_v: Variant = data.get(register_id, {})
+		if not (register_v is Dictionary):
+			return { "ok": false, "error": "missing Calling register: %s" % register_id }
+		var register: Dictionary = register_v
+		for status in statuses:
+			var library_v: Variant = register.get(status, {})
+			if not (library_v is Dictionary):
+				return { "ok": false, "error": "%s missing %s library" % [register_id, status] }
+			var library: Dictionary = library_v
+			for pool in required_pools:
+				if not library.has(pool):
+					return { "ok": false, "error": "%s.%s missing pool %s" % [register_id, status, pool] }
+	return { "ok": true }
+
+
+static func _t_uncertain_hesitant_band_mapping() -> Dictionary:
+	if ConversationService._emotional_fit_band("uncertain") != "grounded":
+		return { "ok": false, "error": "uncertain must remain in grounded conversation scoring band" }
+	if ConversationService._emotional_fit_band("hesitant") != "strained":
+		return { "ok": false, "error": "hesitant must enter strained conversation scoring band" }
+	return { "ok": true }
+
+
+static func _t_uncertain_hesitant_consequence_signals() -> Dictionary:
+	if ConsequencePassService._emotional_status_to_signal("uncertain") != "neutral":
+		return { "ok": false, "error": "uncertain consequence signal must be neutral" }
+	if ConsequencePassService._emotional_status_to_signal("hesitant") != "warning":
+		return { "ok": false, "error": "hesitant consequence signal must be warning" }
+	return { "ok": true }
 
 
 # ─── Test 1 — make() returns a Dictionary ────────────────────────────────────

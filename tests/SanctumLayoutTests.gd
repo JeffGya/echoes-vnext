@@ -7,7 +7,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("sanctum.layout/ase_flame_always_in_occupants",      Callable(SanctumLayoutTests, "_t_ase_flame_in_occupants"))
 	runner.register_test("sanctum.layout/institution_tile_after_establish",   Callable(SanctumLayoutTests, "_t_institution_tile_after_establish"))
 	runner.register_test("sanctum.layout/all_echoes_placed_as_occupants",     Callable(SanctumLayoutTests, "_t_all_echoes_placed"))
-	runner.register_test("sanctum.layout/echo_occupant_has_morale_tier",      Callable(SanctumLayoutTests, "_t_echo_has_morale_tier"))
+	runner.register_test("sanctum.layout/echo_occupant_has_emotional_status", Callable(SanctumLayoutTests, "_t_echo_has_emotional_status"))
 	runner.register_test("sanctum.layout/echo_near_placed_institution",       Callable(SanctumLayoutTests, "_t_echo_near_institution"))
 	runner.register_test("sanctum.layout/valid_cells_exclude_occupied",       Callable(SanctumLayoutTests, "_t_valid_cells_exclude_occupied"))
 	runner.register_test("sanctum.layout/valid_cells_not_in_exclusion",       Callable(SanctumLayoutTests, "_t_valid_cells_not_in_exclusion"))
@@ -111,8 +111,8 @@ static func _t_all_echoes_placed() -> Dictionary:
 	return { "ok": true }
 
 
-# 5. Each echo occupant has morale_tier string
-static func _t_echo_has_morale_tier() -> Dictionary:
+# 5. Each Echo occupant exposes the canonical emotional status only.
+static func _t_echo_has_emotional_status() -> Dictionary:
 	var roster := [_make_echo("e1", 80)]  # 80 morale = inspired
 	var save := _make_save(roster)
 	var occupants := SanctumLayoutService.snapshot_occupants(save, roster, [])
@@ -121,9 +121,11 @@ static func _t_echo_has_morale_tier() -> Dictionary:
 			continue
 		var occ: Dictionary = occ_v
 		if str(occ.get("kind", "")) == "echo" and str(occ.get("id", "")) == "e1":
-			var tier := str(occ.get("morale_tier", ""))
-			if tier.is_empty():
-				return { "ok": false, "error": "morale_tier missing for e1" }
+			var status := str(occ.get("emotional_status", ""))
+			if status.is_empty():
+				return { "ok": false, "error": "emotional_status missing for e1" }
+			if occ.has("morale_tier"):
+				return { "ok": false, "error": "occupant exposes legacy morale_tier" }
 			return { "ok": true }
 	return { "ok": false, "error": "echo e1 not found in occupants" }
 

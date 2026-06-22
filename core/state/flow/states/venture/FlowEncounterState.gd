@@ -3,6 +3,7 @@ class_name FlowEncounterState
 extends State
 
 const FEAR_THRESHOLD_DEFAULT: int = 80
+const LeadershipEmotionService = preload("res://core/combat/LeadershipEmotionService.gd")
 
 func _init(id: String = FlowStateIds.ENCOUNTER) -> void:
 	super(id)
@@ -481,9 +482,13 @@ func enter(ctx: RefCounted, t: int) -> void:
 				_ea_data = _ea_bal.get("data", {})
 			var _ea_bump: int = int(_ea_data.get("combat", {}).get("encounter_approach", {}).get("surprise_fear", 0))
 			if _ea_bump > 0:
+				var _ea_expr_cfg: Dictionary = _ea_data.get("maturity_expression", {})
 				for _ea_i in range(echo_actors.size()):
 					var _ea_actor: Dictionary = echo_actors[_ea_i]
-					echo_actors[_ea_i]["fear"] = clampi(int(_ea_actor.get("fear", 0)) + _ea_bump, 0, 100)
+					var _ea_applied := LeadershipEmotionService.apply_fear_gain(
+						_ea_actor, _ea_bump, echo_actors, _ea_expr_cfg)
+					echo_actors[_ea_i]["fear"] = clampi(
+						int(_ea_actor.get("fear", 0)) + _ea_applied, 0, 100)
 
 		# COMBAT-001: store placed actors and seed on ectx for snapshot rebuilds.
 		var all_actors: Array = echo_actors + enemy_actors
@@ -694,21 +699,13 @@ static func resolve_objective_params(
 # COMBAT-007: Pure static helper functions — projection and objective state.
 # ────────────────────────────────────────────────────────────────────────────
 
-## Derives a player-facing status string from a runtime actor dict.
-## Priority: dead > guarding > refusing (fear ≥ 80) > hesitating (fear ≥ 40) > alive
-## Note: 80 is the base display boundary. Per-actor absolute_fear_threshold may be higher (veteran/elite
-## traits), but this display boundary stays fixed. Hesitating uses fear axis (immediate threat response),
-## not morale axis (openness-of-spirit used for initiative readiness).
+## Derives the actor's operational combat status.
+## Emotional state is represented exclusively by emotional_status in the snapshot.
 static func _derive_status(actor: Dictionary) -> String:
 	if actor.get("is_dead", false):
 		return "dead"
 	if actor.get("guard_state", false):
 		return "guarding"
-	var fear: int = int(actor.get("fear", 0))
-	if fear >= 80:
-		return "refusing"
-	if fear >= 40:
-		return "hesitating"
 	return "alive"
 
 
@@ -731,12 +728,9 @@ static func _project_actor(actor: Dictionary) -> Dictionary:
 		"grid_pos":       actor.get("grid_pos", { "col": 0, "row": 0 }),
 		"faction":        str(actor.get("faction", "")),
 		"is_structure":   bool(actor.get("is_structure", false)),
-		"fear":           fear,
-		"morale":         int(actor.get("morale", 50)),
 		# UI-004: added for party strip and pre-battle overlay.
 		"calling_origin":    str(actor.get("calling_origin", "")),
-		"morale_status":     FlowEncounterState._derive_morale_status(fear),
-		# V2-EMOTION-002: unified player-facing emotional status (replaces morale_tier + fear_signal + refuse_cause).
+		# V2-EMOTION-002: the only player-facing feeling field.
 		"emotional_status":  EmotionService.get_emotional_status(int(actor.get("morale", 50)), fear),
 		# PROG-008: active skill slots forwarded for pre-battle and resolve screens.
 		"skill_slots": (actor.get("skill_slots", [""]) as Array).duplicate(),
@@ -750,18 +744,6 @@ static func _project_actor(actor: Dictionary) -> Dictionary:
 		"expression_band":   str(actor.get("_expression_band",   "")),
 		"presence_strength": float(actor.get("_presence_strength", 0.1)),
 	}
-
-
-## UI-004: Derives a player-facing morale status label from the actor's current fear level.
-static func _derive_morale_status(fear: int) -> String:
-	if fear >= 80:
-		return "Broken"
-	if fear >= 40:
-		return "Afraid"
-	if fear > 0:
-		return "Shaken"
-	return "Normal"
-
 
 ## Builds the objective_state sub-dict from ectx and combat_state.
 ## type: objective string; shrine_hp/shrine_alive: back-compat structure fields.
@@ -1476,15 +1458,17 @@ static func _build_keeper_intro_emotion_summary(ectx: EncounterContext) -> Array
 
 # P1 CLOSE: maps emotional status string to a rank index (higher = better).
 # Used to compute direction in emotion_summary entries.
-# radiant > whole > grounded > burdened > pressed > strained > fraying > hollow
+# radiant > whole > grounded > uncertain > hesitant > burdened > pressed > strained > fraying > hollow
 static func _emotional_status_rank(status: String) -> int:
 	match status:
-		"radiant":  return 7
-		"whole":    return 6
-		"grounded": return 5
-		"burdened": return 4
-		"pressed":  return 3
-		"strained": return 2
-		"fraying":  return 1
-		"hollow":   return 0
-	return 4  # default: burdened (middle)
+		"radiant":   return 9
+		"whole":     return 8
+		"grounded":  return 7
+		"uncertain": return 6
+		"hesitant":  return 5
+		"burdened":  return 4
+		"pressed":   return 3
+		"strained":  return 2
+		"fraying":   return 1
+		"hollow":    return 0
+	return 5  # default: hesitant (middle)

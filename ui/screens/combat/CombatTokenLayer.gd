@@ -7,7 +7,6 @@ extends Node2D
 const CombatTokenVisualConfigScript := preload("res://ui/screens/combat/CombatTokenVisualConfig.gd")
 const CombatTokenPresentationStateScript := preload("res://ui/screens/combat/CombatTokenPresentationState.gd")
 const FONT_SIZE: int = 14
-const EM_FONT_SIZE: int = 10
 
 const FACTION_COLORS: Dictionary = {
 	"echo":      Color(0.20, 0.45, 0.90),
@@ -20,7 +19,6 @@ const FACTION_COLORS: Dictionary = {
 
 var _tokens: Array[Dictionary] = []
 var _active_actor_id: String = ""
-var _emotion_debug: bool = false
 var _presentation_state = CombatTokenPresentationStateScript.new()
 
 
@@ -44,9 +42,10 @@ func apply_snapshot(tokens: Array[Dictionary], active_actor_id: String = "", las
 	return telegraph_event
 
 
-func set_emotion_debug(enabled: bool) -> void:
-	_emotion_debug = enabled
-	queue_redraw()
+## Raw fear/morale are intentionally absent from player-facing combat snapshots.
+## Keep the debug command callable, but do not fabricate diagnostic defaults.
+func set_emotion_debug(_enabled: bool) -> void:
+	pass
 
 
 func clear_tokens() -> void:
@@ -144,29 +143,6 @@ func _draw() -> void:
 				FONT_SIZE,
 				Color.RED
 			)
-
-		if _emotion_debug and not is_structure:
-			var fear_y: float = pos.y - extent - 30.0
-			var morale_y: float = pos.y - extent - 20.0
-			draw_string(
-				font,
-				Vector2(pos.x - extent, fear_y),
-				"F:%d" % int(tok.get("fear", 0)),
-				HORIZONTAL_ALIGNMENT_CENTER,
-				extent * 2.0,
-				EM_FONT_SIZE,
-				Color(1.0, 0.45, 0.1)
-			)
-			draw_string(
-				font,
-				Vector2(pos.x - extent, morale_y),
-				"M:%d" % int(tok.get("morale", 50)),
-				HORIZONTAL_ALIGNMENT_CENTER,
-				extent * 2.0,
-				EM_FONT_SIZE,
-				Color(0.3, 0.8, 1.0)
-			)
-
 
 func _normalize_tokens(tokens: Array[Dictionary]) -> Array[Dictionary]:
 	var normalized: Array[Dictionary] = []

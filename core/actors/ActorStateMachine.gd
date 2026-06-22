@@ -17,6 +17,7 @@ class_name ActorStateMachine
 extends RefCounted
 
 const MaturityExpressionService = preload("res://core/actors/MaturityExpressionService.gd")
+const LeadershipEmotionService = preload("res://core/combat/LeadershipEmotionService.gd")
 
 var _actor: Dictionary
 var _behavior_module: BehaviorModule
@@ -681,8 +682,8 @@ func _check_reactive_bark(context: Dictionary, variation_key: int) -> void:
 		break  # React to first qualifying event only
 
 
-# Activates the first applicable leadership trait and applies radius effects.
-# Returns the trait ID that fired, or "" if none.
+# Applies every configured Whole-band morale/fear leadership trait.
+# Returns the first trait ID that fired for active_leadership snapshot compatibility.
 func _apply_leadership(
 	leadership_traits: Array,
 	expr_cfg: Dictionary,
@@ -690,63 +691,106 @@ func _apply_leadership(
 	logger: StructuredLogger,
 	t: int
 ) -> String:
-	var my_pos: Dictionary = _actor.get("grid_pos", { "col": 0, "row": 0 })
-	var leadership_radius: int = int(_calling_behavior.get("leadership_radius", 3))
-	var effects_cfg: Dictionary = expr_cfg.get("leadership_trait_effects", {})
-
-	# Gather living allies within radius
-	var nearby_allies: Array = []
-	for a_v in context.get("all_actors", []):
-		if not (a_v is Dictionary):
-			continue
-		var a: Dictionary = a_v as Dictionary
-		if a.get("actor_type", "") != "echo":
-			continue
-		if a.get("is_dead", false):
-			continue
-		if str(a.get("id", "")) == str(_actor.get("id", "")):
-			continue
-		var apos: Dictionary = a.get("grid_pos", {})
-		if GridService.chebyshev_distance(my_pos, apos) <= leadership_radius:
-			nearby_allies.append(a)
-
-	# Try each leadership trait in order; fire the first one that has an effect
-	for trait_id in leadership_traits:
-		var effect: Dictionary = effects_cfg.get(trait_id, {})
+	var all_actors: Array = context.get("all_actors", [])
+	var first_active := ""
+	var round_number := int(context.get("round", 0))
+	for trait_v in leadership_traits:
+		var trait_id := str(trait_v)
+		var effect := LeadershipEmotionService.get_trait_effect(trait_id, expr_cfg)
 		if effect.is_empty():
 			continue
-		var effect_type: String = str(effect.get("type", ""))
-		match effect_type:
-			"morale_tick":
-				var tick_val: int = int(effect.get("value", 3))
-				for ally in nearby_allies:
-					ally["morale"] = clampi(int(ally.get("morale", 50)) + tick_val, 0, 100)
-				logger.info(t, "actor.leadership.morale_tick", "Leadership morale tick", {
-					"actor_id":       _actor.get("id", ""),
-					"trait_id":       trait_id,
-					"tick_value":     tick_val,
-					"allies_affected": nearby_allies.size(),
-				})
-				return trait_id
-			"fear_reduce":
-				# calm_fear: reduce the most-feared ally's fear
-				var reduce_val: int = int(effect.get("value", 15))
-				var most_feared: Dictionary = {}
-				var highest_fear: int = -1
-				for ally in nearby_allies:
-					if int(ally.get("fear", 0)) > highest_fear:
-						highest_fear = int(ally.get("fear", 0))
-						most_feared = ally
-				if not most_feared.is_empty():
-					most_feared["fear"] = clampi(int(most_feared.get("fear", 0)) - reduce_val, 0, 100)
-					logger.info(t, "actor.leadership.fear_reduce", "Leadership fear reduce", {
-						"actor_id":  _actor.get("id", ""),
-						"trait_id":  trait_id,
-						"target_id": most_feared.get("id", ""),
-						"new_fear":  most_feared["fear"],
+		var radius := LeadershipEmotionService.get_trait_radius(
+			_actor, trait_id, expr_cfg, _calling_behavior)
+		var allies := LeadershipEmotionService.get_nearby_living_echo_allies(
+			_actor, all_actors, radius)
+		if allies.is_empty():
+			continue
+		# Passive aura/event traits are resolved only by their combat emotion choke points.
+		if trait_id in ["kill_momentum", "fearless_example", "morale_anchor", \
+				"calm_transmission", "block_contagion"]:
+			continue
+		var fired := false
+		match trait_id:
+			"inspire_aura", "steady_presence":
+				var morale_tick := int(effect.get("morale_per_round", 0))
+				var allies_affected := 0
+				if morale_tick > 0:
+					for ally_v in allies:
+						var ally: Dictionary = ally_v
+						var previous_morale := int(ally.get("morale", 50))
+						ally["morale"] = clampi(previous_morale + morale_tick, 0, 100)
+						if int(ally["morale"]) != previous_morale:
+							allies_affected += 1
+					fired = allies_affected > 0
+				if fired:
+					logger.info(t, "actor.leadership.morale_tick", "Leadership morale tick", {
+						"actor_id": _actor.get("id", ""), "trait_id": trait_id,
+						"tick_value": morale_tick, "allies_affected": allies_affected,
 					})
-					return trait_id
-	return ""
+			"calm_fear", "fear_read":
+				var fear_reduction := int(effect.get("fear_reduction",
+					effect.get("fear_reduction_per_round", 0)))
+				var most_feared := _get_most_feared_ally(allies)
+				if fear_reduction > 0 and not most_feared.is_empty():
+					var previous_fear := int(most_feared.get("fear", 0))
+					most_feared["fear"] = clampi(previous_fear - fear_reduction, 0, 100)
+					fired = int(most_feared["fear"]) != previous_fear
+				if fired:
+					logger.info(t, "actor.leadership.fear_reduce", "Leadership fear reduced", {
+						"actor_id": _actor.get("id", ""), "trait_id": trait_id,
+						"target_id": most_feared.get("id", ""),
+						"fear_reduction": fear_reduction, "new_fear": most_feared["fear"],
+					})
+			"rally_call":
+				var rally_once := bool(effect.get("once_per_combat", false))
+				if not rally_once or not _actor.get("_rally_call_used", false):
+					var morale_boost := int(effect.get("morale_boost", 0))
+					var allies_affected := 0
+					if morale_boost > 0:
+						for ally_v in allies:
+							var ally: Dictionary = ally_v
+							var previous_morale := int(ally.get("morale", 50))
+							ally["morale"] = clampi(previous_morale + morale_boost, 0, 100)
+							if int(ally["morale"]) != previous_morale:
+								allies_affected += 1
+					fired = allies_affected > 0
+					if fired:
+						if rally_once:
+							_actor["_rally_call_used"] = true
+						logger.info(t, "actor.leadership.rally_call", "Leadership rally fired", {
+							"actor_id": _actor.get("id", ""), "morale_boost": morale_boost,
+							"allies_affected": allies_affected,
+						})
+			"morale_forecast":
+				var forecast_once := bool(effect.get("once_per_combat", false))
+				if not forecast_once or not _actor.get("_morale_forecast_used", false):
+					var lock_rounds := maxi(0, int(effect.get("morale_lock_rounds", 0)))
+					fired = lock_rounds > 0
+					if fired:
+						_actor["_morale_forecast_until_round"] = round_number + lock_rounds - 1
+						if forecast_once:
+							_actor["_morale_forecast_used"] = true
+						logger.info(t, "actor.leadership.morale_forecast", "Leadership morale forecast activated", {
+							"actor_id": _actor.get("id", ""), "rounds": lock_rounds,
+							"until_round": _actor["_morale_forecast_until_round"],
+						})
+		if fired and first_active.is_empty():
+			first_active = trait_id
+	return first_active
+
+
+func _get_most_feared_ally(allies: Array) -> Dictionary:
+	var most_feared: Dictionary = {}
+	var highest_fear := -1
+	for ally_v in allies:
+		if not (ally_v is Dictionary):
+			continue
+		var ally: Dictionary = ally_v
+		var ally_fear := int(ally.get("fear", 0))
+		if ally_fear > highest_fear:
+			highest_fear = ally_fear
+			most_feared = ally
+	return most_feared
 
 
 # PROG-009: Update per-round passive state counters after each turn.

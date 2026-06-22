@@ -4,10 +4,12 @@
 #   Encounter/Resolve: { name, hp, max_hp, emotional_status, faction }
 #   Stage/StageMap:    { name, rank, calling_origin, emotional_status }
 # Data bind only — no colors. All styling via Godot theme.
-# V2-EMOTION-002: single emotional_status field replaces morale_tier + fear_signal.
+# V2-EMOTION-002: emotional_status is the sole player-facing feeling field.
 
 class_name EchoCardItem
 extends PanelContainer
+
+const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
 
 @onready var hp_bar: ProgressBar     = %HpBar
 @onready var hp_label: Label         = %HpLabel
@@ -30,35 +32,6 @@ func setup(actor: Dictionary) -> void:
 	else:
 		hp_bar.visible = false
 
-	# V2-EMOTION-002: unified emotional_status; fall back to morale_status for legacy shapes.
-	if actor.has("emotional_status"):
-		var status := str(actor.get("emotional_status", "burdened")).to_lower()
-		status_label.text                = status.capitalize()
-		status_label.theme_type_variation = _emotion_theme_key(status)
-	elif actor.has("morale_status"):
-		var status := str(actor.get("morale_status", "steady")).to_lower()
-		status_label.text                = status.capitalize()
-		status_label.theme_type_variation = _emotion_theme_key(status)
-	else:
-		status_label.text                = str(actor.get("calling_origin", "Ready"))
-		status_label.theme_type_variation = &"EmotionBadge.Ready"
-
-
-## Maps an emotional_status tier to the nearest available theme variation.
-## New dedicated theme keys can be added per tier as the theme grows.
-func _emotion_theme_key(status: String) -> StringName:
-	match status:
-		"radiant":  return &"EmotionBadge.Inspired"
-		"whole":    return &"EmotionBadge.Inspired"
-		"grounded": return &"EmotionBadge.Steady"
-		"burdened": return &"EmotionBadge.Steady"
-		"pressed":  return &"EmotionBadge.Shaken"
-		"strained": return &"EmotionBadge.Shaken"
-		"fraying":  return &"EmotionBadge.Broken"
-		"hollow":   return &"EmotionBadge.Broken"
-		# Legacy morale_status fallbacks (encounter actors pre-V2-EMOTION-002)
-		"inspired": return &"EmotionBadge.Inspired"
-		"steady":   return &"EmotionBadge.Steady"
-		"shaken":   return &"EmotionBadge.Shaken"
-		"broken":   return &"EmotionBadge.Broken"
-		_:          return &"EmotionBadge.Ready"
+	var status := EmotionPresentation.normalize(str(actor.get("emotional_status", "")))
+	status_label.text = EmotionPresentation.display_name(status)
+	status_label.theme_type_variation = EmotionPresentation.text_theme(status)

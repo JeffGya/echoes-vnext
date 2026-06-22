@@ -67,13 +67,13 @@ Four project-specific skills are installed. Use them proactively — they are au
 | FlowSanctumState | `core/state/flow/states/sanctum/FlowSanctumState.gd` | Slot-keyed dict. `cta.enter_stage` always present with `disabled` flag. |
 | FlowSummonState | `core/state/flow/states/sanctum/FlowSummonState.gd` | Static `build_snapshot()`. Grade defaults to "uncalled" on `enter()`. |
 | FlowPartyManageState | `core/state/flow/states/sanctum/FlowPartyManageState.gd` | Static `build_snapshot()`. Pending toggle, max-cap=5, confirm→save. |
-| FlowEncounterState | `core/state/flow/states/venture/FlowEncounterState.gd` | Two static builders: `build_round_snapshot()` + `build_final_snapshot()`. |
+| FlowEncounterState | `core/state/flow/states/venture/FlowEncounterState.gd` | `build_round_snapshot()` + `build_final_snapshot()`. Combat actors project `emotional_status` only; raw/legacy emotion fields are stripped and operational `status` is alive/dead/guarding. Final combat fear/morale is copied back to the roster before resolve routing. |
 | EncounterContext | `core/state/encounter/EncounterContext.gd` | actors, placement_seed, combat_state, initiative_cfg, last_round_results, combat_result, purifier_id, last_round_snapshot, final_snapshot. |
 | EchoFactory | `core/sanctum/EchoFactory.gd` | Deterministic echo gen. RNG draw order v1 **IMMUTABLE**: rarity→calling_origin→gender→name→traits→archetype_birth→derived_stats. |
 | SanctumService | `core/sanctum/SanctumService.gd` | `get_party_actors()` + `get_roster_actors()` → read-only actor dicts. |
 | SummonService | `core/sanctum/SummonService.gd` | `summon_paid_one()` / `summon_paid_many()`. Transactional (settle→validate→spend→generate→save). |
 | EconomyService | `core/economy/EconomyService.gd` | `spend_ase()`, `add_ase()`, `can_afford_ase()`, `get_ase()`. Single choke for Ase mutations. |
-| SaveService + Schema | `core/save/` | Crash-safe (tmp→rename). Additive repair. 8 top-level keys: schema_version/first_boot/meta/campaign/flow/economy/sanctum/stage_context. |
+| SaveService + Schema | `core/save/` | Transactional verified tmp + three rotating backups. Highest-generation recovery, corrupt-primary archive, additive repair after validation. Runtime save path is injectable for test isolation. |
 | ConfigService | `core/config/ConfigService.gd` | Loads `data/balance.json`. Read-only. |
 | ActorSchema | `core/actors/ActorSchema.gd` | `validate()` checks 18 REQUIRED_FIELDS. `get_defaults()` adds `guard_state:false` (runtime only). |
 | EchoActor | `core/actors/EchoActor.gd` | `from_echo(echo)` → deep-copied actor dict. Reads `echo["emotion"]` for morale/fear. |
@@ -87,7 +87,10 @@ Four project-specific skills are installed. Use them proactively — they are au
 | ActorService | `core/actors/ActorService.gd` | `get_nearest_enemy()` + `get_threatened_ally()`. Filters `is_dead` + `is_structure`. |
 | DerivedStatService | `core/actors/DerivedStatService.gd` | Pure static `compute_stats(traits, rank, level, stat_cfg)`. 7 stats incl. speed. |
 | VectorService | `core/actors/VectorService.gd` | Tracks `vector_scores` + `dominant_vector`. 3% hysteresis to switch dominant. CLAMP_MAX=1000. |
-| EmotionService | `core/emotion/EmotionService.gd` | `init_echo()` idempotent. `apply_morale_delta()` / `apply_fear_delta()` / `set_fear_base()`. Emotion block: faith, morale_base, morale_current, fear_current, fear_base, win_streak, loss_streak. fear_base born from traits/archetype (0–20), rises +1 per loss, falls -1 per win, capped 0–40. morale_base mutates via streaks (3-win: +1, 3-loss: -1, range 10–90). Sanctum tick bidirectional for fear (toward fear_base). BehaviorArbiter uses max(fear_current, fear_base) as effective fear. Morale tiers: inspired/steady/shaken/broken. 8 emotional status tiers. (V2-EMOTION-003) |
+| EmotionService | `core/emotion/EmotionService.gd` | Emotion mutation choke point outside mid-combat writes. `get_emotional_status(morale, fear)` returns the only player-facing feeling field: radiant → whole → grounded → uncertain → hesitant → burdened → pressed → strained → fraying → hollow. Hidden morale tiers remain simulation-only. |
+| EmotionRecoveryService | `core/emotion/EmotionRecoveryService.gd` | Time settlement for roster emotion: +1 morale/min toward base, −0.5 fear/min toward zero, modifiers + maturity bonus, offline decay. Runs on bank/Continue settlement; consumed recovery clock is persisted even when no rounded delta applies. |
+| LeadershipEmotionService | `core/combat/LeadershipEmotionService.gd` | Whole-band, radius-aware leadership emotion rules. Living Echo allies only; excludes source/dead/non-Echo/out-of-radius. Overlapping reductions use strongest factor (never multiply); direct positive recovery from separate leaders stacks. |
+| EmotionPresentation | `ui/components/EmotionPresentation.gd` + `assets/theme/LivingTreeSystem.tres` | Shared ten-status display names, colors, chip variations, and text variations for every player-facing emotion surface. |
 | GridService | `core/grid/GridService.gd` | `place_actors()`, `manhattan_distance()`, `move_toward()` (8-dir greedy). Board 10×10. |
 | CombatState | `core/combat/CombatState.gd` | `create()` + `check_end_condition()`. End priority: all_enemies_defeated → shrine_destroyed → all_echoes_dead. |
 | CombatService | `core/combat/CombatService.gd` | `resolve_action(type, attacker, defender, round)` → result dict. Melee: guard doubles eff_def. |
@@ -114,7 +117,7 @@ Four project-specific skills are installed. Use them proactively — they are au
 | ResolveScreen | `ui/screens/ResolveScreen.gd` | VICTORY/DEFEAT. Actor roster. `cta.continue` → sanctum. `cta.next_stage` → dispatches `flow.complete_stage`. |
 | SkillDefinition | `core/progression/SkillDefinition.gd` | Active skill data contract + validator. `MAX_SKILL_SLOTS=1`. |
 
-**Tests (572 total, 33 suites):** EconomyTests, SanctumSummonTests, PartyTests, ActorTests, EchoSchemaTests, ActorStatInitTests, DerivedStatTests, BehaviorModuleTests, MeleeTests, BehaviorArbiterTests, StructureTests, MoraleInfluenceTests, KODeathTests, EmotionTests, VectorTests, DirectiveTests, GridTests, CombatStateTests, CombatServiceTests, CombatRoundTests, CombatSnapshotTests, RetreatTests, ArchetypeTests, StageProgressionTests, SkillDefinitionTests, CallingBehaviorTests, ExclusiveActionTests, CooldownTests, PassiveIdentityTests, SkillLoadoutTests, MaturityExpressionTests, StageExploreTests (V2-STAGE-001), **StageObjectiveTests** (V2-STAGE-002, 12 tests), VoiceTests (V2-VOICE-001)
+**Tests: 736 total.** The full registered suite includes `LeadershipEmotionTests` for configured Whole-band effects, overlap/source/radius rules, shared fear/morale paths, once-per-combat behavior, recovery stacking, and all ten UI presentation statuses.
 
 ---
 
