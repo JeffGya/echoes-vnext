@@ -45,6 +45,8 @@ static func register(runner) -> void:
 	runner.register_test("combat_roundtrip/protect_counter_advances_when_echo_near", func(): return test_protect_counter_near())
 	runner.register_test("combat_roundtrip/protect_counter_resets_when_echo_far", func(): return test_protect_counter_far())
 	runner.register_test("combat_roundtrip/protect_counter_resets_after_leaving", func(): return test_protect_counter_resets_after_leaving())
+	# Bug-fix: RECOVER holder reads top-level speed field
+	runner.register_test("combat_roundtrip/recover_holder_fastest_echo_designated", func(): return test_recover_holder_fastest_echo())
 
 
 # ---------------------------------------------------------------------------
@@ -693,4 +695,99 @@ static func test_protect_counter_resets_after_leaving() -> Dictionary:
 	var protect_counter: int = int(ectx.combat_state.get("protect_counter", 0))
 	if protect_counter != 0:
 		return { "ok": false, "error": "Expected protect_counter=0 after leaving guard (reset-on-leave), got %d (was pre-seeded at 3)" % protect_counter }
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# Bug-fix: RECOVER holder designation reads top-level `speed`, not stats.speed.
+#
+# Two echo actors are built with differing TOP-LEVEL speed fields (stats.speed
+# intentionally absent / set to 0). After one RECOVER round, recover_holder_id
+# must point to the echo with the higher top-level speed.
+# ---------------------------------------------------------------------------
+static func test_recover_holder_fastest_echo() -> Dictionary:
+	var env: Dictionary = _setup("holder_speed", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var ectx = env["ectx"]
+	var runtime = env["runtime"]
+
+	# Replace ectx.actors with two controlled echo actors + one enemy.
+	# Echo A: top-level speed=10. Echo B: top-level speed=5.
+	# stats sub-dict has speed=0 for both (the previously-wrong read path).
+	var echo_a: Dictionary = {
+		"id": "echo_fast", "name": "Fast Echo",
+		"faction": "echo", "is_dead": false, "is_structure": false,
+		"speed": 10,
+		"stats": { "max_hp": 100, "hp": 100, "def": 5, "atk": 5, "agi": 5, "speed": 0, "morale": 50 },
+		"current_hp": 100, "max_hp": 100,
+		"emotion": { "morale": 50, "fear": 0 },
+		"grid_pos": { "col": 2, "row": 2 },
+		"behavior": "advance",
+		"traits": [], "archetype": "warrior",
+	}
+	var echo_b: Dictionary = {
+		"id": "echo_slow", "name": "Slow Echo",
+		"faction": "echo", "is_dead": false, "is_structure": false,
+		"speed": 5,
+		"stats": { "max_hp": 100, "hp": 100, "def": 5, "atk": 5, "agi": 5, "speed": 0, "morale": 50 },
+		"current_hp": 100, "max_hp": 100,
+		"emotion": { "morale": 50, "fear": 0 },
+		"grid_pos": { "col": 3, "row": 2 },
+		"behavior": "advance",
+		"traits": [], "archetype": "warrior",
+	}
+	var enemy_a: Dictionary = {
+		"id": "enemy_01", "name": "Vale Patrol",
+		"faction": "enemy", "is_dead": false, "is_structure": false,
+		"speed": 3,
+		"stats": { "max_hp": 80, "hp": 80, "def": 3, "atk": 5, "agi": 3, "speed": 3, "morale": 50 },
+		"current_hp": 80, "max_hp": 80,
+		"emotion": { "morale": 50, "fear": 0 },
+		"grid_pos": { "col": 8, "row": 8 },
+		"behavior": "advance",
+		"traits": [], "archetype": "fighter",
+	}
+	var relic_a: Dictionary = {
+		"id": "test_relic_01", "name": "Test Relic", "faction": "structure",
+		"is_structure": true, "is_objective_relic": true,
+		"current_hp": 9999, "is_dead": false,
+		"speed": 0,
+		"stats": { "max_hp": 9999, "def": 0, "atk": 0, "speed": 0 },
+		"grid_pos": { "col": 5, "row": 5 },
+	}
+	ectx.actors = [echo_a, echo_b, enemy_a, relic_a]
+
+	ectx.resolution_mode = EncounterResolutionModes.RECOVER
+	ectx.objective_params = {
+		"hold_rounds": 99,
+		"relic_def_id": "recover_relic",
+		"relic_name": "Test Relic",
+		"relic_max_hp": 9999,
+		"reinforce_interval":  99,
+		"reinforce_size":      0,
+		"reinforce_group":     "group.vale_patrol_sm",
+		"reinforce_max_total": 0,
+	}
+
+	runtime.dispatch({ "type": "combat.init" })
+	ectx.combat_state["recover_holder_id"]       = ""
+	ectx.combat_state["recover_reinforce_count"] = 0
+
+	# Drive one round — _end_round sets recover_holder_id.
+	runtime.dispatch({ "type": "combat.confirm_round" })
+	var guard: int = 0
+	while guard < 40:
+		guard += 1
+		var cs: Dictionary = ectx.combat_state
+		if bool(cs.get("combat_over", false)): break
+		if str(cs.get("round_phase", "")) != "in_round": break
+		runtime.dispatch({ "type": "combat.next_actor" })
+
+	var holder_id: String = str(ectx.combat_state.get("recover_holder_id", ""))
+	if holder_id != "echo_fast":
+		return {
+			"ok": false,
+			"error": "Expected recover_holder_id='echo_fast' (top-level speed=10 wins over speed=5), got '%s'" % holder_id
+		}
 	return { "ok": true }

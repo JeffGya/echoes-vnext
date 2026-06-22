@@ -2205,8 +2205,8 @@ func _end_round(t: int) -> void:
 				if _holder_best.is_empty():
 					_holder_best = _hd_a
 				else:
-					var _hd_spd: int  = int(_hd_a.get("stats", {}).get("speed", 0))
-					var _hb_spd: int  = int(_holder_best.get("stats", {}).get("speed", 0))
+					var _hd_spd: int  = int(_hd_a.get("speed", 0))
+					var _hb_spd: int  = int(_holder_best.get("speed", 0))
 					if _hd_spd > _hb_spd:
 						_holder_best = _hd_a
 					elif _hd_spd == _hb_spd:

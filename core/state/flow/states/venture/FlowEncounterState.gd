@@ -662,10 +662,14 @@ static func resolve_objective_params(
 			var _r_base:   int   = int(mode_cfg.get("hold_rounds",                         2))
 			var _r_growth: float = float(mode_cfg.get("hold_rounds_growth_per_completion",  0.0))
 			var _r_max:    int   = int(mode_cfg.get("hold_rounds_max",                      4))
-			params["hold_rounds"]  = clampi(_r_base + roundi(_r_growth * float(completion_index)), _r_base, _r_max)
-			params["relic_def_id"] = str(mode_cfg.get("relic_def_id",  "recover_relic"))
-			params["relic_name"]   = str(mode_cfg.get("relic_name",    "Ancestral Relic"))
-			params["relic_max_hp"] = int(mode_cfg.get("relic_max_hp",  150))
+			params["hold_rounds"]       = clampi(_r_base + roundi(_r_growth * float(completion_index)), _r_base, _r_max)
+			params["relic_def_id"]      = str(mode_cfg.get("relic_def_id",  "recover_relic"))
+			params["relic_name"]        = str(mode_cfg.get("relic_name",    "Ancestral Relic"))
+			params["relic_max_hp"]      = int(mode_cfg.get("relic_max_hp",  150))
+			params["reinforce_interval"]  = int(mode_cfg.get("reinforce_interval",  2))
+			params["reinforce_size"]      = int(mode_cfg.get("reinforce_size",      1))
+			params["reinforce_group"]     = str(mode_cfg.get("reinforce_group",     "group.vale_patrol_sm"))
+			params["reinforce_max_total"] = int(mode_cfg.get("reinforce_max_total", 4))
 		"protect":
 			var _p_base:      int   = int(mode_cfg.get("duration_turns",                        4))
 			var _p_growth:    float = float(mode_cfg.get("duration_growth_per_completion",       0.0))
@@ -683,10 +687,12 @@ static func resolve_objective_params(
 			var _e_ws_base:   int   = int(mode_cfg.get("wave_size",                              2))
 			var _e_ws_growth: float = float(mode_cfg.get("wave_size_growth_per_completion",      0.0))
 			var _e_ws_max:    int   = int(mode_cfg.get("wave_size_max",                          4))
-			params["duration_turns"] = clampi(_e_base + roundi(_e_growth * float(completion_index)), _e_base, _e_max)
-			params["wave_interval"]  = int(mode_cfg.get("wave_interval", 2))
-			params["wave_size"]      = clampi(_e_ws_base + roundi(_e_ws_growth * float(completion_index)), _e_ws_base, _e_ws_max)
-			params["wave_group"]     = str(mode_cfg.get("wave_group", ""))
+			params["duration_turns"]       = clampi(_e_base + roundi(_e_growth * float(completion_index)), _e_base, _e_max)
+			params["wave_interval"]        = int(mode_cfg.get("wave_interval", 2))
+			params["wave_size"]            = clampi(_e_ws_base + roundi(_e_ws_growth * float(completion_index)), _e_ws_base, _e_ws_max)
+			params["wave_group"]           = str(mode_cfg.get("wave_group", ""))
+			params["wave_size_max"]        = _e_ws_max
+			params["wave_size_rising_step"] = int(mode_cfg.get("wave_size_rising_step", 0))
 		_:
 			return {}
 	# Stage-level overrides applied last (non-empty only).
