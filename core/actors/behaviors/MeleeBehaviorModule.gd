@@ -35,6 +35,49 @@ func select_intent(context: Dictionary) -> Dictionary:
 					and not a_v.get("is_dead", false):
 				target = a_v
 				break
+
+	# §5-C: PROTECT echo target overrides — mirrors the enemy prefer_objective_target pattern above.
+	# Priority: stolen (focus-fire carrier) > threatened (intercept nearest-to-totem enemy).
+	# Only fires for echo actors in PROTECT mode. Defensive: falls through if no valid target found.
+	if target.is_empty() and context.get("resolution_mode", "") == "protect" \
+			and str(actor.get("faction", "")) == "echo":
+		var totem_stolen_mm: bool = context.get("totem_stolen", false)
+		var totem_carrier_id_mm: String = context.get("totem_carrier_id", "")
+		if totem_stolen_mm and not totem_carrier_id_mm.is_empty():
+			# Stolen: focus-fire the carrier.
+			for a_v in all_actors:
+				if a_v is Dictionary \
+						and str(a_v.get("id", "")) == totem_carrier_id_mm \
+						and not a_v.get("is_dead", false):
+					target = a_v
+					break
+		else:
+			# Threatened: pick the living enemy NEAREST TO THE TOTEM (not nearest to this echo).
+			# Deterministic tiebreak: lowest id string.
+			var totem_pos_mm: Dictionary = {}
+			for a_v in all_actors:
+				if a_v is Dictionary and a_v.get("is_structure", false) and not a_v.get("is_dead", false):
+					totem_pos_mm = a_v.get("grid_pos", {})
+					break
+			if not totem_pos_mm.is_empty():
+				var protect_radius_mm: int = 3  # default; matches §5-B
+				var best_dist_mm: int = 999999
+				var best_id_mm: String = ""
+				for a_v in all_actors:
+					if not (a_v is Dictionary):
+						continue
+					var a_mm: Dictionary = a_v
+					if a_mm.get("is_dead", false) or a_mm.get("is_structure", false):
+						continue
+					if str(a_mm.get("faction", "")) == "enemy":
+						var d_mm: int = GridService.chebyshev_distance(totem_pos_mm, a_mm.get("grid_pos", {}))
+						if d_mm <= protect_radius_mm:
+							var aid_mm: String = str(a_mm.get("id", ""))
+							if d_mm < best_dist_mm or (d_mm == best_dist_mm and aid_mm < best_id_mm):
+								best_dist_mm = d_mm
+								best_id_mm = aid_mm
+								target = a_mm
+
 	if target.is_empty():
 		target = ActorService.get_nearest_enemy(actor, all_actors)
 	if target.is_empty():

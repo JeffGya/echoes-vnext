@@ -535,6 +535,7 @@ func _format_reason(reason: String) -> String:
 		"all_enemies_defeated": return "All enemies defeated"
 		"all_echoes_dead":      return "All echoes fell"
 		"shrine_destroyed":     return "Shrine Destroyed"
+		"totem_taken":          return "The totem was taken."
 	return reason
 
 

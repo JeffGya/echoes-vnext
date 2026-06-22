@@ -35,6 +35,12 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("arbiter/purifier_attacks_enemy_when_adjacent",      Callable(BehaviorArbiterTests, "_t_purifier_attacks_enemy_when_adjacent"))
 	# COMBAT-BUG-002: guard deadlock fix
 	runner.register_test("arbiter/repeated_guard_breaks_to_melee",            Callable(BehaviorArbiterTests, "_t_repeated_guard_breaks_to_melee"))
+	# §5-A: RECOVER holder adjacent to relic gets objective_in_range (move down-weighted)
+	runner.register_test("arbiter/recover_holder_adjacent_relic_digs_in",     Callable(BehaviorArbiterTests, "_t_recover_holder_adjacent_relic_digs_in"))
+	# §5-B/C: PROTECT echo intercepts totem's nearest attacker
+	runner.register_test("arbiter/protect_echo_intercepts_totem_attacker",    Callable(BehaviorArbiterTests, "_t_protect_echo_intercepts_totem_attacker"))
+	# §5-C: PROTECT stolen → echo focus-fires carrier id
+	runner.register_test("arbiter/protect_echo_focus_fires_carrier",          Callable(BehaviorArbiterTests, "_t_protect_echo_focus_fires_carrier"))
 
 
 # -------------------------
@@ -831,3 +837,193 @@ static func _t_repeated_guard_breaks_to_melee() -> Dictionary:
 		}
 
 	return { "ok": true }
+
+
+# -------------------------
+# §5: Combat-mode distinctiveness tests (V2-STAGE-004 Phase 3)
+# -------------------------
+
+# Test §5-A: recover_holder_adjacent_relic_digs_in
+# Setup: onyamesu echo in RECOVER mode, adjacent (dist=1) to a living is_structure relic,
+#        enemy adjacent (dist=1 from echo). No threatened ally.
+# Expected: objective_in_range condition fires (crushing idle from ~8 to 4) and the echo
+#           chooses melee_attack or actor.guard — NOT actor.idle.
+# This verifies the condition fires and penalises idle/move as specified in §5-A.
+static func _t_recover_holder_adjacent_relic_digs_in() -> Dictionary:
+	var actor := {
+		"id":             "echo_rec_001",
+		"faction":        "echo",
+		"calling_origin": "onyamesu",
+		"actor_type":     "echo",
+		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
+		"vector_scores":  {},
+		"fear":           0,
+		"morale":         50,
+		"grid_pos":       { "col": 5, "row": 5 },
+		"current_hp":     100,
+		"stats":          { "max_hp": 100 },
+	}
+	# Relic: is_structure, adjacent (col 6 row 5 → chebyshev dist=1 from echo at col 5 row 5).
+	var relic := {
+		"id":           "relic_001",
+		"faction":      "structure",
+		"is_structure": true,
+		"is_dead":      false,
+		"grid_pos":     { "col": 6, "row": 5 },
+	}
+	# Enemy adjacent to echo (col 4 row 5 → dist=1). Guard candidate fires.
+	# onyamesu: melee_attack base=35, echo_in_melee+18, + near_friendly_structure(-5) = 48
+	# actor.guard: base=55, echo_in_melee-5, near_friendly_structure(+3) = 53 → guard wins
+	# actor.idle: base=20, echo_in_melee-12, near_friendly_structure(0) + objective_in_range(-4) = 4
+	# Idle must NOT win.
+	var enemy := {
+		"id":       "enemy_rec_001",
+		"faction":  "enemy",
+		"is_dead":  false,
+		"grid_pos": { "col": 4, "row": 5 },
+	}
+
+	var arbiter := BehaviorArbiter.new({})
+	var context := {
+		"actor":           actor,
+		"all_actors":      [actor, relic, enemy],
+		"resolution_mode": "recover",
+		"t":               1,
+	}
+	var intent: Dictionary = arbiter.select_intent(context)
+
+	if str(intent.get("action_type", "")) == "actor.idle":
+		return {
+			"ok": false,
+			"error": "RECOVER holder adjacent to relic: objective_in_range should crush idle (score→4), got actor.idle. Intent: %s" % str(intent),
+		}
+	# Bonus: confirm intent is melee or guard (not idle, not move — no move candidate since enemy is adjacent).
+	var at: String = str(intent.get("action_type", ""))
+	if at != "melee_attack" and at != "actor.guard":
+		return {
+			"ok": false,
+			"error": "RECOVER holder: expected melee_attack or actor.guard (enemy adjacent + relic adjacent), got: %s" % at,
+		}
+	return { "ok": true }
+
+
+# Test §5-C (threatened path): protect_echo_intercepts_totem_attacker
+# Setup: echo actor in PROTECT mode, totem at (5,5), one enemy adjacent to totem at (6,5)
+#        (chebyshev dist=1 from totem), another enemy closer to echo at (2,0) but far from totem.
+#        totem_stolen=false. The echo should target the enemy NEAREST THE TOTEM (not nearest to echo).
+# Expected: the intent target_id == "enemy_near_totem".
+static func _t_protect_echo_intercepts_totem_attacker() -> Dictionary:
+	var actor := {
+		"id":             "echo_prot_001",
+		"faction":        "echo",
+		"calling_origin": "uncalled",
+		"actor_type":     "echo",
+		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
+		"vector_scores":  {},
+		"fear":           0,
+		"morale":         50,
+		"grid_pos":       { "col": 0, "row": 0 },
+		"current_hp":     100,
+		"stats":          { "max_hp": 100 },
+	}
+	var totem := {
+		"id":           "totem_001",
+		"faction":      "structure",
+		"is_structure": true,
+		"is_dead":      false,
+		"grid_pos":     { "col": 5, "row": 5 },
+	}
+	# Enemy near the totem (chebyshev dist=1 from totem at (5,5)). This is the one to target.
+	var enemy_near := {
+		"id":       "enemy_near_totem",
+		"faction":  "enemy",
+		"is_dead":  false,
+		"grid_pos": { "col": 6, "row": 5 },
+	}
+	# Enemy far from totem but nearer to the echo — should be ignored in PROTECT mode.
+	var enemy_far := {
+		"id":       "enemy_far_totem",
+		"faction":  "enemy",
+		"is_dead":  false,
+		"grid_pos": { "col": 2, "row": 0 },  # closer to echo, far from totem
+	}
+
+	var arbiter := BehaviorArbiter.new({})
+	var context := {
+		"actor":            actor,
+		"all_actors":       [actor, totem, enemy_near, enemy_far],
+		"resolution_mode":  "protect",
+		"totem_stolen":     false,
+		"totem_carrier_id": "",
+		"t":                1,
+	}
+	var intent: Dictionary = arbiter.select_intent(context)
+
+	var got_target: String = str(intent.get("target_id", ""))
+	if got_target != "enemy_near_totem":
+		return {
+			"ok": false,
+			"error": "PROTECT echo should target nearest-to-totem enemy ('enemy_near_totem'), got target_id='%s' (action=%s)" % [got_target, str(intent.get("action_type"))],
+		}
+	return { "ok": true }
+
+
+# Test §5-C (stolen path): protect_echo_focus_fires_carrier
+# Setup: echo actor in PROTECT mode, totem_stolen=true, totem_carrier_id="enemy_carrier_001".
+#        Carrier alive at (3,3). Another enemy closer to the echo at (1,0) — should be IGNORED.
+# Expected: the intent target_id == "enemy_carrier_001" (focus-fire the carrier).
+static func _t_protect_echo_focus_fires_carrier() -> Dictionary:
+	var actor := {
+		"id":             "echo_prot_002",
+		"faction":        "echo",
+		"calling_origin": "aduro",
+		"actor_type":     "echo",
+		"traits":         { "courage": 55, "wisdom": 20, "faith": 10 },
+		"vector_scores":  {},
+		"fear":           0,
+		"morale":         50,
+		"grid_pos":       { "col": 0, "row": 0 },
+		"current_hp":     100,
+		"stats":          { "max_hp": 100 },
+	}
+	var totem := {
+		"id":           "totem_002",
+		"faction":      "structure",
+		"is_structure": true,
+		"is_dead":      false,
+		"grid_pos":     { "col": 5, "row": 5 },
+	}
+	# The carrier — must be focused.
+	var carrier := {
+		"id":       "enemy_carrier_001",
+		"faction":  "enemy",
+		"is_dead":  false,
+		"grid_pos": { "col": 3, "row": 3 },
+	}
+	# Another enemy closer to the echo — should be IGNORED in stolen mode.
+	var other_enemy := {
+		"id":       "enemy_other_001",
+		"faction":  "enemy",
+		"is_dead":  false,
+		"grid_pos": { "col": 1, "row": 0 },  # dist=1 from echo — would normally be picked
+	}
+
+	var arbiter := BehaviorArbiter.new({})
+	var context := {
+		"actor":            actor,
+		"all_actors":       [actor, totem, carrier, other_enemy],
+		"resolution_mode":  "protect",
+		"totem_stolen":     true,
+		"totem_carrier_id": "enemy_carrier_001",
+		"t":                1,
+	}
+	var intent: Dictionary = arbiter.select_intent(context)
+
+	var got_target: String = str(intent.get("target_id", ""))
+	if got_target != "enemy_carrier_001":
+		return {
+			"ok": false,
+			"error": "PROTECT stolen: echo must focus-fire carrier ('enemy_carrier_001'), got target_id='%s' (action=%s). Should ignore closer enemy." % [got_target, str(intent.get("action_type"))],
+		}
+	return { "ok": true }
+

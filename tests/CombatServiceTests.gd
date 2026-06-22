@@ -21,6 +21,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("combat/resolve_melee_kills",       Callable(CombatServiceTests, "_t_resolve_melee_kills"))
 	runner.register_test("combat/resolve_guard_reduces_dmg", Callable(CombatServiceTests, "_t_resolve_guard_reduces_dmg"))
 	runner.register_test("combat/resolve_refuse",            Callable(CombatServiceTests, "_t_resolve_refuse"))
+	# V2-STAGE-004 Distinctiveness §4-H: carrier double-damage.
+	runner.register_test("combat/carrier_double_damage_applies",    Callable(CombatServiceTests, "_t_carrier_double_damage_applies"))
+	runner.register_test("combat/carrier_double_damage_default_mult", Callable(CombatServiceTests, "_t_carrier_double_damage_default_mult"))
+	runner.register_test("combat/non_carrier_no_double_damage",     Callable(CombatServiceTests, "_t_non_carrier_no_double_damage"))
 
 
 # -------------------------
@@ -166,6 +170,57 @@ static func _t_resolve_guard_reduces_dmg() -> Dictionary:
 	if dmg_guarded >= dmg_unguarded:
 		return { "ok": false, "error": "Guarded should take less damage than unguarded" }
 
+	return { "ok": true }
+
+
+# ─── V2-STAGE-004 Distinctiveness §4-H: carrier double-damage ───────────────────
+
+# Test 7: carrier_double_damage_applies
+# Attacker with _carrier_double_damage==true deals 2× melee damage (default mult=2.0).
+# atk=10, def=0, morale=50, fear=0 → base damage=10; with double_damage: damage=20.
+static func _t_carrier_double_damage_applies() -> Dictionary:
+	var attacker := _make_attacker(10)
+	attacker["_carrier_double_damage"] = true
+	var defender := _make_defender(0, 40)
+
+	var result: Dictionary = CombatService.resolve_action("melee_attack", attacker, defender, 1)
+
+	if int(result.get("damage", -1)) != 20:
+		return { "ok": false, "error": "Expected damage=20 (carrier double), got: %d" % int(result.get("damage", -1)) }
+	if int(defender["current_hp"]) != 20:
+		return { "ok": false, "error": "Expected defender_hp=20 after doubled damage, got: %d" % int(defender["current_hp"]) }
+	return { "ok": true }
+
+
+# Test 8: carrier_double_damage_default_mult
+# Attacker with _carrier_double_damage==true and NO explicit _double_damage_mult uses 2.0.
+# atk=6, def=1, morale=50, fear=0 → base=5; with 2.0 mult: damage=10.
+static func _t_carrier_double_damage_default_mult() -> Dictionary:
+	var attacker := _make_attacker(6)
+	attacker["_carrier_double_damage"] = true
+	# No _double_damage_mult field — must default to 2.0.
+	var defender := _make_defender(1, 30)
+
+	var result: Dictionary = CombatService.resolve_action("melee_attack", attacker, defender, 1)
+
+	if int(result.get("damage", -1)) != 10:
+		return { "ok": false, "error": "Expected damage=10 (base 5 × 2.0 default), got: %d" % int(result.get("damage", -1)) }
+	return { "ok": true }
+
+
+# Test 9: non_carrier_no_double_damage
+# Attacker WITHOUT _carrier_double_damage flag produces normal (non-doubled) damage.
+# Verifies the guard is off by default — other paths byte-identical.
+# atk=10, def=0 → base=10; no carrier flag → damage=10 (not 20).
+static func _t_non_carrier_no_double_damage() -> Dictionary:
+	var attacker := _make_attacker(10)
+	# _carrier_double_damage absent / defaults false.
+	var defender := _make_defender(0, 40)
+
+	var result: Dictionary = CombatService.resolve_action("melee_attack", attacker, defender, 1)
+
+	if int(result.get("damage", -1)) != 10:
+		return { "ok": false, "error": "Expected damage=10 (no carrier flag), got: %d" % int(result.get("damage", -1)) }
 	return { "ok": true }
 
 

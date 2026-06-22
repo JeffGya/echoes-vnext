@@ -258,7 +258,7 @@ func select_intent(context: Dictionary) -> Dictionary:
 	var rank_strength: float     = float(context.get("rank_strength", 0.0))
 
 	# Build board summary once — passed to _score() for every candidate to avoid re-computation.
-	var board_summary: Dictionary = _build_board_summary(actor, all_actors, context.get("board_cfg", {}), expression_band)
+	var board_summary: Dictionary = _build_board_summary(actor, all_actors, context.get("board_cfg", {}), expression_band, context.get("resolution_mode", ""))
 
 	var candidates: Array[Dictionary] = _generate_candidates(actor, all_actors, context, expression_band, calling_behavior)
 
@@ -364,6 +364,56 @@ func _generate_candidates(
 				shrine_override = a_v
 				break
 
+	# §5-C: PROTECT echo target overrides — mirrors the enemy prefer_objective_target pattern above.
+	# Priority: stolen (focus-fire carrier) > threatened (intercept nearest-to-totem enemy).
+	# Only applies to echo actors in PROTECT mode. Defensive: falls through to nearest-enemy if no
+	# valid target is found.
+	var protect_echo_override: Dictionary = {}
+	var res_mode_gc: String = context.get("resolution_mode", "")
+	if res_mode_gc == "protect" and str(actor.get("faction", "")) == "echo":
+		var totem_stolen_gc: bool = context.get("totem_stolen", false)
+		var totem_carrier_id_gc: String = context.get("totem_carrier_id", "")
+		if totem_stolen_gc and not totem_carrier_id_gc.is_empty():
+			# Stolen: find the carrier by id; must be alive.
+			for a_v in all_actors:
+				if a_v is Dictionary \
+						and str(a_v.get("id", "")) == totem_carrier_id_gc \
+						and not a_v.get("is_dead", false):
+					protect_echo_override = a_v
+					break
+		else:
+			# Threatened: find totem, then pick the living enemy NEAREST TO THE TOTEM.
+			# Deterministic tiebreak: lowest id string.
+			var totem_pos_gc: Dictionary = {}
+			for a_v in all_actors:
+				if a_v is Dictionary and a_v.get("is_structure", false) and not a_v.get("is_dead", false):
+					totem_pos_gc = a_v.get("grid_pos", {})
+					break
+			if not totem_pos_gc.is_empty():
+				var protect_radius_gc: int = 3
+				var om_protect_gc: Dictionary = (_cfg.get("objective_modes", {}) as Dictionary).get("protect", {}) if _cfg.has("objective_modes") else {}
+				if om_protect_gc.has("objective_threatened_radius"):
+					protect_radius_gc = int(om_protect_gc["objective_threatened_radius"])
+				var best_dist_gc: int = 999999
+				var best_id_gc: String = ""
+				var best_enemy_gc: Dictionary = {}
+				for a_v in all_actors:
+					if not (a_v is Dictionary):
+						continue
+					var a_gc: Dictionary = a_v
+					if a_gc.get("is_dead", false) or a_gc.get("is_structure", false):
+						continue
+					if str(a_gc.get("faction", "")) == "enemy":
+						var d_gc: int = GridService.chebyshev_distance(totem_pos_gc, a_gc.get("grid_pos", {}))
+						if d_gc <= protect_radius_gc:
+							var aid_gc: String = str(a_gc.get("id", ""))
+							if d_gc < best_dist_gc or (d_gc == best_dist_gc and aid_gc < best_id_gc):
+								best_dist_gc = d_gc
+								best_id_gc = aid_gc
+								best_enemy_gc = a_gc
+				if not best_enemy_gc.is_empty():
+					protect_echo_override = best_enemy_gc
+
 	# COMBAT-BUG-001: purifier shrine lookup — when this echo is the designated purifier,
 	# remember the shrine actor so movement can be directed toward it instead of the nearest enemy.
 	var purifier_shrine_actor: Dictionary = {}
@@ -385,16 +435,18 @@ func _generate_candidates(
 	# V2-PROG-006: Enemy Forming+ focus fire — prefer most-wounded echo over nearest.
 	# Echo actors use standard nearest-enemy selection.
 	var nearest_enemy: Dictionary
-	if shrine_override.is_empty():
-		if actor_type == "enemy" \
-				and (expression_band == "forming" or expression_band == "grounded" or expression_band == "whole"):
-			nearest_enemy = _get_most_wounded_enemy(actor, all_actors)
-			if nearest_enemy.is_empty():
-				nearest_enemy = ActorService.get_nearest_enemy(actor, all_actors)
-		else:
+	if not shrine_override.is_empty():
+		nearest_enemy = shrine_override
+	elif not protect_echo_override.is_empty():
+		# §5-C: echo PROTECT override — focus on carrier (stolen) or totem-nearest enemy (threatened).
+		nearest_enemy = protect_echo_override
+	elif actor_type == "enemy" \
+			and (expression_band == "forming" or expression_band == "grounded" or expression_band == "whole"):
+		nearest_enemy = _get_most_wounded_enemy(actor, all_actors)
+		if nearest_enemy.is_empty():
 			nearest_enemy = ActorService.get_nearest_enemy(actor, all_actors)
 	else:
-		nearest_enemy = shrine_override
+		nearest_enemy = ActorService.get_nearest_enemy(actor, all_actors)
 
 	var enemy_dist: int = 999999
 	var t_pos: Dictionary = {}
@@ -672,7 +724,7 @@ func _generate_candidates(
 ##
 ## last_echo_standing sentinel: requires dead_allies > 0 so a designed 1v1 scenario
 ## (all_actors contains only enemies) never fires the condition.
-func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dictionary, expression_band: String = "nascent") -> Dictionary:
+func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dictionary, expression_band: String = "nascent", resolution_mode: String = "") -> Dictionary:
 	var my_id:      String = str(actor.get("id", ""))
 	var my_faction: String = str(actor.get("faction", ""))
 	var actor_type: String = str(actor.get("actor_type", "echo"))
@@ -814,6 +866,48 @@ func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dict
 				else:
 					active.append("near_hostile_structure")
 			break
+
+	# §5-A: objective_in_range — RECOVER holder dig-in.
+	# Fires when: mode==recover, actor is echo, AND actor is adjacent (Chebyshev==1) to a living
+	# is_structure actor (the relic). Config row down-weights move/idle so the holder stays put.
+	if resolution_mode == "recover" and actor_type == "echo":
+		for a_v in all_actors:
+			if not (a_v is Dictionary):
+				continue
+			var a: Dictionary = a_v
+			if a.get("is_structure", false) and not a.get("is_dead", false):
+				if GridService.is_adjacent(my_pos, a.get("grid_pos", {})):
+					active.append("objective_in_range")
+				break
+
+	# §5-B: objective_threatened — PROTECT interpose.
+	# Fires when: mode==protect, actor is echo, AND a living is_structure totem exists with
+	# a living enemy within objective_threatened_radius (Chebyshev, default 3).
+	if resolution_mode == "protect" and actor_type == "echo":
+		var protect_radius: int = 3  # default; balance.json value injected via Agent A
+		# If config provides the radius via objective_modes, it would be in _cfg — read defensively.
+		var om_protect: Dictionary = (_cfg.get("objective_modes", {}) as Dictionary).get("protect", {}) if _cfg.has("objective_modes") else {}
+		if om_protect.has("objective_threatened_radius"):
+			protect_radius = int(om_protect["objective_threatened_radius"])
+		var totem_pos_pt: Dictionary = {}
+		for a_v in all_actors:
+			if not (a_v is Dictionary):
+				continue
+			var a: Dictionary = a_v
+			if a.get("is_structure", false) and not a.get("is_dead", false):
+				totem_pos_pt = a.get("grid_pos", {})
+				break
+		if not totem_pos_pt.is_empty():
+			for a_v in all_actors:
+				if not (a_v is Dictionary):
+					continue
+				var a: Dictionary = a_v
+				if a.get("is_dead", false) or a.get("is_structure", false):
+					continue
+				if str(a.get("faction", "")) == "enemy":
+					if GridService.chebyshev_distance(totem_pos_pt, a.get("grid_pos", {})) <= protect_radius:
+						active.append("objective_threatened")
+						break
 
 	return {
 		"hp_ratio":          hp_ratio,
