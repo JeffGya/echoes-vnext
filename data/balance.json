@@ -860,6 +860,16 @@
 					"actor.idle": 0.0,
 					"actor.move": 0.0
 				},
+				"objective_in_range": {
+					"_comment": "RECOVER holder adjacent to relic — dig in, don't wander.",
+					"actor.move": -10.0,
+					"actor.idle": -4.0
+				},
+				"objective_threatened": {
+					"_comment": "PROTECT — enemy closing on the totem; echoes intercept.",
+					"protect_ally": 12.0,
+					"actor.move": 6.0
+				},
 				"repeated_guard_penalty": {
 					"_comment": "COMBAT-BUG-002: fires when echo guarded last round AND enemy adjacent. Works with candidate suppression: suppression removes guard from pool; this penalty pushes melee above idle/protect_ally on the forced-action turn, and discourages guard when it re-enters the pool (HP critical exception).",
 					"melee_attack": 15.0,
@@ -1605,7 +1615,12 @@
 					"hold_rounds_max": 4,
 					"relic_def_id": "recover_relic",
 					"relic_name": "Severed Relic",
-					"relic_max_hp": 9999
+					"relic_max_hp": 9999,
+					"directive_intent_weights": { "objective_advance_priority": 1.0, "engage_only_blockers": 0.8 },
+					"reinforce_interval": 2,
+					"reinforce_size": 1,
+					"reinforce_group": "group.vale_patrol_sm",
+					"reinforce_max_total": 4
 				},
 				"protect": {
 					"duration_turns": 4,
@@ -1614,7 +1629,12 @@
 					"entity_def_id": "protect_entity",
 					"entity_name": "The Charge",
 					"entity_max_hp": 70,
-					"entity_hp_growth_per_completion": 10
+					"entity_hp_growth_per_completion": 10,
+					"directive_intent_weights": { "threat_interception": 1.0, "ally_protection_bias": 0.8 },
+					"objective_threatened_radius": 3,
+					"theft_chance": 0.5,
+					"double_damage_mult": 2.0,
+					"protect_guard_radius": 2
 				},
 				"endure": {
 					"duration_turns": 5,
@@ -1624,7 +1644,11 @@
 					"wave_size": 2,
 					"wave_size_growth_per_completion": 0.5,
 					"wave_size_max": 4,
-					"wave_group": "group.vale_patrol_sm"
+					"wave_group": "group.vale_patrol_sm",
+					"wave_size_rising_step": 1
+				},
+				"purify_shrine": {
+					"directive_intent_weights": { "threat_interception": 0.7, "ally_protection_bias": 0.5 }
 				}
 			},
 			"encounter_approach": {

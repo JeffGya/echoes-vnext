@@ -796,17 +796,44 @@ static func _build_objective_state(ectx: EncounterContext, combat_state: Diction
 	var _hold_progress: int  = int(combat_state.get("hold_counter", 0)) if not combat_state.is_empty() else 0
 	var _hold_required: int  = int(_obj_params.get("hold_rounds", 0))
 
+	# V2-STAGE-004 Distinctiveness §4-I: additional objective_state fields.
+	# objective_invulnerable: true when the located structure has is_objective_relic (RECOVER relic).
+	var _objective_invulnerable: bool = false
+	if ectx != null:
+		for _oi_a in ectx.actors:
+			if _oi_a is Dictionary and bool(_oi_a.get("is_structure", false)):
+				if bool(_oi_a.get("is_objective_relic", false)):
+					_objective_invulnerable = true
+				break
+	# waves_remaining / wave_total: ENDURE only.
+	var _total_waves: int    = int(combat_state.get("total_waves", 0)) if not combat_state.is_empty() else 0
+	var _waves_spawned: int  = int(combat_state.get("waves_spawned", 0)) if not combat_state.is_empty() else 0
+	var _waves_remaining: int = maxi(0, _total_waves - _waves_spawned)
+	var _wave_total: int = _total_waves if obj_type == EncounterResolutionModes.ENDURE else 0
+	if obj_type != EncounterResolutionModes.ENDURE:
+		_waves_remaining = 0
+	# totem_stolen: PROTECT only.
+	var _totem_stolen: bool = bool(combat_state.get("totem_stolen", false)) if not combat_state.is_empty() else false
+
 	return {
-		"type":            obj_type,
-		"shrine_hp":       shrine_hp,
-		"shrine_alive":    shrine_alive,
+		"type":                  obj_type,
+		"shrine_hp":             shrine_hp,
+		"shrine_alive":          shrine_alive,
 		# V2-STAGE-004 P3: enriched fields (back-compat: zero when N/A).
-		"objective_hp":    objective_hp,
-		"objective_alive": objective_alive,
-		"round":           _round,
-		"rounds_required": _rounds_required,
-		"hold_progress":   _hold_progress,
-		"hold_required":   _hold_required,
+		"objective_hp":          objective_hp,
+		"objective_alive":       objective_alive,
+		"round":                 _round,
+		"rounds_required":       _rounds_required,
+		"hold_progress":         _hold_progress,
+		"hold_required":         _hold_required,
+		# V2-STAGE-004 Distinctiveness §4-I: new fields (zero/false when N/A).
+		"objective_invulnerable": _objective_invulnerable,
+		"waves_remaining":        _waves_remaining,
+		"wave_total":             _wave_total,
+		"totem_stolen":           _totem_stolen,
+		# V2-STAGE-004 PROTECT guard-proximity: actual guarded-round progress vs required.
+		"protect_progress":       int(combat_state.get("protect_counter", 0)) if not combat_state.is_empty() else 0,
+		"protect_required":       int(_obj_params.get("duration_turns", 0)),
 	}
 
 

@@ -63,10 +63,18 @@ static func resolve_action(action_type: String, attacker: Dictionary,
 
 ## Resolves a melee attack: computes damage (with guard check), mutates defender HP,
 ## sets is_dead + death_round when HP reaches zero.
+## V2-STAGE-004 Distinctiveness §4-H: if attacker._carrier_double_damage == true,
+## the final melee damage is multiplied by double_damage_mult (default 2.0).
+## double_damage_mult may be passed via attacker["_double_damage_mult"] as an optional
+## override; otherwise defaults to 2.0 (PROTECT objective config value).
 static func _resolve_melee(attacker: Dictionary, defender: Dictionary,
 		round: int) -> Dictionary:
 	var hp_before: int      = int(defender.get("current_hp", 0))
 	var damage: int         = _melee_damage(attacker, defender)
+	# §4-H: carrier double-damage (PROTECT totem carrier deals double melee damage).
+	if bool(attacker.get("_carrier_double_damage", false)):
+		var _dd_mult: float = float(attacker.get("_double_damage_mult", 2.0))
+		damage = int(float(damage) * _dd_mult)
 	var hp_after: int       = max(0, hp_before - damage)
 	defender["current_hp"]  = hp_after
 	if hp_after <= 0:

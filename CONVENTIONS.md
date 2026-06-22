@@ -259,15 +259,15 @@ The walkable set is threaded by `FlowEncounterState.enter()` (placement) and `Fl
 
 **Irregular combat boards:** `FlowEncounterState.enter()` generates the board via `StageTerrain.generate(realm_seed, stage_index, signature, bounds, "combat.terrain." + encounter_id)` — same generator as exploration, append-only RNG namespace, keyed to the realm's **virtue signature** (`data.stages.map_shape.by_virtue`). Board **bounds scale with realm completion order** (`data.combat.board`: base 12×12 → +growth/completion → max 22×22). Terrain stored transiently on `EncounterContext.terrain` (not saved). Objective-actor placement (shrine now; relic/entity/quarry/npc later) scales **depth by completion order** via `data.combat.objective_placement` (early realm → central/reachable; late realm → deep among enemies). `CombatBoardScreen` paints only walkable cells (void = no tile, no fog). `CombatState.create(..., objective_params={})` carries per-mode tuning.
 
-**Per-mode win/lose conditions (V2-STAGE-004 Phase 3 — `CombatState.check_end_condition(actors, objective, combat_state={})`):**
+**Per-mode win/lose conditions (V2-STAGE-004 Phase 3 + Distinctiveness — `CombatState.check_end_condition(actors, objective, combat_state={})`):**
 
-`all_enemies_defeated` is the **universal first win** check — fires before any mode-specific check. COMBAT and PURIFY_SHRINE are byte-identical to pre-P3 (pass empty `combat_state={}`). Mode-specific branches:
+`all_enemies_defeated` is the **universal first win** check — fires before any mode-specific check **except ENDURE** (see below). COMBAT and PURIFY_SHRINE are byte-identical to pre-P3 (pass empty `combat_state={}`). Mode-specific branches:
 
 | Mode | Win condition | Lose condition |
 |------|--------------|---------------|
 | RECOVER | `combat_state["relic_secured"]` = true (`hold_counter ≥ hold_rounds`) | `all_echoes_dead` |
-| PROTECT | `combat_state["protected"]` = true (`round_counter ≥ duration_turns`) | `combat_state["entity_lost"]` = true (entity structure hp → 0) OR `all_echoes_dead` |
-| ENDURE | `combat_state["endured"]` = true (`round_counter ≥ duration_turns`) | `all_echoes_dead` |
+| PROTECT | `combat_state["protected"]` = true (`protect_counter ≥ duration_turns`); **proximity-gated** — counter advances only when a living echo is within `protect_guard_radius` (Chebyshev, default 2) of entity, **resets to 0 when unguarded**; if `totem_stolen` at win moment → `totem_taken` defeat | `combat_state["entity_lost"]` = true (entity hp → 0) OR `all_echoes_dead` |
+| ENDURE | `combat_state["endured"]` = true (`round_counter ≥ duration_turns`); `all_enemies_defeated` victory is **suppressed until `all_waves_spawned`** = true (no transient-lull early-win); `all_echoes_dead` defeat fires even in the lull | `all_echoes_dead` |
 | PURSUE | — (Phase 3b) | — |
 | GUIDE_SPIRIT | — (Phase 3c) | — |
 
@@ -275,9 +275,29 @@ The walkable set is threaded by `FlowEncounterState.enter()` (placement) and `Fl
 
 **`_resolve_mode_from_stage(stage)` mapping:** `recover` → RECOVER; `protect` → PROTECT; `endure` → ENDURE; all others → COMBAT (shrine handled separately in encounter_approach routing). `resolve_objective_params(mode_key, mode_cfg, completion_index, stage_params)` is pure static — floats scaled by completion order, clamped, stage `params` override.
 
-**ENDURE wave spawn (`FlowRuntime._end_round`):** deterministic wave actors appended each round via `combat.wave.<id>.<round>` (append-only RNG namespace); appended to END of `initiative_order` — no re-sort. `hold_counter` (RECOVER) also incremented here for echoes adjacent to relic. Both paths pass `combat_state` to `check_end_condition`.
+**ENDURE wave spawn (`FlowRuntime._end_round`):** deterministic wave actors appended each round via `combat.wave.<id>.<round>` (append-only RNG namespace); appended to END of `initiative_order` — no re-sort. Wave size rises each wave by `wave_size_rising_step` (clamped to `wave_size_max`). `combat_state` tracks `waves_spawned`, `total_waves`, `all_waves_spawned`. `hold_counter` (RECOVER) also incremented here for echoes adjacent to relic. Both paths pass `combat_state` to `check_end_condition`.
 
-**Known limitation:** ENDURE can end early on an empty-wave-lull because `all_enemies_defeated` is the universal first check. Full distinctiveness pass (win-only-via-all-waves + no transient-lull + no defensive-default) is tracked as a follow-up to Phase 3.
+**~~Known limitation~~:** ~~ENDURE can end early on an empty-wave-lull~~ — **RESOLVED** by the Distinctiveness pass. `all_enemies_defeated` is now suppressed for ENDURE until `all_waves_spawned = true`.
+
+**Mode-distinctiveness mechanism (V2-STAGE-004 Distinctiveness pass):** per-mode "directive-weight context" is **injected additively** into `BehaviorArbiter.select_intent()` — merged onto the player's current directive `intent_weights`, never mutating the directive itself. Dormant situational conditions (`objective_in_range`, `objective_threatened`) are activated with real multipliers. Per-turn ctx carries `resolution_mode`, `totem_stolen`, `totem_carrier_id` which the arbiter reads.
+
+- **RECOVER:** designated holder (deterministic: speed→agi→id, stored as `recover_holder_id`) gets advance/hold directive weights via injected context; `objective_in_range` situational fires when holder is adjacent to relic (digs in); enemies get `prefer_objective_target`; **relic-seeking reinforcement** trickles from far edge each `reinforce_interval` rounds (`reinforce_size` actors per wave, up to `reinforce_max_total`), appended to END of initiative_order (no re-sort, no new RNG draws beyond existing wave namespace). **Relic: invulnerable + no HP bar** (UI draw-gated on `is_objective_relic`).
+- **PROTECT:** echoes interpose via `objective_threatened` situational + target overrides (intercept nearest-to-totem enemy; focus-fire carrier when stolen). **Theft:** enemy ending adjacent to an unguarded totem rolls `theft_chance` (RNG `combat.theft.<encounter>.<round>`, ≤1 draw/round) → becomes carrier + deals `double_damage_mult` damage; echoes focus-fire to recover it; carrier death clears theft. `totem_stolen` / `totem_carrier_id` written to `combat_state` and threaded to ctx each turn.
+- **ENDURE:** rising wave curve only; no defensive-default bias injected. Dual-win: survive-to-N OR clear-all (only after `all_waves_spawned`).
+- **PURIFY_SHRINE:** ring-defend `directive_intent_weights` injected for **NON-purifier echoes only** (purifier target selection untouched).
+
+**New `combat_state` fields (Distinctiveness):** `recover_holder_id` (String), `recover_reinforce_count` (int), `waves_spawned` (int), `total_waves` (int), `all_waves_spawned` (bool), `totem_stolen` (bool), `totem_carrier_id` (String), `protect_counter` (int).
+
+**New `objective_state` snapshot fields (Distinctiveness):** `objective_invulnerable` (bool — suppresses HP bar draw), `waves_remaining` (int), `wave_total` (int), `totem_stolen` (bool), `protect_progress` (int), `protect_required` (int).
+
+**New balance keys (Distinctiveness — under `data.combat.objective_modes`):**
+- `recover`: `directive_intent_weights {}`, `reinforce_interval`, `reinforce_size`, `reinforce_group`, `reinforce_max_total`
+- `protect`: `directive_intent_weights {}`, `objective_threatened_radius`, `theft_chance`, `double_damage_mult`, `protect_guard_radius`
+- `endure`: `wave_size_rising_step`
+- `purify_shrine`: `directive_intent_weights {}`
+- `data.actor.situational_muls.objective_in_range` and `objective_threatened` (real non-stub multipliers)
+
+**Known limitations (Distinctiveness):** `objective_threatened_radius` defaults to 3 in the arbiter — tuning `data.combat.objective_modes.protect.objective_threatened_radius` in the JSON has no effect until that key is threaded from `data.combat` into the arbiter's `data.actor` `_cfg`. RECOVER holder gets no directive weight on round 1 (designated at first `_end_round`). PURIFY sharpen applies to non-purifier echoes only. A pre-existing PURIFY purifier-passivity bug (morale collapse → idle) is tracked as a separate future fix.
 
 **`next_step` target-directed pathing contract (V2-STAGE-004 Phase 3, `StageTerrain.next_step(from, dist_field, walkable, target={})`):**
 Among neighbours that share the minimum BFS distance, `next_step` tiebreaks **toward the target** (chebyshev-distance → then manhattan → then stable sort). The `target` dict (`{"col":int,"row":int}`) is threaded from both callers — `GridService.move_toward` (combat movement) and `FlowRuntime._handle_stage_advance_turn` (exploration). Without the target, equal-BFS neighbours were resolved by sort order, producing a systematic up-left/top-left drift visible in both game modes. **Contract: never call `next_step` without a target when directional fidelity matters.**

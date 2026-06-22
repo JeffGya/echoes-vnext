@@ -1576,7 +1576,8 @@ func _resolve_next_actor(t: int) -> void:
 		"shrine_hp_ratio":         shrine_hp_ratio,
 		"prefer_objective_target": actor.get("faction", "") == "enemy" \
 			and (ectx.resolution_mode == EncounterResolutionModes.PURIFY_SHRINE \
-				or ectx.resolution_mode == EncounterResolutionModes.PROTECT),
+				or ectx.resolution_mode == EncounterResolutionModes.PROTECT \
+				or ectx.resolution_mode == EncounterResolutionModes.RECOVER),
 		# VOW-001: active vow dict (or {}) for BehaviorArbiter vow bias layer.
 		"active_vow":              _vow_ctx,
 		# VOW-001: echo party size for tikoro_nko_agyina party-size gate.
@@ -1588,7 +1589,56 @@ func _resolve_next_actor(t: int) -> void:
 		# V2-VOICE-001: reactive bark queue — read-only; actors read this to fire rally_ally barks.
 		"round_bark_events":       ectx.round_bark_events,
 		"directive":               {} if _is_keeper_intro_trial_active() else (directive_service.get_active_directive() if directive_service != null else {}),
+		# V2-STAGE-004 Distinctiveness: mode identity + PROTECT theft context for BehaviorArbiter.
+		"resolution_mode":         str(ectx.resolution_mode),
+		"totem_stolen":            bool(ectx.combat_state.get("totem_stolen", false)),
+		"totem_carrier_id":        str(ectx.combat_state.get("totem_carrier_id", "")),
 	}
+
+	# V2-STAGE-004 Distinctiveness §4-C: mode directive injection.
+	# Merge mode-specific directive_intent_weights into a COPY of the player directive —
+	# never mutate the shared player directive dict.
+	# Gate: skip during keeper-intro trial (mirrors the existing keeper-intro guard above).
+	if not _is_keeper_intro_trial_active():
+		var _mode_dw_src: Dictionary = {}
+		var _di_mode: String = str(ectx.resolution_mode)
+		var _di_bdata: Dictionary = config_service.get_balance().get("data", {})
+		var _di_modes_cfg: Dictionary = _di_bdata.get("combat", {}).get("objective_modes", {})
+		var _di_mode_cfg: Dictionary = _di_modes_cfg.get(_di_mode, {})
+		var _di_raw_dw: Variant = _di_mode_cfg.get("directive_intent_weights", {})
+		if _di_raw_dw is Dictionary and not (_di_raw_dw as Dictionary).is_empty():
+			# Determine whether this actor is eligible for mode directive injection.
+			var _di_apply: bool = false
+			match _di_mode:
+				EncounterResolutionModes.RECOVER:
+					# Only the designated holder receives mode directive weights.
+					_di_apply = str(actor.get("id", "")) == str(ectx.combat_state.get("recover_holder_id", "")) \
+						and str(actor.get("faction", "")) == "echo" \
+						and not bool(actor.get("is_dead", false))
+				EncounterResolutionModes.PROTECT:
+					# All living echoes receive mode directive (interpose bias).
+					_di_apply = str(actor.get("faction", "")) == "echo" \
+						and not bool(actor.get("is_dead", false))
+				EncounterResolutionModes.PURIFY_SHRINE:
+					# All NON-purifier echoes receive mode directive.
+					_di_apply = str(actor.get("faction", "")) == "echo" \
+						and not bool(actor.get("is_dead", false)) \
+						and not bool(ctx.get("is_purifier", false))
+				_:
+					_di_apply = false  # ENDURE / COMBAT: no mode directive.
+			if _di_apply:
+				_mode_dw_src = _di_raw_dw as Dictionary
+		if not _mode_dw_src.is_empty():
+			# Duplicate the player directive to avoid mutating the shared object.
+			var _base_dir: Dictionary = ctx.get("directive", {})
+			var _dir_copy: Dictionary = _base_dir.duplicate(true)
+			if not _dir_copy.has("intent_weights"):
+				_dir_copy["intent_weights"] = {}
+			var _iw_copy: Dictionary = (_dir_copy["intent_weights"] as Dictionary).duplicate(true)
+			for _dw_key in _mode_dw_src:
+				_iw_copy[_dw_key] = float(_iw_copy.get(_dw_key, 0.0)) + float(_mode_dw_src[_dw_key])
+			_dir_copy["intent_weights"] = _iw_copy
+			ctx["directive"] = _dir_copy
 
 	# Resolve this actor's turn.
 	var asm := ActorStateMachine.new(actor, null, actor_cfg)
@@ -2062,19 +2112,185 @@ func _end_round(t: int) -> void:
 				"adjacent":     _any_adjacent,
 			})
 
+		# V2-STAGE-004 Distinctiveness §4-D: designate holder once (deterministic pick).
+		# Among living echoes: highest speed; tiebreak highest stats.agi; tiebreak lowest id.
+		if str(combat_state.get("recover_holder_id", "")) == "":
+			var _holder_best: Dictionary = {}
+			for _hd_a in ectx.actors:
+				if not (_hd_a is Dictionary): continue
+				if bool(_hd_a.get("is_dead", false)): continue
+				if str(_hd_a.get("faction", "")) != "echo": continue
+				if _holder_best.is_empty():
+					_holder_best = _hd_a
+				else:
+					var _hd_spd: int  = int(_hd_a.get("stats", {}).get("speed", 0))
+					var _hb_spd: int  = int(_holder_best.get("stats", {}).get("speed", 0))
+					if _hd_spd > _hb_spd:
+						_holder_best = _hd_a
+					elif _hd_spd == _hb_spd:
+						var _hd_agi: int = int(_hd_a.get("stats", {}).get("agi", 0))
+						var _hb_agi: int = int(_holder_best.get("stats", {}).get("agi", 0))
+						if _hd_agi > _hb_agi:
+							_holder_best = _hd_a
+						elif _hd_agi == _hb_agi:
+							# Tiebreak: lowest id string (lexicographic).
+							if str(_hd_a.get("id", "")) < str(_holder_best.get("id", "")):
+								_holder_best = _hd_a
+			if not _holder_best.is_empty():
+				combat_state["recover_holder_id"] = str(_holder_best.get("id", ""))
+				logger.info(t, "combat.recover.holder_assigned", "RECOVER holder designated", {
+					"round":     round,
+					"holder_id": str(combat_state.get("recover_holder_id", "")),
+					"holder_name": str(_holder_best.get("name", "")),
+				})
+
+		# V2-STAGE-004 Distinctiveness §4-E: RECOVER reinforcement spawn.
+		# Trigger: round > 0, divisible by reinforce_interval, and under max total.
+		var _rec_obj2: Dictionary = combat_state.get("objective_params", {})
+		var _reinf_interval: int   = int(_rec_obj2.get("reinforce_interval", 2))
+		var _reinf_size: int       = int(_rec_obj2.get("reinforce_size", 1))
+		var _reinf_group: String   = str(_rec_obj2.get("reinforce_group", "group.vale_patrol_sm"))
+		var _reinf_max: int        = int(_rec_obj2.get("reinforce_max_total", 4))
+		var _rec_round: int        = int(combat_state.get("round_counter", 0))
+		var _rec_reinf_count: int  = int(combat_state.get("recover_reinforce_count", 0))
+		if _rec_round > 0 and _reinf_interval > 0 \
+				and _rec_round % _reinf_interval == 0 \
+				and _rec_reinf_count < _reinf_max:
+			# Build actor_cfg matching FlowEncounterState.enter() shape.
+			var _ri_actor_cfg: Dictionary = {}
+			var _ri_actors_json: Dictionary = {}
+			if flow_ctx.config_service != null:
+				var _ri_bal: Dictionary = flow_ctx.config_service.get_balance()
+				var _ri_bd: Dictionary  = _ri_bal.get("data", {})
+				_ri_actor_cfg = {
+					"birth_stats": _ri_bd.get("summoning", {}).get("birth_stats", {}),
+					"enemy_types": _ri_bd.get("actor", {}).get("enemy_types", {}),
+				}
+				_ri_actors_json = flow_ctx.config_service.get_actors()
+			var _ri_actors_data: Dictionary = _ri_actors_json.get("data", {})
+			var _ri_enemies_dict: Dictionary = _ri_actors_data.get("enemies", {})
+			var _ri_groups_dict: Dictionary  = _ri_actors_data.get("groups", {})
+			var _ri_group_def: Dictionary    = _ri_groups_dict.get(_reinf_group, {})
+			var _ri_spawns: Array = _ri_group_def.get("spawns", []) if not _ri_group_def.is_empty() else []
+			var _ri_new_actors: Array = []
+			var _ri_built: int = 0
+			var _ri_tmpl_idx: int = 0
+			while _ri_built < _reinf_size and not _ri_spawns.is_empty():
+				var _ri_sp: Dictionary = _ri_spawns[_ri_tmpl_idx % _ri_spawns.size()]
+				_ri_tmpl_idx += 1
+				if not (_ri_sp is Dictionary): continue
+				var _ri_template_id: String = str(_ri_sp.get("template_id", ""))
+				var _ri_tmpl: Dictionary = _ri_enemies_dict.get(_ri_template_id, {})
+				if _ri_tmpl.is_empty(): continue
+				var _ri_type_key: String = _ri_template_id
+				if _ri_type_key.begins_with("enemy."):
+					_ri_type_key = _ri_type_key.substr(6)
+				var _ri_defn: Dictionary = {
+					"id":      "recover_reinf_%d_%d" % [_rec_round, _ri_built],
+					"name":   str(_ri_tmpl.get("name", _ri_template_id)),
+					"type":   _ri_type_key,
+					"faction": "enemy",
+				}
+				_ri_new_actors.append(EnemyActor.from_definition(_ri_defn, t, _ri_actor_cfg))
+				_ri_built += 1
+			# Placement: enemy-side (highest columns), deterministic — reuse ENDURE placement logic.
+			var _ri_walkable: Dictionary = StageTerrain.walkable_set(ectx.terrain) \
+				if not ectx.terrain.is_empty() else {}
+			var _ri_occupied: Dictionary = {}
+			for _ri_oa in ectx.actors:
+				if _ri_oa is Dictionary and not bool(_ri_oa.get("is_dead", false)):
+					var _ri_op: Dictionary = _ri_oa.get("grid_pos", {})
+					if not _ri_op.is_empty():
+						_ri_occupied["%d,%d" % [int(_ri_op.get("col", 0)), int(_ri_op.get("row", 0))]] = true
+			if not _ri_walkable.is_empty():
+				var _ri_candidate_keys: Array = []
+				for _ri_k in _ri_walkable:
+					if not _ri_occupied.has(_ri_k):
+						_ri_candidate_keys.append(_ri_k)
+				_ri_candidate_keys.sort_custom(func(a: String, b: String) -> bool:
+					var _ap := a.split(","); var _bp := b.split(",")
+					var _ac: int = int(_ap[0]); var _bc: int = int(_bp[0])
+					if _ac != _bc: return _ac > _bc  # highest col first (enemy side)
+					var _ar: int = int(_ap[1]); var _br: int = int(_bp[1])
+					if _ar != _br: return _ar < _br   # row asc tiebreak
+					return _ac < _bc                  # col asc final tiebreak
+				)
+				var _ri_cell_idx: int = 0
+				for _ri_na in _ri_new_actors:
+					if _ri_cell_idx >= _ri_candidate_keys.size():
+						break
+					var _ri_ck: String = _ri_candidate_keys[_ri_cell_idx]
+					var _ri_ck_parts := _ri_ck.split(",")
+					GridService.assign_grid_pos(_ri_na,
+						int(_ri_ck_parts[0]), int(_ri_ck_parts[1]))
+					_ri_occupied[_ri_ck] = true
+					_ri_cell_idx += 1
+			else:
+				# Legacy path (no terrain): rightmost columns.
+				var _ri_bal_leg: Dictionary = {}
+				if flow_ctx.config_service != null:
+					_ri_bal_leg = flow_ctx.config_service.get_balance()
+				var _ri_grid_leg: Dictionary = _ri_bal_leg.get("data", {}).get("grid", {})
+				var _ri_cols: int = GridService.get_board_cols(_ri_grid_leg)
+				var _ri_rows: int = GridService.get_board_rows(_ri_grid_leg)
+				var _ri_leg_cells: Array = []
+				for _ri_leg_c in range(_ri_cols - 1, -1, -1):
+					for _ri_leg_r in range(_ri_rows):
+						var _ri_leg_k: String = "%d,%d" % [_ri_leg_c, _ri_leg_r]
+						if not _ri_occupied.has(_ri_leg_k):
+							_ri_leg_cells.append({ "col": _ri_leg_c, "row": _ri_leg_r })
+				var _ri_leg_idx: int = 0
+				for _ri_na in _ri_new_actors:
+					if _ri_leg_idx >= _ri_leg_cells.size():
+						break
+					var _ri_leg_cell: Dictionary = _ri_leg_cells[_ri_leg_idx]
+					GridService.assign_grid_pos(_ri_na,
+						int(_ri_leg_cell.get("col", 0)), int(_ri_leg_cell.get("row", 0)))
+					_ri_occupied["%d,%d" % [int(_ri_leg_cell.get("col", 0)), int(_ri_leg_cell.get("row", 0))]] = true
+					_ri_leg_idx += 1
+			# Append to ectx.actors + END of initiative_order (never re-sort).
+			var _ri_init_order: Array = combat_state.get("initiative_order", [])
+			for _ri_na in _ri_new_actors:
+				ectx.actors.append(_ri_na)
+				_ri_init_order.append({ "id": str(_ri_na.get("id", "")), "name": str(_ri_na.get("name", "")) })
+			combat_state["initiative_order"] = _ri_init_order
+			combat_state["recover_reinforce_count"] = _rec_reinf_count + _ri_new_actors.size()
+			logger.info(t, "combat.recover.reinforce", "RECOVER reinforcement spawned", {
+				"round":              _rec_round,
+				"count":              _ri_new_actors.size(),
+				"reinforce_group":    _reinf_group,
+				"total_reinforced":   int(combat_state.get("recover_reinforce_count", 0)),
+			})
+
 	# V2-STAGE-004 P3a — ENDURE: spawn an enemy wave at the configured interval.
 	# Gate: ENDURE only; COMBAT / PURIFY_SHRINE / other modes are byte-identical.
 	if ectx.resolution_mode == EncounterResolutionModes.ENDURE:
 		var _end_obj: Dictionary = combat_state.get("objective_params", {})
-		var _wave_interval: int = int(_end_obj.get("wave_interval", 2))
-		var _wave_size: int     = int(_end_obj.get("wave_size", 2))
-		var _wave_group: String = str(_end_obj.get("wave_group", "group.vale_patrol_sm"))
-		var _duration_turns: int = int(_end_obj.get("duration_turns", 5))
-		var _round_no: int = int(combat_state.get("round_counter", 0))
+		var _wave_interval: int      = int(_end_obj.get("wave_interval", 2))
+		var _wave_size_base: int     = int(_end_obj.get("wave_size", 2))
+		var _wave_size_max: int      = int(_end_obj.get("wave_size_max", 4))
+		var _wave_size_rising: int   = int(_end_obj.get("wave_size_rising_step", 0))
+		var _wave_group: String      = str(_end_obj.get("wave_group", "group.vale_patrol_sm"))
+		var _duration_turns: int     = int(_end_obj.get("duration_turns", 5))
+		var _round_no: int           = int(combat_state.get("round_counter", 0))
+
+		# V2-STAGE-004 Distinctiveness §4-F: compute total_waves once (count intervals in range).
+		if not combat_state.has("total_waves"):
+			var _tw: int = 0
+			if _wave_interval > 0:
+				for _r in range(1, _duration_turns):
+					if _r % _wave_interval == 0:
+						_tw += 1
+			combat_state["total_waves"] = _tw
+
 		# Spawn when: not round 0, divisible by interval, and before the final/winning round.
 		if _round_no > 0 and _wave_interval > 0 \
 				and _round_no % _wave_interval == 0 \
 				and _round_no < _duration_turns:
+			# §4-F: rising wave size — N = waves_spawned (1-indexed after increment).
+			var _waves_so_far: int = int(combat_state.get("waves_spawned", 0))
+			var _wave_n: int       = _waves_so_far + 1  # 1-indexed for this spawn
+			var _wave_size: int    = clampi(_wave_size_base + (_wave_n - 1) * _wave_size_rising, _wave_size_base, _wave_size_max)
 			# Build actor_cfg same as FlowEncounterState.enter() does.
 			var _w_actor_cfg: Dictionary = {}
 			var _w_actors_json: Dictionary = {}
@@ -2182,10 +2398,142 @@ func _end_round(t: int) -> void:
 				ectx.actors.append(_w_na)
 				_w_init_order.append({ "id": str(_w_na.get("id", "")), "name": str(_w_na.get("name", "")) })
 			combat_state["initiative_order"] = _w_init_order
+			# §4-F: increment waves_spawned and set all_waves_spawned flag.
+			combat_state["waves_spawned"] = _waves_so_far + 1
+			combat_state["all_waves_spawned"] = int(combat_state.get("waves_spawned", 0)) >= int(combat_state.get("total_waves", 9999))
 			logger.info(t, "combat.wave.spawned", "ENDURE wave spawned", {
-				"round":      _round_no,
-				"count":      _w_new_actors.size(),
-				"wave_group": _wave_group,
+				"round":            _round_no,
+				"count":            _w_new_actors.size(),
+				"wave_group":       _wave_group,
+				"wave_n":           _wave_n,
+				"wave_size_used":   _wave_size,
+				"waves_spawned":    int(combat_state.get("waves_spawned", 0)),
+				"total_waves":      int(combat_state.get("total_waves", 0)),
+				"all_waves_spawned": bool(combat_state.get("all_waves_spawned", false)),
+			})
+
+	# V2-STAGE-004 Distinctiveness §4-G: PROTECT theft block.
+	# Gate: PROTECT only. Locate the totem (first living is_structure actor).
+	if ectx.resolution_mode == EncounterResolutionModes.PROTECT:
+		var _prot_totem: Dictionary = {}
+		for _pt_a in ectx.actors:
+			if _pt_a is Dictionary and bool(_pt_a.get("is_structure", false)) \
+					and not bool(_pt_a.get("is_dead", false)):
+				_prot_totem = _pt_a
+				break
+		if not _prot_totem.is_empty():
+			var _pt_totem_pos: Dictionary = _prot_totem.get("grid_pos", {})
+			# Recovery first: if stolen and carrier is dead/absent → clear theft state.
+			if bool(combat_state.get("totem_stolen", false)):
+				var _pt_carrier_id: String = str(combat_state.get("totem_carrier_id", ""))
+				var _pt_carrier: Dictionary = _find_actor_by_id(ectx.actors, _pt_carrier_id)
+				var _pt_carrier_dead: bool = _pt_carrier.is_empty() or bool(_pt_carrier.get("is_dead", false))
+				if _pt_carrier_dead:
+					combat_state["totem_stolen"] = false
+					combat_state["totem_carrier_id"] = ""
+					if not _pt_carrier.is_empty():
+						_pt_carrier["_carrier_double_damage"] = false
+					logger.info(t, "combat.protect.theft_cleared", "PROTECT carrier down — theft cleared", {
+						"round":       round,
+						"carrier_id":  _pt_carrier_id,
+					})
+			# Theft roll: only when NOT already stolen.
+			elif not bool(combat_state.get("totem_stolen", false)):
+				# Determine if totem is guarded (any living echo adjacent to totem).
+				var _pt_guarded: bool = false
+				for _pt_echo in ectx.actors:
+					if not (_pt_echo is Dictionary): continue
+					if bool(_pt_echo.get("is_dead", false)): continue
+					if str(_pt_echo.get("faction", "")) != "echo": continue
+					if GridService.is_adjacent(_pt_echo.get("grid_pos", {}), _pt_totem_pos):
+						_pt_guarded = true
+						break
+				if not _pt_guarded:
+					# Find living enemy adjacent to totem with lowest id (deterministic).
+					var _pt_adj_enemy: Dictionary = {}
+					for _pt_en in ectx.actors:
+						if not (_pt_en is Dictionary): continue
+						if bool(_pt_en.get("is_dead", false)): continue
+						if str(_pt_en.get("faction", "")) != "enemy": continue
+						if bool(_pt_en.get("is_structure", false)): continue
+						if GridService.is_adjacent(_pt_en.get("grid_pos", {}), _pt_totem_pos):
+							if _pt_adj_enemy.is_empty() or \
+									str(_pt_en.get("id", "")) < str(_pt_adj_enemy.get("id", "")):
+								_pt_adj_enemy = _pt_en
+					if not _pt_adj_enemy.is_empty():
+						# Roll theft via CampaignSeed — one derive per round, append-only namespace.
+						var _pt_encounter_id: String = str(ectx.encounter_id)
+						var _pt_theft_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+						if flow_ctx.campaign_seed != null:
+							_pt_theft_rng = flow_ctx.campaign_seed.get_rng(
+								"combat.theft.%s.%d" % [_pt_encounter_id, round])
+						else:
+							_pt_theft_rng.seed = hash("combat.theft.%s.%d" % [_pt_encounter_id, round])
+						# Read theft_chance from balance config.
+						var _pt_bal: Dictionary = {}
+						if flow_ctx.config_service != null:
+							_pt_bal = flow_ctx.config_service.get_balance()
+						var _pt_theft_chance: float = float(
+							_pt_bal.get("data", {}).get("combat", {})
+								.get("objective_modes", {})
+								.get("protect", {})
+								.get("theft_chance", 0.5))
+						if _pt_theft_rng.randf() < _pt_theft_chance:
+							combat_state["totem_stolen"]     = true
+							combat_state["totem_carrier_id"] = str(_pt_adj_enemy.get("id", ""))
+							_pt_adj_enemy["_carrier_double_damage"] = true
+							_pt_adj_enemy["_double_damage_mult"] = float(
+								_pt_bal.get("data", {}).get("combat", {})
+									.get("objective_modes", {})
+									.get("protect", {})
+									.get("double_damage_mult", 2.0))
+							logger.info(t, "combat.protect.theft", "PROTECT totem stolen!", {
+								"round":       round,
+								"carrier_id":  str(_pt_adj_enemy.get("id", "")),
+								"carrier_name": str(_pt_adj_enemy.get("name", "")),
+							})
+
+	# V2-STAGE-004 Distinctiveness §4-G2: PROTECT guard-proximity counter.
+	# protect_counter only advances on rounds where at least one living echo is within
+	# protect_guard_radius (Chebyshev) of the protected entity. Resets when unguarded
+	# (mirrors RECOVER hold_counter). Gate: PROTECT only. Run AFTER theft resolution for this round.
+	if ectx.resolution_mode == EncounterResolutionModes.PROTECT:
+		var _pg_entity: Dictionary = {}
+		for _pg_a in ectx.actors:
+			if _pg_a is Dictionary and bool(_pg_a.get("is_structure", false)) \
+					and not bool(_pg_a.get("is_dead", false)):
+				_pg_entity = _pg_a
+				break
+		if not _pg_entity.is_empty():
+			var _pg_entity_pos: Dictionary = _pg_entity.get("grid_pos", {})
+			# Read guard radius from balance config (default 2).
+			var _pg_bal: Dictionary = {}
+			if flow_ctx.config_service != null:
+				_pg_bal = flow_ctx.config_service.get_balance()
+			var _pg_guard_radius: int = int(
+				_pg_bal.get("data", {}).get("combat", {})
+					.get("objective_modes", {})
+					.get("protect", {})
+					.get("protect_guard_radius", 2))
+			# Check whether any living echo is within guard radius of the entity.
+			var _pg_guarded: bool = false
+			for _pg_echo in ectx.actors:
+				if not (_pg_echo is Dictionary): continue
+				if bool(_pg_echo.get("is_dead", false)): continue
+				if str(_pg_echo.get("faction", "")) != "echo": continue
+				if GridService.chebyshev_distance(_pg_echo.get("grid_pos", {}), _pg_entity_pos) \
+						<= _pg_guard_radius:
+					_pg_guarded = true
+					break
+			if _pg_guarded:
+				combat_state["protect_counter"] = int(combat_state.get("protect_counter", 0)) + 1
+			else:
+				# Not guarded: reset to 0 (mirrors RECOVER hold_counter reset-on-leave semantics).
+				combat_state["protect_counter"] = 0
+			logger.debug(t, "combat.protect.guard", "PROTECT guard progress", {
+				"round":           round,
+				"protect_counter": int(combat_state.get("protect_counter", 0)),
+				"guarded":         _pg_guarded,
 			})
 
 	# Check end condition — pass combat_state so RECOVER/PROTECT/ENDURE checks read

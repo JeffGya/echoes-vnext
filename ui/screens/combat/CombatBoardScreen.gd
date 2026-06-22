@@ -213,8 +213,18 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	# COMBAT-007: read objective_state dict (replaces flat objective_type field).
 	var obj_state: Dictionary = data.get("objective_state", {})
 	var obj_type: String = str(obj_state.get("type", ""))
-	_objective_label.text    = obj_type
-	_objective_label.visible = not obj_type.is_empty()
+	# V2-STAGE-004 distinctiveness: enrich banner text for ENDURE and PROTECT modes.
+	var banner_text: String = obj_type
+	if obj_type == "endure":
+		var waves_remaining: int = int(obj_state.get("waves_remaining", 0))
+		var wave_total: int      = int(obj_state.get("wave_total", 0))
+		if wave_total > 0:
+			banner_text = "Endure — Waves: %d/%d remaining" % [waves_remaining, wave_total]
+	elif obj_type == "protect":
+		if bool(obj_state.get("totem_stolen", false)):
+			banner_text = "Totem STOLEN — recover it!"
+	_objective_label.text    = banner_text
+	_objective_label.visible = not banner_text.is_empty()
 
 	# COMBAT-SEQ: CTA and auto-dispatch depend on round_phase.
 	var round_phase: String  = str(data.get("round_phase", "pre_combat"))
@@ -487,16 +497,17 @@ func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}
 		var hp_ratio: float = clampf(cur_hp / max(max_hp, 1.0), 0.0, 1.0)
 
 		tokens.append({
-			"actor_id":      actor_id,
-			"grid_pos":      gp.duplicate(),
-			"cell_pos":      cell_center,
-			"faction":       str(actor.get("faction", "")),
-			"is_structure":  bool(actor.get("is_structure", false)),
-			"label":         str(actor.get("name", "??")).substr(0, 2).to_upper(),
-			"hp_ratio":      hp_ratio,
-			"damage_text":   damage_by_id.get(actor_id, ""),
-			"fear":          int(actor.get("fear", 0)),
-			"morale":        int(actor.get("morale", 50)),
+			"actor_id":           actor_id,
+			"grid_pos":           gp.duplicate(),
+			"cell_pos":           cell_center,
+			"faction":            str(actor.get("faction", "")),
+			"is_structure":       bool(actor.get("is_structure", false)),
+			"is_objective_relic": bool(actor.get("is_objective_relic", false)),
+			"label":              str(actor.get("name", "??")).substr(0, 2).to_upper(),
+			"hp_ratio":           hp_ratio,
+			"damage_text":        damage_by_id.get(actor_id, ""),
+			"fear":               int(actor.get("fear", 0)),
+			"morale":             int(actor.get("morale", 50)),
 		})
 
 	var telegraph_event: Dictionary = _token_layer.apply_snapshot(

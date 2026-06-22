@@ -20,11 +20,15 @@
 #   5. objective_combat/protect_entity_lost_lose
 #          guarded structure is_dead:true + living echoes + living enemies → "entity_lost" lose.
 #   6. objective_combat/protect_duration_met_victory
-#          entity alive + round_counter >= duration_turns + living enemies → "protected" victory.
+#          entity alive + protect_counter >= duration_turns + living enemies → "protected" victory.
 #   7. objective_combat/protect_not_over_short
-#          entity alive + round_counter < duration_turns + living enemies → not over.
+#          entity alive + protect_counter < duration_turns + living enemies → not over.
 #   8. objective_combat/protect_all_enemies_dead_beats_duration
 #          all enemies dead → "all_enemies_defeated" (first priority).
+#   (new) objective_combat/protect_round_counter_only_not_over
+#          round_counter >= duration_turns but protect_counter=0 + living enemies → NOT over.
+#   (new) objective_combat/protect_counter_partial_advance
+#          protect_counter=2 < duration_turns=4 → not over (counter advances, but not there yet).
 #
 # ENDURE
 #   9. objective_combat/endure_duration_met_victory
@@ -129,6 +133,18 @@ static func _timed_state(round_counter: int, duration_turns: int) -> Dictionary:
 		"objective_params": { "duration_turns": duration_turns },
 	}
 
+# Minimal combat_state dict for PROTECT objectives that use protect_counter.
+# protect_counter is the guard-proximity counter (only advances when an echo is near entity).
+# round_counter is still present for completeness but protect win checks protect_counter.
+static func _protect_state(protect_counter: int, duration_turns: int, totem_stolen: bool = false) -> Dictionary:
+	return {
+		"round_counter":    protect_counter,  # kept in sync for snapshot projections; not used for win gate
+		"hold_counter":     0,
+		"protect_counter":  protect_counter,
+		"objective_params": { "duration_turns": duration_turns },
+		"totem_stolen":     totem_stolen,
+	}
+
 
 # ─── Registration ────────────────────────────────────────────────────────────
 
@@ -160,6 +176,41 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(ObjectiveCombatTests, "_t_endure_all_echoes_dead_lose"))
 	runner.register_test("objective_combat/endure_all_enemies_dead_first",
 		Callable(ObjectiveCombatTests, "_t_endure_all_enemies_dead_first"))
+	# V2-STAGE-004 Distinctiveness — ENDURE lull guard + dual win
+	runner.register_test("objective_combat/endure_lull_clear_all_no_win",
+		Callable(ObjectiveCombatTests, "_t_endure_lull_clear_all_no_win"))
+	runner.register_test("objective_combat/endure_lull_echoes_dead_still_lose",
+		Callable(ObjectiveCombatTests, "_t_endure_lull_echoes_dead_still_lose"))
+	runner.register_test("objective_combat/endure_all_waves_spawned_clear_all_wins",
+		Callable(ObjectiveCombatTests, "_t_endure_all_waves_spawned_clear_all_wins"))
+	runner.register_test("objective_combat/endure_survive_to_duration_wins",
+		Callable(ObjectiveCombatTests, "_t_endure_survive_to_duration_wins"))
+	# V2-STAGE-004 Distinctiveness — PROTECT stolen-at-clockout
+	runner.register_test("objective_combat/protect_stolen_at_clockout_defeat",
+		Callable(ObjectiveCombatTests, "_t_protect_stolen_at_clockout_defeat"))
+	runner.register_test("objective_combat/protect_not_stolen_at_clockout_victory",
+		Callable(ObjectiveCombatTests, "_t_protect_not_stolen_at_clockout_victory"))
+	# V2-STAGE-004 PROTECT guard-proximity counter
+	runner.register_test("objective_combat/protect_round_counter_only_not_over",
+		Callable(ObjectiveCombatTests, "_t_protect_round_counter_only_not_over"))
+	runner.register_test("objective_combat/protect_counter_partial_advance",
+		Callable(ObjectiveCombatTests, "_t_protect_counter_partial_advance"))
+	# V2-STAGE-004 Distinctiveness — ENDURE rising wave size logic (§4-F)
+	runner.register_test("objective_combat/endure_wave_size_rising_n1",
+		Callable(ObjectiveCombatTests, "_t_endure_wave_size_rising_n1"))
+	runner.register_test("objective_combat/endure_wave_size_rising_n2",
+		Callable(ObjectiveCombatTests, "_t_endure_wave_size_rising_n2"))
+	runner.register_test("objective_combat/endure_wave_size_clamped_at_max",
+		Callable(ObjectiveCombatTests, "_t_endure_wave_size_clamped_at_max"))
+	runner.register_test("objective_combat/endure_total_waves_computed",
+		Callable(ObjectiveCombatTests, "_t_endure_total_waves_computed"))
+	# V2-STAGE-004 Distinctiveness — §4-I _build_objective_state additions
+	runner.register_test("objective_combat/objective_state_invulnerable_recover",
+		Callable(ObjectiveCombatTests, "_t_objective_state_invulnerable_recover"))
+	runner.register_test("objective_combat/objective_state_waves_remaining_endure",
+		Callable(ObjectiveCombatTests, "_t_objective_state_waves_remaining_endure"))
+	runner.register_test("objective_combat/objective_state_totem_stolen_protect",
+		Callable(ObjectiveCombatTests, "_t_objective_state_totem_stolen_protect"))
 	# Zero-regression — legacy COMBAT path
 	runner.register_test("objective_combat/legacy_combat_enemies_dead_victory",
 		Callable(ObjectiveCombatTests, "_t_legacy_combat_enemies_dead_victory"))
@@ -279,15 +330,17 @@ static func _t_protect_entity_lost_lose() -> Dictionary:
 	return { "ok": true }
 
 
-# 6. entity alive + round_counter >= duration_turns + living enemies → "protected" victory.
+# 6. entity alive + protect_counter >= duration_turns + living enemies → "protected" victory.
+#    (protect_counter is advanced by FlowRuntime only when an echo is near the entity;
+#     round_counter alone no longer gates the PROTECT win.)
 static func _t_protect_duration_met_victory() -> Dictionary:
 	var actors: Array = [_echo("e1"), _enemy("n1"), _structure("ward_0")]
-	var cs := _timed_state(4, 4)  # round_counter == duration_turns
+	var cs := _protect_state(4, 4)  # protect_counter == duration_turns
 
 	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.PROTECT, cs)
 
 	if not result.get("over", false):
-		return { "ok": false, "error": "Expected over=true (duration met), got over=false" }
+		return { "ok": false, "error": "Expected over=true (protect_counter met), got over=false" }
 	if not result.get("victory", false):
 		return { "ok": false, "error": "Expected victory=true (protected), got victory=false" }
 	if result.get("reason", "") != "protected":
@@ -295,15 +348,15 @@ static func _t_protect_duration_met_victory() -> Dictionary:
 	return { "ok": true }
 
 
-# 7. entity alive + round_counter < duration_turns + living enemies → not over.
+# 7. entity alive + protect_counter < duration_turns + living enemies → not over.
 static func _t_protect_not_over_short() -> Dictionary:
 	var actors: Array = [_echo("e1"), _enemy("n1"), _structure("ward_0")]
-	var cs := _timed_state(3, 4)  # round_counter < duration_turns
+	var cs := _protect_state(3, 4)  # protect_counter < duration_turns
 
 	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.PROTECT, cs)
 
 	if result.get("over", true):
-		return { "ok": false, "error": "Expected over=false (duration not yet met), got over=true (reason='%s')" % str(result.get("reason", "")) }
+		return { "ok": false, "error": "Expected over=false (protect_counter not yet met), got over=true (reason='%s')" % str(result.get("reason", "")) }
 	return { "ok": true }
 
 
@@ -370,20 +423,158 @@ static func _t_endure_all_echoes_dead_lose() -> Dictionary:
 	return { "ok": true }
 
 
-# 12. all enemies dead → "all_enemies_defeated" (first priority over endure check).
+# 12. all enemies dead + all_waves_spawned == true → "all_enemies_defeated" (out-kill win).
+#     Scenario: final wave has been spawned and echoes wipe them — fight ends in victory.
 static func _t_endure_all_enemies_dead_first() -> Dictionary:
 	var actors: Array = [_echo("e1"), _enemy_dead("n1")]
-	# Duration not met — but enemies all dead wins first.
-	var cs := _timed_state(0, 10)
+	# all_waves_spawned must be true so the universal win fires ("out-kill" win path).
+	var cs: Dictionary = {
+		"round_counter":    0,
+		"hold_counter":     0,
+		"objective_params": { "duration_turns": 10 },
+		"all_waves_spawned": true,
+	}
 
 	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.ENDURE, cs)
 
 	if not result.get("over", false):
-		return { "ok": false, "error": "Expected over=true (enemies dead), got over=false" }
+		return { "ok": false, "error": "Expected over=true (enemies dead + all waves spawned), got over=false" }
 	if not result.get("victory", false):
 		return { "ok": false, "error": "Expected victory=true, got victory=false" }
 	if result.get("reason", "") != "all_enemies_defeated":
 		return { "ok": false, "error": "Expected reason='all_enemies_defeated', got '%s'" % str(result.get("reason", "")) }
+	return { "ok": true }
+
+
+# ─── V2-STAGE-004 Distinctiveness: ENDURE lull guard + dual win ──────────────
+
+# endure_lull_clear_all_no_win:
+# ENDURE + all_waves_spawned == false → clearing enemies during lull must NOT end the fight.
+# The next wave must be allowed to spawn (FlowRuntime does so on end_round).
+static func _t_endure_lull_clear_all_no_win() -> Dictionary:
+	var actors: Array = [_echo("e1"), _enemy_dead("n1")]
+	# all_waves_spawned NOT set (defaults false) — simulates inter-wave lull.
+	var cs: Dictionary = {
+		"round_counter":    2,
+		"hold_counter":     0,
+		"objective_params": { "duration_turns": 8 },
+		"all_waves_spawned": false,
+	}
+
+	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.ENDURE, cs)
+
+	if result.get("over", false):
+		return {
+			"ok": false,
+			"error": "ENDURE lull: expected over=false while waves remain, got over=true (reason='%s')" % str(result.get("reason", ""))
+		}
+	return { "ok": true }
+
+
+# endure_lull_echoes_dead_still_lose:
+# During ENDURE lull (all_waves_spawned == false), all echoes dying must still be a defeat.
+# Only the all_enemies_defeated VICTORY is gated — all_echoes_dead defeat fires as normal.
+static func _t_endure_lull_echoes_dead_still_lose() -> Dictionary:
+	var actors: Array = [_echo_dead("e1"), _enemy_dead("n1")]
+	var cs: Dictionary = {
+		"round_counter":    2,
+		"hold_counter":     0,
+		"objective_params": { "duration_turns": 8 },
+		"all_waves_spawned": false,
+	}
+
+	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.ENDURE, cs)
+
+	if not result.get("over", false):
+		return { "ok": false, "error": "Expected over=true (echoes dead during lull), got over=false" }
+	if result.get("victory", true):
+		return { "ok": false, "error": "Expected victory=false (echoes dead), got victory=true" }
+	if result.get("reason", "") != "all_echoes_dead":
+		return { "ok": false, "error": "Expected reason='all_echoes_dead', got '%s'" % str(result.get("reason", "")) }
+	return { "ok": true }
+
+
+# endure_all_waves_spawned_clear_all_wins:
+# ENDURE + all_waves_spawned == true → killing remaining enemies fires "all_enemies_defeated"
+# (the "out-kill" dual win path).
+static func _t_endure_all_waves_spawned_clear_all_wins() -> Dictionary:
+	var actors: Array = [_echo("e1"), _enemy_dead("n1")]
+	var cs: Dictionary = {
+		"round_counter":    3,
+		"hold_counter":     0,
+		"objective_params": { "duration_turns": 8 },
+		"all_waves_spawned": true,
+	}
+
+	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.ENDURE, cs)
+
+	if not result.get("over", false):
+		return { "ok": false, "error": "Expected over=true (all waves out, enemies dead), got over=false" }
+	if not result.get("victory", false):
+		return { "ok": false, "error": "Expected victory=true (out-kill win), got victory=false" }
+	if result.get("reason", "") != "all_enemies_defeated":
+		return { "ok": false, "error": "Expected reason='all_enemies_defeated', got '%s'" % str(result.get("reason", "")) }
+	return { "ok": true }
+
+
+# endure_survive_to_duration_wins:
+# ENDURE + round_counter >= duration_turns + living enemies → "endured" ("out-survive" win).
+# Mirrors existing test 9 but explicitly confirms all_waves_spawned is irrelevant for endure-path.
+static func _t_endure_survive_to_duration_wins() -> Dictionary:
+	var actors: Array = [_echo("e1"), _enemy("n1")]
+	var cs: Dictionary = {
+		"round_counter":    6,
+		"hold_counter":     0,
+		"objective_params": { "duration_turns": 6 },
+		"all_waves_spawned": false,  # doesn't matter — duration path fires regardless
+	}
+
+	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.ENDURE, cs)
+
+	if not result.get("over", false):
+		return { "ok": false, "error": "Expected over=true (duration met), got over=false" }
+	if not result.get("victory", false):
+		return { "ok": false, "error": "Expected victory=true (endured), got victory=false" }
+	if result.get("reason", "") != "endured":
+		return { "ok": false, "error": "Expected reason='endured', got '%s'" % str(result.get("reason", "")) }
+	return { "ok": true }
+
+
+# ─── V2-STAGE-004 Distinctiveness: PROTECT stolen-at-clockout ────────────────
+
+# protect_stolen_at_clockout_defeat:
+# PROTECT + protect_counter >= duration_turns + totem_stolen == true → defeat "totem_taken".
+# The totem was stolen and the echoes accumulated enough guarded rounds — but totem not recovered.
+static func _t_protect_stolen_at_clockout_defeat() -> Dictionary:
+	var actors: Array = [_echo("e1"), _enemy("n1"), _structure("ward_0")]
+	var cs: Dictionary = _protect_state(4, 4, true)  # protect_counter == duration_turns, stolen
+
+	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.PROTECT, cs)
+
+	if not result.get("over", false):
+		return { "ok": false, "error": "Expected over=true (stolen at clockout), got over=false" }
+	if result.get("victory", true):
+		return { "ok": false, "error": "Expected victory=false (totem taken), got victory=true" }
+	if result.get("reason", "") != "totem_taken":
+		return { "ok": false, "error": "Expected reason='totem_taken', got '%s'" % str(result.get("reason", "")) }
+	return { "ok": true }
+
+
+# protect_not_stolen_at_clockout_victory:
+# PROTECT + protect_counter >= duration_turns + totem_stolen == false → victory "protected".
+# Totem was never stolen (or was recovered before guard threshold was met).
+static func _t_protect_not_stolen_at_clockout_victory() -> Dictionary:
+	var actors: Array = [_echo("e1"), _enemy("n1"), _structure("ward_0")]
+	var cs: Dictionary = _protect_state(5, 4, false)  # protect_counter(5) > duration_turns(4), safe
+
+	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.PROTECT, cs)
+
+	if not result.get("over", false):
+		return { "ok": false, "error": "Expected over=true (duration met, totem safe), got over=false" }
+	if not result.get("victory", false):
+		return { "ok": false, "error": "Expected victory=true (protected), got victory=false" }
+	if result.get("reason", "") != "protected":
+		return { "ok": false, "error": "Expected reason='protected', got '%s'" % str(result.get("reason", "")) }
 	return { "ok": true }
 
 
@@ -622,4 +813,188 @@ static func _t_create_stores_objective_params() -> Dictionary:
 	if int(state.get("round_counter", -1)) != 0:
 		return { "ok": false, "error": "Expected round_counter=0, got %d" % int(state.get("round_counter", -1)) }
 
+	return { "ok": true }
+
+
+# ─── V2-STAGE-004 Distinctiveness: ENDURE rising wave size (§4-F) ─────────────
+# These tests exercise the rising-wave-size formula directly — no FlowRuntime needed.
+# Formula: wave_size = clamp(base + (N-1)*rising_step, base, max)
+# where N = 1-indexed wave number (waves_spawned before this spawn + 1).
+
+# Helper: compute rising wave size for wave N.
+static func _rising_wave_size(base: int, rising_step: int, wave_max: int, n: int) -> int:
+	return clampi(base + (n - 1) * rising_step, base, wave_max)
+
+
+# Wave 1 (N=1): no rising yet — size == base.
+# base=2, step=1, max=4, N=1 → size=2.
+static func _t_endure_wave_size_rising_n1() -> Dictionary:
+	var size: int = _rising_wave_size(2, 1, 4, 1)
+	if size != 2:
+		return { "ok": false, "error": "Wave 1: expected size=2, got %d" % size }
+	return { "ok": true }
+
+
+# Wave 2 (N=2): one step of rising — base=2, step=1 → 3.
+static func _t_endure_wave_size_rising_n2() -> Dictionary:
+	var size: int = _rising_wave_size(2, 1, 4, 2)
+	if size != 3:
+		return { "ok": false, "error": "Wave 2: expected size=3, got %d" % size }
+	return { "ok": true }
+
+
+# Wave 5 (N=5): would be 2+(5-1)*1=6, clamped to max=4.
+static func _t_endure_wave_size_clamped_at_max() -> Dictionary:
+	var size: int = _rising_wave_size(2, 1, 4, 5)
+	if size != 4:
+		return { "ok": false, "error": "Wave 5 (clamped): expected size=4, got %d" % size }
+	return { "ok": true }
+
+
+# total_waves computation: duration=6, interval=2 → rounds 2,4 → total_waves=2.
+# (Rounds in range(1,6) divisible by 2: 2, 4 — count=2.)
+static func _t_endure_total_waves_computed() -> Dictionary:
+	var duration_turns: int = 6
+	var wave_interval: int  = 2
+	var _tw: int = 0
+	for _r in range(1, duration_turns):
+		if _r % wave_interval == 0:
+			_tw += 1
+	if _tw != 2:
+		return { "ok": false, "error": "total_waves for duration=6 interval=2: expected 2, got %d" % _tw }
+	return { "ok": true }
+
+
+# ─── V2-STAGE-004 Distinctiveness: §4-I _build_objective_state additions ────────
+# These tests call FlowEncounterState._build_objective_state indirectly via
+# a minimal EncounterContext + combat_state, using the public static builder.
+# We test the new fields: objective_invulnerable, waves_remaining, wave_total, totem_stolen.
+
+# objective_invulnerable: RECOVER relic actor with is_objective_relic=true → true.
+static func _t_objective_state_invulnerable_recover() -> Dictionary:
+	var relic: Dictionary = _structure("relic_0")
+	relic["is_objective_relic"] = true
+	var actors: Array = [_echo("e1"), _enemy("n1"), relic]
+	# Use a minimal combat_state for RECOVER.
+	var cs: Dictionary = {
+		"objective":        EncounterResolutionModes.RECOVER,
+		"round_counter":    1,
+		"hold_counter":     0,
+		"objective_params": { "hold_rounds": 3 },
+	}
+	# Build a mock EncounterContext via CombatState.create then patch actors + terrain.
+	var ectx := EncounterContext.new()
+	ectx.actors          = actors
+	ectx.resolution_mode = EncounterResolutionModes.RECOVER
+	ectx.terrain         = {}
+	ectx.purifier_id     = ""
+	ectx.encounter_id    = "test_invulnerable"
+	ectx.placement_seed  = 0
+	ectx.combat_state    = cs
+	ectx.last_round_results = []
+	ectx.round_bark_events  = []
+	ectx.echo_action_logs   = {}
+
+	var snap: Dictionary = FlowEncounterState._build_objective_state(ectx, cs)
+	if not bool(snap.get("objective_invulnerable", false)):
+		return { "ok": false, "error": "Expected objective_invulnerable=true for RECOVER relic, got false" }
+	return { "ok": true }
+
+
+# waves_remaining / wave_total: ENDURE, 2 of 3 waves spawned → remaining=1.
+static func _t_objective_state_waves_remaining_endure() -> Dictionary:
+	var actors: Array = [_echo("e1"), _enemy("n1")]
+	var cs: Dictionary = {
+		"objective":        EncounterResolutionModes.ENDURE,
+		"round_counter":    4,
+		"hold_counter":     0,
+		"objective_params": { "duration_turns": 6, "wave_interval": 2 },
+		"total_waves":      3,
+		"waves_spawned":    2,
+		"all_waves_spawned": false,
+	}
+	var ectx := EncounterContext.new()
+	ectx.actors          = actors
+	ectx.resolution_mode = EncounterResolutionModes.ENDURE
+	ectx.terrain         = {}
+	ectx.purifier_id     = ""
+	ectx.encounter_id    = "test_waves_remaining"
+	ectx.placement_seed  = 0
+	ectx.combat_state    = cs
+	ectx.last_round_results = []
+	ectx.round_bark_events  = []
+	ectx.echo_action_logs   = {}
+
+	var snap: Dictionary = FlowEncounterState._build_objective_state(ectx, cs)
+	if int(snap.get("waves_remaining", -1)) != 1:
+		return { "ok": false, "error": "Expected waves_remaining=1 (3-2), got %d" % int(snap.get("waves_remaining", -1)) }
+	if int(snap.get("wave_total", -1)) != 3:
+		return { "ok": false, "error": "Expected wave_total=3, got %d" % int(snap.get("wave_total", -1)) }
+	return { "ok": true }
+
+
+# totem_stolen: PROTECT + combat_state.totem_stolen=true → objective_state.totem_stolen=true.
+static func _t_objective_state_totem_stolen_protect() -> Dictionary:
+	var actors: Array = [_echo("e1"), _enemy("n1"), _structure("ward_0")]
+	var cs: Dictionary = {
+		"objective":        EncounterResolutionModes.PROTECT,
+		"round_counter":    2,
+		"hold_counter":     0,
+		"objective_params": { "duration_turns": 5 },
+		"totem_stolen":     true,
+		"totem_carrier_id": "n1",
+	}
+	var ectx := EncounterContext.new()
+	ectx.actors          = actors
+	ectx.resolution_mode = EncounterResolutionModes.PROTECT
+	ectx.terrain         = {}
+	ectx.purifier_id     = ""
+	ectx.encounter_id    = "test_totem_stolen"
+	ectx.placement_seed  = 0
+	ectx.combat_state    = cs
+	ectx.last_round_results = []
+	ectx.round_bark_events  = []
+	ectx.echo_action_logs   = {}
+
+	var snap: Dictionary = FlowEncounterState._build_objective_state(ectx, cs)
+	if not bool(snap.get("totem_stolen", false)):
+		return { "ok": false, "error": "Expected totem_stolen=true in objective_state, got false" }
+	return { "ok": true }
+
+
+# ─── V2-STAGE-004 PROTECT guard-proximity counter tests ─────────────────────
+
+# protect_round_counter_only_not_over:
+# PROTECT with round_counter >= duration_turns but protect_counter=0 and living enemies
+# must NOT be over — the passive round timer no longer gates the PROTECT win.
+static func _t_protect_round_counter_only_not_over() -> Dictionary:
+	var actors: Array = [_echo("e1"), _enemy("n1"), _structure("ward_0")]
+	# round_counter is high enough that the OLD code would have triggered victory,
+	# but protect_counter is 0 (no echo was ever near the entity).
+	var cs: Dictionary = {
+		"round_counter":    8,
+		"hold_counter":     0,
+		"protect_counter":  0,
+		"objective_params": { "duration_turns": 4 },
+		"totem_stolen":     false,
+	}
+
+	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.PROTECT, cs)
+
+	if result.get("over", false):
+		return { "ok": false, "error": "Expected over=false (protect_counter=0 regardless of round_counter), got over=true (reason='%s')" % str(result.get("reason", "")) }
+	return { "ok": true }
+
+
+# protect_counter_partial_advance:
+# PROTECT with protect_counter advanced partway (2 of 4 required guarded rounds) → not over.
+# Validates the guard-proximity mechanic: counter is at 2, threshold is 4.
+static func _t_protect_counter_partial_advance() -> Dictionary:
+	var actors: Array = [_echo("e1"), _enemy("n1"), _structure("ward_0")]
+	var cs: Dictionary = _protect_state(2, 4)  # protect_counter=2 < duration_turns=4
+
+	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.PROTECT, cs)
+
+	if result.get("over", false):
+		return { "ok": false, "error": "Expected over=false (protect_counter=2 < 4), got over=true (reason='%s')" % str(result.get("reason", "")) }
 	return { "ok": true }

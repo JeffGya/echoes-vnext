@@ -152,14 +152,16 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 ## "reason" is "" when not over. Check priority (locked):
 ##   1. all_enemies_defeated → victory  (runs first — echoes that kill the last enemy win
 ##      even if the shrine falls the same round)
+##      EXCEPTION: ENDURE while not all_waves_spawned — lull between waves, fight continues.
 ##   2. shrine_destroyed (purify_shrine objective only) → defeat
 ##   3. PROTECT entity lost → defeat  (structure actor dead)
 ##   4. all_echoes_dead → defeat
 ##   5. RECOVER secured → victory  (hold_counter >= hold_rounds)
-##   6. PROTECT survived → victory  (round_counter >= duration_turns)
+##   6. PROTECT guarded → victory  (protect_counter >= duration_turns AND not totem_stolen)
+##      OR PROTECT stolen-at-clockout → defeat (reason: "totem_taken")
 ##   7. ENDURE survived → victory   (round_counter >= duration_turns)
 ##
-## combat_state carries round_counter, objective_params, and hold_counter.
+## combat_state carries round_counter, protect_counter, objective_params, and hold_counter.
 ## Callers that omit combat_state (COMBAT / PURIFY_SHRINE) receive byte-identical results
 ## to the previous 2-arg signature — no new branches fire for those modes.
 static func check_end_condition(actors: Array, objective: String,
@@ -169,11 +171,19 @@ static func check_end_condition(actors: Array, objective: String,
 	var obj_params: Dictionary = combat_state.get("objective_params", {})
 	var hold_counter: int      = int(combat_state.get("hold_counter", 0))
 
-	# 1. Victory: all enemies dead (universal, unchanged).
+	# 1. Victory: all enemies dead (universal).
+	# ENDURE exception: while waves are still scheduled (all_waves_spawned == false),
+	# clearing the field between waves must NOT end the fight — the next wave must spawn.
+	# Once all_waves_spawned is true, all_enemies_defeated fires normally ("out-kill" win).
 	var living_enemies := actors.filter(func(a: Dictionary) -> bool:
 		return a.get("faction", "") == "enemy" and not a.get("is_dead", false))
 	if living_enemies.is_empty():
-		return { "over": true, "victory": true, "reason": "all_enemies_defeated" }
+		var skip_universal_win: bool = (
+			objective == EncounterResolutionModes.ENDURE
+			and not combat_state.get("all_waves_spawned", false)
+		)
+		if not skip_universal_win:
+			return { "over": true, "victory": true, "reason": "all_enemies_defeated" }
 
 	# 2. Shrine destroyed (purify_shrine objective only, unchanged).
 	if objective == EncounterResolutionModes.PURIFY_SHRINE:
@@ -201,10 +211,16 @@ static func check_end_condition(actors: Array, objective: String,
 		if hold_counter >= hold_rounds:
 			return { "over": true, "victory": true, "reason": "relic_secured" }
 
-	# 6. PROTECT: survived the required wave duration → victory.
+	# 6. PROTECT: guarded for the required number of rounds.
+	# protect_counter only advances on rounds where an echo was within guard radius of the entity.
+	# Victory only when the totem was NOT stolen at clockout.
+	# If the totem was stolen (totem_stolen == true) and the guard threshold is met → defeat "totem_taken".
 	if objective == EncounterResolutionModes.PROTECT:
 		var duration_turns: int = int(obj_params.get("duration_turns", 4))
-		if round_counter >= duration_turns:
+		var protect_counter: int = int(combat_state.get("protect_counter", 0))
+		if protect_counter >= duration_turns:
+			if combat_state.get("totem_stolen", false):
+				return { "over": true, "victory": false, "reason": "totem_taken" }
 			return { "over": true, "victory": true, "reason": "protected" }
 
 	# 7. ENDURE: survived the required wave duration → victory.

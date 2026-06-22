@@ -116,18 +116,22 @@ func _draw() -> void:
 				true
 			)
 
-		var bar_w: float = extent * 2.0
-		var bar_x: float = pos.x - extent
-		var bar_y: float = pos.y - extent - visual_config.hp_bar_offset_y
-		draw_rect(
-			Rect2(bar_x, bar_y, bar_w, visual_config.hp_bar_height),
-			visual_config.hp_bar_background_color
-		)
-		if hp_ratio > 0.0:
+		# V2-STAGE-004: suppress HP bar for the invulnerable RECOVER relic.
+		# The destructible PROTECT totem keeps its HP bar (is_objective_relic is false for it).
+		var is_objective_relic: bool = bool(tok.get("is_objective_relic", false))
+		if not is_objective_relic:
+			var bar_w: float = extent * 2.0
+			var bar_x: float = pos.x - extent
+			var bar_y: float = pos.y - extent - visual_config.hp_bar_offset_y
 			draw_rect(
-				Rect2(bar_x, bar_y, bar_w * hp_ratio, visual_config.hp_bar_height),
-				_hp_color(hp_ratio)
+				Rect2(bar_x, bar_y, bar_w, visual_config.hp_bar_height),
+				visual_config.hp_bar_background_color
 			)
+			if hp_ratio > 0.0:
+				draw_rect(
+					Rect2(bar_x, bar_y, bar_w * hp_ratio, visual_config.hp_bar_height),
+					_hp_color(hp_ratio)
+				)
 
 		var damage_text: String = str(tok.get("damage_text", ""))
 		if not damage_text.is_empty():
