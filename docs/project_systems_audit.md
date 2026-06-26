@@ -18,12 +18,12 @@ This is an implementation-aware audit, not a pure GDD reading. It synthesizes co
 
 Primary repo sources:
 
-- [core/](/Users/jeffreygyamfi/Sites/echoes-vnext/core)
-- [ui/](/Users/jeffreygyamfi/Sites/echoes-vnext/ui)
-- [data/](/Users/jeffreygyamfi/Sites/echoes-vnext/data)
-- [docs/integration-map.md](/Users/jeffreygyamfi/Sites/echoes-vnext/docs/integration-map.md)
-- [docs/v2-migration-map.md](/Users/jeffreygyamfi/Sites/echoes-vnext/docs/v2-migration-map.md)
-- [docs/Echoes vNext V2 Story Backlog d3dc9cb421e944fc9229238474907ed6_all.csv](/Users/jeffreygyamfi/Sites/echoes-vnext/docs/Echoes%20vNext%20V2%20Story%20Backlog%20d3dc9cb421e944fc9229238474907ed6_all.csv)
+- [core/](../core)
+- [ui/](../ui)
+- [data/](../data)
+- [docs/integration-map.md](../docs/integration-map.md)
+- [docs/v2-migration-map.md](../docs/v2-migration-map.md)
+- [docs/Echoes vNext V2 Story Backlog d3dc9cb421e944fc9229238474907ed6_all.csv](../docs/Echoes%20vNext%20V2%20Story%20Backlog%20d3dc9cb421e944fc9229238474907ed6_all.csv)
 
 Backlog-mapping rule used in this report:
 
@@ -69,9 +69,9 @@ Function:
 
 Main files:
 
-- [core/runtime/FlowRuntime.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/runtime/FlowRuntime.gd)
-- [core/state/flow/FlowContext.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/state/flow/FlowContext.gd)
-- [core/state/flow/FlowStateMachine.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/state/flow/FlowStateMachine.gd)
+- [core/runtime/FlowRuntime.gd](../core/runtime/FlowRuntime.gd)
+- [core/state/flow/FlowContext.gd](../core/state/flow/FlowContext.gd)
+- [core/state/flow/FlowStateMachine.gd](../core/state/flow/FlowStateMachine.gd)
 
 Analysis:
 
@@ -93,8 +93,8 @@ Function:
 
 Main files:
 
-- [core/save/SaveSchema.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/save/SaveSchema.gd)
-- [core/save/SaveService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/save/SaveService.gd)
+- [core/save/SaveSchema.gd](../core/save/SaveSchema.gd)
+- [core/save/SaveService.gd](../core/save/SaveService.gd)
 
 Analysis:
 
@@ -116,9 +116,9 @@ Function:
 
 Main files:
 
-- [core/config/ConfigService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/config/ConfigService.gd)
-- [core/config/ConfigValidator.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/config/ConfigValidator.gd)
-- [core/CampaignSeed.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/CampaignSeed.gd)
+- [core/config/ConfigService.gd](../core/config/ConfigService.gd)
+- [core/config/ConfigValidator.gd](../core/config/ConfigValidator.gd)
+- [core/CampaignSeed.gd](../core/CampaignSeed.gd)
 
 Analysis:
 
@@ -139,8 +139,8 @@ Function:
 
 Main files:
 
-- [core/onboarding/OnboardingService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/onboarding/OnboardingService.gd)
-- [core/onboarding/KeeperIntroService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/onboarding/KeeperIntroService.gd)
+- [core/onboarding/OnboardingService.gd](../core/onboarding/OnboardingService.gd)
+- [core/onboarding/KeeperIntroService.gd](../core/onboarding/KeeperIntroService.gd)
 
 Analysis:
 
@@ -160,9 +160,9 @@ Function:
 
 Main files:
 
-- [core/economy/EconomyService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/economy/EconomyService.gd)
-- [core/economy/EconomyAccrualService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/economy/EconomyAccrualService.gd)
-- [core/economy/RewardCalc.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/economy/RewardCalc.gd)
+- [core/economy/EconomyService.gd](../core/economy/EconomyService.gd)
+- [core/economy/EconomyAccrualService.gd](../core/economy/EconomyAccrualService.gd)
+- [core/economy/RewardCalc.gd](../core/economy/RewardCalc.gd)
 
 Analysis:
 
@@ -184,10 +184,10 @@ Function:
 
 Main files:
 
-- [core/sanctum/SummonService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/sanctum/SummonService.gd)
-- [core/sanctum/EchoFactory.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/sanctum/EchoFactory.gd)
-- [core/sanctum/SanctumService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/sanctum/SanctumService.gd)
-- [core/sanctum/SanctumState.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/sanctum/SanctumState.gd)
+- [core/sanctum/SummonService.gd](../core/sanctum/SummonService.gd)
+- [core/sanctum/EchoFactory.gd](../core/sanctum/EchoFactory.gd)
+- [core/sanctum/SanctumService.gd](../core/sanctum/SanctumService.gd)
+- [core/sanctum/SanctumState.gd](../core/sanctum/SanctumState.gd)
 
 Analysis:
 
@@ -209,9 +209,9 @@ Function:
 
 Main files:
 
-- [core/sanctum/ContinuityService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/sanctum/ContinuityService.gd)
-- [core/sanctum/InstitutionService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/sanctum/InstitutionService.gd)
-- [ui/sanctum/SanctumSpatialRenderer.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/ui/sanctum/SanctumSpatialRenderer.gd)
+- [core/sanctum/ContinuityService.gd](../core/sanctum/ContinuityService.gd)
+- [core/sanctum/InstitutionService.gd](../core/sanctum/InstitutionService.gd)
+- [ui/sanctum/SanctumSpatialRenderer.gd](../ui/sanctum/SanctumSpatialRenderer.gd)
 
 Analysis:
 
@@ -233,8 +233,8 @@ Function:
 
 Main files:
 
-- [core/sanctum/SocialGraphService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/sanctum/SocialGraphService.gd)
-- [core/sanctum/VowService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/sanctum/VowService.gd)
+- [core/sanctum/SocialGraphService.gd](../core/sanctum/SocialGraphService.gd)
+- [core/sanctum/VowService.gd](../core/sanctum/VowService.gd)
 
 Analysis:
 
@@ -258,10 +258,10 @@ Function:
 
 Main files:
 
-- [core/progression/ProgressionService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/progression/ProgressionService.gd)
-- [core/progression/CallingService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/progression/CallingService.gd)
-- [core/progression/SkillDefinition.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/progression/SkillDefinition.gd)
-- [core/actors/MaturityExpressionService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/actors/MaturityExpressionService.gd)
+- [core/progression/ProgressionService.gd](../core/progression/ProgressionService.gd)
+- [core/progression/CallingService.gd](../core/progression/CallingService.gd)
+- [core/progression/SkillDefinition.gd](../core/progression/SkillDefinition.gd)
+- [core/actors/MaturityExpressionService.gd](../core/actors/MaturityExpressionService.gd)
 
 Analysis:
 
@@ -285,8 +285,8 @@ Function:
 
 Main files:
 
-- [core/progression/ThreadService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/progression/ThreadService.gd)
-- [core/progression/WeavingRiteService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/progression/WeavingRiteService.gd)
+- [core/progression/ThreadService.gd](../core/progression/ThreadService.gd)
+- [core/progression/WeavingRiteService.gd](../core/progression/WeavingRiteService.gd)
 
 Analysis:
 
@@ -312,10 +312,10 @@ Function:
 
 Main files:
 
-- [core/realms/RealmService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/realms/RealmService.gd)
-- [core/realms/RealmGenerator.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/realms/RealmGenerator.gd)
-- [core/realms/SituationResolutionService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/realms/SituationResolutionService.gd)
-- [core/directives/DirectiveService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/directives/DirectiveService.gd)
+- [core/realms/RealmService.gd](../core/realms/RealmService.gd)
+- [core/realms/RealmGenerator.gd](../core/realms/RealmGenerator.gd)
+- [core/realms/SituationResolutionService.gd](../core/realms/SituationResolutionService.gd)
+- [core/directives/DirectiveService.gd](../core/directives/DirectiveService.gd)
 
 Analysis:
 
@@ -341,11 +341,11 @@ Function:
 
 Main files:
 
-- [core/actors/ActorSchema.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/actors/ActorSchema.gd)
-- [core/actors/EchoActor.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/actors/EchoActor.gd)
-- [core/actors/ActorStateMachine.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/actors/ActorStateMachine.gd)
-- [core/actors/behaviors/BehaviorArbiter.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/actors/behaviors/BehaviorArbiter.gd)
-- [core/actors/VectorService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/actors/VectorService.gd)
+- [core/actors/ActorSchema.gd](../core/actors/ActorSchema.gd)
+- [core/actors/EchoActor.gd](../core/actors/EchoActor.gd)
+- [core/actors/ActorStateMachine.gd](../core/actors/ActorStateMachine.gd)
+- [core/actors/behaviors/BehaviorArbiter.gd](../core/actors/behaviors/BehaviorArbiter.gd)
+- [core/actors/VectorService.gd](../core/actors/VectorService.gd)
 
 Analysis:
 
@@ -366,8 +366,8 @@ Function:
 
 Main files:
 
-- [core/emotion/EmotionService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/emotion/EmotionService.gd)
-- [core/emotion/EmotionRecoveryService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/emotion/EmotionRecoveryService.gd)
+- [core/emotion/EmotionService.gd](../core/emotion/EmotionService.gd)
+- [core/emotion/EmotionRecoveryService.gd](../core/emotion/EmotionRecoveryService.gd)
 
 Analysis:
 
@@ -394,10 +394,10 @@ Function:
 
 Main files:
 
-- [core/combat/CombatState.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/combat/CombatState.gd)
-- [core/combat/CombatService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/combat/CombatService.gd)
-- [core/grid/GridService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/grid/GridService.gd)
-- [core/realms/StageTerrain.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/realms/StageTerrain.gd)
+- [core/combat/CombatState.gd](../core/combat/CombatState.gd)
+- [core/combat/CombatService.gd](../core/combat/CombatService.gd)
+- [core/grid/GridService.gd](../core/grid/GridService.gd)
+- [core/realms/StageTerrain.gd](../core/realms/StageTerrain.gd)
 
 Analysis:
 
@@ -419,10 +419,10 @@ Function:
 
 Main files:
 
-- [ui/AppRoot.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/ui/AppRoot.gd)
-- [ui/shells/SanctumShell.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/ui/shells/SanctumShell.gd)
-- [ui/shells/RealmShell.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/ui/shells/RealmShell.gd)
-- [ui/UISnapshotRenderer.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/ui/UISnapshotRenderer.gd)
+- [ui/AppRoot.gd](../ui/AppRoot.gd)
+- [ui/shells/SanctumShell.gd](../ui/shells/SanctumShell.gd)
+- [ui/shells/RealmShell.gd](../ui/shells/RealmShell.gd)
+- [ui/UISnapshotRenderer.gd](../ui/UISnapshotRenderer.gd)
 
 Analysis:
 
@@ -449,8 +449,8 @@ Current split:
 
 Main files:
 
-- [core/state/flow/FlowStateMachine.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/state/flow/FlowStateMachine.gd)
-- [core/runtime/FlowRuntime.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/runtime/FlowRuntime.gd)
+- [core/state/flow/FlowStateMachine.gd](../core/state/flow/FlowStateMachine.gd)
+- [core/runtime/FlowRuntime.gd](../core/runtime/FlowRuntime.gd)
 
 Why it matters:
 
@@ -466,8 +466,8 @@ Current split:
 
 Main files:
 
-- [core/directives/DirectiveService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/directives/DirectiveService.gd)
-- [core/runtime/FlowRuntime.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/runtime/FlowRuntime.gd)
+- [core/directives/DirectiveService.gd](../core/directives/DirectiveService.gd)
+- [core/runtime/FlowRuntime.gd](../core/runtime/FlowRuntime.gd)
 
 Why it matters:
 
@@ -482,9 +482,9 @@ Current split:
 
 Main files:
 
-- [core/emotion/EmotionService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/emotion/EmotionService.gd)
-- [core/actors/EchoActor.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/actors/EchoActor.gd)
-- [core/state/flow/states/venture/FlowEncounterState.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/state/flow/states/venture/FlowEncounterState.gd)
+- [core/emotion/EmotionService.gd](../core/emotion/EmotionService.gd)
+- [core/actors/EchoActor.gd](../core/actors/EchoActor.gd)
+- [core/state/flow/states/venture/FlowEncounterState.gd](../core/state/flow/states/venture/FlowEncounterState.gd)
 
 Why it matters:
 
@@ -500,8 +500,8 @@ Current split:
 
 Main files:
 
-- [core/save/SaveService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/save/SaveService.gd)
-- [core/progression/ProgressionService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/progression/ProgressionService.gd)
+- [core/save/SaveService.gd](../core/save/SaveService.gd)
+- [core/progression/ProgressionService.gd](../core/progression/ProgressionService.gd)
 
 Why it matters:
 
@@ -516,8 +516,8 @@ Current split:
 
 Main files:
 
-- [core/progression/SkillDefinition.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/progression/SkillDefinition.gd)
-- [core/state/flow/states/sanctum/FlowEchoPartyState.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/state/flow/states/sanctum/FlowEchoPartyState.gd)
+- [core/progression/SkillDefinition.gd](../core/progression/SkillDefinition.gd)
+- [core/state/flow/states/sanctum/FlowEchoPartyState.gd](../core/state/flow/states/sanctum/FlowEchoPartyState.gd)
 
 Why it matters:
 
@@ -531,10 +531,10 @@ Current split:
 
 Main files:
 
-- [core/grid/GridService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/grid/GridService.gd)
-- [core/combat/CombatState.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/combat/CombatState.gd)
-- [core/actors/behaviors/BehaviorArbiter.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/actors/behaviors/BehaviorArbiter.gd)
-- [core/realms/ConversationService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/realms/ConversationService.gd)
+- [core/grid/GridService.gd](../core/grid/GridService.gd)
+- [core/combat/CombatState.gd](../core/combat/CombatState.gd)
+- [core/actors/behaviors/BehaviorArbiter.gd](../core/actors/behaviors/BehaviorArbiter.gd)
+- [core/realms/ConversationService.gd](../core/realms/ConversationService.gd)
 
 Why it matters:
 
@@ -549,8 +549,8 @@ Current split:
 
 Main files:
 
-- [core/realms/StageModel.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/realms/StageModel.gd)
-- [core/realms/ObjectiveModel.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/realms/ObjectiveModel.gd)
+- [core/realms/StageModel.gd](../core/realms/StageModel.gd)
+- [core/realms/ObjectiveModel.gd](../core/realms/ObjectiveModel.gd)
 
 Why it matters:
 
@@ -566,8 +566,8 @@ Current split:
 
 Main files:
 
-- [core/sanctum/InstitutionService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/sanctum/InstitutionService.gd)
-- [core/sanctum/SanctumService.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/core/sanctum/SanctumService.gd)
+- [core/sanctum/InstitutionService.gd](../core/sanctum/InstitutionService.gd)
+- [core/sanctum/SanctumService.gd](../core/sanctum/SanctumService.gd)
 
 Why it matters:
 
@@ -582,10 +582,10 @@ Current split:
 
 Main files:
 
-- [ui/screens/venture/StageExploreScreen.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/ui/screens/venture/StageExploreScreen.gd)
-- [ui/screens/sanctum/SanctumScreen.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/ui/screens/sanctum/SanctumScreen.gd)
-- [ui/components/EchoCardItem.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/ui/components/EchoCardItem.gd)
-- [ui/UISnapshotRenderer.gd](/Users/jeffreygyamfi/Sites/echoes-vnext/ui/UISnapshotRenderer.gd)
+- [ui/screens/venture/StageExploreScreen.gd](../ui/screens/venture/StageExploreScreen.gd)
+- [ui/screens/sanctum/SanctumScreen.gd](../ui/screens/sanctum/SanctumScreen.gd)
+- [ui/components/EchoCardItem.gd](../ui/components/EchoCardItem.gd)
+- [ui/UISnapshotRenderer.gd](../ui/UISnapshotRenderer.gd)
 
 Why it matters:
 
@@ -658,7 +658,7 @@ This section maps the audit to existing unfinished backlog stories only.
 
 Excluded on purpose:
 
-- any story marked done in [docs/integration-map.md](/Users/jeffreygyamfi/Sites/echoes-vnext/docs/integration-map.md)
+- any story marked done in [docs/integration-map.md](../docs/integration-map.md)
 - any story marked `Superseded` in the synced backlog CSV
 - duplicate backlog rows for shipped work
 
