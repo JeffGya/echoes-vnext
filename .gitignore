@@ -19,3 +19,6 @@ Thumbs.db
 # Editor noise
 .vscode/
 .idea/
+
+# Claude Code scratch (agent worktrees, local tooling state)
+.claude/
