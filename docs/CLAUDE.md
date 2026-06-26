@@ -88,6 +88,7 @@ Godot 4 (GDScript, 100%) deterministic mythic house-and-trials strategy game wit
 
 **Architecture reference:** `CONVENTIONS.md` in repo root — contracts, action types, screen summaries, decisions made vs deferred.
 **Project status + file map:** `MEMORY.md` (auto-loaded via memory system) — systems inventory, architecture reference.
+**Integration status:** `docs/integration-map.md` — per-story ship status. **Always check `docs/project_systems_audit.md` alongside it** — the systems audit must be kept in sync with the integration map whenever either is reviewed or updated.
 
 #### Skills (use proactively — authoritative project knowledge)
 
