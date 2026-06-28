@@ -1471,8 +1471,8 @@
 				"max_cols": 22.0,
 				"max_rows": 22.0,
 				"pursue_override": {
-					"_comment": "V2-STAGE-004 P3b: PURSUE mode uses 2x one dimension (randomised wide or tall per encounter seed). long_multiplier applied to cols or rows.",
-					"long_multiplier": 2.0
+					"_comment": "V2-STAGE-004 P3b: PURSUE mode uses 4x one dimension (randomised wide or tall per encounter seed). long_multiplier applied to cols or rows.",
+					"long_multiplier": 4.0
 				}
 			},
 			"objective_placement": {
