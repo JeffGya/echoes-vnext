@@ -1954,7 +1954,16 @@ func _resolve_next_actor(t: int) -> void:
 		var _qe_row: int     = int(actor.get("grid_pos", {}).get("row", -1))
 		var _qe_max_col: int = int(movement_board_cfg.get("board_cols", 10)) - 1
 		var _qe_max_row: int = int(movement_board_cfg.get("board_rows", 10)) - 1
-		if _qe_col <= 1 or _qe_row <= 1 or _qe_col >= _qe_max_col - 1 or _qe_row >= _qe_max_row - 1:
+		var _qe_board_cols: int = int(movement_board_cfg.get("board_cols", 10))
+		var _qe_board_rows: int = int(movement_board_cfg.get("board_rows", 10))
+		var _qe_escaped: bool = false
+		if _qe_board_cols > _qe_board_rows:
+			# Wide board: escape only at the far (high-col) end of the long axis.
+			_qe_escaped = _qe_col >= _qe_max_col - 1
+		else:
+			# Tall board: escape only at the far (high-row) end of the long axis.
+			_qe_escaped = _qe_row >= _qe_max_row - 1
+		if _qe_escaped:
 			combat_state["quarry_escaped"] = true
 			logger.info(t, "combat.pursue.escaped", "Quarry reached board edge", {
 				"quarry_id": str(actor.get("id", "")),
