@@ -88,6 +88,15 @@ var _active_encounter_id: String = ""
 var _last_bark_line: String = ""
 var _presentation_board_size: Vector2i = Vector2i.ZERO
 
+# V2-STAGE-004 P3b: PURSUE camera follow (manual board repositioning — avoids Camera2D UI-pan issue).
+var _pursue_mode: bool            = false
+var _quarry_local_pos: Vector2    = Vector2.ZERO
+var _pan_offset: Vector2          = Vector2.ZERO
+var _pan_active: bool             = false
+var _pan_resume_timer: float      = 0.0
+const _PAN_RESUME_DELAY: float    = 3.0
+const _PURSUE_FOLLOW_SPEED: float = 5.0
+
 # -------------------------
 # Lifecycle
 # -------------------------
@@ -214,7 +223,7 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	# COMBAT-007: read objective_state dict (replaces flat objective_type field).
 	var obj_state: Dictionary = data.get("objective_state", {})
 	var obj_type: String = str(obj_state.get("type", ""))
-	# V2-STAGE-004 distinctiveness: enrich banner text for ENDURE and PROTECT modes.
+	# V2-STAGE-004 distinctiveness: enrich banner text for ENDURE, PROTECT, and PURSUE modes.
 	var banner_text: String = obj_type
 	if obj_type == "endure":
 		var waves_remaining: int = int(obj_state.get("waves_remaining", 0))
@@ -224,8 +233,36 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	elif obj_type == "protect":
 		if bool(obj_state.get("totem_stolen", false)):
 			banner_text = "Totem STOLEN — recover it!"
+	elif obj_type == "pursue":
+		var contain_progress: int  = int(obj_state.get("contain_progress", 0))
+		var contain_required: int  = int(obj_state.get("contain_required", 3))
+		var window_remaining: int  = int(obj_state.get("window_remaining", 0))
+		banner_text = "Pursue — Contain: %d/%d | Window: %d turns" % [contain_progress, contain_required, window_remaining]
 	_objective_label.text    = banner_text
 	_objective_label.visible = not banner_text.is_empty()
+
+	# V2-STAGE-004 P3b: PURSUE camera — update quarry follow target each snapshot.
+	if obj_type == "pursue":
+		if not _pursue_mode:
+			_pursue_mode = true
+			_pan_offset  = Vector2.ZERO
+			_board.scale = Vector2.ONE
+		for actor_v in actors:
+			if actor_v is Dictionary and bool(actor_v.get("is_quarry", false)):
+				var gp_q: Dictionary = actor_v.get("grid_pos", {})
+				_quarry_local_pos = _board.map_to_local(
+					Vector2i(int(gp_q.get("col", 0)), int(gp_q.get("row", 0))))
+				_apply_board_transform(get_viewport_rect().size / 2.0 - _quarry_local_pos + _pan_offset)
+				break
+	elif _pursue_mode:
+		_pursue_mode = false
+		_pan_offset   = Vector2.ZERO
+		_board.scale  = Vector2.ONE
+		_token_layer.scale          = Vector2.ONE
+		_move_telegraph_layer.scale = Vector2.ONE
+		_distance_layer.scale       = Vector2.ONE
+		if _bark_popup_layer != null:
+			_bark_popup_layer.scale = Vector2.ONE
 
 	# COMBAT-SEQ: CTA and auto-dispatch depend on round_phase.
 	var round_phase: String  = str(data.get("round_phase", "pre_combat"))
@@ -457,6 +494,7 @@ func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}
 			"faction":            str(actor.get("faction", "")),
 			"is_structure":       bool(actor.get("is_structure", false)),
 			"is_objective_relic": bool(actor.get("is_objective_relic", false)),
+			"is_quarry":          bool(actor.get("is_quarry", false)),
 			"label":              str(actor.get("name", "??")).substr(0, 2).to_upper(),
 			"hp_ratio":           hp_ratio,
 			"damage_text":        damage_by_id.get(actor_id, ""),
@@ -741,6 +779,7 @@ func _format_objective_label(obj_type: String) -> String:
 	match obj_type:
 		"purify_shrine":   return "Purify the Ancestral Shrine"
 		"defeat_enemies":  return "Defeat all enemies"
+		"pursue":          return "Contain the Fleeing Quarry"
 	return obj_type if not obj_type.is_empty() else "[Battle objective]"
 
 
@@ -756,3 +795,50 @@ func _on_retreat_pressed() -> void:
 		var act := _pending_retreat_action
 		_pending_retreat_action = {}
 		action_requested.emit(act)
+
+
+# -------------------------
+# V2-STAGE-004 P3b: PURSUE camera follow
+# -------------------------
+
+func _process(delta: float) -> void:
+	if not _pursue_mode:
+		return
+	if _pan_active:
+		_pan_resume_timer -= delta
+		if _pan_resume_timer <= 0.0:
+			_pan_active = false
+			_pan_offset = Vector2.ZERO
+	var target: Vector2 = get_viewport_rect().size / 2.0 - _quarry_local_pos + _pan_offset
+	var new_pos: Vector2 = _board.position.lerp(target, clampf(_PURSUE_FOLLOW_SPEED * delta, 0.0, 1.0))
+	_apply_board_transform(new_pos)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not _pursue_mode:
+		return
+	if event is InputEventPanGesture:
+		_pan_offset -= (event as InputEventPanGesture).delta * 1.5
+		_pan_active = true
+		_pan_resume_timer = _PAN_RESUME_DELAY
+	elif event is InputEventMagnifyGesture:
+		var factor: float = (event as InputEventMagnifyGesture).factor
+		var new_zoom: float = clampf(_board.scale.x * factor, 0.4, 2.0)
+		var all_zoom := Vector2(new_zoom, new_zoom)
+		_board.scale               = all_zoom
+		_token_layer.scale         = all_zoom
+		_move_telegraph_layer.scale = all_zoom
+		_distance_layer.scale      = all_zoom
+		if _bark_popup_layer != null:
+			_bark_popup_layer.scale = all_zoom
+		_pan_active = true
+		_pan_resume_timer = _PAN_RESUME_DELAY
+
+
+func _apply_board_transform(pos: Vector2) -> void:
+	_board.position              = pos
+	_token_layer.position        = pos
+	_move_telegraph_layer.position = pos
+	_distance_layer.position     = pos
+	if _bark_popup_layer != null:
+		_bark_popup_layer.position = pos

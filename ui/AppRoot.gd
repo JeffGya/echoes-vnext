@@ -658,8 +658,7 @@ func _run_hero_info_command(parts: Array) -> void:
 
 
 # COMBAT-006: dev toggle for encounter objective.
-# Usage: combat_objective <combat|purify_shrine|recover|protect|endure|show>
-# pursue and guide_spirit are intentionally excluded — win-conditions land in Phase 3b/3c.
+# Usage: combat_objective <combat|purify_shrine|recover|protect|endure|pursue|show>
 func _run_combat_objective_command(parts: Array) -> void:
 	var valid_modes: Array = [
 		EncounterResolutionModes.COMBAT,
@@ -667,9 +666,10 @@ func _run_combat_objective_command(parts: Array) -> void:
 		EncounterResolutionModes.RECOVER,
 		EncounterResolutionModes.PROTECT,
 		EncounterResolutionModes.ENDURE,
+		EncounterResolutionModes.PURSUE,
 	]
 	if parts.size() < 2:
-		_debug_print("Usage: combat_objective <combat|purify_shrine|recover|protect|endure|show>")
+		_debug_print("Usage: combat_objective <combat|purify_shrine|recover|protect|endure|pursue|show>")
 		return
 	var op: String = parts[1].to_lower()
 	if op == "show":
@@ -686,7 +686,7 @@ func _run_combat_objective_command(parts: Array) -> void:
 		runtime.flow_ctx.encounter_machine = null
 		_debug_print("combat_objective set to: %s — encounter reset, re-enter combat to apply" % op)
 	else:
-		_debug_print("Unknown mode '%s'. Use: combat|purify_shrine|recover|protect|endure" % op)
+		_debug_print("Unknown mode '%s'. Use: combat|purify_shrine|recover|protect|endure|pursue" % op)
 	_flush_logs_to_console()
 
 

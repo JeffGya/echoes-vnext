@@ -48,6 +48,11 @@ static func create(actors: Array, objective: String,
 		# COMBAT-SEQ: sequential resolution fields — runtime only, not in REQUIRED_FIELDS.
 		"current_actor_index":     0,     # pointer into initiative_order for the current round
 		"round_phase":             "idle", # "idle" (between rounds) | "in_round" (round active)
+		# V2-STAGE-004 P3b: PURSUE — contain counter and escape flag.
+		# Safe defaults for all modes; only PURSUE logic writes to these.
+		"contain_counter":    0,
+		"quarry_escaped":     false,
+		"quarry_id":          _find_quarry_id(actors),
 	}
 
 
@@ -160,6 +165,7 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 ##   6. PROTECT guarded → victory  (protect_counter >= duration_turns AND not totem_stolen)
 ##      OR PROTECT stolen-at-clockout → defeat (reason: "totem_taken")
 ##   7. ENDURE survived → victory   (round_counter >= duration_turns)
+##   8. PURSUE escaped/window → defeat / contained → victory
 ##
 ## combat_state carries round_counter, protect_counter, objective_params, and hold_counter.
 ## Callers that omit combat_state (COMBAT / PURIFY_SHRINE) receive byte-identical results
@@ -229,6 +235,21 @@ static func check_end_condition(actors: Array, objective: String,
 		if round_counter >= duration_turns:
 			return { "over": true, "victory": true, "reason": "endured" }
 
+	# 8. PURSUE: quarry escaped or window expired → defeat; contained → victory.
+	if objective == EncounterResolutionModes.PURSUE:
+		# Immediate defeat: quarry reached board edge.
+		if combat_state.get("quarry_escaped", false):
+			return { "over": true, "victory": false, "reason": "quarry_escaped" }
+		var window_turns: int   = int(obj_params.get("window_turns",   8))
+		var contain_rounds: int = int(obj_params.get("contain_rounds", 3))
+		var contain_counter: int = int(combat_state.get("contain_counter", 0))
+		# Window expired with quarry alive (all_enemies_defeated would have fired first if quarry dead).
+		if round_counter >= window_turns and contain_counter < contain_rounds:
+			return { "over": true, "victory": false, "reason": "window_expired" }
+		# Victory: held adjacent for required rounds.
+		if contain_counter >= contain_rounds:
+			return { "over": true, "victory": true, "reason": "quarry_contained" }
+
 	return { "over": false, "victory": false, "reason": "" }
 
 
@@ -270,3 +291,13 @@ static func _dominant_key(scores: Dictionary, tiebreak_order: Array) -> String:
 			best_val = val
 			best_key = key
 	return best_key
+
+
+## Returns the id of the first actor with is_quarry == true, or "" if none found.
+static func _find_quarry_id(actors: Array) -> String:
+	for a_v in actors:
+		if not (a_v is Dictionary): continue
+		var a: Dictionary = a_v
+		if bool(a.get("is_quarry", false)):
+			return str(a.get("id", ""))
+	return ""

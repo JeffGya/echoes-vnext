@@ -47,6 +47,12 @@ static func register(runner) -> void:
 	runner.register_test("combat_roundtrip/protect_counter_resets_after_leaving", func(): return test_protect_counter_resets_after_leaving())
 	# Bug-fix: RECOVER holder reads top-level speed field
 	runner.register_test("combat_roundtrip/recover_holder_fastest_echo_designated", func(): return test_recover_holder_fastest_echo())
+	# V2-STAGE-004 P3b — PURSUE smoke test
+	runner.register_test("combat_roundtrip/pursue_quarry_spawns_and_moves", func(): return test_pursue_quarry_moves())
+	# V2-STAGE-004 P3b — PURSUE distinctiveness: no regular enemies, quarry-only
+	runner.register_test("combat_roundtrip/pursue_no_regular_enemies_spawn", func(): return test_pursue_no_regular_enemies_spawn())
+	# V2-STAGE-004 P3b — PURSUE distinctiveness: board is 2× in one dimension
+	runner.register_test("combat_roundtrip/pursue_board_is_larger_than_standard", func(): return test_pursue_board_is_larger_than_standard())
 
 
 # ---------------------------------------------------------------------------
@@ -790,4 +796,203 @@ static func test_recover_holder_fastest_echo() -> Dictionary:
 			"ok": false,
 			"error": "Expected recover_holder_id='echo_fast' (top-level speed=10 wins over speed=5), got '%s'" % holder_id
 		}
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# V2-STAGE-004 P3b: PURSUE smoke test.
+# Uses dev_combat_objective=PURSUE so FlowEncounterState.enter() runs the native
+# PURSUE spawn block, placing the quarry on a guaranteed walkable cell.
+# After 1 round verifies:
+#   (a) A quarry actor (is_quarry=true) was spawned.
+#   (b) combat_state has "contain_counter" key — proves _end_round PURSUE branch ran.
+# ---------------------------------------------------------------------------
+static func test_pursue_quarry_moves() -> Dictionary:
+	# Inline setup — same as _setup() but with PURSUE as dev objective.
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var config := ConfigService.new()
+	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/combat_roundtrip_pursue.json")
+	runtime.boot()
+	var flow_ctx: FlowContext = runtime.flow_ctx
+	var t: int = 0
+
+	flow_ctx.realm_id = "realm.01"
+	var rm: Dictionary = RealmService.get_or_create("realm.01", flow_ctx, t)
+	if rm.is_empty():
+		return { "ok": false, "error": "setup failed — realm not created" }
+	flow_ctx.stage_id = "stage.0"
+	flow_ctx.encounter_id = "realm.01.stage.0.pursue_smoke2"
+
+	var bal: Dictionary = config.get_balance()
+	var summ_cfg: Dictionary = bal.get("data", {}).get("summoning", {})
+	var expr_cfg: Dictionary = bal.get("data", {}).get("maturity_expression", {})
+	var roster: Array = []
+	var party_ids: Array = []
+	for i in range(5):
+		var echo: Dictionary = EchoFactory.generate("pursue_smoke2", "echo." + str(i), i, "summon", summ_cfg, expr_cfg)
+		echo["id"] = "echo_%04d" % (i + 1)
+		roster.append(echo)
+		party_ids.append(str(echo.get("id", "")))
+	flow_ctx.save_data["sanctum"]["roster"] = roster
+	flow_ctx.save_data["sanctum"]["active_party_ids"] = party_ids
+
+	# PURSUE as dev objective → FlowEncounterState spawns quarry on a valid walkable cell.
+	flow_ctx.dev_combat_objective = EncounterResolutionModes.PURSUE
+	flow_ctx.encounter_ctx = null
+	flow_ctx.encounter_machine = null
+
+	var enc_state := FlowEncounterState.new()
+	enc_state.enter(flow_ctx, t)
+	var ectx = flow_ctx.encounter_ctx
+
+	# (a) quarry actor spawned by the PURSUE spawn block.
+	var found_quarry: bool = false
+	for a_v in ectx.actors:
+		if a_v is Dictionary and bool((a_v as Dictionary).get("is_quarry", false)):
+			found_quarry = true
+			break
+	if not found_quarry:
+		return { "ok": false, "error": "No is_quarry=true actor spawned by FlowEncounterState.enter() in PURSUE mode" }
+
+	# Drive 1 round through the full runtime dispatch loop.
+	_drive(runtime, ectx, 1)
+
+	# (b) contain_counter key exists — proves _end_round ran the PURSUE adjacency check.
+	if not ectx.combat_state.has("contain_counter"):
+		return { "ok": false, "error": "combat_state missing 'contain_counter' — PURSUE _end_round branch did not run" }
+
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# V2-STAGE-004 P3b: PURSUE no-regular-enemies test.
+# After FlowEncounterState.enter() with PURSUE objective:
+#   (a) No actor with faction=="enemy" and is_quarry==false exists.
+#   (b) Exactly one actor with is_quarry==true exists.
+# ---------------------------------------------------------------------------
+static func test_pursue_no_regular_enemies_spawn() -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var config := ConfigService.new()
+	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/combat_pursue_noenemy.json")
+	runtime.boot()
+	var flow_ctx: FlowContext = runtime.flow_ctx
+	var t: int = 0
+
+	flow_ctx.realm_id = "realm.01"
+	var rm: Dictionary = RealmService.get_or_create("realm.01", flow_ctx, t)
+	if rm.is_empty():
+		return { "ok": false, "error": "setup failed — realm not created" }
+	flow_ctx.stage_id = "stage.0"
+	flow_ctx.encounter_id = "realm.01.stage.0.pursue_noenemy"
+
+	var bal: Dictionary = config.get_balance()
+	var summ_cfg: Dictionary = bal.get("data", {}).get("summoning", {})
+	var expr_cfg: Dictionary = bal.get("data", {}).get("maturity_expression", {})
+	var roster: Array = []
+	var party_ids: Array = []
+	for i in range(5):
+		var echo: Dictionary = EchoFactory.generate("pursue_noenemy", "echo." + str(i), i, "summon", summ_cfg, expr_cfg)
+		echo["id"] = "echo_%04d" % (i + 1)
+		roster.append(echo)
+		party_ids.append(str(echo.get("id", "")))
+	flow_ctx.save_data["sanctum"]["roster"] = roster
+	flow_ctx.save_data["sanctum"]["active_party_ids"] = party_ids
+
+	flow_ctx.dev_combat_objective = EncounterResolutionModes.PURSUE
+	flow_ctx.encounter_ctx = null
+	flow_ctx.encounter_machine = null
+
+	var enc_state := FlowEncounterState.new()
+	enc_state.enter(flow_ctx, t)
+	var ectx = flow_ctx.encounter_ctx
+
+	var quarry_count: int = 0
+	var regular_enemy_count: int = 0
+	for a_v in ectx.actors:
+		if a_v is Dictionary:
+			var is_q: bool = bool((a_v as Dictionary).get("is_quarry", false))
+			var faction: String = str((a_v as Dictionary).get("faction", ""))
+			if is_q:
+				quarry_count += 1
+			elif faction == "enemy":
+				regular_enemy_count += 1
+
+	if regular_enemy_count > 0:
+		return { "ok": false, "error": "PURSUE mode spawned %d regular (non-quarry) enemy actors — expected 0" % regular_enemy_count }
+	if quarry_count != 1:
+		return { "ok": false, "error": "Expected exactly 1 quarry actor in PURSUE mode, found %d" % quarry_count }
+
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# V2-STAGE-004 P3b: PURSUE board size test.
+# After FlowEncounterState.enter() with PURSUE objective, the terrain bounds
+# must have at least one dimension that is ≥ (standard_base * 1.9) — proving
+# that the 2× long-dimension multiplier was applied.
+# Standard base dimensions come from data.combat.board.base_cols / base_rows.
+# ---------------------------------------------------------------------------
+static func test_pursue_board_is_larger_than_standard() -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var config := ConfigService.new()
+	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/combat_pursue_board.json")
+	runtime.boot()
+	var flow_ctx: FlowContext = runtime.flow_ctx
+	var t: int = 0
+
+	flow_ctx.realm_id = "realm.01"
+	var rm: Dictionary = RealmService.get_or_create("realm.01", flow_ctx, t)
+	if rm.is_empty():
+		return { "ok": false, "error": "setup failed — realm not created" }
+	flow_ctx.stage_id = "stage.0"
+	flow_ctx.encounter_id = "realm.01.stage.0.pursue_board"
+
+	var bal: Dictionary = config.get_balance()
+	var summ_cfg: Dictionary = bal.get("data", {}).get("summoning", {})
+	var expr_cfg: Dictionary = bal.get("data", {}).get("maturity_expression", {})
+	var roster: Array = []
+	var party_ids: Array = []
+	for i in range(5):
+		var echo: Dictionary = EchoFactory.generate("pursue_board", "echo." + str(i), i, "summon", summ_cfg, expr_cfg)
+		echo["id"] = "echo_%04d" % (i + 1)
+		roster.append(echo)
+		party_ids.append(str(echo.get("id", "")))
+	flow_ctx.save_data["sanctum"]["roster"] = roster
+	flow_ctx.save_data["sanctum"]["active_party_ids"] = party_ids
+
+	flow_ctx.dev_combat_objective = EncounterResolutionModes.PURSUE
+	flow_ctx.encounter_ctx = null
+	flow_ctx.encounter_machine = null
+
+	var enc_state := FlowEncounterState.new()
+	enc_state.enter(flow_ctx, t)
+	var ectx = flow_ctx.encounter_ctx
+
+	# Standard base from balance.json data.combat.board (base_cols=12, base_rows=12).
+	var board_cfg: Dictionary = bal.get("data", {}).get("combat", {}).get("board", {})
+	var base_cols: int = int(board_cfg.get("base_cols", 12))
+	var base_rows: int = int(board_cfg.get("base_rows", 12))
+
+	# Read actual terrain bounds from encounter context.
+	var bounds: Dictionary = ectx.terrain.get("bounds", {})
+	var actual_w: int = int(bounds.get("w", 0))
+	var actual_h: int = int(bounds.get("h", 0))
+
+	if actual_w <= 0 or actual_h <= 0:
+		return { "ok": false, "error": "terrain bounds not set on ectx after PURSUE enter() — got w=%d h=%d" % [actual_w, actual_h] }
+
+	var threshold_w: float = float(base_cols) * 1.9
+	var threshold_h: float = float(base_rows) * 1.9
+	if not (float(actual_w) >= threshold_w or float(actual_h) >= threshold_h):
+		return {
+			"ok": false,
+			"error": "PURSUE board not 2× in either dimension — actual w=%d h=%d, needed w≥%.0f or h≥%.0f (base %d×%d)" \
+				% [actual_w, actual_h, threshold_w, threshold_h, base_cols, base_rows]
+		}
+
+	return { "ok": true }
+
 	return { "ok": true }

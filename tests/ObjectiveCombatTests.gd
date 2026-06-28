@@ -263,6 +263,15 @@ static func register(runner: CoreTestRunner) -> void:
 	# Bug-fix coverage: RECOVER holder reads top-level speed (not stats.speed)
 	runner.register_test("objective_combat/recover_holder_top_level_speed",
 		Callable(ObjectiveCombatTests, "_t_recover_holder_top_level_speed"))
+	# V2-STAGE-004 P3b — PURSUE win/lose conditions
+	runner.register_test("objective_combat/pursue_quarry_contained_victory",
+		Callable(ObjectiveCombatTests, "_t_pursue_quarry_contained_victory"))
+	runner.register_test("objective_combat/pursue_window_expired_loss",
+		Callable(ObjectiveCombatTests, "_t_pursue_window_expired_loss"))
+	runner.register_test("objective_combat/pursue_quarry_escaped_loss",
+		Callable(ObjectiveCombatTests, "_t_pursue_quarry_escaped_loss"))
+	runner.register_test("objective_combat/pursue_kill_quarry_universal_win",
+		Callable(ObjectiveCombatTests, "_t_pursue_kill_quarry_universal_win"))
 
 
 # ─── RECOVER tests ──────────────────────────────────────────────────────────
@@ -1148,4 +1157,102 @@ static func _t_recover_holder_top_level_speed() -> Dictionary:
 			"ok": false,
 			"error": "Expected holder='echo_fast' (top-level speed=10 > 3), got '%s' (stats.speed=0 for both would make first actor win)" % holder_id
 		}
+	return { "ok": true }
+
+
+# ─── PURSUE helpers ──────────────────────────────────────────────────────────
+
+# Minimal quarry actor (enemy faction, is_quarry=true, alive).
+static func _quarry(id: String) -> Dictionary:
+	return {
+		"id":           id,
+		"faction":      "enemy",
+		"is_dead":      false,
+		"is_structure": false,
+		"is_quarry":    true,
+		"grid_pos":     { "col": 8, "row": 4 },
+		"current_hp":   60,
+	}
+
+# Minimal combat_state dict for PURSUE.
+static func _pursue_state(contain_counter: int, contain_rounds: int,
+		window_turns: int, round_counter: int, quarry_escaped: bool = false) -> Dictionary:
+	return {
+		"round_counter":    round_counter,
+		"contain_counter":  contain_counter,
+		"quarry_escaped":   quarry_escaped,
+		"objective_params": {
+			"contain_rounds": contain_rounds,
+			"window_turns":   window_turns,
+		},
+	}
+
+
+# ─── PURSUE tests ────────────────────────────────────────────────────────────
+
+# contain_counter >= contain_rounds + quarry alive → "quarry_contained" victory.
+static func _t_pursue_quarry_contained_victory() -> Dictionary:
+	var actors: Array = [_echo("e1"), _echo("e2"), _quarry("q1")]
+	var cs := _pursue_state(3, 3, 8, 2)  # contain_counter == contain_rounds
+
+	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.PURSUE, cs)
+
+	if not result.get("over", false):
+		return { "ok": false, "error": "Expected over=true, got over=false" }
+	if not result.get("victory", false):
+		return { "ok": false, "error": "Expected victory=true, got victory=false" }
+	if result.get("reason", "") != "quarry_contained":
+		return { "ok": false, "error": "Expected reason='quarry_contained', got '%s'" % str(result.get("reason", "")) }
+	return { "ok": true }
+
+
+# round_counter >= window_turns, quarry alive, contain < contain_rounds → "window_expired" defeat.
+static func _t_pursue_window_expired_loss() -> Dictionary:
+	var actors: Array = [_echo("e1"), _quarry("q1")]
+	var cs := _pursue_state(1, 3, 8, 8)  # round_counter == window_turns, contain short
+
+	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.PURSUE, cs)
+
+	if not result.get("over", false):
+		return { "ok": false, "error": "Expected over=true, got over=false" }
+	if result.get("victory", true):
+		return { "ok": false, "error": "Expected victory=false (window expired), got victory=true" }
+	if result.get("reason", "") != "window_expired":
+		return { "ok": false, "error": "Expected reason='window_expired', got '%s'" % str(result.get("reason", "")) }
+	return { "ok": true }
+
+
+# quarry_escaped=true + quarry alive + echo alive → "quarry_escaped" defeat.
+# Escape check fires before window_expired check.
+static func _t_pursue_quarry_escaped_loss() -> Dictionary:
+	var actors: Array = [_echo("e1"), _quarry("q1")]
+	var cs := _pursue_state(0, 3, 8, 2, true)  # quarry_escaped=true
+
+	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.PURSUE, cs)
+
+	if not result.get("over", false):
+		return { "ok": false, "error": "Expected over=true, got over=false" }
+	if result.get("victory", true):
+		return { "ok": false, "error": "Expected victory=false (quarry escaped), got victory=true" }
+	if result.get("reason", "") != "quarry_escaped":
+		return { "ok": false, "error": "Expected reason='quarry_escaped', got '%s'" % str(result.get("reason", "")) }
+	return { "ok": true }
+
+
+# Quarry is dead (all enemies defeated) → universal "all_enemies_defeated" victory (step 1).
+static func _t_pursue_kill_quarry_universal_win() -> Dictionary:
+	var dead_quarry := _quarry("q1")
+	dead_quarry["is_dead"] = true
+	dead_quarry["current_hp"] = 0
+	var actors: Array = [_echo("e1"), dead_quarry]
+	var cs := _pursue_state(0, 3, 8, 2, false)  # quarry dead, contain not met
+
+	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.PURSUE, cs)
+
+	if not result.get("over", false):
+		return { "ok": false, "error": "Expected over=true, got over=false" }
+	if not result.get("victory", false):
+		return { "ok": false, "error": "Expected victory=true (universal kill win), got victory=false" }
+	if result.get("reason", "") != "all_enemies_defeated":
+		return { "ok": false, "error": "Expected reason='all_enemies_defeated', got '%s'" % str(result.get("reason", "")) }
 	return { "ok": true }

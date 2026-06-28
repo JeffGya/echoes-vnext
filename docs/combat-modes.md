@@ -34,9 +34,9 @@
   A game of placement and defence. **Win:** totem has health **and** ≥1 echo alive. After the stage there
   is a **chance the totem is rewarded to the player as an item** (V2-ITEM-002 seam).
 
-- **PURSUE** (new, 3b) — a fleeing quarry (`FleeBehaviorModule`) runs from the party across the board.
-  **Win:** contain it (hold an echo adjacent) for `contain_rounds` before its escape `window_turns` closes.
-  **Lose:** window hits 0, or all echoes dead.
+- **PURSUE** (new, 3b) — a fleeing quarry (`FleeBehaviorModule`) runs from the party across a **2× long-dimension board** (randomised wide or tall per encounter seed; same `StageTerrain` organic rules). **No regular enemy group** spawns — the quarry is the only adversarial actor. The quarry wears a **gold diamond badge** overlay so it is immediately identifiable from regular echo/enemy tokens. Camera auto-follows the quarry; players can pan/zoom to override (resumes after ~3 s). Escape condition: quarry reaches any board edge **or** `window_turns` timer expires — whichever fires first.
+  **Win:** contain it (hold an echo adjacent) for `contain_rounds` consecutive rounds before the escape window closes.
+  **Lose:** window hits 0, quarry escapes off any edge, or all echoes dead.
 
 - **GUIDE_SPIRIT** / escort (new, 3c) — find the spirit, then either **protect it in place** or
   **guide/escort it to a destination**. On escort, **50% chance the spirit joins the battle with a 75%

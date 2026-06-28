@@ -386,6 +386,14 @@
 						"wisdom": 40.0,
 						"faith": 65.0
 					}
+				},
+				"pursue_quarry": {
+					"_comment": "Fleeing quarry — high agility, moderate courage, low faith. Fast but not aggressive.",
+					"traits": {
+						"courage": 30.0,
+						"faith": 20.0,
+						"wisdom": 40.0
+					}
 				}
 			},
 			"structures": {
@@ -642,7 +650,8 @@
 					"objective_advance_priority": 1.0,
 					"engage_only_blockers": 1.0,
 					"clue_seeking_priority": 1.0,
-					"reporting_priority": 1.0
+					"reporting_priority": 1.0,
+					"fan_out_bias": 1.0
 				}
 			},
 			"morale_action_muls": {
@@ -877,6 +886,11 @@
 					"actor.guard": -20.0,
 					"actor.idle": -5.0,
 					"actor.move": 0.0
+				},
+				"quarry_near_exit": {
+					"_comment": "PURSUE — quarry near board edge; echoes intercept urgently.",
+					"actor.move": 8.0,
+					"melee_attack": -2.0
 				}
 			}
 		},
@@ -1455,7 +1469,11 @@
 				"base_rows": 12.0,
 				"growth_per_completion": 1.0,
 				"max_cols": 22.0,
-				"max_rows": 22.0
+				"max_rows": 22.0,
+				"pursue_override": {
+					"_comment": "V2-STAGE-004 P3b: PURSUE mode uses 2x one dimension (randomised wide or tall per encounter seed). long_multiplier applied to cols or rows.",
+					"long_multiplier": 2.0
+				}
 			},
 			"objective_placement": {
 				"_comment": "V2-STAGE-004 P3a: depth-scaled objective-actor placement (shrine now; relic/entity/quarry/npc in P3/3b/3c). f = clamp(completion_index / completion_full_at, depth_min_frac, depth_max_frac). target_col = round(min_walkable_col + f * (max_walkable_col - min_walkable_col)). depth_min_frac=0.35 → first realm places shrine roughly central; depth_max_frac=1.0 → after completion_full_at completions shrine is at max-col (enemy deep). No RNG; deterministic by terrain + completion_index.",
@@ -1649,6 +1667,23 @@
 				},
 				"purify_shrine": {
 					"directive_intent_weights": { "threat_interception": 0.7, "ally_protection_bias": 0.5 }
+				},
+				"pursue": {
+					"_comment": "PURSUE mode — contain a fleeing quarry before its escape window closes.",
+					"window_turns": 8,
+					"window_turns_max": 12,
+					"window_turns_growth_per_completion": 0.0,
+					"contain_rounds": 3,
+					"contain_rounds_max": 5,
+					"contain_rounds_growth_per_completion": 0.0,
+					"quarry_def_id": "pursue_quarry",
+					"quarry_name": "Fleeing Quarry",
+					"quarry_near_exit_threshold": 3,
+					"directive_intent_weights": {
+						"objective_advance_priority": 2.0,
+						"fan_out_bias": 1.5,
+						"engage_only_blockers": 0.5
+					}
 				}
 			},
 			"encounter_approach": {

@@ -414,6 +414,16 @@ func _generate_candidates(
 				if not best_enemy_gc.is_empty():
 					protect_echo_override = best_enemy_gc
 
+	# §5-D: PURSUE echo target override — route all echoes toward the living quarry.
+	var quarry_override: Dictionary = {}
+	if res_mode_gc == "pursue" and str(actor.get("faction", "")) == "echo":
+		for a_v in all_actors:
+			if not (a_v is Dictionary): continue
+			var a_qry: Dictionary = a_v
+			if bool(a_qry.get("is_quarry", false)) and not bool(a_qry.get("is_dead", false)):
+				quarry_override = a_qry
+				break
+
 	# COMBAT-BUG-001: purifier shrine lookup — when this echo is the designated purifier,
 	# remember the shrine actor so movement can be directed toward it instead of the nearest enemy.
 	var purifier_shrine_actor: Dictionary = {}
@@ -435,7 +445,9 @@ func _generate_candidates(
 	# V2-PROG-006: Enemy Forming+ focus fire — prefer most-wounded echo over nearest.
 	# Echo actors use standard nearest-enemy selection.
 	var nearest_enemy: Dictionary
-	if not shrine_override.is_empty():
+	if not quarry_override.is_empty():
+		nearest_enemy = quarry_override
+	elif not shrine_override.is_empty():
 		nearest_enemy = shrine_override
 	elif not protect_echo_override.is_empty():
 		# §5-C: echo PROTECT override — focus on carrier (stolen) or totem-nearest enemy (threatened).
@@ -908,6 +920,30 @@ func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dict
 					if GridService.chebyshev_distance(totem_pos_pt, a.get("grid_pos", {})) <= protect_radius:
 						active.append("objective_threatened")
 						break
+
+	# §5-C: quarry_near_exit — PURSUE interception urgency.
+	# Fires when: mode==pursue, actor is echo, AND the living quarry is within threshold of a board edge.
+	if resolution_mode == "pursue" and actor_type == "echo":
+		var _qne_threshold: int = 3  # default; read from _cfg if objective_modes.pursue is present
+		var _om_pursue: Dictionary = (_cfg.get("objective_modes", {}) as Dictionary).get("pursue", {}) if _cfg.has("objective_modes") else {}
+		if _om_pursue.has("quarry_near_exit_threshold"):
+			_qne_threshold = int(_om_pursue["quarry_near_exit_threshold"])
+		var _qne_board_w: int = int(_board_cfg.get("board_cols", 10))
+		var _qne_board_h: int = int(_board_cfg.get("board_rows", 10))
+		for a_v in all_actors:
+			if not (a_v is Dictionary): continue
+			var a_qne: Dictionary = a_v
+			if bool(a_qne.get("is_quarry", false)) and not bool(a_qne.get("is_dead", false)):
+				var _qne_p: Dictionary = a_qne.get("grid_pos", {})
+				var _qne_col: int = int(_qne_p.get("col", 0))
+				var _qne_row: int = int(_qne_p.get("row", 0))
+				var _qne_dist: int = mini(
+					mini(_qne_col, _qne_row),
+					mini(_qne_board_w - 1 - _qne_col, _qne_board_h - 1 - _qne_row)
+				)
+				if _qne_dist <= _qne_threshold:
+					active.append("quarry_near_exit")
+				break
 
 	return {
 		"hp_ratio":          hp_ratio,
