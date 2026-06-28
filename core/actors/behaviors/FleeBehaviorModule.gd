@@ -54,7 +54,7 @@ func select_intent(context: Dictionary) -> Dictionary:
 				continue
 			var c: int = int(parts[0])
 			var r: int = int(parts[1])
-			if c == 0 or c == max_col or r == 0 or r == max_row:
+			if c <= 1 or c >= max_col - 1 or r <= 1 or r >= max_row - 1:
 				candidates.append({ "col": c, "row": r })
 		# Safety: if fewer than 2 edge-walkable cells found, use full walkable set.
 		if candidates.size() < 2:

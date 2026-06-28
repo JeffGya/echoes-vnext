@@ -43,6 +43,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("arbiter/protect_echo_focus_fires_carrier",          Callable(BehaviorArbiterTests, "_t_protect_echo_focus_fires_carrier"))
 	runner.register_test("arbiter/pursue_flee_module_moves_toward_edge",
 		Callable(BehaviorArbiterTests, "_t_pursue_flee_module_moves_toward_edge"))
+	runner.register_test("behavior_arbiter/pursue_flee_module_targets_inset_border",
+		Callable(BehaviorArbiterTests, "_t_pursue_flee_module_targets_inset_border"))
 	runner.register_test("arbiter/pursue_echo_quarry_near_exit_fires",
 		Callable(BehaviorArbiterTests, "_t_pursue_echo_quarry_near_exit_fires"))
 
@@ -1070,6 +1072,58 @@ static func _t_pursue_flee_module_moves_toward_edge() -> Dictionary:
 	var row: int = int(tp.get("row", -1))
 	if not (col == 0 or col == 9 or row == 0 or row == 9):
 		return { "ok": false, "error": "FleeBehaviorModule target_pos (%d,%d) is not a board-edge cell" % [col, row] }
+	return { "ok": true }
+
+
+# Irregular-terrain sub-case: walkable dict covers only interior cells (col 1..8, row 1..8).
+# Literal edge ring (col 0, col 9, row 0, row 9) is void — absent from walkable.
+# FleeBehaviorModule must use the walkable branch and pick a near-border walkable cell
+# (col ≤ 2 OR col ≥ 7 OR row ≤ 2 OR row ≥ 7) rather than the void literal corners.
+static func _t_pursue_flee_module_targets_inset_border() -> Dictionary:
+	# Build walkable dict for a 10×10 board where only interior cells (col 1..8, row 1..8) exist.
+	var walkable: Dictionary = {}
+	for c in range(1, 9):
+		for r in range(1, 9):
+			walkable["%d,%d" % [c, r]] = true
+
+	var board_cfg: Dictionary = { "board_cols": 10, "board_rows": 10, "walkable": walkable }
+	var flee_mod := FleeBehaviorModule.new(board_cfg)
+
+	var quarry_actor := {
+		"id":        "quarry_irr_001",
+		"faction":   "enemy",
+		"is_quarry": true,
+		"is_dead":   false,
+		"grid_pos":  { "col": 4, "row": 4 },
+	}
+	var echo_actor := {
+		"id":       "echo_irr_001",
+		"faction":  "echo",
+		"is_dead":  false,
+		"grid_pos": { "col": 2, "row": 2 },
+	}
+	var context := {
+		"actor":      quarry_actor,
+		"all_actors": [quarry_actor, echo_actor],
+		"board_cfg":  board_cfg,
+		"t":          0,
+	}
+
+	var intent: Dictionary = flee_mod.select_intent(context)
+
+	if str(intent.get("action_type", "")) != "actor.move":
+		return { "ok": false, "error": "FleeBehaviorModule (irregular) should return actor.move, got '%s'" % str(intent.get("action_type", "")) }
+	var tp: Dictionary = intent.get("target_pos", {})
+	if tp.is_empty():
+		return { "ok": false, "error": "FleeBehaviorModule (irregular) returned actor.move but no target_pos" }
+	var col: int = int(tp.get("col", -1))
+	var row: int = int(tp.get("row", -1))
+	# Target must be in the near-border band of the inset walkable set.
+	if not (col <= 2 or col >= 7 or row <= 2 or row >= 7):
+		return {
+			"ok": false,
+			"error": "FleeBehaviorModule (irregular) target_pos (%d,%d) is not near the inset border band" % [col, row],
+		}
 	return { "ok": true }
 
 

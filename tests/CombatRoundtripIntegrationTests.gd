@@ -994,5 +994,3 @@ static func test_pursue_board_is_larger_than_standard() -> Dictionary:
 		}
 
 	return { "ok": true }
-
-	return { "ok": true }

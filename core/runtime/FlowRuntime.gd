@@ -1954,7 +1954,7 @@ func _resolve_next_actor(t: int) -> void:
 		var _qe_row: int     = int(actor.get("grid_pos", {}).get("row", -1))
 		var _qe_max_col: int = int(movement_board_cfg.get("board_cols", 10)) - 1
 		var _qe_max_row: int = int(movement_board_cfg.get("board_rows", 10)) - 1
-		if _qe_col <= 0 or _qe_row <= 0 or _qe_col >= _qe_max_col or _qe_row >= _qe_max_row:
+		if _qe_col <= 1 or _qe_row <= 1 or _qe_col >= _qe_max_col - 1 or _qe_row >= _qe_max_row - 1:
 			combat_state["quarry_escaped"] = true
 			logger.info(t, "combat.pursue.escaped", "Quarry reached board edge", {
 				"quarry_id": str(actor.get("id", "")),
