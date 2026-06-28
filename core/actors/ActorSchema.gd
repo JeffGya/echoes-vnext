@@ -118,6 +118,8 @@ static func get_defaults() -> Dictionary:
 		"grid_pos":       { "col": 0, "row": 0 },
 		# COMBAT-003: runtime defensive stance — cleared at round start; NOT persisted.
 		"guard_state":    false,
+		# V2-STAGE-004 P3b: runtime quarry flag — true only for the PURSUE quarry actor; NOT persisted.
+		"is_quarry":      false,
 		# PROG-010: identity traits (seeded at generation; active from Veteran+/Elite tier)
 		"resilience_traits": [],
 		"leadership_traits": [],

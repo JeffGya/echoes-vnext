@@ -138,6 +138,9 @@ func enter(ctx: RefCounted, t: int) -> void:
 			enemy_actors.append(EnemyActor.from_definition(
 				{ "id": "enemy_guardian_01", "name": "Guardian", "type": "guardian", "faction": "enemy" }, t, actor_cfg))
 		enemy_actors.sort_custom(func(a, b): return a["id"] < b["id"])
+		# V2-STAGE-004 P3b: PURSUE spawns quarry only — no regular enemy group.
+		if flow_ctx.encounter_ctx.resolution_mode == EncounterResolutionModes.PURSUE:
+			enemy_actors = []
 
 		# V2-STAGE-004 P3a: Generate irregular combat-board terrain.
 		# Guard: keeper_intro and any encounter without an active realm model fall back to
@@ -171,6 +174,20 @@ func enter(ctx: RefCounted, t: int) -> void:
 			var cb_max_rows:  int = int(cb_board_cfg_block.get("max_rows",            22))
 			var cb_cols: int = mini(cb_base_cols + completion_index * cb_growth, cb_max_cols)
 			var cb_rows: int = mini(cb_base_rows + completion_index * cb_growth, cb_max_rows)
+			# V2-STAGE-004 P3b: PURSUE board is 2× one dimension, randomised per encounter seed.
+			if flow_ctx.encounter_ctx.resolution_mode == EncounterResolutionModes.PURSUE:
+				var _pur_override: Dictionary = cb_board_cfg_block.get("pursue_override", {})
+				var _pur_mul: float = float(_pur_override.get("long_multiplier", 2.0))
+				var _pur_rng := RandomNumberGenerator.new()
+				if flow_ctx.campaign_seed != null:
+					_pur_rng = flow_ctx.campaign_seed.get_rng(
+						"combat.pursue_board." + flow_ctx.encounter_ctx.encounter_id)
+				else:
+					_pur_rng.seed = hash("pursue_board_" + flow_ctx.encounter_ctx.encounter_id)
+				if _pur_rng.randi() % 2 == 0:
+					cb_cols = int(float(cb_cols) * _pur_mul)
+				else:
+					cb_rows = int(float(cb_rows) * _pur_mul)
 			var cb_bounds: Dictionary = { "w": cb_cols, "h": cb_rows }
 
 			# Generate terrain on a separate append-only RNG namespace.
@@ -306,6 +323,7 @@ func enter(ctx: RefCounted, t: int) -> void:
 			EncounterResolutionModes.RECOVER:  _obj_mode_key = "recover"
 			EncounterResolutionModes.PROTECT:  _obj_mode_key = "protect"
 			EncounterResolutionModes.ENDURE:   _obj_mode_key = "endure"
+			EncounterResolutionModes.PURSUE:   _obj_mode_key = "pursue"
 		if not _obj_mode_key.is_empty():
 			var _om_data: Dictionary = {}
 			if flow_ctx.config_service != null:
@@ -471,6 +489,60 @@ func enter(ctx: RefCounted, t: int) -> void:
 						objective_actor["grid_pos"] = { "col": _prt_candidates[0]["col"], "row": _prt_candidates[0]["row"] }
 				# Legacy path (no terrain): grid_pos from def used as-is — no relocation needed.
 
+			EncounterResolutionModes.PURSUE:
+				# Spawn quarry enemy — placed deep (enemy-side) like the relic.
+				var _qry_obj_params: Dictionary = flow_ctx.encounter_ctx.objective_params
+				var _qry_def_id: String  = str(_qry_obj_params.get("quarry_def_id", "pursue_quarry"))
+				var _qry_name: String    = str(_qry_obj_params.get("quarry_name",   "Fleeing Quarry"))
+				var _qry_defn: Dictionary = {
+					"id":      "pursue_quarry_01",
+					"name":    _qry_name,
+					"type":    _qry_def_id,
+					"level":   1,
+					"faction": "enemy",
+				}
+				objective_actor = EnemyActor.from_definition(_qry_defn, t, actor_cfg)
+				objective_actor["is_quarry"] = true
+				# Place deep (high column = enemy side) on irregular terrain.
+				var _qry_terrain: Dictionary = flow_ctx.encounter_ctx.terrain
+				if not _qry_terrain.is_empty():
+					var _qry_walkable: Dictionary = StageTerrain.walkable_set(_qry_terrain)
+					var _qry_occupied: Dictionary = {}
+					for _qo_v in echo_actors:
+						if _qo_v is Dictionary:
+							var _qq: Dictionary = _qo_v.get("grid_pos", {})
+							_qry_occupied[str(int(_qq.get("col",-1))) + "," + str(int(_qq.get("row",-1)))] = true
+					for _qo_v in enemy_actors:
+						if _qo_v is Dictionary:
+							var _qq: Dictionary = _qo_v.get("grid_pos", {})
+							_qry_occupied[str(int(_qq.get("col",-1))) + "," + str(int(_qq.get("row",-1)))] = true
+					var _qry_candidates: Array = []
+					for _qc_key in _qry_walkable:
+						if not _qry_occupied.has(_qc_key):
+							var _qc_p: Array = str(_qc_key).split(",")
+							if _qc_p.size() == 2:
+								_qry_candidates.append({ "col": int(_qc_p[0]), "row": int(_qc_p[1]) })
+					var _qry_min_col: int = 999999
+					var _qry_max_col: int = -1
+					for _qc_v in _qry_candidates:
+						if _qc_v["col"] < _qry_min_col: _qry_min_col = _qc_v["col"]
+						if _qc_v["col"] > _qry_max_col: _qry_max_col = _qc_v["col"]
+					var _qry_target_col: int = roundi(_qry_min_col + _op_f_p3 * float(_qry_max_col - _qry_min_col))
+					var _qry_board_h: int = int(_qry_terrain.get("bounds", {}).get("h", 12))
+					var _qry_mid_row: float = float(_qry_board_h - 1) * 0.5
+					_qry_candidates.sort_custom(func(a, b):
+						var da: int = abs(a["col"] - _qry_target_col)
+						var db: int = abs(b["col"] - _qry_target_col)
+						if da != db: return da < db
+						var dra: float = abs(float(a["row"]) - _qry_mid_row)
+						var drb: float = abs(float(b["row"]) - _qry_mid_row)
+						if dra != drb: return dra < drb
+						if a["col"] != b["col"]: return a["col"] < b["col"]
+						return a["row"] < b["row"]
+					)
+					if not _qry_candidates.is_empty():
+						objective_actor["grid_pos"] = { "col": _qry_candidates[0]["col"], "row": _qry_candidates[0]["row"] }
+
 		# V2-STAGE-004 P3: Surprise fear bump — unscouted encounter approach.
 		# Applied to echo actors only, after they are built and before all_actors assembly.
 		# Guard: approach dict must be non-empty AND situation_was_revealed must be false.
@@ -625,6 +697,8 @@ static func _resolve_mode_from_stage(flow_ctx: FlowContext) -> String:
 				return EncounterResolutionModes.PROTECT
 			ObjectiveModel.TYPE_ENDURE:
 				return EncounterResolutionModes.ENDURE
+			ObjectiveModel.TYPE_PURSUE:
+				return EncounterResolutionModes.PURSUE
 			_:
 				return EncounterResolutionModes.COMBAT
 
@@ -693,6 +767,19 @@ static func resolve_objective_params(
 			params["wave_group"]           = str(mode_cfg.get("wave_group", ""))
 			params["wave_size_max"]        = _e_ws_max
 			params["wave_size_rising_step"] = int(mode_cfg.get("wave_size_rising_step", 0))
+		"pursue":
+			var _w_base:   int   = int(mode_cfg.get("window_turns",                           8))
+			var _w_growth: float = float(mode_cfg.get("window_turns_growth_per_completion",   0.0))
+			var _w_max:    int   = int(mode_cfg.get("window_turns_max",                       12))
+			var _c_base:   int   = int(mode_cfg.get("contain_rounds",                         3))
+			var _c_growth: float = float(mode_cfg.get("contain_rounds_growth_per_completion", 0.0))
+			var _c_max:    int   = int(mode_cfg.get("contain_rounds_max",                     5))
+			params["window_turns"]                = clampi(_w_base + roundi(_w_growth * float(completion_index)), _w_base, _w_max)
+			params["contain_rounds"]              = clampi(_c_base + roundi(_c_growth * float(completion_index)), _c_base, _c_max)
+			params["quarry_def_id"]               = str(mode_cfg.get("quarry_def_id",   "pursue_quarry"))
+			params["quarry_name"]                 = str(mode_cfg.get("quarry_name",     "Fleeing Quarry"))
+			params["quarry_near_exit_threshold"]  = int(mode_cfg.get("quarry_near_exit_threshold", 3))
+			params["directive_intent_weights"]    = mode_cfg.get("directive_intent_weights", {})
 		_:
 			return {}
 	# Stage-level overrides applied last (non-empty only).
@@ -734,6 +821,7 @@ static func _project_actor(actor: Dictionary) -> Dictionary:
 		"grid_pos":       actor.get("grid_pos", { "col": 0, "row": 0 }),
 		"faction":        str(actor.get("faction", "")),
 		"is_structure":   bool(actor.get("is_structure", false)),
+		"is_quarry":      bool(actor.get("is_quarry", false)),
 		# UI-004: added for party strip and pre-battle overlay.
 		"calling_origin":    str(actor.get("calling_origin", "")),
 		# V2-EMOTION-002: the only player-facing feeling field.
@@ -803,6 +891,20 @@ static func _build_objective_state(ectx: EncounterContext, combat_state: Diction
 	# totem_stolen: PROTECT only.
 	var _totem_stolen: bool = bool(combat_state.get("totem_stolen", false)) if not combat_state.is_empty() else false
 
+	# V2-STAGE-004 P3b: PURSUE quarry distance to nearest board edge.
+	var _quarry_dist_to_exit: int = 0
+	if ectx != null and obj_type == EncounterResolutionModes.PURSUE:
+		var _qd_bounds: Dictionary = ectx.terrain.get("bounds", {}) if not ectx.terrain.is_empty() else {}
+		var _qd_max_col: int = int(_qd_bounds.get("w", 10)) - 1
+		var _qd_max_row: int = int(_qd_bounds.get("h", 10)) - 1
+		for _qd_a in ectx.actors:
+			if _qd_a is Dictionary and bool(_qd_a.get("is_quarry", false)) and not bool(_qd_a.get("is_dead", false)):
+				var _qd_p: Dictionary = _qd_a.get("grid_pos", {})
+				var _qd_col: int = int(_qd_p.get("col", 0))
+				var _qd_row: int = int(_qd_p.get("row", 0))
+				_quarry_dist_to_exit = mini(mini(_qd_col, _qd_row), mini(_qd_max_col - _qd_col, _qd_max_row - _qd_row))
+				break
+
 	return {
 		"type":                  obj_type,
 		"shrine_hp":             shrine_hp,
@@ -822,6 +924,11 @@ static func _build_objective_state(ectx: EncounterContext, combat_state: Diction
 		# V2-STAGE-004 PROTECT guard-proximity: actual guarded-round progress vs required.
 		"protect_progress":       int(combat_state.get("protect_counter", 0)) if not combat_state.is_empty() else 0,
 		"protect_required":       int(_obj_params.get("duration_turns", 0)),
+		# V2-STAGE-004 P3b: PURSUE fields (zero/false when N/A).
+		"contain_progress":       int(combat_state.get("contain_counter", 0)) if not combat_state.is_empty() else 0,
+		"contain_required":       int(_obj_params.get("contain_rounds", 0)),
+		"window_remaining":       maxi(0, int(_obj_params.get("window_turns", 0)) - _round) if not combat_state.is_empty() else 0,
+		"quarry_distance_to_exit": _quarry_dist_to_exit,
 	}
 
 

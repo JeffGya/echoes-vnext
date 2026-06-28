@@ -1684,6 +1684,10 @@ func _resolve_next_actor(t: int) -> void:
 					_di_apply = str(actor.get("faction", "")) == "echo" \
 						and not bool(actor.get("is_dead", false)) \
 						and not bool(ctx.get("is_purifier", false))
+				EncounterResolutionModes.PURSUE:
+					# All living echoes receive pursuit directive (fan-out and intercept bias).
+					_di_apply = str(actor.get("faction", "")) == "echo" \
+						and not bool(actor.get("is_dead", false))
 				_:
 					_di_apply = false  # ENDURE / COMBAT: no mode directive.
 			if _di_apply:
@@ -1701,7 +1705,13 @@ func _resolve_next_actor(t: int) -> void:
 			ctx["directive"] = _dir_copy
 
 	# Resolve this actor's turn.
-	var asm := ActorStateMachine.new(actor, null, actor_cfg)
+	# V2-STAGE-004 P3b: PURSUE — quarry uses FleeBehaviorModule instead of BehaviorArbiter.
+	var _flee_mod: BehaviorModule = null
+	if ectx.resolution_mode == EncounterResolutionModes.PURSUE \
+			and bool(actor.get("is_quarry", false)) \
+			and not bool(actor.get("is_dead", false)):
+		_flee_mod = FleeBehaviorModule.new(movement_board_cfg)
+	var asm := ActorStateMachine.new(actor, _flee_mod, actor_cfg)
 	var intent: Dictionary = asm.advance_turn(ctx, logger, t)
 	var action_type: String = intent.get("action_type", "actor.idle")
 
@@ -1933,6 +1943,32 @@ func _resolve_next_actor(t: int) -> void:
 
 	# Advance current_actor_index past this actor so the next call finds the correct one.
 	combat_state["current_actor_index"] = next_idx + 1
+
+	# V2-STAGE-004 P3b: PURSUE — quarry edge escape detection.
+	# Quarry's grid_pos is updated inside asm.advance_turn(); check after index is advanced.
+	if ectx.resolution_mode == EncounterResolutionModes.PURSUE \
+			and bool(actor.get("is_quarry", false)) \
+			and not bool(actor.get("is_dead", false)) \
+			and not bool(combat_state.get("quarry_escaped", false)):
+		var _qe_col: int     = int(actor.get("grid_pos", {}).get("col", -1))
+		var _qe_row: int     = int(actor.get("grid_pos", {}).get("row", -1))
+		var _qe_max_col: int = int(movement_board_cfg.get("board_cols", 10)) - 1
+		var _qe_max_row: int = int(movement_board_cfg.get("board_rows", 10)) - 1
+		var _qe_board_cols: int = int(movement_board_cfg.get("board_cols", 10))
+		var _qe_board_rows: int = int(movement_board_cfg.get("board_rows", 10))
+		var _qe_escaped: bool = false
+		if _qe_board_cols > _qe_board_rows:
+			# Wide board: escape only at the far (high-col) end of the long axis.
+			_qe_escaped = _qe_col >= _qe_max_col - 1
+		else:
+			# Tall board: escape only at the far (high-row) end of the long axis.
+			_qe_escaped = _qe_row >= _qe_max_row - 1
+		if _qe_escaped:
+			combat_state["quarry_escaped"] = true
+			logger.info(t, "combat.pursue.escaped", "Quarry reached board edge", {
+				"quarry_id": str(actor.get("id", "")),
+				"grid_pos":  actor.get("grid_pos", {}),
+			})
 
 	# Emit per-actor snapshot — UI shows updated board + arrow + action text for this actor.
 	flow_ctx.last_snapshot = FlowEncounterState.build_round_snapshot(flow_ctx, t)
@@ -2616,6 +2652,35 @@ func _end_round(t: int) -> void:
 				"round":           round,
 				"protect_counter": int(combat_state.get("protect_counter", 0)),
 				"guarded":         _pg_guarded,
+			})
+
+	# V2-STAGE-004 P3b — PURSUE: update contain_counter based on echo adjacency to the quarry.
+	# Gate: PURSUE only. Mirror of RECOVER hold_counter pattern.
+	if ectx.resolution_mode == EncounterResolutionModes.PURSUE:
+		var _quarry: Dictionary = {}
+		for _qa in ectx.actors:
+			if _qa is Dictionary and bool(_qa.get("is_quarry", false)) \
+					and not bool(_qa.get("is_dead", false)):
+				_quarry = _qa
+				break
+		if not _quarry.is_empty():
+			var _quarry_pos: Dictionary = _quarry.get("grid_pos", {})
+			var _any_adjacent: bool = false
+			for _qe_a in ectx.actors:
+				if not (_qe_a is Dictionary): continue
+				if bool(_qe_a.get("is_dead", false)): continue
+				if str(_qe_a.get("faction", "")) != "echo": continue
+				if GridService.is_adjacent(_qe_a.get("grid_pos", {}), _quarry_pos):
+					_any_adjacent = true
+					break
+			if _any_adjacent:
+				combat_state["contain_counter"] = int(combat_state.get("contain_counter", 0)) + 1
+			else:
+				combat_state["contain_counter"] = 0
+			logger.debug(t, "combat.pursue.contain", "PURSUE contain_counter updated", {
+				"round":           round,
+				"contain_counter": int(combat_state.get("contain_counter", 0)),
+				"adjacent":        _any_adjacent,
 			})
 
 	# Check end condition — pass combat_state so RECOVER/PROTECT/ENDURE checks read

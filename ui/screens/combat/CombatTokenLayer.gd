@@ -132,6 +132,16 @@ func _draw() -> void:
 					_hp_color(hp_ratio)
 				)
 
+		# V2-STAGE-004 P3b: Quarry gets a gold diamond badge so it's immediately identifiable.
+		if bool(tok.get("is_quarry", false)):
+			var badge_size: float = visual_config.token_radius * 0.55
+			draw_colored_polygon(PackedVector2Array([
+				pos + Vector2(0.0, -badge_size),
+				pos + Vector2(badge_size, 0.0),
+				pos + Vector2(0.0, badge_size),
+				pos + Vector2(-badge_size, 0.0),
+			]), Color(1.0, 0.7, 0.0, 0.9))
+
 		var damage_text: String = str(tok.get("damage_text", ""))
 		if not damage_text.is_empty():
 			draw_string(
