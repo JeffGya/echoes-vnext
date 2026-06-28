@@ -177,6 +177,10 @@ static func check_end_condition(actors: Array, objective: String,
 	var obj_params: Dictionary = combat_state.get("objective_params", {})
 	var hold_counter: int      = int(combat_state.get("hold_counter", 0))
 
+	# 0. PURSUE: quarry_escaped is an immediate defeat — takes priority over kill-win.
+	if objective == EncounterResolutionModes.PURSUE and bool(combat_state.get("quarry_escaped", false)):
+		return { "over": true, "victory": false, "reason": "quarry_escaped" }
+
 	# 1. Victory: all enemies dead (universal).
 	# ENDURE exception: while waves are still scheduled (all_waves_spawned == false),
 	# clearing the field between waves must NOT end the fight — the next wave must spawn.
