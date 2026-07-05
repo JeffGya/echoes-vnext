@@ -61,6 +61,18 @@ var last_transition_reason: String = ""
 # Set via AppRoot debug command "combat_objective <mode>". Empty = use default.
 var dev_combat_objective: String = ""
 
+# V2-STAGE-004 P3c dev toggle: forces the GUIDE_SPIRIT guide_mode when non-empty.
+# Set via AppRoot debug command "combat_objective guide_spirit [protect|escort] ...".
+# "" = use the seeded 50/50 roll; "protect"/"escort" = forced. Draw-then-override:
+# the seeded draw still runs so RNG draw order is identical with or without the override.
+var dev_guide_mode: String = ""
+
+# V2-STAGE-004 P3c dev toggle: forces whether an escort spirit joins battle when non-empty.
+# Set via AppRoot debug command "combat_objective guide_spirit escort [join|nojoin]".
+# "" = use the seeded 50/50 roll; "join"/"nojoin" = forced. Only meaningful in escort mode
+# (same as the natural roll). Draw-then-override preserves RNG draw order.
+var dev_guide_joins: String = ""
+
 # V2-STAGE-002: index into stage.objectives[] for the currently active encounter.
 # Set by FlowRuntime when stage.engage_situation transitions to ENCOUNTER.
 # Read by FlowEncounterState._resolve_mode_from_stage() to pick encounter resolution mode.

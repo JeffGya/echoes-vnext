@@ -1473,6 +1473,10 @@
 				"pursue_override": {
 					"_comment": "V2-STAGE-004 P3b: PURSUE mode uses 4x one dimension (randomised wide or tall per encounter seed). long_multiplier applied to cols or rows.",
 					"long_multiplier": 4.0
+				},
+				"guide_spirit_override": {
+					"_comment": "V2-STAGE-004 P3c: GUIDE_SPIRIT mode uses 5x one dimension (randomised wide or tall per encounter seed). long_multiplier applied to cols or rows.",
+					"long_multiplier": 5.0
 				}
 			},
 			"objective_placement": {
@@ -1684,6 +1688,21 @@
 						"fan_out_bias": 1.5,
 						"engage_only_blockers": 0.5
 					}
+				},
+				"guide_spirit": {
+					"_comment": "GUIDE_SPIRIT mode — find a named spirit, then protect it in place (skittish) or escort it to a seeded edge destination. Mode seeded 50/50 per encounter.",
+					"duration_turns": 4,
+					"duration_growth_per_completion": 0.5,
+					"duration_max": 8,
+					"spirit_def_id": "guide_spirit",
+					"spirit_name": "Wandering Spirit",
+					"spirit_max_hp": 60,
+					"spirit_hp_growth_per_completion": 10.0,
+					"escort_radius": 2,
+					"skittish_radius": 3,
+					"destination_min_distance": 6,
+					"spirit_damage_mul": 0.75,
+					"directive_intent_weights": { "threat_interception": 1.0, "ally_protection_bias": 0.8, "objective_advance_priority": 0.6 }
 				}
 			},
 			"encounter_approach": {
@@ -2794,10 +2813,11 @@
 				"recover": { "label": "Recover", "required": true,  "reveal_hint": "Something of value is hidden in this area." },
 				"protect": { "label": "Protect", "required": true,  "reveal_hint": "A presence here needs guarding." },
 				"endure":  { "label": "Endure",  "required": true,  "reveal_hint": "The pressure here does not relent." },
-				"pursue":  { "label": "Pursue",  "required": false, "reveal_hint": "Something is moving through this area." }
+				"pursue":  { "label": "Pursue",  "required": false, "reveal_hint": "Something is moving through this area." },
+				"guide_spirit": { "label": "Guide the Spirit", "required": false, "reveal_hint": "A lost spirit lingers here, waiting to be seen home." }
 			},
 
-			"foundation_objective_pool": ["combat", "shrine", "recover", "protect", "endure"],
+			"foundation_objective_pool": ["combat", "shrine", "recover", "protect", "endure", "pursue", "guide_spirit"],
 
 			"calling_action_bonuses": {
 				"ranger":  ["reveal_adjacent"],

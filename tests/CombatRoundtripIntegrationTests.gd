@@ -53,6 +53,17 @@ static func register(runner) -> void:
 	runner.register_test("combat_roundtrip/pursue_no_regular_enemies_spawn", func(): return test_pursue_no_regular_enemies_spawn())
 	# V2-STAGE-004 P3b — PURSUE distinctiveness: board is 2× in one dimension
 	runner.register_test("combat_roundtrip/pursue_board_is_larger_than_standard", func(): return test_pursue_board_is_larger_than_standard())
+	# V2-STAGE-004 P3c — GUIDE_SPIRIT roundtrip + escort/skittish behaviour
+	runner.register_test("combat_roundtrip/guide_spirit_protect_roundtrip", func(): return test_guide_spirit_protect_roundtrip())
+	runner.register_test("combat_roundtrip/guide_spirit_protect_no_win_without_guard", func(): return test_guide_spirit_protect_no_win_without_guard())
+	runner.register_test("combat_roundtrip/guide_spirit_escort_moves_only_after_adjacency", func(): return test_guide_spirit_escort_moves_only_after_adjacency())
+	runner.register_test("combat_roundtrip/guide_spirit_protect_flees_when_enemy_near_no_echo", func(): return test_guide_spirit_protect_flees_when_enemy_near_no_echo())
+	runner.register_test("combat_roundtrip/guide_spirit_protect_holds_when_echo_adjacent", func(): return test_guide_spirit_protect_holds_when_echo_adjacent())
+	# BLOCKER regression: JOINED combatant spirit (is_structure=false) must move freely —
+	# it is NOT subject to FlowRuntime's is_spirit grid_pos capture/restore gate (that gate
+	# is is_structure-only, owned by the idle _end_round escort/skittish spirit).
+	runner.register_test("combat_roundtrip/guide_spirit_joined_combatant_moves_freely", func(): return test_guide_spirit_joined_combatant_moves_freely())
+	runner.register_test("combat_roundtrip/guide_spirit_dev_override_forces_escort_join", func(): return test_guide_spirit_dev_override_forces_escort_join())
 
 
 # ---------------------------------------------------------------------------
@@ -992,5 +1003,586 @@ static func test_pursue_board_is_larger_than_standard() -> Dictionary:
 			"error": "PURSUE board not 2× in either dimension — actual w=%d h=%d, needed w≥%.0f or h≥%.0f (base %d×%d)" \
 				% [actual_w, actual_h, threshold_w, threshold_h, base_cols, base_rows]
 		}
+
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# V2-STAGE-004 P3c: GUIDE_SPIRIT roundtrip test.
+# Forces the GUIDE_SPIRIT objective (mirrors the RECOVER/PROTECT override pattern:
+# set ectx.resolution_mode + ectx.objective_params BEFORE combat.init so
+# CombatState.create() reads them), adds a living spirit actor, keeps it alive and
+# protected for the full duration, and verifies:
+#   (a) a spirit actor (is_spirit=true) exists on the board,
+#   (b) objective_state carries guide_mode/spirit_alive/spirit_name/rounds_remaining,
+#   (c) combat ends "spirit_protected" once round_counter reaches duration_turns.
+# ---------------------------------------------------------------------------
+static func test_guide_spirit_protect_roundtrip() -> Dictionary:
+	var env: Dictionary = _setup("guide_spirit_protect", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var ectx = env["ectx"]
+	var runtime = env["runtime"]
+
+	# Override to GUIDE_SPIRIT (protect mode) — set BEFORE combat.init so CombatState.create
+	# reads ectx.resolution_mode + ectx.objective_params.
+	ectx.resolution_mode = EncounterResolutionModes.GUIDE_SPIRIT
+	ectx.objective_params = {
+		"guide_mode":       "protect",
+		"duration_turns":   2,   # short so the roundtrip completes quickly
+		"spirit_def_id":    "guide_spirit",
+		"spirit_name":      "Test Spirit",
+		"spirit_max_hp":    9999,
+		# Generous escort_radius so an echo placed beside the spirit stays within the
+		# guard band even as it drifts a step or two toward the (far) enemies each round —
+		# guard-to-count requires an echo near the spirit to advance guide_protect_counter.
+		"escort_radius":    5,
+		"skittish_radius":  3,
+	}
+
+	# Add a living spirit actor, far from any enemy so it is never threatened
+	# (skittish flee/enemy-near does not interfere with the protect-duration win).
+	var spirit: Dictionary = {
+		"id": "guide_spirit_01", "name": "Test Spirit", "faction": "npc",
+		"is_structure": false, "is_spirit": true, "is_dead": false,
+		"current_hp": 9999, "stats": { "max_hp": 9999, "def": 0, "atk": 0, "speed": 0 },
+		"grid_pos": { "col": 1, "row": 1 },
+	}
+	ectx.actors.append(spirit)
+
+	# Move all enemies far away so the spirit is never "enemy near" and combat
+	# does not end prematurely via all_enemies_defeated or all_echoes_dead.
+	var enemy_col: int = 9
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "enemy" and not bool(a_v.get("is_structure", false)):
+			a_v["grid_pos"] = { "col": enemy_col, "row": 9 }
+			enemy_col = maxi(0, enemy_col - 1)
+
+	runtime.dispatch({ "type": "combat.init" })
+
+	# Place one echo directly adjacent to the spirit so guide_protect_counter advances each round
+	# (deterministic — no reliance on real AI reaching the spirit). Set AFTER combat.init so the
+	# placement is not overwritten by initial actor placement.
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "echo":
+			a_v["grid_pos"] = { "col": 2, "row": 1 }  # Chebyshev 1 from spirit at (1,1)
+			break
+
+	# (a) Spirit actor present on the board.
+	var found_spirit: bool = false
+	for a_v in ectx.actors:
+		if a_v is Dictionary and bool((a_v as Dictionary).get("is_spirit", false)):
+			found_spirit = true
+			break
+	if not found_spirit:
+		return { "ok": false, "error": "No is_spirit=true actor found on the board after combat.init" }
+
+	# Drive rounds until combat ends or duration_turns is reached.
+	_drive(runtime, ectx, 4)
+
+	# (b) objective_state fields — build via the static objective-state helper, same as
+	# other objective_combat/_build_objective_state-style checks in ObjectiveCombatTests.
+	var obj_state: Dictionary = FlowEncounterState._build_objective_state(ectx, ectx.combat_state)
+	if str(obj_state.get("guide_mode", "")) != "protect":
+		return { "ok": false, "error": "Expected objective_state.guide_mode='protect', got '%s'" % str(obj_state.get("guide_mode", "")) }
+	if not obj_state.has("spirit_alive"):
+		return { "ok": false, "error": "objective_state missing 'spirit_alive'" }
+	if str(obj_state.get("spirit_name", "")).is_empty():
+		return { "ok": false, "error": "objective_state.spirit_name is empty, expected a spirit name" }
+	if not obj_state.has("rounds_remaining"):
+		return { "ok": false, "error": "objective_state missing 'rounds_remaining'" }
+
+	# (c) Combat should have ended in victory "spirit_protected" — an echo was kept within
+	# escort_radius of the spirit, so guide_protect_counter reached duration_turns=2 (guard-to-count).
+	var cs: Dictionary = ectx.combat_state
+	if not bool(cs.get("combat_over", false)):
+		return { "ok": false, "error": "Expected combat_over=true after guarding to duration_turns, got false" }
+	var result: Dictionary = ectx.combat_result
+	if str(result.get("reason", "")) != "spirit_protected":
+		return { "ok": false, "error": "Expected combat_result.reason='spirit_protected', got '%s'" % str(result.get("reason", "")) }
+	if not bool(result.get("victory", false)):
+		return { "ok": false, "error": "Expected combat_result.victory=true for spirit_protected, got false" }
+	# Guard-to-count sanity: the win came from guide_protect_counter, not a bare round timer.
+	if int(cs.get("guide_protect_counter", 0)) < 2:
+		return { "ok": false, "error": "Expected guide_protect_counter >= duration_turns(2) at win, got %d" % int(cs.get("guide_protect_counter", 0)) }
+
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# V2-STAGE-004 P3c "guard to count" — GUIDE_SPIRIT protect: with NO echo ever within
+# escort_radius of the spirit, driving rounds well past duration_turns must NOT win. The
+# bare round timer no longer grants the protect victory — the party must reach the spirit.
+# ---------------------------------------------------------------------------
+static func test_guide_spirit_protect_no_win_without_guard() -> Dictionary:
+	var env: Dictionary = _setup("guide_spirit_no_guard", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var ectx = env["ectx"]
+	var runtime = env["runtime"]
+
+	ectx.resolution_mode = EncounterResolutionModes.GUIDE_SPIRIT
+	ectx.objective_params = {
+		"guide_mode":       "protect",
+		"duration_turns":   2,   # short — would win on a bare round timer after 2 rounds
+		"spirit_def_id":    "guide_spirit",
+		"spirit_name":      "Test Spirit",
+		"spirit_max_hp":    9999,
+		"escort_radius":    2,
+		"skittish_radius":  3,
+	}
+
+	# Spirit tucked in a corner, far from every echo and enemy.
+	var spirit: Dictionary = {
+		"id": "guide_spirit_01", "name": "Test Spirit", "faction": "npc",
+		"is_structure": false, "is_spirit": true, "is_dead": false,
+		"current_hp": 9999, "stats": { "max_hp": 9999, "def": 0, "atk": 0, "speed": 0 },
+		"grid_pos": { "col": 0, "row": 0 },
+	}
+	ectx.actors.append(spirit)
+
+	# Enemies far from the spirit (bottom-right) so the fight does not end early.
+	var enemy_col: int = 9
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "enemy" and not bool(a_v.get("is_structure", false)):
+			a_v["grid_pos"] = { "col": enemy_col, "row": 9 }
+			enemy_col = maxi(0, enemy_col - 1)
+
+	runtime.dispatch({ "type": "combat.init" })
+
+	# Pin every echo far from the spirit (bottom rows) AFTER init. They advance toward the
+	# far enemies, never coming within escort_radius(2) of the corner spirit.
+	var echo_col: int = 6
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "echo":
+			a_v["grid_pos"] = { "col": echo_col, "row": 8 }
+			echo_col = mini(9, echo_col + 1)
+
+	# Drive several rounds — well past duration_turns=2.
+	for _r in range(5):
+		runtime.dispatch({ "type": "combat.confirm_round" })
+		var g: int = 0
+		while g < 40:
+			g += 1
+			var cs2: Dictionary = ectx.combat_state
+			if bool(cs2.get("combat_over", false)): break
+			if str(cs2.get("round_phase", "")) != "in_round": break
+			runtime.dispatch({ "type": "combat.next_actor" })
+		if bool(ectx.combat_state.get("combat_over", false)): break
+
+	var cs: Dictionary = ectx.combat_state
+	# No echo ever guarded the spirit → counter stays 0 → no spirit_protected win.
+	if int(cs.get("guide_protect_counter", 0)) != 0:
+		return { "ok": false, "error": "Expected guide_protect_counter=0 (no echo near spirit), got %d" % int(cs.get("guide_protect_counter", 0)) }
+	var reason: String = str(ectx.combat_result.get("reason", "")) if ectx.combat_result != null else ""
+	if reason == "spirit_protected":
+		return { "ok": false, "error": "Expected NO spirit_protected win without proximity, but combat ended spirit_protected" }
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# V2-STAGE-004 P3c: GUIDE_SPIRIT escort — spirit does NOT move before any echo is
+# adjacent (escort_started stays false), and DOES move after an echo becomes adjacent
+# (escort_started flips true and the spirit steps toward the destination on a
+# subsequent round). Direct _end_round-level check via combat.confirm_round +
+# combat.next_actor, mirroring the existing PROTECT guard-proximity tests.
+# ---------------------------------------------------------------------------
+static func test_guide_spirit_escort_moves_only_after_adjacency() -> Dictionary:
+	var env: Dictionary = _setup("guide_spirit_escort", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var ectx = env["ectx"]
+	var runtime = env["runtime"]
+
+	ectx.resolution_mode = EncounterResolutionModes.GUIDE_SPIRIT
+	ectx.objective_params = {
+		"guide_mode":      "escort",
+		"duration_turns":  20,  # irrelevant to escort mode; long so it never fires
+		"spirit_def_id":   "guide_spirit",
+		"spirit_name":     "Test Spirit",
+		"spirit_max_hp":   9999,
+		"escort_radius":   2,
+		"skittish_radius": 3,
+		"destination_col": 9,
+		"destination_row": 9,
+	}
+
+	var spirit: Dictionary = {
+		"id": "guide_spirit_01", "name": "Test Spirit", "faction": "npc",
+		"is_structure": false, "is_spirit": true, "is_dead": false,
+		"current_hp": 9999, "stats": { "max_hp": 9999, "def": 0, "atk": 0, "speed": 0 },
+		"grid_pos": { "col": 5, "row": 5 },
+	}
+	ectx.actors.append(spirit)
+
+	# Place all echoes FAR from the spirit (no adjacency at combat start).
+	var echo_row: int = 0
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "echo":
+			a_v["grid_pos"] = { "col": 0, "row": echo_row }
+			echo_row += 1
+
+	# Move enemies far away so nothing else ends combat early.
+	var enemy_col: int = 9
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "enemy" and not bool(a_v.get("is_structure", false)):
+			a_v["grid_pos"] = { "col": enemy_col, "row": 0 }
+			enemy_col = maxi(0, enemy_col - 1)
+
+	runtime.dispatch({ "type": "combat.init" })
+
+	var spirit_pos_before: Dictionary = spirit.get("grid_pos", {}).duplicate()
+
+	# Round 1 — no echo adjacent to the spirit: escort must NOT start, spirit must NOT move.
+	runtime.dispatch({ "type": "combat.confirm_round" })
+	var guard: int = 0
+	while guard < 60:
+		guard += 1
+		var cs: Dictionary = ectx.combat_state
+		if bool(cs.get("combat_over", false)): break
+		if str(cs.get("round_phase", "")) != "in_round": break
+		runtime.dispatch({ "type": "combat.next_actor" })
+
+	if bool(ectx.combat_state.get("escort_started", false)):
+		return { "ok": false, "error": "Expected escort_started=false while no echo is adjacent to the spirit" }
+	var spirit_pos_after_r1: Dictionary = spirit.get("grid_pos", {})
+	if int(spirit_pos_after_r1.get("col", -1)) != int(spirit_pos_before.get("col", -1)) \
+			or int(spirit_pos_after_r1.get("row", -1)) != int(spirit_pos_before.get("row", -1)):
+		return { "ok": false, "error": "Spirit moved before any echo was adjacent (escort must not start): %s → %s" \
+			% [str(spirit_pos_before), str(spirit_pos_after_r1)] }
+
+	# Now place an echo directly adjacent to the spirit's current position.
+	var spirit_col: int = int(spirit_pos_after_r1.get("col", 5))
+	var spirit_row: int = int(spirit_pos_after_r1.get("row", 5))
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "echo" and not bool(a_v.get("is_dead", false)):
+			a_v["grid_pos"] = { "col": spirit_col + 1, "row": spirit_row }
+			break
+
+	# Round 2 — an echo is now adjacent: escort must start.
+	runtime.dispatch({ "type": "combat.confirm_round" })
+	guard = 0
+	while guard < 60:
+		guard += 1
+		var cs2: Dictionary = ectx.combat_state
+		if bool(cs2.get("combat_over", false)): break
+		if str(cs2.get("round_phase", "")) != "in_round": break
+		runtime.dispatch({ "type": "combat.next_actor" })
+
+	if not bool(ectx.combat_state.get("escort_started", false)):
+		return { "ok": false, "error": "Expected escort_started=true after an echo became adjacent to the spirit" }
+
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# V2-STAGE-004 P3c: GUIDE_SPIRIT protect (skittish) — spirit flees one cell away
+# from the nearest enemy when an enemy is within skittish_radius and no echo is
+# adjacent; spirit holds its position when an echo IS adjacent (even with an
+# enemy near).
+# ---------------------------------------------------------------------------
+static func test_guide_spirit_protect_flees_when_enemy_near_no_echo() -> Dictionary:
+	var env: Dictionary = _setup("guide_spirit_flee", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var ectx = env["ectx"]
+	var runtime = env["runtime"]
+
+	ectx.resolution_mode = EncounterResolutionModes.GUIDE_SPIRIT
+	ectx.objective_params = {
+		"guide_mode":      "protect",
+		"duration_turns":  20,  # long enough it never fires during this 1-round test
+		"spirit_def_id":   "guide_spirit",
+		"spirit_name":     "Test Spirit",
+		"spirit_max_hp":   9999,
+		"escort_radius":   2,
+		"skittish_radius": 3,
+	}
+
+	var spirit: Dictionary = {
+		"id": "guide_spirit_01", "name": "Test Spirit", "faction": "npc",
+		"is_structure": false, "is_spirit": true, "is_dead": false,
+		"current_hp": 9999, "stats": { "max_hp": 9999, "def": 0, "atk": 0, "speed": 0 },
+		"grid_pos": { "col": 5, "row": 5 },
+	}
+	ectx.actors.append(spirit)
+
+	# Keep all echoes FAR from the spirit (no adjacency).
+	var echo_row: int = 0
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "echo":
+			a_v["grid_pos"] = { "col": 0, "row": echo_row }
+			echo_row += 1
+
+	# Place one enemy WITHIN skittish_radius of the spirit (distance 2 <= 3).
+	var enemy_near_placed: bool = false
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "enemy" and not bool(a_v.get("is_structure", false)):
+			if not enemy_near_placed:
+				a_v["grid_pos"] = { "col": 7, "row": 5 }  # chebyshev distance 2 from (5,5)
+				enemy_near_placed = true
+			else:
+				a_v["grid_pos"] = { "col": 9, "row": 0 }  # rest far away
+
+	runtime.dispatch({ "type": "combat.init" })
+
+	var spirit_pos_before: Dictionary = spirit.get("grid_pos", {}).duplicate()
+
+	runtime.dispatch({ "type": "combat.confirm_round" })
+	var guard: int = 0
+	while guard < 60:
+		guard += 1
+		var cs: Dictionary = ectx.combat_state
+		if bool(cs.get("combat_over", false)): break
+		if str(cs.get("round_phase", "")) != "in_round": break
+		runtime.dispatch({ "type": "combat.next_actor" })
+
+	var spirit_pos_after: Dictionary = spirit.get("grid_pos", {})
+	if int(spirit_pos_after.get("col", -1)) == int(spirit_pos_before.get("col", -1)) \
+			and int(spirit_pos_after.get("row", -1)) == int(spirit_pos_before.get("row", -1)):
+		return { "ok": false, "error": "Expected spirit to flee one cell (enemy near, no echo adjacent), but it did not move: %s" \
+			% str(spirit_pos_before) }
+
+	return { "ok": true }
+
+
+static func test_guide_spirit_protect_holds_when_echo_adjacent() -> Dictionary:
+	var env: Dictionary = _setup("guide_spirit_hold", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var ectx = env["ectx"]
+	var runtime = env["runtime"]
+
+	ectx.resolution_mode = EncounterResolutionModes.GUIDE_SPIRIT
+	ectx.objective_params = {
+		"guide_mode":      "protect",
+		"duration_turns":  20,
+		"spirit_def_id":   "guide_spirit",
+		"spirit_name":     "Test Spirit",
+		"spirit_max_hp":   9999,
+		"escort_radius":   2,
+		"skittish_radius": 3,
+	}
+
+	var spirit: Dictionary = {
+		"id": "guide_spirit_01", "name": "Test Spirit", "faction": "npc",
+		"is_structure": false, "is_spirit": true, "is_dead": false,
+		"current_hp": 9999, "stats": { "max_hp": 9999, "def": 0, "atk": 0, "speed": 0 },
+		"grid_pos": { "col": 5, "row": 5 },
+	}
+	ectx.actors.append(spirit)
+
+	# Place ONE echo directly adjacent to the spirit; the rest far away.
+	var echo_adjacent_placed: bool = false
+	var echo_row: int = 0
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "echo":
+			if not echo_adjacent_placed:
+				a_v["grid_pos"] = { "col": 6, "row": 5 }  # adjacent to (5,5)
+				echo_adjacent_placed = true
+			else:
+				a_v["grid_pos"] = { "col": 0, "row": echo_row }
+				echo_row += 1
+
+	# Place one enemy WITHIN skittish_radius of the spirit (would normally trigger flee).
+	var enemy_near_placed: bool = false
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "enemy" and not bool(a_v.get("is_structure", false)):
+			if not enemy_near_placed:
+				a_v["grid_pos"] = { "col": 7, "row": 5 }  # chebyshev distance 2 from (5,5)
+				enemy_near_placed = true
+			else:
+				a_v["grid_pos"] = { "col": 9, "row": 0 }
+
+	runtime.dispatch({ "type": "combat.init" })
+
+	var spirit_pos_before: Dictionary = spirit.get("grid_pos", {}).duplicate()
+
+	runtime.dispatch({ "type": "combat.confirm_round" })
+	var guard: int = 0
+	while guard < 60:
+		guard += 1
+		var cs: Dictionary = ectx.combat_state
+		if bool(cs.get("combat_over", false)): break
+		if str(cs.get("round_phase", "")) != "in_round": break
+		runtime.dispatch({ "type": "combat.next_actor" })
+
+	var spirit_pos_after: Dictionary = spirit.get("grid_pos", {})
+	if int(spirit_pos_after.get("col", -1)) != int(spirit_pos_before.get("col", -1)) \
+			or int(spirit_pos_after.get("row", -1)) != int(spirit_pos_before.get("row", -1)):
+		return { "ok": false, "error": "Expected spirit to hold position (echo adjacent guards it), but it moved: %s → %s" \
+			% [str(spirit_pos_before), str(spirit_pos_after)] }
+
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# BLOCKER regression: the JOINED combatant GUIDE_SPIRIT (faction "echo", is_spirit=true,
+# is_structure=false — built via EnemyActor when spirit_joins_battle=true) is NOT the idle
+# structure spirit whose movement _end_round owns. FlowRuntime's is_spirit grid_pos
+# capture/restore gate (core/runtime/FlowRuntime.gd, around _resolve_next_actor) is now
+# gated on `is_spirit AND is_structure`, so a joined combatant spirit must be free to move
+# on its own arbiter turn like any other echo-faction combatant. Drive several rounds and
+# assert its grid_pos changes from spawn at least once.
+# ---------------------------------------------------------------------------
+static func test_guide_spirit_joined_combatant_moves_freely() -> Dictionary:
+	var env: Dictionary = _setup("guide_spirit_joined_moves", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var ectx = env["ectx"]
+	var runtime = env["runtime"]
+
+	ectx.resolution_mode = EncounterResolutionModes.GUIDE_SPIRIT
+	ectx.objective_params = {
+		"guide_mode":          "escort",
+		"duration_turns":      20,  # irrelevant to escort mode; long so it never fires
+		"spirit_def_id":       "guide_spirit",
+		"spirit_name":         "Test Spirit",
+		"spirit_max_hp":       9999,
+		"escort_radius":       2,
+		"skittish_radius":     3,
+		"spirit_joins_battle": true,
+		"destination_col":     9,
+		"destination_row":     9,
+	}
+
+	# JOINED combatant spirit: faction "echo", is_spirit=true, is_structure=false — distinct
+	# from the idle "npc"-faction structure spirit used in the other GUIDE_SPIRIT tests above.
+	# actor_type "enemy" matches the real spawn path (EnemyActor.from_definition, see
+	# FlowEncounterState.gd _gs_joins block) — ActorStateMachine._init routes actor_type
+	# "echo"/"enemy" to BehaviorArbiter; anything else silently falls back to
+	# IdleBehaviorModule, which never generates a move intent.
+	var spirit: Dictionary = {
+		"id": "guide_spirit_01", "name": "Test Spirit", "faction": "echo",
+		"actor_type": "enemy",
+		"is_structure": false, "is_spirit": true, "is_dead": false,
+		"current_hp": 60, "stats": { "max_hp": 60, "def": 2, "atk": 8, "speed": 6 },
+		"speed": 6, "morale": 50, "fear": 0,
+		"grid_pos": { "col": 1, "row": 1 },
+	}
+	ectx.actors.append(spirit)
+
+	# Move all enemies far away so combat does not end early and nothing else interferes.
+	var enemy_col: int = 9
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "enemy" and not bool(a_v.get("is_structure", false)):
+			a_v["grid_pos"] = { "col": enemy_col, "row": 9 }
+			enemy_col = maxi(0, enemy_col - 1)
+
+	runtime.dispatch({ "type": "combat.init" })
+
+	var spirit_pos_before: Dictionary = spirit.get("grid_pos", {}).duplicate()
+
+	_drive(runtime, ectx, 6)
+
+	# Re-find the spirit actor by id (arbiter turns mutate the dict in place within ectx.actors).
+	var spirit_after: Dictionary = {}
+	for a_v in ectx.actors:
+		if a_v is Dictionary and str((a_v as Dictionary).get("id", "")) == "guide_spirit_01":
+			spirit_after = a_v
+			break
+	if spirit_after.is_empty():
+		return { "ok": false, "error": "joined spirit actor not found after driving rounds" }
+
+	var pos_after: Dictionary = spirit_after.get("grid_pos", {})
+	if int(pos_after.get("col", -1)) == int(spirit_pos_before.get("col", -1)) \
+			and int(pos_after.get("row", -1)) == int(spirit_pos_before.get("row", -1)):
+		return { "ok": false, "error": "Expected joined combatant spirit to move from spawn %s over 6 rounds, but it did not (grid_pos capture/restore gate may be re-pinning it)" \
+			% str(spirit_pos_before) }
+
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# V2-STAGE-004 P3c: dev-override determinism test.
+# Exercises the REAL GUIDE_SPIRIT spawn block (via dev_combat_objective=GUIDE_SPIRIT)
+# with dev_guide_mode="escort" + dev_guide_joins="join" forced. Asserts:
+#   (a) objective_params.guide_mode == "escort"   (mode override applied)
+#   (b) spirit_joins_battle == true               (joins override applied)
+#   (c) a spirit actor exists with faction "echo"  (joined combatant path)
+#   (d) the seeded RNG draws still occurred: the spirit NAME is byte-identical with
+#       and without the override for the same encounter seed. The name draw follows
+#       the mode + joins draws in the spawn block, so an identical name proves the
+#       draw-then-override left the RNG draw sequence unshifted.
+# ---------------------------------------------------------------------------
+static func _guide_spawn_env(seed_tag: String, force_mode: String, force_joins: String) -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var config := ConfigService.new()
+	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/combat_roundtrip_guide_dev.json")
+	runtime.boot()
+	var flow_ctx: FlowContext = runtime.flow_ctx
+	var t: int = 0
+
+	flow_ctx.realm_id = "realm.01"
+	var rm: Dictionary = RealmService.get_or_create("realm.01", flow_ctx, t)
+	if rm.is_empty():
+		return {}
+	flow_ctx.stage_id = "stage.0"
+	flow_ctx.encounter_id = "realm.01.stage.0." + seed_tag
+
+	var bal: Dictionary = config.get_balance()
+	var summ_cfg: Dictionary = bal.get("data", {}).get("summoning", {})
+	var expr_cfg: Dictionary = bal.get("data", {}).get("maturity_expression", {})
+	var roster: Array = []
+	var party_ids: Array = []
+	for i in range(5):
+		var echo: Dictionary = EchoFactory.generate(seed_tag, "echo." + str(i), i, "summon", summ_cfg, expr_cfg)
+		echo["id"] = "echo_%04d" % (i + 1)
+		roster.append(echo)
+		party_ids.append(str(echo.get("id", "")))
+	flow_ctx.save_data["sanctum"]["roster"] = roster
+	flow_ctx.save_data["sanctum"]["active_party_ids"] = party_ids
+
+	flow_ctx.dev_combat_objective = EncounterResolutionModes.GUIDE_SPIRIT
+	flow_ctx.dev_guide_mode = force_mode
+	flow_ctx.dev_guide_joins = force_joins
+	flow_ctx.encounter_ctx = null
+	flow_ctx.encounter_machine = null
+
+	var enc_state := FlowEncounterState.new()
+	enc_state.enter(flow_ctx, t)
+	return { "runtime": runtime, "flow_ctx": flow_ctx, "ectx": flow_ctx.encounter_ctx }
+
+
+static func test_guide_spirit_dev_override_forces_escort_join() -> Dictionary:
+	# Same encounter seed for both runs so RNG-derived draws are comparable.
+	var seed_tag: String = "guide_dev_override"
+
+	# (1) With override forced: escort + joins battle.
+	var env: Dictionary = _guide_spawn_env(seed_tag, "escort", "join")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed (realm not created)" }
+	var ectx = env["ectx"]
+	var params: Dictionary = ectx.objective_params
+
+	# (a) mode override applied.
+	if str(params.get("guide_mode", "")) != "escort":
+		return { "ok": false, "error": "Expected guide_mode='escort', got '%s'" % str(params.get("guide_mode", "")) }
+	# (b) joins override applied.
+	if not bool(params.get("spirit_joins_battle", false)):
+		return { "ok": false, "error": "Expected spirit_joins_battle=true, got false" }
+
+	# (c) a spirit actor exists with faction "echo" (joined combatant path).
+	var spirit_faction: String = ""
+	var forced_name: String = str(params.get("spirit_name", ""))
+	for a_v in ectx.actors:
+		if a_v is Dictionary and bool((a_v as Dictionary).get("is_spirit", false)):
+			spirit_faction = str((a_v as Dictionary).get("faction", ""))
+			break
+	if spirit_faction != "echo":
+		return { "ok": false, "error": "Expected joined spirit faction='echo', got '%s'" % spirit_faction }
+	if forced_name.is_empty():
+		return { "ok": false, "error": "spirit_name was empty under override" }
+
+	# (d) determinism: same seed, NO override -> seeded draws run naturally. The NAME draw
+	# follows the mode+joins draws, so an identical spirit name proves the draw-then-override
+	# did not shift the RNG draw sequence.
+	var env2: Dictionary = _guide_spawn_env(seed_tag, "", "")
+	if env2.is_empty():
+		return { "ok": false, "error": "setup failed (seeded run)" }
+	var seeded_name: String = str(env2["ectx"].objective_params.get("spirit_name", ""))
+	if seeded_name != forced_name:
+		return { "ok": false, "error": "spirit name diverged with override: forced='%s' seeded='%s' -- draw order shifted" % [forced_name, seeded_name] }
 
 	return { "ok": true }

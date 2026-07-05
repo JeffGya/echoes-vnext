@@ -1,0 +1,26 @@
+{
+  "spirit_first_adjacency": [
+    "You came. I didn't think anyone still walked this far for a name.",
+    "Someone remembers me. I'd almost forgotten what that felt like.",
+    "You're close now. I can feel the thread again, just barely.",
+    "Ah — a living hand, near mine. It's been so long."
+  ],
+  "spirit_escort_start": [
+    "Walk with me, then. The road home is longer than it looks.",
+    "Stay close. I lose myself when I'm alone too long.",
+    "Lead, and I'll follow — my feet remember the way, if my mind doesn't.",
+    "Together, then. One more thread pulled back from the dark."
+  ],
+  "spirit_guide_win": [
+    "Home. I'm home. Thank you for not letting go of me.",
+    "The thread holds again. I am whole enough to rest.",
+    "This is the place. I remember it now — I remember myself.",
+    "You carried a stolen story all this way. I won't forget it."
+  ],
+  "spirit_killed": [
+    "No — not again. Not so close to—",
+    "The thread... it's slipping. Tell them I tried to come home.",
+    "I was almost whole. Almost.",
+    "Let the next one find the road easier than I did."
+  ]
+}

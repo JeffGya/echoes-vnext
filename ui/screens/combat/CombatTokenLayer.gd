@@ -142,6 +142,22 @@ func _draw() -> void:
 				pos + Vector2(-badge_size, 0.0),
 			]), Color(1.0, 0.7, 0.0, 0.9))
 
+		# V2-STAGE-004 P3c: GUIDE_SPIRIT gets a soft radiant gold halo — a sacred nimbus
+		# ringing the token — so the escorted spirit reads distinctly from party echoes
+		# (blue circles) and enemies. Deliberately NOT the quarry's solid diamond: a ring,
+		# not a filled shape. Draws over both the structure square and the joined echo circle.
+		if bool(tok.get("is_spirit", false)):
+			var halo_r: float = extent + visual_config.spirit_halo_padding
+			# Faint filled glow disc behind the token for presence at small sizes.
+			draw_circle(pos, halo_r, visual_config.spirit_halo_inner_color)
+			# Two concentric gold rings form the nimbus (bright inner, softer outer).
+			draw_arc(pos, halo_r, 0.0, TAU, 40,
+				visual_config.spirit_halo_color, visual_config.spirit_halo_width, true)
+			draw_arc(pos, halo_r + visual_config.spirit_halo_width + 1.5, 0.0, TAU, 40,
+				Color(visual_config.spirit_halo_color.r, visual_config.spirit_halo_color.g,
+					visual_config.spirit_halo_color.b, visual_config.spirit_halo_color.a * 0.45),
+				visual_config.spirit_halo_width * 0.7, true)
+
 		var damage_text: String = str(tok.get("damage_text", ""))
 		if not damage_text.is_empty():
 			draw_string(

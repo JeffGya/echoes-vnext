@@ -170,7 +170,7 @@ The matrix must stay legible at a glance: **objective role** is the strongest di
 6. **Map / placement.** **Long, winding path** with ambush pockets; spirit travels start→destination; enemies seeded along the route, not in one clump.
 7. **Failure & stakes.** Spirit dies en route — a death you were entrusted to prevent; the heaviest emotional loss of the seven.
 8. **Tuning.** Path length + spirit move rate set the clock; ambush count along route scales with completion order. Spirit HP low (it relies on the screen). Join-chance/debuff per canon.
-9. **Foundation vs later.** **Foundation:** find + protect-in-place + escort-to-destination win, moving-anchor screen (reuses PROTECT seams). **Later:** the 50% join + 75% debuff combat participation, free-summon reward wiring, vanguard/rear-guard role assignment heuristics.
+9. **Foundation vs later.** **Foundation (shipped, Phase 3c):** find + protect-in-place (guard-to-count) + escort-to-destination win, moving-anchor screen (reuses PROTECT seams), **plus** the **50% join + 75% damage debuff** combat participation — this landed in 3c per Jeff's decision (ANSWERS.md #12); a joined spirit is a fully-active `BehaviorArbiter` ally. **Later:** free-summon reward **wiring** (V2-ITEM-002 — the `guide_spirit_protected` flag seam already exists, set on a successful protect win), vanguard/rear-guard role-assignment heuristics.
 
 ---
 

@@ -56,6 +56,34 @@
 #  18. objective_combat/create_stores_objective_params
 #          CombatState.create(actors, "recover", 0, {}, {hold_rounds:3}) →
 #          returned dict objective_params.hold_rounds == 3, round_counter == 0.
+#
+# GUIDE_SPIRIT (V2-STAGE-004 P3c)
+#  29. objective_combat/guide_spirit_protect_win
+#          guide_mode="protect", spirit alive, guide_protect_counter >= duration_turns → "spirit_protected" victory.
+#  29b. objective_combat/guide_spirit_protect_no_win_without_guard
+#          round_counter >> duration_turns but guide_protect_counter == 0 → NOT over (guard-to-count).
+#  30. objective_combat/guide_spirit_protect_loss_spirit_killed
+#          spirit is_dead → "spirit_killed" defeat.
+#  31. objective_combat/guide_spirit_killed_beats_all_enemies_dead
+#          spirit dead AND all enemies dead → "spirit_killed" defeat wins (early guard beats kill-win).
+#  32. objective_combat/guide_spirit_escort_destination_reached_wins_over_living_enemies
+#          destination_reached=true → "spirit_escorted" victory, even with living enemies present.
+#  33. objective_combat/guide_spirit_escort_no_duration_win
+#          guide_mode="escort", round_counter >= duration_turns, destination NOT reached,
+#          spirit alive, enemies alive → NOT over (protect-duration branch must not fire for escort).
+#  34. objective_combat/guide_spirit_create_stores_params_and_initiative
+#          CombatState.create() with objective_params seeds guide_mode/spirit_joins_battle/
+#          destination_col/destination_row; spirit actor appears in initiative_order.
+#  35. objective_combat/guide_spirit_damage_debuff
+#          attacker._spirit_damage_mul=0.75 → melee damage is floor(0.75 * undebuffed damage).
+#  36. objective_combat/resolve_params_guide_spirit_all_keys_present
+#          resolve_objective_params("guide_spirit", ...) → all expected keys present.
+#  37. objective_combat/resolve_params_guide_spirit_duration_scales_and_clamps
+#          duration_turns scales with completion_index and clamps at duration_max.
+#  38. objective_combat/guide_spirit_joined_spirit_does_not_block_party_wipe
+#          BLOCKER regression: wiped party + living JOINED spirit (faction "echo",
+#          is_spirit=true) → "all_echoes_dead" still fires (joined spirit excluded
+#          from the living_echoes filter).
 
 extends RefCounted
 class_name ObjectiveCombatTests
@@ -124,6 +152,66 @@ static func _recover_state(hold_counter: int, hold_rounds: int) -> Dictionary:
 		"hold_counter":     hold_counter,
 		"objective_params": { "hold_rounds": hold_rounds },
 	}
+
+# Minimal living spirit actor (GUIDE_SPIRIT).
+static func _spirit(id: String) -> Dictionary:
+	return {
+		"id":           id,
+		"name":         "Test Spirit",
+		"faction":      "npc",
+		"is_dead":      false,
+		"is_structure": false,
+		"is_spirit":    true,
+		"grid_pos":     { "col": 4, "row": 4 },
+		"current_hp":   60,
+	}
+
+# Dead spirit.
+static func _spirit_dead(id: String) -> Dictionary:
+	var a := _spirit(id)
+	a["is_dead"] = true
+	a["current_hp"] = 0
+	return a
+
+# Living JOINED combatant spirit (faction "echo", is_spirit true, is_structure false) —
+# the GUIDE_SPIRIT escort spirit that fights alongside the party. Distinct from the idle
+# "npc"-faction spirit above: this one must NEVER keep a wiped party "alive" in
+# all_echoes_dead (BLOCKER fix — see CombatState.check_end_condition() living_echoes filter).
+static func _joined_spirit(id: String) -> Dictionary:
+	return {
+		"id":           id,
+		"name":         "Test Spirit",
+		"faction":      "echo",
+		"is_dead":      false,
+		"is_structure": false,
+		"is_spirit":    true,
+		"grid_pos":     { "col": 4, "row": 4 },
+		"current_hp":   60,
+	}
+
+# Minimal combat_state dict for GUIDE_SPIRIT (protect mode).
+# guide_protect_counter defaults to round_counter for existing callers that expect the old
+# "counter tracked wall rounds" behaviour; pass it explicitly to decouple guard progress from rounds.
+static func _guide_spirit_protect_state(round_counter: int, duration_turns: int, guide_protect_counter: int = -1) -> Dictionary:
+	return {
+		"round_counter":    round_counter,
+		"hold_counter":     0,
+		"guide_mode":       "protect",
+		"guide_protect_counter": (round_counter if guide_protect_counter < 0 else guide_protect_counter),
+		"objective_params": { "duration_turns": duration_turns },
+		"destination_reached": false,
+	}
+
+# Minimal combat_state dict for GUIDE_SPIRIT (escort mode).
+static func _guide_spirit_escort_state(round_counter: int, duration_turns: int, destination_reached: bool) -> Dictionary:
+	return {
+		"round_counter":       round_counter,
+		"hold_counter":        0,
+		"guide_mode":          "escort",
+		"objective_params":    { "duration_turns": duration_turns },
+		"destination_reached": destination_reached,
+	}
+
 
 # Minimal combat_state dict for PROTECT / ENDURE objectives.
 static func _timed_state(round_counter: int, duration_turns: int) -> Dictionary:
@@ -272,6 +360,29 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(ObjectiveCombatTests, "_t_pursue_quarry_escaped_loss"))
 	runner.register_test("objective_combat/pursue_kill_quarry_universal_win",
 		Callable(ObjectiveCombatTests, "_t_pursue_kill_quarry_universal_win"))
+	# V2-STAGE-004 P3c — GUIDE_SPIRIT win/lose conditions
+	runner.register_test("objective_combat/guide_spirit_protect_win",
+		Callable(ObjectiveCombatTests, "_t_guide_spirit_protect_win"))
+	runner.register_test("objective_combat/guide_spirit_protect_no_win_without_guard",
+		Callable(ObjectiveCombatTests, "_t_guide_spirit_protect_no_win_without_guard"))
+	runner.register_test("objective_combat/guide_spirit_protect_loss_spirit_killed",
+		Callable(ObjectiveCombatTests, "_t_guide_spirit_protect_loss_spirit_killed"))
+	runner.register_test("objective_combat/guide_spirit_killed_beats_all_enemies_dead",
+		Callable(ObjectiveCombatTests, "_t_guide_spirit_killed_beats_all_enemies_dead"))
+	runner.register_test("objective_combat/guide_spirit_escort_destination_reached_wins_over_living_enemies",
+		Callable(ObjectiveCombatTests, "_t_guide_spirit_escort_destination_reached_wins_over_living_enemies"))
+	runner.register_test("objective_combat/guide_spirit_escort_no_duration_win",
+		Callable(ObjectiveCombatTests, "_t_guide_spirit_escort_no_duration_win"))
+	runner.register_test("objective_combat/guide_spirit_create_stores_params_and_initiative",
+		Callable(ObjectiveCombatTests, "_t_guide_spirit_create_stores_params_and_initiative"))
+	runner.register_test("objective_combat/guide_spirit_damage_debuff",
+		Callable(ObjectiveCombatTests, "_t_guide_spirit_damage_debuff"))
+	runner.register_test("objective_combat/resolve_params_guide_spirit_all_keys_present",
+		Callable(ObjectiveCombatTests, "_t_resolve_params_guide_spirit_all_keys_present"))
+	runner.register_test("objective_combat/guide_spirit_joined_spirit_does_not_block_party_wipe",
+		Callable(ObjectiveCombatTests, "_t_guide_spirit_joined_spirit_does_not_block_party_wipe"))
+	runner.register_test("objective_combat/resolve_params_guide_spirit_duration_scales_and_clamps",
+		Callable(ObjectiveCombatTests, "_t_resolve_params_guide_spirit_duration_scales_and_clamps"))
 
 
 # ─── RECOVER tests ──────────────────────────────────────────────────────────
@@ -706,6 +817,22 @@ static func _protect_cfg() -> Dictionary:
 		"entity_hp_growth_per_completion": 10,
 		"entity_def_id": "protect_entity",
 		"entity_name": "The Charge",
+	}
+
+# Minimal guide_spirit mode_cfg.
+static func _guide_spirit_cfg() -> Dictionary:
+	return {
+		"duration_turns": 4,
+		"duration_growth_per_completion": 0.5,
+		"duration_max": 8,
+		"spirit_max_hp": 60,
+		"spirit_hp_growth_per_completion": 5,
+		"spirit_def_id": "guide_spirit",
+		"spirit_name": "Wandering Spirit",
+		"escort_radius": 2,
+		"skittish_radius": 3,
+		"destination_min_distance": 6,
+		"spirit_damage_mul": 0.75,
 	}
 
 # Minimal endure mode_cfg.
@@ -1255,4 +1382,214 @@ static func _t_pursue_kill_quarry_universal_win() -> Dictionary:
 		return { "ok": false, "error": "Expected victory=true (universal kill win), got victory=false" }
 	if result.get("reason", "") != "all_enemies_defeated":
 		return { "ok": false, "error": "Expected reason='all_enemies_defeated', got '%s'" % str(result.get("reason", "")) }
+	return { "ok": true }
+
+
+# ─── V2-STAGE-004 P3c — GUIDE_SPIRIT tests ───────────────────────────────────
+
+# 29. protect-win: guide_mode=protect, spirit alive, guide_protect_counter >= duration_turns → "spirit_protected" victory.
+static func _t_guide_spirit_protect_win() -> Dictionary:
+	var actors: Array = [_echo("e1"), _enemy("n1"), _spirit("guide_spirit_01")]
+	var cs := _guide_spirit_protect_state(4, 4, 4)  # guide_protect_counter == duration_turns
+
+	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.GUIDE_SPIRIT, cs)
+
+	if not result.get("over", false):
+		return { "ok": false, "error": "Expected over=true (protect duration met), got over=false" }
+	if not result.get("victory", false):
+		return { "ok": false, "error": "Expected victory=true (spirit protected), got victory=false" }
+	if result.get("reason", "") != "spirit_protected":
+		return { "ok": false, "error": "Expected reason='spirit_protected', got '%s'" % str(result.get("reason", "")) }
+	return { "ok": true }
+
+
+# 29b. protect-no-win-without-guard: guide_mode=protect, spirit alive, round_counter far past
+# duration_turns but guide_protect_counter == 0 → NOT over. Guard-to-count means a bare round
+# timer can no longer win; the party must actually reach the spirit.
+static func _t_guide_spirit_protect_no_win_without_guard() -> Dictionary:
+	var actors: Array = [_echo("e1"), _enemy("n1"), _spirit("guide_spirit_01")]
+	var cs := _guide_spirit_protect_state(99, 4, 0)  # round_counter >> duration, but no guarded rounds
+
+	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.GUIDE_SPIRIT, cs)
+
+	if result.get("over", true):
+		return { "ok": false, "error": "Expected over=false (guide_protect_counter=0 despite rounds), got over=true (reason='%s')" % str(result.get("reason", "")) }
+	return { "ok": true }
+
+
+# 30. protect-loss: spirit is_dead → "spirit_killed" defeat.
+static func _t_guide_spirit_protect_loss_spirit_killed() -> Dictionary:
+	var actors: Array = [_echo("e1"), _enemy("n1"), _spirit_dead("guide_spirit_01")]
+	var cs := _guide_spirit_protect_state(1, 4)  # round_counter well below duration
+
+	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.GUIDE_SPIRIT, cs)
+
+	if not result.get("over", false):
+		return { "ok": false, "error": "Expected over=true (spirit dead), got over=false" }
+	if result.get("victory", true):
+		return { "ok": false, "error": "Expected victory=false (spirit killed), got victory=true" }
+	if result.get("reason", "") != "spirit_killed":
+		return { "ok": false, "error": "Expected reason='spirit_killed', got '%s'" % str(result.get("reason", "")) }
+	return { "ok": true }
+
+
+# 31. spirit-killed priority: spirit dead AND all enemies dead → "spirit_killed" defeat wins
+#     (the early guard fires before the universal all_enemies_defeated kill-win check).
+static func _t_guide_spirit_killed_beats_all_enemies_dead() -> Dictionary:
+	var actors: Array = [_echo("e1"), _enemy_dead("n1"), _spirit_dead("guide_spirit_01")]
+	var cs := _guide_spirit_protect_state(1, 4)
+
+	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.GUIDE_SPIRIT, cs)
+
+	if not result.get("over", false):
+		return { "ok": false, "error": "Expected over=true, got over=false" }
+	if result.get("victory", true):
+		return { "ok": false, "error": "Expected victory=false (spirit_killed beats kill-win), got victory=true" }
+	if result.get("reason", "") != "spirit_killed":
+		return { "ok": false, "error": "Expected reason='spirit_killed' (early guard priority), got '%s'" % str(result.get("reason", "")) }
+	return { "ok": true }
+
+
+# 32. escort-win: destination_reached=true → "spirit_escorted" victory, even with living enemies present.
+static func _t_guide_spirit_escort_destination_reached_wins_over_living_enemies() -> Dictionary:
+	var actors: Array = [_echo("e1"), _enemy("n1"), _spirit("guide_spirit_01")]
+	var cs := _guide_spirit_escort_state(2, 8, true)  # destination_reached=true, enemies still alive
+
+	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.GUIDE_SPIRIT, cs)
+
+	if not result.get("over", false):
+		return { "ok": false, "error": "Expected over=true (destination reached), got over=false" }
+	if not result.get("victory", false):
+		return { "ok": false, "error": "Expected victory=true (spirit escorted), got victory=false" }
+	if result.get("reason", "") != "spirit_escorted":
+		return { "ok": false, "error": "Expected reason='spirit_escorted', got '%s'" % str(result.get("reason", "")) }
+	return { "ok": true }
+
+
+# 33. escort no-duration-win: guide_mode=escort, round_counter >= duration_turns, destination NOT
+#     reached, spirit alive, enemies alive → NOT over. The protect-mode duration branch (step 9)
+#     must not fire when guide_mode is "escort".
+static func _t_guide_spirit_escort_no_duration_win() -> Dictionary:
+	var actors: Array = [_echo("e1"), _enemy("n1"), _spirit("guide_spirit_01")]
+	var cs := _guide_spirit_escort_state(10, 4, false)  # round_counter >= duration_turns, but escort mode
+
+	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.GUIDE_SPIRIT, cs)
+
+	if result.get("over", true):
+		return { "ok": false, "error": "Expected over=false (escort mode ignores duration timer), got over=true (reason='%s')" % str(result.get("reason", "")) }
+	return { "ok": true }
+
+
+# 34. joins-battle: create() with objective_params seeds guide_mode/spirit_joins_battle/
+#     destination_col/destination_row on the returned combat_state; spirit actor appears
+#     in initiative_order (identified by id).
+static func _t_guide_spirit_create_stores_params_and_initiative() -> Dictionary:
+	var spirit_actor := _spirit("guide_spirit_01")
+	var actors: Array = [_echo("e1"), _enemy("n1"), spirit_actor]
+	var params := {
+		"guide_mode": "escort",
+		"spirit_joins_battle": true,
+		"destination_col": 9,
+		"destination_row": 3,
+	}
+
+	var state := CombatState.create(actors, EncounterResolutionModes.GUIDE_SPIRIT, 0, {}, params)
+
+	if str(state.get("guide_mode", "")) != "escort":
+		return { "ok": false, "error": "Expected guide_mode='escort', got '%s'" % str(state.get("guide_mode", "")) }
+	if not bool(state.get("spirit_joins_battle", false)):
+		return { "ok": false, "error": "Expected spirit_joins_battle=true, got false" }
+	if int(state.get("destination_col", -1)) != 9:
+		return { "ok": false, "error": "Expected destination_col=9, got %d" % int(state.get("destination_col", -1)) }
+	if int(state.get("destination_row", -1)) != 3:
+		return { "ok": false, "error": "Expected destination_row=3, got %d" % int(state.get("destination_row", -1)) }
+	if str(state.get("spirit_id", "")) != "guide_spirit_01":
+		return { "ok": false, "error": "Expected spirit_id='guide_spirit_01', got '%s'" % str(state.get("spirit_id", "")) }
+
+	var initiative: Array = state.get("initiative_order", [])
+	var found_spirit_in_initiative: bool = false
+	for entry in initiative:
+		if entry is Dictionary and str(entry.get("id", "")) == "guide_spirit_01":
+			found_spirit_in_initiative = true
+			break
+	if not found_spirit_in_initiative:
+		return { "ok": false, "error": "Expected spirit actor 'guide_spirit_01' in initiative_order, not found" }
+	return { "ok": true }
+
+
+# 35. damage debuff: attacker with _spirit_damage_mul=0.75 deals floor(0.75×) of the same
+#     attack without the field.
+static func _t_guide_spirit_damage_debuff() -> Dictionary:
+	var attacker_base: Dictionary = {
+		"id": "spirit_atk", "stats": { "atk": 20, "def": 0 },
+		"morale": 50, "fear": 0,
+	}
+	var attacker_debuffed: Dictionary = {
+		"id": "spirit_atk", "stats": { "atk": 20, "def": 0 },
+		"morale": 50, "fear": 0, "_spirit_damage_mul": 0.75,
+	}
+	var defender_a: Dictionary = { "id": "d1", "stats": { "atk": 0, "def": 4 }, "current_hp": 100 }
+	var defender_b: Dictionary = { "id": "d2", "stats": { "atk": 0, "def": 4 }, "current_hp": 100 }
+
+	var result_base := CombatService.resolve_action("melee_attack", attacker_base, defender_a, 1)
+	var result_debuffed := CombatService.resolve_action("melee_attack", attacker_debuffed, defender_b, 1)
+
+	var dmg_base: int = int(result_base.get("damage", -1))
+	var dmg_debuffed: int = int(result_debuffed.get("damage", -1))
+	var expected: int = int(float(dmg_base) * 0.75)
+
+	if dmg_debuffed != expected:
+		return {
+			"ok": false,
+			"error": "Expected debuffed damage=floor(0.75*%d)=%d, got %d" % [dmg_base, expected, dmg_debuffed]
+		}
+	return { "ok": true }
+
+
+# 36. resolve_objective_params("guide_spirit", ...) — all expected keys present.
+static func _t_resolve_params_guide_spirit_all_keys_present() -> Dictionary:
+	var p := FlowEncounterState.resolve_objective_params("guide_spirit", _guide_spirit_cfg(), 0, {})
+	var required_keys: Array = [
+		"duration_turns", "spirit_def_id", "spirit_name", "spirit_max_hp",
+		"escort_radius", "skittish_radius", "destination_min_distance",
+		"spirit_damage_mul", "directive_intent_weights",
+	]
+	for k in required_keys:
+		if not p.has(k):
+			return { "ok": false, "error": "resolve_objective_params('guide_spirit') missing key '%s'" % k }
+	return { "ok": true }
+
+
+# 37. duration scales with completion_index and clamps at duration_max.
+# base=4, growth=0.5, max=8. At index 2: 4+round(0.5*2)=5. At index 20: clamps to 8.
+static func _t_resolve_params_guide_spirit_duration_scales_and_clamps() -> Dictionary:
+	var p_scaled := FlowEncounterState.resolve_objective_params("guide_spirit", _guide_spirit_cfg(), 2, {})
+	var dur_scaled: int = int(p_scaled.get("duration_turns", -1))
+	if dur_scaled != 5:
+		return { "ok": false, "error": "Expected duration_turns=5 at index 2, got %d" % dur_scaled }
+
+	var p_clamped := FlowEncounterState.resolve_objective_params("guide_spirit", _guide_spirit_cfg(), 20, {})
+	var dur_clamped: int = int(p_clamped.get("duration_turns", -1))
+	if dur_clamped != 8:
+		return { "ok": false, "error": "Expected duration_turns=8 (clamped) at index 20, got %d" % dur_clamped }
+	return { "ok": true }
+
+
+# 38. BLOCKER regression: joined GUIDE_SPIRIT combatant (faction "echo", is_spirit=true) must
+#     NOT count as a living echo — a wiped party + a living joined spirit must still trigger
+#     "all_echoes_dead", not soft-lock the encounter.
+static func _t_guide_spirit_joined_spirit_does_not_block_party_wipe() -> Dictionary:
+	var actors: Array = [
+		_echo_dead("e1"), _echo_dead("e2"), _joined_spirit("guide_spirit_01"), _enemy("n1"),
+	]
+	var cs := _guide_spirit_escort_state(1, 20, false)
+
+	var result := CombatState.check_end_condition(actors, EncounterResolutionModes.GUIDE_SPIRIT, cs)
+
+	if not result.get("over", false):
+		return { "ok": false, "error": "Expected over=true (party wiped despite living joined spirit), got over=false" }
+	if result.get("victory", true):
+		return { "ok": false, "error": "Expected victory=false (all_echoes_dead), got victory=true" }
+	if result.get("reason", "") != "all_echoes_dead":
+		return { "ok": false, "error": "Expected reason='all_echoes_dead' (joined spirit must not count as living echo), got '%s'" % str(result.get("reason", "")) }
 	return { "ok": true }

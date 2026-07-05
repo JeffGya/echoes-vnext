@@ -28,10 +28,11 @@ const TYPE_RECOVER := "recover"
 const TYPE_PROTECT := "protect"
 const TYPE_ENDURE  := "endure"
 const TYPE_PURSUE  := "pursue"
+const TYPE_GUIDE_SPIRIT := "guide_spirit"
 
 const VALID_TYPES: Array = [
 	TYPE_COMBAT, TYPE_SHRINE, TYPE_BOSS,
-	TYPE_RECOVER, TYPE_PROTECT, TYPE_ENDURE, TYPE_PURSUE,
+	TYPE_RECOVER, TYPE_PROTECT, TYPE_ENDURE, TYPE_PURSUE, TYPE_GUIDE_SPIRIT,
 ]
 
 # Short player-facing descriptions keyed by type.
@@ -44,6 +45,7 @@ const TYPE_DESCRIPTIONS: Dictionary = {
 	"protect": "Keep the presence here safe.",
 	"endure":  "Hold your ground through the pressure.",
 	"pursue":  "Track and intercept before the window closes.",
+	"guide_spirit": "Find the spirit and see it to safety.",
 }
 
 

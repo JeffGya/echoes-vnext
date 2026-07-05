@@ -269,7 +269,7 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	_debug_print("Unknown command: " + cmd)
-	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective [purify_shrine|defeat_enemies] | combat_emotion | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all>")
+	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective [purify_shrine|defeat_enemies|guide_spirit [protect|escort] [join|nojoin]] | combat_emotion | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all>")
 	
 	_flush_logs_to_console()
 	
@@ -658,7 +658,10 @@ func _run_hero_info_command(parts: Array) -> void:
 
 
 # COMBAT-006: dev toggle for encounter objective.
-# Usage: combat_objective <combat|purify_shrine|recover|protect|endure|pursue|show>
+# Usage: combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show>
+# V2-STAGE-004 P3c: for guide_spirit, optional 3rd/4th tokens force the two seeded rolls:
+#   combat_objective guide_spirit [protect|escort] [join|nojoin]
+# Omitting them clears both dev fields to "" (seeded). Any non-guide mode also clears both.
 func _run_combat_objective_command(parts: Array) -> void:
 	var valid_modes: Array = [
 		EncounterResolutionModes.COMBAT,
@@ -667,9 +670,10 @@ func _run_combat_objective_command(parts: Array) -> void:
 		EncounterResolutionModes.PROTECT,
 		EncounterResolutionModes.ENDURE,
 		EncounterResolutionModes.PURSUE,
+		EncounterResolutionModes.GUIDE_SPIRIT,
 	]
 	if parts.size() < 2:
-		_debug_print("Usage: combat_objective <combat|purify_shrine|recover|protect|endure|pursue|show>")
+		_debug_print("Usage: combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> | guide_spirit [protect|escort] [join|nojoin]")
 		return
 	var op: String = parts[1].to_lower()
 	if op == "show":
@@ -678,15 +682,44 @@ func _run_combat_objective_command(parts: Array) -> void:
 			_debug_print("combat_objective: using default (resolved from stage objective)")
 		else:
 			_debug_print("combat_objective: override = %s" % current)
+		var gm: String = runtime.flow_ctx.dev_guide_mode
+		var gj: String = runtime.flow_ctx.dev_guide_joins
+		_debug_print("guide_mode override: %s | guide_joins override: %s" % [
+			("seeded" if gm.is_empty() else gm), ("seeded" if gj.is_empty() else gj)])
 		return
 	if op in valid_modes:
 		runtime.flow_ctx.dev_combat_objective = op
+		# V2-STAGE-004 P3c: guide_spirit sub-tokens force the two seeded rolls; any other
+		# mode clears both back to "" (seeded).
+		if op == EncounterResolutionModes.GUIDE_SPIRIT:
+			var forced_mode: String = ""
+			var forced_joins: String = ""
+			if parts.size() >= 3:
+				var m: String = str(parts[2]).to_lower()
+				if m == "protect" or m == "escort":
+					forced_mode = m
+				else:
+					_debug_print("Ignoring unknown guide mode token '%s' (use protect|escort)" % m)
+			if parts.size() >= 4:
+				var j: String = str(parts[3]).to_lower()
+				if j == "join" or j == "nojoin":
+					forced_joins = j
+				else:
+					_debug_print("Ignoring unknown guide joins token '%s' (use join|nojoin)" % j)
+			runtime.flow_ctx.dev_guide_mode = forced_mode
+			runtime.flow_ctx.dev_guide_joins = forced_joins
+			_debug_print("guide overrides: mode=%s joins=%s" % [
+				("seeded" if forced_mode.is_empty() else forced_mode),
+				("seeded" if forced_joins.is_empty() else forced_joins)])
+		else:
+			runtime.flow_ctx.dev_guide_mode = ""
+			runtime.flow_ctx.dev_guide_joins = ""
 		# Reset encounter state so next entry uses the new objective.
 		runtime.flow_ctx.encounter_ctx = null
 		runtime.flow_ctx.encounter_machine = null
 		_debug_print("combat_objective set to: %s — encounter reset, re-enter combat to apply" % op)
 	else:
-		_debug_print("Unknown mode '%s'. Use: combat|purify_shrine|recover|protect|endure|pursue" % op)
+		_debug_print("Unknown mode '%s'. Use: combat|purify_shrine|recover|protect|endure|pursue|guide_spirit" % op)
 	_flush_logs_to_console()
 
 

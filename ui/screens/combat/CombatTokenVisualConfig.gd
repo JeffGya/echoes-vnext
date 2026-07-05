@@ -20,6 +20,15 @@ extends Resource
 @export var active_ring_width: float = 2.5
 @export var active_ring_padding: float = 4.0
 
+# V2-STAGE-004 P3c: GUIDE_SPIRIT halo — a soft radiant gold nimbus that marks the
+# escorted spirit. Distinct from the PURSUE quarry's solid gold diamond: the spirit
+# reads as "watched over / sacred," the quarry as "hunted." Renders over both the
+# structure square and the joined echo-faction circle.
+@export var spirit_halo_color: Color = Color(1.0, 0.85, 0.35, 0.85)
+@export var spirit_halo_inner_color: Color = Color(1.0, 0.92, 0.55, 0.22)
+@export var spirit_halo_padding: float = 6.0
+@export var spirit_halo_width: float = 2.5
+
 @export var hp_bar_offset_y: float = 10.0
 @export var hp_bar_height: float = 4.0
 @export var hp_bar_background_color: Color = Color(0.15, 0.15, 0.15, 1.0)

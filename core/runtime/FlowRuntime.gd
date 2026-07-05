@@ -1637,7 +1637,8 @@ func _resolve_next_actor(t: int) -> void:
 		"prefer_objective_target": actor.get("faction", "") == "enemy" \
 			and (ectx.resolution_mode == EncounterResolutionModes.PURIFY_SHRINE \
 				or ectx.resolution_mode == EncounterResolutionModes.PROTECT \
-				or ectx.resolution_mode == EncounterResolutionModes.RECOVER),
+				or ectx.resolution_mode == EncounterResolutionModes.RECOVER \
+				or ectx.resolution_mode == EncounterResolutionModes.GUIDE_SPIRIT),
 		# VOW-001: active vow dict (or {}) for BehaviorArbiter vow bias layer.
 		"active_vow":              _vow_ctx,
 		# VOW-001: echo party size for tikoro_nko_agyina party-size gate.
@@ -1688,6 +1689,13 @@ func _resolve_next_actor(t: int) -> void:
 					# All living echoes receive pursuit directive (fan-out and intercept bias).
 					_di_apply = str(actor.get("faction", "")) == "echo" \
 						and not bool(actor.get("is_dead", false))
+				EncounterResolutionModes.GUIDE_SPIRIT:
+					# All living echoes receive the guide directive (escort/protect bias).
+					# The spirit itself never receives directive weights (movement is
+					# fully owned by the _end_round escort/skittish step).
+					_di_apply = str(actor.get("faction", "")) == "echo" \
+						and not bool(actor.get("is_dead", false)) \
+						and not bool(actor.get("is_spirit", false))
 				_:
 					_di_apply = false  # ENDURE / COMBAT: no mode directive.
 			if _di_apply:
@@ -1711,8 +1719,21 @@ func _resolve_next_actor(t: int) -> void:
 			and bool(actor.get("is_quarry", false)) \
 			and not bool(actor.get("is_dead", false)):
 		_flee_mod = FleeBehaviorModule.new(movement_board_cfg)
+	# V2-STAGE-004 P3c: GUIDE_SPIRIT — the IDLE structure spirit's board movement is exclusively
+	# the _end_round escort/skittish step (deterministic, no RNG). ActorStateMachine.advance_turn()
+	# owns move execution internally (out of scope here), so we capture grid_pos before the
+	# call and restore it after if the spirit moved — attack/other intents are unaffected.
+	# Gated on is_structure: the JOINED combatant spirit (built via EnemyActor, is_structure=false)
+	# is NOT owned by _end_round and must be free to move via its own arbiter turn — capturing/
+	# restoring its grid_pos here would pin it to its spawn cell forever.
+	var _spirit_pos_before: Dictionary = {}
+	var _is_spirit_actor: bool = bool(actor.get("is_spirit", false)) and bool(actor.get("is_structure", false))
+	if _is_spirit_actor:
+		_spirit_pos_before = actor.get("grid_pos", {}).duplicate()
 	var asm := ActorStateMachine.new(actor, _flee_mod, actor_cfg)
 	var intent: Dictionary = asm.advance_turn(ctx, logger, t)
+	if _is_spirit_actor and not _spirit_pos_before.is_empty():
+		actor["grid_pos"] = _spirit_pos_before
 	var action_type: String = intent.get("action_type", "actor.idle")
 
 	# V2-VOICE-001: after advance_turn, if actor produced a high-signal bark, append to round queue.
@@ -2529,6 +2550,222 @@ func _end_round(t: int) -> void:
 				"total_waves":      int(combat_state.get("total_waves", 0)),
 				"all_waves_spawned": bool(combat_state.get("all_waves_spawned", false)),
 			})
+
+	# V2-STAGE-004 P3c — GUIDE_SPIRIT: escort/skittish movement + first-adjacency/kill barks.
+	# Gate: GUIDE_SPIRIT only; COMBAT / PURIFY_SHRINE / RECOVER / PROTECT / ENDURE / PURSUE
+	# are byte-identical. Deterministic — no randf()/OS time; away-step and toward-step both
+	# use fixed tiebreak rules over the walkable set.
+	if ectx.resolution_mode == EncounterResolutionModes.GUIDE_SPIRIT:
+		var _gs_obj: Dictionary = combat_state.get("objective_params", {})
+		var _gs_spirit_id: String = str(combat_state.get("spirit_id", ""))
+		var _gs_spirit: Dictionary = _find_actor_by_id(ectx.actors, _gs_spirit_id)
+
+		if _gs_spirit.is_empty() or bool(_gs_spirit.get("is_dead", false)):
+			# Spirit is dead (or missing from the roster) — fire spirit_killed once; end
+			# condition handles the defeat branch. No movement possible.
+			if not bool(combat_state.get("_spirit_killed_barked", false)):
+				combat_state["_spirit_killed_barked"] = true
+				if not _gs_spirit.is_empty():
+					_fire_spirit_bark(_gs_spirit, "spirit_killed", t)
+		else:
+			var _gs_spirit_pos: Dictionary = _gs_spirit.get("grid_pos", {})
+
+			# First-adjacency bark (both escort + protect modes): fires once, the first round
+			# any living echo is Chebyshev-adjacent to the living spirit.
+			if not bool(combat_state.get("_spirit_greeted", false)):
+				var _gs_any_adjacent: bool = false
+				for _gs_e in ectx.actors:
+					if not (_gs_e is Dictionary): continue
+					if bool(_gs_e.get("is_dead", false)): continue
+					if str(_gs_e.get("faction", "")) != "echo": continue
+					if GridService.is_adjacent(_gs_e.get("grid_pos", {}), _gs_spirit_pos):
+						_gs_any_adjacent = true
+						break
+				if _gs_any_adjacent:
+					combat_state["_spirit_greeted"] = true
+					_fire_spirit_bark(_gs_spirit, "spirit_first_adjacency", t)
+
+			var _gs_mode: String = str(combat_state.get("guide_mode", "protect"))
+
+			if _gs_mode == "escort":
+				var _gs_escort_radius: int = int(_gs_obj.get("escort_radius", 2))
+
+				# Escort start: first round any living echo is adjacent to the spirit.
+				if not bool(combat_state.get("escort_started", false)):
+					var _gs_start_adjacent: bool = false
+					for _gs_e2 in ectx.actors:
+						if not (_gs_e2 is Dictionary): continue
+						if bool(_gs_e2.get("is_dead", false)): continue
+						if str(_gs_e2.get("faction", "")) != "echo": continue
+						if GridService.is_adjacent(_gs_e2.get("grid_pos", {}), _gs_spirit_pos):
+							_gs_start_adjacent = true
+							break
+					if _gs_start_adjacent:
+						combat_state["escort_started"] = true
+						_fire_spirit_bark(_gs_spirit, "spirit_escort_start", t)
+
+				# Move toward destination while escorted (within escort_radius) and not yet arrived.
+				if bool(combat_state.get("escort_started", false)) \
+						and not bool(combat_state.get("destination_reached", false)):
+					var _gs_escorted: bool = false
+					for _gs_e3 in ectx.actors:
+						if not (_gs_e3 is Dictionary): continue
+						if bool(_gs_e3.get("is_dead", false)): continue
+						if str(_gs_e3.get("faction", "")) != "echo": continue
+						if GridService.chebyshev_distance(_gs_e3.get("grid_pos", {}), _gs_spirit_pos) \
+								<= _gs_escort_radius:
+							_gs_escorted = true
+							break
+					if _gs_escorted:
+						var _gs_dest: Dictionary = {
+							"col": int(combat_state.get("destination_col", -1)),
+							"row": int(combat_state.get("destination_row", -1)),
+						}
+						var _gs_walkable: Dictionary = StageTerrain.walkable_set(ectx.terrain) \
+							if not ectx.terrain.is_empty() else {}
+						if not _gs_walkable.is_empty() and _gs_dest.get("col", -1) >= 0:
+							# Occupied set: all OTHER living actors (spirit may wait if its
+							# chosen step is occupied — simple, deterministic).
+							var _gs_occupied: Array = []
+							for _gs_oa in ectx.actors:
+								if _gs_oa is Dictionary \
+										and str(_gs_oa.get("id", "")) != _gs_spirit_id \
+										and not bool(_gs_oa.get("is_dead", false)):
+									_gs_occupied.append(_gs_oa.get("grid_pos", {}))
+							var _gs_dist_field: Dictionary = StageTerrain.bfs_distance_field(_gs_dest, _gs_walkable)
+							var _gs_effective_walkable: Dictionary = _gs_walkable.duplicate()
+							for _gs_occ in _gs_occupied:
+								if _gs_occ is Dictionary:
+									var _gs_occ_key: String = "%d,%d" % [
+										int(_gs_occ.get("col", -1)), int(_gs_occ.get("row", -1))]
+									_gs_effective_walkable.erase(_gs_occ_key)
+							var _gs_step: Dictionary = StageTerrain.next_step(
+								_gs_spirit_pos, _gs_dist_field, _gs_effective_walkable, _gs_dest)
+							if int(_gs_step.get("col", _gs_spirit_pos.get("col", 0))) != int(_gs_spirit_pos.get("col", 0)) \
+									or int(_gs_step.get("row", _gs_spirit_pos.get("row", 0))) != int(_gs_spirit_pos.get("row", 0)):
+								GridService.assign_grid_pos(_gs_spirit,
+									int(_gs_step.get("col", 0)), int(_gs_step.get("row", 0)))
+								_gs_spirit_pos = _gs_spirit.get("grid_pos", {})
+							# else: spirit waits this round (occupied or no progressing step).
+						# Destination check after move.
+						if int(_gs_spirit_pos.get("col", -999)) == int(combat_state.get("destination_col", -1)) \
+								and int(_gs_spirit_pos.get("row", -999)) == int(combat_state.get("destination_row", -1)):
+							combat_state["destination_reached"] = true
+							_fire_spirit_bark(_gs_spirit, "spirit_guide_win", t)
+					logger.debug(t, "combat.guide.escort", "GUIDE_SPIRIT escort progress", {
+						"round":              round,
+						"escorted":           _gs_escorted,
+						"escort_started":     bool(combat_state.get("escort_started", false)),
+						"destination_reached": bool(combat_state.get("destination_reached", false)),
+						"spirit_pos":         _gs_spirit_pos,
+					})
+
+			elif _gs_mode == "protect":
+				var _gs_skittish_radius: int = int(_gs_obj.get("skittish_radius", 3))
+				var _gs_enemy_near: bool = false
+				var _gs_nearest_enemy: Dictionary = {}
+				var _gs_nearest_dist: int = 999999
+				for _gs_en in ectx.actors:
+					if not (_gs_en is Dictionary): continue
+					if bool(_gs_en.get("is_dead", false)): continue
+					if str(_gs_en.get("faction", "")) != "enemy": continue
+					var _gs_d: int = GridService.chebyshev_distance(_gs_en.get("grid_pos", {}), _gs_spirit_pos)
+					if _gs_d <= _gs_skittish_radius:
+						_gs_enemy_near = true
+					if _gs_d < _gs_nearest_dist \
+							or (_gs_d == _gs_nearest_dist and (_gs_nearest_enemy.is_empty() \
+								or str(_gs_en.get("id", "")) < str(_gs_nearest_enemy.get("id", "")))):
+						_gs_nearest_dist = _gs_d
+						_gs_nearest_enemy = _gs_en
+				var _gs_echo_adjacent: bool = false
+				for _gs_e4 in ectx.actors:
+					if not (_gs_e4 is Dictionary): continue
+					if bool(_gs_e4.get("is_dead", false)): continue
+					if str(_gs_e4.get("faction", "")) != "echo": continue
+					if GridService.is_adjacent(_gs_e4.get("grid_pos", {}), _gs_spirit_pos):
+						_gs_echo_adjacent = true
+						break
+				if _gs_enemy_near and not _gs_echo_adjacent and not _gs_nearest_enemy.is_empty():
+					var _gs_walkable_p: Dictionary = StageTerrain.walkable_set(ectx.terrain) \
+						if not ectx.terrain.is_empty() else {}
+					var _gs_occupied_p: Dictionary = {}
+					for _gs_oa2 in ectx.actors:
+						if _gs_oa2 is Dictionary \
+								and str(_gs_oa2.get("id", "")) != _gs_spirit_id \
+								and not bool(_gs_oa2.get("is_dead", false)):
+							var _gs_op2: Dictionary = _gs_oa2.get("grid_pos", {})
+							if not _gs_op2.is_empty():
+								_gs_occupied_p["%d,%d" % [int(_gs_op2.get("col", 0)), int(_gs_op2.get("row", 0))]] = true
+					var _gs_sc: int = int(_gs_spirit_pos.get("col", 0))
+					var _gs_sr: int = int(_gs_spirit_pos.get("row", 0))
+					var _gs_enemy_pos: Dictionary = _gs_nearest_enemy.get("grid_pos", {})
+					# Deterministic away-step: among walkable+unoccupied 8-dir neighbours, pick
+					# the one maximising Chebyshev distance to nearest enemy; tiebreak manhattan
+					# desc, then col asc, then row asc. No RNG.
+					var _gs_best_cell: Dictionary = {}
+					var _gs_best_cheb: int = -1
+					var _gs_best_man: int = -1
+					for _gs_dr in [-1, 0, 1]:
+						for _gs_dc in [-1, 0, 1]:
+							if _gs_dc == 0 and _gs_dr == 0: continue
+							var _gs_nc: int = _gs_sc + _gs_dc
+							var _gs_nr: int = _gs_sr + _gs_dr
+							var _gs_nk: String = "%d,%d" % [_gs_nc, _gs_nr]
+							if not _gs_walkable_p.is_empty() and not _gs_walkable_p.has(_gs_nk):
+								continue
+							if _gs_occupied_p.has(_gs_nk):
+								continue
+							var _gs_cand: Dictionary = { "col": _gs_nc, "row": _gs_nr }
+							var _gs_cheb: int = GridService.chebyshev_distance(_gs_cand, _gs_enemy_pos)
+							var _gs_man: int = GridService.manhattan_distance(_gs_cand, _gs_enemy_pos)
+							var _gs_better: bool = false
+							if _gs_cheb > _gs_best_cheb:
+								_gs_better = true
+							elif _gs_cheb == _gs_best_cheb and _gs_man > _gs_best_man:
+								_gs_better = true
+							elif _gs_cheb == _gs_best_cheb and _gs_man == _gs_best_man:
+								if _gs_best_cell.is_empty() \
+										or _gs_nc < int(_gs_best_cell.get("col", 999)) \
+										or (_gs_nc == int(_gs_best_cell.get("col", 999)) \
+											and _gs_nr < int(_gs_best_cell.get("row", 999))):
+									_gs_better = true
+							if _gs_better:
+								_gs_best_cell = _gs_cand
+								_gs_best_cheb = _gs_cheb
+								_gs_best_man = _gs_man
+					if not _gs_best_cell.is_empty():
+						GridService.assign_grid_pos(_gs_spirit,
+							int(_gs_best_cell.get("col", _gs_sc)), int(_gs_best_cell.get("row", _gs_sr)))
+				logger.debug(t, "combat.guide.skittish", "GUIDE_SPIRIT skittish check", {
+					"round":       round,
+					"enemy_near":  _gs_enemy_near,
+					"echo_adjacent": _gs_echo_adjacent,
+					"spirit_pos":  _gs_spirit.get("grid_pos", {}),
+				})
+
+				# V2-STAGE-004 P3c "guard to count": guide_protect_counter advances only on rounds
+				# where a living echo is within escort_radius (Chebyshev) of the living spirit — the
+				# party must actually reach the spirit to make progress toward the protect win. Unlike
+				# PROTECT's protect_counter, this NEVER resets when no echo is near (accumulates).
+				# Runs AFTER skittish movement so proximity reflects end-of-round positions.
+				var _gs_escort_radius_p: int = int(_gs_obj.get("escort_radius", 2))
+				var _gs_spirit_pos_final: Dictionary = _gs_spirit.get("grid_pos", {})
+				var _gs_guard_near: bool = false
+				for _gs_e5 in ectx.actors:
+					if not (_gs_e5 is Dictionary): continue
+					if bool(_gs_e5.get("is_dead", false)): continue
+					if str(_gs_e5.get("faction", "")) != "echo": continue
+					if GridService.chebyshev_distance(_gs_e5.get("grid_pos", {}), _gs_spirit_pos_final) \
+							<= _gs_escort_radius_p:
+						_gs_guard_near = true
+						break
+				if _gs_guard_near:
+					combat_state["guide_protect_counter"] = int(combat_state.get("guide_protect_counter", 0)) + 1
+				logger.debug(t, "combat.guide.protect_hold", "GUIDE_SPIRIT protect_hold updated", {
+					"round":                 round,
+					"guide_protect_counter": int(combat_state.get("guide_protect_counter", 0)),
+					"near":                  _gs_guard_near,
+				})
 
 	# V2-STAGE-004 Distinctiveness §4-G: PROTECT theft block.
 	# Gate: PROTECT only. Locate the totem (first living is_structure actor).
@@ -6848,6 +7085,58 @@ func _load_contact_responses() -> Dictionary:
 	if parsed is Dictionary:
 		_contact_responses_cache = parsed
 	return _contact_responses_cache
+
+
+# Returns a lazy-loaded dict from data/bark/spirit_barks.json.
+# Cached after first load. Pure read — no side effects.
+# V2-STAGE-004 P3c: GUIDE_SPIRIT bark lines. Mirrors _load_contact_responses() pattern —
+# leanest wiring available; no ShoutBank / class_name involvement needed.
+var _spirit_barks_cache: Dictionary = {}
+func _load_spirit_barks() -> Dictionary:
+	if not _spirit_barks_cache.is_empty():
+		return _spirit_barks_cache
+	var path := "res://data/bark/spirit_barks.json"
+	if not FileAccess.file_exists(path):
+		return {}
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return {}
+	var raw := f.get_as_text()
+	f.close()
+	var parsed: Variant = JSON.parse_string(raw)
+	if parsed is Dictionary:
+		_spirit_barks_cache = parsed
+	return _spirit_barks_cache
+
+
+# Selects a deterministic bark line for the given context and writes it onto the spirit
+# actor dict (_bark_line / _bark_context / _bark_tier), then appends to ectx.round_bark_events
+# so the reactive-bark pipeline (BarkPopupLayer) can surface it like other high-signal barks.
+# variation_key follows the ShoutBank convention: (t + id.hash()) % N — deterministic, no RNG.
+func _fire_spirit_bark(spirit: Dictionary, context: String, t: int) -> void:
+	var lines_v: Variant = _load_spirit_barks().get(context, [])
+	var lines: Array = lines_v if lines_v is Array else []
+	if lines.is_empty():
+		return
+	var spirit_id: String = str(spirit.get("id", ""))
+	var vk: int = posmod(t + spirit_id.hash(), lines.size())
+	var line: String = str(lines[vk])
+	spirit["_bark_line"]    = line
+	spirit["_bark_context"] = context
+	spirit["_bark_tier"]    = "nascent"
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	if ectx != null:
+		ectx.round_bark_events.append({
+			"actor_id":     spirit_id,
+			"faction":      str(spirit.get("faction", "")),
+			"bark_context": context,
+			"grid_pos":     spirit.get("grid_pos", {}),
+		})
+	logger.info(t, "combat.guide.bark", "GUIDE_SPIRIT bark fired", {
+		"context":   context,
+		"spirit_id": spirit_id,
+		"line":      line,
+	})
 
 
 # Returns Array of echo dicts for all active party members.
