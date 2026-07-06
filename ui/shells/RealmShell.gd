@@ -43,11 +43,20 @@ func _update_echo_bar(snap: Dictionary) -> void:
 	var data: Dictionary = snap.get("data", {})
 
 	var party: Array = []
+	# GUIDE_SPIRIT: the escorted/protected ally is projected into data.actors with is_spirit=true.
+	# It may carry faction "echo" (fights alongside) or "structure" (a protected totem) — so the
+	# regular faction filter would either miss it or blend it in. We pull it out separately and
+	# render it as a distinct gold-accented ally slot at the end of the bar.
+	var spirit_actor: Dictionary = {}
 	match snap_type:
 		"flow.encounter", "flow.keeper_trial", "flow.resolve":
 			# Encounter snapshots include all combatants — filter for echoes only.
 			for a in data.get("actors", []):
-				if a is Dictionary and str(a.get("faction", "")) == "echo":
+				if not (a is Dictionary):
+					continue
+				if bool(a.get("is_spirit", false)):
+					spirit_actor = a
+				elif str(a.get("faction", "")) == "echo":
 					party.append(a)
 		"flow.stage", "flow.stage_map", "flow.stage_explore":
 			# Stage snapshots include party_preview: { name, rank, calling_origin }
@@ -55,7 +64,7 @@ func _update_echo_bar(snap: Dictionary) -> void:
 			if preview is Array:
 				party = preview
 
-	# Rebuild from scratch — max 5 cards, trivially fast.
+	# Rebuild from scratch — max 5 party cards + optional spirit, trivially fast.
 	for child in _echo_bar.get_children():
 		child.queue_free()
 	for actor in party:
@@ -63,6 +72,32 @@ func _update_echo_bar(snap: Dictionary) -> void:
 			var card: EchoCardItem = EchoCardScene.instantiate()
 			_echo_bar.add_child(card)
 			card.setup(actor)
+
+	# Append the spirit ally slot last so it reads as "one of the party" but stays distinct.
+	if not spirit_actor.is_empty():
+		var obj_state: Variant = data.get("objective_state", {})
+		var progress_text: String = _spirit_progress_text(
+			obj_state if obj_state is Dictionary else {})
+		var spirit_card: EchoCardItem = EchoCardScene.instantiate()
+		_echo_bar.add_child(spirit_card)
+		spirit_card.setup_spirit(spirit_actor, progress_text)
+
+
+## Composes the spirit ally's one-line objective status from objective_state.
+## escort → "Arrived" (destination reached) / "Escorting"; protect → "N rounds left" / "Protect".
+## Returns "Fallen" when the spirit is dead. Empty objective_state degrades to "" (no line).
+func _spirit_progress_text(obj_state: Dictionary) -> String:
+	if obj_state.is_empty():
+		return ""
+	if obj_state.has("spirit_alive") and not bool(obj_state.get("spirit_alive", true)):
+		return "Fallen"
+	var guide_mode: String = str(obj_state.get("guide_mode", ""))
+	if guide_mode == "escort":
+		return "Arrived" if bool(obj_state.get("destination_reached", false)) else "Escorting"
+	var rounds_remaining: int = int(obj_state.get("rounds_remaining", 0))
+	if rounds_remaining > 0:
+		return "%d rounds left" % rounds_remaining
+	return "Protect"
 
 
 # ─────────────────────────────────────────────────────────────

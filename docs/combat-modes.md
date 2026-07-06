@@ -14,7 +14,7 @@
 | `PROTECT` = "protect" | protect | 3 |
 | `ENDURE` = "endure" | endure | 3 |
 | `PURSUE` = "pursue" | pursue | 3b |
-| `GUIDE_SPIRIT` = "guide_spirit" | guide/escort | 3c |
+| `GUIDE_SPIRIT` = "guide_spirit" | guide/escort | 3c (live) |
 
 ## Mode mechanics (authored design canon)
 
@@ -38,11 +38,25 @@
   **Win:** contain it (hold an echo adjacent) for `contain_rounds` consecutive rounds before the escape window closes.
   **Lose:** window hits 0, quarry escapes off the far-end edge, or all echoes dead.
 
-- **GUIDE_SPIRIT** / escort (new, 3c) — find the spirit, then either **protect it in place** or
-  **guide/escort it to a destination**. On escort, **50% chance the spirit joins the battle with a 75%
-  damage debuff**. **Win:** spirit alive **and** ≥1 echo alive, **or** successful escort to the destination
-  **and** ≥1 echo alive. There is a **chance the player gets the spirit as a free summon if it was protected
-  successfully**. The board is long/winding, scaled to realm completion order.
+- **GUIDE_SPIRIT** / escort (new, 3c — **live as shipped**) — find a **NameBank-named spirit**
+  (`is_spirit: true`), then either **protect it in place** or **escort it to a destination**. The mode
+  (protect|escort) and whether the spirit **joins the battle** are each a **seeded 50/50** roll per
+  encounter. When it joins, the spirit is a **fully-active ally** (driven by `BehaviorArbiter`) with a
+  **75% outgoing-damage debuff** (`spirit_damage_mul` 0.75); a joined spirit is excluded from the
+  `all_echoes_dead` check and its HP bar is not suppressed.
+  - **Protect (guard-to-count):** a **skittish** spirit flees 1 deterministic step away when an enemy is
+    within `skittish_radius` (3) and no echo is adjacent. **Win:** `guide_protect_counter ≥ duration_turns`,
+    where the counter advances **only** on rounds a living echo is within `escort_radius` (2) of the living
+    spirit and **never resets** — a bare round timer no longer wins, so the party must actually **reach and
+    stay by** the spirit. On this win the final snapshot sets `guide_spirit_protected: true` — the **free-summon
+    reward seam** (V2-ITEM-002; flag only, reward wiring deferred).
+  - **Escort:** the spirit steps 1 cell/round via `StageTerrain.next_step` toward a **seeded random walkable
+    edge destination** — but **only** once `escort_started` (a first-adjacency latch) AND a living echo is
+    within `escort_radius`; it waits if the next cell is occupied. **Win:** `destination_reached`
+    (`spirit_escorted`), taking priority over `all_enemies_defeated`.
+  - **Both:** spirit death → **immediate defeat** (`spirit_killed`, priority over the kill-win). The board is
+    long/winding — `data.combat.board.guide_spirit_override.long_multiplier` (5.0), randomised wide or tall
+    per encounter seed, scaled to realm completion order.
 
 - **RECOVER** (new, 3) — a relic (`StructureActor`) is placed deep with enemies between. **Win:** hold an
   echo adjacent to the relic for `hold_rounds`. **Lose:** all echoes dead.

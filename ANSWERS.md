@@ -18,6 +18,13 @@
 | 9 | pursue-enemy-spawn | PURSUE spawns quarry only — no regular enemy group | 2026-06-28 |
 | 10 | pursue-quarry-visual | Quarry gets an icon or shape overlay to distinguish it from regular enemy tokens | 2026-06-28 |
 | 11 | pursue-escape-condition | Defeat = quarry reaches board edge OR window_turns expires — both tracks active | 2026-06-28 |
+| 12 | guide-spirit-joins-fully-active | Escort spirit that joins battle is a fully active ally, not passive | 2026-07-04 |
+| 13 | spirit-escort-destination-random-edge | Escort destination is a seeded random walkable edge cell, distance-guarded | 2026-07-04 |
+| 14 | spirit-escort-gated-movement | Escort spirit only advances toward destination while echo is nearby | 2026-07-04 |
+| 15 | spirit-barks-key-moments | Spirit barks fire at 4 key moments via new spirit_barks.json data | 2026-07-04 |
+| 16 | guide-spirit-pursue-gen-pools | GUIDE_SPIRIT and PURSUE both join stage-generation objective pools | 2026-07-04 |
+| 17 | guide-spirit-skittish-protect | Spirit flees when threatened and unescorted, unlike static PROTECT totem | 2026-07-04 |
+| 18 | guide-spirit-long-board | GUIDE_SPIRIT reuses PURSUE's board-override mechanism with a longer multiplier | 2026-07-04 |
 
 ---
 
@@ -119,5 +126,68 @@
 **A:** V2-CONTINUITY-002 ("Add mythic recognition scaffolding as a fallible multi-step pipeline") absorbs the keeper nudge. It is the house-side sister story to V2-PROG-011 and is the right home for sanctum-facing recognition expression.
 **Source:** Jeff, 2026-06-26
 **Date:** 2026-06-26
+
+---
+
+### 12. guide-spirit-joins-fully-active
+
+**Q:** When the escort spirit rolls its 50% joins-battle chance, does it actively fight?
+**A:** Yes — fully active ally in Phase 3c: faction "echo", routed to BehaviorArbiter, appended to END of initiative order, melee damage ×0.75 via `_spirit_damage_mul` in CombatService._resolve_melee (mirrors PROTECT's `_double_damage_mult` pattern). Supersedes the "Later" deferral in docs/combat-modes-distinctiveness.md for this piece. Move intents for is_spirit actors are suppressed — destination movement stays with the escort-gated _end_round step.
+**Source:** Jeff, 2026-07-04
+**Date:** 2026-07-04
+
+---
+
+### 13. spirit-escort-destination-random-edge
+
+**Q:** Where is the escort destination seeded?
+**A:** A seeded random walkable edge cell on ANY board edge (namespace `combat.spirit_destination.<encounter_id>`), guarded by a tunable `destination_min_distance` (default 6) from the spirit spawn.
+**Source:** Jeff, 2026-07-04
+**Date:** 2026-07-04
+
+---
+
+### 14. spirit-escort-gated-movement
+
+**Q:** Does the escort spirit keep walking once triggered, or only while escorted?
+**A:** Escort-gated — after first echo adjacency starts the escort, the spirit steps 1 cell/round toward the destination ONLY on rounds where a living echo is within `escort_radius` (Chebyshev, default 2, tunable); otherwise it stops and waits. Mirrors the RECOVER hold-adjacency pattern.
+**Source:** Jeff, 2026-07-04
+**Date:** 2026-07-04
+
+---
+
+### 15. spirit-barks-key-moments
+
+**Q:** When does the spirit bark and how much content ships in 3c?
+**A:** Key moments — new `data/bark/spirit_barks.json` with 4 moments (first_adjacency, escort_start, guide_win, spirit_killed), ≥3 variants each, deterministic variation_key selection, displayed via the existing BarkPopupLayer pipeline. Spirit name drawn from `NameBank.build_full_name(gender, rng)` on namespace `combat.spirit_name.<encounter_id>`.
+**Source:** Jeff, 2026-07-04
+**Date:** 2026-07-04
+
+---
+
+### 16. guide-spirit-pursue-gen-pools
+
+**Q:** Should guide_spirit and pursue enter the stage-generation objective pools?
+**A:** Yes, both — appended (append-only, no reorder) to both realms' `objective_pool` in realms.json and the foundation pool in balance.json. Already-generated saved stages keep their objectives; only new stages roll the new types.
+**Source:** Jeff, 2026-07-04
+**Date:** 2026-07-04
+
+---
+
+### 17. guide-spirit-skittish-protect
+
+**Q:** How does GUIDE_SPIRIT protect-in-place differ from PROTECT?
+**A:** The spirit is skittish — when an enemy ends the round within `skittish_radius` (default 3) of the spirit AND no echo is adjacent to it, the spirit flees 1 walkable cell away from the nearest enemy (deterministic away-step, stable tiebreak, no RNG). Protecting means keeping an echo beside it to keep it calm — distinct from PROTECT's static totem + theft mechanics.
+**Source:** Jeff, 2026-07-04
+**Date:** 2026-07-04
+
+---
+
+### 18. guide-spirit-long-board
+
+**Q:** What board does GUIDE_SPIRIT use?
+**A:** Long board for BOTH variants via the PURSUE override mechanism but longer — `data.combat.board.guide_spirit_override.long_multiplier: 5.0` (PURSUE is 4.0), one dimension randomised wide-or-tall per encounter seed, applied post-clamp.
+**Source:** Jeff, 2026-07-04
+**Date:** 2026-07-04
 
 ---

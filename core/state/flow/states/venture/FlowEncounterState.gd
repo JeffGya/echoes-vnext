@@ -188,6 +188,21 @@ func enter(ctx: RefCounted, t: int) -> void:
 					cb_cols = int(float(cb_cols) * _pur_mul)
 				else:
 					cb_rows = int(float(cb_rows) * _pur_mul)
+			# V2-STAGE-004 P3c: GUIDE_SPIRIT board is 5× one dimension, randomised per encounter seed.
+			# Same mechanism as the PURSUE override above — both "long board" objectives.
+			if flow_ctx.encounter_ctx.resolution_mode == EncounterResolutionModes.GUIDE_SPIRIT:
+				var _gsb_override: Dictionary = cb_board_cfg_block.get("guide_spirit_override", {})
+				var _gsb_mul: float = float(_gsb_override.get("long_multiplier", 5.0))
+				var _gsb_rng := RandomNumberGenerator.new()
+				if flow_ctx.campaign_seed != null:
+					_gsb_rng = flow_ctx.campaign_seed.get_rng(
+						"combat.guide_spirit_board." + flow_ctx.encounter_ctx.encounter_id)
+				else:
+					_gsb_rng.seed = hash("guide_spirit_board_" + flow_ctx.encounter_ctx.encounter_id)
+				if _gsb_rng.randi() % 2 == 0:
+					cb_cols = int(float(cb_cols) * _gsb_mul)
+				else:
+					cb_rows = int(float(cb_rows) * _gsb_mul)
 			var cb_bounds: Dictionary = { "w": cb_cols, "h": cb_rows }
 
 			# Generate terrain on a separate append-only RNG namespace.
@@ -324,6 +339,7 @@ func enter(ctx: RefCounted, t: int) -> void:
 			EncounterResolutionModes.PROTECT:  _obj_mode_key = "protect"
 			EncounterResolutionModes.ENDURE:   _obj_mode_key = "endure"
 			EncounterResolutionModes.PURSUE:   _obj_mode_key = "pursue"
+			EncounterResolutionModes.GUIDE_SPIRIT: _obj_mode_key = "guide_spirit"
 		if not _obj_mode_key.is_empty():
 			var _om_data: Dictionary = {}
 			if flow_ctx.config_service != null:
@@ -543,6 +559,215 @@ func enter(ctx: RefCounted, t: int) -> void:
 					if not _qry_candidates.is_empty():
 						objective_actor["grid_pos"] = { "col": _qry_candidates[0]["col"], "row": _qry_candidates[0]["row"] }
 
+			EncounterResolutionModes.GUIDE_SPIRIT:
+				# V2-STAGE-004 P3c: seed guide_mode 50/50 — "protect" (stay in place) or
+				# "escort" (walk to a seeded edge destination). Mirrors PURSUE's per-encounter
+				# seeded coin-flip pattern exactly.
+				var _gs_obj_params: Dictionary = flow_ctx.encounter_ctx.objective_params
+				var _gs_mode_rng := RandomNumberGenerator.new()
+				if flow_ctx.campaign_seed != null:
+					_gs_mode_rng = flow_ctx.campaign_seed.get_rng(
+						"combat.guide_mode." + flow_ctx.encounter_ctx.encounter_id)
+				else:
+					_gs_mode_rng.seed = hash("guide_mode_" + flow_ctx.encounter_ctx.encounter_id)
+				var _gs_mode: String = "protect" if _gs_mode_rng.randi() % 2 == 0 else "escort"
+				# V2-STAGE-004 P3c dev override: honour a non-empty dev_guide_mode INSTEAD of the
+				# roll — but the seeded draw above already ran unconditionally (draw-then-override),
+				# so RNG draw order is identical with or without the override.
+				if not flow_ctx.dev_guide_mode.is_empty():
+					if flow_ctx.logger != null:
+						flow_ctx.logger.info(t, "combat.guide.dev_override",
+							"Dev override applied to guide_mode",
+							{ "field": "guide_mode", "seeded": _gs_mode,
+							  "forced": flow_ctx.dev_guide_mode })
+					_gs_mode = flow_ctx.dev_guide_mode
+
+				# Seed the spirit's name: draw gender first (50/50), then NameBank.build_full_name().
+				var _gs_name_rng := RandomNumberGenerator.new()
+				if flow_ctx.campaign_seed != null:
+					_gs_name_rng = flow_ctx.campaign_seed.get_rng(
+						"combat.spirit_name." + flow_ctx.encounter_ctx.encounter_id)
+				else:
+					_gs_name_rng.seed = hash("spirit_name_" + flow_ctx.encounter_ctx.encounter_id)
+				var _gs_gender: String = "female" if _gs_name_rng.randi() % 2 == 0 else "male"
+				# NameBank.build_full_name() always returns "%s %s" from non-empty curated pools
+				# (falls back to "Nameless" internally if a pool were ever empty) — never leading-
+				# space or empty, so no post-hoc guard/fallback is needed here.
+				var _gs_spirit_name: String = NameBank.build_full_name(_gs_gender, _gs_name_rng)
+
+				# Escort only — seed whether the spirit joins battle as a combatant (50/50).
+				var _gs_joins: bool = false
+				if _gs_mode == "escort":
+					var _gs_joins_rng := RandomNumberGenerator.new()
+					if flow_ctx.campaign_seed != null:
+						_gs_joins_rng = flow_ctx.campaign_seed.get_rng(
+							"combat.guide_spirit_joins." + flow_ctx.encounter_ctx.encounter_id)
+					else:
+						_gs_joins_rng.seed = hash("guide_spirit_joins_" + flow_ctx.encounter_ctx.encounter_id)
+					_gs_joins = _gs_joins_rng.randi() % 2 == 0
+					# V2-STAGE-004 P3c dev override: honour a non-empty dev_guide_joins INSTEAD of the
+					# roll — draw-then-override (the seeded draw above already ran) keeps RNG order
+					# identical. Only meaningful in escort mode, same as the natural roll.
+					if not flow_ctx.dev_guide_joins.is_empty():
+						var _gs_forced_joins: bool = flow_ctx.dev_guide_joins == "join"
+						if flow_ctx.logger != null:
+							flow_ctx.logger.info(t, "combat.guide.dev_override",
+								"Dev override applied to spirit_joins_battle",
+								{ "field": "spirit_joins_battle", "seeded": _gs_joins,
+								  "forced": _gs_forced_joins })
+						_gs_joins = _gs_forced_joins
+
+				var _gs_max_hp: int = int(_gs_obj_params.get("spirit_max_hp", 60))
+				var _gs_def_id: String = str(_gs_obj_params.get("spirit_def_id", "guide_spirit"))
+				var _gs_dmg_mul: float = float(_gs_obj_params.get("spirit_damage_mul", 0.75))
+
+				if _gs_joins:
+					# Escort + joins battle: build via EnemyActor (actor_type "enemy" → BehaviorArbiter)
+					# but with faction "echo" so the spirit fights alongside the party — ActorService
+					# filters targeting by faction, not actor_type, so this makes it a valid ally for
+					# get_threatened_ally() and a valid combatant against the "enemy" faction.
+					var _gs_defn: Dictionary = {
+						"id":      "guide_spirit_01",
+						"name":    _gs_spirit_name,
+						"type":    _gs_def_id,
+						"level":   1,
+						"faction": "echo",
+					}
+					objective_actor = EnemyActor.from_definition(_gs_defn, t, actor_cfg)
+					objective_actor["_spirit_damage_mul"] = _gs_dmg_mul
+				else:
+					# Protect, or escort without joining: idle structure (StructureActor →
+					# IdleBehaviorModule), same precedent as the RECOVER relic / PROTECT entity.
+					var _gs_struct_cfg: Dictionary = {}
+					if flow_ctx.config_service != null:
+						var _gsb: Dictionary = flow_ctx.config_service.get_balance()
+						_gs_struct_cfg = _gsb.get("data", {}).get("actor", {}).get("structures", {})
+					var _gs_def: Dictionary = _gs_struct_cfg.get(_gs_def_id, {
+						"id": "guide_spirit_01", "name": _gs_spirit_name,
+						"faction": "structure", "max_hp": _gs_max_hp,
+						"grid_pos": { "col": 0, "row": 4 }
+					})
+					var _gs_def_copy: Dictionary = _gs_def.duplicate(true)
+					_gs_def_copy["id"]      = "guide_spirit_01"
+					_gs_def_copy["max_hp"]  = _gs_max_hp
+					_gs_def_copy["name"]    = _gs_spirit_name
+					objective_actor = StructureActor.from_definition(_gs_def_copy, t)
+
+				objective_actor["is_spirit"] = true
+				objective_actor["name"] = _gs_spirit_name
+
+				# Placement: deep on enemy side — identical candidate/sort pattern as the
+				# PURSUE quarry block above, reusing the same _op_f_p3 depth scaling.
+				var _gs_terrain: Dictionary = flow_ctx.encounter_ctx.terrain
+				var _gs_candidates: Array = []
+				if not _gs_terrain.is_empty():
+					var _gs_walkable: Dictionary = StageTerrain.walkable_set(_gs_terrain)
+					var _gs_occupied: Dictionary = {}
+					for _go_v in echo_actors:
+						if _go_v is Dictionary:
+							var _gg: Dictionary = _go_v.get("grid_pos", {})
+							_gs_occupied[str(int(_gg.get("col",-1))) + "," + str(int(_gg.get("row",-1)))] = true
+					for _go_v in enemy_actors:
+						if _go_v is Dictionary:
+							var _gg: Dictionary = _go_v.get("grid_pos", {})
+							_gs_occupied[str(int(_gg.get("col",-1))) + "," + str(int(_gg.get("row",-1)))] = true
+					for _gc_key in _gs_walkable:
+						if not _gs_occupied.has(_gc_key):
+							var _gc_p: Array = str(_gc_key).split(",")
+							if _gc_p.size() == 2:
+								_gs_candidates.append({ "col": int(_gc_p[0]), "row": int(_gc_p[1]) })
+					var _gs_min_col: int = 999999
+					var _gs_max_col: int = -1
+					for _gc_v in _gs_candidates:
+						if _gc_v["col"] < _gs_min_col: _gs_min_col = _gc_v["col"]
+						if _gc_v["col"] > _gs_max_col: _gs_max_col = _gc_v["col"]
+					var _gs_target_col: int = roundi(_gs_min_col + _op_f_p3 * float(_gs_max_col - _gs_min_col))
+					var _gs_board_h: int = int(_gs_terrain.get("bounds", {}).get("h", 12))
+					var _gs_mid_row: float = float(_gs_board_h - 1) * 0.5
+					_gs_candidates.sort_custom(func(a, b):
+						var da: int = abs(a["col"] - _gs_target_col)
+						var db: int = abs(b["col"] - _gs_target_col)
+						if da != db: return da < db
+						var dra: float = abs(float(a["row"]) - _gs_mid_row)
+						var drb: float = abs(float(b["row"]) - _gs_mid_row)
+						if dra != drb: return dra < drb
+						if a["col"] != b["col"]: return a["col"] < b["col"]
+						return a["row"] < b["row"]
+					)
+					if not _gs_candidates.is_empty():
+						objective_actor["grid_pos"] = { "col": _gs_candidates[0]["col"], "row": _gs_candidates[0]["row"] }
+
+				# Escort — seed destination on the walkable BORDER/FRONTIER ring, Chebyshev distance
+				# >= destination_min_distance from the spirit's spawn cell (relax to farthest frontier
+				# cell if none qualify). A frontier cell is a walkable cell with at least one 4-dir
+				# neighbour that is non-walkable OR out of bounds. On irregular StageTerrain the walkable
+				# set is usually inset from the outer ring, so literal bounds cells (col==0 etc.) are
+				# empty — the frontier ring is where the terrain actually ends. On a full-rect board the
+				# frontier reduces to the literal edge cells, so behaviour there is preserved.
+				var _gs_dest_col: int = -1
+				var _gs_dest_row: int = -1
+				if _gs_mode == "escort" and not _gs_terrain.is_empty():
+					var _gs_walkable_dest: Dictionary = StageTerrain.walkable_set(_gs_terrain)
+					var _gs_spawn_pos: Dictionary = objective_actor.get("grid_pos", { "col": 0, "row": 0 })
+					var _gs_min_dist: int = int(_gs_obj_params.get("destination_min_distance", 6))
+					var _gs_edge_candidates: Array = []
+					for _gc_v in _gs_candidates:
+						var _gc_col: int = _gc_v["col"]
+						var _gc_row: int = _gc_v["row"]
+						# Frontier test: any 4-dir neighbour absent from the walkable set (this also
+						# covers out-of-bounds neighbours, which are never in the walkable set).
+						var _is_edge: bool = \
+							not _gs_walkable_dest.has("%d,%d" % [_gc_col - 1, _gc_row]) \
+							or not _gs_walkable_dest.has("%d,%d" % [_gc_col + 1, _gc_row]) \
+							or not _gs_walkable_dest.has("%d,%d" % [_gc_col, _gc_row - 1]) \
+							or not _gs_walkable_dest.has("%d,%d" % [_gc_col, _gc_row + 1])
+						if _is_edge:
+							_gs_edge_candidates.append({ "col": _gc_col, "row": _gc_row })
+					# Sort deterministically (col then row) before indexing.
+					_gs_edge_candidates.sort_custom(func(a, b):
+						if a["col"] != b["col"]: return a["col"] < b["col"]
+						return a["row"] < b["row"]
+					)
+					var _gs_far_candidates: Array = []
+					for _ec_v in _gs_edge_candidates:
+						var _ec_dist: int = maxi(abs(_ec_v["col"] - int(_gs_spawn_pos.get("col", 0))),
+							abs(_ec_v["row"] - int(_gs_spawn_pos.get("row", 0))))
+						if _ec_dist >= _gs_min_dist:
+							_gs_far_candidates.append(_ec_v)
+					if _gs_far_candidates.is_empty() and not _gs_edge_candidates.is_empty():
+						# Relax to the farthest edge cell (deterministic: stable sort by dist desc, then col, row).
+						_gs_edge_candidates.sort_custom(func(a, b):
+							var da: int = maxi(abs(a["col"] - int(_gs_spawn_pos.get("col", 0))),
+								abs(a["row"] - int(_gs_spawn_pos.get("row", 0))))
+							var db: int = maxi(abs(b["col"] - int(_gs_spawn_pos.get("col", 0))),
+								abs(b["row"] - int(_gs_spawn_pos.get("row", 0))))
+							if da != db: return da > db
+							if a["col"] != b["col"]: return a["col"] < b["col"]
+							return a["row"] < b["row"]
+						)
+						_gs_far_candidates = [_gs_edge_candidates[0]]
+					if not _gs_far_candidates.is_empty():
+						var _gs_dest_rng := RandomNumberGenerator.new()
+						if flow_ctx.campaign_seed != null:
+							_gs_dest_rng = flow_ctx.campaign_seed.get_rng(
+								"combat.spirit_destination." + flow_ctx.encounter_ctx.encounter_id)
+						else:
+							_gs_dest_rng.seed = hash("spirit_destination_" + flow_ctx.encounter_ctx.encounter_id)
+						var _gs_pick: Dictionary = _gs_far_candidates[_gs_dest_rng.randi() % _gs_far_candidates.size()]
+						_gs_dest_col = _gs_pick["col"]
+						_gs_dest_row = _gs_pick["row"]
+
+				# Stash the RNG-derived runtime decisions on objective_params — CombatState.create()
+				# (called downstream in EncounterRoundsState.enter(), out of this file's scope) threads
+				# objective_params verbatim onto combat_state, so these ride along without touching
+				# CombatState.gd. _build_objective_state() below reads them back for the snapshot.
+				flow_ctx.encounter_ctx.objective_params["guide_mode"]          = _gs_mode
+				flow_ctx.encounter_ctx.objective_params["spirit_joins_battle"] = _gs_joins
+				flow_ctx.encounter_ctx.objective_params["spirit_name"]        = _gs_spirit_name
+				if _gs_mode == "escort":
+					flow_ctx.encounter_ctx.objective_params["destination_col"] = _gs_dest_col
+					flow_ctx.encounter_ctx.objective_params["destination_row"] = _gs_dest_row
+
 		# V2-STAGE-004 P3: Surprise fear bump — unscouted encounter approach.
 		# Applied to echo actors only, after they are built and before all_actors assembly.
 		# Guard: approach dict must be non-empty AND situation_was_revealed must be false.
@@ -699,6 +924,8 @@ static func _resolve_mode_from_stage(flow_ctx: FlowContext) -> String:
 				return EncounterResolutionModes.ENDURE
 			ObjectiveModel.TYPE_PURSUE:
 				return EncounterResolutionModes.PURSUE
+			ObjectiveModel.TYPE_GUIDE_SPIRIT:
+				return EncounterResolutionModes.GUIDE_SPIRIT
 			_:
 				return EncounterResolutionModes.COMBAT
 
@@ -780,6 +1007,21 @@ static func resolve_objective_params(
 			params["quarry_name"]                 = str(mode_cfg.get("quarry_name",     "Fleeing Quarry"))
 			params["quarry_near_exit_threshold"]  = int(mode_cfg.get("quarry_near_exit_threshold", 3))
 			params["directive_intent_weights"]    = mode_cfg.get("directive_intent_weights", {})
+		"guide_spirit":
+			var _gs_base:      int   = int(mode_cfg.get("duration_turns",                        4))
+			var _gs_growth:    float = float(mode_cfg.get("duration_growth_per_completion",       0.0))
+			var _gs_max:       int   = int(mode_cfg.get("duration_max",                           8))
+			var _gs_hp_base:   int   = int(mode_cfg.get("spirit_max_hp",                          60))
+			var _gs_hp_growth: float = float(mode_cfg.get("spirit_hp_growth_per_completion",       0.0))
+			params["duration_turns"]  = clampi(_gs_base + roundi(_gs_growth * float(completion_index)), _gs_base, _gs_max)
+			params["spirit_def_id"]   = str(mode_cfg.get("spirit_def_id",  "guide_spirit"))
+			params["spirit_name"]     = str(mode_cfg.get("spirit_name",    "Wandering Spirit"))
+			params["spirit_max_hp"]   = _gs_hp_base + roundi(_gs_hp_growth * float(completion_index))
+			params["escort_radius"]             = int(mode_cfg.get("escort_radius",             2))
+			params["skittish_radius"]           = int(mode_cfg.get("skittish_radius",            3))
+			params["destination_min_distance"]  = int(mode_cfg.get("destination_min_distance",   6))
+			params["spirit_damage_mul"]         = float(mode_cfg.get("spirit_damage_mul",         0.75))
+			params["directive_intent_weights"]  = mode_cfg.get("directive_intent_weights", {})
 		_:
 			return {}
 	# Stage-level overrides applied last (non-empty only).
@@ -822,6 +1064,7 @@ static func _project_actor(actor: Dictionary) -> Dictionary:
 		"faction":        str(actor.get("faction", "")),
 		"is_structure":   bool(actor.get("is_structure", false)),
 		"is_quarry":      bool(actor.get("is_quarry", false)),
+		"is_spirit":      bool(actor.get("is_spirit", false)),
 		# UI-004: added for party strip and pre-battle overlay.
 		"calling_origin":    str(actor.get("calling_origin", "")),
 		# V2-EMOTION-002: the only player-facing feeling field.
@@ -905,6 +1148,40 @@ static func _build_objective_state(ectx: EncounterContext, combat_state: Diction
 				_quarry_dist_to_exit = mini(mini(_qd_col, _qd_row), mini(_qd_max_col - _qd_col, _qd_max_row - _qd_row))
 				break
 
+	# V2-STAGE-004 P3c: GUIDE_SPIRIT fields (zero/false/"" when N/A).
+	var _gs_mode: String          = ""
+	var _gs_spirit_alive: bool    = false
+	var _gs_spirit_hp: int        = 0
+	var _gs_spirit_name_out: String = ""
+	var _gs_joins_out: bool       = false
+	var _gs_destination_reached: bool = false
+	var _gs_destination_pos: Dictionary = {}
+	var _gs_rounds_remaining: int = 0
+	if obj_type == EncounterResolutionModes.GUIDE_SPIRIT:
+		_gs_mode              = str(_obj_params.get("guide_mode", "protect"))
+		_gs_spirit_name_out    = str(_obj_params.get("spirit_name", ""))
+		_gs_joins_out          = bool(_obj_params.get("spirit_joins_battle", false))
+		_gs_destination_reached = bool(combat_state.get("destination_reached", false)) if not combat_state.is_empty() else false
+		if ectx != null:
+			for _gs_a in ectx.actors:
+				if _gs_a is Dictionary and bool(_gs_a.get("is_spirit", false)):
+					_gs_spirit_alive = not bool(_gs_a.get("is_dead", false))
+					_gs_spirit_hp    = int(_gs_a.get("current_hp", 0))
+					if _gs_spirit_name_out.is_empty():
+						_gs_spirit_name_out = str(_gs_a.get("name", ""))
+					break
+		if _gs_mode == "escort":
+			var _gs_dc: int = int(_obj_params.get("destination_col", -1))
+			var _gs_dr: int = int(_obj_params.get("destination_row", -1))
+			if _gs_dc >= 0 and _gs_dr >= 0:
+				_gs_destination_pos = { "col": _gs_dc, "row": _gs_dr }
+		else:
+			# V2-STAGE-004 P3c "guard to count": protect-mode progress is guide_protect_counter
+			# (rounds an echo was within escort_radius of the spirit), NOT wall rounds — so the
+			# HUD shows real guard progress toward the win, not the raw round timer.
+			var _gs_guard_progress: int = int(combat_state.get("guide_protect_counter", 0)) if not combat_state.is_empty() else 0
+			_gs_rounds_remaining = maxi(0, _rounds_required - _gs_guard_progress)
+
 	return {
 		"type":                  obj_type,
 		"shrine_hp":             shrine_hp,
@@ -929,6 +1206,15 @@ static func _build_objective_state(ectx: EncounterContext, combat_state: Diction
 		"contain_required":       int(_obj_params.get("contain_rounds", 0)),
 		"window_remaining":       maxi(0, int(_obj_params.get("window_turns", 0)) - _round) if not combat_state.is_empty() else 0,
 		"quarry_distance_to_exit": _quarry_dist_to_exit,
+		# V2-STAGE-004 P3c: GUIDE_SPIRIT fields (zero/false/"" when N/A).
+		"guide_mode":             _gs_mode,
+		"spirit_alive":           _gs_spirit_alive,
+		"spirit_hp":              _gs_spirit_hp,
+		"spirit_name":            _gs_spirit_name_out,
+		"spirit_joins_battle":    _gs_joins_out,
+		"destination_reached":    _gs_destination_reached,
+		"destination_pos":        _gs_destination_pos,
+		"rounds_remaining":       _gs_rounds_remaining,
 	}
 
 
@@ -1408,6 +1694,9 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			# P1 CLOSE: additive fields for unified Resolve component.
 			"surface":          _combat_surface,
 			"summary_line":     _summary_line,
+			# V2-STAGE-004 P3c: GUIDE_SPIRIT victory via protect-mode survival — V2-ITEM-002
+			# free-summon seam flag only (no reward logic here).
+			"guide_spirit_protected": victory and str(combat_result.get("reason", "")) == "spirit_protected",
 		},
 		"actions": _build_resolve_actions(victory, objectives_remaining),
 		"meta": { "t": t },

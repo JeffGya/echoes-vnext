@@ -53,6 +53,8 @@ const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd
 @onready var _speed_slow_button: Button             = %SpeedSlowButton
 @onready var _speed_normal_button: Button           = %SpeedNormalButton
 @onready var _speed_fast_button: Button             = %SpeedFastButton
+# Camera controls (all modes): recenter-on-party button.
+@onready var _recenter_button: Button               = %RecenterButton
 
 # Clay floor tile: source 0, atlas position (0, 0)
 const _TILE_SOURCE_ID:    int       = 0
@@ -87,15 +89,52 @@ var _active_encounter_id: String = ""
 # V2-VOICE-002: last bark line shown — prevents back-to-back identical lines across echoes.
 var _last_bark_line: String = ""
 var _presentation_board_size: Vector2i = Vector2i.ZERO
+# Cached actor projection from the latest snapshot — used by the recenter-on-party helper.
+var _last_actors: Array = []
 
 # V2-STAGE-004 P3b: PURSUE camera follow (manual board repositioning — avoids Camera2D UI-pan issue).
+# Camera controls are now available on ALL combat boards. In PURSUE the board auto-follows the
+# quarry (pan/zoom temporarily overrides, then resumes after _PAN_RESUME_DELAY). In every other
+# mode there is no auto-follow: the board rests at _base_board_pos + _pan_offset and the player
+# pans/zooms freely; the recenter button clears _pan_offset back to the centred position.
 var _pursue_mode: bool            = false
 var _quarry_local_pos: Vector2    = Vector2.ZERO
 var _pan_offset: Vector2          = Vector2.ZERO
 var _pan_active: bool             = false
 var _pan_resume_timer: float      = 0.0
+# Centred board position computed by _center_board — the neutral camera origin for non-PURSUE modes.
+var _base_board_pos: Vector2      = Vector2.ZERO
+# Current uniform board zoom (kept in sync with _board.scale.x); shared by all modes.
+var _board_zoom: float            = 1.0
+# True unscaled isometric board extents (pixels), measured from map_to_local corners in
+# _center_board. Used by _clamp_board_pos so BOTH axes clamp against the real rendered span
+# — the old cols*128 / rows*64 rectangle mis-measured the vertical span on wide-short boards,
+# which is why vertical panning felt locked ("sideways-only").
+var _board_span_px: Vector2       = Vector2(1280.0, 640.0)
 const _PAN_RESUME_DELAY: float    = 3.0
 const _PURSUE_FOLLOW_SPEED: float = 5.0
+const _ZOOM_MIN: float            = 0.4
+const _ZOOM_MAX: float            = 2.0
+# Panning clamp: keep at least this many pixels of the board within the viewport on every side,
+# so the board can never be flung fully off-screen.
+const _PAN_MARGIN: float          = 120.0
+
+# Single-pointer drag panning (mouse-button / touch). Works in every mode and in all
+# directions. A press records the origin; motion beyond _DRAG_THRESHOLD begins a drag and
+# from then on the full 2D delta pans the board. Below threshold the press is left alone so
+# button/CTA taps still register (buttons are Control nodes and consume their own events
+# before _unhandled_input ever sees them, so chrome is never blocked).
+var _drag_pointer_down: bool  = false
+var _drag_active: bool        = false
+var _drag_last_pos: Vector2   = Vector2.ZERO
+# Source-exclusivity lock: "" (idle), "mouse", or "touch". project.godot enables
+# input_devices/pointing/emulate_touch_from_mouse, so ONE physical mouse drag delivers BOTH
+# real InputEventMouseButton/MouseMotion AND synthesized InputEventScreenTouch/ScreenDrag.
+# Without this lock both branches would feed _update_pointer_drag and the pan delta would
+# apply twice (double-speed panning on desktop). Whichever source presses first owns the
+# drag; begin/update/end events from the other source are ignored until release clears it.
+var _drag_source: String      = ""
+const _DRAG_THRESHOLD: float  = 8.0
 
 # -------------------------
 # Lifecycle
@@ -132,6 +171,10 @@ func _ready() -> void:
 	_speed_normal_button.pressed.connect(func(): _on_speed_pressed(_SPEED_NORMAL))
 	_speed_fast_button.pressed.connect(func(): _on_speed_pressed(_SPEED_FAST))
 	_apply_visual_playback_for_delay(_SPEED_NORMAL)
+
+	# Camera controls (all modes): recenter-on-party button. Hidden until combat is drawn.
+	_recenter_button.visible = false
+	_recenter_button.pressed.connect(_on_recenter_pressed)
 
 
 # -------------------------
@@ -177,6 +220,9 @@ func _reset_transient_ui() -> void:
 	_pending_enter_combat_action     = {}
 	_pending_retreat_action          = {}
 
+	# Camera reset each snapshot; re-shown by _render when applicable.
+	_recenter_button.visible  = false
+
 
 func _reset_presentation_state() -> void:
 	_token_layer.reset_presentation()
@@ -184,6 +230,16 @@ func _reset_presentation_state() -> void:
 	if _bark_popup_layer != null:
 		_bark_popup_layer.clear_all()
 	_last_bark_line = ""
+	# Fresh encounter → neutral camera: clear pan, reset zoom to 1× on every layer.
+	_pan_offset  = Vector2.ZERO
+	_pan_active  = false
+	_board_zoom  = 1.0
+	_board.scale               = Vector2.ONE
+	_token_layer.scale         = Vector2.ONE
+	_move_telegraph_layer.scale = Vector2.ONE
+	_distance_layer.scale      = Vector2.ONE
+	if _bark_popup_layer != null:
+		_bark_popup_layer.scale = Vector2.ONE
 
 
 func _should_reset_presentation(data: Dictionary) -> bool:
@@ -207,6 +263,7 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	_center_board(_current_cols, _current_rows)
 
 	var actors: Array = data.get("actors", [])
+	_last_actors = actors
 	var current_actor_id: String = str(data.get("current_actor_id", ""))
 	if not actors.is_empty():
 		_draw_tokens(actors, current_actor_id, data)
@@ -246,6 +303,7 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 		if not _pursue_mode:
 			_pursue_mode = true
 			_pan_offset  = Vector2.ZERO
+			_board_zoom  = 1.0
 			_board.scale = Vector2.ONE
 		for actor_v in actors:
 			if actor_v is Dictionary and bool(actor_v.get("is_quarry", false)):
@@ -257,6 +315,7 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	elif _pursue_mode:
 		_pursue_mode = false
 		_pan_offset   = Vector2.ZERO
+		_board_zoom   = 1.0
 		_board.scale  = Vector2.ONE
 		_token_layer.scale          = Vector2.ONE
 		_move_telegraph_layer.scale = Vector2.ONE
@@ -291,6 +350,8 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	# Manual toggle is visible whenever combat is active (not pre_combat, not combat_end).
 	if round_phase != "pre_combat" and not combat_over:
 		_manual_toggle.visible = true
+		# Recenter-on-party button shares the same active-combat lifetime on every board.
+		_recenter_button.visible = true
 
 	if actions.has("nav.back"):
 		var action_v: Variant = actions["nav.back"]
@@ -343,16 +404,27 @@ func _center_board(cols: int, rows: int) -> void:
 	var bl: Vector2 = _board.map_to_local(Vector2i(0,        rows - 1))
 	var br: Vector2 = _board.map_to_local(Vector2i(cols - 1, rows - 1))
 
+	var min_x: float = min(tl.x, bl.x)
+	var max_x: float = max(tr.x, br.x)
+	var min_y: float = min(tl.y, tr.y)
+	var max_y: float = max(bl.y, br.y)
 	var grid_center := Vector2(
-		(min(tl.x, bl.x) + max(tr.x, br.x)) / 2.0,
-		(min(tl.y, tr.y) + max(bl.y, br.y)) / 2.0
+		(min_x + max_x) / 2.0,
+		(min_y + max_y) / 2.0
+	)
+	# Record the true (unscaled) isometric span so the clamp measures both axes correctly.
+	# Add one tile of padding so edge cells aren't flush against the clamp boundary.
+	_board_span_px = Vector2(
+		maxf(max_x - min_x, 1.0) + 128.0,
+		maxf(max_y - min_y, 1.0) + 64.0
 	)
 
 	var viewport_center: Vector2 = get_viewport_rect().size / 2.0
-	_board.position    = viewport_center - grid_center
-	_move_telegraph_layer.position = _board.position
-	_token_layer.position    = _board.position
-	_distance_layer.position = _board.position
+	# Neutral centred origin — the camera rest position for non-PURSUE modes.
+	_base_board_pos = viewport_center - grid_center
+	# In PURSUE the _process follow loop drives position; elsewhere apply the current pan offset.
+	if not _pursue_mode:
+		_apply_board_transform(_clamp_board_pos(_base_board_pos + _pan_offset))
 
 
 func _on_back_pressed() -> void:
@@ -495,6 +567,7 @@ func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}
 			"is_structure":       bool(actor.get("is_structure", false)),
 			"is_objective_relic": bool(actor.get("is_objective_relic", false)),
 			"is_quarry":          bool(actor.get("is_quarry", false)),
+			"is_spirit":          bool(actor.get("is_spirit", false)),
 			"label":              str(actor.get("name", "??")).substr(0, 2).to_upper(),
 			"hp_ratio":           hp_ratio,
 			"damage_text":        damage_by_id.get(actor_id, ""),
@@ -802,6 +875,8 @@ func _on_retreat_pressed() -> void:
 # -------------------------
 
 func _process(delta: float) -> void:
+	# PURSUE is the only mode with an auto-follow loop. Other modes rest at their
+	# static panned position (set on gesture / recenter), so _process is a no-op there.
 	if not _pursue_mode:
 		return
 	if _pan_active:
@@ -814,17 +889,72 @@ func _process(delta: float) -> void:
 	_apply_board_transform(new_pos)
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if not _pursue_mode:
+# Single-pointer drag panning (mouse button + touch), all directions.
+#
+# ROUTING NOTE: this MUST live in _gui_input, not _unhandled_input. The screen root is a
+# full-rect Control with the default mouse_filter = STOP, so it consumes button/touch/motion
+# events as GUI input before they ever reach _unhandled_input — which is why the previous
+# _unhandled_input drag handler never fired (the halo + gesture pan worked because gesture
+# events are NOT consumed by mouse_filter and DO fall through to _unhandled_input).
+#
+# Because this fires as GUI input on the ROOT, child Buttons/CTAs (higher in the pick order,
+# also STOP) still consume their own clicks first — _gui_input here only sees presses on empty
+# board space. accept_event() is called while a drag is ACTIVE so a genuine pan doesn't leak
+# further, while a below-threshold press is left un-accepted so plain taps behave normally.
+func _gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			if mb.pressed:
+				_begin_pointer_drag(mb.position, "mouse")
+			else:
+				var was_dragging := _drag_active and _drag_source == "mouse"
+				_end_pointer_drag("mouse")
+				if was_dragging:
+					accept_event()
 		return
+	elif event is InputEventScreenTouch:
+		var st := event as InputEventScreenTouch
+		if st.pressed:
+			_begin_pointer_drag(st.position, "touch")
+		else:
+			var was_dragging := _drag_active and _drag_source == "touch"
+			_end_pointer_drag("touch")
+			if was_dragging:
+				accept_event()
+		return
+	elif event is InputEventMouseMotion:
+		var mm := event as InputEventMouseMotion
+		# Only pan while the left button is held down over the board.
+		if _drag_pointer_down and (mm.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+			_update_pointer_drag(mm.position, "mouse")
+			if _drag_active and _drag_source == "mouse":
+				accept_event()
+		return
+	elif event is InputEventScreenDrag:
+		var sd := event as InputEventScreenDrag
+		if _drag_pointer_down:
+			_update_pointer_drag(sd.position, "touch")
+			if _drag_active and _drag_source == "touch":
+				accept_event()
+		return
+
+
+# Two-finger gesture pan + pinch zoom. These stay in _unhandled_input: gesture events are
+# NOT consumed by Control mouse_filter, so they reach here reliably (and always did — the
+# gesture pan was the one part of the camera that worked before this fix).
+func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventPanGesture:
 		_pan_offset -= (event as InputEventPanGesture).delta * 1.5
 		_pan_active = true
 		_pan_resume_timer = _PAN_RESUME_DELAY
+		# Non-PURSUE modes have no follow loop — apply the pan immediately (clamped).
+		if not _pursue_mode:
+			_apply_board_transform(_clamp_board_pos(_base_board_pos + _pan_offset))
 	elif event is InputEventMagnifyGesture:
 		var factor: float = (event as InputEventMagnifyGesture).factor
-		var new_zoom: float = clampf(_board.scale.x * factor, 0.4, 2.0)
-		var all_zoom := Vector2(new_zoom, new_zoom)
+		_board_zoom = clampf(_board_zoom * factor, _ZOOM_MIN, _ZOOM_MAX)
+		var all_zoom := Vector2(_board_zoom, _board_zoom)
 		_board.scale               = all_zoom
 		_token_layer.scale         = all_zoom
 		_move_telegraph_layer.scale = all_zoom
@@ -833,6 +963,114 @@ func _unhandled_input(event: InputEvent) -> void:
 			_bark_popup_layer.scale = all_zoom
 		_pan_active = true
 		_pan_resume_timer = _PAN_RESUME_DELAY
+		if not _pursue_mode:
+			_apply_board_transform(_clamp_board_pos(_base_board_pos + _pan_offset))
+
+
+## Records a potential drag origin. Does NOT pan yet — panning only begins once the
+## pointer moves past _DRAG_THRESHOLD, so a stationary press is still a plain tap.
+## source ("mouse"/"touch") claims the drag: with emulate_touch_from_mouse a physical press
+## arrives twice (real mouse + synthesized touch); only the FIRST source takes ownership and
+## the duplicate begin from the other source is ignored while the pointer is down.
+func _begin_pointer_drag(pos: Vector2, source: String) -> void:
+	if _drag_pointer_down and _drag_source != source:
+		return
+	_drag_source       = source
+	_drag_pointer_down = true
+	_drag_active       = false
+	_drag_last_pos     = pos
+
+
+## Applies pointer motion. Waits for the threshold before treating the gesture as a drag,
+## then pans by the FULL 2D delta (x AND y) so every direction works. Counts as a manual
+## camera override in every mode — in PURSUE it pauses auto-follow exactly like the gesture pan.
+## Ignores motion from the source that does NOT own the drag — with emulate_touch_from_mouse
+## every physical mouse motion is duplicated as a ScreenDrag; applying both would pan at 2×.
+func _update_pointer_drag(pos: Vector2, source: String) -> void:
+	if not _drag_pointer_down:
+		return
+	if _drag_source != source:
+		return
+	if not _drag_active:
+		if _drag_last_pos.distance_to(pos) < _DRAG_THRESHOLD:
+			return
+		_drag_active = true
+	var delta: Vector2 = pos - _drag_last_pos
+	_drag_last_pos = pos
+	_pan_offset += delta
+	_pan_active = true
+	_pan_resume_timer = _PAN_RESUME_DELAY
+	# PURSUE has a follow loop that consumes _pan_offset each frame; other modes apply now.
+	if not _pursue_mode:
+		_apply_board_transform(_clamp_board_pos(_base_board_pos + _pan_offset))
+
+
+## Ends the current pointer interaction. No state is committed on release beyond clearing
+## the down flag — the board keeps its panned position. Only the source that OWNS the drag
+## may end it; the duplicated release from the emulated source is ignored (the owning
+## source's release always arrives too, so the lock is always cleared).
+func _end_pointer_drag(source: String) -> void:
+	if _drag_pointer_down and _drag_source != source:
+		return
+	_drag_pointer_down = false
+	_drag_active       = false
+	_drag_source       = ""
+
+
+## Clamps a proposed board position so at least _PAN_MARGIN pixels of the viewport-space
+## board region remain on screen on every side — the board can never be flung fully away.
+## Only used by the non-PURSUE static camera; PURSUE follow keeps the quarry centred.
+func _clamp_board_pos(pos: Vector2) -> Vector2:
+	var vp: Vector2 = get_viewport_rect().size
+	# True isometric board extents (measured in _center_board) → scale by current zoom for a
+	# viewport-space span. Using the real span on BOTH axes is what unlocks vertical panning:
+	# the previous rows*64 approximation badly under-measured height on wide-short boards,
+	# collapsing the allowed vertical range to near zero.
+	var span_x: float = _board_span_px.x * _board_zoom
+	var span_y: float = _board_span_px.y * _board_zoom
+	var clamped := pos
+	# Keep the board's left edge from passing the right margin, and vice-versa.
+	clamped.x = clampf(pos.x, _PAN_MARGIN - span_x, vp.x - _PAN_MARGIN)
+	clamped.y = clampf(pos.y, _PAN_MARGIN - span_y, vp.y - _PAN_MARGIN)
+	return clamped
+
+
+## Recenter-on-party button. In PURSUE, resume quarry auto-follow immediately (clears the
+## manual-override hold). In every other mode, snap the camera back to the living-echo centroid.
+func _on_recenter_pressed() -> void:
+	if _pursue_mode:
+		_pan_active = false
+		_pan_offset = Vector2.ZERO
+		_pan_resume_timer = 0.0
+		return
+	_recenter_on_party()
+
+
+## Centres the (non-PURSUE) camera on the centroid of living faction=="echo" tokens.
+## Falls back to the neutral centred board position when no living echo is present.
+func _recenter_on_party() -> void:
+	var sum := Vector2.ZERO
+	var count: int = 0
+	for actor_v in _last_actors:
+		if not (actor_v is Dictionary):
+			continue
+		var actor: Dictionary = actor_v
+		if str(actor.get("faction", "")) != "echo":
+			continue
+		if str(actor.get("status", "")) == "dead":
+			continue
+		var gp: Dictionary = actor.get("grid_pos", {})
+		sum += _board.map_to_local(Vector2i(int(gp.get("col", 0)), int(gp.get("row", 0))))
+		count += 1
+	if count == 0:
+		_pan_offset = Vector2.ZERO
+		_apply_board_transform(_clamp_board_pos(_base_board_pos))
+		return
+	var centroid: Vector2 = (sum / float(count)) * _board_zoom
+	# Desired board position that places the party centroid at viewport centre.
+	var desired: Vector2 = get_viewport_rect().size / 2.0 - centroid
+	_pan_offset = desired - _base_board_pos
+	_apply_board_transform(_clamp_board_pos(desired))
 
 
 func _apply_board_transform(pos: Vector2) -> void:

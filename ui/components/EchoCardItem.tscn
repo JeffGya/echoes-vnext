@@ -73,6 +73,16 @@ text = "HP 128/128"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="SpiritBadge" type="Label" parent="VBoxContainer/BodyMargin/BodyRow/InfoCol" unique_id=300100001]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+theme_override_fonts/font = ExtResource("2_gnycu")
+theme_override_font_sizes/font_size = 11
+text = "◆ SPIRIT"
+
 [node name="NameLabel" type="Label" parent="VBoxContainer/BodyMargin/BodyRow/InfoCol" unique_id=457191916]
 unique_name_in_owner = true
 layout_mode = 2
@@ -89,4 +99,14 @@ size_flags_horizontal = 3
 theme_override_fonts/font = ExtResource("4_qal5b")
 theme_override_font_sizes/font_size = 14
 text = "Shaken"
+
+[node name="ProgressLabel" type="Label" parent="VBoxContainer/BodyMargin/BodyRow/InfoCol" unique_id=300100002]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+theme_override_fonts/font = ExtResource("2_gnycu")
+theme_override_font_sizes/font_size = 12
+text = "Protect"
 

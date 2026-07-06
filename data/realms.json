@@ -27,7 +27,7 @@
         "map_width_max": 45,
         "map_height_min": 30,
         "map_height_max": 40,
-        "objective_pool": ["combat", "shrine", "recover", "protect", "endure"]
+        "objective_pool": ["combat", "shrine", "recover", "protect", "endure", "pursue", "guide_spirit"]
       },
 
       "realm.02": {
@@ -48,7 +48,7 @@
         "map_width_max": 70,
         "map_height_min": 45,
         "map_height_max": 65,
-        "objective_pool": ["combat", "shrine", "recover", "protect", "endure"]
+        "objective_pool": ["combat", "shrine", "recover", "protect", "endure", "pursue", "guide_spirit"]
       }
 
     }

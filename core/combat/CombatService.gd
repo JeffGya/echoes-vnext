@@ -75,6 +75,9 @@ static func _resolve_melee(attacker: Dictionary, defender: Dictionary,
 	if bool(attacker.get("_carrier_double_damage", false)):
 		var _dd_mult: float = float(attacker.get("_double_damage_mult", 2.0))
 		damage = int(float(damage) * _dd_mult)
+	# P3c: spirit ally damage debuff (GUIDE_SPIRIT joined spirit deals reduced melee damage).
+	if attacker.has("_spirit_damage_mul"):
+		damage = int(float(damage) * float(attacker.get("_spirit_damage_mul", 0.75)))
 	var hp_after: int       = max(0, hp_before - damage)
 	defender["current_hp"]  = hp_after
 	if hp_after <= 0:

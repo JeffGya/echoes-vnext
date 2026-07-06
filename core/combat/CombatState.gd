@@ -53,6 +53,20 @@ static func create(actors: Array, objective: String,
 		"contain_counter":    0,
 		"quarry_escaped":     false,
 		"quarry_id":          _find_quarry_id(actors),
+		# V2-STAGE-004 P3c: GUIDE_SPIRIT — escort mode, joined-spirit tracking, destination state.
+		# guide_mode/spirit_joins_battle/destination_col/destination_row are seeded via
+		# objective_params by FlowEncounterState (runtime decisions made at encounter setup).
+		# Safe defaults for all modes; only GUIDE_SPIRIT logic writes to escort_started/destination_reached.
+		"guide_mode":           str(objective_params.get("guide_mode", "protect")),
+		"spirit_id":            _find_spirit_id(actors),
+		"spirit_joins_battle":  bool(objective_params.get("spirit_joins_battle", false)),
+		"escort_started":       false,
+		"guide_protect_counter": 0,  # guard-to-count: advances only when an echo is within
+			#                              escort_radius of the living spirit; NEVER resets (accumulates,
+			#                              unlike PROTECT's resetting protect_counter).
+			"destination_col":      int(objective_params.get("destination_col", -1)),
+		"destination_row":      int(objective_params.get("destination_row", -1)),
+		"destination_reached":  false,
 	}
 
 
@@ -155,6 +169,9 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 
 ## COMBAT-005/006: Returns { "over": bool, "victory": bool, "reason": String }.
 ## "reason" is "" when not over. Check priority (locked):
+##   0. PURSUE quarry_escaped → defeat  (immediate — takes priority over kill-win)
+##   0b. GUIDE_SPIRIT spirit_killed → defeat  (immediate — takes priority over kill-win)
+##       OR GUIDE_SPIRIT destination_reached → victory  (escort win, before kill-win)
 ##   1. all_enemies_defeated → victory  (runs first — echoes that kill the last enemy win
 ##      even if the shrine falls the same round)
 ##      EXCEPTION: ENDURE while not all_waves_spawned — lull between waves, fight continues.
@@ -166,6 +183,9 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 ##      OR PROTECT stolen-at-clockout → defeat (reason: "totem_taken")
 ##   7. ENDURE survived → victory   (round_counter >= duration_turns)
 ##   8. PURSUE escaped/window → defeat / contained → victory
+##   9. GUIDE_SPIRIT (protect mode) survived → victory  (guide_protect_counter >= duration_turns)
+##      guide_protect_counter advances only on rounds an echo was within escort_radius of the
+##      living spirit (guard-to-count) and never resets — the party must actually reach the spirit.
 ##
 ## combat_state carries round_counter, protect_counter, objective_params, and hold_counter.
 ## Callers that omit combat_state (COMBAT / PURIFY_SHRINE) receive byte-identical results
@@ -180,6 +200,15 @@ static func check_end_condition(actors: Array, objective: String,
 	# 0. PURSUE: quarry_escaped is an immediate defeat — takes priority over kill-win.
 	if objective == EncounterResolutionModes.PURSUE and bool(combat_state.get("quarry_escaped", false)):
 		return { "over": true, "victory": false, "reason": "quarry_escaped" }
+
+	# 0b. GUIDE_SPIRIT: spirit death is an immediate defeat — takes priority over kill-win.
+	if objective == EncounterResolutionModes.GUIDE_SPIRIT:
+		var _gs_spirit: Dictionary = _find_spirit(actors)
+		if not _gs_spirit.is_empty() and _gs_spirit.get("is_dead", false):
+			return { "over": true, "victory": false, "reason": "spirit_killed" }
+		# Escort: destination reached wins before all_enemies_defeated (mirrors PURSUE priority).
+		if combat_state.get("destination_reached", false):
+			return { "over": true, "victory": true, "reason": "spirit_escorted" }
 
 	# 1. Victory: all enemies dead (universal).
 	# ENDURE exception: while waves are still scheduled (all_waves_spawned == false),
@@ -210,8 +239,11 @@ static func check_end_condition(actors: Array, objective: String,
 			return { "over": true, "victory": false, "reason": "entity_lost" }
 
 	# 4. Defeat: all echoes dead (unchanged).
+	# A joined GUIDE_SPIRIT combatant has faction "echo" + is_spirit true, but it must never
+	# keep a wiped party "alive" — exclude it so a dead party still triggers all_echoes_dead.
 	var living_echoes := actors.filter(func(a: Dictionary) -> bool:
-		return a.get("faction", "") == "echo" and not a.get("is_dead", false))
+		return a.get("faction", "") == "echo" and not a.get("is_dead", false) \
+			and not a.get("is_spirit", false))
 	if living_echoes.is_empty():
 		return { "over": true, "victory": false, "reason": "all_echoes_dead" }
 
@@ -253,6 +285,15 @@ static func check_end_condition(actors: Array, objective: String,
 		# Victory: held adjacent for required rounds.
 		if contain_counter >= contain_rounds:
 			return { "over": true, "victory": true, "reason": "quarry_contained" }
+
+	# 9. GUIDE_SPIRIT (protect mode): spirit guarded for the required duration → victory.
+	# guide_protect_counter advances only on rounds where a living echo was within escort_radius
+	# of the living spirit (guard-to-count) and never resets — a bare round timer no longer wins,
+	# so the party must actually reach the spirit.
+	if objective == EncounterResolutionModes.GUIDE_SPIRIT and str(combat_state.get("guide_mode", "protect")) == "protect":
+		var _gs_duration: int = int(obj_params.get("duration_turns", 4))
+		if int(combat_state.get("guide_protect_counter", 0)) >= _gs_duration:
+			return { "over": true, "victory": true, "reason": "spirit_protected" }
 
 	return { "over": false, "victory": false, "reason": "" }
 
@@ -305,3 +346,24 @@ static func _find_quarry_id(actors: Array) -> String:
 		if bool(a.get("is_quarry", false)):
 			return str(a.get("id", ""))
 	return ""
+
+
+## Returns the id of the first actor with is_spirit == true, or "" if none found.
+static func _find_spirit_id(actors: Array) -> String:
+	for a_v in actors:
+		if not (a_v is Dictionary): continue
+		var a: Dictionary = a_v
+		if bool(a.get("is_spirit", false)):
+			return str(a.get("id", ""))
+	return ""
+
+
+## Returns the first spirit actor (is_spirit == true) from the list, or {} if none found.
+static func _find_spirit(actors: Array) -> Dictionary:
+	for actor_v in actors:
+		if not (actor_v is Dictionary):
+			continue
+		var actor: Dictionary = actor_v
+		if actor.get("is_spirit", false):
+			return actor
+	return {}

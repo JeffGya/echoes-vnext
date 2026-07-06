@@ -402,7 +402,8 @@ Main files:
 Analysis:
 
 - The board and objective foundation is strong.
-- The next gap is battlefield meaning: enemies still need richer pressure roles, and objective context should drive more behavior.
+- As of V2-STAGE-004 Phase 3c (2026-07-05) all seven combat modes (COMBAT / PURIFY_SHRINE / RECOVER / PROTECT / ENDURE / PURSUE / GUIDE_SPIRIT) have live per-mode win/lose conditions, distinct objective-actor behavior, and mode-specific echo-autonomy biasing — the objective now drives outcome per mode rather than every stage collapsing to "kill the nearest enemy". See `docs/combat-modes.md` and `CONVENTIONS.md` § Combat resolution modes & boards.
+- The next gap is battlefield meaning: enemies still need richer pressure roles (V2-COMBAT-002), and stage context should drive more enemy behavior.
 
 Opportunity:
 

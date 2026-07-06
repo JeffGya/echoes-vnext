@@ -143,6 +143,23 @@ layout_mode = 2
 theme_type_variation = &"ButtonGhost"
 text = "Fast"
 
+[node name="RecenterButton" type="Button" parent="." unique_id=300000001]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -64.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = 64.0
+grow_horizontal = 0
+theme_type_variation = &"ButtonGhost"
+text = "⌖"
+tooltip_text = "Recenter on party"
+
 [node name="AutoTimer" type="Timer" parent="." unique_id=100000011]
 wait_time = 1.2
 
