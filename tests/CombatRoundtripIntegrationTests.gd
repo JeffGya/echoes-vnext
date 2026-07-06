@@ -64,6 +64,12 @@ static func register(runner) -> void:
 	# is is_structure-only, owned by the idle _end_round escort/skittish spirit).
 	runner.register_test("combat_roundtrip/guide_spirit_joined_combatant_moves_freely", func(): return test_guide_spirit_joined_combatant_moves_freely())
 	runner.register_test("combat_roundtrip/guide_spirit_dev_override_forces_escort_join", func(): return test_guide_spirit_dev_override_forces_escort_join())
+	# V2-STAGE-004 P3c review-fix: escort destination lands on the walkable FRONTIER ring
+	# (not literal bounds) on inset irregular terrain, so escort is winnable.
+	runner.register_test("combat_roundtrip/guide_spirit_escort_destination_on_inset_terrain", func(): return test_guide_spirit_escort_destination_on_inset_terrain())
+	# V2-STAGE-004 P3c review-fix: a JOINED spirit must not self-escort to a spirit_escorted
+	# victory after the real party is wiped — party-wipe defeat must fire instead.
+	runner.register_test("combat_roundtrip/guide_spirit_joined_spirit_does_not_self_escort", func(): return test_guide_spirit_joined_spirit_does_not_self_escort())
 
 
 # ---------------------------------------------------------------------------
@@ -1584,5 +1590,153 @@ static func test_guide_spirit_dev_override_forces_escort_join() -> Dictionary:
 	var seeded_name: String = str(env2["ectx"].objective_params.get("spirit_name", ""))
 	if seeded_name != forced_name:
 		return { "ok": false, "error": "spirit name diverged with override: forced='%s' seeded='%s' -- draw order shifted" % [forced_name, seeded_name] }
+
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# V2-STAGE-004 P3c review-fix (FIX 1): escort destination selection on INSET terrain.
+# Real combat terrain (irregular StageTerrain) has a walkable set that is inset from the
+# outer bounds ring — literal-bounds cells (col==0 / col==cols-1 / row==0 / row==rows-1)
+# are usually absent. The old code only admitted literal-bounds cells as destination
+# candidates, so on inset terrain the candidate set was empty and destination_col/row
+# stayed -1 -> the escort branch never ran -> escort was unwinnable. The fix builds
+# candidates from the walkable FRONTIER ring (a walkable cell with at least one 4-dir
+# neighbour that is non-walkable/out-of-bounds). This test drives the REAL escort spawn
+# path via FlowEncounterState.enter() on the realm's generated inset terrain and asserts:
+#   (a) destination_col/row are set (!= -1), and
+#   (b) the destination cell is walkable, and
+#   (c) the destination is a genuine frontier cell (proves the frontier branch fired).
+# ---------------------------------------------------------------------------
+static func test_guide_spirit_escort_destination_on_inset_terrain() -> Dictionary:
+	var env: Dictionary = _guide_spawn_env("guide_escort_inset", "escort", "nojoin")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed (realm not created)" }
+	var ectx = env["ectx"]
+	var params: Dictionary = ectx.objective_params
+
+	if str(params.get("guide_mode", "")) != "escort":
+		return { "ok": false, "error": "Expected guide_mode='escort', got '%s'" % str(params.get("guide_mode", "")) }
+
+	var dest_col: int = int(params.get("destination_col", -1))
+	var dest_row: int = int(params.get("destination_row", -1))
+
+	# (a) destination must be set — the exact failure the fix repairs.
+	if dest_col == -1 or dest_row == -1:
+		return { "ok": false, "error": "escort destination not set on inset terrain (dest_col=%d dest_row=%d) -- frontier candidates empty" % [dest_col, dest_row] }
+
+	var walkable: Dictionary = StageTerrain.walkable_set(ectx.terrain)
+	if walkable.is_empty():
+		return { "ok": false, "error": "walkable set empty -- terrain not generated" }
+
+	# Guard: confirm the terrain really is inset (the fix's whole reason to exist).
+	var bounds: Dictionary = ectx.terrain.get("bounds", {})
+	var cols: int = int(bounds.get("w", 0))
+	var rows: int = int(bounds.get("h", 0))
+	var literal_edge_walkable: int = 0
+	for k in walkable:
+		var p: Array = str(k).split(",")
+		if p.size() != 2: continue
+		var c: int = int(p[0]); var r: int = int(p[1])
+		if c == 0 or c == cols - 1 or r == 0 or r == rows - 1:
+			literal_edge_walkable += 1
+	if literal_edge_walkable >= walkable.size():
+		return { "ok": false, "error": "terrain is a full rectangle (not inset) -- test would not exercise the frontier fix" }
+
+	# (b) destination must be walkable.
+	var dest_key: String = "%d,%d" % [dest_col, dest_row]
+	if not walkable.has(dest_key):
+		return { "ok": false, "error": "escort destination %s is not walkable" % dest_key }
+
+	# (c) destination must be a frontier cell.
+	var is_frontier: bool = \
+		not walkable.has("%d,%d" % [dest_col - 1, dest_row]) \
+		or not walkable.has("%d,%d" % [dest_col + 1, dest_row]) \
+		or not walkable.has("%d,%d" % [dest_col, dest_row - 1]) \
+		or not walkable.has("%d,%d" % [dest_col, dest_row + 1])
+	if not is_frontier:
+		return { "ok": false, "error": "escort destination %s is interior, not a frontier cell" % dest_key }
+
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# V2-STAGE-004 P3c review-fix (FIX 2): a JOINED spirit must not self-escort.
+# When spirit_joins_battle is true the spirit has faction "echo" + is_spirit true. The
+# escort proximity/start/greet loops in FlowRuntime._end_round previously matched on
+# faction=="echo" alone, so the spirit counted ITSELF (distance 0) as an escorting echo
+# and walked itself to the destination — reaching a spirit_escorted victory even after
+# every real echo was dead (destination_reached is evaluated before all_echoes_dead). The
+# fix skips is_spirit actors in those loops. This test places the spirit ON its own
+# destination with all real echoes dead, drives a round, and asserts combat does NOT end
+# spirit_escorted — party-wipe defeat (all_echoes_dead) fires instead.
+# ---------------------------------------------------------------------------
+static func test_guide_spirit_joined_spirit_does_not_self_escort() -> Dictionary:
+	var env: Dictionary = _setup("guide_self_escort", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var ectx = env["ectx"]
+	var runtime = env["runtime"]
+
+	ectx.resolution_mode = EncounterResolutionModes.GUIDE_SPIRIT
+	ectx.objective_params = {
+		"guide_mode":          "escort",
+		"duration_turns":      20,
+		"spirit_def_id":       "guide_spirit",
+		"spirit_name":         "Test Spirit",
+		"spirit_max_hp":       9999,
+		"escort_radius":       2,
+		"skittish_radius":     3,
+		"spirit_joins_battle": true,
+		"destination_col":     5,
+		"destination_row":     5,
+	}
+
+	# JOINED combatant spirit sitting ON the destination cell, within its own escort_radius.
+	var spirit: Dictionary = {
+		"id": "guide_spirit_01", "name": "Test Spirit", "faction": "echo",
+		"actor_type": "enemy",
+		"is_structure": false, "is_spirit": true, "is_dead": false,
+		"current_hp": 9999, "stats": { "max_hp": 9999, "def": 0, "atk": 0, "speed": 0 },
+		"speed": 0, "morale": 50, "fear": 0,
+		"grid_pos": { "col": 5, "row": 5 },
+	}
+	ectx.actors.append(spirit)
+
+	# Wipe the real party: every echo-faction, non-spirit actor is dead.
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "echo" and not bool(a_v.get("is_spirit", false)):
+			a_v["is_dead"] = true
+			a_v["current_hp"] = 0
+
+	# Keep at least one enemy alive and far away so nothing else resolves the fight first.
+	var enemy_col: int = 9
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "enemy" and not bool(a_v.get("is_structure", false)):
+			a_v["is_dead"] = false
+			a_v["grid_pos"] = { "col": enemy_col, "row": 0 }
+			enemy_col = maxi(0, enemy_col - 1)
+
+	runtime.dispatch({ "type": "combat.init" })
+
+	runtime.dispatch({ "type": "combat.confirm_round" })
+	var guard: int = 0
+	while guard < 60:
+		guard += 1
+		var cs: Dictionary = ectx.combat_state
+		if bool(cs.get("combat_over", false)): break
+		if str(cs.get("round_phase", "")) != "in_round": break
+		runtime.dispatch({ "type": "combat.next_actor" })
+
+	var cs2: Dictionary = ectx.combat_state
+	if bool(cs2.get("destination_reached", false)):
+		return { "ok": false, "error": "joined spirit self-delivered: destination_reached=true with no living real echo" }
+
+	var reason: String = str(ectx.combat_result.get("reason", "")) if ectx.combat_result != null else ""
+	if reason == "spirit_escorted":
+		return { "ok": false, "error": "combat ended 'spirit_escorted' after party wipe -- joined spirit self-escorted" }
+
+	if reason != "all_echoes_dead":
+		return { "ok": false, "error": "Expected 'all_echoes_dead' defeat after party wipe, got '%s'" % reason }
 
 	return { "ok": true }

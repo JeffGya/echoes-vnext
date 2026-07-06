@@ -697,22 +697,30 @@ func enter(ctx: RefCounted, t: int) -> void:
 					if not _gs_candidates.is_empty():
 						objective_actor["grid_pos"] = { "col": _gs_candidates[0]["col"], "row": _gs_candidates[0]["row"] }
 
-				# Escort — seed destination on the board EDGE, Chebyshev distance >= destination_min_distance
-				# from the spirit's spawn cell (relax to farthest edge cell if none qualify).
+				# Escort — seed destination on the walkable BORDER/FRONTIER ring, Chebyshev distance
+				# >= destination_min_distance from the spirit's spawn cell (relax to farthest frontier
+				# cell if none qualify). A frontier cell is a walkable cell with at least one 4-dir
+				# neighbour that is non-walkable OR out of bounds. On irregular StageTerrain the walkable
+				# set is usually inset from the outer ring, so literal bounds cells (col==0 etc.) are
+				# empty — the frontier ring is where the terrain actually ends. On a full-rect board the
+				# frontier reduces to the literal edge cells, so behaviour there is preserved.
 				var _gs_dest_col: int = -1
 				var _gs_dest_row: int = -1
 				if _gs_mode == "escort" and not _gs_terrain.is_empty():
-					var _gs_bounds: Dictionary = _gs_terrain.get("bounds", {})
-					var _gs_cols: int = int(_gs_bounds.get("w", 12))
-					var _gs_rows: int = int(_gs_bounds.get("h", 12))
+					var _gs_walkable_dest: Dictionary = StageTerrain.walkable_set(_gs_terrain)
 					var _gs_spawn_pos: Dictionary = objective_actor.get("grid_pos", { "col": 0, "row": 0 })
 					var _gs_min_dist: int = int(_gs_obj_params.get("destination_min_distance", 6))
 					var _gs_edge_candidates: Array = []
 					for _gc_v in _gs_candidates:
 						var _gc_col: int = _gc_v["col"]
 						var _gc_row: int = _gc_v["row"]
-						var _is_edge: bool = _gc_col == 0 or _gc_col == _gs_cols - 1 \
-							or _gc_row == 0 or _gc_row == _gs_rows - 1
+						# Frontier test: any 4-dir neighbour absent from the walkable set (this also
+						# covers out-of-bounds neighbours, which are never in the walkable set).
+						var _is_edge: bool = \
+							not _gs_walkable_dest.has("%d,%d" % [_gc_col - 1, _gc_row]) \
+							or not _gs_walkable_dest.has("%d,%d" % [_gc_col + 1, _gc_row]) \
+							or not _gs_walkable_dest.has("%d,%d" % [_gc_col, _gc_row - 1]) \
+							or not _gs_walkable_dest.has("%d,%d" % [_gc_col, _gc_row + 1])
 						if _is_edge:
 							_gs_edge_candidates.append({ "col": _gc_col, "row": _gc_row })
 					# Sort deterministically (col then row) before indexing.

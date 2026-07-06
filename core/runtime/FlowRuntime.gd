@@ -2578,6 +2578,10 @@ func _end_round(t: int) -> void:
 					if not (_gs_e is Dictionary): continue
 					if bool(_gs_e.get("is_dead", false)): continue
 					if str(_gs_e.get("faction", "")) != "echo": continue
+					# A joined spirit has faction "echo" + is_spirit true — never count it as a
+					# guiding echo (else it self-greets/self-escorts). Same exclusion the
+					# directive-injection and party-wipe (all_echoes_dead) checks already use.
+					if bool(_gs_e.get("is_spirit", false)): continue
 					if GridService.is_adjacent(_gs_e.get("grid_pos", {}), _gs_spirit_pos):
 						_gs_any_adjacent = true
 						break
@@ -2597,6 +2601,7 @@ func _end_round(t: int) -> void:
 						if not (_gs_e2 is Dictionary): continue
 						if bool(_gs_e2.get("is_dead", false)): continue
 						if str(_gs_e2.get("faction", "")) != "echo": continue
+						if bool(_gs_e2.get("is_spirit", false)): continue  # never latch on the spirit itself
 						if GridService.is_adjacent(_gs_e2.get("grid_pos", {}), _gs_spirit_pos):
 							_gs_start_adjacent = true
 							break
@@ -2612,6 +2617,7 @@ func _end_round(t: int) -> void:
 						if not (_gs_e3 is Dictionary): continue
 						if bool(_gs_e3.get("is_dead", false)): continue
 						if str(_gs_e3.get("faction", "")) != "echo": continue
+						if bool(_gs_e3.get("is_spirit", false)): continue  # the spirit is distance 0 to itself — exclude
 						if GridService.chebyshev_distance(_gs_e3.get("grid_pos", {}), _gs_spirit_pos) \
 								<= _gs_escort_radius:
 							_gs_escorted = true
