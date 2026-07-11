@@ -19,7 +19,6 @@ class_name StageExploreScreen
 extends Control
 
 const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
-const GhostFootprintLayerScript := preload("res://ui/screens/venture/GhostFootprintLayer.gd")
 
 signal action_requested(action: Dictionary)
 
@@ -122,9 +121,10 @@ var _vow_hint_label:      Label = null
 @onready var _revealed_template:  Control        = $SituationLayer/RevealedMarkerTemplate
 @onready var _resolved_template:  Control        = $SituationLayer/ResolvedMarkerTemplate
 @onready var _party_layer:        Node2D         = $PartyTokenLayer
-# V2-STAGE-004 P5: board-local ghost trail. Parented to _board in _ready() so ghosts ride
-# with the terrain (position + scale) as the board scrolls — see GhostFootprintLayer.gd.
-var _ghost_layer: Node2D = null
+# V2-STAGE-004 P5: board-local ghost trail, authored as a child of Board in the scene so
+# ghosts inherit the board's transform (position + scale) and scroll with the terrain
+# during travel — see GhostFootprintLayer.gd.
+@onready var _ghost_layer:        Node2D         = %GhostFootprintLayer
 @onready var _hud_strip:          PanelContainer = $HudStrip
 @onready var _turn_label:         Label          = %TurnLabel
 @onready var _objectives_label:   Label          = %ObjectivesLabel
@@ -186,12 +186,6 @@ var _is_picker_mode:            bool       = false
 # ─────────────────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
-	# V2-STAGE-004 P5: ghost-trail layer, parented to the board so its board-local draw
-	# coordinates inherit the board's transform and scroll with the terrain during travel.
-	_ghost_layer = GhostFootprintLayerScript.new()
-	_ghost_layer.name = "GhostFootprintLayer"
-	_board.add_child(_ghost_layer)
-
 	_hidden_template.visible   = false
 	_revealed_template.visible = false
 	_resolved_template.visible = false

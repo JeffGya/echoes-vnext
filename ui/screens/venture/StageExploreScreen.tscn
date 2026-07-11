@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://ui/screens/venture/StepProgressBar.gd" id="5_stepbar"]
 [ext_resource type="Script" path="res://ui/screens/venture/DirectiveBadge.gd" id="6_dirbadge"]
 [ext_resource type="PackedScene" uid="uid://voice001_bark_popup_layer" path="res://ui/screens/combat/BarkPopupLayer.tscn" id="7_barklayer"]
+[ext_resource type="Script" uid="uid://culh5bvr1nyo7" path="res://ui/screens/venture/GhostFootprintLayer.gd" id="8_ghostlayer"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_explore"]
 texture = ExtResource("2_tile")
@@ -140,6 +141,10 @@ script = ExtResource("1_script")
 [node name="Board" type="TileMapLayer" parent="." unique_id=2125377735]
 y_sort_enabled = true
 tile_set = SubResource("TileSet_explore")
+
+[node name="GhostFootprintLayer" type="Node2D" parent="Board" unique_id=2125377740]
+unique_name_in_owner = true
+script = ExtResource("8_ghostlayer")
 
 [node name="FogLayer" type="TileMapLayer" parent="." unique_id=2125377736]
 y_sort_enabled = true
