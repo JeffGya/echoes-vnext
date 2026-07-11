@@ -37,6 +37,22 @@ content_margin_right = 8.0
 content_margin_bottom = 8.0
 bg_color = Color(0, 0, 0, 0.6)
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_objective_banner"]
+content_margin_left = 12.0
+content_margin_top = 8.0
+content_margin_right = 12.0
+content_margin_bottom = 8.0
+bg_color = Color(0.05, 0.05, 0.08, 0.92)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.831, 0.686, 0.216, 0.75)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_result"]
 content_margin_left = 24.0
 content_margin_top = 24.0
@@ -90,9 +106,18 @@ text = "←"
 
 [node name="RoundLabel" type="Label" parent="." unique_id=100000004]
 layout_mode = 1
-offset_left = 220.0
-offset_right = 380.0
-offset_bottom = 31.0
+anchors_preset = -1
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -80.0
+offset_top = 16.0
+offset_right = 80.0
+offset_bottom = 48.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.9607843, 0.94509804, 0.90588236, 1)
+theme_override_colors/font_outline_color = Color(0.05, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 4
+horizontal_alignment = 1
 
 [node name="ObjectiveLabel" type="Label" parent="." unique_id=100000005]
 layout_mode = 1
@@ -100,26 +125,133 @@ offset_top = 35.0
 offset_right = 400.0
 offset_bottom = 66.0
 
-[node name="StartCombatButton" type="Button" parent="." unique_id=100000006]
+[node name="ObjectiveBanner" type="PanelContainer" parent="." unique_id=400000001]
+unique_name_in_owner = true
+visible = false
 layout_mode = 1
-offset_left = 72.0
-offset_right = 210.0
-offset_bottom = 31.0
+anchors_preset = -1
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -172.0
+offset_top = 68.0
+offset_right = 172.0
+grow_horizontal = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_objective_banner")
+
+[node name="BannerContent" type="VBoxContainer" parent="ObjectiveBanner" unique_id=400000002]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="HeaderRow" type="HBoxContainer" parent="ObjectiveBanner/BannerContent" unique_id=400000003]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="GlyphLabel" type="Label" parent="ObjectiveBanner/BannerContent/HeaderRow" unique_id=400000004]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.83137256, 0.6862745, 0.21568628, 1)
+theme_override_font_sizes/font_size = 16
+text = "◆"
+vertical_alignment = 1
+
+[node name="InstructionLabel" type="Label" parent="ObjectiveBanner/BannerContent/HeaderRow" unique_id=400000005]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.9607843, 0.94509804, 0.90588236, 1)
+theme_override_font_sizes/font_size = 15
+text = "Objective"
+vertical_alignment = 1
+
+[node name="ProgressLabel" type="Label" parent="ObjectiveBanner/BannerContent" unique_id=400000006]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.831, 0.686, 0.216, 1)
+theme_override_font_sizes/font_size = 12
+text = "progress"
+
+[node name="QuarryPips" type="HBoxContainer" parent="ObjectiveBanner/BannerContent" unique_id=400000007]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Pip0" type="Label" parent="ObjectiveBanner/BannerContent/QuarryPips" unique_id=400000008]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9607843, 0.94509804, 0.90588236, 1)
+theme_override_font_sizes/font_size = 12
+text = "◇"
+
+[node name="Pip1" type="Label" parent="ObjectiveBanner/BannerContent/QuarryPips" unique_id=400000009]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9607843, 0.94509804, 0.90588236, 1)
+theme_override_font_sizes/font_size = 12
+text = "◇"
+
+[node name="Pip2" type="Label" parent="ObjectiveBanner/BannerContent/QuarryPips" unique_id=400000010]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9607843, 0.94509804, 0.90588236, 1)
+theme_override_font_sizes/font_size = 12
+text = "◇"
+
+[node name="Pip3" type="Label" parent="ObjectiveBanner/BannerContent/QuarryPips" unique_id=400000011]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9607843, 0.94509804, 0.90588236, 1)
+theme_override_font_sizes/font_size = 12
+text = "◇"
+
+[node name="Pip4" type="Label" parent="ObjectiveBanner/BannerContent/QuarryPips" unique_id=400000012]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9607843, 0.94509804, 0.90588236, 1)
+theme_override_font_sizes/font_size = 12
+text = "◇"
+
+[node name="StartCombatButton" type="Button" parent="." unique_id=100000006]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -100.0
+offset_top = -52.0
+offset_right = 100.0
+offset_bottom = -8.0
+grow_horizontal = 2
+grow_vertical = 0
 text = "Start Combat"
 
 [node name="AutoToggleButton" type="CheckButton" parent="." unique_id=100000010]
 visible = false
 layout_mode = 1
-offset_left = 215.0
-offset_right = 285.0
-offset_bottom = 31.0
+anchors_preset = -1
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -70.0
+offset_top = -96.0
+offset_right = 70.0
+offset_bottom = -60.0
+grow_horizontal = 2
+grow_vertical = 0
 text = "Manual"
 
 [node name="SpeedBar" type="HBoxContainer" parent="." unique_id=100000018]
 layout_mode = 1
-offset_left = 295.0
-offset_right = 475.0
-offset_bottom = 31.0
+anchors_preset = -1
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -90.0
+offset_top = -140.0
+offset_right = 90.0
+offset_bottom = -104.0
+grow_horizontal = 2
+grow_vertical = 0
+alignment = 1
 theme_override_constants/separation = 6
 
 [node name="SpeedSlowButton" type="Button" parent="SpeedBar" unique_id=100000019]
@@ -167,9 +299,10 @@ wait_time = 1.2
 visible = false
 layout_mode = 1
 anchors_preset = -1
-anchor_top = 0.05
-anchor_bottom = 0.95
+anchor_bottom = 1.0
+offset_top = 150.0
 offset_right = 240.0
+offset_bottom = -150.0
 theme_override_styles/panel = SubResource("StyleBoxFlat_initiative")
 
 [node name="InitiativeList" type="VBoxContainer" parent="InitiativePanel" unique_id=100000009]

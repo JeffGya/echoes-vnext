@@ -19,6 +19,7 @@ class_name StageExploreScreen
 extends Control
 
 const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
+const GhostFootprintLayerScript := preload("res://ui/screens/venture/GhostFootprintLayer.gd")
 
 signal action_requested(action: Dictionary)
 
@@ -58,6 +59,38 @@ var _is_zooming:     bool    = false
 # ─── Situation marker tracking ────────────────────────────────────────────────
 var _situation_markers: Array = []
 
+# ─── V2-STAGE-004 Phase 5 explore-bundle state ───────────────────────────────
+# Previous-snapshot revealed situation ids, for reveal-flash diffing.
+var _prev_revealed_ids: Dictionary = {}   # situation_id → true
+# situation_id → SituationMarkerDraw node, rebuilt each explore render.
+var _marker_by_sit_id: Dictionary = {}
+# Choice actions authored per pending situation: choice_id → { situation_id, choice_id }.
+var _choice_actions: Array = []
+# Bark/snippet tween handles so travel updates can supersede stale ones.
+var _snippet_tween: Tween = null
+# V2-STAGE-004 P5 (playtest fix): last travel_snippet text actually presented, so an
+# event-driven snippet (which now arrives on ANY explore snapshot, not just travel) is
+# played exactly once even though FlowRuntime only clears explore_map["travel_snippet"]
+# at the START of stage.advance_turn — non-advance rebuilds (dismiss_overlay, ignore,
+# resolve_choice, engage, disengage_contact, etc.) call build_snapshot() directly and the
+# field lingers unchanged, so without this guard the same line would replay on every
+# subsequent non-advance re-render.
+var _last_played_snippet: String = ""
+# Current step budget for this turn (drives StepProgressBar text denominator).
+var _step_budget: int = 0
+# V2-STAGE-004 P5 (playtest fix): number of tiles ACTUALLY walked this advance
+# (traveled_path segment count). Drives how many diamonds the bar shows while in
+# motion so it depletes to zero in sync with the travel tween — instead of showing
+# the full budget with a dimmed remainder. 0 when parked/idle (bar shows full budget).
+var _travel_step_count: int = 0
+# Type of the currently-pending situation, used to gate the pre-combat transition beat.
+var _pending_sit_type: String = ""
+# Combat-track situation types that warrant the pre-combat transition beat.
+const _COMBAT_TRACK_TYPES := {
+	"combat": true, "shrine": true, "recover": true, "protect": true,
+	"endure": true, "pursue": true, "guide_spirit": true,
+}
+
 # ─── Travel animation state ───────────────────────────────────────────────────
 var _last_party_col:          int        = -1
 var _last_party_row:          int        = -1
@@ -89,6 +122,9 @@ var _vow_hint_label:      Label = null
 @onready var _revealed_template:  Control        = $SituationLayer/RevealedMarkerTemplate
 @onready var _resolved_template:  Control        = $SituationLayer/ResolvedMarkerTemplate
 @onready var _party_layer:        Node2D         = $PartyTokenLayer
+# V2-STAGE-004 P5: board-local ghost trail. Parented to _board in _ready() so ghosts ride
+# with the terrain (position + scale) as the board scrolls — see GhostFootprintLayer.gd.
+var _ghost_layer: Node2D = null
 @onready var _hud_strip:          PanelContainer = $HudStrip
 @onready var _turn_label:         Label          = %TurnLabel
 @onready var _objectives_label:   Label          = %ObjectivesLabel
@@ -112,6 +148,18 @@ var _vow_hint_label:      Label = null
 @onready var _dismiss_btn:          Button         = %DismissButton
 @onready var _ignore_btn:           Button         = %IgnoreButton
 @onready var _directive_overlay:  Control        = %DirectiveSelectOverlay
+
+# ─── V2-STAGE-004 Phase 5 explore-bundle refs ────────────────────────────────
+@onready var _step_budget_row:    HBoxContainer  = %StepBudgetRow
+@onready var _step_progress_bar:  Control        = %StepProgressBar
+@onready var _step_fraction_lbl:  Label          = %StepFractionLabel
+@onready var _directive_badge:    PanelContainer = %DirectiveBadge
+@onready var _travel_snippet_lbl: Label          = %TravelSnippetLabel
+@onready var _bark_layer:         Control        = %BarkPopupLayer
+@onready var _choice_container:   VBoxContainer  = %ChoiceButtonsContainer
+@onready var _choice_btn_0:       Button         = %ChoiceButton0
+@onready var _choice_btn_1:       Button         = %ChoiceButton1
+@onready var _transition_flash:   ColorRect      = %TransitionFlash
 
 # ─── Contact conversation @onready refs ──────────────────────────────────────
 @onready var _dim_overlay:             ColorRect      = $DimOverlay
@@ -138,6 +186,12 @@ var _is_picker_mode:            bool       = false
 # ─────────────────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
+	# V2-STAGE-004 P5: ghost-trail layer, parented to the board so its board-local draw
+	# coordinates inherit the board's transform and scroll with the terrain during travel.
+	_ghost_layer = GhostFootprintLayerScript.new()
+	_ghost_layer.name = "GhostFootprintLayer"
+	_board.add_child(_ghost_layer)
+
 	_hidden_template.visible   = false
 	_revealed_template.visible = false
 	_resolved_template.visible = false
@@ -149,6 +203,17 @@ func _ready() -> void:
 	_contact_panel.visible         = false
 	_npc_reaction_label.visible    = false
 	_confirm_selection_btn.visible = false
+
+	# V2-STAGE-004 Phase 5 explore-bundle nodes start hidden; shown by data when present.
+	_step_budget_row.visible    = false
+	_directive_badge.visible    = false
+	_travel_snippet_lbl.visible = false
+	_choice_container.visible   = false
+	_choice_btn_0.visible       = false
+	_choice_btn_1.visible       = false
+	_transition_flash.modulate  = Color(1, 1, 1, 0)
+	_choice_btn_0.pressed.connect(_on_choice_pressed.bind(0))
+	_choice_btn_1.pressed.connect(_on_choice_pressed.bind(1))
 
 	_stage_complete_btn.pressed.connect(_on_stage_complete_pressed)
 	_advance_btn.pressed.connect(_on_advance_pressed)
@@ -167,6 +232,11 @@ func _process(_delta: float) -> void:
 	# the board's current position (and scale) onto the situation layer each frame.
 	if _travel_tween != null and _travel_tween.is_valid():
 		_sync_situation_layer()
+		# Party token is screen-locked at centre during travel; keep the bark bubble
+		# pinned to it so it reads as coming from the moving party.
+		if _bark_layer != null:
+			var sc := get_viewport_rect().size * 0.5
+			_bark_layer.call("update_actor_positions", { "party": sc })
 	# Keep fog layer in sync with board at all times (position + scale must match).
 	_sync_fog_layer()
 
@@ -211,6 +281,10 @@ func set_snapshot(snap: Dictionary) -> void:
 
 func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 	_is_zooming = false
+
+	# Clear any lingering travel ghosts when returning to the (non-scrolling) preview.
+	if _ghost_layer != null:
+		_ghost_layer.call("clear_all")
 
 	var cols := int(data.get("map_width",  30))
 	var rows := int(data.get("map_height", 30))
@@ -283,6 +357,18 @@ func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 	_back_btn.show()
 	_sit_overlay.hide()
 	_ignore_btn.visible = false
+
+	# Phase 5 explore-only chrome is hidden in preview; reset reveal-diff so the first
+	# explore render pops newly-revealed markers correctly.
+	_step_budget_row.hide()
+	_directive_badge.hide()
+	_travel_snippet_lbl.hide()
+	_choice_container.visible = false
+	_transition_flash.modulate = Color(1, 1, 1, 0)
+	_prev_revealed_ids = {}
+	_last_played_snippet = ""
+	if _bark_layer != null:
+		_bark_layer.call("clear_all")
 
 	if not dir_data.is_empty():
 		_directive_overlay.call("populate", dir_data)
@@ -383,9 +469,12 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 		# Only use chained path when we have ≥2 entries (pre-cell + at least one step).
 		if traveled_path.size() >= 2:
 			var seg_count: int = traveled_path.size() - 1
+			# Bar shows one diamond per tile actually walked this advance (depletes to zero).
+			_travel_step_count = seg_count
 			var seg_dur: float = _TRAVEL_DURATION / float(seg_count)
 			# Skip the first entry (pre-advance cell — already the current board position).
 			# Chain one tween segment per subsequent step cell.
+			# After each segment, deplete one step diamond so the budget display tracks travel.
 			for _seg_i in range(1, traveled_path.size()):
 				var step_v: Variant = traveled_path[_seg_i]
 				var step: Dictionary = step_v if step_v is Dictionary else {}
@@ -393,17 +482,36 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 					Vector2i(int(step.get("col", 0)), int(step.get("row", 0)))
 				)
 				var step_target: Vector2 = screen_center - step_local * board_scale
+				# Board-local pixel of the cell being VACATED by this segment (the prior path
+				# entry). Dropped as a ghost when the segment completes so the trail glues to
+				# the terrain and fades behind the party.
+				var _prev_v: Variant = traveled_path[_seg_i - 1]
+				var _prev: Dictionary = _prev_v if _prev_v is Dictionary else {}
+				var vacated_local: Vector2 = _board.map_to_local(
+					Vector2i(int(_prev.get("col", 0)), int(_prev.get("row", 0)))
+				)
 				_travel_tween.tween_property(_board, "position", step_target, seg_dur)
+				var spent_after: int = _seg_i
+				_travel_tween.tween_callback(_on_step_consumed.bind(spent_after))
+				_travel_tween.tween_callback(_drop_travel_ghost.bind(vacated_local))
 		else:
 			# Fallback: single straight tween (no path data or single-cell move).
+			_travel_step_count = 1
 			_travel_tween.tween_property(_board, "position", board_target, _TRAVEL_DURATION)
+			_travel_tween.tween_callback(_on_step_consumed.bind(1))
 
 		_party_layer.call("init_position", screen_center)
+
+		# Travel-beat presentation: ghost-text snippet + party-token speech bubble.
+		_maybe_play_travel_snippet(str(data.get("travel_snippet", "")))
+		_play_travel_bark(data, screen_center)
 
 		_pending_overlay_data    = data
 		_pending_overlay_actions = actions
 		_travel_tween.finished.connect(_apply_pending_overlay, CONNECT_ONE_SHOT)
 	else:
+		# Parked/idle refresh — no travel this snapshot; bar shows full budget.
+		_travel_step_count = 0
 		_board.position = board_target
 		_sync_fog_layer()
 		_sync_situation_layer()
@@ -411,7 +519,37 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 		_party_layer.call("init_position", screen_center)
 		_pending_overlay_data    = {}
 		_pending_overlay_actions = {}
+		# V2-STAGE-004 P5 (playtest fix): Anansi snippets are event-driven and can arrive
+		# on a non-travel snapshot (notably the stage first-entry render). Gate through
+		# _maybe_play_travel_snippet so it still presents here — not just during travel —
+		# while the exactly-once guard skips lingering/unchanged text on later rebuilds.
+		_maybe_play_travel_snippet(str(data.get("travel_snippet", "")))
 		_apply_overlay_from(data, actions)
+
+	# ── V2-STAGE-004 Phase 5: directive badge (HUD) ──────────────────────────
+	# Data-driven {id,label}; badge hides itself when the field is absent/empty.
+	var dir_snap_v: Variant  = data.get("directive", {})
+	var dir_snap: Dictionary = dir_snap_v if dir_snap_v is Dictionary else {}
+	_directive_badge.call("set_directive", dir_snap)
+
+	# ── V2-STAGE-004 Phase 5: step-budget diamonds ───────────────────────────
+	# One diamond per step_budget; deplete in sync with the travel tween below.
+	# When step_budget is absent the row hides (old snapshots render as today).
+	_step_budget = int(data.get("step_budget", 0))
+	if _step_budget > 0:
+		_step_budget_row.visible = true
+		if is_travel and _travel_step_count > 0:
+			# In motion: show one diamond per tile actually walked this advance so the bar
+			# depletes to zero in sync with the travel tween. The tween's _on_step_consumed
+			# callbacks dim them one-by-one. Text keeps the "x/y" budget context (y = budget).
+			_step_progress_bar.call("set_budget", _travel_step_count)
+			_step_fraction_lbl.text = "%d/%d" % [_travel_step_count, _step_budget]
+		else:
+			# Parked/idle: full budget shown as available — "how far can we go" at rest.
+			_step_progress_bar.call("set_budget", _step_budget)
+			_step_fraction_lbl.text = "%d/%d" % [_step_budget, _step_budget]
+	else:
+		_step_budget_row.visible = false
 
 	_turn_label.text       = "Turn %d" % int(data.get("turn_count", 0))
 	_objectives_label.text = "Objectives: %d / %d" % [
@@ -461,6 +599,7 @@ func _apply_overlay_from(data: Dictionary, actions: Dictionary) -> void:
 		_show_contact_panel(cp, data, actions)
 		_sit_overlay.hide()
 		_ignore_btn.visible = false
+		_choice_container.visible = false
 		return
 
 	_hide_contact_panel()
@@ -485,6 +624,7 @@ func _apply_overlay_from(data: Dictionary, actions: Dictionary) -> void:
 	else:
 		_sit_overlay.hide()
 		_ignore_btn.visible = false
+		_choice_container.visible = false
 
 
 # ─── Situation overlays ──────────────────────────────────────────────────────
@@ -492,6 +632,7 @@ func _apply_overlay_from(data: Dictionary, actions: Dictionary) -> void:
 func _show_pending_overlay(pending: Dictionary, engage_action: Dictionary, ignore_action: Dictionary = {}) -> void:
 	var revealed     := bool(pending.get("revealed", false))
 	var is_objective := bool(pending.get("is_objective", false)) and revealed
+	_pending_sit_type = str(pending.get("type", "")) if revealed else ""
 
 	# Header distinguishes objectives (required stage goals) from regular encounters.
 	if is_objective:
@@ -515,11 +656,55 @@ func _show_pending_overlay(pending: Dictionary, engage_action: Dictionary, ignor
 	var enemy_est := str(pending.get("enemy_estimate", ""))
 	_enemy_estimate_label.text    = enemy_est
 	_enemy_estimate_label.visible = not enemy_est.is_empty()
+
+	# V2-STAGE-004 Phase 5: per-choice CTAs (obstacle/structure). When choices are
+	# present the plain Enter button is hidden and one button per choice is shown.
+	# When absent (all other types / old snapshots) the Enter button behaves as today.
+	var choices_v: Variant = pending.get("choices", [])
+	var choices: Array = choices_v if choices_v is Array else []
+	var sit_id := str(pending.get("situation_id", ""))
+	_populate_choice_ctas(choices, sit_id)
+	var has_choices := not _choice_actions.is_empty()
+
+	_dismiss_btn.visible   = not has_choices
 	_dismiss_btn.text      = "Enter"
 	_cached_overlay_action = engage_action
 	_cached_ignore_action  = ignore_action
 	_ignore_btn.visible    = not ignore_action.is_empty()
 	_sit_overlay.show()
+
+
+## Populate the two authored choice buttons from the pending situation's choice list.
+## Hides the container + both buttons when there are no choices.
+func _populate_choice_ctas(choices: Array, situation_id: String) -> void:
+	_choice_actions = []
+	var btns: Array = [_choice_btn_0, _choice_btn_1]
+	# Guard: only two authored choice buttons exist. Config currently authors exactly 2;
+	# this warns (and drops the extras) should future content author more.
+	if choices.size() > btns.size():
+		push_warning("StageExploreScreen: situation '%s' has %d choices; only %d shown, %d dropped." % [
+			situation_id, choices.size(), btns.size(), choices.size() - btns.size()
+		])
+	for i in range(btns.size()):
+		var btn: Button = btns[i]
+		if i < choices.size():
+			var choice_v: Variant = choices[i]
+			var choice: Dictionary = choice_v if choice_v is Dictionary else {}
+			var choice_id := str(choice.get("id", ""))
+			var label     := str(choice.get("label", ""))
+			if choice_id.is_empty():
+				btn.visible = false
+				continue
+			btn.text    = label if not label.is_empty() else choice_id.capitalize()
+			btn.visible = true
+			_choice_actions.append({
+				"type":         "stage.resolve_situation_choice",
+				"situation_id": situation_id,
+				"choice_id":    choice_id,
+			})
+		else:
+			btn.visible = false
+	_choice_container.visible = not _choice_actions.is_empty()
 
 
 func _show_result_overlay(result: Dictionary) -> void:
@@ -529,9 +714,11 @@ func _show_result_overlay(result: Dictionary) -> void:
 	_sit_result_label.text  = str(result.get("result_text", ""))
 	_intel_clue_label.visible     = false
 	_enemy_estimate_label.visible = false
+	_dismiss_btn.visible    = true
 	_dismiss_btn.text       = "Continue"
 	_cached_overlay_action  = { "type": "stage.dismiss_overlay" }
 	_ignore_btn.visible     = false
+	_choice_container.visible = false
 	_sit_overlay.show()
 
 
@@ -550,7 +737,9 @@ func _show_return_home_overlay(result: Dictionary) -> void:
 	_sit_result_label.text        = str(result.get("message", ""))
 	_intel_clue_label.visible     = false
 	_enemy_estimate_label.visible = false
+	_dismiss_btn.visible          = true
 	_ignore_btn.visible           = false
+	_choice_container.visible     = false
 	_sit_overlay.show()
 
 
@@ -706,6 +895,11 @@ func _rebuild_situations(situations: Array) -> void:
 		if is_instance_valid(m):
 			m.queue_free()
 	_situation_markers.clear()
+	_marker_by_sit_id.clear()
+
+	# Newly-revealed situations get a scale-pop; diff current vs previous revealed set.
+	var next_revealed: Dictionary = {}
+	var newly_revealed: Array = []
 
 	for sit_v in situations:
 		var sit: Dictionary   = sit_v if sit_v is Dictionary else {}
@@ -715,6 +909,7 @@ func _rebuild_situations(situations: Array) -> void:
 		var resolved: bool    = bool(sit.get("resolved", false))
 		var is_obj: bool      = bool(sit.get("is_objective", false))
 		var sit_type: String  = str(sit.get("type", ""))
+		var sit_id: String    = str(sit.get("id", ""))
 
 		var marker := SituationMarkerDraw.new()
 		marker.setup(sit_type, not revealed, resolved, is_obj)
@@ -722,6 +917,22 @@ func _rebuild_situations(situations: Array) -> void:
 
 		_situation_layer.add_child(marker)
 		_situation_markers.append(marker)
+
+		if not sit_id.is_empty():
+			_marker_by_sit_id[sit_id] = marker
+			if revealed:
+				next_revealed[sit_id] = true
+				if not _prev_revealed_ids.has(sit_id):
+					newly_revealed.append(sit_id)
+
+	# Fire reveal-flash on markers that flipped to revealed this snapshot.
+	for sid_v in newly_revealed:
+		var sid: String = str(sid_v)
+		var mk: Variant = _marker_by_sit_id.get(sid, null)
+		if mk != null and is_instance_valid(mk):
+			mk.call("play_reveal_flash")
+
+	_prev_revealed_ids = next_revealed
 
 
 # ─── Button handlers ─────────────────────────────────────────────────────────
@@ -774,17 +985,39 @@ func _on_back_pressed() -> void:
 		action_requested.emit(_cached_back_action)
 
 
+func _on_choice_pressed(index: int) -> void:
+	if index < 0 or index >= _choice_actions.size():
+		return
+	var act_v: Variant = _choice_actions[index]
+	var act: Dictionary = act_v if act_v is Dictionary else {}
+	if act.is_empty():
+		return
+	_sit_overlay.hide()
+	_choice_container.visible = false
+	_ignore_btn.visible       = false
+	_choice_actions = []
+	action_requested.emit(act)
+
+
 func _on_dismiss_pressed() -> void:
 	_sit_overlay.hide()
 	_ignore_btn.visible = false
+	_choice_container.visible = false
 	if not _cached_overlay_action.is_empty():
+		# Pre-combat transition beat: brief flash when handing off to a combat-track
+		# situation. Purely cosmetic; the action still dispatches immediately after.
+		if str(_cached_overlay_action.get("type", "")) == "stage.engage_situation" \
+				and _COMBAT_TRACK_TYPES.has(_pending_sit_type):
+			_play_transition_flash()
 		action_requested.emit(_cached_overlay_action)
 		_cached_overlay_action = {}
+		_pending_sit_type = ""
 
 
 func _on_ignore_pressed() -> void:
 	_sit_overlay.hide()
 	_ignore_btn.visible = false
+	_choice_container.visible = false
 	if not _cached_ignore_action.is_empty():
 		action_requested.emit(_cached_ignore_action)
 		_cached_ignore_action = {}
@@ -795,6 +1028,87 @@ func _on_overlay_action(action: Dictionary) -> void:
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
+
+# ── V2-STAGE-004 Phase 5 travel-beat helpers ─────────────────────────────────
+
+## Called after each travel tween segment: dims one more step diamond + updates fraction.
+func _on_step_consumed(spent: int) -> void:
+	if _step_budget <= 0:
+		return
+	# In motion the bar shows _travel_step_count diamonds (tiles walked this advance); the
+	# numerator counts diamonds still filled, the denominator stays the directive budget.
+	var shown: int = _travel_step_count if _travel_step_count > 0 else _step_budget
+	var clamped: int = clampi(spent, 0, shown)
+	_step_progress_bar.call("set_spent", clamped)
+	_step_fraction_lbl.text = "%d/%d" % [shown - clamped, _step_budget]
+
+
+## Drop a fading ghost footprint at a vacated cell (board-local pixel). Called from the
+## travel-tween segment chain so the trail appears along the traveled path and fades out.
+func _drop_travel_ghost(vacated_local: Vector2) -> void:
+	if _ghost_layer != null:
+		_ghost_layer.call("drop_ghost", vacated_local)
+
+
+## Gate for _play_travel_snippet: presents a given snippet text at most once.
+## FlowRuntime clears explore_map["travel_snippet"] only at the START of
+## stage.advance_turn; every other action handler (dismiss_overlay, ignore_situation,
+## resolve_situation_choice, engage_situation, disengage_contact, ...) rebuilds the
+## snapshot via FlowStageExploreState.build_snapshot() directly, which re-projects
+## whatever text is still sitting in explore_map — so without this de-dupe the same
+## line would replay on every subsequent non-advance re-render. Comparing against the
+## last-presented text (updated on every call, including the "" clear case) keeps
+## presentation exactly-once while still allowing a genuinely new/different snippet
+## (or the field going back to empty) to be picked up immediately.
+func _maybe_play_travel_snippet(snippet: String) -> void:
+	if snippet == _last_played_snippet:
+		return
+	_last_played_snippet = snippet
+	_play_travel_snippet(snippet)
+
+
+## Ghost-text snippet fading in/out during the travel tween. No-op when empty.
+func _play_travel_snippet(snippet: String) -> void:
+	if _snippet_tween != null and _snippet_tween.is_valid():
+		_snippet_tween.kill()
+	if snippet.is_empty():
+		_travel_snippet_lbl.visible = false
+		return
+	_travel_snippet_lbl.text     = snippet
+	_travel_snippet_lbl.visible  = true
+	_travel_snippet_lbl.modulate = Color(1, 1, 1, 0)
+	_snippet_tween = create_tween()
+	_snippet_tween.tween_property(_travel_snippet_lbl, "modulate:a", 1.0, 0.4)
+	_snippet_tween.tween_interval(2.1)
+	_snippet_tween.tween_property(_travel_snippet_lbl, "modulate:a", 0.0, 0.5)
+	_snippet_tween.tween_callback(func() -> void: _travel_snippet_lbl.visible = false)
+
+
+## Party-token speech bubble during travel, fed to the instanced BarkPopupLayer.
+## Builds one synthetic event for the "party" actor. No-op when travel_bark is empty.
+func _play_travel_bark(data: Dictionary, screen_center: Vector2) -> void:
+	if _bark_layer == null:
+		return
+	var tb_v: Variant  = data.get("travel_bark", {})
+	var tb: Dictionary = tb_v if tb_v is Dictionary else {}
+	var line := str(tb.get("line", ""))
+	if line.is_empty():
+		return
+	_bark_layer.call("show_barks", [{
+		"actor_id":    "party",
+		"bark_line":   line,
+		"screen_pos":  screen_center,
+		"is_response": false,
+	}])
+
+
+## 200ms flash/fade overlay when handing off to combat. Cosmetic only.
+func _play_transition_flash() -> void:
+	_transition_flash.modulate = Color(1, 1, 1, 0)
+	var tw := create_tween()
+	tw.tween_property(_transition_flash, "modulate:a", 1.0, 0.1)
+	tw.tween_property(_transition_flash, "modulate:a", 0.0, 0.1)
+
 
 func _board_to_screen(board_local: Vector2) -> Vector2:
 	return _board.position + board_local * _board.scale.x

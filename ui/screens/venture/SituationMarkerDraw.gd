@@ -25,6 +25,17 @@ func setup(p_type: String, p_hidden: bool, p_resolved: bool, p_objective: bool) 
 	queue_redraw()
 
 
+## V2-STAGE-004 Phase 5: scale-pop when a situation is newly revealed between snapshots.
+## Tween 1.0 → 1.4 → 1.0 over ~300ms. Called by the screen after diffing the revealed set.
+func play_reveal_flash() -> void:
+	scale = Vector2.ONE
+	var tw := create_tween()
+	tw.set_ease(Tween.EASE_OUT)
+	tw.set_trans(Tween.TRANS_BACK)
+	tw.tween_property(self, "scale", Vector2(1.4, 1.4), 0.15)
+	tw.tween_property(self, "scale", Vector2.ONE, 0.15)
+
+
 func _draw() -> void:
 	if is_hidden:
 		_draw_circle_shape(Color(0.35, 0.35, 0.45, 0.90), Color(0.50, 0.50, 0.60, 0.50))

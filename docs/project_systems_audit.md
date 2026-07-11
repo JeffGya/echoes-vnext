@@ -320,6 +320,7 @@ Main files:
 Analysis:
 
 - Realm exploration is one of the most complete end-to-end loops in the codebase.
+- V2-STAGE-004 Phase 5 (2026-07-09) tightened two traversal edges: **frontier chaining** (tier-3 frontier targets lift fog per step and re-target `nearest_unexplored` until `step_budget` is spent, so an advance now binds to the directive budget instead of stopping ~`reveal_radius`+1 tiles out) and **mid-path stop** (stepping onto an unresolved, un-passed situation parks the party for resolution — walking onto a situation always triggers the resolution flow). Pass/resolved invariants preserved.
 - The biggest live seam is directive state split between canonical and legacy paths.
 - intel exists, but cost, aftermath, and multi-channel acquisition are still underdeveloped.
 - stage summary meaning and actual objective meaning still partially diverge.
@@ -403,6 +404,7 @@ Analysis:
 
 - The board and objective foundation is strong.
 - As of V2-STAGE-004 Phase 3c (2026-07-05) all seven combat modes (COMBAT / PURIFY_SHRINE / RECOVER / PROTECT / ENDURE / PURSUE / GUIDE_SPIRIT) have live per-mode win/lose conditions, distinct objective-actor behavior, and mode-specific echo-autonomy biasing — the objective now drives outcome per mode rather than every stage collapsing to "kill the nearest enemy". See `docs/combat-modes.md` and `CONVENTIONS.md` § Combat resolution modes & boards.
+- As of V2-STAGE-004 Phase 5 (2026-07-09) the combat board reads its per-mode objective through an authored `ObjectiveBanner` (7 per-mode layouts) with de-overlapped top chrome and a contrast-fixed cream/gold palette — the mode is now legible on-screen, not just in the model. See `CombatBoardScreen` below and `CONVENTIONS.md` § Per-Screen Snapshot Summaries.
 - The next gap is battlefield meaning: enemies still need richer pressure roles (V2-COMBAT-002), and stage context should drive more enemy behavior.
 
 Opportunity:
@@ -429,7 +431,7 @@ Analysis:
 
 - The shell model is one of the best reuse patterns in the repo.
 - The biggest weak points are:
-- `StageExploreScreen` carrying too many jobs
+- `StageExploreScreen` carrying too many jobs — V2-STAGE-004 Phase 5 extracted several presentation concerns into dedicated venture components (`StepProgressBar`, `DirectiveBadge`, `GhostFootprintLayer`), but the screen still owns board/fog/situation/travel-beat orchestration
 - fragmented echo presentation across screens
 - script-built sanctum UI pieces that should be scene components
 - legacy fallback renderer still expecting Array actions

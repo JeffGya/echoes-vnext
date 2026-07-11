@@ -263,6 +263,70 @@ static func _cheby(a: Dictionary, b: Dictionary) -> int:
 	           abs(int(a.get("row", 0)) - int(b.get("row", 0))))
 
 
+# ─── P5 controlled-terrain helpers (frontier chaining + mid-path stop tests) ──
+
+# Full open WxH rectangle terrain (plateaus empty → walkable_set fills the whole rect).
+# Gives a large open frontier so chaining is exercised deterministically.
+static func _full_rect_terrain(w: int, h: int) -> Dictionary:
+	return { "bounds": { "w": w, "h": h }, "plateaus": [], "bridges": [], "stragglers": [] }
+
+
+# Single-row corridor terrain: one plateau whose blob cells are exactly (0..w-1, row).
+# Party can only move east/west along `row`, so the traversal path is fully predictable.
+static func _corridor_terrain(w: int, h: int, row: int) -> Dictionary:
+	var cells: Array = []
+	for c in range(w):
+		cells.append([c, row])
+	return {
+		"bounds":    { "w": w, "h": h },
+		"plateaus":  [{ "col": 0, "row": row, "w": w, "h": 1, "cells": cells }],
+		"bridges":   [],
+		"stragglers": [],
+	}
+
+
+# Inject a stage using an explicit terrain dict + situations + entry cell.
+# Mirrors _inject_terrain_stage but takes a caller-built terrain (no generation).
+static func _inject_stage_with_terrain(
+	runtime: FlowRuntime,
+	terrain: Dictionary,
+	situations: Array,
+	entry: Dictionary,
+	realm_seed: int = 42,
+	stage_idx: int = 0
+) -> void:
+	var bounds_v: Variant = terrain.get("bounds", { "w": 30, "h": 30 })
+	var bounds: Dictionary = bounds_v if bounds_v is Dictionary else { "w": 30, "h": 30 }
+	var explore_map := StageExploreModelScript.make(
+		int(bounds.get("w", 30)), int(bounds.get("h", 30)), situations)
+	explore_map["locked"]              = true
+	explore_map["party_pos"]           = entry.duplicate()
+	explore_map["terrain"]             = terrain
+	explore_map["loot_results"]        = []
+	explore_map["in_transit"]          = false
+	explore_map["target_situation_id"] = ""
+	explore_map["explored_cells"]      = {}
+
+	var stage := StageModel.make(stage_idx, StageModel.TYPE_COMBAT, realm_seed + stage_idx, [], explore_map)
+	var realm  := RealmModel.make("realm.01", "Vale of Dust", "courage", "desc", realm_seed, 1, 0, 0)
+	realm["stages"] = [stage]
+
+	runtime.flow_ctx.save_data["realms"]["realm.01"] = realm
+	runtime.flow_ctx.realm_id = "realm.01"
+	runtime.flow_ctx.stage_id = "stage.%d" % stage_idx
+	runtime.flow_ctx.last_snapshot = {
+		"type": FlowStateIds.STAGE_EXPLORE,
+		"data": {}, "actions": {}, "meta": { "t": 0 },
+	}
+
+
+# Steps taken this advance = last_traveled_path minus the pre-move cell.
+static func _steps_taken(runtime: FlowRuntime) -> int:
+	var tp_v: Variant = _read_em(runtime, "last_traveled_path")
+	var tp: Array = tp_v if tp_v is Array else []
+	return max(0, tp.size() - 1)
+
+
 # ─── Registration ────────────────────────────────────────────────────────────
 
 static func register(runner: CoreTestRunner) -> void:
@@ -293,6 +357,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("traversal/pass_fix_obj_reoffered_at_exhaustion",   Callable(TraversalModelTests, "_t_pass_fix_obj_reoffered_at_exhaustion"))
 	# Finding 2 fix: entry fog seeded before first snapshot
 	runner.register_test("traversal/fog_entry_seeded_before_first_snapshot", Callable(TraversalModelTests, "_t_fog_entry_seeded_before_first_snapshot"))
+	# V2-STAGE-004-P5: frontier chaining + mid-path situation stopping
+	runner.register_test("traversal/p5_chain_frontier_uses_full_budget",     Callable(TraversalModelTests, "_t_p5_chain_frontier_uses_full_budget"))
+	runner.register_test("traversal/p5_tier1_hard_stops_on_arrival",         Callable(TraversalModelTests, "_t_p5_tier1_hard_stops_on_arrival"))
+	runner.register_test("traversal/p5_mid_path_situation_parks_party",      Callable(TraversalModelTests, "_t_p5_mid_path_situation_parks_party"))
+	runner.register_test("traversal/p5_passed_situation_walked_through",     Callable(TraversalModelTests, "_t_p5_passed_situation_walked_through"))
 
 
 # ─── Test 1 — NO TELEPORT: advance_turn moves ≤ step_budget tiles ─────────────
@@ -1781,5 +1850,175 @@ static func _t_fog_entry_seeded_before_first_snapshot() -> Dictionary:
 			"ok": false,
 			"error": "sit.0 absent from first snapshot situations — fog projection missing entry-seed reveal"
 		}
+
+	return { "ok": true }
+
+
+# ─── Test P5-a — CHAIN FRONTIER USES FULL BUDGET ────────────────────────────
+# Large open map, no situations at all. With nothing to discover, every advance
+# target is a Tier-3 frontier cell. V2-STAGE-004-P5 frontier chaining should
+# keep re-targeting the nearest unexplored cell as the party arrives, so a
+# single advance_turn spends its FULL step_budget (Seek Signs = 6) instead of
+# stopping ~reveal_radius+1 tiles out, and explored_cells should grow well
+# beyond the entry-fog seed.
+static func _t_p5_chain_frontier_uses_full_budget() -> Dictionary:
+	var runtime := _make_runtime("directive.seek_signs")
+	var bounds := { "w": 40, "h": 40 }
+	var terrain := _full_rect_terrain(40, 40)
+	var walkable: Dictionary = StageTerrainScript.walkable_set(terrain)
+	var entry: Dictionary = StageTerrainScript.entry_cell(walkable, bounds)
+
+	_inject_stage_with_terrain(runtime, terrain, [], entry, 500, 0)
+
+	var ec_before_v: Variant = _read_em(runtime, "explored_cells")
+	var ec_before_count := (ec_before_v as Dictionary).size() if ec_before_v is Dictionary else 0
+
+	runtime.dispatch({ "type": "stage.advance_turn" })
+
+	var step_budget := int(runtime.directive_service.get_active_directive().get("step_budget", 6))
+	var steps := _steps_taken(runtime)
+
+	if steps != step_budget:
+		return {
+			"ok": false,
+			"error": "Expected chained frontier advance to spend the full step_budget (%d), got %d steps" % [step_budget, steps]
+		}
+
+	var ec_after_v: Variant = _read_em(runtime, "explored_cells")
+	var ec_after: Dictionary = ec_after_v if ec_after_v is Dictionary else {}
+	if ec_after.size() <= ec_before_count:
+		return {
+			"ok": false,
+			"error": "explored_cells did not grow across the chained-frontier advance (before=%d, after=%d)" % [ec_before_count, ec_after.size()]
+		}
+
+	return { "ok": true }
+
+
+# ─── Test P5-b — TIER-1 TARGET STILL HARD-STOPS ON ARRIVAL ─────────────────
+# A discovered (revealed), unresolved OBJECTIVE situation sits closer than the
+# directive's step_budget. Tier-1 targets are NOT frontier — arrival must hard
+# stop the advance (queue the engagement popup) even though budget remains.
+static func _t_p5_tier1_hard_stops_on_arrival() -> Dictionary:
+	var runtime := _make_runtime("directive.scout_carefully")  # step_budget = 3
+	var row := 2
+	var terrain := _corridor_terrain(10, 5, row)
+	var entry := { "col": 0, "row": row }
+
+	var sit: Dictionary = SituationModelScript.make(
+		"sit.0", SituationModelScript.TYPE_COMBAT, 2, row, 700, true  # is_objective = true
+	)
+	sit["revealed"] = true  # already discovered — Tier-1 eligible
+
+	_inject_stage_with_terrain(runtime, terrain, [sit], entry, 700, 0)
+
+	runtime.dispatch({ "type": "stage.advance_turn" })
+
+	var pos := _read_pos(runtime)
+	if int(pos.get("col", -1)) != 2 or int(pos.get("row", -1)) != row:
+		return { "ok": false, "error": "Party did not arrive at Tier-1 objective — pos=%s" % [pos] }
+
+	var pending_v: Variant = _read_em(runtime, "pending_situation_id")
+	var pending := str(pending_v) if pending_v != null else ""
+	if pending != "sit.0":
+		return { "ok": false, "error": "pending_situation_id should be 'sit.0' on Tier-1 arrival, got '%s'" % pending }
+
+	var steps := _steps_taken(runtime)
+	if steps != 2:
+		return { "ok": false, "error": "Expected exactly 2 steps to reach the Tier-1 objective (hard stop, not chained), got %d" % steps }
+
+	return { "ok": true }
+
+
+# ─── Test P5-c — MID-PATH SITUATION PARKS THE PARTY ─────────────────────────
+# A revealed, unresolved, non-objective situation sits ON the path toward the
+# frontier target (not itself the chosen target — its directive-weighted score
+# is too low to win Tier 2). Walking onto its cell must stop the advance there
+# (mid-path stop), queueing the engagement popup with budget left unspent.
+static func _t_p5_mid_path_situation_parks_party() -> Dictionary:
+	var runtime := _make_runtime("directive.scout_carefully")  # step_budget = 3, reveal_radius = 3
+	var row := 2
+	var terrain := _corridor_terrain(10, 5, row)
+	var entry := { "col": 0, "row": row }
+
+	# Non-objective combat situation one step east of entry — directly on the
+	# path toward the (farther) frontier target, but its Tier-2 score
+	# (0.4 * 1/(1+1) = 0.2) is below the 1.0 commit threshold, so it is never
+	# the *chosen* target — it can only be encountered as a mid-path block.
+	var sit: Dictionary = SituationModelScript.make(
+		"sit.0", SituationModelScript.TYPE_COMBAT, 1, row, 800, false  # is_objective = false
+	)
+	sit["revealed"] = true
+
+	_inject_stage_with_terrain(runtime, terrain, [sit], entry, 800, 0)
+
+	runtime.dispatch({ "type": "stage.advance_turn" })
+
+	var pos := _read_pos(runtime)
+	if int(pos.get("col", -1)) != 1 or int(pos.get("row", -1)) != row:
+		return { "ok": false, "error": "Party should have parked on the mid-path situation cell (1,%d), got %s" % [row, pos] }
+
+	var pending_v: Variant = _read_em(runtime, "pending_situation_id")
+	var pending := str(pending_v) if pending_v != null else ""
+	if pending != "sit.0":
+		return { "ok": false, "error": "pending_situation_id should be 'sit.0' after mid-path stop, got '%s'" % pending }
+
+	var steps := _steps_taken(runtime)
+	if steps != 1:
+		return { "ok": false, "error": "Expected exactly 1 step before the mid-path stop, got %d" % steps }
+	if steps >= 3:
+		return { "ok": false, "error": "Mid-path stop should leave step_budget unspent (budget=3), got %d steps used" % steps }
+
+	return { "ok": true }
+
+
+# ─── Test P5-d — PASSED SITUATION ON PATH IS WALKED THROUGH ────────────────
+# A revealed, unresolved, but PASSED (previously ignored) non-objective
+# situation sits on the path toward the frontier target. It must NOT block
+# the advance or re-queue an engagement — the party walks straight through it.
+static func _t_p5_passed_situation_walked_through() -> Dictionary:
+	var runtime := _make_runtime("directive.scout_carefully")  # step_budget = 3, reveal_radius = 3
+	var row := 2
+	var terrain := _corridor_terrain(10, 5, row)
+	var entry := { "col": 0, "row": row }
+
+	var sit: Dictionary = SituationModelScript.make(
+		"sit.0", SituationModelScript.TYPE_COMBAT, 1, row, 900, false  # is_objective = false
+	)
+	sit["revealed"] = true
+	sit["passed"]   = true  # player already dismissed this node — never re-prompt
+
+	_inject_stage_with_terrain(runtime, terrain, [sit], entry, 900, 0)
+
+	runtime.dispatch({ "type": "stage.advance_turn" })
+
+	var pending_v: Variant = _read_em(runtime, "pending_situation_id")
+	var pending := str(pending_v) if pending_v != null else ""
+	if pending == "sit.0":
+		return { "ok": false, "error": "Passed situation re-triggered an engagement prompt — should be walked through" }
+
+	var pos := _read_pos(runtime)
+	if int(pos.get("col", -1)) <= 1:
+		return { "ok": false, "error": "Party should have walked past the passed situation's cell (col 1), stopped at col=%d" % int(pos.get("col", -1)) }
+
+	var steps := _steps_taken(runtime)
+	if steps != 3:
+		return { "ok": false, "error": "Expected full step_budget (3) to be spent walking past the passed node, got %d steps" % steps }
+
+	# The passed situation itself must remain unresolved and still marked passed —
+	# walking through it must not silently resolve or un-pass it.
+	var sits_v: Variant = _read_em(runtime, "situations")
+	var sits: Array = sits_v if sits_v is Array else []
+	var found_passed := false
+	for s_v in sits:
+		var s: Dictionary = s_v if s_v is Dictionary else {}
+		if str(s.get("id", "")) == "sit.0":
+			found_passed = true
+			if bool(s.get("resolved", false)):
+				return { "ok": false, "error": "Passed situation should remain unresolved after being walked through" }
+			if not bool(s.get("passed", false)):
+				return { "ok": false, "error": "Passed situation should still be marked passed after being walked through" }
+	if not found_passed:
+		return { "ok": false, "error": "sit.0 missing from explore_map.situations after advance" }
 
 	return { "ok": true }

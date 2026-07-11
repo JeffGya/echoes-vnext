@@ -25,6 +25,10 @@
 | 16 | guide-spirit-pursue-gen-pools | GUIDE_SPIRIT and PURSUE both join stage-generation objective pools | 2026-07-04 |
 | 17 | guide-spirit-skittish-protect | Spirit flees when threatened and unescorted, unlike static PROTECT totem | 2026-07-04 |
 | 18 | guide-spirit-long-board | GUIDE_SPIRIT reuses PURSUE's board-override mechanism with a longer multiplier | 2026-07-04 |
+| 19 | p5-travel-beat-all-layers | Phase 5 ships all four explore-travel-beat layers: progress bar, proximity flash, echo barks, Anansi snippets | 2026-07-06 |
+| 20 | p5-hud-component-upgrades | Phase 5 upgrades directive text and combat objective text to authored DirectiveBadge + ObjectiveBanner components | 2026-07-06 |
+| 21 | p5-choice-ui-engagement-popup | Obstacle/structure choice branches are picked on the arrival/engagement popup, not a dedicated overlay | 2026-07-06 |
+| 22 | p5-polish-and-phase-order | Ghost footprint, combat-entry beat, and accessibility pass all ship in P5; Phase 4 comes after and closes the story | 2026-07-06 |
 
 ---
 
@@ -189,5 +193,41 @@
 **A:** Long board for BOTH variants via the PURSUE override mechanism but longer — `data.combat.board.guide_spirit_override.long_multiplier: 5.0` (PURSUE is 4.0), one dimension randomised wide-or-tall per encounter seed, applied post-clamp.
 **Source:** Jeff, 2026-07-04
 **Date:** 2026-07-04
+
+---
+
+### 19. p5-travel-beat-all-layers
+
+**Q:** How much of the four-layer explore travel beat ships in Phase 5?
+**A:** All four — StepProgressBar (kente segments + text fraction), proximity-reveal flash on markers, echo travel barks (wire ShoutBank's existing journey.json context into a new `travel_bark` snapshot field), and Anansi travel snippets (new `data/stages/anansi_travel_snippets.json` + `travel_snippet` field, loader mirrors `_load_spirit_barks`). Max one bark + one snippet per Advance, deterministic variation-key selection.
+**Source:** Jeff, 2026-07-06
+**Date:** 2026-07-06
+
+---
+
+### 20. p5-hud-component-upgrades
+
+**Q:** Upgrade the plain directive text and combat objective text to authored components?
+**A:** Yes, both — DirectiveBadge (.tscn glyph + left-edge tint: Mist Blue Scout / Akan Gold Seek, fed by a new composite `directive {id, label}` snapshot field) and ObjectiveBanner (compact ~85% opacity panel, ≤48dp, per-mode layouts for all SEVEN modes incl. GUIDE_SPIRIT; banner shows the instruction, the EchoBar spirit slot keeps health/progress — no duplication).
+**Source:** Jeff, 2026-07-06
+**Date:** 2026-07-06
+
+---
+
+### 21. p5-choice-ui-engagement-popup
+
+**Q:** Where does the player pick obstacle/structure choice branches?
+**A:** On the arrival/engagement popup — the two authored choice CTAs replace plain Engage for those types, dispatch `stage.resolve_situation_choice`, and the outcome flows through the normal ResolveScreen overlay. Supersedes §H's dedicated overlay panels (already superseded by the P1 unified resolve surface). Requires `situation_pending.choices[]` in the snapshot.
+**Source:** Jeff, 2026-07-06
+**Date:** 2026-07-06
+
+---
+
+### 22. p5-polish-and-phase-order
+
+**Q:** Do the ghost footprint, combat-entry beat, and accessibility pass ship in P5, and where does Phase 4 sit?
+**A:** All three ship (party ghost-footprint trace, 200ms explore→combat transition beat, accessibility verification: 48dp targets, text alongside color, shape-not-color, ≥4.5:1 contrast). Phase order: P5 ships FIRST; Phase 4 (conversation-combat seams) comes AFTER and closes V2-STAGE-004.
+**Source:** Jeff, 2026-07-06
+**Date:** 2026-07-06
 
 ---
