@@ -1,7 +1,11 @@
 # res://ui/screens/venture/PartyTokenLayer.gd
 # Single-token Node2D drawn via _draw() with smooth lerp animation.
 # Visual style and animation pattern match CombatTokenLayer / CombatTokenPresentationState.
-# Must be a child of the Board TileMapLayer so its draw coordinates are in board-local space.
+#
+# The party token is screen-locked at viewport centre during explore: the board scrolls
+# beneath it (camera-follow), so this layer sits at scene root and draws in screen space.
+# The traveled-path trail is NOT drawn here — ghosts must ride WITH the board, so they live
+# in GhostFootprintLayer (a child of the Board). See GhostFootprintLayer.gd.
 
 extends Node2D
 

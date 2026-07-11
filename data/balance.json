@@ -2828,6 +2828,14 @@
 			"party_return_fear_threshold": 60,
 			"cautious_advance_fear_threshold": 50,
 
+			"_anansi_snippet_events_note": "V2-STAGE-004 P5 (playtest): Anansi travel snippets are event-driven, not cadence-based. Each key toggles whether Anansi may whisper at that narrative moment (deterministic line pick still applies). Set false to silence that moment.",
+			"anansi_snippet_events": {
+				"stage_first_entry":   true,
+				"objective_revealed":  true,
+				"objectives_complete": true,
+				"return_home_failed":  true
+			},
+
 			"situation_emotion_effects": {
 				"loot":      { "fear_delta": -5, "morale_delta":  0 },
 				"npc":       { "fear_delta":  0, "morale_delta":  8 },

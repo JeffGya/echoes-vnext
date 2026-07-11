@@ -4,6 +4,10 @@
 [ext_resource type="Texture2D" uid="uid://bitpbc4p75ue7" path="res://assets/sanctum/tiles/floor/sanctum_tile_floor_clay_base_128x96.png" id="2_tile"]
 [ext_resource type="Script" uid="uid://dc3crtsdxar0j" path="res://ui/screens/venture/PartyTokenLayer.gd" id="3_ptl"]
 [ext_resource type="PackedScene" uid="uid://bx8mqfn7s2vp4" path="res://ui/screens/venture/DirectiveSelectOverlay.tscn" id="4_directive_overlay"]
+[ext_resource type="Script" path="res://ui/screens/venture/StepProgressBar.gd" id="5_stepbar"]
+[ext_resource type="Script" path="res://ui/screens/venture/DirectiveBadge.gd" id="6_dirbadge"]
+[ext_resource type="PackedScene" uid="uid://voice001_bark_popup_layer" path="res://ui/screens/combat/BarkPopupLayer.tscn" id="7_barklayer"]
+[ext_resource type="Script" uid="uid://culh5bvr1nyo7" path="res://ui/screens/venture/GhostFootprintLayer.gd" id="8_ghostlayer"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_explore"]
 texture = ExtResource("2_tile")
@@ -103,6 +107,17 @@ corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_dir_badge"]
+content_margin_left = 4.0
+content_margin_top = 6.0
+content_margin_right = 12.0
+content_margin_bottom = 6.0
+bg_color = Color(0.04, 0.04, 0.08, 0.85)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_npc_zone"]
 content_margin_left = 12.0
 content_margin_top = 10.0
@@ -126,6 +141,10 @@ script = ExtResource("1_script")
 [node name="Board" type="TileMapLayer" parent="." unique_id=2125377735]
 y_sort_enabled = true
 tile_set = SubResource("TileSet_explore")
+
+[node name="GhostFootprintLayer" type="Node2D" parent="Board" unique_id=2125377740]
+unique_name_in_owner = true
+script = ExtResource("8_ghostlayer")
 
 [node name="FogLayer" type="TileMapLayer" parent="." unique_id=2125377736]
 y_sort_enabled = true
@@ -293,6 +312,116 @@ size_flags_horizontal = 3
 theme_type_variation = &"ButtonPrimary"
 text = "Begin"
 
+[node name="StepBudgetRow" type="HBoxContainer" parent="." unique_id=5100000001]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -120.0
+offset_right = -16.0
+offset_bottom = -88.0
+grow_horizontal = 2
+grow_vertical = 0
+alignment = 1
+theme_override_constants/separation = 12
+
+[node name="StepsLabel" type="Label" parent="StepBudgetRow" unique_id=5100000004]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.784, 0.663, 0.431, 1.0)
+text = "Steps"
+vertical_alignment = 1
+
+[node name="StepProgressBar" type="Control" parent="StepBudgetRow" unique_id=5100000002]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("5_stepbar")
+
+[node name="StepFractionLabel" type="Label" parent="StepBudgetRow" unique_id=5100000003]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.784, 0.663, 0.431, 1.0)
+text = "0/0"
+vertical_alignment = 1
+
+[node name="DirectiveBadge" type="PanelContainer" parent="." unique_id=5100000010]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -220.0
+offset_top = 64.0
+offset_right = -16.0
+offset_bottom = 100.0
+grow_horizontal = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_dir_badge")
+script = ExtResource("6_dirbadge")
+
+[node name="DirectiveBadgeRow" type="HBoxContainer" parent="DirectiveBadge" unique_id=5100000011]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="DirectiveTintBar" type="ColorRect" parent="DirectiveBadge/DirectiveBadgeRow" unique_id=5100000012]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(4, 0)
+layout_mode = 2
+color = Color(0.45, 0.45, 0.52, 1)
+
+[node name="DirectiveGlyphLabel" type="Label" parent="DirectiveBadge/DirectiveBadgeRow" unique_id=5100000013]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.784, 0.663, 0.431, 1.0)
+text = "◈"
+vertical_alignment = 1
+
+[node name="DirectiveTextLabel" type="Label" parent="DirectiveBadge/DirectiveBadgeRow" unique_id=5100000014]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.816, 0.753, 0.627, 1.0)
+text = "Directive"
+vertical_alignment = 1
+
+[node name="TravelSnippetLabel" type="Label" parent="." unique_id=5100000020]
+unique_name_in_owner = true
+visible = false
+modulate = Color(1, 1, 1, 0)
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -240.0
+offset_top = 140.0
+offset_right = 240.0
+offset_bottom = 200.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.9607843, 0.94509804, 0.90588236, 1.0)
+theme_override_colors/font_outline_color = Color(0.05, 0.05, 0.08, 0.92)
+theme_override_constants/outline_size = 4
+text = ""
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+
+[node name="BarkPopupLayer" parent="." instance=ExtResource("7_barklayer") unique_id=5100000030]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
 [node name="SituationOverlay" type="PanelContainer" parent="." unique_id=1517669964]
 visible = false
 layout_mode = 1
@@ -360,6 +489,30 @@ layout_mode = 2
 size_flags_horizontal = 4
 theme_type_variation = &"ButtonPrimary"
 text = "Continue"
+
+[node name="ChoiceButtonsContainer" type="VBoxContainer" parent="SituationOverlay/OverlayContent" unique_id=5100000040]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ChoiceButton0" type="Button" parent="SituationOverlay/OverlayContent/ChoiceButtonsContainer" unique_id=5100000041]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(200, 48)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_type_variation = &"ButtonPrimary"
+text = "Choice A"
+
+[node name="ChoiceButton1" type="Button" parent="SituationOverlay/OverlayContent/ChoiceButtonsContainer" unique_id=5100000042]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(200, 48)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_type_variation = &"ButtonPrimary"
+text = "Choice B"
 
 [node name="IgnoreButton" type="Button" parent="SituationOverlay/OverlayContent" unique_id=1234567890]
 unique_name_in_owner = true
@@ -590,3 +743,15 @@ layout_mode = 2
 size_flags_horizontal = 4
 theme_type_variation = &"ButtonPrimary"
 text = "Continue"
+
+[node name="TransitionFlash" type="ColorRect" parent="." unique_id=5100000050]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 1)
+mouse_filter = 2

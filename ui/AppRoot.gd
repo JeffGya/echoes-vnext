@@ -382,6 +382,8 @@ func _run_tests(parts: Array) -> void:
 	# V2-STAGE-004 Phase 3 — per-mode win/lose (RECOVER / PROTECT / ENDURE)
 	ObjectiveCombatTests.register(runner)    # V2-STAGE-004-P3: objective win/lose conditions
 	CombatRoundtripIntegrationTests.register(runner)  # V2-STAGE-004-P3: real combat round loop on irregular terrain (id-keyed wiring)
+	# V2-STAGE-004 Phase 5
+	StageExploreP5Tests.register(runner)     # V2-STAGE-004-P5: directive composite, party_preview emotional_status, situation_pending.choices, travel-beat
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [

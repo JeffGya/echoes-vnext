@@ -5612,7 +5612,13 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 	var is_frontier := bool(target.get("is_frontier", false))
 	var target_sit_id := str(target.get("id", ""))
 
-	# V2-STAGE-004-P2: partial-move toward target up to step_budget steps
+	# V2-STAGE-004-P2: partial-move toward target up to step_budget steps.
+	# V2-STAGE-004-P5 (frontier chaining): for FRONTIER targets only, when the party
+	# arrives at the current frontier cell with budget remaining, recompute the next
+	# nearest unexplored cell against the NOW-updated explored set, rebuild the dist
+	# field, and keep stepping. This lets an advance spend its full step_budget instead
+	# of stopping ~reveal_radius+1 tiles out. Fog is lifted PER STEP (below) so the
+	# recompute sees freshly explored cells. Tier-1/2 targets keep hard-stop-on-arrival.
 	var dist_field: Dictionary = {}
 	if not walkable.is_empty():
 		dist_field = StageTerrainScript.bfs_distance_field(target_pos, walkable)
@@ -5621,6 +5627,12 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 	var _pre_move_v: Variant = explore_map.get("party_pos", { "col": 0, "row": 0 })
 	var _pre_move: Dictionary = _pre_move_v if _pre_move_v is Dictionary else { "col": 0, "row": 0 }
 
+	# V2-STAGE-004 Phase 2.5 / P5: ALWAYS-ON fog lift, now applied PER STEP inside the
+	# loop (replaces the old post-loop batch). Lift the starting cell first so the
+	# zero-step case still reveals the entry vicinity (idempotent when already explored).
+	# Both directives lift fog; reveal_radius is the lever (Scout wide, Seek narrow).
+	_lift_fog_at_cell(_pre_move, reveal_radius, walkable, explored_cells)
+
 	var stepped: Array = []
 	var steps := 0
 	while steps < step_budget:
@@ -5628,7 +5640,23 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 		var here: Dictionary = here_v if here_v is Dictionary else { "col": 0, "row": 0 }
 		if int(here.get("col", 0)) == int(target_pos.get("col", 0)) \
 				and int(here.get("row", 0)) == int(target_pos.get("row", 0)):
-			break
+			# Arrived at the current target cell.
+			if is_frontier:
+				# FRONTIER CHAINING: pick the next nearest unexplored cell against the
+				# updated explored set and keep going. Break when the whole reachable
+				# map is explored (nearest_unexplored returns the current cell).
+				var next_frontier := StageTerrainScript.nearest_unexplored(here, walkable, explored_cells)
+				if int(next_frontier.get("col", 0)) == int(here.get("col", 0)) \
+						and int(next_frontier.get("row", 0)) == int(here.get("row", 0)):
+					break
+				target_pos = next_frontier
+				if walkable.is_empty():
+					dist_field = {}
+				else:
+					dist_field = StageTerrainScript.bfs_distance_field(target_pos, walkable)
+			else:
+				# Tier-1/2 discovered situation/objective: hard stop on arrival (unchanged).
+				break
 		var nxt: Dictionary
 		if dist_field.is_empty():
 			# Corruption-safety only: _explore_walkable always returns a populated set
@@ -5644,6 +5672,16 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 		explore_map["party_pos"] = nxt
 		stepped.append(nxt)
 		steps += 1
+		# Lift fog around every newly entered cell (per-step so frontier chaining's
+		# nearest_unexplored recompute above sees the updated explored set).
+		_lift_fog_at_cell(nxt, reveal_radius, walkable, explored_cells)
+		# V2-STAGE-004-P5 (mid-path stop): walking the party ONTO an unresolved, un-passed
+		# situation (revealed OR hidden — reveal-on-arrival) ends the advance there so the
+		# normal engagement popup fires. Passed nodes are walked through (no prompt) unless
+		# this is exactly the node deliberately re-targeted via Tier-4 (target_sit_id match).
+		# The post-loop reveal sweep + arrival check set pending_situation_id.
+		if _situation_blocks_step(explore_map, nxt, target_sit_id):
+			break
 
 	# V2-STAGE-004-P2: stash full path walked this turn for UI chained-tween animation.
 	# Shape: Array of { col, row } — pre-advance cell followed by each stepped cell.
@@ -5660,29 +5698,39 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 	var party_pos_v: Variant = explore_map.get("party_pos", { "col": 0, "row": 0 })
 	var party_pos: Dictionary = party_pos_v if party_pos_v is Dictionary else { "col": 0, "row": 0 }
 
-	# V2-STAGE-004 Phase 2.5: ALWAYS-ON fog lift for every stepped cell.
-	# Both directives lift fog; reveal_radius is the lever (Scout wide, Seek narrow).
-	# Run BEFORE arrival check so the cell we land on is always in explored_cells.
-	var _all_stepped_cells: Array = [party_pos]  # final party cell always included
-	for _fstep in stepped:
-		var _fstep_d: Dictionary = _fstep if _fstep is Dictionary else {}
-		_all_stepped_cells.append(_fstep_d)
-
-	for _step_cell_v in _all_stepped_cells:
-		var _step_cell: Dictionary = _step_cell_v if _step_cell_v is Dictionary else {}
-		# Lift fog: add every walkable cell within reveal_radius of this stepped cell.
-		var _fog_cells := StageTerrainScript.cells_within_radius(_step_cell, reveal_radius, walkable)
-		for _fc_v in _fog_cells:
-			var _fc: Dictionary = _fc_v if _fc_v is Dictionary else {}
-			explored_cells["%d,%d" % [int(_fc.get("col", 0)), int(_fc.get("row", 0))]] = true
-
+	# V2-STAGE-004 Phase 2.5 / P5: fog was lifted PER STEP during the movement loop above
+	# (ALWAYS-ON for both directives; reveal_radius is the lever). explored_cells is mutated
+	# in place; persist it back so the discovery sweep below and the snapshot see every
+	# newly explored cell (including all chained-frontier cells).
 	explore_map["explored_cells"] = explored_cells
+
+	# V2-STAGE-004 P5 (playtest fix): capture which OBJECTIVE situations were already revealed
+	# BEFORE the discovery sweep, so we can detect a newly-revealed objective this advance and
+	# fire Anansi's "objective_revealed" snippet at that narrative moment (event b).
+	var _pre_reveal_obj_ids: Dictionary = {}
+	var _pre_sits_v: Variant = explore_map.get("situations", [])
+	var _pre_sits: Array = _pre_sits_v if _pre_sits_v is Array else []
+	for _prs_v in _pre_sits:
+		var _prs: Dictionary = _prs_v if _prs_v is Dictionary else {}
+		if bool(_prs.get("is_objective", false)) and bool(_prs.get("revealed", false)):
+			_pre_reveal_obj_ids[str(_prs.get("id", ""))] = true
 
 	# Tile-based discovery sweep: reveal every unresolved situation whose cell is now in
 	# explored_cells. This is a superset of the old radius check — any situation whose tile
 	# was fog-lifted during movement (within reveal_radius of any stepped cell) is guaranteed
 	# revealed. Invariant: tile in explored_cells ⟺ situation on it is revealed.
 	FlowStageExploreStateScript._reveal_explored_situations_static(explore_map, explored_cells, _adv_precise_bias, _adv_realm_seed, flow_ctx.stage_id, logger, t)
+
+	# Detect a newly-revealed objective (was hidden before the sweep, revealed after).
+	var _objective_revealed := false
+	var _post_sits_v: Variant = explore_map.get("situations", [])
+	var _post_sits: Array = _post_sits_v if _post_sits_v is Array else []
+	for _pos_v in _post_sits:
+		var _pos: Dictionary = _pos_v if _pos_v is Dictionary else {}
+		if bool(_pos.get("is_objective", false)) and bool(_pos.get("revealed", false)) \
+				and not _pre_reveal_obj_ids.has(str(_pos.get("id", ""))):
+			_objective_revealed = true
+			break
 
 	# V2-STAGE-004 Phase 2.5: arrival/engage check — check whether the final party cell
 	# holds a discovered, unresolved, non-frontier situation (includes situations discovered
@@ -5738,6 +5786,21 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 		# IN-TRANSIT toward frontier or mid-way to a real situation; no engagement popup.
 		explore_map["in_transit"]          = true
 		explore_map["target_situation_id"] = target_sit_id if not is_frontier else ""
+
+	# V2-STAGE-004 Phase 5: travel-beat selection (bark or Anansi snippet).
+	# Fires only when the party actually travelled this turn (stepped ≥1 tile).
+	# Transient — same lifecycle as last_traveled_path: overwritten every advance,
+	# cleared on session reset (not carried forward by _reset_session_state's rebuild).
+	explore_map["travel_bark"]    = {}
+	explore_map["travel_snippet"] = ""
+	if not stepped.is_empty():
+		_select_travel_beat(explore_map, t, logger)
+
+	# V2-STAGE-004 P5 (playtest fix): Anansi event (b) — an objective situation was revealed
+	# during this advance. Fires a snippet at that moment (overwrites the empty travel_snippet;
+	# gated by data.stages.anansi_snippet_events). Independent of the echo-bark cadence above.
+	if _objective_revealed:
+		_fire_anansi_snippet(explore_map, "objective_revealed", t)
 
 	stage["explore_map"] = explore_map
 	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
@@ -5827,6 +5890,10 @@ func _handle_stage_return_home(_action: Dictionary, t: int) -> void:
 		flow_machine.transition(FlowStateIds.RESOLVE, flow_ctx, logger, t, "stage.return_home.scout_return")
 	else:
 		# Escape failed — show overlay. Full consequence mechanic deferred to V2-INTEL-002.
+		# V2-STAGE-004 P5 (playtest fix): Anansi event (d) — a failed return-home escape roll is
+		# a genuine narrative beat. Clear any stale snippet first, then fire (gated by config).
+		explore_map["travel_snippet"] = ""
+		_fire_anansi_snippet(explore_map, "return_home_failed", t)
 		stage["explore_map"] = explore_map
 		FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
 		var snap_fail := FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
@@ -7145,6 +7212,79 @@ func _fire_spirit_bark(spirit: Dictionary, context: String, t: int) -> void:
 	})
 
 
+# ── V2-STAGE-004 Phase 5: travel-beat selection ───────────────────────────────
+#
+# Fires once per advance-turn, only when the party actually travelled this turn
+# (caller gates on `stepped` being non-empty). Selects a party-echo journey bark
+# (ShoutBank) on odd ticks — the echo-bark cadence is unchanged.
+#
+# V2-STAGE-004 P5 (playtest fix): Anansi narrator snippets are NO LONGER part of the
+# travel cadence. Anansi is not a constant narrator; his snippets are now event-driven
+# (first entry / objective revealed / objectives complete / return-home failed) and are
+# fired at those moments via FlowStageExploreState.fire_anansi_snippet — see the call
+# sites in _handle_stage_advance_turn, _handle_stage_return_home, and the state's enter().
+# Mutates explore_map in place: writes "travel_bark" ({actor_name,line} or {}). Transient
+# — same lifecycle as last_traveled_path (overwritten every advance, wiped on session reset).
+func _select_travel_beat(explore_map: Dictionary, t: int, logger_ref: StructuredLogger) -> void:
+	# Echo travel barks keep the existing odd-t gate (cadence unchanged).
+	if t % 2 != 0:
+		_select_travel_bark(explore_map, t, logger_ref)
+
+
+# Picks one living party echo deterministically, then selects a ShoutBank
+# "journey.travel" line using that echo's archetype/expression-band/calling —
+# same call convention as _select_sanctum_bark_for_echo_data_and_write.
+func _select_travel_bark(explore_map: Dictionary, t: int, logger_ref: StructuredLogger) -> void:
+	var party_echoes := _get_active_party_echoes()
+	if party_echoes.is_empty():
+		return
+	var idx: int = posmod(t + str(flow_ctx.stage_id).hash(), party_echoes.size())
+	var echo: Dictionary = party_echoes[idx] if party_echoes[idx] is Dictionary else {}
+	if echo.is_empty():
+		return
+	var arch    := str(echo.get("archetype_birth", "loyal"))
+	var calling := str(echo.get("calling_origin", ""))
+	var band    := _get_expression_band_for_echo(echo)
+	var vk: int = posmod(t + str(echo.get("id", "")).hash(), 997)
+	var line := ShoutBank.get_expression_shout("journey.travel", arch, band, calling, vk)
+	# Fallback contract: ShoutBank.get_expression_shout always returns a non-empty
+	# line (>= _FALLBACK "I'll do my part."), so no empty-line guard is needed here.
+	explore_map["travel_bark"] = {
+		"actor_name": str(echo.get("name", "")),
+		"line":       line,
+	}
+	if logger_ref != null:
+		logger_ref.debug(t, "stage.travel_beat", "Travel bark fired", {
+			"layer":     "bark",
+			"actor_id":  str(echo.get("id", "")),
+			"stage_id":  str(flow_ctx.stage_id),
+		})
+
+
+# V2-STAGE-004 P5 (playtest fix): event-driven Anansi snippet firing.
+# Thin instance wrapper over the shared static selector in FlowStageExploreState — reads
+# the enabled-events config once, then delegates. Called at the narrative moments where
+# the event is already computed (objective revealed, return-home failed).
+func _fire_anansi_snippet(explore_map: Dictionary, event_key: String, t: int) -> void:
+	FlowStageExploreStateScript.fire_anansi_snippet(
+		explore_map, event_key, _anansi_snippet_events_cfg(), t, logger, flow_ctx.stage_id
+	)
+
+
+# Reads data.stages.anansi_snippet_events from balance config (defensive: {} when absent).
+func _anansi_snippet_events_cfg() -> Dictionary:
+	if config_service == null:
+		return {}
+	var bal_v: Variant = config_service.get_balance()
+	var bal: Dictionary = bal_v if bal_v is Dictionary else {}
+	var bd_v: Variant = bal.get("data", {})
+	var bd: Dictionary = bd_v if bd_v is Dictionary else {}
+	var sc_v: Variant = bd.get("stages", {})
+	var sc: Dictionary = sc_v if sc_v is Dictionary else {}
+	var ev_v: Variant = sc.get("anansi_snippet_events", {})
+	return ev_v if ev_v is Dictionary else {}
+
+
 # Returns Array of echo dicts for all active party members.
 func _get_active_party_echoes() -> Array:
 	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
@@ -7376,6 +7516,40 @@ func _find_target_situation(explore_map: Dictionary, directive: Dictionary, walk
 		return best_d0_sit
 
 	return {}
+
+
+# V2-STAGE-004-P5: Lift fog around a single cell — add every walkable cell within
+# `radius` (Chebyshev) of `cell` to `explored_cells` (mutated in place). Pure/deterministic.
+# Called per movement step so frontier chaining's nearest_unexplored recompute sees the
+# freshly explored cells. Same rule as the former post-loop batch (union of per-cell lifts).
+func _lift_fog_at_cell(cell: Dictionary, radius: int, walkable: Dictionary, explored_cells: Dictionary) -> void:
+	var fog_cells := StageTerrainScript.cells_within_radius(cell, radius, walkable)
+	for fc_v in fog_cells:
+		var fc: Dictionary = fc_v if fc_v is Dictionary else {}
+		explored_cells["%d,%d" % [int(fc.get("col", 0)), int(fc.get("row", 0))]] = true
+
+
+# V2-STAGE-004-P5: mid-path stop predicate. Returns true when `cell` holds a situation the
+# party must engage on contact — unresolved and (not passed, OR the deliberately re-targeted
+# Tier-4 objective whose id == target_sit_id). Does NOT require revealed: stepping onto a
+# hidden situation reveals it (reveal-on-arrival), mirroring the arrival-at-target path.
+# Passed non-target nodes return false (walked through, no re-prompt) — preserving the
+# stage.ignore_situation invariant that a passed node never re-prompts.
+func _situation_blocks_step(explore_map: Dictionary, cell: Dictionary, target_sit_id: String) -> bool:
+	var sits_v: Variant = explore_map.get("situations", [])
+	var sits: Array = sits_v if sits_v is Array else []
+	var cell_key: String = "%d,%d" % [int(cell.get("col", 0)), int(cell.get("row", 0))]
+	for s_v in sits:
+		var s: Dictionary = s_v if s_v is Dictionary else {}
+		if bool(s.get("resolved", false)):
+			continue
+		if bool(s.get("passed", false)) and str(s.get("id", "")) != target_sit_id:
+			continue
+		var pos_v: Variant = s.get("pos", { "col": 0, "row": 0 })
+		var pos: Dictionary = pos_v if pos_v is Dictionary else { "col": 0, "row": 0 }
+		if ("%d,%d" % [int(pos.get("col", 0)), int(pos.get("row", 0))]) == cell_key:
+			return true
+	return false
 
 
 # V2-STAGE-004 Phase 2.5: Four-tier fog-of-war target selection.

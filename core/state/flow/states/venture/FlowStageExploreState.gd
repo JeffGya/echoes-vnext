@@ -31,6 +31,11 @@ func _init(id: String = FlowStateIds.STAGE_EXPLORE) -> void:
 func enter(ctx: RefCounted, t: int) -> void:
 	var flow_ctx := ctx as FlowContext
 
+	# V2-STAGE-004 P5 (playtest fix): capture whether this stage was already locked BEFORE
+	# _lock_map_if_needed flips it. A false→true flip means this is the FIRST entry — the
+	# narrative moment for Anansi's stage-entry whisper (event "stage_first_entry").
+	var was_locked := _stage_was_locked(flow_ctx)
+
 	# Lock the map on first entry so the layout persists across revisits.
 	_lock_map_if_needed(flow_ctx, t)
 
@@ -38,6 +43,11 @@ func enter(ctx: RefCounted, t: int) -> void:
 	# Map layout (situation positions, revealed flags) is preserved.
 	# Position and pending engagement are NOT — the party always starts fresh.
 	_reset_session_state(flow_ctx, t)
+
+	# V2-STAGE-004 P5 (playtest fix): event-driven Anansi snippet on entry.
+	# Runs AFTER _reset_session_state (which rebuilds explore_map with a clean travel_snippet)
+	# and BEFORE build_snapshot so the whisper is present on the entry snapshot.
+	_fire_entry_anansi_snippets(flow_ctx, was_locked, t)
 
 	flow_ctx.last_snapshot = build_snapshot(flow_ctx, t)
 
@@ -104,6 +114,9 @@ static func _reset_session_state(flow_ctx: FlowContext, t: int) -> void:
 		"terrain":             terrain, # V2-STAGE-004-P2: permanent geometry, never cleared on reset
 		"last_traveled_path":  [],   # V2-STAGE-004-P2: presentation-only path for UI chained tween; cleared on session reset
 		"explored_cells":      explored_cells, # V2-STAGE-004 Phase 2.5: durable fog-of-war set; NOT a transient
+		# V2-STAGE-004 P5 (playtest fix): one-shot guard so the "all objectives complete" Anansi
+		# whisper fires at most once per run, even across return_home→re-entry. Durable like locked.
+		"anansi_complete_fired": bool(explore_map.get("anansi_complete_fired", false)),
 	}
 
 	stage["explore_map"] = explore_map
@@ -391,12 +404,20 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			match sit_quality:
 				"precise": enemy_estimate = "You make out %d figures." % (int(pending_sit.get("seed", 0)) % 5 + 1)
 				"rough":   enemy_estimate = "Hard to tell — could be a few, could be several."
+		# V2-STAGE-004 Phase 5: authored choice list for obstacle/structure situations.
+		# Empty for all other types — only these two route to the "choice" panel_kind
+		# (see SituationResolutionService + data.stages.situation_resolution config).
+		var pend_type := str(pending_sit.get("type", ""))
+		var pend_choices: Array = []
+		if pend_revealed and (pend_type == SituationModelScript.TYPE_OBSTACLE or pend_type == SituationModelScript.TYPE_STRUCTURE):
+			pend_choices = _build_situation_choices(flow_ctx, pend_type)
 		situation_pending = {
 			"situation_id":   pending_sit_id,
 			"revealed":       pend_revealed,
 			"type":           str(pending_sit.get("type", "unknown")) if pend_revealed else "hidden",
 			"is_objective":   bool(pending_sit.get("is_objective", false)) if pend_revealed else false,
 			"intel_clues":    sit_clues,
+			"choices":        pend_choices,
 			"intel_quality":  sit_quality,
 			"enemy_estimate": enemy_estimate,
 		}
@@ -416,10 +437,18 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		for echo_v in roster:
 			var echo: Dictionary = echo_v if echo_v is Dictionary else {}
 			if str(echo.get("id", "")) == echo_id:
+				# V2-STAGE-004 Phase 5: mirror the contact-bids emotional_status derivation
+				# (see contact_echo_bids above) -- defaults to "grounded" defensively.
+				var pp_emo_v: Variant = echo.get("emotion", {})
+				var pp_emo: Dictionary = pp_emo_v if pp_emo_v is Dictionary else {}
+				var pp_fear   := int(pp_emo.get("fear_current",   0))
+				var pp_morale := int(pp_emo.get("morale_current", 50))
+				var pp_emotional_status := EmotionServiceScript.get_emotional_status(pp_morale, pp_fear)
 				party_preview.append({
-					"name":           str(echo.get("name", "")),
-					"rank":           int(echo.get("rank", 1)),
-					"calling_origin": str(echo.get("calling_origin", "")),
+					"name":             str(echo.get("name", "")),
+					"rank":             int(echo.get("rank", 1)),
+					"calling_origin":   str(echo.get("calling_origin", "")),
+					"emotional_status": pp_emotional_status,
 				})
 				break
 
@@ -551,6 +580,14 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		_dir_snap = _de_v if _de_v is Dictionary else {}
 	var _step_budget_snap := int(_dir_snap.get("step_budget", 3))
 
+	# V2-STAGE-004 Phase 5: composite directive field — bundles the active directive's
+	# id + label so the UI does not need to separately resolve config to show it.
+	# All existing individual directive-derived fields (step_budget etc.) are unchanged.
+	var _directive_snap: Dictionary = {
+		"id":    _dir_id_snap,
+		"label": str(_dir_snap.get("label", "")),
+	}
+
 	# steps_to_target: BFS distance from party to the in-transit target situation.
 	var _steps_to_target := 0
 	var _target_sit_id_snap := str(explore_map.get("target_situation_id", ""))
@@ -595,6 +632,8 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"contact_pending":         contact_pending,
 			"contact_responses":       contact_responses_out,
 			"contact_echo_bids":       contact_echo_bids,
+			# V2-STAGE-004 Phase 5: composite directive (id + label) for UI display.
+			"directive":               _directive_snap,
 			# V2-STAGE-004-P2 traversal fields
 			"step_budget":             _step_budget_snap,
 			"steps_to_target":         _steps_to_target,
@@ -608,6 +647,12 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			# Three tile states: void (not walkable) = no tile; walkable + in explored_cells = normal;
 			# walkable + NOT in explored_cells = fog tile. Drives both overview and in-exploration views.
 			"explored_cells":          explore_map.get("explored_cells", {}),
+			# V2-STAGE-004 Phase 5: transient travel-beat fields, stashed onto explore_map by
+			# FlowRuntime._handle_stage_advance_turn only when the party actually moved this turn.
+			# Same lifecycle as last_traveled_path: cleared by session reset, absent/empty on
+			# non-advance refreshes (contact turns, situation overlays, etc.).
+			"travel_bark":             _project_travel_bark(explore_map),
+			"travel_snippet":          str(explore_map.get("travel_snippet", "")),
 		},
 		"actions": actions,
 		"meta": { "t": t },
@@ -715,6 +760,35 @@ static func _build_objective_entries(
 			"required":    is_required,
 		})
 	return entries
+
+
+# V2-STAGE-004 Phase 5: build the {id, label} choice list for the situation_pending
+# UI popup. Reads data.stages.situation_resolution.<type>.choices from balance config —
+# same config access pattern as _build_objective_entries. Only id + label are surfaced;
+# fear/morale/turn_cost stay backend-side (consumed by SituationResolutionService.resolve_choice).
+static func _build_situation_choices(flow_ctx: FlowContext, sit_type: String) -> Array:
+	var out: Array = []
+	if flow_ctx.config_service == null:
+		return out
+	var bal_v: Variant = flow_ctx.config_service.get_balance()
+	var bal: Dictionary = bal_v if bal_v is Dictionary else {}
+	var bd_v: Variant = bal.get("data", {})
+	var bd: Dictionary = bd_v if bd_v is Dictionary else {}
+	var sc_v: Variant = bd.get("stages", {})
+	var sc: Dictionary = sc_v if sc_v is Dictionary else {}
+	var res_map_v: Variant = sc.get("situation_resolution", {})
+	var res_map: Dictionary = res_map_v if res_map_v is Dictionary else {}
+	var type_cfg_v: Variant = res_map.get(sit_type, {})
+	var type_cfg: Dictionary = type_cfg_v if type_cfg_v is Dictionary else {}
+	var choices_v: Variant = type_cfg.get("choices", [])
+	var choices: Array = choices_v if choices_v is Array else []
+	for choice_v in choices:
+		var choice: Dictionary = choice_v if choice_v is Dictionary else {}
+		out.append({
+			"id":    str(choice.get("id", "")),
+			"label": str(choice.get("label_key", "")),
+		})
+	return out
 
 
 # Build calling-action bonus action slots.
@@ -912,6 +986,24 @@ static func _project_traveled_path(explore_map: Dictionary) -> Array:
 	return out
 
 
+# ---------------------------------------------------------------------------
+# V2-STAGE-004 Phase 5: travel_bark projection helper
+# Projects explore_map["travel_bark"] into the snapshot as { actor_name, line }.
+# Returns {} when the field is missing or empty (non-advance refreshes, or an
+# advance turn where a snippet fired instead of a bark). Transient — cleared by
+# session reset, same lifecycle as last_traveled_path.
+# ---------------------------------------------------------------------------
+static func _project_travel_bark(explore_map: Dictionary) -> Dictionary:
+	var raw_v: Variant = explore_map.get("travel_bark", {})
+	var raw: Dictionary = raw_v if raw_v is Dictionary else {}
+	if raw.is_empty():
+		return {}
+	return {
+		"actor_name": str(raw.get("actor_name", "")),
+		"line":       str(raw.get("line", "")),
+	}
+
+
 static func _echo_picker_hint(bid_type: String, dominant_vector: String) -> String:
 	if bid_type == "reactive":
 		return "Speaking from fear"
@@ -1087,5 +1179,149 @@ static func _intel_clue_for_type_static(sit_type: String) -> String:
 		SituationModelScript.TYPE_RITUAL:           return "Worn ground and old ash. Hands have tended this place, again and again."
 		SituationModelScript.TYPE_STRUCTURE:        return "Walls, deliberate and standing. Someone raised this — and may yet return to it."
 		_:                                          return "Something is present here."
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# V2-STAGE-004 Phase 5 (playtest fix): event-driven Anansi travel snippets
+# ────────────────────────────────────────────────────────────────────────────
+#
+# Anansi is NOT a constant narrator. He interferes incidentally, at narrative
+# moments, and must feel impactful when he does. His snippets are therefore
+# EVENT-DRIVEN — never a cadence tied to advance parity. Four moments fire a
+# snippet (each gated by data.stages.anansi_snippet_events so Jeff can tune
+# presence without code):
+#   (a) stage_first_entry   — the party first locks/enters a stage        (here)
+#   (b) objective_revealed  — an objective situation is revealed on advance (FlowRuntime)
+#   (c) objectives_complete — all required objectives are done             (here)
+#   (d) return_home_failed  — a failed return-home escape roll             (FlowRuntime)
+#
+# The pool (data/stages/anansi_travel_snippets.json) is moment-agnostic today:
+# every event draws the shared "travel" pool. `fire_anansi_snippet` centralises
+# the deterministic line pick + event gate so both this state (a/c) and
+# FlowRuntime (b/d) share one implementation.
+
+# True when the current stage's explore_map is already locked (i.e. NOT first entry).
+static func _stage_was_locked(flow_ctx: FlowContext) -> bool:
+	var stage := _get_current_stage(flow_ctx)
+	if stage.is_empty():
+		return false
+	var m_v: Variant = stage.get("explore_map", {})
+	var m: Dictionary = m_v if m_v is Dictionary else {}
+	return bool(m.get("locked", false))
+
+
+# Fires the entry-time Anansi snippet (event a or c) onto the live explore_map.
+# Priority: "all required objectives complete" (a completed-stage re-entry) outranks
+# a plain first entry. Guarded so completion fires at most once per run.
+static func _fire_entry_anansi_snippets(flow_ctx: FlowContext, was_locked: bool, t: int) -> void:
+	var stage := _get_current_stage(flow_ctx)
+	if stage.is_empty():
+		return
+	var m_v: Variant = stage.get("explore_map", {})
+	var explore_map: Dictionary = m_v if m_v is Dictionary else {}
+	var enabled := _anansi_events_cfg(flow_ctx)
+
+	var event_key := ""
+	var mark_complete_fired := false
+	if _all_required_objectives_complete(stage, explore_map):
+		if not bool(explore_map.get("anansi_complete_fired", false)):
+			event_key = "objectives_complete"
+			mark_complete_fired = true
+	elif not was_locked:
+		event_key = "stage_first_entry"
+
+	if event_key.is_empty():
+		return
+
+	fire_anansi_snippet(explore_map, event_key, enabled, t, flow_ctx.logger, flow_ctx.stage_id)
+	if mark_complete_fired:
+		explore_map["anansi_complete_fired"] = true
+	stage["explore_map"] = explore_map
+	_write_stage_back(flow_ctx, stage)
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason.is_empty():
+		flow_ctx.save_request_reason = "stage.anansi_snippet"
+	else:
+		flow_ctx.save_request_reason += "|stage.anansi_snippet"
+
+
+# True when every REQUIRED stage objective is completed (mirrors build_snapshot's
+# objectives_remaining logic). Returns false when there are no objectives.
+static func _all_required_objectives_complete(stage: Dictionary, explore_map: Dictionary) -> bool:
+	if int(explore_map.get("objectives_total", 0)) <= 0:
+		return false
+	var objs_v: Variant = stage.get("objectives", [])
+	var objs: Array = objs_v if objs_v is Array else []
+	if objs.is_empty():
+		return false
+	for o_v in objs:
+		var o: Dictionary = o_v if o_v is Dictionary else {}
+		if bool(o.get("required", true)) and not bool(o.get("completed", false)):
+			return false
+	return true
+
+
+# Reads data.stages.anansi_snippet_events from balance config (defensive: {} when absent).
+static func _anansi_events_cfg(flow_ctx: FlowContext) -> Dictionary:
+	if flow_ctx.config_service == null:
+		return {}
+	var bal_v: Variant = flow_ctx.config_service.get_balance()
+	var bal: Dictionary = bal_v if bal_v is Dictionary else {}
+	var bd_v: Variant = bal.get("data", {})
+	var bd: Dictionary = bd_v if bd_v is Dictionary else {}
+	var sc_v: Variant = bd.get("stages", {})
+	var sc: Dictionary = sc_v if sc_v is Dictionary else {}
+	var ev_v: Variant = sc.get("anansi_snippet_events", {})
+	return ev_v if ev_v is Dictionary else {}
+
+
+# Central deterministic Anansi snippet selection, shared by this state and FlowRuntime.
+# Writes explore_map["travel_snippet"] to a deterministic line for `event_key`, gated by
+# `enabled_events` (an event fires unless explicitly set false). No-op (leaves the field
+# untouched) when the event is disabled or the pool is empty.
+static func fire_anansi_snippet(
+		explore_map: Dictionary,
+		event_key: String,
+		enabled_events: Dictionary,
+		t: int,
+		logger,
+		stage_id: String) -> void:
+	# Defensive event gate — fire unless explicitly disabled in config.
+	if not bool(enabled_events.get(event_key, true)):
+		return
+	var pool := _load_anansi_snippet_pool(event_key)
+	if pool.is_empty():
+		return
+	# Deterministic line pick (no RNG) — same convention as the legacy snippet path.
+	var vk: int = posmod(t, pool.size())
+	var line := str(pool[vk])
+	if line.is_empty():
+		return
+	explore_map["travel_snippet"] = line
+	if logger != null:
+		logger.debug(t, "stage.anansi_snippet", "Anansi snippet fired", {
+			"event":    event_key,
+			"stage_id": stage_id,
+		})
+
+
+# Loads the snippet pool for an event. Per-event-pool seam: every event currently maps to
+# the moment-agnostic "travel" pool — to give an event its own authored pool later, map
+# event_key → pool key here and add that key to anansi_travel_snippets.json.
+static func _load_anansi_snippet_pool(_event_key: String) -> Array:
+	var pool_key := "travel"   # per-event-pool seam (see above)
+	var path := "res://data/stages/anansi_travel_snippets.json"
+	if not FileAccess.file_exists(path):
+		return []
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return []
+	var raw := f.get_as_text()
+	f.close()
+	var parsed: Variant = JSON.parse_string(raw)
+	if not (parsed is Dictionary):
+		return []
+	var pool_v: Variant = (parsed as Dictionary).get(pool_key, [])
+	return pool_v if pool_v is Array else []
 
 

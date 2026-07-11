@@ -30,6 +30,12 @@ const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd
 @onready var _back_button: Button                   = $BackButton
 @onready var _round_label: Label                    = $RoundLabel
 @onready var _objective_label: Label                = $ObjectiveLabel
+# V2-STAGE-004 P5: authored ObjectiveBanner (replaces the bare objective label during combat).
+@onready var _objective_banner: PanelContainer      = %ObjectiveBanner
+@onready var _banner_glyph: Label                   = %GlyphLabel
+@onready var _banner_instruction: Label             = %InstructionLabel
+@onready var _banner_progress: Label                = %ProgressLabel
+@onready var _banner_quarry_pips: HBoxContainer      = %QuarryPips
 # Repurposed: was StartCombatButton / Confirm Round — now also shows "Next" during actor_turn phase.
 @onready var _cta_button: Button                    = $StartCombatButton
 # Repurposed: was AutoToggleButton — now Manual mode toggle.
@@ -59,6 +65,19 @@ const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd
 # Clay floor tile: source 0, atlas position (0, 0)
 const _TILE_SOURCE_ID:    int       = 0
 const _TILE_ATLAS_COORDS: Vector2i  = Vector2i(0, 0)
+
+# V2-STAGE-004 P5: ObjectiveBanner urgent-state tinting (applied via modulate; base = WHITE).
+# The urgent tint is used when a PROTECT totem is stolen or a PURSUE quarry is at the exit edge.
+const _BANNER_MODULATE_NORMAL: Color = Color(1, 1, 1, 1)
+const _BANNER_MODULATE_URGENT: Color = Color(1.0, 0.62, 0.55, 1)
+# Pip glyphs: filled = urgency, hollow = safe distance.
+const _PIP_FILLED: String = "◆"
+const _PIP_HOLLOW: String = "◇"
+const _PIP_COUNT:  int    = 5
+# Cached banner StyleBoxes captured at _ready from the authored ObjectiveBanner panel.
+# _normal is the authored base; _urgent is a duplicate re-tinted for the PROTECT stolen state.
+var _normal_banner_style: StyleBoxFlat = null
+var _urgent_banner_style: StyleBoxFlat = null
 
 const _SPEED_SLOW:   float = 3.0
 const _SPEED_NORMAL: float = 1.5
@@ -176,6 +195,18 @@ func _ready() -> void:
 	_recenter_button.visible = false
 	_recenter_button.pressed.connect(_on_recenter_pressed)
 
+	# V2-STAGE-004 P5: cache the authored banner StyleBox and derive the urgent variant.
+	# _normal is the .tscn-authored base; _urgent duplicates it and re-tints bg + border red
+	# for the PROTECT "STOLEN" state (distinct chrome, not just a modulate).
+	_objective_banner.visible = false
+	# get_theme_stylebox() returns the effective stylebox (the .tscn-authored override here) —
+	# Control has no get_theme_stylebox_override() getter, only has_/add_/remove_.
+	_normal_banner_style = _objective_banner.get_theme_stylebox("panel") as StyleBoxFlat
+	if _normal_banner_style != null:
+		_urgent_banner_style = _normal_banner_style.duplicate() as StyleBoxFlat
+		_urgent_banner_style.bg_color     = Color(0.16, 0.04, 0.04, 0.88)
+		_urgent_banner_style.border_color = Color(0.86, 0.27, 0.22, 0.9)
+
 
 # -------------------------
 # Bespoke screen contract (UI-001)
@@ -206,6 +237,7 @@ func _reset_transient_ui() -> void:
 	_objective_label.visible = false
 	_cta_button.visible      = false
 	_manual_toggle.visible   = false
+	_objective_banner.visible = false
 	_nav_back_action         = {}
 
 	_initiative_panel.visible = false
@@ -278,25 +310,12 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	_round_label.text    = "Round: %d" % int(data.get("round", 0))
 	_round_label.visible = true
 	# COMBAT-007: read objective_state dict (replaces flat objective_type field).
+	# V2-STAGE-004 P5: the authored ObjectiveBanner renders all per-mode objective content.
+	# The bare _objective_label is retired here — the banner is the single objective surface.
 	var obj_state: Dictionary = data.get("objective_state", {})
 	var obj_type: String = str(obj_state.get("type", ""))
-	# V2-STAGE-004 distinctiveness: enrich banner text for ENDURE, PROTECT, and PURSUE modes.
-	var banner_text: String = obj_type
-	if obj_type == "endure":
-		var waves_remaining: int = int(obj_state.get("waves_remaining", 0))
-		var wave_total: int      = int(obj_state.get("wave_total", 0))
-		if wave_total > 0:
-			banner_text = "Endure — Waves: %d/%d remaining" % [waves_remaining, wave_total]
-	elif obj_type == "protect":
-		if bool(obj_state.get("totem_stolen", false)):
-			banner_text = "Totem STOLEN — recover it!"
-	elif obj_type == "pursue":
-		var contain_progress: int  = int(obj_state.get("contain_progress", 0))
-		var contain_required: int  = int(obj_state.get("contain_required", 3))
-		var window_remaining: int  = int(obj_state.get("window_remaining", 0))
-		banner_text = "Pursue — Contain: %d/%d | Window: %d turns" % [contain_progress, contain_required, window_remaining]
-	_objective_label.text    = banner_text
-	_objective_label.visible = not banner_text.is_empty()
+	_objective_label.visible = false
+	_render_objective_banner(obj_state, obj_type)
 
 	# V2-STAGE-004 P3b: PURSUE camera — update quarry follow target each snapshot.
 	if obj_type == "pursue":
@@ -365,6 +384,143 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 
 	# COMBAT-002: draw initiative panel — snapshot-driven, no local playback state.
 	_draw_initiative_panel(data)
+
+
+# -------------------------
+# V2-STAGE-004 P5: ObjectiveBanner
+# -------------------------
+
+## Populates the authored ObjectiveBanner from snapshot.data.objective_state.
+## Reads ONLY objective_state fields — no core access. Unknown/missing type hides
+## the banner entirely (graceful degradation: old snapshots render as before).
+##
+## Per-mode content:
+##   combat        → "Defeat all enemies"                           (no progress line)
+##   purify_shrine → "Purify the shrine"        + "Shrine HP x"
+##   recover       → "Secure the relic"         + "Hold h/N"
+##   protect       → "Protect <entity>"         + "Guard c/N · HP x"; totem_stolen → urgent
+##   endure        → "Hold your ground"         + "Round r/N · Waves left: w"
+##   pursue        → "Contain the quarry"       + "Contain c/N · Window: w" + distance pips
+##   guide_spirit  → protect: "Keep <name> calm" / escort: "Guide <name> to safety" (+ "Arrived")
+func _render_objective_banner(obj_state: Dictionary, obj_type: String) -> void:
+	# Reset transient state each render: neutral tint, hidden pips.
+	_objective_banner.modulate = _BANNER_MODULATE_NORMAL
+	_banner_quarry_pips.visible = false
+
+	var glyph: String       = "◆"
+	var instruction: String = ""
+	var progress: String    = ""
+	var urgent: bool        = false
+
+	match obj_type:
+		"combat":
+			glyph = "◆"
+			instruction = "Defeat all enemies"
+		"purify_shrine":
+			glyph = "◆"
+			instruction = "Purify the shrine"
+			progress = "Shrine HP %d" % int(obj_state.get("shrine_hp", 0))
+		"recover":
+			glyph = "◆"
+			instruction = "Secure the relic"
+			progress = "Hold %d/%d" % [
+				int(obj_state.get("hold_progress", 0)),
+				int(obj_state.get("hold_required", 0)),
+			]
+		"protect":
+			glyph = "◆"
+			var entity_name: String = str(obj_state.get("entity_name", ""))
+			if bool(obj_state.get("totem_stolen", false)):
+				instruction = "STOLEN — recover it!"
+				urgent = true
+			elif not entity_name.is_empty():
+				instruction = "Protect %s" % entity_name
+			else:
+				instruction = "Protect the totem"
+			progress = "Guard %d/%d · HP %d" % [
+				int(obj_state.get("protect_progress", 0)),
+				int(obj_state.get("protect_required", 0)),
+				int(obj_state.get("objective_hp", 0)),
+			]
+		"endure":
+			glyph = "◆"
+			instruction = "Hold your ground"
+			progress = "Round %d/%d · Waves left: %d" % [
+				int(obj_state.get("round", 0)),
+				int(obj_state.get("rounds_required", 0)),
+				int(obj_state.get("waves_remaining", 0)),
+			]
+		"pursue":
+			glyph = "◆"
+			instruction = "Contain the quarry"
+			progress = "Contain %d/%d · Window: %d" % [
+				int(obj_state.get("contain_progress", 0)),
+				int(obj_state.get("contain_required", 0)),
+				int(obj_state.get("window_remaining", 0)),
+			]
+		"guide_spirit":
+			glyph = "◆"
+			var spirit_name: String = str(obj_state.get("spirit_name", ""))
+			var who: String = spirit_name if not spirit_name.is_empty() else "the spirit"
+			if str(obj_state.get("guide_mode", "protect")) == "escort":
+				if bool(obj_state.get("destination_reached", false)):
+					instruction = "Guide %s to safety — Arrived" % who
+				else:
+					instruction = "Guide %s to safety" % who
+			else:
+				instruction = "Keep %s calm" % who
+			# HP / rounds detail lives in the EchoBar spirit slot — no duplication here.
+		_:
+			# Unknown / missing objective type → hide banner, board renders as today.
+			_objective_banner.visible = false
+			return
+
+	_banner_glyph.text       = glyph
+	_banner_instruction.text = instruction
+	_banner_progress.text    = progress
+	_banner_progress.visible = not progress.is_empty()
+	# PURSUE distance pips — rendered after the progress label so the text hint
+	# ("· AT EXIT!" / "· closing in") appends to the freshly-set progress string.
+	if obj_type == "pursue":
+		_render_quarry_pips(int(obj_state.get("quarry_distance_to_exit", 0)))
+	# Urgent state (PROTECT totem stolen): swap to the pre-authored urgent StyleBox for
+	# distinct chrome, plus a red modulate. The instruction text also carries the state
+	# ("STOLEN — recover it!") so the signal is never colour-only.
+	if urgent:
+		_objective_banner.modulate = _BANNER_MODULATE_URGENT
+		if _urgent_banner_style != null:
+			_objective_banner.add_theme_stylebox_override("panel", _urgent_banner_style)
+	else:
+		_objective_banner.modulate = _BANNER_MODULATE_NORMAL
+		if _normal_banner_style != null:
+			_objective_banner.add_theme_stylebox_override("panel", _normal_banner_style)
+	_objective_banner.visible = true
+
+
+## Fills the pre-authored diamond pips by quarry proximity to the exit edge.
+## Closer to exit (smaller distance) = more urgent = more filled pips + text hint.
+## dist is quarry_distance_to_exit (chebyshev-to-edge, 0 = at the exit).
+func _render_quarry_pips(dist: int) -> void:
+	# Map distance → filled count: 0 tiles ⇒ all 5 filled (max urgency);
+	# ≥5 tiles ⇒ 0 filled (safe). Clamped in between.
+	var filled: int = clampi(_PIP_COUNT - dist, 0, _PIP_COUNT)
+	var pips: Array = _banner_quarry_pips.get_children()
+	for i in range(pips.size()):
+		var pip := pips[i] as Label
+		if pip == null:
+			continue
+		if i < filled:
+			pip.text = _PIP_FILLED
+			pip.modulate = _BANNER_MODULATE_URGENT
+		else:
+			pip.text = _PIP_HOLLOW
+			pip.modulate = _BANNER_MODULATE_NORMAL
+	# Text hint alongside the colour/shape signal (accessibility: never colour-only).
+	if filled >= _PIP_COUNT:
+		_banner_progress.text += " · AT EXIT!"
+	elif filled >= _PIP_COUNT - 1:
+		_banner_progress.text += " · closing in"
+	_banner_quarry_pips.visible = true
 
 
 # -------------------------

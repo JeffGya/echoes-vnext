@@ -1201,6 +1201,8 @@ static func _build_objective_state(ectx: EncounterContext, combat_state: Diction
 		# V2-STAGE-004 PROTECT guard-proximity: actual guarded-round progress vs required.
 		"protect_progress":       int(combat_state.get("protect_counter", 0)) if not combat_state.is_empty() else 0,
 		"protect_required":       int(_obj_params.get("duration_turns", 0)),
+		# V2-STAGE-004 PROTECT entity name: objective_params carries it (default "Protected One").
+		"entity_name":            str(_obj_params.get("entity_name", "")),
 		# V2-STAGE-004 P3b: PURSUE fields (zero/false when N/A).
 		"contain_progress":       int(combat_state.get("contain_counter", 0)) if not combat_state.is_empty() else 0,
 		"contain_required":       int(_obj_params.get("contain_rounds", 0)),
