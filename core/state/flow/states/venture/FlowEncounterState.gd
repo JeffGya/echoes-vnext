@@ -371,6 +371,49 @@ func enter(ctx: RefCounted, t: int) -> void:
 			flow_ctx.encounter_ctx.objective_params = \
 				FlowEncounterState.resolve_objective_params(_obj_mode_key, _om_cfg, completion_index, _om_stage_params)
 
+			# V2-STAGE-004 Phase 4 (S13): Charge pressure — a failed non-objective Charge sets
+			# explore_map.hostile_charge_sit_id (FlowRuntime._apply_contact_outcome charge branch).
+			# Applied AFTER the completion-index scaling above; consumed exactly once by the first
+			# PROTECT/ENDURE objective combat that reads it, then cleared. Other modes ignore it —
+			# it stays set until a protect/endure fight consumes it (intended, per design).
+			if _obj_mode_key == "protect" or _obj_mode_key == "endure":
+				var _cp_stage: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
+				if not _cp_stage.is_empty():
+					var _cp_map_v: Variant = _cp_stage.get("explore_map", {})
+					var _cp_map: Dictionary = _cp_map_v if _cp_map_v is Dictionary else {}
+					var _cp_sit_id := str(_cp_map.get("hostile_charge_sit_id", ""))
+					if not _cp_sit_id.is_empty():
+						match _obj_mode_key:
+							"protect":
+								var _cp_bonus: int = int(_om_data.get("combat", {}).get("charge_pressure", {}).get("protect_duration_bonus", 0))
+								var _cp_max: int = int(_om_cfg.get("duration_max", flow_ctx.encounter_ctx.objective_params.get("duration_turns", 0)))
+								flow_ctx.encounter_ctx.objective_params["duration_turns"] = clampi(
+									int(flow_ctx.encounter_ctx.objective_params.get("duration_turns", 0)) + _cp_bonus,
+									0, _cp_max)
+							"endure":
+								var _cp_bonus2: int = int(_om_data.get("combat", {}).get("charge_pressure", {}).get("endure_wave_bonus", 0))
+								var _cp_max2: int = int(_om_cfg.get("wave_size_max", flow_ctx.encounter_ctx.objective_params.get("wave_size", 0)))
+								flow_ctx.encounter_ctx.objective_params["wave_size"] = clampi(
+									int(flow_ctx.encounter_ctx.objective_params.get("wave_size", 0)) + _cp_bonus2,
+									0, _cp_max2)
+						# V2-STAGE-004 S15 prep: durable per-encounter flag so the objective_state
+						# projection can surface "charge_pressure_applied" for THIS encounter only.
+						flow_ctx.encounter_ctx.charge_pressure_applied = true
+						_cp_map["hostile_charge_sit_id"] = ""
+						_cp_stage["explore_map"] = _cp_map
+						FlowStageExploreState._write_stage_back(flow_ctx, _cp_stage)
+						flow_ctx.save_request = true
+						if flow_ctx.save_request_reason.is_empty():
+							flow_ctx.save_request_reason = "encounter.charge_pressure_consumed"
+						else:
+							flow_ctx.save_request_reason += "|encounter.charge_pressure_consumed"
+						if flow_ctx.logger != null:
+							flow_ctx.logger.info(t, "combat.charge_pressure.applied",
+								"Charge pressure applied to objective combat", {
+									"mode":         _obj_mode_key,
+									"situation_id": _cp_sit_id,
+								})
+
 		# V2-STAGE-004 P3: Spawn objective structure actor for RECOVER / PROTECT modes.
 		# ENDURE spawns no objective actor (wave-only). Shrine path is unchanged above.
 		var objective_actor: Dictionary = {}
@@ -794,6 +837,109 @@ func enter(ctx: RefCounted, t: int) -> void:
 		if not objective_actor.is_empty():
 			all_actors.append(objective_actor)
 
+		# V2-STAGE-004 Phase 4 (S12): Temporary Ally auto-join. Mirrors the GUIDE_SPIRIT
+		# joined-spirit injection above — build via ContactActorBuilder (EnemyActor.from_definition,
+		# faction "echo"), append to all_actors BEFORE _ensure_unique_actor_ids. Gated on a durable
+		# ally_contact set by FlowRuntime._apply_contact_outcome's temporary_ally/good branch AND
+		# not yet consumed this stage session — one battle only.
+		var _ally_stage: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
+		if not _ally_stage.is_empty():
+			var _ally_map_v: Variant = _ally_stage.get("explore_map", {})
+			var _ally_map: Dictionary = _ally_map_v if _ally_map_v is Dictionary else {}
+			var _ally_contact_v: Variant = _ally_map.get("ally_contact", {})
+			var _ally_contact: Dictionary = _ally_contact_v if _ally_contact_v is Dictionary else {}
+			if not _ally_contact.is_empty() and not bool(_ally_map.get("ally_consumed_in_encounter", false)):
+				var _ally_bal_cfg: Dictionary = {}
+				if flow_ctx.config_service != null:
+					var _ally_bal: Dictionary = flow_ctx.config_service.get_balance()
+					_ally_bal_cfg = _ally_bal.get("data", {}).get("contact", {}).get("ally", {})
+				# Level scaled by realm completion — same completion_index + clamp pattern as
+				# resolve_objective_params() below (base + growth*completion_index, clamped).
+				var _ally_lvl_base: int    = int(_ally_bal_cfg.get("level_base", 1))
+				var _ally_lvl_growth: float = float(_ally_bal_cfg.get("level_growth_per_completion", 0.0))
+				var _ally_lvl_max: int     = int(_ally_bal_cfg.get("level_max", _ally_lvl_base))
+				var _ally_level: int = clampi(
+					_ally_lvl_base + roundi(_ally_lvl_growth * float(completion_index)),
+					_ally_lvl_base, _ally_lvl_max)
+				var _ally_build_cfg: Dictionary = _ally_bal_cfg.duplicate()
+				_ally_build_cfg["actor_cfg"] = actor_cfg
+				var _ally_actor: Dictionary = ContactActorBuilder.build(
+					_ally_contact, _ally_build_cfg, t, _ally_level)
+
+				# BUGFIX (playtest): place_actors() (line ~237) already ran before this block,
+				# so _ally_actor still carries EnemyActor.from_definition's grid_pos placeholder
+				# { col:0, row:0 } (core/actors/EnemyActor.gd:75). On irregular terrain boards
+				# that cell is VOID (outside StageTerrain's walkable set), which strands the ally
+				# off-board with no legal move (GridService.move_toward roots over the walkable
+				# set). Assign a real walkable, unoccupied, party-side cell here — same
+				# candidate/sort pattern as the RECOVER/PROTECT/GUIDE_SPIRIT objective placement
+				# above (~line 452-486 / 691-741), targeting proximity to the party's centroid
+				# instead of a depth-scaled column. Legacy full-rect boards (grid_cfg_for_placement
+				# has no "walkable" key) are untouched — (0,0) is a normal, non-void, unoccupied
+				# cell there (echoes fill from col=1 inward), so the ally still "just works".
+				var _ally_walkable: Dictionary = grid_cfg_for_placement.get("walkable", {})
+				if not _ally_walkable.is_empty():
+					var _ally_occupied: Dictionary = {}
+					for _ao_v in echo_actors:
+						if _ao_v is Dictionary:
+							var _ag: Dictionary = _ao_v.get("grid_pos", {})
+							_ally_occupied[str(int(_ag.get("col",-1))) + "," + str(int(_ag.get("row",-1)))] = true
+					for _ao_v in enemy_actors:
+						if _ao_v is Dictionary:
+							var _ag: Dictionary = _ao_v.get("grid_pos", {})
+							_ally_occupied[str(int(_ag.get("col",-1))) + "," + str(int(_ag.get("row",-1)))] = true
+					if not shrine_actor.is_empty():
+						var _ag: Dictionary = shrine_actor.get("grid_pos", {})
+						_ally_occupied[str(int(_ag.get("col",-1))) + "," + str(int(_ag.get("row",-1)))] = true
+					if not objective_actor.is_empty():
+						var _ag: Dictionary = objective_actor.get("grid_pos", {})
+						_ally_occupied[str(int(_ag.get("col",-1))) + "," + str(int(_ag.get("row",-1)))] = true
+
+					# Party centroid — place the ally near the echoes it's fighting alongside.
+					var _ally_centroid_col: float = 0.0
+					var _ally_centroid_row: float = 0.0
+					if not echo_actors.is_empty():
+						for _ao_v in echo_actors:
+							if _ao_v is Dictionary:
+								var _ag: Dictionary = _ao_v.get("grid_pos", {})
+								_ally_centroid_col += float(_ag.get("col", 0))
+								_ally_centroid_row += float(_ag.get("row", 0))
+						_ally_centroid_col /= float(echo_actors.size())
+						_ally_centroid_row /= float(echo_actors.size())
+
+					var _ally_candidates: Array = []
+					for _ac_key in _ally_walkable:
+						if not _ally_occupied.has(_ac_key):
+							var _ac_p: Array = str(_ac_key).split(",")
+							if _ac_p.size() == 2:
+								_ally_candidates.append({ "col": int(_ac_p[0]), "row": int(_ac_p[1]) })
+					# Stable sort: nearest to party centroid (Manhattan) first; tiebreak lowest col, then row.
+					_ally_candidates.sort_custom(func(a, b):
+						var da: float = abs(float(a["col"]) - _ally_centroid_col) + abs(float(a["row"]) - _ally_centroid_row)
+						var db: float = abs(float(b["col"]) - _ally_centroid_col) + abs(float(b["row"]) - _ally_centroid_row)
+						if da != db: return da < db
+						if a["col"] != b["col"]: return a["col"] < b["col"]
+						return a["row"] < b["row"]
+					)
+					if not _ally_candidates.is_empty():
+						_ally_actor["grid_pos"] = { "col": _ally_candidates[0]["col"], "row": _ally_candidates[0]["row"] }
+
+				all_actors.append(_ally_actor)
+
+				_ally_map["ally_consumed_in_encounter"] = true
+				_ally_stage["explore_map"] = _ally_map
+				FlowStageExploreState._write_stage_back(flow_ctx, _ally_stage)
+				flow_ctx.save_request = true
+				if flow_ctx.save_request_reason.is_empty():
+					flow_ctx.save_request_reason = "encounter.ally_joined"
+				else:
+					flow_ctx.save_request_reason += "|encounter.ally_joined"
+				if flow_ctx.logger != null:
+					flow_ctx.logger.info(t, "combat.ally.joined", "Temporary ally auto-joined encounter", {
+						"actor_id": _ally_actor.get("id", ""),
+						"level":    _ally_level,
+					})
+
 		# Safety net: the combat round loop is id-keyed (CombatState builds initiative_order
 		# from actor ids; FlowRuntime._resolve_next_actor looks the actor back up via
 		# _find_actor_by_id, which returns the FIRST match). If two actors enter with the
@@ -1047,15 +1193,20 @@ static func _derive_status(actor: Dictionary) -> String:
 ## Projects a full runtime actor dict to the minimal render-safe snapshot shape.
 ## Strips internal fields (traits, xp, archetype, raw stats block, etc.)
 ## while preserving all fields needed by CombatBoardScreen.
-static func _project_actor(actor: Dictionary) -> Dictionary:
+## S14a: contribution_ledger is optional (default null → no "contribution" key added, byte-
+## identical to pre-S14a shape). Pass EncounterContext.echo_action_logs to project a per-actor
+## "contribution": {damage_dealt, damage_taken, kills} sub-dict (zeros when the actor has no
+## ledger entry). Only build_final_snapshot() passes it — build_round_snapshot() stays untouched.
+static func _project_actor(actor: Dictionary, contribution_ledger: Variant = null) -> Dictionary:
 	var stats: Dictionary = actor.get("stats", {})
 	var max_hp: int = int(stats.get("max_hp", 1))
 	var fear: int = int(actor.get("fear", 0))
+	var actor_id: String = str(actor.get("id", ""))
 	# V2-VOICE-002: consume bark on first projection — prevents re-enqueueing across subsequent snapshots.
 	var bark_line_val: String = str(actor.get("_bark_line", ""))
 	actor["_bark_line"] = ""
-	return {
-		"id":             str(actor.get("id", "")),
+	var proj: Dictionary = {
+		"id":             actor_id,
 		"name":           str(actor.get("name", "")),
 		"hp":             int(actor.get("current_hp", max_hp)),
 		"max_hp":         max_hp,
@@ -1065,6 +1216,8 @@ static func _project_actor(actor: Dictionary) -> Dictionary:
 		"is_structure":   bool(actor.get("is_structure", false)),
 		"is_quarry":      bool(actor.get("is_quarry", false)),
 		"is_spirit":      bool(actor.get("is_spirit", false)),
+		# V2-STAGE-004 Phase 4 (S12): Temporary Ally — additive projection field only.
+		"is_ally":        bool(actor.get("is_ally", false)),
 		# UI-004: added for party strip and pre-battle overlay.
 		"calling_origin":    str(actor.get("calling_origin", "")),
 		# V2-EMOTION-002: the only player-facing feeling field.
@@ -1081,6 +1234,16 @@ static func _project_actor(actor: Dictionary) -> Dictionary:
 		"expression_band":   str(actor.get("_expression_band",   "")),
 		"presence_strength": float(actor.get("_presence_strength", 0.1)),
 	}
+	# S14a: offensive contribution ledger, projected read-only for the resolve screen / S14 recruit formula.
+	if contribution_ledger is Dictionary:
+		var _ledger_entry_v: Variant = (contribution_ledger as Dictionary).get(actor_id, {})
+		var _ledger_entry: Dictionary = _ledger_entry_v if _ledger_entry_v is Dictionary else {}
+		proj["contribution"] = {
+			"damage_dealt": int(_ledger_entry.get("damage_dealt", 0)),
+			"damage_taken": int(_ledger_entry.get("damage_taken", 0)),
+			"kills":        int(_ledger_entry.get("kills", 0)),
+		}
+	return proj
 
 ## Builds the objective_state sub-dict from ectx and combat_state.
 ## type: objective string; shrine_hp/shrine_alive: back-compat structure fields.
@@ -1217,7 +1380,38 @@ static func _build_objective_state(ectx: EncounterContext, combat_state: Diction
 		"destination_reached":    _gs_destination_reached,
 		"destination_pos":        _gs_destination_pos,
 		"rounds_remaining":       _gs_rounds_remaining,
+		# V2-STAGE-004 S15 prep: true when S13's failed-charge pressure bump was applied
+		# to this encounter's objective. Default false.
+		"charge_pressure_applied": ectx.charge_pressure_applied if ectx != null else false,
 	}
+
+
+## V2-STAGE-004 S15 prep: short context line for a hostile-claimant-forced combat.
+## Reads the durable explore_map.combat_intro_reason marker set by FlowRuntime's
+## stage.claimant.combat_forced branch (cleared at encounter teardown alongside
+## the ally fields — see _clear_ally_fields_if_present). No hard-coded copy here;
+## the line itself lives in data.contact.claimant.combat_intro_line.
+static func _build_combat_intro_line(flow_ctx: FlowContext) -> String:
+	if flow_ctx == null:
+		return ""
+	var _cil_stage: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
+	if _cil_stage.is_empty():
+		return ""
+	var _cil_map_v: Variant = _cil_stage.get("explore_map", {})
+	var _cil_map: Dictionary = _cil_map_v if _cil_map_v is Dictionary else {}
+	var _cil_reason := str(_cil_map.get("combat_intro_reason", ""))
+	if _cil_reason != "claimant_hostile":
+		return ""
+	if flow_ctx.config_service == null:
+		return ""
+	var _cil_bal: Dictionary = flow_ctx.config_service.get_balance()
+	var _cil_data_v: Variant = _cil_bal.get("data", {})
+	var _cil_data: Dictionary = _cil_data_v if _cil_data_v is Dictionary else {}
+	var _cil_contact_v: Variant = _cil_data.get("contact", {})
+	var _cil_contact: Dictionary = _cil_contact_v if _cil_contact_v is Dictionary else {}
+	var _cil_claimant_v: Variant = _cil_contact.get("claimant", {})
+	var _cil_claimant: Dictionary = _cil_claimant_v if _cil_claimant_v is Dictionary else {}
+	return str(_cil_claimant.get("combat_intro_line", ""))
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -1365,6 +1559,9 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			# P1 CLOSE: stub fields to keep round field_count >= final field_count.
 			"surface":        "",
 			"summary_line":   "",
+			# V2-STAGE-004 S15 prep: short context beat for a hostile-claimant-forced combat.
+			# "" when not applicable.
+			"combat_intro_line": FlowEncounterState._build_combat_intro_line(flow_ctx),
 		},
 		"actions": actions,
 		"meta":    { "t": t },
@@ -1383,11 +1580,61 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var victory := bool(combat_result.get("victory", false))
 	var round_ended := int(combat_result.get("round_ended", 0))
 
+	# V2-STAGE-004 Phase 4 (S12): Temporary Ally death knock. If the joined ally (is_ally
+	# true) died in this battle, apply a small party morale/fear knock — a thematic loss,
+	# never a battle failure (combat_result is untouched). Mirrors the surprise-fear
+	# precedent (LeadershipEmotionService.apply_fear_gain, ~line 785 above) plus the
+	# parallel apply_morale_loss helper. Gated on an ally actor being present AND dead —
+	# no-op (byte-identical) for every encounter without a joined ally.
+	var _ak_ally: Dictionary = {}
+	for _ak_v in raw_actors:
+		if _ak_v is Dictionary and bool(_ak_v.get("is_ally", false)):
+			_ak_ally = _ak_v
+			break
+	if not _ak_ally.is_empty() and bool(_ak_ally.get("is_dead", false)):
+		var _ak_cfg: Dictionary = {}
+		var _ak_expr_cfg: Dictionary = {}
+		if flow_ctx.config_service != null:
+			var _ak_bal: Dictionary = flow_ctx.config_service.get_balance()
+			var _ak_data: Dictionary = _ak_bal.get("data", {})
+			_ak_cfg = _ak_data.get("contact", {}).get("ally", {})
+			_ak_expr_cfg = _ak_data.get("maturity_expression", {})
+		var _ak_fear_knock: int   = int(_ak_cfg.get("death_fear_knock",   0))
+		var _ak_morale_knock: int = int(_ak_cfg.get("death_morale_knock", 0))
+		for _ak_i in range(raw_actors.size()):
+			var _ak_target_v: Variant = raw_actors[_ak_i]
+			if not (_ak_target_v is Dictionary):
+				continue
+			var _ak_target: Dictionary = _ak_target_v
+			if str(_ak_target.get("faction", "")) != "echo" or bool(_ak_target.get("is_dead", false)):
+				continue
+			# Exclude a joined guide spirit and the ally itself — the knock is meant for the
+			# player's real echoes only (mirrors the deliberate exclusions used elsewhere).
+			if bool(_ak_target.get("is_spirit", false)) or bool(_ak_target.get("is_ally", false)):
+				continue
+			if _ak_fear_knock > 0:
+				var _ak_fear_applied := LeadershipEmotionService.apply_fear_gain(
+					_ak_target, _ak_fear_knock, raw_actors, _ak_expr_cfg)
+				raw_actors[_ak_i]["fear"] = clampi(int(_ak_target.get("fear", 0)) + _ak_fear_applied, 0, 100)
+			if _ak_morale_knock > 0:
+				var _ak_morale_applied := LeadershipEmotionService.apply_morale_loss(
+					_ak_target, _ak_morale_knock, raw_actors, _ak_expr_cfg, round_ended)
+				raw_actors[_ak_i]["morale"] = clampi(int(_ak_target.get("morale", 50)) - _ak_morale_applied, 0, 100)
+		if flow_ctx.logger != null:
+			flow_ctx.logger.info(t, "combat.ally.killed", "Temporary ally died — party knock applied", {
+				"actor_id": _ak_ally.get("id", ""),
+				"fear_knock":   _ak_fear_knock,
+				"morale_knock": _ak_morale_knock,
+			})
+
 	# Project actors to clean render shape.
+	# S14a: pass the offensive contribution ledger so each projected actor carries a
+	# "contribution" sub-dict (damage_dealt/damage_taken/kills) for the resolve screen / S14.
+	var _s14a_contribution_ledger: Dictionary = ectx.echo_action_logs if ectx != null else {}
 	var projected_actors: Array = []
 	for a_v in raw_actors:
 		if a_v is Dictionary:
-			projected_actors.append(FlowEncounterState._project_actor(a_v))
+			projected_actors.append(FlowEncounterState._project_actor(a_v, _s14a_contribution_ledger))
 
 	# UI-005: pre-compute summary counts so ResolveScreen reads clean fields.
 	var enemies_defeated: int = 0
@@ -1402,6 +1649,13 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			if status == "dead":
 				enemies_defeated += 1
 		elif faction == "echo":
+			# FIX (Codex review bug 2): a joined Temporary Ally (is_ally) or GUIDE_SPIRIT
+			# (is_spirit) is a faction:"echo" combatant but NOT a roster echo — exclude both
+			# from the reward/survivor/rank tally so a surviving ally/spirit doesn't grant an
+			# extra echo-survival bonus and a dead one doesn't skew the rank denominator.
+			# Rendering (projected_actors) and combat end-conditions are untouched.
+			if bool(a.get("is_ally", false)) or bool(a.get("is_spirit", false)):
+				continue
 			total_echoes += 1
 			if status != "dead":
 				echoes_survived += 1
@@ -1699,6 +1953,9 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			# V2-STAGE-004 P3c: GUIDE_SPIRIT victory via protect-mode survival — V2-ITEM-002
 			# free-summon seam flag only (no reward logic here).
 			"guide_spirit_protected": victory and str(combat_result.get("reason", "")) == "spirit_protected",
+			# V2-STAGE-004 S15 prep: short context beat for a hostile-claimant-forced combat.
+			# "" when not applicable.
+			"combat_intro_line": FlowEncounterState._build_combat_intro_line(flow_ctx),
 		},
 		"actions": _build_resolve_actions(victory, objectives_remaining),
 		"meta": { "t": t },

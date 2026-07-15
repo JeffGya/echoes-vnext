@@ -212,6 +212,8 @@ func _rebuild_snapshot(ctx: FlowContext, logger: StructuredLogger, t: int) -> vo
 							int(_emo_p.get("morale_current", 50)),
 							int(_emo_p.get("fear_current", 0))
 						),
+						# V2-STAGE-004 P4 S15 UI-A3: player-facing companion attribute (no id exposed).
+						"origin":           str(echo.get("origin", "")),
 					})
 					break
 		data["party_slots"] = party_slots

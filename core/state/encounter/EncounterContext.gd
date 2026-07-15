@@ -43,7 +43,17 @@ var last_round_snapshot: Dictionary = {}
 var final_snapshot: Dictionary = {}
 
 # PROG-003: per-echo action log — accumulated across all rounds; consumed at resolve for XP calc.
-# Shape: { echo_id: { melee_count: int, guard_count: int, kill_count: int, total_count: int } }
+# S14a: widened into a general offensive contribution ledger — entries now exist for actors of
+# ANY faction (echo/enemy/spirit/ally), keyed by actor id. melee_count/guard_count/kill_count/
+# total_count remain echo-only (populated exclusively by the PROG-003 accumulator in
+# FlowRuntime._resolve_next_actor, gated on faction == "echo"); damage_dealt/damage_taken/kills
+# are populated for every actor at the single melee damage choke (same function, "melee_attack"
+# branch) and are read by FlowEncounterState._project_actor() to build the "contribution"
+# projected-actor field, and later by S14 for the recruit formula.
+# Shape: { actor_id: {
+#   melee_count: int, guard_count: int, kill_count: int, total_count: int,  # echo-only
+#   damage_dealt: int, damage_taken: int, kills: int,                      # all factions
+# } }
 # Initialised fresh per EncounterContext instance (i.e. once per combat). Never persisted.
 var echo_action_logs: Dictionary = {}
 
@@ -63,6 +73,11 @@ var terrain: Dictionary = {}
 # V2-STAGE-004 P3: scaled objective parameters — transient, never persisted.
 # Populated by FlowEncounterState.enter() for RECOVER/PROTECT/ENDURE modes; {} otherwise.
 var objective_params: Dictionary = {}
+
+# V2-STAGE-004 Phase 4 (S15 prep): true when S13's failed-charge pressure bump (see
+# explore_map.hostile_charge_sit_id consumption in FlowEncounterState.enter()) was
+# applied to THIS encounter's objective. Transient, never persisted. Default false.
+var charge_pressure_applied: bool = false
 
 # Optional deterministic notes for debugging / temporary tests
 var notes: Array[String] = []

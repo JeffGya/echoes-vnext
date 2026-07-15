@@ -56,6 +56,11 @@ func _update_echo_bar(snap: Dictionary) -> void:
 					continue
 				if bool(a.get("is_spirit", false)):
 					spirit_actor = a
+				elif bool(a.get("is_ally", false)):
+					# V2-STAGE-004 P4 S15-UI-A: a combat RECRUITED_ALLY is a normal party-side
+					# card (rendered inline, not the single dedicated spirit slot) with the
+					# Mist Blue "⊕ ALLY" badge via setup_ally().
+					party.append(a)
 				elif str(a.get("faction", "")) == "echo":
 					party.append(a)
 		"flow.stage", "flow.stage_map", "flow.stage_explore":
@@ -71,7 +76,10 @@ func _update_echo_bar(snap: Dictionary) -> void:
 		if actor is Dictionary:
 			var card: EchoCardItem = EchoCardScene.instantiate()
 			_echo_bar.add_child(card)
-			card.setup(actor)
+			if bool(actor.get("is_ally", false)):
+				card.setup_ally(actor)
+			else:
+				card.setup(actor)
 
 	# Append the spirit ally slot last so it reads as "one of the party" but stays distinct.
 	if not spirit_actor.is_empty():
@@ -148,8 +156,9 @@ func _show_overlay_for_type(snap_type: String, snap: Dictionary) -> void:
 	if _active_overlay != null and _active_overlay.has_method("set_snapshot"):
 		_active_overlay.call("set_snapshot", snap)
 
-## Renders flow.resolve as a dim modal overlay added LAST to _overlay_root so it draws
-## on top of whatever venture screen (_active_overlay) is currently mounted behind it.
+## Renders flow.resolve as a dim modal overlay added directly to RealmShell as the LAST
+## child so it draws — and receives input — on top of both the active venture screen
+## (_active_overlay, inside _overlay_root) AND the persistent %EchoBar (P4 playtest fix).
 ## Reuses the existing instance on repeated resolve snapshots (e.g. score update mid-scene).
 func _show_resolve_overlay(snap: Dictionary) -> void:
 	# Snapshot-reuse: overlay already live — just push updated data.
@@ -159,8 +168,16 @@ func _show_resolve_overlay(snap: Dictionary) -> void:
 		return
 
 	# Fresh instantiation.
+	# P4 playtest fix: parent directly to RealmShell (not _overlay_root) and force
+	# it to be the LAST child so it draws — and receives input — above %EchoBar.
+	# _overlay_root reserves bottom space for the EchoBar (offset_bottom = -133)
+	# and sits BEFORE %EchoBar in the tree, so anything mounted inside it is
+	# occluded by the persistent bar. flow.resolve is a true full-screen modal
+	# (its DimBackdrop must cover the EchoBar too), so it escapes that reserved
+	# region entirely instead of being bounded by it.
 	var overlay := _resolve_scene.instantiate()
-	_overlay_root.add_child(overlay)  # added last → draws on top of _active_overlay
+	add_child(overlay)
+	move_child(overlay, get_child_count() - 1)
 	_resolve_overlay = overlay as Control
 
 	if _resolve_overlay != null and _resolve_overlay.has_signal("action_requested"):

@@ -158,6 +158,16 @@ func _draw() -> void:
 					visual_config.spirit_halo_color.b, visual_config.spirit_halo_color.a * 0.45),
 				visual_config.spirit_halo_width * 0.7, true)
 
+		# V2-STAGE-004 Phase 4 (S15 UI-B): joined-ally token ring — a single crisp Mist
+		# Blue ring (no fill), distinct from the spirit's soft filled gold nimbus above
+		# and the quarry's solid gold diamond below. Faction colour (echo blue) already
+		# distinguishes an ally from enemies; this ring further distinguishes the ally
+		# from ordinary joined echoes.
+		if bool(tok.get("is_ally", false)):
+			var ally_ring_r: float = extent + visual_config.ally_ring_padding
+			draw_arc(pos, ally_ring_r, 0.0, TAU, 36,
+				visual_config.ally_ring_color, visual_config.ally_ring_width, true)
+
 		var damage_text: String = str(tok.get("damage_text", ""))
 		if not damage_text.is_empty():
 			draw_string(

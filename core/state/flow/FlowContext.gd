@@ -73,6 +73,14 @@ var dev_guide_mode: String = ""
 # (same as the natural roll). Draw-then-override preserves RNG draw order.
 var dev_guide_joins: String = ""
 
+# V2-STAGE-004 Phase 4 (S14) dev toggle: forces the ally recruit-offer roll outcome when
+# non-empty. Set via AppRoot debug command "force_recruit <success|fail|clear>".
+# "" = use the seeded roll; "success"/"fail" = forced. Draw-then-override: the seeded
+# roll in FlowRuntime._compute_ally_recruit_offer_if_eligible always runs first (RNG
+# draw order is byte-identical with or without the override) — only the boolean result
+# is swapped afterward.
+var dev_force_recruit: String = ""
+
 # V2-STAGE-002: index into stage.objectives[] for the currently active encounter.
 # Set by FlowRuntime when stage.engage_situation transitions to ENCOUNTER.
 # Read by FlowEncounterState._resolve_mode_from_stage() to pick encounter resolution mode.

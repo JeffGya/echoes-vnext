@@ -78,6 +78,9 @@ static func _resolve_melee(attacker: Dictionary, defender: Dictionary,
 	# P3c: spirit ally damage debuff (GUIDE_SPIRIT joined spirit deals reduced melee damage).
 	if attacker.has("_spirit_damage_mul"):
 		damage = int(float(damage) * float(attacker.get("_spirit_damage_mul", 0.75)))
+	# V2-STAGE-004 Phase 4 (S12): Temporary Ally damage debuff — parallels _spirit_damage_mul.
+	if attacker.has("_ally_damage_mul"):
+		damage = int(float(damage) * float(attacker.get("_ally_damage_mul", 0.75)))
 	var hp_after: int       = max(0, hp_before - damage)
 	defender["current_hp"]  = hp_after
 	if hp_after <= 0:

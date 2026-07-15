@@ -25,7 +25,7 @@ const _ASYNC_SIT_TYPES: Array = ["combat"]
 # (e.g. a shrine objective lives inside a combat situation — still async.)
 # "boss" is defensive: not yet generated as an engageable situation (REALM-002),
 # but if it ever is, it must hand off to combat — never resolve in-explore.
-const _ASYNC_OBJ_TYPES: Array = ["combat", "shrine", "boss", "recover", "protect", "endure", "pursue"]
+const _ASYNC_OBJ_TYPES: Array = ["combat", "shrine", "boss", "recover", "protect", "endure", "pursue", "guide_spirit"]
 
 # Fallback strings used when config is missing.
 const _FALLBACK_RESULT_TEXT := "The moment passes without resolution."

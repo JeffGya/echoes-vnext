@@ -122,6 +122,16 @@ size_flags_horizontal = 4
 text = "[EchoName]"
 horizontal_alignment = 1
 
+[node name="DetailCompanionTag" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=406763901]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_colors/font_color = Color(0.47843137, 0.70980392, 0.78431373, 1)
+theme_override_font_sizes/font_size = 12
+text = "⊕ Companion"
+horizontal_alignment = 1
+
 [node name="DetailShout" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=406763964]
 unique_name_in_owner = true
 visible = false
@@ -588,6 +598,13 @@ layout_mode = 2
 size_flags_horizontal = 3
 text = "Echo Name"
 
+[node name="CompanionTag" type="Label" parent="RootVBox/Templates/EchoRowTemplate" unique_id=1236477901]
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.47843137, 0.70980392, 0.78431373, 1)
+theme_override_font_sizes/font_size = 11
+text = "⊕ Companion"
+
 [node name="CallingLabel" type="Label" parent="RootVBox/Templates/EchoRowTemplate" unique_id=1073789561]
 layout_mode = 2
 text = "Calling"
@@ -648,6 +665,13 @@ theme_override_constants/separation = 4
 [node name="CardNameLabel" type="Label" parent="RootVBox/Templates/PartyCardTemplate/CardMargin/CardRoot/CardInfo" unique_id=1779707597]
 layout_mode = 2
 text = "Echo Name"
+
+[node name="CompanionTag" type="Label" parent="RootVBox/Templates/PartyCardTemplate/CardMargin/CardRoot/CardInfo" unique_id=1779707601]
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.47843137, 0.70980392, 0.78431373, 1)
+theme_override_font_sizes/font_size = 11
+text = "⊕ Companion"
 
 [node name="CardCallingLabel" type="Label" parent="RootVBox/Templates/PartyCardTemplate/CardMargin/CardRoot/CardInfo" unique_id=1664621461]
 layout_mode = 2

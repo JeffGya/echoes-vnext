@@ -13,6 +13,11 @@
 #
 # Rank colors are @export so they can be adjusted in the Godot editor
 # without touching this script.
+#
+# V2-STAGE-004 Phase 4: the ally-recruit offer (formerly rendered here as
+# %AllyRecruitOffer) now lives on SanctumScreen as the %CompanionInvite
+# modal, shown on Sanctum entry. This screen no longer reads
+# data.ally_recruit_offer or cta.recruit_accept/cta.recruit_decline.
 
 class_name ResolveScreen
 extends Control
@@ -26,6 +31,11 @@ signal action_requested(action: Dictionary)
 @export var rank_color_c: Color = Color("#f0e8d0")  # text default
 @export var rank_color_d: Color = Color("#b08040")  # amber dim
 @export var rank_color_f: Color = Color("#c04040")  # red
+
+# P4 playtest fix: safe top/bottom headroom (px) reserved when clamping the
+# card's max height, so it never spans edge-to-edge and CTAs stay reachable.
+const _CARD_TOP_MARGIN:    float = 60.0
+const _CARD_BOTTOM_MARGIN: float = 140.0
 
 const RewardEntryScene    := preload("res://ui/components/RewardEntryItem.tscn")
 const EmotionEntryScene   := preload("res://ui/components/EmotionEntryItem.tscn")
@@ -49,7 +59,10 @@ const EffectChipScene     := preload("res://ui/components/EffectChip.tscn")
 @onready var _summary_label:           Label         = %SummaryLabel
 @onready var _effects_rail:            HFlowContainer = %EffectsRail
 # CardContent — parent of all card sections, used for dynamic vow nodes.
-@onready var _card_content:            VBoxContainer = $CenterContainer/ResultCard/CardContent
+@onready var _card_content:            VBoxContainer = $CenterContainer/ResultCard/ScrollContainer/CardContent
+# P4 playtest fix: wraps CardContent so a tall card (rewards + vow sections +
+# CTAs) scrolls instead of overflowing off-screen (authored in .tscn).
+@onready var _card_scroll:             ScrollContainer = $CenterContainer/ResultCard/ScrollContainer
 # V2-VOW-002: vow outcome section nodes (authored in .tscn).
 @onready var _vow_section:             VBoxContainer = %VowOutcomeSection
 @onready var _vow_outcome_header:      Label         = %VowOutcomeHeader
@@ -70,6 +83,12 @@ func set_snapshot(snap: Dictionary) -> void:
 	assert(snap.has("data"), "ResolveScreen: snapshot missing 'data'")
 	_clear()
 	_render(snap["data"], snap.get("actions", {}))
+	# P4 playtest fix: re-measure after layout settles so a tall card (e.g.
+	# combat rewards + vow sections) is capped and scrollable rather than
+	# overflowing past the viewport. Deferred so container
+	# children (RewardEntryItem/EmotionEntryItem/EffectChip instances) have
+	# finished sizing before we read their combined minimum height.
+	call_deferred("_clamp_card_height")
 
 
 func _clear() -> void:
@@ -625,3 +644,25 @@ func _build_vow_discovered_section(data: Dictionary) -> void:
 func _ready() -> void:
 	_sanctum_button.pressed.connect(_on_sanctum_pressed)
 	_next_stage_button.pressed.connect(_on_next_stage_pressed)
+	# P4 playtest fix: re-clamp on rotation/resize so the card stays reachable.
+	get_viewport().size_changed.connect(_clamp_card_height)
+
+
+# ─────────────────────────────────────────────────────────────
+# P4 playtest fix: bounded, scrollable card
+# ─────────────────────────────────────────────────────────────
+
+## Caps %ScrollContainer's height at (viewport height - safe margins) so a
+## tall card scrolls instead of overflowing off-screen; short cards keep
+## hugging their natural content height (no visual change for those).
+## ScrollContainer ignores its child's height in its own minimum-size
+## calculation while vertical scrolling is enabled, so custom_minimum_size
+## is the only lever that controls the displayed height here — this is not
+## a floor, it fully determines the allotted height in this layout.
+func _clamp_card_height() -> void:
+	if _card_scroll == null or _card_content == null:
+		return
+	var natural_height: float = _card_content.get_combined_minimum_size().y
+	var viewport_height: float = get_viewport_rect().size.y
+	var max_height: float = maxf(120.0, viewport_height - _CARD_TOP_MARGIN - _CARD_BOTTOM_MARGIN)
+	_card_scroll.custom_minimum_size.y = minf(natural_height, max_height)

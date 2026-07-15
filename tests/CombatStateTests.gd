@@ -29,6 +29,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("combat/initiative_tiebreak_order",  Callable(CombatStateTests, "_t_initiative_tiebreak_order"))
 	# V2-PROG-002: initiative uses confirmed calling modifier over birth origin
 	runner.register_test("combat/initiative_uses_confirmed_calling", Callable(CombatStateTests, "_t_initiative_uses_confirmed_calling"))
+	# V2-STAGE-004 Phase 4 (S16b): all_echoes_dead exclusion — is_ally must not keep a wiped party "alive"
+	runner.register_test("combat/all_echoes_dead_excludes_ally", Callable(CombatStateTests, "_t_all_echoes_dead_excludes_ally"))
+	runner.register_test("combat/all_echoes_dead_living_normal_echo_prevents", Callable(CombatStateTests, "_t_all_echoes_dead_living_normal_echo_prevents"))
 
 
 # -------------------------
@@ -246,5 +249,46 @@ static func _t_initiative_uses_confirmed_calling() -> Dictionary:
 		return {
 			"ok": false,
 			"error": "Confirmed warder (A, +10 modifier) should go first. Got '%s' first — birth origin 'seer' must not override confirmed calling." % first_id,
+		}
+	return { "ok": true }
+
+
+# -------------------------
+# V2-STAGE-004 Phase 4 (S16b): all_echoes_dead exclusion tests
+# -------------------------
+
+# A joined Temporary Ally (is_ally=true) must NOT keep a wiped party "alive" —
+# CombatState.check_end_condition's living_echoes filter excludes is_ally actors
+# (mirrors the pre-existing is_spirit exclusion for GUIDE_SPIRIT).
+static func _t_all_echoes_dead_excludes_ally() -> Dictionary:
+	var actors: Array = [
+		{ "id": "echo_1",  "faction": "echo",  "is_dead": true },
+		{ "id": "echo_2",  "faction": "echo",  "is_dead": true },
+		{ "id": "ally_1",  "faction": "echo",  "is_dead": false, "is_ally": true },
+		{ "id": "enemy_1", "faction": "enemy", "is_dead": false },
+	]
+	var result: Dictionary = CombatState.check_end_condition(actors, "defeat_enemies", {})
+	if not bool(result.get("over", false)):
+		return { "ok": false, "error": "Expected combat over (party wiped except a living ally), got over=false" }
+	if bool(result.get("victory", false)):
+		return { "ok": false, "error": "Expected defeat (victory=false) when only a living ally remains" }
+	if str(result.get("reason", "")) != "all_echoes_dead":
+		return { "ok": false, "error": "Expected reason='all_echoes_dead', got '%s'" % str(result.get("reason", "")) }
+	return { "ok": true }
+
+
+# Control: a living NORMAL echo (is_ally=false, is_spirit=false) must still prevent
+# all_echoes_dead from firing — proves the exclusion is scoped to is_ally/is_spirit only.
+static func _t_all_echoes_dead_living_normal_echo_prevents() -> Dictionary:
+	var actors: Array = [
+		{ "id": "echo_1",  "faction": "echo",  "is_dead": true },
+		{ "id": "echo_2",  "faction": "echo",  "is_dead": false },
+		{ "id": "enemy_1", "faction": "enemy", "is_dead": false },
+	]
+	var result: Dictionary = CombatState.check_end_condition(actors, "defeat_enemies", {})
+	if bool(result.get("over", false)):
+		return {
+			"ok": false,
+			"error": "Expected combat NOT over (one normal echo still alive), got over=true reason='%s'" % str(result.get("reason", ""))
 		}
 	return { "ok": true }

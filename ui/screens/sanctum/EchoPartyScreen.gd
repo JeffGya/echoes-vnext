@@ -18,6 +18,8 @@ const _RADAR_AXIS_MAX: float = 100.0
 # Detail panel
 @onready var detail_panel: Control = %DetailPanel
 @onready var detail_name_label: Label = %DetailName
+# V2-STAGE-004 P4 S15 UI-A2: Companion tag for recruited-ally roster echoes.
+@onready var detail_companion_tag: Label = %DetailCompanionTag
 @onready var detail_shout_label: Label = %DetailShout
 @onready var detail_hp_bar: ProgressBar = %DetailHPBar
 @onready var detail_hp_label: Label = %DetailHPLabel
@@ -171,6 +173,10 @@ func _rebuild_echo_list() -> void:
 		var name_lbl := _row_node(row, "NameLabel") as Label
 		name_lbl.text = str(e.get("name", "Unknown"))
 
+		# V2-STAGE-004 P4 S15 UI-A2: recruited allies stay in the roster as durable Companions.
+		var companion_tag := _row_node(row, "CompanionTag") as Label
+		companion_tag.visible = str(e.get("origin", "")) == "recruited_ally"
+
 		var calling_lbl := _row_node(row, "CallingLabel") as Label
 		calling_lbl.text = _calling_label(e)
 
@@ -207,6 +213,10 @@ func _rebuild_party_cards() -> void:
 
 		var name_lbl := _card_node(card, "CardNameLabel") as Label
 		name_lbl.text = str(e.get("name", "Unknown"))
+
+		# V2-STAGE-004 P4 S15 UI-A2: recruited allies stay in the roster as durable Companions.
+		var companion_tag := _card_node(card, "CompanionTag") as Label
+		companion_tag.visible = str(e.get("origin", "")) == "recruited_ally"
 
 		var calling_lbl := _card_node(card, "CardCallingLabel") as Label
 		calling_lbl.text = _calling_label(e)
@@ -253,6 +263,8 @@ func _render_detail(e: Dictionary) -> void:
 	var stats: Dictionary = stats_v if stats_v is Dictionary else {}
 
 	detail_name_label.text = name_str
+	# V2-STAGE-004 P4 S15 UI-A2: recruited allies stay in the roster as durable Companions.
+	detail_companion_tag.visible = str(e.get("origin", "")) == "recruited_ally"
 	detail_shout_label.text = shout
 	detail_shout_label.visible = not shout.is_empty()
 

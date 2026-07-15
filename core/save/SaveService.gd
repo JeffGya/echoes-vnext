@@ -610,6 +610,7 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			"bonds": [],
 			"party_encounters": [],
 			"rival_incidents": [],
+			"companion_invite": {},
 			"ase_flame": {
 				"awakened": false,
 				"boost_remaining_seconds": 0,
@@ -687,7 +688,15 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			sanctum["occupants"] = []
 			repaired = true
 			repaired_notes.append("sanctum.occupants set to array default")
-	
+
+		# V2-STAGE-004 Phase 4 (S14 redesign): earned-return companion invite — a one-slot
+		# Sanctum inbox surfaced by FlowSanctumState on entry until the player accepts
+		# (sanctum.companion.accept) or declines (sanctum.companion.decline). {} = none pending.
+		if not sanctum.has("companion_invite") or not (sanctum["companion_invite"] is Dictionary):
+			sanctum["companion_invite"] = {}
+			repaired = true
+			repaired_notes.append("sanctum.companion_invite set to dict default")
+
 		# SANCTUM-002: roster item additive repairs (Echo placeholder contract)
 		# Keep deterministic: no RNG, no OS time; only defaults + key migrations.
 
@@ -1323,6 +1332,39 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 						# Dict used as set: { "col,row": true }. Additive — never reset.
 						if not _emap_003.has("explored_cells"):
 							_emap_003["explored_cells"] = {}
+							_003_repaired = true
+						# V2-STAGE-004 Phase 4 (S12): durable Temporary Ally auto-join fields.
+						# ally_contact holds the durable contact dict once earned (temporary_ally
+						# good outcome); ally_consumed_in_encounter spends it for one battle only.
+						if not _emap_003.has("ally_contact"):
+							_emap_003["ally_contact"] = {}
+							_003_repaired = true
+						if not _emap_003.has("ally_contact_id"):
+							_emap_003["ally_contact_id"] = ""
+							_003_repaired = true
+						if not _emap_003.has("ally_consumed_in_encounter"):
+							_emap_003["ally_consumed_in_encounter"] = false
+							_003_repaired = true
+						# V2-STAGE-004 Phase 4 (S13): durable Charge-pressure flag. Set by a failed
+						# non-objective Charge (FlowRuntime._apply_contact_outcome charge branch);
+						# consumed once by the first PROTECT/ENDURE objective combat fought afterward
+						# (FlowEncounterState._build_objective_params), then cleared back to "".
+						if not _emap_003.has("hostile_charge_sit_id"):
+							_emap_003["hostile_charge_sit_id"] = ""
+							_003_repaired = true
+						# V2-STAGE-004 Phase 4 (S14 redesign): compute-once guard marker for the
+						# earned-return ally recruit roll — tracks which encounter_id's roll was
+						# already evaluated by FlowRuntime._compute_ally_recruit_offer_if_eligible()
+						# so a re-render/Continue never re-rolls. The invite itself now lives on
+						# save_data.sanctum.companion_invite (see the sanctum repair block below).
+						if not _emap_003.has("ally_recruit_rolled_encounter_id"):
+							_emap_003["ally_recruit_rolled_encounter_id"] = ""
+							_003_repaired = true
+						# V2-STAGE-004 Phase 4 (S15 prep): durable combat-intro marker. Set by
+						# FlowRuntime's stage.claimant.combat_forced branch ("claimant_hostile");
+						# cleared back to "" at encounter teardown alongside the ally fields.
+						if not _emap_003.has("combat_intro_reason"):
+							_emap_003["combat_intro_reason"] = ""
 							_003_repaired = true
 					if _003_repaired:
 						repaired = true

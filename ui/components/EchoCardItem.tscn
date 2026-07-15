@@ -83,6 +83,16 @@ theme_override_fonts/font = ExtResource("2_gnycu")
 theme_override_font_sizes/font_size = 11
 text = "◆ SPIRIT"
 
+[node name="AllyBadge" type="Label" parent="VBoxContainer/BodyMargin/BodyRow/InfoCol" unique_id=300100003]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.47843137, 0.70980392, 0.78431373, 1)
+theme_override_fonts/font = ExtResource("2_gnycu")
+theme_override_font_sizes/font_size = 11
+text = "⊕ ALLY"
+
 [node name="NameLabel" type="Label" parent="VBoxContainer/BodyMargin/BodyRow/InfoCol" unique_id=457191916]
 unique_name_in_owner = true
 layout_mode = 2
@@ -91,6 +101,16 @@ theme_override_fonts/font = ExtResource("3_5bj6p")
 theme_override_font_sizes/font_size = 16
 text = "[EchoName]"
 clip_text = true
+
+[node name="CompanionTag" type="Label" parent="VBoxContainer/BodyMargin/BodyRow/InfoCol" unique_id=300100004]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.47843137, 0.70980392, 0.78431373, 1)
+theme_override_fonts/font = ExtResource("2_gnycu")
+theme_override_font_sizes/font_size = 11
+text = "⊕ Companion"
 
 [node name="StatusLabel" type="Label" parent="VBoxContainer/BodyMargin/BodyRow/InfoCol" unique_id=2021664904]
 unique_name_in_owner = true

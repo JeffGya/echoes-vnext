@@ -241,9 +241,11 @@ static func check_end_condition(actors: Array, objective: String,
 	# 4. Defeat: all echoes dead (unchanged).
 	# A joined GUIDE_SPIRIT combatant has faction "echo" + is_spirit true, but it must never
 	# keep a wiped party "alive" — exclude it so a dead party still triggers all_echoes_dead.
+	# V2-STAGE-004 Phase 4 (S12): a joined Temporary Ally (is_ally true) gets the same
+	# exclusion — party wipe is defeat even if the ally still stands.
 	var living_echoes := actors.filter(func(a: Dictionary) -> bool:
 		return a.get("faction", "") == "echo" and not a.get("is_dead", false) \
-			and not a.get("is_spirit", false))
+			and not a.get("is_spirit", false) and not a.get("is_ally", false))
 	if living_echoes.is_empty():
 		return { "over": true, "victory": false, "reason": "all_echoes_dead" }
 

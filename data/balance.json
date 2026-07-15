@@ -394,6 +394,14 @@
 						"faith": 20.0,
 						"wisdom": 40.0
 					}
+				},
+				"temporary_ally": {
+					"_comment": "V2-STAGE-004 Phase 4 (S12): Temporary Ally auto-join combat template — sane mid-tier stat block, dampened further in combat via data.contact.ally.damage_mul.",
+					"traits": {
+						"courage": 45.0,
+						"wisdom": 45.0,
+						"faith": 45.0
+					}
 				}
 			},
 			"structures": {
@@ -1708,6 +1716,11 @@
 			"encounter_approach": {
 				"_comment": "V2-STAGE-004 Phase 3: on an UNSCOUTED approach (stage_context.encounter_approach.situation_was_revealed == false), bump each echo's fear at combat start. Degrades readiness/intent via existing fear mechanics — NO initiative re-sort (readiness computed once).",
 				"surprise_fear": 12
+			},
+			"charge_pressure": {
+				"_comment": "V2-STAGE-004 Phase 4 (S13): a failed non-objective Charge sets explore_map.hostile_charge_sit_id (FlowRuntime._apply_contact_outcome charge branch). Consumed exactly once by the first PROTECT/ENDURE objective combat fought afterward — moderate bump, then cleared. Parallels the surprise_fear modifier above.",
+				"protect_duration_bonus": 1,
+				"endure_wave_bonus": 1
 			}
 		},
 		"calling": {
@@ -3097,7 +3110,63 @@
 				"realm.02": ["witness", "claimant", "guide", "charge", "temporary_ally"]
 			},
 			"role_pool_fallback": ["witness", "witness", "guide", "charge"],
-			"virtue_wheel": ["courage","leadership","truth","wisdom","humility","acceptance","forgiveness","compassion","empathy","generosity"]
+			"virtue_wheel": ["courage","leadership","truth","wisdom","humility","acceptance","forgiveness","compassion","empathy","generosity"],
+			"ally": {
+				"_comment": "V2-STAGE-004 Phase 4 (S12): Temporary Ally auto-join tuning. def_id/level_* feed ContactActorBuilder via FlowEncounterState; damage_mul mirrors guide_spirit.spirit_damage_mul; death_*_knock apply once if the joined ally dies in battle.",
+				"def_id": "temporary_ally",
+				"damage_mul": 0.75,
+				"level_base": 1,
+				"level_growth_per_completion": 0.5,
+				"level_max": 5,
+				"death_morale_knock": 6,
+				"death_fear_knock": 6
+			},
+			"claimant": {
+				"_comment": "V2-STAGE-004 Phase 4 (S15 prep): combat_intro_line shown on the encounter/resolve screens when a hostile Claimant forces combat (see FlowRuntime stage.claimant.combat_forced).",
+				"combat_intro_line": "The claimant turns on you."
+			},
+			"recruitment": {
+				"_comment": "V2-STAGE-004 Phase 4 (S14): Earned Return recruit-chance formula for a surviving temporary_ally. Additive conversation+combat+fit, base 0, never guaranteed (cap < 100). See ANSWERS.md #28/#30/#31. All sub-blocks are self-contained here (RecruitmentService.compute_recruit_chance only receives this block) — vector_to_virtue_primary/rival_archetype_pairs duplicate data.weaving_rite/data.sanctum sources by necessity of that scope.",
+				"cap": 75,
+				"conversation_max": 30,
+				"combat_max": 35,
+				"fit_max": 30,
+				"conversation_good_fear_max": 35,
+				"conversation_good_morale_min": 60,
+				"conv_score_baseline": 3.0,
+				"conversation_subweights": { "outcome_quality": 18, "engagement": 12 },
+				"combat_subweights": {
+					"remaining_hp": 14,
+					"rounds_survived": 9,
+					"offensive": 12,
+					"offensive_damage_baseline": 40
+				},
+				"fit_subweights": { "vector": 15, "archetype": 8, "stat": 7 },
+				"archetype_match_bonus": 0.3,
+				"rival_archetype_penalty": -0.4,
+				"rival_archetype_pairs": [
+					["proud", "empathic"],
+					["valiant", "stoic"],
+					["ambitious", "devout"],
+					["canny", "loyal"]
+				],
+				"stat_similarity_scale": 50.0,
+				"vector_seed_primary": 60.0,
+				"vector_seed_secondary": 20.0,
+				"vector_to_virtue_primary": {
+					"vanguard": "courage",
+					"protector": "leadership",
+					"seeker": "wisdom",
+					"pillar": "acceptance",
+					"strategist": "truth",
+					"skeptic": "humility",
+					"devoted": "forgiveness",
+					"opportunist": "generosity",
+					"mediator": "compassion",
+					"nurturer": "empathy"
+				},
+				"companion_bond_debuff": -30
+			}
 		}
 	}
 }
