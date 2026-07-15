@@ -29,6 +29,14 @@ extends Resource
 @export var spirit_halo_padding: float = 6.0
 @export var spirit_halo_width: float = 2.5
 
+# V2-STAGE-004 Phase 4 (S15 UI-B): joined-ally ring — a single crisp Mist Blue ring
+# (no fill, no double-line nimbus) so a temporary combat ally reads distinctly from
+# the GUIDE_SPIRIT gold halo (soft filled nimbus) and the PURSUE quarry's solid gold
+# diamond badge. Palette: Mist Blue #7AB5C8.
+@export var ally_ring_color: Color = Color(0.4784314, 0.70980394, 0.78431373, 0.9)
+@export var ally_ring_padding: float = 5.0
+@export var ally_ring_width: float = 2.5
+
 @export var hp_bar_offset_y: float = 10.0
 @export var hp_bar_height: float = 4.0
 @export var hp_bar_background_color: Color = Color(0.15, 0.15, 0.15, 1.0)

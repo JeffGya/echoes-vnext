@@ -262,6 +262,34 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	# -------------------------
+	# spawn_ally dev command (V2-STAGE-004 Phase 4 S12 / debug only)
+	# -------------------------
+	if head == "spawn_ally":
+		_run_spawn_ally_command()
+		return
+
+	# -------------------------
+	# force_claimant_combat dev command (V2-STAGE-004 Phase 4 S13 / debug only)
+	# -------------------------
+	if head == "force_claimant_combat":
+		_run_force_claimant_combat_command()
+		return
+
+	# -------------------------
+	# force_charge_pressure dev command (V2-STAGE-004 Phase 4 S13 / debug only)
+	# -------------------------
+	if head == "force_charge_pressure":
+		_run_force_charge_pressure_command(parts)
+		return
+
+	# -------------------------
+	# force_recruit dev toggle (V2-STAGE-004 Phase 4 S14 / debug only)
+	# -------------------------
+	if head == "force_recruit":
+		_run_force_recruit_command(parts)
+		return
+
+	# -------------------------
 	# institution shortcuts (V2-SANCTUM-002 / debug only)
 	# -------------------------
 	if head == "institution" or head == "inst":
@@ -269,7 +297,7 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	_debug_print("Unknown command: " + cmd)
-	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective [purify_shrine|defeat_enemies|guide_spirit [protect|escort] [join|nojoin]] | combat_emotion | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all>")
+	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective [purify_shrine|defeat_enemies|guide_spirit [protect|escort] [join|nojoin]] | combat_emotion | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear>")
 	
 	_flush_logs_to_console()
 	
@@ -384,6 +412,12 @@ func _run_tests(parts: Array) -> void:
 	CombatRoundtripIntegrationTests.register(runner)  # V2-STAGE-004-P3: real combat round loop on irregular terrain (id-keyed wiring)
 	# V2-STAGE-004 Phase 5
 	StageExploreP5Tests.register(runner)     # V2-STAGE-004-P5: directive composite, party_preview emotional_status, situation_pending.choices, travel-beat
+	# V2-STAGE-004 Phase 4 (S16a) — recruitment + contact-actor unit tests
+	RecruitmentServiceTests.register(runner)     # V2-STAGE-004-P4 S14: earned-return recruit chance + promotion
+	ContactActorBuilderTests.register(runner)    # V2-STAGE-004-P4 S12: temporary-ally combat actor builder
+	# V2-STAGE-004 Phase 4 (S16b) — seam + exclusion tests (ally auto-join, claimant-forced
+	# combat, charge-pressure bump, ally recruit offer compute-once, projection shapes)
+	Stage004SeamTests.register(runner)
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [
@@ -745,6 +779,87 @@ func _run_combat_emotion_command() -> void:
 	combat_screen.set_emotion_debug(not currently_on)
 	var state_label: String = "ON" if not currently_on else "OFF"
 	_debug_print("Emotion debug: %s" % state_label)
+	_flush_logs_to_console()
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# V2-STAGE-004 Phase 4 dev commands — manual testing aids for the conversation-RNG-
+# gated combat seams. Dev-only; each command guards the "must be exploring a stage"
+# precondition here (before dispatching) so the player-facing message always reaches
+# the debug panel, mirroring the guide_spirit dev-override precedent's determinism.
+# ────────────────────────────────────────────────────────────────────────────
+
+# S12: stages a synthetic temporary_ally contact so the next encounter fought in this
+# stage auto-joins it. Usage: spawn_ally
+func _run_spawn_ally_command() -> void:
+	if str(runtime.flow_ctx.last_snapshot.get("type", "")) != "flow.stage_explore":
+		_debug_print("spawn_ally: only usable while exploring a stage (flow.stage_explore).")
+		_flush_logs_to_console()
+		return
+	var snap := runtime.dispatch({ "type": "debug.ally.spawn" })
+	_render_snapshot(snap)
+	_debug_print("Ally staged — it will join the next encounter.")
+	_flush_logs_to_console()
+
+
+# S13: replicates the claimant-hostile branch — forces immediate combat with
+# combat_intro_reason="claimant_hostile". Usage: force_claimant_combat
+func _run_force_claimant_combat_command() -> void:
+	if str(runtime.flow_ctx.last_snapshot.get("type", "")) != "flow.stage_explore":
+		_debug_print("force_claimant_combat: only usable while exploring a stage (flow.stage_explore).")
+		_flush_logs_to_console()
+		return
+	var snap := runtime.dispatch({ "type": "debug.claimant.force_combat" })
+	_render_snapshot(snap)
+	_debug_print("Hostile Claimant combat forced — entering flow.encounter.")
+	_flush_logs_to_console()
+
+
+# S13: sets/clears explore_map.hostile_charge_sit_id, consumed by the next protect/endure
+# objective combat. Usage: force_charge_pressure [on|off]  (default on)
+func _run_force_charge_pressure_command(parts: Array) -> void:
+	if str(runtime.flow_ctx.last_snapshot.get("type", "")) != "flow.stage_explore":
+		_debug_print("force_charge_pressure: only usable while exploring a stage (flow.stage_explore).")
+		_flush_logs_to_console()
+		return
+	var op := "on"
+	if parts.size() >= 2:
+		op = str(parts[1]).to_lower()
+	if op != "on" and op != "off":
+		_debug_print("Usage: force_charge_pressure [on|off]")
+		_flush_logs_to_console()
+		return
+	var on := (op == "on")
+	var snap := runtime.dispatch({ "type": "debug.charge_pressure.set", "on": on })
+	_render_snapshot(snap)
+	if on:
+		_debug_print("Charge pressure ON — next protect/endure objective combat is harder.")
+	else:
+		_debug_print("Charge pressure OFF.")
+	_flush_logs_to_console()
+
+
+# S14: forces the ally recruit-offer roll outcome via flow_ctx.dev_force_recruit
+# (draw-then-override, honored in FlowRuntime._compute_ally_recruit_offer_if_eligible).
+# Usage: force_recruit <success|fail|clear>
+func _run_force_recruit_command(parts: Array) -> void:
+	if parts.size() < 2:
+		_debug_print("Usage: force_recruit <success|fail|clear>")
+		_flush_logs_to_console()
+		return
+	var op := str(parts[1]).to_lower()
+	match op:
+		"success":
+			runtime.flow_ctx.dev_force_recruit = "success"
+			_debug_print("force_recruit: override = success — next earned-return ally offer rolls a guaranteed success.")
+		"fail":
+			runtime.flow_ctx.dev_force_recruit = "fail"
+			_debug_print("force_recruit: override = fail — next earned-return ally offer rolls a guaranteed failure (no offer).")
+		"clear":
+			runtime.flow_ctx.dev_force_recruit = ""
+			_debug_print("force_recruit: override cleared — using seeded roll.")
+		_:
+			_debug_print("Unknown force_recruit op '%s'. Use: success|fail|clear" % op)
 	_flush_logs_to_console()
 
 

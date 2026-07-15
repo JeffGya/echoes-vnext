@@ -190,6 +190,11 @@ func dispatch(action: Dictionary) -> Dictionary:
 				var _from_id: String = str(flow_machine._current_state_id)
 				if _from_id == FlowStateIds.RESOLVE or _from_id == FlowStateIds.ENCOUNTER:
 					# V2-COMBAT-001: defeat path — null ctx so re-entry initialises a fresh encounter.
+					# FIX (P4 review bug 2): the defeat RESOLVE→SANCTUM path skipped ally-field
+					# teardown entirely — clear before nulling ctx, mirroring the encounter.complete
+					# and _handle_complete_stage call sites, so a stale combat_intro_reason/offer
+					# never leaks onto the next unrelated encounter.
+					_clear_ally_fields_if_present(t)
 					flow_ctx.encounter_ctx     = null
 					flow_ctx.encounter_machine = null
 					_apply_run_emotion_modifiers("defeat", t)
@@ -203,63 +208,9 @@ func dispatch(action: Dictionary) -> Dictionary:
 				flow_ctx.weave_resolution = {}
 			elif to_state == FlowStateIds.STAGE_EXPLORE:
 				# P1-FIX: non-final objective victory returns to stage_explore via go_state.
-				# apply post-combat effects here (same as _handle_complete_stage minus advance_stage)
-				# before encounter_ctx is cleared by the state exit.
-				var _ncv_from: String = str(flow_machine._current_state_id)
-				if _ncv_from == FlowStateIds.ENCOUNTER and flow_ctx.encounter_ctx != null:
-					var _ncv_victory := bool(flow_ctx.encounter_ctx.combat_result.get("victory", false))
-					if _ncv_victory:
-						var _ncv_outcome := "win"
-						_apply_encounter_emotion_drift(_ncv_outcome, t)
-						_apply_combat_bond_triggers(t, _ncv_outcome)
-						_apply_bond_aftermath_modifiers(t, _ncv_outcome)
-						_seed_rival_stage_incidents(t)
-						# Resolve the combat situation in the save (marks objective completed)
-						if not flow_ctx.stage_id.is_empty():
-							var _ncv_stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
-							if not _ncv_stage.is_empty():
-								var _ncv_map_v: Variant = _ncv_stage.get("explore_map", {})
-								var _ncv_map: Dictionary = _ncv_map_v if _ncv_map_v is Dictionary else {}
-								var _ncv_sit_id := str(_ncv_map.get("last_situation_id", ""))
-								if not _ncv_sit_id.is_empty():
-									var _ncv_sits_v: Variant = _ncv_map.get("situations", [])
-									var _ncv_sits: Array = _ncv_sits_v if _ncv_sits_v is Array else []
-									for _ncv_i in range(_ncv_sits.size()):
-										var _ncv_sv: Variant = _ncv_sits[_ncv_i]
-										if _ncv_sv is Dictionary and str((_ncv_sv as Dictionary).get("id", "")) == _ncv_sit_id:
-											var _ncv_s: Dictionary = _ncv_sv
-											_ncv_s["resolved"] = true
-											_ncv_s["revealed"] = true
-											_ncv_sits[_ncv_i] = _ncv_s
-											if bool(_ncv_s.get("is_objective", false)):
-												_ncv_map["objectives_found"] = int(_ncv_map.get("objectives_found", 0)) + 1
-												var _ncv_obj_idx := int(_ncv_s.get("objective_index", -1))
-												if _ncv_obj_idx >= 0:
-													var _ncv_objs_v: Variant = _ncv_stage.get("objectives", [])
-													if _ncv_objs_v is Array:
-														var _ncv_objs: Array = _ncv_objs_v
-														if _ncv_obj_idx < _ncv_objs.size() and _ncv_objs[_ncv_obj_idx] is Dictionary:
-															_ncv_objs[_ncv_obj_idx]["completed"] = true
-														_ncv_stage["objectives"] = _ncv_objs
-											break
-									_ncv_map["situations"] = _ncv_sits
-									_ncv_stage["explore_map"] = _ncv_map
-									FlowStageExploreStateScript._write_stage_back(flow_ctx, _ncv_stage)
-									flow_ctx.save_request = true
-									flow_ctx.save_request_reason = "stage.combat_resolved" \
-										if flow_ctx.save_request_reason.is_empty() \
-										else flow_ctx.save_request_reason + "|stage.combat_resolved"
-									logger.info(t, "stage.combat_resolved.nonfinal", "Non-final objective resolved on victory", {
-										"stage_id": flow_ctx.stage_id, "situation_id": _ncv_sit_id,
-									})
-						# Vow discovery reads is_dead from ectx.actors — must run before null
-						_check_vow_discovery(t)
-						flow_ctx.encounter_ctx     = null
-						flow_ctx.encounter_machine = null
-						flow_ctx.active_encounter_objective_index = -1
-				# V2-VOW-002: evaluate vow condition on actual stage entry (covers first entry
-				# via "Begin" and re-entry after defeat — both route through go_state→STAGE_EXPLORE).
-				_apply_vow_stage_entry_condition(t)
+				# V2-STAGE-004 Phase 4 (S14): extracted into _apply_victory_return_to_explore()
+				# — pure move, no behaviour change for this call site.
+				_apply_victory_return_to_explore(t)
 			flow_machine.transition(to_state, flow_ctx, logger, t, "ui.flow.go_state")
 
 		"flow.select_realm":
@@ -417,9 +368,19 @@ func dispatch(action: Dictionary) -> Dictionary:
 			# EMOTION-002: apply win/loss drift to all roster echoes before clearing encounter
 			var enc_outcome := str(action.get("outcome", "loss"))
 			_apply_encounter_emotion_drift(enc_outcome, t)
+			# V2-STAGE-004 Phase 4 (S12): ally is spent for one battle only — clear before nulling ctx.
+			_clear_ally_fields_if_present(t)
 			flow_ctx.encounter_ctx = null
 			flow_ctx.encounter_machine = null
 			flow_machine.transition(FlowStateIds.RESOLVE, flow_ctx, logger, t, "ui.encounter.complete")
+
+		# ---- Recruitment (V2-STAGE-004 Phase 4 S14 redesign): Sanctum-scoped earned-return
+		# companion invite accept/decline (see FlowSanctumState data.companion_invite) ----
+		"sanctum.companion.accept":
+			_handle_companion_accept(t)
+
+		"sanctum.companion.decline":
+			_handle_companion_decline(t)
 
 		# ---- Economy ----
 		"economy.settle_time":
@@ -567,6 +528,16 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 		"debug.vow.unlock":
 			_handle_debug_vow_unlock(action, t)
+
+		# ---- V2-STAGE-004 Phase 4 dev commands (manual testing aids; dev-only) ----
+		"debug.ally.spawn":
+			_handle_debug_spawn_ally(t)
+
+		"debug.claimant.force_combat":
+			_handle_debug_force_claimant_combat(t)
+
+		"debug.charge_pressure.set":
+			_handle_debug_force_charge_pressure(action, t)
 
 		# ---- Directives (DIRECTIVE-001) ----
 		"directive.select":
@@ -811,6 +782,69 @@ func _handle_sanctum_grade_select(action: Dictionary, t: int) -> void:
 	flow_ctx.last_snapshot = FlowSummonState.build_snapshot(flow_ctx, t)
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
+# P1-FIX / V2-STAGE-004 Phase 4 (S14): non-final-objective victory returning to STAGE_EXPLORE.
+# Applies post-combat effects (mirrors _handle_complete_stage minus advance_stage), resolves the
+# triggering situation in the save, and nulls encounter_ctx — all BEFORE the state exit clears it.
+# Extracted from the "flow.go_state"→STAGE_EXPLORE match case (pure move, no behaviour change for
+# that call site).
+func _apply_victory_return_to_explore(t: int) -> void:
+	var _ncv_from: String = str(flow_machine._current_state_id)
+	if _ncv_from == FlowStateIds.ENCOUNTER and flow_ctx.encounter_ctx != null:
+		var _ncv_victory := bool(flow_ctx.encounter_ctx.combat_result.get("victory", false))
+		if _ncv_victory:
+			var _ncv_outcome := "win"
+			_apply_encounter_emotion_drift(_ncv_outcome, t)
+			_apply_combat_bond_triggers(t, _ncv_outcome)
+			_apply_bond_aftermath_modifiers(t, _ncv_outcome)
+			_seed_rival_stage_incidents(t)
+			# Resolve the combat situation in the save (marks objective completed)
+			if not flow_ctx.stage_id.is_empty():
+				var _ncv_stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
+				if not _ncv_stage.is_empty():
+					var _ncv_map_v: Variant = _ncv_stage.get("explore_map", {})
+					var _ncv_map: Dictionary = _ncv_map_v if _ncv_map_v is Dictionary else {}
+					var _ncv_sit_id := str(_ncv_map.get("last_situation_id", ""))
+					if not _ncv_sit_id.is_empty():
+						var _ncv_sits_v: Variant = _ncv_map.get("situations", [])
+						var _ncv_sits: Array = _ncv_sits_v if _ncv_sits_v is Array else []
+						for _ncv_i in range(_ncv_sits.size()):
+							var _ncv_sv: Variant = _ncv_sits[_ncv_i]
+							if _ncv_sv is Dictionary and str((_ncv_sv as Dictionary).get("id", "")) == _ncv_sit_id:
+								var _ncv_s: Dictionary = _ncv_sv
+								_ncv_s["resolved"] = true
+								_ncv_s["revealed"] = true
+								_ncv_sits[_ncv_i] = _ncv_s
+								if bool(_ncv_s.get("is_objective", false)):
+									_ncv_map["objectives_found"] = int(_ncv_map.get("objectives_found", 0)) + 1
+									var _ncv_obj_idx := int(_ncv_s.get("objective_index", -1))
+									if _ncv_obj_idx >= 0:
+										var _ncv_objs_v: Variant = _ncv_stage.get("objectives", [])
+										if _ncv_objs_v is Array:
+											var _ncv_objs: Array = _ncv_objs_v
+											if _ncv_obj_idx < _ncv_objs.size() and _ncv_objs[_ncv_obj_idx] is Dictionary:
+												_ncv_objs[_ncv_obj_idx]["completed"] = true
+											_ncv_stage["objectives"] = _ncv_objs
+								break
+						_ncv_map["situations"] = _ncv_sits
+						_ncv_stage["explore_map"] = _ncv_map
+						FlowStageExploreStateScript._write_stage_back(flow_ctx, _ncv_stage)
+						flow_ctx.save_request = true
+						flow_ctx.save_request_reason = "stage.combat_resolved" \
+							if flow_ctx.save_request_reason.is_empty() \
+							else flow_ctx.save_request_reason + "|stage.combat_resolved"
+						logger.info(t, "stage.combat_resolved.nonfinal", "Non-final objective resolved on victory", {
+							"stage_id": flow_ctx.stage_id, "situation_id": _ncv_sit_id,
+						})
+			# Vow discovery reads is_dead from ectx.actors — must run before null
+			_check_vow_discovery(t)
+			flow_ctx.encounter_ctx     = null
+			flow_ctx.encounter_machine = null
+			flow_ctx.active_encounter_objective_index = -1
+	# V2-VOW-002: evaluate vow condition on actual stage entry (covers first entry
+	# via "Begin" and re-entry after defeat — both route through go_state→STAGE_EXPLORE).
+	_apply_vow_stage_entry_condition(t)
+
+
 # REALM-004: Advance stage index; on realm complete, clear context and route to REALM_SELECT.
 # destination_override: when set, non-completed stages route there instead of STAGE_MAP.
 # Realm completion always routes to REALM_SELECT regardless of override.
@@ -892,6 +926,8 @@ func _handle_complete_stage(t: int, destination_override: String = "") -> void:
 	# all_situations_scouted reads the correct revealed state. ectx is still non-null
 	# here so _check_vow_discovery can read is_dead from ectx.actors; nulled right after.
 	_check_vow_discovery(t)
+	# V2-STAGE-004 Phase 4 (S12): ally is spent for one battle only — clear before nulling ctx.
+	_clear_ally_fields_if_present(t)
 	flow_ctx.encounter_ctx     = null
 	flow_ctx.encounter_machine = null
 	flow_ctx.active_encounter_objective_index = -1  # V2-STAGE-002: reset after combat resolves
@@ -1457,6 +1493,10 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 		flow_ctx.pending_scout_return_intel_count = _intel_count
 
 		# Clear encounter context — no emotion drift on retreat.
+		# FIX (P4 review bug 2): retreat-success also skipped ally-field teardown — clear
+		# before nulling ctx, mirroring the encounter.complete / _handle_complete_stage /
+		# defeat go_state→SANCTUM call sites.
+		_clear_ally_fields_if_present(t)
 		flow_ctx.encounter_ctx    = null
 		flow_ctx.encounter_machine = null
 		flow_ctx.save_request      = true
@@ -1768,6 +1808,28 @@ func _resolve_next_actor(t: int) -> void:
 					result["source_name"] = str(actor.get("name", ""))
 					result["target_name"] = str(target.get("name", ""))
 					ectx.last_round_results.append(result)
+					# S14a: offensive contribution ledger — damage_dealt/damage_taken/kills across
+					# ALL factions (echo/enemy/spirit/ally). Widens the existing echo_action_logs
+					# accumulator (PROG-003, ~line 1944 below) in place — same field name, kept for
+					# ProgressionService compatibility. Read-only bookkeeping; never influences a
+					# decision. Kill signal is derived from defender_hp_after (CombatService's
+					# _resolve_melee sets defender.is_dead the same way but never returns an
+					# "is_kill" key on the result dict, so the pre-existing result.get("is_kill", ...)
+					# checks below are left untouched for byte-identical behaviour).
+					var _s14a_dmg: int = int(result.get("damage", 0))
+					var _s14a_attacker_id: String = str(actor.get("id", ""))
+					var _s14a_defender_id: String = str(target.get("id", ""))
+					var _s14a_is_kill: bool = int(result.get("defender_hp_after", 1)) <= 0
+					if not ectx.echo_action_logs.has(_s14a_attacker_id):
+						ectx.echo_action_logs[_s14a_attacker_id] = _new_contribution_ledger_entry()
+					if not ectx.echo_action_logs.has(_s14a_defender_id):
+						ectx.echo_action_logs[_s14a_defender_id] = _new_contribution_ledger_entry()
+					var _s14a_atk_log: Dictionary = ectx.echo_action_logs[_s14a_attacker_id]
+					var _s14a_def_log: Dictionary = ectx.echo_action_logs[_s14a_defender_id]
+					_s14a_atk_log["damage_dealt"] = int(_s14a_atk_log.get("damage_dealt", 0)) + _s14a_dmg
+					_s14a_def_log["damage_taken"] = int(_s14a_def_log.get("damage_taken", 0)) + _s14a_dmg
+					if _s14a_is_kill:
+						_s14a_atk_log["kills"] = int(_s14a_atk_log.get("kills", 0)) + 1
 					var kill_str: String = " (kills)" if result.get("is_kill", false) else ""
 					logger.info(t, "combat.action_resolved",
 					"%s attacks %s for %d%s" % [actor.get("name", "?"), target.get("name", "?"), int(result.get("damage", 0)), kill_str], result)
@@ -1941,7 +2003,7 @@ func _resolve_next_actor(t: int) -> void:
 		var last_res: Dictionary = ectx.last_round_results.back()
 		var eid: String = str(actor.get("id", ""))
 		if not ectx.echo_action_logs.has(eid):
-			ectx.echo_action_logs[eid] = { "melee_count": 0, "guard_count": 0, "kill_count": 0, "total_count": 0 }
+			ectx.echo_action_logs[eid] = _new_contribution_ledger_entry()
 		var alog: Dictionary = ectx.echo_action_logs[eid]
 		match str(last_res.get("action_type", "")):
 			"melee_attack":
@@ -2074,6 +2136,13 @@ func _end_round(t: int) -> void:
 			var ko_actor: Dictionary = _find_actor_by_id(ectx.actors, ko_id)
 			if ko_actor.is_empty():
 				continue
+			# V2-STAGE-004 Phase 4 (S15 UI-B): Temporary Ally death bark. Fires once, the
+			# round the joined ally (is_ally true) is KO'd — mirrors the GUIDE_SPIRIT
+			# spirit_killed detection pattern (fire-once guard on combat_state).
+			if bool(ko_actor.get("is_ally", false)) \
+					and not bool(combat_state.get("_ally_killed_barked", false)):
+				combat_state["_ally_killed_barked"] = true
+				_fire_ally_bark(ko_actor, "ally_killed", t)
 			var ko_faction: String = str(ko_actor.get("faction", ""))
 			var ko_spread_count: int = 0
 			for sp_a in ectx.actors:
@@ -2958,6 +3027,13 @@ func _end_round(t: int) -> void:
 	if bool(combat_state.get("combat_over", false)):
 		var _arr_victory: bool = bool(ectx.combat_result.get("victory", false))
 
+		# V2-STAGE-004 Phase 4 (S14): compute the earned-return ally recruit offer ONCE, here —
+		# before any downstream teardown path (encounter.complete / _handle_complete_stage /
+		# flow.go_state→STAGE_EXPLORE) clears explore_map.ally_contact or nulls encounter_ctx.
+		# No-op (byte-identical) when there is no joined ally, the ally died, or this wasn't a
+		# victory. See ANSWERS.md #28/#31.
+		_compute_ally_recruit_offer_if_eligible(_arr_victory, round, t)
+
 		# V2-STAGE-002: on victory, resolve the situation AND mark objective complete BEFORE
 		# the final snapshot so objectives_remaining is accurate AND the situation is not
 		# re-targeted if the player returns to stage_explore.
@@ -3030,6 +3106,24 @@ func _find_actor_by_id(actors: Array, actor_id: String) -> Dictionary:
 		if a_v is Dictionary and str(a_v.get("id", "")) == actor_id:
 			return a_v
 	return {}
+
+
+## S14a: canonical default entry for EncounterContext.echo_action_logs.
+## Field name kept for compatibility — ProgressionService.award_post_combat_xp() reads this
+## Dictionary by echo_id (PROG-003). Entries now exist for ALL combat factions (echo/enemy/
+## spirit/ally) so the offensive contribution ledger (damage_dealt/damage_taken/kills) can
+## be attributed to any actor; melee_count/guard_count/kill_count/total_count remain
+## echo-only, populated exclusively by the pre-existing PROG-003 accumulator block.
+func _new_contribution_ledger_entry() -> Dictionary:
+	return {
+		"melee_count":  0,
+		"guard_count":  0,
+		"kill_count":   0,
+		"total_count":  0,
+		"damage_dealt": 0,
+		"damage_taken": 0,
+		"kills":        0,
+	}
 
 
 func _generate_seed_root_string() -> String:
@@ -3533,6 +3627,253 @@ func _get_drift_cfg() -> Dictionary:
 	var emo: Dictionary = emo_v if emo_v is Dictionary else {}
 	var drift_v: Variant = emo.get("drift", {})
 	return drift_v if drift_v is Dictionary else {}
+
+
+# V2-STAGE-004 Phase 4 (S14) — REDESIGNED (Jeff, Sanctum-event pass): "Earned Return" — if a
+# joined ally survived AND the encounter was won, compute the recruit-chance breakdown + a
+# single seeded roll. On a SUCCESSFUL roll, the invite is stored on save_data.sanctum
+# .companion_invite — a one-slot Sanctum inbox surfaced by FlowSanctumState on entry (see
+# _handle_companion_accept/_handle_companion_decline below) — instead of the old resolve-screen
+# explore_map.ally_recruit_offer. Called from _end_round() BEFORE any teardown path clears
+# explore_map.ally_contact or nulls encounter_ctx. See ANSWERS.md #28/#30/#31.
+#
+# Compute-once guard: skips silently if THIS encounter_id's roll was already evaluated (never
+# re-rolls on re-render / save+Continue). Tracked via explore_map.ally_recruit_rolled_encounter_id,
+# separate from the invite itself — a failed roll or a no-stack-discarded success leaves no trace
+# in sanctum.companion_invite, so presence of the invite alone can't serve as the guard anymore.
+#
+# No-stack guard: a successful roll is discarded (not stored) when save_data.sanctum
+# .companion_invite is already non-empty — one pending companion invite max. The invite then
+# PERSISTS until the player accepts/declines it (no auto-clear on encounter teardown, no expiry).
+#
+# No-op (no write) when: no joined ally, the ally died, or the encounter was not a victory.
+func _compute_ally_recruit_offer_if_eligible(is_victory: bool, rounds_total: int, t: int) -> void:
+	if not is_victory:
+		return
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	if ectx == null:
+		return
+
+	var _aro_ally: Dictionary = {}
+	for _aro_a_v in ectx.actors:
+		if _aro_a_v is Dictionary and bool((_aro_a_v as Dictionary).get("is_ally", false)):
+			_aro_ally = _aro_a_v
+			break
+	if _aro_ally.is_empty() or bool(_aro_ally.get("is_dead", false)):
+		return
+
+	var _aro_stage: Dictionary = FlowStageExploreStateScript._get_current_stage(flow_ctx)
+	if _aro_stage.is_empty():
+		return
+	var _aro_map_v: Variant = _aro_stage.get("explore_map", {})
+	var _aro_map: Dictionary = _aro_map_v if _aro_map_v is Dictionary else {}
+	var _aro_source_contact_v: Variant = _aro_map.get("ally_contact", {})
+	var _aro_source_contact: Dictionary = _aro_source_contact_v if _aro_source_contact_v is Dictionary else {}
+	if _aro_source_contact.is_empty():
+		return
+
+	var _aro_encounter_id: String = str(ectx.encounter_id)
+	if str(_aro_map.get("ally_recruit_rolled_encounter_id", "")) == _aro_encounter_id:
+		return  # already evaluated for this encounter — never re-roll
+
+	var _aro_bal: Dictionary = config_service.get_balance()
+	var _aro_bal_data_v: Variant = _aro_bal.get("data", {})
+	var _aro_bal_data: Dictionary = _aro_bal_data_v if _aro_bal_data_v is Dictionary else {}
+	var _aro_contact_cfg_v: Variant = _aro_bal_data.get("contact", {})
+	var _aro_contact_cfg: Dictionary = _aro_contact_cfg_v if _aro_contact_cfg_v is Dictionary else {}
+	var _aro_recruit_cfg_v: Variant = _aro_contact_cfg.get("recruitment", {})
+	var _aro_recruit_cfg: Dictionary = _aro_recruit_cfg_v if _aro_recruit_cfg_v is Dictionary else {}
+
+	var _aro_party_echoes: Array = _get_active_party_echoes()
+	var _aro_contribution_v: Variant = ectx.echo_action_logs.get(str(_aro_ally.get("id", "")), {})
+	var _aro_contribution: Dictionary = _aro_contribution_v if _aro_contribution_v is Dictionary else {}
+
+	var _aro_breakdown: Dictionary = RecruitmentService.compute_recruit_chance(
+		_aro_ally, _aro_source_contact, _aro_party_echoes, _aro_contribution, rounds_total, _aro_recruit_cfg)
+
+	# Seeded roll for determinism — append-only namespace, one draw per encounter.
+	var _aro_rng := RandomNumberGenerator.new()
+	if flow_ctx.campaign_seed != null:
+		_aro_rng = flow_ctx.campaign_seed.get_rng("combat." + _aro_encounter_id + ".ally_recruit")
+	else:
+		# Unexpected in real flow (campaign_seed is always set) — log so a silent divergent
+		# fallback never hides an upstream bug.
+		logger.warn(t, "combat.ally_recruit_offer.null_seed_fallback",
+			"campaign_seed was null when computing ally recruit offer — using non-deterministic hash fallback", {
+				"encounter_id": _aro_encounter_id,
+			})
+		_aro_rng.seed = hash("combat." + _aro_encounter_id + ".ally_recruit")
+	var _aro_chance: int = int(_aro_breakdown.get("chance", 0))
+	# V2-STAGE-004 Phase 4 (S14) dev toggle: draw-then-override — the seeded roll always
+	# runs first, so RNG draw order is byte-identical whether or not the override is
+	# active; only the boolean RESULT is swapped afterward. flow_ctx.dev_force_recruit
+	# defaults to "" (real play), which never touches _aro_success.
+	var _aro_success: bool = RecruitmentService.roll(_aro_chance, _aro_rng)
+	if flow_ctx.dev_force_recruit == "success":
+		_aro_success = true
+	elif flow_ctx.dev_force_recruit == "fail":
+		_aro_success = false
+
+	# Mark this encounter's roll as evaluated regardless of outcome — compute-once guard.
+	_aro_map["ally_recruit_rolled_encounter_id"] = _aro_encounter_id
+	_aro_stage["explore_map"] = _aro_map
+	FlowStageExploreStateScript._write_stage_back(flow_ctx, _aro_stage)
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason.is_empty():
+		flow_ctx.save_request_reason = "sanctum.companion_invite"
+	else:
+		flow_ctx.save_request_reason += "|sanctum.companion_invite"
+	logger.info(t, "combat.ally_recruit_offer", "Ally recruit offer evaluated", {
+		"encounter_id":   _aro_encounter_id,
+		"chance":         _aro_chance,
+		"conversation":   int(_aro_breakdown.get("conversation", 0)),
+		"combat":         int(_aro_breakdown.get("combat", 0)),
+		"fit":            int(_aro_breakdown.get("fit", 0)),
+		"rolled_success": _aro_success,
+	})
+
+	if not _aro_success:
+		return
+
+	# No-stack guard: one pending companion invite max — a successful roll is discarded
+	# (not stored) if the Sanctum already has an invite awaiting a decision.
+	if not flow_ctx.save_data.has("sanctum") or not (flow_ctx.save_data["sanctum"] is Dictionary):
+		flow_ctx.save_data["sanctum"] = {}
+	var _aro_sanctum: Dictionary = flow_ctx.save_data["sanctum"]
+	var _aro_existing_invite_v: Variant = _aro_sanctum.get("companion_invite", {})
+	var _aro_existing_invite: Dictionary = _aro_existing_invite_v if _aro_existing_invite_v is Dictionary else {}
+	if not _aro_existing_invite.is_empty():
+		logger.info(t, "sanctum.companion_invite.discarded",
+			"Ally recruit succeeded but a companion invite was already pending — discarded (no-stack)", {
+				"encounter_id": _aro_encounter_id,
+			})
+		return
+
+	_aro_sanctum["companion_invite"] = {
+		"chance":         _aro_chance,
+		"conversation":   int(_aro_breakdown.get("conversation", 0)),
+		"combat":         int(_aro_breakdown.get("combat", 0)),
+		"fit":            int(_aro_breakdown.get("fit", 0)),
+		"cap":            int(_aro_recruit_cfg.get("cap", 75)),
+		"ally_name":      str(_aro_ally.get("name", "")),
+		"ally_actor":     (_aro_ally as Dictionary).duplicate(true),
+		"source_contact": (_aro_source_contact as Dictionary).duplicate(true),
+	}
+	flow_ctx.save_data["sanctum"] = _aro_sanctum
+	logger.info(t, "sanctum.companion_invite.created", "Companion invite created for Sanctum pickup", {
+		"encounter_id": _aro_encounter_id,
+		"ally_name":    str(_aro_ally.get("name", "")),
+	})
+
+
+# V2-STAGE-004 Phase 4 (S14 redesign): player accepts the Sanctum-scoped companion invite —
+# mints exactly one roster echo via RecruitmentService.promote_ally_to_echo() (origin
+# "recruited_ally" + companion bond debuff, seeded by the service itself), clears the invite,
+# then rebuilds the Sanctum snapshot (reenter + refresh) so the modal dismisses. No-op when no
+# invite is pending.
+func _handle_companion_accept(t: int) -> void:
+	if not flow_ctx.save_data.has("sanctum") or not (flow_ctx.save_data["sanctum"] is Dictionary):
+		flow_ctx.save_data["sanctum"] = {}
+	var _hca_sanctum: Dictionary = flow_ctx.save_data["sanctum"]
+	var _hca_invite_v: Variant = _hca_sanctum.get("companion_invite", {})
+	var _hca_invite: Dictionary = _hca_invite_v if _hca_invite_v is Dictionary else {}
+	if _hca_invite.is_empty():
+		return
+
+	var _hca_ally_v: Variant = _hca_invite.get("ally_actor", {})
+	var _hca_ally: Dictionary = _hca_ally_v if _hca_ally_v is Dictionary else {}
+	var _hca_contact_v: Variant = _hca_invite.get("source_contact", {})
+	var _hca_contact: Dictionary = _hca_contact_v if _hca_contact_v is Dictionary else {}
+	var _hca_bal: Dictionary = config_service.get_balance()
+	var _hca_bal_data_v: Variant = _hca_bal.get("data", {})
+	var _hca_bal_data: Dictionary = _hca_bal_data_v if _hca_bal_data_v is Dictionary else {}
+	var _hca_echo_id: String = RecruitmentService.promote_ally_to_echo(
+		_hca_ally, _hca_contact, flow_ctx.save_data, _hca_bal_data, logger, t)
+
+	_hca_sanctum["companion_invite"] = {}
+	flow_ctx.save_data["sanctum"] = _hca_sanctum
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason.is_empty():
+		flow_ctx.save_request_reason = "sanctum.companion.recruited"
+	else:
+		flow_ctx.save_request_reason += "|sanctum.companion.recruited"
+	logger.info(t, "sanctum.companion.accepted", "Player accepted the earned-return companion invite", {
+		"echo_id": _hca_echo_id,
+	})
+
+	flow_machine.reenter(flow_ctx, logger, t)
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+# V2-STAGE-004 Phase 4 (S14 redesign): player declines the Sanctum-scoped companion invite —
+# mints nothing, clears the invite, then rebuilds the Sanctum snapshot so the modal dismisses.
+# No-op when no invite is pending.
+func _handle_companion_decline(t: int) -> void:
+	if not flow_ctx.save_data.has("sanctum") or not (flow_ctx.save_data["sanctum"] is Dictionary):
+		flow_ctx.save_data["sanctum"] = {}
+	var _hcd_sanctum: Dictionary = flow_ctx.save_data["sanctum"]
+	var _hcd_invite_v: Variant = _hcd_sanctum.get("companion_invite", {})
+	var _hcd_invite: Dictionary = _hcd_invite_v if _hcd_invite_v is Dictionary else {}
+	if _hcd_invite.is_empty():
+		return
+
+	_hcd_sanctum["companion_invite"] = {}
+	flow_ctx.save_data["sanctum"] = _hcd_sanctum
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason.is_empty():
+		flow_ctx.save_request_reason = "sanctum.companion.declined"
+	else:
+		flow_ctx.save_request_reason += "|sanctum.companion.declined"
+	logger.info(t, "sanctum.companion.declined", "Player declined the earned-return companion invite", {})
+
+	flow_machine.reenter(flow_ctx, logger, t)
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+# V2-STAGE-004 Phase 4 (S12): clears the durable Temporary Ally auto-join fields on the
+# current stage's explore_map at encounter teardown (win or loss — the ally is spent for
+# one battle either way). No-op (and no write) when nothing is set, so the common no-ally
+# path stays byte-identical.
+func _clear_ally_fields_if_present(t: int) -> void:
+	var _acf_stage: Dictionary = FlowStageExploreStateScript._get_current_stage(flow_ctx)
+	if _acf_stage.is_empty():
+		return
+	var _acf_map_v: Variant = _acf_stage.get("explore_map", {})
+	var _acf_map: Dictionary = _acf_map_v if _acf_map_v is Dictionary else {}
+	var _acf_ally_v: Variant = _acf_map.get("ally_contact", {})
+	var _acf_ally: Dictionary = _acf_ally_v if _acf_ally_v is Dictionary else {}
+	var _acf_has_ally: bool = not _acf_ally.is_empty() \
+		or bool(_acf_map.get("ally_consumed_in_encounter", false))
+	# V2-STAGE-004 S15 prep: also clear the combat_intro_reason marker (set by the
+	# claimant-hostile combat-forced branch) at the same teardown point.
+	var _acf_has_intro_marker: bool = not str(_acf_map.get("combat_intro_reason", "")).is_empty()
+	# V2-STAGE-004 Phase 4 (S14 redesign): the earned-return companion invite now lives on
+	# save_data.sanctum.companion_invite (Sanctum-scoped, persists until the player decides) —
+	# encounter teardown must NOT touch it. Only the ally-join fields + intro marker are
+	# encounter-scoped and clear here.
+	if not _acf_has_ally and not _acf_has_intro_marker:
+		return
+	if _acf_has_ally:
+		_acf_map["ally_contact"]              = {}
+		_acf_map["ally_contact_id"]           = ""
+		_acf_map["ally_consumed_in_encounter"] = false
+	if _acf_has_intro_marker:
+		_acf_map["combat_intro_reason"] = ""
+	_acf_stage["explore_map"] = _acf_map
+	FlowStageExploreStateScript._write_stage_back(flow_ctx, _acf_stage)
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason.is_empty():
+		flow_ctx.save_request_reason = "encounter.ally_cleared"
+	else:
+		flow_ctx.save_request_reason += "|encounter.ally_cleared"
+	if _acf_has_ally:
+		logger.info(t, "stage.ally.cleared", "Temporary ally auto-join fields cleared at encounter teardown", {
+			"stage_id": flow_ctx.stage_id,
+		})
+	if _acf_has_intro_marker:
+		logger.info(t, "stage.combat_intro.cleared", "Combat intro reason marker cleared at encounter teardown", {
+			"stage_id": flow_ctx.stage_id,
+		})
 
 
 # EMOTION-002/003: applies combat win/loss morale+fear deltas + fear_base mutation + morale streak tracking.
@@ -5112,6 +5453,115 @@ func _handle_debug_vow_unlock(action: Dictionary, t: int) -> void:
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# V2-STAGE-004 Phase 4 dev commands — manual testing aids for the conversation-RNG-
+# gated combat seams (S12 ally join, S13 charge pressure / claimant-forced combat).
+# Dev-only: reached only via AppRoot F1 debug panel commands, never from normal play.
+# AppRoot guards the "must be exploring a stage" precondition before dispatching, so
+# these handlers additionally no-op safely (push_warning + refresh, never crash) if
+# called from an unexpected context.
+# ────────────────────────────────────────────────────────────────────────────
+
+# V2-STAGE-004 Phase 4 (S12) dev command: stages a synthetic ContactModel-shaped
+# temporary_ally contact on explore_map.ally_contact so the next encounter fought in
+# this stage auto-joins it (mirrors the real temporary_ally/good outcome in
+# _apply_contact_outcome, minus the situation/Continuity side effects).
+func _handle_debug_spawn_ally(t: int) -> void:
+	var stage: Dictionary = FlowStageExploreStateScript._get_current_stage(flow_ctx)
+	if stage.is_empty():
+		push_warning("debug.ally.spawn: no active stage — command ignored")
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+		return
+	var map_v: Variant = stage.get("explore_map", {})
+	var explore_map: Dictionary = map_v if map_v is Dictionary else {}
+
+	var contact: Dictionary = ContactModelScript.make(
+		"dev_ally", "temporary_ally", "courage", "wisdom",
+		20, 75, "bold", "Dev Ally", 3
+	)
+	contact["state"]   = "concluded"
+	contact["outcome"] = "good"
+	contact["allied"]  = true
+	# S14a engagement-signal fields (RecruitmentService._conversation_component) — set to
+	# plausible non-zero values so the recruit-chance formula has real signal to work with.
+	contact["conv_score_sum"] = 4.0
+	contact["winning_turns"]  = 2
+
+	explore_map["ally_contact"]               = contact
+	explore_map["ally_contact_id"]            = "dev_ally"
+	explore_map["ally_consumed_in_encounter"] = false
+	stage["explore_map"] = explore_map
+	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason.is_empty():
+		flow_ctx.save_request_reason = "debug.ally.spawn"
+	else:
+		flow_ctx.save_request_reason += "|debug.ally.spawn"
+
+	logger.info(t, "debug.ally.spawn", "Dev ally staged for next encounter", {
+		"stage_id": flow_ctx.stage_id,
+	})
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+# V2-STAGE-004 Phase 4 (S13) dev command: replicates the claimant-hostile branch of
+# _apply_contact_outcome (the "claimant" / "failed" case) — sets the durable
+# combat_intro_reason marker and force-transitions straight to flow.encounter with the
+# same transition reason, so FlowEncounterState's combat_intro_line projection matches
+# the real path exactly.
+func _handle_debug_force_claimant_combat(t: int) -> void:
+	var stage: Dictionary = FlowStageExploreStateScript._get_current_stage(flow_ctx)
+	if stage.is_empty():
+		push_warning("debug.claimant.force_combat: no active stage — command ignored")
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+		return
+	var map_v: Variant = stage.get("explore_map", {})
+	var explore_map: Dictionary = map_v if map_v is Dictionary else {}
+
+	explore_map["combat_intro_reason"] = "claimant_hostile"
+	stage["explore_map"] = explore_map
+	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+	flow_ctx.save_request = true
+	flow_ctx.save_request_reason = "debug.claimant.force_combat"
+
+	flow_ctx.active_encounter_objective_index = -1
+
+	logger.info(t, "debug.claimant.force_combat", "Dev-forced hostile Claimant combat", {
+		"stage_id": flow_ctx.stage_id,
+	})
+
+	flow_machine.transition(FlowStateIds.ENCOUNTER, flow_ctx, logger, t, "stage.claimant.combat_forced")
+
+
+# V2-STAGE-004 Phase 4 (S13) dev command: sets/clears explore_map.hostile_charge_sit_id,
+# consumed exactly once by the next PROTECT/ENDURE objective combat
+# (FlowEncounterState._build_objective_params) for the charge-pressure duration/wave bump.
+func _handle_debug_force_charge_pressure(action: Dictionary, t: int) -> void:
+	var on: bool = bool(action.get("on", true))
+	var stage: Dictionary = FlowStageExploreStateScript._get_current_stage(flow_ctx)
+	if stage.is_empty():
+		push_warning("debug.charge_pressure.set: no active stage — command ignored")
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
+		return
+	var map_v: Variant = stage.get("explore_map", {})
+	var explore_map: Dictionary = map_v if map_v is Dictionary else {}
+
+	explore_map["hostile_charge_sit_id"] = "dev_charge" if on else ""
+	stage["explore_map"] = explore_map
+	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+	flow_ctx.save_request = true
+	if flow_ctx.save_request_reason.is_empty():
+		flow_ctx.save_request_reason = "debug.charge_pressure.set"
+	else:
+		flow_ctx.save_request_reason += "|debug.charge_pressure.set"
+
+	logger.info(t, "debug.charge_pressure.set", "Dev charge pressure toggled", {
+		"stage_id": flow_ctx.stage_id,
+		"on": on,
+	})
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
 # VOW-001: Check if any vow was discovered by a scenario condition during this stage.
 # Called from _handle_complete_stage after stage data is finalized.
 func _check_vow_discovery(t: int) -> void:
@@ -6682,6 +7132,15 @@ func _handle_stage_speak_response(action: Dictionary, t: int) -> void:
 					echo["xp_total"]    = current_sw + sw_gain
 				break
 
+	# S14a: conversation-quality accumulator — read by S14 recruit formula's conversation
+	# component. Lives on the contact dict alongside the existing turn tracking (turn_current
+	# / consulted_ids_this_turn below); survives into explore_map["ally_contact"] via the
+	# contact.duplicate(true) in _apply_contact_outcome() when a temporary_ally is recruited.
+	# Additive-only bookkeeping — zero effect on reaction/outcome/storyweight resolution above.
+	contact["conv_score_sum"] = float(contact.get("conv_score_sum", 0.0)) + turn_score
+	if turn_score >= sw_threshold:
+		contact["winning_turns"] = int(contact.get("winning_turns", 0)) + 1
+
 	# Increment turn
 	contact["turn_current"] = int(contact.get("turn_current", 0)) + 1
 	contact["consulted_ids_this_turn"] = []
@@ -6910,6 +7369,12 @@ func _apply_contact_outcome(
 				flow_ctx.last_snapshot = _build_contact_resolve_snapshot(contact, "failed", false, t)
 				flow_machine.transition(FlowStateIds.RESOLVE, flow_ctx, logger, t, "stage_abandoned_charge_fled")
 				return
+			elif outcome == "failed" and not is_objective:
+				# V2-STAGE-004 Phase 4 (S13): a failed non-objective Charge doesn't abandon the
+				# stage — it raises pressure instead. Consumed exactly once by the stage's next
+				# PROTECT/ENDURE objective combat (FlowEncounterState._build_objective_params),
+				# then cleared. Resolution still proceeds to the normal Resolve screen below.
+				explore_map["hostile_charge_sit_id"] = sit_id
 
 		"claimant":
 			if outcome == "good":
@@ -6927,12 +7392,49 @@ func _apply_contact_outcome(
 					"situation_id": sit_id,
 				})
 
+				# V2-STAGE-004 Phase 4 (S13): a hostile Claimant forces immediate combat — mirrors
+				# the async situation → ENCOUNTER routing in _handle_stage_engage_situation (index
+				# forced to -1 so _resolve_mode_from_stage() resolves plain COMBAT). Mark the
+				# situation resolved first so it can't be re-prompted from Explore; combat victory
+				# returns to Explore via the existing generic complete_stage path.
+				if sit_ref_idx >= 0:
+					sit_ref["resolved"] = true
+					sit_ref["revealed"] = true
+					map_situations[sit_ref_idx] = sit_ref
+				explore_map["situations"]        = map_situations
+				explore_map["pending_contact"]   = {}
+				explore_map["contact_responses"] = []
+				# V2-STAGE-004 S15 prep: durable marker so FlowEncounterState can project a
+				# combat_intro_line context beat. Cleared at encounter teardown alongside
+				# ally fields (see _clear_ally_fields_if_present).
+				explore_map["combat_intro_reason"] = "claimant_hostile"
+				stage["explore_map"] = explore_map
+				FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+				flow_ctx.save_request = true
+				flow_ctx.save_request_reason = "stage.claimant.combat_forced"
+
+				flow_ctx.active_encounter_objective_index = -1
+
+				logger.info(t, "stage.claimant.combat_forced", "Hostile Claimant forces combat", {
+					"stage_id":     flow_ctx.stage_id,
+					"situation_id": sit_id,
+				})
+
+				flow_machine.transition(FlowStateIds.ENCOUNTER, flow_ctx, logger, t, "stage.claimant.combat_forced")
+				return
+
 		"temporary_ally":
 			if outcome == "good":
 				contact["allied"] = true
 				# Continuity gain
 				var cont_pts := int(contact_cfg.get("continuity_temporary_ally_good", 5))
 				ContinuityService.add_points(flow_ctx.save_data, cont_pts, "contact.ally.good", logger, t)
+				# V2-STAGE-004 Phase 4 (S12): persist the ally durably on explore_map so
+				# FlowEncounterState.enter() can auto-join it into the NEXT encounter fought
+				# in this stage (one battle only — ally_consumed_in_encounter gates repeat
+				# injection; both cleared at encounter teardown).
+				explore_map["ally_contact"]    = contact.duplicate(true)
+				explore_map["ally_contact_id"] = sit_id
 				logger.info(t, "stage.ally.gained", "Temporary ally earned", {
 					"stage_id": flow_ctx.stage_id,
 					"situation_id": sit_id,
@@ -7209,6 +7711,58 @@ func _fire_spirit_bark(spirit: Dictionary, context: String, t: int) -> void:
 		"context":   context,
 		"spirit_id": spirit_id,
 		"line":      line,
+	})
+
+
+# Returns a lazy-loaded dict from data/bark/ally_barks.json.
+# Cached after first load. Pure read — no side effects.
+# V2-STAGE-004 Phase 4 (S15 UI-B): Temporary Ally death bark. Mirrors
+# _load_spirit_barks()/_fire_spirit_bark() — the leanest wiring available.
+var _ally_barks_cache: Dictionary = {}
+func _load_ally_barks() -> Dictionary:
+	if not _ally_barks_cache.is_empty():
+		return _ally_barks_cache
+	var path := "res://data/bark/ally_barks.json"
+	if not FileAccess.file_exists(path):
+		return {}
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return {}
+	var raw := f.get_as_text()
+	f.close()
+	var parsed: Variant = JSON.parse_string(raw)
+	if parsed is Dictionary:
+		_ally_barks_cache = parsed
+	return _ally_barks_cache
+
+
+# Selects a deterministic bark line for the given context and writes it onto the ally
+# actor dict (_bark_line / _bark_context / _bark_tier), then appends to ectx.round_bark_events
+# so the reactive-bark pipeline (BarkPopupLayer) can surface it like other high-signal barks.
+# variation_key follows the ShoutBank convention: (t + id.hash()) % N — deterministic, no RNG.
+func _fire_ally_bark(ally: Dictionary, context: String, t: int) -> void:
+	var lines_v: Variant = _load_ally_barks().get(context, [])
+	var lines: Array = lines_v if lines_v is Array else []
+	if lines.is_empty():
+		return
+	var ally_id: String = str(ally.get("id", ""))
+	var vk: int = posmod(t + ally_id.hash(), lines.size())
+	var line: String = str(lines[vk])
+	ally["_bark_line"]    = line
+	ally["_bark_context"] = context
+	ally["_bark_tier"]    = "nascent"
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	if ectx != null:
+		ectx.round_bark_events.append({
+			"actor_id":     ally_id,
+			"faction":      str(ally.get("faction", "")),
+			"bark_context": context,
+			"grid_pos":     ally.get("grid_pos", {}),
+		})
+	logger.info(t, "combat.ally.bark", "Ally death bark fired", {
+		"context":  context,
+		"ally_id":  ally_id,
+		"line":     line,
 	})
 
 

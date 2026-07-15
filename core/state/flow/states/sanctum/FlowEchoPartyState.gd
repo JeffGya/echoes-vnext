@@ -103,6 +103,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"id":                    str(e.get("id", "")),
 			"name":                  str(e.get("name", "")),
 			"calling_origin":        str(e.get("calling_origin", "Uncalled")),
+			"origin":                str(e.get("origin", "")),  # V2-STAGE-004 S15 prep: "recruited_ally" for companion tag
 			"standing":              int(e.get("rank", 1)),
 			"rarity":                str(e.get("rarity", "uncalled")),
 			"step":                  level,

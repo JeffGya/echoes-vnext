@@ -170,6 +170,24 @@ theme_override_colors/font_color = Color(0.831, 0.686, 0.216, 1)
 theme_override_font_sizes/font_size = 12
 text = "progress"
 
+[node name="PressureMarker" type="HBoxContainer" parent="ObjectiveBanner/BannerContent" unique_id=400000013]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="PressureDot" type="Label" parent="ObjectiveBanner/BannerContent/PressureMarker" unique_id=400000014]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.90980393, 0.6275157, 0.1882353, 1)
+theme_override_font_sizes/font_size = 12
+text = "●"
+
+[node name="PressureLabel" type="Label" parent="ObjectiveBanner/BannerContent/PressureMarker" unique_id=400000015]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.90980393, 0.6275157, 0.1882353, 1)
+theme_override_font_sizes/font_size = 12
+text = "Pressure raised"
+
 [node name="QuarryPips" type="HBoxContainer" parent="ObjectiveBanner/BannerContent" unique_id=400000007]
 unique_name_in_owner = true
 visible = false
@@ -371,6 +389,16 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 15
 text = "[Battle objective]"
 horizontal_alignment = 1
+
+[node name="IntroLineLabel" type="Label" parent="PrebattlePanel/PrebattleContent" unique_id=200000007]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9607843, 0.94509804, 0.90588236, 1)
+theme_override_font_sizes/font_size = 13
+text = ""
+horizontal_alignment = 1
+autowrap_mode = 2
 
 [node name="ButtonRow" type="HBoxContainer" parent="PrebattlePanel/PrebattleContent" unique_id=200000004]
 layout_mode = 2

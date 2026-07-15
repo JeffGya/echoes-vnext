@@ -35,18 +35,22 @@ grow_vertical = 2
 layout_mode = 2
 custom_minimum_size = Vector2(480, 0)
 
-[node name="CardContent" type="VBoxContainer" parent="CenterContainer/ResultCard"]
+[node name="ScrollContainer" type="ScrollContainer" parent="CenterContainer/ResultCard"]
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="CardContent" type="VBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer"]
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="BannerLabel" type="Label" parent="CenterContainer/ResultCard/CardContent"]
+[node name="BannerLabel" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "VICTORY"
 theme_override_font_sizes/font_size = 36
 horizontal_alignment = 1
 
-[node name="SummaryLabel" type="Label" parent="CenterContainer/ResultCard/CardContent"]
+[node name="SummaryLabel" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
 unique_name_in_owner = true
 layout_mode = 2
 text = ""
@@ -56,196 +60,196 @@ horizontal_alignment = 1
 autowrap_mode = 3
 visible = false
 
-[node name="ReasonLabel" type="Label" parent="CenterContainer/ResultCard/CardContent"]
+[node name="ReasonLabel" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
 unique_name_in_owner = true
 layout_mode = 2
 text = ""
 theme_override_font_sizes/font_size = 16
 horizontal_alignment = 1
 
-[node name="HSeparator" type="HSeparator" parent="CenterContainer/ResultCard/CardContent"]
+[node name="HSeparator" type="HSeparator" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
 layout_mode = 2
 
-[node name="RankRow" type="HBoxContainer" parent="CenterContainer/ResultCard/CardContent"]
+[node name="RankRow" type="HBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
 layout_mode = 2
 alignment = 1
 theme_override_constants/separation = 12
 
-[node name="RankKey" type="Label" parent="CenterContainer/ResultCard/CardContent/RankRow"]
+[node name="RankKey" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/RankRow"]
 layout_mode = 2
 text = "Rank"
 theme_override_font_sizes/font_size = 16
 
-[node name="RankBadge" type="Label" parent="CenterContainer/ResultCard/CardContent/RankRow"]
+[node name="RankBadge" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/RankRow"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "—"
 theme_override_font_sizes/font_size = 22
 
-[node name="AseRow" type="HBoxContainer" parent="CenterContainer/ResultCard/CardContent"]
+[node name="AseRow" type="HBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
 layout_mode = 2
 alignment = 1
 theme_override_constants/separation = 12
 
-[node name="AseKey" type="Label" parent="CenterContainer/ResultCard/CardContent/AseRow"]
+[node name="AseKey" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/AseRow"]
 layout_mode = 2
 text = "Ase earned"
 theme_override_font_sizes/font_size = 16
 
-[node name="AseValue" type="Label" parent="CenterContainer/ResultCard/CardContent/AseRow"]
+[node name="AseValue" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/AseRow"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 theme_override_font_sizes/font_size = 16
 
-[node name="EkwanRow" type="HBoxContainer" parent="CenterContainer/ResultCard/CardContent"]
+[node name="EkwanRow" type="HBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 alignment = 1
 theme_override_constants/separation = 12
 
-[node name="EkwanKey" type="Label" parent="CenterContainer/ResultCard/CardContent/EkwanRow"]
+[node name="EkwanKey" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/EkwanRow"]
 layout_mode = 2
 text = "Ekwan earned"
 theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.91, 0.627, 0.188, 1)
 
-[node name="EkwanValue" type="Label" parent="CenterContainer/ResultCard/CardContent/EkwanRow"]
+[node name="EkwanValue" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/EkwanRow"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.91, 0.627, 0.188, 1)
 
-[node name="BreakdownSection" type="VBoxContainer" parent="CenterContainer/ResultCard/CardContent"]
+[node name="BreakdownSection" type="VBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="RewardEntryPlaceholder" parent="CenterContainer/ResultCard/CardContent/BreakdownSection" instance=ExtResource("2_rewardentry")]
+[node name="RewardEntryPlaceholder" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/BreakdownSection" instance=ExtResource("2_rewardentry")]
 layout_mode = 2
 
-[node name="StatGrid" type="GridContainer" parent="CenterContainer/ResultCard/CardContent"]
+[node name="StatGrid" type="GridContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
 layout_mode = 2
 columns = 2
 theme_override_constants/h_separation = 24
 theme_override_constants/v_separation = 8
 
-[node name="EnemiesDefeatedKey" type="Label" parent="CenterContainer/ResultCard/CardContent/StatGrid"]
+[node name="EnemiesDefeatedKey" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/StatGrid"]
 layout_mode = 2
 text = "Enemies defeated"
 theme_override_font_sizes/font_size = 14
 
-[node name="EnemiesDefeatedValue" type="Label" parent="CenterContainer/ResultCard/CardContent/StatGrid"]
+[node name="EnemiesDefeatedValue" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/StatGrid"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 theme_override_font_sizes/font_size = 14
 horizontal_alignment = 2
 
-[node name="EchoesAliveKey" type="Label" parent="CenterContainer/ResultCard/CardContent/StatGrid"]
+[node name="EchoesAliveKey" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/StatGrid"]
 layout_mode = 2
 text = "Echoes survived"
 theme_override_font_sizes/font_size = 14
 
-[node name="EchoesAliveValue" type="Label" parent="CenterContainer/ResultCard/CardContent/StatGrid"]
+[node name="EchoesAliveValue" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/StatGrid"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 theme_override_font_sizes/font_size = 14
 horizontal_alignment = 2
 
-[node name="RoundsKey" type="Label" parent="CenterContainer/ResultCard/CardContent/StatGrid"]
+[node name="RoundsKey" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/StatGrid"]
 layout_mode = 2
 text = "Rounds"
 theme_override_font_sizes/font_size = 14
 
-[node name="RoundsValue" type="Label" parent="CenterContainer/ResultCard/CardContent/StatGrid"]
+[node name="RoundsValue" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/StatGrid"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 theme_override_font_sizes/font_size = 14
 horizontal_alignment = 2
 
-[node name="EmotionSection" type="VBoxContainer" parent="CenterContainer/ResultCard/CardContent"]
+[node name="EmotionSection" type="VBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="EmotionHeader" type="Label" parent="CenterContainer/ResultCard/CardContent/EmotionSection"]
+[node name="EmotionHeader" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/EmotionSection"]
 layout_mode = 2
 text = "Echo Emotion"
 theme_override_font_sizes/font_size = 14
 
-[node name="EmotionSeparator" type="HSeparator" parent="CenterContainer/ResultCard/CardContent/EmotionSection"]
+[node name="EmotionSeparator" type="HSeparator" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/EmotionSection"]
 layout_mode = 2
 
-[node name="EmotionList" type="VBoxContainer" parent="CenterContainer/ResultCard/CardContent/EmotionSection"]
+[node name="EmotionList" type="VBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/EmotionSection"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="EffectsRail" type="HFlowContainer" parent="CenterContainer/ResultCard/CardContent"]
+[node name="EffectsRail" type="HFlowContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/h_separation = 6
 theme_override_constants/v_separation = 6
 visible = false
 
-[node name="VowOutcomeSection" type="VBoxContainer" parent="CenterContainer/ResultCard/CardContent"]
+[node name="VowOutcomeSection" type="VBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
 unique_name_in_owner = true
 layout_mode = 2
 visible = false
 theme_override_constants/separation = 4
 
-[node name="VowOutcomeSeparator" type="HSeparator" parent="CenterContainer/ResultCard/CardContent/VowOutcomeSection"]
+[node name="VowOutcomeSeparator" type="HSeparator" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/VowOutcomeSection"]
 layout_mode = 2
 
-[node name="VowOutcomeHeader" type="Label" parent="CenterContainer/ResultCard/CardContent/VowOutcomeSection"]
+[node name="VowOutcomeHeader" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/VowOutcomeSection"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Vow"
 theme_override_font_sizes/font_size = 14
 
-[node name="VowOutcomeList" type="VBoxContainer" parent="CenterContainer/ResultCard/CardContent/VowOutcomeSection"]
+[node name="VowOutcomeList" type="VBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/VowOutcomeSection"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="VowDiscoveredSection" type="VBoxContainer" parent="CenterContainer/ResultCard/CardContent"]
+[node name="VowDiscoveredSection" type="VBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
 unique_name_in_owner = true
 layout_mode = 2
 visible = false
 theme_override_constants/separation = 4
 
-[node name="VowDiscoveredSeparator" type="HSeparator" parent="CenterContainer/ResultCard/CardContent/VowDiscoveredSection"]
+[node name="VowDiscoveredSeparator" type="HSeparator" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/VowDiscoveredSection"]
 layout_mode = 2
 
-[node name="VowDiscoveredHeader" type="Label" parent="CenterContainer/ResultCard/CardContent/VowDiscoveredSection"]
+[node name="VowDiscoveredHeader" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/VowDiscoveredSection"]
 layout_mode = 2
 text = "Vow Revealed"
 theme_override_font_sizes/font_size = 14
 theme_override_colors/font_color = Color(0.478431, 0.709804, 0.784314, 1)
 
-[node name="VowDiscoveredList" type="VBoxContainer" parent="CenterContainer/ResultCard/CardContent/VowDiscoveredSection"]
+[node name="VowDiscoveredList" type="VBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/VowDiscoveredSection"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="ButtonRow" type="HBoxContainer" parent="CenterContainer/ResultCard/CardContent"]
+[node name="ButtonRow" type="HBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
 layout_mode = 2
 alignment = 1
 theme_override_constants/separation = 12
 
-[node name="SanctumButton" type="Button" parent="CenterContainer/ResultCard/CardContent/ButtonRow"]
+[node name="SanctumButton" type="Button" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/ButtonRow"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(160, 48)
 theme_type_variation = "ButtonSecondary"
 text = "To Sanctum"
 
-[node name="NextStageButton" type="Button" parent="CenterContainer/ResultCard/CardContent/ButtonRow"]
+[node name="NextStageButton" type="Button" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/ButtonRow"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(160, 48)

@@ -29,6 +29,19 @@
 | 20 | p5-hud-component-upgrades | Phase 5 upgrades directive text and combat objective text to authored DirectiveBadge + ObjectiveBanner components | 2026-07-06 |
 | 21 | p5-choice-ui-engagement-popup | Obstacle/structure choice branches are picked on the arrival/engagement popup, not a dedicated overlay | 2026-07-06 |
 | 22 | p5-polish-and-phase-order | Ghost footprint, combat-entry beat, and accessibility pass all ship in P5; Phase 4 comes after and closes the story | 2026-07-06 |
+| 23 | p4-contact-outcome-states | Contact outcomes are role-agnostic good/partial/failed; failed vs abandoned Charge distinction; seam sites in FlowRuntime | 2026-07-11 |
+| 24 | p4-ally-build-mirror-spirit | Temp ally is built like the joined spirit: ally_def_id template, completion-scaled level, damage dampener | 2026-07-11 |
+| 25 | p4-ally-death-exclude-knock | Ally excluded from all_echoes_dead (party wipe = defeat); its death applies a small party morale/fear knock | 2026-07-11 |
+| 26 | p4-charge-pressure-moderate | Failed non-objective Charge sets hostile_charge_sit_id → ENDURE +1 wave_size / PROTECT +1 duration_turns, consumed once | 2026-07-11 |
+| 27 | p4-ally-echobar-plain-card | Temp ally shows in EchoBar as a plain party card (auto via faction=="echo"); no distinct slot in P4 | 2026-07-11 |
+| 28 | p4-recruit-mechanic | Surviving temp ally can be recruited as a roster Echo via an earned chance (base 0, cap 75), additive conversation+combat+fit formula | 2026-07-11 |
+| 29 | p4-recruit-agency-offer | Successful roll earns an OFFER; Keeper accepts/declines on Resolve (Guidance over Control), not auto-join | 2026-07-11 |
+| 30 | p4-recruit-companion-identity | Recruited ally = full Echo, fresh Standing 1, but keeps a durable "companion" origin + bond-integration debuff (harder/antagonistic) | 2026-07-11 |
+| 31 | p4-recruit-gate-survival-victory | Recruitment gated on ally alive AND encounter won (not survival alone) | 2026-07-11 |
+| 32 | p4-contribution-ledger-tier-split | Tier 1 (offensive: damage/kills, both factions) generalizes echo_action_logs in P4; Tier 2 (support attribution, ~9 sites) is its own parallel story | 2026-07-12 |
+| 33 | p4-ships-complete-ui | P5 already shipped, so P4 authors its own complete UI; ally visual line = Mist Blue + ⊕ Odo Nnyew glyph (ally badge, board ring, Companion tag, recruit-offer panel, seam cues) | 2026-07-12 |
+| 34 | p4-companion-invite-sanctum-event | Recruit offer moved OFF Resolve → durable sanctum.companion_invite event on Sanctum entry; no-stack (one max); persists until decided | 2026-07-15 |
+| 35 | p4-guide-spirit-routing-fix | guide_spirit added to SituationResolutionService._ASYNC_OBJ_TYPES (pre-existing Phase 3c soft-lock); folded into the P4 PR | 2026-07-15 |
 
 ---
 
@@ -229,5 +242,123 @@
 **A:** All three ship (party ghost-footprint trace, 200ms explore→combat transition beat, accessibility verification: 48dp targets, text alongside color, shape-not-color, ≥4.5:1 contrast). Phase order: P5 ships FIRST; Phase 4 (conversation-combat seams) comes AFTER and closes V2-STAGE-004.
 **Source:** Jeff, 2026-07-06
 **Date:** 2026-07-06
+
+---
+
+### 23. p4-contact-outcome-states
+
+**Q:** What outcome values drive the three Phase 4 seams, and how is a failed Charge told apart from an abandoned one?
+**A:** `ConversationService.resolve_outcome()` returns role-agnostic `"good"`/`"partial"`/`"failed"` (`core/realms/ConversationService.gd:352-368`), carried on `contact["outcome"]` and branched in `_apply_contact_outcome()` (`core/runtime/FlowRuntime.gd:6804`; charge :6881, claimant :6914, temporary_ally :6930). FAILED resolves an outcome; ABANDONED = `stage.disengage_contact` never resolves one and leaves the situation re-engageable. A failed **objective** Charge already abandons the stage → RESOLVE `stage_abandoned_charge_fled` (:6891-6912), so the pressure seam only applies to a failed **non-objective** Charge. The claimant stub already logs `stage.claimant.hostile` with a comment that P4 wires the combat (:6914-6928).
+**Source:** codebase (interview research, 2026-07-11)
+**Date:** 2026-07-11
+
+---
+
+### 24. p4-ally-build-mirror-spirit
+
+**Q:** How strong is an auto-joined Temporary Ally and how is its combat actor built?
+**A:** Mirror the Phase 3c joined spirit: build via `EnemyActor.from_definition` with `faction:"echo"` from a new `ally_def_id` enemy template, level-scaled by realm completion like other objective actors, and apply a damage dampener paralleling `_spirit_damage_mul` (0.75) so it helps without trivializing the fight. ContactModel has no combat stats, so the template is the source of stats. New `core/actors/ContactActorBuilder.gd` (~40 lines) does the contact→actor conversion; injection is pre-initiative in `FlowEncounterState.enter()` (precedent `FlowEncounterState.gd:624-657,794`).
+**Source:** Jeff, 2026-07-11
+**Date:** 2026-07-11
+
+---
+
+### 25. p4-ally-death-exclude-knock
+
+**Q:** How do the ally's death and the party-wipe check behave while the ally is present?
+**A:** Exclude the ally from the `all_echoes_dead` check (party wipe = defeat even if the ally survives), mirroring the spirit's `is_spirit` exclusion (`core/combat/CombatState.gd:242-248`) — via an ally flag, NOT by reusing `is_spirit`. The ally's death applies a small party morale/fear knock (thematic loss) but never fails the battle on its own. GDD-aligned: an allied NPC is not an inert payload.
+**Source:** Jeff, 2026-07-11
+**Date:** 2026-07-11
+
+---
+
+### 26. p4-charge-pressure-moderate
+
+**Q:** How much does a failed Charge raise protect/endure pressure, and on which failure?
+**A:** Only a failed **non-objective** Charge sets `hostile_charge_sit_id` (objective-charge failure abandons the stage; disengage is re-engageable — neither qualifies). Moderate bump, consumed once by the stage's objective combat if it is protect/endure: ENDURE +1 `wave_size`, PROTECT +1 `duration_turns`. Injected in `_build_objective_params` (`core/state/flow/states/venture/FlowEncounterState.gd:~955-996`), paralleling the `surprise_fear:12` encounter-start modifier precedent. Exact JSON values via balance config.
+**Source:** Jeff, 2026-07-11
+**Date:** 2026-07-11
+
+---
+
+### 27. p4-ally-echobar-plain-card
+
+**Q:** Does the Temporary Ally get a distinct EchoBar slot like the spirit, or a plain card?
+**A:** Plain party card in P4 — an echo-faction ally appears automatically because the EchoBar filters purely on `faction=="echo"` (`ui/shells/RealmShell.gd:59`), no party-membership check and no wiring needed. A distinct "ally slot" (the spirit uses `EchoCardItem.setup_spirit` gold badge) is deferred; do NOT set `is_spirit` on the ally (single spirit slot, wrong semantics).
+**Source:** Jeff, 2026-07-11 (default confirmed; backend-first)
+**Date:** 2026-07-11
+**Superseded by:** [[p4-ships-complete-ui]] — P5 already shipped, so P4 authors complete UI now: the ally gets a distinct **⊕ ALLY** Mist-Blue badge (new `setup_ally`, mirrors `setup_spirit`) + a board-token ring, NOT a plain card. (Still do not reuse `is_spirit`.)
+
+---
+
+### 28. p4-recruit-mechanic
+
+**Q:** How does a surviving Temporary Ally become a permanent Sanctum Echo?
+**A:** New "Earned Return" mechanic (designed via game-mechanics-designer + systems-story-designer): if a temporary_ally/good ally survives combat AND the encounter is won ([[p4-recruit-gate-survival-victory]]), compute an EARNED recruit chance — base **0**, clamped **[0,75]**, never guaranteed — as an additive sum of three `balance.json`-tunable components: `conversation_pts` (0–30, how deep into "good" the talk landed + calling-aligned resonance), `combat_pts` (0–35, survival + contribution: damage/guarding/rounds-alive/remaining-HP), `fit_pts` (0–30, party fit: contact vp/vs→10-domain vector similarity, archetype compatibility incl. rival-archetype penalty via SocialGraphService, derived-stat closeness; fit weight kept ≤ combat weight to avoid roster homogeneity). One seeded append-only draw (`combat.<encounter_id>.ally_recruit`), computed once at resolution and persisted (no re-roll on Continue). Snapshot exposes the chance + component breakdown for readability. On success → an OFFER ([[p4-recruit-agency-offer]]); on accept → `promote_ally_to_echo()` builder (NOT EchoFactory — immutable RNG order, Lesson #5) mints a roster echo from the ally's archetype/stats + contact virtue profile ([[p4-recruit-companion-identity]]).
+**Source:** Jeff + game-mechanics-designer + systems-story-designer, 2026-07-11
+**Date:** 2026-07-11
+
+---
+
+### 29. p4-recruit-agency-offer
+
+**Q:** On a successful recruit roll, does the ally auto-join or is it an offer?
+**A:** Earn-the-offer, then accept/decline — a successful roll means the ally is WILLING to stay; the Keeper accepts or declines on the Resolve surface (fits "Guidance over Control", respects roster/summon economy). Adds a durable offer record on save + an accept/decline action + minimal Resolve UI (backend-first; UI can be minimal in P4, richer in a later pass). Not auto-join.
+**Source:** Jeff, 2026-07-11
+**Date:** 2026-07-11
+
+---
+
+### 30. p4-recruit-companion-identity
+
+**Q:** What does a recruited ally become, and how does it differ from a summoned Echo?
+**A:** A **full Echo** using all Echo systems (calling, storyweight, bonds), minted fresh at **Standing 1 / Step 0** with stats re-derived at baseline (the battle template was for that one fight). BUT it keeps a durable **"companion" origin marker** (e.g. `origin:"recruited_ally"`) and integrates **harder**: its initial bonds toward existing roster echoes are seeded with a debuff / more-antagonistic bias via SocialGraphService, so it feels properly different from a summon and adds social friction (rivalry) rather than homogeneity. Any UI tag for the companion origin is deferred (backend carries the marker).
+**Source:** Jeff, 2026-07-11
+**Date:** 2026-07-11
+
+---
+
+### 31. p4-recruit-gate-survival-victory
+
+**Q:** What combat outcome gates recruitment?
+**A:** Ally must be **alive at battle end AND the encounter resolved as a victory** (not survival alone) — an ally only follows the house home from a battle won together; blocks recruiting off a retreat/defeat. Dead ally or non-victory → chance stays 0, no roll.
+**Source:** Jeff, 2026-07-11
+**Date:** 2026-07-11
+
+---
+
+### 32. p4-contribution-ledger-tier-split
+
+**Q:** How much per-actor combat-contribution tracking do we build, given it isn't currently tracked?
+**A:** Split by cost (mutation-site count): **Tier 1 (offensive)** — `damage_dealt`/`damage_taken`/`kills` — is a ~1-site change because it piggybacks the **existing** `EncounterContext.echo_action_logs` accumulator (`core/state/encounter/EncounterContext.gd:48`) at the single melee choke (`FlowRuntime._resolve_next_actor:1766`); Phase 4 generalizes that accumulator to **both factions** and projects it into the final snapshot (reused by the recruit formula now; MVP barks / storyweight / bonds later). **Tier 2 (support attribution)** — guards/morale/fear applied to allies — is ~9 scattered inline sites with no shared mutator, so it is carved out as its own story `V2-COMBAT-00x — Combat Contribution: Support Attribution` (task_09603c7e), to run in a parallel instance and rebase after the P4 PR merges.
+**Source:** Jeff + codebase scope research, 2026-07-12
+**Date:** 2026-07-12
+
+---
+
+### 33. p4-ships-complete-ui
+
+**Q:** Does Phase 4 ship its own UI/UX, or defer it to a later polish pass?
+**A:** Ships complete now — P5 (the UI/UX surface pass) already merged, so there is no downstream UI phase to absorb P4's surfaces. The **ally visual line** = **Mist Blue `#7AB5C8`** + the **⊕ Odo Nnyew Fie Kwan** Adinkra glyph ("love never loses its way" — bond/loyalty), distinct from spirit gold and enemy red. Authored surfaces (structure in `.tscn`, `.gd` sets values — Lessons #2/#5/#14): `⊕ ALLY` EchoCard badge (`setup_ally`) + Mist-Blue board ring, the `AllyRecruitOffer` Resolve panel (earned chance + Talk/Fight/Fit sub-bars + accept/decline), a durable `⊕ Companion` roster tag on `origin=="recruited_ally"`, and readable seam cues (claimant→combat intro line, Amber "Pressure raised" ObjectiveBanner marker, `ally_killed` bark). Supersedes [[p4-ally-echobar-plain-card]].
+**Source:** Jeff, 2026-07-12
+**Date:** 2026-07-12
+
+---
+
+### 34. p4-companion-invite-sanctum-event
+
+**Q:** Where does the ally-recruit offer surface — on the Resolve screen, or as its own thing?
+**A:** Its own **Sanctum event**, not part of Resolve (Jeff, post-approval iteration). A successful roll writes a durable `sanctum.companion_invite` (one slot — **no-stack** guard: a second success is discarded while one is pending). `FlowSanctumState` projects `data.companion_invite`; the `%CompanionInvite` modal on `SanctumScreen` shows it on Sanctum entry and **persists until decided** (re-projects each entry). Actions: `sanctum.companion.accept` (promote + clear) / `sanctum.companion.decline` (clear). The old Resolve `AllyRecruitOffer` panel + `cta.recruit_accept/decline` + `explore_map.ally_recruit_offer` were removed. Supersedes the plan's Resolve-panel design in [[p4-recruit-agency-offer]]. Rationale: a companion choosing to join the house deserves its own beat back home.
+**Source:** Jeff, 2026-07-15
+**Date:** 2026-07-15
+
+---
+
+### 35. p4-guide-spirit-routing-fix
+
+**Q:** Why could a stage with a guide_spirit objective never be completed (soft-lock)?
+**A:** `guide_spirit` was missing from `SituationResolutionService._ASYNC_OBJ_TYPES` (`core/realms/SituationResolutionService.gd:28`), so a guide_spirit OBJECTIVE routed to the flavor `in_explore` path instead of the real combat hand-off — the situation was marked resolved but `stage.objectives[idx].completed` never flipped, so `objectives_remaining` stayed ≥1 and the `cta.proceed_to_stage_map` CTA never rendered. A pre-existing **Phase 3c** oversight on `main` (Phase 3c added guide_spirit end-to-end but not to this routing list), surfaced during Jeff's P4 playtest and folded into the P4 PR. Fix: append `"guide_spirit"` to `_ASYNC_OBJ_TYPES` (+ routing test). Follow-up chip: guard the in-explore path so any is_objective resolving there is caught/completed (defense-in-depth).
+**Source:** Jeff + investigation, 2026-07-15
+**Date:** 2026-07-15
 
 ---

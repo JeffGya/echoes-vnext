@@ -194,6 +194,7 @@ Analysis:
 - The generation and summon rails are solid.
 - `SanctumService` and `SanctumState` are not yet true choke points.
 - large parts of the code still edit `save_data["sanctum"]` directly.
+- V2-STAGE-004 Phase 4 added a **second roster-mint path**: `core/sanctum/RecruitmentService.gd` (`promote_ally_to_echo()`) mints a roster echo from a battle-surviving `temporary_ally` contact, deliberately bypassing `EchoFactory` (whose RNG draw order is immutable and whose birth flow assumes a paid summon, not an earned companion). The new echo carries `origin: "recruited_ally"` and a seeded negative bond debuff against the existing roster. This is a considered exception, not drift — but it is now a second place that knows how to construct a valid roster echo dict, worth tracking if a third minting path is ever proposed.
 
 Opportunity:
 
@@ -321,6 +322,7 @@ Analysis:
 
 - Realm exploration is one of the most complete end-to-end loops in the codebase.
 - V2-STAGE-004 Phase 5 (2026-07-09) tightened two traversal edges: **frontier chaining** (tier-3 frontier targets lift fog per step and re-target `nearest_unexplored` until `step_budget` is spent, so an advance now binds to the directive budget instead of stopping ~`reveal_radius`+1 tiles out) and **mid-path stop** (stepping onto an unresolved, un-passed situation parks the party for resolution — walking onto a situation always triggers the resolution flow). Pass/resolved invariants preserved.
+- V2-STAGE-004 Phase 4 (final phase — story now fully Done) closed the last gap between `ConversationService`/`SituationResolutionService` (STAGE-003) and combat: a good `temporary_ally` conversation outcome now auto-joins the next fight (`ContactActorBuilder`), a failed Claimant routes straight into real combat, and a failed non-objective Charge leaves a one-time pressure marker consumed by the next PROTECT/ENDURE encounter. A pre-existing Phase 3c soft-lock was folded in and fixed: `guide_spirit` was missing from `SituationResolutionService._ASYNC_OBJ_TYPES`, so a guide_spirit OBJECTIVE fell through to flavor text and never completed. Directive state and intel remain the two live seams called out below — Phase 4 did not touch either.
 - The biggest live seam is directive state split between canonical and legacy paths.
 - intel exists, but cost, aftermath, and multi-channel acquisition are still underdeveloped.
 - stage summary meaning and actual objective meaning still partially diverge.
@@ -405,7 +407,8 @@ Analysis:
 - The board and objective foundation is strong.
 - As of V2-STAGE-004 Phase 3c (2026-07-05) all seven combat modes (COMBAT / PURIFY_SHRINE / RECOVER / PROTECT / ENDURE / PURSUE / GUIDE_SPIRIT) have live per-mode win/lose conditions, distinct objective-actor behavior, and mode-specific echo-autonomy biasing — the objective now drives outcome per mode rather than every stage collapsing to "kill the nearest enemy". See `docs/combat-modes.md` and `CONVENTIONS.md` § Combat resolution modes & boards.
 - As of V2-STAGE-004 Phase 5 (2026-07-09) the combat board reads its per-mode objective through an authored `ObjectiveBanner` (7 per-mode layouts) with de-overlapped top chrome and a contrast-fixed cream/gold palette — the mode is now legible on-screen, not just in the model. See `CombatBoardScreen` below and `CONVENTIONS.md` § Per-Screen Snapshot Summaries.
-- The next gap is battlefield meaning: enemies still need richer pressure roles (V2-COMBAT-002), and stage context should drive more enemy behavior.
+- As of V2-STAGE-004 Phase 4 (2026-07-15, final phase — story now fully Done) the combat and progression stack gained two new integration seams: a `temporary_ally` NPC contact can auto-join the next fight as a full echo-faction combatant (`ContactActorBuilder`, excluded from `all_echoes_dead` the same way a joined GUIDE_SPIRIT is), and `EncounterContext.echo_action_logs` is now a general Tier-1 contribution ledger (`damage_dealt`/`damage_taken`/`kills`) across **all** factions, not just echoes — `ProgressionService` reads it byte-identically via keyed lookup. This is the first system to read combat outcomes for a purpose *other* than XP: `RecruitmentService.compute_recruit_chance()` blends the ledger's combat component with a conversation-quality score and a party-fit score to gate a post-victory "Earned Return" companion invite.
+- The next gap is battlefield meaning: enemies still need richer pressure roles (V2-COMBAT-002), and stage context should drive more enemy behavior. Tier-2 support-attribution (guard/heal/utility contribution, not just damage) remains a deferred follow-up to the new ledger.
 
 Opportunity:
 

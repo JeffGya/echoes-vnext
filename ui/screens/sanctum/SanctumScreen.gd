@@ -9,6 +9,12 @@ const ThreadSlotItemScene: PackedScene = preload("res://ui/components/ThreadSlot
 const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.tscn")
 const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
 
+# V2-STAGE-004 Phase 4: safe top/bottom headroom (px) reserved when clamping the
+# CompanionInvite card's max height, mirroring ResolveScreen's playtest fix, so
+# the card never spans edge-to-edge and its CTAs stay reachable above BottomRail.
+const _COMPANION_CARD_TOP_MARGIN:    float = 60.0
+const _COMPANION_CARD_BOTTOM_MARGIN: float = 140.0
+
 @onready var title_label: Label = %TitleLabel
 @onready var _continuity_flame: ContinuityFlameControl = %ContinuityFlame  # V2-CONTINUITY-001
 @onready var vow_mantra_label: Label = %VowMantraLabel
@@ -23,6 +29,24 @@ const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd
 @onready var _awakening_overlay: Control = %AwakeningOverlay
 @onready var _awakening_grant_label: Label = %AwakeningGrantLabel
 @onready var _awakening_dismiss: Button = %AwakeningDismiss
+
+# V2-STAGE-004 Phase 4: CompanionInvite modal — one-slot Sanctum-entry ally
+# recruit offer (ported from ResolveScreen's %AllyRecruitOffer). Shown when
+# data.companion_invite is non-empty; hidden ({}) once accepted/declined.
+@onready var _companion_invite:        Control         = %CompanionInvite
+@onready var _companion_scroll:        ScrollContainer  = %CompanionInviteScroll
+@onready var _companion_content:       VBoxContainer    = %CompanionInviteVBox
+@onready var _companion_name_label:    Label            = %CompanionNameLabel
+@onready var _companion_chance_label:  Label            = %CompanionChanceLabel
+@onready var _companion_chance_bar:    ProgressBar      = %CompanionChanceBar
+@onready var _companion_talk_bar:      ProgressBar      = %CompanionTalkBar
+@onready var _companion_talk_value:    Label            = %CompanionTalkValue
+@onready var _companion_fight_bar:     ProgressBar      = %CompanionFightBar
+@onready var _companion_fight_value:   Label            = %CompanionFightValue
+@onready var _companion_fit_bar:       ProgressBar      = %CompanionFitBar
+@onready var _companion_fit_value:     Label            = %CompanionFitValue
+@onready var _companion_accept_button: Button           = %CompanionAcceptButton
+@onready var _companion_decline_button: Button          = %CompanionDeclineButton
 
 @onready var party_summary_label: Label = %PartySummaryLabel
 @onready var party_empty_label: Label = %PartyEmptyLabel
@@ -73,6 +97,8 @@ const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd
 @onready var _detail_future_lbl: Label = %SkillFutureLabel
 @onready var detail_pages_scroll: ScrollContainer = %DetailPagesScroll
 @onready var detail_name_label: Label = %DetailNameLabel
+# V2-STAGE-004 P4 S15 UI-A2: Companion tag for recruited-ally roster echoes.
+@onready var detail_companion_tag: Label = %DetailCompanionTag
 @onready var detail_archetype_label: Label = %DetailArchetypeLabel
 @onready var detail_calling_label: Label = %DetailCallingLabel
 @onready var detail_vector_label: Label = %DetailVectorLabel
@@ -167,6 +193,10 @@ func _ready() -> void:
 	detail_party_action_button.pressed.connect(_on_detail_party_pressed)
 	_awakening_dismiss.pressed.connect(_on_awakening_dismiss_pressed)
 	_apply_awakening_panel_style()
+	# V2-STAGE-004 Phase 4: CompanionInvite modal wiring.
+	_companion_accept_button.pressed.connect(_on_companion_accept_pressed)
+	_companion_decline_button.pressed.connect(_on_companion_decline_pressed)
+	get_viewport().size_changed.connect(_clamp_companion_card_height)
 	# V2-SANCTUM-002: institution wiring
 	_inst_back_btn.pressed.connect(_on_inst_detail_back_pressed)
 	_inst_assign_btn.pressed.connect(_on_inst_assign_pressed)
@@ -286,6 +316,9 @@ func _render() -> void:
 		_awakening_grant_label.text = "+%d Ase" % int(data.get("awakening_grant", 40))
 		_show_awakening_overlay()
 
+	# V2-STAGE-004 Phase 4: CompanionInvite modal — persists until accept/decline.
+	_render_companion_invite(data)
+
 
 func open_echo_detail(start_echo_id: String) -> void:
 	var detail_roster := _detail_roster()
@@ -336,6 +369,10 @@ func _rebuild_party_list(party_slots: Array) -> void:
 			int(slot.get("standing", 1)),
 			int(slot.get("step", 1))
 		]
+		# V2-STAGE-004 P4 S15 UI-A3: recruited allies stay in the roster as durable Companions.
+		var companion_tag := row.find_child("CompanionTag", true, false) as Label
+		if companion_tag != null:
+			companion_tag.visible = str(slot.get("origin", "")) == "recruited_ally"
 		party_list.add_child(row)
 
 	call_deferred("_sync_party_scroll_height")
@@ -391,6 +428,8 @@ func _render_echo_detail(detail_roster: Array, featured_echo_id: String) -> void
 	_apply_tab_state()
 
 	detail_name_label.text = str(selected.get("name", "Echo"))
+	# V2-STAGE-004 P4 S15 UI-A2: recruited allies stay in the roster as durable Companions.
+	detail_companion_tag.visible = str(selected.get("origin", "")) == "recruited_ally"
 	var archetype_birth := _title_case(str(selected.get("archetype_birth", "")))
 	detail_archetype_label.text = archetype_birth
 	detail_calling_label.text = _title_case(str(selected.get("calling_origin", "Uncalled")))
@@ -936,6 +975,90 @@ func _on_awakening_dismiss_pressed() -> void:
 	var tw := create_tween()
 	tw.tween_property(_awakening_overlay, "modulate:a", 0.0, 0.2)
 	tw.tween_callback(func(): _awakening_overlay.visible = false)
+
+
+# ─────────────────────────────────────────────────────────────
+# V2-STAGE-004 Phase 4: CompanionInvite modal
+# Binds data.companion_invite (ported design from ResolveScreen's old
+# %AllyRecruitOffer). Persists across Sanctum renders until the player
+# accepts/declines — the backend then rebuilds the snapshot with
+# companion_invite = {}, which hides the modal here on the next render
+# (we never hide it manually on button press).
+#
+# Layering (authored in .tscn): SanctumShell mounts SanctumScreen inside
+# %OverlayRoot, whose rect is deliberately 108px short at the bottom (it
+# reserves that band for the persistent %BottomRail nav, a LATER sibling of
+# OverlayRoot under the same UILayer CanvasLayer — see SanctumShell.tscn).
+# Because Controls don't clip overflowing children, %CompanionInvite (a
+# direct child of SanctumScreen) is given its own offset_bottom = 108.0 so
+# its rect — and its full-bleed dim backdrop — extends past that shortfall
+# to the true screen bottom, physically covering the nav band instead of
+# stopping above it. z_index = 20 (higher than every other SanctumScreen
+# overlay: InstitutionDetailPanel=5, EchoAssignPicker=6, EffectDetailPanel=10)
+# then wins the same-CanvasLayer paint/input order against %BottomRail
+# (default z_index 0), so the modal draws — and receives clicks — above
+# the nav regardless of the two branches' tree position.
+# ─────────────────────────────────────────────────────────────
+
+func _render_companion_invite(data: Dictionary) -> void:
+	var invite_v: Variant = data.get("companion_invite", {})
+	var invite: Dictionary = invite_v if invite_v is Dictionary else {}
+	if invite.is_empty():
+		_companion_invite.visible = false
+		return
+
+	var cap := maxi(1, int(invite.get("cap", 75)))
+	var chance := int(invite.get("chance", 0))
+	var conversation := int(invite.get("conversation", 0))
+	var combat := int(invite.get("combat", 0))
+	var fit := int(invite.get("fit", 0))
+
+	_companion_name_label.text   = str(invite.get("ally_name", ""))
+	_companion_chance_label.text = "%d%%" % chance
+
+	_companion_chance_bar.min_value = 0
+	_companion_chance_bar.max_value = cap
+	_companion_chance_bar.value     = chance
+
+	_companion_talk_bar.min_value = 0
+	_companion_talk_bar.max_value = cap
+	_companion_talk_bar.value     = conversation
+	_companion_talk_value.text    = "%d/%d" % [conversation, cap]
+
+	_companion_fight_bar.min_value = 0
+	_companion_fight_bar.max_value = cap
+	_companion_fight_bar.value     = combat
+	_companion_fight_value.text    = "%d/%d" % [combat, cap]
+
+	_companion_fit_bar.min_value = 0
+	_companion_fit_bar.max_value = cap
+	_companion_fit_bar.value     = fit
+	_companion_fit_value.text    = "%d/%d" % [fit, cap]
+
+	_companion_invite.visible = true
+	call_deferred("_clamp_companion_card_height")
+
+
+func _on_companion_accept_pressed() -> void:
+	action_requested.emit({ "type": "sanctum.companion.accept" })
+
+
+func _on_companion_decline_pressed() -> void:
+	action_requested.emit({ "type": "sanctum.companion.decline" })
+
+
+## Caps %CompanionInviteScroll's height at (viewport height - safe margins) so
+## the card scrolls instead of overflowing off-screen — same approach as
+## ResolveScreen's _clamp_card_height P4 playtest fix. Deferred call so the
+## VBox's children have finished sizing before we read their combined
+## minimum height.
+func _clamp_companion_card_height() -> void:
+	if _companion_scroll == null or _companion_content == null:
+		return
+	var natural_height: float = _companion_content.get_combined_minimum_size().y
+	var viewport_height: float = get_viewport_rect().size.y
+	var max_height: float = maxf(120.0, viewport_height - _COMPANION_CARD_TOP_MARGIN - _COMPANION_CARD_BOTTOM_MARGIN)
+	_companion_scroll.custom_minimum_size.y = minf(natural_height, max_height)
 
 
 # ─────────────────────────────────────────────────────────────

@@ -128,6 +128,7 @@ func enter(ctx: RefCounted, t:int) -> void:
 			"id":              str(echo.get("id", "")),
 			"name":            str(echo.get("name", "")),
 			"calling_origin":  str(echo.get("calling_origin", "")),
+			"origin":          str(echo.get("origin", "")),  # V2-STAGE-004 S15 prep: "recruited_ally" for companion tag
 			"rarity":          str(echo.get("rarity", "")),
 			"standing":        int(echo.get("rank", 1)),
 			"step":            int(echo.get("level", 1)),
@@ -273,6 +274,13 @@ func enter(ctx: RefCounted, t:int) -> void:
 	var _cont_pts  := ContinuityService.get_points(flow_ctx.save_data)
 	var _cont_band := ContinuityService.get_band(_cont_pts, _cont_cfg)
 
+	# V2-STAGE-004 Phase 4 (S14 redesign): earned-return companion invite — a one-slot Sanctum
+	# inbox (written by FlowRuntime._compute_ally_recruit_offer_if_eligible on combat victory,
+	# cleared by sanctum.companion.accept/decline). {} when no invite is pending. Re-projects on
+	# every Sanctum entry, so the invite "persists until decided" for free — no expiry logic here.
+	var _companion_invite_v: Variant = sanctum.get("companion_invite", {})
+	var _companion_invite: Dictionary = _companion_invite_v if _companion_invite_v is Dictionary else {}
+
 	# Base Sanctum snapshot. FlowStateMachine._rebuild_snapshot() enriches data with:
 	# - ase_balance, ekwan_balance (Economy)
 	# - roster_count, active_party_count (Sanctum)
@@ -302,6 +310,8 @@ func enter(ctx: RefCounted, t:int) -> void:
 		"placement_floor_cells":     _pl_floor,    # Array[Vector2i] — all floor tiles; for SanctumShell placement checks
 		"placement_occupied_cells":  _pl_occupied, # Array[Vector2i] — all non-floor tiles (ase_flame, institutions)
 		"institution_compat_hints":  _compat_hints,
+		# V2-STAGE-004 Phase 4 (S14 redesign): {} when no invite pending.
+		"companion_invite": _companion_invite,
 	}
 
 	flow_ctx.last_snapshot = {
@@ -354,6 +364,7 @@ static func _build_echo_detail_roster(
 			"name": str(echo.get("name", "")),
 			"archetype_birth": str(echo.get("archetype_birth", "")),
 			"calling_origin": str(echo.get("calling_origin", "Uncalled")),
+			"origin": str(echo.get("origin", "")),  # V2-STAGE-004 S15 prep: "recruited_ally" for companion tag
 			"calling": str(echo.get("calling", "")),
 			"standing": rank,
 			"step": step,

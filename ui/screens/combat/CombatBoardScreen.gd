@@ -36,6 +36,9 @@ const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd
 @onready var _banner_instruction: Label             = %InstructionLabel
 @onready var _banner_progress: Label                = %ProgressLabel
 @onready var _banner_quarry_pips: HBoxContainer      = %QuarryPips
+# V2-STAGE-004 Phase 4 (S15 UI-B): "Pressure raised" marker — shown when objective_state
+# .charge_pressure_applied is true. Icon+text (Amber), never colour-only.
+@onready var _banner_pressure_marker: HBoxContainer  = %PressureMarker
 # Repurposed: was StartCombatButton / Confirm Round — now also shows "Next" during actor_turn phase.
 @onready var _cta_button: Button                    = $StartCombatButton
 # Repurposed: was AutoToggleButton — now Manual mode toggle.
@@ -54,6 +57,9 @@ const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd
 # UI-004: Pre-battle panel (pre_combat phase only).
 @onready var _prebattle_panel: PanelContainer       = $PrebattlePanel
 @onready var _prebattle_objective: Label            = $PrebattlePanel/PrebattleContent/ObjectivePanelLabel
+# V2-STAGE-004 Phase 4 (S15 UI-B): claimant-forced combat intro line — hidden when
+# data.combat_intro_line is "".
+@onready var _prebattle_intro_line: Label           = %IntroLineLabel
 @onready var _retreat_button: Button                = $PrebattlePanel/PrebattleContent/ButtonRow/RetreatButton
 @onready var _enter_combat_button: Button           = $PrebattlePanel/PrebattleContent/ButtonRow/EnterCombatButton
 @onready var _speed_slow_button: Button             = %SpeedSlowButton
@@ -406,6 +412,7 @@ func _render_objective_banner(obj_state: Dictionary, obj_type: String) -> void:
 	# Reset transient state each render: neutral tint, hidden pips.
 	_objective_banner.modulate = _BANNER_MODULATE_NORMAL
 	_banner_quarry_pips.visible = false
+	_banner_pressure_marker.visible = false
 
 	var glyph: String       = "◆"
 	var instruction: String = ""
@@ -483,6 +490,10 @@ func _render_objective_banner(obj_state: Dictionary, obj_type: String) -> void:
 	# ("· AT EXIT!" / "· closing in") appends to the freshly-set progress string.
 	if obj_type == "pursue":
 		_render_quarry_pips(int(obj_state.get("quarry_distance_to_exit", 0)))
+	# V2-STAGE-004 Phase 4 (S15 UI-B): "Pressure raised" marker — mode-agnostic, gated
+	# solely on objective_state.charge_pressure_applied (S15-prep field). Icon+text
+	# (Amber), never colour-only.
+	_banner_pressure_marker.visible = bool(obj_state.get("charge_pressure_applied", false))
 	# Urgent state (PROTECT totem stolen): swap to the pre-authored urgent StyleBox for
 	# distinct chrome, plus a red modulate. The instruction text also carries the state
 	# ("STOLEN — recover it!") so the signal is never colour-only.
@@ -724,6 +735,8 @@ func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}
 			"is_objective_relic": bool(actor.get("is_objective_relic", false)),
 			"is_quarry":          bool(actor.get("is_quarry", false)),
 			"is_spirit":          bool(actor.get("is_spirit", false)),
+			# V2-STAGE-004 Phase 4 (S15 UI-B): joined-ally token ring — mirrors is_spirit.
+			"is_ally":            bool(actor.get("is_ally", false)),
 			"label":              str(actor.get("name", "??")).substr(0, 2).to_upper(),
 			"hp_ratio":           hp_ratio,
 			"damage_text":        damage_by_id.get(actor_id, ""),
@@ -976,6 +989,15 @@ func _show_prebattle_panel(data: Dictionary, actions: Dictionary) -> void:
 	var obj_state: Dictionary = data.get("objective_state", {})
 	var obj_type: String = str(obj_state.get("type", ""))
 	_prebattle_objective.text = _format_objective_label(obj_type)
+
+	# V2-STAGE-004 Phase 4 (S15 UI-B): claimant-forced combat intro line — snapshot-driven,
+	# never hard-coded. "" (not a claimant-forced fight) hides the label entirely.
+	var intro_line: String = str(data.get("combat_intro_line", ""))
+	if not intro_line.is_empty():
+		_prebattle_intro_line.text    = intro_line
+		_prebattle_intro_line.visible = true
+	else:
+		_prebattle_intro_line.visible = false
 
 	# Enter Combat button — always enabled; dispatches cta.combat_init.
 	if actions.has("cta.combat_init"):

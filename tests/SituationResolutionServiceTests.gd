@@ -121,6 +121,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("sit_res/route_in_explore_types",    Callable(SituationResolutionServiceTests, "_t_route_in_explore_types"))
 	runner.register_test("sit_res/route_npc_not_objective",   Callable(SituationResolutionServiceTests, "_t_route_npc_not_objective"))
 	runner.register_test("sit_res/route_recover_objective",   Callable(SituationResolutionServiceTests, "_t_route_recover_objective"))
+	runner.register_test("sit_res/route_guide_spirit_objective", Callable(SituationResolutionServiceTests, "_t_route_guide_spirit_objective"))
 	runner.register_test("sit_res/resolve_omen",              Callable(SituationResolutionServiceTests, "_t_resolve_omen"))
 	runner.register_test("sit_res/resolve_ritual",            Callable(SituationResolutionServiceTests, "_t_resolve_ritual"))
 	runner.register_test("sit_res/resolve_loot",              Callable(SituationResolutionServiceTests, "_t_resolve_loot"))
@@ -138,7 +139,7 @@ static func register(runner: CoreTestRunner) -> void:
 
 # ─── Test 1 — route() async types all return "async" ─────────────────────────
 # "combat" is async regardless of is_objective.
-# "shrine","recover","protect","endure","pursue" are async only when is_objective=true.
+# "shrine","recover","protect","endure","pursue","guide_spirit" are async only when is_objective=true.
 static func _t_route_async_types() -> Dictionary:
 	# combat always async
 	var result_combat := SituationResolutionService.route("combat", false)
@@ -146,7 +147,7 @@ static func _t_route_async_types() -> Dictionary:
 		return { "ok": false, "error": "route('combat', false) expected 'async', got '%s'" % result_combat }
 
 	# objective-only async types — must be objective to trigger async
-	var obj_async_types := ["shrine", "recover", "protect", "endure", "pursue"]
+	var obj_async_types := ["shrine", "recover", "protect", "endure", "pursue", "guide_spirit"]
 	for t in obj_async_types:
 		var r := SituationResolutionService.route(t, true)
 		if r != "async":
@@ -178,6 +179,18 @@ static func _t_route_recover_objective() -> Dictionary:
 	var result := SituationResolutionService.route("recover", true)
 	if result != "async":
 		return { "ok": false, "error": "route('recover', true) expected 'async', got '%s'" % result }
+	return { "ok": true }
+
+
+# ─── Test 4b — route("guide_spirit", true) == "async" ────────────────────────
+# V2-STAGE-004 Phase 4 fix: guide_spirit objective must hand off to combat
+# (FlowEncounterState / GUIDE_SPIRIT mode), never resolve as in-explore flavor
+# text — otherwise stage.objectives[idx].completed can never flip true and
+# the player soft-locks (cta.proceed_to_stage_map never renders).
+static func _t_route_guide_spirit_objective() -> Dictionary:
+	var result := SituationResolutionService.route("guide_spirit", true)
+	if result != "async":
+		return { "ok": false, "error": "route('guide_spirit', true) expected 'async', got '%s'" % result }
 	return { "ok": true }
 
 

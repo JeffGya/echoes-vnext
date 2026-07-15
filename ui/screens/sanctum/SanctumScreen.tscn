@@ -48,6 +48,32 @@ corner_radius_top_right = 16
 corner_radius_bottom_right = 16
 corner_radius_bottom_left = 16
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_companion_panel"]
+bg_color = Color(0.176471, 0.176471, 0.266667, 0.96)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.658824, 0.529412, 0.352941, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_companion_bar_fill"]
+bg_color = Color(0.298039, 0.686275, 0.447059, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_companion_bar_bg"]
+bg_color = Color(0.101961, 0.101961, 0.156863, 0.6)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
 
 [node name="SanctumScreen" type="Control" unique_id=218783654]
 layout_mode = 3
@@ -322,6 +348,13 @@ layout_mode = 2
 theme_type_variation = &"SanctumMuted"
 text = "Standing 1  Step 1"
 
+[node name="CompanionTag" type="Label" parent="RootMargin/LayoutRoot/LeftStack/PartyPanel/PartyMargin/PartyStack/PartyScroll/PartyList/PartyEntryTemplate" unique_id=3010150102]
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.47843137, 0.70980392, 0.78431373, 1)
+theme_override_font_sizes/font_size = 12
+text = "⊕ Companion"
+
 [node name="RightStack" type="VBoxContainer" parent="RootMargin/LayoutRoot" unique_id=958951822]
 unique_name_in_owner = true
 layout_mode = 1
@@ -504,6 +537,14 @@ layout_mode = 2
 theme_type_variation = &"SanctumHeaderTitle"
 text = "Echo"
 autowrap_mode = 3
+
+[node name="DetailCompanionTag" type="Label" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/DetailTabs/HeaderMargin/HeaderWrapper" unique_id=3010150101]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.47843137, 0.70980392, 0.78431373, 1)
+theme_override_font_sizes/font_size = 12
+text = "⊕ Companion"
 
 [node name="DetailCallingRow" type="HBoxContainer" parent="RootMargin/LayoutRoot/EchoDetailPanel/DetailMargin/DetailStack/PanelContainer/DetailBodyRow/DetailTabs/HeaderMargin/HeaderWrapper" unique_id=693882767]
 layout_mode = 2
@@ -1417,6 +1458,200 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 72)
 layout_mode = 2
 text = "Continue"
+
+[node name="CompanionInvite" type="Control" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_bottom = 108.0
+grow_horizontal = 2
+grow_vertical = 2
+z_index = 20
+
+[node name="CompanionInviteBackdrop" type="ColorRect" parent="CompanionInvite"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.102, 0.102, 0.18, 0.75)
+
+[node name="CompanionInviteCenter" type="CenterContainer" parent="CompanionInvite"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="CompanionInviteScroll" type="ScrollContainer" parent="CompanionInvite/CompanionInviteCenter"]
+unique_name_in_owner = true
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="CompanionInviteCard" type="PanelContainer" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll"]
+layout_mode = 2
+custom_minimum_size = Vector2(480, 0)
+theme_override_styles/panel = SubResource("StyleBoxFlat_companion_panel")
+
+[node name="CompanionInviteMargin" type="MarginContainer" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard"]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 12
+
+[node name="CompanionInviteVBox" type="VBoxContainer" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="CompanionHeaderRow" type="HBoxContainer" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 8
+
+[node name="CompanionNameLabel" type="Label" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionHeaderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumHeaderTitle"
+text = "Ally Name"
+
+[node name="CompanionBadge" type="Label" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionHeaderRow"]
+layout_mode = 2
+text = "⊕ ALLY"
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.478431, 0.709804, 0.784314, 1)
+
+[node name="CompanionChanceHeadlineRow" type="HBoxContainer" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 8
+
+[node name="CompanionChanceHeadline" type="Label" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionChanceHeadlineRow"]
+layout_mode = 2
+text = "Chance to stay"
+theme_override_font_sizes/font_size = 14
+
+[node name="CompanionChanceLabel" type="Label" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionChanceHeadlineRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0%"
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.298039, 0.686275, 0.447059, 1)
+
+[node name="CompanionChanceBar" type="ProgressBar" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 16)
+layout_mode = 2
+theme_override_styles/fill = SubResource("StyleBoxFlat_companion_bar_fill")
+theme_override_styles/background = SubResource("StyleBoxFlat_companion_bar_bg")
+max_value = 75.0
+show_percentage = false
+
+[node name="CompanionSubBarsGrid" type="GridContainer" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox"]
+layout_mode = 2
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 6
+columns = 3
+
+[node name="TalkCaption" type="Label" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionSubBarsGrid"]
+layout_mode = 2
+custom_minimum_size = Vector2(48, 0)
+text = "Talk"
+theme_override_font_sizes/font_size = 12
+
+[node name="CompanionTalkBar" type="ProgressBar" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionSubBarsGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/fill = SubResource("StyleBoxFlat_companion_bar_fill")
+theme_override_styles/background = SubResource("StyleBoxFlat_companion_bar_bg")
+max_value = 75.0
+show_percentage = false
+
+[node name="CompanionTalkValue" type="Label" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionSubBarsGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(46, 0)
+text = "0/0"
+horizontal_alignment = 2
+theme_override_font_sizes/font_size = 12
+
+[node name="FightCaption" type="Label" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionSubBarsGrid"]
+layout_mode = 2
+custom_minimum_size = Vector2(48, 0)
+text = "Fight"
+theme_override_font_sizes/font_size = 12
+
+[node name="CompanionFightBar" type="ProgressBar" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionSubBarsGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/fill = SubResource("StyleBoxFlat_companion_bar_fill")
+theme_override_styles/background = SubResource("StyleBoxFlat_companion_bar_bg")
+max_value = 75.0
+show_percentage = false
+
+[node name="CompanionFightValue" type="Label" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionSubBarsGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(46, 0)
+text = "0/0"
+horizontal_alignment = 2
+theme_override_font_sizes/font_size = 12
+
+[node name="FitCaption" type="Label" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionSubBarsGrid"]
+layout_mode = 2
+custom_minimum_size = Vector2(48, 0)
+text = "Fit"
+theme_override_font_sizes/font_size = 12
+
+[node name="CompanionFitBar" type="ProgressBar" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionSubBarsGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/fill = SubResource("StyleBoxFlat_companion_bar_fill")
+theme_override_styles/background = SubResource("StyleBoxFlat_companion_bar_bg")
+max_value = 75.0
+show_percentage = false
+
+[node name="CompanionFitValue" type="Label" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionSubBarsGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(46, 0)
+text = "0/0"
+horizontal_alignment = 2
+theme_override_font_sizes/font_size = 12
+
+[node name="CompanionButtonRow" type="HBoxContainer" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 12
+
+[node name="CompanionDeclineButton" type="Button" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionButtonRow"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(140, 48)
+theme_type_variation = &"ButtonGhost"
+text = "Let them go"
+
+[node name="CompanionAcceptButton" type="Button" parent="CompanionInvite/CompanionInviteCenter/CompanionInviteScroll/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionButtonRow"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(140, 48)
+theme_type_variation = &"ButtonPrimary"
+text = "Welcome them"
 
 [node name="InstitutionsOverlay" type="PanelContainer" parent="RootMargin/LayoutRoot"]
 unique_name_in_owner = true
