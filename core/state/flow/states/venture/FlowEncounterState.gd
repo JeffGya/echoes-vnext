@@ -1649,6 +1649,13 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			if status == "dead":
 				enemies_defeated += 1
 		elif faction == "echo":
+			# FIX (Codex review bug 2): a joined Temporary Ally (is_ally) or GUIDE_SPIRIT
+			# (is_spirit) is a faction:"echo" combatant but NOT a roster echo — exclude both
+			# from the reward/survivor/rank tally so a surviving ally/spirit doesn't grant an
+			# extra echo-survival bonus and a dead one doesn't skew the rank denominator.
+			# Rendering (projected_actors) and combat end-conditions are untouched.
+			if bool(a.get("is_ally", false)) or bool(a.get("is_spirit", false)):
+				continue
 			total_echoes += 1
 			if status != "dead":
 				echoes_survived += 1

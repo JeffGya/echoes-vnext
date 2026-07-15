@@ -40,6 +40,10 @@
 #   24. seam/sanctum_snapshot_projects_companion_invite            (pure unit)
 #   25. seam/sanctum_snapshot_companion_invite_empty_when_none_pending (pure unit)
 #
+# Codex review fix regressions (P4 follow-up):
+#   26. seam/victory_return_clears_ally_fields_and_preserves_companion_invite (integration)
+#   27. seam/final_snapshot_excludes_ally_and_spirit_from_echo_tally (pure unit)
+#
 # All tests deterministic — no randf/randomize/OS time. Any RNG use goes through
 # CampaignSeed-derived / caller-seeded RandomNumberGenerator, per project invariant.
 
@@ -94,6 +98,11 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(Stage004SeamTests, "_t_sanctum_snapshot_projects_companion_invite"))
 	runner.register_test("seam/sanctum_snapshot_companion_invite_empty_when_none_pending",
 		Callable(Stage004SeamTests, "_t_sanctum_snapshot_companion_invite_empty_when_none_pending"))
+	# Codex review fix regression tests (P4 follow-up).
+	runner.register_test("seam/victory_return_clears_ally_fields_and_preserves_companion_invite",
+		Callable(Stage004SeamTests, "_t_victory_return_clears_ally_fields_and_preserves_companion_invite"))
+	runner.register_test("seam/final_snapshot_excludes_ally_and_spirit_from_echo_tally",
+		Callable(Stage004SeamTests, "_t_final_snapshot_excludes_ally_and_spirit_from_echo_tally"))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1024,3 +1033,171 @@ static func _t_sanctum_snapshot_companion_invite_empty_when_none_pending() -> Di
 	if not (invite_v is Dictionary) or not (invite_v as Dictionary).is_empty():
 		return { "ok": false, "error": "Expected companion_invite == {} when no invite is pending, got %s" % str(invite_v) }
 	return { "ok": true }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 26-27. Codex review fix regressions (P4 follow-up)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# BUG 1 regression: _apply_victory_return_to_explore() (the non-final-objective
+# victory path, "flow.go_state"→STAGE_EXPLORE while flow_machine is in ENCOUNTER)
+# must clear the encounter-scoped ally/intro fields the same way every other
+# teardown path does (defeat go_state→SANCTUM, retreat, encounter.complete,
+# _handle_complete_stage) — otherwise a stale ally_consumed_in_encounter=true
+# leaks onto the next objective in the same multi-objective stage and a SECOND
+# earned ally never joins. A pending sanctum.companion_invite must survive
+# untouched, since it is Sanctum-scoped (not encounter-scoped) and is captured
+# at combat-end time (_compute_ally_recruit_offer_if_eligible), strictly before
+# this handler ever runs.
+static func _t_victory_return_clears_ally_fields_and_preserves_companion_invite() -> Dictionary:
+	var env: Dictionary = _boot_env("victory_return_clear")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed (realm not created)" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var t: int = env["t"]
+
+	# Simulate a PRIOR ally auto-join in this same multi-objective stage that was
+	# never torn down — the exact leak this bug produces without the fix.
+	var stage: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
+	var explore_map: Dictionary = stage.get("explore_map", {})
+	explore_map["ally_contact"] = { "id": "contact.ally.victory_return_test", "name": "Stale Ally" }
+	explore_map["ally_contact_id"] = "contact.ally.victory_return_test"
+	explore_map["ally_consumed_in_encounter"] = true
+	explore_map["combat_intro_reason"] = "claimant_hostile"
+	stage["explore_map"] = explore_map
+	FlowStageExploreState._write_stage_back(flow_ctx, stage)
+
+	# A pending Sanctum companion invite (from an earlier, unrelated victory) must
+	# survive this teardown untouched — it is not encounter-scoped.
+	if not flow_ctx.save_data.has("sanctum") or not (flow_ctx.save_data["sanctum"] is Dictionary):
+		flow_ctx.save_data["sanctum"] = {}
+	flow_ctx.save_data["sanctum"]["companion_invite"] = {
+		"chance": 55, "ally_name": "Untouched Companion",
+	}
+
+	# Build a real encounter_ctx (mirrors _boot_env-style setup used elsewhere in this
+	# file) and mark it a victory, then put the flow machine in ENCOUNTER — the exact
+	# precondition _apply_victory_return_to_explore() checks before it runs its body.
+	flow_ctx.dev_combat_objective = EncounterResolutionModes.COMBAT
+	flow_ctx.encounter_ctx = null
+	flow_ctx.encounter_machine = null
+	var enc_state := FlowEncounterState.new()
+	enc_state.enter(flow_ctx, t)
+	flow_ctx.encounter_ctx.combat_result = {
+		"victory": true, "reason": "all_enemies_defeated", "round_ended": 2,
+	}
+	runtime.flow_machine._current_state_id = FlowStateIds.ENCOUNTER
+
+	runtime._apply_victory_return_to_explore(t)
+
+	var stage_after: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
+	var map_after: Dictionary = stage_after.get("explore_map", {})
+
+	if bool(map_after.get("ally_consumed_in_encounter", true)):
+		return { "ok": false, "error": "Expected explore_map.ally_consumed_in_encounter reset to false after victory-return teardown (BUG 1 regression)" }
+	if not (map_after.get("ally_contact", { "__missing__": true }) as Dictionary).is_empty():
+		return { "ok": false, "error": "Expected explore_map.ally_contact cleared to {} after victory-return teardown" }
+	if str(map_after.get("ally_contact_id", "unset")) != "":
+		return { "ok": false, "error": "Expected explore_map.ally_contact_id cleared to ''" }
+	if not str(map_after.get("combat_intro_reason", "unset")).is_empty():
+		return { "ok": false, "error": "Expected explore_map.combat_intro_reason cleared to ''" }
+
+	var invite_after: Dictionary = _read_companion_invite(flow_ctx)
+	if invite_after.is_empty() or str(invite_after.get("ally_name", "")) != "Untouched Companion":
+		return { "ok": false, "error": "Expected sanctum.companion_invite to survive victory-return teardown untouched, got %s" % str(invite_after) }
+
+	return { "ok": true }
+
+
+# BUG 2 regression: build_final_snapshot()'s echo tally (total_echoes / echoes_survived,
+# which feed RewardCalc's echo_bonus and rank denominator) must exclude combatants with
+# is_ally == true or is_spirit == true — they are temporary combat participants, not
+# roster echoes. Compares a snapshot with 3 roster echoes (2 alive, 1 dead) against an
+# otherwise-identical snapshot that ALSO has a living joined ally and a dead joined
+# spirit: echoes_survived, rank, and ase_awarded must be byte-identical, since the
+# non-roster combatants must not move the tally either way.
+static func _t_final_snapshot_excludes_ally_and_spirit_from_echo_tally() -> Dictionary:
+	var roster_actors: Array = [
+		_minimal_actor({ "id": "roster_echo_1", "name": "Roster Echo 1", "faction": "echo",
+			"current_hp": 40, "is_dead": false }),
+		_minimal_actor({ "id": "roster_echo_2", "name": "Roster Echo 2", "faction": "echo",
+			"current_hp": 40, "is_dead": false }),
+		_minimal_actor({ "id": "roster_echo_3", "name": "Roster Echo 3", "faction": "echo",
+			"current_hp": 0, "is_dead": true }),
+		_minimal_actor({ "id": "enemy_1", "name": "Enemy 1", "faction": "enemy",
+			"current_hp": 0, "is_dead": true }),
+	]
+	var actors_with_ally_and_spirit: Array = roster_actors.duplicate(true)
+	actors_with_ally_and_spirit.append(_minimal_actor({
+		"id": "joined_ally_1", "name": "Joined Ally", "faction": "echo",
+		"current_hp": 30, "is_dead": false, "is_ally": true,
+	}))
+	actors_with_ally_and_spirit.append(_minimal_actor({
+		"id": "joined_spirit_1", "name": "Joined Spirit", "faction": "echo",
+		"current_hp": 0, "is_dead": true, "is_spirit": true,
+	}))
+
+	var snap_baseline: Dictionary = _final_snapshot_for_actors(roster_actors, "test_enc_tally_baseline")
+	var snap_with_ally_spirit: Dictionary = _final_snapshot_for_actors(actors_with_ally_and_spirit, "test_enc_tally_ally_spirit")
+
+	var data_baseline: Dictionary = snap_baseline.get("data", {})
+	var data_with: Dictionary = snap_with_ally_spirit.get("data", {})
+
+	if int(data_baseline.get("echoes_survived", -1)) != 2:
+		return { "ok": false, "error": "Baseline setup sanity check failed: expected echoes_survived == 2, got %d" % int(data_baseline.get("echoes_survived", -1)) }
+
+	if int(data_with.get("echoes_survived", -1)) != int(data_baseline.get("echoes_survived", -2)):
+		return {
+			"ok": false,
+			"error": "Expected echoes_survived to exclude the living is_ally combatant (BUG 2 regression) — baseline %d, with ally+spirit %d" \
+				% [int(data_baseline.get("echoes_survived", -2)), int(data_with.get("echoes_survived", -1))]
+		}
+
+	if str(data_with.get("rank", "")) != str(data_baseline.get("rank", "")):
+		return {
+			"ok": false,
+			"error": "Expected rank to be unaffected by the ally/spirit combatants (BUG 2 regression) — baseline '%s', with ally+spirit '%s'" \
+				% [str(data_baseline.get("rank", "")), str(data_with.get("rank", ""))]
+		}
+
+	if int(data_with.get("ase_awarded", -1)) != int(data_baseline.get("ase_awarded", -2)):
+		return {
+			"ok": false,
+			"error": "Expected ase_awarded to be unaffected by the ally/spirit combatants (BUG 2 regression) — baseline %d, with ally+spirit %d" \
+				% [int(data_baseline.get("ase_awarded", -2)), int(data_with.get("ase_awarded", -1))]
+		}
+
+	return { "ok": true }
+
+
+# Shared builder for the BUG 2 regression test — mirrors
+# _t_final_snapshot_has_combat_intro_line_and_no_recruit_offer_key's minimal-context
+# pattern (bare FlowContext + EncounterContext, real ConfigService for reward config).
+static func _final_snapshot_for_actors(actors: Array, encounter_id: String) -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+
+	var ctx := FlowContext.new()
+	ctx.config_service = cs
+	ctx.realm_id = "realm.01"
+	ctx.stage_id = "stage.0"
+	ctx.save_data = {
+		"realms": {
+			"realm.01": {
+				"stages": [
+					{ "index": 0, "explore_map": {} },
+				],
+			},
+		},
+	}
+
+	var ectx := EncounterContext.new()
+	ectx.encounter_id  = encounter_id
+	ectx.placement_seed = 1
+	ectx.actors = actors
+	ectx.combat_state  = { "combat_over": true, "objective": "defeat_enemies", "round_counter": 2 }
+	ectx.combat_result = { "victory": true, "reason": "all_enemies_defeated", "round_ended": 2 }
+	ctx.encounter_ctx = ectx
+
+	return FlowEncounterState.build_final_snapshot(ctx, 1)

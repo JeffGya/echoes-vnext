@@ -837,6 +837,17 @@ func _apply_victory_return_to_explore(t: int) -> void:
 						})
 			# Vow discovery reads is_dead from ectx.actors — must run before null
 			_check_vow_discovery(t)
+			# FIX (Codex review bug 1): this non-final-objective victory path nulled the
+			# encounter without clearing the encounter-scoped ally/intro fields, unlike the
+			# other teardown paths (defeat go_state→SANCTUM, retreat, encounter.complete,
+			# _handle_complete_stage). That left ally_consumed_in_encounter=true (and a stale
+			# combat_intro_reason) on explore_map, so a SECOND temporary ally earned later in
+			# the same multi-objective stage was seen as already-consumed and never joined the
+			# next fight. Safe here: the companion invite (if any) was already captured into
+			# save_data.sanctum.companion_invite at combat-end (_compute_ally_recruit_offer_if_eligible,
+			# called from the round-resolution path before this handler ever runs), and
+			# _clear_ally_fields_if_present() explicitly does not touch that key.
+			_clear_ally_fields_if_present(t)
 			flow_ctx.encounter_ctx     = null
 			flow_ctx.encounter_machine = null
 			flow_ctx.active_encounter_objective_index = -1
