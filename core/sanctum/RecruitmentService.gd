@@ -9,13 +9,15 @@
 # - Pure static. No RNG anywhere except `roll()`, which takes an already-seeded
 #   RandomNumberGenerator from the caller (append-only namespace) — this service
 #   never derives its own seed.
-# - No hard-coded magic numbers: every tunable lives in data.contact.recruitment,
-#   merged with the CANONICAL source blocks (data.weaving_rite.vector_to_virtue_primary,
-#   data.sanctum.rival_archetypes, data.contact.outcome_thresholds.good) via
-#   build_effective_cfg() so those keys have a single source of truth (no balance.json
-#   duplication that could silently desync). The merged dict is passed as `cfg` to
-#   compute_recruit_chance; promote_ally_to_echo receives the full `cfg_data` and merges
-#   internally.
+# - No hard-coded magic numbers: every tunable lives in data.contact.recruitment. A few
+#   of them (vector_to_virtue_primary, rival_archetype_pairs, conversation_good_fear_max/
+#   _morale_min) also live CANONICALLY elsewhere (data.weaving_rite, data.sanctum,
+#   data.contact.outcome_thresholds.good); build_effective_cfg() overrides the recruitment
+#   copies with those canonical sources at runtime, making canonical the single source of
+#   truth (the balance.json copies are kept for the additive-only data/ schema rule but are
+#   never read for the formula, so they can't silently desync it). The merged dict is passed
+#   as `cfg` to compute_recruit_chance; promote_ally_to_echo receives the full `cfg_data` and
+#   merges internally.
 # - promote_ally_to_echo() is a direct builder, NOT EchoFactory — EchoFactory's RNG
 #   draw order is immutable (Lesson #5) and a recruited companion has no RNG-driven
 #   birth to begin with; every field is derived from the ally's battle build + the
@@ -47,9 +49,10 @@ const STAT_KEYS: Array = ["max_hp", "atk", "def", "agi", "int", "cha", "speed"]
 
 ## Builds the effective recruitment cfg consumed by compute_recruit_chance and
 ## promote_ally_to_echo. The recruitment formula reads several tunables by LOCAL
-## key names that live CANONICALLY elsewhere in balance data; this overlays those
-## single sources onto a copy of data.contact.recruitment so the formula keeps its
-## local key names WITHOUT balance.json duplicating (and later drifting from) them:
+## key names that also live CANONICALLY elsewhere in balance data; this overlays those
+## canonical single sources onto a copy of data.contact.recruitment, so the recruitment
+## block's own copies of these keys (kept for the additive-only data/ schema rule) are
+## overridden and can never silently desync the formula — canonical is authoritative:
 ##   vector_to_virtue_primary    <- data.weaving_rite.vector_to_virtue_primary
 ##   rival_archetype_pairs       <- data.sanctum.rival_archetypes
 ##   conversation_good_fear_max  <- data.contact.outcome_thresholds.good.npc_fear_max
@@ -197,8 +200,8 @@ static func promote_ally_to_echo(
 			if not existing_id.is_empty():
 				existing_ids.append(existing_id)
 
-	# Merges the canonical source blocks (vector_to_virtue_primary etc.) onto the
-	# recruitment block — the raw data.contact.recruitment no longer carries them.
+	# Overrides the recruitment block's copies of vector_to_virtue_primary etc. with their
+	# canonical sources (single source of truth) — see build_effective_cfg.
 	var recruit_cfg: Dictionary = build_effective_cfg(cfg_data)
 
 	var summoning_cfg_v: Variant = cfg_data.get("summoning", {})

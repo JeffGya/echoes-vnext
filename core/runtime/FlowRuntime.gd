@@ -3694,9 +3694,9 @@ func _compute_ally_recruit_offer_if_eligible(is_victory: bool, rounds_total: int
 	var _aro_contact_cfg: Dictionary = _aro_contact_cfg_v if _aro_contact_cfg_v is Dictionary else {}
 	var _aro_recruit_cfg_v: Variant = _aro_contact_cfg.get("recruitment", {})
 	var _aro_recruit_cfg: Dictionary = _aro_recruit_cfg_v if _aro_recruit_cfg_v is Dictionary else {}
-	# Merge the canonical source blocks (vector_to_virtue_primary / rival_archetype_pairs /
-	# good thresholds) onto the recruitment block — they live canonically elsewhere and are
-	# no longer duplicated in data.contact.recruitment (single source of truth).
+	# Override the recruitment block's copies of vector_to_virtue_primary / rival_archetype_pairs /
+	# good thresholds with their canonical sources (single source of truth) — see
+	# RecruitmentService.build_effective_cfg.
 	var _aro_effective_cfg: Dictionary = RecruitmentService.build_effective_cfg(_aro_bal_data)
 
 	var _aro_party_echoes: Array = _get_active_party_echoes()

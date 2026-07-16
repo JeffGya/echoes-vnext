@@ -26,9 +26,8 @@
 # in CallingTests.gd's _load_real_calling_cfg(). The recruitment cfg is built through
 # RecruitmentService.build_effective_cfg() so the tests exercise the REAL formula — the
 # canonical source blocks (data.weaving_rite.vector_to_virtue_primary, data.sanctum.
-# rival_archetypes, data.contact.outcome_thresholds.good) are merged onto data.contact.
-# recruitment exactly as the runtime does it (those keys are no longer duplicated in the
-# recruitment block).
+# rival_archetypes, data.contact.outcome_thresholds.good) override the recruitment block's
+# own copies exactly as the runtime does it (canonical is the authoritative source).
 
 extends RefCounted
 class_name RecruitmentServiceTests
