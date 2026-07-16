@@ -1042,6 +1042,7 @@ func _render_snapshot(snap: Dictionary) -> void:
 		if _sanctum_shell == null:
 			_sanctum_shell = _sanctum_shell_scene.instantiate() as SanctumShell
 			screen_host.add_child(_sanctum_shell)
+			_sanctum_shell.set_blocking_modal_active_check(Callable(modal_host, "has_active_modal"))
 			_sanctum_shell.action_requested.connect(_on_ui_action_selected)
 			if _sanctum_shell.has_signal("modal_requested"):
 				_sanctum_shell.connect("modal_requested", Callable(self, "_on_shell_modal_requested").bind(_sanctum_shell))

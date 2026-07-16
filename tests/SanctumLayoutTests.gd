@@ -41,6 +41,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("sanctum.layout/modal_dismiss_blocks_resize_reopen", Callable(SanctumLayoutTests, "_t_modal_dismiss_blocks_resize_reopen"))
 	runner.register_test("sanctum.layout/hidden_shell_resize_no_modal_replay", Callable(SanctumLayoutTests, "_t_hidden_shell_resize_no_modal_replay"))
 	runner.register_test("sanctum.layout/modal_ids_route_through_shell",      Callable(SanctumLayoutTests, "_t_modal_ids_route_through_shell"))
+	runner.register_test("sanctum.layout/blocking_modal_guards_spatial_input", Callable(SanctumLayoutTests, "_t_blocking_modal_guards_spatial_input"))
 	runner.register_test("sanctum.layout/modal_safe_frames_authored",         Callable(SanctumLayoutTests, "_t_modal_safe_frames_authored"))
 	runner.register_test("sanctum.layout/modal_safe_frames_apply_insets",     Callable(SanctumLayoutTests, "_t_modal_safe_frames_apply_insets"))
 	runner.register_test("sanctum.layout/modal_content_geometry_and_identity", Callable(SanctumLayoutTests, "_t_modal_content_geometry_and_identity"))
@@ -202,6 +203,47 @@ static func _t_modal_ids_route_through_shell() -> Dictionary:
 			shell.free()
 			return { "ok": false, "error": "Missing shell modal scene for %s" % str(modal_id) }
 	shell.free()
+	return { "ok": true }
+
+static func _t_blocking_modal_guards_spatial_input() -> Dictionary:
+	var tree := Engine.get_main_loop() as SceneTree
+	var fixture_host := tree.current_scene.get_node_or_null("UISnapshotRenderer") if tree != null and tree.current_scene != null else null
+	if fixture_host == null:
+		return { "ok": false, "error": "Ready fixture host unavailable for modal spatial-input guard test" }
+	var viewport := SubViewport.new()
+	viewport.size = Vector2i(1280, 720)
+	viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	fixture_host.add_child(viewport)
+	var shell := SanctumShellScene.instantiate() as SanctumShell
+	var modal_host := ModalHostScene.instantiate() as ModalHost
+	viewport.add_child(shell)
+	viewport.add_child(modal_host)
+	shell.set("_current_snap_type", "flow.sanctum")
+	shell.set_blocking_modal_active_check(Callable(modal_host, "has_active_modal"))
+	if not bool(shell.call("_can_accept_spatial_pointer_input")):
+		viewport.free()
+		return { "ok": false, "error": "Sanctum spatial input was disabled without a blocking modal" }
+	if not modal_host.present_modal_for_id(&"realm.return_home", ReturnHomeModalScene, {
+		"layout": {
+			"profile": &"standard",
+			"safe_insets": Vector4.ZERO,
+			"logical_size": Vector2(1280, 720),
+		},
+		"result": {
+			"success": true,
+			"message": "The party found its way home.",
+		},
+	}):
+		viewport.free()
+		return { "ok": false, "error": "Failed to present blocking modal fixture" }
+	if bool(shell.call("_can_accept_spatial_pointer_input")):
+		viewport.free()
+		return { "ok": false, "error": "Sanctum map/placement input remained active behind ModalHost" }
+	modal_host.dismiss_modal()
+	if not bool(shell.call("_can_accept_spatial_pointer_input")):
+		viewport.free()
+		return { "ok": false, "error": "Sanctum spatial input did not recover after modal dismissal" }
+	viewport.free()
 	return { "ok": true }
 
 static func _t_modal_safe_frames_authored() -> Dictionary:

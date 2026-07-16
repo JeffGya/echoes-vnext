@@ -35,6 +35,7 @@ var _active_overlay: Control = null
 var _layout: Dictionary = {}
 var _active_modal_id: StringName = &""
 var _active_modal_payload: Dictionary = {}
+var _blocking_modal_active_check: Callable = Callable()
 # Nav actions cached from the last flow.sanctum snapshot.
 # The shell owns the persistent nav bar so all sanctum-family screens share it.
 var _cached_nav: Dictionary = {}
@@ -204,6 +205,9 @@ func set_layout(layout: Dictionary) -> void:
 func modal_scene_for(modal_id: StringName) -> PackedScene:
 	var scene_v: Variant = _modal_scene_by_id.get(modal_id, null)
 	return scene_v if scene_v is PackedScene else null
+
+func set_blocking_modal_active_check(check: Callable) -> void:
+	_blocking_modal_active_check = check
 
 func on_modal_dismissed(modal_id: StringName) -> void:
 	if _active_modal_id != modal_id:
@@ -390,9 +394,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if _echo_detail_open:
-		return
-	if _current_snap_type != "flow.sanctum":
+	if not _can_accept_spatial_pointer_input():
 		return
 	if not (event is InputEventMouseButton):
 		return
@@ -416,6 +418,11 @@ func _input(event: InputEvent) -> void:
 	# Normal mode: check hit, route by kind.
 	if _try_open_occupant_at_viewport_point(mb.position):
 		get_viewport().set_input_as_handled()
+
+func _can_accept_spatial_pointer_input() -> bool:
+	if _blocking_modal_active_check.is_valid() and bool(_blocking_modal_active_check.call()):
+		return false
+	return not _echo_detail_open and _current_snap_type == "flow.sanctum"
 
 func _bottom_chrome_inset() -> int:
 	var safe: Vector4 = _layout.get("safe_insets", Vector4.ZERO)

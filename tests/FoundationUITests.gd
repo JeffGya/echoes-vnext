@@ -3,7 +3,6 @@ class_name FoundationUITests
 
 const LayoutController := preload("res://ui/components/ResponsiveLayoutController.gd")
 const ModalHostScene := preload("res://ui/components/ModalHost.tscn")
-const AppRootScene := preload("res://ui/Approot.tscn")
 const ResponsiveHelpers := preload("res://tests/ui_responsive/ResponsiveUITestHelpers.gd")
 const FakeLayoutReceiverScript := preload("res://tests/ui_responsive/FakeLayoutReceiver.gd")
 const TestModalFixtureScene := preload("res://tests/ui_responsive/TestModalFixture.tscn")
@@ -182,7 +181,8 @@ static func _t_wide_bounds_grow_while_ui_scale_caps() -> Dictionary:
 	return { "ok": true }
 
 static func _t_app_root_layers_and_full_rect_host() -> Dictionary:
-	var root := AppRootScene.instantiate() as Control
+	var app_root_scene := load("res://ui/Approot.tscn") as PackedScene
+	var root := app_root_scene.instantiate() as Control if app_root_scene != null else null
 	if root == null:
 		return { "ok": false, "error": "Failed to instantiate AppRoot scene" }
 	var content_layer := root.get_node_or_null("ContentLayer") as CanvasLayer
@@ -215,7 +215,8 @@ static func _t_app_root_layers_and_full_rect_host() -> Dictionary:
 	return { "ok": true }
 
 static func _t_app_root_layout_forwarding_contract() -> Dictionary:
-	var root := AppRootScene.instantiate() as Control
+	var app_root_scene := load("res://ui/Approot.tscn") as PackedScene
+	var root := app_root_scene.instantiate() as Control if app_root_scene != null else null
 	if root == null:
 		return { "ok": false, "error": "Failed to instantiate AppRoot scene" }
 	var onboarding := FakeLayoutReceiverScript.new() as Control
@@ -409,7 +410,10 @@ static func _t_modal_host_backdrop_and_trap_contract() -> Dictionary:
 	return { "ok": true }
 
 static func _t_modal_dismissal_notifies_owner_once() -> Dictionary:
-	var app_root := AppRootScene.instantiate() as Control
+	var app_root_scene := load("res://ui/Approot.tscn") as PackedScene
+	var app_root := app_root_scene.instantiate() as Control if app_root_scene != null else null
+	if app_root == null:
+		return { "ok": false, "error": "Failed to instantiate AppRoot scene" }
 	var fixture := _make_in_tree_modal_host_fixture()
 	var host := fixture.get("host") as Control
 	var shell_a := _TestModalShell.new()
