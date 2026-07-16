@@ -3126,7 +3126,7 @@
 				"combat_intro_line": "The claimant turns on you."
 			},
 			"recruitment": {
-				"_comment": "V2-STAGE-004 Phase 4 (S14): Earned Return recruit-chance formula for a surviving temporary_ally. Additive conversation+combat+fit, base 0, never guaranteed (cap < 100). See ANSWERS.md #28/#30/#31. All sub-blocks are self-contained here (RecruitmentService.compute_recruit_chance only receives this block) — vector_to_virtue_primary/rival_archetype_pairs duplicate data.weaving_rite/data.sanctum sources by necessity of that scope.",
+				"_comment": "V2-STAGE-004 Phase 4 (S14): Earned Return recruit-chance formula for a surviving temporary_ally. Additive conversation+combat+fit, base 0, never guaranteed (cap < 100). See ANSWERS.md #28/#30/#31. NOTE: vector_to_virtue_primary, rival_archetype_pairs, conversation_good_fear_max, and conversation_good_morale_min are kept here for the additive-only data/ schema rule (AGENTS.md), but at runtime RecruitmentService.build_effective_cfg AUTHORITATIVELY OVERRIDES them from their canonical single sources — data.weaving_rite.vector_to_virtue_primary, data.sanctum.rival_archetypes, and data.contact.outcome_thresholds.good. Editing the copies below has no effect on the recruit formula; tune the canonical blocks instead (kept in sync to avoid confusion).",
 				"cap": 75,
 				"conversation_max": 30,
 				"combat_max": 35,
