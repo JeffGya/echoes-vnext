@@ -2,10 +2,12 @@ extends Control
 
 class_name SummonRevealOverlay
 
+signal action_requested(action: Dictionary)
 signal dismiss_requested()
 
 @onready var title_label: Label = %TitleLabel
 @onready var count_label: Label = %CountLabel
+@onready var safe_frame: MarginContainer = %SafeFrame
 
 @onready var name_label: Label = %NameLabel
 @onready var meta_label: Label = %MetaLabel
@@ -20,11 +22,12 @@ signal dismiss_requested()
 
 var _reveals: Array = []
 var _index: int = 0
+var _dismiss_action: Dictionary = {}
 
 func _ready() -> void:
 	prev_button.pressed.connect(func(): set_index(_index - 1))
 	next_button.pressed.connect(func(): set_index(_index + 1))
-	dismiss_button.pressed.connect(func(): dismiss_requested.emit())
+	dismiss_button.pressed.connect(_on_dismiss_pressed)
 	
 	# Defaults
 	title_label.text = "New Echo"
@@ -34,6 +37,18 @@ func set_reveals(reveals: Array) -> void:
 	_reveals = reveals.duplicate(true)
 	_index = 0
 	_update_ui()
+
+func present(payload: Dictionary) -> void:
+	var reveals_v: Variant = payload.get("reveals", [])
+	_dismiss_action = payload.get("dismiss_action", {}) if payload.get("dismiss_action", {}) is Dictionary else {}
+	if payload.get("layout", {}) is Dictionary:
+		set_layout(payload.get("layout", {}) as Dictionary)
+	set_reveals(reveals_v if reveals_v is Array else [])
+
+func set_layout(layout: Dictionary) -> void:
+	var frame := safe_frame if safe_frame != null else find_child("SafeFrame", true, false) as MarginContainer
+	if frame != null and frame.has_method("set_layout"):
+		frame.call("set_layout", layout)
 
 func set_index(i: int) -> void:
 	if _reveals.is_empty():
@@ -88,3 +103,8 @@ func _update_ui() -> void:
 		int(stats.get("def", 0)),
 		int(stats.get("agi", 0)),
 	]
+
+func _on_dismiss_pressed() -> void:
+	dismiss_requested.emit()
+	if not _dismiss_action.is_empty():
+		action_requested.emit(_dismiss_action.duplicate(true))

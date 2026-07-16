@@ -15,6 +15,42 @@ Reviewed at the start of each session.
 
 ---
 
+### 16 — CanvasLayer visibility must follow inherited shell visibility
+
+**Rule:** Every shell-owned `CanvasLayer` must mirror `is_visible_in_tree()`, not only the shell Control's local `visible` flag.
+**Why:** A hidden Realm shell left its EchoBar layer active over Sanctum, so invisible Realm chrome intercepted Sanctum input.
+**How to apply:** Synchronize world, content, chrome, and transient CanvasLayers on shell/ancestor visibility changes; verify the previously hidden shell cannot draw or receive input after cross-shell routing.
+**Mistake count:** 1
+
+---
+
+### 15 — Reset full-rect container offsets when applying a responsive profile
+
+**Rule:** When a Control is meant to fill its parent, responsive layout application must restore all four offsets to zero after setting full-rect anchors.
+**Why:** Stale authored/runtime offsets survived profile changes and shifted otherwise full-rect content, producing blank or compressed screens after live resize and routing.
+**How to apply:** For full-rect responsive roots, set the authored anchors and explicitly clear left/top/right/bottom offsets in the profile application path. Test compact → wide → compact without re-instancing the screen.
+**Mistake count:** 1
+
+---
+
+### 14 — Autowrap needs an authored/profile width before first layout
+
+**Rule:** An autowrap label or wrapped container that participates in minimum-size calculation must receive a concrete authored or profile-specific wrap width before the first layout pass.
+**Why:** Labels initially measured against tiny intrinsic widths, fed excessively tall minimum sizes back into their containers, and collapsed or overlapped adjacent cards.
+**How to apply:** Author the structural width in `.tscn`, update the width value in `set_layout()`, then refresh minimum sizes after snapshot text/visibility changes. Do not fix the symptom with arbitrary height clamps or a new scroll container.
+**Mistake count:** 1
+
+---
+
+### 13 — Responsive UI is recomposition, caps, and spatial surplus
+
+**Rule:** Do not uniformly scale every UI element and do not add scroll containers to every primary screen. Recompose by profile, cap readable panels/chrome, and give surplus wide-screen space to the spatial presentation.
+**Why:** Uniform scaling made small and large views feel identical while wasting desktop real estate; blanket scrolling narrowed and fragmented the Sanctum overview instead of solving its layout hierarchy.
+**How to apply:** Use authored containers, compact/standard/wide columns and visibility states, explicit wrap widths, capped panel sizes, and safe/chrome exclusions. Reserve scrolling for genuinely long bounded content such as modal bodies, lists, or detail pages.
+**Mistake count:** 1
+
+---
+
 ### 12 — Tests and load failures must never share the production save path
 
 **Rule:** Every runtime test must inject an isolated save path. Persistence must distinguish a genuinely missing save from an unreadable or invalid save, and only the missing case may create a new campaign.
@@ -80,9 +116,9 @@ Reviewed at the start of each session.
 
 ### 5 — Build UI structure in .tscn, not .gd — script only sets values
 
-**Rule:** All visual structure (color-coded cells, styled backgrounds, layout hierarchy, default text) must be authored in `.tscn`. `.gd` may only update values: `modulate`, `text`, `visible`, `disabled`. Do not construct visual nodes dynamically in `.gd`.
+**Rule:** All visual structure (color-coded cells, styled backgrounds, layout hierarchy, default text) must be authored in `.tscn`. `.gd` may render state and set responsive profile values such as margins, columns, visibility, wrap widths, and min/max sizes. Do not construct visual nodes or styles dynamically in `.gd`.
 **Why:** Jeff rejected a plan that set cell colors via `StyleBoxFlat.new()` in `.gd`. "Move that to .tscn if possible." Authoring structure in `.gd` bypasses the editor and makes visual tuning impossible without code changes.
-**How to apply:** For any new visual component, design the full node tree in `.tscn` first. `.gd` gets `@onready` refs to pre-built nodes and only calls `node.modulate = ...` or `node.text = ...`.
+**How to apply:** For any new visual component, design the full node tree and theme hooks in `.tscn` first. `.gd` gets `@onready` refs to pre-built nodes, renders snapshot values, and may apply profile-specific values without changing the tree.
 **Mistake count:** 1
 
 ---
@@ -105,11 +141,11 @@ Reviewed at the start of each session.
 
 ---
 
-### 2 — No UI work in .gd files — all visual work belongs in .tscn
+### 2 — No UI structure or styling construction in .gd
 
-**Rule:** Never create, layout, or style UI nodes programmatically in `.gd` files. All visual work (node hierarchy, sizing, text defaults, visibility, theme variations) must live in `.tscn` scene files.
+**Rule:** Never create/reparent UI nodes or construct visual styles programmatically in `.gd` files. Node hierarchy, layout relationships, text defaults, and theme variations live in `.tscn`; responsive scripts may set profile values on those authored nodes.
 **Why:** Jeff corrected a plan that created Label nodes and HBoxContainers in `_ready()` via `Node.new()`. Visual structure belongs in `.tscn`; `.gd` is for logic only.
-**How to apply:** Any time a new UI element needs to be added: define it in `.tscn` first with `unique_name_in_owner = true`, reference it in `.gd` via `@onready var x = %NodeName`. Only update `.text`, `.visible`, `.disabled`, `.modulate` in `.gd`. Never call `add_child(Button.new())` or similar in `.gd` unless it's an overlay/modal with no persistent scene reference.
+**How to apply:** Any time a new UI element needs to be added: define it in `.tscn` first with `unique_name_in_owner = true`, reference it in `.gd` via `@onready var x = %NodeName`, and update its rendered/profile values there. Never call `add_child(Button.new())`, build StyleBoxes, or dynamically reparent authored UI to solve responsiveness.
 **Mistake count:** 1
 
 ---

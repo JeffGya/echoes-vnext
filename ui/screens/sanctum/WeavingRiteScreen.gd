@@ -4,6 +4,9 @@ class_name WeavingRiteScreen
 signal action_requested(action: Dictionary)
 
 @onready var _phase_label: Label = %PhaseLabel
+@onready var _root_panel: PanelContainer = %RootPanel
+@onready var _content_area: GridContainer = %ContentArea
+@onready var _thread_card_grid: GridContainer = %ThreadCardGrid
 
 @onready var _thread_panel: VBoxContainer = %ThreadPanel
 @onready var _echo_panel: VBoxContainer = %EchoPanel
@@ -31,6 +34,8 @@ var _echo_picker_extra_rows: Array = []  # dynamically created for rosters > 6
 var _invitation_labels: Array = []
 var _aftermath_labels: Array = []
 var _non_chosen_labels: Array = []
+var _bottom_content_exclusion := 108
+var _layout_profile: StringName = &"standard"
 
 
 func _ready() -> void:
@@ -78,9 +83,38 @@ func _ready() -> void:
 
 func set_snapshot(snapshot: Dictionary) -> void:
 	_last_snapshot = snapshot
-	var data_v: Variant = snapshot.get("data", {})
+	_render()
+
+func set_layout(layout: Dictionary) -> void:
+	var safe: Vector4 = layout.get("safe_insets", Vector4.ZERO)
+	var profile: StringName = layout.get("profile", &"standard")
+	_layout_profile = profile
+	var logical_size_v: Variant = layout.get("logical_size", Vector2(1280, 720))
+	var logical_size: Vector2 = logical_size_v if logical_size_v is Vector2 else Vector2(1280, 720)
+	var viewport_w := float(logical_size.x)
+	var cap := 1440.0 if profile == &"wide" else 1200.0
+	var left_inset := maxf(16.0, ceilf(safe.x))
+	var right_inset := maxf(16.0, ceilf(safe.z))
+	var available_w := maxf(320.0, viewport_w - left_inset - right_inset)
+	var content_w := minf(available_w, cap)
+	var left := left_inset + maxf(0.0, (available_w - content_w) * 0.5)
+	offset_left = left
+	offset_top = maxf(16.0, ceilf(safe.y))
+	offset_right = -(viewport_w - left - content_w)
+	offset_bottom = -float(_bottom_content_exclusion)
+	var thread_grid := _thread_card_grid if _thread_card_grid != null else find_child("ThreadCardGrid", true, false) as GridContainer
+	if thread_grid != null:
+		thread_grid.columns = 3
+	var phase := str(_last_snapshot.get("data", {}).get("phase", "thread_select"))
+	_apply_responsive_composition(phase)
+
+func set_bottom_content_exclusion(value: int) -> void:
+	_bottom_content_exclusion = maxi(0, value)
+
+func _render() -> void:
+	var data_v: Variant = _last_snapshot.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
-	var actions_v: Variant = snapshot.get("actions", {})
+	var actions_v: Variant = _last_snapshot.get("actions", {})
 	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
 
 	var phase := str(data.get("phase", "thread_select"))
@@ -311,6 +345,15 @@ func _apply_phase_visibility(phase: String) -> void:
 	_thread_panel.visible = phase == "thread_select" or phase == "invitation"
 	_echo_panel.visible = phase == "echo_missing" or phase == "thread_select" or phase == "invitation"
 	_resolution_panel.visible = phase == "aftermath"
+	_apply_responsive_composition(phase)
+
+
+func _apply_responsive_composition(phase: String) -> void:
+	var content_grid := _content_area if _content_area != null else find_child("ContentArea", true, false) as GridContainer
+	if content_grid == null:
+		return
+	var has_two_panels := phase == "thread_select" or phase == "invitation"
+	content_grid.columns = 2 if has_two_panels and _layout_profile != &"compact" else 1
 
 
 func _apply_action_slots(actions: Dictionary) -> void:

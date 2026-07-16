@@ -1,0 +1,175 @@
+[gd_scene load_steps=3 format=3 uid="uid://institution_detail_modal"]
+
+[ext_resource type="Script" path="res://ui/overlays/sanctum/InstitutionDetailModal.gd" id="1_inst"]
+[ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="2_safe"]
+
+[node name="InstitutionDetailModal" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_inst")
+
+[node name="SafeFrame" type="MarginContainer" parent="."]
+script = ExtResource("2_safe")
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Center" type="CenterContainer" parent="SafeFrame"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="SafeFrame/Center"]
+custom_minimum_size = Vector2(560, 0)
+layout_mode = 2
+theme_type_variation = &"SanctumDetailPanel"
+
+[node name="Margin" type="MarginContainer" parent="SafeFrame/Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Stack" type="VBoxContainer" parent="SafeFrame/Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="InstDetailName" type="Label" parent="SafeFrame/Center/Panel/Margin/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumDetailTitle"
+text = "Hearth"
+
+[node name="InstDetailCondition" type="Label" parent="SafeFrame/Center/Panel/Margin/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumMuted"
+text = "Neglected"
+
+[node name="PassiveEffectLabel" type="Label" parent="SafeFrame/Center/Panel/Margin/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumMuted"
+autowrap_mode = 3
+
+[node name="BodyScroll" type="ScrollContainer" parent="SafeFrame/Center/Panel/Margin/Stack"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 180)
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="BodyStack" type="VBoxContainer" parent="SafeFrame/Center/Panel/Margin/Stack/BodyScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="InstDetailOccupantList" type="VBoxContainer" parent="SafeFrame/Center/Panel/Margin/Stack/BodyScroll/BodyStack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="OccupantRowTemplate" type="HBoxContainer" parent="SafeFrame/Center/Panel/Margin/Stack/BodyScroll/BodyStack/InstDetailOccupantList"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="OccupantEmotionDot" type="Label" parent="SafeFrame/Center/Panel/Margin/Stack/BodyScroll/BodyStack/InstDetailOccupantList/OccupantRowTemplate"]
+layout_mode = 2
+text = "●"
+
+[node name="OccupantName" type="Label" parent="SafeFrame/Center/Panel/Margin/Stack/BodyScroll/BodyStack/InstDetailOccupantList/OccupantRowTemplate"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Echo"
+
+[node name="OccupantRemoveButton" type="Button" parent="SafeFrame/Center/Panel/Margin/Stack/BodyScroll/BodyStack/InstDetailOccupantList/OccupantRowTemplate"]
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+theme_type_variation = &"SanctumModalSecondaryWarmButton"
+text = "x"
+
+[node name="EchoAssignPicker" type="PanelContainer" parent="SafeFrame/Center/Panel/Margin/Stack/BodyScroll/BodyStack"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"SanctumCard"
+
+[node name="PickerMargin" type="MarginContainer" parent="SafeFrame/Center/Panel/Margin/Stack/BodyScroll/BodyStack/EchoAssignPicker"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="PickerStack" type="VBoxContainer" parent="SafeFrame/Center/Panel/Margin/Stack/BodyScroll/BodyStack/EchoAssignPicker/PickerMargin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PickerTitle" type="Label" parent="SafeFrame/Center/Panel/Margin/Stack/BodyScroll/BodyStack/EchoAssignPicker/PickerMargin/PickerStack"]
+layout_mode = 2
+theme_type_variation = &"SanctumDetailTitle"
+text = "Assign Echo"
+
+[node name="PickerList" type="VBoxContainer" parent="SafeFrame/Center/Panel/Margin/Stack/BodyScroll/BodyStack/EchoAssignPicker/PickerMargin/PickerStack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="PickerRowTemplate" type="Button" parent="SafeFrame/Center/Panel/Margin/Stack/BodyScroll/BodyStack/EchoAssignPicker/PickerMargin/PickerStack/PickerList"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(48, 72)
+layout_mode = 2
+theme_type_variation = &"SanctumModalSecondaryWarmButton"
+text = "Echo"
+autowrap_mode = 3
+
+[node name="PickerCancelButton" type="Button" parent="SafeFrame/Center/Panel/Margin/Stack/BodyScroll/BodyStack/EchoAssignPicker/PickerMargin/PickerStack"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+theme_type_variation = &"SanctumModalSecondaryWarmButton"
+text = "Cancel"
+
+[node name="FooterButtons" type="VBoxContainer" parent="SafeFrame/Center/Panel/Margin/Stack"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="InstDetailAssignButton" type="Button" parent="SafeFrame/Center/Panel/Margin/Stack/FooterButtons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 56)
+layout_mode = 2
+theme_type_variation = &"SanctumModalPrimaryButton"
+text = "Assign Echo"
+
+[node name="InstDetailEstablishButton" type="Button" parent="SafeFrame/Center/Panel/Margin/Stack/FooterButtons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 56)
+layout_mode = 2
+theme_type_variation = &"SanctumModalPrimaryButton"
+text = "Establish (10 Ekwan)"
+
+[node name="InstDetailBackButton" type="Button" parent="SafeFrame/Center/Panel/Margin/Stack/FooterButtons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+theme_type_variation = &"SanctumModalSecondaryWarmButton"
+text = "Back"

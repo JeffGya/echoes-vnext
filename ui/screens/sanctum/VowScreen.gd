@@ -9,11 +9,13 @@ extends Control
 class_name VowScreen
 
 signal action_requested(action: Dictionary)
+signal modal_requested(modal_id: StringName, payload: Dictionary)
 
 var _vow_card_scene := preload("res://ui/screens/sanctum/VowCard.tscn")
 
 # ---- Node refs ----
 @onready var back_button: Button               = %BackButton
+@onready var content_row: GridContainer        = %ContentRow
 @onready var realm_locked_label: Label         = %RealmLockedLabel
 @onready var vow_card_container: VBoxContainer = %VowCardContainer
 
@@ -48,6 +50,7 @@ var _vow_card_scene := preload("res://ui/screens/sanctum/VowCard.tscn")
 
 var _last_snapshot: Dictionary = {}
 var _selected_vow_id: String   = ""
+var _bottom_content_exclusion := 108
 # V2-VOW-002: lifetime stats label (created in _ready, always visible).
 var _vow_stats_label: Label = null
 
@@ -57,9 +60,10 @@ func _ready() -> void:
 		_emit_slot_action("nav.back")
 	)
 	action_button.pressed.connect(_on_action_button_pressed)
-	pledge_dismiss_button.pressed.connect(_on_dismiss_pledge_pressed)
-	break_keep_button.pressed.connect(_on_cancel_break_pressed)
-	break_confirm_button.pressed.connect(_on_confirm_break_pressed)
+	pledge_moment_overlay.visible = false
+	pledge_moment_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	break_confirm_overlay.visible = false
+	break_confirm_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	# V2-VOW-002: lifetime stats label — above the card list, always visible.
 	_vow_stats_label = Label.new()
@@ -105,6 +109,27 @@ func set_snapshot(snapshot: Dictionary) -> void:
 			_show_empty()
 	else:
 		_show_empty()
+
+func set_layout(layout: Dictionary) -> void:
+	var safe: Vector4 = layout.get("safe_insets", Vector4.ZERO)
+	var profile: StringName = layout.get("profile", &"standard")
+	var logical_size_v: Variant = layout.get("logical_size", Vector2(1280, 720))
+	var logical_size: Vector2 = logical_size_v if logical_size_v is Vector2 else Vector2(1280, 720)
+	var viewport_w := float(logical_size.x)
+	var cap := 1100.0 if profile == &"wide" else 960.0
+	var available_w := maxf(320.0, viewport_w - float(32 + int(ceilf(safe.x)) + int(ceilf(safe.z))))
+	var content_w := minf(available_w, cap)
+	var left := float(16 + int(ceilf(safe.x))) + maxf(0.0, (available_w - content_w) * 0.5)
+	offset_left = left
+	offset_top = float(16 + int(ceilf(safe.y)))
+	offset_right = -(viewport_w - left - content_w)
+	offset_bottom = -float(_bottom_content_exclusion)
+	var grid := content_row if content_row != null else find_child("ContentRow", true, false) as GridContainer
+	if grid != null:
+		grid.columns = 1 if profile == &"compact" else 2
+
+func set_bottom_content_exclusion(value: int) -> void:
+	_bottom_content_exclusion = maxi(0, value)
 
 
 # ---- Rendering ----
@@ -265,18 +290,18 @@ func _on_action_button_pressed() -> void:
 		pledge_action["vow_id"] = _selected_vow_id
 		pledge_action["tier"]   = 1
 		action_requested.emit(pledge_action)
-		_show_pledge_moment(selected_entry)
+		modal_requested.emit(&"vow_moment", {
+			"mode": "pledge",
+			"proverb_twi": str(selected_entry.get("proverb_twi", "")),
+			"proverb_en": str(selected_entry.get("proverb_en", "")),
+		})
 
 
 # ---- Pledge moment overlay ----
 
 func _show_pledge_moment(entry: Dictionary) -> void:
-	pledge_twi_label.text = str(entry.get("proverb_twi", ""))
-	pledge_en_label.text  = '"%s"' % str(entry.get("proverb_en", ""))
-	pledge_moment_overlay.modulate.a = 0.0
-	pledge_moment_overlay.visible    = true
-	var tw := create_tween()
-	tw.tween_property(pledge_moment_overlay, "modulate:a", 1.0, 0.25)
+	pledge_moment_overlay.visible = false
+	pledge_moment_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
 func _on_dismiss_pledge_pressed() -> void:
@@ -290,12 +315,12 @@ func _on_dismiss_pledge_pressed() -> void:
 # ---- Break confirm overlay ----
 
 func _show_break_confirm(entry: Dictionary) -> void:
-	break_vow_name_label.text = str(entry.get("vow_name", ""))
-	break_penalty_label.text  = str(entry.get("breaking_cost_hint", ""))
-	break_confirm_overlay.modulate.a = 0.0
-	break_confirm_overlay.visible    = true
-	var tw := create_tween()
-	tw.tween_property(break_confirm_overlay, "modulate:a", 1.0, 0.25)
+	modal_requested.emit(&"vow_moment", {
+		"mode": "break",
+		"name": str(entry.get("vow_name", "")),
+		"penalty": str(entry.get("breaking_cost_hint", "")),
+		"confirm_action": _slot_action("cta.break"),
+	})
 
 
 func _on_cancel_break_pressed() -> void:
@@ -318,8 +343,14 @@ func _on_confirm_break_pressed() -> void:
 # ---- Helpers ----
 
 func _emit_slot_action(slot: String) -> void:
+	var action := _slot_action(slot)
+	if not action.is_empty():
+		action_requested.emit(action)
+
+func _slot_action(slot: String) -> Dictionary:
 	var actions_v: Variant = _last_snapshot.get("actions", {})
 	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
 	var action_v: Variant = actions.get(slot, {})
 	if action_v is Dictionary and not (action_v as Dictionary).is_empty():
-		action_requested.emit((action_v as Dictionary).duplicate())
+		return (action_v as Dictionary).duplicate()
+	return {}

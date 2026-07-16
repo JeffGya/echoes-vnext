@@ -1,0 +1,79 @@
+[gd_scene load_steps=3 format=3 uid="uid://calling_info_modal"]
+
+[ext_resource type="Script" path="res://ui/overlays/sanctum/CallingInfoModal.gd" id="1_calling"]
+[ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="2_safe"]
+
+[node name="CallingInfoModal" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_calling")
+
+[node name="SafeFrame" type="MarginContainer" parent="."]
+script = ExtResource("2_safe")
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Center" type="CenterContainer" parent="SafeFrame"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="SafeFrame/Center"]
+custom_minimum_size = Vector2(520, 0)
+layout_mode = 2
+theme_type_variation = &"SanctumDetailPanel"
+
+[node name="Margin" type="MarginContainer" parent="SafeFrame/Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="Root" type="VBoxContainer" parent="SafeFrame/Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="CallingInfoTitle" type="Label" parent="SafeFrame/Center/Panel/Margin/Root"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumDetailTitle"
+text = "Calling"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="BodyScroll" type="ScrollContainer" parent="SafeFrame/Center/Panel/Margin/Root"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 180)
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="CallingInfoDesc" type="Label" parent="SafeFrame/Center/Panel/Margin/Root/BodyScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+autowrap_mode = 3
+
+[node name="CallingInfoClose" type="Button" parent="SafeFrame/Center/Panel/Margin/Root"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 56)
+layout_mode = 2
+theme_type_variation = &"SanctumModalPrimaryButton"
+text = "Close"

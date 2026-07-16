@@ -3,11 +3,11 @@ extends Control
 class_name SummonScreen
 
 signal action_requested(action: Dictionary)
-
-const SummonRevealOverlayScene := preload("res://ui/overlays/SummonRevealOverlay.tscn")
+signal modal_requested(modal_id: StringName, payload: Dictionary)
 
 @onready var title_label: Label = %TitleLabel
 @onready var back_button: Button = %BackButton
+@onready var root_panel: PanelContainer = %RootPanel
 
 @onready var ase_label: Label = %AseLabel
 @onready var ase_rate_label: Label = %AseRateLabel
@@ -22,11 +22,11 @@ const SummonRevealOverlayScene := preload("res://ui/overlays/SummonRevealOverlay
 
 var _last_snapshot: Dictionary = {}
 
-var _overlay: Control = null # SummonRevealOverlay
 var _count: int = 1
 var _cost_each: int = 60
 var _ase: int = 0
 var _grade: String = "uncalled"
+var _bottom_content_exclusion := 108
 
 func _ready() -> void:
 	# Slider
@@ -45,16 +45,6 @@ func _ready() -> void:
 
 	# Grade options (MVP: only "uncalled" enabled)
 	_setup_grade_options()
-
-	# Overlay (themeable scene)
-	_overlay = SummonRevealOverlayScene.instantiate()
-	add_child(_overlay)
-	_overlay.visible = false
-
-	# SummonRevealOverlay exposes dismiss_requested
-	_overlay.dismiss_requested.connect(func():
-		_emit_slot_action("overlay.dismiss_reveals")
-	)
 
 	_refresh_labels_and_button()
 
@@ -80,11 +70,31 @@ func set_snapshot(snapshot: Dictionary) -> void:
 	var reveals: Array = reveals_v if reveals_v is Array else []
 
 	if reveals.size() > 0:
-		_overlay.set_reveals(reveals)
-	else:
-		_overlay.visible = false
+		var dismiss_action := _slot_action("overlay.dismiss_reveals")
+		modal_requested.emit(&"summon_reveal", {
+			"reveals": reveals,
+			"dismiss_action": dismiss_action,
+		})
 
 	_refresh_labels_and_button()
+
+func set_layout(layout: Dictionary) -> void:
+	var safe: Vector4 = layout.get("safe_insets", Vector4.ZERO)
+	var profile: StringName = layout.get("profile", &"standard")
+	var logical_size_v: Variant = layout.get("logical_size", Vector2(1280, 720))
+	var logical_size: Vector2 = logical_size_v if logical_size_v is Vector2 else Vector2(1280, 720)
+	var viewport_w := float(logical_size.x)
+	var cap := 680.0 if profile == &"compact" else 760.0
+	var available_w := maxf(320.0, viewport_w - float(32 + int(ceilf(safe.x)) + int(ceilf(safe.z))))
+	var content_w := minf(available_w, cap)
+	var left := float(16 + int(ceilf(safe.x))) + maxf(0.0, (available_w - content_w) * 0.5)
+	offset_left = left
+	offset_top = float(16 + int(ceilf(safe.y)))
+	offset_right = -(viewport_w - left - content_w)
+	offset_bottom = -float(_bottom_content_exclusion)
+
+func set_bottom_content_exclusion(value: int) -> void:
+	_bottom_content_exclusion = maxi(0, value)
 
 func _setup_grade_options() -> void:
 	grade_option.clear()
@@ -142,14 +152,18 @@ func _emit_action(action: Dictionary) -> void:
 	action_requested.emit(action)
 
 func _emit_slot_action(slot: String, extra: Dictionary = {}) -> void:
+	var a := _slot_action(slot)
+	if not a.is_empty():
+		for k in extra.keys():
+			a[k] = extra[k]
+		action_requested.emit(a)
+		return
+	action_requested.emit(extra)
+
+func _slot_action(slot: String) -> Dictionary:
 	if _last_snapshot.has("actions") and typeof(_last_snapshot["actions"]) == TYPE_DICTIONARY:
 		var actions: Dictionary = _last_snapshot["actions"]
 		if actions.has(slot) and typeof(actions[slot]) == TYPE_DICTIONARY:
 			var a: Dictionary = (actions[slot] as Dictionary).duplicate(true)
-			for k in extra.keys():
-				a[k] = extra[k]
-			action_requested.emit(a)
-			return
-
-	# Fallback (only if slot missing)
-	action_requested.emit(extra)
+			return a
+	return {}

@@ -7,6 +7,7 @@ signal action_requested(action: Dictionary)
 @onready var _renderer: Node2D = %SanctumSpatialRenderer
 @onready var _title_label: Label = %TitleLabel
 @onready var _body_label: Label = %BodyLabel
+@onready var _safe_frame: Control = %SafeFrame
 @onready var _thread_card: PanelContainer = %ThreadSigilCard
 @onready var _flame_core: ColorRect = %FlameCore
 @onready var _cta_button: Button = %CtaButton
@@ -21,10 +22,15 @@ var _line_is_typing := false
 
 
 func _ready() -> void:
+	_cta_button.focus_mode = Control.FOCUS_ALL
 	_cta_button.pressed.connect(_on_cta_pressed)
 	for i in range(_choice_buttons.size()):
+		_choice_buttons[i].focus_mode = Control.FOCUS_ALL
 		_choice_buttons[i].pressed.connect(_on_choice_pressed.bind(i))
 
+func set_layout(layout: Dictionary) -> void:
+	if is_node_ready() and _safe_frame.has_method("set_layout"):
+		_safe_frame.call("set_layout", layout)
 
 func set_snapshot(snap: Dictionary) -> void:
 	if _renderer != null and _renderer.has_method("render"):
@@ -108,6 +114,17 @@ func _sync_action_visibility() -> void:
 	for i in range(_choice_buttons.size()):
 		var has_action := i < _choice_actions.size() and not _choice_actions[i].is_empty()
 		_choice_buttons[i].visible = can_show_actions and not has_more_lines and has_action
+	_grab_default_focus()
+
+
+func _grab_default_focus() -> void:
+	if _cta_button.visible and not _cta_button.disabled:
+		_cta_button.grab_focus.call_deferred()
+		return
+	for button in _choice_buttons:
+		if button.visible and not button.disabled:
+			button.grab_focus.call_deferred()
+			return
 
 
 func _on_cta_pressed() -> void:

@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://ui/screens/onboarding/SanctumNamingScreen.gd" id="1_script"]
 [ext_resource type="Theme" uid="uid://8qssuuodths2" path="res://assets/theme/LivingTreeSystem.tres" id="2_theme"]
+[ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="3_safe"]
 
 [node name="SanctumNamingScreen" type="Control"]
 layout_mode = 3
@@ -22,7 +23,23 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.23921569, 0.35294118, 0.27843137, 1)
 
-[node name="Title" type="Label" parent="."]
+[node name="SafeFrame" type="MarginContainer" parent="." unique_id=1121]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("3_safe")
+base_margin = 16
+
+[node name="ContentRoot" type="Control" parent="SafeFrame"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Title" type="Label" parent="SafeFrame/ContentRoot"]
 layout_mode = 1
 anchors_preset = 5
 anchor_left = 0.5
@@ -37,7 +54,7 @@ theme_override_font_sizes/font_size = 30
 text = "Name this house"
 horizontal_alignment = 1
 
-[node name="CardsRoot" type="HBoxContainer" parent="." unique_id=1070]
+[node name="CardsRoot" type="HBoxContainer" parent="SafeFrame/ContentRoot" unique_id=1070]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 8
@@ -53,23 +70,23 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 22
 
-[node name="Card1" type="PanelContainer" parent="CardsRoot"]
+[node name="Card1" type="PanelContainer" parent="SafeFrame/ContentRoot/CardsRoot"]
 custom_minimum_size = Vector2(235, 260)
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="Card1Margin" type="MarginContainer" parent="CardsRoot/Card1"]
+[node name="Card1Margin" type="MarginContainer" parent="SafeFrame/ContentRoot/CardsRoot/Card1"]
 layout_mode = 2
 theme_override_constants/margin_left = 18
 theme_override_constants/margin_top = 18
 theme_override_constants/margin_right = 18
 theme_override_constants/margin_bottom = 18
 
-[node name="Card1VBox" type="VBoxContainer" parent="CardsRoot/Card1/Card1Margin"]
+[node name="Card1VBox" type="VBoxContainer" parent="SafeFrame/ContentRoot/CardsRoot/Card1/Card1Margin"]
 layout_mode = 2
 theme_override_constants/separation = 18
 
-[node name="NameLabel1" type="Label" parent="CardsRoot/Card1/Card1Margin/Card1VBox" unique_id=1071]
+[node name="NameLabel1" type="Label" parent="SafeFrame/ContentRoot/CardsRoot/Card1/Card1Margin/Card1VBox" unique_id=1071]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
@@ -78,30 +95,30 @@ horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 3
 
-[node name="NameButton1" type="Button" parent="CardsRoot/Card1/Card1Margin/Card1VBox" unique_id=1072]
+[node name="NameButton1" type="Button" parent="SafeFrame/ContentRoot/CardsRoot/Card1/Card1Margin/Card1VBox" unique_id=1072]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
 theme_type_variation = &"ButtonPrimary"
 text = "Choose"
 
-[node name="Card2" type="PanelContainer" parent="CardsRoot"]
+[node name="Card2" type="PanelContainer" parent="SafeFrame/ContentRoot/CardsRoot"]
 custom_minimum_size = Vector2(235, 260)
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="Card2Margin" type="MarginContainer" parent="CardsRoot/Card2"]
+[node name="Card2Margin" type="MarginContainer" parent="SafeFrame/ContentRoot/CardsRoot/Card2"]
 layout_mode = 2
 theme_override_constants/margin_left = 18
 theme_override_constants/margin_top = 18
 theme_override_constants/margin_right = 18
 theme_override_constants/margin_bottom = 18
 
-[node name="Card2VBox" type="VBoxContainer" parent="CardsRoot/Card2/Card2Margin"]
+[node name="Card2VBox" type="VBoxContainer" parent="SafeFrame/ContentRoot/CardsRoot/Card2/Card2Margin"]
 layout_mode = 2
 theme_override_constants/separation = 18
 
-[node name="NameLabel2" type="Label" parent="CardsRoot/Card2/Card2Margin/Card2VBox" unique_id=1081]
+[node name="NameLabel2" type="Label" parent="SafeFrame/ContentRoot/CardsRoot/Card2/Card2Margin/Card2VBox" unique_id=1081]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
@@ -110,30 +127,30 @@ horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 3
 
-[node name="NameButton2" type="Button" parent="CardsRoot/Card2/Card2Margin/Card2VBox" unique_id=1082]
+[node name="NameButton2" type="Button" parent="SafeFrame/ContentRoot/CardsRoot/Card2/Card2Margin/Card2VBox" unique_id=1082]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
 theme_type_variation = &"ButtonPrimary"
 text = "Choose"
 
-[node name="Card3" type="PanelContainer" parent="CardsRoot"]
+[node name="Card3" type="PanelContainer" parent="SafeFrame/ContentRoot/CardsRoot"]
 custom_minimum_size = Vector2(235, 260)
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="Card3Margin" type="MarginContainer" parent="CardsRoot/Card3"]
+[node name="Card3Margin" type="MarginContainer" parent="SafeFrame/ContentRoot/CardsRoot/Card3"]
 layout_mode = 2
 theme_override_constants/margin_left = 18
 theme_override_constants/margin_top = 18
 theme_override_constants/margin_right = 18
 theme_override_constants/margin_bottom = 18
 
-[node name="Card3VBox" type="VBoxContainer" parent="CardsRoot/Card3/Card3Margin"]
+[node name="Card3VBox" type="VBoxContainer" parent="SafeFrame/ContentRoot/CardsRoot/Card3/Card3Margin"]
 layout_mode = 2
 theme_override_constants/separation = 18
 
-[node name="NameLabel3" type="Label" parent="CardsRoot/Card3/Card3Margin/Card3VBox" unique_id=1091]
+[node name="NameLabel3" type="Label" parent="SafeFrame/ContentRoot/CardsRoot/Card3/Card3Margin/Card3VBox" unique_id=1091]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
@@ -142,30 +159,30 @@ horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 3
 
-[node name="NameButton3" type="Button" parent="CardsRoot/Card3/Card3Margin/Card3VBox" unique_id=1092]
+[node name="NameButton3" type="Button" parent="SafeFrame/ContentRoot/CardsRoot/Card3/Card3Margin/Card3VBox" unique_id=1092]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
 theme_type_variation = &"ButtonPrimary"
 text = "Choose"
 
-[node name="CustomCard" type="PanelContainer" parent="CardsRoot"]
+[node name="CustomCard" type="PanelContainer" parent="SafeFrame/ContentRoot/CardsRoot"]
 custom_minimum_size = Vector2(235, 260)
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="CustomMargin" type="MarginContainer" parent="CardsRoot/CustomCard"]
+[node name="CustomMargin" type="MarginContainer" parent="SafeFrame/ContentRoot/CardsRoot/CustomCard"]
 layout_mode = 2
 theme_override_constants/margin_left = 18
 theme_override_constants/margin_top = 18
 theme_override_constants/margin_right = 18
 theme_override_constants/margin_bottom = 18
 
-[node name="CustomVBox" type="VBoxContainer" parent="CardsRoot/CustomCard/CustomMargin"]
+[node name="CustomVBox" type="VBoxContainer" parent="SafeFrame/ContentRoot/CardsRoot/CustomCard/CustomMargin"]
 layout_mode = 2
 theme_override_constants/separation = 18
 
-[node name="CustomLabel" type="Label" parent="CardsRoot/CustomCard/CustomMargin/CustomVBox"]
+[node name="CustomLabel" type="Label" parent="SafeFrame/ContentRoot/CardsRoot/CustomCard/CustomMargin/CustomVBox"]
 layout_mode = 2
 size_flags_vertical = 3
 theme_type_variation = &"HeaderLargePanel"
@@ -174,14 +191,14 @@ horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 3
 
-[node name="CustomOptionButton" type="Button" parent="CardsRoot/CustomCard/CustomMargin/CustomVBox" unique_id=1100]
+[node name="CustomOptionButton" type="Button" parent="SafeFrame/ContentRoot/CardsRoot/CustomCard/CustomMargin/CustomVBox" unique_id=1100]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 theme_type_variation = &"ButtonSecondary"
 text = "Write name"
 
-[node name="CustomRoot" type="VBoxContainer" parent="." unique_id=1110]
+[node name="CustomRoot" type="VBoxContainer" parent="SafeFrame/ContentRoot" unique_id=1110]
 unique_name_in_owner = true
 visible = false
 layout_mode = 1
@@ -198,20 +215,20 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 18
 
-[node name="CustomNameEdit" type="LineEdit" parent="CustomRoot" unique_id=1111]
+[node name="CustomNameEdit" type="LineEdit" parent="SafeFrame/ContentRoot/CustomRoot" unique_id=1111]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(440, 52)
+custom_minimum_size = Vector2(440, 56)
 layout_mode = 2
 placeholder_text = "Sanctum name"
 
-[node name="CustomSubmitButton" type="Button" parent="CustomRoot" unique_id=1112]
+[node name="CustomSubmitButton" type="Button" parent="SafeFrame/ContentRoot/CustomRoot" unique_id=1112]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(440, 52)
+custom_minimum_size = Vector2(440, 56)
 layout_mode = 2
 theme_type_variation = &"ButtonPrimary"
 text = "Choose"
 
-[node name="Glow" type="ColorRect" parent="." unique_id=1120]
+[node name="Glow" type="ColorRect" parent="SafeFrame/ContentRoot" unique_id=1120]
 unique_name_in_owner = true
 visible = false
 layout_mode = 1

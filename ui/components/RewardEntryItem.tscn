@@ -5,6 +5,9 @@
 [node name="RewardEntryItem" type="HBoxContainer"]
 theme_override_constants/separation = 8
 script = ExtResource("1_rewardentry")
+color_positive = Color(0.1764706, 0.41568628, 0.30980393, 1)
+color_negative = Color(0.627451, 0.23529412, 0.21176471, 1)
+color_ekwan = Color(0.47058824, 0.36078432, 0.16862746, 1)
 
 [node name="EntryLabel" type="Label" parent="."]
 unique_name_in_owner = true

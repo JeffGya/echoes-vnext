@@ -118,26 +118,132 @@ AppRoot routes `snapshot.type` → shell → bespoke screen.
 | `SanctumShell` | `ui/shells/SanctumShell.gd` | flow.sanctum, flow.summon, flow.echo_party, flow.realm_select, flow.vow_manage, flow.weaving_rite |
 | `RealmShell` | `ui/shells/RealmShell.gd` | flow.stage_map, flow.stage, flow.stage_explore, flow.encounter, flow.keeper_trial, flow.resolve |
 
-> **TECH DEBT (V2-STAGE-004) — `flow.resolve` overlay rendering:**
-> `flow.resolve` is a flow STATE that RealmShell currently renders as a **dim modal overlay** (semi-transparent `ColorRect` + `ResultCard`) drawn on top of the active venture screen (combat board / stage-explore / conversation) rather than swapping to a new screen. This eliminates the visual "jump" off the battle board on resolution. Implementation: `RealmShell._show_resolve_overlay()` adds the ResolveScreen instance last to `_overlay_root` so it paints above `_active_overlay`; it is NOT entered in `_scene_by_flow_type`. When a non-resolve snapshot arrives the overlay is freed before normal routing runs.
->
-> **Candidate for deletion / refactor later:** making `flow.resolve` a pure overlay with no backing flow state would require relocating combat teardown (encounter_ctx/machine nulling), emotion drift (`_apply_encounter_emotion_drift`), and XP accrual — all of which currently happen on the RESOLVE transition inside `FlowRuntime`/`FlowEncounterState`. Do not remove the `flow.resolve` state until those side-effects have a new home. Track as a dedicated deferred story.
+`AppRoot` remains the application composition root. It owns runtime boot/dispatch,
+shell and onboarding routing, save recovery, economy timing, debug/test entry points,
+responsive layout coordination, and the single app-wide blocking `ModalHost`.
+`ScreenHost` is full viewport; shells own their content-safe frames and persistent
+chrome reservations.
+
+`flow.resolve` remains a flow state because its core transition still owns combat
+teardown, emotion drift, and progression side effects. Its UI is presented through
+the AppRoot `ModalHost` as modal id `realm.resolve`, over the still-mounted Realm
+screen. Do not remove the state until those core responsibilities have another
+explicit owner.
+
+### Responsive UI, Safe Area, and Layer Contract
+
+**Runtime:** Godot 4.6.1. Landscape-only. Design base `1280×720`; initial desktop
+window `1600×900`; desktop minimum `960×540`. The window is resizable and HiDPI
+aware, using `canvas_items`, fractional scaling, and `expand`.
+
+`ResponsiveLayoutController` owns window-to-layout conversion and emits:
+
+```gdscript
+signal layout_changed(layout: Dictionary)
+
+{
+  "profile": StringName,   # compact | standard | wide
+  "logical_size": Vector2,
+  "safe_insets": Vector4,  # left, top, right, bottom in logical units
+  "ui_scale": float,
+  "is_mobile": bool,
+}
+```
+
+- Desktop scale: `clamp(min(width / 1280, height / 720), 1.0, 1.25)`.
+- Phone landscape targets about `960×540` logical space, capped at `2.0`.
+- Tablet/foldable landscape targets about `1280×720`, capped at `1.5`.
+- Mobile profile detection prefers physical size/DPI and falls back to aspect ratio.
+- Physical OS safe-area rectangles are converted through the inverse viewport
+  stretch transform before logical margins are applied.
+- Profile thresholds use safe logical space: compact below `1200×680`, standard
+  below `1440×810`, otherwise wide.
+- Wide layouts stop enlarging capped panels/chrome and give surplus room to the
+  Sanctum, exploration, and combat spatial fields.
+
+**Composition rule:** responsive means recomposition through authored containers,
+profile-specific columns/visibility/margins/wrap widths, and readable maximum panel
+widths. Do not uniformly scale individual screen roots, reparent UI dynamically, or
+solve ordinary primary layouts by adding scroll containers everywhere. Scroll only
+bounded long-content regions where content can genuinely exceed the available space.
+
+**Safe-content rule:**
+- Actionable content keeps at least `max(16, OS safe inset)` from each edge.
+- Screen content excludes persistent bottom chrome plus an 8-unit gap.
+- Persistent `EchoBar` and `BottomRail` are inset from the bottom and sides; neither
+  is full-width edge-to-edge.
+- All interactive targets are at least `48×48`; primary CTAs are 56 high; adjacent
+  targets keep at least 8 units separation.
+- Full-bleed spatial/world presentation may extend outside the safe frame; actionable
+  content may not.
+
+**Canonical layers:**
+
+| Layer | Responsibility |
+|---:|---|
+| 0 | Full-bleed world/spatial presentation |
+| 10 | Active screen content |
+| 20 | Persistent EchoBar, Sanctum rail, and navigation chrome |
+| 30 | Non-modal transients: barks, transitions, placement controls, notifications |
+| 40 | AppRoot blocking `ModalHost` |
+| 128 | Recovery, debug, and emergency UI |
+
+Every shell-owned `CanvasLayer` must mirror `is_visible_in_tree()`. Hiding a shell or
+one of its ancestors must disable both drawing and input for its world, content,
+chrome, and transient layers before another shell becomes interactive.
+
+**UI-only interfaces:**
+- `ResponsiveLayoutController.layout_changed(layout)`
+- `ResponsiveLayoutController.current_layout()`
+- `Shell.set_layout(layout)`
+- `Screen.modal_requested(modal_id, payload)`
+- Modal scenes implement `present(payload)`, emit `action_requested(action)`, and
+  may emit `dismiss_requested()`.
+
+These interfaces do not alter snapshots, action dictionaries, simulation state, or
+core contracts. Scene structure stays authored in `.tscn`; scripts set responsive
+values and rendered state only.
+
+**Blocking modal contract:**
+- Exactly one blocking modal may be active.
+- The layer-40 root and dim backdrop cover the full viewport, including shell chrome
+  and device cutouts. The decorative backdrop ignores input; the full modal input
+  root stops it.
+- Modal cards remain inside the logical safe area. Long bodies may scroll while
+  authored headers, footers, and required CTAs stay reachable.
+- Opening records prior focus, moves focus to an authored safe action, contains focus
+  within the modal, and restores prior focus on dismissal.
+- Re-presenting the same modal id updates its payload; a different blocking modal is
+  rejected until the active one closes.
+
+**Responsive verification:** run both commands behind the exact 200-second watchdog:
+
+```bash
+/usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --check-only --quit --path /Users/jeffreygyamfi/Sites/echoes-vnext
+/usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --quit --path /Users/jeffreygyamfi/Sites/echoes-vnext -- tests
+```
+
+Desktop resize acceptance uses a standalone/editor-launched OS window. The embedded
+Godot game dock follows editor-dock sizing and is not evidence that standalone
+window resizing works.
 
 **Shell-cached nav pattern (UI-002):**
-- SanctumShell owns the persistent NavBar — NOT injected into every sanctum-family snapshot
+- SanctumShell owns the persistent bottom rail — NOT injected into every sanctum-family snapshot
 - On `flow.sanctum`: shell caches all `nav.*` and `cta.*` slots from `snap.actions` → `_cached_nav`
-- All other sanctum-family screens inherit the cached NavBar unchanged
+- All other sanctum-family screens inherit the cached rail actions unchanged
 - This keeps SummonState, EchoPartyState, etc. free from nav injection
 
 **RealmShell echo bar pattern (UI-005):**
-- RealmShell owns the persistent EchoBar (bottom 88px, full-width) — NOT rendered by individual screens
+- RealmShell owns the persistent EchoBar (88 logical units high) — NOT rendered by individual screens
+- The bar is horizontally centered, keeps safe side/bottom insets, and caps at 1440
+  logical units. Overflow is clipped and horizontally scrollable.
 - `_update_echo_bar(snap)` is called on **every** `set_snapshot()` — always reflects latest HP + emotional state
 - Data source by snapshot type:
   - `flow.encounter` / `flow.resolve` → filters `data.actors` by `faction == "echo"`
-  - `flow.stage` / `flow.stage_map`   → reads `data.party_preview` (pre-combat shape: name, rank, calling_origin)
+  - `flow.stage` / `flow.stage_map` / `flow.stage_explore` → reads `data.party_preview`
 - HP label shown only when `hp`/`max_hp` fields are present (encounter/resolve only)
 - Emotion label: `emotional_status` in combat; `calling_origin` pre-combat (defaults to "Ready")
-- `OverlayRoot` (where screens attach) is sized to stop 88px above bottom — bar never overlaps content
+- Realm screens receive the persistent-chrome exclusion and reserve content above it.
 - **GUIDE_SPIRIT spirit slot (V2-STAGE-004 P3c):** when `data.actors` contains an actor with `is_spirit == true`, RealmShell appends it as a **distinct last EchoBar slot** via `EchoCardItem.setup_spirit()` — a ◆ SPIRIT badge, gold accent StyleBox (`EchoCardSpiritAccent.tres`), and an HP + objective-progress line. It reads as "one of the party" but stays visually distinct.
 - **Temporary Ally slot (V2-STAGE-004 P4):** when an actor carries `is_ally == true`, `EchoCardItem.setup_ally()` promotes its card to the Mist Blue `#7AB5C8` "⊕ ALLY" badge + `EchoCardAllyAccent.tres` border — the same "one of the party but visually distinct" treatment as the spirit slot, in a different accent family. Never applied together with `setup_spirit()` on the same card.
 
@@ -392,7 +498,7 @@ Closes the last STAGE-004 gap: STAGE-003 conversation outcomes now reach combat,
 - `promote_ally_to_echo(ally_actor, source_contact, save_data, cfg_data, logger, t) -> String` (returns new `echo_id`) — a **direct builder, NOT `EchoFactory`** (EchoFactory's v1/v2 RNG draw order is immutable and a recruited companion has no RNG-driven birth). Mints a roster echo: `origin: "recruited_ally"`, `rarity: "uncalled"`, `rank: 1` / `level: 1` (Standing 1), traits carried from the ally's battle build, stats re-derived fresh via `DerivedStatService.compute_stats()`, `vector_scores` built from the source contact's `virtue_primary`/`virtue_secondary`. **Seeds a NEGATIVE companion bond debuff** (`data.contact.recruitment.companion_bond_debuff`, default −30) against every roster echo that existed before the promotion, via `SocialGraphService.apply_score_delta()`.
 - **Gate (enforced by the caller, not this service):** ally must be ALIVE at battle end AND the encounter must be a VICTORY.
 
-**Companion invite is a SANCTUM EVENT — design change from the original plan (a Resolve-panel accept/decline).** A successful `roll()` writes a durable `sanctum.companion_invite` dict (ONE pending max — a no-stack guard discards a second success while one is already pending, logged `sanctum.companion_invite.discarded`). `FlowSanctumState.build_snapshot()` projects it as `data.companion_invite` (`{}` when none pending). The `%CompanionInvite` modal on `SanctumScreen` shows it on every Sanctum entry and **persists across sessions** until the player decides. Actions `sanctum.companion.accept` (`FlowRuntime._handle_companion_accept`, calls `promote_ally_to_echo()` then clears the invite) / `sanctum.companion.decline` (`FlowRuntime._handle_companion_decline`, clears with no roster mutation) — both no-payload. **Removed from Resolve:** the old plan's `cta.recruit_accept`/`cta.recruit_decline` + `ally_recruit_offer` resolve-snapshot projection do not exist — recruitment offers never appear on `flow.resolve`.
+**Companion invite is a SANCTUM EVENT — design change from the original plan (a Resolve-panel accept/decline).** A successful `roll()` writes a durable `sanctum.companion_invite` dict (ONE pending max — a no-stack guard discards a second success while one is already pending, logged `sanctum.companion_invite.discarded`). `FlowSanctumState.build_snapshot()` projects it as `data.companion_invite` (`{}` when none pending). `SanctumScreen` requests modal id `companion_invite`; AppRoot presents the blocking `CompanionInviteModal` on every Sanctum entry until the player decides, including across sessions. Actions `sanctum.companion.accept` (`FlowRuntime._handle_companion_accept`, calls `promote_ally_to_echo()` then clears the invite) / `sanctum.companion.decline` (`FlowRuntime._handle_companion_decline`, clears with no roster mutation) — both no-payload. **Removed from Resolve:** the old plan's `cta.recruit_accept`/`cta.recruit_decline` + `ally_recruit_offer` resolve-snapshot projection do not exist — recruitment offers never appear on `flow.resolve`.
 
 **Combat Contribution Ledger (Tier 1):** `EncounterContext.echo_action_logs` (previously echo-only, keyed by echo id for XP contribution) is generalized to **all factions** (echo/enemy/spirit/ally). Every entry now carries `damage_dealt: int, damage_taken: int, kills: int` (plus the pre-existing `melee_count`/`guard_count`/`kill_count`/`total_count`/`survived` XP fields) via `FlowRuntime._new_contribution_ledger_entry()`. Populated at the single melee resolution choke in `FlowRuntime._resolve_next_actor()` — `kills` increments when `defender_hp_after <= 0`. Projected into the final resolve snapshot as a `contribution` sub-dict (per actor). **`ProgressionService` is byte-identical** — it already read this dict by keyed lookup, so widening it to non-echo factions is purely additive; XP math is unaffected. This is the ledger `RecruitmentService`'s `combat` component reads.
 
@@ -402,7 +508,12 @@ Closes the last STAGE-004 gap: STAGE-003 conversation outcomes now reach combat,
 
 **guide_spirit routing fix (pre-existing Phase 3c soft-lock, discovered and fixed while wiring these seams):** `SituationResolutionService._ASYNC_OBJ_TYPES` was missing `"guide_spirit"`. A guide_spirit **OBJECTIVE** situation therefore fell through to the `"in_explore"` flavor-text branch instead of routing to real combat, and never set `completed` — silently soft-locking stage advancement whenever a guide_spirit objective was rolled. Fixed by appending `"guide_spirit"` to the array (it was already present in the sibling `_ASYNC_SIT_TYPES`-adjacent combat routing everywhere else in the P3c contract above).
 
-**ResolveScreen layering fix:** card content is now wrapped in a bounded `ScrollContainer` (previously could overflow off-screen on tall content), and the resolve overlay's z-order is raised above the EchoBar (previously the EchoBar could paint over the top of the resolve card).
+**Historical Phase 4 workaround — superseded:** Phase 4 temporarily bounded the
+Resolve body and raised a RealmShell-owned overlay above the EchoBar to unblock its
+playtest. The general responsive/layering refactor supersedes that add-order fix:
+Resolve now requests `realm.resolve` from the AppRoot layer-40 `ModalHost`. Its
+full-viewport blocker covers persistent chrome, while its authored safe card uses a
+bounded body and reachable footer actions.
 
 **New save fields (all additive):**
 - `explore_map.ally_contact` (Dictionary), `explore_map.ally_contact_id` (String), `explore_map.ally_consumed_in_encounter` (bool), `explore_map.hostile_charge_sit_id` (String), `explore_map.combat_intro_reason` (String), `explore_map.ally_recruit_rolled_encounter_id` (String — guards a single recruit roll per encounter).
@@ -417,7 +528,7 @@ Closes the last STAGE-004 gap: STAGE-003 conversation outcomes now reach combat,
 
 **Visual language:** ally/companion = Mist Blue `#7AB5C8` + ⊕ Odo Nnyew glyph — a third combat-visual family distinct from the P3c spirit gold nimbus and standard enemy red.
 
-**Deferrals (tracked, not blocking):** Tier-2 support-attribution ledger (guard/heal/utility contribution, not just damage); `is_kill` dead-code fix (pre-existing, unrelated to this phase); recruitment-config de-duplication (`conversation_good_fear_max`/`conversation_good_morale_min` duplicate thresholds `ConversationService` already defines elsewhere); venture-screen layering/safe-area audit (ResolveScreen fix above was a targeted patch, not a full pass); in-explore objective-completion guard (defense-in-depth beyond the guide_spirit fix above). Plus the original STAGE-004 deferrals carried forward: item rewards → V2-ITEM-002, enemy pressure roles → V2-COMBAT-002.
+**Deferrals (tracked, not blocking):** Tier-2 support-attribution ledger (guard/heal/utility contribution, not just damage); `is_kill` dead-code fix (pre-existing, unrelated to this phase); recruitment-config de-duplication (`conversation_good_fear_max`/`conversation_good_morale_min` duplicate thresholds `ConversationService` already defines elsewhere); in-explore objective-completion guard (defense-in-depth beyond the guide_spirit fix above). Plus the original STAGE-004 deferrals carried forward: item rewards → V2-ITEM-002, enemy pressure roles → V2-COMBAT-002.
 
 **V2-STAGE-004 is now fully DONE.** All phases shipped: P0–P3c (PRs #27/#28/#29/#30/#33/#36/#37), P3a, P5 (#38), P4 (this phase).
 
@@ -701,7 +812,10 @@ The 4 locked V1 entries (`protect`, `push`, `preserve`, `focus`) and `directive.
 - `directive.scout`, `directive.protect`, `directive.push`, `directive.preserve`, `directive.focus` → `directive.scout_carefully`
 - Unknown IDs reset to `directive.scout_carefully`
 
-**Directive selection UI:** A `DirectiveSelectOverlay` blocks stage preview interaction at every stage entry. Player must confirm a directive before the stage begins. Overlay hides itself on confirm; emits `directive.select` action via the inherited `action_requested` signal.
+**Directive selection UI:** Stage preview requests modal id `realm.directive` at every
+stage entry. AppRoot presents the authored `DirectiveSelectOverlay` through
+`ModalHost`, blocking the preview and persistent EchoBar until the player confirms.
+Confirmation emits the unchanged `directive.select` action.
 
 **Intent weights → BehaviorArbiter:** Semantic keys in `intent_weights` match keys in `balance.json → directive_action_muls`. Scout Carefully favours `survival_bias`, `avoid_overcommit`, `prefer_disengage`. Seek Signs favours `clue_seeking_priority`, `reporting_priority`, `exposure_acceptance`.
 
@@ -746,11 +860,11 @@ Full field shapes live in each FlowState file (`core/state/flow/states/`).
 
 | Screen | Snapshot type | Key data fields | Action slots |
 |--------|--------------|-----------------|-------------|
-| SanctumScreen | `flow.sanctum` | sanctum_name, ase_balance, ekwan_balance, ase_rate_per_hour, ase_flame_awakened, show_awakening_overlay (one-shot bool), awakening_grant (int), roster_count, roster_preview (3 echoes + emotion + **origin** (V2-STAGE-004 P4, ⊕ Companion badge)), active_party_count, party_slots, **companion_invite** ({} when none pending — V2-STAGE-004 P4, renders `%CompanionInvite` modal, persists across Sanctum entries until decided) | nav.echo_party, nav.realm_select, nav.summon, cta.enter_stage (disabled when no realm), **sanctum.companion.accept / sanctum.companion.decline** (dispatched by `%CompanionInvite`, not slot-keyed — see Action Type Registry) |
+| SanctumScreen | `flow.sanctum` | sanctum_name, ase_balance, ekwan_balance, ase_rate_per_hour, ase_flame_awakened, show_awakening_overlay (one-shot bool), awakening_grant (int), roster_count, roster_preview (3 echoes + emotion + **origin** (V2-STAGE-004 P4, ⊕ Companion badge)), active_party_count, party_slots, **companion_invite** ({} when none pending — V2-STAGE-004 P4, requests the app-wide `companion_invite` modal and persists across Sanctum entries until decided) | nav.echo_party, nav.realm_select, nav.summon, cta.enter_stage (disabled when no realm), **sanctum.companion.accept / sanctum.companion.decline** (emitted by `CompanionInviteModal`, not slot-keyed — see Action Type Registry) |
 | SummonScreen | `flow.summon` | ase_balance, selected_grade, summon_grade_options, summon_disabled, pending_summon_reveals | nav.back, cta.summon, overlay.dismiss_reveals |
 | EchoPartyScreen | `flow.echo_party` | max_party_size (5), echoes (id/name/rank/level/in_party/archetype/calling/calling_eligible/stats/xp/bond_entries/**origin** — V2-STAGE-004 P4, ⊕ Companion badge on list/cards/detail), active_party_ids | nav.back (party toggles are immediate via sanctum.party.toggle) |
 | CombatBoardScreen | `flow.encounter` | actors (projected, incl. `is_quarry`, `is_spirit`, **`is_ally`** — V2-STAGE-004 P4), round, round_phase, initiative_order, objective_state, retreat fields (pre_combat only) | nav.back, cta.retreat (when eligible). **Camera (ALL modes since P3c):** `CombatBoardScreen` extends `Control` (no Camera2D node). **Pan** via 2-finger gesture AND single-pointer click/tap-drag in `_gui_input` (`_DRAG_THRESHOLD` 8px; mouse/touch source-lock so `emulate_touch_from_mouse` doesn't double-apply the delta). **Pinch zoom** on all modes. `_apply_board_transform(pos)` repositions all five layers simultaneously (`_board`, `_token_layer`, `_move_telegraph_layer`, `_distance_layer`, `_bark_popup_layer`). Isometric-accurate pan clamp via `_board_span_px` (fixes the old rows×64 vertical under-measure). **⌖ RecenterButton** re-centres on the party centroid. **PURSUE:** auto-follow the quarry (`is_quarry` flag; `_pursue_mode` gates a `_process` lerp; auto-follow resumes after `_PAN_RESUME_DELAY` 3 s; quarry gold-diamond badge in `CombatTokenLayer`). **GUIDE_SPIRIT (P3c):** the spirit (`is_spirit`) gets a **gold halo/nimbus** in `CombatTokenLayer` (distinct from the quarry's solid diamond; tunable via `CombatTokenVisualConfig` exports); spirit HP bar NOT suppressed. **ObjectiveBanner (P5):** an authored `%ObjectiveBanner` PanelContainer renders all per-mode objective content from `objective_state` — **7 per-mode layouts** (combat / purify / recover / protect incl. `entity_name` + STOLEN urgent state with distinct chrome / endure / pursue incl. window + `%QuarryPips` distance pips driven by `quarry_distance_to_exit` / guide_spirit instruction-only, detail stays in the EchoBar spirit slot). Urgent tint applied via `modulate` **plus** a text hint ("STOLEN — recover it!") so the signal is never colour-only. **Top-chrome de-overlap (P5):** round label top-center, banner below it, initiative pushed down, pace controls in a stacked bottom band. **Palette fix (P5):** theme-default dark-brown labels were 1.4:1 on the dark panel → retinted cream/gold chrome, all pairs ≥5.33:1; `RoundLabel` is cream + 4px dark outline (~17:1 governing pair, board-independent). |
-| ResolveScreen | `flow.resolve` | victory, reason, round_ended, actors (projected — each entry now also carries **`contribution`**: `{damage_dealt, damage_taken, kills}`, V2-STAGE-004 P4 Tier-1 ledger sourced from `EncounterContext.echo_action_logs`, all factions, zeros when the actor took no logged action), objective_state, enemies_defeated, echoes_survived, ase_awarded, ekwan_awarded, rank (S/A/B/C/D/F), reward_breakdown (Array of {label, delta, currency}), xp_events (Array of XpEvent), emotion_summary (Array of per-echo emotion arc with `direction` lift/ease/steady/fall + optional `tag` ko/refused + `bark`), vow_outcome ({event, vow_id, vow_name, proverb_twi, tier, morale_delta, fear_delta, ase_delta, echoes_affected} or {}), **run_type** ("" for combat, "scout_return" for retreat/return_home, "contact_result" for NPC conversation, **"situation_result"** for in-explore resolution), **surface** (String — screen label e.g. "Combat", "Scout Return", situation type label), **verdict** (carried/passed/good/partial/missed — non-combat runs; blank for pure combat), **summary_line** (String — one-line outcome prose), **effects[]** (Array of {kind: item/intel/continuity/objective/storyweight, label, value, tone}) | Victory: `cta.continue` → `flow.complete_stage` (destination=sanctum), `cta.next_stage` → `flow.complete_stage`. Defeat: `cta.continue` → `flow.go_state` (no stage advance). Scout/contact/situation return: `cta.continue` → `flow.go_state` (→ stage_explore). **V2-STAGE-004:** `run_type="situation_result"` routes back to STAGE_EXPLORE. Rendered as a **dim modal overlay** by RealmShell (`_show_resolve_overlay()`) over the active venture screen — NOT a screen swap. Overlay freed when next non-resolve snapshot arrives. Four zones: Banner (surface + S–F rank for combat / verdict badge otherwise), Summary line, Echo stage (token + tier-arc + direction cue + KO/refused tag + arrival bark), Effects rail (EffectChip). Ledger (reward breakdown + stat readout + vow) still present. |
+| ResolveScreen | `flow.resolve` | victory, reason, round_ended, actors (projected — each entry now also carries **`contribution`**: `{damage_dealt, damage_taken, kills}`, V2-STAGE-004 P4 Tier-1 ledger sourced from `EncounterContext.echo_action_logs`, all factions, zeros when the actor took no logged action), objective_state, enemies_defeated, echoes_survived, ase_awarded, ekwan_awarded, rank (S/A/B/C/D/F), reward_breakdown (Array of {label, delta, currency}), xp_events (Array of XpEvent), emotion_summary (Array of per-echo emotion arc with `direction` lift/ease/steady/fall + optional `tag` ko/refused + `bark`), vow_outcome ({event, vow_id, vow_name, proverb_twi, tier, morale_delta, fear_delta, ase_delta, echoes_affected} or {}), **run_type** ("" for combat, "scout_return" for retreat/return_home, "contact_result" for NPC conversation, **"situation_result"** for in-explore resolution), **surface** (String — screen label e.g. "Combat", "Scout Return", situation type label), **verdict** (carried/passed/good/partial/missed — non-combat runs; blank for pure combat), **summary_line** (String — one-line outcome prose), **effects[]** (Array of {kind: item/intel/continuity/objective/storyweight, label, value, tone}) | Victory: `cta.continue` → `flow.complete_stage` (destination=sanctum), `cta.next_stage` → `flow.complete_stage`. Defeat: `cta.continue` → `flow.go_state` (no stage advance). Scout/contact/situation return: `cta.continue` → `flow.go_state` (→ stage_explore). **V2-STAGE-004:** `run_type="situation_result"` routes back to STAGE_EXPLORE. RealmShell requests modal id `realm.resolve`; AppRoot presents it through the layer-40 `ModalHost` over the still-mounted venture screen. Four zones: Banner (surface + S–F rank for combat / verdict badge otherwise), Summary line, Echo stage (token + tier-arc + direction cue + KO/refused tag + arrival bark), Effects rail (EffectChip). Ledger (reward breakdown + stat readout + vow) still present. |
 | RealmSelectScreen | `flow.realm_select` | title, current_realm_id, realms[] (id/name/virtue/description/stage_count_min/max/status/locked) | nav.back |
 | ~~RealmInitScreen~~ | `flow.realm_init` | **Removed (UI-003)** — FlowRealmInitState now auto-advances to `flow.stage_map` on enter(); no screen rendered. | — |
 | StageMapScreen | `flow.stage_map` | realm_id, realm_name, current_stage_id, stages_completed_count, stages[] (id, name, status, stage_type, stage_description, objective_count, objectives[{obj_index, obj_type, obj_description}]), party_preview | cta.enter_stage, nav.back |
@@ -901,7 +1015,7 @@ Echo traits (resilience + leadership) use a **separate derived RNG** at path `<s
 
 ### Made (locked)
 - Slot-keyed actions Dictionary — no going back to Array-style
-- Shell-cached nav: SanctumShell owns NavBar; sanctum-family states do NOT inject nav
+- Shell-cached nav: SanctumShell owns the BottomRail; sanctum-family states do NOT inject nav
 - Two-shell router: SanctumShell (hub) vs RealmShell (venture)
 - EmotionService as single choke point outside combat
 - Direct dict writes for mid-combat emotion (EmotionService not called during rounds)
@@ -938,7 +1052,9 @@ Echo traits (resilience + leadership) use a **separate derived RNG** at path `<s
   - `flow.resolve` payload extended **additively** (no field renamed/removed). Fields added: `surface`, `verdict`, `summary_line`, `emotion_summary[].direction` + `.tag`, `effects[]`. All existing producers enriched. Existing combat/scout consumers zero regression.
   - `EffectChip` (`ui/components/EffectChip.gd/.tscn`) — atomic rail chip for the effects zone. Carries: `kind`, `label`, `value`, `tone`. Reused by all resolve producers. Never instantiate inline — scene instanced.
   - `ResolveScreen` is now a **single parametric component** for all resolution surfaces (combat, scout, contact, situation). Four display zones: Banner, Summary, Echo stage, Effects rail. Do not add a fifth zone without review.
-  - `RealmShell` renders `flow.resolve` as a **dim modal overlay** (see TECH DEBT note in Shell Routing Model section). `flow.resolve` is NOT in `_scene_by_flow_type`. Overlay freed on any non-resolve snapshot.
+  - `RealmShell` keeps `flow.resolve` out of `_scene_by_flow_type` and requests
+    modal id `realm.resolve`; AppRoot presents the parametric ResolveScreen through
+    its layer-40 `ModalHost` over the still-mounted venture screen.
   - `run_type="situation_result"` — cta.continue routes back to STAGE_EXPLORE (not sanctum/stage_map).
   - Four objective-type combat scenarios (recover/protect/endure/pursue as distinct fight shapes) deferred to V2-STAGE-004 Phase 3. The four types do run real combats now, but use the generic layout.
 
@@ -1033,6 +1149,14 @@ After `advance_turn`, party is at situation but does not engage automatically. `
 - TravelSnippetLabel — Anansi ghost text (cream + dark outline, ~17.5:1); driven by `data.travel_snippet`.
 - Travel echo barks via an instanced BarkPopupLayer above the party token; driven by `data.travel_bark`. UI de-dupes replay via a last-played gate (the transient fields persist in the saved `explore_map`).
 - Reveal scale-pop on situation markers; 200ms transition flash into combat-track engagements.
+
+**Responsive exploration composition:** Explore mode uses a capped Living Tree HUD
+card for Turn / Objectives / Party State with the directive badge on the same top
+row. The cluster is informational and ignores input. The spatial field begins below
+that row; Step budget and action controls occupy a separate bottom region above the
+EchoBar exclusion. Stage preview hides the explore HUD and refits its authored
+briefing plus map to the safe body. Live profile changes preserve the explored
+world point and player zoom rather than resetting the camera.
 
 **RealmShell routing:** Both `flow.stage` AND `flow.stage_explore` → `StageExploreScreen.tscn`. Shell scene-reuse logic ensures the same instance persists across the preview→explore transition; the zoom tween plays on the actual board.
 

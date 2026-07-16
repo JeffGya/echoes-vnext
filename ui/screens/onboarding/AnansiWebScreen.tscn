@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://ui/screens/onboarding/AnansiWebScreen.gd" id="1_script"]
 [ext_resource type="Script" path="res://ui/screens/onboarding/WebDrawControl.gd" id="2_web"]
 [ext_resource type="Theme" uid="uid://8qssuuodths2" path="res://assets/theme/LivingTreeSystem.tres" id="3_theme"]
+[ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="4_safe"]
 
 [node name="AnansiWebScreen" type="Control"]
 layout_mode = 3
@@ -33,7 +34,23 @@ grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("2_web")
 
-[node name="LineLabel" type="Label" parent="." unique_id=1002]
+[node name="SafeFrame" type="MarginContainer" parent="." unique_id=1004]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("4_safe")
+base_margin = 16
+
+[node name="ContentRoot" type="Control" parent="SafeFrame"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="LineLabel" type="Label" parent="SafeFrame/ContentRoot" unique_id=1002]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 8
@@ -53,10 +70,10 @@ horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 3
 
-[node name="ContinueButton" type="Button" parent="." unique_id=1003]
+[node name="ContinueButton" type="Button" parent="SafeFrame/ContentRoot" unique_id=1003]
 unique_name_in_owner = true
 visible = false
-custom_minimum_size = Vector2(180, 48)
+custom_minimum_size = Vector2(180, 56)
 layout_mode = 1
 anchors_preset = 2
 anchor_top = 1.0

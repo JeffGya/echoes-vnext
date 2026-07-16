@@ -1,0 +1,114 @@
+[gd_scene load_steps=3 format=3 uid="uid://vow_moment_modal"]
+
+[ext_resource type="Script" path="res://ui/overlays/sanctum/VowMomentModal.gd" id="1_vow_modal"]
+[ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="2_safe"]
+
+[node name="VowMomentModal" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_vow_modal")
+
+[node name="SafeFrame" type="MarginContainer" parent="."]
+script = ExtResource("2_safe")
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Center" type="CenterContainer" parent="SafeFrame"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="SafeFrame/Center"]
+custom_minimum_size = Vector2(520, 0)
+layout_mode = 2
+theme_type_variation = &"SanctumHeaderCard"
+
+[node name="Margin" type="MarginContainer" parent="SafeFrame/Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="Root" type="VBoxContainer" parent="SafeFrame/Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="TitleLabel" type="Label" parent="SafeFrame/Center/Panel/Margin/Root"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumHeaderTitle"
+text = "The web remembers."
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="BodyScroll" type="ScrollContainer" parent="SafeFrame/Center/Panel/Margin/Root"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 180)
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="BodyStack" type="VBoxContainer" parent="SafeFrame/Center/Panel/Margin/Root/BodyScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 16
+
+[node name="TwiLabel" type="Label" parent="SafeFrame/Center/Panel/Margin/Root/BodyScroll/BodyStack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.784, 0.663, 0.431, 1)
+theme_override_font_sizes/font_size = 22
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="EnLabel" type="Label" parent="SafeFrame/Center/Panel/Margin/Root/BodyScroll/BodyStack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumHeaderText"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="PenaltyLabel" type="Label" parent="SafeFrame/Center/Panel/Margin/Root/BodyScroll/BodyStack"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.94117647, 0.5647059, 0.4745098, 1)
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="ButtonRow" type="HBoxContainer" parent="SafeFrame/Center/Panel/Margin/Root"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="SecondaryButton" type="Button" parent="SafeFrame/Center/Panel/Margin/Root/ButtonRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumModalSecondaryDarkButton"
+text = "Keep My Word"
+
+[node name="PrimaryButton" type="Button" parent="SafeFrame/Center/Panel/Margin/Root/ButtonRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumModalPrimaryButton"
+text = "Continue"

@@ -6,6 +6,7 @@
 extends Control
 
 signal action_requested(action: Dictionary)
+signal dismiss_requested
 
 @onready var _tag_0:       Button = %Tag0
 @onready var _tag_1:       Button = %Tag1
@@ -18,10 +19,14 @@ signal action_requested(action: Dictionary)
 @onready var _con_0:       Label  = %Con0
 @onready var _con_1:       Label  = %Con1
 @onready var _select_btn:  Button = %SelectButton
+@onready var _safe_frame:  MarginContainer = %SafeFrame
+@onready var _panel:       PanelContainer = %Panel
+@onready var _body_scroll: ScrollContainer = %BodyScroll
 
 var _directives: Array = []
 var _active_id:  String = ""
 var _preview_idx: int   = 0
+var _layout: Dictionary = {}
 
 
 func _ready() -> void:
@@ -38,6 +43,33 @@ func populate(directive_data: Dictionary) -> void:
 	_active_id   = directive_data.get("active_id", "")
 	_preview_idx = _find_idx(_active_id)
 	_refresh_ui()
+
+func present(payload: Dictionary) -> void:
+	var layout_v: Variant = payload.get("layout", {})
+	if layout_v is Dictionary:
+		set_layout(layout_v)
+	var directive_v: Variant = payload.get("directive", {})
+	if directive_v is Dictionary:
+		populate(directive_v)
+
+func set_layout(layout: Dictionary) -> void:
+	_layout = layout.duplicate(true)
+	if _safe_frame != null and _safe_frame.has_method("set_layout"):
+		_safe_frame.call("set_layout", _layout)
+	_apply_profile_size()
+
+func _apply_profile_size() -> void:
+	var profile := str(_layout.get("profile", "standard"))
+	match profile:
+		"wide":
+			_panel.custom_minimum_size = Vector2(460, 0)
+			_body_scroll.custom_minimum_size = Vector2(0, 360)
+		"compact":
+			_panel.custom_minimum_size = Vector2(360, 0)
+			_body_scroll.custom_minimum_size = Vector2(0, 260)
+		_:
+			_panel.custom_minimum_size = Vector2(400, 0)
+			_body_scroll.custom_minimum_size = Vector2(0, 300)
 
 
 func _find_idx(id: String) -> int:
@@ -60,6 +92,9 @@ func _refresh_ui() -> void:
 			continue
 		(tags[i] as Button).text     = str(_directives[i].get("label", ""))
 		(tags[i] as Button).disabled = (i == _preview_idx)
+		(tags[i] as Button).theme_type_variation = (
+			&"SanctumTabButtonActive" if i == _preview_idx else &"SanctumTabButton"
+		)
 
 	# Detail panel
 	var d: Dictionary = _directives[_preview_idx]
@@ -101,4 +136,5 @@ func _on_select_pressed() -> void:
 		"directive_id": chosen_id,
 		"slot":         "directive.confirm"
 	})
+	dismiss_requested.emit()
 	hide()

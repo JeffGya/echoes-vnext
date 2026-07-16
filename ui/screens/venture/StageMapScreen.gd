@@ -13,6 +13,14 @@ const StageRowScene     := preload("res://ui/components/StageRowItem.tscn")
 const ObjectiveScene    := preload("res://ui/components/ObjectiveItem.tscn")
 const EchoSkillRowScene := preload("res://ui/components/EchoSkillRow.tscn")
 const RealmRecoveryCordScene := preload("res://ui/components/RealmRecoveryCord.tscn")
+const _STANDARD_CONTENT_MAX_WIDTH := 1280.0
+const _WIDE_CONTENT_MAX_WIDTH := 1400.0
+const _LEFT_PANEL_MIN_WIDTH := 320.0
+const _LEFT_PANEL_MAX_WIDTH := 440.0
+const _LEFT_PANEL_WIDTH_RATIO := 0.32
+const _COMPACT_PRIMARY_PANEL_HEIGHT := 300.0
+const _COMPACT_SECONDARY_PANEL_HEIGHT := 240.0
+const _COMPACT_SCROLL_STEP := 64
 
 @onready var _title_label: Label            = %TitleLabel
 @onready var _subtitle_label: Label         = %SubtitleLabel
@@ -30,20 +38,33 @@ const RealmRecoveryCordScene := preload("res://ui/components/RealmRecoveryCord.t
 @onready var _detail_no_objectives_label: Label = %DetailNoObjectivesLabel
 @onready var _detail_objectives_list: VBoxContainer = %DetailObjectivesList
 @onready var _detail_intel_label: Label = %DetailIntelLabel
+@onready var _safe_frame: MarginContainer = %SafeFrame
+@onready var _content_scroll: ScrollContainer = %ContentScroll
+@onready var _content_row: GridContainer = %ContentRow
+@onready var _left_panel: PanelContainer = %LeftPanel
+@onready var _right_panel: PanelContainer = %RightPanel
+@onready var _stage_scroll: ScrollContainer = %StageScroll
 
 var _back_action: Dictionary = {}
 var _enter_action: Dictionary = {}
+var _layout: Dictionary = {}
 
 
 func _ready() -> void:
 	_back_button.pressed.connect(_on_back_pressed)
 	_enter_button.pressed.connect(_on_enter_pressed)
+	_stage_scroll.gui_input.connect(_on_stage_scroll_gui_input)
 
 func set_snapshot(snap: Dictionary) -> void:
 	assert(snap.has("type"), "Snapshot missing 'type' key")
 	assert(snap.has("data"), "Snapshot missing 'data' key")
 	_clear()
 	_render(snap["data"], snap.get("actions", {}))
+	_apply_layout()
+
+func set_layout(layout: Dictionary) -> void:
+	_layout = layout.duplicate(true)
+	_apply_layout()
 
 func _clear() -> void:
 	for child in _stage_list.get_children():
@@ -201,6 +222,23 @@ func _on_enter_pressed() -> void:
 	if not _enter_action.is_empty() and not _enter_button.disabled:
 		action_requested.emit(_enter_action)
 
+func _on_stage_scroll_gui_input(event: InputEvent) -> void:
+	if str(_layout.get("profile", "standard")) != "compact":
+		return
+	var delta := 0
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			delta = maxi(1, int(ceilf(mouse_event.factor))) * _COMPACT_SCROLL_STEP
+		elif mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			delta = -maxi(1, int(ceilf(mouse_event.factor))) * _COMPACT_SCROLL_STEP
+	elif event is InputEventPanGesture:
+		delta = int(roundf((event as InputEventPanGesture).delta.y * _COMPACT_SCROLL_STEP))
+	if delta != 0:
+		# Compact StageScroll is display-only; all wheel/touch movement is applied
+		# to the outer content scroller so the detail panel remains reachable.
+		_content_scroll.scroll_vertical += delta
+
 func _badge_text(status: String) -> String:
 	match status:
 		"completed":              return "Completed"
@@ -213,3 +251,53 @@ func _badge_theme_key(status: String) -> StringName:
 		"current", "not_started": return &"StatusBadge.NotStarted"
 		"in_progress":            return &"StatusBadge.InProgress"
 		_:                        return &"StatusBadge.Locked"
+
+func _apply_layout() -> void:
+	if _safe_frame != null and _safe_frame.has_method("set_layout"):
+		_safe_frame.call("set_layout", _layout)
+	var profile := str(_layout.get("profile", "standard"))
+	var insets: Vector4 = _layout.get("safe_insets", Vector4.ZERO)
+	var safe_left := maxf(16.0, ceilf(insets.x))
+	var safe_top := maxf(16.0, ceilf(insets.y))
+	_back_button.offset_left = safe_left
+	_back_button.offset_top = safe_top
+	_back_button.offset_right = safe_left + 80.0
+	_back_button.offset_bottom = safe_top + 48.0
+	if _content_row == null:
+		return
+	if profile == "compact":
+		_content_row.columns = 1
+		_content_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_content_row.custom_minimum_size = Vector2.ZERO
+		_content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+		_stage_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		_stage_scroll.mouse_filter = Control.MOUSE_FILTER_PASS
+		# Compact is a scrollable single-primary-column composition. Give the stage
+		# list a full readable panel before the secondary detail panel rather than
+		# letting GridContainer compress both rows into the visible body height.
+		_left_panel.custom_minimum_size = Vector2(0, _COMPACT_PRIMARY_PANEL_HEIGHT)
+		_right_panel.custom_minimum_size = Vector2(0, _COMPACT_SECONDARY_PANEL_HEIGHT)
+	else:
+		_content_row.columns = 2
+		_content_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		_content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		_stage_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+		_stage_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+		var logical_size: Vector2 = _layout.get("logical_size", Vector2(1280, 720))
+		var safe_width := maxf(
+			0.0,
+			logical_size.x
+				- maxf(16.0, ceilf(insets.x))
+				- maxf(16.0, ceilf(insets.z))
+		)
+		var max_width := _WIDE_CONTENT_MAX_WIDTH if profile == "wide" else _STANDARD_CONTENT_MAX_WIDTH
+		var content_width := minf(safe_width, max_width)
+		var left_width := clampf(
+			content_width * _LEFT_PANEL_WIDTH_RATIO,
+			_LEFT_PANEL_MIN_WIDTH,
+			_LEFT_PANEL_MAX_WIDTH
+		)
+		var right_width := maxf(560.0, content_width - left_width)
+		_left_panel.custom_minimum_size = Vector2(left_width, 0)
+		_right_panel.custom_minimum_size = Vector2(right_width, 0)
+		_content_row.custom_minimum_size = Vector2(content_width, 0)

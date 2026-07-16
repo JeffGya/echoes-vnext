@@ -1,0 +1,92 @@
+[gd_scene load_steps=4 format=3 uid="uid://realm_prebattle_modal"]
+
+[ext_resource type="Script" path="res://ui/overlays/realm/PrebattleModal.gd" id="1_script"]
+[ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="2_safe"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card"]
+content_margin_left = 24.0
+content_margin_top = 20.0
+content_margin_right = 24.0
+content_margin_bottom = 20.0
+bg_color = Color(0.1019608, 0.15294118, 0.11764706, 0.97)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.83137256, 0.6862745, 0.21568628, 0.82)
+corner_radius_top_left = 22
+corner_radius_top_right = 8
+corner_radius_bottom_right = 18
+corner_radius_bottom_left = 10
+shadow_color = Color(0.039215688, 0.05490196, 0.047058824, 0.42)
+shadow_size = 14
+shadow_offset = Vector2(0, 5)
+
+[node name="PrebattleModal" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+
+[node name="SafeFrame" type="MarginContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("2_safe")
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Center" type="CenterContainer" parent="SafeFrame"]
+layout_mode = 2
+
+[node name="Card" type="PanelContainer" parent="SafeFrame/Center"]
+layout_mode = 2
+custom_minimum_size = Vector2(360, 0)
+theme_override_styles/panel = SubResource("StyleBoxFlat_card")
+
+[node name="Content" type="VBoxContainer" parent="SafeFrame/Center/Card"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ObjectiveLabel" type="Label" parent="SafeFrame/Center/Card/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"RealmModalTitle"
+theme_override_font_sizes/font_size = 24
+horizontal_alignment = 1
+
+[node name="IntroLineLabel" type="Label" parent="SafeFrame/Center/Card/Content"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"RealmModalBody"
+theme_override_font_sizes/font_size = 16
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="ButtonRow" type="HBoxContainer" parent="SafeFrame/Center/Card/Content"]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="RetreatButton" type="Button" parent="SafeFrame/Center/Card/Content/ButtonRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 56)
+layout_mode = 2
+theme_type_variation = &"RealmModalSecondaryButton"
+text = "Retreat"
+
+[node name="EnterCombatButton" type="Button" parent="SafeFrame/Center/Card/Content/ButtonRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 56)
+layout_mode = 2
+theme_type_variation = &"RealmModalPrimaryButton"
+text = "Enter Combat"

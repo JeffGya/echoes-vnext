@@ -7,6 +7,7 @@ signal action_requested(action: Dictionary)
 @onready var _renderer: Node2D = %SanctumSpatialRenderer
 @onready var _narrator: Label = %NarratorLabel
 @onready var _continue_button: Button = %ContinueButton
+@onready var _safe_frame: Control = %SafeFrame
 
 var _action: Dictionary = {}
 var _lines: Array[String] = []
@@ -15,8 +16,12 @@ var _typing_tween: Tween
 
 
 func _ready() -> void:
+	_continue_button.focus_mode = Control.FOCUS_ALL
 	_continue_button.pressed.connect(_on_continue_pressed)
 
+func set_layout(layout: Dictionary) -> void:
+	if is_node_ready() and _safe_frame.has_method("set_layout"):
+		_safe_frame.call("set_layout", layout)
 
 func set_snapshot(snap: Dictionary) -> void:
 	if _renderer != null and _renderer.has_method("render"):
@@ -50,6 +55,7 @@ func _show_current_line() -> void:
 		_typing_tween.tween_callback(func(idx := i): _narrator.text = line.substr(0, idx + 1))
 		_typing_tween.tween_interval(0.02)
 	_typing_tween.tween_callback(func(): _continue_button.visible = true)
+	_typing_tween.tween_callback(func(): _continue_button.grab_focus())
 
 
 func _on_continue_pressed() -> void:

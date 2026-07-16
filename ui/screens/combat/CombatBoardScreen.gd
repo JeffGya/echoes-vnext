@@ -17,6 +17,7 @@ class_name CombatBoardScreen
 extends Control
 
 signal action_requested(action: Dictionary)
+signal modal_requested(modal_id: StringName, payload: Dictionary)
 
 const InitiativeRowScene := preload("res://ui/components/InitiativeRowItem.tscn")
 const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
@@ -25,7 +26,7 @@ const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd
 @onready var _move_telegraph_layer: Node2D          = $MoveTelegraphLayer
 @onready var _token_layer: CombatTokenLayer         = $TokenLayer
 # V2-VOICE-001: bark popup layer — optional; null-checked before use.
-@onready var _bark_popup_layer: BarkPopupLayer      = $BarkPopupLayer if has_node("BarkPopupLayer") else null
+@onready var _bark_popup_layer: BarkPopupLayer      = get_node_or_null("%BarkPopupLayer") as BarkPopupLayer
 @onready var _distance_layer: CombatDistanceLayer   = $DistanceLayer
 @onready var _back_button: Button                   = $BackButton
 @onready var _round_label: Label                    = $RoundLabel
@@ -116,6 +117,7 @@ var _last_bark_line: String = ""
 var _presentation_board_size: Vector2i = Vector2i.ZERO
 # Cached actor projection from the latest snapshot — used by the recenter-on-party helper.
 var _last_actors: Array = []
+var _layout: Dictionary = {}
 
 # V2-STAGE-004 P3b: PURSUE camera follow (manual board repositioning — avoids Camera2D UI-pan issue).
 # Camera controls are now available on ALL combat boards. In PURSUE the board auto-follows the
@@ -231,6 +233,18 @@ func set_snapshot(snap: Dictionary) -> void:
 		int(data.get("board_cols", 10)),
 		int(data.get("board_rows", 10))
 	)
+	_apply_responsive_layout()
+
+func set_layout(layout: Dictionary) -> void:
+	_layout = layout.duplicate(true)
+	_apply_responsive_layout()
+	if _current_cols > 0 and _current_rows > 0:
+		var previous_pos := _board.position
+		_center_board(_current_cols, _current_rows)
+		if not _pursue_mode:
+			var clamped := _clamp_board_pos(previous_pos)
+			_pan_offset = clamped - _base_board_pos
+			_apply_board_transform(clamped)
 
 func _reset_transient_ui() -> void:
 	_step_timer.stop()
@@ -985,10 +999,10 @@ func _show_prebattle_panel(data: Dictionary, actions: Dictionary) -> void:
 	_round_label.visible     = false
 	_objective_label.visible = false
 
-	# Objective label.
 	var obj_state: Dictionary = data.get("objective_state", {})
 	var obj_type: String = str(obj_state.get("type", ""))
-	_prebattle_objective.text = _format_objective_label(obj_type)
+	var objective_label := _format_objective_label(obj_type)
+	_prebattle_objective.text = objective_label
 
 	# V2-STAGE-004 Phase 4 (S15 UI-B): claimant-forced combat intro line — snapshot-driven,
 	# never hard-coded. "" (not a claimant-forced fight) hides the label entirely.
@@ -1023,7 +1037,15 @@ func _show_prebattle_panel(data: Dictionary, actions: Dictionary) -> void:
 		_retreat_button.disabled = true
 		_retreat_button.text     = "Retreat is not possible"
 
-	_prebattle_panel.visible = true
+	_prebattle_panel.visible = false
+	modal_requested.emit(&"realm.prebattle", {
+		"objective_label": objective_label,
+		"intro_line": intro_line,
+		"enter_action": _pending_enter_combat_action.duplicate(true),
+		"retreat_action": _pending_retreat_action.duplicate(true),
+		"retreat_enabled": not _retreat_button.disabled,
+		"retreat_label": _retreat_button.text,
+	})
 
 ## Maps objective type string to a player-facing label.
 func _format_objective_label(obj_type: String) -> String:
@@ -1199,7 +1221,9 @@ func _end_pointer_drag(source: String) -> void:
 ## board region remain on screen on every side — the board can never be flung fully away.
 ## Only used by the non-PURSUE static camera; PURSUE follow keeps the quarry centred.
 func _clamp_board_pos(pos: Vector2) -> Vector2:
-	var vp: Vector2 = get_viewport_rect().size
+	var vp: Vector2 = _layout.get("logical_size", get_viewport_rect().size)
+	var insets: Vector4 = _layout.get("safe_insets", Vector4.ZERO)
+	var chrome_bottom := 88.0 + insets.w + 8.0
 	# True isometric board extents (measured in _center_board) → scale by current zoom for a
 	# viewport-space span. Using the real span on BOTH axes is what unlocks vertical panning:
 	# the previous rows*64 approximation badly under-measured height on wide-short boards,
@@ -1208,8 +1232,8 @@ func _clamp_board_pos(pos: Vector2) -> Vector2:
 	var span_y: float = _board_span_px.y * _board_zoom
 	var clamped := pos
 	# Keep the board's left edge from passing the right margin, and vice-versa.
-	clamped.x = clampf(pos.x, _PAN_MARGIN - span_x, vp.x - _PAN_MARGIN)
-	clamped.y = clampf(pos.y, _PAN_MARGIN - span_y, vp.y - _PAN_MARGIN)
+	clamped.x = clampf(pos.x, _PAN_MARGIN + insets.x - span_x, vp.x - insets.z - _PAN_MARGIN)
+	clamped.y = clampf(pos.y, _PAN_MARGIN + insets.y - span_y, vp.y - chrome_bottom - _PAN_MARGIN)
 	return clamped
 
 
@@ -1258,3 +1282,28 @@ func _apply_board_transform(pos: Vector2) -> void:
 	_distance_layer.position     = pos
 	if _bark_popup_layer != null:
 		_bark_popup_layer.position = pos
+
+func _apply_responsive_layout() -> void:
+	var insets: Vector4 = _layout.get("safe_insets", Vector4.ZERO)
+	var top := float(ceilf(insets.y))
+	var right := float(ceilf(insets.z))
+	var bottom := float(ceilf(insets.w)) + 88.0
+	_back_button.offset_top = 16.0 + top
+	_back_button.offset_bottom = _back_button.offset_top + 48.0
+	_round_label.offset_top = 16.0 + top
+	_round_label.offset_bottom = 48.0 + top
+	_objective_banner.offset_top = 68.0 + top
+	_recenter_button.offset_left = -64.0 - right
+	_recenter_button.offset_right = -16.0 - right
+	_recenter_button.offset_top = 16.0 + top
+	_recenter_button.offset_bottom = 64.0 + top
+	_cta_button.offset_top = -bottom - 56.0
+	_cta_button.offset_bottom = -bottom - 8.0
+	_manual_toggle.offset_top = -bottom - 112.0
+	_manual_toggle.offset_bottom = -bottom - 64.0
+	var speed_bar := $SpeedBar as HBoxContainer
+	speed_bar.offset_top = -bottom - 168.0
+	speed_bar.offset_bottom = -bottom - 120.0
+	_initiative_panel.offset_top = 150.0 + top
+	_initiative_panel.offset_bottom = -bottom - 62.0
+	_prebattle_panel.offset_top = 72.0 + top

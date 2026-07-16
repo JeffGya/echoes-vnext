@@ -10,10 +10,10 @@
 
 ## Project Identity
 
-Godot 4.5.1 GDScript strategy game. Deterministic core simulation with snapshot-driven UI.
+Godot 4.6.1 GDScript strategy game. Deterministic core simulation with snapshot-driven UI.
 The player runs a Sanctum, summons Echoes (returning fragments of stolen stories), and leads them through Realm trials.
 
-**Stack:** 100% GDScript. No web, no TypeScript, no Python. Godot 4.5.1 only.
+**Stack:** 100% GDScript. No web, no TypeScript, no Python. Godot 4.6.1 only.
 
 ---
 
@@ -21,13 +21,19 @@ The player runs a Sanctum, summons Echoes (returning fragments of stolen stories
 
 ### Compile check (no editor needed)
 ```bash
-/opt/homebrew/bin/godot --headless --check-only --path /Users/jeffreygyamfi/Sites/echoes-vnext 2>&1
+/usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --check-only --quit --path /Users/jeffreygyamfi/Sites/echoes-vnext
 ```
 Run this after every GDScript change. Zero errors expected.
 
 ### Tests
 Tests run inside Godot via the Debug Panel (`F1` → `tests` command) or headlessly via `CoreTestRunner.gd`.
 There is no standalone CLI test runner — Godot must execute the tests.
+
+Run the full suite behind the same exact watchdog:
+
+```bash
+/usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --quit --path /Users/jeffreygyamfi/Sites/echoes-vnext -- tests
+```
 
 **Test suites** (all in `tests/`):
 EconomyTests, SanctumSummonTests, PartyTests, ActorTests, EchoSchemaTests, ActorStatInitTests,
@@ -154,11 +160,19 @@ Action type format: `domain.subdomain.verb` e.g. `flow.go_state`, `sanctum.party
 
 ## UI Rules
 
-- **Build structure in `.tscn`** — scripts only set values: `text`, `modulate`, `visible`, `disabled`
-- Never create, layout, or style UI nodes programmatically in `.gd`
+- **Build structure in `.tscn`** — scripts render values and apply profile values such as margins, columns, visibility, wrap widths, and min/max sizes
+- Never create/reparent the UI hierarchy or construct visual styles programmatically in `.gd`; layout relationships and theme hooks belong in `.tscn`
 - Reusable visual treatments belong in `assets/theme/LivingTreeSystem.tres`; extend the theme instead of restyling the same patterns per scene
-- `SanctumShell` owns the NavBar via `_cached_nav` — do NOT inject nav into snapshots
-- `RealmShell` owns the EchoBar (bottom 88px) — do NOT render it in individual screens
+- Godot 4.6.1 responsive base is 1280×720 landscape; desktop starts at 1600×900 and may resize down to 960×540
+- Responsive means profile recomposition, capped readable UI, and spatial surplus on wide views — not uniform root scaling or scroll containers everywhere
+- `SanctumShell` owns the inset BottomRail via `_cached_nav` — do NOT inject nav into snapshots
+- `RealmShell` owns the inset, capped EchoBar (88 logical units high) — do NOT render it in individual screens
+- Screens reserve safe edges and persistent bottom chrome; full-bleed spatial presentation may extend beyond the safe frame, actionable content may not
+- AppRoot owns the single layer-40 blocking `ModalHost`; shell screens request modals by id and payload
+- Blocking modal roots cover all chrome, stop underlying input, contain focus, and restore prior focus on dismissal
+- Minimum target 48×48; primary CTA height 56; adjacent targets keep at least 8 units separation
+- Canonical layers: world 0, screen 10, persistent chrome 20, non-modal transient 30, blocking modal 40, recovery/debug 128
+- Every shell-owned `CanvasLayer` must mirror inherited shell visibility so hidden Realm/Sanctum layers cannot draw or intercept input
 - No IDs in player-facing display — show names, standings, callings only
 
 ---
@@ -167,7 +181,7 @@ Action type format: `domain.subdomain.verb` e.g. `flow.go_state`, `sanctum.party
 
 | Shell | Snapshot types |
 |-------|---------------|
-| `SanctumShell` | `flow.sanctum`, `flow.summon`, `flow.echo_party`, `flow.realm_select`, `flow.vow_manage` |
+| `SanctumShell` | `flow.sanctum`, `flow.summon`, `flow.echo_party`, `flow.realm_select`, `flow.vow_manage`, `flow.weaving_rite` |
 | `RealmShell` | `flow.stage_map`, `flow.stage`, `flow.stage_explore`, `flow.encounter`, `flow.keeper_trial`, `flow.resolve` |
 
 AppRoot routes on `snapshot.type`. Shell routes to bespoke screen.
@@ -217,6 +231,11 @@ Read `docs/v2-migration-map.md` before starting any Alignment story.
 5. Calling `refresh_snapshot()` expecting it to re-run `enter()` — it only re-reads `ctx.last_snapshot`
 6. Creating UI nodes in `.gd` — all structure goes in `.tscn`
 7. Reordering EchoFactory RNG draws — append only, bump version string
+8. Uniformly scaling the whole UI on wide screens — cap UI and expose more spatial field
+9. Adding a scroll container to solve every responsive problem — recompose primary layouts first
+10. Letting autowrap determine first-pass geometry without authored/profile wrap widths
+11. Leaving stale offsets on a full-rect container after changing responsive profiles
+12. Hiding a shell Control without synchronizing its independent `CanvasLayer` visibility/input
 
 Full lesson history: `docs/LESSONS.md`
 

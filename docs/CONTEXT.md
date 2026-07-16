@@ -8,7 +8,7 @@
 
 ## About the Project
 
-**Echoes vNext** is a mythic house-and-trials strategy game built in **Godot 4.5.1 (GDScript, 100%)**.
+**Echoes vNext** is a mythic house-and-trials strategy game built in **Godot 4.6.1 (GDScript, 100%)**.
 
 The player is the **Ase Keeper** — they run a Sanctum, summon Echoes (returning names / fragments of stolen stories), and lead them through Realm trials to recover Threads and bring stolen stories home. The game is deterministic at its core, with a snapshot-driven UI layer.
 
@@ -73,7 +73,8 @@ The player is the **Ase Keeper** — they run a Sanctum, summon Echoes (returnin
 ### Story Verification Workflow (every story — never skip or reorder)
 1. **Run Godot terminal tests** via headless command:
    ```
-   /opt/homebrew/bin/godot --headless --check-only --path /Users/jeffreygyamfi/Sites/echoes-vnext 2>&1
+   /usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --check-only --quit --path /Users/jeffreygyamfi/Sites/echoes-vnext
+   /usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --quit --path /Users/jeffreygyamfi/Sites/echoes-vnext -- tests
    ```
 2. **Pause and ask Jeff to test in-game** — do not proceed until Jeff confirms the change feels correct in the running game.
 3. **Docs + Commit** — only after Jeff signs off on the in-game test.
@@ -135,10 +136,16 @@ tests/  — Lightweight, deterministic. Run via Debug Panel `tests` command.
 - Per-row UI actions dispatched directly by rows — NOT in `snapshot.actions`
 
 ### UI Rules
-- Build visual structure in `.tscn`, not `.gd`. Scripts only set values: `modulate`, `text`, `visible`, `disabled`.
-- Never create, layout, or style UI nodes programmatically in `.gd` files.
-- All layout, sizing, text defaults, and node-level theme variation hooks belong in `.tscn` so Jeff can style in the Godot editor.
+- Build visual structure in `.tscn`, not `.gd`. Scripts render state and set responsive profile values.
+- Never create/reparent the UI hierarchy or construct visual styles programmatically in `.gd` files.
+- All structure, text defaults, and node-level theme variation hooks belong in `.tscn` so Jeff can style in the Godot editor. Responsive scripts may set profile values such as margins, columns, visibility, wrap widths, and minimum/maximum sizes.
 - Reused cards, badges, chips, and text treatments should be added to `assets/theme/LivingTreeSystem.tres` incrementally instead of rebuilt locally in each screen.
+- Landscape-only responsive base: 1280×720; desktop starts at 1600×900 and resizes down to 960×540.
+- Responsive means compact/standard/wide recomposition, capped readable UI, and more spatial real estate on wide windows — not uniform scaling or scroll containers everywhere.
+- Actionable content respects logical safe insets and excludes the shell-owned EchoBar/BottomRail. Persistent chrome is inset and capped rather than edge-to-edge.
+- AppRoot owns the one app-wide layer-40 blocking ModalHost. Modal roots cover chrome and stop underlying input; safe cards own focus and restore it on dismissal.
+- Minimum interactive target is 48×48; primary CTA height is 56; adjacent targets keep at least 8 units separation.
+- Shell CanvasLayers must follow inherited visibility so hidden Realm/Sanctum layers cannot remain interactive after routing.
 
 ---
 
@@ -175,7 +182,7 @@ Four project-specific skills are installed. Reference docs in `docs/skills/`.
 
 | Skill | When to use |
 |-------|-------------|
-| `godot-echoes-dev` | Any implementation question — Godot 4.5 + GDScript dev patterns, architectural invariants, flow state IDs, action types, naming conventions |
+| `godot-echoes-dev` | Any implementation question — Godot 4.6.1 + GDScript dev patterns, architectural invariants, flow state IDs, action types, naming conventions |
 | `echoes-sankofa-gdd` | Design decisions, feature scope, lore questions — V2 GDD knowledge base: callings, vectors, skill families, Weave system, Threads, Storyweight, Continuity |
 | `echoes-backlog` | Look up stories, pickup order, wave, status — 168 stories via CSV + Notion MCP |
 | `game-ui-ux-echoes` | New screens, layout decisions, emotion display — mobile-first UI/UX patterns, snapshot-to-screen mapping, touch targets, West African aesthetic |
@@ -185,7 +192,9 @@ Four project-specific skills are installed. Reference docs in `docs/skills/`.
 ## Environment Notes
 
 - **Godot path:** `/opt/homebrew/bin/godot` (v4.6.1 stable, installed via Homebrew)
-- **Headless compile check:** `/opt/homebrew/bin/godot --headless --check-only --path /Users/jeffreygyamfi/Sites/echoes-vnext 2>&1`
+- **Headless compile check:** `/usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --check-only --quit --path /Users/jeffreygyamfi/Sites/echoes-vnext`
+- **Headless full suite:** `/usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --quit --path /Users/jeffreygyamfi/Sites/echoes-vnext -- tests`
+- **Window testing:** test editor-launched/standalone OS windows for desktop resizing. Godot's embedded game dock follows editor-dock sizing and is not proof of standalone window behavior.
 - **`raw.githubusercontent.com` is blocked** by egress proxy — always fetch GitHub files via `github.com/JeffGya/echoes-vnext/blob/main/<path>` using WebFetch.
 
 ---

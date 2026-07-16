@@ -3,14 +3,18 @@ extends Control
 const SaveIntegrityTestsScript := preload("res://tests/SaveIntegrityTests.gd")
 const LeadershipEmotionTestsScript := preload("res://tests/LeadershipEmotionTests.gd")
 const SanctumPulseTestsScript := preload("res://tests/SanctumPulseTests.gd")
+const FoundationUITestsScript := preload("res://tests/FoundationUITests.gd")
 
 @onready var snapshot_view: RichTextLabel = %SnapshotView
 @onready var renderer: UISnapshotRenderer = %UISnapshotRenderer
 @onready var debug_overlay: Control = %DebugOverlay
 @onready var debug_panel: DebugPanel = %DebugPanel
 @onready var actions_container: Control = %ActionsContainer
+@onready var fallback_root: Control = %FallbackRoot
 @onready var econ_bank_timer: Timer = $EconBankTimer
 @onready var screen_host: Control = %ScreenHost
+@onready var modal_host: Control = %ModalHost
+@onready var responsive_layout: Node = %ResponsiveLayoutController
 @onready var save_recovery_notice: Control = %SaveRecoveryNotice
 @onready var save_recovery_message: Label = %SaveRecoveryMessage
 @onready var save_recovery_timer: Timer = %SaveRecoveryTimer
@@ -18,6 +22,8 @@ const SanctumPulseTestsScript := preload("res://tests/SanctumPulseTests.gd")
 var runtime: FlowRuntime
 
 var _last_log_index: int = 0
+var _current_layout: Dictionary = {}
+var _modal_owner: Control = null
 
 var _econ_timer_started: bool = false
 
@@ -56,6 +62,16 @@ var _onboarding_scene_by_type: Dictionary = {
 }
 
 func _ready():
+	if responsive_layout.has_method("current_layout"):
+		var layout_v: Variant = responsive_layout.call("current_layout")
+		_current_layout = layout_v if layout_v is Dictionary else {}
+	if responsive_layout.has_signal("layout_changed"):
+		responsive_layout.connect("layout_changed", Callable(self, "_on_layout_changed"))
+	if modal_host.has_signal("action_requested"):
+		modal_host.connect("action_requested", Callable(self, "_on_ui_action_selected"))
+	if modal_host.has_signal("modal_dismissed"):
+		modal_host.connect("modal_dismissed", Callable(self, "_on_modal_dismissed"))
+
 	var cmdline_args := OS.get_cmdline_user_args()
 	var is_test_run := cmdline_args.size() > 0 and cmdline_args[0].to_lower() in ["tests", "test"]
 	var runtime_save_path := "/tmp/echoes-vnext-tests/headless_runtime_slot.json" if is_test_run else SaveSchema.DEFAULT_SAVE_PATH
@@ -150,6 +166,17 @@ func _on_ui_action_selected(action: Dictionary) -> void:
 	_maybe_start_econ_timer_from_snapshot(snap)
 	_maybe_stop_econ_timer_from_snapshot(snap)
 	_flush_logs_to_console()
+
+func _on_layout_changed(layout: Dictionary) -> void:
+	_current_layout = layout.duplicate(true)
+	if _active_onboarding_screen != null and _active_onboarding_screen.has_method("set_layout"):
+		_active_onboarding_screen.call("set_layout", _current_layout)
+	if _save_error_screen != null and _save_error_screen.has_method("set_layout"):
+		_save_error_screen.call("set_layout", _current_layout)
+	if _sanctum_shell != null and _sanctum_shell.has_method("set_layout"):
+		_sanctum_shell.set_layout(_current_layout)
+	if _realm_shell != null and _realm_shell.has_method("set_layout"):
+		_realm_shell.set_layout(_current_layout)
 	
 func _maybe_start_econ_timer_from_snapshot(snap: Dictionary) -> void:
 	if _econ_timer_started:
@@ -354,6 +381,7 @@ func _run_tests(parts: Array) -> void:
 	EmotionTests.register(runner)
 	LeadershipEmotionTestsScript.register(runner)
 	SanctumPulseTestsScript.register(runner)
+	FoundationUITestsScript.register(runner)
 	VectorTests.register(runner)
 	DirectiveTests.register(runner)  # DIRECTIVE-001
 	GridTests.register(runner)       # GRID-001
@@ -983,6 +1011,8 @@ func _render_snapshot(snap: Dictionary) -> void:
 		if _save_error_screen == null:
 			_save_error_screen = _save_error_scene.instantiate() as Control
 			screen_host.add_child(_save_error_screen)
+			if _save_error_screen.has_method("set_layout"):
+				_save_error_screen.call("set_layout", _current_layout)
 		_show_screen(_save_error_screen)
 		_save_error_screen.call("set_snapshot", snap)
 		return
@@ -999,6 +1029,8 @@ func _render_snapshot(snap: Dictionary) -> void:
 				_active_onboarding_screen = null
 			_active_onboarding_screen = packed.instantiate() as Control
 			screen_host.add_child(_active_onboarding_screen)
+			if _active_onboarding_screen.has_method("set_layout"):
+				_active_onboarding_screen.call("set_layout", _current_layout)
 			if _active_onboarding_screen.has_signal("action_requested"):
 				_active_onboarding_screen.connect("action_requested", Callable(self, "_on_ui_action_selected"))
 		_show_screen(_active_onboarding_screen)
@@ -1011,6 +1043,9 @@ func _render_snapshot(snap: Dictionary) -> void:
 			_sanctum_shell = _sanctum_shell_scene.instantiate() as SanctumShell
 			screen_host.add_child(_sanctum_shell)
 			_sanctum_shell.action_requested.connect(_on_ui_action_selected)
+			if _sanctum_shell.has_signal("modal_requested"):
+				_sanctum_shell.connect("modal_requested", Callable(self, "_on_shell_modal_requested").bind(_sanctum_shell))
+			_sanctum_shell.set_layout(_current_layout)
 		_show_screen(_sanctum_shell)
 		_sanctum_shell.set_snapshot(snap)
 		return
@@ -1020,6 +1055,9 @@ func _render_snapshot(snap: Dictionary) -> void:
 			_realm_shell = _realm_shell_scene.instantiate() as RealmShell
 			screen_host.add_child(_realm_shell)
 			_realm_shell.action_requested.connect(_on_ui_action_selected)
+			if _realm_shell.has_signal("modal_requested"):
+				_realm_shell.connect("modal_requested", Callable(self, "_on_shell_modal_requested").bind(_realm_shell))
+			_realm_shell.set_layout(_current_layout)
 		_show_screen(_realm_shell)
 		_realm_shell.set_snapshot(snap)
 		return
@@ -1030,6 +1068,7 @@ func _render_snapshot(snap: Dictionary) -> void:
 
 func _show_screen(screen: Control) -> void:
 	screen_host.visible = true
+	fallback_root.visible = false
 	snapshot_view.visible = false
 	actions_container.visible = false
 
@@ -1043,6 +1082,35 @@ func _show_screen(screen: Control) -> void:
 		_save_error_screen.visible = false
 
 	screen.visible = true
+
+func _on_shell_modal_requested(modal_id: StringName, payload: Dictionary, shell: Control) -> void:
+	_present_shell_modal(modal_id, payload, shell)
+
+func _present_shell_modal(modal_id: StringName, payload: Dictionary, shell: Control) -> bool:
+	if shell == null or not is_instance_valid(shell) or not shell.has_method("modal_scene_for"):
+		return false
+	var scene_v: Variant = shell.call("modal_scene_for", modal_id)
+	var scene: PackedScene = scene_v if scene_v is PackedScene else null
+	if scene == null:
+		return false
+	if not modal_host.has_method("present_modal_for_id"):
+		return false
+	var previous_id := &""
+	if modal_host.has_method("active_modal_id"):
+		previous_id = modal_host.call("active_modal_id")
+	if previous_id != &"" and (_modal_owner == null or not is_instance_valid(_modal_owner) or _modal_owner != shell):
+		return false
+	var accepted := bool(modal_host.call("present_modal_for_id", modal_id, scene, payload))
+	if accepted and previous_id == &"":
+		_modal_owner = shell
+	if accepted and shell.has_method("on_modal_accepted"):
+		shell.call("on_modal_accepted", modal_id, payload)
+	return accepted
+
+func _on_modal_dismissed(modal_id: StringName) -> void:
+	if _modal_owner != null and is_instance_valid(_modal_owner) and _modal_owner.has_method("on_modal_dismissed"):
+		_modal_owner.call("on_modal_dismissed", modal_id)
+	_modal_owner = null
 
 func _run_vow_command(parts: Array) -> void:
 	# Usage (VOW-001 debug only):
@@ -1230,6 +1298,7 @@ func _run_institution_command(parts: Array) -> void:
 
 func _hide_bespoke_screens() -> void:
 	screen_host.visible = false
+	fallback_root.visible = true
 	snapshot_view.visible = true
 	actions_container.visible = true
 	if _sanctum_shell != null:

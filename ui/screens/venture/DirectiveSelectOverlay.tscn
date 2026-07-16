@@ -1,9 +1,9 @@
-[gd_scene load_steps=2 format=3 uid="uid://bx8mqfn7s2vp4"]
+[gd_scene load_steps=3 format=3 uid="uid://bx8mqfn7s2vp4"]
 
 [ext_resource type="Script" path="res://ui/screens/venture/DirectiveSelectOverlay.gd" id="1_directive_overlay"]
+[ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="2_safe"]
 
 [node name="DirectiveSelectOverlay" type="Control"]
-visible = false
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -13,6 +13,7 @@ grow_vertical = 2
 script = ExtResource("1_directive_overlay")
 
 [node name="Dim" type="ColorRect" parent="."]
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -21,134 +22,157 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0, 0, 0, 0.701961)
 
-[node name="Center" type="CenterContainer" parent="."]
+[node name="SafeFrame" type="MarginContainer" parent="."]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+script = ExtResource("2_safe")
 
-[node name="Panel" type="PanelContainer" parent="Center"]
-custom_minimum_size = Vector2(360, 0)
+[node name="Center" type="CenterContainer" parent="SafeFrame"]
 layout_mode = 2
 
-[node name="Margin" type="MarginContainer" parent="Center/Panel"]
+[node name="Panel" type="PanelContainer" parent="SafeFrame/Center"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(360, 0)
+layout_mode = 2
+theme_type_variation = &"SanctumCard"
+
+[node name="Margin" type="MarginContainer" parent="SafeFrame/Center/Panel"]
 layout_mode = 2
 theme_override_constants/margin_left = 20
 theme_override_constants/margin_top = 20
 theme_override_constants/margin_right = 20
 theme_override_constants/margin_bottom = 20
 
-[node name="Root" type="VBoxContainer" parent="Center/Panel/Margin"]
+[node name="Root" type="VBoxContainer" parent="SafeFrame/Center/Panel/Margin"]
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="TagsRow" type="HBoxContainer" parent="Center/Panel/Margin/Root"]
+[node name="TagsRow" type="HBoxContainer" parent="SafeFrame/Center/Panel/Margin/Root"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="Tag0" type="Button" parent="Center/Panel/Margin/Root/TagsRow"]
+[node name="Tag0" type="Button" parent="SafeFrame/Center/Panel/Margin/Root/TagsRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 44)
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
-theme_type_variation = &"ButtonSecondary"
+theme_type_variation = &"SanctumTabButton"
 text = "Scout Carefully"
 
-[node name="Tag1" type="Button" parent="Center/Panel/Margin/Root/TagsRow"]
+[node name="Tag1" type="Button" parent="SafeFrame/Center/Panel/Margin/Root/TagsRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 44)
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
-theme_type_variation = &"ButtonSecondary"
+theme_type_variation = &"SanctumTabButton"
 text = "Seek Signs"
 
-[node name="DetailPanel" type="VBoxContainer" parent="Center/Panel/Margin/Root"]
+[node name="BodyScroll" type="ScrollContainer" parent="SafeFrame/Center/Panel/Margin/Root"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 300)
 layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="DetailPanel" type="VBoxContainer" parent="SafeFrame/Center/Panel/Margin/Root/BodyScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_constants/separation = 12
 
-[node name="NavRow" type="HBoxContainer" parent="Center/Panel/Margin/Root/DetailPanel"]
+[node name="NavRow" type="HBoxContainer" parent="SafeFrame/Center/Panel/Margin/Root/BodyScroll/DetailPanel"]
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="ArrowLeft" type="Button" parent="Center/Panel/Margin/Root/DetailPanel/NavRow"]
+[node name="ArrowLeft" type="Button" parent="SafeFrame/Center/Panel/Margin/Root/BodyScroll/DetailPanel/NavRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(44, 44)
+custom_minimum_size = Vector2(48, 48)
 layout_mode = 2
-theme_type_variation = &"ButtonGhost"
+theme_type_variation = &"SanctumTabButton"
 text = "←"
 
-[node name="DirectiveTitle" type="Label" parent="Center/Panel/Margin/Root/DetailPanel/NavRow"]
+[node name="DirectiveTitle" type="Label" parent="SafeFrame/Center/Panel/Margin/Root/BodyScroll/DetailPanel/NavRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
+theme_type_variation = &"HeaderLargePanel"
 theme_override_font_sizes/font_size = 18
 text = "Scout Carefully"
 horizontal_alignment = 1
 
-[node name="ArrowRight" type="Button" parent="Center/Panel/Margin/Root/DetailPanel/NavRow"]
+[node name="ArrowRight" type="Button" parent="SafeFrame/Center/Panel/Margin/Root/BodyScroll/DetailPanel/NavRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(44, 44)
+custom_minimum_size = Vector2(48, 48)
 layout_mode = 2
-theme_type_variation = &"ButtonGhost"
+theme_type_variation = &"SanctumTabButton"
 text = "→"
 
-[node name="DirectiveDescription" type="Label" parent="Center/Panel/Margin/Root/DetailPanel"]
+[node name="DirectiveDescription" type="Label" parent="SafeFrame/Center/Panel/Margin/Root/BodyScroll/DetailPanel"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"ContentBasePanel"
 text = "The land will speak if you give it time."
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="ProsList" type="VBoxContainer" parent="Center/Panel/Margin/Root/DetailPanel"]
+[node name="ProsList" type="VBoxContainer" parent="SafeFrame/Center/Panel/Margin/Root/BodyScroll/DetailPanel"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="ProsHeader" type="Label" parent="Center/Panel/Margin/Root/DetailPanel/ProsList"]
+[node name="ProsHeader" type="Label" parent="SafeFrame/Center/Panel/Margin/Root/BodyScroll/DetailPanel/ProsList"]
 layout_mode = 2
+theme_type_variation = &"SanctumKicker"
 theme_override_font_sizes/font_size = 11
 text = "WHAT IT FAVOURS"
 
-[node name="Pro0" type="Label" parent="Center/Panel/Margin/Root/DetailPanel/ProsList"]
+[node name="Pro0" type="Label" parent="SafeFrame/Center/Panel/Margin/Root/BodyScroll/DetailPanel/ProsList"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"ContentBasePanel"
 text = "—"
 autowrap_mode = 2
 
-[node name="Pro1" type="Label" parent="Center/Panel/Margin/Root/DetailPanel/ProsList"]
+[node name="Pro1" type="Label" parent="SafeFrame/Center/Panel/Margin/Root/BodyScroll/DetailPanel/ProsList"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"ContentBasePanel"
 text = "—"
 autowrap_mode = 2
 
-[node name="ConsList" type="VBoxContainer" parent="Center/Panel/Margin/Root/DetailPanel"]
+[node name="ConsList" type="VBoxContainer" parent="SafeFrame/Center/Panel/Margin/Root/BodyScroll/DetailPanel"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="ConsHeader" type="Label" parent="Center/Panel/Margin/Root/DetailPanel/ConsList"]
+[node name="ConsHeader" type="Label" parent="SafeFrame/Center/Panel/Margin/Root/BodyScroll/DetailPanel/ConsList"]
 layout_mode = 2
+theme_type_variation = &"SanctumKicker"
 theme_override_font_sizes/font_size = 11
 text = "WHAT IT COSTS"
 
-[node name="Con0" type="Label" parent="Center/Panel/Margin/Root/DetailPanel/ConsList"]
+[node name="Con0" type="Label" parent="SafeFrame/Center/Panel/Margin/Root/BodyScroll/DetailPanel/ConsList"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"ContentBasePanel"
 text = "—"
 autowrap_mode = 2
 
-[node name="Con1" type="Label" parent="Center/Panel/Margin/Root/DetailPanel/ConsList"]
+[node name="Con1" type="Label" parent="SafeFrame/Center/Panel/Margin/Root/BodyScroll/DetailPanel/ConsList"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"ContentBasePanel"
 text = "—"
 autowrap_mode = 2
 
-[node name="SelectButton" type="Button" parent="Center/Panel/Margin/Root"]
+[node name="SelectButton" type="Button" parent="SafeFrame/Center/Panel/Margin/Root"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
 size_flags_horizontal = 3
-theme_type_variation = &"ButtonPrimary"
+theme_type_variation = &"RealmModalPrimaryButton"
 text = "Select Directive"

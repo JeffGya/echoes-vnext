@@ -1,9 +1,10 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://ui/screens/onboarding/KeeperIntroScreen.gd" id="1_script"]
 [ext_resource type="PackedScene" uid="uid://d1px4m6lxvynp" path="res://ui/sanctum/SanctumSpatialRenderer.tscn" id="2_sanctum"]
 [ext_resource type="Theme" uid="uid://8qssuuodths2" path="res://assets/theme/LivingTreeSystem.tres" id="3_theme"]
 [ext_resource type="PackedScene" path="res://ui/components/ThreadSigilCard.tscn" id="4_thread_sigil"]
+[ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="5_safe"]
 
 [node name="KeeperIntroScreen" type="Control"]
 layout_mode = 3
@@ -31,7 +32,23 @@ scale = Vector2(2.05, 2.05)
 [node name="SanctumSpatialRenderer" parent="SpatialView" unique_id=1200 instance=ExtResource("2_sanctum")]
 unique_name_in_owner = true
 
-[node name="FlameCore" type="ColorRect" parent="." unique_id=1201]
+[node name="SafeFrame" type="MarginContainer" parent="." unique_id=1210]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("5_safe")
+base_margin = 16
+
+[node name="ContentRoot" type="Control" parent="SafeFrame"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="FlameCore" type="ColorRect" parent="SafeFrame/ContentRoot" unique_id=1201]
 unique_name_in_owner = true
 visible = false
 layout_mode = 1
@@ -49,7 +66,7 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.83137256, 0.68627451, 0.21568627, 0.7)
 
-[node name="ThreadSigilCard" parent="." unique_id=1202 instance=ExtResource("4_thread_sigil")]
+[node name="ThreadSigilCard" parent="SafeFrame/ContentRoot" unique_id=1202 instance=ExtResource("4_thread_sigil")]
 unique_name_in_owner = true
 visible = false
 custom_minimum_size = Vector2(132, 132)
@@ -66,7 +83,7 @@ offset_bottom = -24.0
 grow_horizontal = 0
 grow_vertical = 2
 
-[node name="NarratorPanel" type="PanelContainer" parent="."]
+[node name="NarratorPanel" type="PanelContainer" parent="SafeFrame/ContentRoot"]
 layout_mode = 1
 anchors_preset = 7
 anchor_left = 0.5
@@ -80,18 +97,18 @@ offset_bottom = -42.0
 grow_horizontal = 2
 grow_vertical = 0
 
-[node name="NarratorMargin" type="MarginContainer" parent="NarratorPanel"]
+[node name="NarratorMargin" type="MarginContainer" parent="SafeFrame/ContentRoot/NarratorPanel"]
 layout_mode = 2
 theme_override_constants/margin_left = 22
 theme_override_constants/margin_top = 18
 theme_override_constants/margin_right = 22
 theme_override_constants/margin_bottom = 18
 
-[node name="NarratorVBox" type="VBoxContainer" parent="NarratorPanel/NarratorMargin"]
+[node name="NarratorVBox" type="VBoxContainer" parent="SafeFrame/ContentRoot/NarratorPanel/NarratorMargin"]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="TitleLabel" type="Label" parent="NarratorPanel/NarratorMargin/NarratorVBox" unique_id=1204]
+[node name="TitleLabel" type="Label" parent="SafeFrame/ContentRoot/NarratorPanel/NarratorMargin/NarratorVBox" unique_id=1204]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"HeaderLargePanel"
@@ -99,41 +116,46 @@ text = "The House Stirs"
 horizontal_alignment = 1
 autowrap_mode = 3
 
-[node name="BodyLabel" type="Label" parent="NarratorPanel/NarratorMargin/NarratorVBox" unique_id=1205]
+[node name="BodyScroll" type="ScrollContainer" parent="SafeFrame/ContentRoot/NarratorPanel/NarratorMargin/NarratorVBox" unique_id=1211]
+layout_mode = 2
+custom_minimum_size = Vector2(820, 76)
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="BodyLabel" type="Label" parent="SafeFrame/ContentRoot/NarratorPanel/NarratorMargin/NarratorVBox/BodyScroll" unique_id=1205]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(820, 72)
 layout_mode = 2
 theme_type_variation = &"ContentBasePanel"
 autowrap_mode = 3
 
-[node name="ChoiceRow" type="HBoxContainer" parent="NarratorPanel/NarratorMargin/NarratorVBox"]
+[node name="ChoiceRow" type="HBoxContainer" parent="SafeFrame/ContentRoot/NarratorPanel/NarratorMargin/NarratorVBox"]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="ChoiceButton1" type="Button" parent="NarratorPanel/NarratorMargin/NarratorVBox/ChoiceRow" unique_id=1206]
+[node name="ChoiceButton1" type="Button" parent="SafeFrame/ContentRoot/NarratorPanel/NarratorMargin/NarratorVBox/ChoiceRow" unique_id=1206]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"ButtonSecondary"
 
-[node name="ChoiceButton2" type="Button" parent="NarratorPanel/NarratorMargin/NarratorVBox/ChoiceRow" unique_id=1207]
+[node name="ChoiceButton2" type="Button" parent="SafeFrame/ContentRoot/NarratorPanel/NarratorMargin/NarratorVBox/ChoiceRow" unique_id=1207]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"ButtonSecondary"
 
-[node name="ChoiceButton3" type="Button" parent="NarratorPanel/NarratorMargin/NarratorVBox/ChoiceRow" unique_id=1208]
+[node name="ChoiceButton3" type="Button" parent="SafeFrame/ContentRoot/NarratorPanel/NarratorMargin/NarratorVBox/ChoiceRow" unique_id=1208]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"ButtonSecondary"
 
-[node name="CtaButton" type="Button" parent="NarratorPanel/NarratorMargin/NarratorVBox" unique_id=1209]
+[node name="CtaButton" type="Button" parent="SafeFrame/ContentRoot/NarratorPanel/NarratorMargin/NarratorVBox" unique_id=1209]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(220, 48)
+custom_minimum_size = Vector2(220, 56)
 layout_mode = 2
 size_flags_horizontal = 8
 theme_type_variation = &"ButtonPrimary"
