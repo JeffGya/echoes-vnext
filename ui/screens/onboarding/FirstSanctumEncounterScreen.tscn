@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://ui/screens/onboarding/FirstSanctumEncounterScreen.gd" id="1_script"]
 [ext_resource type="PackedScene" uid="uid://d1px4m6lxvynp" path="res://ui/sanctum/SanctumSpatialRenderer.tscn" id="2_sanctum"]
 [ext_resource type="Theme" uid="uid://8qssuuodths2" path="res://assets/theme/LivingTreeSystem.tres" id="3_theme"]
+[ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="4_safe"]
 
 [node name="FirstSanctumEncounterScreen" type="Control"]
 layout_mode = 3
@@ -30,7 +31,23 @@ scale = Vector2(2.15, 2.15)
 [node name="SanctumSpatialRenderer" parent="SpatialView" unique_id=1060 instance=ExtResource("2_sanctum")]
 unique_name_in_owner = true
 
-[node name="NarratorPanel" type="PanelContainer" parent="."]
+[node name="SafeFrame" type="MarginContainer" parent="." unique_id=1063]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("4_safe")
+base_margin = 16
+
+[node name="ContentRoot" type="Control" parent="SafeFrame"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="NarratorPanel" type="PanelContainer" parent="SafeFrame/ContentRoot"]
 layout_mode = 1
 anchors_preset = 7
 anchor_left = 0.5
@@ -44,27 +61,27 @@ offset_bottom = -42.0
 grow_horizontal = 2
 grow_vertical = 0
 
-[node name="NarratorMargin" type="MarginContainer" parent="NarratorPanel"]
+[node name="NarratorMargin" type="MarginContainer" parent="SafeFrame/ContentRoot/NarratorPanel"]
 layout_mode = 2
 theme_override_constants/margin_left = 20
 theme_override_constants/margin_top = 18
 theme_override_constants/margin_right = 20
 theme_override_constants/margin_bottom = 18
 
-[node name="NarratorVBox" type="VBoxContainer" parent="NarratorPanel/NarratorMargin"]
+[node name="NarratorVBox" type="VBoxContainer" parent="SafeFrame/ContentRoot/NarratorPanel/NarratorMargin"]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="NarratorLabel" type="Label" parent="NarratorPanel/NarratorMargin/NarratorVBox" unique_id=1061]
+[node name="NarratorLabel" type="Label" parent="SafeFrame/ContentRoot/NarratorPanel/NarratorMargin/NarratorVBox" unique_id=1061]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(680, 54)
 layout_mode = 2
 theme_type_variation = &"ContentBasePanel"
 autowrap_mode = 3
 
-[node name="ContinueButton" type="Button" parent="NarratorPanel/NarratorMargin/NarratorVBox" unique_id=1062]
+[node name="ContinueButton" type="Button" parent="SafeFrame/ContentRoot/NarratorPanel/NarratorMargin/NarratorVBox" unique_id=1062]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(180, 42)
+custom_minimum_size = Vector2(180, 56)
 layout_mode = 2
 size_flags_horizontal = 8
 theme_type_variation = &"ButtonPrimary"

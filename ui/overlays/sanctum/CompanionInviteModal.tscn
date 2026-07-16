@@ -1,0 +1,229 @@
+[gd_scene load_steps=6 format=3 uid="uid://companion_invite_modal"]
+
+[ext_resource type="Script" path="res://ui/overlays/sanctum/CompanionInviteModal.gd" id="1_companion"]
+[ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="2_safe"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_companion_panel"]
+bg_color = Color(0.09, 0.12, 0.14, 0.96)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.478431, 0.709804, 0.784314, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_companion_bar_fill"]
+bg_color = Color(0.478431, 0.709804, 0.784314, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_companion_bar_bg"]
+bg_color = Color(0.05, 0.07, 0.08, 1)
+
+[node name="CompanionInviteModal" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_companion")
+
+[node name="SafeFrame" type="MarginContainer" parent="."]
+script = ExtResource("2_safe")
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Center" type="CenterContainer" parent="SafeFrame"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="CompanionInviteCard" type="PanelContainer" parent="SafeFrame/Center"]
+layout_mode = 2
+custom_minimum_size = Vector2(560, 0)
+theme_override_styles/panel = SubResource("StyleBoxFlat_companion_panel")
+
+[node name="CompanionInviteMargin" type="MarginContainer" parent="SafeFrame/Center/CompanionInviteCard"]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 12
+
+[node name="CompanionInviteVBox" type="VBoxContainer" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="CompanionHeaderRow" type="HBoxContainer" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 8
+
+[node name="CompanionNameLabel" type="Label" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionHeaderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumHeaderTitle"
+text = "Ally Name"
+
+[node name="CompanionBadge" type="Label" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionHeaderRow"]
+layout_mode = 2
+text = "ALLY"
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.478431, 0.709804, 0.784314, 1)
+
+[node name="CompanionInviteScroll" type="ScrollContainer" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 180)
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="CompanionBodyVBox" type="VBoxContainer" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionInviteScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="CompanionChanceHeadlineRow" type="HBoxContainer" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionInviteScroll/CompanionBodyVBox"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 8
+
+[node name="CompanionChanceHeadline" type="Label" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionInviteScroll/CompanionBodyVBox/CompanionChanceHeadlineRow"]
+layout_mode = 2
+theme_type_variation = &"SanctumHeaderText"
+text = "Chance to stay"
+theme_override_font_sizes/font_size = 14
+
+[node name="CompanionChanceLabel" type="Label" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionInviteScroll/CompanionBodyVBox/CompanionChanceHeadlineRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0%"
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.298039, 0.686275, 0.447059, 1)
+
+[node name="CompanionChanceBar" type="ProgressBar" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionInviteScroll/CompanionBodyVBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 16)
+layout_mode = 2
+theme_override_styles/fill = SubResource("StyleBoxFlat_companion_bar_fill")
+theme_override_styles/background = SubResource("StyleBoxFlat_companion_bar_bg")
+max_value = 75.0
+show_percentage = false
+
+[node name="CompanionSubBarsGrid" type="GridContainer" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionInviteScroll/CompanionBodyVBox"]
+layout_mode = 2
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 6
+columns = 3
+
+[node name="TalkCaption" type="Label" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionInviteScroll/CompanionBodyVBox/CompanionSubBarsGrid"]
+layout_mode = 2
+custom_minimum_size = Vector2(48, 0)
+theme_type_variation = &"SanctumHeaderText"
+text = "Talk"
+theme_override_font_sizes/font_size = 12
+
+[node name="CompanionTalkBar" type="ProgressBar" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionInviteScroll/CompanionBodyVBox/CompanionSubBarsGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/fill = SubResource("StyleBoxFlat_companion_bar_fill")
+theme_override_styles/background = SubResource("StyleBoxFlat_companion_bar_bg")
+max_value = 75.0
+show_percentage = false
+
+[node name="CompanionTalkValue" type="Label" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionInviteScroll/CompanionBodyVBox/CompanionSubBarsGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(46, 0)
+text = "0/0"
+horizontal_alignment = 2
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.478431, 0.709804, 0.784314, 1)
+
+[node name="FightCaption" type="Label" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionInviteScroll/CompanionBodyVBox/CompanionSubBarsGrid"]
+layout_mode = 2
+custom_minimum_size = Vector2(48, 0)
+theme_type_variation = &"SanctumHeaderText"
+text = "Fight"
+theme_override_font_sizes/font_size = 12
+
+[node name="CompanionFightBar" type="ProgressBar" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionInviteScroll/CompanionBodyVBox/CompanionSubBarsGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/fill = SubResource("StyleBoxFlat_companion_bar_fill")
+theme_override_styles/background = SubResource("StyleBoxFlat_companion_bar_bg")
+max_value = 75.0
+show_percentage = false
+
+[node name="CompanionFightValue" type="Label" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionInviteScroll/CompanionBodyVBox/CompanionSubBarsGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(46, 0)
+text = "0/0"
+horizontal_alignment = 2
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.478431, 0.709804, 0.784314, 1)
+
+[node name="FitCaption" type="Label" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionInviteScroll/CompanionBodyVBox/CompanionSubBarsGrid"]
+layout_mode = 2
+custom_minimum_size = Vector2(48, 0)
+theme_type_variation = &"SanctumHeaderText"
+text = "Fit"
+theme_override_font_sizes/font_size = 12
+
+[node name="CompanionFitBar" type="ProgressBar" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionInviteScroll/CompanionBodyVBox/CompanionSubBarsGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/fill = SubResource("StyleBoxFlat_companion_bar_fill")
+theme_override_styles/background = SubResource("StyleBoxFlat_companion_bar_bg")
+max_value = 75.0
+show_percentage = false
+
+[node name="CompanionFitValue" type="Label" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionInviteScroll/CompanionBodyVBox/CompanionSubBarsGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(46, 0)
+text = "0/0"
+horizontal_alignment = 2
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.478431, 0.709804, 0.784314, 1)
+
+[node name="CompanionButtonRow" type="HBoxContainer" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 12
+
+[node name="CompanionDeclineButton" type="Button" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionButtonRow"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(140, 48)
+theme_type_variation = &"SanctumModalSecondaryDarkButton"
+text = "Let them go"
+
+[node name="CompanionAcceptButton" type="Button" parent="SafeFrame/Center/CompanionInviteCard/CompanionInviteMargin/CompanionInviteVBox/CompanionButtonRow"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(140, 56)
+theme_type_variation = &"SanctumModalPrimaryButton"
+text = "Welcome them"

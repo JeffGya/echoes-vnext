@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3 uid="uid://resolve_screen_001"]
+[gd_scene load_steps=5 format=3 uid="uid://resolve_screen_001"]
 
 [ext_resource type="Script" path="res://ui/screens/venture/ResolveScreen.gd" id="1_resolve"]
 [ext_resource type="PackedScene" path="res://ui/components/RewardEntryItem.tscn" id="2_rewardentry"]
 [ext_resource type="PackedScene" path="res://ui/components/EffectChip.tscn" id="3_effectchip"]
+[ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="4_safe"]
 
 [node name="ResolveScreen" type="Control"]
 layout_mode = 3
@@ -14,6 +15,7 @@ grow_vertical = 2
 script = ExtResource("1_resolve")
 
 [node name="DimBackdrop" type="ColorRect" parent="."]
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -23,235 +25,311 @@ grow_vertical = 2
 color = Color(0, 0, 0, 0.55)
 mouse_filter = 0
 
-[node name="CenterContainer" type="CenterContainer" parent="."]
+[node name="SafeFrame" type="MarginContainer" parent="."]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+script = ExtResource("4_safe")
 
-[node name="ResultCard" type="PanelContainer" parent="CenterContainer"]
+[node name="CenterContainer" type="Control" parent="SafeFrame"]
 layout_mode = 2
-custom_minimum_size = Vector2(480, 0)
 
-[node name="ScrollContainer" type="ScrollContainer" parent="CenterContainer/ResultCard"]
+[node name="ResultCard" type="Panel" parent="SafeFrame/CenterContainer"]
+unique_name_in_owner = true
+layout_mode = 1
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -340.0
+offset_top = -238.0
+offset_right = 340.0
+offset_bottom = 238.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_type_variation = &"RealmResolveCard"
+
+[node name="CardMargin" type="MarginContainer" parent="SafeFrame/CenterContainer/ResultCard"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 20
+
+[node name="CardLayout" type="VBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin"]
 layout_mode = 2
-horizontal_scroll_mode = 0
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
 
-[node name="CardContent" type="VBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer"]
-layout_mode = 2
-theme_override_constants/separation = 16
-
-[node name="BannerLabel" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
+[node name="HeaderSection" type="VBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="BannerLabel" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/HeaderSection"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SanctumDetailTitle"
 text = "VICTORY"
 theme_override_font_sizes/font_size = 36
 horizontal_alignment = 1
+autowrap_mode = 2
 
-[node name="SummaryLabel" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
+[node name="SummaryLabel" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/HeaderSection"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
+theme_type_variation = &"RealmWarmMeta"
 text = ""
-theme_override_font_sizes/font_size = 14
-theme_override_colors/font_color = Color(0.784314, 0.737255, 0.647059, 0.8)
+theme_override_font_sizes/font_size = 15
 horizontal_alignment = 1
 autowrap_mode = 3
-visible = false
 
-[node name="ReasonLabel" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
+[node name="ReasonLabel" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/HeaderSection"]
 unique_name_in_owner = true
 layout_mode = 2
 text = ""
-theme_override_font_sizes/font_size = 16
+theme_override_font_sizes/font_size = 17
 horizontal_alignment = 1
+autowrap_mode = 3
 
-[node name="HSeparator" type="HSeparator" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
+[node name="HeaderSeparator" type="HSeparator" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout"]
 layout_mode = 2
 
-[node name="RankRow" type="HBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
+[node name="BodyViewport" type="Control" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 210)
+layout_mode = 2
+size_flags_horizontal = 3
+clip_contents = true
+
+[node name="ScrollContainer" type="ScrollContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+horizontal_scroll_mode = 0
+
+[node name="CardContent" type="VBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 16
+
+[node name="RankRow" type="HBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent"]
 layout_mode = 2
 alignment = 1
 theme_override_constants/separation = 12
 
-[node name="RankKey" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/RankRow"]
+[node name="RankKey" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/RankRow"]
 layout_mode = 2
 text = "Rank"
 theme_override_font_sizes/font_size = 16
 
-[node name="RankBadge" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/RankRow"]
+[node name="RankBadge" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/RankRow"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "—"
 theme_override_font_sizes/font_size = 22
 
-[node name="AseRow" type="HBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
+[node name="AseRow" type="HBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent"]
 layout_mode = 2
 alignment = 1
 theme_override_constants/separation = 12
 
-[node name="AseKey" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/AseRow"]
+[node name="AseKey" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/AseRow"]
 layout_mode = 2
 text = "Ase earned"
 theme_override_font_sizes/font_size = 16
 
-[node name="AseValue" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/AseRow"]
+[node name="AseValue" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/AseRow"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 theme_override_font_sizes/font_size = 16
 
-[node name="EkwanRow" type="HBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
+[node name="EkwanRow" type="HBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 alignment = 1
 theme_override_constants/separation = 12
 
-[node name="EkwanKey" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/EkwanRow"]
+[node name="EkwanKey" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/EkwanRow"]
 layout_mode = 2
 text = "Ekwan earned"
 theme_override_font_sizes/font_size = 16
-theme_override_colors/font_color = Color(0.91, 0.627, 0.188, 1)
 
-[node name="EkwanValue" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/EkwanRow"]
+[node name="EkwanValue" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/EkwanRow"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 theme_override_font_sizes/font_size = 16
-theme_override_colors/font_color = Color(0.91, 0.627, 0.188, 1)
 
-[node name="BreakdownSection" type="VBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
+[node name="BreakdownSection" type="VBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 theme_override_constants/separation = 4
 
-[node name="RewardEntryPlaceholder" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/BreakdownSection" instance=ExtResource("2_rewardentry")]
+[node name="RewardEntryPlaceholder" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/BreakdownSection" instance=ExtResource("2_rewardentry")]
 layout_mode = 2
 
-[node name="StatGrid" type="GridContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
+[node name="StatGrid" type="GridContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent"]
 layout_mode = 2
+size_flags_horizontal = 3
 columns = 2
 theme_override_constants/h_separation = 24
 theme_override_constants/v_separation = 8
 
-[node name="EnemiesDefeatedKey" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/StatGrid"]
+[node name="EnemiesDefeatedKey" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/StatGrid"]
 layout_mode = 2
 text = "Enemies defeated"
 theme_override_font_sizes/font_size = 14
 
-[node name="EnemiesDefeatedValue" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/StatGrid"]
+[node name="EnemiesDefeatedValue" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/StatGrid"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 theme_override_font_sizes/font_size = 14
 horizontal_alignment = 2
 
-[node name="EchoesAliveKey" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/StatGrid"]
+[node name="EchoesAliveKey" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/StatGrid"]
 layout_mode = 2
 text = "Echoes survived"
 theme_override_font_sizes/font_size = 14
 
-[node name="EchoesAliveValue" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/StatGrid"]
+[node name="EchoesAliveValue" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/StatGrid"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 theme_override_font_sizes/font_size = 14
 horizontal_alignment = 2
 
-[node name="RoundsKey" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/StatGrid"]
+[node name="RoundsKey" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/StatGrid"]
 layout_mode = 2
 text = "Rounds"
 theme_override_font_sizes/font_size = 14
 
-[node name="RoundsValue" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/StatGrid"]
+[node name="RoundsValue" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/StatGrid"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0"
 theme_override_font_sizes/font_size = 14
 horizontal_alignment = 2
 
-[node name="EmotionSection" type="VBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
+[node name="EmotionSection" type="VBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="EmotionHeader" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/EmotionSection"]
+[node name="EmotionHeader" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/EmotionSection"]
 layout_mode = 2
 text = "Echo Emotion"
 theme_override_font_sizes/font_size = 14
 
-[node name="EmotionSeparator" type="HSeparator" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/EmotionSection"]
+[node name="EmotionSeparator" type="HSeparator" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/EmotionSection"]
 layout_mode = 2
 
-[node name="EmotionList" type="VBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/EmotionSection"]
+[node name="EmotionList" type="VBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/EmotionSection"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="EffectsRail" type="HFlowContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
+[node name="EffectsRail" type="HFlowContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/h_separation = 6
 theme_override_constants/v_separation = 6
 visible = false
 
-[node name="VowOutcomeSection" type="VBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
+[node name="VowOutcomeSection" type="VBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent"]
 unique_name_in_owner = true
 layout_mode = 2
 visible = false
 theme_override_constants/separation = 4
 
-[node name="VowOutcomeSeparator" type="HSeparator" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/VowOutcomeSection"]
+[node name="VowOutcomeSeparator" type="HSeparator" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/VowOutcomeSection"]
 layout_mode = 2
 
-[node name="VowOutcomeHeader" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/VowOutcomeSection"]
+[node name="VowOutcomeHeader" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/VowOutcomeSection"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Vow"
 theme_override_font_sizes/font_size = 14
 
-[node name="VowOutcomeList" type="VBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/VowOutcomeSection"]
+[node name="VowOutcomeList" type="VBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/VowOutcomeSection"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="VowDiscoveredSection" type="VBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
+[node name="VowDiscoveredSection" type="VBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent"]
 unique_name_in_owner = true
 layout_mode = 2
 visible = false
 theme_override_constants/separation = 4
 
-[node name="VowDiscoveredSeparator" type="HSeparator" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/VowDiscoveredSection"]
+[node name="VowDiscoveredSeparator" type="HSeparator" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/VowDiscoveredSection"]
 layout_mode = 2
 
-[node name="VowDiscoveredHeader" type="Label" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/VowDiscoveredSection"]
+[node name="VowDiscoveredHeader" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/VowDiscoveredSection"]
 layout_mode = 2
 text = "Vow Revealed"
 theme_override_font_sizes/font_size = 14
-theme_override_colors/font_color = Color(0.478431, 0.709804, 0.784314, 1)
 
-[node name="VowDiscoveredList" type="VBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/VowDiscoveredSection"]
+[node name="VowDiscoveredList" type="VBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/VowDiscoveredSection"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="ButtonRow" type="HBoxContainer" parent="CenterContainer/ResultCard/ScrollContainer/CardContent"]
+[node name="FooterSeparator" type="HSeparator" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout"]
 layout_mode = 2
+
+[node name="FooterSurface" type="PanelContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SanctumRouteAction"
+
+[node name="FooterMargin" type="MarginContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/FooterSurface"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="ButtonRow" type="HBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/FooterSurface/FooterMargin"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
 alignment = 1
 theme_override_constants/separation = 12
 
-[node name="SanctumButton" type="Button" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/ButtonRow"]
+[node name="SanctumButton" type="Button" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/FooterSurface/FooterMargin/ButtonRow"]
 unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(160, 48)
-theme_type_variation = "ButtonSecondary"
+custom_minimum_size = Vector2(160, 56)
+size_flags_horizontal = 3
+theme_type_variation = &"RealmModalSecondaryButton"
 text = "To Sanctum"
 
-[node name="NextStageButton" type="Button" parent="CenterContainer/ResultCard/ScrollContainer/CardContent/ButtonRow"]
+[node name="NextStageButton" type="Button" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/FooterSurface/FooterMargin/ButtonRow"]
 unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(160, 48)
-theme_type_variation = "ButtonPrimary"
+custom_minimum_size = Vector2(160, 56)
+size_flags_horizontal = 3
+theme_type_variation = &"RealmModalPrimaryButton"
 text = "Next Stage"

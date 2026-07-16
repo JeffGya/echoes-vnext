@@ -22,6 +22,8 @@ extends Control
 
 signal confirm_requested(echo_id: String)
 signal calling_confirm_requested(echo_id: String, chosen_calling_id: String)
+signal action_requested(action: Dictionary)
+signal dismiss_requested()
 signal dismissed()
 
 const _CALLING_OPTION_CARD_SCENE: PackedScene = preload("res://ui/components/CallingOptionCard.tscn")
@@ -45,6 +47,7 @@ const _BADGE_AMBIVALENT: String = "Ambivalent"
 
 # ── Scene refs — ConfirmPanel ───────────────────────────────────────────────
 @onready var confirm_panel: VBoxContainer  = %ConfirmPanel
+@onready var safe_frame: MarginContainer   = %SafeFrame
 @onready var confirm_text: Label           = %ConfirmText
 @onready var cancel_button: Button         = %CancelButton
 @onready var confirm_button: Button        = %ConfirmButton
@@ -78,6 +81,26 @@ func _ready() -> void:
 	confirm_calling_button.pressed.connect(_on_confirm_calling_pressed)
 	defer_button.pressed.connect(_on_defer_pressed)
 	visible = false
+
+func present(payload: Dictionary) -> void:
+	if payload.get("layout", {}) is Dictionary:
+		set_layout(payload.get("layout", {}) as Dictionary)
+	var mode := str(payload.get("mode", ""))
+	match mode:
+		"confirm":
+			var echo_v: Variant = payload.get("echo_data", {})
+			show_confirm(echo_v if echo_v is Dictionary else {})
+		"reveal":
+			var event_v: Variant = payload.get("rank_up_event", {})
+			show_reveal(event_v if event_v is Dictionary else {})
+		"calling":
+			var options_v: Variant = payload.get("calling_options", [])
+			show_calling(str(payload.get("echo_id", "")), options_v if options_v is Array else [])
+
+func set_layout(layout: Dictionary) -> void:
+	var frame := safe_frame if safe_frame != null else find_child("SafeFrame", true, false) as MarginContainer
+	if frame != null and frame.has_method("set_layout"):
+		frame.call("set_layout", layout)
 
 
 # ── Public API ─────────────────────────────────────────────────────────────
@@ -162,7 +185,8 @@ func _build_calling_rows() -> void:
 	# Clear previously generated rows.
 	for child in calling_options_container.get_children():
 		if child.has_method("get_calling_id"):
-			child.queue_free()
+			calling_options_container.remove_child(child)
+			child.free()
 
 	for opt_v in _calling_options:
 		if not (opt_v is Dictionary):
@@ -204,11 +228,16 @@ func _on_calling_row_pressed(cid: String) -> void:
 func _on_cancel_pressed() -> void:
 	visible  = false
 	_echo_id = ""
+	dismiss_requested.emit()
 
 
 func _on_confirm_pressed() -> void:
 	# EchoPartyScreen receives this → dispatches sanctum.rank_up → calls show_reveal().
 	confirm_requested.emit(_echo_id)
+	action_requested.emit({
+		"type": "sanctum.rank_up",
+		"payload": { "echo_id": _echo_id },
+	})
 
 
 func _on_continue_pressed() -> void:
@@ -219,15 +248,22 @@ func _on_continue_pressed() -> void:
 	visible  = false
 	_echo_id = ""
 	dismissed.emit()
+	dismiss_requested.emit()
 
 
 func _on_confirm_calling_pressed() -> void:
 	if _selected_calling_id.is_empty():
 		return
-	calling_confirm_requested.emit(_calling_echo_id, _selected_calling_id)
+	var echo_id := _calling_echo_id
+	var selected_calling_id := _selected_calling_id
 	_reset_calling_state()
 	visible = false
 	dismissed.emit()
+	dismiss_requested.emit()
+	action_requested.emit({
+		"type": "sanctum.calling.confirm",
+		"payload": { "echo_id": echo_id, "chosen_calling_id": selected_calling_id },
+	})
 
 
 func _on_defer_pressed() -> void:
@@ -235,6 +271,7 @@ func _on_defer_pressed() -> void:
 	_reset_calling_state()
 	visible = false
 	dismissed.emit()
+	dismiss_requested.emit()
 
 
 func _reset_calling_state() -> void:

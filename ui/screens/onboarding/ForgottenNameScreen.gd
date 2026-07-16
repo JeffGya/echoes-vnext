@@ -21,6 +21,7 @@ const VIRTUE_COLORS := {
 
 @onready var _choice_root: Control = %ChoiceRoot
 @onready var _meeting_root: Control = %MeetingRoot
+@onready var _safe_frame: Control = %SafeFrame
 @onready var _commit_button: Button = %CommitButton
 @onready var _name_labels: Array[Label] = [%Name1, %Name2, %Name3]
 @onready var _bark_labels: Array[Label] = [%Bark1, %Bark2, %Bark3]
@@ -40,10 +41,16 @@ var _continue_action: Dictionary = {}
 
 func _ready() -> void:
 	for i in range(_orb_buttons.size()):
+		_orb_buttons[i].focus_mode = Control.FOCUS_ALL
 		_orb_buttons[i].pressed.connect(_on_orb_pressed.bind(i))
+	_commit_button.focus_mode = Control.FOCUS_ALL
+	_meeting_continue.focus_mode = Control.FOCUS_ALL
 	_commit_button.pressed.connect(_on_commit_pressed)
 	_meeting_continue.pressed.connect(_on_meeting_continue_pressed)
 
+func set_layout(layout: Dictionary) -> void:
+	if is_node_ready() and _safe_frame.has_method("set_layout"):
+		_safe_frame.call("set_layout", layout)
 
 func set_snapshot(snap: Dictionary) -> void:
 	var data_v: Variant = snap.get("data", {})
@@ -85,6 +92,7 @@ func _render_choice(data: Dictionary, actions: Dictionary) -> void:
 	_confirm_action = action_v if action_v is Dictionary else {}
 	_commit_button.disabled = _confirm_action.is_empty() or bool(_confirm_action.get("disabled", false))
 	_commit_button.text = str(_confirm_action.get("label", "COMMIT TO ONE"))
+	_grab_choice_focus()
 
 
 func _render_meeting(data: Dictionary, actions: Dictionary) -> void:
@@ -121,6 +129,16 @@ func _render_meeting(data: Dictionary, actions: Dictionary) -> void:
 	var action_v: Variant = actions.get("cta.continue", {})
 	_continue_action = action_v if action_v is Dictionary else {}
 	_meeting_continue.text = str(_continue_action.get("label", "Continue"))
+	_meeting_continue.grab_focus.call_deferred()
+
+
+func _grab_choice_focus() -> void:
+	for button in _orb_buttons:
+		if not button.disabled:
+			button.grab_focus.call_deferred()
+			return
+	if not _commit_button.disabled:
+		_commit_button.grab_focus.call_deferred()
 
 
 func _on_orb_pressed(index: int) -> void:

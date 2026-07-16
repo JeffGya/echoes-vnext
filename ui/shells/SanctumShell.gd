@@ -3,15 +3,19 @@ extends Control
 class_name SanctumShell
 
 @onready var overlay_root: Control = %OverlayRoot
-@onready var spatial_layer: Control = $SpatialLayer
-@onready var spatial_view: Node2D = $SpatialLayer/SpatialView
-@onready var camera: Camera2D = $SpatialLayer/SpatialView/Camera2D
-@onready var spatial_renderer: Node2D = $SpatialLayer/SpatialView/SanctumSpatialRenderer2
+@onready var _world_layer: CanvasLayer = $WorldLayer
+@onready var spatial_layer: Control = $WorldLayer/SpatialLayer
+@onready var spatial_view: Node2D = $WorldLayer/SpatialLayer/SpatialView
+@onready var camera: Camera2D = $WorldLayer/SpatialLayer/SpatialView/Camera2D
+@onready var spatial_renderer: Node2D = $WorldLayer/SpatialLayer/SpatialView/SanctumSpatialRenderer2
 @onready var _ui_layer: CanvasLayer = $UILayer
 @onready var _overlay_container: Control = $UILayer/Control
+@onready var _chrome_layer: CanvasLayer = $ChromeLayer
 @onready var _notification_layer: CanvasLayer = $NotificationLayer
 @onready var _notification_overlay: ColorRect = %NotificationOverlay
+@onready var _notification_anchor: MarginContainer = %NotificationAnchor
 @onready var _notification_panel: PanelContainer = %NotificationPanel
+@onready var _notification_body_scroll: ScrollContainer = %NotificationBodyScroll
 @onready var _notification_title: Label = %NotificationTitle
 @onready var _notification_body: Label = %NotificationBody
 @onready var _notification_detail: Label = %NotificationDetail
@@ -25,8 +29,13 @@ class_name SanctumShell
 @onready var _weaving_button: Button = %WeavingButton
 
 signal action_requested(action: Dictionary)
+signal modal_requested(modal_id: StringName, payload: Dictionary)
 
 var _active_overlay: Control = null
+var _layout: Dictionary = {}
+var _active_modal_id: StringName = &""
+var _active_modal_payload: Dictionary = {}
+var _blocking_modal_active_check: Callable = Callable()
 # Nav actions cached from the last flow.sanctum snapshot.
 # The shell owns the persistent nav bar so all sanctum-family screens share it.
 var _cached_nav: Dictionary = {}
@@ -79,6 +88,19 @@ const _TONE_OVERLAY_COLORS: Dictionary = {
 const TILE_W := 72.0
 const TILE_H := 36.0
 const FLOOR_PAD := Vector2(240.0, 240.0) # wide enough to show full valid placement zone beyond floor edges
+const _RAIL_HEIGHT := 88
+const _RAIL_GAP := 8
+const _CHROME_EDGE_INSET := 16
+const _RAIL_SIDE_MARGIN := 16
+const _RAIL_MAX_WIDTH := 980.0
+const _NOTIFICATION_TOP_GAP := 32.0
+const _NOTIFICATION_RAIL_GAP := 8.0
+const _NOTIFICATION_COMPACT_MAX_WIDTH := 560.0
+const _NOTIFICATION_STANDARD_MAX_WIDTH := 640.0
+const _NOTIFICATION_WIDE_MAX_WIDTH := 720.0
+const _NOTIFICATION_COMPACT_HEIGHT := 240.0
+const _NOTIFICATION_STANDARD_HEIGHT := 260.0
+const _NOTIFICATION_WIDE_HEIGHT := 280.0
 
 var _floor_bounds_sv := Rect2(Vector2.ZERO, Vector2.ZERO) # floor bounds in SpatialView-local pixels
  
@@ -90,6 +112,15 @@ var _echo_party_scene := preload("res://ui/screens/sanctum/EchoPartyScreen.tscn"
 var _realm_scene := preload("res://ui/screens/realm/RealmSelectScreen.tscn")
 var _vow_scene := preload("res://ui/screens/sanctum/VowScreen.tscn")  # VOW-001
 var _weaving_rite_scene := preload("res://ui/screens/sanctum/WeavingRiteScreen.tscn")  # V2-WEAVE-002
+var _modal_scene_by_id: Dictionary = {
+	&"summon_reveal": preload("res://ui/overlays/SummonRevealOverlay.tscn"),
+	&"rank_up": preload("res://ui/overlays/RankUpOverlay.tscn"),
+	&"awakening": preload("res://ui/overlays/sanctum/AwakeningModal.tscn"),
+	&"companion_invite": preload("res://ui/overlays/sanctum/CompanionInviteModal.tscn"),
+	&"vow_moment": preload("res://ui/overlays/sanctum/VowMomentModal.tscn"),
+	&"institution_detail": preload("res://ui/overlays/sanctum/InstitutionDetailModal.tscn"),
+	&"calling_info": preload("res://ui/overlays/sanctum/CallingInfoModal.tscn"),
+}
 
 func _ready() -> void:
 	_scene_by_flow_type = {
@@ -108,25 +139,32 @@ func _ready() -> void:
 	_recompute_floor_bounds()
 	_clamp_camera_to_floor()
 	# CanvasLayer does not inherit visibility from its Control parent.
-	# Sync UILayer visibility whenever SanctumShell is shown/hidden.
+	# Sync world, UI, chrome, and notification layers whenever the shell changes.
 	visibility_changed.connect(_sync_ui_layer_visibility)
+	_sync_ui_layer_visibility()
 	_bind_nav_bar()
 	_notification_panel.visible = false
 	_notification_panel.modulate.a = 0.0
 	_notification_overlay.visible = false
 	_notification_dismiss.pressed.connect(_dismiss_notification)
+	_update_safe_layout_frames()
 
 func _sync_ui_layer_visibility() -> void:
-	_ui_layer.visible = visible
-	_notification_layer.visible = visible
+	var effective_visible := is_visible_in_tree()
+	_world_layer.visible = effective_visible
+	_ui_layer.visible = effective_visible
+	_chrome_layer.visible = effective_visible
+	_notification_layer.visible = effective_visible
 	# Camera2D.enabled is independent of node visibility in Godot 4.
 	# Disable it when SanctumShell is hidden so it does not affect the viewport
 	# while RealmShell (or any other screen) is active.
-	camera.enabled = visible
+	camera.enabled = effective_visible
 
 
 func set_snapshot(snap: Dictionary) -> void:
 	_current_snap_type = str(snap.get("type", ""))
+	_active_modal_id = &""
+	_active_modal_payload = {}
 
 	# 1) Update spatial background (read-only visual layer)
 	# For now this is a stub. Later we will add proper renderer script.
@@ -158,6 +196,27 @@ func set_snapshot(snap: Dictionary) -> void:
 		_restore_echo_detail_shell_state()
 	_update_rail_tone(_current_snap_type)
 	_maybe_show_return_notice(snap)
+
+func set_layout(layout: Dictionary) -> void:
+	_layout = layout.duplicate(true)
+	_update_safe_layout_frames()
+	_refresh_active_modal_layout()
+
+func modal_scene_for(modal_id: StringName) -> PackedScene:
+	var scene_v: Variant = _modal_scene_by_id.get(modal_id, null)
+	return scene_v if scene_v is PackedScene else null
+
+func set_blocking_modal_active_check(check: Callable) -> void:
+	_blocking_modal_active_check = check
+
+func on_modal_dismissed(modal_id: StringName) -> void:
+	if _active_modal_id != modal_id:
+		return
+	_active_modal_id = &""
+	_active_modal_payload = {}
+
+func bottom_content_exclusion() -> int:
+	return _bottom_chrome_inset() + _RAIL_HEIGHT + _RAIL_GAP
 	
 func _show_overlay_for_type(snap_type: String, snap: Dictionary) -> void:
 	if not _scene_by_flow_type.has(snap_type):
@@ -168,10 +227,11 @@ func _show_overlay_for_type(snap_type: String, snap: Dictionary) -> void:
 	if packed == null:
 		return
 	
-	# if same overlay if event is InputEventKey and event.pressed and event.echo:scene class already active, just update snapshot
+	# If the same overlay scene is already active, refresh it in place.
 	if _active_overlay != null and _active_overlay.scene_file_path == packed.resource_path:
 		if _active_overlay.has_method("set_snapshot"):
 			_active_overlay.call("set_snapshot", snap)
+		_update_safe_layout_frames()
 		return
 	
 	# Otherwise replace overlay
@@ -190,6 +250,10 @@ func _show_overlay_for_type(snap_type: String, snap: Dictionary) -> void:
 		var ok := _active_overlay.connect("action_requested", Callable(self, "_on_overlay_action_requested"))
 		if ok != OK:
 			push_warning("SanctumShell: failed to connect overlay action_requested (err=%d)" % ok)
+	if _active_overlay != null and _active_overlay.has_signal("modal_requested"):
+		var modal_ok := _active_overlay.connect("modal_requested", Callable(self, "_on_overlay_modal_requested"))
+		if modal_ok != OK:
+			push_warning("SanctumShell: failed to connect overlay modal_requested (err=%d)" % modal_ok)
 	if _active_overlay != null and _active_overlay.has_signal("echo_detail_closed"):
 		var close_ok := _active_overlay.connect("echo_detail_closed", Callable(self, "_on_overlay_echo_detail_closed"))
 		if close_ok != OK:
@@ -198,6 +262,66 @@ func _show_overlay_for_type(snap_type: String, snap: Dictionary) -> void:
 	# Give snapshot to overlay
 	if _active_overlay != null and _active_overlay.has_method("set_snapshot"):
 		_active_overlay.call("set_snapshot", snap)
+	if _active_overlay != null and _active_overlay.has_method("set_layout"):
+		_active_overlay.call("set_layout", _layout)
+	_update_safe_layout_frames()
+
+func _update_safe_layout_frames() -> void:
+	var safe: Vector4 = _layout.get("safe_insets", Vector4.ZERO)
+	var safe_left := int(ceilf(safe.x))
+	var safe_right := int(ceilf(safe.z))
+	if _bottom_rail != null:
+		var bottom_inset := _bottom_chrome_inset()
+		var logical_size_v: Variant = _layout.get("logical_size", Vector2(1280, 720))
+		var logical_size: Vector2 = logical_size_v if logical_size_v is Vector2 else Vector2(1280, 720)
+		var viewport_w := maxf(320.0, float(logical_size.x))
+		var available_w := maxf(320.0, viewport_w - float(safe_left + safe_right + (_RAIL_SIDE_MARGIN * 2)))
+		var rail_w := minf(_RAIL_MAX_WIDTH, available_w)
+		var rail_left := float(safe_left + _RAIL_SIDE_MARGIN) + maxf(0.0, (available_w - rail_w) * 0.5)
+		_bottom_rail.offset_top = -float(_RAIL_HEIGHT + bottom_inset)
+		_bottom_rail.offset_bottom = -float(bottom_inset)
+		_bottom_rail.offset_left = rail_left
+		_bottom_rail.offset_right = rail_left + rail_w
+	_update_notification_layout()
+	if _active_overlay != null:
+		if _active_overlay.has_method("set_bottom_content_exclusion"):
+			_active_overlay.call("set_bottom_content_exclusion", bottom_content_exclusion())
+		if _active_overlay.has_method("set_layout"):
+			_active_overlay.call("set_layout", _layout)
+
+func _update_notification_layout() -> void:
+	if _notification_anchor == null:
+		return
+	var logical_size_v: Variant = _layout.get("logical_size", Vector2(1280, 720))
+	var logical_size: Vector2 = logical_size_v if logical_size_v is Vector2 else Vector2(1280, 720)
+	var safe: Vector4 = _layout.get("safe_insets", Vector4.ZERO)
+	var safe_left := maxf(16.0, ceilf(safe.x))
+	var safe_top := maxf(16.0, ceilf(safe.y))
+	var safe_right := maxf(16.0, ceilf(safe.z))
+	var safe_bottom := maxf(16.0, ceilf(safe.w))
+	var profile: StringName = _layout.get("profile", &"standard")
+	var width_cap := _NOTIFICATION_STANDARD_MAX_WIDTH
+	var height_cap := _NOTIFICATION_STANDARD_HEIGHT
+	match profile:
+		&"compact":
+			width_cap = _NOTIFICATION_COMPACT_MAX_WIDTH
+			height_cap = _NOTIFICATION_COMPACT_HEIGHT
+		&"wide":
+			width_cap = _NOTIFICATION_WIDE_MAX_WIDTH
+			height_cap = _NOTIFICATION_WIDE_HEIGHT
+	var available_width := maxf(0.0, logical_size.x - safe_left - safe_right)
+	var card_width := minf(width_cap, available_width)
+	var card_left := safe_left + maxf(0.0, (available_width - card_width) * 0.5)
+	var card_top := safe_top + _NOTIFICATION_TOP_GAP
+	var rail_top := logical_size.y - safe_bottom - float(_RAIL_HEIGHT)
+	var available_height := maxf(0.0, rail_top - _NOTIFICATION_RAIL_GAP - card_top)
+	var card_height := minf(height_cap, available_height)
+	_notification_anchor.offset_left = card_left
+	_notification_anchor.offset_top = card_top
+	_notification_anchor.offset_right = card_left + card_width
+	_notification_anchor.offset_bottom = card_top + card_height
+	if _notification_body_scroll != null:
+		_notification_body_scroll.custom_minimum_size.y = 72.0 if profile == &"compact" else 88.0
 
 func _unhandled_input(event: InputEvent) -> void:
 	# Don't steal UI clicks: only pan when dragging with MMB or Space+LMB for now.
@@ -270,9 +394,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if _echo_detail_open:
-		return
-	if _current_snap_type != "flow.sanctum":
+	if not _can_accept_spatial_pointer_input():
 		return
 	if not (event is InputEventMouseButton):
 		return
@@ -281,15 +403,14 @@ func _input(event: InputEvent) -> void:
 		return
 	if Input.is_key_pressed(KEY_SPACE):
 		return
+	if _control_or_ancestor_is_interactive(get_viewport().gui_get_hovered_control()):
+		return
 
 	if _placement_mode:
 		# _input() fires before GUI/mouse_filter processing, so placement taps are
 		# caught here regardless of what Controls are in the scene tree.
 		# Use gui_get_hover_control() to detect when the cursor is over a UI button
 		# (Cancel, Confirm, strip) and let it handle its own click via _gui_input.
-		var hover: Control = get_viewport().gui_get_hovered_control()
-		if hover is BaseButton:
-			return  # Let the button's _gui_input handle it.
 		if _try_placement_tap(mb.position):
 			get_viewport().set_input_as_handled()
 		return
@@ -297,6 +418,24 @@ func _input(event: InputEvent) -> void:
 	# Normal mode: check hit, route by kind.
 	if _try_open_occupant_at_viewport_point(mb.position):
 		get_viewport().set_input_as_handled()
+
+func _can_accept_spatial_pointer_input() -> bool:
+	if _blocking_modal_active_check.is_valid() and bool(_blocking_modal_active_check.call()):
+		return false
+	return not _echo_detail_open and _current_snap_type == "flow.sanctum"
+
+func _bottom_chrome_inset() -> int:
+	var safe: Vector4 = _layout.get("safe_insets", Vector4.ZERO)
+	return maxi(_CHROME_EDGE_INSET, int(ceilf(safe.w)))
+
+func _control_or_ancestor_is_interactive(control: Control) -> bool:
+	var current := control
+	while current != null:
+		if current is BaseButton or current is LineEdit or current is TextEdit \
+				or current is Range or current is ItemList or current is Tree:
+			return true
+		current = current.get_parent() as Control
+	return false
 
 
 # ---- HELPERS ----
@@ -322,6 +461,29 @@ func _on_overlay_action_requested(action: Dictionary) -> void:
 		close_institutions_panel()
 		return
 	action_requested.emit(action)
+
+func _on_overlay_modal_requested(modal_id: StringName, payload: Dictionary) -> void:
+	if modal_id == &"":
+		_active_modal_id = &""
+		_active_modal_payload = {}
+		return
+	modal_requested.emit(modal_id, _payload_with_layout(payload))
+
+func on_modal_accepted(modal_id: StringName, payload: Dictionary) -> void:
+	_active_modal_id = modal_id
+	_active_modal_payload = payload.duplicate(true)
+
+func _refresh_active_modal_layout() -> void:
+	if _active_modal_id == &"":
+		return
+	if not visible:
+		return
+	modal_requested.emit(_active_modal_id, _payload_with_layout(_active_modal_payload))
+
+func _payload_with_layout(payload: Dictionary) -> Dictionary:
+	var next := payload.duplicate(true)
+	next["layout"] = _layout.duplicate(true)
+	return next
 
 
 func _on_overlay_echo_detail_closed() -> void:
@@ -565,11 +727,10 @@ func dismiss_nav_bar(animated: bool = true) -> void:
 		_nav_bar_tween = create_tween()
 		_nav_bar_tween.set_trans(Tween.TRANS_SINE)
 		_nav_bar_tween.set_ease(Tween.EASE_IN)
-		_nav_bar_tween.parallel().tween_property(_bottom_rail, "offset_top", 20.0, 0.2)
-		_nav_bar_tween.parallel().tween_property(_bottom_rail, "offset_bottom", 108.0, 0.2)
+		_nav_bar_tween.parallel().tween_property(_bottom_rail, "modulate:a", 0.0, 0.2)
 	else:
-		_bottom_rail.offset_top = 20.0
-		_bottom_rail.offset_bottom = 108.0
+		_bottom_rail.modulate.a = 0.0
+	_bottom_rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
 func restore_nav_bar(animated: bool = true) -> void:
@@ -581,11 +742,10 @@ func restore_nav_bar(animated: bool = true) -> void:
 		_nav_bar_tween = create_tween()
 		_nav_bar_tween.set_trans(Tween.TRANS_SINE)
 		_nav_bar_tween.set_ease(Tween.EASE_OUT)
-		_nav_bar_tween.parallel().tween_property(_bottom_rail, "offset_top", -108.0, 0.2)
-		_nav_bar_tween.parallel().tween_property(_bottom_rail, "offset_bottom", -20.0, 0.2)
+		_nav_bar_tween.parallel().tween_property(_bottom_rail, "modulate:a", 1.0, 0.2)
 	else:
-		_bottom_rail.offset_top = -108.0
-		_bottom_rail.offset_bottom = -20.0
+		_bottom_rail.modulate.a = 1.0
+	_bottom_rail.mouse_filter = Control.MOUSE_FILTER_STOP
 
 
 func _enter_placement_mode(inst_id: String, valid_cells: Array, floor_cells: Array = [], occupied_cells: Array = []) -> void:
@@ -601,7 +761,7 @@ func _enter_placement_mode(inst_id: String, valid_cells: Array, floor_cells: Arr
 	# otherwise consume every click before _unhandled_input fires:
 	#   1. UILayer/Control (full-screen, STOP by default)
 	#   2. SanctumScreen overlay (full-screen, STOP by default)
-	#   3. SpatialLayer (full-screen Control under UILayer, STOP by default)
+	#   3. WorldLayer/SpatialLayer (full-screen Control, STOP by default)
 	# Setting all three to PASS lets clicks on empty map space fall through.
 	# Buttons inside the overlay (Cancel, Confirm, strip) keep their own STOP
 	# filter and continue to capture their own clicks correctly.
@@ -609,8 +769,6 @@ func _enter_placement_mode(inst_id: String, valid_cells: Array, floor_cells: Arr
 		_overlay_container.mouse_filter = Control.MOUSE_FILTER_PASS
 	if _active_overlay != null:
 		_active_overlay.mouse_filter = Control.MOUSE_FILTER_PASS
-	if spatial_layer != null:
-		spatial_layer.mouse_filter = Control.MOUSE_FILTER_PASS
 	if spatial_renderer != null and spatial_renderer.has_method("set_valid_placement_cells"):
 		spatial_renderer.call("set_valid_placement_cells", valid_cells)
 	if _active_overlay != null and _active_overlay.has_method("show_placement_bar"):
@@ -629,8 +787,6 @@ func _exit_placement_mode() -> void:
 		_overlay_container.mouse_filter = Control.MOUSE_FILTER_STOP
 	if _active_overlay != null:
 		_active_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	if spatial_layer != null:
-		spatial_layer.mouse_filter = Control.MOUSE_FILTER_STOP
 	if spatial_renderer != null and spatial_renderer.has_method("clear_placement_mode"):
 		spatial_renderer.call("clear_placement_mode")
 	if _active_overlay != null and _active_overlay.has_method("hide_placement_bar"):

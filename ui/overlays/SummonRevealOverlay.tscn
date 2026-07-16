@@ -1,6 +1,7 @@
-[gd_scene format=3 uid="uid://bfbskhxcrbhu6"]
+[gd_scene load_steps=2 format=3 uid="uid://bfbskhxcrbhu6"]
 
 [ext_resource type="Script" uid="uid://wq0quyb8ws4l" path="res://ui/overlays/SummonRevealOverlay.gd" id="1_88dhn"]
+[ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="2_safe"]
 
 [node name="SummonRevealOverlay" type="Control" unique_id=1259915153]
 layout_mode = 3
@@ -12,6 +13,7 @@ grow_vertical = 2
 script = ExtResource("1_88dhn")
 
 [node name="Dim" type="ColorRect" parent="." unique_id=1697296574]
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -20,7 +22,21 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0, 0, 0, 0.627451)
 
-[node name="Center" type="CenterContainer" parent="." unique_id=1586327616]
+[node name="SafeFrame" type="MarginContainer" parent="."]
+script = ExtResource("2_safe")
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Center" type="CenterContainer" parent="SafeFrame" unique_id=1586327616]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -28,78 +44,113 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Panel" type="PanelContainer" parent="Center" unique_id=1082645147]
+[node name="Panel" type="PanelContainer" parent="SafeFrame/Center" unique_id=1082645147]
+custom_minimum_size = Vector2(560, 0)
 layout_mode = 2
+theme_type_variation = &"SanctumNoticePositive"
 
-[node name="Root" type="VBoxContainer" parent="Center/Panel" unique_id=1166772418]
+[node name="PanelMargin" type="MarginContainer" parent="SafeFrame/Center/Panel"]
 layout_mode = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 20
 
-[node name="HeaderRow" type="HBoxContainer" parent="Center/Panel/Root" unique_id=696798872]
+[node name="Root" type="VBoxContainer" parent="SafeFrame/Center/Panel/PanelMargin" unique_id=1166772418]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="HeaderRow" type="HBoxContainer" parent="SafeFrame/Center/Panel/PanelMargin/Root" unique_id=696798872]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="TitleLabel" type="Label" parent="Center/Panel/Root/HeaderRow" unique_id=1449996307]
+[node name="TitleLabel" type="Label" parent="SafeFrame/Center/Panel/PanelMargin/Root/HeaderRow" unique_id=1449996307]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
+theme_type_variation = &"SanctumDetailTitle"
 text = "Title"
 
-[node name="CountLabel" type="Label" parent="Center/Panel/Root/HeaderRow" unique_id=1556176856]
+[node name="CountLabel" type="Label" parent="SafeFrame/Center/Panel/PanelMargin/Root/HeaderRow" unique_id=1556176856]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"SanctumKicker"
 text = "2 / 5"
 
-[node name="Card" type="VBoxContainer" parent="Center/Panel/Root" unique_id=1825013501]
+[node name="CardScroll" type="ScrollContainer" parent="SafeFrame/Center/Panel/PanelMargin/Root"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 260)
 layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
 
-[node name="NameLabel" type="Label" parent="Center/Panel/Root/Card" unique_id=1458562725]
+[node name="Card" type="VBoxContainer" parent="SafeFrame/Center/Panel/PanelMargin/Root/CardScroll" unique_id=1825013501]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="NameLabel" type="Label" parent="SafeFrame/Center/Panel/PanelMargin/Root/CardScroll/Card" unique_id=1458562725]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"SanctumDetailTitle"
 text = "Tim"
 
-[node name="MetaLabel" type="Label" parent="Center/Panel/Root/Card" unique_id=1063462373]
+[node name="MetaLabel" type="Label" parent="SafeFrame/Center/Panel/PanelMargin/Root/CardScroll/Card" unique_id=1063462373]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"SanctumKicker"
+autowrap_mode = 3
 
-[node name="ArchetypeLabel" type="Label" parent="Center/Panel/Root/Card" unique_id=1434712799]
+[node name="ArchetypeLabel" type="Label" parent="SafeFrame/Center/Panel/PanelMargin/Root/CardScroll/Card" unique_id=1434712799]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Demon"
 
-[node name="BarkLabel" type="Label" parent="Center/Panel/Root/Card" unique_id=312749058]
+[node name="BarkLabel" type="Label" parent="SafeFrame/Center/Panel/PanelMargin/Root/CardScroll/Card" unique_id=312749058]
 unique_name_in_owner = true
 layout_mode = 2
+theme_override_colors/font_color = Color(0.47058824, 0.36078432, 0.16862746, 1)
+theme_override_font_sizes/font_size = 18
 autowrap_mode = 2
 
-[node name="TraitsLabel" type="Label" parent="Center/Panel/Root/Card" unique_id=94066665]
+[node name="TraitsLabel" type="Label" parent="SafeFrame/Center/Panel/PanelMargin/Root/CardScroll/Card" unique_id=94066665]
 unique_name_in_owner = true
 layout_mode = 2
+autowrap_mode = 3
 
-[node name="StatsLabel" type="Label" parent="Center/Panel/Root/Card" unique_id=1575817635]
+[node name="StatsLabel" type="Label" parent="SafeFrame/Center/Panel/PanelMargin/Root/CardScroll/Card" unique_id=1575817635]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"StatsPanel"
 text = "(gender / rarity / calling)"
+autowrap_mode = 3
 
-[node name="ButtonRow" type="HBoxContainer" parent="Center/Panel/Root" unique_id=810608827]
+[node name="ButtonRow" type="HBoxContainer" parent="SafeFrame/Center/Panel/PanelMargin/Root" unique_id=810608827]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="NavButtons" type="HBoxContainer" parent="Center/Panel/Root/ButtonRow" unique_id=2059873001]
+[node name="NavButtons" type="HBoxContainer" parent="SafeFrame/Center/Panel/PanelMargin/Root/ButtonRow" unique_id=2059873001]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 8
 
-[node name="PrevButton" type="Button" parent="Center/Panel/Root/ButtonRow/NavButtons" unique_id=1204214177]
+[node name="PrevButton" type="Button" parent="SafeFrame/Center/Panel/PanelMargin/Root/ButtonRow/NavButtons" unique_id=1204214177]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
 layout_mode = 2
+theme_type_variation = &"SanctumModalSecondaryWarmButton"
 text = "Prev"
 
-[node name="NextButton" type="Button" parent="Center/Panel/Root/ButtonRow/NavButtons" unique_id=1880198530]
+[node name="NextButton" type="Button" parent="SafeFrame/Center/Panel/PanelMargin/Root/ButtonRow/NavButtons" unique_id=1880198530]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
 layout_mode = 2
+theme_type_variation = &"SanctumModalSecondaryWarmButton"
 text = "Next"
 
-[node name="DismissButton" type="Button" parent="Center/Panel/Root/ButtonRow" unique_id=964103679]
+[node name="DismissButton" type="Button" parent="SafeFrame/Center/Panel/PanelMargin/Root/ButtonRow" unique_id=964103679]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 56)
 layout_mode = 2
+theme_type_variation = &"SanctumModalPrimaryButton"
 text = "Dismiss"

@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://ui/screens/boot/SaveErrorScreen.gd" id="1_save_error"]
+[ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="2_safe"]
 
 [node name="SaveErrorScreen" type="Control"]
 layout_mode = 3
@@ -11,37 +12,51 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_save_error")
 
-[node name="CenterContainer" type="CenterContainer" parent="."]
+[node name="SafeFrame" type="MarginContainer" parent="." unique_id=1000]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+script = ExtResource("2_safe")
+base_margin = 16
 
-[node name="PanelContainer" type="PanelContainer" parent="CenterContainer"]
+[node name="ScrollContainer" type="ScrollContainer" parent="SafeFrame"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="CenterContainer" type="CenterContainer" parent="SafeFrame/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="PanelContainer" type="PanelContainer" parent="SafeFrame/ScrollContainer/CenterContainer"]
 custom_minimum_size = Vector2(720, 0)
 layout_mode = 2
 
-[node name="MarginContainer" type="MarginContainer" parent="CenterContainer/PanelContainer"]
+[node name="MarginContainer" type="MarginContainer" parent="SafeFrame/ScrollContainer/CenterContainer/PanelContainer"]
 layout_mode = 2
 theme_override_constants/margin_left = 48
 theme_override_constants/margin_top = 48
 theme_override_constants/margin_right = 48
 theme_override_constants/margin_bottom = 48
 
-[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer/PanelContainer/MarginContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="SafeFrame/ScrollContainer/CenterContainer/PanelContainer/MarginContainer"]
 layout_mode = 2
 theme_override_constants/separation = 24
 
-[node name="TitleLabel" type="Label" parent="CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
+[node name="TitleLabel" type="Label" parent="SafeFrame/ScrollContainer/CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Campaign Save Needs Attention"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 36
 
-[node name="MessageLabel" type="Label" parent="CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
+[node name="MessageLabel" type="Label" parent="SafeFrame/ScrollContainer/CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "The campaign save could not be verified."
@@ -49,7 +64,7 @@ horizontal_alignment = 1
 autowrap_mode = 2
 theme_override_font_sizes/font_size = 24
 
-[node name="DetailLabel" type="Label" parent="CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
+[node name="DetailLabel" type="Label" parent="SafeFrame/ScrollContainer/CenterContainer/PanelContainer/MarginContainer/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Your save files were left untouched."

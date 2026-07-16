@@ -1,6 +1,7 @@
-[gd_scene format=3 uid="uid://crr6taw8gvl7c"]
+[gd_scene load_steps=2 format=3 uid="uid://crr6taw8gvl7c"]
 
 [ext_resource type="Script" uid="uid://ckk5mnvdxsgxy" path="res://ui/overlays/RankUpOverlay.gd" id="1_rankup"]
+[ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="2_safe"]
 
 [node name="RankUpOverlay" type="Control" unique_id=200000001]
 visible = false
@@ -13,6 +14,7 @@ grow_vertical = 2
 script = ExtResource("1_rankup")
 
 [node name="Dim" type="ColorRect" parent="." unique_id=200000002]
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -21,7 +23,21 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0, 0, 0, 0.627451)
 
-[node name="Center" type="CenterContainer" parent="." unique_id=200000003]
+[node name="SafeFrame" type="MarginContainer" parent="."]
+script = ExtResource("2_safe")
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Center" type="CenterContainer" parent="SafeFrame" unique_id=200000003]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -29,125 +45,138 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Panel" type="PanelContainer" parent="Center" unique_id=200000004]
-custom_minimum_size = Vector2(320, 0)
+[node name="Panel" type="PanelContainer" parent="SafeFrame/Center" unique_id=200000004]
+custom_minimum_size = Vector2(560, 0)
 layout_mode = 2
+theme_type_variation = &"SanctumCard"
 
-[node name="Margin" type="MarginContainer" parent="Center/Panel" unique_id=200000005]
+[node name="Margin" type="MarginContainer" parent="SafeFrame/Center/Panel" unique_id=200000005]
 layout_mode = 2
 theme_override_constants/margin_left = 16
 theme_override_constants/margin_top = 16
 theme_override_constants/margin_right = 16
 theme_override_constants/margin_bottom = 16
 
-[node name="Root" type="VBoxContainer" parent="Center/Panel/Margin" unique_id=200000006]
+[node name="Root" type="VBoxContainer" parent="SafeFrame/Center/Panel/Margin" unique_id=200000006]
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="ConfirmPanel" type="VBoxContainer" parent="Center/Panel/Margin/Root" unique_id=200000007]
+[node name="ConfirmPanel" type="VBoxContainer" parent="SafeFrame/Center/Panel/Margin/Root" unique_id=200000007]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="ConfirmText" type="Label" parent="Center/Panel/Margin/Root/ConfirmPanel" unique_id=200000008]
+[node name="ConfirmText" type="Label" parent="SafeFrame/Center/Panel/Margin/Root/ConfirmPanel" unique_id=200000008]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"SanctumNoticeBody"
 text = "[Anansi narrator text]"
 autowrap_mode = 2
 
-[node name="ButtonRow" type="HBoxContainer" parent="Center/Panel/Margin/Root/ConfirmPanel" unique_id=200000009]
+[node name="ButtonRow" type="HBoxContainer" parent="SafeFrame/Center/Panel/Margin/Root/ConfirmPanel" unique_id=200000009]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="CancelButton" type="Button" parent="Center/Panel/Margin/Root/ConfirmPanel/ButtonRow" unique_id=200000010]
+[node name="CancelButton" type="Button" parent="SafeFrame/Center/Panel/Margin/Root/ConfirmPanel/ButtonRow" unique_id=200000010]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 48)
 layout_mode = 2
 size_flags_horizontal = 3
-theme_type_variation = &"ButtonSecondary"
+theme_type_variation = &"SanctumModalSecondaryWarmButton"
 text = "Cancel"
 
-[node name="ConfirmButton" type="Button" parent="Center/Panel/Margin/Root/ConfirmPanel/ButtonRow" unique_id=200000011]
+[node name="ConfirmButton" type="Button" parent="SafeFrame/Center/Panel/Margin/Root/ConfirmPanel/ButtonRow" unique_id=200000011]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(80, 48)
+custom_minimum_size = Vector2(80, 56)
 layout_mode = 2
 size_flags_horizontal = 3
-theme_type_variation = &"ButtonPrimary"
+theme_type_variation = &"SanctumModalPrimaryButton"
 text = "Confirm Ascension"
 
-[node name="RevealPanel" type="VBoxContainer" parent="Center/Panel/Margin/Root" unique_id=200000012]
+[node name="RevealPanel" type="VBoxContainer" parent="SafeFrame/Center/Panel/Margin/Root" unique_id=200000012]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="RankBadge" type="Label" parent="Center/Panel/Margin/Root/RevealPanel" unique_id=200000013]
+[node name="RankBadge" type="Label" parent="SafeFrame/Center/Panel/Margin/Root/RevealPanel" unique_id=200000013]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
+theme_type_variation = &"SanctumKicker"
 text = "Rank 2"
 horizontal_alignment = 1
 
-[node name="RevealName" type="Label" parent="Center/Panel/Margin/Root/RevealPanel" unique_id=200000014]
+[node name="RevealName" type="Label" parent="SafeFrame/Center/Panel/Margin/Root/RevealPanel" unique_id=200000014]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
+theme_type_variation = &"SanctumDetailTitle"
 text = "[Echo Name]"
 horizontal_alignment = 1
 
-[node name="RevealText" type="Label" parent="Center/Panel/Margin/Root/RevealPanel" unique_id=200000015]
+[node name="RevealText" type="Label" parent="SafeFrame/Center/Panel/Margin/Root/RevealPanel" unique_id=200000015]
 unique_name_in_owner = true
 layout_mode = 2
 text = "[Reveal narrative]"
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="CallingStirs" type="Label" parent="Center/Panel/Margin/Root/RevealPanel" unique_id=200000016]
+[node name="CallingStirs" type="Label" parent="SafeFrame/Center/Panel/Margin/Root/RevealPanel" unique_id=200000016]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 size_flags_horizontal = 4
+theme_type_variation = &"SanctumKicker"
 text = "★ A Calling stirs within {name}."
 horizontal_alignment = 1
 
-[node name="ContinueButton" type="Button" parent="Center/Panel/Margin/Root/RevealPanel" unique_id=200000017]
+[node name="ContinueButton" type="Button" parent="SafeFrame/Center/Panel/Margin/Root/RevealPanel" unique_id=200000017]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(48, 56)
 layout_mode = 2
 size_flags_horizontal = 4
-theme_type_variation = &"ButtonPrimary"
+theme_type_variation = &"SanctumModalPrimaryButton"
 text = "Continue"
 
-[node name="CallingPanel" type="VBoxContainer" parent="Center/Panel/Margin/Root" unique_id=200000018]
+[node name="CallingPanel" type="VBoxContainer" parent="SafeFrame/Center/Panel/Margin/Root" unique_id=200000018]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="CallingTitle" type="Label" parent="Center/Panel/Margin/Root/CallingPanel" unique_id=200000019]
+[node name="CallingTitle" type="Label" parent="SafeFrame/Center/Panel/Margin/Root/CallingPanel" unique_id=200000019]
 layout_mode = 2
 size_flags_horizontal = 4
+theme_type_variation = &"SanctumDetailTitle"
 text = "A Path Reveals Itself"
 horizontal_alignment = 1
 
-[node name="CallingOptionsContainer" type="VBoxContainer" parent="Center/Panel/Margin/Root/CallingPanel" unique_id=200000020]
+[node name="CallingOptionsScroll" type="ScrollContainer" parent="SafeFrame/Center/Panel/Margin/Root/CallingPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 240)
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="CallingOptionsContainer" type="VBoxContainer" parent="SafeFrame/Center/Panel/Margin/Root/CallingPanel/CallingOptionsScroll" unique_id=200000020]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="ConfirmCallingButton" type="Button" parent="Center/Panel/Margin/Root/CallingPanel" unique_id=200000021]
+[node name="ConfirmCallingButton" type="Button" parent="SafeFrame/Center/Panel/Margin/Root/CallingPanel" unique_id=200000021]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(48, 56)
 layout_mode = 2
 size_flags_horizontal = 4
-theme_type_variation = &"ButtonPrimary"
+theme_type_variation = &"SanctumModalPrimaryButton"
 disabled = true
 text = "Confirm Path"
 
-[node name="DeferButton" type="Button" parent="Center/Panel/Margin/Root/CallingPanel" unique_id=200000022]
+[node name="DeferButton" type="Button" parent="SafeFrame/Center/Panel/Margin/Root/CallingPanel" unique_id=200000022]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(48, 48)
 layout_mode = 2
 size_flags_horizontal = 4
-theme_type_variation = &"ButtonSecondary"
+theme_type_variation = &"SanctumModalSecondaryWarmButton"
 text = "Choose Later"

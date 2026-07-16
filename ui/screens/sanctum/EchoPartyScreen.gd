@@ -1,16 +1,21 @@
 extends Control
 
 signal action_requested(action: Dictionary)
+signal modal_requested(modal_id: StringName, payload: Dictionary)
 
 const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
 
-const _RANK_UP_OVERLAY_SCENE: PackedScene = preload("res://ui/overlays/RankUpOverlay.tscn")
 const _STAT_KEYS := ["atk", "def", "int", "agi", "cha", "speed"]
 const _RADAR_AXIS_MAX: float = 100.0
 
 @onready var echo_count_label: Label = %EchoCountLabel
 @onready var party_count_label: Label = %PartyCountLabel
 @onready var back_button: Button = %BackButton
+@onready var root_vbox: VBoxContainer = %RootVBox
+@onready var three_panel_row: GridContainer = %ThreePanelRow
+@onready var echo_list_panel: PanelContainer = %EchoListPanel
+@onready var detail_container: PanelContainer = %DetailContainer
+@onready var party_panel: PanelContainer = %PartyPanel
 
 @onready var echo_rows: VBoxContainer = %EchoRows
 @onready var echo_row_template: HBoxContainer = %EchoRowTemplate
@@ -70,13 +75,14 @@ var _echoes: Array = []
 var _selected_echo_id: String = ""
 var _max_party_size: int = 5
 var _thread_count: int = 0
-var _rank_up_overlay: RankUpOverlay = null
 var _show_party_average: bool = false
+var _bottom_content_exclusion := 108
 
 
 func _ready() -> void:
 	detail_panel.visible = false
 	calling_info_overlay.visible = false
+	calling_info_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	compare_party_toggle.button_pressed = false
 
 	if not back_button.pressed.is_connected(_on_back_pressed):
@@ -102,13 +108,6 @@ func _ready() -> void:
 		calling_info_close_btn.pressed.connect(_on_calling_info_close_pressed)
 	if not compare_party_toggle.toggled.is_connected(_on_compare_party_toggled):
 		compare_party_toggle.toggled.connect(_on_compare_party_toggled)
-
-	_rank_up_overlay = _RANK_UP_OVERLAY_SCENE.instantiate() as RankUpOverlay
-	add_child(_rank_up_overlay)
-	_rank_up_overlay.confirm_requested.connect(_on_rank_up_confirm_requested)
-	_rank_up_overlay.dismissed.connect(_on_rank_up_dismissed)
-	_rank_up_overlay.calling_confirm_requested.connect(_on_calling_confirm_requested)
-
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_VISIBILITY_CHANGED and visible and is_node_ready():
@@ -154,8 +153,38 @@ func set_snapshot(snap: Dictionary) -> void:
 
 	var rank_up_event_v: Variant = data.get("rank_up_event", null)
 	if rank_up_event_v is Dictionary and not (rank_up_event_v as Dictionary).is_empty():
-		if _rank_up_overlay != null:
-			_rank_up_overlay.show_reveal(rank_up_event_v as Dictionary)
+		_request_rank_modal({
+			"mode": "reveal",
+			"rank_up_event": rank_up_event_v as Dictionary,
+		})
+
+func set_layout(layout: Dictionary) -> void:
+	var safe: Vector4 = layout.get("safe_insets", Vector4.ZERO)
+	var profile: StringName = layout.get("profile", &"standard")
+	var logical_size_v: Variant = layout.get("logical_size", Vector2(1280, 720))
+	var logical_size: Vector2 = logical_size_v if logical_size_v is Vector2 else Vector2(1280, 720)
+	var viewport_w := float(logical_size.x)
+	var cap := 1320.0 if profile == &"wide" else 1180.0
+	var available_w := maxf(320.0, viewport_w - float(32 + int(ceilf(safe.x)) + int(ceilf(safe.z))))
+	var content_w := minf(available_w, cap)
+	var left := float(16 + int(ceilf(safe.x))) + maxf(0.0, (available_w - content_w) * 0.5)
+	offset_left = left
+	offset_top = float(16 + int(ceilf(safe.y)))
+	offset_right = -(viewport_w - left - content_w)
+	offset_bottom = -float(_bottom_content_exclusion)
+	var panel_grid := three_panel_row if three_panel_row != null else find_child("ThreePanelRow", true, false) as GridContainer
+	if panel_grid != null:
+		panel_grid.columns = 1 if profile == &"compact" else 3
+	for panel in [
+		echo_list_panel if echo_list_panel != null else find_child("EchoListPanel", true, false) as PanelContainer,
+		detail_container if detail_container != null else find_child("DetailContainer", true, false) as PanelContainer,
+		party_panel if party_panel != null else find_child("PartyPanel", true, false) as PanelContainer,
+	]:
+		if panel != null:
+			panel.custom_minimum_size.x = 0.0 if profile == &"compact" else 300.0
+
+func set_bottom_content_exclusion(value: int) -> void:
+	_bottom_content_exclusion = maxi(0, value)
 
 
 func _rebuild_echo_list() -> void:
@@ -423,9 +452,12 @@ func _on_begin_rite_pressed() -> void:
 
 func _on_ascend_pressed() -> void:
 	var selected := _echo_by_id(_selected_echo_id)
-	if selected.is_empty() or _rank_up_overlay == null:
+	if selected.is_empty():
 		return
-	_rank_up_overlay.show_confirm(selected)
+	_request_rank_modal({
+		"mode": "confirm",
+		"echo_data": selected,
+	})
 
 
 func _on_rank_up_confirm_requested(echo_id: String) -> void:
@@ -436,18 +468,22 @@ func _on_rank_up_confirm_requested(echo_id: String) -> void:
 
 
 func _on_rank_up_dismissed() -> void:
-	pass
+	return
 
 
 func _on_path_awaits_pressed() -> void:
 	var selected := _echo_by_id(_selected_echo_id)
-	if selected.is_empty() or _rank_up_overlay == null:
+	if selected.is_empty():
 		return
 	var options_v: Variant = selected.get("calling_options", [])
 	var options: Array = options_v if options_v is Array else []
 	if options.is_empty():
 		return
-	_rank_up_overlay.show_calling(str(selected.get("id", "")), options)
+	_request_rank_modal({
+		"mode": "calling",
+		"echo_id": str(selected.get("id", "")),
+		"calling_options": options,
+	})
 
 
 func _on_calling_confirm_requested(echo_id: String, chosen_calling_id: String) -> void:
@@ -455,6 +491,9 @@ func _on_calling_confirm_requested(echo_id: String, chosen_calling_id: String) -
 		"type": "sanctum.calling.confirm",
 		"payload": { "echo_id": echo_id, "chosen_calling_id": chosen_calling_id },
 	})
+
+func _request_rank_modal(payload: Dictionary) -> void:
+	modal_requested.emit(&"rank_up", payload)
 
 
 func _on_tab_base_pressed() -> void:
@@ -487,9 +526,11 @@ func _on_calling_info_pressed() -> void:
 	var selected := _echo_by_id(_selected_echo_id)
 	if selected.is_empty():
 		return
-	calling_info_title.text = str(selected.get("calling", "")).capitalize()
-	calling_info_desc.text = str(selected.get("calling_description", ""))
-	calling_info_overlay.visible = true
+	calling_info_overlay.visible = false
+	modal_requested.emit(&"calling_info", {
+		"title": str(selected.get("calling", "")).capitalize(),
+		"description": str(selected.get("calling_description", "")),
+	})
 
 
 func _on_calling_info_close_pressed() -> void:

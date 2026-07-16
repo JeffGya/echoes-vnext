@@ -1,8 +1,9 @@
-[gd_scene format=3 uid="uid://bkk5c5an22gs3"]
+[gd_scene load_steps=4 format=3 uid="uid://bkk5c5an22gs3"]
 
 [ext_resource type="Script" uid="uid://de3fvw7vbafgr" path="res://ui/screens/onboarding/ForgottenNameScreen.gd" id="1_script"]
 [ext_resource type="Script" uid="uid://dp5fpaa3v8ixn" path="res://ui/screens/onboarding/VirtueOrbControl.gd" id="2_orb"]
 [ext_resource type="Theme" uid="uid://8qssuuodths2" path="res://assets/theme/LivingTreeSystem.tres" id="3_theme"]
+[ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="4_safe"]
 
 [node name="ForgottenNameScreen" type="Control" unique_id=18812544]
 layout_mode = 3
@@ -23,7 +24,23 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.23921569, 0.3529412, 0.27843136, 1)
 
-[node name="ChoiceRoot" type="Control" parent="." unique_id=1010]
+[node name="SafeFrame" type="MarginContainer" parent="." unique_id=1060]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("4_safe")
+base_margin = 16
+
+[node name="ContentRoot" type="Control" parent="SafeFrame"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="ChoiceRoot" type="Control" parent="SafeFrame/ContentRoot" unique_id=1010]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
@@ -32,7 +49,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Title" type="Label" parent="ChoiceRoot" unique_id=78113447]
+[node name="Title" type="Label" parent="SafeFrame/ContentRoot/ChoiceRoot" unique_id=78113447]
 layout_mode = 1
 anchors_preset = 5
 anchor_left = 0.5
@@ -47,7 +64,7 @@ theme_override_font_sizes/font_size = 30
 text = "Three names are trying to return"
 horizontal_alignment = 1
 
-[node name="Subtitle" type="Label" parent="ChoiceRoot" unique_id=1124855636]
+[node name="Subtitle" type="Label" parent="SafeFrame/ContentRoot/ChoiceRoot" unique_id=1124855636]
 layout_mode = 1
 anchors_preset = 5
 anchor_left = 0.5
@@ -62,7 +79,7 @@ theme_override_font_sizes/font_size = 15
 text = "TAP EACH TO HEAR THEM SPEAK"
 horizontal_alignment = 1
 
-[node name="OrbRow" type="HBoxContainer" parent="ChoiceRoot" unique_id=2069287098]
+[node name="OrbRow" type="HBoxContainer" parent="SafeFrame/ContentRoot/ChoiceRoot" unique_id=2069287098]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -77,12 +94,12 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 70
 
-[node name="OrbSlot1" type="VBoxContainer" parent="ChoiceRoot/OrbRow" unique_id=619345596]
+[node name="OrbSlot1" type="VBoxContainer" parent="SafeFrame/ContentRoot/ChoiceRoot/OrbRow" unique_id=619345596]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 8
 
-[node name="Bark1" type="Label" parent="ChoiceRoot/OrbRow/OrbSlot1" unique_id=1011]
+[node name="Bark1" type="Label" parent="SafeFrame/ContentRoot/ChoiceRoot/OrbRow/OrbSlot1" unique_id=1011]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 64)
 layout_mode = 2
@@ -90,13 +107,13 @@ theme_override_colors/font_color = Color(0.9607843, 0.9019608, 0.827451, 1)
 horizontal_alignment = 1
 autowrap_mode = 3
 
-[node name="OrbButton1" type="Button" parent="ChoiceRoot/OrbRow/OrbSlot1" unique_id=1012]
+[node name="OrbButton1" type="Button" parent="SafeFrame/ContentRoot/ChoiceRoot/OrbRow/OrbSlot1" unique_id=1012]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(170, 170)
 layout_mode = 2
 flat = true
 
-[node name="Orb1" type="Control" parent="ChoiceRoot/OrbRow/OrbSlot1/OrbButton1" unique_id=1013]
+[node name="Orb1" type="Control" parent="SafeFrame/ContentRoot/ChoiceRoot/OrbRow/OrbSlot1/OrbButton1" unique_id=1013]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
@@ -107,19 +124,19 @@ grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("2_orb")
 
-[node name="Name1" type="Label" parent="ChoiceRoot/OrbRow/OrbSlot1" unique_id=1014]
+[node name="Name1" type="Label" parent="SafeFrame/ContentRoot/ChoiceRoot/OrbRow/OrbSlot1" unique_id=1014]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 32)
 layout_mode = 2
 theme_override_colors/font_color = Color(0.9607843, 0.9019608, 0.827451, 1)
 horizontal_alignment = 1
 
-[node name="OrbSlot2" type="VBoxContainer" parent="ChoiceRoot/OrbRow" unique_id=1477397731]
+[node name="OrbSlot2" type="VBoxContainer" parent="SafeFrame/ContentRoot/ChoiceRoot/OrbRow" unique_id=1477397731]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 8
 
-[node name="Bark2" type="Label" parent="ChoiceRoot/OrbRow/OrbSlot2" unique_id=1021]
+[node name="Bark2" type="Label" parent="SafeFrame/ContentRoot/ChoiceRoot/OrbRow/OrbSlot2" unique_id=1021]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 64)
 layout_mode = 2
@@ -127,13 +144,13 @@ theme_override_colors/font_color = Color(0.9607843, 0.9019608, 0.827451, 1)
 horizontal_alignment = 1
 autowrap_mode = 3
 
-[node name="OrbButton2" type="Button" parent="ChoiceRoot/OrbRow/OrbSlot2" unique_id=1022]
+[node name="OrbButton2" type="Button" parent="SafeFrame/ContentRoot/ChoiceRoot/OrbRow/OrbSlot2" unique_id=1022]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(170, 170)
 layout_mode = 2
 flat = true
 
-[node name="Orb2" type="Control" parent="ChoiceRoot/OrbRow/OrbSlot2/OrbButton2" unique_id=1023]
+[node name="Orb2" type="Control" parent="SafeFrame/ContentRoot/ChoiceRoot/OrbRow/OrbSlot2/OrbButton2" unique_id=1023]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
@@ -144,19 +161,19 @@ grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("2_orb")
 
-[node name="Name2" type="Label" parent="ChoiceRoot/OrbRow/OrbSlot2" unique_id=1024]
+[node name="Name2" type="Label" parent="SafeFrame/ContentRoot/ChoiceRoot/OrbRow/OrbSlot2" unique_id=1024]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 32)
 layout_mode = 2
 theme_override_colors/font_color = Color(0.9607843, 0.9019608, 0.827451, 1)
 horizontal_alignment = 1
 
-[node name="OrbSlot3" type="VBoxContainer" parent="ChoiceRoot/OrbRow" unique_id=1542237667]
+[node name="OrbSlot3" type="VBoxContainer" parent="SafeFrame/ContentRoot/ChoiceRoot/OrbRow" unique_id=1542237667]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 8
 
-[node name="Bark3" type="Label" parent="ChoiceRoot/OrbRow/OrbSlot3" unique_id=1031]
+[node name="Bark3" type="Label" parent="SafeFrame/ContentRoot/ChoiceRoot/OrbRow/OrbSlot3" unique_id=1031]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 64)
 layout_mode = 2
@@ -164,13 +181,13 @@ theme_override_colors/font_color = Color(0.9607843, 0.9019608, 0.827451, 1)
 horizontal_alignment = 1
 autowrap_mode = 3
 
-[node name="OrbButton3" type="Button" parent="ChoiceRoot/OrbRow/OrbSlot3" unique_id=1032]
+[node name="OrbButton3" type="Button" parent="SafeFrame/ContentRoot/ChoiceRoot/OrbRow/OrbSlot3" unique_id=1032]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(170, 170)
 layout_mode = 2
 flat = true
 
-[node name="Orb3" type="Control" parent="ChoiceRoot/OrbRow/OrbSlot3/OrbButton3" unique_id=1033]
+[node name="Orb3" type="Control" parent="SafeFrame/ContentRoot/ChoiceRoot/OrbRow/OrbSlot3/OrbButton3" unique_id=1033]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
@@ -181,16 +198,16 @@ grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("2_orb")
 
-[node name="Name3" type="Label" parent="ChoiceRoot/OrbRow/OrbSlot3" unique_id=1034]
+[node name="Name3" type="Label" parent="SafeFrame/ContentRoot/ChoiceRoot/OrbRow/OrbSlot3" unique_id=1034]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 32)
 layout_mode = 2
 theme_override_colors/font_color = Color(0.9607843, 0.9019608, 0.827451, 1)
 horizontal_alignment = 1
 
-[node name="CommitButton" type="Button" parent="ChoiceRoot" unique_id=1040]
+[node name="CommitButton" type="Button" parent="SafeFrame/ContentRoot/ChoiceRoot" unique_id=1040]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(220, 52)
+custom_minimum_size = Vector2(220, 56)
 layout_mode = 1
 anchors_preset = 7
 anchor_left = 0.5
@@ -206,7 +223,7 @@ grow_vertical = 0
 theme_type_variation = &"ButtonPrimary"
 text = "COMMIT TO ONE"
 
-[node name="MeetingRoot" type="Control" parent="." unique_id=1050]
+[node name="MeetingRoot" type="Control" parent="SafeFrame/ContentRoot" unique_id=1050]
 unique_name_in_owner = true
 visible = false
 layout_mode = 1
@@ -216,7 +233,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="MeetingTitle" type="Label" parent="MeetingRoot" unique_id=1807471124]
+[node name="MeetingTitle" type="Label" parent="SafeFrame/ContentRoot/MeetingRoot" unique_id=1807471124]
 layout_mode = 1
 anchors_preset = 5
 anchor_left = 0.5
@@ -231,7 +248,7 @@ theme_override_font_sizes/font_size = 30
 text = "A name has returned"
 horizontal_alignment = 1
 
-[node name="InfoPanel" type="PanelContainer" parent="MeetingRoot" unique_id=1409805966]
+[node name="InfoScroll" type="ScrollContainer" parent="SafeFrame/ContentRoot/MeetingRoot" unique_id=1061]
 layout_mode = 1
 anchors_preset = 4
 anchor_top = 0.5
@@ -241,42 +258,51 @@ offset_top = -210.0
 offset_right = 390.0
 offset_bottom = 210.0
 grow_vertical = 2
+horizontal_scroll_mode = 0
 
-[node name="InfoMargin" type="MarginContainer" parent="MeetingRoot/InfoPanel" unique_id=1754404124]
+[node name="InfoPanel" type="PanelContainer" parent="SafeFrame/ContentRoot/MeetingRoot/InfoScroll" unique_id=1409805966]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="InfoMargin" type="MarginContainer" parent="SafeFrame/ContentRoot/MeetingRoot/InfoScroll/InfoPanel" unique_id=1754404124]
 layout_mode = 2
 theme_override_constants/margin_left = 22
 theme_override_constants/margin_top = 22
 theme_override_constants/margin_right = 22
 theme_override_constants/margin_bottom = 22
 
-[node name="InfoVBox" type="VBoxContainer" parent="MeetingRoot/InfoPanel/InfoMargin" unique_id=1314205992]
+[node name="InfoVBox" type="VBoxContainer" parent="SafeFrame/ContentRoot/MeetingRoot/InfoScroll/InfoPanel/InfoMargin" unique_id=1314205992]
 layout_mode = 2
 theme_override_constants/separation = 14
 
-[node name="EchoName" type="Label" parent="MeetingRoot/InfoPanel/InfoMargin/InfoVBox" unique_id=1051]
+[node name="EchoName" type="Label" parent="SafeFrame/ContentRoot/MeetingRoot/InfoScroll/InfoPanel/InfoMargin/InfoVBox" unique_id=1051]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"HeaderLargePanel"
 text = "Echo"
 autowrap_mode = 3
 
-[node name="EchoMeta" type="Label" parent="MeetingRoot/InfoPanel/InfoMargin/InfoVBox" unique_id=1052]
+[node name="EchoMeta" type="Label" parent="SafeFrame/ContentRoot/MeetingRoot/InfoScroll/InfoPanel/InfoMargin/InfoVBox" unique_id=1052]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"ContentBasePanel"
 autowrap_mode = 3
 
-[node name="EchoTraits" type="Label" parent="MeetingRoot/InfoPanel/InfoMargin/InfoVBox" unique_id=1053]
+[node name="EchoTraits" type="Label" parent="SafeFrame/ContentRoot/MeetingRoot/InfoScroll/InfoPanel/InfoMargin/InfoVBox" unique_id=1053]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"ContentBasePanel"
 
-[node name="EchoStats" type="Label" parent="MeetingRoot/InfoPanel/InfoMargin/InfoVBox" unique_id=1054]
+[node name="EchoStats" type="Label" parent="SafeFrame/ContentRoot/MeetingRoot/InfoScroll/InfoPanel/InfoMargin/InfoVBox" unique_id=1054]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"ContentBasePanel"
 
-[node name="EchoPlaceholder" type="Panel" parent="MeetingRoot" unique_id=259478176]
+[node name="EchoPlaceholder" type="Panel" parent="SafeFrame/ContentRoot/MeetingRoot" unique_id=259478176]
 layout_mode = 1
 anchors_preset = -1
 anchor_left = 0.68
@@ -290,7 +316,7 @@ offset_bottom = 145.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="PlaceholderLabel" type="Label" parent="MeetingRoot/EchoPlaceholder" unique_id=958780723]
+[node name="PlaceholderLabel" type="Label" parent="SafeFrame/ContentRoot/MeetingRoot/EchoPlaceholder" unique_id=958780723]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -302,9 +328,9 @@ text = "Echo"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="MeetingContinue" type="Button" parent="MeetingRoot" unique_id=1055]
+[node name="MeetingContinue" type="Button" parent="SafeFrame/ContentRoot/MeetingRoot" unique_id=1055]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(220, 52)
+custom_minimum_size = Vector2(220, 56)
 layout_mode = 1
 anchors_preset = 3
 anchor_left = 1.0

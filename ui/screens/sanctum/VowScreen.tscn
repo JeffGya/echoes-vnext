@@ -12,6 +12,7 @@ grow_vertical = 2
 script = ExtResource("1_vowscr")
 
 [node name="RootPanel" type="PanelContainer" parent="." unique_id=1440031832]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -57,9 +58,11 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.9, 0.6, 0.3, 1)
 text = "A realm run is in progress. Return to Sanctum to pledge a new vow."
 
-[node name="ContentRow" type="HBoxContainer" parent="RootPanel/MarginContainer/Root" unique_id=599739349]
+[node name="ContentRow" type="GridContainer" parent="RootPanel/MarginContainer/Root" unique_id=599739349]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
+columns = 2
 theme_override_constants/separation = 16
 
 [node name="CardScroll" type="ScrollContainer" parent="RootPanel/MarginContainer/Root/ContentRow" unique_id=1554413241]
@@ -191,7 +194,7 @@ autowrap_mode = 3
 [node name="ActionButton" type="Button" parent="RootPanel/MarginContainer/Root/ContentRow/DetailPanel/DetailMargin/DetailScroll/DetailStack/DiscoveredContent" unique_id=1116512216]
 unique_name_in_owner = true
 visible = false
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(48, 56)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Pledge Vow (Tier 1)"
@@ -258,7 +261,7 @@ horizontal_alignment = 1
 
 [node name="PledgeDismissButton" type="Button" parent="PledgeMomentOverlay/Center/ContentBox" unique_id=900000009]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(48, 56)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Continue"
@@ -332,14 +335,14 @@ theme_override_constants/separation = 12
 
 [node name="BreakKeepButton" type="Button" parent="BreakConfirmOverlay/Center/ContentBox/ButtonRow" unique_id=900000019]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(48, 48)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Keep My Word"
 
 [node name="BreakConfirmButton" type="Button" parent="BreakConfirmOverlay/Center/ContentBox/ButtonRow" unique_id=900000020]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(48, 56)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0.9, 0.4, 0.4, 1)

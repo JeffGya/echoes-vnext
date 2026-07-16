@@ -36,11 +36,17 @@ theme_type_variation = &"ButtonGhost"
 text = "←"
 
 [node name="RootVBox" type="VBoxContainer" parent="." unique_id=630127278]
-layout_mode = 0
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 offset_left = 16.0
 offset_top = 64.0
-offset_right = 1904.0
-offset_bottom = 1064.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 12
@@ -49,12 +55,15 @@ theme_override_constants/separation = 12
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="ThreePanelRow" type="HBoxContainer" parent="RootVBox" unique_id=1412607601]
+[node name="ThreePanelRow" type="GridContainer" parent="RootVBox" unique_id=1412607601]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
+columns = 3
 theme_override_constants/separation = 12
 
 [node name="EchoListPanel" type="PanelContainer" parent="RootVBox/ThreePanelRow" unique_id=37195665]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
@@ -93,6 +102,7 @@ size_flags_vertical = 3
 theme_override_constants/separation = 6
 
 [node name="DetailContainer" type="PanelContainer" parent="RootVBox/ThreePanelRow" unique_id=1610970849]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
@@ -172,6 +182,7 @@ text = "—"
 
 [node name="CallingInfoBtn" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/CallingRankRow" unique_id=1720791396]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
 visible = false
 layout_mode = 2
 text = "ⓘ"
@@ -221,7 +232,7 @@ horizontal_alignment = 1
 [node name="CallingEligibleBadge" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=208509166]
 unique_name_in_owner = true
 visible = false
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(48, 48)
 layout_mode = 2
 size_flags_horizontal = 4
 theme_type_variation = &"ButtonSecondary"
@@ -230,7 +241,7 @@ text = "⚡ Path Awaits"
 [node name="AscendButton" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel" unique_id=1854947068]
 unique_name_in_owner = true
 visible = false
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(48, 56)
 layout_mode = 2
 size_flags_horizontal = 4
 theme_type_variation = &"ButtonPrimary"
@@ -347,6 +358,7 @@ text = "Stat profile"
 
 [node name="ComparePartyToggle" type="CheckButton" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/StatsSection/StatProfileColumn" unique_id=1387521910]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
 layout_mode = 2
 text = "Compare to party avg"
 
@@ -500,7 +512,7 @@ theme_override_constants/separation = 4
 
 [node name="TabBase" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/TabStrip" unique_id=821828102]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(60, 36)
+custom_minimum_size = Vector2(60, 56)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"ButtonPrimary"
@@ -508,7 +520,7 @@ text = "Base"
 
 [node name="TabSkills" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/TabStrip" unique_id=412098742]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(60, 36)
+custom_minimum_size = Vector2(60, 48)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"ButtonSecondary"
@@ -517,7 +529,7 @@ text = "Skills"
 
 [node name="TabBonds" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/TabStrip" unique_id=19051126]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(60, 36)
+custom_minimum_size = Vector2(60, 48)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"ButtonSecondary"
@@ -529,7 +541,7 @@ theme_override_constants/separation = 8
 
 [node name="AssignPartyBtn" type="Button" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/DetailCTAs" unique_id=624618244]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(80, 48)
+custom_minimum_size = Vector2(80, 56)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"ButtonPrimary"
@@ -544,6 +556,7 @@ theme_type_variation = &"ButtonSecondary"
 text = "Assign job"
 
 [node name="PartyPanel" type="PanelContainer" parent="RootVBox/ThreePanelRow" unique_id=981152500]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
@@ -622,7 +635,7 @@ layout_mode = 2
 text = "★"
 
 [node name="SelectButton" type="Button" parent="RootVBox/Templates/EchoRowTemplate" unique_id=921692777]
-custom_minimum_size = Vector2(64, 40)
+custom_minimum_size = Vector2(64, 48)
 layout_mode = 2
 theme_type_variation = &"ButtonSecondary"
 text = "View"
@@ -686,6 +699,7 @@ layout_mode = 2
 text = "Vector"
 
 [node name="CardSelectButton" type="Button" parent="RootVBox/Templates/PartyCardTemplate/CardMargin/CardRoot/CardInfo" unique_id=2052891581]
+custom_minimum_size = Vector2(48, 48)
 layout_mode = 2
 size_flags_horizontal = 0
 theme_type_variation = &"ButtonSecondary"
@@ -763,7 +777,7 @@ autowrap_mode = 2
 
 [node name="CallingInfoCloseBtn" type="Button" parent="CallingInfoOverlay/Center/CallingInfoPanel/Margin/Content" unique_id=1551677796]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(48, 56)
 layout_mode = 2
 size_flags_horizontal = 4
 theme_type_variation = &"ButtonPrimary"

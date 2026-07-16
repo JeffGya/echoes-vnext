@@ -1,8 +1,10 @@
-[gd_scene format=3 uid="uid://djonhnpk45xl4"]
+[gd_scene load_steps=6 format=3 uid="uid://djonhnpk45xl4"]
 
 [ext_resource type="Script" uid="uid://31tvrxyncblb" path="res://ui/AppRoot.gd" id="1_51q3y"]
 [ext_resource type="Script" uid="uid://ctdrd0hyvl5e5" path="res://ui/UISnapshotRenderer.gd" id="2_fv0kl"]
 [ext_resource type="Script" uid="uid://dy8h1bq01y4go" path="res://ui/components/DebugPanel.gd" id="2_ism07"]
+[ext_resource type="PackedScene" path="res://ui/components/ModalHost.tscn" id="4_modal"]
+[ext_resource type="PackedScene" path="res://ui/components/ResponsiveLayoutController.tscn" id="5_layout"]
 
 [node name="Approot" type="Control" unique_id=698262161]
 layout_mode = 3
@@ -23,6 +25,70 @@ script = ExtResource("2_fv0kl")
 unique_name_in_owner = true
 wait_time = 8.0
 one_shot = true
+
+[node name="ResponsiveLayoutController" parent="." instance=ExtResource("5_layout")]
+unique_name_in_owner = true
+
+[node name="ContentLayer" type="CanvasLayer" parent="." unique_id=100000010]
+layer = 10
+
+[node name="ContentRoot" type="Control" parent="ContentLayer" unique_id=100000011]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ScreenHost" type="Control" parent="ContentLayer/ContentRoot" unique_id=1998345838]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="FallbackRoot" type="MarginContainer" parent="ContentLayer/ContentRoot" unique_id=293867754]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="LeftPanel" type="VBoxContainer" parent="ContentLayer/ContentRoot/FallbackRoot" unique_id=970934812]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ScrollContainer" type="ScrollContainer" parent="ContentLayer/ContentRoot/FallbackRoot/LeftPanel" unique_id=930968893]
+layout_mode = 2
+size_flags_vertical = 3
+follow_focus = true
+
+[node name="SnapshotView" type="RichTextLabel" parent="ContentLayer/ContentRoot/FallbackRoot/LeftPanel/ScrollContainer" unique_id=1461290670]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_font_sizes/normal_font_size = 32
+fit_content = true
+
+[node name="ActionsContainer" type="VBoxContainer" parent="ContentLayer/ContentRoot/FallbackRoot/LeftPanel" unique_id=270195499]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 8
+
+[node name="ModalLayer" type="CanvasLayer" parent="." unique_id=100000020]
+layer = 40
+
+[node name="ModalHost" parent="ModalLayer" instance=ExtResource("4_modal")]
+unique_name_in_owner = true
 
 [node name="OverlayRoot" type="CanvasLayer" parent="." unique_id=1206220084]
 layer = 128
@@ -101,42 +167,3 @@ placeholder_text = "Enter debug input"
 unique_name_in_owner = true
 layout_mode = 2
 text = "Confirm"
-
-[node name="MarginContainer" type="MarginContainer" parent="." unique_id=293867754]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_constants/margin_left = 40
-theme_override_constants/margin_top = 40
-theme_override_constants/margin_right = 40
-theme_override_constants/margin_bottom = 40
-
-[node name="LeftPanel" type="VBoxContainer" parent="MarginContainer" unique_id=970934812]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="ScrollContainer" type="ScrollContainer" parent="MarginContainer/LeftPanel" unique_id=930968893]
-layout_mode = 2
-size_flags_vertical = 3
-follow_focus = true
-
-[node name="SnapshotView" type="RichTextLabel" parent="MarginContainer/LeftPanel/ScrollContainer" unique_id=1461290670]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-theme_override_font_sizes/normal_font_size = 32
-fit_content = true
-
-[node name="ActionsContainer" type="VBoxContainer" parent="MarginContainer/LeftPanel" unique_id=270195499]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_vertical = 8
-
-[node name="ScreenHost" type="Control" parent="MarginContainer" unique_id=1998345838]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_vertical = 3

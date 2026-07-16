@@ -4,16 +4,11 @@ class_name SanctumScreen
 
 signal action_requested(action: Dictionary)
 signal echo_detail_closed
+signal modal_requested(modal_id: StringName, payload: Dictionary)
 
 const ThreadSlotItemScene: PackedScene = preload("res://ui/components/ThreadSlotItem.tscn")
 const EmotionChipScene: PackedScene = preload("res://ui/components/EmotionChip.tscn")
 const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
-
-# V2-STAGE-004 Phase 4: safe top/bottom headroom (px) reserved when clamping the
-# CompanionInvite card's max height, mirroring ResolveScreen's playtest fix, so
-# the card never spans edge-to-edge and its CTAs stay reachable above BottomRail.
-const _COMPANION_CARD_TOP_MARGIN:    float = 60.0
-const _COMPANION_CARD_BOTTOM_MARGIN: float = 140.0
 
 @onready var title_label: Label = %TitleLabel
 @onready var _continuity_flame: ContinuityFlameControl = %ContinuityFlame  # V2-CONTINUITY-001
@@ -25,6 +20,7 @@ const _COMPANION_CARD_BOTTOM_MARGIN: float = 140.0
 @onready var ase_flame_tip: Label = %AseFlameTip
 @onready var ase_delta_label: Label = %AseDeltaLabel
 @onready var top_band: HBoxContainer = %TopBand
+@onready var _header_copy: HBoxContainer = %HeaderCopy
 @onready var ekwan_label: Label = %EkwanLabel
 @onready var _awakening_overlay: Control = %AwakeningOverlay
 @onready var _awakening_grant_label: Label = %AwakeningGrantLabel
@@ -57,6 +53,7 @@ const _COMPANION_CARD_BOTTOM_MARGIN: float = 140.0
 @onready var thread_empty_label: Label = %ThreadEmptyLabel
 @onready var thread_note_label: Label = %ThreadNoteLabel
 @onready var thread_slots: HBoxContainer = %ThreadSlots
+@onready var _thread_panel: PanelContainer = find_child("ThreadPanel", true, false) as PanelContainer
 @onready var left_stack: VBoxContainer = %LeftStack
 @onready var right_stack: VBoxContainer = %RightStack
 
@@ -168,6 +165,7 @@ var _ase_tween: Tween
 var _echo_detail_open := false
 var _detail_tab := "overview"
 var _selected_echo_id := ""
+var _bottom_content_exclusion := 108
 
 # V2-PROG-009: Constellation Web state
 var _constellation_expanded: bool = false
@@ -196,7 +194,8 @@ func _ready() -> void:
 	# V2-STAGE-004 Phase 4: CompanionInvite modal wiring.
 	_companion_accept_button.pressed.connect(_on_companion_accept_pressed)
 	_companion_decline_button.pressed.connect(_on_companion_decline_pressed)
-	get_viewport().size_changed.connect(_clamp_companion_card_height)
+	_disable_legacy_modal(_awakening_overlay)
+	_disable_legacy_modal(_companion_invite)
 	# V2-SANCTUM-002: institution wiring
 	_inst_back_btn.pressed.connect(_on_inst_detail_back_pressed)
 	_inst_assign_btn.pressed.connect(_on_inst_assign_pressed)
@@ -230,6 +229,115 @@ func _ready() -> void:
 func set_snapshot(snap: Dictionary) -> void:
 	_snapshot = snap
 	_render()
+
+func set_layout(layout: Dictionary) -> void:
+	var safe: Vector4 = layout.get("safe_insets", Vector4.ZERO)
+	var profile: StringName = layout.get("profile", &"standard")
+	offset_left = float(int(ceilf(safe.x)))
+	offset_top = float(int(ceilf(safe.y)))
+	offset_right = -float(int(ceilf(safe.z)))
+	offset_bottom = -float(_bottom_content_exclusion)
+	var compact := profile == &"compact"
+	var standard := profile == &"standard"
+	var left_width := 300.0 if compact else (340.0 if standard else 360.0)
+	var right_width := 280.0 if compact else (320.0 if standard else 340.0)
+	var left_panel := left_stack if left_stack != null else find_child("LeftStack", true, false) as Control
+	if left_panel != null:
+		left_panel.offset_right = left_width
+	var right_panel := right_stack if right_stack != null else find_child("RightStack", true, false) as Control
+	if right_panel != null:
+		right_panel.offset_left = -right_width
+		right_panel.grow_vertical = Control.GROW_DIRECTION_END if compact else Control.GROW_DIRECTION_BOTH
+	var header_panel := _header_card if _header_card != null else find_child("HeaderCard", true, false) as Control
+	var header_width := 600.0 if compact else (620.0 if standard else 680.0)
+	if header_panel != null:
+		header_panel.custom_minimum_size.x = header_width
+	if title_label != null:
+		title_label.custom_minimum_size.x = 420.0 if compact else (440.0 if standard else 500.0)
+		title_label.add_theme_font_size_override("font_size", 24 if compact else 32)
+	var header_copy_width := header_width - (20.0 if compact else 32.0)
+	var header_copy_content := _header_copy if _header_copy != null else find_child("HeaderCopy", true, false) as Control
+	if header_copy_content != null:
+		header_copy_content.custom_minimum_size.x = header_copy_width
+		header_copy_content.add_theme_constant_override("separation", 8 if compact else 12)
+	var vow_copy_width := 400.0 if compact or standard else 420.0
+	var vow_copy := find_child("VowCopyStack", true, false) as VBoxContainer
+	if vow_copy != null:
+		vow_copy.custom_minimum_size.x = vow_copy_width
+		vow_copy.add_theme_constant_override("separation", 1 if compact else 2)
+	for vow_label in [vow_mantra_label, _vow_compliance_label]:
+		if vow_label != null:
+			vow_label.custom_minimum_size.x = vow_copy_width
+			vow_label.add_theme_font_size_override("font_size", 14 if compact else 16)
+	if guidance_label != null:
+		guidance_label.custom_minimum_size.x = header_copy_width - vow_copy_width - (8.0 if compact else 12.0)
+		guidance_label.add_theme_font_size_override("font_size", 14 if compact else 16)
+	var party_copy_width := maxf(240.0, left_width - 32.0)
+	for party_copy_label in [party_summary_label, party_empty_label]:
+		if party_copy_label != null:
+			party_copy_label.custom_minimum_size.x = party_copy_width
+			party_copy_label.add_theme_font_size_override("font_size", 14 if compact else 16)
+	var thread_copy_width := right_width - (24.0 if compact else 36.0)
+	for thread_copy_label in [thread_count_label, thread_empty_label, thread_note_label]:
+		if thread_copy_label != null:
+			thread_copy_label.custom_minimum_size.x = thread_copy_width
+			thread_copy_label.add_theme_font_size_override("font_size", 14 if compact else 15)
+	var thread_header := find_child("ThreadHeader", true, false) as Label
+	if thread_header != null:
+		thread_header.custom_minimum_size.x = 0.0
+	if _thread_panel != null:
+		_thread_panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	var ase_card := find_child("AseCard", true, false) as Control
+	if ase_card != null:
+		ase_card.custom_minimum_size.x = 220.0 if compact else (240.0 if standard else 260.0)
+	var ase_value := ase_label if ase_label != null else find_child("AseLabel", true, false) as Label
+	var ase_tip := ase_flame_tip if ase_flame_tip != null else find_child("AseFlameTip", true, false) as Label
+	var ekwan_value := ekwan_label if ekwan_label != null else find_child("EkwanLabel", true, false) as Label
+	if ase_value != null:
+		ase_value.add_theme_font_size_override("font_size", 28 if compact else 32)
+	if ase_tip != null:
+		ase_tip.add_theme_font_size_override("font_size", 12 if compact else 13)
+	if ekwan_value != null:
+		ekwan_value.add_theme_font_size_override("font_size", 14 if compact else 16)
+	var overview_flow := find_child("OverviewFlow", true, false) as VBoxContainer
+	if overview_flow != null:
+		overview_flow.offset_left = 0.0
+		overview_flow.offset_top = 0.0
+		overview_flow.offset_right = 0.0
+		overview_flow.offset_bottom = 0.0
+		overview_flow.add_theme_constant_override("separation", 8 if compact else 10)
+	var band := top_band if top_band != null else find_child("TopBand", true, false) as HBoxContainer
+	if band != null:
+		band.add_theme_constant_override("separation", 8 if compact else 10)
+	_apply_overview_spacing_profile(compact)
+	call_deferred("_refresh_overview_wrap_metrics")
+
+func _apply_overview_spacing_profile(compact: bool) -> void:
+	var header_margin := find_child("HeaderMargin", true, false) as MarginContainer
+	var ase_margin := find_child("AseMargin", true, false) as MarginContainer
+	var party_margin := find_child("PartyMargin", true, false) as MarginContainer
+	var thread_margin := find_child("ThreadMargin", true, false) as MarginContainer
+	for margin in [header_margin, ase_margin, party_margin, thread_margin]:
+		if margin == null:
+			continue
+		margin.add_theme_constant_override("margin_left", 10 if compact else 16)
+		margin.add_theme_constant_override("margin_right", 10 if compact else 16)
+		margin.add_theme_constant_override("margin_top", (0 if margin == thread_margin else 8) if compact else (10 if margin == ase_margin else 12))
+		margin.add_theme_constant_override("margin_bottom", (0 if margin == thread_margin else 8) if compact else 10)
+	for stack_name in [&"HeaderStack", &"PartyStack", &"ThreadStack"]:
+		var stack := find_child(stack_name, true, false) as VBoxContainer
+		if stack != null:
+			stack.add_theme_constant_override("separation", (0 if stack_name == &"ThreadStack" else 2) if compact else (2 if stack_name == &"HeaderStack" else 5))
+	for header_name in [&"PartyHeader", &"ThreadHeader"]:
+		var header := find_child(header_name, true, false) as Label
+		if header != null:
+			header.add_theme_font_size_override("font_size", 16 if compact else 20)
+	var slots := thread_slots if thread_slots != null else find_child("ThreadSlots", true, false) as HBoxContainer
+	if slots != null:
+		slots.add_theme_constant_override("separation", 4 if compact else 8)
+
+func set_bottom_content_exclusion(value: int) -> void:
+	_bottom_content_exclusion = maxi(0, value)
 
 
 func _render() -> void:
@@ -302,8 +410,8 @@ func _render() -> void:
 	_render_active_effects(data)
 	# V2-SANCTUM-002: render institutions overlay + refresh detail if open
 	_render_institutions(data)
-	if _inst_detail_panel.visible and not _current_institution_id.is_empty():
-		_refresh_institution_detail(data)
+	if not _current_institution_id.is_empty():
+		_request_institution_modal(data)
 
 	if _last_ase_balance != -1 and ase_balance != _last_ase_balance:
 		var delta := ase_balance - _last_ase_balance
@@ -313,11 +421,36 @@ func _render() -> void:
 
 	# V2-ECONOMY-001: Awakening overlay — one-shot on first Sanctum entry after awakening
 	if bool(data.get("show_awakening_overlay", false)):
-		_awakening_grant_label.text = "+%d Ase" % int(data.get("awakening_grant", 40))
-		_show_awakening_overlay()
+		modal_requested.emit(&"awakening", {
+			"awakening_grant": int(data.get("awakening_grant", 40)),
+		})
 
 	# V2-STAGE-004 Phase 4: CompanionInvite modal — persists until accept/decline.
 	_render_companion_invite(data)
+	call_deferred("_refresh_overview_wrap_metrics")
+
+
+func _refresh_overview_wrap_metrics() -> void:
+	for control in [
+		title_label,
+		vow_mantra_label,
+		_vow_compliance_label,
+		guidance_label,
+		party_summary_label,
+		party_empty_label,
+		thread_count_label,
+		thread_empty_label,
+		thread_note_label,
+		_header_copy,
+		_thread_panel,
+		top_band,
+	]:
+		if control != null:
+			control.update_minimum_size()
+	var overview_flow := find_child("OverviewFlow", true, false) as VBoxContainer
+	if overview_flow != null:
+		overview_flow.get_combined_minimum_size()
+		overview_flow.set_offsets_preset(Control.PRESET_FULL_RECT)
 
 
 func open_echo_detail(start_echo_id: String) -> void:
@@ -965,16 +1098,11 @@ func _apply_awakening_panel_style() -> void:
 
 
 func _show_awakening_overlay() -> void:
-	_awakening_overlay.modulate.a = 0.0
-	_awakening_overlay.visible = true
-	var tw := create_tween()
-	tw.tween_property(_awakening_overlay, "modulate:a", 1.0, 0.25)
+	_disable_legacy_modal(_awakening_overlay)
 
 
 func _on_awakening_dismiss_pressed() -> void:
-	var tw := create_tween()
-	tw.tween_property(_awakening_overlay, "modulate:a", 0.0, 0.2)
-	tw.tween_callback(func(): _awakening_overlay.visible = false)
+	_disable_legacy_modal(_awakening_overlay)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1006,59 +1134,23 @@ func _render_companion_invite(data: Dictionary) -> void:
 	if invite.is_empty():
 		_companion_invite.visible = false
 		return
-
-	var cap := maxi(1, int(invite.get("cap", 75)))
-	var chance := int(invite.get("chance", 0))
-	var conversation := int(invite.get("conversation", 0))
-	var combat := int(invite.get("combat", 0))
-	var fit := int(invite.get("fit", 0))
-
-	_companion_name_label.text   = str(invite.get("ally_name", ""))
-	_companion_chance_label.text = "%d%%" % chance
-
-	_companion_chance_bar.min_value = 0
-	_companion_chance_bar.max_value = cap
-	_companion_chance_bar.value     = chance
-
-	_companion_talk_bar.min_value = 0
-	_companion_talk_bar.max_value = cap
-	_companion_talk_bar.value     = conversation
-	_companion_talk_value.text    = "%d/%d" % [conversation, cap]
-
-	_companion_fight_bar.min_value = 0
-	_companion_fight_bar.max_value = cap
-	_companion_fight_bar.value     = combat
-	_companion_fight_value.text    = "%d/%d" % [combat, cap]
-
-	_companion_fit_bar.min_value = 0
-	_companion_fit_bar.max_value = cap
-	_companion_fit_bar.value     = fit
-	_companion_fit_value.text    = "%d/%d" % [fit, cap]
-
-	_companion_invite.visible = true
-	call_deferred("_clamp_companion_card_height")
+	_companion_invite.visible = false
+	modal_requested.emit(&"companion_invite", { "invite": invite })
 
 
 func _on_companion_accept_pressed() -> void:
-	action_requested.emit({ "type": "sanctum.companion.accept" })
+	_disable_legacy_modal(_companion_invite)
 
 
 func _on_companion_decline_pressed() -> void:
-	action_requested.emit({ "type": "sanctum.companion.decline" })
+	_disable_legacy_modal(_companion_invite)
 
 
-## Caps %CompanionInviteScroll's height at (viewport height - safe margins) so
-## the card scrolls instead of overflowing off-screen — same approach as
-## ResolveScreen's _clamp_card_height P4 playtest fix. Deferred call so the
-## VBox's children have finished sizing before we read their combined
-## minimum height.
-func _clamp_companion_card_height() -> void:
-	if _companion_scroll == null or _companion_content == null:
+func _disable_legacy_modal(modal: Control) -> void:
+	if modal == null:
 		return
-	var natural_height: float = _companion_content.get_combined_minimum_size().y
-	var viewport_height: float = get_viewport_rect().size.y
-	var max_height: float = maxf(120.0, viewport_height - _COMPANION_CARD_TOP_MARGIN - _COMPANION_CARD_BOTTOM_MARGIN)
-	_companion_scroll.custom_minimum_size.y = minf(natural_height, max_height)
+	modal.visible = false
+	modal.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1205,9 +1297,9 @@ func open_institution_detail(institution_id: String) -> void:
 	_current_institution_id = institution_id
 	var data_v: Variant = _snapshot.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
-	_refresh_institution_detail(data)
-	_inst_detail_panel.visible = true
+	_inst_detail_panel.visible = false
 	_assign_picker.visible = false
+	_request_institution_modal(data)
 
 
 func _render_institutions(data: Dictionary) -> void:
@@ -1390,6 +1482,7 @@ func _on_inst_detail_back_pressed() -> void:
 	_inst_detail_panel.visible = false
 	_assign_picker.visible = false
 	_current_institution_id = ""
+	modal_requested.emit(&"", {})
 	show_institutions_panel()
 
 
@@ -1398,8 +1491,7 @@ func _on_inst_assign_pressed() -> void:
 		return
 	var data_v: Variant = _snapshot.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
-	_populate_assign_picker(data)
-	_assign_picker.visible = true
+	_request_institution_modal(data, true)
 
 
 func _on_inst_establish_pressed() -> void:
@@ -1570,3 +1662,28 @@ func _on_occupant_remove_pressed(echo_id: String) -> void:
 		"type":    "sanctum.institution.remove_echo",
 		"payload": { "institution_id": _current_institution_id, "echo_id": echo_id },
 	})
+
+func _request_institution_modal(data: Dictionary, show_assign_picker: bool = false) -> void:
+	var inst_data := _institution_by_id(data, _current_institution_id)
+	if inst_data.is_empty():
+		return
+	var actions_v: Variant = _snapshot.get("actions", {})
+	var detail_roster_v: Variant = data.get("echo_detail_roster", [])
+	var compat_hints_v: Variant = data.get("institution_compat_hints", {})
+	modal_requested.emit(&"institution_detail", {
+		"institution_id": _current_institution_id,
+		"institution": inst_data,
+		"institutions": data.get("institutions", []) if data.get("institutions", []) is Array else [],
+		"detail_roster": detail_roster_v if detail_roster_v is Array else [],
+		"compat_hints": compat_hints_v if compat_hints_v is Dictionary else {},
+		"actions": actions_v if actions_v is Dictionary else {},
+		"show_assign_picker": show_assign_picker,
+	})
+
+func _institution_by_id(data: Dictionary, institution_id: String) -> Dictionary:
+	var institutions_v: Variant = data.get("institutions", [])
+	var institutions: Array = institutions_v if institutions_v is Array else []
+	for entry_v in institutions:
+		if entry_v is Dictionary and str((entry_v as Dictionary).get("id", "")) == institution_id:
+			return entry_v as Dictionary
+	return {}

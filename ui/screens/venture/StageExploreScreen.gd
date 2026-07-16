@@ -21,10 +21,33 @@ extends Control
 const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
 
 signal action_requested(action: Dictionary)
+signal modal_requested(modal_id: StringName, payload: Dictionary)
 
 # ─── Tile constants ───────────────────────────────────────────────────────────
 const _TILE_SOURCE_ID:    int      = 0
 const _TILE_ATLAS_COORDS: Vector2i = Vector2i(0, 0)
+# The authored tile texture is 128×96 on a 128×64 isometric cell, with
+# texture_origin.y = -16. Relative to map_to_local()'s cell centre, its visible
+# footprint is therefore 64 left/right, 64 above, and 32 below.
+const _TILE_VISUAL_LEFT := 64.0
+const _TILE_VISUAL_TOP := 64.0
+const _TILE_VISUAL_RIGHT := 64.0
+const _TILE_VISUAL_BOTTOM := 32.0
+const _CONTENT_EDGE := 16.0
+const _PERSISTENT_CHROME_HEIGHT := 88.0
+const _CHROME_SEPARATION := 12.0
+const _BOTTOM_HUD_HEIGHT := 100.0
+const _TOP_HUD_HEIGHT := 56.0
+const _TOP_HUD_SEPARATION := 12.0
+const _TOP_HUD_COMPACT_WIDTH := 520.0
+const _TOP_HUD_STANDARD_WIDTH := 620.0
+const _TOP_HUD_WIDE_WIDTH := 720.0
+const _DIRECTIVE_BADGE_WIDTH := 204.0
+const _DIRECTIVE_BADGE_HEIGHT := 36.0
+const _STAGE_INFO_COMPACT_HEIGHT := 96.0
+const _STAGE_INFO_DEFAULT_HEIGHT := 96.0
+const _STAGE_INFO_MAX_WIDTH := 1120.0
+const _PREVIEW_INFO_SEPARATION := 16.0
 
 # ─── Zoom tween constants (preview → explore transition) ─────────────────────
 const _ZOOM_DURATION:  float = 0.35
@@ -54,6 +77,7 @@ var _cached_ignore_action:  Dictionary = {}
 var _preview_scale:  float   = 1.0
 var _preview_center: Vector2 = Vector2.ZERO
 var _is_zooming:     bool    = false
+var _preview_transition_tween: Tween = null
 
 # ─── Situation marker tracking ────────────────────────────────────────────────
 var _situation_markers: Array = []
@@ -106,12 +130,6 @@ var _pending_overlay_actions: Dictionary = {}
 # paint, eliminating the cross-realm/cross-rerun stale-board bug (Finding 1).
 var _last_paint_key: String = ""
 
-# V2-VOW-002 ST-F: dynamic labels in StageInfoPanel and preview panel
-var _stage_proverb_lbl:   Label = null
-var _stage_condition_lbl: Label = null
-var _vow_proverb_label:   Label = null
-var _vow_hint_label:      Label = null
-
 # ─── @onready refs ────────────────────────────────────────────────────────────
 @onready var _board:              TileMapLayer   = $Board
 @onready var _fog_layer:          TileMapLayer   = $FogLayer
@@ -133,11 +151,17 @@ var _vow_hint_label:      Label = null
 @onready var _advance_btn:        Button         = %AdvanceButton
 @onready var _return_btn:         Button         = %ReturnButton
 @onready var _begin_btn:          Button         = %BeginButton
+@onready var _bottom_hud_region:  Control        = %BottomHudRegion
 @onready var _stage_info:         PanelContainer = $StageInfoPanel
 @onready var _stage_title:        Label          = %StageTitleLabel
 @onready var _obj_title:          Label          = %ObjectiveTitleLabel
 @onready var _directive_label:    Label          = %DirectiveLabel
-@onready var _info_vbox:          VBoxContainer  = $StageInfoPanel/InfoVBox
+@onready var _preview_info_scroll: ScrollContainer = %PreviewInfoScroll
+@onready var _info_columns:       HBoxContainer  = %InfoColumns
+@onready var _stage_summary:      VBoxContainer  = %StageSummary
+@onready var _vow_summary:        VBoxContainer  = %VowSummary
+@onready var _vow_proverb_label:  Label          = %VowProverbLabel
+@onready var _vow_hint_label:     Label          = %VowConditionLabel
 @onready var _back_btn:           Button         = %BackButton
 @onready var _sit_overlay:          PanelContainer = $SituationOverlay
 @onready var _sit_header_label:     Label          = %SituationHeaderLabel
@@ -160,6 +184,7 @@ var _vow_hint_label:      Label = null
 @onready var _choice_btn_0:       Button         = %ChoiceButton0
 @onready var _choice_btn_1:       Button         = %ChoiceButton1
 @onready var _transition_flash:   ColorRect      = %TransitionFlash
+@onready var _transient_layer:    CanvasLayer    = $TransientLayer
 
 # ─── Contact conversation @onready refs ──────────────────────────────────────
 @onready var _dim_overlay:             ColorRect      = $DimOverlay
@@ -182,6 +207,9 @@ var _contact_consult_action:    Dictionary = {}
 var _picker_selected_ids:       Array      = []   # consultation picker selection
 var _picker_chip_nodes:         Dictionary = {}   # echo_id → chip PanelContainer
 var _is_picker_mode:            bool       = false
+var _layout: Dictionary = {}
+var _current_mode: StringName = &""
+var _current_map_size: Vector2i = Vector2i.ZERO
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -219,6 +247,32 @@ func _ready() -> void:
 	_directive_overlay.action_requested.connect(_on_overlay_action)
 	_disengage_btn.pressed.connect(_on_disengage_pressed)
 	_confirm_selection_btn.pressed.connect(_on_confirm_selection_pressed)
+	visibility_changed.connect(_sync_transient_visibility)
+	_sync_transient_visibility()
+
+func set_layout(layout: Dictionary) -> void:
+	var previous_layout := _layout.duplicate(true)
+	var preserve_explore_focus := (
+		_current_mode == &"explore"
+		and _board != null
+		and not is_zero_approx(_board.scale.x)
+	)
+	var focused_world_point := Vector2.ZERO
+	if preserve_explore_focus:
+		var old_focus := _explore_spatial_rect(previous_layout).get_center()
+		focused_world_point = (old_focus - _board.position) / _board.scale.x
+	_layout = layout.duplicate(true)
+	_apply_responsive_layout()
+	# Preview is a fit-to-safe-body composition, so live profile changes refit it.
+	if _current_mode == &"preview" and _current_map_size.x > 0 and _current_map_size.y > 0:
+		_build_preview(_current_map_size.x, _current_map_size.y)
+	elif preserve_explore_focus:
+		var new_focus := _explore_spatial_rect(_layout).get_center()
+		_board.position = new_focus - focused_world_point * _board.scale.x
+		_clamp_explore_board_to_spatial_rect()
+		_sync_fog_layer()
+		_sync_situation_layer()
+		_party_layer.call("init_position", new_focus)
 
 
 func _process(_delta: float) -> void:
@@ -274,7 +328,14 @@ func set_snapshot(snap: Dictionary) -> void:
 # ─── Preview mode ─────────────────────────────────────────────────────────────
 
 func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
+	_cancel_preview_transition()
 	_is_zooming = false
+	_current_mode = &"preview"
+	_stage_info.modulate = Color.WHITE
+	_stage_info.mouse_filter = Control.MOUSE_FILTER_STOP
+	_back_btn.modulate = Color.WHITE
+	_back_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	_apply_responsive_layout()
 
 	# Clear any lingering travel ghosts when returning to the (non-scrolling) preview.
 	if _ghost_layer != null:
@@ -282,6 +343,7 @@ func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 
 	var cols := int(data.get("map_width",  30))
 	var rows := int(data.get("map_height", 30))
+	_current_map_size = Vector2i(cols, rows)
 	_fill_board(cols, rows, data, "preview")
 	_build_preview(cols, rows)
 
@@ -306,35 +368,21 @@ func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 
 	var av_sf_v: Variant = data.get("active_vow", {})
 	var av_sf: Dictionary = av_sf_v if av_sf_v is Dictionary else {}
-	var _info_vbox_node: Node = _directive_label.get_parent()
-	if _stage_proverb_lbl == null and _info_vbox_node != null:
-		_stage_proverb_lbl = Label.new()
-		_stage_proverb_lbl.add_theme_font_size_override("font_size", 12)
-		_stage_proverb_lbl.add_theme_color_override("font_color", Color("#A8865A"))
-		_stage_proverb_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
-		_info_vbox_node.add_child(_stage_proverb_lbl)
-	if _stage_condition_lbl == null and _info_vbox_node != null:
-		_stage_condition_lbl = Label.new()
-		_stage_condition_lbl.add_theme_font_size_override("font_size", 12)
-		_stage_condition_lbl.add_theme_color_override("font_color", Color(0.55, 0.55, 0.65, 1.0))
-		_stage_condition_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
-		_info_vbox_node.add_child(_stage_condition_lbl)
 	var _sf_twi := str(av_sf.get("proverb_twi", ""))
 	var _sf_en  := str(av_sf.get("proverb_en", ""))
-	if _stage_proverb_lbl != null:
-		if not av_sf.is_empty() and (not _sf_twi.is_empty() or not _sf_en.is_empty()):
-			_stage_proverb_lbl.text = "%s — \"%s\"" % [_sf_twi, _sf_en] if not _sf_twi.is_empty() else '"%s"' % _sf_en
-			_stage_proverb_lbl.visible = true
-		else:
-			_stage_proverb_lbl.visible = false
-	if _stage_condition_lbl != null:
-		var _sf_status := str(av_sf.get("condition_status", "none"))
-		var _sf_hint   := str(av_sf.get("condition_hint", ""))
-		if _sf_status != "none" and not _sf_hint.is_empty():
-			_stage_condition_lbl.text    = _sf_hint
-			_stage_condition_lbl.visible = true
-		else:
-			_stage_condition_lbl.visible = false
+	var has_proverb := not av_sf.is_empty() and (not _sf_twi.is_empty() or not _sf_en.is_empty())
+	_vow_proverb_label.text = (
+		"%s — \"%s\"" % [_sf_twi, _sf_en]
+		if not _sf_twi.is_empty()
+		else '"%s"' % _sf_en
+	)
+	_vow_proverb_label.visible = has_proverb
+	var _sf_status := str(av_sf.get("condition_status", "none"))
+	var _sf_hint   := str(av_sf.get("condition_hint", ""))
+	var has_condition := _sf_status != "none" and not _sf_hint.is_empty()
+	_vow_hint_label.text = _sf_hint
+	_vow_hint_label.visible = has_condition
+	_vow_summary.visible = has_proverb or has_condition
 
 	var start_v: Variant = actions.get("cta.start", {})
 	_cached_start_action = start_v if start_v is Dictionary else {}
@@ -342,6 +390,8 @@ func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 	_cached_back_action  = back_v if back_v is Dictionary else {}
 
 	_hud_strip.hide()
+	_hud_strip.modulate = Color.WHITE
+	_hud_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_stage_complete_btn.hide()
 	_advance_btn.hide()
 	_return_btn.hide()
@@ -349,6 +399,7 @@ func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 	_begin_btn.disabled = _cached_start_action.is_empty()
 	_stage_info.show()
 	_back_btn.show()
+	_begin_btn.grab_focus()
 	_sit_overlay.hide()
 	_ignore_btn.visible = false
 
@@ -365,36 +416,10 @@ func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 		_bark_layer.call("clear_all")
 
 	if not dir_data.is_empty():
-		_directive_overlay.call("populate", dir_data)
-		_directive_overlay.show()
-
-	if _vow_proverb_label != null:
-		_vow_proverb_label.queue_free()
-		_vow_proverb_label = null
-	if _vow_hint_label != null:
-		_vow_hint_label.queue_free()
-		_vow_hint_label = null
-	var av_v: Variant = data.get("active_vow", {})
-	var av: Dictionary = av_v if av_v is Dictionary else {}
-	if not av.is_empty():
-		var proverb_twi := str(av.get("proverb_twi", ""))
-		var proverb_en  := str(av.get("proverb_en", ""))
-		if not proverb_twi.is_empty() or not proverb_en.is_empty():
-			_vow_proverb_label = Label.new()
-			_vow_proverb_label.text = "%s - \"%s\"" % [proverb_twi, proverb_en] if not proverb_twi.is_empty() else '"%s"' % proverb_en
-			_vow_proverb_label.add_theme_font_size_override("font_size", 11)
-			_vow_proverb_label.add_theme_color_override("font_color", Color("#C8A96E"))
-			_vow_proverb_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-			_info_vbox.add_child(_vow_proverb_label)
-		var condition_status := str(av.get("condition_status", "none"))
-		var condition_hint   := str(av.get("condition_hint", ""))
-		if condition_status != "none" and not condition_hint.is_empty():
-			_vow_hint_label = Label.new()
-			_vow_hint_label.text = condition_hint
-			_vow_hint_label.add_theme_font_size_override("font_size", 11)
-			_vow_hint_label.add_theme_color_override("font_color", Color("#A8865A"))
-			_vow_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-			_info_vbox.add_child(_vow_hint_label)
+		_directive_overlay.hide()
+		modal_requested.emit(&"realm.directive", {
+			"directive": dir_data.duplicate(true),
+		})
 
 	modulate = Color(1, 1, 1, 0)
 	var tween := create_tween()
@@ -404,8 +429,21 @@ func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 # ─── Explore mode ─────────────────────────────────────────────────────────────
 
 func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
+	_cancel_preview_transition()
+	_current_mode = &"explore"
+	_stage_info.hide()
+	_stage_info.modulate = Color.WHITE
+	_stage_info.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_back_btn.hide()
+	_back_btn.modulate = Color.WHITE
+	_back_btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if _begin_btn.has_focus():
+		_begin_btn.release_focus()
+	if _back_btn.has_focus():
+		_back_btn.release_focus()
 	var cols := int(data.get("map_width",  30))
 	var rows := int(data.get("map_height", 30))
+	_current_map_size = Vector2i(cols, rows)
 	_fill_board(cols, rows, data, "explore")
 
 	var ppos_v: Variant    = data.get("party_pos", { "col": 0, "row": 0 })
@@ -566,6 +604,8 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 	_cached_stage_complete_action = sc_v if sc_v is Dictionary else {}
 	_stage_complete_btn.visible = not _cached_stage_complete_action.is_empty()
 
+	_hud_strip.modulate = Color.WHITE
+	_hud_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_strip.show()
 	_stage_complete_btn.show() if not _cached_stage_complete_action.is_empty() else _stage_complete_btn.hide()
 	_advance_btn.show()
@@ -574,6 +614,12 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 	_stage_info.hide()
 	_back_btn.hide()
 	_directive_overlay.hide()
+	_apply_responsive_layout()
+	if not _explore_requests_modal(data, actions):
+		if _stage_complete_btn.visible and not _stage_complete_btn.disabled:
+			_stage_complete_btn.grab_focus()
+		elif _advance_btn.visible and not _advance_btn.disabled:
+			_advance_btn.grab_focus()
 
 
 # ─── Overlay helpers ─────────────────────────────────────────────────────────
@@ -590,10 +636,15 @@ func _apply_overlay_from(data: Dictionary, actions: Dictionary) -> void:
 	var cp: Dictionary = cp_v if cp_v is Dictionary else {}
 
 	if not cp.is_empty():
-		_show_contact_panel(cp, data, actions)
+		_hide_contact_panel()
 		_sit_overlay.hide()
 		_ignore_btn.visible = false
 		_choice_container.visible = false
+		modal_requested.emit(&"realm.contact", {
+			"contact": cp.duplicate(true),
+			"data": data.duplicate(true),
+			"actions": actions.duplicate(true),
+		})
 		return
 
 	_hide_contact_panel()
@@ -606,15 +657,33 @@ func _apply_overlay_from(data: Dictionary, actions: Dictionary) -> void:
 	var eng: Dictionary     = eng_v if eng_v is Dictionary else {}
 
 	if not rhr.is_empty():
-		_show_return_home_overlay(rhr)
+		_sit_overlay.hide()
+		_ignore_btn.visible = false
+		_choice_container.visible = false
+		modal_requested.emit(&"realm.return_home", {
+			"result": rhr.duplicate(true),
+		})
 	elif not pending.is_empty() and not eng.is_empty():
 		var ign_v: Variant  = actions.get("cta.ignore_situation", {})
 		var ign: Dictionary = ign_v if ign_v is Dictionary else {}
-		_show_pending_overlay(pending, eng, ign)
+		_sit_overlay.hide()
+		_ignore_btn.visible = false
+		_choice_container.visible = false
+		_pending_sit_type = str(pending.get("type", "")) if bool(pending.get("revealed", false)) else ""
+		modal_requested.emit(&"realm.engagement", {
+			"pending": pending.duplicate(true),
+			"engage_action": eng.duplicate(true),
+			"ignore_action": ign.duplicate(true),
+		})
 	elif data.has("situation_overlay"):
 		var ov_v: Variant   = data.get("situation_overlay", {})
 		var ov: Dictionary  = ov_v if ov_v is Dictionary else {}
-		_show_result_overlay(ov)
+		_sit_overlay.hide()
+		_ignore_btn.visible = false
+		_choice_container.visible = false
+		modal_requested.emit(&"realm.situation", {
+			"result": ov.duplicate(true),
+		})
 	else:
 		_sit_overlay.hide()
 		_ignore_btn.visible = false
@@ -818,17 +887,12 @@ func _fill_board(cols: int, rows: int, data: Dictionary = {}, mode: String = "")
 
 
 func _build_preview(cols: int, rows: int) -> void:
-	var tl: Vector2 = _board.map_to_local(Vector2i(0,        0       ))
-	var tr: Vector2 = _board.map_to_local(Vector2i(cols - 1, 0       ))
-	var bl: Vector2 = _board.map_to_local(Vector2i(0,        rows - 1))
-	var br: Vector2 = _board.map_to_local(Vector2i(cols - 1, rows - 1))
-
-	var map_pixel_w: float = max(tr.x, br.x) - min(tl.x, bl.x)
-	var map_pixel_h: float = max(bl.y, br.y) - min(tl.y, tr.y)
-
-	var vp_size := get_viewport_rect().size
-	var available_w: float = vp_size.x - 48.0
-	var available_h: float = (vp_size.y - 80.0) - 112.0 - 48.0
+	var visual_rect := _preview_visual_rect(cols, rows)
+	var map_pixel_w: float = visual_rect.size.x
+	var map_pixel_h: float = visual_rect.size.y
+	var preview_rect := _preview_safe_rect()
+	var available_w: float = preview_rect.size.x
+	var available_h: float = preview_rect.size.y
 
 	if map_pixel_w <= 0.0 or map_pixel_h <= 0.0 or available_w <= 0.0 or available_h <= 0.0:
 		return
@@ -836,11 +900,60 @@ func _build_preview(cols: int, rows: int) -> void:
 	_preview_scale = min(available_w / map_pixel_w, available_h / map_pixel_h)
 	_board.scale   = Vector2(_preview_scale, _preview_scale)
 
-	var map_center_local := (tl + tr + bl + br) / 4.0
-	var body_center_y: float = 112.0 + (vp_size.y - 80.0 - 112.0) / 2.0
-	_preview_center = Vector2(vp_size.x / 2.0, body_center_y)
-	_board.position = _preview_center - map_center_local * _preview_scale
+	_preview_center = preview_rect.get_center()
+	_board.position = _preview_center - visual_rect.get_center() * _preview_scale
 	_sync_fog_layer()
+
+func _preview_safe_rect() -> Rect2:
+	var logical_size: Vector2 = _layout.get("logical_size", Vector2.ZERO)
+	if logical_size.x <= 0.0 or logical_size.y <= 0.0:
+		logical_size = get_viewport_rect().size
+	var insets: Vector4 = _layout.get("safe_insets", Vector4.ZERO)
+	var edge_left := maxf(_CONTENT_EDGE, ceilf(insets.x))
+	var edge_top := maxf(_CONTENT_EDGE, ceilf(insets.y))
+	var edge_right := maxf(_CONTENT_EDGE, ceilf(insets.z))
+	var edge_bottom := maxf(_CONTENT_EDGE, ceilf(insets.w))
+	# Derive the field boundary from the actual laid-out banner so the authored
+	# preview card and map fit cannot drift apart as profiles change.
+	var preview_top := maxf(edge_top, _stage_info.offset_bottom) + _PREVIEW_INFO_SEPARATION
+	var preview_bottom := (
+		edge_bottom
+		+ _PERSISTENT_CHROME_HEIGHT
+		+ _CHROME_SEPARATION
+		+ 56.0
+	)
+	return Rect2(
+		Vector2(edge_left, preview_top),
+		Vector2(
+			maxf(0.0, logical_size.x - edge_left - edge_right),
+			maxf(0.0, logical_size.y - preview_top - preview_bottom)
+		)
+	)
+
+
+func _preview_visual_rect(cols: int, rows: int) -> Rect2:
+	var used_rect := _board.get_used_rect()
+	var first_cell := Vector2i.ZERO
+	var last_cell := Vector2i(maxi(0, cols - 1), maxi(0, rows - 1))
+	if used_rect.size.x > 0 and used_rect.size.y > 0:
+		first_cell = used_rect.position
+		last_cell = used_rect.end - Vector2i.ONE
+
+	var tl: Vector2 = _board.map_to_local(first_cell)
+	var tr: Vector2 = _board.map_to_local(Vector2i(last_cell.x, first_cell.y))
+	var bl: Vector2 = _board.map_to_local(Vector2i(first_cell.x, last_cell.y))
+	var br: Vector2 = _board.map_to_local(last_cell)
+	var center_min := Vector2(
+		minf(minf(tl.x, tr.x), minf(bl.x, br.x)),
+		minf(minf(tl.y, tr.y), minf(bl.y, br.y))
+	)
+	var center_max := Vector2(
+		maxf(maxf(tl.x, tr.x), maxf(bl.x, br.x)),
+		maxf(maxf(tl.y, tr.y), maxf(bl.y, br.y))
+	)
+	var visual_min := center_min - Vector2(_TILE_VISUAL_LEFT, _TILE_VISUAL_TOP)
+	var visual_max := center_max + Vector2(_TILE_VISUAL_RIGHT, _TILE_VISUAL_BOTTOM)
+	return Rect2(visual_min, visual_max - visual_min)
 
 
 # ─── Situation markers ───────────────────────────────────────────────────────
@@ -950,28 +1063,40 @@ func _on_return_pressed() -> void:
 func _on_begin_pressed() -> void:
 	if _cached_start_action.is_empty() or _is_zooming:
 		return
+	_cancel_preview_transition()
 	_is_zooming         = true
 	_begin_btn.disabled = true
+	if _begin_btn.has_focus():
+		_begin_btn.release_focus()
+	if _back_btn.has_focus():
+		_back_btn.release_focus()
 
-	var tween := create_tween()
-	tween.set_ease(Tween.EASE_IN)
-	tween.set_trans(Tween.TRANS_QUAD)
+	_preview_transition_tween = create_tween()
+	_preview_transition_tween.set_ease(Tween.EASE_IN)
+	_preview_transition_tween.set_trans(Tween.TRANS_QUAD)
 
 	var target_scale := Vector2(_preview_scale * _ZOOM_SCALE_MUL, _preview_scale * _ZOOM_SCALE_MUL)
 	var current_pos  := _board.position
 	var map_offset   := _preview_center - current_pos
 	var target_pos   := _preview_center - map_offset * _ZOOM_SCALE_MUL
 
-	tween.parallel().tween_property(_board,      "scale",    target_scale,      _ZOOM_DURATION)
-	tween.parallel().tween_property(_board,      "position", target_pos,        _ZOOM_DURATION)
-	tween.parallel().tween_property(_stage_info, "modulate", Color(1, 1, 1, 0), _ZOOM_DURATION)
-	tween.parallel().tween_property(_back_btn,   "modulate", Color(1, 1, 1, 0), _ZOOM_DURATION)
+	_preview_transition_tween.parallel().tween_property(_board,      "scale",    target_scale,      _ZOOM_DURATION)
+	_preview_transition_tween.parallel().tween_property(_board,      "position", target_pos,        _ZOOM_DURATION)
+	_preview_transition_tween.parallel().tween_property(_stage_info, "modulate", Color(1, 1, 1, 0), _ZOOM_DURATION)
+	_preview_transition_tween.parallel().tween_property(_back_btn,   "modulate", Color(1, 1, 1, 0), _ZOOM_DURATION)
 
-	tween.finished.connect(_on_zoom_finished)
+	_preview_transition_tween.finished.connect(_on_zoom_finished)
 
 
 func _on_zoom_finished() -> void:
+	_preview_transition_tween = null
 	action_requested.emit(_cached_start_action)
+
+
+func _cancel_preview_transition() -> void:
+	if _preview_transition_tween != null and _preview_transition_tween.is_valid():
+		_preview_transition_tween.kill()
+	_preview_transition_tween = null
 
 
 func _on_back_pressed() -> void:
@@ -1452,3 +1577,131 @@ func _on_disengage_pressed() -> void:
 	if not _contact_disengage_action.is_empty():
 		action_requested.emit(_contact_disengage_action)
 	_hide_contact_panel()
+
+func _apply_responsive_layout() -> void:
+	var insets: Vector4 = _layout.get("safe_insets", Vector4.ZERO)
+	var top := maxf(_CONTENT_EDGE, float(ceilf(insets.y)))
+	var left := maxf(_CONTENT_EDGE, float(ceilf(insets.x)))
+	var right := maxf(_CONTENT_EDGE, float(ceilf(insets.z)))
+	var bottom_edge := maxf(_CONTENT_EDGE, float(ceilf(insets.w)))
+	var chrome_exclusion := bottom_edge + _PERSISTENT_CHROME_HEIGHT
+	var logical_size_v: Variant = _layout.get("logical_size", Vector2.ZERO)
+	var logical_size: Vector2 = logical_size_v if logical_size_v is Vector2 else Vector2.ZERO
+	if logical_size.x <= 0.0 or logical_size.y <= 0.0:
+		logical_size = get_viewport_rect().size if is_inside_tree() else Vector2(1280, 720)
+	var profile := str(_layout.get("profile", "standard"))
+	var target_hud_width := _TOP_HUD_STANDARD_WIDTH
+	match profile:
+		"compact":
+			target_hud_width = _TOP_HUD_COMPACT_WIDTH
+		"wide":
+			target_hud_width = _TOP_HUD_WIDE_WIDTH
+	var available_hud_width := maxf(
+		0.0,
+		logical_size.x - left - right - _DIRECTIVE_BADGE_WIDTH - _TOP_HUD_SEPARATION
+	)
+	var hud_width := minf(target_hud_width, available_hud_width)
+	_hud_strip.offset_left = left
+	_hud_strip.offset_top = top
+	_hud_strip.offset_right = left + hud_width
+	_hud_strip.offset_bottom = top + _TOP_HUD_HEIGHT
+	var stage_info_height := (
+		_STAGE_INFO_COMPACT_HEIGHT
+		if profile == "compact"
+		else _STAGE_INFO_DEFAULT_HEIGHT
+	)
+	_back_btn.offset_left = left
+	_back_btn.offset_top = top
+	_back_btn.offset_right = _back_btn.offset_left + 80.0
+	_back_btn.offset_bottom = _back_btn.offset_top + 48.0
+	var stage_info_safe_left := left
+	if profile == "compact":
+		stage_info_safe_left = _back_btn.offset_right + 16.0
+	var available_info_width := maxf(0.0, logical_size.x - stage_info_safe_left - right)
+	var stage_info_width := minf(_STAGE_INFO_MAX_WIDTH, available_info_width)
+	var stage_info_left := stage_info_safe_left + maxf(0.0, (available_info_width - stage_info_width) * 0.5)
+	_stage_info.offset_left = stage_info_left
+	_stage_info.offset_right = stage_info_left + stage_info_width
+	_stage_info.offset_top = top
+	_stage_info.offset_bottom = top + stage_info_height
+	if _info_columns != null:
+		# ScrollContainer does not guarantee an HBox child receives the viewport
+		# width when its wrapped labels report a tiny intrinsic minimum. Give the
+		# authored two-column body and its children concrete widths so autowrap
+		# cannot feed an artificially tall minimum back into the container.
+		var info_body_width := maxf(0.0, stage_info_width - 48.0)
+		var column_content_width := maxf(0.0, info_body_width - 24.0)
+		var stage_summary_width := floorf(column_content_width / 3.0)
+		var vow_summary_width := column_content_width - stage_summary_width
+		_info_columns.custom_minimum_size.x = info_body_width
+		_stage_summary.custom_minimum_size.x = stage_summary_width
+		_stage_title.custom_minimum_size.x = stage_summary_width
+		_vow_summary.custom_minimum_size.x = vow_summary_width
+		_vow_proverb_label.custom_minimum_size.x = vow_summary_width
+		_vow_hint_label.custom_minimum_size.x = vow_summary_width
+	_bottom_hud_region.offset_left = left
+	_bottom_hud_region.offset_right = -right
+	_bottom_hud_region.offset_bottom = -chrome_exclusion - _CHROME_SEPARATION
+	_bottom_hud_region.offset_top = _bottom_hud_region.offset_bottom - _BOTTOM_HUD_HEIGHT
+	_directive_badge.offset_right = -right
+	_directive_badge.offset_left = _directive_badge.offset_right - _DIRECTIVE_BADGE_WIDTH
+	_directive_badge.offset_top = top + (_TOP_HUD_HEIGHT - _DIRECTIVE_BADGE_HEIGHT) * 0.5
+	_directive_badge.offset_bottom = _directive_badge.offset_top + _DIRECTIVE_BADGE_HEIGHT
+
+func _explore_requests_modal(data: Dictionary, actions: Dictionary) -> bool:
+	var contact_v: Variant = data.get("contact_pending", {})
+	if contact_v is Dictionary and not (contact_v as Dictionary).is_empty():
+		return true
+	var return_v: Variant = data.get("return_home_result", {})
+	if return_v is Dictionary and not (return_v as Dictionary).is_empty():
+		return true
+	var pending_v: Variant = data.get("situation_pending", {})
+	var engage_v: Variant = actions.get("cta.engage_situation", {})
+	if pending_v is Dictionary and engage_v is Dictionary \
+			and not (pending_v as Dictionary).is_empty() \
+			and not (engage_v as Dictionary).is_empty():
+		return true
+	return data.has("situation_overlay")
+
+func _explore_spatial_rect(layout: Dictionary) -> Rect2:
+	var logical_size: Vector2 = layout.get("logical_size", Vector2.ZERO)
+	if logical_size.x <= 0.0 or logical_size.y <= 0.0:
+		logical_size = get_viewport_rect().size
+	var insets: Vector4 = layout.get("safe_insets", Vector4.ZERO)
+	var left := maxf(_CONTENT_EDGE, ceilf(insets.x))
+	var top := maxf(_CONTENT_EDGE, ceilf(insets.y)) + _TOP_HUD_HEIGHT + _TOP_HUD_SEPARATION
+	var right := maxf(_CONTENT_EDGE, ceilf(insets.z))
+	var bottom_edge := maxf(_CONTENT_EDGE, ceilf(insets.w))
+	var bottom := (
+		logical_size.y
+		- bottom_edge
+		- _PERSISTENT_CHROME_HEIGHT
+		- _CHROME_SEPARATION
+		- _BOTTOM_HUD_HEIGHT
+		- 12.0
+	)
+	return Rect2(
+		Vector2(left, top),
+		Vector2(maxf(0.0, logical_size.x - left - right), maxf(0.0, bottom - top))
+	)
+
+func _clamp_explore_board_to_spatial_rect() -> void:
+	if _current_map_size.x <= 0 or _current_map_size.y <= 0:
+		return
+	var visual_rect := _preview_visual_rect(_current_map_size.x, _current_map_size.y)
+	var spatial_rect := _explore_spatial_rect(_layout)
+	var scale_value := _board.scale.x
+	var min_position := spatial_rect.end - visual_rect.end * scale_value
+	var max_position := spatial_rect.position - visual_rect.position * scale_value
+	if min_position.x <= max_position.x:
+		_board.position.x = clampf(_board.position.x, min_position.x, max_position.x)
+	else:
+		_board.position.x = spatial_rect.get_center().x - visual_rect.get_center().x * scale_value
+	if min_position.y <= max_position.y:
+		_board.position.y = clampf(_board.position.y, min_position.y, max_position.y)
+	else:
+		_board.position.y = spatial_rect.get_center().y - visual_rect.get_center().y * scale_value
+
+func _sync_transient_visibility() -> void:
+	if _transient_layer != null:
+		_transient_layer.visible = is_visible_in_tree()

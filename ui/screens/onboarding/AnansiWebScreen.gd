@@ -8,14 +8,19 @@ const LINE := "You have been pulled here because names are trying to come home. 
 
 @onready var _line_label: Label = %LineLabel
 @onready var _continue_button: Button = %ContinueButton
+@onready var _safe_frame: Control = %SafeFrame
 
 var _action: Dictionary = {}
 var _typing_tween: Tween
 
 
 func _ready() -> void:
+	_continue_button.focus_mode = Control.FOCUS_ALL
 	_continue_button.pressed.connect(_on_continue_pressed)
 
+func set_layout(layout: Dictionary) -> void:
+	if is_node_ready() and _safe_frame.has_method("set_layout"):
+		_safe_frame.call("set_layout", layout)
 
 func set_snapshot(snap: Dictionary) -> void:
 	var actions_v: Variant = snap.get("actions", {})
@@ -35,6 +40,7 @@ func _start_typewriter() -> void:
 		_typing_tween.tween_callback(func(idx := i): _line_label.text = LINE.substr(0, idx + 1))
 		_typing_tween.tween_interval(0.025)
 	_typing_tween.tween_callback(func(): _continue_button.visible = true)
+	_typing_tween.tween_callback(func(): _continue_button.grab_focus())
 
 
 func _on_continue_pressed() -> void:

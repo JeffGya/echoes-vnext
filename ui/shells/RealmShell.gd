@@ -2,20 +2,36 @@ class_name RealmShell
 extends Control
 
 signal action_requested(action: Dictionary)
+signal modal_requested(modal_id: StringName, payload: Dictionary)
 
 var _active_overlay: Control = null
 var _resolve_overlay: Control = null
+var _layout: Dictionary = {}
+var _active_modal_id: StringName = &""
+var _active_modal_payload: Dictionary = {}
 
 var _stage_map_scene      := preload("res://ui/screens/venture/StageMapScreen.tscn")
 var _stage_explore_scene  := preload("res://ui/screens/venture/StageExploreScreen.tscn")  # V2-STAGE-001
 var _combat_board_scene   := preload("res://ui/screens/combat/CombatBoardScreen.tscn")
 var _resolve_scene        := preload("res://ui/screens/venture/ResolveScreen.tscn")
+var _directive_modal_scene := preload("res://ui/screens/venture/DirectiveSelectOverlay.tscn")
+var _prebattle_modal_scene := preload("res://ui/overlays/realm/PrebattleModal.tscn")
+var _contact_modal_scene := preload("res://ui/overlays/realm/ContactModal.tscn")
+var _engagement_modal_scene := preload("res://ui/overlays/realm/EngagementModal.tscn")
+var _situation_modal_scene := preload("res://ui/overlays/realm/SituationModal.tscn")
+var _return_home_modal_scene := preload("res://ui/overlays/realm/ReturnHomeModal.tscn")
 
 const EchoCardScene := preload("res://ui/components/EchoCardItem.tscn")
+const _ECHO_BAR_HEIGHT := 88.0
+const _CHROME_EDGE_INSET := 16.0
+const _ECHO_BAR_MAX_WIDTH := 1440.0
 
 var _scene_by_flow_type: Dictionary = {}
 
 @onready var _overlay_root: Control      = $OverlayRoot
+@onready var _chrome_layer: CanvasLayer = $ChromeLayer
+@onready var _echo_bar_frame: MarginContainer = %EchoBarFrame
+@onready var _echo_bar_scroll: ScrollContainer = %EchoBarScroll
 @onready var _echo_bar:     HBoxContainer = %EchoBar
 
 func _ready() -> void:
@@ -27,10 +43,55 @@ func _ready() -> void:
 		"flow.keeper_trial":  _combat_board_scene,
 		# flow.resolve is NOT in this dict — handled as a dim modal overlay by _show_resolve_overlay()
 	}
+	# CanvasLayer visibility is independent of its Control parent. Keep Realm
+	# chrome inactive whenever routing or an ancestor hides this shell.
+	visibility_changed.connect(_sync_chrome_layer_visibility)
+	_sync_chrome_layer_visibility()
+	_apply_shell_layout()
+
+func _sync_chrome_layer_visibility() -> void:
+	if _chrome_layer != null:
+		_chrome_layer.visible = is_visible_in_tree()
 
 func set_snapshot(snap: Dictionary) -> void:
 	_update_echo_bar(snap)
 	_show_overlay_for_type(str(snap.get("type", "")), snap)
+
+func set_layout(layout: Dictionary) -> void:
+	_layout = layout.duplicate(true)
+	_apply_shell_layout()
+	if _active_overlay != null and _active_overlay.has_method("set_layout"):
+		_active_overlay.call("set_layout", _layout)
+	if _resolve_overlay != null and _resolve_overlay.has_method("set_layout"):
+		_resolve_overlay.call("set_layout", _layout)
+	if _active_modal_id != &"" and _can_refresh_active_modal_on_layout():
+		var payload := _active_modal_payload.duplicate(true)
+		payload["layout"] = _layout.duplicate(true)
+		modal_requested.emit(_active_modal_id, payload)
+
+func modal_scene_for(_modal_id: StringName) -> PackedScene:
+	if _modal_id == &"realm.resolve":
+		return _resolve_scene
+	if _modal_id == &"realm.directive":
+		return _directive_modal_scene
+	if _modal_id == &"realm.prebattle":
+		return _prebattle_modal_scene
+	if _modal_id == &"realm.contact":
+		return _contact_modal_scene
+	if _modal_id == &"realm.engagement":
+		return _engagement_modal_scene
+	if _modal_id == &"realm.situation":
+		return _situation_modal_scene
+	if _modal_id == &"realm.return_home":
+		return _return_home_modal_scene
+	return null
+
+func _can_refresh_active_modal_on_layout() -> bool:
+	if not visible:
+		return false
+	if is_inside_tree() and not is_visible_in_tree():
+		return false
+	return true
 
 # ─────────────────────────────────────────────────────────────
 # Echo bar — shell-owned, live-updates on every snapshot
@@ -107,6 +168,31 @@ func _spirit_progress_text(obj_state: Dictionary) -> String:
 		return "%d rounds left" % rounds_remaining
 	return "Protect"
 
+func _apply_shell_layout() -> void:
+	var insets: Vector4 = _layout.get("safe_insets", Vector4.ZERO)
+	var logical_size_v: Variant = _layout.get("logical_size", Vector2(1280, 720))
+	var logical_size: Vector2 = logical_size_v if logical_size_v is Vector2 else Vector2(1280, 720)
+	var safe_left := maxf(_CHROME_EDGE_INSET, ceilf(insets.x))
+	var safe_right := maxf(_CHROME_EDGE_INSET, ceilf(insets.z))
+	var safe_bottom := maxf(_CHROME_EDGE_INSET, ceilf(insets.w))
+	var available_width := maxf(0.0, logical_size.x - safe_left - safe_right)
+	var frame_width := minf(_ECHO_BAR_MAX_WIDTH, available_width)
+	var frame_left := safe_left + maxf(0.0, (available_width - frame_width) * 0.5)
+	if _echo_bar_frame == null:
+		_echo_bar_frame = get_node_or_null("%EchoBarFrame") as MarginContainer
+	if _echo_bar_scroll == null:
+		_echo_bar_scroll = get_node_or_null("%EchoBarScroll") as ScrollContainer
+	if _echo_bar_frame != null:
+		_echo_bar_frame.offset_left = frame_left
+		_echo_bar_frame.offset_right = frame_left + frame_width
+		_echo_bar_frame.offset_top = -(_ECHO_BAR_HEIGHT + safe_bottom)
+		_echo_bar_frame.offset_bottom = -safe_bottom
+	if _echo_bar_scroll != null:
+		# Overflow remains discoverable on desktop and touch: the authored
+		# horizontal scrollbar appears only when the party exceeds the frame.
+		_echo_bar_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+		_echo_bar_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+
 
 # ─────────────────────────────────────────────────────────────
 # Overlay routing
@@ -116,8 +202,13 @@ func _show_overlay_for_type(snap_type: String, snap: Dictionary) -> void:
 	# flow.resolve is a dim modal overlay drawn ON TOP of the active venture screen.
 	# It does NOT swap _active_overlay — the screen behind stays mounted. (V2-STAGE-004)
 	if snap_type == "flow.resolve":
-		_show_resolve_overlay(snap)
+		_emit_realm_modal(&"realm.resolve", {
+			"snapshot": snap.duplicate(true),
+			"layout": _layout.duplicate(true),
+		})
 		return
+
+	_clear_tracked_modal()
 
 	# Arriving at any non-resolve type: tear down any existing resolve overlay first
 	# so the destination screen shows cleanly without the modal on top.
@@ -152,9 +243,15 @@ func _show_overlay_for_type(snap_type: String, snap: Dictionary) -> void:
 		var ok := _active_overlay.connect("action_requested", Callable(self, "_on_overlay_action_requested"))
 		if ok != OK:
 			push_warning("RealmShell: failed to connect overlay action_requested (err=%d)" % ok)
+	if _active_overlay != null and _active_overlay.has_signal("modal_requested"):
+		var modal_ok := _active_overlay.connect("modal_requested", Callable(self, "_on_overlay_modal_requested"))
+		if modal_ok != OK:
+			push_warning("RealmShell: failed to connect overlay modal_requested (err=%d)" % modal_ok)
 
 	if _active_overlay != null and _active_overlay.has_method("set_snapshot"):
 		_active_overlay.call("set_snapshot", snap)
+	if _active_overlay != null and _active_overlay.has_method("set_layout"):
+		_active_overlay.call("set_layout", _layout)
 
 ## Renders flow.resolve as a dim modal overlay added directly to RealmShell as the LAST
 ## child so it draws — and receives input — on top of both the active venture screen
@@ -187,6 +284,28 @@ func _show_resolve_overlay(snap: Dictionary) -> void:
 
 	if _resolve_overlay != null and _resolve_overlay.has_method("set_snapshot"):
 		_resolve_overlay.call("set_snapshot", snap)
+	if _resolve_overlay != null and _resolve_overlay.has_method("set_layout"):
+		_resolve_overlay.call("set_layout", _layout)
 
 func _on_overlay_action_requested(action: Dictionary) -> void:
 	action_requested.emit(action)
+
+func _on_overlay_modal_requested(modal_id: StringName, payload: Dictionary) -> void:
+	_emit_realm_modal(modal_id, payload)
+
+func _emit_realm_modal(modal_id: StringName, payload: Dictionary) -> void:
+	var next_payload := payload.duplicate(true)
+	next_payload["layout"] = _layout.duplicate(true)
+	modal_requested.emit(modal_id, next_payload)
+
+func on_modal_accepted(modal_id: StringName, payload: Dictionary) -> void:
+	_active_modal_id = modal_id
+	_active_modal_payload = payload.duplicate(true)
+
+func _clear_tracked_modal() -> void:
+	_active_modal_id = &""
+	_active_modal_payload = {}
+
+func on_modal_dismissed(modal_id: StringName) -> void:
+	if modal_id == _active_modal_id:
+		_clear_tracked_modal()

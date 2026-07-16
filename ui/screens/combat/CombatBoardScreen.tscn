@@ -225,7 +225,7 @@ theme_override_font_sizes/font_size = 12
 text = "◇"
 
 [node name="StartCombatButton" type="Button" parent="." unique_id=100000006]
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(0, 56)
 layout_mode = 1
 anchors_preset = -1
 anchor_left = 0.5
@@ -233,7 +233,7 @@ anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
 offset_left = -100.0
-offset_top = -56.0
+offset_top = -64.0
 offset_right = 100.0
 offset_bottom = -8.0
 grow_horizontal = 2
@@ -242,6 +242,7 @@ text = "Start Combat"
 
 [node name="AutoToggleButton" type="CheckButton" parent="." unique_id=100000010]
 visible = false
+custom_minimum_size = Vector2(140, 48)
 layout_mode = 1
 anchors_preset = -1
 anchor_left = 0.5
@@ -274,21 +275,21 @@ theme_override_constants/separation = 6
 
 [node name="SpeedSlowButton" type="Button" parent="SpeedBar" unique_id=100000019]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(48, 26)
+custom_minimum_size = Vector2(48, 48)
 layout_mode = 2
 theme_type_variation = &"ButtonGhost"
 text = "Slow"
 
 [node name="SpeedNormalButton" type="Button" parent="SpeedBar" unique_id=100000020]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(60, 26)
+custom_minimum_size = Vector2(60, 48)
 layout_mode = 2
 theme_type_variation = &"ButtonGhost"
 text = "Normal"
 
 [node name="SpeedFastButton" type="Button" parent="SpeedBar" unique_id=100000021]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(48, 26)
+custom_minimum_size = Vector2(48, 48)
 layout_mode = 2
 theme_type_variation = &"ButtonGhost"
 text = "Fast"
@@ -364,6 +365,7 @@ text = "Completed in Round 0"
 horizontal_alignment = 1
 
 [node name="EndCombatButton" type="Button" parent="CombatResultOverlay/ResultContent" unique_id=100000017]
+custom_minimum_size = Vector2(160, 56)
 layout_mode = 2
 text = "Return to Sanctum"
 
@@ -406,16 +408,30 @@ theme_override_constants/separation = 12
 alignment = 1
 
 [node name="RetreatButton" type="Button" parent="PrebattlePanel/PrebattleContent/ButtonRow" unique_id=200000005]
-custom_minimum_size = Vector2(150, 50)
+custom_minimum_size = Vector2(150, 56)
 layout_mode = 2
 text = "Retreat"
 
 [node name="EnterCombatButton" type="Button" parent="PrebattlePanel/PrebattleContent/ButtonRow" unique_id=200000006]
-custom_minimum_size = Vector2(150, 50)
+custom_minimum_size = Vector2(150, 56)
 layout_mode = 2
+theme_type_variation = &"ButtonPrimary"
 text = "Enter Combat"
 
-[node name="BarkPopupLayer" parent="." instance=ExtResource("7_bark_popup_layer")]
+[node name="TransientLayer" type="CanvasLayer" parent="."]
+layer = 30
+
+[node name="TransientRoot" type="Control" parent="TransientLayer"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="BarkPopupLayer" parent="TransientLayer/TransientRoot" instance=ExtResource("7_bark_popup_layer")]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0

@@ -23,19 +23,15 @@ class_name ResolveScreen
 extends Control
 
 signal action_requested(action: Dictionary)
+signal dismiss_requested
 
 # Purposeful informational colors — adjustable in Godot inspector per instance.
-@export var rank_color_s: Color = Color("#ffd700")  # gold
-@export var rank_color_a: Color = Color("#c0ff80")  # lime
-@export var rank_color_b: Color = Color("#80c0ff")  # sky blue
-@export var rank_color_c: Color = Color("#f0e8d0")  # text default
-@export var rank_color_d: Color = Color("#b08040")  # amber dim
-@export var rank_color_f: Color = Color("#c04040")  # red
-
-# P4 playtest fix: safe top/bottom headroom (px) reserved when clamping the
-# card's max height, so it never spans edge-to-edge and CTAs stay reachable.
-const _CARD_TOP_MARGIN:    float = 60.0
-const _CARD_BOTTOM_MARGIN: float = 140.0
+@export var rank_color_s: Color = Color("#8B6A18")  # deep gold on warm panel
+@export var rank_color_a: Color = Color("#2D6A4F")  # forest green
+@export var rank_color_b: Color = Color("#315E6D")  # deep mist blue
+@export var rank_color_c: Color = Color("#3D2817")  # dark brown
+@export var rank_color_d: Color = Color("#76562E")  # warm brass
+@export var rank_color_f: Color = Color("#9B342E")  # deep terracotta
 
 const RewardEntryScene    := preload("res://ui/components/RewardEntryItem.tscn")
 const EmotionEntryScene   := preload("res://ui/components/EmotionEntryItem.tscn")
@@ -59,19 +55,21 @@ const EffectChipScene     := preload("res://ui/components/EffectChip.tscn")
 @onready var _summary_label:           Label         = %SummaryLabel
 @onready var _effects_rail:            HFlowContainer = %EffectsRail
 # CardContent — parent of all card sections, used for dynamic vow nodes.
-@onready var _card_content:            VBoxContainer = $CenterContainer/ResultCard/ScrollContainer/CardContent
-# P4 playtest fix: wraps CardContent so a tall card (rewards + vow sections +
-# CTAs) scrolls instead of overflowing off-screen (authored in .tscn).
-@onready var _card_scroll:             ScrollContainer = $CenterContainer/ResultCard/ScrollContainer
+@onready var _card_content:            VBoxContainer = %CardContent
 # V2-VOW-002: vow outcome section nodes (authored in .tscn).
 @onready var _vow_section:             VBoxContainer = %VowOutcomeSection
 @onready var _vow_outcome_header:      Label         = %VowOutcomeHeader
 @onready var _vow_list:                VBoxContainer = %VowOutcomeList
 @onready var _vow_discovered_section:  VBoxContainer = %VowDiscoveredSection
 @onready var _vow_discovered_list:     VBoxContainer = %VowDiscoveredList
+@onready var _safe_frame:              MarginContainer = %SafeFrame
+@onready var _result_card:             Panel = %ResultCard
+@onready var _body_viewport:           Control = %BodyViewport
+@onready var _scroll_body:             ScrollContainer = %ScrollContainer
 
 var _sanctum_action:    Dictionary = {}
 var _next_stage_action: Dictionary = {}
+var _layout: Dictionary = {}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -83,12 +81,20 @@ func set_snapshot(snap: Dictionary) -> void:
 	assert(snap.has("data"), "ResolveScreen: snapshot missing 'data'")
 	_clear()
 	_render(snap["data"], snap.get("actions", {}))
-	# P4 playtest fix: re-measure after layout settles so a tall card (e.g.
-	# combat rewards + vow sections) is capped and scrollable rather than
-	# overflowing past the viewport. Deferred so container
-	# children (RewardEntryItem/EmotionEntryItem/EffectChip instances) have
-	# finished sizing before we read their combined minimum height.
-	call_deferred("_clamp_card_height")
+
+func present(payload: Dictionary) -> void:
+	var layout_v: Variant = payload.get("layout", {})
+	if layout_v is Dictionary:
+		set_layout(layout_v)
+	var snap_v: Variant = payload.get("snapshot", {})
+	if snap_v is Dictionary:
+		set_snapshot(snap_v)
+
+func set_layout(layout: Dictionary) -> void:
+	_layout = layout.duplicate(true)
+	if _safe_frame != null and _safe_frame.has_method("set_layout"):
+		_safe_frame.call("set_layout", _layout)
+	_apply_profile_size()
 
 
 func _clear() -> void:
@@ -96,6 +102,8 @@ func _clear() -> void:
 	_next_stage_action = {}
 	_sanctum_button.visible    = false
 	_next_stage_button.visible = false
+	_banner.remove_theme_color_override("font_color")
+	_rank_badge.visible = true
 	_rank_badge.text = "—"
 	_rank_badge.remove_theme_color_override("font_color")
 	_ase_value.text     = "0"
@@ -202,7 +210,7 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 		if _arrival_barks.has(_echo_id):
 			var _bark_lbl := Label.new()
 			_bark_lbl.text = "\"%s\"" % _arrival_barks[_echo_id]
-			_bark_lbl.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55, 1.0))
+			_bark_lbl.add_theme_color_override("font_color", Color("#6F5A43"))
 			_bark_lbl.add_theme_font_size_override("font_size", 12)
 			_bark_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
 			_bark_lbl.modulate.a = 0.0  # starts invisible for stagger animation
@@ -284,7 +292,7 @@ func _render_situation_result(data: Dictionary, actions: Dictionary) -> void:
 		if not bark.is_empty():
 			var bark_lbl := Label.new()
 			bark_lbl.text = "\"%s\"" % bark
-			bark_lbl.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55, 1.0))
+			bark_lbl.add_theme_color_override("font_color", Color("#6F5A43"))
 			bark_lbl.add_theme_font_size_override("font_size", 12)
 			bark_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
 			_emotion_list.add_child(bark_lbl)
@@ -459,9 +467,9 @@ func _render_contact_result(data: Dictionary, actions: Dictionary) -> void:
 
 	_banner.text = role_label.to_upper()
 	match outcome:
-		"good":    _banner.add_theme_color_override("font_color", Color("#4CAF72"))
-		"partial": _banner.add_theme_color_override("font_color", Color("#C8A96E"))
-		"failed":  _banner.add_theme_color_override("font_color", Color("#C05050"))
+		"good":    _banner.add_theme_color_override("font_color", Color("#2D6A4F"))
+		"partial": _banner.add_theme_color_override("font_color", Color("#76562E"))
+		"failed":  _banner.add_theme_color_override("font_color", Color("#9B342E"))
 		_:         _banner.remove_theme_color_override("font_color")
 
 	_reason.text = outcome_text
@@ -490,7 +498,7 @@ func _render_contact_result(data: Dictionary, actions: Dictionary) -> void:
 
 func _render_scout_return(data: Dictionary, actions: Dictionary) -> void:
 	_banner.text = "Scout Return"
-	_banner.add_theme_color_override("font_color", Color("#7AB5C8"))  # Mist Blue — neutral info
+	_banner.add_theme_color_override("font_color", Color("#315E6D"))  # Deep Mist Blue on warm panel
 
 	var intel := int(data.get("intel_count", 0))
 	_reason.text = "%d situation%s revealed" % [intel, "s" if intel != 1 else ""]
@@ -540,11 +548,13 @@ func _render_scout_return(data: Dictionary, actions: Dictionary) -> void:
 
 func _on_sanctum_pressed() -> void:
 	if not _sanctum_action.is_empty():
+		dismiss_requested.emit()
 		action_requested.emit(_sanctum_action)
 
 
 func _on_next_stage_pressed() -> void:
 	if not _next_stage_action.is_empty():
+		dismiss_requested.emit()
 		action_requested.emit(_next_stage_action)
 
 
@@ -585,10 +595,10 @@ func _build_vow_section(data: Dictionary) -> void:
 			_vow_outcome_header.add_theme_color_override("font_color", Color("#E8412A"))  # Ohene Red
 		"benefit":
 			_vow_outcome_header.text = "The promise held."
-			_vow_outcome_header.add_theme_color_override("font_color", Color("#C8A96E"))  # Akan Gold
+			_vow_outcome_header.add_theme_color_override("font_color", Color("#76562E"))  # Warm Brass
 		"compliant":
 			_vow_outcome_header.text = "The promise holds."
-			_vow_outcome_header.add_theme_color_override("font_color", Color("#C8A96E"))  # Akan Gold
+			_vow_outcome_header.add_theme_color_override("font_color", Color("#76562E"))  # Warm Brass
 		_:
 			return
 
@@ -606,7 +616,7 @@ func _build_vow_section(data: Dictionary) -> void:
 		if morale != 0 or fear != 0:
 			var pen_lbl := Label.new()
 			pen_lbl.text = "Morale %+d  Fear %+d" % [morale, fear]
-			pen_lbl.add_theme_color_override("font_color", Color("#E8D0A0"))  # Pale Kente
+			pen_lbl.add_theme_color_override("font_color", Color("#9B342E"))  # Deep terracotta
 			_vow_list.add_child(pen_lbl)
 
 	_vow_section.visible = true
@@ -623,18 +633,18 @@ func _build_vow_discovered_section(data: Dictionary) -> void:
 		var vow: Dictionary = vow_v if vow_v is Dictionary else {}
 		var name_lbl := Label.new()
 		name_lbl.text = str(vow.get("vow_name", ""))
-		name_lbl.add_theme_color_override("font_color", Color("#E8D0A0"))
+		name_lbl.add_theme_color_override("font_color", Color("#3D2817"))
 		_vow_discovered_list.add_child(name_lbl)
 
 		var twi_lbl := Label.new()
 		twi_lbl.text = str(vow.get("proverb_twi", ""))
-		twi_lbl.add_theme_color_override("font_color", Color("#C8A96E"))
+		twi_lbl.add_theme_color_override("font_color", Color("#76562E"))
 		twi_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
 		_vow_discovered_list.add_child(twi_lbl)
 
 		var en_lbl := Label.new()
 		en_lbl.text = '"%s"' % str(vow.get("proverb_en", ""))
-		en_lbl.add_theme_color_override("font_color", Color("#A8865A"))
+		en_lbl.add_theme_color_override("font_color", Color("#6F5A43"))
 		en_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
 		_vow_discovered_list.add_child(en_lbl)
 
@@ -644,25 +654,24 @@ func _build_vow_discovered_section(data: Dictionary) -> void:
 func _ready() -> void:
 	_sanctum_button.pressed.connect(_on_sanctum_pressed)
 	_next_stage_button.pressed.connect(_on_next_stage_pressed)
-	# P4 playtest fix: re-clamp on rotation/resize so the card stays reachable.
-	get_viewport().size_changed.connect(_clamp_card_height)
 
-
-# ─────────────────────────────────────────────────────────────
-# P4 playtest fix: bounded, scrollable card
-# ─────────────────────────────────────────────────────────────
-
-## Caps %ScrollContainer's height at (viewport height - safe margins) so a
-## tall card scrolls instead of overflowing off-screen; short cards keep
-## hugging their natural content height (no visual change for those).
-## ScrollContainer ignores its child's height in its own minimum-size
-## calculation while vertical scrolling is enabled, so custom_minimum_size
-## is the only lever that controls the displayed height here — this is not
-## a floor, it fully determines the allotted height in this layout.
-func _clamp_card_height() -> void:
-	if _card_scroll == null or _card_content == null:
+func _apply_profile_size() -> void:
+	if _result_card == null or _body_viewport == null:
 		return
-	var natural_height: float = _card_content.get_combined_minimum_size().y
-	var viewport_height: float = get_viewport_rect().size.y
-	var max_height: float = maxf(120.0, viewport_height - _CARD_TOP_MARGIN - _CARD_BOTTOM_MARGIN)
-	_card_scroll.custom_minimum_size.y = minf(natural_height, max_height)
+	var profile: StringName = _layout.get("profile", &"compact")
+	match profile:
+		&"wide":
+			_set_result_card_size(Vector2(840, 700))
+			_body_viewport.custom_minimum_size = Vector2(0, 430)
+		&"standard":
+			_set_result_card_size(Vector2(760, 600))
+			_body_viewport.custom_minimum_size = Vector2(0, 320)
+		_:
+			_set_result_card_size(Vector2(680, 476))
+			_body_viewport.custom_minimum_size = Vector2(0, 210)
+
+func _set_result_card_size(card_size: Vector2) -> void:
+	_result_card.offset_left = -card_size.x * 0.5
+	_result_card.offset_top = -card_size.y * 0.5
+	_result_card.offset_right = card_size.x * 0.5
+	_result_card.offset_bottom = card_size.y * 0.5

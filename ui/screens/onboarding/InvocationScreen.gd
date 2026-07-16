@@ -5,6 +5,7 @@ class_name InvocationScreen
 signal action_requested(action: Dictionary)
 
 @onready var _hint: Label = %HintLabel
+@onready var _safe_frame: Control = %SafeFrame
 
 var _action: Dictionary = {}
 var _pending_snapshot: Dictionary = {}
@@ -12,10 +13,15 @@ var _pending_snapshot: Dictionary = {}
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	focus_mode = Control.FOCUS_ALL
+	grab_focus.call_deferred()
 	if not _pending_snapshot.is_empty():
 		_apply_snapshot(_pending_snapshot)
 		_pending_snapshot = {}
 
+func set_layout(layout: Dictionary) -> void:
+	if is_node_ready() and _safe_frame.has_method("set_layout"):
+		_safe_frame.call("set_layout", layout)
 
 func set_snapshot(snap: Dictionary) -> void:
 	if not is_node_ready():

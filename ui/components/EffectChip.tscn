@@ -4,6 +4,7 @@
 
 [node name="EffectChip" type="PanelContainer"]
 custom_minimum_size = Vector2(72, 28)
+theme_type_variation = &"SanctumRouteAction"
 script = ExtResource("1_effectchip")
 
 [node name="Margin" type="MarginContainer" parent="."]

@@ -1,7 +1,7 @@
 # Echoes vNext — Project Memory
 
 ## What This Is
-Godot 4.5.1 mythic house-and-trials strategy game. Deterministic core simulation + snapshot-driven UI.
+Godot 4.6.1 mythic house-and-trials strategy game. Deterministic core simulation + snapshot-driven UI.
 Player is the Ase Keeper who runs a Sanctum, summons Echoes (returning names / fragments of stolen stories), and leads them through Realm trials to recover Threads and bring stolen stories home.
 
 ## Architecture at a Glance
@@ -15,6 +15,11 @@ Player is the Ase Keeper who runs a Sanctum, summons Echoes (returning names / f
 - `FlowRuntime.dispatch(action)` is the single choke point (tick, logger, save, snapshot)
 - Snapshot shape: `{ type, meta, data, actions }` — only source of truth for UI
 - `snapshot.actions` is a **slot-keyed Dictionary** (not Array). Per-row actions dispatched by rows, never in snapshot.actions.
+- AppRoot remains the application composition root and owns responsive coordination plus the single layer-40 blocking `ModalHost`.
+- UI layers: spatial 0, screen 10, persistent chrome 20, non-modal transient 30, blocking modal 40, recovery/debug 128.
+- Window policy: 1280×720 landscape base, 1600×900 initial desktop, 960×540 minimum, resizable/HiDPI, `canvas_items` + fractional `expand`.
+- Responsive layouts recompose at compact/standard/wide profiles. UI scale is capped; wide-window surplus expands spatial presentation rather than panels and controls.
+- Logical safe insets are converted from the OS safe-area rect through the inverse stretch transform. Screens reserve safe edges and persistent bottom chrome.
 - Save: crash-safe (write `.tmp` → rename), additive repairs, schema_version 1
 - Economy: settlement model (not frame-based); offline decay applied once per session on Continue
 - One save slot forever. Save triggers: new game, summon, realm select, stage enter, resolve, name confirm, party confirm
@@ -47,7 +52,7 @@ The repo is migrating from V1 idioms to V2 canonical design. **V2-MIG-001 is Don
 ## Available Skills
 Four project-specific skills are installed. Use them proactively — they are authoritative.
 
-- **`godot-echoes-dev`** — Godot 4.5 + GDScript dev patterns: architectural invariants, flow state IDs, all action types, naming conventions, checklists for adding new states/services/tests. **Use for any implementation question.**
+- **`godot-echoes-dev`** — Godot 4.6.1 + GDScript dev patterns: architectural invariants, flow state IDs, all action types, naming conventions, checklists for adding new states/services/tests. **Use for any implementation question.**
 - **`echoes-sankofa-gdd`** — V2 GDD navigator: design pillars, glossary, callings (S3/S6/S9), skill families, vectors, Weave system, Threads, Storyweight, Continuity. **Use for design decisions, feature scope, lore questions.**
 - **`echoes-backlog`** — V2 story backlog (168 stories) via CSV + Notion MCP. **Use to look up stories, pickup order, wave, status.**
 - **`game-ui-ux-echoes`** — Mobile-first UI/UX patterns: snapshot-to-screen mapping, touch targets, screen inventory, West African aesthetic. **Use for new screens, layout decisions.**
@@ -97,11 +102,15 @@ Four project-specific skills are installed. Use them proactively — they are au
 | ShrineService | `core/combat/ShrineService.gd` | `select_purifier()`, `apply_drain()`, `apply_purify_stack()`. |
 | RetreatService | `core/combat/RetreatService.gd` | `can_attempt()` (speed gate), `get_chance_tier()` (agi tiers), `roll_retreat()` (seeded RNG). |
 | DirectiveService | `core/directives/DirectiveService.gd` | Directives: none, scout, protect, push, preserve. `set_active_directive()` writes to save. |
-| AppRoot | `ui/AppRoot.gd` | Routes `snapshot.type` → SanctumShell or RealmShell. Bank timer. Debug panel (F1). Test runner. |
-| SanctumShell | `ui/shells/SanctumShell.gd` | Hub family host. Owns persistent NavBar via `_cached_nav`. Shell-cached nav pattern. |
-| RealmShell | `ui/shells/RealmShell.gd` | Venture family host. Routes stage_map/stage/encounter/resolve. No shared chrome. |
-| SanctumScreen | `ui/screens/SanctumScreen.gd` | Hub: Ase, roster preview, party slots, name modal. No nav buttons (in shell). |
-| CombatBoardScreen | `ui/screens/CombatBoardScreen.gd` | Isometric TileMap. InitiativePanel, PrebattlePanel, PartyBar, CombatTokenLayer, CombatDistanceLayer. |
+| AppRoot | `ui/AppRoot.gd` + `ui/Approot.tscn` | Application composition root. Runtime boot/dispatch, shell/onboarding routing, bank timer, recovery/debug/test surfaces, responsive layout forwarding, full-rect ScreenHost, and the single app-wide layer-40 ModalHost. |
+| ResponsiveLayoutController | `ui/components/ResponsiveLayoutController.gd` | Emits `{profile, logical_size, safe_insets, ui_scale, is_mobile}`. Applies desktop/phone/tablet scale caps, detects mobile profile, converts physical safe areas to logical insets, and updates `Window.content_scale_size` on live resize. |
+| ModalHost | `ui/components/ModalHost.gd` + `.tscn` | One blocking modal at a time. Full-viewport dim/input root above chrome; forwards modal actions, contains focus, and restores prior focus on dismissal. |
+| SafeAreaContainer | `ui/components/SafeAreaContainer.gd` + `.tscn` | Shared logical edge margins plus optional persistent-bottom-chrome reservation. |
+| SanctumShell | `ui/shells/SanctumShell.gd` | Hub family host. Owns layer-0 spatial world, layer-10 screen content, inset/capped layer-20 BottomRail, layer-30 notifications, cached nav actions, modal scene lookup, and inherited CanvasLayer visibility synchronization. |
+| RealmShell | `ui/shells/RealmShell.gd` | Venture family host. Routes stage map/preview/explore/combat. Owns the inset/capped 88-unit layer-20 EchoBar and requests Resolve/directive/engagement/contact/situation/return/prebattle modals from AppRoot. |
+| SanctumScreen | `ui/screens/sanctum/SanctumScreen.gd` | Spatial-first hub. Authored `OverviewFlow` places `TopBand` above `OverviewBody`; title/vow/guidance reflow without primary overview scrolling, while capped side panels leave surplus room to the Sanctum field. |
+| StageExploreScreen | `ui/screens/venture/StageExploreScreen.gd` + `.tscn` | Shared stage preview/explore screen. Preview refits briefing + map; explore uses a capped Living Tree HUD and same-row directive badge, bottom controls above the EchoBar exclusion, and preserves world focus/zoom across live resize. |
+| CombatBoardScreen | `ui/screens/combat/CombatBoardScreen.gd` | Responsive isometric board. Capped objective/initiative/control panels leave wide-layout surplus to the battlefield; prebattle is requested through ModalHost. |
 | RealmModel | `core/realms/RealmModel.gd` | Pure data factory. Fields: id/name/virtue/description/seed/stage_count/current_stage_index/is_completed/status/run_index/run_count/stages. |
 | RealmService | `core/realms/RealmService.gd` | `get_or_create()`, `get_active()`, `compute_runtime_locks()`, `advance_stage()→Dict`. |
 | ObjectiveModel | `core/realms/ObjectiveModel.gd` | Pure data factory. `make(index, type, seed, params={}, completed=false, required=true)`. **V2-STAGE-002:** 7 VALID_TYPES: combat/shrine/boss/recover/protect/endure/pursue. `completed`+`required` track stage completion gate. `params` is extension point for V2-STAGE-004. |
@@ -112,12 +121,14 @@ Four project-specific skills are installed. Use them proactively — they are au
 | FlowStageMapState | `core/state/flow/states/venture/FlowStageMapState.gd` | Stage progress list + party prep. Static `build_snapshot()`. |
 | FlowStageState | `core/state/flow/states/venture/FlowStageState.gd` | Single-stage overview. `cta.start` → STAGE_EXPLORE (V2-STAGE-001). |
 | FlowStageExploreState | `core/state/flow/states/venture/FlowStageExploreState.gd` | Exploration map state `flow.stage_explore`. Locks map on first entry. Directive-guided party movement. **V2-STAGE-002:** `cta.proceed_to_stage_map` completion gate (all required objectives done). `cta.ignore_situation` when pending. Calling-action bonuses (ranger/okofor/aduro/cautious_advance). `party_requesting_return` when avg fear > threshold. Snapshot: `objectives[]`, `objectives_remaining`, `party_calling_actions`, `party_requesting_return`. |
-| StageExploreScreen | `ui/screens/venture/StageExploreScreen.gd` + `.tscn` | Isometric TileMap exploration board. **V2-STAGE-002:** Travel animation — board tweens 0.5 s (SINE); `SituationLayer.position` mirrors `_board.position` in `_process()` so markers follow. Situation markers via `SituationMarkerDraw` (typed shapes, see below). Engagement popup: "Objective" (gold) vs "Encounter" header + "Pass" button → `stage.ignore_situation`. "Stage Complete" button in action bar → `flow.complete_stage` when `cta.proceed_to_stage_map` present. |
+| StageExploreScreen (flow behavior) | `ui/screens/venture/StageExploreScreen.gd` + `.tscn` | Isometric exploration board. **V2-STAGE-002:** Travel animation — board tweens 0.5 s (SINE); `SituationLayer.position` mirrors `_board.position` in `_process()` so markers follow. Situation markers via `SituationMarkerDraw`. Engagement/contact/return/situation surfaces request blocking Realm modals; Stage Complete dispatches `flow.complete_stage` when its slot is present. |
 | SituationMarkerDraw | `ui/screens/venture/SituationMarkerDraw.gd` | Node2D custom draw. Shape by type: combat=square, shrine=triangle, loot/money=diamond, other=circle. State: hidden=grey+?, revealed=blue shape, revealed-objective=blue shape+gold ring (+3.5 px arc), resolved-encounter=grey+✓, resolved-objective=gold+✓. Added as children of `SituationLayer`; position = board-local pixels. |
-| ResolveScreen | `ui/screens/ResolveScreen.gd` | VICTORY/DEFEAT. Actor roster. `cta.continue` → sanctum. `cta.next_stage` → dispatches `flow.complete_stage`. |
+| ResolveScreen | `ui/screens/venture/ResolveScreen.gd` | Responsive bounded modal card presented by AppRoot as `realm.resolve`; keeps authored header/footer and scrolls only the long body. Actions and flow outcomes are unchanged. |
 | SkillDefinition | `core/progression/SkillDefinition.gd` | Active skill data contract + validator. `MAX_SKILL_SLOTS=1`. |
 
-**Tests: 736 total.** The full registered suite includes `LeadershipEmotionTests` for configured Whole-band effects, overlap/source/radius rules, shared fear/morale paths, once-per-combat behavior, recovery stacking, and all ten UI presentation statuses.
+The registered suite includes responsive foundation, viewport/safe-area, modal focus/input,
+cross-shell CanvasLayer, target-size, live-resize, Sanctum geometry, Realm geometry,
+and existing deterministic core regression coverage.
 
 ---
 

@@ -6,6 +6,7 @@ signal action_requested(action: Dictionary)
 
 @onready var _cards_root: HBoxContainer = %CardsRoot
 @onready var _custom_root: VBoxContainer = %CustomRoot
+@onready var _safe_frame: Control = %SafeFrame
 @onready var _glow: ColorRect = %Glow
 @onready var _name_buttons: Array[Button] = [%NameButton1, %NameButton2, %NameButton3]
 @onready var _name_labels: Array[Label] = [%NameLabel1, %NameLabel2, %NameLabel3]
@@ -19,12 +20,18 @@ var _confirm_action: Dictionary = {}
 
 func _ready() -> void:
 	for i in range(_name_buttons.size()):
+		_name_buttons[i].focus_mode = Control.FOCUS_ALL
 		_name_buttons[i].pressed.connect(_on_name_pressed.bind(i))
+	_custom_option.focus_mode = Control.FOCUS_ALL
+	_custom_submit.focus_mode = Control.FOCUS_ALL
 	_custom_option.pressed.connect(_on_custom_option_pressed)
 	_custom_submit.pressed.connect(_on_custom_submit_pressed)
 	_glow.visible = false
 	_custom_root.visible = false
 
+func set_layout(layout: Dictionary) -> void:
+	if is_node_ready() and _safe_frame.has_method("set_layout"):
+		_safe_frame.call("set_layout", layout)
 
 func set_snapshot(snap: Dictionary) -> void:
 	var data_v: Variant = snap.get("data", {})
@@ -43,6 +50,7 @@ func set_snapshot(snap: Dictionary) -> void:
 	_cards_root.visible = true
 	_custom_root.visible = false
 	_glow.visible = false
+	_grab_default_focus()
 
 
 func _on_name_pressed(index: int) -> void:
@@ -73,3 +81,11 @@ func _confirm_name(name: String) -> void:
 	tween.tween_property(_glow, "modulate", Color(0.82, 0.68, 0.22, 0.82), 0.35)
 	tween.tween_interval(0.15)
 	tween.tween_callback(func(): action_requested.emit(action))
+
+
+func _grab_default_focus() -> void:
+	for button in _name_buttons:
+		if not button.disabled:
+			button.grab_focus.call_deferred()
+			return
+	_custom_option.grab_focus.call_deferred()
