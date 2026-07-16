@@ -9,9 +9,13 @@
 # - Pure static. No RNG anywhere except `roll()`, which takes an already-seeded
 #   RandomNumberGenerator from the caller (append-only namespace) — this service
 #   never derives its own seed.
-# - No hard-coded magic numbers: every tunable lives in data.contact.recruitment
-#   (passed in as `cfg` to compute_recruit_chance; passed in as part of `cfg_data`
-#   to promote_ally_to_echo).
+# - No hard-coded magic numbers: every tunable lives in data.contact.recruitment,
+#   merged with the CANONICAL source blocks (data.weaving_rite.vector_to_virtue_primary,
+#   data.sanctum.rival_archetypes, data.contact.outcome_thresholds.good) via
+#   build_effective_cfg() so those keys have a single source of truth (no balance.json
+#   duplication that could silently desync). The merged dict is passed as `cfg` to
+#   compute_recruit_chance; promote_ally_to_echo receives the full `cfg_data` and merges
+#   internally.
 # - promote_ally_to_echo() is a direct builder, NOT EchoFactory — EchoFactory's RNG
 #   draw order is immutable (Lesson #5) and a recruited companion has no RNG-driven
 #   birth to begin with; every field is derived from the ally's battle build + the
@@ -20,8 +24,9 @@
 # compute_recruit_chance() formula (additive, base 0, never guaranteed):
 #   chance = clampi(conversation + combat + fit, 0, cfg.cap)
 #   conversation ∈ [0, cfg.conversation_max] — quality of the talk (final morale/fear
-#     vs. the same "good" thresholds ConversationService uses, duplicated locally in
-#     cfg) blended with conv_score_sum / winning_turns engagement.
+#     vs. the same "good" thresholds ConversationService uses, merged into cfg from
+#     data.contact.outcome_thresholds.good via build_effective_cfg) blended with
+#     conv_score_sum / winning_turns engagement.
 #   combat ∈ [0, cfg.combat_max] — remaining-HP ratio, rounds-survived ratio, and
 #     offensive output (damage_dealt + kills, normalized against a cfg baseline).
 #   fit ∈ [0, cfg.fit_max] — vector-profile cosine similarity (contact virtue wheel →
@@ -39,6 +44,46 @@ const STAT_KEYS: Array = ["max_hp", "atk", "def", "agi", "int", "cha", "speed"]
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+## Builds the effective recruitment cfg consumed by compute_recruit_chance and
+## promote_ally_to_echo. The recruitment formula reads several tunables by LOCAL
+## key names that live CANONICALLY elsewhere in balance data; this overlays those
+## single sources onto a copy of data.contact.recruitment so the formula keeps its
+## local key names WITHOUT balance.json duplicating (and later drifting from) them:
+##   vector_to_virtue_primary    <- data.weaving_rite.vector_to_virtue_primary
+##   rival_archetype_pairs       <- data.sanctum.rival_archetypes
+##   conversation_good_fear_max  <- data.contact.outcome_thresholds.good.npc_fear_max
+##   conversation_good_morale_min<- data.contact.outcome_thresholds.good.npc_morale_min
+## `data` is the full balance `data` dict. Returns a fresh dict (never mutates input).
+static func build_effective_cfg(data: Dictionary) -> Dictionary:
+	var contact_v: Variant = data.get("contact", {})
+	var contact: Dictionary = contact_v if contact_v is Dictionary else {}
+	var recruit_v: Variant = contact.get("recruitment", {})
+	var recruit: Dictionary = recruit_v if recruit_v is Dictionary else {}
+	var cfg: Dictionary = recruit.duplicate(true)
+
+	# vector_to_virtue_primary — canonical: data.weaving_rite.vector_to_virtue_primary
+	var weaving_v: Variant = data.get("weaving_rite", {})
+	var weaving: Dictionary = weaving_v if weaving_v is Dictionary else {}
+	var v2v_v: Variant = weaving.get("vector_to_virtue_primary", {})
+	cfg["vector_to_virtue_primary"] = v2v_v if v2v_v is Dictionary else {}
+
+	# rival_archetype_pairs — canonical: data.sanctum.rival_archetypes
+	var sanctum_v: Variant = data.get("sanctum", {})
+	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	var rivals_v: Variant = sanctum.get("rival_archetypes", [])
+	cfg["rival_archetype_pairs"] = rivals_v if rivals_v is Array else []
+
+	# conversation "good" thresholds — canonical: data.contact.outcome_thresholds.good
+	var thresholds_v: Variant = contact.get("outcome_thresholds", {})
+	var thresholds: Dictionary = thresholds_v if thresholds_v is Dictionary else {}
+	var good_v: Variant = thresholds.get("good", {})
+	var good: Dictionary = good_v if good_v is Dictionary else {}
+	cfg["conversation_good_fear_max"] = int(good.get("npc_fear_max", 35))
+	cfg["conversation_good_morale_min"] = int(good.get("npc_morale_min", 60))
+
+	return cfg
+
 
 ## Additive earned recruit chance. Never guaranteed (see cfg.cap).
 ## ally_actor: joined ally combat actor at battle end (current_hp, max_hp, is_dead,
@@ -152,10 +197,9 @@ static func promote_ally_to_echo(
 			if not existing_id.is_empty():
 				existing_ids.append(existing_id)
 
-	var contact_cfg_v: Variant = cfg_data.get("contact", {})
-	var contact_cfg: Dictionary = contact_cfg_v if contact_cfg_v is Dictionary else {}
-	var recruit_cfg_v: Variant = contact_cfg.get("recruitment", {})
-	var recruit_cfg: Dictionary = recruit_cfg_v if recruit_cfg_v is Dictionary else {}
+	# Merges the canonical source blocks (vector_to_virtue_primary etc.) onto the
+	# recruitment block — the raw data.contact.recruitment no longer carries them.
+	var recruit_cfg: Dictionary = build_effective_cfg(cfg_data)
 
 	var summoning_cfg_v: Variant = cfg_data.get("summoning", {})
 	var summoning_cfg: Dictionary = summoning_cfg_v if summoning_cfg_v is Dictionary else {}

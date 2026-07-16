@@ -22,8 +22,13 @@
 #   11. recruit/promote_sets_origin_rank_and_valid_actor — origin/rank fields + EchoActor.from_echo validity.
 #   12. recruit/promote_seeds_negative_bond_debuff — pre-existing roster echo gets a below-neutral bond edge.
 #
-# Config is loaded from the real data/balance.json (data.contact.recruitment / data.contact.ally)
-# via ConfigService, matching the pattern in CallingTests.gd's _load_real_calling_cfg().
+# Config is loaded from the real data/balance.json via ConfigService, matching the pattern
+# in CallingTests.gd's _load_real_calling_cfg(). The recruitment cfg is built through
+# RecruitmentService.build_effective_cfg() so the tests exercise the REAL formula — the
+# canonical source blocks (data.weaving_rite.vector_to_virtue_primary, data.sanctum.
+# rival_archetypes, data.contact.outcome_thresholds.good) are merged onto data.contact.
+# recruitment exactly as the runtime does it (those keys are no longer duplicated in the
+# recruitment block).
 
 extends RefCounted
 class_name RecruitmentServiceTests
@@ -40,11 +45,9 @@ static func _load_balance_data() -> Dictionary:
 
 
 static func _recruitment_cfg() -> Dictionary:
-	var data := _load_balance_data()
-	var contact_v: Variant = data.get("contact", {})
-	var contact: Dictionary = contact_v if contact_v is Dictionary else {}
-	var cfg_v: Variant = contact.get("recruitment", {})
-	return cfg_v if cfg_v is Dictionary else {}
+	# Merged effective cfg (canonical source blocks overlaid onto data.contact.recruitment) —
+	# same dict the runtime passes to compute_recruit_chance.
+	return RecruitmentService.build_effective_cfg(_load_balance_data())
 
 
 # ─── Fixtures ──────────────────────────────────────────────────────────────

@@ -3126,13 +3126,11 @@
 				"combat_intro_line": "The claimant turns on you."
 			},
 			"recruitment": {
-				"_comment": "V2-STAGE-004 Phase 4 (S14): Earned Return recruit-chance formula for a surviving temporary_ally. Additive conversation+combat+fit, base 0, never guaranteed (cap < 100). See ANSWERS.md #28/#30/#31. All sub-blocks are self-contained here (RecruitmentService.compute_recruit_chance only receives this block) — vector_to_virtue_primary/rival_archetype_pairs duplicate data.weaving_rite/data.sanctum sources by necessity of that scope.",
+				"_comment": "V2-STAGE-004 Phase 4 (S14): Earned Return recruit-chance formula for a surviving temporary_ally. Additive conversation+combat+fit, base 0, never guaranteed (cap < 100). See ANSWERS.md #28/#30/#31. NOTE: vector_to_virtue_primary, rival_archetype_pairs, and the conversation good-thresholds are NOT stored here — they live canonically in data.weaving_rite.vector_to_virtue_primary, data.sanctum.rival_archetypes, and data.contact.outcome_thresholds.good, and are merged onto this block at runtime by RecruitmentService.build_effective_cfg (single source of truth, no duplication).",
 				"cap": 75,
 				"conversation_max": 30,
 				"combat_max": 35,
 				"fit_max": 30,
-				"conversation_good_fear_max": 35,
-				"conversation_good_morale_min": 60,
 				"conv_score_baseline": 3.0,
 				"conversation_subweights": { "outcome_quality": 18, "engagement": 12 },
 				"combat_subweights": {
@@ -3144,27 +3142,9 @@
 				"fit_subweights": { "vector": 15, "archetype": 8, "stat": 7 },
 				"archetype_match_bonus": 0.3,
 				"rival_archetype_penalty": -0.4,
-				"rival_archetype_pairs": [
-					["proud", "empathic"],
-					["valiant", "stoic"],
-					["ambitious", "devout"],
-					["canny", "loyal"]
-				],
 				"stat_similarity_scale": 50.0,
 				"vector_seed_primary": 60.0,
 				"vector_seed_secondary": 20.0,
-				"vector_to_virtue_primary": {
-					"vanguard": "courage",
-					"protector": "leadership",
-					"seeker": "wisdom",
-					"pillar": "acceptance",
-					"strategist": "truth",
-					"skeptic": "humility",
-					"devoted": "forgiveness",
-					"opportunist": "generosity",
-					"mediator": "compassion",
-					"nurturer": "empathy"
-				},
 				"companion_bond_debuff": -30
 			}
 		}

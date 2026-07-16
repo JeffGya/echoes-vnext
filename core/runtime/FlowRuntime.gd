@@ -3694,13 +3694,17 @@ func _compute_ally_recruit_offer_if_eligible(is_victory: bool, rounds_total: int
 	var _aro_contact_cfg: Dictionary = _aro_contact_cfg_v if _aro_contact_cfg_v is Dictionary else {}
 	var _aro_recruit_cfg_v: Variant = _aro_contact_cfg.get("recruitment", {})
 	var _aro_recruit_cfg: Dictionary = _aro_recruit_cfg_v if _aro_recruit_cfg_v is Dictionary else {}
+	# Merge the canonical source blocks (vector_to_virtue_primary / rival_archetype_pairs /
+	# good thresholds) onto the recruitment block — they live canonically elsewhere and are
+	# no longer duplicated in data.contact.recruitment (single source of truth).
+	var _aro_effective_cfg: Dictionary = RecruitmentService.build_effective_cfg(_aro_bal_data)
 
 	var _aro_party_echoes: Array = _get_active_party_echoes()
 	var _aro_contribution_v: Variant = ectx.echo_action_logs.get(str(_aro_ally.get("id", "")), {})
 	var _aro_contribution: Dictionary = _aro_contribution_v if _aro_contribution_v is Dictionary else {}
 
 	var _aro_breakdown: Dictionary = RecruitmentService.compute_recruit_chance(
-		_aro_ally, _aro_source_contact, _aro_party_echoes, _aro_contribution, rounds_total, _aro_recruit_cfg)
+		_aro_ally, _aro_source_contact, _aro_party_echoes, _aro_contribution, rounds_total, _aro_effective_cfg)
 
 	# Seeded roll for determinism — append-only namespace, one draw per encounter.
 	var _aro_rng := RandomNumberGenerator.new()
