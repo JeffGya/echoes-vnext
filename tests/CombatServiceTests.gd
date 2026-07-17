@@ -1,10 +1,10 @@
 # res://tests/CombatServiceTests.gd
 # COMBAT-003: Tests for CombatService — the full action resolver.
 #
-#   1. combat/resolve_melee_base          — atk=10, def=5, neutral morale/fear → damage=5; HP reduced.
+#   1. combat/resolve_melee_base          — atk=10, def=5, neutral morale/fear → damage=5; HP reduced; is_kill=false.
 #   2. combat/resolve_melee_clamped       — atk=3, def=10 → damage floors at 0; HP unchanged.
 #   3. combat/resolve_melee_modifiers     — morale=80 (+3 bonus), fear=60 (-3 penalty) → net delta correct.
-#   4. combat/resolve_melee_kills         — hp_before=3, damage sufficient → hp_after=0, is_dead=true, death_round set.
+#   4. combat/resolve_melee_kills         — hp_before=3, damage sufficient → hp_after=0, is_dead=true, death_round set, is_kill=true.
 #   5. combat/resolve_guard_reduces_dmg   — guarding defender (guard_state=true) takes reduced damage vs unguarded.
 #   6. combat/resolve_refuse              — resolve_action("actor.refuse",...) returns { refused:true }, no HP mutation.
 #
@@ -74,6 +74,11 @@ static func _t_resolve_melee_base() -> Dictionary:
 		return { "ok": false, "error": "Expected defender_hp_after=15, got: %d" % int(result.get("defender_hp_after", -1)) }
 	if int(defender["current_hp"]) != 15:
 		return { "ok": false, "error": "Defender dict not mutated: expected current_hp=15, got: %d" % int(defender["current_hp"]) }
+	# Non-lethal hit must carry is_kill=false (key present, not just absent).
+	if not result.has("is_kill"):
+		return { "ok": false, "error": "Result missing is_kill key on non-lethal hit" }
+	if bool(result.get("is_kill", true)):
+		return { "ok": false, "error": "Expected is_kill=false on non-lethal hit" }
 
 	return { "ok": true }
 
@@ -141,6 +146,10 @@ static func _t_resolve_melee_kills() -> Dictionary:
 		return { "ok": false, "error": "Expected defender is_dead=true after lethal hit" }
 	if int(defender.get("death_round", -1)) != 2:
 		return { "ok": false, "error": "Expected death_round=2, got: %d" % int(defender.get("death_round", -1)) }
+	# Kill signal: result must carry is_kill=true — single source of truth for
+	# kill barks / kill ripple / kill XP consumers in FlowRuntime.
+	if not bool(result.get("is_kill", false)):
+		return { "ok": false, "error": "Expected is_kill=true on lethal hit" }
 
 	return { "ok": true }
 
