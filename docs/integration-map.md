@@ -113,6 +113,7 @@
 | Story | Wave | Status | Ships | Notes |
 |-------|------|--------|-------|-------|
 | **V2-COMBAT-001** — Readiness score, hesitation band, defeat bug fix, enemy count scaling | Foundation | Done | `CombatState.gd`, `ActorStateMachine.gd`, `FlowEncounterState.gd`, `FlowRuntime.gd`, `balance.json`, `tests/CombatInitiativeTests.gd`, `tests/CombatConsequenceTests.gd` | Morale-tier initiative modifier (inspired +4 … broken −6); "hesitating" status band (fear ≥ 40); guard self-set fix; defeat re-entry bug fixed (encounter_ctx nulled on defeat path); enemy count config-driven via spawn groups (1/2/3 base by realm completion index); 8 new bidirectional emotion triggers (guard absorb, near-death, shrine purify, outnumbering, witness refuse, overwhelmed, consecutive no-damage). V2-COMBAT-002 required for tonal realm differentiation (type variety). V2-INFRA-005 required before permadeath. |
+| **V2-COMBAT-002 Slice 1** — Shared Movement Contract + Path/Terrain Foundation | Foundation | In Progress (Slice 1 accepted) | `core/movement/contracts/` (Context/Profile/Goal/Option/Intent/Event/Result + validation), `core/movement/MovementPathService.gd`, `core/realms/StageTerrain.gd` (`is_legal_edge`, `legal_neighbors`), `tests/MovementContractTests.gd`, `tests/MovementPathTests.gd`, extended `tests/StageTerrainTests.gd`, test registration | Deterministic contract and routing foundation only: exact deep-copied data shapes, stable diagnostics, paths exclude origin, capacity envelope 0–6, weighted destination-entry costs, insertion-order-independent tie policy, and shared 8-direction topology. Approved diagonal rule: block only when both orthogonal side cells are solid; occupancy never counts as terrain solidity. **No live combat/exploration behavior switch and no live capacity derivation in Slice 1.** **Verification:** 1011/1011 full suite; contracts 33/33; paths 10/10; terrain 27/27; combat terrain 16/16; Jeff manual regression pass — everything works as before. **Deferred:** approved slices 2–6. |
 
 ---
 
@@ -124,11 +125,11 @@
 
 ---
 
-## Upcoming (Foundation — next pickup order)
+## Current Foundation Work
 
-| Story | Wave | Priority | Notes |
-|-------|------|----------|-------|
-| **V2-DIRECTIVE-001** | Foundation | Next | Directive rewrite (Scout Carefully / Seek Signs) — V2-STAGE-004 is now fully shipped (see above), clearing this for pickup |
+| Story | Wave | State | Notes |
+|-------|------|-------|-------|
+| **V2-COMBAT-002** | Foundation | In Progress | Approved Slice 1 foundation accepted after automated and manual regression verification. Slices 2–6 remain deferred and are not documented as live behavior. V2-DIRECTIVE-001 is already shipped and is no longer the next pickup. |
 
 ---
 

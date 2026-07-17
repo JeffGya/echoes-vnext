@@ -57,12 +57,20 @@ static func _make_runtime(directive_id: String = "directive.scout_carefully") ->
 	runtime.flow_ctx.sim_tick = 0
 
 	var save_data := {
+		"schema_version": SaveSchema.SCHEMA_VERSION,
+		"first_boot": false,
+		"meta": {
+			"created_at_unix": 0,
+			"last_saved_at_unix": 0,
+			"save_generation": 0,
+			"app_version": "traversal-test",
+		},
 		"realms": {},
 		"sanctum": { "roster": [], "active_party_ids": [] },
 		"stage_context": { "active_directive_id": directive_id },
 		"economy": { "ase": 0 },
 		"campaign": { "root_seed": 42 },
-		"flow": {},
+		"flow": { "state": FlowStateIds.STAGE_EXPLORE, "context": {} },
 	}
 	runtime.flow_ctx.save_data = save_data
 	runtime.flow_ctx.campaign_seed = CampaignSeed.new(42)
@@ -75,6 +83,15 @@ static func _make_runtime(directive_id: String = "directive.scout_carefully") ->
 	runtime.econ = EconomyService.new(save_data)
 	runtime.flow_machine = FlowStateMachine.new()
 	runtime.flow_machine.register_default_states()
+	# Dispatch refreshes the current flow state's snapshot. Keep this lightweight
+	# fixture on the real state-machine contract instead of relying on a snapshot
+	# type alone while leaving the machine itself uninitialized.
+	runtime.flow_machine.set_initial(
+		FlowStateIds.STAGE_EXPLORE,
+		runtime.flow_ctx,
+		logger,
+		0
+	)
 
 	return runtime
 
