@@ -303,6 +303,39 @@ static func _t_option_destination_and_commitment() -> Dictionary:
 	var commitment_result: Dictionary = OptionContract.validate(commitment_mismatch, {"col": 1, "row": 1})
 	if not _matches_failure(commitment_result, "commitment_must_equal_route_cost", "commitment"):
 		return _fail("option commitment mismatch accepted: %s" % str(commitment_result))
+	var zero_route_cost: Dictionary = _valid_option()
+	zero_route_cost["route_cost"] = 0
+	var zero_route_result: Dictionary = OptionContract.validate(zero_route_cost, {"col": 1, "row": 1})
+	if not _matches_failure(
+		zero_route_result,
+		"nonempty_path_requires_positive_route_cost",
+		"route_cost"
+	):
+		return _fail("moving option accepted zero route cost: %s" % str(zero_route_result))
+	var zero_shortest_cost: Dictionary = _valid_option()
+	zero_shortest_cost["shortest_cost"] = 0
+	var zero_shortest_result: Dictionary = OptionContract.validate(
+		zero_shortest_cost,
+		{"col": 1, "row": 1}
+	)
+	if not _matches_failure(
+		zero_shortest_result,
+		"nonempty_path_requires_positive_shortest_cost",
+		"shortest_cost"
+	):
+		return _fail("moving option accepted zero shortest cost: %s" % str(zero_shortest_result))
+	var zero_commitment: Dictionary = _valid_option()
+	zero_commitment["commitment"] = 0
+	var zero_commitment_result: Dictionary = OptionContract.validate(
+		zero_commitment,
+		{"col": 1, "row": 1}
+	)
+	if not _matches_failure(
+		zero_commitment_result,
+		"nonempty_path_requires_positive_commitment",
+		"commitment"
+	):
+		return _fail("moving option accepted zero commitment: %s" % str(zero_commitment_result))
 	return _pass()
 
 
@@ -344,6 +377,61 @@ static func _t_origin_required_and_empty_path() -> Dictionary:
 	var stationary_result: Dictionary = OptionContract.validate(stationary, {"col": 1, "row": 1})
 	if not bool(stationary_result["valid"]):
 		return _fail("stationary option at origin rejected: %s" % str(stationary_result))
+	var stationary_cost_cases: Array = [
+		["route_cost", "empty_path_requires_zero_route_cost"],
+		["shortest_cost", "empty_path_requires_zero_shortest_cost"],
+		["slack", "empty_path_requires_zero_slack"],
+		["commitment", "empty_path_requires_zero_commitment"],
+	]
+	for case_value: Variant in stationary_cost_cases:
+		var case: Array = case_value as Array
+		var field: String = str(case[0])
+		var costly_stationary: Dictionary = stationary.duplicate(true)
+		costly_stationary[field] = 1
+		var costly_stationary_result: Dictionary = OptionContract.validate(
+			costly_stationary,
+			{"col": 1, "row": 1}
+		)
+		if not _matches_failure(costly_stationary_result, str(case[1]), field):
+			return _fail(
+				"stationary option accepted positive %s: %s"
+				% [field, str(costly_stationary_result)]
+			)
+	var stationary_intent: Dictionary = IntentContract.build(
+		"echo.1", "activation.1", "goal.hold", "option.hold", [], 2, 0, {}, {}, []
+	)
+	var stationary_intent_result: Dictionary = IntentContract.validate(
+		stationary_intent,
+		{"col": 1, "row": 1}
+	)
+	if not bool(stationary_intent_result["valid"]):
+		return _fail("stationary intent with zero commitment rejected: %s" % str(stationary_intent_result))
+	stationary_intent["commitment"] = 1
+	var costly_stationary_intent_result: Dictionary = IntentContract.validate(
+		stationary_intent,
+		{"col": 1, "row": 1}
+	)
+	if not _matches_failure(
+		costly_stationary_intent_result,
+		"empty_path_requires_zero_commitment",
+		"commitment"
+	):
+		return _fail(
+			"stationary intent accepted positive commitment: %s"
+			% str(costly_stationary_intent_result)
+		)
+	var moving_zero_commitment: Dictionary = _valid_intent()
+	moving_zero_commitment["commitment"] = 0
+	var moving_zero_result: Dictionary = IntentContract.validate(
+		moving_zero_commitment,
+		{"col": 1, "row": 1}
+	)
+	if not _matches_failure(
+		moving_zero_result,
+		"nonempty_path_requires_positive_commitment",
+		"commitment"
+	):
+		return _fail("moving intent accepted zero commitment: %s" % str(moving_zero_result))
 	stationary["destination"] = {"col": 2, "row": 1}
 	var mismatch_result: Dictionary = OptionContract.validate(stationary, {"col": 1, "row": 1})
 	if not _matches_failure(mismatch_result, "empty_path_destination_must_equal_origin", "destination"):
@@ -561,7 +649,7 @@ static func _t_result_rejects_contradictory_history() -> Dictionary:
 		[{"col": 2, "row": 1}], costly_forced, 0, 1, {"col": 2, "row": 1}
 	)
 	var costly_result: Dictionary = ResultContract.validate(costly_result_value)
-	if not _matches_failure(costly_result, "forced_movement_has_cost", "events"):
+	if not _matches_failure(costly_result, "invalid_event.forced_movement_has_cost", "events.cost"):
 		return _fail("forced movement consumed voluntary cost: %s" % str(costly_result))
 	return _pass()
 
@@ -583,6 +671,29 @@ static func _t_voluntary_event_cost_positive() -> Dictionary:
 		"events.cost"
 	):
 		return _fail("zero-cost voluntary history accepted: %s" % str(history_result))
+	var costly_forced: Dictionary = _event(
+		1, {"col": 1, "row": 1}, {"col": 2, "row": 1}, "", "forced", 1
+	)
+	var forced_result: Dictionary = EventContract.validate(costly_forced)
+	if not _matches_failure(forced_result, "forced_movement_has_cost", "cost"):
+		return _fail("positive-cost forced event accepted: %s" % str(forced_result))
+	var costly_nonmovement: Dictionary = _event(
+		1, {"col": 1, "row": 1}, {"col": 1, "row": 1}, "no_route", "none", 1
+	)
+	var nonmovement_result: Dictionary = EventContract.validate(costly_nonmovement)
+	if not _matches_failure(nonmovement_result, "nonmovement_event_has_cost", "cost"):
+		return _fail("positive-cost nonmovement event accepted: %s" % str(nonmovement_result))
+	var nonmovement_history: Dictionary = _result_for_history(
+		[], [costly_nonmovement], 0, 0, {"col": 1, "row": 1}
+	)
+	nonmovement_history["stop_reason"] = "no_route"
+	var nonmovement_history_result: Dictionary = ResultContract.validate(nonmovement_history)
+	if not _matches_failure(
+		nonmovement_history_result,
+		"invalid_event.nonmovement_event_has_cost",
+		"events.cost"
+	):
+		return _fail("positive-cost nonmovement history accepted: %s" % str(nonmovement_history_result))
 	return _pass()
 
 

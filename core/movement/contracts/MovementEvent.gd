@@ -94,8 +94,13 @@ static func validate(value: Dictionary) -> Dictionary:
 		var int_result: Dictionary = V.require_non_negative_int(value, field)
 		if not bool(int_result["valid"]):
 			return int_result
-	if str(value["movement_kind"]) == "voluntary" and int(value["cost"]) < 1:
+	var movement_kind: String = str(value["movement_kind"])
+	if movement_kind == "voluntary" and int(value["cost"]) < 1:
 		return V.failure("voluntary_movement_requires_positive_cost", "cost")
+	if movement_kind == "forced" and int(value["cost"]) != 0:
+		return V.failure("forced_movement_has_cost", "cost")
+	if movement_kind == "none" and int(value["cost"]) != 0:
+		return V.failure("nonmovement_event_has_cost", "cost")
 	var hazard_result: Dictionary = V.require_type(value, "hazard", TYPE_DICTIONARY)
 	if not bool(hazard_result["valid"]):
 		return hazard_result

@@ -68,6 +68,11 @@ static func validate(value: Dictionary, origin: Dictionary) -> Dictionary:
 	var commitment_result: Dictionary = V.require_non_negative_int(value, "commitment")
 	if not bool(commitment_result["valid"]):
 		return commitment_result
+	if (value["path"] as Array).is_empty():
+		if int(value["commitment"]) != 0:
+			return V.failure("empty_path_requires_zero_commitment", "commitment")
+	elif int(value["commitment"]) == 0:
+		return V.failure("nonempty_path_requires_positive_commitment", "commitment")
 	if int(value["commitment"]) > int(value["capacity"]):
 		return V.failure("commitment_exceeds_capacity", "commitment")
 	for field: String in ["planned_action", "fallback"]:

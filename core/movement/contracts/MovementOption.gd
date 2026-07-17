@@ -98,6 +98,22 @@ static func validate(value: Dictionary, origin: Dictionary) -> Dictionary:
 		var int_result: Dictionary = V.require_non_negative_int(value, field)
 		if not bool(int_result["valid"]):
 			return int_result
+	if path.is_empty():
+		if int(value["route_cost"]) != 0:
+			return V.failure("empty_path_requires_zero_route_cost", "route_cost")
+		if int(value["shortest_cost"]) != 0:
+			return V.failure("empty_path_requires_zero_shortest_cost", "shortest_cost")
+		if int(value["slack"]) != 0:
+			return V.failure("empty_path_requires_zero_slack", "slack")
+		if int(value["commitment"]) != 0:
+			return V.failure("empty_path_requires_zero_commitment", "commitment")
+	else:
+		if int(value["route_cost"]) == 0:
+			return V.failure("nonempty_path_requires_positive_route_cost", "route_cost")
+		if int(value["shortest_cost"]) == 0:
+			return V.failure("nonempty_path_requires_positive_shortest_cost", "shortest_cost")
+		if int(value["commitment"]) == 0:
+			return V.failure("nonempty_path_requires_positive_commitment", "commitment")
 	var capacity_result: Dictionary = V.require_capacity(value, "capacity")
 	if not bool(capacity_result["valid"]):
 		return capacity_result
