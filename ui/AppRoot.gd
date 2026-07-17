@@ -388,6 +388,7 @@ func _run_tests(parts: Array) -> void:
 	CombatStateTests.register(runner)        # COMBAT-001 + COMBAT-002
 	CombatInitiativeTests.register(runner)   # V2-COMBAT-001: readiness score (morale-tier)
 	CombatConsequenceTests.register(runner)  # V2-COMBAT-001: guard routing, hesitation band
+	CombatSupportLedgerTests.register(runner) # V2-COMBAT-00x (S14b): support/defensive attribution
 	CombatServiceTests.register(runner) # COMBAT-003
 	CombatRoundTests.register(runner)     # COMBAT-004
 	CombatSnapshotTests.register(runner) # COMBAT-007

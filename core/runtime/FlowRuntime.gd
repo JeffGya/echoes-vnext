@@ -1850,6 +1850,10 @@ func _resolve_next_actor(t: int) -> void:
 					var hit_fear_applied := LeadershipEmotionServiceScript.apply_fear_gain(
 						target, fear_per_hit, ectx.actors, leadership_expr_cfg)
 					target["fear"] = mini(100, int(target.get("fear", 0)) + hit_fear_applied)
+					# S14b Tier 2 (offensive): credit the attacker the ACTUAL dampened fear
+					# delivered to whoever they hit. All-faction, direct to the ledger (mirrors
+					# damage_dealt); _s14a_atk_log is the attacker's entry created just above.
+					_s14a_atk_log["fear_inflicted"] = int(_s14a_atk_log.get("fear_inflicted", 0)) + hit_fear_applied
 					logger.debug(t, "combat.fear.hit", "%s gains fear from hit" % target.get("name", "?"), {
 						"actor_id": str(target.get("id", "")),
 						"delta":    hit_fear_applied,
@@ -1874,8 +1878,14 @@ func _resolve_next_actor(t: int) -> void:
 							if str(ally.get("id", "")) == str(actor.get("id", "")): continue
 							if ally.get("is_dead", false): continue
 							if str(ally.get("faction", "")) != "echo": continue
-							ally["morale"] = mini(100, int(ally.get("morale", 50)) + morale_ripple)
-							ally["fear"]   = maxi(0,   int(ally.get("fear",   0)) - fear_ripple)
+							var _kr_m_before: int = int(ally.get("morale", 50))
+							var _kr_f_before: int = int(ally.get("fear",   0))
+							ally["morale"] = mini(100, _kr_m_before + morale_ripple)
+							ally["fear"]   = maxi(0,   _kr_f_before - fear_ripple)
+							# S14b Tier 2 (support): credit the killer the effective morale gained
+							# and fear relieved on each living echo ally (post-clamp deltas).
+							_credit_support_tally(actor, "morale_given",  int(ally["morale"]) - _kr_m_before)
+							_credit_support_tally(actor, "fear_relieved", _kr_f_before - int(ally["fear"]))
 							logger.info(t, "combat.kill_ripple",
 								"%s ripple from %s kill" % [ally.get("name", "?"), actor.get("name", "?")], {
 								"ally_id":      str(ally.get("id", "")),
@@ -2034,6 +2044,11 @@ func _resolve_next_actor(t: int) -> void:
 				alog["total_count"] += 1
 			"actor.move", "actor.idle", "actor.refuse":
 				alog["total_count"] += 1
+
+	# S14b Tier 2: fold this actor's transient support tally into the contribution ledger.
+	# Single write path for support fields (ActorStateMachine + kill ripple/momentum all
+	# accumulate onto actor["_support_tally"] during this turn).
+	_fold_support_tally(actor, ectx)
 
 	# Advance current_actor_index past this actor so the next call finds the correct one.
 	combat_state["current_actor_index"] = next_idx + 1
@@ -3089,7 +3104,10 @@ func _apply_kill_momentum(
 		return
 	for ally_v in allies:
 		var ally: Dictionary = ally_v
-		ally["morale"] = clampi(int(ally.get("morale", 50)) + morale_boost, 0, 100)
+		var _km_before: int = int(ally.get("morale", 50))
+		ally["morale"] = clampi(_km_before + morale_boost, 0, 100)
+		# S14b Tier 2 (support): credit the killer the effective morale gained per ally.
+		_credit_support_tally(source, "morale_given", int(ally["morale"]) - _km_before)
 	logger.info(t, "actor.leadership.kill_momentum", "Leadership kill momentum fired", {
 		"actor_id": source.get("id", ""),
 		"morale_boost": morale_boost,
@@ -3125,6 +3143,13 @@ func _find_actor_by_id(actors: Array, actor_id: String) -> Dictionary:
 ## spirit/ally) so the offensive contribution ledger (damage_dealt/damage_taken/kills) can
 ## be attributed to any actor; melee_count/guard_count/kill_count/total_count remain
 ## echo-only, populated exclusively by the pre-existing PROG-003 accumulator block.
+## S14b (Tier 2 — support/defensive attribution): five additive fields, all default 0.
+##   - guards_granted / morale_given / fear_relieved / support_actions are SUPPORT metrics,
+##     echo-gated (populated only for echo-faction acting actors via the _support_tally fold
+##     in _resolve_next_actor). morale_given/fear_relieved are EFFECTIVE post-clamp points
+##     delivered to ALLIES (self-effects excluded).
+##   - fear_inflicted is an OFFENSIVE metric (fear dealt to whoever the actor hits),
+##     all-faction, written directly at the per-hit fear choke (mirrors damage_dealt).
 func _new_contribution_ledger_entry() -> Dictionary:
 	return {
 		"melee_count":  0,
@@ -3134,7 +3159,44 @@ func _new_contribution_ledger_entry() -> Dictionary:
 		"damage_dealt": 0,
 		"damage_taken": 0,
 		"kills":        0,
+		# S14b Tier 2 — support/defensive (echo-gated) + offensive fear (all-faction)
+		"guards_granted":  0,
+		"morale_given":    0,
+		"fear_relieved":   0,
+		"support_actions": 0,
+		"fear_inflicted":  0,
 	}
+
+
+## S14b Tier 2: accumulate a support metric onto the acting actor's transient _support_tally
+## dict (folded into echo_action_logs once per turn in _resolve_next_actor, then erased).
+## Additive, read-only bookkeeping — never influences a decision. amount == 0 is a no-op.
+func _credit_support_tally(a: Dictionary, field: String, amount: int) -> void:
+	if amount == 0:
+		return
+	var st: Dictionary = a.get("_support_tally", {})
+	st[field] = int(st.get(field, 0)) + amount
+	a["_support_tally"] = st
+
+
+## S14b Tier 2: merge the acting actor's transient _support_tally into echo_action_logs and
+## clear it. Echo-gated (support fields are an echo-only signal, mirroring PROG-003); the tally
+## is ALWAYS erased so a stale tally can never double-count on the actor's next turn.
+func _fold_support_tally(actor: Dictionary, ectx: EncounterContext) -> void:
+	var st_v: Variant = actor.get("_support_tally", {})
+	if not (st_v is Dictionary) or (st_v as Dictionary).is_empty():
+		return
+	if str(actor.get("faction", "")) == "echo":
+		var st: Dictionary = st_v
+		var aid: String = str(actor.get("id", ""))
+		if not ectx.echo_action_logs.has(aid):
+			ectx.echo_action_logs[aid] = _new_contribution_ledger_entry()
+		var slog: Dictionary = ectx.echo_action_logs[aid]
+		slog["guards_granted"]  = int(slog.get("guards_granted", 0))  + int(st.get("guards_granted", 0))
+		slog["morale_given"]    = int(slog.get("morale_given", 0))    + int(st.get("morale_given", 0))
+		slog["fear_relieved"]   = int(slog.get("fear_relieved", 0))   + int(st.get("fear_relieved", 0))
+		slog["support_actions"] = int(slog.get("support_actions", 0)) + int(st.get("support_actions", 0))
+	actor.erase("_support_tally")
 
 
 func _generate_seed_root_string() -> String:
