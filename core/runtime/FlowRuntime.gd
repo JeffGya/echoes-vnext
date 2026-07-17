@@ -1816,6 +1816,10 @@ func _resolve_next_actor(t: int) -> void:
 			if not target.is_empty() and not target.get("is_dead", false):
 				var result: Dictionary = CombatService.resolve_action("melee_attack", actor, target, round)
 				if not result.is_empty():
+					# source_id is the shared lookup key across last_round_results consumers
+					# (initiative-panel action text, T9 no-damage streak, current_actor_id) —
+					# CombatService returns attacker_id only, so enrich here like source_name.
+					result["source_id"]   = str(actor.get("id", ""))
 					result["source_name"] = str(actor.get("name", ""))
 					result["target_name"] = str(target.get("name", ""))
 					ectx.last_round_results.append(result)
@@ -1823,14 +1827,14 @@ func _resolve_next_actor(t: int) -> void:
 					# ALL factions (echo/enemy/spirit/ally). Widens the existing echo_action_logs
 					# accumulator (PROG-003, ~line 1944 below) in place — same field name, kept for
 					# ProgressionService compatibility. Read-only bookkeeping; never influences a
-					# decision. Kill signal is derived from defender_hp_after (CombatService's
-					# _resolve_melee sets defender.is_dead the same way but never returns an
-					# "is_kill" key on the result dict, so the pre-existing result.get("is_kill", ...)
-					# checks below are left untouched for byte-identical behaviour).
+					# decision. Kill signal comes from result.is_kill, set by
+					# CombatService._resolve_melee — the single source of truth (same condition
+					# that sets defender.is_dead). All result.get("is_kill", ...) checks below
+					# read the same key.
 					var _s14a_dmg: int = int(result.get("damage", 0))
 					var _s14a_attacker_id: String = str(actor.get("id", ""))
 					var _s14a_defender_id: String = str(target.get("id", ""))
-					var _s14a_is_kill: bool = int(result.get("defender_hp_after", 1)) <= 0
+					var _s14a_is_kill: bool = bool(result.get("is_kill", false))
 					if not ectx.echo_action_logs.has(_s14a_attacker_id):
 						ectx.echo_action_logs[_s14a_attacker_id] = _new_contribution_ledger_entry()
 					if not ectx.echo_action_logs.has(_s14a_defender_id):
@@ -1954,6 +1958,7 @@ func _resolve_next_actor(t: int) -> void:
 		"actor.guard":
 			var guard_result: Dictionary = CombatService.resolve_action("actor.guard", actor, {}, round)
 			if not guard_result.is_empty():
+				guard_result["source_id"]   = str(actor.get("id", ""))
 				guard_result["source_name"] = str(actor.get("name", ""))
 				ectx.last_round_results.append(guard_result)
 				logger.info(t, "combat.guard_taken",

@@ -70,6 +70,10 @@ static func register(runner) -> void:
 	# V2-STAGE-004 P3c review-fix: a JOINED spirit must not self-escort to a spirit_escorted
 	# victory after the real party is wiped — party-wipe defeat must fire instead.
 	runner.register_test("combat_roundtrip/guide_spirit_joined_spirit_does_not_self_escort", func(): return test_guide_spirit_joined_spirit_does_not_self_escort())
+	# Kill-signal fix regression: a killing blow through the LIVE round loop must carry
+	# is_kill=true on the result and fire the kill consumers (boost, ripple, ledger).
+	# Guards against _resolve_melee ever dropping the is_kill key again.
+	runner.register_test("combat_roundtrip/killing_blow_sets_is_kill_live", func(): return test_killing_blow_sets_is_kill_live())
 
 
 # ---------------------------------------------------------------------------
@@ -1738,5 +1742,153 @@ static func test_guide_spirit_joined_spirit_does_not_self_escort() -> Dictionary
 
 	if reason != "all_echoes_dead":
 		return { "ok": false, "error": "Expected 'all_echoes_dead' defeat after party wipe, got '%s'" % reason }
+
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# Kill-signal fix — regression coverage through the LIVE path.
+#
+# Bug: CombatService._resolve_melee historically returned no "is_kill" key, so
+# every result.get("is_kill", false) consumer in FlowRuntime._resolve_next_actor
+# (kill log, kill boost + party ripple, combat_ko bark, PROG-003 kill_count /
+# mid-combat kill XP) was permanently dead. The fix makes _resolve_melee return
+# "is_kill": hp_after <= 0 — the same condition that sets defender.is_dead.
+#
+# This test drives a killing blow through the REAL dispatch loop (combat.init →
+# combat.confirm_round → combat.next_actor), NOT a hand-built result dict, and
+# asserts the signal + its consumers:
+#   (a) a melee result in last_round_results carries is_kill=true
+#   (b) killer's echo_action_logs entry has kills >= 1 (S14a) and kill_count >= 1 (PROG-003)
+#   (c) the killer received the kill morale boost
+#   (d) at least one OTHER living echo received the kill ripple
+# ---------------------------------------------------------------------------
+# Morale of every living echo, keyed by id — snapshot taken before a dispatch.
+static func _living_echo_morale(ectx) -> Dictionary:
+	var out: Dictionary = {}
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "echo" and not a_v.get("is_dead", false):
+			out[str(a_v.get("id", ""))] = int(a_v.get("morale", 50))
+	return out
+
+
+# Returns the trailing melee result iff it is an echo-attacker killing blow; {} otherwise.
+static func _last_echo_melee_kill(ectx) -> Dictionary:
+	if ectx.last_round_results.is_empty():
+		return {}
+	var lr: Dictionary = ectx.last_round_results.back()
+	if str(lr.get("action_type", "")) != "melee_attack":
+		return {}
+	if not bool(lr.get("is_kill", false)):
+		return {}
+	if not str(lr.get("attacker_id", "")).begins_with("echo_"):
+		return {}
+	return lr
+
+
+static func test_killing_blow_sets_is_kill_live() -> Dictionary:
+	var env: Dictionary = _setup("iskill", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed (realm not created)" }
+	var runtime = env["runtime"]
+	var ectx = env["ectx"]
+
+	# Rig the live actors for a fast, one-sided kill: echoes hit hard with morale
+	# headroom (40 < 100 cap so the +25 boost / +10 ripple are observable); enemies
+	# are 1-HP glass with atk 0 so no echo dies and no enemy-side kill fires first.
+	for a_v in ectx.actors:
+		var a: Dictionary = a_v
+		if str(a.get("faction", "")) == "echo":
+			var e_stats: Dictionary = a.get("stats", {})
+			e_stats["atk"] = 50
+			a["stats"]  = e_stats
+			a["morale"] = 40
+			a["fear"]   = 0
+		elif str(a.get("faction", "")) == "enemy":
+			var n_stats: Dictionary = a.get("stats", {})
+			n_stats["atk"] = 0
+			n_stats["def"] = 0
+			a["stats"]      = n_stats
+			a["current_hp"] = 1
+
+	# Drive the real loop dispatch-by-dispatch so we can snapshot echo morale
+	# immediately before the killing dispatch and compare after it. NOTE:
+	# combat.confirm_round itself resolves the FIRST living actor of the round,
+	# so the kill check must run after BOTH dispatch types — a fast killer acts
+	# inside confirm_round, never inside a next_actor dispatch.
+	runtime.dispatch({ "type": "combat.init" })
+	var kill_result: Dictionary = {}
+	var pre_kill_morale: Dictionary = {}
+	for _r in range(10):
+		var morale_cr: Dictionary = _living_echo_morale(ectx)
+		runtime.dispatch({ "type": "combat.confirm_round" })
+		kill_result = _last_echo_melee_kill(ectx)
+		if not kill_result.is_empty():
+			pre_kill_morale = morale_cr
+			break
+		var guard: int = 0
+		while guard < 60:
+			guard += 1
+			var cs: Dictionary = ectx.combat_state
+			if bool(cs.get("combat_over", false)): break
+			if str(cs.get("round_phase", "")) != "in_round": break
+			# Snapshot living-echo morale before this actor resolves.
+			var morale_now: Dictionary = _living_echo_morale(ectx)
+			runtime.dispatch({ "type": "combat.next_actor" })
+			kill_result = _last_echo_melee_kill(ectx)
+			if not kill_result.is_empty():
+				pre_kill_morale = morale_now
+				break
+		if not kill_result.is_empty(): break
+		if bool(ectx.combat_state.get("combat_over", false)): break
+
+	# (a) The live result dict must carry the kill signal.
+	if kill_result.is_empty():
+		return { "ok": false, "error": "no echo melee result with is_kill=true observed through the live loop" }
+	if int(kill_result.get("defender_hp_after", 1)) > 0:
+		return { "ok": false, "error": "is_kill=true but defender_hp_after > 0 — signal out of sync" }
+
+	var killer_id: String = str(kill_result.get("attacker_id", ""))
+
+	# Melee results must also carry source_id (== attacker_id): it is the shared
+	# lookup key for the initiative-panel action text, the T9 no-damage streak,
+	# and current_actor_id. Missing key = those consumers silently go dead.
+	if str(kill_result.get("source_id", "")) != killer_id:
+		return { "ok": false, "error": "melee result source_id '%s' != attacker_id '%s'" % [str(kill_result.get("source_id", "")), killer_id] }
+
+	# (b) Ledger consumers: S14a kills + PROG-003 kill_count both credited.
+	var klog: Dictionary = ectx.echo_action_logs.get(killer_id, {})
+	if int(klog.get("kills", 0)) < 1:
+		return { "ok": false, "error": "S14a ledger kills=0 for killer %s after live kill" % killer_id }
+	if int(klog.get("kill_count", 0)) < 1:
+		return { "ok": false, "error": "PROG-003 kill_count=0 for killer %s after live kill" % killer_id }
+
+	# (c) Kill boost: killer morale rose vs its pre-dispatch snapshot (boost is +25;
+	# allow other same-dispatch effects a ±5 margin).
+	var killer_actor: Dictionary = {}
+	for a_v in ectx.actors:
+		if str(a_v.get("id", "")) == killer_id:
+			killer_actor = a_v
+			break
+	if killer_actor.is_empty():
+		return { "ok": false, "error": "killer actor %s not found post-kill" % killer_id }
+	var killer_before: int = int(pre_kill_morale.get(killer_id, -1))
+	var killer_after: int  = int(killer_actor.get("morale", 0))
+	if killer_after < killer_before + 20:
+		return { "ok": false, "error": "kill boost missing: killer morale %d → %d (expected >= +20)" % [killer_before, killer_after] }
+
+	# (d) Kill ripple: at least one OTHER living echo gained morale (+10 ripple, >= +5 margin).
+	var ripple_seen: bool = false
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) != "echo": continue
+		if a_v.get("is_dead", false): continue
+		var aid: String = str(a_v.get("id", ""))
+		if aid == killer_id: continue
+		if not pre_kill_morale.has(aid): continue
+		if int(a_v.get("morale", 0)) >= int(pre_kill_morale[aid]) + 5:
+			ripple_seen = true
+			break
+	if not ripple_seen:
+		return { "ok": false, "error": "kill ripple missing: no other living echo gained morale after the kill" }
 
 	return { "ok": true }
