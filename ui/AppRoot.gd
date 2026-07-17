@@ -4,6 +4,8 @@ const SaveIntegrityTestsScript := preload("res://tests/SaveIntegrityTests.gd")
 const LeadershipEmotionTestsScript := preload("res://tests/LeadershipEmotionTests.gd")
 const SanctumPulseTestsScript := preload("res://tests/SanctumPulseTests.gd")
 const FoundationUITestsScript := preload("res://tests/FoundationUITests.gd")
+const MovementContractTestsScript := preload("res://tests/MovementContractTests.gd")
+const MovementPathTestsScript := preload("res://tests/MovementPathTests.gd")
 
 @onready var snapshot_view: RichTextLabel = %SnapshotView
 @onready var renderer: UISnapshotRenderer = %UISnapshotRenderer
@@ -385,6 +387,9 @@ func _run_tests(parts: Array) -> void:
 	VectorTests.register(runner)
 	DirectiveTests.register(runner)  # DIRECTIVE-001
 	GridTests.register(runner)       # GRID-001
+	# V2-COMBAT-002 slice 1: shared movement contracts + weighted path primitives
+	MovementContractTestsScript.register(runner)
+	MovementPathTestsScript.register(runner)
 	CombatStateTests.register(runner)        # COMBAT-001 + COMBAT-002
 	CombatInitiativeTests.register(runner)   # V2-COMBAT-001: readiness score (morale-tier)
 	CombatConsequenceTests.register(runner)  # V2-COMBAT-001: guard routing, hesitation band

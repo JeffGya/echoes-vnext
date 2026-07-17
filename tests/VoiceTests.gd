@@ -8,6 +8,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("voice/reactive_bark_deterministic", Callable(VoiceTests, "_test_reactive_bark_deterministic"))
 	runner.register_test("voice/shoutbank_variation_deterministic", Callable(VoiceTests, "_test_shoutbank_variation_deterministic"))
 	runner.register_test("voice/sanctum_bark_context_victory_defeat", Callable(VoiceTests, "_test_sanctum_bark_context"))
+	runner.register_test("voice/legacy_fallback_tolerates_array_traits", Callable(VoiceTests, "_test_legacy_fallback_tolerates_array_traits"))
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -198,6 +199,24 @@ static func _test_shoutbank_variation_deterministic() -> Dictionary:
 	if line_b0.is_empty() or line_b1.is_empty():
 		return { "ok": false, "error": "get_expression_shout returned empty for variation keys 0 or 1" }
 
+	return { "ok": true }
+
+
+# ── Regression: malformed legacy traits must not crash bark fallback ────────────────
+
+## Some legacy integration fixtures carry traits as an Array. The actor contract
+## requires a Dictionary, but bark selection must remain silent instead of emitting
+## an Array.get() arity error when the expression lookup reaches its legacy fallback.
+static func _test_legacy_fallback_tolerates_array_traits() -> Dictionary:
+	var actor := _make_echo_actor("legacy", "missing_archetype", "", "echo", 10, 50, "nascent")
+	actor["traits"] = []
+	var asm := ActorStateMachine.new(actor, null, _make_actor_cfg())
+	asm._expression_band = "nascent"
+	asm._select_bark("missing_archetype", "", "actor.guard", 10, 10,
+		"steady", "steady", false, false, "", 0, 0)
+
+	if asm._bark_context != "combat_banter":
+		return { "ok": false, "error": "Expected combat_banter context, got '%s'" % asm._bark_context }
 	return { "ok": true }
 
 

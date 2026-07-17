@@ -97,6 +97,9 @@ Four project-specific skills are installed. Use them proactively — they are au
 | LeadershipEmotionService | `core/combat/LeadershipEmotionService.gd` | Whole-band, radius-aware leadership emotion rules. Living Echo allies only; excludes source/dead/non-Echo/out-of-radius. Overlapping reductions use strongest factor (never multiply); direct positive recovery from separate leaders stacks. |
 | EmotionPresentation | `ui/components/EmotionPresentation.gd` + `assets/theme/LivingTreeSystem.tres` | Shared ten-status display names, colors, chip variations, and text variations for every player-facing emotion surface. |
 | GridService | `core/grid/GridService.gd` | `place_actors()`, `manhattan_distance()`, `move_toward()` (8-dir greedy). Board 10×10. |
+| Movement contracts (V2-COMBAT-002 S1) | `core/movement/contracts/` | Seven strict, deep-copying data seams: Context, Profile, Goal, Option, Intent, Event, Result. Exact-field validation returns stable `{valid, reason, field}` diagnostics; paths exclude origin; ordered result events must exactly project traversal, costs, forced steps, hazards, destination, and stop reason. Capacity envelope is 0–6: structures use 0 and capacity 1 requires an exact authored override. No live capacity derivation or behavior switch in Slice 1. |
+| MovementPathService (V2-COMBAT-002 S1) | `core/movement/MovementPathService.gd` | Pure deterministic weighted `shortest_path`, `reachable_cost_region`, and `validate_route`. Positive integer destination-entry costs default to 1; routes exclude origin; tie policy is geometric then numeric and independent of Dictionary insertion order. Uses `StageTerrain` as edge authority. |
+| StageTerrain shared movement seam | `core/realms/StageTerrain.gd` | Existing irregular terrain authority plus S1 `is_legal_edge` / `legal_neighbors`: stable 8-direction, optional bounds, walkable source+destination, and diagonal blocked only when both orthogonal side cells are solid. Occupancy is not terrain solidity; empty walkable keeps legacy all-walkable behavior. |
 | CombatState | `core/combat/CombatState.gd` | `create()` + `check_end_condition()`. End priority: all_enemies_defeated → shrine_destroyed → all_echoes_dead. |
 | CombatService | `core/combat/CombatService.gd` | `resolve_action(type, attacker, defender, round)` → result dict. Melee: guard doubles eff_def. |
 | ShrineService | `core/combat/ShrineService.gd` | `select_purifier()`, `apply_drain()`, `apply_purify_stack()`. |
@@ -129,6 +132,8 @@ Four project-specific skills are installed. Use them proactively — they are au
 The registered suite includes responsive foundation, viewport/safe-area, modal focus/input,
 cross-shell CanvasLayer, target-size, live-resize, Sanctum geometry, Realm geometry,
 and existing deterministic core regression coverage.
+
+**V2-COMBAT-002 Slice 1 acceptance:** foundation only; live combat/exploration movement remains unchanged and slices 2–6 are deferred. Final verification: 1011/1011 full suite; focused movement contracts 33/33, movement paths 10/10, StageTerrain 27/27, combat terrain 16/16; Jeff's manual in-game regression pass confirmed behavior remains as before.
 
 ---
 

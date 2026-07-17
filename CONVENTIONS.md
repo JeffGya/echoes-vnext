@@ -715,6 +715,23 @@ Guard consequence types:
 
 **V2-COMBAT-002 dependency:** Required for tonal realm differentiation. V2-COMBAT-001 scales enemy count only — type variety (making realms feel distinct in pressure and tone) belongs to V2-COMBAT-002.
 
+### Shared Movement Contract + Path Foundation (V2-COMBAT-002 Slice 1)
+
+Slice 1 establishes deterministic movement vocabulary and topology primitives only. It does **not** switch combat, exploration, actor behavior, initiative, objectives, snapshots, saves, or UI to a new movement executor. Existing live behavior remains the regression baseline; V2-COMBAT-002 slices 2–6 own all later integration and player-facing behavior.
+
+**Contracts (`core/movement/contracts/`, pure `RefCounted` data seams):**
+- `MovementContext` separates authoritative topology/occupancy from planner-visible cells, actors, hazards, relationships, pressure, and history.
+- `MovementProfile` records capacity provenance and control state. Capacity is capped at 6; structures use 0; capacity 1 is valid only with an exact, matching authored override (the approved non-joining GUIDE seam). Slice 1 validates these values but does not derive live actor capacity.
+- `MovementGoal`, `MovementOption`, and `MovementIntent` preserve goal/option correlation, destination regions, truthful route cost, bounded slack, commitment, pressure/control sources, planned action, and declared fallback.
+- `MovementEvent` and `MovementResult` preserve one strictly ordered authoritative history. Event projection must exactly match traversed cells, voluntary cost, forced steps, hazards, final destination, and terminal stop reason.
+- Builders deep-copy mutable inputs. Validators accept exact field sets and return stable `{valid, reason, field}` diagnostics. Paths always contain destinations only and therefore exclude their origin.
+
+**Weighted paths (`core/movement/MovementPathService.gd`, pure-static):** `shortest_path`, `reachable_cost_region`, and `validate_route` use positive integer destination-entry costs (default 1), never consume RNG, and never depend on Dictionary insertion order. Equal-cost routing prefers cumulative origin-to-destination line deviation, then relative progress, with numeric `(col,row)` ordering only as the irreducible final fallback. Returned paths exclude origin; unreachable and invalid inputs return explicit reason codes.
+
+**Shared terrain edge authority (`StageTerrain`):** `is_legal_edge(from_cell, to_cell, walkable, bounds={})` and `legal_neighbors(...)` define stable 8-direction, bounds-aware topology for the new path service. Source and destination must be walkable. A diagonal is blocked only when **both** orthogonal side cells are solid; one open side permits it. Actor occupancy is intentionally not terrain solidity and never creates a solid corner. Empty `walkable` retains the legacy all-walkable sentinel, clipped when bounds are supplied.
+
+**Accepted verification:** 1011/1011 full-suite tests; focused suites: movement contracts 33/33, movement paths 10/10, StageTerrain 27/27, combat terrain 16/16. Jeff's manual in-game regression pass confirmed the game behaves as before. Slices 2–6 remain deferred.
+
 ### Save Schema (`core/save/SaveSchema.gd` + `SaveService.gd`)
 9 top-level keys: `schema_version`, `first_boot`, `meta`, `campaign`, `flow`, `economy`, `sanctum`, `stage_context`, `realms`
 

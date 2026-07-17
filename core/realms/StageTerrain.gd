@@ -421,6 +421,69 @@ static func is_walkable(cell: Dictionary, walkable: Dictionary) -> bool:
 	return walkable.has(key)
 
 
+## Returns true when `to_cell` is a legal single-cell 8-direction edge from
+## `from_cell`. `walkable` remains the collision authority; an empty set keeps
+## the legacy all-walkable sentinel behavior, constrained by `bounds` when the
+## caller supplies them.
+##
+## Diagonals may pass one solid orthogonal side, but not two. Actor occupancy is
+## deliberately absent from this topology seam and therefore never forms a
+## solid corner.
+static func is_legal_edge(
+	from_cell: Dictionary,
+	to_cell: Dictionary,
+	walkable: Dictionary,
+	bounds: Dictionary = {}
+) -> bool:
+	var from_col: int = int(from_cell.get("col", 0))
+	var from_row: int = int(from_cell.get("row", 0))
+	var to_col: int = int(to_cell.get("col", 0))
+	var to_row: int = int(to_cell.get("row", 0))
+	var delta_col: int = abs(to_col - from_col)
+	var delta_row: int = abs(to_row - from_row)
+
+	# Exactly one 8-direction edge: reject self and non-adjacent cells.
+	if max(delta_col, delta_row) != 1:
+		return false
+	if not _is_walkable_in_bounds(from_cell, walkable, bounds):
+		return false
+	if not _is_walkable_in_bounds(to_cell, walkable, bounds):
+		return false
+
+	if delta_col == 1 and delta_row == 1:
+		var side_col := { "col": to_col, "row": from_row }
+		var side_row := { "col": from_col, "row": to_row }
+		if not _is_walkable_in_bounds(side_col, walkable, bounds) \
+				and not _is_walkable_in_bounds(side_row, walkable, bounds):
+			return false
+
+	return true
+
+
+## Returns all legal one-cell neighbours in stable numeric (col, row) order.
+## Numeric ordering is intentional: sorting canonical string keys would place
+## multi-digit and negative coordinates in lexical rather than semantic order.
+static func legal_neighbors(
+	cell: Dictionary,
+	walkable: Dictionary,
+	bounds: Dictionary = {}
+) -> Array:
+	var col: int = int(cell.get("col", 0))
+	var row: int = int(cell.get("row", 0))
+	var result: Array = []
+	for delta_col in range(-1, 2):
+		for delta_row in range(-1, 2):
+			if delta_col == 0 and delta_row == 0:
+				continue
+			var candidate := {
+				"col": col + delta_col,
+				"row": row + delta_row,
+			}
+			if is_legal_edge(cell, candidate, walkable, bounds):
+				result.append(candidate)
+	return result
+
+
 ## Returns the entry cell {col,row}: the leftmost walkable column, and among that
 ## column's walkable rows the one nearest to row = bounds.h / 2.
 ## If walkable is empty (legacy), returns {col:0, row: bounds.h/2}.
@@ -681,6 +744,23 @@ static func next_step(from_cell: Dictionary, dist_field: Dictionary, walkable: D
 # ---------------------------------------------------------------------------
 # PRIVATE HELPERS
 # ---------------------------------------------------------------------------
+
+## Bounds-aware form of is_walkable used by shared edge legality. Bounds are
+## optional for compatibility; when supplied they describe a zero-based w x h
+## rectangle.
+static func _is_walkable_in_bounds(
+	cell: Dictionary,
+	walkable: Dictionary,
+	bounds: Dictionary
+) -> bool:
+	if not bounds.is_empty():
+		var col: int = int(cell.get("col", 0))
+		var row: int = int(cell.get("row", 0))
+		var width: int = int(bounds.get("w", 0))
+		var height: int = int(bounds.get("h", 0))
+		if col < 0 or row < 0 or col >= width or row >= height:
+			return false
+	return is_walkable(cell, walkable)
 
 ## Build a cell-key dict from an Array of plateau dicts.
 ## Uses plateau["cells"] (irregular blob) when present and non-empty;

@@ -569,10 +569,12 @@ func _select_bark(
 	var line := ShoutBank.get_expression_shout(context_key, arch, _expression_band, calling, variation_key)
 	if line.is_empty() or line == ShoutBank._FALLBACK:
 		# Fall back to legacy get_shout for tier-based contexts (arrival, combat stubs)
+		var traits_v: Variant = _actor.get("traits", {})
+		var traits: Dictionary = traits_v as Dictionary if traits_v is Dictionary else {}
 		var trait_tier := ShoutBank.get_tier(
-			int(_actor.get("traits", {}).get("courage", 50)),
-			int(_actor.get("traits", {}).get("wisdom",  50)),
-			int(_actor.get("traits", {}).get("faith",   50))
+			int(traits.get("courage", 50)),
+			int(traits.get("wisdom",  50)),
+			int(traits.get("faith",   50))
 		)
 		var legacy := ShoutBank.get_shout(context_key, arch, trait_tier, variation_key)
 		if not legacy.is_empty() and legacy != ShoutBank._FALLBACK:

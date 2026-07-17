@@ -164,6 +164,15 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("terrain/next_step_no_lateral_drift", Callable(StageTerrainTests, "_t_next_step_no_lateral_drift"))
 	runner.register_test("terrain/empty_terrain_walkable",    Callable(StageTerrainTests, "_t_empty_terrain_walkable"))
 	runner.register_test("terrain/is_walkable_empty_true",    Callable(StageTerrainTests, "_t_is_walkable_empty_true"))
+	# V2-COMBAT-002 slice 1 — shared topology/edge-legality seam.
+	runner.register_test("terrain/legal_edge_orthogonal", Callable(StageTerrainTests, "_t_legal_edge_orthogonal"))
+	runner.register_test("terrain/legal_edge_diagonal_both_solid", Callable(StageTerrainTests, "_t_legal_edge_diagonal_both_solid"))
+	runner.register_test("terrain/legal_edge_diagonal_one_solid", Callable(StageTerrainTests, "_t_legal_edge_diagonal_one_solid"))
+	runner.register_test("terrain/legal_edge_destination_rejected", Callable(StageTerrainTests, "_t_legal_edge_destination_rejected"))
+	runner.register_test("terrain/legal_edge_source_rejected", Callable(StageTerrainTests, "_t_legal_edge_source_rejected"))
+	runner.register_test("terrain/legal_edge_shape_rejected", Callable(StageTerrainTests, "_t_legal_edge_shape_rejected"))
+	runner.register_test("terrain/legal_neighbors_empty_sentinel_bounds", Callable(StageTerrainTests, "_t_legal_neighbors_empty_sentinel_bounds"))
+	runner.register_test("terrain/legal_neighbors_semantic_order", Callable(StageTerrainTests, "_t_legal_neighbors_semantic_order"))
 	# New irregularity tests (V2-STAGE-004 Phase 2).
 	runner.register_test("terrain/plateaus_are_irregular",           Callable(StageTerrainTests, "_t_plateaus_are_irregular"))
 	runner.register_test("terrain/single_plateau_irregular_island",  Callable(StageTerrainTests, "_t_single_plateau_irregular_island"))
@@ -480,6 +489,123 @@ static func _t_is_walkable_empty_true() -> Dictionary:
 		var cell: Dictionary = cell_v if cell_v is Dictionary else {}
 		if not StageTerrain.is_walkable(cell, {}):
 			return { "ok": false, "error": "is_walkable(%s, {}) should return true but returned false" % str(cell) }
+	return { "ok": true }
+
+
+# V2-COMBAT-002 — orthogonal edges use the same destination walkability seam.
+static func _t_legal_edge_orthogonal() -> Dictionary:
+	var walkable := {
+		"1,1": true,
+		"2,1": true,
+	}
+	if not StageTerrain.is_legal_edge({ "col": 1, "row": 1 }, { "col": 2, "row": 1 }, walkable):
+		return { "ok": false, "error": "walkable orthogonal edge should be legal" }
+	return { "ok": true }
+
+
+# A diagonal cannot squeeze between two solid orthogonal side cells.
+static func _t_legal_edge_diagonal_both_solid() -> Dictionary:
+	var walkable := {
+		"1,1": true,
+		"2,2": true,
+	}
+	if StageTerrain.is_legal_edge({ "col": 1, "row": 1 }, { "col": 2, "row": 2 }, walkable):
+		return { "ok": false, "error": "diagonal between two solid corners should be illegal" }
+	return { "ok": true }
+
+
+# One open orthogonal side is enough to permit the diagonal.
+static func _t_legal_edge_diagonal_one_solid() -> Dictionary:
+	var from_cell := { "col": 1, "row": 1 }
+	var to_cell := { "col": 2, "row": 2 }
+	var side_col_open := {
+		"1,1": true,
+		"2,1": true,
+		"2,2": true,
+	}
+	var side_row_open := {
+		"1,1": true,
+		"1,2": true,
+		"2,2": true,
+	}
+	if not StageTerrain.is_legal_edge(from_cell, to_cell, side_col_open):
+		return { "ok": false, "error": "diagonal with open column-side cell should be legal" }
+	if not StageTerrain.is_legal_edge(from_cell, to_cell, side_row_open):
+		return { "ok": false, "error": "diagonal with open row-side cell should be legal" }
+	return { "ok": true }
+
+
+# Solid and out-of-bounds destinations are rejected before corner evaluation.
+static func _t_legal_edge_destination_rejected() -> Dictionary:
+	var walkable := {
+		"1,1": true,
+	}
+	if StageTerrain.is_legal_edge({ "col": 1, "row": 1 }, { "col": 2, "row": 1 }, walkable):
+		return { "ok": false, "error": "solid destination should be illegal" }
+	if StageTerrain.is_legal_edge({ "col": 0, "row": 0 }, { "col": -1, "row": 0 }, {}, { "w": 3, "h": 3 }):
+		return { "ok": false, "error": "out-of-bounds destination should be illegal" }
+	return { "ok": true }
+
+
+# A move cannot originate from solid or out-of-bounds topology.
+static func _t_legal_edge_source_rejected() -> Dictionary:
+	var walkable := {
+		"2,1": true,
+	}
+	if StageTerrain.is_legal_edge({ "col": 1, "row": 1 }, { "col": 2, "row": 1 }, walkable):
+		return { "ok": false, "error": "solid source should be illegal" }
+	if StageTerrain.is_legal_edge({ "col": -1, "row": 0 }, { "col": 0, "row": 0 }, {}, { "w": 3, "h": 3 }):
+		return { "ok": false, "error": "out-of-bounds source should be illegal" }
+	return { "ok": true }
+
+
+# The seam represents exactly one 8-direction edge, never self or a jump.
+static func _t_legal_edge_shape_rejected() -> Dictionary:
+	var origin := { "col": 2, "row": 2 }
+	if StageTerrain.is_legal_edge(origin, origin, {}):
+		return { "ok": false, "error": "self edge should be illegal" }
+	for destination in [
+		{ "col": 4, "row": 2 },
+		{ "col": 2, "row": 0 },
+		{ "col": 4, "row": 4 },
+	]:
+		if StageTerrain.is_legal_edge(origin, destination, {}):
+			return { "ok": false, "error": "nonadjacent edge should be illegal: %s" % str(destination) }
+	return { "ok": true }
+
+
+# Empty walkable retains its all-walkable meaning, while supplied bounds clip it.
+static func _t_legal_neighbors_empty_sentinel_bounds() -> Dictionary:
+	var neighbors: Array = StageTerrain.legal_neighbors(
+		{ "col": 0, "row": 0 },
+		{},
+		{ "w": 3, "h": 3 }
+	)
+	var expected: Array = [
+		{ "col": 0, "row": 1 },
+		{ "col": 1, "row": 0 },
+		{ "col": 1, "row": 1 },
+	]
+	if neighbors != expected:
+		return { "ok": false, "error": "bounded empty-sentinel neighbors mismatch: %s" % str(neighbors) }
+	return { "ok": true }
+
+
+# Ordering is numeric (col,row), not lexical canonical-key ordering.
+static func _t_legal_neighbors_semantic_order() -> Dictionary:
+	var neighbors: Array = StageTerrain.legal_neighbors({ "col": 10, "row": 10 }, {})
+	var expected: Array = [
+		{ "col": 9, "row": 9 },
+		{ "col": 9, "row": 10 },
+		{ "col": 9, "row": 11 },
+		{ "col": 10, "row": 9 },
+		{ "col": 10, "row": 11 },
+		{ "col": 11, "row": 9 },
+		{ "col": 11, "row": 10 },
+		{ "col": 11, "row": 11 },
+	]
+	if neighbors != expected:
+		return { "ok": false, "error": "neighbors not in numeric (col,row) order: %s" % str(neighbors) }
 	return { "ok": true }
 
 
