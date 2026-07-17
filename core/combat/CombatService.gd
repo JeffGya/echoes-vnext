@@ -28,7 +28,7 @@
 #   damage        = max(0, base + morale_bonus - fear_penalty)
 #
 # ActionResultSnapshot shapes:
-#   melee_attack: { action_type, attacker_id, target_id, damage, defender_hp_before, defender_hp_after }
+#   melee_attack: { action_type, attacker_id, target_id, damage, defender_hp_before, defender_hp_after, is_kill }
 #   actor.guard:  { action_type, actor_id, guard_state: true }
 #   actor.refuse: { action_type, refused: true, actor_id }
 #   stubs / no-ops: {}
@@ -93,6 +93,9 @@ static func _resolve_melee(attacker: Dictionary, defender: Dictionary,
 		"damage":             damage,
 		"defender_hp_before": hp_before,
 		"defender_hp_after":  hp_after,
+		# Single source of truth for the kill signal — same condition that set is_dead above.
+		# Consumers (kill barks, kill ripple, kill XP, "Kills X" display) read this key.
+		"is_kill":            hp_after <= 0,
 	}
 
 
