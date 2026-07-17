@@ -721,8 +721,11 @@ func _apply_leadership(
 						ally["morale"] = clampi(previous_morale + morale_tick, 0, 100)
 						if int(ally["morale"]) != previous_morale:
 							allies_affected += 1
+						# S14b Tier 2 (support): effective morale delivered to this ally.
+						_credit_support_tally("morale_given", int(ally["morale"]) - previous_morale)
 					fired = allies_affected > 0
 				if fired:
+					_credit_support_tally("support_actions", 1)
 					logger.info(t, "actor.leadership.morale_tick", "Leadership morale tick", {
 						"actor_id": _actor.get("id", ""), "trait_id": trait_id,
 						"tick_value": morale_tick, "allies_affected": allies_affected,
@@ -735,7 +738,10 @@ func _apply_leadership(
 					var previous_fear := int(most_feared.get("fear", 0))
 					most_feared["fear"] = clampi(previous_fear - fear_reduction, 0, 100)
 					fired = int(most_feared["fear"]) != previous_fear
+					# S14b Tier 2 (support): fear relieved on the most-feared ally.
+					_credit_support_tally("fear_relieved", previous_fear - int(most_feared["fear"]))
 				if fired:
+					_credit_support_tally("support_actions", 1)
 					logger.info(t, "actor.leadership.fear_reduce", "Leadership fear reduced", {
 						"actor_id": _actor.get("id", ""), "trait_id": trait_id,
 						"target_id": most_feared.get("id", ""),
@@ -753,8 +759,11 @@ func _apply_leadership(
 							ally["morale"] = clampi(previous_morale + morale_boost, 0, 100)
 							if int(ally["morale"]) != previous_morale:
 								allies_affected += 1
+							# S14b Tier 2 (support): effective morale delivered to this ally.
+							_credit_support_tally("morale_given", int(ally["morale"]) - previous_morale)
 					fired = allies_affected > 0
 					if fired:
+						_credit_support_tally("support_actions", 1)
 						if rally_once:
 							_actor["_rally_call_used"] = true
 						logger.info(t, "actor.leadership.rally_call", "Leadership rally fired", {
@@ -777,6 +786,18 @@ func _apply_leadership(
 		if fired and first_active.is_empty():
 			first_active = trait_id
 	return first_active
+
+
+## S14b Tier 2: accumulate a support metric onto _actor's transient _support_tally dict.
+## FlowRuntime._resolve_next_actor folds this into EncounterContext.echo_action_logs once per
+## turn (echo-gated) and erases it. Additive bookkeeping only — never influences a decision.
+## amount == 0 is a no-op (e.g. an ally already at the morale/fear clamp).
+func _credit_support_tally(field: String, amount: int) -> void:
+	if amount == 0:
+		return
+	var st: Dictionary = _actor.get("_support_tally", {})
+	st[field] = int(st.get(field, 0)) + amount
+	_actor["_support_tally"] = st
 
 
 func _get_most_feared_ally(allies: Array) -> Dictionary:
@@ -829,6 +850,7 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int) -> v
 				var aura_val: int     = int(_calling_behavior.get("idle_fear_aura", 3))
 				var aura_radius: int  = int(_calling_behavior.get("leadership_radius", 5))
 				var my_pos_s: Dictionary = _actor.get("grid_pos", {})
+				var ifa_fired: bool = false
 				if not my_pos_s.is_empty():
 					for a_sv in context.get("all_actors", []):
 						if not (a_sv is Dictionary): continue
@@ -839,7 +861,13 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int) -> v
 							var a_s_pos: Dictionary = a_s.get("grid_pos", {})
 							if not a_s_pos.is_empty() and \
 									GridService.chebyshev_distance(my_pos_s, a_s_pos) <= aura_radius:
-								a_s["fear"] = clampi(int(a_s.get("fear", 0)) - aura_val, 0, 100)
+								var ifa_before: int = int(a_s.get("fear", 0))
+								a_s["fear"] = clampi(ifa_before - aura_val, 0, 100)
+								# S14b Tier 2 (support): Seer idle aura relieves ally fear.
+								_credit_support_tally("fear_relieved", ifa_before - int(a_s["fear"]))
+								ifa_fired = true
+				if ifa_fired:
+					_credit_support_tally("support_actions", 1)
 		"ranger":
 			if action == "actor.withdraw":
 				_actor["_withdraw_cooldown"] = 1
@@ -897,6 +925,7 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int) -> v
 		var hg_radius: int       = 2
 		var hg_morale_bonus: int = 3
 		var my_pos_hg: Dictionary = _actor.get("grid_pos", {})
+		var hg_fired: bool = false
 		if not my_pos_hg.is_empty():
 			for hg_av in context.get("all_actors", []):
 				if not (hg_av is Dictionary): continue
@@ -906,13 +935,20 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int) -> v
 						and str(hg_a.get("id", "")) != str(_actor.get("id", "")):
 					var hg_pos: Dictionary = hg_a.get("grid_pos", {})
 					if not hg_pos.is_empty() and GridService.chebyshev_distance(my_pos_hg, hg_pos) <= hg_radius:
-						hg_a["morale"] = clampi(int(hg_a.get("morale", 50)) + hg_morale_bonus, 0, 100)
+						var hg_before: int = int(hg_a.get("morale", 50))
+						hg_a["morale"] = clampi(hg_before + hg_morale_bonus, 0, 100)
+						# S14b Tier 2 (support): effective morale delivered to this ally.
+						_credit_support_tally("morale_given", int(hg_a["morale"]) - hg_before)
+						hg_fired = true
+		if hg_fired:
+			_credit_support_tally("support_actions", 1)
 
 	# Apply steady_call effects (Steward)
 	if action == "actor.steady_call":
 		var sc_radius: int    = int(_calling_behavior.get("leadership_radius", 4))
 		var sc_fear_red: int  = 20
 		var my_pos_sc: Dictionary = _actor.get("grid_pos", {})
+		var sc_fired: bool = false
 		if not my_pos_sc.is_empty():
 			for sc_av in context.get("all_actors", []):
 				if not (sc_av is Dictionary): continue
@@ -921,7 +957,14 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int) -> v
 				if str(sc_a.get("faction", "")) == str(_actor.get("faction", "")):
 					var sc_pos: Dictionary = sc_a.get("grid_pos", {})
 					if not sc_pos.is_empty() and GridService.chebyshev_distance(my_pos_sc, sc_pos) <= sc_radius:
-						sc_a["fear"] = clampi(int(sc_a.get("fear", 0)) - sc_fear_red, 0, 100)
+						var sc_before: int = int(sc_a.get("fear", 0))
+						sc_a["fear"] = clampi(sc_before - sc_fear_red, 0, 100)
+						# S14b Tier 2 (support): credit fear relieved on ALLIES only (exclude self).
+						if str(sc_a.get("id", "")) != str(_actor.get("id", "")):
+							_credit_support_tally("fear_relieved", sc_before - int(sc_a["fear"]))
+							sc_fired = true
+		if sc_fired:
+			_credit_support_tally("support_actions", 1)
 
 	# Guard: set guard_state on self (interpose sets it on the protected ally below).
 	if action == "actor.guard":
@@ -932,13 +975,20 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int) -> v
 		var emo_cfg_ip: Dictionary = context.get("cfg", {}).get("data", {}).get("combat", {}).get("emotion", {})
 		var interpose_morale: int = int(emo_cfg_ip.get("morale_on_interpose", 5))
 		var interpose_target: String = str(intent.get("target_id", ""))
+		var ip_granted: bool = false
 		if not interpose_target.is_empty():
 			for ip_v in context.get("all_actors", []):
 				if not (ip_v is Dictionary): continue
 				var ip_a: Dictionary = ip_v
 				if str(ip_a.get("id", "")) == interpose_target:
 					ip_a["guard_state"] = true
+					ip_granted = true
 					break
+		# S14b Tier 2 (support): count the guard granted to an ally + the support action.
+		# The interposer's own +morale is a self-credit, excluded from morale_given.
+		if ip_granted:
+			_credit_support_tally("guards_granted", 1)
+			_credit_support_tally("support_actions", 1)
 		_actor["morale"] = mini(100, int(_actor.get("morale", 50)) + interpose_morale)
 
 	if t > 0:  # suppress unused-variable warning for t in Godot

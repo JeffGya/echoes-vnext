@@ -50,9 +50,20 @@ var final_snapshot: Dictionary = {}
 # are populated for every actor at the single melee damage choke (same function, "melee_attack"
 # branch) and are read by FlowEncounterState._project_actor() to build the "contribution"
 # projected-actor field, and later by S14 for the recruit formula.
+# S14b (Tier 2 — support/defensive attribution): five additive fields.
+#   guards_granted/morale_given/fear_relieved/support_actions are SUPPORT metrics, echo-gated —
+#   populated only for echo-faction acting actors. Support effects are scattered across ~10 inline
+#   sites (ActorStateMachine hold_ground/steady_call/interpose/idle-aura/leadership auras +
+#   FlowRuntime kill ripple/momentum); each accumulates onto a transient actor["_support_tally"]
+#   dict during the actor's turn, folded once per turn by FlowRuntime._fold_support_tally() (then
+#   erased). morale_given/fear_relieved are EFFECTIVE post-clamp points delivered to ALLIES
+#   (self-effects excluded). fear_inflicted is an OFFENSIVE metric (fear dealt to whoever the actor
+#   hits), all-faction, written directly at the per-hit fear choke (mirrors damage_dealt).
 # Shape: { actor_id: {
 #   melee_count: int, guard_count: int, kill_count: int, total_count: int,  # echo-only
-#   damage_dealt: int, damage_taken: int, kills: int,                      # all factions
+#   damage_dealt: int, damage_taken: int, kills: int,                       # all factions
+#   guards_granted: int, morale_given: int, fear_relieved: int, support_actions: int,  # S14b support (echo-gated)
+#   fear_inflicted: int,                                                    # S14b offensive (all factions)
 # } }
 # Initialised fresh per EncounterContext instance (i.e. once per combat). Never persisted.
 var echo_action_logs: Dictionary = {}

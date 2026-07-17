@@ -1197,6 +1197,8 @@ static func _derive_status(actor: Dictionary) -> String:
 ## identical to pre-S14a shape). Pass EncounterContext.echo_action_logs to project a per-actor
 ## "contribution": {damage_dealt, damage_taken, kills} sub-dict (zeros when the actor has no
 ## ledger entry). Only build_final_snapshot() passes it — build_round_snapshot() stays untouched.
+## S14b (Tier 2): the same sub-dict also carries the support/offensive fields
+## {guards_granted, morale_given, fear_relieved, support_actions, fear_inflicted}.
 static func _project_actor(actor: Dictionary, contribution_ledger: Variant = null) -> Dictionary:
 	var stats: Dictionary = actor.get("stats", {})
 	var max_hp: int = int(stats.get("max_hp", 1))
@@ -1239,9 +1241,15 @@ static func _project_actor(actor: Dictionary, contribution_ledger: Variant = nul
 		var _ledger_entry_v: Variant = (contribution_ledger as Dictionary).get(actor_id, {})
 		var _ledger_entry: Dictionary = _ledger_entry_v if _ledger_entry_v is Dictionary else {}
 		proj["contribution"] = {
-			"damage_dealt": int(_ledger_entry.get("damage_dealt", 0)),
-			"damage_taken": int(_ledger_entry.get("damage_taken", 0)),
-			"kills":        int(_ledger_entry.get("kills", 0)),
+			"damage_dealt":    int(_ledger_entry.get("damage_dealt", 0)),
+			"damage_taken":    int(_ledger_entry.get("damage_taken", 0)),
+			"kills":           int(_ledger_entry.get("kills", 0)),
+			# S14b Tier 2 — support (echo-gated) + offensive fear (all-faction)
+			"guards_granted":  int(_ledger_entry.get("guards_granted", 0)),
+			"morale_given":    int(_ledger_entry.get("morale_given", 0)),
+			"fear_relieved":   int(_ledger_entry.get("fear_relieved", 0)),
+			"support_actions": int(_ledger_entry.get("support_actions", 0)),
+			"fear_inflicted":  int(_ledger_entry.get("fear_inflicted", 0)),
 		}
 	return proj
 
