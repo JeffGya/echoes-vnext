@@ -74,6 +74,10 @@ static func register(runner) -> void:
 	# is_kill=true on the result and fire the kill consumers (boost, ripple, ledger).
 	# Guards against _resolve_melee ever dropping the is_kill key again.
 	runner.register_test("combat_roundtrip/killing_blow_sets_is_kill_live", func(): return test_killing_blow_sets_is_kill_live())
+	# Kill-signal fix P1 (Codex review): an ENEMY lethal blow also sets is_kill=true, but the
+	# kill morale/ripple block is echo-gated — an enemy kill must NOT boost the enemy or hand
+	# the surviving party morale/fear relief for losing a member.
+	runner.register_test("combat_roundtrip/enemy_kill_does_not_ripple_to_party", func(): return test_enemy_kill_does_not_ripple_to_party())
 
 
 # ---------------------------------------------------------------------------
@@ -81,9 +85,9 @@ static func register(runner) -> void:
 # `assign_ids` controls whether echoes get real ids (real flow) or are left id-less
 # (all id "" — the duplicate-id condition that reproduces the freeze).
 # ---------------------------------------------------------------------------
-static func _setup(seed_tag: String, assign_ids: bool) -> Dictionary:
+static func _setup(seed_tag: String, assign_ids: bool, log_level: String = "off") -> Dictionary:
 	var logger := StructuredLogger.new()
-	logger.set_level("off")
+	logger.set_level(log_level)
 	var config := ConfigService.new()
 	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/combat_roundtrip_slot.json")
 	runtime.boot()
@@ -118,7 +122,7 @@ static func _setup(seed_tag: String, assign_ids: bool) -> Dictionary:
 
 	var enc_state := FlowEncounterState.new()
 	enc_state.enter(flow_ctx, t)
-	return { "runtime": runtime, "flow_ctx": flow_ctx, "ectx": flow_ctx.encounter_ctx }
+	return { "runtime": runtime, "flow_ctx": flow_ctx, "ectx": flow_ctx.encounter_ctx, "logger": logger }
 
 
 # Drive the real round loop for up to `max_rounds` rounds.
@@ -1890,5 +1894,82 @@ static func test_killing_blow_sets_is_kill_live() -> Dictionary:
 			break
 	if not ripple_seen:
 		return { "ok": false, "error": "kill ripple missing: no other living echo gained morale after the kill" }
+
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# Kill-signal fix — P1 regression (Codex review, PR #43).
+#
+# The kill morale/ripple block in FlowRuntime._resolve_next_actor is a
+# player-side feedback mechanic: the killer gets +morale/-fear, and every
+# living ECHO ally gets a morale/fear ripple. An ENEMY lethal blow also sets
+# is_kill=true now, so without a faction gate an enemy killing an echo would
+# (a) boost the enemy and (b) reward the surviving party with morale for
+# losing a member. The fix gates that block to echo killers.
+#
+# This test drives a one-sided fight where ONLY enemies can kill (all echoes
+# atk 0, all echoes 1 HP; enemies atk high) through the real dispatch loop
+# with an info-level logger, then asserts:
+#   (a) at least one enemy-attacker killing blow actually landed (non-vacuous)
+#   (b) ZERO combat.kill_boost events were logged
+#   (c) ZERO combat.kill_ripple events were logged
+# Pre-fix, every enemy kill would emit a kill_boost (enemy) and a kill_ripple
+# per surviving echo; post-fix the echo-only gate suppresses all of them.
+# ---------------------------------------------------------------------------
+static func test_enemy_kill_does_not_ripple_to_party() -> Dictionary:
+	var env: Dictionary = _setup("enemykill", true, "info")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed (realm not created)" }
+	var runtime = env["runtime"]
+	var ectx = env["ectx"]
+	var logger = env["logger"]
+
+	# Rig a one-sided fight: enemies hit hard, echoes are 1-HP and deal no damage,
+	# so every kill in this combat is necessarily an enemy killing an echo.
+	var enemy_ids: Dictionary = {}
+	for a_v in ectx.actors:
+		var a: Dictionary = a_v
+		if str(a.get("faction", "")) == "echo":
+			var e_stats: Dictionary = a.get("stats", {})
+			e_stats["atk"] = 0
+			a["stats"]      = e_stats
+			a["current_hp"] = 1
+			a["morale"]     = 50
+			a["fear"]       = 0
+		elif str(a.get("faction", "")) == "enemy":
+			enemy_ids[str(a.get("id", ""))] = true
+			var n_stats: Dictionary = a.get("stats", {})
+			n_stats["atk"] = 99
+			a["stats"] = n_stats
+
+	# Fresh log slate so we only inspect combat-round events.
+	logger.clear()
+	_drive(runtime, ectx, 16)
+
+	# Scan the captured log for kills and for the gated kill effects.
+	var enemy_kill_seen: bool = false
+	var kill_boost_events: int = 0
+	var kill_ripple_events: int = 0
+	for ev_v in logger.get_logs():
+		var ev: Dictionary = ev_v
+		var etype: String = str(ev.get("type", ""))
+		if etype == "combat.action_resolved":
+			var d: Dictionary = ev.get("data", {})
+			if bool(d.get("is_kill", false)) and enemy_ids.has(str(d.get("attacker_id", ""))):
+				enemy_kill_seen = true
+		elif etype == "combat.kill_boost":
+			kill_boost_events += 1
+		elif etype == "combat.kill_ripple":
+			kill_ripple_events += 1
+
+	# (a) The scenario must actually exercise an enemy kill, or the test proves nothing.
+	if not enemy_kill_seen:
+		return { "ok": false, "error": "no enemy killing blow occurred in 16 rounds — test is vacuous" }
+	# (b)+(c) The echo-only gate must have suppressed every kill boost and ripple.
+	if kill_boost_events != 0:
+		return { "ok": false, "error": "enemy kill wrongly fired %d combat.kill_boost event(s)" % kill_boost_events }
+	if kill_ripple_events != 0:
+		return { "ok": false, "error": "enemy kill wrongly fired %d combat.kill_ripple event(s) to the party" % kill_ripple_events }
 
 	return { "ok": true }

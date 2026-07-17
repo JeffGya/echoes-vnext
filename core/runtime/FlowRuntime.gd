@@ -1866,7 +1866,13 @@ func _resolve_next_actor(t: int) -> void:
 						"new_fear": int(target.get("fear", 0)),
 					})
 					# Kill bonus: killer gets morale + fear reduction; living Echo allies get a ripple.
-					if result.get("is_kill", false):
+					# GATED to echo killers: this is a player-side feedback mechanic (the ripple
+					# hardcodes echo recipients, and kill_momentum boosts nearby echo allies). An
+					# ENEMY landing a lethal blow also sets is_kill=true, so without this gate an
+					# enemy kill would boost the enemy AND wrongly hand the surviving party morale
+					# for losing a member. The all-faction kill signal (ledger kills, "(kills)" log,
+					# combat_ko bark) stays live; only these positive party effects are echo-only.
+					if result.get("is_kill", false) and str(actor.get("faction", "")) == "echo":
 						_apply_kill_momentum(actor, ectx.actors, leadership_expr_cfg, t)
 						var morale_per_kill: int      = int(combat_emo_cfg.get("morale_per_kill",       25))
 						var fear_reduce_per_kill: int = int(combat_emo_cfg.get("fear_reduce_per_kill",  15))
