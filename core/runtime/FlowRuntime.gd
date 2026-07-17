@@ -1849,11 +1849,13 @@ func _resolve_next_actor(t: int) -> void:
 					var fear_per_hit: int = int(combat_emo_cfg.get("fear_per_hit", 2))
 					var hit_fear_applied := LeadershipEmotionServiceScript.apply_fear_gain(
 						target, fear_per_hit, ectx.actors, leadership_expr_cfg)
-					target["fear"] = mini(100, int(target.get("fear", 0)) + hit_fear_applied)
-					# S14b Tier 2 (offensive): credit the attacker the ACTUAL dampened fear
-					# delivered to whoever they hit. All-faction, direct to the ledger (mirrors
-					# damage_dealt); _s14a_atk_log is the attacker's entry created just above.
-					_s14a_atk_log["fear_inflicted"] = int(_s14a_atk_log.get("fear_inflicted", 0)) + hit_fear_applied
+					var _fear_before: int = int(target.get("fear", 0))
+					target["fear"] = mini(100, _fear_before + hit_fear_applied)
+					# S14b Tier 2 (offensive): credit the attacker the EFFECTIVE post-clamp fear
+					# increase on whoever they hit — a target already at/near the 100 cap accrues less
+					# than the nominal dampened amount. Consistent with the support fields'
+					# effective-delta accounting. All-faction; _s14a_atk_log created just above.
+					_s14a_atk_log["fear_inflicted"] = int(_s14a_atk_log.get("fear_inflicted", 0)) + (int(target["fear"]) - _fear_before)
 					logger.debug(t, "combat.fear.hit", "%s gains fear from hit" % target.get("name", "?"), {
 						"actor_id": str(target.get("id", "")),
 						"delta":    hit_fear_applied,
