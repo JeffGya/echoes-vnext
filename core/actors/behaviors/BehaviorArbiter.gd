@@ -33,6 +33,32 @@ class_name BehaviorArbiter
 extends BehaviorModule
 
 var _cfg: Dictionary
+var _movement_cfg: Dictionary
+
+const MovementContextContract = preload("res://core/movement/contracts/MovementContext.gd")
+const MovementProfileContract = preload("res://core/movement/contracts/MovementProfile.gd")
+const MovementGoalContract = preload("res://core/movement/contracts/MovementGoal.gd")
+const MovementOptionContract = preload("res://core/movement/contracts/MovementOption.gd")
+const MovementIntentContract = preload("res://core/movement/contracts/MovementIntent.gd")
+const MovementActionPlanContract = preload("res://core/movement/contracts/MovementActionPlan.gd")
+
+const _MOVEMENT_STYLE_ORDER: Array = [
+	"direct", "safe", "cohesive", "lateral", "screen", "intercept", "conservative",
+]
+const _SPATIAL_UTILITY_FIELDS: Array = [
+	"cap",
+	"urgency_weight",
+	"objective_progress_weight",
+	"cohesion_weight",
+	"exposure_weight",
+	"congestion_weight",
+	"commitment_weight",
+	"directive_objective_advance_weight",
+	"directive_avoid_overcommit_weight",
+	"directive_exposure_acceptance_weight",
+	"directive_ally_protection_weight",
+	"directive_threat_interception_weight",
+]
 
 # Hardcoded defaults — mirrors data/balance.json data.actor block.
 # Used when _cfg is empty (no balance.json block passed in).
@@ -237,8 +263,11 @@ const _DEFAULTS := {
 
 ## actor_cfg: the data.actor block from balance.json, or {} to use hardcoded defaults.
 ## Tests and non-echo actors may pass {} safely — behaviour is identical to balance.json values.
-func _init(actor_cfg: Dictionary = {}) -> void:
+## movement_cfg: the data.combat.movement block. It is consumed only by the dormant
+## movement-aware API; existing production selection remains unchanged.
+func _init(actor_cfg: Dictionary = {}, movement_cfg: Dictionary = {}) -> void:
 	_cfg = actor_cfg
+	_movement_cfg = movement_cfg
 
 
 func get_module_id() -> String:
@@ -325,6 +354,667 @@ func select_intent(context: Dictionary) -> Dictionary:
 	winner["archetype_modifier"] = int(winner_a_row.get(winner_arch, 0))
 
 	return winner
+
+
+## Dormant V2-COMBAT-002 Slice 2 complete-candidate arbitration. This does not
+## participate in live combat until the shared executor boundary arrives.
+func select_movement_intent(
+	context: Dictionary,
+	movement_context: Dictionary,
+	profile: Dictionary,
+	goals: Array,
+	options: Array
+) -> Dictionary:
+	var validated: Dictionary = _validate_movement_inputs(
+		context, movement_context, profile, goals, options
+	)
+	if not bool(validated["valid"]):
+		return validated
+
+	var actor: Dictionary = context["actor"] as Dictionary
+	var all_actors: Array = _canonical_perceived_actors(context, movement_context)
+	var directive: Dictionary = context.get("directive", {}) as Dictionary
+	var expression_band: String = str(context.get("expression_band", "nascent"))
+	var calling_behavior: Dictionary = context.get("calling_behavior", {}) as Dictionary
+	var presence_strength: float = float(context.get("presence_strength", 0.1))
+	var rank_strength: float = float(context.get("rank_strength", 0.0))
+	var board_summary: Dictionary = _build_board_summary(
+		actor,
+		all_actors,
+		context.get("board_cfg", {}),
+		expression_band,
+		context.get("resolution_mode", "")
+	)
+
+	var legacy_candidates: Array[Dictionary] = _generate_candidates(
+		actor, all_actors, context, expression_band, calling_behavior
+	)
+	var legacy_by_plan: Dictionary = {}
+	var candidates: Array[Dictionary] = []
+	for legacy: Dictionary in legacy_candidates:
+		var legacy_key: String = _plan_key(
+			str(legacy.get("action_type", "")), str(legacy.get("target_id", ""))
+		)
+		if not legacy_by_plan.has(legacy_key):
+			legacy_by_plan[legacy_key] = []
+		(legacy_by_plan[legacy_key] as Array).append(legacy)
+		if str(legacy.get("action_type", "")) != "actor.move":
+			candidates.append(_stationary_candidate(legacy, movement_context, profile))
+
+	var goals_by_id: Dictionary = {}
+	for goal_value: Variant in goals:
+		var goal: Dictionary = goal_value as Dictionary
+		goals_by_id[str(goal["goal_id"])] = goal
+	for option_value: Variant in options:
+		var option: Dictionary = option_value as Dictionary
+		var goal: Dictionary = goals_by_id[str(option["goal_id"])] as Dictionary
+		var plan: Dictionary = option["planned_action"] as Dictionary
+		var matches: Array = legacy_by_plan.get(
+			_plan_key(str(plan["type"]), str(plan["target_id"])), []
+		) as Array
+		if matches.is_empty():
+			candidates.append(_route_candidate({}, plan, goal, option, movement_context, profile))
+		else:
+			for match_value: Variant in matches:
+				candidates.append(_route_candidate(
+					match_value as Dictionary,
+					plan,
+					goal,
+					option,
+					movement_context,
+					profile
+				))
+
+	var spatial_cfg: Dictionary = _movement_cfg["spatial_utility"] as Dictionary
+	for candidate: Dictionary in candidates:
+		var plan: Dictionary = candidate["_movement_plan"] as Dictionary
+		var score: float = _score(
+			str(plan["type"]),
+			actor,
+			directive,
+			board_summary,
+			expression_band,
+			calling_behavior,
+			candidate,
+			presence_strength,
+			rank_strength
+		)
+		if bool(candidate.get("_movement_route", false)):
+			score += _spatial_utility(
+				candidate["_movement_goal"] as Dictionary,
+				candidate["_movement_option"] as Dictionary,
+				directive,
+				spatial_cfg
+			)
+		if not is_finite(score):
+			return _movement_failure("non_finite_candidate_score", "candidates")
+		candidate["_score"] = score
+
+	var active_vow: Dictionary = context.get("active_vow", {}) as Dictionary
+	if not active_vow.is_empty() and str(actor.get("faction", "")) == "echo":
+		_apply_vow_bias(candidates, active_vow, int(context.get("party_size", 0)))
+	var bonds_ctx: Array = context.get("bonds", []) as Array
+	if not bonds_ctx.is_empty() and str(actor.get("faction", "")) == "echo":
+		_apply_bond_bias(
+			candidates,
+			actor,
+			bonds_ctx,
+			context.get("bond_thresholds", {}) as Dictionary,
+			context.get("bond_behavior_cfg", {}) as Dictionary
+		)
+
+	# Hard purifier authority remains last and exact after vow/bond adjustments.
+	var purifier_ready: bool = bool(context.get("is_purifier", false)) \
+		and bool(context.get("shrine_alive", false)) \
+		and float(context.get("shrine_hp_ratio", 1.0)) < 0.5 \
+		and int(actor.get("purify_cooldown", 0)) == 0
+	if purifier_ready:
+		for candidate: Dictionary in candidates:
+			var plan: Dictionary = candidate["_movement_plan"] as Dictionary
+			if str(plan["type"]) == "actor.purify_shrine":
+				candidate["_score"] = 9999.0
+	_append_legacy_purifier_candidate(candidates, context, actor, all_actors, movement_context, profile)
+	for candidate: Dictionary in candidates:
+		var final_score: Variant = candidate.get("_score", null)
+		if not (final_score is int or final_score is float) or not is_finite(float(final_score)):
+			return _movement_failure("non_finite_final_candidate_score", "candidates")
+
+	candidates.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
+		if float(left["_score"]) != float(right["_score"]):
+			return float(left["_score"]) > float(right["_score"])
+		var left_plan: Dictionary = left["_movement_plan"] as Dictionary
+		var right_plan: Dictionary = right["_movement_plan"] as Dictionary
+		if str(left_plan["type"]) != str(right_plan["type"]):
+			return str(left_plan["type"]) < str(right_plan["type"])
+		if str(left["_movement_goal_id"]) != str(right["_movement_goal_id"]):
+			return str(left["_movement_goal_id"]) < str(right["_movement_goal_id"])
+		return str(left["_movement_option_id"]) < str(right["_movement_option_id"])
+	)
+
+	var winner: Dictionary = candidates[0]
+	var intent: Dictionary = MovementIntentContract.build(
+		str(movement_context["mover_id"]),
+		str(movement_context["activation_id"]),
+		str(winner["_movement_goal_id"]),
+		str(winner["_movement_option_id"]),
+		winner["_movement_path"] as Array,
+		int(profile["capacity"]),
+		int(winner["_movement_commitment"]),
+		winner["_movement_plan"] as Dictionary,
+		winner["_movement_fallback"] as Dictionary,
+		winner["_movement_pressure_sources"] as Array
+	)
+	var intent_result: Dictionary = MovementIntentContract.validate(
+		intent, movement_context["origin"] as Dictionary
+	)
+	if not bool(intent_result["valid"]):
+		return _movement_failure(
+			"invalid_selected_intent.%s" % str(intent_result["reason"]),
+			str(intent_result["field"])
+		)
+	return {"valid": true, "intent": intent, "reason": "", "field": ""}
+
+
+func _validate_movement_inputs(
+	context: Dictionary,
+	movement_context: Dictionary,
+	profile: Dictionary,
+	goals: Array,
+	options: Array
+) -> Dictionary:
+	if not context.get("actor", {}) is Dictionary:
+		return _movement_failure("invalid_actor", "context.actor")
+	if not context.get("all_actors", []) is Array:
+		return _movement_failure("invalid_all_actors", "context.all_actors")
+	if not context.get("directive", {}) is Dictionary:
+		return _movement_failure("invalid_directive", "context.directive")
+	if not context.get("calling_behavior", {}) is Dictionary:
+		return _movement_failure("invalid_calling_behavior", "context.calling_behavior")
+	for numeric_field: String in ["presence_strength", "rank_strength"]:
+		if context.has(numeric_field):
+			var numeric_value: Variant = context[numeric_field]
+			if not (numeric_value is int or numeric_value is float) or not is_finite(float(numeric_value)):
+				return _movement_failure("invalid_context_number", "context.%s" % numeric_field)
+
+	var movement_result: Dictionary = MovementContextContract.validate(movement_context)
+	if not bool(movement_result["valid"]):
+		return _movement_failure(
+			"invalid_movement_context.%s" % str(movement_result["reason"]),
+			str(movement_result["field"])
+		)
+	var profile_result: Dictionary = MovementProfileContract.validate(profile)
+	if not bool(profile_result["valid"]):
+		return _movement_failure(
+			"invalid_profile.%s" % str(profile_result["reason"]),
+			str(profile_result["field"])
+		)
+	if int(profile["capacity"]) <= 0:
+		return _movement_failure("non_positive_capacity", "profile.capacity")
+
+	var actor: Dictionary = context["actor"] as Dictionary
+	var actor_id: String = str(actor.get("id", ""))
+	if actor_id.is_empty() or actor_id != str(movement_context["mover_id"]):
+		return _movement_failure("mover_id_mismatch", "context.actor.id")
+	if not actor.get("grid_pos", {}) is Dictionary \
+			or (actor.get("grid_pos", {}) as Dictionary) != (movement_context["origin"] as Dictionary):
+		return _movement_failure("mover_origin_mismatch", "context.actor.grid_pos")
+	var mover_fact: Dictionary = {}
+	for actor_value: Variant in movement_context["perceived_actors"] as Array:
+		var fact: Dictionary = actor_value as Dictionary
+		if str(fact["id"]) == actor_id:
+			mover_fact = fact
+			break
+	if mover_fact.is_empty() or (mover_fact["position"] as Dictionary) != (movement_context["origin"] as Dictionary):
+		return _movement_failure("mover_fact_mismatch", "movement_context.perceived_actors")
+	var origin_key: String = _movement_cell_key(movement_context["origin"] as Dictionary)
+	if str((movement_context["occupancy"] as Dictionary).get(origin_key, "")) != actor_id:
+		return _movement_failure("mover_occupancy_mismatch", "movement_context.occupancy.%s" % origin_key)
+
+	var spatial_result: Dictionary = _validate_spatial_config()
+	if not bool(spatial_result["valid"]):
+		return spatial_result
+	var directive_result: Dictionary = _validate_spatial_directive(context.get("directive", {}) as Dictionary)
+	if not bool(directive_result["valid"]):
+		return directive_result
+
+	var actor_context_result: Dictionary = _validate_perceived_actor_context(context, movement_context)
+	if not bool(actor_context_result["valid"]):
+		return actor_context_result
+
+	var goals_by_id: Dictionary = {}
+	var previous_goal: Dictionary = {}
+	for goal_index: int in range(goals.size()):
+		if not goals[goal_index] is Dictionary:
+			return _movement_failure("invalid_goal_type", "goals.%d" % goal_index)
+		var goal: Dictionary = goals[goal_index] as Dictionary
+		var goal_result: Dictionary = MovementGoalContract.validate(
+			goal, movement_context["origin"] as Dictionary
+		)
+		if not bool(goal_result["valid"]):
+			return _movement_failure(
+				"invalid_goal.%s" % str(goal_result["reason"]),
+				"goals.%d.%s" % [goal_index, str(goal_result["field"])]
+			)
+		var goal_id: String = str(goal["goal_id"])
+		if not goal_id.begins_with("goal."):
+			return _movement_failure("invalid_goal_id", "goals.%d.goal_id" % goal_index)
+		if goals_by_id.has(goal_id):
+			return _movement_failure("duplicate_goal_id", "goals.%d.goal_id" % goal_index)
+		if not previous_goal.is_empty() and _movement_goal_before(goal, previous_goal):
+			return _movement_failure("non_canonical_goal_order", "goals.%d" % goal_index)
+		for relevant_value: Variant in goal["relevant_actors"] as Array:
+			if not _perceived_actor_ids(movement_context).has(str(relevant_value)):
+				return _movement_failure("unknown_relevant_actor", "goals.%d.relevant_actors" % goal_index)
+		for plan_field: String in ["planned_primary", "declared_fallback"]:
+			var plan: Dictionary = goal[plan_field] as Dictionary
+			if not plan.is_empty():
+				var target_id: String = str(plan["target_id"])
+				if not target_id.is_empty() and not _perceived_actor_ids(movement_context).has(target_id):
+					return _movement_failure("unknown_plan_target", "goals.%d.%s.target_id" % [goal_index, plan_field])
+		goals_by_id[goal_id] = goal
+		previous_goal = goal
+
+	var option_ids: Dictionary = {}
+	var mechanics: Dictionary = {}
+	var previous_goal_index: int = -1
+	var previous_style_index: int = -1
+	var previous_option_id: String = ""
+	var option_counts_by_goal: Dictionary = {}
+	for option_index: int in range(options.size()):
+		if not options[option_index] is Dictionary:
+			return _movement_failure("invalid_option_type", "options.%d" % option_index)
+		var option: Dictionary = options[option_index] as Dictionary
+		var option_result: Dictionary = MovementOptionContract.validate(
+			option, movement_context["origin"] as Dictionary
+		)
+		if not bool(option_result["valid"]):
+			return _movement_failure(
+				"invalid_option.%s" % str(option_result["reason"]),
+				"options.%d.%s" % [option_index, str(option_result["field"])]
+			)
+		var option_id: String = str(option["option_id"])
+		if option_ids.has(option_id):
+			return _movement_failure("duplicate_option_id", "options.%d.option_id" % option_index)
+		option_ids[option_id] = true
+		var goal_id: String = str(option["goal_id"])
+		if not goals_by_id.has(goal_id):
+			return _movement_failure("unknown_option_goal", "options.%d.goal_id" % option_index)
+		option_counts_by_goal[goal_id] = int(option_counts_by_goal.get(goal_id, 0)) + 1
+		var goal: Dictionary = goals_by_id[goal_id] as Dictionary
+		if str(option["purpose"]) != str(goal["purpose"]):
+			return _movement_failure("option_purpose_mismatch", "options.%d.purpose" % option_index)
+		if int(option["capacity"]) != int(profile["capacity"]):
+			return _movement_failure("option_capacity_mismatch", "options.%d.capacity" % option_index)
+		if (option["planned_action"] as Dictionary) != (goal["planned_primary"] as Dictionary):
+			return _movement_failure("option_action_mismatch", "options.%d.planned_action" % option_index)
+		if (option["fallback"] as Dictionary) != (goal["declared_fallback"] as Dictionary):
+			return _movement_failure("option_fallback_mismatch", "options.%d.fallback" % option_index)
+
+		var goal_suffix: String = goal_id.trim_prefix("goal.")
+		var option_prefix: String = "option.%s." % goal_suffix
+		if not option_id.begins_with(option_prefix):
+			return _movement_failure("option_id_goal_mismatch", "options.%d.option_id" % option_index)
+		var option_remainder: String = option_id.trim_prefix(option_prefix)
+		var style: String = option_remainder.get_slice(".", 0)
+		var style_index: int = _MOVEMENT_STYLE_ORDER.find(style)
+		if style_index < 0:
+			return _movement_failure("invalid_option_style", "options.%d.option_id" % option_index)
+		var goal_order_index: int = _goal_index(goals, goal_id)
+		if goal_order_index < previous_goal_index \
+				or (goal_order_index == previous_goal_index and style_index < previous_style_index) \
+				or (goal_order_index == previous_goal_index and style_index == previous_style_index \
+					and option_id < previous_option_id):
+			return _movement_failure("non_canonical_option_order", "options.%d" % option_index)
+		previous_goal_index = goal_order_index
+		previous_style_index = style_index
+		previous_option_id = option_id
+
+		var mechanics_key: String = "%s|%s|%s" % [
+			goal_id,
+			_movement_cell_key(option["destination"] as Dictionary),
+			_movement_path_key(option["path"] as Array),
+		]
+		if mechanics.has(mechanics_key) and (mechanics[mechanics_key] as Dictionary) != option:
+			return _movement_failure("conflicting_duplicate_mechanics", "options.%d" % option_index)
+		mechanics[mechanics_key] = option
+	if goals.size() > 3:
+		return _movement_failure("goal_cap_exceeded", "goals")
+	var counted_goal_ids: Array = option_counts_by_goal.keys()
+	counted_goal_ids.sort()
+	for goal_id_value: Variant in counted_goal_ids:
+		var counted_goal_id: String = str(goal_id_value)
+		if int(option_counts_by_goal[counted_goal_id]) > 4:
+			return _movement_failure("option_cap_exceeded", "options")
+	return {"valid": true, "intent": {}, "reason": "", "field": ""}
+
+
+func _validate_perceived_actor_context(context: Dictionary, movement_context: Dictionary) -> Dictionary:
+	var all_actors: Array = context["all_actors"] as Array
+	var canonical_actors: Array[Dictionary] = []
+	var context_ids: Dictionary = {}
+	var has_invalid_type: bool = false
+	var has_empty_id: bool = false
+	for actor_value: Variant in all_actors:
+		if not actor_value is Dictionary:
+			has_invalid_type = true
+			continue
+		var context_actor: Dictionary = actor_value as Dictionary
+		var context_id: String = str(context_actor.get("id", ""))
+		if context_id.is_empty():
+			has_empty_id = true
+			continue
+		canonical_actors.append(context_actor)
+		context_ids[context_id] = int(context_ids.get(context_id, 0)) + 1
+	if has_invalid_type:
+		return _movement_failure("invalid_all_actor_type", "context.all_actors")
+	if has_empty_id:
+		return _movement_failure("empty_all_actor_id", "context.all_actors.id")
+	var actor_ids: Array = context_ids.keys()
+	actor_ids.sort()
+	for id_value: Variant in actor_ids:
+		var context_id: String = str(id_value)
+		if int(context_ids[context_id]) > 1:
+			return _movement_failure("duplicate_all_actor_id", "context.all_actors.%s.id" % context_id)
+	canonical_actors.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
+		return str(left["id"]) < str(right["id"])
+	)
+	var facts_by_id: Dictionary = _perceived_facts_by_id(movement_context)
+	var mover: Dictionary = context["actor"] as Dictionary
+	var mover_result: Dictionary = _crosscheck_perceived_actor(mover, facts_by_id[str(mover["id"])] as Dictionary, "context.actor")
+	if not bool(mover_result["valid"]):
+		return mover_result
+	for context_actor: Dictionary in canonical_actors:
+		var context_id: String = str(context_actor["id"])
+		if not facts_by_id.has(context_id):
+			continue
+		var result: Dictionary = _crosscheck_perceived_actor(
+			context_actor,
+			facts_by_id[context_id] as Dictionary,
+			"context.all_actors.%s" % context_id
+		)
+		if not bool(result["valid"]):
+			return result
+	return {"valid": true, "intent": {}, "reason": "", "field": ""}
+
+
+func _crosscheck_perceived_actor(actor: Dictionary, fact: Dictionary, field: String) -> Dictionary:
+	if not actor.get("grid_pos", {}) is Dictionary or (actor.get("grid_pos", {}) as Dictionary) != (fact["position"] as Dictionary):
+		return _movement_failure("perceived_actor_position_mismatch", "%s.grid_pos" % field)
+	var actor_is_dead: bool = bool(actor.get("is_dead", false))
+	var actor_is_ko: bool = bool(actor.get("is_ko", false))
+	if not actor.has("is_ko") and actor.has("current_hp"):
+		actor_is_ko = int(actor["current_hp"]) <= 0 and not actor_is_dead
+	for state_pair: Array in [
+		["is_dead", actor_is_dead],
+		["is_ko", actor_is_ko],
+		["is_structure", bool(actor.get("is_structure", false))],
+		["is_spirit", bool(actor.get("is_spirit", false))],
+		["is_quarry", bool(actor.get("is_quarry", false))],
+		["controlling_state", bool(actor.get("controlling_state", true))],
+	]:
+		if bool(fact[str(state_pair[0])]) != bool(state_pair[1]):
+			return _movement_failure("perceived_actor_state_mismatch", "%s.%s" % [field, str(state_pair[0])])
+	var actor_kind: String = "structure" if bool(actor.get("is_structure", false)) else str(actor.get("kind", actor.get("actor_type", "")))
+	if actor_kind != str(fact["kind"]):
+		return _movement_failure("perceived_actor_kind_mismatch", "%s.kind" % field)
+	if not is_equal_approx(_hp_ratio(actor), float(fact["health_ratio"])):
+		return _movement_failure("perceived_actor_health_mismatch", "%s.health_ratio" % field)
+	return {"valid": true, "intent": {}, "reason": "", "field": ""}
+
+
+func _canonical_perceived_actors(context: Dictionary, movement_context: Dictionary) -> Array:
+	var perceived_ids: Dictionary = _perceived_actor_ids(movement_context)
+	var result: Array = []
+	for actor_value: Variant in context["all_actors"] as Array:
+		var actor: Dictionary = actor_value as Dictionary
+		if perceived_ids.has(str(actor["id"])):
+			result.append(actor)
+	result.sort_custom(func(left: Variant, right: Variant) -> bool:
+		return str((left as Dictionary)["id"]) < str((right as Dictionary)["id"])
+	)
+	return result
+
+
+static func _perceived_facts_by_id(movement_context: Dictionary) -> Dictionary:
+	var result: Dictionary = {}
+	for fact_value: Variant in movement_context["perceived_actors"] as Array:
+		var fact: Dictionary = fact_value as Dictionary
+		result[str(fact["id"])] = fact
+	return result
+
+
+static func _perceived_actor_ids(movement_context: Dictionary) -> Dictionary:
+	var result: Dictionary = {}
+	for fact_value: Variant in movement_context["perceived_actors"] as Array:
+		result[str((fact_value as Dictionary)["id"])] = true
+	return result
+
+
+func _validate_spatial_config() -> Dictionary:
+	if not _movement_cfg.has("spatial_utility") or not _movement_cfg["spatial_utility"] is Dictionary:
+		return _movement_failure("missing_spatial_utility", "movement_cfg.spatial_utility")
+	var config: Dictionary = _movement_cfg["spatial_utility"] as Dictionary
+	for field: String in _SPATIAL_UTILITY_FIELDS:
+		if not config.has(field):
+			return _movement_failure("missing_spatial_config_field", "movement_cfg.spatial_utility.%s" % field)
+		var value: Variant = config[field]
+		if not (value is int or value is float):
+			return _movement_failure("invalid_spatial_config_type", "movement_cfg.spatial_utility.%s" % field)
+		if not is_finite(float(value)):
+			return _movement_failure("non_finite_spatial_config", "movement_cfg.spatial_utility.%s" % field)
+	var keys: Array = config.keys()
+	keys.sort()
+	for key_value: Variant in keys:
+		var key: String = str(key_value)
+		if not _SPATIAL_UTILITY_FIELDS.has(key):
+			return _movement_failure("unexpected_spatial_config_field", "movement_cfg.spatial_utility.%s" % key)
+	if float(config["cap"]) <= 0.0:
+		return _movement_failure("non_positive_spatial_cap", "movement_cfg.spatial_utility.cap")
+	return {"valid": true, "intent": {}, "reason": "", "field": ""}
+
+
+func _validate_spatial_directive(directive: Dictionary) -> Dictionary:
+	if not directive.has("intent_weights"):
+		return {"valid": true, "intent": {}, "reason": "", "field": ""}
+	if not directive["intent_weights"] is Dictionary:
+		return _movement_failure("invalid_directive_weights", "context.directive.intent_weights")
+	var weights: Dictionary = directive["intent_weights"] as Dictionary
+	for key: String in [
+		"objective_advance_priority", "avoid_overcommit", "exposure_acceptance",
+		"ally_protection_bias", "threat_interception",
+	]:
+		if not weights.has(key):
+			continue
+		var value: Variant = weights[key]
+		if not (value is int or value is float) or not is_finite(float(value)):
+			return _movement_failure("invalid_directive_weight", "context.directive.intent_weights.%s" % key)
+	return {"valid": true, "intent": {}, "reason": "", "field": ""}
+
+
+func _stationary_candidate(
+	legacy: Dictionary,
+	movement_context: Dictionary,
+	profile: Dictionary
+) -> Dictionary:
+	var plan: Dictionary = MovementActionPlanContract.from_legacy_candidate(legacy)
+	var result: Dictionary = legacy.duplicate(true)
+	_apply_stationary_identity(result, plan, movement_context, profile)
+	return result
+
+
+func _route_candidate(
+	legacy: Dictionary,
+	plan: Dictionary,
+	goal: Dictionary,
+	option: Dictionary,
+	movement_context: Dictionary,
+	profile: Dictionary
+) -> Dictionary:
+	var candidate: Dictionary = legacy.duplicate(true)
+	if candidate.is_empty():
+		candidate = (plan["payload"] as Dictionary).duplicate(true)
+	candidate["action_type"] = str(plan["type"])
+	candidate["target_id"] = str(plan["target_id"])
+	if legacy.is_empty():
+		_add_perceived_target_health(candidate, movement_context)
+	candidate["_movement_plan"] = plan.duplicate(true)
+	candidate["_movement_goal"] = goal
+	candidate["_movement_option"] = option
+	candidate["_movement_route"] = true
+	candidate["_movement_goal_id"] = str(goal["goal_id"])
+	candidate["_movement_option_id"] = str(option["option_id"])
+	candidate["_movement_path"] = (option["path"] as Array).duplicate(true)
+	candidate["_movement_commitment"] = int(option["commitment"])
+	candidate["_movement_fallback"] = (option["fallback"] as Dictionary).duplicate(true)
+	candidate["_movement_pressure_sources"] = (goal["pressure_sources"] as Array).duplicate(true)
+	if (option["path"] as Array).is_empty():
+		_apply_stationary_identity(candidate, plan, movement_context, profile)
+	return candidate
+
+
+func _add_perceived_target_health(candidate: Dictionary, movement_context: Dictionary) -> void:
+	var target_id: String = str(candidate.get("target_id", ""))
+	if target_id.is_empty():
+		return
+	var facts: Dictionary = _perceived_facts_by_id(movement_context)
+	if facts.has(target_id):
+		candidate["target_hp_ratio"] = float((facts[target_id] as Dictionary)["health_ratio"])
+
+
+func _apply_stationary_identity(
+	candidate: Dictionary,
+	plan: Dictionary,
+	movement_context: Dictionary,
+	profile: Dictionary
+) -> void:
+	var origin: Dictionary = movement_context["origin"] as Dictionary
+	var action_token: String = str(plan["type"]).replace(".", "_")
+	var anchor: String = "c%dr%d" % [int(origin["col"]), int(origin["row"])]
+	var goal_id: String = "goal.legacy.stationary.%s.%s" % [action_token, anchor]
+	candidate["_movement_plan"] = plan.duplicate(true)
+	candidate["_movement_goal"] = {}
+	candidate["_movement_option"] = {}
+	candidate["_movement_route"] = false
+	candidate["_movement_goal_id"] = goal_id
+	candidate["_movement_option_id"] = "%s.stationary.d%dr%d.pstay" % [
+		goal_id, int(origin["col"]), int(origin["row"]),
+	]
+	candidate["_movement_path"] = []
+	candidate["_movement_commitment"] = 0
+	candidate["_movement_fallback"] = {}
+	candidate["_movement_pressure_sources"] = []
+	candidate["capacity"] = int(profile["capacity"])
+
+
+func _append_legacy_purifier_candidate(
+	candidates: Array[Dictionary],
+	context: Dictionary,
+	actor: Dictionary,
+	all_actors: Array,
+	movement_context: Dictionary,
+	profile: Dictionary
+) -> void:
+	if not context.get("is_purifier", false) \
+			or not context.get("shrine_alive", false) \
+			or float(context.get("shrine_hp_ratio", 1.0)) >= 0.5 \
+			or int(actor.get("purify_cooldown", 0)) != 0:
+		return
+	var my_pos: Dictionary = actor.get("grid_pos", {}) as Dictionary
+	for actor_value: Variant in all_actors:
+		if actor_value is Dictionary:
+			var other: Dictionary = actor_value as Dictionary
+			if other.get("is_structure", false) and not other.get("is_dead", false):
+				if GridService.is_adjacent(my_pos, other.get("grid_pos", {})):
+					var candidate: Dictionary = _stationary_candidate(
+						{"action_type": "actor.purify_shrine", "target_id": "", "priority": 1.0},
+						movement_context,
+						profile
+					)
+					candidate["_score"] = 9999.0
+					candidates.append(candidate)
+				return
+
+
+func _spatial_utility(
+	goal: Dictionary,
+	option: Dictionary,
+	directive: Dictionary,
+	config: Dictionary
+) -> float:
+	var urgency: float = clampf(float(goal["urgency"]), 0.0, 1.0)
+	var progress: float = clampf(float(option["objective_progress"]), 0.0, 1.0)
+	var cohesion: float = clampf(float(option["cohesion"]), 0.0, 1.0)
+	var exposure: float = clampf(float(option["exposure"]), 0.0, 1.0)
+	var congestion: float = clampf(float(option["congestion"]), 0.0, 1.0)
+	var commitment_ratio: float = clampf(
+		float(option["commitment"]) / float(option["capacity"]), 0.0, 1.0
+	)
+	var weights: Dictionary = directive.get("intent_weights", {}) as Dictionary
+	var objective_advance: float = clampf(
+		float(weights.get("objective_advance_priority", 0.0)), -1.0, 1.0
+	)
+	var avoid_overcommit: float = clampf(
+		float(weights.get("avoid_overcommit", 0.0)), -1.0, 1.0
+	)
+	var exposure_acceptance: float = clampf(
+		float(weights.get("exposure_acceptance", 0.0)), -1.0, 1.0
+	)
+	var ally_protection: float = clampf(
+		float(weights.get("ally_protection_bias", 0.0)), -1.0, 1.0
+	)
+	var threat_interception: float = clampf(
+		float(weights.get("threat_interception", 0.0)), -1.0, 1.0
+	)
+	var purpose: String = str(goal["purpose"])
+	var protects: float = 1.0 if purpose in ["protect", "intercept", "escort"] else 0.0
+	var intercepts: float = 1.0 if purpose in ["intercept", "cut_off"] else 0.0
+	var raw: float = (
+		float(config["urgency_weight"]) * urgency
+		+ float(config["objective_progress_weight"]) * progress
+		+ float(config["cohesion_weight"]) * cohesion
+		+ float(config["exposure_weight"]) * exposure
+		+ float(config["congestion_weight"]) * congestion
+		+ float(config["commitment_weight"]) * commitment_ratio
+		+ float(config["directive_objective_advance_weight"]) * objective_advance * progress
+		+ float(config["directive_avoid_overcommit_weight"]) * avoid_overcommit * (1.0 - commitment_ratio)
+		+ float(config["directive_exposure_acceptance_weight"]) * exposure_acceptance * exposure
+		+ float(config["directive_ally_protection_weight"]) * ally_protection * protects
+		+ float(config["directive_threat_interception_weight"]) * threat_interception * intercepts
+	)
+	var cap: float = float(config["cap"])
+	return clampf(raw, -cap, cap)
+
+
+static func _movement_goal_before(left: Dictionary, right: Dictionary) -> bool:
+	if float(left["urgency"]) != float(right["urgency"]):
+		return float(left["urgency"]) > float(right["urgency"])
+	return str(left["goal_id"]) < str(right["goal_id"])
+
+
+static func _goal_index(goals: Array, goal_id: String) -> int:
+	for index: int in range(goals.size()):
+		if str((goals[index] as Dictionary)["goal_id"]) == goal_id:
+			return index
+	return -1
+
+
+static func _plan_key(action_type: String, target_id: String) -> String:
+	return "%s\u001f%s" % [action_type, target_id]
+
+
+static func _movement_cell_key(position: Dictionary) -> String:
+	return "%d,%d" % [int(position["col"]), int(position["row"])]
+
+
+static func _movement_path_key(path: Array) -> String:
+	var keys: Array[String] = []
+	for cell_value: Variant in path:
+		keys.append(_movement_cell_key(cell_value as Dictionary))
+	return ">".join(keys)
+
+
+static func _movement_failure(reason: String, field: String) -> Dictionary:
+	return {"valid": false, "intent": {}, "reason": reason, "field": field}
 
 
 # -------------------------

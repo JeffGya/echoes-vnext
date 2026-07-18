@@ -715,7 +715,7 @@ Guard consequence types:
 
 **V2-COMBAT-002 dependency:** Required for tonal realm differentiation. V2-COMBAT-001 scales enemy count only — type variety (making realms feel distinct in pressure and tone) belongs to V2-COMBAT-002.
 
-### Shared Movement Contract + Path Foundation (V2-COMBAT-002 Slice 1)
+### Shared Movement Contract, Pressure + Route-Arbitration Foundation (V2-COMBAT-002 Slices 1–2)
 
 Slice 1 establishes deterministic movement vocabulary and topology primitives only. It does **not** switch combat, exploration, actor behavior, initiative, objectives, snapshots, saves, or UI to a new movement executor. Existing live behavior remains the regression baseline; V2-COMBAT-002 slices 2–6 own all later integration and player-facing behavior.
 
@@ -731,6 +731,18 @@ Slice 1 establishes deterministic movement vocabulary and topology primitives on
 **Shared terrain edge authority (`StageTerrain`):** `is_legal_edge(from_cell, to_cell, walkable, bounds={})` and `legal_neighbors(...)` define stable 8-direction, bounds-aware topology for the new path service. Source and destination must be walkable. A diagonal is blocked only when **both** orthogonal side cells are solid; one open side permits it. Actor occupancy is intentionally not terrain solidity and never creates a solid corner. Empty `walkable` retains the legacy all-walkable sentinel, clipped when bounds are supplied.
 
 **Accepted verification:** 1011/1011 full-suite tests; focused suites: movement contracts 33/33, movement paths 10/10, StageTerrain 27/27, combat terrain 16/16. Jeff's manual in-game regression pass confirmed the game behaves as before. Slices 2–6 remain deferred.
+
+**Slice 2 exact planning contracts:** `MovementActionPlan` requires explicit internal `{type, target_id, payload}` actions; empty never means idle. `MovementPerceivedActorFact`, `MovementKnownHazardFact`, and `CombatPressureSnapshot` keep planning on exact perceived facts. `MovementGoal.validate(goal, mover_origin)` owns the rule that only a truthful `hold` region may contain the mover origin. Context/goal/option/intent validators remain exact-field, finite-number, stable-diagnostic boundaries; constructors deep-copy.
+
+**Dormant combat pressure (`CombatPressureService.build_goals`):** validates context and the seven-mode pressure snapshot before producing at most one direct-objective, one tactical-alternative, and one combat-safety goal. Goal IDs, pressure sources, region order, urgency, and tie-breaking are canonical. The service reads perceived facts only and never owns mutation, target custody, mode progress, escape, kill-all, win, or loss authority.
+
+**Dormant route options (`MovementOptionService.generate_options`):** plans only through cells that are both authoritatively walkable and perceived as plannable, with occupied destinations removed except the mover origin for truthful hold. It returns at most four mechanically distinct options using frozen style precedence. Terrain destination-entry cost plus validated directed edge surcharges determines route cost and commitment. Living perceived hostile controllers add a one-point surcharge to a controlled edge; known hazards are reported but do not add cost in Slice 2. Route metrics expose progress, exposure, congestion, cohesion, and commitment without embedding Calling/archetype/virtue identity in path generation.
+
+**Directed path costs:** all three `MovementPathService` APIs accept optional `edge_costs`, keyed exactly `from_col,from_row>to_col,to_row`. Keys must be canonical adjacent directed edges and values must be nonnegative integers. The complete map is validated in sorted order before routing, preserving deterministic failures and insertion-order-independent results.
+
+**Dormant complete-candidate arbitration (`BehaviorArbiter.select_movement_intent`):** validates the whole goal/option pool before caps or scoring, filters actor context to perceived IDs, and compares complete route-plus-action candidates. Existing visible Calling, trait, ten-virtue, fear, morale, maturity, Directive, situation, skill, vow, bond, and purifier layers remain operative. Spatial utility from `data.combat.movement.spatial_utility` is bounded and applied after existing action scoring but before vow/bond adjustments; purifier authority remains the final exact override. Route generation stays identity-neutral. The production `select_intent()` behavior is unchanged.
+
+**Slice 2 acceptance:** 1081/1081 full-suite tests; focused suites: Slice 2 contracts 12/12, pressure 23/23, options/path 23/23, arbiter/legacy 70/70. Jeff's manual regression confirmed unchanged live behavior. Slice 3 owns movement-profile derivation, shared execution, fixed hazard fixtures/effects, forced displacement, and ordered movement-plus-action activation. Special carry/retreat/interpose/protect/pursue mechanics, party stage movement, and player-facing presentation remain assigned to Slices 4, 5, and 6 respectively.
 
 ### Save Schema (`core/save/SaveSchema.gd` + `SaveService.gd`)
 9 top-level keys: `schema_version`, `first_boot`, `meta`, `campaign`, `flow`, `economy`, `sanctum`, `stage_context`, `realms`

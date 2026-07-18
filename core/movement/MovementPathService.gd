@@ -18,8 +18,12 @@ static func shortest_path(
 	destination: Dictionary,
 	walkable: Dictionary,
 	terrain_costs: Dictionary = {},
-	bounds: Dictionary = {}
+	bounds: Dictionary = {},
+	edge_costs: Dictionary = {}
 ) -> Dictionary:
+	var edge_validation: Dictionary = _validate_edge_costs(edge_costs)
+	if not bool(edge_validation["valid"]):
+		return _path_failure(str(edge_validation["reason"]))
 	if not _is_cell(origin):
 		return _path_failure("invalid_origin")
 	if not _is_cell(destination):
@@ -79,7 +83,8 @@ static func shortest_path(
 			var entry_cost: int = _entry_cost(neighbor_key, terrain_costs)
 			if entry_cost < 1:
 				return _path_failure("invalid_terrain_cost")
-			var candidate_cost: int = current_cost + entry_cost
+			var candidate_cost: int = current_cost + entry_cost \
+				+ _edge_surcharge(current, neighbor, edge_costs)
 			var candidate_deviation: int = current_deviation + _line_deviation(
 				origin_cell,
 				destination_cell,
@@ -107,8 +112,12 @@ static func reachable_cost_region(
 	capacity: int,
 	walkable: Dictionary,
 	terrain_costs: Dictionary = {},
-	bounds: Dictionary = {}
+	bounds: Dictionary = {},
+	edge_costs: Dictionary = {}
 ) -> Dictionary:
+	var edge_validation: Dictionary = _validate_edge_costs(edge_costs)
+	if not bool(edge_validation["valid"]):
+		return _region_failure(str(edge_validation["reason"]))
 	if capacity < 0:
 		return _region_failure("invalid_capacity")
 	if not _is_cell(origin):
@@ -142,7 +151,8 @@ static func reachable_cost_region(
 			var entry_cost: int = _entry_cost(neighbor_key, terrain_costs)
 			if entry_cost < 1:
 				return _region_failure("invalid_terrain_cost")
-			var candidate_cost: int = current_cost + entry_cost
+			var candidate_cost: int = current_cost + entry_cost \
+				+ _edge_surcharge(current, neighbor, edge_costs)
 			if candidate_cost > capacity:
 				continue
 			if not costs.has(neighbor_key) or candidate_cost < int(costs[neighbor_key]):
@@ -163,8 +173,12 @@ static func validate_route(
 	path: Array,
 	walkable: Dictionary,
 	terrain_costs: Dictionary = {},
-	bounds: Dictionary = {}
+	bounds: Dictionary = {},
+	edge_costs: Dictionary = {}
 ) -> Dictionary:
+	var edge_validation: Dictionary = _validate_edge_costs(edge_costs)
+	if not bool(edge_validation["valid"]):
+		return _route_failure(str(edge_validation["reason"]), 0)
 	if not _is_cell(origin):
 		return _route_failure("invalid_origin", 0)
 	if not _is_available_cell(origin, walkable, bounds):
@@ -191,7 +205,7 @@ static func validate_route(
 		var entry_cost: int = _entry_cost(_cell_key(next_cell), terrain_costs)
 		if entry_cost < 1:
 			return _route_failure("invalid_terrain_cost", total_cost)
-		total_cost += entry_cost
+		total_cost += entry_cost + _edge_surcharge(current, next_cell, edge_costs)
 		current = next_cell
 
 	return {
@@ -259,6 +273,50 @@ static func _entry_cost(cell_key: String, terrain_costs: Dictionary) -> int:
 	if not value is int or int(value) < 1:
 		return -1
 	return int(value)
+
+
+static func _validate_edge_costs(edge_costs: Dictionary) -> Dictionary:
+	var keys: Array = []
+	for key_value: Variant in edge_costs.keys():
+		if not key_value is String:
+			return {"valid": false, "reason": "invalid_edge_cost_key"}
+		keys.append(key_value)
+	keys.sort()
+	for key_value: Variant in keys:
+		var key: String = str(key_value)
+		var parts: PackedStringArray = key.split(">", false)
+		if parts.size() != 2:
+			return {"valid": false, "reason": "invalid_edge_cost_key"}
+		var from_cell: Dictionary = _cell_from_canonical_key(parts[0])
+		var to_cell: Dictionary = _cell_from_canonical_key(parts[1])
+		if from_cell.is_empty() or to_cell.is_empty():
+			return {"valid": false, "reason": "invalid_edge_cost_key"}
+		var delta_col: int = abs(int(to_cell["col"]) - int(from_cell["col"]))
+		var delta_row: int = abs(int(to_cell["row"]) - int(from_cell["row"]))
+		if max(delta_col, delta_row) != 1:
+			return {"valid": false, "reason": "invalid_edge_cost_edge"}
+		var value: Variant = edge_costs[key]
+		if not value is int or int(value) < 0:
+			return {"valid": false, "reason": "invalid_edge_cost"}
+	return {"valid": true, "reason": ""}
+
+
+static func _cell_from_canonical_key(key: String) -> Dictionary:
+	var parts: PackedStringArray = key.split(",", false)
+	if parts.size() != 2 or not parts[0].is_valid_int() or not parts[1].is_valid_int():
+		return {}
+	var cell: Dictionary = {"col": int(parts[0]), "row": int(parts[1])}
+	if _cell_key(cell) != key:
+		return {}
+	return cell
+
+
+static func _edge_surcharge(
+	from_cell: Dictionary,
+	to_cell: Dictionary,
+	edge_costs: Dictionary
+) -> int:
+	return int(edge_costs.get("%s>%s" % [_cell_key(from_cell), _cell_key(to_cell)], 0))
 
 
 static func _is_available_cell(

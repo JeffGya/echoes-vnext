@@ -51,7 +51,12 @@ static func register(runner: CoreTestRunner) -> void:
 
 static func _t_context_valid_copy() -> Dictionary:
 	var origin := {"col": 1, "row": 2}
-	var actors: Array = [{"id": "enemy.1", "grid_pos": {"col": 4, "row": 2}}]
+	var actors: Array = [{
+		"id": "enemy.1", "position": {"col": 4, "row": 2}, "kind": "enemy",
+		"is_dead": false, "is_ko": false, "is_structure": false,
+		"is_spirit": false, "is_quarry": false, "controlling_state": false,
+		"health_ratio": 1.0,
+	}]
 	var context: Dictionary = ContextContract.build(
 		"echo.1", "activation.1", origin, {"w": 10, "h": 10},
 		{"1,2": true, "2,2": true}, {"1,2": true, "2,2": true}, {}, actors,
@@ -93,19 +98,20 @@ static func _t_profile_zero_and_authored_one() -> Dictionary:
 
 static func _t_goal_valid_copy() -> Dictionary:
 	var region: Array = [{"col": 4, "row": 3}, {"col": 4, "row": 4}]
-	var action := {"type": "combat.attack", "target_id": "enemy.1"}
+	var action := {"type": "actor.guard", "target_id": "", "payload": {}}
 	var goal: Dictionary = GoalContract.build(
-		"goal.recover.hold", "hold_objective", region, 0.8, 1.0,
-		["echo.1", "enemy.1"], ["objective.relic"], action, {"type": "combat.guard"}
+		"goal.recover.hold.holder.c4r3", "hold", region, 0.8, 1.0,
+		["echo.1", "enemy.1"], ["objective.relic"], action,
+		{"type": "actor.idle", "target_id": "", "payload": {}}
 	)
-	var result: Dictionary = GoalContract.validate(goal)
+	var result: Dictionary = GoalContract.validate(goal, {"col": 1, "row": 1})
 	if not bool(result["valid"]):
 		return _fail("valid goal rejected: %s" % str(result))
 	(region[0] as Dictionary)["col"] = 0
 	action["type"] = "mutated"
 	if int((goal["destination_region"] as Array)[0].get("col", -1)) != 4:
 		return _fail("goal retained destination region input alias")
-	if str((goal["planned_primary"] as Dictionary).get("type", "")) != "combat.attack":
+	if str((goal["planned_primary"] as Dictionary).get("type", "")) != "actor.guard":
 		return _fail("goal retained primary action input alias")
 	return _pass()
 
@@ -124,10 +130,11 @@ static func _t_option_valid_copy() -> Dictionary:
 
 static func _t_intent_valid_copy() -> Dictionary:
 	var path: Array = [{"col": 2, "row": 1}]
-	var action := {"type": "combat.guard"}
+	var action := {"type": "actor.guard", "target_id": "", "payload": {}}
 	var intent: Dictionary = IntentContract.build(
 		"echo.1", "activation.1", "goal.hold", "option.hold.1", path,
-		3, 1, action, {"type": "combat.wait"}, ["objective.relic"]
+		3, 1, action, {"type": "actor.idle", "target_id": "", "payload": {}},
+		["objective.relic"]
 	)
 	var result: Dictionary = IntentContract.validate(intent, {"col": 1, "row": 1})
 	if not bool(result["valid"]):
@@ -136,7 +143,7 @@ static func _t_intent_valid_copy() -> Dictionary:
 	action["type"] = "mutated"
 	if int((intent["path"] as Array)[0].get("col", -1)) != 2:
 		return _fail("intent retained path input alias")
-	if str((intent["planned_action"] as Dictionary).get("type", "")) != "combat.guard":
+	if str((intent["planned_action"] as Dictionary).get("type", "")) != "actor.guard":
 		return _fail("intent retained action input alias")
 	return _pass()
 
@@ -176,7 +183,7 @@ static func _t_missing_fields_reasoned() -> Dictionary:
 	var cases: Array = [
 		[_valid_context(), Callable(ContextContract, "validate"), "activation_id"],
 		[ProfileContract.build(2, [], true, "echo", {}), Callable(ProfileContract, "validate"), "capacity"],
-		[_valid_goal(), Callable(GoalContract, "validate"), "purpose"],
+		[_valid_goal(), Callable(GoalContract, "validate"), "purpose", {"col": 1, "row": 1}],
 		[_valid_option(), Callable(OptionContract, "validate"), "option_id", {"col": 1, "row": 1}],
 		[_valid_intent(), Callable(IntentContract, "validate"), "mover_id", {"col": 1, "row": 1}],
 		[_event(1, {"col": 1, "row": 1}, {"col": 2, "row": 1}), Callable(EventContract, "validate"), "seq"],
@@ -220,7 +227,7 @@ static func _t_wrong_types_reasoned() -> Dictionary:
 static func _t_unexpected_field_rejected() -> Dictionary:
 	var goal: Dictionary = _valid_goal()
 	goal["free_form_note"] = "not contract data"
-	var result: Dictionary = GoalContract.validate(goal)
+	var result: Dictionary = GoalContract.validate(goal, {"col": 1, "row": 1})
 	if not _matches_failure(result, "unexpected_field", "free_form_note"):
 		return _fail("unexpected field was not rejected deterministically: %s" % str(result))
 	return _pass()
@@ -371,8 +378,11 @@ static func _t_origin_required_and_empty_path() -> Dictionary:
 	if not _matches_failure(intent_path_result, "path_includes_origin", "path"):
 		return _fail("intent accepted origin inside path: %s" % str(intent_path_result))
 	var stationary: Dictionary = OptionContract.build(
-		"goal.hold", "option.hold", "hold", {"col": 1, "row": 1}, [],
-		0, 0, 0, 2, 0, 0.0, 0.0, 1.0, [], {}, 0.0, {}, {}
+		"goal.combat.hold.baseline.c1r1",
+		"option.combat.hold.baseline.c1r1.direct.d1r1.pstay",
+		"hold", {"col": 1, "row": 1}, [],
+		0, 0, 0, 2, 0, 0.0, 0.0, 1.0, [], {"known_count": 0, "known_ids": []}, 0.0,
+		{"type": "actor.guard", "target_id": "", "payload": {}}, {}
 	)
 	var stationary_result: Dictionary = OptionContract.validate(stationary, {"col": 1, "row": 1})
 	if not bool(stationary_result["valid"]):
@@ -398,7 +408,8 @@ static func _t_origin_required_and_empty_path() -> Dictionary:
 				% [field, str(costly_stationary_result)]
 			)
 	var stationary_intent: Dictionary = IntentContract.build(
-		"echo.1", "activation.1", "goal.hold", "option.hold", [], 2, 0, {}, {}, []
+		"echo.1", "activation.1", "goal.hold", "option.hold", [], 2, 0,
+		{"type": "actor.idle", "target_id": "", "payload": {}}, {}, []
 	)
 	var stationary_intent_result: Dictionary = IntentContract.validate(
 		stationary_intent,
@@ -468,27 +479,35 @@ static func _t_capacity_bands_and_cap() -> Dictionary:
 	if not _matches_failure(intent_cap_result, "capacity_exceeds_system_cap", "capacity"):
 		return _fail("intent capacity above six accepted: %s" % str(intent_cap_result))
 	var structure_option: Dictionary = OptionContract.build(
-		"goal.structure", "option.structure", "stay", {"col": 1, "row": 1}, [],
-		0, 0, 0, 0, 0, 0.0, 0.0, 1.0, [], {}, 0.0, {}, {}
+		"goal.combat.hold.baseline.c1r1",
+		"option.combat.hold.baseline.c1r1.direct.d1r1.pstay",
+		"hold", {"col": 1, "row": 1}, [],
+		0, 0, 0, 0, 0, 0.0, 0.0, 1.0, [], {"known_count": 0, "known_ids": []}, 0.0,
+		{"type": "actor.guard", "target_id": "", "payload": {}}, {}
 	)
 	var structure_option_result: Dictionary = OptionContract.validate(structure_option, {"col": 1, "row": 1})
 	if not bool(structure_option_result["valid"]):
 		return _fail("zero-capacity option rejected: %s" % str(structure_option_result))
 	var guide_option: Dictionary = OptionContract.build(
-		"goal.guide", "option.guide", "escort_step", {"col": 2, "row": 1}, [{"col": 2, "row": 1}],
-		1, 1, 0, 1, 1, 0.0, 0.0, 1.0, [], {}, 1.0, {}, {}
+		"goal.guide_spirit.advance.spirit.c2r1",
+		"option.guide_spirit.advance.spirit.c2r1.direct.d2r1.pc2r1",
+		"advance", {"col": 2, "row": 1}, [{"col": 2, "row": 1}],
+		1, 1, 0, 1, 1, 0.0, 0.0, 1.0, [], {"known_count": 0, "known_ids": []}, 1.0,
+		{"type": "actor.move", "target_id": "objective.guide", "payload": {}}, {}
 	)
 	var guide_option_result: Dictionary = OptionContract.validate(guide_option, {"col": 1, "row": 1})
 	if not bool(guide_option_result["valid"]):
 		return _fail("one-capacity option rejected: %s" % str(guide_option_result))
 	var structure_intent: Dictionary = IntentContract.build(
-		"structure.1", "activation.1", "goal.structure", "option.structure", [], 0, 0, {}, {}, []
+		"structure.1", "activation.1", "goal.structure", "option.structure", [], 0, 0,
+		{"type": "actor.idle", "target_id": "", "payload": {}}, {}, []
 	)
 	var structure_intent_result: Dictionary = IntentContract.validate(structure_intent, {"col": 1, "row": 1})
 	if not bool(structure_intent_result["valid"]):
 		return _fail("zero-capacity intent rejected: %s" % str(structure_intent_result))
 	var guide_intent: Dictionary = IntentContract.build(
-		"guide.1", "activation.1", "goal.guide", "option.guide", [{"col": 2, "row": 1}], 1, 1, {}, {}, []
+		"guide.1", "activation.1", "goal.guide", "option.guide", [{"col": 2, "row": 1}], 1, 1,
+		{"type": "actor.move", "target_id": "objective.guide", "payload": {}}, {}, []
 	)
 	var guide_intent_result: Dictionary = IntentContract.validate(guide_intent, {"col": 1, "row": 1})
 	if not bool(guide_intent_result["valid"]):
@@ -557,13 +576,17 @@ static func _t_slack_exact_and_bounded() -> Dictionary:
 
 static func _t_source_arrays_canonical() -> Dictionary:
 	var goal: Dictionary = GoalContract.build(
-		"goal.test", "advance", [{"col": 2, "row": 1}], 1.0, 0.0, [],
-		["pressure.z", "pressure.a", "pressure.z"], {}, {}
+		"goal.combat.advance.baseline.c2r1", "advance", [{"col": 2, "row": 1}], 1.0, 0.0,
+		["objective.test"],
+		["pressure.z", "pressure.a", "pressure.z"],
+		{"type": "actor.move", "target_id": "objective.test", "payload": {}},
+		{"type": "actor.idle", "target_id": "", "payload": {}}
 	)
 	if goal["pressure_sources"] != ["pressure.a", "pressure.z"]:
 		return _fail("goal builder did not sort and dedupe pressure sources")
 	var intent: Dictionary = IntentContract.build(
-		"echo.1", "activation.1", "goal.test", "option.test", [], 2, 0, {}, {},
+		"echo.1", "activation.1", "goal.test", "option.test", [], 2, 0,
+		{"type": "actor.idle", "target_id": "", "payload": {}}, {},
 		["pressure.z", "pressure.a", "pressure.z"]
 	)
 	if intent["pressure_sources"] != ["pressure.a", "pressure.z"]:
@@ -572,12 +595,15 @@ static func _t_source_arrays_canonical() -> Dictionary:
 	option = OptionContract.build(
 		str(option["goal_id"]), str(option["option_id"]), str(option["purpose"]),
 		option["destination"] as Dictionary, option["path"] as Array, 2, 2, 0, 3, 2,
-		0.2, 0.0, 1.0, ["enemy.z", "enemy.a", "enemy.z"], {}, 1.0, {}, {}
+		0.2, 0.0, 1.0, ["enemy.z", "enemy.a", "enemy.z"],
+		{"known_count": 0, "known_ids": []}, 1.0,
+		{"type": "actor.guard", "target_id": "", "payload": {}},
+		{"type": "actor.idle", "target_id": "", "payload": {}}
 	)
 	if option["hostile_control_sources"] != ["enemy.a", "enemy.z"]:
 		return _fail("option builder did not sort and dedupe hostile sources")
 	goal["pressure_sources"] = ["pressure.z", "pressure.a"]
-	var goal_result: Dictionary = GoalContract.validate(goal)
+	var goal_result: Dictionary = GoalContract.validate(goal, {"col": 1, "row": 1})
 	if not _matches_failure(goal_result, "not_strictly_sorted_unique", "pressure_sources"):
 		return _fail("goal validator accepted unsorted pressure sources: %s" % str(goal_result))
 	intent["pressure_sources"] = ["pressure.a", "pressure.a"]
@@ -812,6 +838,7 @@ static func _t_required_fields_exact_tables() -> Dictionary:
 			"expected": ["goal_id", "purpose", "destination_region", "urgency", "objective_progress", "relevant_actors", "pressure_sources", "planned_primary", "declared_fallback"],
 			"value": _valid_goal(),
 			"validator": Callable(GoalContract, "validate"),
+			"origin": {"col": 1, "row": 1},
 		},
 		{
 			"name": "MovementOption",
@@ -870,10 +897,15 @@ static func _t_all_mutable_inputs_deep_copied() -> Dictionary:
 	var walkable := {"1,1": true}
 	var planning := {"1,1": true}
 	var occupancy := {"2,1": "enemy.1"}
-	var perceived: Array = [{"id": "enemy.1"}]
-	var relationships := {"enemy.1": {"faction": "enemy"}}
+	var perceived: Array = [{
+		"id": "enemy.1", "position": {"col": 2, "row": 1}, "kind": "enemy",
+		"is_dead": false, "is_ko": false, "is_structure": false,
+		"is_spirit": false, "is_quarry": false, "controlling_state": true,
+		"health_ratio": 1.0,
+	}]
+	var relationships := {"enemy.1": "hostile"}
 	var terrain_costs := {"1,1": 1}
-	var hazards: Array = [{"id": "hazard.1"}]
+	var hazards: Array = [{"id": "hazard.1", "position": {"col": 1, "row": 1}, "hazard_type": "binding"}]
 	var pressure := {"mode": "recover"}
 	var history: Array = [{"destination": {"col": 0, "row": 1}}]
 	var context: Dictionary = ContextContract.build(
@@ -887,7 +919,7 @@ static func _t_all_mutable_inputs_deep_copied() -> Dictionary:
 	planning["1,1"] = false
 	occupancy["2,1"] = "mutated"
 	(perceived[0] as Dictionary)["id"] = "mutated"
-	(relationships["enemy.1"] as Dictionary)["faction"] = "mutated"
+	relationships["enemy.1"] = "neutral"
 	terrain_costs["1,1"] = 9
 	(hazards[0] as Dictionary)["id"] = "mutated"
 	pressure["mode"] = "mutated"
@@ -907,8 +939,8 @@ static func _t_all_mutable_inputs_deep_copied() -> Dictionary:
 	var destination_region: Array = [{"col": 3, "row": 1}]
 	var relevant_actors: Array = ["echo.1"]
 	var goal_sources: Array = ["pressure.a"]
-	var primary := {"type": "combat.guard", "payload": {"v": 1}}
-	var declared_fallback := {"type": "combat.wait", "payload": {"v": 1}}
+	var primary := {"type": "actor.guard", "target_id": "", "payload": {"v": 1}}
+	var declared_fallback := {"type": "actor.idle", "target_id": "", "payload": {"v": 1}}
 	var goal: Dictionary = GoalContract.build(
 		"goal.1", "hold", destination_region, 1.0, 0.0, relevant_actors,
 		goal_sources, primary, declared_fallback
@@ -925,9 +957,9 @@ static func _t_all_mutable_inputs_deep_copied() -> Dictionary:
 	var option_destination := {"col": 3, "row": 1}
 	var option_path: Array = [{"col": 2, "row": 1}, {"col": 3, "row": 1}]
 	var hostile_sources: Array = ["enemy.1"]
-	var hazard_summary := {"known": {"count": 1}}
-	var option_action := {"type": "combat.guard", "payload": {"v": 1}}
-	var option_fallback := {"type": "combat.wait", "payload": {"v": 1}}
+	var hazard_summary := {"known_count": 1, "known_ids": ["hazard.1"]}
+	var option_action := {"type": "actor.guard", "target_id": "", "payload": {"v": 1}}
+	var option_fallback := {"type": "actor.idle", "target_id": "", "payload": {"v": 1}}
 	var option: Dictionary = OptionContract.build(
 		"goal.1", "option.1", "hold", option_destination, option_path, 2, 2, 0, 3, 2,
 		0.0, 0.0, 1.0, hostile_sources, hazard_summary, 0.0, option_action, option_fallback
@@ -936,15 +968,15 @@ static func _t_all_mutable_inputs_deep_copied() -> Dictionary:
 	option_destination["col"] = 9
 	(option_path[0] as Dictionary)["col"] = 9
 	hostile_sources[0] = "mutated"
-	(hazard_summary["known"] as Dictionary)["count"] = 9
+	hazard_summary["known_count"] = 9
 	(option_action["payload"] as Dictionary)["v"] = 9
 	(option_fallback["payload"] as Dictionary)["v"] = 9
 	if option != expected_option:
 		return _fail("MovementOption did not deep-copy every mutable input")
 
 	var intent_path: Array = [{"col": 2, "row": 1}]
-	var intent_action := {"type": "combat.guard", "payload": {"v": 1}}
-	var intent_fallback := {"type": "combat.wait", "payload": {"v": 1}}
+	var intent_action := {"type": "actor.guard", "target_id": "", "payload": {"v": 1}}
+	var intent_fallback := {"type": "actor.idle", "target_id": "", "payload": {"v": 1}}
 	var intent_sources: Array = ["pressure.a"]
 	var intent: Dictionary = IntentContract.build(
 		"echo.1", "activation.1", "goal.1", "option.1", intent_path, 2, 1,
@@ -1071,16 +1103,22 @@ static func _valid_context() -> Dictionary:
 
 static func _valid_goal() -> Dictionary:
 	return GoalContract.build(
-		"goal.recover.hold", "hold_objective", [{"col": 3, "row": 1}], 0.8, 1.0,
-		["echo.1"], ["objective.relic"], {"type": "combat.guard"}, {"type": "combat.wait"}
+		"goal.recover.hold.holder.c3r1", "hold", [{"col": 3, "row": 1}], 0.8, 1.0,
+		["echo.1"], ["objective.relic"],
+		{"type": "actor.guard", "target_id": "", "payload": {}},
+		{"type": "actor.idle", "target_id": "", "payload": {}}
 	)
 
 
 static func _valid_option(path: Array = [{"col": 2, "row": 1}, {"col": 3, "row": 1}]) -> Dictionary:
 	return OptionContract.build(
-		"goal.recover.hold", "option.recover.hold.1", "hold_objective", {"col": 3, "row": 1},
+		"goal.recover.hold.holder.c3r1",
+		"option.recover.hold.holder.c3r1.direct.d3r1.pc2r1-c3r1",
+		"hold", {"col": 3, "row": 1},
 		path, 2, 2, 0, 3, 2, 0.2, 0.0, 1.0, ["enemy.1"],
-		{"known_count": 0}, 1.0, {"type": "combat.guard"}, {"type": "combat.wait"}
+		{"known_count": 0, "known_ids": []}, 1.0,
+		{"type": "actor.guard", "target_id": "", "payload": {}},
+		{"type": "actor.idle", "target_id": "", "payload": {}}
 	)
 
 
@@ -1088,7 +1126,8 @@ static func _valid_intent() -> Dictionary:
 	return IntentContract.build(
 		"echo.1", "activation.1", "goal.recover.hold", "option.recover.hold.1",
 		[{"col": 2, "row": 1}, {"col": 3, "row": 1}], 3, 2,
-		{"type": "combat.guard"}, {"type": "combat.wait"}, ["objective.relic"]
+		{"type": "actor.guard", "target_id": "", "payload": {}},
+		{"type": "actor.idle", "target_id": "", "payload": {}}, ["objective.relic"]
 	)
 
 
