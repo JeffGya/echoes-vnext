@@ -73,9 +73,16 @@ static func generate_options(
 	if bool(primary.get("failed", false)):
 		return _failure(str(primary["reason"]), str(primary["field"]))
 
+	# A holder already standing on the objective must stay put: the stay option is the only
+	# truthful candidate. Endpoint alternatives could otherwise emit a non-empty hold route
+	# that walks the actor off the objective it is meant to hold.
+	var holding_in_place: bool = str(goal["purpose"]) == "hold" \
+		and (goal["destination_region"] as Array).has(origin)
+
 	var candidates: Array = []
 	if not primary.is_empty():
 		candidates.append(primary)
+	if not primary.is_empty() and not holding_in_place:
 		var endpoints: Array = _build_endpoint_candidates(
 			context,
 			profile,
@@ -330,6 +337,7 @@ static func _build_option(
 	var hazard_ids: Array = _hazard_ids(path, context["known_hazards"] as Array)
 	var hostile_sources: Array = _hostile_sources(path, origin, edge_sources)
 	var option_id: String = _option_id(goal, style, destination, path)
+	var planned_action: Dictionary = _planned_action_for_destination(goal, destination)
 	return OptionContract.build(
 		str(goal["goal_id"]),
 		option_id,
@@ -347,9 +355,28 @@ static func _build_option(
 		hostile_sources,
 		{"known_count": hazard_ids.size(), "known_ids": hazard_ids},
 		progress,
-		goal["planned_primary"] as Dictionary,
+		planned_action,
 		goal["declared_fallback"] as Dictionary
 	)
+
+
+# Actions that require standing on/adjacent to the goal region to be legal. When an
+# option's route stops short of that region (truncated primary, conservative prefix, or
+# a safe/cohesive detour), keeping such an action would advertise an out-of-range strike.
+# In that case the option downgrades to a movement-only advance; the declared fallback is
+# unchanged. Movement-only or intentionally stationary plans are carried through untouched.
+const _RANGE_BOUND_ACTIONS: Array = [
+	"melee_attack", "protect_ally", "actor.guard", "actor.purify_shrine",
+]
+
+
+static func _planned_action_for_destination(goal: Dictionary, destination: Dictionary) -> Dictionary:
+	var planned: Dictionary = goal["planned_primary"] as Dictionary
+	if (goal["destination_region"] as Array).has(destination):
+		return planned
+	if not _RANGE_BOUND_ACTIONS.has(str(planned["type"])):
+		return planned
+	return {"type": "actor.move", "target_id": "", "payload": {}}
 
 
 static func _build_control(context: Dictionary, planning_walkable: Dictionary) -> Dictionary:

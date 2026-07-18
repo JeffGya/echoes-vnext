@@ -20,6 +20,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement_option/conservative_prefix", Callable(MovementOptionTests, "_t_conservative_prefix"))
 	runner.register_test("movement_option/purpose_primary_styles", Callable(MovementOptionTests, "_t_purpose_primary_styles"))
 	runner.register_test("movement_option/truthful_hold", Callable(MovementOptionTests, "_t_truthful_hold"))
+	runner.register_test("movement_option/truncated_attack_downgrades", Callable(MovementOptionTests, "_t_truncated_attack_downgrades"))
+	runner.register_test("movement_option/hold_in_place_no_endpoints", Callable(MovementOptionTests, "_t_hold_in_place_no_endpoints"))
 	runner.register_test("movement_option/perceived_intersection_and_occupancy", Callable(MovementOptionTests, "_t_perceived_intersection_and_occupancy"))
 	runner.register_test("movement_option/reversed_inputs_stable", Callable(MovementOptionTests, "_t_reversed_inputs_stable"))
 	runner.register_test("movement_option/mirrored_metrics_covary", Callable(MovementOptionTests, "_t_mirrored_metrics_covary"))
@@ -276,6 +278,61 @@ static func _t_truthful_hold() -> Dictionary:
 		return _fail("Stay mechanics were not truthful: %s" % str(option))
 	if not str(option["option_id"]).ends_with(".pstay"):
 		return _fail("Stationary option must use pstay ID")
+	return _pass()
+
+
+# A far engage target whose route exceeds capacity must not advertise an out-of-range
+# strike: every option that stops short of the goal region downgrades to a bare actor.move.
+static func _t_truncated_attack_downgrades() -> Dictionary:
+	var context: Dictionary = _context(_line_cells(0, 5, 0))
+	var goal: Dictionary = MovementGoal.build(
+		"goal.combat.engage.hunter.c5r0",
+		"engage",
+		[_cell(5, 0)],
+		0.5,
+		0.0,
+		["enemy.a"],
+		["mode.combat"],
+		ActionPlan.build("melee_attack", "enemy.a"),
+		ActionPlan.build("actor.idle")
+	)
+	var result: Dictionary = OptionService.generate_options(context, _profile(2), goal)
+	if not bool(result["valid"]):
+		return _fail("Truncated engage generation must succeed: %s" % str(result))
+	var options: Array = result["options"] as Array
+	if options.is_empty():
+		return _fail("Truncated engage must still emit a movement option: %s" % str(result))
+	var move_plan: Dictionary = ActionPlan.build("actor.move")
+	for option_value: Variant in options:
+		var option: Dictionary = option_value as Dictionary
+		var plan: Dictionary = option["planned_action"] as Dictionary
+		if (goal["destination_region"] as Array).has(option["destination"] as Dictionary):
+			if plan != (goal["planned_primary"] as Dictionary):
+				return _fail("In-range endpoint must retain the melee plan: %s" % str(option))
+		elif plan != move_plan:
+			return _fail("Out-of-range endpoint must downgrade to bare actor.move: %s" % str(option))
+	var primary: Dictionary = _find_style(options, "direct")
+	if primary.is_empty() or primary["destination"] != _cell(2, 0):
+		return _fail("Primary must truncate to capacity endpoint (2,0): %s" % str(primary))
+	if str((primary["planned_action"] as Dictionary)["type"]) != "actor.move":
+		return _fail("Truncated primary must downgrade melee to actor.move: %s" % str(primary))
+	return _pass()
+
+
+# A holder already on the objective must stay put even when a nearby cell would improve
+# cohesion: endpoint alternatives are suppressed so it cannot walk off the objective.
+static func _t_hold_in_place_no_endpoints() -> Dictionary:
+	var origin: Dictionary = _cell(0, 0)
+	var friend: Dictionary = _actor("ally.f", _cell(3, 0))
+	var context: Dictionary = _context(_line_cells(0, 3, 0), [friend], {"ally.f": "friendly"})
+	var result: Dictionary = OptionService.generate_options(context, _profile(2), _goal("hold", [origin]))
+	if not bool(result["valid"]) or (result["options"] as Array).size() != 1:
+		return _fail("Holder on objective must emit exactly the stay option: %s" % str(result))
+	var option: Dictionary = (result["options"] as Array)[0] as Dictionary
+	if option["path"] != [] or int(option["route_cost"]) != 0 or float(option["objective_progress"]) != 1.0:
+		return _fail("Stay mechanics were not truthful: %s" % str(option))
+	if not str(option["option_id"]).ends_with(".pstay"):
+		return _fail("Stationary hold must use pstay ID")
 	return _pass()
 
 
