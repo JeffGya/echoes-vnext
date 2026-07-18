@@ -4,6 +4,7 @@ extends RefCounted
 ## The selected actor, route option, commitment, and action/fallback pair.
 
 const V = preload("res://core/movement/contracts/MovementContractValidation.gd")
+const ActionPlan = preload("res://core/movement/contracts/MovementActionPlan.gd")
 
 const REQUIRED_FIELDS: Array = [
 	"mover_id",
@@ -75,10 +76,25 @@ static func validate(value: Dictionary, origin: Dictionary) -> Dictionary:
 		return V.failure("nonempty_path_requires_positive_commitment", "commitment")
 	if int(value["commitment"]) > int(value["capacity"]):
 		return V.failure("commitment_exceeds_capacity", "commitment")
-	for field: String in ["planned_action", "fallback"]:
-		var dict_result: Dictionary = V.require_type(value, field, TYPE_DICTIONARY)
-		if not bool(dict_result["valid"]):
-			return dict_result
+	var action_type: Dictionary = V.require_type(value, "planned_action", TYPE_DICTIONARY)
+	if not bool(action_type["valid"]):
+		return action_type
+	var action_result: Dictionary = ActionPlan.validate(value["planned_action"] as Dictionary)
+	if not bool(action_result["valid"]):
+		return V.failure(
+			"invalid_action_plan.%s" % str(action_result["reason"]),
+			"planned_action.%s" % str(action_result["field"])
+		)
+	var fallback_type: Dictionary = V.require_type(value, "fallback", TYPE_DICTIONARY)
+	if not bool(fallback_type["valid"]):
+		return fallback_type
+	if not (value["fallback"] as Dictionary).is_empty():
+		var fallback_result: Dictionary = ActionPlan.validate(value["fallback"] as Dictionary)
+		if not bool(fallback_result["valid"]):
+			return V.failure(
+				"invalid_action_plan.%s" % str(fallback_result["reason"]),
+				"fallback.%s" % str(fallback_result["field"])
+			)
 	var pressure_result: Dictionary = V.require_strictly_sorted_unique_strings(value, "pressure_sources")
 	if not bool(pressure_result["valid"]):
 		return pressure_result

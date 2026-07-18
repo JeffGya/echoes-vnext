@@ -1487,6 +1487,22 @@
 					"long_multiplier": 5.0
 				}
 			},
+			"movement": {
+				"spatial_utility": {
+					"cap": 20.0,
+					"urgency_weight": 4.0,
+					"objective_progress_weight": 8.0,
+					"cohesion_weight": 4.0,
+					"exposure_weight": -6.0,
+					"congestion_weight": -2.0,
+					"commitment_weight": -2.0,
+					"directive_objective_advance_weight": 4.0,
+					"directive_avoid_overcommit_weight": 2.0,
+					"directive_exposure_acceptance_weight": 2.0,
+					"directive_ally_protection_weight": 2.0,
+					"directive_threat_interception_weight": 2.0
+				}
+			},
 			"objective_placement": {
 				"_comment": "V2-STAGE-004 P3a: depth-scaled objective-actor placement (shrine now; relic/entity/quarry/npc in P3/3b/3c). f = clamp(completion_index / completion_full_at, depth_min_frac, depth_max_frac). target_col = round(min_walkable_col + f * (max_walkable_col - min_walkable_col)). depth_min_frac=0.35 → first realm places shrine roughly central; depth_max_frac=1.0 → after completion_full_at completions shrine is at max-col (enemy deep). No RNG; deterministic by terrain + completion_index.",
 				"depth_min_frac": 0.35,
