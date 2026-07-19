@@ -7,6 +7,11 @@ const V = preload("res://core/movement/contracts/MovementContractValidation.gd")
 
 const REQUIRED_FIELDS: Array = ["id", "position", "hazard_type"]
 
+## Canonical fixed-hazard vocabulary (V2-COMBAT-002 Slice 3). Additive reference for
+## MovementHazardService; validate() is intentionally left permissive (semantic-token
+## only) so existing callers/tests using other hazard_type tokens still pass.
+const HAZARD_TYPES: Array = ["unstable", "binding", "burning"]
+
 
 static func build(hazard_id: String, position: Dictionary, hazard_type: String) -> Dictionary:
 	return {
