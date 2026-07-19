@@ -10,6 +10,10 @@ const MovementSlice2ContractTestsScript := preload("res://tests/MovementSlice2Co
 const CombatPressureTestsScript := preload("res://tests/CombatPressureTests.gd")
 const MovementOptionTestsScript := preload("res://tests/MovementOptionTests.gd")
 const MovementArbitrationTestsScript := preload("res://tests/MovementArbitrationTests.gd")
+const MovementProfileTestsScript := preload("res://tests/MovementProfileTests.gd")
+const MovementHazardTestsScript := preload("res://tests/MovementHazardTests.gd")
+const MovementExecutorTestsScript := preload("res://tests/MovementExecutorTests.gd")
+const CombatActivationTestsScript := preload("res://tests/CombatActivationTests.gd")
 
 @onready var snapshot_view: RichTextLabel = %SnapshotView
 @onready var renderer: UISnapshotRenderer = %UISnapshotRenderer
@@ -399,6 +403,13 @@ func _run_tests(parts: Array) -> void:
 	CombatPressureTestsScript.register(runner)
 	MovementOptionTestsScript.register(runner)
 	MovementArbitrationTestsScript.register(runner)
+	# V2-COMBAT-002 slice 3: dormant movement capacity profile derivation
+	MovementProfileTestsScript.register(runner)
+	# V2-COMBAT-002 slice 3: dormant fixed-hazard behavior (unstable/binding/burning)
+	MovementHazardTestsScript.register(runner)
+	# V2-COMBAT-002 slice 3: dormant edge-by-edge movement executor
+	MovementExecutorTestsScript.register(runner)
+	CombatActivationTestsScript.register(runner)  # V2-COMBAT-002 Slice 3: activation coordinator
 	CombatStateTests.register(runner)        # COMBAT-001 + COMBAT-002
 	CombatInitiativeTests.register(runner)   # V2-COMBAT-001: readiness score (morale-tier)
 	CombatConsequenceTests.register(runner)  # V2-COMBAT-001: guard routing, hesitation band

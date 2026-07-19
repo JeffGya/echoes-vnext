@@ -1501,6 +1501,21 @@
 					"directive_exposure_acceptance_weight": 2.0,
 					"directive_ally_protection_weight": 2.0,
 					"directive_threat_interception_weight": 2.0
+				},
+				"capacity": {
+					"_comment": "V2-COMBAT-002 Slice 3: movement capacity. final = clamp(max(standing_capacity, aptitude_capacity), floor, cap). standing_capacity from highest matching band (ceiling 4; Standing 9 gives no auto-increase). aptitude = aptitude_base + (agi>=agi_threshold_1:+1) + (agi>=agi_threshold_2:+1) + calling_bonus + skill_bonus. sum_okwanfo_shadow_step deferred; no Standing term in aptitude; no saved max_movement; equipment deferred to ITEM-003.",
+					"floor": 2, "cap": 6, "aptitude_base": 2,
+					"standing_bands": [ {"min_standing":1,"capacity":2}, {"min_standing":3,"capacity":3}, {"min_standing":6,"capacity":4} ],
+					"agi_threshold_1": 12, "agi_threshold_2": 18,
+					"calling_bonus": {"kra_soro": 1},
+					"skill_bonus": {"kra_soro_open_ground": 1}
+				},
+				"hazards": {
+					"_comment": "V2-COMBAT-002 Slice 3: fixed hazard behavior. unstable displaces displacement_cells outward (fallback_damage if no legal cell); binding stops movement; burning deals end_activation_damage once per activation. Each hazard type triggers at most once per actor activation. Damage values are PROPOSED DEFAULTS pending Jeff manual-test tuning.",
+					"types": ["unstable", "binding", "burning"],
+					"unstable": { "displacement_cells": 1, "fallback_damage": 3 },
+					"binding": { "stops_movement": true },
+					"burning": { "end_activation_damage": 3 }
 				}
 			},
 			"objective_placement": {
