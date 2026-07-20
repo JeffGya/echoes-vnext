@@ -38,6 +38,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement/executor/movement_result_integration", Callable(MovementExecutorTests, "_t_result_integration"))
 	runner.register_test("movement/executor/validate_rejects_path_including_origin", Callable(MovementExecutorTests, "_t_validate_rejects_path_including_origin"))
 	runner.register_test("movement/executor/no_input_mutation", Callable(MovementExecutorTests, "_t_no_input_mutation"))
+	runner.register_test("movement/executor/authored_pace_pays_cost_two_terrain", Callable(MovementExecutorTests, "_t_authored_pace_cost_two_terrain"))
+	runner.register_test("movement/executor/authored_pace_pays_hostile_surcharge", Callable(MovementExecutorTests, "_t_authored_pace_surcharge"))
+	runner.register_test("movement/executor/authored_pace_allowance_is_step_count", Callable(MovementExecutorTests, "_t_authored_pace_step_allowance"))
+	runner.register_test("movement/executor/authored_pace_binding_still_stops", Callable(MovementExecutorTests, "_t_authored_pace_binding_stops"))
+	runner.register_test("movement/executor/authored_pace_result_still_validates", Callable(MovementExecutorTests, "_t_authored_pace_result_integration"))
 
 
 # --- fixtures / helpers ------------------------------------------------------
@@ -504,6 +509,159 @@ static func _t_no_input_mutation() -> Dictionary:
 		return _fail("execute mutated profile")
 	if hazard_ctx != hazard_before:
 		return _fail("execute mutated hazard_ctx ledger input")
+	return _pass()
+
+
+# ---------------------------------------------------------------------------
+# AUTHORED PACE (Slice 4 fix)
+#
+# A profile carrying a non-empty authored_override paces in STEPS, not cost: it is
+# permitted min(authored_override.capacity, commitment) EDGES whatever they cost.
+# Normal movers keep the cost-budget wall UNCHANGED — every test below runs the
+# same board twice (authored vs normal) so the two paths are pinned as divergent.
+# ---------------------------------------------------------------------------
+
+## Authored capacity-1 profile (the non-joining guide spirit / burdened carrier shape).
+static func _authored_profile(capacity: int = 1, source: String = "guide_spirit_nonjoining") -> Dictionary:
+	return {
+		"capacity": capacity,
+		"authored_override": {"source": source, "capacity": capacity},
+	}
+
+
+## An authored mover crosses a cost-2 ("difficult") cell on its single edge; an
+## otherwise identical NORMAL capacity-1 mover cannot afford it and never moves.
+static func _t_authored_pace_cost_two_terrain() -> Dictionary:
+	var ctx: Dictionary = _ctx({"terrain_costs": {"2,1": 2}})
+
+	var authored: Dictionary = Executor.execute(ctx, _intent([_cell(2, 1)], 1), _authored_profile(), _hazard_ctx())
+	if str(authored["stop_reason"]) != "reached_destination":
+		return _fail("authored mover did not complete its cost-2 edge: %s" % str(authored["stop_reason"]))
+	if (authored["final_destination"] as Dictionary) != _cell(2, 1):
+		return _fail("authored mover did not displace: %s" % str(authored["final_destination"]))
+	if (authored["actual_traversed_cells"] as Array) != [_cell(2, 1)]:
+		return _fail("authored traversal was not exactly one cell: %s" % str(authored["actual_traversed_cells"]))
+	# TRUTHFUL accounting: the real edge cost (2) is charged and carried on the event,
+	# while remaining_capacity clamps at 0 so MovementResult.validate accepts it.
+	if int(authored["voluntary_cost"]) != 2:
+		return _fail("authored edge cost not recorded truthfully: %d" % int(authored["voluntary_cost"]))
+	if int(authored["remaining_capacity"]) != 0:
+		return _fail("remaining_capacity must clamp at 0: %d" % int(authored["remaining_capacity"]))
+	var steps: Array = _step_events(authored["events"] as Array)
+	if int((steps[0] as Dictionary)["cost"]) != 2:
+		return _fail("authored step event lost the real cost: %s" % str(steps))
+
+	# Divergence: the SAME board with a normal (non-authored) capacity-1 mover stalls.
+	var normal: Dictionary = Executor.execute(ctx, _intent([_cell(2, 1)], 1), _profile(1), _hazard_ctx())
+	if (normal["final_destination"] as Dictionary) != _cell(1, 1):
+		return _fail("normal capacity-1 mover must NOT afford a cost-2 edge: %s" % str(normal["final_destination"]))
+	if str(normal["stop_reason"]) != "commitment_spent":
+		return _fail("normal cost-budget wall changed: %s" % str(normal["stop_reason"]))
+	return _pass()
+
+
+## An authored mover steps while under hostile control (the +1 surcharge makes the
+## edge cost 2); a normal capacity-1 mover is pinned. This is the MODE_PROTECT case.
+static func _t_authored_pace_surcharge() -> Dictionary:
+	var ctx: Dictionary = _ctx({
+		"perceived_actors": [_actor("enemy.a", 2, 0)],
+		"relationships": {"enemy.a": "hostile"},
+	})
+
+	var authored: Dictionary = Executor.execute(ctx, _intent([_cell(2, 1)], 1), _authored_profile(), _hazard_ctx())
+	if (authored["final_destination"] as Dictionary) == _cell(1, 1):
+		return _fail("authored mover pinned by the hostile-control surcharge: %s" % str(authored["stop_reason"]))
+	if int(authored["voluntary_cost"]) != 2:
+		return _fail("surcharged authored edge cost not recorded: %d" % int(authored["voluntary_cost"]))
+	if (authored["hostile_constraints"] as Array) != ["enemy.a"]:
+		return _fail("authored mover lost its hostile constraint: %s" % str(authored["hostile_constraints"]))
+
+	var normal: Dictionary = Executor.execute(ctx, _intent([_cell(2, 1)], 1), _profile(1), _hazard_ctx())
+	if (normal["final_destination"] as Dictionary) != _cell(1, 1):
+		return _fail("normal capacity-1 mover must NOT afford a surcharged edge: %s" % str(normal["final_destination"]))
+	return _pass()
+
+
+## The allowance is a STEP COUNT: an authored capacity-1 mover takes exactly one
+## edge of a longer path and then stops — it never rides free past its pace.
+static func _t_authored_pace_step_allowance() -> Dictionary:
+	var path: Array = [_cell(2, 1), _cell(3, 1), _cell(4, 1)]
+	var out: Dictionary = Executor.execute(_ctx(), _intent(path, 1), _authored_profile(), _hazard_ctx())
+	if (out["actual_traversed_cells"] as Array) != [_cell(2, 1)]:
+		return _fail("authored allowance exceeded one step: %s" % str(out["actual_traversed_cells"]))
+	if str(out["stop_reason"]) != "commitment_spent":
+		return _fail("authored allowance stop reason: %s" % str(out["stop_reason"]))
+
+	# Capacity is the tighter bound (commitment 3, authored capacity 1) -> capacity_spent.
+	var capped: Dictionary = Executor.execute(_ctx(), _intent(path, 3), _authored_profile(), _hazard_ctx())
+	if (capped["actual_traversed_cells"] as Array) != [_cell(2, 1)]:
+		return _fail("authored capacity did not cap the walk: %s" % str(capped["actual_traversed_cells"]))
+	if str(capped["stop_reason"]) != "capacity_spent":
+		return _fail("authored capacity stop reason: %s" % str(capped["stop_reason"]))
+
+	# An authored override ABOVE 1 generalizes: two edges permitted, cost irrelevant.
+	var costly: Dictionary = _ctx({"terrain_costs": {"2,1": 2, "3,1": 2}})
+	var two: Dictionary = Executor.execute(costly, _intent(path, 2), _authored_profile(2, "authored.two"), _hazard_ctx())
+	if (two["actual_traversed_cells"] as Array) != [_cell(2, 1), _cell(3, 1)]:
+		return _fail("authored capacity-2 pace wrong: %s" % str(two["actual_traversed_cells"]))
+	if int(two["voluntary_cost"]) != 4:
+		return _fail("authored capacity-2 cost not truthful: %d" % int(two["voluntary_cost"]))
+	return _pass()
+
+
+## Hazard semantics are NOT bypassed by the one-step allowance: Binding still stops
+## the activation, and Unstable still displaces the authored mover for free.
+static func _t_authored_pace_binding_stops() -> Dictionary:
+	var bind_ctx: Dictionary = _ctx({"known_hazards": [HazardFact.build("h.b", _cell(2, 1), "binding")]})
+	var bound: Dictionary = Executor.execute(
+		bind_ctx, _intent([_cell(2, 1), _cell(3, 1)], 1), _authored_profile(), _hazard_ctx(_cfg())
+	)
+	if str(bound["stop_reason"]) != "binding_stop":
+		return _fail("binding did not stop the authored mover: %s" % str(bound["stop_reason"]))
+	if (bound["final_destination"] as Dictionary) != _cell(2, 1):
+		return _fail("authored mover walked past binding: %s" % str(bound["final_destination"]))
+	var last: Dictionary = (bound["events"] as Array).back() as Dictionary
+	if str(last.get("type", "")) != "hazard.binding.stop":
+		return _fail("authored binding terminal event wrong: %s" % str(last))
+
+	var shift_ctx: Dictionary = _ctx({"known_hazards": [HazardFact.build("h.u", _cell(2, 1), "unstable")]})
+	var shifted: Dictionary = Executor.execute(
+		shift_ctx, _intent([_cell(2, 1)], 1), _authored_profile(), _hazard_ctx(_cfg())
+	)
+	if int(shifted["forced_steps"]) != 1:
+		return _fail("unstable did not displace the authored mover: %d" % int(shifted["forced_steps"]))
+	if int(shifted["voluntary_cost"]) != 1:
+		return _fail("forced displacement charged the authored mover: %d" % int(shifted["voluntary_cost"]))
+	return _pass()
+
+
+## An authored mover that OVERSPENDS its capacity still assembles into a valid
+## MovementResult — the clamped remaining_capacity is the reconciliation.
+static func _t_authored_pace_result_integration() -> Dictionary:
+	var ctx: Dictionary = _ctx({
+		"terrain_costs": {"2,1": 2},
+		"perceived_actors": [_actor("enemy.a", 2, 0)],
+		"relationships": {"enemy.a": "hostile"},
+	})
+	var out: Dictionary = Executor.execute(ctx, _intent([_cell(2, 1)], 1), _authored_profile(), _hazard_ctx(_cfg()))
+	if int(out["voluntary_cost"]) != 3:
+		return _fail("expected truthful cost 3 (2 terrain + 1 surcharge), got %d" % int(out["voluntary_cost"]))
+	if int(out["remaining_capacity"]) != 0:
+		return _fail("overspent remaining_capacity must clamp to 0: %d" % int(out["remaining_capacity"]))
+	var result: Dictionary = ResultContract.build(
+		"mover.1", "activation.1", "guide.protect", "guide.step", "protect",
+		out["origin"] as Dictionary, out["final_destination"] as Dictionary,
+		out["planned_path"] as Array, out["actual_traversed_cells"] as Array,
+		int(out["voluntary_cost"]), int(out["forced_steps"]), int(out["remaining_capacity"]),
+		str(out["stop_reason"]), out["events"] as Array,
+		{"type": "actor.idle", "target_id": "", "payload": {}},
+		{"type": "actor.idle", "target_id": "", "payload": {}}, {},
+		out["hazards"] as Array, 0.0,
+		{"hostile_control_sources": out["hostile_constraints"]}
+	)
+	var validated: Dictionary = ResultContract.validate(result)
+	if not bool(validated["valid"]):
+		return _fail("overspent authored MovementResult rejected: %s" % str(validated))
 	return _pass()
 
 

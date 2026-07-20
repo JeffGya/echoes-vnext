@@ -14,6 +14,10 @@ const MovementProfileTestsScript := preload("res://tests/MovementProfileTests.gd
 const MovementHazardTestsScript := preload("res://tests/MovementHazardTests.gd")
 const MovementExecutorTestsScript := preload("res://tests/MovementExecutorTests.gd")
 const CombatActivationTestsScript := preload("res://tests/CombatActivationTests.gd")
+const PursueEscapeTestsScript := preload("res://tests/PursueEscapeTests.gd")
+const GuideSpiritActivationTestsScript := preload("res://tests/GuideSpiritActivationTests.gd")
+const ProtectCustodyTestsScript := preload("res://tests/ProtectCustodyTests.gd")
+const SpatialModeGoalTestsScript := preload("res://tests/SpatialModeGoalTests.gd")
 
 @onready var snapshot_view: RichTextLabel = %SnapshotView
 @onready var renderer: UISnapshotRenderer = %UISnapshotRenderer
@@ -410,6 +414,13 @@ func _run_tests(parts: Array) -> void:
 	# V2-COMBAT-002 slice 3: dormant edge-by-edge movement executor
 	MovementExecutorTestsScript.register(runner)
 	CombatActivationTestsScript.register(runner)  # V2-COMBAT-002 Slice 3: activation coordinator
+	# V2-COMBAT-002 slice 4: dormant shared PURSUE long-axis escape authority
+	PursueEscapeTestsScript.register(runner)
+	# V2-COMBAT-002 slice 4: dormant non-joining GUIDE spirit activation
+	GuideSpiritActivationTestsScript.register(runner)
+	# V2-COMBAT-002 slice 4: dormant PROTECT totem carry/custody adapter
+	ProtectCustodyTestsScript.register(runner)
+	SpatialModeGoalTestsScript.register(runner)  # V2-COMBAT-002 Slice 4: spatial modes + cutoff
 	CombatStateTests.register(runner)        # COMBAT-001 + COMBAT-002
 	CombatInitiativeTests.register(runner)   # V2-COMBAT-001: readiness score (morale-tier)
 	CombatConsequenceTests.register(runner)  # V2-COMBAT-001: guard routing, hesitation band
