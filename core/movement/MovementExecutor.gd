@@ -37,7 +37,14 @@
 #                                         chronological order (excludes start)
 #   voluntary_cost          int         — sum of voluntary edge costs charged
 #   forced_steps            int         — count of forced (hazard displacement) steps
-#   remaining_capacity      int         — max(0, profile.capacity - voluntary_cost)
+#   remaining_capacity      int         — max(0, profile.capacity - voluntary_cost).
+#                                         CLAMPED AT 0: an authored-pace mover may
+#                                         truthfully spend MORE than its capacity on
+#                                         its single permitted edge (a cost-2 cell or
+#                                         a surcharged edge). voluntary_cost reports
+#                                         the real spend; remaining_capacity reports
+#                                         the (non-negative) budget left, as
+#                                         MovementResult.validate requires.
 #   stop_reason             String      — reached_destination | blocked_edge |
 #                                         occupied | commitment_spent |
 #                                         capacity_spent | no_route | binding_stop
@@ -59,9 +66,22 @@
 #        stop "occupied".
 #     3. Voluntary edge cost = destination entry cost (terrain_costs, default 1;
 #        a "difficult" cell is 2) PLUS +1 ONCE if EITHER endpoint is 8-adjacent
-#        (Chebyshev == 1) to >= 1 active hostile. Budget wall = min(profile.capacity,
-#        intent.commitment): projected cost > wall -> stop "capacity_spent" when
-#        capacity is the tighter bound, else "commitment_spent".
+#        (Chebyshev == 1) to >= 1 active hostile.
+#        NORMAL movers (profile.authored_override EMPTY) pay a COST BUDGET:
+#        wall = min(profile.capacity, intent.commitment); projected cost > wall ->
+#        stop "capacity_spent" when capacity is the tighter bound, else
+#        "commitment_spent". This path is UNCHANGED.
+#        AUTHORED-PACE movers (profile.authored_override NON-EMPTY — the
+#        non-joining guide spirit; a burdened carrier floored to capacity 1) pace in
+#        STEPS instead: they are permitted exactly
+#        min(authored_override.capacity, intent.commitment) EDGES, and edge cost
+#        NEVER gates that allowance. The TRUE cost is still charged to
+#        voluntary_cost and carried on the step event, so the ledger stays honest;
+#        remaining_capacity simply clamps at 0. Once the allowance is consumed the
+#        walk stops with the same capacity_spent/commitment_spent reasons. Without
+#        this a capacity-1 authored mover could never cross a cost-2 cell nor step
+#        while under hostile control — MODE_PROTECT would be permanently inert in
+#        exactly the case it exists for (movement-model §13.7 one-cell pace).
 #     4. On ENTERING the destination, MovementHazardService.resolve_cell_entry
 #        applies Unstable forced displacement (free, no capacity) then Binding.
 #        Binding -> stop "binding_stop", halting remaining edges.
@@ -96,6 +116,15 @@ static func execute(
 	var commitment: int = int(intent.get("commitment", 0))
 	var capacity: int = int(profile.get("capacity", 0))
 	var hazard_config: Dictionary = hazard_ctx.get("config", {}) as Dictionary
+
+	# AUTHORED PACE (see header): a profile carrying a non-empty authored_override
+	# paces in STEPS, not cost. Its allowance is min(override.capacity, commitment)
+	# EDGES, and edge cost never gates that allowance.
+	var authored_override: Dictionary = profile.get("authored_override", {}) as Dictionary
+	var authored_pace: bool = not authored_override.is_empty()
+	var authored_capacity: int = int(authored_override.get("capacity", capacity))
+	var step_allowance: int = mini(authored_capacity, commitment)
+	var voluntary_steps: int = 0
 
 	var controllers: Array = _active_hostiles(context)
 
@@ -132,13 +161,24 @@ static func execute(
 		var edge_sources: Array = _edge_hostile_sources(controllers, from_cell, next_cell)
 		var edge_cost: int = entry_cost + (1 if not edge_sources.is_empty() else 0)
 		var projected: int = voluntary_cost + edge_cost
-		var wall: int = mini(capacity, commitment)
-		if projected > wall:
-			stop_reason = "capacity_spent" if capacity < commitment else "commitment_spent"
-			break
+		if authored_pace:
+			# STEP COUNT, not a cost budget: the authored edge is permitted whatever
+			# it costs (difficult terrain, hostile-control surcharge). Cost is still
+			# recorded truthfully below.
+			if voluntary_steps >= step_allowance:
+				# Same tie convention as the normal wall: on equality the mover's OWN
+				# committed budget label wins (see _t_budget_tie).
+				stop_reason = "capacity_spent" if authored_capacity < commitment else "commitment_spent"
+				break
+		else:
+			var wall: int = mini(capacity, commitment)
+			if projected > wall:
+				stop_reason = "capacity_spent" if capacity < commitment else "commitment_spent"
+				break
 
 		# Commit the voluntary edge.
 		voluntary_cost = projected
+		voluntary_steps += 1
 		for source_value: Variant in edge_sources:
 			hostile_set[str(source_value)] = true
 		events.append(EventContract.build(

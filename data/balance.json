@@ -1695,7 +1695,13 @@
 					"objective_threatened_radius": 3,
 					"theft_chance": 0.5,
 					"double_damage_mult": 2.0,
-					"protect_guard_radius": 2
+					"protect_guard_radius": 2,
+					"_custody_comment": "V2-COMBAT-002 Slice 4 (Unit C, DORMANT): totem carry/custody tuning read by ProtectCustodyService (config is INJECTED by the caller; core never reads ConfigService). theft_chance and double_damage_mult above are REUSED unchanged. carry_capacity_penalty is subtracted from the carrier's per-activation MovementProfile capacity and clamps at 1 (a non-structure mover may never reach capacity 0; capacity 1 stamps an authored_override). pickup_range is the max Chebyshev reach from the mover's FINAL cell to the totem for the pickup/recovery primary action.",
+					"carry_capacity_penalty": 1,
+					"pickup_range": 1,
+					"enemy_carrier_capacity_cap": 1,
+					"enemy_carrier_movement_restricted": true,
+					"enemy_carrier_action_restricted": true
 				},
 				"endure": {
 					"duration_turns": 5,

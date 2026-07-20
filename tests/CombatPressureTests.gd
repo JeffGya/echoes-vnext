@@ -410,7 +410,24 @@ static func _t_exact_mode_alignment_matrix() -> Dictionary:
 	]
 	var destination_region: Array = [{"col": 2, "row": 3}, {"col": 3, "row": 2}, {"col": 4, "row": 3}]
 	var approach_region: Array = [{"col": 2, "row": 2}, {"col": 3, "row": 1}]
-	var fallback_region: Array = [{"col": 0, "row": 2}]
+	# V2-COMBAT-002 Slice 4 (§13.6): PURSUE cutoff TARGETING is now projected from
+	# the quarry's traversable escape graph, so the authored fallback_region
+	# ([{0,2}]) no longer describes the cut_off destination. This is the corridor
+	# the quarry must actually cross to reach the escape BAND, filtered to the
+	# cells this mover can reach no later than the quarry.
+	#
+	# Board 6x6 (square -> band = rows 4 and 5). Quarry (4,2), mover (1,2),
+	# structure blocker (3,3). The quarry reaches the band in 2 steps, so the
+	# corridor is {(4,3),(5,3),(3,4),(4,4),(5,4)}; of those only (3,4) is reachable
+	# by the mover in <= 2 steps ((1,2)->(2,3)->(3,4)), so it is the sole
+	# interception cell.
+	#
+	# This SHRANK when escape targeting was corrected from the far-end LINE to the
+	# `>= max-1` BAND that `is_escaped` actually wins on. The old expectation
+	# ([{2,5},{3,4},{3,5},{4,5}]) projected routes to row 5 — one row deeper than
+	# the quarry ever needs to travel — so it named cells that are irrelevant to
+	# the real race.
+	var pursue_cutoff_corridor: Array = [{"col": 3, "row": 4}]
 	var matrix: Array = [
 		["combat", "party", [["advance", "baseline", "enemy.1", 0.75, enemy_region, ["enemy.1"]], ["engage", "baseline", "enemy.1", 0.50, enemy_region, ["enemy.1"]]]],
 		["combat", "hostile", [["advance", "baseline", "echo.1", 0.75, enemy_region, ["echo.1"]], ["engage", "baseline", "echo.1", 0.50, enemy_region, ["echo.1"]]]],
@@ -422,7 +439,7 @@ static func _t_exact_mode_alignment_matrix() -> Dictionary:
 		["protect", "hostile", [["advance", "custody_threat", "objective.relic", 1.0, destination_region, ["objective.relic"]], ["engage", "baseline", "echo.1", 0.50, enemy_region, ["echo.1"]], ["engage", "breaker", "objective.relic", 0.50, objective_region, ["objective.relic"]]]],
 		["endure", "party", [["advance", "baseline", "enemy.1", 0.75, enemy_region, ["enemy.1"]], ["engage", "baseline", "enemy.1", 0.50, enemy_region, ["enemy.1"]]]],
 		["endure", "hostile", [["advance", "baseline", "echo.1", 0.75, enemy_region, ["echo.1"]], ["engage", "baseline", "echo.1", 0.50, enemy_region, ["echo.1"]]]],
-		["pursue", "party", [["pursue", "hunter", "enemy.1", 1.0, enemy_region, ["enemy.1"]], ["cut_off", "blocker", "", 0.75, fallback_region, ["enemy.1"]]]],
+		["pursue", "party", [["pursue", "hunter", "enemy.1", 1.0, enemy_region, ["enemy.1"]], ["cut_off", "blocker", "", 0.75, pursue_cutoff_corridor, ["enemy.1"]]]],
 		["pursue", "hostile", []],
 		["guide_spirit", "party", [["escort", "protector", "guide.spirit", 0.75, destination_region, ["guide.spirit"]], ["intercept", "rear_guard", "", 0.75, approach_region, ["guide.spirit"]], ["engage", "baseline", "enemy.1", 0.50, enemy_region, ["enemy.1"]]]],
 		["guide_spirit", "hostile", [["advance", "escort_threat", "guide.spirit", 1.0, destination_region, ["guide.spirit"]], ["engage", "baseline", "echo.1", 0.50, enemy_region, ["echo.1"]], ["engage", "breaker", "guide.spirit", 0.50, spirit_region, ["guide.spirit"]]]],
@@ -475,20 +492,37 @@ static func _t_pursue_fallback_intercept_and_reverse() -> Dictionary:
 	var safety: Dictionary = _goal(fallback_result, "engage")
 	if safety.is_empty() or str((safety["planned_primary"] as Dictionary)["target_id"]) != "enemy.2":
 		return _fail("PURSUE did not retain separate-hostile safety engage")
+	# V2-COMBAT-002 Slice 4 (§13.6): with a live quarry the escape-graph corridor is
+	# the cutoff target whether or not the authority authored a fallback_region, so
+	# removing that region no longer demotes cut_off to a geometric intercept.
 	var no_fallback: Dictionary = _context("pursue", "party")
 	_add_second_hostile(no_fallback)
 	(no_fallback["objective_pressure"] as Dictionary)["fallback_region"] = []
 	var no_fallback_result: Dictionary = Service.build_goals(no_fallback)
-	if not bool(no_fallback_result["valid"]) or not _has_goal(no_fallback_result, "intercept", "blocker"):
-		return _fail("PURSUE without fallback did not emit intercept")
-	if _has_goal(no_fallback_result, "cut_off", "blocker"):
-		return _fail("PURSUE without fallback emitted cut_off")
+	if not bool(no_fallback_result["valid"]) or not _has_goal(no_fallback_result, "cut_off", "blocker"):
+		return _fail("PURSUE without fallback did not emit projected cut_off")
+	if _has_goal(no_fallback_result, "intercept", "blocker"):
+		return _fail("PURSUE with a projectable corridor fell back to geometric intercept")
+	# The geometric approach lane remains the last resort: with no quarry left to
+	# project a corridor from, PURSUE still emits the authored intercept.
+	var no_corridor: Dictionary = _context("pursue", "party")
+	_add_second_hostile(no_corridor)
+	(no_corridor["objective_pressure"] as Dictionary)["fallback_region"] = []
+	for actor_value: Variant in no_corridor["perceived_actors"] as Array:
+		var actor: Dictionary = actor_value as Dictionary
+		if str(actor["id"]) == "enemy.1":
+			actor["is_dead"] = true
+	var no_corridor_result: Dictionary = Service.build_goals(no_corridor)
+	if not bool(no_corridor_result["valid"]) or not _has_goal(no_corridor_result, "intercept", "blocker"):
+		return _fail("PURSUE without a projectable corridor did not emit intercept")
+	if _has_goal(no_corridor_result, "cut_off", "blocker"):
+		return _fail("PURSUE without a projectable corridor emitted cut_off")
 	var reversed: Dictionary = no_fallback.duplicate(true)
 	(reversed["perceived_actors"] as Array).reverse()
 	reversed["relationships"] = _reverse_dictionary(no_fallback["relationships"] as Dictionary)
 	reversed["occupancy"] = _reverse_dictionary(no_fallback["occupancy"] as Dictionary)
 	if Service.build_goals(reversed) != no_fallback_result:
-		return _fail("reversed PURSUE facts changed fallback/intercept result")
+		return _fail("reversed PURSUE facts changed cutoff/intercept result")
 	return _pass()
 
 
