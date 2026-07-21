@@ -1328,6 +1328,12 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 						# V2-STAGE-004-P2: presentation-only path for UI chained tween
 						if not _emap_003.has("last_traveled_path"):
 							_emap_003["last_traveled_path"] = []
+						# V2-COMBAT-002 slice 5: pre-advance cell the path above departs from.
+						# Additive alongside last_traveled_path (which is never removed or
+						# renamed). Safe default {} — the snapshot projection then falls back
+						# to the current party_pos, so legacy saves keep a valid tween anchor.
+						if not _emap_003.has("last_traveled_origin"):
+							_emap_003["last_traveled_origin"] = {}
 						# V2-STAGE-004 Phase 2.5: durable fog-of-war discovered-tile set.
 						# Dict used as set: { "col,row": true }. Additive — never reset.
 						if not _emap_003.has("explored_cells"):

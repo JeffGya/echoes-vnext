@@ -6223,13 +6223,23 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 		if _situation_blocks_step(explore_map, nxt, target_sit_id):
 			break
 
-	# V2-STAGE-004-P2: stash full path walked this turn for UI chained-tween animation.
-	# Shape: Array of { col, row } — pre-advance cell followed by each stepped cell.
+	# V2-STAGE-004-P2 / V2-COMBAT-002 slice 5: stash the path walked this turn for the UI
+	# chained-tween animation.
+	# Shape: Array of { col, row } — DESTINATIONS ONLY, one entry per cell actually entered.
+	# The path EXCLUDES the origin, matching the movement contracts' path-excludes-origin
+	# rule (MovementContractValidation.require_path_excludes_origin). The pre-advance cell
+	# rides alongside in `last_traveled_origin` so the UI keeps its ghost-trail anchor.
+	# Zero steps ⇒ empty path, and origin == the (unchanged) current party cell.
 	# Presentation-only; does not affect determinism. Cleared by next advance or session reset.
+	var _origin_cell: Dictionary = {
+		"col": int(_pre_move.get("col", 0)),
+		"row": int(_pre_move.get("row", 0)),
+	}
+	explore_map["last_traveled_origin"] = _origin_cell
 	if stepped.is_empty():
 		explore_map["last_traveled_path"] = []
 	else:
-		var _path: Array = [{ "col": int(_pre_move.get("col", 0)), "row": int(_pre_move.get("row", 0)) }]
+		var _path: Array = []
 		for _sp in stepped:
 			var _sp_d: Dictionary = _sp if _sp is Dictionary else {}
 			_path.append({ "col": int(_sp_d.get("col", 0)), "row": int(_sp_d.get("row", 0)) })

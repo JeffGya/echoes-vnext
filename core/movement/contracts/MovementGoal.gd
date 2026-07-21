@@ -12,6 +12,9 @@ const PURPOSES: Array = [
 ]
 const MODES: Array = [
 	"combat", "purify_shrine", "recover", "protect", "endure", "pursue", "guide_spirit",
+	# V2-COMBAT-002 slice 5 (A3): stage exploration. MODES is an allowlist, so
+	# appending cannot invalidate any goal that validated before this entry existed.
+	"explore",
 ]
 const GOAL_ROLES: Array = [
 	"baseline", "purifier", "holder", "carrier", "quarry", "spirit",
