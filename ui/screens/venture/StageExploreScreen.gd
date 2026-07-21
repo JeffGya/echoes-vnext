@@ -492,38 +492,46 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 
 		# V2-STAGE-004-P2: chained tween through each cell in traveled_path so the board
 		# scroll follows the walkable route and never cuts across void.
-		# traveled_path = pre-advance cell + each stepped cell (≥2 entries when movement occurred).
+		# V2-COMBAT-002 slice 5: traveled_path is now DESTINATIONS ONLY (one entry per cell
+		# entered, origin excluded); the departure cell arrives separately as traveled_origin.
+		# Segment count is therefore traveled_path.size() — unchanged from the old
+		# (origin-prefixed size) - 1, so timing, ghost trail, and diamond count are identical.
 		# Segment duration = _TRAVEL_DURATION / segment_count so total time is unchanged.
 		var tp_v: Variant = data.get("traveled_path", [])
 		var traveled_path: Array = tp_v if tp_v is Array else []
+		var to_v: Variant = data.get("traveled_origin", {})
+		var traveled_origin: Dictionary = to_v if to_v is Dictionary else {}
 		# Note: board_scale is already declared above in this function scope.
 
-		# Only use chained path when we have ≥2 entries (pre-cell + at least one step).
-		if traveled_path.size() >= 2:
-			var seg_count: int = traveled_path.size() - 1
+		# Only use the chained path when at least one step was actually walked.
+		if traveled_path.size() >= 1:
+			var seg_count: int = traveled_path.size()
 			# Bar shows one diamond per tile actually walked this advance (depletes to zero).
 			_travel_step_count = seg_count
 			var seg_dur: float = _TRAVEL_DURATION / float(seg_count)
-			# Skip the first entry (pre-advance cell — already the current board position).
-			# Chain one tween segment per subsequent step cell.
+			# Chain one tween segment per stepped cell. Segment 0 departs from traveled_origin
+			# (the pre-advance cell — already the current board position); every later segment
+			# departs from the preceding path entry.
 			# After each segment, deplete one step diamond so the budget display tracks travel.
-			for _seg_i in range(1, traveled_path.size()):
+			for _seg_i in range(traveled_path.size()):
 				var step_v: Variant = traveled_path[_seg_i]
 				var step: Dictionary = step_v if step_v is Dictionary else {}
 				var step_local: Vector2 = _board.map_to_local(
 					Vector2i(int(step.get("col", 0)), int(step.get("row", 0)))
 				)
 				var step_target: Vector2 = screen_center - step_local * board_scale
-				# Board-local pixel of the cell being VACATED by this segment (the prior path
-				# entry). Dropped as a ghost when the segment completes so the trail glues to
-				# the terrain and fades behind the party.
-				var _prev_v: Variant = traveled_path[_seg_i - 1]
-				var _prev: Dictionary = _prev_v if _prev_v is Dictionary else {}
+				# Board-local pixel of the cell being VACATED by this segment — traveled_origin
+				# for the first segment, the prior path entry thereafter. Dropped as a ghost when
+				# the segment completes so the trail glues to the terrain and fades behind the party.
+				var _prev: Dictionary = traveled_origin
+				if _seg_i > 0:
+					var _prev_v: Variant = traveled_path[_seg_i - 1]
+					_prev = _prev_v if _prev_v is Dictionary else {}
 				var vacated_local: Vector2 = _board.map_to_local(
 					Vector2i(int(_prev.get("col", 0)), int(_prev.get("row", 0)))
 				)
 				_travel_tween.tween_property(_board, "position", step_target, seg_dur)
-				var spent_after: int = _seg_i
+				var spent_after: int = _seg_i + 1
 				_travel_tween.tween_callback(_on_step_consumed.bind(spent_after))
 				_travel_tween.tween_callback(_drop_travel_ghost.bind(vacated_local))
 		else:

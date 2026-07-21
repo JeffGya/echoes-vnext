@@ -112,7 +112,8 @@ static func _reset_session_state(flow_ctx: FlowContext, t: int) -> void:
 		"pending_contact":      {},   # V2-STAGE-003: cleared on session reset; active contact persists in save
 		"contact_responses":    [],   # V2-STAGE-003: cleared on session reset
 		"terrain":             terrain, # V2-STAGE-004-P2: permanent geometry, never cleared on reset
-		"last_traveled_path":  [],   # V2-STAGE-004-P2: presentation-only path for UI chained tween; cleared on session reset
+		"last_traveled_path":  [],   # V2-STAGE-004-P2: presentation-only path (destinations only) for UI chained tween; cleared on session reset
+		"last_traveled_origin": {},  # V2-COMBAT-002 slice 5: pre-advance cell for the path above; same lifecycle. Empty ⇒ projection falls back to party_pos
 		"explored_cells":      explored_cells, # V2-STAGE-004 Phase 2.5: durable fog-of-war set; NOT a transient
 		# V2-STAGE-004 P5 (playtest fix): one-shot guard so the "all objectives complete" Anansi
 		# whisper fires at most once per run, even across return_home→re-entry. Durable like locked.
@@ -640,9 +641,14 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"in_transit":              bool(explore_map.get("in_transit", false)),
 			"target_situation_id":     str(explore_map.get("target_situation_id", "")),
 			"terrain":                 explore_map.get("terrain", {}),
-			# traveled_path: Array of {col,row} dicts — pre-advance cell + each stepped cell this turn.
+			# traveled_path: Array of {col,row} dicts — DESTINATIONS ONLY, one per cell entered
+			# this turn. Excludes the origin (movement-contract path-excludes-origin rule).
 			# Empty when no movement occurred (non-advance refreshes). UI uses this for chained tween.
 			"traveled_path":           _project_traveled_path(explore_map),
+			# traveled_origin: {col,row} — the pre-advance cell the path starts FROM. The UI
+			# anchors the first tween segment / ghost here. Falls back to the current party
+			# cell when no advance has been stashed (zero-step advance, session reset).
+			"traveled_origin":         _project_traveled_origin(explore_map),
 			# V2-STAGE-004 Phase 2.5: discovered-tile set { "col,row": true } for fog-of-war rendering.
 			# Three tile states: void (not walkable) = no tile; walkable + in explored_cells = normal;
 			# walkable + NOT in explored_cells = fog tile. Drives both overview and in-exploration views.
@@ -970,8 +976,11 @@ static func _check_party_return_request(flow_ctx: FlowContext) -> bool:
 # ---------------------------------------------------------------------------
 # V2-STAGE-004-P2: traveled_path projection helper
 # Projects explore_map["last_traveled_path"] into the snapshot as an Array of
-# {col,row} dicts.  Returns [] when the field is missing or empty (non-advance
-# refreshes — contact turns, situation overlays, session resets).
+# {col,row} dicts.  DESTINATIONS ONLY — the origin is NOT part of this array; it
+# is carried separately by _project_traveled_origin (movement-contract
+# path-excludes-origin rule).  Returns [] when the field is missing or empty
+# (zero-step advances, and non-advance refreshes — contact turns, situation
+# overlays, session resets).
 # This is presentation-only data; it must never affect sim determinism.
 # ---------------------------------------------------------------------------
 static func _project_traveled_path(explore_map: Dictionary) -> Array:
@@ -984,6 +993,24 @@ static func _project_traveled_path(explore_map: Dictionary) -> Array:
 		var cell: Dictionary = cell_v if cell_v is Dictionary else {}
 		out.append({ "col": int(cell.get("col", 0)), "row": int(cell.get("row", 0)) })
 	return out
+
+
+# ---------------------------------------------------------------------------
+# V2-COMBAT-002 slice 5: traveled_origin projection helper
+# Projects explore_map["last_traveled_origin"] — the pre-advance cell that
+# `traveled_path` departs FROM — into the snapshot as a {col,row} dict.
+# Falls back to the current party cell when the field is missing or empty, so
+# the UI always has a valid first-segment anchor (zero-step advance, session
+# reset, legacy saves repaired to {}).
+# Presentation-only; never affects sim determinism.
+# ---------------------------------------------------------------------------
+static func _project_traveled_origin(explore_map: Dictionary) -> Dictionary:
+	var raw_v: Variant = explore_map.get("last_traveled_origin", {})
+	var raw: Dictionary = raw_v if raw_v is Dictionary else {}
+	if raw.is_empty():
+		var pos_v: Variant = explore_map.get("party_pos", {})
+		raw = pos_v if pos_v is Dictionary else {}
+	return { "col": int(raw.get("col", 0)), "row": int(raw.get("row", 0)) }
 
 
 # ---------------------------------------------------------------------------

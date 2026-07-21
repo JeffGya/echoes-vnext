@@ -337,11 +337,17 @@ static func _inject_stage_with_terrain(
 	}
 
 
-# Steps taken this advance = last_traveled_path minus the pre-move cell.
+# Steps taken this advance = last_traveled_path size.
+# V2-COMBAT-002 slice 5: the path is destinations-only (origin excluded), so every
+# entry is one step actually walked. The pre-move cell now lives in
+# last_traveled_origin and is no longer subtracted here.
+#
+# `max(0, ...)` was dead once the origin stopped being subtracted — Array.size()
+# is never negative — so the clamp is gone.
 static func _steps_taken(runtime: FlowRuntime) -> int:
 	var tp_v: Variant = _read_em(runtime, "last_traveled_path")
 	var tp: Array = tp_v if tp_v is Array else []
-	return max(0, tp.size() - 1)
+	return tp.size()
 
 
 # ─── Registration ────────────────────────────────────────────────────────────
@@ -907,13 +913,23 @@ static func _t_party_pos_always_walkable() -> Dictionary:
 
 
 # ─── Test 13 — TRAVELED PATH IN SNAPSHOT ────────────────────────────────────
-# After advance_turn, snapshot data.traveled_path must have ≥2 entries (pre-cell + steps).
+# V2-COMBAT-002 slice 5 — corrected convention:
+# After advance_turn, snapshot data.traveled_path holds DESTINATIONS ONLY (≥1 entry
+# when the party moved); the pre-move cell is carried separately as data.traveled_origin.
+# traveled_origin must equal the party cell recorded BEFORE the advance, and the path
+# must NOT begin with the origin (path-excludes-origin rule).
 # All cells in traveled_path must be walkable.
 # On a non-advance refresh (e.g. after session reset entry), traveled_path must be empty.
 static func _t_traveled_path_in_snapshot() -> Dictionary:
 	var runtime := _make_runtime("directive.scout_carefully")
 	var terrain := _inject_terrain_stage(runtime, 77, 0, [{ "col": 22, "row": 18 }])
 	var walkable: Dictionary = StageTerrainScript.walkable_set(terrain)
+
+	# Capture the party cell BEFORE the advance — this is what traveled_origin must equal.
+	var pre_pos_v: Variant = _read_em(runtime, "party_pos")
+	var pre_pos: Dictionary = pre_pos_v if pre_pos_v is Dictionary else {}
+	var pre_col := int(pre_pos.get("col", -1))
+	var pre_row := int(pre_pos.get("row", -1))
 
 	# Dispatch advance_turn — party starts far from target, must take some steps.
 	runtime.dispatch({ "type": "stage.advance_turn" })
@@ -929,13 +945,56 @@ static func _t_traveled_path_in_snapshot() -> Dictionary:
 		return { "ok": false, "error": "data.traveled_path is not an Array" }
 	var tp: Array = tp_v
 
-	# traveled_path should have ≥2 entries when party actually moved (pre-cell + ≥1 step).
-	# It may be shorter only if party was already at target (arrived immediately).
+	# traveled_path should have ≥1 entry when the party actually moved (destinations only).
+	# It may be empty only if the party was already at target (arrived immediately).
 	var pending_v: Variant = snap_data.get("situation_pending", {})
 	var pending: Dictionary = pending_v if pending_v is Dictionary else {}
-	var arrived := not pending.is_empty() and tp.size() <= 1
-	if not arrived and tp.size() < 2:
-		return { "ok": false, "error": "data.traveled_path should have ≥2 entries after movement (got %d)" % tp.size() }
+	var arrived := not pending.is_empty() and tp.is_empty()
+	if not arrived and tp.size() < 1:
+		return { "ok": false, "error": "data.traveled_path should have ≥1 entry after movement (got %d)" % tp.size() }
+
+	# traveled_origin must be present and must equal the pre-advance party cell.
+	var to_v: Variant = snap_data.get("traveled_origin", null)
+	if to_v == null:
+		return { "ok": false, "error": "data.traveled_origin missing from explore snapshot after advance_turn" }
+	if not (to_v is Dictionary):
+		return { "ok": false, "error": "data.traveled_origin is not a Dictionary" }
+	var origin: Dictionary = to_v
+	var org_col := int(origin.get("col", -1))
+	var org_row := int(origin.get("row", -1))
+	if org_col != pre_col or org_row != pre_row:
+		return {
+			"ok": false,
+			"error": "data.traveled_origin %d,%d != pre-advance party cell %d,%d" % [
+				org_col, org_row, pre_col, pre_row
+			]
+		}
+
+	# ZERO-STEP CASE (freeze C3, previously unasserted): when the party did not
+	# move, traveled_path is [] and traveled_origin is the CURRENT party cell —
+	# the anchor the UI still needs to place its step diamond.
+	if tp.is_empty():
+		var post_pos_v: Variant = _read_em(runtime, "party_pos")
+		var post_pos: Dictionary = post_pos_v if post_pos_v is Dictionary else {}
+		if int(post_pos.get("col", -1)) != org_col or int(post_pos.get("row", -1)) != org_row:
+			return {
+				"ok": false,
+				"error": "zero-step advance: traveled_origin %d,%d != current party cell %d,%d" % [
+					org_col, org_row, int(post_pos.get("col", -1)), int(post_pos.get("row", -1))
+				]
+			}
+
+	# Path-excludes-origin: the first travelled cell must NOT be the origin itself.
+	if not tp.is_empty():
+		var first_v: Variant = tp[0]
+		var first: Dictionary = first_v if first_v is Dictionary else {}
+		if int(first.get("col", -1)) == org_col and int(first.get("row", -1)) == org_row:
+			return {
+				"ok": false,
+				"error": "data.traveled_path[0] %d,%d must not equal traveled_origin (path excludes origin)" % [
+					org_col, org_row
+				]
+			}
 
 	# All cells in traveled_path must be walkable.
 	if not walkable.is_empty():
@@ -957,6 +1016,30 @@ static func _t_traveled_path_in_snapshot() -> Dictionary:
 	var tp2: Array = tp2_v if tp2_v is Array else ["not_empty"]
 	if not tp2.is_empty():
 		return { "ok": false, "error": "data.traveled_path should be [] after session reset, got size %d" % tp2.size() }
+
+	# SESSION-RESET CASE (previously unasserted): _project_traveled_origin's
+	# fallback path. With no advance to draw an origin from, traveled_origin must
+	# still be present and must anchor on the party's current cell — otherwise the
+	# UI loses its trail anchor on the first frame after a reset.
+	var to2_v: Variant = sd2.get("traveled_origin", null)
+	if to2_v == null:
+		return { "ok": false, "error": "data.traveled_origin missing from snapshot after session reset" }
+	if not (to2_v is Dictionary):
+		return { "ok": false, "error": "data.traveled_origin is not a Dictionary after session reset" }
+	var origin2: Dictionary = to2_v
+	var reset_pos_v: Variant = _read_em(runtime, "party_pos")
+	var reset_pos: Dictionary = reset_pos_v if reset_pos_v is Dictionary else {}
+	if (
+		int(origin2.get("col", -1)) != int(reset_pos.get("col", -2))
+		or int(origin2.get("row", -1)) != int(reset_pos.get("row", -2))
+	):
+		return {
+			"ok": false,
+			"error": "session reset: traveled_origin %d,%d != party cell %d,%d" % [
+				int(origin2.get("col", -1)), int(origin2.get("row", -1)),
+				int(reset_pos.get("col", -2)), int(reset_pos.get("row", -2))
+			]
+		}
 
 	return { "ok": true }
 

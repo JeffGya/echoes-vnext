@@ -18,6 +18,7 @@ const PursueEscapeTestsScript := preload("res://tests/PursueEscapeTests.gd")
 const GuideSpiritActivationTestsScript := preload("res://tests/GuideSpiritActivationTests.gd")
 const ProtectCustodyTestsScript := preload("res://tests/ProtectCustodyTests.gd")
 const SpatialModeGoalTestsScript := preload("res://tests/SpatialModeGoalTests.gd")
+const StagePartyMovementTestsScript := preload("res://tests/StagePartyMovementTests.gd")
 
 @onready var snapshot_view: RichTextLabel = %SnapshotView
 @onready var renderer: UISnapshotRenderer = %UISnapshotRenderer
@@ -421,6 +422,7 @@ func _run_tests(parts: Array) -> void:
 	# V2-COMBAT-002 slice 4: dormant PROTECT totem carry/custody adapter
 	ProtectCustodyTestsScript.register(runner)
 	SpatialModeGoalTestsScript.register(runner)  # V2-COMBAT-002 Slice 4: spatial modes + cutoff
+	StagePartyMovementTestsScript.register(runner)  # V2-COMBAT-002 Slice 5: dormant stage party adapter
 	CombatStateTests.register(runner)        # COMBAT-001 + COMBAT-002
 	CombatInitiativeTests.register(runner)   # V2-COMBAT-001: readiness score (morale-tier)
 	CombatConsequenceTests.register(runner)  # V2-COMBAT-001: guard routing, hesitation band
