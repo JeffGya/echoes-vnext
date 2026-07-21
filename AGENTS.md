@@ -91,6 +91,10 @@ CONVENTIONS.md    Full architecture contracts
 
 ## Non-Negotiable Rules
 
+### Scope Control — never overreach
+- Do not perform work beyond the requester-defined scope. Audit findings are not authorization to fix adjacent issues.
+- If out-of-scope work appears necessary, useful, or blocking, report it and obtain explicit requester approval before mutating files, external tools, tasks, identifiers, dependencies, or backlog state.
+
 ### Determinism — never break these
 - No `OS.get_unix_time()`, `randf()`, `randomize()`, `rand()` anywhere in `core/`
 - All RNG via `CampaignSeed.derive("dot.separated.path")` → `RandomNumberGenerator`
