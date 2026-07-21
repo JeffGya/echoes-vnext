@@ -1,14 +1,20 @@
-# Echoes vNext GDD V2
+# Echoes vNext GDD V2.5
 
-**Status:** V2 base spec  
-**Purpose:** Concept-first Game Design Document V2 for Echoes vNext. This document is now the primary design authority for the project and should be used as the base knowledge for implementation, content planning, UX work, and future system expansion.  
-**Current scope:** Core concept, player fantasy, story backbone, foundation cutline, progression backbone, implementation-facing constraints, and the full current V2 design direction.
+**Status:** V2.5 canonical spec — approved July 12, 2026
+
+**Revision date:** July 12, 2026
+
+**Revision record:** V2.5 promotes the minimum Keeper Tactical Guidance loop into Foundation scope, defines its system-level design boundaries, and narrows the corresponding Post-Foundation boundary.
+
+**Purpose:** Concept-first Game Design Document V2.5 for Echoes vNext. This document is now the primary design authority for the project and should be used as the base knowledge for implementation, content planning, UX work, and future system expansion.
+
+**Current scope:** Core concept, player fantasy, story backbone, foundation cutline, progression backbone, implementation-facing constraints, the full current V2 design direction, and the V2.5 Keeper Tactical Guidance foundation amendment.
 
 ---
 
 # 1. What This Document Is
 
-This is the main V2 design backbone for Echoes.
+This is the main V2.5 design backbone for Echoes.
 
 It exists to:
 
@@ -17,6 +23,21 @@ It exists to:
 - keep vNext implementation principles and built systems in play
 - steer the current codebase instead of restarting from zero
 - establish the major identity, progression, and world-shaping systems as the new source of truth
+
+## 1.1 V2.5 amendment scope and evidence
+
+V2.5 makes one scoped change to the V2 foundation cutline: the minimum **Keeper Tactical Guidance** loop is now Foundation work rather than a Post-Foundation combat expansion.
+
+This amendment is grounded in:
+
+- the playable [Keeper Tactical Guidance prototype specification](../prototypes/keeper_tactical_guidance/SPEC.md)
+- the successful qualitative [prototype playtest findings](../prototypes/keeper_tactical_guidance/FINDINGS.md)
+- the resulting [production design proposal](proposals/keeper-tactical-guidance-promotion.md)
+- the accompanying [production architecture plan](proposals/keeper-tactical-guidance-architecture.md)
+
+The prototype showed that preparation, readable terrain, continuous automatic combat, limited guidance, and legible Echo resistance can make combat more engaging while strengthening concern for Echoes. This is bounded evidence from one qualitative playtest plus deterministic prototype verification, not validation of every tuning value, board family, Directive, or combat mode.
+
+V2.5 canonizes the **interaction model and Foundation responsibility**, not a direct transfer of prototype code or balance values. Detailed design and production contracts remain in the linked proposal and architecture plan.
 
 ---
 
@@ -228,6 +249,14 @@ Indirect control only works if:
 - outcomes are legible
 - Echo behavior is interpretable
 - refusal and autonomy reveal character rather than remove agency
+
+The minimum playable combat chain is:
+
+**Observe -> guide -> Echo interprets -> visible consequence.**
+
+Combat remains automatic. The Keeper may prepare a formation, set broad party intent, adjust playback speed, and issue limited spatial guidance while the battle continues. The Keeper does not pause combat to choose an exact move, attack, skill, path, or target for an Echo.
+
+Guidance must acknowledge the Keeper's input, identify who is affected, reveal whether each affected Echo aligns, interprets, hesitates, objects, or refuses, and make the Echo's next behavior legible as a consequence. Unaffected Echoes do not produce a response. Resistance without a readable reason is not character autonomy; it is lost player agency.
 
 ## 7.4 Myth must be systemic
 
@@ -1247,6 +1276,7 @@ The wholeness model should steer the systems already in the codebase as follows:
 Current behavior / autonomy direction:
 
 - directives are party-wide intent, not direct obedience
+- Keeper pings are temporary recipient-scoped influence, not direct obedience and not a second behavior system
 - each Echo filters that intent through traits, bonds, fear, morale, calling pressure, and current instability
 - most autonomy friction should modify planned action rather than replace it
 - player-facing incoherence should be foreshadowed before a run and paid off more clearly under pressure during battle or crisis
@@ -1304,6 +1334,8 @@ Current pre-run readability direction:
   - hesitant
   - refusing
 - this ladder should remain hidden and should support warning language, not replace it on the player-facing surface
+
+The pre-run autonomy-readiness ladder and the in-combat ping-response vocabulary are related but distinct. `aligned / strained / hesitant / refusing` is a hidden forecast of party coherence. `Align / Interpret / Hesitate / Object / Refuse` is an event-local, player-facing explanation of how one Echo fixed as a recipient when the ping is confirmed responds to that ping. A ping response is not a permanent personality label, a new emotion tier, or an obedience score.
 
 ### Hidden maturity-expression layer
 
@@ -1375,10 +1407,19 @@ Current Sanctum direction:
 Current Realm direction:
 
 - directives remain party-wide intent, not direct control
+- Keeper pings remain temporary tactical emphasis layered onto the active Directive; they never guarantee an exact action
 - higher-Standing Echoes should be more willing to ask for adjustment, object, or reinterpret rather than silently obey
 - most contradiction should first appear as reinterpretation, hesitation, substitution, or altered emphasis
 - full refusal mid-run should remain possible under severe identity mismatch, vow contradiction, bond emergency, collapse, or extreme fear
 - occasional Keeper-facing prompts, reactions, or adjustment requests during stage exploration and encounters are valid, but should remain high-signal rather than constant
+
+Current in-combat guidance direction:
+
+- only Echoes fixed as recipients when a ping is confirmed evaluate that ping
+- each affected Echo independently produces `Align`, `Interpret`, `Hesitate`, `Object`, or `Refuse`, with one clear primary reason for every result other than `Align`
+- the response appears immediately before the affected Echo's activation turn, and the first movement or action on that turn must provide visible evidence of following, reshaping, resisting, or rejecting the guidance
+- active Directive, guidance, Calling, fear, morale, bonds, Standing, maturity expression, current danger, objective pressure, and hazard exposure resolve through one deterministic behavior authority
+- higher Standing means more coherent judgment and self-assertion, never increased obedience
 
 Current Presence direction:
 
@@ -3745,6 +3786,7 @@ Current tutorial rules:
 
 - no permanent death in the tutorial mini-trial
 - formal directives are not introduced here
+- tactical deployment and Keeper pings are not introduced here
 - the mini-trial should be constrained and guided
 - it should still use the normal game language and not feel like a disconnected fake mode
 
@@ -3878,6 +3920,8 @@ Good intel should reliably reveal:
 
 - objective type
 - objective location
+
+The tactical combat briefing must respect this stage-intel contract. The prototype's fully revealed board was an experimental shortcut used to isolate tactical decision quality; it is not the production hidden-information rule. Production preparation shows known terrain, hazards, pressure, and objective information according to what the party has actually learned. Unknown information may remain concealed, but anything shown as decision-critical must be readable and truthful.
 
 Other elements can be revealed in uneven amounts over time:
 
@@ -4250,6 +4294,25 @@ The early foundation still needs to prove:
 - `Scout Carefully` should also be the stronger choice for returning with useful information from a failed or partial run
 - `Seek Signs` should be the stronger choice for revealing hidden objective requirements, omen language, and readiness clues, while being worse on safety if the run goes bad
 
+#### Keeper tactical guidance
+
+- fully playable in a deliberately bounded Foundation form, though not necessarily exposed in the first session
+- combat is player-facing automatic-only once preparation commits; playback speed may change, but the Keeper may not pause, manually advance actors, or enter a command phase
+- preparation provides one visible party representation and one Echo-selection path for deployment
+- the Foundation tactical field uses readable irregular terrain, obstacles, hazards, and meaningful route tradeoffs so deployment and guidance respond to the board rather than only to actor stats
+- the active Directive remains broad party intent; limited pings are temporary, round-earned tactical emphasis and never replace the Directive
+- each ping uses exactly one recipient scope: Echo-specific, area-based, or party-wide; spatial subjects and footprints never create hybrid recipient modes
+- before confirmation, the player can understand what the ping suggests, which Echoes it affects, when it matters, and why it is unavailable
+- recipients are fixed at confirmation, then independently interpret the guidance on their first relevant turn in the next round; unaffected Echoes do not respond
+- the response appears before that turn and the Echo's next movement or action makes following, reshaping, resisting, or rejecting the guidance legible
+- the Foundation scope covers every currently authored production combat objective—`COMBAT`, `PURIFY_SHRINE`, `RECOVER`, `PROTECT`, `ENDURE`, `PURSUE`, and `GUIDE_SPIRIT`—preserving each objective's rules rather than redefining them
+
+The Foundation experience chain is:
+
+**Read -> prepare -> observe -> guide -> Echo interprets -> visible action -> review.**
+
+The Foundation loop includes this complete chain so the player can understand how preparation, Directive, guidance, Echo identity, emotional state, battlefield pressure, and the objective affect the result.
+
 #### Vows
 
 - lightly playable
@@ -4389,7 +4452,7 @@ This should remain mechanically meaningful, but the hostile-celebration branch s
 
 # 21. Remaining Open Questions
 
-GDD V2 is now in the finalization phase.
+GDD V2.5 is now in the finalization phase.
 
 The core concept, Wholeness Model, Realm recovery model, foundation cutline, progression backbone, and calling lattice are sufficiently locked.
 
@@ -4430,6 +4493,8 @@ Still open:
 12. exact pre-run warning language for party incoherence, overcommitment, and likely refusal
 13. exact conflict-resolution rules when directive, bond protection, fear, morale, and calling pressure all collide
 14. exact behavior modifications produced by directives and scouting stances across different Echo profiles
+
+V2.5 leaves exact Charge cadence and costs, ping breadth, response thresholds and language, tactical-field variety, and additional Directives open to controlled validation.
 
 ## 21.4 Thread reserve, rite surfacing, and integration tuning
 
@@ -4473,7 +4538,7 @@ The most important remaining work for completing this GDD is:
 # 22. Current Build Reality (April 4, 2026)
 
 This section is implementation-aware.
-It records what the current build actually supports so the V2 GDD can steer the game that exists rather than drift into a parallel paper design.
+It records what the current build actually supports so the V2.5 GDD can steer the game that exists rather than drift into a parallel paper design.
 
 Current verification snapshot:
 
@@ -4576,6 +4641,8 @@ The smallest strong proof of that is:
 7. one visible post-stage consequence pass back in Sanctum
 8. one early social beat between Echoes
 
+This first-session sequence does not need to expose the entire Keeper Tactical Guidance system. The protected mini-trial excludes formal Directives and pings, and the first proper stage may introduce the tactical loop in a reduced, paced form.
+
 For first-session proof, the player must be able to feel all of the following:
 
 - Echoes are not obedient units
@@ -4586,9 +4653,11 @@ For first-session proof, the player must be able to feel all of the following:
 
 The foundation cutline does **not** need full versions of every later system to prove this.
 
+The full Foundation includes the bounded tactical-guidance loop across every currently authored production combat objective. First-session exposure and Foundation scope are separate decisions: onboarding may sequence the system gradually, but the system may not be deferred out of Foundation.
+
 ## 22.5 Systems that should be treated as post-foundation expansion
 
-The following should remain in the V2 GDD as real future structure, but they should not be required for first-session proof:
+The following should remain in the V2.5 GDD as real future structure, but they are not required for Foundation completion:
 
 - full multi-Thread reserve strategy
 - contested Weaving Rite depth
@@ -4597,7 +4666,7 @@ The following should remain in the V2 GDD as real future structure, but they sho
 - deep Sanctum jobs / pillars / office politics
 - mythic recognition rites and departure pressure
 - crafting / research breadth beyond minimal hooks
-- tactical pre-positioning and mid-battle guidance expansions
+- tactical-guidance expansion beyond the Foundation loop: future combat objectives, wider ping or Directive libraries, deeper mode-specific board topology/ecology and content breadth, and final animation/reporting breadth
 - multi-zone Sanctum growth
 
 These systems matter.
@@ -4620,6 +4689,7 @@ Priority order:
    - stage intel
    - party preparation
    - fear / morale readability
+   - Keeper guidance and Echo-response readability
 4. make Sanctum consequences more legible after runs:
    - bond movement
    - vow consequences
@@ -4639,6 +4709,7 @@ In practice this means:
 
 - use the existing Sanctum / Realm / Resolve loop as the skeleton
 - use existing emotion, vow, calling, bond, and progression systems as the first person-shaping layer
+- integrate Keeper guidance through the same deterministic behavior and objective authority while preserving the hidden-intel contract
 - treat Weave, Continuity, and mythic systems as the next major layer to connect onto that skeleton
 
 ## 23.3 Current design warning

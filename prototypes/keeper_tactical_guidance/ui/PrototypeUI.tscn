@@ -1,0 +1,711 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://prototypes/keeper_tactical_guidance/ui/PrototypeUI.gd" id="1"]
+[ext_resource type="Theme" path="res://prototypes/keeper_tactical_guidance/ui/PrototypeTheme.tres" id="2"]
+[ext_resource type="PackedScene" path="res://prototypes/keeper_tactical_guidance/ui/TacticalBoardView.tscn" id="3"]
+
+[node name="PrototypeUI" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2")
+script = ExtResource("1")
+
+[node name="Backdrop" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.027, 0.039, 0.034, 1)
+mouse_filter = 2
+
+[node name="SafeMargin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 12.0
+offset_right = -12.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Root" type="VBoxContainer" parent="SafeMargin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Header" type="PanelContainer" parent="SafeMargin/Root"]
+custom_minimum_size = Vector2(0, 64)
+layout_mode = 2
+
+[node name="HeaderRow" type="HBoxContainer" parent="SafeMargin/Root/Header"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="TitleBlock" type="VBoxContainer" parent="SafeMargin/Root/Header/HeaderRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Title" type="Label" parent="SafeMargin/Root/Header/HeaderRow/TitleBlock"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.88, 0.71, 0.22, 1)
+theme_override_font_sizes/font_size = 22
+text = "Keeper Tactical Guidance"
+
+[node name="Subtitle" type="Label" parent="SafeMargin/Root/Header/HeaderRow/TitleBlock"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.55, 0.63, 0.57, 1)
+text = "Responsible influence under uncertainty"
+
+[node name="PhaseLabel" type="Label" parent="SafeMargin/Root/Header/HeaderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.47, 0.79, 0.84, 1)
+theme_override_font_sizes/font_size = 16
+text = "Briefing"
+vertical_alignment = 1
+
+[node name="SeedHeader" type="Label" parent="SafeMargin/Root/Header/HeaderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Seed 1"
+vertical_alignment = 1
+
+[node name="ObjectiveHeader" type="Label" parent="SafeMargin/Root/Header/HeaderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.88, 0.71, 0.22, 1)
+text = "RECOVER"
+vertical_alignment = 1
+
+[node name="DebugButton" type="Button" parent="SafeMargin/Root/Header/HeaderRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(76, 48)
+layout_mode = 2
+text = "Debug"
+
+[node name="Workspace" type="HSplitContainer" parent="SafeMargin/Root"]
+layout_mode = 2
+size_flags_vertical = 3
+split_offset = 1060
+
+[node name="BoardPanel" type="PanelContainer" parent="SafeMargin/Root/Workspace"]
+custom_minimum_size = Vector2(560, 520)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="BoardStack" type="VBoxContainer" parent="SafeMargin/Root/Workspace/BoardPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="BoardToolbar" type="HBoxContainer" parent="SafeMargin/Root/Workspace/BoardPanel/BoardStack"]
+layout_mode = 2
+alignment = 2
+theme_override_constants/separation = 8
+
+[node name="BoardHint" type="Label" parent="SafeMargin/Root/Workspace/BoardPanel/BoardStack/BoardToolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Drag to pan • wheel to zoom • select cells and subjects"
+
+[node name="RoutesToggle" type="CheckButton" parent="SafeMargin/Root/Workspace/BoardPanel/BoardStack/BoardToolbar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(92, 48)
+layout_mode = 2
+button_pressed = true
+text = "Routes"
+
+[node name="ChokepointsToggle" type="CheckButton" parent="SafeMargin/Root/Workspace/BoardPanel/BoardStack/BoardToolbar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(128, 48)
+layout_mode = 2
+button_pressed = true
+text = "Chokepoints"
+
+[node name="ZoomOutButton" type="Button" parent="SafeMargin/Root/Workspace/BoardPanel/BoardStack/BoardToolbar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+text = "−"
+
+[node name="RecenterButton" type="Button" parent="SafeMargin/Root/Workspace/BoardPanel/BoardStack/BoardToolbar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(88, 48)
+layout_mode = 2
+text = "Recenter"
+
+[node name="ZoomInButton" type="Button" parent="SafeMargin/Root/Workspace/BoardPanel/BoardStack/BoardToolbar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+text = "+"
+
+[node name="BoardView" parent="SafeMargin/Root/Workspace/BoardPanel/BoardStack" instance=ExtResource("3")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Sidebar" type="ScrollContainer" parent="SafeMargin/Root/Workspace"]
+custom_minimum_size = Vector2(410, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+horizontal_scroll_mode = 0
+
+[node name="SidebarContent" type="VBoxContainer" parent="SafeMargin/Root/Workspace/Sidebar"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="BriefingPanel" type="VBoxContainer" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="BriefingTitle" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/BriefingPanel"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Board briefing"
+
+[node name="ObjectiveCopy" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/BriefingPanel"]
+layout_mode = 2
+text = "RECOVER: establish consecutive adjacency at the relic. PROTECT: keep the totem alive, guarded, and out of enemy custody. Killing all enemies also wins."
+autowrap_mode = 2
+
+[node name="SeedRow" type="HBoxContainer" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/BriefingPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="SeedInput" type="LineEdit" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/BriefingPanel/SeedRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "1"
+placeholder_text = "Deterministic seed"
+
+[node name="GenerateButton" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/BriefingPanel/SeedRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(100, 48)
+layout_mode = 2
+text = "Generate"
+
+[node name="ModeRow" type="HBoxContainer" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/BriefingPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="RecoverButton" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/BriefingPanel/ModeRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "RECOVER\nReach and hold the relic"
+
+[node name="ProtectButton" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/BriefingPanel/ModeRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "PROTECT\nGuard the totem"
+
+[node name="BoardDiagnostics" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/BriefingPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Board diagnostics"
+autowrap_mode = 2
+
+[node name="HazardLegend" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/BriefingPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.76, 0.65, 0.49, 1)
+text = "Hazard rules"
+autowrap_mode = 2
+
+[node name="BoardOverlayLegend" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/BriefingPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ReferenceText"
+text = "BOARD MARKINGS\nCyan diamonds: party deployment • Red diamonds: enemy entry\nRoute ribbons: alternative approaches • Gate brackets: meaningful chokepoints\nRaised rocks, growth and ruins: impassable obstacles"
+autowrap_mode = 2
+
+[node name="EchoBriefing" type="RichTextLabel" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/BriefingPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 220)
+layout_mode = 2
+bbcode_enabled = true
+fit_content = false
+scroll_active = true
+
+[node name="BriefingActions" type="HBoxContainer" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/BriefingPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="RerollButton" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/BriefingPanel/BriefingActions"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Reroll seed"
+
+[node name="PrepareButton" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/BriefingPanel/BriefingActions"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Prepare party →"
+
+[node name="PreparationPanel" type="VBoxContainer" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="PreparationTitle" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/PreparationPanel"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Preparation"
+
+[node name="DirectiveHelp" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/PreparationPanel"]
+layout_mode = 2
+text = "Choose one broad Directive. Echoes interpret it through identity and current pressure; it never commands an exact action."
+autowrap_mode = 2
+
+[node name="DirectiveGrid" type="GridContainer" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/PreparationPanel"]
+layout_mode = 2
+columns = 2
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+
+[node name="Directive_scout_carefully" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/PreparationPanel/DirectiveGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(180, 54)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Scout Carefully"
+
+[node name="Directive_seek_signs" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/PreparationPanel/DirectiveGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(180, 54)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Seek Signs"
+
+[node name="Directive_press_the_path" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/PreparationPanel/DirectiveGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(180, 54)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Press the Path"
+
+[node name="Directive_hold_the_circle" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/PreparationPanel/DirectiveGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(180, 54)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Hold the Circle"
+
+[node name="DirectiveSummary" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/PreparationPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.88, 0.71, 0.22, 1)
+text = "Scout Carefully"
+autowrap_mode = 2
+
+[node name="PreparationInstruction" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/PreparationPanel"]
+layout_mode = 2
+theme_type_variation = &"ReferenceText"
+text = "Select one Echo below, then choose a cyan deployment slot on the board. Selecting an occupied slot swaps their positions. Echo tokens show placement only."
+autowrap_mode = 2
+
+[node name="PreparationRoster" type="VBoxContainer" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/PreparationPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="EchoSelect0" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/PreparationPanel/PreparationRoster"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 92)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Echo 1"
+alignment = 0
+autowrap_mode = 2
+
+[node name="EchoSelect1" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/PreparationPanel/PreparationRoster"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 92)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Echo 2"
+alignment = 0
+autowrap_mode = 2
+
+[node name="EchoSelect2" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/PreparationPanel/PreparationRoster"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 92)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Echo 3"
+alignment = 0
+autowrap_mode = 2
+
+[node name="EchoSelect3" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/PreparationPanel/PreparationRoster"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 92)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Echo 4"
+alignment = 0
+autowrap_mode = 2
+
+[node name="SelectedEchoLabel" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/PreparationPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.88, 0.71, 0.22, 1)
+text = "Select an Echo, then a cyan board slot."
+autowrap_mode = 2
+
+[node name="PreparationBoardLegend" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/PreparationPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ReferenceText"
+text = "BOARD MARKINGS\nCyan: deployment slots • Red: enemy entry • Route ribbons: approaches • Gate brackets: chokepoints • Raised forms: impassable obstacles"
+autowrap_mode = 2
+
+[node name="DeploymentStatus" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/PreparationPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0 / 4 Echoes positioned"
+autowrap_mode = 2
+
+[node name="StartCombatButton" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/PreparationPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+text = "Start autonomous combat"
+
+[node name="CombatPanel" type="VBoxContainer" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="RoundLabel" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Round 1"
+
+[node name="InitiativeLabel" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Initiative"
+autowrap_mode = 2
+
+[node name="DirectiveLabel" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.52, 0.78, 0.82, 1)
+text = "Directive"
+autowrap_mode = 2
+
+[node name="ObjectiveStatus" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.88, 0.71, 0.22, 1)
+text = "Objective"
+autowrap_mode = 2
+
+[node name="ChargeBar" type="ProgressBar" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 26)
+layout_mode = 2
+max_value = 5.0
+show_percentage = false
+
+[node name="ChargeLabel" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0 / 5 Ping Charge"
+horizontal_alignment = 1
+
+[node name="ThresholdLabel" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.58, 0.64, 0.59, 1)
+text = "Echo-specific 2 • Area-based 3 • Party-wide 5"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="PlaybackTitle" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel"]
+layout_mode = 2
+text = "Automatic combat speed"
+
+[node name="PlaybackSpeedRow" type="HBoxContainer" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="SpeedSlowButton" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PlaybackSpeedRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Slow"
+[node name="SpeedNormalButton" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PlaybackSpeedRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Normal"
+[node name="SpeedFastButton" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PlaybackSpeedRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Fast"
+
+[node name="AttentionLabel" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.57, 0.34, 1)
+text = "ATTENTION"
+autowrap_mode = 2
+
+[node name="PingPanel" type="VBoxContainer" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PingTitle" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPanel"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Choose one priority ping"
+
+[node name="PingHelp" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPanel"]
+layout_mode = 2
+theme_type_variation = &"ReferenceText"
+text = "Pings suggest a priority; they never command an exact action. Browse any ping while combat continues. Locked pings still show their effect and legal area."
+autowrap_mode = 2
+
+[node name="PingGrid" type="GridContainer" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPanel"]
+layout_mode = 2
+columns = 2
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+
+[node name="Ping_hold_ground" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPanel/PingGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(180, 60)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Hold Ground"
+[node name="Ping_break_through" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPanel/PingGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(180, 60)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Break Through"
+[node name="Ping_focus_threat" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPanel/PingGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(180, 60)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Focus Threat"
+[node name="Ping_regroup" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPanel/PingGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(180, 60)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Regroup"
+[node name="Ping_secure_objective" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPanel/PingGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(180, 60)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Secure Objective"
+
+[node name="PingPreviewPanel" type="VBoxContainer" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="PreviewTitle" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPreviewPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.88, 0.71, 0.22, 1)
+theme_override_font_sizes/font_size = 18
+text = "Ping preview"
+[node name="PreviewSuggestion" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPreviewPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"GuidanceText"
+text = "What this guidance suggests"
+autowrap_mode = 2
+[node name="PreviewInfluence" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPreviewPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Mechanical influence"
+autowrap_mode = 2
+[node name="PreviewAvailability" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPreviewPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Availability"
+autowrap_mode = 2
+[node name="PreviewMode" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPreviewPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Recipient mode"
+[node name="PreviewSubject" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPreviewPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Subject"
+autowrap_mode = 2
+[node name="PreviewInstruction" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPreviewPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "How to target"
+autowrap_mode = 2
+[node name="PreviewRecipients" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPreviewPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Eligible Echoes"
+autowrap_mode = 2
+[node name="PreviewCost" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPreviewPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Cost"
+[node name="PreviewDuration" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPreviewPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Duration"
+autowrap_mode = 2
+[node name="PreviewInvalid" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPreviewPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.42, 0.36, 1)
+text = "Cannot confirm"
+autowrap_mode = 2
+
+[node name="PingConfirmRow" type="HBoxContainer" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPreviewPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+[node name="CancelPingButton" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPreviewPanel/PingConfirmRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Cancel — no charge"
+[node name="ConfirmPingButton" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PingPreviewPanel/PingConfirmRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Confirm ping"
+
+[node name="PendingGuidancePanel" type="PanelContainer" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"GuidancePanel"
+
+[node name="PendingGuidanceContent" type="VBoxContainer" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PendingGuidancePanel"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="PendingGuidanceTitle" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PendingGuidancePanel/PendingGuidanceContent"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"GuidanceText"
+text = "Guidance pending"
+
+[node name="PendingGuidanceText" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel/PendingGuidancePanel/PendingGuidanceContent"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Recipients will respond on their next-round turn."
+autowrap_mode = 2
+
+[node name="ResponseHeader" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "How affected Echoes responded"
+[node name="ResponseFeedback" type="RichTextLabel" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 140)
+layout_mode = 2
+bbcode_enabled = true
+text = "Only snapshotted recipients respond."
+fit_content = false
+[node name="TimelineHeader" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "Event timeline"
+[node name="TimelineTail" type="RichTextLabel" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/CombatPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 160)
+layout_mode = 2
+bbcode_enabled = true
+fit_content = false
+
+[node name="ReviewPanel" type="VBoxContainer" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 12
+[node name="ResultTitle" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/ReviewPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.88, 0.71, 0.22, 1)
+theme_override_font_sizes/font_size = 28
+text = "VICTORY"
+horizontal_alignment = 1
+[node name="ResultSummary" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/ReviewPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Battle summary"
+horizontal_alignment = 1
+autowrap_mode = 2
+[node name="ReportText" type="RichTextLabel" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/ReviewPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 520)
+layout_mode = 2
+bbcode_enabled = true
+fit_content = false
+[node name="ReviewActions" type="HBoxContainer" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/ReviewPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+[node name="RestartSameButton" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/ReviewPanel/ReviewActions"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Restart same seed"
+[node name="NewSeedButton" type="Button" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/ReviewPanel/ReviewActions"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Generate new seed"
+
+[node name="DebugPanel" type="VBoxContainer" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 6
+[node name="DebugHeader" type="Label" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/DebugPanel"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.3, 0.85, 1)
+text = "DEBUG OVERLAY — routes, chokepoints, metrics"
+[node name="DebugText" type="RichTextLabel" parent="SafeMargin/Root/Workspace/Sidebar/SidebarContent/DebugPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 240)
+layout_mode = 2
+bbcode_enabled = true
+fit_content = false

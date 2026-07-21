@@ -1,0 +1,15 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://prototypes/keeper_tactical_guidance/PrototypeController.gd" id="1_controller"]
+[ext_resource type="PackedScene" path="res://prototypes/keeper_tactical_guidance/ui/PrototypeUI.tscn" id="2_ui"]
+
+[node name="KeeperTacticalGuidance" type="Node"]
+script = ExtResource("1_controller")
+
+[node name="PrototypeUI" parent="." instance=ExtResource("2_ui")]
+unique_name_in_owner = true
+
+[node name="PlaybackTimer" type="Timer" parent="."]
+unique_name_in_owner = true
+wait_time = 0.75
+one_shot = false
