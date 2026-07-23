@@ -79,6 +79,34 @@ const _ACTIVATION_PHASE: String = "activation"
 ## Purpose -> action types permitted as a declared fallback. Mirrors MovementGoal's
 ## plan-for-purpose vocabulary. Unknown purpose (or "read", whose primary is idle)
 ## permits NO fallback. Table-driven so it is trivial to tune / ratify.
+##
+## RATIFIED — V2-COMBAT-002 slice 6, Phase 6A. Checked entry-by-entry against
+## docs/movement-model.md §9 (intent vocabulary) and §8.5 (bounded fallback
+## policy). Verdict: CORRECT AS WRITTEN, no entry changed. Reasoning:
+##
+##  * Coverage is exact. All twelve MovementGoal.PURPOSES have an entry and the
+##    table declares no purpose outside that allowlist. (§9 also lists `carry`,
+##    which is deliberately NOT in PURPOSES yet; adding it is a separate change.)
+##  * Every list is a subset of {the purpose's own primaries} + {actor.guard,
+##    actor.idle}. §8.5 step 3 names exactly "stop, guard, or observe according
+##    to the original intent" as the bounded retreat, and step 4 forbids
+##    producing an unrelated action — so guard/idle are the correct universal
+##    tail and nothing broader belongs.
+##  * No entry lets a mover change purpose under cover of a fallback: `advance`
+##    cannot fall back to `melee_attack`, and `withdraw` cannot either — the same
+##    set MovementGoal rejects on withdraw's PRIMARY, so the two layers agree.
+##    (Unit 4: this used to be attributed to §8.3's withdraw "attack forfeit".
+##    That attribution is RETRACTED — §8.3 is the movement-EXPRESSIONS style table
+##    and PURPOSES comes from §9 INTENT; the agreement between the two layers is
+##    real, its §8.3 provenance was not. §8.3's consequence stays UNOWNED.)
+##  * No entry admits an OBJECTIVE action as a fallback (`actor.purify_shrine` is
+##    absent everywhere, including from `advance`, whose primary may be one).
+##    Objective progress must be planned, never fallen into.
+##  * `read: []` is correct and not an oversight: `read`'s only legal primary is
+##    `actor.idle`, and MovementGoal requires an idle primary to carry an EMPTY
+##    declared_fallback, so any entry here would be unreachable.
+##  * `protect` and `escort` carry identical lists, which now matches
+##    MovementGoal's single shared plan rule for the two purposes.
 const _PURPOSE_FALLBACK_ALLOW: Dictionary = {
 	"advance": ["actor.move", "actor.guard", "actor.idle"],
 	"engage": ["melee_attack", "actor.guard", "actor.idle"],

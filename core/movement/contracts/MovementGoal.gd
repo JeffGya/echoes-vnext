@@ -22,6 +22,14 @@ const GOAL_ROLES: Array = [
 	"hunter", "watcher", "breaker", "custody_threat", "escort_threat",
 ]
 
+## Pressure-source prefix that names an authored objective, situation, or place.
+## A PLACE-DIRECTED `advance` publishes what it advances toward here rather than
+## in `relevant_actors`, because `CombatPressureService._goal_sources` expands
+## `relevant_actors` as `"actor.%s"` — putting a situation or shrine id there
+## would publish the false fact `actor.sit.obj`. Kept in sync with
+## `CombatPressureService._valid_source`'s `"objective."` prefix.
+const OBJECTIVE_SOURCE_PREFIX: String = "objective."
+
 const REQUIRED_FIELDS: Array = [
 	"goal_id",
 	"purpose",
@@ -157,6 +165,28 @@ static func _parse_anchor(token: String) -> Dictionary:
 	return {"col": col, "row": row}
 
 
+## True when `pressure_sources` names at least one authored objective/place.
+## Pure: reads only the goal dict, no config, no services, no RNG.
+##
+## The suffix must be a well-formed semantic token, not merely non-empty:
+## `CombatPressureService._valid_source` gates `"objective."` sources with
+## `V.is_semantic_token(source)` (applied to the whole token), and `goal_id`
+## is gated the same way. Without mirroring that here, `objective.Bad-ID`
+## (capitals, hyphens, spaces) would launder a place-directed `advance`
+## through `validate()`, which is laxer than either sibling. Matching
+## `_valid_source` exactly keeps the two validators in agreement.
+static func _has_objective_source(value: Dictionary) -> bool:
+	for source_value: Variant in value["pressure_sources"] as Array:
+		var source: String = str(source_value)
+		if (
+			source.begins_with(OBJECTIVE_SOURCE_PREFIX)
+			and source.length() > OBJECTIVE_SOURCE_PREFIX.length()
+			and V.is_semantic_token(source)
+		):
+			return true
+	return false
+
+
 static func _validate_plan_for_purpose(value: Dictionary) -> Dictionary:
 	var purpose: String = str(value["purpose"])
 	var primary: Dictionary = value["planned_primary"] as Dictionary
@@ -167,7 +197,26 @@ static func _validate_plan_for_purpose(value: Dictionary) -> Dictionary:
 		"advance":
 			if not str(primary["type"]) in ["actor.move", "actor.purify_shrine"]:
 				return V.failure("invalid_primary_for_purpose", "planned_primary.type")
-			if target_id.is_empty() or not relevant.has(target_id):
+			# An `advance` must truthfully name WHAT it advances toward (§9:
+			# "reduce route distance to an authored objective or priority
+			# subject"). There are exactly two truthful shapes:
+			#
+			#   actor-directed — `target_id` names an actor, which must appear in
+			#                    `relevant_actors` (UNCHANGED rule);
+			#   place-directed — `target_id` is EMPTY, `destination_region` IS the
+			#                    place, and `pressure_sources` must carry an
+			#                    `objective.` source naming the authored objective.
+			#
+			# The second clause is what makes this a rule rather than a hole:
+			# without it, a place-directed advance would be indistinguishable from
+			# a `reposition` and every moving goal could relabel itself `advance`
+			# for free. It also removes the slice-5 concession that forced all
+			# moving stage goals to `reposition` because a situation id could not
+			# be laundered through `relevant_actors`.
+			if target_id.is_empty():
+				if not _has_objective_source(value):
+					return V.failure("advance_requires_named_objective", "pressure_sources")
+			elif not relevant.has(target_id):
 				return V.failure("invalid_primary_target", "planned_primary.target_id")
 		"engage", "pursue":
 			if str(primary["type"]) != "melee_attack":
@@ -179,7 +228,17 @@ static func _validate_plan_for_purpose(value: Dictionary) -> Dictionary:
 				return V.failure("invalid_primary_for_purpose", "planned_primary.type")
 			if not target_id.is_empty():
 				return V.failure("invalid_primary_target", "planned_primary.target_id")
-		"protect":
+		"protect", "escort":
+			# `escort` is protect-in-motion (§9: "maintain a moving protection
+			# relationship"), and §13.7 lists FRONT SCREEN and REAR GUARD among
+			# the escort goals — a screening escort's primary is an
+			# `actor.guard`, not a `protect_ally`. `escort` previously admitted
+			# `protect_ally` alone, which made those authored goals unexpressible.
+			# The two purposes now share one plan rule.
+			#
+			# `actor.idle` is deliberately NOT admitted here. A mover that
+			# declares no action is not escorting or protecting anyone; that
+			# shape belongs to `read`, `hold`, or `withdraw`.
 			if str(primary["type"]) == "protect_ally":
 				if target_id.is_empty() or not relevant.has(target_id):
 					return V.failure("invalid_primary_target", "planned_primary.target_id")
@@ -188,20 +247,56 @@ static func _validate_plan_for_purpose(value: Dictionary) -> Dictionary:
 					return V.failure("invalid_primary_target", "planned_primary.target_id")
 			else:
 				return V.failure("invalid_primary_for_purpose", "planned_primary.type")
-		"reposition", "regroup", "withdraw":
+		"reposition", "regroup":
 			if str(primary["type"]) != "actor.move":
 				return V.failure("invalid_primary_for_purpose", "planned_primary.type")
 			if not target_id.is_empty() and not relevant.has(target_id):
+				return V.failure("invalid_primary_target", "planned_primary.target_id")
+		"withdraw":
+			# §8.5 step 3 — "otherwise stop, guard, or observe according to the
+			# original intent". `actor.guard` and `actor.idle` are exactly those
+			# outcomes, so a withdrawing mover may declare them as its primary
+			# alongside the existing `actor.move`. Purely ADDITIVE: no goal that
+			# validated before this widening is rejected now.
+			#
+			# RETRACTION (slice 6 phase 6A, unit 4). This branch used to claim it
+			# "owned §8.3's action consequence" — that withdraw "usually forfeits
+			# attack or limits follow-up" — and presented the rejection of
+			# `melee_attack` / `protect_ally` / `actor.purify_shrine` as that
+			# forfeit. THAT WAS A CATEGORY ERROR and is withdrawn:
+			#
+			#   * §8.3 is the movement-EXPRESSIONS table — a STYLE vocabulary
+			#     (Measured / Rush / Screen / Withdraw / Observe / Hold), each row
+			#     pairing a movement rule with an action consequence.
+			#   * `PURPOSES` comes from §9, the movement-INTENT vocabulary, where
+			#     `withdraw` means only "increase safety while preserving future
+			#     participation" and carries NO action consequence whatsoever.
+			#
+			# The two tables share the token `withdraw` and nothing else. Applying
+			# one table's consequence to the other table's token is not enforcement,
+			# it is a name collision. And the claim was hollow regardless: those
+			# three types were ALREADY rejected before the widening, so this change
+			# forfeits nothing that was not already forfeited — it is a pure
+			# widening that admits guard/idle, and that is all it is.
+			#
+			# STILL UNOWNED: §8.3's actual withdraw consequence. It is a rule about
+			# what a mover may DO after expressing a withdrawal, which belongs at
+			# ACTION RESOLUTION, not in a contract validator that only ever sees a
+			# declaration. Nothing in the codebase owns it yet.
+			var withdraw_type: String = str(primary["type"])
+			if not withdraw_type in ["actor.move", "actor.guard", "actor.idle"]:
+				return V.failure("invalid_primary_for_purpose", "planned_primary.type")
+			if withdraw_type == "actor.move":
+				if not target_id.is_empty() and not relevant.has(target_id):
+					return V.failure("invalid_primary_target", "planned_primary.target_id")
+			elif not target_id.is_empty():
+				# guard/idle are position-independent everywhere else in this
+				# validator; naming a target under them would be a false claim.
 				return V.failure("invalid_primary_target", "planned_primary.target_id")
 		"read":
 			if str(primary["type"]) != "actor.idle":
 				return V.failure("invalid_primary_for_purpose", "planned_primary.type")
 			if not target_id.is_empty():
-				return V.failure("invalid_primary_target", "planned_primary.target_id")
-		"escort":
-			if str(primary["type"]) != "protect_ally":
-				return V.failure("invalid_primary_for_purpose", "planned_primary.type")
-			if target_id.is_empty() or not relevant.has(target_id):
 				return V.failure("invalid_primary_target", "planned_primary.target_id")
 	if str(primary["type"]) == "actor.idle":
 		if not fallback.is_empty():

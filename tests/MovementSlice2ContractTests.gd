@@ -12,6 +12,7 @@ const ContextContract = preload("res://core/movement/contracts/MovementContext.g
 const GoalContract = preload("res://core/movement/contracts/MovementGoal.gd")
 const OptionContract = preload("res://core/movement/contracts/MovementOption.gd")
 const IntentContract = preload("res://core/movement/contracts/MovementIntent.gd")
+const ActivationService = preload("res://core/movement/CombatActivationService.gd")
 
 
 static func register(runner: CoreTestRunner) -> void:
@@ -23,6 +24,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement/slice2_contracts/context_fact_correlation", Callable(MovementSlice2ContractTests, "_t_context_fact_correlation"))
 	runner.register_test("movement/slice2_contracts/context_map_failures", Callable(MovementSlice2ContractTests, "_t_context_map_failures"))
 	runner.register_test("movement/slice2_contracts/goal_exact", Callable(MovementSlice2ContractTests, "_t_goal_exact"))
+	runner.register_test("movement/slice2_contracts/goal_place_directed_advance", Callable(MovementSlice2ContractTests, "_t_goal_place_directed_advance"))
+	runner.register_test("movement/slice2_contracts/goal_advance_objective_source_semantic", Callable(MovementSlice2ContractTests, "_t_goal_advance_objective_source_semantic"))
+	runner.register_test("movement/slice2_contracts/goal_escort_protect_plans", Callable(MovementSlice2ContractTests, "_t_goal_escort_protect_plans"))
+	runner.register_test("movement/slice2_contracts/goal_withdraw_admits_stop_guard_observe", Callable(MovementSlice2ContractTests, "_t_goal_withdraw_admits_stop_guard_observe"))
+	runner.register_test("movement/slice2_contracts/purpose_fallback_table_ratified", Callable(MovementSlice2ContractTests, "_t_purpose_fallback_table_ratified"))
 	runner.register_test("movement/slice2_contracts/option_exact", Callable(MovementSlice2ContractTests, "_t_option_exact"))
 	runner.register_test("movement/slice2_contracts/intent_exact", Callable(MovementSlice2ContractTests, "_t_intent_exact"))
 	runner.register_test("movement/slice2_contracts/reversed_input_stable", Callable(MovementSlice2ContractTests, "_t_reversed_input_stable"))
@@ -351,6 +357,275 @@ static func _t_goal_exact() -> Dictionary:
 	return _pass()
 
 
+## Slice 6 / 6A: an `advance` may name a PLACE (situation, cell, objective)
+## without laundering that id through `relevant_actors`, provided it declares the
+## objective it advances toward. The actor-directed shape is unchanged.
+static func _t_goal_place_directed_advance() -> Dictionary:
+	var origin := {"col": 1, "row": 1}
+
+	# WOULD FAIL UNDER THE OLD RULE: empty target_id was an outright rejection,
+	# which is why slice 5 had to emit `reposition` for every moving stage goal.
+	var place_directed: Dictionary = _purpose_goal(
+		"explore", "advance", "baseline", _action("actor.move"), _action("actor.idle"),
+		[], ["mode.explore", "objective.sit.obj", "role.baseline"]
+	)
+	if not bool(GoalContract.validate(place_directed, origin)["valid"]):
+		return _fail("place-directed advance rejected: %s" % str(GoalContract.validate(place_directed, origin)))
+
+	# THE RULE STILL BITES: without a named objective a place-directed advance is
+	# indistinguishable from a reposition, so it must be rejected.
+	var unnamed: Dictionary = _purpose_goal(
+		"explore", "advance", "baseline", _action("actor.move"), _action("actor.idle"),
+		[], ["mode.explore", "role.baseline"]
+	)
+	if not _matches(GoalContract.validate(unnamed, origin), "advance_requires_named_objective", "pressure_sources"):
+		return _fail("advance accepted an empty target with no named objective")
+
+	# A bare `objective.` prefix carries no id and must not satisfy the rule.
+	var bare_prefix: Dictionary = _purpose_goal(
+		"explore", "advance", "baseline", _action("actor.move"), _action("actor.idle"),
+		[], ["mode.explore", "role.baseline"]
+	)
+	bare_prefix["pressure_sources"] = ["mode.explore", "objective."]
+	if not _matches(GoalContract.validate(bare_prefix, origin), "advance_requires_named_objective", "pressure_sources"):
+		return _fail("advance accepted a bare objective. prefix as a named objective")
+
+	# Unrelated `state.`/`actor.` sources must not be mistaken for an objective.
+	var wrong_prefix: Dictionary = _purpose_goal(
+		"explore", "advance", "baseline", _action("actor.move"), _action("actor.idle"),
+		[], ["actor.sit.obj", "mode.explore", "state.objective_unknown"]
+	)
+	if not _matches(GoalContract.validate(wrong_prefix, origin), "advance_requires_named_objective", "pressure_sources"):
+		return _fail("advance accepted a non-objective source as a named objective")
+
+	# Actor-directed advance: an unlisted target is still rejected even when an
+	# objective source is present, so the objective clause cannot be used to
+	# smuggle an unknown actor target past the relevant_actors requirement.
+	var unlisted: Dictionary = _purpose_goal(
+		"combat", "advance", "baseline", _action("actor.move", "unlisted.actor"), _action("actor.idle"),
+		["target.1"], ["mode.combat", "objective.shrine.1", "role.baseline"]
+	)
+	if not _matches(GoalContract.validate(unlisted, origin), "invalid_primary_target", "planned_primary.target_id"):
+		return _fail("advance accepted an unlisted actor target alongside an objective source")
+
+	# The primary vocabulary is unchanged: a place-directed advance is still a
+	# MOVE, never an attack.
+	var attacking: Dictionary = _purpose_goal(
+		"explore", "advance", "baseline", _action("melee_attack"), _action("actor.idle"),
+		[], ["mode.explore", "objective.sit.obj"]
+	)
+	if not _matches(GoalContract.validate(attacking, origin), "invalid_primary_for_purpose", "planned_primary.type"):
+		return _fail("advance accepted a melee_attack primary")
+	return _pass()
+
+
+## Slice 6: the `objective.` source that unlocks a place-directed `advance` must
+## be a WELL-FORMED semantic token, not merely a non-empty suffix. This mirrors
+## `CombatPressureService._valid_source`, which gates `objective.` sources with
+## `V.is_semantic_token`; `MovementGoal.validate()` (the 6B cutover's last line of
+## defence, reached WITHOUT `_valid_source`) must agree.
+static func _t_goal_advance_objective_source_semantic() -> Dictionary:
+	var origin := {"col": 1, "row": 1}
+
+	# NO REGRESSION: a well-formed `objective.<semantic>` source still validates a
+	# place-directed advance (lowercase, digits, dots, underscores are semantic).
+	var well_formed: Dictionary = _purpose_goal(
+		"explore", "advance", "baseline", _action("actor.move"), _action("actor.idle"),
+		[], ["mode.explore", "objective.sit_obj.2", "role.baseline"]
+	)
+	if not bool(GoalContract.validate(well_formed, origin)["valid"]):
+		return _fail("place-directed advance rejected a well-formed objective source: %s" % str(GoalContract.validate(well_formed, origin)))
+
+	# NOW REJECTED (validated under the OLD lax rule): a malformed objective id
+	# with capitals and a hyphen is not a semantic token, so it must not unlock a
+	# place-directed advance. This is the assertion that bites the fix.
+	var malformed: Dictionary = _purpose_goal(
+		"explore", "advance", "baseline", _action("actor.move"), _action("actor.idle"),
+		[], ["mode.explore", "objective.Bad-ID"]
+	)
+	if not _matches(GoalContract.validate(malformed, origin), "advance_requires_named_objective", "pressure_sources"):
+		return _fail("advance accepted a malformed objective id (capitals/hyphen) as a named objective")
+
+	# A source with an interior space is likewise not a semantic token.
+	var spaced: Dictionary = _purpose_goal(
+		"explore", "advance", "baseline", _action("actor.move"), _action("actor.idle"),
+		[], ["mode.explore", "objective.foo bar"]
+	)
+	if not _matches(GoalContract.validate(spaced, origin), "advance_requires_named_objective", "pressure_sources"):
+		return _fail("advance accepted an objective source containing a space")
+	return _pass()
+
+
+## Slice 6 / 6A: `escort` shares `protect`'s plan rule (§13.7 front screen / rear
+## guard need an `actor.guard` primary), and NEITHER admits `actor.idle`.
+static func _t_goal_escort_protect_plans() -> Dictionary:
+	var origin := {"col": 1, "row": 1}
+	for purpose: String in ["protect", "escort"]:
+		var sources: Array = ["mode.guide_spirit", "role.protector"]
+
+		# WOULD FAIL UNDER THE OLD RULE for `escort`: guard was not admitted.
+		var screening: Dictionary = _purpose_goal(
+			"guide_spirit", purpose, "protector", _action("actor.guard"), _action("actor.idle"),
+			["ally.1"], sources
+		)
+		if not bool(GoalContract.validate(screening, origin)["valid"]):
+			return _fail("%s rejected a screening actor.guard primary: %s" % [purpose, str(GoalContract.validate(screening, origin))])
+
+		# Unchanged shape must keep validating.
+		var supporting: Dictionary = _purpose_goal(
+			"guide_spirit", purpose, "protector", _action("protect_ally", "ally.1"), _action("actor.idle"),
+			["ally.1"], sources
+		)
+		if not bool(GoalContract.validate(supporting, origin)["valid"]):
+			return _fail("%s rejected a protect_ally primary" % purpose)
+
+		# THE RULE STILL BITES — these three are the ways to gut it.
+		var idle_primary: Dictionary = _purpose_goal(
+			"guide_spirit", purpose, "protector", _action("actor.idle"), {}, ["ally.1"], sources
+		)
+		if not _matches(GoalContract.validate(idle_primary, origin), "invalid_primary_for_purpose", "planned_primary.type"):
+			return _fail("%s accepted an actor.idle primary" % purpose)
+
+		var attacking: Dictionary = _purpose_goal(
+			"guide_spirit", purpose, "protector", _action("melee_attack", "ally.1"), _action("actor.idle"),
+			["ally.1"], sources
+		)
+		if not _matches(GoalContract.validate(attacking, origin), "invalid_primary_for_purpose", "planned_primary.type"):
+			return _fail("%s accepted a melee_attack primary" % purpose)
+
+		var targeted_guard: Dictionary = _purpose_goal(
+			"guide_spirit", purpose, "protector", _action("actor.guard", "ally.1"), _action("actor.idle"),
+			["ally.1"], sources
+		)
+		if not _matches(GoalContract.validate(targeted_guard, origin), "invalid_primary_target", "planned_primary.target_id"):
+			return _fail("%s accepted a targeted actor.guard primary" % purpose)
+
+		var unlisted_support: Dictionary = _purpose_goal(
+			"guide_spirit", purpose, "protector", _action("protect_ally", "unlisted.actor"), _action("actor.idle"),
+			["ally.1"], sources
+		)
+		if not _matches(GoalContract.validate(unlisted_support, origin), "invalid_primary_target", "planned_primary.target_id"):
+			return _fail("%s accepted an unlisted protect_ally target" % purpose)
+	return _pass()
+
+
+## Slice 6 / 6A (unit 4, CORRECTED): `withdraw` admits the §8.5 step-3 "stop,
+## guard, or observe according to the original intent" primaries alongside
+## `actor.move`. A PURE WIDENING — every shape that validated before still does.
+##
+## This test used to be titled "withdraw forfeits attack" and cited §8.3's action
+## consequence. That claim is RETRACTED (see the `withdraw` branch in
+## MovementGoal): §8.3 is the movement-EXPRESSIONS style table, `PURPOSES` comes
+## from §9 INTENT, and the two merely share a token. The rejections asserted below
+## are NOT a forfeit this change introduced — `melee_attack`, `protect_ally` and
+## `actor.purify_shrine` were already rejected under `withdraw` before it. They are
+## asserted here as REGRESSION COVER on the widening: guard/idle became legal and
+## nothing else did.
+##
+## §8.3's real withdraw consequence remains UNOWNED; it belongs at action
+## resolution, not in a declaration validator.
+static func _t_goal_withdraw_admits_stop_guard_observe() -> Dictionary:
+	var origin := {"col": 1, "row": 1}
+	var sources: Array = ["mode.pursue", "role.quarry"]
+
+	# Unchanged shape.
+	var moving: Dictionary = _purpose_goal(
+		"pursue", "withdraw", "quarry", _action("actor.move"), _action("actor.idle"), [], sources
+	)
+	if not bool(GoalContract.validate(moving, origin)["valid"]):
+		return _fail("withdraw rejected an actor.move primary")
+
+	# WOULD FAIL UNDER THE OLD RULE: the §8.5 step-3 "stop, guard, or observe"
+	# outcomes are now expressible under withdraw.
+	var guarding: Dictionary = _purpose_goal(
+		"pursue", "withdraw", "quarry", _action("actor.guard"), _action("actor.idle"), [], sources
+	)
+	if not bool(GoalContract.validate(guarding, origin)["valid"]):
+		return _fail("withdraw rejected an actor.guard primary: %s" % str(GoalContract.validate(guarding, origin)))
+	var idling: Dictionary = _purpose_goal(
+		"pursue", "withdraw", "quarry", _action("actor.idle"), {}, [], sources
+	)
+	if not bool(GoalContract.validate(idling, origin)["valid"]):
+		return _fail("withdraw rejected an actor.idle primary: %s" % str(GoalContract.validate(idling, origin)))
+
+	# STILL REJECTED, as they already were before the widening — this pins that the
+	# widening admitted guard/idle and NOTHING else. It is not a forfeit this
+	# contract introduced; see the docblock.
+	for forbidden: String in ["melee_attack", "protect_ally", "actor.purify_shrine"]:
+		var committing: Dictionary = _purpose_goal(
+			"pursue", "withdraw", "quarry", _action(forbidden, "target.1"), _action("actor.idle"),
+			["target.1"], sources
+		)
+		if not _matches(GoalContract.validate(committing, origin), "invalid_primary_for_purpose", "planned_primary.type"):
+			return _fail("withdraw accepted a committing %s primary" % forbidden)
+
+	# guard/idle stay position-independent — naming a target is a false claim.
+	var targeted_guard: Dictionary = _purpose_goal(
+		"pursue", "withdraw", "quarry", _action("actor.guard", "target.1"), _action("actor.idle"),
+		["target.1"], sources
+	)
+	if not _matches(GoalContract.validate(targeted_guard, origin), "invalid_primary_target", "planned_primary.target_id"):
+		return _fail("withdraw accepted a targeted actor.guard primary")
+
+	# An unlisted move target is still rejected.
+	var unlisted: Dictionary = _purpose_goal(
+		"pursue", "withdraw", "quarry", _action("actor.move", "unlisted.actor"), _action("actor.idle"),
+		["target.1"], sources
+	)
+	if not _matches(GoalContract.validate(unlisted, origin), "invalid_primary_target", "planned_primary.target_id"):
+		return _fail("withdraw accepted an unlisted actor.move target")
+
+	# An idle primary still forbids a declared fallback.
+	var idle_with_fallback: Dictionary = _purpose_goal(
+		"pursue", "withdraw", "quarry", _action("actor.idle"), _action("actor.idle"), [], sources
+	)
+	if not _matches(GoalContract.validate(idle_with_fallback, origin), "idle_primary_requires_empty_fallback", "declared_fallback"):
+		return _fail("withdraw accepted an idle primary with a declared fallback")
+	return _pass()
+
+
+## Pins the ratified CombatActivationService._PURPOSE_FALLBACK_ALLOW shape.
+static func _t_purpose_fallback_table_ratified() -> Dictionary:
+	var table: Dictionary = ActivationService._PURPOSE_FALLBACK_ALLOW
+	# Coverage is exact in both directions.
+	for purpose_value: Variant in GoalContract.PURPOSES:
+		if not table.has(str(purpose_value)):
+			return _fail("purpose %s has no fallback entry" % str(purpose_value))
+	for key_value: Variant in table:
+		if not GoalContract.PURPOSES.has(str(key_value)):
+			return _fail("fallback table declares unknown purpose %s" % str(key_value))
+	# `read`'s only legal primary is idle, which contractually forbids a declared
+	# fallback — so any entry here would be unreachable.
+	if not (table["read"] as Array).is_empty():
+		return _fail("read declares an unreachable fallback")
+	# Objective progress must be planned, never fallen into.
+	# The universal tail is guard/idle (§8.5 step 3) and nothing broader.
+	var purpose_primaries: Dictionary = {
+		"advance": ["actor.move"],
+		"engage": ["melee_attack"],
+		"pursue": ["melee_attack"],
+		"intercept": [],
+		"hold": [],
+		"cut_off": [],
+		"protect": ["protect_ally"],
+		"escort": ["protect_ally"],
+		"reposition": ["actor.move"],
+		"regroup": ["actor.move"],
+		"withdraw": ["actor.move"],
+		"read": [],
+	}
+	for purpose_value: Variant in table:
+		var purpose: String = str(purpose_value)
+		var allowed: Array = ["actor.guard", "actor.idle"] + (purpose_primaries[purpose] as Array)
+		for entry_value: Variant in table[purpose] as Array:
+			var entry: String = str(entry_value)
+			if entry == "actor.purify_shrine":
+				return _fail("%s admits an objective action as a fallback" % purpose)
+			if not allowed.has(entry):
+				return _fail("%s admits an out-of-purpose fallback %s" % [purpose, entry])
+	return _pass()
+
+
 static func _t_option_exact() -> Dictionary:
 	var option: Dictionary = _option()
 	if not bool(OptionContract.validate(option, {"col": 1, "row": 1})["valid"]):
@@ -533,6 +808,30 @@ static func _option() -> Dictionary:
 		1, 1, 0, 2, 1, 0.0, 0.125, 1.0, [],
 		{"known_count": 1, "known_ids": ["hazard.binding.1"]}, 1.0,
 		_action("actor.move", "objective.relic"), _action("actor.idle")
+	)
+
+
+## Goal builder with full control of mode / role / plans / sources. Destination is
+## always {2,1} so the anchor token is fixed; the tests use origin {1,1}.
+static func _purpose_goal(
+	mode: String,
+	purpose: String,
+	role: String,
+	primary: Dictionary,
+	fallback: Dictionary,
+	relevant: Array,
+	sources: Array
+) -> Dictionary:
+	return GoalContract.build(
+		"goal.%s.%s.%s.c2r1" % [mode, purpose, role],
+		purpose,
+		[{"col": 2, "row": 1}],
+		0.5,
+		0.5,
+		relevant,
+		sources,
+		primary,
+		fallback
 	)
 
 

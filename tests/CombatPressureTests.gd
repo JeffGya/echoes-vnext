@@ -35,6 +35,13 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement/pressure/pursue_fallback_intercept_and_reverse", Callable(CombatPressureTests, "_t_pursue_fallback_intercept_and_reverse"))
 	runner.register_test("movement/pressure/guide_dead_ko", Callable(CombatPressureTests, "_t_guide_dead_ko"))
 	runner.register_test("movement/pressure/pressure_covariance", Callable(CombatPressureTests, "_t_pressure_covariance"))
+	# V2-COMBAT-002 Slice 6 Phase 6A — data.combat.movement.pressure config seam.
+	runner.register_test("movement/pressure/config_defaults_match_constants", Callable(CombatPressureTests, "_t_config_defaults_match_constants"))
+	runner.register_test("movement/pressure/config_collapse_health_seam", Callable(CombatPressureTests, "_t_config_collapse_health_seam"))
+	runner.register_test("movement/pressure/config_fallback_radius_seam", Callable(CombatPressureTests, "_t_config_fallback_radius_seam"))
+	runner.register_test("movement/pressure/config_intercept_lane_seam", Callable(CombatPressureTests, "_t_config_intercept_lane_seam"))
+	runner.register_test("movement/pressure/config_degenerate_values_safe", Callable(CombatPressureTests, "_t_config_degenerate_values_safe"))
+	runner.register_test("movement/pressure/config_balance_wired", Callable(CombatPressureTests, "_t_config_balance_wired"))
 
 
 static func _t_all_modes_party_hostile() -> Dictionary:
@@ -561,6 +568,223 @@ static func _t_pressure_covariance() -> Dictionary:
 		if not bool(covariance["ok"]):
 			return covariance
 	return _pass()
+
+
+# ---------------------------------------------------------------------------
+# V2-COMBAT-002 Slice 6 Phase 6A — `data.combat.movement.pressure` config seam.
+#
+# The seam is an OPTIONAL trailing argument on `build_goals`. These tests pin
+# three separate properties, because they can fail independently:
+#   1. an ABSENT block reproduces the frozen Slice 4 constants exactly;
+#   2. a PRESENT block is actually read (each key changes observable output);
+#   3. a DEGENERATE block neither crashes nor silently empties a region.
+# ---------------------------------------------------------------------------
+
+
+## The full block, stated explicitly at the frozen constant values. Passing this
+## must be indistinguishable from passing nothing.
+static func _explicit_default_cfg() -> Dictionary:
+	return {
+		"collapse_health": Service.COLLAPSE_HEALTH,
+		"fallback_radius": Service.FALLBACK_RADIUS,
+		"intercept_lane_inner_band": Service.INTERCEPT_LANE_INNER_BAND,
+		"intercept_lane_radius": Service.INTERCEPT_LANE_RADIUS,
+	}
+
+
+## Property 1 — an absent block is exactly today's behaviour, across every mode
+## and alignment, and matches the block stated explicitly at the constants.
+static func _t_config_defaults_match_constants() -> Dictionary:
+	var explicit: Dictionary = _explicit_default_cfg()
+	for mode_value: Variant in PressureContract.MODES:
+		var mode: String = str(mode_value)
+		for alignment: String in ["party", "hostile"]:
+			var absent: Dictionary = Service.build_goals(_context(mode, alignment))
+			var empty_block: Dictionary = Service.build_goals(_context(mode, alignment), {})
+			var stated: Dictionary = Service.build_goals(_context(mode, alignment), explicit)
+			if absent != empty_block:
+				return _fail("%s/%s: empty config block diverged from omitted argument" % [mode, alignment])
+			if absent != stated:
+				return _fail("%s/%s: explicit constants diverged from defaults" % [mode, alignment])
+	# Same claim on the collapse path, which the healthy fixture above never reaches.
+	var collapsing: Dictionary = _collapsing_context(Service.COLLAPSE_HEALTH)
+	if Service.build_goals(collapsing) != Service.build_goals(_collapsing_context(Service.COLLAPSE_HEALTH), explicit):
+		return _fail("collapse path: explicit constants diverged from defaults")
+	return _pass()
+
+
+## Property 2a — `collapse_health` gates the board fall-back and is read from config.
+## A mover at 0.6 health is ABOVE the frozen 0.5 band, so it must not fall back by
+## default, and must fall back once config raises the band past it.
+static func _t_config_collapse_health_seam() -> Dictionary:
+	if not _goal(Service.build_goals(_collapsing_context(0.6)), "withdraw").is_empty():
+		return _fail("0.6 health fell back under the default 0.5 collapse band")
+	var raised: Dictionary = Service.build_goals(_collapsing_context(0.6), {"collapse_health": 0.75})
+	if _goal(raised, "withdraw").is_empty():
+		return _fail("config collapse_health 0.75 was not read: no withdraw at 0.6 health")
+	# ...and lowering it below a collapsing mover suppresses the fall-back.
+	var lowered: Dictionary = Service.build_goals(_collapsing_context(0.4), {"collapse_health": 0.25})
+	if not _goal(lowered, "withdraw").is_empty():
+		return _fail("config collapse_health 0.25 was not read: withdraw at 0.4 health")
+	# A collapsing mover DOES fall back by default — otherwise the two checks
+	# above would pass vacuously on a fixture that can never produce a withdraw.
+	if _goal(Service.build_goals(_collapsing_context(0.4)), "withdraw").is_empty():
+		return _fail("fixture cannot produce a withdraw at all; seam checks are vacuous")
+	return _pass()
+
+
+## Property 2b — `fallback_radius` bounds the search for safer ground. A tighter
+## radius must yield a strictly smaller, non-empty region that is a subset of the
+## default one.
+static func _t_config_fallback_radius_seam() -> Dictionary:
+	var default_region: Array = _withdraw_region(Service.build_goals(_collapsing_context(0.4)))
+	if default_region.is_empty():
+		return _fail("default fallback region empty; seam check would be vacuous")
+	var tight_region: Array = _withdraw_region(
+		Service.build_goals(_collapsing_context(0.4), {"fallback_radius": 1})
+	)
+	if tight_region.is_empty():
+		return _fail("fallback_radius 1 silently emptied the region")
+	if tight_region.size() >= default_region.size():
+		return _fail("fallback_radius 1 did not narrow the region: %s" % str(tight_region))
+	for cell_value: Variant in tight_region:
+		if not default_region.has(cell_value):
+			return _fail("tight region left the default region: %s" % str(cell_value))
+	return _pass()
+
+
+## Property 2c — the interception-lane band. BOTH ends are seamed: the outer
+## radius (already named) and the inner band (previously an unnamed literal 2 at
+## the `_lane_or_authored` call site).
+static func _t_config_intercept_lane_seam() -> Dictionary:
+	var default_lane: Array = _lane_region(_lane_context())
+	if default_lane.is_empty():
+		return _fail("default derived lane empty; seam check would be vacuous")
+	# Inner band 1 turns the lane into a close screen — a different band, so a
+	# different region. This is the literal the carry-forward list missed.
+	var inner_lane: Array = _lane_region(_lane_context(), {"intercept_lane_inner_band": 1})
+	if inner_lane.is_empty():
+		return _fail("intercept_lane_inner_band 1 silently emptied the lane")
+	if inner_lane == default_lane:
+		return _fail("intercept_lane_inner_band was not read: lane unchanged")
+	# Widening the outer radius can only add cells, never remove them.
+	var wide_lane: Array = _lane_region(_lane_context(), {"intercept_lane_radius": 5})
+	if wide_lane.size() < default_lane.size():
+		return _fail("intercept_lane_radius 5 narrowed the lane")
+	for cell_value: Variant in default_lane:
+		if not wide_lane.has(cell_value):
+			return _fail("widened lane lost a default cell: %s" % str(cell_value))
+	return _pass()
+
+
+## Property 3 — a degenerate block must degrade to a safe value, never crash and
+## never silently produce an empty region. Zero and negative radii are the real
+## hazard: they would make every derived region vanish while every call still
+## reported `valid`.
+static func _t_config_degenerate_values_safe() -> Dictionary:
+	var degenerate: Array = [
+		{},
+		{"fallback_radius": 0},
+		{"fallback_radius": -4},
+		{"intercept_lane_radius": 0},
+		{"intercept_lane_radius": -1},
+		{"intercept_lane_inner_band": 0},
+		{"intercept_lane_inner_band": -3},
+		# Inner band above the outer band would make every membership test fail.
+		{"intercept_lane_inner_band": 9, "intercept_lane_radius": 2},
+		# Wrong-typed values are config typos, not tuning.
+		{"fallback_radius": "3", "collapse_health": "0.5"},
+		{"fallback_radius": null, "intercept_lane_radius": null},
+		{"collapse_health": 2.5},
+		{"collapse_health": -1.0},
+		# Unknown keys must be ignored rather than disturbing anything.
+		{"not_a_real_key": 99},
+	]
+	for cfg_value: Variant in degenerate:
+		var cfg: Dictionary = cfg_value as Dictionary
+		var fallback_result: Dictionary = Service.build_goals(_collapsing_context(0.4), cfg)
+		if not bool(fallback_result["valid"]):
+			return _fail("degenerate cfg %s rejected a valid context" % str(cfg))
+		# `collapse_health` 0 legitimately disables the fall-back; every OTHER
+		# degenerate value must still produce a region.
+		if float(cfg.get("collapse_health", 1.0)) > 0.0:
+			if _withdraw_region(fallback_result).is_empty():
+				return _fail("degenerate cfg %s silently emptied the fallback region" % str(cfg))
+		var lane: Array = _lane_region(_lane_context(), cfg)
+		if lane.is_empty():
+			return _fail("degenerate cfg %s silently emptied the lane region" % str(cfg))
+	return _pass()
+
+
+## The block must exist in the live balance.json at the documented values —
+## otherwise the seam is real but unreachable. House `_t_balance_config_wired`
+## idiom, matching MovementProfileTests / MovementHazardTests.
+static func _t_config_balance_wired() -> Dictionary:
+	var config := ConfigService.new()
+	config.load_balance()
+	var movement_cfg: Dictionary = config.get_balance() \
+		.get("data", {}) \
+		.get("combat", {}) \
+		.get("movement", {})
+	var pressure_cfg: Dictionary = movement_cfg.get("pressure", {})
+	if pressure_cfg.is_empty():
+		return _fail("data.combat.movement.pressure missing from balance.json")
+	var expected: Dictionary = _explicit_default_cfg()
+	for key: String in expected:
+		if not pressure_cfg.has(key):
+			return _fail("pressure config missing key '%s'" % key)
+		if not is_equal_approx(float(pressure_cfg[key]), float(expected[key])):
+			return _fail("pressure config '%s' differs from the frozen constant" % key)
+	# The authored block must be behaviourally identical to the defaults it seams.
+	if Service.build_goals(_collapsing_context(0.4), pressure_cfg) != Service.build_goals(_collapsing_context(0.4)):
+		return _fail("balance.json pressure block is not behaviourally identical to defaults")
+	# Slack seam (decision 5): the keys must exist for the adapter to read in a
+	# later unit, and must not WIDEN the MovementOption contract floor of 2 / 0.25.
+	var slack_cfg: Dictionary = movement_cfg.get("slack", {})
+	if slack_cfg.is_empty():
+		return _fail("data.combat.movement.slack missing from balance.json")
+	for key: String in ["floor", "fraction"]:
+		if not slack_cfg.has(key):
+			return _fail("slack config missing key '%s'" % key)
+	if int(slack_cfg["floor"]) > 2 or float(slack_cfg["fraction"]) > 0.25:
+		return _fail("slack config widens past the MovementOption contract floor (2 / 0.25)")
+	return _pass()
+
+
+## A `combat`/`party` context whose mover carries the given health ratio, so the
+## board fall-back path is reachable. Everything else matches `_context`.
+static func _collapsing_context(health_ratio: float) -> Dictionary:
+	var context: Dictionary = _context("combat", "party")
+	var mover: Dictionary = _actor_ref(context, "echo.mover")
+	mover["health_ratio"] = health_ratio
+	return context
+
+
+## A `protect`/`party` context with the authored approach region REMOVED, which is
+## the only condition under which `_lane_or_authored` derives a lane at all. The
+## hostile is moved far enough from the protected actor that the default inner
+## band of 2 still has a geodesic to stand on.
+static func _lane_context() -> Dictionary:
+	var context: Dictionary = _context("protect", "party")
+	(context["objective_pressure"] as Dictionary)["approach_region"] = []
+	var hostile: Dictionary = _actor_ref(context, "enemy.1")
+	hostile["position"] = {"col": 0, "row": 0}
+	var occupancy: Dictionary = context["occupancy"] as Dictionary
+	occupancy.erase("4,2")
+	occupancy["0,0"] = "enemy.1"
+	return context
+
+
+## The derived interception lane published for the given context/config, or [] if
+## no intercept goal survived.
+static func _lane_region(context: Dictionary, pressure_cfg: Dictionary = {}) -> Array:
+	var intercept: Dictionary = _goal(Service.build_goals(context, pressure_cfg), "intercept")
+	return [] if intercept.is_empty() else intercept["destination_region"] as Array
+
+
+static func _withdraw_region(result: Dictionary) -> Array:
+	var withdraw: Dictionary = _goal(result, "withdraw")
+	return [] if withdraw.is_empty() else withdraw["destination_region"] as Array
 
 
 static func _context(mode: String, alignment: String, role: String = "baseline") -> Dictionary:

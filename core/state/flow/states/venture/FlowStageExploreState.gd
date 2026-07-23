@@ -579,7 +579,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		var _bdd: Dictionary = _bdd_v if _bdd_v is Dictionary else {}
 		var _de_v: Variant = _bdd.get(_dir_id_snap, {})
 		_dir_snap = _de_v if _de_v is Dictionary else {}
-	var _step_budget_snap := int(_dir_snap.get("step_budget", 3))
+	var _step_budget_snap := int(_dir_snap.get("step_budget", DirectiveService.DEFAULT_STEP_BUDGET))
 
 	# V2-STAGE-004 Phase 5: composite directive field — bundles the active directive's
 	# id + label so the UI does not need to separately resolve config to show it.

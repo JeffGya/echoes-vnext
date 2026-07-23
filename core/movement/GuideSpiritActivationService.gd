@@ -127,8 +127,75 @@
 #   The chosen step is packaged as a MovementIntent and run through
 #   CombatActivationService.activate, so the spirit obeys the identical terrain,
 #   occupancy, two-solid-corners diagonal, hostile-control, hazard and event rules
-#   as any other actor. The declared action is a position-independent actor.idle
-#   (the non-joining spirit never attacks), so no action ever invalidates.
+#   as any other actor. Every declared action is position-independent (empty
+#   target_id) — the non-joining spirit never attacks — so no action ever
+#   invalidates and the declared fallback is never consulted.
+#
+# ---------------------------------------------------------------------------
+# DECLARED PURPOSE AND PLAN (slice 6, Phase 6A, Unit 4)
+# ---------------------------------------------------------------------------
+#   The spirit declares a MovementGoal purpose describing what IT does, never the
+#   caller's guide mode label:
+#
+#     escort mode + a step   -> "advance"   plan `actor.move`,  fallback `actor.idle`
+#     protect mode + a step  -> "withdraw"  plan `actor.move`,  fallback `actor.idle`
+#     no step at all         -> "hold"      plan `actor.guard`, fallback `actor.idle`
+#
+#   WHY THE PLAN CHANGED (this is the fix, not a cosmetic edit).
+#
+#   Unit 2 aligned the PURPOSES but left the plan as a blanket `actor.idle`, which
+#   only moved the blocker rather than removing it. `MovementGoal`'s
+#   `_validate_plan_for_purpose` admits `actor.idle` under exactly two purposes —
+#   `read` and (after Unit 2's widening) `withdraw`. So of the three purposes this
+#   service declares, only `withdraw` validated:
+#
+#     advance + actor.idle -> invalid_primary_for_purpose  (needs actor.move /
+#                                                           actor.purify_shrine)
+#     hold    + actor.idle -> invalid_primary_for_purpose  (needs actor.guard)
+#
+#   Two of the three shapes `BehaviorArbiter._validate_movement_inputs` will see at
+#   cutover were still rejects. The cutover was still blocked.
+#
+#   THE FIX CHANGES THE DECLARATION, NOT THE VALIDATOR. No purpose rule is widened
+#   and no purpose is relabelled; the spirit simply stops declaring a plan that
+#   contradicts its own purpose. `actor.idle` was never truthful here anyway: it
+#   means "this mover performs no action", and §8.3 gives movement its own
+#   expressions — a mover whose entire activation IS the move declares `actor.move`
+#   (the same token `reposition` / `regroup` / stage `explore` goals already use for
+#   pure-movement plans), and a mover that stays put declares `actor.guard` (§8.3
+#   "Hold | Uses little or no movement | Gains position-specific guard/objective
+#   value"). Widening `advance` to admit `actor.idle` was rejected as the
+#   alternative: it would let ANY mover claim it advances on an objective while
+#   declaring it does nothing, which is the whole rule.
+#
+#   AGAINST §9 (docs/movement-model.md, Movement Intent Vocabulary):
+#     advance  "reduce route distance to an authored objective or priority subject"
+#              — the escorting spirit walks its authored destination. That
+#              destination is a PLACE, not an actor, so this is the place-directed
+#              advance shape: EMPTY target_id plus an `objective.` pressure source
+#              (see OBJECTIVE_PRESSURE_SOURCE). It is also what
+#              `CombatPressureService._add_guide` already models this mover as
+#              (`advance`, role "spirit"), so the two producers agree.
+#     withdraw "increase safety while preserving future participation" — the
+#              skittish spirit backs away from the nearest threat. Note this shape
+#              (`withdraw` + `actor.move`) validated BEFORE Unit 2's widening too,
+#              so the spirit does not depend on it.
+#     hold     "establish or maintain an anchor" — the gated, refused or
+#              unrecognised-mode spirit holds its ground.
+#
+#   AGAINST docs/combat-modes.md §13.7: the non-joining spirit is "a moving
+#   anchor" on its "authored objective-phase movement and pace". The authored
+#   one-cell pace, the hard `joined` precondition, `objective_progress` 0.0 and
+#   every step-selection rule below are UNCHANGED by this fix. `resolved_action` is
+#   DECLARED ONLY and never executed (CombatActivationService step 5), and every
+#   declared primary here has an empty target_id, so it is position-independent,
+#   always revalidates at the final cell, and `stop_reason` is untouched.
+#
+# STILL UNOWNED — `withdraw`'s §8.3 action consequence. See MovementGoal's
+# `withdraw` branch: §8.3 is the movement-EXPRESSIONS table, a style vocabulary,
+# while `MovementGoal.PURPOSES` comes from §9 INTENT. Enforcing the forfeit
+# belongs at action resolution, not in a contract validator, and nothing owns it
+# yet.
 
 class_name GuideSpiritActivationService
 extends RefCounted
@@ -149,6 +216,59 @@ const DEFAULT_AUTHORED_SOURCE: String = "guide_spirit_nonjoining"
 
 ## Correlation goal_id stamped when the PRECONDITION is violated (joined spirit).
 const REFUSED_JOINED_GOAL_ID: String = "guide.refused_joined_spirit"
+
+## guide_state.mode is a CALLER MODE LABEL, not a MovementGoal purpose. The two
+## were conflated: this service used to declare the purpose "escort"/"protect",
+## which are the GUARDIAN's purposes (§9 — escort: "maintain a moving protection
+## relationship"; protect: "move into useful support or guard reach of an
+## entrusted subject"). The non-joining spirit is the guarded SUBJECT, not the
+## guardian: it walks to its authored destination, or backs away from a threat.
+## Declaring a guardian purpose alongside an `actor.idle` plan produced a shape
+## MovementGoal rejects, which would have blocked the slice-6 live cutover.
+##
+## CombatPressureService._add_guide already models this exact mover as
+## `advance` / role "spirit", so this alignment REMOVES a divergence between the
+## two producers rather than inventing a new vocabulary.
+const _MODE_PURPOSE: Dictionary = {
+	MODE_ESCORT: "advance",    # reduce route distance to the authored destination
+	MODE_PROTECT: "withdraw",  # increase safety while preserving participation
+}
+
+## Declared when no step was selected: caller gate closed, joined refusal, or an
+## unrecognised mode. "hold" (§9: "establish or maintain an anchor") is the only
+## truthful purpose for a mover that does not move.
+const PURPOSE_NO_MOVEMENT: String = "hold"
+
+## The plan the spirit declares when it HAS a step. Its whole activation is the
+## move, so `actor.move` is the truthful primary — the same token every other
+## pure-movement goal in the contract (`reposition`, `regroup`, stage `explore`)
+## declares. Target is empty: the spirit acts on no one.
+const PRIMARY_MOVING: String = "actor.move"
+
+## The plan the spirit declares when it holds. §8.3 "Hold | Uses little or no
+## movement | Gains position-specific guard/objective value", and `actor.guard` is
+## the primary `MovementGoal` requires under the `hold` purpose. Target is empty.
+const PRIMARY_HOLDING: String = "actor.guard"
+
+## `MovementGoal`'s universal fallback: `actor.idle`, empty target, empty payload.
+## Required on any non-idle primary. It is never actually consulted here — every
+## primary above is position-independent and always revalidates at the final cell.
+const FALLBACK_UNIVERSAL: String = "actor.idle"
+
+## The `objective.` pressure source a slice-6 caller MUST publish on the goal it
+## builds around an `advance` result.
+##
+## `MovementGoal._validate_plan_for_purpose` admits a PLACE-DIRECTED `advance`
+## (empty `planned_primary.target_id`) only when `pressure_sources` names what it
+## advances toward under the `objective.` prefix — otherwise a place-directed
+## advance would be indistinguishable from a `reposition`. The escort destination
+## is a place, so this is that name. It is published here as a constant rather
+## than left to the caller to invent, so the seam has ONE spelling.
+##
+## Purpose intentionally does NOT depend on this source: it is derived from the
+## spirit's own mode and step. The service declares the purpose; the caller
+## publishes the matching source.
+const OBJECTIVE_PRESSURE_SOURCE: String = "objective.guide_spirit"
 
 
 static func activate_spirit(
@@ -197,6 +317,22 @@ static func activate_spirit(
 	var goal_id: String = REFUSED_JOINED_GOAL_ID if joined else str(
 		guide_state.get("goal_id", "guide.%s" % (mode if not mode.is_empty() else "hold"))
 	)
+
+	# Purpose is derived from what the spirit ACTUALLY does this activation: a
+	# selected step under a known mode, or no movement at all. The PLAN is then
+	# derived from the same fact, so purpose and plan can never contradict — which
+	# is exactly the pairing MovementGoal validates. See the DECLARED PURPOSE AND
+	# PLAN header block.
+	var purpose: String = PURPOSE_NO_MOVEMENT
+	if not path.is_empty():
+		purpose = str(_MODE_PURPOSE.get(mode, PURPOSE_NO_MOVEMENT))
+
+	# Both primaries carry an EMPTY target_id, so CombatActivationService treats
+	# them as position-independent, they always revalidate at the final cell, the
+	# purpose-restricted fallback table is never consulted, and `resolved_action`
+	# always equals `planned_action`. Movement behaviour is therefore untouched.
+	var primary_type: String = PRIMARY_HOLDING if path.is_empty() else PRIMARY_MOVING
+
 	var intent: Dictionary = IntentContract.build(
 		mover_id,
 		str(guide_state.get("activation_id", "guide.activation")),
@@ -205,15 +341,13 @@ static func activate_spirit(
 		path,
 		int(profile.get("capacity", AUTHORED_CAPACITY)),
 		commitment,
-		ActionPlan.build("actor.idle"),
-		{},
+		ActionPlan.build(primary_type),
+		ActionPlan.build(FALLBACK_UNIVERSAL),
 		[]
 	)
 
 	var action_ctx: Dictionary = {
-		# escort/protect are both declared MovementGoal purposes; actor.idle is a
-		# permitted fallback for each, so the idle plan can never invalidate.
-		"purpose": MODE_ESCORT if mode == MODE_ESCORT else MODE_PROTECT,
+		"purpose": purpose,
 		"goal_id": str(intent["goal_id"]),
 		"option_id": str(intent["option_id"]),
 		# NO objective authority here — progress scoring belongs to the caller.
