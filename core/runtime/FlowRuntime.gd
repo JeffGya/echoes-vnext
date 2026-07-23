@@ -6110,7 +6110,7 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 
 	# V2-STAGE-004-P2: resolve directive once for this turn
 	var directive := directive_service.get_active_directive()
-	var step_budget := int(directive.get("step_budget", 3))
+	var step_budget := int(directive.get("step_budget", DirectiveService.DEFAULT_STEP_BUDGET))
 	# V2-STAGE-004 Phase 2.5: reveal_radius replaces passive_reveal_radius as the primary fog lever.
 	# Both directives always reveal (radius is the differentiator — Scout wide, Seek narrow).
 	var reveal_radius := int(directive.get("reveal_radius", directive.get("passive_reveal_radius", 2)))

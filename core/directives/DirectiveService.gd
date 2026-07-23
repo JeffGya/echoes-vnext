@@ -14,6 +14,23 @@ extends RefCounted
 #   pros  — Array[String] of 2 player-facing benefit labels (game-tone, not mechanical)
 #   cons  — Array[String] of 2 player-facing risk labels (game-tone, not mechanical)
 
+## V2-COMBAT-002 Slice 6 Phase 6A — the ONE step-budget fallback.
+##
+## The REAL value is always authored per directive in `data.directives.<id>.step_budget`
+## (Scout Carefully 3, Seek Signs 6) and is read from balance.json by every consumer.
+## This constant is ONLY the missing-key default for a directive dict that carries no
+## `step_budget` at all — a malformed, partially-loaded, or legacy-save directive.
+##
+## It deliberately lives on this class rather than in balance.json: it is the fallback
+## FOR a balance.json read, so sourcing it from the same file it guards would be
+## circular — the case it exists to cover is precisely the case where that file did not
+## supply the value. It also stays out of `core/movement/`, which is still dormant and
+## must not acquire a production caller.
+##
+## `FlowRuntime` and `FlowStageExploreState` previously each hardcoded their own `3`
+## and could silently diverge. Both now read this.
+const DEFAULT_STEP_BUDGET: int = 3
+
 const _REGISTRY: Dictionary = {
 	"directive.scout_carefully": {
 		"id":          "directive.scout_carefully",

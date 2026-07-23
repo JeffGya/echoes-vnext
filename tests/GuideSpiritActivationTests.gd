@@ -14,6 +14,7 @@ const GuideActivation = preload("res://core/movement/GuideSpiritActivationServic
 const ProfileService = preload("res://core/movement/MovementProfileService.gd")
 const ResultContract = preload("res://core/movement/contracts/MovementResult.gd")
 const HazardFixtures = preload("res://core/movement/MovementHazardFixtures.gd")
+const GoalContract = preload("res://core/movement/contracts/MovementGoal.gd")
 
 
 static func register(runner: CoreTestRunner) -> void:
@@ -35,6 +36,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement/guide_spirit/protect_moves_with_adjacent_active_hostile", Callable(GuideSpiritActivationTests, "_t_protect_moves_with_adjacent_hostile"))
 	runner.register_test("movement/guide_spirit/escort_moves_when_step_adjacent_to_active_hostile", Callable(GuideSpiritActivationTests, "_t_escort_moves_adjacent_hostile"))
 	runner.register_test("movement/guide_spirit/escort_moves_onto_cost_two_terrain", Callable(GuideSpiritActivationTests, "_t_escort_moves_onto_cost_two_terrain"))
+	runner.register_test("movement/guide_spirit/declared_goal_passes_movement_goal_validate", Callable(GuideSpiritActivationTests, "_t_declared_goal_validates"))
 	runner.register_test("movement/guide_spirit/deterministic_replay", Callable(GuideSpiritActivationTests, "_t_deterministic_replay"))
 	runner.register_test("movement/guide_spirit/no_input_mutation", Callable(GuideSpiritActivationTests, "_t_no_mutation"))
 
@@ -170,8 +172,11 @@ static func _t_escort_one_cell() -> Dictionary:
 			int(result["voluntary_cost"]), int(result["remaining_capacity"])])
 	if str(result["stop_reason"]) != "reached_destination":
 		return _fail("expected reached_destination, got %s" % str(result["stop_reason"]))
-	if str(result["purpose"]) != "escort":
-		return _fail("expected escort purpose, got %s" % str(result["purpose"]))
+	# Slice 6 / 6A: escort MODE declares the `advance` PURPOSE — the spirit is the
+	# guarded subject reducing route distance to its authored destination, not the
+	# guardian maintaining a protection relationship. See _t_declared_goal_validates.
+	if str(result["purpose"]) != "advance":
+		return _fail("expected advance purpose, got %s" % str(result["purpose"]))
 	if not bool(ResultContract.validate(result)["valid"]):
 		return _fail("escort result rejected: %s" % str(ResultContract.validate(result)))
 	return _pass()
@@ -229,8 +234,10 @@ static func _t_skittish_away() -> Dictionary:
 		return _fail("skittish step should be (2,2), got %s" % str(result["final_destination"]))
 	if (result["actual_traversed_cells"] as Array).size() != 1:
 		return _fail("skittish moved more than one cell: %s" % str(result["actual_traversed_cells"]))
-	if str(result["purpose"]) != "protect":
-		return _fail("expected protect purpose, got %s" % str(result["purpose"]))
+	# Slice 6 / 6A: protect MODE declares the `withdraw` PURPOSE — the skittish
+	# spirit increases its own safety; it does not guard anyone.
+	if str(result["purpose"]) != "withdraw":
+		return _fail("expected withdraw purpose, got %s" % str(result["purpose"]))
 	if not bool(ResultContract.validate(result)["valid"]):
 		return _fail("skittish result rejected: %s" % str(ResultContract.validate(result)))
 	return _pass()
@@ -418,7 +425,8 @@ static func _t_golden_escort_result() -> Dictionary:
 		"activation_id": "guide.activation",
 		"goal_id": "guide.escort",
 		"option_id": "guide.step",
-		"purpose": "escort",
+		# Slice 6 / 6A: escort mode -> `advance` purpose (see _t_declared_goal_validates).
+		"purpose": "advance",
 		"origin": _cell(1, 1),
 		"final_destination": _cell(2, 2),
 		"planned_path": [_cell(2, 2)],
@@ -760,6 +768,109 @@ static func _t_escort_moves_onto_cost_two_terrain() -> Dictionary:
 # ---------------------------------------------------------------------------
 # DETERMINISM / PURITY
 # ---------------------------------------------------------------------------
+
+## THE CUTOVER SEAM — slice 6 / 6A, Unit 4.
+##
+## What this test replaced, and why: it used to assert only
+## `GoalContract.PURPOSES.has(purpose)`. That is VOCABULARY MEMBERSHIP, not
+## validatability, so it passed green while the service emitted two combinations
+## `MovementGoal.validate` rejects outright (`advance` + `actor.idle` and `hold` +
+## `actor.idle`) — i.e. it certified as fixed the exact blocker Phase 6A exists to
+## remove, and its docstring claimed behaviour the code did not have.
+##
+## The real seam is this: at cutover `BehaviorArbiter._validate_movement_inputs`
+## builds a `MovementGoal` around what `activate_spirit` declared and validates it.
+## So this test BUILDS THAT GOAL — from the result's own purpose, planned_action
+## and fallback, nothing invented — and asserts `MovementGoal.validate` passes, for
+## every purpose the service can declare. If any purpose/plan pairing is
+## unexpressible, the cutover is blocked and this test says so.
+##
+## Behaviour assertions are kept alongside, because the fix must be a change of
+## DECLARATION only: same step selection, same one-cell pace, `objective_progress`
+## still 0.0, and every declared primary still position-independent so it always
+## resolves and never perturbs `stop_reason`.
+static func _t_declared_goal_validates() -> Dictionary:
+	var origin: Dictionary = _cell(1, 1)
+	var cases: Array = [
+		# [label, guide_state, expected purpose, expected primary, expects movement]
+		["escort", _escort_state(_cell(5, 1)), "advance", "actor.move", true],
+		["protect", _protect_state([_cell(3, 1)]), "withdraw", "actor.move", true],
+		["escort gated", _escort_state(_cell(5, 1), {"should_move": false}), "hold", "actor.guard", false],
+		["protect no threats", _protect_state([]), "hold", "actor.guard", false],
+		["joined refusal", _escort_state(_cell(5, 1), {"joined": true}), "hold", "actor.guard", false],
+		["unknown mode", _escort_state(_cell(5, 1), {"mode": "wander"}), "hold", "actor.guard", false],
+	]
+	var seen_purposes: Dictionary = {}
+	for case_value: Variant in cases:
+		var case: Array = case_value as Array
+		var label: String = str(case[0])
+		var result: Dictionary = GuideActivation.activate_spirit(
+			_spirit(), _ctx(), case[1] as Dictionary, _hazard_ctx(), _capacity_cfg()
+		)
+		var purpose: String = str(result["purpose"])
+		if purpose != str(case[2]):
+			return _fail("%s declared purpose %s, expected %s" % [label, purpose, str(case[2])])
+		seen_purposes[purpose] = true
+
+		# --- THE ASSERTION THAT MATTERS -------------------------------------
+		var goal: Dictionary = _goal_from_result(result)
+		var goal_validation: Dictionary = GoalContract.validate(goal, origin)
+		if not bool(goal_validation["valid"]):
+			return _fail(
+				"%s: MovementGoal.validate REJECTED the declared goal (%s @ %s). "
+				% [label, str(goal_validation["reason"]), str(goal_validation["field"])]
+				+ "purpose=%s planned=%s fallback=%s — the slice-6 cutover is blocked."
+				% [purpose, str(result["planned_action"]), str(result["fallback"])]
+			)
+
+		# --- Declaration is truthful and behaviour is unchanged ---------------
+		if str((result["planned_action"] as Dictionary)["type"]) != str(case[3]):
+			return _fail("%s declared primary %s, expected %s" % [
+				label, str((result["planned_action"] as Dictionary)["type"]), str(case[3])])
+		if not str((result["planned_action"] as Dictionary)["target_id"]).is_empty():
+			return _fail("%s named an action target — the spirit acts on no one" % label)
+		if (result["resolved_action"] as Dictionary) != (result["planned_action"] as Dictionary):
+			return _fail("%s plan failed to resolve as planned: %s" % [label, str(result["resolved_action"])])
+		if float(result["objective_progress"]) != 0.0:
+			return _fail("%s scored objective progress" % label)
+		var moved: bool = (result["final_destination"] as Dictionary) != origin
+		if moved != bool(case[4]):
+			return _fail("%s movement changed: moved=%s" % [label, str(moved)])
+		if not bool(ResultContract.validate(result)["valid"]):
+			return _fail("%s result rejected: %s" % [label, str(ResultContract.validate(result))])
+
+	# All three declarable purposes were actually exercised — a case list that
+	# silently stopped covering one would otherwise weaken this test invisibly.
+	for required: String in ["advance", "withdraw", "hold"]:
+		if not seen_purposes.has(required):
+			return _fail("no case exercised the %s purpose" % required)
+	return _pass()
+
+
+## The MovementGoal a slice-6 caller builds around one activation result.
+##
+## Everything comes from the result itself. The only caller-owned inputs are the
+## correlation shape (`goal.<mode>.<purpose>.<role>.<anchor>`, with the
+## `guide_spirit` MODE and `spirit` ROLE both already in MovementGoal's allowlists,
+## matching CombatPressureService._add_guide) and the pressure sources — including
+## `GuideActivation.OBJECTIVE_PRESSURE_SOURCE`, which the contract requires on a
+## PLACE-DIRECTED `advance` and which the service publishes as a constant so caller
+## and contract cannot spell it differently.
+static func _goal_from_result(result: Dictionary) -> Dictionary:
+	var anchor: Dictionary = result["final_destination"] as Dictionary
+	var purpose: String = str(result["purpose"])
+	return GoalContract.build(
+		"goal.guide_spirit.%s.spirit.c%dr%d" % [purpose, int(anchor["col"]), int(anchor["row"])],
+		purpose,
+		[anchor],
+		0.5,
+		float(result["objective_progress"]),
+		[],
+		["mode.guide_spirit", "role.spirit", GuideActivation.OBJECTIVE_PRESSURE_SOURCE],
+		result["planned_action"] as Dictionary,
+		result["fallback"] as Dictionary
+	)
+
 
 static func _t_deterministic_replay() -> Dictionary:
 	var context: Dictionary = _ctx({

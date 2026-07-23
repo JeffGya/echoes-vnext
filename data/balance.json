@@ -1516,6 +1516,18 @@
 					"unstable": { "displacement_cells": 1, "fallback_damage": 3 },
 					"binding": { "stops_movement": true },
 					"burning": { "end_activation_damage": 3 }
+				},
+				"pressure": {
+					"_comment": "V2-COMBAT-002 Slice 6 Phase 6A: config seam for CombatPressureService spatial-mode tuning. STILL DORMANT — no production caller passes this block yet. collapse_health is the mover health ratio at or below which a board fall-back (withdraw) candidate joins the SAFETY bucket at HIGH urgency alongside the ordinary NORMAL engage. fallback_radius bounds the reachable search for strictly-safer ground. intercept_lane_inner_band / intercept_lane_radius are the Chebyshev band, measured from the PROTECTED actor, for a DERIVED interception lane; the close screen (band 1..1) is intentionally not configurable because band 1 is what makes it a screen. Values equal the frozen Slice 4 constants, and every key falls back to its constant when absent, so an absent block reproduces today's behaviour exactly. Radii are clamped to >= 1 and inner <= outer so a degenerate value cannot silently empty a region.",
+					"collapse_health": 0.5,
+					"fallback_radius": 3,
+					"intercept_lane_inner_band": 2,
+					"intercept_lane_radius": 3
+				},
+				"slack": {
+					"_comment": "V2-COMBAT-002 Slice 6 Phase 6A: config seam for StagePartyMovementAdapter's route-slack tuning knob. StagePartyMovementAdapter._slack_envelope READS these keys (they are injected by the caller as the slack_config argument — the adapter never loads config itself). The adapter as a whole is STILL DORMANT: it has no production caller until the slice-6 cutover. normal_slack_limit = max(floor, ceil(nearest_distance * fraction)). MovementOption.gd's inline maxi(2, ceili(dist * 0.25)) is the INVARIANT CONTRACT FLOOR and stays deliberately config-free: config may NARROW the envelope (a smaller floor or fraction), but must NEVER widen it past that contract floor, or the adapter would propose routes the contract itself rejects. Non-numeric values are type-gated to the contract defaults, never cast.",
+					"floor": 2,
+					"fraction": 0.25
 				}
 			},
 			"objective_placement": {

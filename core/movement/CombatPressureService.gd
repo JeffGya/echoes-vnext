@@ -19,7 +19,13 @@ const NORMAL := 0.50
 const HIGH := 0.75
 const CRITICAL := 1.00
 
-## V2-COMBAT-002 Slice 4, Unit D — spatial-mode tuning (dormant, no config seam yet).
+## V2-COMBAT-002 Slice 4, Unit D — spatial-mode tuning.
+##
+## Slice 6 Phase 6A seamed these to `data.combat.movement.pressure`. They remain
+## the DEFAULTS: `build_goals` takes the config block as an OPTIONAL trailing
+## argument, and every key falls back to the constant below when the block (or
+## the individual key) is absent or non-numeric. An absent config block is
+## therefore exactly today's behaviour, never a crash and never a silent zero.
 ##
 ## Mover health at or below this ratio is a local collapse: a board fall-back
 ## (`withdraw`) candidate is emitted into the SAFETY bucket ALONGSIDE the ordinary
@@ -34,9 +40,23 @@ const COLLAPSE_HEALTH := 0.5
 const FALLBACK_RADIUS := 3
 ## Outer Chebyshev radius for derived interception lanes.
 const INTERCEPT_LANE_RADIUS := 3
+## Inner Chebyshev band for derived interception lanes. This is what stands the
+## lane OFF the protected actor: band 1 is the close screen (`_screen_or_authored`),
+## so the lane starts at 2. Named here because Slice 6 seams it; it was previously
+## an unnamed literal at the `_lane_or_authored` call site.
+const INTERCEPT_LANE_INNER_BAND := 2
+
+## Key names under `data.combat.movement.pressure`.
+const CFG_COLLAPSE_HEALTH := "collapse_health"
+const CFG_FALLBACK_RADIUS := "fallback_radius"
+const CFG_INTERCEPT_LANE_INNER_BAND := "intercept_lane_inner_band"
+const CFG_INTERCEPT_LANE_RADIUS := "intercept_lane_radius"
 
 
-static func build_goals(context: Dictionary) -> Dictionary:
+## `pressure_cfg` is the OPTIONAL `data.combat.movement.pressure` block. Omitting
+## it (or passing `{}`) selects the frozen constants above, so every existing
+## caller is unaffected.
+static func build_goals(context: Dictionary, pressure_cfg: Dictionary = {}) -> Dictionary:
 	var context_result: Dictionary = ContextContract.validate(context)
 	if not bool(context_result["valid"]):
 		return _failure(
@@ -69,13 +89,13 @@ static func build_goals(context: Dictionary) -> Dictionary:
 		"recover":
 			_add_recover(candidates, context, pressure)
 		"protect":
-			_add_protect(candidates, context, pressure)
+			_add_protect(candidates, context, pressure, pressure_cfg)
 		"pursue":
 			_add_pursue(candidates, context, pressure)
 		"guide_spirit":
-			_add_guide(candidates, context, pressure)
+			_add_guide(candidates, context, pressure, pressure_cfg)
 
-	_add_board_fallback(candidates, context, pressure)
+	_add_board_fallback(candidates, context, pressure, pressure_cfg)
 
 	var validation_result: Dictionary = _validate_candidates(candidates, context["origin"] as Dictionary)
 	if not bool(validation_result["valid"]):
@@ -148,7 +168,9 @@ static func _add_recover(candidates: Array, context: Dictionary, pressure: Dicti
 	_add_truthful_engage(candidates, context, pressure)
 
 
-static func _add_protect(candidates: Array, context: Dictionary, pressure: Dictionary) -> void:
+static func _add_protect(
+	candidates: Array, context: Dictionary, pressure: Dictionary, pressure_cfg: Dictionary = {}
+) -> void:
 	var alignment: String = str(pressure["mover_alignment"])
 	var role: String = str(pressure["factual_role"])
 	if alignment == "hostile" and role == "carrier" and bool(pressure["totem_stolen"]):
@@ -173,7 +195,7 @@ static func _add_protect(candidates: Array, context: Dictionary, pressure: Dicti
 		_add_goal(candidates, BUCKET_TACTICAL, context, pressure, "cut_off", "blocker", carrier_cutoff, HIGH, [str(pressure["carrier_id"])])
 	elif alignment == "party":
 		_add_goal(candidates, BUCKET_DIRECT, context, pressure, "protect", "protector", _screen_or_authored(context, pressure, pressure["objective_position"] as Dictionary), HIGH, [str(pressure["objective_id"])])
-		_add_goal(candidates, BUCKET_TACTICAL, context, pressure, "intercept", "blocker", _lane_or_authored(context, pressure, pressure["objective_position"] as Dictionary), HIGH, [str(pressure["objective_id"])])
+		_add_goal(candidates, BUCKET_TACTICAL, context, pressure, "intercept", "blocker", _lane_or_authored(context, pressure, pressure["objective_position"] as Dictionary, pressure_cfg), HIGH, [str(pressure["objective_id"])])
 	elif alignment == "hostile":
 		_add_goal(candidates, BUCKET_DIRECT, context, pressure, "advance", "custody_threat", pressure["destination_region"] as Array, CRITICAL, [str(pressure["objective_id"])])
 		_add_objective_engage(candidates, BUCKET_TACTICAL, context, pressure, "breaker", NORMAL)
@@ -217,7 +239,9 @@ static func _add_pursue(candidates: Array, context: Dictionary, pressure: Dictio
 		_add_truthful_engage(candidates, context, pressure, engaged_elsewhere)
 
 
-static func _add_guide(candidates: Array, context: Dictionary, pressure: Dictionary) -> void:
+static func _add_guide(
+	candidates: Array, context: Dictionary, pressure: Dictionary, pressure_cfg: Dictionary = {}
+) -> void:
 	var alignment: String = str(pressure["mover_alignment"])
 	var role: String = str(pressure["factual_role"])
 	var spirit: Dictionary = _actor_by_id(context, str(pressure["spirit_id"]))
@@ -240,7 +264,7 @@ static func _add_guide(candidates: Array, context: Dictionary, pressure: Diction
 			# taken around the spirit's live position when no authored region exists.
 			var spirit_position: Dictionary = spirit["position"] as Dictionary
 			_add_goal(candidates, BUCKET_DIRECT, context, pressure, purpose, "protector", _screen_or_authored(context, pressure, spirit_position), HIGH, [str(pressure["spirit_id"])])
-			_add_goal(candidates, BUCKET_TACTICAL, context, pressure, "intercept", "rear_guard", _lane_or_authored(context, pressure, spirit_position), HIGH, [str(pressure["spirit_id"])])
+			_add_goal(candidates, BUCKET_TACTICAL, context, pressure, "intercept", "rear_guard", _lane_or_authored(context, pressure, spirit_position, pressure_cfg), HIGH, [str(pressure["spirit_id"])])
 		_add_truthful_engage(candidates, context, pressure)
 	elif alignment == "hostile":
 		if spirit_is_active:
@@ -283,14 +307,14 @@ static func _add_guide(candidates: Array, context: Dictionary, pressure: Diction
 ## completely unaffected. Objective-aligned movers (quarry / non-joining spirit)
 ## are excluded outright so PURSUE quarry timing and economy stay untouched.
 static func _add_board_fallback(
-	candidates: Array, context: Dictionary, pressure: Dictionary
+	candidates: Array, context: Dictionary, pressure: Dictionary, pressure_cfg: Dictionary = {}
 ) -> void:
 	if str(pressure["mover_alignment"]) == "objective":
 		return
 	var mover: Dictionary = _actor_by_id(context, str(context["mover_id"]))
 	if not _is_living_actor(mover):
 		return
-	if float(mover.get("health_ratio", 1.0)) > COLLAPSE_HEALTH:
+	if float(mover.get("health_ratio", 1.0)) > _collapse_health(pressure_cfg):
 		return
 	# FIX 6 — the `withdraw` goal deliberately does NOT borrow
 	# `pressure["fallback_region"]`, even though that key names "fallback".
@@ -302,7 +326,7 @@ static func _add_board_fallback(
 	# derivation (`_board_fallback_region`: reachable ground strictly farther from
 	# the nearest hostile than the mover's current cell), which is correct in every
 	# mode because it is defined against threat distance, not against an objective.
-	var region: Array = _board_fallback_region(context)
+	var region: Array = _board_fallback_region(context, pressure_cfg)
 	if region.is_empty():
 		return
 	# Safety bucket at HIGH: under collapse, falling back outranks the ordinary
@@ -319,7 +343,7 @@ static func _add_board_fallback(
 ## strictly greater than the origin's. "Strictly greater" is what makes this a
 ## real fall-back rather than a lateral shuffle, and it is what keeps the region
 ## disjoint from the `advance` regions (which close on hostiles).
-static func _board_fallback_region(context: Dictionary) -> Array:
+static func _board_fallback_region(context: Dictionary, pressure_cfg: Dictionary = {}) -> Array:
 	var hostiles: Array = _hostiles(context)
 	if hostiles.is_empty():
 		return []
@@ -327,7 +351,7 @@ static func _board_fallback_region(context: Dictionary) -> Array:
 	var origin_threat: int = _threat_distance(origin, hostiles)
 	var region: Dictionary = MovementPathService.reachable_cost_region(
 		origin,
-		FALLBACK_RADIUS,
+		_fallback_radius(pressure_cfg),
 		context["authoritative_walkable"] as Dictionary,
 		{},
 		context["bounds"] as Dictionary,
@@ -445,12 +469,66 @@ static func _screen_or_authored(
 ## Authored approach region, else a derived interception lane standing off the
 ## protected actor. Same known-objective gate as `_screen_or_authored`.
 static func _lane_or_authored(
-	context: Dictionary, pressure: Dictionary, protected_position: Dictionary
+	context: Dictionary,
+	pressure: Dictionary,
+	protected_position: Dictionary,
+	pressure_cfg: Dictionary = {}
 ) -> Array:
 	var authored: Array = pressure["approach_region"] as Array
 	if not authored.is_empty() or not bool(pressure["objective_known"]):
 		return authored
-	return _interposition_region(context, protected_position, 2, INTERCEPT_LANE_RADIUS)
+	var outer: int = _intercept_lane_radius(pressure_cfg)
+	return _interposition_region(
+		context, protected_position, _intercept_lane_inner_band(pressure_cfg, outer), outer
+	)
+
+
+# ---------------------------------------------------------------------------
+# V2-COMBAT-002 Slice 6 Phase 6A — CONFIG RESOLVERS (`data.combat.movement.pressure`)
+#
+# Each resolver is total: it returns the frozen constant whenever the block is
+# absent, the key is absent, or the value is not numeric. No resolver can return
+# a value that silently empties a derived region, so a missing or malformed
+# config block degrades to today's behaviour rather than to zero.
+# ---------------------------------------------------------------------------
+
+
+## Numeric-or-default read. Bool is excluded deliberately: GDScript would happily
+## coerce `true` to 1, which is a config typo, not a radius.
+static func _cfg_number(cfg: Dictionary, key: String, fallback: float) -> float:
+	var value: Variant = cfg.get(key, null)
+	if value is int or value is float:
+		return float(value)
+	return fallback
+
+
+## Health ratio, clamped to the meaningful [0, 1] band. 0 is legitimate (it
+## disables the board fall-back entirely, which is a real tuning choice), so this
+## one is NOT floored above zero.
+static func _collapse_health(cfg: Dictionary) -> float:
+	return clampf(_cfg_number(cfg, CFG_COLLAPSE_HEALTH, COLLAPSE_HEALTH), 0.0, 1.0)
+
+
+## Search radius for safer ground. Floored at 1: radius 0 would make
+## `reachable_cost_region` return the origin alone, which `_board_fallback_region`
+## then discards, silently producing an empty region and no fall-back at all.
+static func _fallback_radius(cfg: Dictionary) -> int:
+	return maxi(1, int(_cfg_number(cfg, CFG_FALLBACK_RADIUS, float(FALLBACK_RADIUS))))
+
+
+## Outer lane band. Floored at 1 for the same reason as `_fallback_radius`.
+static func _intercept_lane_radius(cfg: Dictionary) -> int:
+	return maxi(1, int(_cfg_number(cfg, CFG_INTERCEPT_LANE_RADIUS, float(INTERCEPT_LANE_RADIUS))))
+
+
+## Inner lane band, clamped to [1, outer]. Band 0 would admit the protected
+## actor's own cell into its own defensive lane; an inner band above the outer
+## band would make every membership test fail and empty the region.
+static func _intercept_lane_inner_band(cfg: Dictionary, outer: int) -> int:
+	var inner: int = int(
+		_cfg_number(cfg, CFG_INTERCEPT_LANE_INNER_BAND, float(INTERCEPT_LANE_INNER_BAND))
+	)
+	return clampi(inner, 1, outer)
 
 
 static func _structure_blockers(context: Dictionary) -> Array:
