@@ -25,6 +25,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement/slice2_contracts/context_map_failures", Callable(MovementSlice2ContractTests, "_t_context_map_failures"))
 	runner.register_test("movement/slice2_contracts/goal_exact", Callable(MovementSlice2ContractTests, "_t_goal_exact"))
 	runner.register_test("movement/slice2_contracts/goal_place_directed_advance", Callable(MovementSlice2ContractTests, "_t_goal_place_directed_advance"))
+	runner.register_test("movement/slice2_contracts/goal_advance_objective_source_semantic", Callable(MovementSlice2ContractTests, "_t_goal_advance_objective_source_semantic"))
 	runner.register_test("movement/slice2_contracts/goal_escort_protect_plans", Callable(MovementSlice2ContractTests, "_t_goal_escort_protect_plans"))
 	runner.register_test("movement/slice2_contracts/goal_withdraw_admits_stop_guard_observe", Callable(MovementSlice2ContractTests, "_t_goal_withdraw_admits_stop_guard_observe"))
 	runner.register_test("movement/slice2_contracts/purpose_fallback_table_ratified", Callable(MovementSlice2ContractTests, "_t_purpose_fallback_table_ratified"))
@@ -415,6 +416,43 @@ static func _t_goal_place_directed_advance() -> Dictionary:
 	)
 	if not _matches(GoalContract.validate(attacking, origin), "invalid_primary_for_purpose", "planned_primary.type"):
 		return _fail("advance accepted a melee_attack primary")
+	return _pass()
+
+
+## Slice 6: the `objective.` source that unlocks a place-directed `advance` must
+## be a WELL-FORMED semantic token, not merely a non-empty suffix. This mirrors
+## `CombatPressureService._valid_source`, which gates `objective.` sources with
+## `V.is_semantic_token`; `MovementGoal.validate()` (the 6B cutover's last line of
+## defence, reached WITHOUT `_valid_source`) must agree.
+static func _t_goal_advance_objective_source_semantic() -> Dictionary:
+	var origin := {"col": 1, "row": 1}
+
+	# NO REGRESSION: a well-formed `objective.<semantic>` source still validates a
+	# place-directed advance (lowercase, digits, dots, underscores are semantic).
+	var well_formed: Dictionary = _purpose_goal(
+		"explore", "advance", "baseline", _action("actor.move"), _action("actor.idle"),
+		[], ["mode.explore", "objective.sit_obj.2", "role.baseline"]
+	)
+	if not bool(GoalContract.validate(well_formed, origin)["valid"]):
+		return _fail("place-directed advance rejected a well-formed objective source: %s" % str(GoalContract.validate(well_formed, origin)))
+
+	# NOW REJECTED (validated under the OLD lax rule): a malformed objective id
+	# with capitals and a hyphen is not a semantic token, so it must not unlock a
+	# place-directed advance. This is the assertion that bites the fix.
+	var malformed: Dictionary = _purpose_goal(
+		"explore", "advance", "baseline", _action("actor.move"), _action("actor.idle"),
+		[], ["mode.explore", "objective.Bad-ID"]
+	)
+	if not _matches(GoalContract.validate(malformed, origin), "advance_requires_named_objective", "pressure_sources"):
+		return _fail("advance accepted a malformed objective id (capitals/hyphen) as a named objective")
+
+	# A source with an interior space is likewise not a semantic token.
+	var spaced: Dictionary = _purpose_goal(
+		"explore", "advance", "baseline", _action("actor.move"), _action("actor.idle"),
+		[], ["mode.explore", "objective.foo bar"]
+	)
+	if not _matches(GoalContract.validate(spaced, origin), "advance_requires_named_objective", "pressure_sources"):
+		return _fail("advance accepted an objective source containing a space")
 	return _pass()
 
 

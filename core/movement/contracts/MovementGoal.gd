@@ -167,12 +167,21 @@ static func _parse_anchor(token: String) -> Dictionary:
 
 ## True when `pressure_sources` names at least one authored objective/place.
 ## Pure: reads only the goal dict, no config, no services, no RNG.
+##
+## The suffix must be a well-formed semantic token, not merely non-empty:
+## `CombatPressureService._valid_source` gates `"objective."` sources with
+## `V.is_semantic_token(source)` (applied to the whole token), and `goal_id`
+## is gated the same way. Without mirroring that here, `objective.Bad-ID`
+## (capitals, hyphens, spaces) would launder a place-directed `advance`
+## through `validate()`, which is laxer than either sibling. Matching
+## `_valid_source` exactly keeps the two validators in agreement.
 static func _has_objective_source(value: Dictionary) -> bool:
 	for source_value: Variant in value["pressure_sources"] as Array:
 		var source: String = str(source_value)
 		if (
 			source.begins_with(OBJECTIVE_SOURCE_PREFIX)
 			and source.length() > OBJECTIVE_SOURCE_PREFIX.length()
+			and V.is_semantic_token(source)
 		):
 			return true
 	return false
