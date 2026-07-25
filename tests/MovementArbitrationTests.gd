@@ -330,10 +330,10 @@ static func _t_spatial_clamp_indicators() -> Dictionary:
 static func _t_config_failures() -> Dictionary:
 	var fixture: Dictionary = _fixture()
 	var cases: Array = [
-		[{}, "missing_spatial_utility"],
-		[{"spatial_utility": {}}, "missing_spatial_config_field"],
-		[_cfg_edit("cap", "bad"), "invalid_spatial_config_type"],
-		[_cfg_edit("cap", NAN), "non_finite_spatial_config"],
+		[{}, "missing_spatial_utility_config"],
+		[{"spatial_utility": {}}, "missing_spatial_utility_field"],
+		[_cfg_edit("cap", "bad"), "invalid_spatial_utility_field"],
+		[_cfg_edit("cap", NAN), "invalid_spatial_utility_field"],
 		[_cfg_edit("cap", 0.0), "non_positive_spatial_cap"],
 	]
 	var unexpected: Dictionary = _spatial_cfg()

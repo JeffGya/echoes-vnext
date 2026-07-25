@@ -15,14 +15,14 @@
 #   3. combat_terrain/placement_keystone_empty_walkable_matches_legacy
 #         — empty walkable ⇒ place_actors behaves identically to calling it without the
 #           walkable key at all (same positions for same seed).
-#   4. combat_terrain/move_toward_never_enters_void
-#         — repeated move_toward over a 2-wide bridge never steps on a void cell;
+#   4. combat_terrain/shared_executor_never_enters_void
+#         — repeated shared-executor steps over a 2-wide bridge never step on a void cell;
 #           actor crosses from one plateau to the other.
-#   5. combat_terrain/move_toward_makes_progress_across_bridge
+#   5. combat_terrain/shared_executor_makes_progress_across_bridge
 #         — actor on the left plateau eventually reaches (or adjoins) the target on the
 #           right plateau, confirming the bridge is traversable.
 #   6. combat_terrain/movement_keystone_empty_walkable_matches_legacy
-#         — empty walkable ⇒ move_toward result identical to the legacy greedy step.
+#         — empty walkable ⇒ shared movement result identical to the no-walkable-key path.
 #   7. combat_terrain/terrain_determinism_same_rng_namespace
 #         — StageTerrain.generate() with the same inputs and a custom rng_namespace
 #           produces deep-equal output on two successive calls.
@@ -39,10 +39,13 @@
 extends RefCounted
 class_name CombatTerrainTests
 
+const MovementPathService = preload("res://core/movement/MovementPathService.gd")
+const MovementExecutor = preload("res://core/movement/MovementExecutor.gd")
+
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
 
-# Build a minimal actor dict that satisfies place_actors() and move_toward().
+# Build a minimal actor dict that satisfies place_actors() and movement-service tests.
 static func _make_actor(id: String) -> Dictionary:
 	var a: Dictionary = ActorSchema.get_defaults()
 	a["id"]              = id
@@ -97,6 +100,68 @@ static func _pos_equal(a: Dictionary, b: Dictionary) -> bool:
 		and int(a.get("row", -1)) == int(b.get("row", -1))
 
 
+static func _move_one_step(actor: Dictionary, target: Dictionary, board: Dictionary,
+		occupied_positions: Array = []) -> Dictionary:
+	var from_pos: Dictionary = (actor.get("grid_pos", {"col": 0, "row": 0}) as Dictionary).duplicate(true)
+	var bounds: Dictionary = {
+		"w": GridService.get_board_cols(board),
+		"h": GridService.get_board_rows(board),
+	}
+	var walkable: Dictionary = board.get("walkable", {}) as Dictionary
+	if walkable.is_empty():
+		walkable = {}
+		for col in range(int(bounds["w"])):
+			for row in range(int(bounds["h"])):
+				walkable["%d,%d" % [col, row]] = true
+	var effective_walkable: Dictionary = walkable.duplicate(true)
+	var occupancy: Dictionary = {}
+	var occ_index: int = 0
+	for occ_value: Variant in occupied_positions:
+		if occ_value is Dictionary:
+			var occ: Dictionary = occ_value as Dictionary
+			var key: String = "%d,%d" % [int(occ.get("col", -1)), int(occ.get("row", -1))]
+			effective_walkable.erase(key)
+			occupancy[key] = "occupied.%d" % occ_index
+			occ_index += 1
+	var route: Dictionary = MovementPathService.shortest_path(from_pos, target, effective_walkable, {}, bounds)
+	var path: Array = []
+	if bool(route.get("reachable", false)):
+		path = route.get("path", []) as Array
+	var context: Dictionary = {
+		"mover_id": str(actor.get("id", "actor")),
+		"origin": from_pos,
+		"bounds": bounds,
+		"authoritative_walkable": walkable,
+		"perceived_planning_cells": walkable,
+		"occupancy": occupancy,
+		"perceived_actors": [],
+		"relationships": {},
+		"terrain_costs": {},
+		"known_hazards": [],
+		"objective_pressure": {},
+		"movement_history": [],
+	}
+	var outcome: Dictionary = MovementExecutor.execute(
+		context,
+		{
+			"mover_id": str(actor.get("id", "actor")),
+			"path": path,
+			"commitment": 1,
+		},
+		{"capacity": 1, "authored_override": {}},
+		{"triggered": {"unstable": false, "binding": false, "burning": false}, "config": {}}
+	)
+	var actual: Array = outcome.get("actual_traversed_cells", []) as Array
+	if not actual.is_empty():
+		var final_pos: Dictionary = outcome.get("final_destination", from_pos) as Dictionary
+		GridService.assign_grid_pos(actor, int(final_pos.get("col", 0)), int(final_pos.get("row", 0)))
+	return {
+		"from_pos": from_pos,
+		"to_pos": (actor.get("grid_pos", from_pos) as Dictionary).duplicate(true),
+		"stop_reason": str(outcome.get("stop_reason", "")),
+	}
+
+
 # ─── Registration ────────────────────────────────────────────────────────────
 
 static func register(runner: CoreTestRunner) -> void:
@@ -106,10 +171,10 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(CombatTerrainTests, "_t_walkable_placement_echo_left_enemy_right"))
 	runner.register_test("combat_terrain/placement_keystone_empty_walkable_matches_legacy",
 		Callable(CombatTerrainTests, "_t_placement_keystone_empty_walkable_matches_legacy"))
-	runner.register_test("combat_terrain/move_toward_never_enters_void",
-		Callable(CombatTerrainTests, "_t_move_toward_never_enters_void"))
-	runner.register_test("combat_terrain/move_toward_makes_progress_across_bridge",
-		Callable(CombatTerrainTests, "_t_move_toward_makes_progress_across_bridge"))
+	runner.register_test("combat_terrain/shared_executor_never_enters_void",
+		Callable(CombatTerrainTests, "_t_shared_executor_never_enters_void"))
+	runner.register_test("combat_terrain/shared_executor_makes_progress_across_bridge",
+		Callable(CombatTerrainTests, "_t_shared_executor_makes_progress_across_bridge"))
 	runner.register_test("combat_terrain/movement_keystone_empty_walkable_matches_legacy",
 		Callable(CombatTerrainTests, "_t_movement_keystone_empty_walkable_matches_legacy"))
 	runner.register_test("combat_terrain/terrain_determinism_same_rng_namespace",
@@ -255,9 +320,9 @@ static func _t_placement_keystone_empty_walkable_matches_legacy() -> Dictionary:
 
 # ─── Test 4 — Move toward never enters void ──────────────────────────────────
 # Places an actor on the left plateau (col 2, row 1), target on the right plateau
-# (col 10, row 1).  Runs up to 30 steps of move_toward with board_cfg["walkable"]
+# (col 10, row 1).  Runs up to 30 shared-executor steps with board_cfg["walkable"]
 # set.  At EVERY step, asserts the actor's grid_pos is in the walkable set.
-static func _t_move_toward_never_enters_void() -> Dictionary:
+static func _t_shared_executor_never_enters_void() -> Dictionary:
 	var walkable := _make_bridge_walkable()
 	var board    := _board_cfg(walkable)
 
@@ -278,7 +343,7 @@ static func _t_move_toward_never_enters_void() -> Dictionary:
 		# Stop early if already at target.
 		if int(gp.get("col", -1)) == 10 and int(gp.get("row", -1)) == 1:
 			break
-		GridService.move_toward(actor, target, board, [])
+		_move_one_step(actor, target, board, [])
 
 	return { "ok": true }
 
@@ -286,7 +351,7 @@ static func _t_move_toward_never_enters_void() -> Dictionary:
 # ─── Test 5 — Move toward makes progress across the bridge ───────────────────
 # Same setup as Test 4.  After at most walkable.size() + 5 steps the actor must
 # be within Chebyshev distance 1 of the target (reached or adjacent).
-static func _t_move_toward_makes_progress_across_bridge() -> Dictionary:
+static func _t_shared_executor_makes_progress_across_bridge() -> Dictionary:
 	var walkable := _make_bridge_walkable()
 	var board    := _board_cfg(walkable)
 
@@ -315,7 +380,7 @@ static func _t_move_toward_makes_progress_across_bridge() -> Dictionary:
 
 		# Detect permanent stall (same cell twice in a row after move).
 		var before_key: String = key
-		GridService.move_toward(actor, target, board, [])
+		_move_one_step(actor, target, board, [])
 		var after_gp: Dictionary  = actor.get("grid_pos", {})
 		var after_key: String = "%d,%d" % [int(after_gp.get("col", -999)), int(after_gp.get("row", -999))]
 
@@ -342,8 +407,8 @@ static func _t_move_toward_makes_progress_across_bridge() -> Dictionary:
 
 
 # ─── Test 6 — Movement keystone: empty walkable == legacy greedy step ────────
-# With board_cfg containing walkable:{}, move_toward must produce the same result
-# as move_toward with no walkable key at all (legacy 8-dir greedy path).
+# With board_cfg containing walkable:{}, the shared movement helper must produce
+# the same result as the no-walkable-key path.
 static func _t_movement_keystone_empty_walkable_matches_legacy() -> Dictionary:
 	var cfg_no_walkable := { "board_cols": 10, "board_rows": 10 }
 	var cfg_empty_walk  := { "board_cols": 10, "board_rows": 10, "walkable": {} }
@@ -362,11 +427,11 @@ static func _t_movement_keystone_empty_walkable_matches_legacy() -> Dictionary:
 
 		var actor_a: Dictionary = _make_actor("x")
 		GridService.assign_grid_pos(actor_a, int(from_pos.get("col", 0)), int(from_pos.get("row", 0)))
-		var result_a: Dictionary = GridService.move_toward(actor_a, target, cfg_no_walkable, [])
+		var result_a: Dictionary = _move_one_step(actor_a, target, cfg_no_walkable, [])
 
 		var actor_b: Dictionary = _make_actor("x")
 		GridService.assign_grid_pos(actor_b, int(from_pos.get("col", 0)), int(from_pos.get("row", 0)))
-		var result_b: Dictionary = GridService.move_toward(actor_b, target, cfg_empty_walk, [])
+		var result_b: Dictionary = _move_one_step(actor_b, target, cfg_empty_walk, [])
 
 		var to_a: Dictionary = result_a.get("to_pos", {})
 		var to_b: Dictionary = result_b.get("to_pos", {})
@@ -604,7 +669,7 @@ static func _t_pathing_clustered_target_advances() -> Dictionary:
 	]
 
 	var dist_before: int = GridService.chebyshev_distance(echo.get("grid_pos", {}), target)
-	GridService.move_toward(echo, target, board, occupied)
+	_move_one_step(echo, target, board, occupied)
 	var gp_after: Dictionary = echo.get("grid_pos", {})
 	var dist_after: int = GridService.chebyshev_distance(gp_after, target)
 
@@ -643,7 +708,7 @@ static func _t_pathing_clustered_target_advances() -> Dictionary:
 
 # ─── Test 12 — Open path: echo advances each call, never overlaps target ─────
 # No occupied positions.  Echo at (0,2), target at (9,2).
-# Each move_toward call must not increase the Chebyshev distance to target,
+# Each shared-executor step must not increase the Chebyshev distance to target,
 # and there must be at least one decrease.
 static func _t_pathing_open_path_advances() -> Dictionary:
 	var walkable := _make_rect_walkable(10, 5)
@@ -659,7 +724,7 @@ static func _t_pathing_open_path_advances() -> Dictionary:
 		var gp: Dictionary = echo.get("grid_pos", {})
 		if GridService.chebyshev_distance(gp, target) <= 1:
 			break
-		GridService.move_toward(echo, target, board, [])
+		_move_one_step(echo, target, board, [])
 		var gp_after: Dictionary = echo.get("grid_pos", {})
 		var dist_after: int = GridService.chebyshev_distance(gp_after, target)
 
@@ -701,7 +766,7 @@ static func _t_pathing_never_steps_occupied_or_void() -> Dictionary:
 		var gp: Dictionary = echo.get("grid_pos", {})
 		if GridService.chebyshev_distance(gp, target) <= 1:
 			break
-		GridService.move_toward(echo, target, board, occupied)
+		_move_one_step(echo, target, board, occupied)
 		var gp_after: Dictionary = echo.get("grid_pos", {})
 		var gp_key: String = "%d,%d" % [int(gp_after.get("col", -1)), int(gp_after.get("row", -1))]
 
@@ -719,7 +784,7 @@ static func _t_pathing_never_steps_occupied_or_void() -> Dictionary:
 
 # ─── Test 14 — Dead-end stay: surrounded actor stays put ─────────────────────
 # Echo at (5,2) in a 10×5 rect; all 8 neighbours occupied.
-# move_toward must return from_pos unchanged (no snap to (0,0)).
+# Shared executor must return from_pos unchanged (no snap to (0,0)).
 static func _t_pathing_dead_end_stay() -> Dictionary:
 	var walkable := _make_rect_walkable(10, 5)
 	var board    := _board_cfg(walkable)
@@ -735,7 +800,7 @@ static func _t_pathing_dead_end_stay() -> Dictionary:
 			occupied.append({ "col": 5 + dc, "row": 2 + dr })
 
 	var target := { "col": 9, "row": 4 }
-	var result: Dictionary = GridService.move_toward(echo, target, board, occupied)
+	var result: Dictionary = _move_one_step(echo, target, board, occupied)
 
 	var to_pos: Dictionary = result.get("to_pos", {})
 	if int(to_pos.get("col", -1)) != 5 or int(to_pos.get("row", -1)) != 2:
@@ -776,11 +841,11 @@ static func _t_pathing_legacy_empty_walkable_unchanged() -> Dictionary:
 
 		var actor_a: Dictionary = _make_actor("a")
 		GridService.assign_grid_pos(actor_a, int(from_pos.get("col", 0)), int(from_pos.get("row", 0)))
-		var res_a: Dictionary = GridService.move_toward(actor_a, tgt, cfg_no_key, occ)
+		var res_a: Dictionary = _move_one_step(actor_a, tgt, cfg_no_key, occ)
 
 		var actor_b: Dictionary = _make_actor("b")
 		GridService.assign_grid_pos(actor_b, int(from_pos.get("col", 0)), int(from_pos.get("row", 0)))
-		var res_b: Dictionary = GridService.move_toward(actor_b, tgt, cfg_empty_wk, occ)
+		var res_b: Dictionary = _move_one_step(actor_b, tgt, cfg_empty_wk, occ)
 
 		var to_a: Dictionary = res_a.get("to_pos", {})
 		var to_b: Dictionary = res_b.get("to_pos", {})
@@ -798,7 +863,7 @@ static func _t_pathing_legacy_empty_walkable_unchanged() -> Dictionary:
 
 
 # ─── Test 16 — Determinism: same inputs → same step twice ────────────────────
-# Calls move_toward twice with identical inputs (resetting actor pos between calls).
+# Calls the shared movement helper twice with identical inputs (resetting actor pos between calls).
 # Both calls must return identical to_pos.
 static func _t_pathing_determinism() -> Dictionary:
 	var walkable_rect := _make_rect_walkable(10, 5)
@@ -837,11 +902,11 @@ static func _t_pathing_determinism() -> Dictionary:
 
 		var actor_1: Dictionary = _make_actor("d1")
 		GridService.assign_grid_pos(actor_1, int(from_pos.get("col", 0)), int(from_pos.get("row", 0)))
-		var res_1: Dictionary = GridService.move_toward(actor_1, tgt, cfg, occ)
+		var res_1: Dictionary = _move_one_step(actor_1, tgt, cfg, occ)
 
 		var actor_2: Dictionary = _make_actor("d2")
 		GridService.assign_grid_pos(actor_2, int(from_pos.get("col", 0)), int(from_pos.get("row", 0)))
-		var res_2: Dictionary = GridService.move_toward(actor_2, tgt, cfg, occ)
+		var res_2: Dictionary = _move_one_step(actor_2, tgt, cfg, occ)
 
 		var to_1: Dictionary = res_1.get("to_pos", {})
 		var to_2: Dictionary = res_2.get("to_pos", {})

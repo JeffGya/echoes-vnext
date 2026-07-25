@@ -1,9 +1,10 @@
 # res://core/movement/MovementHazardFixtures.gd
-# V2-COMBAT-002 Slice 3 (DORMANT): deterministic authored-hazard fixture provider.
+# V2-COMBAT-002 Slice 3: deterministic authored-hazard fixture provider.
 #
 # Pure, all-static, no RNG. Stands in for COMBAT-004's future hazard generator so the
-# executor + tests have fixed hazard fact sets on a known board. Minimal and dormant —
-# nothing in production reads it yet. Facts conform to MovementKnownHazardFact.build().
+# executor + tests have fixed hazard fact sets on a known board. Slice 6 uses
+# authored_set() as the approved combat-board hazard field. Facts conform to
+# MovementKnownHazardFact.build().
 
 class_name MovementHazardFixtures
 extends RefCounted

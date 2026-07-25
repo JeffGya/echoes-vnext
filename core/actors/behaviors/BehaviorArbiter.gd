@@ -291,7 +291,8 @@ func select_intent(context: Dictionary) -> Dictionary:
 
 	var candidates: Array[Dictionary] = _generate_candidates(actor, all_actors, context, expression_band, calling_behavior)
 
-	# Score each candidate, then sort: highest score first; tiebreak alphabetically.
+	# Score each candidate, then sort by the same four-key order used by the
+	# movement-aware selector: score, action type, target id, target cell.
 	for c: Dictionary in candidates:
 		c["_score"] = _score(c["action_type"], actor, directive, board_summary, expression_band, calling_behavior, c, presence_strength, rank_strength)
 
@@ -334,7 +335,11 @@ func select_intent(context: Dictionary) -> Dictionary:
 	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		if a["_score"] != b["_score"]:
 			return a["_score"] > b["_score"]
-		return str(a["action_type"]) < str(b["action_type"])
+		if str(a["action_type"]) != str(b["action_type"]):
+			return str(a["action_type"]) < str(b["action_type"])
+		if str(a.get("target_id", "")) != str(b.get("target_id", "")):
+			return str(a.get("target_id", "")) < str(b.get("target_id", ""))
+		return _candidate_target_key(a) < _candidate_target_key(b)
 	)
 
 	var winner: Dictionary = candidates[0].duplicate()
@@ -550,6 +555,9 @@ func _validate_movement_inputs(
 		)
 	if int(profile["capacity"]) <= 0:
 		return _movement_failure("non_positive_capacity", "profile.capacity")
+	var utility_result: Dictionary = _validate_spatial_utility_cfg()
+	if not bool(utility_result["valid"]):
+		return utility_result
 
 	var actor: Dictionary = context["actor"] as Dictionary
 	var actor_id: String = str(actor.get("id", ""))
@@ -1017,6 +1025,30 @@ static func _movement_failure(reason: String, field: String) -> Dictionary:
 	return {"valid": false, "intent": {}, "reason": reason, "field": field}
 
 
+static func _candidate_target_key(candidate: Dictionary) -> String:
+	var target: Dictionary = candidate.get("target_pos", {}) as Dictionary
+	if target.is_empty():
+		return ""
+	return _movement_cell_key(target)
+
+
+func _validate_spatial_utility_cfg() -> Dictionary:
+	if not _movement_cfg.has("spatial_utility"):
+		return _movement_failure("missing_spatial_utility_config", "movement_cfg.spatial_utility")
+	var spatial: Variant = _movement_cfg["spatial_utility"]
+	if not (spatial is Dictionary):
+		return _movement_failure("invalid_spatial_utility_config", "movement_cfg.spatial_utility")
+	var spatial_cfg: Dictionary = spatial as Dictionary
+	for field_value: Variant in _SPATIAL_UTILITY_FIELDS:
+		var field: String = str(field_value)
+		if not spatial_cfg.has(field):
+			return _movement_failure("missing_spatial_utility_field", "movement_cfg.spatial_utility.%s" % field)
+		var value: Variant = spatial_cfg[field]
+		if not (value is int or value is float) or not is_finite(float(value)):
+			return _movement_failure("invalid_spatial_utility_field", "movement_cfg.spatial_utility.%s" % field)
+	return {"valid": true, "intent": {}, "reason": "", "field": ""}
+
+
 # -------------------------
 # Private helpers
 # -------------------------
@@ -1045,84 +1077,9 @@ func _generate_candidates(
 	# actor.idle is always a candidate — the unconditional safe fallback.
 	candidates.append({ "action_type": "actor.idle", "target_id": "", "priority": 0.0 })
 
-	# COMBAT-006: enemy actors in purify_shrine encounter prioritise the shrine target.
-	# prefer_objective_target is set by FlowRuntime for enemy actors when objective is purify_shrine.
-	var shrine_override: Dictionary = {}
-	if context.get("prefer_objective_target", false):
-		for a_v in all_actors:
-			if a_v is Dictionary and a_v.get("is_structure", false) and not a_v.get("is_dead", false):
-				shrine_override = a_v
-				break
-
-	# §5-C: PROTECT echo target overrides — mirrors the enemy prefer_objective_target pattern above.
-	# Priority: stolen (focus-fire carrier) > threatened (intercept nearest-to-totem enemy).
-	# Only applies to echo actors in PROTECT mode. Defensive: falls through to nearest-enemy if no
-	# valid target is found.
-	var protect_echo_override: Dictionary = {}
-	var res_mode_gc: String = context.get("resolution_mode", "")
-	if res_mode_gc == "protect" and str(actor.get("faction", "")) == "echo":
-		var totem_stolen_gc: bool = context.get("totem_stolen", false)
-		var totem_carrier_id_gc: String = context.get("totem_carrier_id", "")
-		if totem_stolen_gc and not totem_carrier_id_gc.is_empty():
-			# Stolen: find the carrier by id; must be alive.
-			for a_v in all_actors:
-				if a_v is Dictionary \
-						and str(a_v.get("id", "")) == totem_carrier_id_gc \
-						and not a_v.get("is_dead", false):
-					protect_echo_override = a_v
-					break
-		else:
-			# Threatened: find totem, then pick the living enemy NEAREST TO THE TOTEM.
-			# Deterministic tiebreak: lowest id string.
-			var totem_pos_gc: Dictionary = {}
-			for a_v in all_actors:
-				if a_v is Dictionary and a_v.get("is_structure", false) and not a_v.get("is_dead", false):
-					totem_pos_gc = a_v.get("grid_pos", {})
-					break
-			if not totem_pos_gc.is_empty():
-				var protect_radius_gc: int = 3
-				var om_protect_gc: Dictionary = (_cfg.get("objective_modes", {}) as Dictionary).get("protect", {}) if _cfg.has("objective_modes") else {}
-				if om_protect_gc.has("objective_threatened_radius"):
-					protect_radius_gc = int(om_protect_gc["objective_threatened_radius"])
-				var best_dist_gc: int = 999999
-				var best_id_gc: String = ""
-				var best_enemy_gc: Dictionary = {}
-				for a_v in all_actors:
-					if not (a_v is Dictionary):
-						continue
-					var a_gc: Dictionary = a_v
-					if a_gc.get("is_dead", false) or a_gc.get("is_structure", false):
-						continue
-					if str(a_gc.get("faction", "")) == "enemy":
-						var d_gc: int = GridService.chebyshev_distance(totem_pos_gc, a_gc.get("grid_pos", {}))
-						if d_gc <= protect_radius_gc:
-							var aid_gc: String = str(a_gc.get("id", ""))
-							if d_gc < best_dist_gc or (d_gc == best_dist_gc and aid_gc < best_id_gc):
-								best_dist_gc = d_gc
-								best_id_gc = aid_gc
-								best_enemy_gc = a_gc
-				if not best_enemy_gc.is_empty():
-					protect_echo_override = best_enemy_gc
-
-	# §5-D: PURSUE echo target override — route all echoes toward the living quarry.
-	var quarry_override: Dictionary = {}
-	if res_mode_gc == "pursue" and str(actor.get("faction", "")) == "echo":
-		for a_v in all_actors:
-			if not (a_v is Dictionary): continue
-			var a_qry: Dictionary = a_v
-			if bool(a_qry.get("is_quarry", false)) and not bool(a_qry.get("is_dead", false)):
-				quarry_override = a_qry
-				break
-
-	# COMBAT-BUG-001: purifier shrine lookup — when this echo is the designated purifier,
-	# remember the shrine actor so movement can be directed toward it instead of the nearest enemy.
-	var purifier_shrine_actor: Dictionary = {}
-	if context.get("is_purifier", false) and context.get("shrine_alive", false):
-		for a_v in all_actors:
-			if a_v is Dictionary and a_v.get("is_structure", false) and not a_v.get("is_dead", false):
-				purifier_shrine_actor = a_v
-				break
-
+	# V2-COMBAT-002 Slice 6B: exact-cell PURIFY/PROTECT/PURSUE redirects were
+	# retired. Pressure regions now describe objective movement; this candidate
+	# generator only supplies ordinary action-score vocabulary.
 	var actor_type: String = str(actor.get("actor_type", "echo"))
 	# V2-PROG-002: prefer confirmed calling (runtime identity) over birth origin.
 	# Once an Echo has confirmed a calling, that identity drives behavior — not the birth weight.
@@ -1135,14 +1092,7 @@ func _generate_candidates(
 	# V2-PROG-006: Enemy Forming+ focus fire — prefer most-wounded echo over nearest.
 	# Echo actors use standard nearest-enemy selection.
 	var nearest_enemy: Dictionary
-	if not quarry_override.is_empty():
-		nearest_enemy = quarry_override
-	elif not shrine_override.is_empty():
-		nearest_enemy = shrine_override
-	elif not protect_echo_override.is_empty():
-		# §5-C: echo PROTECT override — focus on carrier (stolen) or totem-nearest enemy (threatened).
-		nearest_enemy = protect_echo_override
-	elif actor_type == "enemy" \
+	if actor_type == "enemy" \
 			and (expression_band == "forming" or expression_band == "grounded" or expression_band == "whole"):
 		nearest_enemy = _get_most_wounded_enemy(actor, all_actors)
 		if nearest_enemy.is_empty():
@@ -1180,35 +1130,14 @@ func _generate_candidates(
 				"_reveal_bonus":   _reveal_bonus,
 			})
 		else:
-			# COMBAT-BUG-001: shrine-HP-aware purifier movement.
-			# Shrine healthy (≥ 50%): pursue enemy — no shrine redirect.
-			#   Without this HP gate, the purifier oscillates: adjacent to shrine → steps toward
-			#   enemy → now 2 tiles from shrine → steps back → adjacent again → repeat forever.
-			# Shrine low (< 50%) AND not yet adjacent: return to shrine to purify.
-			# Shrine low (< 50%) AND already adjacent: fight enemy while cooldown runs down;
-			#   the purify override (score 9999) handles the turn when cooldown reaches 0.
-			var shrine_hp_ratio_ctx: float = float(context.get("shrine_hp_ratio", 1.0))
-			if not purifier_shrine_actor.is_empty() \
-					and shrine_hp_ratio_ctx < 0.5 \
-					and not GridService.is_adjacent(my_pos, purifier_shrine_actor.get("grid_pos", {})):
-				var shrine_pos: Dictionary = purifier_shrine_actor.get("grid_pos", {})
-				candidates.append({
-					"action_type":     "actor.move",
-					"target_id":       str(purifier_shrine_actor.get("id", "")),
-					"target_pos":      shrine_pos,
-					"target_distance": GridService.chebyshev_distance(my_pos, shrine_pos),
-					"target_hp_ratio": 1.0,
-					"priority":        1.0,
-				})
-			else:
-				candidates.append({
-					"action_type":     "actor.move",
-					"target_id":       str(nearest_enemy.get("id", "")),
-					"target_pos":      t_pos,
-					"target_distance": enemy_dist,
-					"target_hp_ratio": target_hp_ratio,
-					"priority":        1.0,
-				})
+			candidates.append({
+				"action_type":     "actor.move",
+				"target_id":       str(nearest_enemy.get("id", "")),
+				"target_pos":      t_pos,
+				"target_distance": enemy_dist,
+				"target_hp_ratio": target_hp_ratio,
+				"priority":        1.0,
+			})
 
 	# actor.guard — only meaningful when an enemy is within guard_range tiles.
 	# No nearby threat → guarding is pointless; omit so scorer never picks it.

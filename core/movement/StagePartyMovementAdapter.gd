@@ -961,6 +961,13 @@ static func _target_weight(
 ##
 ## The value is a pure function of (salt, cell) — no RNG, no clock, no state — so
 ## replay is exact and the function stays as pure as the rest of this adapter.
+## Public seam for live callers (e.g. FlowRuntime combat destination tie-break):
+## the compass-de-aligned, replay-stable FNV-1a tie value over "<salt>|<cell key>".
+## Same de-aligner criterion 4 uses, exposed so combat and stage share one source.
+static func salted_cell_hash(salt: String, cell_key: String) -> int:
+	return _salted_cell_hash(salt, cell_key)
+
+
 static func _salted_cell_hash(salt: String, cell_key: String) -> int:
 	return _fnv1a_32("%s|%s" % [salt, cell_key])
 

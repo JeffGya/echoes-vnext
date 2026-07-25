@@ -42,13 +42,16 @@ var _bark_is_response: bool = false  # V2-VOICE-001: true when this bark is a re
 ## behavior_module: the AI module to query each turn. Explicit injection wins; used by tests and
 ##   non-echo actors that need a specific module. Defaults to BehaviorArbiter for echo actors.
 ## actor_cfg: the data.actor block from balance.json; passed through to BehaviorArbiter.
+## movement_cfg: the data.combat.movement block from balance.json; required only
+##   when FlowRuntime supplies movement contracts for select_movement_intent().
 ##   Pass {} (default) to use BehaviorArbiter's hardcoded defaults — safe for all existing callers.
-func _init(actor_dict: Dictionary, behavior_module: BehaviorModule = null, actor_cfg: Dictionary = {}) -> void:
+func _init(actor_dict: Dictionary, behavior_module: BehaviorModule = null,
+		actor_cfg: Dictionary = {}, movement_cfg: Dictionary = {}) -> void:
 	_actor = actor_dict
 	if behavior_module != null:
 		_behavior_module = behavior_module
 	elif actor_dict.get("actor_type", "") in ["echo", "enemy"]:
-		_behavior_module = BehaviorArbiter.new(actor_cfg)  # ACTOR-005: echo + enemy actors use weighted arbiter
+		_behavior_module = BehaviorArbiter.new(actor_cfg, movement_cfg)  # ACTOR-005: echo + enemy actors use weighted arbiter
 	else:
 		_behavior_module = IdleBehaviorModule.new()
 	_last_intent = {}
@@ -236,7 +239,32 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	augmented_context["equipped_skills"] = _actor.get("equipped_skills", {})
 	augmented_context["skills_cfg"]      = cfg_data.get("skills", {})
 
-	var intent: Dictionary = _behavior_module.select_intent(augmented_context)
+	var intent: Dictionary = {}
+	if augmented_context.has("movement_context") \
+			and augmented_context.has("movement_profile") \
+			and augmented_context.has("movement_goals") \
+			and augmented_context.has("movement_options") \
+			and _behavior_module.has_method("select_movement_intent"):
+		var movement_selection: Dictionary = _behavior_module.call(
+			"select_movement_intent",
+			augmented_context,
+			augmented_context["movement_context"],
+			augmented_context["movement_profile"],
+			augmented_context["movement_goals"],
+			augmented_context["movement_options"]
+		)
+		if bool(movement_selection.get("valid", false)):
+			intent = movement_selection.get("intent", {}) as Dictionary
+			var planned_action: Dictionary = intent.get("planned_action", {}) as Dictionary
+			intent["action_type"] = str(planned_action.get("type", ""))
+			intent["target_id"] = str(planned_action.get("target_id", ""))
+			var selected_path: Array = intent.get("path", []) as Array
+			intent["target_pos"] = selected_path.back() if not selected_path.is_empty() else _actor.get("grid_pos", {})
+			intent["target_distance"] = GridService.chebyshev_distance(_actor.get("grid_pos", {}), intent["target_pos"] as Dictionary)
+		else:
+			intent = _behavior_module.select_intent(augmented_context)
+	else:
+		intent = _behavior_module.select_intent(augmented_context)
 	_last_intent = intent
 	# Persist last_intent to actor dict so _build_board_summary() can read it next turn.
 	# ActorStateMachine is recreated each turn (FlowRuntime.new per actor), so _last_intent
@@ -313,84 +341,21 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	_actor["_bark_tier"]        = _bark_tier
 	_actor["_bark_target_id"]   = _bark_target_id
 	_actor["_bark_is_response"] = _bark_is_response
-	# PROG-009: Ranger passive — threat-minimising move.
-	# When a Ranger chooses actor.move (or actor.withdraw), redirect target_pos
-	# away from the nearest enemy so they reposition rather than advance.
-	var _calling_p: String = str(_actor.get("calling_origin", ""))
-	if _calling_p == "ranger" and str(intent.get("action_type", "")) == "actor.move" \
-			and not _movement_skipped:
-		var _my_pos_r: Dictionary = _actor.get("grid_pos", {})
-		var _ne_r: Dictionary = ActorService.get_nearest_enemy(_actor, context.get("all_actors", []))
-		if not _ne_r.is_empty() and not _my_pos_r.is_empty():
-			var _e_col: int = int(_ne_r.get("grid_pos", {}).get("col", 0))
-			var _e_row: int = int(_ne_r.get("grid_pos", {}).get("row", 0))
-			var _mc: int    = int(_my_pos_r.get("col", 0))
-			var _mr: int    = int(_my_pos_r.get("row", 0))
-			var _nx: int    = 0 if _mc == _e_col else (1 if _mc > _e_col else -1)
-			var _ny: int    = 0 if _mr == _e_row else (1 if _mr > _e_row else -1)
-			var _bc: Dictionary = context.get("board_cfg", {})
-			var _bc_w: int  = int(_bc.get("board_cols", 10))
-			var _bc_h: int  = int(_bc.get("board_rows", 10))
-			intent["target_pos"] = {
-				"col": clampi(_mc + _nx * 3, 0, _bc_w - 1),
-				"row": clampi(_mr + _ny * 3, 0, _bc_h - 1),
-			}
-
-	# GRID-005: resolve movement when the behavior module requests a move.
-	if intent.get("action_type", "") == "actor.move" and not _movement_skipped:
-		var target_pos: Dictionary = intent.get("target_pos", {})
-		if not target_pos.is_empty():
-			# Build occupied set: all living actors except self (1 actor per cell).
-			var my_id: String = str(_actor.get("id", ""))
-			var occupied: Array = []
-			for a_v in context.get("all_actors", []):
-				if a_v is Dictionary \
-						and str(a_v.get("id", "")) != my_id \
-						and not a_v.get("is_dead", false):
-					occupied.append(a_v.get("grid_pos", {}))
-			var move_result: Dictionary = GridService.move_toward(
-					_actor, target_pos, context.get("board_cfg", {}), occupied)
-			logger.info(t, "actor.moved", "Actor moved", {
-				"actor_id": _actor.get("id", ""),
-				"from_pos": move_result["from_pos"],
-				"to_pos":   move_result["to_pos"],
-			})
-
-	# COMBAT-006: resolve purify shrine action — applies a drain-reduction stack to the shrine.
-	if intent.get("action_type", "") == "actor.purify_shrine":
-		var shrine_cfg_data: Dictionary = \
-			context.get("cfg", {}).get("data", {}).get("combat", {}).get("shrine", {})
-		var shrine_ref: Dictionary = {}
-		for a_v in context.get("all_actors", []):
-			if a_v is Dictionary and a_v.get("is_structure", false) \
-					and not a_v.get("is_dead", false):
-				shrine_ref = a_v
-				break
-		if not shrine_ref.is_empty():
-			ShrineService.apply_purify_stack(shrine_ref, _actor, shrine_cfg_data)
-			logger.info(t, "actor.purified_shrine", "Purify applied to shrine", {
-				"actor_id":     _actor.get("id", ""),
-				"shrine_id":    shrine_ref.get("id", ""),
-				"stacks_count": shrine_ref.get("purify_stacks", []).size(),
-				"cooldown_set": _actor.get("purify_cooldown", 0),
-			})
-			# Trigger 4: shrine purify morale — purifier gains boost; allies receive ripple.
-			var emo_cfg_sh: Dictionary = context.get("cfg", {}).get("data", {}).get("combat", {}).get("emotion", {})
-			var shrine_morale: int = int(emo_cfg_sh.get("morale_on_shrine_purify", 5))
-			var shrine_ripple: int = int(emo_cfg_sh.get("morale_ripple_shrine_purify", 2))
-			_actor["morale"] = mini(100, int(_actor.get("morale", 50)) + shrine_morale)
-			for rp_v in context.get("all_actors", []):
-				if not (rp_v is Dictionary): continue
-				var rp_a: Dictionary = rp_v
-				if str(rp_a.get("id", "")) != str(_actor.get("id", "")) \
-						and str(rp_a.get("faction", "")) == "echo" \
-						and not rp_a.get("is_dead", false):
-					rp_a["morale"] = mini(100, int(rp_a.get("morale", 50)) + shrine_ripple)
-
-	# PROG-009: update per-round passive counters and skill state flags.
-	_update_passive_state(intent, context, t)
+	# PROG-009: update per-round passive counters and skill state flags. Live
+	# movement cutover defers this until FlowRuntime knows actual traversal.
+	if not context.has("movement_context"):
+		_update_passive_state(intent, context, t)
 
 	return intent
+
+
+func update_passive_state_from_activation(intent: Dictionary, context: Dictionary, t: int,
+		actual_moved: bool) -> void:
+	# Live activation can replace a planned move with its bounded fallback. Persist
+	# that resolved action for next-turn repetition scoring, not the pre-activation plan.
+	_last_intent = intent.duplicate(true)
+	_actor["last_intent"] = { "action_type": str(intent.get("action_type", "")) }
+	_update_passive_state(intent, context, t, actual_moved)
 
 
 ## Returns a debug-friendly snapshot of this actor's current behavior state.
@@ -821,10 +786,12 @@ func _get_most_feared_ally(allies: Array) -> Dictionary:
 # Steward: tracks stationary_rounds for soft-taunt eligibility.
 # Skill once-per-combat flags are set here when the skill fires.
 # Skill cooldowns (read_field, withdraw) are ticked at turn START instead.
-func _update_passive_state(intent: Dictionary, context: Dictionary, t: int) -> void:
+func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
+		actual_moved_override: Variant = null) -> void:
 	var action: String         = str(intent.get("action_type", ""))
 	var calling_origin: String = str(_actor.get("calling_origin", ""))
-	var moved: bool            = (action == "actor.move" or action == "actor.withdraw")
+	var moved: bool = bool(actual_moved_override) if actual_moved_override != null \
+		else (action == "actor.move" or action == "actor.withdraw")
 
 	match calling_origin:
 		"warder":
