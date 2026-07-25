@@ -117,6 +117,16 @@ static func _add_ordinary_combat(
 ) -> void:
 	for hostile_value: Variant in _hostiles(context):
 		var hostile: Dictionary = hostile_value as Dictionary
+		if _is_adjacent(context["origin"] as Dictionary, hostile["position"] as Dictionary):
+			# The mover is already in melee range, so it must not receive a competing
+			# advance. `engage` remains a legal non-stationary goal: MovementGoal only
+			# admits an origin-containing region for `hold`.
+			var adjacent_region: Array = _adjacent_region(context, hostile["position"] as Dictionary, false)
+			_add_goal(
+				candidates, BUCKET_DIRECT, context, pressure, "engage", goal_role,
+				adjacent_region, NORMAL, [str(hostile["id"])]
+			)
+			continue
 		var region: Array = _adjacent_region(context, hostile["position"] as Dictionary, false)
 		_add_goal(candidates, BUCKET_TACTICAL, context, pressure, "advance", goal_role, region, HIGH, [str(hostile["id"])])
 		_add_goal(candidates, BUCKET_SAFETY, context, pressure, "engage", goal_role, region, NORMAL, [str(hostile["id"])])
@@ -659,7 +669,7 @@ static func _add_goal(
 	var fallback: Dictionary = {} if str(primary["type"]) == "actor.idle" else ActionPlan.build("actor.idle")
 	var anchor: Dictionary = region[0] as Dictionary
 	var goal_id := "goal.%s.%s.%s.c%dr%d" % [str(pressure["mode"]), purpose, goal_role, int(anchor["col"]), int(anchor["row"])]
-	var sources: Array = _goal_sources(pressure, goal_role, relevant)
+	var sources: Array = _goal_sources(pressure, goal_role, relevant, purpose)
 	var goal: Dictionary = GoalContract.build(
 		goal_id,
 		purpose,
@@ -780,13 +790,14 @@ static func _objective_progress(pressure: Dictionary) -> float:
 	return clampf(float(pressure["progress_current"]) / float(required), 0.0, 1.0)
 
 
-static func _goal_sources(pressure: Dictionary, goal_role: String, relevant: Array) -> Array:
+static func _goal_sources(pressure: Dictionary, goal_role: String, relevant: Array,
+		purpose: String) -> Array:
 	var sources: Array = (pressure["pressure_sources"] as Array).duplicate()
 	sources.append("mode.%s" % str(pressure["mode"]))
 	sources.append("role.%s" % goal_role)
 	for actor_value: Variant in relevant:
 		sources.append("actor.%s" % str(actor_value))
-	if not str(pressure["objective_id"]).is_empty():
+	if _goal_relates_to_objective(pressure, goal_role, relevant, purpose):
 		sources.append("objective.%s" % str(pressure["objective_id"]))
 	if not bool(pressure["objective_known"]):
 		sources.append("state.objective_unknown")
@@ -799,6 +810,40 @@ static func _goal_sources(pressure: Dictionary, goal_role: String, relevant: Arr
 	if str(pressure["mode"]) == "guide_spirit":
 		sources.append("state.spirit_joined" if bool(pressure["spirit_joins_battle"]) else "state.spirit_nonjoining")
 	return V.canonical_string_array(sources)
+
+
+static func _goal_relates_to_objective(pressure: Dictionary, goal_role: String,
+		relevant: Array, purpose: String) -> bool:
+	var objective_id: String = str(pressure["objective_id"])
+	if objective_id.is_empty():
+		return false
+	if relevant.has(objective_id):
+		return true
+	var mode: String = str(pressure["mode"])
+	var role: String = str(goal_role)
+	if role in [
+		"purifier",
+		"protector",
+		"holder",
+		"runner",
+		"breaker",
+		"custody_threat",
+		"spirit",
+	]:
+		return true
+	if purpose in ["protect", "escort"] and mode in [
+		"purify_shrine",
+		"recover",
+		"protect",
+		"guide_spirit",
+	]:
+		return true
+	if purpose in ["advance", "hold", "intercept"] and role in [
+		"blocker",
+		"screener",
+	]:
+		return mode in ["purify_shrine", "recover", "protect"]
+	return false
 
 
 static func _validate_input_sources(sources: Array) -> Dictionary:

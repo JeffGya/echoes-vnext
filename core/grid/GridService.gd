@@ -12,7 +12,6 @@
 #   GRID-002 — assign_grid_pos(), spawn positions
 #   GRID-003 — place_actors() with seeded RNG              ← implemented here
 #   GRID-004 — manhattan_distance()              ← implemented here
-#   GRID-005 — move_toward()                    ← implemented here
 #
 # V2-STAGE-004 walkable terrain (combat board):
 #   board_cfg["walkable"] — optional Dictionary of "col,row" keys (StageTerrain.walkable_set output).
@@ -70,7 +69,6 @@ static func is_valid_pos(pos: Dictionary, cfg: Dictionary = {}) -> bool:
 ## Returns the Manhattan distance between two grid_pos dicts { col, row }.
 ## Pure integer function — no floats, no RNG, no side effects.
 ## distance(A, A) == 0; distance(adjacent cell) == 1.
-## Used internally by _greedy_step() as a direction heuristic — do not replace there.
 static func manhattan_distance(a: Dictionary, b: Dictionary) -> int:
 	return abs(int(a.get("col", 0)) - int(b.get("col", 0))) \
 		 + abs(int(a.get("row", 0)) - int(b.get("row", 0)))
@@ -79,7 +77,7 @@ static func manhattan_distance(a: Dictionary, b: Dictionary) -> int:
 ## Returns the Chebyshev distance between two grid_pos dicts { col, row }.
 ## Chebyshev = max(|Δcol|, |Δrow|) — matches the true step cost for 8-directional movement.
 ## A diagonal neighbour is distance 1, same as an orthogonal neighbour.
-## Use for all range checks and AI distance awareness; keep manhattan_distance() for _greedy_step.
+## Use for all range checks and AI distance awareness.
 static func chebyshev_distance(a: Dictionary, b: Dictionary) -> int:
 	return max(abs(int(a.get("col", 0)) - int(b.get("col", 0))),
 			   abs(int(a.get("row", 0)) - int(b.get("row", 0))))
@@ -90,106 +88,6 @@ static func chebyshev_distance(a: Dictionary, b: Dictionary) -> int:
 ## Use for melee range checks — do not substitute manhattan_distance == 1.
 static func is_adjacent(a: Dictionary, b: Dictionary) -> bool:
 	return chebyshev_distance(a, b) == 1
-
-
-# -------------------------
-# Movement helpers (GRID-005)
-# -------------------------
-
-## Moves actor one cell toward target_pos using greedy 8-directional movement.
-## Mutates actor["grid_pos"] in-place. Returns { "from_pos": Dictionary, "to_pos": Dictionary }.
-## Pure except for the actor mutation — no RNG, no logging.
-## If no valid neighbour exists (degenerate board), actor is not moved.
-## occupied_positions: Array of { col, row } dicts for cells already taken by living actors.
-##
-## Walkable-terrain branch (board_cfg["walkable"] non-empty):
-##   Uses StageTerrain.bfs_distance_field + next_step for walkable-aware pathfinding.
-##   Distance field is rooted over the FULL walkable set (target is always reachable via BFS).
-##   Step set is walkable minus ALL occupied cells (no target-key exception) so the mover
-##   advances toward the target without stepping onto any occupied cell.
-##   If no walkable path exists (actor cornered), actor stays in place — never enters void.
-##
-## Empty walkable ⇒ identical-to-today _greedy_step path (LEGACY, byte-identical).
-static func move_toward(actor: Dictionary, target_pos: Dictionary,
-		board_cfg: Dictionary = {}, occupied_positions: Array = []) -> Dictionary:
-	var from_pos: Dictionary = actor.get("grid_pos", { "col": 0, "row": 0 }).duplicate()
-
-	var walkable: Dictionary = board_cfg.get("walkable", {})
-
-	if walkable.is_empty():
-		# LEGACY path — greedy step, byte-identical to before.
-		var best: Dictionary = _greedy_step(from_pos, target_pos, board_cfg, occupied_positions)
-		if best != from_pos:
-			assign_grid_pos(actor, int(best.get("col", 0)), int(best.get("row", 0)))
-	else:
-		# WALKABLE TERRAIN path — BFS-based, never enters void.
-		#
-		# Root the distance field over the FULL walkable set so the shortest-path
-		# direction toward target is always known, even when allies cluster around it.
-		# Build effective_walkable separately (walkable minus ALL occupied cells) and
-		# pass it to next_step so the mover never physically steps onto an occupied cell.
-		# The target-key exception is intentionally removed: we do NOT want to step
-		# onto the target's cell (behaviour arbiter handles melee when adjacent).
-
-		# Distance field: full walkable — target is on a walkable cell, BFS always roots.
-		var dist_field: Dictionary = StageTerrain.bfs_distance_field(target_pos, walkable)
-
-		# Step set: walkable minus every occupied cell (no exceptions).
-		var effective_walkable: Dictionary = walkable.duplicate()
-		for occ_v in occupied_positions:
-			if occ_v is Dictionary:
-				var occ_key: String = "%d,%d" % [int(occ_v.get("col", -1)), int(occ_v.get("row", -1))]
-				effective_walkable.erase(occ_key)
-
-		var step: Dictionary = StageTerrain.next_step(from_pos, dist_field, effective_walkable, target_pos)
-
-		# next_step returns from_cell unchanged when no progressing neighbour exists (dead-end safety).
-		if step.get("col", from_pos.get("col", 0)) != from_pos.get("col", 0) \
-				or step.get("row", from_pos.get("row", 0)) != from_pos.get("row", 0):
-			assign_grid_pos(actor, int(step.get("col", 0)), int(step.get("row", 0)))
-		# else: actor stays — already at target or no walkable path available.
-
-	return { "from_pos": from_pos, "to_pos": actor["grid_pos"].duplicate() }
-
-
-## Returns the best neighbour cell to step toward target_pos using greedy minimisation.
-## Considers all 8 neighbours; filters out-of-bounds cells via is_valid_pos().
-## Filters cells in occupied_positions so two living actors cannot share a cell.
-## Tiebreak: lowest (col + row) sum. Returns from_pos if no valid neighbour found.
-static func _greedy_step(from_pos: Dictionary, target_pos: Dictionary,
-		board_cfg: Dictionary, occupied_positions: Array = []) -> Dictionary:
-	var fc: int = int(from_pos.get("col", 0))
-	var fr: int = int(from_pos.get("row", 0))
-
-	var best: Dictionary = from_pos
-	var best_dist: int = manhattan_distance(from_pos, target_pos)
-	var best_sum: int = fc + fr
-
-	for dc in [-1, 0, 1]:
-		for dr in [-1, 0, 1]:
-			if dc == 0 and dr == 0:
-				continue
-			var candidate: Dictionary = { "col": fc + dc, "row": fr + dr }
-			if not is_valid_pos(candidate, board_cfg):
-				continue
-			# Skip cells already occupied by a living actor.
-			var is_occupied: bool = false
-			for occ_v in occupied_positions:
-				if occ_v is Dictionary \
-						and int(occ_v.get("col", -1)) == candidate["col"] \
-						and int(occ_v.get("row", -1)) == candidate["row"]:
-					is_occupied = true
-					break
-			if is_occupied:
-				continue
-			var dist: int = manhattan_distance(candidate, target_pos)
-			var sum: int = int(candidate["col"]) + int(candidate["row"])
-			if dist < best_dist or (dist == best_dist and sum < best_sum):
-				best = candidate
-				best_dist = dist
-				best_sum = sum
-
-	return best
 
 
 # -------------------------

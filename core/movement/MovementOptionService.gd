@@ -379,6 +379,15 @@ static func _planned_action_for_destination(goal: Dictionary, destination: Dicti
 	return {"type": "actor.move", "target_id": "", "payload": {}}
 
 
+## Public seam for live callers (e.g. FlowRuntime): the hostile-control edge-cost map
+## that MovementPathService._edge_surcharge consumes, built from the SAME control model
+## MovementExecutor charges ("from>to" -> 1 for any edge whose either endpoint is
+## 8-adjacent to a live hostile). Threading this into the planner keeps route_cost /
+## commitment equal to the executor's real per-edge cost — a single source of truth.
+static func hostile_edge_costs(context: Dictionary, planning_walkable: Dictionary) -> Dictionary:
+	return _build_control(context, planning_walkable)["edge_costs"] as Dictionary
+
+
 static func _build_control(context: Dictionary, planning_walkable: Dictionary) -> Dictionary:
 	var controllers: Array = []
 	for actor_value: Variant in context["perceived_actors"] as Array:

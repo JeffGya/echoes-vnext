@@ -1,6 +1,6 @@
 # res://tests/GridTests.gd
 # Tests for the GRID-001 Board Configuration system + GRID-002 grid_pos assignment
-# + GRID-003 deterministic placement + GRID-004 Manhattan distance + GRID-005 greedy movement
+# + GRID-003 deterministic placement + GRID-004 Manhattan distance
 # + GRID-ADJ Chebyshev distance and adjacency:
 #   1. GridService returns the defaults (10 cols, 10 rows) when called with no config.
 #   2. GridService reads board_cols and board_rows from a config dict.
@@ -18,10 +18,10 @@
 #  14. manhattan_distance returns 1 for adjacent column cells.                         (GRID-004)
 #  15. manhattan_distance returns 2 for a one-step diagonal move.                      (GRID-004)
 #  16. manhattan_distance returns correct value for a multi-step cross-board path.     (GRID-004)
-#  17. move_toward() with horizontal target moves one step right.                     (GRID-005)
-#  18. move_toward() with diagonal target moves one step diagonally.                  (GRID-005)
-#  19. move_toward() at board corner never moves out of bounds.                       (GRID-005)
-#  20. move_toward() return dict has correct from_pos and to_pos.                     (GRID-005)
+#  17. get_board_config() returns default dimensions without config.
+#  18. is_valid_pos() rejects negative coordinates.
+#  19. chebyshev_distance returns 0 for identical positions.                          (GRID-ADJ)
+#  20. is_adjacent returns false for the same cell.                                   (GRID-ADJ)
 #  21. chebyshev_distance returns 1 for an orthogonal neighbour.                      (GRID-ADJ)
 #  22. chebyshev_distance returns 1 for a diagonal neighbour.                         (GRID-ADJ)
 #  23. chebyshev_distance returns 2 for a two-step orthogonal distance.               (GRID-ADJ)
@@ -52,11 +52,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("grid/distance_adjacent_col_is_one",        Callable(GridTests, "_t_distance_adjacent_col_is_one"))
 	runner.register_test("grid/distance_diagonal_step_is_two",       Callable(GridTests, "_t_distance_diagonal_step_is_two"))
 	runner.register_test("grid/distance_multi_step_cross_board",     Callable(GridTests, "_t_distance_multi_step_cross_board"))
-	# GRID-005
-	runner.register_test("grid/move_toward_orthogonal",              Callable(GridTests, "_t_move_toward_orthogonal"))
-	runner.register_test("grid/move_toward_diagonal",                Callable(GridTests, "_t_move_toward_diagonal"))
-	runner.register_test("grid/move_toward_stays_inbounds",          Callable(GridTests, "_t_move_toward_stays_inbounds"))
-	runner.register_test("grid/move_toward_returns_from_to",         Callable(GridTests, "_t_move_toward_returns_from_to"))
+	runner.register_test("grid/default_board_config_shape",          Callable(GridTests, "_t_default_board_config_shape"))
+	runner.register_test("grid/valid_pos_rejects_negative",          Callable(GridTests, "_t_valid_pos_rejects_negative"))
+	runner.register_test("grid/chebyshev_same_cell_is_zero",         Callable(GridTests, "_t_chebyshev_same_cell_is_zero"))
+	runner.register_test("grid/is_adjacent_same_cell_false",         Callable(GridTests, "_t_is_adjacent_same_cell_false"))
 	# GRID-ADJ
 	runner.register_test("grid/chebyshev_orthogonal_is_one",         Callable(GridTests, "_t_chebyshev_orthogonal_is_one"))
 	runner.register_test("grid/chebyshev_diagonal_is_one",           Callable(GridTests, "_t_chebyshev_diagonal_is_one"))
@@ -437,105 +436,36 @@ static func _t_distance_multi_step_cross_board() -> Dictionary:
 	return { "ok": true }
 
 
-# -------------------------
-# GRID-005 Tests
-# -------------------------
-
-# Test 17: move_toward_orthogonal
-# Actor at (2,5), target at (6,5) on 10×10 board.
-# Expected: greedy step moves actor to (3,5) — pure horizontal step is optimal
-# (diagonal neighbours like (3,4) and (3,6) have dist=4, vs (3,5) dist=3).
-static func _t_move_toward_orthogonal() -> Dictionary:
-	var cfg := { "board_cols": 10, "board_rows": 10 }
-	var actor: Dictionary = ActorSchema.get_defaults()
-	GridService.assign_grid_pos(actor, 2, 5)
-
-	GridService.move_toward(actor, { "col": 6, "row": 5 }, cfg)
-
-	var gp: Dictionary = actor.get("grid_pos", {})
-	if int(gp.get("col", -1)) != 3 or int(gp.get("row", -1)) != 5:
-		return {
-			"ok": false,
-			"error": "Expected actor at (3,5) after orthogonal move, got col=%d row=%d" % [
-				int(gp.get("col", -1)), int(gp.get("row", -1))]
-		}
+static func _t_default_board_config_shape() -> Dictionary:
+	var cfg: Dictionary = GridService.get_board_config({})
+	if int(cfg.get("board_cols", 0)) != 10:
+		return { "ok": false, "error": "Expected default board_cols=10, got: %d" % int(cfg.get("board_cols", 0)) }
+	if int(cfg.get("board_rows", 0)) != 10:
+		return { "ok": false, "error": "Expected default board_rows=10, got: %d" % int(cfg.get("board_rows", 0)) }
 	return { "ok": true }
 
 
-# Test 18: move_toward_diagonal
-# Actor at (2,2), target at (6,6) on 10×10 board.
-# Expected: greedy step moves actor to (3,3) — diagonal step has dist=6,
-# while orthogonal neighbours give dist=7.
-static func _t_move_toward_diagonal() -> Dictionary:
+static func _t_valid_pos_rejects_negative() -> Dictionary:
 	var cfg := { "board_cols": 10, "board_rows": 10 }
-	var actor: Dictionary = ActorSchema.get_defaults()
-	GridService.assign_grid_pos(actor, 2, 2)
-
-	GridService.move_toward(actor, { "col": 6, "row": 6 }, cfg)
-
-	var gp: Dictionary = actor.get("grid_pos", {})
-	if int(gp.get("col", -1)) != 3 or int(gp.get("row", -1)) != 3:
-		return {
-			"ok": false,
-			"error": "Expected actor at (3,3) after diagonal move, got col=%d row=%d" % [
-				int(gp.get("col", -1)), int(gp.get("row", -1))]
-		}
+	if GridService.is_valid_pos({ "col": -1, "row": 0 }, cfg):
+		return { "ok": false, "error": "Negative col accepted as valid" }
+	if GridService.is_valid_pos({ "col": 0, "row": -1 }, cfg):
+		return { "ok": false, "error": "Negative row accepted as valid" }
 	return { "ok": true }
 
 
-# Test 19: move_toward_stays_inbounds
-# Actor at (0,0), target at (0,9) on 10×10 board.
-# Expected: actor moves to (0,1) — not (-1,0), (-1,1) or similar out-of-bounds cells.
-static func _t_move_toward_stays_inbounds() -> Dictionary:
-	var cfg := { "board_cols": 10, "board_rows": 10 }
-	var actor: Dictionary = ActorSchema.get_defaults()
-	GridService.assign_grid_pos(actor, 0, 0)
-
-	GridService.move_toward(actor, { "col": 0, "row": 9 }, cfg)
-
-	var gp: Dictionary = actor.get("grid_pos", {})
-	var col: int = int(gp.get("col", -1))
-	var row: int = int(gp.get("row", -1))
-	if not GridService.is_valid_pos(gp, cfg):
-		return { "ok": false, "error": "Actor moved out of bounds to col=%d row=%d" % [col, row] }
-	if col != 0 or row != 1:
-		return {
-			"ok": false,
-			"error": "Expected actor at (0,1) after corner move, got col=%d row=%d" % [col, row]
-		}
+static func _t_chebyshev_same_cell_is_zero() -> Dictionary:
+	var pos := { "col": 4, "row": 4 }
+	var dist: int = GridService.chebyshev_distance(pos, pos)
+	if dist != 0:
+		return { "ok": false, "error": "Expected chebyshev(same cell)=0, got: %d" % dist }
 	return { "ok": true }
 
 
-# Test 20: move_toward_returns_from_to
-# Actor at (3,3), target at (7,3) on 10×10 board.
-# Expected: return dict has from_pos=={col:3,row:3} and to_pos=={col:4,row:3}.
-static func _t_move_toward_returns_from_to() -> Dictionary:
-	var cfg := { "board_cols": 10, "board_rows": 10 }
-	var actor: Dictionary = ActorSchema.get_defaults()
-	GridService.assign_grid_pos(actor, 3, 3)
-
-	var result: Dictionary = GridService.move_toward(actor, { "col": 7, "row": 3 }, cfg)
-
-	if not result.has("from_pos"):
-		return { "ok": false, "error": "move_toward() result missing 'from_pos'" }
-	if not result.has("to_pos"):
-		return { "ok": false, "error": "move_toward() result missing 'to_pos'" }
-
-	var from: Dictionary = result["from_pos"]
-	var to: Dictionary   = result["to_pos"]
-
-	if int(from.get("col", -1)) != 3 or int(from.get("row", -1)) != 3:
-		return {
-			"ok": false,
-			"error": "Expected from_pos={col:3,row:3}, got col=%d row=%d" % [
-				int(from.get("col", -1)), int(from.get("row", -1))]
-		}
-	if int(to.get("col", -1)) != 4 or int(to.get("row", -1)) != 3:
-		return {
-			"ok": false,
-			"error": "Expected to_pos={col:4,row:3}, got col=%d row=%d" % [
-				int(to.get("col", -1)), int(to.get("row", -1))]
-		}
+static func _t_is_adjacent_same_cell_false() -> Dictionary:
+	var pos := { "col": 4, "row": 4 }
+	if GridService.is_adjacent(pos, pos):
+		return { "ok": false, "error": "Same cell reported adjacent" }
 	return { "ok": true }
 
 

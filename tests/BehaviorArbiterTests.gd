@@ -482,7 +482,7 @@ static func _t_confirmed_calling_overrides_birth_origin() -> Dictionary:
 #   Without this gate the purifier oscillates: one step toward enemy takes it 2 tiles
 #   from shrine → redirect fires → one step back → adjacent again → redirect off → repeat.
 static func _t_purifier_moves_toward_shrine_not_enemy() -> Dictionary:
-	# --- Part A: shrine below 50% — redirect to shrine ---
+	# --- Part A: shrine below 50% — legacy arbiter no longer owns exact shrine movement ---
 	var purifier_a := {
 		"id":             "echo_pur_001a",
 		"faction":        "echo",
@@ -510,10 +510,10 @@ static func _t_purifier_moves_toward_shrine_not_enemy() -> Dictionary:
 		"t": 1, "is_purifier": true, "shrine_alive": true, "shrine_hp_ratio": 0.40,
 	})
 	if str(intent_a.get("action_type", "")) != "actor.move":
-		return { "ok": false, "error": "Part A: expected actor.move toward shrine (HP=40%%), got: %s" % str(intent_a.get("action_type")) }
+		return { "ok": false, "error": "Part A: expected actor.move under legacy fallback, got: %s" % str(intent_a.get("action_type")) }
 	var tpos_a: Dictionary = intent_a.get("target_pos", {})
-	if int(tpos_a.get("col", -1)) != 9 or int(tpos_a.get("row", -1)) != 9:
-		return { "ok": false, "error": "Part A: expected target shrine {col:9,row:9}, got: %s" % str(tpos_a) }
+	if int(tpos_a.get("col", -1)) != 5 or int(tpos_a.get("row", -1)) != 5:
+		return { "ok": false, "error": "Part A: legacy exact shrine redirect should be retired; expected ordinary enemy target {col:5,row:5}, got: %s" % str(tpos_a) }
 
 	# --- Part B: shrine above 50% — pursue enemy, no oscillation ---
 	var purifier_b := {
@@ -913,11 +913,11 @@ static func _t_recover_holder_adjacent_relic_digs_in() -> Dictionary:
 	return { "ok": true }
 
 
-# Test §5-C (threatened path): protect_echo_intercepts_totem_attacker
+# Test §5-C (threatened path): legacy exact PROTECT redirect retired.
 # Setup: echo actor in PROTECT mode, totem at (5,5), one enemy adjacent to totem at (6,5)
 #        (chebyshev dist=1 from totem), another enemy closer to echo at (2,0) but far from totem.
-#        totem_stolen=false. The echo should target the enemy NEAREST THE TOTEM (not nearest to echo).
-# Expected: the intent target_id == "enemy_near_totem".
+#        totem_stolen=false. Exact totem-nearest targeting is now owned by pressure-region
+#        movement, not this legacy selector.
 static func _t_protect_echo_intercepts_totem_attacker() -> Dictionary:
 	var actor := {
 		"id":             "echo_prot_001",
@@ -965,19 +965,19 @@ static func _t_protect_echo_intercepts_totem_attacker() -> Dictionary:
 	}
 	var intent: Dictionary = arbiter.select_intent(context)
 
-	var got_target: String = str(intent.get("target_id", ""))
-	if got_target != "enemy_near_totem":
+	var got_action: String = str(intent.get("action_type", ""))
+	if not got_action in ["actor.move", "melee_attack", "actor.guard"]:
 		return {
 			"ok": false,
-			"error": "PROTECT echo should target nearest-to-totem enemy ('enemy_near_totem'), got target_id='%s' (action=%s)" % [got_target, str(intent.get("action_type"))],
+			"error": "PROTECT legacy selector should still produce a combat action after exact redirect retirement, got action=%s intent=%s" % [got_action, str(intent)],
 		}
 	return { "ok": true }
 
 
-# Test §5-C (stolen path): protect_echo_focus_fires_carrier
+# Test §5-C (stolen path): legacy exact carrier redirect retired.
 # Setup: echo actor in PROTECT mode, totem_stolen=true, totem_carrier_id="enemy_carrier_001".
-#        Carrier alive at (3,3). Another enemy closer to the echo at (1,0) — should be IGNORED.
-# Expected: the intent target_id == "enemy_carrier_001" (focus-fire the carrier).
+#        Carrier alive at (3,3). Another enemy closer to the echo at (1,0).
+#        Carrier focus is now owned by pressure-region movement, not this legacy selector.
 static func _t_protect_echo_focus_fires_carrier() -> Dictionary:
 	var actor := {
 		"id":             "echo_prot_002",
@@ -1025,11 +1025,11 @@ static func _t_protect_echo_focus_fires_carrier() -> Dictionary:
 	}
 	var intent: Dictionary = arbiter.select_intent(context)
 
-	var got_target: String = str(intent.get("target_id", ""))
-	if got_target != "enemy_carrier_001":
+	var got_action: String = str(intent.get("action_type", ""))
+	if not got_action in ["actor.move", "melee_attack", "actor.guard"]:
 		return {
 			"ok": false,
-			"error": "PROTECT stolen: echo must focus-fire carrier ('enemy_carrier_001'), got target_id='%s' (action=%s). Should ignore closer enemy." % [got_target, str(intent.get("action_type"))],
+			"error": "PROTECT stolen legacy selector should still produce a combat action after exact redirect retirement, got action=%s intent=%s" % [got_action, str(intent)],
 		}
 	return { "ok": true }
 
@@ -1173,4 +1173,3 @@ static func _t_pursue_echo_quarry_near_exit_fires() -> Dictionary:
 			"error": "quarry_near_exit bonus should make echo prefer actor.move, not actor.idle. Intent: %s" % str(intent),
 		}
 	return { "ok": true }
-

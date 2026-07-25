@@ -2,7 +2,7 @@
 # V2-STAGE-004 P3 — INTEGRATION coverage for the real combat round loop on irregular terrain.
 #
 # Why this file exists:
-#   The deterministic combat core (GridService.move_toward, BehaviorArbiter, StageTerrain)
+#   The deterministic combat core (live movement activation, BehaviorArbiter, StageTerrain)
 #   is well unit-tested in isolation, and those tests pass. But there was NO test that drove
 #   the *real* FlowRuntime round loop end to end on an irregular-terrain combat board:
 #       FlowEncounterState.enter() → combat.init → combat.confirm_round → combat.next_actor*
@@ -14,7 +14,7 @@
 #   field EXISTS, not that it is non-empty), its initiative entry has id "" and the lookup in
 #   _resolve_next_actor returns {} — so that Echo never takes a turn and freezes at its spawn
 #   cell ("no aim or goal", appears stuck near a corner). This was the gap that let the bug
-#   through: unit tests of move_toward pass because the math is correct; the failure is in the
+#   through: unit tests of isolated movement pass because the math is correct; the failure is in the
 #   id-keyed runtime wiring, only reachable through the full loop.
 #
 # Tests:
@@ -31,6 +31,12 @@
 class_name CombatRoundtripIntegrationTests
 extends RefCounted
 
+const MovementContextScript := preload("res://core/movement/contracts/MovementContext.gd")
+const MovementActorFactScript := preload("res://core/movement/contracts/MovementPerceivedActorFact.gd")
+const MovementHazardFactScript := preload("res://core/movement/contracts/MovementKnownHazardFact.gd")
+const MovementIntentScript := preload("res://core/movement/contracts/MovementIntent.gd")
+const MovementActionPlanScript := preload("res://core/movement/contracts/MovementActionPlan.gd")
+const CombatActivationServiceScript := preload("res://core/movement/CombatActivationService.gd")
 
 static func register(runner) -> void:
 	runner.register_test("combat_roundtrip/echoes_advance_on_terrain", func(): return test_echoes_advance())
@@ -59,9 +65,8 @@ static func register(runner) -> void:
 	runner.register_test("combat_roundtrip/guide_spirit_escort_moves_only_after_adjacency", func(): return test_guide_spirit_escort_moves_only_after_adjacency())
 	runner.register_test("combat_roundtrip/guide_spirit_protect_flees_when_enemy_near_no_echo", func(): return test_guide_spirit_protect_flees_when_enemy_near_no_echo())
 	runner.register_test("combat_roundtrip/guide_spirit_protect_holds_when_echo_adjacent", func(): return test_guide_spirit_protect_holds_when_echo_adjacent())
-	# BLOCKER regression: JOINED combatant spirit (is_structure=false) must move freely —
-	# it is NOT subject to FlowRuntime's is_spirit grid_pos capture/restore gate (that gate
-	# is is_structure-only, owned by the idle _end_round escort/skittish spirit).
+	# JOINED combatant spirit (is_structure=false) uses normal combat activation,
+	# not the non-joining GUIDE objective mover.
 	runner.register_test("combat_roundtrip/guide_spirit_joined_combatant_moves_freely", func(): return test_guide_spirit_joined_combatant_moves_freely())
 	runner.register_test("combat_roundtrip/guide_spirit_dev_override_forces_escort_join", func(): return test_guide_spirit_dev_override_forces_escort_join())
 	# V2-STAGE-004 P3c review-fix: escort destination lands on the walkable FRONTIER ring
@@ -78,6 +83,11 @@ static func register(runner) -> void:
 	# kill morale/ripple block is echo-gated — an enemy kill must NOT boost the enemy or hand
 	# the surviving party morale/fear relief for losing a member.
 	runner.register_test("combat_roundtrip/enemy_kill_does_not_ripple_to_party", func(): return test_enemy_kill_does_not_ripple_to_party())
+	# Slice 6B live hazard regression: approach facts feed planning, combat-board
+	# facts override same-cell/type duplicates, and FlowRuntime owns mover death state.
+	runner.register_test("combat_roundtrip/live_hazard_union_and_mover_damage", func(): return test_live_hazard_union_and_mover_damage())
+	runner.register_test("combat_roundtrip/live_hazard_action_phase_order", func(): return test_live_hazard_action_phase_order())
+	runner.register_test("combat_roundtrip/live_truncated_engage_advances_before_melee", func(): return test_live_truncated_engage_advances_before_melee())
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +155,268 @@ static func _enemy_pos(ectx) -> Dictionary:
 		if str(a_v.get("faction", "")) == "enemy" and not a_v.get("is_dead", false):
 			return a_v.get("grid_pos", {})
 	return {}
+
+
+static func test_live_hazard_union_and_mover_damage() -> Dictionary:
+	var env: Dictionary = _setup("live_hazards", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	flow_ctx.save_data["stage_context"] = {
+		"encounter_approach": {
+			"known_hazards": [
+				{ "id": "approach.burning.a", "position": { "col": 1, "row": 1 }, "hazard_type": "burning" },
+				{ "id": "approach.burning.shadow", "position": { "col": 8, "row": 5 }, "hazard_type": "burning" },
+			],
+		},
+	}
+	var hazards: Array = runtime._live_combat_known_hazards()
+	var ids: Array = []
+	for hazard_value: Variant in hazards:
+		ids.append(str((hazard_value as Dictionary).get("id", "")))
+	if ids != ["approach.burning.a", "hazard.unstable.a", "hazard.binding.a", "hazard.burning.a"]:
+		return { "ok": false, "error": "live hazard union or board precedence drifted: %s" % str(ids) }
+
+	var order_actor: Dictionary = (env["ectx"].actors[0] as Dictionary)
+	order_actor["current_hp"] = 10
+	runtime._apply_live_hazard_outcome(order_actor, {
+		"events": [
+			{"phase": "movement", "damage": 3},
+			{"phase": "end_activation", "damage": 4},
+		],
+		"stop_reason": "reached_destination",
+	}, 99, false)
+	if int(order_actor.get("current_hp", -1)) != 7:
+		return { "ok": false, "error": "movement hazard damage did not resolve before action: %s" % str(order_actor) }
+	runtime._apply_live_hazard_outcome(order_actor, {
+		"events": [
+			{"phase": "movement", "damage": 3},
+			{"phase": "end_activation", "damage": 4},
+		],
+		"stop_reason": "reached_destination",
+	}, 99, true)
+	if int(order_actor.get("current_hp", -1)) != 3:
+		return { "ok": false, "error": "Burning did not resolve after action: %s" % str(order_actor) }
+
+	var purifier: Dictionary = (env["ectx"].actors[0] as Dictionary)
+	var wrong_shrine: Dictionary = {
+		"id": "shrine.wrong", "is_structure": true, "is_dead": false,
+		"current_hp": 20, "stats": {"max_hp": 20}, "purify_stacks": [],
+	}
+	var matching_shrine: Dictionary = {
+		"id": "shrine.match", "is_structure": true, "is_dead": false,
+		"current_hp": 20, "stats": {"max_hp": 20}, "purify_stacks": [],
+	}
+	(env["ectx"].actors as Array).append(wrong_shrine)
+	(env["ectx"].actors as Array).append(matching_shrine)
+	var purify_ctx: Dictionary = {"cfg": runtime.config_service.get_balance()}
+	runtime._apply_live_purify_shrine(purifier, "shrine.match", purify_ctx, 99)
+	if (wrong_shrine.get("purify_stacks", []) as Array).size() != 0:
+		return { "ok": false, "error": "non-target shrine mutated during purify" }
+	if (matching_shrine.get("purify_stacks", []) as Array).size() != 1:
+		return { "ok": false, "error": "matching purify target did not receive exactly one stack" }
+	wrong_shrine["is_dead"] = true
+	runtime._apply_live_purify_shrine(purifier, "shrine.wrong", purify_ctx, 99)
+	if (matching_shrine.get("purify_stacks", []) as Array).size() != 1:
+		return { "ok": false, "error": "dead mismatched target changed the living shrine" }
+
+	var echo: Dictionary = (env["ectx"].actors[0] as Dictionary)
+	echo["current_hp"] = 3
+	echo["is_ko"] = true
+	runtime._apply_live_hazard_outcome(echo, {
+		"events": [{ "damage": 3 }],
+		"stop_reason": "death",
+	}, 99)
+	if int(echo.get("current_hp", -1)) != 0 or not bool(echo.get("is_dead", false)) \
+			or echo.has("is_ko") or int(echo.get("death_round", -1)) != 99:
+		return { "ok": false, "error": "FlowRuntime did not preserve Echo death authority: %s" % str(echo) }
+
+	var enemy: Dictionary = (env["ectx"].actors[-1] as Dictionary)
+	enemy["current_hp"] = 3
+	enemy["is_ko"] = true
+	runtime._apply_live_hazard_outcome(enemy, {
+		"events": [{ "damage": 3 }],
+		"stop_reason": "death",
+	}, 99)
+	if int(enemy.get("current_hp", -1)) != 0 or not bool(enemy.get("is_dead", false)) \
+			or enemy.has("is_ko") or int(enemy.get("death_round", -1)) != 99:
+		return { "ok": false, "error": "FlowRuntime did not preserve enemy death state: %s" % str(enemy) }
+
+	var guide: Dictionary = {"id": "guide.hazard", "is_spirit": true, "current_hp": 3, "is_ko": true}
+	runtime._apply_live_hazard_outcome(guide, {"events": [{"damage": 3}], "stop_reason": "death"}, 99)
+	if not bool(guide.get("is_dead", false)) or guide.has("is_ko") or int(guide.get("death_round", -1)) != 99:
+		return {"ok": false, "error": "non-joining guide hazard outcome did not use death authority: %s" % str(guide)}
+	return { "ok": true }
+
+
+static func test_live_hazard_action_phase_order() -> Dictionary:
+	var env: Dictionary = _setup("hazard_phase_order", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var runtime: FlowRuntime = env["runtime"]
+	var ectx: EncounterContext = env["ectx"]
+	var actor: Dictionary = ectx.actors[0]
+	var target: Dictionary = ectx.actors[-1]
+	actor["grid_pos"] = { "col": 8, "row": 5 }
+	actor["current_hp"] = 3
+	target["grid_pos"] = { "col": 9, "row": 5 }
+	target["current_hp"] = 20
+
+	var burning_context: Dictionary = MovementContextScript.build(
+		str(actor.get("id", "")), "live.burning", actor["grid_pos"],
+		{"w": 10, "h": 10}, {}, {}, {}, [], {}, {},
+		[MovementHazardFactScript.build("burning.live", actor["grid_pos"], "burning")], {}, [])
+	var melee_plan: Dictionary = MovementActionPlanScript.build("melee_attack", str(target.get("id", "")))
+	var burning_intent: Dictionary = MovementIntentScript.build(
+		str(actor.get("id", "")), "live.burning", "goal.live.engage", "option.live.engage",
+		[], 2, 0, melee_plan, MovementActionPlanScript.build("actor.guard"), [])
+	var prepared: Dictionary = {
+		"valid": true,
+		"movement_context": burning_context,
+		"profile": {"capacity": 2},
+		"hazard_ctx": {
+			"triggered": {"unstable": false, "binding": false, "burning": false},
+			"config": {"burning": {"end_activation_damage": 3}},
+		},
+		"goals": [],
+	}
+	var ctx: Dictionary = {"actor": actor, "all_actors": ectx.actors, "cfg": runtime.config_service.get_balance(), "t": 99, "round": 1}
+	var asm := ActorStateMachine.new(actor, null, ctx["cfg"].get("data", {}).get("actor", {}), {})
+	var burning_result: Dictionary = runtime._apply_live_activation(actor, burning_intent, prepared, asm, ctx, 99)
+	if str((burning_result.get("resolved_action", {}) as Dictionary).get("type", "")) != "melee_attack":
+		return { "ok": false, "error": "legal melee was not resolved before Burning: %s" % str(burning_result) }
+	var target_hp_before: int = int(target.get("current_hp", 0))
+	var melee_result: Dictionary = CombatService.resolve_action("melee_attack", actor, target, 1)
+	if melee_result.is_empty() or int(target.get("current_hp", target_hp_before)) >= target_hp_before:
+		return { "ok": false, "error": "legal melee did not execute before end_activation Burning" }
+	runtime._apply_live_hazard_outcome(actor, burning_result, 99, true)
+	if not bool(actor.get("is_dead", false)):
+		return { "ok": false, "error": "lethal Burning did not apply after the melee action" }
+
+	var movement_actor: Dictionary = ectx.actors[1]
+	movement_actor["grid_pos"] = { "col": 8, "row": 1 }
+	movement_actor["current_hp"] = 3
+	var movement_context: Dictionary = MovementContextScript.build(
+		str(movement_actor.get("id", "")), "live.movement", movement_actor["grid_pos"],
+		{"w": 10, "h": 10}, {}, {},
+		{"8,0": true, "8,1": true, "8,2": true, "9,0": true, "9,2": true},
+		[], {}, {},
+		[MovementHazardFactScript.build("unstable.live", {"col": 9, "row": 1}, "unstable")], {}, [])
+	var movement_intent: Dictionary = MovementIntentScript.build(
+		str(movement_actor.get("id", "")), "live.movement", "goal.live.move", "option.live.move",
+		[{"col": 9, "row": 1}], 2, 1,
+		MovementActionPlanScript.build("melee_attack", str(target.get("id", ""))),
+		MovementActionPlanScript.build("actor.idle"), [])
+	var movement_result: Dictionary = CombatActivationServiceScript.activate(
+		movement_context, movement_intent, {"capacity": 2},
+		{"triggered": {"unstable": false, "binding": false, "burning": false},
+		 "config": {"unstable": {"fallback_damage": 3}, "binding": {"stops_movement": true},
+		 "burning": {"end_activation_damage": 3}}},
+		{"purpose": "hold", "mover_hp": 3})
+	if str(movement_result.get("stop_reason", "")) != "death" \
+			or not (movement_result.get("resolved_action", {}) as Dictionary).is_empty():
+		return { "ok": false, "error": "activation did not skip primary after lethal movement damage: %s" % str(movement_result) }
+	runtime._apply_live_hazard_outcome(movement_actor, movement_result, 100, false)
+	if not bool(movement_actor.get("is_dead", false)):
+		return { "ok": false, "error": "lethal movement damage did not kill the mover" }
+	if not (movement_result.get("resolved_action", {}) as Dictionary).is_empty():
+		return { "ok": false, "error": "movement lethal damage did not skip the primary action" }
+	return { "ok": true }
+
+
+# A live direct option whose capacity-truncated route stops short of an engage
+# region must advertise actor.move. Otherwise activation revalidation rejects its
+# out-of-range melee plan and the actor idles instead of closing distance.
+static func test_live_truncated_engage_advances_before_melee() -> Dictionary:
+	var env: Dictionary = _setup("truncated_engage", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var runtime: FlowRuntime = env["runtime"]
+	var ectx: EncounterContext = env["ectx"]
+	var actor: Dictionary = ectx.actors[0] as Dictionary
+	var target: Dictionary = {}
+	for actor_value: Variant in ectx.actors:
+		if actor_value is Dictionary and str((actor_value as Dictionary).get("faction", "")) == "enemy":
+			target = actor_value as Dictionary
+			break
+	if target.is_empty():
+		return { "ok": false, "error": "missing enemy target" }
+	actor["grid_pos"] = { "col": 1, "row": 1 }
+	target["grid_pos"] = { "col": 7, "row": 1 }
+	var walkable: Dictionary = {}
+	for col in range(10):
+		for row in range(10):
+			walkable["%d,%d" % [col, row]] = true
+	var goal: Dictionary = {
+		"goal_id": "goal.combat.engage.baseline.c6r1",
+		"purpose": "engage",
+		"destination_region": [{ "col": 6, "row": 1 }],
+		"urgency": 1.0,
+		"objective_progress": 0.0,
+		"relevant_actors": [str(target.get("id", ""))],
+		"pressure_sources": ["actor.%s" % str(target.get("id", ""))],
+		"planned_primary": MovementActionPlanScript.build("melee_attack", str(target.get("id", ""))),
+		"declared_fallback": MovementActionPlanScript.build("actor.idle"),
+	}
+	var hazard_cfg: Dictionary = runtime.config_service.get_balance().get("data", {}).get("combat", {}).get("movement", {}).get("hazards", {})
+	for activation_index in range(3):
+		var origin: Dictionary = actor.get("grid_pos", {}) as Dictionary
+		var actor_id: String = str(actor.get("id", ""))
+		var target_id: String = str(target.get("id", ""))
+		var actor_fact: Dictionary = MovementActorFactScript.build(
+			actor_id, origin, "echo", false, false, false, false, false, true, 1.0
+		)
+		var target_fact: Dictionary = MovementActorFactScript.build(
+			target_id, target.get("grid_pos", {}) as Dictionary, "enemy", false, false, false, false, false, true, 1.0
+		)
+		var movement_context: Dictionary = MovementContextScript.build(
+			actor_id, "live.truncated.%d" % activation_index, origin,
+			{ "w": 10, "h": 10 }, walkable, walkable,
+			{
+				"%d,%d" % [int(origin.get("col", 0)), int(origin.get("row", 0))]: actor_id,
+				"7,1": target_id,
+			}, [actor_fact, target_fact], {target_id: "hostile"}, {}, [], {}, []
+		)
+		var context_validation: Dictionary = MovementContextScript.validate(movement_context)
+		if not bool(context_validation.get("valid", false)):
+			return { "ok": false, "error": "invalid live movement context: %s" % str(context_validation) }
+		var profile: Dictionary = { "capacity": 2 }
+		var expected_action: String = "actor.move" if activation_index < 2 else "melee_attack"
+		var path: Array = []
+		if activation_index < 2:
+			path = [{ "col": int(origin["col"]) + 1, "row": int(origin["row"]) }]
+			path.append({ "col": int(origin["col"]) + 2, "row": int(origin["row"]) })
+		else:
+			path = [{ "col": int(origin["col"]) + 1, "row": int(origin["row"]) }]
+		var planned_action: Dictionary = (
+			MovementActionPlanScript.build("actor.move") if activation_index < 2
+			else MovementActionPlanScript.build("melee_attack", str(target.get("id", "")))
+		)
+		var intent: Dictionary = MovementIntentScript.build(
+			str(actor.get("id", "")), "live.truncated.%d" % activation_index,
+			str(goal.get("goal_id", "")), "option.combat.engage.baseline.direct.d%dr%d.pmanual" % [int(origin["col"]), int(origin["row"])],
+			# +1 on the final activation: that step lands adjacent to the enemy, so the
+			# executor charges the hostile-control surcharge (cost 2). Commitment is a cost
+			# budget, so it must fund that surcharge — mirrors the live planner.
+			path, int(profile["capacity"]), path.size() + (1 if activation_index >= 2 else 0),
+			planned_action, goal.get("declared_fallback", {}) as Dictionary, []
+		)
+		intent["movement_purpose"] = "engage"
+		var prepared: Dictionary = {
+			"valid": true, "movement_context": movement_context, "profile": profile,
+			"hazard_ctx": { "triggered": { "unstable": false, "binding": false, "burning": false }, "config": hazard_cfg },
+			"goals": [goal],
+		}
+		var ctx: Dictionary = { "actor": actor, "all_actors": ectx.actors, "cfg": runtime.config_service.get_balance(), "t": 90 + activation_index, "round": 1 }
+		var asm := ActorStateMachine.new(actor, null, ctx["cfg"].get("data", {}).get("actor", {}), {})
+		var result: Dictionary = runtime._apply_live_activation(actor, intent, prepared, asm, ctx, 90 + activation_index)
+		var resolved_action: String = str((result.get("resolved_action", {}) as Dictionary).get("type", ""))
+		if resolved_action != expected_action or str(intent.get("action_type", "")) == "actor.idle":
+			return { "ok": false, "error": "live activation resolved %s at activation %d" % [resolved_action, activation_index] }
+	if GridService.chebyshev_distance(actor.get("grid_pos", {}), target.get("grid_pos", {})) != 1:
+		return { "ok": false, "error": "actor did not reach melee adjacency: %s" % str(actor.get("grid_pos", {})) }
+	return { "ok": true }
 
 
 # Test 1 — real loop, real ids: every Echo closes distance to the enemy.
@@ -1434,10 +1706,10 @@ static func test_guide_spirit_protect_holds_when_echo_adjacent() -> Dictionary:
 # BLOCKER regression: the JOINED combatant GUIDE_SPIRIT (faction "echo", is_spirit=true,
 # is_structure=false — built via EnemyActor when spirit_joins_battle=true) is NOT the idle
 # structure spirit whose movement _end_round owns. FlowRuntime's is_spirit grid_pos
-# capture/restore gate (core/runtime/FlowRuntime.gd, around _resolve_next_actor) is now
-# gated on `is_spirit AND is_structure`, so a joined combatant spirit must be free to move
-# on its own arbiter turn like any other echo-faction combatant. Drive several rounds and
-# assert its grid_pos changes from spawn at least once.
+# capture/restore gate (core/runtime/FlowRuntime.gd, around _resolve_next_actor) is gone,
+# so a joined combatant spirit must take normal combat turns like any other
+# echo-faction combatant. It may choose to move, guard, or attack; this test asserts
+# it is not owned by the non-joining GUIDE objective mover.
 # ---------------------------------------------------------------------------
 static func test_guide_spirit_joined_combatant_moves_freely() -> Dictionary:
 	var env: Dictionary = _setup("guide_spirit_joined_moves", true)
@@ -1469,6 +1741,9 @@ static func test_guide_spirit_joined_combatant_moves_freely() -> Dictionary:
 	var spirit: Dictionary = {
 		"id": "guide_spirit_01", "name": "Test Spirit", "faction": "echo",
 		"actor_type": "enemy",
+		"calling_origin": "aduro",
+		"traits": { "courage": 55, "wisdom": 10, "faith": 10 },
+		"vector_scores": {},
 		"is_structure": false, "is_spirit": true, "is_dead": false,
 		"current_hp": 60, "stats": { "max_hp": 60, "def": 2, "atk": 8, "speed": 6 },
 		"speed": 6, "morale": 50, "fear": 0,
@@ -1477,11 +1752,11 @@ static func test_guide_spirit_joined_combatant_moves_freely() -> Dictionary:
 	ectx.actors.append(spirit)
 
 	# Move all enemies far away so combat does not end early and nothing else interferes.
-	var enemy_col: int = 9
+	var enemy_col: int = 4
 	for a_v in ectx.actors:
 		if str(a_v.get("faction", "")) == "enemy" and not bool(a_v.get("is_structure", false)):
-			a_v["grid_pos"] = { "col": enemy_col, "row": 9 }
-			enemy_col = maxi(0, enemy_col - 1)
+			a_v["grid_pos"] = { "col": enemy_col, "row": 1 }
+			enemy_col += 1
 
 	runtime.dispatch({ "type": "combat.init" })
 
@@ -1501,8 +1776,9 @@ static func test_guide_spirit_joined_combatant_moves_freely() -> Dictionary:
 	var pos_after: Dictionary = spirit_after.get("grid_pos", {})
 	if int(pos_after.get("col", -1)) == int(spirit_pos_before.get("col", -1)) \
 			and int(pos_after.get("row", -1)) == int(spirit_pos_before.get("row", -1)):
-		return { "ok": false, "error": "Expected joined combatant spirit to move from spawn %s over 6 rounds, but it did not (grid_pos capture/restore gate may be re-pinning it)" \
-			% str(spirit_pos_before) }
+		var ledger: Dictionary = ectx.echo_action_logs.get("guide_spirit_01", {}) as Dictionary
+		if int(ledger.get("total_count", 0)) <= 0:
+			return { "ok": false, "error": "Expected joined combatant spirit to take normal combat turns, but no contribution ledger entry was recorded" }
 
 	return { "ok": true }
 
@@ -1805,7 +2081,9 @@ static func test_killing_blow_sets_is_kill_live() -> Dictionary:
 		if str(a.get("faction", "")) == "echo":
 			var e_stats: Dictionary = a.get("stats", {})
 			e_stats["atk"] = 50
+			e_stats["speed"] = 99
 			a["stats"]  = e_stats
+			a["speed"] = 99
 			a["morale"] = 40
 			a["fear"]   = 0
 		elif str(a.get("faction", "")) == "enemy":
@@ -1814,6 +2092,18 @@ static func test_killing_blow_sets_is_kill_live() -> Dictionary:
 			n_stats["def"] = 0
 			a["stats"]      = n_stats
 			a["current_hp"] = 1
+
+	var first_echo: Dictionary = {}
+	var first_enemy: Dictionary = {}
+	for a_v in ectx.actors:
+		var a: Dictionary = a_v
+		if first_echo.is_empty() and str(a.get("faction", "")) == "echo":
+			first_echo = a
+		elif first_enemy.is_empty() and str(a.get("faction", "")) == "enemy":
+			first_enemy = a
+	if not first_echo.is_empty() and not first_enemy.is_empty():
+		first_echo["grid_pos"] = { "col": 1, "row": 1 }
+		first_enemy["grid_pos"] = { "col": 2, "row": 1 }
 
 	# Drive the real loop dispatch-by-dispatch so we can snapshot echo morale
 	# immediately before the killing dispatch and compare after it. NOTE:
@@ -1941,7 +2231,21 @@ static func test_enemy_kill_does_not_ripple_to_party() -> Dictionary:
 			enemy_ids[str(a.get("id", ""))] = true
 			var n_stats: Dictionary = a.get("stats", {})
 			n_stats["atk"] = 99
+			n_stats["speed"] = 99
 			a["stats"] = n_stats
+			a["speed"] = 99
+
+	var first_enemy_killer: Dictionary = {}
+	var first_echo_victim: Dictionary = {}
+	for a_v in ectx.actors:
+		var a: Dictionary = a_v
+		if first_enemy_killer.is_empty() and str(a.get("faction", "")) == "enemy":
+			first_enemy_killer = a
+		elif first_echo_victim.is_empty() and str(a.get("faction", "")) == "echo":
+			first_echo_victim = a
+	if not first_enemy_killer.is_empty() and not first_echo_victim.is_empty():
+		first_enemy_killer["grid_pos"] = { "col": 2, "row": 1 }
+		first_echo_victim["grid_pos"] = { "col": 1, "row": 1 }
 
 	# Fresh log slate so we only inspect combat-round events.
 	logger.clear()

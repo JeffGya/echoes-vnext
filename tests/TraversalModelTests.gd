@@ -50,7 +50,9 @@ static func _make_logger() -> StructuredLogger:
 # Instead we construct the minimal state inline.
 static func _make_runtime(directive_id: String = "directive.scout_carefully") -> FlowRuntime:
 	var logger := _make_logger()
-	var runtime := FlowRuntime.new(logger, ConfigService.new(), "/tmp/echoes-vnext-tests/traversal_slot.json")
+	var config := ConfigService.new()
+	config.load_balance(logger, 0)
+	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/traversal_slot.json")
 
 	runtime.flow_ctx          = FlowContext.new()
 	runtime.flow_ctx.logger   = logger
@@ -149,6 +151,10 @@ static func _make_directive_cfg() -> Dictionary:
 				"party_return_fear_threshold": 60,
 				"cautious_advance_fear_threshold": 50,
 				"situation_emotion_effects":   {},
+				"situation_category": {
+					"combat": "combat",
+					"loot": "reward",
+				},
 			},
 		}
 	}
@@ -366,6 +372,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("traversal/terrain_survives_session_reset", Callable(TraversalModelTests, "_t_terrain_survives_session_reset"))
 	runner.register_test("traversal/party_pos_always_walkable",  Callable(TraversalModelTests, "_t_party_pos_always_walkable"))
 	runner.register_test("traversal/traveled_path_in_snapshot",  Callable(TraversalModelTests, "_t_traveled_path_in_snapshot"))
+	runner.register_test("traversal/float_save_coordinates_advance", Callable(TraversalModelTests, "_t_float_save_coordinates_advance"))
 	# Phase 2.5 fog tests
 	runner.register_test("traversal/fog_projection_only_revealed", Callable(TraversalModelTests, "_t_fog_projection_only_revealed"))
 	runner.register_test("traversal/fog_explored_cells_seeded",    Callable(TraversalModelTests, "_t_fog_explored_cells_seeded"))
@@ -1044,6 +1051,47 @@ static func _t_traveled_path_in_snapshot() -> Dictionary:
 	return { "ok": true }
 
 
+# JSON-decoded save coordinates are floats even when they represent whole cells.
+# The live stage boundary must canonicalize them before shared path validation.
+static func _t_float_save_coordinates_advance() -> Dictionary:
+	var runtime := _make_runtime("directive.scout_carefully")
+	_inject_terrain_stage(runtime, 77, 0, [{ "col": 22, "row": 18 }])
+	var stage := FlowStageExploreStateScript._get_current_stage(runtime.flow_ctx)
+	var explore_map: Dictionary = stage.get("explore_map", {})
+	var origin := _read_pos(runtime)
+	var sits_v: Variant = explore_map.get("situations", [])
+	var sits: Array = sits_v if sits_v is Array else []
+	if sits.is_empty():
+		return { "ok": false, "error": "float coordinate regression has no situation" }
+	var sit: Dictionary = sits[0] if sits[0] is Dictionary else {}
+	var sit_pos_v: Variant = sit.get("pos", {})
+	var sit_pos: Dictionary = sit_pos_v if sit_pos_v is Dictionary else {}
+	explore_map["party_pos"] = { "col": float(origin.get("col", 0)), "row": float(origin.get("row", 0)) }
+	sit["pos"] = { "col": float(sit_pos.get("col", 0)), "row": float(sit_pos.get("row", 0)) }
+	sit["revealed"] = true
+	sits[0] = sit
+	explore_map["situations"] = sits
+	stage["explore_map"] = explore_map
+	FlowStageExploreStateScript._write_stage_back(runtime.flow_ctx, stage)
+
+	runtime.dispatch({ "type": "stage.advance_turn" })
+	var after := _read_pos(runtime)
+	var path_v: Variant = _read_em(runtime, "last_traveled_path")
+	var path: Array = path_v if path_v is Array else []
+	if path.is_empty():
+		return { "ok": false, "error": "float-shaped save took zero movement steps" }
+	if int(after.get("col", 0)) == int(origin.get("col", 0)) \
+			and int(after.get("row", 0)) == int(origin.get("row", 0)):
+		return { "ok": false, "error": "float-shaped save party_pos did not change" }
+	if typeof(after.get("col", null)) != TYPE_INT or typeof(after.get("row", null)) != TYPE_INT:
+		return { "ok": false, "error": "persisted party_pos is not integer-shaped" }
+	for cell_v in path:
+		var cell: Dictionary = cell_v if cell_v is Dictionary else {}
+		if typeof(cell.get("col", null)) != TYPE_INT or typeof(cell.get("row", null)) != TYPE_INT:
+			return { "ok": false, "error": "persisted traveled_path contains non-integer cell" }
+	return { "ok": true }
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 2.5 — Fog-of-War tests
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1441,125 +1489,55 @@ static func _t_fog_determinism() -> Dictionary:
 
 
 # ─── Test 21 — LIGHT BIAS: Seek targets discovered combat; Scout does not ────
-# After placing a combat (non-objective) situation and a non-combat intel situation,
-# reveal both manually (simulate discovery), then:
-#   - Seek's target_preference[combat]=1.4 > Scout's [combat]=0.4
-#   - Seek should head toward the combat; Scout should not (prefers intel/reward).
-#
-# We assert the weaker, deterministic invariant:
-#   With a discovered combat node and a discovered intel node (no objective yet),
-#   the directive-weighted targeting differs: Seek picks the combat node or moves
-#   toward it; Scout does not (picks the intel/non-combat node or frontier).
+# In the 6C adapter path, directive weight leads only inside the bounded route
+# slack envelope. This fixture keeps the combat and loot nodes within that
+# envelope, so Seek should choose combat while Scout chooses the reward node.
 static func _t_fog_light_bias_seek_engages() -> Dictionary:
-	# Build a small 20×20 stage with two situations near the party:
-	# - combat sit at mid-right (non-objective)
-	# - intel/loot sit at mid-right-2 (also non-objective, closer)
-	# Then pre-reveal both so the targeting logic can see them.
-	for seed_val in [42, 100]:
-		var runtime_seek  := _make_runtime("directive.seek_signs")
-		var runtime_scout := _make_runtime("directive.scout_carefully")
+	var runtime_seek := _make_runtime("directive.seek_signs")
+	var runtime_scout := _make_runtime("directive.scout_carefully")
+	var terrain := _full_rect_terrain(10, 6)
+	var entry := { "col": 0, "row": 0 }
+	var sit_loot := SituationModelScript.make("sit.loot", SituationModelScript.TYPE_LOOT, 2, 0, 2201, false)
+	sit_loot["revealed"] = true
+	var sit_combat := SituationModelScript.make("sit.combat", SituationModelScript.TYPE_COMBAT, 3, 1, 2202, false)
+	sit_combat["revealed"] = true
 
-		# Shared setup for both runtimes.
-		for runtime in [runtime_seek, runtime_scout]:
-			var sig := {
-				"plateau_count_min": 2, "plateau_count_max": 2,
-				"plateau_w_min": 8, "plateau_w_max": 12,
-				"plateau_h_min": 8, "plateau_h_max": 12,
-				"bridge_width": 2, "bridge_density": 0.3,
-				"straggler_count_min": 0, "straggler_count_max": 0,
-			}
-			var bounds := { "w": 25, "h": 25 }
-			var terrain: Dictionary = StageTerrainScript.generate(seed_val, 0, sig, bounds)
-			var walkable: Dictionary = StageTerrainScript.walkable_set(terrain)
-			var entry: Dictionary   = StageTerrainScript.entry_cell(walkable, bounds)
-			var entry_col           := int(entry.get("col", 0))
+	for runtime in [runtime_seek, runtime_scout]:
+		_inject_stage_with_terrain(runtime, terrain, [sit_combat.duplicate(true), sit_loot.duplicate(true)], entry, 2200, 0)
+		var walkable: Dictionary = StageTerrainScript.walkable_set(terrain)
+		var explored: Dictionary = {}
+		for key_value: Variant in walkable.keys():
+			explored[str(key_value)] = true
+		var stages_v: Variant = runtime.flow_ctx.save_data["realms"]["realm.01"].get("stages", [])
+		var stages: Array = stages_v if stages_v is Array else []
+		var stage: Dictionary = stages[0] if not stages.is_empty() and stages[0] is Dictionary else {}
+		var em_v: Variant = stage.get("explore_map", {})
+		var em: Dictionary = em_v if em_v is Dictionary else {}
+		em["explored_cells"] = explored
+		stage["explore_map"] = em
+		stages[0] = stage
+		runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"] = stages
 
-			# Find two walkable cells to the right of entry (col > entry_col+2).
-			var near_pos:   Dictionary = {}
-			var farther_pos: Dictionary = {}
-			for k in walkable:
-				var parts: PackedStringArray = (k as String).split(",")
-				var kc := int(parts[0])
-				var kr := int(parts[1])
-				if kc > entry_col + 2 and near_pos.is_empty():
-					near_pos   = { "col": kc, "row": kr }
-				elif kc > entry_col + 4 and farther_pos.is_empty():
-					farther_pos = { "col": kc, "row": kr }
-				if not near_pos.is_empty() and not farther_pos.is_empty():
-					break
+	runtime_seek.dispatch({ "type": "stage.advance_turn" })
+	runtime_scout.dispatch({ "type": "stage.advance_turn" })
 
-			if near_pos.is_empty() or farther_pos.is_empty():
-				break  # Degenerate terrain for this seed — skip
+	var seek_choice := str(_read_em(runtime_seek, "pending_situation_id"))
+	if seek_choice.is_empty():
+		seek_choice = str(_read_em(runtime_seek, "target_situation_id"))
+	var scout_choice := str(_read_em(runtime_scout, "pending_situation_id"))
+	if scout_choice.is_empty():
+		scout_choice = str(_read_em(runtime_scout, "target_situation_id"))
 
-			# Build situations: combat (non-objective) + loot (non-objective).
-			# Pre-reveal both so they are in the "discovered" set.
-			var sit_combat := SituationModelScript.make("sit.combat", SituationModelScript.TYPE_COMBAT,
-				int(farther_pos.get("col", 10)), int(farther_pos.get("row", 10)), seed_val + 10, false)
-			sit_combat["revealed"] = true
-			var sit_loot   := SituationModelScript.make("sit.loot",   SituationModelScript.TYPE_LOOT,
-				int(near_pos.get("col",    8)), int(near_pos.get("row",    8)), seed_val + 20, false)
-			sit_loot["revealed"] = true
-
-			var explore_map := StageExploreModelScript.make(
-				int(bounds.get("w", 25)), int(bounds.get("h", 25)), [sit_combat, sit_loot]
-			)
-			explore_map["locked"]              = true
-			explore_map["party_pos"]           = entry.duplicate()
-			explore_map["terrain"]             = terrain
-			explore_map["loot_results"]        = []
-			explore_map["in_transit"]          = false
-			explore_map["target_situation_id"] = ""
-			# Pre-seed explored_cells with all walkable cells (fully unfogged)
-			# so the targeting has full visibility for this bias test.
-			var pre_ec: Dictionary = {}
-			for k in walkable:
-				pre_ec[k] = true
-			explore_map["explored_cells"] = pre_ec
-
-			var stage := StageModel.make(0, StageModel.TYPE_COMBAT, seed_val, [], explore_map)
-			var realm  := RealmModel.make("realm.01", "Vale", "courage", "desc", seed_val, 1, 0, 0)
-			realm["stages"] = [stage]
-			runtime.flow_ctx.save_data["realms"]["realm.01"] = realm
-			runtime.flow_ctx.realm_id = "realm.01"
-			runtime.flow_ctx.stage_id = "stage.0"
-			runtime.flow_ctx.last_snapshot = {
-				"type": FlowStateIds.STAGE_EXPLORE, "data": {}, "actions": {}, "meta": { "t": 0 },
-			}
-
-		# Advance one turn for each; read target_situation_id to see what they chose.
-		runtime_seek.dispatch({ "type": "stage.advance_turn" })
-		runtime_scout.dispatch({ "type": "stage.advance_turn" })
-
-		var seek_target_v:  Variant = _read_em(runtime_seek,  "target_situation_id")
-		var scout_target_v: Variant = _read_em(runtime_scout, "target_situation_id")
-		var seek_target  := str(seek_target_v)  if seek_target_v  != null else ""
-		var scout_target := str(scout_target_v) if scout_target_v != null else ""
-
-		# Weaker deterministic assertion:
-		# If both chose a target, Seek's target should not be the loot node while Scout's is combat.
-		# The STRONG assertion: they chose DIFFERENT targets (bias is real).
-		# If either arrived immediately (pending set) without setting target_situation_id, skip.
-		var seek_pending_v:  Variant = _read_em(runtime_seek,  "pending_situation_id")
-		var scout_pending_v: Variant = _read_em(runtime_scout, "pending_situation_id")
-		if (seek_pending_v  != null and str(seek_pending_v)  != "") or \
-		   (scout_pending_v != null and str(scout_pending_v) != ""):
-			# One arrived immediately — target distinction not observable from target_sit_id.
-			# This is a degenerate case (situations very close to entry). Accept.
-			continue
-
-		if not seek_target.is_empty() and not scout_target.is_empty():
-			if seek_target == scout_target:
-				# Both chose same target — bias didn't differentiate.
-				# Check if only one node is available — degenerate.
-				# Otherwise this is a mild failure. Soft pass: bias is config-driven.
-				pass  # Soft pass: frontier may override in edge cases.
-
-		# At minimum, Seek must NOT prefer the loot node when a combat node is available.
-		if seek_target == "sit.loot" and not scout_target.is_empty():
-			return {
-				"ok": false,
-				"error": "Seed %d: Seek chose loot (combat-avoiding) over combat — target_preference not working" % seed_val
-			}
+	if seek_choice != "sit.combat":
+		return {
+			"ok": false,
+			"error": "Seek should choose combat within the adapter slack envelope, got '%s'" % seek_choice
+		}
+	if scout_choice != "sit.loot":
+		return {
+			"ok": false,
+			"error": "Scout should choose the reward node over combat, got '%s'" % scout_choice
+		}
 
 	return { "ok": true }
 

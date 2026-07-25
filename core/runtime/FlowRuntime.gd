@@ -14,10 +14,32 @@ const ConversationServiceScript    := preload("res://core/realms/ConversationSer
 const ContactModelScript           := preload("res://core/realms/ContactModel.gd")            # V2-STAGE-003
 const SituationResolutionServiceScript := preload("res://core/realms/SituationResolutionService.gd")  # V2-STAGE-004
 const StageTerrainScript               := preload("res://core/realms/StageTerrain.gd")                  # V2-STAGE-004-P2
+const MovementContextScript            := preload("res://core/movement/contracts/MovementContext.gd")
+const MovementActorFactScript          := preload("res://core/movement/contracts/MovementPerceivedActorFact.gd")
+const MovementHazardFactScript         := preload("res://core/movement/contracts/MovementKnownHazardFact.gd")
+const CombatPressureSnapshotScript     := preload("res://core/movement/contracts/CombatPressureSnapshot.gd")
+const MovementProfileServiceScript     := preload("res://core/movement/MovementProfileService.gd")
+const CombatPressureServiceScript      := preload("res://core/movement/CombatPressureService.gd")
+const MovementOptionServiceScript      := preload("res://core/movement/MovementOptionService.gd")
+const MovementPathServiceScript        := preload("res://core/movement/MovementPathService.gd")
+const MovementIntentScript             := preload("res://core/movement/contracts/MovementIntent.gd")
+const MovementActionPlanScript         := preload("res://core/movement/contracts/MovementActionPlan.gd")
+const MovementOptionScript             := preload("res://core/movement/contracts/MovementOption.gd")
+const CombatActivationServiceScript    := preload("res://core/movement/CombatActivationService.gd")
+const MovementHazardFixturesScript     := preload("res://core/movement/MovementHazardFixtures.gd")
+const PursueEscapeServiceScript        := preload("res://core/movement/PursueEscapeService.gd")
+const GuideSpiritActivationServiceScript := preload("res://core/movement/GuideSpiritActivationService.gd")
+const StagePartyMovementAdapterScript  := preload("res://core/movement/StagePartyMovementAdapter.gd")
 ## ConsequencePassService kept on disk for future use; not preloaded here.
 const EmotionRecoveryServiceScript := preload("res://core/emotion/EmotionRecoveryService.gd")                    # V2-SANCTUM-001
 const InstitutionServiceScript     := preload("res://core/sanctum/InstitutionService.gd")                         # V2-SANCTUM-002
 const LeadershipEmotionServiceScript := preload("res://core/combat/LeadershipEmotionService.gd")
+
+# Keep the live direct-option builder aligned with MovementOptionService. A route
+# that stops short of its goal cannot truthfully promise a range-bound follow-up.
+const _LIVE_RANGE_BOUND_ACTIONS: Array = [
+	"melee_attack", "protect_ally", "actor.guard", "actor.purify_shrine",
+]
 
 var logger: StructuredLogger
 var config_service: ConfigService
@@ -1608,6 +1630,842 @@ func _handle_combat_next_actor(t: int) -> void:
 	_resolve_next_actor(t)
 
 
+func _prepare_live_movement_context(
+	actor: Dictionary,
+	ectx: EncounterContext,
+	combat_state: Dictionary,
+	movement_board_cfg: Dictionary,
+	bdata: Dictionary,
+	t: int
+) -> Dictionary:
+	if bool(actor.get("is_structure", false)):
+		return {"valid": false, "reason": "structure_no_live_movement"}
+	var movement_cfg: Dictionary = bdata.get("combat", {}).get("movement", {}) as Dictionary
+	var capacity_cfg: Dictionary = movement_cfg.get("capacity", {}) as Dictionary
+	var hazard_cfg: Dictionary = movement_cfg.get("hazards", {}) as Dictionary
+	var pressure_cfg: Dictionary = movement_cfg.get("pressure", {}) as Dictionary
+	if hazard_cfg.is_empty():
+		return {"valid": false, "reason": "missing_hazard_config"}
+	var bounds: Dictionary = {
+		"w": int(movement_board_cfg.get("board_cols", 10)),
+		"h": int(movement_board_cfg.get("board_rows", 10)),
+	}
+	var walkable: Dictionary = movement_board_cfg.get("walkable", {}) as Dictionary
+	if walkable.is_empty():
+		walkable = _movement_rect_walkable(bounds)
+	var occupancy: Dictionary = _movement_occupancy(ectx.actors)
+	var perceived: Array = _movement_actor_facts(ectx.actors)
+	var relationships: Dictionary = _movement_relationships(actor, perceived)
+	var pressure: Dictionary = _movement_pressure_snapshot(actor, ectx, combat_state, bounds, walkable)
+	var known_hazards: Array = _live_combat_known_hazards()
+	var movement_context: Dictionary = MovementContextScript.build(
+		str(actor.get("id", "")),
+		"combat.%s.%s.%d" % [str(ectx.encounter_id), str(actor.get("id", "")), t],
+		actor.get("grid_pos", {}) as Dictionary,
+		bounds,
+		walkable,
+		walkable,
+		occupancy,
+		perceived,
+		relationships,
+		{},
+		known_hazards,
+		pressure,
+		[]
+	)
+	var planning_walkable_ec: Dictionary = _movement_planning_walkable(movement_context)
+	var edge_costs: Dictionary = MovementOptionServiceScript.hostile_edge_costs(movement_context, planning_walkable_ec)
+	var profile: Dictionary = MovementProfileServiceScript.derive_profile(actor, capacity_cfg, {})
+	var goals_result: Dictionary = CombatPressureServiceScript.build_goals(movement_context, pressure_cfg)
+	if not bool(goals_result.get("valid", false)):
+		return {
+			"valid": true,
+			"selection_enabled": false,
+			"movement_cfg": movement_cfg,
+			"movement_context": movement_context,
+			"profile": profile,
+			"goals": [],
+			"options": [],
+			"edge_costs": edge_costs,
+			"hazard_ctx": {
+				"triggered": {"unstable": false, "binding": false, "burning": false},
+				"config": hazard_cfg,
+			},
+		}
+	var goals: Array = goals_result.get("goals", []) as Array
+	var options: Array = []
+	if not bool(actor.get("is_quarry", false)):
+		options = _movement_live_direct_options(movement_context, profile, goals, edge_costs)
+	return {
+		"valid": true,
+		"selection_enabled": not options.is_empty(),
+		"movement_cfg": movement_cfg,
+		"movement_context": movement_context,
+		"profile": profile,
+		"goals": goals,
+		"options": options,
+		"edge_costs": edge_costs,
+		"hazard_ctx": {
+			"triggered": {"unstable": false, "binding": false, "burning": false},
+			"config": hazard_cfg,
+		},
+	}
+
+
+func _movement_live_direct_options(
+	movement_context: Dictionary,
+	profile: Dictionary,
+	goals: Array,
+	edge_costs: Dictionary = {}
+) -> Array:
+	var options: Array = []
+	for goal_value: Variant in goals:
+		if not (goal_value is Dictionary):
+			continue
+		var goal: Dictionary = goal_value
+		var option: Dictionary = _movement_direct_option_for_goal(movement_context, profile, goal, edge_costs)
+		if not option.is_empty():
+			options.append(option)
+	return options
+
+
+func _movement_direct_option_for_goal(
+	movement_context: Dictionary,
+	profile: Dictionary,
+	goal: Dictionary,
+	edge_costs: Dictionary = {}
+) -> Dictionary:
+	var origin: Dictionary = movement_context.get("origin", {}) as Dictionary
+	var destination_region: Array = goal.get("destination_region", []) as Array
+	if destination_region.has(origin) and str(goal.get("purpose", "")) == "hold":
+		return _movement_build_direct_option(movement_context, profile, goal, origin, [], 0, 0)
+
+	var best_path: Array = []
+	var best_cost: int = 999999
+	var best_destination: Dictionary = {}
+	var planning_walkable: Dictionary = _movement_planning_walkable(movement_context)
+	for destination_value: Variant in destination_region:
+		if not (destination_value is Dictionary):
+			continue
+		var destination: Dictionary = destination_value
+		var route: Dictionary = MovementPathServiceScript.shortest_path(
+			origin,
+			destination,
+			planning_walkable,
+			movement_context.get("terrain_costs", {}) as Dictionary,
+			movement_context.get("bounds", {}) as Dictionary,
+			edge_costs
+		)
+		if not bool(route.get("reachable", false)):
+			continue
+		var cost: int = int(route.get("cost", 0))
+		if cost < best_cost or (cost == best_cost and _movement_cell_key_runtime(destination) < _movement_cell_key_runtime(best_destination)):
+			best_cost = cost
+			best_path = (route.get("path", []) as Array).duplicate(true)
+			best_destination = destination.duplicate(true)
+	if best_path.is_empty():
+		return {}
+
+	var capacity: int = int(profile.get("capacity", 0))
+	var selected_path: Array = best_path
+	var selected_cost: int = best_cost
+	if selected_cost > capacity:
+		var prefix: Dictionary = _movement_affordable_prefix(
+			origin,
+			best_path,
+			capacity,
+			planning_walkable,
+			movement_context.get("terrain_costs", {}) as Dictionary,
+			movement_context.get("bounds", {}) as Dictionary,
+			edge_costs
+		)
+		selected_path = prefix.get("path", []) as Array
+		selected_cost = int(prefix.get("cost", 0))
+	if selected_path.is_empty():
+		return {}
+	var destination: Dictionary = selected_path.back() as Dictionary
+	return _movement_build_direct_option(
+		movement_context, profile, goal, destination, selected_path, selected_cost, selected_cost)
+
+
+func _movement_planning_walkable(movement_context: Dictionary) -> Dictionary:
+	var result: Dictionary = (movement_context.get("authoritative_walkable", {}) as Dictionary).duplicate(true)
+	var origin: Dictionary = movement_context.get("origin", {}) as Dictionary
+	var origin_key: String = _movement_cell_key_runtime(origin)
+	var occupancy: Dictionary = movement_context.get("occupancy", {}) as Dictionary
+	for occupied_key_value: Variant in occupancy.keys():
+		var occupied_key: String = str(occupied_key_value)
+		if occupied_key != origin_key:
+			result.erase(occupied_key)
+	return result
+
+
+func _movement_affordable_prefix(
+	origin: Dictionary,
+	path: Array,
+	capacity: int,
+	walkable: Dictionary,
+	terrain_costs: Dictionary,
+	bounds: Dictionary,
+	edge_costs: Dictionary = {}
+) -> Dictionary:
+	var best_path: Array = []
+	var best_cost: int = 0
+	for end_index in range(path.size()):
+		var prefix: Array = path.slice(0, end_index + 1)
+		var route: Dictionary = MovementPathServiceScript.validate_route(
+			origin,
+			prefix,
+			walkable,
+			terrain_costs,
+			bounds,
+			edge_costs
+		)
+		if not bool(route.get("valid", false)):
+			break
+		var cost: int = int(route.get("cost", 0))
+		if cost > capacity:
+			break
+		best_path = prefix
+		best_cost = cost
+	return {"path": best_path, "cost": best_cost}
+
+
+func _movement_build_direct_option(
+	movement_context: Dictionary,
+	profile: Dictionary,
+	goal: Dictionary,
+	destination: Dictionary,
+	path: Array,
+	route_cost: int,
+	shortest_cost: int
+) -> Dictionary:
+	var goal_id: String = str(goal.get("goal_id", "goal.live"))
+	var suffix: String = goal_id.trim_prefix("goal.")
+	var option_id: String = "option.%s.direct.%s" % [suffix, _movement_cell_key_runtime(destination).replace(",", "_")]
+	var planned_action: Dictionary = goal.get("planned_primary", {}) as Dictionary
+	if not (goal.get("destination_region", []) as Array).has(destination) \
+			and _LIVE_RANGE_BOUND_ACTIONS.has(str(planned_action.get("type", ""))):
+		planned_action = MovementActionPlanScript.build("actor.move")
+	var option: Dictionary = MovementOptionScript.build(
+		goal_id,
+		option_id,
+		str(goal.get("purpose", "advance")),
+		destination,
+		path,
+		route_cost,
+		shortest_cost,
+		route_cost - shortest_cost,
+		int(profile.get("capacity", 0)),
+		route_cost,
+		0.0,
+		0.0,
+		0.0,
+		[],
+		{"known_count": 0, "known_ids": []},
+		1.0 if (goal.get("destination_region", []) as Array).has(destination) else 0.25,
+		planned_action,
+		goal.get("declared_fallback", {}) as Dictionary
+	)
+	var validation: Dictionary = MovementOptionScript.validate(
+		option,
+		movement_context.get("origin", {}) as Dictionary
+	)
+	return option if bool(validation.get("valid", false)) else {}
+
+
+func _movement_cell_key_runtime(cell: Dictionary) -> String:
+	if cell.is_empty():
+		return ""
+	return "%d,%d" % [int(cell.get("col", 0)), int(cell.get("row", 0))]
+
+
+func _apply_live_activation(
+	actor: Dictionary,
+	intent: Dictionary,
+	prepared: Dictionary,
+	asm: ActorStateMachine,
+	ctx: Dictionary,
+	t: int
+) -> Dictionary:
+	_prepare_legacy_move_intent_for_activation(actor, intent, prepared)
+	if not bool(prepared.get("valid", false)) or not intent.has("planned_action"):
+		asm.update_passive_state_from_activation(intent, ctx, t, false)
+		return {}
+	var movement_context: Dictionary = prepared["movement_context"] as Dictionary
+	var profile: Dictionary = prepared["profile"] as Dictionary
+	var hazard_ctx: Dictionary = prepared["hazard_ctx"] as Dictionary
+	var goal: Dictionary = _movement_goal_by_id(
+		prepared.get("goals", []) as Array, str(intent.get("goal_id", "")))
+	var action_ctx: Dictionary = {
+		"purpose": str(intent.get("movement_purpose", goal.get("purpose", "advance"))),
+		"goal_id": str(intent.get("goal_id", "")),
+		"option_id": str(intent.get("option_id", "")),
+		"positions": _movement_actor_positions(flow_ctx.encounter_ctx.actors),
+		"ranges": {
+			"melee_attack": 1,
+			"protect_ally": 1,
+			"actor.purify_shrine": 1,
+		},
+		"default_range": 1,
+		"objective_progress": float(goal.get("objective_progress", 0.0)),
+		"mover_hp": int(actor.get("current_hp", 0)),
+		"mover_ko_only": false,
+	}
+	var result: Dictionary = CombatActivationServiceScript.activate(
+		movement_context, intent, profile, hazard_ctx, action_ctx)
+	var final_cell: Dictionary = result.get("final_destination", actor.get("grid_pos", {})) as Dictionary
+	var actual: Array = result.get("actual_traversed_cells", []) as Array
+	if not actual.is_empty():
+		var from_pos: Dictionary = actor.get("grid_pos", {}).duplicate(true)
+		GridService.assign_grid_pos(actor, int(final_cell.get("col", 0)), int(final_cell.get("row", 0)))
+		logger.info(t, "actor.moved", "Actor moved", {
+			"actor_id": actor.get("id", ""),
+			"from_pos": from_pos,
+			"to_pos": actor.get("grid_pos", {}),
+			"path": actual.duplicate(true),
+			"stop_reason": str(result.get("stop_reason", "")),
+		})
+	var resolved_action: Dictionary = result.get("resolved_action", {}) as Dictionary
+	if resolved_action.is_empty():
+		intent["action_type"] = "actor.idle"
+		intent["target_id"] = ""
+	else:
+		intent["action_type"] = str(resolved_action.get("type", "actor.idle"))
+		intent["target_id"] = str(resolved_action.get("target_id", ""))
+	# Movement/forced hazard damage resolves before the external primary action.
+	# Burning is deliberately deferred until that action has completed below.
+	_apply_live_hazard_outcome(actor, result, t, false)
+	if bool(actor.get("is_dead", false)):
+		intent["action_type"] = "actor.idle"
+		intent["target_id"] = ""
+	intent["movement_result"] = result
+	asm.update_passive_state_from_activation(intent, ctx, t, not actual.is_empty())
+	return result
+
+
+## Live mutation choke for the pure activation result. CombatActivationService only
+## computes event damage and KO/death truth; FlowRuntime owns actor state writes.
+func _apply_live_hazard_outcome(
+	actor: Dictionary,
+	result: Dictionary,
+	t: int,
+	end_activation_only: bool = false
+) -> void:
+	var damage: int = 0
+	for event_value: Variant in result.get("events", []) as Array:
+		if event_value is Dictionary:
+			var event: Dictionary = event_value as Dictionary
+			var is_end_activation: bool = str(event.get("phase", "")) == "end_activation"
+			if is_end_activation == end_activation_only:
+				damage += int(event.get("damage", 0))
+	if damage <= 0:
+		return
+	var hp_before: int = int(actor.get("current_hp", 0))
+	var hp_after: int = maxi(0, hp_before - damage)
+	actor["current_hp"] = hp_after
+	var stop_reason: String = str(result.get("stop_reason", ""))
+	if hp_after <= 0:
+		# Live combat owns only the established ActorSchema lifecycle fields.
+		# Pure activation tests may still exercise `ko`, but live callers request death.
+		actor.erase("is_ko")
+		actor["is_dead"] = true
+		actor["death_round"] = t
+	logger.info(t, "combat.hazard_resolved", "Movement hazard applied", {
+		"actor_id": str(actor.get("id", "")),
+		"damage": damage,
+		"hp_before": hp_before,
+		"hp_after": hp_after,
+		"downed": hp_after <= 0,
+		"stop_reason": stop_reason,
+	})
+
+
+## Applies the shrine effect only after CombatActivationService has legally resolved
+## the action at the final cell. Intent selection itself remains side-effect free.
+func _apply_live_purify_shrine(
+	actor: Dictionary,
+	target_id: String,
+	ctx: Dictionary,
+	t: int
+) -> void:
+	if target_id.is_empty():
+		return
+	var shrine_cfg: Dictionary = ctx.get("cfg", {}).get("data", {}).get("combat", {}).get("shrine", {})
+	var shrine_ref: Dictionary = {}
+	for actor_value: Variant in flow_ctx.encounter_ctx.actors:
+		if actor_value is Dictionary:
+			var candidate: Dictionary = actor_value
+			if str(candidate.get("id", "")) == target_id \
+					and bool(candidate.get("is_structure", false)) \
+					and not bool(candidate.get("is_dead", false)):
+				shrine_ref = candidate
+				break
+	if shrine_ref.is_empty():
+		return
+	ShrineService.apply_purify_stack(shrine_ref, actor, shrine_cfg)
+	logger.info(t, "actor.purified_shrine", "Purify applied to shrine", {
+		"actor_id": str(actor.get("id", "")),
+		"shrine_id": str(shrine_ref.get("id", "")),
+		"stacks_count": (shrine_ref.get("purify_stacks", []) as Array).size(),
+		"cooldown_set": int(actor.get("purify_cooldown", 0)),
+	})
+	var emotion_cfg: Dictionary = ctx.get("cfg", {}).get("data", {}).get("combat", {}).get("emotion", {})
+	var shrine_morale: int = int(emotion_cfg.get("morale_on_shrine_purify", 5))
+	var shrine_ripple: int = int(emotion_cfg.get("morale_ripple_shrine_purify", 2))
+	actor["morale"] = mini(100, int(actor.get("morale", 50)) + shrine_morale)
+	for actor_value: Variant in flow_ctx.encounter_ctx.actors:
+		if not (actor_value is Dictionary):
+			continue
+		var ally: Dictionary = actor_value
+		if str(ally.get("id", "")) != str(actor.get("id", "")) \
+				and str(ally.get("faction", "")) == "echo" \
+				and not bool(ally.get("is_dead", false)):
+			ally["morale"] = mini(100, int(ally.get("morale", 50)) + shrine_ripple)
+
+
+func _prepare_legacy_move_intent_for_activation(
+	actor: Dictionary,
+	intent: Dictionary,
+	prepared: Dictionary
+) -> void:
+	if not bool(prepared.get("valid", false)):
+		return
+	if intent.has("planned_action"):
+		return
+	if str(intent.get("action_type", "")) != "actor.move":
+		return
+	var target_pos: Dictionary = intent.get("target_pos", {}) as Dictionary
+	if target_pos.is_empty():
+		return
+	var movement_context: Dictionary = prepared["movement_context"] as Dictionary
+	var origin: Dictionary = movement_context.get("origin", actor.get("grid_pos", {})) as Dictionary
+	var walkable: Dictionary = _movement_planning_walkable(movement_context)
+	var edge_costs: Dictionary = prepared.get("edge_costs", {}) as Dictionary
+	var bounds: Dictionary = movement_context.get("bounds", {}) as Dictionary
+	var destination: Dictionary = target_pos
+	if not bool(walkable.get(_movement_cell_key_runtime(destination), false)):
+		destination = _movement_nearest_reachable_adjacent(
+			origin,
+			target_pos,
+			walkable,
+			movement_context.get("terrain_costs", {}) as Dictionary,
+			bounds,
+			edge_costs
+		)
+		if destination.is_empty():
+			return
+	var route: Dictionary = MovementPathServiceScript.shortest_path(
+		origin,
+		destination,
+		walkable,
+		movement_context.get("terrain_costs", {}) as Dictionary,
+		bounds,
+		edge_costs
+	)
+	var path: Array = route.get("path", []) as Array if bool(route.get("reachable", false)) else []
+	var profile: Dictionary = prepared["profile"] as Dictionary
+	var capacity: int = int(profile.get("capacity", 0))
+	# Commitment is a COST budget the executor charges the hostile-control surcharge
+	# against — not a step count. Use the surcharged route cost so a step into a
+	# hostile-adjacent cell (cost 2) is actually funded; empty path keeps commitment 0.
+	var commitment: int = 0 if path.is_empty() else mini(capacity, int(route.get("cost", path.size())))
+	var plan: Dictionary = MovementActionPlanScript.build("actor.move", str(intent.get("target_id", "")))
+	var fallback: Dictionary = MovementActionPlanScript.build("actor.idle", "")
+	var movement_intent: Dictionary = MovementIntentScript.build(
+		str(movement_context.get("mover_id", actor.get("id", ""))),
+		str(movement_context.get("activation_id", "live.activation")),
+		"goal.live.quarry_flee" if bool(actor.get("is_quarry", false)) else "goal.live.move",
+		"option.live.quarry_flee" if bool(actor.get("is_quarry", false)) else "option.live.move",
+		path,
+		capacity,
+		commitment,
+		plan,
+		fallback,
+		["mode.%s" % str(flow_ctx.encounter_ctx.resolution_mode)]
+	)
+	var validation: Dictionary = MovementIntentScript.validate(movement_intent, origin)
+	if not bool(validation.get("valid", false)):
+		return
+	for key_value: Variant in movement_intent.keys():
+		intent[key_value] = movement_intent[key_value]
+	intent["movement_purpose"] = "withdraw" if bool(actor.get("is_quarry", false)) else "advance"
+
+
+func _movement_nearest_reachable_adjacent(
+	origin: Dictionary,
+	center: Dictionary,
+	walkable: Dictionary,
+	terrain_costs: Dictionary,
+	bounds: Dictionary,
+	edge_costs: Dictionary = {}
+) -> Dictionary:
+	var best: Dictionary = {}
+	var best_cost: int = 999999
+	for dc in range(-1, 2):
+		for dr in range(-1, 2):
+			if dc == 0 and dr == 0:
+				continue
+			var candidate: Dictionary = {
+				"col": int(center.get("col", 0)) + dc,
+				"row": int(center.get("row", 0)) + dr,
+			}
+			if not bool(walkable.get(_movement_cell_key_runtime(candidate), false)):
+				continue
+			var route: Dictionary = MovementPathServiceScript.shortest_path(
+				origin,
+				candidate,
+				walkable,
+				terrain_costs,
+				bounds,
+				edge_costs
+			)
+			if not bool(route.get("reachable", false)):
+				continue
+			var cost: int = int(route.get("cost", 0))
+			var key: String = _movement_cell_key_runtime(candidate)
+			if cost < best_cost or (cost == best_cost and key < _movement_cell_key_runtime(best)):
+				best = candidate
+				best_cost = cost
+	return best
+
+
+func _prepare_guide_spirit_activation_context(
+	spirit: Dictionary,
+	ectx: EncounterContext,
+	combat_state: Dictionary,
+	bdata: Dictionary,
+	t: int
+) -> Dictionary:
+	var movement_cfg: Dictionary = bdata.get("combat", {}).get("movement", {}) as Dictionary
+	var capacity_cfg: Dictionary = movement_cfg.get("capacity", {}) as Dictionary
+	var hazard_cfg: Dictionary = movement_cfg.get("hazards", {}) as Dictionary
+	if hazard_cfg.is_empty():
+		return {"valid": false, "reason": "missing_hazard_config"}
+	var grid_cfg: Dictionary = bdata.get("grid", {}) as Dictionary
+	var bounds: Dictionary = {
+		"w": GridService.get_board_cols(grid_cfg),
+		"h": GridService.get_board_rows(grid_cfg),
+	}
+	var walkable: Dictionary = {}
+	if not ectx.terrain.is_empty():
+		walkable = StageTerrain.walkable_set(ectx.terrain)
+		var terrain_bounds: Dictionary = ectx.terrain.get("bounds", {}) as Dictionary
+		if terrain_bounds.has("w"):
+			bounds["w"] = int(terrain_bounds["w"])
+		if terrain_bounds.has("h"):
+			bounds["h"] = int(terrain_bounds["h"])
+	if walkable.is_empty():
+		walkable = _movement_rect_walkable(bounds)
+	var perceived: Array = _movement_actor_facts(ectx.actors)
+	var known_hazards: Array = _live_combat_known_hazards()
+	var context: Dictionary = MovementContextScript.build(
+		str(spirit.get("id", "")),
+		"guide.%s.%s.%d" % [str(ectx.encounter_id), str(spirit.get("id", "")), t],
+		spirit.get("grid_pos", {}) as Dictionary,
+		bounds,
+		walkable,
+		walkable,
+		_movement_occupancy(ectx.actors),
+		perceived,
+		_movement_relationships(spirit, perceived),
+		{},
+		known_hazards,
+		_movement_pressure_snapshot(spirit, ectx, combat_state, bounds, walkable),
+		[]
+	)
+	return {
+		"valid": true,
+		"context": context,
+		"capacity_cfg": capacity_cfg,
+		"hazard_ctx": {
+			"triggered": {"unstable": false, "binding": false, "burning": false},
+			"config": hazard_cfg,
+		},
+	}
+
+
+## The approach stores only information the party learned before engagement. The
+## fixed combat-board field is separately authored; its cell/type fact replaces an
+## approach fact at the same identity so physical board truth has precedence.
+func _live_combat_known_hazards() -> Array:
+	var stage_context: Dictionary = flow_ctx.save_data.get("stage_context", {}) as Dictionary
+	var approach: Dictionary = stage_context.get("encounter_approach", {}) as Dictionary
+	var approach_hazards: Array = approach.get("known_hazards", []) as Array
+	var winners_by_identity: Dictionary = {}
+	for hazard_value: Variant in approach_hazards:
+		_merge_live_combat_hazard(winners_by_identity, hazard_value, 0)
+	for hazard_value: Variant in MovementHazardFixturesScript.authored_set():
+		_merge_live_combat_hazard(winners_by_identity, hazard_value, 1)
+
+	var identities: Array = winners_by_identity.keys()
+	identities.sort()
+	var winners_by_id: Dictionary = {}
+	for identity_value: Variant in identities:
+		var candidate: Dictionary = winners_by_identity[identity_value] as Dictionary
+		var hazard: Dictionary = candidate["hazard"] as Dictionary
+		var hazard_id: String = str(hazard.get("id", ""))
+		if not winners_by_id.has(hazard_id) \
+				or int(candidate["source_priority"]) >= int((winners_by_id[hazard_id] as Dictionary)["source_priority"]):
+			winners_by_id[hazard_id] = candidate
+
+	var result: Array = []
+	for identity_value: Variant in identities:
+		var candidate: Dictionary = winners_by_identity[identity_value] as Dictionary
+		var hazard: Dictionary = candidate["hazard"] as Dictionary
+		var chosen: Dictionary = winners_by_id[str(hazard.get("id", ""))] as Dictionary
+		if candidate == chosen:
+			result.append(hazard.duplicate(true))
+	return result
+
+
+func _merge_live_combat_hazard(winners_by_identity: Dictionary, value: Variant, source_priority: int) -> void:
+	if not (value is Dictionary):
+		return
+	var hazard: Dictionary = value as Dictionary
+	var validation: Dictionary = MovementHazardFactScript.validate(hazard)
+	if not bool(validation.get("valid", false)):
+		return
+	var hazard_type: String = str(hazard.get("hazard_type", ""))
+	if not hazard_type in ["unstable", "binding", "burning"]:
+		return
+	var position: Dictionary = hazard["position"] as Dictionary
+	var identity: String = "%d,%d:%s" % [
+		int(position.get("col", 0)), int(position.get("row", 0)), hazard_type,
+	]
+	winners_by_identity[identity] = {
+		"hazard": hazard.duplicate(true),
+		"source_priority": source_priority,
+	}
+
+
+func _movement_rect_walkable(bounds: Dictionary) -> Dictionary:
+	var result: Dictionary = {}
+	for col in range(int(bounds.get("w", 0))):
+		for row in range(int(bounds.get("h", 0))):
+			result["%d,%d" % [col, row]] = true
+	return result
+
+
+func _movement_occupancy(actors: Array) -> Dictionary:
+	var result: Dictionary = {}
+	for actor_value: Variant in actors:
+		if not (actor_value is Dictionary):
+			continue
+		var actor: Dictionary = actor_value
+		if bool(actor.get("is_dead", false)):
+			continue
+		var pos: Dictionary = actor.get("grid_pos", {}) as Dictionary
+		if pos.is_empty():
+			continue
+		result["%d,%d" % [int(pos.get("col", 0)), int(pos.get("row", 0))]] = str(actor.get("id", ""))
+	return result
+
+
+func _movement_actor_facts(actors: Array) -> Array:
+	var facts: Array = []
+	for actor_value: Variant in actors:
+		if not (actor_value is Dictionary):
+			continue
+		var actor: Dictionary = actor_value
+		var max_hp: int = int((actor.get("stats", {}) as Dictionary).get("max_hp", actor.get("max_hp", 1)))
+		var hp_ratio: float = 0.0 if max_hp <= 0 else clampf(float(actor.get("current_hp", 0)) / float(max_hp), 0.0, 1.0)
+		var is_dead: bool = bool(actor.get("is_dead", false))
+		var is_ko: bool = bool(actor.get("is_ko", false)) or (int(actor.get("current_hp", 1)) <= 0 and not is_dead)
+		var is_structure: bool = bool(actor.get("is_structure", false))
+		var controlling: bool = bool(actor.get("controlling_state", true)) \
+			and not is_dead and not is_ko and not is_structure
+		facts.append(MovementActorFactScript.build(
+			str(actor.get("id", "")),
+			actor.get("grid_pos", {}) as Dictionary,
+			"structure" if is_structure else str(actor.get("actor_type", "echo")),
+			is_dead,
+			is_ko,
+			is_structure,
+			bool(actor.get("is_spirit", false)),
+			bool(actor.get("is_quarry", false)),
+			controlling,
+			hp_ratio
+		))
+	facts.sort_custom(func(left: Variant, right: Variant) -> bool:
+		return str((left as Dictionary)["id"]) < str((right as Dictionary)["id"])
+	)
+	return facts
+
+
+func _movement_relationships(mover: Dictionary, facts: Array) -> Dictionary:
+	var result: Dictionary = {}
+	var mover_faction: String = str(mover.get("faction", ""))
+	for fact_value: Variant in facts:
+		var fact: Dictionary = fact_value
+		var actor_id: String = str(fact["id"])
+		var actor_ref: Dictionary = _find_actor_by_id(flow_ctx.encounter_ctx.actors, actor_id)
+		var faction: String = str(actor_ref.get("faction", ""))
+		var relationship: String = "neutral"
+		if actor_id == str(mover.get("id", "")) or faction == mover_faction:
+			relationship = "friendly"
+		elif mover_faction == "enemy" or faction == "enemy":
+			relationship = "hostile"
+		result[actor_id] = relationship
+	return result
+
+
+func _movement_actor_positions(actors: Array) -> Dictionary:
+	var result: Dictionary = {}
+	for actor_value: Variant in actors:
+		if actor_value is Dictionary:
+			var actor: Dictionary = actor_value
+			result[str(actor.get("id", ""))] = (actor.get("grid_pos", {}) as Dictionary).duplicate(true)
+	return result
+
+
+func _movement_goal_by_id(goals: Array, goal_id: String) -> Dictionary:
+	for goal_value: Variant in goals:
+		var goal: Dictionary = goal_value
+		if str(goal.get("goal_id", "")) == goal_id:
+			return goal
+	return {}
+
+
+func _movement_pressure_snapshot(
+	actor: Dictionary,
+	ectx: EncounterContext,
+	combat_state: Dictionary,
+	bounds: Dictionary,
+	walkable: Dictionary
+) -> Dictionary:
+	var mode: String = str(ectx.resolution_mode)
+	var objective: Dictionary = _movement_objective_actor(ectx, combat_state)
+	var objective_known: bool = not objective.is_empty()
+	var objective_id: String = str(objective.get("id", ""))
+	var objective_pos: Dictionary = objective.get("grid_pos", {}) if objective_known else {}
+	var destination_region: Array = []
+	var approach_region: Array = []
+	var fallback_region: Array = []
+	var search_region: Array = _movement_all_cells(walkable)
+	if objective_known:
+		destination_region = _movement_adjacent_cells(objective_pos, bounds, walkable)
+		approach_region = destination_region.duplicate(true)
+		fallback_region = destination_region.duplicate(true)
+	if mode == EncounterResolutionModes.PURSUE and bool(actor.get("is_quarry", false)):
+		destination_region = PursueEscapeServiceScript.escape_cells(bounds, walkable)
+	var guide_mode: String = str(combat_state.get("guide_mode", "")) if mode == EncounterResolutionModes.GUIDE_SPIRIT else ""
+	var faction: String = str(actor.get("faction", ""))
+	var alignment: String = "objective" if bool(actor.get("is_structure", false)) else ("hostile" if faction == "enemy" else "party")
+	var factual_role: String = _movement_factual_role(actor, combat_state)
+	var progress_current: int = 0
+	var progress_required: int = 0
+	match mode:
+		EncounterResolutionModes.RECOVER:
+			progress_current = int(combat_state.get("hold_counter", 0))
+			progress_required = int((combat_state.get("objective_params", {}) as Dictionary).get("hold_rounds", 0))
+		EncounterResolutionModes.PROTECT:
+			progress_current = int(combat_state.get("protect_counter", 0))
+			progress_required = int((combat_state.get("objective_params", {}) as Dictionary).get("duration_turns", 0))
+		EncounterResolutionModes.PURSUE:
+			progress_current = int(combat_state.get("contain_counter", 0))
+			progress_required = int((combat_state.get("objective_params", {}) as Dictionary).get("contain_rounds", 0))
+		EncounterResolutionModes.GUIDE_SPIRIT:
+			progress_current = int(combat_state.get("guide_protect_counter", 0))
+			progress_required = int((combat_state.get("objective_params", {}) as Dictionary).get("duration_turns", 0))
+		EncounterResolutionModes.ENDURE:
+			progress_current = int(combat_state.get("round_counter", 0))
+			progress_required = int((combat_state.get("objective_params", {}) as Dictionary).get("duration_turns", 0))
+	var objective_health: float = -1.0
+	if objective_known:
+		var max_hp: int = int((objective.get("stats", {}) as Dictionary).get("max_hp", objective.get("max_hp", 1)))
+		objective_health = 0.0 if max_hp <= 0 else clampf(float(objective.get("current_hp", 0)) / float(max_hp), 0.0, 1.0)
+	return CombatPressureSnapshotScript.build(
+		mode,
+		guide_mode,
+		alignment,
+		factual_role,
+		objective_known,
+		objective_id,
+		objective_pos,
+		destination_region,
+		approach_region,
+		fallback_region,
+		search_region,
+		str(ectx.purifier_id),
+		str(combat_state.get("recover_holder_id", "")),
+		str(combat_state.get("totem_carrier_id", "")),
+		str(objective_id) if mode == EncounterResolutionModes.PURSUE else "",
+		str(combat_state.get("spirit_id", "")),
+		objective_health,
+		progress_current,
+		progress_required,
+		bool(combat_state.get("escort_started", false)),
+		bool(combat_state.get("spirit_joins_battle", false)),
+		bool(combat_state.get("totem_stolen", false)),
+		["mode.%s" % mode]
+	)
+
+
+func _movement_objective_actor(ectx: EncounterContext, combat_state: Dictionary) -> Dictionary:
+	match str(ectx.resolution_mode):
+		EncounterResolutionModes.PURSUE:
+			for actor_value: Variant in ectx.actors:
+				if actor_value is Dictionary and bool((actor_value as Dictionary).get("is_quarry", false)):
+					return actor_value
+		EncounterResolutionModes.GUIDE_SPIRIT:
+			return _find_actor_by_id(ectx.actors, str(combat_state.get("spirit_id", "")))
+		EncounterResolutionModes.PURIFY_SHRINE, EncounterResolutionModes.RECOVER, EncounterResolutionModes.PROTECT:
+			for actor_value: Variant in ectx.actors:
+				if actor_value is Dictionary and bool((actor_value as Dictionary).get("is_structure", false)):
+					return actor_value
+	return {}
+
+
+func _movement_factual_role(actor: Dictionary, combat_state: Dictionary) -> String:
+	var actor_id: String = str(actor.get("id", ""))
+	if actor_id == str(combat_state.get("recover_holder_id", "")):
+		return "holder"
+	if actor_id == str(combat_state.get("totem_carrier_id", "")):
+		return "carrier"
+	if bool(actor.get("is_quarry", false)):
+		return "quarry"
+	if bool(actor.get("is_spirit", false)):
+		return "spirit"
+	if actor_id == str(flow_ctx.encounter_ctx.purifier_id):
+		return "purifier"
+	return "baseline"
+
+
+func _movement_adjacent_cells(center: Dictionary, bounds: Dictionary, walkable: Dictionary) -> Array:
+	var cells: Array = []
+	for dc in range(-1, 2):
+		for dr in range(-1, 2):
+			if dc == 0 and dr == 0:
+				continue
+			var cell: Dictionary = {"col": int(center.get("col", 0)) + dc, "row": int(center.get("row", 0)) + dr}
+			var key: String = "%d,%d" % [int(cell["col"]), int(cell["row"])]
+			if int(cell["col"]) >= 0 and int(cell["row"]) >= 0 \
+					and int(cell["col"]) < int(bounds.get("w", 0)) \
+					and int(cell["row"]) < int(bounds.get("h", 0)) \
+					and bool(walkable.get(key, false)):
+				cells.append(cell)
+	cells.sort_custom(func(left: Variant, right: Variant) -> bool:
+		var a: Dictionary = left
+		var b: Dictionary = right
+		if int(a["col"]) != int(b["col"]):
+			return int(a["col"]) < int(b["col"])
+		return int(a["row"]) < int(b["row"])
+	)
+	return cells
+
+
+func _movement_all_cells(walkable: Dictionary) -> Array:
+	var cells: Array = []
+	var keys: Array = walkable.keys()
+	keys.sort()
+	for key_value: Variant in keys:
+		var parts: PackedStringArray = str(key_value).split(",")
+		if parts.size() == 2:
+			cells.append({"col": int(parts[0]), "row": int(parts[1])})
+	return cells
+
+
 ## COMBAT-SEQ: finds the next living actor from current_actor_index, resolves their turn,
 ## appends the result to last_round_results, emits a per-actor snapshot.
 ## If no living actor remains, calls _end_round() instead.
@@ -1763,28 +2621,22 @@ func _resolve_next_actor(t: int) -> void:
 			_dir_copy["intent_weights"] = _iw_copy
 			ctx["directive"] = _dir_copy
 
+	var movement_prepared: Dictionary = _prepare_live_movement_context(
+		actor, ectx, combat_state, movement_board_cfg, bdata, t)
+	if bool(movement_prepared.get("valid", false)) and bool(movement_prepared.get("selection_enabled", false)):
+		ctx["movement_context"] = movement_prepared["movement_context"]
+		ctx["movement_profile"] = movement_prepared["profile"]
+		ctx["movement_goals"] = movement_prepared["goals"]
+		ctx["movement_options"] = movement_prepared["options"]
+
 	# Resolve this actor's turn.
-	# V2-STAGE-004 P3b: PURSUE — quarry uses FleeBehaviorModule instead of BehaviorArbiter.
-	var _flee_mod: BehaviorModule = null
-	if ectx.resolution_mode == EncounterResolutionModes.PURSUE \
-			and bool(actor.get("is_quarry", false)) \
-			and not bool(actor.get("is_dead", false)):
-		_flee_mod = FleeBehaviorModule.new(movement_board_cfg)
-	# V2-STAGE-004 P3c: GUIDE_SPIRIT — the IDLE structure spirit's board movement is exclusively
-	# the _end_round escort/skittish step (deterministic, no RNG). ActorStateMachine.advance_turn()
-	# owns move execution internally (out of scope here), so we capture grid_pos before the
-	# call and restore it after if the spirit moved — attack/other intents are unaffected.
-	# Gated on is_structure: the JOINED combatant spirit (built via EnemyActor, is_structure=false)
-	# is NOT owned by _end_round and must be free to move via its own arbiter turn — capturing/
-	# restoring its grid_pos here would pin it to its spawn cell forever.
-	var _spirit_pos_before: Dictionary = {}
-	var _is_spirit_actor: bool = bool(actor.get("is_spirit", false)) and bool(actor.get("is_structure", false))
-	if _is_spirit_actor:
-		_spirit_pos_before = actor.get("grid_pos", {}).duplicate()
-	var asm := ActorStateMachine.new(actor, _flee_mod, actor_cfg)
+	var movement_cfg_for_asm: Dictionary = movement_prepared.get("movement_cfg", {}) as Dictionary
+	var behavior_module: BehaviorModule = null
+	if ectx.resolution_mode == EncounterResolutionModes.PURSUE and bool(actor.get("is_quarry", false)):
+		behavior_module = FleeBehaviorModule.new(movement_board_cfg)
+	var asm := ActorStateMachine.new(actor, behavior_module, actor_cfg, movement_cfg_for_asm)
 	var intent: Dictionary = asm.advance_turn(ctx, logger, t)
-	if _is_spirit_actor and not _spirit_pos_before.is_empty():
-		actor["grid_pos"] = _spirit_pos_before
+	var _movement_result: Dictionary = _apply_live_activation(actor, intent, movement_prepared, asm, ctx, t)
 	var action_type: String = intent.get("action_type", "actor.idle")
 
 	# V2-VOICE-001: after advance_turn, if actor produced a high-signal bark, append to round queue.
@@ -2018,6 +2870,12 @@ func _resolve_next_actor(t: int) -> void:
 				"is_kill":     false,
 			})
 
+	# Primary actions resolve before end-of-activation Burning. Purify is an
+	# external side effect and therefore shares this post-action boundary.
+	if action_type == "actor.purify_shrine" and not bool(actor.get("is_dead", false)):
+		_apply_live_purify_shrine(actor, str(intent.get("target_id", "")), ctx, t)
+	_apply_live_hazard_outcome(actor, _movement_result, t, true)
+
 	if _is_keeper_intro_trial_active():
 		var lethal_ids: Array[String] = _keeper_intro_trial_lethal_echo_ids()
 		if not lethal_ids.is_empty():
@@ -2072,20 +2930,14 @@ func _resolve_next_actor(t: int) -> void:
 			and bool(actor.get("is_quarry", false)) \
 			and not bool(actor.get("is_dead", false)) \
 			and not bool(combat_state.get("quarry_escaped", false)):
-		var _qe_col: int     = int(actor.get("grid_pos", {}).get("col", -1))
-		var _qe_row: int     = int(actor.get("grid_pos", {}).get("row", -1))
-		var _qe_max_col: int = int(movement_board_cfg.get("board_cols", 10)) - 1
-		var _qe_max_row: int = int(movement_board_cfg.get("board_rows", 10)) - 1
-		var _qe_board_cols: int = int(movement_board_cfg.get("board_cols", 10))
-		var _qe_board_rows: int = int(movement_board_cfg.get("board_rows", 10))
-		var _qe_escaped: bool = false
-		if _qe_board_cols > _qe_board_rows:
-			# Wide board: escape only at the far (high-col) end of the long axis.
-			_qe_escaped = _qe_col >= _qe_max_col - 1
-		else:
-			# Tall board: escape only at the far (high-row) end of the long axis.
-			_qe_escaped = _qe_row >= _qe_max_row - 1
-		if _qe_escaped:
+		var _qe_bounds: Dictionary = {
+			"w": int(movement_board_cfg.get("board_cols", 10)),
+			"h": int(movement_board_cfg.get("board_rows", 10)),
+		}
+		var _qe_walkable: Dictionary = movement_board_cfg.get("walkable", {}) as Dictionary
+		if _qe_walkable.is_empty():
+			_qe_walkable = _movement_rect_walkable(_qe_bounds)
+		if PursueEscapeServiceScript.is_escaped(actor.get("grid_pos", {}), _qe_bounds, _qe_walkable):
 			combat_state["quarry_escaped"] = true
 			logger.info(t, "combat.pursue.escaped", "Quarry reached board edge", {
 				"quarry_id": str(actor.get("id", "")),
@@ -2717,62 +3569,77 @@ func _end_round(t: int) -> void:
 						combat_state["escort_started"] = true
 						_fire_spirit_bark(_gs_spirit, "spirit_escort_start", t)
 
-				# Move toward destination while escorted (within escort_radius) and not yet arrived.
+				var _gs_escorted: bool = false
 				if bool(combat_state.get("escort_started", false)) \
 						and not bool(combat_state.get("destination_reached", false)):
-					var _gs_escorted: bool = false
 					for _gs_e3 in ectx.actors:
 						if not (_gs_e3 is Dictionary): continue
 						if bool(_gs_e3.get("is_dead", false)): continue
 						if str(_gs_e3.get("faction", "")) != "echo": continue
-						if bool(_gs_e3.get("is_spirit", false)): continue  # the spirit is distance 0 to itself — exclude
+						if bool(_gs_e3.get("is_spirit", false)): continue
 						if GridService.chebyshev_distance(_gs_e3.get("grid_pos", {}), _gs_spirit_pos) \
 								<= _gs_escort_radius:
 							_gs_escorted = true
 							break
-					if _gs_escorted:
-						var _gs_dest: Dictionary = {
-							"col": int(combat_state.get("destination_col", -1)),
-							"row": int(combat_state.get("destination_row", -1)),
-						}
-						var _gs_walkable: Dictionary = StageTerrain.walkable_set(ectx.terrain) \
-							if not ectx.terrain.is_empty() else {}
-						if not _gs_walkable.is_empty() and _gs_dest.get("col", -1) >= 0:
-							# Occupied set: all OTHER living actors (spirit may wait if its
-							# chosen step is occupied — simple, deterministic).
-							var _gs_occupied: Array = []
-							for _gs_oa in ectx.actors:
-								if _gs_oa is Dictionary \
-										and str(_gs_oa.get("id", "")) != _gs_spirit_id \
-										and not bool(_gs_oa.get("is_dead", false)):
-									_gs_occupied.append(_gs_oa.get("grid_pos", {}))
-							var _gs_dist_field: Dictionary = StageTerrain.bfs_distance_field(_gs_dest, _gs_walkable)
-							var _gs_effective_walkable: Dictionary = _gs_walkable.duplicate()
-							for _gs_occ in _gs_occupied:
-								if _gs_occ is Dictionary:
-									var _gs_occ_key: String = "%d,%d" % [
-										int(_gs_occ.get("col", -1)), int(_gs_occ.get("row", -1))]
-									_gs_effective_walkable.erase(_gs_occ_key)
-							var _gs_step: Dictionary = StageTerrain.next_step(
-								_gs_spirit_pos, _gs_dist_field, _gs_effective_walkable, _gs_dest)
-							if int(_gs_step.get("col", _gs_spirit_pos.get("col", 0))) != int(_gs_spirit_pos.get("col", 0)) \
-									or int(_gs_step.get("row", _gs_spirit_pos.get("row", 0))) != int(_gs_spirit_pos.get("row", 0)):
-								GridService.assign_grid_pos(_gs_spirit,
-									int(_gs_step.get("col", 0)), int(_gs_step.get("row", 0)))
-								_gs_spirit_pos = _gs_spirit.get("grid_pos", {})
-							# else: spirit waits this round (occupied or no progressing step).
-						# Destination check after move.
-						if int(_gs_spirit_pos.get("col", -999)) == int(combat_state.get("destination_col", -1)) \
-								and int(_gs_spirit_pos.get("row", -999)) == int(combat_state.get("destination_row", -1)):
-							combat_state["destination_reached"] = true
-							_fire_spirit_bark(_gs_spirit, "spirit_guide_win", t)
-					logger.debug(t, "combat.guide.escort", "GUIDE_SPIRIT escort progress", {
-						"round":              round,
-						"escorted":           _gs_escorted,
-						"escort_started":     bool(combat_state.get("escort_started", false)),
-						"destination_reached": bool(combat_state.get("destination_reached", false)),
-						"spirit_pos":         _gs_spirit_pos,
-					})
+				var _gs_dest: Dictionary = {
+					"col": int(combat_state.get("destination_col", -1)),
+					"row": int(combat_state.get("destination_row", -1)),
+				}
+				var _gs_should_move: bool = bool(combat_state.get("escort_started", false)) \
+					and _gs_escorted \
+					and not bool(combat_state.get("destination_reached", false))
+				if not bool(combat_state.get("spirit_joins_battle", false)):
+					var _gs_goal_id: String = "guide.escort"
+					if bool(combat_state.get("destination_reached", false)):
+						_gs_goal_id = "guide.escort_arrived"
+					elif not _gs_should_move:
+						_gs_goal_id = "guide.escort_caller_gated"
+					var _gs_prepared: Dictionary = _prepare_guide_spirit_activation_context(
+						_gs_spirit, ectx, combat_state, config_service.get_balance().get("data", {}), t)
+					if bool(_gs_prepared.get("valid", false)):
+						var _gs_result: Dictionary = GuideSpiritActivationServiceScript.activate_spirit(
+							_gs_spirit,
+							_gs_prepared["context"] as Dictionary,
+							{
+								"mode": "escort",
+								"joined": false,
+								"should_move": _gs_should_move,
+								"destination": _gs_dest,
+								"activation_id": "guide.%s.%d" % [_gs_spirit_id, round],
+								"goal_id": _gs_goal_id,
+								"option_id": "guide.escort.step",
+								"mover_ko_only": false,
+							},
+							_gs_prepared["hazard_ctx"] as Dictionary,
+							_gs_prepared["capacity_cfg"] as Dictionary
+						)
+						var _gs_actual: Array = _gs_result.get("actual_traversed_cells", []) as Array
+						if not _gs_actual.is_empty():
+							GridService.assign_grid_pos(_gs_spirit,
+								int((_gs_result.get("final_destination", {}) as Dictionary).get("col", 0)),
+								int((_gs_result.get("final_destination", {}) as Dictionary).get("row", 0)))
+							_gs_spirit_pos = _gs_spirit.get("grid_pos", {})
+						_apply_live_hazard_outcome(_gs_spirit, _gs_result, t, false)
+						_apply_live_hazard_outcome(_gs_spirit, _gs_result, t, true)
+						if _gs_should_move and str(_gs_result.get("stop_reason", "")) == "no_route":
+							logger.info(t, "combat.guide.no_route", "GUIDE_SPIRIT escort route unavailable", {
+								"round": round,
+								"spirit_id": _gs_spirit_id,
+								"reason": "unreachable",
+								"goal_id": str(_gs_result.get("goal_id", "")),
+							})
+				if not bool(_gs_spirit.get("is_dead", false)) \
+						and int(_gs_spirit_pos.get("col", -999)) == int(combat_state.get("destination_col", -1)) \
+						and int(_gs_spirit_pos.get("row", -999)) == int(combat_state.get("destination_row", -1)):
+					combat_state["destination_reached"] = true
+					_fire_spirit_bark(_gs_spirit, "spirit_guide_win", t)
+				logger.debug(t, "combat.guide.escort", "GUIDE_SPIRIT escort progress", {
+					"round":              round,
+					"escorted":           _gs_escorted,
+					"escort_started":     bool(combat_state.get("escort_started", false)),
+					"destination_reached": bool(combat_state.get("destination_reached", false)),
+					"spirit_pos":         _gs_spirit_pos,
+				})
 
 			elif _gs_mode == "protect":
 				var _gs_skittish_radius: int = int(_gs_obj.get("skittish_radius", 3))
@@ -2796,60 +3663,53 @@ func _end_round(t: int) -> void:
 					if not (_gs_e4 is Dictionary): continue
 					if bool(_gs_e4.get("is_dead", false)): continue
 					if str(_gs_e4.get("faction", "")) != "echo": continue
+					if bool(_gs_e4.get("is_spirit", false)): continue
 					if GridService.is_adjacent(_gs_e4.get("grid_pos", {}), _gs_spirit_pos):
 						_gs_echo_adjacent = true
 						break
-				if _gs_enemy_near and not _gs_echo_adjacent and not _gs_nearest_enemy.is_empty():
-					var _gs_walkable_p: Dictionary = StageTerrain.walkable_set(ectx.terrain) \
-						if not ectx.terrain.is_empty() else {}
-					var _gs_occupied_p: Dictionary = {}
-					for _gs_oa2 in ectx.actors:
-						if _gs_oa2 is Dictionary \
-								and str(_gs_oa2.get("id", "")) != _gs_spirit_id \
-								and not bool(_gs_oa2.get("is_dead", false)):
-							var _gs_op2: Dictionary = _gs_oa2.get("grid_pos", {})
-							if not _gs_op2.is_empty():
-								_gs_occupied_p["%d,%d" % [int(_gs_op2.get("col", 0)), int(_gs_op2.get("row", 0))]] = true
-					var _gs_sc: int = int(_gs_spirit_pos.get("col", 0))
-					var _gs_sr: int = int(_gs_spirit_pos.get("row", 0))
-					var _gs_enemy_pos: Dictionary = _gs_nearest_enemy.get("grid_pos", {})
-					# Deterministic away-step: among walkable+unoccupied 8-dir neighbours, pick
-					# the one maximising Chebyshev distance to nearest enemy; tiebreak manhattan
-					# desc, then col asc, then row asc. No RNG.
-					var _gs_best_cell: Dictionary = {}
-					var _gs_best_cheb: int = -1
-					var _gs_best_man: int = -1
-					for _gs_dr in [-1, 0, 1]:
-						for _gs_dc in [-1, 0, 1]:
-							if _gs_dc == 0 and _gs_dr == 0: continue
-							var _gs_nc: int = _gs_sc + _gs_dc
-							var _gs_nr: int = _gs_sr + _gs_dr
-							var _gs_nk: String = "%d,%d" % [_gs_nc, _gs_nr]
-							if not _gs_walkable_p.is_empty() and not _gs_walkable_p.has(_gs_nk):
-								continue
-							if _gs_occupied_p.has(_gs_nk):
-								continue
-							var _gs_cand: Dictionary = { "col": _gs_nc, "row": _gs_nr }
-							var _gs_cheb: int = GridService.chebyshev_distance(_gs_cand, _gs_enemy_pos)
-							var _gs_man: int = GridService.manhattan_distance(_gs_cand, _gs_enemy_pos)
-							var _gs_better: bool = false
-							if _gs_cheb > _gs_best_cheb:
-								_gs_better = true
-							elif _gs_cheb == _gs_best_cheb and _gs_man > _gs_best_man:
-								_gs_better = true
-							elif _gs_cheb == _gs_best_cheb and _gs_man == _gs_best_man:
-								if _gs_best_cell.is_empty() \
-										or _gs_nc < int(_gs_best_cell.get("col", 999)) \
-										or (_gs_nc == int(_gs_best_cell.get("col", 999)) \
-											and _gs_nr < int(_gs_best_cell.get("row", 999))):
-									_gs_better = true
-							if _gs_better:
-								_gs_best_cell = _gs_cand
-								_gs_best_cheb = _gs_cheb
-								_gs_best_man = _gs_man
-					if not _gs_best_cell.is_empty():
-						GridService.assign_grid_pos(_gs_spirit,
-							int(_gs_best_cell.get("col", _gs_sc)), int(_gs_best_cell.get("row", _gs_sr)))
+				var _gs_protect_should_move: bool = _gs_enemy_near \
+					and not _gs_echo_adjacent \
+					and not _gs_nearest_enemy.is_empty()
+				if not bool(combat_state.get("spirit_joins_battle", false)):
+					var _gs_protect_goal_id: String = "guide.protect"
+					if not _gs_protect_should_move:
+						_gs_protect_goal_id = "guide.protect_caller_gated"
+					var _gs_prepared_p: Dictionary = _prepare_guide_spirit_activation_context(
+						_gs_spirit, ectx, combat_state, config_service.get_balance().get("data", {}), t)
+					if bool(_gs_prepared_p.get("valid", false)):
+						var _gs_threats: Array = []
+						if not _gs_nearest_enemy.is_empty():
+							_gs_threats.append((_gs_nearest_enemy.get("grid_pos", {}) as Dictionary).duplicate(true))
+						var _gs_result_p: Dictionary = GuideSpiritActivationServiceScript.activate_spirit(
+							_gs_spirit,
+							_gs_prepared_p["context"] as Dictionary,
+							{
+								"mode": "protect",
+								"joined": false,
+								"should_move": _gs_protect_should_move,
+								"threats": _gs_threats,
+								"activation_id": "guide.%s.%d" % [_gs_spirit_id, round],
+								"goal_id": _gs_protect_goal_id,
+								"option_id": "guide.protect.step",
+								"mover_ko_only": false,
+							},
+							_gs_prepared_p["hazard_ctx"] as Dictionary,
+							_gs_prepared_p["capacity_cfg"] as Dictionary
+						)
+						var _gs_actual_p: Array = _gs_result_p.get("actual_traversed_cells", []) as Array
+						if not _gs_actual_p.is_empty():
+							GridService.assign_grid_pos(_gs_spirit,
+								int((_gs_result_p.get("final_destination", {}) as Dictionary).get("col", 0)),
+								int((_gs_result_p.get("final_destination", {}) as Dictionary).get("row", 0)))
+						_apply_live_hazard_outcome(_gs_spirit, _gs_result_p, t, false)
+						_apply_live_hazard_outcome(_gs_spirit, _gs_result_p, t, true)
+						if _gs_protect_should_move and str(_gs_result_p.get("stop_reason", "")) == "no_route":
+							logger.info(t, "combat.guide.no_route", "GUIDE_SPIRIT protect route unavailable", {
+								"round": round,
+								"spirit_id": _gs_spirit_id,
+								"reason": "unreachable",
+								"goal_id": str(_gs_result_p.get("goal_id", "")),
+							})
 				logger.debug(t, "combat.guide.skittish", "GUIDE_SPIRIT skittish check", {
 					"round":       round,
 					"enemy_near":  _gs_enemy_near,
@@ -2869,11 +3729,12 @@ func _end_round(t: int) -> void:
 					if not (_gs_e5 is Dictionary): continue
 					if bool(_gs_e5.get("is_dead", false)): continue
 					if str(_gs_e5.get("faction", "")) != "echo": continue
+					if bool(_gs_e5.get("is_spirit", false)): continue
 					if GridService.chebyshev_distance(_gs_e5.get("grid_pos", {}), _gs_spirit_pos_final) \
 							<= _gs_escort_radius_p:
 						_gs_guard_near = true
 						break
-				if _gs_guard_near:
+				if not bool(_gs_spirit.get("is_dead", false)) and _gs_guard_near:
 					combat_state["guide_protect_counter"] = int(combat_state.get("guide_protect_counter", 0)) + 1
 				logger.debug(t, "combat.guide.protect_hold", "GUIDE_SPIRIT protect_hold updated", {
 					"round":                 round,
@@ -6092,10 +6953,19 @@ func _apply_vow_break_aftermath(summary: Dictionary, cfg: Dictionary, t: int) ->
 ##   - High roll (>50): situation is revealed; snapshot rebuilt to show type.
 ##   - Low roll (<=50): party stumbles in blind → dispatch stage.engage_situation.
 ## If situation was already revealed on arrival → dispatch stage.engage_situation.
+func _stage_integer_cell(value: Variant, fallback: Dictionary = {"col": 0, "row": 0}) -> Dictionary:
+	var raw: Dictionary = value if value is Dictionary else fallback
+	return {
+		"col": int(raw.get("col", fallback.get("col", 0))),
+		"row": int(raw.get("row", fallback.get("row", 0))),
+	}
+
 func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
 	if stage.is_empty():
 		logger.debug(t, "stage.advance.no_stage", "advance_turn: no active stage", {})
+		flow_ctx.last_snapshot = FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
 		return
 
 	var map_v: Variant = stage.get("explore_map", {})
@@ -6117,6 +6987,9 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 
 	# V2-STAGE-004-P2: build walkable set once (supports both terrain maps and legacy saves)
 	var walkable := _explore_walkable(explore_map)
+	# JSON-decoded save coordinates are floats; canonicalize only at this live
+	# boundary so shared path validation continues to require integer cells.
+	explore_map["party_pos"] = _stage_integer_cell(explore_map.get("party_pos", {}))
 
 	# V2-STAGE-004 Phase 2.5: load durable explored_cells set (fog state).
 	var explored_cells_v: Variant = explore_map.get("explored_cells", {})
@@ -6135,12 +7008,15 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 	var _ec_post_v: Variant = explore_map.get("explored_cells", {})
 	explored_cells = _ec_post_v if _ec_post_v is Dictionary else {}
 
-	# V2-STAGE-004 Phase 2.5: fog-of-war 3-tier target selection (replaces category-only _find_target_situation).
-	var target := _find_explore_target(explore_map, directive, walkable, explored_cells)
+	# V2-COMBAT-002 Slice 6C: target selection is now routed through the stage
+	# party adapter. It uses shared MovementPathService reachability, continuity
+	# heading, and a stable stage-identity salt.
+	var target := _find_explore_target(explore_map, directive, walkable, explored_cells, stage)
 
 	if target.is_empty():
 		# All walkable cells explored and no discovered unresolved situations — nothing left.
 		logger.debug(t, "stage.advance.no_target", "advance_turn: no target found (all explored, all resolved)", {})
+		flow_ctx.last_snapshot = FlowStageExploreStateScript.build_snapshot(flow_ctx, t)
 		flow_machine.refresh_snapshot(flow_ctx, logger, t)
 		return
 
@@ -6148,24 +7024,18 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 	explore_map["turn_count"] = int(explore_map.get("turn_count", 0)) + 1
 
 	var target_pos_v: Variant = target.get("pos", { "col": 0, "row": 0 })
-	var target_pos: Dictionary = target_pos_v if target_pos_v is Dictionary else { "col": 0, "row": 0 }
+	var target_pos: Dictionary = _stage_integer_cell(target_pos_v)
 	var is_frontier := bool(target.get("is_frontier", false))
 	var target_sit_id := str(target.get("id", ""))
-
-	# V2-STAGE-004-P2: partial-move toward target up to step_budget steps.
-	# V2-STAGE-004-P5 (frontier chaining): for FRONTIER targets only, when the party
-	# arrives at the current frontier cell with budget remaining, recompute the next
-	# nearest unexplored cell against the NOW-updated explored set, rebuild the dist
-	# field, and keep stepping. This lets an advance spend its full step_budget instead
-	# of stopping ~reveal_radius+1 tiles out. Fog is lifted PER STEP (below) so the
-	# recompute sees freshly explored cells. Tier-1/2 targets keep hard-stop-on-arrival.
-	var dist_field: Dictionary = {}
-	if not walkable.is_empty():
-		dist_field = StageTerrainScript.bfs_distance_field(target_pos, walkable)
+	var target_tier := int(target.get("_movement_tier", StagePartyMovementAdapterScript.TIER_FRONTIER))
 
 	# Capture pre-advance party position as the first entry in the traveled path.
-	var _pre_move_v: Variant = explore_map.get("party_pos", { "col": 0, "row": 0 })
-	var _pre_move: Dictionary = _pre_move_v if _pre_move_v is Dictionary else { "col": 0, "row": 0 }
+	var _pre_move: Dictionary = _stage_integer_cell(explore_map.get("party_pos", {}))
+	explore_map["party_pos"] = _pre_move.duplicate()
+	var _origin_cell: Dictionary = {
+		"col": int(_pre_move.get("col", 0)),
+		"row": int(_pre_move.get("row", 0)),
+	}
 
 	# V2-STAGE-004 Phase 2.5 / P5: ALWAYS-ON fog lift, now applied PER STEP inside the
 	# loop (replaces the old post-loop batch). Lift the starting cell first so the
@@ -6175,52 +7045,77 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 
 	var stepped: Array = []
 	var steps := 0
+	var _heading_origin_v: Variant = explore_map.get("last_traveled_origin", {})
+	var _heading_origin: Dictionary = _heading_origin_v if _heading_origin_v is Dictionary else {}
 	while steps < step_budget:
-		var here_v: Variant = explore_map.get("party_pos", { "col": 0, "row": 0 })
-		var here: Dictionary = here_v if here_v is Dictionary else { "col": 0, "row": 0 }
+		var here: Dictionary = _stage_integer_cell(explore_map.get("party_pos", {}))
+		explore_map["party_pos"] = here.duplicate()
+		explore_map["last_traveled_origin"] = _heading_origin.duplicate(true)
+		target = _find_explore_target(explore_map, directive, walkable, explored_cells, stage)
+		if target.is_empty():
+			break
+		target_pos_v = target.get("pos", { "col": 0, "row": 0 })
+		target_pos = _stage_integer_cell(target_pos_v)
+		is_frontier = bool(target.get("is_frontier", false))
+		target_sit_id = str(target.get("id", ""))
+		target_tier = int(target.get("_movement_tier", StagePartyMovementAdapterScript.TIER_FRONTIER))
 		if int(here.get("col", 0)) == int(target_pos.get("col", 0)) \
 				and int(here.get("row", 0)) == int(target_pos.get("row", 0)):
-			# Arrived at the current target cell.
-			if is_frontier:
-				# FRONTIER CHAINING: pick the next nearest unexplored cell against the
-				# updated explored set and keep going. Break when the whole reachable
-				# map is explored (nearest_unexplored returns the current cell).
-				var next_frontier := StageTerrainScript.nearest_unexplored(here, walkable, explored_cells)
-				if int(next_frontier.get("col", 0)) == int(here.get("col", 0)) \
-						and int(next_frontier.get("row", 0)) == int(here.get("row", 0)):
-					break
-				target_pos = next_frontier
-				if walkable.is_empty():
-					dist_field = {}
-				else:
-					dist_field = StageTerrainScript.bfs_distance_field(target_pos, walkable)
-			else:
-				# Tier-1/2 discovered situation/objective: hard stop on arrival (unchanged).
-				break
-		var nxt: Dictionary
-		if dist_field.is_empty():
-			# Corruption-safety only: _explore_walkable always returns a populated set
-			# (terrain or full WxH rect), so dist_field is empty ONLY if the target cell
-			# itself is non-walkable (a malformed map). Step directly rather than hang.
-			nxt = target_pos
-		else:
-			nxt = StageTerrainScript.next_step(here, dist_field, walkable, target_pos)
-		# Dead-end safety: next_step returns from_cell unchanged
+			break
+
+		var profile := StagePartyMovementAdapterScript.build_profile(directive)
+		var goal := StagePartyMovementAdapterScript.build_goal(explore_map, target, target_tier, walkable)
+		var route := MovementPathServiceScript.shortest_path(here, target_pos, walkable, {}, {}, {})
+		if not bool(route.get("reachable", false)):
+			var no_route_intent := StagePartyMovementAdapterScript.build_intent(profile, goal, [], here)
+			if not no_route_intent.is_empty():
+				StagePartyMovementAdapterScript.build_result(
+					here, [], "no_route", [], no_route_intent, goal, goal.get("declared_fallback", {}) as Dictionary
+				)
+			break
+
+		var route_path_v: Variant = route.get("path", [])
+		var route_path: Array = route_path_v if route_path_v is Array else []
+		if route_path.is_empty():
+			break
+
+		var intent := StagePartyMovementAdapterScript.build_intent(profile, goal, route_path, here)
+		if intent.is_empty():
+			break
+
+		var nxt_v: Variant = route_path[0]
+		var nxt: Dictionary = nxt_v if nxt_v is Dictionary else {}
+		if nxt.is_empty():
+			break
 		if int(nxt.get("col", 0)) == int(here.get("col", 0)) \
 				and int(nxt.get("row", 0)) == int(here.get("row", 0)):
 			break
-		explore_map["party_pos"] = nxt
-		stepped.append(nxt)
+		var step_reaches_target := int(nxt.get("col", 0)) == int(target_pos.get("col", 0)) \
+			and int(nxt.get("row", 0)) == int(target_pos.get("row", 0))
+		_heading_origin = {
+			"col": int(here.get("col", 0)),
+			"row": int(here.get("row", 0)),
+		}
+		nxt = _stage_integer_cell(nxt)
+		explore_map["party_pos"] = nxt.duplicate()
+		stepped.append(nxt.duplicate())
 		steps += 1
-		# Lift fog around every newly entered cell (per-step so frontier chaining's
-		# nearest_unexplored recompute above sees the updated explored set).
+		# Lift fog around every newly entered cell (per-step so the next adapter
+		# frontier replan sees the updated explored set).
 		_lift_fog_at_cell(nxt, reveal_radius, walkable, explored_cells)
+		var step_blocks := _situation_blocks_step(explore_map, nxt, target_sit_id)
+		var stop_reason := "capacity_spent"
+		if step_blocks:
+			stop_reason = "interrupted"
+		elif step_reaches_target:
+			stop_reason = "reached_destination"
+		StagePartyMovementAdapterScript.build_result(here, [nxt], stop_reason, [], intent, goal)
 		# V2-STAGE-004-P5 (mid-path stop): walking the party ONTO an unresolved, un-passed
 		# situation (revealed OR hidden — reveal-on-arrival) ends the advance there so the
 		# normal engagement popup fires. Passed nodes are walked through (no prompt) unless
 		# this is exactly the node deliberately re-targeted via Tier-4 (target_sit_id match).
 		# The post-loop reveal sweep + arrival check set pending_situation_id.
-		if _situation_blocks_step(explore_map, nxt, target_sit_id):
+		if step_blocks:
 			break
 
 	# V2-STAGE-004-P2 / V2-COMBAT-002 slice 5: stash the path walked this turn for the UI
@@ -6231,10 +7126,6 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 	# rides alongside in `last_traveled_origin` so the UI keeps its ghost-trail anchor.
 	# Zero steps ⇒ empty path, and origin == the (unchanged) current party cell.
 	# Presentation-only; does not affect determinism. Cleared by next advance or session reset.
-	var _origin_cell: Dictionary = {
-		"col": int(_pre_move.get("col", 0)),
-		"row": int(_pre_move.get("row", 0)),
-	}
 	explore_map["last_traveled_origin"] = _origin_cell
 	if stepped.is_empty():
 		explore_map["last_traveled_path"] = []
@@ -6245,8 +7136,8 @@ func _handle_stage_advance_turn(_action: Dictionary, t: int) -> void:
 			_path.append({ "col": int(_sp_d.get("col", 0)), "row": int(_sp_d.get("row", 0)) })
 		explore_map["last_traveled_path"] = _path
 
-	var party_pos_v: Variant = explore_map.get("party_pos", { "col": 0, "row": 0 })
-	var party_pos: Dictionary = party_pos_v if party_pos_v is Dictionary else { "col": 0, "row": 0 }
+	var party_pos: Dictionary = _stage_integer_cell(explore_map.get("party_pos", {}))
+	explore_map["party_pos"] = party_pos.duplicate()
 
 	# V2-STAGE-004 Phase 2.5 / P5: fog was lifted PER STEP during the movement loop above
 	# (ALWAYS-ON for both directives; reveal_radius is the lever). explored_cells is mutated
@@ -8174,8 +9065,8 @@ func _find_target_situation(explore_map: Dictionary, directive: Dictionary, walk
 
 # V2-STAGE-004-P5: Lift fog around a single cell — add every walkable cell within
 # `radius` (Chebyshev) of `cell` to `explored_cells` (mutated in place). Pure/deterministic.
-# Called per movement step so frontier chaining's nearest_unexplored recompute sees the
-# freshly explored cells. Same rule as the former post-loop batch (union of per-cell lifts).
+# Called per movement step so frontier chaining's adapter replan sees the freshly
+# explored cells. Same rule as the former post-loop batch (union of per-cell lifts).
 func _lift_fog_at_cell(cell: Dictionary, radius: int, walkable: Dictionary, explored_cells: Dictionary) -> void:
 	var fog_cells := StageTerrainScript.cells_within_radius(cell, radius, walkable)
 	for fc_v in fog_cells:
@@ -8206,18 +9097,80 @@ func _situation_blocks_step(explore_map: Dictionary, cell: Dictionary, target_si
 	return false
 
 
-# V2-STAGE-004 Phase 2.5: Four-tier fog-of-war target selection.
-# Replaces _find_target_situation as the sole caller in _handle_stage_advance_turn.
+# V2-COMBAT-002 Slice 6C: heading for adapter frontier choice.
+func _stage_party_heading(explore_map: Dictionary) -> Dictionary:
+	var origin_v: Variant = explore_map.get("last_traveled_origin", {})
+	var origin: Dictionary = origin_v if origin_v is Dictionary else {}
+	if origin.is_empty():
+		return {}
+	var party_v: Variant = explore_map.get("party_pos", {})
+	var party: Dictionary = party_v if party_v is Dictionary else {}
+	if party.is_empty():
+		return {}
+	var dc := int(party.get("col", 0)) - int(origin.get("col", 0))
+	var dr := int(party.get("row", 0)) - int(origin.get("row", 0))
+	if dc == 0 and dr == 0:
+		return {}
+	return { "col": dc, "row": dr }
+
+
+func _stage_movement_salt(stage: Dictionary) -> String:
+	return "%s:%s" % [str(flow_ctx.realm_id), str(stage.get("index", flow_ctx.stage_id))]
+
+
+func _stage_situation_category_map() -> Dictionary:
+	if config_service == null:
+		return {}
+	var balance_v: Variant = config_service.get_balance()
+	var balance: Dictionary = balance_v if balance_v is Dictionary else {}
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var stages_v: Variant = data.get("stages", {})
+	var stages: Dictionary = stages_v if stages_v is Dictionary else {}
+	var category_v: Variant = stages.get("situation_category", {})
+	return category_v if category_v is Dictionary else {}
+
+
+func _stage_movement_slack_config() -> Dictionary:
+	if config_service == null:
+		return {}
+	var balance_v: Variant = config_service.get_balance()
+	var balance: Dictionary = balance_v if balance_v is Dictionary else {}
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var combat_v: Variant = data.get("combat", {})
+	var combat: Dictionary = combat_v if combat_v is Dictionary else {}
+	var movement_v: Variant = combat.get("movement", {})
+	var movement: Dictionary = movement_v if movement_v is Dictionary else {}
+	var slack_v: Variant = movement.get("slack", {})
+	return slack_v if slack_v is Dictionary else {}
+
+
+func _stage_reachable_costs(party_pos: Dictionary, walkable: Dictionary) -> Dictionary:
+	if walkable.is_empty():
+		return {}
+	var region := MovementPathServiceScript.reachable_cost_region(
+		party_pos, maxi(walkable.size(), 1), walkable, {}, {}, {}
+	)
+	if not bool(region.get("reachable", false)):
+		return {}
+	var costs_v: Variant = region.get("costs", {})
+	return costs_v if costs_v is Dictionary else {}
+
+
+# V2-COMBAT-002 Slice 6C: Four-tier fog-of-war target selection routed through
+# StagePartyMovementAdapter. The live stage loop no longer depends on
+# StageTerrain.nearest_unexplored / next_step ordering.
 #
 # Priority:
 #   Tier 1 — nearest DISCOVERED unresolved OBJECTIVE situation (BFS distance),
 #             excluding nodes where passed==true (player skipped them; let them explore).
 #   Tier 2 — best DISCOVERED unresolved non-objective situation scored by directive
 #             target_preference[category], excluding passed==true nodes,
-#             only when score >= 1.0 and reachable.
-#   Tier 3 — FRONTIER: nearest walkable cell not yet in explored_cells (BFS, deterministic).
+#             and reachable within the adapter's bounded slack.
+#   Tier 3 — FRONTIER: adapter-selected walkable cell not yet in explored_cells.
 #             Returns synthetic { "id": "", "pos": <cell>, "is_frontier": true }.
-#   Tier 4 — FRONTIER EXHAUSTED (nearest_unexplored == party_pos, i.e. whole map explored):
+#   Tier 4 — FRONTIER EXHAUSTED (select_frontier returned {}, i.e. no reachable frontier):
 #             Re-offer the nearest unresolved OBJECTIVE including passed ones — so the stage
 #             remains completable when all optional nodes were skipped.
 #             Non-objective passed nodes are NEVER re-offered (player dismissed them on purpose).
@@ -8228,21 +9181,19 @@ func _find_explore_target(
 	explore_map: Dictionary,
 	directive: Dictionary,
 	walkable: Dictionary,
-	explored_cells: Dictionary
+	explored_cells: Dictionary,
+	stage: Dictionary
 ) -> Dictionary:
 	var sits_v: Variant = explore_map.get("situations", [])
 	var situations: Array = sits_v if sits_v is Array else []
 	var party_pos_v: Variant = explore_map.get("party_pos", { "col": 0, "row": 0 })
 	var party_pos: Dictionary = party_pos_v if party_pos_v is Dictionary else { "col": 0, "row": 0 }
-
-	# BFS distance field from party position (used for Tier 1 and Tier 2 BFS distances).
-	var dist_from_party: Dictionary = {}
-	if not walkable.is_empty():
-		dist_from_party = StageTerrainScript.bfs_distance_field(party_pos, walkable)
+	var dist_from_party: Dictionary = _stage_reachable_costs(party_pos, walkable)
+	var category_map := _stage_situation_category_map()
+	var slack_config := _stage_movement_slack_config()
 
 	# ---- Tier 1: discovered, unresolved OBJECTIVE situations (not passed) ----
-	var best_obj_sit: Dictionary = {}
-	var best_obj_dist: int = 999999
+	var tier1_candidates: Array = []
 	for sit_v in situations:
 		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
 		if bool(sit.get("resolved", false)):
@@ -8253,40 +9204,20 @@ func _find_explore_target(
 			continue  # undiscovered — fog; not targetable
 		if bool(sit.get("passed", false)):
 			continue  # player skipped it — do not re-target until Tier 4
-		var pos_v: Variant = sit.get("pos", { "col": 0, "row": 0 })
-		var pos: Dictionary = pos_v if pos_v is Dictionary else { "col": 0, "row": 0 }
-		var d: int
-		if dist_from_party.is_empty():
-			d = GridService.chebyshev_distance(party_pos, pos)
-		else:
-			var pk: String = "%d,%d" % [int(pos.get("col", 0)), int(pos.get("row", 0))]
-			var d_v: Variant = dist_from_party.get(pk, -1)
-			if int(d_v) < 0:
-				continue  # unreachable
-			d = int(d_v)
-		if d < best_obj_dist:
-			best_obj_dist = d
-			best_obj_sit  = sit
+		tier1_candidates.append(sit)
+	var best_obj_sit := StagePartyMovementAdapterScript.select_objective_target(
+		tier1_candidates, dist_from_party, {}, category_map, slack_config
+	)
 	if not best_obj_sit.is_empty():
+		best_obj_sit["_movement_tier"] = StagePartyMovementAdapterScript.TIER_OBJECTIVE
+		best_obj_sit["is_frontier"] = false
 		return best_obj_sit
 
 	# ---- Tier 2: discovered, unresolved non-objective situations (directive-biased, not passed) ----
-	var sit_cat_map: Dictionary = {}
-	if config_service != null:
-		var _b_v: Variant = config_service.get_balance()
-		var _b: Dictionary = _b_v if _b_v is Dictionary else {}
-		var _bd_v: Variant = _b.get("data", {})
-		var _bd: Dictionary = _bd_v if _bd_v is Dictionary else {}
-		var _bs_v: Variant = _bd.get("stages", {})
-		var _bs: Dictionary = _bs_v if _bs_v is Dictionary else {}
-		var _sc_v: Variant = _bs.get("situation_category", {})
-		sit_cat_map = _sc_v if _sc_v is Dictionary else {}
-
 	var target_pref_v: Variant = directive.get("target_preference", {})
 	var target_pref: Dictionary = target_pref_v if target_pref_v is Dictionary else {}
 
-	var best_sit: Dictionary = {}
-	var best_score := -1.0
+	var tier2_candidates: Array = []
 	for sit_v in situations:
 		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
 		if bool(sit.get("resolved", false)):
@@ -8297,42 +9228,45 @@ func _find_explore_target(
 			continue  # undiscovered — fog; not targetable
 		if bool(sit.get("passed", false)):
 			continue  # player skipped it; never re-target non-objective passed nodes
-		var pos_v: Variant = sit.get("pos", { "col": 0, "row": 0 })
-		var pos: Dictionary = pos_v if pos_v is Dictionary else { "col": 0, "row": 0 }
-		var d: int
-		if dist_from_party.is_empty():
-			d = GridService.chebyshev_distance(party_pos, pos)
-		else:
-			var pk: String = "%d,%d" % [int(pos.get("col", 0)), int(pos.get("row", 0))]
-			var d_v: Variant = dist_from_party.get(pk, -1)
-			if int(d_v) < 0:
-				continue  # unreachable
-			d = int(d_v)
-		var sit_type := str(sit.get("type", ""))
-		var category := str(sit_cat_map.get(sit_type, "intel"))
-		var weight := float(target_pref.get(category, 1.0))
-		var score := weight * (1.0 / (float(d) + 1.0))
-		if score > best_score:
-			best_score = score
-			best_sit   = sit
-	# Only commit to a discovered node if the directive meaningfully prefers it (weight >= 1.0).
-	if not best_sit.is_empty() and best_score >= 1.0:
+		tier2_candidates.append(sit)
+	var best_sit := StagePartyMovementAdapterScript.select_objective_target(
+		tier2_candidates, dist_from_party, target_pref, category_map, slack_config
+	)
+	if not best_sit.is_empty():
+		best_sit["_movement_tier"] = StagePartyMovementAdapterScript.TIER_WEIGHTED
+		best_sit["is_frontier"] = false
 		return best_sit
 
-	# ---- Tier 3: frontier — nearest walkable unexplored cell ----
-	var frontier_cell := StageTerrainScript.nearest_unexplored(party_pos, walkable, explored_cells)
-	var fk: String = "%d,%d" % [int(frontier_cell.get("col", 0)), int(frontier_cell.get("row", 0))]
-	var pk_party: String = "%d,%d" % [int(party_pos.get("col", 0)), int(party_pos.get("row", 0))]
-	if fk != pk_party:
-		# There is still unexplored frontier — head there.
-		return { "id": "", "pos": frontier_cell, "is_frontier": true }
+	# ---- Tier 3: frontier — adapter-selected unexplored cell ----
+	var frontier_candidates: Array = []
+	for key_value: Variant in walkable.keys():
+		var key := str(key_value)
+		if explored_cells.has(key):
+			continue
+		var parts := key.split(",", false)
+		if parts.size() != 2 or not parts[0].is_valid_int() or not parts[1].is_valid_int():
+			continue
+		frontier_candidates.append({ "col": int(parts[0]), "row": int(parts[1]) })
+	var frontier_cell := StagePartyMovementAdapterScript.select_frontier(
+		frontier_candidates,
+		party_pos,
+		_stage_party_heading(explore_map),
+		walkable,
+		_stage_movement_salt(stage)
+	)
+	if not frontier_cell.is_empty():
+		return {
+			"id": "",
+			"pos": frontier_cell,
+			"is_frontier": true,
+			"_movement_tier": StagePartyMovementAdapterScript.TIER_FRONTIER,
+		}
 
 	# ---- Tier 4: frontier exhausted — re-offer nearest unresolved OBJECTIVE (including passed) ----
 	# The whole reachable map is explored. If the player had previously passed an objective,
 	# the stage cannot be completed until they engage it — re-offer it here so the stage stays
 	# completable. Non-objective passed nodes are NOT re-offered.
-	var best_obj4_sit: Dictionary = {}
-	var best_obj4_dist: int = 999999
+	var tier4_candidates: Array = []
 	for sit_v in situations:
 		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
 		if bool(sit.get("resolved", false)):
@@ -8341,21 +9275,13 @@ func _find_explore_target(
 			continue  # only objectives are re-offered (non-objective passed nodes stay skipped)
 		if not bool(sit.get("revealed", false)):
 			continue  # still fog — cannot target
-		var pos_v: Variant = sit.get("pos", { "col": 0, "row": 0 })
-		var pos: Dictionary = pos_v if pos_v is Dictionary else { "col": 0, "row": 0 }
-		var d: int
-		if dist_from_party.is_empty():
-			d = GridService.chebyshev_distance(party_pos, pos)
-		else:
-			var pk4: String = "%d,%d" % [int(pos.get("col", 0)), int(pos.get("row", 0))]
-			var d_v: Variant = dist_from_party.get(pk4, -1)
-			if int(d_v) < 0:
-				continue  # unreachable
-			d = int(d_v)
-		if d < best_obj4_dist:
-			best_obj4_dist = d
-			best_obj4_sit  = sit
+		tier4_candidates.append(sit)
+	var best_obj4_sit := StagePartyMovementAdapterScript.select_objective_target(
+		tier4_candidates, dist_from_party, {}, category_map, slack_config
+	)
 	if not best_obj4_sit.is_empty():
+		best_obj4_sit["_movement_tier"] = StagePartyMovementAdapterScript.TIER_PASSED_OBJECTIVE
+		best_obj4_sit["is_frontier"] = false
 		return best_obj4_sit
 
 	# Nothing left — whole map explored and nothing actionable remains (or all situations resolved).

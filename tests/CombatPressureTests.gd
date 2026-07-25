@@ -30,6 +30,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement/pressure/guide_authoritative_spirit_id", Callable(CombatPressureTests, "_t_guide_authoritative_spirit_id"))
 	runner.register_test("movement/pressure/unknown_and_pursue_engage", Callable(CombatPressureTests, "_t_unknown_and_pursue_engage"))
 	runner.register_test("movement/pressure/hostile_carrier_ordinary_only", Callable(CombatPressureTests, "_t_hostile_carrier_ordinary_only"))
+	runner.register_test("movement/pressure/adjacent_combat_direct_engage", Callable(CombatPressureTests, "_t_adjacent_combat_direct_engage"))
 	runner.register_test("movement/pressure/exact_goal_semantics", Callable(CombatPressureTests, "_t_exact_goal_semantics"))
 	runner.register_test("movement/pressure/exact_mode_alignment_matrix", Callable(CombatPressureTests, "_t_exact_mode_alignment_matrix"))
 	runner.register_test("movement/pressure/pursue_fallback_intercept_and_reverse", Callable(CombatPressureTests, "_t_pursue_fallback_intercept_and_reverse"))
@@ -192,6 +193,39 @@ static func _t_guide_join_boundary() -> Dictionary:
 	var escort_result: Dictionary = Service.build_goals(escort_party)
 	if not _has_goal(escort_result, "escort", "protector"):
 		return _fail("escort party did not receive escort purpose")
+	return _pass()
+
+
+## A mover already in melee range must not receive a competing `advance` goal.
+## The remaining engage goal must retain the established non-origin destination
+## contract, so the option can be a legal movement-and-melee activation.
+static func _t_adjacent_combat_direct_engage() -> Dictionary:
+	for alignment: String in ["party", "hostile"]:
+		var context: Dictionary = _context("combat", alignment)
+		var mover_id: String = str(context["mover_id"])
+		var hostile_id: String = "enemy.1" if alignment == "party" else "echo.1"
+		var origin := {"col": 3, "row": 2}
+		var mover: Dictionary = _actor_ref(context, mover_id)
+		mover["position"] = origin
+		context["origin"] = origin
+		var occupancy: Dictionary = context["occupancy"] as Dictionary
+		occupancy.erase("1,2")
+		occupancy["3,2"] = mover_id
+
+		var result: Dictionary = Service.build_goals(context)
+		if not bool(result["valid"]):
+			return _fail("adjacent combat %s rejected: %s" % [alignment, str(result)])
+		var goals: Array = result["goals"] as Array
+		if goals.size() != 1:
+			return _fail("adjacent combat %s retained non-direct goals: %s" % [alignment, str(goals)])
+		var engage: Dictionary = goals[0] as Dictionary
+		var plan: Dictionary = engage["planned_primary"] as Dictionary
+		if str(engage["purpose"]) != "engage" \
+				or float(engage["urgency"]) != 0.5 \
+				or (engage["destination_region"] as Array).has(origin) \
+				or str(plan["type"]) != "melee_attack" \
+				or str(plan["target_id"]) != hostile_id:
+			return _fail("adjacent combat %s did not select direct melee engage: %s" % [alignment, str(engage)])
 	return _pass()
 
 
@@ -630,6 +664,11 @@ static func _t_config_collapse_health_seam() -> Dictionary:
 	# above would pass vacuously on a fixture that can never produce a withdraw.
 	if _goal(Service.build_goals(_collapsing_context(0.4)), "withdraw").is_empty():
 		return _fail("fixture cannot produce a withdraw at all; seam checks are vacuous")
+	var endure_default: Dictionary = Service.build_goals(_collapsing_context(0.4, "endure"))
+	if _goal(endure_default, "withdraw").is_empty():
+		return _fail("ENDURE did not keep the generic board fallback under collapse health")
+	if _goal(endure_default, "advance").is_empty():
+		return _fail("ENDURE lost the ordinary combat advance path while adding board fallback")
 	return _pass()
 
 
@@ -753,8 +792,8 @@ static func _t_config_balance_wired() -> Dictionary:
 
 ## A `combat`/`party` context whose mover carries the given health ratio, so the
 ## board fall-back path is reachable. Everything else matches `_context`.
-static func _collapsing_context(health_ratio: float) -> Dictionary:
-	var context: Dictionary = _context("combat", "party")
+static func _collapsing_context(health_ratio: float, mode: String = "combat") -> Dictionary:
+	var context: Dictionary = _context(mode, "party")
 	var mover: Dictionary = _actor_ref(context, "echo.mover")
 	mover["health_ratio"] = health_ratio
 	return context
@@ -943,7 +982,7 @@ static func _assert_exact_goal(
 	expected_sources.append("role.%s" % str(parts[3]))
 	for actor_id: Variant in expected_relevant_actors:
 		expected_sources.append("actor.%s" % str(actor_id))
-	if not str(pressure["objective_id"]).is_empty():
+	if _expected_objective_source(pressure, str(parts[3]), expected_relevant_actors, str(goal["purpose"])):
 		expected_sources.append("objective.%s" % str(pressure["objective_id"]))
 	if not bool(pressure["objective_known"]):
 		expected_sources.append("state.objective_unknown")
@@ -965,6 +1004,23 @@ static func _add_second_hostile(context: Dictionary) -> void:
 	(context["perceived_actors"] as Array).append(actor)
 	(context["relationships"] as Dictionary)["enemy.2"] = "hostile"
 	(context["occupancy"] as Dictionary)["5,4"] = "enemy.2"
+
+
+static func _expected_objective_source(pressure: Dictionary, role: String,
+		relevant: Array, purpose: String) -> bool:
+	var objective_id: String = str(pressure["objective_id"])
+	if objective_id.is_empty():
+		return false
+	if relevant.has(objective_id):
+		return true
+	if role in ["purifier", "protector", "holder", "runner", "breaker", "custody_threat", "spirit"]:
+		return true
+	var mode: String = str(pressure["mode"])
+	if purpose in ["protect", "escort"] and mode in ["purify_shrine", "recover", "protect", "guide_spirit"]:
+		return true
+	if purpose in ["advance", "hold", "intercept"] and role in ["blocker", "screener"]:
+		return mode in ["purify_shrine", "recover", "protect"]
+	return false
 
 
 static func _actor_ref(context: Dictionary, actor_id: String) -> Dictionary:

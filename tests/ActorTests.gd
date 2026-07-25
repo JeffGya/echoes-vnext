@@ -12,12 +12,21 @@
 extends RefCounted
 class_name ActorTests
 
+class PurifyIntentBehavior extends BehaviorModule:
+	func get_module_id() -> String:
+		return "test.purify_intent"
+
+	func select_intent(_context: Dictionary) -> Dictionary:
+		return {"action_type": "actor.purify_shrine", "target_id": "shrine.test", "priority": 1.0}
+
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("actor/from_echo_all_fields_present",  Callable(ActorTests, "_t_from_echo_all_fields_present"))
 	runner.register_test("actor/validate_false_missing_id",     Callable(ActorTests, "_t_validate_false_missing_id"))
 	runner.register_test("actor/validate_false_null_name",      Callable(ActorTests, "_t_validate_false_null_name"))
 	runner.register_test("actor/party_actors_empty_party",      Callable(ActorTests, "_t_party_actors_empty_party"))
 	runner.register_test("actor/party_actors_two_echoes_valid", Callable(ActorTests, "_t_party_actors_two_echoes_valid"))
+	runner.register_test("actor/resolved_activation_replaces_persisted_move", Callable(ActorTests, "_t_resolved_activation_replaces_persisted_move"))
+	runner.register_test("actor/purify_intent_has_no_shrine_side_effect", Callable(ActorTests, "_t_purify_intent_has_no_shrine_side_effect"))
 
 
 # -------------------------
@@ -141,6 +150,46 @@ static func _t_party_actors_two_echoes_valid() -> Dictionary:
 				return { "ok": false, "error": "actors[%d].%s is null" % [i, field] }
 
 	return { "ok": true }
+
+
+## A live movement activation can stop a selected actor.move and resolve its
+## declared bounded fallback instead. Next-turn repetition scoring must see that
+## resolved action, never the pre-activation movement plan.
+static func _t_resolved_activation_replaces_persisted_move() -> Dictionary:
+	var actor: Dictionary = EchoActor.from_echo(_make_test_echo("echo_resolved_001", "Yaw Resolve"))
+	actor["last_intent"] = { "action_type": "actor.move" }
+	var state_machine := ActorStateMachine.new(actor, IdleBehaviorModule.new())
+	state_machine.update_passive_state_from_activation(
+		{ "action_type": "actor.guard", "target_id": "" },
+		{ "all_actors": [actor] },
+		1,
+		false
+	)
+	var persisted: Dictionary = actor.get("last_intent", {}) as Dictionary
+	if str(persisted.get("action_type", "")) != "actor.guard":
+		return { "ok": false, "error": "resolved guard did not replace persisted actor.move: %s" % str(persisted) }
+	return { "ok": true }
+
+
+static func _t_purify_intent_has_no_shrine_side_effect() -> Dictionary:
+	var actor: Dictionary = EchoActor.from_echo(_make_test_echo("echo_purify_001", "Esi Purify"))
+	actor["grid_pos"] = {"col": 1, "row": 1}
+	var shrine: Dictionary = {
+		"id": "shrine.test", "is_structure": true, "is_dead": false,
+		"faction": "structure", "purify_stacks": [], "current_hp": 20,
+		"stats": {"max_hp": 20}, "grid_pos": {"col": 2, "row": 1},
+	}
+	var state_machine := ActorStateMachine.new(actor, PurifyIntentBehavior.new())
+	var intent: Dictionary = state_machine.advance_turn({
+		"actor": actor,
+		"all_actors": [actor, shrine],
+		"cfg": {"data": {"combat": {"shrine": {"purify_stack_rounds": 2}}}},
+	}, StructuredLogger.new(), 1)
+	if str(intent.get("action_type", "")) != "actor.purify_shrine":
+		return {"ok": false, "error": "test behavior did not select purify"}
+	if not (shrine.get("purify_stacks", []) as Array).is_empty() or int(actor.get("purify_cooldown", 0)) != 0:
+		return {"ok": false, "error": "purify intent mutated shrine before live activation resolved"}
+	return {"ok": true}
 
 
 # -------------------------
