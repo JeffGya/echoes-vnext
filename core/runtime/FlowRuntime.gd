@@ -1736,6 +1736,7 @@ func _movement_direct_option_for_goal(
 	edge_costs: Dictionary = {}
 ) -> Dictionary:
 	var origin: Dictionary = movement_context.get("origin", {}) as Dictionary
+	var salt: String = str(movement_context.get("mover_id", ""))
 	var destination_region: Array = goal.get("destination_region", []) as Array
 	if destination_region.has(origin) and str(goal.get("purpose", "")) == "hold":
 		return _movement_build_direct_option(movement_context, profile, goal, origin, [], 0, 0)
@@ -1759,7 +1760,7 @@ func _movement_direct_option_for_goal(
 		if not bool(route.get("reachable", false)):
 			continue
 		var cost: int = int(route.get("cost", 0))
-		if cost < best_cost or (cost == best_cost and _movement_cell_key_runtime(destination) < _movement_cell_key_runtime(best_destination)):
+		if cost < best_cost or (cost == best_cost and _movement_destination_before(salt, destination, best_destination)):
 			best_cost = cost
 			best_path = (route.get("path", []) as Array).duplicate(true)
 			best_destination = destination.duplicate(true)
@@ -1878,6 +1879,21 @@ func _movement_cell_key_runtime(cell: Dictionary) -> String:
 	if cell.is_empty():
 		return ""
 	return "%d,%d" % [int(cell.get("col", 0)), int(cell.get("row", 0))]
+
+
+## Compass-de-aligned, replay-stable tie-break for equal-cost combat destinations.
+## Replaces the old lexicographic "col,row" preference that biased every mover to
+## the top-left cell around its target. Salted FNV-1a (the 6A stage de-aligner),
+## keyed by the mover so attackers spread instead of stacking; numeric col/row is
+## the final total-order fallback on the (rare) hash tie. Pure — replay-exact.
+func _movement_destination_before(salt: String, a: Dictionary, b: Dictionary) -> bool:
+	var ha: int = StagePartyMovementAdapterScript.salted_cell_hash(salt, _movement_cell_key_runtime(a))
+	var hb: int = StagePartyMovementAdapterScript.salted_cell_hash(salt, _movement_cell_key_runtime(b))
+	if ha != hb:
+		return ha < hb
+	if int(a.get("col", 0)) != int(b.get("col", 0)):
+		return int(a.get("col", 0)) < int(b.get("col", 0))
+	return int(a.get("row", 0)) < int(b.get("row", 0))
 
 
 func _apply_live_activation(
@@ -2051,7 +2067,8 @@ func _prepare_legacy_move_intent_for_activation(
 			walkable,
 			movement_context.get("terrain_costs", {}) as Dictionary,
 			bounds,
-			edge_costs
+			edge_costs,
+			str(movement_context.get("mover_id", ""))
 		)
 		if destination.is_empty():
 			return
@@ -2098,7 +2115,8 @@ func _movement_nearest_reachable_adjacent(
 	walkable: Dictionary,
 	terrain_costs: Dictionary,
 	bounds: Dictionary,
-	edge_costs: Dictionary = {}
+	edge_costs: Dictionary = {},
+	salt: String = ""
 ) -> Dictionary:
 	var best: Dictionary = {}
 	var best_cost: int = 999999
@@ -2123,8 +2141,7 @@ func _movement_nearest_reachable_adjacent(
 			if not bool(route.get("reachable", false)):
 				continue
 			var cost: int = int(route.get("cost", 0))
-			var key: String = _movement_cell_key_runtime(candidate)
-			if cost < best_cost or (cost == best_cost and key < _movement_cell_key_runtime(best)):
+			if cost < best_cost or (cost == best_cost and _movement_destination_before(salt, candidate, best)):
 				best = candidate
 				best_cost = cost
 	return best
