@@ -35,12 +35,6 @@ const EmotionRecoveryServiceScript := preload("res://core/emotion/EmotionRecover
 const InstitutionServiceScript     := preload("res://core/sanctum/InstitutionService.gd")                         # V2-SANCTUM-002
 const LeadershipEmotionServiceScript := preload("res://core/combat/LeadershipEmotionService.gd")
 
-# Keep the live direct-option builder aligned with MovementOptionService. A route
-# that stops short of its goal cannot truthfully promise a range-bound follow-up.
-const _LIVE_RANGE_BOUND_ACTIONS: Array = [
-	"melee_attack", "protect_ally", "actor.guard", "actor.purify_shrine",
-]
-
 var logger: StructuredLogger
 var config_service: ConfigService
 var flow_ctx: FlowContext
@@ -1845,9 +1839,6 @@ func _movement_build_direct_option(
 	var suffix: String = goal_id.trim_prefix("goal.")
 	var option_id: String = "option.%s.direct.%s" % [suffix, _movement_cell_key_runtime(destination).replace(",", "_")]
 	var planned_action: Dictionary = goal.get("planned_primary", {}) as Dictionary
-	if not (goal.get("destination_region", []) as Array).has(destination) \
-			and _LIVE_RANGE_BOUND_ACTIONS.has(str(planned_action.get("type", ""))):
-		planned_action = MovementActionPlanScript.build("actor.move")
 	var option: Dictionary = MovementOptionScript.build(
 		goal_id,
 		option_id,
@@ -2005,16 +1996,16 @@ func _apply_live_purify_shrine(
 	ctx: Dictionary,
 	t: int
 ) -> void:
-	if target_id.is_empty():
-		return
 	var shrine_cfg: Dictionary = ctx.get("cfg", {}).get("data", {}).get("combat", {}).get("shrine", {})
 	var shrine_ref: Dictionary = {}
 	for actor_value: Variant in flow_ctx.encounter_ctx.actors:
 		if actor_value is Dictionary:
 			var candidate: Dictionary = actor_value
-			if str(candidate.get("id", "")) == target_id \
-					and bool(candidate.get("is_structure", false)) \
-					and not bool(candidate.get("is_dead", false)):
+			if not bool(candidate.get("is_structure", false)) or bool(candidate.get("is_dead", false)):
+				continue
+			# Empty target_id: the purify candidate is authored without one, so locate
+			# the live shrine directly (mirrors the pre-cutover ActorStateMachine path).
+			if target_id.is_empty() or str(candidate.get("id", "")) == target_id:
 				shrine_ref = candidate
 				break
 	if shrine_ref.is_empty():
