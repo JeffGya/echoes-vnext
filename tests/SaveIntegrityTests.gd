@@ -17,6 +17,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("save_integrity/rejects_unsupported_schema_before_repairs", Callable(SaveIntegrityTests, "_test_rejects_unsupported_schema_before_repairs"))
 	runner.register_test("save_integrity/runtime_boot_surfaces_recovery", Callable(SaveIntegrityTests, "_test_runtime_boot_surfaces_recovery"))
 	runner.register_test("save_integrity/failed_flush_remains_queued", Callable(SaveIntegrityTests, "_test_failed_flush_remains_queued"))
+	runner.register_test("save_integrity/legacy_origin_included_path_falls_back_to_party_pos", Callable(SaveIntegrityTests, "_test_legacy_origin_included_path"))
+	runner.register_test("save_integrity/presentation_only_keys_do_not_flag_repair", Callable(SaveIntegrityTests, "_test_presentation_only_keys_do_not_flag_repair"))
 
 static func _logger() -> StructuredLogger:
 	var logger := StructuredLogger.new()
@@ -298,4 +300,134 @@ static func _test_failed_flush_remains_queued() -> Dictionary:
 		return {"ok": false, "error": "failed save request was cleared"}
 	if runtime.flow_ctx.save_request_reason != "test.failed_flush":
 		return {"ok": false, "error": "failed save reason changed"}
+	return {"ok": true}
+
+
+# ---------------------------------------------------------------------------
+# V2-COMBAT-002 Phase 6E — explore_map traveled-path repair coverage
+# ---------------------------------------------------------------------------
+
+## A capturing logger: level info so `save.schema.repair` notices are observable.
+static func _capturing_logger() -> StructuredLogger:
+	var logger := StructuredLogger.new()
+	logger.set_level(StructuredLogger.LEVEL_INFO)
+	return logger
+
+static func _has_repair_note(logger: StructuredLogger) -> bool:
+	for event_v in logger.get_logs():
+		if str((event_v as Dictionary).get("type", "")) == "save.schema.repair":
+			return true
+	return false
+
+## A save carrying one realm with one stage, fully repaired so that any FURTHER
+## repair observed by a test is caused only by what that test erased.
+static func _save_with_explore_map(name: String) -> Dictionary:
+	var save := _save(name)
+	save["realms"] = {
+		"realm.01": {
+			"stages": [
+				{"index": 0, "explore_map": StageExploreModel.make(30, 30, [])},
+			],
+		},
+	}
+	SaveService._apply_additive_defaults_and_repairs(save, _logger(), 0)
+	return save
+
+static func _explore_map_of(save: Dictionary) -> Dictionary:
+	var stages: Array = ((save["realms"] as Dictionary)["realm.01"] as Dictionary)["stages"] as Array
+	return (stages[0] as Dictionary)["explore_map"] as Dictionary
+
+## PIN, DO NOT FIX — legacy origin-included `last_traveled_path` × repaired origin.
+##
+## Pre-slice-5 saves persisted `last_traveled_path` with the ORIGIN INCLUDED as
+## element [0]. The current writer (FlowRuntime._advance_explore_party) writes
+## DESTINATIONS ONLY and carries the origin alongside in `last_traveled_origin`.
+## SaveService._apply_additive_defaults_and_repairs repairs a MISSING
+## `last_traveled_origin` to {} — it cannot infer the pre-advance cell — so
+## FlowStageExploreState._project_traveled_origin falls back to `party_pos`, which
+## on a legacy save is the POST-advance cell, while `last_traveled_path[0]` is the
+## PRE-advance cell.
+##
+## CONSEQUENCE (accepted): the UI's chained tween draws its first segment from the
+## post-advance cell back to the pre-advance cell, duplicating that segment once.
+## This is accepted because both fields are presentation-only, the duplication is
+## visual and self-limiting, and it self-heals on the very next advance (which
+## rewrites both fields in the current destinations-only shape). This test asserts
+## the CURRENT behaviour deliberately; do not "fix" the projection to peek at
+## last_traveled_path[0] without a design decision.
+static func _test_legacy_origin_included_path() -> Dictionary:
+	var save := _save_with_explore_map("Legacy Traveled Path")
+	var emap := _explore_map_of(save)
+	var pre_advance: Dictionary = {"col": 4, "row": 7}
+	var post_advance: Dictionary = {"col": 6, "row": 7}
+	# Legacy shape: origin included as element [0], no last_traveled_origin at all.
+	emap["last_traveled_path"] = [pre_advance, {"col": 5, "row": 7}, post_advance]
+	emap["party_pos"] = post_advance
+	emap.erase("last_traveled_origin")
+
+	SaveService._apply_additive_defaults_and_repairs(save, _logger(), 0)
+	var repaired_map := _explore_map_of(save)
+	if not repaired_map.has("last_traveled_origin"):
+		return {"ok": false, "error": "repair did not add last_traveled_origin"}
+	if not (repaired_map["last_traveled_origin"] as Dictionary).is_empty():
+		return {"ok": false, "error": "repair must default the origin to {} — it cannot infer it"}
+	if (repaired_map["last_traveled_path"] as Array).size() != 3:
+		return {"ok": false, "error": "repair must not rewrite an existing legacy path"}
+
+	var projected := FlowStageExploreState._project_traveled_origin(repaired_map)
+	if projected != post_advance:
+		return {"ok": false, "error": "empty origin must fall back to party_pos, got %s" % str(projected)}
+	var legacy_first: Dictionary = (repaired_map["last_traveled_path"] as Array)[0] as Dictionary
+	if legacy_first != pre_advance:
+		return {"ok": false, "error": "legacy path head changed: %s" % str(legacy_first)}
+	# The duplicated first tween segment, stated as an assertion rather than prose.
+	if projected == legacy_first:
+		return {"ok": false, "error": "fixture failed to reproduce the legacy origin/path mismatch"}
+	return {"ok": true}
+
+## PIN, DO NOT FIX — `_003_repaired` deliberately skips the two presentation-only keys.
+##
+## Every key-defaulting branch inside the V2-STAGE-003 explore_map block sets
+## `_003_repaired = true` EXCEPT `last_traveled_path` and `last_traveled_origin`.
+## That is DELIBERATE, not an oversight: those two are the only presentation-only
+## keys in the block, and raising a durable `save.schema.repair` notice for a
+## transient UI field would be noise. Their defaults are still written — only the
+## repair FLAG (and therefore the log note and the persist-repaired-candidate path)
+## is suppressed. A durable key in the same block (e.g. `target_situation_id`) does
+## flag, proving the suppression is scoped to those two keys alone.
+static func _test_presentation_only_keys_do_not_flag_repair() -> Dictionary:
+	var save := _save_with_explore_map("Presentation Only Repair")
+	# Baseline: a fully-repaired save reports nothing further to repair.
+	if SaveService._apply_additive_defaults_and_repairs(save, _logger(), 0):
+		return {"ok": false, "error": "repair is not idempotent — baseline is unusable"}
+
+	var emap := _explore_map_of(save)
+	emap.erase("last_traveled_path")
+	emap.erase("last_traveled_origin")
+	var quiet_logger := _capturing_logger()
+	var quiet_repaired := SaveService._apply_additive_defaults_and_repairs(save, quiet_logger, 0)
+	var after := _explore_map_of(save)
+	if not after.has("last_traveled_path") or not after.has("last_traveled_origin"):
+		return {"ok": false, "error": "presentation-only defaults were not written"}
+	if not (after["last_traveled_path"] as Array).is_empty() \
+			or not (after["last_traveled_origin"] as Dictionary).is_empty():
+		return {"ok": false, "error": "presentation-only defaults are [] and {}"}
+	if quiet_repaired:
+		return {"ok": false, "error": "presentation-only keys must not flag a durable repair"}
+	if _has_repair_note(quiet_logger):
+		return {"ok": false, "error": "presentation-only keys must not log save.schema.repair"}
+
+	# A durable key in the SAME block still flags and still logs.
+	emap = _explore_map_of(save)
+	emap.erase("last_traveled_path")
+	emap.erase("last_traveled_origin")
+	emap.erase("target_situation_id")
+	var loud_logger := _capturing_logger()
+	var loud_repaired := SaveService._apply_additive_defaults_and_repairs(save, loud_logger, 0)
+	if not loud_repaired:
+		return {"ok": false, "error": "a missing durable key must flag a repair"}
+	if not _has_repair_note(loud_logger):
+		return {"ok": false, "error": "a durable repair must log save.schema.repair"}
+	if not _explore_map_of(save).has("last_traveled_path"):
+		return {"ok": false, "error": "presentation-only defaults missing after durable repair"}
 	return {"ok": true}

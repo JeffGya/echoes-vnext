@@ -1836,8 +1836,12 @@ func _movement_build_direct_option(
 	shortest_cost: int
 ) -> Dictionary:
 	var goal_id: String = str(goal.get("goal_id", "goal.live"))
-	var suffix: String = goal_id.trim_prefix("goal.")
-	var option_id: String = "option.%s.direct.%s" % [suffix, _movement_cell_key_runtime(destination).replace(",", "_")]
+	# The option_id is contract-checked by MovementOption._validate_option_id, which demands
+	# exactly "option.<goal-suffix>.<style>.d<col>r<row>.p<path>". Reuse the canonical builder
+	# from MovementOptionService instead of hand-rolling the token — a hand-rolled id silently
+	# failed validation here, which disabled movement-aware selection for the whole live loop.
+	var option_id: String = MovementOptionServiceScript._option_id(
+		{"goal_id": goal_id}, "direct", destination, path)
 	var planned_action: Dictionary = goal.get("planned_primary", {}) as Dictionary
 	var option: Dictionary = MovementOptionScript.build(
 		goal_id,
@@ -2895,7 +2899,25 @@ func _resolve_next_actor(t: int) -> void:
 			_keeper_intro_restore_echo_after_second_attempt(t, lethal_ids)
 
 	if not ectx.last_round_results.is_empty():
-		ectx.last_actor_action = ectx.last_round_results.back().duplicate()
+		ectx.last_actor_action = ectx.last_round_results.back().duplicate(true)
+		# V2-COMBAT-002 Slice 6D: presentation-only path threading. The traversed
+		# path already exists in the activation result but evaporated here, so
+		# tokens lerped straight through walls. Stamped additively for EVERY
+		# action_type (a move-then-melee activation appends the MELEE entry, and
+		# that entry must still carry the path). Keys are always present so the
+		# snapshot shape stays stable; `path` is actual_traversed_cells VERBATIM
+		# (origin is contract-excluded and the array MAY be empty).
+		var _path_from_pos: Dictionary = (actor.get("grid_pos", {}) as Dictionary).duplicate(true)
+		var _path_cells: Array = []
+		if str(ectx.last_actor_action.get("source_id", "")) == str(actor.get("id", "")):
+			var _mv_result: Dictionary = intent.get("movement_result", {}) as Dictionary
+			if not _mv_result.is_empty():
+				var _mv_actual: Array = _mv_result.get("actual_traversed_cells", []) as Array
+				if not _mv_actual.is_empty():
+					_path_cells = _mv_actual.duplicate(true)
+					_path_from_pos = (_mv_result.get("origin", _path_from_pos) as Dictionary).duplicate(true)
+		ectx.last_actor_action["from_pos"] = _path_from_pos
+		ectx.last_actor_action["path"]     = _path_cells
 
 	# PROG-003: accumulate echo action log for XP virtue multiplier at resolve.
 	# Only echo-faction actors contribute. Accumulated across all rounds.

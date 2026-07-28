@@ -758,7 +758,17 @@ func _crosscheck_perceived_actor(actor: Dictionary, fact: Dictionary, field: Str
 		["is_structure", bool(actor.get("is_structure", false))],
 		["is_spirit", bool(actor.get("is_spirit", false))],
 		["is_quarry", bool(actor.get("is_quarry", false))],
-		["controlling_state", bool(actor.get("controlling_state", true))],
+		# MovementPerceivedActorFact.validate rejects `incapable_actor_cannot_control`:
+		# a dead/KO'd/structure actor may never assert controlling_state. Mirror the same
+		# conjunction FlowRuntime._movement_actor_facts derives, or every board containing
+		# a structure or a downed actor fails the cross-check.
+		[
+			"controlling_state",
+			bool(actor.get("controlling_state", true)) \
+				and not actor_is_dead \
+				and not actor_is_ko \
+				and not bool(actor.get("is_structure", false)),
+		],
 	]:
 		if bool(fact[str(state_pair[0])]) != bool(state_pair[1]):
 			return _movement_failure("perceived_actor_state_mismatch", "%s.%s" % [field, str(state_pair[0])])

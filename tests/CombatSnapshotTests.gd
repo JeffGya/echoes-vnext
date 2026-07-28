@@ -26,6 +26,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("snapshot/pre_combat_has_retreat_fields",       Callable(CombatSnapshotTests, "_t_pre_combat_has_retreat_fields"))
 	runner.register_test("snapshot/cta_retreat_absent_when_ineligible",  Callable(CombatSnapshotTests, "_t_cta_retreat_absent_when_ineligible"))
 	runner.register_test("snapshot/last_actor_action_retains_move_to_pos", Callable(CombatSnapshotTests, "_t_last_actor_action_retains_move_to_pos"))
+	# V2-COMBAT-002 Slice 6D additions:
+	runner.register_test("snapshot/last_actor_action_forwards_path_and_from_pos", Callable(CombatSnapshotTests, "_t_last_actor_action_forwards_path_and_from_pos"))
+	runner.register_test("snapshot/last_actor_action_path_is_deep_copy",          Callable(CombatSnapshotTests, "_t_last_actor_action_path_is_deep_copy"))
+	runner.register_test("snapshot/last_actor_action_empty_path_projects_empty",  Callable(CombatSnapshotTests, "_t_last_actor_action_empty_path_projects_empty"))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -308,5 +312,112 @@ static func _t_last_actor_action_retains_move_to_pos() -> Dictionary:
 		return { "ok": false, "error": "Expected last_actor_action.to_pos.col=4" }
 	if int(action.get("to_pos", {}).get("row", -1)) != 3:
 		return { "ok": false, "error": "Expected last_actor_action.to_pos.row=3" }
+
+	return { "ok": true }
+
+
+## Shared setup for the Slice 6D path-projection tests: an actor_turn context whose
+## last_actor_action already carries the additive from_pos/path keys.
+static func _make_path_ctx(from_pos: Dictionary, path: Array) -> FlowContext:
+	var ctx: FlowContext = CombatSnapshotTests._make_pre_combat_ctx()
+	ctx.encounter_ctx.combat_state = {
+		"round_phase": "in_round",
+		"objective": "defeat_enemies",
+		"round_counter": 1,
+		"initiative_order": [],
+		"active_initiative_index": 0,
+	}
+	ctx.encounter_ctx.last_actor_action = {
+		"action_type": "melee_attack",
+		"source_id": "echo_01",
+		"from_pos": from_pos,
+		"path": path,
+	}
+	return ctx
+
+
+# Test 10: last_actor_action_forwards_path_and_from_pos
+# Setup: last_actor_action carries a multi-cell traversed path plus the pre-activation cell.
+# Expected: build_round_snapshot forwards both keys unchanged, exact cell sequence preserved.
+static func _t_last_actor_action_forwards_path_and_from_pos() -> Dictionary:
+	var expected: Array = [
+		{ "col": 2, "row": 5 },
+		{ "col": 3, "row": 5 },
+		{ "col": 3, "row": 4 },
+	]
+	var ctx: FlowContext = CombatSnapshotTests._make_path_ctx({ "col": 1, "row": 5 }, expected.duplicate(true))
+
+	var snap: Dictionary = FlowEncounterState.build_round_snapshot(ctx, 3)
+	var action: Dictionary = snap.get("data", {}).get("last_actor_action", {})
+
+	if not action.has("from_pos"):
+		return { "ok": false, "error": "last_actor_action.from_pos missing from snapshot" }
+	if int(action.get("from_pos", {}).get("col", -1)) != 1 or int(action.get("from_pos", {}).get("row", -1)) != 5:
+		return { "ok": false, "error": "Expected from_pos {col:1,row:5}, got %s" % str(action.get("from_pos", {})) }
+
+	if not action.has("path"):
+		return { "ok": false, "error": "last_actor_action.path missing from snapshot" }
+	var path: Array = action.get("path", []) as Array
+	if path.size() != expected.size():
+		return { "ok": false, "error": "Expected path size %d, got %d" % [expected.size(), path.size()] }
+	for i: int in range(expected.size()):
+		var got: Dictionary = path[i] as Dictionary
+		var want: Dictionary = expected[i] as Dictionary
+		if int(got.get("col", -1)) != int(want["col"]) or int(got.get("row", -1)) != int(want["row"]):
+			return { "ok": false, "error": "path[%d] expected %s, got %s" % [i, str(want), str(got)] }
+
+	return { "ok": true }
+
+
+# Test 11: last_actor_action_path_is_deep_copy
+# Setup: mutate the path Array (and a cell inside it) returned in the snapshot.
+# Expected: ectx.last_actor_action is untouched — no aliasing across the core/UI boundary.
+static func _t_last_actor_action_path_is_deep_copy() -> Dictionary:
+	var ctx: FlowContext = CombatSnapshotTests._make_path_ctx(
+		{ "col": 0, "row": 0 },
+		[{ "col": 1, "row": 0 }, { "col": 2, "row": 0 }]
+	)
+
+	var snap: Dictionary = FlowEncounterState.build_round_snapshot(ctx, 4)
+	var action: Dictionary = snap.get("data", {}).get("last_actor_action", {})
+	var path: Array = action.get("path", []) as Array
+
+	path.append({ "col": 99, "row": 99 })
+	(path[0] as Dictionary)["col"] = 77
+	(action.get("from_pos", {}) as Dictionary)["col"] = 55
+
+	var source_path: Array = ctx.encounter_ctx.last_actor_action.get("path", []) as Array
+	if source_path.size() != 2:
+		return { "ok": false, "error": "Source path was mutated: expected size 2, got %d" % source_path.size() }
+	if int((source_path[0] as Dictionary).get("col", -1)) != 1:
+		return { "ok": false, "error": "Source path cell was mutated: expected col=1, got %d" % int((source_path[0] as Dictionary).get("col", -1)) }
+	var source_from: Dictionary = ctx.encounter_ctx.last_actor_action.get("from_pos", {}) as Dictionary
+	if int(source_from.get("col", -1)) != 0:
+		return { "ok": false, "error": "Source from_pos was mutated: expected col=0, got %d" % int(source_from.get("col", -1)) }
+
+	return { "ok": true }
+
+
+# Test 12: last_actor_action_empty_path_projects_empty
+# Setup: an activation with no traversal — path is [] and from_pos is the current cell.
+# Expected: `path` is present and an empty Array (not missing, not null); from_pos present.
+static func _t_last_actor_action_empty_path_projects_empty() -> Dictionary:
+	var ctx: FlowContext = CombatSnapshotTests._make_path_ctx({ "col": 6, "row": 2 }, [])
+
+	var snap: Dictionary = FlowEncounterState.build_round_snapshot(ctx, 5)
+	var action: Dictionary = snap.get("data", {}).get("last_actor_action", {})
+
+	if not action.has("path"):
+		return { "ok": false, "error": "last_actor_action.path missing — key must always be present" }
+	var path_v: Variant = action.get("path")
+	if not (path_v is Array):
+		return { "ok": false, "error": "last_actor_action.path must be an Array, got %s" % type_string(typeof(path_v)) }
+	if not (path_v as Array).is_empty():
+		return { "ok": false, "error": "Expected empty path, got size %d" % (path_v as Array).size() }
+
+	if not action.has("from_pos"):
+		return { "ok": false, "error": "last_actor_action.from_pos missing — key must always be present" }
+	if int(action.get("from_pos", {}).get("col", -1)) != 6 or int(action.get("from_pos", {}).get("row", -1)) != 2:
+		return { "ok": false, "error": "Expected from_pos {col:6,row:2}, got %s" % str(action.get("from_pos", {})) }
 
 	return { "ok": true }

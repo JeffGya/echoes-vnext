@@ -1473,7 +1473,9 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 
 	# Per-actor display fields.
 	var current_actor_id: String      = str(ectx.last_actor_action.get("source_id", "")) if ectx != null else ""
-	var last_actor_action_v: Dictionary = ectx.last_actor_action.duplicate() if ectx != null else {}
+	# V2-COMBAT-002 Slice 6D: deep duplicate — last_actor_action now carries a nested
+	# `path` Array; a shallow copy would alias a mutable array across the core/UI boundary.
+	var last_actor_action_v: Dictionary = ectx.last_actor_action.duplicate(true) if ectx != null else {}
 
 	# Project actors to clean render shape.
 	var projected_actors: Array = []

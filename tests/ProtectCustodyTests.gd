@@ -29,9 +29,12 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement/protect_custody/pickup_out_of_range_fails", Callable(ProtectCustodyTests, "_t_pickup_out_of_range"))
 	runner.register_test("movement/protect_custody/pickup_costs_no_movement_capacity", Callable(ProtectCustodyTests, "_t_pickup_no_capacity_cost"))
 	runner.register_test("movement/protect_custody/pickup_of_carried_totem_rejected", Callable(ProtectCustodyTests, "_t_pickup_already_carried"))
+	runner.register_test("movement/protect_custody/pickup_by_downed_mover_consumes_action", Callable(ProtectCustodyTests, "_t_pickup_mover_downed"))
+	runner.register_test("movement/protect_custody/invalidated_pickup_stops_precluding", Callable(ProtectCustodyTests, "_t_pickup_invalidated_precludes_nothing"))
 	runner.register_test("movement/protect_custody/totem_follows_every_voluntary_step", Callable(ProtectCustodyTests, "_t_follows_voluntary"))
 	runner.register_test("movement/protect_custody/totem_follows_forced_hazard_step", Callable(ProtectCustodyTests, "_t_follows_forced"))
 	runner.register_test("movement/protect_custody/totem_ignores_non_carrier_movement", Callable(ProtectCustodyTests, "_t_ignores_non_carrier"))
+	runner.register_test("movement/protect_custody/downed_carrier_keeps_totem_and_reports_fact", Callable(ProtectCustodyTests, "_t_carrier_downed_fact"))
 	runner.register_test("movement/protect_custody/burden_reduces_capacity_by_one", Callable(ProtectCustodyTests, "_t_burden_minus_one"))
 	runner.register_test("movement/protect_custody/burden_respects_profile_floor", Callable(ProtectCustodyTests, "_t_burden_floor"))
 	runner.register_test("movement/protect_custody/burden_absorbed_at_capacity_one", Callable(ProtectCustodyTests, "_t_burden_absorbed"))
@@ -294,6 +297,105 @@ static func _t_pickup_already_carried() -> Dictionary:
 	return _pass()
 
 
+## An activation that ends with the mover DOWNED. Lethal end-of-activation Burning
+## on the destination cell: the primary action still resolves at the final cell
+## (CombatActivationService resolves the action BEFORE Burning), then the mover's
+## own hazard damage takes it to 0 hp, so stop_reason becomes "death" (or "ko" when
+## the caller declares mover_ko_only). Ends on cell (8,5).
+static func _downed_activation(
+	mover_id: String,
+	planned_action: Dictionary,
+	action_ctx: Dictionary = {},
+	ko_only: bool = false
+) -> Dictionary:
+	var context: Dictionary = _ctx({
+		"mover_id": mover_id,
+		"origin": _cell(7, 5),
+		"bounds": HazardFixtures.board_bounds(),
+		"known_hazards": HazardFixtures.burning_at(_cell(8, 5)),
+	})
+	var merged: Dictionary = {"mover_hp": 3, "mover_ko_only": ko_only}
+	for key: Variant in action_ctx.keys():
+		merged[key] = action_ctx[key]
+	return _activate(
+		context, [_cell(8, 5)], planned_action, _profile(4), merged, _hazard_ctx(_hazard_cfg())
+	)
+
+
+## The pickup was DECLARED and consumed the activation's single primary slot, but the
+## mover went down during the activation — so the totem is never picked up and custody
+## is untouched, while the mover still forwent its attack. Also pins the ORDER of the
+## two guards: the downed check runs BEFORE the is_carried check, so a downed mover
+## reaching for an already-carried totem reports "mover_downed", not "already_carried".
+static func _t_pickup_mover_downed() -> Dictionary:
+	var cfg: Dictionary = _protect_cfg()
+	var grounded: Dictionary = _grounded(_cell(9, 5))
+	var result: Dictionary = _downed_activation(
+		"echo.1", Custody.pickup_action_plan("totem.1"), Custody.pickup_action_ctx(grounded, cfg)
+	)
+	if str(result["stop_reason"]) != "death":
+		return _fail("fixture did not down the mover: %s" % str(result["stop_reason"]))
+	if str((result["resolved_action"] as Dictionary).get("type", "")) != Custody.ACTION_PICKUP:
+		return _fail("pickup did not resolve as the primary action: %s" % str(result["resolved_action"]))
+
+	var report: Dictionary = Custody.resolve_pickup(grounded, result, cfg)
+	if bool(report["picked_up"]):
+		return _fail("a downed mover picked the totem up")
+	if str(report["reason"]) != "mover_downed":
+		return _fail("expected reason mover_downed, got %s" % str(report["reason"]))
+	if not bool(report["action_consumed"]) or not bool(report["attack_precluded"]):
+		return _fail("a declared pickup still consumes the primary slot: %s" % str(report))
+	if (report["custody_state"] as Dictionary) != grounded:
+		return _fail("custody changed when the mover went down: %s" % str(report["custody_state"]))
+
+	# "ko" is the same downed truth as "death" for custody purposes.
+	var ko_result: Dictionary = _downed_activation(
+		"echo.1", Custody.pickup_action_plan("totem.1"), Custody.pickup_action_ctx(grounded, cfg), true
+	)
+	if str(ko_result["stop_reason"]) != "ko":
+		return _fail("ko fixture did not report ko: %s" % str(ko_result["stop_reason"]))
+	if str(Custody.resolve_pickup(grounded, ko_result, cfg)["reason"]) != "mover_downed":
+		return _fail("a ko'd mover was not treated as downed")
+
+	# ORDERING: downed is checked BEFORE already_carried.
+	var carried: Dictionary = _carried(_cell(9, 5), "enemy.9", "enemy")
+	var carried_report: Dictionary = Custody.resolve_pickup(carried, result, cfg)
+	if str(carried_report["reason"]) != "mover_downed":
+		return _fail("downed check must precede already_carried, got %s" % str(carried_report["reason"]))
+	if str((carried_report["custody_state"] as Dictionary)["carrier_id"]) != "enemy.9":
+		return _fail("carrier changed on a downed pickup")
+	return _pass()
+
+
+## A pickup whose DECLARED primary is invalidated at the final cell (the mover stopped
+## outside pickup_range) resolves to nothing — so it neither precludes the attack nor
+## reaches any custody branch. Complements _t_pickup_precludes_attack, which only
+## covers the two UN-invalidated poles (a resolved pickup and a resolved melee).
+static func _t_pickup_invalidated_precludes_nothing() -> Dictionary:
+	var cfg: Dictionary = _protect_cfg()
+	var state: Dictionary = _grounded(_cell(8, 8))
+	# Final cell (2,1) is far outside ranges[ACTION_PICKUP] (1) of the totem cell.
+	var result: Dictionary = _activate(
+		_ctx(), [_cell(2, 1)], Custody.pickup_action_plan("totem.1"), _profile(4),
+		Custody.pickup_action_ctx(state, cfg)
+	)
+	if not (result["resolved_action"] as Dictionary).is_empty():
+		return _fail("activation did not downgrade the out-of-range pickup: %s" % str(result["resolved_action"]))
+	if str((result["planned_action"] as Dictionary).get("type", "")) != Custody.ACTION_PICKUP:
+		return _fail("the DECLARED primary should still be the pickup: %s" % str(result["planned_action"]))
+	if Custody.precludes_attack(result):
+		return _fail("an invalidated pickup must not preclude attacking")
+
+	var report: Dictionary = Custody.resolve_pickup(state, result, cfg)
+	if str(report["reason"]) != "not_pickup_action":
+		return _fail("expected not_pickup_action, got %s" % str(report["reason"]))
+	if bool(report["action_consumed"]) or bool(report["attack_precluded"]) or bool(report["picked_up"]):
+		return _fail("an invalidated pickup consumed nothing: %s" % str(report))
+	if (report["custody_state"] as Dictionary) != state:
+		return _fail("custody changed on an invalidated pickup")
+	return _pass()
+
+
 # ---------------------------------------------------------------------------
 # RULE 2 — THE TOTEM FOLLOWS THE CARRIER AFTER EVERY STEP
 # ---------------------------------------------------------------------------
@@ -372,6 +474,45 @@ static func _t_ignores_non_carrier() -> Dictionary:
 		return _fail("a grounded totem followed a mover: %s" % str(grounded_report))
 	if ((grounded_report["custody_state"] as Dictionary)["totem_cell"] as Dictionary) != _cell(5, 5):
 		return _fail("grounded totem moved")
+	return _pass()
+
+
+## A carrier that goes down mid-activation still DRAGS the totem to its final cell:
+## `carrier_downed` is a reported FACT on an otherwise ordinary "followed" report, not
+## a control-flow branch. This service never drops the totem — the drop is the caller's
+## decision (resolve_drop), so the totem is left exactly where the carrier fell.
+static func _t_carrier_downed_fact() -> Dictionary:
+	var state: Dictionary = _carried(_cell(7, 5), "echo.1", "echo")
+	var result: Dictionary = _downed_activation("echo.1", ActionPlan.build("actor.guard"))
+	if str(result["stop_reason"]) != "death":
+		return _fail("fixture did not down the carrier: %s" % str(result["stop_reason"]))
+
+	var report: Dictionary = Custody.track_carrier_movement(state, result)
+	if not bool(report["followed"]) or str(report["reason"]) != "followed":
+		return _fail("a downed carrier still follows: %s" % str(report))
+	if not bool(report["carrier_downed"]):
+		return _fail("carrier_downed fact not reported: %s" % str(report))
+	var after: Dictionary = report["custody_state"] as Dictionary
+	if str(after["carrier_id"]) != "echo.1" or str(after["carrier_faction"]) != "echo":
+		return _fail("track_carrier_movement must not drop the totem: %s" % str(after))
+	if (after["totem_cell"] as Dictionary) != (result["final_destination"] as Dictionary) \
+			or (after["totem_cell"] as Dictionary) != _cell(8, 5):
+		return _fail("totem did not end on the fallen carrier's cell: %s" % str(after["totem_cell"]))
+
+	# "ko" is the same downed truth.
+	var ko_result: Dictionary = _downed_activation("echo.1", ActionPlan.build("actor.guard"), {}, true)
+	if not bool(Custody.track_carrier_movement(state, ko_result)["carrier_downed"]):
+		return _fail("a ko'd carrier was not reported as downed")
+
+	# The two rejection branches never claim a downed carrier, even on a downed result.
+	var not_the_carrier: Dictionary = Custody.track_carrier_movement(
+		_carried(_cell(7, 5), "echo.2", "echo"), result
+	)
+	if str(not_the_carrier["reason"]) != "not_the_carrier" or bool(not_the_carrier["carrier_downed"]):
+		return _fail("not_the_carrier must report carrier_downed false: %s" % str(not_the_carrier))
+	var not_carried: Dictionary = Custody.track_carrier_movement(_grounded(_cell(7, 5)), result)
+	if str(not_carried["reason"]) != "not_carried" or bool(not_carried["carrier_downed"]):
+		return _fail("not_carried must report carrier_downed false: %s" % str(not_carried))
 	return _pass()
 
 

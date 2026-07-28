@@ -37,6 +37,9 @@ const MovementHazardFactScript := preload("res://core/movement/contracts/Movemen
 const MovementIntentScript := preload("res://core/movement/contracts/MovementIntent.gd")
 const MovementActionPlanScript := preload("res://core/movement/contracts/MovementActionPlan.gd")
 const CombatActivationServiceScript := preload("res://core/movement/CombatActivationService.gd")
+const MovementOptionScript := preload("res://core/movement/contracts/MovementOption.gd")
+const MovementOptionServiceScript := preload("res://core/movement/MovementOptionService.gd")
+const MovementProfileServiceScript := preload("res://core/movement/MovementProfileService.gd")
 
 static func register(runner) -> void:
 	runner.register_test("combat_roundtrip/echoes_advance_on_terrain", func(): return test_echoes_advance())
@@ -88,6 +91,27 @@ static func register(runner) -> void:
 	runner.register_test("combat_roundtrip/live_hazard_union_and_mover_damage", func(): return test_live_hazard_union_and_mover_damage())
 	runner.register_test("combat_roundtrip/live_hazard_action_phase_order", func(): return test_live_hazard_action_phase_order())
 	runner.register_test("combat_roundtrip/live_truncated_engage_advances_before_melee", func(): return test_live_truncated_engage_advances_before_melee())
+	# Slice 6B PR#52 fix 2 (previously unguarded): the authored purify candidate carries
+	# an EMPTY target_id, so the live shrine must be located directly.
+	runner.register_test("combat_roundtrip/purify_empty_target_id_finds_first_living_structure", func(): return test_purify_empty_target_id())
+	# Slice 6E: the live option_id must satisfy the MovementOption contract, and the
+	# movement-aware selector must actually run (both were dead after PR #52).
+	runner.register_test("combat_roundtrip/live_direct_option_id_is_contract_valid", func(): return test_live_direct_option_id_is_contract_valid())
+	runner.register_test("combat_roundtrip/objective_route_truncates_and_stays_movement_aware", func(): return test_objective_route_truncates_and_stays_movement_aware())
+	# Slice 6E: the perceived-actor cross-check must survive structures, corpses and
+	# downed actors — otherwise movement-aware selection is inert in every objective mode.
+	runner.register_test("combat_roundtrip/purify_selection_survives_structure_and_death", func(): return test_purify_selection_survives_structure_and_death())
+
+
+static func _drive_one_round(runtime, ectx) -> void:
+	runtime.dispatch({ "type": "combat.confirm_round" })
+	var guard: int = 0
+	while guard < 60:
+		guard += 1
+		var cs: Dictionary = ectx.combat_state
+		if bool(cs.get("combat_over", false)): break
+		if str(cs.get("round_phase", "")) != "in_round": break
+		runtime.dispatch({ "type": "combat.next_actor" })
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +119,12 @@ static func register(runner) -> void:
 # `assign_ids` controls whether echoes get real ids (real flow) or are left id-less
 # (all id "" — the duplicate-id condition that reproduces the freeze).
 # ---------------------------------------------------------------------------
-static func _setup(seed_tag: String, assign_ids: bool, log_level: String = "off") -> Dictionary:
+static func _setup(
+	seed_tag: String,
+	assign_ids: bool,
+	log_level: String = "off",
+	objective_mode: String = EncounterResolutionModes.COMBAT
+) -> Dictionary:
 	var logger := StructuredLogger.new()
 	logger.set_level(log_level)
 	var config := ConfigService.new()
@@ -126,7 +155,7 @@ static func _setup(seed_tag: String, assign_ids: bool, log_level: String = "off"
 	flow_ctx.save_data["sanctum"]["roster"] = roster
 	flow_ctx.save_data["sanctum"]["active_party_ids"] = party_ids
 
-	flow_ctx.dev_combat_objective = EncounterResolutionModes.COMBAT
+	flow_ctx.dev_combat_objective = objective_mode
 	flow_ctx.encounter_ctx = null
 	flow_ctx.encounter_machine = null
 
@@ -2277,3 +2306,530 @@ static func test_enemy_kill_does_not_ripple_to_party() -> Dictionary:
 		return { "ok": false, "error": "enemy kill wrongly fired %d combat.kill_ripple event(s) to the party" % kill_ripple_events }
 
 	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# V2-COMBAT-002 Phase 6E — guards for the two PR #52 slice-6B review fixes.
+# ---------------------------------------------------------------------------
+
+# GUARD for FlowRuntime._apply_live_purify_shrine (fix 2).
+#
+# The purify candidate is authored with a LITERAL EMPTY target_id
+# (BehaviorArbiter.gd:325-331 and :937). Pre-fix, _apply_live_purify_shrine
+# early-returned on an empty target_id and only ever matched a shrine BY that id, so
+# a purifier authored this way never applied a single stack. The fix reads
+# `if target_id.is_empty() or str(candidate.get("id","")) == target_id`.
+#
+# HOW THIS TEST DISCRIMINATES: it calls the function with "" and asserts a stack
+# LANDS. Pre-fix that call was a no-op, so `stacks == 1` and `purify_cooldown == 3`
+# both fail. The existing coverage only ever passed "shrine.match"/"shrine.wrong",
+# which behaved identically before and after the fix.
+#
+# Also pins the ORDERING fact that the loop `break`s on the first match: with an
+# empty target_id the FIRST LIVING STRUCTURE in ectx.actors order wins, and dead
+# structures are skipped.
+static func test_purify_empty_target_id() -> Dictionary:
+	var env: Dictionary = _setup("purify_empty_target", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var runtime: FlowRuntime = env["runtime"]
+	var ectx: EncounterContext = env["ectx"]
+	for actor_value: Variant in ectx.actors:
+		if actor_value is Dictionary and bool((actor_value as Dictionary).get("is_structure", false)):
+			return { "ok": false, "error": "COMBAT setup unexpectedly spawned a structure" }
+
+	var purifier: Dictionary = ectx.actors[0] as Dictionary
+	purifier.erase("purify_cooldown")
+	var dead_first: Dictionary = {
+		"id": "shrine.dead", "is_structure": true, "is_dead": true,
+		"current_hp": 0, "stats": {"max_hp": 20}, "purify_stacks": [],
+	}
+	var living_first: Dictionary = {
+		"id": "shrine.living.first", "is_structure": true, "is_dead": false,
+		"current_hp": 20, "stats": {"max_hp": 20}, "purify_stacks": [],
+	}
+	var living_second: Dictionary = {
+		"id": "shrine.living.second", "is_structure": true, "is_dead": false,
+		"current_hp": 20, "stats": {"max_hp": 20}, "purify_stacks": [],
+	}
+	# Order matters: dead structure FIRST, so skipping it is observable.
+	(ectx.actors as Array).append(dead_first)
+	(ectx.actors as Array).append(living_first)
+	(ectx.actors as Array).append(living_second)
+
+	var purify_ctx: Dictionary = { "cfg": runtime.config_service.get_balance() }
+	runtime._apply_live_purify_shrine(purifier, "", purify_ctx, 99)
+
+	var first_stacks: Array = living_first.get("purify_stacks", []) as Array
+	if first_stacks.size() != 1:
+		return { "ok": false, "error": "empty target_id applied %d stacks to the first living structure" % first_stacks.size() }
+	if (first_stacks[0] as Dictionary) != { "duration": 2, "reduction": 3 }:
+		return { "ok": false, "error": "unexpected purify stack payload: %s" % str(first_stacks[0]) }
+	if (living_second.get("purify_stacks", []) as Array).size() != 0:
+		return { "ok": false, "error": "the break-on-first-match rule was violated" }
+	if (dead_first.get("purify_stacks", []) as Array).size() != 0:
+		return { "ok": false, "error": "a dead structure received a purify stack" }
+	if int(purifier.get("purify_cooldown", -1)) != 3:
+		return { "ok": false, "error": "purify_cooldown was not set to 3: %s" % str(purifier.get("purify_cooldown", -1)) }
+
+	# Killing the first living structure hands the empty-id match to the next one.
+	living_first["is_dead"] = true
+	runtime._apply_live_purify_shrine(purifier, "", purify_ctx, 100)
+	if (living_first.get("purify_stacks", []) as Array).size() != 1:
+		return { "ok": false, "error": "a newly dead structure was still selected" }
+	if (living_second.get("purify_stacks", []) as Array).size() != 1:
+		return { "ok": false, "error": "empty target_id did not fall through to the next living structure" }
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# V2-COMBAT-002 Slice 6E — movement-aware SELECTION regression + E1 coverage.
+#
+# PR #52 shipped `_movement_build_direct_option` with a hand-rolled option_id
+# ("option.<goal-suffix>.direct.<col>_<row>") that MovementOption._validate_option_id
+# ALWAYS rejects — the contract demands "option.<goal-suffix>.<style>.d<col>r<row>.p<path>".
+# Every live option therefore validated false → `_movement_build_direct_option`
+# returned {} → `_movement_live_direct_options` returned [] → `selection_enabled`
+# was false → FlowRuntime never populated ctx["movement_options"] →
+# ActorStateMachine never reached BehaviorArbiter.select_movement_intent.
+# Movement-aware target selection was completely inert in live combat; every actor
+# fell back to legacy nearest-enemy `select_intent`.
+#
+# The two tests below are the guards that were impossible to write before the fix.
+# ---------------------------------------------------------------------------
+
+# Mirrors FlowRuntime._resolve_next_actor's board_cfg derivation (terrain-aware).
+static func _movement_board_cfg(runtime: FlowRuntime, ectx: EncounterContext) -> Dictionary:
+	var grid_cfg: Dictionary = runtime.config_service.get_balance().get("data", {}).get("grid", {})
+	if ectx == null or ectx.terrain.is_empty():
+		return grid_cfg
+	var cfg: Dictionary = grid_cfg.duplicate(true)
+	cfg["walkable"] = StageTerrain.walkable_set(ectx.terrain)
+	var bounds: Dictionary = ectx.terrain.get("bounds", {}) as Dictionary
+	if bounds.has("w"):
+		cfg["board_cols"] = int(bounds["w"])
+	if bounds.has("h"):
+		cfg["board_rows"] = int(bounds["h"])
+	return cfg
+
+
+static func _living_quarry(ectx: EncounterContext) -> Dictionary:
+	for actor_value: Variant in ectx.actors:
+		var actor: Dictionary = actor_value as Dictionary
+		if bool(actor.get("is_quarry", false)) and not bool(actor.get("is_dead", false)):
+			return actor
+	return {}
+
+
+# Regression guard on the exact function that regressed. Deterministic and closed-form:
+# a realistic live goal + a known affordable route must yield a NON-EMPTY option whose
+# option_id is the canonical five-part token. Pre-fix this returned {} — silently, with
+# no error surface anywhere in the runtime — for this and every other input.
+static func test_live_direct_option_id_is_contract_valid() -> Dictionary:
+	var env: Dictionary = _setup("live_option_id", true, "off", EncounterResolutionModes.PURSUE)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var runtime: FlowRuntime = env["runtime"]
+	var ectx: EncounterContext = env["ectx"]
+
+	# --- closed-form guard -------------------------------------------------
+	var origin: Dictionary = { "col": 1, "row": 1 }
+	var hostile_id: String = "enemy_probe"
+	var goal: Dictionary = {
+		"goal_id": "goal.combat.advance.baseline.c4r1",
+		"purpose": "advance",
+		"destination_region": [{ "col": 4, "row": 1 }],
+		"urgency": 1.0,
+		"objective_progress": 0.0,
+		"relevant_actors": [hostile_id],
+		"pressure_sources": ["actor.%s" % hostile_id],
+		"planned_primary": MovementActionPlanScript.build("actor.move", hostile_id),
+		"declared_fallback": MovementActionPlanScript.build("actor.idle"),
+	}
+	var path: Array = [{ "col": 2, "row": 1 }, { "col": 3, "row": 1 }, { "col": 4, "row": 1 }]
+	# `_movement_build_direct_option` reads only `origin` off the movement context.
+	var option: Dictionary = runtime._movement_build_direct_option(
+		{ "origin": origin }, { "capacity": 3 }, goal, path.back() as Dictionary, path, 3, 3)
+	if option.is_empty():
+		return {
+			"ok": false,
+			"error": "_movement_build_direct_option returned {} for a valid affordable route — option contract regression",
+		}
+	var expected_id: String = "option.combat.advance.baseline.c4r1.direct.d4r1.pc2r1-c3r1-c4r1"
+	if str(option.get("option_id", "")) != expected_id:
+		return {
+			"ok": false,
+			"error": "option_id is not canonical: %s (expected %s)" % [str(option.get("option_id", "")), expected_id],
+		}
+	var closed_form: Dictionary = MovementOptionScript.validate(option, origin)
+	if not bool(closed_form.get("valid", false)):
+		return { "ok": false, "error": "closed-form option failed the contract: %s" % str(closed_form) }
+
+	# --- live guard --------------------------------------------------------
+	# Every option the real runtime builds for a real encounter must also validate.
+	# Some echoes can be legitimately boxed in by allies on irregular terrain, so the
+	# assertion is "at least one echo produces options, and every produced option is
+	# contract-valid" — pre-fix the produced count was ZERO for every echo, always.
+	runtime.dispatch({ "type": "combat.init" })
+	var board_cfg: Dictionary = _movement_board_cfg(runtime, ectx)
+	var bdata: Dictionary = runtime.config_service.get_balance().get("data", {}) as Dictionary
+	var live_option_count: int = 0
+	var t: int = 200
+	for actor_value: Variant in ectx.actors:
+		var mover: Dictionary = actor_value as Dictionary
+		if str(mover.get("faction", "")) != "echo" or bool(mover.get("is_dead", false)):
+			continue
+		t += 1
+		var prepared: Dictionary = runtime._prepare_live_movement_context(
+			mover, ectx, ectx.combat_state, board_cfg, bdata, t)
+		if not bool(prepared.get("valid", false)):
+			continue
+		var mover_origin: Dictionary = (prepared["movement_context"] as Dictionary).get("origin", {}) as Dictionary
+		for option_value: Variant in prepared.get("options", []) as Array:
+			var live_option: Dictionary = option_value as Dictionary
+			live_option_count += 1
+			var validation: Dictionary = MovementOptionScript.validate(live_option, mover_origin)
+			if not bool(validation.get("valid", false)):
+				return { "ok": false, "error": "live option failed the contract: %s" % str(validation) }
+			var canonical: String = MovementOptionServiceScript._option_id(
+				{ "goal_id": str(live_option["goal_id"]) },
+				"direct",
+				live_option["destination"] as Dictionary,
+				live_option["path"] as Array
+			)
+			if str(live_option["option_id"]) != canonical:
+				return {
+					"ok": false,
+					"error": "live option_id drifted from the canonical builder: %s vs %s" % [
+						str(live_option["option_id"]), canonical,
+					],
+				}
+		if not prepared.get("options", []).is_empty() and not bool(prepared.get("selection_enabled", false)):
+			return { "ok": false, "error": "selection_enabled false despite non-empty options" }
+	if live_option_count == 0:
+		return { "ok": false, "error": "the live runtime produced ZERO movement options for every echo" }
+	return { "ok": true }
+
+
+# E1 — the whole-runtime case that was impossible to assert before the fix.
+#
+# PURSUE puts a fleeing quarry on a board that is 2x in one dimension, so a party echo
+# standing at the far end is guaranteed to be farther from the objective than its
+# movement capacity. FlowRuntime.gd:1767-1783 therefore truncates the route to an
+# affordable prefix and the chosen destination falls OUTSIDE goal.destination_region —
+# the exact "objective farther than capacity" shape. That truncated option must still
+# be contract-valid, must still be the option the arbiter selects, and must still point
+# at the OBJECTIVE rather than at whatever enemy happens to be nearest.
+#
+# Discriminator: `intent.has("planned_action")`. ActorStateMachine sets that key ONLY on
+# the movement-aware branch (ActorStateMachine.gd:257-263); the legacy `select_intent`
+# fallback never produces it. Pre-fix that key could not exist in live combat at all.
+static func test_objective_route_truncates_and_stays_movement_aware() -> Dictionary:
+	var env: Dictionary = _setup("objective_truncation", true, "off", EncounterResolutionModes.PURSUE)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var runtime: FlowRuntime = env["runtime"]
+	var ectx: EncounterContext = env["ectx"]
+	runtime.dispatch({ "type": "combat.init" })
+
+	var objective: Dictionary = _living_quarry(ectx)
+	if objective.is_empty():
+		return { "ok": false, "error": "pursue encounter produced no quarry" }
+	var objective_id: String = str(objective.get("id", ""))
+	var objective_pos: Dictionary = objective.get("grid_pos", {}) as Dictionary
+
+	var mover: Dictionary = {}
+	for actor_value: Variant in ectx.actors:
+		var candidate: Dictionary = actor_value as Dictionary
+		if str(candidate.get("faction", "")) == "echo" and not bool(candidate.get("is_dead", false)):
+			mover = candidate
+			break
+	if mover.is_empty():
+		return { "ok": false, "error": "no living echo" }
+	var mover_id: String = str(mover.get("id", ""))
+
+	var board_cfg: Dictionary = _movement_board_cfg(runtime, ectx)
+	var walkable: Dictionary = board_cfg.get("walkable", {}) as Dictionary
+	if walkable.is_empty():
+		return { "ok": false, "error": "no terrain walkable set — expected irregular terrain" }
+
+	# Stand the mover on the free walkable cell FARTHEST from the objective, so the
+	# objective is guaranteed to be out of movement capacity and the route truncates.
+	# Deterministic: keys are sorted before scanning and the first maximum wins.
+	var occupied: Dictionary = {}
+	for actor_value: Variant in ectx.actors:
+		var other: Dictionary = actor_value as Dictionary
+		if str(other.get("id", "")) == mover_id or bool(other.get("is_dead", false)):
+			continue
+		var pos: Dictionary = other.get("grid_pos", {}) as Dictionary
+		if not pos.is_empty():
+			occupied["%d,%d" % [int(pos.get("col", 0)), int(pos.get("row", 0))]] = true
+	var keys: Array = walkable.keys()
+	keys.sort()
+	var far_cell: Dictionary = {}
+	var far_dist: int = -1
+	for key_value: Variant in keys:
+		if bool(occupied.get(str(key_value), false)):
+			continue
+		var parts: PackedStringArray = str(key_value).split(",")
+		if parts.size() != 2:
+			continue
+		var cell: Dictionary = { "col": int(parts[0]), "row": int(parts[1]) }
+		var dist: int = GridService.chebyshev_distance(cell, objective_pos)
+		if dist > far_dist:
+			far_dist = dist
+			far_cell = cell
+	if far_cell.is_empty():
+		return { "ok": false, "error": "no free walkable cell found" }
+	GridService.assign_grid_pos(mover, int(far_cell["col"]), int(far_cell["row"]))
+
+	var bdata: Dictionary = runtime.config_service.get_balance().get("data", {}) as Dictionary
+	var capacity_cfg: Dictionary = bdata.get("combat", {}).get("movement", {}).get("capacity", {}) as Dictionary
+	var capacity: int = int(MovementProfileServiceScript.derive_profile(mover, capacity_cfg, {}).get("capacity", 0))
+	var start_dist: int = GridService.chebyshev_distance(mover.get("grid_pos", {}), objective_pos)
+	if start_dist <= capacity:
+		return {
+			"ok": false,
+			"error": "objective within capacity (%d <= %d) — the route would not truncate" % [start_dist, capacity],
+		}
+
+	var prepared: Dictionary = runtime._prepare_live_movement_context(
+		mover, ectx, ectx.combat_state, board_cfg, bdata, 300)
+	if not bool(prepared.get("valid", false)):
+		return { "ok": false, "error": "live movement context invalid: %s" % str(prepared.get("reason", "")) }
+	if not bool(prepared.get("selection_enabled", false)):
+		return {
+			"ok": false,
+			"error": "selection_enabled false — movement-aware selection is inert (goals=%d, options=%d)" % [
+				(prepared.get("goals", []) as Array).size(),
+				(prepared.get("options", []) as Array).size(),
+			],
+		}
+
+	# The objective goal must exist, must have produced an option, and that option's
+	# destination must fall OUTSIDE the goal's destination_region — i.e. it truncated.
+	var objective_goal: Dictionary = {}
+	for goal_value: Variant in prepared.get("goals", []) as Array:
+		var goal: Dictionary = goal_value as Dictionary
+		if str(goal.get("purpose", "")) == "pursue" \
+				and (goal.get("relevant_actors", []) as Array).has(objective_id):
+			objective_goal = goal
+			break
+	if objective_goal.is_empty():
+		return { "ok": false, "error": "no objective pursue goal built for a party echo" }
+	var objective_option: Dictionary = {}
+	for option_value: Variant in prepared.get("options", []) as Array:
+		var option: Dictionary = option_value as Dictionary
+		if str(option.get("goal_id", "")) == str(objective_goal.get("goal_id", "")):
+			objective_option = option
+			break
+	if objective_option.is_empty():
+		return { "ok": false, "error": "objective goal produced no live option" }
+	if (objective_goal.get("destination_region", []) as Array).has(objective_option["destination"]):
+		return { "ok": false, "error": "route did not truncate — destination is inside destination_region" }
+
+	# Run the REAL decision layer exactly as FlowRuntime._resolve_next_actor wires it.
+	var ctx: Dictionary = {
+		"actor": mover,
+		"all_actors": ectx.actors,
+		"board_cfg": board_cfg,
+		"cfg": runtime.config_service.get_balance(),
+		"t": 300,
+		"round": int(ectx.combat_state.get("round_counter", 0)),
+		"movement_context": prepared["movement_context"],
+		"movement_profile": prepared["profile"],
+		"movement_goals": prepared["goals"],
+		"movement_options": prepared["options"],
+	}
+	var asm := ActorStateMachine.new(
+		mover, null, bdata.get("actor", {}) as Dictionary, prepared.get("movement_cfg", {}) as Dictionary)
+	var intent: Dictionary = asm.advance_turn(ctx, env["logger"], 300)
+
+	# (1) The movement-aware branch ran at all. Impossible pre-fix.
+	if not intent.has("planned_action"):
+		# Surface the arbiter's own rejection reason — "fallback ran" alone tells us nothing.
+		var probe := BehaviorArbiter.new(
+			bdata.get("actor", {}) as Dictionary, prepared.get("movement_cfg", {}) as Dictionary)
+		var diagnosis: Dictionary = probe.select_movement_intent(
+			ctx, prepared["movement_context"], prepared["profile"], prepared["goals"], prepared["options"])
+		return {
+			"ok": false,
+			"error": "legacy fallback ran — intent has no planned_action (%s); arbiter said %s" % [
+				str(intent.get("action_type", "")), str(diagnosis),
+			],
+		}
+	# (2) It committed to the OBJECTIVE goal, not to the nearest enemy.
+	if str(intent.get("goal_id", "")) != str(objective_goal.get("goal_id", "")):
+		return {
+			"ok": false,
+			"error": "selected goal %s, expected objective goal %s" % [
+				str(intent.get("goal_id", "")), str(objective_goal.get("goal_id", "")),
+			],
+		}
+	if str(intent.get("target_id", "")) != objective_id:
+		return {
+			"ok": false,
+			"error": "movement-aware intent targeted %s, expected objective %s" % [
+				str(intent.get("target_id", "")), objective_id,
+			],
+		}
+	if str(intent.get("option_id", "")) != str(objective_option.get("option_id", "")):
+		return {
+			"ok": false,
+			"error": "selected option %s, expected truncated objective option %s" % [
+				str(intent.get("option_id", "")), str(objective_option.get("option_id", "")),
+			],
+		}
+	# (3) Executing it actually closes distance to the objective.
+	runtime._apply_live_activation(mover, intent, prepared, asm, ctx, 300)
+	var end_dist: int = GridService.chebyshev_distance(mover.get("grid_pos", {}), objective_pos)
+	if end_dist >= start_dist:
+		return {
+			"ok": false,
+			"error": "objective distance did not decrease: %d → %d" % [start_dist, end_dist],
+		}
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# Slice 6E — whole-runtime guard on BehaviorArbiter._crosscheck_perceived_actor.
+#
+# The arbiter re-derives the perceived-actor facts FlowRuntime hands it and asserts they
+# match. It defaulted `controlling_state` to `true` off the raw actor dict — but NO actor
+# dict anywhere sets that key, while FlowRuntime._movement_actor_facts ANDs in
+# `not dead and not ko and not structure`, exactly as MovementPerceivedActorFact.validate
+# demands (`incapable_actor_cannot_control`). A single mismatched actor discards the WHOLE
+# board's selection, so every purify_shrine board — which carries a shrine STRUCTURE from
+# round 1 — was permanently pinned to the legacy nearest-enemy fallback, and every other
+# mode switched off for good at the first death or KO.
+#
+# purify_shrine is chosen deliberately: the structure is present before the first
+# activation, so this is the case that could never work at all.
+static func test_purify_selection_survives_structure_and_death() -> Dictionary:
+	var env: Dictionary = _setup("crosscheck_incapacity", true, "off", EncounterResolutionModes.PURIFY_SHRINE)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var runtime: FlowRuntime = env["runtime"]
+	var ectx: EncounterContext = env["ectx"]
+	runtime.dispatch({ "type": "combat.init" })
+
+	# The fixture must actually contain the hazard it claims to guard.
+	var has_structure: bool = false
+	for actor_value: Variant in ectx.actors:
+		if bool((actor_value as Dictionary).get("is_structure", false)):
+			has_structure = true
+			break
+	if not has_structure:
+		return { "ok": false, "error": "purify_shrine board carries no structure — fixture cannot exercise the bug" }
+
+	# (1) Structure on the board from round 1.
+	var with_structure: Dictionary = _selection_census(runtime, ectx, 400)
+	if not str(with_structure["error"]).is_empty():
+		return { "ok": false, "error": "structure on board: %s" % str(with_structure["error"]) }
+	if int(with_structure["aware"]) <= 0:
+		return { "ok": false, "error": "no echo reached a movement-aware selection with a structure on the board" }
+
+	# (2) A DEAD actor on the board. Killed the way the runtime kills: is_dead + hp 0.
+	# A PARTY member is downed rather than the enemy: purify_shrine opens with a single
+	# hostile and spawns waves later, so killing the enemy would empty the goal set and
+	# the census would go quiet for a reason that has nothing to do with the cross-check.
+	var victim: Dictionary = _first_living(ectx, "echo")
+	if victim.is_empty():
+		return { "ok": false, "error": "no living echo to kill" }
+	victim["current_hp"] = 0
+	victim["is_dead"] = true
+	var with_dead: Dictionary = _selection_census(runtime, ectx, 500)
+	if not str(with_dead["error"]).is_empty():
+		return { "ok": false, "error": "dead actor on board: %s" % str(with_dead["error"]) }
+	if int(with_dead["aware"]) <= 0:
+		return { "ok": false, "error": "selection switched off after a death (eligible=%d)" % int(with_dead["eligible"]) }
+
+	# (3) A KO'd actor on the board — hp 0 but not dead.
+	var downed: Dictionary = _first_living(ectx, "echo")
+	if downed.is_empty():
+		return { "ok": false, "error": "no living echo to down" }
+	downed["current_hp"] = 0
+	downed["is_ko"] = true
+	var with_ko: Dictionary = _selection_census(runtime, ectx, 600)
+	if not str(with_ko["error"]).is_empty():
+		return { "ok": false, "error": "KO'd actor on board: %s" % str(with_ko["error"]) }
+	if int(with_ko["aware"]) <= 0:
+		return { "ok": false, "error": "selection switched off after a KO (eligible=%d)" % int(with_ko["eligible"]) }
+
+	# (4) Selection survives deaths driven through the REAL round loop, not just
+	#     hand-set flags. Drive until the loop itself kills something, then re-census.
+	var baseline_deaths: int = _dead_count(ectx)
+	var deaths: int = baseline_deaths
+	for _r in range(8):
+		_drive_one_round(runtime, ectx)
+		deaths = _dead_count(ectx)
+		if deaths > baseline_deaths or bool(ectx.combat_state.get("combat_over", false)):
+			break
+	if deaths <= baseline_deaths:
+		return { "ok": false, "error": "the live round loop produced no additional death to test across" }
+	var after_live: Dictionary = _selection_census(runtime, ectx, 700)
+	if not str(after_live["error"]).is_empty():
+		return { "ok": false, "error": "after live deaths: %s" % str(after_live["error"]) }
+	if int(after_live["eligible"]) > 0 and int(after_live["aware"]) <= 0:
+		return { "ok": false, "error": "selection went inert after live-loop deaths (eligible=%d)" % int(after_live["eligible"]) }
+	return { "ok": true }
+
+
+static func _dead_count(ectx: EncounterContext) -> int:
+	var total: int = 0
+	for actor_value: Variant in ectx.actors:
+		if bool((actor_value as Dictionary).get("is_dead", false)):
+			total += 1
+	return total
+
+
+# Runs the REAL preparation + arbiter selection for every living non-structure actor.
+# Returns { aware, eligible, error } — `error` is non-empty on the FIRST arbiter rejection,
+# carrying the arbiter's own reason/field so a regression names itself.
+static func _selection_census(runtime: FlowRuntime, ectx: EncounterContext, t0: int) -> Dictionary:
+	var bdata: Dictionary = runtime.config_service.get_balance().get("data", {}) as Dictionary
+	var board_cfg: Dictionary = _movement_board_cfg(runtime, ectx)
+	var aware: int = 0
+	var eligible: int = 0
+	var t: int = t0
+	for actor_value: Variant in ectx.actors:
+		var mover: Dictionary = actor_value as Dictionary
+		if bool(mover.get("is_structure", false)) or bool(mover.get("is_dead", false)):
+			continue
+		t += 1
+		var prepared: Dictionary = runtime._prepare_live_movement_context(
+			mover, ectx, ectx.combat_state, board_cfg, bdata, t)
+		if not bool(prepared.get("valid", false)) or not bool(prepared.get("selection_enabled", false)):
+			continue
+		eligible += 1
+		var ctx: Dictionary = {
+			"actor": mover, "all_actors": ectx.actors, "board_cfg": board_cfg,
+			"cfg": runtime.config_service.get_balance(), "t": t,
+			"round": int(ectx.combat_state.get("round_counter", 0)),
+		}
+		var arbiter := BehaviorArbiter.new(
+			bdata.get("actor", {}) as Dictionary, prepared.get("movement_cfg", {}) as Dictionary)
+		var selection: Dictionary = arbiter.select_movement_intent(
+			ctx, prepared["movement_context"], prepared["profile"],
+			prepared["goals"], prepared["options"])
+		if not bool(selection.get("valid", false)):
+			return {
+				"aware": aware, "eligible": eligible,
+				"error": "arbiter discarded the board for %s — %s @ %s" % [
+					str(mover.get("id", "")), str(selection.get("reason", "")), str(selection.get("field", "")),
+				],
+			}
+		aware += 1
+	return { "aware": aware, "eligible": eligible, "error": "" }
+
+
+static func _first_living(ectx: EncounterContext, faction: String) -> Dictionary:
+	for actor_value: Variant in ectx.actors:
+		var actor: Dictionary = actor_value as Dictionary
+		if bool(actor.get("is_structure", false)) or bool(actor.get("is_dead", false)):
+			continue
+		if bool(actor.get("is_ko", false)) or int(actor.get("current_hp", 0)) <= 0:
+			continue
+		if str(actor.get("faction", "")) == faction:
+			return actor
+	return {}
