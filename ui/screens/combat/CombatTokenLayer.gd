@@ -27,7 +27,12 @@ func _ready() -> void:
 		visual_config = CombatTokenVisualConfigScript.new()
 
 
-func apply_snapshot(tokens: Array[Dictionary], active_actor_id: String = "", last_actor_action: Dictionary = {}) -> Dictionary:
+## V2-COMBAT-002 Slice 6D: `move_path_cells` are board-local cell centres (the exact
+## `_board.map_to_local()` output the caller already uses for each token's `cell_pos`).
+## They are converted to pixel waypoints here through `_draw_pos`, the same function
+## that produces every token's `draw_pos`, so a waypoint for cell X is pixel-identical
+## to the `draw_pos` a token standing on X receives.
+func apply_snapshot(tokens: Array[Dictionary], active_actor_id: String = "", last_actor_action: Dictionary = {}, move_path_cells: Array[Vector2] = []) -> Dictionary:
 	if visual_config == null:
 		visual_config = CombatTokenVisualConfigScript.new()
 
@@ -36,7 +41,8 @@ func apply_snapshot(tokens: Array[Dictionary], active_actor_id: String = "", las
 	var telegraph_event: Dictionary = _presentation_state.apply_snapshot(
 		_tokens,
 		last_actor_action,
-		visual_config.telegraph_lead_time
+		visual_config.telegraph_lead_time,
+		_path_draw_positions(move_path_cells, str(last_actor_action.get("source_id", "")))
 	)
 	queue_redraw()
 	return telegraph_event
@@ -188,6 +194,24 @@ func _normalize_tokens(tokens: Array[Dictionary]) -> Array[Dictionary]:
 		norm["move_duration"] = max(float(norm.get("move_duration", visual_config.move_duration)), 0.001)
 		normalized.append(norm)
 	return normalized
+
+
+## Converts traversed cell centres into token draw positions using the mover's own
+## structure flag, so the waypoints share the feet offset applied to its draw_pos.
+func _path_draw_positions(move_path_cells: Array[Vector2], source_id: String) -> Array[Vector2]:
+	var waypoints: Array[Vector2] = []
+	if move_path_cells.is_empty() or source_id.is_empty():
+		return waypoints
+
+	var is_structure: bool = false
+	for tok in _tokens:
+		if str(tok.get("actor_id", "")) == source_id:
+			is_structure = bool(tok.get("is_structure", false))
+			break
+
+	for cell_pos in move_path_cells:
+		waypoints.append(_draw_pos({ "cell_pos": cell_pos, "is_structure": is_structure }))
+	return waypoints
 
 
 func _draw_pos(token: Dictionary) -> Vector2:

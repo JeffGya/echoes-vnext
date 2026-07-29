@@ -17,6 +17,14 @@
 extends RefCounted
 class_name BehaviorArbiterTests
 
+# V2-COMBAT-002 Slice 6E movement cross-check fixtures.
+const MvContext = preload("res://core/movement/contracts/MovementContext.gd")
+const MvActorFact = preload("res://core/movement/contracts/MovementPerceivedActorFact.gd")
+const MvProfile = preload("res://core/movement/contracts/MovementProfile.gd")
+const MvGoal = preload("res://core/movement/contracts/MovementGoal.gd")
+const MvOption = preload("res://core/movement/contracts/MovementOption.gd")
+const MvActionPlan = preload("res://core/movement/contracts/MovementActionPlan.gd")
+
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("arbiter/guardian_origin_prefers_protect_ally",       Callable(BehaviorArbiterTests, "_t_guardian_origin_prefers_protect_ally"))
 	runner.register_test("arbiter/high_faith_warrior_can_guard",               Callable(BehaviorArbiterTests, "_t_high_faith_warrior_can_guard"))
@@ -47,6 +55,16 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(BehaviorArbiterTests, "_t_pursue_flee_module_targets_inset_border"))
 	runner.register_test("arbiter/pursue_echo_quarry_near_exit_fires",
 		Callable(BehaviorArbiterTests, "_t_pursue_echo_quarry_near_exit_fires"))
+	# V2-COMBAT-002 Slice 6E: _crosscheck_perceived_actor must apply the same
+	# `incapable_actor_cannot_control` conjunction FlowRuntime._movement_actor_facts derives.
+	runner.register_test("arbiter/crosscheck_structure_on_board_selects",
+		Callable(BehaviorArbiterTests, "_t_crosscheck_structure_on_board_selects"))
+	runner.register_test("arbiter/crosscheck_dead_actor_on_board_selects",
+		Callable(BehaviorArbiterTests, "_t_crosscheck_dead_actor_on_board_selects"))
+	runner.register_test("arbiter/crosscheck_ko_actor_on_board_selects",
+		Callable(BehaviorArbiterTests, "_t_crosscheck_ko_actor_on_board_selects"))
+	runner.register_test("arbiter/crosscheck_still_catches_real_state_mismatch",
+		Callable(BehaviorArbiterTests, "_t_crosscheck_still_catches_real_state_mismatch"))
 
 
 # -------------------------
@@ -1173,3 +1191,199 @@ static func _t_pursue_echo_quarry_near_exit_fires() -> Dictionary:
 			"error": "quarry_near_exit bonus should make echo prefer actor.move, not actor.idle. Intent: %s" % str(intent),
 		}
 	return { "ok": true }
+
+# ---------------------------------------------------------------------------
+# V2-COMBAT-002 Slice 6E — `_crosscheck_perceived_actor` incapacity conjunction.
+#
+# `select_movement_intent` re-derives the perceived-actor facts it is handed and
+# asserts they match the raw actor dicts. NO actor dict in the codebase ever SETS a
+# `controlling_state` key, so the arbiter's side defaulted to `true` for every actor,
+# while FlowRuntime._movement_actor_facts derives
+#     controlling = actor.get("controlling_state", true) and not dead and not ko and not structure
+# — the conjunction MovementPerceivedActorFact.validate MANDATES via
+# `incapable_actor_cannot_control`. Any board holding a structure, a corpse or a
+# downed actor therefore failed the cross-check with `perceived_actor_state_mismatch`,
+# and a single mismatch discards the WHOLE board's selection (select_movement_intent
+# returns valid:false), so ActorStateMachine fell back to legacy nearest-enemy
+# select_intent for every actor.
+#
+# The fixtures below build facts exactly the way FlowRuntime does — and, critically,
+# never set `controlling_state` on the raw actor dict, because production never does.
+# ---------------------------------------------------------------------------
+
+static func _t_crosscheck_structure_on_board_selects() -> Dictionary:
+	# Shrine: is_structure, kind "structure", and NO controlling_state key on the dict.
+	return _assert_incapable_actor_selects(
+		_mv_bystander("shrine.a", { "col": 0, "row": 2 }, "structure", { "is_structure": true }),
+		"structure"
+	)
+
+
+static func _t_crosscheck_dead_actor_on_board_selects() -> Dictionary:
+	return _assert_incapable_actor_selects(
+		_mv_bystander("enemy.dead", { "col": 1, "row": 2 }, "enemy", { "is_dead": true, "current_hp": 0 }),
+		"dead actor"
+	)
+
+
+static func _t_crosscheck_ko_actor_on_board_selects() -> Dictionary:
+	return _assert_incapable_actor_selects(
+		_mv_bystander("echo.ko", { "col": 2, "row": 2 }, "echo", { "is_ko": true, "current_hp": 0 }),
+		"KO'd actor"
+	)
+
+
+# Negative pole: the audit must still REJECT a genuine disagreement. A live, healthy
+# enemy is capable, so a fact claiming controlling_state=false for it is contract-legal
+# but factually wrong — the cross-check must catch it and discard the selection.
+# Without this, the three tests above could be satisfied by deleting the audit outright.
+static func _t_crosscheck_still_catches_real_state_mismatch() -> Dictionary:
+	var fixture: Dictionary = _mv_fixture([])
+	var movement: Dictionary = fixture["movement_context"] as Dictionary
+	for fact_value: Variant in movement["perceived_actors"] as Array:
+		var fact: Dictionary = fact_value as Dictionary
+		if str(fact["id"]) == "enemy.a":
+			fact["controlling_state"] = false
+	var result: Dictionary = _mv_select(fixture)
+	if bool(result.get("valid", false)):
+		return { "ok": false, "error": "a live hostile falsely marked non-controlling must be rejected: %s" % str(result) }
+	if str(result.get("reason", "")) != "perceived_actor_state_mismatch":
+		return { "ok": false, "error": "expected perceived_actor_state_mismatch, got %s" % str(result) }
+	if str(result.get("field", "")) != "context.all_actors.enemy.a.controlling_state":
+		return { "ok": false, "error": "unexpected mismatch field: %s" % str(result.get("field", "")) }
+	if not (result.get("intent", {}) as Dictionary).is_empty():
+		return { "ok": false, "error": "an invalidated selection must carry no intent: %s" % str(result) }
+	return { "ok": true }
+
+
+static func _assert_incapable_actor_selects(bystander: Dictionary, label: String) -> Dictionary:
+	if bystander.has("controlling_state"):
+		return { "ok": false, "error": "fixture must not set controlling_state — production actor dicts never do" }
+	var fixture: Dictionary = _mv_fixture([bystander])
+	var result: Dictionary = _mv_select(fixture)
+	if not bool(result.get("valid", false)):
+		return {
+			"ok": false,
+			"error": "a board containing a %s discarded the whole movement-aware selection: %s" % [label, str(result)],
+		}
+	var intent: Dictionary = result["intent"] as Dictionary
+	if not intent.has("planned_action"):
+		return { "ok": false, "error": "valid selection carried no planned_action: %s" % str(intent) }
+	if str((intent["planned_action"] as Dictionary).get("target_id", "")) != "enemy.a":
+		return { "ok": false, "error": "selection did not commit to the goal target: %s" % str(intent) }
+	return { "ok": true }
+
+
+static func _mv_select(fixture: Dictionary) -> Dictionary:
+	var arbiter := BehaviorArbiter.new({}, fixture["movement_cfg"] as Dictionary)
+	return arbiter.select_movement_intent(
+		fixture["context"] as Dictionary,
+		fixture["movement_context"] as Dictionary,
+		fixture["profile"] as Dictionary,
+		fixture["goals"] as Array,
+		fixture["options"] as Array
+	)
+
+
+# 6x3 board. Mover echo.a at (0,0) advances toward enemy.a at (3,0) via (1,0)→(2,0).
+static func _mv_fixture(bystanders: Array) -> Dictionary:
+	var mover: Dictionary = {
+		"id": "echo.a", "faction": "echo", "actor_type": "echo", "calling_origin": "uncalled",
+		"traits": {}, "vector_scores": {}, "fear": 0, "morale": 50,
+		"grid_pos": { "col": 0, "row": 0 }, "stats": { "max_hp": 100 }, "current_hp": 100,
+	}
+	var enemy: Dictionary = {
+		"id": "enemy.a", "faction": "enemy", "actor_type": "enemy",
+		"grid_pos": { "col": 3, "row": 0 }, "stats": { "max_hp": 100 }, "current_hp": 100,
+	}
+	var others: Array = [enemy]
+	for value: Variant in bystanders:
+		others.append(value as Dictionary)
+
+	var facts: Array = [_mv_fact(mover)]
+	var occupancy: Dictionary = { "0,0": "echo.a" }
+	var relationships: Dictionary = {}
+	for value: Variant in others:
+		var other: Dictionary = value as Dictionary
+		facts.append(_mv_fact(other))
+		# Mirrors FlowRuntime._movement_occupancy — dead actors do not occupy a cell.
+		if not bool(other.get("is_dead", false)):
+			occupancy["%d,%d" % [int(other["grid_pos"]["col"]), int(other["grid_pos"]["row"])]] = str(other["id"])
+		relationships[str(other["id"])] = "friendly" if str(other.get("faction", "")) == "echo" else "hostile"
+	facts.sort_custom(func(a: Variant, b: Variant) -> bool:
+		return str((a as Dictionary)["id"]) < str((b as Dictionary)["id"])
+	)
+
+	var walkable: Dictionary = {}
+	var terrain: Dictionary = {}
+	for col: int in range(6):
+		for row: int in range(3):
+			walkable["%d,%d" % [col, row]] = true
+			terrain["%d,%d" % [col, row]] = 1
+
+	var goal: Dictionary = MvGoal.build(
+		"goal.combat.advance.baseline.c2r0", "advance", [{ "col": 2, "row": 0 }], 1.0, 0.0,
+		["enemy.a"], ["mode.combat", "role.baseline"],
+		MvActionPlan.build("actor.move", "enemy.a"), MvActionPlan.build("actor.idle")
+	)
+	var option: Dictionary = MvOption.build(
+		str(goal["goal_id"]),
+		"option.combat.advance.baseline.c2r0.direct.d2r0.pc1r0-c2r0",
+		"advance", { "col": 2, "row": 0 }, [{ "col": 1, "row": 0 }, { "col": 2, "row": 0 }],
+		2, 2, 0, 4, 2, 0.0, 0.0, 0.0, [], { "known_count": 0, "known_ids": [] }, 1.0,
+		goal["planned_primary"] as Dictionary, goal["declared_fallback"] as Dictionary
+	)
+	var all_actors: Array = [mover]
+	for value: Variant in others:
+		all_actors.append(value)
+	return {
+		"context": { "actor": mover, "all_actors": all_actors, "t": 1 },
+		"movement_context": MvContext.build(
+			"echo.a", "activation.a", mover["grid_pos"] as Dictionary, { "w": 6, "h": 3 },
+			walkable, walkable, occupancy, facts, relationships, terrain, [], {}, []
+		),
+		"profile": MvProfile.build(4, [], true, "echo", {}),
+		"goals": [goal],
+		"options": [option],
+		"movement_cfg": _mv_spatial_cfg(),
+	}
+
+
+# VERBATIM mirror of FlowRuntime._movement_actor_facts — including the
+# `incapable_actor_cannot_control` conjunction the contract mandates.
+static func _mv_fact(actor: Dictionary) -> Dictionary:
+	var max_hp: int = int((actor.get("stats", {}) as Dictionary).get("max_hp", actor.get("max_hp", 1)))
+	var hp_ratio: float = 0.0 if max_hp <= 0 else clampf(float(actor.get("current_hp", 0)) / float(max_hp), 0.0, 1.0)
+	var is_dead: bool = bool(actor.get("is_dead", false))
+	var is_ko: bool = bool(actor.get("is_ko", false)) or (int(actor.get("current_hp", 1)) <= 0 and not is_dead)
+	var is_structure: bool = bool(actor.get("is_structure", false))
+	var controlling: bool = bool(actor.get("controlling_state", true)) \
+		and not is_dead and not is_ko and not is_structure
+	return MvActorFact.build(
+		str(actor.get("id", "")), actor.get("grid_pos", {}) as Dictionary,
+		"structure" if is_structure else str(actor.get("actor_type", "echo")),
+		is_dead, is_ko, is_structure,
+		bool(actor.get("is_spirit", false)), bool(actor.get("is_quarry", false)),
+		controlling, hp_ratio
+	)
+
+
+static func _mv_bystander(id: String, position: Dictionary, actor_type: String, flags: Dictionary) -> Dictionary:
+	var actor: Dictionary = {
+		"id": id, "actor_type": actor_type,
+		"faction": "structure" if actor_type == "structure" else ("echo" if actor_type == "echo" else "enemy"),
+		"grid_pos": position, "stats": { "max_hp": 100 }, "current_hp": 100,
+	}
+	for key: Variant in flags.keys():
+		actor[str(key)] = flags[key]
+	return actor
+
+
+static func _mv_spatial_cfg() -> Dictionary:
+	return { "spatial_utility": {
+		"cap": 20.0, "urgency_weight": 4.0, "objective_progress_weight": 8.0,
+		"cohesion_weight": 4.0, "exposure_weight": -6.0, "congestion_weight": -2.0,
+		"commitment_weight": -2.0, "directive_objective_advance_weight": 4.0,
+		"directive_avoid_overcommit_weight": 2.0, "directive_exposure_acceptance_weight": 2.0,
+		"directive_ally_protection_weight": 2.0, "directive_threat_interception_weight": 2.0,
+	} }

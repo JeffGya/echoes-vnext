@@ -100,14 +100,38 @@ static func build_goals(context: Dictionary, pressure_cfg: Dictionary = {}) -> D
 	var validation_result: Dictionary = _validate_candidates(candidates, context["origin"] as Dictionary)
 	if not bool(validation_result["valid"]):
 		return validation_result
+	# PRODUCER-SIDE GOAL-ID UNIQUENESS.
+	#
+	# `goal_id` is "goal.<mode>.<purpose>.<role>.c<col>r<row>" — five segments, all
+	# of them contract-load-bearing (MovementGoal/MovementOption both assert exactly
+	# five). It therefore carries NO identity for the actor a goal concerns, so two
+	# buckets can independently select goals that differ in target, region and plan
+	# yet collide on id: `_add_ordinary_combat` gives every hostile the role
+	# `baseline`, and two hostiles whose adjacency regions share a first cell (the
+	# anchor) produce the same string.
+	#
+	# BehaviorArbiter rejects the WHOLE board on `duplicate_goal_id`, so a collision
+	# used to cost the mover all three goals rather than one. Falling through to the
+	# next-best candidate in the colliding bucket keeps 2-3 usable goals instead.
+	#
+	# Determinism: the bucket sequence is fixed and `_candidate_before` (unchanged)
+	# remains the sole ordering authority inside a bucket, so the same state and seed
+	# always skip and select the same candidates.
 	var shortlisted: Array = []
+	var shortlisted_ids: Dictionary = {}
 	for bucket: String in [BUCKET_DIRECT, BUCKET_TACTICAL, BUCKET_SAFETY]:
 		var bucket_candidates: Array = candidates.filter(
 			func(item: Variant) -> bool: return str((item as Dictionary)["bucket"]) == bucket
 		)
 		bucket_candidates.sort_custom(Callable(CombatPressureService, "_candidate_before"))
-		if not bucket_candidates.is_empty():
-			shortlisted.append((bucket_candidates[0] as Dictionary)["goal"])
+		for candidate_value: Variant in bucket_candidates:
+			var candidate_goal: Dictionary = (candidate_value as Dictionary)["goal"] as Dictionary
+			var candidate_id: String = str(candidate_goal["goal_id"])
+			if shortlisted_ids.has(candidate_id):
+				continue
+			shortlisted_ids[candidate_id] = true
+			shortlisted.append(candidate_goal)
+			break
 	shortlisted.sort_custom(Callable(CombatPressureService, "_final_goal_before"))
 	return {"valid": true, "goals": shortlisted.duplicate(true), "reason": "", "field": ""}
 

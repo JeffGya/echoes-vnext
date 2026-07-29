@@ -758,7 +758,17 @@ func _crosscheck_perceived_actor(actor: Dictionary, fact: Dictionary, field: Str
 		["is_structure", bool(actor.get("is_structure", false))],
 		["is_spirit", bool(actor.get("is_spirit", false))],
 		["is_quarry", bool(actor.get("is_quarry", false))],
-		["controlling_state", bool(actor.get("controlling_state", true))],
+		# MovementPerceivedActorFact.validate rejects `incapable_actor_cannot_control`:
+		# a dead/KO'd/structure actor may never assert controlling_state. Mirror the same
+		# conjunction FlowRuntime._movement_actor_facts derives, or every board containing
+		# a structure or a downed actor fails the cross-check.
+		[
+			"controlling_state",
+			bool(actor.get("controlling_state", true)) \
+				and not actor_is_dead \
+				and not actor_is_ko \
+				and not bool(actor.get("is_structure", false)),
+		],
 	]:
 		if bool(fact[str(state_pair[0])]) != bool(state_pair[1]):
 			return _movement_failure("perceived_actor_state_mismatch", "%s.%s" % [field, str(state_pair[0])])
@@ -954,9 +964,16 @@ func _spatial_utility(
 	var cohesion: float = clampf(float(option["cohesion"]), 0.0, 1.0)
 	var exposure: float = clampf(float(option["exposure"]), 0.0, 1.0)
 	var congestion: float = clampf(float(option["congestion"]), 0.0, 1.0)
-	var commitment_ratio: float = clampf(
-		float(option["commitment"]) / float(option["capacity"]), 0.0, 1.0
-	)
+	# V2-COMBAT-002 Slice 6E: guard the capacity division. capacity == 0 with
+	# commitment == 0 yields 0.0/0.0 = NAN, which propagates through the weighted sum
+	# and fails `non_finite_candidate_score` — discarding the WHOLE board, not just this
+	# option. Latent today (balance.json pins capacity.floor = 2 and structures are
+	# excluded upstream), but it is a data-shape assumption enforced by config rather
+	# than by code. A zero-capacity mover can commit nothing, so the ratio is 0.0.
+	var option_capacity: float = float(option["capacity"])
+	var commitment_ratio: float = 0.0
+	if option_capacity > 0.0:
+		commitment_ratio = clampf(float(option["commitment"]) / option_capacity, 0.0, 1.0)
 	var weights: Dictionary = directive.get("intent_weights", {}) as Dictionary
 	var objective_advance: float = clampf(
 		float(weights.get("objective_advance_priority", 0.0)), -1.0, 1.0

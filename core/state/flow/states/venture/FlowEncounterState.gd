@@ -587,8 +587,26 @@ func enter(ctx: RefCounted, t: int) -> void:
 						if _qc_v["col"] < _qry_min_col: _qry_min_col = _qc_v["col"]
 						if _qc_v["col"] > _qry_max_col: _qry_max_col = _qc_v["col"]
 					var _qry_target_col: int = roundi(_qry_min_col + _op_f_p3 * float(_qry_max_col - _qry_min_col))
+					# V2-COMBAT-002 Slice 6E: anchor the row tie-break to the PARTY's spawn band,
+					# not the board's midpoint. `_op_f_p3` scales depth along COLUMNS only, so on
+					# a tall board the old board-midpoint rule parked the quarry ~24 rows from a
+					# party spawning in the top rows — a Chebyshev gap the depth fraction never
+					# governed. PURSUE is uniquely punished by that because a quarry escape is an
+					# IMMEDIATE defeat (CombatState.gd:200-202), so the mode became unwinnable by
+					# geometry alone. Column depth (and therefore progression scaling) is unchanged.
+					# Falls back to the board midpoint when no echo has a position.
 					var _qry_board_h: int = int(_qry_terrain.get("bounds", {}).get("h", 12))
 					var _qry_mid_row: float = float(_qry_board_h - 1) * 0.5
+					var _qry_row_sum: float = 0.0
+					var _qry_row_n: int = 0
+					for _qr_v in echo_actors:
+						if _qr_v is Dictionary:
+							var _qr_p: Dictionary = (_qr_v as Dictionary).get("grid_pos", {}) as Dictionary
+							if not _qr_p.is_empty():
+								_qry_row_sum += float(int(_qr_p.get("row", 0)))
+								_qry_row_n += 1
+					if _qry_row_n > 0:
+						_qry_mid_row = _qry_row_sum / float(_qry_row_n)
 					_qry_candidates.sort_custom(func(a, b):
 						var da: int = abs(a["col"] - _qry_target_col)
 						var db: int = abs(b["col"] - _qry_target_col)
@@ -1473,7 +1491,9 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 
 	# Per-actor display fields.
 	var current_actor_id: String      = str(ectx.last_actor_action.get("source_id", "")) if ectx != null else ""
-	var last_actor_action_v: Dictionary = ectx.last_actor_action.duplicate() if ectx != null else {}
+	# V2-COMBAT-002 Slice 6D: deep duplicate — last_actor_action now carries a nested
+	# `path` Array; a shallow copy would alias a mutable array across the core/UI boundary.
+	var last_actor_action_v: Dictionary = ectx.last_actor_action.duplicate(true) if ectx != null else {}
 
 	# Project actors to clean render shape.
 	var projected_actors: Array = []

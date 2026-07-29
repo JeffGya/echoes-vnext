@@ -43,6 +43,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement/pressure/config_intercept_lane_seam", Callable(CombatPressureTests, "_t_config_intercept_lane_seam"))
 	runner.register_test("movement/pressure/config_degenerate_values_safe", Callable(CombatPressureTests, "_t_config_degenerate_values_safe"))
 	runner.register_test("movement/pressure/config_balance_wired", Callable(CombatPressureTests, "_t_config_balance_wired"))
+	# V2-COMBAT-002 Slice 6 Phase 6E — cross-bucket goal-id collision.
+	runner.register_test("movement/pressure/shared_anchor_goal_ids_unique", Callable(CombatPressureTests, "_t_shared_anchor_goal_ids_unique"))
 
 
 static func _t_all_modes_party_hostile() -> Dictionary:
@@ -787,6 +789,108 @@ static func _t_config_balance_wired() -> Dictionary:
 			return _fail("slack config missing key '%s'" % key)
 	if int(slack_cfg["floor"]) > 2 or float(slack_cfg["fraction"]) > 0.25:
 		return _fail("slack config widens past the MovementOption contract floor (2 / 0.25)")
+	return _pass()
+
+
+# ---------------------------------------------------------------------------
+# V2-COMBAT-002 Slice 6 Phase 6E — cross-bucket goal-id collision.
+#
+# `goal_id` is "goal.<mode>.<purpose>.<role>.c<col>r<row>". It names the mode,
+# purpose, role and REGION ANCHOR, but nothing about WHICH hostile the goal
+# concerns, and `_add_ordinary_combat` gives every hostile the role `baseline`.
+# Two hostiles whose adjacency regions share a first cell therefore produce two
+# `engage` goals with byte-identical ids but different targets, regions and plans.
+#
+# Those two goals land in DIFFERENT buckets (an ADJACENT hostile engages from
+# `direct`, a distant one from `safety`), and the shortlist used to take each
+# bucket's best with no cross-bucket uniqueness check — so both were published.
+# BehaviorArbiter rejects the WHOLE board on `duplicate_goal_id`, which cost the
+# mover all three goals over one collision. This pins the producer-side fix.
+# ---------------------------------------------------------------------------
+
+
+## Mover at (1,2) with three hostiles:
+##   enemy.1 @ (2,2) — ADJACENT, so it engages from the `direct` bucket. Its
+##                     adjacency region anchors at (1,1).
+##   enemy.2 @ (0,0) — distant. (0,1) and (1,0) are unperceived, so its adjacency
+##                     region is exactly [(1,1)] — the SAME anchor as enemy.1.
+##   enemy.3 @ (4,4) — distant, anchoring at (3,4). This is the next-best `safety`
+##                     candidate the shortlist must fall through to.
+static func _shared_anchor_context() -> Dictionary:
+	var context: Dictionary = _context("endure", "party")
+	var occupancy: Dictionary = context["occupancy"] as Dictionary
+	var near: Dictionary = _actor_ref(context, "enemy.1")
+	near["position"] = {"col": 2, "row": 2}
+	occupancy.erase("4,2")
+	occupancy["2,2"] = "enemy.1"
+	for spec: Array in [["enemy.2", 0, 0], ["enemy.3", 4, 4]]:
+		var position := {"col": int(spec[1]), "row": int(spec[2])}
+		(context["perceived_actors"] as Array).append(_actor(str(spec[0]), position, "enemy"))
+		(context["relationships"] as Dictionary)[str(spec[0])] = "hostile"
+		occupancy["%d,%d" % [int(spec[1]), int(spec[2])]] = str(spec[0])
+	for key: String in ["0,1", "1,0"]:
+		(context["perceived_planning_cells"] as Dictionary)[key] = false
+	return context
+
+
+## The goal whose plan targets `target_id`, or {} — goals are keyed by purpose
+## elsewhere in this file, but a collision is precisely two goals sharing a
+## purpose, so this test must address them by target.
+static func _goal_for_target(result: Dictionary, purpose: String, target_id: String) -> Dictionary:
+	for goal_value: Variant in result["goals"] as Array:
+		var goal: Dictionary = goal_value as Dictionary
+		if str(goal["purpose"]) != purpose:
+			continue
+		if str((goal["planned_primary"] as Dictionary)["target_id"]) == target_id:
+			return goal
+	return {}
+
+
+static func _t_shared_anchor_goal_ids_unique() -> Dictionary:
+	var context: Dictionary = _shared_anchor_context()
+	var result: Dictionary = Service.build_goals(context)
+	if not bool(result["valid"]):
+		return _fail("shared-anchor fixture rejected: %s" % str(result))
+	var goals: Array = result["goals"] as Array
+
+	# 1. The published board must satisfy the arbiter's `duplicate_goal_id` guard.
+	var seen: Dictionary = {}
+	for goal_value: Variant in goals:
+		var goal_id: String = str((goal_value as Dictionary)["goal_id"])
+		if seen.has(goal_id):
+			return _fail("duplicate goal_id published: %s in %s" % [goal_id, str(goals)])
+		seen[goal_id] = true
+
+	# 2. The fixture must really collide, or 1 passes vacuously. The `direct`
+	#    engage on the ADJACENT enemy.1 and the `tactical` advance on the distant
+	#    enemy.2 are built from two different hostiles yet share the anchor c1r1 —
+	#    that shared anchor is exactly what made enemy.2's engage collide.
+	var near_engage: Dictionary = _goal_for_target(result, "engage", "enemy.1")
+	var far_advance: Dictionary = _goal_for_target(result, "advance", "enemy.2")
+	if near_engage.is_empty() or far_advance.is_empty():
+		return _fail("shared-anchor fixture lost its colliding pair: %s" % str(goals))
+	if not str(near_engage["goal_id"]).ends_with(".c1r1"):
+		return _fail("adjacent engage did not anchor at c1r1: %s" % str(near_engage["goal_id"]))
+	if not str(far_advance["goal_id"]).ends_with(".c1r1"):
+		return _fail("distant advance did not anchor at c1r1: %s" % str(far_advance["goal_id"]))
+
+	# 3. The collision must be resolved by FALLING THROUGH, not by dropping the
+	#    bucket: `safety` must still publish, on the next-best hostile.
+	if goals.size() != 3:
+		return _fail("collision cost the mover a bucket instead of falling through: %s" % str(goals))
+	if _goal_for_target(result, "engage", "enemy.3").is_empty():
+		return _fail("safety bucket did not fall through to the next-best hostile: %s" % str(goals))
+	if not _goal_for_target(result, "engage", "enemy.2").is_empty():
+		return _fail("colliding engage was published rather than skipped: %s" % str(goals))
+
+	# 4. The skip must be order-stable — the shortlist is deterministic input to a
+	#    deterministic sim, so reversed fact order must not change what is dropped.
+	var reversed: Dictionary = context.duplicate(true)
+	(reversed["perceived_actors"] as Array).reverse()
+	reversed["relationships"] = _reverse_dictionary(context["relationships"] as Dictionary)
+	reversed["occupancy"] = _reverse_dictionary(context["occupancy"] as Dictionary)
+	if Service.build_goals(reversed) != result:
+		return _fail("reversed fact order changed the deduplicated shortlist")
 	return _pass()
 
 

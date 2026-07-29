@@ -2650,6 +2650,19 @@ Home: `V2-ITEM-003`.
 
 Home: `V2-COMBAT-004`.
 
+> **Amended V2-COMBAT-002 Slice 6D (2026-07-29).** A MINIMAL movement animation ships in
+> V2-COMBAT-002, not here. Its sole goal is that combat tokens must not cut through walls:
+> `MovementResult.actual_traversed_cells` is threaded verbatim into the encounter snapshot
+> (`last_actor_action.path` + `.from_pos`) and the token walks it per segment. Per-segment
+> duration is `move_duration / segment_count`, so TOTAL animation time is invariant to path
+> length and the combat step timer cannot fire mid-animation — the total-duration clamp at
+> §presentation is satisfied by construction rather than by a busy flag. Everything else in
+> Slice F — hazard feedback, activity text, death beats, ordered-path-as-evidence, and
+> movement review — remains with `V2-COMBAT-004`, along with a readability gap found in
+> playtest: with autonomous combat it is not clear WHO ATTACKS WHOM. The data that beat
+> needs is already published (`last_actor_action` carries `source_id`, `target_id`, `damage`,
+> `is_kill`, and now `path`/`from_pos`), so COMBAT-004 renders it rather than plumbing it.
+
 - spatial pings influence existing movement goals and options;
 - response appears before movement;
 - ordered path and purpose become visible evidence;

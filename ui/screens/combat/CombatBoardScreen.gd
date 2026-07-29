@@ -757,15 +757,36 @@ func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}
 			"emotional_status":   str(actor.get("emotional_status", "")),
 		})
 
+	var last_actor_action: Dictionary = data.get("last_actor_action", {})
 	var telegraph_event: Dictionary = _token_layer.apply_snapshot(
 		tokens,
 		current_actor_id,
-		data.get("last_actor_action", {})
+		last_actor_action,
+		_move_path_cell_positions(last_actor_action)
 	)
 	if telegraph_event.is_empty():
 		_move_telegraph_layer.clear_telegraph()
 	else:
 		_move_telegraph_layer.show_move_telegraph(telegraph_event)
+
+## V2-COMBAT-002 Slice 6D: converts `last_actor_action.path` (cells ENTERED, origin
+## excluded, MAY be empty) into board-local cell centres through the very same
+## `_board.map_to_local()` call that produces each token's `cell_pos`. Reusing that
+## call is what makes a waypoint for cell X pixel-identical to the token draw position
+## for cell X. Not filtered by action_type: a move-then-melee activation reports the
+## MELEE entry, and that entry still carries the traversed path.
+func _move_path_cell_positions(last_actor_action: Dictionary) -> Array[Vector2]:
+	var cell_positions: Array[Vector2] = []
+	if _board == null:
+		return cell_positions
+	for cell_v in last_actor_action.get("path", []):
+		if cell_v is Dictionary:
+			var cell: Dictionary = cell_v
+			cell_positions.append(
+				_board.map_to_local(Vector2i(int(cell.get("col", 0)), int(cell.get("row", 0))))
+			)
+	return cell_positions
+
 
 ## The legacy raw emotion overlay is unavailable from player-facing snapshots.
 ## Called from AppRoot when the "combat_emotion" debug command fires.

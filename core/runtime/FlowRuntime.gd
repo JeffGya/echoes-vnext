@@ -1648,6 +1648,13 @@ func _prepare_live_movement_context(
 	if walkable.is_empty():
 		walkable = _movement_rect_walkable(bounds)
 	var occupancy: Dictionary = _movement_occupancy(ectx.actors)
+	# V2-COMBAT-002 Slice 6E: the mover always owns its own origin cell. Without this,
+	# a stacked pair hands the losing mover an occupancy map that names someone else at
+	# its origin, BehaviorArbiter._validate_movement_inputs fails `mover_occupancy_mismatch`,
+	# and the ENTIRE board is discarded for that activation. No-op when nothing is stacked.
+	var mover_origin: Dictionary = actor.get("grid_pos", {}) as Dictionary
+	if not mover_origin.is_empty():
+		occupancy[_movement_cell_key_runtime(mover_origin)] = str(actor.get("id", ""))
 	var perceived: Array = _movement_actor_facts(ectx.actors)
 	var relationships: Dictionary = _movement_relationships(actor, perceived)
 	var pressure: Dictionary = _movement_pressure_snapshot(actor, ectx, combat_state, bounds, walkable)
@@ -1668,7 +1675,14 @@ func _prepare_live_movement_context(
 		[]
 	)
 	var planning_walkable_ec: Dictionary = _movement_planning_walkable(movement_context)
-	var edge_costs: Dictionary = MovementOptionServiceScript.hostile_edge_costs(movement_context, planning_walkable_ec)
+	# V2-COMBAT-002 Slice 6E: take BOTH halves of the control build. The live path used
+	# to call hostile_edge_costs(), which discards `edge_sources` — so every published
+	# option claimed `hostile_control_sources: []` regardless of the truth. This story
+	# owes V2-COMBAT-003 normalized hostile-control and hazard summaries; handing it
+	# hardcoded emptiness would make its "willingness to accept risk" seam unbuildable.
+	var control_build: Dictionary = MovementOptionServiceScript._build_control(movement_context, planning_walkable_ec)
+	var edge_costs: Dictionary = control_build["edge_costs"] as Dictionary
+	var edge_sources: Dictionary = control_build["edge_sources"] as Dictionary
 	var profile: Dictionary = MovementProfileServiceScript.derive_profile(actor, capacity_cfg, {})
 	var goals_result: Dictionary = CombatPressureServiceScript.build_goals(movement_context, pressure_cfg)
 	if not bool(goals_result.get("valid", false)):
@@ -1689,10 +1703,23 @@ func _prepare_live_movement_context(
 	var goals: Array = goals_result.get("goals", []) as Array
 	var options: Array = []
 	if not bool(actor.get("is_quarry", false)):
-		options = _movement_live_direct_options(movement_context, profile, goals, edge_costs)
+		options = _movement_live_direct_options(movement_context, profile, goals, edge_costs, edge_sources)
+	# V2-COMBAT-002 Slice 6E: gate the movement-aware layer on GOALS, not options.
+	# An empty option set only means no destination region was routable this activation
+	# (boxed in by allies, objective behind a wall, capacity 0 after truncation). The
+	# arbiter handles that case natively: `_generate_candidates` always emits an
+	# unconditional `actor.idle`, so at least one STATIONARY candidate is always ranked
+	# and a valid zero-length intent is produced. Gating on options threw the whole
+	# board away and fell back to legacy nearest-enemy `select_intent` for the actor.
 	return {
 		"valid": true,
-		"selection_enabled": not options.is_empty(),
+		# The PURSUE quarry is the ONE case where empty options are deliberate rather than
+		# incidental: `:1705` skips option generation for it entirely because
+		# FleeBehaviorModule owns quarry movement. Gating purely on goals therefore sent
+		# the quarry down the movement-aware path with nothing to select, so it produced a
+		# target-less `actor.move`, the legacy bridge could not rescue it, and the quarry
+		# stopped fleeing altogether. Keep it on its flee module.
+		"selection_enabled": not goals.is_empty() and not bool(actor.get("is_quarry", false)),
 		"movement_cfg": movement_cfg,
 		"movement_context": movement_context,
 		"profile": profile,
@@ -1710,14 +1737,15 @@ func _movement_live_direct_options(
 	movement_context: Dictionary,
 	profile: Dictionary,
 	goals: Array,
-	edge_costs: Dictionary = {}
+	edge_costs: Dictionary = {},
+	edge_sources: Dictionary = {}
 ) -> Array:
 	var options: Array = []
 	for goal_value: Variant in goals:
 		if not (goal_value is Dictionary):
 			continue
 		var goal: Dictionary = goal_value
-		var option: Dictionary = _movement_direct_option_for_goal(movement_context, profile, goal, edge_costs)
+		var option: Dictionary = _movement_direct_option_for_goal(movement_context, profile, goal, edge_costs, edge_sources)
 		if not option.is_empty():
 			options.append(option)
 	return options
@@ -1727,13 +1755,14 @@ func _movement_direct_option_for_goal(
 	movement_context: Dictionary,
 	profile: Dictionary,
 	goal: Dictionary,
-	edge_costs: Dictionary = {}
+	edge_costs: Dictionary = {},
+	edge_sources: Dictionary = {}
 ) -> Dictionary:
 	var origin: Dictionary = movement_context.get("origin", {}) as Dictionary
 	var salt: String = str(movement_context.get("mover_id", ""))
 	var destination_region: Array = goal.get("destination_region", []) as Array
 	if destination_region.has(origin) and str(goal.get("purpose", "")) == "hold":
-		return _movement_build_direct_option(movement_context, profile, goal, origin, [], 0, 0)
+		return _movement_build_direct_option(movement_context, profile, goal, origin, [], 0, 0, edge_sources)
 
 	var best_path: Array = []
 	var best_cost: int = 999999
@@ -1780,7 +1809,7 @@ func _movement_direct_option_for_goal(
 		return {}
 	var destination: Dictionary = selected_path.back() as Dictionary
 	return _movement_build_direct_option(
-		movement_context, profile, goal, destination, selected_path, selected_cost, selected_cost)
+		movement_context, profile, goal, destination, selected_path, selected_cost, selected_cost, edge_sources)
 
 
 func _movement_planning_walkable(movement_context: Dictionary) -> Dictionary:
@@ -1833,11 +1862,16 @@ func _movement_build_direct_option(
 	destination: Dictionary,
 	path: Array,
 	route_cost: int,
-	shortest_cost: int
+	shortest_cost: int,
+	edge_sources: Dictionary = {}
 ) -> Dictionary:
 	var goal_id: String = str(goal.get("goal_id", "goal.live"))
-	var suffix: String = goal_id.trim_prefix("goal.")
-	var option_id: String = "option.%s.direct.%s" % [suffix, _movement_cell_key_runtime(destination).replace(",", "_")]
+	# The option_id is contract-checked by MovementOption._validate_option_id, which demands
+	# exactly "option.<goal-suffix>.<style>.d<col>r<row>.p<path>". Reuse the canonical builder
+	# from MovementOptionService instead of hand-rolling the token — a hand-rolled id silently
+	# failed validation here, which disabled movement-aware selection for the whole live loop.
+	var option_id: String = MovementOptionServiceScript._option_id(
+		{"goal_id": goal_id}, "direct", destination, path)
 	var planned_action: Dictionary = goal.get("planned_primary", {}) as Dictionary
 	var option: Dictionary = MovementOptionScript.build(
 		goal_id,
@@ -1850,11 +1884,22 @@ func _movement_build_direct_option(
 		route_cost - shortest_cost,
 		int(profile.get("capacity", 0)),
 		route_cost,
+		# exposure / congestion / cohesion stay 0.0 ON PURPOSE. These three are consumed by
+		# BehaviorArbiter._spatial_utility as WEIGHTED terms (exposure -6.0, cohesion 4.0,
+		# congestion -2.0), so populating them here would silently activate scoring weights
+		# that have never run in a live encounter. Deciding "whether a particular Echo
+		# accepts that risk" is V2-COMBAT-003 (Movement Model Slice C), which owns both
+		# filling these and tuning their weights together. See docs/movement-model.md.
 		0.0,
 		0.0,
 		0.0,
-		[],
-		{"known_count": 0, "known_ids": []},
+		# hostile_control_sources + hazard_summary ARE this story's to publish truthfully:
+		# they are declarative route facts, not risk appetite, and V2-COMBAT-003 is written
+		# to consume them. Both were previously hardcoded empty, which was a false claim.
+		# Inert for selection today, so this is a contract-honesty fix with no behaviour change.
+		MovementOptionServiceScript._hostile_sources(
+			path, movement_context.get("origin", {}) as Dictionary, edge_sources),
+		_movement_hazard_summary(movement_context, path),
 		1.0 if (goal.get("destination_region", []) as Array).has(destination) else 0.25,
 		planned_action,
 		goal.get("declared_fallback", {}) as Dictionary
@@ -1864,6 +1909,17 @@ func _movement_build_direct_option(
 		movement_context.get("origin", {}) as Dictionary
 	)
 	return option if bool(validation.get("valid", false)) else {}
+
+
+## V2-COMBAT-002 Slice 6E: the normalized known-hazard summary this story owes
+## V2-COMBAT-003. Mirrors MovementOptionService's own shape exactly — ids strictly
+## sorted and unique, `known_count` equal to the id count — which MovementOption.validate
+## enforces (`hazard_count_mismatch`). Only hazards the mover actually KNOWS about are
+## published; undiscovered hazards must never influence selection or explanation.
+func _movement_hazard_summary(movement_context: Dictionary, path: Array) -> Dictionary:
+	var hazard_ids: Array = MovementOptionServiceScript._hazard_ids(
+		path, movement_context.get("known_hazards", []) as Array)
+	return {"known_count": hazard_ids.size(), "known_ids": hazard_ids}
 
 
 func _movement_cell_key_runtime(cell: Dictionary) -> String:
@@ -2266,7 +2322,16 @@ func _movement_occupancy(actors: Array) -> Dictionary:
 		var pos: Dictionary = actor.get("grid_pos", {}) as Dictionary
 		if pos.is_empty():
 			continue
-		result["%d,%d" % [int(pos.get("col", 0)), int(pos.get("row", 0))]] = str(actor.get("id", ""))
+		var cell_key: String = "%d,%d" % [int(pos.get("col", 0)), int(pos.get("row", 0))]
+		var actor_id: String = str(actor.get("id", ""))
+		# V2-COMBAT-002 Slice 6E: deterministic stacking guard. Two live actors on one
+		# cell is latent (never observed in 3,585 activations) but not impossible, and a
+		# raw last-writer-wins map makes the recorded occupant depend on `ectx.actors`
+		# order. Keep the lexicographically smallest id so the same board always yields
+		# the same occupancy — the mover's own origin is re-asserted by the caller.
+		if result.has(cell_key) and str(result[cell_key]) <= actor_id:
+			continue
+		result[cell_key] = actor_id
 	return result
 
 
@@ -2420,7 +2485,14 @@ func _movement_objective_actor(ectx: EncounterContext, combat_state: Dictionary)
 			return _find_actor_by_id(ectx.actors, str(combat_state.get("spirit_id", "")))
 		EncounterResolutionModes.PURIFY_SHRINE, EncounterResolutionModes.RECOVER, EncounterResolutionModes.PROTECT:
 			for actor_value: Variant in ectx.actors:
-				if actor_value is Dictionary and bool((actor_value as Dictionary).get("is_structure", false)):
+				# V2-COMBAT-002 Slice 6E: mirror the `shrine_alive` liveness check in
+				# _resolve_next_actor. A destroyed structure was still published as the
+				# movement objective, so pressure carried objective_known=true with an
+				# objective_health of 0.0 — below every 0.5 urgency threshold — and movers
+				# kept advancing on a corpse instead of reading "no objective".
+				if actor_value is Dictionary \
+						and bool((actor_value as Dictionary).get("is_structure", false)) \
+						and not bool((actor_value as Dictionary).get("is_dead", false)):
 					return actor_value
 	return {}
 
@@ -2895,7 +2967,25 @@ func _resolve_next_actor(t: int) -> void:
 			_keeper_intro_restore_echo_after_second_attempt(t, lethal_ids)
 
 	if not ectx.last_round_results.is_empty():
-		ectx.last_actor_action = ectx.last_round_results.back().duplicate()
+		ectx.last_actor_action = ectx.last_round_results.back().duplicate(true)
+		# V2-COMBAT-002 Slice 6D: presentation-only path threading. The traversed
+		# path already exists in the activation result but evaporated here, so
+		# tokens lerped straight through walls. Stamped additively for EVERY
+		# action_type (a move-then-melee activation appends the MELEE entry, and
+		# that entry must still carry the path). Keys are always present so the
+		# snapshot shape stays stable; `path` is actual_traversed_cells VERBATIM
+		# (origin is contract-excluded and the array MAY be empty).
+		var _path_from_pos: Dictionary = (actor.get("grid_pos", {}) as Dictionary).duplicate(true)
+		var _path_cells: Array = []
+		if str(ectx.last_actor_action.get("source_id", "")) == str(actor.get("id", "")):
+			var _mv_result: Dictionary = intent.get("movement_result", {}) as Dictionary
+			if not _mv_result.is_empty():
+				var _mv_actual: Array = _mv_result.get("actual_traversed_cells", []) as Array
+				if not _mv_actual.is_empty():
+					_path_cells = _mv_actual.duplicate(true)
+					_path_from_pos = (_mv_result.get("origin", _path_from_pos) as Dictionary).duplicate(true)
+		ectx.last_actor_action["from_pos"] = _path_from_pos
+		ectx.last_actor_action["path"]     = _path_cells
 
 	# PROG-003: accumulate echo action log for XP virtue multiplier at resolve.
 	# Only echo-faction actors contribute. Accumulated across all rounds.

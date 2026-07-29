@@ -32,6 +32,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement_arbiter/purifier_authority", _t_purifier_authority)
 	runner.register_test("movement_arbiter/unmatched_payload_policy", _t_unmatched_payload_policy)
 	runner.register_test("movement_arbiter/mirrored_intent", _t_mirrored_intent)
+	runner.register_test("movement_arbiter/truncated_option_keeps_planned_primary", _t_truncated_option_keeps_planned_primary)
 
 
 static func _t_production_golden() -> Dictionary:
@@ -523,6 +524,54 @@ static func _t_mirrored_intent() -> Dictionary:
 	var right_path: Array = (right_result["intent"] as Dictionary)["path"]
 	if right_path != _mirror_path(left_path, 5):
 		return _fail("Selected intent did not mirror covariantly: %s / %s" % [left_path, right_path])
+	return _pass()
+
+
+## GUARD for the PR #52 slice-6B fix in FlowRuntime._movement_build_direct_option.
+##
+## When a route is capacity-truncated (FlowRuntime._movement_affordable_prefix, taken
+## whenever selected_cost > capacity) the option's destination becomes
+## `selected_path.back()`, which is by construction NOT in goal.destination_region.
+## The pre-fix builder reacted by REWRITING the option's planned_action to a bare
+## `actor.move` whenever the goal's planned_primary was range-bound. That rewrite is
+## exactly what this arbiter rejects at BehaviorArbiter.gd:656-657
+## ("option_action_mismatch"), and the rejection invalidates the WHOLE
+## select_movement_intent call — so ActorStateMachine (:255-267) fell through to the
+## legacy nearest-enemy select_intent and the objective route was abandoned.
+##
+## Both poles are asserted here, so the test cannot pass in both worlds:
+##   * VERBATIM planned_primary on a truncated option  -> valid selection (post-fix).
+##   * REWRITTEN `actor.move` on the same option       -> option_action_mismatch, the
+##     precise failure the pre-fix builder produced.
+static func _t_truncated_option_keeps_planned_primary() -> Dictionary:
+	var fixture: Dictionary = _fixture("engage", "baseline", "enemy.a", "melee_attack")
+	var goal: Dictionary = (fixture["goals"] as Array)[0] as Dictionary
+	# Truncated: the mover stops at (1,0), one cell short of the goal region (2,0).
+	var truncated: Dictionary = _option(goal, "direct", {"col": 1, "row": 0}, [{"col": 1, "row": 0}], 1, 0.25)
+	if (goal["destination_region"] as Array).has(truncated["destination"] as Dictionary):
+		return _fail("Fixture is not truncated — destination is inside the goal region")
+	if (truncated["planned_action"] as Dictionary) != (goal["planned_primary"] as Dictionary):
+		return _fail("Fixture option did not carry planned_primary verbatim")
+
+	var kept: Dictionary = _select(fixture, {}, [truncated])
+	if not bool(kept["valid"]):
+		return _fail("Verbatim planned_primary on a truncated option was rejected: %s" % str(kept))
+	var intent: Dictionary = kept["intent"] as Dictionary
+	if (intent["planned_action"] as Dictionary) != (goal["planned_primary"] as Dictionary):
+		return _fail("Selected intent lost the planned primary: %s" % str(intent["planned_action"]))
+	if (intent["path"] as Array) != [{"col": 1, "row": 0}]:
+		return _fail("Selected intent did not take the truncated route: %s" % str(intent["path"]))
+
+	# The PRE-FIX shape: same truncated option, planned_action rewritten to actor.move.
+	var rewritten: Dictionary = truncated.duplicate(true)
+	rewritten["planned_action"] = ActionPlan.build("actor.move")
+	var rejected: Dictionary = _select(fixture, {}, [rewritten])
+	if bool(rejected["valid"]):
+		return _fail("A rewritten planned_action must not validate: %s" % str(rejected))
+	if str(rejected["reason"]) != "option_action_mismatch":
+		return _fail("Expected option_action_mismatch, got %s" % str(rejected["reason"]))
+	if not rejected.get("intent", {}).is_empty():
+		return _fail("An invalidated selection must carry no intent: %s" % str(rejected))
 	return _pass()
 
 
