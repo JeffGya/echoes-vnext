@@ -101,6 +101,12 @@ static func register(runner) -> void:
 	# Slice 6E: the perceived-actor cross-check must survive structures, corpses and
 	# downed actors — otherwise movement-aware selection is inert in every objective mode.
 	runner.register_test("combat_roundtrip/purify_selection_survives_structure_and_death", func(): return test_purify_selection_survives_structure_and_death())
+	# Slice 6E Task A: an unroutable goal set must NOT switch the movement-aware layer off.
+	runner.register_test("combat_roundtrip/unroutable_goals_keep_selection_enabled", func(): return test_unroutable_goals_keep_selection_enabled())
+	# Slice 6E Task B: a destroyed objective must stop being published as a live objective.
+	runner.register_test("combat_roundtrip/dead_objective_is_not_published", func(): return test_dead_objective_is_not_published())
+	# Slice 6E Task C: two actors on one cell must not discard the whole board.
+	runner.register_test("combat_roundtrip/stacked_actors_keep_selection_alive", func(): return test_stacked_actors_keep_selection_alive())
 
 
 static func _drive_one_round(runtime, ectx) -> void:
@@ -2821,6 +2827,322 @@ static func _selection_census(runtime: FlowRuntime, ectx: EncounterContext, t0: 
 			}
 		aware += 1
 	return { "aware": aware, "eligible": eligible, "error": "" }
+
+
+# ---------------------------------------------------------------------------
+# Slice 6E Task A — the movement layer must not switch itself off when the goals
+# it published happen to be unroutable this activation.
+#
+# `_prepare_live_movement_context` gated `selection_enabled` on OPTIONS. An empty
+# option set only means no destination region was reachable right now (boxed in by
+# allies, objective behind terrain, capacity exhausted after truncation) — the GOALS
+# are still true and the arbiter handles a zero-option board natively, because
+# `_generate_candidates` unconditionally emits `actor.idle` so at least one stationary
+# candidate is always ranked. Gating on options threw the whole movement-aware board
+# away and fell back to legacy nearest-enemy `select_intent` for that actor.
+#
+# The fixture walls the mover in by removing its eight neighbours from the walkable
+# set, which makes EVERY published goal unroutable while leaving the goals themselves
+# intact — the exact shape of the bug, reached through the real preparation function.
+static func test_unroutable_goals_keep_selection_enabled() -> Dictionary:
+	var env: Dictionary = _setup("unroutable_goals", true, "off", EncounterResolutionModes.COMBAT)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var runtime: FlowRuntime = env["runtime"]
+	var ectx: EncounterContext = env["ectx"]
+	runtime.dispatch({ "type": "combat.init" })
+
+	var bdata: Dictionary = runtime.config_service.get_balance().get("data", {}) as Dictionary
+	var board_cfg: Dictionary = _movement_board_cfg(runtime, ectx)
+	var walkable: Dictionary = _full_walkable(board_cfg)
+	if walkable.is_empty():
+		return { "ok": false, "error": "board produced no walkable set" }
+
+	# First living echo whose published goal set is non-empty once it is walled in.
+	var mover: Dictionary = {}
+	var prepared: Dictionary = {}
+	var walled_cfg: Dictionary = {}
+	var t: int = 800
+	for actor_value: Variant in ectx.actors:
+		var candidate: Dictionary = actor_value as Dictionary
+		if str(candidate.get("faction", "")) != "echo" \
+				or bool(candidate.get("is_dead", false)) \
+				or bool(candidate.get("is_structure", false)):
+			continue
+		t += 1
+		var origin: Dictionary = candidate.get("grid_pos", {}) as Dictionary
+		if origin.is_empty():
+			continue
+		var walled: Dictionary = walkable.duplicate(true)
+		for dc in range(-1, 2):
+			for dr in range(-1, 2):
+				if dc == 0 and dr == 0:
+					continue
+				walled.erase("%d,%d" % [int(origin["col"]) + dc, int(origin["row"]) + dr])
+		var cfg: Dictionary = board_cfg.duplicate(true)
+		cfg["walkable"] = walled
+		var attempt: Dictionary = runtime._prepare_live_movement_context(
+			candidate, ectx, ectx.combat_state, cfg, bdata, t)
+		if not bool(attempt.get("valid", false)):
+			continue
+		if (attempt.get("goals", []) as Array).is_empty():
+			continue
+		mover = candidate
+		prepared = attempt
+		walled_cfg = cfg
+		break
+	if mover.is_empty():
+		return { "ok": false, "error": "no living echo published goals — fixture cannot exercise the bug" }
+
+	# The fixture must actually be the "goals but no options" shape.
+	if not (prepared.get("options", []) as Array).is_empty():
+		return {
+			"ok": false,
+			"error": "walling the mover in still produced %d options — fixture is not the bug shape" % [
+				(prepared.get("options", []) as Array).size(),
+			],
+		}
+
+	# (1) The gate itself. Pre-fix this was `not options.is_empty()` → false.
+	if not bool(prepared.get("selection_enabled", false)):
+		return {
+			"ok": false,
+			"error": "selection_enabled false with %d live goals and 0 routable options — the movement layer switched itself off" % [
+				(prepared.get("goals", []) as Array).size(),
+			],
+		}
+
+	# (2) The arbiter genuinely survives a zero-option board and ranks stationary candidates.
+	var ctx: Dictionary = {
+		"actor": mover,
+		"all_actors": ectx.actors,
+		"board_cfg": walled_cfg,
+		"cfg": runtime.config_service.get_balance(),
+		"t": t,
+		"round": int(ectx.combat_state.get("round_counter", 0)),
+	}
+	var arbiter := BehaviorArbiter.new(
+		bdata.get("actor", {}) as Dictionary, prepared.get("movement_cfg", {}) as Dictionary)
+	var selection: Dictionary = arbiter.select_movement_intent(
+		ctx, prepared["movement_context"], prepared["profile"], prepared["goals"], prepared["options"])
+	if not bool(selection.get("valid", false)):
+		return {
+			"ok": false,
+			"error": "arbiter discarded a zero-option board: %s @ %s" % [
+				str(selection.get("reason", "")), str(selection.get("field", "")),
+			],
+		}
+	var selected_path: Array = (selection.get("intent", {}) as Dictionary).get("path", []) as Array
+	if not selected_path.is_empty():
+		return { "ok": false, "error": "zero-option board yielded a non-stationary path" }
+
+	# (3) The live seam, wired exactly as `_resolve_next_actor` wires it: the movement
+	#     keys are injected ONLY when selection_enabled. `planned_action` is the
+	#     discriminator — ActorStateMachine sets it only on the movement-aware branch.
+	var seam_ctx: Dictionary = ctx.duplicate(true)
+	seam_ctx["actor"] = mover
+	seam_ctx["all_actors"] = ectx.actors
+	seam_ctx["cfg"] = runtime.config_service.get_balance()
+	if bool(prepared.get("valid", false)) and bool(prepared.get("selection_enabled", false)):
+		seam_ctx["movement_context"] = prepared["movement_context"]
+		seam_ctx["movement_profile"] = prepared["profile"]
+		seam_ctx["movement_goals"] = prepared["goals"]
+		seam_ctx["movement_options"] = prepared["options"]
+	var asm := ActorStateMachine.new(
+		mover, null, bdata.get("actor", {}) as Dictionary, prepared.get("movement_cfg", {}) as Dictionary)
+	var intent: Dictionary = asm.advance_turn(seam_ctx, env["logger"], t)
+	if not intent.has("planned_action"):
+		return {
+			"ok": false,
+			"error": "legacy fallback ran for an actor with live goals — intent has no planned_action (%s)" % [
+				str(intent.get("action_type", "")),
+			],
+		}
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# Slice 6E Task B — a destroyed objective must stop being published as one.
+#
+# `_movement_objective_actor` returned the first `is_structure` actor without checking
+# `is_dead`, while `_resolve_next_actor` computes `shrine_alive` WITH that check. The
+# two disagreed: pressure carried objective_known=true for a corpse, with an
+# objective_health of 0.0 that sits below every 0.5 urgency threshold, so movers kept
+# advancing on a dead objective. Reachability of the destroyed-structure state was
+# unproven in the wild, so the state is pinned here directly.
+static func test_dead_objective_is_not_published() -> Dictionary:
+	var env: Dictionary = _setup("dead_objective", true, "off", EncounterResolutionModes.PURIFY_SHRINE)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var runtime: FlowRuntime = env["runtime"]
+	var ectx: EncounterContext = env["ectx"]
+	runtime.dispatch({ "type": "combat.init" })
+
+	var board_cfg: Dictionary = _movement_board_cfg(runtime, ectx)
+	var walkable: Dictionary = _full_walkable(board_cfg)
+	var bounds: Dictionary = {
+		"w": int(board_cfg.get("board_cols", 10)),
+		"h": int(board_cfg.get("board_rows", 10)),
+	}
+	var mover: Dictionary = _first_living(ectx, "echo")
+	if mover.is_empty():
+		return { "ok": false, "error": "no living echo" }
+	var structure: Dictionary = {}
+	for actor_value: Variant in ectx.actors:
+		var candidate: Dictionary = actor_value as Dictionary
+		if bool(candidate.get("is_structure", false)):
+			structure = candidate
+			break
+	if structure.is_empty():
+		return { "ok": false, "error": "purify_shrine board carries no structure — fixture cannot exercise the bug" }
+
+	# (1) Baseline: while the structure lives it IS the published objective, so the
+	#     assertions below cannot pass vacuously.
+	var alive: Dictionary = runtime._movement_pressure_snapshot(
+		mover, ectx, ectx.combat_state, bounds, walkable)
+	if not bool(alive.get("objective_known", false)):
+		return { "ok": false, "error": "living structure was not published as the objective" }
+	if str(alive.get("objective_id", "")) != str(structure.get("id", "")):
+		return { "ok": false, "error": "living objective id mismatch" }
+
+	# (2) Destroy it exactly the way the live runtime does.
+	structure["current_hp"] = 0
+	structure["is_dead"] = true
+
+	if not runtime._movement_objective_actor(ectx, ectx.combat_state).is_empty():
+		return { "ok": false, "error": "_movement_objective_actor still returned a destroyed structure" }
+
+	var dead: Dictionary = runtime._movement_pressure_snapshot(
+		mover, ectx, ectx.combat_state, bounds, walkable)
+	if bool(dead.get("objective_known", false)):
+		return {
+			"ok": false,
+			"error": "destroyed objective still published as known (id=%s, health=%s) — movers keep advancing on a corpse" % [
+				str(dead.get("objective_id", "")), str(dead.get("objective_health", 0.0)),
+			],
+		}
+	if not str(dead.get("objective_id", "")).is_empty():
+		return { "ok": false, "error": "destroyed objective still carries an objective_id" }
+	if float(dead.get("objective_health", -1.0)) >= 0.0:
+		return {
+			"ok": false,
+			"error": "destroyed objective published health %s instead of the unknown sentinel" % [
+				str(dead.get("objective_health", -1.0)),
+			],
+		}
+	if not (dead.get("destination_region", []) as Array).is_empty():
+		return { "ok": false, "error": "destroyed objective still published a destination region" }
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# Slice 6E Task C — latent stacking guard.
+#
+# `_movement_occupancy` is a cell→id map with no stacking guard. Two live actors on one
+# cell meant (a) the recorded occupant depended on `ectx.actors` iteration order, and
+# (b) the losing actor got an occupancy map naming someone else at its own origin, so
+# `BehaviorArbiter._validate_movement_inputs` failed `mover_occupancy_mismatch` and the
+# ENTIRE board was discarded for that activation. Never observed in 3,585 activations,
+# so the state is constructed directly rather than driven.
+static func test_stacked_actors_keep_selection_alive() -> Dictionary:
+	var env: Dictionary = _setup("stacked_occupancy", true, "off", EncounterResolutionModes.COMBAT)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var runtime: FlowRuntime = env["runtime"]
+	var ectx: EncounterContext = env["ectx"]
+	runtime.dispatch({ "type": "combat.init" })
+
+	# Two living echoes, ordered by id: the larger id is the one the guard would have lost.
+	var living: Array = []
+	for actor_value: Variant in ectx.actors:
+		var candidate: Dictionary = actor_value as Dictionary
+		if str(candidate.get("faction", "")) == "echo" \
+				and not bool(candidate.get("is_dead", false)) \
+				and not bool(candidate.get("is_structure", false)):
+			living.append(candidate)
+	if living.size() < 2:
+		return { "ok": false, "error": "need two living echoes to stack" }
+	var low: Dictionary = living[0] as Dictionary
+	var high: Dictionary = living[1] as Dictionary
+	if str(low.get("id", "")) > str(high.get("id", "")):
+		var swap: Dictionary = low
+		low = high
+		high = swap
+	var cell: Dictionary = low.get("grid_pos", {}) as Dictionary
+	if cell.is_empty():
+		return { "ok": false, "error": "stack anchor has no grid_pos" }
+	GridService.assign_grid_pos(high, int(cell["col"]), int(cell["row"]))
+	var cell_key: String = "%d,%d" % [int(cell["col"]), int(cell["row"])]
+
+	# (1) The recorded occupant is deterministic — same answer whatever the array order.
+	var occupancy: Dictionary = runtime._movement_occupancy(ectx.actors)
+	if str(occupancy.get(cell_key, "")) != str(low.get("id", "")):
+		return {
+			"ok": false,
+			"error": "stacked cell recorded %s, expected the smallest id %s" % [
+				str(occupancy.get(cell_key, "")), str(low.get("id", "")),
+			],
+		}
+	var reversed_actors: Array = ectx.actors.duplicate()
+	reversed_actors.reverse()
+	var reversed_occupancy: Dictionary = runtime._movement_occupancy(reversed_actors)
+	if str(reversed_occupancy.get(cell_key, "")) != str(low.get("id", "")):
+		return {
+			"ok": false,
+			"error": "occupancy depends on actor order: %s vs %s" % [
+				str(occupancy.get(cell_key, "")), str(reversed_occupancy.get(cell_key, "")),
+			],
+		}
+
+	# (2) The LOSING mover still gets a live board instead of having it discarded.
+	var bdata: Dictionary = runtime.config_service.get_balance().get("data", {}) as Dictionary
+	var board_cfg: Dictionary = _movement_board_cfg(runtime, ectx)
+	var prepared: Dictionary = runtime._prepare_live_movement_context(
+		high, ectx, ectx.combat_state, board_cfg, bdata, 900)
+	if not bool(prepared.get("valid", false)):
+		return { "ok": false, "error": "stacked mover prepare invalid: %s" % str(prepared.get("reason", "")) }
+	var prepared_occupancy: Dictionary = (prepared["movement_context"] as Dictionary).get("occupancy", {}) as Dictionary
+	if str(prepared_occupancy.get(cell_key, "")) != str(high.get("id", "")):
+		return {
+			"ok": false,
+			"error": "the mover does not own its own origin cell: %s occupies %s" % [
+				str(prepared_occupancy.get(cell_key, "")), cell_key,
+			],
+		}
+	if not bool(prepared.get("selection_enabled", false)):
+		return { "ok": false, "error": "stacked mover lost movement-aware selection" }
+	var ctx: Dictionary = {
+		"actor": high,
+		"all_actors": ectx.actors,
+		"board_cfg": board_cfg,
+		"cfg": runtime.config_service.get_balance(),
+		"t": 900,
+		"round": int(ectx.combat_state.get("round_counter", 0)),
+	}
+	var arbiter := BehaviorArbiter.new(
+		bdata.get("actor", {}) as Dictionary, prepared.get("movement_cfg", {}) as Dictionary)
+	var selection: Dictionary = arbiter.select_movement_intent(
+		ctx, prepared["movement_context"], prepared["profile"], prepared["goals"], prepared["options"])
+	if not bool(selection.get("valid", false)):
+		return {
+			"ok": false,
+			"error": "arbiter discarded the whole board for the stacked mover: %s @ %s" % [
+				str(selection.get("reason", "")), str(selection.get("field", "")),
+			],
+		}
+	return { "ok": true }
+
+
+# Full walkable set for a board cfg — the authored terrain set, or the raw rect when
+# the board carries no terrain (mirrors `_prepare_live_movement_context`).
+static func _full_walkable(board_cfg: Dictionary) -> Dictionary:
+	var walkable: Dictionary = (board_cfg.get("walkable", {}) as Dictionary).duplicate(true)
+	if not walkable.is_empty():
+		return walkable
+	for col in range(int(board_cfg.get("board_cols", 10))):
+		for row in range(int(board_cfg.get("board_rows", 10))):
+			walkable["%d,%d" % [col, row]] = true
+	return walkable
 
 
 static func _first_living(ectx: EncounterContext, faction: String) -> Dictionary:

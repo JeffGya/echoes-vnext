@@ -1648,6 +1648,13 @@ func _prepare_live_movement_context(
 	if walkable.is_empty():
 		walkable = _movement_rect_walkable(bounds)
 	var occupancy: Dictionary = _movement_occupancy(ectx.actors)
+	# V2-COMBAT-002 Slice 6E: the mover always owns its own origin cell. Without this,
+	# a stacked pair hands the losing mover an occupancy map that names someone else at
+	# its origin, BehaviorArbiter._validate_movement_inputs fails `mover_occupancy_mismatch`,
+	# and the ENTIRE board is discarded for that activation. No-op when nothing is stacked.
+	var mover_origin: Dictionary = actor.get("grid_pos", {}) as Dictionary
+	if not mover_origin.is_empty():
+		occupancy[_movement_cell_key_runtime(mover_origin)] = str(actor.get("id", ""))
 	var perceived: Array = _movement_actor_facts(ectx.actors)
 	var relationships: Dictionary = _movement_relationships(actor, perceived)
 	var pressure: Dictionary = _movement_pressure_snapshot(actor, ectx, combat_state, bounds, walkable)
@@ -1690,9 +1697,16 @@ func _prepare_live_movement_context(
 	var options: Array = []
 	if not bool(actor.get("is_quarry", false)):
 		options = _movement_live_direct_options(movement_context, profile, goals, edge_costs)
+	# V2-COMBAT-002 Slice 6E: gate the movement-aware layer on GOALS, not options.
+	# An empty option set only means no destination region was routable this activation
+	# (boxed in by allies, objective behind a wall, capacity 0 after truncation). The
+	# arbiter handles that case natively: `_generate_candidates` always emits an
+	# unconditional `actor.idle`, so at least one STATIONARY candidate is always ranked
+	# and a valid zero-length intent is produced. Gating on options threw the whole
+	# board away and fell back to legacy nearest-enemy `select_intent` for the actor.
 	return {
 		"valid": true,
-		"selection_enabled": not options.is_empty(),
+		"selection_enabled": not goals.is_empty(),
 		"movement_cfg": movement_cfg,
 		"movement_context": movement_context,
 		"profile": profile,
@@ -2270,7 +2284,16 @@ func _movement_occupancy(actors: Array) -> Dictionary:
 		var pos: Dictionary = actor.get("grid_pos", {}) as Dictionary
 		if pos.is_empty():
 			continue
-		result["%d,%d" % [int(pos.get("col", 0)), int(pos.get("row", 0))]] = str(actor.get("id", ""))
+		var cell_key: String = "%d,%d" % [int(pos.get("col", 0)), int(pos.get("row", 0))]
+		var actor_id: String = str(actor.get("id", ""))
+		# V2-COMBAT-002 Slice 6E: deterministic stacking guard. Two live actors on one
+		# cell is latent (never observed in 3,585 activations) but not impossible, and a
+		# raw last-writer-wins map makes the recorded occupant depend on `ectx.actors`
+		# order. Keep the lexicographically smallest id so the same board always yields
+		# the same occupancy — the mover's own origin is re-asserted by the caller.
+		if result.has(cell_key) and str(result[cell_key]) <= actor_id:
+			continue
+		result[cell_key] = actor_id
 	return result
 
 
@@ -2424,7 +2447,14 @@ func _movement_objective_actor(ectx: EncounterContext, combat_state: Dictionary)
 			return _find_actor_by_id(ectx.actors, str(combat_state.get("spirit_id", "")))
 		EncounterResolutionModes.PURIFY_SHRINE, EncounterResolutionModes.RECOVER, EncounterResolutionModes.PROTECT:
 			for actor_value: Variant in ectx.actors:
-				if actor_value is Dictionary and bool((actor_value as Dictionary).get("is_structure", false)):
+				# V2-COMBAT-002 Slice 6E: mirror the `shrine_alive` liveness check in
+				# _resolve_next_actor. A destroyed structure was still published as the
+				# movement objective, so pressure carried objective_known=true with an
+				# objective_health of 0.0 — below every 0.5 urgency threshold — and movers
+				# kept advancing on a corpse instead of reading "no objective".
+				if actor_value is Dictionary \
+						and bool((actor_value as Dictionary).get("is_structure", false)) \
+						and not bool((actor_value as Dictionary).get("is_dead", false)):
 					return actor_value
 	return {}
 
