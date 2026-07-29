@@ -107,6 +107,7 @@ static func register(runner) -> void:
 	runner.register_test("combat_roundtrip/dead_objective_is_not_published", func(): return test_dead_objective_is_not_published())
 	# Slice 6E Task C: two actors on one cell must not discard the whole board.
 	runner.register_test("combat_roundtrip/stacked_actors_keep_selection_alive", func(): return test_stacked_actors_keep_selection_alive())
+	runner.register_test("combat_roundtrip/published_option_carries_truthful_control_and_hazards", func(): return test_published_option_carries_truthful_control_and_hazards())
 
 
 static func _drive_one_round(runtime, ectx) -> void:
@@ -3155,3 +3156,84 @@ static func _first_living(ectx: EncounterContext, faction: String) -> Dictionary
 		if str(actor.get("faction", "")) == faction:
 			return actor
 	return {}
+
+
+## V2-COMBAT-002 Slice 6E: the published option must carry TRUTHFUL hostile-control and
+## hazard summaries. Both were previously hardcoded (`[]` and `{0, []}`) because the live
+## path called hostile_edge_costs(), which discards `edge_sources`. This story owes those
+## normalized summaries to V2-COMBAT-003; publishing hardcoded emptiness was a false claim.
+##
+## Guards the fix specifically: a live hostile is parked 8-adjacent to the mover's origin,
+## so every edge leaving that origin is controlled and the sources CANNOT legitimately be
+## empty. Against the pre-fix code this fails on the `hostile_control_sources is empty`
+## branch, because that array was empty for every option on every board.
+static func test_published_option_carries_truthful_control_and_hazards() -> Dictionary:
+	var env: Dictionary = _setup("truthful_control", true, "off", EncounterResolutionModes.COMBAT)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var runtime: FlowRuntime = env["runtime"]
+	var ectx: EncounterContext = env["ectx"]
+	runtime.dispatch({ "type": "combat.init" })
+
+	var mover: Dictionary = _first_living(ectx, "echo")
+	var hostile: Dictionary = _first_living(ectx, "enemy")
+	if mover.is_empty() or hostile.is_empty():
+		return { "ok": false, "error": "needed one living echo and one living enemy" }
+
+	var origin: Dictionary = mover.get("grid_pos", {}) as Dictionary
+	if origin.is_empty():
+		return { "ok": false, "error": "mover has no grid_pos" }
+
+	# Park the hostile 8-adjacent to the mover so its zone of control is unambiguous.
+	var bdata: Dictionary = runtime.config_service.get_balance().get("data", {}) as Dictionary
+	var board_cfg: Dictionary = _movement_board_cfg(runtime, ectx)
+	var walkable: Dictionary = _full_walkable(board_cfg)
+	var adjacent: Dictionary = {}
+	for dc in range(-1, 2):
+		for dr in range(-1, 2):
+			if dc == 0 and dr == 0:
+				continue
+			var cell: Dictionary = { "col": int(origin["col"]) + dc, "row": int(origin["row"]) + dr }
+			var key: String = "%d,%d" % [int(cell["col"]), int(cell["row"])]
+			if walkable.has(key) and bool(walkable[key]) and adjacent.is_empty():
+				adjacent = cell
+	if adjacent.is_empty():
+		return { "ok": false, "error": "no walkable cell adjacent to the mover" }
+	hostile["grid_pos"] = adjacent.duplicate(true)
+
+	var prepared: Dictionary = runtime._prepare_live_movement_context(
+		mover, ectx, ectx.combat_state, board_cfg, bdata, 920)
+	if not bool(prepared.get("valid", false)):
+		return { "ok": false, "error": "live movement context invalid" }
+	var options: Array = prepared.get("options", []) as Array
+	if options.is_empty():
+		return { "ok": false, "error": "no options published — cannot assess the summaries" }
+
+	var saw_control: bool = false
+	for option_value: Variant in options:
+		var option: Dictionary = option_value as Dictionary
+		var sources: Array = option.get("hostile_control_sources", []) as Array
+		# Contract shape: strictly sorted, unique. MovementOption.validate enforces it, so a
+		# violation here means we published something that only survived by not being checked.
+		for i in range(1, sources.size()):
+			if str(sources[i - 1]) >= str(sources[i]):
+				return { "ok": false, "error": "hostile_control_sources not strictly sorted/unique: %s" % str(sources) }
+		if not sources.is_empty():
+			saw_control = true
+			if not sources.has(str(hostile.get("id", ""))):
+				return { "ok": false, "error": "control sources %s omit the adjacent hostile %s" % [str(sources), str(hostile.get("id", ""))] }
+
+		var summary: Dictionary = option.get("hazard_summary", {}) as Dictionary
+		if not summary.has("known_count") or not summary.has("known_ids"):
+			return { "ok": false, "error": "hazard_summary missing required fields: %s" % str(summary) }
+		var ids: Array = summary.get("known_ids", []) as Array
+		if int(summary.get("known_count", -1)) != ids.size():
+			return { "ok": false, "error": "hazard_count_mismatch: %s" % str(summary) }
+		for j in range(1, ids.size()):
+			if str(ids[j - 1]) >= str(ids[j]):
+				return { "ok": false, "error": "hazard known_ids not strictly sorted/unique: %s" % str(ids) }
+
+	# The load-bearing assertion. Pre-fix this array was empty for every option, always.
+	if not saw_control:
+		return { "ok": false, "error": "no option reported hostile control despite a hostile adjacent to the mover origin — summaries are still hardcoded empty" }
+	return { "ok": true }

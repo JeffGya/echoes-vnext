@@ -1675,7 +1675,14 @@ func _prepare_live_movement_context(
 		[]
 	)
 	var planning_walkable_ec: Dictionary = _movement_planning_walkable(movement_context)
-	var edge_costs: Dictionary = MovementOptionServiceScript.hostile_edge_costs(movement_context, planning_walkable_ec)
+	# V2-COMBAT-002 Slice 6E: take BOTH halves of the control build. The live path used
+	# to call hostile_edge_costs(), which discards `edge_sources` — so every published
+	# option claimed `hostile_control_sources: []` regardless of the truth. This story
+	# owes V2-COMBAT-003 normalized hostile-control and hazard summaries; handing it
+	# hardcoded emptiness would make its "willingness to accept risk" seam unbuildable.
+	var control_build: Dictionary = MovementOptionServiceScript._build_control(movement_context, planning_walkable_ec)
+	var edge_costs: Dictionary = control_build["edge_costs"] as Dictionary
+	var edge_sources: Dictionary = control_build["edge_sources"] as Dictionary
 	var profile: Dictionary = MovementProfileServiceScript.derive_profile(actor, capacity_cfg, {})
 	var goals_result: Dictionary = CombatPressureServiceScript.build_goals(movement_context, pressure_cfg)
 	if not bool(goals_result.get("valid", false)):
@@ -1696,7 +1703,7 @@ func _prepare_live_movement_context(
 	var goals: Array = goals_result.get("goals", []) as Array
 	var options: Array = []
 	if not bool(actor.get("is_quarry", false)):
-		options = _movement_live_direct_options(movement_context, profile, goals, edge_costs)
+		options = _movement_live_direct_options(movement_context, profile, goals, edge_costs, edge_sources)
 	# V2-COMBAT-002 Slice 6E: gate the movement-aware layer on GOALS, not options.
 	# An empty option set only means no destination region was routable this activation
 	# (boxed in by allies, objective behind a wall, capacity 0 after truncation). The
@@ -1724,14 +1731,15 @@ func _movement_live_direct_options(
 	movement_context: Dictionary,
 	profile: Dictionary,
 	goals: Array,
-	edge_costs: Dictionary = {}
+	edge_costs: Dictionary = {},
+	edge_sources: Dictionary = {}
 ) -> Array:
 	var options: Array = []
 	for goal_value: Variant in goals:
 		if not (goal_value is Dictionary):
 			continue
 		var goal: Dictionary = goal_value
-		var option: Dictionary = _movement_direct_option_for_goal(movement_context, profile, goal, edge_costs)
+		var option: Dictionary = _movement_direct_option_for_goal(movement_context, profile, goal, edge_costs, edge_sources)
 		if not option.is_empty():
 			options.append(option)
 	return options
@@ -1741,13 +1749,14 @@ func _movement_direct_option_for_goal(
 	movement_context: Dictionary,
 	profile: Dictionary,
 	goal: Dictionary,
-	edge_costs: Dictionary = {}
+	edge_costs: Dictionary = {},
+	edge_sources: Dictionary = {}
 ) -> Dictionary:
 	var origin: Dictionary = movement_context.get("origin", {}) as Dictionary
 	var salt: String = str(movement_context.get("mover_id", ""))
 	var destination_region: Array = goal.get("destination_region", []) as Array
 	if destination_region.has(origin) and str(goal.get("purpose", "")) == "hold":
-		return _movement_build_direct_option(movement_context, profile, goal, origin, [], 0, 0)
+		return _movement_build_direct_option(movement_context, profile, goal, origin, [], 0, 0, edge_sources)
 
 	var best_path: Array = []
 	var best_cost: int = 999999
@@ -1794,7 +1803,7 @@ func _movement_direct_option_for_goal(
 		return {}
 	var destination: Dictionary = selected_path.back() as Dictionary
 	return _movement_build_direct_option(
-		movement_context, profile, goal, destination, selected_path, selected_cost, selected_cost)
+		movement_context, profile, goal, destination, selected_path, selected_cost, selected_cost, edge_sources)
 
 
 func _movement_planning_walkable(movement_context: Dictionary) -> Dictionary:
@@ -1847,7 +1856,8 @@ func _movement_build_direct_option(
 	destination: Dictionary,
 	path: Array,
 	route_cost: int,
-	shortest_cost: int
+	shortest_cost: int,
+	edge_sources: Dictionary = {}
 ) -> Dictionary:
 	var goal_id: String = str(goal.get("goal_id", "goal.live"))
 	# The option_id is contract-checked by MovementOption._validate_option_id, which demands
@@ -1868,11 +1878,22 @@ func _movement_build_direct_option(
 		route_cost - shortest_cost,
 		int(profile.get("capacity", 0)),
 		route_cost,
+		# exposure / congestion / cohesion stay 0.0 ON PURPOSE. These three are consumed by
+		# BehaviorArbiter._spatial_utility as WEIGHTED terms (exposure -6.0, cohesion 4.0,
+		# congestion -2.0), so populating them here would silently activate scoring weights
+		# that have never run in a live encounter. Deciding "whether a particular Echo
+		# accepts that risk" is V2-COMBAT-003 (Movement Model Slice C), which owns both
+		# filling these and tuning their weights together. See docs/movement-model.md.
 		0.0,
 		0.0,
 		0.0,
-		[],
-		{"known_count": 0, "known_ids": []},
+		# hostile_control_sources + hazard_summary ARE this story's to publish truthfully:
+		# they are declarative route facts, not risk appetite, and V2-COMBAT-003 is written
+		# to consume them. Both were previously hardcoded empty, which was a false claim.
+		# Inert for selection today, so this is a contract-honesty fix with no behaviour change.
+		MovementOptionServiceScript._hostile_sources(
+			path, movement_context.get("origin", {}) as Dictionary, edge_sources),
+		_movement_hazard_summary(movement_context, path),
 		1.0 if (goal.get("destination_region", []) as Array).has(destination) else 0.25,
 		planned_action,
 		goal.get("declared_fallback", {}) as Dictionary
@@ -1882,6 +1903,17 @@ func _movement_build_direct_option(
 		movement_context.get("origin", {}) as Dictionary
 	)
 	return option if bool(validation.get("valid", false)) else {}
+
+
+## V2-COMBAT-002 Slice 6E: the normalized known-hazard summary this story owes
+## V2-COMBAT-003. Mirrors MovementOptionService's own shape exactly — ids strictly
+## sorted and unique, `known_count` equal to the id count — which MovementOption.validate
+## enforces (`hazard_count_mismatch`). Only hazards the mover actually KNOWS about are
+## published; undiscovered hazards must never influence selection or explanation.
+func _movement_hazard_summary(movement_context: Dictionary, path: Array) -> Dictionary:
+	var hazard_ids: Array = MovementOptionServiceScript._hazard_ids(
+		path, movement_context.get("known_hazards", []) as Array)
+	return {"known_count": hazard_ids.size(), "known_ids": hazard_ids}
 
 
 func _movement_cell_key_runtime(cell: Dictionary) -> String:
