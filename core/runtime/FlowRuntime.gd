@@ -1713,7 +1713,13 @@ func _prepare_live_movement_context(
 	# board away and fell back to legacy nearest-enemy `select_intent` for the actor.
 	return {
 		"valid": true,
-		"selection_enabled": not goals.is_empty(),
+		# The PURSUE quarry is the ONE case where empty options are deliberate rather than
+		# incidental: `:1705` skips option generation for it entirely because
+		# FleeBehaviorModule owns quarry movement. Gating purely on goals therefore sent
+		# the quarry down the movement-aware path with nothing to select, so it produced a
+		# target-less `actor.move`, the legacy bridge could not rescue it, and the quarry
+		# stopped fleeing altogether. Keep it on its flee module.
+		"selection_enabled": not goals.is_empty() and not bool(actor.get("is_quarry", false)),
 		"movement_cfg": movement_cfg,
 		"movement_context": movement_context,
 		"profile": profile,
