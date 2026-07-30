@@ -42,6 +42,14 @@
 | 33 | p4-ships-complete-ui | P5 already shipped, so P4 authors its own complete UI; ally visual line = Mist Blue + ⊕ Odo Nnyew glyph (ally badge, board ring, Companion tag, recruit-offer panel, seam cues) | 2026-07-12 |
 | 34 | p4-companion-invite-sanctum-event | Recruit offer moved OFF Resolve → durable sanctum.companion_invite event on Sanctum entry; no-stack (one max); persists until decided | 2026-07-15 |
 | 35 | p4-guide-spirit-routing-fix | guide_spirit added to SituationResolutionService._ASYNC_OBJ_TYPES (pre-existing Phase 3c soft-lock); folded into the P4 PR | 2026-07-15 |
+| 36 | prog012-per-echo-scope-only | PROG-012 owns the per-Echo autonomy seam; the party-coherence forecast belongs to V2-VOICE-002 | 2026-07-29 |
+| 37 | prog012-four-maturity-outputs | Hidden maturity layer emits FOUR outputs: Judgment, Presence, Composure, Legibility | 2026-07-29 |
+| 38 | prog012-must-ship-live | PROG-012 must ship with a live divergence-detection effect, not a dormant seam | 2026-07-29 |
+| 39 | autonomy-is-derived-not-stored | Autonomy is derived per activation from Standing/maturity/traits/bonds/vows/emotion; nothing new persists | 2026-07-29 |
+| 40 | prog012-vs-combat003-boundary | PROG-012 ships inputs + thresholds; V2-COMBAT-003 resolves the five responses | 2026-07-29 |
+| 41 | autonomy-seam-partially-exists | directive_band_mul is already a live autonomy axis; what is missing is the consequence/legibility layer | 2026-07-29 |
+| 42 | party-ladder-not-response-ladder | The hidden 4-band party ladder and the 5 event-local responses are different axes, not a mapping | 2026-07-29 |
+| 43 | prog012-absorbs-parked-notes | The two calling-virtue corrections and the Storyweight truncation bug all ship inside PROG-012 | 2026-07-29 |
 
 ---
 
@@ -360,5 +368,86 @@
 **A:** `guide_spirit` was missing from `SituationResolutionService._ASYNC_OBJ_TYPES` (`core/realms/SituationResolutionService.gd:28`), so a guide_spirit OBJECTIVE routed to the flavor `in_explore` path instead of the real combat hand-off — the situation was marked resolved but `stage.objectives[idx].completed` never flipped, so `objectives_remaining` stayed ≥1 and the `cta.proceed_to_stage_map` CTA never rendered. A pre-existing **Phase 3c** oversight on `main` (Phase 3c added guide_spirit end-to-end but not to this routing list), surfaced during Jeff's P4 playtest and folded into the P4 PR. Fix: append `"guide_spirit"` to `_ASYNC_OBJ_TYPES` (+ routing test). Follow-up chip: guard the in-explore path so any is_objective resolving there is caught/completed (defense-in-depth).
 **Source:** Jeff + investigation, 2026-07-15
 **Date:** 2026-07-15
+
+---
+
+### 36. prog012-per-echo-scope-only
+
+**Q:** Does V2-PROG-012 also compute the GDD's hidden four-band party-coherence ladder, or only the per-Echo autonomy seam?
+**A:** **Per-Echo only.** `V2-VOICE-002` (Order 252, Ready) already owns the pre-run party read — "let the player see unstable party pressure before commitment" — and it *depends on* PROG-012, so the layering is per-Echo inputs → party aggregation → `V2-INFRA-004`'s integrated readiness read. The GDD's `aligned/strained/hesitant/refusing` ladder (`docs/Echoes vNext Working GDD.md:1329-1338`) is a party-level pre-run forecast and is therefore VOICE-002's surface, not this story's. See [[party-ladder-not-response-ladder]].
+**Source:** Jeff + Notion backlog query, 2026-07-29
+**Date:** 2026-07-29
+
+---
+
+### 37. prog012-four-maturity-outputs
+
+**Q:** How many named outputs does the hidden maturity-expression layer produce, and what are they?
+**A:** **Four.** The GDD names only **Judgment** (`GDD:1360` — hold, interpret and assert self under pressure) and **Presence** (`GDD:1361` — how strongly that state presses onto nearby or bonded others). Jeff expanded the set to four, and research identified the only two further dimensions the GDD *describes but never names*: **Composure** (`GDD:1369` — steady against noise, hit harder by true contradiction) and **Legibility** (`GDD:1273`, `:1282`, §7.3 — intent becomes more specific and readable as wholeness grows). Rejected as peers: Self-command (overlaps Judgment's own definition), Instability (the GDD lists it as an *input*, `GDD:1380`), and Resolve/Conviction/Coherence/Initiative/Restraint (absent from the GDD entirely — inventions).
+**Source:** Jeff, 2026-07-29 (GDD §11.5 research)
+**Date:** 2026-07-29
+
+---
+
+### 38. prog012-must-ship-live
+
+**Q:** May PROG-012 ship as a dormant seam, given its consumer (Keeper guidance) does not exist until COMBAT-003/004?
+**A:** **No — it must have at least one live, observable effect at ship time.** The chosen effect is **divergence detection**: when an Echo's own judgment out-votes the active directive, name it and surface it (log + telemetry/bark) instead of letting it happen silently, which is what happens today. Rationale: V2-COMBAT-002 shipped a movement-aware layer that was **completely inert through an entire merged PR** while 1281 tests passed, because nothing live consumed it. A dormant seam is not verifiable by a green suite.
+**Source:** Jeff, 2026-07-29
+**Date:** 2026-07-29
+
+---
+
+### 39. autonomy-is-derived-not-stored
+
+**Q:** Is autonomy a stored per-Echo field or derived at runtime?
+**A:** **Derived**, per `GDD:1270-1345`, from Standing/Storyweight maturity, archetype, trait balance, calling family/accent, bonds and rivalries, vow state, fear and morale, and current instability/distortion. Nothing new persists, so there is no save migration and autonomy cannot drift out of sync with Standing. Note the word "autonomy" appears **zero** times in `core/` today. Contrast with `confidence` ([[echo-confidence-model]]), which uses a stored base plus derived runtime blend — autonomy deliberately does not.
+**Source:** GDD §11.5, 2026-07-29
+**Date:** 2026-07-29
+
+---
+
+### 40. prog012-vs-combat003-boundary
+
+**Q:** Does PROG-012 resolve the five guidance responses, or only supply the inputs and thresholds?
+**A:** **Inputs and thresholds only.** `docs/proposals/keeper-tactical-guidance-promotion.md:520` is explicit: "V2-PROG-012 for autonomy-threshold tuning, then V2-COMBAT-003 for deterministic pressure collision and reason-bearing outcomes." Corroborated by `keeper-tactical-guidance-architecture.md:753` ("settle autonomy/refusal threshold behavior before collision-order work"). COMBAT-003 owns choosing Align/Interpret/Hesitate/Object/Refuse; the architecture doc's `response_thresholds: {}` (`:622`) is the empty stub PROG-012 fills.
+**Source:** keeper-tactical-guidance proposals, 2026-07-29
+**Date:** 2026-07-29
+
+---
+
+### 41. autonomy-seam-partially-exists
+
+**Q:** Does an autonomy seam already exist in code under another name?
+**A:** **Partially.** `data.maturity_expression.directive_band_mul` (nascent 1.30 → whole 0.75) is live and applied in `BehaviorArbiter.gd:1786-1790`, and `refusal_thresholds_by_band` (65/72/80/90) already drives the Absolute Fear Rule. So the numeric axis is built; what is missing is any *consequence* — nothing detects, names, or surfaces the moment an Echo's judgment out-votes the directive, and the directive is only ever re-weighted, never reinterpreted. Two defects found alongside: `presence_strength` is passed to `BehaviorArbiter._score` (`:1623`) and **never read**, and `directive_band_mul` double-counts against rank-scaled identity weighting (`:1666`).
+**Source:** codebase research, 2026-07-29
+**Date:** 2026-07-29
+
+---
+
+### 42. party-ladder-not-response-ladder
+
+**Q:** How does the GDD's four-band ladder (aligned/strained/hesitant/refusing) map onto the five guidance responses (Align/Interpret/Hesitate/Object/Refuse)?
+**A:** **It does not — they are different axes.** `GDD:1338` states they are "related but distinct": the four bands are a *hidden pre-run forecast of party coherence*, while the five responses are *event-local and per-recipient*. No mapping is required or intended. **Naming hazard:** three of the four band names (`grounded`, `hesitant`, `strained`) already mean something else in the live 10-tier `emotional_status` vocabulary (`core/emotion/EmotionService.gd:198-229`), so whoever builds the party ladder must rename or explicitly disambiguate.
+**Source:** GDD §11.5, 2026-07-29
+**Date:** 2026-07-29
+
+---
+
+### 43. prog012-absorbs-parked-notes
+
+**Q:** Do the three review notes parked on the PROG-012 page ship with it, or split out?
+**A:** **All three ship inside PROG-012** (Jeff's call). They are corrections and a bug, not open questions: **Okofor→Generosity** is contradicted by GDD-derived vector composition (Okofor pulls Protector = Courage+Compassion and Pillar = Acceptance+Humility; Generosity belongs to Onyamesu's vectors); **Sum-Okwanfo→Forgiveness** likewise (Skeptic = Truth+Humility, so Humility is supported; Forgiveness belongs to Mediator). Both live in `core/realms/ConversationService.gd:26-33`. The third is a live bug — see [[storyweight-speak-truncated]]. Note `data/balance.json:280` `vector_to_virtue_primary` also conflicts with the calling-reference compositions and belongs to the same audit.
+**Source:** Jeff, 2026-07-29
+**Date:** 2026-07-29
+
+---
+
+### 44. storyweight-speak-truncated
+
+**Q:** Why does a successful conversation turn appear to award no Storyweight?
+**A:** Because it awards **exactly zero**. `data.contact.storyweight_speak_partial_step` is `0.2` (`data/balance.json:3132`), but the consumer at `core/runtime/FlowRuntime.gd:8218` wraps the award in `int(...)`, which truncates `0.2` → `0`. So conversation Storyweight has **never** been granted. The original review note ("+0.2 may be too small to register as motivation") understated it. For comparison, combat awards kill 25 / stage clear 40 / realm 100 against `level_thresholds` of 100 per Step (`data/balance.json:1402-1404`). Ships inside PROG-012 per [[prog012-absorbs-parked-notes]].
+**Source:** codebase research, 2026-07-29
+**Date:** 2026-07-29
 
 ---
