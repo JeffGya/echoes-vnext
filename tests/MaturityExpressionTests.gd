@@ -134,6 +134,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("expr/identity_spike_fires_on_calling_vector",   Callable(MaturityExpressionTests, "_t_identity_spike_fires"))
 	runner.register_test("expr/no_spike_on_non_identity_action",          Callable(MaturityExpressionTests, "_t_no_spike_on_non_identity"))
 	runner.register_test("expr/rank_benefits_build_correct_entries",      Callable(MaturityExpressionTests, "_t_rank_benefits_build"))
+	# V2-PROG-012 Phase 0
+	runner.register_test("expr/config_defaults_reachable_and_consistent", Callable(MaturityExpressionTests, "_t_config_defaults_reachable_and_consistent"))
 
 
 # ─── Test 1 ────────────────────────────────────────────────────────────────
@@ -737,4 +739,76 @@ static func _t_rank_benefits_build() -> Dictionary:
 		return { "ok": false, "error": "Expected benefit id 'fear_recovery', got: %s" % b.get("id", "") }
 	if str(b.get("label", "")).is_empty():
 		return { "ok": false, "error": "Benefit label should not be empty" }
+	return { "ok": true }
+
+
+# ─── Test 24 — V2-PROG-012 Phase 0 config-integrity guard ─────────────────
+# BehaviorArbiter._cfg_get(key) falls through to _DEFAULTS[key] whenever _cfg
+# lacks the key. Before V2-PROG-012 Phase 0, seven keys authored under
+# data.maturity_expression (directive_band_mul, identity_weight_scale,
+# presence_dampen_scale, press_attack_bonus, press_hp_threshold,
+# protect_ally_grounded_mul, protect_ally_grounded_hp_threshold) were never
+# merged into the actor_cfg passed to BehaviorArbiter, so they silently fell
+# through to _DEFAULTS on every turn — the authored balance.json values were
+# decorative. This test guards against that regressing.
+#
+# For every _DEFAULTS key that is also authored somewhere in the real
+# balance.json (loaded via ConfigService, same as FlowRuntime does at
+# runtime), we check two things against a cfg built with the SAME merge
+# FlowRuntime._resolve_next_actor() uses (data.actor ∪ data.maturity_expression,
+# data.actor winning on collision):
+#   (a) value consistency — the arbiter resolves exactly the authored value.
+#   (b) reachability — swapping the key's value for a sentinel and rebuilding
+#       the arbiter must produce the SENTINEL, not the old value and not
+#       _DEFAULTS[key]. A test that only checked (a) would have passed while
+#       the bug was live, because the authored values happened to be
+#       bit-for-bit identical to _DEFAULTS — comparing resolved-vs-authored
+#       can't tell "read from cfg" apart from "fell through to a default that
+#       happens to match." Only forcing a value _DEFAULTS does NOT have, and
+#       confirming the arbiter reflects it, proves _cfg is actually consulted.
+#
+# Note: _cfg_get() ends with `return _DEFAULTS[key]` — a key present in
+# balance.json but absent from _DEFAULTS would be a runtime invalid-index
+# error, not a silent fallback. Any new key BehaviorArbiter reads via
+# _cfg_get() must be added to _DEFAULTS as well as to balance.json.
+static func _t_config_defaults_reachable_and_consistent() -> Dictionary:
+	const _SENTINEL: String = "__V2_PROG_012_SENTINEL__"
+
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var maturity_cfg: Dictionary = bdata.get("maturity_expression", {})
+	var actor_data_cfg: Dictionary = bdata.get("actor", {})
+
+	# Same merge FlowRuntime._resolve_next_actor() performs when building actor_cfg.
+	var merged_cfg: Dictionary = actor_data_cfg.duplicate(true)
+	for k: String in maturity_cfg.keys():
+		if not merged_cfg.has(k):
+			merged_cfg[k] = maturity_cfg[k]
+
+	var defaults: Dictionary = BehaviorArbiter._DEFAULTS
+	var checked: int = 0
+	for key: String in defaults.keys():
+		if not merged_cfg.has(key):
+			continue  # not authored anywhere reachable from this cfg — nothing to guard here
+		checked += 1
+
+		# (a) value consistency.
+		var arbiter_real := BehaviorArbiter.new(merged_cfg)
+		var resolved: Variant = arbiter_real._cfg_get(key)
+		if resolved != merged_cfg[key]:
+			return { "ok": false, "error": "Key '%s': arbiter resolved %s, authored balance.json has %s" % [key, str(resolved), str(merged_cfg[key])] }
+
+		# (b) reachability — force a sentinel value _DEFAULTS does not have and confirm
+		# the arbiter reflects it, proving _cfg_get() actually reads _cfg for this key.
+		var sentinel_cfg: Dictionary = merged_cfg.duplicate(true)
+		sentinel_cfg[key] = _SENTINEL
+		var arbiter_sentinel := BehaviorArbiter.new(sentinel_cfg)
+		var resolved_sentinel: Variant = arbiter_sentinel._cfg_get(key)
+		if resolved_sentinel != _SENTINEL:
+			return { "ok": false, "error": "Key '%s' is NOT reachable through _cfg — arbiter did not reflect a sentinel override (still fell through to _DEFAULTS or a stale value)" % key }
+
+	if checked == 0:
+		return { "ok": false, "error": "No _DEFAULTS keys matched any authored balance.json key — test is vacuous, check config paths" }
 	return { "ok": true }
