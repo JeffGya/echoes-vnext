@@ -136,6 +136,12 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("expr/rank_benefits_build_correct_entries",      Callable(MaturityExpressionTests, "_t_rank_benefits_build"))
 	# V2-PROG-012 Phase 0
 	runner.register_test("expr/config_defaults_reachable_and_consistent", Callable(MaturityExpressionTests, "_t_config_defaults_reachable_and_consistent"))
+	# V2-PROG-012 Phase 1 — derive_expression() autonomy outputs
+	runner.register_test("expr/derive_expression_is_pure",                        Callable(MaturityExpressionTests, "_t_derive_expression_is_pure"))
+	runner.register_test("expr/derive_expression_outputs_in_range",               Callable(MaturityExpressionTests, "_t_derive_expression_outputs_in_range"))
+	runner.register_test("expr/derive_expression_no_new_save_fields",             Callable(MaturityExpressionTests, "_t_derive_expression_no_new_save_fields"))
+	runner.register_test("expr/composure_separates_structural_and_situational_fear", Callable(MaturityExpressionTests, "_t_composure_separates_structural_and_situational_fear"))
+	runner.register_test("expr/judgment_rises_with_standing",                     Callable(MaturityExpressionTests, "_t_judgment_rises_with_standing"))
 
 
 # ─── Test 1 ────────────────────────────────────────────────────────────────
@@ -814,4 +820,202 @@ static func _t_config_defaults_reachable_and_consistent() -> Dictionary:
 
 	if checked == 0:
 		return { "ok": false, "error": "No _DEFAULTS keys matched any authored balance.json key — test is vacuous, check config paths" }
+	return { "ok": true }
+
+
+# ─── V2-PROG-012 Phase 1 — derive_expression() autonomy outputs ───────────
+
+# Test 25 — purity: identical inputs called twice produce an identical dict,
+# including exact float equality (not just is_equal_approx).
+static func _t_derive_expression_is_pure() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var expr_cfg: Dictionary = bdata.get("maturity_expression", {})
+
+	var echo := ActorTests._make_test_echo("echo_pure1", "Pure Echo")
+	echo["rank"] = 5
+	echo["calling"] = "okofor"
+	echo["vector_scores"] = { "protector": 200, "pillar": 80 }
+	echo["xp_total"] = 400
+	echo["emotion"] = { "morale_current": 55, "fear_current": 30, "fear_base": 15 }
+	var actor: Dictionary = EchoActor.from_echo(echo)
+
+	var ctx_inputs: Dictionary = {
+		"bonds":            [{ "actor_a": str(actor.get("id", "")), "actor_b": "ally_1", "strength": 40 }],
+		"bond_thresholds":  { "rival_max": -30, "friend_min": 30 },
+		"active_vow":       { "vow_id": "vow.test" },
+		"calling_family":   "anchor",
+		"instability":      0.0,
+		"level_thresholds": bdata.get("progression", {}).get("level_thresholds", []),
+	}
+
+	var r1: Dictionary = MaturityExpressionService.derive_expression(actor, ctx_inputs, expr_cfg)
+	var r2: Dictionary = MaturityExpressionService.derive_expression(actor, ctx_inputs, expr_cfg)
+
+	for key: String in ["judgment", "presence", "composure", "legibility", "rank_strength"]:
+		if float(r1[key]) != float(r2[key]):
+			return { "ok": false, "error": "Key '%s' not exactly equal across two calls with identical inputs: %s vs %s" % [key, str(r1[key]), str(r2[key])] }
+	if str(r1.get("expression_band", "")) != str(r2.get("expression_band", "")):
+		return { "ok": false, "error": "expression_band differs across two calls with identical inputs" }
+	return { "ok": true }
+
+
+# Test 26 — range: all four outputs stay within 0.0-1.0 across a spread of
+# actors (rank 1 and 9, zero and max fear, no bonds and many bonds, no
+# calling and confirmed calling).
+static func _t_derive_expression_outputs_in_range() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var expr_cfg: Dictionary = bdata.get("maturity_expression", {})
+	var level_thresholds: Array = bdata.get("progression", {}).get("level_thresholds", [])
+
+	var many_bonds: Array = []
+	for i in range(8):
+		many_bonds.append({
+			"actor_a": "echo_range1", "actor_b": "ally_%d" % i,
+			"strength": 40 if i % 2 == 0 else -40,
+		})
+
+	for rank in [1, 9]:
+		for fear in [0, 100]:
+			for bonds in [[], many_bonds]:
+				for calling in ["", "okofor"]:
+					var echo := ActorTests._make_test_echo("echo_range1", "Range Echo")
+					echo["rank"] = rank
+					echo["calling"] = calling
+					echo["xp_total"] = 300
+					echo["vector_scores"] = { "protector": 120, "pillar": 40 }
+					echo["emotion"] = { "morale_current": 50, "fear_current": fear, "fear_base": mini(fear, 40) }
+					var actor: Dictionary = EchoActor.from_echo(echo)
+					var ctx_inputs: Dictionary = {
+						"bonds":            bonds,
+						"bond_thresholds":  { "rival_max": -30, "friend_min": 30 },
+						"active_vow":       {},
+						"calling_family":   "anchor",
+						"instability":      0.0,
+						"level_thresholds": level_thresholds,
+					}
+					var result: Dictionary = MaturityExpressionService.derive_expression(actor, ctx_inputs, expr_cfg)
+					for key: String in ["judgment", "presence", "composure", "legibility"]:
+						var v: float = float(result.get(key, -1.0))
+						if v < 0.0 or v > 1.0:
+							return { "ok": false, "error": "%s=%.4f out of [0,1] for rank=%d fear=%d bonds=%d calling='%s'" % [key, v, rank, fear, bonds.size(), calling] }
+	return { "ok": true }
+
+
+# Test 27 — no new save fields: build an echo save dict, run it through
+# several combat turns via ActorStateMachine, and assert the source echo's
+# key set is unchanged. The four autonomy outputs live only on the transient
+# combat actor dict (EchoActor.from_echo() deep-copies and never writes
+# back), so this is the guarantee that nothing persists and no save
+# migration is needed.
+static func _t_derive_expression_no_new_save_fields() -> Dictionary:
+	var echo := ActorTests._make_test_echo("echo_nosave1", "NoSave Echo")
+	echo["rank"] = 3
+	echo["calling"] = "kra_soro"
+	echo["vector_scores"] = { "skeptic": 150 }
+	var before_keys: Array = echo.keys()
+	before_keys.sort()
+
+	var actor: Dictionary = EchoActor.from_echo(echo)
+	actor["grid_pos"] = { "col": 0, "row": 0 }
+	var enemy := _make_enemy("en_nosave1", { "col": 1, "row": 0 })
+
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var sm := ActorStateMachine.new(actor)
+	for round_i in range(3):
+		if bool(actor.get("is_dead", false)):
+			break
+		sm.advance_turn({ "actor": actor, "all_actors": [actor, enemy], "cfg": _BALANCE_CFG, "t": round_i }, logger, round_i)
+
+	var after_keys: Array = echo.keys()
+	after_keys.sort()
+
+	if before_keys != after_keys:
+		return { "ok": false, "error": "Echo save dict key set changed after combat: before=%s after=%s" % [str(before_keys), str(after_keys)] }
+	return { "ok": true }
+
+
+# Test 28 — composure design requirement: two actors with identical
+# fear_current but different fear_base must produce DIFFERENT composure.
+# A grounded Echo with fear_base=20 is a different person from one at
+# fear_base=2 at the same fear_current — this pins that split.
+static func _t_composure_separates_structural_and_situational_fear() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var expr_cfg: Dictionary = bdata.get("maturity_expression", {})
+	var level_thresholds: Array = bdata.get("progression", {}).get("level_thresholds", [])
+
+	var ctx_inputs: Dictionary = {
+		"bonds":            [],
+		"bond_thresholds":  { "rival_max": -30, "friend_min": 30 },
+		"active_vow":       {},
+		"calling_family":   "anchor",
+		"instability":      0.0,
+		"level_thresholds": level_thresholds,
+	}
+
+	var echo_low := ActorTests._make_test_echo("echo_cmp_low", "Low Dread")
+	echo_low["rank"] = 5
+	echo_low["xp_total"] = 300
+	echo_low["emotion"] = { "morale_current": 50, "fear_current": 40, "fear_base": 2 }
+	var actor_low: Dictionary = EchoActor.from_echo(echo_low)
+
+	var echo_high := ActorTests._make_test_echo("echo_cmp_high", "High Dread")
+	echo_high["rank"] = 5
+	echo_high["xp_total"] = 300
+	echo_high["emotion"] = { "morale_current": 50, "fear_current": 40, "fear_base": 20 }
+	var actor_high: Dictionary = EchoActor.from_echo(echo_high)
+
+	var r_low: Dictionary = MaturityExpressionService.derive_expression(actor_low, ctx_inputs, expr_cfg)
+	var r_high: Dictionary = MaturityExpressionService.derive_expression(actor_high, ctx_inputs, expr_cfg)
+	var composure_low: float = float(r_low.get("composure", 0.0))
+	var composure_high: float = float(r_high.get("composure", 0.0))
+
+	if is_equal_approx(composure_low, composure_high):
+		return { "ok": false, "error": "Composure identical (%.4f) for fear_base=2 vs fear_base=20 at same fear_current=40" % composure_low }
+	if composure_low <= composure_high:
+		return { "ok": false, "error": "Expected lower fear_base (2) to yield HIGHER composure than higher fear_base (20); got low=%.4f high=%.4f" % [composure_low, composure_high] }
+	return { "ok": true }
+
+
+# Test 29 — judgment rises monotonically with Standing (rank), all else equal.
+static func _t_judgment_rises_with_standing() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var expr_cfg: Dictionary = bdata.get("maturity_expression", {})
+	var level_thresholds: Array = bdata.get("progression", {}).get("level_thresholds", [])
+
+	var ctx_inputs: Dictionary = {
+		"bonds":            [],
+		"bond_thresholds":  { "rival_max": -30, "friend_min": 30 },
+		"active_vow":       {},
+		"calling_family":   "anchor",
+		"instability":      0.0,
+		"level_thresholds": level_thresholds,
+	}
+
+	var prev_judgment: float = -1.0
+	for rank in range(1, 10):
+		var echo := ActorTests._make_test_echo("echo_jr_%d" % rank, "Judgment Rank %d" % rank)
+		echo["rank"] = rank
+		echo["xp_total"] = 300
+		echo["calling"] = "okofor"
+		echo["vector_scores"] = { "protector": 150, "pillar": 40 }
+		echo["emotion"] = { "morale_current": 50, "fear_current": 10, "fear_base": 0 }
+		var actor: Dictionary = EchoActor.from_echo(echo)
+		var result: Dictionary = MaturityExpressionService.derive_expression(actor, ctx_inputs, expr_cfg)
+		var judgment: float = float(result.get("judgment", 0.0))
+		if rank > 1 and judgment <= prev_judgment:
+			return { "ok": false, "error": "Judgment did not rise at rank %d: %.4f <= previous %.4f" % [rank, judgment, prev_judgment] }
+		prev_judgment = judgment
 	return { "ok": true }
