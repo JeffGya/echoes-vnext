@@ -1119,6 +1119,68 @@
 				"trait": 0.6,
 				"vector": 0.6
 			},
+			"autonomy_outputs": {
+				"_comment": "V2-PROG-012 Phase 1: hidden maturity-expression autonomy layer (GDD §11.5, §7.3). PROPOSED DEFAULTS awaiting playtest ratification. Four flat 0.0-1.0 scalars (judgment, presence, composure, legibility) derived per-Echo per-turn from eight named inputs (GDD:1371-1380): Standing/Storyweight maturity, archetype, trait balance, calling family/accent, bonds/rivalries, vow state, fear/morale, instability. Deliberately flat weighted sums, clamped 0.0-1.0 — GDD:1438-1442 forbids growing this into a broad hidden stat-bonus tree. Each output below is its own weight dictionary so it can be tuned independently without touching the others.",
+				"judgment": {
+					"_comment": "PROPOSED DEFAULT. GDD:1360 - how strongly the Echo can hold, interpret, and assert self under pressure. judgment = clamp(rank_strength*w + storyweight_maturity*w + identity_coherence*w + calling_accent_confirmed*w + bond_support*w - fear_pressure*w - instability*w, 0, 1).",
+					"rank_strength_weight": 0.25,
+					"storyweight_maturity_weight": 0.2,
+					"identity_coherence_weight": 0.2,
+					"calling_accent_confirmed_weight": 0.15,
+					"bond_support_weight": 0.15,
+					"fear_pressure_weight": 0.25,
+					"instability_weight": 0.0
+				},
+				"presence": {
+					"_comment": "PROPOSED DEFAULT. GDD:1361 - how strongly the Echo's current state presses onto nearby or bonded others. presence = clamp(rank_strength*w + archetype_projection*w + calling_family_projection*w + bond_density*w + morale_lift*w - instability*w, 0, 1).",
+					"rank_strength_weight": 0.2,
+					"archetype_projection_weight": 0.25,
+					"calling_family_projection_weight": 0.25,
+					"bond_density_weight": 0.15,
+					"morale_lift_weight": 0.15,
+					"instability_weight": 0.0
+				},
+				"composure": {
+					"_comment": "PROPOSED DEFAULT. GDD:1369 - less casually swayable by noise, but more sharply affected by true contradiction. composure = clamp(rank_strength*w + vow_held*w + trait_balance*w - structural_dread*w - situational_spike*w - instability*w, 0, 1). Reads fear TWICE on purpose: structural_dread from fear_base (permanent, earned from combat losses), situational_spike from fear_current above fear_base (recoverable within the encounter) — see MaturityExpressionService.derive_expression().",
+					"rank_strength_weight": 0.2,
+					"vow_held_weight": 0.15,
+					"trait_balance_weight": 0.2,
+					"structural_dread_weight": 0.25,
+					"situational_spike_weight": 0.2,
+					"instability_weight": 0.0
+				},
+				"legibility": {
+					"_comment": "PROPOSED DEFAULT. GDD:1273, §7.3 - how specific and readable the Echo's intent is. legibility = clamp(rank_strength*w + storyweight_maturity*w + calling_accent_confirmed*w + identity_coherence*w - instability*w, 0, 1).",
+					"rank_strength_weight": 0.3,
+					"storyweight_maturity_weight": 0.25,
+					"calling_accent_confirmed_weight": 0.2,
+					"identity_coherence_weight": 0.25,
+					"instability_weight": 0.0
+				},
+				"archetype_projection": {
+					"_comment": "PROPOSED DEFAULT. Shared 0.0-1.0 lookup by actor.archetype_birth, consumed by presence's archetype_projection_weight. Outward archetypes (proud, valiant, loyal) project more; inward archetypes (reflective, canny) project less. Id list mirrors data.actor.archetype_action_muls.",
+					"valiant": 0.9,
+					"proud": 0.85,
+					"loyal": 0.7,
+					"ambitious": 0.6,
+					"empathic": 0.55,
+					"devout": 0.5,
+					"stoic": 0.45,
+					"canny": 0.3,
+					"reflective": 0.25
+				},
+				"calling_family_projection": {
+					"_comment": "PROPOSED DEFAULT. Shared 0.0-1.0 lookup by calling family (data.calling.definitions.<id>.family), consumed by presence's calling_family_projection_weight. Per GDD:1431-1436: Anchor is steady and broad (highest presence), Edge is sharp and narrow (moderate presence), Sight is informational (lowest presence).",
+					"anchor": 0.85,
+					"edge": 0.5,
+					"sight": 0.35
+				},
+				"bond_scale": {
+					"_comment": "PROPOSED DEFAULT. Normalisation divisor for bond_support/bond_density: each friend-tier bond to a living party member counts +1, each rival-tier bond counts -1 (bond_support) or +1 magnitude (bond_density), summed then divided by max_bonds before clamping.",
+					"max_bonds": 4
+				},
+				"fear_base_max": 40
+			},
 			"presence_dampen_scale": {
 				"_comment": "V2-PROG-010: Max reduction to fear_active_dampen at rank 9. 0.4 = 40% less fear disruption at rank 9 vs rank 1.",
 				"value": 0.4
