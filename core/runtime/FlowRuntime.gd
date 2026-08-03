@@ -2571,7 +2571,15 @@ func _resolve_next_actor(t: int) -> void:
 	var bdata: Dictionary = balance.get("data", {})
 	var leadership_expr_cfg: Dictionary = bdata.get("maturity_expression", {})
 	var grid_cfg: Dictionary = bdata.get("grid", {})
-	var actor_cfg: Dictionary = bdata.get("actor", {})
+	# V2-PROG-012 Phase 0: BehaviorArbiter reads seven tuning keys that are authored in
+	# data.maturity_expression (identity_weight_scale, presence_dampen_scale, directive_band_mul,
+	# press_*, protect_ally_grounded_*). Without this merge they were unreachable and silently
+	# fell through to BehaviorArbiter._DEFAULTS, making the balance.json values decorative.
+	# data.actor wins on collision so existing behaviour is unchanged.
+	var actor_cfg: Dictionary = bdata.get("actor", {}).duplicate(true)
+	for _k: String in leadership_expr_cfg.keys():
+		if not actor_cfg.has(_k):
+			actor_cfg[_k] = leadership_expr_cfg[_k]
 	var prog_cfg_block: Dictionary    = bdata.get("progression", {})
 	var birth_stats_block: Dictionary = bdata.get("summoning", {}).get("birth_stats", {})
 	var round: int = int(combat_state.get("round_counter", 0))
