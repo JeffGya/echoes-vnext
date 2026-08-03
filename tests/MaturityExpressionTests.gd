@@ -754,9 +754,14 @@ static func _t_rank_benefits_build() -> Dictionary:
 #
 # For every _DEFAULTS key that is also authored somewhere in the real
 # balance.json (loaded via ConfigService, same as FlowRuntime does at
-# runtime), we check two things against a cfg built with the SAME merge
-# FlowRuntime._resolve_next_actor() uses (data.actor ∪ data.maturity_expression,
-# data.actor winning on collision):
+# runtime), we check two things against a cfg built by calling
+# FlowRuntime._merge_actor_cfg() directly — the actual static helper
+# _get_actor_cfg_merged() calls in production (data.actor ∪
+# data.maturity_expression, data.actor winning on collision). Calling the
+# production function itself (rather than re-implementing the merge here)
+# means this test can't silently drift from production if the merge logic
+# ever changes — the earlier draft of this test copy-pasted the loop inline,
+# which the merge was subsequently extracted out from under.
 #   (a) value consistency — the arbiter resolves exactly the authored value.
 #   (b) reachability — swapping the key's value for a sentinel and rebuilding
 #       the arbiter must produce the SENTINEL, not the old value and not
@@ -781,11 +786,9 @@ static func _t_config_defaults_reachable_and_consistent() -> Dictionary:
 	var maturity_cfg: Dictionary = bdata.get("maturity_expression", {})
 	var actor_data_cfg: Dictionary = bdata.get("actor", {})
 
-	# Same merge FlowRuntime._resolve_next_actor() performs when building actor_cfg.
-	var merged_cfg: Dictionary = actor_data_cfg.duplicate(true)
-	for k: String in maturity_cfg.keys():
-		if not merged_cfg.has(k):
-			merged_cfg[k] = maturity_cfg[k]
+	# Call the actual production merge helper — not a re-implementation — so this
+	# test cannot drift from what FlowRuntime._get_actor_cfg_merged() really does.
+	var merged_cfg: Dictionary = FlowRuntime._merge_actor_cfg(actor_data_cfg, maturity_cfg)
 
 	var defaults: Dictionary = BehaviorArbiter._DEFAULTS
 	var checked: int = 0

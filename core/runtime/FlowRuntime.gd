@@ -2546,6 +2546,37 @@ func _movement_all_cells(walkable: Dictionary) -> Array:
 	return cells
 
 
+## V2-PROG-012 Phase 0: merges data.maturity_expression into data.actor for BehaviorArbiter's
+## actor_cfg (data.actor wins on collision). Pure/stateless so MaturityExpressionTests can
+## call this exact function instead of re-implementing the merge inline — a copy-pasted
+## duplicate in the test would silently drift from production if this logic ever changes.
+##
+## Shallow duplicate() is correct here, not deep: BehaviorArbiter never writes to _cfg after
+## construction (verified — no `_cfg[...] =` assignment anywhere in BehaviorArbiter.gd or
+## ActorStateMachine.gd, only reads via _cfg_get()), and this merge only ever adds top-level
+## keys, never mutates a nested value in place. A shallow copy is therefore both correct and
+## far cheaper than deep-copying ~13KB of nested config (situational_muls alone serializes to
+## 5.5KB) every time this is called.
+static func _merge_actor_cfg(actor_data_cfg: Dictionary, maturity_cfg: Dictionary) -> Dictionary:
+	var merged: Dictionary = actor_data_cfg.duplicate()
+	for k: String in maturity_cfg.keys():
+		if not merged.has(k):
+			merged[k] = maturity_cfg[k]
+	return merged
+
+
+## Cached result of _merge_actor_cfg(). Config is immutable for the life of this FlowRuntime —
+## config_service.load_balance() runs exactly once, at boot() (grep-verified: no other
+## production call site reloads balance mid-run) — so _resolve_next_actor() would otherwise
+## rebuild the same merged dict on every single actor turn (6v6 x 20 rounds ≈ 240 rebuilds)
+## for a result that never changes.
+var _actor_cfg_merged_cache: Dictionary = {}
+func _get_actor_cfg_merged(actor_data_cfg: Dictionary, maturity_cfg: Dictionary) -> Dictionary:
+	if _actor_cfg_merged_cache.is_empty():
+		_actor_cfg_merged_cache = _merge_actor_cfg(actor_data_cfg, maturity_cfg)
+	return _actor_cfg_merged_cache
+
+
 ## COMBAT-SEQ: finds the next living actor from current_actor_index, resolves their turn,
 ## appends the result to last_round_results, emits a per-actor snapshot.
 ## If no living actor remains, calls _end_round() instead.
@@ -2575,11 +2606,9 @@ func _resolve_next_actor(t: int) -> void:
 	# data.maturity_expression (identity_weight_scale, presence_dampen_scale, directive_band_mul,
 	# press_*, protect_ally_grounded_*). Without this merge they were unreachable and silently
 	# fell through to BehaviorArbiter._DEFAULTS, making the balance.json values decorative.
-	# data.actor wins on collision so existing behaviour is unchanged.
-	var actor_cfg: Dictionary = bdata.get("actor", {}).duplicate(true)
-	for _k: String in leadership_expr_cfg.keys():
-		if not actor_cfg.has(_k):
-			actor_cfg[_k] = leadership_expr_cfg[_k]
+	# data.actor wins on collision so existing behaviour is unchanged. See _merge_actor_cfg()
+	# / _get_actor_cfg_merged() above for the merge + per-run cache.
+	var actor_cfg: Dictionary = _get_actor_cfg_merged(bdata.get("actor", {}), leadership_expr_cfg)
 	var prog_cfg_block: Dictionary    = bdata.get("progression", {})
 	var birth_stats_block: Dictionary = bdata.get("summoning", {}).get("birth_stats", {})
 	var round: int = int(combat_state.get("round_counter", 0))
