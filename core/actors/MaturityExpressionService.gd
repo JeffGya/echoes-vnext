@@ -130,11 +130,16 @@ static func derive_expression(actor: Dictionary, ctx_inputs: Dictionary, expr_cf
 	var rank_strength := get_rank_strength(rank, max_rank)
 
 	# ── Shared sub-scores (0.0-1.0), each feeding one or more outputs ──
+	# actor/ctx_inputs entries are defensively type-checked (not blind `as`
+	# casts) — some hand-authored test fixtures across the suite carry
+	# placeholder values (e.g. "traits": []) that don't match the real
+	# EchoActor/EnemyActor shape. Matches the defensive style already used
+	# by VectorService/SocialGraphService for the same reason.
 	var storyweight: int = int(actor.get("storyweight", actor.get("xp_total", 0)))
-	var level_thresholds: Array = ctx_inputs.get("level_thresholds", []) as Array
+	var level_thresholds: Array = _as_array(ctx_inputs.get("level_thresholds", []))
 	var storyweight_maturity := _storyweight_maturity(storyweight, level_thresholds)
 
-	var vector_scores: Dictionary = actor.get("vector_scores", {}) as Dictionary
+	var vector_scores: Dictionary = _as_dict(actor.get("vector_scores", {}))
 	var identity_coherence := _identity_coherence(vector_scores)
 
 	var calling_accent_confirmed: float = 1.0 if str(actor.get("calling", "")) != "" else 0.0
@@ -148,16 +153,16 @@ static func derive_expression(actor: Dictionary, ctx_inputs: Dictionary, expr_cf
 		float(family_cfg.get(str(ctx_inputs.get("calling_family", "")), 0.0)), 0.0, 1.0)
 
 	var bond_scale_cfg: Dictionary = autonomy_cfg.get("bond_scale", {})
-	var bond_thresholds: Dictionary = ctx_inputs.get("bond_thresholds", {}) as Dictionary
-	var bonds: Array = ctx_inputs.get("bonds", []) as Array
+	var bond_thresholds: Dictionary = _as_dict(ctx_inputs.get("bond_thresholds", {}))
+	var bonds: Array = _as_array(ctx_inputs.get("bonds", []))
 	var bond_stats := _bond_support_and_density(bonds, bond_thresholds, bond_scale_cfg)
 	var bond_support: float = bond_stats["support"]
 	var bond_density: float = bond_stats["density"]
 
-	var active_vow: Dictionary = ctx_inputs.get("active_vow", {}) as Dictionary
+	var active_vow: Dictionary = _as_dict(ctx_inputs.get("active_vow", {}))
 	var vow_held: float = 1.0 if str(active_vow.get("vow_id", "")) != "" else 0.0
 
-	var traits: Dictionary = actor.get("traits", {}) as Dictionary
+	var traits: Dictionary = _as_dict(actor.get("traits", {}))
 	var trait_balance: float = clampf(float(traits.get("faith", 0)) / 100.0, 0.0, 1.0)
 
 	var fear_current: float = float(actor.get("fear", 0))
@@ -221,6 +226,17 @@ static func derive_expression(actor: Dictionary, ctx_inputs: Dictionary, expr_cf
 		"calling_behavior": calling_behavior,
 		"rank_strength":    rank_strength,
 	}
+
+
+# Defensive coercion for values read out of caller-supplied actor/ctx_inputs dicts.
+# Some hand-authored actor fixtures across the test suite carry placeholder values
+# (e.g. "traits": []) that do not match the real EchoActor/EnemyActor shape — a blind
+# `as Dictionary`/`as Array` cast on those throws. Returns {} / [] on any type mismatch.
+static func _as_dict(v: Variant) -> Dictionary:
+	return v if v is Dictionary else {}
+
+static func _as_array(v: Variant) -> Array:
+	return v if v is Array else []
 
 
 # Normalises storyweight against data.progression.level_thresholds (last entry = ceiling).
