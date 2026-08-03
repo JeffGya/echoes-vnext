@@ -18,6 +18,7 @@ extends RefCounted
 
 const MaturityExpressionService = preload("res://core/actors/MaturityExpressionService.gd")
 const LeadershipEmotionService = preload("res://core/combat/LeadershipEmotionService.gd")
+const SocialGraphService = preload("res://core/sanctum/SocialGraphService.gd")
 
 var _actor: Dictionary
 var _behavior_module: BehaviorModule
@@ -106,22 +107,70 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 			"movement_skipped": true,
 		})
 
-	# V2-PROG-006: compute maturity-expression band + calling behavior
+	# V2-PROG-006/V2-PROG-012: compute maturity-expression band, calling behavior,
+	# and the four hidden autonomy outputs (judgment/presence/composure/legibility)
+	# via one derive_expression() call.
 	var cfg_data: Dictionary = context.get("cfg", {}).get("data", {})
 	var expr_cfg: Dictionary = cfg_data.get("maturity_expression", {})
-	var band_by_standing: Dictionary = expr_cfg.get("band_by_standing", {})
-	var calling_cfg: Dictionary = expr_cfg.get("calling_behavior", {})
-	_expression_band = MaturityExpressionService.get_expression_band(int(_actor.get("rank", 1)), band_by_standing)
-	_calling_behavior = MaturityExpressionService.get_calling_behavior(_actor, calling_cfg)
-	# V2-PROG-010: continuous rank scalar + presence_strength for identity scaling and composure
-	var rank_scale_cfg: Dictionary = expr_cfg.get("rank_strength_scale", {})
-	var max_rank: int              = int(rank_scale_cfg.get("max_rank", 9))
-	var rank_strength: float       = MaturityExpressionService.get_rank_strength(int(_actor.get("rank", 1)), max_rank)
-	var presence_strength: float   = MaturityExpressionService.get_presence_strength(_expression_band)
+
+	# V2-PROG-012: assemble ctx_inputs from context this actor already has access to.
+	var calling_defs: Dictionary = cfg_data.get("calling", {}).get("definitions", {})
+	var calling_id_for_family: String = str(_actor.get("calling", ""))
+	if calling_id_for_family.is_empty():
+		calling_id_for_family = str(_actor.get("calling_origin", ""))
+	var calling_family: String = str((calling_defs.get(calling_id_for_family, {}) as Dictionary).get("family", ""))
+
+	var raw_bonds: Array = context.get("bonds", []) as Array
+	var actor_id_str: String = str(_actor.get("id", ""))
+	var actor_bonds: Array = SocialGraphService.get_bonds_for_actor(raw_bonds, actor_id_str)
+	# Only bonds to currently-living party members count — a bond to a fallen
+	# ally shouldn't keep pressing on judgment/presence mid-encounter.
+	var living_party_ids: Dictionary = {}
+	for a_v in (context.get("all_actors", []) as Array):
+		if a_v is Dictionary:
+			var a: Dictionary = a_v
+			if str(a.get("faction", "")) == "echo" and not bool(a.get("is_dead", false)):
+				living_party_ids[str(a.get("id", ""))] = true
+	var living_bonds: Array = []
+	for edge_v in actor_bonds:
+		if not (edge_v is Dictionary):
+			continue
+		var edge: Dictionary = edge_v
+		var other_id: String = str(edge.get("actor_b", "")) if str(edge.get("actor_a", "")) == actor_id_str \
+			else str(edge.get("actor_a", ""))
+		if living_party_ids.has(other_id):
+			living_bonds.append(edge)
+
+	var ctx_inputs: Dictionary = {
+		"bonds":            living_bonds,
+		"bond_thresholds":  context.get("bond_thresholds", {}),
+		"active_vow":       context.get("active_vow", {}),
+		"calling_family":   calling_family,
+		"instability":      float(context.get("instability", 0.0)),  # V2-PROG-012: reserved seam, no system yet
+		"level_thresholds": (cfg_data.get("progression", {}) as Dictionary).get("level_thresholds", []),
+	}
+
+	var expr_result: Dictionary = MaturityExpressionService.derive_expression(_actor, ctx_inputs, expr_cfg)
+	_expression_band = str(expr_result.get("expression_band", "nascent"))
+	_calling_behavior = expr_result.get("calling_behavior", {}) as Dictionary
+	var rank_strength: float = float(expr_result.get("rank_strength", 0.0))
+	var judgment: float      = float(expr_result.get("judgment", 0.0))
+	var presence: float      = float(expr_result.get("presence", 0.0))
+	var composure: float     = float(expr_result.get("composure", 0.0))
+	var legibility: float    = float(expr_result.get("legibility", 0.0))
+	# V2-PROG-012: presence (derived) replaces get_presence_strength() as the source of
+	# _presence_strength. The old band-only value was passed to BehaviorArbiter._score()
+	# and never read there, and projected into the snapshot but read by no UI — this
+	# retires that dead path without removing the key any existing reader relies on.
+	var presence_strength: float = presence
 	# Write back to actor dict so _project_actor() can include them in snapshots
 	_actor["_expression_band"]   = _expression_band
 	_actor["_presence_strength"] = presence_strength
 	_actor["_rank_strength"]     = rank_strength
+	_actor["_judgment"]          = judgment
+	_actor["_presence"]          = presence
+	_actor["_composure"]         = composure
+	_actor["_legibility"]        = legibility
 
 	# PROG-010: read resilience + leadership traits
 	var resilience_traits: Array = _actor.get("resilience_traits", []) as Array
@@ -233,6 +282,11 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	augmented_context["rank_strength"]     = rank_strength
 	augmented_context["resilience_traits"] = resilience_traits
 	augmented_context["leadership_traits"] = leadership_traits
+	# V2-PROG-012 Phase 1: hidden autonomy outputs — no consumer reads these yet.
+	augmented_context["judgment"]          = judgment
+	augmented_context["presence"]          = presence
+	augmented_context["composure"]         = composure
+	augmented_context["legibility"]        = legibility
 
 	# PROG-009: inject equipped_skills + skills_cfg into context for BehaviorArbiter.
 	# equipped_skills: slot → skill_id dict set by FlowSkillLoadoutState at encounter start.
