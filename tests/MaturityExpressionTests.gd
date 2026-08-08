@@ -146,6 +146,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("expr/composure_ceiling_never_floors_at_high_fear_base",  Callable(MaturityExpressionTests, "_t_composure_ceiling_never_floors_at_high_fear_base"))
 	# V2-PROG-012 Phase 1 review-fix — trait_balance must read courage/wisdom/faith, not faith alone
 	runner.register_test("expr/trait_balance_reads_all_three_traits",              Callable(MaturityExpressionTests, "_t_trait_balance_reads_all_three_traits"))
+	# V2-PROG-012 Phase 2 — composure_dampen_scale rename + composure threaded into the arbiter
+	runner.register_test("expr/composure_not_rank_drives_fear_dampen",            Callable(MaturityExpressionTests, "_t_composure_not_rank_drives_fear_dampen"))
+	runner.register_test("expr/high_fear_base_more_disruption_at_equal_rank",     Callable(MaturityExpressionTests, "_t_high_fear_base_more_disruption_at_equal_rank"))
+	runner.register_test("expr/composure_dampen_scale_reachable_from_balance",    Callable(MaturityExpressionTests, "_t_composure_dampen_scale_reachable_from_balance"))
 
 
 # ─── Test 1 ────────────────────────────────────────────────────────────────
@@ -1221,4 +1225,162 @@ static func _t_trait_balance_reads_all_three_traits() -> Dictionary:
 	var composure_courage_up: float  = float(r_courage_up.get("composure", 0.0))
 	if is_equal_approx(composure_base, composure_courage_up):
 		return { "ok": false, "error": "Composure did not change when courage alone changed (50→90, wisdom/faith fixed): %.4f vs %.4f" % [composure_base, composure_courage_up] }
+	return { "ok": true }
+
+
+# ─── V2-PROG-012 Phase 2 — composure_dampen_scale rename + threading ──────
+
+# Test — composure (a real derive_expression() output, not a synthetic 0/1)
+# drives the fear-dampen multiplier at EQUAL rank_strength. Two actors share
+# rank=5 (identical rank_strength) and identical "fear" as BehaviorArbiter._score()
+# computes it (max(fear_current, fear_base) = 60 for both, since fear_current=60
+# dominates in both cases) — the ONLY thing that differs is fear_base (2 vs 35),
+# which Phase 1 wired into composure's structural_dread ceiling. Before Phase 2,
+# BehaviorArbiter's dampener multiplied by rank_strength alone, so two actors at
+# identical rank_strength — regardless of fear_base — would score identically
+# under fear. This test would have been impossible to write against that code:
+# there is no way to make rank_strength differ while holding rank equal.
+static func _t_composure_not_rank_drives_fear_dampen() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var expr_cfg: Dictionary = bdata.get("maturity_expression", {})
+	var ctx_inputs: Dictionary = {
+		"bonds":            [],
+		"bond_thresholds":  {},
+		"active_vow":       {},
+		"calling_family":   "",
+		"instability":      0.0,
+		"level_thresholds": bdata.get("progression", {}).get("level_thresholds", []),
+		"fear_base_max":    float(bdata.get("emotion", {}).get("drift", {}).get("fear_base_max", 40.0)),
+	}
+
+	var actor_low_dread := {
+		"id": "echo_dampen_low", "faction": "echo", "calling_origin": "aduro",
+		"actor_type": "echo", "archetype_birth": "valiant",
+		"traits": { "courage": 60, "wisdom": 40, "faith": 20 },
+		"vector_scores": { "vanguard": 80, "protector": 10 },
+		"rank": 5, "fear": 60, "fear_base": 2, "morale": 50,
+		"grid_pos": { "col": 0, "row": 0 },
+	}
+	var actor_high_dread: Dictionary = actor_low_dread.duplicate(true)
+	actor_high_dread["id"] = "echo_dampen_high"
+	actor_high_dread["fear_base"] = 35
+
+	var r_low: Dictionary  = MaturityExpressionService.derive_expression(actor_low_dread, ctx_inputs, expr_cfg)
+	var r_high: Dictionary = MaturityExpressionService.derive_expression(actor_high_dread, ctx_inputs, expr_cfg)
+	var composure_low: float  = float(r_low.get("composure", 0.0))
+	var composure_high: float = float(r_high.get("composure", 0.0))
+	var rank_strength: float  = float(r_low.get("rank_strength", 0.0))
+
+	if is_equal_approx(composure_low, composure_high):
+		return { "ok": false, "error": "Precondition failed: composure identical (%.4f) for fear_base=2 vs fear_base=35 at same rank — cannot test the arbiter axis" % composure_low }
+	if not is_equal_approx(rank_strength, float(r_high.get("rank_strength", 0.0))):
+		return { "ok": false, "error": "Precondition failed: rank_strength differs between actors of the same rank" }
+
+	var arbiter := BehaviorArbiter.new({})
+	var score_low_dread: float = arbiter._score(
+		"melee_attack", actor_low_dread, {}, {}, "grounded", {}, {}, 0.1, rank_strength, composure_low)
+	var score_high_dread: float = arbiter._score(
+		"melee_attack", actor_high_dread, {}, {}, "grounded", {}, {}, 0.1, rank_strength, composure_high)
+
+	if is_equal_approx(score_low_dread, score_high_dread):
+		return { "ok": false, "error": "Scores identical (%.4f) at equal rank_strength (%.4f) despite different composure (low=%.4f, high=%.4f) — the dampener is not reading composure" % [score_low_dread, rank_strength, composure_low, composure_high] }
+	return { "ok": true }
+
+
+# Test — high fear_base means MORE fear disruption (lower score) at equal rank.
+# Same construction as the test above, but asserts the DIRECTION, not just that
+# the scores differ. This pins the structural-vs-situational distinction
+# end-to-end through the arbiter (not just inside derive_expression, which
+# expr/composure_separates_structural_and_situational_fear already covers at
+# the derive_expression layer alone): a high structural fear_base must lower
+# composure's ceiling, which must lower the arbiter's fear_factor, which must
+# lower the final score for an active (non-passive) action under fear.
+static func _t_high_fear_base_more_disruption_at_equal_rank() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var expr_cfg: Dictionary = bdata.get("maturity_expression", {})
+	var ctx_inputs: Dictionary = {
+		"bonds":            [],
+		"bond_thresholds":  {},
+		"active_vow":       {},
+		"calling_family":   "",
+		"instability":      0.0,
+		"level_thresholds": bdata.get("progression", {}).get("level_thresholds", []),
+		"fear_base_max":    float(bdata.get("emotion", {}).get("drift", {}).get("fear_base_max", 40.0)),
+	}
+
+	var actor_low_dread := {
+		"id": "echo_direction_low", "faction": "echo", "calling_origin": "aduro",
+		"actor_type": "echo", "archetype_birth": "valiant",
+		"traits": { "courage": 60, "wisdom": 40, "faith": 20 },
+		"vector_scores": { "vanguard": 80, "protector": 10 },
+		"rank": 5, "fear": 60, "fear_base": 2, "morale": 50,
+		"grid_pos": { "col": 0, "row": 0 },
+	}
+	var actor_high_dread: Dictionary = actor_low_dread.duplicate(true)
+	actor_high_dread["id"] = "echo_direction_high"
+	actor_high_dread["fear_base"] = 35
+
+	var r_low: Dictionary  = MaturityExpressionService.derive_expression(actor_low_dread, ctx_inputs, expr_cfg)
+	var r_high: Dictionary = MaturityExpressionService.derive_expression(actor_high_dread, ctx_inputs, expr_cfg)
+	var composure_low: float  = float(r_low.get("composure", 0.0))
+	var composure_high: float = float(r_high.get("composure", 0.0))
+	var rank_strength: float  = float(r_low.get("rank_strength", 0.0))
+
+	if composure_low <= composure_high:
+		return { "ok": false, "error": "Precondition failed: expected lower fear_base (2) to yield HIGHER composure than higher fear_base (35); got low=%.4f high=%.4f" % [composure_low, composure_high] }
+
+	var arbiter := BehaviorArbiter.new({})
+	var score_low_dread: float = arbiter._score(
+		"melee_attack", actor_low_dread, {}, {}, "grounded", {}, {}, 0.1, rank_strength, composure_low)
+	var score_high_dread: float = arbiter._score(
+		"melee_attack", actor_high_dread, {}, {}, "grounded", {}, {}, 0.1, rank_strength, composure_high)
+
+	if score_high_dread >= score_low_dread:
+		return { "ok": false, "error": "High fear_base (35, composure=%.4f, score=%.2f) should score LOWER under fear than low fear_base (2, composure=%.4f, score=%.2f) at equal rank_strength — more structural dread must mean more disruption" % [composure_high, score_high_dread, composure_low, score_low_dread] }
+	return { "ok": true }
+
+
+# Test — config reachability for the renamed key. Mirrors the Phase 0 sentinel
+# technique in expr/config_defaults_reachable_and_consistent, scoped to just
+# composure_dampen_scale: confirms the merged actor cfg (data.actor ∪
+# data.maturity_expression, the real production merge via
+# FlowRuntime._merge_actor_cfg()) carries the renamed key, that the arbiter
+# resolves the authored balance.json value (not _DEFAULTS), and that a
+# sentinel override is actually reflected — proving _cfg_get() reads _cfg for
+# this key rather than silently falling through.
+static func _t_composure_dampen_scale_reachable_from_balance() -> Dictionary:
+	const _SENTINEL: String = "__V2_PROG_012_PHASE2_SENTINEL__"
+
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var maturity_cfg: Dictionary = bdata.get("maturity_expression", {})
+	var actor_data_cfg: Dictionary = bdata.get("actor", {})
+	var merged_cfg: Dictionary = FlowRuntime._merge_actor_cfg(actor_data_cfg, maturity_cfg)
+
+	if not merged_cfg.has("composure_dampen_scale"):
+		return { "ok": false, "error": "composure_dampen_scale not present in the merged actor cfg — the balance.json rename did not land where BehaviorArbiter reads it" }
+
+	var arbiter_real := BehaviorArbiter.new(merged_cfg)
+	var resolved: Variant = arbiter_real._cfg_get("composure_dampen_scale")
+	if resolved != merged_cfg["composure_dampen_scale"]:
+		return { "ok": false, "error": "arbiter resolved %s, authored balance.json has %s" % [str(resolved), str(merged_cfg["composure_dampen_scale"])] }
+
+	var sentinel_cfg: Dictionary = merged_cfg.duplicate(true)
+	sentinel_cfg["composure_dampen_scale"] = _SENTINEL
+	var arbiter_sentinel := BehaviorArbiter.new(sentinel_cfg)
+	var resolved_sentinel: Variant = arbiter_sentinel._cfg_get("composure_dampen_scale")
+	if resolved_sentinel != _SENTINEL:
+		return { "ok": false, "error": "composure_dampen_scale is NOT reachable through _cfg — arbiter did not reflect a sentinel override (fell through to _DEFAULTS or a stale value)" }
+
+	if merged_cfg.has("presence_dampen_scale"):
+		return { "ok": false, "error": "stale presence_dampen_scale key still present in the merged actor cfg after the Phase 2 rename" }
+
 	return { "ok": true }
