@@ -138,7 +138,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("expr/config_defaults_reachable_and_consistent", Callable(MaturityExpressionTests, "_t_config_defaults_reachable_and_consistent"))
 	# V2-PROG-012 Phase 1 — derive_expression() autonomy outputs
 	runner.register_test("expr/derive_expression_is_pure",                        Callable(MaturityExpressionTests, "_t_derive_expression_is_pure"))
-	runner.register_test("expr/derive_expression_outputs_in_range",               Callable(MaturityExpressionTests, "_t_derive_expression_outputs_in_range"))
+	runner.register_test("expr/derive_expression_outputs_discriminate",           Callable(MaturityExpressionTests, "_t_derive_expression_outputs_discriminate"))
 	runner.register_test("expr/derive_expression_no_new_save_fields",             Callable(MaturityExpressionTests, "_t_derive_expression_no_new_save_fields"))
 	runner.register_test("expr/composure_separates_structural_and_situational_fear", Callable(MaturityExpressionTests, "_t_composure_separates_structural_and_situational_fear"))
 	runner.register_test("expr/judgment_rises_with_standing",                     Callable(MaturityExpressionTests, "_t_judgment_rises_with_standing"))
@@ -866,10 +866,21 @@ static func _t_derive_expression_is_pure() -> Dictionary:
 	return { "ok": true }
 
 
-# Test 26 — range: all four outputs stay within 0.0-1.0 across a spread of
-# actors (rank 1 and 9, zero and max fear, no bonds and many bonds, no
-# calling and confirmed calling).
-static func _t_derive_expression_outputs_in_range() -> Dictionary:
+# Test 26 (Opus review fix) — replaces the vacuous range check. The old test's
+# `if v < 0.0 or v > 1.0` could never fail: every output is clampf(..., 0.0, 1.0)
+# at its assignment site inside derive_expression(), so the check tested clampf,
+# not the derivation. It also could not catch NaN — clampf propagates NaN, and
+# both `NaN < 0.0` and `NaN > 1.0` evaluate false.
+#
+# This test actually exercises the derivation: across a spread of actors (rank
+# 1 and 9, zero and max fear, no bonds and many bonds, no calling and confirmed
+# calling) every output must be finite (catches NaN), AND across that whole
+# spread each output must NOT collapse to a single repeated value — i.e. the
+# derivation genuinely discriminates between actors. That second assertion is
+# exactly the shape of check that would have caught the FIX-1 Composure
+# flooring bug, where every fear_base past ~16 collapsed Composure to exactly
+# 0.0 for an entire cohort of low-Standing Echoes.
+static func _t_derive_expression_outputs_discriminate() -> Dictionary:
 	var cs := ConfigService.new()
 	cs.load_balance()
 	var bal: Dictionary = cs.get_balance()
@@ -884,6 +895,7 @@ static func _t_derive_expression_outputs_in_range() -> Dictionary:
 			"strength": 40 if i % 2 == 0 else -40,
 		})
 
+	var seen: Dictionary = { "judgment": [], "presence": [], "composure": [], "legibility": [] }
 	for rank in [1, 9]:
 		for fear in [0, 100]:
 			for bonds in [[], many_bonds]:
@@ -905,43 +917,109 @@ static func _t_derive_expression_outputs_in_range() -> Dictionary:
 					}
 					var result: Dictionary = MaturityExpressionService.derive_expression(actor, ctx_inputs, expr_cfg)
 					for key: String in ["judgment", "presence", "composure", "legibility"]:
-						var v: float = float(result.get(key, -1.0))
-						if v < 0.0 or v > 1.0:
-							return { "ok": false, "error": "%s=%.4f out of [0,1] for rank=%d fear=%d bonds=%d calling='%s'" % [key, v, rank, fear, bonds.size(), calling] }
+						var v: float = float(result.get(key, NAN))
+						if not is_finite(v):
+							return { "ok": false, "error": "%s is not finite (%s) for rank=%d fear=%d bonds=%d calling='%s'" % [key, str(v), rank, fear, bonds.size(), calling] }
+						(seen[key] as Array).append(v)
+
+	for key: String in seen.keys():
+		var values: Array = seen[key]
+		var first: float = float(values[0])
+		var all_same := true
+		for v in values:
+			if not is_equal_approx(float(v), first):
+				all_same = false
+				break
+		if all_same:
+			return { "ok": false, "error": "%s never varies across the actor spread (always %.4f) — derivation is not discriminating between actors" % [key, first] }
 	return { "ok": true }
 
 
-# Test 27 — no new save fields: build an echo save dict, run it through
-# several combat turns via ActorStateMachine, and assert the source echo's
-# key set is unchanged. The four autonomy outputs live only on the transient
-# combat actor dict (EchoActor.from_echo() deep-copies and never writes
-# back), so this is the guarantee that nothing persists and no save
-# migration is needed.
+# Test 27 (Opus review fix) — replaces a test that pinned the wrong object. The
+# old test compared echo.keys() before/after running combat via
+# EchoActor.from_echo(echo) — but from_echo() deep-copies the echo and the
+# autonomy fields are only ever added to the TRANSIENT copy, so the source
+# echo's keyset could never change no matter what derive_expression() does.
+# It was a regression test for EchoActor.from_echo()'s deep-copy behaviour,
+# and it never touched SaveService — the actual persistence boundary.
+#
+# This test drives a real combat encounter through FlowRuntime (roster echo →
+# EchoActor.from_echo() → ActorStateMachine.advance_turn() sets the five
+# transient keys on the combat actor), then round-trips the resulting
+# save_data through the real SaveService.save_to_file()/load_from_file() path
+# and asserts the persisted roster echo carries none of them. This would catch
+# a future regression where the transient autonomy fields get merged back onto
+# the save-side echo (the codebase already has precedent for writing transient
+# per-actor state like "_sanctum_bark" onto roster entries), or where
+# EchoActor.from_echo() stops deep-copying and starts aliasing.
 static func _t_derive_expression_no_new_save_fields() -> Dictionary:
-	var echo := ActorTests._make_test_echo("echo_nosave1", "NoSave Echo")
-	echo["rank"] = 3
-	echo["calling"] = "kra_soro"
-	echo["vector_scores"] = { "skeptic": 150 }
-	var before_keys: Array = echo.keys()
-	before_keys.sort()
-
-	var actor: Dictionary = EchoActor.from_echo(echo)
-	actor["grid_pos"] = { "col": 0, "row": 0 }
-	var enemy := _make_enemy("en_nosave1", { "col": 1, "row": 0 })
-
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
-	var sm := ActorStateMachine.new(actor)
-	for round_i in range(3):
-		if bool(actor.get("is_dead", false)):
+	var config := ConfigService.new()
+	var test_path := "/tmp/echoes-vnext-tests/maturity_expr_save_roundtrip_slot.json"
+	var runtime := FlowRuntime.new(logger, config, test_path)
+	runtime.boot()
+	var flow_ctx: FlowContext = runtime.flow_ctx
+
+	flow_ctx.realm_id = "realm.01"
+	var rm: Dictionary = RealmService.get_or_create("realm.01", flow_ctx, 0)
+	if rm.is_empty():
+		return { "ok": false, "error": "setup failed: realm not created" }
+	flow_ctx.stage_id = "stage.0"
+	flow_ctx.encounter_id = "realm.01.stage.0.save_roundtrip"
+
+	var bal: Dictionary = config.get_balance()
+	var summ_cfg: Dictionary = bal.get("data", {}).get("summoning", {})
+	var expr_cfg: Dictionary = bal.get("data", {}).get("maturity_expression", {})
+	var echo: Dictionary = EchoFactory.generate("save_roundtrip", "echo.0", 0, "summon", summ_cfg, expr_cfg)
+	echo["id"] = "echo_save_rt_0001"
+	flow_ctx.save_data["sanctum"]["roster"] = [echo]
+	flow_ctx.save_data["sanctum"]["active_party_ids"] = [str(echo["id"])]
+
+	flow_ctx.dev_combat_objective = EncounterResolutionModes.COMBAT
+	flow_ctx.encounter_ctx = null
+	flow_ctx.encounter_machine = null
+
+	var enc_state := FlowEncounterState.new()
+	enc_state.enter(flow_ctx, 0)
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	if ectx == null:
+		return { "ok": false, "error": "setup failed: no encounter context" }
+
+	runtime.dispatch({ "type": "combat.init" })
+	for _r in range(3):
+		runtime.dispatch({ "type": "combat.confirm_round" })
+		var guard: int = 0
+		while guard < 40:
+			guard += 1
+			var cs2: Dictionary = ectx.combat_state
+			if bool(cs2.get("combat_over", false)): break
+			if str(cs2.get("round_phase", "")) != "in_round": break
+			runtime.dispatch({ "type": "combat.next_actor" })
+		if bool(ectx.combat_state.get("combat_over", false)): break
+
+	# Precondition: confirm the transient combat actor actually computed
+	# _composure — otherwise this test would trivially pass without ever
+	# exercising the derivation.
+	var combat_actor: Dictionary = {}
+	for a_v in ectx.actors:
+		if a_v is Dictionary and str(a_v.get("id", "")) == str(echo.get("id", "")):
+			combat_actor = a_v
 			break
-		sm.advance_turn({ "actor": actor, "all_actors": [actor, enemy], "cfg": _BALANCE_CFG, "t": round_i }, logger, round_i)
+	if not combat_actor.has("_composure"):
+		return { "ok": false, "error": "precondition failed: combat actor never computed _composure — test does not exercise the derivation" }
 
-	var after_keys: Array = echo.keys()
-	after_keys.sort()
-
-	if before_keys != after_keys:
-		return { "ok": false, "error": "Echo save dict key set changed after combat: before=%s after=%s" % [str(before_keys), str(after_keys)] }
+	if not SaveService.save_to_file(test_path, flow_ctx.save_data, logger, 0):
+		return { "ok": false, "error": "SaveService.save_to_file() failed" }
+	var result: Dictionary = SaveService.load_from_file(test_path, logger, 0)
+	var data: Dictionary = result.get("data", {}) as Dictionary
+	var roster: Array = (data.get("sanctum", {}) as Dictionary).get("roster", []) as Array
+	if roster.is_empty():
+		return { "ok": false, "error": "reloaded save has an empty roster" }
+	var saved_echo: Dictionary = roster[0]
+	for forbidden in ["_judgment", "_presence", "_composure", "_legibility", "_presence_strength"]:
+		if saved_echo.has(forbidden):
+			return { "ok": false, "error": "persisted echo unexpectedly contains transient key '%s'" % forbidden }
 	return { "ok": true }
 
 
