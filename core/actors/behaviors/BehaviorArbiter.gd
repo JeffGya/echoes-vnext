@@ -285,6 +285,8 @@ func select_intent(context: Dictionary) -> Dictionary:
 	# V2-PROG-010: rank-strength and presence_strength for identity scaling + composure
 	var presence_strength: float = float(context.get("presence_strength", 0.1))
 	var rank_strength: float     = float(context.get("rank_strength", 0.0))
+	# V2-PROG-012 Phase 2: composure — the actual fear-dampening driver (see _score()).
+	var composure: float         = float(context.get("composure", 0.4))
 
 	# Build board summary once — passed to _score() for every candidate to avoid re-computation.
 	var board_summary: Dictionary = _build_board_summary(actor, all_actors, context.get("board_cfg", {}), expression_band, context.get("resolution_mode", ""))
@@ -294,7 +296,7 @@ func select_intent(context: Dictionary) -> Dictionary:
 	# Score each candidate, then sort by the same four-key order used by the
 	# movement-aware selector: score, action type, target id, target cell.
 	for c: Dictionary in candidates:
-		c["_score"] = _score(c["action_type"], actor, directive, board_summary, expression_band, calling_behavior, c, presence_strength, rank_strength)
+		c["_score"] = _score(c["action_type"], actor, directive, board_summary, expression_band, calling_behavior, c, presence_strength, rank_strength, composure)
 
 	# VOW-001: apply vow bias additively after base scoring.
 	# Vow bias is always additive, never overrides. Enemies are unaffected (faction != "echo").
@@ -383,6 +385,8 @@ func select_movement_intent(
 	var calling_behavior: Dictionary = context.get("calling_behavior", {}) as Dictionary
 	var presence_strength: float = float(context.get("presence_strength", 0.1))
 	var rank_strength: float = float(context.get("rank_strength", 0.0))
+	# V2-PROG-012 Phase 2: composure — the actual fear-dampening driver (see _score()).
+	var composure: float = float(context.get("composure", 0.4))
 	var board_summary: Dictionary = _build_board_summary(
 		actor,
 		all_actors,
@@ -442,7 +446,8 @@ func select_movement_intent(
 			calling_behavior,
 			candidate,
 			presence_strength,
-			rank_strength
+			rank_strength,
+			composure
 		)
 		if bool(candidate.get("_movement_route", false)):
 			score += _spatial_utility(
@@ -535,7 +540,7 @@ func _validate_movement_inputs(
 		return _movement_failure("invalid_directive", "context.directive")
 	if not context.get("calling_behavior", {}) is Dictionary:
 		return _movement_failure("invalid_calling_behavior", "context.calling_behavior")
-	for numeric_field: String in ["presence_strength", "rank_strength"]:
+	for numeric_field: String in ["presence_strength", "rank_strength", "composure"]:
 		if context.has(numeric_field):
 			var numeric_value: Variant = context[numeric_field]
 			if not (numeric_value is int or numeric_value is float) or not is_finite(float(numeric_value)):
