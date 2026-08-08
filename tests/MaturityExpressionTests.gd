@@ -665,7 +665,16 @@ static func _t_identity_weight_scales_with_rank() -> Dictionary:
 	return { "ok": true }
 
 
-# Test 20 — composure: rank 9 scores higher under fear than rank 1
+# Test 20 — composure (not rank_strength) drives the fear-dampen multiplier.
+# V2-PROG-012 Phase 2: this test previously varied expression_band AND
+# rank_strength together, which couldn't isolate an axis — before the Phase 2
+# rename+swap, rank_strength drove the dampener directly, so it "passed" for
+# the wrong reason (and would keep passing today via the unrelated
+# identity_weight_scale trait/vector channel even with composure held fixed).
+# Rewritten to hold rank_strength, presence_strength, and expression_band
+# fixed across both calls and vary ONLY the composure argument — isolating
+# the exact axis composure_dampen_scale now multiplies. This call shape
+# (a composure argument on _score()) did not exist before Phase 2.
 static func _t_composure_rank9_vs_rank1() -> Dictionary:
 	var actor_base := {
 		"id": "echo_cmp", "faction": "echo", "calling_origin": "aduro",
@@ -677,11 +686,13 @@ static func _t_composure_rank9_vs_rank1() -> Dictionary:
 	}
 	var arbiter := BehaviorArbiter.new({})
 
-	var score_r1: float = arbiter._score("melee_attack", actor_base, {}, {}, "nascent", {}, {}, 0.1, 0.0)
-	var score_r9: float = arbiter._score("melee_attack", actor_base, {}, {}, "whole",   {}, {}, 1.0, 1.0)
+	var score_low_composure: float = arbiter._score(
+		"melee_attack", actor_base, {}, {}, "nascent", {}, {}, 0.1, 0.0, 0.0)
+	var score_high_composure: float = arbiter._score(
+		"melee_attack", actor_base, {}, {}, "nascent", {}, {}, 0.1, 0.0, 1.0)
 
-	if score_r9 <= score_r1:
-		return { "ok": false, "error": "At fear=60, rank 9 (%.2f) should score > rank 1 (%.2f)" % [score_r9, score_r1] }
+	if score_high_composure <= score_low_composure:
+		return { "ok": false, "error": "At fear=60 with rank_strength/band held fixed, composure=1.0 (%.2f) should score > composure=0.0 (%.2f)" % [score_high_composure, score_low_composure] }
 	return { "ok": true }
 
 
