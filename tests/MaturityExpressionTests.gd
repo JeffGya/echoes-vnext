@@ -144,6 +144,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("expr/judgment_rises_with_standing",                     Callable(MaturityExpressionTests, "_t_judgment_rises_with_standing"))
 	# V2-PROG-012 Phase 1 review-fix — structural_dread must lower composure's CEILING
 	runner.register_test("expr/composure_ceiling_never_floors_at_high_fear_base",  Callable(MaturityExpressionTests, "_t_composure_ceiling_never_floors_at_high_fear_base"))
+	# V2-PROG-012 Phase 1 review-fix — trait_balance must read courage/wisdom/faith, not faith alone
+	runner.register_test("expr/trait_balance_reads_all_three_traits",              Callable(MaturityExpressionTests, "_t_trait_balance_reads_all_three_traits"))
 
 
 # ─── Test 1 ────────────────────────────────────────────────────────────────
@@ -1076,4 +1078,58 @@ static func _t_composure_ceiling_never_floors_at_high_fear_base() -> Dictionary:
 		return { "ok": false, "error": "composure(fear_base=16) floored to 0.0 — structural_dread alone must never drive composure to the absolute floor" }
 	if is_equal_approx(composure_32, 0.0):
 		return { "ok": false, "error": "composure(fear_base=32) floored to 0.0 — structural_dread alone must never drive composure to the absolute floor" }
+	return { "ok": true }
+
+
+static func _make_trait_test_actor(id: String, courage: int, wisdom: int, faith: int) -> Dictionary:
+	var echo := ActorTests._make_test_echo(id, id)
+	echo["rank"] = 1
+	echo["traits"] = { "courage": courage, "wisdom": wisdom, "faith": faith }
+	echo["emotion"] = { "morale_current": 50, "fear_current": 0, "fear_base": 0 }
+	return EchoActor.from_echo(echo)
+
+
+# Test 31 (Opus review fix) — trait_balance must read all three traits
+# (courage/wisdom/faith), not faith alone. Pins:
+#   (a) 50/50/50 and 90/30/30 (same mean=50) produce DIFFERENT trait_balance
+#       (and therefore different Composure) — evenness matters, not just level.
+#   (b) Changing courage ALONE (holding wisdom/faith fixed) changes Composure —
+#       which the old faith-only formula provably could not do.
+static func _t_trait_balance_reads_all_three_traits() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var expr_cfg: Dictionary = bdata.get("maturity_expression", {})
+	var level_thresholds: Array = bdata.get("progression", {}).get("level_thresholds", [])
+
+	var ctx_inputs: Dictionary = {
+		"bonds":            [],
+		"bond_thresholds":  { "rival_max": -30, "friend_min": 30 },
+		"active_vow":       {},
+		"calling_family":   "anchor",
+		"instability":      0.0,
+		"level_thresholds": level_thresholds,
+	}
+
+	# (a) Same mean (50), different spread.
+	var actor_even: Dictionary   = _make_trait_test_actor("echo_tb_even", 50, 50, 50)
+	var actor_uneven: Dictionary = _make_trait_test_actor("echo_tb_uneven", 90, 30, 30)
+	var r_even: Dictionary   = MaturityExpressionService.derive_expression(actor_even, ctx_inputs, expr_cfg)
+	var r_uneven: Dictionary = MaturityExpressionService.derive_expression(actor_uneven, ctx_inputs, expr_cfg)
+	var composure_even: float   = float(r_even.get("composure", 0.0))
+	var composure_uneven: float = float(r_uneven.get("composure", 0.0))
+	if is_equal_approx(composure_even, composure_uneven):
+		return { "ok": false, "error": "Composure identical (%.4f) for 50/50/50 vs 90/30/30 (same mean) — trait_balance ignores evenness" % composure_even }
+
+	# (b) Changing courage alone (wisdom/faith held fixed) must change Composure —
+	# the old faith-only read could never move under a courage-only change.
+	var actor_base: Dictionary       = _make_trait_test_actor("echo_tb_base", 50, 50, 50)
+	var actor_courage_up: Dictionary = _make_trait_test_actor("echo_tb_courage_up", 90, 50, 50)
+	var r_base: Dictionary        = MaturityExpressionService.derive_expression(actor_base, ctx_inputs, expr_cfg)
+	var r_courage_up: Dictionary  = MaturityExpressionService.derive_expression(actor_courage_up, ctx_inputs, expr_cfg)
+	var composure_base: float        = float(r_base.get("composure", 0.0))
+	var composure_courage_up: float  = float(r_courage_up.get("composure", 0.0))
+	if is_equal_approx(composure_base, composure_courage_up):
+		return { "ok": false, "error": "Composure did not change when courage alone changed (50→90, wisdom/faith fixed): %.4f vs %.4f" % [composure_base, composure_courage_up] }
 	return { "ok": true }

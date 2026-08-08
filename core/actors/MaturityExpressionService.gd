@@ -166,7 +166,8 @@ static func derive_expression(actor: Dictionary, ctx_inputs: Dictionary, expr_cf
 	var vow_held: float = 1.0 if str(active_vow.get("vow_id", "")) != "" else 0.0
 
 	var traits: Dictionary = _as_dict(actor.get("traits", {}))
-	var trait_balance: float = clampf(float(traits.get("faith", 0)) / 100.0, 0.0, 1.0)
+	var trait_balance_cfg: Dictionary = autonomy_cfg.get("trait_balance", {})
+	var trait_balance := _trait_balance(traits, trait_balance_cfg)
 
 	var fear_current: float = float(actor.get("fear", 0))
 	var fear_base: float    = float(actor.get("fear_base", 0))
@@ -260,6 +261,27 @@ static func _storyweight_maturity(storyweight: int, level_thresholds: Array) -> 
 	if ceiling <= 0.0:
 		return 0.0
 	return clampf(float(storyweight) / ceiling, 0.0, 1.0)
+
+
+# Balance across all three traits (courage/wisdom/faith), not faith alone.
+# Two flat, config-weighted components:
+#   level    — mean of the three traits, normalised to 0.0-1.0.
+#   evenness — how close together the three traits are: 1.0 - (max-min)/100,
+#              clamped 0.0-1.0. 50/50/50 is fully even (1.0); a wide spread
+#              like 90/30/30 is less even.
+# trait_balance = level * (1.0 - evenness_weight * (1.0 - evenness)) — an Echo
+# who is both capable (high level) and even (low spread) scores highest;
+# unevenness penalises an otherwise-capable Echo by up to evenness_weight.
+# trait_balance_cfg: data.maturity_expression.autonomy_outputs.trait_balance.
+static func _trait_balance(traits: Dictionary, trait_balance_cfg: Dictionary) -> float:
+	var courage: float = float(traits.get("courage", 0))
+	var wisdom: float  = float(traits.get("wisdom", 0))
+	var faith: float   = float(traits.get("faith", 0))
+	var level: float = clampf((courage + wisdom + faith) / 3.0 / 100.0, 0.0, 1.0)
+	var spread: float = maxf(courage, maxf(wisdom, faith)) - minf(courage, minf(wisdom, faith))
+	var evenness: float = clampf(1.0 - spread / 100.0, 0.0, 1.0)
+	var evenness_weight: float = float(trait_balance_cfg.get("evenness_weight", 0.0))
+	return clampf(level * (1.0 - evenness_weight * (1.0 - evenness)), 0.0, 1.0)
 
 
 # How peaked the Echo's identity is: normalised margin between the dominant

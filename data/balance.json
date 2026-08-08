@@ -1157,6 +1157,10 @@
 					"identity_coherence_weight": 0.25,
 					"instability_weight": 0.0
 				},
+				"trait_balance": {
+					"_comment": "PROPOSED DEFAULT. Shared input consumed by composure's trait_balance_weight. Balances actor.traits.courage/wisdom/faith across two flat components: level (mean of the three, normalised 0-1) and evenness (1.0 - (max-min)/100, clamped 0-1 — how close together the three traits are; 50/50/50 is fully even). trait_balance = level * (1.0 - evenness_weight * (1.0 - evenness)); an Echo who is both capable (high level) AND even (low spread) scores highest. evenness_weight tunes how much unevenness penalises an otherwise-capable Echo.",
+					"evenness_weight": 0.5
+				},
 				"archetype_projection": {
 					"_comment": "PROPOSED DEFAULT. Shared 0.0-1.0 lookup by actor.archetype_birth, consumed by presence's archetype_projection_weight. Outward archetypes (proud, valiant, loyal) project more; inward archetypes (reflective, canny) project less. Id list mirrors data.actor.archetype_action_muls.",
 					"valiant": 0.9,
