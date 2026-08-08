@@ -1,5 +1,5 @@
 # res://core/actors/MaturityExpressionService.gd
-# Derives the maturity-expression band and presence strength for an actor.
+# Derives the maturity-expression band and the four autonomy-output scalars for an actor.
 # Replaces SmartnessTierService (V2-PROG-006).
 #
 # The maturity-expression layer reflects how internally authored an Echo has
@@ -44,20 +44,6 @@ static func get_expression_band(rank: int, band_by_standing: Dictionary) -> Stri
 		return band_by_standing[key]
 	# Clamp to highest defined band if rank exceeds table
 	return band_by_standing.get("5", "whole")
-
-
-# ── Presence strength ─────────────────────────────────────────────────────────
-
-# Returns presence_strength (0.0–1.0): how strongly the Echo's state presses
-# onto nearby or bonded others. Derived from expression band.
-# Higher presence = stronger social spillover, broader leadership radius.
-static func get_presence_strength(expression_band: String) -> float:
-	match expression_band:
-		"nascent":  return 0.1
-		"forming":  return 0.25
-		"grounded": return 0.5
-		"whole":    return 1.0
-	return 0.1
 
 
 # ── Autonomy outputs (V2-PROG-012 Phase 1) ────────────────────────────────────
