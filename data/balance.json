@@ -1122,7 +1122,7 @@
 			"autonomy_outputs": {
 				"_comment": "V2-PROG-012 Phase 1: hidden maturity-expression autonomy layer (GDD §11.5, §7.3). PROPOSED DEFAULTS awaiting playtest ratification. Four flat 0.0-1.0 scalars (judgment, presence, composure, legibility) derived per-Echo per-turn from eight named inputs (GDD:1371-1380): Standing/Storyweight maturity, archetype, trait balance, calling family/accent, bonds/rivalries, vow state, fear/morale, instability. Deliberately flat weighted sums, clamped 0.0-1.0 — GDD:1438-1442 forbids growing this into a broad hidden stat-bonus tree. Each output below is its own weight dictionary so it can be tuned independently without touching the others.",
 				"judgment": {
-					"_comment": "PROPOSED DEFAULT. GDD:1360 - how strongly the Echo can hold, interpret, and assert self under pressure. judgment = clamp(rank_strength*w + storyweight_maturity*w + identity_coherence*w + calling_accent_confirmed*w + bond_support*w - fear_pressure*w - instability*w, 0, 1).",
+					"_comment": "PROPOSED DEFAULT. GDD:1360 - how strongly the Echo can hold, interpret, and assert self under pressure. judgment = clamp(rank_strength*w + storyweight_maturity*w + identity_coherence*w + calling_accent_confirmed*w + bond_support*w - fear_pressure*w - instability*w, 0, 1). instability_weight is a RESERVED SEAM: the GDD names instability/distortion as an input, but no such system exists in the codebase yet, so it ships as a documented named zero — do not 'fix' it without wiring an actual instability source.",
 					"rank_strength_weight": 0.25,
 					"storyweight_maturity_weight": 0.2,
 					"identity_coherence_weight": 0.2,
@@ -1132,7 +1132,7 @@
 					"instability_weight": 0.0
 				},
 				"presence": {
-					"_comment": "PROPOSED DEFAULT. GDD:1361 - how strongly the Echo's current state presses onto nearby or bonded others. presence = clamp(rank_strength*w + archetype_projection*w + calling_family_projection*w + bond_density*w + morale_lift*w - instability*w, 0, 1).",
+					"_comment": "PROPOSED DEFAULT. GDD:1361 - how strongly the Echo's current state presses onto nearby or bonded others. presence = clamp(rank_strength*w + archetype_projection*w + calling_family_projection*w + bond_density*w + morale_lift*w - instability*w, 0, 1). instability_weight is a RESERVED SEAM: the GDD names instability/distortion as an input, but no such system exists in the codebase yet, so it ships as a documented named zero — do not 'fix' it without wiring an actual instability source.",
 					"rank_strength_weight": 0.2,
 					"archetype_projection_weight": 0.25,
 					"calling_family_projection_weight": 0.25,
@@ -1141,7 +1141,7 @@
 					"instability_weight": 0.0
 				},
 				"composure": {
-					"_comment": "PROPOSED DEFAULT. GDD:1369 - less casually swayable by noise, but more sharply affected by true contradiction. composure = clamp(rank_strength*w + vow_held*w + trait_balance*w - situational_spike*w - instability*w, 0, 1) * (1.0 - structural_dread * structural_dread_ceiling_weight). rank_strength/vow_held/trait_balance weights sum to 1.0 so the base term spans the full 0-1 range like judgment/presence/legibility. structural_dread scales composure's CEILING multiplicatively rather than subtracting from the sum — this preserves ordering between actors who differ only in fear_base instead of flooring them all to the same value once fear_base saturates (structural_dread_ceiling_weight is kept < 1.0 so the ceiling can never reach exactly 0.0 from fear_base alone). Reads fear TWICE on purpose: structural_dread from fear_base (permanent, earned from combat losses, lowers the ceiling), situational_spike from fear_current above fear_base (recoverable within the encounter, stays subtractive in the base sum) — see MaturityExpressionService.derive_expression().",
+					"_comment": "PROPOSED DEFAULT. GDD:1369 - less casually swayable by noise, but more sharply affected by true contradiction. composure = clamp(rank_strength*w + vow_held*w + trait_balance*w - situational_spike*w - instability*w, 0, 1) * (1.0 - structural_dread * structural_dread_ceiling_weight). rank_strength/vow_held/trait_balance weights sum to 1.0 so the base term spans the full 0-1 range like judgment/presence/legibility. structural_dread scales composure's CEILING multiplicatively rather than subtracting from the sum — this preserves ordering between actors who differ only in fear_base instead of flooring them all to the same value once fear_base saturates (structural_dread_ceiling_weight is kept < 1.0 so the ceiling can never reach exactly 0.0 from fear_base alone). Reads fear TWICE on purpose: structural_dread from fear_base (permanent, earned from combat losses, lowers the ceiling), situational_spike from fear_current above fear_base (recoverable within the encounter, stays subtractive in the base sum) — see MaturityExpressionService.derive_expression(). instability_weight is a RESERVED SEAM: the GDD names instability/distortion as an input, but no such system exists in the codebase yet, so it ships as a documented named zero — do not 'fix' it without wiring an actual instability source.",
 					"rank_strength_weight": 0.36,
 					"vow_held_weight": 0.27,
 					"trait_balance_weight": 0.37,
@@ -1150,7 +1150,7 @@
 					"structural_dread_ceiling_weight": 0.5
 				},
 				"legibility": {
-					"_comment": "PROPOSED DEFAULT. GDD:1273, §7.3 - how specific and readable the Echo's intent is. legibility = clamp(rank_strength*w + storyweight_maturity*w + calling_accent_confirmed*w + identity_coherence*w - instability*w, 0, 1).",
+					"_comment": "PROPOSED DEFAULT. GDD:1273, §7.3 - how specific and readable the Echo's intent is. legibility = clamp(rank_strength*w + storyweight_maturity*w + calling_accent_confirmed*w + identity_coherence*w - instability*w, 0, 1). instability_weight is a RESERVED SEAM: the GDD names instability/distortion as an input, but no such system exists in the codebase yet, so it ships as a documented named zero — do not 'fix' it without wiring an actual instability source.",
 					"rank_strength_weight": 0.3,
 					"storyweight_maturity_weight": 0.25,
 					"calling_accent_confirmed_weight": 0.2,
@@ -1183,6 +1183,7 @@
 					"_comment": "PROPOSED DEFAULT. Normalisation divisor for bond_support/bond_density: each friend-tier bond to a living party member counts +1, each rival-tier bond counts -1 (bond_support) or +1 magnitude (bond_density), summed then divided by max_bonds before clamping.",
 					"max_bonds": 4
 				},
+				"_comment_fear_base_max": "FALLBACK ONLY. The canonical source of truth is data.emotion.drift.fear_base_max — that value is what actually enforces the fear_base cap (see FlowRuntime._apply_encounter_emotion_drift()). ActorStateMachine threads the canonical value through derive_expression()'s ctx_inputs.fear_base_max; this copy is read only when a caller omits that. Tune data.emotion.drift.fear_base_max — this copy must move with it or the two will silently desync.",
 				"fear_base_max": 40
 			},
 			"presence_dampen_scale": {

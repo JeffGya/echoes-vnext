@@ -7,7 +7,8 @@
 # (rank) and shapes behavior selection, refusal thresholds, social spillover,
 # and directive interpretation.
 #
-# Four outputs (GDD §11.5, §7.3):
+# Five return values (GDD §11.5, §7.3) — expression_band plus four autonomy-output
+# scalars:
 #   expression_band — how strongly the Echo holds/asserts self under pressure (band form)
 #   judgment        — how strongly the Echo can hold, interpret, and assert self under pressure
 #   presence        — how strongly that current state presses onto nearby or bonded others
@@ -107,6 +108,10 @@ static func get_presence_strength(expression_band: String) -> float:
 #                                        exists yet. Defaults to 0.0 if absent.
 #     "level_thresholds": Array,      — data.progression.level_thresholds, for
 #                                        storyweight_maturity normalisation
+#     "fear_base_max":    float,      — OPTIONAL. Canonical source is
+#                                        data.emotion.drift.fear_base_max (what actually
+#                                        enforces the fear_base cap). If absent, falls
+#                                        back to autonomy_outputs.fear_base_max.
 #   }
 #
 # expr_cfg: data.maturity_expression from balance.json (must contain autonomy_outputs).
@@ -117,7 +122,7 @@ static func get_presence_strength(expression_band: String) -> float:
 #     "judgment":         float,      — 0.0–1.0
 #     "presence":         float,      — 0.0–1.0
 #     "composure":        float,      — 0.0–1.0
-#     "legibility":        float,     — 0.0–1.0
+#     "legibility":       float,      — 0.0–1.0
 #     "calling_behavior": Dictionary  — per-calling combat personality config
 #     "rank_strength":    float,      — 0.0–1.0 continuous rank scalar
 #   }
@@ -171,7 +176,12 @@ static func derive_expression(actor: Dictionary, ctx_inputs: Dictionary, expr_cf
 
 	var fear_current: float = float(actor.get("fear", 0))
 	var fear_base: float    = float(actor.get("fear_base", 0))
-	var fear_base_max: float = maxf(1.0, float(autonomy_cfg.get("fear_base_max", 40)))
+	# FIX (Opus review): fear_base_max's canonical source is data.emotion.drift.fear_base_max
+	# (what actually enforces the fear_base cap — see FlowRuntime._apply_encounter_emotion_drift()).
+	# Prefer the value the caller threads through ctx_inputs from that canonical config; only
+	# fall back to the autonomy_outputs copy (kept for callers that don't thread it) so the two
+	# can't silently desync if the canonical value is retuned.
+	var fear_base_max: float = maxf(1.0, float(ctx_inputs.get("fear_base_max", autonomy_cfg.get("fear_base_max", 40))))
 	var fear_pressure: float      = clampf(maxf(fear_current, fear_base) / 100.0, 0.0, 1.0)
 	var structural_dread: float   = clampf(fear_base / fear_base_max, 0.0, 1.0)
 	var situational_spike: float  = clampf(maxf(0.0, fear_current - fear_base) / 100.0, 0.0, 1.0)
@@ -292,11 +302,17 @@ static func _trait_balance(traits: Dictionary, trait_balance_cfg: Dictionary) ->
 static func _identity_coherence(vector_scores: Dictionary) -> float:
 	if vector_scores.is_empty():
 		return 0.0
-	var top: float = -1.0
-	var second: float = -1.0
+	# FIX (Opus review): sentinels use -INF, not -1.0 — a -1.0 sentinel collides with any
+	# real vector score <= -1.0 (e.g. a genuinely negative runner-up would fail `v > second`
+	# and get silently dropped, then floored to 0.0 below as if there were no runner-up at
+	# all). -INF can never collide with a real float score.
+	var top: float = -INF
+	var second: float = -INF
 	var total: float = 0.0
 	for key in vector_scores:
-		var v: float = float(int(vector_scores[key]))
+		# FIX (Opus review): no int() truncation — data.vectors.archetype_init authors
+		# fractional scores (e.g. 60.0, 20.0) and this was silently flooring them.
+		var v: float = float(vector_scores[key])
 		total += v
 		if v > top:
 			second = top
@@ -305,7 +321,7 @@ static func _identity_coherence(vector_scores: Dictionary) -> float:
 			second = v
 	if total <= 0.0:
 		return 0.0
-	if second < 0.0:
+	if second == -INF:
 		second = 0.0
 	return clampf((top - second) / total, 0.0, 1.0)
 
