@@ -18,6 +18,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("leadership/direct_recovery_stacks", Callable(LeadershipEmotionTests, "_t_direct_recovery_stacks"))
 	runner.register_test("leadership/kill_momentum_radius_and_source_exclusion", Callable(LeadershipEmotionTests, "_t_kill_momentum_radius_and_source_exclusion"))
 	runner.register_test("leadership/surprise_fear_uses_shared_path", Callable(LeadershipEmotionTests, "_t_surprise_fear_uses_shared_path"))
+	runner.register_test("leadership/presence_grades_leadership_strength", Callable(LeadershipEmotionTests, "_t_presence_grades_leadership_strength"))
+	runner.register_test("leadership/presence_grades_leadership_radius", Callable(LeadershipEmotionTests, "_t_presence_grades_leadership_radius"))
+	runner.register_test("leadership/presence_does_not_grant_eligibility", Callable(LeadershipEmotionTests, "_t_presence_does_not_grant_eligibility"))
 	runner.register_test("leadership/ui_presentation_has_all_statuses", Callable(LeadershipEmotionTests, "_t_ui_presentation_has_all_statuses"))
 
 static func _t_real_balance_defines_all_emotion_traits() -> Dictionary:
@@ -227,6 +230,86 @@ static func _t_surprise_fear_uses_shared_path() -> Dictionary:
 	var applied := LeadershipEmotionService.apply_fear_gain(ally, surprise, [leader, ally], expr)
 	if applied != roundi(float(surprise) * 0.7):
 		return { "ok": false, "error": "surprise fear did not use leadership-aware fear path" }
+	return { "ok": true }
+
+## V2-PROG-012 Phase 3, Item 4 #1: two Whole leaders with the same trait but different
+## Presence must produce different fear mitigation on the same-amount target. Before this
+## phase, is_whole_leader() was a binary gate — grading by Presence was impossible to
+## construct at all. Leader/target are adjacent (distance 1) so radius grading (tested
+## separately below) can never be the thing that changes the outcome here — only the
+## trait_factor grading can. Falsifiable: reverting apply_fear_gain()'s presence-grading
+## line collapses both leaders to factor 0.7 regardless of _presence, producing 14/14
+## instead of 14/17, and this test fails on both the inequality check and the pinned values.
+static func _t_presence_grades_leadership_strength() -> Dictionary:
+	var expr := _real_expr_cfg()
+	var canonical: float = float(expr.get("leadership_presence_scaling", {}).get("canonical_presence", 0.0))
+	if canonical <= 0.0:
+		return { "ok": false, "error": "real balance canonical_presence must be positive" }
+
+	var full_leader := _actor("full_presence_leader", 0, 0, 4, ["fearless_example"])
+	full_leader["_presence"] = canonical
+	var target_a := _actor("target_a", 1, 0, 1, [])
+	var applied_full := LeadershipEmotionService.apply_fear_gain(target_a, 20, [full_leader, target_a], expr, false)
+
+	var weak_leader := _actor("half_presence_leader", 0, 0, 4, ["fearless_example"])
+	weak_leader["_presence"] = canonical * 0.5
+	var target_b := _actor("target_b", 1, 0, 1, [])
+	var applied_weak := LeadershipEmotionService.apply_fear_gain(target_b, 20, [weak_leader, target_b], expr, false)
+
+	if applied_full == applied_weak:
+		return { "ok": false, "error": "leaders with different Presence must mitigate fear differently (both gave %d)" % applied_full }
+	if applied_full != 14 or applied_weak != 17:
+		return { "ok": false, "error": "graded leadership strength produced unexpected values (full=%d, half=%d), expected (14, 17)" % [applied_full, applied_weak] }
+	return { "ok": true }
+
+## V2-PROG-012 Phase 3, Item 4 #2: a lower-Presence leader's trait radius must be smaller
+## than a canonical-Presence leader's, and must never collapse below the configured
+## radius_floor_tiles even at zero Presence. Calls get_trait_radius() directly (not via
+## apply_fear_gain) so the radius grading is isolated from the strength grading covered
+## above. Falsifiable: reverting get_trait_radius()'s presence scaling makes all three
+## leaders report the same base radius (3), failing the strict-monotonic check; removing
+## the floor clamp makes the zero-Presence leader report 0 instead of the floor value.
+static func _t_presence_grades_leadership_radius() -> Dictionary:
+	var expr := _real_expr_cfg()
+	var scaling_cfg: Dictionary = expr.get("leadership_presence_scaling", {})
+	var canonical: float = float(scaling_cfg.get("canonical_presence", 0.0))
+	var floor_tiles: int = int(scaling_cfg.get("radius_floor_tiles", 1))
+	if canonical <= 0.0:
+		return { "ok": false, "error": "real balance canonical_presence must be positive" }
+
+	var full_leader := _actor("radius_full", 0, 0, 4, ["calm_transmission"])
+	full_leader["_presence"] = canonical
+	var full_radius := LeadershipEmotionService.get_trait_radius(full_leader, "calm_transmission", expr)
+
+	var half_leader := _actor("radius_half", 0, 0, 4, ["calm_transmission"])
+	half_leader["_presence"] = canonical * 0.5
+	var half_radius := LeadershipEmotionService.get_trait_radius(half_leader, "calm_transmission", expr)
+
+	var zero_leader := _actor("radius_zero", 0, 0, 4, ["calm_transmission"])
+	zero_leader["_presence"] = 0.0
+	var zero_radius := LeadershipEmotionService.get_trait_radius(zero_leader, "calm_transmission", expr)
+
+	if not (zero_radius < half_radius and half_radius < full_radius):
+		return { "ok": false, "error": "radius must shrink monotonically as Presence drops (zero=%d, half=%d, full=%d)" % [zero_radius, half_radius, full_radius] }
+	if zero_radius != floor_tiles:
+		return { "ok": false, "error": "zero-Presence leader radius must equal the configured floor of %d tiles, got %d" % [floor_tiles, zero_radius] }
+	return { "ok": true }
+
+## V2-PROG-012 Phase 3, Item 4 #3: pins the deliberate decision to keep is_whole_leader()'s
+## band gate as ELIGIBILITY, separate from Presence grading. A Grounded (non-Whole) Echo
+## with a high _presence must still fail to lead — Presence only grades an already-eligible
+## Whole leader's strength/radius, it does not grant eligibility on its own. Falsifiable: if
+## is_whole_leader() were changed to check Presence instead of (or in addition to) the
+## expression band, this Grounded leader would start reducing fear and the full-amount
+## (20) assertion below would fail.
+static func _t_presence_does_not_grant_eligibility() -> Dictionary:
+	var expr := _real_expr_cfg()
+	var grounded_leader := _actor("grounded_high_presence", 0, 0, 3, ["fearless_example"])
+	grounded_leader["_presence"] = 1.0
+	var target := _actor("grounded_target", 1, 0, 1, [])
+	var applied := LeadershipEmotionService.apply_fear_gain(target, 20, [grounded_leader, target], expr, false)
+	if applied != 20:
+		return { "ok": false, "error": "non-Whole leader with high Presence must not reduce fear at all (Whole-band eligibility gate must stay), got %d" % applied }
 	return { "ok": true }
 
 static func _t_ui_presentation_has_all_statuses() -> Dictionary:
