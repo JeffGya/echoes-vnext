@@ -127,7 +127,7 @@ const _DEFAULTS := {
 	# V2-PROG-006: expression-band-based scoring defaults
 	# V2-PROG-010: identity weight scaling + composure + directive band tables
 	"identity_weight_scale":  { "trait": 0.6, "vector": 0.6 },
-	"presence_dampen_scale":  { "value": 0.4 },
+	"composure_dampen_scale": { "value": 0.4 },  # V2-PROG-012 Phase 2 (renamed from presence_dampen_scale)
 	"directive_band_mul":     { "nascent": 1.30, "forming": 1.10, "grounded": 0.90, "whole": 0.75 },
 
 	"wound_chase_mul":              15.0,  # Forming+ finish-wounded score bonus multiplier
@@ -1621,7 +1621,13 @@ func _score(
 	calling_behavior: Dictionary = {},
 	candidate: Dictionary = {},
 	presence_strength: float = 0.1,  # V2-PROG-010
-	rank_strength: float = 0.0       # V2-PROG-010
+	rank_strength: float = 0.0,      # V2-PROG-010
+	# V2-PROG-012 Phase 2: default approximates a mid-band actor under the
+	# balance.json composure weights (rank_strength_weight 0.36 + trait_balance_weight
+	# 0.37 at ~0.5 each, no vow, no fear spike ≈ 0.365, rounded to 0.4) — an omitted
+	# argument degrades to "average composure" rather than the floor (0.0, full
+	# dampen) or the ceiling (1.0, no dampen).
+	composure: float = 0.4
 ) -> float:
 	var _confirmed_calling: String = str(actor.get("calling", ""))
 	var calling_origin: String = _confirmed_calling \
@@ -1674,13 +1680,15 @@ func _score(
 	var archetype_bonus: float  = float(a_row.get(archetype, 0.0))
 
 	# 4. Fear factor: dampens active intents; passive intents (actor.idle) are unaffected.
-	# V2-PROG-010: composure — fear disrupts scoring less at higher ranks (lower effective dampen).
+	# V2-PROG-012 Phase 2: composure — fear disrupts scoring less for more composed
+	# Echoes (lower effective dampen). Composure blends rank, vow state, trait balance,
+	# and both fear dimensions (GDD:1369) — it is the real driver, not raw rank alone.
 	var passive_actions: Array = _cfg_get("fear_passive_actions")
 	var fear_factor: float     = 1.0
 	if action_type not in passive_actions:
 		var dampen: float   = float(_cfg_get("fear_active_dampen"))
-		var d_scale: float  = float((_cfg_get("presence_dampen_scale") as Dictionary).get("value", 0.4))
-		var eff_dampen: float = dampen * (1.0 - rank_strength * d_scale)
+		var d_scale: float  = float((_cfg_get("composure_dampen_scale") as Dictionary).get("value", 0.4))
+		var eff_dampen: float = dampen * (1.0 - composure * d_scale)
 		fear_factor = clamp(1.0 - (fear / 100.0) * eff_dampen, 0.0, 1.0)
 
 	# 5. Morale bonus — flat integer modifier based on tier; steady tier = 0 (neutral baseline).

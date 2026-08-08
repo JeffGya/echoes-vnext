@@ -1186,8 +1186,8 @@
 				"_comment_fear_base_max": "FALLBACK ONLY. The canonical source of truth is data.emotion.drift.fear_base_max — that value is what actually enforces the fear_base cap (see FlowRuntime._apply_encounter_emotion_drift()). ActorStateMachine threads the canonical value through derive_expression()'s ctx_inputs.fear_base_max; this copy is read only when a caller omits that. Tune data.emotion.drift.fear_base_max — this copy must move with it or the two will silently desync.",
 				"fear_base_max": 40
 			},
-			"presence_dampen_scale": {
-				"_comment": "V2-PROG-010: Max reduction to fear_active_dampen at rank 9. 0.4 = 40% less fear disruption at rank 9 vs rank 1.",
+			"composure_dampen_scale": {
+				"_comment": "V2-PROG-012 Phase 2 (renamed from presence_dampen_scale, V2-PROG-010): Max reduction to fear_active_dampen at composure=1.0. 0.4 = 40% less fear disruption at full composure vs zero composure. Composure (MaturityExpressionService.derive_expression) blends rank, vow state, trait balance, and both fear dimensions (structural fear_base as a ceiling, situational spike as a subtractive term) per GDD:1369 — it is the actual driver, not raw rank alone.",
 				"value": 0.4
 			},
 			"fear_self_recovery": {

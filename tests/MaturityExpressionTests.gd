@@ -52,7 +52,7 @@ const _EXPR_CFG := {
 	"rank_strength_scale":       { "max_rank": 9 },
 	"refusal_thresholds_by_band": { "nascent": 65, "forming": 72, "grounded": 80, "whole": 90 },
 	"identity_weight_scale":     { "trait": 0.6, "vector": 0.6 },
-	"presence_dampen_scale":     { "value": 0.4 },
+	"composure_dampen_scale":    { "value": 0.4 },
 	"fear_self_recovery": {
 		"passive_max": 3,
 		"active_spike_min": 3,
@@ -88,7 +88,7 @@ const _BALANCE_CFG := {
 			"rank_strength_scale":       { "max_rank": 9 },
 			"refusal_thresholds_by_band": { "nascent": 65, "forming": 72, "grounded": 80, "whole": 90 },
 			"identity_weight_scale":     { "trait": 0.6, "vector": 0.6 },
-			"presence_dampen_scale":     { "value": 0.4 },
+			"composure_dampen_scale":    { "value": 0.4 },
 			"fear_self_recovery": {
 				"passive_max": 3,
 				"active_spike_min": 3,
