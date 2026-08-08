@@ -1141,13 +1141,13 @@
 					"instability_weight": 0.0
 				},
 				"composure": {
-					"_comment": "PROPOSED DEFAULT. GDD:1369 - less casually swayable by noise, but more sharply affected by true contradiction. composure = clamp(rank_strength*w + vow_held*w + trait_balance*w - structural_dread*w - situational_spike*w - instability*w, 0, 1). Reads fear TWICE on purpose: structural_dread from fear_base (permanent, earned from combat losses), situational_spike from fear_current above fear_base (recoverable within the encounter) — see MaturityExpressionService.derive_expression().",
-					"rank_strength_weight": 0.2,
-					"vow_held_weight": 0.15,
-					"trait_balance_weight": 0.2,
-					"structural_dread_weight": 0.25,
+					"_comment": "PROPOSED DEFAULT. GDD:1369 - less casually swayable by noise, but more sharply affected by true contradiction. composure = clamp(rank_strength*w + vow_held*w + trait_balance*w - situational_spike*w - instability*w, 0, 1) * (1.0 - structural_dread * structural_dread_ceiling_weight). rank_strength/vow_held/trait_balance weights sum to 1.0 so the base term spans the full 0-1 range like judgment/presence/legibility. structural_dread scales composure's CEILING multiplicatively rather than subtracting from the sum — this preserves ordering between actors who differ only in fear_base instead of flooring them all to the same value once fear_base saturates (structural_dread_ceiling_weight is kept < 1.0 so the ceiling can never reach exactly 0.0 from fear_base alone). Reads fear TWICE on purpose: structural_dread from fear_base (permanent, earned from combat losses, lowers the ceiling), situational_spike from fear_current above fear_base (recoverable within the encounter, stays subtractive in the base sum) — see MaturityExpressionService.derive_expression().",
+					"rank_strength_weight": 0.36,
+					"vow_held_weight": 0.27,
+					"trait_balance_weight": 0.37,
 					"situational_spike_weight": 0.2,
-					"instability_weight": 0.0
+					"instability_weight": 0.0,
+					"structural_dread_ceiling_weight": 0.5
 				},
 				"legibility": {
 					"_comment": "PROPOSED DEFAULT. GDD:1273, §7.3 - how specific and readable the Echo's intent is. legibility = clamp(rank_strength*w + storyweight_maturity*w + calling_accent_confirmed*w + identity_coherence*w - instability*w, 0, 1).",

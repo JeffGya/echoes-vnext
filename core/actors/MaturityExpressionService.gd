@@ -76,15 +76,18 @@ static func get_presence_strength(expression_band: String) -> float:
 #              + calling_accent_confirmed + bond_support - fear_pressure - instability
 #   presence   = rank_strength + archetype_projection + calling_family_projection
 #              + bond_density + morale_lift - instability
-#   composure  = rank_strength + vow_held + trait_balance
-#              - structural_dread - situational_spike - instability
+#   composure  = clamp(rank_strength + vow_held + trait_balance - situational_spike
+#              - instability, 0, 1) * (1.0 - structural_dread * structural_dread_ceiling_weight)
 #   legibility = rank_strength + storyweight_maturity + calling_accent_confirmed
 #              + identity_coherence - instability
 #
 # composure reads fear TWICE, deliberately: structural_dread comes from
-# fear_base (permanent, earned from combat losses — lowers the ceiling),
-# situational_spike comes from fear_current above fear_base (recoverable
-# within the encounter). This is a design requirement, not duplication —
+# fear_base (permanent, earned from combat losses) and LOWERS THE CEILING —
+# it multiplies the whole composure result down rather than subtracting from
+# the sum, so two actors who differ only in fear_base stay ORDERED instead of
+# both flooring to 0.0 once fear_base saturates. situational_spike comes from
+# fear_current above fear_base (recoverable within the encounter) and stays
+# subtractive, inside the sum. This is a design requirement, not duplication —
 # do not collapse it back into a single max(fear_current, fear_base) read
 # the way BehaviorArbiter._score() does for its own (different) purpose.
 #
@@ -198,15 +201,24 @@ static func derive_expression(actor: Dictionary, ctx_inputs: Dictionary, expr_cf
 		- instability               * float(presence_cfg.get("instability_weight", 0.0)),
 		0.0, 1.0)
 
+	# FIX (Opus review, V2-PROG-012 Phase 1): structural_dread lowers composure's
+	# CEILING multiplicatively — it must NOT be summed in as a plain subtractive
+	# term like situational_spike. Positive weights (rank_strength/vow_held/
+	# trait_balance) sum to 1.0 so the base term can span the full 0-1 range;
+	# structural_dread_ceiling_weight is < 1.0 so the ceiling factor can never
+	# reach 0.0 on its own, preserving ordering between actors who differ only
+	# in fear_base instead of flooring them all to the same value.
 	var composure_cfg: Dictionary = autonomy_cfg.get("composure", {})
-	var composure := clampf(
+	var composure_base := clampf(
 		rank_strength         * float(composure_cfg.get("rank_strength_weight", 0.0))
 		+ vow_held            * float(composure_cfg.get("vow_held_weight", 0.0))
 		+ trait_balance       * float(composure_cfg.get("trait_balance_weight", 0.0))
-		- structural_dread    * float(composure_cfg.get("structural_dread_weight", 0.0))
 		- situational_spike   * float(composure_cfg.get("situational_spike_weight", 0.0))
 		- instability         * float(composure_cfg.get("instability_weight", 0.0)),
 		0.0, 1.0)
+	var structural_dread_ceiling_weight: float = float(composure_cfg.get("structural_dread_ceiling_weight", 0.0))
+	var composure_ceiling := clampf(1.0 - structural_dread * structural_dread_ceiling_weight, 0.0, 1.0)
+	var composure := clampf(composure_base * composure_ceiling, 0.0, 1.0)
 
 	var legibility_cfg: Dictionary = autonomy_cfg.get("legibility", {})
 	var legibility := clampf(

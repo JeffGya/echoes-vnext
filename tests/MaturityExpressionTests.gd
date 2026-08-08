@@ -142,6 +142,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("expr/derive_expression_no_new_save_fields",             Callable(MaturityExpressionTests, "_t_derive_expression_no_new_save_fields"))
 	runner.register_test("expr/composure_separates_structural_and_situational_fear", Callable(MaturityExpressionTests, "_t_composure_separates_structural_and_situational_fear"))
 	runner.register_test("expr/judgment_rises_with_standing",                     Callable(MaturityExpressionTests, "_t_judgment_rises_with_standing"))
+	# V2-PROG-012 Phase 1 review-fix — structural_dread must lower composure's CEILING
+	runner.register_test("expr/composure_ceiling_never_floors_at_high_fear_base",  Callable(MaturityExpressionTests, "_t_composure_ceiling_never_floors_at_high_fear_base"))
 
 
 # ─── Test 1 ────────────────────────────────────────────────────────────────
@@ -1018,4 +1020,60 @@ static func _t_judgment_rises_with_standing() -> Dictionary:
 		if rank > 1 and judgment <= prev_judgment:
 			return { "ok": false, "error": "Judgment did not rise at rank %d: %.4f <= previous %.4f" % [rank, judgment, prev_judgment] }
 		prev_judgment = judgment
+	return { "ok": true }
+
+
+# Test 30 (Opus review fix) — structural_dread must lower composure's CEILING
+# multiplicatively, not subtract from it directly. Two actors identical except
+# fear_base, using values (16 and 32) that are BOTH past the point where the old
+# subtractive formula floored composure to exactly 0.0 for a rank-1 Echo (fear_base
+# 16 alone consumed all available headroom under the pre-fix weights). Pins:
+#   (a) composure(fear_base=16) and composure(fear_base=32) are DIFFERENT — ordering
+#       between actors is preserved instead of both collapsing to the same floor.
+#   (b) composure(fear_base=16) > composure(fear_base=32) — more structural dread
+#       still means less composure.
+#   (c) NEITHER value is exactly 0.0 — a single input (fear_base) can no longer
+#       drive composure to the absolute floor on its own.
+static func _t_composure_ceiling_never_floors_at_high_fear_base() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var expr_cfg: Dictionary = bdata.get("maturity_expression", {})
+	var level_thresholds: Array = bdata.get("progression", {}).get("level_thresholds", [])
+
+	var ctx_inputs: Dictionary = {
+		"bonds":            [],
+		"bond_thresholds":  { "rival_max": -30, "friend_min": 30 },
+		"active_vow":       {},
+		"calling_family":   "anchor",
+		"instability":      0.0,
+		"level_thresholds": level_thresholds,
+	}
+
+	# fear_current == fear_base for both — isolates the structural_dread ceiling
+	# effect from situational_spike (which is 0 when there's no spike above base).
+	var echo_16 := ActorTests._make_test_echo("echo_ceiling_16", "Rank1 Dread16")
+	echo_16["rank"] = 1
+	echo_16["emotion"] = { "morale_current": 50, "fear_current": 16, "fear_base": 16 }
+	var actor_16: Dictionary = EchoActor.from_echo(echo_16)
+
+	var echo_32 := ActorTests._make_test_echo("echo_ceiling_32", "Rank1 Dread32")
+	echo_32["rank"] = 1
+	echo_32["emotion"] = { "morale_current": 50, "fear_current": 32, "fear_base": 32 }
+	var actor_32: Dictionary = EchoActor.from_echo(echo_32)
+
+	var r16: Dictionary = MaturityExpressionService.derive_expression(actor_16, ctx_inputs, expr_cfg)
+	var r32: Dictionary = MaturityExpressionService.derive_expression(actor_32, ctx_inputs, expr_cfg)
+	var composure_16: float = float(r16.get("composure", 0.0))
+	var composure_32: float = float(r32.get("composure", 0.0))
+
+	if is_equal_approx(composure_16, composure_32):
+		return { "ok": false, "error": "Composure identical (%.4f) for fear_base=16 vs fear_base=32 — structural_dread is flooring both to the same value" % composure_16 }
+	if composure_16 <= composure_32:
+		return { "ok": false, "error": "Expected fear_base=16 to yield HIGHER composure than fear_base=32; got 16=%.4f 32=%.4f" % [composure_16, composure_32] }
+	if is_equal_approx(composure_16, 0.0):
+		return { "ok": false, "error": "composure(fear_base=16) floored to 0.0 — structural_dread alone must never drive composure to the absolute floor" }
+	if is_equal_approx(composure_32, 0.0):
+		return { "ok": false, "error": "composure(fear_base=32) floored to 0.0 — structural_dread alone must never drive composure to the absolute floor" }
 	return { "ok": true }
