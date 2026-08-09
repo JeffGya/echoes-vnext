@@ -24,20 +24,26 @@ static func get_trait_effect(trait_id: String, expr_cfg: Dictionary) -> Dictiona
 # V2-PROG-012 Phase 3: how strongly a leader's traits press onto nearby allies, graded by
 # the leader's derived Presence (autonomy_outputs.presence — GDD:1361, GDD:1424-1429) rather
 # than a flat Whole-band aura. See data.maturity_expression.leadership_presence_scaling for the
-# full derivation and why canonical_presence (not 1.0) is the identity point.
+# full derivation, the measured production Presence distribution, and why canonical_presence
+# is a distribution mean (not a single unrepresentative fixture) with an UNCAPPED-above-1.0
+# ceiling — an earlier cut of this calibration clamped the ratio to [0.0, 1.0] against a
+# fixture-derived canonical value that sat below almost every real archetype, which saturated
+# the multiplier to 1.0 for every production leader and made the grading dormant in actual play.
 #
 # leader._presence is written by ActorStateMachine.advance_turn() (via
 # MaturityExpressionService.derive_expression()) once per turn. A leader dict that has not yet
 # taken a turn this encounter (most hand-built test fixtures; the pre-combat surprise-fear bump
 # in FlowEncounterState, which runs before any turn) has no "_presence" key — that case defaults
-# to canonical_presence itself, i.e. multiplier 1.0 (today's full strength), not 0.0. This is a
-# deliberate identity default, not a bug: the seam only weakens an established leader once its
-# real Presence has actually been computed and found wanting.
+# to canonical_presence itself, i.e. multiplier 1.0 (today's average-leader strength), not 0.0.
+# This is a deliberate identity default, not a bug: the seam only grades an established leader
+# once its real Presence has actually been computed.
 static func _presence_multiplier(leader: Dictionary, expr_cfg: Dictionary) -> float:
 	var scaling_cfg: Dictionary = expr_cfg.get("leadership_presence_scaling", {})
 	var canonical: float = maxf(0.0001, float(scaling_cfg.get("canonical_presence", 1.0)))
+	var floor_v: float = float(scaling_cfg.get("multiplier_floor", 0.0))
+	var ceiling_v: float = float(scaling_cfg.get("multiplier_ceiling", 1.0))
 	var presence: float = float(leader.get("_presence", canonical))
-	return clampf(presence / canonical, 0.0, 1.0)
+	return clampf(presence / canonical, floor_v, ceiling_v)
 
 
 static func get_trait_radius(
