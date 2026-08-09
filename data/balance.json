@@ -1030,11 +1030,16 @@
 		"maturity_expression": {
 			"_comment": "V2-PROG-006: Maturity-Expression system. Expression band derived from actor rank (Standing). Replaces smartness-tier framing. Calling-specific behavior modifiers. All thresholds config-driven.",
 			"band_by_standing": {
+				"_comment": "V2-PROG-012 Phase 6 Item 3: backfilled ranks 6-9 (all 'whole') so this table agrees with rank_strength_scale.max_rank=9 below — previously only ranks 1-5 were defined and MaturityExpressionService.get_expression_band()'s fallback (band_by_standing.get('5', 'whole')) silently covered 6-9 with the same result, so this is a documentation/agreement fix, not a behavior change. Still matters for refusal_thresholds_by_band and snapshot display even though the directive path no longer keys on the band (V2-PROG-012 Phase 6 Item 1 — see BehaviorArbiter._directive_bonus()'s doc comment).",
 				"1": "nascent",
 				"2": "forming",
 				"3": "grounded",
 				"4": "whole",
-				"5": "whole"
+				"5": "whole",
+				"6": "whole",
+				"7": "whole",
+				"8": "whole",
+				"9": "whole"
 			},
 			"calling_behavior": {
 				"_comment": "Per-calling combat personality. retreat_threshold: HP ratio below which retreat is considered (null = never retreat). press_advantage: melee bonus when target hp < press_hp_threshold. directive_mul: multiplier on directive bonuses for this calling. leadership_radius: tile radius for Whole-band leadership trait effects. fear_move_bonus: flat bonus to move score per 10 fear points (kra_soro). idle_fear_aura: fear reduction applied to nearby allies when actor.idle wins (okomfo).",
