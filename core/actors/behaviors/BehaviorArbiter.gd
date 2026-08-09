@@ -352,17 +352,52 @@ func select_intent(context: Dictionary) -> Dictionary:
 	# sorted in the exact four-key order used above (score, action_type, target_id,
 	# _candidate_target_key), so scanning forward and keeping strict `>` gives the
 	# same tie-break the winner sort would give — no second sort needed.
+	# V2-PROG-012 Phase 4 fix: also track `decision_scale` — the spread of
+	# self_score (= _score - directive_bonus, the Echo's own judgment with the
+	# Directive's voice subtracted out) across every regularly-scored candidate.
+	# This is the denominator DivergenceDetector.gd uses to turn `directive_pull`
+	# into a proportion (contest_ratio) instead of a raw number dominated by how
+	# much better acting is than idling. Hard-override sentinels (actor.purify_shrine's
+	# 9999.0) ARE already present in `candidates` by this point (appended before the
+	# sort above) — excluded here for the same reason the winner-side probe below
+	# skips them entirely: a mechanical certainty isn't a tactical option she weighed,
+	# and including it would blow the spread out to a meaningless ~9999.
+	# V2-PROG-012 Phase 4 fix — Part B (fall-through, not suppression): track
+	# `_repr_by_type`, the highest-scoring candidate seen for each action_type
+	# (`candidates` is already score-sorted, so the FIRST candidate of a given
+	# type encountered here is that type's best). Below, this feeds a full
+	# directive_bonus-descending ranking (`_rank_directive_candidates()`), not
+	# just a single top D — measurement showed the top D is
+	# directive.scout_carefully's actor.idle on ~100% of turns (idle carries 6
+	# directive_action_muls keys, more than any other action), so a detector
+	# that SUPPRESSES whenever D is actor.idle (per this story's Part B, naive
+	# reading) went silent for the entire encounter — a dormant seam, explicitly
+	# called out as a failure condition in the story brief. DivergenceDetector.gd
+	# instead falls through this ranked list to the next-best NON-ignored
+	# action_type; BehaviorArbiter still doesn't know or care what "ignored"
+	# means (that policy stays in DivergenceDetector.gd) — it just reports the
+	# full ranking. (There is deliberately no separate "single top D" variable
+	# here — an earlier draft kept one alongside the ranking and it went dead,
+	# unread by anything once the ranking replaced it; see the story brief on
+	# not shipping config or variables that only look live.)
 	var _dbonus_by_type: Dictionary = {}
-	var _directive_preferred: Dictionary = candidates[0]
-	var _directive_preferred_bonus: float = -INF
+	var _repr_by_type: Dictionary = {}
+	var _self_score_min: float = INF
+	var _self_score_max: float = -INF
 	for c: Dictionary in candidates:
 		var _atype: String = str(c.get("action_type", ""))
 		if not _dbonus_by_type.has(_atype):
 			_dbonus_by_type[_atype] = _directive_bonus(_atype, directive, expression_band, calling_behavior)
+			_repr_by_type[_atype] = c
 		var _cbonus: float = float(_dbonus_by_type[_atype])
-		if _cbonus > _directive_preferred_bonus:
-			_directive_preferred_bonus = _cbonus
-			_directive_preferred = c
+		var _cscore: float = float(c.get("_score", 0.0))
+		if _cscore < 9999.0:
+			var _cself_score: float = _cscore - _cbonus
+			if _cself_score < _self_score_min:
+				_self_score_min = _cself_score
+			if _cself_score > _self_score_max:
+				_self_score_max = _cself_score
+	var _decision_scale: float = (_self_score_max - _self_score_min) if _self_score_max >= _self_score_min else 0.0
 
 	var winner: Dictionary = candidates[0].duplicate()
 	winner.erase("_score")
@@ -389,7 +424,6 @@ func select_intent(context: Dictionary) -> Dictionary:
 	var _winner_score: float = float(candidates[0].get("_score", 0.0))
 	if _winner_score < 9999.0:
 		var _w_action_type: String = str(candidates[0].get("action_type", ""))
-		var _d_action_type: String = str(_directive_preferred.get("action_type", ""))
 		var _w_components: Dictionary = {}
 		# Recompute is deterministic/pure — identical inputs to the call already made
 		# in the scoring loop above, so this reproduces `_winner_score` exactly while
@@ -406,13 +440,17 @@ func select_intent(context: Dictionary) -> Dictionary:
 				"directive_bonus_nascent": _directive_bonus(_w_action_type, directive, "nascent", calling_behavior),
 				"components":              _w_components,
 			},
-			"directive_preferred": {
-				"action_type":             _d_action_type,
-				"target_id":               str(_directive_preferred.get("target_id", "")),
-				"score":                   float(_directive_preferred.get("_score", 0.0)),
-				"directive_bonus":         float(_dbonus_by_type.get(_d_action_type, 0.0)),
-				"directive_bonus_nascent": _directive_bonus(_d_action_type, directive, "nascent", calling_behavior),
-			},
+			# V2-PROG-012 Phase 4 fix: the FULL directive_bonus-descending ranking
+			# (not just the single top D) — see `_repr_by_type` above for why.
+			# DivergenceDetector.gd falls through this list past any ignored
+			# action_type (data.maturity_expression.divergence.divergence_ignored_directive_actions)
+			# to find the effective directive_preferred candidate.
+			"directive_candidates": _rank_directive_candidates(
+				_dbonus_by_type, _repr_by_type, directive, calling_behavior
+			),
+			# V2-PROG-012 Phase 4 fix: see `_decision_scale` above — DivergenceDetector.gd
+			# divides `directive_pull` by this to get a proportion instead of a raw number.
+			"decision_scale": _decision_scale,
 		}
 
 	return winner
@@ -556,22 +594,32 @@ func select_movement_intent(
 		return str(left["_movement_option_id"]) < str(right["_movement_option_id"])
 	)
 
-	# V2-PROG-012 Phase 4: locate D, the Directive-preferred candidate — same
-	# reasoning as select_intent()'s equivalent block above. This selector has its
-	# OWN four-key winner order (score, plan type, goal id, option id); `candidates`
-	# is already sorted in that order by the call directly above, so a forward scan
-	# with strict `>` reproduces that selector's own tie-break for D.
+	# V2-PROG-012 Phase 4 fix: decision_scale + the directive_bonus-descending
+	# ranking — same reasoning as select_intent()'s equivalent block above (see
+	# `_rank_directive_candidates()` and its callers there for why there is no
+	# separate "single top D" variable). `c["_score"]` here already includes
+	# spatial_utility (route candidates) — that IS part of "how much the options
+	# actually differed to her", so no special-casing is needed beyond excluding
+	# the 9999.0 hard purifier override (set on candidates just above, before
+	# this loop).
 	var _dbonus_by_type: Dictionary = {}
-	var _directive_preferred: Dictionary = candidates[0]
-	var _directive_preferred_bonus: float = -INF
+	var _repr_by_type: Dictionary = {}
+	var _self_score_min: float = INF
+	var _self_score_max: float = -INF
 	for c: Dictionary in candidates:
 		var _atype: String = str((c["_movement_plan"] as Dictionary)["type"])
 		if not _dbonus_by_type.has(_atype):
 			_dbonus_by_type[_atype] = _directive_bonus(_atype, directive, expression_band, calling_behavior)
+			_repr_by_type[_atype] = c
 		var _cbonus: float = float(_dbonus_by_type[_atype])
-		if _cbonus > _directive_preferred_bonus:
-			_directive_preferred_bonus = _cbonus
-			_directive_preferred = c
+		var _cscore: float = float(c.get("_score", 0.0))
+		if _cscore < 9999.0:
+			var _cself_score: float = _cscore - _cbonus
+			if _cself_score < _self_score_min:
+				_self_score_min = _cself_score
+			if _cself_score > _self_score_max:
+				_self_score_max = _cself_score
+	var _decision_scale: float = (_self_score_max - _self_score_min) if _self_score_max >= _self_score_min else 0.0
 
 	var winner: Dictionary = candidates[0]
 	var intent: Dictionary = MovementIntentContract.build(
@@ -608,8 +656,6 @@ func select_movement_intent(
 	if _winner_score < 9999.0:
 		var _w_plan: Dictionary = winner["_movement_plan"] as Dictionary
 		var _w_action_type: String = str(_w_plan["type"])
-		var _d_plan: Dictionary = _directive_preferred["_movement_plan"] as Dictionary
-		var _d_action_type: String = str(_d_plan["type"])
 		var _w_components: Dictionary = {}
 		_score(_w_action_type, actor, directive, board_summary, expression_band, calling_behavior,
 			winner, presence_strength, rank_strength, composure, _w_components)
@@ -622,13 +668,13 @@ func select_movement_intent(
 				"directive_bonus_nascent": _directive_bonus(_w_action_type, directive, "nascent", calling_behavior),
 				"components":              _w_components,
 			},
-			"directive_preferred": {
-				"action_type":             _d_action_type,
-				"target_id":               str(_directive_preferred.get("target_id", "")),
-				"score":                   float(_directive_preferred.get("_score", 0.0)),
-				"directive_bonus":         float(_dbonus_by_type.get(_d_action_type, 0.0)),
-				"directive_bonus_nascent": _directive_bonus(_d_action_type, directive, "nascent", calling_behavior),
-			},
+			# V2-PROG-012 Phase 4 fix: see select_intent()'s equivalent block for why
+			# this is the full ranking, not just the single top D.
+			"directive_candidates": _rank_directive_candidates(
+				_dbonus_by_type, _repr_by_type, directive, calling_behavior
+			),
+			# V2-PROG-012 Phase 4 fix: see `_decision_scale` above.
+			"decision_scale": _decision_scale,
 		}
 
 	return {"valid": true, "intent": intent, "reason": "", "field": "", "_divergence_probe": _divergence_probe}
@@ -1948,6 +1994,41 @@ func _directive_bonus(action_type: String, directive: Dictionary, expression_ban
 		bonus += dir_weight * float(d_row[semantic_key]) * base_bonus
 
 	return bonus
+
+
+## V2-PROG-012 Phase 4 fix: turns the per-type directive_bonus cache built by
+## select_intent()/select_movement_intent()'s D-search loop into a full ranking,
+## descending by directive_bonus, deterministic tie-break by action_type string.
+## Pure reporting — this function has no notion of "ignored" action types; that
+## POLICY decision (Part B — a passive directive preference like actor.idle isn't
+## something an acting Echo can defy, so DivergenceDetector.gd falls through past
+## it to the next entry here) stays entirely inside DivergenceDetector.gd.
+func _rank_directive_candidates(
+	dbonus_by_type: Dictionary,
+	repr_by_type: Dictionary,
+	directive: Dictionary,
+	calling_behavior: Dictionary
+) -> Array:
+	var type_keys: Array = dbonus_by_type.keys()
+	type_keys.sort_custom(func(a, b) -> bool:
+		var ba: float = float(dbonus_by_type[a])
+		var bb: float = float(dbonus_by_type[b])
+		if ba != bb:
+			return ba > bb
+		return str(a) < str(b)
+	)
+	var ranked: Array = []
+	for atype_v: Variant in type_keys:
+		var atype: String = str(atype_v)
+		var repr_candidate: Dictionary = repr_by_type[atype] as Dictionary
+		ranked.append({
+			"action_type":             atype,
+			"target_id":               str(repr_candidate.get("target_id", "")),
+			"score":                   float(repr_candidate.get("_score", 0.0)),
+			"directive_bonus":         float(dbonus_by_type[atype]),
+			"directive_bonus_nascent": _directive_bonus(atype, directive, "nascent", calling_behavior),
+		})
+	return ranked
 
 
 ## Config accessor — falls back to _DEFAULTS when _cfg is empty or key is missing.

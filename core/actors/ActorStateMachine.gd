@@ -398,11 +398,27 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		var directive: Dictionary = context.get("directive", {}) as Dictionary
 		var divergence_result: Dictionary = DivergenceDetector.detect(
 			divergence_probe.get("chosen", {}) as Dictionary,
-			divergence_probe.get("directive_preferred", {}) as Dictionary,
+			divergence_probe.get("directive_candidates", []) as Array,
+			float(divergence_probe.get("decision_scale", 0.0)),
 			composure,
 			legibility,
 			divergence_cfg
 		)
+		# Diagnostic-only, filtered out at the default INFO level (see StructuredLogger):
+		# every turn's contest_ratio, not just the ones that cross the threshold. This is
+		# what a playtest-ratification pass reads to (re)calibrate min_contest_ratio — see
+		# the measurement methodology in the V2-PROG-012 Phase 4 fix story.
+		logger.debug(t, "actor.divergence_probe", "Divergence contest computed", {
+			"actor_id":         str(_actor.get("id", "")),
+			"round":            int(context.get("round", t)),
+			"chosen_action":    str(divergence_result.get("chosen_action", "")),
+			"directive_action": str(divergence_result.get("directive_action", "")),
+			"directive_pull":   float(divergence_result.get("directive_pull", 0.0)),
+			"decision_scale":   float(divergence_result.get("decision_scale", 0.0)),
+			"contest_ratio":    float(divergence_result.get("contest_ratio", 0.0)),
+			"overrule_strength": float(divergence_result.get("overrule_strength", 0.0)),
+			"diverged":         bool(divergence_result.get("diverged", false)),
+		})
 		if bool(divergence_result.get("diverged", false)):
 			logger.info(t, "actor.divergence", "Echo's judgment diverged from the Directive", {
 				"actor_id":          str(_actor.get("id", "")),
@@ -420,6 +436,8 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 				"directive_pull":    float(divergence_result.get("directive_pull", 0.0)),
 				"self_margin":       float(divergence_result.get("self_margin", 0.0)),
 				"overrule_strength": float(divergence_result.get("overrule_strength", 0.0)),
+				"decision_scale":    float(divergence_result.get("decision_scale", 0.0)),
+				"contest_ratio":     float(divergence_result.get("contest_ratio", 0.0)),
 				"threshold":         float(divergence_result.get("threshold", 0.0)),
 				"severity":          float(divergence_result.get("severity", 0.0)),
 				"divergence_kind":   str(divergence_result.get("divergence_kind", "")),

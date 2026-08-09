@@ -49,8 +49,8 @@ const _COMPONENT_LABELS: Dictionary = {
 }
 
 
-## chosen / directive_preferred shape (both produced by BehaviorArbiter, never
-## constructed by policy code — see select_intent()/select_movement_intent()):
+## chosen shape (produced by BehaviorArbiter, never constructed by policy code —
+## see select_intent()/select_movement_intent()):
 ##   action_type: String
 ##   target_id:   String
 ##   score:       float — the candidate's FINAL _score, i.e. whatever value the
@@ -59,17 +59,42 @@ const _COMPONENT_LABELS: Dictionary = {
 ##                 applied on top of _score()'s return — see BehaviorArbiter).
 ##   directive_bonus:         float — _directive_bonus() at the ACTUAL expression_band.
 ##   directive_bonus_nascent: float — _directive_bonus() re-evaluated at band "nascent".
-##   components: Dictionary — (chosen only; ignored on directive_preferred) the raw
-##                 _score() term breakdown, used only for primary_reason.
+##   components: Dictionary — the raw _score() term breakdown, used only for primary_reason.
+##
+## directive_candidates: the FULL ranking BehaviorArbiter computed, descending by
+## directive_bonus (same per-entry shape as `chosen`, minus `components`) — not
+## just the single top candidate. Part B: a directive whose favourite action is
+## merely "do nothing" (divergence_ignored_directive_actions, default
+## ["actor.idle"]) is not something an acting Echo can meaningfully defy, so this
+## falls through the ranking to the next entry whose action_type isn't ignored —
+## see _resolve_directive_preferred() below for why FALL-THROUGH was chosen over
+## simple suppression (measured data: directive.scout_carefully's directive
+## preference is actor.idle on ~100% of turns in a real encounter — suppression
+## alone would leave this detector permanently silent, exactly the "dormant seam"
+## failure mode the story brief calls out).
+##
+## decision_scale: max(self_score) - min(self_score) across every regularly-scored
+## candidate this turn (BehaviorArbiter's select_intent()/select_movement_intent()
+## compute this — see the comment on `_decision_scale` there). It is the yardstick
+## `directive_pull` is measured against: "how large was the directive's push,
+## relative to how much the options actually differed to HER?" A raw margin
+## (the pre-fix version of this file) conflates "the directive pushed hard" with
+## "her options were very different from each other" — see the story brief for
+## the production case (directive_pull 10.5 against a ~235-point tactical spread:
+## a 4% nudge, not a contest) that this fixes.
 ##
 ## divergence_cfg: data.maturity_expression.divergence from balance.json.
 static func detect(
 	chosen: Dictionary,
-	directive_preferred: Dictionary,
+	directive_candidates: Array,
+	decision_scale: float,
 	composure: float,
 	legibility: float,
 	divergence_cfg: Dictionary
 ) -> Dictionary:
+	var ignored_actions: Array = divergence_cfg.get("divergence_ignored_directive_actions", ["actor.idle"])
+	var directive_preferred: Dictionary = _resolve_directive_preferred(directive_candidates, ignored_actions)
+
 	var chosen_action: String    = str(chosen.get("action_type", ""))
 	var directive_action: String = str(directive_preferred.get("action_type", ""))
 
@@ -90,25 +115,45 @@ static func detect(
 	# which is >= 0 whenever `chosen` genuinely won its own arbiter sort — so
 	# self_margin >= directive_pull >= 0 holds for every real winner. This is
 	# exactly "how far past merely tying the Echo's own judgment carried it."
+	# KEPT as a diagnostic field (and the algebraic invariant tests still pin it)
+	# but it is NO LONGER the trigger — see `contest_ratio` below.
 	var overrule_strength: float = self_margin - directive_pull
 
-	var min_margin: float         = float(divergence_cfg.get("divergence_min_margin", 6.0))
-	var noise_gate: float         = float(divergence_cfg.get("composure_noise_gate", 0.5))
-	var contradiction_gain: float = float(divergence_cfg.get("composure_contradiction_gain", 0.75))
+	var min_contest_ratio: float      = float(divergence_cfg.get("min_contest_ratio", 0.35))
+	var decision_scale_epsilon: float = float(divergence_cfg.get("decision_scale_epsilon", 1.0))
+	var noise_gate: float             = float(divergence_cfg.get("composure_noise_gate", 0.5))
+	var contradiction_gain: float     = float(divergence_cfg.get("composure_contradiction_gain", 0.75))
+
+	# contest_ratio: how large the directive's push was RELATIVE TO how much the
+	# scored options actually differed to her — a proportion, not a raw number.
+	# Guard against a near-zero decision_scale: if every option looked about the
+	# same to her, no meaningful divergence is possible (there was nothing to
+	# diverge FROM), regardless of how large directive_pull happens to be.
+	var decision_scale_valid: bool = decision_scale > decision_scale_epsilon
+	var contest_ratio: float = (directive_pull / decision_scale) if (decision_scale_valid and directive_pull > 0.0) else 0.0
+
 	# Composure does GDD:1369's two-sided sentence with one number: it RAISES the
 	# bar for what counts as divergence (noise rejection)...
-	var effective_min_margin: float = min_margin * (1.0 + noise_gate * composure)
+	var effective_min_contest_ratio: float = min_contest_ratio * (1.0 + noise_gate * composure)
 
-	var diverged: bool = chosen_action != directive_action \
+	# `directive_preferred` was already resolved past any ignored action_type by
+	# _resolve_directive_preferred() above (Part B) — if it came back empty (every
+	# candidate's action_type was ignored, or the candidate list was empty), there
+	# is no meaningful directive preference left to contest.
+	var diverged: bool = not directive_preferred.is_empty() \
+		and chosen_action != directive_action \
 		and directive_pull > 0.0 \
-		and overrule_strength >= effective_min_margin
+		and decision_scale_valid \
+		and contest_ratio >= effective_min_contest_ratio
 
 	var severity: float = 0.0
 	var divergence_kind: String = ""
 	var primary_reason: String = ""
 	if diverged:
 		# ...and AMPLIFIES recorded severity when it does fire (contradiction sharpening).
-		severity = overrule_strength * (1.0 + contradiction_gain * composure)
+		# severity now derives from contest_ratio (a stable, comparable-across-encounters
+		# fraction), not overrule_strength (a raw number dominated by tactical quality).
+		severity = contest_ratio * (1.0 + contradiction_gain * composure)
 
 		# divergence_kind — the headline claim made observable. Re-evaluate ONLY the
 		# directive_bonus term (not the whole score) at band "nascent", the most
@@ -130,12 +175,39 @@ static func detect(
 		"overrule_strength": overrule_strength,
 		"directive_pull":    directive_pull,
 		"self_margin":       self_margin,
-		"threshold":         effective_min_margin,
+		"decision_scale":    decision_scale,
+		"contest_ratio":     contest_ratio,
+		"threshold":         effective_min_contest_ratio,
 		"severity":          severity,
 		"primary_reason":    primary_reason,
 		"directive_action":  directive_action,
 		"chosen_action":     chosen_action,
 	}
+
+
+## V2-PROG-012 Phase 4 fix — Part B: picks the effective directive_preferred by
+## scanning `directive_candidates` (already ranked descending by directive_bonus
+## by BehaviorArbiter — see _rank_directive_candidates()) and returning the first
+## entry whose action_type is NOT in `ignored_actions`. Returns {} if every entry
+## is ignored (or the list is empty) — `detect()` treats that as "no meaningful
+## directive preference to contest".
+##
+## FALL-THROUGH, not suppression: a detector that simply refused to fire whenever
+## the single top-ranked D was "actor.idle" would have gone silent for an entire
+## real encounter under directive.scout_carefully — measurement showed D is
+## actor.idle on ~100% of turns there (it carries more directive_action_muls
+## semantic keys than any other action), so "D is ignored" and "D is actor.idle"
+## were nearly the same event. Falling through to the next-best NON-ignored
+## preference (typically actor.guard, a genuinely deliberate defensive choice)
+## keeps the detector answering its real question — "did she defy a meaningful
+## directive preference?" — instead of going dormant. See the story's measurement
+## writeup for the before/after event counts that justified this choice.
+static func _resolve_directive_preferred(directive_candidates: Array, ignored_actions: Array) -> Dictionary:
+	for candidate_v: Variant in directive_candidates:
+		var candidate: Dictionary = candidate_v as Dictionary
+		if not ignored_actions.has(str(candidate.get("action_type", ""))):
+			return candidate
+	return {}
 
 
 ## Names the dominant _score() term for `chosen`, at a specificity that scales
