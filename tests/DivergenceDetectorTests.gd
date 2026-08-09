@@ -18,6 +18,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("divergence/genuine_contest_small_margin_diverges", Callable(DivergenceDetectorTests, "_t_genuine_contest_small_margin_diverges"))
 	runner.register_test("divergence/passive_directive_ignored_never_diverges", Callable(DivergenceDetectorTests, "_t_passive_directive_ignored_never_diverges"))
 	runner.register_test("divergence/guard_not_ignored_can_diverge", Callable(DivergenceDetectorTests, "_t_guard_not_ignored_can_diverge"))
+	runner.register_test("divergence/primary_reason_varies_with_legibility", Callable(DivergenceDetectorTests, "_t_primary_reason_varies_with_legibility"))
 
 
 static func _pass() -> Dictionary: return {"ok": true}
@@ -467,4 +468,64 @@ static func _t_guard_not_ignored_can_diverge() -> Dictionary:
 		return _fail("expected actor.guard to resolve as the directive preference, got: %s" % str(result.get("directive_action", "")))
 	if not bool(result.get("diverged", false)):
 		return _fail("expected diverged=true — actor.guard must NOT be treated as a passive/ignored preference: %s" % str(result))
+	return _pass()
+
+
+# Test 11 — V2-PROG-012 Phase 5 Item 3: legibility_specificity_bands genuinely
+# gates primary_reason's specificity, not just the diverged boolean. Story brief:
+# a live run produced primary_reason "her own values" (the NAMED tier) and asked
+# whether the config that maps legibility onto specificity is actually applied,
+# or a dead key that gates nothing. Same `chosen`/`directive_candidates`/
+# `decision_scale`/`composure`/`divergence_cfg` at three legibility samples
+# (0.1, 0.5, 0.9) straddling vague_max=0.34 / named_max=0.67 — only `legibility`
+# varies between the three detect() calls.
+# FALSIFIABLE: if _primary_reason() stopped reading `legibility` (e.g. collapsed
+# to always returning the named label, or always the vague fallback), at least
+# two of the three results below would collide and this test would fail. It also
+# pins the actual band strings so a boundary-off-by-one regression is caught.
+static func _t_primary_reason_varies_with_legibility() -> Dictionary:
+	# vector_bonus (40.0) dominates every other term — "her own values" is the
+	# unambiguous expected NAMED-tier label.
+	var components: Dictionary = {
+		"base": 5.0, "trait_bonus": 2.0, "vector_bonus": 40.0, "archetype_bonus": 1.0,
+		"morale_bonus": 0.0, "directive_bonus": 2.0, "situational_bonus": 0.0,
+		"fear_factor": 1.0, "calling_mul": 1.0,
+	}
+	var chosen: Dictionary = {
+		"action_type": "melee_attack", "target_id": "e1", "score": 45.0,
+		"directive_bonus": 2.0, "directive_bonus_nascent": 2.0, "components": components,
+	}
+	var directive_candidates: Array = [
+		{"action_type": "actor.guard", "target_id": "", "score": 40.0,
+			"directive_bonus": 15.0, "directive_bonus_nascent": 15.0},
+	]
+	var cfg: Dictionary = {
+		"min_contest_ratio": 0.1, "decision_scale_epsilon": 1.0,
+		"composure_noise_gate": 0.0, "composure_contradiction_gain": 0.0,
+		"divergence_ignored_directive_actions": ["actor.idle"],
+		"legibility_specificity_bands": {"vague_max": 0.34, "named_max": 0.67},
+	}
+	# decision_scale=20.0, directive_pull=15-2=13 → contest_ratio=0.65 >= 0.1:
+	# diverged=true at every legibility sample (legibility must not affect the
+	# diverged boolean — only composure gates that; see detect()'s comment).
+	var vague: Dictionary   = DivergenceDetector.detect(chosen, directive_candidates, 20.0, 0.0, 0.1, cfg)
+	var named: Dictionary   = DivergenceDetector.detect(chosen, directive_candidates, 20.0, 0.0, 0.5, cfg)
+	var outweighed: Dictionary = DivergenceDetector.detect(chosen, directive_candidates, 20.0, 0.0, 0.9, cfg)
+
+	for r in [vague, named, outweighed]:
+		if not bool(r.get("diverged", false)):
+			return _fail("expected diverged=true at every legibility sample (legibility must not gate the diverged boolean): %s" % str(r))
+
+	var reason_vague: String      = str(vague.get("primary_reason", ""))
+	var reason_named: String      = str(named.get("primary_reason", ""))
+	var reason_outweighed: String = str(outweighed.get("primary_reason", ""))
+
+	if reason_vague != "her own judgment":
+		return _fail("expected vague-band (legibility=0.1) primary_reason 'her own judgment', got '%s'" % reason_vague)
+	if reason_named != "her own values":
+		return _fail("expected named-band (legibility=0.5) primary_reason 'her own values', got '%s'" % reason_named)
+	if reason_outweighed != "her own values outweighed the Directive":
+		return _fail("expected outweighed-band (legibility=0.9) primary_reason 'her own values outweighed the Directive', got '%s'" % reason_outweighed)
+	if reason_vague == reason_named or reason_named == reason_outweighed or reason_vague == reason_outweighed:
+		return _fail("legibility bands collapsed to identical primary_reason text: %s / %s / %s" % [reason_vague, reason_named, reason_outweighed])
 	return _pass()
