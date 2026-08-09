@@ -485,6 +485,7 @@ func _run_tests(parts: Array) -> void:
 	# V2-STAGE-004 Phase 4 (S16b) — seam + exclusion tests (ally auto-join, claimant-forced
 	# combat, charge-pressure bump, ally recruit offer compute-once, projection shapes)
 	Stage004SeamTests.register(runner)
+	DivergenceDetectorTests.register(runner)  # V2-PROG-012 Phase 4: divergence detection
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [
