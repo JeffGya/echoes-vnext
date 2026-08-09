@@ -392,6 +392,9 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	# select_movement_intent() attach it — see that file); ActorStateMachine
 	# owns the threshold POLICY decision and reads data.maturity_expression.divergence
 	# directly, never through BehaviorArbiter._cfg (that config stays out of the arbiter).
+	# V2-PROG-012 Phase 5: also drives the combat_divergence bark below — see
+	# _select_bark()'s Tier 2 branch.
+	var diverged_this_turn: bool = false
 	var divergence_probe: Dictionary = intent.get("_divergence_probe", {}) as Dictionary
 	if not divergence_probe.is_empty():
 		var divergence_cfg: Dictionary = expr_cfg.get("divergence", {})
@@ -420,6 +423,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 			"diverged":         bool(divergence_result.get("diverged", false)),
 		})
 		if bool(divergence_result.get("diverged", false)):
+			diverged_this_turn = true
 			logger.info(t, "actor.divergence", "Echo's judgment diverged from the Directive", {
 				"actor_id":          str(_actor.get("id", "")),
 				"actor_name":        str(_actor.get("name", "")),
@@ -476,7 +480,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	# V2-VOICE-001: deterministic variation key — no RNG, same inputs → same line
 	var variation_key: int = (t + str(_actor.get("id", "")).hash()) % 997
 	_select_bark(arch, calling, action_type, start_fear, end_fear, start_morale_tier, end_morale_tier,
-		last_echo_standing, resilience_fired, intent.get("target_id", ""), variation_key, t)
+		last_echo_standing, resilience_fired, intent.get("target_id", ""), variation_key, t, diverged_this_turn)
 	# V2-VOICE-001: check if this actor should react to an ally's high-signal bark
 	_check_reactive_bark(augmented_context, variation_key)
 	# V2-VOICE-001: write bark fields to actor dict so round_bark_events pipeline can read them
@@ -609,7 +613,8 @@ func _select_bark(
 	resilience_fired: bool,
 	target_id: Variant,
 	variation_key: int = 0,
-	t: int = 0
+	t: int = 0,
+	diverged: bool = false
 ) -> void:
 	var context_key := ""
 	var target := str(target_id) if target_id != null else ""
@@ -629,6 +634,15 @@ func _select_bark(
 	# Priority 5: combat_morale_falling (morale dropped a tier)
 	elif start_morale_tier != end_morale_tier and _morale_tier_rank(end_morale_tier) < _morale_tier_rank(start_morale_tier):
 		context_key = "combat_morale_falling"
+	# Priority 5.5: combat_divergence — V2-PROG-012 Phase 5: her judgment out-voted
+	# the Directive this turn (see DivergenceDetector.gd). Tier 2 priority — rarer
+	# than the emotional-crisis contexts above it, but more narratively important
+	# than a routine taunt/attack bark. Deliberately NOT in _HIGH_PRIORITY_BARK:
+	# divergence can recur on consecutive turns in a hot fight, and an Echo
+	# narrating every one of them reads as noise, not character — the normal
+	# _bark_next_t cooldown gate below still applies.
+	elif diverged:
+		context_key = "combat_divergence"
 	# Priority 6: combat_taunt
 	elif action_type == "actor.taunt":
 		context_key = "combat_taunt"
