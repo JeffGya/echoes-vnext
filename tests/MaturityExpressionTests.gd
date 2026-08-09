@@ -150,6 +150,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("expr/composure_not_rank_drives_fear_dampen",            Callable(MaturityExpressionTests, "_t_composure_not_rank_drives_fear_dampen"))
 	runner.register_test("expr/high_fear_base_more_disruption_at_equal_rank",     Callable(MaturityExpressionTests, "_t_high_fear_base_more_disruption_at_equal_rank"))
 	runner.register_test("expr/composure_dampen_scale_reachable_from_balance",    Callable(MaturityExpressionTests, "_t_composure_dampen_scale_reachable_from_balance"))
+	# V2-PROG-012 Phase 7 — absolute_fear_offset composes with refusal_thresholds_by_band
+	runner.register_test("expr/nascent_aduro_refuses_before_whole_aduro",         Callable(MaturityExpressionTests, "_t_nascent_aduro_refuses_before_whole_aduro"))
+	runner.register_test("expr/calling_character_preserved_at_same_band",        Callable(MaturityExpressionTests, "_t_calling_character_preserved_at_same_band"))
+	runner.register_test("expr/legacy_absolute_fear_threshold_fallback",         Callable(MaturityExpressionTests, "_t_legacy_absolute_fear_threshold_fallback"))
+	runner.register_test("expr/absolute_fear_offset_clamps_to_valid_range",      Callable(MaturityExpressionTests, "_t_absolute_fear_offset_clamps_to_valid_range"))
 
 
 # ─── Test 1 ────────────────────────────────────────────────────────────────
@@ -1389,5 +1394,225 @@ static func _t_composure_dampen_scale_reachable_from_balance() -> Dictionary:
 
 	if merged_cfg.has("presence_dampen_scale"):
 		return { "ok": false, "error": "stale presence_dampen_scale key still present in the merged actor cfg after the Phase 2 rename" }
+
+	return { "ok": true }
+
+
+# ─── V2-PROG-012 Phase 7 — absolute_fear_offset composes with band baseline ──
+#
+# DEFECT this section guards against: before Phase 7, calling_behavior.
+# absolute_fear_threshold OVERRODE refusal_thresholds_by_band outright, so a
+# nascent and a whole Echo of the same calling refused at the EXACT SAME fear
+# — the band table was decorative for every calling except uncalled. These
+# four tests exercise ActorStateMachine.advance_turn()'s Absolute Fear Rule
+# directly (not the arbiter in isolation) so they pin real refusal behavior,
+# not just threshold arithmetic.
+#
+# Local cfg only — deliberately NOT loaded from the real balance.json via
+# ConfigService, so these tests can't drift silently if the authored offsets
+# are re-tuned later; they pin the MECHANISM (band + calling both matter),
+# not today's specific numbers.
+
+## Builds a _BALANCE_CFG-shaped dict with one calling entry, isolated from the
+## shared _BALANCE_CFG constant above so these tests can't be perturbed by
+## edits made for other tests (and vice versa).
+static func _offset_test_cfg(calling_id: String, calling_entry: Dictionary) -> Dictionary:
+	return {
+		"data": {
+			"maturity_expression": {
+				"band_by_standing":           { "1": "nascent", "2": "forming", "3": "grounded", "4": "whole", "5": "whole", "6": "whole", "7": "whole", "8": "whole", "9": "whole" },
+				"calling_behavior":           { calling_id: calling_entry },
+				"last_stand_fear_threshold":  { "grounded": 88, "whole": 95 },
+				"last_stand_whole_morale_tick": 5,
+				"enemy_demoralize_fear_tick": 5,
+				"enemy_demoralize_radius":    3,
+				"resilience_trait_pool":      {},
+				"leadership_trait_pool":      {},
+				"leadership_trait_effects":   {},
+				"rank_strength_scale":        { "max_rank": 9 },
+				"refusal_thresholds_by_band": { "nascent": 65, "forming": 72, "grounded": 80, "whole": 90 },
+				"identity_weight_scale":      { "trait": 0.35, "vector": 0.35 },
+				"composure_dampen_scale":     { "value": 0.4 },
+				"fear_self_recovery": {
+					"passive_max": 3, "active_spike_min": 3, "active_spike_max": 12,
+					"identity_threshold_calling": 30, "identity_threshold_vector": 0.15,
+				},
+				"sanctum_fear_recovery_bonus": { "mid_rank_start": 5, "bonus_max": 4, "identity_calling_bonus": 1, "identity_vector_bonus": 1 },
+				"directive_band_mul":          { "nascent": 1.30, "forming": 1.10, "grounded": 0.90, "whole": 0.75 },
+				"rank_benefits_config":        {},
+			},
+			"emotion": { "fear_threshold": 80 },
+			"actor":   { "threat_threshold": 0.50 },
+		}
+	}
+
+
+## actor rank/calling/fear factory shared by the four tests below — mirrors
+## the shape ActorTests._make_test_echo()/EchoActor.from_echo() produce,
+## just with the fields these tests actually vary exposed as parameters.
+static func _offset_test_actor(id: String, calling: String, rank: int, fear: int) -> Dictionary:
+	var echo := ActorTests._make_test_echo(id, id)
+	echo["calling_origin"] = calling
+	var actor: Dictionary = EchoActor.from_echo(echo)
+	actor["rank"]     = rank
+	actor["fear"]     = fear
+	actor["morale"]   = 50
+	actor["grid_pos"] = { "col": 0, "row": 0 }
+	return actor
+
+
+## Runs one turn through the real ActorStateMachine.advance_turn() and returns
+## whether the actor refused, plus the computed _fear_threshold for inspection.
+## Includes a LIVING ally echo in all_actors so _is_last_echo_standing() never
+## fires — these tests isolate the band+offset Absolute Fear Rule path, not
+## the separate last_stand_fear_threshold override (last_stand's own
+## composition is covered by the pre-existing tests 8-10 above).
+static func _offset_test_run(actor: Dictionary, cfg: Dictionary) -> Dictionary:
+	var enemy := _make_enemy("en_offset_%s" % str(actor.get("id", "")), { "col": 1, "row": 0 })
+	var living_ally := {
+		"id": "ally_offset_%s" % str(actor.get("id", "")), "faction": "echo", "actor_type": "echo",
+		"is_dead": false, "current_hp": 100, "stats": { "max_hp": 100 },
+		"grid_pos": { "col": 5, "row": 5 },
+	}
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var sm := ActorStateMachine.new(actor)
+	var intent: Dictionary = sm.advance_turn({ "actor": actor, "all_actors": [enemy, living_ally], "cfg": cfg, "t": 1 }, logger, 1)
+	return {
+		"refused":        str(intent.get("action_type", "")) == "actor.refuse",
+		"fear_threshold": int(actor.get("_fear_threshold", -1)),
+	}
+
+
+# Test 33 — THE HEADLINE CLAIM: a nascent aduro refuses before a whole aduro.
+# Before Phase 7 this was impossible for any called Echo — calling_behavior.
+# absolute_fear_threshold overrode the band outright, so aduro (any band)
+# refused at a flat 75. Here aduro carries ONLY absolute_fear_offset=-5 (no
+# legacy absolute_fear_threshold key), so nascent = 65-5 = 60 and
+# whole = 90-5 = 85. At fear=62: nascent must refuse, whole must not.
+# Falsifiable: revert ActorStateMachine.gd's Phase 7 change (back to
+# `_calling_behavior.get("absolute_fear_threshold", band_base_threshold)`) and
+# this cfg's unknown "absolute_fear_offset" key is silently ignored — both
+# actors fall through to their raw band values (nascent=65, whole=90), so at
+# fear=62 the nascent actor does NOT refuse (62<65) and this test fails.
+static func _t_nascent_aduro_refuses_before_whole_aduro() -> Dictionary:
+	var cfg := _offset_test_cfg("aduro", {
+		"retreat_threshold": 0.3, "press_advantage": true, "directive_mul": 1.0,
+		"leadership_radius": 3.0, "absolute_fear_offset": -5,
+	})
+
+	var actor_n := _offset_test_actor("echo_aduro_nascent", "aduro", 1, 62)
+	var result_n := _offset_test_run(actor_n, cfg)
+	if not bool(result_n["refused"]):
+		return { "ok": false, "error": "Nascent aduro at fear=62 should refuse (band 65 + offset -5 = 60), got no refusal (threshold=%d)" % int(result_n["fear_threshold"]) }
+
+	var actor_w := _offset_test_actor("echo_aduro_whole", "aduro", 9, 62)
+	var result_w := _offset_test_run(actor_w, cfg)
+	if bool(result_w["refused"]):
+		return { "ok": false, "error": "Whole aduro at fear=62 should NOT refuse (band 90 + offset -5 = 85), got refusal (threshold=%d)" % int(result_w["fear_threshold"]) }
+
+	return { "ok": true }
+
+
+# Test 34 — calling character is preserved: at the SAME band, sum_okwanfo
+# (most fragile calling, offset -10) still refuses before onyamesu (most
+# steadfast, offset +5). Both actors are rank 3 (grounded, threshold base 80)
+# so this isolates the calling axis from the band axis entirely.
+# sum_okwanfo threshold = 80-10 = 70; onyamesu threshold = 80+5 = 85.
+# At fear=75: sum_okwanfo must refuse, onyamesu must not.
+# Falsifiable: if the offsets were removed, swapped, or ignored, both actors
+# would resolve to the shared band base (80) and neither refuses at fear=75
+# — the sum_okwanfo assertion below would fail.
+static func _t_calling_character_preserved_at_same_band() -> Dictionary:
+	var cfg_fragile := _offset_test_cfg("sum_okwanfo", {
+		"retreat_threshold": 0.35, "press_advantage": false, "directive_mul": 1.2,
+		"leadership_radius": 3.0, "absolute_fear_offset": -10,
+	})
+	var actor_fragile := _offset_test_actor("echo_sum_okwanfo_gnd", "sum_okwanfo", 3, 75)
+	var result_fragile := _offset_test_run(actor_fragile, cfg_fragile)
+	if not bool(result_fragile["refused"]):
+		return { "ok": false, "error": "Grounded sum_okwanfo at fear=75 should refuse (band 80 + offset -10 = 70), got no refusal (threshold=%d)" % int(result_fragile["fear_threshold"]) }
+
+	var cfg_steadfast := _offset_test_cfg("onyamesu", {
+		"retreat_threshold": 0.45, "press_advantage": false, "directive_mul": 1.2,
+		"leadership_radius": 4.0, "absolute_fear_offset": 5,
+	})
+	var actor_steadfast := _offset_test_actor("echo_onyamesu_gnd", "onyamesu", 3, 75)
+	var result_steadfast := _offset_test_run(actor_steadfast, cfg_steadfast)
+	if bool(result_steadfast["refused"]):
+		return { "ok": false, "error": "Grounded onyamesu at fear=75 should NOT refuse (band 80 + offset +5 = 85), got refusal (threshold=%d)" % int(result_steadfast["fear_threshold"]) }
+
+	return { "ok": true }
+
+
+# Test 35 — legacy fallback: a calling config with ONLY absolute_fear_threshold
+# (no absolute_fear_offset) must behave EXACTLY as the pre-Phase-7 flat
+# override — i.e. the band is bypassed entirely and the threshold stays flat
+# across every band. Uses the actual boundary (fear == threshold triggers
+# refusal, since ActorStateMachine checks `fear >= fear_threshold`): at
+# fear=74 neither a nascent nor a whole actor refuses; at fear=75 (exactly
+# the legacy flat threshold) BOTH refuse, identically, regardless of band.
+# Falsifiable: if a future change mistakenly started treating the legacy key
+# as an offset too (e.g. band + 75), a nascent actor would need fear>=140
+# (clamped to 100) to refuse — it would NOT refuse at fear=75, and the
+# "nascent refuses at 75" assertion below fails. If band leaked in any other
+# way, nascent and whole would disagree at the same fear value, which the
+# paired assertions below also catch.
+static func _t_legacy_absolute_fear_threshold_fallback() -> Dictionary:
+	var cfg := _offset_test_cfg("okofor", {
+		"retreat_threshold": 0.45, "press_advantage": false, "directive_mul": 1.0,
+		"leadership_radius": 4.0, "absolute_fear_threshold": 75,
+	})
+
+	var actor_n_below := _offset_test_actor("echo_legacy_n_below", "okofor", 1, 74)
+	var actor_w_below := _offset_test_actor("echo_legacy_w_below", "okofor", 9, 74)
+	if bool(_offset_test_run(actor_n_below, cfg)["refused"]):
+		return { "ok": false, "error": "Legacy flat threshold=75: nascent at fear=74 should NOT refuse" }
+	if bool(_offset_test_run(actor_w_below, cfg)["refused"]):
+		return { "ok": false, "error": "Legacy flat threshold=75: whole at fear=74 should NOT refuse" }
+
+	var actor_n_at := _offset_test_actor("echo_legacy_n_at", "okofor", 1, 75)
+	var actor_w_at := _offset_test_actor("echo_legacy_w_at", "okofor", 9, 75)
+	var result_n_at := _offset_test_run(actor_n_at, cfg)
+	var result_w_at := _offset_test_run(actor_w_at, cfg)
+	if not bool(result_n_at["refused"]):
+		return { "ok": false, "error": "Legacy flat threshold=75: nascent at fear=75 should refuse (band must NOT apply when only absolute_fear_threshold is set), got threshold=%d" % int(result_n_at["fear_threshold"]) }
+	if not bool(result_w_at["refused"]):
+		return { "ok": false, "error": "Legacy flat threshold=75: whole at fear=75 should refuse (band must NOT apply when only absolute_fear_threshold is set), got threshold=%d" % int(result_w_at["fear_threshold"]) }
+	if int(result_n_at["fear_threshold"]) != int(result_w_at["fear_threshold"]):
+		return { "ok": false, "error": "Legacy flat threshold should be IDENTICAL across bands: nascent=%d whole=%d" % [int(result_n_at["fear_threshold"]), int(result_w_at["fear_threshold"])] }
+
+	return { "ok": true }
+
+
+# Test 36 — clamping holds: no band+offset combination may push the computed
+# threshold outside [0, 100]. Uses deliberately extreme offsets (+50 on the
+# whole band, which sums to 140; -100 on the nascent band, which sums to -35)
+# and reads the actor's computed `_fear_threshold` directly (the same field
+# FlowRuntime projects into combat.action_refused evidence) rather than
+# inferring it from refuse/no-refuse — a refusal check alone couldn't
+# distinguish "clamped to 100" from "clamped to 1000", so this test pins the
+# exact clamped value.
+# Falsifiable: if the clampi() in ActorStateMachine.gd were removed, the high
+# case would resolve to 140 (not 100) and the low case to -35 (not 0) — both
+# assertions below fail.
+static func _t_absolute_fear_offset_clamps_to_valid_range() -> Dictionary:
+	var cfg_high := _offset_test_cfg("okofor", {
+		"retreat_threshold": 0.45, "press_advantage": false, "directive_mul": 1.0,
+		"leadership_radius": 4.0, "absolute_fear_offset": 50,
+	})
+	var actor_high := _offset_test_actor("echo_clamp_high", "okofor", 9, 100)  # whole band: 90+50=140 → clamp 100
+	var result_high := _offset_test_run(actor_high, cfg_high)
+	if int(result_high["fear_threshold"]) != 100:
+		return { "ok": false, "error": "Whole band + offset=+50 (raw=140) should clamp to 100, got %d" % int(result_high["fear_threshold"]) }
+
+	var cfg_low := _offset_test_cfg("okofor", {
+		"retreat_threshold": 0.45, "press_advantage": false, "directive_mul": 1.0,
+		"leadership_radius": 4.0, "absolute_fear_offset": -100,
+	})
+	var actor_low := _offset_test_actor("echo_clamp_low", "okofor", 1, 0)  # nascent band: 65-100=-35 → clamp 0
+	var result_low := _offset_test_run(actor_low, cfg_low)
+	if int(result_low["fear_threshold"]) != 0:
+		return { "ok": false, "error": "Nascent band + offset=-100 (raw=-35) should clamp to 0, got %d" % int(result_low["fear_threshold"]) }
 
 	return { "ok": true }
