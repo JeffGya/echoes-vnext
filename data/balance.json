@@ -1219,6 +1219,18 @@
 				"grounded": 0.90,
 				"whole": 0.75
 			},
+			"divergence": {
+				"_comment": "V2-PROG-012 Phase 4: PROPOSED DEFAULT — awaiting playtest ratification. Detection-only config for actor.divergence (DivergenceDetector.gd) — no score is changed by any value here, this block is read by ActorStateMachine, never by BehaviorArbiter._cfg. divergence_min_margin sits at ~30% of data.actor.directive_base_bonus (20.0): overrule_strength must clear this before a turn counts as the Echo's own judgment beating the Directive rather than noise. Composure does GDD:1369's two-sided sentence with one number: composure_noise_gate RAISES the bar for what counts as divergence (effective_min_margin = divergence_min_margin * (1.0 + composure_noise_gate * composure)), while composure_contradiction_gain separately AMPLIFIES the recorded severity of whatever does clear it (severity = overrule_strength * (1.0 + composure_contradiction_gain * composure)). legibility_specificity_bands maps derived legibility (autonomy_outputs.legibility, 0.0-1.0) onto how specific the logged primary_reason string is: at/below vague_max the dominant scoring term stays unnamed ('her own judgment'); at/below named_max it is named plainly (e.g. 'calling pressure'); above named_max it is spelled out in a full clause. instability_weight is a RESERVED SEAM: the GDD names instability/distortion as a pressure on autonomy, but no such system exists yet (see autonomy_outputs above, same seam) — it ships as a documented named zero and is NOT read anywhere in DivergenceDetector.gd; do not 'fix' it without wiring an actual instability source. log_severity documents that actor.divergence must log at info, not debug — StructuredLogger._should_log filters debug at the default INFO level, which would make this story's mandatory live effect invisible by default.",
+				"divergence_min_margin": 6.0,
+				"composure_noise_gate": 0.5,
+				"composure_contradiction_gain": 0.75,
+				"legibility_specificity_bands": {
+					"vague_max": 0.34,
+					"named_max": 0.67
+				},
+				"instability_weight": 0.0,
+				"log_severity": "info"
+			},
 			"rank_benefits_config": {
 				"_comment": "V2-PROG-010: Earned benefit definitions shown as persistent glyphs on Echo detail card. Unlocked at min_rank. Label and description are prose only — no numbers.",
 				"fear_recovery": {
