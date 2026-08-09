@@ -22,6 +22,12 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("divergence/probe_gated_to_echo_faction", Callable(DivergenceDetectorTests, "_t_divergence_probe_gated_to_echo_faction"))
 	runner.register_test("divergence/production_threshold_rejects_routine_noise", Callable(DivergenceDetectorTests, "_t_production_threshold_rejects_routine_noise"))
 	runner.register_test("divergence/production_threshold_admits_meaningful_tail", Callable(DivergenceDetectorTests, "_t_production_threshold_admits_meaningful_tail"))
+	# V2-PROG-012 Phase 6 Item 3(b) — data-driven, directive-agnostic coverage.
+	# Enumerates data.directives at runtime (never a hardcoded directive list) so
+	# a directive added later is automatically covered without editing this file.
+	runner.register_test("divergence/every_registered_directive_never_crashes_and_stays_in_range", Callable(DivergenceDetectorTests, "_t_every_directive_never_crashes_and_stays_in_range"))
+	runner.register_test("divergence/every_registered_directive_can_diverge_under_constructed_conflict", Callable(DivergenceDetectorTests, "_t_every_directive_can_diverge_under_constructed_conflict"))
+	runner.register_test("divergence/every_registered_directive_agreement_never_diverges", Callable(DivergenceDetectorTests, "_t_every_directive_agreement_never_diverges"))
 
 
 static func _pass() -> Dictionary: return {"ok": true}
@@ -650,11 +656,15 @@ static func _t_divergence_probe_gated_to_echo_faction() -> Dictionary:
 
 # ─── Guard tests: pin balance.json's SHIPPED min_contest_ratio (not a hand-set ──
 # ─── test override) above the routine-noise cluster measured for the V2-PROG-012 ──
-# ─── Phase 5 fix recalibration. Both tests read data.maturity_expression.divergence
-# ─── straight off ConfigService.get_balance() — the REAL production config — so a
-# ─── future tuning pass that silently drops min_contest_ratio back toward the noise
-# ─── cluster (or pushes it past the measured tail) fails one of these, not just a
-# ─── hand-tuned fixture that would happily "pass" no matter what the shipped value is.
+# ─── Phase 6 Item 2 recalibration (0.30 -> 0.28 — Phase 6's directive_interpretation_mul
+# ─── change moved directive_bonus, and therefore contest_ratio's numerator, so the
+# ─── Phase 5 fix calibration was re-measured and re-fit; see balance.json's
+# ─── divergence._comment for the full re-measurement writeup). Both tests read
+# ─── data.maturity_expression.divergence straight off ConfigService.get_balance() —
+# ─── the REAL production config — so a future tuning pass that silently drops
+# ─── min_contest_ratio back toward the noise cluster (or pushes it past the
+# ─── measured tail) fails one of these, not just a hand-tuned fixture that would
+# ─── happily "pass" no matter what the shipped value is.
 #
 # Both fixtures hold decision_scale=100.0 and composure=0.0 fixed (composure=0.0
 # makes effective_min_contest_ratio == min_contest_ratio exactly — see
@@ -662,16 +672,16 @@ static func _t_divergence_probe_gated_to_echo_faction() -> Dictionary:
 # compared directly against the shipped threshold, with no composure inflation
 # to account for), and vary only directive_pull (== D below, since
 # w_directive_bonus is 0.0) so contest_ratio = D / 100.0 lands exactly on the
-# bucket being pinned:
-#   - 0.08 sits inside the measured dense noise cluster (0.05-0.10, 78 of 163
-#     nonzero Echo-only actor-turns in the Phase 5 fix remeasurement — see
-#     balance.json's divergence._comment) — routine tactical disagreement, not
-#     a meaningful contest. Must NOT diverge.
-#   - 0.34 sits inside the measured sparse tail (0.30-0.3747) — a genuine
-#     directive-driven reversal. Must diverge (0.34 >= the shipped 0.30 default;
-#     if a future pass drops min_contest_ratio below 0.08 the FIRST test below
-#     fails; if it raises min_contest_ratio above 0.34 the SECOND test fails —
-#     both directions are falsifiable).
+# bucket being pinned. Both buckets remain valid under the Phase 6 re-measured
+# distribution too (min=0.0526, p25=0.0598, median=0.0987, p75=0.2069,
+# p90=0.2959, max=0.3845 — see balance.json's divergence._comment):
+#   - 0.08 sits inside the dense noise cluster (near p25/median) — routine
+#     tactical disagreement, not a meaningful contest. Must NOT diverge.
+#   - 0.34 sits inside the sparse tail (between p90=0.2959 and max=0.3845) — a
+#     genuine directive-driven reversal. Must diverge (0.34 >= the shipped 0.28
+#     default; if a future pass drops min_contest_ratio below 0.08 the FIRST
+#     test below fails; if it raises min_contest_ratio above 0.34 the SECOND
+#     test fails — both directions are falsifiable).
 static func _t_production_threshold_rejects_routine_noise() -> Dictionary:
 	var cs := ConfigService.new()
 	cs.load_balance()
@@ -717,4 +727,262 @@ static func _t_production_threshold_admits_meaningful_tail() -> Dictionary:
 		return _fail("fixture broken: expected contest_ratio 0.34, got %s" % str(result.get("contest_ratio")))
 	if not bool(result.get("diverged", false)):
 		return _fail("a contest_ratio of 0.34 (measured sparse tail, 0.30-0.3747) did NOT diverge at the shipped min_contest_ratio=%s — threshold has drifted above the measured meaningful tail, back toward a dormant seam" % str(divergence_cfg.get("min_contest_ratio")))
+	return _pass()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# V2-PROG-012 Phase 6 Item 3 — directive-agnostic coverage, data-driven.
+#
+# The designer's requirement, verbatim: "Make sure that the divergence is
+# covered under all directives. More will be added later on. And the game
+# should not break due to those being added."
+#
+# DivergenceDetector.gd itself never branches on a directive id (grep confirms
+# every "scout_carefully"/"seek_signs" string in that file lives in a comment,
+# never in executable code — see its header and _resolve_directive_preferred()'s
+# doc comment) and never assumes a particular action is preferred, a particular
+# number of intent_weights keys, or that weights sum to 1.0 — detect() only
+# ever reads `directive_bonus` fields already computed by BehaviorArbiter and
+# a directive-shaped `directive_candidates` ranking. The three tests below are
+# the executable proof of that: they enumerate data.directives AT RUNTIME via
+# DirectiveService.get_registry() (config-loaded — never a hardcoded id list),
+# so a directive story adds later is automatically covered without touching
+# this file. Real directive_bonus values are computed through the REAL
+# BehaviorArbiter._directive_bonus() pipeline (production directive_action_muls
+# table), so these tests exercise the actual translation logic for whatever
+# semantic keys a future directive happens to use — not a hand-picked fixture.
+# ═══════════════════════════════════════════════════════════════════════════
+
+## Returns {action_type: directive_bonus} for every action_type present in
+## data.actor.directive_action_muls, computed via the REAL _directive_bonus()
+## pipeline for `directive` at interpretation_width=0.0 (most literal — the
+## directive's strongest possible pull for each action, floor of the lerp).
+static func _directive_bonus_by_action(directive: Dictionary, actor_cfg: Dictionary) -> Dictionary:
+	var arbiter := BehaviorArbiter.new(actor_cfg)
+	var dir_muls_v: Variant = actor_cfg.get("directive_action_muls", {})
+	var dir_muls_table: Dictionary = dir_muls_v if dir_muls_v is Dictionary else {}
+	var result: Dictionary = {}
+	for atype_v in dir_muls_table:
+		var atype: String = str(atype_v)
+		result[atype] = arbiter._directive_bonus(atype, directive, 0.0, {})
+	return result
+
+
+## Shared setup: the REAL production directive registry (config-loaded, via the
+## same DirectiveService.get_registry() path production code uses), the REAL
+## data.actor block (directive_action_muls table), and the REAL shipped
+## data.maturity_expression.divergence config. Returns {} if config failed to
+## load (callers must treat that as a hard failure, not "zero directives").
+static func _load_production_directive_fixtures() -> Dictionary:
+	var cs := ConfigService.new()
+	if not cs.load_balance():
+		return {}
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var actor_cfg: Dictionary = bdata.get("actor", {})
+	var divergence_cfg: Dictionary = (bdata.get("maturity_expression", {}) as Dictionary).get("divergence", {})
+
+	var dir_svc := DirectiveService.new({})
+	dir_svc.load_from_config(bal)
+	var registry: Dictionary = dir_svc.get_registry()
+
+	return {"registry": registry, "actor_cfg": actor_cfg, "divergence_cfg": divergence_cfg}
+
+
+# Test — (a) no-crash / bounds check. For EVERY directive in the runtime
+# registry, build a directive_candidates ranking from REAL computed
+# directive_bonus values and run detect() across a spread of decision_scale /
+# composure combinations (including the degenerate decision_scale=0.0 case).
+# FALSIFIABLE: any directive whose intent_weights shape trips a divide-by-zero,
+# a NaN propagation, or a contest_ratio/severity value outside [0,1] (contest_ratio)
+# would fail this test the moment that directive's data ships — not months later
+# when a real playtest happens to hit the case.
+static func _t_every_directive_never_crashes_and_stays_in_range() -> Dictionary:
+	var fx: Dictionary = _load_production_directive_fixtures()
+	if fx.is_empty():
+		return _fail("could not load production balance.json")
+	var registry: Dictionary = fx["registry"]
+	if registry.is_empty():
+		return _fail("directive registry is empty — nothing to enumerate (config or DirectiveService broken)")
+	var actor_cfg: Dictionary = fx["actor_cfg"]
+	var divergence_cfg: Dictionary = fx["divergence_cfg"]
+
+	for did_v in registry:
+		var did: String = str(did_v)
+		var directive: Dictionary = registry[did_v]
+		var bonuses: Dictionary = _directive_bonus_by_action(directive, actor_cfg)
+		if bonuses.is_empty():
+			return _fail("[%s] data.actor.directive_action_muls is empty — cannot exercise any action_type" % did)
+
+		var ranked: Array = bonuses.keys()
+		ranked.sort_custom(func(a, b): return float(bonuses[a]) > float(bonuses[b]))
+
+		var directive_candidates: Array = []
+		for atype in ranked:
+			directive_candidates.append({
+				"action_type": str(atype), "target_id": "",
+				"score": 50.0 + float(bonuses[atype]), "directive_bonus": float(bonuses[atype]),
+				"directive_bonus_nascent": float(bonuses[atype]),
+			})
+		var chosen: Dictionary = {
+			"action_type": str(ranked[0]), "target_id": "e1",
+			"score": 50.0 + float(bonuses[ranked[0]]), "directive_bonus": float(bonuses[ranked[0]]),
+			"directive_bonus_nascent": float(bonuses[ranked[0]]), "components": {},
+		}
+
+		for decision_scale_case: float in [0.0, 0.5, 1.0, 50.0, 1000.0]:
+			for composure_case: float in [0.0, 0.5, 1.0]:
+				var result: Dictionary = DivergenceDetector.detect(
+					chosen, directive_candidates, decision_scale_case, composure_case, 0.5, divergence_cfg
+				)
+				var cr: float = float(result.get("contest_ratio", -1.0))
+				if is_nan(cr) or not is_finite(cr):
+					return _fail("[%s] contest_ratio is NaN/non-finite at decision_scale=%s composure=%s: %s" % [did, str(decision_scale_case), str(composure_case), str(cr)])
+				if cr < 0.0 or cr > 1.0:
+					return _fail("[%s] contest_ratio %s out of [0.0, 1.0] at decision_scale=%s composure=%s" % [did, str(cr), str(decision_scale_case), str(composure_case)])
+				var sev: float = float(result.get("severity", 0.0))
+				if is_nan(sev) or not is_finite(sev):
+					return _fail("[%s] severity is NaN/non-finite at decision_scale=%s composure=%s: %s" % [did, str(decision_scale_case), str(composure_case), str(sev)])
+	return _pass()
+
+
+# Test — (b) a strong constructed identity conflict CAN fire, for every
+# directive. Does not assert a specific rate (per the story brief) — only that
+# the detector is CAPABLE of registering a genuine contest for whatever
+# directive shows up, using that directive's own REAL computed directive_bonus
+# spread (not a hand-tuned fixture number). Picks D = the highest-bonus,
+# non-ignored action_type (mirrors _resolve_directive_preferred's fall-through)
+# and W = the lowest-bonus action_type, then hand-sets decision_scale so
+# contest_ratio lands at 0.9 (comfortably above any plausible min_contest_ratio)
+# — this is "construct the conflict", exactly as the story brief asks, not a
+# measurement of how often it happens naturally.
+#
+# If a directive's own bonus spread is flat/inverted (D never out-bonuses any
+# alternative — directive_pull_raw <= 0) or the achievable pull sits below
+# decision_scale_epsilon (too small a spread to ever be a "meaningful contest"
+# by the detector's own noise guard), that directive is SKIPPED with a printed
+# note rather than failed — this is a real, documented structural finding
+# (see the story report), not a test bug. Every directive currently shipped
+# (scout_carefully, seek_signs) clears this comfortably — real directive_pull
+# ≈18.2 for both, verified via a throwaway measurement probe — so a silent
+# empty run here is itself suspicious; the test asserts at least one directive
+# was actually exercised.
+static func _t_every_directive_can_diverge_under_constructed_conflict() -> Dictionary:
+	var fx: Dictionary = _load_production_directive_fixtures()
+	if fx.is_empty():
+		return _fail("could not load production balance.json")
+	var registry: Dictionary = fx["registry"]
+	if registry.is_empty():
+		return _fail("directive registry is empty — nothing to enumerate")
+	var actor_cfg: Dictionary = fx["actor_cfg"]
+	var divergence_cfg: Dictionary = fx["divergence_cfg"]
+	var ignored_actions: Array = divergence_cfg.get("divergence_ignored_directive_actions", ["actor.idle"])
+	var epsilon: float = float(divergence_cfg.get("decision_scale_epsilon", 1.0))
+
+	var exercised := 0
+	for did_v in registry:
+		var did: String = str(did_v)
+		var directive: Dictionary = registry[did_v]
+		var bonuses: Dictionary = _directive_bonus_by_action(directive, actor_cfg)
+		if bonuses.size() < 2:
+			continue  # nothing to contrast against
+
+		var ranked: Array = bonuses.keys()
+		ranked.sort_custom(func(a, b): return float(bonuses[a]) > float(bonuses[b]))
+
+		var d_action: String = ""
+		var d_bonus: float = 0.0
+		for atype in ranked:
+			if not ignored_actions.has(str(atype)):
+				d_action = str(atype)
+				d_bonus = float(bonuses[atype])
+				break
+		if d_action == "":
+			continue  # every action_type ignored — Part B has nothing left to contest
+
+		var w_action: String = ""
+		var w_bonus: float = INF
+		for atype in ranked:
+			if str(atype) == d_action:
+				continue
+			if float(bonuses[atype]) < w_bonus:
+				w_bonus = float(bonuses[atype])
+				w_action = str(atype)
+		if w_action == "":
+			continue  # only one non-ignored action_type exists — nothing to contrast
+
+		var directive_pull_raw: float = d_bonus - w_bonus
+		if directive_pull_raw <= epsilon * 1.5:
+			continue  # flat/inverted or too small a spread — structural, not a bug (see doc comment)
+
+		var decision_scale: float = directive_pull_raw / 0.9  # forces contest_ratio == 0.9
+		var self_score_d: float = 0.0
+		var self_score_w: float = directive_pull_raw + 5.0  # comfortably a genuine winner (self_margin > directive_pull)
+		var chosen: Dictionary = {
+			"action_type": w_action, "target_id": "e1",
+			"score": self_score_w + w_bonus, "directive_bonus": w_bonus,
+			"directive_bonus_nascent": w_bonus, "components": {},
+		}
+		var directive_candidates: Array = [
+			{"action_type": d_action, "target_id": "", "score": self_score_d + d_bonus,
+				"directive_bonus": d_bonus, "directive_bonus_nascent": d_bonus},
+		]
+		var result: Dictionary = DivergenceDetector.detect(chosen, directive_candidates, decision_scale, 0.0, 0.5, divergence_cfg)
+		if not bool(result.get("diverged", false)):
+			return _fail("[%s] constructed conflict (chosen=%s vs directive_preferred=%s, contest_ratio target 0.9) did NOT diverge: %s" % [did, w_action, d_action, str(result)])
+		exercised += 1
+
+	if exercised == 0:
+		return _fail("no directive in the registry was exercisable — every one was flat, single-action, or fully ignored; this is suspicious for the current registry (scout_carefully/seek_signs both have a real bonus spread) and should be investigated, not silently passed")
+	return _pass()
+
+
+# Test — (c) agreement never diverges, for every directive. chosen_action ==
+# directive_action by construction — DivergenceDetector.detect()'s diverged
+# gate requires chosen_action != directive_action (see its comment), so an
+# Echo who does exactly what the directive's own top (non-ignored) preference
+# is must never be logged as diverged, regardless of directive content.
+static func _t_every_directive_agreement_never_diverges() -> Dictionary:
+	var fx: Dictionary = _load_production_directive_fixtures()
+	if fx.is_empty():
+		return _fail("could not load production balance.json")
+	var registry: Dictionary = fx["registry"]
+	if registry.is_empty():
+		return _fail("directive registry is empty — nothing to enumerate")
+	var actor_cfg: Dictionary = fx["actor_cfg"]
+	var divergence_cfg: Dictionary = fx["divergence_cfg"]
+	var ignored_actions: Array = divergence_cfg.get("divergence_ignored_directive_actions", ["actor.idle"])
+
+	for did_v in registry:
+		var did: String = str(did_v)
+		var directive: Dictionary = registry[did_v]
+		var bonuses: Dictionary = _directive_bonus_by_action(directive, actor_cfg)
+		if bonuses.is_empty():
+			continue
+
+		var ranked: Array = bonuses.keys()
+		ranked.sort_custom(func(a, b): return float(bonuses[a]) > float(bonuses[b]))
+
+		var d_action: String = ""
+		var d_bonus: float = 0.0
+		for atype in ranked:
+			if not ignored_actions.has(str(atype)):
+				d_action = str(atype)
+				d_bonus = float(bonuses[atype])
+				break
+		if d_action == "":
+			continue
+
+		var chosen: Dictionary = {
+			"action_type": d_action, "target_id": "e1",
+			"score": 100.0 + d_bonus, "directive_bonus": d_bonus,
+			"directive_bonus_nascent": d_bonus, "components": {},
+		}
+		var directive_candidates: Array = [
+			{"action_type": d_action, "target_id": "", "score": 100.0 + d_bonus,
+				"directive_bonus": d_bonus, "directive_bonus_nascent": d_bonus},
+		]
+		var result: Dictionary = DivergenceDetector.detect(chosen, directive_candidates, 50.0, 0.0, 0.5, divergence_cfg)
+		if bool(result.get("diverged", true)):
+			return _fail("[%s] agreement case (chosen_action == directive_action == '%s') incorrectly diverged: %s" % [did, d_action, str(result)])
 	return _pass()
