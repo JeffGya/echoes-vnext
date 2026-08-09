@@ -20,6 +20,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("divergence/guard_not_ignored_can_diverge", Callable(DivergenceDetectorTests, "_t_guard_not_ignored_can_diverge"))
 	runner.register_test("divergence/primary_reason_varies_with_legibility", Callable(DivergenceDetectorTests, "_t_primary_reason_varies_with_legibility"))
 	runner.register_test("divergence/probe_gated_to_echo_faction", Callable(DivergenceDetectorTests, "_t_divergence_probe_gated_to_echo_faction"))
+	runner.register_test("divergence/production_threshold_rejects_routine_noise", Callable(DivergenceDetectorTests, "_t_production_threshold_rejects_routine_noise"))
+	runner.register_test("divergence/production_threshold_admits_meaningful_tail", Callable(DivergenceDetectorTests, "_t_production_threshold_admits_meaningful_tail"))
 
 
 static func _pass() -> Dictionary: return {"ok": true}
@@ -592,4 +594,76 @@ static func _t_divergence_probe_gated_to_echo_faction() -> Dictionary:
 	if not enemy_probe.is_empty():
 		return _fail("expected NO _divergence_probe for a faction='enemy' actor, got: %s" % str(enemy_probe))
 
+	return _pass()
+
+
+# ─── Guard tests: pin balance.json's SHIPPED min_contest_ratio (not a hand-set ──
+# ─── test override) above the routine-noise cluster measured for the V2-PROG-012 ──
+# ─── Phase 5 fix recalibration. Both tests read data.maturity_expression.divergence
+# ─── straight off ConfigService.get_balance() — the REAL production config — so a
+# ─── future tuning pass that silently drops min_contest_ratio back toward the noise
+# ─── cluster (or pushes it past the measured tail) fails one of these, not just a
+# ─── hand-tuned fixture that would happily "pass" no matter what the shipped value is.
+#
+# Both fixtures hold decision_scale=100.0 and composure=0.0 fixed (composure=0.0
+# makes effective_min_contest_ratio == min_contest_ratio exactly — see
+# DivergenceDetector.detect()'s noise_gate multiplier — so contest_ratio is
+# compared directly against the shipped threshold, with no composure inflation
+# to account for), and vary only directive_pull (== D below, since
+# w_directive_bonus is 0.0) so contest_ratio = D / 100.0 lands exactly on the
+# bucket being pinned:
+#   - 0.08 sits inside the measured dense noise cluster (0.05-0.10, 78 of 163
+#     nonzero Echo-only actor-turns in the Phase 5 fix remeasurement — see
+#     balance.json's divergence._comment) — routine tactical disagreement, not
+#     a meaningful contest. Must NOT diverge.
+#   - 0.34 sits inside the measured sparse tail (0.30-0.3747) — a genuine
+#     directive-driven reversal. Must diverge (0.34 >= the shipped 0.30 default;
+#     if a future pass drops min_contest_ratio below 0.08 the FIRST test below
+#     fails; if it raises min_contest_ratio above 0.34 the SECOND test fails —
+#     both directions are falsifiable).
+static func _t_production_threshold_rejects_routine_noise() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var divergence_cfg: Dictionary = (bal.get("data", {}) as Dictionary) \
+		.get("maturity_expression", {}).get("divergence", {})
+
+	var chosen: Dictionary = {
+		"action_type": "melee_attack", "target_id": "t", "score": 50.0,
+		"directive_bonus": 0.0, "directive_bonus_nascent": 0.0, "components": {},
+	}
+	var directive_preferred: Dictionary = {
+		"action_type": "actor.guard", "target_id": "", "score": 42.0, "directive_bonus": 8.0,
+	}
+	var result: Dictionary = DivergenceDetector.detect(
+		chosen, [directive_preferred], 100.0, 0.0, 0.0, divergence_cfg
+	)
+	if absf(float(result.get("contest_ratio", -1.0)) - 0.08) > 0.0001:
+		return _fail("fixture broken: expected contest_ratio 0.08, got %s" % str(result.get("contest_ratio")))
+	if bool(result.get("diverged", false)):
+		return _fail("a contest_ratio of 0.08 (measured dense noise cluster, 0.05-0.10) diverged at the shipped min_contest_ratio=%s — threshold has fallen back into routine noise" % str(divergence_cfg.get("min_contest_ratio")))
+	return _pass()
+
+
+static func _t_production_threshold_admits_meaningful_tail() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var divergence_cfg: Dictionary = (bal.get("data", {}) as Dictionary) \
+		.get("maturity_expression", {}).get("divergence", {})
+
+	var chosen: Dictionary = {
+		"action_type": "melee_attack", "target_id": "t", "score": 50.0,
+		"directive_bonus": 0.0, "directive_bonus_nascent": 0.0, "components": {},
+	}
+	var directive_preferred: Dictionary = {
+		"action_type": "actor.guard", "target_id": "", "score": 16.0, "directive_bonus": 34.0,
+	}
+	var result: Dictionary = DivergenceDetector.detect(
+		chosen, [directive_preferred], 100.0, 0.0, 0.0, divergence_cfg
+	)
+	if absf(float(result.get("contest_ratio", -1.0)) - 0.34) > 0.0001:
+		return _fail("fixture broken: expected contest_ratio 0.34, got %s" % str(result.get("contest_ratio")))
+	if not bool(result.get("diverged", false)):
+		return _fail("a contest_ratio of 0.34 (measured sparse tail, 0.30-0.3747) did NOT diverge at the shipped min_contest_ratio=%s — threshold has drifted above the measured meaningful tail, back toward a dormant seam" % str(divergence_cfg.get("min_contest_ratio")))
 	return _pass()
