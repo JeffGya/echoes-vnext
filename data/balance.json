@@ -1042,13 +1042,13 @@
 				"9": "whole"
 			},
 			"calling_behavior": {
-				"_comment": "Per-calling combat personality. retreat_threshold: HP ratio below which retreat is considered (null = never retreat). press_advantage: melee bonus when target hp < press_hp_threshold. directive_mul: multiplier on directive bonuses for this calling. leadership_radius: tile radius for Whole-band leadership trait effects. fear_move_bonus: flat bonus to move score per 10 fear points (kra_soro). idle_fear_aura: fear reduction applied to nearby allies when actor.idle wins (okomfo).",
+				"_comment": "Per-calling combat personality. retreat_threshold: HP ratio below which retreat is considered (null = never retreat). press_advantage: melee bonus when target hp < press_hp_threshold. directive_mul: multiplier on directive bonuses for this calling. leadership_radius: tile radius for Whole-band leadership trait effects. fear_move_bonus: flat bonus to move score per 10 fear points (kra_soro). idle_fear_aura: fear reduction applied to nearby allies when actor.idle wins (okomfo). absolute_fear_offset (V2-PROG-012 Phase 7, PROPOSED DEFAULT — awaiting playtest ratification): delta applied to the band baseline in refusal_thresholds_by_band (threshold = clamp(band_base + offset, 0, 100)), replacing the old flat absolute_fear_threshold override so band and calling both matter — see ActorStateMachine.gd's Absolute Fear Rule comment. Each offset is the calling's pre-Phase-7 flat value expressed as a delta from the grounded baseline of 80, so grounded-band thresholds are unchanged by this migration (aduro 75, sum_okwanfo 70, okofor 80, onyamesu 85, okomfo 85, kra_soro 80 → offsets -5, -10, 0, +5, +5, 0); nascent/forming/whole now diverge by calling for the first time. absolute_fear_threshold (legacy) is read as a flat override ONLY when absolute_fear_offset is absent, for compatibility with configs authored before this key existed.",
 				"aduro": {
 					"retreat_threshold": 0.3,
 					"press_advantage": true,
 					"directive_mul": 1.0,
 					"leadership_radius": 3.0,
-					"absolute_fear_threshold": 75,
+					"absolute_fear_offset": -5,
 					"broken_morale_override": {
 						"melee_attack": 8.0,
 						"actor.guard": -5.0
@@ -1059,21 +1059,21 @@
 					"press_advantage": false,
 					"directive_mul": 1.2,
 					"leadership_radius": 3.0,
-					"absolute_fear_threshold": 70
+					"absolute_fear_offset": -10
 				},
 				"okofor": {
 					"retreat_threshold": 0.45,
 					"press_advantage": false,
 					"directive_mul": 1.0,
 					"leadership_radius": 4.0,
-					"absolute_fear_threshold": 80
+					"absolute_fear_offset": 0
 				},
 				"onyamesu": {
 					"retreat_threshold": 0.45,
 					"press_advantage": false,
 					"directive_mul": 1.2,
 					"leadership_radius": 4.0,
-					"absolute_fear_threshold": 85
+					"absolute_fear_offset": 5
 				},
 				"okomfo": {
 					"retreat_threshold": 0.4,
@@ -1081,7 +1081,7 @@
 					"directive_mul": 1.5,
 					"leadership_radius": 5.0,
 					"idle_fear_aura": 3.0,
-					"absolute_fear_threshold": 85
+					"absolute_fear_offset": 5
 				},
 				"kra_soro": {
 					"retreat_threshold": 0.35,
@@ -1089,7 +1089,7 @@
 					"directive_mul": 1.3,
 					"leadership_radius": 4.0,
 					"fear_move_bonus": 12.0,
-					"absolute_fear_threshold": 80
+					"absolute_fear_offset": 0
 				},
 				"uncalled": {
 					"retreat_threshold": 0.3,
@@ -1113,7 +1113,7 @@
 				"max_rank": 9
 			},
 			"refusal_thresholds_by_band": {
-				"_comment": "V2-PROG-010: Base Absolute Fear Rule threshold by expression band, before calling-specific absolute_fear_threshold override. Nascent breaks sooner, whole holds longer.",
+				"_comment": "V2-PROG-010: Base Absolute Fear Rule threshold by expression band. V2-PROG-012 Phase 7: this table is now genuinely load-bearing for every calling — calling_behavior.absolute_fear_offset composes ON TOP of these values (threshold = clamp(band_base + offset, 0, 100)) instead of a calling value replacing them outright, so 'nascent breaks sooner, whole holds longer' (GDD:1422) holds regardless of calling. Only the legacy absolute_fear_threshold override (kept for backward compatibility, config-only) bypasses this table entirely.",
 				"nascent": 65,
 				"forming": 72,
 				"grounded": 80,

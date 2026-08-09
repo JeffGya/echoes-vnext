@@ -216,18 +216,33 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	if _actor.has("_withdraw_cooldown"):
 		_actor["_withdraw_cooldown"] = maxi(0, int(_actor["_withdraw_cooldown"]) - 1)
 
-	# COMBAT-003 + V2-PROG-006 + V2-PROG-010: Absolute Fear Rule — dynamic threshold.
-	# Priority chain: calling_behavior.absolute_fear_threshold → band base → global fallback (80).
-	# V2-PROG-010: band base from refusal_thresholds_by_band (nascent=65, forming=72, grounded=80, whole=90).
+	# COMBAT-003 + V2-PROG-006 + V2-PROG-010 + V2-PROG-012 Phase 7: Absolute Fear Rule — dynamic threshold.
+	# Band base from refusal_thresholds_by_band (nascent=65, forming=72, grounded=80, whole=90) is now
+	# genuinely load-bearing: the calling value composes as an OFFSET on top of the band baseline
+	# instead of replacing it outright, so "nascent breaks sooner, whole holds longer" (GDD:1422) holds
+	# for every calling, not just uncalled.
+	# Priority chain:
+	#   1. calling_behavior.absolute_fear_offset present → threshold = clamp(band_base + offset, 0, 100)
+	#   2. else calling_behavior.absolute_fear_threshold present (legacy) → threshold = that flat value,
+	#      unchanged from pre-Phase-7 behavior, for configs authored before this key existed
+	#   3. else → threshold = band base (global fallback 80 if band itself is unconfigured)
 	var refusal_by_band: Dictionary = expr_cfg.get("refusal_thresholds_by_band", {})
 	var band_base_threshold: int    = int(refusal_by_band.get(_expression_band, \
 		cfg_data.get("emotion", {}).get("fear_threshold", 80)))
-	var fear_threshold: int = int(_calling_behavior.get("absolute_fear_threshold", band_base_threshold))
+	var fear_threshold: int
 	# V2-PROG-012 Phase 4: track WHICH rule set the final threshold so a refusal
 	# carries evidence of why the threshold sat where it did (combat.action_refused).
-	var fear_threshold_reason: String = "expression band"
-	if _calling_behavior.has("absolute_fear_threshold"):
+	var fear_threshold_reason: String
+	if _calling_behavior.has("absolute_fear_offset"):
+		var fear_offset: int = int(_calling_behavior.get("absolute_fear_offset", 0))
+		fear_threshold = clampi(band_base_threshold + fear_offset, 0, 100)
+		fear_threshold_reason = "expression band + calling offset"
+	elif _calling_behavior.has("absolute_fear_threshold"):
+		fear_threshold = int(_calling_behavior.get("absolute_fear_threshold"))
 		fear_threshold_reason = "calling behavior"
+	else:
+		fear_threshold = band_base_threshold
+		fear_threshold_reason = "expression band"
 	if last_echo_standing:
 		var ls_thresholds: Dictionary = expr_cfg.get("last_stand_fear_threshold", {})
 		if _expression_band == "whole":
