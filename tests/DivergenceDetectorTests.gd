@@ -14,6 +14,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("divergence/no_score_change", Callable(DivergenceDetectorTests, "_t_no_score_change"))
 	runner.register_test("divergence/composure_gates_threshold", Callable(DivergenceDetectorTests, "_t_composure_gates_threshold"))
 	runner.register_test("divergence/algebraic_invariant", Callable(DivergenceDetectorTests, "_t_algebraic_invariant"))
+	runner.register_test("divergence/trivial_nudge_not_diverged", Callable(DivergenceDetectorTests, "_t_trivial_nudge_not_diverged"))
+	runner.register_test("divergence/genuine_contest_small_margin_diverges", Callable(DivergenceDetectorTests, "_t_genuine_contest_small_margin_diverges"))
+	runner.register_test("divergence/passive_directive_ignored_never_diverges", Callable(DivergenceDetectorTests, "_t_passive_directive_ignored_never_diverges"))
+	runner.register_test("divergence/guard_not_ignored_can_diverge", Callable(DivergenceDetectorTests, "_t_guard_not_ignored_can_diverge"))
 
 
 static func _pass() -> Dictionary: return {"ok": true}
@@ -22,12 +26,24 @@ static func _fail(message: String) -> Dictionary: return {"ok": false, "error": 
 
 # ─── Shared fixture: a "test_calling" Echo, adjacent to a full-health enemy, ──
 # ─── plus a distant living ally (so "last echo standing" never fires and    ──
-# ─── morale/last-stand logic stays out of the math). Base weights are       ──
-# ─── chosen so melee_attack (72) narrowly loses to actor.idle (32) once a   ──
-# ─── contradicting directive is weighted at Nascent (band_mul 1.30), but    ──
-# ─── narrowly WINS once that same directive is weighted at Whole (0.75).    ──
-# ─── See the derivation in the PR description / DivergenceDetector.gd —    ──
-# ─── the numbers are hand-verified, not tuned by trial and error.          ──
+# ─── morale/last-stand logic stays out of the math). directive_action_muls  ──
+# ─── gives actor.idle the ONLY entry with a directive_mul big enough to     ──
+# ─── make it, not melee_attack or actor.guard, the raw top-bonus preference ──
+# ─── at every band — exactly production's shape under directive.scout_carefully ──
+# ─── (see the story brief). Part B's fall-through therefore always resolves ──
+# ─── D to actor.guard, the next-ranked NON-ignored preference (constant     ──
+# ─── zero bonus — no directive_action_muls entry for it — so its self_score ──
+# ─── is band-invariant, isolating directive_band_mul's effect to melee's    ──
+# ─── OWN bonus term). At Nascent/Forming (band_mul 1.30/1.10), actor.idle's ──
+# ─── own directive bonus is large enough that idle itself wins the turn —   ──
+# ─── directive_pull(idle vs guard) then goes NEGATIVE (idle already carries ──
+# ─── more directive weight than the fallback D), so she reads as compliant. ──
+# ─── At Grounded/Whole (0.90/0.75), melee_attack's bigger base weight (72   ──
+# ─── vs idle's 32) wins outright once idle's shrunken bonus can no longer   ──
+# ─── carry it past melee — and melee's own (negative) bonus is smaller in   ──
+# ─── magnitude than guard's (0), giving a positive, threshold-clearing      ──
+# ─── contest_ratio. The numbers are hand-verified (see _t_determinism's     ──
+# ─── companion diagnostic run), not tuned by trial and error.
 static func _build_env(rank: int) -> Dictionary:
 	var cs := ConfigService.new()
 	cs.load_balance()
@@ -38,8 +54,15 @@ static func _build_env(rank: int) -> Dictionary:
 	# which would perturb the hand-derived numbers below) — "test_calling" isn't a
 	# real calling id anyway, so it always falls back to calling_cfg.get("uncalled", {}).
 	expr_cfg["calling_behavior"] = {}
+	# min_contest_ratio deliberately tiny (not the production PROPOSED DEFAULT of
+	# 0.35) — this fixture is about pinning directive_band_mul's effect on the
+	# comply/diverge boundary across bands, not about calibrating the production
+	# threshold (that's balance.json's job — see its divergence._comment for the
+	# measured justification).
 	expr_cfg["divergence"] = {
-		"divergence_min_margin": 1.0,
+		"min_contest_ratio": 0.1,
+		"decision_scale_epsilon": 1.0,
+		"divergence_ignored_directive_actions": ["actor.idle"],
 		"composure_noise_gate": 0.0,
 		"composure_contradiction_gain": 0.0,
 		"legibility_specificity_bands": {"vague_max": 0.34, "named_max": 0.67},
@@ -51,6 +74,8 @@ static func _build_env(rank: int) -> Dictionary:
 			"test_calling": {"melee_attack": 72.0, "actor.idle": 32.0, "actor.guard": 5.0},
 		},
 		"default_intent_weight": 5.0,
+		# actor.guard intentionally has NO entry here (bonus 0.0 at every band) — see
+		# the fixture comment above for why that isolates directive_band_mul's effect.
 		"directive_action_muls": {
 			"actor.idle":   {"test_key": 1.0},
 			"melee_attack": {"test_key": -1.0},
@@ -125,24 +150,32 @@ static func _t_determinism() -> Dictionary:
 
 
 # Test 2 — Whole diverges where Nascent complies. FALSIFIABLE: if `directive_band_mul`
-# stopped being applied to the directive term, or if the divergence threshold/gate
+# stopped being applied to the directive term, or if the contest_ratio threshold/gate
 # were wired backwards, either (a) the Whole-band Echo would also comply (zero events),
-# or (b) the Nascent-band Echo would also diverge (a spurious event), or (c) the kind
-# would come out "judgment" instead of "interpretation" (proving the nascent-band
-# counterfactual re-evaluation wasn't actually wired).
+# or (b) the Nascent-band Echo would also diverge (a spurious event) — proving band
+# scaling no longer moves the comply/diverge boundary at all.
+#
+# At Nascent, actor.idle's own directive bonus is large enough that idle wins the turn
+# outright (chosen_action == "actor.idle") — she is MORE directive-aligned than the
+# fallen-through D (actor.guard, constant zero bonus in this fixture), so
+# directive_pull goes negative and she reads as compliant, not merely tied.
+# At Whole, idle's shrunken bonus can no longer carry it past melee_attack's bigger
+# base weight (72 vs 32) — melee_attack wins, and its own (smaller-magnitude,
+# band-shrunk) negative bonus is still below guard's zero, giving a positive,
+# threshold-clearing contest_ratio.
 static func _t_whole_diverges_nascent_complies() -> Dictionary:
 	var whole_events: Array[Dictionary] = _run(4)  # rank 4 → whole band
 	if whole_events.size() != 1:
 		return _fail("expected exactly one actor.divergence for the Whole-band Echo, got %d" % whole_events.size())
 	var data: Dictionary = whole_events[0].get("data", {})
-	if str(data.get("divergence_kind", "")) != "interpretation":
-		return _fail("Whole-band divergence_kind should be 'interpretation' (she'd have complied at Nascent), got: %s" % str(data.get("divergence_kind", "")))
-	if str(data.get("chosen_action", "")) != "melee_attack" or str(data.get("directive_action", "")) != "actor.idle":
+	if str(data.get("chosen_action", "")) != "melee_attack" or str(data.get("directive_action", "")) != "actor.guard":
 		return _fail("unexpected chosen/directive actions: %s" % str(data))
+	if float(data.get("contest_ratio", -1.0)) <= 0.0:
+		return _fail("expected a positive contest_ratio for a genuine contest, got: %s" % str(data))
 
 	var nascent_events: Array[Dictionary] = _run(1)  # rank 1 → nascent band
 	if nascent_events.size() != 0:
-		return _fail("Nascent-band Echo in the same spot should comply (zero actor.divergence events), got %d: %s" % [nascent_events.size(), str(nascent_events)])
+		return _fail("Nascent-band Echo in the same spot should comply (zero actor.divergence events — she out-weights the Directive's own fallback preference), got %d: %s" % [nascent_events.size(), str(nascent_events)])
 	return _pass()
 
 
@@ -158,12 +191,16 @@ static func _t_kind_discriminates_judgment() -> Dictionary:
 		"score": 100.0, "directive_bonus": -10.0, "directive_bonus_nascent": -20.0,
 		"components": {},
 	}
+	# action_type "actor.guard" (not "actor.idle") — this test targets divergence_kind
+	# discrimination, not Part B's ignore-list; actor.guard is never ignored by default.
 	var directive_preferred: Dictionary = {
-		"action_type": "actor.idle", "target_id": "",
+		"action_type": "actor.guard", "target_id": "",
 		"score": 50.0, "directive_bonus": 20.0, "directive_bonus_nascent": 30.0,
 	}
-	var cfg: Dictionary = {"divergence_min_margin": 6.0, "composure_noise_gate": 0.0, "composure_contradiction_gain": 0.0}
-	var result: Dictionary = DivergenceDetector.detect(chosen, directive_preferred, 0.0, 0.5, cfg)
+	var cfg: Dictionary = {"min_contest_ratio": 0.2, "decision_scale_epsilon": 1.0, "composure_noise_gate": 0.0, "composure_contradiction_gain": 0.0}
+	# decision_scale=100.0: directive_pull (30.0) / decision_scale (100.0) = contest_ratio 0.3,
+	# comfortably clears min_contest_ratio 0.2.
+	var result: Dictionary = DivergenceDetector.detect(chosen, [directive_preferred], 100.0, 0.5, 0.5, cfg)
 	if not bool(result.get("diverged", false)):
 		return _fail("expected diverged=true for this case, got: %s" % str(result))
 	if str(result.get("divergence_kind", "")) != "judgment":
@@ -226,27 +263,33 @@ static func _t_no_score_change() -> Dictionary:
 # specifically picks an overrule_strength that sits strictly between the two
 # resulting thresholds, so a no-op or backwards implementation fails it.
 static func _t_composure_gates_threshold() -> Dictionary:
-	var cfg: Dictionary = {"divergence_min_margin": 10.0, "composure_noise_gate": 1.0, "composure_contradiction_gain": 0.0}
-	# overrule_strength = 15.0 (self_margin 25.0 - directive_pull 10.0):
-	#   effective_min_margin(composure=0.0) = 10 * (1 + 1.0*0.0) = 10.0  → 15 >= 10 → diverged
-	#   effective_min_margin(composure=1.0) = 10 * (1 + 1.0*1.0) = 20.0  → 15 <  20 → NOT diverged
+	var cfg: Dictionary = {"min_contest_ratio": 0.25, "decision_scale_epsilon": 1.0, "composure_noise_gate": 1.0, "composure_contradiction_gain": 0.0}
+	# Same fixture as the pre-fix version of this test (directive_pull 10.0,
+	# self_margin 25.0, overrule_strength 15.0 — kept as a fixture-drift pin below),
+	# now read through decision_scale=25.0: contest_ratio = 10.0 / 25.0 = 0.4.
+	#   effective_min_contest_ratio(composure=0.0) = 0.25 * (1 + 1.0*0.0) = 0.25  → 0.4 >= 0.25 → diverged
+	#   effective_min_contest_ratio(composure=1.0) = 0.25 * (1 + 1.0*1.0) = 0.50  → 0.4 <  0.50 → NOT diverged
 	var chosen: Dictionary = {
 		"action_type": "melee_attack", "target_id": "e1",
 		"score": 115.0, "directive_bonus": 10.0, "directive_bonus_nascent": 10.0,
 		"components": {},
 	}
+	# action_type "actor.guard" — this test targets composure gating, not Part B.
 	var directive_preferred: Dictionary = {
-		"action_type": "actor.idle", "target_id": "",
+		"action_type": "actor.guard", "target_id": "",
 		"score": 100.0, "directive_bonus": 20.0, "directive_bonus_nascent": 20.0,
 	}
-	var low_composure: Dictionary = DivergenceDetector.detect(chosen, directive_preferred, 0.0, 0.5, cfg)
-	var high_composure: Dictionary = DivergenceDetector.detect(chosen, directive_preferred, 1.0, 0.5, cfg)
+	var decision_scale: float = 25.0
+	var low_composure: Dictionary = DivergenceDetector.detect(chosen, [directive_preferred], decision_scale, 0.0, 0.5, cfg)
+	var high_composure: Dictionary = DivergenceDetector.detect(chosen, [directive_preferred], decision_scale, 1.0, 0.5, cfg)
 	if not is_equal_approx(float(low_composure.get("overrule_strength", -1.0)), 15.0):
 		return _fail("fixture drifted — expected overrule_strength 15.0, got %s" % str(low_composure.get("overrule_strength", -1.0)))
+	if not is_equal_approx(float(low_composure.get("contest_ratio", -1.0)), 0.4):
+		return _fail("fixture drifted — expected contest_ratio 0.4, got %s" % str(low_composure.get("contest_ratio", -1.0)))
 	if not bool(low_composure.get("diverged", false)):
-		return _fail("expected diverged=true at composure=0.0 (threshold 10.0, overrule_strength 15.0): %s" % str(low_composure))
+		return _fail("expected diverged=true at composure=0.0 (threshold 0.25, contest_ratio 0.4): %s" % str(low_composure))
 	if bool(high_composure.get("diverged", true)):
-		return _fail("expected diverged=false at composure=1.0 (threshold 20.0, overrule_strength 15.0): %s" % str(high_composure))
+		return _fail("expected diverged=false at composure=1.0 (threshold 0.50, contest_ratio 0.4): %s" % str(high_composure))
 	return _pass()
 
 
@@ -259,7 +302,11 @@ static func _t_composure_gates_threshold() -> Dictionary:
 # A sign error or a swap of which candidate plays which role would violate this
 # for at least one of the combinations below.
 static func _t_algebraic_invariant() -> Dictionary:
-	var cfg: Dictionary = {"divergence_min_margin": 6.0, "composure_noise_gate": 0.5, "composure_contradiction_gain": 0.75}
+	var cfg: Dictionary = {"min_contest_ratio": 0.35, "decision_scale_epsilon": 1.0, "composure_noise_gate": 0.5, "composure_contradiction_gain": 0.75}
+	# decision_scale fixed at a large constant, safely above decision_scale_epsilon for
+	# every combination below — this test is about the directive_pull/self_margin
+	# algebra, not contest_ratio gating, so decision_scale is held out of the sweep.
+	var decision_scale: float = 1000.0
 	var chosen_scores: Array = [10.0, 50.0, 200.0]
 	var directive_bonuses: Array = [-30.0, -5.0, 0.0, 5.0, 30.0]
 	var score_gaps: Array = [0.0, 1.0, 25.0, 100.0]  # chosen.score - directive_preferred.score, always >= 0
@@ -274,15 +321,150 @@ static func _t_algebraic_invariant() -> Dictionary:
 						"score": chosen_score, "directive_bonus": w_dbonus, "directive_bonus_nascent": w_dbonus,
 						"components": {},
 					}
+					# action_type "actor.guard" — this test targets the directive_pull/
+					# self_margin algebra, not Part B's ignore-list.
 					var directive_preferred: Dictionary = {
-						"action_type": "actor.idle", "target_id": "",
+						"action_type": "actor.guard", "target_id": "",
 						"score": chosen_score - gap, "directive_bonus": d_dbonus, "directive_bonus_nascent": d_dbonus,
 					}
-					var result: Dictionary = DivergenceDetector.detect(chosen, directive_preferred, 0.5, 0.5, cfg)
+					var result: Dictionary = DivergenceDetector.detect(chosen, [directive_preferred], decision_scale, 0.5, 0.5, cfg)
 					var directive_pull: float = float(result.get("directive_pull", -1.0))
 					var self_margin: float = float(result.get("self_margin", -1.0))
 					if directive_pull < -0.0001:
 						return _fail("directive_pull went negative: %s (case: score=%s w=%s d=%s gap=%s)" % [str(directive_pull), str(chosen_score), str(w_dbonus), str(d_dbonus), str(gap)])
 					if self_margin < directive_pull - 0.0001:
 						return _fail("self_margin < directive_pull: %s < %s (case: score=%s w=%s d=%s gap=%s)" % [str(self_margin), str(directive_pull), str(chosen_score), str(w_dbonus), str(d_dbonus), str(gap)])
+	return _pass()
+
+
+# Test 7 — A trivial nudge does not register. This is the logged PRODUCTION case that
+# motivated this fix: chosen_action "actor.move" vs directive_preferred "actor.idle",
+# self_margin ~235, overrule_strength ~225, directive_pull 10.5. Under the pre-fix
+# raw-margin rule this cleared any plausible threshold and fired almost every turn.
+# Here directive_pull (10.5) is read against a decision_scale (235.45, matching the
+# self_margin order of magnitude reported in production) — contest_ratio ≈ 0.045, a
+# ~4% nudge — which sits far below the production PROPOSED DEFAULT min_contest_ratio
+# (0.35), even after composure_noise_gate raises the bar further.
+# FALSIFIABLE: a detector that reverted to gating on overrule_strength (≈225, comfortably
+# above any plausible raw-margin threshold) would incorrectly fire here; this test would
+# catch that regression immediately. The idle entry ranks first in directive_candidates
+# (bonus 30.0 > guard's 15.5) to also confirm Part B's fall-through is exercised, not
+# bypassed, on the way to this result.
+static func _t_trivial_nudge_not_diverged() -> Dictionary:
+	var chosen: Dictionary = {
+		"action_type": "actor.move", "target_id": "e1",
+		"score": 305.0, "directive_bonus": 5.0, "directive_bonus_nascent": 5.0,
+		"components": {},
+	}
+	var directive_candidates: Array = [
+		{"action_type": "actor.idle", "target_id": "", "score": 999.0, "directive_bonus": 30.0, "directive_bonus_nascent": 30.0},
+		{"action_type": "actor.guard", "target_id": "", "score": 80.05, "directive_bonus": 15.5, "directive_bonus_nascent": 15.5},
+	]
+	var cfg: Dictionary = {
+		"min_contest_ratio": 0.35, "decision_scale_epsilon": 1.0,
+		"composure_noise_gate": 0.5, "composure_contradiction_gain": 0.75,
+		"divergence_ignored_directive_actions": ["actor.idle"],
+	}
+	# decision_scale 235.45 ≈ the production self_margin — "the options differed to her
+	# by about this much overall".
+	var result: Dictionary = DivergenceDetector.detect(chosen, directive_candidates, 235.45, 0.4, 0.5, cfg)
+	if str(result.get("directive_action", "")) != "actor.guard":
+		return _fail("expected fall-through past actor.idle to actor.guard, got directive_action=%s" % str(result.get("directive_action", "")))
+	if float(result.get("overrule_strength", -1.0)) < 200.0:
+		return _fail("fixture drifted — expected a large raw overrule_strength (~225), got %s" % str(result.get("overrule_strength", -1.0)))
+	if float(result.get("contest_ratio", -1.0)) >= 0.1:
+		return _fail("fixture drifted — expected contest_ratio well under 0.1 (a trivial nudge), got %s" % str(result.get("contest_ratio", -1.0)))
+	if bool(result.get("diverged", true)):
+		return _fail("expected diverged=false for a trivial nudge against a large decision_scale: %s" % str(result))
+	return _pass()
+
+
+# Test 8 — A genuine contest registers even with a SMALL raw margin — the inverse of
+# the old behaviour. directive_pull (8.0) is large relative to a small decision_scale
+# (10.0) — contest_ratio 0.8, decisively above the 0.35 threshold — while overrule_strength
+# (0.5) is tiny, far below the old retired min_margin default (6.0).
+# FALSIFIABLE: a detector still gating on overrule_strength (or on min_contest_ratio
+# applied to the wrong numerator/denominator) would read this as noise and miss it;
+# this test would catch that regression.
+static func _t_genuine_contest_small_margin_diverges() -> Dictionary:
+	var chosen: Dictionary = {
+		"action_type": "melee_attack", "target_id": "e1",
+		"score": 52.0, "directive_bonus": 2.0, "directive_bonus_nascent": 2.0,
+		"components": {},
+	}
+	var directive_candidates: Array = [
+		{"action_type": "actor.guard", "target_id": "", "score": 51.5, "directive_bonus": 10.0, "directive_bonus_nascent": 10.0},
+	]
+	var cfg: Dictionary = {
+		"min_contest_ratio": 0.35, "decision_scale_epsilon": 1.0,
+		"composure_noise_gate": 0.5, "composure_contradiction_gain": 0.75,
+		"divergence_ignored_directive_actions": ["actor.idle"],
+	}
+	var result: Dictionary = DivergenceDetector.detect(chosen, directive_candidates, 10.0, 0.0, 0.5, cfg)
+	if not is_equal_approx(float(result.get("overrule_strength", -1.0)), 0.5):
+		return _fail("fixture drifted — expected overrule_strength 0.5, got %s" % str(result.get("overrule_strength", -1.0)))
+	if not is_equal_approx(float(result.get("contest_ratio", -1.0)), 0.8):
+		return _fail("fixture drifted — expected contest_ratio 0.8, got %s" % str(result.get("contest_ratio", -1.0)))
+	if not bool(result.get("diverged", false)):
+		return _fail("expected diverged=true for a genuine contest despite a tiny raw margin (0.5): %s" % str(result))
+	return _pass()
+
+
+# Test 9 — Part B: a passive directive preference (actor.idle) is never diverged
+# against, regardless of margins — even when idle is the ONLY entry in
+# directive_candidates (so there is nothing left to fall through to). Uses the exact
+# numbers from Test 8 (which DO clear the threshold when the same candidate is typed
+# "actor.guard") to prove the ignore-list is doing the work, not a coincidence of the
+# numbers.
+# FALSIFIABLE: if the ignore-list were not applied (or applied to the wrong field),
+# this scenario — contest_ratio 0.8, decisively above threshold — would incorrectly
+# register as diverged.
+static func _t_passive_directive_ignored_never_diverges() -> Dictionary:
+	var chosen: Dictionary = {
+		"action_type": "melee_attack", "target_id": "e1",
+		"score": 52.0, "directive_bonus": 2.0, "directive_bonus_nascent": 2.0,
+		"components": {},
+	}
+	var directive_candidates: Array = [
+		{"action_type": "actor.idle", "target_id": "", "score": 51.5, "directive_bonus": 10.0, "directive_bonus_nascent": 10.0},
+	]
+	var cfg: Dictionary = {
+		"min_contest_ratio": 0.35, "decision_scale_epsilon": 1.0,
+		"composure_noise_gate": 0.5, "composure_contradiction_gain": 0.75,
+		"divergence_ignored_directive_actions": ["actor.idle"],
+	}
+	var result: Dictionary = DivergenceDetector.detect(chosen, directive_candidates, 10.0, 0.0, 0.5, cfg)
+	if str(result.get("directive_action", "")) != "":
+		return _fail("expected no resolvable directive preference (idle-only, ignored), got directive_action=%s" % str(result.get("directive_action", "")))
+	if bool(result.get("diverged", true)):
+		return _fail("expected diverged=false when the only directive preference is the ignored actor.idle: %s" % str(result))
+	return _pass()
+
+
+# Test 10 — Part B: actor.guard is NOT on the default ignore list — pins the
+# deliberate design decision that a guard order IS something an Echo can meaningfully
+# defy (unlike actor.idle). Same shape as Test 9, but the single candidate is typed
+# "actor.guard" instead of "actor.idle" — and now it registers.
+# FALSIFIABLE: if a future change widened divergence_ignored_directive_actions to
+# include actor.guard (or the ignore-check were applied unconditionally), this test
+# would start failing — it is the tripwire for that regression.
+static func _t_guard_not_ignored_can_diverge() -> Dictionary:
+	var chosen: Dictionary = {
+		"action_type": "melee_attack", "target_id": "e1",
+		"score": 52.0, "directive_bonus": 2.0, "directive_bonus_nascent": 2.0,
+		"components": {},
+	}
+	var directive_candidates: Array = [
+		{"action_type": "actor.guard", "target_id": "", "score": 51.5, "directive_bonus": 10.0, "directive_bonus_nascent": 10.0},
+	]
+	var cfg: Dictionary = {
+		"min_contest_ratio": 0.35, "decision_scale_epsilon": 1.0,
+		"composure_noise_gate": 0.5, "composure_contradiction_gain": 0.75,
+		"divergence_ignored_directive_actions": ["actor.idle"],
+	}
+	var result: Dictionary = DivergenceDetector.detect(chosen, directive_candidates, 10.0, 0.0, 0.5, cfg)
+	if str(result.get("directive_action", "")) != "actor.guard":
+		return _fail("expected actor.guard to resolve as the directive preference, got: %s" % str(result.get("directive_action", "")))
+	if not bool(result.get("diverged", false)):
+		return _fail("expected diverged=true — actor.guard must NOT be treated as a passive/ignored preference: %s" % str(result))
 	return _pass()
