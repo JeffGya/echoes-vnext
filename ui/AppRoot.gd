@@ -486,6 +486,7 @@ func _run_tests(parts: Array) -> void:
 	# combat, charge-pressure bump, ally recruit offer compute-once, projection shapes)
 	Stage004SeamTests.register(runner)
 	DivergenceDetectorTests.register(runner)  # V2-PROG-012 Phase 4: divergence detection
+	CombatDivergenceBarkTests.register(runner)  # V2-PROG-012 Phase 5: divergence bark content + wiring
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [
