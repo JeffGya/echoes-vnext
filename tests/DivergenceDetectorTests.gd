@@ -19,6 +19,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("divergence/passive_directive_ignored_never_diverges", Callable(DivergenceDetectorTests, "_t_passive_directive_ignored_never_diverges"))
 	runner.register_test("divergence/guard_not_ignored_can_diverge", Callable(DivergenceDetectorTests, "_t_guard_not_ignored_can_diverge"))
 	runner.register_test("divergence/primary_reason_varies_with_legibility", Callable(DivergenceDetectorTests, "_t_primary_reason_varies_with_legibility"))
+	runner.register_test("divergence/probe_gated_to_echo_faction", Callable(DivergenceDetectorTests, "_t_divergence_probe_gated_to_echo_faction"))
 
 
 static func _pass() -> Dictionary: return {"ok": true}
@@ -528,4 +529,67 @@ static func _t_primary_reason_varies_with_legibility() -> Dictionary:
 		return _fail("expected outweighed-band (legibility=0.9) primary_reason 'her own values outweighed the Directive', got '%s'" % reason_outweighed)
 	if reason_vague == reason_named or reason_named == reason_outweighed or reason_vague == reason_outweighed:
 		return _fail("legibility bands collapsed to identical primary_reason text: %s / %s / %s" % [reason_vague, reason_named, reason_outweighed])
+	return _pass()
+
+
+# Test 12 — V2-PROG-012 Phase 5 fix: BehaviorArbiter never attaches
+# _divergence_probe for a non-echo-faction actor, regardless of scores.
+# Deliberately does NOT reuse _build_env/_run's "test_calling" fixture —
+# _generate_candidates() resolves melee targets by OPPOSING faction (not
+# actor_type), so simply relabeling the acting actor "enemy" there would also
+# silently break which fixture entity is even a valid attack target,
+# confounding "no probe because gated" with "no probe because no candidate" —
+# exactly the kind of false-negative test the story brief has called out
+# before. Instead this builds two minimal, symmetric BehaviorArbiterTests.gd-
+# style contexts (actor adjacent to ONE opposing-faction target — the only
+# thing that differs between them is the actor/target faction pair), so both
+# cases score an identical, ordinary (non-9999-override) intent and the ONLY
+# variable exercised is the gate itself.
+# FALSIFIABLE: before the faction == "echo" gate landed in
+# BehaviorArbiter.select_intent(), _divergence_probe was attached whenever the
+# winner wasn't a 9999.0 hard override, with no faction check at all — the
+# enemy_intent assertion below would then fail (captured failure, pre-fix:
+# enemy_probe non-empty, e.g. {"chosen": {"action_type": "melee_attack", ...},
+# "directive_candidates": [...], "decision_scale": ...} — see the story
+# writeup for the exact dict).
+static func _t_divergence_probe_gated_to_echo_faction() -> Dictionary:
+	var directive: Dictionary = {"id": "directive.test", "intent_weights": {}}
+	var arbiter := BehaviorArbiter.new({})
+
+	var echo_actor: Dictionary = {
+		"id": "actor.a", "faction": "echo", "calling_origin": "uncalled",
+		"traits": {}, "vector_scores": {}, "fear": 0, "morale": 50,
+		"grid_pos": {"col": 0, "row": 0},
+	}
+	var echo_target: Dictionary = {
+		"id": "target.b", "faction": "enemy", "current_hp": 20,
+		"stats": {"max_hp": 20}, "grid_pos": {"col": 1, "row": 0},
+	}
+	var echo_context: Dictionary = {
+		"actor": echo_actor, "all_actors": [echo_actor, echo_target],
+		"directive": directive, "t": 1,
+	}
+	var echo_intent: Dictionary = arbiter.select_intent(echo_context)
+	var echo_probe: Dictionary = echo_intent.get("_divergence_probe", {}) as Dictionary
+	if echo_probe.is_empty():
+		return _fail("control fixture broken: expected a populated _divergence_probe for a faction='echo' actor, got empty. intent=%s" % str(echo_intent))
+
+	var enemy_actor: Dictionary = {
+		"id": "actor.a", "faction": "enemy", "calling_origin": "uncalled",
+		"traits": {}, "vector_scores": {}, "fear": 0, "morale": 50,
+		"grid_pos": {"col": 0, "row": 0},
+	}
+	var enemy_target: Dictionary = {
+		"id": "target.b", "faction": "echo", "current_hp": 20,
+		"stats": {"max_hp": 20}, "grid_pos": {"col": 1, "row": 0},
+	}
+	var enemy_context: Dictionary = {
+		"actor": enemy_actor, "all_actors": [enemy_actor, enemy_target],
+		"directive": directive, "t": 1,
+	}
+	var enemy_intent: Dictionary = arbiter.select_intent(enemy_context)
+	var enemy_probe: Dictionary = enemy_intent.get("_divergence_probe", {}) as Dictionary
+	if not enemy_probe.is_empty():
+		return _fail("expected NO _divergence_probe for a faction='enemy' actor, got: %s" % str(enemy_probe))
+
 	return _pass()

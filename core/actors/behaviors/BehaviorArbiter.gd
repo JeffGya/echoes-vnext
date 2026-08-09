@@ -380,24 +380,43 @@ func select_intent(context: Dictionary) -> Dictionary:
 	# here — an earlier draft kept one alongside the ranking and it went dead,
 	# unread by anything once the ranking replaced it; see the story brief on
 	# not shipping config or variables that only look live.)
+	# V2-PROG-012 Phase 5 fix: divergence detection only makes sense for an actor
+	# that actually receives the Directive. Gate is faction == "echo", NOT
+	# actor_type == "echo" — V2-STAGE-004 temporary allies are built by
+	# ContactActorBuilder.gd via EnemyActor.from_definition (which always sets
+	# actor_type "enemy") with faction overridden to "echo"; actor_type would
+	# wrongly exclude them from a party they fight in and are subject to the
+	# Directive alongside. True enemies (faction "enemy") never receive the
+	# Directive at all — measured production run: 7 of 8 actor.divergence events
+	# were logged for an enemy actor against directive.scout_carefully, which is
+	# meaningless (an enemy has no Directive to diverge from) and — because Phase
+	# 4's min_contest_ratio=0.35 was calibrated against a contest_ratio sample
+	# drawn from ALL actors, not Echoes only — invalidated that calibration (see
+	# data.maturity_expression.divergence._comment's re-measurement note). Same
+	# pattern this file already uses for VOW-001/BOND-002 bias above. Gated here,
+	# before the per-candidate accumulation loop, so non-echo actors skip the
+	# whole probe — not just the eventual divergence log — at zero extra cost.
+	var _is_echo_faction: bool = str(actor.get("faction", "")) == "echo"
 	var _dbonus_by_type: Dictionary = {}
 	var _repr_by_type: Dictionary = {}
-	var _self_score_min: float = INF
-	var _self_score_max: float = -INF
-	for c: Dictionary in candidates:
-		var _atype: String = str(c.get("action_type", ""))
-		if not _dbonus_by_type.has(_atype):
-			_dbonus_by_type[_atype] = _directive_bonus(_atype, directive, expression_band, calling_behavior)
-			_repr_by_type[_atype] = c
-		var _cbonus: float = float(_dbonus_by_type[_atype])
-		var _cscore: float = float(c.get("_score", 0.0))
-		if _cscore < 9999.0:
-			var _cself_score: float = _cscore - _cbonus
-			if _cself_score < _self_score_min:
-				_self_score_min = _cself_score
-			if _cself_score > _self_score_max:
-				_self_score_max = _cself_score
-	var _decision_scale: float = (_self_score_max - _self_score_min) if _self_score_max >= _self_score_min else 0.0
+	var _decision_scale: float = 0.0
+	if _is_echo_faction:
+		var _self_score_min: float = INF
+		var _self_score_max: float = -INF
+		for c: Dictionary in candidates:
+			var _atype: String = str(c.get("action_type", ""))
+			if not _dbonus_by_type.has(_atype):
+				_dbonus_by_type[_atype] = _directive_bonus(_atype, directive, expression_band, calling_behavior)
+				_repr_by_type[_atype] = c
+			var _cbonus: float = float(_dbonus_by_type[_atype])
+			var _cscore: float = float(c.get("_score", 0.0))
+			if _cscore < 9999.0:
+				var _cself_score: float = _cscore - _cbonus
+				if _cself_score < _self_score_min:
+					_self_score_min = _cself_score
+				if _cself_score > _self_score_max:
+					_self_score_max = _cself_score
+		_decision_scale = (_self_score_max - _self_score_min) if _self_score_max >= _self_score_min else 0.0
 
 	var winner: Dictionary = candidates[0].duplicate()
 	winner.erase("_score")
@@ -422,7 +441,7 @@ func select_intent(context: Dictionary) -> Dictionary:
 	# 9999.0 sentinel at ~:333): that is a mechanical certainty, not the Echo's
 	# judgment outvoting the Directive, so it is not a candidate for divergence.
 	var _winner_score: float = float(candidates[0].get("_score", 0.0))
-	if _winner_score < 9999.0:
+	if _is_echo_faction and _winner_score < 9999.0:
 		var _w_action_type: String = str(candidates[0].get("action_type", ""))
 		var _w_components: Dictionary = {}
 		# Recompute is deterministic/pure — identical inputs to the call already made
@@ -602,24 +621,32 @@ func select_movement_intent(
 	# actually differed to her", so no special-casing is needed beyond excluding
 	# the 9999.0 hard purifier override (set on candidates just above, before
 	# this loop).
+	# V2-PROG-012 Phase 5 fix: same faction == "echo" gate as select_intent()'s
+	# equivalent block above — see that comment for the temporary-ally
+	# (actor_type "enemy", faction "echo") reasoning and the miscalibration this
+	# fixes. Gated before the per-candidate accumulation loop so non-echo actors
+	# skip the whole probe at zero extra cost.
+	var _is_echo_faction: bool = str(actor.get("faction", "")) == "echo"
 	var _dbonus_by_type: Dictionary = {}
 	var _repr_by_type: Dictionary = {}
-	var _self_score_min: float = INF
-	var _self_score_max: float = -INF
-	for c: Dictionary in candidates:
-		var _atype: String = str((c["_movement_plan"] as Dictionary)["type"])
-		if not _dbonus_by_type.has(_atype):
-			_dbonus_by_type[_atype] = _directive_bonus(_atype, directive, expression_band, calling_behavior)
-			_repr_by_type[_atype] = c
-		var _cbonus: float = float(_dbonus_by_type[_atype])
-		var _cscore: float = float(c.get("_score", 0.0))
-		if _cscore < 9999.0:
-			var _cself_score: float = _cscore - _cbonus
-			if _cself_score < _self_score_min:
-				_self_score_min = _cself_score
-			if _cself_score > _self_score_max:
-				_self_score_max = _cself_score
-	var _decision_scale: float = (_self_score_max - _self_score_min) if _self_score_max >= _self_score_min else 0.0
+	var _decision_scale: float = 0.0
+	if _is_echo_faction:
+		var _self_score_min: float = INF
+		var _self_score_max: float = -INF
+		for c: Dictionary in candidates:
+			var _atype: String = str((c["_movement_plan"] as Dictionary)["type"])
+			if not _dbonus_by_type.has(_atype):
+				_dbonus_by_type[_atype] = _directive_bonus(_atype, directive, expression_band, calling_behavior)
+				_repr_by_type[_atype] = c
+			var _cbonus: float = float(_dbonus_by_type[_atype])
+			var _cscore: float = float(c.get("_score", 0.0))
+			if _cscore < 9999.0:
+				var _cself_score: float = _cscore - _cbonus
+				if _cself_score < _self_score_min:
+					_self_score_min = _cself_score
+				if _cself_score > _self_score_max:
+					_self_score_max = _cself_score
+		_decision_scale = (_self_score_max - _self_score_min) if _self_score_max >= _self_score_min else 0.0
 
 	var winner: Dictionary = candidates[0]
 	var intent: Dictionary = MovementIntentContract.build(
@@ -653,7 +680,7 @@ func select_movement_intent(
 	# to hand the detector. Skipped for hard score overrides (9999.0 sentinel).
 	var _divergence_probe: Dictionary = {}
 	var _winner_score: float = float(winner.get("_score", 0.0))
-	if _winner_score < 9999.0:
+	if _is_echo_faction and _winner_score < 9999.0:
 		var _w_plan: Dictionary = winner["_movement_plan"] as Dictionary
 		var _w_action_type: String = str(_w_plan["type"])
 		var _w_components: Dictionary = {}
