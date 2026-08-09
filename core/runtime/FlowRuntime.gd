@@ -7825,7 +7825,12 @@ func _start_contact_conversation(sit: Dictionary, sit_id: String, explore_map: D
 		_party_echoes, contact_work, _dir_id, contact_cfg_bal
 	)
 
-	# Set NPC opening line from burden_variant (authored in contact_responses.json)
+	# Set NPC opening line from burden_variant (authored in contact_responses.json), when available.
+	# NOTE: contact_responses.json is keyed by calling, not by contact role, and no entry
+	# currently defines a "burden_variants" map — this content has never been authored (see
+	# RealmGenerator._BURDEN_VARIANTS_BY_ROLE / npc_opening_lines.json for the real opening-line
+	# source). Guard the overwrite so an unauthored/empty lookup never blanks the populated
+	# npc_line that RealmGenerator already selected.
 	var _bv := str(contact_work.get("burden_variant", ""))
 	var _bv_role_data_v: Variant = response_data.get(str(contact_work.get("role", "")), {})
 	var _bv_role_data: Dictionary = _bv_role_data_v if _bv_role_data_v is Dictionary else {}
@@ -7833,7 +7838,9 @@ func _start_contact_conversation(sit: Dictionary, sit_id: String, explore_map: D
 	var _bv_variants: Dictionary = _bv_variants_v if _bv_variants_v is Dictionary else {}
 	var _bv_variant_v: Variant = _bv_variants.get(_bv, {})
 	var _bv_variant: Dictionary = _bv_variant_v if _bv_variant_v is Dictionary else {}
-	contact_work["npc_line"] = str(_bv_variant.get("opening", ""))
+	var _bv_opening := str(_bv_variant.get("opening", ""))
+	if not _bv_opening.is_empty():
+		contact_work["npc_line"] = _bv_opening
 
 	# Auto-generate responses if party ≤ 3
 	var contact_responses: Array = []
