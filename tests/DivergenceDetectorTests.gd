@@ -37,17 +37,40 @@ static func _fail(message: String) -> Dictionary: return {"ok": false, "error": 
 # ─── (see the story brief). Part B's fall-through therefore always resolves ──
 # ─── D to actor.guard, the next-ranked NON-ignored preference (constant     ──
 # ─── zero bonus — no directive_action_muls entry for it — so its self_score ──
-# ─── is band-invariant, isolating directive_band_mul's effect to melee's    ──
-# ─── OWN bonus term). At Nascent/Forming (band_mul 1.30/1.10), actor.idle's ──
-# ─── own directive bonus is large enough that idle itself wins the turn —   ──
-# ─── directive_pull(idle vs guard) then goes NEGATIVE (idle already carries ──
-# ─── more directive weight than the fallback D), so she reads as compliant. ──
-# ─── At Grounded/Whole (0.90/0.75), melee_attack's bigger base weight (72   ──
-# ─── vs idle's 32) wins outright once idle's shrunken bonus can no longer   ──
-# ─── carry it past melee — and melee's own (negative) bonus is smaller in   ──
-# ─── magnitude than guard's (0), giving a positive, threshold-clearing      ──
-# ─── contest_ratio. The numbers are hand-verified (see _t_determinism's     ──
-# ─── companion diagnostic run), not tuned by trial and error.
+# ─── is interpretation_width-invariant, isolating directive_interpretation_mul's ──
+# ─── effect to melee's OWN bonus term).
+#
+# V2-PROG-012 Phase 6 (DEFECT 2 fix): the directive multiplier is now driven by
+# the continuous `judgment` output (via interpretation_width), NOT expression_band
+# — so `rank` alone no longer swings it the way the old per-band table did.
+# `judgment` is a weighted composite (rank_strength 0.25, storyweight_maturity 0.2,
+# identity_coherence 0.2, calling_accent_confirmed 0.15, bond_support 0.15, minus
+# fear_pressure 0.25) — rank_strength is only ONE of five positive inputs. To
+# still produce a genuine, comfortably-separated comply/diverge contrast from a
+# single `rank` argument, the "mature" fixture (rank >= 4) additionally sets
+# `storyweight` (maxed against data.progression.level_thresholds' ceiling →
+# storyweight_maturity=1.0) and one friend-tier bond to the living bystander ally
+# (bond_scale.max_bonds overridden to 1 here so a single bond saturates
+# bond_support=1.0) — both levers feed ONLY `judgment`, never `_score()` directly
+# (unlike vector_scores, which would also move vector_bonus and confound the
+# hand-derived numbers below — deliberately left unset on this actor for that
+# reason). calling_accent_confirmed is already 1.0 at every rank (actor.calling
+# is always set), so it contributes the same +0.15 in both cases and isn't a
+# lever here.
+#   rank 1 (nascent-like): rank_strength=0, storyweight_maturity=0, bond_support=0
+#     → judgment = 0.15 → dir_mul = lerp(1.30, 0.75, 0.15) = 1.2175
+#   rank 9 (whole, maxed maturity signals): rank_strength=1.0, storyweight_maturity=1.0,
+#     bond_support=1.0 → judgment = 0.25+0.2+0.15+0.15 = 0.75 → dir_mul = lerp(1.30, 0.75, 0.75) = 0.8875
+# At rank 1, actor.idle's own directive bonus (20*1.2175=24.35) is large enough
+# that idle wins the turn outright (score 56.35 vs melee's 47.65) — she is MORE
+# directive-aligned than the fallen-through D (actor.guard, constant zero bonus
+# in this fixture), so directive_pull goes negative and she reads as compliant,
+# not merely tied. At rank 9, idle's shrunken bonus (20*0.8875=17.75) can no
+# longer carry it past melee_attack's bigger base weight (72 vs idle's 32): melee
+# wins (54.25 vs 49.75), and melee's own (smaller-magnitude, shrunk) negative
+# bonus is still below guard's zero, giving a positive, threshold-clearing
+# contest_ratio (17.75 / 67.0 ≈ 0.265). The numbers are hand-verified (see
+# _t_determinism's companion diagnostic run), not tuned by trial and error.
 static func _build_env(rank: int) -> Dictionary:
 	var cs := ConfigService.new()
 	cs.load_balance()
@@ -59,10 +82,10 @@ static func _build_env(rank: int) -> Dictionary:
 	# real calling id anyway, so it always falls back to calling_cfg.get("uncalled", {}).
 	expr_cfg["calling_behavior"] = {}
 	# min_contest_ratio deliberately tiny (not the production PROPOSED DEFAULT of
-	# 0.35) — this fixture is about pinning directive_band_mul's effect on the
-	# comply/diverge boundary across bands, not about calibrating the production
-	# threshold (that's balance.json's job — see its divergence._comment for the
-	# measured justification).
+	# 0.30) — this fixture is about pinning directive_interpretation_mul's effect on
+	# the comply/diverge boundary, not about calibrating the production threshold
+	# (that's balance.json's job — see its divergence._comment for the measured
+	# justification).
 	expr_cfg["divergence"] = {
 		"min_contest_ratio": 0.1,
 		"decision_scale_epsilon": 1.0,
@@ -71,6 +94,11 @@ static func _build_env(rank: int) -> Dictionary:
 		"composure_contradiction_gain": 0.0,
 		"legibility_specificity_bands": {"vague_max": 0.34, "named_max": 0.67},
 	}
+	# V2-PROG-012 Phase 6: max_bonds=1 so a single friend-tier bond saturates
+	# bond_support to 1.0 — see the fixture comment above.
+	var autonomy_outputs: Dictionary = (expr_cfg.get("autonomy_outputs", {}) as Dictionary).duplicate(true)
+	autonomy_outputs["bond_scale"] = {"max_bonds": 1}
+	expr_cfg["autonomy_outputs"] = autonomy_outputs
 	bdata["maturity_expression"] = expr_cfg
 
 	var actor_cfg: Dictionary = {
@@ -78,23 +106,30 @@ static func _build_env(rank: int) -> Dictionary:
 			"test_calling": {"melee_attack": 72.0, "actor.idle": 32.0, "actor.guard": 5.0},
 		},
 		"default_intent_weight": 5.0,
-		# actor.guard intentionally has NO entry here (bonus 0.0 at every band) — see
-		# the fixture comment above for why that isolates directive_band_mul's effect.
+		# actor.guard intentionally has NO entry here (bonus 0.0 regardless of
+		# interpretation_width) — see the fixture comment above for why that
+		# isolates directive_interpretation_mul's effect.
 		"directive_action_muls": {
 			"actor.idle":   {"test_key": 1.0},
 			"melee_attack": {"test_key": -1.0},
 		},
 		"directive_base_bonus": 20.0,
-		"directive_band_mul": {"nascent": 1.30, "forming": 1.10, "grounded": 0.90, "whole": 0.75},
+		"directive_interpretation_mul": {"low": 0.75, "high": 1.30},
 		# Neutralise board-state noise — this fixture puts the actor adjacent to an
 		# enemy purely so melee_attack is a candidate at all; "echo_in_melee" and
 		# friends must not skew the hand-derived numbers.
 		"situational_muls": {},
 	}
 
+	# V2-PROG-012 Phase 6: storyweight and a friend bond both feed ONLY `judgment`
+	# (never `_score()` directly — see the fixture comment above), maxed at rank>=4
+	# to produce a genuine judgment contrast against rank 1's all-zero maturity
+	# signals. ceiling matches data.progression.level_thresholds' last entry (1000
+	# in production) so storyweight_maturity saturates at 1.0.
 	var actor: Dictionary = {
 		"id": "echo.div.test", "name": "Test Echo", "actor_type": "echo", "faction": "echo",
 		"calling": "test_calling", "calling_origin": "test_calling", "rank": rank,
+		"storyweight": 1000 if rank >= 4 else 0,
 		"current_hp": 20, "stats": {"max_hp": 20},
 		"morale": 50, "fear": 0, "fear_base": 0,
 		"grid_pos": {"col": 0, "row": 0},
@@ -113,10 +148,16 @@ static func _build_env(rank: int) -> Dictionary:
 		"id": "directive.test_divergence",
 		"intent_weights": {"test_key": 1.0},
 	}
+	# V2-PROG-012 Phase 6: a friend-tier bond to the living bystander (rank>=4 only
+	# — see the fixture comment above). Safe against score confounds: _apply_bond_bias()
+	# only ever touches "protect_ally" candidates, and this fixture's bystander is
+	# full-HP and far away (never a threatened protect_ally target), so no
+	# protect_ally candidate is ever generated for it to act on.
 	var context: Dictionary = {
 		"actor": actor,
 		"all_actors": [actor, enemy, ally],
 		"directive": directive,
+		"bonds": [{"actor_a": "echo.div.test", "actor_b": "echo.div.bystander", "strength": 60}] if rank >= 4 else [],
 		"cfg": {"data": bdata},
 		"round": 1,
 	}
@@ -144,8 +185,8 @@ static func _run(rank: int) -> Array[Dictionary]:
 # tie-break, float accumulation order, etc.), the two independent runs below
 # would diverge on at least one field and this test would catch it.
 static func _t_determinism() -> Dictionary:
-	var run_a: Array[Dictionary] = _run(4)
-	var run_b: Array[Dictionary] = _run(4)
+	var run_a: Array[Dictionary] = _run(9)
+	var run_b: Array[Dictionary] = _run(9)
 	if run_a.size() != 1 or run_b.size() != 1:
 		return _fail("expected exactly one actor.divergence per run, got %d and %d" % [run_a.size(), run_b.size()])
 	if run_a[0] != run_b[0]:
@@ -153,33 +194,43 @@ static func _t_determinism() -> Dictionary:
 	return _pass()
 
 
-# Test 2 — Whole diverges where Nascent complies. FALSIFIABLE: if `directive_band_mul`
-# stopped being applied to the directive term, or if the contest_ratio threshold/gate
-# were wired backwards, either (a) the Whole-band Echo would also comply (zero events),
-# or (b) the Nascent-band Echo would also diverge (a spurious event) — proving band
-# scaling no longer moves the comply/diverge boundary at all.
+# Test 2 — high-judgment diverges where low-judgment complies. FALSIFIABLE: if
+# `directive_interpretation_mul` stopped being applied to the directive term (via
+# interpretation_width), or if the contest_ratio threshold/gate were wired
+# backwards, either (a) the rank-9/maxed-maturity Echo would also comply (zero
+# events), or (b) the rank-1/zero-maturity Echo would also diverge (a spurious
+# event) — proving judgment no longer moves the comply/diverge boundary at all.
 #
-# At Nascent, actor.idle's own directive bonus is large enough that idle wins the turn
-# outright (chosen_action == "actor.idle") — she is MORE directive-aligned than the
-# fallen-through D (actor.guard, constant zero bonus in this fixture), so
-# directive_pull goes negative and she reads as compliant, not merely tied.
-# At Whole, idle's shrunken bonus can no longer carry it past melee_attack's bigger
-# base weight (72 vs 32) — melee_attack wins, and its own (smaller-magnitude,
-# band-shrunk) negative bonus is still below guard's zero, giving a positive,
+# V2-PROG-012 Phase 6: this used to be "rank 4 (whole band) vs rank 1 (nascent
+# band)" — DEFECT 2's whole point is that expression_band/rank alone no longer
+# drives the directive term, so a bare rank swing isn't enough on its own
+# (rank_strength is only one of five positive judgment inputs — see the fixture
+# comment on _build_env above for why storyweight + a bond are also needed, and
+# why rank 9 rather than 4 is used here for a comfortable margin instead of a
+# borderline one).
+#
+# At rank 1 (judgment 0.15), actor.idle's own directive bonus is large enough
+# that idle wins the turn outright (chosen_action == "actor.idle") — she is MORE
+# directive-aligned than the fallen-through D (actor.guard, constant zero bonus
+# in this fixture), so directive_pull goes negative and she reads as compliant,
+# not merely tied. At rank 9 (judgment 0.75, maxed storyweight + bond), idle's
+# shrunken bonus can no longer carry it past melee_attack's bigger base weight
+# (72 vs 32) — melee_attack wins, and its own (smaller-magnitude, shrunk)
+# negative bonus is still below guard's zero, giving a positive,
 # threshold-clearing contest_ratio.
 static func _t_whole_diverges_nascent_complies() -> Dictionary:
-	var whole_events: Array[Dictionary] = _run(4)  # rank 4 → whole band
+	var whole_events: Array[Dictionary] = _run(9)  # rank 9, maxed maturity signals → judgment 0.75
 	if whole_events.size() != 1:
-		return _fail("expected exactly one actor.divergence for the Whole-band Echo, got %d" % whole_events.size())
+		return _fail("expected exactly one actor.divergence for the high-judgment Echo, got %d" % whole_events.size())
 	var data: Dictionary = whole_events[0].get("data", {})
 	if str(data.get("chosen_action", "")) != "melee_attack" or str(data.get("directive_action", "")) != "actor.guard":
 		return _fail("unexpected chosen/directive actions: %s" % str(data))
 	if float(data.get("contest_ratio", -1.0)) <= 0.0:
 		return _fail("expected a positive contest_ratio for a genuine contest, got: %s" % str(data))
 
-	var nascent_events: Array[Dictionary] = _run(1)  # rank 1 → nascent band
+	var nascent_events: Array[Dictionary] = _run(1)  # rank 1, zero maturity signals → judgment 0.15
 	if nascent_events.size() != 0:
-		return _fail("Nascent-band Echo in the same spot should comply (zero actor.divergence events — she out-weights the Directive's own fallback preference), got %d: %s" % [nascent_events.size(), str(nascent_events)])
+		return _fail("low-judgment Echo in the same spot should comply (zero actor.divergence events — she out-weights the Directive's own fallback preference), got %d: %s" % [nascent_events.size(), str(nascent_events)])
 	return _pass()
 
 

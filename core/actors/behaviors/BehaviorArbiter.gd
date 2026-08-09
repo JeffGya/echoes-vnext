@@ -125,10 +125,15 @@ const _DEFAULTS := {
 	"threat_threshold":      0.50,  # 0.50 = ally must be below 50% HP to qualify as threatened
 	"guard_range":           1,     # enemy must be adjacent for guard to be a candidate (melee-only MVP)
 	# V2-PROG-006: expression-band-based scoring defaults
-	# V2-PROG-010: identity weight scaling + composure + directive band tables
+	# V2-PROG-010: identity weight scaling + composure tables
+	# V2-PROG-012 Phase 6: identity_weight_scale and directive_interpretation_mul are
+	# now the two halves of ONE budgeted axis (interpretation_width, driven by
+	# judgment) — see data.maturity_expression's matching _comment for the swing
+	# budget these two keys are jointly checked against. directive_band_mul (the old
+	# per-band table) is REMOVED, not kept dead — see _directive_bonus()'s doc comment.
 	"identity_weight_scale":  { "trait": 0.6, "vector": 0.6 },
 	"composure_dampen_scale": { "value": 0.4 },  # V2-PROG-012 Phase 2 (renamed from presence_dampen_scale)
-	"directive_band_mul":     { "nascent": 1.30, "forming": 1.10, "grounded": 0.90, "whole": 0.75 },
+	"directive_interpretation_mul": { "low": 0.75, "high": 1.30 },
 
 	"wound_chase_mul":              15.0,  # Forming+ finish-wounded score bonus multiplier
 	"surrounded_move_penalty":     -18.0, # Forming+ penalty for move into surrounded position
@@ -287,6 +292,19 @@ func select_intent(context: Dictionary) -> Dictionary:
 	var rank_strength: float     = float(context.get("rank_strength", 0.0))
 	# V2-PROG-012 Phase 2: composure — the actual fear-dampening driver (see _score()).
 	var composure: float         = float(context.get("composure", 0.4))
+	# V2-PROG-012 Phase 6 (DEFECT 2 fix): judgment — drives interpretation_width, the
+	# single continuous axis both identity weighting and directive literalism now key
+	# on (see _score() and _directive_bonus()). Threaded exactly as composure was in
+	# Phase 2. Default 0.3 mirrors composure's default derivation above: under the
+	# balance.json judgment weights (rank_strength_weight 0.25 + storyweight_maturity_weight
+	# 0.2 + identity_coherence_weight 0.2 at ~0.5 each, no calling accent confirmed, no
+	# bond support, no fear spike ≈ 0.325, rounded to 0.3) — a "mid-band" fallback, not
+	# the floor (0.0, most literal) or the ceiling (1.0, most self-directed).
+	var judgment: float          = float(context.get("judgment", 0.3))
+	# V2-PROG-012 Phase 6: the single continuous axis — see _score()'s doc comment
+	# on why this replaces both rank_strength (identity) and expression_band
+	# (directive) as the shared driver.
+	var interpretation_width: float = clampf(judgment, 0.0, 1.0)
 
 	# Build board summary once — passed to _score() for every candidate to avoid re-computation.
 	var board_summary: Dictionary = _build_board_summary(actor, all_actors, context.get("board_cfg", {}), expression_band, context.get("resolution_mode", ""))
@@ -296,7 +314,7 @@ func select_intent(context: Dictionary) -> Dictionary:
 	# Score each candidate, then sort by the same four-key order used by the
 	# movement-aware selector: score, action type, target id, target cell.
 	for c: Dictionary in candidates:
-		c["_score"] = _score(c["action_type"], actor, directive, board_summary, expression_band, calling_behavior, c, presence_strength, rank_strength, composure)
+		c["_score"] = _score(c["action_type"], actor, directive, board_summary, expression_band, calling_behavior, c, presence_strength, rank_strength, composure, judgment)
 
 	# VOW-001: apply vow bias additively after base scoring.
 	# Vow bias is always additive, never overrides. Enemies are unaffected (faction != "echo").
@@ -406,7 +424,7 @@ func select_intent(context: Dictionary) -> Dictionary:
 		for c: Dictionary in candidates:
 			var _atype: String = str(c.get("action_type", ""))
 			if not _dbonus_by_type.has(_atype):
-				_dbonus_by_type[_atype] = _directive_bonus(_atype, directive, expression_band, calling_behavior)
+				_dbonus_by_type[_atype] = _directive_bonus(_atype, directive, interpretation_width, calling_behavior)
 				_repr_by_type[_atype] = c
 			var _cbonus: float = float(_dbonus_by_type[_atype])
 			var _cscore: float = float(c.get("_score", 0.0))
@@ -449,14 +467,16 @@ func select_intent(context: Dictionary) -> Dictionary:
 		# also capturing the term breakdown _score() didn't have anywhere to put
 		# the first time (see DivergenceDetectorTests for the no-score-drift pin).
 		_score(_w_action_type, actor, directive, board_summary, expression_band, calling_behavior,
-			candidates[0], presence_strength, rank_strength, composure, _w_components)
+			candidates[0], presence_strength, rank_strength, composure, judgment, _w_components)
 		winner["_divergence_probe"] = {
 			"chosen": {
 				"action_type":             _w_action_type,
 				"target_id":               str(candidates[0].get("target_id", "")),
 				"score":                   _winner_score,
 				"directive_bonus":         float(_dbonus_by_type.get(_w_action_type, 0.0)),
-				"directive_bonus_nascent": _directive_bonus(_w_action_type, directive, "nascent", calling_behavior),
+				# V2-PROG-012 Phase 6: interpretation_width=0.0 is the new "most literal"
+				# floor (was band string "nascent" — see _directive_bonus()'s doc comment).
+				"directive_bonus_nascent": _directive_bonus(_w_action_type, directive, 0.0, calling_behavior),
 				"components":              _w_components,
 			},
 			# V2-PROG-012 Phase 4 fix: the FULL directive_bonus-descending ranking
@@ -499,6 +519,10 @@ func select_movement_intent(
 	var rank_strength: float = float(context.get("rank_strength", 0.0))
 	# V2-PROG-012 Phase 2: composure — the actual fear-dampening driver (see _score()).
 	var composure: float = float(context.get("composure", 0.4))
+	# V2-PROG-012 Phase 6: judgment — see select_intent()'s equivalent block for the
+	# default derivation and why this drives interpretation_width.
+	var judgment: float = float(context.get("judgment", 0.3))
+	var interpretation_width: float = clampf(judgment, 0.0, 1.0)
 	var board_summary: Dictionary = _build_board_summary(
 		actor,
 		all_actors,
@@ -559,7 +583,8 @@ func select_movement_intent(
 			candidate,
 			presence_strength,
 			rank_strength,
-			composure
+			composure,
+			judgment
 		)
 		if bool(candidate.get("_movement_route", false)):
 			score += _spatial_utility(
@@ -636,7 +661,7 @@ func select_movement_intent(
 		for c: Dictionary in candidates:
 			var _atype: String = str((c["_movement_plan"] as Dictionary)["type"])
 			if not _dbonus_by_type.has(_atype):
-				_dbonus_by_type[_atype] = _directive_bonus(_atype, directive, expression_band, calling_behavior)
+				_dbonus_by_type[_atype] = _directive_bonus(_atype, directive, interpretation_width, calling_behavior)
 				_repr_by_type[_atype] = c
 			var _cbonus: float = float(_dbonus_by_type[_atype])
 			var _cscore: float = float(c.get("_score", 0.0))
@@ -685,14 +710,16 @@ func select_movement_intent(
 		var _w_action_type: String = str(_w_plan["type"])
 		var _w_components: Dictionary = {}
 		_score(_w_action_type, actor, directive, board_summary, expression_band, calling_behavior,
-			winner, presence_strength, rank_strength, composure, _w_components)
+			winner, presence_strength, rank_strength, composure, judgment, _w_components)
 		_divergence_probe = {
 			"chosen": {
 				"action_type":             _w_action_type,
 				"target_id":               str(winner.get("target_id", "")),
 				"score":                   _winner_score,
 				"directive_bonus":         float(_dbonus_by_type.get(_w_action_type, 0.0)),
-				"directive_bonus_nascent": _directive_bonus(_w_action_type, directive, "nascent", calling_behavior),
+				# V2-PROG-012 Phase 6: interpretation_width=0.0 is the new "most literal"
+				# floor (was band string "nascent" — see _directive_bonus()'s doc comment).
+				"directive_bonus_nascent": _directive_bonus(_w_action_type, directive, 0.0, calling_behavior),
 				"components":              _w_components,
 			},
 			# V2-PROG-012 Phase 4 fix: see select_intent()'s equivalent block for why
@@ -722,7 +749,7 @@ func _validate_movement_inputs(
 		return _movement_failure("invalid_directive", "context.directive")
 	if not context.get("calling_behavior", {}) is Dictionary:
 		return _movement_failure("invalid_calling_behavior", "context.calling_behavior")
-	for numeric_field: String in ["presence_strength", "rank_strength", "composure"]:
+	for numeric_field: String in ["presence_strength", "rank_strength", "composure", "judgment"]:
 		if context.has(numeric_field):
 			var numeric_value: Variant = context[numeric_field]
 			if not (numeric_value is int or numeric_value is float) or not is_finite(float(numeric_value)):
@@ -1808,13 +1835,24 @@ func _score(
 	calling_behavior: Dictionary = {},
 	candidate: Dictionary = {},
 	presence_strength: float = 0.1,  # V2-PROG-010
-	rank_strength: float = 0.0,      # V2-PROG-010
+	# V2-PROG-010; DEAD as of V2-PROG-012 Phase 6 — identity weight scaling below now
+	# reads `judgment` (via interpretation_width), not rank_strength (see DEFECT 2:
+	# rank_strength and expression_band were two independently-authored levers that
+	# both derived from raw rank alone, silently doubling the identity-vs-directive
+	# swing). Kept in the signature for positional-call compatibility with existing
+	# callers (same retirement pattern as presence_strength above, which BehaviorArbiter
+	# has never read in _score()'s body).
+	rank_strength: float = 0.0,
 	# V2-PROG-012 Phase 2: default approximates a mid-band actor under the
 	# balance.json composure weights (rank_strength_weight 0.36 + trait_balance_weight
 	# 0.37 at ~0.5 each, no vow, no fear spike ≈ 0.365, rounded to 0.4) — an omitted
 	# argument degrades to "average composure" rather than the floor (0.0, full
 	# dampen) or the ceiling (1.0, no dampen).
 	composure: float = 0.4,
+	# V2-PROG-012 Phase 6 (DEFECT 2 fix): judgment — the sole driver of
+	# interpretation_width, computed just below. See select_intent()'s doc comment
+	# on this parameter for the default's derivation; threaded identically here.
+	judgment: float = 0.3,
 	# V2-PROG-012 Phase 4: optional out-param — when a non-null Dictionary is
 	# passed, this call fills it with the raw per-term breakdown (base, trait_bonus,
 	# vector_bonus, archetype_bonus, morale_bonus, fear_factor, calling_mul,
@@ -1861,11 +1899,26 @@ func _score(
 	for vector_key: String in v_row:
 		vector_bonus += float(vectors.get(vector_key, 0)) * float(v_row[vector_key])
 
-	# V2-PROG-010: identity weight scaling — trait and vector contributions amplify with rank.
-	# At rank 1 (rank_strength=0.0): scale=1.0x (baseline). At rank 9: scale=1.0+identity_weight_scale.
+	# V2-PROG-012 Phase 6 (DEFECT 2 fix): interpretation_width is the SINGLE continuous
+	# axis both identity weighting (here) and directive literalism (_directive_bonus(),
+	# Section 6 below) now key on — derived from `judgment` (Phase 1, continuous 0-1,
+	# GDD:1360's "how strongly the Echo can hold, interpret, and assert self under
+	# pressure"). Previously these were two independently-authored levers that BOTH
+	# derived from raw rank (rank_strength here, expression_band in Section 6) with no
+	# knowledge of each other — since expression_band is itself rank-derived
+	# (band_by_standing), the two moved in lockstep and silently doubled the
+	# identity-vs-directive swing (~2.8x from Rank 1 to Whole; see data.maturity_expression
+	# identity_weight_scale/directive_interpretation_mul _comment for the budget this
+	# now respects). Keying on judgment instead of the band string also fixes the
+	# rank 6-9 saturation: band_by_standing pins everything above rank 5 to "whole"
+	# while rank_strength kept climbing to rank 9 — judgment has no such plateau.
+	var interpretation_width: float = clampf(judgment, 0.0, 1.0)
+	# V2-PROG-010: identity weight scaling — trait and vector contributions amplify
+	# with interpretation_width. At interpretation_width=0.0: scale=1.0x (baseline).
+	# At interpretation_width=1.0: scale=1.0+identity_weight_scale.
 	var id_scale: Dictionary = _cfg_get("identity_weight_scale")
-	trait_bonus  *= 1.0 + rank_strength * float(id_scale.get("trait",  0.6))
-	vector_bonus *= 1.0 + rank_strength * float(id_scale.get("vector", 0.6))
+	trait_bonus  *= 1.0 + interpretation_width * float(id_scale.get("trait",  0.6))
+	vector_bonus *= 1.0 + interpretation_width * float(id_scale.get("vector", 0.6))
 
 	# 3b. Archetype bonus — flat constant lookup by archetype_birth string (not a continuous score).
 	#     Encodes personality combat tendency (combat_bias): aggressive→melee/move, steadfast→guard, etc.
@@ -1903,8 +1956,10 @@ func _score(
 		base += float(mini(anchor_rounds * 8, 24))
 
 	# 6. Directive bonus — generic loop over intent_weights (semantic keys).
-	# V2-PROG-010: pass expression_band + calling_behavior for mul modulation.
-	var directive_bonus: float = _directive_bonus(action_type, directive, expression_band, calling_behavior)
+	# V2-PROG-012 Phase 6: pass interpretation_width (not expression_band — see the
+	# doc comment above the identity-weight-scaling block) + calling_behavior for mul
+	# modulation.
+	var directive_bonus: float = _directive_bonus(action_type, directive, interpretation_width, calling_behavior)
 
 	# V2-PROG-006: calling-aware score multipliers (Grounded+ only)
 	var calling_mul: float = 1.0
@@ -1993,7 +2048,21 @@ func _score(
 ## Uses directive_action_muls translation table (balance.json) so new directive keys
 ## and new action types can be added without touching this function.
 ## V2-PROG-010: expression_band and calling_behavior modulate the effective bonus.
-func _directive_bonus(action_type: String, directive: Dictionary, expression_band: String = "nascent", calling_behavior: Dictionary = {}) -> float:
+## V2-PROG-012 Phase 6 (DEFECT 2 fix): `interpretation_width` (0.0-1.0, derived from
+## `judgment` — see _score()'s doc comment on the identity-weight-scaling block)
+## replaces `expression_band` as the directive-literalism driver. At
+## interpretation_width=0.0 (lowest judgment) the directive is followed most
+## literally (dir_mul_high); at 1.0 (highest judgment) it is weighted least
+## (dir_mul_low) — a straight lerp between the two bounds, preserving the exact
+## endpoints the old per-band table used at its extremes (nascent 1.30, whole
+## 0.75). The old `directive_band_mul` per-band table is REMOVED (not kept as a
+## documented-but-dead equivalence table) — see data.maturity_expression's
+## `directive_interpretation_mul` _comment for why band-keyed steps were retired
+## outright rather than shimmed: continuous interpretation_width is what fixes
+## both the unbudgeted swing AND the rank 6-9 saturation (band_by_standing pins
+## everything above rank 5 to "whole", so a band-keyed table would still plateau
+## there even after this rename).
+func _directive_bonus(action_type: String, directive: Dictionary, interpretation_width: float = 0.0, calling_behavior: Dictionary = {}) -> float:
 	if directive.is_empty():
 		return 0.0
 
@@ -2007,10 +2076,14 @@ func _directive_bonus(action_type: String, directive: Dictionary, expression_ban
 
 	# V2-PROG-010: calling directive_mul (wiring existing config — was declared but never applied)
 	var call_dir_mul: float = float(calling_behavior.get("directive_mul", 1.0))
-	# V2-PROG-010: band-level directive modulation — nascent follows literally, whole interprets independently
-	var band_mul_table: Dictionary = _cfg_get("directive_band_mul") as Dictionary
-	var dir_band_mul: float        = float(band_mul_table.get(expression_band, 1.0))
-	base_bonus = base_bonus * call_dir_mul * dir_band_mul
+	# V2-PROG-012 Phase 6: continuous interpretation-width directive modulation —
+	# low judgment follows literally (dir_mul_high), high judgment interprets
+	# independently (dir_mul_low). Replaces the old per-band table (directive_band_mul).
+	var interp_cfg: Dictionary  = _cfg_get("directive_interpretation_mul") as Dictionary
+	var dir_mul_low: float      = float(interp_cfg.get("low", 0.75))
+	var dir_mul_high: float     = float(interp_cfg.get("high", 1.30))
+	var dir_mul: float          = lerpf(dir_mul_high, dir_mul_low, clampf(interpretation_width, 0.0, 1.0))
+	base_bonus = base_bonus * call_dir_mul * dir_mul
 
 	var bonus: float = 0.0
 
@@ -2053,7 +2126,9 @@ func _rank_directive_candidates(
 			"target_id":               str(repr_candidate.get("target_id", "")),
 			"score":                   float(repr_candidate.get("_score", 0.0)),
 			"directive_bonus":         float(dbonus_by_type[atype]),
-			"directive_bonus_nascent": _directive_bonus(atype, directive, "nascent", calling_behavior),
+			# V2-PROG-012 Phase 6: interpretation_width=0.0 is the new "most literal"
+			# floor (was band string "nascent" — see _directive_bonus()'s doc comment).
+			"directive_bonus_nascent": _directive_bonus(atype, directive, 0.0, calling_behavior),
 		})
 	return ranked
 

@@ -2603,7 +2603,8 @@ func _resolve_next_actor(t: int) -> void:
 	var leadership_expr_cfg: Dictionary = bdata.get("maturity_expression", {})
 	var grid_cfg: Dictionary = bdata.get("grid", {})
 	# V2-PROG-012 Phase 0: BehaviorArbiter reads seven tuning keys that are authored in
-	# data.maturity_expression (identity_weight_scale, composure_dampen_scale, directive_band_mul,
+	# data.maturity_expression (identity_weight_scale, composure_dampen_scale,
+	# directive_interpretation_mul [V2-PROG-012 Phase 6: renamed from directive_band_mul],
 	# press_*, protect_ally_grounded_*). Without this merge they were unreachable and silently
 	# fell through to BehaviorArbiter._DEFAULTS, making the balance.json values decorative.
 	# data.actor wins on collision so existing behaviour is unchanged. See _merge_actor_cfg()

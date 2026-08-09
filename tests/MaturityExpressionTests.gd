@@ -635,10 +635,24 @@ static func _t_rank_strength_scale() -> Dictionary:
 	return { "ok": true }
 
 
-# Test 19 — identity weight scales trait+vector contribution with rank
+# Test 19 — identity weight scales trait+vector contribution with judgment.
+# V2-PROG-012 Phase 6 (DEFECT 2 fix): this test previously varied `rank_strength`
+# (0.0 -> 1.0) directly, alongside expression_band ("nascent" -> "whole") — before
+# this fix, rank_strength was identity_weight_scale's own driver, so it "passed"
+# by construction. As of Phase 6, identity weighting is driven by `judgment` (via
+# interpretation_width), NOT rank_strength — rank_strength is now dead inside
+# _score() (see its doc comment there) — so a rank_strength-only sweep with
+# judgment held at its default on both sides no longer moves the score at all
+# (this is exactly what proves the fix: rank_strength alone can no longer swing
+# identity weighting in isolation, which is the whole point of unifying the axis
+# — see BehaviorArbiterTests.gd's directive_and_identity_invariant_to_rank test
+# for the isolated-axis version of that specific claim). Rewritten to vary ONLY
+# `judgment` (0.0 -> 1.0), holding rank_strength/expression_band/presence_strength
+# fixed across both calls, so this test now actually isolates the axis it claims
+# to test.
 static func _t_identity_weight_scales_with_rank() -> Dictionary:
-	# Aduro echo at rank 1 vs rank 9. Fear=0 so fear_factor=1.0 for both.
-	# rank 9 should score melee_attack higher (trait+vector amplified).
+	# Aduro echo, judgment=0.0 vs judgment=1.0. Fear=0 so fear_factor=1.0 for both.
+	# Higher judgment should score melee_attack higher (trait+vector amplified).
 	var actor_base := {
 		"id": "echo_iw1", "faction": "echo", "calling_origin": "aduro",
 		"actor_type": "echo", "archetype_birth": "valiant",
@@ -647,25 +661,18 @@ static func _t_identity_weight_scales_with_rank() -> Dictionary:
 		"fear": 0, "fear_base": 0, "morale": 60,
 		"grid_pos": { "col": 0, "row": 0 }, "rank": 1,
 	}
-	var enemy := _make_enemy("en19", { "col": 1, "row": 0 })
 
 	var arbiter := BehaviorArbiter.new({})
 
-	var actor_r1 := actor_base.duplicate(true)
-	actor_r1["rank"] = 1
-	var context_r1 := {
-		"actor": actor_r1, "all_actors": [enemy],
-		"expression_band": "nascent", "calling_behavior": {},
-		"presence_strength": 0.1, "rank_strength": 0.0,
-	}
-	var score_r1: float = arbiter._score("melee_attack", actor_r1, {}, {}, "nascent", {}, {}, 0.1, 0.0)
+	# presence_strength=0.1, rank_strength=0.0, composure=0.4 (default) held fixed
+	# on both calls — only `judgment` (the 11th positional arg) differs.
+	var score_low_judgment: float = arbiter._score(
+		"melee_attack", actor_base, {}, {}, "nascent", {}, {}, 0.1, 0.0, 0.4, 0.0)
+	var score_high_judgment: float = arbiter._score(
+		"melee_attack", actor_base, {}, {}, "nascent", {}, {}, 0.1, 0.0, 0.4, 1.0)
 
-	var actor_r9 := actor_base.duplicate(true)
-	actor_r9["rank"] = 9
-	var score_r9: float = arbiter._score("melee_attack", actor_r9, {}, {}, "whole", {}, {}, 1.0, 1.0)
-
-	if score_r9 <= score_r1:
-		return { "ok": false, "error": "Rank 9 melee_attack score (%.2f) should be > rank 1 (%.2f)" % [score_r9, score_r1] }
+	if score_high_judgment <= score_low_judgment:
+		return { "ok": false, "error": "judgment=1.0 melee_attack score (%.2f) should be > judgment=0.0 (%.2f)" % [score_high_judgment, score_low_judgment] }
 	return { "ok": true }
 
 

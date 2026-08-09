@@ -308,7 +308,13 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	augmented_context["rank_strength"]     = rank_strength
 	augmented_context["resilience_traits"] = resilience_traits
 	augmented_context["leadership_traits"] = leadership_traits
-	# V2-PROG-012 Phase 1: hidden autonomy outputs — no consumer reads these yet.
+	# V2-PROG-012 Phase 1: hidden autonomy outputs. `composure` has been read by
+	# BehaviorArbiter._score() since Phase 2; `judgment` has been read since Phase 6
+	# (drives interpretation_width — see BehaviorArbiter._score()'s doc comment).
+	# `presence` and `legibility` still have no BehaviorArbiter consumer (presence
+	# feeds LeadershipEmotionService, legibility feeds DivergenceDetector's
+	# primary_reason specificity — both read this actor's own _presence/_legibility
+	# fields directly, not this context key).
 	augmented_context["judgment"]          = judgment
 	augmented_context["presence"]          = presence
 	augmented_context["composure"]         = composure

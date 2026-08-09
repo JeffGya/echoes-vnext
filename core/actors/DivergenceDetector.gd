@@ -2,10 +2,12 @@
 # V2-PROG-012 Phase 4 — Echo/Directive divergence detection.
 #
 # GDD §7.3:259: "Resistance without a readable reason is not character
-# autonomy; it is lost player agency." `directive_band_mul` (nascent 1.30 →
-# whole 0.75) already makes a Whole Echo weight directives less than a
-# Nascent one — but nothing detected, named, or recorded the moment her own
-# judgment actually out-voted the Directive. This file is that detection.
+# autonomy; it is lost player agency." `directive_interpretation_mul` (V2-PROG-012
+# Phase 6: continuous over interpretation_width/judgment, replacing the old
+# per-band `directive_band_mul` table — low judgment 1.30 → high judgment 0.75)
+# already makes a high-judgment Echo weight directives less than a low-judgment
+# one — but nothing detected, named, or recorded the moment her own judgment
+# actually out-voted the Directive. This file is that detection.
 #
 # Why a separate file (not folded into BehaviorArbiter or
 # MaturityExpressionService): score arithmetic must stay out of
@@ -156,11 +158,14 @@ static func detect(
 		severity = contest_ratio * (1.0 + contradiction_gain * composure)
 
 		# divergence_kind — the headline claim made observable. Re-evaluate ONLY the
-		# directive_bonus term (not the whole score) at band "nascent", the most
-		# literal weighting (directive_band_mul.nascent == 1.30). self_score already
-		# excludes directive_bonus, so it is band-invariant by construction; adding
-		# the nascent-band bonus back in answers "would D have beaten W if this Echo
-		# had weighted the Directive at Nascent instead of her actual band?"
+		# directive_bonus term (not the whole score) at interpretation_width=0.0, the
+		# most literal weighting (directive_interpretation_mul.high == 1.30 — V2-PROG-012
+		# Phase 6; field name `directive_bonus_nascent` is unchanged for contract
+		# stability, but it is now computed at interpretation_width=0.0, not band
+		# "nascent"). self_score already excludes directive_bonus, so it is
+		# interpretation_width-invariant by construction; adding the most-literal
+		# bonus back in answers "would D have beaten W if this Echo had judgment at
+		# its floor instead of her actual level?"
 		var w_nascent: float = w_self_score + float(chosen.get("directive_bonus_nascent", 0.0))
 		var d_nascent: float = d_self_score + float(directive_preferred.get("directive_bonus_nascent", 0.0))
 		divergence_kind = "interpretation" if d_nascent >= w_nascent else "judgment"
