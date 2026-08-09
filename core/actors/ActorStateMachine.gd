@@ -19,6 +19,7 @@ extends RefCounted
 const MaturityExpressionService = preload("res://core/actors/MaturityExpressionService.gd")
 const LeadershipEmotionService = preload("res://core/combat/LeadershipEmotionService.gd")
 const SocialGraphService = preload("res://core/sanctum/SocialGraphService.gd")
+const DivergenceDetector = preload("res://core/actors/DivergenceDetector.gd")
 
 var _actor: Dictionary
 var _behavior_module: BehaviorModule
@@ -222,16 +223,26 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	var band_base_threshold: int    = int(refusal_by_band.get(_expression_band, \
 		cfg_data.get("emotion", {}).get("fear_threshold", 80)))
 	var fear_threshold: int = int(_calling_behavior.get("absolute_fear_threshold", band_base_threshold))
+	# V2-PROG-012 Phase 4: track WHICH rule set the final threshold so a refusal
+	# carries evidence of why the threshold sat where it did (combat.action_refused).
+	var fear_threshold_reason: String = "expression band"
+	if _calling_behavior.has("absolute_fear_threshold"):
+		fear_threshold_reason = "calling behavior"
 	if last_echo_standing:
 		var ls_thresholds: Dictionary = expr_cfg.get("last_stand_fear_threshold", {})
 		if _expression_band == "whole":
 			fear_threshold = int(ls_thresholds.get("whole", 95))
+			fear_threshold_reason = "last stand"
 		elif _expression_band == "grounded":
 			fear_threshold = int(ls_thresholds.get("grounded", 88))
+			fear_threshold_reason = "last stand"
 	# suppress_panic_spiral: raises threshold +5 on top of band bonus
 	if "suppress_panic_spiral" in resilience_traits \
 			and (_expression_band == "grounded" or _expression_band == "whole"):
 		fear_threshold = min(fear_threshold + 5, 100)
+		fear_threshold_reason += " (steadied)"
+	_actor["_fear_threshold"]        = fear_threshold
+	_actor["_fear_threshold_reason"] = fear_threshold_reason
 
 	# V2-PROG-006: self_regulate tick — Grounded+ +3 morale per round
 	if (_expression_band == "grounded" or _expression_band == "whole") \
@@ -330,6 +341,12 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 			var selected_path: Array = intent.get("path", []) as Array
 			intent["target_pos"] = selected_path.back() if not selected_path.is_empty() else _actor.get("grid_pos", {})
 			intent["target_distance"] = GridService.chebyshev_distance(_actor.get("grid_pos", {}), intent["target_pos"] as Dictionary)
+			# V2-PROG-012 Phase 4: select_movement_intent() cannot attach this onto
+			# `intent` itself — MovementIntentContract.validate() enforces an EXACT
+			# field set there, so any extra key would fail validation and discard the
+			# whole board. It travels on the outer selection dict instead; pull it
+			# across here now that `intent` is a plain working Dictionary again.
+			intent["_divergence_probe"] = movement_selection.get("_divergence_probe", {})
 		else:
 			intent = _behavior_module.select_intent(augmented_context)
 	else:
@@ -368,6 +385,46 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		"archetype_birth":        str(intent.get("archetype_birth", "")),
 		"archetype_modifier":     int(intent.get("archetype_modifier", 0)),
 	})
+
+	# V2-PROG-012 Phase 4: divergence detection — purely observational (no score
+	# is touched; see DivergenceDetector.gd). BehaviorArbiter reports raw score
+	# components on `intent["_divergence_probe"]` (both select_intent() and
+	# select_movement_intent() attach it — see that file); ActorStateMachine
+	# owns the threshold POLICY decision and reads data.maturity_expression.divergence
+	# directly, never through BehaviorArbiter._cfg (that config stays out of the arbiter).
+	var divergence_probe: Dictionary = intent.get("_divergence_probe", {}) as Dictionary
+	if not divergence_probe.is_empty():
+		var divergence_cfg: Dictionary = expr_cfg.get("divergence", {})
+		var directive: Dictionary = context.get("directive", {}) as Dictionary
+		var divergence_result: Dictionary = DivergenceDetector.detect(
+			divergence_probe.get("chosen", {}) as Dictionary,
+			divergence_probe.get("directive_preferred", {}) as Dictionary,
+			composure,
+			legibility,
+			divergence_cfg
+		)
+		if bool(divergence_result.get("diverged", false)):
+			logger.info(t, "actor.divergence", "Echo's judgment diverged from the Directive", {
+				"actor_id":          str(_actor.get("id", "")),
+				"actor_name":        str(_actor.get("name", "")),
+				"round":             int(context.get("round", t)),
+				"expression_band":   _expression_band,
+				"judgment":          judgment,
+				"presence":          presence,
+				"composure":         composure,
+				"legibility":        legibility,
+				"directive_id":      str(directive.get("id", "")),
+				"directive_action":  str(divergence_result.get("directive_action", "")),
+				"chosen_action":     str(divergence_result.get("chosen_action", "")),
+				"chosen_target_id":  str((divergence_probe.get("chosen", {}) as Dictionary).get("target_id", "")),
+				"directive_pull":    float(divergence_result.get("directive_pull", 0.0)),
+				"self_margin":       float(divergence_result.get("self_margin", 0.0)),
+				"overrule_strength": float(divergence_result.get("overrule_strength", 0.0)),
+				"threshold":         float(divergence_result.get("threshold", 0.0)),
+				"severity":          float(divergence_result.get("severity", 0.0)),
+				"divergence_kind":   str(divergence_result.get("divergence_kind", "")),
+				"primary_reason":    str(divergence_result.get("primary_reason", "")),
+			})
 
 	# V2-PROG-010: passive fear tick — small per-round fear reduction for echo faction, rank-scaled.
 	var recovery_cfg: Dictionary = expr_cfg.get("fear_self_recovery", {})

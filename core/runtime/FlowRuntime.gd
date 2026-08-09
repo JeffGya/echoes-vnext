@@ -2939,10 +2939,17 @@ func _resolve_next_actor(t: int) -> void:
 				logger.info(t, "combat.guard_taken",
 					"%s guards" % actor.get("name", "?"), { "actor_id": actor.get("id", "") })
 		"actor.refuse":
+			# V2-PROG-012 Phase 4: threshold + expression_band + primary_reason were
+			# already computed by ActorStateMachine.advance_turn() two frames earlier
+			# (~:219-236) and written onto `actor` there — carry them into the log so
+			# a refusal shows evidence of WHY the threshold sat where it did.
 			logger.info(t, "combat.action_refused",
 				"%s refuses (fear %d)" % [actor.get("name", "?"), int(actor.get("fear", 0))], {
-				"actor_id": actor.get("id", ""),
-				"fear":     int(actor.get("fear", 0)),
+				"actor_id":        actor.get("id", ""),
+				"fear":            int(actor.get("fear", 0)),
+				"threshold":       int(actor.get("_fear_threshold", 0)),
+				"expression_band": str(actor.get("_expression_band", "")),
+				"primary_reason":  str(actor.get("_fear_threshold_reason", "")),
 			})
 			ectx.last_round_results.append({
 				"action_type": "actor.refuse",
