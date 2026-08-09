@@ -31,6 +31,10 @@ func load_balance(logger: StructuredLogger= null, t: int = -1) -> bool:
 	var actor_cfg_v: Variant = bal_data.get("actor", {})
 	var actor_cfg: Dictionary = actor_cfg_v if actor_cfg_v is Dictionary else {}
 	DirectiveService.validate_config_integrity(directives_cfg, actor_cfg, logger, t)
+	# V2-PROG-012 Phase 9: same precedent — validates the three canonical
+	# vector/virtue/calling identity tables under data.contact (see
+	# IdentityIntegrity.validate()'s doc comment). Warns only; does not fail the load.
+	IdentityIntegrity.validate(bal_data, logger, t)
 	_balance = root
 	return true
 

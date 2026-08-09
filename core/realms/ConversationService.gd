@@ -22,15 +22,13 @@ const _STAT_TEXTURE_BY_DOMINANT: Dictionary = {
 	"cha":   "perceptive",
 }
 
-# Calling-to-virtue alignment (fallback only — dominant_vector always takes priority)
-const _CALLING_VIRTUE_MAP: Dictionary = {
-	"aduro":       "courage",
-	"okofor":      "generosity",
-	"onyamesu":    "compassion",
-	"okomfo":      "wisdom",
-	"kra_soro":    "truth",
-	"sum_okwanfo": "forgiveness",
-}
+# V2-PROG-012 Phase 9: the calling->virtue fallback table formerly here
+# (_CALLING_VIRTUE_MAP) disagreed with 3 other divergent tables across the codebase
+# (see docs/proposals — WeavingRiteService._CALLING_TO_VIRTUE, balance.json's
+# vector_to_virtue_primary, and this file's own duplicated vector->virtue match
+# blocks). It is now the canonical data.contact.calling_to_virtue_primary, read via
+# _calling_to_virtue()'s cfg param. See balance.json's "_comment_identity" on
+# data.contact for the full three-table canonical scheme.
 
 # S6 expression → S3 parent calling register
 const _S6_TO_S3: Dictionary = {
@@ -101,7 +99,7 @@ static func generate_responses(
 		var emotional_status := EmotionService.get_emotional_status(morale_current, fear_current)
 
 		# Virtue alignment — dominant_vector always takes priority, calling is fallback
-		var virtue_alignment := _calling_to_virtue(calling, echo)
+		var virtue_alignment := _calling_to_virtue(calling, echo, cfg)
 
 		# Resonance score: 2-factor
 		var resonance_score := compute_turn_score_from_virtue(
@@ -508,21 +506,25 @@ static func compute_bids(party_echoes: Array, contact: Dictionary, directive_id:
 
 # Always use dominant_vector as primary signal — vector drifts are real and matter.
 # Calling map is a fallback only when no vector data is available.
-static func _calling_to_virtue(calling: String, echo: Dictionary) -> String:
+#
+# V2-PROG-012 Phase 9: the two identical inline vector->virtue match blocks that used
+# to live here were a THIRD divergent copy of vector/virtue identity, disagreeing with
+# both the calling table above and balance.json's bijection. Both are gone; the single
+# virtue for a vector is now derived the same way calling_to_virtue_primary derives a
+# calling's virtue — cfg.vector_virtue_composition[vector][0], the vector's PRIMARY
+# composing virtue (semantic, GDD-derived — see docs/calling-reference.md:28-37).
+# Deliberately NOT cfg.virtue_vector_key, which is a keying permutation for inversion
+# only and carries no semantic claim (see its own _comment in balance.json).
+static func _calling_to_virtue(calling: String, echo: Dictionary, cfg: Dictionary) -> String:
+	var composition_v: Variant = cfg.get("vector_virtue_composition", {})
+	var composition: Dictionary = composition_v if composition_v is Dictionary else {}
+
 	# Primary: dominant_vector field (written by VectorService)
 	var dv := str(echo.get("dominant_vector", ""))
 	if not dv.is_empty():
-		match dv:
-			"protector":   return "compassion"
-			"vanguard":    return "courage"
-			"seeker":      return "wisdom"
-			"pillar":      return "acceptance"
-			"opportunist": return "generosity"
-			"strategist":  return "leadership"
-			"skeptic":     return "truth"
-			"devoted":     return "humility"
-			"mediator":    return "forgiveness"
-			"nurturer":    return "empathy"
+		var virtue := _primary_composing_virtue(dv, composition)
+		if not virtue.is_empty():
+			return virtue
 
 	# Secondary: compute from vector_scores if dominant_vector not written yet
 	var vscores_v: Variant = echo.get("vector_scores", {})
@@ -534,20 +536,27 @@ static func _calling_to_virtue(calling: String, echo: Dictionary) -> String:
 			if int(vscores[k]) > best:
 				best = int(vscores[k])
 				dominant = str(k)
-		match dominant:
-			"protector":   return "compassion"
-			"vanguard":    return "courage"
-			"seeker":      return "wisdom"
-			"pillar":      return "acceptance"
-			"opportunist": return "generosity"
-			"strategist":  return "leadership"
-			"skeptic":     return "truth"
-			"devoted":     return "humility"
-			"mediator":    return "forgiveness"
-			"nurturer":    return "empathy"
+		var virtue := _primary_composing_virtue(dominant, composition)
+		if not virtue.is_empty():
+			return virtue
 
 	# Tertiary: calling canonical virtue (no vector data at all)
-	return str(_CALLING_VIRTUE_MAP.get(calling, "courage"))
+	var calling_primary_v: Variant = cfg.get("calling_to_virtue_primary", {})
+	var calling_primary: Dictionary = calling_primary_v if calling_primary_v is Dictionary else {}
+	return str(calling_primary.get(calling, "courage"))
+
+
+# vector -> its first-listed (primary) composing virtue, per cfg.vector_virtue_composition.
+# Returns "" when the vector is unknown / the composition entry is malformed, so callers
+# can fall through to the next tier instead of silently returning a wrong virtue.
+static func _primary_composing_virtue(vector: String, composition: Dictionary) -> String:
+	if vector.is_empty() or not composition.has(vector):
+		return ""
+	var pair_v: Variant = composition.get(vector, [])
+	var pair: Array = pair_v if pair_v is Array else []
+	if pair.is_empty():
+		return ""
+	return str(pair[0])
 
 
 # Resolve S6/S9 calling ID to its S3 parent register.

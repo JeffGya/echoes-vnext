@@ -17,14 +17,11 @@ const _OPPOSITE_PAIRS: Dictionary = {
 	"generosity|humility": true,
 }
 
-const _CALLING_TO_VIRTUE: Dictionary = {
-	"aduro": "courage",
-	"okofor": "leadership",
-	"okomfo": "wisdom",
-	"onyamesu": "acceptance",
-	"sum_okwanfo": "generosity",
-	"kra_soro": "wisdom",
-}
+# V2-PROG-012 Phase 9: the calling->virtue fallback table formerly here
+# (_CALLING_TO_VIRTUE) disagreed with ConversationService._CALLING_VIRTUE_MAP on 4 of
+# 6 callings. It is now the canonical data.contact.calling_to_virtue_primary, read via
+# _calling_virtue()'s cfg param — see balance.json's "_comment_identity" on
+# data.contact for the full three-table canonical scheme.
 
 
 static func get_candidates(thread: Dictionary, roster: Array, save_data: Dictionary, cfg: Dictionary) -> Array:
@@ -201,12 +198,15 @@ static func get_non_chosen_consequences(candidates: Array, chosen_id: String, ou
 
 
 static func _compute_fit(echo: Dictionary, thread: Dictionary, save_data: Dictionary, cfg: Dictionary) -> float:
-	var vector_to_virtue_v: Variant = cfg.get("vector_to_virtue_primary", {})
-	var vector_to_virtue: Dictionary = vector_to_virtue_v if vector_to_virtue_v is Dictionary else {}
+	# V2-PROG-012 Phase 9: semantic virtue-for-vector — cfg.vector_virtue_composition's
+	# primary (first-listed) composing virtue, NOT cfg.virtue_vector_key (a keying
+	# permutation for inversion only, carries no semantic claim — see its _comment).
+	var composition_v: Variant = cfg.get("vector_virtue_composition", {})
+	var composition: Dictionary = composition_v if composition_v is Dictionary else {}
 
 	var thread_virtue := _norm_virtue(thread.get("virtue", ""))
 	var dominant_vector := str(echo.get("dominant_vector", ""))
-	var primary_virtue := _norm_virtue(vector_to_virtue.get(dominant_vector, ""))
+	var primary_virtue := _norm_virtue(_primary_composing_virtue(dominant_vector, composition))
 
 	var fit := 0.4
 	if primary_virtue == thread_virtue and not thread_virtue.is_empty():
@@ -389,14 +389,27 @@ static func _calling_virtue(echo: Dictionary, cfg: Dictionary) -> String:
 	var calling := str(echo.get("calling", "")).strip_edges().to_lower()
 	if not calling.is_empty() and cfg_map.has(calling):
 		return _norm_virtue(cfg_map[calling])
-	if not calling.is_empty() and _CALLING_TO_VIRTUE.has(calling):
-		return _norm_virtue(_CALLING_TO_VIRTUE[calling])
 
-	# Fallback: if calling_origin is already a vector key, map via vector table.
+	# Fallback: if calling_origin is already a vector key (unconfirmed echo, "calling"
+	# not yet set), derive via that vector's primary composing virtue.
 	var origin := str(echo.get("calling_origin", "")).strip_edges().to_lower()
-	var vector_to_virtue_v: Variant = cfg.get("vector_to_virtue_primary", {})
-	var vector_to_virtue: Dictionary = vector_to_virtue_v if vector_to_virtue_v is Dictionary else {}
-	if vector_to_virtue.has(origin):
-		return _norm_virtue(vector_to_virtue[origin])
+	var composition_v: Variant = cfg.get("vector_virtue_composition", {})
+	var composition: Dictionary = composition_v if composition_v is Dictionary else {}
+	var origin_virtue := _primary_composing_virtue(origin, composition)
+	if not origin_virtue.is_empty():
+		return _norm_virtue(origin_virtue)
 
 	return ""
+
+
+# vector -> its first-listed (primary) composing virtue, per cfg.vector_virtue_composition.
+# Returns "" when the vector is unknown / the composition entry is malformed, so callers
+# can fall through instead of silently returning a wrong virtue.
+static func _primary_composing_virtue(vector: String, composition: Dictionary) -> String:
+	if vector.is_empty() or not composition.has(vector):
+		return ""
+	var pair_v: Variant = composition.get(vector, [])
+	var pair: Array = pair_v if pair_v is Array else []
+	if pair.is_empty():
+		return ""
+	return str(pair[0])

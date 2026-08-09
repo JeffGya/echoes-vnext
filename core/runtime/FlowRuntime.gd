@@ -4773,9 +4773,10 @@ func _compute_ally_recruit_offer_if_eligible(is_victory: bool, rounds_total: int
 	var _aro_contact_cfg: Dictionary = _aro_contact_cfg_v if _aro_contact_cfg_v is Dictionary else {}
 	var _aro_recruit_cfg_v: Variant = _aro_contact_cfg.get("recruitment", {})
 	var _aro_recruit_cfg: Dictionary = _aro_recruit_cfg_v if _aro_recruit_cfg_v is Dictionary else {}
-	# Override the recruitment block's copies of vector_to_virtue_primary / rival_archetype_pairs /
-	# good thresholds with their canonical sources (single source of truth) — see
-	# RecruitmentService.build_effective_cfg.
+	# Override the recruitment block's copies of rival_archetype_pairs / good thresholds
+	# with their canonical sources, and pull in virtue_vector_key from its single
+	# canonical location (data.contact — V2-PROG-012 Phase 9; no recruitment-block copy
+	# exists anymore) — see RecruitmentService.build_effective_cfg.
 	var _aro_effective_cfg: Dictionary = RecruitmentService.build_effective_cfg(_aro_bal_data)
 
 	var _aro_party_echoes: Array = _get_active_party_echoes()
@@ -5668,7 +5669,22 @@ func _get_weaving_rite_cfg() -> Dictionary:
 	var data_v: Variant = balance.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	var rite_v: Variant = data.get("weaving_rite", {})
-	return rite_v if rite_v is Dictionary else {}
+	var rite: Dictionary = (rite_v if rite_v is Dictionary else {}).duplicate(true)
+
+	# V2-PROG-012 Phase 9: overlay the canonical identity tables from data.contact —
+	# same "overlay canonical source onto a local cfg copy" pattern as
+	# RecruitmentService.build_effective_cfg. WeavingRiteService reads
+	# cfg.vector_virtue_composition and cfg.calling_to_virtue_primary; both live
+	# canonically under data.contact, not data.weaving_rite (see balance.json's
+	# "_comment_identity" on data.contact for why).
+	var contact_v: Variant = data.get("contact", {})
+	var contact: Dictionary = contact_v if contact_v is Dictionary else {}
+	var composition_v: Variant = contact.get("vector_virtue_composition", {})
+	rite["vector_virtue_composition"] = composition_v if composition_v is Dictionary else {}
+	var calling_primary_v: Variant = contact.get("calling_to_virtue_primary", {})
+	rite["calling_to_virtue_primary"] = calling_primary_v if calling_primary_v is Dictionary else {}
+
+	return rite
 
 
 # V2-CONTINUITY-001

@@ -274,21 +274,10 @@
 			}
 		},
 		"weaving_rite": {
+			"_comment_identity": "V2-PROG-012 Phase 9: the vector/virtue/calling identity tables formerly here (vector_to_virtue_primary) and formerly duplicated in data.contact.recruitment now live ONCE, canonically, under data.contact — vector_virtue_composition, virtue_vector_key, calling_to_virtue_primary. FlowRuntime._get_weaving_rite_cfg() overlays virtue_vector_key and calling_to_virtue_primary from data.contact onto this cfg at read time (same overlay pattern as RecruitmentService.build_effective_cfg) so WeavingRiteService's cfg.virtue_vector_key / cfg.calling_to_virtue_primary reads resolve without a second stored copy.",
 			"max_candidates": 3,
 			"fit_threshold_accept": 0.55,
 			"readiness_threshold_defer": 0.38,
-			"vector_to_virtue_primary": {
-				"vanguard": "courage",
-				"protector": "leadership",
-				"seeker": "wisdom",
-				"pillar": "acceptance",
-				"strategist": "truth",
-				"skeptic": "humility",
-				"devoted": "forgiveness",
-				"opportunist": "generosity",
-				"mediator": "compassion",
-				"nurturer": "empathy"
-			},
 			"clue_vocab": {
 				"fit": {
 					"high": "Drawn",
@@ -3256,6 +3245,42 @@
 			},
 			"role_pool_fallback": ["witness", "witness", "guide", "charge"],
 			"virtue_wheel": ["courage","leadership","truth","wisdom","humility","acceptance","forgiveness","compassion","empathy","generosity"],
+			"_comment_identity": "V2-PROG-012 Phase 9: canonical identity tables — single source of truth for vector/virtue/calling mapping across ConversationService, WeavingRiteService, RecruitmentService, and OnboardingService. Placed here (not data.weaving_rite) because ConversationService._calling_to_virtue() reads data.contact directly (its cfg param) far more often than the other three consumers combined (3 call sites per conversation turn vs. 1 per Weaving Rite / recruit roll); data.contact.virtue_wheel already anchors the 10-virtue keyspace in this block. Other consumers reach these tables via a runtime overlay onto their own cfg (see WeavingRiteService cfg-builder in FlowRuntime._get_weaving_rite_cfg and RecruitmentService.build_effective_cfg) — never a second stored copy.",
+			"vector_virtue_composition": {
+				"_comment": "SEMANTIC. Transcribed verbatim from docs/calling-reference.md:28-37 (GDD-derived). Each of the 10 vectors is a pairing of exactly two virtue domains — [primary, secondary] by GDD listing order. Use this table for meaning, fit, resonance, and affinity. This is NOT a bijection: empathy and forgiveness both occur only in mediator's composition, and several virtues (e.g. courage, wisdom) occur in three vectors each — that is a true fact about the vector model, not a bug. Never invert this table (see virtue_vector_key for the invertible keying table).",
+				"vanguard":    ["courage", "leadership"],
+				"protector":   ["courage", "compassion"],
+				"seeker":      ["wisdom", "truth"],
+				"strategist":  ["wisdom", "leadership"],
+				"skeptic":     ["truth", "humility"],
+				"pillar":      ["acceptance", "humility"],
+				"devoted":     ["acceptance", "generosity"],
+				"opportunist": ["courage", "wisdom"],
+				"mediator":    ["empathy", "forgiveness"],
+				"nurturer":    ["generosity", "compassion"]
+			},
+			"virtue_vector_key": {
+				"_comment": "PROPOSED DEFAULT. NOT a semantic claim — see vector_virtue_composition for the real composition. This is a KEYING PERMUTATION: a genuine bijection (10 vectors <-> 10 virtues, each used exactly once) that exists solely so callers can invert virtue -> vector (RecruitmentService._build_ally_vector_profile seeds a recruit's vector_scores from a contact's virtue_primary/virtue_secondary; OnboardingService.vector_for_virtue seeds the starter Echo's vector the same way). A composition-faithful bijection is PROVABLY IMPOSSIBLE: per vector_virtue_composition, empathy and forgiveness both occur ONLY in mediator's pairing, so no matching can assign each of the ten virtues to a distinct vector using only that vector's own composing virtues — two virtues, one vector, ten slots to fill. This table resolves that by deliberately assigning several vectors a virtue OUTSIDE their own composition (e.g. protector -> leadership, not courage/compassion) purely to keep the permutation total and invertible. Do not 'fix' this to match composition — that would break the bijection the two seeding call sites depend on. Keep in sync with data.contact.calling_to_virtue_primary's key set (all 10 vector ids) but do not conflate the two: this table answers 'what virtue keys open this vector's seed slot', calling_to_virtue_primary answers 'what virtue does this calling speak in'.",
+				"vanguard":    "courage",
+				"protector":   "leadership",
+				"seeker":      "wisdom",
+				"pillar":      "acceptance",
+				"strategist":  "truth",
+				"skeptic":     "humility",
+				"devoted":     "forgiveness",
+				"opportunist": "generosity",
+				"mediator":    "compassion",
+				"nurturer":    "empathy"
+			},
+			"calling_to_virtue_primary": {
+				"_comment": "PROPOSED DEFAULT. Mechanically derived: each of the 6 callings' PRIMARY vector (data.calling.definitions.[id].vector) -> that vector's PRIMARY composing virtue (vector_virtue_composition[vector][0]). okofor->protector->courage, onyamesu->pillar->acceptance, aduro->vanguard->courage, sum_okwanfo->opportunist->courage, okomfo->seeker->wisdom, kra_soro->seeker->wisdom. Collisions across callings (three callings resolve to courage; okomfo/kra_soro both resolve to wisdom, since both share vector=seeker) are expected and fine — this table is a one-way calling->virtue lookup (ConversationService fallback voice register, WeavingRiteService._calling_virtue fit nudge) and is NEVER inverted, so it does not need to be a bijection like virtue_vector_key.",
+				"okofor":      "courage",
+				"onyamesu":    "acceptance",
+				"aduro":       "courage",
+				"sum_okwanfo": "courage",
+				"okomfo":      "wisdom",
+				"kra_soro":    "wisdom"
+			},
 			"ally": {
 				"_comment": "V2-STAGE-004 Phase 4 (S12): Temporary Ally auto-join tuning. def_id/level_* feed ContactActorBuilder via FlowEncounterState; damage_mul mirrors guide_spirit.spirit_damage_mul; death_*_knock apply once if the joined ally dies in battle.",
 				"def_id": "temporary_ally",
@@ -3271,7 +3296,7 @@
 				"combat_intro_line": "The claimant turns on you."
 			},
 			"recruitment": {
-				"_comment": "V2-STAGE-004 Phase 4 (S14): Earned Return recruit-chance formula for a surviving temporary_ally. Additive conversation+combat+fit, base 0, never guaranteed (cap < 100). See ANSWERS.md #28/#30/#31. NOTE: vector_to_virtue_primary, rival_archetype_pairs, conversation_good_fear_max, and conversation_good_morale_min are kept here for the additive-only data/ schema rule (AGENTS.md), but at runtime RecruitmentService.build_effective_cfg AUTHORITATIVELY OVERRIDES them from their canonical single sources — data.weaving_rite.vector_to_virtue_primary, data.sanctum.rival_archetypes, and data.contact.outcome_thresholds.good. Editing the copies below has no effect on the recruit formula; tune the canonical blocks instead (kept in sync to avoid confusion).",
+				"_comment": "V2-STAGE-004 Phase 4 (S14): Earned Return recruit-chance formula for a surviving temporary_ally. Additive conversation+combat+fit, base 0, never guaranteed (cap < 100). See ANSWERS.md #28/#30/#31. NOTE: rival_archetype_pairs, conversation_good_fear_max, and conversation_good_morale_min are kept here for the additive-only data/ schema rule (AGENTS.md), but at runtime RecruitmentService.build_effective_cfg AUTHORITATIVELY OVERRIDES them from their canonical single sources — data.sanctum.rival_archetypes and data.contact.outcome_thresholds.good. Editing the copies below has no effect on the recruit formula; tune the canonical blocks instead (kept in sync to avoid confusion). V2-PROG-012 Phase 9: vector_to_virtue_primary REMOVED from this block (it was a verbatim duplicate of the now-relocated data.contact.virtue_vector_key) — build_effective_cfg reads virtue_vector_key directly from data.contact; there is no local copy left to desync.",
 				"cap": 75,
 				"conversation_max": 30,
 				"combat_max": 35,
@@ -3298,18 +3323,6 @@
 				"stat_similarity_scale": 50.0,
 				"vector_seed_primary": 60.0,
 				"vector_seed_secondary": 20.0,
-				"vector_to_virtue_primary": {
-					"vanguard": "courage",
-					"protector": "leadership",
-					"seeker": "wisdom",
-					"pillar": "acceptance",
-					"strategist": "truth",
-					"skeptic": "humility",
-					"devoted": "forgiveness",
-					"opportunist": "generosity",
-					"mediator": "compassion",
-					"nurturer": "empathy"
-				},
 				"companion_bond_debuff": -30
 			}
 		}
