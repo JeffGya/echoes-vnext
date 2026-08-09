@@ -65,6 +65,10 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(BehaviorArbiterTests, "_t_crosscheck_ko_actor_on_board_selects"))
 	runner.register_test("arbiter/crosscheck_still_catches_real_state_mismatch",
 		Callable(BehaviorArbiterTests, "_t_crosscheck_still_catches_real_state_mismatch"))
+	# V2-PROG-012 Phase 6 Item 2: config-integrity guard on the interpretation_width
+	# swing budget — DEFECT 2's actual fix mechanism.
+	runner.register_test("arbiter/interpretation_swing_within_declared_budget",
+		Callable(BehaviorArbiterTests, "_t_interpretation_swing_within_declared_budget"))
 
 
 # -------------------------
@@ -1387,3 +1391,34 @@ static func _mv_spatial_cfg() -> Dictionary:
 		"directive_avoid_overcommit_weight": 2.0, "directive_exposure_acceptance_weight": 2.0,
 		"directive_ally_protection_weight": 2.0, "directive_threat_interception_weight": 2.0,
 	} }
+
+
+# V2-PROG-012 Phase 6 Item 2 — config-integrity test. This is the mechanism that
+# stops DEFECT 2 (identity_weight_scale and directive_band_mul silently doubling
+# the identity-vs-directive swing because neither knew about the other) from
+# recurring: reads the REAL production identity_weight_scale and
+# directive_interpretation_mul straight off ConfigService.get_balance() (not a
+# hand-set test fixture — a fixture would happily "pass" no matter what the
+# shipped values are) and fails if their combined ratio at interpretation_width=1.0
+# exceeds the declared interpretation_swing_max budget.
+# FALSIFIABLE: a future tuning pass that raises identity_weight_scale.trait/vector
+# (e.g. back toward the pre-fix 0.6/0.6) or lowers directive_interpretation_mul.low
+# without also raising interpretation_swing_max to match would push the computed
+# ratio above the budget and this test would fail — exactly the silent-drift
+# scenario DEFECT 2 described, now caught instead of unnoticed.
+static func _t_interpretation_swing_within_declared_budget() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var expr_cfg: Dictionary = (bal.get("data", {}) as Dictionary).get("maturity_expression", {})
+	var identity_weight_scale: Dictionary = expr_cfg.get("identity_weight_scale", {})
+	var directive_interpretation_mul: Dictionary = expr_cfg.get("directive_interpretation_mul", {})
+	var swing_max: float = float(expr_cfg.get("interpretation_swing_max", {}).get("value", 0.0))
+
+	if identity_weight_scale.is_empty() or directive_interpretation_mul.is_empty() or swing_max <= 0.0:
+		return { "ok": false, "error": "fixture broken: expected non-empty identity_weight_scale/directive_interpretation_mul and a positive interpretation_swing_max, got %s / %s / %s" % [str(identity_weight_scale), str(directive_interpretation_mul), str(swing_max)] }
+
+	var actual_swing: float = BehaviorArbiter.compute_interpretation_swing(identity_weight_scale, directive_interpretation_mul)
+	if actual_swing > swing_max:
+		return { "ok": false, "error": "authored identity:directive ratio (%.4f) exceeds the declared interpretation_swing_max budget (%.4f) — identity_weight_scale=%s, directive_interpretation_mul=%s" % [actual_swing, swing_max, str(identity_weight_scale), str(directive_interpretation_mul)] }
+	return { "ok": true }

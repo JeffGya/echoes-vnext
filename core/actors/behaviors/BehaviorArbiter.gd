@@ -126,14 +126,19 @@ const _DEFAULTS := {
 	"guard_range":           1,     # enemy must be adjacent for guard to be a candidate (melee-only MVP)
 	# V2-PROG-006: expression-band-based scoring defaults
 	# V2-PROG-010: identity weight scaling + composure tables
-	# V2-PROG-012 Phase 6: identity_weight_scale and directive_interpretation_mul are
-	# now the two halves of ONE budgeted axis (interpretation_width, driven by
+	# V2-PROG-012 Phase 6 Item 2: identity_weight_scale and directive_interpretation_mul
+	# are the two halves of ONE budgeted axis (interpretation_width, driven by
 	# judgment) — see data.maturity_expression's matching _comment for the swing
-	# budget these two keys are jointly checked against. directive_band_mul (the old
-	# per-band table) is REMOVED, not kept dead — see _directive_bonus()'s doc comment.
-	"identity_weight_scale":  { "trait": 0.6, "vector": 0.6 },
+	# budget these two keys are jointly checked against (config-integrity test:
+	# tests/BehaviorArbiterTests.gd's arbiter/interpretation_swing_within_declared_budget).
+	# {trait: 0.35, vector: 0.35} against directive_interpretation_mul.low=0.75 gives
+	# (1.0+0.35)/0.75 = 1.80 <= interpretation_swing_max (2.0). directive_band_mul
+	# (the old per-band table) is REMOVED, not kept dead — see _directive_bonus()'s
+	# doc comment.
+	"identity_weight_scale":  { "trait": 0.35, "vector": 0.35 },
 	"composure_dampen_scale": { "value": 0.4 },  # V2-PROG-012 Phase 2 (renamed from presence_dampen_scale)
 	"directive_interpretation_mul": { "low": 0.75, "high": 1.30 },
+	"interpretation_swing_max": { "value": 2.0 },
 
 	"wound_chase_mul":              15.0,  # Forming+ finish-wounded score bonus multiplier
 	"surrounded_move_penalty":     -18.0, # Forming+ penalty for move into surrounded position
@@ -2138,6 +2143,41 @@ func _cfg_get(key: String) -> Variant:
 	if _cfg.has(key):
 		return _cfg[key]
 	return _DEFAULTS[key]
+
+
+## V2-PROG-012 Phase 6 Item 2 — config-integrity helper (DEFECT 2's actual fix
+## mechanism): computes the authored identity:directive ratio AT interpretation_width
+## = 1.0, the point where both terms hit their extreme (identity's amplification
+## ceiling, directive's literalism floor) and the ratio is largest. Pure — no
+## BehaviorArbiter instance needed, so a test can call this directly against
+## data/balance.json's raw config dicts without spinning up an actor/candidate/
+## score pipeline.
+##
+##   identity_mul_at_1  = 1.0 + max(identity_weight_scale.trait, identity_weight_scale.vector)
+##   directive_mul_at_1 = directive_interpretation_mul.low (the lerp's low bound —
+##                        reached exactly at interpretation_width=1.0)
+##   ratio = identity_mul_at_1 / directive_mul_at_1
+##
+## This is what silently doubled under the pre-fix defect: identity_weight_scale
+## and directive_interpretation_mul (nee directive_band_mul) were both authored
+## independently by rank/band, with nothing checking their COMBINED effect. The
+## companion test (tests/BehaviorArbiterTests.gd) fails loudly if a future tuning
+## pass raises identity_weight_scale or lowers directive_interpretation_mul.low
+## without also raising interpretation_swing_max to match — the two config blocks
+## can no longer drift apart unnoticed.
+static func compute_interpretation_swing(
+	identity_weight_scale: Dictionary,
+	directive_interpretation_mul: Dictionary
+) -> float:
+	var max_identity_scale: float = maxf(
+		float(identity_weight_scale.get("trait", 0.0)),
+		float(identity_weight_scale.get("vector", 0.0))
+	)
+	var identity_mul_at_1: float = 1.0 + max_identity_scale
+	var directive_mul_at_1: float = float(directive_interpretation_mul.get("low", 1.0))
+	if directive_mul_at_1 <= 0.0:
+		return INF
+	return identity_mul_at_1 / directive_mul_at_1
 
 
 # PROG-010: Returns the most wounded (lowest hp_ratio) enemy relative to this actor.
