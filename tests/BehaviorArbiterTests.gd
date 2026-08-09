@@ -69,6 +69,15 @@ static func register(runner: CoreTestRunner) -> void:
 	# swing budget — DEFECT 2's actual fix mechanism.
 	runner.register_test("arbiter/interpretation_swing_within_declared_budget",
 		Callable(BehaviorArbiterTests, "_t_interpretation_swing_within_declared_budget"))
+	# V2-PROG-012 Phase 6 Item 4: first coverage for _directive_bonus() — each test
+	# isolates ONE axis (rank vs judgment), which neither pre-existing rank-based
+	# test in this suite did (they moved band and rank together).
+	runner.register_test("arbiter/directive_and_identity_invariant_to_rank_when_judgment_fixed",
+		Callable(BehaviorArbiterTests, "_t_directive_and_identity_invariant_to_rank_when_judgment_fixed"))
+	runner.register_test("arbiter/identity_bonus_rises_with_judgment_rank_fixed",
+		Callable(BehaviorArbiterTests, "_t_identity_bonus_rises_with_judgment_rank_fixed"))
+	runner.register_test("arbiter/directive_bonus_falls_with_judgment_rank_fixed",
+		Callable(BehaviorArbiterTests, "_t_directive_bonus_falls_with_judgment_rank_fixed"))
 
 
 # -------------------------
@@ -1421,4 +1430,115 @@ static func _t_interpretation_swing_within_declared_budget() -> Dictionary:
 	var actual_swing: float = BehaviorArbiter.compute_interpretation_swing(identity_weight_scale, directive_interpretation_mul)
 	if actual_swing > swing_max:
 		return { "ok": false, "error": "authored identity:directive ratio (%.4f) exceeds the declared interpretation_swing_max budget (%.4f) — identity_weight_scale=%s, directive_interpretation_mul=%s" % [actual_swing, swing_max, str(identity_weight_scale), str(directive_interpretation_mul)] }
+	return { "ok": true }
+
+
+# ─── V2-PROG-012 Phase 6 Item 4 — first coverage for _directive_bonus() ────
+# Shared fixture for the three axis-isolation tests below: an "uncalled" Echo
+# with positive traits/vectors that both feed melee_attack (courage 0.35,
+# vanguard 0.40 per _DEFAULTS), plus a directive whose sole intent_weights key
+# (objective_advance_priority) maps to a POSITIVE melee_attack directive_action_muls
+# entry (1.0) — so directive_bonus is unambiguously positive and its response to
+# interpretation_width is directly observable, not masked by a sign flip.
+static func _axis_test_actor() -> Dictionary:
+	return {
+		"id": "echo_axis_test", "faction": "echo", "actor_type": "echo",
+		"calling_origin": "uncalled",
+		"traits": {"courage": 60, "wisdom": 40, "faith": 20},
+		"vector_scores": {"vanguard": 50.0},
+		"fear": 0, "fear_base": 0, "morale": 50,
+		"grid_pos": {"col": 0, "row": 0},
+	}
+
+
+static func _axis_test_directive() -> Dictionary:
+	return {"id": "directive.axis_test", "intent_weights": {"objective_advance_priority": 1.0}}
+
+
+# Item 4, bullet 1 — vary rank with judgment held fixed. FALSIFIABLE: if a
+# regression reintroduced rank_strength as an identity-scaling input (DEFECT 2's
+# pre-fix shape — two independently-authored, rank-correlated levers), or if
+# directive literalism regressed back to reading a rank-derived expression_band
+# instead of judgment, trait_bonus/vector_bonus/directive_bonus would differ
+# between these two calls despite identical judgment=0.6. Neither pre-existing
+# rank-based test in this suite isolated this — they moved band and rank
+# together, so neither could attribute a delta to rank alone.
+static func _t_directive_and_identity_invariant_to_rank_when_judgment_fixed() -> Dictionary:
+	var actor: Dictionary = _axis_test_actor()
+	var directive: Dictionary = _axis_test_directive()
+	var arbiter := BehaviorArbiter.new({})
+	var candidate: Dictionary = {"action_type": "melee_attack", "target_id": "e1", "target_hp_ratio": 1.0}
+
+	var comp_low_rank: Dictionary = {}
+	var comp_high_rank: Dictionary = {}
+	# expression_band held fixed at "grounded" on both calls (calling_origin
+	# "uncalled" doesn't hit any of _score()'s Grounded+ calling_mul branches, so
+	# this is neutral) — only rank_strength (identity's OLD driver) differs;
+	# judgment is fixed at 0.6.
+	arbiter._score("melee_attack", actor, directive, {}, "grounded", {}, candidate, 0.1, 0.0, 0.4, 0.6, comp_low_rank)
+	arbiter._score("melee_attack", actor, directive, {}, "grounded", {}, candidate, 0.1, 1.0, 0.4, 0.6, comp_high_rank)
+
+	if not is_equal_approx(float(comp_low_rank.get("trait_bonus", -1.0)), float(comp_high_rank.get("trait_bonus", -2.0))):
+		return { "ok": false, "error": "trait_bonus moved with rank_strength alone (judgment fixed): %s vs %s" % [str(comp_low_rank.get("trait_bonus")), str(comp_high_rank.get("trait_bonus"))] }
+	if not is_equal_approx(float(comp_low_rank.get("vector_bonus", -1.0)), float(comp_high_rank.get("vector_bonus", -2.0))):
+		return { "ok": false, "error": "vector_bonus moved with rank_strength alone (judgment fixed): %s vs %s" % [str(comp_low_rank.get("vector_bonus")), str(comp_high_rank.get("vector_bonus"))] }
+	if not is_equal_approx(float(comp_low_rank.get("directive_bonus", -1.0)), float(comp_high_rank.get("directive_bonus", -2.0))):
+		return { "ok": false, "error": "directive_bonus moved with rank_strength alone (judgment fixed): %s vs %s" % [str(comp_low_rank.get("directive_bonus")), str(comp_high_rank.get("directive_bonus"))] }
+	return { "ok": true }
+
+
+# Item 4, bullet 2 — vary judgment with rank held fixed: identity weighting
+# (trait_bonus/vector_bonus) must rise. FALSIFIABLE: if identity_weight_scale
+# stopped being applied (or were applied to the wrong axis), trait_bonus/
+# vector_bonus would stay flat between judgment=0.0 and judgment=1.0 instead of
+# strictly increasing.
+static func _t_identity_bonus_rises_with_judgment_rank_fixed() -> Dictionary:
+	var actor: Dictionary = _axis_test_actor()
+	var directive: Dictionary = _axis_test_directive()
+	var arbiter := BehaviorArbiter.new({})
+	var candidate: Dictionary = {"action_type": "melee_attack", "target_id": "e1", "target_hp_ratio": 1.0}
+
+	var comp_low_j: Dictionary = {}
+	var comp_high_j: Dictionary = {}
+	# rank_strength held fixed at 0.5 (an arbitrary mid value — DEFECT 2's whole
+	# point is that this must no longer matter to identity/directive) on both
+	# calls; only judgment differs (0.0 -> 1.0).
+	arbiter._score("melee_attack", actor, directive, {}, "grounded", {}, candidate, 0.1, 0.5, 0.4, 0.0, comp_low_j)
+	arbiter._score("melee_attack", actor, directive, {}, "grounded", {}, candidate, 0.1, 0.5, 0.4, 1.0, comp_high_j)
+
+	var trait_low: float = float(comp_low_j.get("trait_bonus", 0.0))
+	var trait_high: float = float(comp_high_j.get("trait_bonus", 0.0))
+	var vector_low: float = float(comp_low_j.get("vector_bonus", 0.0))
+	var vector_high: float = float(comp_high_j.get("vector_bonus", 0.0))
+	if trait_low <= 0.0 or vector_low <= 0.0:
+		return { "ok": false, "error": "fixture broken: expected positive baseline trait_bonus/vector_bonus at judgment=0.0, got trait=%s vector=%s" % [str(trait_low), str(vector_low)] }
+	if trait_high <= trait_low:
+		return { "ok": false, "error": "trait_bonus did not rise with judgment: %s (judgment=0.0) -> %s (judgment=1.0)" % [str(trait_low), str(trait_high)] }
+	if vector_high <= vector_low:
+		return { "ok": false, "error": "vector_bonus did not rise with judgment: %s (judgment=0.0) -> %s (judgment=1.0)" % [str(vector_low), str(vector_high)] }
+	return { "ok": true }
+
+
+# Item 4, bullet 4 — pins GDD:1422/GDD §7.3 "Standing never buys obedience" as an
+# executable assertion: as judgment rises, the directive multiplier must go
+# DOWN, never up. FALSIFIABLE: if a sign error flipped the lerp direction
+# (dir_mul rising with interpretation_width instead of falling), directive_bonus
+# would rise here instead of fall, and this test would catch it immediately.
+static func _t_directive_bonus_falls_with_judgment_rank_fixed() -> Dictionary:
+	var actor: Dictionary = _axis_test_actor()
+	var directive: Dictionary = _axis_test_directive()
+	var arbiter := BehaviorArbiter.new({})
+	var candidate: Dictionary = {"action_type": "melee_attack", "target_id": "e1", "target_hp_ratio": 1.0}
+
+	var comp_low_j: Dictionary = {}
+	var comp_high_j: Dictionary = {}
+	arbiter._score("melee_attack", actor, directive, {}, "grounded", {}, candidate, 0.1, 0.5, 0.4, 0.0, comp_low_j)
+	arbiter._score("melee_attack", actor, directive, {}, "grounded", {}, candidate, 0.1, 0.5, 0.4, 1.0, comp_high_j)
+
+	var directive_low: float = float(comp_low_j.get("directive_bonus", 0.0))
+	var directive_high: float = float(comp_high_j.get("directive_bonus", 0.0))
+	if directive_low <= 0.0:
+		return { "ok": false, "error": "fixture broken: expected a positive baseline directive_bonus at judgment=0.0, got %s" % str(directive_low) }
+	if directive_high >= directive_low:
+		return { "ok": false, "error": "directive_bonus did not fall with rising judgment (GDD:1422 'Standing never buys obedience'): %s (judgment=0.0) -> %s (judgment=1.0)" % [str(directive_low), str(directive_high)] }
 	return { "ok": true }
