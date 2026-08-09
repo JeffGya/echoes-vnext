@@ -40,10 +40,30 @@ static func _t_production_golden() -> Dictionary:
 	var enemy: Dictionary = _enemy("enemy.a", {"col": 3, "row": 0})
 	var arbiter := BehaviorArbiter.new({})
 	var actual: Dictionary = arbiter.select_intent({"actor": actor, "all_actors": [enemy], "t": 1})
+	# V2-PROG-012 Phase 4: select_intent() now also attaches `_divergence_probe`
+	# (score components for DivergenceDetector) to the winner — see BehaviorArbiter's
+	# select_intent(). Context here carries no directive, so directive_bonus is 0.0
+	# everywhere and the probe carries no live directive tension; it is still
+	# attached (only a hard 9999.0 score override skips it) so the golden pins it too.
 	var expected: Dictionary = {
 		"action_type": "actor.move", "target_id": "enemy.a", "target_pos": {"col": 3, "row": 0},
 		"target_distance": 3, "target_hp_ratio": 1.0, "priority": 1.0,
 		"morale_tier": "steady", "morale_modifier": 0, "archetype_birth": "", "archetype_modifier": 0,
+		"_divergence_probe": {
+			"chosen": {
+				"action_type": "actor.move", "target_id": "enemy.a", "score": 44.0,
+				"directive_bonus": 0.0, "directive_bonus_nascent": 0.0,
+				"components": {
+					"base": 44.0, "trait_bonus": 0.0, "vector_bonus": 0.0, "archetype_bonus": 0.0,
+					"morale_bonus": 0.0, "fear_factor": 1.0, "calling_mul": 1.0,
+					"directive_bonus": 0.0, "situational_bonus": 0.0,
+				},
+			},
+			"directive_preferred": {
+				"action_type": "actor.move", "target_id": "enemy.a", "score": 44.0,
+				"directive_bonus": 0.0, "directive_bonus_nascent": 0.0,
+			},
+		},
 	}
 	if actual != expected:
 		return _fail("Production golden changed: %s" % str(actual))
@@ -51,7 +71,26 @@ static func _t_production_golden() -> Dictionary:
 	actor["fear"] = 100
 	enemy["grid_pos"] = {"col": 1, "row": 0}
 	actual = arbiter.select_intent({"actor": actor, "all_actors": [enemy], "t": 2})
-	if actual != {"action_type": "actor.guard", "target_id": "", "priority": 0.0, "morale_tier": "steady", "morale_modifier": 0, "archetype_birth": "", "archetype_modifier": 0}:
+	var expected_stationary: Dictionary = {
+		"action_type": "actor.guard", "target_id": "", "priority": 0.0,
+		"morale_tier": "steady", "morale_modifier": 0, "archetype_birth": "", "archetype_modifier": 0,
+		"_divergence_probe": {
+			"chosen": {
+				"action_type": "actor.guard", "target_id": "", "score": 50.0,
+				"directive_bonus": 0.0, "directive_bonus_nascent": 0.0,
+				"components": {
+					"base": 55.0, "trait_bonus": 0.0, "vector_bonus": 0.0, "archetype_bonus": 0.0,
+					"morale_bonus": 0.0, "fear_factor": 1.0, "calling_mul": 1.0,
+					"directive_bonus": 0.0, "situational_bonus": -5.0,
+				},
+			},
+			"directive_preferred": {
+				"action_type": "actor.guard", "target_id": "", "score": 50.0,
+				"directive_bonus": 0.0, "directive_bonus_nascent": 0.0,
+			},
+		},
+	}
+	if actual != expected_stationary:
 		return _fail("Stationary production golden changed: %s" % str(actual))
 	return _pass()
 

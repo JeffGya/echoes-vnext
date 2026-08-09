@@ -344,6 +344,26 @@ func select_intent(context: Dictionary) -> Dictionary:
 		return _candidate_target_key(a) < _candidate_target_key(b)
 	)
 
+	# V2-PROG-012 Phase 4: locate D, the Directive-preferred candidate — the one
+	# maximizing _directive_bonus() for its action_type. _directive_bonus() depends
+	# only on action_type (given a fixed directive/band/calling_behavior this turn),
+	# so candidates sharing an action_type share the identical value; caching by
+	# action_type avoids redundant recomputation. Tie-break: `candidates` is already
+	# sorted in the exact four-key order used above (score, action_type, target_id,
+	# _candidate_target_key), so scanning forward and keeping strict `>` gives the
+	# same tie-break the winner sort would give — no second sort needed.
+	var _dbonus_by_type: Dictionary = {}
+	var _directive_preferred: Dictionary = candidates[0]
+	var _directive_preferred_bonus: float = -INF
+	for c: Dictionary in candidates:
+		var _atype: String = str(c.get("action_type", ""))
+		if not _dbonus_by_type.has(_atype):
+			_dbonus_by_type[_atype] = _directive_bonus(_atype, directive, expression_band, calling_behavior)
+		var _cbonus: float = float(_dbonus_by_type[_atype])
+		if _cbonus > _directive_preferred_bonus:
+			_directive_preferred_bonus = _cbonus
+			_directive_preferred = c
+
 	var winner: Dictionary = candidates[0].duplicate()
 	winner.erase("_score")
 
@@ -359,6 +379,41 @@ func select_intent(context: Dictionary) -> Dictionary:
 	var winner_a_row: Dictionary  = _cfg_get("archetype_action_muls").get(str(winner.get("action_type", "")), {})
 	winner["archetype_birth"]    = winner_arch
 	winner["archetype_modifier"] = int(winner_a_row.get(winner_arch, 0))
+
+	# V2-PROG-012 Phase 4: expose divergence-detection inputs on the winner. This
+	# is pure REPORTING — BehaviorArbiter never decides what counts as divergence
+	# (that policy lives in DivergenceDetector.gd, called by ActorStateMachine).
+	# Skipped when the winner is a hard score override (e.g. actor.purify_shrine's
+	# 9999.0 sentinel at ~:333): that is a mechanical certainty, not the Echo's
+	# judgment outvoting the Directive, so it is not a candidate for divergence.
+	var _winner_score: float = float(candidates[0].get("_score", 0.0))
+	if _winner_score < 9999.0:
+		var _w_action_type: String = str(candidates[0].get("action_type", ""))
+		var _d_action_type: String = str(_directive_preferred.get("action_type", ""))
+		var _w_components: Dictionary = {}
+		# Recompute is deterministic/pure — identical inputs to the call already made
+		# in the scoring loop above, so this reproduces `_winner_score` exactly while
+		# also capturing the term breakdown _score() didn't have anywhere to put
+		# the first time (see DivergenceDetectorTests for the no-score-drift pin).
+		_score(_w_action_type, actor, directive, board_summary, expression_band, calling_behavior,
+			candidates[0], presence_strength, rank_strength, composure, _w_components)
+		winner["_divergence_probe"] = {
+			"chosen": {
+				"action_type":             _w_action_type,
+				"target_id":               str(candidates[0].get("target_id", "")),
+				"score":                   _winner_score,
+				"directive_bonus":         float(_dbonus_by_type.get(_w_action_type, 0.0)),
+				"directive_bonus_nascent": _directive_bonus(_w_action_type, directive, "nascent", calling_behavior),
+				"components":              _w_components,
+			},
+			"directive_preferred": {
+				"action_type":             _d_action_type,
+				"target_id":               str(_directive_preferred.get("target_id", "")),
+				"score":                   float(_directive_preferred.get("_score", 0.0)),
+				"directive_bonus":         float(_dbonus_by_type.get(_d_action_type, 0.0)),
+				"directive_bonus_nascent": _directive_bonus(_d_action_type, directive, "nascent", calling_behavior),
+			},
+		}
 
 	return winner
 
@@ -501,6 +556,23 @@ func select_movement_intent(
 		return str(left["_movement_option_id"]) < str(right["_movement_option_id"])
 	)
 
+	# V2-PROG-012 Phase 4: locate D, the Directive-preferred candidate — same
+	# reasoning as select_intent()'s equivalent block above. This selector has its
+	# OWN four-key winner order (score, plan type, goal id, option id); `candidates`
+	# is already sorted in that order by the call directly above, so a forward scan
+	# with strict `>` reproduces that selector's own tie-break for D.
+	var _dbonus_by_type: Dictionary = {}
+	var _directive_preferred: Dictionary = candidates[0]
+	var _directive_preferred_bonus: float = -INF
+	for c: Dictionary in candidates:
+		var _atype: String = str((c["_movement_plan"] as Dictionary)["type"])
+		if not _dbonus_by_type.has(_atype):
+			_dbonus_by_type[_atype] = _directive_bonus(_atype, directive, expression_band, calling_behavior)
+		var _cbonus: float = float(_dbonus_by_type[_atype])
+		if _cbonus > _directive_preferred_bonus:
+			_directive_preferred_bonus = _cbonus
+			_directive_preferred = c
+
 	var winner: Dictionary = candidates[0]
 	var intent: Dictionary = MovementIntentContract.build(
 		str(movement_context["mover_id"]),
@@ -522,7 +594,44 @@ func select_movement_intent(
 			"invalid_selected_intent.%s" % str(intent_result["reason"]),
 			str(intent_result["field"])
 		)
-	return {"valid": true, "intent": intent, "reason": "", "field": ""}
+
+	# V2-PROG-012 Phase 4: expose divergence-detection inputs alongside (NOT inside)
+	# `intent` — MovementIntentContract.validate() enforces an EXACT field set on
+	# `intent`, so any extra key attached there would fail validation and discard
+	# the whole board (see select_movement_intent()'s doc comment on that hazard
+	# class elsewhere in this file). `winner["_score"]` here already includes
+	# spatial_utility/purifier-override adjustments applied above — that IS the
+	# value this function's own winner-sort compared, so it is the correct `score`
+	# to hand the detector. Skipped for hard score overrides (9999.0 sentinel).
+	var _divergence_probe: Dictionary = {}
+	var _winner_score: float = float(winner.get("_score", 0.0))
+	if _winner_score < 9999.0:
+		var _w_plan: Dictionary = winner["_movement_plan"] as Dictionary
+		var _w_action_type: String = str(_w_plan["type"])
+		var _d_plan: Dictionary = _directive_preferred["_movement_plan"] as Dictionary
+		var _d_action_type: String = str(_d_plan["type"])
+		var _w_components: Dictionary = {}
+		_score(_w_action_type, actor, directive, board_summary, expression_band, calling_behavior,
+			winner, presence_strength, rank_strength, composure, _w_components)
+		_divergence_probe = {
+			"chosen": {
+				"action_type":             _w_action_type,
+				"target_id":               str(winner.get("target_id", "")),
+				"score":                   _winner_score,
+				"directive_bonus":         float(_dbonus_by_type.get(_w_action_type, 0.0)),
+				"directive_bonus_nascent": _directive_bonus(_w_action_type, directive, "nascent", calling_behavior),
+				"components":              _w_components,
+			},
+			"directive_preferred": {
+				"action_type":             _d_action_type,
+				"target_id":               str(_directive_preferred.get("target_id", "")),
+				"score":                   float(_directive_preferred.get("_score", 0.0)),
+				"directive_bonus":         float(_dbonus_by_type.get(_d_action_type, 0.0)),
+				"directive_bonus_nascent": _directive_bonus(_d_action_type, directive, "nascent", calling_behavior),
+			},
+		}
+
+	return {"valid": true, "intent": intent, "reason": "", "field": "", "_divergence_probe": _divergence_probe}
 
 
 func _validate_movement_inputs(
@@ -1632,7 +1741,15 @@ func _score(
 	# 0.37 at ~0.5 each, no vow, no fear spike ≈ 0.365, rounded to 0.4) — an omitted
 	# argument degrades to "average composure" rather than the floor (0.0, full
 	# dampen) or the ceiling (1.0, no dampen).
-	composure: float = 0.4
+	composure: float = 0.4,
+	# V2-PROG-012 Phase 4: optional out-param — when a non-null Dictionary is
+	# passed, this call fills it with the raw per-term breakdown (base, trait_bonus,
+	# vector_bonus, archetype_bonus, morale_bonus, fear_factor, calling_mul,
+	# directive_bonus, situational_bonus) used to compute the returned float.
+	# Purely additive reporting: does not alter the returned score. Consumed by
+	# DivergenceDetector (via select_intent()/select_movement_intent()) to name the
+	# dominant term as `primary_reason` — never read by anything inside this file.
+	out_components: Dictionary = {}
 ) -> float:
 	var _confirmed_calling: String = str(actor.get("calling", ""))
 	var calling_origin: String = _confirmed_calling \
@@ -1776,7 +1893,27 @@ func _score(
 				if action_type == "protect_ally":
 					base += fear * 0.1
 
-	return (base + trait_bonus + vector_bonus + archetype_bonus + morale_bonus) * fear_factor * calling_mul + directive_bonus + _situational_bonus(action_type, board_summary)
+	var situational_bonus: float = _situational_bonus(action_type, board_summary)
+
+	# V2-PROG-012 Phase 4: directive_bonus is a FLAT ADDITIVE term OUTSIDE the
+	# fear/calling bracket — this is what makes the Directive's entire contribution
+	# to this candidate's score algebraically separable at zero cost:
+	# self_score(c) = c._score - directive_bonus(c) recovers "the Echo's own
+	# judgment with the Directive's voice removed" by simple subtraction, with no
+	# re-scoring needed. DivergenceDetector.gd depends on this exact placement.
+	# Do NOT "tidy" directive_bonus inside the bracket — that would destroy the
+	# separability this phase's detection (V2-PROG-012 Phase 4) is built on.
+	out_components["base"]              = base
+	out_components["trait_bonus"]       = trait_bonus
+	out_components["vector_bonus"]      = vector_bonus
+	out_components["archetype_bonus"]   = archetype_bonus
+	out_components["morale_bonus"]      = morale_bonus
+	out_components["fear_factor"]       = fear_factor
+	out_components["calling_mul"]       = calling_mul
+	out_components["directive_bonus"]   = directive_bonus
+	out_components["situational_bonus"] = situational_bonus
+
+	return (base + trait_bonus + vector_bonus + archetype_bonus + morale_bonus) * fear_factor * calling_mul + directive_bonus + situational_bonus
 
 
 ## Maps directive semantic intent_weights keys → action bonus.
