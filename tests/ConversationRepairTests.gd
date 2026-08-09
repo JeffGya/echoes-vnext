@@ -6,6 +6,16 @@
 #      RealmGenerator (present on sit.contact before FlowRuntime processes it) is not blanked
 #      by the unauthored burden_variants lookup in _start_contact_conversation(). Fails if the
 #      unconditional overwrite in FlowRuntime.gd is restored.
+#   2. conversation_repair/winning_turn_awards_storyweight — a speak_response turn whose
+#      resonance_score clears storyweight_speak_threshold increases the speaking echo's
+#      storyweight. Fails against the int() truncation bug (storyweight_speak_partial_step ==
+#      0.2 → int() == 0 → no gain, which is how this shipped originally).
+#   3. conversation_repair/xp_total_not_clobbered — storyweight and xp_total seeded to
+#      different values both move independently by the gain amount; xp_total must never be
+#      set to a storyweight-derived value that ignores its own prior value.
+#   4. conversation_repair/fractional_config_rounds_to_zero_emits_warn — a configured non-zero
+#      storyweight_speak_partial_step that rounds to 0 storyweight must emit a logger.warn.
+#      Fails if the warn is silently dropped (the historical failure mode this story fixes).
 
 extends RefCounted
 class_name ConversationRepairTests
@@ -16,6 +26,9 @@ const ContactModelScript := preload("res://core/realms/ContactModel.gd")
 
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("conversation_repair/npc_line_survives_contact_start", Callable(ConversationRepairTests, "_t_npc_line_survives_contact_start"))
+	runner.register_test("conversation_repair/winning_turn_awards_storyweight", Callable(ConversationRepairTests, "_t_winning_turn_awards_storyweight"))
+	runner.register_test("conversation_repair/xp_total_not_clobbered", Callable(ConversationRepairTests, "_t_xp_total_not_clobbered"))
+	runner.register_test("conversation_repair/fractional_config_rounds_to_zero_emits_warn", Callable(ConversationRepairTests, "_t_fractional_config_rounds_to_zero_emits_warn"))
 
 
 # ─── Save-file isolation (mirrors UnifiedResolveTests.gd) ────────────────────
@@ -158,6 +171,33 @@ static func _make_runtime(save_data: Dictionary, logger: StructuredLogger) -> Fl
 	return runtime
 
 
+# Puts a contact directly into "pending_contact" with one winning response, bypassing
+# consult/bid generation (covered elsewhere) so speak_response can be dispatched in isolation.
+static func _seed_pending_contact_with_response(runtime: FlowRuntime, contact: Dictionary) -> void:
+	var stage: Dictionary = FlowStageExploreState._get_current_stage(runtime.flow_ctx)
+	var explore_map: Dictionary = stage.get("explore_map", {})
+	explore_map["pending_contact"] = contact
+	explore_map["contact_responses"] = [{
+		"echo_id":          "echo.a1",
+		"echo_name":        "Ama",
+		"calling":          "Keeper",
+		"emotional_status": "steady",
+		"response_text":    "I will answer with the memory we recovered.",
+		"resonance_score":  0.8,  # ≥ storyweight_speak_threshold (0.5) → winning turn
+		"bid_type":         "alignment",
+	}]
+	stage["explore_map"] = explore_map
+	FlowStageExploreState._write_stage_back(runtime.flow_ctx, stage)
+
+
+static func _find_echo(roster: Array, id: String) -> Dictionary:
+	for e_v in roster:
+		var e: Dictionary = e_v if e_v is Dictionary else {}
+		if str(e.get("id", "")) == id:
+			return e
+	return {}
+
+
 # ─── Test 1 — npc_line survives contact start ─────────────────────────────────
 static func _t_npc_line_survives_contact_start() -> Dictionary:
 	var _save_bak := _capture_save()
@@ -176,4 +216,84 @@ static func _t_npc_line_survives_contact_start() -> Dictionary:
 	var got := str(cp.get("npc_line", ""))
 	if got != "TEST OPENING LINE — should survive engage.":
 		return { "ok": false, "error": "npc_line was overwritten/blanked by contact start; got: '%s'" % got }
+	return { "ok": true }
+
+
+# ─── Test 2 — a winning turn awards storyweight ──────────────────────────────
+static func _t_winning_turn_awards_storyweight() -> Dictionary:
+	var _save_bak := _capture_save()
+	var contact := ContactModelScript.make("contact.t2", "witness", "courage", "wisdom", 24, 68, "bold", "Nana Adwoa", 2)
+	contact["npc_line"] = "Speak, if you dare."
+
+	var save_data := _make_save_with_contact_situation(contact, 10, 40)
+	var runtime := _make_runtime(save_data, _make_logger("off"))
+	_seed_pending_contact_with_response(runtime, contact)
+
+	var before := int(_find_echo(runtime.flow_ctx.save_data["sanctum"]["roster"], "echo.a1").get("storyweight", -1))
+
+	runtime.dispatch({ "type": "stage.speak_response", "echo_id": "echo.a1" })
+
+	var after := int(_find_echo(runtime.flow_ctx.save_data["sanctum"]["roster"], "echo.a1").get("storyweight", -1))
+	_restore_save(_save_bak)
+
+	if after <= before:
+		return { "ok": false, "error": "Storyweight did not increase on winning turn (before=%d after=%d)" % [before, after] }
+	return { "ok": true }
+
+
+# ─── Test 3 — xp_total is not clobbered when it differs from storyweight ─────
+static func _t_xp_total_not_clobbered() -> Dictionary:
+	var _save_bak := _capture_save()
+	var contact := ContactModelScript.make("contact.t3", "witness", "courage", "wisdom", 24, 68, "bold", "Nana Adwoa", 2)
+	contact["npc_line"] = "Speak, if you dare."
+
+	# Seed storyweight and xp_total to deliberately different values.
+	var save_data := _make_save_with_contact_situation(contact, 10, 999)
+	var runtime := _make_runtime(save_data, _make_logger("off"))
+	_seed_pending_contact_with_response(runtime, contact)
+
+	runtime.dispatch({ "type": "stage.speak_response", "echo_id": "echo.a1" })
+
+	var echo := _find_echo(runtime.flow_ctx.save_data["sanctum"]["roster"], "echo.a1")
+	_restore_save(_save_bak)
+
+	var sw := int(echo.get("storyweight", -1))
+	var xp := int(echo.get("xp_total", -1))
+	if sw == xp:
+		return { "ok": false, "error": "storyweight (%d) and xp_total (%d) collapsed to the same value — xp_total was clobbered from storyweight's base instead of moving independently" % [sw, xp] }
+	if xp < 999:
+		return { "ok": false, "error": "xp_total (%d) fell below its seeded base 999 — clobbered" % xp }
+	if sw < 10:
+		return { "ok": false, "error": "storyweight (%d) fell below its seeded base 10" % sw }
+	return { "ok": true }
+
+
+# ─── Test 4 — fractional config that rounds to 0 emits a warn ───────────────
+static func _t_fractional_config_rounds_to_zero_emits_warn() -> Dictionary:
+	var _save_bak := _capture_save()
+	var contact := ContactModelScript.make("contact.t4", "witness", "courage", "wisdom", 24, 68, "bold", "Nana Adwoa", 2)
+	contact["npc_line"] = "Speak, if you dare."
+
+	var save_data := _make_save_with_contact_situation(contact, 10, 40)
+	var logger := _make_logger("info")  # must be at/above INFO for warn() to be captured
+	var runtime := _make_runtime(save_data, logger)
+
+	# Force the historical failure mode: a configured non-zero value that rounds to 0
+	# (mirrors the shipped 0.2 default before this story's re-tune to 1).
+	runtime.config_service._balance["data"]["contact"]["storyweight_speak_partial_step"] = 0.3
+
+	_seed_pending_contact_with_response(runtime, contact)
+
+	runtime.dispatch({ "type": "stage.speak_response", "echo_id": "echo.a1" })
+
+	_restore_save(_save_bak)
+
+	var found := false
+	for ev_v in logger.get_logs():
+		var ev: Dictionary = ev_v
+		if str(ev.get("type", "")) == "conversation.storyweight_gain.rounded_to_zero":
+			found = true
+			break
+	if not found:
+		return { "ok": false, "error": "Expected a conversation.storyweight_gain.rounded_to_zero warn log; none found" }
 	return { "ok": true }

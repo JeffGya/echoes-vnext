@@ -8266,11 +8266,17 @@ func _handle_stage_speak_response(action: Dictionary, t: int) -> void:
 				continue
 			var echo: Dictionary = echo_v
 			if str(echo.get("id", "")) == speaking_id:
-				var current_sw := int(echo.get("storyweight", echo.get("xp_total", 0)))
-				var sw_gain    := int(contact_cfg.get("storyweight_speak_partial_step", 0))
+				var sw_gain_cfg := float(contact_cfg.get("storyweight_speak_partial_step", 0))
+				var sw_gain := int(round(sw_gain_cfg))
+				if sw_gain_cfg > 0.0 and sw_gain == 0:
+					logger.warn(t, "conversation.storyweight_gain.rounded_to_zero",
+						"storyweight_speak_partial_step is configured non-zero but rounds to 0 storyweight; no gain applied",
+						{ "configured_value": sw_gain_cfg, "speaking_id": speaking_id })
 				if sw_gain > 0:
-					echo["storyweight"] = current_sw + sw_gain
-					echo["xp_total"]    = current_sw + sw_gain
+					var xp_before := int(echo.get("xp_total", 0))
+					var story_before := int(echo.get("storyweight", xp_before))
+					echo["xp_total"] = xp_before + sw_gain
+					echo["storyweight"] = story_before + sw_gain
 				break
 
 	# S14a: conversation-quality accumulator — read by S14 recruit formula's conversation

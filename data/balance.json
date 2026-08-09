@@ -3224,7 +3224,8 @@
 				"friend_pride_bond_delta": 2
 			},
 			"combat_fear_bleed": 8,
-			"storyweight_speak_partial_step": 0.2,
+			"_comment_storyweight_speak_partial_step": "PROPOSED DEFAULT (V2-PROG-012 Phase 8): 1 storyweight per winning conversation turn. For scale: combat awards kill 25 / stage clear 40 / realm 100, against level_thresholds of 100 for Step 1→2. Previous value 0.2 truncated to 0 under int() and silently granted nothing.",
+			"storyweight_speak_partial_step": 1,
 			"storyweight_speak_threshold": 0.5,
 			"continuity_temporary_ally_good": 5,
 			"directive_effects": {
