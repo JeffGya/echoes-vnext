@@ -500,8 +500,12 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	var calling: String = str(_actor.get("calling_origin", ""))
 	# V2-VOICE-001: deterministic variation key — no RNG, same inputs → same line
 	var variation_key: int = (t + str(_actor.get("id", "")).hash()) % 997
+	# V2-PROG-012 Phase 11 playtest fix: config-driven divergence bark cooldown
+	# — see data.maturity_expression.divergence.bark_cooldown_ticks.
+	var divergence_bark_cooldown: int = int(expr_cfg.get("divergence", {}).get("bark_cooldown_ticks", 10))
 	_select_bark(arch, calling, action_type, start_fear, end_fear, start_morale_tier, end_morale_tier,
-		last_echo_standing, resilience_fired, intent.get("target_id", ""), variation_key, t, diverged_this_turn)
+		last_echo_standing, resilience_fired, intent.get("target_id", ""), variation_key, t, diverged_this_turn,
+		divergence_bark_cooldown)
 	# V2-VOICE-001: check if this actor should react to an ally's high-signal bark
 	_check_reactive_bark(augmented_context, variation_key)
 	# V2-VOICE-001: write bark fields to actor dict so round_bark_events pipeline can read them
@@ -635,7 +639,8 @@ func _select_bark(
 	target_id: Variant,
 	variation_key: int = 0,
 	t: int = 0,
-	diverged: bool = false
+	diverged: bool = false,
+	divergence_cooldown_ticks: int = 10
 ) -> void:
 	var context_key := ""
 	var target := str(target_id) if target_id != null else ""
@@ -658,10 +663,20 @@ func _select_bark(
 	# Priority 5.5: combat_divergence — V2-PROG-012 Phase 5: her judgment out-voted
 	# the Directive this turn (see DivergenceDetector.gd). Tier 2 priority — rarer
 	# than the emotional-crisis contexts above it, but more narratively important
-	# than a routine taunt/attack bark. Deliberately NOT in _HIGH_PRIORITY_BARK:
-	# divergence can recur on consecutive turns in a hot fight, and an Echo
-	# narrating every one of them reads as noise, not character — the normal
-	# _bark_next_t cooldown gate below still applies.
+	# than a routine taunt/attack bark.
+	# V2-PROG-012 Phase 11 playtest fix: Phase 5 kept this OUT of
+	# _HIGH_PRIORITY_BARK on the belief that divergence fires often enough (~33
+	# per encounter, measured across all actors including enemies) that routine
+	# suppression was needed. Post-Phase-6 recalibration + faction gating, the
+	# measured real rate for Echoes alone is ~0.73 events/encounter, and Phase 5's
+	# own measurement found only 2 of 7 such events actually surfaced a bark —
+	# i.e. the general _bark_next_t cooldown was silencing the single rarest,
+	# most narratively meaningful bark in the game almost every time it earned
+	# one. combat_divergence is now exempt from _bark_next_t (same treatment as
+	# the Tier 1 contexts above) and instead gated by its own, shorter,
+	# divergence-specific cooldown (_divergence_bark_next_t, set below) so the
+	# same Echo still can't narrate divergence on two consecutive turns, without
+	# the routine-chatter gate swallowing a later, genuinely separate one.
 	elif diverged:
 		context_key = "combat_divergence"
 	# Priority 6: combat_taunt
@@ -702,7 +717,14 @@ func _select_bark(
 		"combat_last_stand", "combat_resilient",
 		"combat_fear_extreme", "combat_fear_rising", "combat_morale_falling"
 	]
-	if not _HIGH_PRIORITY_BARK.has(context_key):
+	# V2-PROG-012 Phase 11 playtest fix: combat_divergence is exempt from the
+	# routine _bark_next_t gate (see the Priority 5.5 comment above) but is not
+	# unconditional like Tier 1 — it gets its own, separate, shorter cooldown so
+	# the same Echo cannot voice divergence on two consecutive turns.
+	if context_key == "combat_divergence":
+		if t < int(_actor.get("_divergence_bark_next_t", 0)):
+			return
+	elif not _HIGH_PRIORITY_BARK.has(context_key):
 		if t < int(_actor.get("_bark_next_t", 0)):
 			return
 
@@ -726,6 +748,10 @@ func _select_bark(
 	if not line.is_empty() and line != ShoutBank._FALLBACK:
 		_bark_line = line
 		_actor["_bark_next_t"] = t + _compute_bark_cooldown()
+		# V2-PROG-012 Phase 11 playtest fix: divergence-specific cooldown —
+		# transient-only, same pattern as _bark_next_t (no new save field).
+		if context_key == "combat_divergence":
+			_actor["_divergence_bark_next_t"] = t + divergence_cooldown_ticks
 
 
 # Returns an ordinal rank for morale tiers (higher = better).
