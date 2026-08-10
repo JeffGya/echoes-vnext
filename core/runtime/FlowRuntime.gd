@@ -8276,6 +8276,10 @@ func _handle_stage_speak_response(action: Dictionary, t: int) -> void:
 
 	# Storyweight partial step for speaker (if score >= threshold)
 	var sw_threshold := float(contact_cfg.get("storyweight_speak_threshold", 0.5))
+	# Reset every turn so a losing turn doesn't leave a stale gain/name on the contact
+	# from a prior winning turn (this drives the player-facing confirmation — see below).
+	contact["last_turn_storyweight_gain"] = 0
+	contact["last_turn_speaker_name"] = ""
 	if turn_score >= sw_threshold:
 		for echo_v in roster:
 			if not (echo_v is Dictionary):
@@ -8291,8 +8295,24 @@ func _handle_stage_speak_response(action: Dictionary, t: int) -> void:
 				if sw_gain > 0:
 					var xp_before := int(echo.get("xp_total", 0))
 					var story_before := int(echo.get("storyweight", xp_before))
-					echo["xp_total"] = xp_before + sw_gain
-					echo["storyweight"] = story_before + sw_gain
+					var xp_after := xp_before + sw_gain
+					var story_after := story_before + sw_gain
+					echo["xp_total"] = xp_after
+					echo["storyweight"] = story_after
+					contact["last_turn_storyweight_gain"] = sw_gain
+					contact["last_turn_speaker_name"] = str(echo.get("name", ""))
+					logger.info(t, "conversation.storyweight_gain.awarded",
+						"Conversation turn won; speaker gained Storyweight", {
+							"stage_id":    flow_ctx.stage_id,
+							"echo_id":     speaking_id,
+							"echo_name":   str(echo.get("name", "")),
+							"turn_score":  turn_score,
+							"threshold":   sw_threshold,
+							"threshold_cleared": true,
+							"gain":        sw_gain,
+							"storyweight": story_after,
+							"xp_total":    xp_after,
+						})
 				break
 
 	# S14a: conversation-quality accumulator — read by S14 recruit formula's conversation
