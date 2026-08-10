@@ -223,9 +223,13 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	# for every calling, not just uncalled.
 	# Priority chain:
 	#   1. calling_behavior.absolute_fear_offset present → threshold = clamp(band_base + offset, 0, 100)
-	#   2. else calling_behavior.absolute_fear_threshold present (legacy) → threshold = that flat value,
-	#      unchanged from pre-Phase-7 behavior, for configs authored before this key existed
-	#   3. else → threshold = band base (global fallback 80 if band itself is unconfigured)
+	#   2. else → threshold = band base (global fallback 80 if band itself is unconfigured)
+	# V2-PROG-012 Phase 7 review-fix: the legacy flat `absolute_fear_threshold` override
+	# (pre-Phase-7 config shape) is no longer read here — every calling_behavior entry in
+	# data/balance.json now authors absolute_fear_offset, and AGENTS.md's additive-schema
+	# exception for this story requires migrating every consumer rather than keeping a
+	# silent fallback alive. See tests/MaturityExpressionTests.gd's
+	# expr/legacy_absolute_fear_threshold_key_ignored for the regression guard.
 	var refusal_by_band: Dictionary = expr_cfg.get("refusal_thresholds_by_band", {})
 	var band_base_threshold: int    = int(refusal_by_band.get(_expression_band, \
 		cfg_data.get("emotion", {}).get("fear_threshold", 80)))
@@ -237,9 +241,6 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		var fear_offset: int = int(_calling_behavior.get("absolute_fear_offset", 0))
 		fear_threshold = clampi(band_base_threshold + fear_offset, 0, 100)
 		fear_threshold_reason = "expression band + calling offset"
-	elif _calling_behavior.has("absolute_fear_threshold"):
-		fear_threshold = int(_calling_behavior.get("absolute_fear_threshold"))
-		fear_threshold_reason = "calling behavior"
 	else:
 		fear_threshold = band_base_threshold
 		fear_threshold_reason = "expression band"

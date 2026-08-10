@@ -37,7 +37,7 @@ const _EXPR_CFG := {
 	"band_by_standing":          { "1": "nascent", "2": "forming", "3": "grounded", "4": "whole", "5": "whole" },
 	"calling_behavior":          {
 		"okofor":   { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 3 },
-		"aduro":    { "retreat_threshold": null,  "press_advantage": true,  "directive_mul": 1.0, "leadership_radius": 3, "absolute_fear_threshold": 75 },
+		"aduro":    { "retreat_threshold": null,  "press_advantage": true,  "directive_mul": 1.0, "leadership_radius": 3 },
 		"kra_soro": { "retreat_threshold": 0.50, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 4 },
 		"uncalled": { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.5, "leadership_radius": 3 },
 	},
@@ -61,7 +61,7 @@ const _EXPR_CFG := {
 		"identity_threshold_vector": 0.15,
 	},
 	"sanctum_fear_recovery_bonus": { "mid_rank_start": 5, "bonus_max": 4, "identity_calling_bonus": 1, "identity_vector_bonus": 1 },
-	"directive_band_mul":         { "nascent": 1.30, "forming": 1.10, "grounded": 0.90, "whole": 0.75 },
+	"directive_interpretation_mul": { "low": 0.75, "high": 1.30 },
 	"rank_benefits_config": {
 		"fear_recovery": { "min_rank": 5, "label": "Settles Quickly", "description": "This Echo steadies between ventures." },
 	},
@@ -73,7 +73,7 @@ const _BALANCE_CFG := {
 			"band_by_standing":          { "1": "nascent", "2": "forming", "3": "grounded", "4": "whole", "5": "whole" },
 			"calling_behavior":          {
 				"okofor":   { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 3 },
-				"aduro":    { "retreat_threshold": null,  "press_advantage": true,  "directive_mul": 1.0, "leadership_radius": 3, "absolute_fear_threshold": 75 },
+				"aduro":    { "retreat_threshold": null,  "press_advantage": true,  "directive_mul": 1.0, "leadership_radius": 3 },
 				"kra_soro": { "retreat_threshold": 0.50, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 4 },
 				"uncalled": { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.5, "leadership_radius": 3 },
 			},
@@ -97,7 +97,7 @@ const _BALANCE_CFG := {
 				"identity_threshold_vector": 0.15,
 			},
 			"sanctum_fear_recovery_bonus": { "mid_rank_start": 5, "bonus_max": 4, "identity_calling_bonus": 1, "identity_vector_bonus": 1 },
-			"directive_band_mul":         { "nascent": 1.30, "forming": 1.10, "grounded": 0.90, "whole": 0.75 },
+			"directive_interpretation_mul": { "low": 0.75, "high": 1.30 },
 			"rank_benefits_config": {
 				"fear_recovery": { "min_rank": 5, "label": "Settles Quickly", "description": "This Echo steadies between ventures." },
 			},
@@ -153,7 +153,7 @@ static func register(runner: CoreTestRunner) -> void:
 	# V2-PROG-012 Phase 7 — absolute_fear_offset composes with refusal_thresholds_by_band
 	runner.register_test("expr/nascent_aduro_refuses_before_whole_aduro",         Callable(MaturityExpressionTests, "_t_nascent_aduro_refuses_before_whole_aduro"))
 	runner.register_test("expr/calling_character_preserved_at_same_band",        Callable(MaturityExpressionTests, "_t_calling_character_preserved_at_same_band"))
-	runner.register_test("expr/legacy_absolute_fear_threshold_fallback",         Callable(MaturityExpressionTests, "_t_legacy_absolute_fear_threshold_fallback"))
+	runner.register_test("expr/legacy_absolute_fear_threshold_key_ignored",      Callable(MaturityExpressionTests, "_t_legacy_absolute_fear_threshold_key_ignored"))
 	runner.register_test("expr/absolute_fear_offset_clamps_to_valid_range",      Callable(MaturityExpressionTests, "_t_absolute_fear_offset_clamps_to_valid_range"))
 
 
@@ -1438,7 +1438,7 @@ static func _offset_test_cfg(calling_id: String, calling_entry: Dictionary) -> D
 					"identity_threshold_calling": 30, "identity_threshold_vector": 0.15,
 				},
 				"sanctum_fear_recovery_bonus": { "mid_rank_start": 5, "bonus_max": 4, "identity_calling_bonus": 1, "identity_vector_bonus": 1 },
-				"directive_band_mul":          { "nascent": 1.30, "forming": 1.10, "grounded": 0.90, "whole": 0.75 },
+				"directive_interpretation_mul": { "low": 0.75, "high": 1.30 },
 				"rank_benefits_config":        {},
 			},
 			"emotion": { "fear_threshold": 80 },
@@ -1545,42 +1545,49 @@ static func _t_calling_character_preserved_at_same_band() -> Dictionary:
 	return { "ok": true }
 
 
-# Test 35 — legacy fallback: a calling config with ONLY absolute_fear_threshold
-# (no absolute_fear_offset) must behave EXACTLY as the pre-Phase-7 flat
-# override — i.e. the band is bypassed entirely and the threshold stays flat
-# across every band. Uses the actual boundary (fear == threshold triggers
-# refusal, since ActorStateMachine checks `fear >= fear_threshold`): at
-# fear=74 neither a nascent nor a whole actor refuses; at fear=75 (exactly
-# the legacy flat threshold) BOTH refuse, identically, regardless of band.
-# Falsifiable: if a future change mistakenly started treating the legacy key
-# as an offset too (e.g. band + 75), a nascent actor would need fear>=140
-# (clamped to 100) to refuse — it would NOT refuse at fear=75, and the
-# "nascent refuses at 75" assertion below fails. If band leaked in any other
-# way, nascent and whole would disagree at the same fear value, which the
-# paired assertions below also catch.
-static func _t_legacy_absolute_fear_threshold_fallback() -> Dictionary:
+# Test 35 — the removed legacy `absolute_fear_threshold` key is no longer read.
+# Per AGENTS.md's additive-schema exception for this story ("new only, no
+# alias left behind"), ActorStateMachine.gd's elif branch reading
+# calling_behavior.absolute_fear_threshold was deleted outright (not kept as
+# a fallback). This test proves that removal: a calling config carrying ONLY
+# the legacy flat key (no absolute_fear_offset) must behave EXACTLY as if
+# that key were never authored — i.e. fall straight through to the band
+# baseline (nascent=65, whole=90) and diverge by band, not sit flat at the
+# stray legacy value (75, deliberately chosen to sit BETWEEN the two band
+# bases so a still-live fallback and a correctly-removed one produce
+# opposite, distinguishable refusal outcomes at fear=70).
+# Falsifiable: if the elif branch is reintroduced, threshold resolves to 75
+# for BOTH bands at fear=70 — neither actor refuses, and the nascent
+# assertion below (which expects a refusal at the band-base threshold of 65)
+# fails.
+static func _t_legacy_absolute_fear_threshold_key_ignored() -> Dictionary:
 	var cfg := _offset_test_cfg("okofor", {
 		"retreat_threshold": 0.45, "press_advantage": false, "directive_mul": 1.0,
 		"leadership_radius": 4.0, "absolute_fear_threshold": 75,
 	})
 
-	var actor_n_below := _offset_test_actor("echo_legacy_n_below", "okofor", 1, 74)
-	var actor_w_below := _offset_test_actor("echo_legacy_w_below", "okofor", 9, 74)
+	# fear=64: below nascent's band base (65) — must NOT refuse, proving the
+	# stray legacy key isn't lowering the effective threshold either.
+	var actor_n_below := _offset_test_actor("echo_legacy_n_below", "okofor", 1, 64)
 	if bool(_offset_test_run(actor_n_below, cfg)["refused"]):
-		return { "ok": false, "error": "Legacy flat threshold=75: nascent at fear=74 should NOT refuse" }
-	if bool(_offset_test_run(actor_w_below, cfg)["refused"]):
-		return { "ok": false, "error": "Legacy flat threshold=75: whole at fear=74 should NOT refuse" }
+		return { "ok": false, "error": "Stray legacy key present: nascent at fear=64 should NOT refuse (band base 65 not yet reached)" }
 
-	var actor_n_at := _offset_test_actor("echo_legacy_n_at", "okofor", 1, 75)
-	var actor_w_at := _offset_test_actor("echo_legacy_w_at", "okofor", 9, 75)
+	# fear=70: at/above nascent's band base (65) but below whole's (90) and
+	# below the stray legacy flat value (75) — only the nascent actor should
+	# refuse. A live legacy fallback would read threshold=75 for BOTH and
+	# neither would refuse.
+	var actor_n_at := _offset_test_actor("echo_legacy_n_at", "okofor", 1, 70)
+	var actor_w_at := _offset_test_actor("echo_legacy_w_at", "okofor", 9, 70)
 	var result_n_at := _offset_test_run(actor_n_at, cfg)
 	var result_w_at := _offset_test_run(actor_w_at, cfg)
 	if not bool(result_n_at["refused"]):
-		return { "ok": false, "error": "Legacy flat threshold=75: nascent at fear=75 should refuse (band must NOT apply when only absolute_fear_threshold is set), got threshold=%d" % int(result_n_at["fear_threshold"]) }
-	if not bool(result_w_at["refused"]):
-		return { "ok": false, "error": "Legacy flat threshold=75: whole at fear=75 should refuse (band must NOT apply when only absolute_fear_threshold is set), got threshold=%d" % int(result_w_at["fear_threshold"]) }
-	if int(result_n_at["fear_threshold"]) != int(result_w_at["fear_threshold"]):
-		return { "ok": false, "error": "Legacy flat threshold should be IDENTICAL across bands: nascent=%d whole=%d" % [int(result_n_at["fear_threshold"]), int(result_w_at["fear_threshold"])] }
+		return { "ok": false, "error": "Stray legacy key present: nascent at fear=70 should refuse at the band base (65), got threshold=%d — the removed legacy fallback may have been reintroduced" % int(result_n_at["fear_threshold"]) }
+	if bool(result_w_at["refused"]):
+		return { "ok": false, "error": "Stray legacy key present: whole at fear=70 should NOT refuse (band base 90), got refusal (threshold=%d)" % int(result_w_at["fear_threshold"]) }
+	if int(result_n_at["fear_threshold"]) != 65:
+		return { "ok": false, "error": "Nascent threshold should resolve to the band base (65), ignoring the stray legacy absolute_fear_threshold=75 key, got %d" % int(result_n_at["fear_threshold"]) }
+	if int(result_w_at["fear_threshold"]) != 90:
+		return { "ok": false, "error": "Whole threshold should resolve to the band base (90), ignoring the stray legacy absolute_fear_threshold=75 key, got %d" % int(result_w_at["fear_threshold"]) }
 
 	return { "ok": true }
 
