@@ -11,6 +11,7 @@ const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd
 @onready var _meta: Label = %MetaLabel
 @onready var _line: Label = %LineLabel
 @onready var _reaction: Label = %ReactionLabel
+@onready var _storyweight: Label = %StoryweightLabel
 @onready var _npc_zone: PanelContainer = %NPCZone
 @onready var _confirm_button: Button = %ConfirmButton
 @onready var _disengage_button: Button = %DisengageButton
@@ -69,6 +70,10 @@ func present(payload: Dictionary) -> void:
 		int(contact.get("morale", 50))
 	)
 	_show_reaction(str(contact.get("npc_reaction_word", "")))
+	_show_storyweight_gain(
+		int(contact.get("last_turn_storyweight_gain", 0)),
+		str(contact.get("last_turn_speaker_name", ""))
+	)
 
 	var disengage_v: Variant = actions.get("cta.disengage_contact", {})
 	_disengage_action = disengage_v if disengage_v is Dictionary else {}
@@ -101,6 +106,8 @@ func _ensure_refs() -> void:
 		_line = get_node_or_null("%LineLabel") as Label
 	if _reaction == null:
 		_reaction = get_node_or_null("%ReactionLabel") as Label
+	if _storyweight == null:
+		_storyweight = get_node_or_null("%StoryweightLabel") as Label
 	if _npc_zone == null:
 		_npc_zone = get_node_or_null("%NPCZone") as PanelContainer
 	if _confirm_button == null:
@@ -355,6 +362,18 @@ func _show_reaction(reaction: String) -> void:
 	_reaction.modulate = Color(1, 1, 1, 0)
 	var tween := create_tween()
 	tween.tween_property(_reaction, "modulate:a", 1.0, 0.35)
+
+## V2-PROG-012 playtest fix: on a winning conversation turn, confirm to the player which
+## Echo spoke and how much Storyweight they gained. Empty/zero on a losing turn — hidden.
+func _show_storyweight_gain(gain: int, speaker_name: String) -> void:
+	if gain <= 0 or speaker_name.is_empty():
+		_storyweight.visible = false
+		return
+	_storyweight.text = "%s gained %d Storyweight" % [speaker_name, gain]
+	_storyweight.visible = true
+	_storyweight.modulate = Color(1, 1, 1, 0)
+	var tween := create_tween()
+	tween.tween_property(_storyweight, "modulate:a", 1.0, 0.35)
 
 func _npc_ambient_color(fear: int, morale: int) -> Color:
 	if fear > 65:
