@@ -16,6 +16,18 @@
 #   4. conversation_repair/fractional_config_rounds_to_zero_emits_warn — a configured non-zero
 #      storyweight_speak_partial_step that rounds to 0 storyweight must emit a logger.warn.
 #      Fails if the warn is silently dropped (the historical failure mode this story fixes).
+#   5. conversation_repair/storyweight_gain_log_fires_with_correct_values — a winning turn emits
+#      conversation.storyweight_gain.awarded with the correct echo_id/gain/storyweight/xp_total.
+#      Fails if the success path stays silent (the original playtest bug — the award worked but
+#      was indistinguishable from a skipped one in the log).
+#   6. conversation_repair/storyweight_gain_reaches_snapshot — the gain and speaker name from a
+#      winning turn land in the PROJECTED snapshot's contact_pending, not just the internal
+#      contact dict. Fails if the FlowStageExploreState.build_snapshot() hop is missing — this is
+#      the hop that has failed repeatedly in this story (correct value, never reached the UI).
+#   7. conversation_repair/losing_turn_no_gain_no_confirmation — a turn scoring below threshold
+#      produces no storyweight change, no last_turn_storyweight_gain in the snapshot, and no
+#      conversation.storyweight_gain.awarded log. Fails if a stale gain from an earlier winning
+#      turn leaks into a later losing turn's snapshot/confirmation.
 
 extends RefCounted
 class_name ConversationRepairTests
@@ -29,6 +41,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("conversation_repair/winning_turn_awards_storyweight", Callable(ConversationRepairTests, "_t_winning_turn_awards_storyweight"))
 	runner.register_test("conversation_repair/xp_total_not_clobbered", Callable(ConversationRepairTests, "_t_xp_total_not_clobbered"))
 	runner.register_test("conversation_repair/fractional_config_rounds_to_zero_emits_warn", Callable(ConversationRepairTests, "_t_fractional_config_rounds_to_zero_emits_warn"))
+	runner.register_test("conversation_repair/storyweight_gain_log_fires_with_correct_values", Callable(ConversationRepairTests, "_t_storyweight_gain_log_fires_with_correct_values"))
+	runner.register_test("conversation_repair/storyweight_gain_reaches_snapshot", Callable(ConversationRepairTests, "_t_storyweight_gain_reaches_snapshot"))
+	runner.register_test("conversation_repair/losing_turn_no_gain_no_confirmation", Callable(ConversationRepairTests, "_t_losing_turn_no_gain_no_confirmation"))
 
 
 # ─── Save-file isolation (mirrors UnifiedResolveTests.gd) ────────────────────
@@ -190,6 +205,25 @@ static func _seed_pending_contact_with_response(runtime: FlowRuntime, contact: D
 	FlowStageExploreState._write_stage_back(runtime.flow_ctx, stage)
 
 
+# Same as _seed_pending_contact_with_response but with a resonance_score below the
+# storyweight_speak_threshold (0.5 default) — for the losing-turn test.
+static func _seed_pending_contact_with_losing_response(runtime: FlowRuntime, contact: Dictionary) -> void:
+	var stage: Dictionary = FlowStageExploreState._get_current_stage(runtime.flow_ctx)
+	var explore_map: Dictionary = stage.get("explore_map", {})
+	explore_map["pending_contact"] = contact
+	explore_map["contact_responses"] = [{
+		"echo_id":          "echo.a1",
+		"echo_name":        "Ama",
+		"calling":          "Keeper",
+		"emotional_status": "steady",
+		"response_text":    "I have nothing useful to offer.",
+		"resonance_score":  0.2,  # < storyweight_speak_threshold (0.5) → losing turn
+		"bid_type":         "reactive",
+	}]
+	stage["explore_map"] = explore_map
+	FlowStageExploreState._write_stage_back(runtime.flow_ctx, stage)
+
+
 static func _find_echo(roster: Array, id: String) -> Dictionary:
 	for e_v in roster:
 		var e: Dictionary = e_v if e_v is Dictionary else {}
@@ -296,4 +330,116 @@ static func _t_fractional_config_rounds_to_zero_emits_warn() -> Dictionary:
 			break
 	if not found:
 		return { "ok": false, "error": "Expected a conversation.storyweight_gain.rounded_to_zero warn log; none found" }
+	return { "ok": true }
+
+
+# ─── Test 5 — the successful-award log fires with correct gain/totals ───────
+# Falsifiable: before this story's fix, the success path never called logger at all —
+# a real award and a silently-skipped one were indistinguishable in the log. This test
+# fails if conversation.storyweight_gain.awarded is missing OR if any of its payload
+# fields (gain, storyweight, xp_total, echo_id) don't match what actually landed on the echo.
+static func _t_storyweight_gain_log_fires_with_correct_values() -> Dictionary:
+	var _save_bak := _capture_save()
+	var contact := ContactModelScript.make("contact.t5", "witness", "courage", "wisdom", 24, 68, "bold", "Nana Adwoa", 2)
+	contact["npc_line"] = "Speak, if you dare."
+
+	var save_data := _make_save_with_contact_situation(contact, 10, 40)
+	var logger := _make_logger("info")
+	var runtime := _make_runtime(save_data, logger)
+	_seed_pending_contact_with_response(runtime, contact)
+
+	runtime.dispatch({ "type": "stage.speak_response", "echo_id": "echo.a1" })
+
+	var echo := _find_echo(runtime.flow_ctx.save_data["sanctum"]["roster"], "echo.a1")
+	_restore_save(_save_bak)
+
+	var found: Dictionary = {}
+	for ev_v in logger.get_logs():
+		var ev: Dictionary = ev_v
+		if str(ev.get("type", "")) == "conversation.storyweight_gain.awarded":
+			found = ev
+			break
+	if found.is_empty():
+		return { "ok": false, "error": "Expected a conversation.storyweight_gain.awarded log on a winning turn; none found" }
+
+	var data: Dictionary = found.get("data", found)  # StructuredLogger may nest payload under "data"
+	if str(data.get("echo_id", "")) != "echo.a1":
+		return { "ok": false, "error": "Log echo_id mismatch: got '%s'" % str(data.get("echo_id", "")) }
+	var logged_gain := int(data.get("gain", -1))
+	var expected_gain := int(echo.get("storyweight", -1)) - 10
+	if logged_gain != expected_gain or logged_gain <= 0:
+		return { "ok": false, "error": "Log gain=%d does not match actual storyweight delta=%d" % [logged_gain, expected_gain] }
+	if int(data.get("storyweight", -1)) != int(echo.get("storyweight", -1)):
+		return { "ok": false, "error": "Log storyweight=%d does not match resulting echo.storyweight=%d" % [int(data.get("storyweight", -1)), int(echo.get("storyweight", -1))] }
+	if int(data.get("xp_total", -1)) != int(echo.get("xp_total", -1)):
+		return { "ok": false, "error": "Log xp_total=%d does not match resulting echo.xp_total=%d" % [int(data.get("xp_total", -1)), int(echo.get("xp_total", -1))] }
+	return { "ok": true }
+
+
+# ─── Test 6 — the gain reaches the PROJECTED snapshot ────────────────────────
+# Falsifiable: the internal contact dict can hold the right value while the UI-facing
+# snapshot built by FlowStageExploreState.build_snapshot() never receives it — this is
+# the exact failure mode called out in this story (7 prior "correct value, never reached
+# anyone" defects). This test reads ONLY the dispatch() return value (the projected
+# snapshot), never the internal save_data, so it fails if the data-path hop is broken.
+static func _t_storyweight_gain_reaches_snapshot() -> Dictionary:
+	var _save_bak := _capture_save()
+	var contact := ContactModelScript.make("contact.t6", "witness", "courage", "wisdom", 24, 68, "bold", "Nana Adwoa", 2)
+	contact["npc_line"] = "Speak, if you dare."
+
+	var save_data := _make_save_with_contact_situation(contact, 10, 40)
+	var runtime := _make_runtime(save_data, _make_logger("off"))
+	_seed_pending_contact_with_response(runtime, contact)
+
+	var snap: Dictionary = runtime.dispatch({ "type": "stage.speak_response", "echo_id": "echo.a1" })
+	_restore_save(_save_bak)
+
+	var data: Dictionary = snap.get("data", {})
+	var cp: Dictionary = data.get("contact_pending", {})
+	var snap_gain := int(cp.get("last_turn_storyweight_gain", -1))
+	var snap_name := str(cp.get("last_turn_speaker_name", ""))
+	if snap_gain <= 0:
+		return { "ok": false, "error": "Projected snapshot's contact_pending.last_turn_storyweight_gain=%d — the gain never reached the UI-facing snapshot" % snap_gain }
+	if snap_name != "Echo echo.a1":
+		return { "ok": false, "error": "Projected snapshot's contact_pending.last_turn_speaker_name='%s' — expected the speaking echo's name" % snap_name }
+	return { "ok": true }
+
+
+# ─── Test 7 — a losing turn produces no gain and no confirmation ────────────
+# Falsifiable: fails if storyweight moves on a sub-threshold turn, if the snapshot still
+# shows a gain/speaker (e.g. leaked from a prior winning turn since these fields live on
+# a dict that persists turn-to-turn), or if the awarded log fires when it shouldn't.
+static func _t_losing_turn_no_gain_no_confirmation() -> Dictionary:
+	var _save_bak := _capture_save()
+	var contact := ContactModelScript.make("contact.t7", "witness", "courage", "wisdom", 24, 68, "bold", "Nana Adwoa", 2)
+	contact["npc_line"] = "Speak, if you dare."
+
+	var save_data := _make_save_with_contact_situation(contact, 10, 40)
+	var logger := _make_logger("info")
+	var runtime := _make_runtime(save_data, logger)
+	_seed_pending_contact_with_losing_response(runtime, contact)
+
+	var before := int(_find_echo(runtime.flow_ctx.save_data["sanctum"]["roster"], "echo.a1").get("storyweight", -1))
+
+	var snap: Dictionary = runtime.dispatch({ "type": "stage.speak_response", "echo_id": "echo.a1" })
+
+	var after := int(_find_echo(runtime.flow_ctx.save_data["sanctum"]["roster"], "echo.a1").get("storyweight", -1))
+	_restore_save(_save_bak)
+
+	if after != before:
+		return { "ok": false, "error": "Storyweight changed on a losing turn (before=%d after=%d)" % [before, after] }
+
+	var data: Dictionary = snap.get("data", {})
+	var cp: Dictionary = data.get("contact_pending", {})
+	var snap_gain := int(cp.get("last_turn_storyweight_gain", -1))
+	var snap_name := str(cp.get("last_turn_speaker_name", "MISSING"))
+	if snap_gain != 0:
+		return { "ok": false, "error": "Snapshot shows last_turn_storyweight_gain=%d on a losing turn — should be 0" % snap_gain }
+	if snap_name != "":
+		return { "ok": false, "error": "Snapshot shows last_turn_speaker_name='%s' on a losing turn — should be empty" % snap_name }
+
+	for ev_v in logger.get_logs():
+		var ev: Dictionary = ev_v
+		if str(ev.get("type", "")) == "conversation.storyweight_gain.awarded":
+			return { "ok": false, "error": "conversation.storyweight_gain.awarded fired on a losing turn" }
 	return { "ok": true }
