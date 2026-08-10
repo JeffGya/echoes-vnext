@@ -1953,7 +1953,7 @@ func _apply_live_activation(
 ) -> Dictionary:
 	_prepare_legacy_move_intent_for_activation(actor, intent, prepared)
 	if not bool(prepared.get("valid", false)) or not intent.has("planned_action"):
-		asm.update_passive_state_from_activation(intent, ctx, t, false)
+		asm.update_passive_state_from_activation(intent, ctx, t, false, logger)
 		return {}
 	var movement_context: Dictionary = prepared["movement_context"] as Dictionary
 	var profile: Dictionary = prepared["profile"] as Dictionary
@@ -2003,7 +2003,7 @@ func _apply_live_activation(
 		intent["action_type"] = "actor.idle"
 		intent["target_id"] = ""
 	intent["movement_result"] = result
-	asm.update_passive_state_from_activation(intent, ctx, t, not actual.is_empty())
+	asm.update_passive_state_from_activation(intent, ctx, t, not actual.is_empty(), logger)
 	return result
 
 
