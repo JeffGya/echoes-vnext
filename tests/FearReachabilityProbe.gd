@@ -200,6 +200,14 @@ static func _run_scenario(sc: Dictionary) -> Dictionary:
 	# idle_fear_aura (~:834), Steward steady_call (~:930) — instead of burying them
 	# in one opaque "residual" number.
 	var tally: Dictionary = {}
+	## Phase 0 instrumentation — see the census block inside the round loop.
+	var census: Dictionary = {
+		"enemy_actions": {},            # resolved action_type → count
+		"enemy_melee_vs_echo": 0,       # melee attacks aimed at an Echo
+		"enemy_melee_zero_damage": 0,   # ...of which landed no damage
+		"enemy_damage_to_echo": 0,
+		"enemy_rounds_available": 0,    # sum over rounds of living enemies
+	}
 	var st: Dictionary = {"cursor": logger.get_logs().size(), "peak": 0}
 	_dispatch_tracked(runtime, ectx, {"type": "combat.init"}, echo_ids, tally, logger, st)
 
@@ -227,6 +235,36 @@ static func _run_scenario(sc: Dictionary) -> Dictionary:
 				break
 			_dispatch_tracked(runtime, ectx, {"type": "combat.next_actor"}, echo_ids, tally, logger, st)
 		rounds_run += 1
+
+		# ── Phase 0: enemy-activity census ───────────────────────────────────
+		# Hit-based fear contributes only ~+0.22/echo/round in a 5v4 fight. Two very
+		# different causes produce that: enemies never get to act (they die first), or
+		# they act but do not connect. Read last_round_results BEFORE the next round
+		# clears it, and tally what the enemy side actually did.
+		for res_v in ectx.last_round_results:
+			if not (res_v is Dictionary):
+				continue
+			var res: Dictionary = res_v
+			var src: String = str(res.get("source_id", ""))
+			if src.is_empty() or echo_ids.has(src):
+				continue  # echo-side or unattributed
+			var at: String = str(res.get("action_type", "unknown"))
+			census["enemy_actions"][at] = int(census["enemy_actions"].get(at, 0)) + 1
+			if at == "melee_attack" and echo_ids.has(str(res.get("target_id", ""))):
+				census["enemy_melee_vs_echo"] += 1
+				var dmg: int = int(res.get("damage", 0))
+				census["enemy_damage_to_echo"] += dmg
+				if dmg <= 0:
+					census["enemy_melee_zero_damage"] += 1
+		# Enemy-rounds actually available this round — the denominator that tells us
+		# whether low hit counts are a supply problem or a connect-rate problem.
+		var alive_enemies: int = 0
+		for a_v2 in ectx.actors:
+			if a_v2 is Dictionary and str((a_v2 as Dictionary).get("faction", "")) == "enemy" \
+					and not bool((a_v2 as Dictionary).get("is_dead", false)) \
+					and not bool((a_v2 as Dictionary).get("is_structure", false)):
+				alive_enemies += 1
+		census["enemy_rounds_available"] += alive_enemies
 
 		var net: int = 0
 		var living: int = 0
@@ -277,6 +315,7 @@ static func _run_scenario(sc: Dictionary) -> Dictionary:
 		"unreconciled": observed_sum - logged_sum - unlogged_sum,
 		"per_round_net": per_round_net,
 		"zero_echo_rounds": zero_echo_rounds,
+		"census": census,
 		"refusals": int(tally.get("!refusals", 0)),
 		"threshold_note": _threshold_for(ectx, expr_cfg),
 		"combat_over": bool(ectx.combat_state.get("combat_over", false)),
@@ -435,6 +474,18 @@ static func _find(ectx: EncounterContext, id: String) -> Dictionary:
 	return {}
 
 
+## Refusal threshold actually in force per Echo.
+##
+## Prefers the LIVE value: ActorStateMachine stamps the resolved threshold onto
+## `_fear_threshold` each turn, so reading it back reports exactly what the
+## Absolute Fear Rule compared against — including last-stand and
+## suppress_panic_spiral adjustments this probe does not model.
+##
+## The derivation below is only a pre-combat fallback (before any actor has
+## taken a turn). It composes band base + calling offset, matching
+## ActorStateMachine ~:240. NOTE: the legacy flat `absolute_fear_threshold`
+## key was REMOVED by V2-PROG-012 Phase 7 — reading it here made this display
+## silently print the bare band base for every called Echo.
 static func _threshold_for(ectx: EncounterContext, expr_cfg: Dictionary) -> String:
 	var by_band: Dictionary = expr_cfg.get("refusal_thresholds_by_band", {})
 	var out: Array = []
@@ -446,11 +497,18 @@ static func _threshold_for(ectx: EncounterContext, expr_cfg: Dictionary) -> Stri
 			continue
 		var band: String = MaturityExpressionService.get_expression_band(
 			int(a.get("rank", 1)), expr_cfg.get("band_by_standing", {}))
-		var base: int = int(by_band.get(band, 80))
 		var calling: String = str(a.get("calling_origin", "uncalled"))
-		var cb: Dictionary = expr_cfg.get("calling_behavior", {}).get(calling, {})
-		var thr: int = int(cb.get("absolute_fear_threshold", base))
-		out.append("%s/%s=%d" % [band, calling, thr])
+		var thr: int
+		var src: String
+		if a.has("_fear_threshold"):
+			thr = int(a["_fear_threshold"])
+			src = ""
+		else:
+			var base: int = int(by_band.get(band, 80))
+			var cb: Dictionary = expr_cfg.get("calling_behavior", {}).get(calling, {})
+			thr = clampi(base + int(cb.get("absolute_fear_offset", 0)), 0, 100)
+			src = "~"
+		out.append("%s/%s=%s%d" % [band, calling, src, thr])
 	return ", ".join(PackedStringArray(out))
 
 
@@ -476,6 +534,25 @@ static func _print_report(sc: Dictionary, r: Dictionary) -> void:
 	_say("    fear: %s" % ", ".join(PackedStringArray(line)))
 	_say("    PEAK fear reached by any echo: %d    REFUSALS: %d"
 		% [int(r["peak_fear"]), int(r["refusals"])])
+
+	# Phase 0: is hit-based fear starved because enemies never act, or because
+	# they act and do not connect?
+	var cs: Dictionary = r.get("census", {})
+	if not cs.is_empty():
+		var avail: int = int(cs.get("enemy_rounds_available", 0))
+		var swings: int = int(cs.get("enemy_melee_vs_echo", 0))
+		var whiffs: int = int(cs.get("enemy_melee_zero_damage", 0))
+		_say("    enemy activity: %d enemy-rounds available, %d melee swings at an Echo (%.2f per enemy-round)"
+			% [avail, swings, float(swings) / maxf(1.0, float(avail))])
+		_say("                    %d swings dealt 0 damage, %d total damage to echoes"
+			% [whiffs, int(cs.get("enemy_damage_to_echo", 0))])
+		var acts: Dictionary = cs.get("enemy_actions", {})
+		var akeys: Array = acts.keys()
+		akeys.sort()
+		var parts: Array = []
+		for k in akeys:
+			parts.append("%s=%d" % [str(k), int(acts[k])])
+		_say("                    enemy resolved actions: %s" % ", ".join(PackedStringArray(parts)))
 
 	_say("    ledger (party total across run, points of fear):")
 	var tkeys: Array = (r["tally"] as Dictionary).keys()
