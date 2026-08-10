@@ -109,6 +109,42 @@ func clear_all() -> void:
 
 # ── internal ─────────────────────────────────────────────────────────────────
 
+const _TEMPLATE_KIND_DIVERGENCE: String = "divergence"
+const _TEMPLATE_KIND_REACTION: String   = "reaction"
+const _TEMPLATE_KIND_ORIGINAL: String   = "original"
+
+
+## Pure selection logic — no scene tree, no nodes, just the bark_context/
+## is_response inputs mapped to which template kind an event resolves to.
+## Extracted (V2-PROG-012 playtest fix review) so the three-way choice can be
+## unit-tested without a live SceneTree host — see tests/BarkPopupLayerTests.gd.
+##
+## V2-PROG-012: divergence takes precedence over reaction styling. In practice
+## the two never coexist on the same event — ActorStateMachine._check_reactive_bark()
+## always overwrites _bark_context (to "combat_rally_ally") in the SAME assignment
+## that sets _bark_is_response = true, so a divergence bark is never also flagged
+## as a reaction. This ordering is still explicit (not accidental) so the
+## structurally-distinct divergence template wins if that upstream invariant
+## ever changes.
+static func resolve_template_kind(bark_context: String, is_response: bool) -> String:
+	if bark_context == "combat_divergence":
+		return _TEMPLATE_KIND_DIVERGENCE
+	elif is_response:
+		return _TEMPLATE_KIND_REACTION
+	else:
+		return _TEMPLATE_KIND_ORIGINAL
+
+
+func _template_for_kind(kind: String) -> Control:
+	match kind:
+		_TEMPLATE_KIND_DIVERGENCE:
+			return _divergence_template
+		_TEMPLATE_KIND_REACTION:
+			return _reaction_template
+		_:
+			return _original_template
+
+
 func _show_bark_popup(ev: Dictionary) -> void:
 	var actor_id: String  = str(ev.get("actor_id", ""))
 	var bark_line: String = str(ev.get("bark_line", ""))
@@ -121,22 +157,10 @@ func _show_bark_popup(ev: Dictionary) -> void:
 
 	var is_response: bool = bool(ev.get("is_response", false))
 	var bark_context: String = str(ev.get("bark_context", ""))
-	var is_divergence: bool = bark_context == "combat_divergence"
+	var template_kind: String = resolve_template_kind(bark_context, is_response)
+	var is_divergence: bool = template_kind == _TEMPLATE_KIND_DIVERGENCE
 
-	# V2-PROG-012: divergence takes precedence over reaction styling. In practice
-	# the two never coexist on the same event — ActorStateMachine._check_reactive_bark()
-	# always overwrites _bark_context (to "combat_rally_ally") in the SAME assignment
-	# that sets _bark_is_response = true, so a divergence bark is never also flagged
-	# as a reaction. This ordering is still explicit (not accidental) so the
-	# structurally-distinct divergence template wins if that upstream invariant
-	# ever changes.
-	var template: Control
-	if is_divergence:
-		template = _divergence_template
-	elif is_response:
-		template = _reaction_template
-	else:
-		template = _original_template
+	var template: Control = _template_for_kind(template_kind)
 	if template == null:
 		return
 

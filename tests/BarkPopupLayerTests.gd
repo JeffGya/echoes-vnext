@@ -3,15 +3,42 @@
 # own judgment out-votes the Directive — gets a visually distinct popup
 # template (indigo panel, bright gold border) instead of reusing the ordinary
 # "original" bark styling. These tests pin:
-#   1. the three-way template selection in BarkPopupLayer._show_bark_popup()
-#      (combat_divergence > is_response > plain original)
-#   2. the BarkPopupDivergence node exists in the scene with the approved
-#      colours, so it can't be silently dropped or recoloured
+#   1. the three-way template selection (combat_divergence > is_response >
+#      plain original), exercised as PURE LOGIC via
+#      BarkPopupLayer.resolve_template_kind() — no scene tree involved.
+#   2. the three template root nodes (BarkPopupOriginal/Reaction/Divergence)
+#      exist under BarkPopupLayer.tscn at the exact paths resolve_template_kind's
+#      result gets mapped to ($BarkPopupOriginal etc. in _template_for_kind())
+#   3. the BarkPopupDivergence node carries the approved colours, so it can't
+#      be silently dropped or recoloured
+#
+# tests/AGENTS.md: "Tests are pure GDScript — no UI, no scene tree, no network,
+# no OS time." This suite previously parented a live BarkPopupLayer under
+# SceneTree.current_scene to call _show_bark_popup() (which needs create_tween()),
+# and failed outright with no current_scene — the opposite of "no scene tree."
+# V2-PROG-012 playtest fix review: the selection decision was extracted out of
+# _show_bark_popup() into a static, input-only helper
+# (BarkPopupLayer.resolve_template_kind(bark_context, is_response) -> String)
+# specifically so it stays testable without a live tree. See that function's
+# doc comment in ui/screens/combat/BarkPopupLayer.gd for why divergence must
+# win precedence.
+#
+# Known gap (documented, not papered over): with the selection extracted to
+# pure logic, this suite no longer exercises the full duplicate-and-animate
+# path of _show_bark_popup() end to end (that still needs create_tween(), which
+# needs a live SceneTree). Test 2 below closes most of that gap statically —
+# it confirms the exact node paths _template_for_kind() maps each kind onto
+# ($BarkPopupOriginal / $BarkPopupReaction / $BarkPopupDivergence) actually
+# exist in the scene — but it cannot prove the @onready template vars are
+# non-null at runtime, since @onready assignment only fires on _ready(), which
+# only fires once a node enters a live SceneTree. That remaining sliver needs
+# either an in-game/editor smoke check or a scene-tree-hosted integration test
+# living outside this pure suite.
 #
 # BarkPopupLayer.gd's header states it "only sets text, position, modulate,
-# and drives Tweens" — all StyleBoxFlat authoring lives in the .tscn, so test
-# 2 reads colours straight off the scene's SubResources, the same approach
-# FoundationUITests._effective_panel_color() uses for other panels.
+# and drives Tweens" — all StyleBoxFlat authoring lives in the .tscn, so the
+# colour test reads colours straight off the scene's SubResources, the same
+# approach FoundationUITests._effective_panel_color() uses for other panels.
 
 extends RefCounted
 class_name BarkPopupLayerTests
@@ -24,150 +51,56 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("bark_popup/plain_bark_selects_original_template", Callable(BarkPopupLayerTests, "_t_selects_original_template"))
 	runner.register_test("bark_popup/reaction_selects_reaction_template", Callable(BarkPopupLayerTests, "_t_selects_reaction_template"))
 	runner.register_test("bark_popup/divergence_takes_precedence_over_is_response", Callable(BarkPopupLayerTests, "_t_divergence_precedence_over_response"))
+	runner.register_test("bark_popup/template_nodes_exist_at_expected_paths", Callable(BarkPopupLayerTests, "_t_template_nodes_exist_at_expected_paths"))
 	runner.register_test("bark_popup/divergence_template_has_approved_colors", Callable(BarkPopupLayerTests, "_t_divergence_template_colors"))
 
 
-# ── fixture helpers ─────────────────────────────────────────────────────────
+# ── template selection (pure logic — no scene tree) ────────────────────────
 
-# BarkPopupLayer's _show_bark_popup() calls create_tween(), which requires the
-# node to be inside a live SceneTree — so (unlike plain instantiate()-only
-# fixtures elsewhere in this suite) this layer must be parented under the
-# running game's current_scene, mirroring FoundationUITests._ready_fixture_host().
-static func _make_layer_in_tree() -> BarkPopupLayer:
-	var tree := Engine.get_main_loop() as SceneTree
-	if tree == null or tree.current_scene == null:
-		return null
-	var layer := BarkPopupLayerScene.instantiate() as BarkPopupLayer
-	tree.current_scene.add_child(layer)
-	return layer
-
-
-static func _free_layer(layer: BarkPopupLayer) -> void:
-	if layer != null and is_instance_valid(layer):
-		layer.free()
-
-
-## Identifies which template a shown popup was duplicated from. Node names are
-## NOT reliable here — Node.add_child() auto-renames a duplicate that collides
-## with an existing sibling name (the template itself is a permanent sibling
-## under BarkPopupLayer), so the popup's own `.name` no longer matches its
-## source template. Node.duplicate()'s default flags copy resource PROPERTIES
-## by reference rather than deep-copying them, so the duplicated BarkPanel's
-## "panel" StyleBoxFlat override is still the exact same Resource object as
-## the source template's — that identity is what this compares.
-static func _popup_template_kind(layer: BarkPopupLayer, actor_id: String) -> String:
-	var entry: Dictionary = layer._active_popups.get(actor_id, {})
-	var node: Node = entry.get("node")
-	if node == null:
-		return ""
-	var panel := node.get_node_or_null("BarkPanel") as PanelContainer
-	if panel == null:
-		return ""
-	var style: StyleBox = panel.get_theme_stylebox("panel")
-
-	var orig_panel := layer._original_template.get_node("BarkPanel") as PanelContainer
-	var react_panel := layer._reaction_template.get_node("BarkPanel") as PanelContainer
-	var diverge_panel := layer._divergence_template.get_node("BarkPanel") as PanelContainer
-	if style == orig_panel.get_theme_stylebox("panel"):
-		return "original"
-	if style == react_panel.get_theme_stylebox("panel"):
-		return "reaction"
-	if style == diverge_panel.get_theme_stylebox("panel"):
-		return "divergence"
-	return "unknown"
-
-
-# ── template selection ──────────────────────────────────────────────────────
-
-# Test 1 — FALSIFIABLE: if the three-way selection in _show_bark_popup() ever
-# collapsed back to the old `is_response ? reaction : original` ternary
-# (dropping the bark_context == "combat_divergence" branch), a divergence
-# event would duplicate the original template instead, and this test's
-# stylebox-identity check would fail.
+# Test 1a — FALSIFIABLE: if the three-way selection ever collapsed back to the
+# old `is_response ? reaction : original` ternary (dropping the
+# bark_context == "combat_divergence" branch), this would return "original"
+# instead of "divergence" and the assertion fails.
 static func _t_selects_divergence_template() -> Dictionary:
-	var layer := _make_layer_in_tree()
-	if layer == null:
-		return { "ok": false, "error": "No live scene tree host available for BarkPopupLayer fixture" }
-	layer._show_bark_popup({
-		"actor_id":     "echo.divergence.test",
-		"bark_line":    "I will not.",
-		"bark_context": "combat_divergence",
-		"is_response":  false,
-		"screen_pos":   Vector2.ZERO,
-	})
-	var kind := _popup_template_kind(layer, "echo.divergence.test")
-	_free_layer(layer)
+	var kind := BarkPopupLayer.resolve_template_kind("combat_divergence", false)
 	if kind != "divergence":
-		return { "ok": false, "error": "Expected combat_divergence event to duplicate the divergence template, got '%s'" % kind }
+		return { "ok": false, "error": "Expected combat_divergence context to resolve to the divergence template, got '%s'" % kind }
 	return { "ok": true }
 
 
-# Test 2 — FALSIFIABLE: if the divergence branch were made unconditional (e.g.
+# Test 1b — FALSIFIABLE: if the divergence branch were made unconditional (e.g.
 # checking `not is_response` instead of `bark_context == "combat_divergence"`),
-# an ordinary non-response bark would incorrectly duplicate BarkPopupDivergence
-# and this test would fail.
+# an ordinary non-response bark would incorrectly resolve to "divergence" and
+# this test would fail.
 static func _t_selects_original_template() -> Dictionary:
-	var layer := _make_layer_in_tree()
-	if layer == null:
-		return { "ok": false, "error": "No live scene tree host available for BarkPopupLayer fixture" }
-	layer._show_bark_popup({
-		"actor_id":     "echo.original.test",
-		"bark_line":    "Hold the line.",
-		"bark_context": "combat_attack",
-		"is_response":  false,
-		"screen_pos":   Vector2.ZERO,
-	})
-	var kind := _popup_template_kind(layer, "echo.original.test")
-	_free_layer(layer)
+	var kind := BarkPopupLayer.resolve_template_kind("combat_attack", false)
 	if kind != "original":
-		return { "ok": false, "error": "Expected plain bark event to duplicate the original template, got '%s'" % kind }
+		return { "ok": false, "error": "Expected plain bark context to resolve to the original template, got '%s'" % kind }
 	return { "ok": true }
 
 
-# Test 3 — FALSIFIABLE: pins that reaction routing (is_response=true,
-# bark_context="combat_rally_ally") still resolves to the reaction template
-# after the ternary was restructured into a three-way choice — a regression
-# here would mean the restructure broke the pre-existing reaction path.
+# Test 1c — FALSIFIABLE: pins that reaction routing (is_response=true,
+# bark_context="combat_rally_ally") still resolves to "reaction" — a
+# regression here would mean the three-way choice broke the pre-existing
+# reaction path.
 static func _t_selects_reaction_template() -> Dictionary:
-	var layer := _make_layer_in_tree()
-	if layer == null:
-		return { "ok": false, "error": "No live scene tree host available for BarkPopupLayer fixture" }
-	layer._show_bark_popup({
-		"actor_id":     "echo.reaction.test",
-		"bark_line":    "With you!",
-		"bark_context": "combat_rally_ally",
-		"is_response":  true,
-		"screen_pos":   Vector2.ZERO,
-	})
-	var kind := _popup_template_kind(layer, "echo.reaction.test")
-	_free_layer(layer)
+	var kind := BarkPopupLayer.resolve_template_kind("combat_rally_ally", true)
 	if kind != "reaction":
-		return { "ok": false, "error": "Expected reaction event to duplicate the reaction template, got '%s'" % kind }
+		return { "ok": false, "error": "Expected is_response=true to resolve to the reaction template, got '%s'" % kind }
 	return { "ok": true }
 
 
-# Test 4 — explicit precedence check requested by the design brief: if
+# Test 1d — explicit precedence check requested by the design brief: if
 # is_response were somehow true on the SAME event as bark_context ==
 # "combat_divergence" (never happens today — ActorStateMachine._check_reactive_bark()
 # always overwrites _bark_context to "combat_rally_ally" in the same assignment
 # that sets _bark_is_response = true, so the two never coexist in practice —
-# see the comment above the selection block in BarkPopupLayer.gd), the
+# see resolve_template_kind()'s doc comment in BarkPopupLayer.gd), the
 # divergence template must still win. FALSIFIABLE: if the `elif is_response`
-# branch were ever reordered ahead of the `if is_divergence` check, this event
-# would incorrectly duplicate BarkPopupReaction and this test would fail.
+# branch were ever reordered ahead of the `if bark_context == "combat_divergence"`
+# check, this would resolve to "reaction" instead and the test fails.
 static func _t_divergence_precedence_over_response() -> Dictionary:
-	var layer := _make_layer_in_tree()
-	if layer == null:
-		return { "ok": false, "error": "No live scene tree host available for BarkPopupLayer fixture" }
-	layer._show_bark_popup({
-		"actor_id":     "echo.precedence.test",
-		"bark_line":    "No. Not this time.",
-		"bark_context": "combat_divergence",
-		"is_response":  true,
-		"screen_pos":   Vector2.ZERO,
-	})
-	var kind := _popup_template_kind(layer, "echo.precedence.test")
-	_free_layer(layer)
+	var kind := BarkPopupLayer.resolve_template_kind("combat_divergence", true)
 	if kind != "divergence":
 		return { "ok": false, "error": "Expected combat_divergence to win over is_response=true, got '%s'" % kind }
 	return { "ok": true }
@@ -175,7 +108,29 @@ static func _t_divergence_precedence_over_response() -> Dictionary:
 
 # ── scene authoring ─────────────────────────────────────────────────────────
 
-# Test 5 — FALSIFIABLE: if the BarkPopupDivergence node were deleted from
+# Test 2 — FALSIFIABLE: _template_for_kind() in BarkPopupLayer.gd maps
+# resolve_template_kind()'s three possible return values onto the sibling
+# nodes $BarkPopupOriginal / $BarkPopupReaction / $BarkPopupDivergence. If any
+# of those three were ever renamed or removed from the .tscn, the
+# corresponding @onready var would resolve to null at runtime and
+# _show_bark_popup() would silently drop that event (early return). This test
+# instantiates the scene (no add_child, no live tree — see BarkPopupLayerTests
+# header for why @onready assignment can't be exercised here) and walks the
+# node paths directly, so a rename/removal fails this test outright instead of
+# surfacing only as a silently-missing popup in play.
+static func _t_template_nodes_exist_at_expected_paths() -> Dictionary:
+	var layer := BarkPopupLayerScene.instantiate() as BarkPopupLayer
+	var missing: Array = []
+	for path in ["BarkPopupOriginal", "BarkPopupReaction", "BarkPopupDivergence"]:
+		if layer.get_node_or_null(path) == null:
+			missing.append(path)
+	layer.free()
+	if not missing.is_empty():
+		return { "ok": false, "error": "BarkPopupLayer.tscn is missing expected template node(s): %s" % str(missing) }
+	return { "ok": true }
+
+
+# Test 3 — FALSIFIABLE: if the BarkPopupDivergence node were deleted from
 # BarkPopupLayer.tscn, get_node_or_null() below returns null and this test
 # fails outright. If its StyleBoxFlat's bg_color/border_color, the BarkLabel's
 # font_color, or the BarkTail's color were ever changed away from the
