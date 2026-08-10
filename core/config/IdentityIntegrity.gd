@@ -148,13 +148,13 @@ static func validate(data: Dictionary, logger, t: int) -> bool:
 	var recruitment_v: Variant = contact.get("recruitment", {})
 	var recruitment: Dictionary = recruitment_v if recruitment_v is Dictionary else {}
 	if recruitment.has("vector_to_virtue_primary"):
-		_warn(logger, t, "data.contact.recruitment still has a 'vector_to_virtue_primary' copy — this was supposed to be removed in favor of the canonical data.contact.virtue_vector_key", {})
+		_warn(logger, t, "data.contact.recruitment has a 'vector_to_virtue_primary' copy — canonical location is data.contact.virtue_vector_key; duplicates are rejected to prevent silent desync", {})
 		all_valid = false
 
 	var weaving_v: Variant = data.get("weaving_rite", {})
 	var weaving: Dictionary = weaving_v if weaving_v is Dictionary else {}
 	if weaving.has("vector_to_virtue_primary"):
-		_warn(logger, t, "data.weaving_rite still has a 'vector_to_virtue_primary' copy — this was supposed to be relocated to the canonical data.contact.virtue_vector_key", {})
+		_warn(logger, t, "data.weaving_rite has a 'vector_to_virtue_primary' copy — canonical location is data.contact.virtue_vector_key; duplicates are rejected to prevent silent desync", {})
 		all_valid = false
 
 	return all_valid
