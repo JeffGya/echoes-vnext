@@ -273,8 +273,9 @@ const _DEFAULTS := {
 
 ## actor_cfg: the data.actor block from balance.json, or {} to use hardcoded defaults.
 ## Tests and non-echo actors may pass {} safely — behaviour is identical to balance.json values.
-## movement_cfg: the data.combat.movement block. It is consumed only by the dormant
-## movement-aware API; existing production selection remains unchanged.
+## movement_cfg: the data.combat.movement block. It is consumed by
+## select_movement_intent() — live since V2-COMBAT-002 Slice 6B/6C and now the
+## dominant movement-selection path (see that function's doc comment).
 func _init(actor_cfg: Dictionary = {}, movement_cfg: Dictionary = {}) -> void:
 	_cfg = actor_cfg
 	_movement_cfg = movement_cfg
@@ -500,8 +501,12 @@ func select_intent(context: Dictionary) -> Dictionary:
 	return winner
 
 
-## Dormant V2-COMBAT-002 Slice 2 complete-candidate arbitration. This does not
-## participate in live combat until the shared executor boundary arrives.
+## Movement-intent arbitration: scores every generated movement candidate for
+## `actor` against the board/directive/expression context and returns the
+## winning intent. Introduced dormant as V2-COMBAT-002 Slice 2 complete-candidate
+## arbitration; V2-COMBAT-002 Slice 6B/6C cut movement over to live, and this is
+## now the dominant selection path — V2-PROG-012 Phase 4 measured it firing 230
+## times vs. 122 for select_intent() across the test suite.
 func select_movement_intent(
 	context: Dictionary,
 	movement_context: Dictionary,
