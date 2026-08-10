@@ -6,12 +6,6 @@ extends RefCounted
 # All functions are side-effect free — callers (FlowRuntime) apply any mutations.
 # Response generation, resonance scoring, NPC reaction, outcome resolution, social effects.
 
-# Virtue wheel adjacency for resonance scoring — must match balance.json data.contact.virtue_wheel
-const _VIRTUE_WHEEL: Array = [
-	"courage","leadership","truth","wisdom","humility",
-	"acceptance","forgiveness","compassion","empathy","generosity",
-]
-
 # Stat textures derived from dominant stat (used on response card chip)
 const _STAT_TEXTURE_BY_DOMINANT: Dictionary = {
 	"atk":   "forceful",
@@ -29,6 +23,15 @@ const _STAT_TEXTURE_BY_DOMINANT: Dictionary = {
 # blocks). It is now the canonical data.contact.calling_to_virtue_primary, read via
 # _calling_to_virtue()'s cfg param. See balance.json's "_comment_identity" on
 # data.contact for the full three-table canonical scheme.
+
+# chore/dead-config-cleanup: the last divergent virtue table in this file — a
+# hardcoded _VIRTUE_WHEEL duplicating data.contact.virtue_wheel — was removed.
+# _virtue_wheel_distance() now reads the canonical wheel from its cfg param
+# (threaded down from _compute_virtue_resonance / compute_resonance /
+# compute_turn_score_from_virtue), the same pattern _calling_to_virtue() uses
+# above. Order was verified identical to the removed const before switching —
+# ring distance is order-dependent and this table's find()-based indices drive
+# resonance scoring.
 
 # S6 expression → S3 parent calling register
 const _S6_TO_S3: Dictionary = {
@@ -171,7 +174,7 @@ static func compute_turn_score_from_virtue(
 	var weights: Dictionary = weights_v if weights_v is Dictionary else {}
 
 	# Factor 1: virtue resonance
-	var virtue_score := _compute_virtue_resonance(virtue_alignment, virtue_primary, virtue_secondary, weights)
+	var virtue_score := _compute_virtue_resonance(virtue_alignment, virtue_primary, virtue_secondary, weights, cfg)
 
 	# Factor 2: emotional fit
 	var emotional_fit := _compute_emotional_fit(
@@ -182,20 +185,23 @@ static func compute_turn_score_from_virtue(
 
 
 # Virtue resonance: primary=1.0, adjacent=0.7, two_steps=0.4, opposite=0.1
+# cfg: balance.json data.contact — supplies the canonical virtue_wheel for ring distance.
 static func compute_resonance(
 	virtue_alignment: String,
 	virtue_primary: String,
 	virtue_secondary: String,
-	weights: Dictionary
+	weights: Dictionary,
+	cfg: Dictionary = {}
 ) -> float:
-	return _compute_virtue_resonance(virtue_alignment, virtue_primary, virtue_secondary, weights)
+	return _compute_virtue_resonance(virtue_alignment, virtue_primary, virtue_secondary, weights, cfg)
 
 
 static func _compute_virtue_resonance(
 	virtue_alignment: String,
 	virtue_primary: String,
 	virtue_secondary: String,
-	weights: Dictionary
+	weights: Dictionary,
+	cfg: Dictionary
 ) -> float:
 	if virtue_alignment == virtue_primary:
 		return float(weights.get("primary", 1.0))
@@ -203,7 +209,7 @@ static func _compute_virtue_resonance(
 		return float(weights.get("secondary", 0.7))
 
 	# Distance on virtue wheel
-	var dist := _virtue_wheel_distance(virtue_alignment, virtue_primary)
+	var dist := _virtue_wheel_distance(virtue_alignment, virtue_primary, cfg)
 	if dist == 2:
 		return float(weights.get("two_steps", 0.4))
 	# Opposite (5 steps on 10-wheel)
@@ -213,13 +219,18 @@ static func _compute_virtue_resonance(
 	return float(weights.get("two_steps", 0.4)) * 0.7
 
 
-# Distance between two virtues on the wheel (min of clockwise / counter-clockwise)
-static func _virtue_wheel_distance(a: String, b: String) -> int:
-	var ia: int = _VIRTUE_WHEEL.find(a)
-	var ib: int = _VIRTUE_WHEEL.find(b)
+# Distance between two virtues on the wheel (min of clockwise / counter-clockwise).
+# cfg: balance.json data.contact — virtue_wheel is the canonical ring order; a missing
+# or malformed wheel degrades safely to an empty array, which falls through to the
+# same "unknown → opposite" guard used for an unrecognised virtue name.
+static func _virtue_wheel_distance(a: String, b: String, cfg: Dictionary) -> int:
+	var wheel_v: Variant = cfg.get("virtue_wheel", [])
+	var wheel: Array = wheel_v if wheel_v is Array else []
+	var ia: int = wheel.find(a)
+	var ib: int = wheel.find(b)
 	if ia < 0 or ib < 0:
 		return 5  # Unknown → treat as opposite
-	var size: int = _VIRTUE_WHEEL.size()
+	var size: int = wheel.size()
 	var cw: int  = abs(ia - ib)
 	var ccw: int = size - cw
 	return mini(cw, ccw)

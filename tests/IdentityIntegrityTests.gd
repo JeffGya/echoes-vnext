@@ -19,6 +19,14 @@
 #   13. identity/weaving_rite_service_reads_canonical_composition  — sentinel-override: WeavingRiteService.resolve_outcome's fit computation reflects an overridden vector_virtue_composition entry.
 #   14. identity/recruitment_service_reads_canonical_key           — sentinel-override: RecruitmentService's vector-profile seeding reflects an overridden virtue_vector_key entry.
 #   15. identity/onboarding_service_reads_canonical_key            — sentinel-override: OnboardingService.vector_for_virtue reflects an overridden virtue_vector_key entry.
+#
+# chore/dead-config-cleanup — ConversationService._VIRTUE_WHEEL migrated to canonical
+# data.contact.virtue_wheel; IdentityIntegrity.validate() extended to guard the wheel
+# itself (previously only consumed for its *values*, never checked for shape):
+#   16. identity/integrity_rejects_virtue_wheel_duplicate    — a duplicate entry in virtue_wheel is flagged.
+#   17. identity/integrity_rejects_virtue_wheel_wrong_size   — virtue_wheel with a dropped entry (9 instead of 10) is flagged.
+#   18. identity/virtue_wheel_distance_matches_pre_migration_values — pins _virtue_wheel_distance's known distances (adjacent/opposite/identical/unknown) so a config-plumbing regression can't silently change resonance scoring.
+#   19. identity/conversation_service_reads_canonical_virtue_wheel  — sentinel-override: _virtue_wheel_distance reflects an overridden cfg.virtue_wheel, proving the const is gone and cfg is live.
 
 extends RefCounted
 class_name IdentityIntegrityTests
@@ -42,6 +50,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("identity/weaving_rite_service_reads_canonical_composition", Callable(IdentityIntegrityTests, "_t_weaving_rite_reads_composition"))
 	runner.register_test("identity/recruitment_service_reads_canonical_key", Callable(IdentityIntegrityTests, "_t_recruitment_reads_key"))
 	runner.register_test("identity/onboarding_service_reads_canonical_key", Callable(IdentityIntegrityTests, "_t_onboarding_reads_key"))
+	runner.register_test("identity/integrity_rejects_virtue_wheel_duplicate", Callable(IdentityIntegrityTests, "_t_integrity_rejects_virtue_wheel_duplicate"))
+	runner.register_test("identity/integrity_rejects_virtue_wheel_wrong_size", Callable(IdentityIntegrityTests, "_t_integrity_rejects_virtue_wheel_wrong_size"))
+	runner.register_test("identity/virtue_wheel_distance_matches_pre_migration_values", Callable(IdentityIntegrityTests, "_t_virtue_wheel_distance_matches_pre_migration_values"))
+	runner.register_test("identity/conversation_service_reads_canonical_virtue_wheel", Callable(IdentityIntegrityTests, "_t_conversation_reads_virtue_wheel"))
 
 
 # ─── Fixture: a complete, internally-consistent "data" dict ──────────────────
@@ -302,4 +314,78 @@ static func _t_onboarding_reads_key() -> Dictionary:
 	var result := OnboardingService.vector_for_virtue(cfg, "sentinel_virtue_vv")
 	if result != "sentinel_vector_vv":
 		return { "ok": false, "error": "expected 'sentinel_vector_vv' from overridden cfg.data.contact.virtue_vector_key, got '%s'" % result }
+	return { "ok": true }
+
+
+# ─── Test 16 — virtue_wheel with a duplicate entry is flagged ────────────────
+# Appends (does not replace) a duplicate so all ten canonical virtues stay present —
+# isolates the duplicate-detection branch from the separate size check (Test 17),
+# which the validator's own guard (`if not wheel_has_duplicate and ...`) skips once
+# a duplicate is found. Fails if the new duplicate-detection loop is removed.
+static func _t_integrity_rejects_virtue_wheel_duplicate() -> Dictionary:
+	var data := _make_valid_data()
+	var wheel: Array = (data["contact"] as Dictionary)["virtue_wheel"]
+	wheel.append("courage")  # duplicate of the first entry
+	if IdentityIntegrity.validate(data, null, 0):
+		return { "ok": false, "error": "expected validate() to reject a virtue_wheel with a duplicate entry" }
+	return { "ok": true }
+
+
+# ─── Test 17 — virtue_wheel sized wrong (11 distinct entries) is flagged ─────
+# Appends a brand-new, otherwise-unused virtue name rather than removing one, so no
+# OTHER identity table's "virtue exists in virtue_wheel" check trips first — isolates
+# the size-mismatch branch. Fails if the new size check against data.vectors.
+# archetype_init's cardinality is removed.
+static func _t_integrity_rejects_virtue_wheel_wrong_size() -> Dictionary:
+	var data := _make_valid_data()
+	var wheel: Array = (data["contact"] as Dictionary)["virtue_wheel"]
+	wheel.append("an_eleventh_virtue")
+	if IdentityIntegrity.validate(data, null, 0):
+		return { "ok": false, "error": "expected validate() to reject a virtue_wheel with 11 entries (expected 10)" }
+	return { "ok": true }
+
+
+# ─── Test 18 — PIN: _virtue_wheel_distance's known distances are unchanged ───
+# Falsifiable: pins the exact distances the removed _VIRTUE_WHEEL const produced for a
+# representative spread (identical / adjacent / two-steps / opposite / unknown) against
+# a cfg carrying the same order the const had. Fails if the migration silently
+# reordered the wheel or broke the ring-distance arithmetic.
+static func _t_virtue_wheel_distance_matches_pre_migration_values() -> Dictionary:
+	var cfg := {
+		"virtue_wheel": ["courage","leadership","truth","wisdom","humility","acceptance","forgiveness","compassion","empathy","generosity"],
+	}
+	var cases := [
+		["courage", "courage", 0],            # identical
+		["courage", "leadership", 1],         # adjacent
+		["courage", "truth", 2],              # two steps
+		["courage", "acceptance", 5],         # opposite (5 steps on a 10-wheel)
+		["courage", "not_a_real_virtue", 5],  # unknown -> treated as opposite
+	]
+	for case_v in cases:
+		var case: Array = case_v
+		var a := str(case[0])
+		var b := str(case[1])
+		var expected := int(case[2])
+		var got := ConversationService._virtue_wheel_distance(a, b, cfg)
+		if got != expected:
+			return { "ok": false, "error": "distance(%s, %s) = %d, expected %d — pinned pre-migration value regressed" % [a, b, got, expected] }
+	return { "ok": true }
+
+
+# ─── Test 19 — SENTINEL OVERRIDE: _virtue_wheel_distance reads cfg.virtue_wheel ──
+# Proves the removed _VIRTUE_WHEEL const is gone and the wheel is live-read from cfg —
+# a sentinel wheel that exists nowhere in real game data can only produce this distance
+# via cfg. Fails if a hardcoded fallback wheel (the deleted const, or a copy of it) is
+# still being consulted: "courage" would then resolve to a real index instead of falling
+# through to the unknown-virtue guard.
+static func _t_conversation_reads_virtue_wheel() -> Dictionary:
+	var cfg := {
+		"virtue_wheel": ["sentinel_virtue_a", "sentinel_virtue_b", "sentinel_virtue_c"],
+	}
+	var got_adjacent := ConversationService._virtue_wheel_distance("sentinel_virtue_a", "sentinel_virtue_b", cfg)
+	if got_adjacent != 1:
+		return { "ok": false, "error": "expected distance 1 between adjacent sentinel virtues from overridden cfg.virtue_wheel, got %d" % got_adjacent }
+	var got_unknown := ConversationService._virtue_wheel_distance("courage", "sentinel_virtue_b", cfg)
+	if got_unknown != 5:
+		return { "ok": false, "error": "expected distance 5 ('courage' absent from overridden cfg.virtue_wheel), got %d — a hardcoded fallback wheel is still being consulted" % got_unknown }
 	return { "ok": true }
