@@ -59,6 +59,30 @@ static func validate(data: Dictionary, logger, t: int) -> bool:
 	var defns_v: Variant = calling_cfg.get("definitions", {})
 	var defns: Dictionary = defns_v if defns_v is Dictionary else {}
 
+	# ── 0. virtue_wheel itself is a genuine list of the ten canonical virtues:
+	#       present, no duplicate entries, and sized to the same canonical
+	#       vector/virtue keyspace (data.vectors.archetype_init) that the
+	#       virtue_vector_key bijection below is anchored to. Every other check
+	#       in this file trusts virtue_wheel to define the correct virtue
+	#       keyspace (via virtue_set, built above) — this is what makes that
+	#       trust well-founded instead of assumed.
+	if virtue_wheel.is_empty():
+		_warn(logger, t, "data.contact.virtue_wheel is missing or empty — every canonical identity table in this file anchors its virtue keyspace to this list", {})
+		all_valid = false
+	else:
+		var wheel_seen: Dictionary = {}
+		var wheel_has_duplicate := false
+		for v in virtue_wheel:
+			var vs := str(v)
+			if wheel_seen.has(vs):
+				_warn(logger, t, "data.contact.virtue_wheel has a duplicate entry '%s' — each virtue must appear exactly once" % vs, {"virtue": vs})
+				all_valid = false
+				wheel_has_duplicate = true
+			wheel_seen[vs] = true
+		if not wheel_has_duplicate and virtue_wheel.size() != vector_keyspace.size():
+			_warn(logger, t, "data.contact.virtue_wheel has %d entries, expected %d (one per vector in data.vectors.archetype_init, the canonical virtue keyspace size)" % [virtue_wheel.size(), vector_keyspace.size()], {})
+			all_valid = false
+
 	# ── 1. composition keyspace matches canonical vector keyspace ──────────────
 	var composition_keys: Array = _real_keys(composition)
 	for vk in composition_keys:
