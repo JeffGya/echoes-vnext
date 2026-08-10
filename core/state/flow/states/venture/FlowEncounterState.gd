@@ -1253,6 +1253,11 @@ static func _project_actor(actor: Dictionary, contribution_ledger: Variant = nul
 		# V2-PROG-010: maturity expression — written by ActorStateMachine.advance_turn()
 		"expression_band":   str(actor.get("_expression_band",   "")),
 		"presence_strength": float(actor.get("_presence_strength", 0.1)),
+		# V2-PROG-012 Phase 1: hidden autonomy outputs — no consumer reads these yet.
+		"judgment":          float(actor.get("_judgment",  0.0)),
+		"presence":          float(actor.get("_presence",  0.0)),
+		"composure":         float(actor.get("_composure", 0.0)),
+		"legibility":        float(actor.get("_legibility", 0.0)),
 	}
 	# S14a: offensive contribution ledger, projected read-only for the resolve screen / S14 recruit formula.
 	if contribution_ledger is Dictionary:

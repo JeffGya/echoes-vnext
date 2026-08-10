@@ -42,6 +42,18 @@ Vector keys are lowercase identifiers stored in `echo["vector_scores"]` and `ech
 
 **Save repair:** `VectorService.backfill_vector_scores()` adds any missing vector keys at 0 on load. Old 4-key saves are expanded to 10 keys automatically.
 
+**Identity tables (V2-PROG-012 Phase 9):** the "Virtue composition" column above is now
+also machine-readable canon, `balance.json data.contact.vector_virtue_composition`
+(verbatim transcription — first-listed virtue is PRIMARY). Two more canonical tables
+live alongside it: `data.contact.virtue_vector_key` (a keying permutation, NOT
+semantic — used only to invert virtue → vector for recruit/starter-Echo seeding) and
+`data.contact.calling_to_virtue_primary` (each calling's `vector` field → that
+vector's primary composing virtue). `IdentityIntegrity.validate()` guards all three at
+boot. Four previously-divergent tables (`ConversationService._CALLING_VIRTUE_MAP`, its
+own duplicated inline vector→virtue `match` blocks, `WeavingRiteService._CALLING_TO_VIRTUE`,
+and a verbatim-duplicated copy of the bijection in `data.contact.recruitment`) are gone —
+these three are now the only source of vector/virtue/calling identity in the codebase.
+
 ---
 
 ## V2 Calling Set — Active (V2-PROG-004 ✅ Done)
@@ -51,10 +63,21 @@ These are the live IDs used in all backend systems: `balance.json`, `BehaviorArb
 
 ### Anchor Family — steadiness, protection, continuity, holding
 
-| ID | Twi name | Primary vector | Secondary vector | Description |
-|---|---|---|---|---|
-| `okofor` | Oko Fo — Strong Ward | Protector | Pillar (secondary) | Bears danger for others and refuses collapse |
-| `onyamesu` | Onyame Su — Root | Pillar | Nurturer (secondary) | Sustains life, morale, and communal steadiness |
+| ID | Twi name | Primary vector | Secondary vector | Also preferred by (orphan) | Description |
+|---|---|---|---|---|---|
+| `okofor` | Oko Fo — Strong Ward | Protector | Pillar (secondary) | Mediator | Bears danger for others and refuses collapse |
+| `onyamesu` | Onyame Su — Root | Pillar | Nurturer (secondary) | Devoted | Sustains life, morale, and communal steadiness |
+
+**Orphan ruling (V2-PROG-012 Phase 9):** `mediator` (Empathy + Forgiveness) and `devoted`
+(Acceptance + Generosity) don't have a calling in this table's Primary/Secondary
+columns because neither composing virtue lines up with an existing family the way
+the other 8 vectors do. Per designer ruling, `mediator` → `okofor` and `devoted` →
+`onyamesu` so no vector is orphaned; `balance.json data.calling.vector_to_calling`
+already encodes this (a dominant `mediator`/`devoted` Echo gets `okofor`/`onyamesu`
+as its `preferred` calling — see `CallingService.compute_all_options()`). This does
+NOT change either calling's single `vector` field (still `protector`/`pillar` — used
+by `data.contact.calling_to_virtue_primary`'s mechanical derivation); it is purely an
+extra "also preferred" claim, resolved above.
 
 ### Edge Family — initiative, breach, pursuit, decisive redirection
 

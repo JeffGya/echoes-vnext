@@ -814,7 +814,7 @@ func _show_bark_popups(actors: Array, _data: Dictionary) -> void:
 		"combat_ko":            1, "combat_resilient":    1,
 		"combat_fear_rising":   2, "combat_morale_falling": 2,
 		"combat_inspired":      2, "combat_taunt":          2,
-		"combat_calling_skill": 2,
+		"combat_calling_skill": 2, "combat_divergence":     2,
 		"combat_attack":        3, "combat_guard":          3,
 		"combat_banter":        3,
 	}

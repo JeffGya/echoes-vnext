@@ -35,6 +35,28 @@ content_margin_right = 10.0
 content_margin_top = 8.0
 content_margin_bottom = 8.0
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_diverge"]
+; V2-PROG-012: combat_divergence bark — indigo panel + bright gold border, so the
+; moment an Echo's own judgment out-votes the Directive reads as structurally
+; different, not just another line of chatter. Indigo (Adire cloth) is culturally
+; grounded and reads as depth/self-possession rather than alarm — kept clearly
+; distinct from the red urgent banner (CombatBoardScreen.gd _urgent_banner_style,
+; Color(0.86, 0.27, 0.22, 0.9)), which owns danger.
+bg_color = Color(0.165, 0.180, 0.361, 0.88)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.910, 0.765, 0.290, 1.0)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_left = 8
+corner_radius_bottom_right = 8
+content_margin_left = 10.0
+content_margin_right = 10.0
+content_margin_top = 8.0
+content_margin_bottom = 8.0
+
 [node name="BarkPopupLayer" type="Control"]
 layout_mode = 3
 anchors_preset = 15
@@ -94,3 +116,28 @@ layout_mode = 2
 size_flags_horizontal = 4
 script = ExtResource("2_bark_tail_script")
 color = Color(0.961, 0.902, 0.827, 0.9)
+
+[node name="BarkPopupDivergence" type="VBoxContainer" parent="."]
+visible = false
+layout_mode = 0
+theme_override_constants/separation = 0
+
+[node name="BarkPanel" type="PanelContainer" parent="BarkPopupDivergence"]
+custom_minimum_size = Vector2(200, 40)
+layout_mode = 2
+size_flags_horizontal = 1
+theme_override_styles/panel = SubResource("StyleBoxFlat_diverge")
+
+[node name="BarkLabel" type="Label" parent="BarkPopupDivergence/BarkPanel"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1.0, 0.973, 0.863, 1.0)
+theme_override_font_sizes/font_size = 14
+autowrap_mode = 2
+text = ""
+
+[node name="BarkTail" type="Control" parent="BarkPopupDivergence"]
+custom_minimum_size = Vector2(14, 9)
+layout_mode = 2
+size_flags_horizontal = 4
+script = ExtResource("2_bark_tail_script")
+color = Color(0.165, 0.180, 0.361, 0.88)

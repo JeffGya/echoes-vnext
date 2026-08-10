@@ -130,6 +130,8 @@ static func build_fragment_options(save_data: Dictionary, cfg: Dictionary) -> Ar
 	var vector_to_virtue := get_vector_to_virtue(cfg)
 	var virtues: Array = []
 	for vector_key in vector_to_virtue:
+		if str(vector_key).begins_with("_"):
+			continue  # skip metadata keys (e.g. "_comment") — not a vector id
 		var virtue := str(vector_to_virtue[vector_key])
 		if virtue != "" and not virtue in virtues:
 			virtues.append(virtue)
@@ -170,17 +172,23 @@ static func build_name_options(save_data: Dictionary) -> Array:
 		})
 	return out
 
+## Returns the canonical virtue -> vector keying permutation (V2-PROG-012 Phase 9:
+## data.contact.virtue_vector_key — relocated + renamed from
+## data.weaving_rite.vector_to_virtue_primary). This is a bijection used ONLY to invert
+## virtue -> vector for seeding (not a semantic composition claim — see its _comment).
 static func get_vector_to_virtue(cfg: Dictionary) -> Dictionary:
 	var data_v: Variant = cfg.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
-	var weave_v: Variant = data.get("weaving_rite", {})
-	var weave: Dictionary = weave_v if weave_v is Dictionary else {}
-	var map_v: Variant = weave.get("vector_to_virtue_primary", {})
+	var contact_v: Variant = data.get("contact", {})
+	var contact: Dictionary = contact_v if contact_v is Dictionary else {}
+	var map_v: Variant = contact.get("virtue_vector_key", {})
 	return map_v if map_v is Dictionary else {}
 
 static func vector_for_virtue(cfg: Dictionary, virtue: String) -> String:
 	var map := get_vector_to_virtue(cfg)
 	for vector_key in map:
+		if str(vector_key).begins_with("_"):
+			continue  # skip metadata keys (e.g. "_comment") — not a vector id
 		if str(map[vector_key]) == virtue:
 			return str(vector_key)
 	return ""

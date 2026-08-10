@@ -123,6 +123,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("directive_cfg/scout_target_preference",    Callable(DirectiveConfigTests, "_t_scout_target_preference"))
 	runner.register_test("directive_cfg/scout_reveal_radius_wider",  Callable(DirectiveConfigTests, "_t_scout_reveal_radius_wider"))
 	runner.register_test("directive_cfg/passive_reveal_both_true",   Callable(DirectiveConfigTests, "_t_passive_reveal_both_true"))
+	runner.register_test("directive_cfg/integrity_accepts_real_directives", Callable(DirectiveConfigTests, "_t_integrity_accepts_real_directives"))
+	runner.register_test("directive_cfg/integrity_rejects_empty_weights", Callable(DirectiveConfigTests, "_t_integrity_rejects_empty_weights"))
+	runner.register_test("directive_cfg/integrity_rejects_all_nonpositive_weights", Callable(DirectiveConfigTests, "_t_integrity_rejects_all_nonpositive_weights"))
+	runner.register_test("directive_cfg/integrity_rejects_untranslated_keys", Callable(DirectiveConfigTests, "_t_integrity_rejects_untranslated_keys"))
+	runner.register_test("directive_cfg/integrity_accepts_partial_translation", Callable(DirectiveConfigTests, "_t_integrity_accepts_partial_translation"))
 
 
 # ─── Test 1 — scout step_budget == 3 after load_from_config ─────────────────
@@ -329,4 +334,84 @@ static func _t_passive_reveal_both_true() -> Dictionary:
 				"ok": false,
 				"error": "%s must have passive_reveal=true (Phase 2.5: always-on discovery, radius is the lever)" % dir_id
 			}
+	return { "ok": true }
+
+
+# ─── V2-PROG-012 Phase 6 Item 3(c) — DirectiveService.validate_config_integrity() ──
+# A minimal directive_action_muls translation table — mirrors the shape of
+# data.actor.directive_action_muls (action_type -> {semantic_key: mul}), just
+# scoped to two semantic keys so the tests below can construct "translated" vs
+# "untranslated" intent_weights keys precisely.
+static func _actor_cfg_for_integrity() -> Dictionary:
+	return {
+		"directive_action_muls": {
+			"melee_attack": {"objective_advance_priority": 1.0},
+			"actor.idle":   {"survival_bias": 1.0},
+		}
+	}
+
+
+# ─── Test 13 — the two REAL shipped directives pass integrity (control case) ──
+static func _t_integrity_accepts_real_directives() -> Dictionary:
+	var cs := ConfigService.new()
+	if not cs.load_balance():
+		return { "ok": false, "error": "could not load production balance.json" }
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var directives_cfg: Dictionary = bdata.get("directives", {})
+	var actor_cfg: Dictionary = bdata.get("actor", {})
+	if not DirectiveService.validate_config_integrity(directives_cfg, actor_cfg, null, 0):
+		return { "ok": false, "error": "production directive.scout_carefully / directive.seek_signs failed integrity check — one of them is now degenerate" }
+	return { "ok": true }
+
+
+# ─── Test 14 — empty intent_weights is flagged ────────────────────────────────
+static func _t_integrity_rejects_empty_weights() -> Dictionary:
+	var directives_cfg: Dictionary = {
+		"directive.broken": {"id": "directive.broken", "intent_weights": {}},
+	}
+	if DirectiveService.validate_config_integrity(directives_cfg, _actor_cfg_for_integrity(), null, 0):
+		return { "ok": false, "error": "expected validate_config_integrity to return false for empty intent_weights" }
+	return { "ok": true }
+
+
+# ─── Test 15 — all-non-positive intent_weights is flagged ────────────────────
+# Every weight <= 0.0 can never push directive_bonus above baseline for ANY
+# action_type, even though the keys ARE translated (objective_advance_priority
+# has a row) — this test isolates the "all non-positive" failure mode from the
+# "no translated key" failure mode (Test 16).
+static func _t_integrity_rejects_all_nonpositive_weights() -> Dictionary:
+	var directives_cfg: Dictionary = {
+		"directive.broken": {"id": "directive.broken", "intent_weights": {"objective_advance_priority": -0.5, "survival_bias": 0.0}},
+	}
+	if DirectiveService.validate_config_integrity(directives_cfg, _actor_cfg_for_integrity(), null, 0):
+		return { "ok": false, "error": "expected validate_config_integrity to return false for all-non-positive intent_weights" }
+	return { "ok": true }
+
+
+# ─── Test 16 — intent_weights keys with NO translation entry anywhere is flagged ─
+# "unknown_key" appears in no directive_action_muls row in the fixture — a
+# directive built entirely from vocabulary the translation table doesn't know
+# about is silently worth 0.0 forever, exactly the dormant-seam failure mode
+# this check exists to catch.
+static func _t_integrity_rejects_untranslated_keys() -> Dictionary:
+	var directives_cfg: Dictionary = {
+		"directive.broken": {"id": "directive.broken", "intent_weights": {"unknown_key": 0.5, "another_unknown_key": 0.3}},
+	}
+	if DirectiveService.validate_config_integrity(directives_cfg, _actor_cfg_for_integrity(), null, 0):
+		return { "ok": false, "error": "expected validate_config_integrity to return false when no intent_weights key has any directive_action_muls translation" }
+	return { "ok": true }
+
+
+# ─── Test 17 — a directive with AT LEAST ONE positive, translated key passes ──
+# Deliberately mixes one untranslated key (unknown_key) with one real,
+# positive, translated one (survival_bias) — proves the check requires only
+# ONE working path, not that every key be meaningful; a directive is only
+# flagged when NONE of its keys can ever produce a nonzero bonus.
+static func _t_integrity_accepts_partial_translation() -> Dictionary:
+	var directives_cfg: Dictionary = {
+		"directive.mostly_ok": {"id": "directive.mostly_ok", "intent_weights": {"unknown_key": 0.9, "survival_bias": 0.1}},
+	}
+	if not DirectiveService.validate_config_integrity(directives_cfg, _actor_cfg_for_integrity(), null, 0):
+		return { "ok": false, "error": "expected validate_config_integrity to return true — survival_bias is positive and translated (actor.idle row)" }
 	return { "ok": true }

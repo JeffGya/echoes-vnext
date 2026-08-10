@@ -102,7 +102,6 @@ static func _blade_cfg() -> Dictionary:
 					"press_advantage":   true,
 					"directive_mul":     1.0,
 					"leadership_radius": 3,
-					"absolute_fear_threshold": 75,
 					"broken_morale_override": {
 						"melee_attack": 8.0,
 						"actor.guard":  -5.0,

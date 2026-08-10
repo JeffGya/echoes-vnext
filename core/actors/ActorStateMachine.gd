@@ -18,6 +18,8 @@ extends RefCounted
 
 const MaturityExpressionService = preload("res://core/actors/MaturityExpressionService.gd")
 const LeadershipEmotionService = preload("res://core/combat/LeadershipEmotionService.gd")
+const SocialGraphService = preload("res://core/sanctum/SocialGraphService.gd")
+const DivergenceDetector = preload("res://core/actors/DivergenceDetector.gd")
 
 var _actor: Dictionary
 var _behavior_module: BehaviorModule
@@ -106,22 +108,85 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 			"movement_skipped": true,
 		})
 
-	# V2-PROG-006: compute maturity-expression band + calling behavior
+	# V2-PROG-006/V2-PROG-012: compute maturity-expression band, calling behavior,
+	# and the four hidden autonomy outputs (judgment/presence/composure/legibility)
+	# via one derive_expression() call.
 	var cfg_data: Dictionary = context.get("cfg", {}).get("data", {})
 	var expr_cfg: Dictionary = cfg_data.get("maturity_expression", {})
-	var band_by_standing: Dictionary = expr_cfg.get("band_by_standing", {})
-	var calling_cfg: Dictionary = expr_cfg.get("calling_behavior", {})
-	_expression_band = MaturityExpressionService.get_expression_band(int(_actor.get("rank", 1)), band_by_standing)
-	_calling_behavior = MaturityExpressionService.get_calling_behavior(_actor, calling_cfg)
-	# V2-PROG-010: continuous rank scalar + presence_strength for identity scaling and composure
-	var rank_scale_cfg: Dictionary = expr_cfg.get("rank_strength_scale", {})
-	var max_rank: int              = int(rank_scale_cfg.get("max_rank", 9))
-	var rank_strength: float       = MaturityExpressionService.get_rank_strength(int(_actor.get("rank", 1)), max_rank)
-	var presence_strength: float   = MaturityExpressionService.get_presence_strength(_expression_band)
+
+	# V2-PROG-012: assemble ctx_inputs from context this actor already has access to.
+	# FIX (Opus review): defensive coercion (MaturityExpressionService._as_dict/_as_array)
+	# instead of hard `as` casts — this read runs unconditionally for EVERY actor (echo,
+	# enemy, structure), unlike BehaviorArbiter.gd's read of the same "bonds" context key,
+	# which gates on faction == "echo". A hard cast here would be a new crash surface for
+	# non-echo actors or malformed test fixtures; a type mismatch now degrades to {}/[] like
+	# it does everywhere else in derive_expression()'s input assembly.
+	var calling_defs: Dictionary = cfg_data.get("calling", {}).get("definitions", {})
+	var calling_id_for_family: String = str(_actor.get("calling", ""))
+	if calling_id_for_family.is_empty():
+		calling_id_for_family = str(_actor.get("calling_origin", ""))
+	var calling_family: String = str(MaturityExpressionService._as_dict(
+		calling_defs.get(calling_id_for_family, {})).get("family", ""))
+
+	var raw_bonds: Array = MaturityExpressionService._as_array(context.get("bonds", []))
+	var actor_id_str: String = str(_actor.get("id", ""))
+	var actor_bonds: Array = SocialGraphService.get_bonds_for_actor(raw_bonds, actor_id_str)
+	# Only bonds to currently-living party members count — a bond to a fallen
+	# ally shouldn't keep pressing on judgment/presence mid-encounter.
+	var living_party_ids: Dictionary = {}
+	for a_v in MaturityExpressionService._as_array(context.get("all_actors", [])):
+		if a_v is Dictionary:
+			var a: Dictionary = a_v
+			if str(a.get("faction", "")) == "echo" and not bool(a.get("is_dead", false)):
+				living_party_ids[str(a.get("id", ""))] = true
+	var living_bonds: Array = []
+	for edge_v in actor_bonds:
+		if not (edge_v is Dictionary):
+			continue
+		var edge: Dictionary = edge_v
+		var other_id: String = str(edge.get("actor_b", "")) if str(edge.get("actor_a", "")) == actor_id_str \
+			else str(edge.get("actor_a", ""))
+		if living_party_ids.has(other_id):
+			living_bonds.append(edge)
+
+	# FIX (Opus review, autonomy_outputs.fear_base_max de-dup): thread the canonical
+	# fear_base_max (data.emotion.drift.fear_base_max — what actually enforces the cap,
+	# see FlowRuntime._apply_encounter_emotion_drift()) through ctx_inputs so it can't
+	# silently desync from the autonomy_outputs fallback copy.
+	var emotion_cfg: Dictionary = MaturityExpressionService._as_dict(cfg_data.get("emotion", {}))
+	var drift_cfg: Dictionary   = MaturityExpressionService._as_dict(emotion_cfg.get("drift", {}))
+
+	var ctx_inputs: Dictionary = {
+		"bonds":            living_bonds,
+		"bond_thresholds":  context.get("bond_thresholds", {}),
+		"active_vow":       context.get("active_vow", {}),
+		"calling_family":   calling_family,
+		"instability":      float(context.get("instability", 0.0)),  # V2-PROG-012: reserved seam, no system yet
+		"level_thresholds": MaturityExpressionService._as_dict(cfg_data.get("progression", {})).get("level_thresholds", []),
+		"fear_base_max":    float(drift_cfg.get("fear_base_max", 40.0)),
+	}
+
+	var expr_result: Dictionary = MaturityExpressionService.derive_expression(_actor, ctx_inputs, expr_cfg)
+	_expression_band = str(expr_result.get("expression_band", "nascent"))
+	_calling_behavior = expr_result.get("calling_behavior", {}) as Dictionary
+	var rank_strength: float = float(expr_result.get("rank_strength", 0.0))
+	var judgment: float      = float(expr_result.get("judgment", 0.0))
+	var presence: float      = float(expr_result.get("presence", 0.0))
+	var composure: float     = float(expr_result.get("composure", 0.0))
+	var legibility: float    = float(expr_result.get("legibility", 0.0))
+	# V2-PROG-012: presence (derived) replaces get_presence_strength() as the source of
+	# _presence_strength. The old band-only value was passed to BehaviorArbiter._score()
+	# and never read there, and projected into the snapshot but read by no UI — this
+	# retires that dead path without removing the key any existing reader relies on.
+	var presence_strength: float = presence
 	# Write back to actor dict so _project_actor() can include them in snapshots
 	_actor["_expression_band"]   = _expression_band
 	_actor["_presence_strength"] = presence_strength
 	_actor["_rank_strength"]     = rank_strength
+	_actor["_judgment"]          = judgment
+	_actor["_presence"]          = presence
+	_actor["_composure"]         = composure
+	_actor["_legibility"]        = legibility
 
 	# PROG-010: read resilience + leadership traits
 	var resilience_traits: Array = _actor.get("resilience_traits", []) as Array
@@ -151,23 +216,49 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	if _actor.has("_withdraw_cooldown"):
 		_actor["_withdraw_cooldown"] = maxi(0, int(_actor["_withdraw_cooldown"]) - 1)
 
-	# COMBAT-003 + V2-PROG-006 + V2-PROG-010: Absolute Fear Rule — dynamic threshold.
-	# Priority chain: calling_behavior.absolute_fear_threshold → band base → global fallback (80).
-	# V2-PROG-010: band base from refusal_thresholds_by_band (nascent=65, forming=72, grounded=80, whole=90).
+	# COMBAT-003 + V2-PROG-006 + V2-PROG-010 + V2-PROG-012 Phase 7: Absolute Fear Rule — dynamic threshold.
+	# Band base from refusal_thresholds_by_band (nascent=65, forming=72, grounded=80, whole=90) is now
+	# genuinely load-bearing: the calling value composes as an OFFSET on top of the band baseline
+	# instead of replacing it outright, so "nascent breaks sooner, whole holds longer" (GDD:1422) holds
+	# for every calling, not just uncalled.
+	# Priority chain:
+	#   1. calling_behavior.absolute_fear_offset present → threshold = clamp(band_base + offset, 0, 100)
+	#   2. else → threshold = band base (global fallback 80 if band itself is unconfigured)
+	# V2-PROG-012 Phase 7 review-fix: the legacy flat `absolute_fear_threshold` override
+	# (pre-Phase-7 config shape) is no longer read here — every calling_behavior entry in
+	# data/balance.json now authors absolute_fear_offset, and AGENTS.md's additive-schema
+	# exception for this story requires migrating every consumer rather than keeping a
+	# silent fallback alive. See tests/MaturityExpressionTests.gd's
+	# expr/legacy_absolute_fear_threshold_key_ignored for the regression guard.
 	var refusal_by_band: Dictionary = expr_cfg.get("refusal_thresholds_by_band", {})
 	var band_base_threshold: int    = int(refusal_by_band.get(_expression_band, \
 		cfg_data.get("emotion", {}).get("fear_threshold", 80)))
-	var fear_threshold: int = int(_calling_behavior.get("absolute_fear_threshold", band_base_threshold))
+	var fear_threshold: int
+	# V2-PROG-012 Phase 4: track WHICH rule set the final threshold so a refusal
+	# carries evidence of why the threshold sat where it did (combat.action_refused).
+	var fear_threshold_reason: String
+	if _calling_behavior.has("absolute_fear_offset"):
+		var fear_offset: int = int(_calling_behavior.get("absolute_fear_offset", 0))
+		fear_threshold = clampi(band_base_threshold + fear_offset, 0, 100)
+		fear_threshold_reason = "expression band + calling offset"
+	else:
+		fear_threshold = band_base_threshold
+		fear_threshold_reason = "expression band"
 	if last_echo_standing:
 		var ls_thresholds: Dictionary = expr_cfg.get("last_stand_fear_threshold", {})
 		if _expression_band == "whole":
 			fear_threshold = int(ls_thresholds.get("whole", 95))
+			fear_threshold_reason = "last stand"
 		elif _expression_band == "grounded":
 			fear_threshold = int(ls_thresholds.get("grounded", 88))
+			fear_threshold_reason = "last stand"
 	# suppress_panic_spiral: raises threshold +5 on top of band bonus
 	if "suppress_panic_spiral" in resilience_traits \
 			and (_expression_band == "grounded" or _expression_band == "whole"):
 		fear_threshold = min(fear_threshold + 5, 100)
+		fear_threshold_reason += " (steadied)"
+	_actor["_fear_threshold"]        = fear_threshold
+	_actor["_fear_threshold_reason"] = fear_threshold_reason
 
 	# V2-PROG-006: self_regulate tick — Grounded+ +3 morale per round
 	if (_expression_band == "grounded" or _expression_band == "whole") \
@@ -233,6 +324,17 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	augmented_context["rank_strength"]     = rank_strength
 	augmented_context["resilience_traits"] = resilience_traits
 	augmented_context["leadership_traits"] = leadership_traits
+	# V2-PROG-012 Phase 1: hidden autonomy outputs. `composure` has been read by
+	# BehaviorArbiter._score() since Phase 2; `judgment` has been read since Phase 6
+	# (drives interpretation_width — see BehaviorArbiter._score()'s doc comment).
+	# `presence` and `legibility` still have no BehaviorArbiter consumer (presence
+	# feeds LeadershipEmotionService, legibility feeds DivergenceDetector's
+	# primary_reason specificity — both read this actor's own _presence/_legibility
+	# fields directly, not this context key).
+	augmented_context["judgment"]          = judgment
+	augmented_context["presence"]          = presence
+	augmented_context["composure"]         = composure
+	augmented_context["legibility"]        = legibility
 
 	# PROG-009: inject equipped_skills + skills_cfg into context for BehaviorArbiter.
 	# equipped_skills: slot → skill_id dict set by FlowSkillLoadoutState at encounter start.
@@ -261,6 +363,12 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 			var selected_path: Array = intent.get("path", []) as Array
 			intent["target_pos"] = selected_path.back() if not selected_path.is_empty() else _actor.get("grid_pos", {})
 			intent["target_distance"] = GridService.chebyshev_distance(_actor.get("grid_pos", {}), intent["target_pos"] as Dictionary)
+			# V2-PROG-012 Phase 4: select_movement_intent() cannot attach this onto
+			# `intent` itself — MovementIntentContract.validate() enforces an EXACT
+			# field set there, so any extra key would fail validation and discard the
+			# whole board. It travels on the outer selection dict instead; pull it
+			# across here now that `intent` is a plain working Dictionary again.
+			intent["_divergence_probe"] = movement_selection.get("_divergence_probe", {})
 		else:
 			intent = _behavior_module.select_intent(augmented_context)
 	else:
@@ -300,6 +408,68 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		"archetype_modifier":     int(intent.get("archetype_modifier", 0)),
 	})
 
+	# V2-PROG-012 Phase 4: divergence detection — purely observational (no score
+	# is touched; see DivergenceDetector.gd). BehaviorArbiter reports raw score
+	# components on `intent["_divergence_probe"]` (both select_intent() and
+	# select_movement_intent() attach it — see that file); ActorStateMachine
+	# owns the threshold POLICY decision and reads data.maturity_expression.divergence
+	# directly, never through BehaviorArbiter._cfg (that config stays out of the arbiter).
+	# V2-PROG-012 Phase 5: also drives the combat_divergence bark below — see
+	# _select_bark()'s Tier 2 branch.
+	var diverged_this_turn: bool = false
+	var divergence_probe: Dictionary = intent.get("_divergence_probe", {}) as Dictionary
+	if not divergence_probe.is_empty():
+		var divergence_cfg: Dictionary = expr_cfg.get("divergence", {})
+		var directive: Dictionary = context.get("directive", {}) as Dictionary
+		var divergence_result: Dictionary = DivergenceDetector.detect(
+			divergence_probe.get("chosen", {}) as Dictionary,
+			divergence_probe.get("directive_candidates", []) as Array,
+			float(divergence_probe.get("decision_scale", 0.0)),
+			composure,
+			legibility,
+			divergence_cfg
+		)
+		# Diagnostic-only, filtered out at the default INFO level (see StructuredLogger):
+		# every turn's contest_ratio, not just the ones that cross the threshold. This is
+		# what a playtest-ratification pass reads to (re)calibrate min_contest_ratio — see
+		# the measurement methodology in the V2-PROG-012 Phase 4 fix story.
+		logger.debug(t, "actor.divergence_probe", "Divergence contest computed", {
+			"actor_id":         str(_actor.get("id", "")),
+			"round":            int(context.get("round", t)),
+			"chosen_action":    str(divergence_result.get("chosen_action", "")),
+			"directive_action": str(divergence_result.get("directive_action", "")),
+			"directive_pull":   float(divergence_result.get("directive_pull", 0.0)),
+			"decision_scale":   float(divergence_result.get("decision_scale", 0.0)),
+			"contest_ratio":    float(divergence_result.get("contest_ratio", 0.0)),
+			"overrule_strength": float(divergence_result.get("overrule_strength", 0.0)),
+			"diverged":         bool(divergence_result.get("diverged", false)),
+		})
+		if bool(divergence_result.get("diverged", false)):
+			diverged_this_turn = true
+			logger.info(t, "actor.divergence", "Echo's judgment diverged from the Directive", {
+				"actor_id":          str(_actor.get("id", "")),
+				"actor_name":        str(_actor.get("name", "")),
+				"round":             int(context.get("round", t)),
+				"expression_band":   _expression_band,
+				"judgment":          judgment,
+				"presence":          presence,
+				"composure":         composure,
+				"legibility":        legibility,
+				"directive_id":      str(directive.get("id", "")),
+				"directive_action":  str(divergence_result.get("directive_action", "")),
+				"chosen_action":     str(divergence_result.get("chosen_action", "")),
+				"chosen_target_id":  str((divergence_probe.get("chosen", {}) as Dictionary).get("target_id", "")),
+				"directive_pull":    float(divergence_result.get("directive_pull", 0.0)),
+				"self_margin":       float(divergence_result.get("self_margin", 0.0)),
+				"overrule_strength": float(divergence_result.get("overrule_strength", 0.0)),
+				"decision_scale":    float(divergence_result.get("decision_scale", 0.0)),
+				"contest_ratio":     float(divergence_result.get("contest_ratio", 0.0)),
+				"threshold":         float(divergence_result.get("threshold", 0.0)),
+				"severity":          float(divergence_result.get("severity", 0.0)),
+				"divergence_kind":   str(divergence_result.get("divergence_kind", "")),
+				"primary_reason":    str(divergence_result.get("primary_reason", "")),
+			})
+
 	# V2-PROG-010: passive fear tick — small per-round fear reduction for echo faction, rank-scaled.
 	var recovery_cfg: Dictionary = expr_cfg.get("fear_self_recovery", {})
 	var passive_max: int = int(recovery_cfg.get("passive_max", 3))
@@ -331,8 +501,12 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	var calling: String = str(_actor.get("calling_origin", ""))
 	# V2-VOICE-001: deterministic variation key — no RNG, same inputs → same line
 	var variation_key: int = (t + str(_actor.get("id", "")).hash()) % 997
+	# V2-PROG-012 Phase 11 playtest fix: config-driven divergence bark cooldown
+	# — see data.maturity_expression.divergence.bark_cooldown_ticks.
+	var divergence_bark_cooldown: int = int(expr_cfg.get("divergence", {}).get("bark_cooldown_ticks", 10))
 	_select_bark(arch, calling, action_type, start_fear, end_fear, start_morale_tier, end_morale_tier,
-		last_echo_standing, resilience_fired, intent.get("target_id", ""), variation_key, t)
+		last_echo_standing, resilience_fired, intent.get("target_id", ""), variation_key, t, diverged_this_turn,
+		divergence_bark_cooldown)
 	# V2-VOICE-001: check if this actor should react to an ally's high-signal bark
 	_check_reactive_bark(augmented_context, variation_key)
 	# V2-VOICE-001: write bark fields to actor dict so round_bark_events pipeline can read them
@@ -465,7 +639,9 @@ func _select_bark(
 	resilience_fired: bool,
 	target_id: Variant,
 	variation_key: int = 0,
-	t: int = 0
+	t: int = 0,
+	diverged: bool = false,
+	divergence_cooldown_ticks: int = 10
 ) -> void:
 	var context_key := ""
 	var target := str(target_id) if target_id != null else ""
@@ -485,6 +661,25 @@ func _select_bark(
 	# Priority 5: combat_morale_falling (morale dropped a tier)
 	elif start_morale_tier != end_morale_tier and _morale_tier_rank(end_morale_tier) < _morale_tier_rank(start_morale_tier):
 		context_key = "combat_morale_falling"
+	# Priority 5.5: combat_divergence — V2-PROG-012 Phase 5: her judgment out-voted
+	# the Directive this turn (see DivergenceDetector.gd). Tier 2 priority — rarer
+	# than the emotional-crisis contexts above it, but more narratively important
+	# than a routine taunt/attack bark.
+	# V2-PROG-012 Phase 11 playtest fix: Phase 5 kept this OUT of
+	# _HIGH_PRIORITY_BARK on the belief that divergence fires often enough (~33
+	# per encounter, measured across all actors including enemies) that routine
+	# suppression was needed. Post-Phase-6 recalibration + faction gating, the
+	# measured real rate for Echoes alone is ~0.73 events/encounter, and Phase 5's
+	# own measurement found only 2 of 7 such events actually surfaced a bark —
+	# i.e. the general _bark_next_t cooldown was silencing the single rarest,
+	# most narratively meaningful bark in the game almost every time it earned
+	# one. combat_divergence is now exempt from _bark_next_t (same treatment as
+	# the Tier 1 contexts above) and instead gated by its own, shorter,
+	# divergence-specific cooldown (_divergence_bark_next_t, set below) so the
+	# same Echo still can't narrate divergence on two consecutive turns, without
+	# the routine-chatter gate swallowing a later, genuinely separate one.
+	elif diverged:
+		context_key = "combat_divergence"
 	# Priority 6: combat_taunt
 	elif action_type == "actor.taunt":
 		context_key = "combat_taunt"
@@ -523,7 +718,14 @@ func _select_bark(
 		"combat_last_stand", "combat_resilient",
 		"combat_fear_extreme", "combat_fear_rising", "combat_morale_falling"
 	]
-	if not _HIGH_PRIORITY_BARK.has(context_key):
+	# V2-PROG-012 Phase 11 playtest fix: combat_divergence is exempt from the
+	# routine _bark_next_t gate (see the Priority 5.5 comment above) but is not
+	# unconditional like Tier 1 — it gets its own, separate, shorter cooldown so
+	# the same Echo cannot voice divergence on two consecutive turns.
+	if context_key == "combat_divergence":
+		if t < int(_actor.get("_divergence_bark_next_t", 0)):
+			return
+	elif not _HIGH_PRIORITY_BARK.has(context_key):
 		if t < int(_actor.get("_bark_next_t", 0)):
 			return
 
@@ -547,6 +749,10 @@ func _select_bark(
 	if not line.is_empty() and line != ShoutBank._FALLBACK:
 		_bark_line = line
 		_actor["_bark_next_t"] = t + _compute_bark_cooldown()
+		# V2-PROG-012 Phase 11 playtest fix: divergence-specific cooldown —
+		# transient-only, same pattern as _bark_next_t (no new save field).
+		if context_key == "combat_divergence":
+			_actor["_divergence_bark_next_t"] = t + divergence_cooldown_ticks
 
 
 # Returns an ordinal rank for morale tiers (higher = better).

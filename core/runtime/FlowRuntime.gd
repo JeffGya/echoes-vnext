@@ -2546,6 +2546,37 @@ func _movement_all_cells(walkable: Dictionary) -> Array:
 	return cells
 
 
+## V2-PROG-012 Phase 0: merges data.maturity_expression into data.actor for BehaviorArbiter's
+## actor_cfg (data.actor wins on collision). Pure/stateless so MaturityExpressionTests can
+## call this exact function instead of re-implementing the merge inline — a copy-pasted
+## duplicate in the test would silently drift from production if this logic ever changes.
+##
+## Shallow duplicate() is correct here, not deep: BehaviorArbiter never writes to _cfg after
+## construction (verified — no `_cfg[...] =` assignment anywhere in BehaviorArbiter.gd or
+## ActorStateMachine.gd, only reads via _cfg_get()), and this merge only ever adds top-level
+## keys, never mutates a nested value in place. A shallow copy is therefore both correct and
+## far cheaper than deep-copying ~13KB of nested config (situational_muls alone serializes to
+## 5.5KB) every time this is called.
+static func _merge_actor_cfg(actor_data_cfg: Dictionary, maturity_cfg: Dictionary) -> Dictionary:
+	var merged: Dictionary = actor_data_cfg.duplicate()
+	for k: String in maturity_cfg.keys():
+		if not merged.has(k):
+			merged[k] = maturity_cfg[k]
+	return merged
+
+
+## Cached result of _merge_actor_cfg(). Config is immutable for the life of this FlowRuntime —
+## config_service.load_balance() runs exactly once, at boot() (grep-verified: no other
+## production call site reloads balance mid-run) — so _resolve_next_actor() would otherwise
+## rebuild the same merged dict on every single actor turn (6v6 x 20 rounds ≈ 240 rebuilds)
+## for a result that never changes.
+var _actor_cfg_merged_cache: Dictionary = {}
+func _get_actor_cfg_merged(actor_data_cfg: Dictionary, maturity_cfg: Dictionary) -> Dictionary:
+	if _actor_cfg_merged_cache.is_empty():
+		_actor_cfg_merged_cache = _merge_actor_cfg(actor_data_cfg, maturity_cfg)
+	return _actor_cfg_merged_cache
+
+
 ## COMBAT-SEQ: finds the next living actor from current_actor_index, resolves their turn,
 ## appends the result to last_round_results, emits a per-actor snapshot.
 ## If no living actor remains, calls _end_round() instead.
@@ -2571,7 +2602,14 @@ func _resolve_next_actor(t: int) -> void:
 	var bdata: Dictionary = balance.get("data", {})
 	var leadership_expr_cfg: Dictionary = bdata.get("maturity_expression", {})
 	var grid_cfg: Dictionary = bdata.get("grid", {})
-	var actor_cfg: Dictionary = bdata.get("actor", {})
+	# V2-PROG-012 Phase 0: BehaviorArbiter reads seven tuning keys that are authored in
+	# data.maturity_expression (identity_weight_scale, composure_dampen_scale,
+	# directive_interpretation_mul [V2-PROG-012 Phase 6: renamed from directive_band_mul],
+	# press_*, protect_ally_grounded_*). Without this merge they were unreachable and silently
+	# fell through to BehaviorArbiter._DEFAULTS, making the balance.json values decorative.
+	# data.actor wins on collision so existing behaviour is unchanged. See _merge_actor_cfg()
+	# / _get_actor_cfg_merged() above for the merge + per-run cache.
+	var actor_cfg: Dictionary = _get_actor_cfg_merged(bdata.get("actor", {}), leadership_expr_cfg)
 	var prog_cfg_block: Dictionary    = bdata.get("progression", {})
 	var birth_stats_block: Dictionary = bdata.get("summoning", {}).get("birth_stats", {})
 	var round: int = int(combat_state.get("round_counter", 0))
@@ -2902,10 +2940,17 @@ func _resolve_next_actor(t: int) -> void:
 				logger.info(t, "combat.guard_taken",
 					"%s guards" % actor.get("name", "?"), { "actor_id": actor.get("id", "") })
 		"actor.refuse":
+			# V2-PROG-012 Phase 4: threshold + expression_band + primary_reason were
+			# already computed by ActorStateMachine.advance_turn() two frames earlier
+			# (~:219-236) and written onto `actor` there — carry them into the log so
+			# a refusal shows evidence of WHY the threshold sat where it did.
 			logger.info(t, "combat.action_refused",
 				"%s refuses (fear %d)" % [actor.get("name", "?"), int(actor.get("fear", 0))], {
-				"actor_id": actor.get("id", ""),
-				"fear":     int(actor.get("fear", 0)),
+				"actor_id":        actor.get("id", ""),
+				"fear":            int(actor.get("fear", 0)),
+				"threshold":       int(actor.get("_fear_threshold", 0)),
+				"expression_band": str(actor.get("_expression_band", "")),
+				"primary_reason":  str(actor.get("_fear_threshold_reason", "")),
 			})
 			ectx.last_round_results.append({
 				"action_type": "actor.refuse",
@@ -4728,9 +4773,10 @@ func _compute_ally_recruit_offer_if_eligible(is_victory: bool, rounds_total: int
 	var _aro_contact_cfg: Dictionary = _aro_contact_cfg_v if _aro_contact_cfg_v is Dictionary else {}
 	var _aro_recruit_cfg_v: Variant = _aro_contact_cfg.get("recruitment", {})
 	var _aro_recruit_cfg: Dictionary = _aro_recruit_cfg_v if _aro_recruit_cfg_v is Dictionary else {}
-	# Override the recruitment block's copies of vector_to_virtue_primary / rival_archetype_pairs /
-	# good thresholds with their canonical sources (single source of truth) — see
-	# RecruitmentService.build_effective_cfg.
+	# Override the recruitment block's copies of rival_archetype_pairs / good thresholds
+	# with their canonical sources, and pull in virtue_vector_key from its single
+	# canonical location (data.contact — V2-PROG-012 Phase 9; no recruitment-block copy
+	# exists anymore) — see RecruitmentService.build_effective_cfg.
 	var _aro_effective_cfg: Dictionary = RecruitmentService.build_effective_cfg(_aro_bal_data)
 
 	var _aro_party_echoes: Array = _get_active_party_echoes()
@@ -5623,7 +5669,22 @@ func _get_weaving_rite_cfg() -> Dictionary:
 	var data_v: Variant = balance.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	var rite_v: Variant = data.get("weaving_rite", {})
-	return rite_v if rite_v is Dictionary else {}
+	var rite: Dictionary = (rite_v if rite_v is Dictionary else {}).duplicate(true)
+
+	# V2-PROG-012 Phase 9: overlay the canonical identity tables from data.contact —
+	# same "overlay canonical source onto a local cfg copy" pattern as
+	# RecruitmentService.build_effective_cfg. WeavingRiteService reads
+	# cfg.vector_virtue_composition and cfg.calling_to_virtue_primary; both live
+	# canonically under data.contact, not data.weaving_rite (see balance.json's
+	# "_comment_identity" on data.contact for why).
+	var contact_v: Variant = data.get("contact", {})
+	var contact: Dictionary = contact_v if contact_v is Dictionary else {}
+	var composition_v: Variant = contact.get("vector_virtue_composition", {})
+	rite["vector_virtue_composition"] = composition_v if composition_v is Dictionary else {}
+	var calling_primary_v: Variant = contact.get("calling_to_virtue_primary", {})
+	rite["calling_to_virtue_primary"] = calling_primary_v if calling_primary_v is Dictionary else {}
+
+	return rite
 
 
 # V2-CONTINUITY-001
@@ -7780,7 +7841,12 @@ func _start_contact_conversation(sit: Dictionary, sit_id: String, explore_map: D
 		_party_echoes, contact_work, _dir_id, contact_cfg_bal
 	)
 
-	# Set NPC opening line from burden_variant (authored in contact_responses.json)
+	# Set NPC opening line from burden_variant (authored in contact_responses.json), when available.
+	# NOTE: contact_responses.json is keyed by calling, not by contact role, and no entry
+	# currently defines a "burden_variants" map — this content has never been authored (see
+	# RealmGenerator._BURDEN_VARIANTS_BY_ROLE / npc_opening_lines.json for the real opening-line
+	# source). Guard the overwrite so an unauthored/empty lookup never blanks the populated
+	# npc_line that RealmGenerator already selected.
 	var _bv := str(contact_work.get("burden_variant", ""))
 	var _bv_role_data_v: Variant = response_data.get(str(contact_work.get("role", "")), {})
 	var _bv_role_data: Dictionary = _bv_role_data_v if _bv_role_data_v is Dictionary else {}
@@ -7788,7 +7854,9 @@ func _start_contact_conversation(sit: Dictionary, sit_id: String, explore_map: D
 	var _bv_variants: Dictionary = _bv_variants_v if _bv_variants_v is Dictionary else {}
 	var _bv_variant_v: Variant = _bv_variants.get(_bv, {})
 	var _bv_variant: Dictionary = _bv_variant_v if _bv_variant_v is Dictionary else {}
-	contact_work["npc_line"] = str(_bv_variant.get("opening", ""))
+	var _bv_opening := str(_bv_variant.get("opening", ""))
+	if not _bv_opening.is_empty():
+		contact_work["npc_line"] = _bv_opening
 
 	# Auto-generate responses if party ≤ 3
 	var contact_responses: Array = []
@@ -8208,17 +8276,43 @@ func _handle_stage_speak_response(action: Dictionary, t: int) -> void:
 
 	# Storyweight partial step for speaker (if score >= threshold)
 	var sw_threshold := float(contact_cfg.get("storyweight_speak_threshold", 0.5))
+	# Reset every turn so a losing turn doesn't leave a stale gain/name on the contact
+	# from a prior winning turn (this drives the player-facing confirmation — see below).
+	contact["last_turn_storyweight_gain"] = 0
+	contact["last_turn_speaker_name"] = ""
 	if turn_score >= sw_threshold:
 		for echo_v in roster:
 			if not (echo_v is Dictionary):
 				continue
 			var echo: Dictionary = echo_v
 			if str(echo.get("id", "")) == speaking_id:
-				var current_sw := int(echo.get("storyweight", echo.get("xp_total", 0)))
-				var sw_gain    := int(contact_cfg.get("storyweight_speak_partial_step", 0))
+				var sw_gain_cfg := float(contact_cfg.get("storyweight_speak_partial_step", 0))
+				var sw_gain := int(round(sw_gain_cfg))
+				if sw_gain_cfg > 0.0 and sw_gain == 0:
+					logger.warn(t, "conversation.storyweight_gain.rounded_to_zero",
+						"storyweight_speak_partial_step is configured non-zero but rounds to 0 storyweight; no gain applied",
+						{ "configured_value": sw_gain_cfg, "speaking_id": speaking_id })
 				if sw_gain > 0:
-					echo["storyweight"] = current_sw + sw_gain
-					echo["xp_total"]    = current_sw + sw_gain
+					var xp_before := int(echo.get("xp_total", 0))
+					var story_before := int(echo.get("storyweight", xp_before))
+					var xp_after := xp_before + sw_gain
+					var story_after := story_before + sw_gain
+					echo["xp_total"] = xp_after
+					echo["storyweight"] = story_after
+					contact["last_turn_storyweight_gain"] = sw_gain
+					contact["last_turn_speaker_name"] = str(echo.get("name", ""))
+					logger.info(t, "conversation.storyweight_gain.awarded",
+						"Conversation turn won; speaker gained Storyweight", {
+							"stage_id":    flow_ctx.stage_id,
+							"echo_id":     speaking_id,
+							"echo_name":   str(echo.get("name", "")),
+							"turn_score":  turn_score,
+							"threshold":   sw_threshold,
+							"threshold_cleared": true,
+							"gain":        sw_gain,
+							"storyweight": story_after,
+							"xp_total":    xp_after,
+						})
 				break
 
 	# S14a: conversation-quality accumulator — read by S14 recruit formula's conversation

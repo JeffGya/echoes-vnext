@@ -50,6 +50,9 @@
 | 41 | autonomy-seam-partially-exists | directive_band_mul is already a live autonomy axis; what is missing is the consequence/legibility layer | 2026-07-29 |
 | 42 | party-ladder-not-response-ladder | The hidden 4-band party ladder and the 5 event-local responses are different axes, not a mapping | 2026-07-29 |
 | 43 | prog012-absorbs-parked-notes | The two calling-virtue corrections and the Storyweight truncation bug all ship inside PROG-012 | 2026-07-29 |
+| 44 | storyweight-speak-truncated | Conversation Storyweight was `int(0.2)` → `0`, silently never awarded | 2026-07-29 |
+| 45 | prog012-refusal-unreachable-measured | 0 refusals in 439 measured rounds across all bands — the Phase 7 band+offset fix is correct but its effect is unobservable until the fear economy is rebalanced | 2026-08-09 |
+| 46 | prog012-divergence-single-directive-measured | Divergence fires almost only under directive.scout_carefully; seek_signs shows contest on 4 of 535 turns — a directive-content property, not a detector defect | 2026-08-09 |
 
 ---
 
@@ -449,5 +452,23 @@
 **A:** Because it awards **exactly zero**. `data.contact.storyweight_speak_partial_step` is `0.2` (`data/balance.json:3132`), but the consumer at `core/runtime/FlowRuntime.gd:8218` wraps the award in `int(...)`, which truncates `0.2` → `0`. So conversation Storyweight has **never** been granted. The original review note ("+0.2 may be too small to register as motivation") understated it. For comparison, combat awards kill 25 / stage clear 40 / realm 100 against `level_thresholds` of 100 per Step (`data/balance.json:1402-1404`). Ships inside PROG-012 per [[prog012-absorbs-parked-notes]].
 **Source:** codebase research, 2026-07-29
 **Date:** 2026-07-29
+
+---
+
+### 45. prog012-refusal-unreachable-measured
+
+**Q:** Does the Phase 7 Absolute Fear Rule band+offset fix (see [[prog012-absorbs-parked-notes]]) have an observable effect in real play?
+**A:** **Not yet — refusal is unreachable in natural play.** Measured across all expression bands, fresh and veteran Echoes, and tripled enemy counts (439 rounds total): **0 refusals**. Fear peaks around **27** against band+offset thresholds of **60–90**, because passive/active fear recovery (`fear_self_recovery`, `sanctum_fear_recovery_bonus`) outpaces every accumulation path measured. The Phase 7 fix (`absolute_fear_offset` composing with the band, instead of replacing it) is structurally correct and passes falsifiable tests, but no amount of threshold tuning will make it visible until the fear economy itself is rebalanced to let fear climb higher in a real encounter. **Do not tune refusal thresholds expecting a visible effect** — that lever is not the bottleneck.
+**Source:** measured probe, V2-PROG-012 Phase 10, 2026-08-09
+**Date:** 2026-08-09
+
+---
+
+### 46. prog012-divergence-single-directive-measured
+
+**Q:** Does divergence detection fire meaningfully across all directives, or only under one?
+**A:** **Effectively single-directive today.** Under `directive.seek_signs`, only **4 of 535** scored Echo turns showed any contest (max `contest_ratio` 0.0179, well under `min_contest_ratio` 0.28) — not because the detector is structurally incapable (a throwaway probe found a real, non-flat `directive_bonus` spread for `seek_signs`, comfortably clearing the threshold), but because that directive's resolved preference (`actor.move`, driven by `clue_seeking_priority`/`reporting_priority`) already closely matches what an Echo's own base identity favours in combat — a genuine identity-vs-directive conflict rarely arises naturally under this directive's content. `directive.scout_carefully` is where divergence is actually observable (recalibrated to `min_contest_ratio: 0.28`, ~0.73 events/encounter across 15 measured encounters). Coverage is directive-agnostic by construction (`tests/DivergenceDetectorTests.gd` enumerates `DirectiveService.get_registry()` at runtime), so this generalises automatically to any directive added later — but a future directive whose content resembles `seek_signs` (i.e. whose preferred action already matches unprompted Echo behavior) will show the same near-silence, and that is expected, not a bug.
+**Source:** measured probe, V2-PROG-012 Phase 6/10, 2026-08-09
+**Date:** 2026-08-09
 
 ---
