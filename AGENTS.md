@@ -111,6 +111,7 @@ CONVENTIONS.md    Full architecture contracts
 - `core/` has zero UI node refs or Godot scene tree calls
 - `ui/` never calls `dispatch()` directly; never reads `FlowContext`, `SaveService`, or any sim internal
 - `data/` is read-only; schema changes are additive only (never remove or rename existing fields)
+  - **Exception (V2-PROG-012 precedent):** a rename/removal is permitted when the old name is actively misleading or its value was unreachable (silently falling through to a code default), provided **every** consumer is migrated in the same change and no alias is left behind. V2-PROG-012 renamed four keys under this exception — `presence_dampen_scale` → `composure_dampen_scale`, `directive_band_mul` → `directive_interpretation_mul`, per-calling `absolute_fear_threshold` → `absolute_fear_offset`, `vector_to_virtue_primary` → `virtue_vector_key` — after auditing every `core/`, `ui/`, `tests/`, and `docs/` reference. Default to the additive-only rule; reach for this exception only with the same full-repo audit, and say so in the story writeup.
 
 ### Snapshot Shape — always enforce
 ```gdscript
