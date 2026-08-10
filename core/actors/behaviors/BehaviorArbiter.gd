@@ -125,10 +125,20 @@ const _DEFAULTS := {
 	"threat_threshold":      0.50,  # 0.50 = ally must be below 50% HP to qualify as threatened
 	"guard_range":           1,     # enemy must be adjacent for guard to be a candidate (melee-only MVP)
 	# V2-PROG-006: expression-band-based scoring defaults
-	# V2-PROG-010: identity weight scaling + composure + directive band tables
-	"identity_weight_scale":  { "trait": 0.6, "vector": 0.6 },
-	"presence_dampen_scale":  { "value": 0.4 },
-	"directive_band_mul":     { "nascent": 1.30, "forming": 1.10, "grounded": 0.90, "whole": 0.75 },
+	# V2-PROG-010: identity weight scaling + composure tables
+	# V2-PROG-012 Phase 6 Item 2: identity_weight_scale and directive_interpretation_mul
+	# are the two halves of ONE budgeted axis (interpretation_width, driven by
+	# judgment) — see data.maturity_expression's matching _comment for the swing
+	# budget these two keys are jointly checked against (config-integrity test:
+	# tests/BehaviorArbiterTests.gd's arbiter/interpretation_swing_within_declared_budget).
+	# {trait: 0.35, vector: 0.35} against directive_interpretation_mul.low=0.75 gives
+	# (1.0+0.35)/0.75 = 1.80 <= interpretation_swing_max (2.0). directive_band_mul
+	# (the old per-band table) is REMOVED, not kept dead — see _directive_bonus()'s
+	# doc comment.
+	"identity_weight_scale":  { "trait": 0.35, "vector": 0.35 },
+	"composure_dampen_scale": { "value": 0.4 },  # V2-PROG-012 Phase 2 (renamed from presence_dampen_scale)
+	"directive_interpretation_mul": { "low": 0.75, "high": 1.30 },
+	"interpretation_swing_max": { "value": 2.0 },
 
 	"wound_chase_mul":              15.0,  # Forming+ finish-wounded score bonus multiplier
 	"surrounded_move_penalty":     -18.0, # Forming+ penalty for move into surrounded position
@@ -285,6 +295,21 @@ func select_intent(context: Dictionary) -> Dictionary:
 	# V2-PROG-010: rank-strength and presence_strength for identity scaling + composure
 	var presence_strength: float = float(context.get("presence_strength", 0.1))
 	var rank_strength: float     = float(context.get("rank_strength", 0.0))
+	# V2-PROG-012 Phase 2: composure — the actual fear-dampening driver (see _score()).
+	var composure: float         = float(context.get("composure", 0.4))
+	# V2-PROG-012 Phase 6 (DEFECT 2 fix): judgment — drives interpretation_width, the
+	# single continuous axis both identity weighting and directive literalism now key
+	# on (see _score() and _directive_bonus()). Threaded exactly as composure was in
+	# Phase 2. Default 0.3 mirrors composure's default derivation above: under the
+	# balance.json judgment weights (rank_strength_weight 0.25 + storyweight_maturity_weight
+	# 0.2 + identity_coherence_weight 0.2 at ~0.5 each, no calling accent confirmed, no
+	# bond support, no fear spike ≈ 0.325, rounded to 0.3) — a "mid-band" fallback, not
+	# the floor (0.0, most literal) or the ceiling (1.0, most self-directed).
+	var judgment: float          = float(context.get("judgment", 0.3))
+	# V2-PROG-012 Phase 6: the single continuous axis — see _score()'s doc comment
+	# on why this replaces both rank_strength (identity) and expression_band
+	# (directive) as the shared driver.
+	var interpretation_width: float = clampf(judgment, 0.0, 1.0)
 
 	# Build board summary once — passed to _score() for every candidate to avoid re-computation.
 	var board_summary: Dictionary = _build_board_summary(actor, all_actors, context.get("board_cfg", {}), expression_band, context.get("resolution_mode", ""))
@@ -294,7 +319,7 @@ func select_intent(context: Dictionary) -> Dictionary:
 	# Score each candidate, then sort by the same four-key order used by the
 	# movement-aware selector: score, action type, target id, target cell.
 	for c: Dictionary in candidates:
-		c["_score"] = _score(c["action_type"], actor, directive, board_summary, expression_band, calling_behavior, c, presence_strength, rank_strength)
+		c["_score"] = _score(c["action_type"], actor, directive, board_summary, expression_band, calling_behavior, c, presence_strength, rank_strength, composure, judgment)
 
 	# VOW-001: apply vow bias additively after base scoring.
 	# Vow bias is always additive, never overrides. Enemies are unaffected (faction != "echo").
@@ -342,6 +367,80 @@ func select_intent(context: Dictionary) -> Dictionary:
 		return _candidate_target_key(a) < _candidate_target_key(b)
 	)
 
+	# V2-PROG-012 Phase 4: locate D, the Directive-preferred candidate — the one
+	# maximizing _directive_bonus() for its action_type. _directive_bonus() depends
+	# only on action_type (given a fixed directive/band/calling_behavior this turn),
+	# so candidates sharing an action_type share the identical value; caching by
+	# action_type avoids redundant recomputation. Tie-break: `candidates` is already
+	# sorted in the exact four-key order used above (score, action_type, target_id,
+	# _candidate_target_key), so scanning forward and keeping strict `>` gives the
+	# same tie-break the winner sort would give — no second sort needed.
+	# V2-PROG-012 Phase 4 fix: also track `decision_scale` — the spread of
+	# self_score (= _score - directive_bonus, the Echo's own judgment with the
+	# Directive's voice subtracted out) across every regularly-scored candidate.
+	# This is the denominator DivergenceDetector.gd uses to turn `directive_pull`
+	# into a proportion (contest_ratio) instead of a raw number dominated by how
+	# much better acting is than idling. Hard-override sentinels (actor.purify_shrine's
+	# 9999.0) ARE already present in `candidates` by this point (appended before the
+	# sort above) — excluded here for the same reason the winner-side probe below
+	# skips them entirely: a mechanical certainty isn't a tactical option she weighed,
+	# and including it would blow the spread out to a meaningless ~9999.
+	# V2-PROG-012 Phase 4 fix — Part B (fall-through, not suppression): track
+	# `_repr_by_type`, the highest-scoring candidate seen for each action_type
+	# (`candidates` is already score-sorted, so the FIRST candidate of a given
+	# type encountered here is that type's best). Below, this feeds a full
+	# directive_bonus-descending ranking (`_rank_directive_candidates()`), not
+	# just a single top D — measurement showed the top D is
+	# directive.scout_carefully's actor.idle on ~100% of turns (idle carries 6
+	# directive_action_muls keys, more than any other action), so a detector
+	# that SUPPRESSES whenever D is actor.idle (per this story's Part B, naive
+	# reading) went silent for the entire encounter — a dormant seam, explicitly
+	# called out as a failure condition in the story brief. DivergenceDetector.gd
+	# instead falls through this ranked list to the next-best NON-ignored
+	# action_type; BehaviorArbiter still doesn't know or care what "ignored"
+	# means (that policy stays in DivergenceDetector.gd) — it just reports the
+	# full ranking. (There is deliberately no separate "single top D" variable
+	# here — an earlier draft kept one alongside the ranking and it went dead,
+	# unread by anything once the ranking replaced it; see the story brief on
+	# not shipping config or variables that only look live.)
+	# V2-PROG-012 Phase 5 fix: divergence detection only makes sense for an actor
+	# that actually receives the Directive. Gate is faction == "echo", NOT
+	# actor_type == "echo" — V2-STAGE-004 temporary allies are built by
+	# ContactActorBuilder.gd via EnemyActor.from_definition (which always sets
+	# actor_type "enemy") with faction overridden to "echo"; actor_type would
+	# wrongly exclude them from a party they fight in and are subject to the
+	# Directive alongside. True enemies (faction "enemy") never receive the
+	# Directive at all — measured production run: 7 of 8 actor.divergence events
+	# were logged for an enemy actor against directive.scout_carefully, which is
+	# meaningless (an enemy has no Directive to diverge from) and — because Phase
+	# 4's min_contest_ratio=0.35 was calibrated against a contest_ratio sample
+	# drawn from ALL actors, not Echoes only — invalidated that calibration (see
+	# data.maturity_expression.divergence._comment's re-measurement note). Same
+	# pattern this file already uses for VOW-001/BOND-002 bias above. Gated here,
+	# before the per-candidate accumulation loop, so non-echo actors skip the
+	# whole probe — not just the eventual divergence log — at zero extra cost.
+	var _is_echo_faction: bool = str(actor.get("faction", "")) == "echo"
+	var _dbonus_by_type: Dictionary = {}
+	var _repr_by_type: Dictionary = {}
+	var _decision_scale: float = 0.0
+	if _is_echo_faction:
+		var _self_score_min: float = INF
+		var _self_score_max: float = -INF
+		for c: Dictionary in candidates:
+			var _atype: String = str(c.get("action_type", ""))
+			if not _dbonus_by_type.has(_atype):
+				_dbonus_by_type[_atype] = _directive_bonus(_atype, directive, interpretation_width, calling_behavior)
+				_repr_by_type[_atype] = c
+			var _cbonus: float = float(_dbonus_by_type[_atype])
+			var _cscore: float = float(c.get("_score", 0.0))
+			if _cscore < 9999.0:
+				var _cself_score: float = _cscore - _cbonus
+				if _cself_score < _self_score_min:
+					_self_score_min = _cself_score
+				if _cself_score > _self_score_max:
+					_self_score_max = _cself_score
+		_decision_scale = (_self_score_max - _self_score_min) if _self_score_max >= _self_score_min else 0.0
+
 	var winner: Dictionary = candidates[0].duplicate()
 	winner.erase("_score")
 
@@ -357,6 +456,46 @@ func select_intent(context: Dictionary) -> Dictionary:
 	var winner_a_row: Dictionary  = _cfg_get("archetype_action_muls").get(str(winner.get("action_type", "")), {})
 	winner["archetype_birth"]    = winner_arch
 	winner["archetype_modifier"] = int(winner_a_row.get(winner_arch, 0))
+
+	# V2-PROG-012 Phase 4: expose divergence-detection inputs on the winner. This
+	# is pure REPORTING — BehaviorArbiter never decides what counts as divergence
+	# (that policy lives in DivergenceDetector.gd, called by ActorStateMachine).
+	# Skipped when the winner is a hard score override (e.g. actor.purify_shrine's
+	# 9999.0 sentinel at ~:333): that is a mechanical certainty, not the Echo's
+	# judgment outvoting the Directive, so it is not a candidate for divergence.
+	var _winner_score: float = float(candidates[0].get("_score", 0.0))
+	if _is_echo_faction and _winner_score < 9999.0:
+		var _w_action_type: String = str(candidates[0].get("action_type", ""))
+		var _w_components: Dictionary = {}
+		# Recompute is deterministic/pure — identical inputs to the call already made
+		# in the scoring loop above, so this reproduces `_winner_score` exactly while
+		# also capturing the term breakdown _score() didn't have anywhere to put
+		# the first time (see DivergenceDetectorTests for the no-score-drift pin).
+		_score(_w_action_type, actor, directive, board_summary, expression_band, calling_behavior,
+			candidates[0], presence_strength, rank_strength, composure, judgment, _w_components)
+		winner["_divergence_probe"] = {
+			"chosen": {
+				"action_type":             _w_action_type,
+				"target_id":               str(candidates[0].get("target_id", "")),
+				"score":                   _winner_score,
+				"directive_bonus":         float(_dbonus_by_type.get(_w_action_type, 0.0)),
+				# V2-PROG-012 Phase 6: interpretation_width=0.0 is the new "most literal"
+				# floor (was band string "nascent" — see _directive_bonus()'s doc comment).
+				"directive_bonus_nascent": _directive_bonus(_w_action_type, directive, 0.0, calling_behavior),
+				"components":              _w_components,
+			},
+			# V2-PROG-012 Phase 4 fix: the FULL directive_bonus-descending ranking
+			# (not just the single top D) — see `_repr_by_type` above for why.
+			# DivergenceDetector.gd falls through this list past any ignored
+			# action_type (data.maturity_expression.divergence.divergence_ignored_directive_actions)
+			# to find the effective directive_preferred candidate.
+			"directive_candidates": _rank_directive_candidates(
+				_dbonus_by_type, _repr_by_type, directive, calling_behavior
+			),
+			# V2-PROG-012 Phase 4 fix: see `_decision_scale` above — DivergenceDetector.gd
+			# divides `directive_pull` by this to get a proportion instead of a raw number.
+			"decision_scale": _decision_scale,
+		}
 
 	return winner
 
@@ -383,6 +522,12 @@ func select_movement_intent(
 	var calling_behavior: Dictionary = context.get("calling_behavior", {}) as Dictionary
 	var presence_strength: float = float(context.get("presence_strength", 0.1))
 	var rank_strength: float = float(context.get("rank_strength", 0.0))
+	# V2-PROG-012 Phase 2: composure — the actual fear-dampening driver (see _score()).
+	var composure: float = float(context.get("composure", 0.4))
+	# V2-PROG-012 Phase 6: judgment — see select_intent()'s equivalent block for the
+	# default derivation and why this drives interpretation_width.
+	var judgment: float = float(context.get("judgment", 0.3))
+	var interpretation_width: float = clampf(judgment, 0.0, 1.0)
 	var board_summary: Dictionary = _build_board_summary(
 		actor,
 		all_actors,
@@ -442,7 +587,9 @@ func select_movement_intent(
 			calling_behavior,
 			candidate,
 			presence_strength,
-			rank_strength
+			rank_strength,
+			composure,
+			judgment
 		)
 		if bool(candidate.get("_movement_route", false)):
 			score += _spatial_utility(
@@ -496,6 +643,41 @@ func select_movement_intent(
 		return str(left["_movement_option_id"]) < str(right["_movement_option_id"])
 	)
 
+	# V2-PROG-012 Phase 4 fix: decision_scale + the directive_bonus-descending
+	# ranking — same reasoning as select_intent()'s equivalent block above (see
+	# `_rank_directive_candidates()` and its callers there for why there is no
+	# separate "single top D" variable). `c["_score"]` here already includes
+	# spatial_utility (route candidates) — that IS part of "how much the options
+	# actually differed to her", so no special-casing is needed beyond excluding
+	# the 9999.0 hard purifier override (set on candidates just above, before
+	# this loop).
+	# V2-PROG-012 Phase 5 fix: same faction == "echo" gate as select_intent()'s
+	# equivalent block above — see that comment for the temporary-ally
+	# (actor_type "enemy", faction "echo") reasoning and the miscalibration this
+	# fixes. Gated before the per-candidate accumulation loop so non-echo actors
+	# skip the whole probe at zero extra cost.
+	var _is_echo_faction: bool = str(actor.get("faction", "")) == "echo"
+	var _dbonus_by_type: Dictionary = {}
+	var _repr_by_type: Dictionary = {}
+	var _decision_scale: float = 0.0
+	if _is_echo_faction:
+		var _self_score_min: float = INF
+		var _self_score_max: float = -INF
+		for c: Dictionary in candidates:
+			var _atype: String = str((c["_movement_plan"] as Dictionary)["type"])
+			if not _dbonus_by_type.has(_atype):
+				_dbonus_by_type[_atype] = _directive_bonus(_atype, directive, interpretation_width, calling_behavior)
+				_repr_by_type[_atype] = c
+			var _cbonus: float = float(_dbonus_by_type[_atype])
+			var _cscore: float = float(c.get("_score", 0.0))
+			if _cscore < 9999.0:
+				var _cself_score: float = _cscore - _cbonus
+				if _cself_score < _self_score_min:
+					_self_score_min = _cself_score
+				if _cself_score > _self_score_max:
+					_self_score_max = _cself_score
+		_decision_scale = (_self_score_max - _self_score_min) if _self_score_max >= _self_score_min else 0.0
+
 	var winner: Dictionary = candidates[0]
 	var intent: Dictionary = MovementIntentContract.build(
 		str(movement_context["mover_id"]),
@@ -517,7 +699,44 @@ func select_movement_intent(
 			"invalid_selected_intent.%s" % str(intent_result["reason"]),
 			str(intent_result["field"])
 		)
-	return {"valid": true, "intent": intent, "reason": "", "field": ""}
+
+	# V2-PROG-012 Phase 4: expose divergence-detection inputs alongside (NOT inside)
+	# `intent` — MovementIntentContract.validate() enforces an EXACT field set on
+	# `intent`, so any extra key attached there would fail validation and discard
+	# the whole board (see select_movement_intent()'s doc comment on that hazard
+	# class elsewhere in this file). `winner["_score"]` here already includes
+	# spatial_utility/purifier-override adjustments applied above — that IS the
+	# value this function's own winner-sort compared, so it is the correct `score`
+	# to hand the detector. Skipped for hard score overrides (9999.0 sentinel).
+	var _divergence_probe: Dictionary = {}
+	var _winner_score: float = float(winner.get("_score", 0.0))
+	if _is_echo_faction and _winner_score < 9999.0:
+		var _w_plan: Dictionary = winner["_movement_plan"] as Dictionary
+		var _w_action_type: String = str(_w_plan["type"])
+		var _w_components: Dictionary = {}
+		_score(_w_action_type, actor, directive, board_summary, expression_band, calling_behavior,
+			winner, presence_strength, rank_strength, composure, judgment, _w_components)
+		_divergence_probe = {
+			"chosen": {
+				"action_type":             _w_action_type,
+				"target_id":               str(winner.get("target_id", "")),
+				"score":                   _winner_score,
+				"directive_bonus":         float(_dbonus_by_type.get(_w_action_type, 0.0)),
+				# V2-PROG-012 Phase 6: interpretation_width=0.0 is the new "most literal"
+				# floor (was band string "nascent" — see _directive_bonus()'s doc comment).
+				"directive_bonus_nascent": _directive_bonus(_w_action_type, directive, 0.0, calling_behavior),
+				"components":              _w_components,
+			},
+			# V2-PROG-012 Phase 4 fix: see select_intent()'s equivalent block for why
+			# this is the full ranking, not just the single top D.
+			"directive_candidates": _rank_directive_candidates(
+				_dbonus_by_type, _repr_by_type, directive, calling_behavior
+			),
+			# V2-PROG-012 Phase 4 fix: see `_decision_scale` above.
+			"decision_scale": _decision_scale,
+		}
+
+	return {"valid": true, "intent": intent, "reason": "", "field": "", "_divergence_probe": _divergence_probe}
 
 
 func _validate_movement_inputs(
@@ -535,7 +754,7 @@ func _validate_movement_inputs(
 		return _movement_failure("invalid_directive", "context.directive")
 	if not context.get("calling_behavior", {}) is Dictionary:
 		return _movement_failure("invalid_calling_behavior", "context.calling_behavior")
-	for numeric_field: String in ["presence_strength", "rank_strength"]:
+	for numeric_field: String in ["presence_strength", "rank_strength", "composure", "judgment"]:
 		if context.has(numeric_field):
 			var numeric_value: Variant = context[numeric_field]
 			if not (numeric_value is int or numeric_value is float) or not is_finite(float(numeric_value)):
@@ -1621,7 +1840,32 @@ func _score(
 	calling_behavior: Dictionary = {},
 	candidate: Dictionary = {},
 	presence_strength: float = 0.1,  # V2-PROG-010
-	rank_strength: float = 0.0       # V2-PROG-010
+	# V2-PROG-010; DEAD as of V2-PROG-012 Phase 6 — identity weight scaling below now
+	# reads `judgment` (via interpretation_width), not rank_strength (see DEFECT 2:
+	# rank_strength and expression_band were two independently-authored levers that
+	# both derived from raw rank alone, silently doubling the identity-vs-directive
+	# swing). Kept in the signature for positional-call compatibility with existing
+	# callers (same retirement pattern as presence_strength above, which BehaviorArbiter
+	# has never read in _score()'s body).
+	rank_strength: float = 0.0,
+	# V2-PROG-012 Phase 2: default approximates a mid-band actor under the
+	# balance.json composure weights (rank_strength_weight 0.36 + trait_balance_weight
+	# 0.37 at ~0.5 each, no vow, no fear spike ≈ 0.365, rounded to 0.4) — an omitted
+	# argument degrades to "average composure" rather than the floor (0.0, full
+	# dampen) or the ceiling (1.0, no dampen).
+	composure: float = 0.4,
+	# V2-PROG-012 Phase 6 (DEFECT 2 fix): judgment — the sole driver of
+	# interpretation_width, computed just below. See select_intent()'s doc comment
+	# on this parameter for the default's derivation; threaded identically here.
+	judgment: float = 0.3,
+	# V2-PROG-012 Phase 4: optional out-param — when a non-null Dictionary is
+	# passed, this call fills it with the raw per-term breakdown (base, trait_bonus,
+	# vector_bonus, archetype_bonus, morale_bonus, fear_factor, calling_mul,
+	# directive_bonus, situational_bonus) used to compute the returned float.
+	# Purely additive reporting: does not alter the returned score. Consumed by
+	# DivergenceDetector (via select_intent()/select_movement_intent()) to name the
+	# dominant term as `primary_reason` — never read by anything inside this file.
+	out_components: Dictionary = {}
 ) -> float:
 	var _confirmed_calling: String = str(actor.get("calling", ""))
 	var calling_origin: String = _confirmed_calling \
@@ -1660,11 +1904,26 @@ func _score(
 	for vector_key: String in v_row:
 		vector_bonus += float(vectors.get(vector_key, 0)) * float(v_row[vector_key])
 
-	# V2-PROG-010: identity weight scaling — trait and vector contributions amplify with rank.
-	# At rank 1 (rank_strength=0.0): scale=1.0x (baseline). At rank 9: scale=1.0+identity_weight_scale.
+	# V2-PROG-012 Phase 6 (DEFECT 2 fix): interpretation_width is the SINGLE continuous
+	# axis both identity weighting (here) and directive literalism (_directive_bonus(),
+	# Section 6 below) now key on — derived from `judgment` (Phase 1, continuous 0-1,
+	# GDD:1360's "how strongly the Echo can hold, interpret, and assert self under
+	# pressure"). Previously these were two independently-authored levers that BOTH
+	# derived from raw rank (rank_strength here, expression_band in Section 6) with no
+	# knowledge of each other — since expression_band is itself rank-derived
+	# (band_by_standing), the two moved in lockstep and silently doubled the
+	# identity-vs-directive swing (~2.8x from Rank 1 to Whole; see data.maturity_expression
+	# identity_weight_scale/directive_interpretation_mul _comment for the budget this
+	# now respects). Keying on judgment instead of the band string also fixes the
+	# rank 6-9 saturation: band_by_standing pins everything above rank 5 to "whole"
+	# while rank_strength kept climbing to rank 9 — judgment has no such plateau.
+	var interpretation_width: float = clampf(judgment, 0.0, 1.0)
+	# V2-PROG-010: identity weight scaling — trait and vector contributions amplify
+	# with interpretation_width. At interpretation_width=0.0: scale=1.0x (baseline).
+	# At interpretation_width=1.0: scale=1.0+identity_weight_scale.
 	var id_scale: Dictionary = _cfg_get("identity_weight_scale")
-	trait_bonus  *= 1.0 + rank_strength * float(id_scale.get("trait",  0.6))
-	vector_bonus *= 1.0 + rank_strength * float(id_scale.get("vector", 0.6))
+	trait_bonus  *= 1.0 + interpretation_width * float(id_scale.get("trait",  0.6))
+	vector_bonus *= 1.0 + interpretation_width * float(id_scale.get("vector", 0.6))
 
 	# 3b. Archetype bonus — flat constant lookup by archetype_birth string (not a continuous score).
 	#     Encodes personality combat tendency (combat_bias): aggressive→melee/move, steadfast→guard, etc.
@@ -1674,13 +1933,15 @@ func _score(
 	var archetype_bonus: float  = float(a_row.get(archetype, 0.0))
 
 	# 4. Fear factor: dampens active intents; passive intents (actor.idle) are unaffected.
-	# V2-PROG-010: composure — fear disrupts scoring less at higher ranks (lower effective dampen).
+	# V2-PROG-012 Phase 2: composure — fear disrupts scoring less for more composed
+	# Echoes (lower effective dampen). Composure blends rank, vow state, trait balance,
+	# and both fear dimensions (GDD:1369) — it is the real driver, not raw rank alone.
 	var passive_actions: Array = _cfg_get("fear_passive_actions")
 	var fear_factor: float     = 1.0
 	if action_type not in passive_actions:
 		var dampen: float   = float(_cfg_get("fear_active_dampen"))
-		var d_scale: float  = float((_cfg_get("presence_dampen_scale") as Dictionary).get("value", 0.4))
-		var eff_dampen: float = dampen * (1.0 - rank_strength * d_scale)
+		var d_scale: float  = float((_cfg_get("composure_dampen_scale") as Dictionary).get("value", 0.4))
+		var eff_dampen: float = dampen * (1.0 - composure * d_scale)
 		fear_factor = clamp(1.0 - (fear / 100.0) * eff_dampen, 0.0, 1.0)
 
 	# 5. Morale bonus — flat integer modifier based on tier; steady tier = 0 (neutral baseline).
@@ -1700,8 +1961,10 @@ func _score(
 		base += float(mini(anchor_rounds * 8, 24))
 
 	# 6. Directive bonus — generic loop over intent_weights (semantic keys).
-	# V2-PROG-010: pass expression_band + calling_behavior for mul modulation.
-	var directive_bonus: float = _directive_bonus(action_type, directive, expression_band, calling_behavior)
+	# V2-PROG-012 Phase 6: pass interpretation_width (not expression_band — see the
+	# doc comment above the identity-weight-scaling block) + calling_behavior for mul
+	# modulation.
+	var directive_bonus: float = _directive_bonus(action_type, directive, interpretation_width, calling_behavior)
 
 	# V2-PROG-006: calling-aware score multipliers (Grounded+ only)
 	var calling_mul: float = 1.0
@@ -1763,14 +2026,48 @@ func _score(
 				if action_type == "protect_ally":
 					base += fear * 0.1
 
-	return (base + trait_bonus + vector_bonus + archetype_bonus + morale_bonus) * fear_factor * calling_mul + directive_bonus + _situational_bonus(action_type, board_summary)
+	var situational_bonus: float = _situational_bonus(action_type, board_summary)
+
+	# V2-PROG-012 Phase 4: directive_bonus is a FLAT ADDITIVE term OUTSIDE the
+	# fear/calling bracket — this is what makes the Directive's entire contribution
+	# to this candidate's score algebraically separable at zero cost:
+	# self_score(c) = c._score - directive_bonus(c) recovers "the Echo's own
+	# judgment with the Directive's voice removed" by simple subtraction, with no
+	# re-scoring needed. DivergenceDetector.gd depends on this exact placement.
+	# Do NOT "tidy" directive_bonus inside the bracket — that would destroy the
+	# separability this phase's detection (V2-PROG-012 Phase 4) is built on.
+	out_components["base"]              = base
+	out_components["trait_bonus"]       = trait_bonus
+	out_components["vector_bonus"]      = vector_bonus
+	out_components["archetype_bonus"]   = archetype_bonus
+	out_components["morale_bonus"]      = morale_bonus
+	out_components["fear_factor"]       = fear_factor
+	out_components["calling_mul"]       = calling_mul
+	out_components["directive_bonus"]   = directive_bonus
+	out_components["situational_bonus"] = situational_bonus
+
+	return (base + trait_bonus + vector_bonus + archetype_bonus + morale_bonus) * fear_factor * calling_mul + directive_bonus + situational_bonus
 
 
 ## Maps directive semantic intent_weights keys → action bonus.
 ## Uses directive_action_muls translation table (balance.json) so new directive keys
 ## and new action types can be added without touching this function.
 ## V2-PROG-010: expression_band and calling_behavior modulate the effective bonus.
-func _directive_bonus(action_type: String, directive: Dictionary, expression_band: String = "nascent", calling_behavior: Dictionary = {}) -> float:
+## V2-PROG-012 Phase 6 (DEFECT 2 fix): `interpretation_width` (0.0-1.0, derived from
+## `judgment` — see _score()'s doc comment on the identity-weight-scaling block)
+## replaces `expression_band` as the directive-literalism driver. At
+## interpretation_width=0.0 (lowest judgment) the directive is followed most
+## literally (dir_mul_high); at 1.0 (highest judgment) it is weighted least
+## (dir_mul_low) — a straight lerp between the two bounds, preserving the exact
+## endpoints the old per-band table used at its extremes (nascent 1.30, whole
+## 0.75). The old `directive_band_mul` per-band table is REMOVED (not kept as a
+## documented-but-dead equivalence table) — see data.maturity_expression's
+## `directive_interpretation_mul` _comment for why band-keyed steps were retired
+## outright rather than shimmed: continuous interpretation_width is what fixes
+## both the unbudgeted swing AND the rank 6-9 saturation (band_by_standing pins
+## everything above rank 5 to "whole", so a band-keyed table would still plateau
+## there even after this rename).
+func _directive_bonus(action_type: String, directive: Dictionary, interpretation_width: float = 0.0, calling_behavior: Dictionary = {}) -> float:
 	if directive.is_empty():
 		return 0.0
 
@@ -1784,10 +2081,14 @@ func _directive_bonus(action_type: String, directive: Dictionary, expression_ban
 
 	# V2-PROG-010: calling directive_mul (wiring existing config — was declared but never applied)
 	var call_dir_mul: float = float(calling_behavior.get("directive_mul", 1.0))
-	# V2-PROG-010: band-level directive modulation — nascent follows literally, whole interprets independently
-	var band_mul_table: Dictionary = _cfg_get("directive_band_mul") as Dictionary
-	var dir_band_mul: float        = float(band_mul_table.get(expression_band, 1.0))
-	base_bonus = base_bonus * call_dir_mul * dir_band_mul
+	# V2-PROG-012 Phase 6: continuous interpretation-width directive modulation —
+	# low judgment follows literally (dir_mul_high), high judgment interprets
+	# independently (dir_mul_low). Replaces the old per-band table (directive_band_mul).
+	var interp_cfg: Dictionary  = _cfg_get("directive_interpretation_mul") as Dictionary
+	var dir_mul_low: float      = float(interp_cfg.get("low", 0.75))
+	var dir_mul_high: float     = float(interp_cfg.get("high", 1.30))
+	var dir_mul: float          = lerpf(dir_mul_high, dir_mul_low, clampf(interpretation_width, 0.0, 1.0))
+	base_bonus = base_bonus * call_dir_mul * dir_mul
 
 	var bonus: float = 0.0
 
@@ -1800,11 +2101,83 @@ func _directive_bonus(action_type: String, directive: Dictionary, expression_ban
 	return bonus
 
 
+## V2-PROG-012 Phase 4 fix: turns the per-type directive_bonus cache built by
+## select_intent()/select_movement_intent()'s D-search loop into a full ranking,
+## descending by directive_bonus, deterministic tie-break by action_type string.
+## Pure reporting — this function has no notion of "ignored" action types; that
+## POLICY decision (Part B — a passive directive preference like actor.idle isn't
+## something an acting Echo can defy, so DivergenceDetector.gd falls through past
+## it to the next entry here) stays entirely inside DivergenceDetector.gd.
+func _rank_directive_candidates(
+	dbonus_by_type: Dictionary,
+	repr_by_type: Dictionary,
+	directive: Dictionary,
+	calling_behavior: Dictionary
+) -> Array:
+	var type_keys: Array = dbonus_by_type.keys()
+	type_keys.sort_custom(func(a, b) -> bool:
+		var ba: float = float(dbonus_by_type[a])
+		var bb: float = float(dbonus_by_type[b])
+		if ba != bb:
+			return ba > bb
+		return str(a) < str(b)
+	)
+	var ranked: Array = []
+	for atype_v: Variant in type_keys:
+		var atype: String = str(atype_v)
+		var repr_candidate: Dictionary = repr_by_type[atype] as Dictionary
+		ranked.append({
+			"action_type":             atype,
+			"target_id":               str(repr_candidate.get("target_id", "")),
+			"score":                   float(repr_candidate.get("_score", 0.0)),
+			"directive_bonus":         float(dbonus_by_type[atype]),
+			# V2-PROG-012 Phase 6: interpretation_width=0.0 is the new "most literal"
+			# floor (was band string "nascent" — see _directive_bonus()'s doc comment).
+			"directive_bonus_nascent": _directive_bonus(atype, directive, 0.0, calling_behavior),
+		})
+	return ranked
+
+
 ## Config accessor — falls back to _DEFAULTS when _cfg is empty or key is missing.
 func _cfg_get(key: String) -> Variant:
 	if _cfg.has(key):
 		return _cfg[key]
 	return _DEFAULTS[key]
+
+
+## V2-PROG-012 Phase 6 Item 2 — config-integrity helper (DEFECT 2's actual fix
+## mechanism): computes the authored identity:directive ratio AT interpretation_width
+## = 1.0, the point where both terms hit their extreme (identity's amplification
+## ceiling, directive's literalism floor) and the ratio is largest. Pure — no
+## BehaviorArbiter instance needed, so a test can call this directly against
+## data/balance.json's raw config dicts without spinning up an actor/candidate/
+## score pipeline.
+##
+##   identity_mul_at_1  = 1.0 + max(identity_weight_scale.trait, identity_weight_scale.vector)
+##   directive_mul_at_1 = directive_interpretation_mul.low (the lerp's low bound —
+##                        reached exactly at interpretation_width=1.0)
+##   ratio = identity_mul_at_1 / directive_mul_at_1
+##
+## This is what silently doubled under the pre-fix defect: identity_weight_scale
+## and directive_interpretation_mul (nee directive_band_mul) were both authored
+## independently by rank/band, with nothing checking their COMBINED effect. The
+## companion test (tests/BehaviorArbiterTests.gd) fails loudly if a future tuning
+## pass raises identity_weight_scale or lowers directive_interpretation_mul.low
+## without also raising interpretation_swing_max to match — the two config blocks
+## can no longer drift apart unnoticed.
+static func compute_interpretation_swing(
+	identity_weight_scale: Dictionary,
+	directive_interpretation_mul: Dictionary
+) -> float:
+	var max_identity_scale: float = maxf(
+		float(identity_weight_scale.get("trait", 0.0)),
+		float(identity_weight_scale.get("vector", 0.0))
+	)
+	var identity_mul_at_1: float = 1.0 + max_identity_scale
+	var directive_mul_at_1: float = float(directive_interpretation_mul.get("low", 1.0))
+	if directive_mul_at_1 <= 0.0:
+		return INF
+	return identity_mul_at_1 / directive_mul_at_1
 
 
 # PROG-010: Returns the most wounded (lowest hp_ratio) enemy relative to this actor.

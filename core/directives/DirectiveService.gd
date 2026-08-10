@@ -188,3 +188,86 @@ func get_available_directives() -> Array:
 			if str(defn.get("unlock_condition", "")) == "always":
 				result.append(id)
 	return result
+
+
+## V2-PROG-012 Phase 6 Item 3(c) — config-integrity guard, same precedent as
+## CallingService.validate_config_integrity() (called once at boot, alongside it,
+## from ConfigService.load_balance()).
+##
+## Flags (logs a warning, does NOT fail the load) any directive whose
+## intent_weights are degenerate in a way that would make it INVISIBLE to
+## DivergenceDetector.gd forever, without anything crashing:
+##   - empty intent_weights
+##   - every weight <= 0.0 (BehaviorArbiter._directive_bonus() sums
+##     dir_weight * directive_action_muls[action][key] * base_bonus — an
+##     all-non-positive weight set can never push a directive_bonus above the
+##     baseline for ANY action_type, so directive_pull, which requires
+##     directive_preferred to OUT-bonus the chosen candidate, can never be
+##     positive)
+##   - every semantic key in intent_weights is ABSENT from every row of
+##     data.actor.directive_action_muls (the translation table
+##     _directive_bonus() reads) — a key with no translation entry contributes
+##     0.0 to every action's bonus, so if NONE of a directive's keys have a
+##     translation entry, directive_bonus is silently 0.0 for every action,
+##     every turn, forever
+##
+## Any of these three shapes means the new directive can never be diverged
+## against — GDD:1422's "Standing never buys obedience" becomes vacuously true
+## for it because there is nothing to obey in the first place. This is exactly
+## the designer's "the game should not break due to those being added" case:
+## nothing crashes, but the seam silently goes dormant for that one directive.
+## This check makes that loud at boot instead of silent forever.
+static func validate_config_integrity(directives_cfg: Dictionary, actor_cfg: Dictionary, logger, t: int) -> bool:
+	var all_valid := true
+	var dir_muls_v: Variant = actor_cfg.get("directive_action_muls", {})
+	var dir_muls_table: Dictionary = dir_muls_v if dir_muls_v is Dictionary else {}
+
+	# Every semantic key referenced by ANY action_type's translation row —
+	# a directive whose intent_weights keys are entirely outside this set has
+	# no path to a nonzero directive_bonus for any action.
+	var known_semantic_keys: Dictionary = {}
+	for atype_v in dir_muls_table:
+		var row_v: Variant = dir_muls_table[atype_v]
+		var row: Dictionary = row_v if row_v is Dictionary else {}
+		for key_v in row:
+			known_semantic_keys[str(key_v)] = true
+
+	for did_v in directives_cfg:
+		var did: String = str(did_v)
+		var directive_v: Variant = directives_cfg[did_v]
+		var directive: Dictionary = directive_v if directive_v is Dictionary else {}
+		var weights_v: Variant = directive.get("intent_weights", {})
+		var weights: Dictionary = weights_v if weights_v is Dictionary else {}
+
+		if weights.is_empty():
+			if logger != null:
+				logger.info(t, "directive.config.warn",
+					"Directive '%s' has empty intent_weights — directive_bonus will be 0.0 for every action; DivergenceDetector can never register a meaningful directive preference for it." % did,
+					{"directive_id": did})
+			all_valid = false
+			continue
+
+		var any_positive := false
+		var any_known_key := false
+		for key_v in weights:
+			var key: String = str(key_v)
+			if float(weights[key_v]) > 0.0:
+				any_positive = true
+			if known_semantic_keys.has(key):
+				any_known_key = true
+
+		if not any_positive:
+			if logger != null:
+				logger.info(t, "directive.config.warn",
+					"Directive '%s' intent_weights are all <= 0.0 — directive_bonus can never rise above baseline for any action; this directive can never win a directive_bonus contest." % did,
+					{"directive_id": did, "intent_weights": weights})
+			all_valid = false
+
+		if not any_known_key:
+			if logger != null:
+				logger.info(t, "directive.config.warn",
+					"Directive '%s' intent_weights reference NO semantic key present in any data.actor.directive_action_muls row — directive_bonus is silently 0.0 for every action_type, so this directive can never be diverged against." % did,
+					{"directive_id": did, "intent_weights": weights})
+			all_valid = false
+
+	return all_valid

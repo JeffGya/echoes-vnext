@@ -274,21 +274,10 @@
 			}
 		},
 		"weaving_rite": {
+			"_comment_identity": "V2-PROG-012 Phase 9: the vector/virtue/calling identity tables formerly here (vector_to_virtue_primary) and formerly duplicated in data.contact.recruitment now live ONCE, canonically, under data.contact — vector_virtue_composition, virtue_vector_key, calling_to_virtue_primary. FlowRuntime._get_weaving_rite_cfg() overlays virtue_vector_key and calling_to_virtue_primary from data.contact onto this cfg at read time (same overlay pattern as RecruitmentService.build_effective_cfg) so WeavingRiteService's cfg.virtue_vector_key / cfg.calling_to_virtue_primary reads resolve without a second stored copy.",
 			"max_candidates": 3,
 			"fit_threshold_accept": 0.55,
 			"readiness_threshold_defer": 0.38,
-			"vector_to_virtue_primary": {
-				"vanguard": "courage",
-				"protector": "leadership",
-				"seeker": "wisdom",
-				"pillar": "acceptance",
-				"strategist": "truth",
-				"skeptic": "humility",
-				"devoted": "forgiveness",
-				"opportunist": "generosity",
-				"mediator": "compassion",
-				"nurturer": "empathy"
-			},
 			"clue_vocab": {
 				"fit": {
 					"high": "Drawn",
@@ -1030,20 +1019,25 @@
 		"maturity_expression": {
 			"_comment": "V2-PROG-006: Maturity-Expression system. Expression band derived from actor rank (Standing). Replaces smartness-tier framing. Calling-specific behavior modifiers. All thresholds config-driven.",
 			"band_by_standing": {
+				"_comment": "V2-PROG-012 Phase 6 Item 3: backfilled ranks 6-9 (all 'whole') so this table agrees with rank_strength_scale.max_rank=9 below — previously only ranks 1-5 were defined and MaturityExpressionService.get_expression_band()'s fallback (band_by_standing.get('5', 'whole')) silently covered 6-9 with the same result, so this is a documentation/agreement fix, not a behavior change. Still matters for refusal_thresholds_by_band and snapshot display even though the directive path no longer keys on the band (V2-PROG-012 Phase 6 Item 1 — see BehaviorArbiter._directive_bonus()'s doc comment).",
 				"1": "nascent",
 				"2": "forming",
 				"3": "grounded",
 				"4": "whole",
-				"5": "whole"
+				"5": "whole",
+				"6": "whole",
+				"7": "whole",
+				"8": "whole",
+				"9": "whole"
 			},
 			"calling_behavior": {
-				"_comment": "Per-calling combat personality. retreat_threshold: HP ratio below which retreat is considered (null = never retreat). press_advantage: melee bonus when target hp < press_hp_threshold. directive_mul: multiplier on directive bonuses for this calling. leadership_radius: tile radius for Whole-band leadership trait effects. fear_move_bonus: flat bonus to move score per 10 fear points (kra_soro). idle_fear_aura: fear reduction applied to nearby allies when actor.idle wins (okomfo).",
+				"_comment": "Per-calling combat personality. retreat_threshold: HP ratio below which retreat is considered (null = never retreat). press_advantage: melee bonus when target hp < press_hp_threshold. directive_mul: multiplier on directive bonuses for this calling. leadership_radius: tile radius for Whole-band leadership trait effects. fear_move_bonus: flat bonus to move score per 10 fear points (kra_soro). idle_fear_aura: fear reduction applied to nearby allies when actor.idle wins (okomfo). absolute_fear_offset (V2-PROG-012 Phase 7, PROPOSED DEFAULT — awaiting playtest ratification): delta applied to the band baseline in refusal_thresholds_by_band (threshold = clamp(band_base + offset, 0, 100)), replacing the old flat absolute_fear_threshold override so band and calling both matter — see ActorStateMachine.gd's Absolute Fear Rule comment. Each offset is the calling's pre-Phase-7 flat value expressed as a delta from the grounded baseline of 80, so grounded-band thresholds are unchanged by this migration (aduro 75, sum_okwanfo 70, okofor 80, onyamesu 85, okomfo 85, kra_soro 80 → offsets -5, -10, 0, +5, +5, 0); nascent/forming/whole now diverge by calling for the first time. The legacy flat absolute_fear_threshold key is REMOVED outright (not kept as a fallback) — see AGENTS.md's additive-schema exception and ActorStateMachine.gd's Absolute Fear Rule comment.",
 				"aduro": {
 					"retreat_threshold": 0.3,
 					"press_advantage": true,
 					"directive_mul": 1.0,
 					"leadership_radius": 3.0,
-					"absolute_fear_threshold": 75,
+					"absolute_fear_offset": -5,
 					"broken_morale_override": {
 						"melee_attack": 8.0,
 						"actor.guard": -5.0
@@ -1054,21 +1048,21 @@
 					"press_advantage": false,
 					"directive_mul": 1.2,
 					"leadership_radius": 3.0,
-					"absolute_fear_threshold": 70
+					"absolute_fear_offset": -10
 				},
 				"okofor": {
 					"retreat_threshold": 0.45,
 					"press_advantage": false,
 					"directive_mul": 1.0,
 					"leadership_radius": 4.0,
-					"absolute_fear_threshold": 80
+					"absolute_fear_offset": 0
 				},
 				"onyamesu": {
 					"retreat_threshold": 0.45,
 					"press_advantage": false,
 					"directive_mul": 1.2,
 					"leadership_radius": 4.0,
-					"absolute_fear_threshold": 85
+					"absolute_fear_offset": 5
 				},
 				"okomfo": {
 					"retreat_threshold": 0.4,
@@ -1076,7 +1070,7 @@
 					"directive_mul": 1.5,
 					"leadership_radius": 5.0,
 					"idle_fear_aura": 3.0,
-					"absolute_fear_threshold": 85
+					"absolute_fear_offset": 5
 				},
 				"kra_soro": {
 					"retreat_threshold": 0.35,
@@ -1084,7 +1078,7 @@
 					"directive_mul": 1.3,
 					"leadership_radius": 4.0,
 					"fear_move_bonus": 12.0,
-					"absolute_fear_threshold": 80
+					"absolute_fear_offset": 0
 				},
 				"uncalled": {
 					"retreat_threshold": 0.3,
@@ -1108,20 +1102,98 @@
 				"max_rank": 9
 			},
 			"refusal_thresholds_by_band": {
-				"_comment": "V2-PROG-010: Base Absolute Fear Rule threshold by expression band, before calling-specific absolute_fear_threshold override. Nascent breaks sooner, whole holds longer.",
+				"_comment": "V2-PROG-010: Base Absolute Fear Rule threshold by expression band. V2-PROG-012 Phase 7: this table is now genuinely load-bearing for every calling — calling_behavior.absolute_fear_offset composes ON TOP of these values (threshold = clamp(band_base + offset, 0, 100)) instead of a calling value replacing them outright, so 'nascent breaks sooner, whole holds longer' (GDD:1422) holds regardless of calling. The legacy flat absolute_fear_threshold override is REMOVED (V2-PROG-012 Phase 7 review-fix) — this table is now unconditionally load-bearing for every calling_behavior entry.",
 				"nascent": 65,
 				"forming": 72,
 				"grounded": 80,
 				"whole": 90
 			},
 			"identity_weight_scale": {
-				"_comment": "V2-PROG-010: Additional multiplier on trait_bonus and vector_bonus at rank 9 (rank_strength=1.0). At rank 1 multiplier=1.0x; at rank 9 multiplier=1.0+scale.",
-				"trait": 0.6,
-				"vector": 0.6
+				"_comment": "V2-PROG-010: Additional multiplier on trait_bonus and vector_bonus, scaled by interpretation_width (V2-PROG-012 Phase 6, derived from autonomy_outputs.judgment below — NOT rank_strength; see BehaviorArbiter._score()'s doc comment on the identity-weight-scaling block). At interpretation_width=0.0 multiplier=1.0x; at interpretation_width=1.0 multiplier=1.0+scale. Paired with directive_interpretation_mul below as the two halves of ONE budgeted axis — see interpretation_swing_max's _comment for the identity:directive ratio these two blocks are jointly checked against (config-integrity test: tests/BehaviorArbiterTests.gd). V2-PROG-012 Phase 6 Item 2: lowered from 0.6/0.6 (the pre-fix DEFECT 2 value) to 0.35/0.35 — PROPOSED DEFAULT, chosen to fit inside interpretation_swing_max: (1.0+0.35)/directive_interpretation_mul.low(0.75) = 1.80 <= 2.0. 0.6 would give (1.0+0.6)/0.75 = 2.13 > 2.0, failing the budget.",
+				"trait": 0.35,
+				"vector": 0.35
 			},
-			"presence_dampen_scale": {
-				"_comment": "V2-PROG-010: Max reduction to fear_active_dampen at rank 9. 0.4 = 40% less fear disruption at rank 9 vs rank 1.",
+			"interpretation_swing_max": {
+				"_comment": "V2-PROG-012 Phase 6 Item 2: PROPOSED DEFAULT. The declared budget on the identity:directive ratio at interpretation_width=1.0 (BehaviorArbiter.compute_interpretation_swing(identity_weight_scale, directive_interpretation_mul) — see that function's doc comment for the exact formula). This is the mechanism that stops DEFECT 2 recurring: identity_weight_scale and directive_interpretation_mul are authored in two separate blocks with no knowledge of each other, so nothing previously stopped them being tuned independently into an unbudgeted combined swing (the pre-fix values, trait/vector 0.6 against directive_band_mul's whole=0.75, gave a ratio of 2.13 with no budget checking it at all). A config-integrity test (tests/BehaviorArbiterTests.gd) FAILS if the authored ratio exceeds this value — any future tuning pass that raises identity_weight_scale or lowers directive_interpretation_mul.low without also raising this budget to match will fail loudly instead of silently drifting. 2.0 is not derived from a specific playtest measurement (no combat-feel target has been ratified yet) — it is a round-number ceiling comfortably above the fitted default (1.80) that still meaningfully constrains future tuning.",
+				"value": 2.0
+			},
+			"autonomy_outputs": {
+				"_comment": "V2-PROG-012 Phase 1: hidden maturity-expression autonomy layer (GDD §11.5, §7.3). PROPOSED DEFAULTS awaiting playtest ratification. Four flat 0.0-1.0 scalars (judgment, presence, composure, legibility) derived per-Echo per-turn from eight named inputs (GDD:1371-1380): Standing/Storyweight maturity, archetype, trait balance, calling family/accent, bonds/rivalries, vow state, fear/morale, instability. Deliberately flat weighted sums, clamped 0.0-1.0 — GDD:1438-1442 forbids growing this into a broad hidden stat-bonus tree. Each output below is its own weight dictionary so it can be tuned independently without touching the others.",
+				"judgment": {
+					"_comment": "PROPOSED DEFAULT. GDD:1360 - how strongly the Echo can hold, interpret, and assert self under pressure. judgment = clamp(rank_strength*w + storyweight_maturity*w + identity_coherence*w + calling_accent_confirmed*w + bond_support*w - fear_pressure*w - instability*w, 0, 1). instability_weight is a RESERVED SEAM: the GDD names instability/distortion as an input, but no such system exists in the codebase yet, so it ships as a documented named zero — do not 'fix' it without wiring an actual instability source.",
+					"rank_strength_weight": 0.25,
+					"storyweight_maturity_weight": 0.2,
+					"identity_coherence_weight": 0.2,
+					"calling_accent_confirmed_weight": 0.15,
+					"bond_support_weight": 0.15,
+					"fear_pressure_weight": 0.25,
+					"instability_weight": 0.0
+				},
+				"presence": {
+					"_comment": "PROPOSED DEFAULT. GDD:1361 - how strongly the Echo's current state presses onto nearby or bonded others. presence = clamp(rank_strength*w + archetype_projection*w + calling_family_projection*w + bond_density*w + morale_lift*w - instability*w, 0, 1). instability_weight is a RESERVED SEAM: the GDD names instability/distortion as an input, but no such system exists in the codebase yet, so it ships as a documented named zero — do not 'fix' it without wiring an actual instability source.",
+					"rank_strength_weight": 0.2,
+					"archetype_projection_weight": 0.25,
+					"calling_family_projection_weight": 0.25,
+					"bond_density_weight": 0.15,
+					"morale_lift_weight": 0.15,
+					"instability_weight": 0.0
+				},
+				"composure": {
+					"_comment": "PROPOSED DEFAULT. GDD:1369 - less casually swayable by noise, but more sharply affected by true contradiction. composure = clamp(rank_strength*w + vow_held*w + trait_balance*w - situational_spike*w - instability*w, 0, 1) * (1.0 - structural_dread * structural_dread_ceiling_weight). rank_strength/vow_held/trait_balance weights sum to 1.0 so the base term spans the full 0-1 range like judgment/presence/legibility. structural_dread scales composure's CEILING multiplicatively rather than subtracting from the sum — this preserves ordering between actors who differ only in fear_base instead of flooring them all to the same value once fear_base saturates (structural_dread_ceiling_weight is kept < 1.0 so the ceiling can never reach exactly 0.0 from fear_base alone). Reads fear TWICE on purpose: structural_dread from fear_base (permanent, earned from combat losses, lowers the ceiling), situational_spike from fear_current above fear_base (recoverable within the encounter, stays subtractive in the base sum) — see MaturityExpressionService.derive_expression(). instability_weight is a RESERVED SEAM: the GDD names instability/distortion as an input, but no such system exists in the codebase yet, so it ships as a documented named zero — do not 'fix' it without wiring an actual instability source.",
+					"rank_strength_weight": 0.36,
+					"vow_held_weight": 0.27,
+					"trait_balance_weight": 0.37,
+					"situational_spike_weight": 0.2,
+					"instability_weight": 0.0,
+					"structural_dread_ceiling_weight": 0.5
+				},
+				"legibility": {
+					"_comment": "PROPOSED DEFAULT. GDD:1273, §7.3 - how specific and readable the Echo's intent is. legibility = clamp(rank_strength*w + storyweight_maturity*w + calling_accent_confirmed*w + identity_coherence*w - instability*w, 0, 1). instability_weight is a RESERVED SEAM: the GDD names instability/distortion as an input, but no such system exists in the codebase yet, so it ships as a documented named zero — do not 'fix' it without wiring an actual instability source.",
+					"rank_strength_weight": 0.3,
+					"storyweight_maturity_weight": 0.25,
+					"calling_accent_confirmed_weight": 0.2,
+					"identity_coherence_weight": 0.25,
+					"instability_weight": 0.0
+				},
+				"trait_balance": {
+					"_comment": "PROPOSED DEFAULT. Shared input consumed by composure's trait_balance_weight. Balances actor.traits.courage/wisdom/faith across two flat components: level (mean of the three, normalised 0-1) and evenness (1.0 - (max-min)/100, clamped 0-1 — how close together the three traits are; 50/50/50 is fully even). trait_balance = level * (1.0 - evenness_weight * (1.0 - evenness)); an Echo who is both capable (high level) AND even (low spread) scores highest. evenness_weight tunes how much unevenness penalises an otherwise-capable Echo.",
+					"evenness_weight": 0.5
+				},
+				"archetype_projection": {
+					"_comment": "PROPOSED DEFAULT. Shared 0.0-1.0 lookup by actor.archetype_birth, consumed by presence's archetype_projection_weight. Outward archetypes (proud, valiant, loyal) project more; inward archetypes (reflective, canny) project less. Id list mirrors data.actor.archetype_action_muls.",
+					"valiant": 0.9,
+					"proud": 0.85,
+					"loyal": 0.7,
+					"ambitious": 0.6,
+					"empathic": 0.55,
+					"devout": 0.5,
+					"stoic": 0.45,
+					"canny": 0.3,
+					"reflective": 0.25
+				},
+				"calling_family_projection": {
+					"_comment": "PROPOSED DEFAULT. Shared 0.0-1.0 lookup by calling family (data.calling.definitions.<id>.family), consumed by presence's calling_family_projection_weight. Per GDD:1431-1436: Anchor is steady and broad (highest presence), Edge is sharp and narrow (moderate presence), Sight is informational (lowest presence).",
+					"anchor": 0.85,
+					"edge": 0.5,
+					"sight": 0.35
+				},
+				"bond_scale": {
+					"_comment": "PROPOSED DEFAULT. Normalisation divisor for bond_support/bond_density: each friend-tier bond to a living party member counts +1, each rival-tier bond counts -1 (bond_support) or +1 magnitude (bond_density), summed then divided by max_bonds before clamping.",
+					"max_bonds": 4
+				},
+				"_comment_fear_base_max": "FALLBACK ONLY. The canonical source of truth is data.emotion.drift.fear_base_max — that value is what actually enforces the fear_base cap (see FlowRuntime._apply_encounter_emotion_drift()). ActorStateMachine threads the canonical value through derive_expression()'s ctx_inputs.fear_base_max; this copy is read only when a caller omits that. Tune data.emotion.drift.fear_base_max — this copy must move with it or the two will silently desync.",
+				"fear_base_max": 40
+			},
+			"composure_dampen_scale": {
+				"_comment": "V2-PROG-012 Phase 2 (renamed from presence_dampen_scale, V2-PROG-010): Max reduction to fear_active_dampen at composure=1.0. 0.4 = 40% less fear disruption at full composure vs zero composure. Composure (MaturityExpressionService.derive_expression) blends rank, vow state, trait balance, and both fear dimensions (structural fear_base as a ceiling, situational spike as a subtractive term) per GDD:1369 — it is the actual driver, not raw rank alone.",
 				"value": 0.4
+			},
+			"leadership_presence_scaling": {
+				"_comment": "PROPOSED DEFAULT awaiting playtest ratification. V2-PROG-012 Phase 3 (recalibrated after review): LeadershipEmotionService normalises a Whole leader's derived Presence (autonomy_outputs.presence) onto the leadership trait-strength/radius multiplier — GDD:1424-1429 wants Presence's influence to work mainly through proximity/relationship/social weight, not a flat aura. An earlier cut of this calibration set canonical_presence from a test fixture with no archetype_birth (archetype_projection 0.0), but archetype_projection carries the joint-largest weight (0.25) in the presence formula and every production Echo has one — that fixture-derived value sat at the bottom of the real production range and a 0..1 clamp saturated the multiplier to 1.0 for every real leader, making the grading dormant in actual play. canonical_presence is now the mean Presence over a grid spanning all 9 archetype_projection ids x all 3 calling_family_projection ids x realistic morale (25-100, shaken..inspired) x bond_density (0.0-1.0) x rank (4-5): 2160 samples, min 0.2625, max 0.8375, mean 0.5424, median 0.54 — 0.54 here. presence_multiplier = clamp(actor._presence / canonical_presence, multiplier_floor, multiplier_ceiling); floor/ceiling (0.4 / 1.6) sit just outside the observed grid ratio range (~0.49-1.55) so real leaders are almost never clamped and a below-average leader gets visibly weaker mitigation/radius while an above-average one gets visibly stronger — no longer capped at 'today's flat effect' as the ceiling, since that was the saturation bug. An actor with no _presence yet computed (has not taken a turn via ActorStateMachine.advance_turn this encounter) is treated as canonical (multiplier 1.0), not zero. Applied to LeadershipEmotionService.apply_fear_gain()/apply_morale_loss() trait_factor (effective_factor = 1.0 - (1.0 - trait_factor) * presence_multiplier) and get_trait_radius() (effective_radius = max(radius_floor_tiles, round(base_radius * presence_multiplier)); an explicitly-configured zero radius stays zero regardless of presence).",
+				"canonical_presence": 0.54,
+				"multiplier_floor": 0.4,
+				"multiplier_ceiling": 1.6,
+				"radius_floor_tiles": 1
 			},
 			"fear_self_recovery": {
 				"_comment": "V2-PROG-010: Passive per-round fear tick-down + active spike on identity-consistent action. Both scale with rank_strength. Identity-consistent = calling AND dominant_vector both aligned.",
@@ -1138,12 +1210,26 @@
 				"identity_calling_bonus": 1,
 				"identity_vector_bonus": 1
 			},
-			"directive_band_mul": {
-				"_comment": "V2-PROG-010: Multiplier on directive bonus contribution by expression band. Nascent follows directives more literally (>1.0); whole interprets through own judgment (<1.0).",
-				"nascent": 1.30,
-				"forming": 1.10,
-				"grounded": 0.90,
-				"whole": 0.75
+			"directive_interpretation_mul": {
+				"_comment": "V2-PROG-012 Phase 6 (DEFECT 2 fix): REPLACES the old per-band directive_band_mul table (nascent 1.30 / forming 1.10 / grounded 0.90 / whole 0.75) with a continuous lerp over interpretation_width (derived from autonomy_outputs.judgment below, NOT expression_band/rank — see BehaviorArbiter._directive_bonus()'s doc comment). dir_mul = lerp(high, low, interpretation_width): low judgment (width near 0.0) follows the directive most literally (mul near `high`); high judgment (width near 1.0) weighs it least (mul near `low`). `low`/`high` are the SAME endpoints the old table used at its extremes (nascent==high, whole==low) so the shape at the boundaries is unchanged — only the middle is now continuous instead of stepped, which also fixes band_by_standing's rank 6-9 saturation (ranks above 5 all read \"whole\" and would otherwise plateau at `low` regardless of how much higher judgment climbs). directive_band_mul is REMOVED outright (not kept as a dead documented-equivalence table) — a per-band table gated on expression_band is exactly the mechanism this fix retires. Old per-band table is documented HERE only as the historical reference for `low`/`high`, not read anywhere.",
+				"low": 0.75,
+				"high": 1.30
+			},
+			"divergence": {
+				"_comment": "V2-PROG-012 Phase 6 Item 2 RECALIBRATION: PROPOSED DEFAULT - awaiting playtest ratification. Phase 6 replaced directive_band_mul (a per-band table keyed on expression_band) with directive_interpretation_mul (a continuous lerp keyed on interpretation_width, derived from `judgment`) inside BehaviorArbiter._directive_bonus() - directive_bonus, and therefore directive_pull (contest_ratio's numerator), moved as a direct result, so the Phase 5 fix calibration below was re-measured against the SAME 15-encounter / 5-echo / 20-round / directive.scout_carefully / production-balance.json / Echo-only methodology, same 15 seeds (isolated one-pass-per-process; the campaign root seed is a fixed 12346 for a fresh save, so results are exactly reproducible run to run when the save directory is cleared first - INCLUDING SaveService's .bak1/.bak2/.bak3 crash-recovery backups, not just the primary .json, which silently reload stale state otherwise). Re-measured 350 scored echo actor-turns (175 nonzero-contest, exactly matching Phase 5's era-for-era shape) with contest_ratio distribution: min=0.0526, p25=0.0598, median=0.0987, p75=0.2069, p90=0.2959, max=0.3845 - a similar dense-cluster-then-tail shape to the Phase 5 measurement, just shifted (the old 0.30 default now sits further up the tail than before). Swept the REAL diverged-event count (not a contest_ratio proxy) across candidates on the IDENTICAL 15 encounters (only min_contest_ratio differed between runs): 0.20->2.533 events/encounter (38), 0.22->2.333 (35), 0.25->1.933 (29), 0.28->0.733 (11), 0.30->0.467 (7, the old default - down from Phase 5's measured 0.867, a real drift caused by Phase 6's smaller directive_bonus swing, NOT dormant but noticeably under target), 0.32->0.333 (5), 0.35->0.133 (2), 0.40->0.000 (0). Design target unchanged: roughly ONE divergence event per encounter - 'somewhat under is fine; per-turn is not'. RECALIBRATED from 0.30 to 0.28, same selection rule Phase 5 used: 0.28's 0.733 events/encounter is the closest-from-below match to the one-per-encounter target and is clearly not wallpaper (11 events across 15 encounters, at most 3 in any one - most encounters have 0 or 1); 0.25 and below fire roughly twice a encounter on average, crossing into wallpaper. 0.30 remains valid (not dormant) but is now measurably further from the design target than 0.28 under the SAME methodology that originally picked it, so this is a genuine recalibration, not a widening of slack. Checked against directive.seek_signs on the same re-measured methodology: still near-zero real-world contest (4 of 535 scored echo actor-turns nonzero, max contest_ratio 0.0179) - BUT a throwaway measurement probe computing seek_signs's actual per-action directive_bonus spread (via the real _directive_bonus() pipeline) found a real, non-flat spread (actor.move 18.2 vs protect_ally 0.0, directive_pull 18.2 - comfortably clears either 0.28 or 0.30) - so seek_signs's detector-level math is NOT structurally incapable of registering a divergence; its resolved directive-preferred action (actor.move, driven by clue_seeking_priority/reporting_priority) simply already closely matches what an Echo's own base identity favours in combat, so a genuine identity-vs-directive conflict essentially never arises NATURALLY under this directive's content - this is a directive-content property, confirmed again at Phase 6, not a detector defect (see tests/DivergenceDetectorTests.gd's V2-PROG-012 Phase 6 Item 3 data-driven coverage, which enumerates data.directives at runtime and constructs a conflict per directive using real computed directive_bonus values, proving this generalises to any future directive rather than being hardcoded to these two). decision_scale_epsilon, divergence_ignored_directive_actions (Part B fall-through), composure_noise_gate/composure_contradiction_gain, legibility_specificity_bands, instability_weight, and log_severity are unchanged from the Phase 5 fix - see that history (git blame) for their original measurement writeups; none of Phase 6's directive_bonus change altered the reasoning behind any of them.",
+				"min_contest_ratio": 0.28,
+				"decision_scale_epsilon": 1.0,
+				"divergence_ignored_directive_actions": ["actor.idle"],
+				"composure_noise_gate": 0.5,
+				"composure_contradiction_gain": 0.75,
+				"legibility_specificity_bands": {
+					"vague_max": 0.34,
+					"named_max": 0.67
+				},
+				"instability_weight": 0.0,
+				"log_severity": "info",
+				"_comment_bark_cooldown_ticks": "V2-PROG-012 Phase 11 PLAYTEST FIX: PROPOSED DEFAULT - awaiting playtest ratification. Phase 5 put combat_divergence behind the routine _bark_next_t cooldown gate (ActorStateMachine._select_bark, not in _HIGH_PRIORITY_BARK) on the belief divergence fired ~33x/encounter across all actors. After Phase 5's faction gate + Phase 6's recalibration, the measured real Echo-only rate is ~0.73 events/encounter (see min_contest_ratio comment above), and Phase 5's own measurement found only 2 of 7 diverged events actually surfaced a bark - the routine cooldown, built to silence chatter, was instead silencing the rarest and most narratively important bark in the game. A live 2026-08-09 playtest confirmed it: zero divergence barks surfaced across two full encounters despite a genuine divergence event firing. Fix ('show it, but never twice in a row'): combat_divergence is now exempt from _bark_next_t entirely and gated ONLY by this separate, divergence-specific cooldown, tracked transiently per-actor (_divergence_bark_next_t on the combat actor dict, same non-persisted pattern as _bark_next_t - no new save field). bark_cooldown_ticks=10 default reasoning: the codebase's own convention (see _compute_bark_cooldown's routine cooldowns of 14/21/28/35 ticks) approximates 7 ticks/round for a typical multi-actor roster. 10 sits just past one round (7) so an Echo's own very next turn in a normal-sized encounter is still inside the cooldown window and cannot also voice divergence (satisfies 'never twice in a row'); it sits well short of two rounds (14) so a genuinely separate divergence later in the same fight - the ~0.73/encounter rate means most fights that get one at all get exactly one, but multi-round encounters can still produce two independent events - is never swallowed by a cooldown sized for consecutive-turn suppression the way the 14-35-tick routine cooldown would swallow it. Detection (DivergenceDetector.gd, min_contest_ratio etc.) is unchanged by this fix - this key controls only whether the line is spoken, never whether divergence is scored or logged.",
+				"bark_cooldown_ticks": 10
 			},
 			"rank_benefits_config": {
 				"_comment": "V2-PROG-010: Earned benefit definitions shown as persistent glyphs on Echo detail card. Unlocked at min_rank. Label and description are prose only — no numbers.",
@@ -3129,7 +3215,8 @@
 				"friend_pride_bond_delta": 2
 			},
 			"combat_fear_bleed": 8,
-			"storyweight_speak_partial_step": 0.2,
+			"_comment_storyweight_speak_partial_step": "PROPOSED DEFAULT (V2-PROG-012 Phase 8): 1 storyweight per winning conversation turn. For scale: combat awards kill 25 / stage clear 40 / realm 100, against level_thresholds of 100 for Step 1→2. Previous value 0.2 truncated to 0 under int() and silently granted nothing.",
+			"storyweight_speak_partial_step": 1,
 			"storyweight_speak_threshold": 0.5,
 			"continuity_temporary_ally_good": 5,
 			"directive_effects": {
@@ -3160,6 +3247,42 @@
 			},
 			"role_pool_fallback": ["witness", "witness", "guide", "charge"],
 			"virtue_wheel": ["courage","leadership","truth","wisdom","humility","acceptance","forgiveness","compassion","empathy","generosity"],
+			"_comment_identity": "V2-PROG-012 Phase 9: canonical identity tables — single source of truth for vector/virtue/calling mapping across ConversationService, WeavingRiteService, RecruitmentService, and OnboardingService. Placed here (not data.weaving_rite) because ConversationService._calling_to_virtue() reads data.contact directly (its cfg param) far more often than the other three consumers combined (3 call sites per conversation turn vs. 1 per Weaving Rite / recruit roll); data.contact.virtue_wheel already anchors the 10-virtue keyspace in this block. Other consumers reach these tables via a runtime overlay onto their own cfg (see WeavingRiteService cfg-builder in FlowRuntime._get_weaving_rite_cfg and RecruitmentService.build_effective_cfg) — never a second stored copy.",
+			"vector_virtue_composition": {
+				"_comment": "SEMANTIC. Transcribed verbatim from docs/calling-reference.md:28-37 (GDD-derived). Each of the 10 vectors is a pairing of exactly two virtue domains — [primary, secondary] by GDD listing order. Use this table for meaning, fit, resonance, and affinity. This is NOT a bijection: empathy and forgiveness both occur only in mediator's composition, and several virtues (e.g. courage, wisdom) occur in three vectors each — that is a true fact about the vector model, not a bug. Never invert this table (see virtue_vector_key for the invertible keying table).",
+				"vanguard":    ["courage", "leadership"],
+				"protector":   ["courage", "compassion"],
+				"seeker":      ["wisdom", "truth"],
+				"strategist":  ["wisdom", "leadership"],
+				"skeptic":     ["truth", "humility"],
+				"pillar":      ["acceptance", "humility"],
+				"devoted":     ["acceptance", "generosity"],
+				"opportunist": ["courage", "wisdom"],
+				"mediator":    ["empathy", "forgiveness"],
+				"nurturer":    ["generosity", "compassion"]
+			},
+			"virtue_vector_key": {
+				"_comment": "PROPOSED DEFAULT. NOT a semantic claim — see vector_virtue_composition for the real composition. This is a KEYING PERMUTATION: a genuine bijection (10 vectors <-> 10 virtues, each used exactly once) that exists solely so callers can invert virtue -> vector (RecruitmentService._build_ally_vector_profile seeds a recruit's vector_scores from a contact's virtue_primary/virtue_secondary; OnboardingService.vector_for_virtue seeds the starter Echo's vector the same way). A composition-faithful bijection is PROVABLY IMPOSSIBLE: per vector_virtue_composition, empathy and forgiveness both occur ONLY in mediator's pairing, so no matching can assign each of the ten virtues to a distinct vector using only that vector's own composing virtues — two virtues, one vector, ten slots to fill. This table resolves that by deliberately assigning several vectors a virtue OUTSIDE their own composition (e.g. protector -> leadership, not courage/compassion) purely to keep the permutation total and invertible. Do not 'fix' this to match composition — that would break the bijection the two seeding call sites depend on. Keep in sync with data.contact.calling_to_virtue_primary's key set (all 10 vector ids) but do not conflate the two: this table answers 'what virtue keys open this vector's seed slot', calling_to_virtue_primary answers 'what virtue does this calling speak in'.",
+				"vanguard":    "courage",
+				"protector":   "leadership",
+				"seeker":      "wisdom",
+				"pillar":      "acceptance",
+				"strategist":  "truth",
+				"skeptic":     "humility",
+				"devoted":     "forgiveness",
+				"opportunist": "generosity",
+				"mediator":    "compassion",
+				"nurturer":    "empathy"
+			},
+			"calling_to_virtue_primary": {
+				"_comment": "PROPOSED DEFAULT. Mechanically derived: each of the 6 callings' PRIMARY vector (data.calling.definitions.[id].vector) -> that vector's PRIMARY composing virtue (vector_virtue_composition[vector][0]). okofor->protector->courage, onyamesu->pillar->acceptance, aduro->vanguard->courage, sum_okwanfo->opportunist->courage, okomfo->seeker->wisdom, kra_soro->seeker->wisdom. Collisions across callings (three callings resolve to courage; okomfo/kra_soro both resolve to wisdom, since both share vector=seeker) are expected and fine — this table is a one-way calling->virtue lookup (ConversationService fallback voice register, WeavingRiteService._calling_virtue fit nudge) and is NEVER inverted, so it does not need to be a bijection like virtue_vector_key.",
+				"okofor":      "courage",
+				"onyamesu":    "acceptance",
+				"aduro":       "courage",
+				"sum_okwanfo": "courage",
+				"okomfo":      "wisdom",
+				"kra_soro":    "wisdom"
+			},
 			"ally": {
 				"_comment": "V2-STAGE-004 Phase 4 (S12): Temporary Ally auto-join tuning. def_id/level_* feed ContactActorBuilder via FlowEncounterState; damage_mul mirrors guide_spirit.spirit_damage_mul; death_*_knock apply once if the joined ally dies in battle.",
 				"def_id": "temporary_ally",
@@ -3175,7 +3298,7 @@
 				"combat_intro_line": "The claimant turns on you."
 			},
 			"recruitment": {
-				"_comment": "V2-STAGE-004 Phase 4 (S14): Earned Return recruit-chance formula for a surviving temporary_ally. Additive conversation+combat+fit, base 0, never guaranteed (cap < 100). See ANSWERS.md #28/#30/#31. NOTE: vector_to_virtue_primary, rival_archetype_pairs, conversation_good_fear_max, and conversation_good_morale_min are kept here for the additive-only data/ schema rule (AGENTS.md), but at runtime RecruitmentService.build_effective_cfg AUTHORITATIVELY OVERRIDES them from their canonical single sources — data.weaving_rite.vector_to_virtue_primary, data.sanctum.rival_archetypes, and data.contact.outcome_thresholds.good. Editing the copies below has no effect on the recruit formula; tune the canonical blocks instead (kept in sync to avoid confusion).",
+				"_comment": "V2-STAGE-004 Phase 4 (S14): Earned Return recruit-chance formula for a surviving temporary_ally. Additive conversation+combat+fit, base 0, never guaranteed (cap < 100). See ANSWERS.md #28/#30/#31. NOTE: rival_archetype_pairs, conversation_good_fear_max, and conversation_good_morale_min are kept here for the additive-only data/ schema rule (AGENTS.md), but at runtime RecruitmentService.build_effective_cfg AUTHORITATIVELY OVERRIDES them from their canonical single sources — data.sanctum.rival_archetypes and data.contact.outcome_thresholds.good. Editing the copies below has no effect on the recruit formula; tune the canonical blocks instead (kept in sync to avoid confusion). V2-PROG-012 Phase 9: vector_to_virtue_primary REMOVED from this block (it was a verbatim duplicate of the now-relocated data.contact.virtue_vector_key) — build_effective_cfg reads virtue_vector_key directly from data.contact; there is no local copy left to desync.",
 				"cap": 75,
 				"conversation_max": 30,
 				"combat_max": 35,
@@ -3202,18 +3325,6 @@
 				"stat_similarity_scale": 50.0,
 				"vector_seed_primary": 60.0,
 				"vector_seed_secondary": 20.0,
-				"vector_to_virtue_primary": {
-					"vanguard": "courage",
-					"protector": "leadership",
-					"seeker": "wisdom",
-					"pillar": "acceptance",
-					"strategist": "truth",
-					"skeptic": "humility",
-					"devoted": "forgiveness",
-					"opportunist": "generosity",
-					"mediator": "compassion",
-					"nurturer": "empathy"
-				},
 				"companion_bond_debuff": -30
 			}
 		}

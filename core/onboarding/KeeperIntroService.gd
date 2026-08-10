@@ -189,7 +189,12 @@ static func apply_first_weave(save_data: Dictionary, cfg: Dictionary, logger: St
 		return
 	var thread_id := FIRST_THREAD_ID
 	WeavingRiteService.apply_outcome("accept", str(echo.get("id", "")), thread_id, save_data, logger, t)
-	var storyweight_gain := int(intro_cfg.get("first_weave_storyweight", 10))
+	var storyweight_gain_cfg := float(intro_cfg.get("first_weave_storyweight", 10))
+	var storyweight_gain := int(round(storyweight_gain_cfg))
+	if storyweight_gain_cfg > 0.0 and storyweight_gain == 0:
+		logger.warn(t, "keeper_intro.storyweight_gain.rounded_to_zero",
+			"first_weave_storyweight is configured non-zero but rounds to 0 storyweight; no gain applied",
+			{ "configured_value": storyweight_gain_cfg })
 	if storyweight_gain > 0:
 		var xp_before := int(echo.get("xp_total", 0))
 		var story_before := int(echo.get("storyweight", xp_before))

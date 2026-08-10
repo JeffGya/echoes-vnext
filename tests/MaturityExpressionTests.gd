@@ -37,7 +37,7 @@ const _EXPR_CFG := {
 	"band_by_standing":          { "1": "nascent", "2": "forming", "3": "grounded", "4": "whole", "5": "whole" },
 	"calling_behavior":          {
 		"okofor":   { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 3 },
-		"aduro":    { "retreat_threshold": null,  "press_advantage": true,  "directive_mul": 1.0, "leadership_radius": 3, "absolute_fear_threshold": 75 },
+		"aduro":    { "retreat_threshold": null,  "press_advantage": true,  "directive_mul": 1.0, "leadership_radius": 3 },
 		"kra_soro": { "retreat_threshold": 0.50, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 4 },
 		"uncalled": { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.5, "leadership_radius": 3 },
 	},
@@ -52,7 +52,7 @@ const _EXPR_CFG := {
 	"rank_strength_scale":       { "max_rank": 9 },
 	"refusal_thresholds_by_band": { "nascent": 65, "forming": 72, "grounded": 80, "whole": 90 },
 	"identity_weight_scale":     { "trait": 0.6, "vector": 0.6 },
-	"presence_dampen_scale":     { "value": 0.4 },
+	"composure_dampen_scale":    { "value": 0.4 },
 	"fear_self_recovery": {
 		"passive_max": 3,
 		"active_spike_min": 3,
@@ -61,7 +61,7 @@ const _EXPR_CFG := {
 		"identity_threshold_vector": 0.15,
 	},
 	"sanctum_fear_recovery_bonus": { "mid_rank_start": 5, "bonus_max": 4, "identity_calling_bonus": 1, "identity_vector_bonus": 1 },
-	"directive_band_mul":         { "nascent": 1.30, "forming": 1.10, "grounded": 0.90, "whole": 0.75 },
+	"directive_interpretation_mul": { "low": 0.75, "high": 1.30 },
 	"rank_benefits_config": {
 		"fear_recovery": { "min_rank": 5, "label": "Settles Quickly", "description": "This Echo steadies between ventures." },
 	},
@@ -73,7 +73,7 @@ const _BALANCE_CFG := {
 			"band_by_standing":          { "1": "nascent", "2": "forming", "3": "grounded", "4": "whole", "5": "whole" },
 			"calling_behavior":          {
 				"okofor":   { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 3 },
-				"aduro":    { "retreat_threshold": null,  "press_advantage": true,  "directive_mul": 1.0, "leadership_radius": 3, "absolute_fear_threshold": 75 },
+				"aduro":    { "retreat_threshold": null,  "press_advantage": true,  "directive_mul": 1.0, "leadership_radius": 3 },
 				"kra_soro": { "retreat_threshold": 0.50, "press_advantage": false, "directive_mul": 1.0, "leadership_radius": 4 },
 				"uncalled": { "retreat_threshold": 0.30, "press_advantage": false, "directive_mul": 1.5, "leadership_radius": 3 },
 			},
@@ -88,7 +88,7 @@ const _BALANCE_CFG := {
 			"rank_strength_scale":       { "max_rank": 9 },
 			"refusal_thresholds_by_band": { "nascent": 65, "forming": 72, "grounded": 80, "whole": 90 },
 			"identity_weight_scale":     { "trait": 0.6, "vector": 0.6 },
-			"presence_dampen_scale":     { "value": 0.4 },
+			"composure_dampen_scale":    { "value": 0.4 },
 			"fear_self_recovery": {
 				"passive_max": 3,
 				"active_spike_min": 3,
@@ -97,7 +97,7 @@ const _BALANCE_CFG := {
 				"identity_threshold_vector": 0.15,
 			},
 			"sanctum_fear_recovery_bonus": { "mid_rank_start": 5, "bonus_max": 4, "identity_calling_bonus": 1, "identity_vector_bonus": 1 },
-			"directive_band_mul":         { "nascent": 1.30, "forming": 1.10, "grounded": 0.90, "whole": 0.75 },
+			"directive_interpretation_mul": { "low": 0.75, "high": 1.30 },
 			"rank_benefits_config": {
 				"fear_recovery": { "min_rank": 5, "label": "Settles Quickly", "description": "This Echo steadies between ventures." },
 			},
@@ -134,6 +134,27 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("expr/identity_spike_fires_on_calling_vector",   Callable(MaturityExpressionTests, "_t_identity_spike_fires"))
 	runner.register_test("expr/no_spike_on_non_identity_action",          Callable(MaturityExpressionTests, "_t_no_spike_on_non_identity"))
 	runner.register_test("expr/rank_benefits_build_correct_entries",      Callable(MaturityExpressionTests, "_t_rank_benefits_build"))
+	# V2-PROG-012 Phase 0
+	runner.register_test("expr/config_defaults_reachable_and_consistent", Callable(MaturityExpressionTests, "_t_config_defaults_reachable_and_consistent"))
+	# V2-PROG-012 Phase 1 — derive_expression() autonomy outputs
+	runner.register_test("expr/derive_expression_is_pure",                        Callable(MaturityExpressionTests, "_t_derive_expression_is_pure"))
+	runner.register_test("expr/derive_expression_outputs_discriminate",           Callable(MaturityExpressionTests, "_t_derive_expression_outputs_discriminate"))
+	runner.register_test("expr/derive_expression_no_new_save_fields",             Callable(MaturityExpressionTests, "_t_derive_expression_no_new_save_fields"))
+	runner.register_test("expr/composure_separates_structural_and_situational_fear", Callable(MaturityExpressionTests, "_t_composure_separates_structural_and_situational_fear"))
+	runner.register_test("expr/judgment_rises_with_standing",                     Callable(MaturityExpressionTests, "_t_judgment_rises_with_standing"))
+	# V2-PROG-012 Phase 1 review-fix — structural_dread must lower composure's CEILING
+	runner.register_test("expr/composure_ceiling_never_floors_at_high_fear_base",  Callable(MaturityExpressionTests, "_t_composure_ceiling_never_floors_at_high_fear_base"))
+	# V2-PROG-012 Phase 1 review-fix — trait_balance must read courage/wisdom/faith, not faith alone
+	runner.register_test("expr/trait_balance_reads_all_three_traits",              Callable(MaturityExpressionTests, "_t_trait_balance_reads_all_three_traits"))
+	# V2-PROG-012 Phase 2 — composure_dampen_scale rename + composure threaded into the arbiter
+	runner.register_test("expr/composure_not_rank_drives_fear_dampen",            Callable(MaturityExpressionTests, "_t_composure_not_rank_drives_fear_dampen"))
+	runner.register_test("expr/high_fear_base_more_disruption_at_equal_rank",     Callable(MaturityExpressionTests, "_t_high_fear_base_more_disruption_at_equal_rank"))
+	runner.register_test("expr/composure_dampen_scale_reachable_from_balance",    Callable(MaturityExpressionTests, "_t_composure_dampen_scale_reachable_from_balance"))
+	# V2-PROG-012 Phase 7 — absolute_fear_offset composes with refusal_thresholds_by_band
+	runner.register_test("expr/nascent_aduro_refuses_before_whole_aduro",         Callable(MaturityExpressionTests, "_t_nascent_aduro_refuses_before_whole_aduro"))
+	runner.register_test("expr/calling_character_preserved_at_same_band",        Callable(MaturityExpressionTests, "_t_calling_character_preserved_at_same_band"))
+	runner.register_test("expr/legacy_absolute_fear_threshold_key_ignored",      Callable(MaturityExpressionTests, "_t_legacy_absolute_fear_threshold_key_ignored"))
+	runner.register_test("expr/absolute_fear_offset_clamps_to_valid_range",      Callable(MaturityExpressionTests, "_t_absolute_fear_offset_clamps_to_valid_range"))
 
 
 # ─── Test 1 ────────────────────────────────────────────────────────────────
@@ -619,10 +640,24 @@ static func _t_rank_strength_scale() -> Dictionary:
 	return { "ok": true }
 
 
-# Test 19 — identity weight scales trait+vector contribution with rank
+# Test 19 — identity weight scales trait+vector contribution with judgment.
+# V2-PROG-012 Phase 6 (DEFECT 2 fix): this test previously varied `rank_strength`
+# (0.0 -> 1.0) directly, alongside expression_band ("nascent" -> "whole") — before
+# this fix, rank_strength was identity_weight_scale's own driver, so it "passed"
+# by construction. As of Phase 6, identity weighting is driven by `judgment` (via
+# interpretation_width), NOT rank_strength — rank_strength is now dead inside
+# _score() (see its doc comment there) — so a rank_strength-only sweep with
+# judgment held at its default on both sides no longer moves the score at all
+# (this is exactly what proves the fix: rank_strength alone can no longer swing
+# identity weighting in isolation, which is the whole point of unifying the axis
+# — see BehaviorArbiterTests.gd's directive_and_identity_invariant_to_rank test
+# for the isolated-axis version of that specific claim). Rewritten to vary ONLY
+# `judgment` (0.0 -> 1.0), holding rank_strength/expression_band/presence_strength
+# fixed across both calls, so this test now actually isolates the axis it claims
+# to test.
 static func _t_identity_weight_scales_with_rank() -> Dictionary:
-	# Aduro echo at rank 1 vs rank 9. Fear=0 so fear_factor=1.0 for both.
-	# rank 9 should score melee_attack higher (trait+vector amplified).
+	# Aduro echo, judgment=0.0 vs judgment=1.0. Fear=0 so fear_factor=1.0 for both.
+	# Higher judgment should score melee_attack higher (trait+vector amplified).
 	var actor_base := {
 		"id": "echo_iw1", "faction": "echo", "calling_origin": "aduro",
 		"actor_type": "echo", "archetype_birth": "valiant",
@@ -631,29 +666,31 @@ static func _t_identity_weight_scales_with_rank() -> Dictionary:
 		"fear": 0, "fear_base": 0, "morale": 60,
 		"grid_pos": { "col": 0, "row": 0 }, "rank": 1,
 	}
-	var enemy := _make_enemy("en19", { "col": 1, "row": 0 })
 
 	var arbiter := BehaviorArbiter.new({})
 
-	var actor_r1 := actor_base.duplicate(true)
-	actor_r1["rank"] = 1
-	var context_r1 := {
-		"actor": actor_r1, "all_actors": [enemy],
-		"expression_band": "nascent", "calling_behavior": {},
-		"presence_strength": 0.1, "rank_strength": 0.0,
-	}
-	var score_r1: float = arbiter._score("melee_attack", actor_r1, {}, {}, "nascent", {}, {}, 0.1, 0.0)
+	# presence_strength=0.1, rank_strength=0.0, composure=0.4 (default) held fixed
+	# on both calls — only `judgment` (the 11th positional arg) differs.
+	var score_low_judgment: float = arbiter._score(
+		"melee_attack", actor_base, {}, {}, "nascent", {}, {}, 0.1, 0.0, 0.4, 0.0)
+	var score_high_judgment: float = arbiter._score(
+		"melee_attack", actor_base, {}, {}, "nascent", {}, {}, 0.1, 0.0, 0.4, 1.0)
 
-	var actor_r9 := actor_base.duplicate(true)
-	actor_r9["rank"] = 9
-	var score_r9: float = arbiter._score("melee_attack", actor_r9, {}, {}, "whole", {}, {}, 1.0, 1.0)
-
-	if score_r9 <= score_r1:
-		return { "ok": false, "error": "Rank 9 melee_attack score (%.2f) should be > rank 1 (%.2f)" % [score_r9, score_r1] }
+	if score_high_judgment <= score_low_judgment:
+		return { "ok": false, "error": "judgment=1.0 melee_attack score (%.2f) should be > judgment=0.0 (%.2f)" % [score_high_judgment, score_low_judgment] }
 	return { "ok": true }
 
 
-# Test 20 — composure: rank 9 scores higher under fear than rank 1
+# Test 20 — composure (not rank_strength) drives the fear-dampen multiplier.
+# V2-PROG-012 Phase 2: this test previously varied expression_band AND
+# rank_strength together, which couldn't isolate an axis — before the Phase 2
+# rename+swap, rank_strength drove the dampener directly, so it "passed" for
+# the wrong reason (and would keep passing today via the unrelated
+# identity_weight_scale trait/vector channel even with composure held fixed).
+# Rewritten to hold rank_strength, presence_strength, and expression_band
+# fixed across both calls and vary ONLY the composure argument — isolating
+# the exact axis composure_dampen_scale now multiplies. This call shape
+# (a composure argument on _score()) did not exist before Phase 2.
 static func _t_composure_rank9_vs_rank1() -> Dictionary:
 	var actor_base := {
 		"id": "echo_cmp", "faction": "echo", "calling_origin": "aduro",
@@ -665,11 +702,13 @@ static func _t_composure_rank9_vs_rank1() -> Dictionary:
 	}
 	var arbiter := BehaviorArbiter.new({})
 
-	var score_r1: float = arbiter._score("melee_attack", actor_base, {}, {}, "nascent", {}, {}, 0.1, 0.0)
-	var score_r9: float = arbiter._score("melee_attack", actor_base, {}, {}, "whole",   {}, {}, 1.0, 1.0)
+	var score_low_composure: float = arbiter._score(
+		"melee_attack", actor_base, {}, {}, "nascent", {}, {}, 0.1, 0.0, 0.0)
+	var score_high_composure: float = arbiter._score(
+		"melee_attack", actor_base, {}, {}, "nascent", {}, {}, 0.1, 0.0, 1.0)
 
-	if score_r9 <= score_r1:
-		return { "ok": false, "error": "At fear=60, rank 9 (%.2f) should score > rank 1 (%.2f)" % [score_r9, score_r1] }
+	if score_high_composure <= score_low_composure:
+		return { "ok": false, "error": "At fear=60 with rank_strength/band held fixed, composure=1.0 (%.2f) should score > composure=0.0 (%.2f)" % [score_high_composure, score_low_composure] }
 	return { "ok": true }
 
 
@@ -737,4 +776,850 @@ static func _t_rank_benefits_build() -> Dictionary:
 		return { "ok": false, "error": "Expected benefit id 'fear_recovery', got: %s" % b.get("id", "") }
 	if str(b.get("label", "")).is_empty():
 		return { "ok": false, "error": "Benefit label should not be empty" }
+	return { "ok": true }
+
+
+# ─── Test 24 — V2-PROG-012 Phase 0 config-integrity guard ─────────────────
+# BehaviorArbiter._cfg_get(key) falls through to _DEFAULTS[key] whenever _cfg
+# lacks the key. Before V2-PROG-012 Phase 0, seven keys authored under
+# data.maturity_expression (directive_band_mul, identity_weight_scale,
+# presence_dampen_scale, press_attack_bonus, press_hp_threshold,
+# protect_ally_grounded_mul, protect_ally_grounded_hp_threshold) were never
+# merged into the actor_cfg passed to BehaviorArbiter, so they silently fell
+# through to _DEFAULTS on every turn — the authored balance.json values were
+# decorative. This test guards against that regressing.
+#
+# For every _DEFAULTS key that is also authored somewhere in the real
+# balance.json (loaded via ConfigService, same as FlowRuntime does at
+# runtime), we check two things against a cfg built by calling
+# FlowRuntime._merge_actor_cfg() directly — the actual static helper
+# _get_actor_cfg_merged() calls in production (data.actor ∪
+# data.maturity_expression, data.actor winning on collision). Calling the
+# production function itself (rather than re-implementing the merge here)
+# means this test can't silently drift from production if the merge logic
+# ever changes — the earlier draft of this test copy-pasted the loop inline,
+# which the merge was subsequently extracted out from under.
+#   (a) value consistency — the arbiter resolves exactly the authored value.
+#   (b) reachability — swapping the key's value for a sentinel and rebuilding
+#       the arbiter must produce the SENTINEL, not the old value and not
+#       _DEFAULTS[key]. A test that only checked (a) would have passed while
+#       the bug was live, because the authored values happened to be
+#       bit-for-bit identical to _DEFAULTS — comparing resolved-vs-authored
+#       can't tell "read from cfg" apart from "fell through to a default that
+#       happens to match." Only forcing a value _DEFAULTS does NOT have, and
+#       confirming the arbiter reflects it, proves _cfg is actually consulted.
+#
+# Note: _cfg_get() ends with `return _DEFAULTS[key]` — a key present in
+# balance.json but absent from _DEFAULTS would be a runtime invalid-index
+# error, not a silent fallback. Any new key BehaviorArbiter reads via
+# _cfg_get() must be added to _DEFAULTS as well as to balance.json.
+static func _t_config_defaults_reachable_and_consistent() -> Dictionary:
+	const _SENTINEL: String = "__V2_PROG_012_SENTINEL__"
+
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var maturity_cfg: Dictionary = bdata.get("maturity_expression", {})
+	var actor_data_cfg: Dictionary = bdata.get("actor", {})
+
+	# Call the actual production merge helper — not a re-implementation — so this
+	# test cannot drift from what FlowRuntime._get_actor_cfg_merged() really does.
+	var merged_cfg: Dictionary = FlowRuntime._merge_actor_cfg(actor_data_cfg, maturity_cfg)
+
+	var defaults: Dictionary = BehaviorArbiter._DEFAULTS
+	var checked: int = 0
+	for key: String in defaults.keys():
+		if not merged_cfg.has(key):
+			continue  # not authored anywhere reachable from this cfg — nothing to guard here
+		checked += 1
+
+		# (a) value consistency.
+		var arbiter_real := BehaviorArbiter.new(merged_cfg)
+		var resolved: Variant = arbiter_real._cfg_get(key)
+		if resolved != merged_cfg[key]:
+			return { "ok": false, "error": "Key '%s': arbiter resolved %s, authored balance.json has %s" % [key, str(resolved), str(merged_cfg[key])] }
+
+		# (b) reachability — force a sentinel value _DEFAULTS does not have and confirm
+		# the arbiter reflects it, proving _cfg_get() actually reads _cfg for this key.
+		var sentinel_cfg: Dictionary = merged_cfg.duplicate(true)
+		sentinel_cfg[key] = _SENTINEL
+		var arbiter_sentinel := BehaviorArbiter.new(sentinel_cfg)
+		var resolved_sentinel: Variant = arbiter_sentinel._cfg_get(key)
+		if resolved_sentinel != _SENTINEL:
+			return { "ok": false, "error": "Key '%s' is NOT reachable through _cfg — arbiter did not reflect a sentinel override (still fell through to _DEFAULTS or a stale value)" % key }
+
+	if checked == 0:
+		return { "ok": false, "error": "No _DEFAULTS keys matched any authored balance.json key — test is vacuous, check config paths" }
+	return { "ok": true }
+
+
+# ─── V2-PROG-012 Phase 1 — derive_expression() autonomy outputs ───────────
+
+# Test 25 — purity: identical inputs called twice produce an identical dict,
+# including exact float equality (not just is_equal_approx).
+static func _t_derive_expression_is_pure() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var expr_cfg: Dictionary = bdata.get("maturity_expression", {})
+
+	var echo := ActorTests._make_test_echo("echo_pure1", "Pure Echo")
+	echo["rank"] = 5
+	echo["calling"] = "okofor"
+	echo["vector_scores"] = { "protector": 200, "pillar": 80 }
+	echo["xp_total"] = 400
+	echo["emotion"] = { "morale_current": 55, "fear_current": 30, "fear_base": 15 }
+	var actor: Dictionary = EchoActor.from_echo(echo)
+
+	var ctx_inputs: Dictionary = {
+		"bonds":            [{ "actor_a": str(actor.get("id", "")), "actor_b": "ally_1", "strength": 40 }],
+		"bond_thresholds":  { "rival_max": -30, "friend_min": 30 },
+		"active_vow":       { "vow_id": "vow.test" },
+		"calling_family":   "anchor",
+		"instability":      0.0,
+		"level_thresholds": bdata.get("progression", {}).get("level_thresholds", []),
+	}
+
+	var r1: Dictionary = MaturityExpressionService.derive_expression(actor, ctx_inputs, expr_cfg)
+	var r2: Dictionary = MaturityExpressionService.derive_expression(actor, ctx_inputs, expr_cfg)
+
+	for key: String in ["judgment", "presence", "composure", "legibility", "rank_strength"]:
+		if float(r1[key]) != float(r2[key]):
+			return { "ok": false, "error": "Key '%s' not exactly equal across two calls with identical inputs: %s vs %s" % [key, str(r1[key]), str(r2[key])] }
+	if str(r1.get("expression_band", "")) != str(r2.get("expression_band", "")):
+		return { "ok": false, "error": "expression_band differs across two calls with identical inputs" }
+	return { "ok": true }
+
+
+# Test 26 (Opus review fix) — replaces the vacuous range check. The old test's
+# `if v < 0.0 or v > 1.0` could never fail: every output is clampf(..., 0.0, 1.0)
+# at its assignment site inside derive_expression(), so the check tested clampf,
+# not the derivation. It also could not catch NaN — clampf propagates NaN, and
+# both `NaN < 0.0` and `NaN > 1.0` evaluate false.
+#
+# This test actually exercises the derivation: across a spread of actors (rank
+# 1 and 9, zero and max fear, no bonds and many bonds, no calling and confirmed
+# calling) every output must be finite (catches NaN), AND across that whole
+# spread each output must NOT collapse to a single repeated value — i.e. the
+# derivation genuinely discriminates between actors. That second assertion is
+# exactly the shape of check that would have caught the FIX-1 Composure
+# flooring bug, where every fear_base past ~16 collapsed Composure to exactly
+# 0.0 for an entire cohort of low-Standing Echoes.
+static func _t_derive_expression_outputs_discriminate() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var expr_cfg: Dictionary = bdata.get("maturity_expression", {})
+	var level_thresholds: Array = bdata.get("progression", {}).get("level_thresholds", [])
+
+	var many_bonds: Array = []
+	for i in range(8):
+		many_bonds.append({
+			"actor_a": "echo_range1", "actor_b": "ally_%d" % i,
+			"strength": 40 if i % 2 == 0 else -40,
+		})
+
+	var seen: Dictionary = { "judgment": [], "presence": [], "composure": [], "legibility": [] }
+	for rank in [1, 9]:
+		for fear in [0, 100]:
+			for bonds in [[], many_bonds]:
+				for calling in ["", "okofor"]:
+					var echo := ActorTests._make_test_echo("echo_range1", "Range Echo")
+					echo["rank"] = rank
+					echo["calling"] = calling
+					echo["xp_total"] = 300
+					echo["vector_scores"] = { "protector": 120, "pillar": 40 }
+					echo["emotion"] = { "morale_current": 50, "fear_current": fear, "fear_base": mini(fear, 40) }
+					var actor: Dictionary = EchoActor.from_echo(echo)
+					var ctx_inputs: Dictionary = {
+						"bonds":            bonds,
+						"bond_thresholds":  { "rival_max": -30, "friend_min": 30 },
+						"active_vow":       {},
+						"calling_family":   "anchor",
+						"instability":      0.0,
+						"level_thresholds": level_thresholds,
+					}
+					var result: Dictionary = MaturityExpressionService.derive_expression(actor, ctx_inputs, expr_cfg)
+					for key: String in ["judgment", "presence", "composure", "legibility"]:
+						var v: float = float(result.get(key, NAN))
+						if not is_finite(v):
+							return { "ok": false, "error": "%s is not finite (%s) for rank=%d fear=%d bonds=%d calling='%s'" % [key, str(v), rank, fear, bonds.size(), calling] }
+						(seen[key] as Array).append(v)
+
+	for key: String in seen.keys():
+		var values: Array = seen[key]
+		var first: float = float(values[0])
+		var all_same := true
+		for v in values:
+			if not is_equal_approx(float(v), first):
+				all_same = false
+				break
+		if all_same:
+			return { "ok": false, "error": "%s never varies across the actor spread (always %.4f) — derivation is not discriminating between actors" % [key, first] }
+	return { "ok": true }
+
+
+# Test 27 (Opus review fix) — replaces a test that pinned the wrong object. The
+# old test compared echo.keys() before/after running combat via
+# EchoActor.from_echo(echo) — but from_echo() deep-copies the echo and the
+# autonomy fields are only ever added to the TRANSIENT copy, so the source
+# echo's keyset could never change no matter what derive_expression() does.
+# It was a regression test for EchoActor.from_echo()'s deep-copy behaviour,
+# and it never touched SaveService — the actual persistence boundary.
+#
+# This test drives a real combat encounter through FlowRuntime (roster echo →
+# EchoActor.from_echo() → ActorStateMachine.advance_turn() sets the five
+# transient keys on the combat actor), then round-trips the resulting
+# save_data through the real SaveService.save_to_file()/load_from_file() path
+# and asserts the persisted roster echo carries none of them. This would catch
+# a future regression where the transient autonomy fields get merged back onto
+# the save-side echo (the codebase already has precedent for writing transient
+# per-actor state like "_sanctum_bark" onto roster entries), or where
+# EchoActor.from_echo() stops deep-copying and starts aliasing.
+static func _t_derive_expression_no_new_save_fields() -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var config := ConfigService.new()
+	var test_path := "/tmp/echoes-vnext-tests/maturity_expr_save_roundtrip_slot.json"
+	var runtime := FlowRuntime.new(logger, config, test_path)
+	runtime.boot()
+	var flow_ctx: FlowContext = runtime.flow_ctx
+
+	flow_ctx.realm_id = "realm.01"
+	var rm: Dictionary = RealmService.get_or_create("realm.01", flow_ctx, 0)
+	if rm.is_empty():
+		return { "ok": false, "error": "setup failed: realm not created" }
+	flow_ctx.stage_id = "stage.0"
+	flow_ctx.encounter_id = "realm.01.stage.0.save_roundtrip"
+
+	var bal: Dictionary = config.get_balance()
+	var summ_cfg: Dictionary = bal.get("data", {}).get("summoning", {})
+	var expr_cfg: Dictionary = bal.get("data", {}).get("maturity_expression", {})
+	var echo: Dictionary = EchoFactory.generate("save_roundtrip", "echo.0", 0, "summon", summ_cfg, expr_cfg)
+	echo["id"] = "echo_save_rt_0001"
+	flow_ctx.save_data["sanctum"]["roster"] = [echo]
+	flow_ctx.save_data["sanctum"]["active_party_ids"] = [str(echo["id"])]
+
+	flow_ctx.dev_combat_objective = EncounterResolutionModes.COMBAT
+	flow_ctx.encounter_ctx = null
+	flow_ctx.encounter_machine = null
+
+	var enc_state := FlowEncounterState.new()
+	enc_state.enter(flow_ctx, 0)
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	if ectx == null:
+		return { "ok": false, "error": "setup failed: no encounter context" }
+
+	runtime.dispatch({ "type": "combat.init" })
+	for _r in range(3):
+		runtime.dispatch({ "type": "combat.confirm_round" })
+		var guard: int = 0
+		while guard < 40:
+			guard += 1
+			var cs2: Dictionary = ectx.combat_state
+			if bool(cs2.get("combat_over", false)): break
+			if str(cs2.get("round_phase", "")) != "in_round": break
+			runtime.dispatch({ "type": "combat.next_actor" })
+		if bool(ectx.combat_state.get("combat_over", false)): break
+
+	# Precondition: confirm the transient combat actor actually computed
+	# _composure — otherwise this test would trivially pass without ever
+	# exercising the derivation.
+	var combat_actor: Dictionary = {}
+	for a_v in ectx.actors:
+		if a_v is Dictionary and str(a_v.get("id", "")) == str(echo.get("id", "")):
+			combat_actor = a_v
+			break
+	if not combat_actor.has("_composure"):
+		return { "ok": false, "error": "precondition failed: combat actor never computed _composure — test does not exercise the derivation" }
+
+	if not SaveService.save_to_file(test_path, flow_ctx.save_data, logger, 0):
+		return { "ok": false, "error": "SaveService.save_to_file() failed" }
+	var result: Dictionary = SaveService.load_from_file(test_path, logger, 0)
+	var data: Dictionary = result.get("data", {}) as Dictionary
+	var roster: Array = (data.get("sanctum", {}) as Dictionary).get("roster", []) as Array
+	if roster.is_empty():
+		return { "ok": false, "error": "reloaded save has an empty roster" }
+	var saved_echo: Dictionary = roster[0]
+	for forbidden in ["_judgment", "_presence", "_composure", "_legibility", "_presence_strength"]:
+		if saved_echo.has(forbidden):
+			return { "ok": false, "error": "persisted echo unexpectedly contains transient key '%s'" % forbidden }
+	return { "ok": true }
+
+
+# Test 28 — composure design requirement: two actors with identical
+# fear_current but different fear_base must produce DIFFERENT composure.
+# A grounded Echo with fear_base=20 is a different person from one at
+# fear_base=2 at the same fear_current — this pins that split.
+static func _t_composure_separates_structural_and_situational_fear() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var expr_cfg: Dictionary = bdata.get("maturity_expression", {})
+	var level_thresholds: Array = bdata.get("progression", {}).get("level_thresholds", [])
+
+	var ctx_inputs: Dictionary = {
+		"bonds":            [],
+		"bond_thresholds":  { "rival_max": -30, "friend_min": 30 },
+		"active_vow":       {},
+		"calling_family":   "anchor",
+		"instability":      0.0,
+		"level_thresholds": level_thresholds,
+	}
+
+	var echo_low := ActorTests._make_test_echo("echo_cmp_low", "Low Dread")
+	echo_low["rank"] = 5
+	echo_low["xp_total"] = 300
+	echo_low["emotion"] = { "morale_current": 50, "fear_current": 40, "fear_base": 2 }
+	var actor_low: Dictionary = EchoActor.from_echo(echo_low)
+
+	var echo_high := ActorTests._make_test_echo("echo_cmp_high", "High Dread")
+	echo_high["rank"] = 5
+	echo_high["xp_total"] = 300
+	echo_high["emotion"] = { "morale_current": 50, "fear_current": 40, "fear_base": 20 }
+	var actor_high: Dictionary = EchoActor.from_echo(echo_high)
+
+	var r_low: Dictionary = MaturityExpressionService.derive_expression(actor_low, ctx_inputs, expr_cfg)
+	var r_high: Dictionary = MaturityExpressionService.derive_expression(actor_high, ctx_inputs, expr_cfg)
+	var composure_low: float = float(r_low.get("composure", 0.0))
+	var composure_high: float = float(r_high.get("composure", 0.0))
+
+	if is_equal_approx(composure_low, composure_high):
+		return { "ok": false, "error": "Composure identical (%.4f) for fear_base=2 vs fear_base=20 at same fear_current=40" % composure_low }
+	if composure_low <= composure_high:
+		return { "ok": false, "error": "Expected lower fear_base (2) to yield HIGHER composure than higher fear_base (20); got low=%.4f high=%.4f" % [composure_low, composure_high] }
+	return { "ok": true }
+
+
+# Test 29 — judgment rises monotonically with Standing (rank), all else equal.
+static func _t_judgment_rises_with_standing() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var expr_cfg: Dictionary = bdata.get("maturity_expression", {})
+	var level_thresholds: Array = bdata.get("progression", {}).get("level_thresholds", [])
+
+	var ctx_inputs: Dictionary = {
+		"bonds":            [],
+		"bond_thresholds":  { "rival_max": -30, "friend_min": 30 },
+		"active_vow":       {},
+		"calling_family":   "anchor",
+		"instability":      0.0,
+		"level_thresholds": level_thresholds,
+	}
+
+	var prev_judgment: float = -1.0
+	for rank in range(1, 10):
+		var echo := ActorTests._make_test_echo("echo_jr_%d" % rank, "Judgment Rank %d" % rank)
+		echo["rank"] = rank
+		echo["xp_total"] = 300
+		echo["calling"] = "okofor"
+		echo["vector_scores"] = { "protector": 150, "pillar": 40 }
+		echo["emotion"] = { "morale_current": 50, "fear_current": 10, "fear_base": 0 }
+		var actor: Dictionary = EchoActor.from_echo(echo)
+		var result: Dictionary = MaturityExpressionService.derive_expression(actor, ctx_inputs, expr_cfg)
+		var judgment: float = float(result.get("judgment", 0.0))
+		if rank > 1 and judgment <= prev_judgment:
+			return { "ok": false, "error": "Judgment did not rise at rank %d: %.4f <= previous %.4f" % [rank, judgment, prev_judgment] }
+		prev_judgment = judgment
+	return { "ok": true }
+
+
+# Test 30 (Opus review fix) — structural_dread must lower composure's CEILING
+# multiplicatively, not subtract from it directly. Two actors identical except
+# fear_base, using values (16 and 32) that are BOTH past the point where the old
+# subtractive formula floored composure to exactly 0.0 for a rank-1 Echo (fear_base
+# 16 alone consumed all available headroom under the pre-fix weights). Pins:
+#   (a) composure(fear_base=16) and composure(fear_base=32) are DIFFERENT — ordering
+#       between actors is preserved instead of both collapsing to the same floor.
+#   (b) composure(fear_base=16) > composure(fear_base=32) — more structural dread
+#       still means less composure.
+#   (c) NEITHER value is exactly 0.0 — a single input (fear_base) can no longer
+#       drive composure to the absolute floor on its own.
+static func _t_composure_ceiling_never_floors_at_high_fear_base() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var expr_cfg: Dictionary = bdata.get("maturity_expression", {})
+	var level_thresholds: Array = bdata.get("progression", {}).get("level_thresholds", [])
+
+	var ctx_inputs: Dictionary = {
+		"bonds":            [],
+		"bond_thresholds":  { "rival_max": -30, "friend_min": 30 },
+		"active_vow":       {},
+		"calling_family":   "anchor",
+		"instability":      0.0,
+		"level_thresholds": level_thresholds,
+	}
+
+	# fear_current == fear_base for both — isolates the structural_dread ceiling
+	# effect from situational_spike (which is 0 when there's no spike above base).
+	var echo_16 := ActorTests._make_test_echo("echo_ceiling_16", "Rank1 Dread16")
+	echo_16["rank"] = 1
+	echo_16["emotion"] = { "morale_current": 50, "fear_current": 16, "fear_base": 16 }
+	var actor_16: Dictionary = EchoActor.from_echo(echo_16)
+
+	var echo_32 := ActorTests._make_test_echo("echo_ceiling_32", "Rank1 Dread32")
+	echo_32["rank"] = 1
+	echo_32["emotion"] = { "morale_current": 50, "fear_current": 32, "fear_base": 32 }
+	var actor_32: Dictionary = EchoActor.from_echo(echo_32)
+
+	var r16: Dictionary = MaturityExpressionService.derive_expression(actor_16, ctx_inputs, expr_cfg)
+	var r32: Dictionary = MaturityExpressionService.derive_expression(actor_32, ctx_inputs, expr_cfg)
+	var composure_16: float = float(r16.get("composure", 0.0))
+	var composure_32: float = float(r32.get("composure", 0.0))
+
+	if is_equal_approx(composure_16, composure_32):
+		return { "ok": false, "error": "Composure identical (%.4f) for fear_base=16 vs fear_base=32 — structural_dread is flooring both to the same value" % composure_16 }
+	if composure_16 <= composure_32:
+		return { "ok": false, "error": "Expected fear_base=16 to yield HIGHER composure than fear_base=32; got 16=%.4f 32=%.4f" % [composure_16, composure_32] }
+	if is_equal_approx(composure_16, 0.0):
+		return { "ok": false, "error": "composure(fear_base=16) floored to 0.0 — structural_dread alone must never drive composure to the absolute floor" }
+	if is_equal_approx(composure_32, 0.0):
+		return { "ok": false, "error": "composure(fear_base=32) floored to 0.0 — structural_dread alone must never drive composure to the absolute floor" }
+	return { "ok": true }
+
+
+static func _make_trait_test_actor(id: String, courage: int, wisdom: int, faith: int) -> Dictionary:
+	var echo := ActorTests._make_test_echo(id, id)
+	echo["rank"] = 1
+	echo["traits"] = { "courage": courage, "wisdom": wisdom, "faith": faith }
+	echo["emotion"] = { "morale_current": 50, "fear_current": 0, "fear_base": 0 }
+	return EchoActor.from_echo(echo)
+
+
+# Test 31 (Opus review fix) — trait_balance must read all three traits
+# (courage/wisdom/faith), not faith alone. Pins:
+#   (a) 50/50/50 and 90/30/30 (same mean=50) produce DIFFERENT trait_balance
+#       (and therefore different Composure) — evenness matters, not just level.
+#   (b) Changing courage ALONE (holding wisdom/faith fixed) changes Composure —
+#       which the old faith-only formula provably could not do.
+static func _t_trait_balance_reads_all_three_traits() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var expr_cfg: Dictionary = bdata.get("maturity_expression", {})
+	var level_thresholds: Array = bdata.get("progression", {}).get("level_thresholds", [])
+
+	var ctx_inputs: Dictionary = {
+		"bonds":            [],
+		"bond_thresholds":  { "rival_max": -30, "friend_min": 30 },
+		"active_vow":       {},
+		"calling_family":   "anchor",
+		"instability":      0.0,
+		"level_thresholds": level_thresholds,
+	}
+
+	# (a) Same mean (50), different spread.
+	var actor_even: Dictionary   = _make_trait_test_actor("echo_tb_even", 50, 50, 50)
+	var actor_uneven: Dictionary = _make_trait_test_actor("echo_tb_uneven", 90, 30, 30)
+	var r_even: Dictionary   = MaturityExpressionService.derive_expression(actor_even, ctx_inputs, expr_cfg)
+	var r_uneven: Dictionary = MaturityExpressionService.derive_expression(actor_uneven, ctx_inputs, expr_cfg)
+	var composure_even: float   = float(r_even.get("composure", 0.0))
+	var composure_uneven: float = float(r_uneven.get("composure", 0.0))
+	if is_equal_approx(composure_even, composure_uneven):
+		return { "ok": false, "error": "Composure identical (%.4f) for 50/50/50 vs 90/30/30 (same mean) — trait_balance ignores evenness" % composure_even }
+
+	# (b) Changing courage alone (wisdom/faith held fixed) must change Composure —
+	# the old faith-only read could never move under a courage-only change.
+	var actor_base: Dictionary       = _make_trait_test_actor("echo_tb_base", 50, 50, 50)
+	var actor_courage_up: Dictionary = _make_trait_test_actor("echo_tb_courage_up", 90, 50, 50)
+	var r_base: Dictionary        = MaturityExpressionService.derive_expression(actor_base, ctx_inputs, expr_cfg)
+	var r_courage_up: Dictionary  = MaturityExpressionService.derive_expression(actor_courage_up, ctx_inputs, expr_cfg)
+	var composure_base: float        = float(r_base.get("composure", 0.0))
+	var composure_courage_up: float  = float(r_courage_up.get("composure", 0.0))
+	if is_equal_approx(composure_base, composure_courage_up):
+		return { "ok": false, "error": "Composure did not change when courage alone changed (50→90, wisdom/faith fixed): %.4f vs %.4f" % [composure_base, composure_courage_up] }
+	return { "ok": true }
+
+
+# ─── V2-PROG-012 Phase 2 — composure_dampen_scale rename + threading ──────
+
+# Test — composure (a real derive_expression() output, not a synthetic 0/1)
+# drives the fear-dampen multiplier at EQUAL rank_strength. Two actors share
+# rank=5 (identical rank_strength) and identical "fear" as BehaviorArbiter._score()
+# computes it (max(fear_current, fear_base) = 60 for both, since fear_current=60
+# dominates in both cases) — the ONLY thing that differs is fear_base (2 vs 35),
+# which Phase 1 wired into composure's structural_dread ceiling. Before Phase 2,
+# BehaviorArbiter's dampener multiplied by rank_strength alone, so two actors at
+# identical rank_strength — regardless of fear_base — would score identically
+# under fear. This test would have been impossible to write against that code:
+# there is no way to make rank_strength differ while holding rank equal.
+static func _t_composure_not_rank_drives_fear_dampen() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var expr_cfg: Dictionary = bdata.get("maturity_expression", {})
+	var ctx_inputs: Dictionary = {
+		"bonds":            [],
+		"bond_thresholds":  {},
+		"active_vow":       {},
+		"calling_family":   "",
+		"instability":      0.0,
+		"level_thresholds": bdata.get("progression", {}).get("level_thresholds", []),
+		"fear_base_max":    float(bdata.get("emotion", {}).get("drift", {}).get("fear_base_max", 40.0)),
+	}
+
+	var actor_low_dread := {
+		"id": "echo_dampen_low", "faction": "echo", "calling_origin": "aduro",
+		"actor_type": "echo", "archetype_birth": "valiant",
+		"traits": { "courage": 60, "wisdom": 40, "faith": 20 },
+		"vector_scores": { "vanguard": 80, "protector": 10 },
+		"rank": 5, "fear": 60, "fear_base": 2, "morale": 50,
+		"grid_pos": { "col": 0, "row": 0 },
+	}
+	var actor_high_dread: Dictionary = actor_low_dread.duplicate(true)
+	actor_high_dread["id"] = "echo_dampen_high"
+	actor_high_dread["fear_base"] = 35
+
+	var r_low: Dictionary  = MaturityExpressionService.derive_expression(actor_low_dread, ctx_inputs, expr_cfg)
+	var r_high: Dictionary = MaturityExpressionService.derive_expression(actor_high_dread, ctx_inputs, expr_cfg)
+	var composure_low: float  = float(r_low.get("composure", 0.0))
+	var composure_high: float = float(r_high.get("composure", 0.0))
+	var rank_strength: float  = float(r_low.get("rank_strength", 0.0))
+
+	if is_equal_approx(composure_low, composure_high):
+		return { "ok": false, "error": "Precondition failed: composure identical (%.4f) for fear_base=2 vs fear_base=35 at same rank — cannot test the arbiter axis" % composure_low }
+	if not is_equal_approx(rank_strength, float(r_high.get("rank_strength", 0.0))):
+		return { "ok": false, "error": "Precondition failed: rank_strength differs between actors of the same rank" }
+
+	var arbiter := BehaviorArbiter.new({})
+	var score_low_dread: float = arbiter._score(
+		"melee_attack", actor_low_dread, {}, {}, "grounded", {}, {}, 0.1, rank_strength, composure_low)
+	var score_high_dread: float = arbiter._score(
+		"melee_attack", actor_high_dread, {}, {}, "grounded", {}, {}, 0.1, rank_strength, composure_high)
+
+	if is_equal_approx(score_low_dread, score_high_dread):
+		return { "ok": false, "error": "Scores identical (%.4f) at equal rank_strength (%.4f) despite different composure (low=%.4f, high=%.4f) — the dampener is not reading composure" % [score_low_dread, rank_strength, composure_low, composure_high] }
+	return { "ok": true }
+
+
+# Test — high fear_base means MORE fear disruption (lower score) at equal rank.
+# Same construction as the test above, but asserts the DIRECTION, not just that
+# the scores differ. This pins the structural-vs-situational distinction
+# end-to-end through the arbiter (not just inside derive_expression, which
+# expr/composure_separates_structural_and_situational_fear already covers at
+# the derive_expression layer alone): a high structural fear_base must lower
+# composure's ceiling, which must lower the arbiter's fear_factor, which must
+# lower the final score for an active (non-passive) action under fear.
+static func _t_high_fear_base_more_disruption_at_equal_rank() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var expr_cfg: Dictionary = bdata.get("maturity_expression", {})
+	var ctx_inputs: Dictionary = {
+		"bonds":            [],
+		"bond_thresholds":  {},
+		"active_vow":       {},
+		"calling_family":   "",
+		"instability":      0.0,
+		"level_thresholds": bdata.get("progression", {}).get("level_thresholds", []),
+		"fear_base_max":    float(bdata.get("emotion", {}).get("drift", {}).get("fear_base_max", 40.0)),
+	}
+
+	var actor_low_dread := {
+		"id": "echo_direction_low", "faction": "echo", "calling_origin": "aduro",
+		"actor_type": "echo", "archetype_birth": "valiant",
+		"traits": { "courage": 60, "wisdom": 40, "faith": 20 },
+		"vector_scores": { "vanguard": 80, "protector": 10 },
+		"rank": 5, "fear": 60, "fear_base": 2, "morale": 50,
+		"grid_pos": { "col": 0, "row": 0 },
+	}
+	var actor_high_dread: Dictionary = actor_low_dread.duplicate(true)
+	actor_high_dread["id"] = "echo_direction_high"
+	actor_high_dread["fear_base"] = 35
+
+	var r_low: Dictionary  = MaturityExpressionService.derive_expression(actor_low_dread, ctx_inputs, expr_cfg)
+	var r_high: Dictionary = MaturityExpressionService.derive_expression(actor_high_dread, ctx_inputs, expr_cfg)
+	var composure_low: float  = float(r_low.get("composure", 0.0))
+	var composure_high: float = float(r_high.get("composure", 0.0))
+	var rank_strength: float  = float(r_low.get("rank_strength", 0.0))
+
+	if composure_low <= composure_high:
+		return { "ok": false, "error": "Precondition failed: expected lower fear_base (2) to yield HIGHER composure than higher fear_base (35); got low=%.4f high=%.4f" % [composure_low, composure_high] }
+
+	var arbiter := BehaviorArbiter.new({})
+	var score_low_dread: float = arbiter._score(
+		"melee_attack", actor_low_dread, {}, {}, "grounded", {}, {}, 0.1, rank_strength, composure_low)
+	var score_high_dread: float = arbiter._score(
+		"melee_attack", actor_high_dread, {}, {}, "grounded", {}, {}, 0.1, rank_strength, composure_high)
+
+	if score_high_dread >= score_low_dread:
+		return { "ok": false, "error": "High fear_base (35, composure=%.4f, score=%.2f) should score LOWER under fear than low fear_base (2, composure=%.4f, score=%.2f) at equal rank_strength — more structural dread must mean more disruption" % [composure_high, score_high_dread, composure_low, score_low_dread] }
+	return { "ok": true }
+
+
+# Test — config reachability for the renamed key. Mirrors the Phase 0 sentinel
+# technique in expr/config_defaults_reachable_and_consistent, scoped to just
+# composure_dampen_scale: confirms the merged actor cfg (data.actor ∪
+# data.maturity_expression, the real production merge via
+# FlowRuntime._merge_actor_cfg()) carries the renamed key, that the arbiter
+# resolves the authored balance.json value (not _DEFAULTS), and that a
+# sentinel override is actually reflected — proving _cfg_get() reads _cfg for
+# this key rather than silently falling through.
+static func _t_composure_dampen_scale_reachable_from_balance() -> Dictionary:
+	const _SENTINEL: String = "__V2_PROG_012_PHASE2_SENTINEL__"
+
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var bdata: Dictionary = bal.get("data", {})
+	var maturity_cfg: Dictionary = bdata.get("maturity_expression", {})
+	var actor_data_cfg: Dictionary = bdata.get("actor", {})
+	var merged_cfg: Dictionary = FlowRuntime._merge_actor_cfg(actor_data_cfg, maturity_cfg)
+
+	if not merged_cfg.has("composure_dampen_scale"):
+		return { "ok": false, "error": "composure_dampen_scale not present in the merged actor cfg — the balance.json rename did not land where BehaviorArbiter reads it" }
+
+	var arbiter_real := BehaviorArbiter.new(merged_cfg)
+	var resolved: Variant = arbiter_real._cfg_get("composure_dampen_scale")
+	if resolved != merged_cfg["composure_dampen_scale"]:
+		return { "ok": false, "error": "arbiter resolved %s, authored balance.json has %s" % [str(resolved), str(merged_cfg["composure_dampen_scale"])] }
+
+	var sentinel_cfg: Dictionary = merged_cfg.duplicate(true)
+	sentinel_cfg["composure_dampen_scale"] = _SENTINEL
+	var arbiter_sentinel := BehaviorArbiter.new(sentinel_cfg)
+	var resolved_sentinel: Variant = arbiter_sentinel._cfg_get("composure_dampen_scale")
+	if resolved_sentinel != _SENTINEL:
+		return { "ok": false, "error": "composure_dampen_scale is NOT reachable through _cfg — arbiter did not reflect a sentinel override (fell through to _DEFAULTS or a stale value)" }
+
+	if merged_cfg.has("presence_dampen_scale"):
+		return { "ok": false, "error": "stale presence_dampen_scale key still present in the merged actor cfg after the Phase 2 rename" }
+
+	return { "ok": true }
+
+
+# ─── V2-PROG-012 Phase 7 — absolute_fear_offset composes with band baseline ──
+#
+# DEFECT this section guards against: before Phase 7, calling_behavior.
+# absolute_fear_threshold OVERRODE refusal_thresholds_by_band outright, so a
+# nascent and a whole Echo of the same calling refused at the EXACT SAME fear
+# — the band table was decorative for every calling except uncalled. These
+# four tests exercise ActorStateMachine.advance_turn()'s Absolute Fear Rule
+# directly (not the arbiter in isolation) so they pin real refusal behavior,
+# not just threshold arithmetic.
+#
+# Local cfg only — deliberately NOT loaded from the real balance.json via
+# ConfigService, so these tests can't drift silently if the authored offsets
+# are re-tuned later; they pin the MECHANISM (band + calling both matter),
+# not today's specific numbers.
+
+## Builds a _BALANCE_CFG-shaped dict with one calling entry, isolated from the
+## shared _BALANCE_CFG constant above so these tests can't be perturbed by
+## edits made for other tests (and vice versa).
+static func _offset_test_cfg(calling_id: String, calling_entry: Dictionary) -> Dictionary:
+	return {
+		"data": {
+			"maturity_expression": {
+				"band_by_standing":           { "1": "nascent", "2": "forming", "3": "grounded", "4": "whole", "5": "whole", "6": "whole", "7": "whole", "8": "whole", "9": "whole" },
+				"calling_behavior":           { calling_id: calling_entry },
+				"last_stand_fear_threshold":  { "grounded": 88, "whole": 95 },
+				"last_stand_whole_morale_tick": 5,
+				"enemy_demoralize_fear_tick": 5,
+				"enemy_demoralize_radius":    3,
+				"resilience_trait_pool":      {},
+				"leadership_trait_pool":      {},
+				"leadership_trait_effects":   {},
+				"rank_strength_scale":        { "max_rank": 9 },
+				"refusal_thresholds_by_band": { "nascent": 65, "forming": 72, "grounded": 80, "whole": 90 },
+				"identity_weight_scale":      { "trait": 0.35, "vector": 0.35 },
+				"composure_dampen_scale":     { "value": 0.4 },
+				"fear_self_recovery": {
+					"passive_max": 3, "active_spike_min": 3, "active_spike_max": 12,
+					"identity_threshold_calling": 30, "identity_threshold_vector": 0.15,
+				},
+				"sanctum_fear_recovery_bonus": { "mid_rank_start": 5, "bonus_max": 4, "identity_calling_bonus": 1, "identity_vector_bonus": 1 },
+				"directive_interpretation_mul": { "low": 0.75, "high": 1.30 },
+				"rank_benefits_config":        {},
+			},
+			"emotion": { "fear_threshold": 80 },
+			"actor":   { "threat_threshold": 0.50 },
+		}
+	}
+
+
+## actor rank/calling/fear factory shared by the four tests below — mirrors
+## the shape ActorTests._make_test_echo()/EchoActor.from_echo() produce,
+## just with the fields these tests actually vary exposed as parameters.
+static func _offset_test_actor(id: String, calling: String, rank: int, fear: int) -> Dictionary:
+	var echo := ActorTests._make_test_echo(id, id)
+	echo["calling_origin"] = calling
+	var actor: Dictionary = EchoActor.from_echo(echo)
+	actor["rank"]     = rank
+	actor["fear"]     = fear
+	actor["morale"]   = 50
+	actor["grid_pos"] = { "col": 0, "row": 0 }
+	return actor
+
+
+## Runs one turn through the real ActorStateMachine.advance_turn() and returns
+## whether the actor refused, plus the computed _fear_threshold for inspection.
+## Includes a LIVING ally echo in all_actors so _is_last_echo_standing() never
+## fires — these tests isolate the band+offset Absolute Fear Rule path, not
+## the separate last_stand_fear_threshold override (last_stand's own
+## composition is covered by the pre-existing tests 8-10 above).
+static func _offset_test_run(actor: Dictionary, cfg: Dictionary) -> Dictionary:
+	var enemy := _make_enemy("en_offset_%s" % str(actor.get("id", "")), { "col": 1, "row": 0 })
+	var living_ally := {
+		"id": "ally_offset_%s" % str(actor.get("id", "")), "faction": "echo", "actor_type": "echo",
+		"is_dead": false, "current_hp": 100, "stats": { "max_hp": 100 },
+		"grid_pos": { "col": 5, "row": 5 },
+	}
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var sm := ActorStateMachine.new(actor)
+	var intent: Dictionary = sm.advance_turn({ "actor": actor, "all_actors": [enemy, living_ally], "cfg": cfg, "t": 1 }, logger, 1)
+	return {
+		"refused":        str(intent.get("action_type", "")) == "actor.refuse",
+		"fear_threshold": int(actor.get("_fear_threshold", -1)),
+	}
+
+
+# Test 33 — THE HEADLINE CLAIM: a nascent aduro refuses before a whole aduro.
+# Before Phase 7 this was impossible for any called Echo — calling_behavior.
+# absolute_fear_threshold overrode the band outright, so aduro (any band)
+# refused at a flat 75. Here aduro carries ONLY absolute_fear_offset=-5 (no
+# legacy absolute_fear_threshold key), so nascent = 65-5 = 60 and
+# whole = 90-5 = 85. At fear=62: nascent must refuse, whole must not.
+# Falsifiable: revert ActorStateMachine.gd's Phase 7 change (back to
+# `_calling_behavior.get("absolute_fear_threshold", band_base_threshold)`) and
+# this cfg's unknown "absolute_fear_offset" key is silently ignored — both
+# actors fall through to their raw band values (nascent=65, whole=90), so at
+# fear=62 the nascent actor does NOT refuse (62<65) and this test fails.
+static func _t_nascent_aduro_refuses_before_whole_aduro() -> Dictionary:
+	var cfg := _offset_test_cfg("aduro", {
+		"retreat_threshold": 0.3, "press_advantage": true, "directive_mul": 1.0,
+		"leadership_radius": 3.0, "absolute_fear_offset": -5,
+	})
+
+	var actor_n := _offset_test_actor("echo_aduro_nascent", "aduro", 1, 62)
+	var result_n := _offset_test_run(actor_n, cfg)
+	if not bool(result_n["refused"]):
+		return { "ok": false, "error": "Nascent aduro at fear=62 should refuse (band 65 + offset -5 = 60), got no refusal (threshold=%d)" % int(result_n["fear_threshold"]) }
+
+	var actor_w := _offset_test_actor("echo_aduro_whole", "aduro", 9, 62)
+	var result_w := _offset_test_run(actor_w, cfg)
+	if bool(result_w["refused"]):
+		return { "ok": false, "error": "Whole aduro at fear=62 should NOT refuse (band 90 + offset -5 = 85), got refusal (threshold=%d)" % int(result_w["fear_threshold"]) }
+
+	return { "ok": true }
+
+
+# Test 34 — calling character is preserved: at the SAME band, sum_okwanfo
+# (most fragile calling, offset -10) still refuses before onyamesu (most
+# steadfast, offset +5). Both actors are rank 3 (grounded, threshold base 80)
+# so this isolates the calling axis from the band axis entirely.
+# sum_okwanfo threshold = 80-10 = 70; onyamesu threshold = 80+5 = 85.
+# At fear=75: sum_okwanfo must refuse, onyamesu must not.
+# Falsifiable: if the offsets were removed, swapped, or ignored, both actors
+# would resolve to the shared band base (80) and neither refuses at fear=75
+# — the sum_okwanfo assertion below would fail.
+static func _t_calling_character_preserved_at_same_band() -> Dictionary:
+	var cfg_fragile := _offset_test_cfg("sum_okwanfo", {
+		"retreat_threshold": 0.35, "press_advantage": false, "directive_mul": 1.2,
+		"leadership_radius": 3.0, "absolute_fear_offset": -10,
+	})
+	var actor_fragile := _offset_test_actor("echo_sum_okwanfo_gnd", "sum_okwanfo", 3, 75)
+	var result_fragile := _offset_test_run(actor_fragile, cfg_fragile)
+	if not bool(result_fragile["refused"]):
+		return { "ok": false, "error": "Grounded sum_okwanfo at fear=75 should refuse (band 80 + offset -10 = 70), got no refusal (threshold=%d)" % int(result_fragile["fear_threshold"]) }
+
+	var cfg_steadfast := _offset_test_cfg("onyamesu", {
+		"retreat_threshold": 0.45, "press_advantage": false, "directive_mul": 1.2,
+		"leadership_radius": 4.0, "absolute_fear_offset": 5,
+	})
+	var actor_steadfast := _offset_test_actor("echo_onyamesu_gnd", "onyamesu", 3, 75)
+	var result_steadfast := _offset_test_run(actor_steadfast, cfg_steadfast)
+	if bool(result_steadfast["refused"]):
+		return { "ok": false, "error": "Grounded onyamesu at fear=75 should NOT refuse (band 80 + offset +5 = 85), got refusal (threshold=%d)" % int(result_steadfast["fear_threshold"]) }
+
+	return { "ok": true }
+
+
+# Test 35 — the removed legacy `absolute_fear_threshold` key is no longer read.
+# Per AGENTS.md's additive-schema exception for this story ("new only, no
+# alias left behind"), ActorStateMachine.gd's elif branch reading
+# calling_behavior.absolute_fear_threshold was deleted outright (not kept as
+# a fallback). This test proves that removal: a calling config carrying ONLY
+# the legacy flat key (no absolute_fear_offset) must behave EXACTLY as if
+# that key were never authored — i.e. fall straight through to the band
+# baseline (nascent=65, whole=90) and diverge by band, not sit flat at the
+# stray legacy value (75, deliberately chosen to sit BETWEEN the two band
+# bases so a still-live fallback and a correctly-removed one produce
+# opposite, distinguishable refusal outcomes at fear=70).
+# Falsifiable: if the elif branch is reintroduced, threshold resolves to 75
+# for BOTH bands at fear=70 — neither actor refuses, and the nascent
+# assertion below (which expects a refusal at the band-base threshold of 65)
+# fails.
+static func _t_legacy_absolute_fear_threshold_key_ignored() -> Dictionary:
+	var cfg := _offset_test_cfg("okofor", {
+		"retreat_threshold": 0.45, "press_advantage": false, "directive_mul": 1.0,
+		"leadership_radius": 4.0, "absolute_fear_threshold": 75,
+	})
+
+	# fear=64: below nascent's band base (65) — must NOT refuse, proving the
+	# stray legacy key isn't lowering the effective threshold either.
+	var actor_n_below := _offset_test_actor("echo_legacy_n_below", "okofor", 1, 64)
+	if bool(_offset_test_run(actor_n_below, cfg)["refused"]):
+		return { "ok": false, "error": "Stray legacy key present: nascent at fear=64 should NOT refuse (band base 65 not yet reached)" }
+
+	# fear=70: at/above nascent's band base (65) but below whole's (90) and
+	# below the stray legacy flat value (75) — only the nascent actor should
+	# refuse. A live legacy fallback would read threshold=75 for BOTH and
+	# neither would refuse.
+	var actor_n_at := _offset_test_actor("echo_legacy_n_at", "okofor", 1, 70)
+	var actor_w_at := _offset_test_actor("echo_legacy_w_at", "okofor", 9, 70)
+	var result_n_at := _offset_test_run(actor_n_at, cfg)
+	var result_w_at := _offset_test_run(actor_w_at, cfg)
+	if not bool(result_n_at["refused"]):
+		return { "ok": false, "error": "Stray legacy key present: nascent at fear=70 should refuse at the band base (65), got threshold=%d — the removed legacy fallback may have been reintroduced" % int(result_n_at["fear_threshold"]) }
+	if bool(result_w_at["refused"]):
+		return { "ok": false, "error": "Stray legacy key present: whole at fear=70 should NOT refuse (band base 90), got refusal (threshold=%d)" % int(result_w_at["fear_threshold"]) }
+	if int(result_n_at["fear_threshold"]) != 65:
+		return { "ok": false, "error": "Nascent threshold should resolve to the band base (65), ignoring the stray legacy absolute_fear_threshold=75 key, got %d" % int(result_n_at["fear_threshold"]) }
+	if int(result_w_at["fear_threshold"]) != 90:
+		return { "ok": false, "error": "Whole threshold should resolve to the band base (90), ignoring the stray legacy absolute_fear_threshold=75 key, got %d" % int(result_w_at["fear_threshold"]) }
+
+	return { "ok": true }
+
+
+# Test 36 — clamping holds: no band+offset combination may push the computed
+# threshold outside [0, 100]. Uses deliberately extreme offsets (+50 on the
+# whole band, which sums to 140; -100 on the nascent band, which sums to -35)
+# and reads the actor's computed `_fear_threshold` directly (the same field
+# FlowRuntime projects into combat.action_refused evidence) rather than
+# inferring it from refuse/no-refuse — a refusal check alone couldn't
+# distinguish "clamped to 100" from "clamped to 1000", so this test pins the
+# exact clamped value.
+# Falsifiable: if the clampi() in ActorStateMachine.gd were removed, the high
+# case would resolve to 140 (not 100) and the low case to -35 (not 0) — both
+# assertions below fail.
+static func _t_absolute_fear_offset_clamps_to_valid_range() -> Dictionary:
+	var cfg_high := _offset_test_cfg("okofor", {
+		"retreat_threshold": 0.45, "press_advantage": false, "directive_mul": 1.0,
+		"leadership_radius": 4.0, "absolute_fear_offset": 50,
+	})
+	var actor_high := _offset_test_actor("echo_clamp_high", "okofor", 9, 100)  # whole band: 90+50=140 → clamp 100
+	var result_high := _offset_test_run(actor_high, cfg_high)
+	if int(result_high["fear_threshold"]) != 100:
+		return { "ok": false, "error": "Whole band + offset=+50 (raw=140) should clamp to 100, got %d" % int(result_high["fear_threshold"]) }
+
+	var cfg_low := _offset_test_cfg("okofor", {
+		"retreat_threshold": 0.45, "press_advantage": false, "directive_mul": 1.0,
+		"leadership_radius": 4.0, "absolute_fear_offset": -100,
+	})
+	var actor_low := _offset_test_actor("echo_clamp_low", "okofor", 1, 0)  # nascent band: 65-100=-35 → clamp 0
+	var result_low := _offset_test_run(actor_low, cfg_low)
+	if int(result_low["fear_threshold"]) != 0:
+		return { "ok": false, "error": "Nascent band + offset=-100 (raw=-35) should clamp to 0, got %d" % int(result_low["fear_threshold"]) }
+
 	return { "ok": true }

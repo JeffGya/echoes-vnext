@@ -25,7 +25,7 @@
 # Config is loaded from the real data/balance.json via ConfigService, matching the pattern
 # in CallingTests.gd's _load_real_calling_cfg(). The recruitment cfg is built through
 # RecruitmentService.build_effective_cfg() so the tests exercise the REAL formula — the
-# canonical source blocks (data.weaving_rite.vector_to_virtue_primary, data.sanctum.
+# canonical source blocks (data.contact.virtue_vector_key [V2-PROG-012 Phase 9], data.sanctum.
 # rival_archetypes, data.contact.outcome_thresholds.good) override the recruitment block's
 # own copies exactly as the runtime does it (canonical is the authoritative source).
 

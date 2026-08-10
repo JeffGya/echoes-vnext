@@ -8,8 +8,14 @@ extends Control
 # Reactions appear 0.4s after their trigger (call-and-response feel).
 #
 # Popup visual spec (Living Grove Design System) — authored in BarkPopupLayer.tscn:
-#   Original : Dark forest green panel, Akan Gold border, rounded corners, triangle tail
-#   Reaction : Warm cream panel, amber border, rounded corners, triangle tail
+#   Original   : Dark forest green panel, Akan Gold border, rounded corners, triangle tail
+#   Reaction   : Warm cream panel, amber border, rounded corners, triangle tail
+#   Divergence : Indigo panel, bright gold border, rounded corners, triangle tail —
+#                V2-PROG-012: the moment an Echo's own judgment out-votes the
+#                Directive (bark_context == "combat_divergence"). Indigo (Adire
+#                cloth) reads as depth/self-possession, deliberately distinct
+#                from the red urgent banner (CombatBoardScreen.gd), which owns
+#                danger — see StyleBoxFlat_diverge in the .tscn for the rationale.
 #
 # This .gd only sets text, position, modulate, and drives Tweens.
 # No nodes or StyleBoxes are created here (Lesson 5).
@@ -17,6 +23,7 @@ extends Control
 # ── scene refs ───────────────────────────────────────────────────────────────
 @onready var _original_template: Control = $BarkPopupOriginal
 @onready var _reaction_template: Control = $BarkPopupReaction
+@onready var _divergence_template: Control = $BarkPopupDivergence
 
 # ── state ────────────────────────────────────────────────────────────────────
 # actor_id → { "node": Control, "tween": Tween, "offset": Vector2 }
@@ -39,6 +46,8 @@ func _ready() -> void:
 		_original_template.visible = false
 	if _reaction_template:
 		_reaction_template.visible = false
+	if _divergence_template:
+		_divergence_template.visible = false
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
@@ -100,6 +109,42 @@ func clear_all() -> void:
 
 # ── internal ─────────────────────────────────────────────────────────────────
 
+const _TEMPLATE_KIND_DIVERGENCE: String = "divergence"
+const _TEMPLATE_KIND_REACTION: String   = "reaction"
+const _TEMPLATE_KIND_ORIGINAL: String   = "original"
+
+
+## Pure selection logic — no scene tree, no nodes, just the bark_context/
+## is_response inputs mapped to which template kind an event resolves to.
+## Extracted (V2-PROG-012 playtest fix review) so the three-way choice can be
+## unit-tested without a live SceneTree host — see tests/BarkPopupLayerTests.gd.
+##
+## V2-PROG-012: divergence takes precedence over reaction styling. In practice
+## the two never coexist on the same event — ActorStateMachine._check_reactive_bark()
+## always overwrites _bark_context (to "combat_rally_ally") in the SAME assignment
+## that sets _bark_is_response = true, so a divergence bark is never also flagged
+## as a reaction. This ordering is still explicit (not accidental) so the
+## structurally-distinct divergence template wins if that upstream invariant
+## ever changes.
+static func resolve_template_kind(bark_context: String, is_response: bool) -> String:
+	if bark_context == "combat_divergence":
+		return _TEMPLATE_KIND_DIVERGENCE
+	elif is_response:
+		return _TEMPLATE_KIND_REACTION
+	else:
+		return _TEMPLATE_KIND_ORIGINAL
+
+
+func _template_for_kind(kind: String) -> Control:
+	match kind:
+		_TEMPLATE_KIND_DIVERGENCE:
+			return _divergence_template
+		_TEMPLATE_KIND_REACTION:
+			return _reaction_template
+		_:
+			return _original_template
+
+
 func _show_bark_popup(ev: Dictionary) -> void:
 	var actor_id: String  = str(ev.get("actor_id", ""))
 	var bark_line: String = str(ev.get("bark_line", ""))
@@ -111,7 +156,11 @@ func _show_bark_popup(ev: Dictionary) -> void:
 		_kill_popup(actor_id)
 
 	var is_response: bool = bool(ev.get("is_response", false))
-	var template: Control = _reaction_template if is_response else _original_template
+	var bark_context: String = str(ev.get("bark_context", ""))
+	var template_kind: String = resolve_template_kind(bark_context, is_response)
+	var is_divergence: bool = template_kind == _TEMPLATE_KIND_DIVERGENCE
+
+	var template: Control = _template_for_kind(template_kind)
 	if template == null:
 		return
 
@@ -123,10 +172,10 @@ func _show_bark_popup(ev: Dictionary) -> void:
 
 	var label: Label = _find_label(popup)
 	if label:
-		label.text = (REACTION_PREFIX + bark_line) if is_response else bark_line
+		label.text = (REACTION_PREFIX + bark_line) if (is_response and not is_divergence) else bark_line
 
 	# Initial position from the event's screen_pos (will be refined by update_actor_positions).
-	var offset: Vector2 = REACTION_OFFSET if is_response else ORIGINAL_OFFSET
+	var offset: Vector2 = REACTION_OFFSET if (is_response and not is_divergence) else ORIGINAL_OFFSET
 	var screen_pos: Vector2 = ev.get("screen_pos", Vector2.ZERO)
 	var min_sz: Vector2 = popup.get_combined_minimum_size()
 	popup.position = screen_pos + offset - min_sz * 0.5

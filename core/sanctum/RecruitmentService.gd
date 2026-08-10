@@ -10,14 +10,17 @@
 #   RandomNumberGenerator from the caller (append-only namespace) — this service
 #   never derives its own seed.
 # - No hard-coded magic numbers: every tunable lives in data.contact.recruitment. A few
-#   of them (vector_to_virtue_primary, rival_archetype_pairs, conversation_good_fear_max/
-#   _morale_min) also live CANONICALLY elsewhere (data.weaving_rite, data.sanctum,
-#   data.contact.outcome_thresholds.good); build_effective_cfg() overrides the recruitment
-#   copies with those canonical sources at runtime, making canonical the single source of
-#   truth (the balance.json copies are kept for the additive-only data/ schema rule but are
-#   never read for the formula, so they can't silently desync it). The merged dict is passed
-#   as `cfg` to compute_recruit_chance; promote_ally_to_echo receives the full `cfg_data` and
-#   merges internally.
+#   of them (rival_archetype_pairs, conversation_good_fear_max/_morale_min) also live
+#   CANONICALLY elsewhere (data.sanctum, data.contact.outcome_thresholds.good);
+#   build_effective_cfg() overrides the recruitment copies with those canonical sources
+#   at runtime, making canonical the single source of truth (the balance.json copies are
+#   kept for the additive-only data/ schema rule but are never read for the formula, so
+#   they can't silently desync it). virtue_vector_key (V2-PROG-012 Phase 9: the keying
+#   permutation used to invert a contact's virtue_primary/_secondary into a vector_scores
+#   seed) is read directly from its single canonical location, data.contact — no
+#   recruitment-block copy of it exists anymore. The merged dict is passed as `cfg` to
+#   compute_recruit_chance; promote_ally_to_echo receives the full `cfg_data` and merges
+#   internally.
 # - promote_ally_to_echo() is a direct builder, NOT EchoFactory — EchoFactory's RNG
 #   draw order is immutable (Lesson #5) and a recruited companion has no RNG-driven
 #   birth to begin with; every field is derived from the ally's battle build + the
@@ -32,7 +35,7 @@
 #   combat ∈ [0, cfg.combat_max] — remaining-HP ratio, rounds-survived ratio, and
 #     offensive output (damage_dealt + kills, normalized against a cfg baseline).
 #   fit ∈ [0, cfg.fit_max] — vector-profile cosine similarity (contact virtue wheel →
-#     vector_scores keyspace via cfg.vector_to_virtue_primary), archetype match/rival
+#     vector_scores keyspace via cfg.virtue_vector_key), archetype match/rival
 #     bonus (SocialGraphService.is_rival_archetype_pair), and derived-stat closeness.
 #   Each component's sub-weights are POINT allocations (not fractions) that sum to
 #   that component's max, so summing the three returned ints always reproduces `chance`.
@@ -53,7 +56,7 @@ const STAT_KEYS: Array = ["max_hp", "atk", "def", "agi", "int", "cha", "speed"]
 ## canonical single sources onto a copy of data.contact.recruitment, so the recruitment
 ## block's own copies of these keys (kept for the additive-only data/ schema rule) are
 ## overridden and can never silently desync the formula — canonical is authoritative:
-##   vector_to_virtue_primary    <- data.weaving_rite.vector_to_virtue_primary
+##   virtue_vector_key           <- data.contact.virtue_vector_key (V2-PROG-012 Phase 9)
 ##   rival_archetype_pairs       <- data.sanctum.rival_archetypes
 ##   conversation_good_fear_max  <- data.contact.outcome_thresholds.good.npc_fear_max
 ##   conversation_good_morale_min<- data.contact.outcome_thresholds.good.npc_morale_min
@@ -65,11 +68,12 @@ static func build_effective_cfg(data: Dictionary) -> Dictionary:
 	var recruit: Dictionary = recruit_v if recruit_v is Dictionary else {}
 	var cfg: Dictionary = recruit.duplicate(true)
 
-	# vector_to_virtue_primary — canonical: data.weaving_rite.vector_to_virtue_primary
-	var weaving_v: Variant = data.get("weaving_rite", {})
-	var weaving: Dictionary = weaving_v if weaving_v is Dictionary else {}
-	var v2v_v: Variant = weaving.get("vector_to_virtue_primary", {})
-	cfg["vector_to_virtue_primary"] = v2v_v if v2v_v is Dictionary else {}
+	# virtue_vector_key — canonical: data.contact.virtue_vector_key (V2-PROG-012 Phase 9:
+	# relocated + renamed from data.weaving_rite.vector_to_virtue_primary; it's the keying
+	# permutation used ONLY to invert a contact's virtue -> vector for seeding, not a
+	# semantic composition claim — see its _comment in balance.json).
+	var v2v_v: Variant = contact.get("virtue_vector_key", {})
+	cfg["virtue_vector_key"] = v2v_v if v2v_v is Dictionary else {}
 
 	# rival_archetype_pairs — canonical: data.sanctum.rival_archetypes
 	var sanctum_v: Variant = data.get("sanctum", {})
@@ -200,7 +204,7 @@ static func promote_ally_to_echo(
 			if not existing_id.is_empty():
 				existing_ids.append(existing_id)
 
-	# Overrides the recruitment block's copies of vector_to_virtue_primary etc. with their
+	# Overrides the recruitment block's copies of rival_archetype_pairs etc. with their
 	# canonical sources (single source of truth) — see build_effective_cfg.
 	var recruit_cfg: Dictionary = build_effective_cfg(cfg_data)
 
@@ -238,7 +242,7 @@ static func promote_ally_to_echo(
 	var stats: Dictionary = DerivedStatService.compute_stats(traits, 1, 1, stat_cfg)
 
 	# ---- vector_scores: contact virtue_primary(higher)/virtue_secondary(lower) mapped
-	#      onto the vector_scores keyspace via recruit_cfg.vector_to_virtue_primary ----
+	#      onto the vector_scores keyspace via recruit_cfg.virtue_vector_key ----
 	var vector_profile: Dictionary = _build_ally_vector_profile(source_contact, recruit_cfg)
 
 	var class_origin: String = str(ally_actor.get("class_origin", ""))
@@ -496,13 +500,15 @@ static func _resolve_archetype_birth(ally_actor: Dictionary) -> String:
 
 
 ## Maps the contact's virtue_primary (higher weight) / virtue_secondary (lower
-## weight) onto the vector_scores keyspace via cfg.vector_to_virtue_primary
+## weight) onto the vector_scores keyspace via cfg.virtue_vector_key
 ## (inverted: virtue -> vector_key). Unknown/blank virtues are skipped safely.
 static func _build_ally_vector_profile(source_contact: Dictionary, cfg: Dictionary) -> Dictionary:
-	var v2v_v: Variant = cfg.get("vector_to_virtue_primary", {})
+	var v2v_v: Variant = cfg.get("virtue_vector_key", {})
 	var v2v: Dictionary = v2v_v if v2v_v is Dictionary else {}
 	var virtue_to_vector: Dictionary = {}
 	for vk in v2v:
+		if str(vk).begins_with("_"):
+			continue  # skip metadata keys (e.g. "_comment") — not a vector id
 		virtue_to_vector[str(v2v[vk])] = str(vk)
 
 	var vp: String = str(source_contact.get("virtue_primary", ""))

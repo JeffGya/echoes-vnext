@@ -18,6 +18,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("leadership/direct_recovery_stacks", Callable(LeadershipEmotionTests, "_t_direct_recovery_stacks"))
 	runner.register_test("leadership/kill_momentum_radius_and_source_exclusion", Callable(LeadershipEmotionTests, "_t_kill_momentum_radius_and_source_exclusion"))
 	runner.register_test("leadership/surprise_fear_uses_shared_path", Callable(LeadershipEmotionTests, "_t_surprise_fear_uses_shared_path"))
+	runner.register_test("leadership/presence_grades_leadership_strength", Callable(LeadershipEmotionTests, "_t_presence_grades_leadership_strength"))
+	runner.register_test("leadership/presence_grades_leadership_radius", Callable(LeadershipEmotionTests, "_t_presence_grades_leadership_radius"))
+	runner.register_test("leadership/presence_does_not_grant_eligibility", Callable(LeadershipEmotionTests, "_t_presence_does_not_grant_eligibility"))
+	runner.register_test("leadership/production_archetypes_grade_differently", Callable(LeadershipEmotionTests, "_t_production_archetypes_grade_differently"))
 	runner.register_test("leadership/ui_presentation_has_all_statuses", Callable(LeadershipEmotionTests, "_t_ui_presentation_has_all_statuses"))
 
 static func _t_real_balance_defines_all_emotion_traits() -> Dictionary:
@@ -229,6 +233,116 @@ static func _t_surprise_fear_uses_shared_path() -> Dictionary:
 		return { "ok": false, "error": "surprise fear did not use leadership-aware fear path" }
 	return { "ok": true }
 
+## V2-PROG-012 Phase 3, Item 4 #1: two Whole leaders with the same trait but different
+## Presence must produce different fear mitigation on the same-amount target. Before this
+## phase, is_whole_leader() was a binary gate — grading by Presence was impossible to
+## construct at all. Leader/target are adjacent (distance 1) so radius grading (tested
+## separately below) can never be the thing that changes the outcome here — only the
+## trait_factor grading can. Falsifiable: reverting apply_fear_gain()'s presence-grading
+## line collapses both leaders to factor 0.7 regardless of _presence, producing 14/14
+## instead of 14/17, and this test fails on both the inequality check and the pinned values.
+static func _t_presence_grades_leadership_strength() -> Dictionary:
+	var expr := _real_expr_cfg()
+	var canonical: float = float(expr.get("leadership_presence_scaling", {}).get("canonical_presence", 0.0))
+	if canonical <= 0.0:
+		return { "ok": false, "error": "real balance canonical_presence must be positive" }
+
+	var full_leader := _actor("full_presence_leader", 0, 0, 4, ["fearless_example"])
+	full_leader["_presence"] = canonical
+	var target_a := _actor("target_a", 1, 0, 1, [])
+	var applied_full := LeadershipEmotionService.apply_fear_gain(target_a, 20, [full_leader, target_a], expr, false)
+
+	var weak_leader := _actor("half_presence_leader", 0, 0, 4, ["fearless_example"])
+	weak_leader["_presence"] = canonical * 0.5
+	var target_b := _actor("target_b", 1, 0, 1, [])
+	var applied_weak := LeadershipEmotionService.apply_fear_gain(target_b, 20, [weak_leader, target_b], expr, false)
+
+	if applied_full == applied_weak:
+		return { "ok": false, "error": "leaders with different Presence must mitigate fear differently (both gave %d)" % applied_full }
+	if applied_full != 14 or applied_weak != 17:
+		return { "ok": false, "error": "graded leadership strength produced unexpected values (full=%d, half=%d), expected (14, 17)" % [applied_full, applied_weak] }
+	return { "ok": true }
+
+## V2-PROG-012 Phase 3, Item 4 #2: a lower-Presence leader's trait radius must be smaller
+## than a canonical-Presence leader's, and must never collapse below the configured
+## radius_floor_tiles even at zero Presence. Calls get_trait_radius() directly (not via
+## apply_fear_gain) so the radius grading is isolated from the strength grading covered
+## above. Falsifiable: reverting get_trait_radius()'s presence scaling makes all three
+## leaders report the same base radius (3), failing the strict-monotonic check; removing
+## the floor clamp makes the zero-Presence leader report 0 instead of the floor value.
+static func _t_presence_grades_leadership_radius() -> Dictionary:
+	var expr := _real_expr_cfg()
+	var scaling_cfg: Dictionary = expr.get("leadership_presence_scaling", {})
+	var canonical: float = float(scaling_cfg.get("canonical_presence", 0.0))
+	var floor_tiles: int = int(scaling_cfg.get("radius_floor_tiles", 1))
+	if canonical <= 0.0:
+		return { "ok": false, "error": "real balance canonical_presence must be positive" }
+
+	var full_leader := _actor("radius_full", 0, 0, 4, ["calm_transmission"])
+	full_leader["_presence"] = canonical
+	var full_radius := LeadershipEmotionService.get_trait_radius(full_leader, "calm_transmission", expr)
+
+	var half_leader := _actor("radius_half", 0, 0, 4, ["calm_transmission"])
+	half_leader["_presence"] = canonical * 0.5
+	var half_radius := LeadershipEmotionService.get_trait_radius(half_leader, "calm_transmission", expr)
+
+	var zero_leader := _actor("radius_zero", 0, 0, 4, ["calm_transmission"])
+	zero_leader["_presence"] = 0.0
+	var zero_radius := LeadershipEmotionService.get_trait_radius(zero_leader, "calm_transmission", expr)
+
+	if not (zero_radius < half_radius and half_radius < full_radius):
+		return { "ok": false, "error": "radius must shrink monotonically as Presence drops (zero=%d, half=%d, full=%d)" % [zero_radius, half_radius, full_radius] }
+	if zero_radius != floor_tiles:
+		return { "ok": false, "error": "zero-Presence leader radius must equal the configured floor of %d tiles, got %d" % [floor_tiles, zero_radius] }
+	return { "ok": true }
+
+## V2-PROG-012 Phase 3, Item 4 #3: pins the deliberate decision to keep is_whole_leader()'s
+## band gate as ELIGIBILITY, separate from Presence grading. A Grounded (non-Whole) Echo
+## with a high _presence must still fail to lead — Presence only grades an already-eligible
+## Whole leader's strength/radius, it does not grant eligibility on its own. Falsifiable: if
+## is_whole_leader() were changed to check Presence instead of (or in addition to) the
+## expression band, this Grounded leader would start reducing fear and the full-amount
+## (20) assertion below would fail.
+static func _t_presence_does_not_grant_eligibility() -> Dictionary:
+	var expr := _real_expr_cfg()
+	var grounded_leader := _actor("grounded_high_presence", 0, 0, 3, ["fearless_example"])
+	grounded_leader["_presence"] = 1.0
+	var target := _actor("grounded_target", 1, 0, 1, [])
+	var applied := LeadershipEmotionService.apply_fear_gain(target, 20, [grounded_leader, target], expr, false)
+	if applied != 20:
+		return { "ok": false, "error": "non-Whole leader with high Presence must not reduce fear at all (Whole-band eligibility gate must stay), got %d" % applied }
+	return { "ok": true }
+
+## Regression guard for a Phase 3 review finding: the first cut of presence grading
+## calibrated canonical_presence against these test fixtures themselves (no
+## archetype_birth -> archetype_projection 0.0), but archetype_projection carries the
+## joint-largest weight (0.25) in the presence formula and every production Echo has an
+## archetype. That made the fixture-derived canonical value sit at the bottom of the real
+## production range, so clamp(presence/canonical, 0, 1) saturated at 1.0 for every real
+## archetype — the grading was dormant in actual gameplay despite passing tests.
+## reflective (0.25, weakest projection) and valiant (0.9, strongest) are the two ends of
+## data.maturity_expression.autonomy_outputs.archetype_projection. Both leaders are built
+## the way production Echoes are built — via MaturityExpressionService.derive_expression(),
+## not a hand-set _presence — so this exercises the real seam end to end. Falsifiable: if
+## the calibration saturates again (canonical too low relative to the real archetype
+## spread, or the multiplier ceiling clamped back to 1.0), both leaders clamp to the same
+## multiplier and applied_reflective == applied_valiant, failing this test.
+static func _t_production_archetypes_grade_differently() -> Dictionary:
+	var expr := _real_expr_cfg()
+	var reflective_leader := _production_leader("reflective_leader", 4, ["fearless_example"], "reflective")
+	var target_a := _actor("target_reflective", 1, 0, 1, [])
+	var applied_reflective := LeadershipEmotionService.apply_fear_gain(
+		target_a, 20, [reflective_leader, target_a], expr, false)
+
+	var valiant_leader := _production_leader("valiant_leader", 4, ["fearless_example"], "valiant")
+	var target_b := _actor("target_valiant", 1, 0, 1, [])
+	var applied_valiant := LeadershipEmotionService.apply_fear_gain(
+		target_b, 20, [valiant_leader, target_b], expr, false)
+
+	if applied_reflective == applied_valiant:
+		return { "ok": false, "error": "production leaders at opposite archetype extremes must mitigate fear differently (both gave %d) — presence grading is saturated/dormant" % applied_reflective }
+	return { "ok": true }
+
 static func _t_ui_presentation_has_all_statuses() -> Dictionary:
 	var theme: Theme = load("res://assets/theme/LivingTreeSystem.tres")
 	for status in EmotionPresentation.STATUSES:
@@ -256,4 +370,30 @@ static func _actor(id: String, col: int, row: int, rank: int, traits: Array) -> 
 		"grid_pos": { "col": col, "row": row }, "fear": 0, "morale": 50,
 		"traits": { "courage": 50, "wisdom": 50, "faith": 50 }, "vector_scores": {},
 		"leadership_traits": traits.duplicate(), "resilience_traits": [],
+		"archetype_birth": "empathic",  # V2-PROG-012 Phase 3: real Echoes always have an
+		# archetype (EchoActor.gd reads archetype_birth; PersonalityArchetype.from_traits()
+		# always returns one of nine) — "" (no archetype) is not a production-representative
+		# fixture shape. "empathic" (0.55) sits close to the mean of the nine
+		# archetype_projection values (~0.567), used here as the shared fixture default so
+		# every actor built by this helper represents a plausible production Echo.
 	}
+
+
+## Builds an actor at grid_pos (0,0) with a real, derived _presence — the way
+## ActorStateMachine.advance_turn() computes it via MaturityExpressionService.
+## derive_expression(), not hand-set. Used to exercise the actual production seam
+## (as opposed to _actor()'s leaders in most tests above, whose _presence is simply
+## absent because they're never run through derive_expression — see
+## LeadershipEmotionService._presence_multiplier()'s doc comment for why that's a
+## deliberate identity default rather than an oversight).
+static func _production_leader(id: String, rank: int, traits: Array, archetype_birth: String) -> Dictionary:
+	var actor := _actor(id, 0, 0, rank, traits)
+	actor["archetype_birth"] = archetype_birth
+	var bdata: Dictionary = _real_balance().get("data", {})
+	var expr_cfg: Dictionary = bdata.get("maturity_expression", {})
+	var calling_defs: Dictionary = bdata.get("calling", {}).get("definitions", {})
+	var family: String = str(calling_defs.get(str(actor.get("calling_origin", "")), {}).get("family", ""))
+	var ctx_inputs: Dictionary = { "calling_family": family }
+	var result := MaturityExpressionService.derive_expression(actor, ctx_inputs, expr_cfg)
+	actor["_presence"] = float(result.get("presence", 0.0))
+	return actor

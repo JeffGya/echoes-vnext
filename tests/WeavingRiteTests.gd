@@ -29,17 +29,30 @@ static func _make_cfg() -> Dictionary:
 		"max_candidates": 3,
 		"fit_threshold_accept": 0.55,
 		"readiness_threshold_defer": 0.38,
-		"vector_to_virtue_primary": {
-			"vanguard": "courage",
-			"protector": "leadership",
-			"seeker": "wisdom",
-			"pillar": "acceptance",
-			"strategist": "truth",
-			"skeptic": "humility",
-			"devoted": "forgiveness",
-			"opportunist": "generosity",
-			"mediator": "compassion",
-			"nurturer": "empathy",
+		# V2-PROG-012 Phase 9: WeavingRiteService._compute_fit now reads
+		# cfg.vector_virtue_composition (semantic — vector's PRIMARY [0] composing
+		# virtue), not the old vector_to_virtue_primary bijection. Verbatim mirror of
+		# balance.json data.contact.vector_virtue_composition (GDD-derived, see
+		# docs/calling-reference.md:28-37).
+		"vector_virtue_composition": {
+			"vanguard":    ["courage", "leadership"],
+			"protector":   ["courage", "compassion"],
+			"seeker":      ["wisdom", "truth"],
+			"strategist":  ["wisdom", "leadership"],
+			"skeptic":     ["truth", "humility"],
+			"pillar":      ["acceptance", "humility"],
+			"devoted":     ["acceptance", "generosity"],
+			"opportunist": ["courage", "wisdom"],
+			"mediator":    ["empathy", "forgiveness"],
+			"nurturer":    ["generosity", "compassion"],
+		},
+		"calling_to_virtue_primary": {
+			"okofor":      "courage",
+			"onyamesu":    "acceptance",
+			"aduro":       "courage",
+			"sum_okwanfo": "courage",
+			"okomfo":      "wisdom",
+			"kra_soro":    "wisdom",
 		},
 		"clue_vocab": {
 			"fit": { "high": "Drawn", "medium": "Resonant", "low": "Misaligned", "false": "FalsePull" },

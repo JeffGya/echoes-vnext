@@ -53,6 +53,25 @@ its section here will be updated to reflect V2 truth.
 - Data files: `snake_case.json`
 - IDs and action types: `snake_case` strings / `domain.subdomain.verb`
 
+### Reachability (added V2-PROG-012 — every new derived value, config key, or seam)
+
+**Prove reachability, not just execution.** A green test proves code ran, not that the value reaches anyone. Every new derived value, config key, or seam must additionally show:
+
+- **(a) It is read from where it is authored.** Override with a sentinel and assert the consumer reflects it — proving the value is not silently falling through to a hardcoded default.
+- **(b) It discriminates across production-shaped data, never calibrated against a test fixture.** A fixture that omits a real field (e.g. no `archetype_birth`) can sit at the bottom of the real production range and make a whole grading pass look active while it is actually saturated/dormant for every real case.
+- **(c) It survives every hop to wherever it becomes player-facing, proven by a real `FlowRuntime` session — not a hand-built dict.** A hand-built dict can skip exactly the lookup, overwrite, or truncation that breaks it in play.
+
+**Why this is a hard requirement, not a suggestion:** V2-PROG-012 shipped with seven confirmed defects that were each authored, wired, passing tests, and structurally unreachable in real play:
+1. Seven `balance.json` tuning keys the arbiter could never read — they silently fell through to `_DEFAULTS`, so editing them did nothing (violates (a)).
+2. Composure flooring to `0.0` for a whole cohort of Echoes (a fixture-calibration blind spot — violates (b)).
+3. Presence grading saturating to no-effect for every real archetype (the same class of fixture-calibration blind spot — violates (b)).
+4. Divergence detection firing only for enemies, never for the Echoes it exists to voice (violates (c) — a hand-built test dict never exercised the `faction` gate the real combat seam applies).
+5. 32KB of authored NPC opening lines silently overwritten with `""` by an unauthored fallback lookup (violates (c) — every unit test constructed its own line and never round-tripped through the real `FlowRuntime._start_contact_conversation()` path).
+6. Conversation Storyweight truncated by `int(0.2)` → `0` and never actually awarded (violates (c) — tests asserted the formula, not the post-`int()` grant).
+7. The Absolute Fear Rule's per-calling override made "nascent breaks sooner, whole holds longer" inert for 6 of 7 callings (violates (a) — the override replaced the band table it was meant to compose with).
+
+None of these were caught by a green test suite. Each was caught only by tracing the value to its actual consumer under production-shaped inputs. Treat this checklist as mandatory for any story that adds a derived value, a new config key, or a new cross-system seam — it is cheaper than the defect.
+
 ---
 
 ## Core Contracts
@@ -312,7 +331,49 @@ Default module assignment (ActorStateMachine._init()):
 - all others (incl. `"structure"`) → `IdleBehaviorModule`
 - Explicit module passed to `_init()` always overrides the default
 
-**Absolute Fear Rule:** `fear ≥ 80` → returns `actor.refuse` immediately, before module is called. **PROG-010 tier override:** Veteran+ last-echo-standing raises threshold to 88; Elite raises to 95. `suppress_panic_spiral` resilience trait adds +5 on top of tier baseline.
+**Absolute Fear Rule:** `fear ≥ 80` → returns `actor.refuse` immediately, before module is called. **PROG-010 tier override:** Veteran+ last-echo-standing raises threshold to 88; Elite raises to 95. `suppress_panic_spiral` resilience trait adds +5 on top of tier baseline. **PROG-012 Phase 7:** the base-80 figure above is the `grounded`-band baseline of `data.maturity_expression.refusal_thresholds_by_band`; the real per-calling threshold is `clamp(band_base + calling_behavior.<calling>.absolute_fear_offset, 0, 100)` — offset composes with the band instead of replacing it, so "nascent breaks sooner, whole holds longer" (GDD:1422) now holds for every calling. **Measured: refusal is unreachable in natural play** — 0 refusals in 439 measured rounds across all bands, fresh and veteran Echoes, and tripled enemy counts; fear peaks ~27 against thresholds of 60–90 because recovery outpaces accumulation. This fix is correct but its effect cannot be observed until the fear economy is rebalanced — do not tune these thresholds expecting a visible change in play. See `ANSWERS.md` and `docs/integration-map.md`'s V2-PROG-012 row.
+
+### MaturityExpressionService — Hidden Autonomy Outputs + Divergence Contract (`core/actors/MaturityExpressionService.gd`, `core/actors/DivergenceDetector.gd`) — V2-PROG-012
+
+**Four named hidden outputs** (GDD §11.5, §7.3), derived **per-activation** by `MaturityExpressionService.derive_expression()` from the GDD's eight named inputs — **never persisted, never saved, recomputed fresh every turn**:
+
+| Output | Range | What it grades |
+|---|---|---|
+| `judgment` | `0.0`–`1.0` | how strongly the Echo can hold, interpret, and assert self under pressure — drives `interpretation_width` (how literally she weighs the Directive; see `BehaviorArbiter._directive_bonus()`) |
+| `presence` | `0.0`–`1.0` | how strongly her current state presses onto nearby/bonded others — grades `LeadershipEmotionService` Whole-band trait strength and radius via `leadership_presence_scaling` |
+| `composure` | `0.0`–`1.0` | resistance to noise vs. sharper reaction to true contradiction — drives `composure_dampen_scale` (fear-disruption dampening) and raises/sharpens the divergence-detection bar |
+| `legibility` | `0.0`–`1.0` | how specific and readable the Echo's intent is — drives `primary_reason` specificity in the divergence contract and the `combat_divergence` bark |
+
+All four are flat weighted sums, clamped `0.0`–`1.0` — GDD:1438-1442 forbids growing this into a broad hidden stat-bonus tree. Do not add a fifth output or thread any of the four into a persisted save field without a design decision.
+
+**Divergence contract** (`DivergenceDetector.detect()`, called by `BehaviorArbiter` after normal scoring — pure, static, no RNG/state):
+
+```gdscript
+{
+  "diverged":          bool,
+  "divergence_kind":   String,   # "interpretation" | "judgment" | ""
+  "overrule_strength": float,    # diagnostic only — see contest_ratio for the actual trigger
+  "directive_pull":    float,
+  "self_margin":       float,
+  "decision_scale":    float,
+  "contest_ratio":     float,    # directive_pull / decision_scale — the actual trigger, vs. min_contest_ratio
+  "threshold":         float,    # effective_min_contest_ratio (min_contest_ratio scaled by composure)
+  "severity":          float,
+  "primary_reason":    String,   # player-readable, no IDs; specificity scales with legibility
+  "directive_action":  String,
+  "chosen_action":     String,
+}
+```
+
+This vocabulary is **deliberately not** the five Keeper-guidance responses. `V2-COMBAT-003` owns mapping `diverged`/`divergence_kind`/`severity` onto Align/Interpret/Hesitate/Object/Refuse (deterministic pressure collision + reason-bearing outcomes). `V2-VOICE-002` owns aggregating these per-Echo outputs into the GDD's party-level `aligned/strained/hesitant/refusing` pre-run forecast (`docs/Echoes vNext Working GDD.md:1329-1338`) — that ladder is NOT this contract; do not conflate the two. PROG-012 ships inputs and thresholds only, per `docs/proposals/keeper-tactical-guidance-promotion.md:520`.
+
+**Locked invariant — `directive_bonus` placement in `BehaviorArbiter._score()`:** `directive_bonus` MUST stay a flat additive term **outside** the fear/calling bracket:
+```gdscript
+return (base + trait_bonus + vector_bonus + archetype_bonus + morale_bonus) * fear_factor * calling_mul + directive_bonus + situational_bonus
+```
+This is what makes `self_score(c) = c.score - directive_bonus(c)` recover "the Echo's own judgment with the Directive's voice removed" by simple subtraction, with no re-scoring — the entire divergence detector depends on this exact placement. Do **not** "tidy" `directive_bonus` inside the bracket; that silently breaks divergence detection with no test failure to catch it (the algebra just stops meaning what it claims to mean).
+
+Live effect: `contest_ratio = directive_pull / decision_scale` — a proportion, not a raw margin, so one `min_contest_ratio` threshold (`data.maturity_expression.divergence.min_contest_ratio`, currently `0.28`, PROPOSED DEFAULT) generalises across directives regardless of how large that directive's raw score swing happens to be. A diverged turn emits `actor.divergence` at info severity and (gated to `faction == "echo"`) a band-tiered `combat_divergence` bark whose specificity *is* Legibility — nascent gives a bare impulse, whole gives reason plus a counter-offer. **Measured: divergence is effectively single-directive today** — under `directive.seek_signs`, only 4 of 535 Echo turns showed any contest, because what that directive asks for already matches unprompted Echo behavior. This is a property of that directive's content, not a detector defect (confirmed by data-driven coverage enumerating `DirectiveService.get_registry()` at runtime).
 
 ### EmotionService (`core/emotion/EmotionService.gd`)
 Single choke point for all emotion mutations (outside of mid-combat direct writes).
@@ -492,7 +553,7 @@ Closes the last STAGE-004 gap: STAGE-003 conversation outcomes now reach combat,
 - `compute_recruit_chance(ally_actor, source_contact, party_echoes, contribution_entry, rounds_total, cfg) -> { chance, conversation, combat, fit }` — additive, base 0, `chance = clampi(conversation + combat + fit, 0, cfg.cap)` (`cap` default 75). Three components, each a POINT allocation (not a fraction) capped at its own `cfg.*_max`:
   - `conversation` ∈ `[0, conversation_max]` — blend of talk-quality (final morale/fear vs. `conversation_good_fear_max`/`conversation_good_morale_min`) and engagement (`conv_score_sum` / `winning_turns` ratio).
   - `combat` ∈ `[0, combat_max]` — remaining-HP ratio, rounds-survived ratio, offensive output (`damage_dealt + kills×baseline`) normalized against `combat_subweights.offensive_damage_baseline` — **this is the contribution ledger's first consumer**.
-  - `fit` ∈ `[0, fit_max]` — vector-profile cosine similarity (contact virtue wheel → `vector_scores` keyspace via `cfg.vector_to_virtue_primary`), archetype match/rival bonus (`SocialGraphService.is_rival_archetype_pair`), and derived-stat closeness vs. the party average.
+  - `fit` ∈ `[0, fit_max]` — vector-profile cosine similarity (contact virtue wheel → `vector_scores` keyspace via `cfg.virtue_vector_key`, canonically `data.contact.virtue_vector_key` — V2-PROG-012 Phase 9), archetype match/rival bonus (`SocialGraphService.is_rival_archetype_pair`), and derived-stat closeness vs. the party average.
   - **Invariant:** the three returned ints always sum to exactly `chance`. When the raw sum exceeds `cap`, components are rescaled down via the largest-remainder method (floor each exact share, hand out the leftover one unit at a time to the largest fractional remainders) — never via independent rounding, which could break the sum.
 - `roll(chance: int, rng: RandomNumberGenerator) -> bool` — single seeded draw (`rng.randi_range(1,100) <= chance`); `rng` must already be seeded by the caller under the append-only namespace `combat.<encounter_id>.ally_recruit`. Honors `FlowContext.dev_force_recruit` via draw-then-override (RNG order preserved even when the debug override fires).
 - `promote_ally_to_echo(ally_actor, source_contact, save_data, cfg_data, logger, t) -> String` (returns new `echo_id`) — a **direct builder, NOT `EchoFactory`** (EchoFactory's v1/v2 RNG draw order is immutable and a recruited companion has no RNG-driven birth). Mints a roster echo: `origin: "recruited_ally"`, `rarity: "uncalled"`, `rank: 1` / `level: 1` (Standing 1), traits carried from the ally's battle build, stats re-derived fresh via `DerivedStatService.compute_stats()`, `vector_scores` built from the source contact's `virtue_primary`/`virtue_secondary`. **Seeds a NEGATIVE companion bond debuff** (`data.contact.recruitment.companion_bond_debuff`, default −30) against every roster echo that existed before the promotion, via `SocialGraphService.apply_score_delta()`.
@@ -1052,7 +1113,7 @@ EncounterStateMachine phases (scaffold): `setup → blessing → rounds → reso
 | `save.*` | save.load, save.write, save.schema.repair |
 | `economy.*` | economy.ase.add/spend/add_denied/spend_denied, economy.offline.apply/noop, economy.time_anomaly |
 | `sanctum.*` | sanctum.summon.bark, sanctum.party.toggle, sanctum.rank_up, sanctum.calling.confirm, sanctum.summon.start/complete |
-| `actor.*` | actor.intent, actor.action, actor.moved, actor.purified_shrine, actor.died |
+| `actor.*` | actor.intent, actor.action, actor.moved, actor.purified_shrine, actor.died, actor.divergence (V2-PROG-012 — Echo/Directive divergence; see `DivergenceDetector` contract under BehaviorModule) |
 | `combat.*` | combat.round_start, combat.shrine_drain, combat.end |
 | `realm.*` | realm.created — Payload: `realm_id, virtue, seed, stage_count, run_index, run_count, stage_types: Array[String], stage_seeds: Array[int]` |
 | `encounter.*` | encounter.retreat.attempted, encounter.retreat.failed |

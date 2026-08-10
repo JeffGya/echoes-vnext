@@ -40,10 +40,44 @@ static func _t_production_golden() -> Dictionary:
 	var enemy: Dictionary = _enemy("enemy.a", {"col": 3, "row": 0})
 	var arbiter := BehaviorArbiter.new({})
 	var actual: Dictionary = arbiter.select_intent({"actor": actor, "all_actors": [enemy], "t": 1})
+	# V2-PROG-012 Phase 4: select_intent() now also attaches `_divergence_probe`
+	# (score components for DivergenceDetector) to the winner — see BehaviorArbiter's
+	# select_intent(). Context here carries no directive, so directive_bonus is 0.0
+	# everywhere and the probe carries no live directive tension; it is still
+	# attached (only a hard 9999.0 score override skips it) so the golden pins it too.
+	# V2-PROG-012 Phase 4 fix: `directive_preferred` (a single dict) was replaced by
+	# `directive_candidates` (the FULL directive_bonus-descending ranking — see
+	# BehaviorArbiter's _rank_directive_candidates()) plus `decision_scale`. With no
+	# directive, every candidate's directive_bonus ties at 0.0, so the ranking's
+	# tie-break (action_type, ascending) decides order — not "first encountered by
+	# score" — which is why actor.idle sorts before actor.move below despite
+	# actor.move being the higher-scoring winner.
 	var expected: Dictionary = {
 		"action_type": "actor.move", "target_id": "enemy.a", "target_pos": {"col": 3, "row": 0},
 		"target_distance": 3, "target_hp_ratio": 1.0, "priority": 1.0,
 		"morale_tier": "steady", "morale_modifier": 0, "archetype_birth": "", "archetype_modifier": 0,
+		"_divergence_probe": {
+			"chosen": {
+				"action_type": "actor.move", "target_id": "enemy.a", "score": 44.0,
+				"directive_bonus": 0.0, "directive_bonus_nascent": 0.0,
+				"components": {
+					"base": 44.0, "trait_bonus": 0.0, "vector_bonus": 0.0, "archetype_bonus": 0.0,
+					"morale_bonus": 0.0, "fear_factor": 1.0, "calling_mul": 1.0,
+					"directive_bonus": 0.0, "situational_bonus": 0.0,
+				},
+			},
+			"directive_candidates": [
+				{
+					"action_type": "actor.idle", "target_id": "", "score": 8.0,
+					"directive_bonus": 0.0, "directive_bonus_nascent": 0.0,
+				},
+				{
+					"action_type": "actor.move", "target_id": "enemy.a", "score": 44.0,
+					"directive_bonus": 0.0, "directive_bonus_nascent": 0.0,
+				},
+			],
+			"decision_scale": 36.0,
+		},
 	}
 	if actual != expected:
 		return _fail("Production golden changed: %s" % str(actual))
@@ -51,7 +85,49 @@ static func _t_production_golden() -> Dictionary:
 	actor["fear"] = 100
 	enemy["grid_pos"] = {"col": 1, "row": 0}
 	actual = arbiter.select_intent({"actor": actor, "all_actors": [enemy], "t": 2})
-	if actual != {"action_type": "actor.guard", "target_id": "", "priority": 0.0, "morale_tier": "steady", "morale_modifier": 0, "archetype_birth": "", "archetype_modifier": 0}:
+	# melee_attack's ranked-candidate score (39.77) is a genuine arithmetic result
+	# (not a clean decimal literal), so it lands on a double a few ULPs off whatever
+	# GDScript's own "39.77" literal parses to — is_equal_approx it separately, then
+	# normalize it in `actual` so the single exact-equality dict compare below still
+	# works for every other (exact) field.
+	var stationary_candidates: Array = ((actual.get("_divergence_probe", {}) as Dictionary).get("directive_candidates", []) as Array)
+	for candidate_v: Variant in stationary_candidates:
+		var candidate: Dictionary = candidate_v as Dictionary
+		if str(candidate.get("action_type", "")) == "melee_attack":
+			if not is_equal_approx(float(candidate.get("score", 0.0)), 39.77):
+				return _fail("melee_attack ranked-candidate score drifted: %s" % str(candidate.get("score", 0.0)))
+			candidate["score"] = 39.77
+	var expected_stationary: Dictionary = {
+		"action_type": "actor.guard", "target_id": "", "priority": 0.0,
+		"morale_tier": "steady", "morale_modifier": 0, "archetype_birth": "", "archetype_modifier": 0,
+		"_divergence_probe": {
+			"chosen": {
+				"action_type": "actor.guard", "target_id": "", "score": 50.0,
+				"directive_bonus": 0.0, "directive_bonus_nascent": 0.0,
+				"components": {
+					"base": 55.0, "trait_bonus": 0.0, "vector_bonus": 0.0, "archetype_bonus": 0.0,
+					"morale_bonus": 0.0, "fear_factor": 1.0, "calling_mul": 1.0,
+					"directive_bonus": 0.0, "situational_bonus": -5.0,
+				},
+			},
+			"directive_candidates": [
+				{
+					"action_type": "actor.guard", "target_id": "", "score": 50.0,
+					"directive_bonus": 0.0, "directive_bonus_nascent": 0.0,
+				},
+				{
+					"action_type": "actor.idle", "target_id": "", "score": -4.0,
+					"directive_bonus": 0.0, "directive_bonus_nascent": 0.0,
+				},
+				{
+					"action_type": "melee_attack", "target_id": "enemy.a", "score": 39.77,
+					"directive_bonus": 0.0, "directive_bonus_nascent": 0.0,
+				},
+			],
+			"decision_scale": 54.0,
+		},
+	}
+	if actual != expected_stationary:
 		return _fail("Stationary production golden changed: %s" % str(actual))
 	return _pass()
 
@@ -377,7 +453,13 @@ static func _t_identity_one_factor() -> Dictionary:
 	if arbiter._score("actor.move", actor, {}, {}, "nascent", {}, candidate, 0.1, 0.0) <= base:
 		return _fail("Calling factor missing")
 	actor = _actor(); actor["traits"] = {"courage": 10}
-	if not is_equal_approx(arbiter._score("actor.move", actor, {}, {}, "nascent", {}, candidate, 0.1, 0.0) - base, 3.5):
+	# V2-PROG-012 Phase 6: this pins the RAW (unscaled) trait_action_muls table
+	# value (courage 0.35 * 10 = 3.5) — identity_weight_scale's amplification is
+	# now driven by `judgment` (default 0.3 when omitted, not 0.0 like the
+	# rank_strength=0.0 passed above), so judgment=0.0 must be passed explicitly
+	# here to keep interpretation_width at its floor (no amplification) and this
+	# exact-equality assertion meaningful.
+	if not is_equal_approx(arbiter._score("actor.move", actor, {}, {}, "nascent", {}, candidate, 0.1, 0.0, 0.4, 0.0) - base, 3.5):
 		return _fail("Trait factor missing")
 	actor = _actor(); actor["archetype_birth"] = "valiant"
 	if not is_equal_approx(arbiter._score("actor.move", actor, {}, {}, "nascent", {}, candidate, 0.1, 0.0) - base, 20.0):
@@ -400,10 +482,15 @@ static func _t_ten_virtues() -> Dictionary:
 	var arbiter := BehaviorArbiter.new({})
 	var expected: Dictionary = {"vanguard": 0.4, "protector": 0.05, "seeker": 0.1, "pillar": 0.0, "strategist": 0.15, "skeptic": 0.05, "devoted": 0.0, "opportunist": 0.3, "mediator": 0.05, "nurturer": 0.0}
 	var base: float = arbiter._score("actor.move", _actor(), {}, {}, "nascent", {}, {}, 0.1, 0.0)
+	# V2-PROG-012 Phase 6: judgment=0.0 pins interpretation_width at its floor (no
+	# identity_weight_scale amplification) so `delta` below reproduces the RAW
+	# vector_action_muls table values — see the equivalent note in
+	# _t_identity_one_factor above for why the default judgment (0.3) would
+	# otherwise silently scale these exact-equality deltas.
 	for virtue: String in expected:
 		var actor: Dictionary = _actor()
 		actor["vector_scores"] = {virtue: 10}
-		var delta: float = arbiter._score("actor.move", actor, {}, {}, "nascent", {}, {}, 0.1, 0.0) - base
+		var delta: float = arbiter._score("actor.move", actor, {}, {}, "nascent", {}, {}, 0.1, 0.0, 0.4, 0.0) - base
 		if not is_equal_approx(delta, 10.0 * float(expected[virtue])):
 			return _fail("Virtue %s factor mismatch: %s" % [virtue, delta])
 	return _pass()
