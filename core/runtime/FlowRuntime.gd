@@ -5791,15 +5791,22 @@ func _get_weaving_rite_cfg() -> Dictionary:
 	# V2-PROG-012 Phase 9: overlay the canonical identity tables from data.contact —
 	# same "overlay canonical source onto a local cfg copy" pattern as
 	# RecruitmentService.build_effective_cfg. WeavingRiteService reads
-	# cfg.vector_virtue_composition and cfg.calling_to_virtue_primary; both live
-	# canonically under data.contact, not data.weaving_rite (see balance.json's
-	# "_comment_identity" on data.contact for why).
+	# cfg.vector_virtue_composition, cfg.calling_to_virtue_primary, and cfg.virtue_wheel;
+	# all three live canonically under data.contact, not data.weaving_rite (see
+	# balance.json's "_comment_identity" on data.contact for why).
 	var contact_v: Variant = data.get("contact", {})
 	var contact: Dictionary = contact_v if contact_v is Dictionary else {}
 	var composition_v: Variant = contact.get("vector_virtue_composition", {})
 	rite["vector_virtue_composition"] = composition_v if composition_v is Dictionary else {}
 	var calling_primary_v: Variant = contact.get("calling_to_virtue_primary", {})
 	rite["calling_to_virtue_primary"] = calling_primary_v if calling_primary_v is Dictionary else {}
+	# chore/finish-virtue-wheel-and-dead-config: WeavingRiteService._is_adjacent migrated
+	# off its hardcoded _VIRTUE_WHEEL const onto this overlaid cfg.virtue_wheel, matching
+	# the ConversationService._virtue_wheel_distance precedent. Without this overlay,
+	# _is_adjacent silently degrades to false for every pair (empty wheel -> find() == -1),
+	# disabling the 0.6 adjacent fit tier and the +0.1 calling-virtue-adjacency bonus.
+	var virtue_wheel_v: Variant = contact.get("virtue_wheel", [])
+	rite["virtue_wheel"] = virtue_wheel_v if virtue_wheel_v is Array else []
 
 	return rite
 

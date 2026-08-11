@@ -27,6 +27,13 @@
 #   17. identity/integrity_rejects_virtue_wheel_wrong_size   — virtue_wheel with a dropped entry (9 instead of 10) is flagged.
 #   18. identity/virtue_wheel_distance_matches_pre_migration_values — pins _virtue_wheel_distance's known distances (adjacent/opposite/identical/unknown) so a config-plumbing regression can't silently change resonance scoring.
 #   19. identity/conversation_service_reads_canonical_virtue_wheel  — sentinel-override: _virtue_wheel_distance reflects an overridden cfg.virtue_wheel, proving the const is gone and cfg is live.
+#
+# chore/finish-virtue-wheel-and-dead-config — WeavingRiteService's own hardcoded
+# _VIRTUE_WHEEL const (duplicating data.contact.virtue_wheel) migrated to the same
+# cfg.virtue_wheel FlowRuntime._get_weaving_rite_cfg() now overlays:
+#   20. identity/weaving_rite_flowruntime_overlay_produces_adjacent_fit — drives _compute_fit through the REAL production cfg path (FlowRuntime._get_weaving_rite_cfg via a live ConfigService), not a hand-built fixture. Fails if the virtue_wheel overlay is missing (proven by removing it and re-running — see PR body).
+#   21. identity/weaving_rite_service_reads_canonical_virtue_wheel — sentinel-override: _compute_fit reflects an overridden cfg.virtue_wheel, proving the const is gone and cfg is live.
+#   22. identity/integrity_rejects_weaving_rite_virtue_wheel_duplicate — regression guard: a re-added data.weaving_rite.virtue_wheel copy is flagged.
 
 extends RefCounted
 class_name IdentityIntegrityTests
@@ -54,6 +61,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("identity/integrity_rejects_virtue_wheel_wrong_size", Callable(IdentityIntegrityTests, "_t_integrity_rejects_virtue_wheel_wrong_size"))
 	runner.register_test("identity/virtue_wheel_distance_matches_pre_migration_values", Callable(IdentityIntegrityTests, "_t_virtue_wheel_distance_matches_pre_migration_values"))
 	runner.register_test("identity/conversation_service_reads_canonical_virtue_wheel", Callable(IdentityIntegrityTests, "_t_conversation_reads_virtue_wheel"))
+	runner.register_test("identity/weaving_rite_flowruntime_overlay_produces_adjacent_fit", Callable(IdentityIntegrityTests, "_t_weaving_rite_flowruntime_overlay_produces_adjacent_fit"))
+	runner.register_test("identity/weaving_rite_service_reads_canonical_virtue_wheel", Callable(IdentityIntegrityTests, "_t_weaving_rite_reads_virtue_wheel"))
+	runner.register_test("identity/integrity_rejects_weaving_rite_virtue_wheel_duplicate", Callable(IdentityIntegrityTests, "_t_integrity_rejects_weaving_rite_virtue_wheel_duplicate"))
 
 
 # ─── Fixture: a complete, internally-consistent "data" dict ──────────────────
@@ -388,4 +398,79 @@ static func _t_conversation_reads_virtue_wheel() -> Dictionary:
 	var got_unknown := ConversationService._virtue_wheel_distance("courage", "sentinel_virtue_b", cfg)
 	if got_unknown != 5:
 		return { "ok": false, "error": "expected distance 5 ('courage' absent from overridden cfg.virtue_wheel), got %d — a hardcoded fallback wheel is still being consulted" % got_unknown }
+	return { "ok": true }
+
+
+# ─── Test 20 — WIRING GAP GUARD: drive _compute_fit through the REAL FlowRuntime cfg ──
+# path, not a hand-built fixture. Loads production balance.json into a live
+# ConfigService, builds a real FlowRuntime, and reads its actual
+# _get_weaving_rite_cfg() overlay. vanguard's primary composing virtue is "courage"
+# (data.contact.vector_virtue_composition); "leadership" is adjacent to "courage" on
+# the real virtue_wheel. echo.calling is left empty so the +0.1 calling bonus does not
+# also fire, isolating the 0.6 adjacent tier. Falsifiable: this is the exact test that
+# failed with fit 0.4 when the virtue_wheel overlay line was temporarily removed from
+# FlowRuntime._get_weaving_rite_cfg() during verification (see PR body for the pasted
+# failure) — a hand-built fixture cfg (like WeavingRiteTests._make_cfg()) cannot catch
+# this class of bug because it always carries virtue_wheel regardless of what the real
+# overlay code does.
+static func _t_weaving_rite_flowruntime_overlay_produces_adjacent_fit() -> Dictionary:
+	var cs := ConfigService.new()
+	if not cs.load_balance():
+		return { "ok": false, "error": "could not load production balance.json" }
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var runtime := FlowRuntime.new(logger, cs, "/tmp/echoes-vnext-tests/identity_weaving_rite_overlay.json")
+	var rite_cfg: Variant = runtime.call("_get_weaving_rite_cfg")
+	if not (rite_cfg is Dictionary):
+		return { "ok": false, "error": "_get_weaving_rite_cfg() did not return a Dictionary" }
+
+	var echo := {
+		"id": "echo.1",
+		"dominant_vector": "vanguard",
+		"calling": "",
+		"emotion": { "fear_current": 0, "morale_current": 90 },
+	}
+	var thread := { "id": "thread.1", "virtue": "leadership", "quality_tier": "clean" }
+	var save_data := { "sanctum": { "active_party_ids": ["echo.1"], "bonds": [] } }
+	var fit: float = WeavingRiteService._compute_fit(echo, thread, save_data, rite_cfg as Dictionary)
+	if not is_equal_approx(fit, 0.6):
+		return {
+			"ok": false,
+			"error": "expected adjacent-virtue fit 0.6 via the real FlowRuntime._get_weaving_rite_cfg() overlay (vanguard->courage adjacent to leadership on data.contact.virtue_wheel), got %f — the virtue_wheel overlay is missing or broken" % fit,
+		}
+	return { "ok": true }
+
+
+# ─── Test 21 — SENTINEL OVERRIDE: WeavingRiteService reads cfg.virtue_wheel ──────────
+# Proves the removed _VIRTUE_WHEEL const is gone and _is_adjacent is live-reading cfg —
+# a sentinel wheel that exists nowhere in real game data can only produce the 0.6
+# adjacent tier via cfg. If a hardcoded fallback wheel were still consulted,
+# "sentinel_virtue_a"/"sentinel_virtue_b" would resolve to no index and fit would fall
+# through to the 0.4 base tier instead of 0.6.
+static func _t_weaving_rite_reads_virtue_wheel() -> Dictionary:
+	var cfg := {
+		"vector_virtue_composition": { "vanguard": ["sentinel_virtue_a", "sentinel_virtue_a"] },
+		"calling_to_virtue_primary": {},
+		"virtue_wheel": ["sentinel_virtue_a", "sentinel_virtue_b", "sentinel_virtue_c"],
+	}
+	var echo := {
+		"id": "echo.1",
+		"dominant_vector": "vanguard",
+		"calling": "",
+		"emotion": { "fear_current": 0, "morale_current": 90 },
+	}
+	var thread := { "id": "thread.1", "virtue": "sentinel_virtue_b", "quality_tier": "clean" }
+	var save_data := { "sanctum": { "active_party_ids": ["echo.1"], "bonds": [] } }
+	var fit: float = WeavingRiteService._compute_fit(echo, thread, save_data, cfg)
+	if not is_equal_approx(fit, 0.6):
+		return { "ok": false, "error": "expected 0.6 (adjacent sentinel virtues via overridden cfg.virtue_wheel), got %f — a hardcoded fallback wheel is still being consulted" % fit }
+	return { "ok": true }
+
+
+# ─── Test 22 — regression guard: a re-added data.weaving_rite.virtue_wheel copy is flagged ─
+static func _t_integrity_rejects_weaving_rite_virtue_wheel_duplicate() -> Dictionary:
+	var data := _make_valid_data()
+	(data["weaving_rite"] as Dictionary)["virtue_wheel"] = ["courage"]
+	if IdentityIntegrity.validate(data, null, 0):
+		return { "ok": false, "error": "expected validate() to reject a reintroduced data.weaving_rite.virtue_wheel copy" }
 	return { "ok": true }

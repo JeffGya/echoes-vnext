@@ -274,7 +274,7 @@
 			}
 		},
 		"weaving_rite": {
-			"_comment_identity": "V2-PROG-012 Phase 9: the vector/virtue/calling identity tables formerly here (vector_to_virtue_primary) and formerly duplicated in data.contact.recruitment now live ONCE, canonically, under data.contact — vector_virtue_composition, virtue_vector_key, calling_to_virtue_primary. FlowRuntime._get_weaving_rite_cfg() overlays virtue_vector_key and calling_to_virtue_primary from data.contact onto this cfg at read time (same overlay pattern as RecruitmentService.build_effective_cfg) so WeavingRiteService's cfg.virtue_vector_key / cfg.calling_to_virtue_primary reads resolve without a second stored copy.",
+			"_comment_identity": "V2-PROG-012 Phase 9: the vector/virtue/calling identity tables formerly here (vector_to_virtue_primary) and formerly duplicated in data.contact.recruitment now live ONCE, canonically, under data.contact — vector_virtue_composition, virtue_vector_key, calling_to_virtue_primary, virtue_wheel. FlowRuntime._get_weaving_rite_cfg() overlays vector_virtue_composition, calling_to_virtue_primary, and (chore/finish-virtue-wheel-and-dead-config) virtue_wheel from data.contact onto this cfg at read time (same overlay pattern as RecruitmentService.build_effective_cfg) so WeavingRiteService's cfg.vector_virtue_composition / cfg.calling_to_virtue_primary / cfg.virtue_wheel reads resolve without a second stored copy.",
 			"max_candidates": 3,
 			"fit_threshold_accept": 0.55,
 			"readiness_threshold_defer": 0.38,

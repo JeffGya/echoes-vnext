@@ -4,10 +4,11 @@ extends RefCounted
 # V2-WEAVE-002: foundation Weaving Rite resolution service.
 # Deterministic, pure-static, no RNG, no OS time.
 
-const _VIRTUE_WHEEL: Array = [
-	"courage", "leadership", "truth", "wisdom", "humility",
-	"acceptance", "forgiveness", "compassion", "empathy", "generosity"
-]
+# chore/finish-virtue-wheel-and-dead-config: the hardcoded _VIRTUE_WHEEL const formerly
+# here (duplicating data.contact.virtue_wheel) was removed. _is_adjacent() now reads the
+# canonical wheel from its cfg param — same "overlay canonical source onto a local cfg
+# copy" pattern ConversationService._virtue_wheel_distance uses, via
+# FlowRuntime._get_weaving_rite_cfg()'s overlay.
 
 const _OPPOSITE_PAIRS: Dictionary = {
 	"acceptance|courage": true,
@@ -211,14 +212,14 @@ static func _compute_fit(echo: Dictionary, thread: Dictionary, save_data: Dictio
 	var fit := 0.4
 	if primary_virtue == thread_virtue and not thread_virtue.is_empty():
 		fit = 1.0
-	elif _is_adjacent(primary_virtue, thread_virtue):
+	elif _is_adjacent(primary_virtue, thread_virtue, cfg):
 		fit = 0.6
 	elif _is_opposite(primary_virtue, thread_virtue):
 		fit = 0.2
 
 	var calling_virtue := _calling_virtue(echo, cfg)
 	if not calling_virtue.is_empty():
-		if calling_virtue == thread_virtue or _is_adjacent(calling_virtue, thread_virtue):
+		if calling_virtue == thread_virtue or _is_adjacent(calling_virtue, thread_virtue, cfg):
 			fit += 0.1
 
 	return clampf(fit, 0.0, 1.0)
@@ -362,14 +363,20 @@ static func _norm_virtue(v: Variant) -> String:
 	return str(v).strip_edges().to_lower()
 
 
-static func _is_adjacent(a: String, b: String) -> bool:
+# cfg: overlaid data.contact.virtue_wheel (see FlowRuntime._get_weaving_rite_cfg) — the
+# canonical ring order. A missing or malformed wheel degrades safely to an empty array,
+# which falls through to "unknown -> not adjacent", the same safe-degrade shape
+# ConversationService._virtue_wheel_distance uses for a missing/malformed wheel.
+static func _is_adjacent(a: String, b: String, cfg: Dictionary) -> bool:
 	if a.is_empty() or b.is_empty() or a == b:
 		return false
-	var ai: int = _VIRTUE_WHEEL.find(a)
-	var bi: int = _VIRTUE_WHEEL.find(b)
+	var wheel_v: Variant = cfg.get("virtue_wheel", [])
+	var wheel: Array = wheel_v if wheel_v is Array else []
+	var ai: int = wheel.find(a)
+	var bi: int = wheel.find(b)
 	if ai == -1 or bi == -1:
 		return false
-	var n: int = _VIRTUE_WHEEL.size()
+	var n: int = wheel.size()
 	var diff: int = absi(ai - bi)
 	return diff == 1 or diff == (n - 1)
 
