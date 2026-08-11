@@ -1666,6 +1666,8 @@
 				"fear_reduce_on_outnumber": 2,
 				"fear_on_witness_refuse": 4,
 				"witness_refuse_radius": 3,
+				"_comment_witness_cap": "A1: total witness fear one Echo can absorb in a single encounter. Witnessing a refusal raises nearby fear, which causes more refusals, which raise it again — undamped positive feedback. Measured where refusal is reachable, it became the largest single accumulation source and produced 20 refusals in 20 rounds with fear pinned at 100. Set to 0 to disable the cap.",
+				"witness_refuse_max_per_encounter": 8,
 				"fear_on_overwhelmed": 5,
 				"overwhelmed_threshold": 2,
 				"morale_on_consecutive_no_damage": -3,

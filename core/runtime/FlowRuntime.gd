@@ -3244,8 +3244,31 @@ func _end_round(t: int) -> void:
 		})
 
 	# E) Witness ally refuse (T7): nearby Echoes gain fear when a comrade freezes this round.
+	#
+	# DAMPING (A1). This term is positive feedback: a refusal raises the fear of every
+	# nearby Echo, which pushes those Echoes over their own refusal threshold, which
+	# raises the fear of THEIR neighbours. Measured in a live encounter where refusal is
+	# reachable, it became the single largest accumulation source (+196 points) and drove
+	# 20 refusals in 20 rounds with fear pinned at 100. The system had only two states:
+	# no refusals at all, or total collapse. That is a loop with no damping, not a tuning
+	# error, and it also breaks the bark budget (max_barks_per_round 3).
+	#
+	# Two dampers, both required:
+	#   1. An Echo that is ITSELF refusing gains no witness fear. This is the loop: a
+	#      refuser must not be pushed further by the refusals it helped cause.
+	#   2. A per-Echo per-encounter cap. Repeated refusals nearby stop compounding once
+	#      an Echo has taken the full dose. The counter is transient runtime state on the
+	#      actor dict, so it resets with each encounter and is never persisted.
 	var witness_fear: int   = int(emo_tick_cfg.get("fear_on_witness_refuse", 4))
 	var witness_radius: int = int(emo_tick_cfg.get("witness_refuse_radius", 3))
+	var witness_cap: int    = int(emo_tick_cfg.get("witness_refuse_max_per_encounter", 8))
+	# Every Echo that refused THIS round. Read from the round results, not from the
+	# actor dict: the Absolute Fear Rule returns early in ActorStateMachine.advance_turn,
+	# before `last_intent` is written, so a refusing actor carries no record of it.
+	var t7_refusers: Dictionary = {}
+	for t7_scan in ectx.last_round_results:
+		if t7_scan is Dictionary and str((t7_scan as Dictionary).get("action_type", "")) == "actor.refuse":
+			t7_refusers[str((t7_scan as Dictionary).get("source_id", ""))] = true
 	for t7_res in ectx.last_round_results:
 		if not (t7_res is Dictionary): continue
 		if str(t7_res.get("action_type", "")) != "actor.refuse": continue
@@ -3261,15 +3284,29 @@ func _end_round(t: int) -> void:
 			if t7_obs.get("is_dead", false): continue
 			if str(t7_obs.get("faction", "")) != "echo": continue
 			if str(t7_obs.get("id", "")) == t7_refuser_id: continue
+			# Damper 1 — an Echo that refused this round is already at its threshold.
+			if t7_refusers.has(str(t7_obs.get("id", ""))): continue
+			# Damper 2 — this Echo has absorbed its full witness dose for this encounter.
+			var t7_taken: int = int(t7_obs.get("_witness_fear_taken", 0))
+			if witness_cap > 0 and t7_taken >= witness_cap: continue
 			var t7_obs_pos: Dictionary = t7_obs.get("grid_pos", {})
 			if GridService.manhattan_distance(t7_refuser_pos, t7_obs_pos) <= witness_radius:
+				var t7_room: int = witness_fear
+				if witness_cap > 0:
+					t7_room = mini(witness_fear, witness_cap - t7_taken)
 				var witness_fear_applied := LeadershipEmotionServiceScript.apply_fear_gain(
-					t7_obs, witness_fear, ectx.actors, leadership_expr_cfg, true)
-				t7_obs["fear"] = mini(100, int(t7_obs.get("fear", 0)) + witness_fear_applied)
+					t7_obs, t7_room, ectx.actors, leadership_expr_cfg, true)
+				var t7_before: int = int(t7_obs.get("fear", 0))
+				t7_obs["fear"] = mini(100, t7_before + witness_fear_applied)
+				# Count the EFFECTIVE post-clamp gain, so an Echo already at fear 100
+				# does not burn its allowance on points it never received.
+				t7_obs["_witness_fear_taken"] = t7_taken + (int(t7_obs["fear"]) - t7_before)
 				logger.debug(t, "combat.emotion.witness_refuse", "Witness ally freeze — fear tick", {
 					"observer_id": str(t7_obs.get("id", "")),
 					"refuser_id":  t7_refuser_id,
-					"delta":       witness_fear,
+					"delta":       int(t7_obs["fear"]) - t7_before,
+					"taken_total": int(t7_obs["_witness_fear_taken"]),
+					"cap":         witness_cap,
 				})
 
 	# F) Overwhelmed (T8): Echo targeted by 2+ attackers in one round gains fear.
