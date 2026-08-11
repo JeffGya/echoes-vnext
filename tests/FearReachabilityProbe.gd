@@ -459,6 +459,12 @@ static func _tally_logs(
 					_add(tally, "- leadership calm", -int(d.get("fear_reduction", 0)))
 			"actor.refused":
 				_add(tally, "!refusals", 1)
+			# actor.moved is emitted ONLY when cells were actually traversed
+			# (FlowRuntime guards it on a non-empty actual_traversed_cells), so this
+			# counts real steps. Paired with the melee count it shows whether attackers
+			# sidestep before swinging.
+			"actor.moved":
+				_add(tally, "!moves", 1)
 
 
 static func _add(tally: Dictionary, key: String, v: int) -> void:
@@ -565,6 +571,7 @@ static func _print_report(sc: Dictionary, r: Dictionary) -> void:
 		for k in akeys:
 			parts.append("%s=%d" % [str(k), int(acts[k])])
 		_say("                    enemy resolved actions: %s" % ", ".join(PackedStringArray(parts)))
+		_say("    real movement events (all factions): %d" % int((r["tally"] as Dictionary).get("!moves", 0)))
 
 	_say("    ledger (party total across run, points of fear):")
 	var tkeys: Array = (r["tally"] as Dictionary).keys()
