@@ -2269,16 +2269,6 @@
 				"okomfo":      ["kra_soro", "onyamesu"],
 				"onyamesu":    ["okomfo", "okofor"]
 			},
-			"absolute_fear_threshold_by_calling": {
-				"_comment": "Per-calling Absolute Fear threshold override. Default is data.emotion.drift.fear_threshold (80). Edge callings break sooner (aduro 75, sum_okwanfo 70). Anchor and Sight callings endure longer (onyamesu 85, okomfo 85).",
-				"aduro": 75.0,
-				"sum_okwanfo": 70.0,
-				"okofor": 80.0,
-				"onyamesu": 85.0,
-				"okomfo": 85.0,
-				"kra_soro": 80.0,
-				"uncalled": 80.0
-			},
 			"broken_morale_overrides": {
 				"_comment": "Per-calling override of morale_action_muls at 'broken' tier. If a calling key is present, its values replace the standard broken-morale muls for that action. Aduro charges when broken; does not collapse into guard.",
 				"aduro": {

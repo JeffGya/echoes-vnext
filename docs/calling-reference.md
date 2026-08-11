@@ -136,17 +136,9 @@ Calling families weight intent — they do not determine it. Traits, vectors, fe
 
 Higher-Standing Echoes let **calling / identity consistency lead** over situational impulse.
 
-**Absolute Fear Thresholds by calling (balance.json `data.calling.absolute_fear_threshold_by_calling`):**
+**Absolute Fear offsets by calling (balance.json `data.maturity_expression.calling_behavior[calling].absolute_fear_offset`):**
 
-| Calling | Threshold |
-|---|---|
-| `aduro` | 75.0 |
-| `sum_okwanfo` | 70.0 |
-| `okofor` | 80.0 |
-| `onyamesu` | 85.0 |
-| `okomfo` | 85.0 |
-| `kra_soro` | 80.0 |
-| `uncalled` | 80.0 |
+V2-PROG-012 Phase 7 replaced the old per-calling absolute threshold table (`data.calling.absolute_fear_threshold_by_calling`, confirmed unread by any consumer and removed under the `AGENTS.md` data-removal exception) with per-calling deltas that compose with `refusal_thresholds_by_band`. See `data.maturity_expression.calling_behavior` in `balance.json` for current values.
 
 ---
 
