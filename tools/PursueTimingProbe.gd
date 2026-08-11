@@ -1,4 +1,4 @@
-# res://tests/PursueTimingProbe.gd
+# res://tools/PursueTimingProbe.gd
 #
 # INVESTIGATION TOOL — not a test. Registered only under `-- tests pursueprobe`.
 #

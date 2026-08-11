@@ -481,7 +481,7 @@
 
 **Q:** Why did fear pin at 0 in every shipped fight, when the emotion system has six accumulation sources and six recovery sources?
 **A:** **Every dominant recovery term paid out for winning, and the shipped encounter design guarantees the party is winning.** `fear_reduce_on_outnumber` was a flat −2 whenever living echoes outnumbered living enemies. It reads as a condition but behaved as a constant, because `enemy_spawn_config.max_count` is 4 against a party of 5, so it fired from round 1 of every fight. The kill economy (−15 to the killer, −5 to every living ally) paid the same for killing 1 of 8 as for killing the last enemy. Together they delivered −4.15 fear per echo per round against a total accumulation of +1.22. Recovery was not narrowly winning — it was **oversupplied by 3–7×**, and 59–71% of it was thrown at the fear-0 floor. Zero refusals in 439 rounds was never a near-miss. The fix set makes relief *situational*: outnumber relief scales with the margin (A4), kill relief scales with the share of threat removed plus a flat bonus if the dead enemy was the one hitting you (A3), and all relief tapers as fear rises (A5). Measured on the hardest shipped fight, peak fear went 4 → 46.
-**Source:** Jeff + measured probe (`tests/FearReachabilityProbe.gd`), 2026-08-11
+**Source:** Jeff + measured probe (`tools/FearReachabilityProbe.gd`), 2026-08-11
 **Date:** 2026-08-11
 
 ---
