@@ -475,13 +475,28 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	var passive_max: int = int(recovery_cfg.get("passive_max", 3))
 	if str(_actor.get("actor_type", "")) == "echo" and passive_max > 0:
 		var passive_tick: int = int(round(float(passive_max) * rank_strength))
+		# A5: relief tapers as fear rises — see LeadershipEmotionService.apply_fear_relief.
+		passive_tick = LeadershipEmotionService.apply_fear_relief(
+			_actor, passive_tick, cfg_data.get("combat", {}).get("emotion", {}))
 		if passive_tick > 0:
-			_actor["fear"] = clampi(int(_actor.get("fear", 0)) - passive_tick, 0, 100)
+			var pt_before: int = int(_actor.get("fear", 0))
+			_actor["fear"] = clampi(pt_before - passive_tick, 0, 100)
+			# Every other fear mutation emits a log line; this one did not, which made
+			# the recovery budget impossible to audit. Effective (post-clamp) delta.
+			logger.debug(t, "actor.fear_passive_tick", "Passive rank-scaled fear tick", {
+				"actor_id": str(_actor.get("id", "")),
+				"delta":    int(_actor["fear"]) - pt_before,
+				"new_fear": int(_actor["fear"]),
+			})
 
 	# V2-PROG-010: active fear spike — fires when intent is identity-consistent (calling ∩ dominant_vector).
 	_actor["_fear_spike_fired"] = false
 	if str(_actor.get("actor_type", "")) == "echo":
 		var spike: int = _compute_identity_fear_spike(intent, rank_strength, expr_cfg, cfg_data.get("actor", {}))
+		# A5: relief tapers as fear rises — acting in character steadies an Echo less
+		# once it is genuinely afraid.
+		spike = LeadershipEmotionService.apply_fear_relief(
+			_actor, spike, cfg_data.get("combat", {}).get("emotion", {}))
 		if spike > 0:
 			_actor["fear"] = clampi(int(_actor.get("fear", 0)) - spike, 0, 100)
 			_actor["_fear_spike_fired"] = true
@@ -518,18 +533,18 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	# PROG-009: update per-round passive counters and skill state flags. Live
 	# movement cutover defers this until FlowRuntime knows actual traversal.
 	if not context.has("movement_context"):
-		_update_passive_state(intent, context, t)
+		_update_passive_state(intent, context, t, null, logger)
 
 	return intent
 
 
 func update_passive_state_from_activation(intent: Dictionary, context: Dictionary, t: int,
-		actual_moved: bool) -> void:
+		actual_moved: bool, logger: StructuredLogger = null) -> void:
 	# Live activation can replace a planned move with its bounded fallback. Persist
 	# that resolved action for next-turn repetition scoring, not the pre-activation plan.
 	_last_intent = intent.duplicate(true)
 	_actor["last_intent"] = { "action_type": str(intent.get("action_type", "")) }
-	_update_passive_state(intent, context, t, actual_moved)
+	_update_passive_state(intent, context, t, actual_moved, logger)
 
 
 ## Returns a debug-friendly snapshot of this actor's current behavior state.
@@ -992,8 +1007,11 @@ func _get_most_feared_ally(allies: Array) -> Dictionary:
 # Steward: tracks stationary_rounds for soft-taunt eligibility.
 # Skill once-per-combat flags are set here when the skill fires.
 # Skill cooldowns (read_field, withdraw) are ticked at turn START instead.
+## `logger` is optional so existing direct-drive test callers keep their signature.
+## When present, the two fear-relieving passives below emit an audit line — without
+## it the Steward/Seer fear relief is invisible to the ledger.
 func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
-		actual_moved_override: Variant = null) -> void:
+		actual_moved_override: Variant = null, logger: StructuredLogger = null) -> void:
 	var action: String         = str(intent.get("action_type", ""))
 	var calling_origin: String = str(_actor.get("calling_origin", ""))
 	var moved: bool = bool(actual_moved_override) if actual_moved_override != null \
@@ -1026,6 +1044,8 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
 				var aura_radius: int  = int(_calling_behavior.get("leadership_radius", 5))
 				var my_pos_s: Dictionary = _actor.get("grid_pos", {})
 				var ifa_fired: bool = false
+				var ifa_count: int = 0
+				var ifa_total: int = 0
 				if not my_pos_s.is_empty():
 					for a_sv in context.get("all_actors", []):
 						if not (a_sv is Dictionary): continue
@@ -1040,9 +1060,17 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
 								a_s["fear"] = clampi(ifa_before - aura_val, 0, 100)
 								# S14b Tier 2 (support): Seer idle aura relieves ally fear.
 								_credit_support_tally("fear_relieved", ifa_before - int(a_s["fear"]))
+								ifa_total += ifa_before - int(a_s["fear"])
+								ifa_count += 1
 								ifa_fired = true
 				if ifa_fired:
 					_credit_support_tally("support_actions", 1)
+					if logger != null:
+						logger.debug(t, "actor.fear_idle_aura", "Seer idle aura relieved ally fear", {
+							"actor_id":       str(_actor.get("id", "")),
+							"affected_count": ifa_count,
+							"total_delta":    -ifa_total,
+						})
 		"ranger":
 			if action == "actor.withdraw":
 				_actor["_withdraw_cooldown"] = 1
@@ -1121,9 +1149,13 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
 	# Apply steady_call effects (Steward)
 	if action == "actor.steady_call":
 		var sc_radius: int    = int(_calling_behavior.get("leadership_radius", 4))
-		var sc_fear_red: int  = 20
+		# Was a bare literal 20 — the largest single fear value anywhere in the system,
+		# and invisible to both config and the log. Default preserves current behaviour.
+		var sc_fear_red: int  = int(_calling_behavior.get("steady_call_fear_reduction", 20))
 		var my_pos_sc: Dictionary = _actor.get("grid_pos", {})
 		var sc_fired: bool = false
+		var sc_count: int = 0
+		var sc_total: int = 0
 		if not my_pos_sc.is_empty():
 			for sc_av in context.get("all_actors", []):
 				if not (sc_av is Dictionary): continue
@@ -1137,9 +1169,18 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
 						# S14b Tier 2 (support): credit fear relieved on ALLIES only (exclude self).
 						if str(sc_a.get("id", "")) != str(_actor.get("id", "")):
 							_credit_support_tally("fear_relieved", sc_before - int(sc_a["fear"]))
+							sc_total += sc_before - int(sc_a["fear"])
+							sc_count += 1
 							sc_fired = true
 		if sc_fired:
 			_credit_support_tally("support_actions", 1)
+			if logger != null:
+				logger.debug(t, "actor.fear_steady_call", "Steward steady_call relieved ally fear", {
+					"actor_id":       str(_actor.get("id", "")),
+					"affected_count": sc_count,
+					"total_delta":    -sc_total,
+					"per_ally":       sc_fear_red,
+				})
 
 	# Guard: set guard_state on self (interpose sets it on the protected ally below).
 	if action == "actor.guard":

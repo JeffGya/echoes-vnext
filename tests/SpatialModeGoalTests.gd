@@ -118,10 +118,14 @@ static func _t_withdraw_distinct_from_advance() -> Dictionary:
 	var context: Dictionary = _open_context("combat", "party")
 	_set_mover_health(context, 0.3)
 	var result: Dictionary = Service.build_goals(context)
+	# The combat approach path is `engage` since the action-less `advance` duplicate was
+	# removed. A collapsing mover must still receive BOTH it and the retreat goal, so the
+	# arbiter can weigh them instead of one being evicted before arbitration. `engage`
+	# sits in TACTICAL and `withdraw` in SAFETY, so both survive the per-bucket shortlist.
 	var withdraw: Dictionary = _goal(result, "withdraw")
-	var advance: Dictionary = _goal(result, "advance")
+	var advance: Dictionary = _goal(result, "engage")
 	if withdraw.is_empty() or advance.is_empty():
-		return _fail("expected both withdraw and advance: %s" % str(result["goals"]))
+		return _fail("expected both withdraw and engage: %s" % str(result["goals"]))
 	if str(withdraw["purpose"]) == str(advance["purpose"]):
 		return _fail("withdraw and advance collapsed to one purpose")
 	for cell_value: Variant in withdraw["destination_region"] as Array:

@@ -378,6 +378,14 @@ func _dispatch_settle_now(source: String) -> Dictionary:
 	return runtime.dispatch(settle_action)
 
 func _run_tests(parts: Array) -> void:
+	# INVESTIGATION TOOL — `tests fearprobe` runs the Absolute Fear Rule reachability
+	# probe instead of the suite. Not part of the regular suite: it prints a report
+	# rather than asserting, and drives dozens of full encounters.
+	if parts.size() > 1 and str(parts[1]).to_lower() == "fearprobe":
+		var probe_runner := CoreTestRunner.new()
+		FearReachabilityProbe.register(probe_runner)
+		probe_runner.run_all()
+		return
 	# Optional: allow "tests economy" later; for now run all.
 	var runner := CoreTestRunner.new()
 	EconomyTests.register(runner)

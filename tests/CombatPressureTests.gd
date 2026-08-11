@@ -472,16 +472,20 @@ static func _t_exact_mode_alignment_matrix() -> Dictionary:
 	# the real race.
 	var pursue_cutoff_corridor: Array = [{"col": 3, "row": 4}]
 	var matrix: Array = [
-		["combat", "party", [["advance", "baseline", "enemy.1", 0.75, enemy_region, ["enemy.1"]], ["engage", "baseline", "enemy.1", 0.50, enemy_region, ["enemy.1"]]]],
-		["combat", "hostile", [["advance", "baseline", "echo.1", 0.75, enemy_region, ["echo.1"]], ["engage", "baseline", "echo.1", 0.50, enemy_region, ["echo.1"]]]],
+		# A non-adjacent hostile now yields ONE goal, not two. The second was a purpose-
+		# `advance` duplicate over the identical region that could only plan actor.move,
+		# and it outranked the engage on urgency — so a mover that closed to melee range
+		# could not attack. `engage` inherits the TACTICAL/HIGH slot it vacated.
+		["combat", "party", [["engage", "baseline", "enemy.1", 0.75, enemy_region, ["enemy.1"]]]],
+		["combat", "hostile", [["engage", "baseline", "echo.1", 0.75, enemy_region, ["echo.1"]]]],
 		["purify_shrine", "party", [["intercept", "blocker", "", 0.75, approach_region, ["objective.relic"]], ["protect", "protector", "", 0.75, destination_region, ["objective.relic"]], ["engage", "baseline", "enemy.1", 0.50, enemy_region, ["enemy.1"]]]],
 		["purify_shrine", "hostile", [["advance", "breaker", "objective.relic", 0.75, approach_region, ["objective.relic"]], ["engage", "baseline", "echo.1", 0.50, enemy_region, ["echo.1"]], ["engage", "breaker", "objective.relic", 0.50, objective_region, ["objective.relic"]]]],
 		["recover", "party", [["advance", "runner", "objective.relic", 1.0, destination_region, ["objective.relic"]], ["intercept", "screener", "", 0.75, approach_region, ["objective.relic"]], ["engage", "baseline", "enemy.1", 0.50, enemy_region, ["enemy.1"]]]],
 		["recover", "hostile", [["advance", "breaker", "echo.1", 1.0, enemy_region, ["echo.1"]], ["intercept", "blocker", "", 0.75, approach_region, ["objective.relic"]], ["engage", "baseline", "echo.1", 0.50, enemy_region, ["echo.1"]]]],
 		["protect", "party", [["intercept", "blocker", "", 0.75, approach_region, ["objective.relic"]], ["protect", "protector", "", 0.75, destination_region, ["objective.relic"]], ["engage", "baseline", "enemy.1", 0.50, enemy_region, ["enemy.1"]]]],
 		["protect", "hostile", [["advance", "custody_threat", "objective.relic", 1.0, destination_region, ["objective.relic"]], ["engage", "baseline", "echo.1", 0.50, enemy_region, ["echo.1"]], ["engage", "breaker", "objective.relic", 0.50, objective_region, ["objective.relic"]]]],
-		["endure", "party", [["advance", "baseline", "enemy.1", 0.75, enemy_region, ["enemy.1"]], ["engage", "baseline", "enemy.1", 0.50, enemy_region, ["enemy.1"]]]],
-		["endure", "hostile", [["advance", "baseline", "echo.1", 0.75, enemy_region, ["echo.1"]], ["engage", "baseline", "echo.1", 0.50, enemy_region, ["echo.1"]]]],
+		["endure", "party", [["engage", "baseline", "enemy.1", 0.75, enemy_region, ["enemy.1"]]]],
+		["endure", "hostile", [["engage", "baseline", "echo.1", 0.75, enemy_region, ["echo.1"]]]],
 		["pursue", "party", [["pursue", "hunter", "enemy.1", 1.0, enemy_region, ["enemy.1"]], ["cut_off", "blocker", "", 0.75, pursue_cutoff_corridor, ["enemy.1"]]]],
 		["pursue", "hostile", []],
 		["guide_spirit", "party", [["escort", "protector", "guide.spirit", 0.75, destination_region, ["guide.spirit"]], ["intercept", "rear_guard", "", 0.75, approach_region, ["guide.spirit"]], ["engage", "baseline", "enemy.1", 0.50, enemy_region, ["enemy.1"]]]],
@@ -669,8 +673,13 @@ static func _t_config_collapse_health_seam() -> Dictionary:
 	var endure_default: Dictionary = Service.build_goals(_collapsing_context(0.4, "endure"))
 	if _goal(endure_default, "withdraw").is_empty():
 		return _fail("ENDURE did not keep the generic board fallback under collapse health")
-	if _goal(endure_default, "advance").is_empty():
-		return _fail("ENDURE lost the ordinary combat advance path while adding board fallback")
+	# The ordinary combat approach path is `engage` (it plans melee_attack, so a mover
+	# that closes to range attacks). It replaced a purpose-`advance` duplicate that could
+	# only plan actor.move. The invariant under test is unchanged: adding the board
+	# fallback must NOT cost a collapsing mover its combat path. `engage` now sits in
+	# TACTICAL precisely so the SAFETY withdraw cannot evict it.
+	if _goal(endure_default, "engage").is_empty():
+		return _fail("ENDURE lost the ordinary combat approach path while adding board fallback")
 	return _pass()
 
 
@@ -861,25 +870,32 @@ static func _t_shared_anchor_goal_ids_unique() -> Dictionary:
 			return _fail("duplicate goal_id published: %s in %s" % [goal_id, str(goals)])
 		seen[goal_id] = true
 
-	# 2. The fixture must really collide, or 1 passes vacuously. The `direct`
-	#    engage on the ADJACENT enemy.1 and the `tactical` advance on the distant
-	#    enemy.2 are built from two different hostiles yet share the anchor c1r1 —
-	#    that shared anchor is exactly what made enemy.2's engage collide.
+	# 2. The fixture must really collide, or 1 passes vacuously. The `direct` engage on
+	#    the ADJACENT enemy.1 anchors at c1r1. The distant enemy.2 anchors there too, so
+	#    its `tactical` engage produces the SAME goal_id and must be skipped.
+	#
+	#    Both colliding goals are now purpose `engage`. Previously enemy.2 also emitted a
+	#    purpose-`advance` duplicate over the identical region, which carried a different
+	#    goal_id and so survived; that duplicate was removed because it could only plan
+	#    actor.move, and it outranked the engage on urgency — a mover that closed to melee
+	#    range could not attack. The collision itself is unchanged.
 	var near_engage: Dictionary = _goal_for_target(result, "engage", "enemy.1")
-	var far_advance: Dictionary = _goal_for_target(result, "advance", "enemy.2")
-	if near_engage.is_empty() or far_advance.is_empty():
-		return _fail("shared-anchor fixture lost its colliding pair: %s" % str(goals))
+	if near_engage.is_empty():
+		return _fail("shared-anchor fixture lost its adjacent engage: %s" % str(goals))
 	if not str(near_engage["goal_id"]).ends_with(".c1r1"):
 		return _fail("adjacent engage did not anchor at c1r1: %s" % str(near_engage["goal_id"]))
-	if not str(far_advance["goal_id"]).ends_with(".c1r1"):
-		return _fail("distant advance did not anchor at c1r1: %s" % str(far_advance["goal_id"]))
 
-	# 3. The collision must be resolved by FALLING THROUGH, not by dropping the
-	#    bucket: `safety` must still publish, on the next-best hostile.
-	if goals.size() != 3:
+	# 3. The collision must be resolved by FALLING THROUGH, not by dropping the bucket:
+	#    `tactical` must still publish, on the next-best hostile.
+	#
+	#    Two goals, not three: both distant hostiles now compete for the single TACTICAL
+	#    slot, where enemy.2 previously took TACTICAL with its advance and enemy.3 took
+	#    SAFETY with its engage. No capability is lost — the goal that disappeared could
+	#    only ever plan actor.move — but the mover no longer holds a goal per hostile.
+	if goals.size() != 2:
 		return _fail("collision cost the mover a bucket instead of falling through: %s" % str(goals))
 	if _goal_for_target(result, "engage", "enemy.3").is_empty():
-		return _fail("safety bucket did not fall through to the next-best hostile: %s" % str(goals))
+		return _fail("tactical bucket did not fall through to the next-best hostile: %s" % str(goals))
 	if not _goal_for_target(result, "engage", "enemy.2").is_empty():
 		return _fail("colliding engage was published rather than skipped: %s" % str(goals))
 

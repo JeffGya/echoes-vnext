@@ -151,9 +151,32 @@ static func _add_ordinary_combat(
 				adjacent_region, NORMAL, [str(hostile["id"])]
 			)
 			continue
+		# A non-adjacent hostile gets ONE goal. This used to emit an `advance`
+		# (TACTICAL/HIGH, plans actor.move) AND an `engage` (SAFETY/NORMAL, plans
+		# melee_attack) over the SAME region and SAME path, differing only in what they
+		# do on arrival. `_final_goal_before` orders the shortlist by urgency DESCENDING,
+		# so the action-less advance always won: a mover that closed to melee range could
+		# not attack, because attacking was never the declared action. Measured live, 80%
+		# of enemy activations produced no action at all (7 swings across 35 enemy-rounds),
+		# contradicting docs/movement-model.md §8.1 ("normal movement may be followed by
+		# one legal action") and §22.4 ("move then attack resolves in order").
+		#
+		# `engage` takes the TACTICAL slot rather than staying in SAFETY, because
+		# _add_board_fallback emits `withdraw` into SAFETY at HIGH under collapse and only
+		# one goal per bucket survives. Left in SAFETY it would be EVICTED, leaving a
+		# wounded mover with "run away" as its only goal — the regression
+		# movement/pressure/config_collapse_health_seam and
+		# movement/spatial/withdraw_distinct_from_advance exist to catch. In TACTICAL both
+		# survive and the arbiter weighs retreat against engaging, which is what those
+		# tests actually assert.
+		#
+		# TACTICAL is free wherever this runs: in combat/endure it held only the advance
+		# duplicate being removed, and _add_purify's fallthrough to _add_ordinary_combat
+		# RETURNS immediately. The `engage baseline` goals in the other objective modes
+		# come from _add_truthful_engage (BUCKET_SAFETY), not from here, so those modes
+		# are untouched.
 		var region: Array = _adjacent_region(context, hostile["position"] as Dictionary, false)
-		_add_goal(candidates, BUCKET_TACTICAL, context, pressure, "advance", goal_role, region, HIGH, [str(hostile["id"])])
-		_add_goal(candidates, BUCKET_SAFETY, context, pressure, "engage", goal_role, region, NORMAL, [str(hostile["id"])])
+		_add_goal(candidates, BUCKET_TACTICAL, context, pressure, "engage", goal_role, region, HIGH, [str(hostile["id"])])
 
 
 static func _add_purify(candidates: Array, context: Dictionary, pressure: Dictionary) -> void:

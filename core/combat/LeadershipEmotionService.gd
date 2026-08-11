@@ -141,6 +141,37 @@ static func apply_fear_gain(
 	return maxi(0, roundi(float(amount) * factor))
 
 
+## A5: the counterpart to apply_fear_gain — the single choke for fear RELIEF.
+##
+## Fear increases all funnel through apply_fear_gain. Reductions had no equivalent,
+## which is why three of them shipped with no log line and the recovery budget could
+## not be audited. Route relief through here.
+##
+## Relief tapers as fear rises. Below `recovery_taper_start` nothing changes, so
+## ordinary fights behave exactly as before. Above it, relief shrinks toward
+## `recovery_taper_min_mul` at `recovery_taper_full`. This is what gives the fear
+## ladder its shape: an Echo shrugs off strain easily, but once it is genuinely
+## afraid the same comforts no longer reach it, so accumulated fear compounds
+## instead of bleeding off.
+##
+## `emo_cfg` is the `data.combat.emotion` block. Absent keys select the defaults
+## below, and a taper span of zero disables the taper entirely.
+static func apply_fear_relief(target: Dictionary, amount: int, emo_cfg: Dictionary) -> int:
+	if amount <= 0:
+		return 0
+	var taper_start: float = float(emo_cfg.get("recovery_taper_start", 40))
+	var taper_full:  float = float(emo_cfg.get("recovery_taper_full", 80))
+	var min_mul:     float = float(emo_cfg.get("recovery_taper_min_mul", 0.15))
+	var fear: float = float(int(target.get("fear", 0)))
+	if fear <= taper_start or taper_full <= taper_start:
+		return amount
+	var span: float = taper_full - taper_start
+	var mul: float = clampf(1.0 - (fear - taper_start) / span, min_mul, 1.0)
+	# Never round a real relief down to nothing — a tapered comfort is smaller,
+	# not absent, so the Echo is not permanently frozen at high fear.
+	return maxi(1, int(round(float(amount) * mul)))
+
+
 static func apply_morale_loss(
 	target: Dictionary,
 	amount: int,

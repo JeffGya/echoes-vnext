@@ -1953,7 +1953,7 @@ func _apply_live_activation(
 ) -> Dictionary:
 	_prepare_legacy_move_intent_for_activation(actor, intent, prepared)
 	if not bool(prepared.get("valid", false)) or not intent.has("planned_action"):
-		asm.update_passive_state_from_activation(intent, ctx, t, false)
+		asm.update_passive_state_from_activation(intent, ctx, t, false, logger)
 		return {}
 	var movement_context: Dictionary = prepared["movement_context"] as Dictionary
 	var profile: Dictionary = prepared["profile"] as Dictionary
@@ -2003,7 +2003,7 @@ func _apply_live_activation(
 		intent["action_type"] = "actor.idle"
 		intent["target_id"] = ""
 	intent["movement_result"] = result
-	asm.update_passive_state_from_activation(intent, ctx, t, not actual.is_empty())
+	asm.update_passive_state_from_activation(intent, ctx, t, not actual.is_empty(), logger)
 	return result
 
 
@@ -2830,6 +2830,10 @@ func _resolve_next_actor(t: int) -> void:
 					# than the nominal dampened amount. Consistent with the support fields'
 					# effective-delta accounting. All-faction; _s14a_atk_log created just above.
 					_s14a_atk_log["fear_inflicted"] = int(_s14a_atk_log.get("fear_inflicted", 0)) + (int(target["fear"]) - _fear_before)
+					# A3: remember who last struck this actor, so the kill relief can tell
+					# "the thing that was hurting ME is gone" from "a thing died somewhere".
+					# Transient runtime state on the actor dict; never persisted.
+					target["_last_attacker_id"] = str(actor.get("id", ""))
 					logger.debug(t, "combat.fear.hit", "%s gains fear from hit" % target.get("name", "?"), {
 						"actor_id": str(target.get("id", "")),
 						"delta":    hit_fear_applied,
@@ -2848,12 +2852,48 @@ func _resolve_next_actor(t: int) -> void:
 						var fear_reduce_per_kill: int = int(combat_emo_cfg.get("fear_reduce_per_kill",  15))
 						var morale_ripple: int         = int(combat_emo_cfg.get("morale_ripple_per_kill", 10))
 						var fear_ripple: int           = int(combat_emo_cfg.get("fear_ripple_per_kill",    5))
+						# A3: an important kill relieves more fear than a routine one.
+						#
+						# Relief used to be flat: -15 to the killer and -5 to EVERY living ally,
+						# so -35 party-wide, for any kill in any situation. Measured, that was
+						# the largest recovery term in a shipped fight. Killing 1 of 8 calmed the
+						# party exactly as much as killing the last enemy on the board.
+						#
+						# Importance has two parts:
+						#   1. SHARE OF THREAT REMOVED. share = 1 / enemies_alive_before_kill.
+						#      One of four -> 0.25. The last enemy -> 1.0, so the blow that ends
+						#      a fight is the big exhale. Scales the killer bonus and the ripple.
+						#   2. PERSONAL THREAT REMOVED. Any Echo this enemy was last hitting gets
+						#      a flat extra relief, NOT scaled by share — your attacker is gone
+						#      regardless of how many others remain.
+						var _k_alive_before: int = 0
+						for _k_a in ectx.actors:
+							if _k_a is Dictionary and str((_k_a as Dictionary).get("faction", "")) == "enemy" \
+									and not bool((_k_a as Dictionary).get("is_structure", false)) \
+									and (not bool((_k_a as Dictionary).get("is_dead", false)) \
+										or str((_k_a as Dictionary).get("id", "")) == str(target.get("id", ""))):
+								_k_alive_before += 1
+						var _k_share: float = 1.0 / float(maxi(1, _k_alive_before))
+						var _k_killer_relief: int = int(round(float(fear_reduce_per_kill) * _k_share))
+						var _k_ripple_relief: int = int(round(float(fear_ripple) * _k_share))
+						var _k_personal: int = int(combat_emo_cfg.get("fear_relief_personal_threat", 5))
+						var _k_dead_id: String = str(target.get("id", ""))
+						# The killer is skipped by the ally loop below, so award its personal
+						# bonus here — killing the enemy that was hitting you is the clearest
+						# case of "the threat to me is gone".
+						if str(actor.get("_last_attacker_id", "")) == _k_dead_id:
+							_k_killer_relief += _k_personal
+							actor["_last_attacker_id"] = ""
 						actor["morale"] = mini(100, int(actor.get("morale", 50)) + morale_per_kill)
-						actor["fear"]   = maxi(0,   int(actor.get("fear",   0)) - fear_reduce_per_kill)
+						_k_killer_relief = LeadershipEmotionServiceScript.apply_fear_relief(
+							actor, _k_killer_relief, combat_emo_cfg)
+						actor["fear"]   = maxi(0,   int(actor.get("fear",   0)) - _k_killer_relief)
 						logger.info(t, "combat.kill_boost", "%s gains morale from kill" % actor.get("name", "?"), {
 							"actor_id":     str(actor.get("id", "")),
 							"morale_delta": morale_per_kill,
-							"fear_delta":   -fear_reduce_per_kill,
+							"fear_delta":   -_k_killer_relief,
+							"enemies_before": _k_alive_before,
+							"threat_share": _k_share,
 						})
 						for ally_v in ectx.actors:
 							var ally: Dictionary = ally_v if ally_v is Dictionary else {}
@@ -2862,8 +2902,16 @@ func _resolve_next_actor(t: int) -> void:
 							if str(ally.get("faction", "")) != "echo": continue
 							var _kr_m_before: int = int(ally.get("morale", 50))
 							var _kr_f_before: int = int(ally.get("fear",   0))
+							# Threat-share relief, plus the personal bonus if this dead enemy
+							# was the one last striking this ally.
+							var _kr_relief: int = _k_ripple_relief
+							if str(ally.get("_last_attacker_id", "")) == _k_dead_id:
+								_kr_relief += _k_personal
+								ally["_last_attacker_id"] = ""
+							_kr_relief = LeadershipEmotionServiceScript.apply_fear_relief(
+								ally, _kr_relief, combat_emo_cfg)
 							ally["morale"] = mini(100, _kr_m_before + morale_ripple)
-							ally["fear"]   = maxi(0,   _kr_f_before - fear_ripple)
+							ally["fear"]   = maxi(0,   _kr_f_before - _kr_relief)
 							# S14b Tier 2 (support): credit the killer the effective morale gained
 							# and fear relieved on each living echo ally (post-clamp deltas).
 							_credit_support_tally(actor, "morale_given",  int(ally["morale"]) - _kr_m_before)
@@ -2872,7 +2920,7 @@ func _resolve_next_actor(t: int) -> void:
 								"%s ripple from %s kill" % [ally.get("name", "?"), actor.get("name", "?")], {
 								"ally_id":      str(ally.get("id", "")),
 								"morale_delta": morale_ripple,
-								"fear_delta":   -fear_ripple,
+								"fear_delta":   -_kr_relief,
 							})
 					# Trigger 5b: guard absorb — guarding Echo absorbs a hit and gains morale.
 					var guard_absorb_morale: int = int(combat_emo_cfg.get("morale_on_guard_absorb", 4))
@@ -3234,18 +3282,73 @@ func _end_round(t: int) -> void:
 		elif str(t5_a.get("faction", "")) == "enemy":
 			t5_living_enemies.append(t5_a)
 	if t5_living_echoes.size() > t5_living_enemies.size() and not t5_living_echoes.is_empty():
+		# A4: the relief scales with the MARGIN, not with the bare fact of outnumbering.
+		#
+		# This was a flat -2 whenever living echoes outnumbered living enemies. It reads
+		# as a condition but behaved as a constant: shipped encounters are 5 echoes
+		# against 1 to 4 enemies (enemy_spawn_config.max_count is 4), so it fired from
+		# round 1 of every fight and stayed on as the party killed things. Measured, it
+		# was the single largest recovery source in every shipped fight at -2.00 per echo
+		# per round, against a total accumulation of +1.22 — a standing subsidy, not a
+		# reward for winning.
+		#
+		# Scaling by margin/party_size keeps the intent (a rout is calming) and removes
+		# the subsidy from fights that are actually close:
+		#   5 v 1 -> margin 4/5 = 0.8 -> -2   (a rout still calms)
+		#   5 v 3 -> margin 2/5 = 0.4 -> -1
+		#   5 v 4 -> margin 1/5 = 0.2 ->  0   (a grind pays nothing)
 		var outnumber_fear: int = int(emo_tick_cfg.get("fear_reduce_on_outnumber", 2))
-		for t5_echo in t5_living_echoes:
-			t5_echo["fear"] = maxi(0, int(t5_echo.get("fear", 0)) - outnumber_fear)
-		logger.debug(t, "combat.emotion.outnumber", "Echoes outnumber enemies — fear reduction", {
-			"echo_count":  t5_living_echoes.size(),
-			"enemy_count": t5_living_enemies.size(),
-			"delta":       -outnumber_fear,
-		})
+		var t5_margin: float = float(t5_living_echoes.size() - t5_living_enemies.size()) \
+			/ float(t5_living_echoes.size())
+		var t5_relief: int = int(round(float(outnumber_fear) * t5_margin))
+		if t5_relief > 0:
+			# Sum the EFFECTIVE post-clamp delta. The nominal t5_relief is not what each
+			# Echo receives: apply_fear_relief tapers it per actor once that actor is past
+			# recovery_taper_start, and the fear-0 floor can cut it again. Logging the
+			# nominal value once and letting a reader multiply it by echo_count overstates
+			# this term and misattributes the remainder — the exact error the ledger this
+			# rebalance depends on is meant to catch.
+			var t5_total: int = 0
+			for t5_echo in t5_living_echoes:
+				var t5_applied: int = LeadershipEmotionServiceScript.apply_fear_relief(
+					t5_echo, t5_relief, emo_tick_cfg)
+				var t5_before: int = int(t5_echo.get("fear", 0))
+				t5_echo["fear"] = maxi(0, t5_before - t5_applied)
+				t5_total += t5_before - int(t5_echo["fear"])
+			logger.debug(t, "combat.emotion.outnumber", "Echoes outnumber enemies — fear reduction", {
+				"echo_count":  t5_living_echoes.size(),
+				"enemy_count": t5_living_enemies.size(),
+				"margin":      t5_margin,
+				"delta":       -t5_relief,
+				"total_delta": -t5_total,
+			})
 
 	# E) Witness ally refuse (T7): nearby Echoes gain fear when a comrade freezes this round.
+	#
+	# DAMPING (A1). This term is positive feedback: a refusal raises the fear of every
+	# nearby Echo, which pushes those Echoes over their own refusal threshold, which
+	# raises the fear of THEIR neighbours. Measured in a live encounter where refusal is
+	# reachable, it became the single largest accumulation source (+196 points) and drove
+	# 20 refusals in 20 rounds with fear pinned at 100. The system had only two states:
+	# no refusals at all, or total collapse. That is a loop with no damping, not a tuning
+	# error, and it also breaks the bark budget (max_barks_per_round 3).
+	#
+	# Two dampers, both required:
+	#   1. An Echo that is ITSELF refusing gains no witness fear. This is the loop: a
+	#      refuser must not be pushed further by the refusals it helped cause.
+	#   2. A per-Echo per-encounter cap. Repeated refusals nearby stop compounding once
+	#      an Echo has taken the full dose. The counter is transient runtime state on the
+	#      actor dict, so it resets with each encounter and is never persisted.
 	var witness_fear: int   = int(emo_tick_cfg.get("fear_on_witness_refuse", 4))
 	var witness_radius: int = int(emo_tick_cfg.get("witness_refuse_radius", 3))
+	var witness_cap: int    = int(emo_tick_cfg.get("witness_refuse_max_per_encounter", 8))
+	# Every Echo that refused THIS round. Read from the round results, not from the
+	# actor dict: the Absolute Fear Rule returns early in ActorStateMachine.advance_turn,
+	# before `last_intent` is written, so a refusing actor carries no record of it.
+	var t7_refusers: Dictionary = {}
+	for t7_scan in ectx.last_round_results:
+		if t7_scan is Dictionary and str((t7_scan as Dictionary).get("action_type", "")) == "actor.refuse":
+			t7_refusers[str((t7_scan as Dictionary).get("source_id", ""))] = true
 	for t7_res in ectx.last_round_results:
 		if not (t7_res is Dictionary): continue
 		if str(t7_res.get("action_type", "")) != "actor.refuse": continue
@@ -3261,15 +3364,29 @@ func _end_round(t: int) -> void:
 			if t7_obs.get("is_dead", false): continue
 			if str(t7_obs.get("faction", "")) != "echo": continue
 			if str(t7_obs.get("id", "")) == t7_refuser_id: continue
+			# Damper 1 — an Echo that refused this round is already at its threshold.
+			if t7_refusers.has(str(t7_obs.get("id", ""))): continue
+			# Damper 2 — this Echo has absorbed its full witness dose for this encounter.
+			var t7_taken: int = int(t7_obs.get("_witness_fear_taken", 0))
+			if witness_cap > 0 and t7_taken >= witness_cap: continue
 			var t7_obs_pos: Dictionary = t7_obs.get("grid_pos", {})
 			if GridService.manhattan_distance(t7_refuser_pos, t7_obs_pos) <= witness_radius:
+				var t7_room: int = witness_fear
+				if witness_cap > 0:
+					t7_room = mini(witness_fear, witness_cap - t7_taken)
 				var witness_fear_applied := LeadershipEmotionServiceScript.apply_fear_gain(
-					t7_obs, witness_fear, ectx.actors, leadership_expr_cfg, true)
-				t7_obs["fear"] = mini(100, int(t7_obs.get("fear", 0)) + witness_fear_applied)
+					t7_obs, t7_room, ectx.actors, leadership_expr_cfg, true)
+				var t7_before: int = int(t7_obs.get("fear", 0))
+				t7_obs["fear"] = mini(100, t7_before + witness_fear_applied)
+				# Count the EFFECTIVE post-clamp gain, so an Echo already at fear 100
+				# does not burn its allowance on points it never received.
+				t7_obs["_witness_fear_taken"] = t7_taken + (int(t7_obs["fear"]) - t7_before)
 				logger.debug(t, "combat.emotion.witness_refuse", "Witness ally freeze — fear tick", {
 					"observer_id": str(t7_obs.get("id", "")),
 					"refuser_id":  t7_refuser_id,
-					"delta":       witness_fear,
+					"delta":       int(t7_obs["fear"]) - t7_before,
+					"taken_total": int(t7_obs["_witness_fear_taken"]),
+					"cap":         witness_cap,
 				})
 
 	# F) Overwhelmed (T8): Echo targeted by 2+ attackers in one round gains fear.
