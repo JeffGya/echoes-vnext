@@ -2885,6 +2885,8 @@ func _resolve_next_actor(t: int) -> void:
 							_k_killer_relief += _k_personal
 							actor["_last_attacker_id"] = ""
 						actor["morale"] = mini(100, int(actor.get("morale", 50)) + morale_per_kill)
+						_k_killer_relief = LeadershipEmotionServiceScript.apply_fear_relief(
+							actor, _k_killer_relief, combat_emo_cfg)
 						actor["fear"]   = maxi(0,   int(actor.get("fear",   0)) - _k_killer_relief)
 						logger.info(t, "combat.kill_boost", "%s gains morale from kill" % actor.get("name", "?"), {
 							"actor_id":     str(actor.get("id", "")),
@@ -2906,6 +2908,8 @@ func _resolve_next_actor(t: int) -> void:
 							if str(ally.get("_last_attacker_id", "")) == _k_dead_id:
 								_kr_relief += _k_personal
 								ally["_last_attacker_id"] = ""
+							_kr_relief = LeadershipEmotionServiceScript.apply_fear_relief(
+								ally, _kr_relief, combat_emo_cfg)
 							ally["morale"] = mini(100, _kr_m_before + morale_ripple)
 							ally["fear"]   = maxi(0,   _kr_f_before - _kr_relief)
 							# S14b Tier 2 (support): credit the killer the effective morale gained
@@ -3299,7 +3303,9 @@ func _end_round(t: int) -> void:
 		var t5_relief: int = int(round(float(outnumber_fear) * t5_margin))
 		if t5_relief > 0:
 			for t5_echo in t5_living_echoes:
-				t5_echo["fear"] = maxi(0, int(t5_echo.get("fear", 0)) - t5_relief)
+				var t5_applied: int = LeadershipEmotionServiceScript.apply_fear_relief(
+					t5_echo, t5_relief, emo_tick_cfg)
+				t5_echo["fear"] = maxi(0, int(t5_echo.get("fear", 0)) - t5_applied)
 			logger.debug(t, "combat.emotion.outnumber", "Echoes outnumber enemies — fear reduction", {
 				"echo_count":  t5_living_echoes.size(),
 				"enemy_count": t5_living_enemies.size(),

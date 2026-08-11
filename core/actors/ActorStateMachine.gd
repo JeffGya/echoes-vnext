@@ -475,6 +475,9 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	var passive_max: int = int(recovery_cfg.get("passive_max", 3))
 	if str(_actor.get("actor_type", "")) == "echo" and passive_max > 0:
 		var passive_tick: int = int(round(float(passive_max) * rank_strength))
+		# A5: relief tapers as fear rises — see LeadershipEmotionService.apply_fear_relief.
+		passive_tick = LeadershipEmotionService.apply_fear_relief(
+			_actor, passive_tick, cfg_data.get("combat", {}).get("emotion", {}))
 		if passive_tick > 0:
 			var pt_before: int = int(_actor.get("fear", 0))
 			_actor["fear"] = clampi(pt_before - passive_tick, 0, 100)
@@ -490,6 +493,10 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	_actor["_fear_spike_fired"] = false
 	if str(_actor.get("actor_type", "")) == "echo":
 		var spike: int = _compute_identity_fear_spike(intent, rank_strength, expr_cfg, cfg_data.get("actor", {}))
+		# A5: relief tapers as fear rises — acting in character steadies an Echo less
+		# once it is genuinely afraid.
+		spike = LeadershipEmotionService.apply_fear_relief(
+			_actor, spike, cfg_data.get("combat", {}).get("emotion", {}))
 		if spike > 0:
 			_actor["fear"] = clampi(int(_actor.get("fear", 0)) - spike, 0, 100)
 			_actor["_fear_spike_fired"] = true
