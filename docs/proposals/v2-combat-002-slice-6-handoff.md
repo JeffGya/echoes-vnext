@@ -1,10 +1,24 @@
 # V2-COMBAT-002 Slice 6 — Continuation Handoff (6B → 6E)
 
-Untracked planning doc in Jeff's `docs/proposals/` area. Reachable by the next agent
-working in the same local repo. Written 2026-07-23 after Phase 6A shipped.
+> ## ⛔ HISTORICAL — DO NOT EXECUTE
+>
+> **V2-COMBAT-002 is CLOSED.** Slice 6 shipped in full via PR #51 (6A), PR #52 (6B+6C)
+> and PR #53 (6D+6E); commit `d1df649` is the story-close commit. See
+> `docs/project_systems_audit.md` § combat for what actually landed, which differs from
+> the plan below in places.
+>
+> This file is preserved **only** as a record of the decisions taken at the time. Every
+> instruction in it — build steps, branch names, verify commands, gotchas — is spent.
+> Do not resume, re-implement, or re-litigate any of it. Two instructions here are now
+> actively wrong and are flagged inline where they appear:
+>
+> - the `.uid` staging rule (§ GIT / WORKTREE) — superseded by PR #60
+> - the perl-watchdog gotcha (§ GOTCHAS #4) — superseded by `AGENTS.md`
+>
+> For current work, `AGENTS.md` and `CONVENTIONS.md` are authoritative.
 
-The full approved plan is at `~/.claude/plans/snazzy-fluttering-blanket.md`; this doc
-is the authoritative RESUME state and supersedes that plan's 6A section (now history).
+Written 2026-07-23 after Phase 6A shipped, as a resume point for the next agent. The
+plan it referenced was at `~/.claude/plans/snazzy-fluttering-blanket.md`.
 
 ---
 
@@ -54,7 +68,7 @@ is the authoritative RESUME state and supersedes that plan's 6A section (now his
 
 ---
 
-## PR 2 — Phase 6B (Combat cutover) + Phase 6C (Stage cutover). THIS IS LIVE.
+## PR 2 — Phase 6B (Combat cutover) + Phase 6C (Stage cutover). [SHIPPED — PR #52]
 
 Backend-first: 6B before 6C. This PR changes real in-game behaviour, so it ends with a
 **genuine manual gate** — Jeff forces every mode and confirms behaviour before commit.
@@ -134,7 +148,7 @@ movement, correct per-mode behaviour, no top-left/bottom-right drift, party-base
 
 ---
 
-## PR 3 — Phase 6D (minimal stopgap) + Phase 6E (tuning, regression, docs)
+## PR 3 — Phase 6D (minimal stopgap) + Phase 6E (tuning, regression, docs) [SHIPPED — PR #53]
 
 ### 6D — Minimal presentation stopgap (decision 6). Scope: tokens must not cut through walls.
 
@@ -194,6 +208,10 @@ movement, correct per-mode behaviour, no top-left/bottom-right drift, party-base
   then branch `feat/v2-combat-002-slice-6bc` off merged main. Re-baseline (expect 1274/1274).
 - Stage EXPLICITLY at commit time (never `git add -A`) — the import step regenerates stray
   `.uid` sidecars for older movement scripts that must NOT be committed.
+  > **⛔ NO LONGER TRUE (PR #60).** Those sidecars were missing by oversight, not by
+  > design — the repo tracks 298 of them. While untracked, each checkout minted its own
+  > random UID, so parallel worktrees disagreed on the same file's identity. The 15
+  > `core/movement/*.gd.uid` files are now tracked. **Commit `.uid` sidecars.**
 - PRESERVE Jeff's dirty/untracked files: `AGENTS.md`, the GDD, the backlog CSV,
   `docs/movement-model.md`, `docs/proposals/` (including THIS file), `prototypes/`. Never
   reset/stash/stage/commit them.
@@ -216,6 +234,8 @@ Benign ERRORs: the `uid://8qssuuodths2` theme warning, `BehaviorModule.*() calle
    `godot --headless --import --path <repo>` once (~9s). (Not needed here; local repo is warm.)
 3. Avoid `cd` — use `git -C` and absolute paths; godot takes `--path`.
 4. Do NOT use the perl watchdog from AGENTS.md; call godot directly with the Bash timeout.
+   > **⛔ NO LONGER TRUE.** `AGENTS.md` § Tests requires the perl-alarm watchdog and it is
+   > the authority. Use the command as written there.
 5. Mutation testing by agents can leave the tree red behind a green compile — ban it.
 6. `user://` resolves by PROJECT NAME, so running the game from here touches Jeff's REAL
    save. The headless test runner is unaffected. (First relevant at the 6B/6C manual gate.)
