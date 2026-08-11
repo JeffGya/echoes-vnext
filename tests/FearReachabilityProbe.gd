@@ -70,6 +70,8 @@ static func run_all_scenarios() -> Dictionary:
 	var argv: PackedStringArray = OS.get_cmdline_user_args()
 	if argv.size() > 2:
 		filter = str(argv[2])
+	# Optional 4th arg: campaign variant, e.g. `-- tests fearprobe A2 3`.
+	var seed_variant: int = int(str(argv[3])) if argv.size() > 3 else 0
 
 	var t_start: int = Time.get_ticks_msec()
 	for sc_v in scenarios:
@@ -80,6 +82,7 @@ static func run_all_scenarios() -> Dictionary:
 			_say("")
 			_say("--- BUDGET EXHAUSTED (%d ms) — remaining scenarios skipped." % BUDGET_MS)
 			break
+		sc["seed_variant"] = seed_variant
 		var report: Dictionary = _run_scenario(sc)
 		_print_report(sc, report)
 
@@ -98,7 +101,18 @@ static func _run_scenario(sc: Dictionary) -> Dictionary:
 	var logger := StructuredLogger.new()
 	logger.set_level("debug")
 	var config := ConfigService.new()
-	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/fear_probe_slot.json")
+	# A SCENARIO-SPECIFIC slot, cleared before boot.
+	#
+	# Every scenario shared one fixed path, so runtime.boot() loaded whatever the
+	# PREVIOUS scenario persisted instead of building a controlled fixture. Realm
+	# completion metadata and the active realm model feed board dimensions, terrain and
+	# encounter seeding, so results depended on scenario order and on earlier or failed
+	# runs — not on `sc` alone. A corrupt leftover could also fail boot() before the
+	# unchecked save_data access below. This is what made runs non-reproducible.
+	var slot_path: String = "/tmp/echoes-vnext-tests/fear_probe_%s_%d.json" \
+		% [seed_tag, int(sc.get("seed_variant", 0))]
+	_clear_slot(slot_path)
+	var runtime := FlowRuntime.new(logger, config, slot_path)
 	runtime.boot()
 
 	# ── Config surgery (in-memory only; data/balance.json is never touched) ──
@@ -130,6 +144,27 @@ static func _run_scenario(sc: Dictionary) -> Dictionary:
 	# ── Realm + party ────────────────────────────────────────────────────────
 	var flow_ctx: FlowContext = runtime.flow_ctx
 	var t: int = 0
+
+	# PIN THE CAMPAIGN SEED. Clearing the save slot is necessary but not sufficient:
+	# booting without a save mints a NEW campaign, and _generate_seed_root_string() is
+	# deliberately random at New Game. Two runs of the same scenario therefore drew
+	# different campaigns — measured 11 rounds / peak fear 25 against 10 rounds / peak
+	# 46, which is far too loose to tune against. Pinning per scenario makes a run a
+	# function of `sc` alone, which is the whole point of a probe.
+	# The variant selects WHICH campaign to pin. One pinned seed is reproducible but not
+	# representative — a scenario's outcome genuinely varies by campaign (measured A2
+	# peak fear 17, 25 and 46 on three different campaigns), because the seed drives
+	# party generation, terrain and spawn placement. Sample several before trusting a
+	# headline number. Pass it as the third argument: `-- tests fearprobe A2 3`.
+	var pinned_root: String = "fearprobe:%s:%d" % [seed_tag, int(sc.get("seed_variant", 0))]
+	var pinned_seed: int = absi(pinned_root.hash())
+	if not (flow_ctx.save_data.get("campaign", {}) is Dictionary):
+		flow_ctx.save_data["campaign"] = {}
+	var camp: Dictionary = flow_ctx.save_data["campaign"]
+	camp["seed_root"] = pinned_root
+	camp["root_seed"] = pinned_seed
+	flow_ctx.campaign_seed = CampaignSeed.new(pinned_seed)
+
 	flow_ctx.realm_id = "realm.01"
 	if RealmService.get_or_create("realm.01", flow_ctx, t).is_empty():
 		return {"error": "realm setup failed"}
@@ -449,7 +484,10 @@ static func _tally_logs(
 				if echo_ids.has(str(d.get("ally_id", ""))):
 					_add(tally, "- kill ripple (allies)", int(d.get("fear_delta", 0)))
 			"combat.emotion.outnumber":
-				_add(tally, "- outnumbering enemies", int(d.get("delta", 0)) * int(d.get("echo_count", 0)))
+				# total_delta is the summed EFFECTIVE post-clamp relief. `delta` is the
+				# nominal per-actor value and must NOT be multiplied by echo_count: the
+				# taper and the fear-0 floor change it per Echo.
+				_add(tally, "- outnumbering enemies", int(d.get("total_delta", 0)))
 			"actor.fear_spike":
 				if echo_ids.has(str(d.get("actor_id", ""))):
 					_add(tally, "- identity spike", -int(d.get("spike", 0)))
@@ -465,6 +503,15 @@ static func _tally_logs(
 			# sidestep before swinging.
 			"actor.moved":
 				_add(tally, "!moves", 1)
+
+
+## Removes a save slot and the sidecars the crash-safe writer can leave beside it,
+## so each scenario boots a genuinely fresh campaign.
+static func _clear_slot(path: String) -> void:
+	for suffix: String in ["", ".tmp", ".bak"]:
+		var target: String = path + suffix
+		if FileAccess.file_exists(target):
+			DirAccess.remove_absolute(target)
 
 
 static func _add(tally: Dictionary, key: String, v: int) -> void:

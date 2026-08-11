@@ -3302,15 +3302,25 @@ func _end_round(t: int) -> void:
 			/ float(t5_living_echoes.size())
 		var t5_relief: int = int(round(float(outnumber_fear) * t5_margin))
 		if t5_relief > 0:
+			# Sum the EFFECTIVE post-clamp delta. The nominal t5_relief is not what each
+			# Echo receives: apply_fear_relief tapers it per actor once that actor is past
+			# recovery_taper_start, and the fear-0 floor can cut it again. Logging the
+			# nominal value once and letting a reader multiply it by echo_count overstates
+			# this term and misattributes the remainder — the exact error the ledger this
+			# rebalance depends on is meant to catch.
+			var t5_total: int = 0
 			for t5_echo in t5_living_echoes:
 				var t5_applied: int = LeadershipEmotionServiceScript.apply_fear_relief(
 					t5_echo, t5_relief, emo_tick_cfg)
-				t5_echo["fear"] = maxi(0, int(t5_echo.get("fear", 0)) - t5_applied)
+				var t5_before: int = int(t5_echo.get("fear", 0))
+				t5_echo["fear"] = maxi(0, t5_before - t5_applied)
+				t5_total += t5_before - int(t5_echo["fear"])
 			logger.debug(t, "combat.emotion.outnumber", "Echoes outnumber enemies — fear reduction", {
 				"echo_count":  t5_living_echoes.size(),
 				"enemy_count": t5_living_enemies.size(),
 				"margin":      t5_margin,
 				"delta":       -t5_relief,
+				"total_delta": -t5_total,
 			})
 
 	# E) Witness ally refuse (T7): nearby Echoes gain fear when a comrade freezes this round.
