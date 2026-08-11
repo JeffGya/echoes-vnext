@@ -5448,6 +5448,11 @@ func _handle_sanctum_party_toggle(action: Dictionary, t: int) -> void:
 	# ECHO_PARTY: build party snapshot as before.
 	if snap_type == FlowStateIds.SANCTUM:
 		flow_machine.reenter(flow_ctx, logger, t)
+		# reenter() replaces last_snapshot with the BASE Sanctum snapshot. refresh_snapshot()
+		# must follow so FlowStateMachine re-applies the Sanctum enrichment block
+		# (ase_balance, sanctum_name, party_slots). Without it the screen renders
+		# 0 Ase, no house name, and "No departure party is set."
+		flow_machine.refresh_snapshot(flow_ctx, logger, t)
 	else:
 		flow_ctx.last_snapshot = FlowEchoPartyState.build_snapshot(flow_ctx, t)
 		flow_machine.refresh_snapshot(flow_ctx, logger, t)
@@ -5549,6 +5554,11 @@ func _handle_sanctum_unlock_skill(action: Dictionary, t: int) -> void:
 		flow_ctx.save_request_reason = "skill.unlock"
 
 	flow_machine.reenter(flow_ctx, logger, t)
+	# reenter() replaces last_snapshot with the BASE Sanctum snapshot. refresh_snapshot()
+	# must follow so FlowStateMachine re-applies the Sanctum enrichment block
+	# (ase_balance, sanctum_name, party_slots). Without it the screen renders
+	# 0 Ase, no house name, and "No departure party is set."
+	flow_machine.refresh_snapshot(flow_ctx, logger, t)
 
 
 func _handle_weave_start_for_echo(action: Dictionary, t: int) -> void:
