@@ -3234,14 +3234,34 @@ func _end_round(t: int) -> void:
 		elif str(t5_a.get("faction", "")) == "enemy":
 			t5_living_enemies.append(t5_a)
 	if t5_living_echoes.size() > t5_living_enemies.size() and not t5_living_echoes.is_empty():
+		# A4: the relief scales with the MARGIN, not with the bare fact of outnumbering.
+		#
+		# This was a flat -2 whenever living echoes outnumbered living enemies. It reads
+		# as a condition but behaved as a constant: shipped encounters are 5 echoes
+		# against 1 to 4 enemies (enemy_spawn_config.max_count is 4), so it fired from
+		# round 1 of every fight and stayed on as the party killed things. Measured, it
+		# was the single largest recovery source in every shipped fight at -2.00 per echo
+		# per round, against a total accumulation of +1.22 — a standing subsidy, not a
+		# reward for winning.
+		#
+		# Scaling by margin/party_size keeps the intent (a rout is calming) and removes
+		# the subsidy from fights that are actually close:
+		#   5 v 1 -> margin 4/5 = 0.8 -> -2   (a rout still calms)
+		#   5 v 3 -> margin 2/5 = 0.4 -> -1
+		#   5 v 4 -> margin 1/5 = 0.2 ->  0   (a grind pays nothing)
 		var outnumber_fear: int = int(emo_tick_cfg.get("fear_reduce_on_outnumber", 2))
-		for t5_echo in t5_living_echoes:
-			t5_echo["fear"] = maxi(0, int(t5_echo.get("fear", 0)) - outnumber_fear)
-		logger.debug(t, "combat.emotion.outnumber", "Echoes outnumber enemies — fear reduction", {
-			"echo_count":  t5_living_echoes.size(),
-			"enemy_count": t5_living_enemies.size(),
-			"delta":       -outnumber_fear,
-		})
+		var t5_margin: float = float(t5_living_echoes.size() - t5_living_enemies.size()) \
+			/ float(t5_living_echoes.size())
+		var t5_relief: int = int(round(float(outnumber_fear) * t5_margin))
+		if t5_relief > 0:
+			for t5_echo in t5_living_echoes:
+				t5_echo["fear"] = maxi(0, int(t5_echo.get("fear", 0)) - t5_relief)
+			logger.debug(t, "combat.emotion.outnumber", "Echoes outnumber enemies — fear reduction", {
+				"echo_count":  t5_living_echoes.size(),
+				"enemy_count": t5_living_enemies.size(),
+				"margin":      t5_margin,
+				"delta":       -t5_relief,
+			})
 
 	# E) Witness ally refuse (T7): nearby Echoes gain fear when a comrade freezes this round.
 	#
