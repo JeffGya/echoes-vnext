@@ -386,6 +386,14 @@ func _run_tests(parts: Array) -> void:
 		FearReachabilityProbe.register(probe_runner)
 		probe_runner.run_all()
 		return
+	# INVESTIGATION TOOL — `tests pursueprobe` runs the PURSUE-encounter timing probe
+	# instead of the suite. Not part of the regular suite: it prints a timing report
+	# rather than asserting.
+	if parts.size() > 1 and str(parts[1]).to_lower() == "pursueprobe":
+		var pursue_probe_runner := CoreTestRunner.new()
+		PursueTimingProbe.register(pursue_probe_runner)
+		pursue_probe_runner.run_all()
+		return
 	# Optional: allow "tests economy" later; for now run all.
 	var runner := CoreTestRunner.new()
 	EconomyTests.register(runner)
