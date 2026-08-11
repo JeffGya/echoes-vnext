@@ -29,6 +29,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("skill_unlock/unlock_denied_wrong_family",          Callable(SkillUnlockTests, "_t_unlock_denied_wrong_family"))
 	runner.register_test("skill_unlock/party_toggle_works_from_sanctum",     Callable(SkillUnlockTests, "_t_party_toggle_from_sanctum"))
 	runner.register_test("skill_unlock/party_prep_filters_to_unlocked_only", Callable(SkillUnlockTests, "_t_party_prep_only_shows_unlocked_skills"))
+	runner.register_test("skill_unlock/unlock_keeps_sanctum_projection",     Callable(SkillUnlockTests, "_t_unlock_keeps_sanctum_projection"))
+	runner.register_test("skill_unlock/toggle_keeps_sanctum_projection",     Callable(SkillUnlockTests, "_t_toggle_keeps_sanctum_projection"))
 
 
 # ---------------------------------------------------------------------------
@@ -566,6 +568,152 @@ static func _t_party_prep_only_shows_unlocked_skills() -> Dictionary:
 
 ## Loads ConfigService and returns { "ok": true, "skills_cfg": Dictionary }
 ## V2-PROG-009 fix: load_balance() must be called explicitly; ConfigService.new() does not auto-load.
+# ---------------------------------------------------------------------------
+# T10 / T11: Sanctum snapshot projection survives reenter()
+# ---------------------------------------------------------------------------
+# Regression guard. ase_balance, sanctum_name and party_slots are produced ONLY by
+# FlowStateMachine._rebuild_snapshot()'s Sanctum enrichment block — FlowSanctumState.enter()
+# does not build them. reenter() re-runs enter() and REPLACES last_snapshot wholesale, so any
+# handler that calls reenter() without a following refresh_snapshot() emits a snapshot missing
+# all three. The UI then renders 0 Ase, no house name, and "No departure party is set."
+# while the save itself is intact.
+#
+# Both handlers below previously called reenter() bare. The assertion is snapshot-vs-save:
+# the projection must agree with authoritative save data after the dispatch.
+
+
+# Asserts the emitted Sanctum snapshot projects the authoritative save state.
+static func _assert_sanctum_projection(snap: Dictionary, save: Dictionary, label: String) -> Dictionary:
+	var snap_type := str(snap.get("type", ""))
+	if snap_type != "flow.sanctum":
+		return { "ok": false, "error": "%s: expected type 'flow.sanctum', got '%s'" % [label, snap_type] }
+
+	var data_v: Variant = snap.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+
+	var econ_v: Variant = save.get("economy", {})
+	var econ: Dictionary = econ_v if econ_v is Dictionary else {}
+	var sanctum_v: Variant = save.get("sanctum", {})
+	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+
+	if not data.has("ase_balance"):
+		return { "ok": false, "error": "%s: snapshot data is missing 'ase_balance' (enrichment block did not run)" % label }
+	var want_ase := int(econ.get("ase", 0))
+	var got_ase := int(data.get("ase_balance", -1))
+	if got_ase != want_ase:
+		return { "ok": false, "error": "%s: ase_balance %d does not match save ase %d" % [label, got_ase, want_ase] }
+
+	if not data.has("sanctum_name"):
+		return { "ok": false, "error": "%s: snapshot data is missing 'sanctum_name' (enrichment block did not run)" % label }
+	var want_name := str(sanctum.get("name", ""))
+	var got_name := str(data.get("sanctum_name", ""))
+	if got_name != want_name:
+		return { "ok": false, "error": "%s: sanctum_name '%s' does not match save name '%s'" % [label, got_name, want_name] }
+
+	if not data.has("party_slots"):
+		return { "ok": false, "error": "%s: snapshot data is missing 'party_slots' (enrichment block did not run)" % label }
+	var active_v: Variant = sanctum.get("active_party_ids", [])
+	var active: Array = active_v if active_v is Array else []
+	var slots_v: Variant = data.get("party_slots", [])
+	var slots: Array = slots_v if slots_v is Array else []
+	if slots.size() != active.size():
+		return {
+			"ok": false,
+			"error": "%s: party_slots size %d does not match active_party_ids size %d" % [label, slots.size(), active.size()],
+		}
+
+	return { "ok": true }
+
+
+# T10: sanctum.unlock_skill must not strip the Sanctum projection.
+static func _t_unlock_keeps_sanctum_projection() -> Dictionary:
+	var env := _make_runtime_env()
+	if not bool(env.get("ok", false)):
+		return env
+	var runtime: FlowRuntime = env["runtime"]
+
+	var save: Dictionary = runtime.get_save_data()
+	var roster := _get_roster(save)
+	if roster.is_empty():
+		return { "ok": false, "error": "Roster is empty after boot" }
+
+	var echo := _first_echo(roster)
+	if echo.is_empty():
+		return { "ok": false, "error": "roster[0] is not a Dictionary" }
+
+	echo["calling"]         = "okofor"
+	echo["unlocked_skills"] = []
+	var echo_id := str(echo.get("id", ""))
+
+	# Give the house a name and a departure party so an empty projection is unambiguous.
+	var sanctum_v: Variant = save.get("sanctum", {})
+	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	sanctum["name"]             = "Test House"
+	sanctum["active_party_ids"] = [echo_id]
+
+	# Set balance directly and stamp last_settle_unix to suppress internal settle drift.
+	var econ := _get_economy(save)
+	econ["ase"]              = 100
+	econ["last_settle_unix"] = int(Time.get_unix_time_from_system())
+
+	var snap: Dictionary = runtime.dispatch({
+		"type":    "sanctum.unlock_skill",
+		"payload": { "echo_id": echo_id, "skill_id": "warders_vigil" },
+	})
+
+	# Sanity: the unlock must actually have happened, otherwise the projection check is vacuous.
+	var save_after: Dictionary = runtime.get_save_data()
+	var echo_after := _find_echo(save_after, echo_id)
+	var ul_v: Variant = echo_after.get("unlocked_skills", [])
+	var ul: Array = ul_v if ul_v is Array else []
+	if not ul.has("warders_vigil"):
+		return { "ok": false, "error": "Precondition failed: skill was not unlocked, so projection check is vacuous" }
+
+	return _assert_sanctum_projection(snap, save_after, "after sanctum.unlock_skill")
+
+
+# T11: sanctum.party.toggle from flow.sanctum must not strip the Sanctum projection.
+static func _t_toggle_keeps_sanctum_projection() -> Dictionary:
+	var env := _make_runtime_env()
+	if not bool(env.get("ok", false)):
+		return env
+	var runtime: FlowRuntime = env["runtime"]
+
+	var save: Dictionary = runtime.get_save_data()
+	var roster := _get_roster(save)
+	if roster.is_empty():
+		return { "ok": false, "error": "Roster is empty after boot" }
+
+	var sanctum_v: Variant = save.get("sanctum", {})
+	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	sanctum["name"] = "Test House"
+
+	# Start from an empty party and add one echo, so party_slots must become non-empty.
+	sanctum["active_party_ids"] = []
+	var echo := _first_echo(roster)
+	if echo.is_empty():
+		return { "ok": false, "error": "roster[0] is not a Dictionary" }
+	var echo_id := str(echo.get("id", ""))
+
+	var econ := _get_economy(save)
+	econ["last_settle_unix"] = int(Time.get_unix_time_from_system())
+
+	var snap: Dictionary = runtime.dispatch({
+		"type":    "sanctum.party.toggle",
+		"payload": { "echo_id": echo_id },
+	})
+
+	var save_after: Dictionary = runtime.get_save_data()
+	var sanctum_after_v: Variant = save_after.get("sanctum", {})
+	var sanctum_after: Dictionary = sanctum_after_v if sanctum_after_v is Dictionary else {}
+	var active_v: Variant = sanctum_after.get("active_party_ids", [])
+	var active: Array = active_v if active_v is Array else []
+	if not active.has(echo_id):
+		return { "ok": false, "error": "Precondition failed: toggle did not add echo to party, projection check is vacuous" }
+
+	return _assert_sanctum_projection(snap, save_after, "after sanctum.party.toggle")
+
+
 static func _load_real_skills_cfg() -> Dictionary:
 	var config := ConfigService.new()
 	config.load_balance()   # required — _balance is {} until this is called
