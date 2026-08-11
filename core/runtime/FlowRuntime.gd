@@ -1764,29 +1764,59 @@ func _movement_direct_option_for_goal(
 	if destination_region.has(origin) and str(goal.get("purpose", "")) == "hold":
 		return _movement_build_direct_option(movement_context, profile, goal, origin, [], 0, 0, edge_sources)
 
-	var best_path: Array = []
+	if destination_region.is_empty():
+		return {}
+
+	var planning_walkable: Dictionary = _movement_planning_walkable(movement_context)
+	var terrain_costs: Dictionary = movement_context.get("terrain_costs", {}) as Dictionary
+	var bounds: Dictionary = movement_context.get("bounds", {}) as Dictionary
+
+	# PERF (perf/pursue-option-generation): destination_region can be 300+ cells for a
+	# hunter positioned ahead of its quarry (a PURSUE "cut off" goal). The old code ran a
+	# COMPLETE single-target shortest_path from the same origin to every candidate cell
+	# just to keep the cheapest — 300+ full searches per turn instead of one.
+	#
+	# Dijkstra's minimum cost to a given node is independent of tie-break policy (candidate
+	# relaxation here only ever fires on strictly-lower cost — see reachable_cost_region's
+	# `candidate_cost < costs[neighbor_key]` — so the recorded cost is the same regardless of
+	# traversal/extraction order). That means ONE single-source flood fill from `origin`
+	# (reachable_cost_region) yields the exact same cost-to-every-cell that running
+	# shortest_path once per destination would have produced. We use that flood fill only to
+	# pick the WINNING destination (same cost values, same tie-break via
+	# _movement_destination_before as before), then make exactly one shortest_path call for
+	# that single destination — the identical call the old loop would have made for it — so
+	# the returned path is byte-identical (tie-breaks included) to the pre-optimization code.
 	var best_cost: int = 999999
 	var best_destination: Dictionary = {}
-	var planning_walkable: Dictionary = _movement_planning_walkable(movement_context)
+	var region: Dictionary = MovementPathServiceScript.reachable_cost_region(
+		origin, best_cost, planning_walkable, terrain_costs, bounds, edge_costs)
+	var region_costs: Dictionary = region.get("costs", {}) as Dictionary
 	for destination_value: Variant in destination_region:
 		if not (destination_value is Dictionary):
 			continue
 		var destination: Dictionary = destination_value
-		var route: Dictionary = MovementPathServiceScript.shortest_path(
-			origin,
-			destination,
-			planning_walkable,
-			movement_context.get("terrain_costs", {}) as Dictionary,
-			movement_context.get("bounds", {}) as Dictionary,
-			edge_costs
-		)
-		if not bool(route.get("reachable", false)):
+		var destination_key: String = _movement_cell_key_runtime(destination)
+		if not region_costs.has(destination_key):
 			continue
-		var cost: int = int(route.get("cost", 0))
+		var cost: int = int(region_costs[destination_key])
 		if cost < best_cost or (cost == best_cost and _movement_destination_before(salt, destination, best_destination)):
 			best_cost = cost
-			best_path = (route.get("path", []) as Array).duplicate(true)
 			best_destination = destination.duplicate(true)
+
+	var best_path: Array = []
+	if not best_destination.is_empty():
+		var winning_route: Dictionary = MovementPathServiceScript.shortest_path(
+			origin,
+			best_destination,
+			planning_walkable,
+			terrain_costs,
+			bounds,
+			edge_costs
+		)
+		if bool(winning_route.get("reachable", false)):
+			best_cost = int(winning_route.get("cost", 0))
+			best_path = (winning_route.get("path", []) as Array).duplicate(true)
+
 	if best_path.is_empty():
 		return {}
 

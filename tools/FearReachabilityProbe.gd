@@ -1,4 +1,4 @@
-# res://tests/FearReachabilityProbe.gd
+# res://tools/FearReachabilityProbe.gd
 #
 # INVESTIGATION TOOL — not a test. Registered only under `-- tests fearprobe`.
 #
