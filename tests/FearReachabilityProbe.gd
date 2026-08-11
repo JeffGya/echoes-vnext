@@ -145,6 +145,14 @@ static func _run_scenario(sc: Dictionary) -> Dictionary:
 			seed_tag, "echo." + str(i), i, "summon", summ_cfg, expr_cfg)
 		echo["id"] = "echo_%04d" % (i + 1)
 		echo["rank"] = int(sc.get("rank", 1))
+		# Mirror the REAL summon path (FlowRuntime ~:1370). EchoFactory.generate()
+		# deliberately leaves emotion and dominant_vector unpopulated and relies on these
+		# two calls to fill them. Skipping them produced a party that cannot exist in
+		# play: dominant_vector stayed "", which silently disabled BOTH the vector half
+		# of the identity-fear-spike gate (_compute_identity_fear_spike returns 0 when
+		# dominant_vector is empty) and every vector term in BehaviorArbiter scoring.
+		EmotionService.init_echo(echo, logger, t)
+		VectorService.init_vectors(echo, bal.get("vectors", {}), logger, t)
 		# NOTE: `echo.get("emotion", {}) is Dictionary` is always true (the default IS a
 		# Dictionary), so the key can still be absent here — check `has()` explicitly.
 		if not echo.has("emotion") or not (echo["emotion"] is Dictionary):
@@ -508,7 +516,11 @@ static func _threshold_for(ectx: EncounterContext, expr_cfg: Dictionary) -> Stri
 			var cb: Dictionary = expr_cfg.get("calling_behavior", {}).get(calling, {})
 			thr = clampi(base + int(cb.get("absolute_fear_offset", 0)), 0, 100)
 			src = "~"
-		out.append("%s/%s=%s%d" % [band, calling, src, thr])
+		# dominant_vector is printed because it is half the identity-fear-spike gate
+		# (_compute_identity_fear_spike needs BOTH a calling weight >= 30 and a vector
+		# multiplier >= 0.15), and only vanguard/seeker/opportunist clear it for
+		# melee_attack. Party composition therefore decides whether that spike can fire.
+		out.append("%s/%s/%s=%s%d" % [band, calling, str(a.get("dominant_vector", "?")), src, thr])
 	return ", ".join(PackedStringArray(out))
 
 
