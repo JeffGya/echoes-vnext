@@ -22,6 +22,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("weave/non_chosen_consequences_exist_for_reject_and_defer", Callable(WeavingRiteTests, "_test_non_chosen_consequences_exist_for_reject_and_defer"))
 	runner.register_test("weave/commitment_lock_blocks_non_confirm_runtime_actions", Callable(WeavingRiteTests, "_test_commitment_lock_blocks_non_confirm_runtime_actions"))
 	runner.register_test("weave/start_for_echo_transitions_to_rite", Callable(WeavingRiteTests, "_test_start_for_echo_transitions_to_rite"))
+	# chore/finish-virtue-wheel-and-dead-config: pin _compute_fit's adjacency-driven
+	# tiers post-migration off the hardcoded _VIRTUE_WHEEL const. No prior test in this
+	# suite covered adjacency — this is the exact regression the migration risked.
+	runner.register_test("weave/adjacent_virtue_fit_returns_point_six", Callable(WeavingRiteTests, "_test_adjacent_virtue_fit_returns_point_six"))
+	runner.register_test("weave/calling_virtue_adjacency_bonus_adds_point_one", Callable(WeavingRiteTests, "_test_calling_virtue_adjacency_bonus_adds_point_one"))
 
 
 static func _make_cfg() -> Dictionary:
@@ -46,6 +51,11 @@ static func _make_cfg() -> Dictionary:
 			"mediator":    ["empathy", "forgiveness"],
 			"nurturer":    ["generosity", "compassion"],
 		},
+		# chore/finish-virtue-wheel-and-dead-config: WeavingRiteService._is_adjacent now
+		# reads cfg.virtue_wheel (formerly a hardcoded _VIRTUE_WHEEL const). Verbatim
+		# mirror of balance.json data.contact.virtue_wheel — omitting this key silently
+		# disables the 0.6 adjacent fit tier and the +0.1 calling-adjacency bonus.
+		"virtue_wheel": ["courage","leadership","truth","wisdom","humility","acceptance","forgiveness","compassion","empathy","generosity"],
 		"calling_to_virtue_primary": {
 			"okofor":      "courage",
 			"onyamesu":    "acceptance",
@@ -334,6 +344,45 @@ static func _test_commitment_lock_blocks_non_confirm_runtime_actions() -> Dictio
 	if runtime.flow_ctx.weave_commit_locked != true:
 		return { "ok": false, "error": "Expected commitment lock to remain active" }
 
+	return { "ok": true }
+
+
+# Pin: dominant_vector "vanguard" -> primary composing virtue "courage" (index 0 on
+# _make_cfg's virtue_wheel). Thread virtue "leadership" (index 1) is adjacent (diff 1),
+# not equal, not opposite. Both echo.calling AND echo.calling_origin are cleared —
+# _calling_virtue() falls back from an empty "calling" to calling_origin's composing
+# virtue (see WeavingRiteService._calling_virtue), and _make_echo() defaults
+# calling_origin to the same dominant_vector, which would silently re-trigger the +0.1
+# calling-adjacency bonus and mask the tier this test targets. Clearing both isolates
+# the 0.6 adjacent tier itself. Fails if cfg.virtue_wheel is missing/empty (falls
+# through to the 0.4 base tier instead of 0.6) or if the adjacency arithmetic regresses.
+static func _test_adjacent_virtue_fit_returns_point_six() -> Dictionary:
+	var cfg := _make_cfg()
+	var echo := _make_echo("echo.adj", "vanguard", 60, 10)
+	echo["calling"] = ""
+	echo["calling_origin"] = ""
+	var thread := { "id": "thread.adj", "virtue": "leadership", "quality_tier": "clean" }
+	var save := { "sanctum": { "active_party_ids": ["echo.adj"], "bonds": [] } }
+	var fit: float = WeavingRiteServiceScript._compute_fit(echo, thread, save, cfg)
+	if not is_equal_approx(fit, 0.6):
+		return { "ok": false, "error": "Expected adjacent-virtue fit 0.6 (courage/leadership), got %f" % fit }
+	return { "ok": true }
+
+
+# Pin: same setup as above, but echo.calling = "aduro" (cfg.calling_to_virtue_primary
+# maps aduro -> "courage"). "courage" is adjacent to thread virtue "leadership", so the
+# +0.1 calling-virtue-adjacency bonus in _compute_fit fires on top of the 0.6 adjacent
+# tier -> 0.7. Fails if the bonus branch's own _is_adjacent call is not migrated to read
+# cfg.virtue_wheel (would silently stay at 0.6), or if the bonus arithmetic regresses.
+static func _test_calling_virtue_adjacency_bonus_adds_point_one() -> Dictionary:
+	var cfg := _make_cfg()
+	var echo := _make_echo("echo.bonus", "vanguard", 60, 10)
+	echo["calling"] = "aduro"
+	var thread := { "id": "thread.bonus", "virtue": "leadership", "quality_tier": "clean" }
+	var save := { "sanctum": { "active_party_ids": ["echo.bonus"], "bonds": [] } }
+	var fit: float = WeavingRiteServiceScript._compute_fit(echo, thread, save, cfg)
+	if not is_equal_approx(fit, 0.7):
+		return { "ok": false, "error": "Expected adjacent tier + calling bonus fit 0.7, got %f" % fit }
 	return { "ok": true }
 
 

@@ -274,7 +274,7 @@
 			}
 		},
 		"weaving_rite": {
-			"_comment_identity": "V2-PROG-012 Phase 9: the vector/virtue/calling identity tables formerly here (vector_to_virtue_primary) and formerly duplicated in data.contact.recruitment now live ONCE, canonically, under data.contact — vector_virtue_composition, virtue_vector_key, calling_to_virtue_primary. FlowRuntime._get_weaving_rite_cfg() overlays virtue_vector_key and calling_to_virtue_primary from data.contact onto this cfg at read time (same overlay pattern as RecruitmentService.build_effective_cfg) so WeavingRiteService's cfg.virtue_vector_key / cfg.calling_to_virtue_primary reads resolve without a second stored copy.",
+			"_comment_identity": "V2-PROG-012 Phase 9: the vector/virtue/calling identity tables formerly here (vector_to_virtue_primary) and formerly duplicated in data.contact.recruitment now live ONCE, canonically, under data.contact — vector_virtue_composition, virtue_vector_key, calling_to_virtue_primary, virtue_wheel. FlowRuntime._get_weaving_rite_cfg() overlays vector_virtue_composition, calling_to_virtue_primary, and (chore/finish-virtue-wheel-and-dead-config) virtue_wheel from data.contact onto this cfg at read time (same overlay pattern as RecruitmentService.build_effective_cfg) so WeavingRiteService's cfg.vector_virtue_composition / cfg.calling_to_virtue_primary / cfg.virtue_wheel reads resolve without a second stored copy.",
 			"max_candidates": 3,
 			"fit_threshold_accept": 0.55,
 			"readiness_threshold_defer": 0.38,
@@ -2268,16 +2268,6 @@
 				"kra_soro":    ["sum_okwanfo", "okomfo"],
 				"okomfo":      ["kra_soro", "onyamesu"],
 				"onyamesu":    ["okomfo", "okofor"]
-			},
-			"absolute_fear_threshold_by_calling": {
-				"_comment": "Per-calling Absolute Fear threshold override. Default is data.emotion.drift.fear_threshold (80). Edge callings break sooner (aduro 75, sum_okwanfo 70). Anchor and Sight callings endure longer (onyamesu 85, okomfo 85).",
-				"aduro": 75.0,
-				"sum_okwanfo": 70.0,
-				"okofor": 80.0,
-				"onyamesu": 85.0,
-				"okomfo": 85.0,
-				"kra_soro": 80.0,
-				"uncalled": 80.0
 			},
 			"broken_morale_overrides": {
 				"_comment": "Per-calling override of morale_action_muls at 'broken' tier. If a calling key is present, its values replace the standard broken-morale muls for that action. Aduro charges when broken; does not collapse into guard.",

@@ -181,6 +181,15 @@ static func validate(data: Dictionary, logger, t: int) -> bool:
 		_warn(logger, t, "data.weaving_rite has a 'vector_to_virtue_primary' copy — canonical location is data.contact.virtue_vector_key; duplicates are rejected to prevent silent desync", {})
 		all_valid = false
 
+	# chore/finish-virtue-wheel-and-dead-config: WeavingRiteService's own hardcoded
+	# _VIRTUE_WHEEL const (formerly duplicating data.contact.virtue_wheel) was removed;
+	# it now reads the wheel via FlowRuntime._get_weaving_rite_cfg()'s runtime overlay —
+	# never a second stored copy in data.weaving_rite. Same regression-guard precedent
+	# as the vector_to_virtue_primary check above.
+	if weaving.has("virtue_wheel"):
+		_warn(logger, t, "data.weaving_rite has a 'virtue_wheel' copy — canonical location is data.contact.virtue_wheel; duplicates are rejected to prevent silent desync", {})
+		all_valid = false
+
 	return all_valid
 
 
