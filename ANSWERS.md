@@ -53,6 +53,10 @@
 | 44 | storyweight-speak-truncated | Conversation Storyweight was `int(0.2)` → `0`, silently never awarded | 2026-07-29 |
 | 45 | prog012-refusal-unreachable-measured | 0 refusals in 439 measured rounds across all bands — the Phase 7 band+offset fix is correct but its effect is unobservable until the fear economy is rebalanced | 2026-08-09 |
 | 46 | prog012-divergence-single-directive-measured | Divergence fires almost only under directive.scout_carefully; seek_signs shows contest on 4 of 535 turns — a directive-content property, not a detector defect | 2026-08-09 |
+| 47 | fear-recovery-was-unconditional | Every dominant fear recovery term paid out for winning, and shipped fights are always winnable, so fear pinned at 0 | 2026-08-11 |
+| 48 | move-then-attack-was-impossible | An actor that closed to melee range could not attack; 80% of enemy activations produced no action at all | 2026-08-11 |
+| 49 | fear-40-target-retired | The COMBAT-001 "stay below fear 40" target is retired; the band boundaries stay, and the economy rises to use them | 2026-08-11 |
+| 50 | probe-must-mirror-the-summon-path | A probe that calls EchoFactory.generate() without init_vectors builds a party that cannot exist in play | 2026-08-11 |
 
 ---
 
@@ -470,5 +474,41 @@
 **A:** **Effectively single-directive today.** Under `directive.seek_signs`, only **4 of 535** scored Echo turns showed any contest (max `contest_ratio` 0.0179, well under `min_contest_ratio` 0.28) — not because the detector is structurally incapable (a throwaway probe found a real, non-flat `directive_bonus` spread for `seek_signs`, comfortably clearing the threshold), but because that directive's resolved preference (`actor.move`, driven by `clue_seeking_priority`/`reporting_priority`) already closely matches what an Echo's own base identity favours in combat — a genuine identity-vs-directive conflict rarely arises naturally under this directive's content. `directive.scout_carefully` is where divergence is actually observable (recalibrated to `min_contest_ratio: 0.28`, ~0.73 events/encounter across 15 measured encounters). Coverage is directive-agnostic by construction (`tests/DivergenceDetectorTests.gd` enumerates `DirectiveService.get_registry()` at runtime), so this generalises automatically to any directive added later — but a future directive whose content resembles `seek_signs` (i.e. whose preferred action already matches unprompted Echo behavior) will show the same near-silence, and that is expected, not a bug.
 **Source:** measured probe, V2-PROG-012 Phase 6/10, 2026-08-09
 **Date:** 2026-08-09
+
+---
+
+### 47. fear-recovery-was-unconditional
+
+**Q:** Why did fear pin at 0 in every shipped fight, when the emotion system has six accumulation sources and six recovery sources?
+**A:** **Every dominant recovery term paid out for winning, and the shipped encounter design guarantees the party is winning.** `fear_reduce_on_outnumber` was a flat −2 whenever living echoes outnumbered living enemies. It reads as a condition but behaved as a constant, because `enemy_spawn_config.max_count` is 4 against a party of 5, so it fired from round 1 of every fight. The kill economy (−15 to the killer, −5 to every living ally) paid the same for killing 1 of 8 as for killing the last enemy. Together they delivered −4.15 fear per echo per round against a total accumulation of +1.22. Recovery was not narrowly winning — it was **oversupplied by 3–7×**, and 59–71% of it was thrown at the fear-0 floor. Zero refusals in 439 rounds was never a near-miss. The fix set makes relief *situational*: outnumber relief scales with the margin (A4), kill relief scales with the share of threat removed plus a flat bonus if the dead enemy was the one hitting you (A3), and all relief tapers as fear rises (A5). Measured on the hardest shipped fight, peak fear went 4 → 46.
+**Source:** Jeff + measured probe (`tests/FearReachabilityProbe.gd`), 2026-08-11
+**Date:** 2026-08-11
+
+---
+
+### 48. move-then-attack-was-impossible
+
+**Q:** Why did enemies attack on only 1 in 5 of their activations?
+**A:** **An actor that closed to melee range during its activation could not attack, because attacking was never the declared action.** `CombatPressureService._add_ordinary_combat` emitted TWO goals for a non-adjacent hostile over the *same* region and the *same* path: an `advance` (TACTICAL, HIGH urgency) planning `actor.move`, and an `engage` (SAFETY, NORMAL) planning `melee_attack`. `_final_goal_before` orders the shortlist by urgency descending, so the action-less advance always won. Measured: **80% of enemy activations produced no action at all**, and only 7 of 35 enemy-rounds produced a swing — while 100% of *planned* swings resolved correctly. The loss was entirely in goal selection, not in execution. This contradicted `docs/movement-model.md` §8.1 and §22.4. Two earlier hypotheses were wrong and are recorded so they are not retried: it is **not** BehaviorArbiter scoring (moving the `enemy_advancing` situational bonus from `actor.move` to `melee_attack` produced byte-identical output), and demoting the advance goal's urgency made it **worse**. The fix removes the duplicate and gives `engage` the TACTICAL slot — the bucket matters, because `withdraw` occupies SAFETY at HIGH under collapse and would evict an engage left there.
+**Source:** measured probe, 2026-08-11
+**Date:** 2026-08-11
+
+---
+
+### 49. fear-40-target-retired
+
+**Q:** Does the V2-COMBAT-001 target — "party landing one kill per round-pair stays below fear=40 in a standard 5-round fight" — still hold?
+**A:** **Retired.** It existed only as a comment in `data/balance.json`, in no design document, and it predates the V2-PROG-010 recovery paths that broke it. Jeff: *"The boundary is worth revisiting. Main goal is to make sure the game is tuned to be enjoyable. We don't have to hold on to old constraints."* The **band boundaries stay where they are** and the economy rises to use them, rather than the boundaries dropping to meet a starved economy. The reason is concrete: **69 fear values are authored outside `data.combat.emotion`**, most assuming the full 0–100 range — vow break costs 15/25/40, `combat_exit_loss_fear` 20, `fear_base_max` 40, contact `fear_ceiling` 90. Two are live gameplay behaviours that had also never fired for the same reason refusal had not: `party_return_fear_threshold` 60 and `cautious_advance_fear_threshold` 50, both consumed by `FlowStageExploreState`. Lowering the boundaries would desync all 69 and strand those two. Raising fear to use the scale lights them all up at once.
+**Source:** Jeff, 2026-08-11
+**Date:** 2026-08-11
+
+---
+
+### 50. probe-must-mirror-the-summon-path
+
+**Q:** Is it enough for a probe to build its party with `EchoFactory.generate()`?
+**A:** **No — that builds a party that cannot exist in play.** `generate()` deliberately leaves `emotion` and `dominant_vector` unpopulated and relies on `EmotionService.init_echo()` and `VectorService.init_vectors()`, which the real summon path calls immediately afterwards (`FlowRuntime` ~:1370). A probe that skips them gives every Echo `dominant_vector = ""`, which silently disables the vector half of the identity-fear-spike gate **and** every vector term in BehaviorArbiter scoring. This invalidated a headline finding: the identity fear spike was reported as "never fires at any rank in any scenario", with the cause named as `uncalled` Echoes failing the calling gate. **Both were wrong.** The `uncalled` weight row already exists and already clears the 30-point threshold; the spike was blocked by the empty vector the probe itself created. With a production-shaped party the spike fires normally, peak fear rose 18 → 45 on the same encounter, and the fight resolved in 9 rounds instead of 13. This is [[reachability-not-just-execution]] applied to the fixture rather than the assertion: production-shaped data means *built by the production path*, not merely *non-empty*.
+**Source:** measured probe, 2026-08-11
+**Date:** 2026-08-11
 
 ---
