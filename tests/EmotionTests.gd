@@ -444,7 +444,7 @@ static func _t_project_actor_emotional_status() -> Dictionary:
 		"morale": 60, "fear": 20,
 		"calling_origin": "Okofor", "skill_slots": [""],
 	}
-	var proj := FlowEncounterState._project_actor(actor)
+	var proj := EncounterSnapshotBuilder._project_actor(actor)
 	if str(proj.get("emotional_status", "")) != "whole":
 		return { "ok": false, "error": "Expected emotional_status='whole' for morale=60/fear=20, got '%s'" % proj.get("emotional_status", "") }
 	return { "ok": true }

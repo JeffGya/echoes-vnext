@@ -146,7 +146,7 @@ static func _run_scenario(sc: Dictionary) -> Dictionary:
 	var t: int = 0
 
 	# PIN THE CAMPAIGN SEED. Clearing the save slot is necessary but not sufficient:
-	# booting without a save mints a NEW campaign, and _generate_seed_root_string() is
+	# booting without a save mints a NEW campaign, and CampaignSeed.generate_seed_root_string() is
 	# deliberately random at New Game. Two runs of the same scenario therefore drew
 	# different campaigns — measured 11 rounds / peak fear 25 against 10 rounds / peak
 	# 46, which is far too loose to tune against. Pinning per scenario makes a run a

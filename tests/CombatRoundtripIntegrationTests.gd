@@ -110,6 +110,14 @@ static func register(runner) -> void:
 	runner.register_test("combat_roundtrip/published_option_carries_truthful_control_and_hazards", func(): return test_published_option_carries_truthful_control_and_hazards())
 
 
+## V2-INFRA-003 Phase 6 Slice 6G: the live movement helper family moved off FlowRuntime onto
+## LiveMovementContextService. These suites reach those helpers by name, so they now build the
+## same object FlowRuntime._resolve_next_actor builds. The service is stateless between calls,
+## so a fresh instance per call site is exact — no shim was left on FlowRuntime (AGENTS.md #20).
+static func _lm(runtime) -> LiveMovementContextService:
+	return LiveMovementContextService.new(runtime.flow_ctx, runtime.logger)
+
+
 static func _drive_one_round(runtime, ectx) -> void:
 	runtime.dispatch({ "type": "combat.confirm_round" })
 	var guard: int = 0
@@ -135,7 +143,7 @@ static func _setup(
 	var logger := StructuredLogger.new()
 	logger.set_level(log_level)
 	var config := ConfigService.new()
-	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/combat_roundtrip_slot.json")
+	var runtime := FlowRuntime.new(logger, config, TestSaveHarness.dir() + "combat_roundtrip_slot.json")
 	runtime.boot()
 	var flow_ctx: FlowContext = runtime.flow_ctx
 	var t: int = 0
@@ -207,7 +215,7 @@ static func test_live_hazard_union_and_mover_damage() -> Dictionary:
 			],
 		},
 	}
-	var hazards: Array = runtime._live_combat_known_hazards()
+	var hazards: Array = _lm(runtime)._live_combat_known_hazards()
 	var ids: Array = []
 	for hazard_value: Variant in hazards:
 		ids.append(str((hazard_value as Dictionary).get("id", "")))
@@ -216,22 +224,22 @@ static func test_live_hazard_union_and_mover_damage() -> Dictionary:
 
 	var order_actor: Dictionary = (env["ectx"].actors[0] as Dictionary)
 	order_actor["current_hp"] = 10
-	runtime._apply_live_hazard_outcome(order_actor, {
+	LiveHazardOutcomeService.apply(order_actor, {
 		"events": [
 			{"phase": "movement", "damage": 3},
 			{"phase": "end_activation", "damage": 4},
 		],
 		"stop_reason": "reached_destination",
-	}, 99, false)
+	}, 99, runtime.logger, false)
 	if int(order_actor.get("current_hp", -1)) != 7:
 		return { "ok": false, "error": "movement hazard damage did not resolve before action: %s" % str(order_actor) }
-	runtime._apply_live_hazard_outcome(order_actor, {
+	LiveHazardOutcomeService.apply(order_actor, {
 		"events": [
 			{"phase": "movement", "damage": 3},
 			{"phase": "end_activation", "damage": 4},
 		],
 		"stop_reason": "reached_destination",
-	}, 99, true)
+	}, 99, runtime.logger, true)
 	if int(order_actor.get("current_hp", -1)) != 3:
 		return { "ok": false, "error": "Burning did not resolve after action: %s" % str(order_actor) }
 
@@ -247,23 +255,23 @@ static func test_live_hazard_union_and_mover_damage() -> Dictionary:
 	(env["ectx"].actors as Array).append(wrong_shrine)
 	(env["ectx"].actors as Array).append(matching_shrine)
 	var purify_ctx: Dictionary = {"cfg": runtime.config_service.get_balance()}
-	runtime._apply_live_purify_shrine(purifier, "shrine.match", purify_ctx, 99)
+	_lm(runtime).apply_live_purify_shrine(purifier, "shrine.match", purify_ctx, 99)
 	if (wrong_shrine.get("purify_stacks", []) as Array).size() != 0:
 		return { "ok": false, "error": "non-target shrine mutated during purify" }
 	if (matching_shrine.get("purify_stacks", []) as Array).size() != 1:
 		return { "ok": false, "error": "matching purify target did not receive exactly one stack" }
 	wrong_shrine["is_dead"] = true
-	runtime._apply_live_purify_shrine(purifier, "shrine.wrong", purify_ctx, 99)
+	_lm(runtime).apply_live_purify_shrine(purifier, "shrine.wrong", purify_ctx, 99)
 	if (matching_shrine.get("purify_stacks", []) as Array).size() != 1:
 		return { "ok": false, "error": "dead mismatched target changed the living shrine" }
 
 	var echo: Dictionary = (env["ectx"].actors[0] as Dictionary)
 	echo["current_hp"] = 3
 	echo["is_ko"] = true
-	runtime._apply_live_hazard_outcome(echo, {
+	LiveHazardOutcomeService.apply(echo, {
 		"events": [{ "damage": 3 }],
 		"stop_reason": "death",
-	}, 99)
+	}, 99, runtime.logger)
 	if int(echo.get("current_hp", -1)) != 0 or not bool(echo.get("is_dead", false)) \
 			or echo.has("is_ko") or int(echo.get("death_round", -1)) != 99:
 		return { "ok": false, "error": "FlowRuntime did not preserve Echo death authority: %s" % str(echo) }
@@ -271,16 +279,16 @@ static func test_live_hazard_union_and_mover_damage() -> Dictionary:
 	var enemy: Dictionary = (env["ectx"].actors[-1] as Dictionary)
 	enemy["current_hp"] = 3
 	enemy["is_ko"] = true
-	runtime._apply_live_hazard_outcome(enemy, {
+	LiveHazardOutcomeService.apply(enemy, {
 		"events": [{ "damage": 3 }],
 		"stop_reason": "death",
-	}, 99)
+	}, 99, runtime.logger)
 	if int(enemy.get("current_hp", -1)) != 0 or not bool(enemy.get("is_dead", false)) \
 			or enemy.has("is_ko") or int(enemy.get("death_round", -1)) != 99:
 		return { "ok": false, "error": "FlowRuntime did not preserve enemy death state: %s" % str(enemy) }
 
 	var guide: Dictionary = {"id": "guide.hazard", "is_spirit": true, "current_hp": 3, "is_ko": true}
-	runtime._apply_live_hazard_outcome(guide, {"events": [{"damage": 3}], "stop_reason": "death"}, 99)
+	LiveHazardOutcomeService.apply(guide, {"events": [{"damage": 3}], "stop_reason": "death"}, 99, runtime.logger)
 	if not bool(guide.get("is_dead", false)) or guide.has("is_ko") or int(guide.get("death_round", -1)) != 99:
 		return {"ok": false, "error": "non-joining guide hazard outcome did not use death authority: %s" % str(guide)}
 	return { "ok": true }
@@ -319,14 +327,14 @@ static func test_live_hazard_action_phase_order() -> Dictionary:
 	}
 	var ctx: Dictionary = {"actor": actor, "all_actors": ectx.actors, "cfg": runtime.config_service.get_balance(), "t": 99, "round": 1}
 	var asm := ActorStateMachine.new(actor, null, ctx["cfg"].get("data", {}).get("actor", {}), {})
-	var burning_result: Dictionary = runtime._apply_live_activation(actor, burning_intent, prepared, asm, ctx, 99)
+	var burning_result: Dictionary = _lm(runtime).apply_live_activation(actor, burning_intent, prepared, asm, ctx, 99)
 	if str((burning_result.get("resolved_action", {}) as Dictionary).get("type", "")) != "melee_attack":
 		return { "ok": false, "error": "legal melee was not resolved before Burning: %s" % str(burning_result) }
 	var target_hp_before: int = int(target.get("current_hp", 0))
 	var melee_result: Dictionary = CombatService.resolve_action("melee_attack", actor, target, 1)
 	if melee_result.is_empty() or int(target.get("current_hp", target_hp_before)) >= target_hp_before:
 		return { "ok": false, "error": "legal melee did not execute before end_activation Burning" }
-	runtime._apply_live_hazard_outcome(actor, burning_result, 99, true)
+	LiveHazardOutcomeService.apply(actor, burning_result, 99, runtime.logger, true)
 	if not bool(actor.get("is_dead", false)):
 		return { "ok": false, "error": "lethal Burning did not apply after the melee action" }
 
@@ -353,7 +361,7 @@ static func test_live_hazard_action_phase_order() -> Dictionary:
 	if str(movement_result.get("stop_reason", "")) != "death" \
 			or not (movement_result.get("resolved_action", {}) as Dictionary).is_empty():
 		return { "ok": false, "error": "activation did not skip primary after lethal movement damage: %s" % str(movement_result) }
-	runtime._apply_live_hazard_outcome(movement_actor, movement_result, 100, false)
+	LiveHazardOutcomeService.apply(movement_actor, movement_result, 100, runtime.logger, false)
 	if not bool(movement_actor.get("is_dead", false)):
 		return { "ok": false, "error": "lethal movement damage did not kill the mover" }
 	if not (movement_result.get("resolved_action", {}) as Dictionary).is_empty():
@@ -446,7 +454,7 @@ static func test_live_truncated_engage_advances_before_melee() -> Dictionary:
 		}
 		var ctx: Dictionary = { "actor": actor, "all_actors": ectx.actors, "cfg": runtime.config_service.get_balance(), "t": 90 + activation_index, "round": 1 }
 		var asm := ActorStateMachine.new(actor, null, ctx["cfg"].get("data", {}).get("actor", {}), {})
-		var result: Dictionary = runtime._apply_live_activation(actor, intent, prepared, asm, ctx, 90 + activation_index)
+		var result: Dictionary = _lm(runtime).apply_live_activation(actor, intent, prepared, asm, ctx, 90 + activation_index)
 		var resolved_action: String = str((result.get("resolved_action", {}) as Dictionary).get("type", ""))
 		if resolved_action != expected_action or str(intent.get("action_type", "")) == "actor.idle":
 			return { "ok": false, "error": "live activation resolved %s at activation %d" % [resolved_action, activation_index] }
@@ -1145,7 +1153,7 @@ static func test_pursue_quarry_moves() -> Dictionary:
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
 	var config := ConfigService.new()
-	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/combat_roundtrip_pursue.json")
+	var runtime := FlowRuntime.new(logger, config, TestSaveHarness.dir() + "combat_roundtrip_pursue.json")
 	runtime.boot()
 	var flow_ctx: FlowContext = runtime.flow_ctx
 	var t: int = 0
@@ -1208,7 +1216,7 @@ static func test_pursue_no_regular_enemies_spawn() -> Dictionary:
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
 	var config := ConfigService.new()
-	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/combat_pursue_noenemy.json")
+	var runtime := FlowRuntime.new(logger, config, TestSaveHarness.dir() + "combat_pursue_noenemy.json")
 	runtime.boot()
 	var flow_ctx: FlowContext = runtime.flow_ctx
 	var t: int = 0
@@ -1271,7 +1279,7 @@ static func test_pursue_board_is_larger_than_standard() -> Dictionary:
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
 	var config := ConfigService.new()
-	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/combat_pursue_board.json")
+	var runtime := FlowRuntime.new(logger, config, TestSaveHarness.dir() + "combat_pursue_board.json")
 	runtime.boot()
 	var flow_ctx: FlowContext = runtime.flow_ctx
 	var t: int = 0
@@ -1404,7 +1412,7 @@ static func test_guide_spirit_protect_roundtrip() -> Dictionary:
 
 	# (b) objective_state fields — build via the static objective-state helper, same as
 	# other objective_combat/_build_objective_state-style checks in ObjectiveCombatTests.
-	var obj_state: Dictionary = FlowEncounterState._build_objective_state(ectx, ectx.combat_state)
+	var obj_state: Dictionary = EncounterSnapshotBuilder._build_objective_state(ectx, ectx.combat_state)
 	if str(obj_state.get("guide_mode", "")) != "protect":
 		return { "ok": false, "error": "Expected objective_state.guide_mode='protect', got '%s'" % str(obj_state.get("guide_mode", "")) }
 	if not obj_state.has("spirit_alive"):
@@ -1835,7 +1843,7 @@ static func _guide_spawn_env(seed_tag: String, force_mode: String, force_joins: 
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
 	var config := ConfigService.new()
-	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/combat_roundtrip_guide_dev.json")
+	var runtime := FlowRuntime.new(logger, config, TestSaveHarness.dir() + "combat_roundtrip_guide_dev.json")
 	runtime.boot()
 	var flow_ctx: FlowContext = runtime.flow_ctx
 	var t: int = 0
@@ -2365,7 +2373,7 @@ static func test_purify_empty_target_id() -> Dictionary:
 	(ectx.actors as Array).append(living_second)
 
 	var purify_ctx: Dictionary = { "cfg": runtime.config_service.get_balance() }
-	runtime._apply_live_purify_shrine(purifier, "", purify_ctx, 99)
+	_lm(runtime).apply_live_purify_shrine(purifier, "", purify_ctx, 99)
 
 	var first_stacks: Array = living_first.get("purify_stacks", []) as Array
 	if first_stacks.size() != 1:
@@ -2381,7 +2389,7 @@ static func test_purify_empty_target_id() -> Dictionary:
 
 	# Killing the first living structure hands the empty-id match to the next one.
 	living_first["is_dead"] = true
-	runtime._apply_live_purify_shrine(purifier, "", purify_ctx, 100)
+	_lm(runtime).apply_live_purify_shrine(purifier, "", purify_ctx, 100)
 	if (living_first.get("purify_stacks", []) as Array).size() != 1:
 		return { "ok": false, "error": "a newly dead structure was still selected" }
 	if (living_second.get("purify_stacks", []) as Array).size() != 1:
@@ -2455,7 +2463,7 @@ static func test_live_direct_option_id_is_contract_valid() -> Dictionary:
 	}
 	var path: Array = [{ "col": 2, "row": 1 }, { "col": 3, "row": 1 }, { "col": 4, "row": 1 }]
 	# `_movement_build_direct_option` reads only `origin` off the movement context.
-	var option: Dictionary = runtime._movement_build_direct_option(
+	var option: Dictionary = _lm(runtime)._movement_build_direct_option(
 		{ "origin": origin }, { "capacity": 3 }, goal, path.back() as Dictionary, path, 3, 3)
 	if option.is_empty():
 		return {
@@ -2487,7 +2495,7 @@ static func test_live_direct_option_id_is_contract_valid() -> Dictionary:
 		if str(mover.get("faction", "")) != "echo" or bool(mover.get("is_dead", false)):
 			continue
 		t += 1
-		var prepared: Dictionary = runtime._prepare_live_movement_context(
+		var prepared: Dictionary = _lm(runtime).prepare_live_movement_context(
 			mover, ectx, ectx.combat_state, board_cfg, bdata, t)
 		if not bool(prepared.get("valid", false)):
 			continue
@@ -2600,7 +2608,7 @@ static func test_objective_route_truncates_and_stays_movement_aware() -> Diction
 			"error": "objective within capacity (%d <= %d) — the route would not truncate" % [start_dist, capacity],
 		}
 
-	var prepared: Dictionary = runtime._prepare_live_movement_context(
+	var prepared: Dictionary = _lm(runtime).prepare_live_movement_context(
 		mover, ectx, ectx.combat_state, board_cfg, bdata, 300)
 	if not bool(prepared.get("valid", false)):
 		return { "ok": false, "error": "live movement context invalid: %s" % str(prepared.get("reason", "")) }
@@ -2688,7 +2696,7 @@ static func test_objective_route_truncates_and_stays_movement_aware() -> Diction
 			],
 		}
 	# (3) Executing it actually closes distance to the objective.
-	runtime._apply_live_activation(mover, intent, prepared, asm, ctx, 300)
+	_lm(runtime).apply_live_activation(mover, intent, prepared, asm, ctx, 300)
 	var end_dist: int = GridService.chebyshev_distance(mover.get("grid_pos", {}), objective_pos)
 	if end_dist >= start_dist:
 		return {
@@ -2804,7 +2812,7 @@ static func _selection_census(runtime: FlowRuntime, ectx: EncounterContext, t0: 
 		if bool(mover.get("is_structure", false)) or bool(mover.get("is_dead", false)):
 			continue
 		t += 1
-		var prepared: Dictionary = runtime._prepare_live_movement_context(
+		var prepared: Dictionary = _lm(runtime).prepare_live_movement_context(
 			mover, ectx, ectx.combat_state, board_cfg, bdata, t)
 		if not bool(prepared.get("valid", false)) or not bool(prepared.get("selection_enabled", false)):
 			continue
@@ -2882,7 +2890,7 @@ static func test_unroutable_goals_keep_selection_enabled() -> Dictionary:
 				walled.erase("%d,%d" % [int(origin["col"]) + dc, int(origin["row"]) + dr])
 		var cfg: Dictionary = board_cfg.duplicate(true)
 		cfg["walkable"] = walled
-		var attempt: Dictionary = runtime._prepare_live_movement_context(
+		var attempt: Dictionary = _lm(runtime).prepare_live_movement_context(
 			candidate, ectx, ectx.combat_state, cfg, bdata, t)
 		if not bool(attempt.get("valid", false)):
 			continue
@@ -2999,7 +3007,7 @@ static func test_dead_objective_is_not_published() -> Dictionary:
 
 	# (1) Baseline: while the structure lives it IS the published objective, so the
 	#     assertions below cannot pass vacuously.
-	var alive: Dictionary = runtime._movement_pressure_snapshot(
+	var alive: Dictionary = _lm(runtime)._movement_pressure_snapshot(
 		mover, ectx, ectx.combat_state, bounds, walkable)
 	if not bool(alive.get("objective_known", false)):
 		return { "ok": false, "error": "living structure was not published as the objective" }
@@ -3010,10 +3018,10 @@ static func test_dead_objective_is_not_published() -> Dictionary:
 	structure["current_hp"] = 0
 	structure["is_dead"] = true
 
-	if not runtime._movement_objective_actor(ectx, ectx.combat_state).is_empty():
+	if not _lm(runtime)._movement_objective_actor(ectx, ectx.combat_state).is_empty():
 		return { "ok": false, "error": "_movement_objective_actor still returned a destroyed structure" }
 
-	var dead: Dictionary = runtime._movement_pressure_snapshot(
+	var dead: Dictionary = _lm(runtime)._movement_pressure_snapshot(
 		mover, ectx, ectx.combat_state, bounds, walkable)
 	if bool(dead.get("objective_known", false)):
 		return {
@@ -3076,7 +3084,7 @@ static func test_stacked_actors_keep_selection_alive() -> Dictionary:
 	var cell_key: String = "%d,%d" % [int(cell["col"]), int(cell["row"])]
 
 	# (1) The recorded occupant is deterministic — same answer whatever the array order.
-	var occupancy: Dictionary = runtime._movement_occupancy(ectx.actors)
+	var occupancy: Dictionary = _lm(runtime)._movement_occupancy(ectx.actors)
 	if str(occupancy.get(cell_key, "")) != str(low.get("id", "")):
 		return {
 			"ok": false,
@@ -3086,7 +3094,7 @@ static func test_stacked_actors_keep_selection_alive() -> Dictionary:
 		}
 	var reversed_actors: Array = ectx.actors.duplicate()
 	reversed_actors.reverse()
-	var reversed_occupancy: Dictionary = runtime._movement_occupancy(reversed_actors)
+	var reversed_occupancy: Dictionary = _lm(runtime)._movement_occupancy(reversed_actors)
 	if str(reversed_occupancy.get(cell_key, "")) != str(low.get("id", "")):
 		return {
 			"ok": false,
@@ -3098,7 +3106,7 @@ static func test_stacked_actors_keep_selection_alive() -> Dictionary:
 	# (2) The LOSING mover still gets a live board instead of having it discarded.
 	var bdata: Dictionary = runtime.config_service.get_balance().get("data", {}) as Dictionary
 	var board_cfg: Dictionary = _movement_board_cfg(runtime, ectx)
-	var prepared: Dictionary = runtime._prepare_live_movement_context(
+	var prepared: Dictionary = _lm(runtime).prepare_live_movement_context(
 		high, ectx, ectx.combat_state, board_cfg, bdata, 900)
 	if not bool(prepared.get("valid", false)):
 		return { "ok": false, "error": "stacked mover prepare invalid: %s" % str(prepared.get("reason", "")) }
@@ -3201,7 +3209,7 @@ static func test_published_option_carries_truthful_control_and_hazards() -> Dict
 		return { "ok": false, "error": "no walkable cell adjacent to the mover" }
 	hostile["grid_pos"] = adjacent.duplicate(true)
 
-	var prepared: Dictionary = runtime._prepare_live_movement_context(
+	var prepared: Dictionary = _lm(runtime).prepare_live_movement_context(
 		mover, ectx, ectx.combat_state, board_cfg, bdata, 920)
 	if not bool(prepared.get("valid", false)):
 		return { "ok": false, "error": "live movement context invalid" }

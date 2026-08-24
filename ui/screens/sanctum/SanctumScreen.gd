@@ -1430,11 +1430,16 @@ func _build_inst_row_label(title: String, subtitle: String, detail: String, enab
 func _on_inst_overlay_establish_pressed(inst_id: String) -> void:
 	_current_institution_id = inst_id
 	# Forward placement context arrays from snapshot data to SanctumShell via action.
+	# V2-INFRA-003 Phase 3 Slice B2: valid_placement_cells / placement_floor_cells /
+	# placement_occupied_cells now arrive as JSON-safe {"x": int, "y": int} dicts (not Vector2i —
+	# see SanctumSnapshotBuilder.gd). SanctumShell still works in Vector2i (GridService/
+	# SanctumLayoutService placement math), so convert back to Vector2i here, at the boundary
+	# where these values leave the snapshot and re-enter live UI code — same cells, same order.
 	var data_v: Variant = _snapshot.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
-	var cells_v: Variant = data.get("valid_placement_cells", [])
-	var floor_v: Variant = data.get("placement_floor_cells", [])
-	var occ_v: Variant   = data.get("placement_occupied_cells", [])
+	var cells_v: Variant = _cells_from_snapshot(data.get("valid_placement_cells", []))
+	var floor_v: Variant = _cells_from_snapshot(data.get("placement_floor_cells", []))
+	var occ_v: Variant   = _cells_from_snapshot(data.get("placement_occupied_cells", []))
 	action_requested.emit({
 		"type":    "ui.enter_placement_mode",
 		"payload": {
@@ -1444,6 +1449,23 @@ func _on_inst_overlay_establish_pressed(inst_id: String) -> void:
 			"occupied_cells": occ_v,
 		},
 	})
+
+
+## V2-INFRA-003 Phase 3 Slice B2: converts an Array of JSON-safe {"x": int, "y": int} cell dicts
+## (the snapshot's placement-cell representation) into an Array[Vector2i] (what SanctumShell and
+## SanctumLayoutService's placement helpers operate on). Same cells, same order, same count —
+## representation-only conversion. Tolerates a stray Vector2i already in the array (defensive;
+## never emitted by the builder) so this is safe to call on any of the three placement fields.
+func _cells_from_snapshot(cells_v: Variant) -> Array:
+	var cells: Array = cells_v if cells_v is Array else []
+	var out: Array = []
+	for c_v in cells:
+		if c_v is Vector2i:
+			out.append(c_v)
+		elif c_v is Dictionary:
+			var c: Dictionary = c_v
+			out.append(Vector2i(int(c.get("x", 0)), int(c.get("y", 0))))
+	return out
 
 
 func _on_placement_confirmed() -> void:

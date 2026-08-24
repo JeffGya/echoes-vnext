@@ -4,7 +4,7 @@
 # Rules:
 # - Pure static functions only — no side effects outside the passed dicts, no logging.
 # - Purify never heals the shrine: it only reduces per-round drain for a limited duration.
-# - Purifier is selected once at combat init (FlowEncounterState.enter) and stored in
+# - Purifier is selected once at combat init (EncounterSetupService.setup) and stored in
 #   EncounterContext.purifier_id. Only that echo may use actor.purify_shrine.
 # - Stacks live on the shrine actor dict as purify_stacks: Array[Dictionary].
 #   Each stack: { "duration": int, "reduction": int } — duration ticks down each round.

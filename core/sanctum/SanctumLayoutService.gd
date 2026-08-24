@@ -36,7 +36,13 @@ static func make_starter_layout() -> Dictionary:
 	}
 
 
-static func ensure_layout(save_data: Dictionary, inst_snapshot: Array = []) -> Dictionary:
+## V2-INFRA-003 Phase 3 Slice B2: `ctx` is optional so every existing caller (this file's own
+## compute_valid_placement_cells()/ensure_starter_occupant()/snapshot_layout(), and any test that
+## calls ensure_layout(save_data) directly) keeps working unchanged. Only a caller that actually
+## holds a FlowContext — today, FlowSanctumState.enter() — should pass one, so the write this
+## function performs on every call (see layout["tiles"] = final_tiles below) gets flushed by a
+## real save instead of relying on some later, unrelated action to request one.
+static func ensure_layout(save_data: Dictionary, inst_snapshot: Array = [], ctx: FlowContext = null) -> Dictionary:
 	var sanctum := _ensure_sanctum(save_data)
 	if not sanctum.has("layout") or not (sanctum["layout"] is Dictionary):
 		sanctum["layout"] = make_starter_layout()
@@ -108,6 +114,12 @@ static func ensure_layout(save_data: Dictionary, inst_snapshot: Array = []) -> D
 		final_tiles.append(it)
 
 	layout["tiles"] = final_tiles
+	# V2-INFRA-003 Phase 3 Slice B2: this function writes save_data["sanctum"]["layout"] on
+	# every call (unconditionally, above) — legitimate lifecycle work, not projection. When the
+	# caller holds a FlowContext, request the save here instead of leaving the write to be
+	# flushed by whatever unrelated action happens to run next.
+	if ctx != null:
+		ctx.request_save("sanctum.layout")
 	return layout
 
 

@@ -24,7 +24,7 @@ var actors: Array = []
 var placement_seed: int = 0
 # COMBAT-001: combat state dict — set by EncounterRoundsState.enter() via combat.init.
 var combat_state: Dictionary = {}
-# COMBAT-002: initiative config — set by FlowEncounterState.enter() from balance.json data.combat.initiative_modifiers.
+# COMBAT-002: initiative config — set by EncounterSetupService.setup() from balance.json data.combat.initiative_modifiers.
 var initiative_cfg: Dictionary = {}
 # COMBAT-003: transient round action results — cleared at start of each round; NOT persisted.
 var last_round_results: Array = []
@@ -55,7 +55,7 @@ var final_snapshot: Dictionary = {}
 #   populated only for echo-faction acting actors. Support effects are scattered across ~10 inline
 #   sites (ActorStateMachine hold_ground/steady_call/interpose/idle-aura/leadership auras +
 #   FlowRuntime kill ripple/momentum); each accumulates onto a transient actor["_support_tally"]
-#   dict during the actor's turn, folded once per turn by FlowRuntime._fold_support_tally() (then
+#   dict during the actor's turn, folded once per turn by ContributionLedgerService.fold_support_tally() (then
 #   erased). morale_given/fear_relieved are EFFECTIVE post-clamp points delivered to ALLIES
 #   (self-effects excluded). fear_inflicted is an OFFENSIVE metric (fear dealt to whoever the actor
 #   hits), all-faction, written directly at the per-hit fear choke (mirrors damage_dealt).
@@ -69,7 +69,7 @@ var final_snapshot: Dictionary = {}
 var echo_action_logs: Dictionary = {}
 
 # V2-EMOTION-001: echo_id → morale_current at encounter entry. Populated by
-# FlowEncounterState.enter(). Used by build_final_snapshot() for delta computation.
+# EncounterSetupService.setup(). Used by build_final_snapshot() for delta computation.
 var pre_encounter_morale: Dictionary = {}
 
 # V2-VOICE-001: round bark events — accumulated per round for reactive bark system.
@@ -82,13 +82,27 @@ var round_bark_events: Array = []
 var terrain: Dictionary = {}
 
 # V2-STAGE-004 P3: scaled objective parameters — transient, never persisted.
-# Populated by FlowEncounterState.enter() for RECOVER/PROTECT/ENDURE modes; {} otherwise.
+# Populated by EncounterSetupService.setup() for RECOVER/PROTECT/ENDURE modes; {} otherwise.
 var objective_params: Dictionary = {}
 
 # V2-STAGE-004 Phase 4 (S15 prep): true when S13's failed-charge pressure bump (see
-# explore_map.hostile_charge_sit_id consumption in FlowEncounterState.enter()) was
+# explore_map.hostile_charge_sit_id consumption in EncounterSetupService.setup()) was
 # applied to THIS encounter's objective. Transient, never persisted. Default false.
 var charge_pressure_applied: bool = false
 
 # Optional deterministic notes for debugging / temporary tests
 var notes: Array[String] = []
+
+
+# V2-INFRA-003 Phase 6 Slice 6A: moved here from FlowRuntime._find_actor_by_id (private,
+# 9 call sites, all of them passing an EncounterContext.actors array). Slice 6A extracted two
+# of those call sites into core/combat/CombatRoundEmotionService.gd, which may neither reach
+# back into FlowRuntime nor keep a second copy (AGENTS.md #19), so the helper moved to its
+# true owner: the class that owns the `actors` array. Body is byte-identical — still returns
+# the FIRST match, a documented quirk that CombatRoundtripIntegrationTests pins.
+## Returns the first actor dict matching actor_id in the array, or {} if not found.
+static func find_actor_by_id(actors: Array, actor_id: String) -> Dictionary:
+	for a_v in actors:
+		if a_v is Dictionary and str(a_v.get("id", "")) == actor_id:
+			return a_v
+	return {}

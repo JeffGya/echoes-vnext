@@ -19,21 +19,105 @@ The player runs a Sanctum, summons Echoes (returning fragments of stolen stories
 
 ## How to Run & Verify
 
+> **`--path` must be the checkout you are editing.** If you work in a git worktree
+> (`.claude/worktrees/<branch>/`), pass that path. The literal path below is the main
+> checkout and is usually on a different branch — running it verifies the wrong code.
+
+> **Pass `timeout: 300000` on every Bash call that runs Godot.** The tool auto-backgrounds
+> at 120s and the suite takes ~173s. A backgrounded run cannot notify a subagent, so its
+> work is lost. This has cost this project many agent-hours.
+
 ### Compile check (no editor needed)
 ```bash
-/usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --check-only --quit --path /Users/jeffreygyamfi/Sites/echoes-vnext
+/usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --check-only --quit --path <checkout>
 ```
 Run this after every GDScript change. Zero errors expected.
 
-### Tests
-Tests run inside Godot via the Debug Panel (`F1` → `tests` command) or headlessly via `CoreTestRunner.gd`.
-There is no standalone CLI test runner — Godot must execute the tests.
+### Rebuild the script class cache — do this FIRST when a new `class_name` file exists
+```bash
+/usr/bin/perl -e 'alarm shift; exec @ARGV' 400 /opt/homebrew/bin/godot --headless --import --path <checkout>
+```
+`--check-only` does **not** register a brand-new `class_name`, so you get
+`Identifier "X" not declared`. Worse, a stale cache makes **existing fingerprint tests fail
+with drifted hashes** — indistinguishable from a real regression. Five agents in a row have
+lost a cycle investigating "pre-existing failures" that a rebuild cleared. Rebuild before you
+believe any fingerprint failure.
 
-Run the full suite behind the same exact watchdog:
+### Tests
+Tests run inside Godot via the Debug Panel (`F1` → `tests`) or headlessly. There is no
+standalone CLI runner — Godot must execute them.
+
+Full suite (~173s):
+```bash
+/usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --quit --path <checkout> -- tests
+```
+
+**One suite only (~5s)** — use this while working, and the full suite once at the end:
+```bash
+/usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --quit --path <checkout> -- tests vow
+```
+The filter is a case-insensitive substring match on the suite name. **A filter that matches nothing prints the
+suite list, runs zero tests, and emits NO `Tests:` line — while still exiting 0. Skim past that and
+it reads as a pass.** Always confirm a `Tests:` line came back. Suite names are not file names:
+`Stage004SeamTests` registers as `seam`, so the filter `stage004` matches nothing.
+
+**Get the authoritative list from the runner, never from memory or a planning doc.** Regenerate it:
+```bash
+<godot ...> -- tests __nomatch__ 2>&1 | sed -n 's/.*Debug output "  \([a-z0-9_]*\)"/\1/p'
+```
+The 90 registered suite names, captured 2026-08-22:
+```
+actor arbiter archetype bark_popup behavior behavior_arbiter bond_trigger bridge calling
+calling_behavior combat combat_baseline combat_initiative combat_roundtrip combat_terrain
+combat_ui consequence contact contact_actor continuity conversation_repair cooldown derived
+directive directive_cfg divergence divergence_bark echo_party echofactory economy emotion
+exclusive_action explore explore_p5 expr fingerprint flow_transaction foundation_ui grid
+identity institution intel ko_death leadership melee morale movement movement_arbiter
+movement_option movement_path objective objective_combat old_echo onboarding passive prog realm
+realm_prog realm_reward realm_ui recruit retreat reward sanctum_pulse save_integrity seam
+shrine sit_res situational skill skill_loadout skill_unlock snapshot snapshot_contract
+snapshot_fingerprint snapshot_purity social_graph stage statinit structure support terrain
+thread traversal unified_resolve vector venture_char voice vow weave
+```
+Names that look right and are WRONG: `guide_spirit` (it is under `movement`), `stage_explore`
+(it is `explore`), `stage_objective` (it is `objective`), `stage004` (it is `seam`).
+ `tests snapshot` matches
+`snapshot`, `snapshot_contract`, `snapshot_fingerprint` and `snapshot_purity`. An unmatched
+filter prints the available suite names and runs nothing.
+
+### Save isolation — DELETE THE WHOLE SAVE DIRECTORY BEFORE EVERY RUN
+
+Suites write saves into a shared directory under `/tmp`. **Stale files there silently corrupt
+results and produce false failures that survive a cache rebuild.** Always start a verification
+run with the delete:
 
 ```bash
-/usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --quit --path /Users/jeffreygyamfi/Sites/echoes-vnext -- tests
+rm -rf /tmp/echoes-vnext-tests && <godot ... -- tests>
 ```
+
+**Why.** `SaveService` writes six artifacts beside the primary save — `.pending_a`, `.pending_b`,
+`.tmp`, `.bak1`, `.bak2`, `.bak3` ([SaveService.gd:173-181](core/save/SaveService.gd:173)). It
+returns `LOAD_MISSING` only when *no* artifact exists ([SaveService.gd:116-118](core/save/SaveService.gd:116)).
+A helper that deletes only the primary therefore leaves a recoverable backup, `boot()` never
+reaches `make_new_save(<pinned seed>)`, and the test **resumes a previous run's campaign** — other
+balances, other XP, another map, another hash. The production behaviour is correct; recovering from
+a backup is what a crash-safe save system is for. The test harness is what is wrong.
+
+Two tells that you are looking at contamination rather than a real regression:
+- the "actual" hash **changes between identical runs**, or differs between a filtered and a full run
+- a payload diff shows every integer arrived as a float (`43` → `43.0`) — that is a JSON round-trip,
+  so the data was read back off disk instead of generated
+
+**Never run two Godot processes against this project at the same time.** They share that directory
+and contaminate each other. This applies to parallel subagents: serialize every test run.
+
+### Reading the result — the runner ALWAYS exits 0
+Exit status is not evidence. Only this line is:
+```
+Tests: 1442 total, 1442 passed, 0 failed
+```
+Pipe output to a file and grep the file. **Never re-run the suite to read a different field** —
+the answer is already in the output you discarded.
 
 **Test suites** (all in `tests/`):
 EconomyTests, SanctumSummonTests, PartyTests, ActorTests, EchoSchemaTests, ActorStatInitTests,
@@ -153,6 +237,86 @@ Action type format: `domain.subdomain.verb` e.g. `flow.go_state`, `sanctum.party
 
 ---
 
+## Extraction & Refactor Rules
+
+Learned the hard way during V2-INFRA-003, which moved ~1,800 lines out of `FlowRuntime.gd`.
+
+### Extract shared services BEFORE the controllers that need them
+Dependencies point from controllers to services, so services must exist first. If you extract a
+controller while a helper it needs is still private on `FlowRuntime`, that controller has no legal
+option — reaching back is forbidden, and so is duplicating. It will invent a workaround.
+
+### A helper used by two or more domains has an owner. Find it.
+- Reads a named subtree of `balance.json` → a static getter on `ConfigService`, beside
+  `get_bond_thresholds_cfg` and friends. **Not** on a pure domain service: `EmotionService`,
+  `SocialGraphService` and `MaturityExpressionService` all document that they never read
+  `ConfigService` and only accept passed-in dicts. Giving them one breaks their own invariant.
+- Reads save data for a domain → a **static** function on that domain's service.
+- Wraps a domain class → a service placed **beside** that class
+  (`VowConsequenceService` with `VowService`, `NarrativeVoiceService` with `ShoutBank`).
+
+### Never duplicate a helper. Never substitute a lookalike API either.
+Copying is banned — two copies drift. But the second-order mistake is worse: when copying is
+forbidden, the tempting move is to reach for an existing public API that *looks* equivalent.
+A real example: `_get_active_party_echoes()` (a pure `.get()` read, roster order) was swapped for
+`SanctumService.new(save_data).get_party_actors()`. That changed iteration order, changed the data
+shape, and introduced a **constructor that can write to save data**. Every test still passed.
+
+If a helper has no clean owner, **stop and report a blocker.** Do not work around it.
+
+### Constructing a service can mutate. Prefer static reads.
+`SanctumService.new(save_ref)` builds `SanctumState`, which can call
+`_ensure_sanctum_dict_exists()` and write to `save_data`. Never construct a service merely to read.
+Use a static reader, or add one.
+
+### Controllers vs services
+- **Controller** — owns dispatched actions for one domain. Returns a `FlowActionOutcome` describing
+  transition / snapshot / save intent. `FlowRuntime.dispatch()` applies that intent. Give it no
+  `flow_machine`, so it *cannot* transition by itself.
+- **Service** — consequence hooks and shared logic called from several domains. Any controller or
+  service may call it.
+- **Controllers must never call one another.** If two controllers need the same behaviour, it is a
+  service.
+- Neither may call `SaveService`. Request a save with `flow_ctx.request_save(reason)`.
+
+### Tests that reach in by string name break silently
+`runtime.call("_private_name", …)` is invisible to `--check-only`, so moving that method fails only
+at runtime. Find these before extracting, and **rewrite the call site in the same change**. Do not
+leave a delegating shim on `FlowRuntime` — a shim keeps the test green while proving nothing.
+
+### When you reach the site of a known defect, investigate and record
+> **SCOPE: story V2-INFRA-003 ONLY. Delete this section when that story ships.**
+> It exists because that one refactor touches most of `core/` and produced a 76-entry register.
+> It is not a standing rule for other work.
+
+`docs/v2-infra-003-defect-register.md` lists every known defect with an ID (`D01`…), a location, and
+a classification. **Read it before you start any V2-INFRA-003 slice.**
+
+If your work brings you to the location of a listed defect:
+
+1. Do a short investigation. Why is it a defect? What is the correct behaviour? What would fixing it
+   change — does it move a fingerprint or a recorded baseline?
+2. **Do not fix it.** The extraction stays behaviour-neutral.
+3. **Write your finding into the register entry**, under that defect's ID. Add what you learned;
+   do not overwrite what is there.
+
+If you find a defect that is NOT in the register, add a new entry with the next free ID, the same
+columns as the existing rows, and mark it as found during your slice.
+
+Rationale: standing at the code is the cheapest moment to understand it. A defect note written from
+the call site is worth more than one written later from a grep. The register is the single place
+these decisions are made, so a finding recorded anywhere else is lost.
+
+**Again: this applies to V2-INFRA-003 only.** Remove this section with the story.
+
+### Characterization before behaviour change
+Record what the code does today, including its bugs, and label each one
+`# KNOWN DEFECT (<story> will change this):`. Invert the assertion in the phase that fixes it.
+A probe that asserts the fixed behaviour before the fix exists tempts the next agent to "fix"
+production code to make its own test pass.
+
+---
+
 ## Naming Conventions
 
 - Folders: `snake_case` (`core/state`, `ui/screens`)
@@ -241,6 +405,18 @@ Read `docs/v2-migration-map.md` before starting any Alignment story.
 10. Letting autowrap determine first-pass geometry without authored/profile wrap widths
 11. Leaving stale offsets on a full-rect container after changing responsive profiles
 12. Hiding a shell Control without synchronizing its independent `CanvasLayer` visibility/input
+13. Running Godot without `timeout: 300000` — the Bash tool auto-backgrounds at 120s and a subagent then loses all its work
+14. Believing a fingerprint failure before rebuilding the script class cache with `--import`
+15. Trusting the runner's exit code — it is always 0; only the `Tests: N total, N passed, M failed` line is evidence
+16. Re-running the full suite to read a different field instead of grepping the log you already produced
+17. Dispatching `flow.new_game` in a characterization test — `_generate_seed_root_string()` uses `Crypto.generate_random_bytes()`, so the campaign seed differs every run. Drive onboarding from `boot()`, which uses the pinned literal seed when no save exists
+18. Constructing a service just to read from it — `SanctumService.new()` can write to `save_data` via `SanctumState._ensure_sanctum_dict_exists()`. Use a static reader
+19. Duplicating a shared helper, **or** swapping in a lookalike API to avoid duplicating it. Both drift. If a helper has no clean owner, stop and report a blocker
+20. Leaving a delegating shim on `FlowRuntime` so a reflection-based test keeps passing — the shim proves the extraction did *not* happen
+21. Diagnosing a fingerprint failure without first deleting the shared `/tmp` save directory — a leftover `.bak1` makes the harness resume an old campaign, and the failure looks exactly like a real regression through a cache rebuild, a clean checkout and four repeat runs
+22. Running two Godot test processes concurrently — they share the save directory and corrupt each other's results
+23. Re-baselining a fingerprint constant to make the suite green before you can explain what moved — a constant you recalibrated without understanding is worse than no guard, because it still looks like protection
+24. Reading a filtered run as green without checking a `Tests:` line came back — an unmatched filter runs nothing, prints nothing, and exits 0. Suite names differ from file names (`Stage004SeamTests` registers as `seam`)
 
 Full lesson history: `docs/LESSONS.md`
 

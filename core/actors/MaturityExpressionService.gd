@@ -46,6 +46,20 @@ static func get_expression_band(rank: int, band_by_standing: Dictionary) -> Stri
 	return band_by_standing.get("5", "whole")
 
 
+## Combinator: resolves the expression band for a save-data/actor echo dict
+## given the band_by_standing config subtree. Falls back to "nascent" if
+## config is missing. band_by_standing is caller-supplied (get it from
+## ConfigService.get_maturity_expression_band_by_standing()) — per the file
+## rule above, this class never loads ConfigService itself.
+## (V2-INFRA-003 Phase 4 Slice 1b — moved out of FlowRuntime/WeaveController,
+## which had duplicated this.)
+static func get_expression_band_for_echo(echo: Dictionary, band_by_standing: Dictionary) -> String:
+	if band_by_standing.is_empty():
+		return "nascent"
+	var rank: int = int(echo.get("rank", 1))
+	return get_expression_band(rank, band_by_standing)
+
+
 # ── Autonomy outputs (V2-PROG-012 Phase 1) ────────────────────────────────────
 
 # Derives the full per-turn maturity-expression + autonomy-output dict for an actor.

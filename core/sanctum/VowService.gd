@@ -531,8 +531,16 @@ static func _ensure_sanctum(save_data: Dictionary) -> Dictionary:
 	return save_data[_KEY_SANCTUM]
 
 
+## V2-INFRA-003: ctx is typed RefCounted (not FlowContext) so tests can pass a minimal
+## stand-in (see VowServiceTests._TestCtx) that satisfies GDScript's type hint without
+## depending on the full FlowContext class. When ctx is a real FlowContext, route through
+## its request_save() so production callers share the single implementation with
+## FlowRuntime._mark_save_requested(); duck-typed get/set remains the fallback for stand-ins.
 static func _set_save_request(ctx: RefCounted, reason: String) -> void:
 	if ctx == null:
+		return
+	if ctx.has_method("request_save"):
+		ctx.request_save(reason)
 		return
 	if ctx.get("save_request") != null:
 		ctx.set("save_request", true)

@@ -30,7 +30,20 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 		},
 		"flow": {
 			"state": "flow.splash",
-			"context": {}
+			"context": {},
+			# V2-INFRA-003 Phase 8 groundwork: pending resolve/return payload. Additive-only,
+			# nothing reads or writes this yet — that wiring lands in Phase 8 itself.
+			# {} = no pending result. Intended shape once populated:
+			# {
+			#   version:int, result_id:String, status:"pending_resolve"|"pending_return",
+			#   source:String, outcome:"victory"|"defeat"|"partial"|"withdrawal", created_t:int,
+			#   realm_id:String, realm_run_count:int, stage_id:String, stage_index:int,
+			#   encounter_id:String, objective_index:int, stage_complete:bool,
+			#   objectives_remaining:int, intel:{}, economy:{}, progression:{},
+			#   emotion_summary:[], bond_outcome:{}, vow_outcome:{}, thread_outcome:{},
+			#   resolve_data:{}, next_action:{}
+			# }
+			"pending_result": {},
 		},
 		"onboarding": {
 			"chapter_one_complete": false,
@@ -46,6 +59,11 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"first_thread_id": "",
 			"first_trial_rewards_granted": false,
 			"awakening_choice": "",
+			# V2-INFRA-003 Phase 8 groundwork: opening-realm gating fields. Additive-only,
+			# nothing reads or writes these yet. Valid opening_realm_status values:
+			# "locked" | "realm_ready" | "active" | "complete".
+			"opening_realm_id": "",
+			"opening_realm_status": "locked",
 		},
 		"economy": {
 			"ase": 0,

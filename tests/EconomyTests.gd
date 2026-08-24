@@ -14,6 +14,17 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("economy/ekwan_awarded_on_stage_completion",      Callable(EconomyTests, "_test_ekwan_awarded"))
 	runner.register_test("economy/awakening_trigger_sets_flag_grants_ase", Callable(EconomyTests, "_test_awakening_trigger"))
 
+## V2-INFRA-003 Half A review correction C1: the five call sites below used to be
+## runtime.call("_apply_offline_accrual_if_needed", …) — string-name reflection into a
+## FlowRuntime private, the anti-pattern AGENTS.md mistake 20 names, and invisible to
+## --check-only. The block moved to core/economy/OfflineAccrualService.gd, so they now
+## construct the service against the same runtime's flow_ctx/config_service/econ/logger.
+## Exactly what FlowRuntime._offline_accrual_service() does, and now a compile-time error
+## if the signature ever moves again.
+static func _offline_service(runtime: FlowRuntime) -> OfflineAccrualService:
+	return OfflineAccrualService.new(runtime.flow_ctx, runtime.config_service, runtime.econ, runtime.logger)
+
+
 static func _test_add_spend() -> Dictionary:
 	var save := { "economy": { "ase": 10, "ekwan": 0 } }
 	var logger := StructuredLogger.new()
@@ -67,7 +78,7 @@ static func _test_offline_flame_gate_zero() -> Dictionary:
 	econ_data["ase"] = 0
 	econ_data["last_offline_unix"] = now_unix - (24 * 3600)
 	econ_data["last_settle_unix"] = now_unix - (24 * 3600)
-	var gain := int(runtime.call("_apply_offline_accrual_if_needed", 2, "test.offline.flame_gate"))
+	var gain := int(_offline_service(runtime).apply_if_needed(2, "test.offline.flame_gate"))
 	if gain != 0:
 		return { "ok": false, "error": "Expected dormant flame to block offline gain" }
 	if int(econ_data.get("ase", 0)) != 0:
@@ -91,8 +102,8 @@ static func _test_offline_continuity_dominance() -> Dictionary:
 	low_sanctum["continuity"] = 0
 	var high_sanctum: Dictionary = high.flow_ctx.save_data.get("sanctum", {})
 	high_sanctum["continuity"] = 100
-	var low_gain := int(low.call("_apply_offline_accrual_if_needed", 2, "test.offline.low"))
-	var high_gain := int(high.call("_apply_offline_accrual_if_needed", 2, "test.offline.high"))
+	var low_gain := int(_offline_service(low).apply_if_needed(2, "test.offline.low"))
+	var high_gain := int(_offline_service(high).apply_if_needed(2, "test.offline.high"))
 	if high_gain <= low_gain:
 		return { "ok": false, "error": "Expected high continuity gain (%d) to exceed low continuity gain (%d)" % [high_gain, low_gain] }
 	return { "ok": true }
@@ -102,7 +113,7 @@ static func _test_offline_continuity_dominance() -> Dictionary:
 # V2-ECONOMY-001: Ase Flame awakening gate + Ekwan cadence
 # ─────────────────────────────────────────────────────────────
 
-## (a) Offline accrual guard: house dormant → FlowRuntime returns 0 gain, Ase unchanged.
+## (a) Offline accrual guard: house dormant → OfflineAccrualService returns 0 gain, Ase unchanged.
 static func _test_offline_gate_blocked() -> Dictionary:
 	var runtime := OnboardingTests._make_runtime()
 	var now_unix := int(Time.get_unix_time_from_system())
@@ -111,7 +122,7 @@ static func _test_offline_gate_blocked() -> Dictionary:
 	econ_data["ase"] = 0
 	econ_data["last_offline_unix"] = now_unix - (8 * 3600)
 	econ_data["last_settle_unix"]  = now_unix - (8 * 3600)
-	var gain := int(runtime.call("_apply_offline_accrual_if_needed", 2, "test.offline.gate_blocked"))
+	var gain := int(_offline_service(runtime).apply_if_needed(2, "test.offline.gate_blocked"))
 	if gain != 0:
 		return { "ok": false, "error": "Dormant flame must block offline gain; got %d" % gain }
 	if int(econ_data.get("ase", 0)) != 0:
@@ -119,7 +130,7 @@ static func _test_offline_gate_blocked() -> Dictionary:
 	return { "ok": true }
 
 
-## (b) Offline accrual guard: house awakened → FlowRuntime returns gain > 0.
+## (b) Offline accrual guard: house awakened → OfflineAccrualService returns gain > 0.
 static func _test_offline_gate_passes() -> Dictionary:
 	var runtime := OnboardingTests._make_runtime()
 	var now_unix := int(Time.get_unix_time_from_system())
@@ -131,7 +142,7 @@ static func _test_offline_gate_passes() -> Dictionary:
 	econ_data["ase"] = 0
 	econ_data["last_offline_unix"] = now_unix - (8 * 3600)
 	econ_data["last_settle_unix"]  = now_unix - (8 * 3600)
-	var gain := int(runtime.call("_apply_offline_accrual_if_needed", 2, "test.offline.gate_passes"))
+	var gain := int(_offline_service(runtime).apply_if_needed(2, "test.offline.gate_passes"))
 	if gain <= 0:
 		return { "ok": false, "error": "Awakened flame must allow offline gain; got %d" % gain }
 	return { "ok": true }
@@ -171,13 +182,13 @@ static func _test_ekwan_awarded() -> Dictionary:
 ## (d) Awakening trigger: dispatches name confirm through FlowRuntime; checks flag + grant.
 static func _test_awakening_trigger() -> Dictionary:
 	var runtime := OnboardingTests._make_runtime()
-	runtime.call("_handle_new_game", 2)
+	runtime.dispatch({ "type": "flow.new_game" })
 	var cfg := runtime.config_service.get_balance()
 	OnboardingService.set_step(runtime.flow_ctx.save_data, cfg, OnboardingService.STEP_NAME_SANCTUM)
 	runtime.flow_machine.transition(
 		FlowStateIds.ONBOARDING_NAME_SANCTUM, runtime.flow_ctx, runtime.logger, 3, "test"
 	)
-	runtime.call("_handle_onboarding_name_confirm", { "name": "Sankofa" }, 4)
+	runtime.dispatch({ "type": "onboarding.name.confirm", "name": "Sankofa" })
 
 	var sanctum: Dictionary = runtime.flow_ctx.save_data.get("sanctum", {})
 	var flame: Dictionary   = sanctum.get("ase_flame", {})

@@ -210,9 +210,12 @@ static func _t_kill_momentum_radius_and_source_exclusion() -> Dictionary:
 	source["morale"] = 40
 	near["morale"] = 40
 	far["morale"] = 40
-	var runtime := FlowRuntime.new(StructuredLogger.new(), ConfigService.new(),
-		"/tmp/echoes-vnext-tests/kill_momentum_slot.json")
-	runtime._apply_kill_momentum(source, [source, near, far], _real_expr_cfg(), 1)
+	# V2-INFRA-003 Phase 6 Slice 6H: _apply_kill_momentum moved off FlowRuntime onto
+	# CombatTurnActionService together with its sole production caller (the melee kill branch).
+	# No delegating shim was left behind (AGENTS.md #20), so this reaches the new owner directly.
+	# The service needs only a logger, so no FlowRuntime and no save slot are constructed here.
+	var kill_momentum := CombatTurnActionService.new(StructuredLogger.new())
+	kill_momentum._apply_kill_momentum(source, [source, near, far], _real_expr_cfg(), 1)
 	if int(source["morale"]) != 40:
 		return { "ok": false, "error": "kill_momentum boosted its source" }
 	if int(near["morale"]) != 48:

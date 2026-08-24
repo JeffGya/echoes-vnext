@@ -98,7 +98,7 @@ static func _make_recovery_cfg(morale_per_min: float = 1.0, fear_per_min: float 
 
 static func _t_recovery_clock_consumed_when_delta_rounds_zero() -> Dictionary:
 	var runtime := FlowRuntime.new(_make_logger(), ConfigService.new(),
-		"/tmp/echoes-vnext-tests/emotion_recovery_clock_slot.json")
+		TestSaveHarness.dir() + "emotion_recovery_clock_slot.json")
 	runtime.boot()
 	var save: Dictionary = runtime.get_save_data()
 	var economy: Dictionary = save.get("economy", {})
@@ -107,7 +107,10 @@ static func _t_recovery_clock_consumed_when_delta_rounds_zero() -> Dictionary:
 	save["sanctum"] = save.get("sanctum", {})
 	(save["sanctum"] as Dictionary)["roster"] = [_make_echo("clock", 50, 0, 50)]
 	runtime.flow_ctx.save_request = false
-	runtime._apply_emotion_recovery_if_needed(101, 1)
+	# V2-INFRA-003 Phase 4 Slice 4: _apply_emotion_recovery_if_needed moved off FlowRuntime to
+	# core/emotion/EmotionConsequenceService.gd.
+	var emotion_consequence_service := EmotionConsequenceService.new(runtime.flow_ctx, runtime.config_service, runtime.logger)
+	emotion_consequence_service.apply_emotion_recovery_if_needed(101, 1)
 	if int((save["economy"] as Dictionary).get("last_emotion_settle_unix", 0)) != 101:
 		return { "ok": false, "error": "recovery clock did not consume elapsed window" }
 	if not runtime.flow_ctx.save_request:

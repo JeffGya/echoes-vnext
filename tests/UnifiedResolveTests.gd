@@ -23,7 +23,7 @@
 extends RefCounted
 class_name UnifiedResolveTests
 
-const TEST_SAVE_PATH := "/tmp/echoes-vnext-tests/unified_resolve_slot.json"
+static var TEST_SAVE_PATH := TestSaveHarness.dir() + "unified_resolve_slot.json"
 
 
 # ─── Preloads ────────────────────────────────────────────────────────────────

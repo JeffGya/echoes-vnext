@@ -243,6 +243,51 @@ static func compute_virtue_multiplier(
 	return courage_bonus + wisdom_bonus + faith_bonus
 
 
+## XP tuning: the realm XP multiplier for `realm_id`, derived from that realm's campaign
+## position (`run_index` = how many realms had ever been started when this one was generated).
+## Returns 1.0 on every guard failure and whenever the configured rate is <= 0.
+##
+## V2-INFRA-003 Phase 6 Slice 6F: DEMOTED here from
+## ProgressionController.get_realm_xp_multiplier() (itself moved from
+## FlowRuntime._get_realm_xp_multiplier in Slice 6b). The body is verbatim; only the inputs
+## changed from `flow_ctx.realm_id` / `flow_ctx.save_data` / a fresh
+## `config_service.get_balance().data.progression` read to the three explicit parameters below.
+##
+## WHY IT MOVED. Its only caller is FlowRuntime._resolve_next_actor(), mid-combat, reaching it
+## as `_progression_controller().get_realm_xp_multiplier()`. That call is the sole
+## controller-to-controller blocker standing between _resolve_next_actor and a future
+## CombatController, which AGENTS.md forbids outright ("Controllers must never call one
+## another"). Demoting it removes the blocker: a service may be called from anywhere.
+##
+## WHY HERE rather than a new service or RealmService. AGENTS.md's extraction rule — "Reads save
+## data for a domain → a static function on that domain's service." The domain is progression,
+## not realms: the tuning key `realm_xp_multiplier_per_realm` is authored under
+## `data.progression`, the value produced is an XP multiplier, and its only two consumers are
+## the two functions directly below/above in this same file (apply_mid_combat_kill_xp and
+## award_post_combat_xp, both of which already take `realm_xp_multiplier` as a parameter).
+## `save_data["realms"]` is read only as the lookup for run_index — a field RealmModel already
+## publishes. A new service was rejected because a pure, dependency-free read has no state to
+## hold, and this file is already the static home of every other XP rule.
+##
+## realm_id  — FlowContext.realm_id (empty string → 1.0)
+## save_data — FlowContext.save_data (live ref, not a copy); read-only here
+## prog_cfg  — data.progression dict from balance.json
+static func get_realm_xp_multiplier(realm_id: String, save_data: Dictionary, prog_cfg: Dictionary) -> float:
+	if realm_id.is_empty():
+		return 1.0
+	var rate: float = float(prog_cfg.get("realm_xp_multiplier_per_realm", 0.0))
+	if rate <= 0.0:
+		return 1.0
+	var realms_v: Variant = save_data.get("realms", {})
+	if not realms_v is Dictionary:
+		return 1.0
+	var realm_entry_v: Variant = (realms_v as Dictionary).get(realm_id, {})
+	if not realm_entry_v is Dictionary:
+		return 1.0
+	var run_idx: int = int((realm_entry_v as Dictionary).get("run_index", 0))
+	return 1.0 + float(run_idx) * rate
+
+
 # ────────────────────────────────────────────────────────────────────────────
 # PROG-004: Rank-up eligibility and execution
 # ────────────────────────────────────────────────────────────────────────────

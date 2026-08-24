@@ -65,9 +65,9 @@ static func _inject_realm(ctx: FlowContext, sit_count: int = 3, obj_count: int =
 	ctx.save_data["realms"][ctx.realm_id] = model
 
 
-# Rebuild ctx.last_snapshot via FlowStageExploreStateScript.build_snapshot (no state machine needed).
+# Rebuild ctx.last_snapshot via StageExploreSnapshotBuilder.build (no state machine needed).
 static func _build_snap(ctx: FlowContext) -> Dictionary:
-	return FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	return StageExploreSnapshotBuilder.build(ctx, 1)
 
 
 # ─── Registration ────────────────────────────────────────────────────────────
@@ -351,7 +351,7 @@ static func _t_return_home_failure_snapshot() -> Dictionary:
 	FlowStageExploreStateScript._lock_map_if_needed(ctx, 1)
 
 	# Inject return_failed manually into snapshot (mirrors what FlowRuntime sets on failure)
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	snap["data"]["return_failed"] = true
 
 	var data_v: Variant = snap.get("data", {})

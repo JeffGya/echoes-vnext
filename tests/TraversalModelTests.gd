@@ -52,7 +52,7 @@ static func _make_runtime(directive_id: String = "directive.scout_carefully") ->
 	var logger := _make_logger()
 	var config := ConfigService.new()
 	config.load_balance(logger, 0)
-	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/traversal_slot.json")
+	var runtime := FlowRuntime.new(logger, config, TestSaveHarness.dir() + "traversal_slot.json")
 
 	runtime.flow_ctx          = FlowContext.new()
 	runtime.flow_ctx.logger   = logger
@@ -1863,7 +1863,7 @@ static func _t_fog_entry_seeded_before_first_snapshot() -> Dictionary:
 	# Simulate enter(): lock -> reset_session_state -> build_snapshot. NO advance_turn dispatch.
 	FlowStageExploreStateScript._lock_map_if_needed(runtime.flow_ctx, 1)
 	FlowStageExploreStateScript._reset_session_state(runtime.flow_ctx, 1)
-	var snap: Dictionary = FlowStageExploreStateScript.build_snapshot(runtime.flow_ctx, 1)
+	var snap: Dictionary = StageExploreSnapshotBuilder.build(runtime.flow_ctx, 1)
 
 	# 1. Snapshot explored_cells must be non-empty before any advance.
 	var snap_data_v: Variant = snap.get("data", {})

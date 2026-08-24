@@ -171,7 +171,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 
 	return {
 		"type": FlowStateIds.VOW_MANAGE,
-		"meta": { "sim_tick": t },
+		"meta": { "t": t },
 		"data": {
 			"active_vow":                active_display,
 			"available_vows":            available_vows,

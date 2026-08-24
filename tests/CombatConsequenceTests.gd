@@ -78,7 +78,7 @@ static func _t_interpose_sets_guard_state_on_ally_not_self() -> Dictionary:
 # Test 3: fear does not replace the operational actor status.
 static func _t_alive_status_at_fear_40() -> Dictionary:
 	var actor := { "is_dead": false, "guard_state": false, "fear": 40 }
-	var status: String = FlowEncounterState._derive_status(actor)
+	var status: String = EncounterSnapshotBuilder._derive_status(actor)
 	if status != "alive":
 		return { "ok": false, "error": "Fear must not replace operational status; got: '%s'" % status }
 	return { "ok": true }
@@ -87,7 +87,7 @@ static func _t_alive_status_at_fear_40() -> Dictionary:
 # Test 4: fear=39 → "alive" (below hesitation threshold).
 static func _t_alive_status_at_fear_39() -> Dictionary:
 	var actor := { "is_dead": false, "guard_state": false, "fear": 39 }
-	var status: String = FlowEncounterState._derive_status(actor)
+	var status: String = EncounterSnapshotBuilder._derive_status(actor)
 	if status != "alive":
 		return { "ok": false, "error": "Expected 'alive' at fear=39, got: '%s'" % status }
 	return { "ok": true }
@@ -96,7 +96,7 @@ static func _t_alive_status_at_fear_39() -> Dictionary:
 # Test 5: refusal is an action/event, not an operational actor status.
 static func _t_alive_status_at_fear_80() -> Dictionary:
 	var actor := { "is_dead": false, "guard_state": false, "fear": 80 }
-	var status: String = FlowEncounterState._derive_status(actor)
+	var status: String = EncounterSnapshotBuilder._derive_status(actor)
 	if status != "alive":
 		return { "ok": false, "error": "Refusal must not replace operational status; got: '%s'" % status }
 	return { "ok": true }

@@ -194,7 +194,7 @@ static func _t_stage_advance_blocked() -> Dictionary:
 	var sit1 := SituationModelScript.make("sit.0", SituationModelScript.TYPE_COMBAT, 5, 5, 100, true, 0)
 	_inject_stage(ctx, [obj1], [sit1])
 
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var actions_v: Variant = snap.get("actions", {})
 	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
 	var data_v: Variant = snap.get("data", {})
@@ -215,7 +215,7 @@ static func _t_stage_advance_unlocked() -> Dictionary:
 	var sit1 := SituationModelScript.make("sit.0", SituationModelScript.TYPE_COMBAT, 5, 5, 100, true, 0)
 	_inject_stage(ctx, [obj1], [sit1])
 
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var actions_v: Variant = snap.get("actions", {})
 	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
 	var data_v: Variant = snap.get("data", {})
@@ -283,7 +283,7 @@ static func _t_calling_ranger_adds_action() -> Dictionary:
 	var echo_ranger := _make_echo("echo_01", "ranger", 10)
 	_inject_stage(ctx, [obj1], [sit1], [echo_ranger])
 
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var actions_v: Variant = snap.get("actions", {})
 	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
 	if not actions.has("cta.calling_reveal_adjacent"):
@@ -311,7 +311,7 @@ static func _t_no_ranger_no_action() -> Dictionary:
 	var echo_blade := _make_echo("echo_01", "blade", 10)
 	_inject_stage(ctx, [obj1], [sit1], [echo_blade])
 
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var actions_v: Variant = snap.get("actions", {})
 	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
 	if actions.has("cta.calling_reveal_adjacent"):
@@ -334,7 +334,7 @@ static func _t_ignore_clears_pending() -> Dictionary:
 	stage["explore_map"] = explore_map
 	FlowStageExploreStateScript._write_stage_back(ctx, stage)
 
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var actions_v: Variant = snap.get("actions", {})
 	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
 	if not actions.has("cta.ignore_situation"):
@@ -445,7 +445,7 @@ static func _t_party_requesting_return_high_fear() -> Dictionary:
 	var echo2 := _make_echo("echo_02", "ranger", 70)
 	_inject_stage(ctx, [obj1], [sit1], [echo1, echo2])
 
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var data_v: Variant = snap.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	if not bool(data.get("party_requesting_return", false)):
@@ -462,7 +462,7 @@ static func _t_party_requesting_return_low_fear() -> Dictionary:
 	var echo2 := _make_echo("echo_02", "ranger", 15)
 	_inject_stage(ctx, [obj1], [sit1], [echo1, echo2])
 
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var data_v: Variant = snap.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	if bool(data.get("party_requesting_return", false)):

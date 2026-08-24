@@ -1,7 +1,7 @@
 # res://tests/CombatSupportLedgerTests.gd
 # V2-COMBAT-00x (S14b, Tier 2): Support/defensive attribution on the combat contribution ledger.
 # Covers: ActorStateMachine _support_tally accumulation per support action type; the
-# FlowRuntime fold (_fold_support_tally) + credit helper; projection of the extended
+# ContributionLedgerService fold (fold_support_tally) + credit helper; projection of the extended
 # contribution sub-dict; and explicit zero-regression on the offensive ledger consumers.
 #
 #   A. ASM unit (direct-drive _update_passive_state / _apply_leadership)
@@ -81,7 +81,7 @@ static func _tally(actor: Dictionary) -> Dictionary:
 
 static func _runtime(tag: String) -> FlowRuntime:
 	# No boot() — the fold/credit helpers only touch the args passed to them.
-	return FlowRuntime.new(_off_logger(), ConfigService.new(), "/tmp/echoes-vnext-tests/support_" + tag + ".json")
+	return FlowRuntime.new(_off_logger(), ConfigService.new(), TestSaveHarness.dir() + "support_" + tag + ".json")
 
 
 # -------------------------
@@ -213,19 +213,21 @@ static func _t_seer_idle_aura() -> Dictionary:
 
 
 # -------------------------
-# B. Fold + credit helper (FlowRuntime instance, no boot)
+# B. Fold + credit helper (ContributionLedgerService statics, no runtime, no boot)
+# V2-INFRA-003 Phase 6 Slice 6H: these four moved off FlowRuntime onto
+# ContributionLedgerService. No delegating shim was left behind (AGENTS.md #20), so the call
+# sites below address the new owner directly.
 # -------------------------
 
-# 9: _credit_support_tally accumulates; amount 0 is a no-op that creates no tally.
+# 9: credit_support_tally accumulates; amount 0 is a no-op that creates no tally.
 static func _t_credit_helper() -> Dictionary:
-	var rt := _runtime("credit")
 	var a := { "id": "echo_a", "faction": "echo" }
-	rt._credit_support_tally(a, "morale_given", 4)
-	rt._credit_support_tally(a, "morale_given", 4)
+	ContributionLedgerService.credit_support_tally(a, "morale_given", 4)
+	ContributionLedgerService.credit_support_tally(a, "morale_given", 4)
 	if int(_tally(a).get("morale_given", 0)) != 8:
 		return { "ok": false, "error": "expected accumulated morale_given=8, got %s" % str(_tally(a).get("morale_given")) }
 	var b := { "id": "echo_b", "faction": "echo" }
-	rt._credit_support_tally(b, "fear_relieved", 0)
+	ContributionLedgerService.credit_support_tally(b, "fear_relieved", 0)
 	if b.has("_support_tally"):
 		return { "ok": false, "error": "amount 0 should be a no-op — no _support_tally created" }
 	return { "ok": true }
@@ -233,11 +235,10 @@ static func _t_credit_helper() -> Dictionary:
 
 # 10: fold merges the tally into the ledger entry and erases the tally.
 static func _t_fold_merges_and_clears() -> Dictionary:
-	var rt := _runtime("fold_merge")
 	var ectx := EncounterContext.new()
 	var a := { "id": "echo_x", "faction": "echo", "_support_tally": {
 		"guards_granted": 1, "morale_given": 5, "fear_relieved": 3, "support_actions": 2 } }
-	rt._fold_support_tally(a, ectx)
+	ContributionLedgerService.fold_support_tally(a, ectx)
 	if not ectx.echo_action_logs.has("echo_x"):
 		return { "ok": false, "error": "ledger entry should be created for echo_x" }
 	var e: Dictionary = ectx.echo_action_logs["echo_x"]
@@ -251,10 +252,9 @@ static func _t_fold_merges_and_clears() -> Dictionary:
 
 # 11: fold is echo-gated — a non-echo actor's tally is NOT merged, but is still erased.
 static func _t_fold_gated_to_echo() -> Dictionary:
-	var rt := _runtime("fold_gate")
 	var ectx := EncounterContext.new()
 	var enemy := { "id": "enemy_x", "faction": "enemy", "_support_tally": { "morale_given": 9 } }
-	rt._fold_support_tally(enemy, ectx)
+	ContributionLedgerService.fold_support_tally(enemy, ectx)
 	if ectx.echo_action_logs.has("enemy_x"):
 		return { "ok": false, "error": "non-echo actor must not create a ledger entry" }
 	if enemy.has("_support_tally"):
@@ -264,13 +264,12 @@ static func _t_fold_gated_to_echo() -> Dictionary:
 
 # 12: two turns (fresh tally each) accumulate additively — no double count, no residue.
 static func _t_fold_no_double_count() -> Dictionary:
-	var rt := _runtime("fold_dbl")
 	var ectx := EncounterContext.new()
 	var a := { "id": "echo_y", "faction": "echo", "_support_tally": { "morale_given": 5 } }
-	rt._fold_support_tally(a, ectx)          # ledger = 5, tally erased
-	rt._fold_support_tally(a, ectx)          # no tally → no-op
+	ContributionLedgerService.fold_support_tally(a, ectx)          # ledger = 5, tally erased
+	ContributionLedgerService.fold_support_tally(a, ectx)          # no tally → no-op
 	a["_support_tally"] = { "morale_given": 2 }  # next turn
-	rt._fold_support_tally(a, ectx)          # ledger = 7
+	ContributionLedgerService.fold_support_tally(a, ectx)          # ledger = 7
 	if int(ectx.echo_action_logs["echo_y"].get("morale_given", 0)) != 7:
 		return { "ok": false, "error": "expected additive morale_given=7, got %s" % str(ectx.echo_action_logs["echo_y"].get("morale_given")) }
 	return { "ok": true }
@@ -283,7 +282,7 @@ static func _t_fold_no_double_count() -> Dictionary:
 # 13: round-snapshot projection (no ledger arg) never adds a "contribution" key.
 static func _t_round_snapshot_no_contribution() -> Dictionary:
 	var actor := { "id": "echo_a", "faction": "echo", "stats": { "max_hp": 10 }, "current_hp": 10, "morale": 50, "fear": 0 }
-	var proj: Dictionary = FlowEncounterState._project_actor(actor)
+	var proj: Dictionary = EncounterSnapshotBuilder._project_actor(actor)
 	if proj.has("contribution"):
 		return { "ok": false, "error": "round snapshot must not carry a contribution key" }
 	return { "ok": true }
@@ -295,7 +294,7 @@ static func _t_final_snapshot_contribution_keys() -> Dictionary:
 	var ledger := { "echo_a": {
 		"damage_dealt": 7, "damage_taken": 2, "kills": 1,
 		"guards_granted": 1, "morale_given": 5, "fear_relieved": 3, "support_actions": 2, "fear_inflicted": 4 } }
-	var proj: Dictionary = FlowEncounterState._project_actor(actor, ledger)
+	var proj: Dictionary = EncounterSnapshotBuilder._project_actor(actor, ledger)
 	if not proj.has("contribution"):
 		return { "ok": false, "error": "final snapshot must carry a contribution key" }
 	var c: Dictionary = proj["contribution"]

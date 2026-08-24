@@ -134,11 +134,7 @@ static func get_or_create(realm_id: String, ctx: FlowContext, t: int) -> Diction
 	})
 
 	# Trigger save flush
-	ctx.save_request = true
-	if ctx.save_request_reason.is_empty():
-		ctx.save_request_reason = "realm_create"
-	else:
-		ctx.save_request_reason += "|realm_create"
+	ctx.request_save("realm_create")
 
 	return model
 
@@ -241,11 +237,7 @@ static func advance_stage(ctx: FlowContext, t: int) -> Dictionary:
 	})
 
 	# Trigger save flush
-	ctx.save_request = true
-	if ctx.save_request_reason.is_empty():
-		ctx.save_request_reason = "realm.stage_advance"
-	else:
-		ctx.save_request_reason += "|realm.stage_advance"
+	ctx.request_save("realm.stage_advance")
 
 	return ctx.save_data["realms"][ctx.realm_id]
 

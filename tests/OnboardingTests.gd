@@ -34,7 +34,7 @@ static func _make_runtime() -> FlowRuntime:
 	var logger := _make_logger()
 	var config := ConfigService.new()
 	config.load_balance(logger, 0)
-	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/onboarding_slot.json")
+	var runtime := FlowRuntime.new(logger, config, TestSaveHarness.dir() + "onboarding_slot.json")
 	runtime.flow_ctx = FlowContext.new()
 	runtime.flow_ctx.sim_tick = 0
 	runtime.flow_ctx.config_service = config
@@ -63,7 +63,7 @@ static func _first_fragment(save_data: Dictionary, cfg: Dictionary) -> Dictionar
 
 static func _t_start_routes_to_invocation() -> Dictionary:
 	var runtime := _make_runtime()
-	runtime.call("_handle_new_game", 2)
+	runtime.dispatch({ "type": "flow.new_game" })
 	runtime.flow_machine.transition(FlowStateIds.ONBOARDING_INVOCATION, runtime.flow_ctx, runtime.logger, 2, "test")
 	var snap := runtime.flow_ctx.last_snapshot
 	if str(snap.get("type", "")) != FlowStateIds.ONBOARDING_INVOCATION:
@@ -86,14 +86,14 @@ static func _t_fragments_are_seed_deterministic() -> Dictionary:
 
 static func _t_hear_select_updates_snapshot() -> Dictionary:
 	var runtime := _make_runtime()
-	runtime.call("_handle_new_game", 2)
+	runtime.dispatch({ "type": "flow.new_game" })
 	var cfg := runtime.config_service.get_balance()
 	var frag := _first_fragment(runtime.flow_ctx.save_data, cfg)
 	var virtue := str(frag.get("virtue", ""))
 	OnboardingService.set_step(runtime.flow_ctx.save_data, cfg, OnboardingService.STEP_CHOOSE_NAME)
 	runtime.flow_machine.transition(FlowStateIds.ONBOARDING_CHOOSE_NAME, runtime.flow_ctx, runtime.logger, 3, "test")
-	runtime.call("_handle_onboarding_fragment_hear", { "virtue": virtue }, 4)
-	runtime.call("_handle_onboarding_fragment_select", { "virtue": virtue }, 5)
+	runtime.dispatch({ "type": "onboarding.fragment.hear", "virtue": virtue })
+	runtime.dispatch({ "type": "onboarding.fragment.select", "virtue": virtue })
 	var data: Dictionary = runtime.flow_ctx.last_snapshot.get("data", {})
 	if not virtue in (data.get("heard_fragments", []) as Array):
 		return { "ok": false, "error": "Expected heard fragment in snapshot" }
@@ -103,12 +103,12 @@ static func _t_hear_select_updates_snapshot() -> Dictionary:
 
 static func _t_confirm_fragment_creates_one_starter() -> Dictionary:
 	var runtime := _make_runtime()
-	runtime.call("_handle_new_game", 2)
+	runtime.dispatch({ "type": "flow.new_game" })
 	var cfg := runtime.config_service.get_balance()
 	var frag := _first_fragment(runtime.flow_ctx.save_data, cfg)
 	OnboardingService.set_step(runtime.flow_ctx.save_data, cfg, OnboardingService.STEP_CHOOSE_NAME)
 	OnboardingService.select_fragment(runtime.flow_ctx.save_data, cfg, str(frag.get("virtue", "")))
-	runtime.call("_handle_onboarding_fragment_confirm", 3)
+	runtime.dispatch({ "type": "onboarding.fragment.confirm" })
 	var roster: Array = runtime.flow_ctx.save_data.get("sanctum", {}).get("roster", [])
 	if roster.size() != 1:
 		return { "ok": false, "error": "Expected exactly one starter Echo, got %d" % roster.size() }
@@ -118,13 +118,13 @@ static func _t_confirm_fragment_creates_one_starter() -> Dictionary:
 
 static func _t_starter_virtue_matches() -> Dictionary:
 	var runtime := _make_runtime()
-	runtime.call("_handle_new_game", 2)
+	runtime.dispatch({ "type": "flow.new_game" })
 	var cfg := runtime.config_service.get_balance()
 	var frag := _first_fragment(runtime.flow_ctx.save_data, cfg)
 	var virtue := str(frag.get("virtue", ""))
 	OnboardingService.set_step(runtime.flow_ctx.save_data, cfg, OnboardingService.STEP_CHOOSE_NAME)
 	OnboardingService.select_fragment(runtime.flow_ctx.save_data, cfg, virtue)
-	runtime.call("_handle_onboarding_fragment_confirm", 3)
+	runtime.dispatch({ "type": "onboarding.fragment.confirm" })
 	var echo: Dictionary = OnboardingService.get_starter_echo(runtime.flow_ctx.save_data)
 	var dominant := str(echo.get("dominant_vector", ""))
 	var mapped := str(OnboardingService.get_vector_to_virtue(cfg).get(dominant, ""))
@@ -134,10 +134,10 @@ static func _t_starter_virtue_matches() -> Dictionary:
 
 static func _t_name_confirm_completes() -> Dictionary:
 	var runtime := _make_runtime()
-	runtime.call("_handle_new_game", 2)
+	runtime.dispatch({ "type": "flow.new_game" })
 	OnboardingService.set_step(runtime.flow_ctx.save_data, runtime.config_service.get_balance(), OnboardingService.STEP_NAME_SANCTUM)
 	runtime.flow_machine.transition(FlowStateIds.ONBOARDING_NAME_SANCTUM, runtime.flow_ctx, runtime.logger, 3, "test")
-	runtime.call("_handle_onboarding_name_confirm", { "name": "House Test" }, 4)
+	runtime.dispatch({ "type": "onboarding.name.confirm", "name": "House Test" })
 	if str(runtime.flow_ctx.save_data.get("sanctum", {}).get("name", "")) != "House Test":
 		return { "ok": false, "error": "Expected sanctum name saved" }
 	if not OnboardingService.is_chapter_one_complete(runtime.flow_ctx.save_data):
@@ -148,15 +148,15 @@ static func _t_name_confirm_completes() -> Dictionary:
 
 static func _prepare_named_runtime() -> FlowRuntime:
 	var runtime := _make_runtime()
-	runtime.call("_handle_new_game", 2)
+	runtime.dispatch({ "type": "flow.new_game" })
 	var cfg := runtime.config_service.get_balance()
 	var frag := _first_fragment(runtime.flow_ctx.save_data, cfg)
 	OnboardingService.set_step(runtime.flow_ctx.save_data, cfg, OnboardingService.STEP_CHOOSE_NAME)
 	OnboardingService.select_fragment(runtime.flow_ctx.save_data, cfg, str(frag.get("virtue", "")))
-	runtime.call("_handle_onboarding_fragment_confirm", 3)
+	runtime.dispatch({ "type": "onboarding.fragment.confirm" })
 	OnboardingService.set_step(runtime.flow_ctx.save_data, cfg, OnboardingService.STEP_NAME_SANCTUM)
 	runtime.flow_machine.transition(FlowStateIds.ONBOARDING_NAME_SANCTUM, runtime.flow_ctx, runtime.logger, 4, "test")
-	runtime.call("_handle_onboarding_name_confirm", { "name": "House Test" }, 5)
+	runtime.dispatch({ "type": "onboarding.name.confirm", "name": "House Test" })
 	return runtime
 
 static func _defeat_trial_wound(runtime: FlowRuntime) -> void:
@@ -173,7 +173,7 @@ static func _defeat_trial_wound(runtime: FlowRuntime) -> void:
 
 static func _t_keeper_call_assigns_party() -> Dictionary:
 	var runtime := _prepare_named_runtime()
-	runtime.call("_handle_keeper_intro_call_answer", 6)
+	runtime.dispatch({ "type": "keeper_intro.call.answer" })
 	var sanctum: Dictionary = runtime.flow_ctx.save_data.get("sanctum", {})
 	var active: Array = sanctum.get("active_party_ids", [])
 	var echo: Dictionary = OnboardingService.get_starter_echo(runtime.flow_ctx.save_data)
@@ -188,7 +188,7 @@ static func _t_keeper_call_assigns_party() -> Dictionary:
 
 static func _t_keeper_trial_real_combat() -> Dictionary:
 	var runtime := _prepare_named_runtime()
-	runtime.call("_handle_keeper_intro_call_answer", 6)
+	runtime.dispatch({ "type": "keeper_intro.call.answer" })
 	var snap: Dictionary = runtime.flow_ctx.last_snapshot
 	var data: Dictionary = snap.get("data", {})
 	var actions: Dictionary = snap.get("actions", {})
@@ -211,15 +211,22 @@ static func _t_keeper_trial_real_combat() -> Dictionary:
 
 static func _t_keeper_trial_rewind_restarts_debuffed() -> Dictionary:
 	var runtime := _prepare_named_runtime()
-	runtime.call("_handle_keeper_intro_call_answer", 6)
+	runtime.dispatch({ "type": "keeper_intro.call.answer" })
 	var lethal_ids: Array[String] = ["echo_0001"]
-	runtime.call("_handle_keeper_intro_trial_rewind", 7, lethal_ids)
+	# V2-INFRA-003 Phase 4 Slice 9: _handle_keeper_intro_trial_rewind moved to
+	# KeeperIntroService.apply_trial_rewind() (a service, so it does not transition itself —
+	# see that function's header note). This reflection call site (the one dispatch route with
+	# no action reaching this method, per the story brief) is rewritten to call the service
+	# directly and then perform the same KEEPER_REWIND transition FlowRuntime's combat-path
+	# caller (_resolve_next_actor) performs immediately afterward.
+	KeeperIntroServiceScript.apply_trial_rewind(runtime.flow_ctx, runtime.config_service.get_balance(), runtime.logger, 7, lethal_ids)
+	runtime.flow_machine.transition(FlowStateIds.KEEPER_REWIND, runtime.flow_ctx, runtime.logger, 7, "keeper_intro.trial.rewind")
 	if str(runtime.flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.KEEPER_REWIND:
 		return { "ok": false, "error": "Expected Anansi rewind screen after lethal first trial hit" }
 	var onboarding: Dictionary = runtime.flow_ctx.save_data.get("onboarding", {})
 	if not bool(onboarding.get("keeper_trial_rewind_used", false)):
 		return { "ok": false, "error": "Expected rewind_used saved" }
-	runtime.call("_handle_keeper_intro_rewind_continue", 8)
+	runtime.dispatch({ "type": "keeper_intro.rewind.continue" })
 	if str(runtime.flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.KEEPER_TRIAL:
 		return { "ok": false, "error": "Expected trial to restart after rewind exposition" }
 	var actors: Array = runtime.flow_ctx.last_snapshot.get("data", {}).get("actors", [])
@@ -232,7 +239,7 @@ static func _t_keeper_trial_rewind_restarts_debuffed() -> Dictionary:
 
 static func _t_keeper_trial_victory_routes_resolve() -> Dictionary:
 	var runtime := _prepare_named_runtime()
-	runtime.call("_handle_keeper_intro_call_answer", 6)
+	runtime.dispatch({ "type": "keeper_intro.call.answer" })
 	_defeat_trial_wound(runtime)
 	var result := {
 		"victory": true,
@@ -256,13 +263,24 @@ static func _t_keeper_trial_victory_routes_resolve() -> Dictionary:
 	var continue_action: Dictionary = actions.get("cta.continue", {})
 	if str(continue_action.get("type", "")) != "keeper_intro.trial.finish":
 		return { "ok": false, "error": "Expected resolve continue to enter thread return beat" }
+
+	# V2-INFRA-003 / defect register D73 — pins the keeper trial's OMISSION of ekwan_awarded.
+	# This asymmetry (it sets ase_awarded but not ekwan_awarded) is the entire reason `ekwan` is
+	# block #8 of ResolveSnapshotBuilder rather than a flag on `ledger`. It was expressed only as
+	# the ABSENCE of an add_ekwan() call, which nothing could catch. Producer A (combat) does set
+	# it, so a future "tidy-up" that adds the block here would look harmless and would silently
+	# make block #8 pointless.
+	if data.has("ekwan_awarded"):
+		return { "ok": false, "error": "Keeper trial resolve must NOT carry ekwan_awarded (register D73); got %s" % str(data.get("ekwan_awarded")) }
+	if not data.has("ase_awarded"):
+		return { "ok": false, "error": "Keeper trial resolve must carry ase_awarded (register D73)" }
 	return { "ok": true }
 
 static func _t_keeper_trial_rewards() -> Dictionary:
 	var runtime := _prepare_named_runtime()
-	runtime.call("_handle_keeper_intro_call_answer", 6)
+	runtime.dispatch({ "type": "keeper_intro.call.answer" })
 	_defeat_trial_wound(runtime)
-	runtime.call("_handle_keeper_intro_trial_finish", 7)
+	runtime.dispatch({ "type": "keeper_intro.trial.finish" })
 	var econ: Dictionary = runtime.flow_ctx.save_data.get("economy", {})
 	if int(econ.get("ase", 0)) != 40:
 		return { "ok": false, "error": "Expected 40 Ase after first trial, got %d" % int(econ.get("ase", 0)) }
@@ -282,15 +300,15 @@ static func _t_keeper_trial_rewards() -> Dictionary:
 
 static func _t_awakening_starts_flame() -> Dictionary:
 	var runtime := _prepare_named_runtime()
-	runtime.call("_handle_keeper_intro_call_answer", 6)
+	runtime.dispatch({ "type": "keeper_intro.call.answer" })
 	_defeat_trial_wound(runtime)
-	runtime.call("_handle_keeper_intro_trial_finish", 7)
-	runtime.call("_handle_keeper_intro_thread_continue", 8)
+	runtime.dispatch({ "type": "keeper_intro.trial.finish" })
+	runtime.dispatch({ "type": "keeper_intro.thread.continue" })
 	var echo_before: Dictionary = OnboardingService.get_starter_echo(runtime.flow_ctx.save_data)
 	var emo_before := EmotionService.get_emotion(echo_before)
 	var morale_before := int(emo_before.get("morale_current", 50))
 	var fear_before := int(emo_before.get("fear_current", 0))
-	runtime.call("_handle_keeper_intro_awakening", { "choice": "guard" }, 9)
+	runtime.dispatch({ "type": "keeper_intro.awakening.choose", "choice": "guard" })
 	var sanctum: Dictionary = runtime.flow_ctx.save_data.get("sanctum", {})
 	var flame: Dictionary = sanctum.get("ase_flame", {})
 	if not bool(flame.get("awakened", false)):
@@ -307,17 +325,17 @@ static func _t_awakening_starts_flame() -> Dictionary:
 
 static func _t_first_weave_growth() -> Dictionary:
 	var runtime := _prepare_named_runtime()
-	runtime.call("_handle_keeper_intro_call_answer", 6)
+	runtime.dispatch({ "type": "keeper_intro.call.answer" })
 	_defeat_trial_wound(runtime)
-	runtime.call("_handle_keeper_intro_trial_finish", 7)
-	runtime.call("_handle_keeper_intro_thread_continue", 8)
-	runtime.call("_handle_keeper_intro_awakening", { "choice": "guard" }, 9)
+	runtime.dispatch({ "type": "keeper_intro.trial.finish" })
+	runtime.dispatch({ "type": "keeper_intro.thread.continue" })
+	runtime.dispatch({ "type": "keeper_intro.awakening.choose", "choice": "guard" })
 	var cfg := runtime.config_service.get_balance()
 	var vector := KeeperIntroServiceScript.get_selected_vector(runtime.flow_ctx.save_data, cfg)
 	var echo_before: Dictionary = OnboardingService.get_starter_echo(runtime.flow_ctx.save_data)
 	var story_before := int(echo_before.get("storyweight", 0))
 	var vector_before := int(echo_before.get("vector_scores", {}).get(vector, 0))
-	runtime.call("_handle_keeper_intro_weave", 10)
+	runtime.dispatch({ "type": "keeper_intro.weave.complete" })
 	var sanctum: Dictionary = runtime.flow_ctx.save_data.get("sanctum", {})
 	var threads: Dictionary = sanctum.get("threads", {})
 	if threads.has(KeeperIntroServiceScript.FIRST_THREAD_ID):
@@ -334,7 +352,7 @@ static func _t_first_weave_growth() -> Dictionary:
 
 static func _t_keeper_complete_unlocks_sanctum() -> Dictionary:
 	var runtime := _prepare_named_runtime()
-	runtime.call("_handle_keeper_intro_complete", 6)
+	runtime.dispatch({ "type": "keeper_intro.complete" })
 	if not KeeperIntroServiceScript.is_complete(runtime.flow_ctx.save_data):
 		return { "ok": false, "error": "Expected keeper intro complete" }
 	if str(runtime.flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.SANCTUM:
@@ -381,12 +399,12 @@ static func _t_starter_layout_is_centered_3x3() -> Dictionary:
 
 static func _t_starter_occupant_centered() -> Dictionary:
 	var runtime := _make_runtime()
-	runtime.call("_handle_new_game", 2)
+	runtime.dispatch({ "type": "flow.new_game" })
 	var cfg := runtime.config_service.get_balance()
 	var frag := _first_fragment(runtime.flow_ctx.save_data, cfg)
 	OnboardingService.set_step(runtime.flow_ctx.save_data, cfg, OnboardingService.STEP_CHOOSE_NAME)
 	OnboardingService.select_fragment(runtime.flow_ctx.save_data, cfg, str(frag.get("virtue", "")))
-	runtime.call("_handle_onboarding_fragment_confirm", 3)
+	runtime.dispatch({ "type": "onboarding.fragment.confirm" })
 	var occupants: Array = SanctumLayoutService.snapshot_occupants(runtime.flow_ctx.save_data)
 	# ase_flame is always the first occupant; echo is placed after it.
 	if occupants.size() < 2:
@@ -419,20 +437,20 @@ static func _t_missing_layout_repairs() -> Dictionary:
 
 static func _t_sanctum_snapshots_share_layout() -> Dictionary:
 	var runtime := _make_runtime()
-	runtime.call("_handle_new_game", 2)
+	runtime.dispatch({ "type": "flow.new_game" })
 	var cfg := runtime.config_service.get_balance()
 	var frag := _first_fragment(runtime.flow_ctx.save_data, cfg)
 	OnboardingService.set_step(runtime.flow_ctx.save_data, cfg, OnboardingService.STEP_CHOOSE_NAME)
 	OnboardingService.select_fragment(runtime.flow_ctx.save_data, cfg, str(frag.get("virtue", "")))
-	runtime.call("_handle_onboarding_fragment_confirm", 3)
+	runtime.dispatch({ "type": "onboarding.fragment.confirm" })
 	OnboardingService.set_step(runtime.flow_ctx.save_data, cfg, OnboardingService.STEP_EMPTY_SANCTUM)
 	runtime.flow_machine.transition(FlowStateIds.ONBOARDING_EMPTY_SANCTUM, runtime.flow_ctx, runtime.logger, 4, "test")
 	var encounter_data: Dictionary = runtime.flow_ctx.last_snapshot.get("data", {})
 	var encounter_layout := JSON.stringify(encounter_data.get("sanctum_layout", {}))
 	var encounter_occupants := JSON.stringify(encounter_data.get("sanctum_occupants", []))
 	OnboardingService.set_step(runtime.flow_ctx.save_data, cfg, OnboardingService.STEP_NAME_SANCTUM)
-	runtime.call("_handle_onboarding_name_confirm", { "name": "House Test" }, 5)
-	runtime.call("_handle_keeper_intro_complete", 6)
+	runtime.dispatch({ "type": "onboarding.name.confirm", "name": "House Test" })
+	runtime.dispatch({ "type": "keeper_intro.complete" })
 	var hub_data: Dictionary = runtime.flow_ctx.last_snapshot.get("data", {})
 	if JSON.stringify(hub_data.get("sanctum_layout", {})) != encounter_layout:
 		return { "ok": false, "error": "Expected encounter and hub layouts to match" }
