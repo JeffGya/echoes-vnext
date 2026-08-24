@@ -89,6 +89,41 @@ V2-INFRA-003". That controller does not exist. The correct target is
 proximity. The addendum's actual intent — keep objective-mode orchestration out of `FlowRuntime` — is
 satisfied either way.
 
+### PHASE 8 SCHEDULING — Reading A, decided 2026-08-25
+
+**The settlement rework and the D36/D77 fix are the same change.** Phase 8's core deliverable is
+"settle only on the final required objective; base + virtue + stage-clear XP once per stage", which
+IS moving payment out of `FlowEncounterState.build_final_snapshot`. The earlier "after Phase 9"
+schedule for D36/D77 was set before that overlap was noticed.
+
+**Decision: Phase 8 does the settlement work.** The after-Phase-9 bundle keeps only what it was
+actually meant for — mechanics that have never run (D01, D02, D03, D04), connected **one at a time**
+with a suite run after each.
+
+**Reason.** Three independent changes move reward numbers: the `run_index` leak (already live), the
+payment relocation, and the base/bonus split. Bundling them into one explained re-record is the only
+way to get **one** baseline event instead of three.
+
+### D82 — `prologue.first` inflates `run_index` for every player (NEW, LIVE, verified 2026-08-25)
+
+`core/onboarding/KeeperIntroService.gd:435-446` writes `save_data["realms"]["prologue.first"]` with
+**no `status` key**. `RealmService._count_started_realms` (`:311-318`) counts any entry whose
+`status != "not_started"`, and an absent key reads as `""`, which passes.
+
+**So every player who completes the keeper intro enters their first real Realm with `run_index = 1`
+instead of `0`.** That inflates the virtue bonus, the reward order multiplier
+(`RealmService.calculate_stage_reward:280-306`) and the realm XP multiplier
+(`ProgressionService.get_realm_xp_multiplier:275-288`, plus its inline duplicate at
+`FlowEncounterState.gd:257-261` — see D33).
+
+Verified by the orchestrator directly, not only by an agent. Live today; not caused by this story.
+
+**Jeff, 2026-08-25: fix it — `run_index` must be 0 for the first real Realm.** Folded into the
+Phase 8 settlement bundle, because it moves the same numbers and fixing it separately means a second
+re-record.
+
+**Blast radius: FP + BL.** It changes reward numbers on its own, independently of the payment move.
+
 ### Decisions taken 2026-08-24 on D36 / D77 / D78
 
 **D77 — the 25% defeat consolation STAYS. It is intended design.**
@@ -325,7 +360,7 @@ every fix above.
 | **D39** | For a partial withdrawal from a multi-objective stage, should the base reward be the **sum** of objectives, the **first**, or **pro-rata by objectives found**? |
 | **D44** | Is the kill-ripple + kill-momentum morale stack intended? An ally in a `kill_momentum` leader's radius currently receives both and is credited twice in the ledger. |
 | **D45** | Should the totem/shrine count toward the kill-share denominator in PROTECT and PURIFY_SHRINE? It fights, but it does not currently dilute XP. |
-| ~~D77~~ | ✅ **ANSWERED 2026-08-24: yes, 25% is intended.** The fix keeps the consolation and stops the repetition — see Decisions. |
+| ~~D77~~ | ✅ **ANSWERED: 25% intended; fix moves to PHASE 8** (Reading A). The fix keeps the consolation and stops the repetition — see Decisions. |
 | ~~D78~~ | ✅ **ANSWERED 2026-08-24: no, Back must not quit.** Fix required. Moves no recorded value. |
 | **D61** | Should institutions accrue passive effects while their condition never degrades (today's behaviour when `inst_cfg` is empty)? |
 | **D66** | Who owns the reward-type weighting bug? The prompt says `V2-ECONOMY-004`; Notion says that story is the Ekwan loop. |
