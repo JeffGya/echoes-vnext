@@ -1,6 +1,6 @@
 # V2-INFRA-003 — Handoff
 
-> **Status: Phases 1–6 COMPLETE. `FlowRuntime.gd` 10,061 → 2,070 (−79%). Phase 7 (thin shell + Half A review gate) is next. Nothing is committed.**
+> **Status: HALF A COMPLETE AND COMMITTED (`aa8147d`). `FlowRuntime.gd` 10,061 → 1,885 (−81%). Phase 8 (Half B — proof spine + settlement) is next.**
 > Branch `claude/v2-infra-003-proof-spine-b3c770` (git worktree).
 > Full plan: `~/.claude/plans/we-are-working-on-jazzy-gem.md` — keep it for reference lookup.
 > Written 2026-08-15.
@@ -28,7 +28,7 @@ Notion page: `339c3d1e-de92-81ae-9e2c-d4eae469ae3d`. Spec State **Locked**, P0, 
 
 | Metric | Start | Now |
 |---|---:|---:|
-| `core/runtime/FlowRuntime.gd` | 10,061 lines | **2,070** (−79%) |
+| `core/runtime/FlowRuntime.gd` | 10,061 lines | **1,885** (−81%) |
 | `FlowEncounterState.gd` | 2,170 lines | **446** (−79%) |
 | Test suite | 1,401 | **1,482**, all passing (verified cold) |
 | Reflection call sites into `FlowRuntime` privates | 50 | **0** (corrected — see below) |
@@ -56,9 +56,10 @@ Notion page: `339c3d1e-de92-81ae-9e2c-d4eae469ae3d`. Spec State **Locked**, P0, 
 > service the factory returns, and the factory is private only because production has no other
 > caller. Left as they are — changing them is test-surface work, not extraction.
 | Controllers | 0 | 9 |
-| Extracted services | 0 | 26 |
+| Extracted services | 0 | 27 |
 
-Tree: 59 changed files, 25 untracked. **Nothing staged, nothing committed.**
+**Half A is committed as `aa8147d`** — 160 files, +25,263 / −12,482. The tree is clean. Half B
+commits on top of it, on the same branch, and both ship in one PR.
 
 | Phase | State |
 |---|---|
@@ -68,7 +69,7 @@ Tree: 59 changed files, 25 untracked. **Nothing staged, nothing committed.**
 | 4 Noncombat controllers | ✅ (10 slices) |
 | 5 Venture + contact | ✅ 5.0 · 5A · 5B · 5C · 5D · 5E all done |
 | 6 Encounter + combat | ✅ **COMPLETE.** `FlowRuntime` 10,061→2,070 · `FlowEncounterState` 2,170→446 · `enter()` 982→7 · CombatController filed to V2-COMBAT-004 |
-| 7 Thin shell + Half A review gate | ⬜ |
+| 7 Thin shell + Half A review gate | ✅ APPROVED WITH CORRECTIONS; all 6 in-scope applied. C7 (payment) deferred to the after-Phase-9 bundle. **Committed.** |
 | 8 Proof spine + settlement (Half B) | ⬜ save-schema groundwork already landed |
 | 9 Regression · 10 Jeff manual test · 11 Docs + PR | ⬜ |
 | Extra — remove job-2 legacy save migrations | ✅ Jeff approved folding into this story |
@@ -893,6 +894,55 @@ Two constraints came with it: a `CombatController` must take **both** `_resolve_
 `_end_round`, because the first calls the second; and the config memo has a lifetime mismatch with
 per-call controller construction (~240 rebuilds per encounter), with a clean one-line fix available
 on `ConfigService` that is behaviour-adjacent and therefore not taken.
+
+---
+
+### Phase 7 — thin shell + the Half A review gate ✅
+
+Gate verdict: **APPROVED WITH CORRECTIONS (7)**. `docs/v2-infra-003-half-a-review.md`.
+
+Verified clean by the gate, independently: 73 actions with one owner each (a naive extraction
+returns 76 rows; three are not cases); no delegating stubs — all 24 factories are real constructors;
+no controller calls another; no controller or service holds `flow_machine`, `SaveService` or a
+`FlowRuntime` reference in code; one dispatch, one flush site; **`git diff -- data/` empty**; no RNG
+namespace or draw-order edit; save schema purely additive.
+
+| # | Correction | Outcome |
+|---|---|---|
+| C1 | 294 lines of offline accrual never left `FlowRuntime` | → `core/economy/OfflineAccrualService.gd` (349) |
+| C2 | `_generate_seed_root_string` stayed while its partner moved | → `CampaignSeed` |
+| C3 | Two headers asserted facts slice 5D disproved | corrected, originals kept visible |
+| C4 | `StageExploreSessionService` name outlived its behaviour | → **`ActiveStageService`** |
+| C5 | 1,018-line file had no written size justification | added |
+| C6 | **The no-`CombatController` decision was invisible in code** | ownership block above the six inline arms |
+| C7 | `build_final_snapshot` still pays the player | **deferred** — D36/D77, after-Phase-9 bundle |
+
+**C6 was the gate's highest priority, and its argument is the one to remember:** *"A reader of
+`dispatch()` sees 67 routed arms and 6 inline ones with nothing distinguishing decision from debt.
+A deliberate decision invisible in the code is indistinguishable from unfinished work."*
+
+**The gate corrected the orchestrator's defence of that decision.** "The residue is irreducible" is
+overstated — `encounter.retreat`, `combat.init` and `encounter.complete` have no turn-loop coupling
+and map onto an outcome today. The honest reason is **cohesion**: three-in-a-controller and
+three-inline with the turn loop straddling both is exactly the ambiguous ownership this story exists
+to remove. The code comment says that, not the overstated version.
+
+**The agent then rejected two of the orchestrator's own suggestions, with better reasoning.** C1 did
+NOT go on `EconomySettlementService` — that file documents "three settlements, three clocks", all on
+the online bank timer, and offline accrual runs on a different clock, trigger and cap. C4 rejected the
+gate's suggested `StageExploreQueryService`, because three of the twelve methods write.
+
+**New defect D81:** the offline dormant-house gate is evaluated twice and the second is unreachable.
+The two are semantically identical but NOT equal in effect — the reachable one leaves the clocks
+untouched, the dead one rolls them forward and requests a save. So deleting the *inline* gate as the
+obvious duplicate would silently change behaviour.
+
+**Reflection metric corrected in both directions.** The handoff said 3, the gate said 6; both mixed
+two categories. Truth: **5 string-name sites → 0** (all were the C1 function), and 19 direct
+compile-checked accesses, which break the build rather than a run and were left alone.
+
+Two items left to Jeff: whether the ~1,000-line guard becomes a standing `AGENTS.md` rule, and a
+legacy `# COMBAT-004:` comment near the new block that could read as the same thing.
 
 ---
 
