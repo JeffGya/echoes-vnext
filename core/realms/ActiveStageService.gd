@@ -302,23 +302,80 @@ static func count_revealed_situations(flow_ctx_arg: FlowContext) -> int:
 	return count
 
 
-# V2-ECONOMY-001: Get the base reward for the current stage's primary objective type.
+# V2-ECONOMY-001: Get the base reward of the current stage.
+#
+# V2-INFRA-003 Phase 8 — DEFECT D39 ANSWERED HERE, AND ANSWERED THE SAME WAY FOR BOTH READERS.
+# This used to read `_objs[0]` only, and read its type under the key `"obj_type"`, which
+# `ObjectiveModel.make()` never writes (it writes `"type"` — core/realms/ObjectiveModel.gd:63).
+# Both faults pushed the same way, so every stage fell through to the "combat" default and this
+# returned a flat 30, while `RewardCalc.compute()` — the stage-completion payer — SUMMED the
+# same stage's objective weights. Two "base reward of this stage" readers, one stage, two
+# answers, and the register warned that whatever answers D39 must answer it for both.
+#
+# It now delegates to `RewardCalc.base_reward()`, the single definition, so the two cannot
+# drift apart again. Consequence, deliberate: the partial-withdrawal payout rises on every
+# multi-objective stage (it is a fraction of this base), and shrine/boss objective weights
+# reach it for the first time.
 static func get_stage_base_reward(flow_ctx_arg: FlowContext, config_service_arg: ConfigService) -> int:
 	var _stage_idx := int(flow_ctx_arg.stage_id.replace("stage.", ""))
 	var _realm_v: Variant = flow_ctx_arg.save_data.get("realms", {}).get(flow_ctx_arg.realm_id, {})
 	var _realm: Dictionary = _realm_v if _realm_v is Dictionary else {}
 	var _stages_v: Variant = _realm.get("stages", [])
 	var _stages: Array = _stages_v if _stages_v is Array else []
-	var _obj_type := "combat"
-	if _stage_idx < _stages.size() and _stages[_stage_idx] is Dictionary:
+	var _objs: Array = []
+	if _stage_idx >= 0 and _stage_idx < _stages.size() and _stages[_stage_idx] is Dictionary:
 		var _stage: Dictionary = _stages[_stage_idx]
 		var _objs_v: Variant = _stage.get("objectives", [])
-		var _objs: Array = _objs_v if _objs_v is Array else []
-		if not _objs.is_empty() and _objs[0] is Dictionary:
-			_obj_type = str((_objs[0] as Dictionary).get("obj_type", "combat"))
-	var _w_v: Variant = ConfigService.get_rewards_cfg(config_service_arg).get("objective_weights", {})
-	var _w: Dictionary = _w_v if _w_v is Dictionary else {}
-	return int(_w.get(_obj_type, _w.get("combat", 30)))
+		_objs = _objs_v if _objs_v is Array else []
+	return RewardCalc.base_reward(_objs, ConfigService.get_rewards_cfg(config_service_arg))
+
+
+# V2-INFRA-003 Phase 8 (defect D77): claim the ONE defeat consolation of the situation that
+# produced the encounter now ending.
+#
+# The 25% defeat consolation is intended design (Jeff, 2026-08-24) and the situation must stay
+# UNRESOLVED after a defeat so the fight is still retryable. Both together made the payout
+# farmable without limit: lose, get paid, retry, lose, get paid. The stamp below separates the
+# two — the fight stays retryable, the payout does not repeat.
+#
+# Returns true exactly once per situation, and writes `consolation_paid: true` onto that
+# situation. Returns true (without a stamp) when there is no situation to stamp — an encounter
+# driven outside the stage-explore flow, e.g. a test harness or a debug spawn. That is not a
+# farming hole: repeating the payout requires re-entering the same situation, and there is no
+# situation to re-enter.
+#
+# Callers must persist: this mutates save data through the same _write_stage_back() seam the
+# rest of the stage-explore writes use.
+static func claim_situation_defeat_consolation(flow_ctx_arg: FlowContext) -> bool:
+	if flow_ctx_arg.realm_id.is_empty() or flow_ctx_arg.stage_id.is_empty():
+		return true
+	var _stage := FlowStageExploreState._get_current_stage(flow_ctx_arg)
+	if _stage.is_empty():
+		return true
+	var _emap_v: Variant = _stage.get("explore_map", {})
+	var _emap: Dictionary = _emap_v if _emap_v is Dictionary else {}
+	var _sit_id := str(_emap.get("last_situation_id", ""))
+	if _sit_id.is_empty():
+		return true
+	var _sits_v: Variant = _emap.get("situations", [])
+	var _sits: Array = _sits_v if _sits_v is Array else []
+	for _i in range(_sits.size()):
+		var _s_v: Variant = _sits[_i]
+		if not (_s_v is Dictionary):
+			continue
+		var _s: Dictionary = _s_v
+		if str(_s.get("id", "")) != _sit_id:
+			continue
+		if bool(_s.get("consolation_paid", false)):
+			return false
+		_s["consolation_paid"] = true
+		_sits[_i] = _s
+		_emap["situations"] = _sits
+		_stage["explore_map"] = _emap
+		FlowStageExploreState._write_stage_back(flow_ctx_arg, _stage)
+		return true
+	# last_situation_id names a situation that is no longer in the list — nothing to stamp.
+	return true
 
 
 # ────────────────────────────────────────────────────────────────────────────

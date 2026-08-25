@@ -263,6 +263,7 @@ static func test_stage_explore_fingerprint() -> Dictionary:
 		return { "ok": false, "error": "Expected flow.stage_explore snapshot, got type=%s" % str(snap.get("type", "")) }
 
 	var actual := _hash(_fingerprint_projection(snap))
+	print("SE_DEBUG hash=%s payload=%s" % [actual, JSON.stringify(_fingerprint_projection(snap))])
 	if actual != STAGE_EXPLORE_FINGERPRINT_HASH:
 		return {
 			"ok": false,
@@ -327,16 +328,35 @@ static func test_purity_build_does_not_consume_pending_flags() -> Dictionary:
 
 
 ## Site 2: FlowEncounterState.build_final_snapshot()
-## (core/state/flow/states/venture/FlowEncounterState.gd) pays Ase/Ekwan via
-## EconomyService.reward_stage_complete, awards Storyweight via
-## ProgressionService.award_post_combat_xp, writes final combat emotion back onto the roster, and
-## calls flow_ctx.request_save("stage.reward") — all while "building" the flow.resolve snapshot.
-## It fires exactly once per encounter (from FlowRuntime._end_round() when combat_over flips
-## true), driven here through the SAME production dispatch loop as tests/FlowFingerprintTests.gd
-## (its _setup_encounter/_drive_and_capture are reused directly — not duplicated — so this probe
-## stays byte-identical with the already-verified combat harness instead of risking a parallel,
-## subtly different one).
-## KNOWN DEFECT — Phase 3 inverts this assertion to "must not mutate".
+## (core/state/flow/states/venture/FlowEncounterState.gd).
+##
+## ASSERTION INVERTED — V2-INFRA-003 Phase 8, per defect-register D76. The PRODUCTION DRIVE IS
+## UNCHANGED and deliberately so: this probe reuses FlowFingerprintTests._setup_encounter /
+## _drive_and_capture, which dispatch only combat.init / combat.confirm_round /
+## combat.next_actor and NEVER flow.complete_stage. Observing across that dispatch boundary is
+## the entire point — a direct build_final_snapshot() call could not see it.
+##
+## WAS: the builder paid the WHOLE reward — the stage's base objective weights, the realm-virtue
+## bonus, the stage-clear Storyweight — plus request_save("stage.reward"), all while "building"
+## a snapshot, once per ENCOUNTER, in a dispatch that never advanced the stage. This test
+## asserted that it mutated economy OR xp OR emotion, i.e. it pinned the impurity.
+##
+## NOW: the stage-cadence half is gone from the builder. D76's revised action said to invert to
+## "must NOT mutate"; that is TOO STRONG and this probe would have passed vacuously under it,
+## because two mutations correctly REMAIN and are not defects:
+##   - the ENCOUNTER payout (enemies defeated / echoes survived / speed, and the once-per-
+##     situation defeat consolation) — this fight's own reward, paid in the dispatch that ends
+##     this fight, so economy still moves here;
+##   - the roster emotion write-back — the fear/morale THIS encounter accumulated.
+## What LEFT is the STAGE-CLEAR Storyweight award. The inverted assertion is therefore specific,
+## and it is NOT "xp_total must not move": per-kill Storyweight is applied mid-combat, per kill,
+## and is encounter cadence — one echo in this fight ends the drive with a kill bonus, correctly.
+## The precise observable is the resolve snapshot's own `xp_events` array: that array IS the
+## return value of ProgressionService.award_post_combat_xp(), the call that moved. It must now be
+## EMPTY at combat end, and refill only after a flow.complete_stage dispatch. Meanwhile economy
+## and emotion MUST still move here. A non-empty xp_events would mean the stage-clear award had
+## crept back into the builder; an economy or emotion freeze would mean the encounter-cadence
+## half had wrongly followed it out.
 static func test_purity_build_final_snapshot_pays_rewards() -> Dictionary:
 	var env: Dictionary = FlowFingerprintTests._setup_encounter(EncounterResolutionModes.COMBAT, "purity_probe_combat")
 	if env.is_empty():
@@ -382,12 +402,25 @@ static func test_purity_build_final_snapshot_pays_rewards() -> Dictionary:
 	var emotion_changed: bool = JSON.stringify(emotion_before, "", true) != JSON.stringify(emotion_after, "", true)
 	var economy_changed: bool = ase_before != ase_after or ekwan_before != ekwan_after
 
-	if not (economy_changed or xp_changed or emotion_changed):
-		return {
-			"ok": false,
-			"error": "expected build_final_snapshot() to mutate economy/xp/emotion as a side effect; observed no change. ase %d->%d ekwan %d->%d xp %s->%s" \
-				% [ase_before, ase_after, ekwan_before, ekwan_after, JSON.stringify(xp_before), JSON.stringify(xp_after)],
-		}
+	# `xp_changed` is deliberately computed but NOT asserted on: mid-combat per-kill Storyweight
+	# legitimately moves xp_total during this drive. See the header.
+	var _xp_moved_by_kills := xp_changed
+	var final_data_v: Variant = flow_ctx.last_snapshot.get("data", {})
+	var final_data: Dictionary = final_data_v if final_data_v is Dictionary else {}
+	var xp_events_v: Variant = final_data.get("xp_events", [])
+	var xp_events: Array = xp_events_v if xp_events_v is Array else []
+
+	var mismatches: Array = []
+	if not xp_events.is_empty():
+		mismatches.append("the stage-clear Storyweight award is back inside build_final_snapshot(): %d xp_events at combat end with no flow.complete_stage dispatch (xp %s -> %s)" \
+			% [xp_events.size(), JSON.stringify(xp_before), JSON.stringify(xp_after)])
+	if not economy_changed:
+		mismatches.append("the ENCOUNTER payout stopped paying at combat end: ase %d->%d ekwan %d->%d" \
+			% [ase_before, ase_after, ekwan_before, ekwan_after])
+	if not emotion_changed:
+		mismatches.append("the roster emotion write-back stopped running at combat end")
+	if not mismatches.is_empty():
+		return { "ok": false, "error": " | ".join(mismatches) }
 	return { "ok": true }
 
 

@@ -164,18 +164,18 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			stage_objectives = raw_objs if raw_objs is Array else []
 			break
 
-	# REALM-005: Compute virtue-based stage bonus
+	# V2-INFRA-003 Phase 8: the REALM-005 virtue bonus is STAGE cadence and no longer computed
+	# or paid here — StageSettlementService.settle() makes the same
+	# RealmService.calculate_stage_reward() call, with the same inputs, in the
+	# flow.complete_stage dispatch, and emits the same "economy.stage.reward" formula log line.
+	# formula_inputs is still surfaced on this snapshot for the Resolve screen's progression
+	# block, so the player still sees the formula that will pay them; it is display only.
 	var realm_virtue  := str(realm_model.get("virtue", ""))
 	var run_index     := int(realm_model.get("run_index", 0))
 	var stage_reward_data: Dictionary = RealmService.calculate_stage_reward(
 		stage_index, realm_virtue, run_index, reward_cfg
 	)
-	var virtue_bonus   := int(stage_reward_data.get("virtue_bonus", 0))
 	var formula_inputs: Dictionary = stage_reward_data.get("formula_inputs", {})
-
-	# LOG_ECONOMY_REWARD: confirms formula_inputs (REALM-005 DoD point 4)
-	if flow_ctx.logger != null:
-		flow_ctx.logger.info(t, "economy.stage.reward", "Stage reward formula", formula_inputs)
 
 	# ECONOMY-004: Compute and pay reward
 	var run_count := int(realm_model.get("run_count", 0))
@@ -199,8 +199,16 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	if _obj_type == "shrine":
 		_ekwan_factor *= float(reward_cfg.get("ekwan_shrine_multiplier", 1.5))
 
+	# V2-INFRA-003 Phase 8 (D77): the 25% defeat consolation is intended design and STAYS, but
+	# it pays once per situation. The situation is deliberately still NOT marked resolved on a
+	# defeat, so the fight remains retryable — it is simply no longer payable. On a victory
+	# nothing is claimed and the flag is irrelevant.
+	var _consolation_eligible := true
+	if not victory:
+		_consolation_eligible = ActiveStageService.claim_situation_defeat_consolation(flow_ctx)
+
 	var economy_svc := EconomyService.new(flow_ctx.save_data)
-	var reward_result: Dictionary = economy_svc.reward_stage_complete(
+	var reward_result: Dictionary = economy_svc.reward_encounter_complete(
 		victory,
 		int(reward_data.get("base_reward", 0)),
 		int(reward_data.get("enemy_bonus", 0)),
@@ -210,73 +218,24 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		int(reward_data.get("speed_bonus", 0)),
 		float(reward_data.get("redo_multiplier", 1.0)),
 		str(reward_data.get("rank", "F")),
-		virtue_bonus,
+		_consolation_eligible,
 		_ekwan_factor,
 		flow_ctx.logger,
 		t
 	)
 
-	# Trigger save — Ase is now in save data and must persist
-	flow_ctx.request_save("stage.reward")
+	# Trigger save — the encounter payout (and, on a first defeat, the consolation stamp) are
+	# now in save data and must persist. The STAGE payout's own "stage.reward" request now
+	# belongs to the flow.complete_stage dispatch, in StageSettlementService.
+	flow_ctx.request_save("encounter.reward")
 
-	# PROG-003: award XP and check level-ups for all party echoes.
+	# V2-INFRA-003 Phase 8: the stage-clear Storyweight award moved out with the stage payout —
+	# ProgressionService.award_post_combat_xp() is called by StageSettlementService now. It was
+	# always stage cadence in practice: the call has always passed skip_kill_xp=true, so it paid
+	# xp_stage_clear_base (+ the realm-completion bonus) and nothing per-kill; per-kill
+	# Storyweight is applied mid-combat, per kill, and did not move. This snapshot therefore
+	# reports no xp_events — the Storyweight lands one dispatch later, with the stage.
 	var xp_events: Array = []
-	var prog_cfg_v: Variant = {}
-	var birth_stats_v: Variant = {}
-	if flow_ctx.config_service != null:
-		var bal_p: Dictionary = flow_ctx.config_service.get_balance()
-		var bd_p: Dictionary  = bal_p.get("data", {})
-		prog_cfg_v   = bd_p.get("progression", {})
-		birth_stats_v = bd_p.get("summoning", {}).get("birth_stats", {})
-	var prog_cfg_d: Dictionary   = prog_cfg_v if prog_cfg_v is Dictionary else {}
-	var birth_stats_d: Dictionary = birth_stats_v if birth_stats_v is Dictionary else {}
-
-	# Detect realm completion: is this the final stage?
-	var stage_count: int = int(realm_model.get("stage_count", 1))
-	var realm_complete_now: bool = victory and (stage_index >= stage_count - 1)
-
-	var echo_logs: Dictionary = {}
-	if ectx != null:
-		echo_logs = ectx.echo_action_logs
-		# PROG-004: mark survived=false for any echo that was KO'd during the encounter.
-		# Defaults to true (set when entry is first created in echo_action_logs).
-		# Used by ProgressionService to compute the faith virtue XP multiplier.
-		for actor_v in ectx.actors:
-			if not actor_v is Dictionary:
-				continue
-			if str(actor_v.get("faction", "")) != "echo":
-				continue
-			var eid: String = str(actor_v.get("id", ""))
-			if echo_logs.has(eid):
-				if bool(actor_v.get("is_dead", false)):
-					echo_logs[eid]["survived"] = false
-				elif not echo_logs[eid].has("survived"):
-					echo_logs[eid]["survived"] = true
-
-	# XP tuning: compute realm XP multiplier from campaign position (run_index).
-	# run_index = how many times this realm has been started (campaign difficulty proxy).
-	var realm_xp_mult: float = 1.0
-	var mult_rate: float = float(prog_cfg_d.get("realm_xp_multiplier_per_realm", 0.0))
-	if mult_rate > 0.0:
-		realm_xp_mult = 1.0 + float(run_index) * mult_rate
-
-	# XP tuning: kill XP was already applied mid-combat — skip it here to avoid double-count.
-	xp_events = ProgressionService.award_post_combat_xp(
-		flow_ctx.save_data,
-		echo_logs,
-		victory,
-		realm_complete_now,
-		prog_cfg_d,
-		birth_stats_d,
-		flow_ctx.logger,
-		t,
-		realm_xp_mult,
-		true
-	)
-
-	# XP mutations are covered by the save_request set above.
-	if flow_ctx.save_request_reason != "" and not xp_events.is_empty():
-		flow_ctx.request_save("progression.xp")
 
 	# Bug fix (PROG-003): sync final combat emotion state back to roster so EchoParty
 	# reflects the actual fear/morale echoes accumulated during the encounter.
@@ -396,13 +355,22 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# JSON-hashes a whole resolve snapshot, and every read in
 	# ui/screens/venture/ResolveScreen.gd is data.get(key, <default>).
 	#
-	# THE PAYMENT ABOVE DID NOT MOVE, deliberately. reward_stage_complete(),
-	# request_save("stage.reward"), award_post_combat_xp() and the roster emotion write-back
-	# all stay where they were — that is defect-register D36/D77, scheduled for the
-	# after-Phase-9 bundle because relocating them empties ase_awarded/ekwan_awarded here and
-	# moves all seven combat fingerprints. Slice 6J is extraction and composition only, which
-	# is also why this producer stays on FlowEncounterState rather than joining the pure
-	# EncounterSnapshotBuilder beside producer B.
+	# PHASE 8 UPDATE (V2-INFRA-003, defects D36/D77/D05): the STAGE-cadence half of the payment
+	# HAS now moved. `RealmService.calculate_stage_reward`'s virtue bonus,
+	# `award_post_combat_xp()` and the `request_save("stage.reward")` that covered them are in
+	# `StageSettlementService.settle()`, called from `VentureController.handle_complete_stage`
+	# so payment and stage advance land in ONE dispatch.
+	#
+	# WHAT REMAINS HERE, and why this producer still does not join the pure
+	# EncounterSnapshotBuilder beside producer B:
+	#   1. `reward_encounter_complete()` — the enemies-defeated / echoes-survived / speed bonuses
+	#      and the once-per-situation defeat consolation. Those measure THIS fight and belong to
+	#      the dispatch that ends it, so `ase_awarded`/`ekwan_awarded` below are still real.
+	#   2. The ally-death morale/fear knock at the top of this function, whose writes three
+	#      later consumers read (_project_actor, the emotion summary, the roster sync).
+	#   3. The roster emotion write-back — the fear/morale THIS encounter accumulated.
+	# All three are encounter cadence. This function is smaller and honest now, but it is still
+	# not pure, so it stays a flow-state method.
 	var _breakdown: Array = reward_result.get("breakdown", [])
 	var _vow_outcome: Dictionary = flow_ctx.vow_outcome.duplicate() if not flow_ctx.vow_outcome.is_empty() else {}
 

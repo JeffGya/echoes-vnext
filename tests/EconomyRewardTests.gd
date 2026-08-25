@@ -151,9 +151,12 @@ static func _t_defeat_payout() -> Dictionary:
 	var svc    := EconomyService.new(save)
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
-	# base = 30, redo_mul = 1.0 (run_count=0), defeat total = round(30×0.25×1.0) = 8
-	var result := svc.reward_stage_complete(
-		false, 30, 0, 0, 0, 0, 0, 1.0, "F", 0, 0.0, logger, 0
+	# base = 30, redo_mul = 1.0 (run_count=0), defeat total = round(30×0.25×1.0) = 8.
+	# V2-INFRA-003 Phase 8: reward_stage_complete → reward_encounter_complete; the virtue_bonus
+	# parameter left with the stage cadence and consolation_eligible (true here — a first defeat)
+	# took its place. The defeat branch itself is unchanged, so the expected payout is unchanged.
+	var result := svc.reward_encounter_complete(
+		false, 30, 0, 0, 0, 0, 0, 1.0, "F", true, 0.0, logger, 0
 	)
 	var expected := roundi(30.0 * 0.25 * 1.0)
 	if int(result.get("ase_awarded", -1)) != expected:
@@ -190,20 +193,33 @@ static func _t_rank_F_poor_performance() -> Dictionary:
 	return { "ok": true }
 
 
-# ─── Test 12 — reward_stage_complete() adds correct Ase to save ──────────────
+# ─── Test 12 — the two cadence payers each add their own half to save ────────
+## V2-INFRA-003 Phase 8: reward_stage_complete() was ONE payer for two cadences. It is now two,
+## and this test pins both halves and their sum. base=30 is the STAGE's summed objective weight
+## and is paid by settle_stage_complete(); the 10 enemy + 10 echo bonuses are THIS fight's and
+## are paid by reward_encounter_complete(). Before the split one call banked 50; after it, two
+## calls in two dispatches bank 20 + 30 = the same 50, which is the point — the split moved
+## WHEN each component pays, not HOW MUCH.
 static func _t_economy_service_adds_ase() -> Dictionary:
 	var save   := _make_save()
 	var svc    := EconomyService.new(save)
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
-	# victory, base=30, 2 enemy bonus=10, 1 echo bonus=10, no speed, redo=1.0
-	# total = (30+10+10) × 1.0 = 50
-	var result := svc.reward_stage_complete(
-		true, 30, 10, 2, 10, 1, 0, 1.0, "B", 0, 0.0, logger, 0
+	# Encounter cadence: 2 enemy bonus=10, 1 echo bonus=10, no speed, redo=1.0 → 20
+	var enc := svc.reward_encounter_complete(
+		true, 30, 10, 2, 10, 1, 0, 1.0, "B", true, 0.0, logger, 0
 	)
+	if int(enc.get("ase_awarded", -1)) != 20:
+		return { "ok": false, "error": "Expected encounter ase_awarded=20, got %d" % enc.get("ase_awarded", -1) }
+	if int(save.get("economy", {}).get("ase", -1)) != 20:
+		return { "ok": false, "error": "Expected save.economy.ase=20 after the encounter payout, got %d" % int(save.get("economy", {}).get("ase", -1)) }
+
+	# Stage cadence: base=30, redo=1.0, no virtue bonus → 30
+	var stage := svc.settle_stage_complete(30, 1.0, 0, 0.0, logger, 0)
+	if int(stage.get("ase_awarded", -1)) != 30:
+		return { "ok": false, "error": "Expected stage ase_awarded=30, got %d" % stage.get("ase_awarded", -1) }
+
 	var ase_after := int(save.get("economy", {}).get("ase", -1))
 	if ase_after != 50:
-		return { "ok": false, "error": "Expected save.economy.ase=50, got %d" % ase_after }
-	if int(result.get("ase_awarded", -1)) != 50:
-		return { "ok": false, "error": "Expected ase_awarded=50, got %d" % result.get("ase_awarded", -1) }
+		return { "ok": false, "error": "Expected save.economy.ase=50 across both cadences, got %d" % ase_after }
 	return { "ok": true }

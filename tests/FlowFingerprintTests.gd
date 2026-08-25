@@ -274,9 +274,12 @@ static func _final_fingerprint(flow_ctx: FlowContext, ectx: EncounterContext) ->
 	}
 
 
-## Post-encounter save-state fingerprint. KNOWN DEFECT (V2-INFRA-003 will change this):
-## build_final_snapshot() pays Ase/Ekwan/XP with no idempotency guard — captured as observed
-## behaviour (a single drive through one encounter), not fixed or guarded against here.
+## Post-encounter save-state fingerprint.
+## The KNOWN DEFECT this used to carry — "build_final_snapshot() pays Ase/Ekwan/XP with no
+## idempotency guard" — was FIXED in V2-INFRA-003 Phase 8 (D36/D77). The stage-cadence half of
+## that payment now settles once per stage behind the stage's settlement_receipt, in the
+## flow.complete_stage dispatch; what this fingerprint still observes is the ENCOUNTER-cadence
+## half, which is per-fight by definition and has nothing to be idempotent about.
 static func _save_fingerprint(flow_ctx: FlowContext, party_ids: Array) -> Dictionary:
 	var econ: Dictionary = flow_ctx.save_data.get("economy", {}) as Dictionary
 	var sanctum: Dictionary = flow_ctx.save_data.get("sanctum", {}) as Dictionary
@@ -354,10 +357,43 @@ static func _run_mode_fingerprint(
 # Per-mode fingerprint tests. Expected hashes are the recorded characterization of current
 # behaviour — any drift fails loudly with expected-vs-actual in the error string.
 # ---------------------------------------------------------------------------
+#
+# RE-RECORDED ONCE, V2-INFRA-003 Phase 8 — the settlement split (defects D36 / D77 / D05).
+# Fourteen constants moved: the FINAL and SAVE hash of all seven modes. NOT ONE ROUNDS HASH
+# MOVED, which is the headline: no combat behaviour changed, only where the reward is paid.
+#
+# WHAT MOVED, AND WHY — measured from this file's own FP_DEBUG payloads, before and after:
+#
+#   ase_awarded / save.ase   −70 in EVERY mode (COMBAT 125→55, PURIFY_SHRINE 134→64,
+#                            RECOVER 129→59, PROTECT 129→59, ENDURE 125→55, PURSUE 125→55,
+#                            GUIDE_SPIRIT 120→50). 70 = the stage's base (two combat
+#                            objectives × objective_weights.combat 30 = 60, redo_multiplier 1.0
+#                            at run_count 0) + the realm.01 courage virtue bonus (10). Both are
+#                            STAGE cadence and are now paid by StageSettlementService in the
+#                            flow.complete_stage dispatch. This harness drives only
+#                            combat.init / confirm_round / next_actor and never dispatches
+#                            flow.complete_stage, so it cannot see that payment — the Ase is
+#                            deferred, not deleted. The identical −70 across seven modes is the
+#                            proof that only the stage-cadence component left: the per-fight
+#                            bonuses, which differ per mode, are untouched.
+#   ekwan_awarded / save.ekwan  falls with it, because Ekwan is a fraction of the Ase actually
+#                            awarded (COMBAT 15→7; the missing 8 = roundi(70 × 0.12) now lands
+#                            with the stage payout).
+#   party xp_total           every party echo loses ~40–50 and lands on 0, EXCEPT the one echo
+#                            per mode that scored a kill, which lands on exactly 25. That is
+#                            xp_kill_bonus, applied mid-combat, per kill — encounter cadence,
+#                            and it did NOT move. What left is xp_stage_clear_base (40) × the
+#                            per-echo virtue multiplier, awarded to every party member on a
+#                            clear: stage cadence, now in StageSettlementService.
+#   party level              unchanged (nobody crossed a threshold either way).
+#   rank / victory / reason / round_ended / enemies_defeated / echoes_survived /
+#   objective_state / data_keys / action_keys / combat_result — ALL UNCHANGED in all seven
+#                            modes. RewardCalc.compute() was not touched, so the grade is
+#                            computed from the same numbers as before.
 
 const COMBAT_ROUNDS_HASH := "e9203c42d3acb3fb2c13b92183808590d63cf251e39c07d1cd188de1c9340dbb"
-const COMBAT_FINAL_HASH  := "91602b2a9530bad20d98597da23677094b4b2d302ce0b79362239a96cd1db37b"
-const COMBAT_SAVE_HASH   := "8abca91c4920aba876d801324631c6506c6f666e3cc3fce60516574cae3dadc4"
+const COMBAT_FINAL_HASH  := "bb5619e74117cabfbd0274aa0af9ec5c223c28a1ed38a4c8c8054d234787d916"
+const COMBAT_SAVE_HASH   := "bbe140a53a33fcc97220ce3f9c8c172e2cb1f4ce4a281094a78f9733b40b50a4"
 
 
 ## Shared expected-vs-actual assertion for the three hashes of one mode.
@@ -394,8 +430,8 @@ static func test_combat() -> Dictionary:
 
 
 const PURIFY_SHRINE_ROUNDS_HASH := "c85e2c4903c52d48f2fe94567ce729c6c3fcd1049c16d41c7a404b72212dc7ee"
-const PURIFY_SHRINE_FINAL_HASH  := "35e77cf0162ca1460763f57d63f1e777c366afb1262fd06cad33df1ae2df7c9b"
-const PURIFY_SHRINE_SAVE_HASH   := "8345a63d73cd6f4c375a187fb4bfcaf576b39fbd534fd82a06283085f6eb40fd"
+const PURIFY_SHRINE_FINAL_HASH  := "b673a91259a6d4888e2bba1a932092f9135b4985fb2a5c339fba0583da87ded1"
+const PURIFY_SHRINE_SAVE_HASH   := "76aba09618df272bf0310af333218c78aa1e990ca0be9ae3b8db0c30af1d06d6"
 
 static func test_purify_shrine() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(EncounterResolutionModes.PURIFY_SHRINE, "fp_purify_shrine")
@@ -403,8 +439,8 @@ static func test_purify_shrine() -> Dictionary:
 
 
 const RECOVER_ROUNDS_HASH := "efd98bb2449fbc285bee101a19b923c812ea1b29a381d9e415185ac0b95f03ae"
-const RECOVER_FINAL_HASH  := "b35bb8c4069d462708874fb6241ac2e8bfd2bf1b2a75bc5f3e989ba7d6be8a2e"
-const RECOVER_SAVE_HASH   := "c395c571abb2b2a01174206c7daa6d9618da934fbc89af4ade3d89feb931dd98"
+const RECOVER_FINAL_HASH  := "860e97c1e66fe8124ea572a0774ae14a59b0a9c1cc4b45552de2073182b0b45a"
+const RECOVER_SAVE_HASH   := "bffa34aa225afe79818ec0b15931d59f495930337b8d07b33a997208e0d46c35"
 
 static func test_recover() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(EncounterResolutionModes.RECOVER, "fp_recover")
@@ -412,8 +448,8 @@ static func test_recover() -> Dictionary:
 
 
 const PROTECT_ROUNDS_HASH := "bc118ed3aee325942e4bfa81691ddc7388edb0b8ad8ecccb763b87d9a3290c03"
-const PROTECT_FINAL_HASH  := "0f4b604898f78c863d5326de6c63b1d42c9b088bd9ee8a45c796e8faf508f112"
-const PROTECT_SAVE_HASH   := "19193977e760a601cd63b2986133223caa6c89e2448e9789b87e9f059ef1d32a"
+const PROTECT_FINAL_HASH  := "9c4018e29082838d81d379d0c793c127b610be4cfe03c5ef5fcc64341a9e64ed"
+const PROTECT_SAVE_HASH   := "bffa34aa225afe79818ec0b15931d59f495930337b8d07b33a997208e0d46c35"
 
 static func test_protect() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(EncounterResolutionModes.PROTECT, "fp_protect")
@@ -421,8 +457,8 @@ static func test_protect() -> Dictionary:
 
 
 const ENDURE_ROUNDS_HASH := "c6a4de6e29261ac97430b8a129da9176be491e7016274fb922113490069807f0"
-const ENDURE_FINAL_HASH  := "0b880a629006127106ead80831e86e3e8b397dd1b9f71fb01f998f429ea31e77"
-const ENDURE_SAVE_HASH   := "6bc7bf4c9725b526c68e1fce80072a750e18f238366c5e9737eead161ad149d2"
+const ENDURE_FINAL_HASH  := "066a2ed8ce950ee080be5e0e75ca976147555ee67931d96613c0779ee83ebdef"
+const ENDURE_SAVE_HASH   := "cca434e9c009c6ba5607c102d12b1d87883fe6899dbffe4214c9a0cb0934eff7"
 
 static func test_endure() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(EncounterResolutionModes.ENDURE, "fp_endure")
@@ -430,8 +466,8 @@ static func test_endure() -> Dictionary:
 
 
 const PURSUE_ROUNDS_HASH := "c5db8858e28be4778751efea6928ba2fe87363dc59bc0e41c9dbae81f094d8aa"
-const PURSUE_FINAL_HASH  := "68185da525f380ea3132522fff257d2e84403bca3f577a0566d855e1a3059841"
-const PURSUE_SAVE_HASH   := "2bc8040a469a2eda469de2cf491b056e442a7f3e2a1c877e72bd184d69309924"
+const PURSUE_FINAL_HASH  := "930204fffad60c56bd31b0eca2bcd5a6263926fc20a1825429d8b7dc7caf23ca"
+const PURSUE_SAVE_HASH   := "bbe140a53a33fcc97220ce3f9c8c172e2cb1f4ce4a281094a78f9733b40b50a4"
 
 static func test_pursue() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(EncounterResolutionModes.PURSUE, "fp_pursue")
@@ -446,8 +482,8 @@ static func test_pursue() -> Dictionary:
 # mode-specific decision surface (escort/skittish movement, guide_protect_counter) worth its own
 # fingerprint.
 const GUIDE_SPIRIT_ROUNDS_HASH := "e6ee04984b2e19d361d085329ab990ac66961e63a4fae4947d3fdf8bd6147b3c"
-const GUIDE_SPIRIT_FINAL_HASH  := "084d189c0d2146625bb8c921a94b524c737cbf1602ce01db0df2a52b967d9082"
-const GUIDE_SPIRIT_SAVE_HASH   := "ab27b6934c8b4cb98916aa39ca03a86fbfabdffbfd9791721ea7336d81166ab7"
+const GUIDE_SPIRIT_FINAL_HASH  := "4ec057e9699b9ea010dbf628de0f90ce9a6c663e5de0aaa7ac4d32062077e1ef"
+const GUIDE_SPIRIT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
 static func test_guide_spirit() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(

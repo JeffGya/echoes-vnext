@@ -232,11 +232,21 @@ static func _rewards_cfg(runtime: FlowRuntime) -> Dictionary:
 
 ## The "complete a stage without a fight" branch: encounter_ctx is null, so the handler never
 ## reads a combat result. Pins the whole observable footprint of one dispatch:
-## snapshot type + action slots, Ase/Ekwan (untouched — rewards are paid by
-## FlowEncounterState.build_final_snapshot(), which this branch never reaches), Storyweight
-## (untouched for the same reason), the realm's stage index (advanced by exactly one), the
-## recovery segment appended for the grade this branch derives, and thread crystallization
-## (none — the realm is not complete).
+## snapshot type + action slots, Ase/Ekwan, Storyweight, the realm's stage index (advanced by
+## exactly one), and thread crystallization (none — the realm is not complete).
+##
+## ASSERTION INVERTED, V2-INFRA-003 Phase 8 (defect D05 + D36). This test used to assert that a
+## no-encounter stage completion pays NOTHING — Ase, Ekwan and Storyweight all untouched —
+## because the only payer was FlowEncounterState.build_final_snapshot(), which a stage finished
+## without a fight never reaches. That was the defect, recorded here as observed behaviour:
+## "Player completes content, receives no reward."
+##
+## The stage settlement now runs in this dispatch (StageSettlementService.settle(), called from
+## VentureController.handle_complete_stage ahead of RealmService.advance_stage), and it does not
+## care whether an encounter happened. So the three "untouched" assertions become "paid": the
+## stage's base objective weights + the realm-virtue bonus in Ase, the Ekwan share of that, and
+## xp_stage_clear_base of Storyweight per party echo. The exact figures are not hard-coded — the
+## test asserts each moved in the right direction, which is what the defect was about.
 static func _t_complete_stage_no_encounter() -> Dictionary:
 	var env := _setup_stage_env("cs_no_enc")
 	if not bool(env.get("ok", false)):
@@ -279,15 +289,15 @@ static func _t_complete_stage_no_encounter() -> Dictionary:
 	var expected_keys := ["cta.enter_stage", "nav.back"]
 	if keys != expected_keys:
 		mismatches.append("flow.stage_map action slots changed: expected %s, got %s" % [str(expected_keys), str(keys)])
-	if int(_economy(save_data).get("ase", -1)) != ase_before:
-		mismatches.append("expected Ase untouched by a no-encounter complete_stage: %d -> %d" % [ase_before, int(_economy(save_data).get("ase", -1))])
-	if int(_economy(save_data).get("ekwan", -1)) != ekwan_before:
-		mismatches.append("expected Ekwan untouched by a no-encounter complete_stage: %d -> %d" % [ekwan_before, int(_economy(save_data).get("ekwan", -1))])
-	if int(echo_after.get("storyweight", echo_after.get("xp_total", 0))) != story_before:
-		mismatches.append("expected Storyweight untouched (rewards are paid by build_final_snapshot, not this handler): %d -> %d" \
+	if int(_economy(save_data).get("ase", -1)) <= ase_before:
+		mismatches.append("expected the stage settlement to PAY Ase on a no-encounter complete_stage: %d -> %d" % [ase_before, int(_economy(save_data).get("ase", -1))])
+	if int(_economy(save_data).get("ekwan", -1)) <= ekwan_before:
+		mismatches.append("expected the stage settlement to PAY Ekwan on a no-encounter complete_stage: %d -> %d" % [ekwan_before, int(_economy(save_data).get("ekwan", -1))])
+	if int(echo_after.get("storyweight", echo_after.get("xp_total", 0))) <= story_before:
+		mismatches.append("expected the stage settlement to award Storyweight (xp_stage_clear_base): %d -> %d" \
 			% [story_before, int(echo_after.get("storyweight", echo_after.get("xp_total", 0)))])
-	if int(echo_after.get("xp_total", 0)) != xp_before:
-		mismatches.append("expected xp_total untouched: %d -> %d" % [xp_before, int(echo_after.get("xp_total", 0))])
+	if int(echo_after.get("xp_total", 0)) <= xp_before:
+		mismatches.append("expected xp_total to rise with the stage-clear award: %d -> %d" % [xp_before, int(echo_after.get("xp_total", 0))])
 	if int(realm_after.get("current_stage_index", -1)) != index_before + 1:
 		mismatches.append("expected current_stage_index %d -> %d, got %d" \
 			% [index_before, index_before + 1, int(realm_after.get("current_stage_index", -1))])
@@ -310,16 +320,40 @@ static func _t_complete_stage_no_encounter() -> Dictionary:
 		if int(seg.get("stage_index", -1)) != index_before:
 			mismatches.append("expected the segment tagged with the stage just completed (%d), got %d" % [index_before, int(seg.get("stage_index", -1))])
 
+	# IDEMPOTENCY (V2-INFRA-003 Phase 8, defects D36/D77). Runs LAST because it dispatches a
+	# SECOND time and would otherwise disturb every single-dispatch count asserted above.
+	# The first dispatch stamped this stage's settlement_receipt; a second flow.complete_stage
+	# aimed back at the SAME stage must pay no Ase and award no Storyweight. Without that stamp
+	# the quit-at-Resolve loop D36 describes pays on every pass.
+	var ase_once := int(_economy(save_data).get("ase", -1))
+	var xp_once := int(_roster_echo(save_data, echo_id).get("xp_total", 0))
+	runtime.flow_ctx.stage_id = "stage.0"
+	_realm(save_data, "realm.01")["current_stage_index"] = 0
+	runtime.dispatch({ "type": "flow.complete_stage" })
+	if int(_economy(save_data).get("ase", -1)) != ase_once:
+		mismatches.append("settlement is not idempotent: a second complete_stage paid again, Ase %d -> %d" % [ase_once, int(_economy(save_data).get("ase", -1))])
+	if int(_roster_echo(save_data, echo_id).get("xp_total", 0)) != xp_once:
+		mismatches.append("settlement is not idempotent: a second complete_stage awarded Storyweight again, %d -> %d" % [xp_once, int(_roster_echo(save_data, echo_id).get("xp_total", 0))])
+
 	if not mismatches.is_empty():
 		return { "ok": false, "error": " | ".join(mismatches) }
 	return { "ok": true }
 
 
-## CHARACTERIZATION — current behaviour, not necessarily correct.
-## FlowRuntime.gd:744–:749 — outcome is seeded to "loss" and only upgraded when encounter_ctx is
-## non-null. A stage completed WITHOUT a fight therefore takes the full defeat emotion drift:
-## morale down by combat_exit_loss_morale, fear up by combat_exit_loss_fear, loss_streak
-## incremented, and fear_base pushed up. Nothing about the no-fight path is a defeat.
+## ASSERTION INVERTED, V2-INFRA-003 Phase 8 (defect D05). The old body is preserved in shape
+## and drives the same production dispatch; only what it expects has flipped.
+##
+## WAS: outcome was seeded to "loss" and upgraded only when encounter_ctx was non-null, so a
+## stage completed WITHOUT a fight took the full defeat emotion drift — morale down by
+## combat_exit_loss_morale, fear up by combat_exit_loss_fear, loss_streak incremented, fear_base
+## pushed up. Nothing about the no-fight path is a defeat, and this test said so while pinning
+## the wrong behaviour in place.
+##
+## NOW: the four encounter-consequence hooks (emotion drift + the three bond hooks) are skipped
+## outright when there was no encounter — they take a combat outcome as their subject and there
+## is none. So morale, fear and both streaks must be UNCHANGED. Note this is deliberately not a
+## win either: the party is not paid a victory it did not fight, it is only not punished for a
+## defeat that never happened.
 static func _t_complete_stage_no_encounter_loss_flavour() -> Dictionary:
 	var env := _setup_stage_env("cs_loss_flavour")
 	if not bool(env.get("ok", false)):
@@ -346,14 +380,15 @@ static func _t_complete_stage_no_encounter_loss_flavour() -> Dictionary:
 	var loss_streak_after := int(emo_after.get("loss_streak", 0))
 
 	var mismatches: Array = []
-	if morale_after >= morale_before:
-		mismatches.append("expected the loss drift to LOWER morale_current (%d -> %d)" % [morale_before, morale_after])
-	if fear_after <= fear_before:
-		mismatches.append("expected the loss drift to RAISE fear_current (%d -> %d)" % [fear_before, fear_after])
-	if loss_streak_after != loss_streak_before + 1:
-		mismatches.append("expected loss_streak %d -> %d, got %d" % [loss_streak_before, loss_streak_before + 1, loss_streak_after])
-	if int(emo_after.get("win_streak", -1)) != 0:
-		mismatches.append("expected win_streak reset to 0 by the loss branch, got %d" % int(emo_after.get("win_streak", -1)))
+	if morale_after != morale_before:
+		mismatches.append("expected morale_current UNCHANGED with no encounter (%d -> %d)" % [morale_before, morale_after])
+	if fear_after != fear_before:
+		mismatches.append("expected fear_current UNCHANGED with no encounter (%d -> %d)" % [fear_before, fear_after])
+	if loss_streak_after != loss_streak_before:
+		mismatches.append("expected loss_streak UNCHANGED with no encounter (%d -> %d)" % [loss_streak_before, loss_streak_after])
+	if int(emo_after.get("win_streak", 0)) != int(emo_before.get("win_streak", 0)):
+		mismatches.append("expected win_streak UNCHANGED with no encounter (%d -> %d)" \
+			% [int(emo_before.get("win_streak", 0)), int(emo_after.get("win_streak", 0))])
 
 	if not mismatches.is_empty():
 		return { "ok": false, "error": " | ".join(mismatches) }
@@ -421,10 +456,18 @@ static func _t_complete_stage_realm_complete() -> Dictionary:
 		mismatches.append("expected current_stage_index == stage_count (%d), got %d" % [stage_count, int(realm_after.get("current_stage_index", -1))])
 	if not bool(realm_after.get("is_completed", false)):
 		mismatches.append("expected the realm marked is_completed")
-	if threads_after.size() - threads_before != 1:
-		mismatches.append("expected exactly 1 Thread crystallized (ThreadService floor), got %d new" % (threads_after.size() - threads_before))
-	if runtime.flow_ctx.last_realm_threads_earned.size() != 1:
-		mismatches.append("expected last_realm_threads_earned to carry the 1 crystallized Thread, got %d" \
+	# RE-RECORDED 1 -> 2, V2-INFRA-003 Phase 8 (defect D05). This env has NO encounter, so the
+	# recovery segment this dispatch contributes used to be graded "F" — the absent-`rank`
+	# default — which data.threads.segment_quality_by_grade maps to "broken", scoring ~0 and
+	# leaving ThreadService's max(1, ...) floor as the only reason a Thread appeared at all.
+	# The segment is now graded VentureController.NO_COMBAT_GRADE ("C" -> "compromised"), so
+	# _derive_quality clears the next count threshold and 2 Threads crystallize. The floor is no
+	# longer what is being observed, which is the point: a stage the party COMPLETED now
+	# contributes to Thread recovery instead of a broken segment.
+	if threads_after.size() - threads_before != 2:
+		mismatches.append("expected exactly 2 Threads crystallized from a compromised segment, got %d new" % (threads_after.size() - threads_before))
+	if runtime.flow_ctx.last_realm_threads_earned.size() != 2:
+		mismatches.append("expected last_realm_threads_earned to carry the 2 crystallized Threads, got %d" \
 			% runtime.flow_ctx.last_realm_threads_earned.size())
 	if not runtime.flow_ctx.realm_id.is_empty():
 		mismatches.append("expected flow_ctx.realm_id cleared on realm completion, got '%s'" % runtime.flow_ctx.realm_id)
@@ -563,13 +606,20 @@ static func _expected_intel_partial(runtime: FlowRuntime, intel_count: int) -> i
 	var realm := _realm(runtime.get_save_data(), "realm.01")
 	var stages_v: Variant = realm.get("stages", [])
 	var stages: Array = stages_v if stages_v is Array else []
-	var obj_type := "combat"
+	# V2-INFRA-003 Phase 8 (defect D39): the stage base is the SUM of the stage's objective
+	# weights, read under the key ObjectiveModel actually writes ("type", never "obj_type").
+	# This helper used to mirror get_stage_base_reward()'s two faults — first objective only,
+	# wrong key — and so expected the flat "combat" default (30) for every stage. It is
+	# recomputed here from the same rule the production single definition
+	# (RewardCalc.base_reward) uses, but independently, so this stays a characterization
+	# expectation rather than a restatement of the code under test.
+	var base := 0
 	if stages.size() > 0 and stages[0] is Dictionary:
 		var objs_v: Variant = (stages[0] as Dictionary).get("objectives", [])
 		var objs: Array = objs_v if objs_v is Array else []
-		if not objs.is_empty() and objs[0] is Dictionary:
-			obj_type = str((objs[0] as Dictionary).get("obj_type", "combat"))
-	var base := int(weights.get(obj_type, weights.get("combat", 30)))
+		for obj_v in objs:
+			if obj_v is Dictionary:
+				base += int(weights.get(str((obj_v as Dictionary).get("type", "")), 0))
 	return roundi(float(base) * factor)
 
 

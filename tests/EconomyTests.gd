@@ -148,16 +148,18 @@ static func _test_offline_gate_passes() -> Dictionary:
 	return { "ok": true }
 
 
-## (c) reward_stage_complete awards Ekwan on victory; partial run awards only Ase (no Ekwan).
+## (c) the encounter payout awards Ekwan on victory; a partial run awards only Ase (no Ekwan).
+## V2-INFRA-003 Phase 8: was reward_stage_complete(); that single payer is now two, and the
+## Ekwan rule this pins ("Ekwan scales off the Ase actually awarded") holds in both.
 static func _test_ekwan_awarded() -> Dictionary:
 	var save := { "economy": { "ase": 0, "ekwan": 0 } }
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
 	var econ := EconomyService.new(save)
 
-	var result := econ.reward_stage_complete(
-		true, 30, 0, 0, 0, 0, 0, 1.0, "B", 0, 0.12, logger, 0
-	)
+	# base=30 is an INPUT to the encounter cadence, never its payout, so a victory with no
+	# per-fight bonuses now pays 0 here. The Ase this test needs comes from the stage cadence.
+	var result := econ.settle_stage_complete(30, 1.0, 0, 0.12, logger, 0)
 
 	var ase_awarded    := int(result.get("ase_awarded", 0))
 	var ekwan_awarded  := int(result.get("ekwan_awarded", 0))

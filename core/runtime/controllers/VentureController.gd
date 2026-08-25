@@ -134,12 +134,17 @@
 # ---------------------------------------------------------------------------
 # DEFECTS REPRODUCED, NOT FIXED (this slice is pure extraction)
 # ---------------------------------------------------------------------------
-# KNOWN DEFECT 1 — handle_complete_stage() on a NO-ENCOUNTER path (encounter_ctx == null)
-#   defaults `outcome` to "loss", so a stage completed without any encounter pays nothing and
-#   is flavoured as a defeat by apply_encounter_emotion_drift / the bond hooks.
-# KNOWN DEFECT 2 — ActiveStageService.get_stage_base_reward() reads objectives[0] only,
-#   so a multi-objective stage computes its partial-withdrawal reward from the first objective
-#   alone. Reached from handle_return_home() below.
+# KNOWN DEFECT 1 — FIXED IN PHASE 8 (register D05). handle_complete_stage() on a NO-ENCOUNTER
+#   path (encounter_ctx == null) defaulted `outcome` to "loss", so a stage completed without any
+#   encounter paid nothing and was flavoured as a defeat by apply_encounter_emotion_drift / the
+#   bond hooks, and wrote its Thread segment with grade "F" (= "broken"). The four
+#   encounter-consequence hooks are now skipped when there was no encounter, the segment grade
+#   comes from NO_COMBAT_GRADE, and the stage settlement below pays the stage regardless of
+#   whether a fight happened. See the comments at each site.
+# KNOWN DEFECT 2 — FIXED IN PHASE 8 (register D39). ActiveStageService.get_stage_base_reward()
+#   read objectives[0] only, under a key ObjectiveModel never writes, so it returned a flat 30
+#   for every stage while RewardCalc SUMMED the same stage's weights. Both readers now call
+#   RewardCalc.base_reward(). Reached from handle_return_home() below.
 # KNOWN DEFECT 3 — the victory-return path
 #   (FlowRuntime._apply_victory_return_to_explore → resolve_combat_situation_and_objective with
 #   skip_if_already_resolved=false, commit_only_when_modified=false) can double-increment
@@ -151,6 +156,12 @@
 
 class_name VentureController
 extends RefCounted
+
+## V2-INFRA-003 Phase 8 (defect D05): the Thread-segment grade for a stage completed without any
+## encounter. "C" maps to `"compromised"` in `data.threads.segment_quality_by_grade` — the stage
+## counts toward the realm's recovery, but earns none of the `"clean"` tier that "S"/"A" give.
+## Before Phase 8 this path silently used the "F" default, i.e. `"broken"`.
+const NO_COMBAT_GRADE: String = "C"
 
 var flow_ctx: FlowContext
 var config_service: ConfigService
@@ -355,7 +366,9 @@ func handle_return_home(_action: Dictionary, t: int) -> FlowActionOutcome:
 			# withdrawal multiplies the partial reward by its `intel_retention_bonus` (data-driven,
 			# default 1.0 = no change). Scout (retention true, bonus 1.5) keeps more of the value it
 			# gathered; Seek (false) does not. Magnitude is tunable in data.directives.
-			# KNOWN DEFECT 2 (see header): get_stage_base_reward() reads objectives[0] only.
+			# Phase 8 (D39): get_stage_base_reward() now sums the stage's objective weights via
+			# RewardCalc.base_reward(), the same definition the stage payout uses. This partial
+			# payout therefore rises on every multi-objective stage.
 			var _retention_mul := 1.0
 			if bool(directive.get("intel_retention", false)):
 				_retention_mul = float(directive.get("intel_retention_bonus", 1.0))
@@ -516,18 +529,32 @@ func handle_complete_stage(action: Dictionary, t: int) -> FlowActionOutcome:
 	var destination_override := str(action.get("destination", ""))
 
 	# Fix BUG-003: read outcome BEFORE nulling encounter_ctx so drift reflects the actual result.
-	# KNOWN DEFECT 1 (see header): with no encounter_ctx this defaults to "loss".
-	var outcome := "loss"
+	#
+	# V2-INFRA-003 Phase 8 — KNOWN DEFECT 1 (D05) FIXED HERE. `outcome` used to be seeded to
+	# "loss" and upgraded only when an encounter context existed, so a stage completed WITHOUT a
+	# fight took the full defeat treatment: the loss emotion drift (morale down, fear up,
+	# loss_streak incremented, fear_base pushed up) and all three loss-flavoured bond hooks.
+	# Nothing about finishing a stage without a fight is a defeat.
+	#
+	# The fix is a removal, not an invention. These four calls are ENCOUNTER-consequence hooks —
+	# `apply_encounter_emotion_drift`, `apply_combat_bond_triggers`,
+	# `apply_bond_aftermath_modifiers`, `seed_rival_stage_incidents` all take a combat outcome as
+	# their subject. With no encounter there is no combat outcome for them to act on, so they do
+	# not run. A no-encounter completion is deliberately NOT flavoured as a win either: the party
+	# is not paid a victory's morale, it is simply not punished for a defeat that never happened.
+	# The reward it SHOULD receive is D05's other half, and it now arrives through the stage
+	# settlement below, which does not care whether an encounter happened.
+	var has_encounter := flow_ctx.encounter_ctx != null
 	var is_combat_victory := false
-	if flow_ctx.encounter_ctx != null:
-		var victory := bool(flow_ctx.encounter_ctx.combat_result.get("victory", false))
-		outcome = "win" if victory else "loss"
-		is_combat_victory = victory
-	_emotion_consequence_service().apply_encounter_emotion_drift(outcome, t)
-	# BOND-002: fire stage-level bond triggers + aftermath modifiers BEFORE nulling encounter context.
-	_bond_consequence_service().apply_combat_bond_triggers(t, outcome)
-	_bond_consequence_service().apply_bond_aftermath_modifiers(t, outcome)
-	_bond_consequence_service().seed_rival_stage_incidents(t)
+	if has_encounter:
+		is_combat_victory = bool(flow_ctx.encounter_ctx.combat_result.get("victory", false))
+	if has_encounter:
+		var outcome := "win" if is_combat_victory else "loss"
+		_emotion_consequence_service().apply_encounter_emotion_drift(outcome, t)
+		# BOND-002: fire stage-level bond triggers + aftermath modifiers BEFORE nulling encounter context.
+		_bond_consequence_service().apply_combat_bond_triggers(t, outcome)
+		_bond_consequence_service().apply_bond_aftermath_modifiers(t, outcome)
+		_bond_consequence_service().seed_rival_stage_incidents(t)
 	# V2-VOW-002: decrement pledge cooldown on stage completion (victory only).
 	var _cd_sanc_v: Variant = flow_ctx.save_data.get("sanctum", {})
 	if _cd_sanc_v is Dictionary:
@@ -591,6 +618,27 @@ func handle_complete_stage(action: Dictionary, t: int) -> FlowActionOutcome:
 	_vow_consequence_service().check_vow_discovery(t)
 	# V2-STAGE-004 Phase 4 (S12): ally is spent for one battle only — clear before nulling ctx.
 	_recruitment_consequence_service().clear_ally_fields_if_present(t)
+
+	# ── V2-INFRA-003 Phase 8: THE STAGE SETTLEMENT (defects D36 / D77 / D05) ────────────────
+	# Base objective weights + realm-virtue bonus + stage-clear Storyweight, paid ONCE per
+	# stage, behind the stage's `settlement_receipt` stamp. This used to fire inside
+	# `FlowEncounterState.build_final_snapshot()`, once per ENCOUNTER, in a dispatch that never
+	# advanced the stage — so a multi-situation stage paid several full stage rewards (D77) and
+	# quitting at the Resolve screen banked the money with the stage still "current" (D36).
+	# Here it is one dispatch with `RealmService.advance_stage()` below and one save flush, so
+	# there is no window to quit inside, and it pays on the no-encounter path too (D05).
+	#
+	# PLACED HERE, not earlier: it must run while `encounter_ctx` is still non-null (the
+	# Storyweight virtue multiplier reads each echo's action log off it) and after
+	# `check_vow_discovery`/`clear_ally_fields_if_present`, so not one existing call changed
+	# order. It is still ahead of `advance_stage`, which is the ordering the fix requires.
+	#
+	# `stage_cleared` is true on a combat victory and on the no-encounter path. A defeat pays
+	# nothing and stamps nothing — and cannot reach here anyway, because the defeat Resolve
+	# screen offers no `flow.complete_stage` action.
+	var _stage_cleared := is_combat_victory or not has_encounter
+	StageSettlementService.new(flow_ctx, config_service, econ, logger).settle(_stage_cleared, t)
+
 	flow_ctx.encounter_ctx     = null
 	flow_ctx.encounter_machine = null
 	flow_ctx.active_encounter_objective_index = -1  # V2-STAGE-002: reset after combat resolves
@@ -603,11 +651,24 @@ func handle_complete_stage(action: Dictionary, t: int) -> FlowActionOutcome:
 	var _thread_cfg_v: Variant = _bal_data.get("threads", {})
 	var _thread_cfg: Dictionary = _thread_cfg_v if _thread_cfg_v is Dictionary else {}
 
-	# V2-WEAVE-001: contribute segment — grade from the final encounter snapshot
+	# V2-WEAVE-001: contribute segment — grade from the final encounter snapshot.
+	#
+	# V2-INFRA-003 Phase 8 — the second half of KNOWN DEFECT 1 (D05). With no encounter there is
+	# no resolve snapshot, so `data.rank` is absent and this fell through to the default "F",
+	# which `data.threads.segment_quality_by_grade` maps to `"broken"`. A stage the party
+	# COMPLETED contributed a broken Thread segment.
+	#
+	# A stage cleared without a fight now contributes NO_COMBAT_GRADE = "C" → "compromised": it
+	# counts, because the party completed the content, but it earns none of the clean tier that
+	# only "S"/"A" give, because no fight was graded. This is the one value in this slice that is
+	# a judgement rather than a repair; it is recorded against D05 in the defect register, where
+	# D05's open question ("what grade should a no-encounter stage carry?") is answered.
 	if not _thread_cfg.is_empty() and not flow_ctx.realm_id.is_empty():
-		var _snap_data_v: Variant = flow_ctx.last_snapshot.get("data", {})
-		var _snap_data: Dictionary = _snap_data_v if _snap_data_v is Dictionary else {}
-		var _combat_grade := str(_snap_data.get("rank", "F"))
+		var _combat_grade := NO_COMBAT_GRADE
+		if has_encounter:
+			var _snap_data_v: Variant = flow_ctx.last_snapshot.get("data", {})
+			var _snap_data: Dictionary = _snap_data_v if _snap_data_v is Dictionary else {}
+			_combat_grade = str(_snap_data.get("rank", "F"))
 		RealmService.contribute_segment(flow_ctx, _combat_grade, _thread_cfg, t)
 
 	var result := RealmService.advance_stage(flow_ctx, t)  # sets save_request + logs internally
