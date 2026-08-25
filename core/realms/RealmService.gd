@@ -307,12 +307,41 @@ static func calculate_stage_reward(
 	}
 
 
+## V2-INFRA-003 Phase 8 (defect D82): is this `save_data["realms"]` entry a REALM RUN?
+##
+## `save_data["realms"]` is not homogeneous. Alongside the RealmModel dicts written by
+## `RealmModel.make()` it also holds synthetic **segment containers** that were never played —
+## today exactly one, `prologue.first`, written by
+## `KeeperIntroService._grant_first_thread_via_thread_service()` so `ThreadService` has a realm
+## to crystallize the prologue Thread out of. That entry carries four keys (`id`, `virtue`,
+## `run_index`, `realm_recovery_segments`) out of `RealmModel.REQUIRED_FIELDS`' thirteen.
+##
+## The discriminator is the `status` key: `RealmModel.make()` always sets it, and a synthetic
+## container never does. Deliberately NOT `RealmModel.validate()` — an older save whose realm
+## predates a later-added required field would silently stop counting as a run.
+##
+## Only `_count_started_realms()` needed this. Every other whole-map scan in `core/` and `ui/`
+## tests `status == "active"` (FlowRuntime:107, SanctumSnapshotBuilder:57, FlowVowState:51,
+## ConsequencePassService:192, compute_runtime_locks:161, AppRoot:1309) or sums `run_count`
+## (VowService:205), and a container fails both by absence. Verified at each site, 2026-08-25.
+static func is_realm_run(entry: Dictionary) -> bool:
+	return entry.has("status")
+
+
 # Count realms that have ever been started (status != "not_started").
+#
+# D82 FIX (V2-INFRA-003 Phase 8): non-run entries are skipped. Before this, `prologue.first`
+# read `""` for its absent `status`, `"" != "not_started"` passed, and every player who
+# finished the keeper intro entered their FIRST real Realm with `run_index = 1` instead of 0 —
+# inflating the virtue bonus, the realm order multiplier (`calculate_stage_reward`) and the
+# realm XP multiplier (`ProgressionService.get_realm_xp_multiplier`).
 static func _count_started_realms(save_realms: Dictionary) -> int:
 	var count := 0
 	for rid in save_realms:
 		var rm_v: Variant = save_realms[rid]
 		var rm: Dictionary = rm_v if rm_v is Dictionary else {}
+		if not is_realm_run(rm):
+			continue
 		if rm.get("status", "") != RealmModel.STATUS_NOT_STARTED:
 			count += 1
 	return count
