@@ -1,6 +1,7 @@
 # V2-INFRA-003 — Handoff
 
-> **Status: HALF A COMPLETE AND COMMITTED (`aa8147d`). `FlowRuntime.gd` 10,061 → 1,885 (−81%). Phase 8 (Half B — proof spine + settlement) is next.**
+> **Status: PHASES 1–9 COMPLETE AND COMMITTED (through `bf8360e`). Suite 1,401 → 1,494.
+> Phase 10 — Jeff's manual first-session test — is next. PAUSE HERE.**
 > Branch `claude/v2-infra-003-proof-spine-b3c770` (git worktree).
 > Full plan: `~/.claude/plans/we-are-working-on-jazzy-gem.md` — keep it for reference lookup.
 > Written 2026-08-15.
@@ -70,8 +71,10 @@ commits on top of it, on the same branch, and both ship in one PR.
 | 5 Venture + contact | ✅ 5.0 · 5A · 5B · 5C · 5D · 5E all done |
 | 6 Encounter + combat | ✅ **COMPLETE.** `FlowRuntime` 10,061→2,070 · `FlowEncounterState` 2,170→446 · `enter()` 982→7 · CombatController filed to V2-COMBAT-004 |
 | 7 Thin shell + Half A review gate | ✅ APPROVED WITH CORRECTIONS; all 6 in-scope applied. C7 (payment) deferred to the after-Phase-9 bundle. **Committed.** |
-| 8 Proof spine + settlement (Half B) | ⬜ save-schema groundwork already landed |
-| 9 Regression · 10 Jeff manual test · 11 Docs + PR | ⬜ |
+| 8 Proof spine + settlement (Half B) | ✅ 8A settlement · 8B durable result + real Resolve · 8C opening spine |
+| 9 Full regression | ✅ see below |
+| 10 Jeff manual test | ⬜ **PAUSE — next** |
+| 11 Docs + register→ledger + PR | ⬜ |
 | Extra — remove job-2 legacy save migrations | ✅ Jeff approved folding into this story |
 
 ---
@@ -954,6 +957,47 @@ legacy `# COMBAT-004:` comment near the new block that could read as the same th
   deleted, including the entries that were disproved.
 - **Remove the "When you reach the site of a known defect" section from `AGENTS.md`.** It is scoped
   to this story and would otherwise send later agents to a document about finished work.
+
+---
+
+## 9e. Phase 9 — full automated regression ✅
+
+Run at `bf8360e`, tree clean.
+
+| Check | Result |
+|---|---|
+| Compile | no errors |
+| Full suite, cold `/tmp` | **1,494 total, 1,494 passed, 0 failed** |
+| Full suite again, WARM `/tmp` | identical — no cross-run contamination |
+| Tree | clean, nothing untracked |
+
+### Stop conditions, audited against `main` across the whole story
+
+| Condition | Result |
+|---|---|
+| Config VALUE changed | **None.** `data/` is +23 lines, **0 removed** — the `realm.prologue` entry only. Not one existing line altered. |
+| RNG namespace or draw-order change | **None.** Two seed-path-shaped strings vanish from the diff — `"stage.reveal"` and `"stage.situation.revealed"` — and both were a save reason and a log tag inside `_mark_situation_revealed`, the dead function deleted in Phase 5. The live RNG path `"stage.reveal.%s"` is unchanged at `FlowStageExploreState.gd:708`. |
+| A file over ~1,000 CODE lines | **None from this story.** Only `BehaviorArbiter.gd` (1,613 code, **untouched**) and `SaveService.gd` (1,151 code, net −21 lines). |
+| Test baseline regressing | No. 1,401 → 1,494, monotonic. |
+| Two flushes in one dispatch | Guarded by `flow_transaction`, green. |
+| Controller calling a controller | None — verified by the Phase 7 gate across all new files. |
+
+### The story's commits
+
+| Commit | Content |
+|---|---|
+| `aa8147d` | Half A — decomposition, 160 files |
+| `61ffcf8` | D82 — `prologue.first` no longer inflates `run_index` |
+| `091bcfd` | 8A — settle stage rewards once per stage; 14 constants re-recorded **with attribution** |
+| `0e801f1` | 8B/8C — durable result, real Resolve state, opening proof spine |
+| `bf8360e` | `AGENTS.md` — size guard counts code; comment discipline |
+
+### The one re-record in the whole story
+14 of 21 fingerprint constants, in `091bcfd`. **Not one ROUNDS hash moved** — no combat behaviour
+changed, only where the reward is paid. The proof is quantitative: **−70 Ase in every one of the
+seven modes**, identical, where 70 is the stage base (two combat objectives × 30) plus the realm
+virtue bonus (10) — both stage cadence. Per-fight bonuses differ per mode and are untouched. The
+attribution is written into the test file header, not only into a report.
 
 ---
 
