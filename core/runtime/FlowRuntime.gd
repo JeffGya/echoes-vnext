@@ -437,7 +437,7 @@ func dispatch(action: Dictionary) -> Dictionary:
 			"combat.init":
 				_handle_combat_init(t)
 	
-			# COMBAT-004: starts a new round, resolves the first actor, emits a per-actor snapshot.
+			# Starts a new round, resolves the first actor, emits a per-actor snapshot.
 			"combat.confirm_round":
 				_handle_combat_confirm_round(t)
 	

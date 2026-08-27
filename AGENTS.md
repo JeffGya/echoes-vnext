@@ -284,6 +284,30 @@ Use a static reader, or add one.
 at runtime. Find these before extracting, and **rewrite the call site in the same change**. Do not
 leave a delegating shim on `FlowRuntime` — a shim keeps the test green while proving nothing.
 
+### File size and comments
+
+**Aim to keep files under ~1,000 lines — and the guard counts CODE, not comments or blanks.**
+Measure with `grep -vcE '^\s*(#|$)' <file>`, not `wc -l`.
+
+- **Do not fragment a file to satisfy the number.** A new file must earn its existence by owning
+  something. Splitting for a line count produces the same tangle spread across more files, which is
+  harder to follow, not easier.
+- **Core central files may exceed it**, with a written justification in the header saying why the
+  content is one unit.
+
+**Comments: write what a reader needs, not the history of the change.**
+
+| Belongs in the file | Belongs elsewhere |
+|---|---|
+| What this file owns, in a few lines | How it came to be here — that is the commit message |
+| A constraint that prevents a mistake: a determinism hazard, a load-bearing order, a shared-state trap | Alternatives considered and rejected |
+| A defect note at the site, one or two lines | The full defect analysis — that is the register's job |
+| | Slice numbers, phase names and process narrative |
+
+**Delete legacy and superseded comments when you encounter them.** A comment describing code that has
+moved, or naming a story that has been renumbered, is not explanation — it is a trap. It also costs
+parse time and reader attention for nothing.
+
 ### When you reach the site of a known defect, investigate and record
 > **SCOPE: story V2-INFRA-003 ONLY. Delete this section when that story ships.**
 > It exists because that one refactor touches most of `core/` and produced a 76-entry register.
