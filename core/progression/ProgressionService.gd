@@ -472,13 +472,21 @@ static func apply_mid_combat_kill_xp(
 	var new_stats: Dictionary  = DerivedStatService.compute_stats(traits, echo_rank, new_level, birth_stats_cfg)
 	echo["stats"] = new_stats
 
-	# Sync live actor — top-level stat fields.
-	var old_max_hp: int = int(actor.get("max_hp", 0))
+	# Sync live actor. Combat reads atk/def/agi/int/cha/max_hp from actor["stats"]
+	# (CombatService._melee_damage, DerivedStatService consumers); only `speed` is also
+	# mirrored at the top level, the way EchoActor.build writes it. Write into the actor's
+	# own stats dict rather than assigning new_stats, so the actor stays a deep copy and
+	# combat mutations cannot bleed into the save roster entry.
+	var actor_stats: Dictionary = actor.get("stats", {})
+	var old_max_hp: int = int(actor_stats.get("max_hp", 0))
 	for stat_key in ["atk", "def", "agi", "int", "cha", "speed", "max_hp"]:
 		if new_stats.has(stat_key):
-			actor[stat_key] = new_stats[stat_key]
+			actor_stats[stat_key] = new_stats[stat_key]
+	actor["stats"] = actor_stats
+	if new_stats.has("speed"):
+		actor["speed"] = new_stats["speed"]
 
-	# Partial heal: give the HP increase from max_hp bump.
+	# Partial heal: give the HP increase from the max_hp bump — never a heal to full.
 	var new_max_hp: int  = int(new_stats.get("max_hp", old_max_hp))
 	var hp_gained: int   = maxi(0, new_max_hp - old_max_hp)
 	if hp_gained > 0:

@@ -35,6 +35,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("prog/realm_mult_scales_with_run_index",          Callable(ProgressionTests, "_test_realm_mult_scales_with_run_index"))
 	runner.register_test("prog/realm_mult_lookup_guards",                  Callable(ProgressionTests, "_test_realm_mult_lookup_guards"))
 	runner.register_test("prog/realm_mult_nonpositive_rate_is_identity",   Callable(ProgressionTests, "_test_realm_mult_nonpositive_rate_is_identity"))
+	# V2-INFRA-003 D04 — mid-combat level-up syncs the stat block combat actually reads:
+	runner.register_test("prog/mid_combat_level_up_partial_heal_boundary", Callable(ProgressionTests, "_test_mid_combat_level_up_partial_heal_boundary"))
+	runner.register_test("prog/mid_combat_level_up_heal_clamps_at_max",    Callable(ProgressionTests, "_test_mid_combat_level_up_heal_clamps_at_max"))
+	runner.register_test("prog/mid_combat_level_up_stats_reach_combat",    Callable(ProgressionTests, "_test_mid_combat_level_up_stats_reach_combat"))
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -485,22 +489,132 @@ static func _test_mid_combat_kill_xp_total() -> Dictionary:
 
 
 ## 19. When kill XP crosses a level threshold, live actor stats are updated immediately.
+## The stat block combat actually reads is actor["stats"] (CombatService._melee_damage), so
+## that is where the assertion sits.
 static func _test_mid_combat_level_up_stats() -> Dictionary:
 	var cfg  := _xp_tuning_cfg()
 	# Put echo just below the level-2 threshold (100 XP).
 	var echo := _make_echo("e1", 90, 1)
-	var actor: Dictionary = echo.duplicate()
-	actor["current_hp"] = int(echo["stats"]["max_hp"])
-	var old_atk: int = int(actor.get("atk", 0))
+	var actor: Dictionary = _live_actor_from(echo, _stub_birth_stats(), 1)
+	var old_atk: int = int((actor["stats"] as Dictionary).get("atk", 0))
 
 	# kill_xp=25 → 90+25=115 > 100 → should level up to 2.
 	ProgressionService.apply_mid_combat_kill_xp(echo, actor, cfg, _stub_birth_stats(), 1.0, null, 0)
 
 	if int(echo.get("level", 0)) != 2:
 		return { "ok": false, "error": "Expected level=2 after level-up, got %d" % int(echo.get("level", 0)) }
-	var new_atk: int = int(actor.get("atk", 0))
+	var new_atk: int = int((actor["stats"] as Dictionary).get("atk", 0))
 	if new_atk <= old_atk:
-		return { "ok": false, "error": "Expected atk to increase after level-up, old=%d new=%d" % [old_atk, new_atk] }
+		return { "ok": false, "error": "Expected actor.stats.atk to increase after level-up, old=%d new=%d" % [old_atk, new_atk] }
+	return { "ok": true }
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Mid-combat level-up sync (V2-INFRA-003 D04)
+#
+# A live combat actor keeps its stats under actor["stats"]; only `speed` is also mirrored
+# at the top level. There is no top-level max_hp. These tests pin the three properties that
+# follow: the heal is exactly the max_hp increase (clamped at the new maximum), all seven
+# granted stats land in actor["stats"], and the speed mirror stays in sync.
+# ────────────────────────────────────────────────────────────────────────────
+
+## Builds the live-actor shape EchoActor.build produces for combat: derived stats under
+## "stats", speed mirrored top-level, current_hp top-level. No top-level max_hp — that is
+## the field D04 wrongly assumed existed.
+static func _live_actor_from(echo: Dictionary, birth_cfg: Dictionary, level: int) -> Dictionary:
+	var stats: Dictionary = DerivedStatService.compute_stats(
+		echo.get("traits", {}), int(echo.get("rank", 1)), level, birth_cfg)
+	return {
+		"id":         str(echo.get("id", "")),
+		"faction":    "echo",
+		"stats":      stats.duplicate(true),
+		"speed":      int(stats.get("speed", 5)),
+		"current_hp": int(stats.get("max_hp", 1)),
+	}
+
+
+## Birth-stats variant that grows every one of the seven stats by one point per level, so a
+## single level-up exercises all seven sync targets. The shipped balance.json only gives
+## max_hp, atk and int a non-zero per_level term.
+static func _birth_stats_all_grow() -> Dictionary:
+	var cfg := _stub_birth_stats()
+	cfg["hp_per_level"]    = 5.0
+	cfg["atk_per_level"]   = 1.0
+	cfg["def_per_level"]   = 1.0
+	cfg["agi_per_level"]   = 1.0
+	cfg["int_per_level"]   = 1.0
+	cfg["cha_per_level"]   = 1.0
+	cfg["speed_per_level"] = 1.0
+	return cfg
+
+
+## 25. D04-A — the heal is the max_hp INCREASE, not a restore to full.
+## Boundary: a wounded actor at a third of its health must end at wounded + gain exactly.
+static func _test_mid_combat_level_up_partial_heal_boundary() -> Dictionary:
+	var cfg   := _xp_tuning_cfg()
+	var birth := _stub_birth_stats()
+	var echo  := _make_echo("e1", 90, 1)
+	var l1: Dictionary = DerivedStatService.compute_stats(echo["traits"], 1, 1, birth)
+	var l2: Dictionary = DerivedStatService.compute_stats(echo["traits"], 1, 2, birth)
+	var gain: int = int(l2["max_hp"]) - int(l1["max_hp"])
+	if gain <= 0:
+		return { "ok": false, "error": "fixture invalid: level-2 max_hp must exceed level-1, got +%d" % gain }
+
+	var actor: Dictionary = _live_actor_from(echo, birth, 1)
+	var wounded: int = int(l1["max_hp"]) / 3
+	actor["current_hp"] = wounded
+
+	ProgressionService.apply_mid_combat_kill_xp(echo, actor, cfg, birth, 1.0, null, 0)
+
+	var got: int = int(actor.get("current_hp", -1))
+	if got != wounded + gain:
+		return { "ok": false, "error": "partial heal: expected current_hp=%d (wounded %d + max_hp gain %d), got %d" % [wounded + gain, wounded, gain, got] }
+	if got >= int(l2["max_hp"]):
+		return { "ok": false, "error": "level-up healed to full: current_hp=%d, new max_hp=%d" % [got, int(l2["max_hp"])] }
+	return { "ok": true }
+
+
+## 26. D04-A — the partial heal still clamps at the new maximum.
+static func _test_mid_combat_level_up_heal_clamps_at_max() -> Dictionary:
+	var cfg   := _xp_tuning_cfg()
+	var birth := _stub_birth_stats()
+	var echo  := _make_echo("e1", 90, 1)
+	var l2: Dictionary = DerivedStatService.compute_stats(echo["traits"], 1, 2, birth)
+
+	var actor: Dictionary = _live_actor_from(echo, birth, 1)   # current_hp = level-1 max
+	ProgressionService.apply_mid_combat_kill_xp(echo, actor, cfg, birth, 1.0, null, 0)
+
+	if int(actor.get("current_hp", -1)) != int(l2["max_hp"]):
+		return { "ok": false, "error": "an unwounded actor should reach exactly the new max %d, got %d" % [int(l2["max_hp"]), int(actor.get("current_hp", -1))] }
+	return { "ok": true }
+
+
+## 27. D04-B — all seven granted stats land in actor["stats"], the block combat reads.
+static func _test_mid_combat_level_up_stats_reach_combat() -> Dictionary:
+	var cfg   := _xp_tuning_cfg()
+	var birth := _birth_stats_all_grow()
+	var echo  := _make_echo("e1", 90, 1)
+	var l1: Dictionary = DerivedStatService.compute_stats(echo["traits"], 1, 1, birth)
+	var l2: Dictionary = DerivedStatService.compute_stats(echo["traits"], 1, 2, birth)
+
+	var actor: Dictionary = _live_actor_from(echo, birth, 1)
+
+	ProgressionService.apply_mid_combat_kill_xp(echo, actor, cfg, birth, 1.0, null, 0)
+
+	var a_stats: Dictionary = actor.get("stats", {})
+	for k in ["atk", "def", "agi", "int", "cha", "speed", "max_hp"]:
+		if int(l2[k]) <= int(l1[k]):
+			return { "ok": false, "error": "fixture invalid: %s does not grow on level-up (%d → %d)" % [k, int(l1[k]), int(l2[k])] }
+		if int(a_stats.get(k, -1)) != int(l2[k]):
+			return { "ok": false, "error": "actor.stats.%s must be the level-2 value %d — combat reads actor[\"stats\"] — got %d" % [k, int(l2[k]), int(a_stats.get(k, -1))] }
+
+	# speed is the one stat combat reads flat; EchoActor.build mirrors it, so the sync must too.
+	if int(actor.get("speed", -1)) != int(l2["speed"]):
+		return { "ok": false, "error": "top-level speed mirror must be %d, got %d" % [int(l2["speed"]), int(actor.get("speed", -1))] }
+
+	# The actor must stay isolated from the save roster entry (actor dicts are deep copies).
+	if is_same(a_stats, echo.get("stats", {})):
+		return { "ok": false, "error": "actor.stats must not alias echo.stats — combat mutations would bleed into save data" }
 	return { "ok": true }
 
 
