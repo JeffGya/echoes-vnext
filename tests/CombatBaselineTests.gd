@@ -54,6 +54,32 @@
 # copy of it. Only the round-driving loop is local, because the fingerprint driver captures
 # turns/positions and returns no emotion — the exact gap this file exists to close.
 #
+# EMOTION HASHES RE-RECORDED ONCE, WITH ATTRIBUTION — D01, the near-death trigger
+#
+# The near-death trigger in CombatTurnActionService read max_hp at the top level of the actor
+# dict, where no builder writes it, so the guard default of 1 made `current_hp * 4 <= max_hp`
+# unsatisfiable and the branch never ran. It now reads stats.max_hp. That turns on two authored
+# keys that had never paid: data.combat.emotion.morale_on_near_death (7) and
+# .fear_on_near_death (8).
+#
+# 7 of the 34 emotion constants moved. Nothing else in this file moved — no round count, no
+# transition sequence, no flush count or reason, no retreat (tick, outcome) pair — and NOT ONE
+# of the seven mode fingerprints in FlowFingerprintTests moved either.
+#
+#   COMBAT          idx 3, 4    enemy.dust_wanderer_1  morale 50 → 57, fear +8
+#   PURIFY_SHRINE   idx 3       enemy.dust_wanderer_1  morale 50 → 57, fear +8
+#   ENDURE          idx 3, 4    enemy.dust_wanderer_1  morale 50 → 57, fear +8
+#   PURSUE          idx 3, 4    pursue_quarry_01       morale 50 → 57, fear +8
+#   RECOVER, PROTECT, GUIDE_SPIRIT — byte-identical: no actor is left alive at or below a
+#   quarter of its max HP in those traces.
+#
+# The whole delta is one actor per mode, once, at exactly +7 morale and +8 fear — the two
+# authored values, unscaled. In all four modes the actor is the enemy, crossing the quarter-HP
+# line in round 4 and dying in round 5; the +8 and +7 then carry unchanged into the idx-4
+# round. No Echo crosses the line in any recorded trace. Because the affected actor dies the
+# following round in every mode, its raised fear changes no decision here, which is why the
+# mode fingerprints are unmoved — that is a property of these fixtures, not of the mechanic.
+#
 # PERMANENT GAP (cannot be closed without a production change, so it is not attempted):
 # the movement decision (goal_id / option_id) chosen inside _resolve_next_actor is a private
 # local on the selected MovementIntent. It is never written to EncounterContext and never
@@ -226,14 +252,14 @@ const COMBAT_EMOTION_HASHES: Array = [
 	"02d98695226aa349d3bc0d290d080c0d7c51bf17232a4b61e4c4888d894f4942",
 	"23810625aee23d5f719c087ed23f641c138c59bfe7a6b74af453a4c2c19d2f01",
 	"65856aeb0f5db7fe4b8a1e91268dc3a54e8d73729ac9ffb132c680db9d5e2e77",
-	"99204fa8eda97e5a771465f0eb3f84679c5cc942a87ddd09b1b93669f74da476",
-	"2b0c146604e560814da01e113f088861f8c90df212009298a6d17d912ebbd93c",
+	"b147bce40ca61bb578e538c62a9186328fd7a8c22c83aad3f3f9fd3272fdae8e",
+	"0a4883070509f21c99ffe7713fa26d6c1383e79a65309ba7e56c84e97b973d21",
 ]
 const PURIFY_SHRINE_EMOTION_HASHES: Array = [
 	"b0a1a28cf5fab4efd04c78e8d88bdb61e86df8d366e860c6798e3cd4b78cf1a1",
 	"acf21c63cdf575d95485ad060ed487195746239883255c4b5646cbefcf887d24",
 	"017ccd83f41d75a0727193b559d2298a3baea3162f0ebd4fa4d51f2067b83f9c",
-	"d73ac9c12623e15f51d98370d5f13004b358361c8ac1c58d8213d8df26f39f52",
+	"0a0ef8747ac8eae256da7f8de4ad43ea0adb7a10d39bf225d9a0bb9e5b6ba5e7",
 ]
 const RECOVER_EMOTION_HASHES: Array = [
 	"628671286fc1023cc80ec893d441c0b1164184228ebf46fe25fe3191f5378207",
@@ -249,15 +275,15 @@ const ENDURE_EMOTION_HASHES: Array = [
 	"02d98695226aa349d3bc0d290d080c0d7c51bf17232a4b61e4c4888d894f4942",
 	"6a991e4303d99b2687bf1a19cc7b4346e05d19dd9c0c793a7cfefb6bab1a4651",
 	"0c8b079cac30bb014d7c241303dbb7baa1efdc004da0f6cf1c5224a74844ed1a",
-	"56e88f2265119de40cc6e41a105b2b34a9d99560567c44a392923729bd29fff0",
-	"c8884a87813d966a19848d65cd26be5c17a9bdc56e345ad495d57a83ba1e2089",
+	"59697cc76fa36c80a25c08b032b3ea4c97653b6a8ea36af4ffa57dfcbd36f7c8",
+	"12c9dda6e60997c12f9010e850f4e7dacacb1b9ee5b681ea38119ab8db021f17",
 ]
 const PURSUE_EMOTION_HASHES: Array = [
 	"5e6f15383743a09765793993107a3a42e183d4d98927eba0084f9c73755b8d77",
 	"72a6bcc3ef7e082d6ff2176923a1bb24c34305d269c33c5439bfee1430d27c06",
 	"355eba76db716818dd2dbcba1282aca1dae6617e63a922081c0ec47bf417baff",
-	"2b7ac72729bbb62d25c5921d0168b99bfb9bd1b407a4ff5a9fce10a2d09e7382",
-	"2e828a2da402541413412236261d3d8ee16522031a2466ef7e104436cd23ce49",
+	"766b8b1d278fb39800b7e49e9816bf7b12398de0f120589f95db8373cf87fbd4",
+	"bc7febd30a33fff204ec63763b68cd78860eb3e40212ff429e1fa2fb6eb873fb",
 ]
 const GUIDE_SPIRIT_EMOTION_HASHES: Array = [
 	"1763e7b0005ec4f959d3154cbaf62d510fb1420c607f7c05eb330dd808c691b6",

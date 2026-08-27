@@ -79,33 +79,20 @@
 # NO SHIM WAS LEFT ON FlowRuntime (AGENTS.md #20). _apply_kill_momentum had one reflection call
 # site, tests/LeadershipEmotionTests.gd:215, rewritten in this same change.
 #
-# DEFECT NOTES — found during extraction, reported and deliberately NOT fixed here:
-#   1. THE NEAR-DEATH TRIGGER IS DEAD CODE. It reads `target.get("max_hp", 1)`, but max_hp is
-#      not a top-level actor field — it lives at actor["stats"]["max_hp"], and no actor builder
-#      (EchoActor, EnemyActor, StructureActor, ContactActorBuilder) writes a top-level copy.
-#      The lookup therefore always returns the DEFAULT 1, which passes the `nd_max_hp > 0`
-#      guard and then makes `current_hp * 4 <= 1` unsatisfiable for any living actor
-#      (current_hp >= 1), while current_hp == 0 is excluded by the third clause. So the
-#      trigger has never fired, and its two balance.json keys — data.combat.emotion
-#      .morale_on_near_death and .fear_on_near_death — are unreachable, exactly the
-#      "decorative balance value" class of defect V2-PROG-012 found seven of. Every other
-#      consumer in the repo reads stats.max_hp (BehaviorArbiter:1625/2284, ActorService:86,
-#      LiveMovementContextService:816/921). This is the largest finding of the slice.
-#      Preserved verbatim — fixing it turns on a morale+fear term that has never run, which is
-#      a combat balance change and needs its own story.
-#   2. The kill ripple and the kill-momentum helper both write ally morale in the same turn,
+# DEFECT NOTES — reported and deliberately NOT fixed here:
+#   1. The kill ripple and the kill-momentum helper both write ally morale in the same turn,
 #      and both credit the killer through the support tally, so an ally inside the kill_momentum
 #      radius is credited twice for one kill (once at morale_ripple_per_kill, once at the trait
 #      morale_boost). Consistent with the "effective post-clamp delta" rule, but the double
 #      credit is not obviously intended. Pre-existing.
-#   3. `_k_alive_before` counts the just-killed target by id, so the share is computed against
+#   2. `_k_alive_before` counts the just-killed target by id, so the share is computed against
 #      the pre-kill enemy count — correct — but the same loop excludes structures, so in
 #      PROTECT and PURIFY_SHRINE the totem/shrine never contributes to the denominator while it
 #      does contribute to the fight. Pre-existing.
-#   4. The "target already dead" else-arm appends an entry with action_type "actor.idle" while
+#   3. The "target already dead" else-arm appends an entry with action_type "actor.idle" while
 #      the intent said "melee_attack", so the contribution ledger counts that turn as an idle.
 #      Pre-existing and deliberate-looking, recorded because it is invisible from the log line.
-#   5. fear_inflicted is credited to the attacker even when attacker and target are the same
+#   4. fear_inflicted is credited to the attacker even when attacker and target are the same
 #      faction. No same-faction melee exists today. Pre-existing.
 
 class_name CombatTurnActionService
@@ -318,7 +305,9 @@ func resolve_activation(
 							"delta":    guard_absorb_morale,
 						})
 					# Triggers 2+6: near-death — first HP drop to ≤ 25% fires morale+fear once per actor.
-					var nd_max_hp: int = int(target.get("max_hp", 1))
+					# max_hp lives at actor["stats"]["max_hp"]; the top-level fallback is for
+					# definition-shaped dicts that carry it flat (LiveMovementContextService:824).
+					var nd_max_hp: int = int((target.get("stats", {}) as Dictionary).get("max_hp", target.get("max_hp", 1)))
 					if nd_max_hp > 0 \
 							and not target.get("_near_death_morale_fired", false) \
 							and int(target.get("current_hp", 1)) * 4 <= nd_max_hp \
