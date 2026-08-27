@@ -201,11 +201,16 @@ static func pledge_vow(
 	var realm_id := str(ctx.get("realm_id") if ctx != null else "")
 
 	# Count total realm runs completed so far. Used to detect completion when pledged outside a realm.
+	# V2-INFRA-003 Phase 8C: the prologue Realm is excluded — it is not one of the player's
+	# Realms, and counting it here would shift the baseline a Vow pledged before it is measured
+	# against, releasing that Vow one run early.
 	var runs_at_pledge := 0
 	var realms_v: Variant = save_data.get("realms", {})
 	if realms_v is Dictionary:
 		var realms_d: Dictionary = realms_v
 		for rid in realms_d:
+			if RealmService.is_prologue_run(str(rid)):
+				continue
 			var rm_v: Variant = realms_d[rid]
 			if rm_v is Dictionary:
 				runs_at_pledge += int((rm_v as Dictionary).get("run_count", 0))

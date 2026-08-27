@@ -22,9 +22,6 @@ const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd
 @onready var top_band: HBoxContainer = %TopBand
 @onready var _header_copy: HBoxContainer = %HeaderCopy
 @onready var ekwan_label: Label = %EkwanLabel
-@onready var _awakening_overlay: Control = %AwakeningOverlay
-@onready var _awakening_grant_label: Label = %AwakeningGrantLabel
-@onready var _awakening_dismiss: Button = %AwakeningDismiss
 
 # V2-STAGE-004 Phase 4: CompanionInvite modal — one-slot Sanctum-entry ally
 # recruit offer (ported from ResolveScreen's %AllyRecruitOffer). Shown when
@@ -189,12 +186,9 @@ func _ready() -> void:
 	tab_bonds.pressed.connect(_on_tab_selected.bind("bonds"))
 	tab_skills.pressed.connect(_on_tab_selected.bind("skills"))
 	detail_party_action_button.pressed.connect(_on_detail_party_pressed)
-	_awakening_dismiss.pressed.connect(_on_awakening_dismiss_pressed)
-	_apply_awakening_panel_style()
 	# V2-STAGE-004 Phase 4: CompanionInvite modal wiring.
 	_companion_accept_button.pressed.connect(_on_companion_accept_pressed)
 	_companion_decline_button.pressed.connect(_on_companion_decline_pressed)
-	_disable_legacy_modal(_awakening_overlay)
 	_disable_legacy_modal(_companion_invite)
 	# V2-SANCTUM-002: institution wiring
 	_inst_back_btn.pressed.connect(_on_inst_detail_back_pressed)
@@ -1084,25 +1078,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 # ─────────────────────────────────────────────────────────────
-# V2-ECONOMY-001: Awakening overlay helpers
+# V2-ECONOMY-001 awakening overlay: DELETED in V2-INFRA-003 Phase 8C.
+#
+# %AwakeningOverlay was a second, inline copy of the awakening modal, carrying its own copy of
+# the same body string. It was permanently disabled at _ready() and could never be shown again,
+# so its only remaining effect was to let the two copies of the text drift apart. The live modal
+# is ui/overlays/sanctum/AwakeningModal.tscn, requested by id below and mounted by SanctumShell.
 # ─────────────────────────────────────────────────────────────
-
-func _apply_awakening_panel_style() -> void:
-	var inner_panel := _awakening_overlay.find_child("InnerPanel", true, false)
-	if inner_panel == null or not (inner_panel is PanelContainer):
-		return
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("#3E3E58")
-	style.set_corner_radius_all(8)
-	(inner_panel as PanelContainer).add_theme_stylebox_override("panel", style)
-
-
-func _show_awakening_overlay() -> void:
-	_disable_legacy_modal(_awakening_overlay)
-
-
-func _on_awakening_dismiss_pressed() -> void:
-	_disable_legacy_modal(_awakening_overlay)
 
 
 # ─────────────────────────────────────────────────────────────

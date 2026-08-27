@@ -482,8 +482,28 @@ func handle_directive_select(action: Dictionary, t: int) -> FlowActionOutcome:
 # ---------------------------------------------------------------------------
 
 ## flow.select_realm — REALM-001: create/retrieve the RealmModel, then go to the stage map.
+##
+## V2-INFRA-003 Phase 8C: validated against the opening-Realm gate. The normal Realms open only
+## after the prologue is finished; until then this denies the selection and leaves the player on
+## Realm Select (handled_outcome() — no transition, no snapshot replacement, no save), exactly
+## the shape `handle_fragment_confirm`'s denied path uses.
+##
+## `realm.prologue` is not selectable through here at all. It is opened once, from
+## `keeper_intro.complete`, by OpeningRealmService — Realm Select never lists it (it is absent
+## from `realm_order`), so the only way to reach this branch with it is a hand-built action.
 func handle_select_realm(action: Dictionary, t: int) -> FlowActionOutcome:
 	var realm_id := str(action.get("realm_id", ""))
+	if RealmService.is_prologue_run(realm_id):
+		logger.info(t, "realm.select.denied", "The opening Realm is not selectable; it opens from the keeper intro", {
+			"realm_id": realm_id,
+		})
+		return FlowActionOutcome.handled_outcome()
+	if not OpeningRealmService.normal_realms_unlocked(flow_ctx.save_data):
+		logger.info(t, "realm.select.denied", "Realms are locked until the opening Realm is complete", {
+			"realm_id": realm_id,
+			"opening_realm_status": OpeningRealmService.get_status(flow_ctx.save_data),
+		})
+		return FlowActionOutcome.handled_outcome()
 	flow_ctx.realm_id = realm_id
 	RealmService.get_or_create(realm_id, flow_ctx, t)  # sets save_request internally
 	return FlowActionOutcome.transition_outcome(FlowStateIds.STAGE_MAP, "ui.realm_selected")
@@ -673,6 +693,11 @@ func handle_complete_stage(action: Dictionary, t: int) -> FlowActionOutcome:
 
 	var result := RealmService.advance_stage(flow_ctx, t)  # sets save_request + logs internally
 	if result.get("is_completed", false):
+		# V2-INFRA-003 Phase 8C: finishing the prologue Realm is what opens the normal Realms.
+		# Stamped BEFORE realm_id is cleared below, and idempotent ("active" -> "complete" only).
+		if RealmService.is_prologue_run(flow_ctx.realm_id):
+			OpeningRealmService.mark_complete(flow_ctx.save_data, logger, t)
+			flow_ctx.request_save("onboarding.opening_realm.complete")
 		# V2-WEAVE-001: crystallize Threads before clearing realm context
 		flow_ctx.last_realm_threads_earned = []
 		if not _thread_cfg.is_empty():

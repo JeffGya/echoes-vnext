@@ -17,7 +17,13 @@ const StageExploreModelScript := preload("res://core/realms/StageExploreModel.gd
 #   3. Status "completed"       → re-run; create fresh model with incremented run_count
 #
 # Sets save_request on ctx in all creation cases.
-static func get_or_create(realm_id: String, ctx: FlowContext, t: int) -> Dictionary:
+#
+# V2-INFRA-003 Phase 8C: `cfg_overrides` is applied ON TOP of the `data.realms[realm_id]` config
+# entry before anything reads it. Default `{}` means every pre-existing caller is byte-identical.
+# Its one production user is OpeningRealmService, which passes `{"virtue": <starter virtue>}` so
+# the prologue Realm is generated around the fragment the player actually chose — a value that
+# cannot live in realms.json because it differs per campaign.
+static func get_or_create(realm_id: String, ctx: FlowContext, t: int, cfg_overrides: Dictionary = {}) -> Dictionary:
 	# Ensure realms dict exists
 	if not ctx.save_data.has("realms") or typeof(ctx.save_data["realms"]) != TYPE_DICTIONARY:
 		ctx.save_data["realms"] = {}
@@ -44,6 +50,10 @@ static func get_or_create(realm_id: String, ctx: FlowContext, t: int) -> Diction
 
 	var cfg_v: Variant = realms_map[realm_id]
 	var cfg: Dictionary = cfg_v if cfg_v is Dictionary else {}
+	if not cfg_overrides.is_empty():
+		cfg = cfg.duplicate(true)
+		for _ov_key in cfg_overrides:
+			cfg[_ov_key] = cfg_overrides[_ov_key]
 
 	var seed_namespace := str(cfg.get("seed_namespace", "campaign.realm." + realm_id))
 	var stage_min   := int(cfg.get("stage_count_min", 3))
@@ -156,9 +166,15 @@ static func get_active(ctx: FlowContext) -> Dictionary:
 # realm_cfg_list: Array of realm config dicts (each has "id", "locked" etc.)
 # save_realms:    save_data["realms"] dict
 static func compute_runtime_locks(realm_cfg_list: Array, save_realms: Dictionary) -> Dictionary:
-	# Check if any realm is currently active
+	# Check if any realm is currently active.
+	# PHASE 8C: the prologue Realm does not participate in the one-active-Realm lock. Normal
+	# Realms are gated during the prologue by `onboarding.opening_realm_status` (see
+	# OpeningRealmService), not by this lock, and letting an active prologue set `any_active`
+	# would leave every normal Realm reading "locked" for a reason the card cannot explain.
 	var any_active := false
 	for rid in save_realms:
+		if is_prologue_run(str(rid)):
+			continue
 		var rm_v: Variant = save_realms[rid]
 		var rm: Dictionary = rm_v if rm_v is Dictionary else {}
 		if rm.get("status", "") == RealmModel.STATUS_ACTIVE:
@@ -328,6 +344,27 @@ static func is_realm_run(entry: Dictionary) -> bool:
 	return entry.has("status")
 
 
+## V2-INFRA-003 Phase 8C: the opening Realm of the first session.
+##
+## THE PROLOGUE NEEDS A SECOND PREDICATE, not `is_realm_run()`. D82's predicate discriminates on
+## the `status` key, because `prologue.first` is a synthetic segment CONTAINER that was never
+## played. `realm.prologue` is the opposite case: a genuine `RealmModel.make()` run, with stages,
+## a seed and a status, that the player really plays — so it passes `is_realm_run()` and must.
+## What makes it special is that it is not one of the player's REALMS: it is internal, unnamed,
+## absent from `realm_order`, never listed in Realm Select, and it must not count toward anything
+## that measures how far into the game the player is.
+##
+## THE TWO IDS ARE NOT THE SAME AND ARE NOT UNIFIED. `prologue.first` (KeeperIntroService) is the
+## Thread container for the keeper intro; `realm.prologue` is the opening Realm run. Each needs a
+## different predicate, and a scan that wants to exclude both must apply both — every exclusion
+## site below says which it applies and why.
+const PROLOGUE_REALM_ID := "realm.prologue"
+
+
+static func is_prologue_run(realm_id: String) -> bool:
+	return realm_id == PROLOGUE_REALM_ID
+
+
 # Count realms that have ever been started (status != "not_started").
 #
 # D82 FIX (V2-INFRA-003 Phase 8): non-run entries are skipped. Before this, `prologue.first`
@@ -335,12 +372,19 @@ static func is_realm_run(entry: Dictionary) -> bool:
 # finished the keeper intro entered their FIRST real Realm with `run_index = 1` instead of 0 —
 # inflating the virtue bonus, the realm order multiplier (`calculate_stage_reward`) and the
 # realm XP multiplier (`ProgressionService.get_realm_xp_multiplier`).
+## PHASE 8C: the prologue Realm is excluded too. It is a real run (so `is_realm_run()` passes it)
+## but it is not one of the player's Realms, and counting it would put every player's FIRST real
+## Realm on `run_index = 1` — reintroducing exactly the reward inflation D82 removed, by a
+## different door. Both exclusions are needed: `is_realm_run()` for `prologue.first`,
+## `is_prologue_run()` for `realm.prologue`.
 static func _count_started_realms(save_realms: Dictionary) -> int:
 	var count := 0
 	for rid in save_realms:
 		var rm_v: Variant = save_realms[rid]
 		var rm: Dictionary = rm_v if rm_v is Dictionary else {}
 		if not is_realm_run(rm):
+			continue
+		if is_prologue_run(str(rid)):
 			continue
 		if rm.get("status", "") != RealmModel.STATUS_NOT_STARTED:
 			count += 1

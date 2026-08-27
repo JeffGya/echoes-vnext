@@ -24,6 +24,12 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("onboarding/starter_occupant_centered", Callable(OnboardingTests, "_t_starter_occupant_centered"))
 	runner.register_test("onboarding/missing_layout_repairs_to_starter", Callable(OnboardingTests, "_t_missing_layout_repairs"))
 	runner.register_test("onboarding/sanctum_snapshots_share_layout", Callable(OnboardingTests, "_t_sanctum_snapshots_share_layout"))
+	# V2-INFRA-003 Phase 8C — the opening proof spine.
+	runner.register_test("onboarding/flame_lights_at_awakening_and_arms_modal", Callable(OnboardingTests, "_t_flame_lights_at_awakening_and_arms_modal"))
+	runner.register_test("onboarding/awakening_modal_shows_once_on_first_sanctum", Callable(OnboardingTests, "_t_awakening_modal_shows_once_on_first_sanctum"))
+	runner.register_test("onboarding/opening_realm_opens_after_awakening_and_weave", Callable(OnboardingTests, "_t_opening_realm_opens_after_awakening_and_weave"))
+	runner.register_test("onboarding/normal_realms_locked_until_prologue_complete", Callable(OnboardingTests, "_t_normal_realms_locked_until_prologue_complete"))
+	runner.register_test("onboarding/prologue_does_not_inflate_first_realm_run_index", Callable(OnboardingTests, "_t_prologue_does_not_inflate_first_realm_run_index"))
 
 static func _make_logger() -> StructuredLogger:
 	var logger := StructuredLogger.new()
@@ -34,6 +40,10 @@ static func _make_runtime() -> FlowRuntime:
 	var logger := _make_logger()
 	var config := ConfigService.new()
 	config.load_balance(logger, 0)
+	# V2-INFRA-003 Phase 8C: realms.json too. This harness builds its FlowRuntime by hand and so
+	# skips FlowRuntime.boot(), which is where load_realms() normally runs — leaving get_realms()
+	# empty. Harmless until the keeper intro started opening the prologue Realm at its end.
+	config.load_realms(logger, 0)
 	var runtime := FlowRuntime.new(logger, config, TestSaveHarness.dir() + "onboarding_slot.json")
 	runtime.flow_ctx = FlowContext.new()
 	runtime.flow_ctx.sim_tick = 0
@@ -456,4 +466,212 @@ static func _t_sanctum_snapshots_share_layout() -> Dictionary:
 		return { "ok": false, "error": "Expected encounter and hub layouts to match" }
 	if JSON.stringify(hub_data.get("sanctum_occupants", [])) != encounter_occupants:
 		return { "ok": false, "error": "Expected encounter and hub occupants to match" }
+	return { "ok": true }
+
+
+# ═════════════════════════════════════════════════════════════════════════════════════════════
+# V2-INFRA-003 Phase 8C — THE OPENING PROOF SPINE
+#
+# These drive the real dispatch chain, never hand-injected save state, and assert the four
+# claims the slice exists to make:
+#   1. the Ase Flame lights at the awakening rite and NOT at the end of Chapter I (D42 / D63)
+#   2. the awakening modal is armed there and spent by the first Sanctum snapshot
+#   3. the opening Realm opens from awakening + first Weave, as one real generated Stage built
+#      around the player's own starter virtue
+#   4. it stays invisible to everything that measures how far into the game the player is —
+#      Realm Select, the Realm locks, and above all `run_index`
+# ═════════════════════════════════════════════════════════════════════════════════════════════
+
+## Drives the whole keeper intro to the Sanctum. Returns the runtime, parked on flow.sanctum with
+## the prologue Realm open.
+static func _run_full_keeper_intro() -> FlowRuntime:
+	var runtime := _prepare_named_runtime()
+	runtime.dispatch({ "type": "keeper_intro.call.answer" })
+	_defeat_trial_wound(runtime)
+	runtime.dispatch({ "type": "keeper_intro.trial.finish" })
+	runtime.dispatch({ "type": "keeper_intro.thread.continue" })
+	runtime.dispatch({ "type": "keeper_intro.awakening.choose", "choice": "guard" })
+	runtime.dispatch({ "type": "keeper_intro.weave.complete" })
+	runtime.dispatch({ "type": "keeper_intro.complete" })
+	return runtime
+
+
+static func _prologue_entry(runtime: FlowRuntime) -> Dictionary:
+	var realms_v: Variant = runtime.flow_ctx.save_data.get("realms", {})
+	var realms: Dictionary = realms_v if realms_v is Dictionary else {}
+	var e_v: Variant = realms.get(RealmService.PROLOGUE_REALM_ID, {})
+	return e_v if e_v is Dictionary else {}
+
+
+## Step 4 of the first session: the Flame lights at the awakening, not a chapter earlier, and the
+## one-shot modal flag is armed with it. The dark half is pinned by economy/name_confirm_leaves_flame_dark.
+static func _t_flame_lights_at_awakening_and_arms_modal() -> Dictionary:
+	var runtime := _prepare_named_runtime()
+	runtime.dispatch({ "type": "keeper_intro.call.answer" })
+	_defeat_trial_wound(runtime)
+	runtime.dispatch({ "type": "keeper_intro.trial.finish" })
+	runtime.dispatch({ "type": "keeper_intro.thread.continue" })
+	if KeeperIntroServiceScript.is_ase_flame_awakened(runtime.flow_ctx.save_data):
+		return { "ok": false, "error": "Flame must still be dark on the Thread Return step" }
+	if runtime.flow_ctx.pending_awakening_banner:
+		return { "ok": false, "error": "Awakening modal must not be armed before the awakening" }
+	runtime.dispatch({ "type": "keeper_intro.awakening.choose", "choice": "guard" })
+	if not KeeperIntroServiceScript.is_ase_flame_awakened(runtime.flow_ctx.save_data):
+		return { "ok": false, "error": "Flame must be lit by the awakening rite" }
+	if not runtime.flow_ctx.pending_awakening_banner:
+		return { "ok": false, "error": "Awakening modal must be armed at the awakening rite" }
+	return { "ok": true }
+
+
+## The modal survives the two intervening dispatches, reaches the first Sanctum snapshot, and is
+## spent there — the established one-shot contract, exercised for the first time.
+static func _t_awakening_modal_shows_once_on_first_sanctum() -> Dictionary:
+	var runtime := _run_full_keeper_intro()
+	var snap: Dictionary = runtime.flow_ctx.last_snapshot
+	if str(snap.get("type", "")) != FlowStateIds.SANCTUM:
+		return { "ok": false, "error": "Expected Sanctum after keeper_intro.complete" }
+	var data: Dictionary = snap.get("data", {})
+	if not bool(data.get("show_awakening_overlay", false)):
+		return { "ok": false, "error": "First Sanctum snapshot must carry show_awakening_overlay" }
+	if runtime.flow_ctx.pending_awakening_banner:
+		return { "ok": false, "error": "Awakening flag must be consumed after the Sanctum snapshot is published" }
+	# And exactly once: leave Sanctum and come back, so a genuinely NEW Sanctum snapshot is built
+	# (re-entering the state you are already in does not rebuild one).
+	runtime.dispatch({ "type": "flow.go_state", "to": FlowStateIds.ECHO_PARTY })
+	runtime.dispatch({ "type": "flow.go_state", "to": FlowStateIds.SANCTUM })
+	var data2: Dictionary = runtime.flow_ctx.last_snapshot.get("data", {})
+	if bool(data2.get("show_awakening_overlay", false)):
+		return { "ok": false, "error": "Awakening overlay must show exactly once" }
+	return { "ok": true }
+
+
+## Step 6: the opening Realm opens, unlocked by awakening + rite, as ONE real generated Stage
+## carrying the player's own starter virtue — and the Sanctum offers a way into it.
+static func _t_opening_realm_opens_after_awakening_and_weave() -> Dictionary:
+	var runtime := _prepare_named_runtime()
+	runtime.dispatch({ "type": "keeper_intro.call.answer" })
+	_defeat_trial_wound(runtime)
+	runtime.dispatch({ "type": "keeper_intro.trial.finish" })
+	runtime.dispatch({ "type": "keeper_intro.thread.continue" })
+	if OpeningRealmService.get_status(runtime.flow_ctx.save_data) != OpeningRealmService.STATUS_LOCKED:
+		return { "ok": false, "error": "Opening Realm must be locked before the awakening" }
+	runtime.dispatch({ "type": "keeper_intro.awakening.choose", "choice": "guard" })
+	if OpeningRealmService.get_status(runtime.flow_ctx.save_data) != OpeningRealmService.STATUS_LOCKED:
+		return { "ok": false, "error": "Awakening alone must not unlock the opening Realm — the rite is the second half" }
+	runtime.dispatch({ "type": "keeper_intro.weave.complete" })
+	if OpeningRealmService.get_status(runtime.flow_ctx.save_data) != OpeningRealmService.STATUS_REALM_READY:
+		return { "ok": false, "error": "Awakening + first Weave must arm the opening Realm" }
+	if OpeningRealmService.get_realm_id(runtime.flow_ctx.save_data) != RealmService.PROLOGUE_REALM_ID:
+		return { "ok": false, "error": "opening_realm_id must name the prologue Realm" }
+	if not _prologue_entry(runtime).is_empty():
+		return { "ok": false, "error": "The prologue run must not exist before keeper_intro.complete" }
+
+	runtime.dispatch({ "type": "keeper_intro.complete" })
+	if OpeningRealmService.get_status(runtime.flow_ctx.save_data) != OpeningRealmService.STATUS_ACTIVE:
+		return { "ok": false, "error": "Opening Realm must be active after keeper_intro.complete" }
+	var entry := _prologue_entry(runtime)
+	if entry.is_empty():
+		return { "ok": false, "error": "Expected a prologue Realm run in save_data.realms" }
+	if str(entry.get("status", "")) != RealmModel.STATUS_ACTIVE:
+		return { "ok": false, "error": "Prologue Realm must be active, got '%s'" % str(entry.get("status", "")) }
+	if int(entry.get("stage_count", 0)) != 1:
+		return { "ok": false, "error": "Prologue Realm must have exactly one stage, got %d" % int(entry.get("stage_count", 0)) }
+	var stages_v: Variant = entry.get("stages", [])
+	var stages: Array = stages_v if stages_v is Array else []
+	if stages.size() != 1:
+		return { "ok": false, "error": "Expected one generated Stage, got %d" % stages.size() }
+	# A real generated stage: it carries an explore map with hidden situations to scout.
+	var stage0: Dictionary = stages[0] if stages[0] is Dictionary else {}
+	var emap_v: Variant = stage0.get("explore_map", {})
+	var emap: Dictionary = emap_v if emap_v is Dictionary else {}
+	var sits_v: Variant = emap.get("situations", [])
+	var sits: Array = sits_v if sits_v is Array else []
+	if sits.is_empty():
+		return { "ok": false, "error": "Prologue Stage must be a real generated stage with situations" }
+	var revealed_count := 0
+	for s_v in sits:
+		if s_v is Dictionary and bool((s_v as Dictionary).get("revealed", false)):
+			revealed_count += 1
+	if revealed_count >= sits.size():
+		return { "ok": false, "error": "Prologue Stage must hold hidden information — every situation starts revealed" }
+	# Built around the player's own starter virtue, not a value authored in realms.json.
+	var cfg := runtime.config_service.get_balance()
+	var starter_virtue := KeeperIntroServiceScript.get_selected_virtue(runtime.flow_ctx.save_data, cfg)
+	if str(entry.get("virtue", "")) != starter_virtue:
+		return { "ok": false, "error": "Prologue virtue '%s' must be the starter virtue '%s'" % [str(entry.get("virtue", "")), starter_virtue] }
+	if int(entry.get("run_index", -1)) != 0:
+		return { "ok": false, "error": "Prologue run_index must be 0" }
+	if runtime.flow_ctx.realm_id != RealmService.PROLOGUE_REALM_ID:
+		return { "ok": false, "error": "flow_ctx.realm_id must point at the prologue Realm" }
+	# The Sanctum must offer a way in.
+	var actions: Dictionary = runtime.flow_ctx.last_snapshot.get("actions", {})
+	var enter_v: Variant = actions.get("cta.enter_stage", {})
+	var enter: Dictionary = enter_v if enter_v is Dictionary else {}
+	if enter.is_empty() or bool(enter.get("disabled", true)):
+		return { "ok": false, "error": "cta.enter_stage must be enabled while the opening Realm is open" }
+	# And that way in actually reaches the prologue's one stage.
+	runtime.dispatch({ "type": "flow.go_state", "to": FlowStateIds.STAGE_MAP })
+	var map_snap: Dictionary = runtime.flow_ctx.last_snapshot
+	if str(map_snap.get("type", "")) != FlowStateIds.STAGE_MAP:
+		return { "ok": false, "error": "cta.enter_stage must reach the stage map" }
+	var listed_v: Variant = map_snap.get("data", {}).get("stages", [])
+	var listed: Array = listed_v if listed_v is Array else []
+	if listed.size() != 1:
+		return { "ok": false, "error": "Prologue stage map must offer exactly one stage, got %d" % listed.size() }
+	return { "ok": true }
+
+
+## Step 10, first half: normal Realms stay shut until the prologue is done — and the prologue is
+## never offered as a choice.
+static func _t_normal_realms_locked_until_prologue_complete() -> Dictionary:
+	var runtime := _run_full_keeper_intro()
+	runtime.dispatch({ "type": "flow.go_state", "to": FlowStateIds.REALM_SELECT })
+	var listed: Array = runtime.flow_ctx.last_snapshot.get("data", {}).get("realms", [])
+	for r_v in listed:
+		if r_v is Dictionary and str((r_v as Dictionary).get("id", "")) == RealmService.PROLOGUE_REALM_ID:
+			return { "ok": false, "error": "The prologue Realm must never appear in Realm Select" }
+	if listed.is_empty():
+		return { "ok": false, "error": "Expected the normal Realms to be listed" }
+	for r_v in listed:
+		if r_v is Dictionary and bool((r_v as Dictionary).get("locked", true)):
+			return { "ok": false, "error": "Normal Realm cards must not read as hard-locked; the gate is on selection" }
+
+	runtime.dispatch({ "type": "flow.select_realm", "realm_id": "realm.01" })
+	if str(runtime.flow_ctx.last_snapshot.get("type", "")) == FlowStateIds.STAGE_MAP:
+		return { "ok": false, "error": "flow.select_realm must be denied before the prologue is complete" }
+	var realms_v: Variant = runtime.flow_ctx.save_data.get("realms", {})
+	var realms: Dictionary = realms_v if realms_v is Dictionary else {}
+	if realms.has("realm.01"):
+		return { "ok": false, "error": "A denied selection must not create the realm" }
+
+	# Selecting the prologue by hand is refused too — it is opened by the intro, never chosen.
+	runtime.dispatch({ "type": "flow.select_realm", "realm_id": RealmService.PROLOGUE_REALM_ID })
+	if str(runtime.flow_ctx.last_snapshot.get("type", "")) == FlowStateIds.STAGE_MAP:
+		return { "ok": false, "error": "The prologue Realm must not be selectable" }
+	return { "ok": true }
+
+
+## Step 10, second half — and the whole point of the exclusion work. Once the prologue is
+## finished the normal Realms open in any order, and the FIRST of them is still the player's
+## first Realm: run_index 0, no inflated virtue bonus, no inflated reward or XP multiplier.
+static func _t_prologue_does_not_inflate_first_realm_run_index() -> Dictionary:
+	var runtime := _run_full_keeper_intro()
+	# Finish the prologue the way the game does: the realm's own completion stamp.
+	runtime.flow_ctx.save_data["realms"][RealmService.PROLOGUE_REALM_ID]["status"] = RealmModel.STATUS_COMPLETED
+	runtime.flow_ctx.save_data["realms"][RealmService.PROLOGUE_REALM_ID]["is_completed"] = true
+	OpeningRealmService.mark_complete(runtime.flow_ctx.save_data, runtime.logger, 1)
+	if not OpeningRealmService.normal_realms_unlocked(runtime.flow_ctx.save_data):
+		return { "ok": false, "error": "Normal Realms must open once the prologue is complete" }
+	runtime.flow_ctx.realm_id = ""
+
+	runtime.dispatch({ "type": "flow.select_realm", "realm_id": "realm.02" })
+	if str(runtime.flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.STAGE_MAP:
+		return { "ok": false, "error": "Normal Realms must be selectable in any order after the prologue" }
+	var realms_v: Variant = runtime.flow_ctx.save_data.get("realms", {})
+	var realms: Dictionary = realms_v if realms_v is Dictionary else {}
+	var first: Dictionary = realms.get("realm.02", {})
+	if first.is_empty():
+		return { "ok": false, "error": "Expected realm.02 to be created" }
+	if int(first.get("run_index", -1)) != 0:
+		return { "ok": false, "error": "First real Realm must have run_index 0, got %d — the prologue is inflating it" % int(first.get("run_index", -1)) }
 	return { "ok": true }

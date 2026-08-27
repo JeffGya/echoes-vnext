@@ -59,11 +59,12 @@
 # flow_machine.refresh_snapshot() on FlowRuntime's behalf, exactly matching the pre-extraction
 # call sequence (build -> assign -> refresh).
 #
-# KNOWN DEFECT — preserved exactly, NOT fixed here (see handle_name_confirm below):
-# _handle_onboarding_name_confirm sets sanctum.ase_flame.awakened = true. This lights the Ase
-# Flame at the end of Chapter I, one full chapter before the intended awakening beat (Keeper
-# Intro's KEEPER_AWAKENING step, which also touches ase_flame). Phase 8 moves this flag write
-# to the correct beat. Do not "fix" it here — the behaviour must move verbatim, bug included.
+# D42 / D63 — FIXED in Phase 8C. handle_name_confirm used to set sanctum.ase_flame.awakened =
+# true, lighting the Ase Flame at the end of Chapter I, one full chapter before the intended
+# awakening beat. That write is now DELETED (not relocated): KeeperIntroService.awaken_flame(),
+# called from handle_awakening() below at the KEEPER_AWAKENING step, already sets the flag —
+# together with the boost duration and rate — idempotently. See handle_name_confirm for the
+# reader-by-reader account of what a dark Flame for one more chapter changes.
 #
 # EchoFactory RNG draw order (rarity -> calling_origin -> gender -> name -> traits ->
 # archetype_birth -> derived_stats) is IMMUTABLE inside _grant_starter_echo_for_fragment()
@@ -135,9 +136,9 @@ func handle_fragment_confirm(t: int) -> FlowActionOutcome:
 	).with_save_reason("onboarding.fragment.confirm")
 
 
-## onboarding.name.confirm — moved verbatim from FlowRuntime._handle_onboarding_name_confirm.
-## KNOWN DEFECT (Phase 8 will change this): sets sanctum.ase_flame.awakened = true here, one
-## full chapter before the intended awakening beat. Preserved exactly — do not fix in this slice.
+## onboarding.name.confirm — moved verbatim from FlowRuntime._handle_onboarding_name_confirm,
+## then amended in Phase 8C: the early Ase Flame write (D42 / D63) is deleted. See the block
+## where it used to be, below.
 func handle_name_confirm(action: Dictionary, t: int) -> FlowActionOutcome:
 	var cfg := config_service.get_balance()
 	var raw := str(action.get("name", "")).strip_edges()
@@ -159,14 +160,25 @@ func handle_name_confirm(action: Dictionary, t: int) -> FlowActionOutcome:
 	OnboardingService.mark_complete(flow_ctx.save_data, cfg)
 	KeeperIntroService.start_after_chapter_one(flow_ctx.save_data, cfg)
 
-	# V2-ECONOMY-001: Ase Flame awakening — set flag only (Ase granted on trial completion, not
-	# here). KNOWN DEFECT (see file header + Phase 8): this lights the Flame one chapter early.
-	var _aw_flame_v: Variant = sanctum.get("ase_flame", {})
-	var _aw_flame: Dictionary = _aw_flame_v if _aw_flame_v is Dictionary else {}
-	if not bool(_aw_flame.get("awakened", false)):
-		_aw_flame["awakened"] = true
-		sanctum["ase_flame"] = _aw_flame
-		logger.info(t, "economy.ase_flame.awakened", "Ase Flame awakened", {})
+	# V2-INFRA-003 Phase 8C (defects D42 / D63): the `sanctum.ase_flame.awakened = true` write
+	# that used to sit here is DELETED, not relocated. KeeperIntroService.awaken_flame() already
+	# does the whole job — flag, boost duration, boost rate — idempotently, at the KEEPER_AWAKENING
+	# beat where the narrative puts it. Writing it here as well only lit the Flame a full chapter
+	# early and spoiled that beat for every player.
+	#
+	# What a dark Flame for one more chapter changes, at every measured reader:
+	#   OfflineAccrualService:102-107,134 — no offline Ase accrues during the keeper intro. The
+	#     house is genuinely dormant now, which is what that gate was written to express.
+	#   EconomySettlementService:132 — online accrual rate stays 0 for the same window.
+	#   FlowSummonState:49-51 — the per-hour RATE HINT reads 0. Summoning is NOT disabled by it;
+	#     `summon_disabled` is affordability only (ase_balance < selected_cost). Verified.
+	#   SanctumSnapshotBuilder:386-396 — ase_flame_awakened false, rate hint 0. Not player-visible
+	#     in this window: flow.sanctum is unreachable until keeper_intro.complete.
+	#   FlowKeeperIntroState:84-96 -> KeeperIntroScreen.gd:65 — THE VISIBLE FIX. The flame core
+	#     shows on `step == "awakening_rite" or flame.awakened`; with the early write it was lit
+	#     on every intro step from the Call onward. It now lights at the awakening and stays lit.
+	#   SanctumLayoutService:78,110-135 — reads NOTHING here. The `ase_flame` entry there is a
+	#     layout TILE, present unconditionally; it never consults `awakened`.
 
 	logger.info(t, "onboarding.name.confirm", "Chapter I complete; Sanctum name set", {
 		"name": name
@@ -315,6 +327,28 @@ func handle_awakening(action: Dictionary, t: int) -> FlowActionOutcome:
 	var cfg := config_service.get_balance()
 	var choice := str(action.get("choice", "")).strip_edges()
 	KeeperIntroService.awaken_flame(flow_ctx.save_data, cfg, choice, logger, t)
+	logger.info(t, "economy.ase_flame.awakened", "Ase Flame awakened", { "choice": choice })
+
+	# V2-INFRA-003 Phase 8C: arm the one-shot awakening modal.
+	#
+	# The modal (ui/overlays/sanctum/AwakeningModal.tscn, registered in SanctumShell's modal map)
+	# and its whole render path already existed and had NEVER rendered, for one reason: nothing
+	# in core/ or ui/ ever set this flag true — the only production write set it false, in the
+	# consume closure at the end of FlowRuntime.dispatch().
+	#
+	# Set here, at the awakening, not at keeper_intro.complete: this IS the awakening beat, and
+	# the established consume gate does the rest. That closure clears the flag only when the
+	# published snapshot is a flow.sanctum one, so the flag survives the two intervening
+	# dispatches (keeper_intro.weave.complete -> KEEPER_WEAVING, keeper_intro.complete ->
+	# SANCTUM) and is spent by exactly the first Sanctum snapshot the player is shown.
+	#
+	# NO ASE IS GRANTED WITH IT. `data.economy.awakening_ase_grant` stays unreachable and belongs
+	# to V2-ECONOMY-002; the player leaves the intro with the 40 Ase from the first trial and
+	# nothing more. The modal was showing a "+40 Ase" line that no code paid — that label is
+	# removed from the scene in this same slice so the copy cannot promise money that never
+	# arrives.
+	flow_ctx.pending_awakening_banner = true
+
 	var econ_data_v: Variant = flow_ctx.save_data.get("economy", {})
 	if econ_data_v is Dictionary:
 		var econ_data: Dictionary = econ_data_v
@@ -329,6 +363,11 @@ func handle_awakening(action: Dictionary, t: int) -> FlowActionOutcome:
 func handle_weave(t: int) -> FlowActionOutcome:
 	var cfg := config_service.get_balance()
 	KeeperIntroService.apply_first_weave(flow_ctx.save_data, cfg, logger, t)
+	# V2-INFRA-003 Phase 8C: the opening Realm is unlocked by AWAKENING + FIRST WEAVE — both
+	# beats are now behind us, so the gate opens here. mark_realm_ready() re-checks the Flame
+	# itself and is a no-op unless the status is still "locked", so a replay cannot double-open
+	# it. See OpeningRealmService's header for why the gate is not the second Echo.
+	OpeningRealmService.mark_realm_ready(flow_ctx.save_data, logger, t)
 	KeeperIntroService.set_step(flow_ctx.save_data, cfg, KeeperIntroService.STEP_KEEPING)
 	return FlowActionOutcome.transition_outcome(
 		FlowStateIds.KEEPER_KEEPING, "keeper_intro.weave"
@@ -343,6 +382,12 @@ func handle_weave(t: int) -> FlowActionOutcome:
 func handle_complete(t: int) -> FlowActionOutcome:
 	var cfg := config_service.get_balance()
 	KeeperIntroService.mark_complete(flow_ctx.save_data, cfg)
+	# V2-INFRA-003 Phase 8C: THE OPENING REALM OPENS HERE. The gate was armed by the first Weave
+	# one dispatch ago; this creates the single-stage prologue run around the player's starter
+	# virtue and makes it the active Realm, so the Sanctum the player lands on already has a
+	# trial waiting. It adds NO dispatch — it runs inside this one. No-op unless the status is
+	# exactly "realm_ready", so an old save or a replay cannot re-open it.
+	OpeningRealmService.open_prologue(flow_ctx, t)
 	_emotion_consequence_service().apply_sanctum_emotion_tick(t)
 	return FlowActionOutcome.transition_outcome(
 		FlowStateIds.SANCTUM, "keeper_intro.complete"

@@ -104,13 +104,31 @@ func boot() -> Dictionary:
 	flow_ctx.campaign_seed = CampaignSeed.new(int(_boot_camp.get("root_seed", 0)))
 
 	# REALM-001: restore active realm_id from save (survives Continue)
+	#
+	# V2-INFRA-003 Phase 8C: the prologue Realm is excluded from this generic scan and restored
+	# EXPLICITLY below instead. Two reasons, and both matter:
+	#   - a prologue left "active" in an old save must never win this scan over a real Realm,
+	#     which would silently point a resumed campaign at the internal run;
+	#   - the prologue is nonetheless resumable. Quitting mid-prologue and pressing Continue has
+	#     to put the player back into it, and `onboarding.opening_realm_status == "active"` is
+	#     the authoritative statement that it is the run in progress — which is exactly what
+	#     D85 observed `save.flow.state` was supposed to be and never became.
+	# A real Realm always wins: the explicit restore only fires if the scan found nothing.
 	var _boot_realms_v: Variant = flow_ctx.save_data.get("realms", {})
 	var _boot_realms: Dictionary = _boot_realms_v if _boot_realms_v is Dictionary else {}
 	for _rid in _boot_realms:
+		if RealmService.is_prologue_run(str(_rid)):
+			continue
 		var _rm: Dictionary = _boot_realms[_rid] if _boot_realms[_rid] is Dictionary else {}
 		if _rm.get("status", "") == "active":
 			flow_ctx.realm_id = str(_rid)
 			break
+	if flow_ctx.realm_id.is_empty() \
+			and OpeningRealmService.get_status(flow_ctx.save_data) == OpeningRealmService.STATUS_ACTIVE:
+		var _boot_prologue_v: Variant = _boot_realms.get(RealmService.PROLOGUE_REALM_ID, {})
+		var _boot_prologue: Dictionary = _boot_prologue_v if _boot_prologue_v is Dictionary else {}
+		if str(_boot_prologue.get("status", "")) == "active":
+			flow_ctx.realm_id = RealmService.PROLOGUE_REALM_ID
 
 	econ = EconomyService.new(flow_ctx.save_data)
 	directive_service = DirectiveService.new(flow_ctx.save_data)  # DIRECTIVE-001
@@ -280,6 +298,20 @@ func dispatch(action: Dictionary) -> Dictionary:
 						t,
 						"ui.flow.continue.keeper_intro"
 					)
+				elif PendingResultService.has_pending(flow_ctx.save_data):
+					# V2-INFRA-003 Phase 8B: a run ended and its result was never seen through.
+					# Route back to the card instead of the Sanctum. FlowResolveState.enter()
+					# rebuilds it from save.flow.pending_result (producer G) — there is no live
+					# snapshot to pass through after a relaunch, which is exactly why the
+					# durable record exists.
+					#
+					# PLACED LAST of the three branches, after onboarding and the keeper intro,
+					# so neither resume path changes. It cannot compete with them in practice:
+					# a pending result is only ever written while a realm is active
+					# (PendingResultService.capture_or_consume gates on flow_ctx.realm_id) and
+					# the keeper trial runs with realm_id "".
+					PendingResultService.restore_run_context(flow_ctx)
+					flow_machine.transition(FlowStateIds.RESOLVE, flow_ctx, logger, t, "ui.flow.continue.pending_result")
 				else:
 					flow_machine.transition(FlowStateIds.SANCTUM, flow_ctx, logger, t, "ui.flow.continue")
 	
@@ -612,6 +644,23 @@ func dispatch(action: Dictionary) -> Dictionary:
 	
 		# If we just entered flow.encounter, bootstrap the Encounter machine.
 		_ensure_encounter_started(t)
+
+	# V2-INFRA-003 Phase 8B: make the run result durable, or consume it.
+	#
+	# ONE call, gated on the type of the snapshot this dispatch is about to publish — the same
+	# gate shape as the pending_awakening_banner and scout-return one-shots further down. It
+	# sits HERE, before the flush, and not down there with them, for one reason: those two only
+	# zero volatile FlowContext ints and request no save, while this writes save data. A save
+	# requested after the flush is not written until the NEXT dispatch, and FlowContext
+	# .request_save() pipe-joins reasons, so the reason string of an unrelated later dispatch
+	# would be corrupted. Publication order is unaffected: flow_ctx.last_snapshot is already the
+	# value `out` reads below, and this call never changes it.
+	#
+	# Publishing a flow.resolve card that represents a run outcome (victory / partial / defeat /
+	# withdrawal) captures it into save.flow.pending_result; publishing anything else consumes
+	# a pending one. Both branches are no-ops in the common case, so the great majority of
+	# dispatches queue no extra save.
+	PendingResultService.capture_or_consume(flow_ctx, flow_ctx.last_snapshot, t)
 
 	# Flow-owned save choke point (single save max per dispatch tick)
 	if flow_ctx.save_request:

@@ -880,9 +880,9 @@ static func test_purity_dispatch_preserves_pending_return_notification_until_san
 	OnboardingService.select_fragment(runtime.flow_ctx.save_data, cfg, str(options[0].get("virtue", "")))
 	runtime.dispatch({ "type": "onboarding.fragment.confirm" })
 
-	# onboarding.name.confirm marks chapter one complete, awakens the Ase Flame, and starts
-	# keeper intro — landing on flow.keeper_call, never flow.sanctum. This is the real
-	# production sequence that makes the defect reachable.
+	# onboarding.name.confirm marks chapter one complete and starts the keeper intro — landing on
+	# flow.keeper_call, never flow.sanctum. This is the real production sequence that makes the
+	# defect reachable.
 	var landed: Dictionary = runtime.dispatch({ "type": "onboarding.name.confirm" })
 
 	var ctx: FlowContext = runtime.flow_ctx
@@ -890,16 +890,25 @@ static func test_purity_dispatch_preserves_pending_return_notification_until_san
 
 	if str(landed.get("type", "")) == FlowStateIds.SANCTUM:
 		mismatches.append("test setup failed: expected onboarding.name.confirm to land on a keeper step, not flow.sanctum")
+	# V2-INFRA-003 Phase 8C (D42 / D63): this setup used to assert the Ase Flame was LIT here.
+	# It no longer is — name confirm is the end of Chapter I, and the Flame lights a chapter
+	# later at the awakening rite. The assertion is inverted rather than dropped, because it is
+	# still worth pinning that this scaffolding reaches the state it claims to.
+	#
+	# THE SUBJECT OF THIS TEST IS UNAFFECTED. It exercises the dispatch() closure's gate on
+	# pending_return_notification, and the notice below is INJECTED directly on the context — it
+	# never travels through OfflineAccrualService, so whether the Flame is lit is scaffolding,
+	# not a precondition.
 	var sanctum_setup_v: Variant = ctx.save_data.get("sanctum", {})
 	var sanctum_setup: Dictionary = sanctum_setup_v if sanctum_setup_v is Dictionary else {}
 	var flame_setup_v: Variant = sanctum_setup.get("ase_flame", {})
 	var flame_setup: Dictionary = flame_setup_v if flame_setup_v is Dictionary else {}
-	if not bool(flame_setup.get("awakened", false)):
-		mismatches.append("test setup failed: expected the Ase Flame to be awakened by onboarding.name.confirm")
+	if bool(flame_setup.get("awakened", false)):
+		mismatches.append("test setup failed: the Ase Flame must still be dark after onboarding.name.confirm")
 
-	# Simulate a return notice already queued — exactly what a real
-	# OfflineAccrualService.apply_if_needed() call would leave behind on a flow.continue while the
-	# Flame is awakened but keeper intro is still incomplete.
+	# Simulate a return notice already queued — the shape a real
+	# OfflineAccrualService.apply_if_needed() call leaves behind on a flow.continue while the
+	# keeper intro is still incomplete.
 	ctx.pending_return_notification = { "ase_earned": 9, "situations_revealed": 4 }
 
 	# "keeper_intro.call.answer" is a real keeper-intro action: it transitions to

@@ -516,6 +516,7 @@ func _run_tests(parts: Array) -> void:
 	SnapshotContractTests.register(runner)  # V2-INFRA-003 Phase 3 Slice B1: universal snapshot contract (type/meta.t/data/actions)
 	VentureCharacterizationTests.register(runner)  # V2-INFRA-003: characterization guard for complete_stage / retreat / scout-return / contact-resolve
 	CombatBaselineTests.register(runner)  # V2-INFRA-003 Phase 6 entry gate: per-round emotion, transition sequence, combat flush reasons, tick-bound retreat, dormant encounter actions
+	PendingResultTests.register(runner)  # V2-INFRA-003 Phase 8B: the durable run result — four outcomes, survives a quit (real reboot off disk), routing + one-shot consumption
 
 	# Suite filter: "tests" with no argument runs everything, unchanged. "tests <filter>"
 	# matches the suite's reported name (text before "/" in each test's registered name,
