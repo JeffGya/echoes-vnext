@@ -78,7 +78,8 @@
 #     ectx.combat_state["contain_counter"]      +1 when an echo is adjacent, hard 0 when not
 #     carrier actor["_carrier_double_damage"]   false on recovery (only when the carrier dict is
 #                                               still findable), true on theft
-#     carrier actor["_double_damage_mult"]      written on theft only, from balance config
+#     carrier actor["_double_damage_mult"]      written on theft from balance config, erased on
+#                                               recovery beside "_carrier_double_damage"
 #     four logger lines (combat.protect.theft_cleared info, combat.protect.theft info,
 #     combat.protect.guard debug, combat.pursue.contain debug)
 #
@@ -119,15 +120,11 @@
 #      same subtree from an already-narrowed cfg dict. The pre-existing count is unchanged by
 #      this move.
 #   2. The adjacency-counter shape is written out four times (see LOCATION AND REMIT above).
-#   3. On the carrier-down recovery path, "_carrier_double_damage" is only cleared when the
-#      carrier dict is still present in ectx.actors. When the carrier has been REMOVED rather
-#      than marked dead the flag is left set on the orphaned dict. Harmless today because the
-#      combat spine never removes actors from ectx.actors, only marks is_dead — but the branch
-#      is written as if it did. Preserved verbatim.
-#   4. "_double_damage_mult" is written on theft but never cleared on recovery, unlike
-#      "_carrier_double_damage". A once-carrier actor keeps a stale multiplier field for the
-#      rest of the encounter; it is inert only because every consumer gates on
-#      "_carrier_double_damage" first. Preserved verbatim.
+#   3. (register D11, FIXED) The carrier-down recovery guard was written as if actors could be
+#      removed from ectx.actors. They cannot — the combat spine marks is_dead. See the comment
+#      at the recovery site.
+#   4. (register D10, FIXED) "_double_damage_mult" was written on theft and never cleared on
+#      recovery. It is now erased beside "_carrier_double_damage".
 
 class_name CombatRoundObjectiveService
 extends RefCounted
@@ -177,8 +174,19 @@ func apply_protect_theft_round(ectx: EncounterContext, round: int, t: int) -> vo
 			if _pt_carrier_dead:
 				combat_state["totem_stolen"] = false
 				combat_state["totem_carrier_id"] = ""
+				# Register D10/D11. Both theft fields are cleared together: leaving
+				# "_double_damage_mult" behind kept a stale multiplier on a once-carrier for
+				# the rest of the encounter, inert only for as long as every consumer keeps
+				# gating on "_carrier_double_damage" first. Erasing it restores the exact
+				# pre-theft shape of the dict.
+				#
+				# The emptiness guard is about find_actor_by_id, not about the combat spine:
+				# actors are marked is_dead, never removed from ectx.actors, so a dead carrier
+				# is always still findable. The guard exists only so a {} miss is not written
+				# into. A carrier that genuinely vanished takes its stale fields with it.
 				if not _pt_carrier.is_empty():
 					_pt_carrier["_carrier_double_damage"] = false
+					_pt_carrier.erase("_double_damage_mult")
 				logger.info(t, "combat.protect.theft_cleared", "PROTECT carrier down — theft cleared", {
 					"round":       round,
 					"carrier_id":  _pt_carrier_id,

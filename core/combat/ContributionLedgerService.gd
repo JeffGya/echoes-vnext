@@ -69,12 +69,10 @@
 # tests/CombatSupportLedgerTests.gd were rewritten in this same change.
 #
 # DEFECT NOTES — found during extraction, reported and deliberately NOT fixed here:
-#   1. accumulate_turn()'s PROG-003 half is gated on the ACTING actor being echo-faction, but
-#      it reads ectx.last_round_results.back() without checking that the entry's source_id is
-#      that actor. Every path in CombatTurnActionService appends exactly one entry per
-#      activation, so today the back() entry is always this actor's — but the guard four lines
-#      further down in FlowRuntime (the last_actor_action stamp) DOES compare source_id, so
-#      the two neighbouring blocks disagree about whether that check is needed.
+#   1. (register D48, FIXED) accumulate_turn()'s PROG-003 half now checks that the back() entry
+#      of last_round_results carries this actor's source_id, matching the last_actor_action
+#      stamp in FlowRuntime that reads the same entry. The check passes on every path that
+#      exists today; it is there so the two readers cannot drift apart.
 #   2. new_entry() is the canonical default, yet the two callers still write the
 #      `if not has(id): logs[id] = new_entry()` shape by hand at four sites. A single
 #      `ensure_entry(ectx, id)` would remove all four, but that is a (small) restructure, so it
@@ -178,9 +176,15 @@ func accumulate_turn(
 ) -> void:
 	# PROG-003: accumulate echo action log for XP virtue multiplier at resolve.
 	# Only echo-faction actors contribute. Accumulated across all rounds.
-	if str(actor.get("faction", "")) == "echo" and not ectx.last_round_results.is_empty():
+	# Register D48: the back() entry is credited to this actor, so it must BE this actor's.
+	# Every path in CombatTurnActionService appends exactly one entry per activation, so the
+	# check passes today — it is here because the last_actor_action stamp in
+	# FlowRuntime._resolve_next_actor reads the same back() entry and already compares
+	# source_id. Two neighbouring readers of one entry now apply one rule.
+	var eid: String = str(actor.get("id", ""))
+	if str(actor.get("faction", "")) == "echo" and not ectx.last_round_results.is_empty() \
+			and str((ectx.last_round_results.back() as Dictionary).get("source_id", "")) == eid:
 		var last_res: Dictionary = ectx.last_round_results.back()
-		var eid: String = str(actor.get("id", ""))
 		if not ectx.echo_action_logs.has(eid):
 			ectx.echo_action_logs[eid] = new_entry()
 		var alog: Dictionary = ectx.echo_action_logs[eid]

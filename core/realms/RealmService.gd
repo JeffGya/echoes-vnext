@@ -210,8 +210,15 @@ static func compute_runtime_locks(realm_cfg_list: Array, save_realms: Dictionary
 #
 # On success:  returns the mutated model dict.
 # On complete: marks realm is_completed=true, status="completed".
-# Guards:      returns {} if no active model; skips if already completed (idempotent).
+# Guards:      returns {} if no active model, and {} if the realm is ALREADY completed.
 # Always:      sets save_request = true on any mutation.
+#
+# Register D40: the already-completed guard used to return the model. Its caller reads
+# `is_completed` off the returned dict as the trigger to crystallize Threads, so the guard
+# handed back a second reason to mint and duplicated Threads in Continuity. An empty dict is
+# the one return value that says "this call advanced nothing", which is exactly what both
+# guard branches mean. Callers must therefore test the RETURNED dict, never re-read the model
+# from save data, to decide whether a realm completed on THIS call.
 static func advance_stage(ctx: FlowContext, t: int) -> Dictionary:
 	var model := get_active(ctx)
 	if model.is_empty():
@@ -220,12 +227,12 @@ static func advance_stage(ctx: FlowContext, t: int) -> Dictionary:
 		})
 		return {}
 
-	# Idempotency guard — already completed
+	# Idempotency guard — already completed (register D40: return {}, not the model)
 	if bool(model.get("is_completed", false)):
 		ctx.logger.warn(t, "realm.stage.advance.skip", "Realm already completed — skipping advance", {
 			"realm_id": ctx.realm_id,
 		})
-		return model
+		return {}
 
 	var current_index := int(model.get("current_stage_index", 0))
 	var stage_count   := int(model.get("stage_count", 1))

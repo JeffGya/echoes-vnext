@@ -66,17 +66,14 @@
 # the retreat path's deliberate omission of bond triggers, which became a parameter rather
 # than an accident of call order.
 #
-#   skip_if_already_resolved  — (A) true: an already-resolved situation is a no-op, so
-#                               objectives_found is NOT bumped twice. (B) false: the inline
-#                               block had no such guard and re-runs the mutation (and the
-#                               objectives_found increment) on a second pass. See DEFECT 1.
-#   commit_only_when_modified — (A) true: write-back / request_save / log happen only when a
-#                               matching, not-yet-resolved situation was actually mutated —
-#                               (A) returned early on a non-Array situations list and did its
-#                               write-back INSIDE the match branch. (B) false: (B) coerced a
-#                               non-Array situations list to [] and did its write-back AFTER
-#                               the loop unconditionally, so it commits, saves and logs even
-#                               when nothing matched. See DEFECT 2.
+#   skip_if_already_resolved  — true on both: an already-resolved situation is a no-op, so
+#                               objectives_found is not bumped twice. (B) passed false until
+#                               register D37 was fixed; the parameter stays because it is what
+#                               makes the two paths auditably the same.
+#   commit_only_when_modified — true on both: write-back / request_save / log happen only when
+#                               a matching, not-yet-resolved situation was actually mutated.
+#                               (B) passed false until register D38 was fixed, which is why an
+#                               unmatched last_situation_id still committed and logged.
 #   log_type / log_message    — (A) "stage.combat_resolved" / "Combat situation resolved on
 #                               victory (pre-snapshot)". (B) "stage.combat_resolved.nonfinal"
 #                               / "Non-final objective resolved on victory".
@@ -96,12 +93,8 @@
 # the same object. Resolved by dropping the parameter entirely: this service holds one
 # flow_ctx, used for both the mutation and the save request.
 #
-# DEFECTS FOUND, DEPRECATED IN PLACE, NOT FIXED (this slice is pure extraction):
-#   DEFECT 1 — the (B) path has no already-resolved guard, so if it runs twice against the
-#              same situation it increments explore_map.objectives_found twice.
-#   DEFECT 2 — the (B) path write-back is unconditional: with an unmatched
-#              last_situation_id it still writes the stage back, requests a save, and logs
-#              "Non-final objective resolved on victory" for a situation it never touched.
+# DEFECT 1 (register D37) and DEFECT 2 (register D38) were both on the (B) path and are both
+# FIXED: that call site now passes true for both flags.
 #
 # V2-INFRA-003 Phase 5 Slice E — SPLIT. Slice D parked three long procedure bodies and two
 # flow.resolve producers here, taking this file to 1,461 lines, past the ~1,000-line guard.
@@ -570,9 +563,8 @@ func resolve_combat_situation_and_objective(
 	if vsit_id.is_empty():
 		return
 	var vsits_v: Variant = vmap.get("situations", [])
-	# A non-Array situations list yields an empty scan: with commit_only_when_modified the
-	# function then returns without touching anything (the (A) path's early `return`), and
-	# without it the unconditional write-back still runs (the (B) path's coercion to []).
+	# A non-Array situations list yields an empty scan, and commit_only_when_modified then
+	# returns without touching anything.
 	var vsits: Array = vsits_v if vsits_v is Array else []
 
 	var modified := false

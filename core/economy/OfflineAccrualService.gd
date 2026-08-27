@@ -44,30 +44,27 @@
 # placement rule EconomySettlementService cites for itself.
 #
 # CONFIG. Reads data.economy through ConfigService.get_economy_cfg() — the shared getter
-# Phase 4 Slice 7 created precisely because this function and settle() both needed it. The
-# ase_flame gate goes through KeeperIntroService.is_ase_flame_awakened(), same shared owner.
+# Phase 4 Slice 7 created precisely because this function and settle() both needed it.
 # No config key, default or clamp was touched by this move.
 #
 # MOVED VERBATIM. Behaviour is unchanged, bodies included. The only edits are mechanical:
 # _apply_offline_accrual_if_needed → apply_if_needed, the two private builders lost their
-# now-redundant "offline_" infix, _mark_save_requested(x) → flow_ctx.request_save(x) (the
-# same single implementation), and KeeperIntroServiceScript → KeeperIntroService (the
-# preload const was a FlowRuntime-local alias for the same script).
+# now-redundant "offline_" infix, and _mark_save_requested(x) → flow_ctx.request_save(x)
+# (the same single implementation).
 #
 # NO SHIM WAS LEFT. FlowRuntime has no forwarder for any of the three. Its one production
 # call site now constructs this service; tests/EconomyTests.gd's five
 # runtime.call("_apply_offline_accrual_if_needed", …) reflection sites were rewritten to
 # construct it too, in this same change (AGENTS.md mistakes 19 and 20).
 #
-# KNOWN DEFECT, NOT FIXED HERE (register D81, found at this site during the C1 move): the
-# "house dormant" gate is evaluated TWICE, and the second evaluation is unreachable. The
-# inline gate near the top reads save_data.sanctum.ase_flame.awakened and returns 0; the
-# later KeeperIntroService.is_ase_flame_awakened() check reads the same key by the same
-# rule, so it can only be reached when the first already passed. The two are not
-# equivalent in effect — the first returns without touching the clocks, the dead one rolls
-# last_offline_unix / last_settle_unix forward and requests an "economy.offline_guard"
-# save — which is why deleting it is a behaviour question, not a tidy-up. Moved verbatim,
-# both branches intact. See the defect register.
+# ONE DORMANT GATE (register D81, fixed): the "house dormant" check reads
+# save_data.sanctum.ase_flame.awakened inline near the top of apply_if_needed() and returns
+# 0 WITHOUT touching last_offline_unix or last_settle_unix. Leaving those clocks alone is
+# the load-bearing part: a dormant house must keep its unclaimed accrual window, so the
+# elapsed time is still there when the flame is lit. A second copy of this gate used to sit
+# after the elapsed-time read; it was unreachable, and it rolled both clocks forward and
+# requested an "economy.offline_guard" save, which would have swallowed that window. It was
+# deleted, not the inline one.
 
 class_name OfflineAccrualService
 extends RefCounted
@@ -131,17 +128,6 @@ func apply_if_needed(t: int, source: String) -> int:
 
 	# Read balance knobs
 	var econ_cfg := ConfigService.get_economy_cfg(config_service)
-	if not KeeperIntroService.is_ase_flame_awakened(flow_ctx.save_data):
-		logger.debug(t, "economy.offline.skip", "Offline accrual skipped (Ase Flame dormant)", {
-			"source": source,
-			"now_unix": now_unix,
-			"last_offline_unix": last_offline,
-			"raw_delta_seconds": raw_delta
-		})
-		econ_data["last_offline_unix"] = now_unix
-		econ_data["last_settle_unix"] = now_unix
-		flow_ctx.request_save("economy.offline_guard")
-		return 0
 
 	var ase_per_min := float(econ_cfg.get("ase_online_per_min_base", 0.0))
 	var rate_per_sec := ase_per_min / 60.0

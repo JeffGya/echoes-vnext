@@ -779,15 +779,14 @@ func _apply_victory_return_to_explore(t: int) -> void:
 			_bond_consequence_service().apply_bond_aftermath_modifiers(t, _ncv_outcome)
 			_bond_consequence_service().seed_rival_stage_incidents(t)
 			# Resolve the combat situation in the save (marks objective completed).
-			# V2-INFRA-003 Phase 5 Slice A: this block used to be a drifted second copy of
-			# _resolve_combat_situation_and_objective(). Both now run the one implementation on
-			# ActiveStageService; every difference is an explicit argument here.
-			# skip_if_already_resolved=false and commit_only_when_modified=false reproduce this
-			# path's exact present behaviour, including the two defects recorded in that file's
-			# header (no already-resolved guard; unconditional write-back/save/log). Fixing them
-			# is a behaviour change and is out of scope for a pure extraction.
+			# Register D37/D38: skip_if_already_resolved and commit_only_when_modified are now
+			# both true, matching the pre-snapshot path. Without the first, a second pass over
+			# an already-resolved situation incremented explore_map.objectives_found again and
+			# completed the stage early. Without the second, an unmatched last_situation_id
+			# still wrote the stage back, requested a save and logged a resolution that never
+			# happened. The two log strings stay distinct so the path is still identifiable.
 			_stage_explore_session_service().resolve_combat_situation_and_objective(
-				t, false, false,
+				t, true, true,
 				"stage.combat_resolved.nonfinal",
 				"Non-final objective resolved on victory",
 				false
@@ -1163,7 +1162,7 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 	if flow_ctx.campaign_seed != null:
 		rng = flow_ctx.campaign_seed.get_rng("encounter.retreat." + encounter_id + "." + str(t))
 	else:
-		rng.seed = hash("encounter.retreat." + encounter_id + str(t))
+		rng.seed = hash("encounter.retreat." + encounter_id + "." + str(t))
 
 	var roll_result: Dictionary = RetreatService.roll_retreat(success_pct, rng)
 	var success: bool = bool(roll_result.get("success", false))

@@ -67,20 +67,18 @@ static func build_scout_return_snapshot(flow_ctx_arg: FlowContext, t: int) -> Di
 		if not _a_v is Dictionary:
 			continue
 		var _a: Dictionary = _a_v
-		# KNOWN DEFECT (V2-INFRA-003 Phase 5 records; a later story fixes): EchoActor.from_echo()
-		# flattens emotion to top-level `morale`/`fear` and emits NO "emotion" key, so this
-		# always yields {} and every scout-return preview below renders the constant
-		# get_emotional_status(50, 0) regardless of the party's real state. Reproduced verbatim
-		# during the extraction — repairing it here would be a behaviour change.
-		var _emo_v: Variant = _a.get("emotion", {})
-		var _emo: Dictionary = _emo_v if _emo_v is Dictionary else {}
+		# Register D07: read the FLATTENED fields. EchoActor.from_echo() writes emotion to
+		# top-level "morale"/"fear" (EchoActor.gd:57-58) and emits no "emotion" key, so the
+		# nested read this used to do always yielded {} and every preview rendered the constant
+		# get_emotional_status(50, 0). The durable withdrawal result stores this array verbatim,
+		# so correcting the card corrects the stored save.flow.pending_result copy too.
 		actor_preview.append({
 			"id":               str(_a.get("id", "")),
 			"name":             str(_a.get("name", "")),
 			"calling_origin":   str(_a.get("calling_origin", "")),
 			"emotional_status": EmotionService.get_emotional_status(
-				int(_emo.get("morale_current", 50)),
-				int(_emo.get("fear_current",   0))
+				int(_a.get("morale", 50)),
+				int(_a.get("fear",   0))
 			),
 		})
 

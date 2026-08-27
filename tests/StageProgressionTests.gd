@@ -6,7 +6,7 @@
 #   2. realm_prog/advance_triggers_save            — ctx.save_request == true after advance
 #   3. realm_prog/advance_to_last_stage_not_complete — advance to penultimate: not complete
 #   4. realm_prog/advance_to_completion            — final advance marks realm complete
-#   5. realm_prog/advance_idempotent_when_complete — already-complete model stays unchanged
+#   5. realm_prog/advance_idempotent_when_complete — already-complete realm → {}, model unchanged
 #   6. realm_prog/advance_empty_model              — no active model → returns {}, no crash
 #   7. realm_prog/stage_map_emits_stages_remaining — snapshot has stages_remaining + realm_complete
 #   8. realm_prog/stage_map_redirects_on_empty_realm — no realm → error snapshot, no scaffold
@@ -138,10 +138,12 @@ static func _t_advance_idempotent_when_complete() -> Dictionary:
 
 	var result: Dictionary = RealmService.advance_stage(ctx, 1)
 
-	if result.is_empty():
-		return { "ok": false, "error": "advance_stage should return the model even when already complete" }
+	# Register D40: the guard returns {}. It used to return the model, whose is_completed flag
+	# is the caller's Thread-mint trigger — so a repeat call minted a second set of Threads.
+	if not result.is_empty():
+		return { "ok": false, "error": "Expected empty dict on already-complete realm (register D40), got: %s" % str(result) }
 
-	var after_index := int(result.get("current_stage_index", -99))
+	var after_index := int(ctx.save_data["realms"]["realm.01"].get("current_stage_index", -99))
 	if after_index != before_index:
 		return { "ok": false, "error": "current_stage_index should be unchanged on already-complete realm; was %d, got %d" % [before_index, after_index] }
 

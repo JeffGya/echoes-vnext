@@ -145,13 +145,11 @@
 #   read objectives[0] only, under a key ObjectiveModel never writes, so it returned a flat 30
 #   for every stage while RewardCalc SUMMED the same stage's weights. Both readers now call
 #   RewardCalc.base_reward(). Reached from handle_return_home() below.
-# KNOWN DEFECT 3 — the victory-return path
-#   (FlowRuntime._apply_victory_return_to_explore → resolve_combat_situation_and_objective with
-#   skip_if_already_resolved=false, commit_only_when_modified=false) can double-increment
-#   explore_map.objectives_found on a second pass, and commits/saves/logs unconditionally even
-#   when it matched nothing. Recorded in full in ActiveStageService.gd's header.
-# All three belong to later phases. Fixing a defect inside an extraction makes any later
-# failure impossible to trace to one cause.
+# KNOWN DEFECT 3 — FIXED (register D37/D38). The victory-return path
+#   (FlowRuntime._apply_victory_return_to_explore → resolve_combat_situation_and_objective)
+#   now passes skip_if_already_resolved=true and commit_only_when_modified=true, so it can no
+#   longer double-increment explore_map.objectives_found or commit, save and log a resolution
+#   that matched nothing.
 # ---------------------------------------------------------------------------
 
 class_name VentureController

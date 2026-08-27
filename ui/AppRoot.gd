@@ -40,6 +40,14 @@ var _last_log_index: int = 0
 var _current_layout: Dictionary = {}
 var _modal_owner: Control = null
 
+## The slot every screen uses for its own back affordance. The Android Back handler
+## dispatches this action and nothing else (register D78).
+const BACK_SLOT: String = "nav.back"
+
+## The snapshot currently on screen. Read only by the Android Back handler, which needs to know
+## whether the live screen offers a back action.
+var _last_snapshot: Dictionary = {}
+
 var _econ_timer_started: bool = false
 
 var logger: StructuredLogger
@@ -365,6 +373,37 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_F1:
 			_toggle_debug_overlay()
 			get_viewport().set_input_as_handled()
+
+## Android system Back / browser back (register D78).
+##
+## `application/config/quit_on_go_back` is set false in `project.godot`, so the SceneTree no
+## longer ends the session on this notification. Without a handler here Back would instead do
+## nothing at all, which is also wrong: on a phone the gesture is reflexive.
+##
+## Back goes back one screen if the current snapshot offers one, and otherwise does nothing.
+## It never quits, and it never invents a control the screen does not already have — it
+## dispatches the screen's own `nav.back` action, so it can only reach states the player could
+## already reach by tapping.
+##
+## A blocking modal swallows Back. ModalHost owns focus containment while a modal is up, and
+## some modals (`sanctum.companion_invite`) persist until decided; dismissing them from here
+## would be a design change, not a repair.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		_handle_go_back_request()
+
+func _handle_go_back_request() -> void:
+	if modal_host != null and modal_host.has_method("has_active_modal") and bool(modal_host.call("has_active_modal")):
+		return
+	var actions_v: Variant = _last_snapshot.get("actions", {})
+	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
+	var back_v: Variant = actions.get(BACK_SLOT, null)
+	if not (back_v is Dictionary):
+		return
+	var back: Dictionary = back_v
+	if bool(back.get("disabled", false)):
+		return
+	_on_ui_action_selected(back)
 
 func _dispatch_settle_now(source: String) -> Dictionary:
 	var now_unix := int(Time.get_unix_time_from_system())
@@ -1116,6 +1155,7 @@ const ONBOARDING_FAMILY: Array = [
 ]
 
 func _render_snapshot(snap: Dictionary) -> void:
+	_last_snapshot = snap
 	var snap_type := str(snap.get("type", ""))
 	if snap_type == "flow.save_error":
 		if _save_error_screen == null:
