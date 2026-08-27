@@ -125,6 +125,35 @@ re-record.
 
 **Blast radius: FP + BL.** It changes reward numbers on its own, independently of the payment move.
 
+### DEFERRED ENTRIES ARE NOW FILED ON THEIR STORIES — 2026-08-25
+
+Every deferred defect now has a named owner and a written handoff **on that story's Notion page**.
+A defect filed only in this repo dies with this branch.
+
+| ID | Defect | Filed on |
+|---|---|---|
+| **D66** | Reward resolution reads `obj_type`; objectives store `type`, so objective-specific weighting falls through to the default combat path | **V2-ECONOMY-004** |
+| **D83** | `ekwan_shrine_multiplier` has never applied — same root cause, second site. Fix both together, re-record once | **V2-ECONOMY-004** |
+| **D64** | The 28-function live movement family, moved verbatim | **V2-COMBAT-003** |
+| **D65** | The GUIDE_SPIRIT mover, moved verbatim | **V2-COMBAT-003** |
+| **D27** | The movement decision (`goal_id`/`option_id`) is never stored or logged — a refactor reaching the right cell for the wrong reason passes silently. **D57 cannot be safely investigated until this exists.** | **V2-COMBAT-003** |
+| **D69** | `_resolve_next_actor` cannot become a controller — three measured blockers | **V2-COMBAT-004** (filed 2026-08-24) |
+| **D67** | `make_new_save` writes a directive value the repair immediately rewrites, so the V1 to V2 migration is LIVE. Fix the schema default first, THEN remove the migration — order matters | **This story, Phase 11** |
+| **D62 / D06** | Contact resolution runs none of the six post-encounter steps — emotion, bonds and vows do not move | **UNRESOLVED — see below** |
+
+**D66's "disputed owner" was a false contradiction.** This register recorded that the prompt said
+V2-ECONOMY-004 while Notion showed the Ekwan loop. They are the **same story** — that page's `Code`
+property is `V2-ECONOMY-004`. The original brief was right. Better: that page already carried a
+2026-08-11 addendum describing this exact `obj_type` / `type` mismatch, and it already drew the
+boundary — *"Keep exactly-once payout orchestration in V2-INFRA-003; this story owns reward
+vocabulary, weights, Ase/Ekwan split."* That boundary was honoured: this story built the
+orchestration and changed **no** reward value.
+
+**D62 needs a decision.** It is the largest player-facing item still open, it was scheduled for
+Phase 8, and Phase 8 did not build it — `EncounterResolutionService` does not exist. It is therefore
+deferred to a phase that has already passed, which is how work silently disappears. Options: build it
+before the manual test, after it, or give it its own story.
+
 ### Decisions taken 2026-08-24 on D36 / D77 / D78
 
 **D77 — the 25% defeat consolation STAYS. It is intended design.**
