@@ -125,6 +125,30 @@ re-record.
 
 **Blast radius: FP + BL.** It changes reward numbers on its own, independently of the payment move.
 
+### THE ~53 "AFTER THE TEST" ENTRIES ARE NOT OPTIONAL — Jeff, 2026-08-25
+
+**Correction to this document's framing.** The triage sorted entries by "would Jeff hit this in a
+first session" and labelled the remainder *"real, but not urgent."* That was wrong, and it is the
+kind of wrong that loses work. Sequencing is not severity. **Every one of these is code that does
+not currently work correctly**, and finding them was an explicit purpose of this refactor — not a
+side effect of it.
+
+**The agreed plan:**
+
+| Step | Work |
+|---|---|
+| 1 | Connect pass — the never-run mechanics, one at a time, full suite after each |
+| 2 | Jeff's manual first-session test |
+| 3 | **Fix the remaining defects** — all of them, not a selection |
+| 4 | Jeff manual-tests again |
+| 5 | Orchestrator runs the full suite |
+
+Design decisions are raised with Jeff as they arise, not resolved unilaterally and not deferred to
+a story that does not exist.
+
+**Nothing in this register may be closed by attrition.** An entry leaves this file by being fixed,
+deleted, disproved, or filed on a named story's page — never by being judged unimportant.
+
 ### DEFERRED ENTRIES ARE NOW FILED ON THEIR STORIES — 2026-08-25
 
 Every deferred defect now has a named owner and a written handoff **on that story's Notion page**.
