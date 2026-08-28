@@ -62,12 +62,9 @@
 # NO SHIM WAS LEFT ON FlowRuntime (AGENTS.md #20). There were no reflection call sites for this
 # block: it was inline code with no name of its own.
 #
-# DEFECT NOTES — found during extraction, reported and deliberately NOT fixed here:
-#   1. `party_size` counts living echo-faction actors including STRUCTURES and temporary allies,
-#      because the filter tests faction and is_dead only. Pre-existing; preserved verbatim.
-#   2. The GUIDE_SPIRIT branch excludes `is_spirit` actors but the other four branches do not,
-#      so in any other mode a spirit-flagged echo would receive mode directive weights. Not
-#      reachable today (spirits only exist in GUIDE_SPIRIT). Preserved verbatim.
+# DEFECT NOTE — found during extraction, reported and deliberately NOT fixed here:
+#   `party_size` still counts temporary allies (is_ally). Whether a one-battle companion is a
+#   party member for the vow gate is a design question, not a code defect. Preserved verbatim.
 
 class_name CombatTurnContextService
 extends RefCounted
@@ -174,7 +171,14 @@ func build_turn_context(
 		# VOW-001: active vow dict (or {}) for BehaviorArbiter vow bias layer.
 		"active_vow":              _vow_ctx,
 		# VOW-001: echo party size for tikoro_nko_agyina party-size gate.
-		"party_size":              ectx.actors.filter(func(a): return str(a.get("faction","")) == "echo" and not bool(a.get("is_dead", false))).size(),
+		# Objective actors are not party members — same principle as the kill-share denominator.
+		# is_spirit is the biting filter: a JOINED guide spirit is built as faction "echo" and
+		# inflated this count by one. is_structure is belt-and-braces (every authored structure
+		# carries faction "structure" today) so a structure can never be counted either.
+		"party_size":              ectx.actors.filter(func(a): return str(a.get("faction","")) == "echo" \
+			and not bool(a.get("is_dead", false)) \
+			and not bool(a.get("is_structure", false)) \
+			and not bool(a.get("is_spirit", false))).size(),
 		# BOND-002: social graph for bond-aware behavior bias (BehaviorArbiter._apply_bond_bias).
 		"bonds":                   _bonds_for_ctx,
 		"bond_thresholds":         ConfigService.get_bond_thresholds_cfg(config_service),

@@ -132,16 +132,10 @@
 #      the same field. Preserved verbatim.
 #   3. Only the FIRST living structure is drained — the loop breaks after one. A PURIFY_SHRINE
 #      encounter with two shrines would drain one and silently ignore the other.
-#   4. The purifier-cooldown decrement and the party morale drain are nested INSIDE the shrine
-#      loop. They therefore stop happening the moment the shrine dies, and would run twice if the
-#      loop ever processed two shrines (it cannot, because of the break). Reading the code as
-#      written, both look like they were meant to be per-round, not per-shrine. Preserved
-#      verbatim.
-#   5. The morale-drain log reports `-morale_drain_per_wave`, the CONFIGURED amount, not the sum
-#      of the amounts actually applied. apply_morale_loss can reduce or fully prevent the loss
-#      per actor (morale_anchor / morale_forecast), and the maxi(0, ...) clamp can absorb more,
-#      so the logged delta overstates the real one whenever a whole leader is nearby.
 #      Preserved verbatim.
+#
+# The cooldown decrement and the party morale drain below sit OUTSIDE that loop on purpose —
+# see the comment at their site.
 
 class_name CombatRoundShrineService
 extends RefCounted
@@ -195,28 +189,39 @@ func apply_shrine_drain_round(
 				"shrine_hp":     shrine_hp_val,
 				"stacks_active": a_v.get("purify_stacks", []).size(),
 			})
-			# Decrement purifier cooldown (min 0).
-			if not ectx.purifier_id.is_empty():
-				for pa_v in ectx.actors:
-					if pa_v is Dictionary and str(pa_v.get("id", "")) == ectx.purifier_id:
-						pa_v["purify_cooldown"] = maxi(0, int(pa_v.get("purify_cooldown", 0)) - 1)
-						break
-			# Shrine morale drain: each wave grinds down the party's will (runtime dict only).
-			var morale_drain_wave: int = int(shrine_cfg_drain.get("morale_drain_per_wave", 5))
-			var shrine_morale_affected: int = 0
-			for em_a in ectx.actors:
-				if em_a is Dictionary and not em_a.get("is_dead", false) \
-						and em_a.get("faction", "") == "echo":
-					var applied_drain := LeadershipEmotionServiceScript.apply_morale_loss(
-						em_a, morale_drain_wave, ectx.actors, leadership_expr_cfg, round)
-					em_a["morale"] = maxi(0, int(em_a.get("morale", 50)) - applied_drain)
-					shrine_morale_affected += 1
-			if shrine_morale_affected > 0:
-				logger.info(t, "combat.shrine.morale_drain", "Shrine wave drains echo morale", {
-					"delta":          -morale_drain_wave,
-					"affected_count": shrine_morale_affected,
-				})
 			break
+
+	# PER ROUND, not per shrine. purify_cooldown_rounds and morale_drain_per_wave are both
+	# time-based keys, so neither the cooldown decrement nor the party morale drain may depend
+	# on how many shrines live. Both run once per PURIFY_SHRINE round, including rounds after
+	# the shrine is dead.
+	if not ectx.purifier_id.is_empty():
+		for pa_v in ectx.actors:
+			if pa_v is Dictionary and str(pa_v.get("id", "")) == ectx.purifier_id:
+				pa_v["purify_cooldown"] = maxi(0, int(pa_v.get("purify_cooldown", 0)) - 1)
+				break
+
+	# Shrine morale drain: each wave grinds down the party's will (runtime dict only).
+	var morale_drain_wave: int = int(shrine_cfg_drain.get("morale_drain_per_wave", 5))
+	var shrine_morale_affected: int = 0
+	var shrine_morale_total: int = 0
+	for em_a in ectx.actors:
+		if em_a is Dictionary and not em_a.get("is_dead", false) \
+				and em_a.get("faction", "") == "echo":
+			var applied_drain := LeadershipEmotionServiceScript.apply_morale_loss(
+				em_a, morale_drain_wave, ectx.actors, leadership_expr_cfg, round)
+			var morale_before: int = int(em_a.get("morale", 50))
+			em_a["morale"] = maxi(0, morale_before - applied_drain)
+			# Report the EFFECTIVE drop: apply_morale_loss can reduce the loss and the floor
+			# clamp can absorb the rest, so the configured number is not what landed.
+			shrine_morale_total += morale_before - int(em_a["morale"])
+			shrine_morale_affected += 1
+	if shrine_morale_affected > 0:
+		logger.info(t, "combat.shrine.morale_drain", "Shrine wave drains echo morale", {
+			"delta":          -shrine_morale_total,
+			"affected_count": shrine_morale_affected,
+		})
+
 	# Capture shrine_hp even if alive (for snapshot).
 	if shrine_hp_val == 0:
 		for a_v in ectx.actors:

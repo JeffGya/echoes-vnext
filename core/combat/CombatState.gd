@@ -67,6 +67,9 @@ static func create(actors: Array, objective: String,
 			"destination_col":      int(objective_params.get("destination_col", -1)),
 		"destination_row":      int(objective_params.get("destination_row", -1)),
 		"destination_reached":  false,
+		# V2-STAGE-004 P4: temporary-ally death bark guard. Fires once per encounter.
+		# Declared here with the other latches so it is not an undeclared runtime key.
+		"_ally_killed_barked":  false,
 	}
 
 

@@ -89,11 +89,6 @@
 #      the pre-kill enemy count — correct — but the same loop excludes structures, so in
 #      PROTECT and PURIFY_SHRINE the totem/shrine never contributes to the denominator while it
 #      does contribute to the fight. Pre-existing.
-#   3. The "target already dead" else-arm appends an entry with action_type "actor.idle" while
-#      the intent said "melee_attack", so the contribution ledger counts that turn as an idle.
-#      Pre-existing and deliberate-looking, recorded because it is invisible from the log line.
-#   4. fear_inflicted is credited to the attacker even when attacker and target are the same
-#      faction. No same-faction melee exists today. Pre-existing.
 
 class_name CombatTurnActionService
 extends RefCounted
@@ -199,8 +194,10 @@ func resolve_activation(
 					# S14b Tier 2 (offensive): credit the attacker the EFFECTIVE post-clamp fear
 					# increase on whoever they hit — a target already at/near the 100 cap accrues less
 					# than the nominal dampened amount. Consistent with the support fields'
-					# effective-delta accounting. All-faction; _s14a_atk_log created just above.
-					_s14a_atk_log["fear_inflicted"] = int(_s14a_atk_log.get("fear_inflicted", 0)) + (int(target["fear"]) - _fear_before)
+					# effective-delta accounting. Credited only across factions — frightening
+					# your own side is not a contribution. No same-faction melee exists today.
+					if str(actor.get("faction", "")) != str(target.get("faction", "")):
+						_s14a_atk_log["fear_inflicted"] = int(_s14a_atk_log.get("fear_inflicted", 0)) + (int(target["fear"]) - _fear_before)
 					# A3: remember who last struck this actor, so the kill relief can tell
 					# "the thing that was hurting ME is gone" from "a thing died somewhere".
 					# Transient runtime state on the actor dict; never persisted.
@@ -344,7 +341,9 @@ func resolve_activation(
 					"target_id": target_id,
 				})
 				ectx.last_round_results.append({
-					"action_type": "actor.idle",
+					# The intent was a melee attack. Report the attack, not an idle, so the
+					# contribution ledger does not read a wasted swing as inaction.
+					"action_type": "melee_attack",
 					"source_id":   str(actor.get("id", "")),
 					"source_name": str(actor.get("name", "")),
 					"target_id":   "",

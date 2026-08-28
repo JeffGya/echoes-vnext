@@ -35,7 +35,8 @@
 #
 # WHAT IT TOUCHES. Runtime actor dictionaries and ectx.last_round_results, plus three things
 # the pre-extraction recon did not list — all of them pre-existing, none of them changed here:
-#   1. ectx.combat_state["_ally_killed_barked"] — the once-per-encounter ally-bark guard.
+#   1. ectx.combat_state["_ally_killed_barked"] — the once-per-encounter ally-bark guard,
+#      declared with the other combat_state latches in CombatState.create().
 #   2. NarrativeVoiceService.fire_ally_bark(), which writes _bark_line/_bark_context/_bark_tier
 #      onto the KO'd actor dict AND appends to ectx.round_bark_events.
 #   3. flow_ctx, read only through _voice_service() below (NarrativeVoiceService resolves
@@ -105,9 +106,8 @@ func apply_round_emotion_tick(
 			var ko_actor: Dictionary = EncounterContext.find_actor_by_id(ectx.actors, ko_id)
 			if ko_actor.is_empty():
 				continue
-			# V2-STAGE-004 Phase 4 (S15 UI-B): Temporary Ally death bark. Fires once, the
-			# round the joined ally (is_ally true) is KO'd — mirrors the GUIDE_SPIRIT
-			# spirit_killed detection pattern (fire-once guard on combat_state).
+			# Temporary Ally death bark. Fires once, the round the joined ally (is_ally) is
+			# KO'd. Latch declared in CombatState.create().
 			if bool(ko_actor.get("is_ally", false)) \
 					and not bool(combat_state.get("_ally_killed_barked", false)):
 				combat_state["_ally_killed_barked"] = true

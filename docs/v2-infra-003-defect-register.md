@@ -713,3 +713,34 @@ which an `escort_started`-only fix would fail. Proved by reverting the guard.
 | **D58** | Comment only. `FlowContext` has no in-dispatch flag, and adding one plus an assertion would be a behaviour-adjacent change against a baseline this pass may not move. The contract is now written at the site. |
 
 | 4 | see commit | D79 | Fixed. Six placement copies collapsed to `GridService.place_on_terrain`. Every copy's values preserved exactly. **Correction to the D79 row above: the six copies do NOT share one comparator.** The five objective copies rank lexicographically — column distance first, row distance only as a tie-break. The temporary-ally copy ranks by the summed Manhattan distance to the party centroid, which orders cells differently: a cell one column off can beat a cell in the exact column. Forcing the ally onto the axis metric would move its cell, so the metric is a fourth parameter. | None moved. All six paths captured before and after; the two ordered captures are identical line for line |
+
+| 5 | see commit | D13, D46, D47, D50, D51, D54, D56 | Fixed. **Two register premises disproved.** D50: the row predicted FP + BL, on the premise that PROTECT and PURIFY_SHRINE always carry a structure inside the party count. They do not — all three authored structures carry `faction: "structure"` (`data.actor.structures`), so the existing `faction == "echo"` test already excluded them. `is_spirit` (D51) was the filter that actually bit: a JOINED guide spirit is built as faction `"echo"` and inflated the count by one. D13: the per-shrine coupling is real but **unreachable today** — see below. | None moved |
+
+### D13 is fixed but currently unverifiable — recorded honestly
+
+The product owner decided the purifier cooldown and the party morale drain are per round. Both are
+now hoisted out of the shrine loop. **This moves no number in play today**, for two independent
+reasons, both checked:
+
+1. **No fixture has more than one living shrine.** `EncounterObjectiveSpawnService` spawns exactly
+   one, and the pre-existing `break` capped the old code at one execution regardless.
+2. **A round never begins with a dead shrine.** `is_dead` on the shrine is written in exactly one
+   place — the drain itself. Nothing else damages it. `CombatState.check_end_condition` priority 2
+   makes a dead shrine an immediate `shrine_destroyed` defeat, in the same `_end_round` as the drain.
+
+So the checkable claim is: the drain is `morale_drain_per_wave = 5` per living echo per round,
+applied once, before and after — because the number of living shrines at drain time is always
+exactly 1 on every round that exists. The fix removes a latent coupling. It does not change the
+difficulty curve until a mode ships more than one shrine.
+
+### Raised by pass 5, not fixed
+
+- `party_size` still counts temporary allies (`is_ally`). Whether a one-battle companion counts
+  toward the `tikoro_nko_agyina` vow gate is a design question, not a defect. Recorded in the file
+  header.
+- `_spirit_killed_barked` and `_spirit_greeted` (`CombatRoundGuideSpiritService.gd:195,204`) are
+  the same undeclared-latch shape as D56. Out of pass scope.
+- `data.actor.structures` has no `guide_spirit` entry, so the non-joining spirit falls back to an
+  inline literal at `EncounterObjectiveSpawnService.gd:419-423`. Unreachable-config shape.
+- The shrine morale drain filters on `faction == "echo"` only, so it drains allies and a joined
+  spirit as well as real Echoes.
