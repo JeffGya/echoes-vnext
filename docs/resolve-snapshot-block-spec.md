@@ -47,8 +47,6 @@ snapshot, and `FlowFingerprintTests._final_fingerprint()` sorts `data_keys`.
 
 | Key | Type | A combat | B keeper | C scout | D contact | E situation | F fallback |
 |---|---|---|---|---|---|---|---|
-| `title` | String | `"Result"` | `"Result"` | | | | `"Resolve"` |
-| `note` | String | | | | | | `"Result unavailable."` |
 | `run_type` | String | | | `"scout_return"` | `"contact_result"` | `"situation_result"` | |
 | `encounter_id` | String | ● | `"keeper_intro.first_trial"` | | | | |
 | `actors` | Array[Dict] | ● *(combat projection)* | ● *(combat projection)* | ● *(party preview — different shape)* | | | |
@@ -95,7 +93,9 @@ snapshot, and `FlowFingerprintTests._final_fingerprint()` sorts `data_keys`.
 6. `emotion_summary` entry shape differs by producer: A adds `direction` + `tag`; **B has neither**;
    E has both plus `bark`.
 7. `ase_awarded` — A, B, C, E set it; **D omits it**.
-8. `title` / `note` are **dead**: no consumer anywhere in `ui/`, `core/` or `tests/` reads either.
+8. `title` / `note` were **dead**: no consumer anywhere in `ui/`, `core/` or `tests/` read either.
+   Blocks #16/#17 and both keys were deleted in the V2-INFRA-003 connect pass (defects D18/D19).
+   The rows above record the payloads as they were measured, before the deletion.
 
 ---
 
@@ -133,8 +133,6 @@ it to `""`, so the sentinel is safe).
 | 13 | `combat_seams` | `objectives_remaining`, `guide_spirit_protected`, `combat_intro_line` | A | **none — routing / future seams** |
 | 14 | `scout_intel` | `intel_count` | C | Reason line ("N situations revealed") |
 | 15 | `contact_outcome` | `role`, `role_label`, `outcome`, `outcome_text` | D | Banner colour + reason text |
-| 16 | `legacy_title` | `title` | A, B, F | **none — dead key** |
-| 17 | `legacy_note` | `note` | F | **none — dead key** |
 
 ### 2.3 Blocks that are partial or forced
 
@@ -166,9 +164,9 @@ Rejected for three reasons:
    "B must not emit this key" — is expressed by a default that is easy to flip by accident and
    invisible at the call site. A missing `add_ekwan(...)` line is visible.
 3. **It does not actually shrink the API.** Eight functions with fourteen flags is more surface than
-   seventeen flat functions, and the flags are untyped intent while the functions are self-documenting.
+   flat functions, and the flags are untyped intent while the functions are self-documenting.
 
-The cost of the recommended model is honest and should be stated: **seventeen blocks, five of which
+The cost of the recommended model is honest and should be stated (as specified): **seventeen blocks, five of which
 are single-key, and three of which map to no screen section at all** (#12, #13, #16/#17). Those are
 not design failures — they are the measured shape of the payload made visible. #16 and #17 are
 flagged for deletion (§7 Q3).
@@ -231,7 +229,6 @@ but it still has to hold, because `FlowFingerprintTests` pins A's exact `data_ke
 | 13 `combat_seams` | **no** | `objectives_remaining` shapes A's own action set before the snapshot is built; `guide_spirit_protected` is a V2-ITEM-002 seam; `combat_intro_line` is S15 prep. |
 | 14 `scout_intel` | yes | `%ReasonLabel` — `"%d situation%s revealed"` |
 | 15 `contact_outcome` | yes | banner text + banner colour + `%ReasonLabel` |
-| 16/17 `legacy_title`/`legacy_note` | **no** | zero consumers repo-wide |
 
 ---
 
@@ -285,8 +282,6 @@ Dictionaries are references). Every one returns `void`.
 | 13 | `static func add_combat_seams(data: Dictionary, objectives_remaining: int, guide_spirit_protected: bool, combat_intro_line: String) -> void` |
 | 14 | `static func add_scout_intel(data: Dictionary, intel_count: int) -> void` |
 | 15 | `static func add_contact_outcome(data: Dictionary, role: String, role_label: String, outcome: String, outcome_text: String) -> void` |
-| 16 | `static func add_legacy_title(data: Dictionary, title: String) -> void` |
-| 17 | `static func add_legacy_note(data: Dictionary, note: String) -> void` |
 
 ### 4.3 How a producer declares its blocks
 
@@ -310,12 +305,12 @@ Block call list per producer:
 
 | P | Blocks called (base `run_type` in bold) |
 |---|---|
-| A | `banner`, `victory_flag`, `grade_rank`, `combat_stats`, `actors`, `ledger`, `ekwan`, `emotion`, `vows`, `progression`, `combat_seams`, `legacy_title` |
-| B | `victory_flag`, `grade_rank`, `combat_stats`, `actors`, `ledger`, `emotion`, `progression`, `legacy_title` |
+| A | `banner`, `victory_flag`, `grade_rank`, `combat_stats`, `actors`, `ledger`, `ekwan`, `emotion`, `vows`, `progression`, `combat_seams` |
+| B | `victory_flag`, `grade_rank`, `combat_stats`, `actors`, `ledger`, `emotion`, `progression` |
 | C | **`scout_return`** + `banner`, `victory_flag`, `grade_rank`, `grade_verdict`, `actors`, `ledger`, `ekwan`, `scout_intel` |
 | D | **`contact_result`** + `banner`, `grade_verdict`, `contact_outcome` |
 | E | **`situation_result`** + `banner`, `grade_verdict`, `ledger`, `ekwan`, `emotion`, `effects` |
-| F | `victory_flag`, `legacy_title`, `legacy_note` |
+| F | `victory_flag` |
 
 ### 4.4 Purity contract
 
@@ -377,7 +372,7 @@ not into the builder — the builder receives the finished `Array` via `add_acto
 
 | Piece | Phase 5 (now) | Phase 6 (with `FlowEncounterState`) |
 |---|---|---|
-| `ResolveSnapshotBuilder.gd` with **all 17 blocks + base** | ✅ build now | — |
+| `ResolveSnapshotBuilder.gd` with **all 17 blocks + base** (now 15 — see §1.2 note 8) | ✅ build now | — |
 | Migrate C, D, E, F to the builder | ✅ | — |
 | `SanctumService.get_party_actors_static()` | ✅ | — |
 | Scout one-shot consumption in the dispatch closure | ✅ | — |
@@ -446,7 +441,7 @@ assertion failure into the new builder, so it is the worse option.
    `# KNOWN DEFECT (V2-INFRA-003 Phase 5 records; a later story fixes):`.
 3. **D's `verdict` is written and never read** — the contact renderer sets
    `_rank_badge.visible = false` unconditionally.
-4. **`title` and `note` are dead keys** — zero consumers repo-wide.
+4. **`title` and `note` are dead keys** — zero consumers repo-wide. Deleted; see note 8 in §1.2.
 5. **B's `emotion_summary` entries lack `direction` and `tag`**, so the keeper-trial resolve renders
    grey default tokens and no direction cue while combat and situations render both.
 
@@ -494,6 +489,8 @@ Neither is read by any consumer in `ui/`, `core/` or `tests/`. Deleting them rem
 #17 and three keys. The only cost is that producer A's fingerprint `data_keys` drifts, so the seven
 combat-mode fingerprint constants would need re-recording — cheap in Phase 6, gratuitous in Phase 5.
 **Recommendation: keep now, delete in Phase 6 if approved.**
+**ANSWERED — yes. Deleted in the V2-INFRA-003 connect pass (D18/D19); the seven FINAL fingerprint
+constants were re-recorded once, with attribution in `tests/FlowFingerprintTests.gd`.**
 
 **Q4 — Should the keeper trial (B) gain `ekwan_awarded`, `direction` and `tag`?**
 B is the only resolve surface that shows no Ekwan row and renders grey emotion tokens with no

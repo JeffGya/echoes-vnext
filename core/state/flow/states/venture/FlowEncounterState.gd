@@ -344,8 +344,8 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# V2-INFRA-003 Phase 6 Slice 6J: producer A of docs/resolve-snapshot-block-spec.md,
 	# composed through ResolveSnapshotBuilder's block library — the last of the six producers
 	# to migrate. No key and no value changed; the spec's claim that Phase 6 needs NO edit to
-	# ResolveSnapshotBuilder.gd was re-verified here (A's twenty-four keys are exactly
-	# legacy_title + combat_stats + actors + victory_flag + ledger + ekwan + grade_rank +
+	# ResolveSnapshotBuilder.gd was re-verified here (A's keys are exactly
+	# combat_stats + actors + victory_flag + ledger + ekwan + grade_rank +
 	# progression + emotion + vows + banner + combat_seams, at the granularity those blocks
 	# already have). A emits no run_type, so it falls through to ResolveScreen's combat
 	# renderer exactly as before.
@@ -380,7 +380,6 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		t, EncounterSnapshotBuilder._build_resolve_actions(victory, objectives_remaining)
 	)
 	var _data: Dictionary = _snap["data"]
-	ResolveSnapshotBuilder.add_legacy_title(_data, "Result")
 	ResolveSnapshotBuilder.add_combat_stats(
 		_data,
 		encounter_id,

@@ -391,8 +391,28 @@ static func _run_mode_fingerprint(
 #                            modes. RewardCalc.compute() was not touched, so the grade is
 #                            computed from the same numbers as before.
 
+#
+# RE-RECORDED ONCE, V2-INFRA-003 connect pass — the dead `title` key deleted (defects D18/D19).
+# Seven constants moved: the FINAL hash of all seven modes. NO ROUNDS HASH AND NO SAVE HASH
+# MOVED, which is the whole claim: a snapshot key was removed, and nothing else was touched.
+#
+# WHAT MOVED, AND WHY — measured by diffing this file's own FP_DEBUG payloads field by field,
+# before and after, across all fourteen (seven modes × final/save):
+#
+#   data_keys    the ONLY field that differs in any of the fourteen payloads, and the only
+#                difference within it is the removal of "title". Producer A's sorted key list
+#                goes from 24 entries to 23; the other 23 are unchanged and in the same order.
+#   everything   snapshot_type, action_keys, victory, reason, round_ended, enemies_defeated,
+#   else         echoes_survived, ase_awarded, ekwan_awarded, rank, objectives_remaining,
+#                surface, guide_spirit_protected, objective_state, combat_result — byte-identical
+#                in all seven modes. `title` was a constant string no consumer read, so removing
+#                it can only shorten the key list.
+#
+# `title` was emitted by producers A, B and F and read by nothing in ui/, core/ or tests/. Only A
+# is fingerprinted, so only these seven constants could move — and only through data_keys.
+
 const COMBAT_ROUNDS_HASH := "e9203c42d3acb3fb2c13b92183808590d63cf251e39c07d1cd188de1c9340dbb"
-const COMBAT_FINAL_HASH  := "bb5619e74117cabfbd0274aa0af9ec5c223c28a1ed38a4c8c8054d234787d916"
+const COMBAT_FINAL_HASH  := "4031c2669731de4b3ca62a24b16378a083a524e048976047208571161098ab5e"
 const COMBAT_SAVE_HASH   := "bbe140a53a33fcc97220ce3f9c8c172e2cb1f4ce4a281094a78f9733b40b50a4"
 
 
@@ -430,7 +450,7 @@ static func test_combat() -> Dictionary:
 
 
 const PURIFY_SHRINE_ROUNDS_HASH := "c85e2c4903c52d48f2fe94567ce729c6c3fcd1049c16d41c7a404b72212dc7ee"
-const PURIFY_SHRINE_FINAL_HASH  := "b673a91259a6d4888e2bba1a932092f9135b4985fb2a5c339fba0583da87ded1"
+const PURIFY_SHRINE_FINAL_HASH  := "8819869f67b59f78577acc99ceb0b132faa6b7fa8282e611c39effd36dcd7c17"
 const PURIFY_SHRINE_SAVE_HASH   := "76aba09618df272bf0310af333218c78aa1e990ca0be9ae3b8db0c30af1d06d6"
 
 static func test_purify_shrine() -> Dictionary:
@@ -439,7 +459,7 @@ static func test_purify_shrine() -> Dictionary:
 
 
 const RECOVER_ROUNDS_HASH := "efd98bb2449fbc285bee101a19b923c812ea1b29a381d9e415185ac0b95f03ae"
-const RECOVER_FINAL_HASH  := "860e97c1e66fe8124ea572a0774ae14a59b0a9c1cc4b45552de2073182b0b45a"
+const RECOVER_FINAL_HASH  := "09e38fdf70259c9a647c6dd053caa9e1518e5f830364ac5f96fac5dbceb92780"
 const RECOVER_SAVE_HASH   := "bffa34aa225afe79818ec0b15931d59f495930337b8d07b33a997208e0d46c35"
 
 static func test_recover() -> Dictionary:
@@ -448,7 +468,7 @@ static func test_recover() -> Dictionary:
 
 
 const PROTECT_ROUNDS_HASH := "bc118ed3aee325942e4bfa81691ddc7388edb0b8ad8ecccb763b87d9a3290c03"
-const PROTECT_FINAL_HASH  := "9c4018e29082838d81d379d0c793c127b610be4cfe03c5ef5fcc64341a9e64ed"
+const PROTECT_FINAL_HASH  := "2dced9c966b40abd0cd2d7bf9d25014ea9a41152d9c304f96664d9e481b2335e"
 const PROTECT_SAVE_HASH   := "bffa34aa225afe79818ec0b15931d59f495930337b8d07b33a997208e0d46c35"
 
 static func test_protect() -> Dictionary:
@@ -457,7 +477,7 @@ static func test_protect() -> Dictionary:
 
 
 const ENDURE_ROUNDS_HASH := "c6a4de6e29261ac97430b8a129da9176be491e7016274fb922113490069807f0"
-const ENDURE_FINAL_HASH  := "066a2ed8ce950ee080be5e0e75ca976147555ee67931d96613c0779ee83ebdef"
+const ENDURE_FINAL_HASH  := "106b216e990ac3e55653976f0bf0506f7f96f2d361a1183e87241c3948f7554e"
 const ENDURE_SAVE_HASH   := "cca434e9c009c6ba5607c102d12b1d87883fe6899dbffe4214c9a0cb0934eff7"
 
 static func test_endure() -> Dictionary:
@@ -466,7 +486,7 @@ static func test_endure() -> Dictionary:
 
 
 const PURSUE_ROUNDS_HASH := "c5db8858e28be4778751efea6928ba2fe87363dc59bc0e41c9dbae81f094d8aa"
-const PURSUE_FINAL_HASH  := "930204fffad60c56bd31b0eca2bcd5a6263926fc20a1825429d8b7dc7caf23ca"
+const PURSUE_FINAL_HASH  := "678b39327b47e4999322d24d3b07d280e48e475ed89fc2e1475f89bc6b8fbedb"
 const PURSUE_SAVE_HASH   := "bbe140a53a33fcc97220ce3f9c8c172e2cb1f4ce4a281094a78f9733b40b50a4"
 
 static func test_pursue() -> Dictionary:
@@ -482,7 +502,7 @@ static func test_pursue() -> Dictionary:
 # mode-specific decision surface (escort/skittish movement, guide_protect_counter) worth its own
 # fingerprint.
 const GUIDE_SPIRIT_ROUNDS_HASH := "e6ee04984b2e19d361d085329ab990ac66961e63a4fae4947d3fdf8bd6147b3c"
-const GUIDE_SPIRIT_FINAL_HASH  := "4ec057e9699b9ea010dbf628de0f90ce9a6c663e5de0aaa7ac4d32062077e1ef"
+const GUIDE_SPIRIT_FINAL_HASH  := "a325a46c3563e33884a9d1bd6899119232354509ceeef03b488d642bb4655b33"
 const GUIDE_SPIRIT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
 static func test_guide_spirit() -> Dictionary:

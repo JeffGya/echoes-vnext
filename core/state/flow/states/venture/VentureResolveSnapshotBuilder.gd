@@ -8,7 +8,7 @@ extends RefCounted
 ## only their surrounding comments re-homed.
 ##
 ## PRODUCER vs BLOCK LIBRARY — why this is a separate file from ResolveSnapshotBuilder.
-## ResolveSnapshotBuilder is the BLOCK LIBRARY: seventeen add_* writers plus build(), and a
+## ResolveSnapshotBuilder is the BLOCK LIBRARY: fifteen add_* writers plus build(), and a
 ## purity contract that takes NO FlowContext at all. Producers are the callers that decide
 ## WHICH blocks a given resolve card emits. ResolveSnapshotBuilder's own header names the six
 ## producers A–F and locates each one outside itself (A/B on FlowEncounterState, C/D/E on

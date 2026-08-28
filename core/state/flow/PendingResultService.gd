@@ -474,9 +474,5 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			str(stored.get("outcome", "")),
 			str(stored.get("outcome_text", ""))
 		)
-	if stored.has("title"):
-		ResolveSnapshotBuilder.add_legacy_title(data, str(stored.get("title", "")))
-	if stored.has("note"):
-		ResolveSnapshotBuilder.add_legacy_note(data, str(stored.get("note", "")))
 
 	return snap

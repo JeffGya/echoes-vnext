@@ -349,30 +349,73 @@ static func _test_bark_budget_prefers_higher_tier() -> Dictionary:
 	return { "ok": true }
 
 
+## Every context the shipped bark_tiers table lists, flattened. Used to prove a probe context
+## is genuinely unlisted rather than trusting a hardcoded name that a later authoring pass
+## may quietly promote into the table (combat_divergence did exactly that).
+static func _listed_bark_contexts(cfg: Dictionary) -> Dictionary:
+	var listed: Dictionary = {}
+	var tiers_v: Variant = cfg.get("bark_tiers", {})
+	if tiers_v is Dictionary:
+		for tier_key in (tiers_v as Dictionary).keys():
+			var contexts_v: Variant = (tiers_v as Dictionary)[tier_key]
+			if contexts_v is Array:
+				for context_v in (contexts_v as Array):
+					listed[str(context_v)] = int(str(tier_key))
+	return listed
+
+
+## A live bark context that data.voice.bark_tiers does not list, picked from the table itself
+## so this stays true however the table is re-authored. Candidates are real `_bark_context`
+## values set in core/actors/ActorStateMachine.gd, not config key names; the synthetic tail
+## entry keeps the test meaningful if every real one is ever authored in.
+static func _unlisted_bark_context(cfg: Dictionary) -> String:
+	var listed := _listed_bark_contexts(cfg)
+	for candidate in ["combat_identity_spike", "combat_refuse", "test_unlisted_bark_context"]:
+		if not listed.has(candidate):
+			return candidate
+	return ""
+
+
 ## A context absent from bark_tiers falls to the lowest authored tier — it neither outranks
-## an authored line nor sinks below one. combat_divergence is the live case: data.voice
-## .bark_tiers does not list it, so it ranks 3 here, where the deleted UI table gave it 2.
+## an authored line nor sinks below one. The probe context is derived from the shipped table
+## rather than hardcoded, so authoring a new context into bark_tiers cannot silently turn this
+## into a test of a listed context.
 static func _test_bark_budget_unknown_context_takes_lowest_tier() -> Dictionary:
 	var cfg := _shipped_voice_cfg()
+	var unlisted := _unlisted_bark_context(cfg)
+	if unlisted == "":
+		return { "ok": false, "error": "no unlisted probe context available — bark_tiers lists every candidate" }
+	var listed := _listed_bark_contexts(cfg)
+	if listed.has(unlisted):
+		return { "ok": false, "error": "probe context %s is listed in bark_tiers — premise broken" % unlisted }
+	var lowest_tier: int = 3
+	for tier_v in listed.values():
+		lowest_tier = maxi(lowest_tier, int(tier_v))
 	var rows: Array = [
-		_bark_row("divergence", "combat_divergence"),
-		_bark_row("banter",     "combat_banter"),
-		_bark_row("taunt",      "combat_taunt"),
+		_bark_row("unlisted", unlisted),
+		_bark_row("banter",   "combat_banter"),
+		_bark_row("taunt",    "combat_taunt"),
 	]
 	NarrativeVoiceService.apply_round_bark_budget(rows, cfg)
-	if int((rows[0] as Dictionary).get("bark_priority", -1)) != 3:
-		return { "ok": false, "error": "an unlisted context must take the lowest authored tier 3, got %s" % (rows[0] as Dictionary).get("bark_priority", "<absent>") }
-	# Ordering check: with four contenders the tier-2 line survives and one tier-3 line is cut.
+	if int((rows[0] as Dictionary).get("bark_priority", -1)) != lowest_tier:
+		return { "ok": false, "error": "an unlisted context (%s) must take the lowest authored tier %d, got %s" % [unlisted, lowest_tier, (rows[0] as Dictionary).get("bark_priority", "<absent>")] }
+	# Ordering check: four contenders against the authored cap of 3. The tier-2 taunt survives
+	# from last place, and the last of the three joint-lowest lines — the authored tier-3 guard —
+	# is the one cut. Board order alone would keep guard and drop taunt.
+	if int(listed.get("combat_taunt", -1)) >= lowest_tier:
+		return { "ok": false, "error": "combat_taunt must outrank the lowest tier for this ordering check, got %s" % listed.get("combat_taunt", "<absent>") }
+	if int(listed.get("combat_banter", -1)) != lowest_tier or int(listed.get("combat_guard", -1)) != lowest_tier:
+		return { "ok": false, "error": "combat_banter and combat_guard must both sit on the lowest tier for this ordering check" }
 	var rows2: Array = [
-		_bark_row("divergence", "combat_divergence"),
-		_bark_row("banter",     "combat_banter"),
-		_bark_row("guard",      "combat_guard"),
-		_bark_row("taunt",      "combat_taunt"),
+		_bark_row("unlisted", unlisted),
+		_bark_row("banter",   "combat_banter"),
+		_bark_row("guard",    "combat_guard"),
+		_bark_row("taunt",    "combat_taunt"),
 	]
 	NarrativeVoiceService.apply_round_bark_budget(rows2, cfg)
 	var kept := _lines_kept(rows2)
-	if kept != ["divergence", "banter", "taunt"]:
-		return { "ok": false, "error": "expected [divergence,banter,taunt], got %s" % str(kept) }
+	if kept != ["unlisted", "banter", "taunt"]:
+		return { "ok": false, "error": "expected [unlisted,banter,taunt] — tier 2 survives, last lowest-tier line is cut — got %s" % str(kept) }
 	return { "ok": true }
 
 

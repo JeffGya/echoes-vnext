@@ -47,10 +47,8 @@ func enter(ctx: RefCounted, t: int) -> void:
 	# and nothing is pending.
 	# Uses slot-keyed Dictionary actions (not legacy Array). No cta.next_stage — player must replay.
 	#
-	# V2-INFRA-003 Phase 5 Slice B: producer F, composed through ResolveSnapshotBuilder.
-	# It emits no run_type, so ResolveScreen falls through to the combat renderer — same as
-	# before. `title` and `note` are dead keys with zero consumers; they are reproduced
-	# deliberately (see the builder's blocks #16/#17) rather than dropped here.
+	# Producer F, composed through ResolveSnapshotBuilder. It emits no run_type, so
+	# ResolveScreen falls through to the combat renderer.
 	var actions: Dictionary = {
 		"cta.continue": {
 			"type":  "flow.go_state",
@@ -61,9 +59,7 @@ func enter(ctx: RefCounted, t: int) -> void:
 	}
 	var snap: Dictionary = ResolveSnapshotBuilder.build(t, actions)
 	var data: Dictionary = snap["data"]
-	ResolveSnapshotBuilder.add_legacy_title(data, "Resolve")
 	ResolveSnapshotBuilder.add_victory_flag(data, false)
-	ResolveSnapshotBuilder.add_legacy_note(data, "Result unavailable.")
 	flow_ctx.last_snapshot = snap
 
 func exit(ctx: RefCounted, t: int) -> void:

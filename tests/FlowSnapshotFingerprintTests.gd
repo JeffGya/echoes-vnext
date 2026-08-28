@@ -1007,8 +1007,6 @@ static func test_purity_resolve_builder_double_build_is_stable() -> Dictionary:
 		ResolveSnapshotBuilder.add_combat_seams(data, 0, false, "")
 		ResolveSnapshotBuilder.add_scout_intel(data, 2)
 		ResolveSnapshotBuilder.add_contact_outcome(data, "elder", "Elder", "good", "The elder nods.")
-		ResolveSnapshotBuilder.add_legacy_title(data, "Result")
-		ResolveSnapshotBuilder.add_legacy_note(data, "Result unavailable.")
 		built.append(JSON.stringify(snap, "", true))
 
 	if built[0] != built[1]:

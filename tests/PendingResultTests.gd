@@ -118,16 +118,16 @@ static func _t_classify_outcomes() -> Dictionary:
 
 ## The three resolve cards that must NOT become durable, and one non-resolve snapshot.
 ##
-## The fallback scaffold is the important one. It emits victory:false and would otherwise read
-## as a defeat, but it is the card that says "Result unavailable." — reached only when Resolve
-## was entered with nothing to show. Persisting it would turn an error card into a real recorded
-## defeat that flow.continue then served back. It is excluded by the absence of the combat-stats
-## block, which producers A and B always emit and F never does.
+## The fallback scaffold is the important one. Producer F emits victory:false and nothing else,
+## so it would otherwise read as a defeat — and it is reached only when Resolve was entered with
+## nothing to show. Persisting it would turn an error card into a real recorded defeat that
+## flow.continue then served back. It is excluded by the absence of the combat-stats block,
+## which producers A and B always emit and F never does.
 static func _t_classify_exclusions() -> Dictionary:
 	var cases: Array = [
 		{ "name": "contact card",     "snap": _resolve_snap({ "run_type": "contact_result", "verdict": "passed" }) },
 		{ "name": "situation card",   "snap": _resolve_snap({ "run_type": "situation_result", "ase_awarded": 12 }) },
-		{ "name": "fallback scaffold","snap": _resolve_snap({ "title": "Resolve", "victory": false, "note": "Result unavailable." }) },
+		{ "name": "fallback scaffold","snap": _resolve_snap({ "victory": false }) },
 		{ "name": "sanctum snapshot", "snap": { "type": FlowStateIds.SANCTUM, "meta": { "t": 1 }, "data": { "victory": false }, "actions": {} } },
 	]
 	var mismatches: Array = []

@@ -26,20 +26,8 @@ extends RefCounted
 ## Every block writes into the `data` Dictionary returned inside the skeleton (GDScript
 ## Dictionaries are passed by reference) and returns void.
 ##
-## ALL SEVENTEEN BLOCKS EXIST NOW, including the eight only producers A (combat) and
-## B (keeper trial) will use. Those two migrate in Phase 6, from
-## core/state/flow/states/venture/FlowEncounterState.gd. Building their blocks now means
-## Phase 6 is a pure call-site migration with NO edit to this file, and therefore no risk to
-## the already-migrated C/D/E/F. Do not delete an apparently unused block.
-##
-## Migrated in Phase 5 (this slice):
-##   C — scout return   (FlowRuntime._build_scout_return_snapshot)
-##   D — contact        (FlowRuntime._build_contact_resolve_snapshot)
-##   E — situation      (FlowRuntime._build_situation_resolve_snapshot)
-##   F — fallback       (FlowResolveState.enter)
-## Deferred to Phase 6:
-##   A — combat         (FlowEncounterState.build_final_snapshot)
-##   B — keeper trial   (FlowEncounterState._build_keeper_intro_final_snapshot)
+## FIFTEEN BLOCKS. Which producer emits which is the table in
+## docs/resolve-snapshot-block-spec.md §4.3 — check it before removing a block that looks unused.
 
 
 # ---------------------------------------------------------------------------
@@ -209,17 +197,3 @@ static func add_contact_outcome(
 	data["outcome"]      = outcome
 	data["outcome_text"] = outcome_text
 
-
-## 16 — KNOWN DEFECT (V2-INFRA-003 Phase 5 records; a later story fixes): `title` is a dead
-## key with zero consumers in ui/, core/ or tests/. It is kept because deleting it drifts
-## producer A's seven FlowFingerprintTests `data_keys` hashes — cheap to re-record in Phase 6,
-## gratuitous in Phase 5. Producers A, B, F.
-static func add_legacy_title(data: Dictionary, title: String) -> void:
-	data["title"] = title
-
-
-## 17 — KNOWN DEFECT (V2-INFRA-003 Phase 5 records; a later story fixes): `note` is a dead
-## key with zero consumers in ui/, core/ or tests/. Kept for the same reason as #16.
-## Producer F.
-static func add_legacy_note(data: Dictionary, note: String) -> void:
-	data["note"] = note

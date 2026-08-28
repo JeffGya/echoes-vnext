@@ -546,7 +546,7 @@ static func _count_remaining_required_objectives(flow_ctx: FlowContext) -> int:
 ## completing the Phase 5 migration (C/D/E/F went first; A is the sibling in
 ## FlowEncounterState.build_final_snapshot()). No key and no value changed. The spec's Phase 5
 ## claim that Phase 6 needs NO edit to ResolveSnapshotBuilder.gd was re-verified here: B's
-## sixteen keys are exactly legacy_title + combat_stats + actors + victory_flag + ledger +
+## keys are exactly combat_stats + actors + victory_flag + ledger +
 ## grade_rank + progression + emotion, at the granularity those blocks already have.
 ##
 ## TWO MEASURED IRREGULARITIES, PRESERVED EXACTLY — do not "tidy" either one.
@@ -607,7 +607,6 @@ static func _build_keeper_intro_final_snapshot(
 	# B emits no run_type — like A and F it falls through to ResolveScreen's combat renderer.
 	var _snap: Dictionary = ResolveSnapshotBuilder.build(t, _actions)
 	var _data: Dictionary = _snap["data"]
-	ResolveSnapshotBuilder.add_legacy_title(_data, "Result")
 	ResolveSnapshotBuilder.add_combat_stats(
 		_data,
 		"keeper_intro.first_trial",
