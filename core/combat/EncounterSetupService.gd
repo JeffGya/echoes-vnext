@@ -548,29 +548,20 @@ func setup(t: int) -> void:
 				# { col:0, row:0 } (core/actors/EnemyActor.gd:75). On irregular terrain boards
 				# that cell is VOID (outside StageTerrain's walkable set), which strands the ally
 				# off-board with no legal move (GridService.move_toward roots over the walkable
-				# set). Assign a real walkable, unoccupied, party-side cell here — same
-				# candidate/sort pattern as the RECOVER/PROTECT/GUIDE_SPIRIT objective placement
-				# above (~line 452-486 / 691-741), targeting proximity to the party's centroid
+				# set). Assign a real walkable, unoccupied, party-side cell here via
+				# GridService.place_on_terrain(), targeting proximity to the party's centroid
 				# instead of a depth-scaled column. Legacy full-rect boards (grid_cfg_for_placement
 				# has no "walkable" key) are untouched — (0,0) is a normal, non-void, unoccupied
 				# cell there (echoes fill from col=1 inward), so the ally still "just works".
 				var _ally_walkable: Dictionary = grid_cfg_for_placement.get("walkable", {})
 				if not _ally_walkable.is_empty():
-					var _ally_occupied: Dictionary = {}
-					for _ao_v in echo_actors:
-						if _ao_v is Dictionary:
-							var _ag: Dictionary = _ao_v.get("grid_pos", {})
-							_ally_occupied[str(int(_ag.get("col",-1))) + "," + str(int(_ag.get("row",-1)))] = true
-					for _ao_v in enemy_actors:
-						if _ao_v is Dictionary:
-							var _ag: Dictionary = _ao_v.get("grid_pos", {})
-							_ally_occupied[str(int(_ag.get("col",-1))) + "," + str(int(_ag.get("row",-1)))] = true
+					var _ally_spawned: Array = []
 					if not shrine_actor.is_empty():
-						var _ag: Dictionary = shrine_actor.get("grid_pos", {})
-						_ally_occupied[str(int(_ag.get("col",-1))) + "," + str(int(_ag.get("row",-1)))] = true
+						_ally_spawned.append(shrine_actor)
 					if not objective_actor.is_empty():
-						var _ag: Dictionary = objective_actor.get("grid_pos", {})
-						_ally_occupied[str(int(_ag.get("col",-1))) + "," + str(int(_ag.get("row",-1)))] = true
+						_ally_spawned.append(objective_actor)
+					var _ally_occupied: Dictionary = GridService.occupied_cells(
+						[echo_actors, enemy_actors, _ally_spawned])
 
 					# Party centroid — place the ally near the echoes it's fighting alongside.
 					var _ally_centroid_col: float = 0.0
@@ -584,22 +575,16 @@ func setup(t: int) -> void:
 						_ally_centroid_col /= float(echo_actors.size())
 						_ally_centroid_row /= float(echo_actors.size())
 
-					var _ally_candidates: Array = []
-					for _ac_key in _ally_walkable:
-						if not _ally_occupied.has(_ac_key):
-							var _ac_p: Array = str(_ac_key).split(",")
-							if _ac_p.size() == 2:
-								_ally_candidates.append({ "col": int(_ac_p[0]), "row": int(_ac_p[1]) })
-					# Stable sort: nearest to party centroid (Manhattan) first; tiebreak lowest col, then row.
-					_ally_candidates.sort_custom(func(a, b):
-						var da: float = abs(float(a["col"]) - _ally_centroid_col) + abs(float(a["row"]) - _ally_centroid_row)
-						var db: float = abs(float(b["col"]) - _ally_centroid_col) + abs(float(b["row"]) - _ally_centroid_row)
-						if da != db: return da < db
-						if a["col"] != b["col"]: return a["col"] < b["col"]
-						return a["row"] < b["row"]
-					)
-					if not _ally_candidates.is_empty():
-						_ally_actor["grid_pos"] = { "col": _ally_candidates[0]["col"], "row": _ally_candidates[0]["row"] }
+					var _ally_candidates: Array = GridService.collect_unoccupied_cells(
+						_ally_walkable, _ally_occupied)
+					# Target column AND row reference are both the party centroid, ranked by
+					# summed distance — the ally wants the nearest cell to the party, not the
+					# nearest cell in a target column.
+					var _ally_cell: Dictionary = GridService.place_on_terrain(
+						_ally_candidates, _ally_centroid_col, _ally_centroid_row,
+						GridService.PLACE_METRIC_MANHATTAN)
+					if not _ally_cell.is_empty():
+						_ally_actor["grid_pos"] = _ally_cell
 
 				all_actors.append(_ally_actor)
 

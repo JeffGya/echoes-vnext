@@ -88,9 +88,12 @@
 # NO SHIM WAS LEFT (AGENTS.md #20). Both blocks were inline code with no name of their own, so
 # there were no reflection call sites to repoint.
 #
+# PLACEMENT. All four spawn branches, and spawn_shrine() above them, pick their cell through
+# GridService.place_on_terrain(). Each passes its own target column and its own row reference;
+# see the note there before you change either.
+#
 # DEFECT NOTES — found while standing at this code, recorded in
-# docs/v2-infra-003-defect-register.md and deliberately NOT fixed here: D79 (the same
-# depth-scaled candidate/sort placement routine is written out five times), D80 (the shrine's
+# docs/v2-infra-003-defect-register.md and deliberately NOT fixed here: D80 (the shrine's
 # legacy no-terrain default grid_pos col 0 row 4 collides with the RECOVER relic's identical
 # default), D81 (PROTECT's centre column uses integer division on a possibly-negative
 # sentinel when no candidate cell exists).
@@ -107,6 +110,20 @@ func _init(_flow_ctx: FlowContext, _config_service = null, _logger = null) -> vo
 	flow_ctx = _flow_ctx
 	config_service = _config_service
 	logger = _logger
+
+
+## Depth along COLUMNS for this realm's completion_index: 0 = echo/left side, 1 = enemy/deep
+## side. Both spawn methods derive their target column from this, so the
+## data.combat.objective_placement read happens once, here.
+func _depth_fraction(completion_index: int) -> float:
+	var cfg: Dictionary = {}
+	if flow_ctx.config_service != null:
+		var bal: Dictionary = flow_ctx.config_service.get_balance()
+		cfg = ConfigService.get_objective_placement_cfg_from_balance(bal)
+	var min_frac: float = float(cfg.get("depth_min_frac",     0.35))
+	var max_frac: float = float(cfg.get("depth_max_frac",     1.0))
+	var full_at:  float = float(cfg.get("completion_full_at", 6.0))
+	return clampf(float(completion_index) / full_at, min_frac, max_frac)
 
 
 ## PURIFY_SHRINE only. Runs once, immediately AFTER GridService.place_actors() (the occupancy
@@ -146,72 +163,23 @@ func spawn_shrine(
 		var _shrine_terrain: Dictionary = flow_ctx.encounter_ctx.terrain
 		if not _shrine_terrain.is_empty():
 			var _shrine_walkable: Dictionary = StageTerrain.walkable_set(_shrine_terrain)
-			# Collect already-occupied cells from echo + enemy actors (placed just above).
-			var _shrine_occupied: Dictionary = {}
-			for _so_v in echo_actors:
-				if _so_v is Dictionary:
-					var _so_gp: Dictionary = _so_v.get("grid_pos", {})
-					var _so_key: String = str(int(_so_gp.get("col", -1))) + "," + str(int(_so_gp.get("row", -1)))
-					_shrine_occupied[_so_key] = true
-			for _so_v in enemy_actors:
-				if _so_v is Dictionary:
-					var _so_gp: Dictionary = _so_v.get("grid_pos", {})
-					var _so_key: String = str(int(_so_gp.get("col", -1))) + "," + str(int(_so_gp.get("row", -1)))
-					_shrine_occupied[_so_key] = true
-			# Build a sorted list of candidates so iteration order is deterministic.
-			var _shrine_candidates: Array = []
-			for _sc_key in _shrine_walkable:
-				if not _shrine_occupied.has(_sc_key):
-					var _sc_parts: Array = str(_sc_key).split(",")
-					if _sc_parts.size() == 2:
-						_shrine_candidates.append({ "col": int(_sc_parts[0]), "row": int(_sc_parts[1]) })
-
-			# P3b: read depth-scale config from balance.json; safe in-code defaults.
-			var _op_cfg: Dictionary = {}
-			if flow_ctx.config_service != null:
-				var _op_bal: Dictionary = flow_ctx.config_service.get_balance()
-				_op_cfg = _op_bal.get("data", {}).get("combat", {}).get("objective_placement", {})
-			var _op_min_frac:  float = float(_op_cfg.get("depth_min_frac",      0.35))
-			var _op_max_frac:  float = float(_op_cfg.get("depth_max_frac",      1.0))
-			var _op_full_at:   float = float(_op_cfg.get("completion_full_at",  6.0))
+			var _shrine_occupied: Dictionary = GridService.occupied_cells([echo_actors, enemy_actors])
+			var _shrine_candidates: Array = GridService.collect_unoccupied_cells(
+				_shrine_walkable, _shrine_occupied)
 
 			# Depth fraction: 0 = echo/left side; 1 = enemy/right (max-col) side.
-			var _op_f: float = clampf(float(completion_index) / _op_full_at, _op_min_frac, _op_max_frac)
-
-			# Derive walkable column range.
-			var _op_min_col: int = 999999
-			var _op_max_col: int = -1
-			for _opc_v in _shrine_candidates:
-				var _opc: Dictionary = _opc_v
-				if _opc["col"] < _op_min_col: _op_min_col = _opc["col"]
-				if _opc["col"] > _op_max_col: _op_max_col = _opc["col"]
-
-			# Target column for this completion_index.
-			var _op_target_col: int = roundi(_op_min_col + _op_f * float(_op_max_col - _op_min_col))
-
-			# Board vertical centre for tiebreak.
+			var _op_f: float = _depth_fraction(completion_index)
+			var _shrine_cols: Dictionary = GridService.candidate_column_range(_shrine_candidates)
+			var _op_target_col: int = roundi(
+				_shrine_cols["min_col"] + _op_f * float(_shrine_cols["max_col"] - _shrine_cols["min_col"]))
+			# Row reference: board vertical centre.
 			var _shrine_board_h: int = int(_shrine_terrain.get("bounds", {}).get("h", 12))
 			var _shrine_mid_row: float = float(_shrine_board_h - 1) * 0.5
 
-			# Stable sort: nearest to target_col first; tiebreak row nearest mid; then lowest col; then lowest row.
-			_shrine_candidates.sort_custom(func(a, b):
-				var da_col: int = abs(a["col"] - _op_target_col)
-				var db_col: int = abs(b["col"] - _op_target_col)
-				if da_col != db_col:
-					return da_col < db_col
-				var da_row: float = abs(float(a["row"]) - _shrine_mid_row)
-				var db_row: float = abs(float(b["row"]) - _shrine_mid_row)
-				if da_row != db_row:
-					return da_row < db_row
-				if a["col"] != b["col"]:
-					return a["col"] < b["col"]
-				return a["row"] < b["row"]
-			)
-			if not _shrine_candidates.is_empty():
-				shrine_actor["grid_pos"] = {
-					"col": _shrine_candidates[0]["col"],
-					"row": _shrine_candidates[0]["row"],
-				}
+			var _shrine_cell: Dictionary = GridService.place_on_terrain(
+				_shrine_candidates, float(_op_target_col), _shrine_mid_row)
+			if not _shrine_cell.is_empty():
+				shrine_actor["grid_pos"] = _shrine_cell
 		# Runtime-only shrine fields — not in ActorSchema REQUIRED_FIELDS.
 		shrine_actor["purify_stacks"] = []
 
@@ -235,14 +203,7 @@ func spawn_objective_actor(
 	# V2-STAGE-004 P3: Spawn objective structure actor for RECOVER / PROTECT modes.
 	# ENDURE spawns no objective actor (wave-only). Shrine path is unchanged above.
 	var objective_actor: Dictionary = {}
-	var _op_cfg_p3: Dictionary = {}
-	if flow_ctx.config_service != null:
-		var _opal_bal: Dictionary = flow_ctx.config_service.get_balance()
-		_op_cfg_p3 = _opal_bal.get("data", {}).get("combat", {}).get("objective_placement", {})
-	var _op_min_frac_p3: float  = float(_op_cfg_p3.get("depth_min_frac",      0.35))
-	var _op_max_frac_p3: float  = float(_op_cfg_p3.get("depth_max_frac",      1.0))
-	var _op_full_at_p3:  float  = float(_op_cfg_p3.get("completion_full_at",  6.0))
-	var _op_f_p3: float = clampf(float(completion_index) / _op_full_at_p3, _op_min_frac_p3, _op_max_frac_p3)
+	var _op_f_p3: float = _depth_fraction(completion_index)
 
 	match flow_ctx.encounter_ctx.resolution_mode:
 		EncounterResolutionModes.RECOVER:
@@ -266,42 +227,19 @@ func spawn_objective_actor(
 			var _rec_terrain: Dictionary = flow_ctx.encounter_ctx.terrain
 			if not _rec_terrain.is_empty():
 				var _rec_walkable: Dictionary = StageTerrain.walkable_set(_rec_terrain)
-				var _rec_occupied: Dictionary = {}
-				for _ro_v in echo_actors:
-					if _ro_v is Dictionary:
-						var _rg: Dictionary = _ro_v.get("grid_pos", {})
-						_rec_occupied[str(int(_rg.get("col",-1))) + "," + str(int(_rg.get("row",-1)))] = true
-				for _ro_v in enemy_actors:
-					if _ro_v is Dictionary:
-						var _rg: Dictionary = _ro_v.get("grid_pos", {})
-						_rec_occupied[str(int(_rg.get("col",-1))) + "," + str(int(_rg.get("row",-1)))] = true
-				var _rec_candidates: Array = []
-				for _rc_key in _rec_walkable:
-					if not _rec_occupied.has(_rc_key):
-						var _rc_p: Array = str(_rc_key).split(",")
-						if _rc_p.size() == 2:
-							_rec_candidates.append({ "col": int(_rc_p[0]), "row": int(_rc_p[1]) })
-				var _rec_min_col: int = 999999
-				var _rec_max_col: int = -1
-				for _rc_v in _rec_candidates:
-					if _rc_v["col"] < _rec_min_col: _rec_min_col = _rc_v["col"]
-					if _rc_v["col"] > _rec_max_col: _rec_max_col = _rc_v["col"]
-				var _rec_target_col: int = roundi(_rec_min_col + _op_f_p3 * float(_rec_max_col - _rec_min_col))
+				var _rec_occupied: Dictionary = GridService.occupied_cells([echo_actors, enemy_actors])
+				var _rec_candidates: Array = GridService.collect_unoccupied_cells(
+					_rec_walkable, _rec_occupied)
+				var _rec_cols: Dictionary = GridService.candidate_column_range(_rec_candidates)
+				var _rec_target_col: int = roundi(
+					_rec_cols["min_col"] + _op_f_p3 * float(_rec_cols["max_col"] - _rec_cols["min_col"]))
+				# Row reference: board vertical centre.
 				var _rec_board_h: int = int(_rec_terrain.get("bounds", {}).get("h", 12))
 				var _rec_mid_row: float = float(_rec_board_h - 1) * 0.5
-				# Stable sort: nearest target_col first; tiebreak row nearest mid; lowest col; lowest row.
-				_rec_candidates.sort_custom(func(a, b):
-					var da: int = abs(a["col"] - _rec_target_col)
-					var db: int = abs(b["col"] - _rec_target_col)
-					if da != db: return da < db
-					var dra: float = abs(float(a["row"]) - _rec_mid_row)
-					var drb: float = abs(float(b["row"]) - _rec_mid_row)
-					if dra != drb: return dra < drb
-					if a["col"] != b["col"]: return a["col"] < b["col"]
-					return a["row"] < b["row"]
-				)
-				if not _rec_candidates.is_empty():
-					objective_actor["grid_pos"] = { "col": _rec_candidates[0]["col"], "row": _rec_candidates[0]["row"] }
+				var _rec_cell: Dictionary = GridService.place_on_terrain(
+					_rec_candidates, float(_rec_target_col), _rec_mid_row)
+				if not _rec_cell.is_empty():
+					objective_actor["grid_pos"] = _rec_cell
 
 		EncounterResolutionModes.PROTECT:
 			# Spawn entity structure — placed mid-field (nearest cell to board-centre column).
@@ -327,43 +265,21 @@ func spawn_objective_actor(
 			var _prt_terrain: Dictionary = flow_ctx.encounter_ctx.terrain
 			if not _prt_terrain.is_empty():
 				var _prt_walkable: Dictionary = StageTerrain.walkable_set(_prt_terrain)
-				var _prt_occupied: Dictionary = {}
-				for _po_v in echo_actors:
-					if _po_v is Dictionary:
-						var _pg: Dictionary = _po_v.get("grid_pos", {})
-						_prt_occupied[str(int(_pg.get("col",-1))) + "," + str(int(_pg.get("row",-1)))] = true
-				for _po_v in enemy_actors:
-					if _po_v is Dictionary:
-						var _pg: Dictionary = _po_v.get("grid_pos", {})
-						_prt_occupied[str(int(_pg.get("col",-1))) + "," + str(int(_pg.get("row",-1)))] = true
-				var _prt_candidates: Array = []
-				for _pc_key in _prt_walkable:
-					if not _prt_occupied.has(_pc_key):
-						var _pc_p: Array = str(_pc_key).split(",")
-						if _pc_p.size() == 2:
-							_prt_candidates.append({ "col": int(_pc_p[0]), "row": int(_pc_p[1]) })
-				# Derive centre column from walkable bounds.
-				var _prt_min_col: int = 999999
-				var _prt_max_col: int = -1
+				var _prt_occupied: Dictionary = GridService.occupied_cells([echo_actors, enemy_actors])
+				var _prt_candidates: Array = GridService.collect_unoccupied_cells(
+					_prt_walkable, _prt_occupied)
+				# Row reference: board vertical centre.
 				var _prt_board_h: int = int(_prt_terrain.get("bounds", {}).get("h", 12))
 				var _prt_mid_row: float = float(_prt_board_h - 1) * 0.5
-				for _pc_v in _prt_candidates:
-					if _pc_v["col"] < _prt_min_col: _prt_min_col = _pc_v["col"]
-					if _pc_v["col"] > _prt_max_col: _prt_max_col = _pc_v["col"]
-				var _prt_centre_col: int = (_prt_min_col + _prt_max_col) / 2
-				# Stable sort: nearest centre column first; tiebreak nearest mid row; lowest col; lowest row.
-				_prt_candidates.sort_custom(func(a, b):
-					var da: int = abs(a["col"] - _prt_centre_col)
-					var db: int = abs(b["col"] - _prt_centre_col)
-					if da != db: return da < db
-					var dra: float = abs(float(a["row"]) - _prt_mid_row)
-					var drb: float = abs(float(b["row"]) - _prt_mid_row)
-					if dra != drb: return dra < drb
-					if a["col"] != b["col"]: return a["col"] < b["col"]
-					return a["row"] < b["row"]
-				)
-				if not _prt_candidates.is_empty():
-					objective_actor["grid_pos"] = { "col": _prt_candidates[0]["col"], "row": _prt_candidates[0]["row"] }
+				# Target column: board centre, not depth-scaled. PROTECT is the only mode that
+				# ignores completion_index. D81: the integer division keeps the 999999 / -1
+				# sentinels when there is no candidate cell — not fixed here.
+				var _prt_cols: Dictionary = GridService.candidate_column_range(_prt_candidates)
+				var _prt_centre_col: int = (int(_prt_cols["min_col"]) + int(_prt_cols["max_col"])) / 2
+				var _prt_cell: Dictionary = GridService.place_on_terrain(
+					_prt_candidates, float(_prt_centre_col), _prt_mid_row)
+				if not _prt_cell.is_empty():
+					objective_actor["grid_pos"] = _prt_cell
 			# Legacy path (no terrain): grid_pos from def used as-is — no relocation needed.
 
 		EncounterResolutionModes.PURSUE:
@@ -384,27 +300,12 @@ func spawn_objective_actor(
 			var _qry_terrain: Dictionary = flow_ctx.encounter_ctx.terrain
 			if not _qry_terrain.is_empty():
 				var _qry_walkable: Dictionary = StageTerrain.walkable_set(_qry_terrain)
-				var _qry_occupied: Dictionary = {}
-				for _qo_v in echo_actors:
-					if _qo_v is Dictionary:
-						var _qq: Dictionary = _qo_v.get("grid_pos", {})
-						_qry_occupied[str(int(_qq.get("col",-1))) + "," + str(int(_qq.get("row",-1)))] = true
-				for _qo_v in enemy_actors:
-					if _qo_v is Dictionary:
-						var _qq: Dictionary = _qo_v.get("grid_pos", {})
-						_qry_occupied[str(int(_qq.get("col",-1))) + "," + str(int(_qq.get("row",-1)))] = true
-				var _qry_candidates: Array = []
-				for _qc_key in _qry_walkable:
-					if not _qry_occupied.has(_qc_key):
-						var _qc_p: Array = str(_qc_key).split(",")
-						if _qc_p.size() == 2:
-							_qry_candidates.append({ "col": int(_qc_p[0]), "row": int(_qc_p[1]) })
-				var _qry_min_col: int = 999999
-				var _qry_max_col: int = -1
-				for _qc_v in _qry_candidates:
-					if _qc_v["col"] < _qry_min_col: _qry_min_col = _qc_v["col"]
-					if _qc_v["col"] > _qry_max_col: _qry_max_col = _qc_v["col"]
-				var _qry_target_col: int = roundi(_qry_min_col + _op_f_p3 * float(_qry_max_col - _qry_min_col))
+				var _qry_occupied: Dictionary = GridService.occupied_cells([echo_actors, enemy_actors])
+				var _qry_candidates: Array = GridService.collect_unoccupied_cells(
+					_qry_walkable, _qry_occupied)
+				var _qry_cols: Dictionary = GridService.candidate_column_range(_qry_candidates)
+				var _qry_target_col: int = roundi(
+					_qry_cols["min_col"] + _op_f_p3 * float(_qry_cols["max_col"] - _qry_cols["min_col"]))
 				# V2-COMBAT-002 Slice 6E: anchor the row tie-break to the PARTY's spawn band,
 				# not the board's midpoint. `_op_f_p3` scales depth along COLUMNS only, so on
 				# a tall board the old board-midpoint rule parked the quarry ~24 rows from a
@@ -413,6 +314,8 @@ func spawn_objective_actor(
 				# IMMEDIATE defeat (CombatState.gd:200-202), so the mode became unwinnable by
 				# geometry alone. Column depth (and therefore progression scaling) is unchanged.
 				# Falls back to the board midpoint when no echo has a position.
+				# This row reference is LOCAL to PURSUE. The other four modes pass the board
+				# midpoint; do not propagate this one to them — it moves their spawn cells.
 				var _qry_board_h: int = int(_qry_terrain.get("bounds", {}).get("h", 12))
 				var _qry_mid_row: float = float(_qry_board_h - 1) * 0.5
 				var _qry_row_sum: float = 0.0
@@ -425,18 +328,10 @@ func spawn_objective_actor(
 							_qry_row_n += 1
 				if _qry_row_n > 0:
 					_qry_mid_row = _qry_row_sum / float(_qry_row_n)
-				_qry_candidates.sort_custom(func(a, b):
-					var da: int = abs(a["col"] - _qry_target_col)
-					var db: int = abs(b["col"] - _qry_target_col)
-					if da != db: return da < db
-					var dra: float = abs(float(a["row"]) - _qry_mid_row)
-					var drb: float = abs(float(b["row"]) - _qry_mid_row)
-					if dra != drb: return dra < drb
-					if a["col"] != b["col"]: return a["col"] < b["col"]
-					return a["row"] < b["row"]
-				)
-				if not _qry_candidates.is_empty():
-					objective_actor["grid_pos"] = { "col": _qry_candidates[0]["col"], "row": _qry_candidates[0]["row"] }
+				var _qry_cell: Dictionary = GridService.place_on_terrain(
+					_qry_candidates, float(_qry_target_col), _qry_mid_row)
+				if not _qry_cell.is_empty():
+					objective_actor["grid_pos"] = _qry_cell
 
 		EncounterResolutionModes.GUIDE_SPIRIT:
 			# V2-STAGE-004 P3c: seed guide_mode 50/50 — "protect" (stay in place) or
@@ -541,40 +436,20 @@ func spawn_objective_actor(
 			var _gs_candidates: Array = []
 			if not _gs_terrain.is_empty():
 				var _gs_walkable: Dictionary = StageTerrain.walkable_set(_gs_terrain)
-				var _gs_occupied: Dictionary = {}
-				for _go_v in echo_actors:
-					if _go_v is Dictionary:
-						var _gg: Dictionary = _go_v.get("grid_pos", {})
-						_gs_occupied[str(int(_gg.get("col",-1))) + "," + str(int(_gg.get("row",-1)))] = true
-				for _go_v in enemy_actors:
-					if _go_v is Dictionary:
-						var _gg: Dictionary = _go_v.get("grid_pos", {})
-						_gs_occupied[str(int(_gg.get("col",-1))) + "," + str(int(_gg.get("row",-1)))] = true
-				for _gc_key in _gs_walkable:
-					if not _gs_occupied.has(_gc_key):
-						var _gc_p: Array = str(_gc_key).split(",")
-						if _gc_p.size() == 2:
-							_gs_candidates.append({ "col": int(_gc_p[0]), "row": int(_gc_p[1]) })
-				var _gs_min_col: int = 999999
-				var _gs_max_col: int = -1
-				for _gc_v in _gs_candidates:
-					if _gc_v["col"] < _gs_min_col: _gs_min_col = _gc_v["col"]
-					if _gc_v["col"] > _gs_max_col: _gs_max_col = _gc_v["col"]
-				var _gs_target_col: int = roundi(_gs_min_col + _op_f_p3 * float(_gs_max_col - _gs_min_col))
+				var _gs_occupied: Dictionary = GridService.occupied_cells([echo_actors, enemy_actors])
+				# place_on_terrain() sorts this array in place; the escort destination block
+				# below re-reads it, so the reference must be the one declared above.
+				_gs_candidates = GridService.collect_unoccupied_cells(_gs_walkable, _gs_occupied)
+				var _gs_cols: Dictionary = GridService.candidate_column_range(_gs_candidates)
+				var _gs_target_col: int = roundi(
+					_gs_cols["min_col"] + _op_f_p3 * float(_gs_cols["max_col"] - _gs_cols["min_col"]))
+				# Row reference: board vertical centre.
 				var _gs_board_h: int = int(_gs_terrain.get("bounds", {}).get("h", 12))
 				var _gs_mid_row: float = float(_gs_board_h - 1) * 0.5
-				_gs_candidates.sort_custom(func(a, b):
-					var da: int = abs(a["col"] - _gs_target_col)
-					var db: int = abs(b["col"] - _gs_target_col)
-					if da != db: return da < db
-					var dra: float = abs(float(a["row"]) - _gs_mid_row)
-					var drb: float = abs(float(b["row"]) - _gs_mid_row)
-					if dra != drb: return dra < drb
-					if a["col"] != b["col"]: return a["col"] < b["col"]
-					return a["row"] < b["row"]
-				)
-				if not _gs_candidates.is_empty():
-					objective_actor["grid_pos"] = { "col": _gs_candidates[0]["col"], "row": _gs_candidates[0]["row"] }
+				var _gs_cell: Dictionary = GridService.place_on_terrain(
+					_gs_candidates, float(_gs_target_col), _gs_mid_row)
+				if not _gs_cell.is_empty():
+					objective_actor["grid_pos"] = _gs_cell
 
 			# Escort — seed destination on the walkable BORDER/FRONTIER ring, Chebyshev distance
 			# >= destination_min_distance from the spirit's spawn cell (relax to farthest frontier

@@ -327,6 +327,26 @@ static func get_objective_modes_cfg_from_balance(balance: Dictionary) -> Diction
 	return modes_v if modes_v is Dictionary else {}
 
 
+## data.combat.objective_placement — depth-scale tuning for objective spawn placement
+## (depth_min_frac, depth_max_frac, completion_full_at). All three keys are read together and
+## can never disagree, so the subtree has one owner here rather than a longhand read per site.
+static func get_objective_placement_cfg(config_service: ConfigService) -> Dictionary:
+	if config_service == null:
+		return {}
+	var balance_v: Variant = config_service.get_balance()
+	return get_objective_placement_cfg_from_balance(balance_v if balance_v is Dictionary else {})
+
+
+## Balance-dict variant, for call sites that already hold the loaded balance dict.
+static func get_objective_placement_cfg_from_balance(balance: Dictionary) -> Dictionary:
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var combat_v: Variant = data.get("combat", {})
+	var combat: Dictionary = combat_v if combat_v is Dictionary else {}
+	var placement_v: Variant = combat.get("objective_placement", {})
+	return placement_v if placement_v is Dictionary else {}
+
+
 ## data.combat.shrine — PURIFY_SHRINE drain/purify tuning. Read by
 ## CombatRoundShrineService, which passes it to ShrineService.apply_drain().
 static func get_shrine_cfg(config_service: ConfigService) -> Dictionary:

@@ -103,6 +103,101 @@ static func assign_grid_pos(actor: Dictionary, col: int, row: int) -> Dictionary
 
 
 # -------------------------
+# Single-cell spawn placement on a walkable set
+# -------------------------
+#
+# The one routine that picks ONE cell for an actor spawned after place_actors() has already
+# filled the board: the shrine, the RECOVER relic, the PROTECT entity, the PURSUE quarry, the
+# GUIDE_SPIRIT spirit and the temporary ally. Callers build the occupancy set, collect the
+# unoccupied walkable cells, choose a target column, then call place_on_terrain().
+#
+# WHY ref_row IS A PARAMETER AND NOT A CONSTANT. Five callers pass the board midpoint. PURSUE
+# passes the PARTY CENTROID row, on purpose: the depth fraction scales COLUMNS only, so on a
+# tall board the midpoint rule parked the quarry tens of rows away from a party spawning near
+# the top, and a quarry escape is an immediate defeat. That fix is deliberately local to
+# PURSUE. Do NOT collapse ref_row to a constant and do NOT propagate the centroid to the other
+# five — either one moves every mode's spawn cell.
+#
+# WHY metric IS A PARAMETER. The five objective callers rank by column distance FIRST and use
+# row distance only as a tie-break, because column is what the depth scale governs. The ally
+# ranks by the summed (Manhattan) distance to the party centroid, which orders cells
+# differently — a cell one column off can beat a cell in the exact column. Both orderings are
+# in use today and neither can adopt the other without moving a spawn cell.
+
+## Rank by |col - target_col| first, then |row - ref_row|, then col, then row.
+const PLACE_METRIC_AXIS: int = 0
+## Rank by |col - target_col| + |row - ref_row|, then col, then row.
+const PLACE_METRIC_MANHATTAN: int = 1
+
+
+## Builds the "col,row" occupancy set from any number of actor lists. Non-Dictionary entries
+## and actors with no grid_pos are keyed at "-1,-1", which no walkable set contains.
+static func occupied_cells(actor_lists: Array) -> Dictionary:
+	var occupied: Dictionary = {}
+	for list_v in actor_lists:
+		for actor_v in list_v:
+			if actor_v is Dictionary:
+				var gp: Dictionary = (actor_v as Dictionary).get("grid_pos", {})
+				occupied[str(int(gp.get("col", -1))) + "," + str(int(gp.get("row", -1)))] = true
+	return occupied
+
+
+## Returns the walkable cells that nothing occupies, as [{ col, row }, ...] in walkable-set
+## iteration order. place_on_terrain() imposes a total order on them, so this order is not
+## load-bearing.
+static func collect_unoccupied_cells(walkable: Dictionary, occupied: Dictionary) -> Array:
+	var cells: Array = []
+	for key in walkable:
+		if not occupied.has(key):
+			var parts: Array = str(key).split(",")
+			if parts.size() == 2:
+				cells.append({ "col": int(parts[0]), "row": int(parts[1]) })
+	return cells
+
+
+## Returns { min_col, max_col } over the given cells. The sentinels 999999 / -1 survive an
+## empty list, exactly as the six inline copies did.
+static func candidate_column_range(cells: Array) -> Dictionary:
+	var min_col: int = 999999
+	var max_col: int = -1
+	for cell_v in cells:
+		var col: int = int((cell_v as Dictionary)["col"])
+		if col < min_col: min_col = col
+		if col > max_col: max_col = col
+	return { "min_col": min_col, "max_col": max_col }
+
+
+## Sorts candidates in place into the chosen total order and returns the best cell as
+## { col, row }, or {} when there are none. The sort is in place so a caller that needs the
+## ranked list afterwards (GUIDE_SPIRIT's escort destination) keeps its own reference to it.
+## No RNG: (col, row) is unique per cell, so the order is total and fully deterministic.
+static func place_on_terrain(candidates: Array, target_col: float, ref_row: float,
+		metric: int = PLACE_METRIC_AXIS) -> Dictionary:
+	if metric == PLACE_METRIC_MANHATTAN:
+		candidates.sort_custom(func(a, b):
+			var da: float = abs(float(a["col"]) - target_col) + abs(float(a["row"]) - ref_row)
+			var db: float = abs(float(b["col"]) - target_col) + abs(float(b["row"]) - ref_row)
+			if da != db: return da < db
+			if a["col"] != b["col"]: return a["col"] < b["col"]
+			return a["row"] < b["row"]
+		)
+	else:
+		candidates.sort_custom(func(a, b):
+			var da: float = abs(float(a["col"]) - target_col)
+			var db: float = abs(float(b["col"]) - target_col)
+			if da != db: return da < db
+			var dra: float = abs(float(a["row"]) - ref_row)
+			var drb: float = abs(float(b["row"]) - ref_row)
+			if dra != drb: return dra < drb
+			if a["col"] != b["col"]: return a["col"] < b["col"]
+			return a["row"] < b["row"]
+		)
+	if candidates.is_empty():
+		return {}
+	return { "col": int(candidates[0]["col"]), "row": int(candidates[0]["row"]) }
+
+
+# -------------------------
 # Deterministic placement (GRID-003)
 # -------------------------
 
