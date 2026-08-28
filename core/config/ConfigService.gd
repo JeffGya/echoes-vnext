@@ -305,6 +305,21 @@ static func get_situation_category_cfg(config_service: ConfigService) -> Diction
 	return category_v if category_v is Dictionary else {}
 
 
+## data.voice — bark budget, tier table and the reactive/sanctum bark parameters.
+## Read by NarrativeVoiceService (round bark budget + sanctum barker selection) and by
+## ActorStateMachine, which receives the whole balance dict in its context and reads the
+## subtree inline rather than through this getter.
+static func get_voice_cfg(config_service: ConfigService) -> Dictionary:
+	if config_service == null:
+		return {}
+	var balance_v: Variant = config_service.get_balance()
+	var balance: Dictionary = balance_v if balance_v is Dictionary else {}
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var voice_v: Variant = data.get("voice", {})
+	return voice_v if voice_v is Dictionary else {}
+
+
 ## data.combat.movement.slack — bounded detour allowance passed to
 ## StagePartyMovementAdapter.select_objective_target(). V2-INFRA-003 Phase 5 Slice A: moved
 ## off FlowRuntime (private _stage_movement_slack_config), same rationale as

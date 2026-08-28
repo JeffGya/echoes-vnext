@@ -100,6 +100,8 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	for a_v in raw_actors:
 		if a_v is Dictionary:
 			projected_actors.append(EncounterSnapshotBuilder._project_actor(a_v, _s14a_contribution_ledger))
+	NarrativeVoiceService.apply_round_bark_budget(
+		projected_actors, ConfigService.get_voice_cfg(flow_ctx.config_service))
 
 	# UI-005: pre-compute summary counts so ResolveScreen reads clean fields.
 	var enemies_defeated: int = 0

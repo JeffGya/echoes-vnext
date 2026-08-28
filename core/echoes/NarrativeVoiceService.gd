@@ -267,6 +267,95 @@ func _anansi_snippet_events_cfg() -> Dictionary:
 	return ev_v if ev_v is Dictionary else {}
 
 
+# ── Round bark budget (data.voice) ────────────────────────────────────────────
+
+## Applies the authored `data.voice` bark budget to one snapshot's projected actor rows.
+##
+## Pure and static: it reads and writes only the projected rows handed to it, never a runtime
+## actor, so the snapshot builders that call it stay pure with respect to `_bark_line`.
+##
+## Rows that lose their budget have `bark_line` cleared — they keep `bark_context`/`bark_tier`,
+## which no consumer reads without a line. Survivors gain `bark_priority` (1 = most significant),
+## resolved from `voice.bark_tiers`; an unlisted context falls to the lowest tier.
+##
+## Selection rule — highest tier first, board order breaking ties:
+##   1. Originals (`bark_is_response == false`) are ranked by tier and the first
+##      `max_barks_per_round` survive.
+##   2. Reactions are not ranked. Each surviving original keeps up to
+##      `max_reactions_per_original` reactions aimed at it (`bark_target_id`); a reaction whose
+##      original did not survive is cleared with it.
+##   3. `reactions_exceed_cap` false makes reactions compete for the same
+##      `max_barks_per_round` budget instead of riding above it.
+static func apply_round_bark_budget(projected_actors: Array, voice_cfg: Dictionary) -> void:
+	var max_barks: int     = int(voice_cfg.get("max_barks_per_round", 3))
+	var max_reactions: int = int(voice_cfg.get("max_reactions_per_original", 1))
+	var exceed_cap: bool   = bool(voice_cfg.get("reactions_exceed_cap", true))
+	var tier_of: Dictionary = _bark_tier_index(voice_cfg)
+	var lowest_tier: int = 3
+	for tier_v in tier_of.values():
+		lowest_tier = maxi(lowest_tier, int(tier_v))
+
+	# Originals carry their board index so the tie-break is board order: sort_custom is not
+	# documented as stable, and two rows on the same tier must not swap between identical runs.
+	var originals: Array = []
+	var reactions: Array = []
+	for i in range(projected_actors.size()):
+		if not (projected_actors[i] is Dictionary):
+			continue
+		var row: Dictionary = projected_actors[i]
+		if str(row.get("bark_line", "")).is_empty():
+			continue
+		var tier: int = int(tier_of.get(str(row.get("bark_context", "")), lowest_tier))
+		row["bark_priority"] = tier
+		if bool(row.get("bark_is_response", false)):
+			reactions.append(row)
+		else:
+			originals.append({ "row": row, "tier": tier, "idx": i })
+
+	originals.sort_custom(func(a, b):
+		if int(a["tier"]) != int(b["tier"]):
+			return int(a["tier"]) < int(b["tier"])
+		return int(a["idx"]) < int(b["idx"])
+	)
+
+	var reactions_left: Dictionary = {}   # surviving original id -> reactions still allowed
+	var shown: int = 0
+	for entry_v in originals:
+		var entry: Dictionary = entry_v
+		var original: Dictionary = entry["row"]
+		if shown < max_barks:
+			reactions_left[str(original.get("id", ""))] = max_reactions
+			shown += 1
+		else:
+			original["bark_line"] = ""
+
+	for reaction_v in reactions:
+		var reaction: Dictionary = reaction_v
+		var target_id: String = str(reaction.get("bark_target_id", ""))
+		var allowed: bool = reactions_left.get(target_id, 0) > 0 \
+			and (exceed_cap or shown < max_barks)
+		if not allowed:
+			reaction["bark_line"] = ""
+			continue
+		reactions_left[target_id] = int(reactions_left[target_id]) - 1
+		if not exceed_cap:
+			shown += 1
+
+
+## Inverts `voice.bark_tiers` ({tier: [context, …]}) into {context: tier}.
+static func _bark_tier_index(voice_cfg: Dictionary) -> Dictionary:
+	var tiers_v: Variant = voice_cfg.get("bark_tiers", {})
+	var tiers: Dictionary = tiers_v if tiers_v is Dictionary else {}
+	var index: Dictionary = {}
+	for tier_key in tiers.keys():
+		var contexts_v: Variant = tiers[tier_key]
+		if not (contexts_v is Array):
+			continue
+		for context_v in (contexts_v as Array):
+			index[str(context_v)] = int(str(tier_key))
+	return index
+
+
 # ── V2-VOICE-001: Sanctum bark helpers ───────────────────────────────────────
 
 ## Selects up to `voice.sanctum_max_barkers` (default 2) party echoes to receive a sanctum bark.
@@ -274,7 +363,7 @@ func _anansi_snippet_events_cfg() -> Dictionary:
 ## party_actors: Array of runtime actor dicts (faction=echo, from ectx.actors).
 ## Returns Array[Dictionary] of ≤2 actor dicts.
 func _select_sanctum_barkers(party_actors: Array, event_echo_id: String, t: int) -> Array:
-	var voice_cfg: Dictionary = config_service.get_balance().get("data", {}).get("voice", {})
+	var voice_cfg: Dictionary = ConfigService.get_voice_cfg(config_service)
 	var max_barkers: int = int(voice_cfg.get("sanctum_max_barkers", 2))
 	if party_actors.is_empty():
 		return []

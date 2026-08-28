@@ -798,26 +798,14 @@ func set_emotion_debug(enabled: bool) -> void:
 # _bark_popup_layer.show_barks(). Called every render; only actors with a non-empty
 # bark_line produce an event (bark is consumed on first projection in FlowEncounterState).
 #
-# Priority sort:
-#   Tier 1: combat_last_stand, combat_fear_extreme, combat_ko, combat_resilient — always shown
-#   Tier 2: combat_fear_rising, combat_morale_falling, combat_inspired, combat_taunt, combat_calling_skill
-#   Tier 3: combat_attack, combat_guard, combat_banter, combat_rally_ally (situational)
-# Cap: max 3 originals. Reactions do NOT count against cap.
+# The budget — how many barks a round may show, and their tier order — is applied upstream by
+# NarrativeVoiceService.apply_round_bark_budget() from data.voice. Rows arriving here are
+# already the survivors, ranked by bark_priority (1 = most significant). This function only
+# orders and interleaves them; it must not reintroduce a cap or a tier table of its own.
 # Originals shown immediately; reactions shown after REACTION_DELAY (in BarkPopupLayer).
 func _show_bark_popups(actors: Array, _data: Dictionary) -> void:
 	if _bark_popup_layer == null:
 		return
-
-	var max_originals: int = 3
-	var tier_map: Dictionary = {
-		"combat_last_stand":    1, "combat_fear_extreme": 1,
-		"combat_ko":            1, "combat_resilient":    1,
-		"combat_fear_rising":   2, "combat_morale_falling": 2,
-		"combat_inspired":      2, "combat_taunt":          2,
-		"combat_calling_skill": 2, "combat_divergence":     2,
-		"combat_attack":        3, "combat_guard":          3,
-		"combat_banter":        3,
-	}
 
 	var originals: Array = []
 	var reactions: Array = []
@@ -835,6 +823,7 @@ func _show_bark_popups(actors: Array, _data: Dictionary) -> void:
 			"bark_context":  str(actor.get("bark_context", "")),
 			"bark_tier":     str(actor.get("bark_tier", "")),
 			"bark_target_id": str(actor.get("bark_target_id", "")),
+			"bark_priority": int(actor.get("bark_priority", 3)),
 			"is_response":   bool(actor.get("bark_is_response", false)),
 			"screen_pos":    screen_pos,
 		}
@@ -843,14 +832,10 @@ func _show_bark_popups(actors: Array, _data: Dictionary) -> void:
 		else:
 			originals.append(ev)
 
-	# Sort originals by tier (1 = highest priority shown first).
+	# Sort by the upstream priority (1 = highest, shown first).
 	originals.sort_custom(func(a, b):
-		var ta: int = int(tier_map.get(str(a.get("bark_context", "")), 3))
-		var tb: int = int(tier_map.get(str(b.get("bark_context", "")), 3))
-		return ta < tb
+		return int(a.get("bark_priority", 3)) < int(b.get("bark_priority", 3))
 	)
-	if originals.size() > max_originals:
-		originals = originals.slice(0, max_originals)
 
 	# Interleave: orig → its reaction (if any) → next orig → ...
 	var interleaved: Array = []

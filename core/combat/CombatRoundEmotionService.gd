@@ -220,7 +220,7 @@ func apply_round_emotion_tick(
 	# reachable, it became the single largest accumulation source (+196 points) and drove
 	# 20 refusals in 20 rounds with fear pinned at 100. The system had only two states:
 	# no refusals at all, or total collapse. That is a loop with no damping, not a tuning
-	# error, and it also breaks the bark budget (max_barks_per_round 3).
+	# error.
 	#
 	# Two dampers, both required:
 	#   1. An Echo that is ITSELF refusing gains no witness fear. This is the loop: a

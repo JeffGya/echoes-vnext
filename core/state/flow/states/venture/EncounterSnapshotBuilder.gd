@@ -371,6 +371,10 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	for a_v in raw_actors:
 		if a_v is Dictionary:
 			projected_actors.append(EncounterSnapshotBuilder._project_actor(a_v))
+	# The authored data.voice budget decides which barks reach the player. It runs on the
+	# projected rows, never on ectx.actors, so this builder stays pure.
+	NarrativeVoiceService.apply_round_bark_budget(
+		projected_actors, ConfigService.get_voice_cfg(flow_ctx.config_service))
 
 	var actions: Dictionary = {}
 	if encounter_id != "keeper_intro.first_trial":
