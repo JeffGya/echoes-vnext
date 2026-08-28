@@ -744,3 +744,55 @@ difficulty curve until a mode ships more than one shrine.
   inline literal at `EncounterObjectiveSpawnService.gd:419-423`. Unreachable-config shape.
 - The shrine morale drain filters on `faction == "echo"` only, so it drains allies and a joined
   spirit as well as real Echoes.
+
+| 6 | see commit | D09, D12, D15, D16, D17, D28, D29, D43, D80 | Fixed, refused or disproved — see below. Six of the nine are unreachable in play, and each says so plainly rather than claiming the green suite as evidence. | None moved |
+
+### Pass 6 — the three that were NOT ordinary fixes
+
+**D15 — investigated, no live defect.** After the protect move, no reader consumes the captured
+spirit position: the skittish log reads `_gs_spirit.grid_pos` directly, and the win counter builds
+its own fresh copy. The protect branch is the last code in the function. A refresh was added anyway,
+with a comment stating it changes nothing — it closes the trap for the next editor rather than
+fixing a live fault.
+
+**D29 — refused, deliberately.** The two duplicated blocks do NOT fit
+`GridService.place_on_terrain` from pass 4, and forcing them would have moved every wave spawn cell.
+Two exact differences: the helper returns ONE cell ranked by distance to a target column, while
+these blocks hand out N cells ranked enemy-side-first by descending column — a different total
+order; and `GridService.occupied_cells` counts a dead actor's cell as occupied, while these blocks
+treat it as free. Deduplicated locally instead, into one private `_place_enemy_spawns`, with the
+determinism-critical sort copied character for character.
+
+**D43 — could not be reproduced, and is provably impossible today.** `defender_hp_after` has exactly
+one producer, reached only behind a `not target.is_dead` guard; that same call sets `is_dead` on any
+blow leaving hp at or below zero; each actor activates once per round; and `last_round_results` is
+cleared at round start. So one target id can appear at most once per round with hp at or below zero.
+A dedupe set was added because it is provably harmless — it can never fire on current producers —
+and the proof is recorded at the site. **No test was added**, because a test would pin a behaviour
+that cannot be produced.
+
+### Pass 6 — verifiability, stated honestly
+
+| ID | Verifiable? |
+|---|---|
+| D09 | No. Needs a nearly full board; no shipped seed reaches it |
+| D12 | Only in part. The shipped path ends PURIFY_SHRINE on the round the shrine dies, so the changed branch is not exercised |
+| D16 | No. Unreachable today |
+| D17 | No. No shipped terrain reaches the relaxation |
+| D80 | No. Reachable only through `dev_combat_objective` with no active realm |
+| D15, D28, D29, D43 | No behaviour changed, so there is nothing to verify |
+
+**D09's decision: do not spawn what you cannot place.** The alternative fallback would have to pick
+a cell the placement rule already rejected — either overlapping a living actor, or off the enemy
+side. Dropping the spawn is recoverable: the next interval tries again on a board that may have
+opened. Both log `count` fields and `recover_reinforce_count` now report placed actors, not built
+ones.
+
+**D28's decision: keep the cache.** Both inputs live on `objective_params`, which is written once
+during setup, before any round runs, and never written after. Recomputing each round returns the
+same number. No code change; the comment now records the proof instead of calling it preserved
+behaviour.
+
+**D80 determinism.** No existing draw moved. The spirit-destination generator is per-encounter and
+freshly derived, and boards with terrain take the identical path. The new draw happens only on a
+legacy board, where none happened before.

@@ -100,9 +100,18 @@ func apply_round_emotion_tick(
 
 	# A) Ally KO fear spread: when a comrade falls, surviving same-faction actors gain fear.
 	var fear_per_ally_ko: int = int(emo_tick_cfg.get("fear_per_ally_ko", 4))
+	# D43: one KO must spread fear once. No producer can emit the same KO twice today —
+	# defender_hp_after comes only from CombatService._resolve_melee, which is reached only
+	# behind CombatTurnActionService's `not target.is_dead` guard and which sets is_dead on the
+	# same blow, each actor activates once per round, and this array is cleared at round start.
+	# The guard therefore never fires; it holds the invariant if a second producer ever appears.
+	var ko_seen: Dictionary = {}
 	for res_v in ectx.last_round_results:
 		if res_v is Dictionary and int(res_v.get("defender_hp_after", 1)) <= 0:
 			var ko_id: String = str(res_v.get("target_id", ""))
+			if ko_seen.has(ko_id):
+				continue
+			ko_seen[ko_id] = true
 			var ko_actor: Dictionary = EncounterContext.find_actor_by_id(ectx.actors, ko_id)
 			if ko_actor.is_empty():
 				continue

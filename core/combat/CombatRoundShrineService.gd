@@ -118,21 +118,9 @@
 # also keep running BEFORE the emotion tick, since that tick reads and further adjusts the same
 # morale field.
 #
-# DEFECT NOTES — found during extraction, reported and deliberately NOT fixed here (this slice is
-# extraction only):
-#   1. The alive-shrine fallback is keyed on the SENTINEL VALUE 0, not on "did the drain run".
-#      `if shrine_hp_val == 0:` cannot distinguish "no living shrine was found, so nothing was
-#      captured" from "the drain landed the shrine on exactly 0 hp". In the second case the
-#      fallback re-scans and overwrites the captured value with the first is_structure actor's
-#      current_hp. Benign today only because that re-read yields 0 again whenever there is a
-#      single shrine — with two structures in ectx.actors it would report the wrong one.
-#      Preserved verbatim.
-#   2. The fallback scan does NOT filter on is_dead, while the drain scan does. So once the
-#      shrine is dead, every later round reports the dead shrine's (negative or zero) hp through
-#      the same field. Preserved verbatim.
-#   3. Only the FIRST living structure is drained — the loop breaks after one. A PURIFY_SHRINE
-#      encounter with two shrines would drain one and silently ignore the other.
-#      Preserved verbatim.
+# OPEN DEFECT — only the FIRST living structure is drained; the loop breaks after one. A
+# PURIFY_SHRINE encounter with two shrines would drain one and silently ignore the other. Every
+# shipped encounter has exactly one shrine. Not fixed.
 #
 # The cooldown decrement and the party morale drain below sit OUTSIDE that loop on purpose —
 # see the comment at their site.
@@ -158,8 +146,8 @@ func _init(_flow_ctx: FlowContext, _config_service: ConfigService, _logger: Stru
 ## end-condition check, because the drain can kill the shrine.
 ##
 ## Returns the shrine hit points to report for this round: the post-drain value when a living
-## shrine was drained, the first structure's current_hp when none was (the "capture shrine_hp
-## even if alive" fallback), and 0 for every non-PURIFY_SHRINE mode. _end_round consumes the
+## shrine was drained, the first LIVING structure's current_hp when no drain ran, and 0 for
+## every non-PURIFY_SHRINE mode and for a round with no living structure at all. _end_round consumes the
 ## return value twice — ectx.combat_result["shrine_hp"] and the combat.end log line — which is
 ## why this method returns rather than mutating and letting the caller re-read.
 ##
@@ -176,8 +164,10 @@ func apply_shrine_drain_round(
 		return shrine_hp_val
 
 	var shrine_cfg_drain: Dictionary = ConfigService.get_shrine_cfg(config_service)
+	var shrine_drained: bool = false
 	for a_v in ectx.actors:
 		if a_v is Dictionary and a_v.get("is_structure", false) and not a_v.get("is_dead", false):
+			shrine_drained = true
 			var drain_result: Dictionary = ShrineService.apply_drain(a_v, shrine_cfg_drain)
 			shrine_hp_val = int(drain_result.get("shrine_hp", 0))
 			if shrine_hp_val <= 0:
@@ -222,10 +212,14 @@ func apply_shrine_drain_round(
 			"affected_count": shrine_morale_affected,
 		})
 
-	# Capture shrine_hp even if alive (for snapshot).
-	if shrine_hp_val == 0:
+	# Capture shrine_hp when no drain ran this round (for snapshot). D12: the trigger is
+	# "the drain did not run", not the sentinel value 0 — a drain that lands the shrine on
+	# exactly 0 hp must keep its own result. The rescan skips dead structures, so a dead
+	# shrine no longer reports hit points; with no living structure the answer is 0.
+	if not shrine_drained:
 		for a_v in ectx.actors:
-			if a_v is Dictionary and a_v.get("is_structure", false):
+			if a_v is Dictionary and a_v.get("is_structure", false) \
+					and not a_v.get("is_dead", false):
 				shrine_hp_val = int(a_v.get("current_hp", 0))
 				break
 

@@ -160,7 +160,12 @@ static func needs_activation_context(ectx: EncounterContext) -> bool:
 	if spirit.is_empty() or bool(spirit.get("is_dead", false)):
 		return false
 	var guide_mode: String = str(combat_state.get("guide_mode", "protect"))
-	return guide_mode == "escort" or guide_mode == "protect"
+	if guide_mode != "escort" and guide_mode != "protect":
+		# D16: only "escort" and "protect" are ever written today. Any other value disables the
+		# whole GUIDE_SPIRIT phase, so it must be visible rather than silent.
+		push_warning("GUIDE_SPIRIT: unknown guide_mode \"%s\" — objective phase disabled" % guide_mode)
+		return false
+	return true
 
 
 ## The GUIDE_SPIRIT objective phase, run once per round from _end_round AFTER the ENDURE wave
@@ -376,6 +381,11 @@ func apply_guide_spirit_round(
 							GridService.assign_grid_pos(_gs_spirit,
 								int((_gs_result_p.get("final_destination", {}) as Dictionary).get("col", 0)),
 								int((_gs_result_p.get("final_destination", {}) as Dictionary).get("row", 0)))
+							# D15: assign_grid_pos replaces the grid_pos dict, so the captured
+							# reference is stale after a move. Nothing below reads it today (the
+							# log and the win counter both re-read the actor), so this refresh
+							# changes no behaviour. It keeps the trap closed for the next edit.
+							_gs_spirit_pos = _gs_spirit.get("grid_pos", {})
 						LiveHazardOutcomeService.apply(_gs_spirit, _gs_result_p, t, logger, false)
 						LiveHazardOutcomeService.apply(_gs_spirit, _gs_result_p, t, logger, true)
 						if _gs_protect_should_move and str(_gs_result_p.get("stop_reason", "")) == "no_route":

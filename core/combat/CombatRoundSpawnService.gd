@@ -221,71 +221,19 @@ func apply_recover_round(ectx: EncounterContext, round: int, t: int) -> void:
 			}
 			_ri_new_actors.append(EnemyActor.from_definition(_ri_defn, t, _ri_actor_cfg))
 			_ri_built += 1
-		# Placement: enemy-side (highest columns), deterministic — reuse ENDURE placement logic.
-		var _ri_walkable: Dictionary = StageTerrain.walkable_set(ectx.terrain) \
-			if not ectx.terrain.is_empty() else {}
-		var _ri_occupied: Dictionary = {}
-		for _ri_oa in ectx.actors:
-			if _ri_oa is Dictionary and not bool(_ri_oa.get("is_dead", false)):
-				var _ri_op: Dictionary = _ri_oa.get("grid_pos", {})
-				if not _ri_op.is_empty():
-					_ri_occupied["%d,%d" % [int(_ri_op.get("col", 0)), int(_ri_op.get("row", 0))]] = true
-		if not _ri_walkable.is_empty():
-			var _ri_candidate_keys: Array = []
-			for _ri_k in _ri_walkable:
-				if not _ri_occupied.has(_ri_k):
-					_ri_candidate_keys.append(_ri_k)
-			_ri_candidate_keys.sort_custom(func(a: String, b: String) -> bool:
-				var _ap := a.split(","); var _bp := b.split(",")
-				var _ac: int = int(_ap[0]); var _bc: int = int(_bp[0])
-				if _ac != _bc: return _ac > _bc  # highest col first (enemy side)
-				var _ar: int = int(_ap[1]); var _br: int = int(_bp[1])
-				if _ar != _br: return _ar < _br   # row asc tiebreak
-				return _ac < _bc                  # col asc final tiebreak
-			)
-			var _ri_cell_idx: int = 0
-			for _ri_na in _ri_new_actors:
-				if _ri_cell_idx >= _ri_candidate_keys.size():
-					break
-				var _ri_ck: String = _ri_candidate_keys[_ri_cell_idx]
-				var _ri_ck_parts := _ri_ck.split(",")
-				GridService.assign_grid_pos(_ri_na,
-					int(_ri_ck_parts[0]), int(_ri_ck_parts[1]))
-				_ri_occupied[_ri_ck] = true
-				_ri_cell_idx += 1
-		else:
-			# Legacy path (no terrain): rightmost columns.
-			var _ri_bal_leg: Dictionary = {}
-			if flow_ctx.config_service != null:
-				_ri_bal_leg = flow_ctx.config_service.get_balance()
-			var _ri_grid_leg: Dictionary = _ri_bal_leg.get("data", {}).get("grid", {})
-			var _ri_cols: int = GridService.get_board_cols(_ri_grid_leg)
-			var _ri_rows: int = GridService.get_board_rows(_ri_grid_leg)
-			var _ri_leg_cells: Array = []
-			for _ri_leg_c in range(_ri_cols - 1, -1, -1):
-				for _ri_leg_r in range(_ri_rows):
-					var _ri_leg_k: String = "%d,%d" % [_ri_leg_c, _ri_leg_r]
-					if not _ri_occupied.has(_ri_leg_k):
-						_ri_leg_cells.append({ "col": _ri_leg_c, "row": _ri_leg_r })
-			var _ri_leg_idx: int = 0
-			for _ri_na in _ri_new_actors:
-				if _ri_leg_idx >= _ri_leg_cells.size():
-					break
-				var _ri_leg_cell: Dictionary = _ri_leg_cells[_ri_leg_idx]
-				GridService.assign_grid_pos(_ri_na,
-					int(_ri_leg_cell.get("col", 0)), int(_ri_leg_cell.get("row", 0)))
-				_ri_occupied["%d,%d" % [int(_ri_leg_cell.get("col", 0)), int(_ri_leg_cell.get("row", 0))]] = true
-				_ri_leg_idx += 1
+		# Placement: enemy-side (highest columns), deterministic. Only the actors that got a
+		# cell come back — see _place_enemy_spawns().
+		var _ri_placed: Array = _place_enemy_spawns(ectx, _ri_new_actors)
 		# Append to ectx.actors + END of initiative_order (never re-sort).
 		var _ri_init_order: Array = combat_state.get("initiative_order", [])
-		for _ri_na in _ri_new_actors:
+		for _ri_na in _ri_placed:
 			ectx.actors.append(_ri_na)
 			_ri_init_order.append({ "id": str(_ri_na.get("id", "")), "name": str(_ri_na.get("name", "")) })
 		combat_state["initiative_order"] = _ri_init_order
-		combat_state["recover_reinforce_count"] = _rec_reinf_count + _ri_new_actors.size()
+		combat_state["recover_reinforce_count"] = _rec_reinf_count + _ri_placed.size()
 		logger.info(t, "combat.recover.reinforce", "RECOVER reinforcement spawned", {
 			"round":              _rec_round,
-			"count":              _ri_new_actors.size(),
+			"count":              _ri_placed.size(),
 			"reinforce_group":    _reinf_group,
 			"total_reinforced":   int(combat_state.get("recover_reinforce_count", 0)),
 		})
@@ -295,9 +243,11 @@ func apply_recover_round(ectx: EncounterContext, round: int, t: int) -> void:
 ## and BEFORE the GUIDE_SPIRIT escort step. The mode gate lives here rather than at the call
 ## site — every other resolution mode returns immediately and is byte-identical.
 ##
-## Note that combat_state["total_waves"] is computed on the FIRST ENDURE round this runs and
-## then never recomputed (the `has()` guard), so it reflects the duration_turns/wave_interval
-## in force at that moment. That is pre-existing behaviour and is preserved unchanged.
+## combat_state["total_waves"] is computed on the FIRST ENDURE round and never recomputed (the
+## `has()` guard). D28 checked whether that cache can go stale: it cannot. Both inputs live on
+## objective_params, which EncounterSetupService writes once during setup — before any round
+## runs — and nothing writes after that. Recomputing every round would return the same number,
+## so the cache is kept.
 func apply_endure_wave_spawn(ectx: EncounterContext, t: int) -> void:
 	if ectx.resolution_mode != EncounterResolutionModes.ENDURE:
 		return
@@ -364,71 +314,14 @@ func apply_endure_wave_spawn(ectx: EncounterContext, t: int) -> void:
 			_w_new_actors.append(EnemyActor.from_definition(_w_defn, t, _w_actor_cfg))
 			_w_built += 1
 
-		# Determine walkable cells; use ENEMY-SIDE (highest columns) for placement.
-		# Purely deterministic: sort walkable cells descending by col, tiebreak row then col.
-		var _w_walkable: Dictionary = StageTerrain.walkable_set(ectx.terrain) \
-			if not ectx.terrain.is_empty() else {}
-		# Build occupied set from all living actors.
-		var _w_occupied: Dictionary = {}
-		for _w_oa in ectx.actors:
-			if _w_oa is Dictionary and not bool(_w_oa.get("is_dead", false)):
-				var _w_op: Dictionary = _w_oa.get("grid_pos", {})
-				if not _w_op.is_empty():
-					_w_occupied["%d,%d" % [int(_w_op.get("col", 0)), int(_w_op.get("row", 0))]] = true
-		if not _w_walkable.is_empty():
-			# Build candidate cells sorted descending by col (highest col = enemy side),
-			# tiebreak row asc then col asc for full determinism.
-			var _w_candidate_keys: Array = []
-			for _w_k in _w_walkable:
-				if not _w_occupied.has(_w_k):
-					_w_candidate_keys.append(_w_k)
-			_w_candidate_keys.sort_custom(func(a: String, b: String) -> bool:
-				var _ap := a.split(","); var _bp := b.split(",")
-				var _ac: int = int(_ap[0]); var _bc: int = int(_bp[0])
-				if _ac != _bc: return _ac > _bc  # highest col first (enemy side)
-				var _ar: int = int(_ap[1]); var _br: int = int(_bp[1])
-				if _ar != _br: return _ar < _br   # row asc tiebreak
-				return _ac < _bc                  # col asc final tiebreak
-			)
-			var _w_cell_idx: int = 0
-			for _w_na in _w_new_actors:
-				if _w_cell_idx >= _w_candidate_keys.size():
-					break
-				var _w_ck: String = _w_candidate_keys[_w_cell_idx]
-				var _w_ck_parts := _w_ck.split(",")
-				GridService.assign_grid_pos(_w_na,
-					int(_w_ck_parts[0]), int(_w_ck_parts[1]))
-				_w_occupied[_w_ck] = true
-				_w_cell_idx += 1
-		else:
-			# Legacy path (no terrain): mirror GridService enemy packing — rightmost columns.
-			var _w_bal_leg: Dictionary = {}
-			if flow_ctx.config_service != null:
-				_w_bal_leg = flow_ctx.config_service.get_balance()
-			var _w_grid_leg: Dictionary = _w_bal_leg.get("data", {}).get("grid", {})
-			var _w_cols: int = GridService.get_board_cols(_w_grid_leg)
-			var _w_rows: int = GridService.get_board_rows(_w_grid_leg)
-			# Collect unoccupied rightmost cells: descending col, ascending row.
-			var _w_leg_cells: Array = []
-			for _w_leg_c in range(_w_cols - 1, -1, -1):
-				for _w_leg_r in range(_w_rows):
-					var _w_leg_k: String = "%d,%d" % [_w_leg_c, _w_leg_r]
-					if not _w_occupied.has(_w_leg_k):
-						_w_leg_cells.append({ "col": _w_leg_c, "row": _w_leg_r })
-			var _w_leg_idx: int = 0
-			for _w_na in _w_new_actors:
-				if _w_leg_idx >= _w_leg_cells.size():
-					break
-				var _w_leg_cell: Dictionary = _w_leg_cells[_w_leg_idx]
-				GridService.assign_grid_pos(_w_na,
-					int(_w_leg_cell.get("col", 0)), int(_w_leg_cell.get("row", 0)))
-				_w_occupied["%d,%d" % [int(_w_leg_cell.get("col", 0)), int(_w_leg_cell.get("row", 0))]] = true
-				_w_leg_idx += 1
+		# Placement: enemy-side (highest columns), deterministic. Only the actors that got a
+		# cell come back — see _place_enemy_spawns().
+		var _w_placed: Array = _place_enemy_spawns(ectx, _w_new_actors)
 
 		# Append new actors to ectx.actors and their ids to the END of initiative_order.
 		# Never re-sort — "readiness computed once" invariant (V2-COMBAT-001) preserved.
 		var _w_init_order: Array = combat_state.get("initiative_order", [])
-		for _w_na in _w_new_actors:
+		for _w_na in _w_placed:
 			ectx.actors.append(_w_na)
 			_w_init_order.append({ "id": str(_w_na.get("id", "")), "name": str(_w_na.get("name", "")) })
 		combat_state["initiative_order"] = _w_init_order
@@ -437,7 +330,7 @@ func apply_endure_wave_spawn(ectx: EncounterContext, t: int) -> void:
 		combat_state["all_waves_spawned"] = int(combat_state.get("waves_spawned", 0)) >= int(combat_state.get("total_waves", 9999))
 		logger.info(t, "combat.wave.spawned", "ENDURE wave spawned", {
 			"round":            _round_no,
-			"count":            _w_new_actors.size(),
+			"count":            _w_placed.size(),
 			"wave_group":       _wave_group,
 			"wave_n":           _wave_n,
 			"wave_size_used":   _wave_size,
@@ -445,3 +338,68 @@ func apply_endure_wave_spawn(ectx: EncounterContext, t: int) -> void:
 			"total_waves":      int(combat_state.get("total_waves", 0)),
 			"all_waves_spawned": bool(combat_state.get("all_waves_spawned", false)),
 		})
+
+
+## The one placement routine both spawn phases use. Ranks the free cells enemy-side first and
+## hands them out in order, and returns ONLY the actors that received a cell.
+##
+## The candidate order is determinism-critical: walkable cells descending by column (highest
+## column = enemy side), row ascending, column ascending. The legacy (no terrain) branch walks
+## the board in that same order directly. Do not reorder either one.
+##
+## This does NOT route through GridService.place_on_terrain(). That helper picks ONE cell ranked
+## by distance to a target column and its occupancy helper counts dead actors as occupying their
+## cell; this routine hands out N cells ranked enemy-side-first and treats a dead actor's cell as
+## free. Forcing the two together would move every wave spawn cell.
+##
+## D09: an actor that gets no cell is not returned, so the caller never appends it to
+## ectx.actors. Appending it would leave EnemyActor's default grid_pos {0,0} — an echo-side cell
+## that a living actor may already stand on. A spawn that cannot be placed is dropped; the next
+## interval tries again on a board that may have opened up.
+func _place_enemy_spawns(ectx: EncounterContext, new_actors: Array) -> Array:
+	var walkable: Dictionary = StageTerrain.walkable_set(ectx.terrain) \
+		if not ectx.terrain.is_empty() else {}
+	var occupied: Dictionary = {}
+	for oa in ectx.actors:
+		if oa is Dictionary and not bool(oa.get("is_dead", false)):
+			var op: Dictionary = oa.get("grid_pos", {})
+			if not op.is_empty():
+				occupied["%d,%d" % [int(op.get("col", 0)), int(op.get("row", 0))]] = true
+
+	var candidate_keys: Array = []
+	if not walkable.is_empty():
+		for k in walkable:
+			if not occupied.has(k):
+				candidate_keys.append(k)
+		candidate_keys.sort_custom(func(a: String, b: String) -> bool:
+			var _ap := a.split(","); var _bp := b.split(",")
+			var _ac: int = int(_ap[0]); var _bc: int = int(_bp[0])
+			if _ac != _bc: return _ac > _bc  # highest col first (enemy side)
+			var _ar: int = int(_ap[1]); var _br: int = int(_bp[1])
+			if _ar != _br: return _ar < _br   # row asc tiebreak
+			return _ac < _bc                  # col asc final tiebreak
+		)
+	else:
+		# Legacy path (no terrain): rightmost columns, descending col then ascending row.
+		var bal_leg: Dictionary = {}
+		if flow_ctx.config_service != null:
+			bal_leg = flow_ctx.config_service.get_balance()
+		var grid_leg: Dictionary = bal_leg.get("data", {}).get("grid", {})
+		var cols: int = GridService.get_board_cols(grid_leg)
+		var rows: int = GridService.get_board_rows(grid_leg)
+		for c in range(cols - 1, -1, -1):
+			for r in range(rows):
+				var leg_k: String = "%d,%d" % [c, r]
+				if not occupied.has(leg_k):
+					candidate_keys.append(leg_k)
+
+	var placed: Array = []
+	var cell_idx: int = 0
+	for na in new_actors:
+		if cell_idx >= candidate_keys.size():
+			break
+		var parts := str(candidate_keys[cell_idx]).split(",")
+		GridService.assign_grid_pos(na, int(parts[0]), int(parts[1]))
+		placed.append(na)
+		cell_idx += 1
+	return placed

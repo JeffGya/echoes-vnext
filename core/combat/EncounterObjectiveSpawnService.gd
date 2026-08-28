@@ -460,23 +460,45 @@ func spawn_objective_actor(
 			# frontier reduces to the literal edge cells, so behaviour there is preserved.
 			var _gs_dest_col: int = -1
 			var _gs_dest_row: int = -1
-			if _gs_mode == "escort" and not _gs_terrain.is_empty():
-				var _gs_walkable_dest: Dictionary = StageTerrain.walkable_set(_gs_terrain)
+			if _gs_mode == "escort":
 				var _gs_spawn_pos: Dictionary = objective_actor.get("grid_pos", { "col": 0, "row": 0 })
 				var _gs_min_dist: int = int(_gs_obj_params.get("destination_min_distance", 6))
 				var _gs_edge_candidates: Array = []
-				for _gc_v in _gs_candidates:
-					var _gc_col: int = _gc_v["col"]
-					var _gc_row: int = _gc_v["row"]
-					# Frontier test: any 4-dir neighbour absent from the walkable set (this also
-					# covers out-of-bounds neighbours, which are never in the walkable set).
-					var _is_edge: bool = \
-						not _gs_walkable_dest.has("%d,%d" % [_gc_col - 1, _gc_row]) \
-						or not _gs_walkable_dest.has("%d,%d" % [_gc_col + 1, _gc_row]) \
-						or not _gs_walkable_dest.has("%d,%d" % [_gc_col, _gc_row - 1]) \
-						or not _gs_walkable_dest.has("%d,%d" % [_gc_col, _gc_row + 1])
-					if _is_edge:
-						_gs_edge_candidates.append({ "col": _gc_col, "row": _gc_row })
+				if not _gs_terrain.is_empty():
+					var _gs_walkable_dest: Dictionary = StageTerrain.walkable_set(_gs_terrain)
+					for _gc_v in _gs_candidates:
+						var _gc_col: int = _gc_v["col"]
+						var _gc_row: int = _gc_v["row"]
+						# Frontier test: any 4-dir neighbour absent from the walkable set (this also
+						# covers out-of-bounds neighbours, which are never in the walkable set).
+						var _is_edge: bool = \
+							not _gs_walkable_dest.has("%d,%d" % [_gc_col - 1, _gc_row]) \
+							or not _gs_walkable_dest.has("%d,%d" % [_gc_col + 1, _gc_row]) \
+							or not _gs_walkable_dest.has("%d,%d" % [_gc_col, _gc_row - 1]) \
+							or not _gs_walkable_dest.has("%d,%d" % [_gc_col, _gc_row + 1])
+						if _is_edge:
+							_gs_edge_candidates.append({ "col": _gc_col, "row": _gc_row })
+				else:
+					# D80: a board with no terrain has no walkable set, so there is no frontier
+					# ring to draw from and the escort used to get destination (-1,-1) — a cell no
+					# spirit can ever stand on, making the objective uncompletable. Every cell of a
+					# legacy board is walkable, so the frontier reduces to the literal board edge.
+					# The authored rule then applies unchanged: distance filter, then a seeded pick.
+					var _gs_bal_leg: Dictionary = {}
+					if flow_ctx.config_service != null:
+						_gs_bal_leg = flow_ctx.config_service.get_balance()
+					var _gs_grid_leg: Dictionary = _gs_bal_leg.get("data", {}).get("grid", {})
+					var _gs_cols_leg: int = GridService.get_board_cols(_gs_grid_leg)
+					var _gs_rows_leg: int = GridService.get_board_rows(_gs_grid_leg)
+					var _gs_occ_leg: Dictionary = GridService.occupied_cells([echo_actors, enemy_actors])
+					for _gl_col in range(_gs_cols_leg):
+						for _gl_row in range(_gs_rows_leg):
+							if _gl_col != 0 and _gl_col != _gs_cols_leg - 1 \
+									and _gl_row != 0 and _gl_row != _gs_rows_leg - 1:
+								continue
+							if _gs_occ_leg.has("%d,%d" % [_gl_col, _gl_row]):
+								continue
+							_gs_edge_candidates.append({ "col": _gl_col, "row": _gl_row })
 				# Sort deterministically (col then row) before indexing.
 				_gs_edge_candidates.sort_custom(func(a, b):
 					if a["col"] != b["col"]: return a["col"] < b["col"]
@@ -499,7 +521,15 @@ func spawn_objective_actor(
 						if a["col"] != b["col"]: return a["col"] < b["col"]
 						return a["row"] < b["row"]
 					)
-					_gs_far_candidates = [_gs_edge_candidates[0]]
+					# D17: the relaxation has to keep a floor. With none, the farthest frontier
+					# cell can be the spawn cell itself (one unoccupied frontier cell on a small
+					# terrain island), and the escort latch then wins on round 1 with no movement.
+					# Below the floor there is no valid destination, so choose none.
+					var _gs_relaxed_dist: int = maxi(
+						abs(int(_gs_edge_candidates[0]["col"]) - int(_gs_spawn_pos.get("col", 0))),
+						abs(int(_gs_edge_candidates[0]["row"]) - int(_gs_spawn_pos.get("row", 0))))
+					if _gs_relaxed_dist > 0:
+						_gs_far_candidates = [_gs_edge_candidates[0]]
 				if not _gs_far_candidates.is_empty():
 					var _gs_dest_rng := RandomNumberGenerator.new()
 					if flow_ctx.campaign_seed != null:
