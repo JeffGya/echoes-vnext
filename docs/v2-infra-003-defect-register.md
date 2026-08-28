@@ -125,6 +125,45 @@ re-record.
 
 **Blast radius: FP + BL.** It changes reward numbers on its own, independently of the payment move.
 
+### MANUAL TEST 1 PASSED — Jeff, 2026-08-28
+
+First full session played end to end on `2d5d629`. **The proof spine works.** Confirmed live from
+the run log:
+
+| Step | Evidence |
+|---|---|
+| House dormant through Chapter I | Flame not lit at name confirm |
+| Flame lights at the awakening | `t:30 Ase Flame awakened` |
+| Opening Realm unlocked by awakening + rite | `t:31` |
+| Prologue completes; normal Realms open | `t:155` |
+| Stage settles ONCE | `t:155` — a single `stage_reward`, +90 Ase |
+| Encounter rewards stay per fight | `t:96`, `t:154` — +15 each |
+| Durable result written, then consumed | `t:96`, `t:97` |
+| Level-up applies | `t:155` — Simon Mensah to level 2 |
+| Near-death fires | `t:89`, `t:141`, `t:195` — all on enemies |
+
+### T01 — refusal is now reachable, and that is a TUNING question, not a defect
+
+In the third encounter (two enemies, one Echo) fear climbed to 100 and the Echo refused for 27
+consecutive rounds before Jeff quit.
+
+**Not a softlock.** The orchestrator called this "a stalemate with no end condition in reach" and
+was wrong: the enemies still deal 1–2 damage per round, so the fight terminates on Echo death. It is
+slow, not stuck. Jeff: *"it will have to reach an end state — echoes die, win state reached, or
+enemies die. I just quit early."*
+
+**Not caused by this story.** All three near-death triggers in the log fired on the Dust Wanderer,
+after Simon attacked — D01 added fear to enemies, not to him.
+
+Jeff's assessment: our changes did not cause the fear rise, but may make refusal **more reachable**,
+which is acceptable. Earlier work (the August fear-economy pass, peak fear 4 → 46) tried to balance
+this and did not succeed. *"If everything was alright we just refactored and turned on systems that
+were already supposed to be turned on."*
+
+**Owner: a fear-economy tuning pass, not V2-INFRA-003.** Two observations for whoever takes it:
+fear has no in-combat recovery term except outnumber relief, which cannot fire while the party is
+outnumbered; and a refusing Echo deals no damage, so the fight can only end by its own death.
+
 ### THE ~53 "AFTER THE TEST" ENTRIES ARE NOT OPTIONAL — Jeff, 2026-08-25
 
 **Correction to this document's framing.** The triage sorted entries by "would Jeff hit this in a
