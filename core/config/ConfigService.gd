@@ -274,9 +274,9 @@ static func get_economy_cfg(config_service: ConfigService) -> Dictionary:
 ## path, and ActiveStageService.get_stage_base_reward(). V2-INFRA-003 Phase 5
 ## Slice A: moved off FlowRuntime (private _get_balance_rewards_cfg) — a plain subtree read
 ## with callers in two different domains, so neither domain owns it; ConfigService does.
-## Null-safety transcribed exactly: the original did NOT null-check config_service (it
-## guarded on an empty balance instead), so neither does this.
 static func get_rewards_cfg(config_service: ConfigService) -> Dictionary:
+	if config_service == null:
+		return {}
 	var balance := config_service.get_balance()
 	if balance.is_empty():
 		return {}
@@ -303,6 +303,43 @@ static func get_situation_category_cfg(config_service: ConfigService) -> Diction
 	var stages: Dictionary = stages_v if stages_v is Dictionary else {}
 	var category_v: Variant = stages.get("situation_category", {})
 	return category_v if category_v is Dictionary else {}
+
+
+## data.combat.objective_modes — per-mode objective tuning (recover / protect / endure /
+## pursue / guide_spirit). Read by EncounterSetupService (scaled objective params),
+## CombatTurnContextService (mode directive weights) and CombatRoundObjectiveService
+## (PROTECT theft + guard radius) — three callers in one domain plus setup, so ConfigService
+## owns the subtree read.
+static func get_objective_modes_cfg(config_service: ConfigService) -> Dictionary:
+	if config_service == null:
+		return {}
+	var balance_v: Variant = config_service.get_balance()
+	return get_objective_modes_cfg_from_balance(balance_v if balance_v is Dictionary else {})
+
+
+## Balance-dict variant, for call sites that already hold the loaded balance dict.
+static func get_objective_modes_cfg_from_balance(balance: Dictionary) -> Dictionary:
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var combat_v: Variant = data.get("combat", {})
+	var combat: Dictionary = combat_v if combat_v is Dictionary else {}
+	var modes_v: Variant = combat.get("objective_modes", {})
+	return modes_v if modes_v is Dictionary else {}
+
+
+## data.combat.shrine — PURIFY_SHRINE drain/purify tuning. Read by
+## CombatRoundShrineService, which passes it to ShrineService.apply_drain().
+static func get_shrine_cfg(config_service: ConfigService) -> Dictionary:
+	if config_service == null:
+		return {}
+	var balance_v: Variant = config_service.get_balance()
+	var balance: Dictionary = balance_v if balance_v is Dictionary else {}
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var combat_v: Variant = data.get("combat", {})
+	var combat: Dictionary = combat_v if combat_v is Dictionary else {}
+	var shrine_v: Variant = combat.get("shrine", {})
+	return shrine_v if shrine_v is Dictionary else {}
 
 
 ## data.voice — bark budget, tier table and the reactive/sanctum bark parameters.

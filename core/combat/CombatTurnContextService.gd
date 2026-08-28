@@ -46,7 +46,8 @@
 #           totem_carrier_id, recover_holder_id);
 #           flow_ctx.save_data (VowService.get_active_vow, sanctum.bonds),
 #           flow_ctx itself (KeeperIntroService.is_trial_active);
-#           config_service.get_balance() -> data.grid, data.combat.objective_modes.*;
+#           config_service.get_balance() -> data.grid;
+#           ConfigService.get_objective_modes_cfg_from_balance(balance);
 #           ConfigService.get_bond_thresholds_cfg / get_bond_behavior_cfg;
 #           directive_service.get_active_directive();
 #           actor (id, faction, is_dead, is_spirit), `balance`, `round` and `t`, all passed in.
@@ -66,16 +67,9 @@
 #   1. ctx["round_bark_events"] is ectx.round_bark_events BY REFERENCE and is documented in the
 #      moved comment as "read-only", but nothing enforces that. ActorStateMachine holds the live
 #      array and could append to it. Pre-existing; preserved verbatim.
-#   2. The mode-directive block re-reads config through `config_service.get_balance()` instead
-#      of the `balance` dict the caller already handed in three lines earlier. Same immutable
-#      object in production (load_balance() runs once, at boot), so the two cannot differ today
-#      — but it is a second read of the same thing. Preserved verbatim.
-#   3. data.combat.objective_modes still has no ConfigService owner; this file reads it longhand,
-#      the fifth such site (CombatRoundObjectiveService already records the other four). The read
-#      is MOVED, not copied, so the pre-existing site count is unchanged.
-#   4. `party_size` counts living echo-faction actors including STRUCTURES and temporary allies,
+#   2. `party_size` counts living echo-faction actors including STRUCTURES and temporary allies,
 #      because the filter tests faction and is_dead only. Pre-existing; preserved verbatim.
-#   5. The GUIDE_SPIRIT branch excludes `is_spirit` actors but the other four branches do not,
+#   3. The GUIDE_SPIRIT branch excludes `is_spirit` actors but the other four branches do not,
 #      so in any other mode a spirit-flagged echo would receive mode directive weights. Not
 #      reachable today (spirits only exist in GUIDE_SPIRIT). Preserved verbatim.
 
@@ -200,8 +194,7 @@ func build_turn_context(
 	if not KeeperIntroServiceScript.is_trial_active(flow_ctx):
 		var _mode_dw_src: Dictionary = {}
 		var _di_mode: String = str(ectx.resolution_mode)
-		var _di_bdata: Dictionary = config_service.get_balance().get("data", {})
-		var _di_modes_cfg: Dictionary = _di_bdata.get("combat", {}).get("objective_modes", {})
+		var _di_modes_cfg: Dictionary = ConfigService.get_objective_modes_cfg_from_balance(balance)
 		var _di_mode_cfg: Dictionary = _di_modes_cfg.get(_di_mode, {})
 		var _di_raw_dw: Variant = _di_mode_cfg.get("directive_intent_weights", {})
 		if _di_raw_dw is Dictionary and not (_di_raw_dw as Dictionary).is_empty():

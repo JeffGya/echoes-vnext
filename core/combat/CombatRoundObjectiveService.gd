@@ -56,14 +56,13 @@
 #     flow_ctx.campaign_seed                    theft roll only, via get_rng() — null-guarded,
 #                                               with a hash() fallback. BOTH branches preserved
 #                                               exactly; the derive is not discarded.
-#     flow_ctx.config_service                   get_balance() twice, read longhand down
-#                                               data.combat.objective_modes.protect for
+#     flow_ctx.config_service                   via ConfigService.get_objective_modes_cfg, for
+#                                               data.combat.objective_modes.protect:
 #                                               theft_chance, double_damage_mult (theft) and
 #                                               protect_guard_radius (guard). NOTE this is
 #                                               flow_ctx.config_service, NOT this service's own
-#                                               config_service field, and it is null-guarded at
-#                                               every use — both preserved exactly, because the
-#                                               two can in principle differ.
+#                                               config_service field — the two can in principle
+#                                               differ. The getter carries the null guard.
 #     `round`                                   passed in, not re-read, so the four log lines
 #                                               carry the exact value _end_round logged in
 #                                               combat.round_end for the same round. This also
@@ -108,17 +107,11 @@
 # exactly as the two blocks did; PROTECT guard must still run AFTER PROTECT theft in the same
 # round, because check_end_condition reads protect_counter and totem_stolen together.
 #
-# NO NON-VERBATIM CHANGE. Unlike slice 6B, this slice introduces no ConfigService getter: the
-# longhand data.combat.objective_modes.protect reads are MOVED, not copied, so no new copy is
-# created. See DEFECT NOTES.
-#
 # DEFECT NOTES — found during extraction, reported and deliberately NOT fixed here (this slice
 # is extraction only):
-#   1. data.combat.objective_modes has no ConfigService owner. It is read longhand at four
-#      sites: twice in the theft method below, once in the guard method below,
-#      EncounterSetupService.gd:420 (was FlowEncounterState.gd:347, moved by slice 6I), and FlowRuntime.gd:2232. BehaviorArbiter.gd:1761/1788 read the
-#      same subtree from an already-narrowed cfg dict. The pre-existing count is unchanged by
-#      this move.
+#   1. (register D30, FIXED) data.combat.objective_modes now has an owner —
+#      ConfigService.get_objective_modes_cfg. BehaviorArbiter.gd:1761/1788 still read the same
+#      key name off data.actor, where it does not exist; see the register.
 #   2. The adjacency-counter shape is written out four times (see LOCATION AND REMIT above).
 #   3. (register D11, FIXED) The carrier-down recovery guard was written as if actors could be
 #      removed from ectx.actors. They cannot — the combat spine marks is_dead. See the comment
@@ -224,23 +217,16 @@ func apply_protect_theft_round(ectx: EncounterContext, round: int, t: int) -> vo
 					else:
 						_pt_theft_rng.seed = hash("combat.theft.%s.%d" % [_pt_encounter_id, round])
 					# Read theft_chance from balance config.
-					var _pt_bal: Dictionary = {}
-					if flow_ctx.config_service != null:
-						_pt_bal = flow_ctx.config_service.get_balance()
+					var _pt_protect_cfg: Dictionary = ConfigService.get_objective_modes_cfg(
+						flow_ctx.config_service).get("protect", {})
 					var _pt_theft_chance: float = float(
-						_pt_bal.get("data", {}).get("combat", {})
-							.get("objective_modes", {})
-							.get("protect", {})
-							.get("theft_chance", 0.5))
+						_pt_protect_cfg.get("theft_chance", 0.5))
 					if _pt_theft_rng.randf() < _pt_theft_chance:
 						combat_state["totem_stolen"]     = true
 						combat_state["totem_carrier_id"] = str(_pt_adj_enemy.get("id", ""))
 						_pt_adj_enemy["_carrier_double_damage"] = true
 						_pt_adj_enemy["_double_damage_mult"] = float(
-							_pt_bal.get("data", {}).get("combat", {})
-								.get("objective_modes", {})
-								.get("protect", {})
-								.get("double_damage_mult", 2.0))
+							_pt_protect_cfg.get("double_damage_mult", 2.0))
 						logger.info(t, "combat.protect.theft", "PROTECT totem stolen!", {
 							"round":       round,
 							"carrier_id":  str(_pt_adj_enemy.get("id", "")),
@@ -270,12 +256,8 @@ func apply_protect_guard_round(ectx: EncounterContext, round: int, t: int) -> vo
 	if not _pg_entity.is_empty():
 		var _pg_entity_pos: Dictionary = _pg_entity.get("grid_pos", {})
 		# Read guard radius from balance config (default 2).
-		var _pg_bal: Dictionary = {}
-		if flow_ctx.config_service != null:
-			_pg_bal = flow_ctx.config_service.get_balance()
 		var _pg_guard_radius: int = int(
-			_pg_bal.get("data", {}).get("combat", {})
-				.get("objective_modes", {})
+			ConfigService.get_objective_modes_cfg(flow_ctx.config_service)
 				.get("protect", {})
 				.get("protect_guard_radius", 2))
 		# Check whether any living echo is within guard radius of the entity.

@@ -50,9 +50,8 @@
 #                                               every other actor's leadership_traits, grid_pos
 #                                               and _morale_forecast_until_round
 #     ectx.purifier_id                          guards the cooldown decrement
-#     config_service.get_balance()              read longhand down data.combat.shrine, for the
-#                                               whole shrine cfg dict handed to
-#                                               ShrineService.apply_drain plus
+#     ConfigService.get_shrine_cfg()            data.combat.shrine, for the whole shrine cfg
+#                                               dict handed to ShrineService.apply_drain plus
 #                                               morale_drain_per_wave. NOTE this is this
 #                                               service's OWN config_service field — the
 #                                               pre-extraction line read FlowRuntime's
@@ -143,9 +142,6 @@
 #      per actor (morale_anchor / morale_forecast), and the maxi(0, ...) clamp can absorb more,
 #      so the logged delta overstates the real one whenever a whole leader is nearby.
 #      Preserved verbatim.
-#   6. data.combat.shrine has no ConfigService getter; it is read longhand here as it was in
-#      _end_round. The read is MOVED, not copied, so the pre-existing longhand-site count is
-#      unchanged by this slice.
 
 class_name CombatRoundShrineService
 extends RefCounted
@@ -185,8 +181,7 @@ func apply_shrine_drain_round(
 	if ectx.resolution_mode != EncounterResolutionModes.PURIFY_SHRINE:
 		return shrine_hp_val
 
-	var balance_drain: Dictionary = config_service.get_balance()
-	var shrine_cfg_drain: Dictionary = balance_drain.get("data", {}).get("combat", {}).get("shrine", {})
+	var shrine_cfg_drain: Dictionary = ConfigService.get_shrine_cfg(config_service)
 	for a_v in ectx.actors:
 		if a_v is Dictionary and a_v.get("is_structure", false) and not a_v.get("is_dead", false):
 			var drain_result: Dictionary = ShrineService.apply_drain(a_v, shrine_cfg_drain)

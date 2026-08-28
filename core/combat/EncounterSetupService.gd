@@ -417,7 +417,8 @@ func setup(t: int) -> void:
 			if flow_ctx.config_service != null:
 				var _om_bal: Dictionary = flow_ctx.config_service.get_balance()
 				_om_data = _om_bal.get("data", {})
-			var _om_cfg: Dictionary = _om_data.get("combat", {}).get("objective_modes", {}).get(_obj_mode_key, {})
+			var _om_cfg: Dictionary = ConfigService.get_objective_modes_cfg(
+				flow_ctx.config_service).get(_obj_mode_key, {})
 			# Read stage-level objective params override (non-empty overrides scaled values).
 			var _om_stage_params: Dictionary = {}
 			var _om_realm_model: Dictionary = RealmService.get_active(flow_ctx)
