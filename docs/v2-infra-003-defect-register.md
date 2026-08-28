@@ -525,7 +525,7 @@ was never written into this file. Written here now, from the call site, without 
 | ID | Title | Verified location | Evidence | Reachable | Player impact | Action | Blast radius |
 |---|---|---|---|---|---|---|---|
 | **D83** | `ekwan_shrine_multiplier` has never applied — the Ekwan factor reads an objective key nothing writes | `core/economy/StageSettlementService.gd:145-150`, and the identical read at `core/state/flow/states/venture/FlowEncounterState.gd:186-191` | Both sites do `objectives[0].get("obj_type", "combat")`. `ObjectiveModel.make()` writes `type`, never `obj_type`, so `_obj_type` is the `"combat"` default on every stage and the `if obj_type == "shrine"` branch is dead. `data.rewards.ekwan_shrine_multiplier` therefore has no effect anywhere. Carried verbatim by Phase 8A rather than fixed, so the settlement split would stay attributable. | **Yes** — every shrine stage. | Shrine stages pay the ordinary Ekwan factor instead of the authored 1.5×. Never noticed because the multiplier has never been observed working. | Read `type`, at BOTH sites, in one change. Note the two sites must move together or a shrine stage's per-encounter and per-stage Ekwan would disagree. | **FP + BL** — Ekwan is in `FlowFingerprintTests`' SAVE fingerprint and in the resolve card's `ekwan_awarded`; it moves on any shrine stage. Belongs with the after-Phase-9 group, not with a settlement change. |
-| **D84** | A run's bond and Thread consequences do not exist yet when its Resolve card is published | Producers: `core/runtime/controllers/VentureController.gd::handle_complete_stage` — `apply_combat_bond_triggers`, `apply_bond_aftermath_modifiers`, `seed_rival_stage_incidents`, and `RealmService.contribute_segment`. Consumer that wants them: `core/state/flow/PendingResultService.gd::_build_result` (`bond_outcome`, `thread_outcome`). | The Resolve card is published by the dispatch that ENDS the fight. All four of the above run in the `flow.complete_stage` dispatch — the one the card's `cta.next_stage` triggers, i.e. the dispatch that CONSUMES the durable result. At capture time neither a bond outcome nor this stage's Thread segment exists anywhere in the process, so `save.flow.pending_result.bond_outcome` is written `{}` and `thread_outcome` carries only the realm's standing recovery-track count plus `flow_ctx.last_realm_threads_earned` (non-empty only when a realm completed). The schema at `SaveSchema.gd:34-45` names both keys, which is why this is recorded rather than silently dropped. | n/a — it is an ordering fact, not a mechanic. | **None today.** No screen reads either key. It becomes an omission the moment a Resolve card wants to show "the bonds this run changed". | Either move the bond hooks and the segment contribution ahead of the resolve card (a real behaviour change — they currently run once per STAGE, the card once per ENCOUNTER, so they are not the same cadence), or accept that a durable result records the ENCOUNTER and let a later Sanctum surface report the stage's bond/Thread movement. **Do not "fill in" these two keys from save state at capture time** — that would record the party's standing bonds as if they were this run's outcome. | `—` today (nothing reads the keys). |
+| **D84** | A run's bond and Thread consequences do not exist yet when its Resolve card is published | Producers: `core/runtime/controllers/VentureController.gd::handle_complete_stage` — `apply_combat_bond_triggers`, `apply_bond_aftermath_modifiers`, `seed_rival_stage_incidents`, and `RealmService.contribute_segment`. Consumer that wants them: `core/state/flow/PendingResultService.gd::_build_result` (`bond_outcome`, `thread_outcome`). | The Resolve card is published by the dispatch that ENDS the fight. All four of the above run in the `flow.complete_stage` dispatch — the one the card's `cta.next_stage` triggers, i.e. the dispatch that CONSUMES the durable result. At capture time neither a bond outcome nor this stage's Thread segment exists anywhere in the process, so `save.flow.pending_result.bond_outcome` is written `{}` and `thread_outcome` carries only the realm's standing recovery-track count plus `flow_ctx.last_realm_threads_earned` (non-empty only when a realm completed). The schema at `SaveSchema.gd:34-45` names both keys, which is why this is recorded rather than silently dropped. | n/a — it is an ordering fact, not a mechanic. | **None today.** No screen reads either key. It becomes an omission the moment a Resolve card wants to show "the bonds this run changed". | Either move the bond hooks and the segment contribution ahead of the resolve card (a real behaviour change — they currently run once per STAGE, the card once per ENCOUNTER, so they are not the same cadence), or accept that a durable result records the ENCOUNTER and let a later Sanctum surface report the stage's bond/Thread movement. **Do not "fill in" these two keys from save state at capture time** — that would record the party's standing bonds as if they were this run's outcome. | **FIXED, pass 9/10.** Investigated all four producers separately. THREE ARE ENCOUNTER CADENCE and were already running once per victorious encounter, split across two call sites (`FlowRuntime._apply_victory_return_to_explore` for a mid-stage victory, `handle_complete_stage` for the stage-clearing one) — both AFTER the card. All three moved to the single site `FlowRuntime._end_round()`, in the dispatch that publishes the card, placed after `build_final_snapshot()` so the arrival-bark / bond_formed-bark order is unchanged. They return a summary, which `PendingResultService` records. THE THREAD SEGMENT IS NOT ENCOUNTER CADENCE: `realm_recovery_segments` holds one entry per `stage_index` and `ThreadService` counts the entries, so a per-encounter contribution would inflate a multi-objective stage's recovery. It is contributed at `_end_round()` only on the fight that CLEARS the stage (`classify() == victory`, the exact card that offers `cta.next_stage`), and `RealmService.contribute_segment` gained a per-`stage_index` receipt — the recorded stage index IS the stamp, no new save key — so the `flow.complete_stage` call that follows is a no-op. That call stays because it is the only contributor on the no-encounter path (D05). Pinned by `tests/PendingResultTests.gd::_t_bond_and_thread_cadence`. |
 | **D85** | `save.flow.state` is defaulted and validated but written by nothing, and `boot()` restores `realm_id` without `stage_id` | `core/save/SaveSchema.gd:31-33` (default `"flow.splash"`), the validator, and `core/save/SaveService.gd:515-526` (repair). Restore gap: `core/runtime/FlowRuntime.gd:105-112`. | Repo-wide grep finds no write to `save["flow"]["state"]` outside `make_new_save` and the repair branch; `save.flow.context` is likewise `{}` forever. Separately, `boot()` restores `flow_ctx.realm_id` from the first realm with `status == "active"` and comments "survives Continue", but never restores `flow_ctx.stage_id` — nothing needed it, because before Phase 8B a run in progress could not be resumed. | The dead field: n/a. The `stage_id` gap: **yes** — any resumed run. | The `stage_id` gap would have been player-visible the moment resume existed: the victory card's `cta.next_stage` dispatches `flow.complete_stage`, and both `StageSettlementService` and `RealmService.advance_stage` locate the stage through `flow_ctx.stage_id`. With it empty the settlement returns `{}` and a completed stage pays nothing. | Phase 8B works around the `stage_id` half locally, in `PendingResultService.restore_run_context()`, filling only EMPTY fields from the durable result — deliberately NOT a change to `boot()`, since boot has no pending result to read and widening it would touch every save-integrity boot path. `save.flow.state` itself is untouched: writing it for the first time changes save contents for no consumer. Decide later whether to make it the real resume pointer or delete it. | `—` for what Phase 8B did. Writing `save.flow.state` would move save contents (though not the `FlowFingerprintTests` SAVE fingerprint, which reads only `economy` + party). |
 
 | **D86** | The awakening modal had never rendered: nothing in `core/` or `ui/` ever set `FlowContext.pending_awakening_banner` true — ✅ **FIXED, Phase 8C** | Flag: `core/state/flow/FlowContext.gd:122`. Reader: `core/state/flow/states/sanctum/SanctumSnapshotBuilder.gd:401` (`show_awakening_overlay`). Consumer: the one-shot closure at `core/runtime/FlowRuntime.gd` end-of-dispatch. Modal: `ui/overlays/sanctum/AwakeningModal.tscn/.gd`, registered `ui/shells/SanctumShell.gd:118`, requested `ui/screens/sanctum/SanctumScreen.gd:417-419`. | The whole chain existed and was correct end to end. The ONLY production write was `= false` in the consume closure, so `show_awakening_overlay` was false in every snapshot ever built and `modal_requested.emit(&"awakening", …)` never fired. Pinned only by `FlowSnapshotFingerprintTests`, which sets the flag by hand — which is why the gap survived: the tests proved the plumbing, and nothing proved the arming. | **No — the modal was unreachable in play.** | The awakening beat had no payoff on the Sanctum side. Found while fixing D42, at the same site. | ✅ **FIXED.** `OnboardingController.handle_awakening` sets the flag at the awakening rite; the established consume gate (clear only when the published snapshot is `flow.sanctum`) carries it across the two intervening dispatches and spends it on the first Sanctum snapshot. New coverage: `onboarding/awakening_modal_shows_once_on_first_sanctum`. | `—` — no recorded value moved. |
@@ -898,3 +898,62 @@ Each of the eleven was demonstrated by probe instead:
 3. **`challenge_call`'s `taunt_attack_bonus` is 25.0, exactly the hardcoded taunt pull already in
    `_score()`.** It was implemented as the `actor.taunt` score bonus, not as a second copy of that
    constant. If the intent was the other reading, it needs changing.
+
+| 9 | see commit | D84 | Fixed, with HALF the instruction deliberately refused — see below. The Resolve card now carries this run's real bond and Thread movement. | None moved |
+
+### D84 — three of the four producers moved; the fourth did not, and must not
+
+The product owner decided the bond hooks and the Thread contribution should run before the card, at
+encounter cadence. Investigating the four producers separately showed that decision is correct for
+three of them and wrong for the fourth.
+
+| Producer | Per-encounter correct? | What was done |
+|---|---|---|
+| `apply_combat_bond_triggers` | **Yes.** It already ran once per victorious encounter, split across two sites, both after the card | Moved ahead of the card |
+| `apply_bond_aftermath_modifiers` | **Yes.** `set_modifier` overwrites, so it is naturally repeat-safe | Moved ahead of the card |
+| `seed_rival_stage_incidents` | **Yes.** Already idempotent — a pair is appended only when not already queued | Moved ahead of the card |
+| `RealmService.contribute_segment` | **NO. It would double-count.** Every entry is keyed by `stage_index` and `ThreadService` counts entries, so one segment per encounter inflates a multi-objective stage's recovery | Made idempotent with a receipt, then contributed only on the stage-clearing fight |
+
+**The receipt uses no new save key.** The already-recorded `stage_index` IS the stamp — the same
+"read the stamp, return early" shape `StageSettlementService` uses for `settlement_receipt`.
+
+The `contribute_segment` call in `VentureController` **stays at stage cadence**. It is now a no-op
+on the combat path, and it is still the only contributor on the no-encounter path (D05).
+
+**A dead arm was found while investigating.** The `"loss"` arm in `handle_complete_stage` could never
+run: a defeat card offers no `cta.next_stage`, so `flow.complete_stage` is never reached after a
+defeat.
+
+**A resume bug was fixed as a side effect.** On a stage-clearing victory the segment is now graded
+from the fight that cleared the stage even if the player quits at the card and resumes. Previously
+that resume path graded it `NO_COMBAT_GRADE` ("C" → "compromised"), because `encounter_ctx` was gone.
+So a resumed run was silently recorded as compromised.
+
+### Evidence, captured on a real card
+
+Before:
+```
+bond_outcome={}  thread_outcome={"realm_id":"realm.01","segments":0,"threads_earned":[]}
+```
+After:
+```
+bond_outcome={"triggers":{"outcome":"win","echo_count":5,"ko_count":0,"near_wipe":false,
+              "new_friend_pairs":[]},"aftermath":{"grief_ids":[],"shared_survival_ids":[]},
+              "rivals":{"added":0,"pairs":[]}}
+thread_outcome={"realm_id":"realm.01","segment":{"stage_index":0,"quality_tier":"clean"},
+              "segments":1,"threads_earned":[]}
+```
+
+Pinned by `pending_result/bond_and_thread_are_on_the_card`, which **fails against the pre-change
+core**. It pins the new cadence rather than restating the old one, and it asserts that the following
+`flow.complete_stage` appends no second segment.
+
+### Raised by pass 9, not fixed
+
+- `core/save/SaveSchema.gd:34-35` still says the `pending_result` payload is groundwork and that
+  "nothing reads or writes this yet". False since Phase 8B.
+- The combat-end dispatch's `save_request_reason` now also accumulates `bond.combat_triggers`, and
+  `bond.rival_incidents` when a rival pair is seeded. `flow.complete_stage` no longer contributes
+  them. No test pins those two dispatches' reason strings.
+- `contribute_segment` requests no save of its own and relies on the surrounding dispatch flushing
+  for another reason. True before and after.

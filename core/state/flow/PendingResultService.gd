@@ -56,13 +56,15 @@
 # published, reading `flow_ctx.last_snapshot`, which is exactly the value `dispatch()` is about
 # to return.
 #
-# WHAT THE RESULT CANNOT CARRY, AND WHY — register D84.
-# `bond_outcome` is written `{}` and `thread_outcome` carries only the realm's recovery track as
-# it stands. That is not an omission: the bond hooks (`apply_combat_bond_triggers`,
-# `apply_bond_aftermath_modifiers`, `seed_rival_stage_incidents`) and the Thread segment
-# (`RealmService.contribute_segment`) all run in `VentureController.handle_complete_stage` —
-# the dispatch AFTER the resolve card is shown, i.e. the dispatch that CONSUMES this result.
-# At capture time neither outcome exists yet anywhere in the process. Recorded, not invented.
+# BOND AND THREAD — register D84, fixed.
+# Both keys used to be empty: the three bond hooks and `RealmService.contribute_segment` ran in
+# `VentureController.handle_complete_stage`, the dispatch AFTER the card is shown and the one
+# that CONSUMES this result, so at capture time neither outcome existed anywhere in the process.
+# The bond hooks are ENCOUNTER cadence and now run in `FlowRuntime._end_round()`, in the
+# dispatch that publishes the card. The Thread segment is STAGE cadence — one entry per
+# stage_index — so it is contributed there only on the fight that clears the stage, and
+# `contribute_segment` carries a per-stage receipt so the later `flow.complete_stage` call
+# cannot append a second one.
 
 class_name PendingResultService
 extends RefCounted
@@ -319,10 +321,11 @@ static func _build_result(
 		# EMOTION — the per-echo arc the card rendered.
 		"emotion_summary": _copy_array(data.get("emotion_summary", [])),
 
-		# BOND — see the header and register D84. The three bond hooks run in
-		# VentureController.handle_complete_stage, one dispatch after this card is published,
-		# so there is no bond outcome in existence at capture time.
-		"bond_outcome": {},
+		# BOND — what this fight did to the party's bonds. The three hooks now run in
+		# FlowRuntime._end_round(), in the dispatch that publishes this card, and leave their
+		# summary on flow_ctx.bond_outcome for this read. Empty on a withdrawal: a retreat is
+		# not a fought encounter and fires no bond hook.
+		"bond_outcome": {} if outcome == OUTCOME_WITHDRAWAL else _copy_dict(flow_ctx.bond_outcome),
 
 		# VOW — the break/benefit/compliance outcome and the vows discovered this run. Both are
 		# real at capture time: VowConsequenceService writes them during the encounter and, on
@@ -332,13 +335,17 @@ static func _build_result(
 			"newly_unlocked_vows": _copy_array(data.get("newly_unlocked_vows", [])),
 		},
 
-		# THREAD — the realm's recovery track AS IT STANDS. The segment for this stage is
-		# contributed by RealmService.contribute_segment in the flow.complete_stage dispatch,
-		# after this card; `threads_earned` fills only when that dispatch completes the realm.
-		# Register D84.
+		# THREAD — the realm's recovery track including this run's own segment. On the fight
+		# that clears a stage, _end_round() contributes the segment before this capture, so
+		# `segment` names what this run added and `segments` counts it. Empty on a partial or a
+		# defeat, which clear no stage and contribute nothing.
+		#
+		# `threads_earned` still fills only when a later flow.complete_stage completes the
+		# realm: crystallization is realm cadence and needs RealmService.advance_stage.
 		"thread_outcome": {
 			"realm_id":       flow_ctx.realm_id,
 			"segments":       segments.size(),
+			"segment":        _segment_for_stage(segments, stage_index),
 			"threads_earned": _copy_array(flow_ctx.last_realm_threads_earned),
 		},
 
@@ -347,6 +354,15 @@ static func _build_result(
 		"resolve_data": _copy_dict(data),
 		"next_action":  _copy_dict(actions),
 	}
+
+
+## The recovery segment recorded for `stage_index`, or {} when this run contributed none.
+## The track holds at most one entry per stage (RealmService.contribute_segment's receipt).
+static func _segment_for_stage(segments: Array, stage_index: int) -> Dictionary:
+	for seg_v in segments:
+		if seg_v is Dictionary and int((seg_v as Dictionary).get("stage_index", -1)) == stage_index:
+			return (seg_v as Dictionary).duplicate(true)
+	return {}
 
 
 static func _copy_dict(v: Variant) -> Dictionary:

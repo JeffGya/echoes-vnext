@@ -204,10 +204,6 @@ func _emotion_consequence_service() -> EmotionConsequenceService:
 	return EmotionConsequenceService.new(flow_ctx, config_service, logger)
 
 
-func _bond_consequence_service() -> BondConsequenceService:
-	return BondConsequenceService.new(flow_ctx, config_service, logger)
-
-
 func _vow_consequence_service() -> VowConsequenceService:
 	return VowConsequenceService.new(flow_ctx, config_service, econ, logger)
 
@@ -565,10 +561,9 @@ func handle_complete_stage(action: Dictionary, t: int) -> FlowActionOutcome:
 	if has_encounter:
 		var outcome := "win" if is_combat_victory else "loss"
 		_emotion_consequence_service().apply_encounter_emotion_drift(outcome, t)
-		# BOND-002: fire stage-level bond triggers + aftermath modifiers BEFORE nulling encounter context.
-		_bond_consequence_service().apply_combat_bond_triggers(t, outcome)
-		_bond_consequence_service().apply_bond_aftermath_modifiers(t, outcome)
-		_bond_consequence_service().seed_rival_stage_incidents(t)
+		# V2-INFRA-003 (defect D84): the three bond hooks used to run here, one dispatch after
+		# the Resolve card was published, so the card could never report them. They now run in
+		# FlowRuntime._end_round(), in the dispatch that ends the fight.
 	# V2-VOW-002: decrement pledge cooldown on stage completion (victory only).
 	var _cd_sanc_v: Variant = flow_ctx.save_data.get("sanctum", {})
 	if _cd_sanc_v is Dictionary:
@@ -657,13 +652,9 @@ func handle_complete_stage(action: Dictionary, t: int) -> FlowActionOutcome:
 	flow_ctx.encounter_machine = null
 	flow_ctx.active_encounter_objective_index = -1  # V2-STAGE-002: reset after combat resolves
 
-	# V2-WEAVE-001: load thread config (read-only)
-	var _bal_v: Variant = flow_ctx.config_service.get_balance()
-	var _bal: Dictionary = _bal_v if _bal_v is Dictionary else {}
-	var _bal_data_v: Variant = _bal.get("data", {})
-	var _bal_data: Dictionary = _bal_data_v if _bal_data_v is Dictionary else {}
-	var _thread_cfg_v: Variant = _bal_data.get("threads", {})
-	var _thread_cfg: Dictionary = _thread_cfg_v if _thread_cfg_v is Dictionary else {}
+	# V2-WEAVE-001: thread config (read-only). V2-INFRA-003 D84: the inline balance.json walk
+	# became ConfigService.get_threads_cfg() when _end_round() gained a second read of it.
+	var _thread_cfg := ConfigService.get_threads_cfg(config_service)
 
 	# V2-WEAVE-001: contribute segment — grade from the final encounter snapshot.
 	#
@@ -677,6 +668,10 @@ func handle_complete_stage(action: Dictionary, t: int) -> FlowActionOutcome:
 	# only "S"/"A" give, because no fight was graded. This is the one value in this slice that is
 	# a judgement rather than a repair; it is recorded against D05 in the defect register, where
 	# D05's open question ("what grade should a no-encounter stage carry?") is answered.
+	#
+	# V2-INFRA-003 D84: on the COMBAT path _end_round() already contributed this stage's segment
+	# with the same grade, so contribute_segment's per-stage_index receipt makes this call a
+	# no-op there. The call stays because it is the only contributor on the no-encounter path.
 	if not _thread_cfg.is_empty() and not flow_ctx.realm_id.is_empty():
 		var _combat_grade := NO_COMBAT_GRADE
 		if has_encounter:

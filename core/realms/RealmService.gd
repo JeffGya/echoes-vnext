@@ -269,6 +269,15 @@ static func advance_stage(ctx: FlowContext, t: int) -> Dictionary:
 ## Call BEFORE advance_stage() so current_stage_index still reflects the stage just completed.
 ## combat_grade: "S"/"A"/"B"/"C"/"D"/"F" from RewardCalc._compute_rank().
 ## thread_cfg: data.threads block from balance.json.
+##
+## ONE SEGMENT PER STAGE (V2-INFRA-003, defect D84). The recovery track is a STAGE-cadence
+## record — every entry is keyed by `stage_index` and ThreadService counts the entries — so a
+## second segment for a stage the realm already has would inflate that realm's recovery. The
+## already-recorded stage_index IS the receipt: no new save key is needed, and it is the same
+## "read the stamp, return early" shape as StageSettlementService's settlement_receipt.
+## This is what makes the call safe from the two call sites it now has: the dispatch that ends
+## the stage-clearing fight (so the Resolve card can report the segment) and flow.complete_stage
+## (which still owns the no-encounter path).
 static func contribute_segment(ctx: FlowContext, combat_grade: String, thread_cfg: Dictionary, t: int) -> void:
 	var model := get_active(ctx)
 	if model.is_empty() or bool(model.get("is_completed", false)):
@@ -281,6 +290,14 @@ static func contribute_segment(ctx: FlowContext, combat_grade: String, thread_cf
 	var segments_v: Variant = ctx.save_data["realms"][ctx.realm_id].get("realm_recovery_segments", [])
 	var segments: Array = segments_v if segments_v is Array else []
 	var stage_index := int(model.get("current_stage_index", 0))
+
+	for seg_v in segments:
+		if seg_v is Dictionary and int((seg_v as Dictionary).get("stage_index", -1)) == stage_index:
+			ctx.logger.debug(t, "realm.recovery.segment.already", "Segment already contributed for this stage", {
+				"realm_id":    ctx.realm_id,
+				"stage_index": stage_index,
+			})
+			return
 
 	segments.append({ "stage_index": stage_index, "quality_tier": quality_tier })
 	ctx.save_data["realms"][ctx.realm_id]["realm_recovery_segments"] = segments

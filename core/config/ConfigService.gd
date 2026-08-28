@@ -286,6 +286,22 @@ static func get_rewards_cfg(config_service: ConfigService) -> Dictionary:
 	return rewards_v if rewards_v is Dictionary else {}
 
 
+## data.threads — the V2-WEAVE-001 Thread block (segment_quality_by_grade and the
+## crystallization table). Two readers since V2-INFRA-003 D84: FlowRuntime._end_round()
+## contributes the stage-clearing fight's segment, VentureController.handle_complete_stage()
+## covers the no-encounter path and crystallizes on realm completion.
+static func get_threads_cfg(config_service: ConfigService) -> Dictionary:
+	if config_service == null:
+		return {}
+	var balance := config_service.get_balance()
+	if balance.is_empty():
+		return {}
+	var data_v = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var threads_v = data.get("threads", {})
+	return threads_v if threads_v is Dictionary else {}
+
+
 ## data.stages.situation_category — maps a situation `type` to the directive
 ## target_preference category used by StagePartyMovementAdapter.select_objective_target().
 ## V2-INFRA-003 Phase 5 Slice A: moved off FlowRuntime (private

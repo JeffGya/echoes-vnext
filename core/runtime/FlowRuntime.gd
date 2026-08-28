@@ -775,9 +775,8 @@ func _apply_victory_return_to_explore(t: int) -> void:
 		if _ncv_victory:
 			var _ncv_outcome := "win"
 			_emotion_consequence_service().apply_encounter_emotion_drift(_ncv_outcome, t)
-			_bond_consequence_service().apply_combat_bond_triggers(t, _ncv_outcome)
-			_bond_consequence_service().apply_bond_aftermath_modifiers(t, _ncv_outcome)
-			_bond_consequence_service().seed_rival_stage_incidents(t)
+			# D84: the three bond hooks used to fire here. They now run in _end_round(), in the
+			# dispatch that ends the fight, so the Resolve card can report them.
 			# Resolve the combat situation in the save (marks objective completed).
 			# Register D37/D38: skip_if_already_resolved and commit_only_when_modified are now
 			# both true, matching the pre-snapshot path. Without the first, a second pass over
@@ -1591,6 +1590,47 @@ func _end_round(t: int) -> void:
 		var final_snap: Dictionary = FlowEncounterState.build_final_snapshot(flow_ctx, t)
 		ectx.final_snapshot    = final_snap
 		flow_ctx.last_snapshot = final_snap
+
+		# ── V2-INFRA-003 (defect D84): THIS RUN'S CONSEQUENCES, IN THIS DISPATCH ─────────────
+		# The Resolve card is published here, at the end of the fight. Its bond consequences and
+		# its Thread segment used to run one dispatch LATER — the dispatch the card's own
+		# cta.next_stage triggers, which is also the dispatch that CONSUMES the durable result.
+		# So the card could never report either: PendingResultService wrote bond_outcome {} and
+		# a thread_outcome built from realm state alone. They run here now, before
+		# capture_or_consume() at the end of this dispatch reads them.
+		#
+		# PLACED AFTER build_final_snapshot(), not before, so the bark order is untouched:
+		# select_arrival_barks_for_party() above writes the arrival bark the card shows, and
+		# apply_combat_bond_triggers() writes bond_formed barks over it afterwards — exactly the
+		# order the two downstream call sites produced.
+		#
+		# VICTORY ONLY, and only inside a realm run. That is the reachable set these hooks
+		# already had: _apply_victory_return_to_explore covered the mid-stage victory and
+		# handle_complete_stage the stage-clearing one, both victory-gated, and the keeper-intro
+		# trial is excluded because it runs with realm_id empty (KeeperIntroService.gd:318) —
+		# the same gate capture_or_consume() uses.
+		flow_ctx.bond_outcome = {}
+		if _arr_victory and not flow_ctx.realm_id.is_empty():
+			var _d84_bond := _bond_consequence_service()
+			flow_ctx.bond_outcome = {
+				"triggers":  _d84_bond.apply_combat_bond_triggers(t, "win"),
+				"aftermath": _d84_bond.apply_bond_aftermath_modifiers(t, "win"),
+				"rivals":    _d84_bond.seed_rival_stage_incidents(t),
+			}
+			# The Thread segment is STAGE cadence, not encounter cadence: one entry per
+			# stage_index, counted by ThreadService. It is contributed here only on the fight
+			# that CLEARS the stage — classify() == victory is precisely the card that offers
+			# cta.next_stage — and RealmService.contribute_segment is now idempotent per stage,
+			# so the flow.complete_stage call that follows is a no-op instead of a second
+			# segment. A partial victory contributes nothing, as before.
+			if PendingResultService.classify(final_snap) == PendingResultService.OUTCOME_VICTORY:
+				var _d84_thread_cfg := ConfigService.get_threads_cfg(config_service)
+				if not _d84_thread_cfg.is_empty():
+					var _d84_data_v: Variant = final_snap.get("data", {})
+					var _d84_data: Dictionary = _d84_data_v if _d84_data_v is Dictionary else {}
+					RealmService.contribute_segment(
+						flow_ctx, str(_d84_data.get("rank", "F")), _d84_thread_cfg, t
+					)
 	else:
 		# RoundSnapshot — emits type "flow.encounter"; stored on ectx.last_round_snapshot.
 		var round_snap: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(flow_ctx, t)

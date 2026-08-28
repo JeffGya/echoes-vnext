@@ -48,6 +48,8 @@ static func register(runner) -> void:
 	runner.register_test("pending_result/combat_result_survives_a_quit", func(): return _t_combat_survives_quit())
 	# 4 — idempotency of the capture
 	runner.register_test("pending_result/capture_is_first_write_wins", func(): return _t_first_write_wins())
+	# 5 — D84: the run's own bond and Thread movement is on the card
+	runner.register_test("pending_result/bond_and_thread_are_on_the_card", func(): return _t_bond_and_thread_cadence())
 
 
 # ---------------------------------------------------------------------------
@@ -446,3 +448,123 @@ static func _t_first_write_wins() -> Dictionary:
 	if not mismatches.is_empty():
 		return { "ok": false, "error": " | ".join(mismatches) }
 	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# 5 — D84: the consequences of the run are captured WITH the card
+# ---------------------------------------------------------------------------
+
+## THE CADENCE PIN. The bond hooks and the Thread segment used to run in the
+## `flow.complete_stage` dispatch — after this card was published, and in the dispatch that
+## consumes it — so `bond_outcome` was always `{}` and `thread_outcome` never named this run's
+## segment. They now run in the dispatch that ends the fight.
+##
+## Three claims, all on one real combat driven through the production dispatch loop:
+##   1. `bond_outcome` is populated on a victory, at capture time, with THIS fight's figures
+##      (its echo count must match the card's own actor rows).
+##   2. On a stage-clearing victory `thread_outcome.segment` names the segment this run added.
+##   3. The Thread segment is still STAGE cadence: the `flow.complete_stage` that follows must
+##      not append a second segment for the same stage.
+static func _t_bond_and_thread_cadence() -> Dictionary:
+	var env: Dictionary = FlowFingerprintTests._setup_encounter(EncounterResolutionModes.COMBAT, "pr_d84")
+	if env.is_empty():
+		return { "ok": false, "error": "encounter setup failed" }
+	var runtime: FlowRuntime = env["runtime"]
+	var ectx: EncounterContext = env["ectx"]
+
+	# The shared harness builds a generated multi-objective stage, so its fight classifies as
+	# "partial" and clears no stage. Mark the stage's other objectives done so this fight is the
+	# LAST one — that is the only card that offers cta.next_stage, and therefore the only card a
+	# Thread segment belongs to. Read at snapshot time only
+	# (EncounterSnapshotBuilder._count_remaining_required_objectives); nothing about the fight,
+	# the rewards or the RNG draw order depends on it.
+	var _stage_ref := _first_stage(runtime.flow_ctx)
+	if _stage_ref.is_empty():
+		return { "ok": false, "error": "harness stage not found — cannot force a stage-clearing victory" }
+	var _objs_v: Variant = _stage_ref.get("objectives", [])
+	var _objs: Array = _objs_v if _objs_v is Array else []
+	for _o_v in _objs:
+		if _o_v is Dictionary:
+			(_o_v as Dictionary)["completed"] = true
+
+	FlowFingerprintTests._drive_and_capture(runtime, ectx, 30)
+
+	var card: Dictionary = runtime.flow_ctx.last_snapshot
+	if str(card.get("type", "")) != FlowStateIds.RESOLVE:
+		return { "ok": false, "error": "combat did not conclude on a resolve card, got '%s'" % str(card.get("type", "")) }
+
+	var pr := PendingResultService.read(runtime.get_save_data())
+	if pr.is_empty():
+		return { "ok": false, "error": "no durable result written at the end of a real combat" }
+
+	var outcome := str(pr.get("outcome", ""))
+	var bond_v: Variant = pr.get("bond_outcome", {})
+	var bond: Dictionary = bond_v if bond_v is Dictionary else {}
+	var thread_v: Variant = pr.get("thread_outcome", {})
+	var thread: Dictionary = thread_v if thread_v is Dictionary else {}
+	var mismatches: Array = []
+
+	if outcome == PendingResultService.OUTCOME_DEFEAT:
+		# A defeat fires no bond hook and clears no stage — the same reachable set the two old
+		# call sites had. Nothing to record, and recording something would be an invention.
+		if not bond.is_empty():
+			mismatches.append("a defeat recorded a bond_outcome: %s" % JSON.stringify(bond))
+	else:
+		if bond.is_empty():
+			mismatches.append("bond_outcome is empty on a %s — the hooks did not run before the capture" % outcome)
+		else:
+			var trig_v: Variant = bond.get("triggers", {})
+			var trig: Dictionary = trig_v if trig_v is Dictionary else {}
+			if str(trig.get("outcome", "")) != "win":
+				mismatches.append("bond_outcome.triggers.outcome expected 'win', got '%s'" % str(trig.get("outcome", "")))
+			var card_actors_v: Variant = _data_of(card).get("actors", [])
+			var card_actors: Array = card_actors_v if card_actors_v is Array else []
+			var card_echoes := 0
+			for a_v in card_actors:
+				if a_v is Dictionary and str((a_v as Dictionary).get("faction", "")) == "echo":
+					card_echoes += 1
+			if int(trig.get("echo_count", -1)) != card_echoes:
+				mismatches.append("bond_outcome counted %s echoes, the card shows %d — it is not this fight" \
+					% [str(trig.get("echo_count", "")), card_echoes])
+			if not bond.has("aftermath") or not bond.has("rivals"):
+				mismatches.append("bond_outcome is missing a hook: keys %s" % str(bond.keys()))
+
+	var seg_v: Variant = thread.get("segment", {})
+	var seg: Dictionary = seg_v if seg_v is Dictionary else {}
+	if outcome == PendingResultService.OUTCOME_VICTORY:
+		if seg.is_empty():
+			mismatches.append("a stage-clearing victory recorded no thread_outcome.segment")
+		elif int(thread.get("segments", 0)) < 1:
+			mismatches.append("thread_outcome.segments did not count the segment just contributed")
+
+		# STAGE CADENCE HOLDS. The card's own cta.next_stage dispatch must not add a second
+		# segment for the stage the fight already contributed.
+		var realm_before: Dictionary = RealmService.get_active(runtime.flow_ctx)
+		var segs_before: int = (realm_before.get("realm_recovery_segments", []) as Array).size()
+		runtime.dispatch({ "type": "flow.complete_stage" })
+		var realms_v: Variant = runtime.get_save_data().get("realms", {})
+		var realms: Dictionary = realms_v if realms_v is Dictionary else {}
+		var realm_after_v: Variant = realms.get("realm.01", {})
+		var realm_after: Dictionary = realm_after_v if realm_after_v is Dictionary else {}
+		var segs_after: int = (realm_after.get("realm_recovery_segments", []) as Array).size()
+		if segs_after != segs_before:
+			mismatches.append("flow.complete_stage appended a SECOND recovery segment for the same stage: %d -> %d" \
+				% [segs_before, segs_after])
+	else:
+		if not seg.is_empty():
+			mismatches.append("a %s contributed a recovery segment: %s" % [outcome, JSON.stringify(seg)])
+
+	if not mismatches.is_empty():
+		return { "ok": false, "error": " | ".join(mismatches) }
+	return { "ok": true }
+
+
+## stage index 0 of the harness realm, by reference into save_data.
+static func _first_stage(flow_ctx: FlowContext) -> Dictionary:
+	var model := RealmService.get_active(flow_ctx)
+	var stages_v: Variant = model.get("stages", [])
+	var stages: Array = stages_v if stages_v is Array else []
+	for s_v in stages:
+		if s_v is Dictionary and int((s_v as Dictionary).get("index", -1)) == 0:
+			return s_v
+	return {}

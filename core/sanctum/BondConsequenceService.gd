@@ -11,22 +11,22 @@
 #   - No UI or scene-tree reference. No flow_machine reference — this class does not (and
 #     structurally cannot) transition state or rebuild a snapshot.
 #
-# THIS IS A SERVICE, NOT A CONTROLLER. All three methods are combat-teardown consequence hooks,
-# called from two different call sites — _apply_victory_return_to_explore (non-final-objective
-# victory) and _handle_complete_stage (stage completion, any outcome) — both of which must run
-# these BEFORE flow_ctx.encounter_ctx is nulled (they read ectx.actors + echo_action_logs).
-# Putting them on a controller would force those call sites' controllers to call into this one —
-# and controller-to-controller calls are forbidden. A service has no such restriction.
+# THIS IS A SERVICE, NOT A CONTROLLER. All three methods are combat-teardown consequence hooks.
+# They must run BEFORE flow_ctx.encounter_ctx is nulled (they read ectx.actors +
+# echo_action_logs). Putting them on a controller would force the calling controller to call
+# into this one — and controller-to-controller calls are forbidden.
+#
+# ONE CALL SITE since V2-INFRA-003 (defect D84): FlowRuntime._end_round(), in the dispatch that
+# ends the fight. They used to run one dispatch later, split across
+# _apply_victory_return_to_explore (mid-stage victory) and handle_complete_stage (stage-clearing
+# victory) — after the Resolve card was already published, so the card could not report them.
+# All three return a summary of what they did, which PendingResultService records on the durable
+# run result.
 #
 # core/sanctum/SocialGraphService.gd already exists and stays exactly as it is — it holds bond
 # DOMAIN rules (score deltas, edge/bond-type lookup, rival-pair classification). This class
 # holds the FLOW-level orchestration that decides WHEN those domain rules run against live
 # encounter/roster state and how results are threaded into save_data for the UI to read.
-#
-# Moved verbatim (behaviour unchanged) from FlowRuntime.gd:
-#   _apply_combat_bond_triggers    → apply_combat_bond_triggers
-#   _apply_bond_aftermath_modifiers → apply_bond_aftermath_modifiers
-#   _seed_rival_stage_incidents    → seed_rival_stage_incidents
 #
 # CONFIG GETTERS — corrected from the story brief: the brief listed four "_get_*_cfg" helpers
 # (_get_bond_triggers_cfg, _get_bond_behavior_cfg, _get_rival_archetypes_cfg,
@@ -60,11 +60,15 @@ func _init(_flow_ctx: FlowContext, _config_service: ConfigService, _logger: Stru
 	logger = _logger
 
 
-# BOND-002: Fires all stage-level bond score deltas after a combat stage ends.
+# BOND-002: Fires all bond score deltas after a combat encounter ends.
 # Must be called BEFORE encounter_ctx is nulled (reads ectx.actors + echo_action_logs).
-func apply_combat_bond_triggers(t: int, outcome: String) -> void:
+#
+# Returns a summary of what this fight did to the party's bonds — the same facts the
+# "bond.combat_triggers.applied" log line carries, plus the friend pairs that formed. D84: the
+# durable run result records it, so the Resolve card can report the run that just happened.
+func apply_combat_bond_triggers(t: int, outcome: String) -> Dictionary:
 	if flow_ctx.encounter_ctx == null:
-		return
+		return {}
 	var ectx: EncounterContext = flow_ctx.encounter_ctx
 
 	var bond_cfg := ConfigService.get_bond_triggers_cfg(config_service)
@@ -73,7 +77,7 @@ func apply_combat_bond_triggers(t: int, outcome: String) -> void:
 
 	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
 	if not (sanctum_v is Dictionary):
-		return
+		return {}
 	var sanctum: Dictionary = sanctum_v
 	var bonds_v: Variant = sanctum.get("bonds", [])
 	var bonds: Array = bonds_v if bonds_v is Array else []
@@ -230,24 +234,42 @@ func apply_combat_bond_triggers(t: int, outcome: String) -> void:
 		if _sanctum_mut is Dictionary:
 			(_sanctum_mut as Dictionary)["roster"] = _roster_arr
 
+	var _new_friend_ids: Array = []
+	for _pair_v2 in _new_friend_pairs:
+		var _p: Array = _pair_v2
+		if _p.size() >= 2:
+			_new_friend_ids.append([
+				str((_p[0] as Dictionary).get("id", "")),
+				str((_p[1] as Dictionary).get("id", "")),
+			])
+	return {
+		"outcome":            outcome,
+		"echo_count":         echo_actors.size(),
+		"ko_count":           ko_echo_ids.size(),
+		"near_wipe":          near_wipe,
+		"new_friend_pairs":   _new_friend_ids,
+	}
+
 
 # BOND-002: Applies EmotionRecoveryService modifiers to surviving roster echoes after combat.
 # Grief: bonded echo (non-neutral) was KO'd → slowed morale recovery, heightened fear recovery.
 # Shared survival bonus: near-wipe victory AND bonded friend also survived → improved recovery.
 # Must be called BEFORE encounter_ctx is nulled.
-func apply_bond_aftermath_modifiers(t: int, outcome: String) -> void:
+## Returns { grief_ids, shared_survival_ids } — which surviving echoes carry which recovery
+## modifier out of this fight. D84: recorded on the durable run result.
+func apply_bond_aftermath_modifiers(t: int, outcome: String) -> Dictionary:
 	if flow_ctx.encounter_ctx == null:
-		return
+		return {}
 	var ectx: EncounterContext = flow_ctx.encounter_ctx
 
 	var thresholds := ConfigService.get_bond_thresholds_cfg(config_service)
 	var bond_rec_cfg := ConfigService.get_bond_recovery_cfg(config_service)
 	if bond_rec_cfg.is_empty():
-		return
+		return {}
 
 	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
 	if not (sanctum_v is Dictionary):
-		return
+		return {}
 	var sanctum: Dictionary = sanctum_v
 	var bonds_v: Variant = sanctum.get("bonds", [])
 	var bonds: Array = bonds_v if bonds_v is Array else []
@@ -272,6 +294,9 @@ func apply_bond_aftermath_modifiers(t: int, outcome: String) -> void:
 			surviving_ids.append(aid)
 
 	var near_wipe := is_victory and not ko_ids.is_empty()
+
+	var grief_ids: Array = []
+	var shared_survival_ids: Array = []
 
 	# Apply modifiers to surviving roster echoes (not runtime actor dicts)
 	for echo_v in roster:
@@ -298,6 +323,7 @@ func apply_bond_aftermath_modifiers(t: int, outcome: String) -> void:
 			var grief_fear_mul   := float(bond_rec_cfg.get("grief_fear_mul",   1.5))
 			var grief_ticks      := int(bond_rec_cfg.get("grief_ticks",        3))
 			EmotionRecoveryService.set_modifier(echo, grief_morale_mul, grief_fear_mul, grief_ticks, logger, t)
+			grief_ids.append(echo_id)
 		elif near_wipe:
 			# Shared survival bonus: bonded friend also survived the near-wipe
 			var bonded_friend_survived := false
@@ -316,21 +342,26 @@ func apply_bond_aftermath_modifiers(t: int, outcome: String) -> void:
 				var surv_fear_mul   := float(bond_rec_cfg.get("shared_survival_fear_mul",   0.7))
 				var surv_ticks      := int(bond_rec_cfg.get("shared_survival_ticks",         2))
 				EmotionRecoveryService.set_modifier(echo, surv_morale_mul, surv_fear_mul, surv_ticks, logger, t)
+				shared_survival_ids.append(echo_id)
+
+	return { "grief_ids": grief_ids, "shared_survival_ids": shared_survival_ids }
 
 
 # BOND-002: Seeds rival_incidents[] for V2-SANCTUM-005 (incident system).
 # For each rival-tier pair among encounter actors: appends canonical [a_id, b_id] if not present.
 # Must be called BEFORE encounter_ctx is nulled.
-func seed_rival_stage_incidents(t: int) -> void:
+## Returns { added, pairs } — the rival pairs this fight put on the incident queue. Already
+## idempotent: a pair is appended only if it is not queued. D84: recorded on the run result.
+func seed_rival_stage_incidents(t: int) -> Dictionary:
 	if flow_ctx.encounter_ctx == null:
-		return
+		return {}
 	var ectx: EncounterContext = flow_ctx.encounter_ctx
 
 	var thresholds := ConfigService.get_bond_thresholds_cfg(config_service)
 
 	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
 	if not (sanctum_v is Dictionary):
-		return
+		return {}
 	var sanctum: Dictionary = sanctum_v
 	var bonds_v: Variant = sanctum.get("bonds", [])
 	var bonds: Array = bonds_v if bonds_v is Array else []
@@ -344,6 +375,7 @@ func seed_rival_stage_incidents(t: int) -> void:
 			echo_ids.append(str(a_v.get("id", "")))
 
 	var added := 0
+	var added_pairs: Array = []
 	for i in range(echo_ids.size()):
 		for j in range(i + 1, echo_ids.size()):
 			var a_id: String = echo_ids[i]
@@ -365,6 +397,7 @@ func seed_rival_stage_incidents(t: int) -> void:
 						break
 			if not already_seeded:
 				incidents.append(pair)
+				added_pairs.append(pair)
 				added += 1
 
 	if added > 0:
@@ -375,6 +408,7 @@ func seed_rival_stage_incidents(t: int) -> void:
 			"added": added,
 			"total": incidents.size(),
 		})
+	return { "added": added, "pairs": added_pairs }
 
 
 ## V2-INFRA-003 Phase 4 Slice 4: builds a fresh NarrativeVoiceService scoped to the current

@@ -103,6 +103,12 @@ var pending_return_notification: Dictionary = {}
 # VowConsequenceService.store_vow_benefit_preview (benefit probe).
 var vow_outcome: Dictionary = {}
 
+# V2-INFRA-003 (defect D84): the bond consequences of the fight that just ended, produced by
+# the three BondConsequenceService hooks in FlowRuntime._end_round() and read once, in the same
+# dispatch, by PendingResultService._build_result(). Session-transient, never persisted here —
+# the durable copy is the one inside save.flow.pending_result.bond_outcome.
+var bond_outcome: Dictionary = {}
+
 # V2-VOW-002: session-transient list of vows unlocked this session (for "Discovered" badge on
 # VowScreen and "Vow Revealed" section on ResolveScreen).
 # Populated by VowConsequenceService.check_vow_discovery when a vow is unlocked during a run.
