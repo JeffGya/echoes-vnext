@@ -1092,7 +1092,7 @@ EncounterStateMachine phases (scaffold): `setup → blessing → rounds → reso
 | | `vow.break` | Calls VowService.break_vow(). Applies morale/fear delta to all roster echoes. |
 | **sanctum (companion, V2-STAGE-004 P4)** | `sanctum.companion.accept` | No payload. Reads `sanctum.companion_invite`, calls `RecruitmentService.promote_ally_to_echo()`, clears the invite. Handled by `FlowRuntime._handle_companion_accept()`. |
 | | `sanctum.companion.decline` | No payload. Clears `sanctum.companion_invite` with no roster mutation. Handled by `FlowRuntime._handle_companion_decline()`. |
-| **debug** | `debug.seed.show/set/reset` | seed tooling (dev only, `t = -1`) |
+| **debug** | `debug.seed.show/set/reset` | seed tooling (dev only). Like every action, it runs at the tick `dispatch()` computes for it — not `t = -1`. |
 | | `debug.echo.gen_test` | generates test echo (dev only) |
 | | `debug.vow.unlock` | payload: `{ vow_id }`. Unlocks a vow at tier 1 without scenario trigger (dev only) |
 | | `debug.vow.pledge` | payload: `{ vow_id }`. Pledges a vow directly (dev only) |

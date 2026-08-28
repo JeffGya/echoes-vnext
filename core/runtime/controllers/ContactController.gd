@@ -134,12 +134,12 @@
 # removes and reorders none. tests/ConversationRepairTests.gd guards it.
 #
 # ---------------------------------------------------------------------------
-# KNOWN DEFECT (V2-INFRA-003 Phase 5 records; Phase 8 fixes):
+# KNOWN DEFECT (V2-INFRA-003 Phase 5 records; V2-INFRA-007 fixes):
 # apply_contact_outcome() runs NONE of the six resolution steps that a combat result runs —
 # ally teardown, emotion drift, bond triggers, sanctum emotion tick, vow discovery, vow release.
-# That is why a contact result behaves differently from a combat result. The repair belongs to
-# Phase 8, through EncounterResolutionService. It is deliberately NOT fixed here: a behaviour
-# change inside an extraction makes any later failure impossible to trace to one cause.
+# That is why a contact result behaves differently from a combat result. The gap is real and
+# still open. `EncounterResolutionService`, named in earlier notes, was never built and does not
+# exist. V2-INFRA-007 (contact resolution consequence parity) owns the repair.
 # ---------------------------------------------------------------------------
 
 class_name ContactController
@@ -492,12 +492,12 @@ func handle_disengage_contact(_action: Dictionary, t: int) -> FlowActionOutcome:
 
 	return FlowActionOutcome.snapshot_outcome(StageExploreSnapshotBuilder.build(flow_ctx, t))
 # Apply conversation outcome by role: intel clues, map reveals, objective, emotion, continuity, fear bleed.
-# KNOWN DEFECT (V2-INFRA-003 Phase 5 records; Phase 8 fixes): this function runs NONE of the
+# KNOWN DEFECT (V2-INFRA-003 Phase 5 records; V2-INFRA-007 fixes): this function runs NONE of the
 # six resolution steps a combat result runs — ally teardown, emotion drift, bond triggers,
 # sanctum emotion tick, vow discovery, vow release. That is why a contact result behaves
-# differently from a combat result. Phase 8 owns the repair, through EncounterResolutionService.
-# Recorded, not fixed: a behaviour change inside an extraction makes a later failure impossible
-# to trace to one cause.
+# differently from a combat result. The gap is real and still open. `EncounterResolutionService`,
+# named in earlier notes, was never built and does not exist. V2-INFRA-007 (contact resolution
+# consequence parity) owns the repair.
 func apply_contact_outcome(
 	contact: Dictionary, stage: Dictionary, explore_map: Dictionary, t: int
 ) -> FlowActionOutcome:

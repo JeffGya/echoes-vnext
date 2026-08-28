@@ -24,15 +24,11 @@
 # STEP 0a — what could NOT move in Slice D, and why it moved in Slice 6F
 # ---------------------------------------------------------------------------
 #
-# SLICE D RECORDED: flow.select_stage STAYS INLINE ON FlowRuntime.dispatch(). Its body calls
+# SLICE D RECORDED (SUPERSEDED — see SLICE 6F below): flow.select_stage had to stay inline on
+# FlowRuntime.dispatch(), because its body called
 # `_progression_controller().persist_equipped_skills(t)` before transitioning to STAGE.
-# Moving the case here would make VentureController call ProgressionController, which
-# AGENTS.md forbids outright ("Controllers must never call one another"). The legal fix is to
-# demote persist_equipped_skills to a service both controllers may call — but that is a second
-# extraction of a function ProgressionController's Slice 6b header deliberately placed on the
-# controller ("NOT a dispatched-action handler — called as a preparatory step from
-# FlowRuntime's flow.select_stage case (which stays on FlowRuntime)"), and it is not in this
-# slice's scope. Recorded, not forced. flow.select_stage's owner remains FlowRuntime.dispatch().
+# Moving the case here would have made VentureController call ProgressionController, which
+# AGENTS.md forbids outright ("Controllers must never call one another").
 #
 # SLICE 6F RESOLVED IT, by doing precisely the fix Slice D named. persist_equipped_skills is now
 # core/progression/SkillLoadoutService.gd::persist_equipped_skills — a service, reachable by any
