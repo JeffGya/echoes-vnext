@@ -78,6 +78,9 @@ static func register(runner) -> void:
 	# V2-STAGE-004 P3c review-fix: a JOINED spirit must not self-escort to a spirit_escorted
 	# victory after the real party is wiped — party-wipe defeat must fire instead.
 	runner.register_test("combat_roundtrip/guide_spirit_joined_spirit_does_not_self_escort", func(): return test_guide_spirit_joined_spirit_does_not_self_escort())
+	# D92: an escort that already started does not keep paying out after the party dies —
+	# a wipe must score all_echoes_dead, never spirit_escorted.
+	runner.register_test("combat_roundtrip/guide_spirit_party_wipe_scores_defeat_not_escort", func(): return test_guide_spirit_party_wipe_scores_defeat_not_escort())
 	# Kill-signal fix regression: a killing blow through the LIVE round loop must carry
 	# is_kill=true on the result and fire the kill consumers (boost, ripple, ledger).
 	# Guards against _resolve_melee ever dropping the is_kill key again.
@@ -2064,6 +2067,88 @@ static func test_guide_spirit_joined_spirit_does_not_self_escort() -> Dictionary
 	if reason == "spirit_escorted":
 		return { "ok": false, "error": "combat ended 'spirit_escorted' after party wipe -- joined spirit self-escorted" }
 
+	if reason != "all_echoes_dead":
+		return { "ok": false, "error": "Expected 'all_echoes_dead' defeat after party wipe, got '%s'" % reason }
+
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# D92 — the escort win must not survive the party that earned it.
+#
+# The test above starts with escort_started false, so an escort_started guard alone
+# would satisfy it. This one starts with escort_started ALREADY true — a real escort
+# that began earlier in the fight — then wipes the party while the joined spirit stands
+# on the destination. destination_reached is evaluated before all_echoes_dead
+# (CombatState.gd), so an unguarded latch turns a party wipe into a spirit_escorted
+# victory. The living-echo-within-escort_radius guard is what stops it.
+# ---------------------------------------------------------------------------
+static func test_guide_spirit_party_wipe_scores_defeat_not_escort() -> Dictionary:
+	var env: Dictionary = _setup("guide_wipe_defeat", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var ectx = env["ectx"]
+	var runtime = env["runtime"]
+
+	ectx.resolution_mode = EncounterResolutionModes.GUIDE_SPIRIT
+	ectx.objective_params = {
+		"guide_mode":          "escort",
+		"duration_turns":      20,
+		"spirit_def_id":       "guide_spirit",
+		"spirit_name":         "Test Spirit",
+		"spirit_max_hp":       9999,
+		"escort_radius":       2,
+		"skittish_radius":     3,
+		"spirit_joins_battle": true,
+		"destination_col":     5,
+		"destination_row":     5,
+	}
+
+	var spirit: Dictionary = {
+		"id": "guide_spirit_01", "name": "Test Spirit", "faction": "echo",
+		"actor_type": "enemy",
+		"is_structure": false, "is_spirit": true, "is_dead": false,
+		"current_hp": 9999, "stats": { "max_hp": 9999, "def": 0, "atk": 0, "speed": 0 },
+		"speed": 0, "morale": 50, "fear": 0,
+		"grid_pos": { "col": 5, "row": 5 },
+	}
+	ectx.actors.append(spirit)
+
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "echo" and not bool(a_v.get("is_spirit", false)):
+			a_v["is_dead"] = true
+			a_v["current_hp"] = 0
+
+	var enemy_col: int = 9
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "enemy" and not bool(a_v.get("is_structure", false)):
+			a_v["is_dead"] = false
+			a_v["grid_pos"] = { "col": enemy_col, "row": 0 }
+			enemy_col = maxi(0, enemy_col - 1)
+
+	runtime.dispatch({ "type": "combat.init" })
+
+	# The escort really did start earlier in this fight. Only the party is gone now.
+	ectx.combat_state["escort_started"] = true
+
+	runtime.dispatch({ "type": "combat.confirm_round" })
+	var guard: int = 0
+	while guard < 60:
+		guard += 1
+		var cs: Dictionary = ectx.combat_state
+		if bool(cs.get("combat_over", false)): break
+		if str(cs.get("round_phase", "")) != "in_round": break
+		runtime.dispatch({ "type": "combat.next_actor" })
+
+	var cs2: Dictionary = ectx.combat_state
+	if not bool(cs2.get("escort_started", false)):
+		return { "ok": false, "error": "test assumption broken: escort_started was cleared" }
+	if bool(cs2.get("destination_reached", false)):
+		return { "ok": false, "error": "escort win latched with no living echo to escort" }
+
+	var reason: String = str(ectx.combat_result.get("reason", "")) if ectx.combat_result != null else ""
+	if reason == "spirit_escorted":
+		return { "ok": false, "error": "party wipe scored as 'spirit_escorted'" }
 	if reason != "all_echoes_dead":
 		return { "ok": false, "error": "Expected 'all_echoes_dead' defeat after party wipe, got '%s'" % reason }
 

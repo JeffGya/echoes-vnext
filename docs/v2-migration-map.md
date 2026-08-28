@@ -291,7 +291,9 @@ Each directive also carries `pros: Array[String]` and `cons: Array[String]` (2 e
 
 **Save field:** `stage_context.active_directive_id` (String) — carryover, field name unchanged.
 
-**Save repair (V2-DIRECTIVE-001):** `directive.none` → `directive.seek_signs`; `directive.scout` → `directive.scout_carefully`; all other V1 IDs → `directive.scout_carefully`.
+**Save repair (V2-DIRECTIVE-001):** `directive.scout` → `directive.scout_carefully`; all other V1 IDs → `directive.scout_carefully`.
+
+**New-save default:** `directive.scout_carefully`, written directly by `SaveSchema.make_new_save()` — the same value every consumer falls back to. The `directive.none` → `directive.seek_signs` remap was deleted (V2-INFRA-003, D67): `make_new_save` wrote `directive.none`, so that branch kept migrating every new save instead of only V1 ones.
 
 **Directive selection:** Blocking overlay on the stage preview — appears on every stage entry. Player must confirm before interacting with the stage. Scene: `ui/screens/venture/DirectiveSelectOverlay.tscn`.
 
@@ -306,7 +308,6 @@ V1 locked directives (`protect`, `push`, `preserve`, `focus`) — **superseded**
 | Item | Action | Status |
 |---|---|---|
 | `directive.scout` | **Rewrite** → `directive.scout_carefully` with V2 weights | ✅ Done |
-| `directive.none` | **Rewrite** → `directive.seek_signs` (remap) | ✅ Done |
 | `directive.protect`, `push`, `preserve`, `focus` | **Superseded** — removed from registry | ✅ Done |
 | `stage_context.active_directive_id` save field | **Carryover** — key name and format unchanged | ✅ Done |
 | V1→V2 save repair | Added migration block to `SaveService.gd` | ✅ Done |

@@ -296,7 +296,15 @@ func apply_guide_spirit_round(
 								"reason": "unreachable",
 								"goal_id": str(_gs_result.get("goal_id", "")),
 							})
-				if not bool(_gs_spirit.get("is_dead", false)) \
+				# D92: the escort win belongs to the party, never to the spirit itself. A joined
+				# spirit has faction "echo" + is_spirit true, so without these two guards a spirit
+				# standing on the destination delivers itself — even with every real echo dead,
+				# which scores a party wipe as a victory. Same pair the movement gate above uses:
+				# the escort must have started, and a living non-spirit echo must be within
+				# escort_radius this round. Both loops that compute them skip is_spirit actors.
+				if bool(combat_state.get("escort_started", false)) \
+						and _gs_escorted \
+						and not bool(_gs_spirit.get("is_dead", false)) \
 						and int(_gs_spirit_pos.get("col", -999)) == int(combat_state.get("destination_col", -1)) \
 						and int(_gs_spirit_pos.get("row", -999)) == int(combat_state.get("destination_row", -1)):
 					combat_state["destination_reached"] = true

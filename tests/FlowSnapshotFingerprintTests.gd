@@ -231,7 +231,13 @@ static func _hash(v: Variant) -> String:
 ## (opening_realm_id, opening_realm_status, pending_result, etc.) leaked into the projection.
 ## Verdict: (a) representation-only change, so this constant is the correct re-derivation, not a
 ## fresh guess overwriting a legitimate regression.
-const SANCTUM_FINGERPRINT_HASH := "cbcc7992a21be3b5e85fe3a558320d0501e75b7f6311a85876ce9c32e834b0e1"
+## D67 re-derivation: `SaveSchema.make_new_save()` now writes the V2 default
+## `directive.scout_carefully` instead of the V1 value `directive.none`. A fresh save is not
+## repaired at creation, so the raw stored id reaches this snapshot. Payload diff (old vs new,
+## captured field-by-field): exactly one changed key — `data.active_directive_id`,
+## "directive.none" → "directive.scout_carefully". Nothing else moved.
+## Previous value: cbcc7992a21be3b5e85fe3a558320d0501e75b7f6311a85876ce9c32e834b0e1.
+const SANCTUM_FINGERPRINT_HASH := "a26556e1eaf749a276123e740511222676b7c27f50981573d365042059f832df"
 
 static func test_sanctum_fingerprint() -> Dictionary:
 	var env := _setup_sanctum_env("fp_sanctum")
@@ -251,7 +257,16 @@ static func test_sanctum_fingerprint() -> Dictionary:
 	return { "ok": true }
 
 
-const STAGE_EXPLORE_FINGERPRINT_HASH := "528b8d5a584bb06dcc199340d99a78e06776e3ab79d364519701bd169e707e54"
+## D67 re-derivation, same cause as SANCTUM_FINGERPRINT_HASH above. Payload diff has three
+## related groups, all downstream of the one schema-default change:
+##   1. data.directive.id — "directive.none" → "directive.scout_carefully".
+##   2. data.directive.label — "" → "Scout Carefully". The old id is absent from the directive
+##      registry, so the label lookup missed and the overlay had no name to show.
+##   3. data.explored_cells — 9 extra cells. FlowStageExploreState resolves reveal_radius from
+##      `data.directives[<id>]` in balance.json. The old id missed that lookup and fell through to
+##      the hardcoded default 2; scout_carefully's authored value is 3, so entry fog lifts wider.
+## Previous value: 528b8d5a584bb06dcc199340d99a78e06776e3ab79d364519701bd169e707e54.
+const STAGE_EXPLORE_FINGERPRINT_HASH := "aee5d5cc22cc484d794f55c967c92d438ba103cb6cb943b61c76fb8b6d4426be"
 
 static func test_stage_explore_fingerprint() -> Dictionary:
 	var env := _setup_stage_explore_env("fp_stage_explore")

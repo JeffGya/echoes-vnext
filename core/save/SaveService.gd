@@ -1149,7 +1149,6 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			repaired_notes.append("stage_context.active_directive_id set to 'directive.scout_carefully' default")
 		# V2-DIRECTIVE-001: migrate V1 directive IDs to V2 canonical IDs
 		var _v1_dir_map: Dictionary = {
-			"directive.none":     "directive.seek_signs",
 			"directive.scout":    "directive.scout_carefully",
 			"directive.protect":  "directive.scout_carefully",
 			"directive.push":     "directive.scout_carefully",

@@ -471,8 +471,7 @@ static func _test_phase8_repair_keeps_flow_state_context() -> Dictionary:
 ## the removed migrations used to backfill (seed_root, onboarding dict, empty
 ## roster) — proving those code paths had nothing left to do. A second repair
 ## pass is then a true no-op, proving no migration logic is silently still
-## running underneath the (still-live, load-bearing) directive.none bridge that
-## fires once on every fresh save.
+## running.
 static func _test_fresh_save_triggers_no_removed_legacy_migrations() -> Dictionary:
 	var logger := _make_logger()
 	var save := SaveSchema.make_new_save(999)
@@ -489,8 +488,6 @@ static func _test_fresh_save_triggers_no_removed_legacy_migrations() -> Dictiona
 	if not (sanctum.get("roster", []) as Array).is_empty():
 		return { "ok": false, "error": "test assumption broken: fresh save roster is not empty" }
 
-	# First repair pass may still do real work (e.g. the directive.none -> seek_signs
-	# bridge, which is reachable on every fresh save and intentionally kept).
 	SaveService._apply_additive_defaults_and_repairs(save, logger, 0)
 
 	# Second pass must be a true no-op: nothing left to migrate or default.
