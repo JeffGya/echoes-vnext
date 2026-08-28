@@ -1,10 +1,14 @@
 # V2-INFRA-003 — Handoff
 
-> **Status: PHASES 1–9 COMPLETE AND COMMITTED (through `bf8360e`). Suite 1,401 → 1,494.
-> Phase 10 — Jeff's manual first-session test — is next. PAUSE HERE.**
+> **Status: PHASES 1–10 COMPLETE AND COMMITTED (through `99b319e`). Suite 1,401 → 1,516.
+> Manual test 1 passed. All 44 defects open at the re-triage are closed. Manual test 2 is next,
+> then Phase 11 closes the story.**
 > Branch `claude/v2-infra-003-proof-spine-b3c770` (git worktree).
 > Full plan: `~/.claude/plans/we-are-working-on-jazzy-gem.md` — keep it for reference lookup.
-> Written 2026-08-15.
+> Written 2026-08-15. Sections 11–17 added 2026-08-28.
+>
+> *The line above read "PHASES 1–9 COMPLETE … through `bf8360e` … Suite 1,494 … Phase 10 is next"
+> until 2026-08-28. Kept here so the earlier record is not lost.*
 
 ---
 
@@ -73,7 +77,9 @@ commits on top of it, on the same branch, and both ship in one PR.
 | 7 Thin shell + Half A review gate | ✅ APPROVED WITH CORRECTIONS; all 6 in-scope applied. C7 (payment) deferred to the after-Phase-9 bundle. **Committed.** |
 | 8 Proof spine + settlement (Half B) | ✅ 8A settlement · 8B durable result + real Resolve · 8C opening spine |
 | 9 Full regression | ✅ see below |
-| 10 Jeff manual test | ⬜ **PAUSE — next** |
+| 10 Jeff manual test | ✅ **PASSED** on `2d5d629`, recorded in `702608b`. See section 11 |
+| 10b Re-triage + twelve decisions + ten fix passes | ✅ `c53a858` → `99b319e`. See sections 12–16 |
+| 10c Jeff manual test 2 | ⬜ **PAUSE — next** |
 | 11 Docs + register→ledger + PR | ⬜ |
 | Extra — remove job-2 legacy save migrations | ✅ Jeff approved folding into this story |
 

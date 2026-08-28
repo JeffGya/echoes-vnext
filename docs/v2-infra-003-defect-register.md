@@ -645,7 +645,7 @@ Three corrections found by the triage:
 | **D44** | **Intended as it stands.** The kill ripple and `kill_momentum` both apply, and the double ledger credit is part of the payoff for the trait the player invested in. | No code change. Entry closes as not a defect. |
 | **D45** | **Structures stay excluded** from the kill-share denominator. A structure is an objective, not a party member. It does not earn, so it must not dilute. | No code change. Entry closes as correct behaviour. |
 | **D61** | **Defer to V2-SANCTUM-004** (Ready). It is the only open story that owns house condition as a runtime layer. The file note must add a scope line for passive values and upkeep, because V2-SANCTUM-002 held that item and is now Done. | No code change in this story. |
-| **D62** | **Expand V2-STAGE-003.** No new story. That story owns contact representation; it gains the consequence parity scope. **No new stories are to be written for this backlog.** | No code change in this story. |
+| **D62** | **SUPERSEDED SAME DAY — see the correction below.** The first ruling was: expand V2-STAGE-003, no new story. | No code change in this story. |
 | **D79** | **Collapse the six placement copies to one function.** Keep each copy's current values: the target column and the row reference become parameters. PURSUE keeps the party centroid. The other five keep the board midpoint. | No spawn cell moves. No recorded value moves. |
 | **D80** | **Use a board-edge cell when terrain is absent.** The escort stays available and the objective becomes completable on every board. | No recorded value moves. No shipped encounter reaches this path. |
 | **D84** | **Run the bond hooks and the Thread contribution before the card is published.** The hooks currently run once per stage; they must run at the encounter cadence, so the card reports the run that just happened. | A change of behaviour, not only of display. Moves recorded values. Ships as one commit with a written record of what moved. |
@@ -996,3 +996,30 @@ pass 9 made it more false.
 
 Several test fixtures still write `"flow": {"state": …, "context": {}}`. The keys are now ignored.
 Cleaning them is churn.
+
+### D62 — the owner's ruling changed the same day. This is the final one.
+
+**First ruling:** expand V2-STAGE-003; write no new story. The addendum was added to V2-STAGE-003
+at Order 310 (Ready).
+
+**Then the twin rule was applied.** The database holds duplicate story codes. V2-STAGE-003 also
+exists at Order 236 with Status Done, and that page carries the shipped contact work. The owner's
+rule is: when one twin is Done, the other twin is not used. So the addendum was removed from
+Order 310, and that page was returned to exactly its previous state — every property unchanged.
+
+**Then the owner authorised a new story, conditionally:** "if no other story applies then yes a new
+story is needed."
+
+**Thirteen open stories were checked and each was rejected with a reason** — V2-INFRA-005 (death
+ripple only), V2-INFRA-004 (before the stage, not after), V2-SANCTUM-005 (generates house events,
+does not own who calls the tick), both V2-INTEL-002 rows, V2-COMBAT-003 and V2-COMBAT-004 (both stop
+at Resolve), V2-STAGE-002 (generation, not consequence), and six Draft stories that mention contacts
+but own content breadth or authoring vocabulary. No open story fitted.
+
+**FINAL: a new story was created — `V2-INFRA-007 — contact resolution consequence parity`.**
+Status Ready, Order 262.5, depends on V2-INFRA-003.
+https://app.notion.com/p/3cac3d1ede9281f58864c9d15a954952
+Four properties were left empty rather than guessed: Priority, Spec State, Source GDD, Legacy Source.
+
+The two stale `ContactController.gd` comments that named the never-built `EncounterResolutionService`
+now name V2-INFRA-007 instead. Fixed in the documentation pass, commit `d0d5125`.
