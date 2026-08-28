@@ -597,3 +597,73 @@ re-dispatching. Green. No change made.
 | ~~D78~~ | ✅ **ANSWERED 2026-08-24: no, Back must not quit.** Fix required. Moves no recorded value. |
 | **D61** | Should institutions accrue passive effects while their condition never degrades (today's behaviour when `inst_cfg` is empty)? |
 | **D66** | Who owns the reward-type weighting bug? The prompt says `V2-ECONOMY-004`; Notion says that story is the Ekwan loop. |
+
+---
+
+## POST-MANUAL-TEST TRIAGE AND DECISIONS — 2026-08-28
+
+### The triage
+
+All 90 identifiers were re-verified against the worktree at `702608b` by four independent
+readers. Each reader went to the named code. None trusted a register row.
+
+| Outcome | Count |
+|---|---|
+| Fixed | 32 |
+| Deleted | 1 |
+| Disproved | 3 |
+| Not a defect | 4 |
+| **Still open** | **44** |
+
+The earlier count of 53 open items was wrong. It is 44. Of those, **32 need no decision** from
+the product owner. **12 needed one.** All 12 are decided below.
+
+Three corrections found by the triage:
+- **D20 is disproved.** `ui/screens/venture/ResolveScreen.gd:262-268` shows the rank badge when
+  `verdict` is not empty. The claim that the screen hides it unconditionally is wrong.
+- **D33 has moved.** The duplicate realm XP multiplier now lives in
+  `core/economy/StageSettlementService.gd:262-265`, not in `FlowEncounterState.gd`.
+- **D85 is half fixed.** The `stage_id` gap is closed by
+  `core/state/flow/PendingResultService.gd:129`. The dead `save.flow.state` field remains.
+
+### Two questions answered by existing sources, not by the product owner
+
+| ID | Answer | Source |
+|---|---|---|
+| **D13** | **Per round.** The authored keys are `purify_cooldown_rounds` and `morale_drain_per_wave`. Both are time-based. No authored key is expressed per shrine. The per-shrine implementation is therefore the defect. | `data/balance.json:1627-1631,1646` |
+| **D66** | **V2-ECONOMY-004 owns it. There was no dispute.** That story is the Ekwan loop AND owns reward vocabulary, weights and the Ase/Ekwan split. It therefore owns D66 and D83. Exactly-once payout stayed with V2-INFRA-003. | Register `:198-212`; backlog line 85. The stale "confirm the true owner" note at `docs/v2-infra-003-handoff.md:1011` is superseded. |
+
+### The twelve decisions — Jeff, 2026-08-28
+
+| ID | Decision | Consequence |
+|---|---|---|
+| **D02** | **Implement all ten leadership traits.** The two empty blocks get authored effects: `cover_positioning` = a move-score bonus toward cover; `anchor_presence` = allies within the radius resist displacement. | A real combat-balance change. Moves recorded values. |
+| **D13** | Make the purifier cooldown and the party morale drain **per round**. | Changes the PURIFY_SHRINE difficulty curve. Moves recorded values. |
+| **D20** | **Keep the badge.** A contact outcome carries a visible rank. | No code change. Entry closes as disproved. |
+| **D44** | **Intended as it stands.** The kill ripple and `kill_momentum` both apply, and the double ledger credit is part of the payoff for the trait the player invested in. | No code change. Entry closes as not a defect. |
+| **D45** | **Structures stay excluded** from the kill-share denominator. A structure is an objective, not a party member. It does not earn, so it must not dilute. | No code change. Entry closes as correct behaviour. |
+| **D61** | **Defer to V2-SANCTUM-004** (Ready). It is the only open story that owns house condition as a runtime layer. The file note must add a scope line for passive values and upkeep, because V2-SANCTUM-002 held that item and is now Done. | No code change in this story. |
+| **D62** | **Expand V2-STAGE-003.** No new story. That story owns contact representation; it gains the consequence parity scope. **No new stories are to be written for this backlog.** | No code change in this story. |
+| **D79** | **Collapse the six placement copies to one function.** Keep each copy's current values: the target column and the row reference become parameters. PURSUE keeps the party centroid. The other five keep the board midpoint. | No spawn cell moves. No recorded value moves. |
+| **D80** | **Use a board-edge cell when terrain is absent.** The escort stays available and the objective becomes completable on every board. | No recorded value moves. No shipped encounter reaches this path. |
+| **D84** | **Run the bond hooks and the Thread contribution before the card is published.** The hooks currently run once per stage; they must run at the encounter cadence, so the card reports the run that just happened. | A change of behaviour, not only of display. Moves recorded values. Ships as one commit with a written record of what moved. |
+| **D85** | **Delete the field**, its default, its validation and its repair. Resume operates through the durable pending result. | Save contents change. The game is not live and saves are disposable. |
+
+### Backlog source of truth — 2026-08-28
+
+**Notion is current. The CSV export is stale.** Notion marks seven stories Done that the CSV
+still shows as Ready or Draft: V2-SANCTUM-001, both V2-SANCTUM-002 rows, V2-STAGE-003
+(Order 236), both V2-STAGE-004 rows, V2-BOND-002 and V2-VOW-002. Notion has no "Closed" status;
+the open set is Draft, Ready, In Progress and Blocked. Read Notion, not the CSV.
+
+### The 32 open items that need no decision
+
+| Group | Items |
+|---|---|
+| Combat consequence | D46, D47, D50, D51, D54, D56 |
+| Objective and spawn | D09, D12, D15, D16, D17, D28, D29, D43 |
+| Config ownership | D30, D31, D32, D53, D67 |
+| Duplication and hygiene | D33, D52, D55, D58, D69 |
+| Observability | D14, D27, D35 |
+| Documentation | D68, and two stale code headers (`VentureController.gd:27-35`, `ContactController.gd:139-141`) |
+| Owned by another story | D06, D57, D59, D60, D62, D66, D83 |
