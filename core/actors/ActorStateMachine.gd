@@ -324,6 +324,11 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	augmented_context["rank_strength"]     = rank_strength
 	augmented_context["resilience_traits"] = resilience_traits
 	augmented_context["leadership_traits"] = leadership_traits
+	# V2-INFRA-003 pass 8: BehaviorArbiter reads OTHER actors' Whole-band leadership
+	# traits (aura score effects), so it needs the trait table and the band map, not
+	# just this actor's own trait list. Per-call config through context — the arbiter
+	# holds no ConfigService by design.
+	augmented_context["expression_cfg"]    = expr_cfg
 	# V2-PROG-012 Phase 1: hidden autonomy outputs. `composure` has been read by
 	# BehaviorArbiter._score() since Phase 2; `judgment` has been read since Phase 6
 	# (drives interpretation_width — see BehaviorArbiter._score()'s doc comment).
@@ -893,9 +898,16 @@ func _apply_leadership(
 			_actor, all_actors, radius)
 		if allies.is_empty():
 			continue
-		# Passive aura/event traits are resolved only by their combat emotion choke points.
+		# Passive aura/event traits are resolved by their own choke points, not here:
+		# the first five by the combat emotion services, the rest by BehaviorArbiter
+		# (decision scores, retreat gate, directive weight) and MovementHazardService
+		# (displacement immunity).
 		if trait_id in ["kill_momentum", "fearless_example", "morale_anchor", \
-				"calm_transmission", "block_contagion"]:
+				"calm_transmission", "block_contagion", \
+				"aggression_field", "mark_target", "challenge_call", "safe_path_read", \
+				"hold_formation", "threat_read", "cover_positioning", \
+				"directive_amplify", "directive_echo", \
+				"position_lock", "anchor_presence"]:
 			continue
 		var fired := false
 		match trait_id:

@@ -835,3 +835,66 @@ The two documents that described it as a tick are corrected in the same commit:
   D35's scope.
 - `tests/KODeathTests.gd:47-48` comments its assertion as a tick. It passes because that fixture
   supplies no round and hits the fallback. The comment misleads; the assertion is correct.
+
+| 8 | see commit | D02 | Fixed. **The count was 11, not 10.** All eleven dead traits implemented and each demonstrated with a with-and-without value. | None moved — and the reason is important, see below |
+
+### D02 — the count was wrong, and two more traits were dead
+
+The register said ten. It is **eleven**. `directive_amplify` and `directive_echo` were also dead. The
+`directive_mul` grep hit that made `directive_amplify` look live is `calling_behavior.directive_mul`,
+a different config subtree.
+
+The eleven: `aggression_field`, `challenge_call`, `mark_target`, `safe_path_read`, `threat_read`,
+`hold_formation`, `position_lock`, `cover_positioning`, `anchor_presence`, `directive_amplify`,
+`directive_echo`.
+
+The two authored blocks, per the product owner's decision:
+```json
+"cover_positioning": { "cover_move_score_bonus": 8.0 },
+"anchor_presence":   { "immune_to_displacement": true, "radius": 2.0 }
+```
+
+### THE FINDING THAT MATTERS MORE THAN D02 — leadership is invisible to every test
+
+**No recorded scenario contains a Whole-band Echo, so no leadership trait activates in any fixture.**
+
+`leadership_trait_pool._comment` says the traits are "Activated at Whole band".
+`band_by_standing` puts Whole at rank 4. `EchoFactory` mints every Echo at rank 1.
+
+So the eleven traits that were ALREADY live are equally dormant in the recorded scenarios. This is a
+pre-existing property of the fixtures, not something pass 8 introduced. It is why implementing
+eleven traits moved no fingerprint and no baseline.
+
+**Consequence: the baselines cannot see leadership at all.** A Whole-band baseline scenario would be
+a genuinely useful addition, and until one exists, every leadership claim rests on probes rather
+than on pinned values.
+
+Each of the eleven was demonstrated by probe instead:
+
+| Trait | With and without |
+|---|---|
+| aggression_field | melee score 68.150 → 76.150 |
+| mark_target | melee score 68.150 → 78.150 |
+| challenge_call | taunt score 5.000 → 30.000 |
+| safe_path_read | move score 81.150 → 89.150 |
+| hold_formation | move score 81.150 → 76.150 |
+| directive_amplify | melee score 68.150 → 85.175 |
+| directive_echo | melee score 68.150 → 78.365 |
+| threat_read | retreat gate 0.45 → 0.35; candidate offered true → false at 0.40 HP |
+| cover_positioning | bonus 0.0 → 8.0; blocked line detected |
+| position_lock | owner immune true, plain actor false |
+| anchor_presence | ally in radius immune true, ally outside false, no leader false |
+
+### Raised by pass 8 — three design questions, not defects
+
+1. **The board has no line-of-sight system.** "Cover" is read off the only physical obstruction the
+   movement layer knows: an in-bounds non-walkable cell on the straight line to the nearest
+   perceived hostile. If real line of sight or destructible cover arrives, that helper is the one
+   place to change.
+2. **`mark_target` and `aggression_field` are the same effect at different magnitudes** (10 and 8),
+   differing only in calling pool. Their key names — `attack_score_bonus` and `melee_score_bonus` —
+   suggest a distinction the action vocabulary cannot express, because there is only one attack
+   action type.
+3. **`challenge_call`'s `taunt_attack_bonus` is 25.0, exactly the hardcoded taunt pull already in
+   `_score()`.** It was implemented as the `actor.taunt` score bonus, not as a second copy of that
+   constant. If the intent was the other reading, it needs changing.

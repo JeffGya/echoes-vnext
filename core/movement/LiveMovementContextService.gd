@@ -91,6 +91,7 @@ const MovementOptionServiceScript      := preload("res://core/movement/MovementO
 const MovementPathServiceScript        := preload("res://core/movement/MovementPathService.gd")
 const MovementIntentScript             := preload("res://core/movement/contracts/MovementIntent.gd")
 const MovementActionPlanScript         := preload("res://core/movement/contracts/MovementActionPlan.gd")
+const LeadershipEmotionServiceScript   := preload("res://core/combat/LeadershipEmotionService.gd")
 const MovementOptionScript             := preload("res://core/movement/contracts/MovementOption.gd")
 const CombatActivationServiceScript    := preload("res://core/movement/CombatActivationService.gd")
 const MovementHazardFixturesScript     := preload("res://core/movement/MovementHazardFixtures.gd")
@@ -122,6 +123,11 @@ func prepare_live_movement_context(
 	var pressure_cfg: Dictionary = movement_cfg.get("pressure", {}) as Dictionary
 	if hazard_cfg.is_empty():
 		return {"valid": false, "reason": "missing_hazard_config"}
+	# V2-INFRA-003 pass 8: Whole-band displacement immunity travels on the hazard
+	# ledger — MovementContext and MovementProfile both validate an EXACT field set,
+	# so neither can carry it. MovementExecutor reads it back out.
+	var displacement_immune: bool = _movement_displacement_immunity(
+		actor, ectx.actors, bdata.get("maturity_expression", {}) as Dictionary)
 	var bounds: Dictionary = {
 		"w": int(movement_board_cfg.get("board_cols", 10)),
 		"h": int(movement_board_cfg.get("board_rows", 10)),
@@ -180,6 +186,7 @@ func prepare_live_movement_context(
 			"hazard_ctx": {
 				"triggered": {"unstable": false, "binding": false, "burning": false},
 				"config": hazard_cfg,
+				"immune_to_displacement": displacement_immune,
 			},
 		}
 	var goals: Array = goals_result.get("goals", []) as Array
@@ -211,8 +218,48 @@ func prepare_live_movement_context(
 		"hazard_ctx": {
 			"triggered": {"unstable": false, "binding": false, "burning": false},
 			"config": hazard_cfg,
+			"immune_to_displacement": displacement_immune,
 		},
 	}
+
+
+## V2-INFRA-003 pass 8: does Whole-band leadership make this mover immune to the
+## Unstable hazard's forced displacement? position_lock protects its own owner and
+## nobody else; anchor_presence protects living echo allies inside its radius.
+## LeadershipEmotionService owns the band test, the trait table and the Presence-graded
+## radius, exactly as it does for the fear and morale traits.
+func _movement_displacement_immunity(
+	actor: Dictionary, actors: Array, expr_cfg: Dictionary
+) -> bool:
+	if expr_cfg.is_empty():
+		return false
+	var actor_id: String = str(actor.get("id", ""))
+	if LeadershipEmotionServiceScript.is_whole_leader(actor, expr_cfg) \
+			and "position_lock" in (actor.get("leadership_traits", []) as Array) \
+			and bool(LeadershipEmotionServiceScript.get_trait_effect(
+				"position_lock", expr_cfg).get("immune_to_displacement", false)):
+		return true
+	for leader_v: Variant in actors:
+		if not (leader_v is Dictionary):
+			continue
+		var leader: Dictionary = leader_v
+		if str(leader.get("id", "")) == actor_id:
+			continue
+		if not LeadershipEmotionServiceScript.is_whole_leader(leader, expr_cfg):
+			continue
+		if not ("anchor_presence" in (leader.get("leadership_traits", []) as Array)):
+			continue
+		if not bool(LeadershipEmotionServiceScript.get_trait_effect(
+				"anchor_presence", expr_cfg).get("immune_to_displacement", false)):
+			continue
+		var radius: int = LeadershipEmotionServiceScript.get_trait_radius(
+			leader, "anchor_presence", expr_cfg)
+		for ally_v: Variant in LeadershipEmotionServiceScript.get_nearby_living_echo_allies(
+			leader, actors, radius
+		):
+			if str((ally_v as Dictionary).get("id", "")) == actor_id:
+				return true
+	return false
 
 
 func _movement_live_direct_options(
