@@ -37,7 +37,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("bridge/phase8_repair_adds_settlement_receipt", Callable(SaveBridgeTests, "_test_phase8_repair_adds_settlement_receipt"))
 	runner.register_test("bridge/phase8_repair_is_idempotent",           Callable(SaveBridgeTests, "_test_phase8_repair_idempotent"))
 	runner.register_test("bridge/phase8_repair_preserves_existing_data", Callable(SaveBridgeTests, "_test_phase8_repair_preserves_existing_data"))
-	runner.register_test("bridge/phase8_repair_keeps_flow_state_context", Callable(SaveBridgeTests, "_test_phase8_repair_keeps_flow_state_context"))
+	runner.register_test("bridge/legacy_flow_state_context_still_loads", Callable(SaveBridgeTests, "_test_legacy_flow_state_context_still_loads"))
 
 
 # ---------------------------------------------------------------------------
@@ -439,8 +439,10 @@ static func _test_phase8_repair_preserves_existing_data() -> Dictionary:
 	return { "ok": true }
 
 
-## A save with existing flow.state and flow.context keeps both after repair adds pending_result.
-static func _test_phase8_repair_keeps_flow_state_context() -> Dictionary:
+## flow.state / flow.context are deleted fields. A save written before the deletion still
+## carries them. It must repair and validate without complaint, and the dead keys are simply
+## left where they are.
+static func _test_legacy_flow_state_context_still_loads() -> Dictionary:
 	var logger := _make_logger()
 	var save := _make_old_save_with_stage()
 	save["flow"] = { "state": "flow.stage", "context": { "foo": "bar" } }
@@ -448,13 +450,21 @@ static func _test_phase8_repair_keeps_flow_state_context() -> Dictionary:
 	SaveService._apply_additive_defaults_and_repairs(save, logger, 0)
 
 	var flow: Dictionary = save["flow"]
-	if str(flow.get("state", "")) != "flow.stage":
-		return { "ok": false, "error": "repair changed flow.state" }
-	var context: Dictionary = flow.get("context", {})
-	if str(context.get("foo", "")) != "bar":
-		return { "ok": false, "error": "repair changed flow.context" }
 	if not flow.has("pending_result") or not (flow["pending_result"] is Dictionary) or not (flow["pending_result"] as Dictionary).is_empty():
-		return { "ok": false, "error": "flow.pending_result not added to {} default alongside existing state/context" }
+		return { "ok": false, "error": "flow.pending_result not added to {} default" }
+	if str(flow.get("state", "")) != "flow.stage" or str((flow.get("context", {}) as Dictionary).get("foo", "")) != "bar":
+		return { "ok": false, "error": "repair disturbed the leftover flow.state / flow.context keys" }
+	if not SaveService.validate(save, false):
+		return { "ok": false, "error": "a save carrying legacy flow.state failed validation" }
+
+	# A save with no flow.state at all must validate too — that is every save written from now on.
+	var fresh := _make_old_save_with_stage()
+	fresh.erase("flow")
+	SaveService._apply_additive_defaults_and_repairs(fresh, logger, 0)
+	if (fresh["flow"] as Dictionary).has("state"):
+		return { "ok": false, "error": "repair reintroduced flow.state" }
+	if not SaveService.validate(fresh, false):
+		return { "ok": false, "error": "a save without flow.state failed validation" }
 
 	return { "ok": true }
 

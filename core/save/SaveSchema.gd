@@ -29,11 +29,9 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"seed_source": "imported"
 		},
 		"flow": {
-			"state": "flow.splash",
-			"context": {},
-			# V2-INFRA-003 Phase 8 groundwork: pending resolve/return payload. Additive-only,
-			# nothing reads or writes this yet — that wiring lands in Phase 8 itself.
-			# {} = no pending result. Intended shape once populated:
+			# Durable pending resolve/return payload. {} = no pending result.
+			# Written and consumed by PendingResultService; resume reads it to rebuild run context.
+			# Shape when populated:
 			# {
 			#   version:int, result_id:String, status:"pending_resolve"|"pending_return",
 			#   source:String, outcome:"victory"|"defeat"|"partial"|"withdrawal", created_t:int,

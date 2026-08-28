@@ -111,8 +111,7 @@ func boot() -> Dictionary:
 	#     which would silently point a resumed campaign at the internal run;
 	#   - the prologue is nonetheless resumable. Quitting mid-prologue and pressing Continue has
 	#     to put the player back into it, and `onboarding.opening_realm_status == "active"` is
-	#     the authoritative statement that it is the run in progress — which is exactly what
-	#     D85 observed `save.flow.state` was supposed to be and never became.
+	#     the authoritative statement that it is the run in progress.
 	# A real Realm always wins: the explicit restore only fires if the scan found nothing.
 	var _boot_realms_v: Variant = flow_ctx.save_data.get("realms", {})
 	var _boot_realms: Dictionary = _boot_realms_v if _boot_realms_v is Dictionary else {}

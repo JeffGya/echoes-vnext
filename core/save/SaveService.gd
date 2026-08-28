@@ -512,18 +512,15 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 		repaired = true
 		repaired_notes.append("economy.favor set to 0 (V2 stub)")
 
-	# ---- Flow repairs (V2-INFRA-003 Phase 8 groundwork) ----
-	# save.flow already exists as {state, context} in every save written by make_new_save
-	# and is otherwise never touched. Add pending_result beside the existing keys; never
-	# remove or overwrite state/context.
+	# ---- Flow repairs ----
+	# Older saves carry dead flow.state / flow.context keys. They are left in place:
+	# removing them is not needed, and nothing reads them.
 	if not save.has("flow") or typeof(save["flow"]) != TYPE_DICTIONARY:
 		save["flow"] = {
-			"state": "flow.splash",
-			"context": {},
 			"pending_result": {},
 		}
 		repaired = true
-		repaired_notes.append("flow added with defaults (state/context/pending_result)")
+		repaired_notes.append("flow added with defaults (pending_result)")
 	else:
 		var flow: Dictionary = save["flow"]
 		if not flow.has("pending_result") or typeof(flow["pending_result"]) != TYPE_DICTIONARY:
@@ -1407,9 +1404,6 @@ static func validate(data: Dictionary, report_errors: bool = true) -> bool:
 	if has_seed_root:
 		if not camp.has("seed_source") or typeof(camp["seed_source"]) != TYPE_STRING:
 			return _validation_failure("Invalid save: missing campaign.seed_source", report_errors)
-		
-	if not data["flow"].has("state"):
-		return _validation_failure("Invalid save: missing flow.state", report_errors)
 		
 	return true
 
