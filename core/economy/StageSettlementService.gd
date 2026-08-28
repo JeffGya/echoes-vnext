@@ -256,13 +256,10 @@ func _award_stage_clear_xp(realm_model: Dictionary, stage_index: int, t: int) ->
 	var stage_count := int(realm_model.get("stage_count", 1))
 	var realm_complete_now := stage_index >= stage_count - 1
 
-	# XP tuning: realm XP multiplier from campaign position (run_index). Formula carried
-	# verbatim; see register D33 — it duplicates ProgressionService.get_realm_xp_multiplier(),
-	# which slice 6J measured as unable to differ. Collapsing them is a separate change.
-	var realm_xp_mult := 1.0
-	var mult_rate := float(prog_cfg.get("realm_xp_multiplier_per_realm", 0.0))
-	if mult_rate > 0.0:
-		realm_xp_mult = 1.0 + float(int(realm_model.get("run_index", 0))) * mult_rate
+	# XP tuning: realm XP multiplier from campaign position (run_index).
+	var realm_xp_mult := ProgressionService.get_realm_xp_multiplier(
+		flow_ctx.realm_id, flow_ctx.save_data, prog_cfg
+	)
 
 	return ProgressionService.award_post_combat_xp(
 		flow_ctx.save_data,

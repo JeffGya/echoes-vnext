@@ -44,9 +44,7 @@
 #
 # DETERMINISM. Nothing here draws RNG. No dispatch is added or removed (the retreat roll's
 # seed path embeds the tick), and the round-counter increment stays in _end_round's caller
-# chain, untouched (the theft roll's seed path embeds the round counter). The `round` parameter
-# keeps its original name, including the shadowing of the built-in round() that the outnumber
-# term calls at term D — same name, same resolution, same result as before the move.
+# chain, untouched (the theft roll's seed path embeds the round counter).
 
 class_name CombatRoundEmotionService
 extends RefCounted
@@ -86,12 +84,12 @@ func _voice_service() -> NarrativeVoiceService:
 ##   F) Overwhelmed                  writes actor.fear
 ##   G) No-damage streak             writes actor.morale, actor._no_damage_streak
 ##
-## `round` and `leadership_expr_cfg` are passed in rather than recomputed: _end_round's shrine
+## `round_number` and `leadership_expr_cfg` are passed in rather than recomputed: _end_round's shrine
 ## morale drain uses the same two values, and re-reading balance.json here would be a second
 ## read of a config subtree that already has exactly one reader per round.
 func apply_round_emotion_tick(
 		ectx: EncounterContext,
-		round: int,
+		round_number: int,
 		leadership_expr_cfg: Dictionary,
 		t: int) -> void:
 	var combat_state: Dictionary = ectx.combat_state
@@ -141,22 +139,22 @@ func apply_round_emotion_tick(
 				tick_a, fear_per_round, ectx.actors, leadership_expr_cfg)
 			tick_a["fear"] = mini(100, int(tick_a.get("fear", 0)) + round_fear_applied)
 	logger.debug(t, "combat.emotion.tick", "Round fear tick applied", {
-		"round":      round,
+		"round":      round_number,
 		"fear_delta": fear_per_round,
 	})
 
 	# C) Morale decay every N rounds: long fights grind echo morale (echo actors only).
 	var morale_decay_n: int  = int(emo_tick_cfg.get("morale_decay_n_rounds", 3))
 	var morale_decay_amt: int = int(emo_tick_cfg.get("morale_decay_amount", 1))
-	if morale_decay_n > 0 and round % morale_decay_n == 0:
+	if morale_decay_n > 0 and round_number % morale_decay_n == 0:
 		for dec_a in ectx.actors:
 			if dec_a is Dictionary and not dec_a.get("is_dead", false) \
 					and dec_a.get("faction", "") == "echo":
 				var decay_applied := LeadershipEmotionServiceScript.apply_morale_loss(
-					dec_a, morale_decay_amt, ectx.actors, leadership_expr_cfg, round)
+					dec_a, morale_decay_amt, ectx.actors, leadership_expr_cfg, round_number)
 				dec_a["morale"] = maxi(0, int(dec_a.get("morale", 50)) - decay_applied)
 		logger.debug(t, "combat.emotion.morale_decay", "Round morale decay applied", {
-			"round": round,
+			"round": round_number,
 			"delta": -morale_decay_amt,
 		})
 
@@ -322,7 +320,7 @@ func apply_round_emotion_tick(
 			t9_a["_no_damage_streak"] = int(t9_a.get("_no_damage_streak", 0)) + 1
 			if int(t9_a["_no_damage_streak"]) >= no_dmg_threshold:
 				var no_damage_loss := LeadershipEmotionServiceScript.apply_morale_loss(
-					t9_a, abs(no_dmg_morale), ectx.actors, leadership_expr_cfg, round)
+					t9_a, abs(no_dmg_morale), ectx.actors, leadership_expr_cfg, round_number)
 				t9_a["morale"] = maxi(0, int(t9_a.get("morale", 50)) - no_damage_loss)
 				logger.debug(t, "combat.emotion.no_damage_streak", "Echo helplessness — morale decay", {
 					"actor_id": t9_id,

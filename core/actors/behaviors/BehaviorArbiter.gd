@@ -313,7 +313,7 @@ func select_intent(context: Dictionary) -> Dictionary:
 	var interpretation_width: float = clampf(judgment, 0.0, 1.0)
 
 	# Build board summary once — passed to _score() for every candidate to avoid re-computation.
-	var board_summary: Dictionary = _build_board_summary(actor, all_actors, context.get("board_cfg", {}), expression_band, context.get("resolution_mode", ""))
+	var board_summary: Dictionary = _build_board_summary(actor, all_actors, context.get("board_cfg", {}), expression_band, context.get("resolution_mode", ""), context.get("objective_modes_cfg", {}))
 
 	var candidates: Array[Dictionary] = _generate_candidates(actor, all_actors, context, expression_band, calling_behavior)
 
@@ -538,7 +538,8 @@ func select_movement_intent(
 		all_actors,
 		context.get("board_cfg", {}),
 		expression_band,
-		context.get("resolution_mode", "")
+		context.get("resolution_mode", ""),
+		context.get("objective_modes_cfg", {})
 	)
 
 	var legacy_candidates: Array[Dictionary] = _generate_candidates(
@@ -1596,7 +1597,10 @@ func _generate_candidates(
 ##
 ## last_echo_standing sentinel: requires dead_allies > 0 so a designed 1v1 scenario
 ## (all_actors contains only enemies) never fires the condition.
-func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dictionary, expression_band: String = "nascent", resolution_mode: String = "") -> Dictionary:
+## objective_modes_cfg: data.combat.objective_modes, supplied per turn through
+## context["objective_modes_cfg"] (this class holds no ConfigService by design). Empty {} falls
+## back to the hardcoded defaults below.
+func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dictionary, expression_band: String = "nascent", resolution_mode: String = "", objective_modes_cfg: Dictionary = {}) -> Dictionary:
 	var my_id:      String = str(actor.get("id", ""))
 	var my_faction: String = str(actor.get("faction", ""))
 	var actor_type: String = str(actor.get("actor_type", "echo"))
@@ -1756,9 +1760,9 @@ func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dict
 	# Fires when: mode==protect, actor is echo, AND a living is_structure totem exists with
 	# a living enemy within objective_threatened_radius (Chebyshev, default 3).
 	if resolution_mode == "protect" and actor_type == "echo":
-		var protect_radius: int = 3  # default; balance.json value injected via Agent A
-		# If config provides the radius via objective_modes, it would be in _cfg — read defensively.
-		var om_protect: Dictionary = (_cfg.get("objective_modes", {}) as Dictionary).get("protect", {}) if _cfg.has("objective_modes") else {}
+		var protect_radius: int = 3  # default when no objective_modes config is supplied
+		var om_protect_v: Variant = objective_modes_cfg.get("protect", {})
+		var om_protect: Dictionary = om_protect_v if om_protect_v is Dictionary else {}
 		if om_protect.has("objective_threatened_radius"):
 			protect_radius = int(om_protect["objective_threatened_radius"])
 		var totem_pos_pt: Dictionary = {}
@@ -1784,8 +1788,9 @@ func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dict
 	# §5-C: quarry_near_exit — PURSUE interception urgency.
 	# Fires when: mode==pursue, actor is echo, AND the living quarry is within threshold of a board edge.
 	if resolution_mode == "pursue" and actor_type == "echo":
-		var _qne_threshold: int = 3  # default; read from _cfg if objective_modes.pursue is present
-		var _om_pursue: Dictionary = (_cfg.get("objective_modes", {}) as Dictionary).get("pursue", {}) if _cfg.has("objective_modes") else {}
+		var _qne_threshold: int = 3  # default when no objective_modes config is supplied
+		var _om_pursue_v: Variant = objective_modes_cfg.get("pursue", {})
+		var _om_pursue: Dictionary = _om_pursue_v if _om_pursue_v is Dictionary else {}
 		if _om_pursue.has("quarry_near_exit_threshold"):
 			_qne_threshold = int(_om_pursue["quarry_near_exit_threshold"])
 		var _qne_board_w: int = int(_board_cfg.get("board_cols", 10))

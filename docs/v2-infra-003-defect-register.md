@@ -669,3 +669,45 @@ the open set is Draft, Ready, In Progress and Blocked. Read Notion, not the CSV.
 | Observability | D14, D27, D35 |
 | Documentation | D68, and two stale code headers (`VentureController.gd:27-35`, `ContactController.gd:139-141`) |
 | Owned by another story | D06, D57, D59, D60, D62, D66, D83 |
+
+---
+
+## FIX PASS OUTCOMES — 2026-08-28
+
+Rows above that describe these defects as open are superseded by this table.
+
+| Pass | Commit | Items | Outcome | Recorded values |
+|---|---|---|---|---|
+| 1 | `f6b9a0c` | D30, D31, D32, D53 | Fixed. Added `get_objective_modes_cfg` (+ `_from_balance`) and `get_shrine_cfg`; routed every longhand read; added the missing null guard to `get_rewards_cfg`; `CombatTurnContextService` now uses the balance dictionary passed to it. **Correction to the D30 row: the two `BehaviorArbiter` sites were NOT routed in this pass** — they read a different subtree. Raised as D91 and fixed in pass 3. | None moved |
+| 2 | `7a91df6` | D67, D92 | Fixed. See the commit for the full account. | Two new-save fingerprints re-recorded, both explained |
+| 3 | `de6ea1a` | D33, D52, D55, D58, D91 | Fixed. See below. | None moved |
+
+### New entries raised by the fix work itself
+
+**D91 — the behaviour arbiter read `objective_modes` from the wrong subtree. ✅ FIXED, pass 3.**
+`core/actors/behaviors/BehaviorArbiter.gd:1761,1788` read the subtree out of `_cfg`, which is
+`data.actor`. The subtree lives under `data.combat`. Both `has()` guards were therefore always
+false and both values fell through to hardcoded defaults of 3. The authored values are also 3, so
+nothing differed in play — but retuning either number in `balance.json` would have done nothing.
+Fixed by passing the subtree through the `context` dictionary, the seam `bond_behavior_cfg` and
+`skills_cfg` already use. `ConfigService` was NOT injected into the arbiter, which holds none by
+design, and `balance.json` was not changed. Proved by probe, not by the suite: a probe radius of 9
+fires `objective_threatened` at 5 tiles, while `{}` and the authored config do not.
+
+**D92 — a party wipe could score as a successful escort. ✅ FIXED, pass 2.**
+`core/combat/CombatRoundGuideSpiritService.gd` latched the escort win on the spirit's own position
+with no guard. A joined spirit standing on the destination delivered itself. `destination_reached`
+is tested before `all_echoes_dead`, so the wipe read as `spirit_escorted`. It survived because the
+old directive default moved the spirit off that cell on turn 1 — the existing test passed by
+accident. The latch now requires `escort_started` AND a living non-spirit echo within
+`escort_radius`. Pinned by `combat_roundtrip/guide_spirit_party_wipe_scores_defeat_not_escort`,
+which an `escort_started`-only fix would fail. Proved by reverting the guard.
+
+### Pass 3 detail
+
+| ID | What changed |
+|---|---|
+| **D33** | Deleted the inline realm XP multiplier in `StageSettlementService` and called `ProgressionService.get_realm_xp_multiplier`. Proved identical first: same dictionary, same key, same rate, and both guards agree. |
+| **D52** | `round_bark_events` now passes a shallow duplicate. Chosen over a comment because the array is small and per-round, so the copy is cheap, and the named risk is a consumer appending to the caller's array. |
+| **D55** | The parameter `round`, which shadows the built-in, is renamed `round_number` at both sites. That name is the project's existing one. Four other files still use `round` as a parameter name — out of scope, recorded here. |
+| **D58** | Comment only. `FlowContext` has no in-dispatch flag, and adding one plus an assertion would be a behaviour-adjacent change against a baseline this pass may not move. The contract is now written at the site. |

@@ -41,8 +41,8 @@
 #
 # WHAT IT TOUCHES — the complete read/write set, verified line by line:
 #   READS   ectx.resolution_mode, ectx.actors (shrine scan, all_actors, party_size),
-#           ectx.purifier_id, ectx.terrain, ectx.round_bark_events (passed through by
-#           REFERENCE, not copied — see DEFECT NOTES), ectx.combat_state (totem_stolen,
+#           ectx.purifier_id, ectx.terrain, ectx.round_bark_events (shallow-copied into ctx so
+#           no consumer can append to the live array), ectx.combat_state (totem_stolen,
 #           totem_carrier_id, recover_holder_id);
 #           flow_ctx.save_data (VowService.get_active_vow, sanctum.bonds),
 #           flow_ctx itself (KeeperIntroService.is_trial_active);
@@ -50,26 +50,22 @@
 #           ConfigService.get_objective_modes_cfg_from_balance(balance);
 #           ConfigService.get_bond_thresholds_cfg / get_bond_behavior_cfg;
 #           directive_service.get_active_directive();
-#           actor (id, faction, is_dead, is_spirit), `balance`, `round` and `t`, all passed in.
+#           actor (id, faction, is_dead, is_spirit), `balance`, `round_number` and `t`, all
+#           passed in.
 #   WRITES  NOTHING. The returned dict is freshly built; ctx["directive"] is a deep duplicate
 #           whenever mode weights apply, precisely so the shared directive is not mutated.
 #
 # DETERMINISM. No RNG and no OS time; `t` is injected and only stored into ctx. No dispatch is
 # added or removed (the retreat roll's seed embeds the sim tick) and the round counter is read,
-# never written (the theft roll's seed embeds the round counter). `round` keeps its original
-# name — it shadows the built-in round() inside this method exactly as it did before, and this
-# method never calls round().
+# never written (the theft roll's seed embeds the round counter).
 #
 # NO SHIM WAS LEFT ON FlowRuntime (AGENTS.md #20). There were no reflection call sites for this
 # block: it was inline code with no name of its own.
 #
 # DEFECT NOTES — found during extraction, reported and deliberately NOT fixed here:
-#   1. ctx["round_bark_events"] is ectx.round_bark_events BY REFERENCE and is documented in the
-#      moved comment as "read-only", but nothing enforces that. ActorStateMachine holds the live
-#      array and could append to it. Pre-existing; preserved verbatim.
-#   2. `party_size` counts living echo-faction actors including STRUCTURES and temporary allies,
+#   1. `party_size` counts living echo-faction actors including STRUCTURES and temporary allies,
 #      because the filter tests faction and is_dead only. Pre-existing; preserved verbatim.
-#   3. The GUIDE_SPIRIT branch excludes `is_spirit` actors but the other four branches do not,
+#   2. The GUIDE_SPIRIT branch excludes `is_spirit` actors but the other four branches do not,
 #      so in any other mode a spirit-flagged echo would receive mode directive weights. Not
 #      reachable today (spirits only exist in GUIDE_SPIRIT). Preserved verbatim.
 
@@ -114,7 +110,7 @@ func build_turn_context(
 	ectx: EncounterContext,
 	balance: Dictionary,
 	bdata: Dictionary,
-	round: int,
+	round_number: int,
 	t: int
 ) -> Dictionary:
 	var grid_cfg: Dictionary = bdata.get("grid", {})
@@ -152,6 +148,11 @@ func build_turn_context(
 		if _mv_bounds.has("h"):
 			movement_board_cfg["board_rows"] = int(_mv_bounds["h"])
 
+	# data.combat.objective_modes — read once here, used both for the mode directive injection
+	# below and passed into ctx for BehaviorArbiter (D91: the arbiter holds no ConfigService,
+	# so the subtree reaches it through the per-turn context).
+	var objective_modes_cfg: Dictionary = ConfigService.get_objective_modes_cfg_from_balance(balance)
+
 	# Build per-turn context — matches ActorStateMachine.advance_turn() contract.
 	var ctx: Dictionary = {
 		"actor":                   actor,
@@ -159,7 +160,7 @@ func build_turn_context(
 		"board_cfg":               movement_board_cfg,
 		"cfg":                     balance,
 		"t":                       t,
-		"round":                   round,
+		"round":                   round_number,
 		# COMBAT-006: shrine context fields for BehaviorArbiter + MeleeBehaviorModule.
 		"purifier_id":             ectx.purifier_id,
 		"is_purifier":             str(actor.get("id", "")) == ectx.purifier_id,
@@ -178,13 +179,18 @@ func build_turn_context(
 		"bonds":                   _bonds_for_ctx,
 		"bond_thresholds":         ConfigService.get_bond_thresholds_cfg(config_service),
 		"bond_behavior_cfg":       ConfigService.get_bond_behavior_cfg(config_service),
-		# V2-VOICE-001: reactive bark queue — read-only; actors read this to fire rally_ally barks.
-		"round_bark_events":       ectx.round_bark_events,
+		# V2-VOICE-001: reactive bark queue — actors read this to fire rally_ally barks.
+		# Shallow copy so a consumer cannot append to (or clear) the live ectx array. The
+		# entries themselves are read but never written. Reset each round, one entry per
+		# activation, so the copy is a few small dicts.
+		"round_bark_events":       ectx.round_bark_events.duplicate(),
 		"directive":               {} if KeeperIntroServiceScript.is_trial_active(flow_ctx) else (directive_service.get_active_directive() if directive_service != null else {}),
 		# V2-STAGE-004 Distinctiveness: mode identity + PROTECT theft context for BehaviorArbiter.
 		"resolution_mode":         str(ectx.resolution_mode),
 		"totem_stolen":            bool(ectx.combat_state.get("totem_stolen", false)),
 		"totem_carrier_id":        str(ectx.combat_state.get("totem_carrier_id", "")),
+		# data.combat.objective_modes for BehaviorArbiter._build_board_summary.
+		"objective_modes_cfg":     objective_modes_cfg,
 	}
 
 	# V2-STAGE-004 Distinctiveness §4-C: mode directive injection.
@@ -194,8 +200,7 @@ func build_turn_context(
 	if not KeeperIntroServiceScript.is_trial_active(flow_ctx):
 		var _mode_dw_src: Dictionary = {}
 		var _di_mode: String = str(ectx.resolution_mode)
-		var _di_modes_cfg: Dictionary = ConfigService.get_objective_modes_cfg_from_balance(balance)
-		var _di_mode_cfg: Dictionary = _di_modes_cfg.get(_di_mode, {})
+		var _di_mode_cfg: Dictionary = objective_modes_cfg.get(_di_mode, {})
 		var _di_raw_dw: Variant = _di_mode_cfg.get("directive_intent_weights", {})
 		if _di_raw_dw is Dictionary and not (_di_raw_dw as Dictionary).is_empty():
 			# Determine whether this actor is eligible for mode directive injection.

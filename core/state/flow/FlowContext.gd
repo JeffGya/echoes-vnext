@@ -130,6 +130,12 @@ var pending_scout_return_intel_count: int = 0      # situations revealed on retr
 # FlowRuntime._mark_save_requested() delegates here so there is exactly one implementation.
 # reason == "" (default) flags a save without touching save_request_reason at all — used by
 # the handful of call sites that never recorded a reason.
+#
+# CONTRACT (D58): call this ONLY from inside a FlowRuntime.dispatch(). FlowRuntime clears
+# save_request_reason after each flush, so a reason queued outside a dispatch is not flushed on
+# its own — it stays in the accumulator and is pipe-joined onto the NEXT dispatch's reason
+# string. No caller does this today. It is not asserted because CombatBaselineTests pins the
+# joined string per dispatch, so any guard that alters accumulation would move that baseline.
 func request_save(reason: String = "") -> void:
 	save_request = true
 	if reason == "":
