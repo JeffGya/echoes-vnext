@@ -292,8 +292,8 @@ func apply_guide_spirit_round(
 								int((_gs_result.get("final_destination", {}) as Dictionary).get("col", 0)),
 								int((_gs_result.get("final_destination", {}) as Dictionary).get("row", 0)))
 							_gs_spirit_pos = _gs_spirit.get("grid_pos", {})
-						LiveHazardOutcomeService.apply(_gs_spirit, _gs_result, t, logger, false)
-						LiveHazardOutcomeService.apply(_gs_spirit, _gs_result, t, logger, true)
+						LiveHazardOutcomeService.apply(_gs_spirit, _gs_result, t, round, logger, false)
+						LiveHazardOutcomeService.apply(_gs_spirit, _gs_result, t, round, logger, true)
 						if _gs_should_move and str(_gs_result.get("stop_reason", "")) == "no_route":
 							logger.info(t, "combat.guide.no_route", "GUIDE_SPIRIT escort route unavailable", {
 								"round": round,
@@ -386,8 +386,8 @@ func apply_guide_spirit_round(
 							# log and the win counter both re-read the actor), so this refresh
 							# changes no behaviour. It keeps the trap closed for the next edit.
 							_gs_spirit_pos = _gs_spirit.get("grid_pos", {})
-						LiveHazardOutcomeService.apply(_gs_spirit, _gs_result_p, t, logger, false)
-						LiveHazardOutcomeService.apply(_gs_spirit, _gs_result_p, t, logger, true)
+						LiveHazardOutcomeService.apply(_gs_spirit, _gs_result_p, t, round, logger, false)
+						LiveHazardOutcomeService.apply(_gs_spirit, _gs_result_p, t, round, logger, true)
 						if _gs_protect_should_move and str(_gs_result_p.get("stop_reason", "")) == "no_route":
 							logger.info(t, "combat.guide.no_route", "GUIDE_SPIRIT protect route unavailable", {
 								"round": round,

@@ -304,7 +304,7 @@ Actor dicts are **read-only views** of save data. Deep-copied at construction. M
 | `current_hp`, `speed`, `morale`, `fear` | Top-level runtime fields — **not** inside `stats` |
 | `is_structure` | `true` for StructureActor only. Immutable after construction. Prevents movement. |
 | `is_dead` | `false` at spawn. Set `true` by ActorStateMachine. Immutable once true. |
-| `death_round` | `0` (alive). Set to `t` at KO. Never reset. |
+| `death_round` | `0` (alive). Set to the combat round at KO. Never reset. RecruitmentService divides it by `rounds_total`, so it must be a round and not a tick. |
 | `grid_pos` | `{ "col": int, "row": int }` |
 | `resilience_traits` | `Array[String]` — seeded personal traits (1–2, e.g. `["resist_fear"]`). Default `[]`. EchoActor only; `[]` for enemies/structures. |
 | `leadership_traits` | `Array[String]` — seeded calling-pool traits (1–2). Default `[]`. EchoActor only; `[]` for enemies/structures. |

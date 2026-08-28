@@ -1398,7 +1398,7 @@ func _resolve_next_actor(t: int) -> void:
 	# external side effect and therefore shares this post-action boundary.
 	if action_type == "actor.purify_shrine" and not bool(actor.get("is_dead", false)):
 		_live_movement.apply_live_purify_shrine(actor, str(intent.get("target_id", "")), ctx, t)
-	LiveHazardOutcomeService.apply(actor, _movement_result, t, logger, true)
+	LiveHazardOutcomeService.apply(actor, _movement_result, t, round, logger, true)
 
 	if KeeperIntroServiceScript.is_trial_active(flow_ctx):
 		var lethal_ids: Array[String] = KeeperIntroServiceScript.trial_lethal_echo_ids(flow_ctx)

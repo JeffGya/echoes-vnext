@@ -25,14 +25,11 @@
 #   READS   result["events"] (each event's "phase" and "damage"), result["stop_reason"],
 #           actor["current_hp"], actor["id"].
 #   WRITES  actor["current_hp"]; on a lethal total, erases actor["is_ko"] and sets
-#           actor["is_dead"] = true and actor["death_round"] = t. One logger line
+#           actor["is_dead"] = true and actor["death_round"] = round. One logger line
 #           (combat.hazard_resolved), emitted only when damage > 0.
 #   NOT TOUCHED  save data, flow_ctx, combat_state, ectx, any other actor.
 #
-# DETERMINISM. No RNG, no OS time. `t` is injected. Behaviour is byte-identical to the
-# private it replaces, including the early return that suppresses the log line when the
-# selected phase carried no damage, and including `death_round = t` (the sim tick, not the
-# round counter — pre-existing and preserved; see the defect note in the slice writeup).
+# DETERMINISM. No RNG, no OS time. `t` and `round` are both injected.
 
 class_name LiveHazardOutcomeService
 extends RefCounted
@@ -42,10 +39,14 @@ extends RefCounted
 ## `end_activation_only` selects WHICH events count: false = movement/forced damage
 ## (resolved before the primary action), true = end-of-activation Burning (resolved
 ## after it). Callers invoke it twice, once per phase, in that order.
+## `round` is the combat round counter, not the sim tick: `death_round` carries a round
+## number everywhere else that writes it (ActorStateMachine, CombatService, the shrine
+## service) and RecruitmentService divides it by the round total.
 static func apply(
 	actor: Dictionary,
 	result: Dictionary,
 	t: int,
+	round: int,
 	logger: StructuredLogger,
 	end_activation_only: bool = false
 ) -> void:
@@ -67,7 +68,7 @@ static func apply(
 		# Pure activation tests may still exercise `ko`, but live callers request death.
 		actor.erase("is_ko")
 		actor["is_dead"] = true
-		actor["death_round"] = t
+		actor["death_round"] = round
 	logger.info(t, "combat.hazard_resolved", "Movement hazard applied", {
 		"actor_id": str(actor.get("id", "")),
 		"damage": damage,

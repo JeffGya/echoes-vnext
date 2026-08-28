@@ -233,7 +233,7 @@ static func test_live_hazard_union_and_mover_damage() -> Dictionary:
 			{"phase": "end_activation", "damage": 4},
 		],
 		"stop_reason": "reached_destination",
-	}, 99, runtime.logger, false)
+	}, 99, 4, runtime.logger, false)
 	if int(order_actor.get("current_hp", -1)) != 7:
 		return { "ok": false, "error": "movement hazard damage did not resolve before action: %s" % str(order_actor) }
 	LiveHazardOutcomeService.apply(order_actor, {
@@ -242,7 +242,7 @@ static func test_live_hazard_union_and_mover_damage() -> Dictionary:
 			{"phase": "end_activation", "damage": 4},
 		],
 		"stop_reason": "reached_destination",
-	}, 99, runtime.logger, true)
+	}, 99, 4, runtime.logger, true)
 	if int(order_actor.get("current_hp", -1)) != 3:
 		return { "ok": false, "error": "Burning did not resolve after action: %s" % str(order_actor) }
 
@@ -274,9 +274,9 @@ static func test_live_hazard_union_and_mover_damage() -> Dictionary:
 	LiveHazardOutcomeService.apply(echo, {
 		"events": [{ "damage": 3 }],
 		"stop_reason": "death",
-	}, 99, runtime.logger)
+	}, 99, 4, runtime.logger)
 	if int(echo.get("current_hp", -1)) != 0 or not bool(echo.get("is_dead", false)) \
-			or echo.has("is_ko") or int(echo.get("death_round", -1)) != 99:
+			or echo.has("is_ko") or int(echo.get("death_round", -1)) != 4:
 		return { "ok": false, "error": "FlowRuntime did not preserve Echo death authority: %s" % str(echo) }
 
 	var enemy: Dictionary = (env["ectx"].actors[-1] as Dictionary)
@@ -285,14 +285,14 @@ static func test_live_hazard_union_and_mover_damage() -> Dictionary:
 	LiveHazardOutcomeService.apply(enemy, {
 		"events": [{ "damage": 3 }],
 		"stop_reason": "death",
-	}, 99, runtime.logger)
+	}, 99, 4, runtime.logger)
 	if int(enemy.get("current_hp", -1)) != 0 or not bool(enemy.get("is_dead", false)) \
-			or enemy.has("is_ko") or int(enemy.get("death_round", -1)) != 99:
+			or enemy.has("is_ko") or int(enemy.get("death_round", -1)) != 4:
 		return { "ok": false, "error": "FlowRuntime did not preserve enemy death state: %s" % str(enemy) }
 
 	var guide: Dictionary = {"id": "guide.hazard", "is_spirit": true, "current_hp": 3, "is_ko": true}
-	LiveHazardOutcomeService.apply(guide, {"events": [{"damage": 3}], "stop_reason": "death"}, 99, runtime.logger)
-	if not bool(guide.get("is_dead", false)) or guide.has("is_ko") or int(guide.get("death_round", -1)) != 99:
+	LiveHazardOutcomeService.apply(guide, {"events": [{"damage": 3}], "stop_reason": "death"}, 99, 4, runtime.logger)
+	if not bool(guide.get("is_dead", false)) or guide.has("is_ko") or int(guide.get("death_round", -1)) != 4:
 		return {"ok": false, "error": "non-joining guide hazard outcome did not use death authority: %s" % str(guide)}
 	return { "ok": true }
 
@@ -337,7 +337,7 @@ static func test_live_hazard_action_phase_order() -> Dictionary:
 	var melee_result: Dictionary = CombatService.resolve_action("melee_attack", actor, target, 1)
 	if melee_result.is_empty() or int(target.get("current_hp", target_hp_before)) >= target_hp_before:
 		return { "ok": false, "error": "legal melee did not execute before end_activation Burning" }
-	LiveHazardOutcomeService.apply(actor, burning_result, 99, runtime.logger, true)
+	LiveHazardOutcomeService.apply(actor, burning_result, 99, 4, runtime.logger, true)
 	if not bool(actor.get("is_dead", false)):
 		return { "ok": false, "error": "lethal Burning did not apply after the melee action" }
 
@@ -364,7 +364,7 @@ static func test_live_hazard_action_phase_order() -> Dictionary:
 	if str(movement_result.get("stop_reason", "")) != "death" \
 			or not (movement_result.get("resolved_action", {}) as Dictionary).is_empty():
 		return { "ok": false, "error": "activation did not skip primary after lethal movement damage: %s" % str(movement_result) }
-	LiveHazardOutcomeService.apply(movement_actor, movement_result, 100, runtime.logger, false)
+	LiveHazardOutcomeService.apply(movement_actor, movement_result, 100, 4, runtime.logger, false)
 	if not bool(movement_actor.get("is_dead", false)):
 		return { "ok": false, "error": "lethal movement damage did not kill the mover" }
 	if not (movement_result.get("resolved_action", {}) as Dictionary).is_empty():

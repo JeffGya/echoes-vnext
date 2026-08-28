@@ -641,13 +641,33 @@ static func _build_keeper_intro_emotion_summary(ectx: EncounterContext) -> Array
 		var pre_morale := int(pre_morale_map.get(eid, 50))
 		var post_morale := int(actor.get("morale", 50))
 		var post_fear := int(actor.get("fear", 0))
+		var pre_status := EmotionService.get_emotional_status(pre_morale, 0)
+		var post_status := EmotionService.get_emotional_status(post_morale, post_fear)
+		var pre_rank := _emotional_status_rank(pre_status)
+		var post_rank := _emotional_status_rank(post_status)
+		var direction: String
+		if post_rank > pre_rank:
+			direction = "lift"
+		elif post_rank < pre_rank:
+			direction = "fall"
+		else:
+			direction = "steady"
+		var tag: String
+		if bool(actor.get("is_dead", false)):
+			tag = "ko"
+		elif post_fear >= FlowEncounterState.FEAR_THRESHOLD_DEFAULT:
+			tag = "refused"
+		else:
+			tag = ""
 		summary.append({
 			"echo_id": eid,
 			"name": str(actor.get("name", "")),
-			"pre_emotional_status": EmotionService.get_emotional_status(pre_morale, 0),
-			"post_emotional_status": EmotionService.get_emotional_status(post_morale, post_fear),
+			"pre_emotional_status": pre_status,
+			"post_emotional_status": post_status,
 			"morale_delta": post_morale - pre_morale,
 			"refused": post_fear >= FlowEncounterState.FEAR_THRESHOLD_DEFAULT,
+			"direction": direction,
+			"tag": tag,
 		})
 	return summary
 

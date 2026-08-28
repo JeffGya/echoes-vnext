@@ -132,10 +132,8 @@ static func add_ekwan(data: Dictionary, ekwan_awarded: int) -> void:
 
 ## 9 — %EmotionList rows via EmotionEntryItem. Producers A, B, E.
 ##
-## KNOWN DEFECT (V2-INFRA-003 Phase 5 records; a later story fixes): entry shape differs by
-## producer. A adds `direction` + `tag`; E adds both plus `bark`; B has neither, so the
-## keeper-trial resolve renders grey default tokens and no direction cue. The block writes
-## whatever Array it is given — the entry shape stays the producer's business.
+## A and B now emit the same eight keys, in the same order, from the same derivation.
+## The block writes whatever Array it is given — the entry shape stays the producer's business.
 static func add_emotion(data: Dictionary, emotion_summary: Array) -> void:
 	data["emotion_summary"] = emotion_summary
 

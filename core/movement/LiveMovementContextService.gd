@@ -70,11 +70,6 @@
 # 30 by-name reflection call sites in tools/PursueTimingProbe.gd and
 # tests/CombatRoundtripIntegrationTests.gd were rewritten in this same change.
 #
-# KNOWN GAP (recorded, NOT closed here — closing it needs a production change and its own
-# story): the movement DECISION (goal_id / option_id) is a private local. It is never stored
-# on the actor and never logged, so a refactor that reaches the right cell for the wrong
-# reason passes every existing guard silently.
-#
 # SIZE — this file is over the ~1,000-line guard (1,018 lines when this note was written),
 # DELIBERATELY (Half A review correction C5; the guard was weighed, not missed). The 27 functions moved VERBATIM because V2-COMBAT-003
 # owns this behaviour: splitting them would mean choosing new seams inside code another story
@@ -499,12 +494,16 @@ func apply_live_activation(
 	if not actual.is_empty():
 		var from_pos: Dictionary = actor.get("grid_pos", {}).duplicate(true)
 		GridService.assign_grid_pos(actor, int(final_cell.get("col", 0)), int(final_cell.get("row", 0)))
+		# goal_id/option_id say WHY the mover went there. Without them a route that
+		# reaches the right cell for the wrong reason is indistinguishable from a correct one.
 		logger.info(t, "actor.moved", "Actor moved", {
 			"actor_id": actor.get("id", ""),
 			"from_pos": from_pos,
 			"to_pos": actor.get("grid_pos", {}),
 			"path": actual.duplicate(true),
 			"stop_reason": str(result.get("stop_reason", "")),
+			"goal_id": str(result.get("goal_id", "")),
+			"option_id": str(result.get("option_id", "")),
 		})
 	var resolved_action: Dictionary = result.get("resolved_action", {}) as Dictionary
 	if resolved_action.is_empty():
@@ -515,7 +514,7 @@ func apply_live_activation(
 		intent["target_id"] = str(resolved_action.get("target_id", ""))
 	# Movement/forced hazard damage resolves before the external primary action.
 	# Burning is deliberately deferred until that action has completed below.
-	LiveHazardOutcomeService.apply(actor, result, t, logger, false)
+	LiveHazardOutcomeService.apply(actor, result, t, int(ctx.get("round", t)), logger, false)
 	if bool(actor.get("is_dead", false)):
 		intent["action_type"] = "actor.idle"
 		intent["target_id"] = ""
