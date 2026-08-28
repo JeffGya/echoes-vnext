@@ -680,7 +680,7 @@ Rows above that describe these defects as open are superseded by this table.
 |---|---|---|---|---|
 | 1 | `f6b9a0c` | D30, D31, D32, D53 | Fixed. Added `get_objective_modes_cfg` (+ `_from_balance`) and `get_shrine_cfg`; routed every longhand read; added the missing null guard to `get_rewards_cfg`; `CombatTurnContextService` now uses the balance dictionary passed to it. **Correction to the D30 row: the two `BehaviorArbiter` sites were NOT routed in this pass** — they read a different subtree. Raised as D91 and fixed in pass 3. | None moved |
 | 2 | `7a91df6` | D67, D92 | Fixed. See the commit for the full account. | Two new-save fingerprints re-recorded, both explained |
-| 3 | `de6ea1a` | D33, D52, D55, D58, D91 | Fixed. See below. | None moved |
+| 3 | `c31d9d0` | D33, D52, D55, D58, D91 | Fixed. See below. | None moved |
 
 ### New entries raised by the fix work itself
 
