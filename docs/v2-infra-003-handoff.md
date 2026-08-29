@@ -1007,14 +1007,284 @@ attribution is written into the test file header, not only into a report.
 
 ---
 
-## 10. Known-stale docs to fix in Phase 11
+## 10. Known-stale docs — status after the fix passes
 
-- `CONVENTIONS.md` states debug actions run at `t = -1`. **False** — `dispatch()` computes one tick
-  for every action.
-- `SaveSchema.make_new_save()` writes `stage_context.active_directive_id = "directive.none"`, which
-  the repair immediately rewrites to `directive.seek_signs`. **The V1→V2 directive migration is
-  therefore LIVE, not dead.** Fix the schema default first, then the migration can be removed.
-- The prompt assigns the reward-type weighting bug to `V2-ECONOMY-004`; Notion shows that story is
-  the Ekwan loop. Confirm the true owner before filing.
-- `AGENTS.md` has already been updated with this story's findings — run commands, extraction rules,
-  and common mistakes 13–20.
+Four entries were listed here as pending. Three are now done. The list is corrected in place; the
+original wording of each entry is kept so the earlier record survives.
+
+| Entry | State |
+|---|---|
+| `CONVENTIONS.md` states debug actions run at `t = -1`. **False** — `dispatch()` computes one tick for every action. | ✅ **DONE** (D68, `d0d5125`). `CONVENTIONS.md:1095` now describes what the code does. The neighbouring `t = -1` claim at `:1121` is **true** and was left alone: `debug.cmd.in` / `out` / `err` really are logged at a literal `-1`, from `ui/AppRoot.gd:362-368`. They are log lines, not dispatched actions. |
+| `SaveSchema.make_new_save()` writes `stage_context.active_directive_id = "directive.none"`, which the repair immediately rewrites to `directive.seek_signs`. The V1→V2 directive migration is therefore LIVE, not dead. Fix the schema default first, then the migration can be removed. | ✅ **DONE** (D67, `7a91df6`, pass 2). The default was fixed first, then the migration was removed, in that order. Two new-save fingerprints were re-recorded — the only recorded values the ten passes moved. |
+| The prompt assigns the reward-type weighting bug to `V2-ECONOMY-004`; Notion shows that story is the Ekwan loop. Confirm the true owner before filing. | ✅ **SETTLED. The entry itself was wrong.** There was no dispute. V2-ECONOMY-004 **is** the Ekwan loop, and that page's `Code` property is `V2-ECONOMY-004`. It owns reward vocabulary, weights and the Ase/Ekwan split, so it owns D66 and D83. Exactly-once payout stayed with this story. Register `:198-212`. |
+| `AGENTS.md` has already been updated with this story's findings — run commands, extraction rules, and common mistakes 13–20. | Unchanged — a note, not a task. |
+
+### What genuinely remains for Phase 11
+
+- Convert `docs/v2-infra-003-defect-register.md` from a worklist into a ledger — see section 9d.
+- Remove the "When you reach the site of a known defect" section from `AGENTS.md` — see section 9d.
+- `tests/KODeathTests.gd:47-48` comments its assertion as a tick. The assertion is correct; the
+  comment misleads. Raised by pass 7, not fixed.
+- Several test fixtures still write `"flow": {"state": …, "context": {}}`. Both keys were deleted in
+  pass 10 and are now ignored. Cleaning them is churn; decide whether to do it.
+- Four files outside pass 3's scope still use `round` as a parameter name, which shadows the
+  built-in.
+
+---
+
+## 11. Phase 10 — manual test 1 PASSED
+
+Jeff played a first full session end to end on `2d5d629`. **The proof spine works.** Recorded in
+`702608b`. Every step was confirmed from the run log, not from a test.
+
+| Step | Evidence |
+|---|---|
+| House dormant through Chapter I | Flame not lit at name confirm |
+| Flame lights at the awakening | `t:30 Ase Flame awakened` |
+| Opening Realm unlocked by awakening + rite | `t:31` |
+| Prologue completes; normal Realms open | `t:155` |
+| Stage settles ONCE | `t:155` — a single `stage_reward`, +90 Ase |
+| Encounter rewards stay per fight | `t:96`, `t:154` — +15 each |
+| Durable result written, then consumed | `t:96`, `t:97` |
+| Level-up applies | `t:155` — Simon Mensah to level 2 |
+| Near-death fires | `t:89`, `t:141`, `t:195` — all on enemies |
+
+One observation was raised and filed away from this story. **T01 — refusal is now reachable.** In
+the third encounter fear reached 100 and an Echo refused for 27 rounds. It is not a softlock: the
+enemies still deal damage, so the fight ends on Echo death. It is slow, not stuck. It is also not
+caused by this story — all three near-death triggers fired on the enemy. Owner: a fear-economy
+tuning pass. Full account in the register.
+
+---
+
+## 12. The re-triage — the register was wrong
+
+Four independent readers re-verified all 90 identifiers against the tree at `702608b`. Each reader
+went to the named code. **None trusted a register row.** Committed as `c53a858`.
+
+| Outcome | Count |
+|---|---:|
+| Fixed | 32 |
+| Deleted | 1 |
+| Disproved | 3 |
+| Not a defect | 4 |
+| **Still open** | **44** |
+
+The register had claimed 53 open. It is 44. Of those, 32 needed no decision and 12 did.
+
+Three corrections the re-triage found:
+
+- **D20 is disproved.** `ui/screens/venture/ResolveScreen.gd:262-268` shows the rank badge when
+  `verdict` is not empty. The claim that the screen hides it was wrong.
+- **D33 had moved file.** The duplicate realm XP multiplier now lives in
+  `core/economy/StageSettlementService.gd:262-265`, not in `FlowEncounterState.gd`.
+- **D85 was half fixed.** The `stage_id` gap was already closed by
+  `core/state/flow/PendingResultService.gd:129`. Only the dead `save.flow.state` field remained.
+
+---
+
+## 13. The twelve product-owner decisions — 2026-08-28
+
+Two of the fourteen questions were answered by existing sources and never reached Jeff:
+
+| ID | Answer | Source |
+|---|---|---|
+| **D13** | **Per round.** The authored keys are `purify_cooldown_rounds` and `morale_drain_per_wave`. Both are time-based. No authored key is per shrine, so the per-shrine implementation is the defect. | `data/balance.json:1627-1631,1646` |
+| **D66** | **V2-ECONOMY-004 owns it, and the reported dispute did not exist.** See the corrected row in section 10. | Register `:198-212` |
+
+The remaining twelve were decided by Jeff. Full reasoning is in the register at
+`### The twelve decisions`.
+
+| ID | Decision | Cost |
+|---|---|---|
+| **D02** | Implement all the dead leadership traits. The two empty blocks get authored effects: `cover_positioning` = a move-score bonus toward cover; `anchor_presence` = allies in the radius resist displacement. | Real combat change |
+| **D13** | Make the purifier cooldown and the party morale drain **per round**. | Changes the PURIFY_SHRINE curve |
+| **D20** | **Keep the badge.** A contact outcome carries a visible rank. | No code change |
+| **D44** | **Intended as it stands.** The kill ripple and `kill_momentum` both apply; the double ledger credit is the payoff for the trait the player invested in. | No code change |
+| **D45** | **Structures stay excluded** from the kill-share denominator. A structure is an objective, not a party member. It does not earn, so it must not dilute. | No code change |
+| **D61** | **Defer to V2-SANCTUM-004.** | Filed, not built here |
+| **D62** | **Expand a story rather than write a new one.** See section 14 — this decision could not be carried out as stated. | Filed, not built here |
+| **D66** | **Owned elsewhere** — V2-ECONOMY-004. | Filed, not built here |
+| **D79** | **Collapse the six placement copies to one function, preserving each copy's values.** The target column and the row reference become parameters. PURSUE keeps the party centroid; the other five keep the board midpoint. | No spawn cell moves |
+| **D80** | **Use a board-edge cell when terrain is absent**, so the escort stays completable on every board. | No recorded value moves |
+| **D84** | **Run the bond hooks and the Thread contribution before the card is published**, at encounter cadence, so the card reports the run that just happened. | Behaviour, not only display |
+| **D85** | **Delete the field**, its default, its validation and its repair. Resume operates through the durable pending result. | Save contents change |
+
+---
+
+## 14. Notion is the backlog source of truth
+
+**Notion is current. The CSV export is stale by seven stories.** Notion marks V2-SANCTUM-001, both
+V2-SANCTUM-002 rows, V2-STAGE-003 (Order 236), both V2-STAGE-004 rows, V2-BOND-002 and V2-VOW-002
+as Done, while the CSV still shows Ready or Draft. Notion has no "Closed" status; the open set is
+Draft, Ready, In Progress and Blocked. Read Notion, not the CSV.
+
+**The database holds duplicate story codes.** Jeff's rule: when one twin is Done, the other is not
+used.
+
+Two filings followed from that:
+
+- **D61 was filed on V2-SANCTUM-004** (Order 340, Ready), with an added scope line for passive
+  values and upkeep. V2-SANCTUM-002 held that item and is now Done, so the scope had to move with
+  the defect.
+- **D62 could not be filed on any open story.** Thirteen candidates were checked and rejected. The
+  decision in section 13 was to expand an existing story, and no existing story could carry it.
+  Jeff then authorised one new story: **V2-INFRA-007 — contact resolution consequence parity**,
+  Status Ready, Order 262.5, depends on V2-INFRA-003. This is the single exception to the "no new
+  stories" rule, and it is the current owner of D62/D06. `ContactController`'s comments were
+  corrected in `d0d5125` to name it, because they had named `EncounterResolutionService`, a class
+  that was never built.
+
+---
+
+## 15. The ten fix passes
+
+One pass per group, each its own commit, each with its evidence in the commit body.
+
+| Pass | Commit | Defects | Recorded values |
+|---|---|---|---|
+| 1 | `f6b9a0c` | D30, D31, D32, D53 | None moved |
+| 2 | `7a91df6` | D67, **D92** | **Two new-save fingerprints re-recorded, both explained** |
+| 3 | `c31d9d0` | D33, D52, D55, D58, **D91** | None moved |
+| 4 | `0cee9db` | D79 | None moved |
+| 5 | `57f431b` | D13, D46, D47, D50, D51, D54, D56 | None moved |
+| 6 | `e9bd152` | D09, D12, D15, D16, D17, D28, D29, D43, D80 | None moved |
+| 7 | `bca31d7` | D14, D27, D35 | None moved |
+| 8 | `fd0bedc` | D02 | None moved |
+| 9 | `3ca76a8` | D84 | None moved |
+| 10 | `99b319e` | D85 | None moved |
+
+Two documentation commits sit among them: `c2307b4` corrects the pass 3 commit hash in the
+register, and `d0d5125` fixes three stale claims (D68, the `VentureController` header, the two
+`ContactController` comments).
+
+**Only pass 2 moved a recorded value**, and it moved two new-save fingerprints, for the schema
+default that D67 named.
+
+Suite **1,508 → 1,516**.
+
+---
+
+## 16. The findings that matter more than the fixes
+
+These are the reason the story was worth doing. Each is a property of the codebase or of the test
+suite, not a line of repaired code.
+
+### Leadership is invisible to every test
+
+`leadership_trait_pool._comment` says the traits activate at Whole band. `band_by_standing` puts
+Whole at rank 4. `EchoFactory` mints every Echo at rank 1. **No recorded scenario contains a
+Whole-band Echo, so no leadership trait activates in any fixture.**
+
+The consequence is larger than D02. The eleven traits that already worked were as dormant in the
+baselines as the eleven that were dead. That is why implementing eleven traits moved no fingerprint
+and no baseline — the fixtures cannot see leadership at all. Every leadership claim therefore rests
+on probes, and each of the eleven was demonstrated with a with-and-without value in the register
+instead. **A Whole-band baseline scenario would fix this.** Jeff has taken it for another story.
+
+### D92 — a party wipe could score as a successful escort
+
+`core/combat/CombatRoundGuideSpiritService.gd` latched the escort win on the spirit's own position
+with no guard. A joined spirit standing on the destination delivered itself, and
+`destination_reached` is tested before `all_echoes_dead`, so a wipe read as `spirit_escorted`.
+
+It was found only because the directive default changed in pass 2 and stopped hiding it. The old
+test had passed by accident: the previous default moved the spirit off that cell on turn 1. Fixed
+in the same pass.
+
+### A resumed run was silently graded compromised
+
+On a stage-clearing victory, quitting at the card and resuming lost `encounter_ctx`, so the Thread
+segment fell back to `NO_COMBAT_GRADE` — "C", flagged compromised. Fixed as a side effect of pass 9,
+which moved the grading ahead of the card.
+
+### Three register predictions were wrong
+
+- **D35** was graded FP. It moves nothing. `tests/FlowFingerprintTests.gd:238-244` hashes the sorted
+  top-level `data.keys()`; `emotion_summary` was already a key and the shape of its entries is not
+  hashed, so adding two fields inside them cannot move that constant.
+- **D50** was graded FP + BL on the premise that PROTECT and PURIFY_SHRINE carry a structure inside
+  the party count. They do not — all three authored structures carry `faction: "structure"`, so the
+  existing `faction == "echo"` test already excluded them. `is_spirit` was the filter that bit.
+- **D02 said ten traits. It was eleven.** `directive_amplify` and `directive_echo` were also dead.
+  The `directive_mul` grep hit that made `directive_amplify` look live is
+  `calling_behavior.directive_mul`, a different config subtree.
+
+### Two fixes were refused on evidence
+
+- **D29.** Reusing pass 4's `GridService.place_on_terrain` would have moved every wave spawn cell.
+  The helper returns one cell ranked by distance to a target column; these blocks hand out N cells
+  ranked enemy-side-first by descending column, and they treat a dead actor's cell as free where the
+  helper does not. The blocks were deduplicated locally instead, with the determinism-critical sort
+  copied character for character.
+- **D84, one quarter of it.** `RealmService.contribute_segment` was not moved to encounter cadence.
+  Entries are keyed by `stage_index` and `ThreadService` counts entries, so one segment per
+  encounter would inflate a multi-objective stage's recovery. It got an idempotency receipt instead,
+  using the already-recorded `stage_index` as the stamp, and contributes only on the stage-clearing
+  fight. The other three producers did move.
+
+### D43 could not be reproduced and is provably impossible today
+
+`defender_hp_after` has one producer, reached only behind a `not target.is_dead` guard; that same
+call sets `is_dead` on any blow leaving hp at or below zero; each actor activates once per round;
+and `last_round_results` is cleared at round start. A dedupe set was added because it is provably
+harmless. **No test was added**, because a test would pin a behaviour that cannot be produced.
+
+### Six of pass 6's nine defects are unreachable in play
+
+Each says so plainly rather than treating the green suite as evidence: D09 needs a nearly full
+board, D12's changed branch is not exercised by the shipped path, D16 and D17 are unreachable
+today, D80 is reachable only through `dev_combat_objective` with no active realm, and D13's fix
+(pass 5) changes no number until a mode ships more than one shrine. D15, D28, D29 and D43 changed no
+behaviour, so there is nothing to verify.
+
+---
+
+## 17. New defects raised by the fix work, and what was left
+
+**Two new defects were found by the fixing, and both were fixed here.**
+
+- **D91 — the behaviour arbiter read a config subtree from the wrong place. Fixed, pass 3.**
+  `core/actors/behaviors/BehaviorArbiter.gd:1761,1788` read `objective_modes` out of `_cfg`, which
+  is `data.actor`. The subtree lives under `data.combat`. Both `has()` guards were always false and
+  both values fell through to a hardcoded 3. The authored values are also 3, so nothing differed in
+  play — but retuning either number in `balance.json` would have done nothing. Fixed through the
+  `context` dictionary seam. No `ConfigService` was injected; `balance.json` was not changed. Proved
+  by probe, not by the suite.
+- **D92 — a party wipe could score as a successful escort. Fixed, pass 2.** See section 16.
+
+**Raised and deliberately not fixed.** The register records these per pass. They are open items for
+whoever picks up the named area.
+
+| Pass | Item |
+|---|---|
+| 5 | `party_size` still counts temporary allies. Whether a one-battle companion counts toward the `tikoro_nko_agyina` vow gate is a design question |
+| 5 | `_spirit_killed_barked` and `_spirit_greeted` are the same undeclared-latch shape as D56 |
+| 5 | `data.actor.structures` has no `guide_spirit` entry, so the non-joining spirit falls back to an inline literal at `EncounterObjectiveSpawnService.gd:419-423` |
+| 5 | The shrine morale drain filters on `faction == "echo"` only, so it drains allies and a joined spirit as well as real Echoes |
+| 7 | D35's producer E emits a third, shorter entry shape — no `morale_delta`, no `refused`, no `bark`, and a hardcoded empty `tag`. Outside D35's scope |
+| 7 | `tests/KODeathTests.gd:47-48` comments its assertion as a tick |
+| 8 | The board has no line-of-sight system; "cover" is read off an in-bounds non-walkable cell on the line to the nearest hostile |
+| 8 | `mark_target` and `aggression_field` are the same effect at different magnitudes, differing only in calling pool |
+| 8 | `challenge_call`'s `taunt_attack_bonus` is 25.0, the same number as the hardcoded taunt pull. It was implemented as the `actor.taunt` score bonus, not as a second copy of that constant |
+| 9 | No test pins the two combat-end dispatches' `save_request_reason` strings, which now also carry `bond.combat_triggers` and `bond.rival_incidents` |
+| 9 | `contribute_segment` requests no save of its own and relies on the surrounding dispatch. True before and after |
+| 10 | Test fixtures still write the two deleted `flow` keys. They are now ignored |
+
+A dead arm was also found while investigating D84: the `"loss"` arm in `handle_complete_stage` can
+never run, because a defeat card offers no `cta.next_stage`.
+
+---
+
+## 18. Where the story stands
+
+- **44 defects were open at the re-triage. All 44 are now closed** — fixed on this branch, or filed
+  against a named owning story. The named owners are V2-INFRA-007 (D62/D06), V2-COMBAT-003 (D27 is
+  now fixed, so D57 is unblocked), V2-COMBAT-004 (D69), V2-ECONOMY-004 (D66, D83) and
+  V2-SANCTUM-004 (D61).
+- **Fourteen commits** from manual test 1 to pass 10, `702608b` through `99b319e`: two records, ten
+  fix passes, and two documentation corrections.
+- **Suite 1,516, green.** One recorded value moved in the whole set of passes — the two new-save
+  fingerprints in pass 2.
+- **The branch is ready for manual test 2.** After that passes, Phase 11 closes the story: register
+  to ledger, the `AGENTS.md` removal, and the PR.

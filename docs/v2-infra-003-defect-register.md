@@ -1023,3 +1023,12 @@ Four properties were left empty rather than guessed: Priority, Spec State, Sourc
 
 The two stale `ContactController.gd` comments that named the never-built `EncounterResolutionService`
 now name V2-INFRA-007 instead. Fixed in the documentation pass, commit `d0d5125`.
+
+### Notion filings made for this story — 2026-08-28
+
+| Defect | Story | Page | What was added |
+|---|---|---|---|
+| **D61** | V2-SANCTUM-004 (Order 340, Ready) | https://app.notion.com/p/339c3d1ede92810ebcb4c71776d816a5 | The institution passive-accrual defect, **plus an added scope line for authoring the first institutions' passive values and their upkeep**. That item sat with V2-SANCTUM-002 (GDD 21.2 item 8), which Notion now marks Done, so it was otherwise orphaned. The strain warning surface (GDD 21.2 item 7) stays with V2-SANCTUM-005. |
+| **D62** | V2-INFRA-007 (Order 262.5, Ready) — NEW | https://app.notion.com/p/3cac3d1ede9281f58864c9d15a954952 | See the D62 correction above for why a new story was the final answer. |
+
+No property was changed on V2-SANCTUM-004. Its Superseded twin at Order 239 was not touched.
