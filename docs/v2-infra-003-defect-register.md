@@ -1062,6 +1062,86 @@ attacks it for **0**. Neither side can reduce the other. This differs from the p
 manual-test-1 ruling that a fight always reaches an end state — at zero damage there may be no end
 condition in reach. Being established.
 
+### RESULT — BOTH ARE PRE-EXISTING. Verified 2026-08-29. No action taken.
+
+**Jeff's decision: these are pre-existing, so we do nothing and note them.** They are recorded here
+as findings of this story, not as work for it.
+
+The method below was carried out. A separate `main` worktree was built and both symptoms were
+reproduced on each tree.
+
+| Scenario | Result |
+|---|---|
+| Forced two-body case — Echo (1,1), enemy (11,0), 12x12 board | **Byte-identical to `main`** |
+| Long board, 60 columns, GUIDE_SPIRIT | **Byte-identical to `main`** |
+| Forced escort with a non-joining spirit | **Byte-identical to `main`** |
+| Twelve real new campaigns, `boot()` through the prologue | Echo closes and wins in 7-9 rounds. No stall |
+
+No bisect was needed. Nothing in the story's 31 commits causes either symptom.
+
+#### Symptom A is two separate things
+
+**1. The `actor.idle` label on a MOVING actor is normal.** In every run the Echo advances two cells
+per round while the recorded `action_type` reads `actor.idle`. Identical on `main`. Most of what
+reads as twelve idle rounds is twelve rounds of approach across a long board. Confusing, not broken.
+Renaming it would move fingerprints for no gameplay gain.
+
+**2. The real freeze is movement-option starvation.** For the frozen Echo the movement layer reports
+`goals=1, options=0`, while every other actor has one option. With zero options the arbiter ranks
+only stationary candidates and its unconditional `actor.idle` wins.
+
+`core/movement/LiveMovementContextService.gd:191-199` gates the movement-aware layer on GOALS, not
+options, and relies on the arbiter's stationary fallback in `BehaviorArbiter._generate_candidates`.
+That is safe on a 10x10 board. On a long board an actor whose goal region is not routable within its
+2-cell capacity gets no option — and because it does not move, it never gains one. **The stall
+sustains itself.** `Echo helplessness — morale decay` (`core/combat/CombatRoundEmotionService.gd:334`)
+then fires every round.
+
+Three checks confirmed clean: pass 8's leadership traits are inert here (`expression_band` is
+`"nascent"`, and `is_whole_leader` gates every trait); the pass 2 directive default moves nothing
+(`directive_action` is `""`, `decision_scale` is `0.0`); and the ANSWERS #48 move-then-attack fix is
+still effective.
+
+#### Symptom B — about one guide-spirit encounter in four is unwinnable
+
+`core/combat/EncounterObjectiveSpawnService.gd:411-427` builds the spirit as a `StructureActor`
+whenever the joins-battle coin flip loses — and that `else` branch covers **protect AND escort**.
+The mode roll (`:337-357`) and the joins roll (`:373-380`) are two independent 50/50 draws, so
+escort-plus-structure occurs about **25% of the time**. `core/movement/MovementExecutor.gd:282` then
+skips it, because it carries `is_structure`.
+
+**No player action can complete that objective. Only the timer ends it.** D80 and D92 are not
+involved: the destination was real, not `(-1,-1)`, and the D92 guard only tightens the win latch.
+
+#### The zero-damage deadlock has no reachable end condition
+
+`core/combat/CombatService.gd:126` returns `max(0, base + morale_bonus - fear_penalty)`. Damage
+floors at **0**, not 1. A guarding defender doubles `def`; a high-fear attacker loses up to 5.
+COMBAT mode requires a kill and there is **no round cap anywhere** — no `max_rounds` exists. So a
+fight in which every swing lands 0 and both sides refuse or guard runs for ever. The formula is
+unchanged from `main`.
+
+**This is the case the manual-test-1 ruling did not cover.** That ruling was correct for its own
+case: enemies were still dealing 1-2 damage, so the fight did terminate.
+
+#### One real difference between the trees, explained and NOT chased
+
+In a plain-combat sample an enemy at 4 HP chose `actor.guard` on the branch and `melee_attack` on
+`main`. This is not either symptom. The suspect is the near-death morale and fear hook from
+`39cfbaf` — connect case 1 of 4, which the product owner approved, and which by design changes
+behaviour at low health. Behaving differently at 4 HP is what that change is FOR. Recorded, not
+bisected.
+
+#### Suggested owners, if these are ever picked up
+
+| Item | Nature | Natural owner |
+|---|---|---|
+| Movement-option starvation on long boards | Movement | The movement story |
+| Escort paired with an immobile spirit | Objective selection, not movement | Guardable at the decision point, keeping the draw-then-override shape |
+| Zero-damage stalemate with no round cap | Combat or fear economy | The fear-economy work |
+
+---
+
 ### The method — comparison, not reasoning
 
 Reasoning about causation is how this story's earlier fingerprint prediction went wrong. So
