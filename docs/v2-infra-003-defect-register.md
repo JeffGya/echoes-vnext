@@ -1182,3 +1182,47 @@ the commit, the file, the line, and the divergence from `main`.
 | **Owner** | **`V2-ECONOMY-004`** — reward vocabulary and weighting. It owns any change that makes Thread count sensitive to Realm size. |
 | **Status** | **NOT FIXED. Deferred by decision.** Do not act on it here. |
 
+
+---
+
+## D94 — a stage with no REQUIRED objective was completable, and paid, on entry. ✅ FIXED.
+
+| Field | Value |
+|---|---|
+| **ID** | **D94** (added 2026-08-29, found in manual play) |
+| **Defect** | The stage-completion gate offered `flow.complete_stage` whenever no *required* objective remained incomplete. It never checked whether the stage's objective situations had been reached. On a stage where every objective is optional, the gate was open from entry, and the settlement paid a full stage reward for walking one step. |
+| **Location** | Gate: `core/state/flow/states/venture/StageExploreSnapshotBuilder.gd:389`. Payer: `core/runtime/controllers/VentureController.gd:648` (`_stage_cleared := is_combat_victory or not has_encounter` → `StageSettlementService.settle()`). Trigger: `handle_ignore_situation` at `VentureController.gd:421` sets `passed = true` and clears `pending_situation_id` at `:424`, which removes the gate's last blocking term. |
+| **Mechanism** | `objectives_remaining` (`StageExploreSnapshotBuilder.gd:283-287`) counts only `stage.objectives` entries flagged `required`. `RealmGenerator.gd:152` writes the boss objective `required = false` unconditionally, and `:146` makes a `pursue` pre-boss optional. `realm.01` generates exactly two objectives (`data/realms.json:45-46`), so a `pursue` roll leaves the stage with **no** required objective at all. The explore map already tracked the honest pair — `objectives_found` against `objectives_total` — and the gate ignored it. `passed` is a red herring for the payment: it only cleared `has_pending`. |
+| **Measurement** | **115 of 800 generated `realm.01` stages (14.4%) have zero required objectives.** Probe over 200 seeds × 4 stages, run against `main`. Sample: `["pursue(req=false)", "boss(req=false)"] obj_total=1`. |
+| **Farmable?** | **No.** `StageSettlementService`'s `settlement_receipt` (`:108-110`, written `:163`) is keyed per `(realm, stage_index)`, and `RealmService.advance_stage()` moves the index on in the same dispatch. Each qualifying stage pays once. The loss is skipped content, not unbounded Ase. |
+| **Pre-existing or ours?** | **The gate is pre-existing** (V2-STAGE-002; identical line on `main` at `FlowStageExploreState.gd:551`), and so is the `passed` write (`main:FlowRuntime.gd:8238`). **The payment is ours.** On `main`, `_handle_complete_stage` contains no economy call — walking such a stage advanced it and paid nothing. Commit **`091bcfd`** (Phase 8A) introduced `_stage_cleared := is_combat_victory or not has_encounter`, which pays the no-encounter path as the intended D05 fix. That fix is correct; it exposed the hole in the gate. |
+| **Fix — product owner, 2026-08-29** | **Fix the gate, not the generator.** The condition gained an `objectives_found >= obj_total` term, so a stage completes only once its objective situations were actually engaged. Changing `RealmGenerator`'s `required` flags would move recorded values for every realm — a far larger change for the same outcome. |
+| **Completability** | A stage whose objectives are all optional stays finishable. Once the frontier is exhausted, `ActiveStageService.find_explore_target` Tier 4 (`:486-505`) re-offers a passed objective, and `situation_blocks_step` (`:225-239`) re-prompts on that deliberate re-target (`id == target_sit_id`). Verified at the site before the fix shipped. |
+| **Cover** | `objective/zero_required_blocked_until_reached` (both halves: blocked while unreached, offered once reached) and `objective/required_stage_gate_unchanged` (normal stage gates as before), in `tests/StageObjectiveTests.gd`. |
+| **Status** | **FIXED.** |
+
+---
+
+## D95 — the generator ignores the authored per-type `required` flag. RECORDED, NOT FIXED.
+
+| Field | Value |
+|---|---|
+| **ID** | **D95** (added 2026-08-29, found while diagnosing D94) |
+| **Defect** | `data/balance.json:2958-2965` authors a `required` flag per objective type under `data.stages.objective_types`. `RealmGenerator.gd:146` ignores it and hardcodes `is_required = (obj_type != ObjectiveModel.TYPE_PURSUE)`. |
+| **Effect** | `guide_spirit` is authored `required: false` but is generated `required = true`. The authored flag is dead config for every type: the only consumer of that subtree, `FlowStageExploreState._build_objective_entries` (`:300-311`), reads `label` and `reveal_hint` from it and takes `required` off the objective dict instead. |
+| **Why not fixed here** | Honouring the authored flag makes `guide_spirit` optional, which changes which stages have required objectives and therefore moves generation-derived recorded values. Out of scope for a gate fix. Note the direction: this would create MORE zero-required stages, which D94's gate now handles safely. |
+| **Owner** | Whichever story next touches objective generation. Fix by reading `required` from `objective_types[obj_type]`, defaulting true. |
+| **Status** | **NOT FIXED. Recorded only.** |
+
+---
+
+## D96 — the boss objective is always optional. RECORDED, NOT FIXED BY DECISION.
+
+| Field | Value |
+|---|---|
+| **ID** | **D96** (added 2026-08-29, found while diagnosing D94) |
+| **Defect** | `RealmGenerator.gd:152` appends the final boss objective with `required = false` on every stage of every realm, unconditionally. |
+| **Effect** | This is the root cause of D94. Because the boss never counts as required, a stage's required set is decided entirely by its pre-boss objectives — and `realm.01` has exactly one of those. It also means no stage anywhere requires its boss to be engaged. |
+| **Decision — product owner, 2026-08-29** | **Fix the gate (D94), not the generator.** Making the boss required would change the required-objective set of every stage in every realm, moving recorded values across the whole generation surface, and would alter difficulty as well. The gate fix removes the exploit without touching generation. |
+| **Owner** | Whichever story owns boss encounters. `TYPE_BOSS` is still a stub (`ObjectiveModel.gd:25`), so requiring it before boss combat exists would soft-lock stages. |
+| **Status** | **NOT FIXED. Deferred by decision.** Do not act on it here. |

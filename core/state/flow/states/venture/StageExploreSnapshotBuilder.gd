@@ -366,8 +366,28 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"slot":         "cta.ignore_situation",
 		}
 
-	# V2-STAGE-002: stage-complete gate — all required objectives done.
-	if is_exploring and not has_pending and objectives_remaining == 0 and obj_total > 0:
+	# V2-STAGE-002: stage-complete gate — all required objectives done AND every objective
+	# situation actually reached.
+	#
+	# The `objectives_found >= obj_total` term is the fix for D94. `objectives_remaining` counts
+	# only stage.objectives entries flagged `required`, and RealmGenerator writes the boss
+	# objective `required = false` unconditionally (RealmGenerator.gd:152) while a `pursue`
+	# pre-boss is optional too (:146). realm.01 generates exactly two objectives, so about 14%
+	# of its stages carry NO required objective and this gate opened the moment nothing was
+	# pending — on entry, or on the first dismissal of an engagement popup. The explore map
+	# already tracked the honest pair, `objectives_found` against `objectives_total`, and the
+	# gate ignored it.
+	#
+	# Harmless until Phase 8A (091bcfd) moved the stage settlement into
+	# VentureController.handle_complete_stage and paid the no-encounter path as `cleared`
+	# (the D05 fix). From then on, walking one step past a situation paid a full stage reward.
+	#
+	# A stage whose objectives are all optional stays completable: once the frontier is
+	# exhausted, ActiveStageService.find_explore_target Tier 4 re-offers a passed objective,
+	# and situation_blocks_step re-prompts on that deliberate re-target.
+	var objectives_reached := int(explore_map.get("objectives_found", 0)) >= obj_total
+	if is_exploring and not has_pending and objectives_remaining == 0 and obj_total > 0 \
+			and objectives_reached:
 		actions["cta.proceed_to_stage_map"] = {
 			"type":  "flow.complete_stage",
 			"label": "Stage Complete",
