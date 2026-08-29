@@ -30,6 +30,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("onboarding/opening_realm_opens_after_awakening_and_weave", Callable(OnboardingTests, "_t_opening_realm_opens_after_awakening_and_weave"))
 	runner.register_test("onboarding/normal_realms_locked_until_prologue_complete", Callable(OnboardingTests, "_t_normal_realms_locked_until_prologue_complete"))
 	runner.register_test("onboarding/prologue_does_not_inflate_first_realm_run_index", Callable(OnboardingTests, "_t_prologue_does_not_inflate_first_realm_run_index"))
+	runner.register_test("onboarding/prologue_pays_exactly_one_thread", Callable(OnboardingTests, "_t_prologue_pays_exactly_one_thread"))
 
 static func _make_logger() -> StructuredLogger:
 	var logger := StructuredLogger.new()
@@ -674,4 +675,78 @@ static func _t_prologue_does_not_inflate_first_realm_run_index() -> Dictionary:
 		return { "ok": false, "error": "Expected realm.02 to be created" }
 	if int(first.get("run_index", -1)) != 0:
 		return { "ok": false, "error": "First real Realm must have run_index 0, got %d — the prologue is inflating it" % int(first.get("run_index", -1)) }
+	return { "ok": true }
+
+
+static func _thread_count(runtime: FlowRuntime) -> int:
+	var sanctum_v: Variant = runtime.flow_ctx.save_data.get("sanctum", {})
+	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	var threads_v: Variant = sanctum.get("threads", {})
+	return (threads_v as Dictionary).size() if threads_v is Dictionary else 0
+
+
+## The opening Realm pays exactly ONE Thread — and pinning it does not leak into normal Realms.
+##
+## Thread count is derived from the AVERAGE segment weight, so a one-stage Realm cleared cleanly
+## reads the same as a ten-stage Realm cleared cleanly and takes the top count. The prologue has
+## exactly one stage, so it was paying the maximum a full Realm can pay. Both halves are pinned
+## here: the prologue is fixed at RealmService.PROLOGUE_THREAD_COUNT, and a normal Realm still
+## takes its count from data.threads.count_thresholds.
+static func _t_prologue_pays_exactly_one_thread() -> Dictionary:
+	var runtime := _run_full_keeper_intro()
+	var mismatches: Array = []
+
+	var before := _thread_count(runtime)
+	runtime.dispatch({ "type": "flow.go_state", "to": FlowStateIds.STAGE_MAP })
+	runtime.dispatch({ "type": "flow.select_stage", "stage_id": "stage.0" })
+	runtime.dispatch({ "type": "flow.complete_stage" })
+
+	var prologue := _prologue_entry(runtime)
+	if not bool(prologue.get("is_completed", false)):
+		return { "ok": false, "error": "Test setup failed: the prologue Realm did not complete" }
+
+	var earned: Array = runtime.flow_ctx.last_realm_threads_earned
+	if earned.size() != 1:
+		mismatches.append("Prologue must pay exactly 1 Thread, paid %d" % earned.size())
+	if _thread_count(runtime) - before != 1:
+		mismatches.append("Prologue must add exactly 1 Thread to the Sanctum, added %d" % (_thread_count(runtime) - before))
+	# Only the COUNT is pinned. Virtue and quality tier must still come from the run.
+	if not earned.is_empty():
+		var thread: Dictionary = earned[0] if earned[0] is Dictionary else {}
+		var starter_virtue := KeeperIntroServiceScript.get_selected_virtue(
+			runtime.flow_ctx.save_data, runtime.config_service.get_balance()
+		)
+		if str(thread.get("virtue", "")) != starter_virtue:
+			mismatches.append("Prologue Thread virtue must be the starter virtue '%s', got '%s'" \
+				% [starter_virtue, str(thread.get("virtue", ""))])
+		var segments_v: Variant = prologue.get("realm_recovery_segments", [])
+		var segments: Array = segments_v if segments_v is Array else []
+		var expected_tier := str((segments[0] as Dictionary).get("quality_tier", "")) if (not segments.is_empty() and segments[0] is Dictionary) else ""
+		if str(thread.get("quality_tier", "")) != expected_tier:
+			mismatches.append("Prologue Thread tier must come from the run ('%s'), got '%s'" \
+				% [expected_tier, str(thread.get("quality_tier", ""))])
+
+	# The other half: a normal Realm is untouched by the pin. Its last stage is completed the
+	# same way, and its count still comes from count_thresholds — here, more than one.
+	runtime.dispatch({ "type": "flow.select_realm", "realm_id": "realm.02" })
+	var realms_v: Variant = runtime.flow_ctx.save_data.get("realms", {})
+	var realms: Dictionary = realms_v if realms_v is Dictionary else {}
+	var realm: Dictionary = realms.get("realm.02", {})
+	if realm.is_empty():
+		return { "ok": false, "error": "Test setup failed: realm.02 was not created | %s" % " | ".join(mismatches) }
+	var stage_count := int(realm.get("stage_count", 1))
+	realm["current_stage_index"] = stage_count - 1
+
+	var before_normal := _thread_count(runtime)
+	runtime.dispatch({ "type": "flow.select_stage", "stage_id": "stage.%d" % (stage_count - 1) })
+	runtime.dispatch({ "type": "flow.complete_stage" })
+	var normal_earned: int = runtime.flow_ctx.last_realm_threads_earned.size()
+	if normal_earned <= 1:
+		mismatches.append("A normal Realm must still take its count from count_thresholds (>1 here), got %d" % normal_earned)
+	if _thread_count(runtime) - before_normal != normal_earned:
+		mismatches.append("Normal Realm added %d Threads to the Sanctum but reported %d" \
+			% [_thread_count(runtime) - before_normal, normal_earned])
+
+	if not mismatches.is_empty():
+		return { "ok": false, "error": " | ".join(mismatches) }
 	return { "ok": true }

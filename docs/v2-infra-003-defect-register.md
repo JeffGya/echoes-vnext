@@ -263,7 +263,7 @@ fingerprint constants. `BL` = moves a recorded baseline (`tests/CombatBaselineTe
 
 ### PRE-PLAYTEST TRIAGE — accounting and closures, 2026-08-27
 
-**Register accounting.** Identifiers run **D01–D92** (D91 added 2026-08-28, fix pass 1; D92 added 2026-08-28, fix pass 2). Six of them (D71–D76) are **coverage gaps,
+**Register accounting.** Identifiers run **D01–D93** (D91 added 2026-08-28, fix pass 1; D92 added 2026-08-28, fix pass 2; D93 added 2026-08-29, prologue Thread payout — recorded and deferred). Six of them (D71–D76) are **coverage gaps,
 not defects**. The defect population is therefore **84 defects + 6 coverage gaps**, not 88.
 (No summary count table exists in this file to correct — the stale "88" the triage refers to lives
 in `docs/v2-infra-003-triage.md`'s source material, not here. The correct accounting is stated
@@ -1166,3 +1166,19 @@ this story does not try to finish it.
 
 This story's job is to REPORT the mechanism precisely enough that the movement story can act on it —
 the commit, the file, the line, and the divergence from `main`.
+
+---
+
+## D93 — Thread count ignores Realm size. RECORDED, KNOWINGLY DEFERRED.
+
+| Field | Value |
+|---|---|
+| **ID** | **D93** (added 2026-08-29) |
+| **Defect** | The Thread payout of a completed Realm is derived from an AVERAGE, so it carries no information about how large the Realm was. |
+| **Location** | `core/progression/ThreadService.gd` — `_derive_quality()` divides the summed segment weights by `segments.size()`, and `_resolve_count()` maps that float through `data.threads.count_thresholds`. |
+| **Effect** | A one-stage Realm cleared cleanly scores 1.0, the same as a ten-stage Realm cleared cleanly, and takes the top count of three. Volume is invisible to the reward. |
+| **How it surfaced** | `realm.prologue` has exactly one stage. Cleared cleanly it paid **three** Threads — the maximum a full Realm can pay. Measured on a real run through `flow.complete_stage`. |
+| **Decision — product owner, 2026-08-29** | **Pin the prologue, do not change the formula.** The prologue now pays a fixed one Thread (`RealmService.PROLOGUE_THREAD_COUNT`, applied in `ThreadService.crystallize_threads`). Its virtue and quality tier still come from the run. Correcting the formula changes the payout of EVERY Realm, which is a real economy change and larger than this story. |
+| **Owner** | **`V2-ECONOMY-004`** — reward vocabulary and weighting. It owns any change that makes Thread count sensitive to Realm size. |
+| **Status** | **NOT FIXED. Deferred by decision.** Do not act on it here. |
+

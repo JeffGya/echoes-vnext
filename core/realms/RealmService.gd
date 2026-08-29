@@ -385,6 +385,10 @@ static func is_realm_run(entry: Dictionary) -> bool:
 const PROLOGUE_REALM_ID := "realm.prologue"
 
 
+## The Thread payout of the opening Realm, pinned rather than derived (ThreadService).
+const PROLOGUE_THREAD_COUNT := 1
+
+
 static func is_prologue_run(realm_id: String) -> bool:
 	return realm_id == PROLOGUE_REALM_ID
 
