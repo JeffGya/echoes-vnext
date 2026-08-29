@@ -239,7 +239,7 @@ Action type format: `domain.subdomain.verb` e.g. `flow.go_state`, `sanctum.party
 
 ## Extraction & Refactor Rules
 
-Learned the hard way during V2-INFRA-003, which moved ~1,800 lines out of `FlowRuntime.gd`.
+Learned the hard way during V2-INFRA-003, which took `FlowRuntime.gd` from 10,061 lines to 1,885.
 
 ### Extract shared services BEFORE the controllers that need them
 Dependencies point from controllers to services, so services must exist first. If you extract a
@@ -301,37 +301,12 @@ Measure with `grep -vcE '^\s*(#|$)' <file>`, not `wc -l`.
 |---|---|
 | What this file owns, in a few lines | How it came to be here — that is the commit message |
 | A constraint that prevents a mistake: a determinism hazard, a load-bearing order, a shared-state trap | Alternatives considered and rejected |
-| A defect note at the site, one or two lines | The full defect analysis — that is the register's job |
+| A defect note at the site, one or two lines | The full defect analysis — that belongs in the owning story's record |
 | | Slice numbers, phase names and process narrative |
 
 **Delete legacy and superseded comments when you encounter them.** A comment describing code that has
 moved, or naming a story that has been renumbered, is not explanation — it is a trap. It also costs
 parse time and reader attention for nothing.
-
-### When you reach the site of a known defect, investigate and record
-> **SCOPE: story V2-INFRA-003 ONLY. Delete this section when that story ships.**
-> It exists because that one refactor touches most of `core/` and produced a 76-entry register.
-> It is not a standing rule for other work.
-
-`docs/v2-infra-003-defect-register.md` lists every known defect with an ID (`D01`…), a location, and
-a classification. **Read it before you start any V2-INFRA-003 slice.**
-
-If your work brings you to the location of a listed defect:
-
-1. Do a short investigation. Why is it a defect? What is the correct behaviour? What would fixing it
-   change — does it move a fingerprint or a recorded baseline?
-2. **Do not fix it.** The extraction stays behaviour-neutral.
-3. **Write your finding into the register entry**, under that defect's ID. Add what you learned;
-   do not overwrite what is there.
-
-If you find a defect that is NOT in the register, add a new entry with the next free ID, the same
-columns as the existing rows, and mark it as found during your slice.
-
-Rationale: standing at the code is the cheapest moment to understand it. A defect note written from
-the call site is worth more than one written later from a grep. The register is the single place
-these decisions are made, so a finding recorded anywhere else is lost.
-
-**Again: this applies to V2-INFRA-003 only.** Remove this section with the story.
 
 ### Characterization before behaviour change
 Record what the code does today, including its bugs, and label each one
