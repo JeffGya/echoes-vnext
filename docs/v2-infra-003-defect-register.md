@@ -2,7 +2,7 @@
 
 **This document is a record of completed work. It is no longer a worklist.**
 
-V2-INFRA-003 decomposed `FlowRuntime` (10,061 lines to 1,885), built the proof spine for the
+V2-INFRA-003 decomposed `FlowRuntime` (10,061 lines to 1,972), built the proof spine for the
 opening session, and — as an explicit purpose of the refactor, not a side effect — found and
 recorded every defect it walked past. This file is the account of what was found and what was done
 about each item.

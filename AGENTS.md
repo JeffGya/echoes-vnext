@@ -239,7 +239,7 @@ Action type format: `domain.subdomain.verb` e.g. `flow.go_state`, `sanctum.party
 
 ## Extraction & Refactor Rules
 
-Learned the hard way during V2-INFRA-003, which took `FlowRuntime.gd` from 10,061 lines to 1,885.
+Learned the hard way during V2-INFRA-003, which took `FlowRuntime.gd` from 10,061 lines to 1,972.
 
 ### Extract shared services BEFORE the controllers that need them
 Dependencies point from controllers to services, so services must exist first. If you extract a

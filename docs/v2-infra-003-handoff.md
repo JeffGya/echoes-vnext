@@ -33,7 +33,7 @@ Notion page: `339c3d1e-de92-81ae-9e2c-d4eae469ae3d`. Spec State **Locked**, P0, 
 
 | Metric | Start | Now |
 |---|---:|---:|
-| `core/runtime/FlowRuntime.gd` | 10,061 lines | **1,885** (−81%) |
+| `core/runtime/FlowRuntime.gd` | 10,061 lines | **1,972** (−80%) |
 | `FlowEncounterState.gd` | 2,170 lines | **446** (−79%) |
 | Test suite | 1,401 | **1,482**, all passing (verified cold) |
 | Reflection call sites into `FlowRuntime` privates | 50 | **0** (corrected — see below) |
