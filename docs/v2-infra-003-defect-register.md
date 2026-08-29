@@ -1226,3 +1226,61 @@ the commit, the file, the line, and the divergence from `main`.
 | **Decision — product owner, 2026-08-29** | **Fix the gate (D94), not the generator.** Making the boss required would change the required-objective set of every stage in every realm, moving recorded values across the whole generation surface, and would alter difficulty as well. The gate fix removes the exploit without touching generation. |
 | **Owner** | Whichever story owns boss encounters. `TYPE_BOSS` is still a stub (`ObjectiveModel.gd:25`), so requiring it before boss combat exists would soft-lock stages. |
 | **Status** | **NOT FIXED. Deferred by decision.** Do not act on it here. |
+
+---
+
+## D97 — ENEMIES SHARE THE ECHO EMOTIONAL MODEL AND ALWAYS REFUSE EVENTUALLY
+
+**Pre-existing. Verified byte-identical on `main`. Noted, not fixed, per Jeff 2026-08-29.**
+
+Reported from play: "enemies are too similar to echoes, they refuse and do nothing even when they
+have the upper hand." Observed in a battle past 70 rounds.
+
+### Enemy refusal is UNAUTHORED
+
+Every refusal reference in the GDD (`:251`, `:1284-1305`, `:1388-1419`) frames refusal as an ECHO
+declining the Keeper's directive. No line describes a Distortion or enemy refusing. `ANSWERS.md`
+#45, #47 and #49 discuss only Echo fear. **The enemy path is an accident of a shared state machine,
+not a design.**
+
+### Every relief term is Echo-gated; enemies have none
+
+| Term | Applies to |
+|---|---|
+| Fear per hit (+2), near-death (+8), ally-KO spread (+4), per-round tick (+1), overwhelmed (+5) | **Both** |
+| Absolute Fear Rule → `actor.refuse` | **Both** |
+| Outnumber fear relief | Echo only |
+| Kill relief and ally ripple | Echo only |
+| Passive rank-scaled fear tick | Echo only |
+| Identity fear relief | Echo only |
+| Leadership fear and morale dampening | Echo only |
+
+Enemies also receive no leadership dampening, so `apply_fear_gain` returns the raw amount for them.
+
+### Enemy fear is monotonic, so refusal is inevitable
+
+Measured through the production path over 80+ rounds, with an enemy given effectively infinite HP and
+500 defence — that is, winning outright:
+
+`1, 2, 12, 26, 38, 50, 53, 67, 81, 95, 100 …` then 100 for the remaining 79 rounds. Echo fear stayed
+at 0.
+
+The per-round tick (`CombatRoundEmotionService.gd:150-155`) is unconditional on every living
+non-structure actor. It does not read HP, damage, or who is ahead. Nothing subtracts.
+
+**And the enemy threshold is the lowest in the game.** `actor_type "enemy"`
+(`core/actors/EnemyActor.gd:58`) never gets a rank, so its band is `nascent`, and
+`calling_behavior.uncalled` has no `absolute_fear_offset` — so it takes the raw band base of **65**,
+while a grounded Echo sits at **80**. The +1 tick alone reaches 65 by round 65 with no contact at all.
+
+### The options, if this is ever picked up
+
+| Option | Blast radius |
+|---|---|
+| Gate the Absolute Fear Rule to `faction == "echo"` (`ActorStateMachine.gd:286`) | Smallest. Enemies keep fear as a scoring input but never freeze. Moves combat fingerprints and baselines |
+| Give enemies a symmetric relief term | Larger. Touches the round tick and needs re-tuning |
+| Give enemies their own threshold or band | Cheapest tuning fix, but a winning enemy still ratchets to 100 |
+| Make the per-round tick threat-aware for all factions | Most principled, biggest radius. Changes Echo fear too and re-opens the ANSWERS #47/#49 rebalance |
+
+Related and already recorded: damage floors at 0 (`CombatService.gd:126`) and there is no round cap
+anywhere, so a long fight has no forced end.
