@@ -1032,3 +1032,57 @@ now name V2-INFRA-007 instead. Fixed in the documentation pass, commit `d0d5125`
 | **D62** | V2-INFRA-007 (Order 262.5, Ready) — NEW | https://app.notion.com/p/3cac3d1ede9281f58864c9d15a954952 | See the D62 correction above for why a new story was the final answer. |
 
 No property was changed on V2-SANCTUM-004. Its Superseded twin at Order 239 was not touched.
+
+---
+
+## MANUAL TEST 2 — TWO COMBAT SYMPTOMS UNDER DIAGNOSIS, 2026-08-29
+
+The product owner played the branch and reported two problems. Diagnosis is running. **Nothing has
+been fixed, and nothing will be, until the mechanism is reported and he decides.**
+
+### Symptom A — actors stand at range and never engage
+
+A new campaign, first real encounter. One Echo at (1,1), one enemy at (11,0), ten columns apart.
+Both choose `actor.idle` for twelve consecutive rounds. Neither closes. `Echo helplessness — morale
+decay` fires every round. The same shape appears on a long board at columns 11 against 49.
+
+### Symptom B — a GUIDE_SPIRIT escort that cannot be completed
+
+The spirit logs `Movement skipped (structure)` every round. `MovementExecutor.gd:282` skips any
+actor carrying `is_structure`. The spirit is built as a `StructureActor` in the "protect, or escort
+without joining" branch of `EncounterObjectiveSpawnService.gd`. But the objective is an ESCORT, so
+`GUIDE_SPIRIT escort progress` logs every round from t:167 to t:602 and never completes: the spirit
+cannot walk to its destination.
+
+**If escort can ever be paired with a non-joining spirit, that objective is unwinnable by
+construction.** No player action can complete it. Only the timer ends it.
+
+On top of that the fight deadlocks. One Echo sits at fear 100 refusing every round; the enemy
+attacks it for **0**. Neither side can reduce the other. This differs from the product owner's
+manual-test-1 ruling that a fight always reaches an end state — at zero damage there may be no end
+condition in reach. Being established.
+
+### The method — comparison, not reasoning
+
+Reasoning about causation is how this story's earlier fingerprint prediction went wrong. So
+causation is being settled by reproducing both symptoms on a separate `main` worktree, then
+bisecting the full `main..HEAD` range — **all 31 commits of the story, not only the ten fix passes**.
+
+Half A is the prime suspect for symptom A, not the fix passes. The whole movement family was
+extracted during this story — `LiveMovementContextService`, `MovementExecutor`,
+`CombatActivationService`, `EncounterSetupService`, `EncounterObjectiveSpawnService`. A move meant to
+preserve behaviour exactly is the kind of change that can alter scoring with no test noticing. Pass 8
+already proved the baselines cannot observe leadership at all, so a green suite is weak evidence here.
+
+One narrowing hint, not a boundary: the product owner played and approved a session at `2d5d629`,
+after all four connect commits, and combat behaved acceptably. He may simply not have met this board
+geometry.
+
+### DECISION — Jeff, 2026-08-29
+
+**If the cause is movement-related and was introduced by this story, the fix does NOT happen here.**
+It is filed to the next movement story to be picked up. The movement work is still in progress, so
+this story does not try to finish it.
+
+This story's job is to REPORT the mechanism precisely enough that the movement story can act on it —
+the commit, the file, the line, and the divergence from `main`.
