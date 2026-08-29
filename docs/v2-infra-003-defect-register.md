@@ -1,4 +1,447 @@
-# V2-INFRA-003 — Defect Register
+# V2-INFRA-003 — Defect Ledger
+
+**This document is a record of completed work. It is no longer a worklist.**
+
+V2-INFRA-003 decomposed `FlowRuntime` (10,061 lines to 1,885), built the proof spine for the
+opening session, and — as an explicit purpose of the refactor, not a side effect — found and
+recorded every defect it walked past. This file is the account of what was found and what was done
+about each item.
+
+Ninety-seven identifiers were raised, `D01` to `D97`. **Every one has an outcome below.** Nothing
+was closed by attrition. An entry left this register by being fixed, connected, deleted, disproved,
+judged not a defect, or filed on a named story — never by being judged unimportant.
+
+## How to read this
+
+The ledger is in three parts:
+
+| Part | What it holds |
+|---|---|
+| **A — The ledger** | One row per identifier, `D01` to `D97`, in numeric order. This is the authoritative outcome for each entry. |
+| **B — Findings with no identifier** | Things this story proved that were never given a D-number: the manual-test findings, the combat controller decision, and the coverage truths. Each carries an owner. |
+| **C — Deferred work, by owning story** | Everything handed on, grouped by the story that now owns it. |
+| **D — The original register, preserved** | The working document as it stood, including the product owner's dated decision blocks. It is the evidence behind Part A. Its instructions are spent; do not act on them. |
+
+Outcome vocabulary, used consistently:
+
+| Outcome | Meaning |
+|---|---|
+| **Fixed** | Code changed. The row names the change, the commit or slice, and what moved in the recorded values. |
+| **Connected** | A mechanic that had never run was turned on, one at a time, with a full suite run after each. |
+| **Deleted** | Code or a field was removed. The row carries the proof it had no caller. |
+| **Disproved** | The original claim was wrong. The claim is kept visible so nobody re-files it. |
+| **Not a defect** | Real behaviour, confirmed intended by the product owner, or a documented characterization. |
+| **Deferred** | Filed on a **named** story. No row says "later". |
+| **Coverage gap** | A hole in the tests, not a defect in the code. |
+
+"Recorded values" means the fingerprint constants in `tests/FlowFingerprintTests.gd` and
+`tests/FlowSnapshotFingerprintTests.gd`, and the baselines in `tests/CombatBaselineTests.gd` and
+`tests/VentureCharacterizationTests.gd`.
+
+---
+
+# Outcomes at a glance
+
+Ninety-seven identifiers, `D01` to `D97`. The counts below sum to 97.
+
+| Outcome | Count | Identifiers |
+|---|---|---|
+| **Fixed** | 58 | D02, D05, D07, D08, D09, D10, D11, D12, D13, D14, D16, D17, D22, D23, D24, D25, D26, D27, D29, D30, D31, D32, D33, D35, D36, D37, D38, D39, D40, D42, D43, D46, D47, D48, D50, D51, D52, D53, D54, D55, D56, D58, D63, D67, D68, D77, D78, D79, D80, D82, D84, D86, D87, D89, D90, D91, D92, D94 |
+| **Connected** | 3 | D01, D03, D04 |
+| **Deleted** | 6 | D18, D19, D21, D81, D85, D88 |
+| **Disproved** | 3 | D20, D34, D41 |
+| **Not a defect** | 6 | D15, D28, D44, D45, D49, D70 |
+| **Deferred to a named story** | 13 | D06, D57, D61, D62, D64, D65, D66, D69, D83, D93, D95, D96, D97 |
+| **Carried with no owner named** | 2 | D59, D60 |
+| **Coverage gap, not a defect** | 6 | D71, D72, D73, D74, D75, D76 |
+
+**The two rows that need a reader's attention are D59 and D60.** Both are real, both were left open,
+and neither was given an owning story. The post-manual-test triage filed them under "owned by
+another story" without naming one. They are recorded here plainly rather than assigned to a story
+that was never asked to take them. See Part A and Part C.
+
+## Where the work landed
+
+| Stage | Commits | What it did |
+|---|---|---|
+| Half A and Phases 5 to 7 | `aa8147d` and earlier slices | Decomposition. Closed D21 to D26 as a by-product. |
+| Phase 8A | `091bcfd` | Stage settlement. Closed D05, D36, D39, D77. |
+| Phase 8 groundwork | `61ffcf8` | Closed D82, the `run_index` leak. |
+| Phase 8B and 8C | `0e801f1` | Durable result and opening spine. Closed D42, D63, D86, D87, D88, D89, D90. |
+| Pre-playtest batch | `e98a70b` | Nine hygiene and repair items. Closed D07, D08, D10, D11, D37, D38, D40, D48, D78, D81. |
+| Connect pass, one mechanic at a time | `39cfbaf`, `df54fba`, `2bc1ec9`, `2d5d629` | D01, D04, D03, then D18 and D19. |
+| Fix passes 1 to 10 | `f6b9a0c`, `7a91df6`, `c31d9d0`, `0cee9db`, `d0d5125`, `57f431b`, `e9bd152`, `bca31d7`, `fd0bedc`, `3ca76a8`, `99b319e` | The remaining open defects. |
+| After manual test 2 | `4b27881`, `ff068ed`, `83a13dd`, `36e5d98` | D93 pinned and deferred, D94 fixed, D95 to D97 recorded. |
+
+---
+
+# Corrections that supersede earlier statements in this file
+
+The register grew by accretion over six days. Where two statements conflict, **the later dated one
+wins**, and the earlier one is named here rather than quietly dropped.
+
+| Subject | The earlier statement | What superseded it |
+|---|---|---|
+| **D35 blast radius** | Graded **FP**. The row said producer B is fingerprinted, so adding `direction` and `tag` would move a fingerprint. | Pass 7, 2026-08-28: **it moved nothing.** `tests/FlowFingerprintTests.gd:238-244` hashes the sorted **top-level** `data.keys()`. `emotion_summary` was already one of those keys and the shape of its entries is not hashed, so adding two fields inside an entry cannot move the constant. |
+| **D50 blast radius and premise** | Graded **FP + BL**, on the premise that PROTECT and PURIFY_SHRINE always carry a structure inside `party_size`. | Pass 5, 2026-08-28: **it moved nothing, and the premise was wrong.** All three authored structures carry `faction: "structure"` (`data.actor.structures`), so the existing `faction == "echo"` test already excluded them. The filter that actually bit was `is_spirit` (D51): a joined guide spirit is built as faction `"echo"` and inflated the count by one. |
+| **D02 count** | "**Ten** leadership trait effects are authored with parameters nothing reads." | Pass 8, 2026-08-28: it was **eleven**. `directive_amplify` and `directive_echo` were also dead. The `directive_mul` grep hit that made `directive_amplify` look live is `calling_behavior.directive_mul`, a different config subtree. |
+| **D62 owner** | First ruling, 2026-08-28: expand V2-STAGE-003, write no new story. The addendum was added at Order 310. | Same day, twice. The **twin rule** was applied — the database holds duplicate story codes, V2-STAGE-003 also exists at Order 236 with status Done, and when one twin is Done the other is not used. The addendum was removed and that page returned to its previous state. Thirteen open stories were then checked and each rejected with a reason. **Final: a new story, `V2-INFRA-007 — contact resolution consequence parity`, Ready, Order 262.5.** |
+| **Number of disproved entries** | The conversion rule in this file said "**two** entries in this register were disproved". | Pre-playtest triage, 2026-08-27: **three** — D20, D34 and D41. |
+| **Open count** | "The ~**53** after-the-test entries". | Post-manual-test triage, 2026-08-28: **44**, after four independent readers re-verified all 90 identifiers at `702608b`. Of the 44, 32 needed no product-owner decision and 12 did. |
+| **D03 premise and blast radius** | "The `data.voice` bark budget block has no reader"; graded **BL** because `CombatBaselineTests` and the round-bark suites pin `round_bark_events`. | Connect case 3, 2026-08-28: **wrong on both counts.** The budget was not missing, it was **duplicated** as hardcoded literals in `ui/screens/combat/CombatBoardScreen._show_bark_popups()`, and the two copies had already drifted. And no suite pins `round_bark_events`; `CombatBaselineTests` contains no bark assertion at all. Nothing moved. |
+| **D33 location** | The duplicate realm XP multiplier lives in `FlowEncounterState.gd`. | Triage, 2026-08-28: it had **moved** to `core/economy/StageSettlementService.gd:262-265`. Fixed there in pass 3. |
+| **D73 status** | Phase 8B addendum, 2026-08-25: "**STILL OPEN** after slice 6J, and now load-bearing." | The assertion had in fact already landed in Half A. `git blame` puts `tests/OnboardingTests.gd:284-285` at commit `aa8147d`, 2026-08-24 — one day **before** the addendum that called it open. The 2026-08-27 closure is correct. |
+| **D76 prediction** | `snapshot_purity/build_final_snapshot_pays_rewards` "will go silently vacuous" when payment moves. | Slice 6J, 2026-08-24: it goes vacuous only under an `_end_round` relocation, which was ruled out. Under the settlement move actually shipped it **fails loudly**, and that failure is the positive evidence the payment left the builder. Revised action: invert the assertion, keep the production drive. |
+| **D79 shape** | The six duplicated placement copies differ in exactly two knobs. | Pass 4, 2026-08-28: **three knobs.** The five objective copies rank lexicographically by column distance then row distance; the temporary-ally copy ranks by summed Manhattan distance to the party centroid, a different total order. The metric became a fourth parameter so no cell moved. |
+| **D30 completeness** | The pass 1 row implied every longhand `objective_modes` read was routed. | Pass 1 correction: the two `BehaviorArbiter` sites were **not** routed — they read a different subtree, `data.actor`. Raised as **D91** and fixed in pass 3. |
+| **D66 owner** | "Owner disputed — the prompt says V2-ECONOMY-004; Notion says that story is the Ekwan loop." | 2026-08-25: a **false contradiction.** They are the same story; that page's `Code` property is `V2-ECONOMY-004`, and it already carried a 2026-08-11 addendum describing this exact `obj_type` / `type` mismatch. |
+| **D07, D37, D38, D40 blast radius** | Each predicted **BL**. | Pre-playtest batch, 2026-08-27: the full suite was green with **zero** re-records. Not because the fixes were inert, but because the changed behaviour sits **outside recorded cover**. That is a real coverage gap, not a clean bill of health — three player-visible repairs landed with no test able to tell whether they worked. |
+| **`death_round` scope** | D14 named one writer, `LiveHazardOutcomeService.gd:70`. | Pass 7: the field's documentation was wrong for **every** writer, and had been before this story. Corrected in the same commit at `core/actors/ActorSchema.gd:39` and `CONVENTIONS.md:307`. |
+| **Register accounting** | "Identifiers run **D01 to D93**." | D94 to D97 were added 2026-08-29. The range is **D01 to D97**. |
+| **Manual test 1 ruling on stalemates** | "A fight always reaches an end state — Echoes die, win state reached, or enemies die." Correct for its own case: enemies were still dealing 1 to 2 damage. | Manual test 2, 2026-08-29: damage floors at **0**, not 1 (`core/combat/CombatService.gd:126`), and there is **no round cap anywhere**. A fight in which every swing lands 0 and both sides refuse or guard has no reachable end condition. |
+| **D84 instruction** | Product owner, 2026-08-28: run the bond hooks **and** the Thread contribution before the card, at encounter cadence. | Pass 9: correct for three producers, **wrong for the fourth**. `RealmService.contribute_segment` keys every entry by `stage_index` and `ThreadService` counts entries, so one segment per encounter would inflate a multi-objective stage's recovery. It was made idempotent with a receipt and contributed only on the stage-clearing fight. Half the instruction was deliberately refused, and the refusal is recorded. |
+
+---
+
+# Part A — The ledger
+
+One row per identifier, in numeric order. **This is the authoritative outcome.** Where a row below
+disagrees with anything in Part D, this row wins; the correction is named in "Corrections that
+supersede earlier statements" above.
+
+Commit references are real hashes on `claude/v2-infra-003-proof-spine-b3c770`.
+
+## D01 to D33
+
+| ID | Subject | Outcome | What was done, and what moved |
+|---|---|---|---|
+| **D01** | Near-death morale and fear read `max_hp` at the top level, so the trigger could never fire | **Connected** | Connect case 1 of 4, `39cfbaf`, 2026-08-27. `CombatTurnActionService.gd:310` now reads `stats.max_hp` with the `LiveMovementContextService` fallback idiom. Two authored keys became reachable: `morale_on_near_death: 7`, `fear_on_near_death: 8`. **Moved: 7 of 34 `CombatBaselineTests` emotion constants, and not one of the seven mode fingerprints.** COMBAT, ENDURE, PURSUE and PURIFY_SHRINE each move by one actor gaining morale 50 to 57 and fear +8, unscaled, once. RECOVER, PROTECT and GUIDE_SPIRIT are byte-identical. **Verified in manual test 1** (2026-08-28, `2d5d629`): near-death fired at `t:89`, `t:141` and `t:195`, all on enemies. |
+| **D02** | Leadership trait effects authored with parameters nothing reads | **Fixed** | Pass 8, `fd0bedc`. **The count was eleven, not ten** — `directive_amplify` and `directive_echo` were also dead. All eleven implemented: `aggression_field`, `challenge_call`, `mark_target`, `safe_path_read`, `threat_read`, `hold_formation`, `position_lock`, `cover_positioning`, `anchor_presence`, `directive_amplify`, `directive_echo`. The two empty blocks were authored per the owner's decision: `cover_positioning` a move-score bonus toward cover, `anchor_presence` displacement immunity within a radius. **Nothing moved**, and the reason matters: no recorded scenario contains a Whole-band Echo, so no leadership trait activates in any fixture (see Part B). Each of the eleven was demonstrated by probe instead, with a with-and-without value. |
+| **D03** | The `data.voice` bark budget block had no reader | **Connected** | Connect case 3 of 4, `2bc1ec9`, 2026-08-28. `ConfigService.get_voice_cfg()` plus `NarrativeVoiceService.apply_round_bark_budget()`, run on projected snapshot rows by both builders so their `_bark_line` purity holds. The UI's hardcoded cap and tier table were deleted; it keeps only ordering and sorts on the new `bark_priority`. **The premise was wrong** — the budget was duplicated in the UI, not missing, and the two copies had drifted. **Nothing moved**, and a probe across the full suite showed the cap has **never bound**: maximum barks ever offered in one snapshot is two, and zero reactions ever reach a projection. Suite 1500 to 1508. `ectx.round_bark_events` was deliberately not capped — it is a trigger queue, not a display stream. |
+| **D04** | Mid-combat level-up synced stats to the wrong place and full-healed the actor | **Connected** | Connect case 2 of 4, `df54fba`, 2026-08-28. `ProgressionService.apply_mid_combat_kill_xp` now reads and writes through `actor["stats"]`, so `old_max_hp` is real and the unintended full heal is gone. Previously `old_max_hp` read 0, so `hp_gained` equalled the new maximum and every mid-combat level-up restored the Echo to full. **Verified in manual test 1**: level-up applied at `t:155`, Simon Mensah to level 2, with no free heal. |
+| **D05** | A stage completed with no encounter paid nothing and was flavoured as a defeat | **Fixed** | Phase 8A, `091bcfd`. `VentureController.NO_COMBAT_GRADE = "C"`; settlement runs on `is_combat_victory or not has_encounter`. A stage cleared without a fight now pays and grades "compromised", recorded at the site as a judgement rather than a repair. This answered the product-owner question in code. |
+| **D06** | Contact resolution runs none of the six post-encounter steps | **Deferred — V2-INFRA-007** | Cross-listed as D62; the same defect, filed once. See D62 for the ruling history. Owner: **V2-INFRA-007 — contact resolution consequence parity** (Ready, Order 262.5, depends on V2-INFRA-003). Emotion drift, bond triggers, sanctum emotion tick, vow discovery, vow release and ally teardown all still fail to run after a conversation. |
+| **D07** | The scout-return party preview always showed a constant emotional status | **Fixed** | Pre-playtest batch, `e98a70b`, 2026-08-27. `VentureResolveSnapshotBuilder.gd:70-83` now reads the flattened `morale` and `fear` that `EchoActor.from_echo()` actually writes. This corrects the stored `save.flow.pending_result` copy for free. **Predicted BL; nothing moved** — the characterization test asserts the projection's key set, never the `emotional_status` value, so `get_emotional_status(50, 0)` was never pinned. Recorded as a coverage finding, not a clean result. |
+| **D08** | The retreat RNG fallback used a different seed namespace from the primary path | **Fixed** | Pre-playtest batch, `e98a70b`. The missing `.` added to the fallback string at `FlowRuntime.gd:1166`. Unreachable in a booted campaign, so nothing moved. |
+| **D09** | Wave reinforcements were silently placed at `{0,0}` when cells ran out | **Fixed** | Pass 6, `e9bd152`. Decision recorded at the site: **do not spawn what you cannot place.** The alternative fallback would have to pick a cell the placement rule already rejected. Dropping the spawn is recoverable — the next interval tries again on a board that may have opened. Both log `count` fields and `recover_reinforce_count` now report placed actors, not built ones. Not verifiable: no shipped seed reaches a nearly full board. |
+| **D10** | `_double_damage_mult` was never cleared on totem recovery | **Fixed** | Pre-playtest batch, `e98a70b`. Now erased beside `_carrier_double_damage` on carrier-down recovery. Inert today because `CombatService` gates on the partner flag first; one gate-order change would have made it a live 2x damage bug. |
+| **D11** | `_carrier_double_damage` was cleared only when the carrier dict was still findable | **Fixed** | Pre-playtest batch, `e98a70b`. The recovery branch was written as if actors can be removed from `ectx.actors`; the spine only marks `is_dead`. The guard's real premise is now stated at the site. |
+| **D12** | Shrine drain used a sentinel key and an unfiltered rescan | **Fixed** | Pass 6, `e9bd152`. The fallback scan now filters `is_dead`, so a dead shrine's HP no longer leaks into later rounds' readouts. Only partly verifiable: the shipped path ends PURIFY_SHRINE on the round the shrine dies, so the changed branch is not exercised. |
+| **D13** | The purifier cooldown and party morale drain were nested inside the shrine loop | **Fixed** | Pass 5, `57f431b`. Both hoisted out of the loop, per the owner's decision that they are **per round**. The answer came from the data, not from the owner: the authored keys are `purify_cooldown_rounds` and `morale_drain_per_wave`, both time-based; no authored key is expressed per shrine. **Fixed but currently unverifiable, recorded honestly:** no fixture has more than one living shrine, and a round never begins with a dead shrine, so the number of living shrines at drain time is always exactly 1. The fix removes a latent coupling; it changes no number until a mode ships two shrines. |
+| **D14** | Guide-spirit hazard deaths recorded the sim tick as `death_round` | **Fixed** | Pass 7, `bca31d7`. Readers were audited first: `RecruitmentService.gd:378-381` divides `death_round` by `rounds_total`, so it needs a round, and every other writer already stores a round. The field name was right and the value was wrong, so `LiveHazardOutcomeService.apply()` now takes a `round` and writes it; all six call sites pass theirs. **The fault was schema-wide, not one site** — the two documents describing the field as a tick, `ActorSchema.gd:39` and `CONVENTIONS.md:307`, were corrected in the same commit. Nothing re-recorded. |
+| **D15** | `_gs_spirit_pos` went stale in the protect branch | **Not a defect** | Pass 6, `e9bd152`. Investigated: after the protect move, no reader consumes the captured position. The skittish log reads `_gs_spirit.grid_pos` directly, the win counter builds a fresh copy, and the protect branch is the last code in the function. A refresh was added anyway, with a comment stating it changes nothing — it closes the trap for the next editor rather than fixing a live fault. |
+| **D16** | An unrecognised `guide_mode` silently disabled the whole phase | **Fixed** | Pass 6, `e9bd152`. Warns on an unknown mode. Unreachable today: only two values are ever written. |
+| **D17** | The escort win latch could fire on a spirit that never moved | **Fixed** | Pass 6, `e9bd152`. The fix went where slice 6I's investigation said it should — **the relaxation branch's floor, not the latch.** When no frontier cell clears `destination_min_distance` the producer relaxes with no distance floor at all, so on a terrain island with one unoccupied frontier cell the destination can equal the spawn cell. A `dist > 0` requirement was added and the branch falls through to no destination when even that fails. The latch was left alone: it is correct given a valid destination. Not verifiable — no shipped terrain reaches the relaxation. |
+| **D18** | `title` — a dead snapshot key with zero consumers | **Deleted** | Connect case 4 of 4, `2d5d629`, 2026-08-28. **Proof of no caller:** `title` has no reader in `core/`, `ui/`, `tests/`, `tools/` or any `.tscn`; `ResolveScreen.gd` never names it, and the other `"title"` hits belong to unrelated snapshot types. Block 16 and all four producer calls deleted. **Moved: seven FINAL `data_keys` hashes re-recorded.** No ROUNDS hash and no SAVE hash moved. Attribution was measured, not assumed: the fourteen FP_DEBUG payloads were diffed field by field, and `data_keys` is the only field that differs anywhere — 24 keys to 23, the removal of `title`. |
+| **D19** | `note` — a dead snapshot key with zero consumers | **Deleted** | Connect case 4 of 4, `2d5d629`. Same verification as D18: no reader anywhere, including scenes. Block 17, producer F's call and producer G's replay line deleted. **It moved nothing on its own** — `note` reached no fingerprinted producer. The seven FINAL hashes moved because of `title` alone. |
+| **D20** | `verdict` written into a badge the screen always hides | **Disproved** | **Original claim, kept visible:** "`ResolveScreen`'s contact renderer sets `_rank_badge.visible = false` unconditionally", so the computed `verdict` is invisible on every contact resolve. **Evidence it was wrong, 2026-08-27:** `ui/screens/venture/ResolveScreen.gd:262-268` shows the badge whenever `verdict` is non-empty and hides it only when the string is empty. The "hidden unconditionally" claim describes the reset and clear paths at `:484` and `:512`, not the contact renderer. Product-owner decision 2026-08-28: **keep the badge.** No code change. Do not re-file this. |
+| **D21** | `_find_target_situation` and `_mark_situation_revealed` — 114 dead lines | **Deleted** | Removed during Phase 5, before this register was compiled. **Proof of no caller:** grep for both symbol names returns nothing in `core/`, `ui/` or `tests/`, and the cited `FlowRuntime.gd` line ranges no longer exist — the file is now roughly 2,070 lines. Recorded so the deletion is attributable. |
+| **D22** | `flow.select_stage` had a provisional owner | **Fixed** | Slice 6F. The blocking controller-to-controller call was removed and ownership moved to `core/progression/SkillLoadoutService.gd`. All 73 actions now have exactly one owner — the ownership stop condition for the story. |
+| **D23** | Producer C emitted `meta.sim_tick`, tripping `assert(false)` | **Fixed** | Slice 5B. `FlowStateMachine._validate_snapshot()` asserts on a missing `t`. Three characterization tests were **inverted rather than deleted**, so the original intent stays visible. |
+| **D24** | `_project_actor` mutated the actor it projected | **Fixed** | Phase 3. The probe assertion at `tests/FlowSnapshotFingerprintTests.gd:33` was inverted to "must not mutate". |
+| **D25** | `_build_scout_return_snapshot` consumed its own one-shot inputs | **Fixed** | Slice 5B. Consumption moved to the dispatch closure, gated on `type == flow.resolve` **and** `data.run_type == "scout_return"`. Now at `core/runtime/FlowRuntime.gd:1094`. The guard was preserved deliberately in slice 5E. |
+| **D26** | `_fresh_save_path()` deleted only the primary save artifact | **Fixed** | Slice 5.0. A leftover `.bak1` made `boot()` recover the previous campaign and produced nine false fingerprint failures. Fixed by `tests/TestSaveHarness.gd`, adopted by 22 suites. Recorded in the register as the highest-value fix of the story: it removed a source of fake regressions from every later measurement. |
+| **D27** | The movement decision (`goal_id` / `option_id`) was never stored or logged | **Fixed** | Pass 7, `bca31d7`. **Superseding the 2026-08-25 filing to V2-COMBAT-003** — it was filed there, then fixed here because it turned out to need no new plumbing. The values were already on the activation result contract (`MovementResult`, built at `CombatActivationService.gd:235-236`), so `LiveMovementContextService.gd:502` simply logs both on `actor.moved`. Verified populated for an ordinary echo, not only a guide spirit. The superseded KNOWN GAP header on that file was deleted. **This unblocked D57**, which could not be safely investigated without it. |
+| **D28** | `total_waves` frozen on the first ENDURE round | **Not a defect** | Pass 6, `e9bd152`. **Decision: keep the cache.** Both inputs live on `objective_params`, which is written once during setup, before any round runs, and never written after. Recomputing each round returns the same number. No code change; the comment now records the proof instead of calling it preserved behaviour. |
+| **D29** | Roughly 60 duplicated placement lines including a determinism-critical sort | **Fixed** | Pass 6, `e9bd152`. **The instruction was deliberately refused as written.** The two blocks do not fit `GridService.place_on_terrain` from pass 4, and forcing them would have moved every wave spawn cell: the helper returns one cell ranked by distance to a target column, while these blocks hand out N cells ranked enemy-side-first by descending column — a different total order — and `GridService.occupied_cells` counts a dead actor's cell as occupied while these blocks treat it as free. Deduplicated locally instead, into one private `_place_enemy_spawns`, with the determinism-critical sort copied character for character. Nothing moved. |
+| **D30** | `data.combat.objective_modes` had no `ConfigService` owner, read longhand at five sites | **Fixed** | Pass 1, `f6b9a0c`. `ConfigService.get_objective_modes_cfg()` plus a `_from_balance` variant added at `ConfigService.gd:308-330`; four production reads routed through it. **Correction to the original row:** the two `BehaviorArbiter` sites were **not** routed in this pass — they read a different subtree, `data.actor`, where the key does not exist. Raised as **D91** and fixed in pass 3. The stale `FlowRuntime.gd:2232` site was confirmed gone. Nothing moved. |
+| **D31** | `data.combat.shrine` had no `ConfigService` getter | **Fixed** | Pass 1, `f6b9a0c`. `ConfigService.get_shrine_cfg()` added at `ConfigService.gd:333-345`; the one read routed through it. Nothing moved. |
+| **D32** | `ConfigService.get_rewards_cfg` had no null guard, unlike its siblings | **Fixed** | Pass 1, `f6b9a0c`. `ConfigService.gd:281-282` now opens with `if config_service == null: return {}`, matching `get_economy_cfg`. Behaviour-neutral in practice: every caller passes a live service, and the previous code would have crashed rather than returned a different value. |
+| **D33** | The realm XP multiplier formula was written twice from two apparent sources | **Fixed** | Pass 3, `c31d9d0`. **Proved identical before collapsing, not after:** same dictionary, same key, same rate, and every guard branch agrees, so the two "independent sources" were one source. The inline copy was deleted and the call routed to `ProgressionService.get_realm_xp_multiplier`. **Superseded location:** the register put the duplicate in `FlowEncounterState.gd`; by 2026-08-28 it had moved to `core/economy/StageSettlementService.gd:262-265`, which is where it was fixed. Nothing moved. |
+
+## D34 to D66
+
+| ID | Subject | Outcome | What was done, and what moved |
+|---|---|---|---|
+| **D34** | `STATE_ESCAPED` "written and never read" | **Disproved** | **Original claim, kept visible:** the handoff at `:270` recorded `STATE_ESCAPED` as a value written at `VentureController.gd:343` and read by nothing. **Evidence it was wrong:** `party_state` is read generically — `StageExploreTurnService.gd:119` gates `advance_turn` on it, `StageExploreSnapshotBuilder.gd:67/279/445` build from it, and `ui/screens/venture/StageExploreScreen.gd:602` renders it capitalised. What is true, and all that is true, is that **no code branches on `STATE_ESCAPED` specifically.** Downgraded to a note. The constant was not deleted. Do not re-file this. |
+| **D35** | Producer B omitted `direction` and `tag` from emotion entries | **Fixed** | Pass 7, `bca31d7`. `EncounterSnapshotBuilder._build_keeper_intro_emotion_summary` now matches producer A exactly: same eight keys in the same order, `direction` from the pre-to-post emotional-status rank, `tag` as `ko` / `refused` / empty. **The predicted fingerprint move did not happen** — see the corrections table. Nothing re-recorded. **Raised and not fixed:** the D35 row claimed producer E "adds both plus `bark`". It does not — `SituationEngagementService.gd:352-362` emits a third, shorter shape with no `morale_delta`, no `refused`, no `bark` and a hardcoded empty `tag`. That is outside D35's scope and is recorded here so it is not lost. |
+| **D36** | Quit at Resolve kept the reward but never advanced the stage | **Fixed** | Phase 8A, `091bcfd`, re-verified 2026-08-27. Payment left the snapshot builder. `core/economy/StageSettlementService.settle()` now runs in the same dispatch as `advance_stage`, behind a persisted `settlement_receipt` keyed per stage. No screen sits between payment and advance any more, so there is no window to quit inside. Re-checked independently against the fresh-stage case in Phase 8B: a realm generated at runtime carries no receipt key at all, and two `flow.complete_stage` dispatches aimed at the same stage pay exactly once. **Verified in manual test 1**: `t:155`, a single `stage_reward`, +90 Ase, with encounter rewards still paid per fight at `t:96` and `t:154`. |
+| **D37** | The victory-return path could double-increment `objectives_found` | **Fixed** | Pre-playtest batch, `e98a70b`. The call site now passes `skip_if_already_resolved=true`. **Predicted BL; nothing moved** — the only test that drives this path asserts ally-field teardown and never `objectives_found`, and no test calls it twice. A coverage gap, recorded as one. |
+| **D38** | The victory-return path committed, saved and logged even when nothing matched | **Fixed** | Pre-playtest batch, `e98a70b`. Same call site now passes `commit_only_when_modified=true`. One fix, two flags, with D37. Predicted BL; nothing moved, for the same coverage reason. |
+| **D39** | `get_stage_base_reward()` read `objectives[0]` only | **Fixed** | Phase 8A, `091bcfd`. `ActiveStageService.gd:330` delegates to `RewardCalc.base_reward()`, so both base-reward readers now **sum** the stage's objective weights. This answered the product-owner question in code and removed a disagreement by construction: the retreat payout and the stage-completion payout had been computed on different bases. |
+| **D40** | `RealmService.advance_stage()`'s idempotency guard **caused** Thread double-minting | **Fixed** | Pre-playtest batch, `e98a70b`. The already-completed guard returns `{}` instead of the model. Its one production caller reads `is_completed` off the returned dict as its Thread-mint trigger, so the guard no longer hands back a second reason to mint. **One deliberate recorded change:** `realm_prog/advance_idempotent_when_complete` had **pinned the defect** — it required the model back from the guard — so its assertion was inverted in `StageProgressionTests.gd`. That was the only re-record in the batch. |
+| **D41** | A successful withdrawal was scored as a defeat | **Disproved** | **Original claim, kept visible:** handoff `:269` recorded that `_apply_run_emotion_modifiers` treats a withdrawal as a defeat. **Evidence it was wrong:** the `match outcome` block in `core/emotion/EmotionConsequenceService.gd:258-259` has a distinct `"withdrawal"` arm that sets `morale_mul = modifier_survived_morale_mul` — 1.25, a **boost**. `"defeat"` is a separate arm that sets `fear_mul`. The handoff line was also stale on location: the function moved off `FlowRuntime` in Phase 4. Do not act on the handoff line, and do not re-file this. |
+| **D42** | The Ase Flame lit one full chapter early | **Fixed** | Phase 8C, `0e801f1`, 2026-08-27. **Fixed as a deletion, not a relocation.** `KeeperIntroService.awaken_flame()` already did the whole job idempotently at the intended beat, so the Chapter I copy was pure duplication and was cut. Every measured reader was walked before the cut and the consequence of a dark Flame for one more chapter recorded at the deletion site — including two the sending brief had listed as readers and which are not: `FlowSummonState` treats the flag as a rate hint only, so summoning is not gated by the Flame, and `SanctumLayoutService` does not read `awakened` at all. `tests/EconomyTests.gd` had pinned the **wrong beat**; it was inverted in place and renamed, with its original intent kept in its docstring. **No recorded value moved** — the predicted onboarding fingerprint move did not occur. **Verified in manual test 1**: flame not lit at name confirm; `t:30 Ase Flame awakened`. |
+| **D43** | A KO could be visited twice in one loop, so fear spread might double-apply | **Fixed (defensively)** | Pass 6, `e9bd152`. **Could not be reproduced, and is provably impossible today:** `defender_hp_after` has one producer, reached only behind a `not target.is_dead` guard; that same call sets `is_dead` on any blow leaving HP at or below zero; each actor activates once per round; and `last_round_results` is cleared at round start. So one target id can appear at most once per round with HP at or below zero. A dedupe set was added because it is provably harmless — it can never fire on current producers — and the proof is recorded at the site. **No test was added**, because a test would pin a behaviour that cannot be produced. |
+| **D44** | Kill ripple and kill momentum double-credit one ally for one kill | **Not a defect** | Product-owner decision, 2026-08-28: **intended as it stands.** Both apply, and the double ledger credit is part of the payoff for the trait the player invested in. No code change. |
+| **D45** | The kill-share denominator excludes structures | **Not a defect** | Product-owner decision, 2026-08-28: **structures stay excluded.** A structure is an objective, not a party member; it does not earn, so it must not dilute. No code change. |
+| **D46** | The "target already dead" arm logged `actor.idle` for a `melee_attack` intent | **Fixed** | Pass 5, `57f431b`. A distinct action type is now emitted, so the contribution ledger no longer counts that turn as an idle. Nothing moved. |
+| **D47** | The morale-drain log reported the configured amount, not the applied amount | **Fixed** | Pass 5, `57f431b`. The summed applied delta is logged. `apply_morale_loss` can reduce or fully prevent the loss and the clamp absorbs more, so the old line overstated the real drain whenever a leader was nearby — and misled every balance investigation that read it. Nothing moved. |
+| **D48** | The contribution ledger read `last_round_results.back()` without checking `source_id` | **Fixed** | Pre-playtest batch, `e98a70b`. The ledger now checks the entry's `source_id`, matching the `last_actor_action` stamp that reads the same entry. Correct before and after; the two neighbouring blocks no longer disagree about whether the check is needed. |
+| **D49** | The support tally is erased for non-echo actors without being read | **Not a defect** | Pre-existing and deliberate: support metrics are documented as an echo-only signal. Recorded because the erase and the gate are easy to misread as a bug. The note is the fix. |
+| **D50** | `party_size` counted structures and temporary allies | **Fixed** | Pass 5, `57f431b`. **Both the premise and the blast radius were wrong** — see the corrections table. Structures were already excluded by `faction == "structure"`; the filter that actually bit was `is_spirit`, a joined guide spirit built as faction `"echo"`. Nothing moved. **Raised and not fixed:** `party_size` still counts temporary allies (`is_ally`). Whether a one-battle companion counts toward the `tikoro_nko_agyina` vow gate is a design question, not a defect. Recorded in the file header. |
+| **D51** | Spirit-flagged echoes received mode directive weights outside GUIDE_SPIRIT | **Fixed** | Pass 5, `57f431b`. The `is_spirit` filter added to the other four branches for symmetry. This was the filter that actually mattered for D50. |
+| **D52** | `round_bark_events` was passed by reference but documented "read-only" | **Fixed** | Pass 3, `c31d9d0`. Now passes a shallow duplicate. Chosen over a comment because the array is small and per-round, so the copy is cheap, and the named risk is a consumer appending to the caller's array. Nothing moved. |
+| **D53** | The mode-directive block re-read config instead of the `balance` dict handed in | **Fixed** | Pass 1, `f6b9a0c`. Now `ConfigService.get_objective_modes_cfg_from_balance(balance)` — one read, of the dict the caller already passed. Same immutable object in production, so nothing could differ and nothing moved. |
+| **D54** | `fear_inflicted` was credited to the attacker on same-faction hits | **Fixed** | Pass 5, `57f431b`. Unreachable today — no same-faction melee exists — so nothing moved. |
+| **D55** | A `round` parameter shadowed the built-in `round()` | **Fixed** | Pass 3, `c31d9d0`. Renamed `round_number` at both sites, which is the project's existing name. **Raised and not fixed:** four other files still use `round` as a parameter name. Out of pass scope, recorded so it is not lost. |
+| **D56** | `_ally_killed_barked` was an ad-hoc string key where its sibling is a typed field | **Fixed** | Pass 5, `57f431b`. Typed. **Raised and not fixed:** `_spirit_killed_barked` and `_spirit_greeted` (`CombatRoundGuideSpiritService.gd:195,204`) are the same undeclared-latch shape. Out of pass scope. |
+| **D57** | Movement adapter criterion 5 orders cells by lexicographic `"col,row"` | **Deferred — V2-COMBAT-003** | `"10,3" < "9,3"`, so the induced order is jagged, non-monotone in either axis, and flips its favoured compass direction with coordinate magnitude — on ordinary input, since the header's original "id-less entries are rare" justification was explicitly withdrawn. **D27 unblocked it** by logging the movement decision, which is what makes the re-record auditable. Not fixed here: party movement paths are pinned, and the movement family belongs to **V2-COMBAT-003** (filed 2026-08-25). Fix by comparing `(col, row)` numerically. |
+| **D58** | `_mark_save_requested()` joins reasons with a pipe across dispatch boundaries | **Fixed (comment only)** | Pass 3, `c31d9d0`. A save queued outside a dispatch glues its reason onto the next one. **Deliberately not fixed with an assertion:** `FlowContext` has no in-dispatch flag, and adding one plus an assertion is a behaviour-adjacent change against a baseline this pass was not authorised to move. The contract is now written at the site. Latent — no controller queues a save outside a dispatch today. |
+| **D59** | `encounter.advance` has no phase guard; `encounter.complete` transitions from any state | **Carried — no owner named** | **Still open at `e8c89f4`, and verified so for this ledger:** `FlowRuntime.gd:448-453` guards `encounter.advance` only on "encounter not initialized", not on phase, and `encounter.complete` at `:462-470` transitions to RESOLVE unconditionally. Both are dispatchable out of phase and are pinned by `CombatBaselineTests` as the two dormant actions no test had ever dispatched. Reachability is **unknown** — the UI may never surface them out of phase; the risk is state corruption through debug or automation. The post-manual-test triage grouped it under "owned by another story" **without naming one**, and no Notion filing was made for it. It is recorded here unassigned rather than pushed onto a story that was never asked to take it. |
+| **D60** | The flow machine never transitions to RESOLVE at the end of combat | **Carried — no owner named** | **Still open at `e8c89f4`, and verified so for this ledger:** `FlowRuntime.gd:1591` still writes `flow_ctx.last_snapshot = final_snap` directly inside `_end_round`. Phase 8B made `FlowResolveState` a real state and added RESOLVE transitions on three other paths (`:313`, `:470`, `:1201`), but **not on the combat-end path**, which is the one this entry names. No player-visible effect; it is the architecture defect that blocks `FlowResolveState` from ever owning the combat resolve, and the reason producer F exists as a fallback at all. Same accounting problem as D59: filed under "owned by another story" with no story named. Recorded here unassigned. Related, and separately filed: **D69**, the combat controller decision, went to V2-COMBAT-004. |
+| **D61** | `InstitutionService.run_settle_tick` asymmetry | **Deferred — V2-SANCTUM-004** | `update_condition` and `apply_institution_modifiers` run only when `inst_cfg` is non-empty, while `apply_passive_effects` runs whenever `hours_elapsed > 0`, so institutions accrue passive effects while their condition never degrades. Filed 2026-08-28 on **V2-SANCTUM-004** (Order 340, Ready), the only open story that owns house condition as a runtime layer. **The filing added a scope line** for authoring the first institutions' passive values and their upkeep — that item had sat with V2-SANCTUM-002, which Notion now marks Done, so it was otherwise orphaned. The strain warning surface stays with V2-SANCTUM-005. No property on the page was changed; its Superseded twin at Order 239 was not touched. |
+| **D62** | Contact resolution runs none of the six post-encounter steps | **Deferred — V2-INFRA-007** | The largest player-facing item left open, and the one whose ownership took three rulings in one day. **First:** expand V2-STAGE-003, write no new story; the addendum was added at Order 310. **Then the twin rule was applied** — the database holds duplicate story codes, V2-STAGE-003 also exists at Order 236 with status Done, and when one twin is Done the other is not used. The addendum was removed and Order 310 returned to exactly its previous state, every property unchanged. **Then a new story was authorised, conditionally**, and thirteen open stories were checked and each rejected with a reason: V2-INFRA-005 (death ripple only), V2-INFRA-004 (before the stage, not after), V2-SANCTUM-005 (generates house events, does not own who calls the tick), both V2-INTEL-002 rows, V2-COMBAT-003 and V2-COMBAT-004 (both stop at Resolve), V2-STAGE-002 (generation, not consequence), and six Draft stories owning content breadth or authoring vocabulary. **Final: `V2-INFRA-007 — contact resolution consequence parity`, Ready, Order 262.5, depends on V2-INFRA-003.** Four properties were left empty rather than guessed. The two stale `ContactController.gd` comments naming the never-built `EncounterResolutionService` now name V2-INFRA-007 instead (`d0d5125`). |
+| **D63** | Ase Flame lights a chapter early (cross-listing of D42) | **Fixed** | Phase 8C, `0e801f1`, with D42. The finding is written at D42. Kept here so the cross-listing does not read as still open. |
+| **D64** | The 28-function live movement family, moved verbatim | **Deferred — V2-COMBAT-003** | Filed 2026-08-25. The extraction was behaviour-preserving by construction; **V2-COMBAT-003** owns the behaviour. The register's own count was corrected in place: 28 functions, not 26 or 25 — 20 `_movement_*` plus 8 others including three `_apply_live_*`. |
+| **D65** | The guide-spirit mover, moved verbatim | **Deferred — V2-COMBAT-003** | Filed 2026-08-25. A 231-line block; extraction only, no behaviour change. |
+| **D66** | Reward resolution reads `obj_type`; objectives store `type` | **Deferred — V2-ECONOMY-004** | Objective-specific weighting falls through to the default combat path. Filed 2026-08-25 on **V2-ECONOMY-004**. The recorded "owner disputed" note was a **false contradiction**: the prompt's V2-ECONOMY-004 and Notion's Ekwan loop are the same story — that page's `Code` property is `V2-ECONOMY-004`. Better, the page already carried a 2026-08-11 addendum describing this exact mismatch and already drew the boundary: keep exactly-once payout orchestration in V2-INFRA-003; that story owns reward vocabulary, weights and the Ase/Ekwan split. The boundary was honoured — this story built the orchestration and changed no reward value. |
+
+## D67 to D97
+
+| ID | Subject | Outcome | What was done, and what moved |
+|---|---|---|---|
+| **D67** | `make_new_save()` wrote a directive value the repair immediately rewrote | **Fixed** | Pass 2, `7a91df6`. **The order was load-bearing and was followed:** the schema default was fixed first, then the migration removed. `SaveSchema.gd:137` now writes `directive.scout_carefully` — the default every consumer already falls back to — and the `directive.none` to `directive.seek_signs` branch was deleted from `SaveService.gd`. A `directive.none` value now falls to the unknown-id branch and is reset to `scout_carefully`. **Behaviour moved:** the repair ran on every load, so an existing campaign's first stage effectively ran `seek_signs`; it now runs `scout_carefully`. **Two new-save fingerprints re-recorded, both explained.** This change **exposed D92**. |
+| **D68** | `CONVENTIONS.md` claimed debug actions run at `t = -1` | **Fixed** | Documentation pass, `d0d5125`. False: `dispatch()` computes one tick per action for every branch, via `_next_tick()`. Corrected at `CONVENTIONS.md:1095`. **The neighbouring claim at `:1121` is true and was left alone** — `debug.cmd.in/out/err` really are logged at a literal `-1`, from `ui/AppRoot.gd:362-368`; they are log lines, not dispatched actions. Two stale code headers were corrected in the same commit: the `VentureController` header, which contradicted the code beneath it about `flow.select_stage` ownership since slice 6F, and the two `ContactController` comments naming the never-built `EncounterResolutionService`. |
+| **D69** | `_resolve_next_actor` cannot become a controller | **Deferred — V2-COMBAT-004** | Filed 2026-08-24, with **all three blockers measured** and recorded on the story page. See Part B for the full decision, including the correction made to that story's own 2026-08-11 audit addendum, which told its implementer to wire `ProtectCustodyService` through a controller that does not exist. |
+| **D70** | `_end_round` cannot be reduced below 139 lines | **Not a defect** | Closed. "There is no further phase to extract. Do not chase it lower." Recorded so a later reader does not reopen it. |
+| **D71** | Producer F has no test anywhere in the repo | **Coverage gap — still open** | Re-verified for this ledger: a repo-wide search of `tests/` for `FlowResolveState` returns nothing. Called "the weakest point of the slice" in the handoff. D19 deleted a key from this untested producer, guarded only by the fingerprints. |
+| **D72** | `SnapshotContractTests` has no `flow.resolve` case | **Coverage gap — still open** | Re-verified for this ledger: `grep -c "flow.resolve" tests/SnapshotContractTests.gd` returns 0. The product owner did not approve adding it in Phase 5. This is exactly the gap that let D23 survive. |
+| **D73** | Nothing asserted that producer B **omits** `ekwan_awarded` | **Coverage gap — closed** | Closed by the assertion at `tests/OnboardingTests.gd:284-285`, which rejects a keeper-trial resolve payload carrying `ekwan_awarded` and requires `ase_awarded`. **A dating conflict, resolved:** the Phase 8B addendum of 2026-08-25 called this "STILL OPEN and now load-bearing"; `git blame` puts the assertion at commit `aa8147d`, 2026-08-24 — a day earlier. The 2026-08-27 closure is correct and the addendum was already stale when written. The omission that block #8 depends on is now pinned. |
+| **D74** | `initiative_order` and `total_waves` are outside fingerprint cover | **Coverage gap — still open** | Re-verified for this ledger: neither appears in `tests/FlowFingerprintTests.gd`. Guarded only by `combat_baseline` and `objective_combat`. |
+| **D75** | 48 of 73 actions have no test coverage | **Coverage gap — count never re-measured** | Recorded as unverified and it stays unverified. Slices 5.0 and 6.0 added coverage, so the number is almost certainly stale in the safe direction. Anyone who needs the real figure must re-measure it; do not quote 48. |
+| **D76** | `snapshot_purity/build_final_snapshot_pays_rewards` would go silently vacuous | **Coverage gap — claim corrected** | Corrected at the site during slice 6J. It goes vacuous only under an `_end_round` relocation, which the decisions block ruled out. Under the settlement move actually shipped, the probe **fails loudly**, and that failure is the positive evidence the payment left the builder. Revised action, recorded: invert the assertion to "must not mutate" and keep the same production drive. A direct `build_final_snapshot()` call would be weaker, because it could not observe the dispatch boundary that is the whole point of the fix. |
+| **D77** | The full stage reward was paid at **every** encounter resolution, victory or defeat | **Fixed** | Phase 8A, `091bcfd`, verified 2026-08-27. The root mechanism behind D36. The two payments are now distinct functions: `EconomyService.reward_encounter_complete()` per encounter, `settle_stage_complete()` once per stage. **The 25% defeat consolation stayed** — product-owner decision, it is intended design — and is stamped once per situation by `ActiveStageService.claim_situation_defeat_consolation()`, which writes `consolation_paid` and returns true only on the first defeat. **The situation stays unresolved after a defeat**, so a lost fight is still retryable and no longer payable twice. That was explicit in the decision: removing retryability would have been a design change nobody asked for. |
+| **D78** | The Android Back button quit the app from any screen | **Fixed** | Pre-playtest batch, `e98a70b`. `application/config/quit_on_go_back=false` plus a `NOTIFICATION_WM_GO_BACK_REQUEST` handler in `ui/AppRoot.gd`. Back dispatches the live snapshot's own `nav.back` action when it has one, is swallowed while a blocking modal is up, and otherwise does nothing. **It can never quit and can never reach a state a tap could not.** Moved no recorded value. |
+| **D79** | The depth-scaled placement routine was written out six times | **Fixed** | Pass 4, `0cee9db`. Collapsed to `GridService.place_on_terrain`, with **every copy's values preserved exactly** per the owner's decision — the target column and row reference became parameters, PURSUE keeping the party centroid and the other five the board midpoint. **Correction to the original row:** the six copies do not share one comparator. The temporary-ally copy ranks by summed Manhattan distance to the party centroid, which orders cells differently from the five objective copies' axis metric, so the metric became a fourth parameter rather than a forced unification. **Nothing moved.** All six paths were captured before and after, and the two ordered captures are identical line for line. |
+| **D80** | GUIDE_SPIRIT escort on a legacy board got destination `(-1,-1)` and could never complete | **Fixed** | Pass 6, `e9bd152`, per the owner's decision: **use a board-edge cell when terrain is absent**, so the escort stays available and the objective is completable on every board. **Determinism checked, not assumed:** no existing draw moved. The spirit-destination generator is per-encounter and freshly derived, boards with terrain take the identical path, and the new draw happens only on a legacy board where none happened before. Not verifiable — reachable only through `dev_combat_objective` with no active realm. |
+| **D81** | The offline-accrual dormant gate was evaluated twice, the second unreachable | **Deleted** | Pre-playtest batch, `e98a70b`. **The second, unreachable gate deleted, with its `economy.offline_guard` save.** Proof it had no reachable caller: the two predicates are semantically identical, and the inline one runs first and returns, so the second can only be reached when the first already passed. **The direction of the delete was load-bearing** and is recorded: the inline gate survives because it leaves `last_offline_unix` and `last_settle_unix` alone; the dead one rolled them forward and would have swallowed the accrual window the awakening is supposed to open onto. Anyone who had "tidied" this by deleting the inline gate instead would have changed behaviour silently. |
+| **D82** | `prologue.first` inflated `run_index` for every player | **Fixed** | `61ffcf8`, folded into the Phase 8 settlement bundle because it moves the same numbers. `KeeperIntroService` wrote `save_data["realms"]["prologue.first"]` with **no `status` key**, and `RealmService._count_started_realms` counts any entry whose `status != "not_started"` — an absent key reads as `""`, which passes. So every player who completed the keeper intro entered their first real Realm with `run_index = 1` instead of `0`, inflating the virtue bonus, the reward order multiplier and the realm XP multiplier. Live before this story, not caused by it. Verified by the orchestrator directly, not only by an agent. |
+| **D83** | `ekwan_shrine_multiplier` has never applied | **Deferred — V2-ECONOMY-004** | The same root cause as D66 at a second site: `StageSettlementService.gd:145-150` and the identical read in `FlowEncounterState.gd:186-191` both do `objectives[0].get("obj_type", "combat")`, but `ObjectiveModel.make()` writes `type`, never `obj_type`. So `data.rewards.ekwan_shrine_multiplier` has no effect anywhere and shrine stages pay the ordinary Ekwan factor instead of the authored 1.5x. Carried verbatim by Phase 8A rather than fixed, so the settlement split stayed attributable. Filed 2026-08-25 on **V2-ECONOMY-004**, to be fixed with D66 in one change and re-recorded once. **The two sites must move together**, or a shrine stage's per-encounter and per-stage Ekwan would disagree. |
+| **D84** | A run's bond and Thread consequences did not exist when its Resolve card was published | **Fixed** | Pass 9, `3ca76a8`, **with half the product owner's instruction deliberately refused.** Three of the four producers were already at encounter cadence, split across two sites, both after the card: `apply_combat_bond_triggers`, `apply_bond_aftermath_modifiers` and `seed_rival_stage_incidents` all moved into `_end_round()`, after `build_final_snapshot()` so the bark ordering is unchanged. **The fourth was refused:** `RealmService.contribute_segment` keys every entry by `stage_index` and `ThreadService` counts entries, so a per-encounter contribution would inflate a multi-objective stage's recovery. It was made idempotent with a receipt — **no new save key, the recorded `stage_index` is the stamp** — and contributed only on the stage-clearing fight. The `VentureController` call stays at stage cadence because it is still the only contributor on the no-encounter path (D05). Pinned by `pending_result/bond_and_thread_are_on_the_card`, which fails against the pre-change core. **A resume bug was fixed as a side effect:** a stage-clearing victory resumed from the card had been graded `NO_COMBAT_GRADE` ("compromised") because `encounter_ctx` was gone. **A dead arm was found:** the `"loss"` arm in `handle_complete_stage` can never run, because a defeat card offers no `cta.next_stage`. Nothing re-recorded. |
+| **D85** | `save.flow.state` was defaulted, validated and repaired but written by nothing | **Deleted** | Pass 10, `99b319e`, by product-owner decision. **Proof of no caller, established before deleting:** every reference was found and classified — the schema default and the repair were the only two writers, the validator rejected a save for missing a field it also defaulted, one comment mentioned it, and six test fixtures set it without reading it. No reader of `state` or `context` exists in `core/`, `ui/` or `tests/`. **`flow.context` was removed with it** — same shape, same two writers, no consumer; keeping one half of a dead pair would leave the same trap. **Backward compatibility was proved, not assumed:** `SaveService.validate()` is a required-key whitelist with no unknown-key rejection, pinned by `bridge/legacy_flow_state_context_still_loads`. Nothing re-recorded. The `stage_id` half of this entry had already been closed in Phase 8B, locally in `PendingResultService.restore_run_context()`, deliberately not by widening `boot()`. |
+| **D86** | The awakening modal had never rendered | **Fixed** | Phase 8C, `0e801f1`. The whole chain existed and was correct end to end; the only production write to `FlowContext.pending_awakening_banner` was `= false` in the consume closure, so the flag was never true and `modal_requested` never fired. `OnboardingController.handle_awakening` now sets it at the awakening rite, and the established consume gate carries it across the two intervening dispatches onto the first Sanctum snapshot. **Why it survived:** it was pinned only by a test that set the flag by hand — the tests proved the plumbing and nothing proved the arming. No recorded value moved. |
+| **D87** | The awakening modal promised "+40 Ase" that no code has ever paid | **Fixed** | Phase 8C, `0e801f1`, **by removing the claim, not by paying it.** `awakening_ase_grant` has no consumer anywhere — the same authored-but-unreachable shape as D01 to D04 — and the moment D86 armed the modal it would have told every player it had granted money it had not. The grant label is deleted from the modal scene and from `present()`. **The grant itself is deferred to V2-ECONOMY-002** and `awakening_ase_grant` stays unreachable. `data.awakening_grant` was deliberately left on the snapshot: removing it would move the recorded `flow.sanctum` key set for no gain. |
+| **D88** | Two copies of the awakening modal, one dead, both carrying the same body string | **Deleted** | Phase 8C, `0e801f1`. **Proof it had no caller:** the legacy `%AwakeningOverlay` was permanently disabled in `_ready` and nothing re-enabled it, and a repo-wide grep for `AwakeningOverlay`, `AwakeningTitle`, `AwakeningBody`, `AwakeningGrantLabel` and `AwakeningDismiss` returns only `AwakeningModal.tscn` and two test lines that instantiate the **live** modal. The node block and all four `.gd` references were deleted with the reason recorded in place. Its only remaining effect had been to hold a second copy of the modal's copy where an edit would touch one and miss the other. |
+| **D89** | The opening Realm did not exist; its two save fields were read and written by nothing | **Fixed (built)** | Phase 8C, `0e801f1`. `realm.prologue` is a real one-stage generated run created from `keeper_intro.complete`, unlocked by **awakening plus first Weave**, carrying the player's own starter virtue — passed as a `cfg_overrides` argument because the virtue differs per campaign and cannot live in `realms.json`. `flow.select_realm` is validated against the gate. **A divergence from the GDD is recorded deliberately:** GDD §20.7 puts the second summon before the opening Realm; this does not, because that ordering depends on an awakening Ase grant that does not exist (D87) and 40 Ase against a 60 Ase summon cost would stall the arc at its first beat. **Do not "fix" it back before the grant ships.** No recorded value moved. **Verified in manual test 1**: opening Realm unlocked at `t:31`, prologue complete and normal Realms open at `t:155`. |
+| **D90** | The prologue Realm needs a second predicate; `is_realm_run()` does not cover it | **Fixed** | Phase 8C, `0e801f1`. D82's predicate discriminates on the `status` key because `prologue.first` is a synthetic container that was never played; `realm.prologue` is the opposite — a genuine run the player really plays, which must pass `is_realm_run()`. What makes it special is that it is not one of the player's Realms. Excluded at **six** sites, each annotated in place with why: the `run_index` count, the one-active-Realm lock, the Vow "realm in progress" scan, the `runs_at_pledge` counter, the consequence-pass intel group, and `boot()`'s `realm_id` restore, where it is restored explicitly from `opening_realm_status` instead so a real Realm always wins and the prologue stays resumable. **A correction to the slice brief is recorded:** the Sanctum enter-stage enablement is deliberately **not** excluded, because that is the affordance the player uses to enter the prologue. Without this, every player's first real Realm would have gone to `run_index = 1` again, by a different door. No recorded value moved. |
+| **D91** | `BehaviorArbiter` read `objective_modes` off `data.actor`, where the key does not exist | **Fixed** | Raised during pass 1, fixed in pass 3, `c31d9d0`. Both `has()` guards were always false and both values fell through to hardcoded defaults of 3. The authored values are also 3, so nothing differed in play — but retuning either number in `balance.json` would have done nothing. Fixed by passing the subtree through the `context` dictionary, the seam `bond_behavior_cfg` and `skills_cfg` already use. **`ConfigService` was not injected into the arbiter**, which holds none by design, and `balance.json` was not changed. **Proved by probe, not by the suite:** a probe radius of 9 fires `objective_threatened` at 5 tiles, while `{}` and the authored config do not. |
+| **D92** | A party wipe could score as a successful escort | **Fixed** | Pass 2, `7a91df6`, in the same change as D67 so the cause stays attributable. The escort win latched on the spirit's own position with no guard, so a **joined** spirit standing on the destination delivered itself — and `destination_reached` is tested before `all_echoes_dead`, so a wipe read as `spirit_escorted`. **It survived because the existing test passed by accident:** under the old directive default the joined spirit moved off that cell on turn 1, so the latch never ran; D67's directive change made it stay. The latch now requires `escort_started` **and** a living non-spirit echo within `escort_radius`, both computed by loops that already skip `is_spirit` actors. Pinned by two tests, including `guide_spirit_party_wipe_scores_defeat_not_escort`, which an `escort_started`-only fix would fail. **Proved by reverting the guard.** Nothing moved: no shipped encounter reaches this path. |
+| **D93** | The Thread count of a completed Realm ignores Realm size | **Deferred — V2-ECONOMY-004** | `ThreadService._derive_quality()` divides summed segment weights by `segments.size()`, so a one-stage Realm cleared cleanly scores 1.0 exactly as a ten-stage Realm does, and takes the top count of three. It surfaced because `realm.prologue` has one stage and paid **three** Threads on a real run. **Product-owner decision, 2026-08-29: pin the prologue, do not change the formula.** The prologue now pays a fixed one Thread (`RealmService.PROLOGUE_THREAD_COUNT`, applied in `ThreadService.crystallize_threads`), commit `ff068ed`; its virtue and quality tier still come from the run. Correcting the formula changes the payout of **every** Realm, which is a real economy change and larger than this story. Owner: **V2-ECONOMY-004** — it owns reward vocabulary and weighting, so it owns making Thread count sensitive to Realm size. |
+| **D94** | A stage with no **required** objective was completable, and paid, on entry | **Fixed** | `83a13dd`, 2026-08-29. The gate offered `flow.complete_stage` whenever no *required* objective remained incomplete, and never checked whether the objective situations had been reached — so on a stage where every objective is optional the gate was open from entry and settlement paid a full stage reward for walking one step. **Measured, not estimated: 115 of 800 generated `realm.01` stages, 14.4%**, have zero required objectives (probe over 200 seeds x 4 stages, run against `main`). **Not farmable** — the settlement receipt is keyed per stage and the index advances in the same dispatch; the loss is skipped content, not unbounded Ase. **Attribution stated plainly: the gate is pre-existing** (identical line on `main`), **the payment is ours** — `091bcfd` introduced the no-encounter payment as the intended D05 fix, which is correct and merely exposed the hole. **Fixed the gate, not the generator**, per the owner: the condition gained an `objectives_found >= obj_total` term. Changing the generator's `required` flags would move recorded values for every realm. Completability was verified at the site before shipping: `find_explore_target` Tier 4 re-offers a passed objective once the frontier is exhausted. Covered by `objective/zero_required_blocked_until_reached` and `objective/required_stage_gate_unchanged`. |
+| **D95** | The generator ignores the authored per-type `required` flag | **Deferred — V2-ECONOMY-004** (placement of convenience) | `data/balance.json:2958-2965` authors `required` per objective type; `RealmGenerator.gd:146` ignores it and hardcodes `is_required = (obj_type != TYPE_PURSUE)`. So `guide_spirit` is authored optional and generated required, and the authored flag is dead config for every type. Not fixed here: honouring it changes which stages have required objectives and therefore moves generation-derived recorded values. Fix by reading `required` from `objective_types[obj_type]`, defaulting true. **Ownership, stated plainly: the natural owner is realm generation, V2-STAGE-002** — but that story's only open row is blocked by a Done twin, so under the twin rule it cannot be used. It is filed on **V2-ECONOMY-004** as a placement of convenience, so it has a real page rather than none. Whoever next touches objective generation should take it back. |
+| **D96** | The boss objective is always optional | **Deferred — V2-ECONOMY-004** (placement of convenience) | `RealmGenerator.gd:152` appends the final boss objective with `required = false` on every stage of every realm, unconditionally. **This is the root cause of D94**: because the boss never counts as required, a stage's required set is decided entirely by its pre-boss objectives, and `realm.01` has exactly one of those. It also means no stage anywhere requires its boss to be engaged. **Product-owner decision, 2026-08-29: fix the gate (D94), not the generator.** Making the boss required would move recorded values across the whole generation surface and alter difficulty; the gate fix removes the exploit without touching generation. A second reason not to act: `TYPE_BOSS` is still a stub, so requiring it before boss combat exists would soft-lock stages. Same placement note as D95 — the natural owner is realm generation, filed on **V2-ECONOMY-004** because V2-STAGE-002's open row is blocked by a Done twin. |
+| **D97** | Enemies share the Echo emotional model and always refuse eventually | **Deferred — V2-COMBAT-003** | Recorded 2026-08-29, `36e5d98`. **Pre-existing; verified byte-identical on `main`. Noted, not fixed, by the owner's decision.** Reported from play as "enemies are too similar to echoes, they refuse and do nothing even when they have the upper hand", observed past 70 rounds. **Enemy refusal is unauthored** — every refusal reference in the GDD frames it as an Echo declining the Keeper's directive; the enemy path is an accident of a shared state machine. **Every relief term is Echo-gated** — outnumber relief, kill relief and ally ripple, the passive rank-scaled tick, identity relief and leadership dampening all apply to Echoes only, while every fear **gain** applies to both. **So enemy fear is monotonic.** Measured through the production path with an enemy given effectively infinite HP and 500 defence, that is, winning outright: `1, 2, 12, 26, 38, 50, 53, 67, 81, 95, 100`, then 100 for 79 more rounds, while Echo fear stayed at 0. **And the enemy threshold is the lowest in the game** — an `enemy` never gets a rank, so its band is `nascent` and it takes the raw base of 65 against a grounded Echo's 80; the unconditional +1 per-round tick alone reaches 65 by round 65 with no contact at all. Four options with their blast radii are recorded in Part D. Owner: **V2-COMBAT-003** (Ready). |
+
+---
+
+# Part B — Findings with no identifier
+
+Things this story proved that were never given a D-number. Each carries an owner, or says plainly
+that it has none.
+
+## The two manual tests
+
+**Manual test 1 passed, 2026-08-28, played end to end on `2d5d629`. The proof spine works.**
+Confirmed live from the run log: the house is dormant through Chapter I; the Flame lights at the
+awakening (`t:30`); the opening Realm is unlocked by awakening plus rite (`t:31`); the prologue
+completes and normal Realms open (`t:155`); the stage settles **once** (`t:155`, a single
+`stage_reward`, +90 Ase) while encounter rewards stay per fight (`t:96`, `t:154`, +15 each); the
+durable result is written then consumed (`t:96`, `t:97`); level-up applies (`t:155`); and near-death
+fires (`t:89`, `t:141`, `t:195`).
+
+**Manual test 2, 2026-08-29, found two combat symptoms. Both were proved pre-existing and, by the
+owner's decision, noted rather than fixed.** Causation was settled by comparison, not by reasoning —
+a separate `main` worktree was built and both symptoms reproduced on each tree — because reasoning
+about causation is how this story's earlier fingerprint prediction went wrong.
+
+| Scenario | Result |
+|---|---|
+| Forced two-body case, Echo (1,1) against enemy (11,0), 12x12 board | **Byte-identical to `main`** |
+| Long board, 60 columns, GUIDE_SPIRIT | **Byte-identical to `main`** |
+| Forced escort with a non-joining spirit | **Byte-identical to `main`** |
+| Twelve real new campaigns, `boot()` through the prologue | Echo closes and wins in 7 to 9 rounds. No stall |
+
+No bisect was needed. **Nothing in the story's 31 commits causes either symptom.**
+
+## The findings themselves
+
+| Finding | What it is | Owner |
+|---|---|---|
+| **T01 — refusal is now reachable** | In manual test 1's third encounter, fear climbed to 100 and the Echo refused for 27 consecutive rounds. **Not a softlock in that case** — the enemies still dealt 1 to 2 damage, so the fight terminates on Echo death; slow, not stuck. **Not caused by this story** — all three near-death triggers in the log fired on the enemy. The owner's assessment: our changes did not cause the fear rise but may make refusal more reachable, which is acceptable. Two observations for whoever takes it: fear has no in-combat recovery term except outnumber relief, which cannot fire while the party is outnumbered; and a refusing Echo deals no damage. | **A fear-economy tuning pass. No story was named**, and none is invented here. This is a tuning question, not a defect. |
+| **The `actor.idle` label on a moving actor** | In every run the Echo advances two cells per round while the recorded `action_type` reads `actor.idle`. Identical on `main`. Most of what read as twelve idle rounds is twelve rounds of approach across a long board. **Confusing, not broken.** Renaming it would move fingerprints for no gameplay gain. | None. Recorded so the next reader is not misled by the log. |
+| **Movement-option starvation on long boards** | The real freeze behind manual test 2's symptom A. For the frozen Echo the movement layer reports `goals=1, options=0`, and with zero options the arbiter ranks only stationary candidates, so its unconditional `actor.idle` wins. `core/movement/LiveMovementContextService.gd:191-199` gates the movement-aware layer on **goals, not options**, and relies on the arbiter's stationary fallback. Safe on a 10x10 board. On a long board an actor whose goal region is not routable within its 2-cell capacity gets no option — and because it does not move, it never gains one. **The stall sustains itself**, and `Echo helplessness — morale decay` then fires every round. Three checks confirmed clean: pass 8's leadership traits are inert here, the pass 2 directive default moves nothing, and the ANSWERS #48 move-then-attack fix is still effective. | **V2-COMBAT-003** (Ready). Per the owner's 2026-08-29 decision, a movement-related cause is filed to the next movement story; this story's job was to report the mechanism precisely. |
+| **Escort paired with an immobile spirit — about one guide-spirit encounter in four is unwinnable** | `EncounterObjectiveSpawnService.gd:411-427` builds the spirit as a `StructureActor` whenever the joins-battle coin flip loses, and that `else` branch covers **protect and escort**. The mode roll and the joins roll are two independent 50/50 draws, so escort-plus-structure occurs about **25%** of the time. `MovementExecutor.gd:282` then skips it, because it carries `is_structure`. **No player action can complete that objective. Only the timer ends it.** D80 and D92 are not involved: the destination was real, and the D92 guard only tightens the win latch. The fix belongs at the decision point, keeping the draw-then-override shape. | **V2-COMBAT-004** (Ready). |
+| **The zero-damage floor** | `core/combat/CombatService.gd:126` returns `max(0, base + morale_bonus - fear_penalty)`. Damage floors at **0**, not 1. A guarding defender doubles `def`; a high-fear attacker loses up to 5. The formula is unchanged from `main`. | **V2-COMBAT-004** (Ready). |
+| **The absent round cap** | There is **no `max_rounds` anywhere.** COMBAT mode requires a kill. Together with the zero-damage floor, a fight in which every swing lands 0 and both sides refuse or guard runs for ever. **This is the case the manual-test-1 ruling did not cover**, and that ruling was correct for its own case. | **V2-COMBAT-004** (Ready). |
+| **The combat controller is not built** | Decision, 2026-08-24. The ownership stop condition was already met — all 73 actions have exactly one owner, and the six combat actions are `FlowRuntime`-owned deliberately, not provisionally. **Three blockers, all measured:** `_resolve_next_actor` transitions to the keeper rewind mid-body and returns bare, so no outcome can carry it; it calls `_end_round`, so a controller must take both functions or neither; and `_actor_cfg_merged_cache` is a per-`FlowRuntime` memo, so a per-call controller would rebuild it about 240 times per encounter — a `static var` was rejected as a silent cross-campaign determinism fault. Cost if built later: about 250 lines, of which the actual control-flow change is about **ten**. The extraction already did the expensive part. **Reason for stopping:** the remaining change sits in the least-guarded code in the combat path — the `last_actor_action` stamping block has no production test. **Also corrected on that story's page:** its own 2026-08-11 audit addendum told its implementer to wire `ProtectCustodyService` "through the extracted encounter/combat controller from V2-INFRA-003". That controller does not exist. The correct target is `core/combat/CombatRoundObjectiveService.gd`, which already owns PROTECT theft, carrier tracking and proximity. The addendum's real intent is satisfied either way. | **V2-COMBAT-004** (Ready), already carrying all three measured blockers. Recorded as **D69** in Part A. |
+| **One real behaviour difference between the trees, explained and not chased** | In a plain-combat sample an enemy at 4 HP chose `actor.guard` on the branch and `melee_attack` on `main`. Not either symptom. The suspect is the near-death morale and fear hook from `39cfbaf` — connect case 1, which the owner approved, and which by design changes behaviour at low health. **Behaving differently at 4 HP is what that change is for.** Recorded, not bisected. | None. Expected consequence of an approved change. |
+
+## Coverage truths this story established
+
+These are not defects. They are facts about what the test suite can and cannot see, and they change
+how much weight a green suite carries.
+
+1. **Leadership is invisible to every test.** No recorded scenario contains a Whole-band Echo, so
+   **no leadership trait activates in any fixture.** `leadership_trait_pool._comment` says the traits
+   activate at the Whole band, `band_by_standing` puts Whole at rank 4, and `EchoFactory` mints every
+   Echo at rank 1. This is a pre-existing property of the fixtures. It is why implementing eleven
+   traits (D02) moved no fingerprint and no baseline, and it means the eleven traits that were
+   **already** live are equally dormant in the recorded scenarios. **Until a Whole-band baseline
+   scenario exists, every leadership claim rests on probes rather than on pinned values.**
+2. **Three player-visible repairs landed with no test able to tell whether they worked.** D07, D37,
+   D38 and D40 were each predicted to move a baseline. The suite was green with zero re-records, and
+   the reason is not that the fixes were inert — the changed behaviour is **outside recorded cover**.
+   File this as a real gap, not a clean bill of health.
+3. **Six of pass 6's nine fixes are unreachable in play**, and each says so plainly rather than
+   claiming the green suite as evidence: D09 needs a nearly full board, D12's changed branch is not
+   exercised because the shipped path ends PURIFY_SHRINE on the round the shrine dies, D16 and D17
+   are unreachable today, D80 is reachable only through a dev toggle, and D15, D28, D29 and D43
+   changed no behaviour at all.
+
+## Design questions raised and left open
+
+Recorded so they are not lost. None is a defect.
+
+| Question | Where it came from |
+|---|---|
+| `combat_divergence` was tier 2 in the deleted UI bark table and is absent from `data.voice.bark_tiers`, so it now ranks 3. Adding it is a one-line config edit that the D03 slice was forbidden to make. | Connect case 3 |
+| **The board has no line-of-sight system.** "Cover" is read off the only physical obstruction the movement layer knows: an in-bounds non-walkable cell on the straight line to the nearest perceived hostile. If real line of sight or destructible cover arrives, that helper is the one place to change. | Pass 8 |
+| **`mark_target` and `aggression_field` are the same effect at different magnitudes** (10 and 8), differing only in calling pool. Their key names suggest a distinction the action vocabulary cannot express, because there is only one attack action type. | Pass 8 |
+| **`challenge_call`'s `taunt_attack_bonus` is 25.0, exactly the hardcoded taunt pull already in `_score()`.** It was implemented as the `actor.taunt` score bonus, not as a second copy of that constant. If the intent was the other reading, it needs changing. | Pass 8 |
+| Whether a one-battle companion should count toward the `tikoro_nko_agyina` vow gate, given that `party_size` still counts `is_ally`. | Pass 5 |
+
+## Smaller items raised during the fix passes and deliberately not fixed
+
+Each is recorded at its site as well as here.
+
+- `_spirit_killed_barked` and `_spirit_greeted` (`CombatRoundGuideSpiritService.gd:195,204`) are the
+  same undeclared-latch shape as D56. Out of pass scope.
+- `data.actor.structures` has no `guide_spirit` entry, so the non-joining spirit falls back to an
+  inline literal at `EncounterObjectiveSpawnService.gd:419-423`. The unreachable-config shape again.
+- The shrine morale drain filters on `faction == "echo"` only, so it drains allies and a joined
+  spirit as well as real Echoes.
+- Four files still use `round` as a parameter name, shadowing the built-in (D55 fixed two).
+- `tests/KODeathTests.gd:47-48` comments its assertion as a tick. It passes because that fixture
+  supplies no round and hits the fallback. The comment misleads; the assertion is correct.
+- `core/save/SaveSchema.gd:34-35` was corrected in pass 10, but several test fixtures still write
+  `"flow": {"state": ..., "context": {}}`. Those keys are now ignored. Cleaning them is churn.
+- The combat-end dispatch's `save_request_reason` now also accumulates `bond.combat_triggers`, and
+  `bond.rival_incidents` when a rival pair is seeded. **No test pins those two dispatches' reason
+  strings.**
+- `contribute_segment` requests no save of its own and relies on the surrounding dispatch flushing
+  for another reason. True before and after pass 9.
+- `data.voice.reactive_min_expression_band` ("forming") has zero readers;
+  `ActorStateMachine._check_reactive_bark` hardcodes the equivalent gate as `nascent`.
+
+## One hazard that governs any future fix here
+
+**The retreat roll is genuinely tick-bound.** Same encounter, same 50 percent: ticks 7 and 8 succeed,
+9 and 10 fail. **Any change to the dispatch count re-rolls every retreat in the game.** Check the
+dispatch count before and after any change to this code.
+
+## Backlog source of truth
+
+**Notion is current. The CSV export is stale.** Notion marks seven stories Done that the CSV still
+shows as Ready or Draft: V2-SANCTUM-001, both V2-SANCTUM-002 rows, V2-STAGE-003 (Order 236), both
+V2-STAGE-004 rows, V2-BOND-002 and V2-VOW-002. Notion has no "Closed" status; the open set is Draft,
+Ready, In Progress and Blocked. **Read Notion, not the CSV.**
+
+**The twin rule.** The database holds duplicate story codes. When one twin is Done, the other twin is
+not used. This decided D62's ownership and it is why D95 and D96 could not be filed on their natural
+owner.
+
+---
+
+# Part C — Deferred work, by owning story
+
+Every item below has a named owner and, where a Notion filing was made, a written handoff on that
+story's page. **A defect filed only in this repository dies with this branch.**
+
+## V2-INFRA-007 — contact resolution consequence parity (Ready, Order 262.5)
+
+New story, created 2026-08-28 after thirteen open stories were checked and each rejected with a
+reason. Depends on V2-INFRA-003. Page: `https://app.notion.com/p/3cac3d1ede9281f58864c9d15a954952`.
+Four properties were left empty rather than guessed: Priority, Spec State, Source GDD, Legacy Source.
+
+| Item | What it owns |
+|---|---|
+| **D62**, cross-listed as **D06** | Contact resolution runs none of the six post-encounter steps: ally teardown, emotion drift, bond triggers, sanctum emotion tick, vow discovery, vow release. A whole social path is inert relative to combat. |
+
+## V2-COMBAT-003 (Ready)
+
+| Item | What it owns |
+|---|---|
+| **D57** | Movement adapter criterion 5 orders cells by lexicographic `"col,row"`. Unblocked by D27. |
+| **D64** | The 28-function live movement family, moved verbatim by this story. |
+| **D65** | The guide-spirit mover, moved verbatim. |
+| **D97** | Enemies share the Echo emotional model and always refuse eventually. |
+| **Movement-option starvation on long boards** | The self-sustaining stall from manual test 2, symptom A. See Part B for the mechanism, the file and the line. |
+
+## V2-COMBAT-004 (Ready)
+
+| Item | What it owns |
+|---|---|
+| **D69** — the combat controller decision | Already carrying **all three measured blockers** on the story page. |
+| **The GUIDE_SPIRIT escort and structure pairing** | About one guide-spirit encounter in four is unwinnable by construction. |
+| **The zero damage floor** | `CombatService.gd:126` floors damage at 0, not 1. |
+| **The absent round cap** | No `max_rounds` exists anywhere. With the damage floor, a fight can have no reachable end condition. |
+
+## V2-ECONOMY-004 (Ready)
+
+| Item | Filed | Note |
+|---|---|---|
+| **D66** | 2026-08-25 | Reward resolution reads `obj_type` where objectives store `type`. |
+| **D83** | 2026-08-25 | `ekwan_shrine_multiplier` has never applied — the same root cause, second site. **Fix both with D66 in one change and re-record once.** |
+| **D93** | 2026-08-29 | Thread count ignores Realm size. The prologue is pinned to one Thread as a stopgap; the formula is untouched. |
+| **D95** | 2026-08-29 | **Placement of convenience.** See below. |
+| **D96** | 2026-08-29 | **Placement of convenience.** See below. |
+
+**D95 and D96 are filed here for want of a better page, and that must not be forgotten.** Their
+natural owner is **realm generation, V2-STAGE-002** — both are `RealmGenerator` defects and neither
+is about reward vocabulary. V2-STAGE-002's only open row is blocked by a Done twin, and under the
+twin rule that row is not used, so there was no correct page to file them on. They are recorded on
+V2-ECONOMY-004 so they have a real owner rather than none. **Whoever next touches objective
+generation should take them back.**
+
+## V2-SANCTUM-004 (Order 340, Ready)
+
+| Item | Filed | Note |
+|---|---|---|
+| **D61** | 2026-08-28 | The institution passive-accrual asymmetry. Page: `https://app.notion.com/p/339c3d1ede92810ebcb4c71776d816a5`. **The filing added a scope line** for authoring the first institutions' passive values and their upkeep — that item sat with V2-SANCTUM-002, which Notion now marks Done, so it was otherwise orphaned. The strain warning surface stays with V2-SANCTUM-005. No property on the page was changed; its Superseded twin at Order 239 was not touched. |
+
+## V2-ECONOMY-002
+
+| Item | Note |
+|---|---|
+| **The awakening Ase grant** | Deferred from **D87**. `data.economy.awakening_ase_grant: 40` stays unreachable and the modal no longer claims it. **D89's recorded divergence from GDD §20.7 depends on this** — do not restore the GDD ordering before the grant ships. |
+
+## Carried with no owning story
+
+**These two are the honest gap in this ledger.** Both are real, both were left open, and the
+post-manual-test triage filed them under "owned by another story" without naming one. No Notion
+filing exists for either.
+
+| Item | Why it has no owner |
+|---|---|
+| **D59** — `encounter.advance` has no phase guard; `encounter.complete` transitions from any state | Grouped with "owned by another story" in the 2026-08-28 triage, but no story was named and none was filed. Verified still open at `e8c89f4`. |
+| **D60** — the flow machine never transitions to RESOLVE at the end of combat | Same. Phase 8B added RESOLVE transitions on three other paths but not the combat-end path. Architecturally adjacent to D69, which went to V2-COMBAT-004, but it was never filed there and is not assigned here on a guess. |
+| **T01 — the fear-economy tuning question** | The owner assigned it to "a fear-economy tuning pass, not V2-INFRA-003". No story exists for that pass. Related work is already recorded in project memory (the August fear pass, peak fear 4 to 46), and **D97 is the same subject seen from the enemy side**. |
+| **D71, D72, D74, D75** — four open coverage gaps | Test gaps, not defects. No story owns test coverage. See Part A for each one's verified status. |
+
+
+---
+
+# Part D — The original register, preserved
+
+**Historical record. Read for evidence, not for instructions.**
+
+Everything below is the working document as it stood when the story finished, kept whole: the
+product owner's dated decision blocks, the five defect kinds, the per-phase addenda, the
+pre-playtest and post-manual-test triages, and the fix-pass outcome tables. The reasoning here is
+why the outcomes in Part A are what they are.
+
+Two warnings for a later reader:
+
+1. **The standing instructions in this part are spent.** The slice rule ("when your work brings you
+   to the location of a listed defect...") was scoped to this story, and its companion rule has been
+   removed from `AGENTS.md` (commit `e8c89f4`). Do not follow it.
+2. **Where two statements below conflict, the later dated one wins**, and Part A states which. Some
+   rows describe an entry as open that a later block closes.
+
+---
+
+## The register as compiled — V2-INFRA-003 Defect Register
 
 Compiled 2026-08-23 from service/controller headers, in-code `KNOWN DEFECT` /
 `CHARACTERIZATION` labels, `docs/v2-infra-003-handoff.md`, `docs/resolve-snapshot-block-spec.md`,
