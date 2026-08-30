@@ -72,7 +72,7 @@
 # suppress_refresh's two existing users). So this slice adds a third outcome shape:
 #   - FlowActionOutcome.requires_reenter: bool (new field, default false)
 #   - FlowActionOutcome.reenter_outcome() -> FlowActionOutcome (new convenience constructor,
-#     handled=true, requires_reenter=true)
+#     requires_reenter=true)
 #   - FlowRuntime._apply_action_outcome() gains a requires_reenter branch, checked BEFORE
 #     has_replacement_snapshot (mutually exclusive — reenter() already assigns
 #     flow_ctx.last_snapshot, so a controller returning requires_reenter never also sets

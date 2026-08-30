@@ -2,17 +2,17 @@
 # V2-INFRA-003 Phase 2 Part A: typed result handed back by a controller's action handler.
 #
 # This is a plain data carrier — no behavior, no side effects. It exists so that, in a
-# later phase (Part B), per-action handlers can report "what happened" (was the action
-# handled, should the flow transition, is there a replacement snapshot, what save reasons
-# were requested, did it fail) as one typed value instead of mutating FlowContext directly
-# and returning void. Not wired into dispatch() yet — this file only defines the shape.
+# later phase (Part B), per-action handlers can report "what happened" (should the flow
+# transition, is there a replacement snapshot, what save reasons were requested, did it
+# fail) as one typed value instead of mutating FlowContext directly and returning void.
+#
+# There is no `handled` flag. One was defined and written by every constructor, but no
+# caller ever read it, and the doc claimed a fall-through behaviour that did not exist.
+# Removed after the PR #61 review. A handler that does not recognise an action does not
+# return an outcome at all.
 
 class_name FlowActionOutcome
 extends RefCounted
-
-## True if a handler recognized and processed the action. False (the default) signals
-## "unhandled" — callers should fall through to existing behavior (e.g. the `_:` no-op case).
-var handled: bool = false
 
 ## Non-empty when the outcome should trigger a flow state transition. Holds a FlowStateIds
 ## constant value (a state ID string), matching the `to` field used elsewhere in actions.
@@ -71,14 +71,12 @@ var error_code: String = ""
 ## Convenience constructor for the common "handled, no transition, no save" case.
 static func handled_outcome() -> FlowActionOutcome:
 	var outcome := FlowActionOutcome.new()
-	outcome.handled = true
 	return outcome
 
 
 ## Convenience constructor for a handled outcome that also requests a state transition.
 static func transition_outcome(to_state: String, reason: String = "") -> FlowActionOutcome:
 	var outcome := FlowActionOutcome.new()
-	outcome.handled = true
 	outcome.transition_to = to_state
 	outcome.transition_reason = reason
 	return outcome
@@ -87,7 +85,6 @@ static func transition_outcome(to_state: String, reason: String = "") -> FlowAct
 ## Convenience constructor for a handled outcome that supplies a ready-made snapshot.
 static func snapshot_outcome(snapshot: Dictionary) -> FlowActionOutcome:
 	var outcome := FlowActionOutcome.new()
-	outcome.handled = true
 	outcome.replacement_snapshot = snapshot
 	outcome.has_replacement_snapshot = true
 	return outcome
@@ -97,7 +94,6 @@ static func snapshot_outcome(snapshot: Dictionary) -> FlowActionOutcome:
 ## snapshot WITHOUT refreshing afterward. See suppress_refresh above for why this exists.
 static func snapshot_outcome_no_refresh(snapshot: Dictionary) -> FlowActionOutcome:
 	var outcome := FlowActionOutcome.new()
-	outcome.handled = true
 	outcome.replacement_snapshot = snapshot
 	outcome.has_replacement_snapshot = true
 	outcome.suppress_refresh = true
@@ -108,7 +104,6 @@ static func snapshot_outcome_no_refresh(snapshot: Dictionary) -> FlowActionOutco
 ## pairing instead of a directly supplied replacement snapshot. See requires_reenter above.
 static func reenter_outcome() -> FlowActionOutcome:
 	var outcome := FlowActionOutcome.new()
-	outcome.handled = true
 	outcome.requires_reenter = true
 	return outcome
 
@@ -117,7 +112,6 @@ static func reenter_outcome() -> FlowActionOutcome:
 ## flow_machine.refresh_snapshot() — no replacement snapshot. See requires_refresh above.
 static func refresh_outcome() -> FlowActionOutcome:
 	var outcome := FlowActionOutcome.new()
-	outcome.handled = true
 	outcome.requires_refresh = true
 	return outcome
 
@@ -125,7 +119,6 @@ static func refresh_outcome() -> FlowActionOutcome:
 ## Convenience constructor for a handled outcome that failed with a specific error code.
 static func error_outcome(code: String) -> FlowActionOutcome:
 	var outcome := FlowActionOutcome.new()
-	outcome.handled = true
 	outcome.error_code = code
 	return outcome
 

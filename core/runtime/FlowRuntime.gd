@@ -1102,7 +1102,7 @@ func _onboarding_controller() -> OnboardingController:
 ## reasons) but never act on it themselves — this is the only place that assigns
 ## flow_ctx.last_snapshot from a controller, calls flow_machine.transition()/
 ## refresh_snapshot() on a controller's behalf, or turns a controller's save_reasons into an
-## actual flow_ctx.request_save() call. error_code/handled are available on the outcome for
+## actual flow_ctx.request_save() call. error_code is available on the outcome for
 ## future controllers; this slice's 6 weave actions never set error_code.
 func _apply_action_outcome(outcome: FlowActionOutcome, t: int) -> void:
 	if outcome == null:
