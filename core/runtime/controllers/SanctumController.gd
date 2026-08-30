@@ -398,20 +398,10 @@ func handle_party_toggle(action: Dictionary, t: int) -> FlowActionOutcome:
 		return FlowActionOutcome.snapshot_outcome(FlowEchoPartyState.build_snapshot(flow_ctx, t)).with_save_reason("sanctum.party.autosave")
 
 
-## Moved verbatim from FlowRuntime._get_party_max_size. Only caller is handle_party_toggle above.
+## PR #61 review: the longhand body moved to ConfigService.get_party_max_size, which
+## FlowEchoPartyState now shares. Only caller is handle_party_toggle above.
 func _get_party_max_size() -> int:
-	var max_party_size := 5
-	if config_service == null:
-		return max_party_size
-
-	var balance: Dictionary = config_service.get_balance()
-	var data_v: Variant = balance.get("data", {})
-	var data: Dictionary = data_v if data_v is Dictionary else {}
-
-	var s_v: Variant = data.get("sanctum", {})
-	var s_cfg: Dictionary = s_v if s_v is Dictionary else {}
-
-	return int(s_cfg.get("party_max_size", 5))
+	return ConfigService.get_party_max_size(config_service)
 
 
 ## sanctum.name.reroll — DEAD but OWNED (see file header). Moved verbatim from dispatch()'s

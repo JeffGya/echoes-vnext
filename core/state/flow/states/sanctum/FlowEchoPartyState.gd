@@ -161,15 +161,8 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 
 
 static func _read_max_party_size(flow_ctx: FlowContext) -> int:
-	var max_party_size := 5
-	if flow_ctx.config_service == null:
-		return max_party_size
-	var balance: Dictionary = flow_ctx.config_service.get_balance()
-	var data_v: Variant = balance.get("data", {})
-	var data: Dictionary = data_v if data_v is Dictionary else {}
-	var sanctum_v: Variant = data.get("sanctum", {})
-	var sanctum_cfg: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
-	return int(sanctum_cfg.get("party_max_size", max_party_size))
+	# PR #61 review: shared with SanctumController through ConfigService.get_party_max_size.
+	return ConfigService.get_party_max_size(flow_ctx.config_service)
 
 
 static func _read_active_party_ids(flow_ctx: FlowContext) -> Array:

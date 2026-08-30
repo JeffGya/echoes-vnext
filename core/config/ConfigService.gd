@@ -125,6 +125,21 @@ static func get_bond_thresholds_cfg(config_service: ConfigService) -> Dictionary
 	return thresholds_v if thresholds_v is Dictionary else {}
 
 
+## data.sanctum.party_max_size — the party slot cap.
+## PR #61 review: this was read longhand at two sites with identical guards and the same
+## default of 5 — SanctumController._get_party_max_size and
+## FlowEchoPartyState._read_max_party_size. Same shape as D30 and D31. One owner now.
+static func get_party_max_size(config_service: ConfigService, fallback: int = 5) -> int:
+	if config_service == null:
+		return fallback
+	var balance: Dictionary = config_service.get_balance()
+	var data_v: Variant = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var sanctum_v: Variant = data.get("sanctum", {})
+	var sanctum_cfg: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	return int(sanctum_cfg.get("party_max_size", fallback))
+
+
 ## data.maturity_expression.band_by_standing — feeds
 ## MaturityExpressionService.get_expression_band()/get_expression_band_for_echo().
 static func get_maturity_expression_band_by_standing(config_service: ConfigService) -> Dictionary:
