@@ -30,6 +30,15 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("prog/mid_combat_kill_xp_updates_xp_total",       Callable(ProgressionTests, "_test_mid_combat_kill_xp_total"))
 	runner.register_test("prog/mid_combat_level_up_updates_actor_stats",   Callable(ProgressionTests, "_test_mid_combat_level_up_stats"))
 	runner.register_test("prog/kill_xp_skipped_in_post_combat",            Callable(ProgressionTests, "_test_skip_kill_xp_flag"))
+	# V2-INFRA-003 Slice 6F — direct unit tests for ProgressionService.get_realm_xp_multiplier:
+	runner.register_test("prog/realm_mult_run_index_zero_is_identity",     Callable(ProgressionTests, "_test_realm_mult_run_index_zero_is_identity"))
+	runner.register_test("prog/realm_mult_scales_with_run_index",          Callable(ProgressionTests, "_test_realm_mult_scales_with_run_index"))
+	runner.register_test("prog/realm_mult_lookup_guards",                  Callable(ProgressionTests, "_test_realm_mult_lookup_guards"))
+	runner.register_test("prog/realm_mult_nonpositive_rate_is_identity",   Callable(ProgressionTests, "_test_realm_mult_nonpositive_rate_is_identity"))
+	# V2-INFRA-003 D04 — mid-combat level-up syncs the stat block combat actually reads:
+	runner.register_test("prog/mid_combat_level_up_partial_heal_boundary", Callable(ProgressionTests, "_test_mid_combat_level_up_partial_heal_boundary"))
+	runner.register_test("prog/mid_combat_level_up_heal_clamps_at_max",    Callable(ProgressionTests, "_test_mid_combat_level_up_heal_clamps_at_max"))
+	runner.register_test("prog/mid_combat_level_up_stats_reach_combat",    Callable(ProgressionTests, "_test_mid_combat_level_up_stats_reach_combat"))
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -480,22 +489,132 @@ static func _test_mid_combat_kill_xp_total() -> Dictionary:
 
 
 ## 19. When kill XP crosses a level threshold, live actor stats are updated immediately.
+## The stat block combat actually reads is actor["stats"] (CombatService._melee_damage), so
+## that is where the assertion sits.
 static func _test_mid_combat_level_up_stats() -> Dictionary:
 	var cfg  := _xp_tuning_cfg()
 	# Put echo just below the level-2 threshold (100 XP).
 	var echo := _make_echo("e1", 90, 1)
-	var actor: Dictionary = echo.duplicate()
-	actor["current_hp"] = int(echo["stats"]["max_hp"])
-	var old_atk: int = int(actor.get("atk", 0))
+	var actor: Dictionary = _live_actor_from(echo, _stub_birth_stats(), 1)
+	var old_atk: int = int((actor["stats"] as Dictionary).get("atk", 0))
 
 	# kill_xp=25 → 90+25=115 > 100 → should level up to 2.
 	ProgressionService.apply_mid_combat_kill_xp(echo, actor, cfg, _stub_birth_stats(), 1.0, null, 0)
 
 	if int(echo.get("level", 0)) != 2:
 		return { "ok": false, "error": "Expected level=2 after level-up, got %d" % int(echo.get("level", 0)) }
-	var new_atk: int = int(actor.get("atk", 0))
+	var new_atk: int = int((actor["stats"] as Dictionary).get("atk", 0))
 	if new_atk <= old_atk:
-		return { "ok": false, "error": "Expected atk to increase after level-up, old=%d new=%d" % [old_atk, new_atk] }
+		return { "ok": false, "error": "Expected actor.stats.atk to increase after level-up, old=%d new=%d" % [old_atk, new_atk] }
+	return { "ok": true }
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Mid-combat level-up sync (V2-INFRA-003 D04)
+#
+# A live combat actor keeps its stats under actor["stats"]; only `speed` is also mirrored
+# at the top level. There is no top-level max_hp. These tests pin the three properties that
+# follow: the heal is exactly the max_hp increase (clamped at the new maximum), all seven
+# granted stats land in actor["stats"], and the speed mirror stays in sync.
+# ────────────────────────────────────────────────────────────────────────────
+
+## Builds the live-actor shape EchoActor.build produces for combat: derived stats under
+## "stats", speed mirrored top-level, current_hp top-level. No top-level max_hp — that is
+## the field D04 wrongly assumed existed.
+static func _live_actor_from(echo: Dictionary, birth_cfg: Dictionary, level: int) -> Dictionary:
+	var stats: Dictionary = DerivedStatService.compute_stats(
+		echo.get("traits", {}), int(echo.get("rank", 1)), level, birth_cfg)
+	return {
+		"id":         str(echo.get("id", "")),
+		"faction":    "echo",
+		"stats":      stats.duplicate(true),
+		"speed":      int(stats.get("speed", 5)),
+		"current_hp": int(stats.get("max_hp", 1)),
+	}
+
+
+## Birth-stats variant that grows every one of the seven stats by one point per level, so a
+## single level-up exercises all seven sync targets. The shipped balance.json only gives
+## max_hp, atk and int a non-zero per_level term.
+static func _birth_stats_all_grow() -> Dictionary:
+	var cfg := _stub_birth_stats()
+	cfg["hp_per_level"]    = 5.0
+	cfg["atk_per_level"]   = 1.0
+	cfg["def_per_level"]   = 1.0
+	cfg["agi_per_level"]   = 1.0
+	cfg["int_per_level"]   = 1.0
+	cfg["cha_per_level"]   = 1.0
+	cfg["speed_per_level"] = 1.0
+	return cfg
+
+
+## 25. D04-A — the heal is the max_hp INCREASE, not a restore to full.
+## Boundary: a wounded actor at a third of its health must end at wounded + gain exactly.
+static func _test_mid_combat_level_up_partial_heal_boundary() -> Dictionary:
+	var cfg   := _xp_tuning_cfg()
+	var birth := _stub_birth_stats()
+	var echo  := _make_echo("e1", 90, 1)
+	var l1: Dictionary = DerivedStatService.compute_stats(echo["traits"], 1, 1, birth)
+	var l2: Dictionary = DerivedStatService.compute_stats(echo["traits"], 1, 2, birth)
+	var gain: int = int(l2["max_hp"]) - int(l1["max_hp"])
+	if gain <= 0:
+		return { "ok": false, "error": "fixture invalid: level-2 max_hp must exceed level-1, got +%d" % gain }
+
+	var actor: Dictionary = _live_actor_from(echo, birth, 1)
+	var wounded: int = int(l1["max_hp"]) / 3
+	actor["current_hp"] = wounded
+
+	ProgressionService.apply_mid_combat_kill_xp(echo, actor, cfg, birth, 1.0, null, 0)
+
+	var got: int = int(actor.get("current_hp", -1))
+	if got != wounded + gain:
+		return { "ok": false, "error": "partial heal: expected current_hp=%d (wounded %d + max_hp gain %d), got %d" % [wounded + gain, wounded, gain, got] }
+	if got >= int(l2["max_hp"]):
+		return { "ok": false, "error": "level-up healed to full: current_hp=%d, new max_hp=%d" % [got, int(l2["max_hp"])] }
+	return { "ok": true }
+
+
+## 26. D04-A — the partial heal still clamps at the new maximum.
+static func _test_mid_combat_level_up_heal_clamps_at_max() -> Dictionary:
+	var cfg   := _xp_tuning_cfg()
+	var birth := _stub_birth_stats()
+	var echo  := _make_echo("e1", 90, 1)
+	var l2: Dictionary = DerivedStatService.compute_stats(echo["traits"], 1, 2, birth)
+
+	var actor: Dictionary = _live_actor_from(echo, birth, 1)   # current_hp = level-1 max
+	ProgressionService.apply_mid_combat_kill_xp(echo, actor, cfg, birth, 1.0, null, 0)
+
+	if int(actor.get("current_hp", -1)) != int(l2["max_hp"]):
+		return { "ok": false, "error": "an unwounded actor should reach exactly the new max %d, got %d" % [int(l2["max_hp"]), int(actor.get("current_hp", -1))] }
+	return { "ok": true }
+
+
+## 27. D04-B — all seven granted stats land in actor["stats"], the block combat reads.
+static func _test_mid_combat_level_up_stats_reach_combat() -> Dictionary:
+	var cfg   := _xp_tuning_cfg()
+	var birth := _birth_stats_all_grow()
+	var echo  := _make_echo("e1", 90, 1)
+	var l1: Dictionary = DerivedStatService.compute_stats(echo["traits"], 1, 1, birth)
+	var l2: Dictionary = DerivedStatService.compute_stats(echo["traits"], 1, 2, birth)
+
+	var actor: Dictionary = _live_actor_from(echo, birth, 1)
+
+	ProgressionService.apply_mid_combat_kill_xp(echo, actor, cfg, birth, 1.0, null, 0)
+
+	var a_stats: Dictionary = actor.get("stats", {})
+	for k in ["atk", "def", "agi", "int", "cha", "speed", "max_hp"]:
+		if int(l2[k]) <= int(l1[k]):
+			return { "ok": false, "error": "fixture invalid: %s does not grow on level-up (%d → %d)" % [k, int(l1[k]), int(l2[k])] }
+		if int(a_stats.get(k, -1)) != int(l2[k]):
+			return { "ok": false, "error": "actor.stats.%s must be the level-2 value %d — combat reads actor[\"stats\"] — got %d" % [k, int(l2[k]), int(a_stats.get(k, -1))] }
+
+	# speed is the one stat combat reads flat; EchoActor.build mirrors it, so the sync must too.
+	if int(actor.get("speed", -1)) != int(l2["speed"]):
+		return { "ok": false, "error": "top-level speed mirror must be %d, got %d" % [int(l2["speed"]), int(actor.get("speed", -1))] }
+
+	# The actor must stay isolated from the save roster entry (actor dicts are deep copies).
+	if is_same(a_stats, echo.get("stats", {})):
+		return { "ok": false, "error": "actor.stats must not alias echo.stats — combat mutations would bleed into save data" }
 	return { "ok": true }
 
 
@@ -522,4 +641,123 @@ static func _test_skip_kill_xp_flag() -> Dictionary:
 
 	if xp_with - xp_without != kill_xp_expected:
 		return { "ok": false, "error": "Expected diff=%d (kill XP), got xp_with=%d xp_without=%d" % [kill_xp_expected, xp_with, xp_without] }
+	return { "ok": true }
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# V2-INFRA-003 Phase 6 Slice 6F: direct unit tests for the DEMOTED static
+# ProgressionService.get_realm_xp_multiplier(realm_id, save_data, prog_cfg).
+#
+# Why these exist: test 17 above (realm_multiplier_scales_stage_xp) computes the
+# multiplier itself and feeds the result in — it never calls the function. And no
+# end-to-end fixture can reach a non-zero run_index, because RealmService writes
+# the new realm model into save_data["realms"] only AFTER _count_started_realms()
+# has already read that dict, so the first realm of a campaign is always
+# run_index = 0 → multiplier 1.0. Without these tests a wrong realm_id argument
+# or a wrong config subtree is invisible to the whole suite.
+# ────────────────────────────────────────────────────────────────────────────
+
+## Minimal save_data shaped like the real one: only the `realms` subtree is read.
+static func _realm_save(realm_id: String, run_index: int) -> Dictionary:
+	return { "realms": { realm_id: { "run_index": run_index, "status": "in_progress" } } }
+
+
+## 21. run_index = 0 must return EXACTLY 1.0 (identity — no XP inflation on realm 1).
+static func _test_realm_mult_run_index_zero_is_identity() -> Dictionary:
+	var cfg := _xp_tuning_cfg()
+	var save := _realm_save("realm_courage", 0)
+	var mult: float = ProgressionService.get_realm_xp_multiplier("realm_courage", save, cfg)
+	if not is_equal_approx(mult, 1.0):
+		return { "ok": false, "error": "run_index=0 must give exactly 1.0, got %.6f (rate=%.4f)" % [mult, float(cfg.get("realm_xp_multiplier_per_realm", 0.0))] }
+	return { "ok": true }
+
+
+## 22. Non-zero run_index scales linearly at the configured rate.
+## Fixture rate is 0.15 — the value shipped in data/balance.json
+## (data.progression.realm_xp_multiplier_per_realm). Expected values are asserted as
+## literals so a broken formula cannot satisfy the test tautologically; the rate is
+## re-asserted first so a config retune fails loudly here instead of silently passing.
+static func _test_realm_mult_scales_with_run_index() -> Dictionary:
+	var cfg := _xp_tuning_cfg()
+	var rate: float = float(cfg.get("realm_xp_multiplier_per_realm", 0.0))
+	if not is_equal_approx(rate, 0.15):
+		return { "ok": false, "error": "Fixture rate drifted: expected 0.15, got %.4f — update the expected multipliers below with it" % rate }
+
+	# run_index → expected multiplier at rate 0.15
+	var cases: Array = [[1, 1.15], [2, 1.30], [3, 1.45], [10, 2.50]]
+	for c in cases:
+		var idx: int = int(c[0])
+		var expected: float = float(c[1])
+		var save := _realm_save("realm_wisdom", idx)
+		var mult: float = ProgressionService.get_realm_xp_multiplier("realm_wisdom", save, cfg)
+		if not is_equal_approx(mult, expected):
+			return { "ok": false, "error": "run_index=%d at rate %.2f: expected %.4f, got %.4f" % [idx, rate, expected, mult] }
+
+	# Step between consecutive run_index values must equal the rate exactly.
+	var m1: float = ProgressionService.get_realm_xp_multiplier("realm_wisdom", _realm_save("realm_wisdom", 1), cfg)
+	var m2: float = ProgressionService.get_realm_xp_multiplier("realm_wisdom", _realm_save("realm_wisdom", 2), cfg)
+	if not is_equal_approx(m2 - m1, rate):
+		return { "ok": false, "error": "Step per realm must equal rate %.4f, got %.4f (m1=%.4f m2=%.4f)" % [rate, m2 - m1, m1, m2] }
+	return { "ok": true }
+
+
+## 23. Every lookup guard falls back to 1.0: empty realm_id, unknown realm_id, a
+## non-Dictionary `realms` container, a non-Dictionary realm entry, a missing
+## `realms` key, and an entry with no `run_index` field.
+static func _test_realm_mult_lookup_guards() -> Dictionary:
+	var cfg := _xp_tuning_cfg()
+	var populated := _realm_save("realm_courage", 4)   # would give 1.60 if reached
+
+	var cases: Array = [
+		["empty realm_id",            "",               populated],
+		["unknown realm_id",          "realm_missing",  populated],
+		["realms is not a Dictionary", "realm_courage", { "realms": [] }],
+		["realm entry is not a Dictionary", "realm_courage", { "realms": { "realm_courage": 7 } }],
+		["realms key absent",         "realm_courage",  {}],
+		["entry without run_index",   "realm_courage",  { "realms": { "realm_courage": { "status": "in_progress" } } }],
+	]
+	for c in cases:
+		var label: String = str(c[0])
+		var rid: String = str(c[1])
+		var save: Dictionary = c[2]
+		var mult: float = ProgressionService.get_realm_xp_multiplier(rid, save, cfg)
+		if not is_equal_approx(mult, 1.0):
+			return { "ok": false, "error": "Guard '%s' (realm_id='%s') must give 1.0, got %.4f" % [label, rid, mult] }
+
+	# Sanity: the populated fixture DOES scale when the correct realm_id is passed —
+	# proves the guard cases above returned 1.0 by guard, not because the data was inert.
+	var live: float = ProgressionService.get_realm_xp_multiplier("realm_courage", populated, cfg)
+	if not is_equal_approx(live, 1.60):
+		return { "ok": false, "error": "Control case: realm_courage run_index=4 should give 1.60, got %.4f" % live }
+	return { "ok": true }
+
+
+## 24. A rate of zero, a negative rate, or an absent rate key all disable scaling
+## entirely — 1.0 regardless of how many realms have been run.
+static func _test_realm_mult_nonpositive_rate_is_identity() -> Dictionary:
+	var save := _realm_save("realm_courage", 5)   # would give 1.75 at rate 0.15
+
+	var cases: Array = [
+		["rate = 0.0",     0.0],
+		["rate = -0.25",  -0.25],
+	]
+	for c in cases:
+		var cfg := _xp_tuning_cfg()
+		cfg["realm_xp_multiplier_per_realm"] = float(c[1])
+		var mult: float = ProgressionService.get_realm_xp_multiplier("realm_courage", save, cfg)
+		if not is_equal_approx(mult, 1.0):
+			return { "ok": false, "error": "%s must give 1.0, got %.4f" % [str(c[0]), mult] }
+
+	# Rate key absent from the config subtree — the failure mode of reading the wrong
+	# config block (e.g. data.economy instead of data.progression).
+	var no_rate := _xp_tuning_cfg()
+	no_rate.erase("realm_xp_multiplier_per_realm")
+	var mult_missing: float = ProgressionService.get_realm_xp_multiplier("realm_courage", save, no_rate)
+	if not is_equal_approx(mult_missing, 1.0):
+		return { "ok": false, "error": "Absent rate key must give 1.0, got %.4f" % mult_missing }
+
+	# Empty config dict (whole subtree missing) — same fallback.
+	var mult_empty: float = ProgressionService.get_realm_xp_multiplier("realm_courage", save, {})
+	if not is_equal_approx(mult_empty, 1.0):
+		return { "ok": false, "error": "Empty prog_cfg must give 1.0, got %.4f" % mult_empty }
 	return { "ok": true }

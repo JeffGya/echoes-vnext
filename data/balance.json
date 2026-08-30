@@ -1326,7 +1326,7 @@
 				]
 			},
 			"leadership_trait_effects": {
-				"_comment": "Numeric parameters for each leadership trait. Used by ActorStateMachine when trait activates.",
+				"_comment": "Numeric parameters for each leadership trait, all activated at the Whole band. Four consumers: ActorStateMachine._apply_leadership (per-turn morale/fear ticks), LeadershipEmotionService (fear/morale choke points), BehaviorArbiter (intent and movement score modifiers, retreat threshold, directive multiplier), and MovementHazardService (displacement immunity). Every trait affects living echo allies inside the leader's Presence-graded radius and never the leader itself, except position_lock, which is the one owner-only trait.",
 				"inspire_aura": {
 					"morale_per_round": 3.0
 				},
@@ -1363,7 +1363,9 @@
 				"threat_read": {
 					"retreat_threshold_reduction": 0.1
 				},
-				"cover_positioning": {},
+				"cover_positioning": {
+					"cover_move_score_bonus": 8.0
+				},
 				"fear_read": {
 					"fear_reduction_per_round": 5.0
 				},
@@ -1375,6 +1377,7 @@
 					"directive_mul": 1.5
 				},
 				"anchor_presence": {
+					"immune_to_displacement": true,
 					"radius": 2.0
 				},
 				"hold_formation": {
@@ -2886,7 +2889,7 @@
 			"max_barks_per_round": 3,
 			"bark_tiers": {
 				"1": ["combat_last_stand", "combat_fear_extreme", "combat_ko", "combat_resilient"],
-				"2": ["combat_fear_rising", "combat_morale_falling", "combat_inspired", "combat_taunt", "combat_calling_skill"],
+				"2": ["combat_fear_rising", "combat_morale_falling", "combat_inspired", "combat_taunt", "combat_calling_skill", "combat_divergence"],
 				"3": ["combat_attack", "combat_guard", "combat_banter"]
 			},
 			"sanctum_max_barkers": 2

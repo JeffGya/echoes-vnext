@@ -30,31 +30,31 @@ func enter(ctx: RefCounted, t: int) -> void:
 func exit(ctx: RefCounted, t: int) -> void:
 	pass
 
-func _build_actions(is_first_boot: bool) -> Array:
-	var actions: Array = []
+func _build_actions(is_first_boot: bool) -> Dictionary:
+	var actions: Dictionary = {}
 
 	if is_first_boot:
-		actions.append({
+		actions["main.cta_primary"] = {
 			"type": "flow.new_game",
 			"label": "Start",
 			"slot": "main.cta_primary"
-		})
+		}
 	else:
-		actions.append({
+		actions["main.cta_primary"] = {
 			"type": "flow.continue",
 			"label": "Continue",
 			"slot": "main.cta_primary"
-		})
+		}
 
-	actions.append({
+	actions["main.settings"] = {
 		"type": "flow.settings",
 		"label": "Settings",
 		"slot": "main.settings"
-	})
-	actions.append({
+	}
+	actions["main.quit"] = {
 		"type": "flow.quit",
 		"label": "Quit",
 		"slot": "main.quit"
-	})
+	}
 
 	return actions

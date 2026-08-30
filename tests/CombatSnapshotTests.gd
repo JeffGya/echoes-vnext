@@ -73,7 +73,7 @@ static func _make_combat_over_ctx() -> FlowContext:
 #           round, action_results, round_phase; type == "flow.encounter".
 static func _t_round_snapshot_has_required_fields() -> Dictionary:
 	var ctx: FlowContext = CombatSnapshotTests._make_pre_combat_ctx()
-	var snap: Dictionary = FlowEncounterState.build_round_snapshot(ctx, 1)
+	var snap: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(ctx, 1)
 
 	if str(snap.get("type", "")) != "flow.encounter":
 		return { "ok": false, "error": "Expected type='flow.encounter', got: %s" % str(snap.get("type")) }
@@ -140,7 +140,7 @@ static func _t_actor_projection_fields() -> Dictionary:
 		"rank":           1,
 	}
 
-	var proj: Dictionary = FlowEncounterState._project_actor(actor)
+	var proj: Dictionary = EncounterSnapshotBuilder._project_actor(actor)
 
 	# Player-facing emotion uses the canonical emotional_status only.
 	for key in ["id", "name", "hp", "max_hp", "status", "grid_pos", "faction",
@@ -180,16 +180,16 @@ static func _t_status_derivation() -> Dictionary:
 	var hesitating_actor:  Dictionary = { "is_dead": false, "guard_state": false, "fear": 50 }
 	var alive_actor:       Dictionary = { "is_dead": false, "guard_state": false, "fear": 39 }
 
-	if FlowEncounterState._derive_status(dead_actor) != "dead":
-		return { "ok": false, "error": "Expected 'dead' for is_dead=true, got: %s" % FlowEncounterState._derive_status(dead_actor) }
-	if FlowEncounterState._derive_status(guard_actor) != "guarding":
-		return { "ok": false, "error": "Expected 'guarding' for guard_state=true, got: %s" % FlowEncounterState._derive_status(guard_actor) }
-	if FlowEncounterState._derive_status(refuse_actor) != "alive":
+	if EncounterSnapshotBuilder._derive_status(dead_actor) != "dead":
+		return { "ok": false, "error": "Expected 'dead' for is_dead=true, got: %s" % EncounterSnapshotBuilder._derive_status(dead_actor) }
+	if EncounterSnapshotBuilder._derive_status(guard_actor) != "guarding":
+		return { "ok": false, "error": "Expected 'guarding' for guard_state=true, got: %s" % EncounterSnapshotBuilder._derive_status(guard_actor) }
+	if EncounterSnapshotBuilder._derive_status(refuse_actor) != "alive":
 		return { "ok": false, "error": "Fear must not replace operational status" }
-	if FlowEncounterState._derive_status(hesitating_actor) != "alive":
+	if EncounterSnapshotBuilder._derive_status(hesitating_actor) != "alive":
 		return { "ok": false, "error": "Hesitation must be expressed through emotional_status" }
-	if FlowEncounterState._derive_status(alive_actor) != "alive":
-		return { "ok": false, "error": "Expected 'alive' for fear=39, got: %s" % FlowEncounterState._derive_status(alive_actor) }
+	if EncounterSnapshotBuilder._derive_status(alive_actor) != "alive":
+		return { "ok": false, "error": "Expected 'alive' for fear=39, got: %s" % EncounterSnapshotBuilder._derive_status(alive_actor) }
 
 	return { "ok": true }
 
@@ -208,7 +208,7 @@ static func _t_objective_state_shape() -> Dictionary:
 	]
 	var combat_state: Dictionary = { "objective": "purify_shrine", "round_counter": 2 }
 
-	var obj: Dictionary = FlowEncounterState._build_objective_state(ectx, combat_state)
+	var obj: Dictionary = EncounterSnapshotBuilder._build_objective_state(ectx, combat_state)
 
 	if str(obj.get("type", "")) != "purify_shrine":
 		return { "ok": false, "error": "Expected type='purify_shrine', got: %s" % str(obj.get("type")) }
@@ -228,7 +228,7 @@ static func _t_field_count_is_nonzero() -> Dictionary:
 	var round_ctx: FlowContext = CombatSnapshotTests._make_pre_combat_ctx()
 	var final_ctx: FlowContext = CombatSnapshotTests._make_combat_over_ctx()
 
-	var round_snap: Dictionary = FlowEncounterState.build_round_snapshot(round_ctx, 1)
+	var round_snap: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(round_ctx, 1)
 	var final_snap: Dictionary = FlowEncounterState.build_final_snapshot(final_ctx, 1)
 
 	var round_field_count: int = round_snap.get("data", {}).size()
@@ -253,7 +253,7 @@ static func _t_field_count_is_nonzero() -> Dictionary:
 #           retreat_tier_label, retreat_success_pct keys.
 static func _t_pre_combat_has_retreat_fields() -> Dictionary:
 	var ctx: FlowContext = CombatSnapshotTests._make_pre_combat_ctx()
-	var snap: Dictionary = FlowEncounterState.build_round_snapshot(ctx, 1)
+	var snap: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(ctx, 1)
 	var data: Dictionary = snap.get("data", {})
 
 	for key in ["retreat_eligible", "retreat_ase_cost", "retreat_tier_label", "retreat_success_pct"]:
@@ -272,7 +272,7 @@ static func _t_cta_retreat_absent_when_ineligible() -> Dictionary:
 	# No actors → RetreatService.can_attempt() returns false.
 	ctx.encounter_ctx.actors = []
 
-	var snap: Dictionary = FlowEncounterState.build_round_snapshot(ctx, 1)
+	var snap: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(ctx, 1)
 	var data: Dictionary = snap.get("data", {})
 	var actions: Dictionary = snap.get("actions", {})
 
@@ -303,7 +303,7 @@ static func _t_last_actor_action_retains_move_to_pos() -> Dictionary:
 		"to_pos": { "col": 4, "row": 3 },
 	}
 
-	var snap: Dictionary = FlowEncounterState.build_round_snapshot(ctx, 2)
+	var snap: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(ctx, 2)
 	var action: Dictionary = snap.get("data", {}).get("last_actor_action", {})
 
 	if str(action.get("action_type", "")) != "actor.move":
@@ -347,7 +347,7 @@ static func _t_last_actor_action_forwards_path_and_from_pos() -> Dictionary:
 	]
 	var ctx: FlowContext = CombatSnapshotTests._make_path_ctx({ "col": 1, "row": 5 }, expected.duplicate(true))
 
-	var snap: Dictionary = FlowEncounterState.build_round_snapshot(ctx, 3)
+	var snap: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(ctx, 3)
 	var action: Dictionary = snap.get("data", {}).get("last_actor_action", {})
 
 	if not action.has("from_pos"):
@@ -378,7 +378,7 @@ static func _t_last_actor_action_path_is_deep_copy() -> Dictionary:
 		[{ "col": 1, "row": 0 }, { "col": 2, "row": 0 }]
 	)
 
-	var snap: Dictionary = FlowEncounterState.build_round_snapshot(ctx, 4)
+	var snap: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(ctx, 4)
 	var action: Dictionary = snap.get("data", {}).get("last_actor_action", {})
 	var path: Array = action.get("path", []) as Array
 
@@ -404,7 +404,7 @@ static func _t_last_actor_action_path_is_deep_copy() -> Dictionary:
 static func _t_last_actor_action_empty_path_projects_empty() -> Dictionary:
 	var ctx: FlowContext = CombatSnapshotTests._make_path_ctx({ "col": 6, "row": 2 }, [])
 
-	var snap: Dictionary = FlowEncounterState.build_round_snapshot(ctx, 5)
+	var snap: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(ctx, 5)
 	var action: Dictionary = snap.get("data", {}).get("last_actor_action", {})
 
 	if not action.has("path"):

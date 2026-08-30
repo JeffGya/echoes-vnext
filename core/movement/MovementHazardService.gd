@@ -121,6 +121,11 @@ static func resolve_cell_entry(
 	var occupied: Dictionary = context.get("occupied", {}) as Dictionary
 	var config: Dictionary = context.get("config", {}) as Dictionary
 	var is_forced_entry: bool = bool(context.get("is_forced_entry", false))
+	# V2-INFRA-003 pass 8: leadership traits position_lock (owner) and anchor_presence
+	# (allies in radius) make a mover immune to Unstable's forced displacement. The
+	# hazard still triggers once per activation — the mover simply is not moved, and
+	# takes no fallback_damage, because nothing tried to push it off the cell.
+	var immune_to_displacement: bool = bool(context.get("immune_to_displacement", false))
 
 	var final_cell: Dictionary = entered_cell.duplicate(true)
 	var displaced: bool = false
@@ -135,10 +140,17 @@ static func resolve_cell_entry(
 			var ucfg: Dictionary = config.get("unstable", {}) as Dictionary
 			var fallback_damage: int = int(ucfg.get("fallback_damage", 0))
 			var from_cell: Dictionary = context.get("from_cell", {}) as Dictionary
-			var target: Dictionary = _displacement_target(
+			var target: Dictionary = {} if immune_to_displacement else _displacement_target(
 				entered_cell, hazard, from_cell, walkable, bounds, occupied
 			)
-			if not target.is_empty():
+			if immune_to_displacement:
+				events.append(EventContract.build(
+					seq, phase, "hazard.unstable.resisted", mover_id,
+					entered_cell, entered_cell, "none", 0,
+					_descriptor(hazard, "displacement_resisted"), 0, ""
+				))
+				seq += 1
+			elif not target.is_empty():
 				events.append(EventContract.build(
 					seq, phase, "hazard.unstable.displace", mover_id,
 					entered_cell, target, "forced", 0,

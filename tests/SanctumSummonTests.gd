@@ -478,7 +478,7 @@ static func _make_runtime_env() -> Dictionary:
 	logger.set_level("off")
 
 	var config = ConfigServiceScript.new()
-	var runtime = FlowRuntimeScript.new(logger, config, "/tmp/echoes-vnext-tests/sanctum_summon_slot.json")
+	var runtime = FlowRuntimeScript.new(logger, config, TestSaveHarness.dir() + "sanctum_summon_slot.json")
 	runtime.boot()
 
 	# Sanity: ensure we can access save.

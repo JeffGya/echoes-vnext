@@ -1181,7 +1181,7 @@ func _drop_travel_ghost(vacated_local: Vector2) -> void:
 ## FlowRuntime clears explore_map["travel_snippet"] only at the START of
 ## stage.advance_turn; every other action handler (dismiss_overlay, ignore_situation,
 ## resolve_situation_choice, engage_situation, disengage_contact, ...) rebuilds the
-## snapshot via FlowStageExploreState.build_snapshot() directly, which re-projects
+## snapshot via StageExploreSnapshotBuilder.build() directly, which re-projects
 ## whatever text is still sitting in explore_map — so without this de-dupe the same
 ## line would replay on every subsequent non-advance re-render. Comparing against the
 ## last-presented text (updated on every call, including the "" clear case) keeps

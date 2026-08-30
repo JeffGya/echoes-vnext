@@ -14,6 +14,10 @@
 # 10. objective/repair_defaults              — SaveService repair applies completed/required/objective_index defaults
 # 11. objective/party_requesting_return_high_fear  — party_requesting_return true when avg fear > threshold
 # 12. objective/party_requesting_return_low_fear   — party_requesting_return false when avg fear ≤ threshold
+# 13. objective/zero_required_blocked_until_reached — D94: a stage with no REQUIRED objective is
+#     not completable until its objective situations are reached, then it is
+# 14. objective/required_stage_gate_unchanged       — D94 regression guard: a normal stage with a
+#     required objective gates exactly as before
 
 class_name StageObjectiveTests
 extends RefCounted
@@ -93,6 +97,21 @@ static func _inject_stage(
 		ctx.save_data["sanctum"]["active_party_ids"] = ids
 
 
+# Set explore_map.objectives_found on the injected stage.
+#
+# Production NEVER marks an objective `completed` without also bumping `objectives_found` —
+# the two move together at every site (VentureController.gd:597+605,
+# ActiveStageService.gd:586+594, ContactController.gd:587+714). A fixture that completes an
+# objective must therefore bump this too, or it describes a state the game cannot reach.
+static func _set_objectives_found(ctx: FlowContext, found: int) -> void:
+	var stage := FlowStageExploreStateScript._get_current_stage(ctx)
+	var map_v: Variant = stage.get("explore_map", {})
+	var explore_map: Dictionary = map_v if map_v is Dictionary else {}
+	explore_map["objectives_found"] = found
+	stage["explore_map"] = explore_map
+	FlowStageExploreStateScript._write_stage_back(ctx, stage)
+
+
 static func _make_echo(id: String, calling: String, fear: int = 10) -> Dictionary:
 	return {
 		"id":             id,
@@ -121,6 +140,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("objective/repair_defaults",                    Callable(StageObjectiveTests, "_t_repair_defaults"))
 	runner.register_test("objective/party_requesting_return_high_fear",  Callable(StageObjectiveTests, "_t_party_requesting_return_high_fear"))
 	runner.register_test("objective/party_requesting_return_low_fear",   Callable(StageObjectiveTests, "_t_party_requesting_return_low_fear"))
+	runner.register_test("objective/zero_required_blocked_until_reached", Callable(StageObjectiveTests, "_t_zero_required_blocked_until_reached"))
+	runner.register_test("objective/required_stage_gate_unchanged",       Callable(StageObjectiveTests, "_t_required_stage_gate_unchanged"))
 
 
 # ─── Tests ────────────────────────────────────────────────────────────────────
@@ -194,7 +215,7 @@ static func _t_stage_advance_blocked() -> Dictionary:
 	var sit1 := SituationModelScript.make("sit.0", SituationModelScript.TYPE_COMBAT, 5, 5, 100, true, 0)
 	_inject_stage(ctx, [obj1], [sit1])
 
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var actions_v: Variant = snap.get("actions", {})
 	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
 	var data_v: Variant = snap.get("data", {})
@@ -214,8 +235,11 @@ static func _t_stage_advance_unlocked() -> Dictionary:
 	var obj1 := ObjectiveModelScript.make(0, ObjectiveModelScript.TYPE_COMBAT, 100, {}, true, true)
 	var sit1 := SituationModelScript.make("sit.0", SituationModelScript.TYPE_COMBAT, 5, 5, 100, true, 0)
 	_inject_stage(ctx, [obj1], [sit1])
+	# D94: the objective is completed, so production has also counted it found. Without this
+	# the fixture describes an unreachable state and the gate's reached-term rejects it.
+	_set_objectives_found(ctx, 1)
 
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var actions_v: Variant = snap.get("actions", {})
 	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
 	var data_v: Variant = snap.get("data", {})
@@ -283,7 +307,7 @@ static func _t_calling_ranger_adds_action() -> Dictionary:
 	var echo_ranger := _make_echo("echo_01", "ranger", 10)
 	_inject_stage(ctx, [obj1], [sit1], [echo_ranger])
 
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var actions_v: Variant = snap.get("actions", {})
 	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
 	if not actions.has("cta.calling_reveal_adjacent"):
@@ -311,7 +335,7 @@ static func _t_no_ranger_no_action() -> Dictionary:
 	var echo_blade := _make_echo("echo_01", "blade", 10)
 	_inject_stage(ctx, [obj1], [sit1], [echo_blade])
 
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var actions_v: Variant = snap.get("actions", {})
 	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
 	if actions.has("cta.calling_reveal_adjacent"):
@@ -334,7 +358,7 @@ static func _t_ignore_clears_pending() -> Dictionary:
 	stage["explore_map"] = explore_map
 	FlowStageExploreStateScript._write_stage_back(ctx, stage)
 
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var actions_v: Variant = snap.get("actions", {})
 	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
 	if not actions.has("cta.ignore_situation"):
@@ -445,7 +469,7 @@ static func _t_party_requesting_return_high_fear() -> Dictionary:
 	var echo2 := _make_echo("echo_02", "ranger", 70)
 	_inject_stage(ctx, [obj1], [sit1], [echo1, echo2])
 
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var data_v: Variant = snap.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	if not bool(data.get("party_requesting_return", false)):
@@ -462,9 +486,92 @@ static func _t_party_requesting_return_low_fear() -> Dictionary:
 	var echo2 := _make_echo("echo_02", "ranger", 15)
 	_inject_stage(ctx, [obj1], [sit1], [echo1, echo2])
 
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var data_v: Variant = snap.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	if bool(data.get("party_requesting_return", false)):
 		return { "ok": false, "error": "Expected party_requesting_return=false with avg fear ~17" }
 	return { "ok": true, "error": "party_requesting_return stays false at low avg fear" }
+
+
+# 13. D94 — a stage with NO required objective is not completable until its objective
+#     situations are actually reached.
+#
+# RealmGenerator writes the boss objective `required = false` unconditionally
+# (RealmGenerator.gd:152) and a `pursue` pre-boss is optional too (:146). realm.01 generates
+# exactly two objectives, so ~14% of its stages (measured: 115 of 800 generated stages) carry
+# no required objective at all. `objectives_remaining` was therefore 0 from stage entry, and
+# the completion gate offered `flow.complete_stage` as soon as nothing was pending — which is
+# what an "Ignore" on the first engagement popup produces. Since Phase 8A (091bcfd) moved the
+# stage settlement onto that action, this paid a full stage reward for one step.
+#
+# Both halves are pinned here: blocked while unreached, offered once reached.
+static func _t_zero_required_blocked_until_reached() -> Dictionary:
+	var ctx := _make_ctx()
+	# The exact shipped shape: optional pursue pre-boss + always-optional boss.
+	var obj_pursue := ObjectiveModelScript.make(0, ObjectiveModelScript.TYPE_PURSUE, 100, {}, false, false)
+	var obj_boss   := ObjectiveModelScript.make(1, ObjectiveModelScript.TYPE_BOSS,   101, {}, false, false)
+	var sit1 := SituationModelScript.make("sit.0", SituationModelScript.TYPE_COMBAT, 5, 5, 100, true, 0)
+	_inject_stage(ctx, [obj_pursue, obj_boss], [sit1])
+
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
+	var actions_v: Variant = snap.get("actions", {})
+	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
+	var data_v: Variant = snap.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+
+	# The pre-fix gate's every term is satisfied — this is what made the defect reachable.
+	if int(data.get("objectives_remaining", -1)) != 0:
+		return { "ok": false, "error": "Fixture wrong: expected objectives_remaining=0, got %d" % int(data.get("objectives_remaining", -1)) }
+	if int(data.get("objectives_total", -1)) != 1:
+		return { "ok": false, "error": "Fixture wrong: expected objectives_total=1, got %d" % int(data.get("objectives_total", -1)) }
+	if int(data.get("objectives_found", -1)) != 0:
+		return { "ok": false, "error": "Fixture wrong: expected objectives_found=0, got %d" % int(data.get("objectives_found", -1)) }
+
+	if actions.has("cta.proceed_to_stage_map"):
+		return { "ok": false, "error": "D94: stage with no required objective must NOT be completable before its objective is reached" }
+
+	# Now the party engages and resolves the objective situation — production bumps
+	# objectives_found in the same write.
+	_set_objectives_found(ctx, 1)
+	var snap2 := StageExploreSnapshotBuilder.build(ctx, 1)
+	var actions2_v: Variant = snap2.get("actions", {})
+	var actions2: Dictionary = actions2_v if actions2_v is Dictionary else {}
+	if not actions2.has("cta.proceed_to_stage_map"):
+		return { "ok": false, "error": "D94: stage must become completable once its objective situations are reached" }
+
+	return { "ok": true, "error": "Zero-required stage blocked until reached, then completable" }
+
+
+# 14. D94 regression guard — a NORMAL stage (one required objective) gates exactly as before.
+#     Blocked while the objective is incomplete; offered once it is completed and counted.
+static func _t_required_stage_gate_unchanged() -> Dictionary:
+	var ctx := _make_ctx()
+	var obj_open := ObjectiveModelScript.make(0, ObjectiveModelScript.TYPE_COMBAT, 100, {}, false, true)
+	var sit1 := SituationModelScript.make("sit.0", SituationModelScript.TYPE_COMBAT, 5, 5, 100, true, 0)
+	_inject_stage(ctx, [obj_open], [sit1])
+
+	var snap_open := StageExploreSnapshotBuilder.build(ctx, 1)
+	var a_open_v: Variant = snap_open.get("actions", {})
+	var a_open: Dictionary = a_open_v if a_open_v is Dictionary else {}
+	if a_open.has("cta.proceed_to_stage_map"):
+		return { "ok": false, "error": "Required objective incomplete — gate must stay closed" }
+
+	# Completed via the combat-victory path: objective completed AND counted found.
+	var ctx2 := _make_ctx()
+	var obj_done := ObjectiveModelScript.make(0, ObjectiveModelScript.TYPE_COMBAT, 100, {}, true, true)
+	var sit2 := SituationModelScript.make("sit.0", SituationModelScript.TYPE_COMBAT, 5, 5, 100, true, 0)
+	_inject_stage(ctx2, [obj_done], [sit2])
+	_set_objectives_found(ctx2, 1)
+
+	var snap_done := StageExploreSnapshotBuilder.build(ctx2, 1)
+	var a_done_v: Variant = snap_done.get("actions", {})
+	var a_done: Dictionary = a_done_v if a_done_v is Dictionary else {}
+	if not a_done.has("cta.proceed_to_stage_map"):
+		return { "ok": false, "error": "Required objective completed — gate must open exactly as before" }
+	var act_v: Variant = a_done.get("cta.proceed_to_stage_map", {})
+	var act: Dictionary = act_v if act_v is Dictionary else {}
+	if str(act.get("type", "")) != "flow.complete_stage":
+		return { "ok": false, "error": "Completion action type changed: got '%s'" % str(act.get("type", "")) }
+
+	return { "ok": true, "error": "Normal required-objective stage gates unchanged" }

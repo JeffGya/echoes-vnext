@@ -55,7 +55,7 @@ static func create(actors: Array, objective: String,
 		"quarry_id":          _find_quarry_id(actors),
 		# V2-STAGE-004 P3c: GUIDE_SPIRIT — escort mode, joined-spirit tracking, destination state.
 		# guide_mode/spirit_joins_battle/destination_col/destination_row are seeded via
-		# objective_params by FlowEncounterState (runtime decisions made at encounter setup).
+		# objective_params by EncounterSetupService / EncounterObjectiveSpawnService (runtime decisions made at encounter setup).
 		# Safe defaults for all modes; only GUIDE_SPIRIT logic writes to escort_started/destination_reached.
 		"guide_mode":           str(objective_params.get("guide_mode", "protect")),
 		"spirit_id":            _find_spirit_id(actors),
@@ -67,6 +67,9 @@ static func create(actors: Array, objective: String,
 			"destination_col":      int(objective_params.get("destination_col", -1)),
 		"destination_row":      int(objective_params.get("destination_row", -1)),
 		"destination_reached":  false,
+		# V2-STAGE-004 P4: temporary-ally death bark guard. Fires once per encounter.
+		# Declared here with the other latches so it is not an undeclared runtime key.
+		"_ally_killed_barked":  false,
 	}
 
 

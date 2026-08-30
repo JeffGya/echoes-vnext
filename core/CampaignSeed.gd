@@ -60,3 +60,42 @@ static func get_rng_from(parent_seed: int, path: String) -> RandomNumberGenerato
 	var rng := RandomNumberGenerator.new()
 	rng.seed = derive_from(parent_seed, path)
 	return rng
+
+# V2-INFRA-003 Phase 4 Slice 6a: relocated verbatim from FlowRuntime._legacy_root_seed_from_seed_root.
+# Shared by two call sites — FlowRuntime._handle_new_game (flow.new_game) and
+# DebugController._handle_seed_set (debug.seed.set / debug.seed.reset) — so it belongs here,
+# on the class that already owns every other "derive a seed value from a seed string" concern,
+# rather than staying private to either caller (core/AGENTS.md: "A helper used by two or more
+# domains has an owner").
+static func legacy_root_seed_from_seed_root(seed_root: String) -> int:
+	# Derive a deterministic int from the first 8 hex chars (32-bit).
+	if seed_root.length() < 8:
+		return 0
+	var prefix := seed_root.substr(0, 8)
+	# Parse as hex via "0x" prefix
+	return int("0x" + prefix)
+
+
+# V2-INFRA-003 Half A review correction C2: relocated verbatim from
+# FlowRuntime._generate_seed_root_string. It is the other half of the pair Phase 4 Slice 6a
+# split — _handle_new_game calls this and legacy_root_seed_from_seed_root() on consecutive
+# lines — and the reason recorded for moving that one ("the class that already owns every
+# other 'derive a seed value from a seed string' concern") covers minting the string just as
+# well as consuming it. Half a pair moved on a rule that applied to both; this closes it.
+#
+# THIS IS THE ONE SANCTIONED NON-DETERMINISTIC CALL IN core/. It does not violate the
+# determinism rule, it is what that rule is defined against: the campaign root seed is the
+# INPUT to determinism, drawn once at New Game and then persisted, after which every draw in
+# the campaign comes from CampaignSeed.derive(). It uses OS crypto bytes rather than the
+# global RNG precisely so it can never be perturbed by, or perturb, any seeded stream.
+#
+# Consequence for tests, recorded here because this is now the site: dispatching
+# "flow.new_game" in a characterization test picks a fresh campaign seed on every run and
+# makes the test unrepeatable (AGENTS.md common mistake 17). Drive onboarding from boot()
+# instead, which uses the pinned literal seed when no save exists.
+static func generate_seed_root_string() -> String:
+	# Dev-safe randomness: allowed only as an input at New Game.
+	# Uses OS crypto bytes, not global RNG.
+	var crypto := Crypto.new()
+	var bytes: PackedByteArray = crypto.generate_random_bytes(16)
+	return bytes.hex_encode()

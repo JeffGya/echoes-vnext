@@ -12,7 +12,19 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("economy/offline_gate_blocked_before_awakening", Callable(EconomyTests, "_test_offline_gate_blocked"))
 	runner.register_test("economy/offline_gate_passes_after_awakening",   Callable(EconomyTests, "_test_offline_gate_passes"))
 	runner.register_test("economy/ekwan_awarded_on_stage_completion",      Callable(EconomyTests, "_test_ekwan_awarded"))
-	runner.register_test("economy/awakening_trigger_sets_flag_grants_ase", Callable(EconomyTests, "_test_awakening_trigger"))
+	# Phase 8C (D42/D63): renamed with the inversion — name confirm must LEAVE the Flame dark.
+	runner.register_test("economy/name_confirm_leaves_flame_dark", Callable(EconomyTests, "_test_awakening_trigger"))
+
+## V2-INFRA-003 Half A review correction C1: the five call sites below used to be
+## runtime.call("_apply_offline_accrual_if_needed", …) — string-name reflection into a
+## FlowRuntime private, the anti-pattern AGENTS.md mistake 20 names, and invisible to
+## --check-only. The block moved to core/economy/OfflineAccrualService.gd, so they now
+## construct the service against the same runtime's flow_ctx/config_service/econ/logger.
+## Exactly what FlowRuntime._offline_accrual_service() does, and now a compile-time error
+## if the signature ever moves again.
+static func _offline_service(runtime: FlowRuntime) -> OfflineAccrualService:
+	return OfflineAccrualService.new(runtime.flow_ctx, runtime.config_service, runtime.econ, runtime.logger)
+
 
 static func _test_add_spend() -> Dictionary:
 	var save := { "economy": { "ase": 10, "ekwan": 0 } }
@@ -67,7 +79,7 @@ static func _test_offline_flame_gate_zero() -> Dictionary:
 	econ_data["ase"] = 0
 	econ_data["last_offline_unix"] = now_unix - (24 * 3600)
 	econ_data["last_settle_unix"] = now_unix - (24 * 3600)
-	var gain := int(runtime.call("_apply_offline_accrual_if_needed", 2, "test.offline.flame_gate"))
+	var gain := int(_offline_service(runtime).apply_if_needed(2, "test.offline.flame_gate"))
 	if gain != 0:
 		return { "ok": false, "error": "Expected dormant flame to block offline gain" }
 	if int(econ_data.get("ase", 0)) != 0:
@@ -91,8 +103,8 @@ static func _test_offline_continuity_dominance() -> Dictionary:
 	low_sanctum["continuity"] = 0
 	var high_sanctum: Dictionary = high.flow_ctx.save_data.get("sanctum", {})
 	high_sanctum["continuity"] = 100
-	var low_gain := int(low.call("_apply_offline_accrual_if_needed", 2, "test.offline.low"))
-	var high_gain := int(high.call("_apply_offline_accrual_if_needed", 2, "test.offline.high"))
+	var low_gain := int(_offline_service(low).apply_if_needed(2, "test.offline.low"))
+	var high_gain := int(_offline_service(high).apply_if_needed(2, "test.offline.high"))
 	if high_gain <= low_gain:
 		return { "ok": false, "error": "Expected high continuity gain (%d) to exceed low continuity gain (%d)" % [high_gain, low_gain] }
 	return { "ok": true }
@@ -102,7 +114,7 @@ static func _test_offline_continuity_dominance() -> Dictionary:
 # V2-ECONOMY-001: Ase Flame awakening gate + Ekwan cadence
 # ─────────────────────────────────────────────────────────────
 
-## (a) Offline accrual guard: house dormant → FlowRuntime returns 0 gain, Ase unchanged.
+## (a) Offline accrual guard: house dormant → OfflineAccrualService returns 0 gain, Ase unchanged.
 static func _test_offline_gate_blocked() -> Dictionary:
 	var runtime := OnboardingTests._make_runtime()
 	var now_unix := int(Time.get_unix_time_from_system())
@@ -111,7 +123,7 @@ static func _test_offline_gate_blocked() -> Dictionary:
 	econ_data["ase"] = 0
 	econ_data["last_offline_unix"] = now_unix - (8 * 3600)
 	econ_data["last_settle_unix"]  = now_unix - (8 * 3600)
-	var gain := int(runtime.call("_apply_offline_accrual_if_needed", 2, "test.offline.gate_blocked"))
+	var gain := int(_offline_service(runtime).apply_if_needed(2, "test.offline.gate_blocked"))
 	if gain != 0:
 		return { "ok": false, "error": "Dormant flame must block offline gain; got %d" % gain }
 	if int(econ_data.get("ase", 0)) != 0:
@@ -119,7 +131,7 @@ static func _test_offline_gate_blocked() -> Dictionary:
 	return { "ok": true }
 
 
-## (b) Offline accrual guard: house awakened → FlowRuntime returns gain > 0.
+## (b) Offline accrual guard: house awakened → OfflineAccrualService returns gain > 0.
 static func _test_offline_gate_passes() -> Dictionary:
 	var runtime := OnboardingTests._make_runtime()
 	var now_unix := int(Time.get_unix_time_from_system())
@@ -131,22 +143,24 @@ static func _test_offline_gate_passes() -> Dictionary:
 	econ_data["ase"] = 0
 	econ_data["last_offline_unix"] = now_unix - (8 * 3600)
 	econ_data["last_settle_unix"]  = now_unix - (8 * 3600)
-	var gain := int(runtime.call("_apply_offline_accrual_if_needed", 2, "test.offline.gate_passes"))
+	var gain := int(_offline_service(runtime).apply_if_needed(2, "test.offline.gate_passes"))
 	if gain <= 0:
 		return { "ok": false, "error": "Awakened flame must allow offline gain; got %d" % gain }
 	return { "ok": true }
 
 
-## (c) reward_stage_complete awards Ekwan on victory; partial run awards only Ase (no Ekwan).
+## (c) the encounter payout awards Ekwan on victory; a partial run awards only Ase (no Ekwan).
+## V2-INFRA-003 Phase 8: was reward_stage_complete(); that single payer is now two, and the
+## Ekwan rule this pins ("Ekwan scales off the Ase actually awarded") holds in both.
 static func _test_ekwan_awarded() -> Dictionary:
 	var save := { "economy": { "ase": 0, "ekwan": 0 } }
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
 	var econ := EconomyService.new(save)
 
-	var result := econ.reward_stage_complete(
-		true, 30, 0, 0, 0, 0, 0, 1.0, "B", 0, 0.12, logger, 0
-	)
+	# base=30 is an INPUT to the encounter cadence, never its payout, so a victory with no
+	# per-fight bonuses now pays 0 here. The Ase this test needs comes from the stage cadence.
+	var result := econ.settle_stage_complete(30, 1.0, 0, 0.12, logger, 0)
 
 	var ase_awarded    := int(result.get("ase_awarded", 0))
 	var ekwan_awarded  := int(result.get("ekwan_awarded", 0))
@@ -168,23 +182,39 @@ static func _test_ekwan_awarded() -> Dictionary:
 	return { "ok": true }
 
 
-## (d) Awakening trigger: dispatches name confirm through FlowRuntime; checks flag + grant.
+## (d) Awakening TIMING. Original intent (V2-ECONOMY-001): prove that the Ase Flame flag is
+## driven by a real dispatch and not by save repair, and that no Ase is granted with it.
+##
+## V2-INFRA-003 Phase 8C (defects D42 / D63) INVERTED the assertion, deliberately, and kept the
+## drive. The original pinned the WRONG BEAT: it asserted the Flame is lit immediately after
+## `onboarding.name.confirm`, at the end of Chapter I. That is one full chapter before the
+## KEEPER_AWAKENING step the Flame's awakening scene belongs to, and it spoiled that beat for
+## every player. The early write is deleted; `KeeperIntroService.awaken_flame()` — reached only
+## through `keeper_intro.awakening.choose` — is now the single writer.
+##
+## So: after name confirm the Flame must still be DARK. The lit case is covered where it now
+## belongs, by onboarding/awakening_starts_flame_and_emotion in OnboardingTests.
 static func _test_awakening_trigger() -> Dictionary:
 	var runtime := OnboardingTests._make_runtime()
-	runtime.call("_handle_new_game", 2)
+	runtime.dispatch({ "type": "flow.new_game" })
 	var cfg := runtime.config_service.get_balance()
 	OnboardingService.set_step(runtime.flow_ctx.save_data, cfg, OnboardingService.STEP_NAME_SANCTUM)
 	runtime.flow_machine.transition(
 		FlowStateIds.ONBOARDING_NAME_SANCTUM, runtime.flow_ctx, runtime.logger, 3, "test"
 	)
-	runtime.call("_handle_onboarding_name_confirm", { "name": "Sankofa" }, 4)
+	runtime.dispatch({ "type": "onboarding.name.confirm", "name": "Sankofa" })
 
 	var sanctum: Dictionary = runtime.flow_ctx.save_data.get("sanctum", {})
 	var flame: Dictionary   = sanctum.get("ase_flame", {})
 
-	# Name confirm sets the awakened flag only — Ase boost is applied later
-	# via KeeperIntroServiceScript.apply_ase_boost_from_save on time-based settle.
-	if not bool(flame.get("awakened", false)):
-		return { "ok": false, "error": "ase_flame.awakened must be true after name confirm" }
+	# INVERTED in Phase 8C — see the docstring. Chapter I ends with the house still dormant;
+	# the Flame lights at the awakening rite, not here.
+	if bool(flame.get("awakened", false)):
+		return { "ok": false, "error": "ase_flame.awakened must still be FALSE after name confirm (D42/D63: the Flame lights at the awakening rite)" }
+	# Unchanged from the original intent: name confirm grants no Ase either way.
+	var econ_after_v: Variant = runtime.flow_ctx.save_data.get("economy", {})
+	var econ_after: Dictionary = econ_after_v if econ_after_v is Dictionary else {}
+	if int(econ_after.get("ase", -1)) != 0:
+		return { "ok": false, "error": "name confirm must grant no Ase; got %d" % int(econ_after.get("ase", -1)) }
 	return { "ok": true }
 

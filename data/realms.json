@@ -7,7 +7,30 @@
 
     "realm_order": ["realm.01", "realm.02"],
 
+    "_prologue_note": "realm.prologue is the opening Realm of the first session (V2-INFRA-003 Phase 8C). It is deliberately ABSENT from realm_order, so Realm Select never lists it and the player never picks it: OpeningRealmService opens it once, from the keeper intro, and RealmService.is_prologue_run() keeps it out of every whole-map scan that would otherwise count it as one of the player's Realms. Its 'virtue' is empty here on purpose — the run is created with the player's own starter virtue, passed as a cfg override to RealmService.get_or_create(), so the opening Realm is about the fragment they chose.",
+
     "realms": {
+
+      "realm.prologue": {
+        "id": "realm.prologue",
+        "name": "",
+        "description": "",
+        "virtue": "",
+        "locked": false,
+        "unlock_requires": null,
+        "seed_namespace": "campaign.realm.prologue",
+        "stage_count_min": 1,
+        "stage_count_max": 1,
+        "obj_count_min": 1,
+        "obj_count_max": 1,
+        "sit_count_min": 4,
+        "sit_count_max": 4,
+        "map_width_min": 30,
+        "map_width_max": 30,
+        "map_height_min": 30,
+        "map_height_max": 30,
+        "objective_pool": ["combat"]
+      },
 
       "realm.01": {
         "id": "realm.01",

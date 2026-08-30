@@ -30,7 +30,7 @@ const FlowStageExploreStateScript := preload("res://core/state/flow/states/ventu
 const StageTerrainScript          := preload("res://core/realms/StageTerrain.gd")
 const EmotionServiceScript        := preload("res://core/emotion/EmotionService.gd")
 
-const TEST_SAVE_PATH := "/tmp/echoes-vnext-tests/explore_p5_slot.json"
+static var TEST_SAVE_PATH := TestSaveHarness.dir() + "explore_p5_slot.json"
 
 # Canonical 10-tier emotional_status set (EmotionService.get_emotional_status).
 const VALID_EMOTIONAL_TIERS: Array = [
@@ -200,7 +200,7 @@ static func _make_directive_cfg() -> Dictionary:
 # (needed for travel bark selection). Does NOT call boot() — no disk I/O.
 static func _make_travel_runtime(seed_suffix: String) -> FlowRuntime:
 	var logger := _make_logger()
-	var runtime := FlowRuntime.new(logger, ConfigService.new(), "/tmp/echoes-vnext-tests/explore_p5_travel_%s.json" % seed_suffix)
+	var runtime := FlowRuntime.new(logger, ConfigService.new(), TestSaveHarness.dir() + "explore_p5_travel_%s.json" % seed_suffix)
 
 	runtime.flow_ctx          = FlowContext.new()
 	runtime.flow_ctx.logger   = logger
@@ -333,7 +333,7 @@ static func _t_directive_composite_id_label_present() -> Dictionary:
 	var ctx := _make_ctx_with_real_config()
 	_inject_pending_situation(ctx, SituationModelScript.TYPE_LOOT)
 
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var data_v: Variant = snap.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	var directive_v: Variant = data.get("directive", null)
@@ -356,7 +356,7 @@ static func _t_directive_composite_matches_active() -> Dictionary:
 	var ctx := _make_ctx_with_real_config()
 	_inject_pending_situation(ctx, SituationModelScript.TYPE_LOOT)
 
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var data_v: Variant = snap.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	var directive: Dictionary = data.get("directive", {})
@@ -383,7 +383,7 @@ static func _t_party_preview_emotional_status_valid_tier() -> Dictionary:
 		{ "fear": 45, "morale": 35 },   # uncertain-ish
 	])
 
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var data_v: Variant = snap.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	var preview_v: Variant = data.get("party_preview", [])
@@ -415,7 +415,7 @@ static func _t_party_preview_emotional_status_matches_service() -> Dictionary:
 	]
 	_inject_party_with_emotions(ctx, pairs)
 
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var data_v: Variant = snap.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	var preview_v: Variant = data.get("party_preview", [])
@@ -466,7 +466,7 @@ static func _assert_choices_for_type(sit_type: String, expect_nonempty: bool) ->
 	var ctx := _make_ctx_with_real_config()
 	_inject_pending_situation(ctx, sit_type)
 
-	var snap := FlowStageExploreStateScript.build_snapshot(ctx, 1)
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var data_v: Variant = snap.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	var pending_v: Variant = data.get("situation_pending", {})

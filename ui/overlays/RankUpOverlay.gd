@@ -127,7 +127,7 @@ func show_confirm(echo_data: Dictionary) -> void:
 
 
 ## Show the reveal panel. Call after set_snapshot() receives data.rank_up_event.
-## rank_up_event: dict from FlowRuntime._handle_sanctum_rank_up() attached to snapshot.data.
+## rank_up_event: dict from ProgressionController.handle_rank_up() attached to snapshot.data.
 func show_reveal(rank_up_event: Dictionary) -> void:
 	var echo_name: String      = str(rank_up_event.get("echo_name", "Unknown"))
 	var echo_id_from_event: String = str(rank_up_event.get("echo_id", ""))

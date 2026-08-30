@@ -22,9 +22,6 @@ const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd
 @onready var top_band: HBoxContainer = %TopBand
 @onready var _header_copy: HBoxContainer = %HeaderCopy
 @onready var ekwan_label: Label = %EkwanLabel
-@onready var _awakening_overlay: Control = %AwakeningOverlay
-@onready var _awakening_grant_label: Label = %AwakeningGrantLabel
-@onready var _awakening_dismiss: Button = %AwakeningDismiss
 
 # V2-STAGE-004 Phase 4: CompanionInvite modal — one-slot Sanctum-entry ally
 # recruit offer (ported from ResolveScreen's %AllyRecruitOffer). Shown when
@@ -189,12 +186,9 @@ func _ready() -> void:
 	tab_bonds.pressed.connect(_on_tab_selected.bind("bonds"))
 	tab_skills.pressed.connect(_on_tab_selected.bind("skills"))
 	detail_party_action_button.pressed.connect(_on_detail_party_pressed)
-	_awakening_dismiss.pressed.connect(_on_awakening_dismiss_pressed)
-	_apply_awakening_panel_style()
 	# V2-STAGE-004 Phase 4: CompanionInvite modal wiring.
 	_companion_accept_button.pressed.connect(_on_companion_accept_pressed)
 	_companion_decline_button.pressed.connect(_on_companion_decline_pressed)
-	_disable_legacy_modal(_awakening_overlay)
 	_disable_legacy_modal(_companion_invite)
 	# V2-SANCTUM-002: institution wiring
 	_inst_back_btn.pressed.connect(_on_inst_detail_back_pressed)
@@ -1084,25 +1078,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 # ─────────────────────────────────────────────────────────────
-# V2-ECONOMY-001: Awakening overlay helpers
+# V2-ECONOMY-001 awakening overlay: DELETED in V2-INFRA-003 Phase 8C.
+#
+# %AwakeningOverlay was a second, inline copy of the awakening modal, carrying its own copy of
+# the same body string. It was permanently disabled at _ready() and could never be shown again,
+# so its only remaining effect was to let the two copies of the text drift apart. The live modal
+# is ui/overlays/sanctum/AwakeningModal.tscn, requested by id below and mounted by SanctumShell.
 # ─────────────────────────────────────────────────────────────
-
-func _apply_awakening_panel_style() -> void:
-	var inner_panel := _awakening_overlay.find_child("InnerPanel", true, false)
-	if inner_panel == null or not (inner_panel is PanelContainer):
-		return
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("#3E3E58")
-	style.set_corner_radius_all(8)
-	(inner_panel as PanelContainer).add_theme_stylebox_override("panel", style)
-
-
-func _show_awakening_overlay() -> void:
-	_disable_legacy_modal(_awakening_overlay)
-
-
-func _on_awakening_dismiss_pressed() -> void:
-	_disable_legacy_modal(_awakening_overlay)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1430,11 +1412,16 @@ func _build_inst_row_label(title: String, subtitle: String, detail: String, enab
 func _on_inst_overlay_establish_pressed(inst_id: String) -> void:
 	_current_institution_id = inst_id
 	# Forward placement context arrays from snapshot data to SanctumShell via action.
+	# V2-INFRA-003 Phase 3 Slice B2: valid_placement_cells / placement_floor_cells /
+	# placement_occupied_cells now arrive as JSON-safe {"x": int, "y": int} dicts (not Vector2i —
+	# see SanctumSnapshotBuilder.gd). SanctumShell still works in Vector2i (GridService/
+	# SanctumLayoutService placement math), so convert back to Vector2i here, at the boundary
+	# where these values leave the snapshot and re-enter live UI code — same cells, same order.
 	var data_v: Variant = _snapshot.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
-	var cells_v: Variant = data.get("valid_placement_cells", [])
-	var floor_v: Variant = data.get("placement_floor_cells", [])
-	var occ_v: Variant   = data.get("placement_occupied_cells", [])
+	var cells_v: Variant = _cells_from_snapshot(data.get("valid_placement_cells", []))
+	var floor_v: Variant = _cells_from_snapshot(data.get("placement_floor_cells", []))
+	var occ_v: Variant   = _cells_from_snapshot(data.get("placement_occupied_cells", []))
 	action_requested.emit({
 		"type":    "ui.enter_placement_mode",
 		"payload": {
@@ -1444,6 +1431,23 @@ func _on_inst_overlay_establish_pressed(inst_id: String) -> void:
 			"occupied_cells": occ_v,
 		},
 	})
+
+
+## V2-INFRA-003 Phase 3 Slice B2: converts an Array of JSON-safe {"x": int, "y": int} cell dicts
+## (the snapshot's placement-cell representation) into an Array[Vector2i] (what SanctumShell and
+## SanctumLayoutService's placement helpers operate on). Same cells, same order, same count —
+## representation-only conversion. Tolerates a stray Vector2i already in the array (defensive;
+## never emitted by the builder) so this is safe to call on any of the three placement fields.
+func _cells_from_snapshot(cells_v: Variant) -> Array:
+	var cells: Array = cells_v if cells_v is Array else []
+	var out: Array = []
+	for c_v in cells:
+		if c_v is Vector2i:
+			out.append(c_v)
+		elif c_v is Dictionary:
+			var c: Dictionary = c_v
+			out.append(Vector2i(int(c.get("x", 0)), int(c.get("y", 0))))
+	return out
 
 
 func _on_placement_confirmed() -> void:

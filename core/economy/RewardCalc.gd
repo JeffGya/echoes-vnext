@@ -5,6 +5,46 @@
 
 class_name RewardCalc extends RefCounted
 
+## V2-INFRA-003 Phase 8 (defect D39): THE single definition of a stage's base reward.
+##
+## Before this, two functions computed "the base reward of this stage" from the same stage and
+## disagreed by construction:
+##   - the loop now inlined here, which SUMS every objective's weight and feeds the stage payout;
+##   - `ActiveStageService.get_stage_base_reward()`, which read `objectives[0]` only AND read its
+##     type under the key `"obj_type"`, which `ObjectiveModel.make()` never writes (it writes
+##     `"type"` — `core/realms/ObjectiveModel.gd:63-70`). Both faults pushed the same way, so it
+##     returned the flat `objective_weights.combat` default (30) for every stage, and fed the
+##     partial-withdrawal payout.
+## For a two-combat-objective stage that is 60 against 30, for one stage, on the same tick.
+##
+## D39 IS ANSWERED "SUM", FOR BOTH READERS (see the register). A stage's base reward is the sum
+## of its objectives' weights; the partial-withdrawal payout is a fraction of that same number.
+## `ActiveStageService.get_stage_base_reward()` now delegates here so the two cannot drift again.
+##
+## objectives: Array of ObjectiveModel dicts. The type key is `"type"`, never `"obj_type"`.
+## reward_cfg: balance.data.rewards dict.
+static func base_reward(objectives: Array, reward_cfg: Dictionary) -> int:
+	var weights_v: Variant = reward_cfg.get("objective_weights", {})
+	var weights: Dictionary = weights_v if weights_v is Dictionary else {}
+	var base := 0
+	for obj_v in objectives:
+		var obj: Dictionary = obj_v if obj_v is Dictionary else {}
+		var w_v: Variant = weights.get(str(obj.get("type", "")), 0)
+		base += int(w_v) if typeof(w_v) == TYPE_INT or typeof(w_v) == TYPE_FLOAT else 0
+	return base
+
+
+## V2-INFRA-003 Phase 8: THE single definition of the redo multiplier, for the same reason
+## base_reward() above is one. The settlement split gave the stage cadence its own payer, and
+## that payer must scale the base by exactly the multiplier the combined payer used — a second
+## copy of `maxf(floor, 1.0 - run_count * per_run)` would be free to drift from this one.
+## Degrades per completed run of the realm, clamped at the authored floor.
+static func redo_multiplier(run_count: int, reward_cfg: Dictionary) -> float:
+	var penalty_per_run := float(reward_cfg.get("redo_penalty_per_run", 0.10))
+	var penalty_floor   := float(reward_cfg.get("redo_penalty_floor", 0.50))
+	return maxf(penalty_floor, 1.0 - float(run_count) * penalty_per_run)
+
+
 ## Compute all reward values from encounter result + stage objectives + realm run_count.
 ## Returns a dict with pre-computed fields ready for EconomyService.reward_stage_complete().
 ##
@@ -27,16 +67,8 @@ static func compute(
 	run_count: int,
 	reward_cfg: Dictionary
 ) -> Dictionary:
-	var weights: Dictionary = reward_cfg.get("objective_weights", {})
-	if not weights is Dictionary:
-		weights = {}
-
-	# Base = sum of objective type weights
-	var base := 0
-	for obj_v in objectives:
-		var obj: Dictionary = obj_v if obj_v is Dictionary else {}
-		var w_v: Variant = weights.get(str(obj.get("type", "")), 0)
-		base += int(w_v) if typeof(w_v) == TYPE_INT or typeof(w_v) == TYPE_FLOAT else 0
+	# Base = sum of objective type weights (single definition — see base_reward() above).
+	var base := base_reward(objectives, reward_cfg)
 
 	# Per-unit bonuses (actual counts)
 	var enemy_bonus_per := int(reward_cfg.get("enemy_defeated_bonus", 5))
@@ -49,10 +81,8 @@ static func compute(
 	var speed_pct       := float(reward_cfg.get("speed_bonus_pct", 0.15))
 	var speed_bonus     := roundi(float(base) * speed_pct) if round_ended < speed_threshold else 0
 
-	# Redo multiplier — degrades per run, floor clamped
-	var penalty_per_run := float(reward_cfg.get("redo_penalty_per_run", 0.10))
-	var penalty_floor   := float(reward_cfg.get("redo_penalty_floor", 0.50))
-	var redo_mul        := maxf(penalty_floor, 1.0 - float(run_count) * penalty_per_run)
+	# Redo multiplier — degrades per run, floor clamped (single definition above)
+	var redo_mul := redo_multiplier(run_count, reward_cfg)
 
 	# Rank — use board totals for max_possible so rank reflects missed opportunities.
 	# On defeat: use defeat_payout as numerator so defeat always ranks worse than victory.

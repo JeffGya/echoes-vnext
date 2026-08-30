@@ -1,8 +1,8 @@
 ## UISnapshotRenderer
 ##
 ## Role: Generic fallback renderer for snapshot types that have no bespoke screen yet.
-## Renders snapshot JSON to a RichTextLabel and builds action buttons from Array-style
-## or legacy action formats.
+## Renders snapshot JSON to a RichTextLabel and builds action buttons from the
+## slot-keyed Dictionary "actions" contract (see CONVENTIONS.md → Snapshot Shape).
 ##
 ## NOT a base class. Bespoke screens extend Control directly and implement the
 ## bespoke screen contract (set_snapshot / action_requested signal).
@@ -39,14 +39,15 @@ func render(snapshot: Dictionary) -> void:
 	if actions_container == null:
 		return
 
-	var actions_v: Variant = snapshot.get("actions", [])
+	var actions_v: Variant = snapshot.get("actions", {})
 
-	if typeof(actions_v) != TYPE_ARRAY:
+	if typeof(actions_v) != TYPE_DICTIONARY:
 		return
 
-	var actions: Array = actions_v
+	var actions: Dictionary = actions_v
 
-	for a in actions:
+	for slot in actions:
+		var a: Variant = actions[slot]
 		if typeof(a) != TYPE_DICTIONARY:
 			continue
 

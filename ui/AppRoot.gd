@@ -40,6 +40,14 @@ var _last_log_index: int = 0
 var _current_layout: Dictionary = {}
 var _modal_owner: Control = null
 
+## The slot every screen uses for its own back affordance. The Android Back handler
+## dispatches this action and nothing else (register D78).
+const BACK_SLOT: String = "nav.back"
+
+## The snapshot currently on screen. Read only by the Android Back handler, which needs to know
+## whether the live screen offers a back action.
+var _last_snapshot: Dictionary = {}
+
 var _econ_timer_started: bool = false
 
 var logger: StructuredLogger
@@ -366,6 +374,37 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_debug_overlay()
 			get_viewport().set_input_as_handled()
 
+## Android system Back / browser back (register D78).
+##
+## `application/config/quit_on_go_back` is set false in `project.godot`, so the SceneTree no
+## longer ends the session on this notification. Without a handler here Back would instead do
+## nothing at all, which is also wrong: on a phone the gesture is reflexive.
+##
+## Back goes back one screen if the current snapshot offers one, and otherwise does nothing.
+## It never quits, and it never invents a control the screen does not already have — it
+## dispatches the screen's own `nav.back` action, so it can only reach states the player could
+## already reach by tapping.
+##
+## A blocking modal swallows Back. ModalHost owns focus containment while a modal is up, and
+## some modals (`sanctum.companion_invite`) persist until decided; dismissing them from here
+## would be a design change, not a repair.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		_handle_go_back_request()
+
+func _handle_go_back_request() -> void:
+	if modal_host != null and modal_host.has_method("has_active_modal") and bool(modal_host.call("has_active_modal")):
+		return
+	var actions_v: Variant = _last_snapshot.get("actions", {})
+	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
+	var back_v: Variant = actions.get(BACK_SLOT, null)
+	if not (back_v is Dictionary):
+		return
+	var back: Dictionary = back_v
+	if bool(back.get("disabled", false)):
+		return
+	_on_ui_action_selected(back)
+
 func _dispatch_settle_now(source: String) -> Dictionary:
 	var now_unix := int(Time.get_unix_time_from_system())
 	var settle_action: Dictionary = {
@@ -394,7 +433,11 @@ func _run_tests(parts: Array) -> void:
 		PursueTimingProbe.register(pursue_probe_runner)
 		pursue_probe_runner.run_all()
 		return
-	# Optional: allow "tests economy" later; for now run all.
+	# V2-INFRA-003: `tests <filter>` runs only suites whose reported name matches.
+	# Registration below is cheap (just appends {name, fn} to CoreTestRunner._tests);
+	# the 173s cost is entirely inside run_all(). So we always register everything,
+	# then — if a filter was given — trim runner._tests down to matching suites
+	# before run_all() ever executes a single test.
 	var runner := CoreTestRunner.new()
 	EconomyTests.register(runner)
 	SanctumSummonTests.register(runner)
@@ -506,6 +549,51 @@ func _run_tests(parts: Array) -> void:
 	ConversationRepairTests.register(runner)  # V2-PROG-012 Phase 8: conversation repairs (npc_line overwrite, storyweight truncation)
 	IdentityIntegrityTests.register(runner)  # V2-PROG-012 Phase 9: canonical vector/virtue/calling identity tables
 	BarkPopupLayerTests.register(runner)  # V2-PROG-012 playtest fix: combat_divergence bark visual distinctness
+	FlowFingerprintTests.register(runner)  # V2-INFRA-003: seven resolution-mode characterization fingerprints
+	FlowTransactionTests.register(runner)  # V2-INFRA-003 Phase 2B: single-flush-per-dispatch + action registration proof
+	FlowSnapshotFingerprintTests.register(runner)  # V2-INFRA-003 Phase 3 entry gate: sanctum/stage_explore fingerprints + snapshot purity probes
+	SnapshotContractTests.register(runner)  # V2-INFRA-003 Phase 3 Slice B1: universal snapshot contract (type/meta.t/data/actions)
+	VentureCharacterizationTests.register(runner)  # V2-INFRA-003: characterization guard for complete_stage / retreat / scout-return / contact-resolve
+	CombatBaselineTests.register(runner)  # V2-INFRA-003 Phase 6 entry gate: per-round emotion, transition sequence, combat flush reasons, tick-bound retreat, dormant encounter actions
+	PendingResultTests.register(runner)  # V2-INFRA-003 Phase 8B: the durable run result — four outcomes, survives a quit (real reboot off disk), routing + one-shot consumption
+
+	# Suite filter: "tests" with no argument runs everything, unchanged. "tests <filter>"
+	# matches the suite's reported name (text before "/" in each test's registered name,
+	# the same grouping used for the "✅ suite — N passed" lines below) case-insensitively,
+	# substring match, so "tests snapshot" catches snapshot_purity, snapshot_contract, and
+	# snapshot_fingerprint together.
+	var suite_filter := ""
+	if parts.size() > 1:
+		suite_filter = str(parts[1]).strip_edges().to_lower()
+
+	if not suite_filter.is_empty():
+		var known_suites: Array = []
+		var matched_tests: Array = []
+		var matched_suites: Array = []
+		for t in runner._tests:
+			var rname := str(t.get("name", "unnamed"))
+			var slash_idx := rname.find("/")
+			var suite_name := rname.substr(0, slash_idx) if slash_idx >= 0 else rname
+			if not known_suites.has(suite_name):
+				known_suites.append(suite_name)
+			if suite_name.to_lower().find(suite_filter) >= 0:
+				matched_tests.append(t)
+				if not matched_suites.has(suite_name):
+					matched_suites.append(suite_name)
+
+		if matched_tests.is_empty():
+			known_suites.sort()
+			_debug_print("No suite matches filter '%s'. Available suites:" % suite_filter)
+			for s in known_suites:
+				_debug_print("  " + str(s))
+			_flush_logs_to_console()
+			return
+
+		runner._tests = matched_tests
+		matched_suites.sort()
+		_debug_print("Filter '%s' applied — running %d suite(s): %s" % [
+			suite_filter, matched_suites.size(), ", ".join(matched_suites)
+		])
 
 	var result: Dictionary = runner.run_all()
 	_debug_print("Tests: %d total, %d passed, %d failed" % [
@@ -928,7 +1016,8 @@ func _run_force_charge_pressure_command(parts: Array) -> void:
 
 
 # S14: forces the ally recruit-offer roll outcome via flow_ctx.dev_force_recruit
-# (draw-then-override, honored in FlowRuntime._compute_ally_recruit_offer_if_eligible).
+# (draw-then-override, honored in
+# RecruitmentConsequenceService.compute_ally_recruit_offer_if_eligible).
 # Usage: force_recruit <success|fail|clear>
 func _run_force_recruit_command(parts: Array) -> void:
 	if parts.size() < 2:
@@ -1066,6 +1155,7 @@ const ONBOARDING_FAMILY: Array = [
 ]
 
 func _render_snapshot(snap: Dictionary) -> void:
+	_last_snapshot = snap
 	var snap_type := str(snap.get("type", ""))
 	if snap_type == "flow.save_error":
 		if _save_error_screen == null:

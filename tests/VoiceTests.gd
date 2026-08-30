@@ -9,6 +9,14 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("voice/shoutbank_variation_deterministic", Callable(VoiceTests, "_test_shoutbank_variation_deterministic"))
 	runner.register_test("voice/sanctum_bark_context_victory_defeat", Callable(VoiceTests, "_test_sanctum_bark_context"))
 	runner.register_test("voice/legacy_fallback_tolerates_array_traits", Callable(VoiceTests, "_test_legacy_fallback_tolerates_array_traits"))
+	runner.register_test("voice/bark_budget_caps_at_authored_max", Callable(VoiceTests, "_test_bark_budget_caps_at_authored_max"))
+	runner.register_test("voice/bark_budget_boundary_three_and_four", Callable(VoiceTests, "_test_bark_budget_boundary_three_and_four"))
+	runner.register_test("voice/bark_budget_prefers_higher_tier", Callable(VoiceTests, "_test_bark_budget_prefers_higher_tier"))
+	runner.register_test("voice/bark_budget_unknown_context_takes_lowest_tier", Callable(VoiceTests, "_test_bark_budget_unknown_context_takes_lowest_tier"))
+	runner.register_test("voice/bark_budget_reactions_ride_above_cap", Callable(VoiceTests, "_test_bark_budget_reactions_ride_above_cap"))
+	runner.register_test("voice/bark_budget_reactions_inside_cap_when_configured", Callable(VoiceTests, "_test_bark_budget_reactions_inside_cap_when_configured"))
+	runner.register_test("voice/bark_budget_is_deterministic", Callable(VoiceTests, "_test_bark_budget_is_deterministic"))
+	runner.register_test("voice/bark_budget_is_wired_into_round_snapshot", Callable(VoiceTests, "_test_bark_budget_is_wired_into_round_snapshot"))
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -240,4 +248,290 @@ static func _test_sanctum_bark_context() -> Dictionary:
 	if vline == dline:
 		return { "ok": false, "error": "Victory and defeat bark contexts returned identical lines — possible data issue" }
 
+	return { "ok": true }
+
+
+# ── D03: the data.voice round bark budget ─────────────────────────────────────
+#
+# NarrativeVoiceService.apply_round_bark_budget() is the single owner of "which barks reach
+# the player". Before D03 the same policy lived as literals inside
+# CombatBoardScreen._show_bark_popups() and the authored data.voice block had no reader at all.
+#
+# These tests drive the pure static function on projected snapshot rows — the exact shape
+# EncounterSnapshotBuilder hands it — so no scene tree and no encounter are needed.
+
+## One projected actor row, reduced to the fields the budget reads and writes.
+static func _bark_row(id: String, context: String, is_response: bool = false,
+		target_id: String = "") -> Dictionary:
+	return {
+		"id":               id,
+		"bark_line":        "line for " + id,
+		"bark_context":     context,
+		"bark_target_id":   target_id,
+		"bark_is_response": is_response,
+	}
+
+
+## The shipped data.voice block, so the authored 3 / 1 are what these tests exercise.
+static func _shipped_voice_cfg() -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var config := ConfigService.new()
+	config.load_balance(logger, 0)
+	return ConfigService.get_voice_cfg(config)
+
+
+static func _lines_kept(rows: Array) -> Array:
+	var kept: Array = []
+	for row_v in rows:
+		if str((row_v as Dictionary).get("bark_line", "")) != "":
+			kept.append(str((row_v as Dictionary).get("id", "")))
+	return kept
+
+
+## Six tier-3 originals, authored cap 3 → exactly three survive, in board order.
+static func _test_bark_budget_caps_at_authored_max() -> Dictionary:
+	var cfg := _shipped_voice_cfg()
+	if int(cfg.get("max_barks_per_round", -1)) != 3:
+		return { "ok": false, "error": "expected shipped max_barks_per_round 3, got %s" % cfg.get("max_barks_per_round", "<absent>") }
+	var rows: Array = []
+	for i in range(6):
+		rows.append(_bark_row("a%d" % i, "combat_attack"))
+	NarrativeVoiceService.apply_round_bark_budget(rows, cfg)
+	var kept := _lines_kept(rows)
+	if kept != ["a0", "a1", "a2"]:
+		return { "ok": false, "error": "expected [a0,a1,a2] to survive the cap, got %s" % str(kept) }
+	return { "ok": true }
+
+
+## Boundary: three offered pass untouched; four offered lose exactly one.
+static func _test_bark_budget_boundary_three_and_four() -> Dictionary:
+	var cfg := _shipped_voice_cfg()
+
+	var three: Array = []
+	for i in range(3):
+		three.append(_bark_row("b%d" % i, "combat_attack"))
+	NarrativeVoiceService.apply_round_bark_budget(three, cfg)
+	if _lines_kept(three).size() != 3:
+		return { "ok": false, "error": "three offered must all survive, kept %s" % str(_lines_kept(three)) }
+
+	var four: Array = []
+	for i in range(4):
+		four.append(_bark_row("c%d" % i, "combat_attack"))
+	NarrativeVoiceService.apply_round_bark_budget(four, cfg)
+	if _lines_kept(four) != ["c0", "c1", "c2"]:
+		return { "ok": false, "error": "four offered must keep the first three, kept %s" % str(_lines_kept(four)) }
+	return { "ok": true }
+
+
+## Selection rule: tier decides, not arrival order. A tier-1 line placed last still survives,
+## and each survivor is stamped with its authored tier.
+static func _test_bark_budget_prefers_higher_tier() -> Dictionary:
+	var cfg := _shipped_voice_cfg()
+	var rows: Array = [
+		_bark_row("chatter1", "combat_attack"),          # tier 3
+		_bark_row("chatter2", "combat_guard"),           # tier 3
+		_bark_row("chatter3", "combat_banter"),          # tier 3
+		_bark_row("taunt",    "combat_taunt"),           # tier 2
+		_bark_row("laststand", "combat_last_stand"),     # tier 1
+	]
+	NarrativeVoiceService.apply_round_bark_budget(rows, cfg)
+	var kept := _lines_kept(rows)
+	kept.sort()
+	if kept != ["chatter1", "laststand", "taunt"]:
+		return { "ok": false, "error": "expected tier 1 + tier 2 + first tier 3 to survive, got %s" % str(kept) }
+	if int((rows[4] as Dictionary).get("bark_priority", -1)) != 1:
+		return { "ok": false, "error": "combat_last_stand must be stamped bark_priority 1, got %s" % (rows[4] as Dictionary).get("bark_priority", "<absent>") }
+	if int((rows[3] as Dictionary).get("bark_priority", -1)) != 2:
+		return { "ok": false, "error": "combat_taunt must be stamped bark_priority 2, got %s" % (rows[3] as Dictionary).get("bark_priority", "<absent>") }
+	if int((rows[0] as Dictionary).get("bark_priority", -1)) != 3:
+		return { "ok": false, "error": "combat_attack must be stamped bark_priority 3, got %s" % (rows[0] as Dictionary).get("bark_priority", "<absent>") }
+	return { "ok": true }
+
+
+## Every context the shipped bark_tiers table lists, flattened. Used to prove a probe context
+## is genuinely unlisted rather than trusting a hardcoded name that a later authoring pass
+## may quietly promote into the table (combat_divergence did exactly that).
+static func _listed_bark_contexts(cfg: Dictionary) -> Dictionary:
+	var listed: Dictionary = {}
+	var tiers_v: Variant = cfg.get("bark_tiers", {})
+	if tiers_v is Dictionary:
+		for tier_key in (tiers_v as Dictionary).keys():
+			var contexts_v: Variant = (tiers_v as Dictionary)[tier_key]
+			if contexts_v is Array:
+				for context_v in (contexts_v as Array):
+					listed[str(context_v)] = int(str(tier_key))
+	return listed
+
+
+## A live bark context that data.voice.bark_tiers does not list, picked from the table itself
+## so this stays true however the table is re-authored. Candidates are real `_bark_context`
+## values set in core/actors/ActorStateMachine.gd, not config key names; the synthetic tail
+## entry keeps the test meaningful if every real one is ever authored in.
+static func _unlisted_bark_context(cfg: Dictionary) -> String:
+	var listed := _listed_bark_contexts(cfg)
+	for candidate in ["combat_identity_spike", "combat_refuse", "test_unlisted_bark_context"]:
+		if not listed.has(candidate):
+			return candidate
+	return ""
+
+
+## A context absent from bark_tiers falls to the lowest authored tier — it neither outranks
+## an authored line nor sinks below one. The probe context is derived from the shipped table
+## rather than hardcoded, so authoring a new context into bark_tiers cannot silently turn this
+## into a test of a listed context.
+static func _test_bark_budget_unknown_context_takes_lowest_tier() -> Dictionary:
+	var cfg := _shipped_voice_cfg()
+	var unlisted := _unlisted_bark_context(cfg)
+	if unlisted == "":
+		return { "ok": false, "error": "no unlisted probe context available — bark_tiers lists every candidate" }
+	var listed := _listed_bark_contexts(cfg)
+	if listed.has(unlisted):
+		return { "ok": false, "error": "probe context %s is listed in bark_tiers — premise broken" % unlisted }
+	var lowest_tier: int = 3
+	for tier_v in listed.values():
+		lowest_tier = maxi(lowest_tier, int(tier_v))
+	var rows: Array = [
+		_bark_row("unlisted", unlisted),
+		_bark_row("banter",   "combat_banter"),
+		_bark_row("taunt",    "combat_taunt"),
+	]
+	NarrativeVoiceService.apply_round_bark_budget(rows, cfg)
+	if int((rows[0] as Dictionary).get("bark_priority", -1)) != lowest_tier:
+		return { "ok": false, "error": "an unlisted context (%s) must take the lowest authored tier %d, got %s" % [unlisted, lowest_tier, (rows[0] as Dictionary).get("bark_priority", "<absent>")] }
+	# Ordering check: four contenders against the authored cap of 3. The tier-2 taunt survives
+	# from last place, and the last of the three joint-lowest lines — the authored tier-3 guard —
+	# is the one cut. Board order alone would keep guard and drop taunt.
+	if int(listed.get("combat_taunt", -1)) >= lowest_tier:
+		return { "ok": false, "error": "combat_taunt must outrank the lowest tier for this ordering check, got %s" % listed.get("combat_taunt", "<absent>") }
+	if int(listed.get("combat_banter", -1)) != lowest_tier or int(listed.get("combat_guard", -1)) != lowest_tier:
+		return { "ok": false, "error": "combat_banter and combat_guard must both sit on the lowest tier for this ordering check" }
+	var rows2: Array = [
+		_bark_row("unlisted", unlisted),
+		_bark_row("banter",   "combat_banter"),
+		_bark_row("guard",    "combat_guard"),
+		_bark_row("taunt",    "combat_taunt"),
+	]
+	NarrativeVoiceService.apply_round_bark_budget(rows2, cfg)
+	var kept := _lines_kept(rows2)
+	if kept != ["unlisted", "banter", "taunt"]:
+		return { "ok": false, "error": "expected [unlisted,banter,taunt] — tier 2 survives, last lowest-tier line is cut — got %s" % str(kept) }
+	return { "ok": true }
+
+
+## reactions_exceed_cap true (authored): a reaction rides above the three-original budget,
+## but only max_reactions_per_original of them, and only for an original that survived.
+static func _test_bark_budget_reactions_ride_above_cap() -> Dictionary:
+	var cfg := _shipped_voice_cfg()
+	if int(cfg.get("max_reactions_per_original", -1)) != 1:
+		return { "ok": false, "error": "expected shipped max_reactions_per_original 1, got %s" % cfg.get("max_reactions_per_original", "<absent>") }
+	if not bool(cfg.get("reactions_exceed_cap", false)):
+		return { "ok": false, "error": "expected shipped reactions_exceed_cap true" }
+	var rows: Array = [
+		_bark_row("o1", "combat_attack"),
+		_bark_row("o2", "combat_attack"),
+		_bark_row("o3", "combat_attack"),
+		_bark_row("o4", "combat_attack"),                              # over the cap
+		_bark_row("r1", "combat_rally_ally", true, "o1"),
+		_bark_row("r2", "combat_rally_ally", true, "o1"),              # second for o1
+		_bark_row("r4", "combat_rally_ally", true, "o4"),              # original was cut
+	]
+	NarrativeVoiceService.apply_round_bark_budget(rows, cfg)
+	var kept := _lines_kept(rows)
+	if kept != ["o1", "o2", "o3", "r1"]:
+		return { "ok": false, "error": "expected [o1,o2,o3,r1], got %s" % str(kept) }
+	return { "ok": true }
+
+
+## reactions_exceed_cap false: the same reaction now competes for the round budget and loses.
+## Config-driven, so both states of the key are exercised rather than one dead branch.
+static func _test_bark_budget_reactions_inside_cap_when_configured() -> Dictionary:
+	var cfg := _shipped_voice_cfg().duplicate(true)
+	cfg["reactions_exceed_cap"] = false
+	var rows: Array = [
+		_bark_row("o1", "combat_attack"),
+		_bark_row("o2", "combat_attack"),
+		_bark_row("o3", "combat_attack"),
+		_bark_row("r1", "combat_rally_ally", true, "o1"),
+	]
+	NarrativeVoiceService.apply_round_bark_budget(rows, cfg)
+	var kept := _lines_kept(rows)
+	if kept != ["o1", "o2", "o3"]:
+		return { "ok": false, "error": "reaction must be cut when it counts against the cap, kept %s" % str(kept) }
+
+	# With one original short of the cap the same reaction fits.
+	var rows2: Array = [
+		_bark_row("o1", "combat_attack"),
+		_bark_row("o2", "combat_attack"),
+		_bark_row("r1", "combat_rally_ally", true, "o1"),
+	]
+	NarrativeVoiceService.apply_round_bark_budget(rows2, cfg)
+	if _lines_kept(rows2) != ["o1", "o2", "r1"]:
+		return { "ok": false, "error": "reaction must fit inside a budget with room, kept %s" % str(_lines_kept(rows2)) }
+	return { "ok": true }
+
+
+## Identical input must produce an identical survivor set — no set/hash iteration order.
+static func _test_bark_budget_is_deterministic() -> Dictionary:
+	var cfg := _shipped_voice_cfg()
+	var first: Array = []
+	for run in range(2):
+		var rows: Array = [
+			_bark_row("z1", "combat_guard"),
+			_bark_row("z2", "combat_taunt"),
+			_bark_row("z3", "combat_guard"),
+			_bark_row("z4", "combat_taunt"),
+			_bark_row("z5", "combat_banter"),
+		]
+		NarrativeVoiceService.apply_round_bark_budget(rows, cfg)
+		if run == 0:
+			first = _lines_kept(rows)
+		elif _lines_kept(rows) != first:
+			return { "ok": false, "error": "survivor set is not deterministic: %s vs %s" % [str(first), str(_lines_kept(rows))] }
+	if first != ["z2", "z4", "z1"] and first != ["z1", "z2", "z4"]:
+		return { "ok": false, "error": "expected the two tier-2 lines plus the first tier-3, got %s" % str(first) }
+	return { "ok": true }
+
+
+## WIRING: the budget must actually run inside the snapshot builder, not merely exist.
+## Six actors carry a bark; the published round snapshot must expose three.
+static func _test_bark_budget_is_wired_into_round_snapshot() -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var config := ConfigService.new()
+	config.load_balance(logger, 0)
+
+	var ectx := EncounterContext.new()
+	ectx.encounter_id = "voice.bark_budget"
+	ectx.combat_state = { "round_phase": "in_round", "round_counter": 1 }
+	for i in range(6):
+		ectx.actors.append({
+			"id":            "w%d" % i,
+			"name":          "W%d" % i,
+			"faction":       "echo",
+			"current_hp":    10,
+			"stats":         { "max_hp": 10 },
+			"grid_pos":      { "col": i, "row": 0 },
+			"morale":        50,
+			"fear":          0,
+			"skill_slots":   [""],
+			"_bark_line":    "line %d" % i,
+			"_bark_context": "combat_attack",
+		})
+
+	var flow_ctx := FlowContext.new()
+	flow_ctx.logger = logger
+	flow_ctx.config_service = config
+	flow_ctx.encounter_ctx = ectx
+
+	var snap := EncounterSnapshotBuilder.build_round_snapshot(flow_ctx, 1)
+	var rows: Array = (snap.get("data", {}) as Dictionary).get("actors", [])
+	var kept := _lines_kept(rows)
+	if kept.size() != 3:
+		return { "ok": false, "error": "round snapshot must carry the budgeted 3 barks, carries %d: %s" % [kept.size(), str(kept)] }
+
+	# The budget must not have reached back into the runtime actors (builder purity).
+	for a_v in ectx.actors:
+		if str((a_v as Dictionary).get("_bark_line", "")) == "":
+			return { "ok": false, "error": "the budget cleared a runtime actor's _bark_line — the builder must stay pure" }
 	return { "ok": true }

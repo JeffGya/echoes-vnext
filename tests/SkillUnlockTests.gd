@@ -747,15 +747,15 @@ static func _make_runtime_env() -> Dictionary:
 	var logger = StructuredLoggerScript.new()
 	logger.set_level("off")
 	var config = ConfigServiceScript.new()
-	var runtime = FlowRuntimeScript.new(logger, config, "/tmp/echoes-vnext-tests/skill_unlock_slot.json")
+	var runtime = FlowRuntimeScript.new(logger, config, TestSaveHarness.dir() + "skill_unlock_slot.json")
 	runtime.boot()
-	runtime.call("_handle_new_game", 2)
+	runtime.dispatch({ "type": "flow.new_game" })
 	var cfg: Dictionary = runtime.config_service.get_balance()
 	var options: Array = OnboardingService.build_fragment_options(runtime.flow_ctx.save_data, cfg)
 	if options.is_empty():
 		return { "ok": false, "error": "Could not create deterministic starter options" }
 	OnboardingService.select_fragment(runtime.flow_ctx.save_data, cfg, str(options[0].get("virtue", "")))
-	runtime.call("_handle_onboarding_fragment_confirm", 3)
+	runtime.dispatch({ "type": "onboarding.fragment.confirm" })
 
 	if not runtime.has_method("get_save_data"):
 		return { "ok": false, "error": "FlowRuntime.get_save_data() missing" }

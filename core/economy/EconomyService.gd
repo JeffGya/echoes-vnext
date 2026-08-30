@@ -92,14 +92,43 @@ func spend_ase(amount: int, reason: String, logger: StructuredLogger, t: int) ->
 	return true
 
 # ---- Stage Reward API ----
+#
+# V2-INFRA-003 Phase 8 — THE SETTLEMENT SPLIT (defects D36 / D77).
+#
+# There used to be ONE payer, `reward_stage_complete()`, called unconditionally from
+# `FlowEncounterState.build_final_snapshot()` at every combat end. It paid the whole reward —
+# the STAGE's summed objective weights and the STAGE's virtue bonus included — for every
+# ENCOUNTER. A stage with three combat situations paid three full stage rewards, and a defeat
+# paid `base × 0.25 × redo` while deliberately leaving the situation unresolved, so one fight
+# could be lost for Ase without limit. That single function is now two, one per cadence:
+#
+#   reward_encounter_complete()  — paid once per ENCOUNTER, in the combat-end dispatch.
+#       Victory: enemies-defeated + echoes-survived + speed bonus, redo-scaled.
+#       Defeat:  the 25% consolation, which is intended design (Jeff, 2026-08-24) — but paid
+#                only ONCE per situation, gated by the caller's `consolation_eligible`.
+#   settle_stage_complete()      — paid once per STAGE, in the `flow.complete_stage` dispatch,
+#       behind the stage's `settlement_receipt` stamp. Base objective weights + virtue bonus.
+#
+# WHAT DID NOT CHANGE. Every component keeps the exact formula and the exact redo exposure it
+# had: redo scaled base+enemy+echo+speed and never the virtue bonus, and it still does — only
+# now inside two `roundi()` calls instead of one, which is the sole arithmetic consequence of
+# splitting (a possible ±1 Ase against the old single rounding). `RewardCalc.compute()` is
+# untouched, so `speed_bonus` is still `roundi(base × speed_pct)`: the stage's base stays an
+# INPUT to the encounter cadence, it just stops being a PAYOUT of it. The defeat consolation
+# likewise still reads the stage base to take 25% of.
 
-## ECONOMY-004 + REALM-005: Compute and pay out stage reward after encounter end.
-## Builds a breakdown Array of {label, delta, currency} entries.
-## enemies_defeated / echoes_survived: raw counts for descriptive labels.
-## virtue_bonus: flat Ase bonus from realm virtue + stage index (REALM-005). Added on victory only.
-## ekwan_factor: fraction of final Ase to award as Ekwan (V2-ECONOMY-001). Pass 0.0 for no Ekwan.
+## Encounter-cadence payout. Paid at every combat end, once per encounter.
+##
+## victory:   on a win pays `roundi((enemy + echo + speed) × redo)`; on a loss pays the
+##            `roundi(base × 0.25 × redo)` consolation.
+## base_reward: the STAGE's base (sum of its objective weights). An INPUT only — never paid
+##            here on a victory. Used for the defeat consolation.
+## consolation_eligible: false on a repeat defeat of a situation that has already paid its
+##            consolation. Ignored on a victory. When false the defeat branch pays nothing and
+##            returns an empty breakdown — there is no second consolation to itemise.
+## ekwan_factor: fraction of THIS payout to award as Ekwan (V2-ECONOMY-001). 0.0 for none.
 ## Returns reward_result dict with ase_awarded, ekwan_awarded, rank, victory, breakdown.
-func reward_stage_complete(
+func reward_encounter_complete(
 	victory: bool,
 	base_reward: int,
 	enemy_bonus: int,
@@ -109,7 +138,7 @@ func reward_stage_complete(
 	speed_bonus: int,
 	redo_multiplier: float,
 	rank: String,
-	virtue_bonus: int,
+	consolation_eligible: bool,
 	ekwan_factor: float,
 	logger: StructuredLogger,
 	t: int
@@ -118,12 +147,11 @@ func reward_stage_complete(
 	var breakdown: Array  # Array of {label: String, delta: int, currency: String}
 
 	if victory:
-		var pre_redo := base_reward + enemy_bonus + echo_bonus + speed_bonus
-		total = roundi(float(pre_redo) * redo_multiplier) + virtue_bonus
-		var redo_penalty := roundi(float(pre_redo) * redo_multiplier) - pre_redo  # negative or 0
+		var pre_redo := enemy_bonus + echo_bonus + speed_bonus
+		total = roundi(float(pre_redo) * redo_multiplier)
+		var redo_penalty := total - pre_redo  # negative or 0
 
 		breakdown = []
-		breakdown.append({ "label": "Base objectives", "delta": base_reward, "currency": "ase" })
 		if enemy_bonus > 0:
 			var e_label := "%d %s defeated" % [enemies_defeated, "enemy" if enemies_defeated == 1 else "enemies"]
 			breakdown.append({ "label": e_label, "delta": enemy_bonus, "currency": "ase" })
@@ -134,9 +162,7 @@ func reward_stage_complete(
 			breakdown.append({ "label": "Speed bonus", "delta": speed_bonus, "currency": "ase" })
 		if redo_penalty < 0:
 			breakdown.append({ "label": "Redo penalty", "delta": redo_penalty, "currency": "ase" })
-		if virtue_bonus > 0:
-			breakdown.append({ "label": "Realm virtue", "delta": virtue_bonus, "currency": "ase" })
-	else:
+	elif consolation_eligible:
 		total = roundi(float(base_reward) * 0.25 * redo_multiplier)
 		var base_consolation := roundi(float(base_reward) * 0.25)
 		var defeat_penalty   := base_consolation - base_reward  # negative
@@ -147,11 +173,63 @@ func reward_stage_complete(
 		breakdown.append({ "label": "Defeat penalty", "delta": defeat_penalty, "currency": "ase" })
 		if redo_penalty < 0:
 			breakdown.append({ "label": "Redo penalty", "delta": redo_penalty, "currency": "ase" })
+	else:
+		# D77: this situation has already paid its one defeat consolation. Losing it again pays
+		# nothing. The situation still is NOT marked resolved by this path, so the fight stays
+		# retryable — it is just no longer payable.
+		total = 0
+		breakdown = []
+
+	if total > 0:
+		add_ase(total, "encounter_reward", logger, t)
+
+	# V2-ECONOMY-001: Ekwan — scales off the Ase actually awarded here.
+	var ekwan_total := roundi(float(total) * maxf(ekwan_factor, 0.0))
+	if ekwan_total > 0:
+		add_ekwan(ekwan_total, "encounter_reward", logger, t)
+		breakdown.append({ "label": "Sanctum share", "delta": ekwan_total, "currency": "ekwan" })
+
+	return {
+		"ase_awarded":   total,
+		"ekwan_awarded": ekwan_total,
+		"rank":          rank,
+		"victory":       victory,
+		"breakdown":     breakdown,
+	}
+
+
+## Stage-cadence payout. Paid once per stage, in the `flow.complete_stage` dispatch, behind the
+## stage's `settlement_receipt` idempotency stamp. The CALLER owns that stamp
+## (`StageSettlementService`), not this function — this function only pays what it is told to.
+##
+## base_reward:  sum of the stage's objective weights (`RewardCalc.base_reward`).
+## redo_multiplier: same value the encounter payout used; scales the base exactly as the single
+##               combined payer scaled it.
+## virtue_bonus: REALM-005 realm-virtue + stage-index bonus. Never redo-scaled — it carries its
+##               own realm-order multiplier already (`RealmService.calculate_stage_reward`).
+## Returns { ase_awarded, ekwan_awarded, breakdown }.
+func settle_stage_complete(
+	base_reward: int,
+	redo_multiplier: float,
+	virtue_bonus: int,
+	ekwan_factor: float,
+	logger: StructuredLogger,
+	t: int
+) -> Dictionary:
+	var base_after_redo := roundi(float(base_reward) * redo_multiplier)
+	var total := base_after_redo + virtue_bonus
+	var redo_penalty := base_after_redo - base_reward  # negative or 0
+
+	var breakdown: Array = []
+	breakdown.append({ "label": "Base objectives", "delta": base_reward, "currency": "ase" })
+	if redo_penalty < 0:
+		breakdown.append({ "label": "Redo penalty", "delta": redo_penalty, "currency": "ase" })
+	if virtue_bonus > 0:
+		breakdown.append({ "label": "Realm virtue", "delta": virtue_bonus, "currency": "ase" })
 
 	if total > 0:
 		add_ase(total, "stage_reward", logger, t)
 
-	# V2-ECONOMY-001: Ekwan — scales off final Ase awarded (post-redo, post-virtue)
 	var ekwan_total := roundi(float(total) * maxf(ekwan_factor, 0.0))
 	if ekwan_total > 0:
 		add_ekwan(ekwan_total, "stage_reward", logger, t)
@@ -160,8 +238,6 @@ func reward_stage_complete(
 	return {
 		"ase_awarded":   total,
 		"ekwan_awarded": ekwan_total,
-		"rank":          rank,
-		"victory":       victory,
 		"breakdown":     breakdown,
 	}
 

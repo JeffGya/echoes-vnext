@@ -18,6 +18,7 @@ config/name="echoes-vnext"
 config/version="0"
 run/main_scene="uid://djonhnpk45xl4"
 config/features=PackedStringArray("4.6", "GL Compatibility")
+config/quit_on_go_back=false
 boot_splash/bg_color=Color(0.051553905, 0.051553912, 0.051553912, 1)
 config/icon="uid://fwbkud6ktd8i"
 

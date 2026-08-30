@@ -6,7 +6,7 @@
 # Prefers direct unit-level assertions where the logic is a pure/static helper
 # (CombatState.check_end_condition, FlowEncounterState._project_actor,
 # FlowEncounterState.build_final_snapshot). Where the invariant lives inline in
-# FlowRuntime._apply_contact_outcome or FlowEncounterState.enter(), drives a real
+# ContactController.apply_contact_outcome or FlowEncounterState.enter(), drives a real
 # (but minimal) FlowRuntime + FlowEncounterState the same way
 # CombatRoundtripIntegrationTests.gd does — no full round-loop needed, since all
 # these seams fire at contact-resolution / encounter-entry time, before combat
@@ -155,7 +155,7 @@ static func _boot_env(tag: String) -> Dictionary:
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
 	var config := ConfigService.new()
-	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/seam_" + tag + ".json")
+	var runtime := FlowRuntime.new(logger, config, TestSaveHarness.dir() + "seam_" + tag + ".json")
 	runtime.boot()
 	var flow_ctx: FlowContext = runtime.flow_ctx
 	var t: int = 0
@@ -321,7 +321,7 @@ static func _t_no_ally_contact_no_ally_actor() -> Dictionary:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 3. Claimant failed → forced combat — FlowRuntime._apply_contact_outcome
+# 3. Claimant failed → forced combat — ContactController.apply_contact_outcome
 # ─────────────────────────────────────────────────────────────────────────────
 
 # A failed claimant outcome must set active_encounter_objective_index == -1 and
@@ -350,7 +350,12 @@ static func _t_claimant_failed_forces_combat_and_sets_markers() -> Dictionary:
 	FlowStageExploreState._write_stage_back(flow_ctx, stage)
 
 	var contact: Dictionary = { "id": sit_id, "role": "claimant", "outcome": "failed" }
-	runtime._apply_contact_outcome(contact, stage, explore_map, t)
+	# V2-INFRA-003 Phase 5 Slice C: _apply_contact_outcome moved to ContactController.
+	# Repointed at the new owner (no delegating stub was left on FlowRuntime). The returned
+	# FlowActionOutcome is fed through _apply_action_outcome() so the snapshot/transition side
+	# of the pre-extraction call still happens exactly as before.
+	runtime._apply_action_outcome(
+		runtime._contact_controller().apply_contact_outcome(contact, stage, explore_map, t), t)
 
 	if int(flow_ctx.active_encounter_objective_index) != -1:
 		return {
@@ -371,7 +376,7 @@ static func _t_claimant_failed_forces_combat_and_sets_markers() -> Dictionary:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 4-5. Charge pressure marker — FlowRuntime._apply_contact_outcome "charge" role
+# 4-5. Charge pressure marker — ContactController.apply_contact_outcome "charge" role
 # ─────────────────────────────────────────────────────────────────────────────
 
 # A failed NON-objective Charge raises pressure: explore_map.hostile_charge_sit_id
@@ -395,7 +400,12 @@ static func _t_nonobjective_charge_failed_sets_hostile_flag() -> Dictionary:
 	FlowStageExploreState._write_stage_back(flow_ctx, stage)
 
 	var contact: Dictionary = { "id": sit_id, "role": "charge", "outcome": "failed" }
-	runtime._apply_contact_outcome(contact, stage, explore_map, t)
+	# V2-INFRA-003 Phase 5 Slice C: _apply_contact_outcome moved to ContactController.
+	# Repointed at the new owner (no delegating stub was left on FlowRuntime). The returned
+	# FlowActionOutcome is fed through _apply_action_outcome() so the snapshot/transition side
+	# of the pre-extraction call still happens exactly as before.
+	runtime._apply_action_outcome(
+		runtime._contact_controller().apply_contact_outcome(contact, stage, explore_map, t), t)
 
 	var stage_after: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
 	var map_after: Dictionary = stage_after.get("explore_map", {})
@@ -428,7 +438,12 @@ static func _t_objective_charge_failed_does_not_set_hostile_flag() -> Dictionary
 	FlowStageExploreState._write_stage_back(flow_ctx, stage)
 
 	var contact: Dictionary = { "id": sit_id, "role": "charge", "outcome": "failed" }
-	runtime._apply_contact_outcome(contact, stage, explore_map, t)
+	# V2-INFRA-003 Phase 5 Slice C: _apply_contact_outcome moved to ContactController.
+	# Repointed at the new owner (no delegating stub was left on FlowRuntime). The returned
+	# FlowActionOutcome is fed through _apply_action_outcome() so the snapshot/transition side
+	# of the pre-extraction call still happens exactly as before.
+	runtime._apply_action_outcome(
+		runtime._contact_controller().apply_contact_outcome(contact, stage, explore_map, t), t)
 
 	var stage_after: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
 	var map_after: Dictionary = stage_after.get("explore_map", {})
@@ -557,10 +572,11 @@ static func _t_charge_pressure_bumps_endure_wave_size_and_clears_flag() -> Dicti
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 8-11, 19-20. Companion invite compute-once / no-stack / gating — FlowRuntime
-# instance method _compute_ally_recruit_offer_if_eligible(is_victory, rounds_total, t).
+# 8-11, 19-20. Companion invite compute-once / no-stack / gating — V2-INFRA-003 Phase 4
+# Slice 5 moved this to RecruitmentConsequenceService.compute_ally_recruit_offer_if_eligible
+# (is_victory, rounds_total, t), reached via runtime._recruitment_consequence_service().
 # Called directly (underscore is convention only; no real GDScript privacy —
-# precedent: LeadershipEmotionTests.gd calls runtime._apply_kill_momentum(...)).
+# precedent: LeadershipEmotionTests.gd calls CombatTurnActionService._apply_kill_momentum(...)).
 # flow_ctx.dev_force_recruit forces the roll outcome ("success"/"fail") so these
 # tests don't depend on the seeded roll landing a particular way.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -624,7 +640,7 @@ static func _t_companion_invite_created_on_successful_roll() -> Dictionary:
 	var flow_ctx: FlowContext = env["flow_ctx"]
 	flow_ctx.dev_force_recruit = "success"
 
-	runtime._compute_ally_recruit_offer_if_eligible(true, 3, 0)
+	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 0)
 
 	var invite: Dictionary = _read_companion_invite(flow_ctx)
 	if invite.is_empty():
@@ -649,7 +665,7 @@ static func _t_companion_invite_same_encounter_second_call_does_not_reroll() -> 
 	var ectx: EncounterContext = env["ectx"]
 	flow_ctx.dev_force_recruit = "success"
 
-	runtime._compute_ally_recruit_offer_if_eligible(true, 3, 0)
+	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 0)
 	var invite1: Dictionary = _read_companion_invite(flow_ctx).duplicate(true)
 	if invite1.is_empty():
 		return { "ok": false, "error": "first call did not write a companion invite" }
@@ -659,7 +675,7 @@ static func _t_companion_invite_same_encounter_second_call_does_not_reroll() -> 
 	(ectx.actors[0] as Dictionary)["current_hp"] = 1
 	ectx.echo_action_logs["ally_test_01"] = { "damage_dealt": 0, "damage_taken": 0, "kills": 0 }
 
-	runtime._compute_ally_recruit_offer_if_eligible(true, 3, 1)
+	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 1)
 	var invite2: Dictionary = _read_companion_invite(flow_ctx)
 
 	if int(invite2.get("chance", -1)) != int(invite1.get("chance", -2)):
@@ -681,7 +697,7 @@ static func _t_companion_invite_dead_ally_gate_no_invite() -> Dictionary:
 	var flow_ctx: FlowContext = env["flow_ctx"]
 	flow_ctx.dev_force_recruit = "success"
 
-	runtime._compute_ally_recruit_offer_if_eligible(true, 3, 0)
+	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 0)
 
 	var invite: Dictionary = _read_companion_invite(flow_ctx)
 	if not invite.is_empty():
@@ -699,7 +715,7 @@ static func _t_companion_invite_nonvictory_gate_no_invite() -> Dictionary:
 	var flow_ctx: FlowContext = env["flow_ctx"]
 	flow_ctx.dev_force_recruit = "success"
 
-	runtime._compute_ally_recruit_offer_if_eligible(false, 3, 0)
+	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(false, 3, 0)
 
 	var invite: Dictionary = _read_companion_invite(flow_ctx)
 	if not invite.is_empty():
@@ -718,7 +734,7 @@ static func _t_companion_invite_failed_roll_no_invite() -> Dictionary:
 	var flow_ctx: FlowContext = env["flow_ctx"]
 	flow_ctx.dev_force_recruit = "fail"
 
-	runtime._compute_ally_recruit_offer_if_eligible(true, 3, 0)
+	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 0)
 
 	var invite: Dictionary = _read_companion_invite(flow_ctx)
 	if not invite.is_empty():
@@ -739,7 +755,7 @@ static func _t_companion_invite_no_stack_does_not_overwrite_pending() -> Diction
 	var ectx: EncounterContext = env["ectx"]
 	flow_ctx.dev_force_recruit = "success"
 
-	runtime._compute_ally_recruit_offer_if_eligible(true, 3, 0)
+	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 0)
 	var invite1: Dictionary = _read_companion_invite(flow_ctx).duplicate(true)
 	if invite1.is_empty():
 		return { "ok": false, "error": "first encounter did not write a companion invite" }
@@ -752,7 +768,7 @@ static func _t_companion_invite_no_stack_does_not_overwrite_pending() -> Diction
 		"ally_test_02": { "damage_dealt": 20, "damage_taken": 10, "kills": 1 },
 	}
 
-	runtime._compute_ally_recruit_offer_if_eligible(true, 3, 1)
+	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 1)
 	var invite2: Dictionary = _read_companion_invite(flow_ctx)
 
 	if str(invite2.get("ally_name", "")) != str(invite1.get("ally_name", "")):
@@ -783,7 +799,7 @@ static func _minimal_actor(overrides: Dictionary = {}) -> Dictionary:
 # _project_actor(actor_with_is_ally) output must carry is_ally (bool) == true.
 static func _t_project_actor_is_ally_true() -> Dictionary:
 	var actor: Dictionary = _minimal_actor({ "is_ally": true })
-	var proj: Dictionary = FlowEncounterState._project_actor(actor)
+	var proj: Dictionary = EncounterSnapshotBuilder._project_actor(actor)
 
 	if not proj.has("is_ally"):
 		return { "ok": false, "error": "projected actor missing 'is_ally' key" }
@@ -797,7 +813,7 @@ static func _t_project_actor_is_ally_true() -> Dictionary:
 # Control: an actor without is_ally set projects is_ally == false.
 static func _t_project_actor_is_ally_false_control() -> Dictionary:
 	var actor: Dictionary = _minimal_actor()
-	var proj: Dictionary = FlowEncounterState._project_actor(actor)
+	var proj: Dictionary = EncounterSnapshotBuilder._project_actor(actor)
 
 	if not proj.has("is_ally"):
 		return { "ok": false, "error": "projected actor missing 'is_ally' key" }
@@ -869,7 +885,7 @@ static func _t_objective_state_has_charge_pressure_applied_bool() -> Dictionary:
 	ectx_false.resolution_mode = "defeat_enemies"
 	ectx_false.actors = []
 	ectx_false.charge_pressure_applied = false
-	var state_false: Dictionary = FlowEncounterState._build_objective_state(ectx_false, {})
+	var state_false: Dictionary = EncounterSnapshotBuilder._build_objective_state(ectx_false, {})
 	if not state_false.has("charge_pressure_applied"):
 		return { "ok": false, "error": "objective_state missing 'charge_pressure_applied' key" }
 	if typeof(state_false["charge_pressure_applied"]) != TYPE_BOOL:
@@ -881,7 +897,7 @@ static func _t_objective_state_has_charge_pressure_applied_bool() -> Dictionary:
 	ectx_true.resolution_mode = "protect"
 	ectx_true.actors = []
 	ectx_true.charge_pressure_applied = true
-	var state_true: Dictionary = FlowEncounterState._build_objective_state(ectx_true, {})
+	var state_true: Dictionary = EncounterSnapshotBuilder._build_objective_state(ectx_true, {})
 	if not bool(state_true.get("charge_pressure_applied", false)):
 		return { "ok": false, "error": "expected charge_pressure_applied == true when ectx.charge_pressure_applied is true" }
 
@@ -921,7 +937,7 @@ static func _t_clear_ally_fields_clears_contact_and_intro_not_companion_invite()
 		"chance": 60, "ally_name": "Pending Ally",
 	}
 
-	runtime._clear_ally_fields_if_present(t)
+	runtime._recruitment_consequence_service().clear_ally_fields_if_present(t)
 
 	var stage_after: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
 	var map_after: Dictionary = stage_after.get("explore_map", {})

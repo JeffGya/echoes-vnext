@@ -240,6 +240,175 @@ static func apply_ase_boost_from_save(save_data: Dictionary, cfg: Dictionary, de
 	return gain
 
 
+## Reads save_data.sanctum.ase_flame.awakened — Ase accrual (online settle + offline catch-up)
+## is gated on the flame being awakened; the house is dormant before onboarding completes.
+## V2-INFRA-003 Phase 4 Slice 7: moved off FlowRuntime (private _is_ase_flame_awakened) — reads
+## save data for the ase_flame domain, which this file already owns (awaken_flame,
+## apply_ase_boost_from_save above). Shared by EconomySettlementService.settle() (online) and
+## OfflineAccrualService.apply_if_needed() (offline), same "true owner" reasoning as the
+## get_institutions_cfg / get_buildings_cfg config getters.
+static func is_ase_flame_awakened(save_data: Dictionary) -> bool:
+	var sanctum_v: Variant = save_data.get("sanctum", {})
+	if not (sanctum_v is Dictionary):
+		return false
+	var flame_v: Variant = (sanctum_v as Dictionary).get("ase_flame", {})
+	var flame: Dictionary = flame_v if flame_v is Dictionary else {}
+	return bool(flame.get("awakened", false))
+
+
+## V2-INFRA-003 Phase 4 Slice 9 (Part B): moved verbatim from
+## FlowRuntime._setup_keeper_intro_trial_encounter(t). Builds the 2-actor Keeper-intro first-
+## trial encounter (starter Echo vs. the Fragment Wound) directly on flow_ctx.
+##
+## CORRECTION vs. the story brief: the brief listed this as one of the methods to move onto
+## OnboardingController. It does not fit there — verified call sites are
+## FlowRuntime._gate_state_for_keeper_intro() and the "flow.continue" case body in
+## FlowRuntime.dispatch(), BOTH of which stay on FlowRuntime this slice (per the
+## _gate_state_for_keeper_intro / flow.go_state "must survive exactly" requirement) and are NOT
+## dispatched actions, so FlowRuntime calling into a controller from either site would violate
+## "FlowRuntime must not call into a controller for a non-action." The third call site
+## (keeper_intro.call.answer's handler) DOES move to OnboardingController. A helper used by both
+## a controller and non-controller FlowRuntime code is exactly the "helper used by two or more
+## domains has an owner" case from core/AGENTS.md — the owner is this file, which already holds
+## every other piece of Keeper-intro trial-step domain knowledge (steps, phases, starter party,
+## rewards). `cfg` replaces the original's own `config_service.get_balance()` call — callers
+## already have the balance dict in hand at every call site.
+static func setup_trial_encounter(flow_ctx: FlowContext, cfg: Dictionary, t: int) -> void:
+	var echo := OnboardingService.get_starter_echo(flow_ctx.save_data)
+	if echo.is_empty():
+		return
+	var bd: Dictionary = cfg.get("data", {})
+	# V2-INFRA-003 Phase 6 Slice 6B: single owner for the { birth_stats, enemy_types } assembly.
+	# The balance-dict variant is used because this function is handed `cfg` and holds no
+	# ConfigService reference. Same dict, same keys as the longhand it replaces.
+	var actor_cfg := ConfigService.get_enemy_actor_cfg_from_balance(cfg)
+	var echo_actor := EchoActor.from_echo(echo)
+	echo_actor["grid_pos"] = { "col": 0, "row": 2 }
+	var onboarding_v: Variant = flow_ctx.save_data.get("onboarding", {})
+	var onboarding: Dictionary = onboarding_v if onboarding_v is Dictionary else {}
+	var rewind_used := bool(onboarding.get("keeper_trial_rewind_used", false))
+	echo_actor["_bark_line"] = "The wound knows us. I can still stand." if not rewind_used else "Again, then. I remember the edge."
+	echo_actor["_bark_context"] = "combat_taunt"
+	echo_actor["_bark_tier"] = "nascent"
+	var wound := EnemyActor.from_definition({
+		"id": "fragment_wound",
+		"name": "Fragment Wound",
+		"type": "fragment_wound",
+		"level": 1,
+		"faction": "enemy",
+	}, t, actor_cfg)
+	wound["grid_pos"] = { "col": 4, "row": 2 }
+	wound["stats"]["max_hp"] = 18 if rewind_used else 28
+	wound["stats"]["atk"] = 10 if rewind_used else 18
+	wound["stats"]["def"] = 0 if rewind_used else 1
+	wound["stats"]["agi"] = 2
+	wound["current_hp"] = int(wound["stats"]["max_hp"])
+	wound["speed"] = 2
+	flow_ctx.encounter_ctx = EncounterContext.new()
+	flow_ctx.encounter_ctx.encounter_id = "keeper_intro.first_trial"
+	flow_ctx.encounter_ctx.resolution_mode = EncounterResolutionModes.COMBAT
+	flow_ctx.encounter_ctx.actors = [echo_actor, wound]
+	flow_ctx.encounter_ctx.placement_seed = 0
+	flow_ctx.encounter_machine = EncounterStateMachine.new()
+	flow_ctx.encounter_machine.register_default_states()
+	var combat_cfg: Dictionary = bd.get("combat", {})
+	flow_ctx.encounter_ctx.initiative_cfg = combat_cfg.get("initiative_modifiers", {})
+	flow_ctx.encounter_id = "keeper_intro.first_trial"
+	flow_ctx.stage_id = ""
+	flow_ctx.realm_id = ""
+
+
+## V2-INFRA-003 Phase 4 Slice 9 (Part B): moved verbatim from
+## FlowRuntime._is_keeper_intro_trial_active(). Shared by combat-round resolution
+## (FlowRuntime._resolve_next_actor(), 3 call sites) AND OnboardingController.handle_trial_finish()
+## (keeper_intro.trial.finish) — a helper used by two domains, hence its home here rather than on
+## either caller. Also used internally by trial_lethal_echo_ids() / trial_enemy_defeated() below.
+static func is_trial_active(flow_ctx: FlowContext) -> bool:
+	return flow_ctx.encounter_ctx != null and flow_ctx.encounter_ctx.encounter_id == "keeper_intro.first_trial"
+
+
+## Moved verbatim from FlowRuntime._keeper_intro_trial_lethal_echo_ids(). Combat-path-only
+## caller: FlowRuntime._resolve_next_actor().
+static func trial_lethal_echo_ids(flow_ctx: FlowContext) -> Array[String]:
+	var lethal_ids: Array[String] = []
+	if not is_trial_active(flow_ctx):
+		return lethal_ids
+	for actor_v in flow_ctx.encounter_ctx.actors:
+		if not (actor_v is Dictionary):
+			continue
+		var actor: Dictionary = actor_v
+		if str(actor.get("faction", "")) != "echo":
+			continue
+		if int(actor.get("current_hp", 1)) <= 0 or bool(actor.get("is_dead", false)):
+			lethal_ids.append(str(actor.get("id", "")))
+	return lethal_ids
+
+
+## Moved verbatim from FlowRuntime._keeper_intro_trial_enemy_defeated(). Only real caller is
+## OnboardingController.handle_trial_finish() (keeper_intro.trial.finish is not on the combat
+## path) — grouped here anyway alongside its sibling trial-state readers above/below, all of
+## which share is_trial_active()'s read of encounter_ctx.actors and belong to this file's
+## existing Keeper-intro-trial domain knowledge.
+static func trial_enemy_defeated(flow_ctx: FlowContext) -> bool:
+	if not is_trial_active(flow_ctx):
+		return false
+	for actor_v in flow_ctx.encounter_ctx.actors:
+		if not (actor_v is Dictionary):
+			continue
+		var actor: Dictionary = actor_v
+		if str(actor.get("faction", "")) == "enemy" and bool(actor.get("is_dead", false)):
+			return true
+	return false
+
+
+## Moved verbatim from FlowRuntime._keeper_intro_restore_echo_after_second_attempt(). Combat-
+## path-only caller: FlowRuntime._resolve_next_actor(). Second-KO safety net: heals the lethal
+## Echo(s) to 1 HP silently (no rewind, no rewards) — see apply_trial_rewind() below for the
+## first-KO branch.
+static func restore_echo_after_second_attempt(flow_ctx: FlowContext, logger: StructuredLogger, t: int, lethal_ids: Array[String]) -> void:
+	for actor_v in flow_ctx.encounter_ctx.actors:
+		if not (actor_v is Dictionary):
+			continue
+		var actor: Dictionary = actor_v
+		if str(actor.get("id", "")) in lethal_ids:
+			actor["current_hp"] = 1
+			actor["is_dead"] = false
+			actor["death_round"] = 0
+			actor["_bark_line"] = "Still here. Finish it."
+			actor["_bark_context"] = "combat_resilient"
+			actor["_bark_tier"] = "nascent"
+	logger.info(t, "keeper_intro.trial.second_attempt.protected", "Second attempt Echo KO prevented without granting rewards", {
+		"lethal_echo_ids": lethal_ids,
+	})
+
+
+## Moved from FlowRuntime._handle_keeper_intro_trial_rewind(), MINUS its final
+## flow_machine.transition(FlowStateIds.KEEPER_REWIND, ...) call. This file is a service, not a
+## controller or flow state — per the Consequence-service convention documented on
+## BondConsequenceService/EmotionConsequenceService/RecruitmentConsequenceService/
+## VowConsequenceService ("No flow_machine reference — structurally cannot transition state"),
+## it does not hold or call flow_machine. It mutates save_data and nulls the encounter context
+## (the one-time-rewind safety net: sets keeper_trial_rewind_used so a second KO instead hits
+## restore_echo_after_second_attempt() above); the caller performs the KEEPER_REWIND transition
+## immediately afterward with the flow_machine it already holds. Two callers, both do this same
+## two-step:
+##   FlowRuntime._resolve_next_actor() (combat path, first KO)
+##   tests/OnboardingTests.gd _t_keeper_trial_rewind_restarts_debuffed() (reflection-site rewrite
+##   — the test previously called FlowRuntime._handle_keeper_intro_trial_rewind by string name)
+static func apply_trial_rewind(flow_ctx: FlowContext, cfg: Dictionary, logger: StructuredLogger, t: int, lethal_ids: Array[String]) -> void:
+	var onboarding: Dictionary = ensure_intro(flow_ctx.save_data, cfg)
+	onboarding["keeper_trial_rewind_used"] = true
+	onboarding["keeper_trial_phase"] = "rewind"
+	set_step(flow_ctx.save_data, cfg, STEP_REWIND)
+	flow_ctx.encounter_ctx = null
+	flow_ctx.encounter_machine = null
+	flow_ctx.encounter_id = ""
+	flow_ctx.request_save("keeper_intro.trial.rewind")
+	logger.info(t, "keeper_intro.trial.rewind", "Anansi rewinds the first trial", {
+		"lethal_echo_ids": lethal_ids,
+	})
+
+
 static func _ensure_sanctum_intro_fields(save_data: Dictionary) -> void:
 	if not save_data.has("sanctum") or not (save_data["sanctum"] is Dictionary):
 		save_data["sanctum"] = {}

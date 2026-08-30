@@ -419,8 +419,12 @@ static func _t_weaving_rite_flowruntime_overlay_produces_adjacent_fit() -> Dicti
 		return { "ok": false, "error": "could not load production balance.json" }
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
-	var runtime := FlowRuntime.new(logger, cs, "/tmp/echoes-vnext-tests/identity_weaving_rite_overlay.json")
-	var rite_cfg: Variant = runtime.call("_get_weaving_rite_cfg")
+	# V2-INFRA-003 Phase 4 Slice 1: _get_weaving_rite_cfg moved off FlowRuntime onto
+	# WeaveController. Constructed directly (not via FlowRuntime + string reflection) so
+	# this test actually exercises the extracted method on its new home — a delegating
+	# shim on FlowRuntime would keep this green without proving the extraction happened.
+	var controller := WeaveController.new(null, cs, logger)
+	var rite_cfg: Variant = controller._get_weaving_rite_cfg()
 	if not (rite_cfg is Dictionary):
 		return { "ok": false, "error": "_get_weaving_rite_cfg() did not return a Dictionary" }
 

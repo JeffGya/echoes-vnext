@@ -302,6 +302,11 @@ static func _measure_prepare_seam(
 	runtime, ectx: EncounterContext, actor: Dictionary, round_idx: int,
 	board_w: int, board_h: int, capacity: int, t: int, breakdown: Dictionary
 ) -> void:
+	# V2-INFRA-003 Phase 6 Slice 6G: the live movement helper family moved off FlowRuntime
+	# onto LiveMovementContextService. Build the same object FlowRuntime._resolve_next_actor
+	# builds (stateless, so a fresh instance is exact) instead of reaching into the runtime.
+	var lm := LiveMovementContextService.new(runtime.flow_ctx, runtime.logger)
+
 	# Replicate FlowRuntime._resolve_next_actor's board_cfg construction
 	# (FlowRuntime.gd:2600-2649) exactly, read-only.
 	var balance: Dictionary = runtime.config_service.get_balance()
@@ -322,7 +327,7 @@ static func _measure_prepare_seam(
 	# A. FULL seam, exactly as FlowRuntime calls it (FlowRuntime.gd:2742) — the
 	# cross-check total every granular step in (B) below must sum close to.
 	var t_prep0: int = Time.get_ticks_usec()
-	var movement_prepared: Dictionary = runtime._prepare_live_movement_context(
+	var movement_prepared: Dictionary = lm.prepare_live_movement_context(
 		actor, ectx, combat_state, movement_board_cfg, bdata, t)
 	var t_prep1: int = Time.get_ticks_usec()
 	breakdown["prep_calls"] = int(breakdown["prep_calls"]) + 1
@@ -358,37 +363,37 @@ static func _measure_prepare_seam(
 	}
 	var walkable: Dictionary = movement_board_cfg.get("walkable", {}) as Dictionary
 	if walkable.is_empty():
-		walkable = runtime._movement_rect_walkable(bounds)
+		walkable = lm.movement_rect_walkable(bounds)
 
 	var t_occ0: int = Time.get_ticks_usec()
-	var occupancy: Dictionary = runtime._movement_occupancy(ectx.actors)
+	var occupancy: Dictionary = lm._movement_occupancy(ectx.actors)
 	var mover_origin: Dictionary = actor.get("grid_pos", {}) as Dictionary
 	if not mover_origin.is_empty():
-		occupancy[runtime._movement_cell_key_runtime(mover_origin)] = str(actor.get("id", ""))
+		occupancy[lm._movement_cell_key_runtime(mover_origin)] = str(actor.get("id", ""))
 	var t_occ1: int = Time.get_ticks_usec()
 	breakdown["occupancy_calls"] = int(breakdown["occupancy_calls"]) + 1
 	breakdown["occupancy_usec"] = int(breakdown["occupancy_usec"]) + (t_occ1 - t_occ0)
 
 	var t_pf0: int = Time.get_ticks_usec()
-	var perceived: Array = runtime._movement_actor_facts(ectx.actors)
+	var perceived: Array = lm._movement_actor_facts(ectx.actors)
 	var t_pf1: int = Time.get_ticks_usec()
 	breakdown["actor_facts_calls"] = int(breakdown["actor_facts_calls"]) + 1
 	breakdown["actor_facts_usec"] = int(breakdown["actor_facts_usec"]) + (t_pf1 - t_pf0)
 
 	var t_rel0: int = Time.get_ticks_usec()
-	var relationships: Dictionary = runtime._movement_relationships(actor, perceived)
+	var relationships: Dictionary = lm._movement_relationships(actor, perceived)
 	var t_rel1: int = Time.get_ticks_usec()
 	breakdown["relationships_calls"] = int(breakdown["relationships_calls"]) + 1
 	breakdown["relationships_usec"] = int(breakdown["relationships_usec"]) + (t_rel1 - t_rel0)
 
 	var t_pr0: int = Time.get_ticks_usec()
-	var pressure: Dictionary = runtime._movement_pressure_snapshot(actor, ectx, combat_state, bounds, walkable)
+	var pressure: Dictionary = lm._movement_pressure_snapshot(actor, ectx, combat_state, bounds, walkable)
 	var t_pr1: int = Time.get_ticks_usec()
 	breakdown["pressure_snapshot_calls"] = int(breakdown["pressure_snapshot_calls"]) + 1
 	breakdown["pressure_snapshot_usec"] = int(breakdown["pressure_snapshot_usec"]) + (t_pr1 - t_pr0)
 
 	var t_hz0: int = Time.get_ticks_usec()
-	var known_hazards: Array = runtime._live_combat_known_hazards()
+	var known_hazards: Array = lm._live_combat_known_hazards()
 	var t_hz1: int = Time.get_ticks_usec()
 	breakdown["known_hazards_calls"] = int(breakdown["known_hazards_calls"]) + 1
 	breakdown["known_hazards_usec"] = int(breakdown["known_hazards_usec"]) + (t_hz1 - t_hz0)
@@ -414,7 +419,7 @@ static func _measure_prepare_seam(
 	breakdown["context_build_usec"] = int(breakdown["context_build_usec"]) + (t_ctx1 - t_ctx0)
 
 	var t_pw0: int = Time.get_ticks_usec()
-	var planning_walkable_ec: Dictionary = runtime._movement_planning_walkable(movement_context)
+	var planning_walkable_ec: Dictionary = lm._movement_planning_walkable(movement_context)
 	var t_pw1: int = Time.get_ticks_usec()
 	breakdown["planning_walkable_calls"] = int(breakdown["planning_walkable_calls"]) + 1
 	breakdown["planning_walkable_usec"] = int(breakdown["planning_walkable_usec"]) + (t_pw1 - t_pw0)
@@ -468,7 +473,7 @@ static func _measure_prepare_seam(
 	if bool(goals_result.get("valid", false)) and not bool(actor.get("is_quarry", false)) \
 			and not goals_arr.is_empty():
 		var t_opt0: int = Time.get_ticks_usec()
-		options = runtime._movement_live_direct_options(movement_context, profile, goals_arr, edge_costs, edge_sources)
+		options = lm._movement_live_direct_options(movement_context, profile, goals_arr, edge_costs, edge_sources)
 		var t_opt1: int = Time.get_ticks_usec()
 		option_gen_usec_this_turn = t_opt1 - t_opt0
 		breakdown["option_gen_calls"] = int(breakdown["option_gen_calls"]) + 1

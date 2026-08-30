@@ -275,24 +275,29 @@ static func _test_same_virtue_overspecialisation_lowers_readiness() -> Dictionar
 
 static func _test_non_chosen_consequences_applied_on_accept() -> Dictionary:
 	var logger := _make_logger()
-	var runtime := FlowRuntime.new(logger, ConfigService.new(), "/tmp/echoes-vnext-tests/weaving_rite_slot.json")
-	runtime.flow_ctx = FlowContext.new()
-	runtime.flow_ctx.save_data = _make_save("courage")
+	# V2-INFRA-003 Phase 4 Slice 1: _apply_weave_non_chosen_consequences moved off
+	# FlowRuntime onto WeaveController. Constructed directly (not via FlowRuntime +
+	# string reflection) so this test actually exercises the extracted method on its
+	# new home — a delegating shim on FlowRuntime would keep this green without
+	# proving the extraction happened.
+	var flow_ctx := FlowContext.new()
+	flow_ctx.save_data = _make_save("courage")
+	var controller := WeaveController.new(flow_ctx, ConfigService.new(), logger)
 
 	var non_chosen := [
 		{ "echo_id": "echo.2", "name": "Echo 2", "morale_delta": -8, "fear_delta": 5, "bond_delta": -8 },
 		{ "echo_id": "echo.3", "name": "Echo 3", "morale_delta": -10, "fear_delta": 6, "bond_delta": -10 },
 	]
-	runtime.call("_apply_weave_non_chosen_consequences", non_chosen, "echo.1", 3)
+	controller._apply_weave_non_chosen_consequences(non_chosen, "echo.1", 3)
 
-	var echo_2 := _find_echo(runtime.flow_ctx.save_data, "echo.2")
+	var echo_2 := _find_echo(flow_ctx.save_data, "echo.2")
 	var emo_2 := EmotionService.get_emotion(echo_2)
 	if int(emo_2.get("morale_current", 50)) >= 65:
 		return { "ok": false, "error": "Expected echo.2 morale to drop after non-chosen consequence" }
 	if int(emo_2.get("fear_current", 0)) <= 10:
 		return { "ok": false, "error": "Expected echo.2 fear to increase after non-chosen consequence" }
 
-	var bonds_v: Variant = runtime.flow_ctx.save_data.get("sanctum", {}).get("bonds", [])
+	var bonds_v: Variant = flow_ctx.save_data.get("sanctum", {}).get("bonds", [])
 	var bonds: Array = bonds_v if bonds_v is Array else []
 	var edge := SocialGraphService.get_edge(bonds, "echo.1", "echo.2")
 	if edge.is_empty():
@@ -323,7 +328,7 @@ static func _test_non_chosen_consequences_exist_for_reject_and_defer() -> Dictio
 
 static func _test_commitment_lock_blocks_non_confirm_runtime_actions() -> Dictionary:
 	var logger := _make_logger()
-	var runtime := FlowRuntime.new(logger, ConfigService.new(), "/tmp/echoes-vnext-tests/weaving_rite_slot.json")
+	var runtime := FlowRuntime.new(logger, ConfigService.new(), TestSaveHarness.dir() + "weaving_rite_slot.json")
 	runtime.flow_ctx = FlowContext.new()
 	runtime.flow_ctx.sim_tick = 0
 	runtime.flow_ctx.weave_commit_locked = true
@@ -388,7 +393,7 @@ static func _test_calling_virtue_adjacency_bonus_adds_point_one() -> Dictionary:
 
 static func _test_start_for_echo_transitions_to_rite() -> Dictionary:
 	var logger := _make_logger()
-	var runtime := FlowRuntime.new(logger, ConfigService.new(), "/tmp/echoes-vnext-tests/weaving_rite_slot.json")
+	var runtime := FlowRuntime.new(logger, ConfigService.new(), TestSaveHarness.dir() + "weaving_rite_slot.json")
 	runtime.flow_ctx = FlowContext.new()
 	runtime.flow_ctx.sim_tick = 0
 	runtime.flow_ctx.save_data = _make_save("courage")
