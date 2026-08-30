@@ -341,9 +341,16 @@ func resolve_activation(
 					"target_id": target_id,
 				})
 				ectx.last_round_results.append({
-					# The intent was a melee attack. Report the attack, not an idle, so the
-					# contribution ledger does not read a wasted swing as inaction.
-					"action_type": "melee_attack",
+					# D46 REVERTED after PR #61 review. This arm was briefly changed to
+					# "melee_attack" on the reasoning that the log should name the intent. That
+					# was wrong: no attack happened, and naming one has two live consequences.
+					# ContributionLedgerService:191 counts melee_attack into melee_count and
+					# total_count, which feed melee_share and so the courage virtue XP
+					# multiplier; and CombatBoardScreen._format_action:962 renders it as
+					# "Attacks ? (0)", because target_name is empty here.
+					# The intent is already recorded by the combat.attack_invalid_target log
+					# line above, so nothing is lost by reporting inaction.
+					"action_type": "actor.idle",
 					"source_id":   str(actor.get("id", "")),
 					"source_name": str(actor.get("name", "")),
 					"target_id":   "",
