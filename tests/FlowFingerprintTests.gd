@@ -570,7 +570,25 @@ static func test_pursue() -> Dictionary:
 # test_guide_spirit_joined_combatant_moves_freely's docstring) — "protect"+"nojoin" is the one
 # mode-specific decision surface (escort/skittish movement, guide_protect_counter) worth its own
 # fingerprint.
-const GUIDE_SPIRIT_ROUNDS_HASH := "e521e51e320631f4022ea9b2085381eded9eb82cc28e3202c54957b9ddda84c3"
+#
+# V2-COMBAT-003 phase 2c re-record — attributed, not blind. GridService.place_actors now skips
+# any walkable cell whose StageTerrain.legal_neighbors is empty (the placement guard; see
+# core/grid/GridService.gd's _assign_walkable_faction). This board — the 60x12 GUIDE_SPIRIT
+# long board for encounter_id "realm.01.stage.0.fp_guide_spirit", root_seed 12346 — generates
+# exactly ONE isolated cell: (8,0). Before the guard, echo_0003 landed on (8,0) and was
+# stranded there for the whole fight (a real instance of the section 5.1 defect, not a
+# hypothetical). After the guard, (8,0) is skipped and the ordered fill shifts every
+# subsequent echo one legal cell along:
+#   before: e1@9,6  e2@9,2  e3@8,0  e4@9,5  e5@9,1
+#   after:  e1@9,8  e2@9,5  e3@9,1  e4@9,6  e5@9,2
+# (enemy and guide_spirit positions are unaffected — the isolated cell sits in the echo
+# column band). Measured with a throwaway probe test that dumped ectx.terrain's walkable set,
+# ran StageTerrain.legal_neighbors over every cell, and printed ectx.actors' grid_pos before
+# and after the fix, on an otherwise-unmodified tree (probe deleted after use, not committed).
+# ROUNDS_HASH is the only one of the three that moved — FINAL_HASH and SAVE_HASH are unchanged,
+# because the fight's outcome (round 9, spirit_protected, same rewards) does not depend on
+# which specific legal cell echo_0003 started the fight on.
+const GUIDE_SPIRIT_ROUNDS_HASH := "899f9999fffb98ff9011ba0ae9fd0d00ef56e134d61bfc28479105fc92a0c310"
 const GUIDE_SPIRIT_FINAL_HASH  := "a325a46c3563e33884a9d1bd6899119232354509ceeef03b488d642bb4655b33"
 const GUIDE_SPIRIT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 

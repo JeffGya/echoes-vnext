@@ -202,7 +202,7 @@ static func place_on_terrain(candidates: Array, target_col: float, ref_row: floa
 # -------------------------
 
 ## Places echo_actors (left half) and enemy_actors (right half) on the board using
-## seeded RNG. Mutates grid_pos on each actor in-place. Returns nothing.
+## seeded RNG. Mutates grid_pos on each actor in-place.
 ##
 ## Placement score = floor((agi + speed) / 2) + archetype_mod + calling_mod
 ##                   + trait_mod + vector_mod
@@ -215,9 +215,15 @@ static func place_on_terrain(candidates: Array, target_col: float, ref_row: floa
 ##
 ## Rows within each column are shuffled via the injected RNG.
 ## The RNG must be freshly seeded by the caller to guarantee reproducibility.
+##
+## Returns { "echo_unfiltered_fallback": bool, "enemy_unfiltered_fallback": bool }.
+## Each flag is true only when that faction had an actor placed by the unfiltered
+## final pass (V2-COMBAT-003 phase 2c) — every remaining candidate cell had no legal
+## edge (StageTerrain.legal_neighbors was empty). This should never happen in practice;
+## the caller logs it as a live alarm. Always false on the legacy (no-walkable) path.
 static func place_actors(echo_actors: Array, enemy_actors: Array,
 		board_cfg: Dictionary, rng: RandomNumberGenerator,
-		place_cfg: Dictionary = {}) -> void:
+		place_cfg: Dictionary = {}) -> Dictionary:
 	var cols: int = get_board_cols(board_cfg)
 	var rows: int = get_board_rows(board_cfg)
 
@@ -245,6 +251,7 @@ static func place_actors(echo_actors: Array, enemy_actors: Array,
 		# LEGACY path — unchanged. Echoes fill from col=1 inward; enemies from col=cols-2 inward.
 		_pack_faction(sorted_echoes, 1, 1, rows, rng)
 		_pack_faction(sorted_enemies, cols - 2, -1, rows, rng)
+		return { "echo_unfiltered_fallback": false, "enemy_unfiltered_fallback": false }
 	else:
 		# WALKABLE TERRAIN path — direct deterministic assignment; NO RNG draws.
 		# (The placement rng is not reused after this function returns, so no parity draw is needed.)
@@ -271,12 +278,16 @@ static func place_actors(echo_actors: Array, enemy_actors: Array,
 		for c in cells_by_col:
 			(cells_by_col[c] as Array).sort_custom(func(a, b): return int(a["row"]) < int(b["row"]))
 
+		# V2-COMBAT-003 phase 2c: bounds for StageTerrain.legal_neighbors. StageTerrain uses
+		# "w"/"h"; board_cfg uses "board_cols"/"board_rows" (already read above as cols/rows).
+		var bounds: Dictionary = { "w": cols, "h": rows }
+
 		# Assign echoes: iterate columns left→right, filling actors in score-ascending order.
 		var echo_cells: Array = []
 		for c in sorted_cols:
 			for cell in cells_by_col[c]:
 				echo_cells.append(cell)
-		_assign_walkable_faction(sorted_echoes, echo_cells, walkable)
+		var echo_unfiltered: bool = _assign_walkable_faction(sorted_echoes, echo_cells, walkable, bounds)
 
 		# Assign enemies: iterate columns right→left, filling actors in score-ascending order.
 		var enemy_cols: Array = sorted_cols.duplicate()
@@ -286,24 +297,40 @@ static func place_actors(echo_actors: Array, enemy_actors: Array,
 			# Within each column keep rows ascending for determinism.
 			for cell in cells_by_col[c]:
 				enemy_cells.append(cell)
-		_assign_walkable_faction(sorted_enemies, enemy_cells, walkable)
+		var enemy_unfiltered: bool = _assign_walkable_faction(sorted_enemies, enemy_cells, walkable, bounds)
+
+		return {
+			"echo_unfiltered_fallback": echo_unfiltered,
+			"enemy_unfiltered_fallback": enemy_unfiltered,
+		}
 
 
 ## Assigns grid positions for one faction into a pre-ordered list of walkable cells.
 ## actors: sorted Array of actor dicts (score-ascending, id tiebreak).
 ## ordered_cells: walkable cells in the desired fill order for this faction.
 ## walkable: the full walkable set (used as fallback pool when ordered_cells are exhausted).
+## bounds: { "w": int, "h": int } — passed straight to StageTerrain.legal_neighbors.
 ## If ordered_cells has fewer entries than actors, falls back to the nearest remaining
 ## walkable cells (those not yet assigned) to ensure every actor gets a cell — never void.
 ## Purely deterministic; no RNG.
-static func _assign_walkable_faction(actors: Array, ordered_cells: Array, walkable: Dictionary) -> void:
+##
+## V2-COMBAT-003 phase 2c: a walkable cell can still be an isolated dead end — reachable
+## by no legal edge (StageTerrain.is_legal_edge rejects a diagonal whose two orthogonal
+## side cells are both solid). Passes 1 and 2 skip such cells so an actor is never placed
+## somewhere it can never leave. Pass 3 has no such filter: if every remaining candidate
+## is isolated, an actor still needs a cell — placing it on unreachable ground is bad,
+## dropping it from the encounter is worse. Returns true iff any actor remained unplaced
+## after passes 1 and 2, i.e. pass 3 had to run.
+static func _assign_walkable_faction(actors: Array, ordered_cells: Array, walkable: Dictionary,
+		bounds: Dictionary = {}) -> bool:
 	if actors.is_empty():
-		return
+		return false
 
 	# Track assigned cells to prevent two actors sharing a cell.
 	var assigned: Dictionary = {}
 
-	# Pass 1: fill actors from ordered_cells in sequence.
+	# Pass 1: fill actors from ordered_cells in sequence, skipping any isolated cell
+	# (StageTerrain.legal_neighbors empty ⇒ no legal edge out).
 	var cell_idx: int = 0
 	var actor_idx: int = 0
 	while actor_idx < actors.size() and cell_idx < ordered_cells.size():
@@ -312,12 +339,15 @@ static func _assign_walkable_faction(actors: Array, ordered_cells: Array, walkab
 		cell_idx += 1
 		if assigned.has(key):
 			continue  # already taken (shouldn't happen with well-formed input, but guard it)
+		if StageTerrain.legal_neighbors(cell, walkable, bounds).is_empty():
+			continue  # isolated — would strand the actor; leave for pass 3 only
 		assign_grid_pos(actors[actor_idx], int(cell.get("col", 0)), int(cell.get("row", 0)))
 		assigned[key] = true
 		actor_idx += 1
 
 	# Pass 2: if ordered_cells were exhausted before all actors placed, drain remaining
 	# walkable cells in sorted key order (col asc, row asc) as a deterministic fallback.
+	# Same isolation filter as pass 1.
 	if actor_idx < actors.size():
 		var fallback_keys: Array = walkable.keys()
 		fallback_keys.sort()
@@ -329,12 +359,38 @@ static func _assign_walkable_faction(actors: Array, ordered_cells: Array, walkab
 			var parts := (fk as String).split(",")
 			var fc: int = int(parts[0])
 			var fr: int = int(parts[1])
+			var fcell: Dictionary = { "col": fc, "row": fr }
+			if StageTerrain.legal_neighbors(fcell, walkable, bounds).is_empty():
+				continue  # isolated — leave for pass 3 only
 			assign_grid_pos(actors[actor_idx], fc, fr)
+			assigned[fk] = true
+			actor_idx += 1
+
+	# Pass 3: unfiltered fallback. Every remaining candidate cell is isolated (or walkable
+	# itself is exhausted). Placing an actor where it cannot walk is bad; dropping it from
+	# the encounter is worse — so place it anyway. Should never fire in practice; the call
+	# site (EncounterSetupService) logs this as a live alarm.
+	var used_unfiltered: bool = false
+	if actor_idx < actors.size():
+		used_unfiltered = true
+		var fallback_keys2: Array = walkable.keys()
+		fallback_keys2.sort()
+		for fk in fallback_keys2:
+			if actor_idx >= actors.size():
+				break
+			if assigned.has(fk):
+				continue
+			var parts2 := (fk as String).split(",")
+			var fc2: int = int(parts2[0])
+			var fr2: int = int(parts2[1])
+			assign_grid_pos(actors[actor_idx], fc2, fr2)
 			assigned[fk] = true
 			actor_idx += 1
 	# If walkable itself is exhausted (more actors than walkable cells), the remaining actors
 	# keep whatever grid_pos they had from the last assign_grid_pos call — this is a
 	# degenerate edge case that cannot crash and will be caught by combat validation.
+
+	return used_unfiltered
 
 
 ## Assigns grid positions for one faction's actors into columns starting at start_col,

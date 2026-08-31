@@ -26,6 +26,14 @@
 #  22. chebyshev_distance returns 1 for a diagonal neighbour.                         (GRID-ADJ)
 #  23. chebyshev_distance returns 2 for a two-step orthogonal distance.               (GRID-ADJ)
 #  24. is_adjacent returns true for a diagonal neighbour.                             (GRID-ADJ)
+#  25. An isolated walkable cell (StageTerrain.legal_neighbors empty) is skipped      (V2-COMBAT-003
+#      while a legal cell remains unfilled.                                           phase 2c)
+#  26. place_actors makes zero RNG draws on the walkable branch, even when the        (V2-COMBAT-003
+#      candidate set contains an isolated cell (rng.state unchanged before/after).    phase 2c)
+#  27. When every walkable cell is isolated, every actor is still placed — nobody     (V2-COMBAT-003
+#      is dropped from the encounter.                                                 phase 2c)
+#  28. On a board with no isolated cells, the placement guard changes nothing —       (V2-COMBAT-003
+#      positions are identical to the pre-guard ordered-fill algorithm.               phase 2c)
 #
 # All tests are pure unit tests — no runtime or save file needed.
 # Run via Debug Panel: tests
@@ -61,6 +69,15 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("grid/chebyshev_diagonal_is_one",           Callable(GridTests, "_t_chebyshev_diagonal_is_one"))
 	runner.register_test("grid/chebyshev_two_steps_is_two",          Callable(GridTests, "_t_chebyshev_two_steps_is_two"))
 	runner.register_test("grid/is_adjacent_diagonal",                Callable(GridTests, "_t_is_adjacent_diagonal"))
+	# V2-COMBAT-003 phase 2c — the placement guard
+	runner.register_test("grid/isolated_cell_skipped_while_legal_remains",
+		Callable(GridTests, "_t_isolated_cell_skipped_while_legal_remains"))
+	runner.register_test("grid/isolated_cell_placement_zero_rng_draws",
+		Callable(GridTests, "_t_isolated_cell_placement_zero_rng_draws"))
+	runner.register_test("grid/isolated_only_board_drops_nobody",
+		Callable(GridTests, "_t_isolated_only_board_drops_nobody"))
+	runner.register_test("grid/no_isolated_cells_placement_unchanged",
+		Callable(GridTests, "_t_no_isolated_cells_placement_unchanged"))
 
 
 # -------------------------
@@ -516,3 +533,213 @@ static func _t_is_adjacent_diagonal() -> Dictionary:
 	if not GridService.is_adjacent(a, b):
 		return { "ok": false, "error": "Expected is_adjacent({0,0},{1,1})=true (diagonal neighbour)" }
 	return { "ok": true }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# V2-COMBAT-003 phase 2c — the placement guard
+#
+# GridService.place_actors can place an actor on a walkable cell that has no legal
+# edge (StageTerrain.is_legal_edge rejects a diagonal whose two orthogonal side
+# cells are both solid, or the cell simply has no walkable neighbour at all). The
+# actor is then stranded: the movement layer truthfully reports zero options and
+# the actor idles forever.
+#
+# _assign_walkable_faction now runs a three-pass fill:
+#   1. ordered pass, skipping any cell whose StageTerrain.legal_neighbors is empty
+#   2. sorted drain, same filter
+#   3. unfiltered final pass — only reached when every remaining cell is isolated,
+#      so an actor is never dropped from the encounter
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Helper: builds a walkable set with a 2x2 legal clump at cols 5-6, rows 5-6
+# (every cell there has an orthogonal walkable neighbour, so legal_neighbors is
+# always non-empty) plus one isolated singleton cell at (0,0) — no walkable cell
+# is adjacent to it in any of the 8 directions, so StageTerrain.legal_neighbors
+# for (0,0) is empty. Column 0 sorts before columns 5-6, so the ordered fill visits
+# the isolated cell FIRST — this is what makes the pre-fix code strand an actor
+# there while legal ground remains.
+static func _make_clump_plus_isolated_walkable() -> Dictionary:
+	return {
+		"0,0": true,  # isolated — no walkable neighbour at all
+		"5,5": true, "6,5": true,
+		"5,6": true, "6,6": true,
+	}
+
+
+# Test 25: isolated_cell_skipped_while_legal_remains
+# Expected: with 4 actors and 5 walkable cells (4 legal + 1 isolated), every actor
+# lands on the legal 2x2 clump and (0,0) — the isolated cell — is never used, even
+# though it sorts first in fill order.
+#
+# Against the pre-fix code (a single unfiltered ordered pass) this test FAILS:
+# actor "e1" is assigned to (0,0) because it is first in echo_cells order, and the
+# clump cell (6,6) is left unused. See the phase 2c report for the captured
+# failure output.
+static func _t_isolated_cell_skipped_while_legal_remains() -> Dictionary:
+	var walkable := _make_clump_plus_isolated_walkable()
+	var board := { "board_cols": 10, "board_rows": 10, "walkable": walkable }
+
+	var echoes: Array = [
+		_make_actor("e1", 2, 2, "brave", "blade", {}, {}),
+		_make_actor("e2", 2, 2, "brave", "blade", {}, {}),
+		_make_actor("e3", 2, 2, "brave", "blade", {}, {}),
+		_make_actor("e4", 2, 2, "brave", "blade", {}, {}),
+	]
+	var enemies: Array = []
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 99
+
+	GridService.place_actors(echoes, enemies, board, rng, {})
+
+	var legal_keys: Dictionary = { "5,5": true, "6,5": true, "5,6": true, "6,6": true }
+	var used: Dictionary = {}
+	for actor in echoes:
+		var gp: Dictionary = actor.get("grid_pos", {})
+		var key: String = "%d,%d" % [int(gp.get("col", -999)), int(gp.get("row", -999))]
+		if key == "0,0":
+			return {
+				"ok": false,
+				"error": ("Actor '%s' was placed on the isolated cell (0,0) while a legal " + \
+					"clump cell remained — StageTerrain.legal_neighbors('0,0') is empty") \
+					% str(actor.get("id", "?"))
+			}
+		if not legal_keys.has(key):
+			return {
+				"ok": false,
+				"error": "Actor '%s' placed at %s, outside the legal clump" \
+					% [str(actor.get("id", "?")), key]
+			}
+		used[key] = true
+
+	if used.size() != 4:
+		return { "ok": false, "error": "Expected all 4 legal clump cells used, got: %s" % [used.keys()] }
+
+	return { "ok": true }
+
+
+# Test 26: isolated_cell_placement_zero_rng_draws
+# Expected: place_actors on the walkable branch makes ZERO RNG draws, even when the
+# candidate set includes an isolated cell that the new filter must skip. Asserted
+# directly via rng.state, per CONVENTIONS.md's guarantee for the walkable path.
+static func _t_isolated_cell_placement_zero_rng_draws() -> Dictionary:
+	var walkable := _make_clump_plus_isolated_walkable()
+	var board := { "board_cols": 10, "board_rows": 10, "walkable": walkable }
+
+	var echoes: Array = [
+		_make_actor("e1", 2, 2, "brave", "blade", {}, {}),
+		_make_actor("e2", 2, 2, "brave", "blade", {}, {}),
+	]
+	var enemies: Array = [
+		_make_actor("n1", 2, 2, "sage", "warder", {}, {}),
+	]
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	var state_before: int = rng.state
+
+	GridService.place_actors(echoes, enemies, board, rng, {})
+
+	var state_after: int = rng.state
+	if state_after != state_before:
+		return {
+			"ok": false,
+			"error": "rng.state changed across place_actors (walkable branch): before=%d after=%d — the placement guard must make zero RNG draws" \
+				% [state_before, state_after]
+		}
+
+	return { "ok": true }
+
+
+# Test 27: isolated_only_board_drops_nobody
+# Expected: when every walkable cell is isolated (no legal edge exists anywhere on
+# the board), pass 3 (the unfiltered fallback) still places every actor. Placing an
+# actor on unreachable ground is bad; dropping it from the encounter is worse.
+static func _t_isolated_only_board_drops_nobody() -> Dictionary:
+	# Two singleton cells, far enough apart that neither is adjacent to the other or
+	# to anything else — both are fully isolated (legal_neighbors empty for both).
+	var walkable := { "0,0": true, "5,5": true }
+	var board := { "board_cols": 10, "board_rows": 10, "walkable": walkable }
+
+	var echoes: Array = [
+		_make_actor("e1", 2, 2, "brave", "blade", {}, {}),
+		_make_actor("e2", 2, 2, "brave", "blade", {}, {}),
+	]
+	var enemies: Array = []
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+
+	GridService.place_actors(echoes, enemies, board, rng, {})
+
+	var seen: Dictionary = {}
+	for actor in echoes:
+		var gp: Dictionary = actor.get("grid_pos", {})
+		var key: String = "%d,%d" % [int(gp.get("col", -999)), int(gp.get("row", -999))]
+		if not walkable.has(key):
+			return {
+				"ok": false,
+				"error": "Actor '%s' was not placed on any walkable cell (got %s) — an actor was dropped" \
+					% [str(actor.get("id", "?")), key]
+			}
+		seen[key] = true
+
+	if seen.size() != 2:
+		return {
+			"ok": false,
+			"error": "Expected both isolated cells used (one per actor), got: %s" % [seen.keys()]
+		}
+
+	return { "ok": true }
+
+
+# Test 28: no_isolated_cells_placement_unchanged
+# Expected: on a board where every cell is legally reachable, the placement guard's
+# filter never rejects anything, so the result is byte-identical to the pre-guard
+# ordered-fill algorithm — a plain col-major, row-ascending consumption of
+# echo_cells. Verified against hand-computed expected positions for a fully solid
+# 3-wide x 2-tall rectangle (no isolated cells exist on it).
+static func _t_no_isolated_cells_placement_unchanged() -> Dictionary:
+	var walkable: Dictionary = {}
+	for c in range(3):
+		for r in range(2):
+			walkable["%d,%d" % [c, r]] = true
+
+	var board := { "board_cols": 3, "board_rows": 2, "walkable": walkable }
+
+	var echoes: Array = [
+		_make_actor("e1", 2, 2, "brave", "blade", {}, {}),
+		_make_actor("e2", 2, 2, "brave", "blade", {}, {}),
+		_make_actor("e3", 2, 2, "brave", "blade", {}, {}),
+	]
+	var enemies: Array = []
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1
+
+	GridService.place_actors(echoes, enemies, board, rng, {})
+
+	# Col-major, row-ascending order over the whole 3x2 rectangle is:
+	# (0,0), (0,1), (1,0), (1,1), (2,0), (2,1) — same-score actors keep input order
+	# (e1, e2, e3) via the id tiebreak, so the ordered pass assigns the first three.
+	var expected: Array = [
+		{ "col": 0, "row": 0 },
+		{ "col": 0, "row": 1 },
+		{ "col": 1, "row": 0 },
+	]
+	for i in range(echoes.size()):
+		var gp: Dictionary = echoes[i].get("grid_pos", {})
+		if not _pos_equal_grid(gp, expected[i]):
+			return {
+				"ok": false,
+				"error": "Actor '%s' expected at %s, got %s — placement guard changed behaviour on an isolation-free board" \
+					% [str(echoes[i].get("id", "?")), str(expected[i]), str(gp)]
+			}
+
+	return { "ok": true }
+
+
+# Helper: exact col+row equality for two grid_pos-shaped dicts.
+static func _pos_equal_grid(a: Dictionary, b: Dictionary) -> bool:
+	return int(a.get("col", -1)) == int(b.get("col", -1)) \
+		and int(a.get("row", -1)) == int(b.get("row", -1))

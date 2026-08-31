@@ -389,7 +389,24 @@ func setup(t: int) -> void:
 		else:
 			rng.seed = hash(flow_ctx.encounter_ctx.encounter_id)
 
-		GridService.place_actors(echo_actors, enemy_actors, grid_cfg_for_placement, rng, place_cfg)
+		var _placement_result: Dictionary = GridService.place_actors(
+			echo_actors, enemy_actors, grid_cfg_for_placement, rng, place_cfg)
+
+		# V2-COMBAT-003 phase 2c: the placement guard (GridService._assign_walkable_faction)
+		# should never need its unfiltered final pass — that only fires when every remaining
+		# candidate cell is isolated (no legal edge). GridService is pure static and has no
+		# logger, so this alarm lives here, at the one call site that owns `logger`.
+		if bool(_placement_result.get("echo_unfiltered_fallback", false)) \
+				or bool(_placement_result.get("enemy_unfiltered_fallback", false)):
+			if logger != null:
+				logger.warn(t, "combat.placement.unfiltered_fallback",
+					"GridService placed an actor on an isolated cell — every remaining " +
+					"candidate had no legal edge (StageTerrain.legal_neighbors empty).",
+					{
+						"encounter_id": flow_ctx.encounter_ctx.encounter_id,
+						"echo_unfiltered_fallback": _placement_result.get("echo_unfiltered_fallback", false),
+						"enemy_unfiltered_fallback": _placement_result.get("enemy_unfiltered_fallback", false),
+					})
 
 		# V2-INFRA-003 Phase 6 Slice 6I: the two objective-actor spawn blocks that used to sit
 		# inline here now live in EncounterObjectiveSpawnService. Same bodies, same order, same
