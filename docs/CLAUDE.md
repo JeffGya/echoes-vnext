@@ -38,6 +38,15 @@
 - One task per subagent for focused execution.
 - For complex problems, throw more compute at it via parallel subagents.
 
+### Delegating to sub-agents
+
+Model tiers for ANY delegated work — Agent-tool calls and Workflow-script `agent()` calls alike. Set the `model` parameter explicitly on every call; never omit it (omission silently inherits the session model):
+- `haiku` — mechanical bulk work: renames, boilerplate, format conversion, log triage
+- `sonnet` — default for well-specified implementation with clear acceptance criteria
+- `opus` — genuinely tricky work: concurrency, subtle algorithms, adversarial verify/judge panels, gnarly debugging
+
+Choose the tier from the DIFFICULTY of the work, not from a fixed build-versus-review split. A diagnosis of an unknown mechanism is `opus` work even when the fix that follows is `sonnet` work. Split a task across two tiers when its halves differ.
+
 ### Self-Improvement Loop
 - After ANY correction from Jeff: update `~/.claude/lessons.md` with the pattern (rule + why + how to apply).
 - Write rules that prevent the same mistake from recurring.
