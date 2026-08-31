@@ -99,7 +99,9 @@ static func _run_scenario(sc: Dictionary) -> Dictionary:
 
 	# Scenario-specific slot, cleared before boot (including .bak1/.bak2/.bak3 — a bare
 	# `rm -f *.json` glob misses those; see SaveService.gd:62-66 for the rotation scheme).
-	var slot_path: String = "/tmp/echoes-vnext-tests/pursue_probe_%s.json" % seed_tag
+	# Root is the single source of truth in tests/TestSaveHarness.gd::root().
+	var save_root := TestSaveHarness.root()
+	var slot_path: String = "%spursue_probe_%s.json" % [save_root, seed_tag]
 	_clear_slot(slot_path)
 	var runtime := FlowRuntime.new(logger, config, slot_path)
 	runtime.boot()

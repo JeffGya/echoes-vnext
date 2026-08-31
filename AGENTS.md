@@ -87,19 +87,28 @@ filter prints the available suite names and runs nothing.
 
 ### Save isolation — DELETE THE WHOLE SAVE DIRECTORY BEFORE EVERY RUN
 
-Suites write saves into a shared directory under `/tmp`. **Stale files there silently corrupt
-results and produce false failures that survive a cache rebuild.** Always start a verification
-run with the delete:
+Suites write saves into a shared directory under `/tmp`, by default `/tmp/echoes-vnext-tests/`.
+**Stale files there silently corrupt results and produce false failures that survive a cache
+rebuild.** Always start a verification run with the delete:
 
 ```bash
 rm -rf /tmp/echoes-vnext-tests && <godot ... -- tests>
 ```
 
-**Why.** `SaveService` writes six artifacts beside the primary save — `.pending_a`, `.pending_b`,
-`.tmp`, `.bak1`, `.bak2`, `.bak3` ([SaveService.gd:173-181](core/save/SaveService.gd:173)). It
-returns `LOAD_MISSING` only when *no* artifact exists ([SaveService.gd:116-118](core/save/SaveService.gd:116)).
-A helper that deletes only the primary therefore leaves a recoverable backup, `boot()` never
-reaches `make_new_save(<pinned seed>)`, and the test **resumes a previous run's campaign** — other
+**The root is configurable.** Set `ECHOES_TEST_SAVE_DIR` to point every save artifact this
+project writes during a test or a probe at a directory of your choosing instead of the shared
+default (a missing trailing separator is normalized). Leaving it unset reproduces today's
+behaviour byte-for-byte — same path, same `rm -rf /tmp/echoes-vnext-tests` cleanup. This is what
+makes parallel Godot runs possible: see "Agent Orchestration" below. Delete whichever directory
+you used before every run, custom or default — the contamination risk described next applies
+equally to both.
+
+**Why the delete matters.** `SaveService` writes six artifacts beside the primary save —
+`.pending_a`, `.pending_b`, `.tmp`, `.bak1`, `.bak2`, `.bak3`
+([SaveService.gd:173-181](core/save/SaveService.gd:173)). It returns `LOAD_MISSING` only when *no*
+artifact exists ([SaveService.gd:116-118](core/save/SaveService.gd:116)). A helper that deletes
+only the primary therefore leaves a recoverable backup, `boot()` never reaches
+`make_new_save(<pinned seed>)`, and the test **resumes a previous run's campaign** — other
 balances, other XP, another map, another hash. The production behaviour is correct; recovering from
 a backup is what a crash-safe save system is for. The test harness is what is wrong.
 
@@ -258,10 +267,14 @@ its halves differ.
 Parallelize by default. Two agents may run together only when all three conditions hold.
 
 1. **Disjoint files.** Neither agent writes a file or a section the other writes.
-2. **No shared exclusive resource.** **In this project that means Godot.** Every test run uses the
-   same absolute save directory, `/tmp/echoes-vnext-tests/`, hardcoded in `tests/TestSaveHarness.gd`
-   and `ui/AppRoot.gd`. Two Godot processes corrupt each other's saves. **A git worktree does NOT
-   isolate them, because the path is absolute.** Godot runs are therefore strictly serial.
+2. **No shared exclusive resource.** **In this project that means Godot.** Every test run writes
+   saves under `/tmp/echoes-vnext-tests/` by default, and that default is a hardcoded absolute
+   path, so **a git worktree alone does not isolate two Godot processes** — a worktree changes the
+   checkout, not `/tmp`. Two Godot processes that share a save directory corrupt each other's
+   saves. **Parallel Godot runs are possible now**, but only when each agent sets its own
+   `ECHOES_TEST_SAVE_DIR` (see "Save isolation" above) to a distinct directory before launching.
+   Two agents that leave the variable unset, or that set it to the same path, still corrupt each
+   other and must run serially.
 3. **Disjoint recorded values.** Two agents that would re-record the same fingerprint or baseline
    constant stay serial **even when their files differ**. Parallel re-records destroy attribution:
    you get one large set of moved values and no way to say which change caused which.

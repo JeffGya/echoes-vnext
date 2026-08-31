@@ -97,7 +97,8 @@ func _ready():
 
 	var cmdline_args := OS.get_cmdline_user_args()
 	var is_test_run := cmdline_args.size() > 0 and cmdline_args[0].to_lower() in ["tests", "test"]
-	var runtime_save_path := "/tmp/echoes-vnext-tests/headless_runtime_slot.json" if is_test_run else SaveSchema.DEFAULT_SAVE_PATH
+	# Root is the single source of truth in tests/TestSaveHarness.gd::root().
+	var runtime_save_path := (TestSaveHarness.root() + "headless_runtime_slot.json") if is_test_run else SaveSchema.DEFAULT_SAVE_PATH
 
 	# Bind renderer to UI elements it can update.
 	renderer.bind_view(snapshot_view, actions_container)

@@ -109,8 +109,10 @@ static func _run_scenario(sc: Dictionary) -> Dictionary:
 	# encounter seeding, so results depended on scenario order and on earlier or failed
 	# runs — not on `sc` alone. A corrupt leftover could also fail boot() before the
 	# unchecked save_data access below. This is what made runs non-reproducible.
-	var slot_path: String = "/tmp/echoes-vnext-tests/fear_probe_%s_%d.json" \
-		% [seed_tag, int(sc.get("seed_variant", 0))]
+	# Root is the single source of truth in tests/TestSaveHarness.gd::root().
+	var save_root := TestSaveHarness.root()
+	var slot_path: String = "%sfear_probe_%s_%d.json" \
+		% [save_root, seed_tag, int(sc.get("seed_variant", 0))]
 	_clear_slot(slot_path)
 	var runtime := FlowRuntime.new(logger, config, slot_path)
 	runtime.boot()
