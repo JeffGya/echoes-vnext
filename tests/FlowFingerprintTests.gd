@@ -45,6 +45,24 @@
 # simply die like any other enemy before the contain/escape window ever fires) hashed
 # identically. _final_fingerprint() now includes objective_state so the final hash can no
 # longer fail to distinguish two modes.
+#
+# FIX (V2-COMBAT-003 Phase 2a): combat.confirm_round resolves the FIRST actor of the round
+# itself (FlowRuntime.gd:1279, via _resolve_next_actor called from _handle_combat_confirm_round)
+# and resets ectx.last_round_results = [] immediately before doing so (FlowRuntime.gd:1269).
+# _drive_and_capture() dispatched confirm_round and then only sampled combat.next_actor, so the
+# first actor of every single round was resolved by the real simulation but never appeared in
+# any captured trace — measured: one Echo was first in initiative every round of a four-round
+# trace and appeared in ZERO captured turns. _drive_and_capture() now reads
+# ectx.last_round_results immediately after the confirm_round dispatch and records that first
+# turn before entering the next_actor loop. No production file changed; no dispatch was added
+# or removed on the path into any encounter (see FlowRuntime.gd's own comment at the
+# CombatTurnActionService call site: "Exactly one last_round_results entry is still appended per
+# call" — so the read added here can only ever pick up the one turn confirm_round itself just
+# resolved).
+#
+# What moved and the additive proof are recorded immediately above the seven per-mode hash
+# blocks below, next to the constants themselves, once the actual before/after values were in
+# hand — not asserted here ahead of measuring them.
 
 class_name FlowFingerprintTests
 extends RefCounted
@@ -182,8 +200,31 @@ static func _drive_and_capture(runtime: FlowRuntime, ectx: EncounterContext, max
 	var rounds: Array = []
 	runtime.dispatch({ "type": "combat.init" })
 	for _r in range(max_rounds):
+		# V2-COMBAT-003 Phase 2a FIX: combat.confirm_round resolves the FIRST actor of the round
+		# itself (FlowRuntime.gd:1279, _resolve_next_actor called from _handle_combat_confirm_round),
+		# and resets ectx.last_round_results = [] immediately before doing so (FlowRuntime.gd:1269).
+		# Previously this harness dispatched confirm_round and only sampled combat.next_actor
+		# afterward, so the first actor of every round was resolved but never captured — a whole
+		# turn per round silently missing from the fingerprint. Capture it here, before the
+		# next_actor loop below.
+		var before_positions_first: Dictionary = _positions_snapshot(ectx.actors)
 		runtime.dispatch({ "type": "combat.confirm_round" })
 		var turns: Array = []
+		var confirm_results: Array = ectx.last_round_results as Array
+		if confirm_results.size() > 0:
+			var after_positions_first: Dictionary = _positions_snapshot(ectx.actors)
+			for i in range(confirm_results.size()):
+				var first_entry: Dictionary = confirm_results[i] as Dictionary
+				var first_sid: String = str(first_entry.get("source_id", ""))
+				turns.append({
+					"actor_id":    first_sid,
+					"action_type": str(first_entry.get("action_type", "")),
+					"target_id":   str(first_entry.get("target_id", "")),
+					"damage":      int(first_entry.get("damage", 0)),
+					"is_kill":     bool(first_entry.get("is_kill", false)),
+					"from_pos":    before_positions_first.get(first_sid, {}),
+					"to_pos":      after_positions_first.get(first_sid, {}),
+				})
 		var guard: int = 0
 		while guard < 40:
 			guard += 1
@@ -411,7 +452,35 @@ static func _run_mode_fingerprint(
 # `title` was emitted by producers A, B and F and read by nothing in ui/, core/ or tests/. Only A
 # is fingerprinted, so only these seven constants could move — and only through data_keys.
 
-const COMBAT_ROUNDS_HASH := "e9203c42d3acb3fb2c13b92183808590d63cf251e39c07d1cd188de1c9340dbb"
+#
+# RE-RECORDED ONCE, V2-COMBAT-003 Phase 2a — the missing-first-actor harness fix (see the file
+# header FIX note above). Seven constants moved: the ROUNDS hash of all seven modes. NO FINAL
+# HASH AND NO SAVE HASH MOVED, which is the whole claim: the harness started capturing a turn
+# it was already simulating but not recording, and nothing about the simulation itself changed.
+#
+# PROOF OF ADDITIVITY — measured by re-running both the pre-fix and post-fix harness in the same
+# process, printing the full `rounds` array (not just its hash) for all seven modes, and diffing
+# turn-by-turn:
+#   - every round's `turns` array in the post-fix trace contains the entire pre-fix `turns` array
+#     as an exact, order-preserving subsequence — no previously-captured turn changed, moved, or
+#     was dropped.
+#   - the only turns added are exactly one per round: the first-actor-of-round turn that
+#     `combat.confirm_round` resolves internally (FlowRuntime.gd _handle_combat_confirm_round →
+#     _resolve_next_actor) and that the old harness never sampled.
+#   - `mode_state`, `positions_end_of_round` and the `round` counter are byte-identical per round
+#     in both traces.
+#   - turns gained, measured per mode: COMBAT +5 (5 rounds), PURIFY_SHRINE +4 (4 rounds),
+#     RECOVER +2 (2 rounds), PROTECT +4 (4 rounds), ENDURE +5 (5 rounds), PURSUE +5 (5 rounds),
+#     GUIDE_SPIRIT +9 (9 rounds) — exactly one gained turn per round in every mode, matching the
+#     "confirm_round resolves exactly one actor" comment at FlowRuntime.gd's
+#     CombatTurnActionService call site.
+#
+# No production file changed. No dispatch was added or removed: this harness still dispatches
+# exactly `combat.init`, one `combat.confirm_round` per round, and `combat.next_actor` per
+# subsequent turn — identically to before. FINAL_HASH and SAVE_HASH constants for all seven
+# modes are therefore untouched by this change.
+
+const COMBAT_ROUNDS_HASH := "8d3ef9e9c8e7ce72c61d1592a523cd165a401b7b3ca21d3a64f9eb59e7647d9c"
 const COMBAT_FINAL_HASH  := "4031c2669731de4b3ca62a24b16378a083a524e048976047208571161098ab5e"
 const COMBAT_SAVE_HASH   := "bbe140a53a33fcc97220ce3f9c8c172e2cb1f4ce4a281094a78f9733b40b50a4"
 
@@ -449,7 +518,7 @@ static func test_combat() -> Dictionary:
 	return _assert_hashes("COMBAT", r, COMBAT_ROUNDS_HASH, COMBAT_FINAL_HASH, COMBAT_SAVE_HASH)
 
 
-const PURIFY_SHRINE_ROUNDS_HASH := "c85e2c4903c52d48f2fe94567ce729c6c3fcd1049c16d41c7a404b72212dc7ee"
+const PURIFY_SHRINE_ROUNDS_HASH := "520b30ee74de2fd0eb13e3553711e06d016b3f37cac52dd76cb72020e9f38bfa"
 const PURIFY_SHRINE_FINAL_HASH  := "8819869f67b59f78577acc99ceb0b132faa6b7fa8282e611c39effd36dcd7c17"
 const PURIFY_SHRINE_SAVE_HASH   := "76aba09618df272bf0310af333218c78aa1e990ca0be9ae3b8db0c30af1d06d6"
 
@@ -458,7 +527,7 @@ static func test_purify_shrine() -> Dictionary:
 	return _assert_hashes("PURIFY_SHRINE", r, PURIFY_SHRINE_ROUNDS_HASH, PURIFY_SHRINE_FINAL_HASH, PURIFY_SHRINE_SAVE_HASH)
 
 
-const RECOVER_ROUNDS_HASH := "efd98bb2449fbc285bee101a19b923c812ea1b29a381d9e415185ac0b95f03ae"
+const RECOVER_ROUNDS_HASH := "a285c1a051a6084cab26b5e8a78b3ce360e576cf631c122fa183519f9c72d10c"
 const RECOVER_FINAL_HASH  := "09e38fdf70259c9a647c6dd053caa9e1518e5f830364ac5f96fac5dbceb92780"
 const RECOVER_SAVE_HASH   := "bffa34aa225afe79818ec0b15931d59f495930337b8d07b33a997208e0d46c35"
 
@@ -467,7 +536,7 @@ static func test_recover() -> Dictionary:
 	return _assert_hashes("RECOVER", r, RECOVER_ROUNDS_HASH, RECOVER_FINAL_HASH, RECOVER_SAVE_HASH)
 
 
-const PROTECT_ROUNDS_HASH := "bc118ed3aee325942e4bfa81691ddc7388edb0b8ad8ecccb763b87d9a3290c03"
+const PROTECT_ROUNDS_HASH := "a15a5e8822b129b4dfde0e3384fae845f0d008400fb05995bc490ef6e8b2b958"
 const PROTECT_FINAL_HASH  := "2dced9c966b40abd0cd2d7bf9d25014ea9a41152d9c304f96664d9e481b2335e"
 const PROTECT_SAVE_HASH   := "bffa34aa225afe79818ec0b15931d59f495930337b8d07b33a997208e0d46c35"
 
@@ -476,7 +545,7 @@ static func test_protect() -> Dictionary:
 	return _assert_hashes("PROTECT", r, PROTECT_ROUNDS_HASH, PROTECT_FINAL_HASH, PROTECT_SAVE_HASH)
 
 
-const ENDURE_ROUNDS_HASH := "c6a4de6e29261ac97430b8a129da9176be491e7016274fb922113490069807f0"
+const ENDURE_ROUNDS_HASH := "2d9ad905ed25f085c2781a642973c296dfc21ec9c9dbb4df33a110ca3d705f83"
 const ENDURE_FINAL_HASH  := "106b216e990ac3e55653976f0bf0506f7f96f2d361a1183e87241c3948f7554e"
 const ENDURE_SAVE_HASH   := "cca434e9c009c6ba5607c102d12b1d87883fe6899dbffe4214c9a0cb0934eff7"
 
@@ -485,7 +554,7 @@ static func test_endure() -> Dictionary:
 	return _assert_hashes("ENDURE", r, ENDURE_ROUNDS_HASH, ENDURE_FINAL_HASH, ENDURE_SAVE_HASH)
 
 
-const PURSUE_ROUNDS_HASH := "c5db8858e28be4778751efea6928ba2fe87363dc59bc0e41c9dbae81f094d8aa"
+const PURSUE_ROUNDS_HASH := "01ce5ffb913144db24911cea5ffe91f9b1c4cf2e4dee3b8d6a3155a3d6f399c7"
 const PURSUE_FINAL_HASH  := "678b39327b47e4999322d24d3b07d280e48e475ed89fc2e1475f89bc6b8fbedb"
 const PURSUE_SAVE_HASH   := "bbe140a53a33fcc97220ce3f9c8c172e2cb1f4ce4a281094a78f9733b40b50a4"
 
@@ -501,7 +570,7 @@ static func test_pursue() -> Dictionary:
 # test_guide_spirit_joined_combatant_moves_freely's docstring) — "protect"+"nojoin" is the one
 # mode-specific decision surface (escort/skittish movement, guide_protect_counter) worth its own
 # fingerprint.
-const GUIDE_SPIRIT_ROUNDS_HASH := "e6ee04984b2e19d361d085329ab990ac66961e63a4fae4947d3fdf8bd6147b3c"
+const GUIDE_SPIRIT_ROUNDS_HASH := "e521e51e320631f4022ea9b2085381eded9eb82cc28e3202c54957b9ddda84c3"
 const GUIDE_SPIRIT_FINAL_HASH  := "a325a46c3563e33884a9d1bd6899119232354509ceeef03b488d642bb4655b33"
 const GUIDE_SPIRIT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
