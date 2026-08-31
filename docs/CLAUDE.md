@@ -47,6 +47,23 @@ Model tiers for ANY delegated work — Agent-tool calls and Workflow-script `age
 
 Choose the tier from the DIFFICULTY of the work, not from a fixed build-versus-review split. A diagnosis of an unknown mechanism is `opus` work even when the fix that follows is `sonnet` work. Split a task across two tiers when its halves differ.
 
+### Run agents in parallel whenever it is safe
+
+Parallelize by default. Two agents may run together only when all three hold:
+
+1. **Disjoint files.** Neither writes a file or a section the other writes.
+2. **No shared exclusive resource.** In this project that means Godot: every test run uses the same absolute save directory, so two Godot processes corrupt each other. A git worktree does NOT isolate an absolute path.
+3. **Disjoint recorded values.** Two agents that would re-record the same fingerprint or baseline constant stay serial even when their files differ. Parallel re-records destroy attribution.
+
+Read-only research and design agents satisfy all three almost always. Run those in parallel freely.
+
+### Verification is central, and never self
+
+- A builder never verifies its own work.
+- Where the work of two or more agents merges, an independent agent verifies the COMBINED tree.
+- The verifier inspects `git diff`, the source and the real test output. Never accept a completion report as evidence.
+- Give the verifier the claim to attack, not the answer to confirm.
+
 ### Self-Improvement Loop
 - After ANY correction from Jeff: update `~/.claude/lessons.md` with the pattern (rule + why + how to apply).
 - Write rules that prevent the same mistake from recurring.

@@ -237,6 +237,56 @@ Action type format: `domain.subdomain.verb` e.g. `flow.go_state`, `sanctum.party
 
 ---
 
+## Agent Orchestration
+
+### Pick the model tier from the difficulty of the work
+
+Set the model explicitly on every delegated call. Omitting it silently inherits the session model.
+
+| Tier | Use it for |
+|---|---|
+| `haiku` | Mechanical bulk work: renames from an approved table, boilerplate, format conversion, log triage |
+| `sonnet` | The default. Well-specified implementation with clear acceptance criteria |
+| `opus` | Genuinely tricky work: concurrency, subtle algorithms, adversarial verification, gnarly debugging |
+
+Choose by difficulty, not by a fixed build-versus-review split. A diagnosis of an unknown mechanism
+is `opus` work even when the fix that follows is `sonnet` work. Split a task across two tiers when
+its halves differ.
+
+### Run agents in parallel whenever it is safe
+
+Parallelize by default. Two agents may run together only when all three conditions hold.
+
+1. **Disjoint files.** Neither agent writes a file or a section the other writes.
+2. **No shared exclusive resource.** **In this project that means Godot.** Every test run uses the
+   same absolute save directory, `/tmp/echoes-vnext-tests/`, hardcoded in `tests/TestSaveHarness.gd`
+   and `ui/AppRoot.gd`. Two Godot processes corrupt each other's saves. **A git worktree does NOT
+   isolate them, because the path is absolute.** Godot runs are therefore strictly serial.
+3. **Disjoint recorded values.** Two agents that would re-record the same fingerprint or baseline
+   constant stay serial **even when their files differ**. Parallel re-records destroy attribution:
+   you get one large set of moved values and no way to say which change caused which.
+
+Read-only research and design agents satisfy all three almost always. Run those in parallel freely.
+
+### Verification is central, and never self
+
+- A builder never verifies its own work.
+- Where the work of two or more agents merges, an independent agent verifies the **combined** tree,
+  so the agents cannot mask each other's mistakes.
+- The verifier inspects `git diff`, the source and the real `Tests:` line. **Never accept a
+  completion report as evidence.** Check the tree yourself.
+- Give the verifier the claim to attack, not the answer to confirm. Ask it to prove the builder
+  wrong. This works: a `sonnet` agent once concluded a reported defect did not exist, and an `opus`
+  verifier then reproduced it and found the real cause.
+
+### After any agent stops, killed or completed, audit the tree read-only before re-dispatching
+
+A killed agent can leave a tree that reads as finished and is not — for example a harness change
+whose comment claims constants were re-recorded when the agent died before recording them. Read the
+diff. Do not trust the file's own description of itself.
+
+---
+
 ## Extraction & Refactor Rules
 
 Learned the hard way during V2-INFRA-003, which took `FlowRuntime.gd` from 10,061 lines to 1,972.
