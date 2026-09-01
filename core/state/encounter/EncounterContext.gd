@@ -78,7 +78,9 @@ var pre_encounter_morale: Dictionary = {}
 var round_bark_events: Array = []
 
 # V2-STAGE-004 P3a: irregular combat-board terrain — transient, never persisted.
-# Shape: { bounds:{w,h}, plateaus:[…], bridges:[…], stragglers:[…] } or {} (legacy).
+# Shape: { bounds:{w,h}, plateaus:[…], bridges:[…], islands:[…] } or {} (legacy).
+# V2-COMBAT-003 terrain commit 3 renamed "stragglers" to "islands"; StageTerrain.walkable_set
+# still reads the old key so persisted terrain cannot silently lose ground.
 var terrain: Dictionary = {}
 
 # V2-STAGE-004 P3: scaled objective parameters — transient, never persisted.

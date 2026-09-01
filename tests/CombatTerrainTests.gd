@@ -466,8 +466,10 @@ static func _t_terrain_determinism_same_rng_namespace() -> Dictionary:
 		"plateau_shape_bias":  "blocky",
 		"bridge_width":        2,
 		"bridge_density":      0.3,
-		"straggler_count_min": 1,
-		"straggler_count_max": 2,
+		"island_count_min": 1,
+		"island_count_max": 2,
+		"island_size_min": 4,
+		"island_size_max": 8,
 	}
 	var bounds    := { "w": 20, "h": 20 }
 	var realm_seed := 42
@@ -511,7 +513,7 @@ static func _terrain_dicts_equal(a: Dictionary, b: Dictionary) -> bool:
 	var bb: Dictionary = b.get("bounds", {})
 	if int(ba.get("w", -1)) != int(bb.get("w", -1)) or int(ba.get("h", -1)) != int(bb.get("h", -1)):
 		return false
-	for key in ["plateaus", "bridges", "stragglers"]:
+	for key in ["plateaus", "bridges", "islands"]:
 		var arr_a_v: Variant = a.get(key, [])
 		var arr_b_v: Variant = b.get(key, [])
 		var arr_a: Array = arr_a_v if arr_a_v is Array else []

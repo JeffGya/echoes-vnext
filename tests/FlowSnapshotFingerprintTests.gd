@@ -266,7 +266,24 @@ static func test_sanctum_fingerprint() -> Dictionary:
 ##      `data.directives[<id>]` in balance.json. The old id missed that lookup and fell through to
 ##      the hardcoded default 2; scout_carefully's authored value is 3, so entry fog lifts wider.
 ## Previous value: 528b8d5a584bb06dcc199340d99a78e06776e3ab79d364519701bd169e707e54.
-const STAGE_EXPLORE_FINGERPRINT_HASH := "aee5d5cc22cc484d794f55c967c92d438ba103cb6cb943b61c76fb8b6d4426be"
+##
+## V2-COMBAT-003 terrain commit 3 — RE-RECORDED ONCE. Islands replace stragglers.
+## The payload diff on THIS board is exactly one pair of lines, and nothing else moved:
+##   removed  data.terrain.stragglers = [ {col:22,row:4} ]                 — one single cell
+##   added    data.terrain.islands    = [ {col:11,row:3,w:2,h:2, cells:[[11,3],[11,4],[12,3],[12,4]]},
+##                                        {col:0, row:19,w:2,h:2, cells:[[0,19],[0,20],[1,19],[1,20]]} ]
+## `data.terrain.plateaus` and `data.terrain.bridges` are BYTE-IDENTICAL to the previous
+## recording, which is the direct evidence that the plateau, shape and bridge RNG streams
+## and the connectivity repair were not touched: only the renamed island streams differ.
+##
+## `data.party_pos` is ALSO unchanged, at {col:8,row:13}, and that is the second thing this
+## board demonstrates. The full walkable set's minimum column moved from 8 to 0, because
+## the second island occupies (0,19),(0,20),(1,19),(1,20). Under the pre-commit-3 rule
+## entry_cell took the leftmost column of the whole set, so the party would have started at
+## column 0 — on a 4-cell island with a clear ring of void around it and no legal step in
+## any direction. entry_cell now anchors to the host region, so party_pos does not move.
+## Previous value: aee5d5cc22cc484d794f55c967c92d438ba103cb6cb943b61c76fb8b6d4426be.
+const STAGE_EXPLORE_FINGERPRINT_HASH := "7a10ee318b24bb0cb80755cbdc67a7714e6c0130e0769fcb352dda74b4589f2b"
 
 static func test_stage_explore_fingerprint() -> Dictionary:
 	var env := _setup_stage_explore_env("fp_stage_explore")

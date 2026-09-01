@@ -479,7 +479,7 @@ parallel** — two at once would make it impossible to say which change caused w
 |---|---|---|---|
 | 1 | Region-based spawn guard; the two warning causes split | `sonnet` | **Done** `1438789` |
 | 2 | Connectivity by shared side; accidental splits repaired | `opus` | **Done** |
-| 3 | Islands replace stragglers — moated, sized, per realm; config rename | `opus` | Queued |
+| 3 | Islands replace stragglers — moated, sized, per realm; config rename | `opus` | **Done** |
 | 4 | Bridges as their own tile; extra bridges per side above 20; edge placement | `sonnet` | Queued |
 | 5 | Host region by playability; objective clearance; the 9-tile compensation | `opus` | Queued |
 
@@ -524,6 +524,100 @@ cases — and asserts exactly one region containing both endpoints. Non-host reg
 gain a cell (every bridge cell touches the host), so the count of substantial non-host regions
 strictly falls each pass. The ceiling survives as a safety net and now `push_error`s instead
 of quietly returning a split board.
+
+### Commit 3 — what it did, and what it measured
+
+A straggler was **one cell taken from the 8-direction neighbours of existing ground**, so by
+construction it touched the board and could never be an island. That single choice produced all
+of it: 819 of 865 cut-off regions were a single cell, and 838 of 865 touched the main ground at a
+corner. Islands now replace them.
+
+**Three properties, each by construction and each asserted by a test.** *Moated:* an island may
+only occupy cells outside the 8-direction **dilation** of everything walkable so far, recomputed
+before each island, so no island cell touches any other region — mainland or island — at a side
+or a corner. *Multi-cell:* growth adds only cells sharing a full side, minimum **4**, and a blob
+that cannot reach 4 is **discarded rather than emitted**. *Sized to the board:* authored size is
+a **request**, clamped to `area/16` per island and `area/4` for all islands together, floor 4 —
+so wisdom's authored 8–50 gives at most 9 cells per island on a 12×12 board and its full range on
+an explore map. Compactness comes from preferring the frontier cell with the most 8-direction
+contacts; the RNG only breaks ties, so islands are blobs and not one-cell-wide worms.
+
+Config renamed on all eleven `map_shape` entries and in `_FALLBACK_SIGNATURE`
+(`straggler_count_min/max` → `island_count_min/max`, plus `island_size_min/max`, all **PROPOSED
+DEFAULT**). RNG namespace `{prefix}.straggler.*` → `{prefix}.island.*`; an island makes several
+draws where a straggler made one, but every draw stays on **its own** stream. `relief` is
+untouched on all eleven entries. `GridService` is untouched.
+
+**`walkable_set` still reads the legacy `stragglers` key**, deliberately. Not to preserve an old
+campaign — saves are disposable — but because dropping it is **silent**: an already-saved board
+would simply lose ground, with no error and no failing test.
+
+Measured with `tools/TerrainRegionProbe.gd` (`-- tests terrainprobe`), 1,800 boards per regime,
+ten virtue signatures, combat bounds now **including the doubled 12×48 and 60×12** shapes:
+
+| Island size bucket | Before (cut-off regions) | After, combat | After, explore |
+|---|---:|---:|---:|
+| 1 cell | 1,104 | **0** | **0** |
+| 2–3 cells | 43 | **0** | **0** |
+| 4–5 | 3 | 504 | 543 |
+| 6–10 | 0 | 1,624 | 1,788 |
+| 11–25 | 0 | 1,327 | 1,782 |
+| 26–50 | 0 | 88 | 589 |
+
+**Realms differentiate by size, not only by count.** Mean island size, combat regime: acceptance
+4.9 (max 6), courage 5.9 (max 8), generosity 6.9, leadership 8.3, truth 8.8 (**min 6** — it never
+makes a small one), empathy 8.9, compassion 10.2, humility 10.2 (1,008 islands, the most),
+wisdom 14.3 (max 44), forgiveness 18.0 (max 30). Wisdom's max of 44 rather than 50 **is the
+area clamp visible in the data**.
+
+| Acceptance criterion | Result |
+|---|---|
+| Islands touching any other region at a corner **or** a side | **0** of 3,543 combat and 4,702 explore islands |
+| Cut-off regions of ≥ 6 cells among **plateaus and bridges** — commit 2's guarantee | **0**, both regimes |
+| Islands below 4 cells | **0** — impossible by construction |
+| Actors stranded (existing region guard, `GridService`) | Unchanged; nothing spawns off the host region |
+
+**One recorded value moved: `STAGE_EXPLORE_FINGERPRINT_HASH`.** All seven combat mode
+fingerprints, `FINAL_HASH`, `SAVE_HASH` and `SANCTUM_FINGERPRINT_HASH` did **not**. On that board
+the payload diff is exactly one pair of lines — `terrain.stragglers` (one cell at 22,4) replaced
+by `terrain.islands` (two 2×2 blobs) — while `terrain.plateaus` and `terrain.bridges` are
+**byte-identical**, which is the direct evidence that no earlier RNG stream and no part of the
+repair moved. The combat fingerprints hold for a structural reason: an island never joins the
+host region, and `GridService` places every actor inside the host region, so combat placement is
+now driven purely by plateaus and bridges.
+
+### One scope addition, measured before it was made: `entry_cell`
+
+`StageTerrain.entry_cell` took the leftmost column of the **whole** walkable set. That was safe
+only by accident — a straggler touched ground at a corner, and the explore layer's own
+reachability rule (`bfs_distance_field`) is a plain 8-direction fill, so a corner touch was
+genuinely walkable in exploration even though the generator's stricter shared-side rule called it
+cut off. **A moated island is cut off under both rules.** Plateaus never occupy column 0
+(`_BORDER_MARGIN`); islands may.
+
+Measured A/B on the same 1,800 boards per regime, before and after the island rewrite:
+
+| Entry cell lands off the host region | Combat bounds | Explore bounds |
+|---|---:|---:|
+| Before commit 3 | 158 / 1,800 (all 8-direction reachable, all harmless) | 144 / 1,800 |
+| After commit 3, old `entry_cell` rule | **766 / 1,800** | **867 / 1,800** — every one a dead start |
+| After commit 3, host-anchored `entry_cell` | **0** | **0** |
+
+`entry_cell` now anchors to the host region — the same rule the repair and
+`GridService._largest_walkable_region` use. It makes **no RNG draw**, before or after. The
+`stage_explore` fingerprint board demonstrates it concretely: the full set's minimum column moved
+from 8 to 0 because an island occupies (0,19)–(1,20), and `party_pos` stayed at (8,13).
+
+### Left open by commit 3 — for commit 5, stated not discovered
+
+`RealmGenerator._place_situations` places a situation on **any** walkable cell. Commit 3 raises
+the share of walkable cells lying off the host region to **10.8 %** (combat bounds) and **11.9 %**
+(explore bounds) — and, unlike before, those cells are now genuinely unreachable under the explore
+layer's 8-direction fill as well. That is the per-situation probability of landing somewhere the
+party cannot reach, **objectives included**, which makes a stage uncompleteable. Commit 3 does not
+fix it; decisions 22–25 assign host-region placement and objective clearance to **commit 5**, and
+commit 4's bridging will reduce it further. It is a real gap in the tree between commit 3 and
+commit 5 and should not be rediscovered as a surprise.
 
 ### 12.8 Independent verification of terrain commit 2 (orchestrator, not the builder)
 

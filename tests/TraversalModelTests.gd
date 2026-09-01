@@ -175,7 +175,8 @@ static func _inject_terrain_stage(
 		"plateau_w_min": 4, "plateau_w_max": 8,
 		"plateau_h_min": 4, "plateau_h_max": 8,
 		"bridge_width": 2, "bridge_density": 0.3,
-		"straggler_count_min": 1, "straggler_count_max": 2,
+		"island_count_min": 1, "island_count_max": 2,
+		"island_size_min": 4, "island_size_max": 8,
 	}
 	var bounds := { "w": 30, "h": 30 }
 	var terrain: Dictionary = StageTerrainScript.generate(realm_seed, stage_idx, sig, bounds)
@@ -291,7 +292,7 @@ static func _cheby(a: Dictionary, b: Dictionary) -> int:
 # Full open WxH rectangle terrain (plateaus empty → walkable_set fills the whole rect).
 # Gives a large open frontier so chaining is exercised deterministically.
 static func _full_rect_terrain(w: int, h: int) -> Dictionary:
-	return { "bounds": { "w": w, "h": h }, "plateaus": [], "bridges": [], "stragglers": [] }
+	return { "bounds": { "w": w, "h": h }, "plateaus": [], "bridges": [], "islands": [] }
 
 
 # Single-row corridor terrain: one plateau whose blob cells are exactly (0..w-1, row).
@@ -304,7 +305,7 @@ static func _corridor_terrain(w: int, h: int, row: int) -> Dictionary:
 		"bounds":    { "w": w, "h": h },
 		"plateaus":  [{ "col": 0, "row": row, "w": w, "h": 1, "cells": cells }],
 		"bridges":   [],
-		"stragglers": [],
+		"islands": [],
 	}
 
 
@@ -497,7 +498,8 @@ static func _t_scout_passive_reveal() -> Dictionary:
 			"plateau_w_min": 4, "plateau_w_max": 8,
 			"plateau_h_min": 4, "plateau_h_max": 8,
 			"bridge_width": 2, "bridge_density": 0.3,
-			"straggler_count_min": 0, "straggler_count_max": 0,
+			"island_count_min": 0, "island_count_max": 0,
+		"island_size_min": 4, "island_size_max": 8,
 		}
 		var bounds := { "w": 30, "h": 30 }
 		var terrain: Dictionary = StageTerrainScript.generate(seed_val, 0, sig, bounds)
@@ -800,7 +802,8 @@ static func _t_per_realm_stage_variation() -> Dictionary:
 		"plateau_w_min": 4, "plateau_w_max": 8,
 		"plateau_h_min": 4, "plateau_h_max": 8,
 		"bridge_width": 2, "bridge_density": 0.3,
-		"straggler_count_min": 1, "straggler_count_max": 2,
+		"island_count_min": 1, "island_count_max": 2,
+		"island_size_min": 4, "island_size_max": 8,
 	}
 	var bounds    := { "w": 30, "h": 30 }
 	var realm_seed := 999
@@ -1311,7 +1314,8 @@ static func _t_fog_frontier_sweep() -> Dictionary:
 			"plateau_w_min": 4, "plateau_w_max": 8,
 			"plateau_h_min": 4, "plateau_h_max": 8,
 			"bridge_width": 2, "bridge_density": 0.3,
-			"straggler_count_min": 0, "straggler_count_max": 1,
+			"island_count_min": 0, "island_count_max": 1,
+		"island_size_min": 4, "island_size_max": 8,
 		}
 		var bounds := { "w": 20, "h": 20 }
 		var terrain: Dictionary = StageTerrainScript.generate(seed_val, 0, sig, bounds)
@@ -1575,7 +1579,8 @@ static func _t_pass_fix_non_obj_not_retargeted() -> Dictionary:
 		"plateau_w_min": 6, "plateau_w_max": 10,
 		"plateau_h_min": 6, "plateau_h_max": 10,
 		"bridge_width": 2, "bridge_density": 0.3,
-		"straggler_count_min": 0, "straggler_count_max": 0,
+		"island_count_min": 0, "island_count_max": 0,
+		"island_size_min": 4, "island_size_max": 8,
 	}
 	var bounds := { "w": 20, "h": 20 }
 	var terrain: Dictionary = StageTerrainScript.generate(55, 0, sig, bounds)
@@ -1716,7 +1721,8 @@ static func _t_pass_fix_obj_reoffered_at_exhaustion() -> Dictionary:
 		"plateau_w_min": 8, "plateau_w_max": 10,
 		"plateau_h_min": 8, "plateau_h_max": 10,
 		"bridge_width": 2, "bridge_density": 0.3,
-		"straggler_count_min": 0, "straggler_count_max": 0,
+		"island_count_min": 0, "island_count_max": 0,
+		"island_size_min": 4, "island_size_max": 8,
 	}
 	var bounds := { "w": 20, "h": 20 }
 	var terrain: Dictionary = StageTerrainScript.generate(99, 0, sig, bounds)

@@ -28,6 +28,19 @@
 # mutates nothing, writes no save, and asserts nothing.
 #
 # Run it on the tree BEFORE a generator change and again AFTER, and diff the two tables.
+#
+# V2-COMBAT-003 terrain commit 3 EXTENDED it, keeping every commit-2 column intact, to
+# answer the three acceptance questions for the island rewrite:
+#   * the ISLAND SIZE DISTRIBUTION per virtue, in buckets — the goal is 4-and-up with an
+#     even spread upward, against the measured 819-of-865 single cells before the change;
+#   * TOUCHING ISLANDS — an island cell adjacent in ANY of the 8 directions to a cell that
+#     is not its own. This MUST be zero; a corner touch is the ambiguity being removed;
+#   * CUT-OFF REGIONS OF >= 6 CELLS AMONG PLATEAUS AND BRIDGES ONLY — commit 2's guarantee,
+#     which islands are outside of by design, so it is measured on the stripped set.
+# It also counts boards whose explore ENTRY CELL lands off the host region, because
+# StageTerrain.entry_cell picks the leftmost walkable column and an island may own it.
+# The combat bounds now include the DOUBLED shapes (12x48 PURSUE, 60x12 GUIDE_SPIRIT) that
+# section 12.8 found the commit-2 builder had excluded.
 
 class_name TerrainRegionProbe
 extends RefCounted
@@ -216,6 +229,12 @@ static func run_all() -> Dictionary:
 			"w": mini(base_cols + c * growth, max_cols),
 			"h": mini(base_rows + c * growth, max_rows),
 		})
+	# The DOUBLED combat shapes. PURSUE doubles rows, GUIDE_SPIRIT doubles columns
+	# (ANSWERS.md #122). Section 12.8 recorded that the commit-2 builder measured
+	# 12x12..22x22 only and therefore excluded exactly the shapes where the largest splits
+	# were originally found. They are part of the combat regime here.
+	combat_bounds.append({ "w": 12, "h": 48 })
+	combat_bounds.append({ "w": 60, "h": 12 })
 
 	# Explore-map bounds. RealmGenerator._generate_explore_map draws width/height in
 	# [30..45] (StageExploreModel.MIN_WIDTH/HEIGHT plus the config span) with a +2 bump per
@@ -228,7 +247,7 @@ static func run_all() -> Dictionary:
 	var virtues: Array = by_virtue.keys()
 	virtues.sort()
 
-	_measure("COMBAT BOARD (%dx%d .. %dx%d, data.combat.board)"
+	_measure("COMBAT BOARD (%dx%d .. %dx%d plus the doubled 12x48 and 60x12, data.combat.board)"
 		% [base_cols, base_rows, max_cols, max_rows], "combat", virtues, by_virtue, combat_bounds)
 	_measure("EXPLORE MAP (30x30 .. 50x40, RealmGenerator._generate_explore_map)",
 		"explore", virtues, by_virtue, explore_bounds)
@@ -260,6 +279,23 @@ static func _measure(regime: String, regime_tag: String, virtues: Array, by_virt
 	var tot_ss: int = 0
 	var tot_le: int = 0
 	var size_hist: Dictionary = {}
+	# V2-COMBAT-003 terrain commit 3 accumulators.
+	var isl_hist: Dictionary = {}       # virtue -> bucket label -> count
+	var isl_total: Dictionary = {}      # virtue -> island count
+	var isl_min: Dictionary = {}
+	var isl_max: Dictionary = {}
+	var isl_sum: Dictionary = {}
+	var touch_violations: Array = []
+	var repair_violations: Array = []
+	var entry_off_host: int = 0
+	var entry_examples: Array = []
+	# Proxy for RealmGenerator._place_situations, which places a situation on ANY walkable
+	# cell. The fraction of walkable cells lying off the host region IS the probability a
+	# uniformly-placed situation — including a stage OBJECTIVE — lands somewhere the party
+	# cannot reach. Measured here because it is a consequence of commit 3 that commit 3
+	# does not fix; commit 5 owns host-region placement.
+	var off_host_cells: int = 0
+	var all_cells: int = 0
 
 	for virtue_v in virtues:
 		var virtue: String = str(virtue_v)
@@ -271,6 +307,11 @@ static func _measure(regime: String, regime_tag: String, virtues: Array, by_virt
 		var bad_le: int = 0
 		var max_cut: int = 0
 		var region_total: int = 0
+		isl_hist[virtue] = {}
+		isl_total[virtue] = 0
+		isl_min[virtue] = 999999
+		isl_max[virtue] = 0
+		isl_sum[virtue] = 0
 
 		for i in range(BOARDS_PER_VIRTUE):
 			var realm_seed: int = 1000000 + i * 7919
@@ -283,9 +324,73 @@ static func _measure(regime: String, regime_tag: String, virtues: Array, by_virt
 			var walkable: Dictionary = StageTerrain.walkable_set(terrain)
 			boards += 1
 
+			# ---- V2-COMBAT-003 terrain commit 3 measurements ----
+			var islands_v: Variant = terrain.get("islands", [])
+			var islands: Array = islands_v if islands_v is Array else []
+			for isl_v in islands:
+				var isl: Dictionary = isl_v if isl_v is Dictionary else {}
+				var own: Dictionary = {}
+				for pr_v in (isl.get("cells", []) as Array):
+					var pr: Array = pr_v
+					own["%d,%d" % [int(pr[0]), int(pr[1])]] = true
+				var sz2: int = own.size()
+				isl_total[virtue] = int(isl_total[virtue]) + 1
+				isl_sum[virtue] = int(isl_sum[virtue]) + sz2
+				isl_min[virtue] = mini(int(isl_min[virtue]), sz2)
+				isl_max[virtue] = maxi(int(isl_max[virtue]), sz2)
+				var lbl: String = _size_bucket(sz2)
+				(isl_hist[virtue] as Dictionary)[lbl] = int((isl_hist[virtue] as Dictionary).get(lbl, 0)) + 1
+				# THE MOAT. Every 8-direction neighbour of every island cell must be either
+				# this island's own cell or void. One hit here is the whole finding.
+				for own_k in own.keys():
+					var op := (own_k as String).split(",")
+					var oc: int = int(op[0])
+					var orow: int = int(op[1])
+					for dc2 in range(-1, 2):
+						for dr2 in range(-1, 2):
+							if dc2 == 0 and dr2 == 0:
+								continue
+							var nk2: String = "%d,%d" % [oc + dc2, orow + dr2]
+							if own.has(nk2):
+								continue
+							if walkable.has(nk2):
+								touch_violations.append(
+									"    TOUCH %s #%d bounds=%dx%d island cell %s touches foreign walkable %s"
+									% [virtue, i, int(bounds.get("w", 0)), int(bounds.get("h", 0)), own_k, nk2])
+
+			# Commit 2's guarantee, measured on the geometry the repair actually governs:
+			# plateaus plus bridges. Islands are minted after the repair by design.
+			var stripped: Dictionary = terrain.duplicate(true)
+			stripped["islands"] = []
+			stripped["stragglers"] = []
+			var pb_walkable: Dictionary = StageTerrain.walkable_set(stripped)
+			var pb_regions: Array = _regions_shared_side(pb_walkable)
+			var pb_host: int = _host_index(pb_regions)
+			for pri in range(pb_regions.size()):
+				if pri == pb_host:
+					continue
+				if (pb_regions[pri] as Array).size() >= REPORT_MIN_REGION:
+					repair_violations.append(
+						"    REPAIR %s #%d bounds=%dx%d cut-off plateau/bridge region of %d cells"
+						% [virtue, i, int(bounds.get("w", 0)), int(bounds.get("h", 0)),
+							(pb_regions[pri] as Array).size()])
+
+			# Explore entry cell: StageTerrain.entry_cell takes the LEFTMOST walkable
+			# column, and after commit 3 an island may own it. Measured, not assumed.
+			var entry: Dictionary = StageTerrain.entry_cell(walkable, bounds)
+			var entry_key: String = "%d,%d" % [int(entry.get("col", -1)), int(entry.get("row", -1))]
+
 			var ss: Array = _regions_shared_side(walkable)
 			region_total += ss.size()
 			var ss_host: int = _host_index(ss)
+			if ss_host >= 0 and not (ss[ss_host] as Array).has(entry_key):
+				entry_off_host += 1
+				if entry_examples.size() < 6:
+					entry_examples.append("    ENTRY %s #%d bounds=%dx%d entry=%s is OFF the host region"
+						% [virtue, i, int(bounds.get("w", 0)), int(bounds.get("h", 0)), entry_key])
+			all_cells += walkable.size()
+			if ss_host >= 0:
+				off_host_cells += walkable.size() - (ss[ss_host] as Array).size()
 			var ss_flag: bool = false
 			for ri in range(ss.size()):
 				if ri == ss_host:
@@ -357,6 +462,79 @@ static func _measure(regime: String, regime_tag: String, virtues: Array, by_virt
 	_say("Boards flagged with a cut-off region of >= %d cells (%d):" % [REPORT_MIN_REGION, _flagged.size()])
 	for line in _flagged:
 		_say(str(line))
+
+	# ── V2-COMBAT-003 terrain commit 3 ───────────────────────────────────────
+	_say("")
+	_say("ISLAND SIZE DISTRIBUTION per virtue (deliberate islands, terrain[\"islands\"]):")
+	_say("%-14s | %7s | %5s | %5s | %6s | %s" % ["virtue", "islands", "min", "max", "mean", "buckets 4-5/6-10/11-25/26-50/51+"])
+	_say("---------------+---------+-------+-------+--------+---------------------------------")
+	var grand: int = 0
+	var grand_buckets: Dictionary = {}
+	for virtue_v2 in virtues:
+		var v2: String = str(virtue_v2)
+		var n2: int = int(isl_total.get(v2, 0))
+		grand += n2
+		var hist: Dictionary = isl_hist.get(v2, {})
+		var parts2: Array = []
+		for lbl2 in _BUCKETS:
+			var cnt: int = int(hist.get(lbl2, 0))
+			grand_buckets[lbl2] = int(grand_buckets.get(lbl2, 0)) + cnt
+			parts2.append("%s:%d" % [lbl2, cnt])
+		_say("%-14s | %7d | %5d | %5d | %6.1f | %s" % [
+			v2, n2,
+			0 if n2 == 0 else int(isl_min.get(v2, 0)),
+			int(isl_max.get(v2, 0)),
+			0.0 if n2 == 0 else float(int(isl_sum.get(v2, 0))) / float(n2),
+			" ".join(PackedStringArray(parts2))])
+	var gparts: Array = []
+	for lbl3 in _BUCKETS:
+		gparts.append("%s:%d" % [lbl3, int(grand_buckets.get(lbl3, 0))])
+	_say("---------------+---------+-------+-------+--------+---------------------------------")
+	_say("%-14s | %7d | %5s | %5s | %6s | %s" % ["TOTAL", grand, "", "", "", " ".join(PackedStringArray(gparts))])
+	_say("  (an island below 4 cells is impossible by construction — the generator discards it)")
+
+	_say("")
+	_say("MOAT — island cells touching ANY foreign walkable cell at a side OR a corner: %d" % touch_violations.size())
+	_say("  MUST BE ZERO. A corner touch is the ambiguity terrain commit 3 removes.")
+	for tv in touch_violations.slice(0, 20):
+		_say(str(tv))
+
+	_say("")
+	_say("COMMIT 2 GUARANTEE — cut-off PLATEAU/BRIDGE regions of >= %d cells: %d" % [REPORT_MIN_REGION, repair_violations.size()])
+	_say("  Measured on the stripped set: islands are minted AFTER the repair by design.")
+	for rv in repair_violations.slice(0, 20):
+		_say(str(rv))
+
+	_say("")
+	_say("EXPLORE ENTRY CELL off the host region: %d of %d boards" % [entry_off_host, tot_boards])
+	for ev in entry_examples:
+		_say(str(ev))
+
+	_say("")
+	_say("SITUATION PLACEMENT EXPOSURE — walkable cells lying OFF the host region: %d of %d (%.1f%%)"
+		% [off_host_cells, all_cells, 100.0 * float(off_host_cells) / float(max(all_cells, 1))])
+	_say("  RealmGenerator._place_situations places a situation on ANY walkable cell, so this")
+	_say("  is the per-situation probability of landing somewhere unreachable, OBJECTIVES")
+	_say("  INCLUDED. Terrain commit 3 raises it and does NOT fix it — commit 5 owns")
+	_say("  host-region placement (handoff decisions 22-25).")
+
+
+const _BUCKETS: Array = ["1", "2-3", "4-5", "6-10", "11-25", "26-50", "51+"]
+
+static func _size_bucket(n: int) -> String:
+	if n == 1:
+		return "1"
+	if n <= 3:
+		return "2-3"
+	if n <= 5:
+		return "4-5"
+	if n <= 10:
+		return "6-10"
+	if n <= 25:
+		return "11-25"
+	if n <= 50:
+		return "26-50"
+	return "51+"
 
 
 ## "hostsize + cut-off sizes" summary of one region list, host first.

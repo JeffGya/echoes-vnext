@@ -33,13 +33,23 @@ extends RefCounted
 #     "plateaus":  [ { "col": int, "row": int, "w": int, "h": int,
 #                      "cells": [ [col, row], ... ] }, ... ],
 #     "bridges":   [ { "col": int, "row": int, "w": int, "h": int }, ... ],
-#     "stragglers":[ { "col": int, "row": int }, ... ]
+#     "islands":   [ { "col": int, "row": int, "w": int, "h": int,
+#                      "cells": [ [col, row], ... ] }, ... ]
 #   }
 #
 #   "cells" is an Array of [col, row] int pairs representing the IRREGULAR BLOB
 #   occupying the plateau's bounding box (col,row,w,h).  Old saved terrain entries
 #   without a "cells" key are handled by walkable_set falling back to bounding-rect
 #   fill (backward compat).
+#
+#   V2-COMBAT-003 terrain commit 3 RENAMED "stragglers" to "islands" and changed what
+#   the list holds: a straggler was ONE cell taken from the 8-direction neighbours of
+#   existing ground, so by construction it always touched the board and could never be
+#   an island (measured: 838 of 865 cut-off regions touched the main ground at a corner).
+#   An island is a MULTI-CELL blob with a guaranteed ring of void around it. Its entry
+#   carries the same { col, row, w, h, cells } shape as a plateau, where (col,row,w,h)
+#   is the blob's bounding box.
+#   walkable_set STILL READS the legacy "stragglers" key — see its doc comment.
 #
 # SIGNATURE SHAPE it RECEIVES (frozen — consume with .get defaults):
 #   {
@@ -53,8 +63,10 @@ extends RefCounted
 #     "plateau_shape_bias":   String,   # "long"|"blocky"|"small"
 #     "bridge_width":         int,      # >= 2
 #     "bridge_density":       float,    # 0.0–1.0 probability of extra bridges
-#     "straggler_count_min":  int,
-#     "straggler_count_max":  int,
+#     "island_count_min":     int,      # V2-COMBAT-003 commit 3 (was straggler_count_min)
+#     "island_count_max":     int,      # V2-COMBAT-003 commit 3 (was straggler_count_max)
+#     "island_size_min":      int,      # >= 4; clamped down to fit the board — see below
+#     "island_size_max":      int,      # >= island_size_min; clamped down to fit the board
 #     "connect_min_region_cells": int,  # >= 2; default 6 (V2-COMBAT-003 terrain commit 2)
 #   }
 #
@@ -70,6 +82,43 @@ extends RefCounted
 #   into the host region (the largest region; ties by numerically lowest col,row — the
 #   same host rule GridService uses to place actors). Regions below that size are LEFT
 #   ALONE by design: small islands are terrain variety, not a defect.
+## ISLANDS (V2-COMBAT-003 terrain commit 3 — read before changing the island pass):
+#
+#   An island is a deliberate feature, NOT a defect. It is minted AFTER the connectivity
+#   repair, and that ordering is the whole design: the repair fixes ACCIDENTAL splits,
+#   islands are INTENTIONAL ones. Consequently the repair's "exactly one region of
+#   >= connect_min_region_cells cells" guarantee covers PLATEAUS PLUS BRIDGES, never the
+#   whole walkable set. A test that asserts it against the full set is testing the island
+#   pass by mistake — strip the islands first.
+#
+#   Three properties hold by construction, and each is asserted by a test:
+#
+#   1. MOATED. No island cell is adjacent — in ANY of the 8 directions — to a cell of any
+#      other region, including another island. Every island sits inside a clear ring of
+#      void. This is enforced positively, not filtered for afterwards: an island may only
+#      occupy cells outside `blocked`, which is the 8-direction DILATION of everything
+#      walkable so far. A corner touch is therefore impossible, not merely rare.
+#   2. MULTI-CELL AND SHARED-SIDE CONTIGUOUS. Growth only ever adds a cell that shares a
+#      full SIDE with the blob, so an island is exactly ONE region under the same
+#      connectivity rule the repair uses. `_ISLAND_MIN_CELLS` (4) is a hard floor: a blob
+#      that cannot reach it is discarded rather than emitted, because a 1-cell island is
+#      the defect this commit removes.
+#   3. SIZED TO THE BOARD. Authored size is a REQUEST, clamped twice against board area:
+#        per island — at most (w * h) / _ISLAND_MAX_AREA_DIVISOR   (1/16 of the board)
+#        all islands — at most (w * h) / _ISLAND_TOTAL_AREA_DIVISOR (1/4 of the board)
+#      Both keep a floor of _ISLAND_MIN_CELLS. Without this, wisdom's authored 8..50 would
+#      swallow a 12x12 combat board (50 of 144 cells in ONE island, and up to six of them).
+#      With it, 12x12 gives at most 9 cells per island and 36 in total; 22x22 gives 30 and
+#      121; a 50x40 explore map gives 125 and 500, so the authored range binds instead.
+#
+#   COMPACTNESS. At each growth step the frontier cell with the MOST 8-direction contacts
+#   with the blob so far wins; the RNG only breaks ties among equally-compact candidates.
+#   Filling concavities before extending a limb is what keeps an island a blob rather than
+#   a one-cell-wide worm.
+#
+#   NOT HERE: bridging an island back to the board is terrain commit 4. Nothing in this
+#   pass connects an island to anything, and nothing may spawn on one (GridService places
+#   every actor inside the host region — commit 1438789).
 #
 # RNG PATHS — all APPEND-ONLY (never reorder existing RealmGenerator paths):
 #   The prefix below is "stage.{i}.explore.terrain" when rng_namespace=="".
@@ -84,8 +133,14 @@ extends RefCounted
 #                                        it used to be blind, so a board consumes more
 #                                        bridge.K streams and the extra bridges start from
 #                                        a higher K. Board geometry moved once, on purpose.
-#   "{prefix}.straggler.count"         — straggler count draw
-#   "{prefix}.straggler.{k}"           — straggler tile k
+#   "{prefix}.island.count"            — island count draw (V2-COMBAT-003 commit 3;
+#                                        RENAMED from "{prefix}.straggler.count")
+#   "{prefix}.island.{k}"              — island k: its size draw, its seed-cell draw and
+#                                        every growth draw, all on ITS OWN stream, so one
+#                                        island's draws can never shift another's.
+#                                        (RENAMED from "{prefix}.straggler.{k}"; an island
+#                                        makes MORE than one draw, a straggler made exactly
+#                                        one. Board geometry moved once, on purpose.)
 #
 # IRREGULARIZATION METHOD — seeded border erosion:
 #   After placing each plateau's bounding box, we generate an irregular blob via one
@@ -114,8 +169,10 @@ const _FALLBACK_SIGNATURE: Dictionary = {
 	"plateau_shape_bias":   "blocky",
 	"bridge_width":         2,
 	"bridge_density":       0.3,
-	"straggler_count_min":  2,
-	"straggler_count_max":  5,
+	"island_count_min":     1,
+	"island_count_max":     2,
+	"island_size_min":      4,
+	"island_size_max":      8,
 	"connect_min_region_cells": 6,
 }
 
@@ -128,6 +185,18 @@ const _MIN_BRIDGE_WIDTH: int = 2
 # 6 comes from the measured size distribution (docs/v2-combat-003-handoff.md §12.1): it is
 # bimodal with an empty 6-to-10 bucket, so any threshold in 6..10 gives the same split.
 const _MIN_CONNECT_REGION_CELLS: int = 6
+
+# V2-COMBAT-003 terrain commit 3 — island sizing.
+# Hard floor on island size. An island below this is discarded, never emitted: a one-cell
+# "island" that touches the board at a corner is exactly the defect this commit removes.
+const _ISLAND_MIN_CELLS: int = 4
+# One island may never exceed board_area / _ISLAND_MAX_AREA_DIVISOR cells (floor
+# _ISLAND_MIN_CELLS). Authored size is a request; the board has the final say.
+const _ISLAND_MAX_AREA_DIVISOR: int = 16
+# All islands together may never exceed board_area / _ISLAND_TOTAL_AREA_DIVISOR cells
+# (floor _ISLAND_MIN_CELLS). Stops a high island_count from eating a small board even when
+# each individual island is legal.
+const _ISLAND_TOTAL_AREA_DIVISOR: int = 4
 
 # Margin (cells) kept between any plateau edge and the map border.
 const _BORDER_MARGIN: int = 1
@@ -384,37 +453,88 @@ static func generate(
 					for ck in new_cells:
 						walkable_cells[ck] = true
 
-	# ---- Stragglers ----
-	var strag_min: int = max(int(sig.get("straggler_count_min", 2)), 0)
-	var strag_max: int = max(int(sig.get("straggler_count_max", 5)), strag_min)
-	var strag_count_rng := CampaignSeed.get_rng_from(
-		realm_seed, prefix + ".straggler.count"
-	)
-	var strag_count: int = strag_count_rng.randi_range(strag_min, strag_max)
+	# ---- Islands (V2-COMBAT-003 terrain commit 3) ----
+	# Deliberate, moated, multi-cell scenery. Minted LAST, after the connectivity repair,
+	# so the repair's guarantee stays a statement about plateaus plus bridges. See the
+	# ISLANDS block in the file header for the three properties this pass guarantees.
+	var isl_count_min: int = max(int(sig.get("island_count_min", 1)), 0)
+	var isl_count_max: int = max(int(sig.get("island_count_max", 2)), isl_count_min)
+	var isl_count_rng := CampaignSeed.get_rng_from(realm_seed, prefix + ".island.count")
+	var island_count: int = isl_count_rng.randi_range(isl_count_min, isl_count_max)
 
-	# Build list of candidate straggler positions: 8-dir neighbours of walkable cells
-	# that are not already walkable and are within bounds.
-	var stragglers: Array = []
-	for sk in range(strag_count):
-		var s_rng := CampaignSeed.get_rng_from(realm_seed, prefix + ".straggler.%d" % sk)
-		var candidate_cells: Array = _adjacent_candidates(walkable_cells, w, h)
-		if candidate_cells.is_empty():
+	# Size clamping. Authored size is a REQUEST; board area has the final say, so config
+	# can never produce a nonsense layout (wisdom's 8..50 on a 12x12 board).
+	var board_area: int = w * h
+	var per_island_cap: int = max(_ISLAND_MIN_CELLS, board_area / _ISLAND_MAX_AREA_DIVISOR)
+	var total_island_cap: int = max(_ISLAND_MIN_CELLS, board_area / _ISLAND_TOTAL_AREA_DIVISOR)
+	var isl_size_max: int = clampi(
+		max(int(sig.get("island_size_max", _ISLAND_MIN_CELLS)), _ISLAND_MIN_CELLS),
+		_ISLAND_MIN_CELLS, per_island_cap
+	)
+	var isl_size_min: int = clampi(
+		max(int(sig.get("island_size_min", _ISLAND_MIN_CELLS)), _ISLAND_MIN_CELLS),
+		_ISLAND_MIN_CELLS, isl_size_max
+	)
+
+	var islands: Array = []
+	var island_cells_used: int = 0
+	for ik in range(island_count):
+		if island_cells_used + _ISLAND_MIN_CELLS > total_island_cap:
 			break
-		var chosen_key: String = candidate_cells[s_rng.randi_range(0, candidate_cells.size() - 1)]
-		walkable_cells[chosen_key] = true
-		var parts := chosen_key.split(",")
-		stragglers.append({ "col": int(parts[0]), "row": int(parts[1]) })
+		# Each island derives its OWN stream, exactly as a straggler did. An island makes
+		# more than one draw (size, seed cell, one per growth step), but every one of them
+		# lands on this stream, so island k's draws can never shift island k+1's.
+		var i_rng := CampaignSeed.get_rng_from(realm_seed, prefix + ".island.%d" % ik)
+		var target: int = i_rng.randi_range(isl_size_min, isl_size_max)
+		target = min(target, total_island_cap - island_cells_used)
+
+		# `blocked` is the moat: everything walkable so far, DILATED by one cell in all 8
+		# directions. Recomputed each pass so a later island is moated from an earlier one
+		# as strictly as it is from the mainland.
+		var blocked: Dictionary = _dilate_8(walkable_cells, w, h)
+		var free_cells: Array = _free_island_cells(blocked, w, h)
+		if free_cells.is_empty():
+			break
+		var seed_key: String = free_cells[i_rng.randi_range(0, free_cells.size() - 1)]
+		var blob: Array = _grow_island(seed_key, target, blocked, w, h, i_rng)
+		if blob.size() < _ISLAND_MIN_CELLS:
+			# Not enough moated room here. Discard rather than emit a stub — a 1-cell
+			# island is the defect this commit removes. The next island still gets a turn.
+			continue
+
+		blob.sort_custom(Callable(StageTerrain, "_cell_key_less"))
+		var min_c: int = 999999
+		var min_r: int = 999999
+		var max_c: int = -999999
+		var max_r: int = -999999
+		var pairs: Array = []
+		for bk in blob:
+			var bparts := (bk as String).split(",")
+			var bcol: int = int(bparts[0])
+			var brow: int = int(bparts[1])
+			pairs.append([bcol, brow])
+			min_c = min(min_c, bcol)
+			min_r = min(min_r, brow)
+			max_c = max(max_c, bcol)
+			max_r = max(max_r, brow)
+			walkable_cells[bk] = true
+		islands.append({
+			"col": min_c, "row": min_r,
+			"w": max_c - min_c + 1, "h": max_r - min_r + 1,
+			"cells": pairs,
+		})
+		island_cells_used += blob.size()
 
 	return {
 		"bounds":    { "w": w, "h": h },
 		"plateaus":  plateaus,
 		"bridges":   bridges,
-		"stragglers": stragglers,
+		"islands":   islands,
 	}
 
 
 ## Returns a Dictionary used as a set: key = "%d,%d" % [col,row] -> true,
-## covering every cell in plateaus/bridges/stragglers.
+## covering every cell in plateaus/bridges/islands (plus the legacy "stragglers" key).
 ## If terrain is empty ({}) or has no plateaus, returns the FULL bounds rectangle
 ## as walkable (legacy fallback). If bounds are also missing, returns {} (all-walkable sentinel).
 static func walkable_set(terrain: Dictionary) -> Dictionary:
@@ -474,12 +594,36 @@ static func walkable_set(terrain: Dictionary) -> Dictionary:
 			for dr in range(bh):
 				cells["%d,%d" % [bc + dc, br + dr]] = true
 
-	# Stragglers
-	var stragglers_v: Variant = terrain.get("stragglers", [])
-	var stragglers: Array = stragglers_v if stragglers_v is Array else []
-	for s_v in stragglers:
-		var s: Dictionary = s_v if s_v is Dictionary else {}
-		cells["%d,%d" % [int(s.get("col", 0)), int(s.get("row", 0))]] = true
+	# Islands (V2-COMBAT-003 terrain commit 3).
+	#
+	# TWO keys are read, on purpose. "islands" is what the generator writes now. The legacy
+	# "stragglers" key is kept as a DOCUMENTED FALLBACK for terrain already persisted in a
+	# save (FlowStageExploreState calls terrain "permanent geometry — must survive session
+	# reset"; SaveService repairs the field but not its contents).
+	#
+	# Saves are disposable and the owner accepts a clean break, so the fallback is not here
+	# to preserve an old campaign. It is here because dropping the key is SILENT: an old
+	# board would simply lose ground, no error, no failing test — the exact trap named in
+	# docs/v2-combat-003-handoff.md section 12.6. Five lines of insurance against a silent
+	# loss of walkable ground is the right trade. The generator never writes "stragglers"
+	# again, so on any newly generated board this branch is dead code by construction.
+	#
+	# One loop serves both shapes: an island carries "cells" (a multi-cell blob), a legacy
+	# straggler carries only col/row (exactly one cell).
+	for list_key in ["islands", "stragglers"]:
+		var list_v: Variant = terrain.get(list_key, [])
+		var list: Array = list_v if list_v is Array else []
+		for s_v in list:
+			var s: Dictionary = s_v if s_v is Dictionary else {}
+			var blob_v: Variant = s.get("cells", [])
+			var blob: Array = blob_v if blob_v is Array else []
+			if blob.is_empty():
+				cells["%d,%d" % [int(s.get("col", 0)), int(s.get("row", 0))]] = true
+				continue
+			for pair_v in blob:
+				var pair: Array = pair_v if pair_v is Array else []
+				if pair.size() >= 2:
+					cells["%d,%d" % [int(pair[0]), int(pair[1])]] = true
 
 	return cells
 
@@ -556,9 +700,35 @@ static func legal_neighbors(
 	return result
 
 
-## Returns the entry cell {col,row}: the leftmost walkable column, and among that
-## column's walkable rows the one nearest to row = bounds.h / 2.
+## Returns the party's explore entry cell {col,row}: the leftmost column OF THE HOST
+## REGION, and among that column's cells the one nearest to row = bounds.h / 2.
 ## If walkable is empty (legacy), returns {col:0, row: bounds.h/2}.
+##
+## V2-COMBAT-003 terrain commit 3 — WHY THE HOST REGION AND NOT THE WHOLE SET.
+##
+## This used to take the leftmost column of the ENTIRE walkable set. That was safe only by
+## accident: the old straggler pass minted single cells that touched existing ground at a
+## corner, and the explore layer's own reachability rule (bfs_distance_field, immediately
+## below) is a plain 8-direction fill, so a corner touch was genuinely walkable in
+## exploration even though the generator's stricter shared-side rule called it cut off.
+##
+## A commit-3 island is MOATED: it has a clear ring of void on all eight sides, so it is
+## cut off under BOTH rules. Plateaus never occupy column 0 (_BORDER_MARGIN), islands may,
+## and the entry cell is chosen by leftmost column — so an island would routinely capture
+## the party's start and freeze exploration on turn one, with no route anywhere.
+##
+## Measured on 1,800 boards per regime, ten virtue signatures, before and after the island
+## rewrite: entry landed off the host region on 158/1,800 combat-bounds and 144/1,800
+## explore-bounds boards BEFORE (all of them 8-direction reachable, so all of them
+## harmless), and would have landed there on 766/1,800 and 867/1,800 AFTER, every one of
+## them a genuine dead start. Anchoring the entry to the host region removes both classes.
+##
+## The host rule is the same one the connectivity repair and GridService._largest_walkable_region
+## use: largest region, ties by numerically lowest (col,row). Regions are judged by SHARED
+## SIDE, the stricter of the two rules, so a cell this function returns is reachable under
+## the explore layer's looser 8-direction fill as well.
+##
+## This function makes NO RNG draw, before or after the change.
 static func entry_cell(walkable: Dictionary, bounds: Dictionary) -> Dictionary:
 	var bh: int = int(bounds.get("h", 30))
 	var mid: int = bh / 2
@@ -566,9 +736,21 @@ static func entry_cell(walkable: Dictionary, bounds: Dictionary) -> Dictionary:
 	if walkable.is_empty():
 		return { "col": 0, "row": mid }
 
-	# Find the minimum column among all walkable cells.
+	# Restrict to the host region. Falls back to the whole set if the fill somehow yields
+	# nothing, so this can never return worse than the pre-commit-3 behaviour.
+	var components := _flood_fill_components(walkable)
+	var host_idx: int = _host_component_index(components)
+	var pool: Dictionary = walkable
+	if host_idx >= 0:
+		var host_set: Dictionary = {}
+		for k in (components[host_idx] as Array):
+			host_set[k] = true
+		if not host_set.is_empty():
+			pool = host_set
+
+	# Find the minimum column among all pool cells.
 	var min_col: int = 999999
-	for key in walkable:
+	for key in pool:
 		var parts := (key as String).split(",")
 		var c: int = int(parts[0])
 		if c < min_col:
@@ -577,7 +759,7 @@ static func entry_cell(walkable: Dictionary, bounds: Dictionary) -> Dictionary:
 	# Among all cells in that column, pick the one whose row is closest to mid.
 	var best_row: int = -1
 	var best_dist: int = 999999
-	for key in walkable:
+	for key in pool:
 		var parts := (key as String).split(",")
 		var c: int = int(parts[0])
 		var r: int = int(parts[1])
@@ -1181,29 +1363,112 @@ static func _is_8_connected(cell_set: Dictionary) -> bool:
 	return visited.size() == cell_set.size()
 
 
-## Returns candidate straggler cells: 8-dir neighbours of walkable cells
-## that are not already walkable, within (0,0)–(w-1, h-1).
-static func _adjacent_candidates(walkable_cells: Dictionary, map_w: int, map_h: int) -> Array:
-	var candidates: Dictionary = {}
-	var deltas: Array = [
-		[-1, -1], [-1, 0], [-1, 1],
-		[ 0, -1],           [ 0, 1],
-		[ 1, -1], [ 1, 0], [ 1, 1],
-	]
+## V2-COMBAT-003 terrain commit 3 — THE MOAT.
+## Returns `walkable_cells` UNION its full 8-direction dilation, clipped to the board.
+## Every cell in the result is either ground or touches ground at a side or a corner, so a
+## cell OUTSIDE the result is guaranteed to have a clear ring of void between it and every
+## existing region. Island placement and island growth both draw only from outside it.
+static func _dilate_8(walkable_cells: Dictionary, map_w: int, map_h: int) -> Dictionary:
+	var blocked: Dictionary = {}
 	for key in walkable_cells:
 		var parts := (key as String).split(",")
 		var cc: int = int(parts[0])
 		var cr: int = int(parts[1])
-		for delta_v in deltas:
-			var delta: Array = delta_v if delta_v is Array else []
-			var nc: int = cc + int(delta[0])
-			var nr: int = cr + int(delta[1])
-			if nc < 0 or nc >= map_w or nr < 0 or nr >= map_h:
-				continue
-			var nk: String = "%d,%d" % [nc, nr]
-			if not walkable_cells.has(nk):
-				candidates[nk] = true
-	# Return as sorted array for determinism
-	var result: Array = candidates.keys()
-	result.sort()
+		for dc in range(-1, 2):
+			for dr in range(-1, 2):
+				var nc: int = cc + dc
+				var nr: int = cr + dr
+				if nc < 0 or nc >= map_w or nr < 0 or nr >= map_h:
+					continue
+				blocked["%d,%d" % [nc, nr]] = true
+	return blocked
+
+
+## Every in-bounds cell an island may legally occupy, in stable numeric (col,row) order.
+## Numeric, not lexical: "10,3" sorts before "9,3" as a string, and a lexical order would
+## bias every island seed toward multi-digit columns.
+static func _free_island_cells(blocked: Dictionary, map_w: int, map_h: int) -> Array:
+	var result: Array = []
+	for c in range(map_w):
+		for r in range(map_h):
+			var k: String = "%d,%d" % [c, r]
+			if not blocked.has(k):
+				result.append(k)
 	return result
+
+
+## Grow one island blob from `seed_key` toward `target` cells and return its cell keys.
+##
+## Two invariants, both load-bearing:
+##   * Every added cell shares a full SIDE with the blob, so the island is exactly ONE
+##     region under the shared-side rule the connectivity repair uses.
+##   * Every added cell is outside `blocked`, so the moat survives growth. `blocked` is a
+##     snapshot taken before this island began and never includes this island's own cells,
+##     which is why the blob may touch itself and nothing else.
+##
+## COMPACTNESS: the frontier cell with the most 8-direction contacts with the blob wins.
+## That fills concavities before extending a limb, which is what stops an island becoming
+## a one-cell-wide worm. The RNG only chooses among equally-compact candidates.
+##
+## Returns fewer than `target` cells when the moated space runs out; the caller discards a
+## blob below _ISLAND_MIN_CELLS rather than emitting a stub.
+static func _grow_island(
+	seed_key: String,
+	target: int,
+	blocked: Dictionary,
+	map_w: int,
+	map_h: int,
+	rng: RandomNumberGenerator
+) -> Array:
+	var blob: Dictionary = { seed_key: true }
+	var order: Array = [seed_key]
+	var side_deltas: Array = [[0, -1], [0, 1], [-1, 0], [1, 0]]
+	while order.size() < target:
+		var frontier: Dictionary = {}
+		for k in order:
+			var parts := (k as String).split(",")
+			var cc: int = int(parts[0])
+			var cr: int = int(parts[1])
+			for d_v in side_deltas:
+				var d: Array = d_v
+				var nc: int = cc + int(d[0])
+				var nr: int = cr + int(d[1])
+				if nc < 0 or nc >= map_w or nr < 0 or nr >= map_h:
+					continue
+				var nk: String = "%d,%d" % [nc, nr]
+				if blocked.has(nk) or blob.has(nk):
+					continue
+				frontier[nk] = true
+		if frontier.is_empty():
+			break
+		var keys: Array = frontier.keys()
+		keys.sort_custom(Callable(StageTerrain, "_cell_key_less"))
+		var best_score: int = -1
+		var best: Array = []
+		for k2 in keys:
+			var score: int = _contacts_8(k2, blob)
+			if score > best_score:
+				best_score = score
+				best = [k2]
+			elif score == best_score:
+				best.append(k2)
+		var chosen: String = best[rng.randi_range(0, best.size() - 1)]
+		blob[chosen] = true
+		order.append(chosen)
+	return order
+
+
+## Number of the 8 neighbours of `key` that are already in `blob`.
+static func _contacts_8(key: String, blob: Dictionary) -> int:
+	var parts := (key as String).split(",")
+	var cc: int = int(parts[0])
+	var cr: int = int(parts[1])
+	var n: int = 0
+	for dc in range(-1, 2):
+		for dr in range(-1, 2):
+			if dc == 0 and dr == 0:
+				continue
+			if blob.has("%d,%d" % [cc + dc, cr + dr]):
+				n += 1
+	return n
+

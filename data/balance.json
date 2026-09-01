@@ -3058,6 +3058,7 @@
 			},
 
 			"map_shape": {
+				"_comment": "V2-COMBAT-003 terrain commit 3: island_count_min/max and island_size_min/max REPLACE straggler_count_min/max. A straggler was one cell taken from the 8-direction neighbours of existing ground, so it always touched the board at a corner and could never be an island (measured: 838 of 865 cut-off regions touched the main ground at a corner, and 819 of 865 were a single cell). An island is a multi-cell blob with a guaranteed ring of void around it, so realms differentiate by island SIZE and not only by island COUNT. All eleven island_count_*/island_size_* values below are PROPOSED DEFAULTS awaiting Jeff's play tuning — see docs/v2-combat-003-handoff.md section 12.5 for the approved table. island_size_* is a REQUEST, not a promise: StageTerrain clamps it against board area (at most 1/16 of the board per island and 1/4 of the board for all islands together, floor 4 cells), so wisdom's 8..50 gives up to 9 cells per island on a 12x12 combat board and the full authored range on an explore map. An island below 4 cells is discarded rather than emitted. relief is RESERVED for future per-realm art (CONVENTIONS.md) — do not rename it. connect_min_region_cells governs the connectivity repair, which runs BEFORE islands are minted and therefore never sees them.",
 				"default": {
 					"relief": "default_relief",
 					"plateau_count_min": 2, "plateau_count_max": 4,
@@ -3065,7 +3066,8 @@
 					"plateau_shape_bias": "blocky",
 					"bridge_width": 2,
 					"bridge_density": 0.2,
-					"straggler_count_min": 1, "straggler_count_max": 2,
+					"island_count_min": 1, "island_count_max": 2,
+					"island_size_min": 4, "island_size_max": 8,
 					"connect_min_region_cells": 6
 				},
 				"by_virtue": {
@@ -3076,7 +3078,8 @@
 						"plateau_shape_bias": "long",
 						"bridge_width": 2,
 						"bridge_density": 0.0,
-						"straggler_count_min": 0, "straggler_count_max": 1,
+						"island_count_min": 1, "island_count_max": 2,
+						"island_size_min": 4, "island_size_max": 8,
 						"connect_min_region_cells": 6
 					},
 					"wisdom": {
@@ -3086,7 +3089,8 @@
 						"plateau_shape_bias": "small",
 						"bridge_width": 2,
 						"bridge_density": 0.6,
-						"straggler_count_min": 2, "straggler_count_max": 4,
+						"island_count_min": 4, "island_count_max": 6,
+						"island_size_min": 8, "island_size_max": 50,
 						"connect_min_region_cells": 6
 					},
 					"leadership": {
@@ -3096,7 +3100,8 @@
 						"plateau_shape_bias": "blocky",
 						"bridge_width": 2,
 						"bridge_density": 0.3,
-						"straggler_count_min": 1, "straggler_count_max": 2,
+						"island_count_min": 2, "island_count_max": 3,
+						"island_size_min": 5, "island_size_max": 12,
 						"connect_min_region_cells": 6
 					},
 					"acceptance": {
@@ -3106,7 +3111,8 @@
 						"plateau_shape_bias": "blocky",
 						"bridge_width": 2,
 						"bridge_density": 0.1,
-						"straggler_count_min": 0, "straggler_count_max": 0,
+						"island_count_min": 0, "island_count_max": 1,
+						"island_size_min": 4, "island_size_max": 6,
 						"connect_min_region_cells": 6
 					},
 					"humility": {
@@ -3116,7 +3122,8 @@
 						"plateau_shape_bias": "small",
 						"bridge_width": 2,
 						"bridge_density": 0.2,
-						"straggler_count_min": 3, "straggler_count_max": 5,
+						"island_count_min": 5, "island_count_max": 7,
+						"island_size_min": 4, "island_size_max": 20,
 						"connect_min_region_cells": 6
 					},
 					"forgiveness": {
@@ -3126,7 +3133,8 @@
 						"plateau_shape_bias": "blocky",
 						"bridge_width": 3,
 						"bridge_density": 0.2,
-						"straggler_count_min": 1, "straggler_count_max": 2,
+						"island_count_min": 1, "island_count_max": 2,
+						"island_size_min": 12, "island_size_max": 30,
 						"connect_min_region_cells": 6
 					},
 					"truth": {
@@ -3136,7 +3144,8 @@
 						"plateau_shape_bias": "long",
 						"bridge_width": 2,
 						"bridge_density": 0.0,
-						"straggler_count_min": 0, "straggler_count_max": 0,
+						"island_count_min": 0, "island_count_max": 1,
+						"island_size_min": 6, "island_size_max": 12,
 						"connect_min_region_cells": 6
 					},
 					"generosity": {
@@ -3146,7 +3155,8 @@
 						"plateau_shape_bias": "blocky",
 						"bridge_width": 2,
 						"bridge_density": 0.5,
-						"straggler_count_min": 2, "straggler_count_max": 3,
+						"island_count_min": 2, "island_count_max": 3,
+						"island_size_min": 4, "island_size_max": 10,
 						"connect_min_region_cells": 6
 					},
 					"compassion": {
@@ -3156,7 +3166,8 @@
 						"plateau_shape_bias": "blocky",
 						"bridge_width": 2,
 						"bridge_density": 0.4,
-						"straggler_count_min": 1, "straggler_count_max": 2,
+						"island_count_min": 2, "island_count_max": 3,
+						"island_size_min": 6, "island_size_max": 16,
 						"connect_min_region_cells": 6
 					},
 					"empathy": {
@@ -3166,7 +3177,8 @@
 						"plateau_shape_bias": "blocky",
 						"bridge_width": 2,
 						"bridge_density": 0.7,
-						"straggler_count_min": 2, "straggler_count_max": 3,
+						"island_count_min": 3, "island_count_max": 4,
+						"island_size_min": 5, "island_size_max": 14,
 						"connect_min_region_cells": 6
 					}
 				}

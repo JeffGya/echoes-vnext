@@ -44,15 +44,17 @@ static func _default_sig() -> Dictionary:
 		"plateau_shape_bias":  "blocky",
 		"bridge_width":        2,
 		"bridge_density":      0.3,
-		"straggler_count_min": 2,
-		"straggler_count_max": 4,
+		"island_count_min": 2,
+		"island_count_max": 4,
+		"island_size_min": 4,
+		"island_size_max": 8,
 	}
 
 static func _default_bounds() -> Dictionary:
 	return { "w": 30, "h": 30 }
 
 
-# Deep-equality check for two terrain dicts (plateaus/bridges/stragglers arrays).
+# Deep-equality check for two terrain dicts (plateaus/bridges/islands arrays).
 # Plateaus now include a "cells" Array — this is compared element-by-element.
 static func _terrain_equal(a: Dictionary, b: Dictionary) -> bool:
 	if a.size() != b.size():
@@ -63,7 +65,7 @@ static func _terrain_equal(a: Dictionary, b: Dictionary) -> bool:
 	if int(ba.get("w", -1)) != int(bb.get("w", -1)) or int(ba.get("h", -1)) != int(bb.get("h", -1)):
 		return false
 	# Compare array fields
-	for key in ["plateaus", "bridges", "stragglers"]:
+	for key in ["plateaus", "bridges", "islands"]:
 		var arr_a_v: Variant = a.get(key, [])
 		var arr_b_v: Variant = b.get(key, [])
 		var arr_a: Array = arr_a_v if arr_a_v is Array else []
@@ -193,12 +195,17 @@ static func _shared_side_regions(walkable: Dictionary) -> Array:
 
 
 # Walkable cells from PLATEAUS + BRIDGES only — the geometry the connectivity repair
-# actually governs. Stragglers are minted AFTER the repair runs (by design: section 12.3
-# of the terrain handoff places islands last), so a straggler can create a small cut-off
-# region the repair never had a chance to see. A test about the repair itself must exclude
-# them, or it is testing the straggler pass instead.
-static func _walkable_no_stragglers(terrain: Dictionary) -> Dictionary:
+# actually governs. Islands are minted AFTER the repair runs (by design: section 12.3 of
+# the terrain handoff places islands last), so an island IS a cut-off region the repair
+# never had a chance to see, and after terrain commit 3 it is a MOATED MULTI-CELL one that
+# routinely exceeds the 6-cell threshold. A test about the repair itself must exclude them
+# or it is testing the island pass instead — and before commit 3 it would have passed by
+# luck, because a straggler was a single cell and could not reach the threshold.
+# The legacy "stragglers" key is cleared too, so the helper is honest about the full set
+# walkable_set reads.
+static func _walkable_without_islands(terrain: Dictionary) -> Dictionary:
 	var stripped: Dictionary = terrain.duplicate(true)
+	stripped["islands"] = []
 	stripped["stragglers"] = []
 	return StageTerrain.walkable_set(stripped)
 
@@ -242,6 +249,12 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("terrain/repair_terminates_all_virtues",   Callable(StageTerrainTests, "_t_repair_terminates_all_virtues"))
 	runner.register_test("terrain/small_islands_are_kept",          Callable(StageTerrainTests, "_t_small_islands_are_kept"))
 	runner.register_test("terrain/min_region_cells_is_honored",     Callable(StageTerrainTests, "_t_min_region_cells_is_honored"))
+	# V2-COMBAT-003 terrain commit 3 — islands replace stragglers.
+	runner.register_test("terrain/islands_are_moated",              Callable(StageTerrainTests, "_t_islands_are_moated"))
+	runner.register_test("terrain/islands_are_one_region_min_size", Callable(StageTerrainTests, "_t_islands_are_one_region_min_size"))
+	runner.register_test("terrain/island_config_is_honored",        Callable(StageTerrainTests, "_t_island_config_is_honored"))
+	runner.register_test("terrain/island_size_scales_to_board",     Callable(StageTerrainTests, "_t_island_size_scales_to_board"))
+	runner.register_test("terrain/walkable_set_reads_legacy_stragglers", Callable(StageTerrainTests, "_t_walkable_set_reads_legacy_stragglers"))
 
 
 # ─── Test 1 — DETERMINISM: same inputs → deep-equal dicts ───────────────────
@@ -268,15 +281,22 @@ static func _t_determinism_generate() -> Dictionary:
 # approved design, which deliberately KEEPS small islands.
 #
 # The guarantee the generator now makes, and the one asserted here, is:
-#   every walkable region of `connect_min_region_cells` (6) cells or more is THE SAME
-#   region, judged by a full shared side.
+#   every PLATEAU-OR-BRIDGE region of `connect_min_region_cells` (6) cells or more is THE
+#   SAME region, judged by a full shared side.
 # Regions of 5 cells or fewer may exist and are left alone on purpose.
+#
+# V2-COMBAT-003 terrain commit 3 narrowed the SET this runs over, not the guarantee.
+# Islands are minted after the repair, so they were never covered by it; before commit 3
+# that distinction was invisible because a straggler was a single cell and could not reach
+# the 6-cell threshold. A commit-3 island is moated and routinely larger than 6, so
+# measuring the full walkable set here would assert something the generator has never
+# promised. `_walkable_without_islands` is the geometry the repair actually governs.
 static func _t_connectivity_single_comp() -> Dictionary:
 	var sig    := _default_sig()
 	var bounds := _default_bounds()
 	for seed_val in range(1, 21):  # 20 seeds
 		var terrain: Dictionary = StageTerrain.generate(seed_val, 0, sig, bounds)
-		var walkable: Dictionary = StageTerrain.walkable_set(terrain)
+		var walkable: Dictionary = _walkable_without_islands(terrain)
 		if walkable.is_empty():
 			return { "ok": false, "error": "Seed %d: walkable_set is empty" % seed_val }
 		var regions := _shared_side_regions(walkable)
@@ -345,7 +365,8 @@ static func _t_sig_low_vs_high_plateaus() -> Dictionary:
 		"plateau_w_min": 4, "plateau_w_max": 8,
 		"plateau_h_min": 4, "plateau_h_max": 8,
 		"bridge_width": 2, "bridge_density": 0.2,
-		"straggler_count_min": 0, "straggler_count_max": 1,
+		"island_count_min": 0, "island_count_max": 1,
+		"island_size_min": 4, "island_size_max": 8,
 	}
 	var high_sig := {
 		"plateau_count_min": 6,
@@ -353,7 +374,8 @@ static func _t_sig_low_vs_high_plateaus() -> Dictionary:
 		"plateau_w_min": 4, "plateau_w_max": 8,
 		"plateau_h_min": 4, "plateau_h_max": 8,
 		"bridge_width": 2, "bridge_density": 0.2,
-		"straggler_count_min": 0, "straggler_count_max": 1,
+		"island_count_min": 0, "island_count_max": 1,
+		"island_size_min": 4, "island_size_max": 8,
 	}
 	for seed_val in [10, 20, 30, 40, 50]:
 		var low_t:  Dictionary = StageTerrain.generate(seed_val, 0, low_sig,  bounds)
@@ -378,7 +400,18 @@ static func _t_entry_cell_walkable() -> Dictionary:
 	return { "ok": true }
 
 
-# ─── Test 8 — ENTRY CELL: at the leftmost walkable column ───────────────────
+# ─── Test 8 — ENTRY CELL: leftmost column OF THE HOST REGION ────────────────
+# V2-COMBAT-003 terrain commit 3 restated this test, because the behaviour it pins had to
+# change. It used to demand the leftmost column of the WHOLE walkable set. Commit 3 mints
+# moated islands, plateaus never occupy column 0 (_BORDER_MARGIN) and islands may, so the
+# old rule would routinely start the party on ground with no route off it — a dead start
+# on turn one, on 766 of 1,800 combat-bounds boards and 867 of 1,800 explore-bounds boards
+# in the measured sweep. entry_cell now anchors to the host region.
+#
+# The test asserts BOTH halves, so neither can rot:
+#   1. the entry cell is the leftmost column of the host region, and
+#   2. the entry cell is REACHABLE — it has at least one legal neighbour and it is in the
+#      host region, which is what makes it a start the party can actually leave.
 static func _t_entry_cell_min_col() -> Dictionary:
 	var sig    := _default_sig()
 	var bounds := _default_bounds()
@@ -387,15 +420,29 @@ static func _t_entry_cell_min_col() -> Dictionary:
 		var walkable: Dictionary = StageTerrain.walkable_set(terrain)
 		var entry: Dictionary    = StageTerrain.entry_cell(walkable, bounds)
 		var entry_col := int(entry.get("col", -1))
-		# Find true minimum col in walkable
-		var min_col := 999999
-		for key in walkable:
-			var parts := (key as String).split(",")
-			var c := int(parts[0])
-			if c < min_col:
-				min_col = c
-		if entry_col != min_col:
-			return { "ok": false, "error": "Seed %d: entry_cell col %d != min_col %d" % [seed_val, entry_col, min_col] }
+		var entry_key := "%d,%d" % [entry_col, int(entry.get("row", -1))]
+
+		# Host region: largest shared-side region, ties by numerically lowest (col,row).
+		var regions := _shared_side_regions(walkable)
+		var host: Array = []
+		for r_v in regions:
+			var r: Array = r_v
+			if host.is_empty() or r.size() > host.size():
+				host = r
+		if host.is_empty():
+			return { "ok": false, "error": "Seed %d: no walkable region at all" % seed_val }
+		var host_set: Dictionary = {}
+		var host_min_col := 999999
+		for k in host:
+			host_set[k] = true
+			host_min_col = min(host_min_col, int((k as String).split(",")[0]))
+
+		if not host_set.has(entry_key):
+			return { "ok": false, "error": "Seed %d: entry_cell %s is OFF the host region — the party starts on unreachable ground" % [seed_val, entry_key] }
+		if entry_col != host_min_col:
+			return { "ok": false, "error": "Seed %d: entry_cell col %d != host region min_col %d" % [seed_val, entry_col, host_min_col] }
+		if StageTerrain.legal_neighbors(entry, walkable, bounds).is_empty():
+			return { "ok": false, "error": "Seed %d: entry_cell %s has no legal neighbour — the party cannot take a step" % [seed_val, entry_key] }
 	return { "ok": true }
 
 
@@ -753,8 +800,10 @@ static func _t_single_plateau_irregular_island() -> Dictionary:
 		"plateau_h_max": 8,
 		"bridge_width":  2,
 		"bridge_density": 0.0,
-		"straggler_count_min": 0,
-		"straggler_count_max": 0,
+		"island_count_min": 0,
+		"island_count_max": 0,
+		"island_size_min": 4,
+		"island_size_max": 8,
 	}
 	var found_irregular_across_seeds := false
 	for seed_val in [10, 20, 30, 40, 50, 60, 70]:
@@ -981,7 +1030,9 @@ static func _t_repair_terminates_all_virtues() -> Dictionary:
 			var bounds: Dictionary = bounds_cycle[i % bounds_cycle.size()]
 			var terrain: Dictionary = StageTerrain.generate(
 				realm_seed, i % 3, sig, bounds, "test.terrain.%s.%d" % [virtue, i])
-			var walkable: Dictionary = StageTerrain.walkable_set(terrain)
+			# Plateaus + bridges only: islands are minted AFTER the repair by design and
+			# are deliberately cut off (V2-COMBAT-003 terrain commit 3).
+			var walkable: Dictionary = _walkable_without_islands(terrain)
 			var regions := _shared_side_regions(walkable)
 			var substantial: Array = []
 			for r_v in regions:
@@ -1013,7 +1064,10 @@ static func _t_small_islands_are_kept() -> Dictionary:
 	for i in range(30):
 		var terrain: Dictionary = StageTerrain.generate(
 			700000 + i * 7919, i % 3, sig, { "w": 22, "h": 22 }, "test.island.%d" % i)
-		var walkable: Dictionary = StageTerrain.walkable_set(terrain)
+		# Islands stripped ON PURPOSE. This test is about the REPAIR leaving a small
+		# accidental region alone; counting deliberate commit-3 islands would let it pass
+		# for a reason that has nothing to do with the repair.
+		var walkable: Dictionary = _walkable_without_islands(terrain)
 		var regions := _shared_side_regions(walkable)
 		for r_v in regions:
 			var r: Array = r_v
@@ -1059,12 +1113,12 @@ static func _t_min_region_cells_is_honored() -> Dictionary:
 			var ns: String = "test.island.%s.%d" % [virtue, i]
 
 			var default_regions: int = _substantial_region_count(
-				_walkable_no_stragglers(StageTerrain.generate(realm_seed, i % 3, base_sig, bounds, ns)))
+				_walkable_without_islands(StageTerrain.generate(realm_seed, i % 3, base_sig, bounds, ns)))
 			if default_regions != 1:
 				return { "ok": false, "error": "default threshold, %s seed %d: %d regions of >= %d cells — the repair did not join the board" % [virtue, realm_seed, default_regions, _MIN_REGION] }
 
 			var disabled_regions: int = _substantial_region_count(
-				_walkable_no_stragglers(StageTerrain.generate(realm_seed, i % 3, disabled_sig, bounds, ns)))
+				_walkable_without_islands(StageTerrain.generate(realm_seed, i % 3, disabled_sig, bounds, ns)))
 			if disabled_regions > 1:
 				split_boards += 1
 				if demonstrated == "":
@@ -1082,3 +1136,287 @@ static func _substantial_region_count(walkable: Dictionary) -> int:
 		if (r_v as Array).size() >= _MIN_REGION:
 			n += 1
 	return n
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# V2-COMBAT-003 terrain commit 3 — islands replace stragglers
+# ═══════════════════════════════════════════════════════════════════════════════
+
+## Every ten authored virtue signatures, over the standard combat span, the two DOUBLED
+## combat shapes (12x48 PURSUE, 60x12 GUIDE_SPIRIT) and explore bounds.
+static func _island_sweep_bounds() -> Array:
+	return [
+		{ "w": 12, "h": 12 }, { "w": 16, "h": 16 }, { "w": 22, "h": 22 },
+		{ "w": 12, "h": 48 }, { "w": 60, "h": 12 },
+		{ "w": 30, "h": 30 }, { "w": 50, "h": 40 },
+	]
+
+
+static func _authored_by_virtue() -> Dictionary:
+	var stages_cfg := _load_balance_stages()
+	var map_shape_v: Variant = stages_cfg.get("map_shape", {})
+	var map_shape: Dictionary = map_shape_v if map_shape_v is Dictionary else {}
+	var by_virtue_v: Variant = map_shape.get("by_virtue", {})
+	return by_virtue_v if by_virtue_v is Dictionary else {}
+
+
+## Cell-key set of one island entry.
+static func _island_cell_set(island: Dictionary) -> Dictionary:
+	var own: Dictionary = {}
+	var cells_v: Variant = island.get("cells", [])
+	var cells: Array = cells_v if cells_v is Array else []
+	for pair_v in cells:
+		var pair: Array = pair_v if pair_v is Array else []
+		if pair.size() >= 2:
+			own["%d,%d" % [int(pair[0]), int(pair[1])]] = true
+	return own
+
+
+# ─── THE MOAT ────────────────────────────────────────────────────────────────
+# The single claim terrain commit 3 exists to make, and the one this test attacks:
+#   no island cell is adjacent, in ANY of the 8 directions, to a cell of any other region,
+#   including another island.
+# Before commit 3 this was false on 838 of 865 measured cut-off regions — 97 % touched the
+# main ground at a CORNER, which reads as connected on screen and is not connected in play.
+# A side touch would be worse still. Both are checked by one condition: every 8-direction
+# neighbour of an island cell is either that same island's cell or not walkable at all.
+static func _t_islands_are_moated() -> Dictionary:
+	var by_virtue := _authored_by_virtue()
+	if by_virtue.is_empty():
+		return { "ok": false, "error": "data.stages.map_shape.by_virtue is empty — wrong config path" }
+	var bounds_cycle := _island_sweep_bounds()
+	var virtues: Array = by_virtue.keys()
+	virtues.sort()
+	var islands_seen: int = 0
+	for virtue_v in virtues:
+		var virtue: String = str(virtue_v)
+		var sig_v: Variant = by_virtue.get(virtue, {})
+		var sig: Dictionary = sig_v if sig_v is Dictionary else {}
+		for i in range(21):
+			var realm_seed: int = 300000 + i * 7919
+			var bounds: Dictionary = bounds_cycle[i % bounds_cycle.size()]
+			var terrain: Dictionary = StageTerrain.generate(
+				realm_seed, i % 3, sig, bounds, "test.moat.%s.%d" % [virtue, i])
+			var walkable: Dictionary = StageTerrain.walkable_set(terrain)
+			var islands_v: Variant = terrain.get("islands", [])
+			var islands: Array = islands_v if islands_v is Array else []
+			for isl_v in islands:
+				var isl: Dictionary = isl_v if isl_v is Dictionary else {}
+				var own := _island_cell_set(isl)
+				islands_seen += 1
+				for own_k in own.keys():
+					var parts := (own_k as String).split(",")
+					var oc: int = int(parts[0])
+					var orow: int = int(parts[1])
+					for dc in range(-1, 2):
+						for dr in range(-1, 2):
+							if dc == 0 and dr == 0:
+								continue
+							var nk: String = "%d,%d" % [oc + dc, orow + dr]
+							if own.has(nk):
+								continue
+							if walkable.has(nk):
+								return { "ok": false, "error": "%s seed %d bounds %dx%d: island cell %s touches FOREIGN walkable cell %s (offset %d,%d) — the moat is broken" % [virtue, realm_seed, int(bounds.get("w", 0)), int(bounds.get("h", 0)), own_k, nk, dc, dr] }
+	if islands_seen == 0:
+		return { "ok": false, "error": "no island was generated across the whole sweep — the test proved nothing" }
+	return { "ok": true, "note": "%d islands, every 8-direction neighbour is own-island or void" % islands_seen }
+
+
+# ─── SHAPE: >= 4 cells, exactly ONE shared-side region ───────────────────────
+# The two remaining structural promises. A single-cell island is the defect being removed,
+# so 4 is a hard floor the generator enforces by discarding a stunted blob rather than
+# emitting it. Shared-side contiguity matters because it is the SAME rule the connectivity
+# repair uses: an island that split into two shared-side regions would be two islands
+# wearing one name, and every size measurement about it would be wrong.
+static func _t_islands_are_one_region_min_size() -> Dictionary:
+	var by_virtue := _authored_by_virtue()
+	var bounds_cycle := _island_sweep_bounds()
+	var virtues: Array = by_virtue.keys()
+	virtues.sort()
+	var seen: int = 0
+	for virtue_v in virtues:
+		var virtue: String = str(virtue_v)
+		var sig_v: Variant = by_virtue.get(virtue, {})
+		var sig: Dictionary = sig_v if sig_v is Dictionary else {}
+		for i in range(21):
+			var bounds: Dictionary = bounds_cycle[i % bounds_cycle.size()]
+			var terrain: Dictionary = StageTerrain.generate(
+				310000 + i * 7919, i % 3, sig, bounds, "test.islandshape.%s.%d" % [virtue, i])
+			var islands_v: Variant = terrain.get("islands", [])
+			var islands: Array = islands_v if islands_v is Array else []
+			for isl_v in islands:
+				var isl: Dictionary = isl_v if isl_v is Dictionary else {}
+				var own := _island_cell_set(isl)
+				seen += 1
+				if own.size() < 4:
+					return { "ok": false, "error": "%s bounds %dx%d: island of %d cells — below the hard floor of 4" % [virtue, int(bounds.get("w", 0)), int(bounds.get("h", 0)), own.size()] }
+				var regions := _shared_side_regions(own)
+				if regions.size() != 1:
+					return { "ok": false, "error": "%s bounds %dx%d: island of %d cells is %d shared-side regions, not 1" % [virtue, int(bounds.get("w", 0)), int(bounds.get("h", 0)), own.size(), regions.size()] }
+				# The recorded bounding box must actually bound the blob.
+				var bc: int = int(isl.get("col", 0))
+				var brow: int = int(isl.get("row", 0))
+				var bw: int = int(isl.get("w", 0))
+				var bh: int = int(isl.get("h", 0))
+				for k in own.keys():
+					var pp := (k as String).split(",")
+					var kc: int = int(pp[0])
+					var kr: int = int(pp[1])
+					if kc < bc or kc >= bc + bw or kr < brow or kr >= brow + bh:
+						return { "ok": false, "error": "%s: island cell %s lies outside its recorded bounding box (%d,%d,%d,%d)" % [virtue, k, bc, brow, bw, bh] }
+	if seen == 0:
+		return { "ok": false, "error": "no island generated across the sweep" }
+	return { "ok": true, "note": "%d islands, all >= 4 cells and one shared-side region" % seen }
+
+
+# ─── THE CONFIG REACHES THE GENERATOR ────────────────────────────────────────
+# A key authored in the signature but never read is a defect this project has shipped
+# before, and this commit renamed FOUR of them. Drive each one to a setting whose effect
+# cannot be confused with anything else, on identical seeds:
+#   island_count 0..0        => zero islands
+#   island_count 3..3        => three islands (space permitting; asserted >= 1 always)
+#   island_size 4..4 vs 12..N => the larger request really produces larger islands
+static func _t_island_config_is_honored() -> Dictionary:
+	var bounds: Dictionary = { "w": 40, "h": 40 }   # per-island cap 100, total cap 400
+	var base: Dictionary = {
+		"plateau_count_min": 2, "plateau_count_max": 2,
+		"plateau_w_min": 6, "plateau_w_max": 8,
+		"plateau_h_min": 6, "plateau_h_max": 8,
+		"plateau_shape_bias": "blocky",
+		"bridge_width": 2, "bridge_density": 0.0,
+		"connect_min_region_cells": 6,
+	}
+	var none_sig: Dictionary = base.duplicate(true)
+	none_sig["island_count_min"] = 0
+	none_sig["island_count_max"] = 0
+	none_sig["island_size_min"] = 4
+	none_sig["island_size_max"] = 8
+
+	var many_sig: Dictionary = base.duplicate(true)
+	many_sig["island_count_min"] = 3
+	many_sig["island_count_max"] = 3
+	many_sig["island_size_min"] = 4
+	many_sig["island_size_max"] = 6
+
+	var small_sig: Dictionary = base.duplicate(true)
+	small_sig["island_count_min"] = 2
+	small_sig["island_count_max"] = 2
+	small_sig["island_size_min"] = 4
+	small_sig["island_size_max"] = 4
+
+	var big_sig: Dictionary = base.duplicate(true)
+	big_sig["island_count_min"] = 2
+	big_sig["island_count_max"] = 2
+	big_sig["island_size_min"] = 20
+	big_sig["island_size_max"] = 20
+
+	var small_total: int = 0
+	var big_total: int = 0
+	var many_total: int = 0
+	for i in range(20):
+		var seed_val: int = 820000 + i * 7919
+		var ns: String = "test.islandcfg.%d" % i
+
+		var none_t: Dictionary = StageTerrain.generate(seed_val, 0, none_sig, bounds, ns)
+		var none_n: int = (none_t.get("islands", []) as Array).size()
+		if none_n != 0:
+			return { "ok": false, "error": "island_count 0..0 produced %d island(s) on seed %d — the count key is not read" % [none_n, seed_val] }
+
+		var many_t: Dictionary = StageTerrain.generate(seed_val, 0, many_sig, bounds, ns)
+		var many_n: int = (many_t.get("islands", []) as Array).size()
+		if many_n < 1 or many_n > 3:
+			return { "ok": false, "error": "island_count 3..3 produced %d island(s) on seed %d — expected 1..3 (fewer only when moated space runs out)" % [many_n, seed_val] }
+		many_total += many_n
+
+		for isl_v in (StageTerrain.generate(seed_val, 0, small_sig, bounds, ns).get("islands", []) as Array):
+			small_total += _island_cell_set(isl_v as Dictionary).size()
+		for isl_v2 in (StageTerrain.generate(seed_val, 0, big_sig, bounds, ns).get("islands", []) as Array):
+			big_total += _island_cell_set(isl_v2 as Dictionary).size()
+
+	if many_total == 0:
+		return { "ok": false, "error": "island_count 3..3 never produced a single island across 20 seeds" }
+	if big_total <= small_total:
+		return { "ok": false, "error": "island_size 20..20 produced %d island cells against 4..4's %d — the size key is inert" % [big_total, small_total] }
+	return { "ok": true, "note": "count 0=>0, 3=>%d islands; size 4..4 => %d cells vs 20..20 => %d cells" % [many_total, small_total, big_total] }
+
+
+# ─── SIZE SCALES TO BOARD AREA ───────────────────────────────────────────────
+# Authored size is a REQUEST, not a promise. Wisdom asks for up to 50 cells; a 12x12 combat
+# board has 144. Without a clamp one island would be a third of the board and six of them
+# would be the whole board. Assert BOTH clamps hold on the smallest board the game makes,
+# with the most extreme authored request in balance.json:
+#   per island  <= area / 16
+#   all islands <= area / 4
+static func _t_island_size_scales_to_board() -> Dictionary:
+	var by_virtue := _authored_by_virtue()
+	var sig_v: Variant = by_virtue.get("wisdom", {})
+	var sig: Dictionary = sig_v if sig_v is Dictionary else {}
+	if sig.is_empty():
+		return { "ok": false, "error": "wisdom signature missing from balance.json" }
+	if int(sig.get("island_size_max", 0)) < 50:
+		return { "ok": false, "error": "wisdom island_size_max is %d — this test needs the extreme authored request to be meaningful" % int(sig.get("island_size_max", 0)) }
+
+	var biggest_seen: int = 0
+	for bounds_v in [{ "w": 12, "h": 12 }, { "w": 22, "h": 22 }, { "w": 12, "h": 48 }, { "w": 60, "h": 12 }]:
+		var bounds: Dictionary = bounds_v
+		var area: int = int(bounds.get("w", 0)) * int(bounds.get("h", 0))
+		var per_cap: int = max(4, area / 16)
+		var total_cap: int = max(4, area / 4)
+		for i in range(25):
+			var terrain: Dictionary = StageTerrain.generate(
+				930000 + i * 7919, i % 3, sig, bounds, "test.islandscale.%d.%d" % [area, i])
+			var total: int = 0
+			for isl_v in (terrain.get("islands", []) as Array):
+				var n: int = _island_cell_set(isl_v as Dictionary).size()
+				total += n
+				biggest_seen = max(biggest_seen, n)
+				if n > per_cap:
+					return { "ok": false, "error": "bounds %dx%d: island of %d cells exceeds the per-island cap of %d (area/16)" % [int(bounds.get("w", 0)), int(bounds.get("h", 0)), n, per_cap] }
+			if total > total_cap:
+				return { "ok": false, "error": "bounds %dx%d: %d island cells in total exceeds the cap of %d (area/4)" % [int(bounds.get("w", 0)), int(bounds.get("h", 0)), total, total_cap] }
+	if biggest_seen < 4:
+		return { "ok": false, "error": "no island of >= 4 cells on any small board — the clamp is starving the pass instead of bounding it" }
+	return { "ok": true, "note": "largest island on a small board: %d cells" % biggest_seen }
+
+
+# ─── THE LEGACY KEY STILL FEEDS walkable_set ─────────────────────────────────
+# THE TRAP, asserted directly. walkable_set builds the walkable set from three keys, and
+# terrain is PERSISTED (FlowStageExploreState calls it permanent geometry; SaveService
+# repairs the field). Renaming "stragglers" to "islands" without teaching walkable_set the
+# new name would make every island silently VANISH from the walkable set — no error, no
+# failing test, just missing ground. The commit keeps reading the old key as a documented
+# fallback so an already-saved board cannot lose ground either.
+# This test pins both halves at once on one hand-built terrain dict.
+static func _t_walkable_set_reads_legacy_stragglers() -> Dictionary:
+	var legacy: Dictionary = {
+		"bounds": { "w": 10, "h": 10 },
+		"plateaus": [ { "col": 1, "row": 1, "w": 2, "h": 2, "cells": [[1, 1], [2, 1], [1, 2], [2, 2]] } ],
+		"bridges": [],
+		"stragglers": [ { "col": 7, "row": 7 }, { "col": 8, "row": 3 } ],
+	}
+	var legacy_walkable := StageTerrain.walkable_set(legacy)
+	if not legacy_walkable.has("7,7") or not legacy_walkable.has("8,3"):
+		return { "ok": false, "error": "walkable_set dropped legacy straggler cells — an already-saved board would silently lose ground (got %d cells: %s)" % [legacy_walkable.size(), str(legacy_walkable.keys())] }
+	if legacy_walkable.size() != 6:
+		return { "ok": false, "error": "legacy terrain: expected 6 walkable cells, got %d" % legacy_walkable.size() }
+
+	var modern: Dictionary = {
+		"bounds": { "w": 10, "h": 10 },
+		"plateaus": [ { "col": 1, "row": 1, "w": 2, "h": 2, "cells": [[1, 1], [2, 1], [1, 2], [2, 2]] } ],
+		"bridges": [],
+		"islands": [ { "col": 6, "row": 6, "w": 2, "h": 2, "cells": [[6, 6], [7, 6], [6, 7], [7, 7]] } ],
+	}
+	var modern_walkable := StageTerrain.walkable_set(modern)
+	for k in ["6,6", "7,6", "6,7", "7,7"]:
+		if not modern_walkable.has(k):
+			return { "ok": false, "error": "walkable_set dropped island cell %s — islands are invisible to every consumer" % k }
+	if modern_walkable.size() != 8:
+		return { "ok": false, "error": "modern terrain: expected 8 walkable cells, got %d" % modern_walkable.size() }
+
+	# And the generator itself must never write the legacy key again.
+	var gen: Dictionary = StageTerrain.generate(4242, 0, _default_sig(), _default_bounds())
+	if gen.has("stragglers"):
+		return { "ok": false, "error": "generate() still writes a \"stragglers\" key — the rename is incomplete" }
+	if not gen.has("islands"):
+		return { "ok": false, "error": "generate() does not write an \"islands\" key" }
+	return { "ok": true }
