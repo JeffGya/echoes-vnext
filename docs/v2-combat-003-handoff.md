@@ -524,3 +524,21 @@ cases — and asserts exactly one region containing both endpoints. Non-host reg
 gain a cell (every bridge cell touches the host), so the count of substantial non-host regions
 strictly falls each pass. The ceiling survives as a safety net and now `push_error`s instead
 of quietly returning a split board.
+
+### 12.8 Independent verification of terrain commit 2 (orchestrator, not the builder)
+
+The builder measured combat bounds as **12x12 to 22x22 only**. That range **excludes the doubled
+boards** — PURSUE uses 12x48 and GUIDE_SPIRIT uses 60x12 — which are exactly the shapes where the
+86, 97, 104 and 115 cell splits were originally found. Its combat incidence figure is therefore
+understated, and its "splits are rarer than section 12.1 implies" caveat applies to standard boards
+only.
+
+Re-measured on the doubled shapes after the fix: **1,800 boards, all ten virtues, zero cut-off
+regions of 6 or more cells, worst case 0.** The repair holds on the shapes that motivated it.
+
+**Both measurements are right about different populations.** Standard combat boards rarely split;
+doubled and explore-scale boards split often. Quote the shape along with the number.
+
+Structural checks done directly on the commit, not taken from the report: `core/realms/StageTerrain.gd`
+is the only `core/` file touched, `GridService.gd` is untouched, and exactly one recorded constant
+moved (`GUIDE_SPIRIT_ROUNDS_HASH`).
