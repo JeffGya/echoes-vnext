@@ -216,11 +216,18 @@ static func place_on_terrain(candidates: Array, target_col: float, ref_row: floa
 ## Rows within each column are shuffled via the injected RNG.
 ## The RNG must be freshly seeded by the caller to guarantee reproducibility.
 ##
-## Returns { "echo_unfiltered_fallback": bool, "enemy_unfiltered_fallback": bool }.
-## Each flag is true only when that faction had an actor placed by the unfiltered
-## final pass (V2-COMBAT-003 phase 2c) — every remaining candidate cell had no legal
-## edge (StageTerrain.legal_neighbors was empty). This should never happen in practice;
-## the caller logs it as a live alarm. Always false on the legacy (no-walkable) path.
+## Returns a Dictionary of four booleans, all false on the legacy (no-walkable) path:
+##   "echo_outside_region_fallback" / "enemy_outside_region_fallback" — true when that
+##     faction had an actor land outside the board's largest connected region (V2-COMBAT-003
+##     phase 2c/2c-region) because the region ran out of cells for it, even though the total
+##     walkable set (across all regions) still had room.
+##   "echo_walkable_exhausted_fallback" / "enemy_walkable_exhausted_fallback" — true when
+##     that faction has more actors than the board has walkable cells in total. This is a
+##     plain shortage, not a connectivity defect, and can fire with zero cut-off cells on
+##     the board.
+## Both flags for a faction can never be true at once (walkable-exhausted is the more severe,
+## true root cause and takes priority — see _assign_walkable_faction). This should never
+## happen in practice; the caller logs it as a live alarm.
 static func place_actors(echo_actors: Array, enemy_actors: Array,
 		board_cfg: Dictionary, rng: RandomNumberGenerator,
 		place_cfg: Dictionary = {}) -> Dictionary:
@@ -251,7 +258,12 @@ static func place_actors(echo_actors: Array, enemy_actors: Array,
 		# LEGACY path — unchanged. Echoes fill from col=1 inward; enemies from col=cols-2 inward.
 		_pack_faction(sorted_echoes, 1, 1, rows, rng)
 		_pack_faction(sorted_enemies, cols - 2, -1, rows, rng)
-		return { "echo_unfiltered_fallback": false, "enemy_unfiltered_fallback": false }
+		return {
+			"echo_outside_region_fallback": false,
+			"enemy_outside_region_fallback": false,
+			"echo_walkable_exhausted_fallback": false,
+			"enemy_walkable_exhausted_fallback": false,
+		}
 	else:
 		# WALKABLE TERRAIN path — direct deterministic assignment; NO RNG draws.
 		# (The placement rng is not reused after this function returns, so no parity draw is needed.)
@@ -282,12 +294,22 @@ static func place_actors(echo_actors: Array, enemy_actors: Array,
 		# "w"/"h"; board_cfg uses "board_cols"/"board_rows" (already read above as cols/rows).
 		var bounds: Dictionary = { "w": cols, "h": rows }
 
+		# V2-COMBAT-003 phase 2c-region: compute the walkable set's connected regions ONCE
+		# per call (not once per actor), using StageTerrain.legal_neighbors as the adjacency
+		# rule — the same authority the movement layer uses. A cut-off GROUP of two or more
+		# cells is invisible to a per-cell "has any legal neighbour" test (each cell in the
+		# group has a legal neighbour — the other cells in the group), so the guard must
+		# operate on regions, not cells. Both factions are restricted to the SAME largest
+		# region: if the party and the enemies land in different regions the battle cannot
+		# happen, which is worse than a single stranded actor.
+		var region_set: Dictionary = _largest_walkable_region(walkable, bounds)
+
 		# Assign echoes: iterate columns left→right, filling actors in score-ascending order.
 		var echo_cells: Array = []
 		for c in sorted_cols:
 			for cell in cells_by_col[c]:
 				echo_cells.append(cell)
-		var echo_unfiltered: bool = _assign_walkable_faction(sorted_echoes, echo_cells, walkable, bounds)
+		var echo_result: Dictionary = _assign_walkable_faction(sorted_echoes, echo_cells, walkable, region_set)
 
 		# Assign enemies: iterate columns right→left, filling actors in score-ascending order.
 		var enemy_cols: Array = sorted_cols.duplicate()
@@ -297,40 +319,51 @@ static func place_actors(echo_actors: Array, enemy_actors: Array,
 			# Within each column keep rows ascending for determinism.
 			for cell in cells_by_col[c]:
 				enemy_cells.append(cell)
-		var enemy_unfiltered: bool = _assign_walkable_faction(sorted_enemies, enemy_cells, walkable, bounds)
+		var enemy_result: Dictionary = _assign_walkable_faction(sorted_enemies, enemy_cells, walkable, region_set)
 
 		return {
-			"echo_unfiltered_fallback": echo_unfiltered,
-			"enemy_unfiltered_fallback": enemy_unfiltered,
+			"echo_outside_region_fallback": echo_result["outside_region"],
+			"enemy_outside_region_fallback": enemy_result["outside_region"],
+			"echo_walkable_exhausted_fallback": echo_result["walkable_exhausted"],
+			"enemy_walkable_exhausted_fallback": enemy_result["walkable_exhausted"],
 		}
 
 
 ## Assigns grid positions for one faction into a pre-ordered list of walkable cells.
 ## actors: sorted Array of actor dicts (score-ascending, id tiebreak).
 ## ordered_cells: walkable cells in the desired fill order for this faction.
-## walkable: the full walkable set (used as fallback pool when ordered_cells are exhausted).
-## bounds: { "w": int, "h": int } — passed straight to StageTerrain.legal_neighbors.
-## If ordered_cells has fewer entries than actors, falls back to the nearest remaining
-## walkable cells (those not yet assigned) to ensure every actor gets a cell — never void.
+## walkable: the full walkable set (used as the last-resort pool in pass 3).
+## region_set: Dictionary of "col,row" keys — the board's largest connected region
+##   (see _largest_walkable_region), shared by both factions.
 ## Purely deterministic; no RNG.
 ##
-## V2-COMBAT-003 phase 2c: a walkable cell can still be an isolated dead end — reachable
-## by no legal edge (StageTerrain.is_legal_edge rejects a diagonal whose two orthogonal
-## side cells are both solid). Passes 1 and 2 skip such cells so an actor is never placed
-## somewhere it can never leave. Pass 3 has no such filter: if every remaining candidate
-## is isolated, an actor still needs a cell — placing it on unreachable ground is bad,
-## dropping it from the encounter is worse. Returns true iff any actor remained unplaced
-## after passes 1 and 2, i.e. pass 3 had to run.
+## V2-COMBAT-003 phase 2c-region: a walkable cell can belong to a cut-off REGION of two or
+## more cells — each cell in the region has a legal neighbour (another cell in the same
+## region), so a per-cell "has any legal neighbour" test cannot see it. Passes 1 and 2
+## restrict placement to region_set (the board's single largest connected region, shared
+## by both factions) so an actor is never placed on ground disconnected from the main
+## fight. Pass 3 has no such filter: if region_set runs out for this faction, an actor
+## still needs a cell — placing it on any remaining walkable ground is bad, dropping it
+## from the encounter is worse.
+##
+## Returns { "outside_region": bool, "walkable_exhausted": bool }:
+##   outside_region — pass 3 ran because this faction has more actors than region_set has
+##     cells, but the total walkable set (all regions) still has room. The extra actor(s)
+##     land outside the main region via pass 3.
+##   walkable_exhausted — pass 3 ran because this faction has more actors than the board
+##     has walkable cells in total — a plain shortage, unrelated to connectivity, and it
+##     can happen with zero cut-off cells on the board. Takes priority over outside_region
+##     when both technically hold, since it is the more severe, true root cause.
 static func _assign_walkable_faction(actors: Array, ordered_cells: Array, walkable: Dictionary,
-		bounds: Dictionary = {}) -> bool:
+		region_set: Dictionary = {}) -> Dictionary:
 	if actors.is_empty():
-		return false
+		return { "outside_region": false, "walkable_exhausted": false }
 
 	# Track assigned cells to prevent two actors sharing a cell.
 	var assigned: Dictionary = {}
 
-	# Pass 1: fill actors from ordered_cells in sequence, skipping any isolated cell
-	# (StageTerrain.legal_neighbors empty ⇒ no legal edge out).
+	# Pass 1: fill actors from ordered_cells in sequence, skipping any cell outside the
+	# board's largest connected region.
 	var cell_idx: int = 0
 	var actor_idx: int = 0
 	while actor_idx < actors.size() and cell_idx < ordered_cells.size():
@@ -339,17 +372,16 @@ static func _assign_walkable_faction(actors: Array, ordered_cells: Array, walkab
 		cell_idx += 1
 		if assigned.has(key):
 			continue  # already taken (shouldn't happen with well-formed input, but guard it)
-		if StageTerrain.legal_neighbors(cell, walkable, bounds).is_empty():
-			continue  # isolated — would strand the actor; leave for pass 3 only
+		if not region_set.has(key):
+			continue  # outside the main region — would strand or split the fight; pass 3 only
 		assign_grid_pos(actors[actor_idx], int(cell.get("col", 0)), int(cell.get("row", 0)))
 		assigned[key] = true
 		actor_idx += 1
 
-	# Pass 2: if ordered_cells were exhausted before all actors placed, drain remaining
-	# walkable cells in sorted key order (col asc, row asc) as a deterministic fallback.
-	# Same isolation filter as pass 1.
+	# Pass 2: if ordered_cells were exhausted before all actors placed, drain the remaining
+	# region_set cells in sorted key order (col asc, row asc) as a deterministic fallback.
 	if actor_idx < actors.size():
-		var fallback_keys: Array = walkable.keys()
+		var fallback_keys: Array = region_set.keys()
 		fallback_keys.sort()
 		for fk in fallback_keys:
 			if actor_idx >= actors.size():
@@ -359,20 +391,28 @@ static func _assign_walkable_faction(actors: Array, ordered_cells: Array, walkab
 			var parts := (fk as String).split(",")
 			var fc: int = int(parts[0])
 			var fr: int = int(parts[1])
-			var fcell: Dictionary = { "col": fc, "row": fr }
-			if StageTerrain.legal_neighbors(fcell, walkable, bounds).is_empty():
-				continue  # isolated — leave for pass 3 only
 			assign_grid_pos(actors[actor_idx], fc, fr)
 			assigned[fk] = true
 			actor_idx += 1
 
-	# Pass 3: unfiltered fallback. Every remaining candidate cell is isolated (or walkable
-	# itself is exhausted). Placing an actor where it cannot walk is bad; dropping it from
+	# Pass 3: unfiltered fallback, drawn from the FULL walkable set (all regions), not just
+	# region_set. The main region ran out for this faction. Placing an actor outside the
+	# main region (or, in the worst case, on unreachable ground) is bad; dropping it from
 	# the encounter is worse — so place it anyway. Should never fire in practice; the call
 	# site (EncounterSetupService) logs this as a live alarm.
-	var used_unfiltered: bool = false
+	var outside_region: bool = false
+	var walkable_exhausted: bool = false
 	if actor_idx < actors.size():
-		used_unfiltered = true
+		# Distinguish the two causes BEFORE draining, using the counts as they stood after
+		# passes 1/2 (region_set exhausted for this faction either way):
+		#   walkable_exhausted — this faction needs more cells than the WHOLE walkable set
+		#     has, board-wide. A plain shortage; can happen with zero cut-off cells.
+		#   outside_region     — the main region alone was too small for this faction, but
+		#     the full walkable set (other, smaller regions included) still has room.
+		if actors.size() > walkable.size():
+			walkable_exhausted = true
+		else:
+			outside_region = true
 		var fallback_keys2: Array = walkable.keys()
 		fallback_keys2.sort()
 		for fk in fallback_keys2:
@@ -390,7 +430,83 @@ static func _assign_walkable_faction(actors: Array, ordered_cells: Array, walkab
 	# keep whatever grid_pos they had from the last assign_grid_pos call — this is a
 	# degenerate edge case that cannot crash and will be caught by combat validation.
 
-	return used_unfiltered
+	return { "outside_region": outside_region, "walkable_exhausted": walkable_exhausted }
+
+
+## V2-COMBAT-003 phase 2c-region: computes the connected regions of `walkable` using
+## StageTerrain.legal_neighbors as the sole adjacency rule (the same authority the movement
+## layer uses — deliberately NOT plain 8-direction adjacency, which cannot see a region cut
+## off only by the diagonal edge rule), then returns the LARGEST region as a Dictionary of
+## "col,row" keys for O(1) membership tests. Ties break deterministically: the region whose
+## lowest cell, in numeric (col, row) order, sorts first wins. Computed ONCE per place_actors
+## call — not once per actor.
+static func _largest_walkable_region(walkable: Dictionary, bounds: Dictionary) -> Dictionary:
+	var all_keys: Array = walkable.keys()
+	all_keys.sort()  # deterministic traversal seed order
+
+	var visited: Dictionary = {}
+	var best_region: Array = []
+	var best_min_key: String = ""
+
+	for start_key in all_keys:
+		if visited.has(start_key):
+			continue
+
+		# Flood-fill this region via StageTerrain.legal_neighbors (BFS/DFS order does not
+		# matter — only membership is used).
+		var region: Array = []
+		var stack: Array = [start_key]
+		visited[start_key] = true
+		while not stack.is_empty():
+			var k: String = stack.pop_back()
+			region.append(k)
+			var parts := (k as String).split(",")
+			var cell: Dictionary = { "col": int(parts[0]), "row": int(parts[1]) }
+			var neighbors: Array = StageTerrain.legal_neighbors(cell, walkable, bounds)
+			for n in neighbors:
+				var nk: String = "%d,%d" % [int(n.get("col", 0)), int(n.get("row", 0))]
+				if not visited.has(nk):
+					visited[nk] = true
+					stack.append(nk)
+
+		var region_min_key: String = _min_cell_key(region)
+		if region.size() > best_region.size():
+			best_region = region
+			best_min_key = region_min_key
+		elif region.size() == best_region.size() and region.size() > 0 \
+				and _cell_key_less(region_min_key, best_min_key):
+			best_region = region
+			best_min_key = region_min_key
+
+	var region_set: Dictionary = {}
+	for k in best_region:
+		region_set[k] = true
+	return region_set
+
+
+## Returns the numerically-lowest "col,row" key in `keys` (col ascending, then row
+## ascending) — NOT a lexical string minimum, which would misorder multi-digit coordinates.
+static func _min_cell_key(keys: Array) -> String:
+	var best: String = ""
+	var best_set: bool = false
+	for k in keys:
+		if not best_set or _cell_key_less(k, best):
+			best = k
+			best_set = true
+	return best
+
+
+## True if cell key `a` sorts before cell key `b` in numeric (col, row) order.
+static func _cell_key_less(a: String, b: String) -> bool:
+	var pa := (a as String).split(",")
+	var pb := (b as String).split(",")
+	var ac: int = int(pa[0])
+	var ar: int = int(pa[1])
+	var bc: int = int(pb[0])
+	var br: int = int(pb[1])
+	if ac != bc:
+		return ac < bc
+	return ar < br
 
 
 ## Assigns grid positions for one faction's actors into columns starting at start_col,

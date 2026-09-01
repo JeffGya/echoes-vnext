@@ -392,20 +392,46 @@ func setup(t: int) -> void:
 		var _placement_result: Dictionary = GridService.place_actors(
 			echo_actors, enemy_actors, grid_cfg_for_placement, rng, place_cfg)
 
-		# V2-COMBAT-003 phase 2c: the placement guard (GridService._assign_walkable_faction)
-		# should never need its unfiltered final pass — that only fires when every remaining
-		# candidate cell is isolated (no legal edge). GridService is pure static and has no
-		# logger, so this alarm lives here, at the one call site that owns `logger`.
-		if bool(_placement_result.get("echo_unfiltered_fallback", false)) \
-				or bool(_placement_result.get("enemy_unfiltered_fallback", false)):
-			if logger != null:
-				logger.warn(t, "combat.placement.unfiltered_fallback",
-					"GridService placed an actor on an isolated cell — every remaining " +
-					"candidate had no legal edge (StageTerrain.legal_neighbors empty).",
+		# V2-COMBAT-003 phase 2c/2c-region: the placement guard restricts both factions to
+		# the board's single largest connected region (GridService._largest_walkable_region)
+		# and should never need its unfiltered final pass. GridService is pure static and has
+		# no logger, so this alarm lives here, at the one call site that owns `logger`.
+		#
+		# Two DISTINCT causes are reported separately — collapsing them was a real defect
+		# (measured: a board with zero cut-off cells and more actors than walkable cells
+		# still reported "no legal edge", which was false):
+		#   *_outside_region_fallback    — the main region ran out for that faction, even
+		#                                  though the full walkable set (other regions
+		#                                  included) still had room. A real connectivity
+		#                                  problem: that faction now stands apart from the
+		#                                  region the rest of the fight is happening on.
+		#   *_walkable_exhausted_fallback — that faction has more actors than the board has
+		#                                  walkable cells in total. A plain shortage,
+		#                                  unrelated to connectivity.
+		var echo_outside_region: bool = bool(_placement_result.get("echo_outside_region_fallback", false))
+		var enemy_outside_region: bool = bool(_placement_result.get("enemy_outside_region_fallback", false))
+		var echo_walkable_exhausted: bool = bool(_placement_result.get("echo_walkable_exhausted_fallback", false))
+		var enemy_walkable_exhausted: bool = bool(_placement_result.get("enemy_walkable_exhausted_fallback", false))
+		if logger != null:
+			if echo_outside_region or enemy_outside_region:
+				logger.warn(t, "combat.placement.outside_region_fallback",
+					"GridService placed an actor outside the board's largest connected " +
+					"region — that faction's share of the main region ran out, though " +
+					"the full walkable set still had room elsewhere.",
 					{
 						"encounter_id": flow_ctx.encounter_ctx.encounter_id,
-						"echo_unfiltered_fallback": _placement_result.get("echo_unfiltered_fallback", false),
-						"enemy_unfiltered_fallback": _placement_result.get("enemy_unfiltered_fallback", false),
+						"echo_outside_region_fallback": echo_outside_region,
+						"enemy_outside_region_fallback": enemy_outside_region,
+					})
+			if echo_walkable_exhausted or enemy_walkable_exhausted:
+				logger.warn(t, "combat.placement.walkable_exhausted_fallback",
+					"GridService placed an actor with no fresh walkable cell left — that " +
+					"faction has more actors than the board has walkable cells, in total. " +
+					"Not a connectivity defect.",
+					{
+						"encounter_id": flow_ctx.encounter_ctx.encounter_id,
+						"echo_walkable_exhausted_fallback": echo_walkable_exhausted,
+						"enemy_walkable_exhausted_fallback": enemy_walkable_exhausted,
 					})
 
 		# V2-INFRA-003 Phase 6 Slice 6I: the two objective-actor spawn blocks that used to sit
