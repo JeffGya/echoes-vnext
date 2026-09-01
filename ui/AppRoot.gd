@@ -434,6 +434,13 @@ func _run_tests(parts: Array) -> void:
 		PursueTimingProbe.register(pursue_probe_runner)
 		pursue_probe_runner.run_all()
 		return
+	# INVESTIGATION TOOL — `tests terrainprobe` measures cut-off walkable regions per virtue
+	# (V2-COMBAT-003 terrain work). Prints a table rather than asserting.
+	if parts.size() > 1 and str(parts[1]).to_lower() == "terrainprobe":
+		var terrain_probe_runner := CoreTestRunner.new()
+		TerrainRegionProbe.register(terrain_probe_runner)
+		terrain_probe_runner.run_all()
+		return
 	# V2-INFRA-003: `tests <filter>` runs only suites whose reported name matches.
 	# Registration below is cheap (just appends {name, fn} to CoreTestRunner._tests);
 	# the 173s cost is entirely inside run_all(). So we always register everything,

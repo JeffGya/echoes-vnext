@@ -55,7 +55,21 @@ extends RefCounted
 #     "bridge_density":       float,    # 0.0–1.0 probability of extra bridges
 #     "straggler_count_min":  int,
 #     "straggler_count_max":  int,
+#     "connect_min_region_cells": int,  # >= 2; default 6 (V2-COMBAT-003 terrain commit 2)
 #   }
+#
+# CONNECTIVITY RULE (V2-COMBAT-003 terrain commit 2 — read before changing either half):
+#   Two walkable cells belong to the same REGION only when they share a full side.
+#   Diagonals do not join regions (`_flood_fill_components`). This is deliberately
+#   stricter than `is_legal_edge`, which permits a diagonal step unless BOTH orthogonal
+#   side cells are solid. Strict is the safe direction: an orthogonal step between two
+#   walkable in-bounds cells is always a legal edge, so a board this generator calls
+#   connected is certainly traversable by the movement layer.
+#
+#   The repair bridges every cut-off region of `connect_min_region_cells` cells or more
+#   into the host region (the largest region; ties by numerically lowest col,row — the
+#   same host rule GridService uses to place actors). Regions below that size are LEFT
+#   ALONE by design: small islands are terrain variety, not a defect.
 #
 # RNG PATHS — all APPEND-ONLY (never reorder existing RealmGenerator paths):
 #   The prefix below is "stage.{i}.explore.terrain" when rng_namespace=="".
@@ -63,7 +77,13 @@ extends RefCounted
 #   "{prefix}.bounds"                  — (currently unused draw; reserved)
 #   "{prefix}.plateau.{k}"             — size + position of plateau k
 #   "{prefix}.plateau.{k}.shape"       — irregular blob erosion draws (NEW, append-only)
-#   "{prefix}.bridge.{k}"              — connectivity bridge k
+#   "{prefix}.bridge.{k}"              — connectivity bridge k, then the density-driven
+#                                        extra bridges continuing from the same counter.
+#                                        V2-COMBAT-003 terrain commit 2 adds NO namespace
+#                                        and reorders none, but the repair now fires where
+#                                        it used to be blind, so a board consumes more
+#                                        bridge.K streams and the extra bridges start from
+#                                        a higher K. Board geometry moved once, on purpose.
 #   "{prefix}.straggler.count"         — straggler count draw
 #   "{prefix}.straggler.{k}"           — straggler tile k
 #
@@ -96,10 +116,18 @@ const _FALLBACK_SIGNATURE: Dictionary = {
 	"bridge_density":       0.3,
 	"straggler_count_min":  2,
 	"straggler_count_max":  5,
+	"connect_min_region_cells": 6,
 }
 
 # Minimum enforced bridge width (hard floor regardless of signature).
 const _MIN_BRIDGE_WIDTH: int = 2
+
+# V2-COMBAT-003 terrain commit 2 — default `connect_min_region_cells`.
+# A walkable region of at least this many cells that is cut off from the host region is a
+# board split and gets bridged back in. A region below it is scenery and is left alone.
+# 6 comes from the measured size distribution (docs/v2-combat-003-handoff.md §12.1): it is
+# bimodal with an empty 6-to-10 bucket, so any threshold in 6..10 gives the same split.
+const _MIN_CONNECT_REGION_CELLS: int = 6
 
 # Margin (cells) kept between any plateau edge and the map border.
 const _BORDER_MARGIN: int = 1
@@ -153,6 +181,13 @@ static func generate(
 
 	var bridge_width: int = max(int(sig.get("bridge_width", 2)), _MIN_BRIDGE_WIDTH)
 	var bridge_density: float = float(sig.get("bridge_density", 0.3))
+	# V2-COMBAT-003 terrain commit 2: the smallest cut-off region the connectivity repair
+	# will bridge back in. Floor of 2 — a value of 0 or 1 would ask the repair to bridge in
+	# every single cell on the board and defeat the design decision to keep small islands.
+	var min_region_cells: int = max(
+		int(sig.get("connect_min_region_cells", _MIN_CONNECT_REGION_CELLS)),
+		2
+	)
 
 	# ---- Plateau count ----
 	var count_min: int = max(int(sig.get("plateau_count_min", 3)), 1)
@@ -232,26 +267,64 @@ static func generate(
 	# Build initial walkable set from plateaus only.
 	var walkable_cells: Dictionary = _cells_from_plateaus(plateaus)
 
-	# Connectivity guarantee: keep bridging until single component.
+	# Connectivity guarantee: keep bridging until every SUBSTANTIAL region is joined to the
+	# host region. "Substantial" means at least `min_region_cells` cells (signature key
+	# `connect_min_region_cells`, default 6). A region of 5 cells or fewer is left alone —
+	# those are scenery the design deliberately keeps, and under the shared-side rule they
+	# are mostly the single cells that touch the board only at a corner.
+	#
+	# TERMINATION (V2-COMBAT-003 terrain commit 2 — the loop must be proven, not assumed):
+	#   1. `_make_bridge_rects` returns rects whose union is SHARED-SIDE connected and
+	#      contains both endpoint cells (proved in that function's header and asserted by
+	#      terrain/bridge_connects_shared_side).
+	#   2. Both endpoints lie in the two regions being joined, so after the bridge cells are
+	#      added those two regions are one region.
+	#   3. Every bridge cell is connected to the host, so no NON-host region can ever gain a
+	#      cell. Non-host regions only disappear; they never grow and never appear.
+	#   4. The host absorbs the candidate plus the bridge, so it strictly grows and stays
+	#      the strictly largest region — the host identity can never move to another region.
+	#   Therefore the count of non-host regions of >= min_region_cells strictly decreases
+	#   every iteration, and the loop runs at most (initial component count) times.
+	# The cap below is a safety net for a defect in that reasoning, not part of it: it fails
+	# LOUDLY via push_error rather than quietly returning a split board.
 	var bridges: Array = []
 	var bridge_k: int = 0
-	# Safety cap: with correct two-leg bridges each iteration reduces the component
-	# count by >=1, so this terminates in <= (components-1) iterations. The cap is a
-	# defensive guard so a pathological case can never hang generation.
 	var _bridge_safety: int = 0
-	var _bridge_safety_max: int = plateaus.size() + 8
 
 	var components := _flood_fill_components(walkable_cells)
-	while components.size() > 1 and _bridge_safety < _bridge_safety_max:
+	var _bridge_safety_max: int = components.size() + plateaus.size() + 8
+
+	while true:
+		var host_idx: int = _host_component_index(components)
+		if host_idx < 0:
+			break
+		# Candidate regions: everything that is not the host and is big enough to matter.
+		var candidate_indices: Array = []
+		for ci in range(components.size()):
+			if ci == host_idx:
+				continue
+			if (components[ci] as Array).size() >= min_region_cells:
+				candidate_indices.append(ci)
+		if candidate_indices.is_empty():
+			break
+		if _bridge_safety >= _bridge_safety_max:
+			push_error(
+				"StageTerrain: connectivity repair hit its %d-iteration ceiling with %d region(s) of >= %d cells still cut off (prefix '%s', bounds %dx%d). The board is SPLIT — a bridge failed to connect under the shared-side rule."
+				% [_bridge_safety_max, candidate_indices.size(), min_region_cells, prefix, w, h]
+			)
+			break
 		_bridge_safety += 1
-		# Find the two nearest components (by minimum cell-pair Chebyshev distance).
+
+		# Find the nearest cell pair between the host and any candidate region
+		# (minimum Chebyshev distance; first match wins, and both the component order and
+		# the cell order inside each component are numerically sorted, so ties resolve to
+		# the numerically lowest (col,row) pair).
 		var best_dist: int = 999999
 		var best_a_cell: String = ""
 		var best_b_cell: String = ""
-		var best_b_comp_idx: int = 1
 
-		var comp_a: Array = components[0]
-		for b_idx in range(1, components.size()):
+		var comp_a: Array = components[host_idx]
+		for b_idx in candidate_indices:
 			var comp_b: Array = components[b_idx]
 			for ca in comp_a:
 				var ca_parts := (ca as String).split(",")
@@ -266,7 +339,6 @@ static func generate(
 						best_dist = dist
 						best_a_cell = ca
 						best_b_cell = cb
-						best_b_comp_idx = b_idx
 
 		# Draw a mandatory bridge between best_a_cell and best_b_cell.
 		var bridge_rng := CampaignSeed.get_rng_from(realm_seed, prefix + ".bridge.%d" % bridge_k)
@@ -802,19 +874,44 @@ static func _cells_from_rect(rect: Dictionary) -> Dictionary:
 	return cells
 
 
-## Flood-fill connected-components on walkable_cells (8-directional).
+## Flood-fill connected-components on walkable_cells under the SHARED-SIDE rule:
+## two cells belong to one component only when they share a full side (4-direction
+## adjacency). Diagonals never join two components.
+##
+## V2-COMBAT-003 terrain commit 2 — this used to be plain 8-direction adjacency, which
+## counted two plateaus touching at a single corner as ONE component. The connectivity
+## repair above therefore believed such a board was already whole and built no bridge,
+## so the guarantee existed in the code and never fired. Measured cut-off regions reached
+## 176 cells on explore-map bounds.
+##
+## The shared-side rule is deliberately STRICTER than `is_legal_edge`, which allows a
+## diagonal step as long as ONE orthogonal side cell is open. Strictness is the safe
+## direction: an orthogonal step between two walkable in-bounds cells is always a legal
+## edge, so anything this function calls connected is certainly traversable in play. The
+## converse does not hold, and that is fine — it only means the repair may bridge ground
+## that was already walkable by a diagonal squeeze.
+##
+## Traversal is seeded from the cell keys in numeric (col, row) order, so both the order
+## of the returned components and the order of cells inside each component are fully
+## deterministic and independent of Dictionary insertion order. Each component's cell list
+## is returned in numeric (col, row) order as well.
+##
 ## Returns Array of Arrays, each inner Array is a list of cell keys.
 static func _flood_fill_components(walkable_cells: Dictionary) -> Array:
 	var visited: Dictionary = {}
 	var components: Array = []
 
+	# Shared side only — no diagonals.
 	var deltas: Array = [
-		[-1, -1], [-1, 0], [-1, 1],
-		[ 0, -1],           [ 0, 1],
-		[ 1, -1], [ 1, 0], [ 1, 1],
+		          [ 0, -1],
+		[-1, 0],           [ 1, 0],
+		          [ 0,  1],
 	]
 
-	for key in walkable_cells:
+	var seed_keys: Array = walkable_cells.keys()
+	seed_keys.sort_custom(Callable(StageTerrain, "_cell_key_less"))
+
+	for key in seed_keys:
 		if visited.has(key):
 			continue
 		# BFS from this cell
@@ -837,9 +934,45 @@ static func _flood_fill_components(walkable_cells: Dictionary) -> Array:
 				if walkable_cells.has(nk) and not visited.has(nk):
 					visited[nk] = true
 					queue.append(nk)
+		component.sort_custom(Callable(StageTerrain, "_cell_key_less"))
 		components.append(component)
 
 	return components
+
+
+## True if cell key `a` sorts before cell key `b` in numeric (col, row) order.
+## NOT a lexical string compare — that would order "10,2" before "9,1".
+static func _cell_key_less(a: String, b: String) -> bool:
+	var pa := (a as String).split(",")
+	var pb := (b as String).split(",")
+	var ac: int = int(pa[0])
+	var ar: int = int(pa[1])
+	var bc: int = int(pb[0])
+	var br: int = int(pb[1])
+	if ac != bc:
+		return ac < bc
+	return ar < br
+
+
+## Index of the HOST component: the largest one, ties broken by the numerically lowest
+## (col, row) cell. Same rule GridService._largest_walkable_region uses to pick the region
+## every actor is placed in, so the generator repairs toward the region play actually uses.
+## Returns -1 for an empty component list.
+static func _host_component_index(components: Array) -> int:
+	var best: int = -1
+	for i in range(components.size()):
+		if best < 0:
+			best = i
+			continue
+		var cur: Array = components[i]
+		var champ: Array = components[best]
+		if cur.size() > champ.size():
+			best = i
+		elif cur.size() == champ.size() and cur.size() > 0 \
+				and _cell_key_less(str(cur[0]), str(champ[0])):
+			# Components are cell-sorted, so element 0 IS the numerically lowest cell.
+			best = i
+	return best
 
 
 ## Build a REAL connecting bridge path from (ac,ar) to (bc,br). Returns an Array of
@@ -852,6 +985,24 @@ static func _flood_fill_components(walkable_cells: Dictionary) -> Array:
 ## two components actually merge — a single leg would not, and the connectivity loop
 ## would never terminate. The corner direction (horizontal-first vs vertical-first) is
 ## chosen deterministically via rng.
+##
+## SHARED-SIDE PROOF (V2-COMBAT-003 terrain commit 2). The repair loop now judges
+## connectivity by a shared side, not by 8-direction adjacency, so "the legs overlap at
+## the corner" has to be exact. It is, and here is why — the L-corner is where it could
+## have failed:
+##   * Each leg is a FULL RECTANGLE of cells, so each leg on its own is shared-side
+##     connected.
+##   * The horizontal leg spans rows [h_row_start, h_row_start + bridge_width - 1], and
+##     h_row_start = clamp(ar - bridge_width / 2, 0, map_h - bridge_width). For any ar in
+##     [0, map_h - 1] that span CONTAINS row ar: the clamp can only pull the span toward
+##     ar, never past it. Its column span [min(ac,bc), max(ac,bc)] contains both ac and bc.
+##   * By the same argument the vertical leg's column span contains column bc, and its row
+##     span [min(ar,br), max(ar,br)] contains both ar and br.
+##   * Therefore cell (bc, ar) lies in BOTH legs. The two legs SHARE A CELL — they do not
+##     merely touch at a corner — so their union is shared-side connected, and it contains
+##     (ac, ar) and (bc, br).
+##   * The vertical-first branch is the mirror image and shares cell (ac, br).
+## Asserted directly by terrain/bridge_connects_shared_side over the full L-shape space.
 static func _make_bridge_rects(
 	ac: int, ar: int,
 	bc: int, br: int,

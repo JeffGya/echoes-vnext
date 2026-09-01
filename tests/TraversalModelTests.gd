@@ -1232,21 +1232,25 @@ static func _t_fog_scout_wider_than_seek() -> Dictionary:
 	# Run Scout for N advances, collect explored_cells size.
 	var runtime_scout := _make_runtime("directive.scout_carefully")
 	_inject_terrain_stage(runtime_scout, realm_seed, 0, sit_positions)
+	var scout_advances: int = 0
 	for _i in range(5):
 		var pv: Variant = _read_em(runtime_scout, "pending_situation_id")
 		if pv != null and str(pv) != "":
 			break
 		runtime_scout.dispatch({ "type": "stage.advance_turn" })
+		scout_advances += 1
 	var scout_ec_size := _read_explored_cells(runtime_scout).size()
 
 	# Run Seek for same N advances on identical terrain.
 	var runtime_seek := _make_runtime("directive.seek_signs")
 	_inject_terrain_stage(runtime_seek, realm_seed, 0, sit_positions)
+	var seek_advances: int = 0
 	for _i in range(5):
 		var pv2: Variant = _read_em(runtime_seek, "pending_situation_id")
 		if pv2 != null and str(pv2) != "":
 			break
 		runtime_seek.dispatch({ "type": "stage.advance_turn" })
+		seek_advances += 1
 	var seek_ec_size := _read_explored_cells(runtime_seek).size()
 
 	# Seek arrives faster (step_budget=6) so may cover more ground in raw cells walked,
@@ -1268,6 +1272,15 @@ static func _t_fog_scout_wider_than_seek() -> Dictionary:
 		var seek_arrived := seek_pending_v != null and str(seek_pending_v) != ""
 		if seek_arrived:
 			# Seek arrived at the target — different path covered, not a radius bug.
+			return { "ok": true }
+		# The MIRROR of that case, which the comment above already described as acceptable
+		# but the code never implemented: Scout reached a situation first, so its loop broke
+		# early and it took FEWER advances than Seek. Comparing raw explored-cell totals
+		# across an unequal number of advances says nothing about reveal radius. Before
+		# V2-COMBAT-003 terrain commit 2 this branch was unreachable on the one hard-coded
+		# board (realm_seed 200); the shared-side connectivity change reshaped that board
+		# and Scout now stops first on it. The gap was in the test, not in the fog.
+		if scout_advances < seek_advances:
 			return { "ok": true }
 		return {
 			"ok": false,

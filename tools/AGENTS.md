@@ -45,4 +45,7 @@ tool owns its own command name rather than running as part of the suite. See `ui
 
 - `FearReachabilityProbe.gd` — measures Absolute Fear Rule reachability across many full encounters
 - `PursueTimingProbe.gd` — measures PURSUE-encounter setup/resolution timing
+- `TerrainRegionProbe.gd` — counts cut-off walkable regions per virtue, on combat-board and
+  explore-map bounds, under both the shared-side and the legal-edge adjacency rule
+  (`-- tests terrainprobe`). Run it before and after any change to terrain connectivity.
 - `assemble_contact_responses.py` — Python helper (non-GDScript)

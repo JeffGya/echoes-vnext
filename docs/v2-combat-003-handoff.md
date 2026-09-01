@@ -478,11 +478,49 @@ parallel** — two at once would make it impossible to say which change caused w
 | # | Change | Tier | State |
 |---|---|---|---|
 | 1 | Region-based spawn guard; the two warning causes split | `sonnet` | **Done** `1438789` |
-| 2 | Connectivity by shared side; accidental splits repaired | `opus` | Next |
+| 2 | Connectivity by shared side; accidental splits repaired | `opus` | **Done** |
 | 3 | Islands replace stragglers — moated, sized, per realm; config rename | `opus` | Queued |
 | 4 | Bridges as their own tile; extra bridges per side above 20; edge placement | `sonnet` | Queued |
 | 5 | Host region by playability; objective clearance; the 9-tile compensation | `opus` | Queued |
 
-**Commit 2 carries a termination risk.** The repair loop bridges until one region remains. Under the
-corrected adjacency rule it must be **proven** that a 2-wide bridge really connects — assert it in a
-test, do not assume it, or the loop can run forever.
+### Commit 2 — what it did, and what it measured
+
+`_flood_fill_components` now joins two cells only when they share a full side, the repair
+anchors on the **host** region (largest, ties by numerically lowest col,row — the same rule
+`GridService._largest_walkable_region` uses), and it bridges every cut-off region of
+`connect_min_region_cells` (**6**, authored on all eleven `map_shape` entries) or more. The
+threshold is a real signature key, not a constant: a test drives it to 999999 and watches
+split boards reappear.
+
+Measured with `tools/TerrainRegionProbe.gd` (`-- tests terrainprobe`), 1,800 boards per
+regime, ten virtue signatures, before and after:
+
+| Regime | Boards | Cut-off region >= 6 cells, before | After |
+|---|---:|---:|---:|
+| Combat board, 12x12..22x22 | 1,800 | 10 (humility 8, wisdom 2; max 42 cells) | **0** |
+| Explore map, 30x30..50x40 | 1,800 | 93 (every virtue; max 176 cells) | **0** |
+
+Small islands survive as designed: 1,143 cut-off regions of 1–2 cells remain on the combat
+regime and 1,601 on the explore regime.
+
+**One recorded value moved: `GUIDE_SPIRIT_ROUNDS_HASH`.** Six of the seven mode fingerprints
+did not. On that board (60×12) the two plateaus were disconnected under both the old and the
+new rule, so the bridge count is unchanged — the repair simply picks a different cell pair
+now, moving the L-bridge and adding 8 walkable cells, which shifts the ordered placement fill.
+`FINAL_HASH` and `SAVE_HASH` did not move. `traversal/fog_scout_wider_than_seek` also needed
+a repair, and it was a defect in the test: its own comment said an early Scout arrival is an
+acceptable degenerate case, but only the mirror case (Seek arriving early) was implemented.
+The reshaped board made the unimplemented branch reachable.
+
+**Commit 2 carried a termination risk, and it is discharged.** The repair loop bridges until
+every substantial region is joined. Under the corrected adjacency rule it had to be **proven**
+that a 2-wide bridge really connects. It does: the two legs of an L-bridge do not merely touch
+at the corner. The horizontal leg always contains row `ar` and the vertical leg always
+contains column `bc` — the rect clamp can only pull a span toward its endpoint, never past it
+— so cell `(bc, ar)` lies in BOTH legs. They share a cell, so their union is shared-side
+connected and contains both endpoints. `terrain/bridge_connects_shared_side` sweeps every
+relative orientation, both board edges, bridge widths 2 and 3 and both corner orders — 2,880
+cases — and asserts exactly one region containing both endpoints. Non-host regions can never
+gain a cell (every bridge cell touches the host), so the count of substantial non-host regions
+strictly falls each pass. The ceiling survives as a safety net and now `push_error`s instead
+of quietly returning a split board.

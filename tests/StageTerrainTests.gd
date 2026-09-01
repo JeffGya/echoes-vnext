@@ -3,7 +3,7 @@
 #
 # Tests:
 #   1.  terrain/determinism_generate      — same (seed,idx,sig,bounds) => deep-equal output
-#   2.  terrain/connectivity_single_comp  — walkable_set is one connected component (~20 seeds)
+#   2.  terrain/connectivity_single_comp  — exactly ONE shared-side region of >= 6 cells (~20 seeds)
 #   3.  terrain/bridge_width_min2         — every bridge rect has min(w,h) >= 2
 #   4.  terrain/stage_variation           — stage_index 0 vs 1, same seed => different terrain
 #   5.  terrain/sig_plateau_count_bounds  — plateau count in [count_min..count_max]
@@ -16,6 +16,14 @@
 #   11b. terrain/next_step_no_lateral_drift — next_step heads directly (no up-left bias)
 #   12. terrain/empty_terrain_walkable    — walkable_set({}) == {}
 #   13. terrain/is_walkable_empty_true    — is_walkable(any, {}) == true
+#
+# V2-COMBAT-003 terrain commit 2 (shared-side connectivity):
+#   terrain/bridge_connects_shared_side   — THE TERMINATION PROOF: a bridge's cell union is
+#                                           one shared-side region containing both endpoints
+#   terrain/repair_terminates_all_virtues — no cut-off region >= 6 cells on any of the ten
+#                                           authored virtue signatures, combat + explore bounds
+#   terrain/small_islands_are_kept        — regions below the threshold still survive
+#   terrain/min_region_cells_is_honored   — the signature key reaches the repair
 
 extends RefCounted
 class_name StageTerrainTests
@@ -147,6 +155,54 @@ static func _flood_fill_count(walkable: Dictionary) -> int:
 	return visited.size()
 
 
+# ─── Shared-side region helper (V2-COMBAT-003 terrain commit 2) ──────────────
+# The connectivity rule the generator's repair now uses: two cells are in one region only
+# when they share a FULL SIDE. Deliberately re-implemented here rather than calling the
+# generator's private helper, so the test can fail the generator instead of agreeing with
+# it. Returns an Array of Arrays of cell keys.
+const _MIN_REGION: int = 6
+
+static func _shared_side_regions(walkable: Dictionary) -> Array:
+	var keys: Array = walkable.keys()
+	keys.sort()
+	var visited: Dictionary = {}
+	var regions: Array = []
+	var deltas: Array = [[0, -1], [0, 1], [-1, 0], [1, 0]]
+	for start_key in keys:
+		if visited.has(start_key):
+			continue
+		var region: Array = []
+		var queue: Array = [start_key]
+		visited[start_key] = true
+		var head: int = 0
+		while head < queue.size():
+			var cur: String = queue[head]
+			head += 1
+			region.append(cur)
+			var parts := (cur as String).split(",")
+			var cc: int = int(parts[0])
+			var cr: int = int(parts[1])
+			for d_v in deltas:
+				var d: Array = d_v
+				var nk: String = "%d,%d" % [cc + int(d[0]), cr + int(d[1])]
+				if walkable.has(nk) and not visited.has(nk):
+					visited[nk] = true
+					queue.append(nk)
+		regions.append(region)
+	return regions
+
+
+# Walkable cells from PLATEAUS + BRIDGES only — the geometry the connectivity repair
+# actually governs. Stragglers are minted AFTER the repair runs (by design: section 12.3
+# of the terrain handoff places islands last), so a straggler can create a small cut-off
+# region the repair never had a chance to see. A test about the repair itself must exclude
+# them, or it is testing the straggler pass instead.
+static func _walkable_no_stragglers(terrain: Dictionary) -> Dictionary:
+	var stripped: Dictionary = terrain.duplicate(true)
+	stripped["stragglers"] = []
+	return StageTerrain.walkable_set(stripped)
+
+
 # ─── Registration ────────────────────────────────────────────────────────────
 
 static func register(runner: CoreTestRunner) -> void:
@@ -181,6 +237,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("terrain/integration_virtue_signature",    Callable(StageTerrainTests, "_t_integration_virtue_signature"))
 	runner.register_test("terrain/integration_situation_category",  Callable(StageTerrainTests, "_t_integration_situation_category"))
 	runner.register_test("terrain/integration_generate_uses_virtue", Callable(StageTerrainTests, "_t_integration_generate_uses_virtue"))
+	# V2-COMBAT-003 terrain commit 2 — shared-side connectivity + the repair's termination.
+	runner.register_test("terrain/bridge_connects_shared_side",     Callable(StageTerrainTests, "_t_bridge_connects_shared_side"))
+	runner.register_test("terrain/repair_terminates_all_virtues",   Callable(StageTerrainTests, "_t_repair_terminates_all_virtues"))
+	runner.register_test("terrain/small_islands_are_kept",          Callable(StageTerrainTests, "_t_small_islands_are_kept"))
+	runner.register_test("terrain/min_region_cells_is_honored",     Callable(StageTerrainTests, "_t_min_region_cells_is_honored"))
 
 
 # ─── Test 1 — DETERMINISM: same inputs → deep-equal dicts ───────────────────
@@ -196,8 +257,20 @@ static func _t_determinism_generate() -> Dictionary:
 	return { "ok": true }
 
 
-# ─── Test 2 — CONNECTIVITY: walkable set is a single connected component ─────
+# ─── Test 2 — CONNECTIVITY: exactly one SUBSTANTIAL shared-side region ───────
 # Critical guard — a bridge generation bug made components disjoint.
+#
+# V2-COMBAT-003 terrain commit 2 rewrote what this test asserts. It used to run an
+# 8-direction flood fill and demand that it reach EVERY walkable cell. That assertion was
+# passing for the wrong reason: an 8-direction fill walks straight through a single corner
+# touch, so it declared two plateaus joined at one corner "connected" — the very blindness
+# that stopped the generator's own repair from ever firing. It also cannot express the
+# approved design, which deliberately KEEPS small islands.
+#
+# The guarantee the generator now makes, and the one asserted here, is:
+#   every walkable region of `connect_min_region_cells` (6) cells or more is THE SAME
+#   region, judged by a full shared side.
+# Regions of 5 cells or fewer may exist and are left alone on purpose.
 static func _t_connectivity_single_comp() -> Dictionary:
 	var sig    := _default_sig()
 	var bounds := _default_bounds()
@@ -206,9 +279,14 @@ static func _t_connectivity_single_comp() -> Dictionary:
 		var walkable: Dictionary = StageTerrain.walkable_set(terrain)
 		if walkable.is_empty():
 			return { "ok": false, "error": "Seed %d: walkable_set is empty" % seed_val }
-		var reachable_count := _flood_fill_count(walkable)
-		if reachable_count != walkable.size():
-			return { "ok": false, "error": "Seed %d: walkable set has %d cells but flood-fill reached only %d — disconnected component found" % [seed_val, walkable.size(), reachable_count] }
+		var regions := _shared_side_regions(walkable)
+		var substantial: Array = []
+		for r_v in regions:
+			var r: Array = r_v
+			if r.size() >= _MIN_REGION:
+				substantial.append(r.size())
+		if substantial.size() != 1:
+			return { "ok": false, "error": "Seed %d: expected exactly ONE shared-side region of >= %d cells, found %d (sizes %s) out of %d walkable cells" % [seed_val, _MIN_REGION, substantial.size(), str(substantial), walkable.size()] }
 	return { "ok": true }
 
 
@@ -789,3 +867,218 @@ static func _t_integration_generate_uses_virtue() -> Dictionary:
 		if pc < cmin or pc > cmax:
 			return { "ok": false, "error": "wisdom terrain plateau count %d outside signature range [%d,%d] (seed %d)" % [pc, cmin, cmax, seed_val] }
 	return { "ok": true }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# V2-COMBAT-003 terrain commit 2 — shared-side connectivity and its termination
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─── THE TERMINATION PROOF ───────────────────────────────────────────────────
+# The connectivity repair loop bridges the host region to a cut-off region, recomputes the
+# regions, and repeats. It terminates ONLY IF a bridge really merges the two regions under
+# the shared-side rule. Under the old 8-direction rule a bridge that merely touched at a
+# corner still counted as a merge; under the shared-side rule it would not, the region
+# count would never fall, and board generation would hang forever.
+#
+# So the loop's termination rests on exactly one claim, and this test attacks it directly:
+#   for every endpoint pair and both corner orders, the cell union of _make_bridge_rects
+#   is SHARED-SIDE connected AND contains both endpoints.
+# The L-corner is the place it would break, which is why the sweep includes every relative
+# orientation of the two endpoints (b left/right of a, above/below, and both straight
+# cases), every board edge (endpoints at 0 and at map_w-1, where the rect clamp bites),
+# and bridge widths 2 and 3.
+static func _t_bridge_connects_shared_side() -> Dictionary:
+	var map_w: int = 14
+	var map_h: int = 12
+	var coords_c: Array = [0, 1, 2, 7, 12, 13]
+	var coords_r: Array = [0, 1, 6, 10, 11]
+	var layouts: Dictionary = {}   # distinct rect layouts seen, to prove both branches ran
+	var checked: int = 0
+
+	for bw in [2, 3]:
+		for ac in coords_c:
+			for ar in coords_r:
+				for bc in coords_c:
+					for br in coords_r:
+						for rng_seed in [1, 2, 3, 4]:
+							var rng := RandomNumberGenerator.new()
+							rng.seed = rng_seed
+							var rects: Array = StageTerrain._make_bridge_rects(
+								ac, ar, bc, br, bw, map_w, map_h, rng)
+							checked += 1
+
+							# Union of all rect cells.
+							var cells: Dictionary = {}
+							var sig_parts: Array = []
+							for rect_v in rects:
+								var rect: Dictionary = rect_v
+								sig_parts.append("%d/%d/%d/%d" % [
+									int(rect.get("col", 0)), int(rect.get("row", 0)),
+									int(rect.get("w", 0)), int(rect.get("h", 0))])
+								var rc: int = int(rect.get("col", 0))
+								var rr: int = int(rect.get("row", 0))
+								var rw: int = int(rect.get("w", 1))
+								var rh: int = int(rect.get("h", 1))
+								for dc in range(rw):
+									for dr in range(rh):
+										cells["%d,%d" % [rc + dc, rr + dr]] = true
+							if ac != bc and ar != br:
+								layouts[",".join(PackedStringArray(sig_parts))] = true
+
+							# 1. Both endpoints are in the bridge.
+							var a_key: String = "%d,%d" % [ac, ar]
+							var b_key: String = "%d,%d" % [bc, br]
+							if not cells.has(a_key):
+								return { "ok": false, "error": "bridge (%d,%d)->(%d,%d) w=%d seed=%d does NOT contain endpoint A" % [ac, ar, bc, br, bw, rng_seed] }
+							if not cells.has(b_key):
+								return { "ok": false, "error": "bridge (%d,%d)->(%d,%d) w=%d seed=%d does NOT contain endpoint B" % [ac, ar, bc, br, bw, rng_seed] }
+
+							# 2. The bridge is ONE shared-side region — so it truly merges
+							#    the two regions it touches, and the loop makes progress.
+							var regions := _shared_side_regions(cells)
+							if regions.size() != 1:
+								return { "ok": false, "error": "bridge (%d,%d)->(%d,%d) w=%d seed=%d splits into %d shared-side regions — the repair loop would NEVER TERMINATE on this pair" % [ac, ar, bc, br, bw, rng_seed, regions.size()] }
+
+	# Both corner orders (horizontal-first and vertical-first) must actually have been
+	# exercised, or the sweep only proved one branch.
+	if layouts.size() < 2:
+		return { "ok": false, "error": "only %d distinct L layout(s) seen — the horizontal-first/vertical-first branches were not both exercised" % layouts.size() }
+	if checked < 1000:
+		return { "ok": false, "error": "sweep too small (%d cases)" % checked }
+	return { "ok": true }
+
+
+# ─── REPAIR: no cut-off region of >= 6 cells survives, on every real signature ─
+# This is the end-to-end statement of the guarantee, run against the ten AUTHORED virtue
+# signatures out of balance.json (not a synthetic one) and against both board-size families
+# the generator serves: the combat board (data.combat.board, 12x12..22x22) and the explore
+# map (RealmGenerator._generate_explore_map, 30x30 and up). Explore and venture render the
+# same terrain, so a guarantee that only held on combat bounds would be half a guarantee.
+#
+# It doubles as the termination test: a repair loop that failed to make progress would not
+# fail this assertion, it would HANG the suite.
+static func _t_repair_terminates_all_virtues() -> Dictionary:
+	var stages_cfg := _load_balance_stages()
+	var map_shape_v: Variant = stages_cfg.get("map_shape", {})
+	var map_shape: Dictionary = map_shape_v if map_shape_v is Dictionary else {}
+	var by_virtue_v: Variant = map_shape.get("by_virtue", {})
+	var by_virtue: Dictionary = by_virtue_v if by_virtue_v is Dictionary else {}
+	if by_virtue.is_empty():
+		return { "ok": false, "error": "data.stages.map_shape.by_virtue is empty — wrong config path" }
+
+	var bounds_cycle: Array = [
+		{ "w": 12, "h": 12 }, { "w": 18, "h": 18 }, { "w": 22, "h": 22 },
+		{ "w": 30, "h": 30 }, { "w": 40, "h": 35 }, { "w": 50, "h": 40 },
+	]
+	var virtues: Array = by_virtue.keys()
+	virtues.sort()
+	for virtue_v in virtues:
+		var virtue: String = str(virtue_v)
+		var sig_v: Variant = by_virtue.get(virtue, {})
+		var sig: Dictionary = sig_v if sig_v is Dictionary else {}
+		for i in range(12):
+			var realm_seed: int = 500000 + i * 7919
+			var bounds: Dictionary = bounds_cycle[i % bounds_cycle.size()]
+			var terrain: Dictionary = StageTerrain.generate(
+				realm_seed, i % 3, sig, bounds, "test.terrain.%s.%d" % [virtue, i])
+			var walkable: Dictionary = StageTerrain.walkable_set(terrain)
+			var regions := _shared_side_regions(walkable)
+			var substantial: Array = []
+			for r_v in regions:
+				var r: Array = r_v
+				if r.size() >= _MIN_REGION:
+					substantial.append(r.size())
+			if substantial.size() != 1:
+				return { "ok": false, "error": "%s seed %d bounds %dx%d: %d regions of >= %d cells (sizes %s) — the board is split" % [virtue, realm_seed, int(bounds.get("w", 0)), int(bounds.get("h", 0)), substantial.size(), _MIN_REGION, str(substantial)] }
+	return { "ok": true }
+
+
+# ─── THE THRESHOLD DOES SOMETHING: small islands are still generated and kept ─
+# The design keeps small islands on purpose. If the repair bridged every cut-off region
+# regardless of size, this test would fail — and the failure would be silent variety loss,
+# not a crash. So assert the positive: across a realistic sample, at least one board still
+# carries a cut-off region of 5 cells or fewer.
+static func _t_small_islands_are_kept() -> Dictionary:
+	var stages_cfg := _load_balance_stages()
+	var map_shape_v: Variant = stages_cfg.get("map_shape", {})
+	var map_shape: Dictionary = map_shape_v if map_shape_v is Dictionary else {}
+	var by_virtue_v: Variant = map_shape.get("by_virtue", {})
+	var by_virtue: Dictionary = by_virtue_v if by_virtue_v is Dictionary else {}
+	var sig_v: Variant = by_virtue.get("humility", {})
+	var sig: Dictionary = sig_v if sig_v is Dictionary else {}
+	if sig.is_empty():
+		return { "ok": false, "error": "humility signature missing from balance.json" }
+
+	var small_found: int = 0
+	for i in range(30):
+		var terrain: Dictionary = StageTerrain.generate(
+			700000 + i * 7919, i % 3, sig, { "w": 22, "h": 22 }, "test.island.%d" % i)
+		var walkable: Dictionary = StageTerrain.walkable_set(terrain)
+		var regions := _shared_side_regions(walkable)
+		for r_v in regions:
+			var r: Array = r_v
+			if r.size() > 0 and r.size() < _MIN_REGION:
+				small_found += 1
+	if small_found == 0:
+		return { "ok": false, "error": "no cut-off region below %d cells survived across 30 humility boards — the repair is bridging in the small islands the design keeps" % _MIN_REGION }
+	return { "ok": true }
+
+
+# ─── THE THRESHOLD IS CONFIG: connect_min_region_cells reaches the generator ──
+# A key authored in the signature but never read is a defect this project has shipped
+# before. Prove the value travels by driving it to the one setting whose effect cannot be
+# confused with anything else: a threshold larger than any board disables the repair
+# entirely. Same seeds, same signatures, one key changed —
+#   default (6)      => exactly one region of >= 6 cells on every board
+#   threshold 999999 => split boards reappear, which IS the defect this commit fixes
+# If the key were inert the two runs would be identical and the second assertion fails.
+static func _t_min_region_cells_is_honored() -> Dictionary:
+	var stages_cfg := _load_balance_stages()
+	var map_shape_v: Variant = stages_cfg.get("map_shape", {})
+	var map_shape: Dictionary = map_shape_v if map_shape_v is Dictionary else {}
+	var by_virtue_v: Variant = map_shape.get("by_virtue", {})
+	var by_virtue: Dictionary = by_virtue_v if by_virtue_v is Dictionary else {}
+	if by_virtue.is_empty():
+		return { "ok": false, "error": "data.stages.map_shape.by_virtue is empty — wrong config path" }
+
+	var virtues: Array = by_virtue.keys()
+	virtues.sort()
+	var split_boards: int = 0
+	var demonstrated: String = ""
+
+	for virtue_v in virtues:
+		var virtue: String = str(virtue_v)
+		var base_sig_v: Variant = by_virtue.get(virtue, {})
+		var base_sig: Dictionary = base_sig_v if base_sig_v is Dictionary else {}
+		var disabled_sig: Dictionary = base_sig.duplicate(true)
+		disabled_sig["connect_min_region_cells"] = 999999
+
+		for i in range(40):
+			var realm_seed: int = 700000 + i * 7919
+			var bounds: Dictionary = { "w": 22, "h": 22 }
+			var ns: String = "test.island.%s.%d" % [virtue, i]
+
+			var default_regions: int = _substantial_region_count(
+				_walkable_no_stragglers(StageTerrain.generate(realm_seed, i % 3, base_sig, bounds, ns)))
+			if default_regions != 1:
+				return { "ok": false, "error": "default threshold, %s seed %d: %d regions of >= %d cells — the repair did not join the board" % [virtue, realm_seed, default_regions, _MIN_REGION] }
+
+			var disabled_regions: int = _substantial_region_count(
+				_walkable_no_stragglers(StageTerrain.generate(realm_seed, i % 3, disabled_sig, bounds, ns)))
+			if disabled_regions > 1:
+				split_boards += 1
+				if demonstrated == "":
+					demonstrated = "%s seed %d: repair disabled by connect_min_region_cells=999999 leaves %d regions of >= %d cells; the default leaves 1" % [virtue, realm_seed, disabled_regions, _MIN_REGION]
+
+	if split_boards == 0:
+		return { "ok": false, "error": "disabling the repair via connect_min_region_cells changed nothing on 400 boards — the signature key is inert" }
+	return { "ok": true, "note": "%s (%d of 400 boards split with the repair disabled)" % [demonstrated, split_boards] }
+
+
+## Number of shared-side regions of at least _MIN_REGION cells.
+static func _substantial_region_count(walkable: Dictionary) -> int:
+	var n: int = 0
+	for r_v in _shared_side_regions(walkable):
+		if (r_v as Array).size() >= _MIN_REGION:
+			n += 1
+	return n

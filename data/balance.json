@@ -3065,7 +3065,8 @@
 					"plateau_shape_bias": "blocky",
 					"bridge_width": 2,
 					"bridge_density": 0.2,
-					"straggler_count_min": 1, "straggler_count_max": 2
+					"straggler_count_min": 1, "straggler_count_max": 2,
+					"connect_min_region_cells": 6
 				},
 				"by_virtue": {
 					"courage": {
@@ -3075,7 +3076,8 @@
 						"plateau_shape_bias": "long",
 						"bridge_width": 2,
 						"bridge_density": 0.0,
-						"straggler_count_min": 0, "straggler_count_max": 1
+						"straggler_count_min": 0, "straggler_count_max": 1,
+						"connect_min_region_cells": 6
 					},
 					"wisdom": {
 						"relief": "sunken_archipelago",
@@ -3084,7 +3086,8 @@
 						"plateau_shape_bias": "small",
 						"bridge_width": 2,
 						"bridge_density": 0.6,
-						"straggler_count_min": 2, "straggler_count_max": 4
+						"straggler_count_min": 2, "straggler_count_max": 4,
+						"connect_min_region_cells": 6
 					},
 					"leadership": {
 						"relief": "central_hub",
@@ -3093,7 +3096,8 @@
 						"plateau_shape_bias": "blocky",
 						"bridge_width": 2,
 						"bridge_density": 0.3,
-						"straggler_count_min": 1, "straggler_count_max": 2
+						"straggler_count_min": 1, "straggler_count_max": 2,
+						"connect_min_region_cells": 6
 					},
 					"acceptance": {
 						"relief": "settled_plains",
@@ -3102,7 +3106,8 @@
 						"plateau_shape_bias": "blocky",
 						"bridge_width": 2,
 						"bridge_density": 0.1,
-						"straggler_count_min": 0, "straggler_count_max": 0
+						"straggler_count_min": 0, "straggler_count_max": 0,
+						"connect_min_region_cells": 6
 					},
 					"humility": {
 						"relief": "scattered_low",
@@ -3111,7 +3116,8 @@
 						"plateau_shape_bias": "small",
 						"bridge_width": 2,
 						"bridge_density": 0.2,
-						"straggler_count_min": 3, "straggler_count_max": 5
+						"straggler_count_min": 3, "straggler_count_max": 5,
+						"connect_min_region_cells": 6
 					},
 					"forgiveness": {
 						"relief": "two_shores",
@@ -3120,7 +3126,8 @@
 						"plateau_shape_bias": "blocky",
 						"bridge_width": 3,
 						"bridge_density": 0.2,
-						"straggler_count_min": 1, "straggler_count_max": 2
+						"straggler_count_min": 1, "straggler_count_max": 2,
+						"connect_min_region_cells": 6
 					},
 					"truth": {
 						"relief": "stark_expanse",
@@ -3129,7 +3136,8 @@
 						"plateau_shape_bias": "long",
 						"bridge_width": 2,
 						"bridge_density": 0.0,
-						"straggler_count_min": 0, "straggler_count_max": 0
+						"straggler_count_min": 0, "straggler_count_max": 0,
+						"connect_min_region_cells": 6
 					},
 					"generosity": {
 						"relief": "rich_sprawl",
@@ -3138,7 +3146,8 @@
 						"plateau_shape_bias": "blocky",
 						"bridge_width": 2,
 						"bridge_density": 0.5,
-						"straggler_count_min": 2, "straggler_count_max": 3
+						"straggler_count_min": 2, "straggler_count_max": 3,
+						"connect_min_region_cells": 6
 					},
 					"compassion": {
 						"relief": "sheltered_cluster",
@@ -3147,7 +3156,8 @@
 						"plateau_shape_bias": "blocky",
 						"bridge_width": 2,
 						"bridge_density": 0.4,
-						"straggler_count_min": 1, "straggler_count_max": 2
+						"straggler_count_min": 1, "straggler_count_max": 2,
+						"connect_min_region_cells": 6
 					},
 					"empathy": {
 						"relief": "connection_web",
@@ -3156,7 +3166,8 @@
 						"plateau_shape_bias": "blocky",
 						"bridge_width": 2,
 						"bridge_density": 0.7,
-						"straggler_count_min": 2, "straggler_count_max": 3
+						"straggler_count_min": 2, "straggler_count_max": 3,
+						"connect_min_region_cells": 6
 					}
 				}
 			},

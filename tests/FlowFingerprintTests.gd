@@ -588,7 +588,25 @@ static func test_pursue() -> Dictionary:
 # ROUNDS_HASH is the only one of the three that moved — FINAL_HASH and SAVE_HASH are unchanged,
 # because the fight's outcome (round 9, spirit_protected, same rewards) does not depend on
 # which specific legal cell echo_0003 started the fight on.
-const GUIDE_SPIRIT_ROUNDS_HASH := "899f9999fffb98ff9011ba0ae9fd0d00ef56e134d61bfc28479105fc92a0c310"
+#
+# V2-COMBAT-003 terrain commit 2 re-record — attributed, not blind. StageTerrain now judges
+# region connectivity by a full SHARED SIDE and anchors the repair on the HOST region (the
+# largest, ties by numerically lowest col,row) instead of on whichever component the
+# walkable Dictionary happened to yield first, scanning cells in numeric order. This board —
+# 60x12, prefix "combat.terrain.realm.01.stage.0.fp_guide_spirit" — has two plateaus that
+# are disconnected under BOTH the old and the new rule, so the repair ran in both cases and
+# the bridge COUNT did not change. What changed is which cell pair the repair picked, and
+# therefore where the L-bridge sits. Measured with a temporary print inside
+# StageTerrain.generate, run on this branch and on 8739d55, and removed afterwards:
+#   before: bridges=[{col:17,row:1,w:2,h:5}, {col:18,row:4,w:15,h:2}]  walkable=216
+#   after:  bridges=[{col:31,row:1,w:2,h:5}, {col:18,row:0,w:15,h:2}]  walkable=224
+# A different walkable set means a different ordered fill in GridService.place_actors, so the
+# echoes start the fight on different cells and the per-round trace differs. ROUNDS_HASH is
+# again the only one of the three that moved: FINAL_HASH and SAVE_HASH are unchanged, because
+# the outcome (round 9, spirit_protected, same rewards) does not depend on the starting cells.
+# This is the ONLY fingerprint in the suite that moved — the other six modes run on 12x12
+# combat boards whose repair choice happened not to change.
+const GUIDE_SPIRIT_ROUNDS_HASH := "18e458b7d2e29ebbd6c1103f562750184dd73c439a7ca16df6907c309da85bca"
 const GUIDE_SPIRIT_FINAL_HASH  := "a325a46c3563e33884a9d1bd6899119232354509ceeef03b488d642bb4655b33"
 const GUIDE_SPIRIT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
