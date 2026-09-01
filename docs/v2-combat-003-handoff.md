@@ -1,6 +1,6 @@
 # V2-COMBAT-003 — Handoff
 
-> **Status: phases 1 and 2a are complete and committed. Phase 2 continues.**
+> **Status: phases 1, 2a and 2c are complete. The terrain work is approved and started.**
 > Branch `claude/v2-combat-003-arbitration`, cut from `4b45b3e` on `main`.
 > Worktree `.claude/worktrees/echoes-vnext-docs-review-e631bf`. Pass this path to `--path`.
 > Plan file: `~/.claude/plans/mellow-cuddling-puddle.md`.
@@ -30,8 +30,8 @@ contract is not locked and must be confirmed before implementation.
 | Metric | Value |
 |---|---|
 | Baseline at branch start | `Tests: 1519 total, 1519 passed, 0 failed`, 94 suites |
-| Now | `Tests: 1527 total, 1527 passed, 0 failed`, 95 suites |
-| Commits | 4 (2 story, 2 process) |
+| Now | `Tests: 1536 total, 1536 passed, 0 failed`, 95 suites |
+| Commits | 8 (6 story, 2 process) |
 
 | Commit | Content |
 |---|---|
@@ -39,9 +39,12 @@ contract is not locked and must be confirmed before implementation.
 | `6ef736f` | The sub-agent model-tier rule |
 | `b04bd12` | The agent orchestration rules |
 | `44671aa` | Phase 2a — the fingerprints watch each round's first actor |
+| `1128417` | The handoff record |
+| `4799e3f` | The configurable test save directory |
+| `1b3badc` | Phase 2c — the placement guard (single isolated cell) |
+| `1438789` | The region guard — supersedes the single-cell test |
 
-**Uncommitted at the time of writing:** the configurable test save directory. It is verified but not
-yet committed. Refer to section 7.
+**Tree is clean.** Every commit above is verified independently, not on a builder's report.
 
 ---
 
@@ -64,6 +67,19 @@ Each decision came from Jeff in this session. Phase 13 writes each one to `ANSWE
 | 11 | **The fingerprint blind spot.** Correct it immediately, before phase 3, so no later re-record pins an incomplete guard. |
 | 12 | **The Seer aura.** Measure the effect first, then decide. Do not compensate speculatively. |
 | 13 | **Orchestration.** Model tier follows the difficulty of the work. Parallelize when safe. Verification is central and never self. Recorded in `AGENTS.md` and both `CLAUDE.md` files. |
+| 14 | **Islands are a design feature. Keep them.** Do not filter them out of the generator. Removing them would make every realm board look the same. **This supersedes the original phase 2d.** |
+| 15 | **Every island gets a moat.** No island may touch any other region, not even at a corner. A corner touch is the ambiguous case and it is being removed. |
+| 16 | **Bridges are their own tile**, not an ordinary combat tile. Art comes later; a placeholder is acceptable now. |
+| 17 | **The bridge threshold starts at 6 cells.** An island of 6 or more may be bridged, on a per-realm chance. Below 6 an island is always pure scenery. |
+| 18 | **An island of 20 or more may get extra bridges** — up to one per side, each reaching a different neighbouring region, which may be another island. |
+| 19 | **A bridge lands anywhere along an edge**, never fixed at the midpoint. |
+| 20 | **Island size scales to board area.** Minimum 4. Some realms may reach 50. |
+| 21 | **`straggler_*` config keys become `island_*`**, plus new size and bridge-chance keys. `relief` is preserved exactly — `CONVENTIONS.md` marks it as a reserved art seam. |
+| 22 | **Nothing spawns outside the host region** — no Echo, no enemy, no objective. Floating island clusters are allowed and are pure scenery. |
+| 23 | **The host region is chosen by playability, not size.** It must hold the party, the enemies and the objective, all mutually reachable. Largest is usually the answer but is not the rule. |
+| 24 | **A static objective needs 8 free neighbouring tiles.** This is a **minimum, not a target** — prefer a more open spot when one exists. It doubles as the test of whether a region can host an objective at all. |
+| 25 | **If no region can host an objective, the generator builds one** — a 9-tile site, one centre with eight around it. Log every occurrence as a count, so a realm whose island sizes are wrong shows up as a number. |
+| 26 | **Combat board scaling is out of scope** for this story. Recorded as a follow-up. |
 
 ---
 
@@ -109,9 +125,21 @@ Measurements:
 | Live encounter setups that stranded a real Echo | 2 of 45 |
 | The stranded encounter, driven through real dispatch | 15 rounds, `goals=3, options=0`, zero cells moved, morale 41 down to 1 |
 
-**Caution about this measurement.** The component count may have used plain 8-direction adjacency.
-If it did, it **structurally could not see** the erosion class below, so the true count may be
-higher and the components may be larger than one cell.
+**RESOLVED 2026-09-01, and two of these numbers were wrong.** The caution was justified. Re-measured
+under the legal-edge rule:
+
+- The "34 to 46 of 60" figure came from boards generated with **no realm setting at all** — the probe
+  built `ConfigService` fresh, which returns an empty balance, so it exercised the generic fallback
+  and described a board type the game never makes. **Do not use that number.**
+- A second measurement gave 30 of 280 (11 %) through the real path — but sampled **realm.01 Courage
+  only**, which the per-virtue table later showed is one of the two least island-prone settings.
+  **Also unrepresentative.**
+- The components are **not** all one cell. Cut-off regions reach 86, 97, 104 and 115 cells — that is
+  half a board, not an island.
+
+The authoritative measurement is section 12.1: 1,800 boards, all ten virtue settings. Islands are
+common on Wisdom and Humility and rare on Acceptance and Truth. **The lesson repeats one already in
+memory: a probe that does not mirror production construction invalidates its own headline.**
 
 ### 5.2 Unreachable ground has three sources, not one
 
@@ -124,7 +152,9 @@ higher and the components may be larger than one cell.
 Bridges themselves are safe. The "at least two cells wide" guarantee **does** hold in
 `_make_bridge_rects` at `:855-914`, and the test that asserts it is a true assertion.
 
-**Phase 2d must not claim that unreachable ground is impossible until all three are addressed.**
+**SUPERSEDED 2026-09-01 by decision 14.** Unreachable ground is now a *feature* and will not be
+eliminated. The three sources still matter, but their treatment changed: an accidental split
+(erosion, bridging) is **repaired**, while a deliberate island is **kept and moated**. See section 12.
 
 ### 5.3 Phase 2d moves no RNG draw
 
@@ -204,8 +234,8 @@ change.** Bring the numbers to Jeff and let him place it.
 | 2a | The fingerprints watch each round's first actor | `sonnet` | **Done** `44671aa` |
 | — | The configurable test save directory | `sonnet` | **Verified, not committed** |
 | 2b | Production-shaped fixtures | `sonnet` | Queued |
-| 2c | The placement guard | `sonnet` | Designed, queued |
-| 2d | The terrain generator | `opus` | Designed. **Measure the provenance split first.** |
+| 2c | The placement guard (single cell) | `sonnet` | **Done** `1b3badc`, superseded by the region guard `1438789` |
+| 2d | The terrain generator | — | **Superseded.** Replaced by the terrain design in section 12 |
 | 3 | The Whole-band baseline scenario | `sonnet` | Not started |
 | 4 | Limit the refusal to an Echo | `sonnet` | Not started |
 | 5 | The action vocabulary | `opus` table, then `haiku` rename | Table produced, needs approval |
@@ -220,10 +250,10 @@ change.** Bring the numbers to Jeff and let him place it.
 
 ### The immediate next steps
 
-1. **Commit the save directory** once the consolidation agent reports and a cold run confirms it.
-2. **Phase 2c, the placement guard.** The design is in section 8.
-3. **The provenance probe**, then bring Jeff the split before scoping phase 2d.
-4. **Phase 2b**, the production-shaped fixtures.
+1. **Terrain commit 2** — connectivity by shared side. See section 12.7.
+2. **Terrain commits 3, 4 and 5**, serial, each with its own attribution.
+3. **Phase 2b**, the production-shaped fixtures.
+4. Then phases 3 onward, unchanged.
 
 ---
 
@@ -323,9 +353,136 @@ sources of unreachable ground are not addressed by the straggler filter.
 
 | Question | Who decides |
 |---|---|
-| The scope of phase 2d — the straggler filter only, or all three sources | Jeff, after the provenance measurement |
+| The ten per-realm island settings in section 12.5 | Jeff, in play. They are proposed defaults |
 | The Seer `idle_fear_aura`, once the label is corrected | Jeff, after the fear measurement |
 | Where the contribution-ledger coverage gap belongs | Jeff, when phase 5 reaches that code |
 | The final `max_barks_per_round` | Jeff, during the manual test |
 | The five `response_thresholds` values | Measure the guidance-contest distribution first |
 | The four commitment band cut points | No measured basis exists yet. Flag to the reviewer. |
+
+---
+
+## 12. The terrain design — approved 2026-09-01
+
+This section supersedes the original phase 2d. That phase was going to filter islands out of the
+generator. **Jeff rejected that**: islands are variety, and removing them makes every realm board
+look the same. The defect was never that islands exist. It was that actors were placed on them, and
+that the generator called things islands which were not.
+
+### 12.1 What the measurement showed
+
+Measured across 1,800 generated boards, ten virtue settings, connectivity judged by a **full shared
+side** (Jeff's rule — a corner touch does not count).
+
+| Island size | Count |
+|---|---:|
+| 1 cell | 819 |
+| 2 cells | 17 |
+| 3 to 5 cells | 3 |
+| **6 to 10 cells** | **0** |
+| 11 to 25 cells | 3 |
+| 26 to 50 cells | 8 |
+| 51 to 100 cells | 15 |
+
+**838 of 865 islands (97 %) touch the main ground at a corner. Only 27 are true islands.**
+
+Two conclusions follow, and both drove the design.
+
+**The threshold chose itself.** The distribution is bimodal with an empty 6-to-10 bucket. 839 islands
+are 5 cells or smaller; 26 are 11 or larger. Any threshold from 6 to 10 gives the same split. 6 was
+taken.
+
+**Realms do not differentiate today.** The only per-realm control is *how many* single-cell bumps to
+add. There is no control over size or shape, so every realm produces the same feature in different
+quantities. Jeff called this out directly.
+
+### 12.2 Why 97 % touch at a corner — the root cause
+
+A "straggler" today is **one cell, chosen from the 8-direction neighbours of existing walkable
+ground** (`_adjacent_candidates`, `StageTerrain.gd:1035`). By construction it always touches the
+board. It can never be an island. That single choice produces all 819 of them.
+
+### 12.3 The generation order
+
+Order is what makes an accidental split separable from a deliberate island. No heuristic is needed.
+
+1. Plateaus are built.
+2. **Accidental splits are repaired — always.** A board erosion broke in half is bridged back
+   together. This guarantee already exists in the code and **never fires**, because
+   `_flood_fill_components` (`:807`) uses plain 8-direction adjacency, so two halves touching at one
+   corner are counted as already connected. Correcting that adjacency to a shared side is the fix.
+3. Decorative extra bridges, as today (`bridge_density`).
+4. **Islands are placed last** — moated by construction, sized per realm.
+5. An island of 6 or more is bridged on a per-realm chance.
+
+### 12.4 The reachability guarantee, and why it is free
+
+Jeff requires that a route always exists to the region holding the objective — which in survival and
+ordinary combat is the enemy spawn.
+
+This holds **by construction**:
+
+- A bridged island becomes part of the host region. That is what bridging means, and it chains:
+  if B bridges to A and A bridges to the mainland, B is reachable too.
+- Everything that spawns is placed in the host region (commit `1438789`).
+
+Therefore an unbridged island can never hold an objective or a spawn. **The bridge chance is free to
+be random**, because no random outcome can make a battle unwinnable. This is worth keeping in mind:
+if bridging were the thing guaranteeing reachability, a low chance would sometimes break a map.
+
+### 12.5 The proposed per-realm settings
+
+**PROPOSED DEFAULTS.** Jeff tunes these in play. Minimum size is 4 everywhere.
+
+| Virtue | Character | Islands | Size | Bridge chance |
+|---|---|---|---|---|
+| Acceptance | settled plains | 0–1 | 4–6 | 0.0 |
+| Truth | stark expanse | 0–1 | 6–12 | 0.2 |
+| Courage | open flats | 1–2 | 4–8 | 0.3 |
+| Forgiveness | two shores | 1–2 | 12–30 | 0.8 |
+| Leadership | central hub | 2–3 | 5–12 | 0.7 |
+| Generosity | — | 2–3 | 4–10 | 0.6 |
+| Compassion | — | 2–3 | 6–16 | 0.6 |
+| Empathy | — | 3–4 | 5–14 | 0.5 |
+| Wisdom | sunken archipelago | 4–6 | 8–50 | 0.6 |
+| Humility | scattered low | 5–7 | 4–20 | 0.4 |
+
+### 12.6 Downstream consumers — check every one
+
+**The terrain generator does not only make combat boards.** The same terrain drives the venture and
+explore screen (`FlowStageState.gd:163`, `StageExploreScreen.gd:823`). An objective on a moated
+island is unreachable **in exploration** exactly as it would be in combat. Both must be covered.
+
+**Terrain is persisted.** `FlowStageExploreState.gd:68` calls it "permanent geometry — must survive
+session reset", and `SaveService.gd:1294` repairs it. An old save holds an old-rules board. Saves are
+disposable, so this is a clean break — but state it, do not discover it.
+
+**Two traps for the rename:**
+
+- `walkable_set` (`:380-410`) builds the walkable set from **three** keys — plateaus, bridges,
+  stragglers. Rename the key without updating that function and **every island silently vanishes**
+  from the walkable set. Nothing fails loudly.
+- `CONVENTIONS.md:961` marks `relief` as **reserved** for future per-realm art, keyed on realm id and
+  virtue. Do not lose or rename it.
+
+**Bridges are already distinct in the data** — the terrain dict keeps `plateaus`, `bridges` and
+`stragglers` as separate lists. They lose their identity only at render time: `walkable_set` flattens
+all three, and `CombatBoardScreen._draw_board` paints every walkable cell with one tile. Making a
+bridge a special tile is therefore **additive**, not a new system.
+
+### 12.7 The remaining commits
+
+Each moves recorded board values. Each is its own commit with its own attribution. **Serial, never
+parallel** — two at once would make it impossible to say which change caused which movement.
+
+| # | Change | Tier | State |
+|---|---|---|---|
+| 1 | Region-based spawn guard; the two warning causes split | `sonnet` | **Done** `1438789` |
+| 2 | Connectivity by shared side; accidental splits repaired | `opus` | Next |
+| 3 | Islands replace stragglers — moated, sized, per realm; config rename | `opus` | Queued |
+| 4 | Bridges as their own tile; extra bridges per side above 20; edge placement | `sonnet` | Queued |
+| 5 | Host region by playability; objective clearance; the 9-tile compensation | `opus` | Queued |
+
+**Commit 2 carries a termination risk.** The repair loop bridges until one region remains. Under the
+corrected adjacency rule it must be **proven** that a 2-wide bridge really connects — assert it in a
+test, do not assume it, or the loop can run forever.
