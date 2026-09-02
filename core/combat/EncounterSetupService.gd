@@ -393,7 +393,7 @@ func setup(t: int) -> void:
 			echo_actors, enemy_actors, grid_cfg_for_placement, rng, place_cfg)
 
 		# V2-COMBAT-003 phase 2c/2c-region: the placement guard restricts both factions to
-		# the board's single largest connected region (GridService._largest_walkable_region)
+		# the board's single largest connected region (GridService.largest_walkable_region)
 		# and should never need its unfiltered final pass. GridService is pure static and has
 		# no logger, so this alarm lives here, at the one call site that owns `logger`.
 		#
@@ -618,8 +618,15 @@ func setup(t: int) -> void:
 						_ally_centroid_col /= float(echo_actors.size())
 						_ally_centroid_row /= float(echo_actors.size())
 
+					# V2-COMBAT-003 terrain commit 5: host region only (decision 22). The ally
+					# gets NO clearance context — it is a combatant, not a static objective,
+					# and it wants the cell nearest the party, not the most open one.
+					var _ally_region: Dictionary = GridService.largest_walkable_region(
+						_ally_walkable,
+						{ "w": int(grid_cfg_for_placement.get("board_cols", 0)),
+						  "h": int(grid_cfg_for_placement.get("board_rows", 0)) })
 					var _ally_candidates: Array = GridService.collect_unoccupied_cells(
-						_ally_walkable, _ally_occupied)
+						_ally_walkable, _ally_occupied, _ally_region)
 					# Target column AND row reference are both the party centroid, ranked by
 					# summed distance — the ally wants the nearest cell to the party, not the
 					# nearest cell in a target column.

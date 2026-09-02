@@ -453,6 +453,48 @@ static func generate(
 					for ck in new_cells:
 						walkable_cells[ck] = true
 
+	# ---- The objective site guarantee (decision 25) ----
+	# Decision 24 makes eight walkable neighbours the MINIMUM a static objective needs, and
+	# that same test decides whether a region can host an objective at all. When the host
+	# region offers no such cell the generator BUILDS one — a 3x3 block, one centre with
+	# eight cells around it, joined to the host region — rather than emitting a board on
+	# which the stage objective can never be placed legally and the stage can never be
+	# completed.
+	#
+	# ORDER IS LOAD-BEARING. This runs AFTER the connectivity repair, so "host" already
+	# means what it will mean on the finished board, and BEFORE the island pass, so the
+	# island moat is computed against the new ground and no island can grow against it.
+	#
+	# It makes NO RNG draw. The site is chosen by a total order over the board: most
+	# overlap with ground that already exists (so the block adds as little as possible),
+	# ties by the numerically lowest centre. A candidate may not contain a walkable cell
+	# of any OTHER region — merging a cut-off region into the host is the repair's job and
+	# is governed by connect_min_region_cells, not by this pass.
+	#
+	# Every occurrence is recorded in terrain["objective_site_built"], present only when
+	# the pass fired. A realm that fires often has plateau or island sizes that are wrong,
+	# and the owner sees that as a COUNT rather than as a board that was silently repaired.
+	var host_now: Dictionary = _host_cell_set(walkable_cells)
+	var objective_site_built: Dictionary = {}
+	if not _has_objective_site(host_now, walkable_cells):
+		var site: Dictionary = _find_objective_site(host_now, walkable_cells, w, h)
+		if not site.is_empty():
+			var site_col: int = int(site["col"])
+			var site_row: int = int(site["row"])
+			var site_pairs: Array = []
+			for dc in range(-1, 2):
+				for dr in range(-1, 2):
+					var scol: int = site_col + dc
+					var srow: int = site_row + dr
+					site_pairs.append([scol, srow])
+					walkable_cells["%d,%d" % [scol, srow]] = true
+			plateaus.append({
+				"col": site_col - 1, "row": site_row - 1, "w": 3, "h": 3,
+				"cells": site_pairs,
+				"objective_site": true,
+			})
+			objective_site_built = { "col": site_col, "row": site_row }
+
 	# ---- Islands (V2-COMBAT-003 terrain commit 3) ----
 	# Deliberate, moated, multi-cell scenery. Minted LAST, after the connectivity repair,
 	# so the repair's guarantee stays a statement about plateaus plus bridges. See the
@@ -525,12 +567,17 @@ static func generate(
 		})
 		island_cells_used += blob.size()
 
-	return {
+	var out: Dictionary = {
 		"bounds":    { "w": w, "h": h },
 		"plateaus":  plateaus,
 		"bridges":   bridges,
 		"islands":   islands,
 	}
+	# Present ONLY when decision 25 fired, so a board that never needed the compensation is
+	# byte-identical to one generated before this pass existed.
+	if not objective_site_built.is_empty():
+		out["objective_site_built"] = objective_site_built
+	return out
 
 
 ## Returns a Dictionary used as a set: key = "%d,%d" % [col,row] -> true,
@@ -723,7 +770,7 @@ static func legal_neighbors(
 ## harmless), and would have landed there on 766/1,800 and 867/1,800 AFTER, every one of
 ## them a genuine dead start. Anchoring the entry to the host region removes both classes.
 ##
-## The host rule is the same one the connectivity repair and GridService._largest_walkable_region
+## The host rule is the same one the connectivity repair and GridService.largest_walkable_region
 ## use: largest region, ties by numerically lowest (col,row). Regions are judged by SHARED
 ## SIDE, the stricter of the two rules, so a cell this function returns is reachable under
 ## the explore layer's looser 8-direction fill as well.
@@ -1137,7 +1184,7 @@ static func _cell_key_less(a: String, b: String) -> bool:
 
 
 ## Index of the HOST component: the largest one, ties broken by the numerically lowest
-## (col, row) cell. Same rule GridService._largest_walkable_region uses to pick the region
+## (col, row) cell. Same rule GridService.largest_walkable_region uses to pick the region
 ## every actor is placed in, so the generator repairs toward the region play actually uses.
 ## Returns -1 for an empty component list.
 static func _host_component_index(components: Array) -> int:
@@ -1155,6 +1202,90 @@ static func _host_component_index(components: Array) -> int:
 			# Components are cell-sorted, so element 0 IS the numerically lowest cell.
 			best = i
 	return best
+
+
+## The host region of `walkable_cells` as a set of "col,row" keys — largest region under
+## the shared-side rule, ties by the numerically lowest cell. Empty when there is no
+## walkable ground at all.
+static func _host_cell_set(walkable_cells: Dictionary) -> Dictionary:
+	var components := _flood_fill_components(walkable_cells)
+	var host_idx: int = _host_component_index(components)
+	var out: Dictionary = {}
+	if host_idx < 0:
+		return out
+	for k in (components[host_idx] as Array):
+		out[k] = true
+	return out
+
+
+## Decision 24, as a terrain test: does `key` have all EIGHT neighbours walkable?
+## Occupancy is not this function's business — nothing stands on a board being generated.
+static func has_eight_walkable_neighbours(key: String, walkable_cells: Dictionary) -> bool:
+	var parts := (key as String).split(",")
+	if parts.size() != 2:
+		return false
+	var c: int = int(parts[0])
+	var r: int = int(parts[1])
+	for dc in range(-1, 2):
+		for dr in range(-1, 2):
+			if dc == 0 and dr == 0:
+				continue
+			if not walkable_cells.has("%d,%d" % [c + dc, r + dr]):
+				return false
+	return true
+
+
+## True when the host region already offers at least one legal objective site.
+## A cell whose eight neighbours are all walkable is, with the cell itself, a 3x3 block of
+## mutually shared-side-connected ground, so if the cell is in the host region the whole
+## block is too.
+static func _has_objective_site(host: Dictionary, walkable_cells: Dictionary) -> bool:
+	for k in host.keys():
+		if has_eight_walkable_neighbours(str(k), walkable_cells):
+			return true
+	return false
+
+
+## Chooses the centre of the 3x3 block decision 25 builds. Returns {} when no legal
+## candidate exists, in which case the board is emitted unchanged — a silent partial repair
+## would be worse than a measurable gap.
+##
+## A candidate centre must satisfy all three:
+##   * the whole 3x3 fits inside the bounds;
+##   * every one of the nine cells is either void or already in the host region — a cell of
+##     another region would be absorbed, which is the connectivity repair's decision to make
+##     and not this pass's;
+##   * at least one of the nine cells is already host, which is what joins the block to the
+##     host region: the nine cells are mutually shared-side connected, so one host cell
+##     among them puts all nine in the host region.
+## Ranked by overlap with existing ground descending — the block that adds the fewest new
+## cells wins — then by the numerically lowest centre. No RNG.
+static func _find_objective_site(host: Dictionary, walkable_cells: Dictionary, w: int, h: int) -> Dictionary:
+	var best_col: int = -1
+	var best_row: int = -1
+	var best_overlap: int = -1
+	for cc in range(1, w - 1):
+		for rr in range(1, h - 1):
+			var overlap: int = 0
+			var legal: bool = true
+			for dc in range(-1, 2):
+				for dr in range(-1, 2):
+					var nk: String = "%d,%d" % [cc + dc, rr + dr]
+					if not walkable_cells.has(nk):
+						continue
+					if host.has(nk):
+						overlap += 1
+					else:
+						legal = false
+			if not legal or overlap < 1:
+				continue
+			if overlap > best_overlap:
+				best_overlap = overlap
+				best_col = cc
+				best_row = rr
+	if best_col < 0:
+		return {}
+	return { "col": best_col, "row": best_row }
 
 
 ## Build a REAL connecting bridge path from (ac,ar) to (bc,br). Returns an Array of

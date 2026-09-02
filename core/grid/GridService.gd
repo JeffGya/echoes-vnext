@@ -145,9 +145,19 @@ static func occupied_cells(actor_lists: Array) -> Dictionary:
 ## Returns the walkable cells that nothing occupies, as [{ col, row }, ...] in walkable-set
 ## iteration order. place_on_terrain() imposes a total order on them, so this order is not
 ## load-bearing.
-static func collect_unoccupied_cells(walkable: Dictionary, occupied: Dictionary) -> Array:
+##
+## `region_set` is THE CONNECTIVITY GUARD for every post-placement spawn (V2-COMBAT-003
+## terrain commit 5, decision 22). Pass largest_walkable_region(walkable, bounds) and no
+## candidate can lie on a cut-off region — an island included. An objective spawned on an
+## island cannot be reached, and an unreachable shrine is an unwinnable battle.
+## Empty (the default) restores the unfiltered behaviour and is the LEGACY shape: it exists
+## for callers that have no bounds to hand, not as an option a spawn path may take.
+static func collect_unoccupied_cells(walkable: Dictionary, occupied: Dictionary,
+		region_set: Dictionary = {}) -> Array:
 	var cells: Array = []
 	for key in walkable:
+		if not region_set.is_empty() and not region_set.has(key):
+			continue
 		if not occupied.has(key):
 			var parts: Array = str(key).split(",")
 			if parts.size() == 2:
@@ -171,30 +181,79 @@ static func candidate_column_range(cells: Array) -> Dictionary:
 ## { col, row }, or {} when there are none. The sort is in place so a caller that needs the
 ## ranked list afterwards (GUIDE_SPIRIT's escort destination) keeps its own reference to it.
 ## No RNG: (col, row) is unique per cell, so the order is total and fully deterministic.
+##
+## CLEARANCE (V2-COMBAT-003 terrain commit 5, decision 24). Pass
+## `clearance_ctx = { "walkable": <set>, "occupied": <set> }` for a STATIC OBJECTIVE and the
+## ranking gains two keys: a cell with all eight neighbours walkable and free outranks one
+## without, ahead of everything else, and openness over the 5x5 neighbourhood breaks the
+## distance tie that the bare (col,row) tie-break used to decide arbitrarily. Eight is a
+## MINIMUM and not a target, so the depth intent still chooses among the cells that clear
+## it; openness only decides where the old order was indifferent. Omit the context and the
+## ranking is byte-identical to the pre-commit-5 one.
 static func place_on_terrain(candidates: Array, target_col: float, ref_row: float,
-		metric: int = PLACE_METRIC_AXIS) -> Dictionary:
+		metric: int = PLACE_METRIC_AXIS, clearance_ctx: Dictionary = {}) -> Dictionary:
+	var use_clearance: bool = not clearance_ctx.is_empty()
+	if use_clearance:
+		# Precomputed once per candidate: a comparator would recompute these O(n log n) times.
+		var cw: Dictionary = clearance_ctx.get("walkable", {})
+		var co: Dictionary = clearance_ctx.get("occupied", {})
+		for cand_v in candidates:
+			var cand: Dictionary = cand_v
+			cand["_clear"] = 1 if has_clearance(int(cand["col"]), int(cand["row"]), cw, co) else 0
+			cand["_open"] = openness(int(cand["col"]), int(cand["row"]), cw, co)
 	if metric == PLACE_METRIC_MANHATTAN:
 		candidates.sort_custom(func(a, b):
+			if use_clearance and int(a["_clear"]) != int(b["_clear"]): return int(a["_clear"]) > int(b["_clear"])
 			var da: float = abs(float(a["col"]) - target_col) + abs(float(a["row"]) - ref_row)
 			var db: float = abs(float(b["col"]) - target_col) + abs(float(b["row"]) - ref_row)
 			if da != db: return da < db
+			if use_clearance and int(a["_open"]) != int(b["_open"]): return int(a["_open"]) > int(b["_open"])
 			if a["col"] != b["col"]: return a["col"] < b["col"]
 			return a["row"] < b["row"]
 		)
 	else:
 		candidates.sort_custom(func(a, b):
+			if use_clearance and int(a["_clear"]) != int(b["_clear"]): return int(a["_clear"]) > int(b["_clear"])
 			var da: float = abs(float(a["col"]) - target_col)
 			var db: float = abs(float(b["col"]) - target_col)
 			if da != db: return da < db
 			var dra: float = abs(float(a["row"]) - ref_row)
 			var drb: float = abs(float(b["row"]) - ref_row)
 			if dra != drb: return dra < drb
+			if use_clearance and int(a["_open"]) != int(b["_open"]): return int(a["_open"]) > int(b["_open"])
 			if a["col"] != b["col"]: return a["col"] < b["col"]
 			return a["row"] < b["row"]
 		)
 	if candidates.is_empty():
 		return {}
 	return { "col": int(candidates[0]["col"]), "row": int(candidates[0]["row"]) }
+
+
+## Decision 24: all EIGHT neighbouring tiles walkable AND free. The minimum a static
+## objective needs, and the same test that decides whether a region can host one at all.
+static func has_clearance(col: int, row: int, walkable: Dictionary, occupied: Dictionary) -> bool:
+	for dc in range(-1, 2):
+		for dr in range(-1, 2):
+			if dc == 0 and dr == 0:
+				continue
+			var nk: String = "%d,%d" % [col + dc, row + dr]
+			if not walkable.has(nk) or occupied.has(nk):
+				return false
+	return true
+
+
+## How open a cell is: walkable, unoccupied cells in the 5x5 neighbourhood around it,
+## excluding the cell itself. 0..24. Only ever a preference — see place_on_terrain.
+static func openness(col: int, row: int, walkable: Dictionary, occupied: Dictionary) -> int:
+	var n: int = 0
+	for dc in range(-2, 3):
+		for dr in range(-2, 3):
+			if dc == 0 and dr == 0:
+				continue
+			var nk: String = "%d,%d" % [col + dc, row + dr]
+			if walkable.has(nk) and not occupied.has(nk):
+				n += 1
+	return n
 
 
 # -------------------------
@@ -302,7 +361,7 @@ static func place_actors(echo_actors: Array, enemy_actors: Array,
 		# operate on regions, not cells. Both factions are restricted to the SAME largest
 		# region: if the party and the enemies land in different regions the battle cannot
 		# happen, which is worse than a single stranded actor.
-		var region_set: Dictionary = _largest_walkable_region(walkable, bounds)
+		var region_set: Dictionary = largest_walkable_region(walkable, bounds)
 
 		# Assign echoes: iterate columns left→right, filling actors in score-ascending order.
 		var echo_cells: Array = []
@@ -334,7 +393,7 @@ static func place_actors(echo_actors: Array, enemy_actors: Array,
 ## ordered_cells: walkable cells in the desired fill order for this faction.
 ## walkable: the full walkable set (used as the last-resort pool in pass 3).
 ## region_set: Dictionary of "col,row" keys — the board's largest connected region
-##   (see _largest_walkable_region), shared by both factions.
+##   (see largest_walkable_region), shared by both factions.
 ## Purely deterministic; no RNG.
 ##
 ## V2-COMBAT-003 phase 2c-region: a walkable cell can belong to a cut-off REGION of two or
@@ -433,14 +492,18 @@ static func _assign_walkable_faction(actors: Array, ordered_cells: Array, walkab
 	return { "outside_region": outside_region, "walkable_exhausted": walkable_exhausted }
 
 
-## V2-COMBAT-003 phase 2c-region: computes the connected regions of `walkable` using
+## THE ONE HOST-REGION AUTHORITY. Computes the connected regions of `walkable` using
 ## StageTerrain.legal_neighbors as the sole adjacency rule (the same authority the movement
 ## layer uses — deliberately NOT plain 8-direction adjacency, which cannot see a region cut
 ## off only by the diagonal edge rule), then returns the LARGEST region as a Dictionary of
 ## "col,row" keys for O(1) membership tests. Ties break deterministically: the region whose
 ## lowest cell, in numeric (col, row) order, sorts first wins. Computed ONCE per place_actors
 ## call — not once per actor.
-static func _largest_walkable_region(walkable: Dictionary, bounds: Dictionary) -> Dictionary:
+##
+## PUBLIC because RealmGenerator places situations against the same set. Two host rules on
+## one board is a defect waiting to happen: GridService and RealmGenerator must never
+## disagree about which region is the host, so there is exactly one implementation.
+static func largest_walkable_region(walkable: Dictionary, bounds: Dictionary) -> Dictionary:
 	var all_keys: Array = walkable.keys()
 	all_keys.sort()  # deterministic traversal seed order
 

@@ -481,7 +481,7 @@ parallel** — two at once would make it impossible to say which change caused w
 | 2 | Connectivity by shared side; accidental splits repaired | `opus` | **Done** |
 | 3 | Islands replace stragglers — moated, sized, per realm; config rename | `opus` | **Done** |
 | 4 | Bridges as their own tile; extra bridges per side above 20; edge placement | `sonnet` | Queued |
-| 5 | Host region by playability; objective clearance; the 9-tile compensation | `opus` | Queued |
+| 5 | Host region by playability; objective clearance; the 9-tile compensation | `opus` | **Done** |
 
 ### Commit 2 — what it did, and what it measured
 
@@ -618,6 +618,83 @@ party cannot reach, **objectives included**, which makes a stage uncompleteable.
 fix it; decisions 22–25 assign host-region placement and objective clearance to **commit 5**, and
 commit 4's bridging will reduce it further. It is a real gap in the tree between commit 3 and
 commit 5 and should not be rediscovered as a surprise.
+
+### Commit 5 — what it did, and what it measured
+
+Decisions 22, 24 and 25, on **both** consumers. Terrain commit 3 left a stated gap: 10.8 % of
+walkable cells (combat bounds) and 11.9 % (explore bounds) lay off the host region, and two
+placement paths ignored it. `RealmGenerator._place_situations` picked any walkable cell —
+**objectives included**, which makes a stage uncompleteable — and `GridService.place_on_terrain`
+sorted free cells by distance to a target column with no connectivity check at all.
+
+**One host-region authority, not two.** `GridService._largest_walkable_region` became public as
+`largest_walkable_region` and `RealmGenerator` calls it. No third region helper was written.
+Measured: a shared-side host cell outside the legal-edge host on **0 of 1,800** boards per
+regime, so `StageTerrain.entry_cell`'s shared-side host always sits inside the region situations
+are placed in.
+
+**Decision 24 is a ranking, not a veto.** Eight walkable free neighbours is the minimum; the
+depth intent still chooses among the cells that clear it, and openness over the 5×5
+neighbourhood breaks the distance tie the bare `(col,row)` tie-break used to settle arbitrarily.
+The ally gets the host filter and **no** clearance context — it is a combatant that wants the
+cell nearest the party, not the most open one.
+
+**Determinism.** Not one RNG path was added, removed or reordered. `_place_situations` keeps its
+`pos.P` → `wpos.P` → `fallback` + `fallback_walkable` structure exactly; only what a tier
+*accepts* changed, and each tier derives its own stream from its own fixed path string, so a
+tightened predicate cannot shift any other draw. The `fallback_walkable` pool is now **sorted
+numerically** by `(col,row)`; it used to be raw Dictionary key order, which leaked generation
+order into the output. `place_on_terrain` and the objective-site chooser make **no** draw at all.
+
+Measured with `tools/TerrainRegionProbe.gd` (`-- tests terrainprobe`), 1,800 boards per regime,
+ten virtue signatures, combat bounds including the doubled 12×48 and 60×12, driving the **real**
+`_place_situations` and the real `collect_unoccupied_cells` → `place_on_terrain` pattern:
+
+| Acceptance criterion | Combat before | Combat after | Explore before | Explore after |
+|---|---:|---:|---:|---:|
+| Situations off the host region | 1,146 / 9,000 | **0** | 1,110 / 9,000 | **0** |
+| Objective situations off the host region | 392 / 3,600 | **0** | 408 / 3,600 | **0** |
+| Objective situations without 8 walkable neighbours | 1,629 / 3,600 | **0** | 2,059 / 3,600 | **0** |
+| Combat objectives off the host region | 33 / 1,800 | **0** | 137 / 1,800 | **0** |
+| Combat objectives without 8 walkable free neighbours | 331 / 1,800 | **0** | 1,376 / 1,800 | **0** |
+
+**Rule 25 fired 0 times, on all ten virtues, on all 3,600 boards.** That is the number the owner
+asked for and it is a real finding, not a missing measurement: every generated board already
+offers a legal objective site, so the compensation is a guarantee rather than a repair in daily
+use. It is worth keeping precisely because the next island-size tuning pass could change that,
+and the count is how the owner would see it.
+
+**Two recorded values moved, each attributed on a concrete board.**
+
+`GUIDE_SPIRIT_ROUNDS_HASH` / `GUIDE_SPIRIT_FINAL_HASH`, and with them
+`combat_baseline/emotion_trace_guide_spirit`. Measured with a temporary print in
+`_run_mode_fingerprint`, run on this tree and on `b4dd797`: the **terrain did not move** —
+223 walkable cells both, identical plateaus, identical bridges, identical islands, no
+`objective_site_built` key — and every Echo (col 9, rows 8/5/1/6/2) and the enemy (47,3) keep
+their exact cells. **One actor moved**: the guide spirit, (23,1) → (17,5). The cause is decision
+24 alone: on that board (23,1) has `clearance=false` and (17,5) has `clearance=true`, while the
+host filter is inert because the host region is all 223 walkable cells. Six columns closer to a
+party at col 9 means the spirit is protected three rounds sooner, so the emotion trace went from
+nine rounds to six — and **the six that remain are byte-identical to the first six recorded
+before**, a strict prefix. `SAVE_HASH` did not move; the outcome is still `spirit_protected`.
+
+`STAGE_EXPLORE_FINGERPRINT_HASH`. The payload diff is exactly one hunk: `situations` goes from
+`[]` to one entry — `sit.1`, type `loot`, non-objective, now at (11,10) and therefore inside the
+party's opening reveal radius. Every other line, terrain included, is byte-identical.
+
+**The other six combat mode fingerprints, `FINAL_HASH`, `SAVE_HASH` and
+`SANCTUM_FINGERPRINT_HASH` did not move.**
+
+**What could not be proved.** The combat objective defect is still **not observed in a real
+encounter** — it never was; section 12.7 recorded it as possible, not triggered. The
+`combat_terrain/objective_never_lands_on_island` test reproduces the mechanism directly on a
+hand-built moated board (it asserts the unfiltered call *does* return the island, then that the
+filtered one does not), but that test cannot compile against `b4dd797` because it calls the new
+API. The two tests that **do** fail against `b4dd797` are the explore-path ones, and their real
+output is pasted in the commit message. Decision 24 is also implemented as a preference only on
+the combat path, where a ranking already exists; on the explore path an accepted objective site
+always meets the full 8/8 minimum, but among equally legal sites the draw stays uniform rather
+than preferring the more open one.
 
 ### 12.8 Independent verification of terrain commit 2 (orchestrator, not the builder)
 

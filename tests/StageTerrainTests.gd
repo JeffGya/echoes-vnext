@@ -255,6 +255,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("terrain/island_config_is_honored",        Callable(StageTerrainTests, "_t_island_config_is_honored"))
 	runner.register_test("terrain/island_size_scales_to_board",     Callable(StageTerrainTests, "_t_island_size_scales_to_board"))
 	runner.register_test("terrain/walkable_set_reads_legacy_stragglers", Callable(StageTerrainTests, "_t_walkable_set_reads_legacy_stragglers"))
+	# V2-COMBAT-003 terrain commit 5 — host-region placement + the objective site.
+	runner.register_test("terrain/host_region_offers_objective_site", Callable(StageTerrainTests, "_t_host_region_offers_objective_site"))
+	runner.register_test("terrain/objective_site_built_when_absent",  Callable(StageTerrainTests, "_t_objective_site_built_when_absent"))
+	runner.register_test("terrain/situations_stay_on_host_region",    Callable(StageTerrainTests, "_t_situations_stay_on_host_region"))
+	runner.register_test("terrain/objective_situations_have_clearance", Callable(StageTerrainTests, "_t_objective_situations_have_clearance"))
 
 
 # ─── Test 1 — DETERMINISM: same inputs → deep-equal dicts ───────────────────
@@ -1420,3 +1425,212 @@ static func _t_walkable_set_reads_legacy_stragglers() -> Dictionary:
 	if not gen.has("islands"):
 		return { "ok": false, "error": "generate() does not write an \"islands\" key" }
 	return { "ok": true }
+
+
+# ─── V2-COMBAT-003 terrain commit 5 ──────────────────────────────────────────
+#
+# Decision 22: nothing spawns outside the host region. Decision 24: a static objective
+# needs all eight neighbouring tiles walkable and free. Decision 25: when no region can
+# host an objective the generator BUILDS a nine-tile site rather than emitting a board on
+# which the stage can never be completed.
+#
+# The host region here is re-derived by this file's own shared-side helper, not read back
+# from the generator, so these tests can fail the generator instead of agreeing with it.
+
+
+## Every generated board's host region offers at least one legal objective site — decision
+## 25's guarantee, stated as the property it exists to protect.
+static func _t_host_region_offers_objective_site() -> Dictionary:
+	var by_virtue := _authored_by_virtue()
+	if by_virtue.is_empty():
+		return { "ok": false, "error": "data.stages.map_shape.by_virtue is empty — wrong config path" }
+	var bounds_cycle := _island_sweep_bounds()
+	var virtues: Array = by_virtue.keys()
+	virtues.sort()
+	for virtue_v in virtues:
+		var virtue: String = str(virtue_v)
+		var sig_v: Variant = by_virtue.get(virtue, {})
+		var sig: Dictionary = sig_v if sig_v is Dictionary else {}
+		for i in range(14):
+			var realm_seed: int = 410000 + i * 7919
+			var bounds: Dictionary = bounds_cycle[i % bounds_cycle.size()]
+			var terrain: Dictionary = StageTerrain.generate(
+				realm_seed, i % 3, sig, bounds, "test.objsite.%s.%d" % [virtue, i])
+			var walkable: Dictionary = StageTerrain.walkable_set(terrain)
+			var host := _host_key_set(walkable)
+			var found: bool = false
+			for k in host.keys():
+				if _eight_walkable(str(k), walkable):
+					found = true
+					break
+			if not found:
+				return { "ok": false, "error":
+					"%s #%d bounds=%dx%d: host region of %d cells offers NO cell with eight walkable neighbours"
+					% [virtue, i, int(bounds.get("w", 0)), int(bounds.get("h", 0)), host.size()] }
+	return { "ok": true }
+
+
+## Decision 25 fires on a board that genuinely cannot host an objective, and the site it
+## builds is legal: nine cells, the centre with eight walkable neighbours, and the whole
+## block joined to the host region. Driven through StageTerrain's own site chooser on a
+## hand-built board — a one-cell-wide cross, which has no cell with eight neighbours.
+static func _t_objective_site_built_when_absent() -> Dictionary:
+	var walkable: Dictionary = {}
+	for c in range(2, 12):
+		walkable["%d,6" % c] = true
+	for r in range(2, 12):
+		walkable["6,%d" % r] = true
+	var host := _host_key_set(walkable)
+	for k in host.keys():
+		if _eight_walkable(str(k), walkable):
+			return { "ok": false, "error": "fixture is wrong — a cross should have no 8-clear cell, %s does" % str(k) }
+	var site: Dictionary = StageTerrain._find_objective_site(host, walkable, 16, 16)
+	if site.is_empty():
+		return { "ok": false, "error": "no objective site found on a board that plainly has room" }
+	var sc: int = int(site["col"])
+	var sr: int = int(site["row"])
+	var built: Dictionary = walkable.duplicate()
+	var touches_host: bool = false
+	for dc in range(-1, 2):
+		for dr in range(-1, 2):
+			var k2: String = "%d,%d" % [sc + dc, sr + dr]
+			if host.has(k2):
+				touches_host = true
+			built[k2] = true
+	if not touches_host:
+		return { "ok": false, "error": "built site at %d,%d shares no cell with the host region" % [sc, sr] }
+	if not _eight_walkable("%d,%d" % [sc, sr], built):
+		return { "ok": false, "error": "built site centre %d,%d does not have eight walkable neighbours" % [sc, sr] }
+	var regions := _shared_side_regions(built)
+	var host_after := _host_key_set(built)
+	if not host_after.has("%d,%d" % [sc, sr]):
+		return { "ok": false, "error": "built site centre is not in the host region (%d regions)" % regions.size() }
+	return { "ok": true }
+
+
+## Decision 22 on the EXPLORE path. Every situation RealmGenerator._place_situations
+## returns lands on the host region. FAILS against b4dd797, where the placer accepted any
+## walkable cell and a moated island was 10.8 % of them.
+static func _t_situations_stay_on_host_region() -> Dictionary:
+	var by_virtue := _authored_by_virtue()
+	if by_virtue.is_empty():
+		return { "ok": false, "error": "data.stages.map_shape.by_virtue is empty — wrong config path" }
+	var bounds_cycle := _island_sweep_bounds()
+	var virtues: Array = by_virtue.keys()
+	virtues.sort()
+	var placed: int = 0
+	for virtue_v in virtues:
+		var virtue: String = str(virtue_v)
+		var sig_v: Variant = by_virtue.get(virtue, {})
+		var sig: Dictionary = sig_v if sig_v is Dictionary else {}
+		for i in range(14):
+			var realm_seed: int = 420000 + i * 7919
+			var bounds: Dictionary = bounds_cycle[i % bounds_cycle.size()]
+			var w: int = int(bounds.get("w", 0))
+			var h: int = int(bounds.get("h", 0))
+			var terrain: Dictionary = StageTerrain.generate(
+				realm_seed, i % 3, sig, bounds, "test.sithost.%s.%d" % [virtue, i])
+			var walkable: Dictionary = StageTerrain.walkable_set(terrain)
+			var host := _host_key_set(walkable)
+			var sits: Array = RealmGenerator._place_situations(
+				realm_seed, i % 3, w, h, 5, 2,
+				[{ "type": "shrine" }, { "type": "recover" }], {}, walkable)
+			for s_v in sits:
+				var sd: Dictionary = s_v if s_v is Dictionary else {}
+				var sp: Dictionary = sd.get("pos", {})
+				var sk: String = "%d,%d" % [int(sp.get("col", -1)), int(sp.get("row", -1))]
+				placed += 1
+				if not host.has(sk):
+					return { "ok": false, "error":
+						"%s #%d bounds=%dx%d: situation %s placed at %s, OFF the host region"
+						% [virtue, i, w, h, str(sd.get("id", "")), sk] }
+	if placed < 100:
+		return { "ok": false, "error": "only %d situations placed — the sweep did not run" % placed }
+	return { "ok": true }
+
+
+## Decision 24 on the EXPLORE path. Every OBJECTIVE situation has all eight neighbours
+## walkable. FAILS against b4dd797, which applied no clearance rule at all.
+static func _t_objective_situations_have_clearance() -> Dictionary:
+	var by_virtue := _authored_by_virtue()
+	if by_virtue.is_empty():
+		return { "ok": false, "error": "data.stages.map_shape.by_virtue is empty — wrong config path" }
+	var bounds_cycle := _island_sweep_bounds()
+	var virtues: Array = by_virtue.keys()
+	virtues.sort()
+	var objectives_seen: int = 0
+	for virtue_v in virtues:
+		var virtue: String = str(virtue_v)
+		var sig_v: Variant = by_virtue.get(virtue, {})
+		var sig: Dictionary = sig_v if sig_v is Dictionary else {}
+		for i in range(14):
+			var realm_seed: int = 430000 + i * 7919
+			var bounds: Dictionary = bounds_cycle[i % bounds_cycle.size()]
+			var w: int = int(bounds.get("w", 0))
+			var h: int = int(bounds.get("h", 0))
+			var terrain: Dictionary = StageTerrain.generate(
+				realm_seed, i % 3, sig, bounds, "test.sitclear.%s.%d" % [virtue, i])
+			var walkable: Dictionary = StageTerrain.walkable_set(terrain)
+			var sits: Array = RealmGenerator._place_situations(
+				realm_seed, i % 3, w, h, 5, 2,
+				[{ "type": "shrine" }, { "type": "recover" }], {}, walkable)
+			for s_v in sits:
+				var sd: Dictionary = s_v if s_v is Dictionary else {}
+				if not bool(sd.get("is_objective", false)):
+					continue
+				objectives_seen += 1
+				var sp: Dictionary = sd.get("pos", {})
+				var sk: String = "%d,%d" % [int(sp.get("col", -1)), int(sp.get("row", -1))]
+				if not _eight_walkable(sk, walkable):
+					return { "ok": false, "error":
+						"%s #%d bounds=%dx%d: objective situation at %s lacks eight walkable neighbours"
+						% [virtue, i, w, h, sk] }
+	if objectives_seen < 100:
+		return { "ok": false, "error": "only %d objective situations seen — the sweep did not run" % objectives_seen }
+	return { "ok": true }
+
+
+## Host region as a key set, re-derived by this file's own shared-side fill.
+static func _host_key_set(walkable: Dictionary) -> Dictionary:
+	var regions := _shared_side_regions(walkable)
+	var best: int = -1
+	for i in range(regions.size()):
+		if best < 0:
+			best = i
+			continue
+		var cur: Array = regions[i]
+		var champ: Array = regions[best]
+		if cur.size() > champ.size():
+			best = i
+		elif cur.size() == champ.size() and cur.size() > 0 and _key_less(str(cur[0]), str(champ[0])):
+			best = i
+	var out: Dictionary = {}
+	if best < 0:
+		return out
+	for k in (regions[best] as Array):
+		out[k] = true
+	return out
+
+
+static func _key_less(a: String, b: String) -> bool:
+	var pa := (a as String).split(",")
+	var pb := (b as String).split(",")
+	if int(pa[0]) != int(pb[0]):
+		return int(pa[0]) < int(pb[0])
+	return int(pa[1]) < int(pb[1])
+
+
+## Decision 24's terrain half, re-implemented locally on purpose.
+static func _eight_walkable(key: String, walkable: Dictionary) -> bool:
+	var parts := (key as String).split(",")
+	if parts.size() != 2:
+		return false
+	var c: int = int(parts[0])
+	var r: int = int(parts[1])
+	for dc in range(-1, 2):
+		for dr in range(-1, 2):
+			if dc == 0 and dr == 0:
+				continue
+			if not walkable.has("%d,%d" % [c + dc, r + dr]):
+				return false
+	return true

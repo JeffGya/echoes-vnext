@@ -285,6 +285,17 @@ const PURSUE_EMOTION_HASHES: Array = [
 	"766b8b1d278fb39800b7e49e9816bf7b12398de0f120589f95db8373cf87fbd4",
 	"bc7febd30a33fff204ec63763b68cd78860eb3e40212ff429e1fa2fb6eb873fb",
 ]
+# RE-RECORDED, V2-COMBAT-003 terrain commit 5. Nine rounds became SIX, and the six that
+# remain are BYTE-IDENTICAL to the first six recorded before — this list is a strict prefix
+# of the old one, not a new trace. The cause is one cell. On this board (60x12,
+# "combat.terrain.realm.01.stage.0.fp_guide_spirit") the terrain is unchanged — walkable 223
+# cells, the same plateaus, the same two bridges, no island change, and decision 25 did not
+# fire — and every Echo and the enemy keep their exact spawn cells. Only the guide spirit
+# moved, from (23,1) to (17,5), because decision 24 now ranks a cell with eight walkable free
+# neighbours ahead of one without: measured on that board, (23,1) has clearance=false and
+# (17,5) has clearance=true. The host-region filter changed nothing here — the whole walkable
+# set is the host region, 223 of 223. A spirit six columns closer to a party spawning at
+# col 9 is protected three rounds sooner.
 const GUIDE_SPIRIT_EMOTION_HASHES: Array = [
 	"1763e7b0005ec4f959d3154cbaf62d510fb1420c607f7c05eb330dd808c691b6",
 	"9436b6ffdbc13f9fbf655165842baefcdff75667adc6ae2cc94539c5a9b76118",
@@ -292,9 +303,6 @@ const GUIDE_SPIRIT_EMOTION_HASHES: Array = [
 	"75d52c6def312b12921a8aec4830ad3f66a8732a6036a416d946265ad9926ea2",
 	"aa28e139148d95d951e42dc66c15449035bf54f1fa6576423d3da30999e1d579",
 	"ea87f2931bda7495deeac1f838bc38934096f7bc1ca427377b74c50f0bcf6d2e",
-	"23f5d1d6eb49a4f310d759483eb57df84b08205bb06d4a0d2aa43b61d202614f",
-	"13c902de0b0a85a0ab273d68d57738420f8c698c471e11eb909453bb6b8be414",
-	"16db26d34cbf646994183bab84bb60719d18debd6a663e5ad6aeec53b90c5e23",
 ]
 
 

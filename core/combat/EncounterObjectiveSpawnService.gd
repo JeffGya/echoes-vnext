@@ -164,8 +164,14 @@ func spawn_shrine(
 		if not _shrine_terrain.is_empty():
 			var _shrine_walkable: Dictionary = StageTerrain.walkable_set(_shrine_terrain)
 			var _shrine_occupied: Dictionary = GridService.occupied_cells([echo_actors, enemy_actors])
+			# V2-COMBAT-003 terrain commit 5: candidates are restricted to the HOST REGION.
+			# An objective on a cut-off island cannot be reached, and an unreachable shrine
+			# is an unwinnable battle. Same region authority place_actors uses, so the
+			# shrine can never land in a region the party was not placed in.
+			var _shrine_region: Dictionary = GridService.largest_walkable_region(
+				_shrine_walkable, _shrine_terrain.get("bounds", {}))
 			var _shrine_candidates: Array = GridService.collect_unoccupied_cells(
-				_shrine_walkable, _shrine_occupied)
+				_shrine_walkable, _shrine_occupied, _shrine_region)
 
 			# Depth fraction: 0 = echo/left side; 1 = enemy/right (max-col) side.
 			var _op_f: float = _depth_fraction(completion_index)
@@ -177,7 +183,9 @@ func spawn_shrine(
 			var _shrine_mid_row: float = float(_shrine_board_h - 1) * 0.5
 
 			var _shrine_cell: Dictionary = GridService.place_on_terrain(
-				_shrine_candidates, float(_op_target_col), _shrine_mid_row)
+				_shrine_candidates, float(_op_target_col), _shrine_mid_row,
+				GridService.PLACE_METRIC_AXIS,
+				{ "walkable": _shrine_walkable, "occupied": _shrine_occupied })
 			if not _shrine_cell.is_empty():
 				shrine_actor["grid_pos"] = _shrine_cell
 		# Runtime-only shrine fields — not in ActorSchema REQUIRED_FIELDS.
@@ -228,8 +236,10 @@ func spawn_objective_actor(
 			if not _rec_terrain.is_empty():
 				var _rec_walkable: Dictionary = StageTerrain.walkable_set(_rec_terrain)
 				var _rec_occupied: Dictionary = GridService.occupied_cells([echo_actors, enemy_actors])
+				var _rec_region: Dictionary = GridService.largest_walkable_region(
+					_rec_walkable, _rec_terrain.get("bounds", {}))
 				var _rec_candidates: Array = GridService.collect_unoccupied_cells(
-					_rec_walkable, _rec_occupied)
+					_rec_walkable, _rec_occupied, _rec_region)
 				var _rec_cols: Dictionary = GridService.candidate_column_range(_rec_candidates)
 				var _rec_target_col: int = roundi(
 					_rec_cols["min_col"] + _op_f_p3 * float(_rec_cols["max_col"] - _rec_cols["min_col"]))
@@ -237,7 +247,9 @@ func spawn_objective_actor(
 				var _rec_board_h: int = int(_rec_terrain.get("bounds", {}).get("h", 12))
 				var _rec_mid_row: float = float(_rec_board_h - 1) * 0.5
 				var _rec_cell: Dictionary = GridService.place_on_terrain(
-					_rec_candidates, float(_rec_target_col), _rec_mid_row)
+					_rec_candidates, float(_rec_target_col), _rec_mid_row,
+					GridService.PLACE_METRIC_AXIS,
+					{ "walkable": _rec_walkable, "occupied": _rec_occupied })
 				if not _rec_cell.is_empty():
 					objective_actor["grid_pos"] = _rec_cell
 
@@ -266,8 +278,10 @@ func spawn_objective_actor(
 			if not _prt_terrain.is_empty():
 				var _prt_walkable: Dictionary = StageTerrain.walkable_set(_prt_terrain)
 				var _prt_occupied: Dictionary = GridService.occupied_cells([echo_actors, enemy_actors])
+				var _prt_region: Dictionary = GridService.largest_walkable_region(
+					_prt_walkable, _prt_terrain.get("bounds", {}))
 				var _prt_candidates: Array = GridService.collect_unoccupied_cells(
-					_prt_walkable, _prt_occupied)
+					_prt_walkable, _prt_occupied, _prt_region)
 				# Row reference: board vertical centre.
 				var _prt_board_h: int = int(_prt_terrain.get("bounds", {}).get("h", 12))
 				var _prt_mid_row: float = float(_prt_board_h - 1) * 0.5
@@ -277,7 +291,9 @@ func spawn_objective_actor(
 				var _prt_cols: Dictionary = GridService.candidate_column_range(_prt_candidates)
 				var _prt_centre_col: int = (int(_prt_cols["min_col"]) + int(_prt_cols["max_col"])) / 2
 				var _prt_cell: Dictionary = GridService.place_on_terrain(
-					_prt_candidates, float(_prt_centre_col), _prt_mid_row)
+					_prt_candidates, float(_prt_centre_col), _prt_mid_row,
+					GridService.PLACE_METRIC_AXIS,
+					{ "walkable": _prt_walkable, "occupied": _prt_occupied })
 				if not _prt_cell.is_empty():
 					objective_actor["grid_pos"] = _prt_cell
 			# Legacy path (no terrain): grid_pos from def used as-is — no relocation needed.
@@ -301,8 +317,10 @@ func spawn_objective_actor(
 			if not _qry_terrain.is_empty():
 				var _qry_walkable: Dictionary = StageTerrain.walkable_set(_qry_terrain)
 				var _qry_occupied: Dictionary = GridService.occupied_cells([echo_actors, enemy_actors])
+				var _qry_region: Dictionary = GridService.largest_walkable_region(
+					_qry_walkable, _qry_terrain.get("bounds", {}))
 				var _qry_candidates: Array = GridService.collect_unoccupied_cells(
-					_qry_walkable, _qry_occupied)
+					_qry_walkable, _qry_occupied, _qry_region)
 				var _qry_cols: Dictionary = GridService.candidate_column_range(_qry_candidates)
 				var _qry_target_col: int = roundi(
 					_qry_cols["min_col"] + _op_f_p3 * float(_qry_cols["max_col"] - _qry_cols["min_col"]))
@@ -329,7 +347,9 @@ func spawn_objective_actor(
 				if _qry_row_n > 0:
 					_qry_mid_row = _qry_row_sum / float(_qry_row_n)
 				var _qry_cell: Dictionary = GridService.place_on_terrain(
-					_qry_candidates, float(_qry_target_col), _qry_mid_row)
+					_qry_candidates, float(_qry_target_col), _qry_mid_row,
+					GridService.PLACE_METRIC_AXIS,
+					{ "walkable": _qry_walkable, "occupied": _qry_occupied })
 				if not _qry_cell.is_empty():
 					objective_actor["grid_pos"] = _qry_cell
 
@@ -439,7 +459,13 @@ func spawn_objective_actor(
 				var _gs_occupied: Dictionary = GridService.occupied_cells([echo_actors, enemy_actors])
 				# place_on_terrain() sorts this array in place; the escort destination block
 				# below re-reads it, so the reference must be the one declared above.
-				_gs_candidates = GridService.collect_unoccupied_cells(_gs_walkable, _gs_occupied)
+				# The host-region filter reaches the ESCORT DESTINATION too, which re-reads
+				# this same array below — a destination on an island is a spirit that can
+				# never arrive.
+				var _gs_region: Dictionary = GridService.largest_walkable_region(
+					_gs_walkable, _gs_terrain.get("bounds", {}))
+				_gs_candidates = GridService.collect_unoccupied_cells(
+					_gs_walkable, _gs_occupied, _gs_region)
 				var _gs_cols: Dictionary = GridService.candidate_column_range(_gs_candidates)
 				var _gs_target_col: int = roundi(
 					_gs_cols["min_col"] + _op_f_p3 * float(_gs_cols["max_col"] - _gs_cols["min_col"]))
@@ -447,7 +473,9 @@ func spawn_objective_actor(
 				var _gs_board_h: int = int(_gs_terrain.get("bounds", {}).get("h", 12))
 				var _gs_mid_row: float = float(_gs_board_h - 1) * 0.5
 				var _gs_cell: Dictionary = GridService.place_on_terrain(
-					_gs_candidates, float(_gs_target_col), _gs_mid_row)
+					_gs_candidates, float(_gs_target_col), _gs_mid_row,
+					GridService.PLACE_METRIC_AXIS,
+					{ "walkable": _gs_walkable, "occupied": _gs_occupied })
 				if not _gs_cell.is_empty():
 					objective_actor["grid_pos"] = _gs_cell
 

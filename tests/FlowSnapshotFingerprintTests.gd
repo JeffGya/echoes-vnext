@@ -283,7 +283,14 @@ static func test_sanctum_fingerprint() -> Dictionary:
 ## column 0 — on a 4-cell island with a clear ring of void around it and no legal step in
 ## any direction. entry_cell now anchors to the host region, so party_pos does not move.
 ## Previous value: aee5d5cc22cc484d794f55c967c92d438ba103cb6cb943b61c76fb8b6d4426be.
-const STAGE_EXPLORE_FINGERPRINT_HASH := "7a10ee318b24bb0cb80755cbdc67a7714e6c0130e0769fcb352dda74b4589f2b"
+# RE-RECORDED, V2-COMBAT-003 terrain commit 5. The payload diff on this board is exactly one
+# hunk, dumped via the SE_DEBUG print below on this tree and on b4dd797: "situations" goes
+# from [] to one entry — sit.1, type loot, non-objective, now at (11,10) and therefore inside
+# the party's opening reveal radius. Every other line of the payload is byte-identical, the
+# terrain included. RealmGenerator._place_situations now refuses a cell off the host region
+# (decision 22), so a situation that used to be dropped on unreachable ground is placed on
+# reachable ground instead. No RNG path was added, removed or reordered to do it.
+const STAGE_EXPLORE_FINGERPRINT_HASH := "57f820b8a0e1592fcf5bfa42c74af35ea65d688d759e33258847dda08bea6837"
 
 static func test_stage_explore_fingerprint() -> Dictionary:
 	var env := _setup_stage_explore_env("fp_stage_explore")

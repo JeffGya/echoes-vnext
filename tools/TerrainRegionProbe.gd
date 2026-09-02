@@ -14,7 +14,7 @@
 #                  repair uses after commit 2. It is deliberately STRICTER than the
 #                  movement layer, so anything it calls connected is certainly traversable.
 #   legal-edge   — StageTerrain.legal_neighbors, i.e. exactly what the movement layer and
-#                  GridService._largest_walkable_region use. A diagonal is legal unless
+#                  GridService.largest_walkable_region use. A diagonal is legal unless
 #                  BOTH orthogonal side cells are solid. This is the rule that decides
 #                  whether an actor can really walk off the ground it stands on.
 #
@@ -297,6 +297,34 @@ static func _measure(regime: String, regime_tag: String, virtues: Array, by_virt
 	var off_host_cells: int = 0
 	var all_cells: int = 0
 
+	# ── V2-COMBAT-003 terrain commit 5 ───────────────────────────────────────
+	# The two real placement paths, driven through their production entry points.
+	#
+	# EXPLORE — RealmGenerator._place_situations, called with the same arguments
+	# _generate_explore_map passes it. Counted: situations landing off the host region, and
+	# OBJECTIVE situations whose eight neighbours are not all walkable (decision 24).
+	#
+	# COMBAT — the two-call pattern every objective spawn in EncounterObjectiveSpawnService
+	# uses: GridService.collect_unoccupied_cells over the walkable set minus the actors
+	# place_actors already positioned, then GridService.place_on_terrain with a depth-scaled
+	# target column. Reproduced here, not re-invented: the same functions, the same order.
+	var sit_total: int = 0
+	var sit_off_host: int = 0
+	var sit_obj_total: int = 0
+	var sit_obj_off_host: int = 0
+	var sit_obj_no_clearance: int = 0
+	var sit_examples: Array = []
+	var cmb_obj_total: int = 0
+	var cmb_obj_off_host: int = 0
+	var cmb_obj_no_clearance: int = 0
+	var cmb_examples: Array = []
+	# Rule 25 — how often the generator had to BUILD an objective site, per virtue.
+	var built_sites: Dictionary = {}
+	# Do the two host rules agree? StageTerrain (and entry_cell) judge regions by SHARED
+	# SIDE; GridService judges them by legal-edge. A cell of the shared-side host that is
+	# NOT in the legal-edge host would mean the two authorities disagree about the board.
+	var host_rule_disagree: int = 0
+
 	for virtue_v in virtues:
 		var virtue: String = str(virtue_v)
 		var sig_v: Variant = by_virtue.get(virtue, {})
@@ -312,6 +340,7 @@ static func _measure(regime: String, regime_tag: String, virtues: Array, by_virt
 		isl_min[virtue] = 999999
 		isl_max[virtue] = 0
 		isl_sum[virtue] = 0
+		built_sites[virtue] = 0
 
 		for i in range(BOARDS_PER_VIRTUE):
 			var realm_seed: int = 1000000 + i * 7919
@@ -391,6 +420,68 @@ static func _measure(regime: String, regime_tag: String, virtues: Array, by_virt
 			all_cells += walkable.size()
 			if ss_host >= 0:
 				off_host_cells += walkable.size() - (ss[ss_host] as Array).size()
+			# ---- V2-COMBAT-003 terrain commit 5 measurements ----
+			var host_set: Dictionary = {}
+			if ss_host >= 0:
+				for hk in (ss[ss_host] as Array):
+					host_set[hk] = true
+			if terrain.has("objective_site_built"):
+				built_sites[virtue] = int(built_sites.get(virtue, 0)) + 1
+
+			# EXPLORE — the real situation placer.
+			var sit_objectives: Array = [
+				{ "type": "shrine" }, { "type": "recover" },
+			]
+			var sits: Array = RealmGenerator._place_situations(
+				realm_seed, stage_index, int(bounds.get("w", 0)), int(bounds.get("h", 0)),
+				5, 2, sit_objectives, {}, walkable)
+			for s_v in sits:
+				var sd: Dictionary = s_v if s_v is Dictionary else {}
+				var sp: Dictionary = sd.get("pos", {}) as Dictionary
+				var sk: String = "%d,%d" % [int(sp.get("col", -1)), int(sp.get("row", -1))]
+				sit_total += 1
+				var s_off: bool = not host_set.has(sk)
+				if s_off:
+					sit_off_host += 1
+				if bool(sd.get("is_objective", false)):
+					sit_obj_total += 1
+					if s_off:
+						sit_obj_off_host += 1
+					if not _has_clearance(sk, walkable, {}):
+						sit_obj_no_clearance += 1
+					if (s_off or not _has_clearance(sk, walkable, {})) and sit_examples.size() < 8:
+						sit_examples.append(
+							"    SIT %s #%d bounds=%dx%d objective at %s off_host=%s clearance=%s"
+							% [virtue, i, int(bounds.get("w", 0)), int(bounds.get("h", 0)), sk,
+								str(s_off), str(_has_clearance(sk, walkable, {}))])
+
+			# COMBAT — the objective-spawn placement pattern.
+			var cmb_cell: Dictionary = _probe_combat_objective(walkable, bounds)
+			if not cmb_cell.is_empty():
+				var ck: String = "%d,%d" % [int(cmb_cell.get("col", -1)), int(cmb_cell.get("row", -1))]
+				cmb_obj_total += 1
+				var c_off: bool = not host_set.has(ck)
+				if c_off:
+					cmb_obj_off_host += 1
+				var c_clear: bool = _has_clearance(ck, walkable, cmb_cell.get("occupied", {}))
+				if not c_clear:
+					cmb_obj_no_clearance += 1
+				if (c_off or not c_clear) and cmb_examples.size() < 8:
+					cmb_examples.append(
+						"    CMBOBJ %s #%d bounds=%dx%d cell=%s off_host=%s clearance=%s"
+						% [virtue, i, int(bounds.get("w", 0)), int(bounds.get("h", 0)), ck,
+							str(c_off), str(c_clear)])
+
+			# Host-rule agreement between StageTerrain (shared side) and GridService (legal edge).
+			var le_host_set: Dictionary = GridService.largest_walkable_region(walkable, bounds)
+			var disagree: bool = false
+			for hk2 in host_set.keys():
+				if not le_host_set.has(hk2):
+					disagree = true
+					break
+			if disagree:
+				host_rule_disagree += 1
+
 			var ss_flag: bool = false
 			for ri in range(ss.size()):
 				if ri == ss_host:
@@ -517,6 +608,116 @@ static func _measure(regime: String, regime_tag: String, virtues: Array, by_virt
 	_say("  is the per-situation probability of landing somewhere unreachable, OBJECTIVES")
 	_say("  INCLUDED. Terrain commit 3 raises it and does NOT fix it — commit 5 owns")
 	_say("  host-region placement (handoff decisions 22-25).")
+
+	# ── V2-COMBAT-003 terrain commit 5 ───────────────────────────────────────
+	_say("")
+	_say("SITUATION PLACEMENT, MEASURED — RealmGenerator._place_situations on every board:")
+	_say("  situations placed                     : %d" % sit_total)
+	_say("  ... OFF the host region               : %d  (MUST BE ZERO)" % sit_off_host)
+	_say("  objective situations                  : %d" % sit_obj_total)
+	_say("  ... OFF the host region               : %d  (MUST BE ZERO)" % sit_obj_off_host)
+	_say("  ... without 8 walkable neighbours     : %d  (MUST BE ZERO)" % sit_obj_no_clearance)
+	for sv in sit_examples:
+		_say(str(sv))
+
+	_say("")
+	_say("COMBAT OBJECTIVE PLACEMENT, MEASURED — place_actors then collect_unoccupied_cells")
+	_say("then place_on_terrain, the EncounterObjectiveSpawnService pattern:")
+	_say("  objectives placed                     : %d" % cmb_obj_total)
+	_say("  ... OFF the host region               : %d  (MUST BE ZERO)" % cmb_obj_off_host)
+	_say("  ... without 8 walkable free neighbours: %d" % cmb_obj_no_clearance)
+	for cv in cmb_examples:
+		_say(str(cv))
+
+	_say("")
+	_say("RULE 25 — boards where the generator BUILT an objective site, per virtue:")
+	var built_total: int = 0
+	for bv in virtues:
+		var bvs: String = str(bv)
+		var bn: int = int(built_sites.get(bvs, 0))
+		built_total += bn
+		_say("  %-14s : %d of %d" % [bvs, bn, BOARDS_PER_VIRTUE])
+	_say("  %-14s : %d of %d" % ["TOTAL", built_total, tot_boards])
+	_say("  Not a failure. A realm that fires often has island sizes that are wrong.")
+
+	_say("")
+	_say("HOST RULE AGREEMENT — boards where a shared-side host cell is NOT in the")
+	_say("legal-edge host (StageTerrain vs GridService disagree): %d of %d" % [host_rule_disagree, tot_boards])
+
+
+# ── V2-COMBAT-003 terrain commit 5 helpers ───────────────────────────────────
+
+## Decision 24: a static objective needs all EIGHT neighbouring tiles walkable and free.
+## `occupied` is the actor occupancy set on the combat path and empty on the explore path,
+## where nothing but other situations stands on the board.
+static func _has_clearance(key: String, walkable: Dictionary, occupied: Dictionary) -> bool:
+	var parts := (key as String).split(",")
+	if parts.size() != 2:
+		return false
+	var c: int = int(parts[0])
+	var r: int = int(parts[1])
+	for dc in range(-1, 2):
+		for dr in range(-1, 2):
+			if dc == 0 and dr == 0:
+				continue
+			var nk: String = "%d,%d" % [c + dc, r + dr]
+			if not walkable.has(nk):
+				return false
+			if occupied.has(nk):
+				return false
+	return true
+
+
+## Reproduces one objective spawn exactly as EncounterObjectiveSpawnService performs it:
+## place six actors per faction with GridService.place_actors, build the occupancy set,
+## collect the unoccupied walkable cells, then rank them by a depth-scaled target column.
+## Returns { col, row, occupied } — `occupied` so the caller can judge clearance against
+## the same board state the real spawn sees.
+static func _probe_combat_objective(walkable: Dictionary, bounds: Dictionary) -> Dictionary:
+	var cols: int = int(bounds.get("w", 0))
+	var rows: int = int(bounds.get("h", 0))
+	var board_cfg: Dictionary = {
+		"board_cols": cols, "board_rows": rows, "walkable": walkable,
+	}
+	var echoes: Array = []
+	var enemies: Array = []
+	for k in range(4):
+		echoes.append(_probe_actor("echo_%d" % k))
+		enemies.append(_probe_actor("enemy_%d" % k))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 12345
+	GridService.place_actors(echoes, enemies, board_cfg, rng, {})
+	var occupied: Dictionary = GridService.occupied_cells([echoes, enemies])
+	# Mirrors the production call sites after V2-COMBAT-003 terrain commit 5: host region
+	# on collect_unoccupied_cells, clearance context on place_on_terrain.
+	var region: Dictionary = GridService.largest_walkable_region(walkable, bounds)
+	var candidates: Array = GridService.collect_unoccupied_cells(walkable, occupied, region)
+	if candidates.is_empty():
+		return {}
+	var col_range: Dictionary = GridService.candidate_column_range(candidates)
+	# Depth fraction 0.35 — EncounterObjectiveSpawnService._depth_fraction at completion 0.
+	var target_col: int = roundi(
+		float(col_range["min_col"]) + 0.35 * float(int(col_range["max_col"]) - int(col_range["min_col"])))
+	var mid_row: float = float(rows - 1) * 0.5
+	var cell: Dictionary = GridService.place_on_terrain(
+		candidates, float(target_col), mid_row, GridService.PLACE_METRIC_AXIS,
+		{ "walkable": walkable, "occupied": occupied })
+	if cell.is_empty():
+		return {}
+	return { "col": int(cell["col"]), "row": int(cell["row"]), "occupied": occupied }
+
+
+static func _probe_actor(id: String) -> Dictionary:
+	var a: Dictionary = ActorSchema.get_defaults()
+	a["id"] = id
+	a["name"] = id
+	a["stats"] = { "max_hp": 100, "atk": 5, "def": 3, "agi": 3, "int": 3, "cha": 2 }
+	a["speed"] = 3
+	a["archetype_birth"] = "brave"
+	a["calling_origin"] = "blade"
+	a["traits"] = { "courage": 40, "faith": 30, "wisdom": 30 }
+	a["vector_scores"] = { "vanguard": 50, "protector": 20, "seeker": 20, "pillar": 10 }
+	return a
 
 
 const _BUCKETS: Array = ["1", "2-3", "4-5", "6-10", "11-25", "26-50", "51+"]

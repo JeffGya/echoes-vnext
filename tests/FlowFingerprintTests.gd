@@ -606,8 +606,17 @@ static func test_pursue() -> Dictionary:
 # the outcome (round 9, spirit_protected, same rewards) does not depend on the starting cells.
 # This is the ONLY fingerprint in the suite that moved — the other six modes run on 12x12
 # combat boards whose repair choice happened not to change.
-const GUIDE_SPIRIT_ROUNDS_HASH := "18e458b7d2e29ebbd6c1103f562750184dd73c439a7ca16df6907c309da85bca"
-const GUIDE_SPIRIT_FINAL_HASH  := "a325a46c3563e33884a9d1bd6899119232354509ceeef03b488d642bb4655b33"
+# RE-RECORDED AGAIN, V2-COMBAT-003 terrain commit 5, and this time the TERRAIN DID NOT MOVE.
+# Measured with a temporary print in _run_mode_fingerprint, run on this tree and on b4dd797
+# and removed afterwards: walkable 223 cells both, identical plateaus, identical bridges
+# ([{col:31,row:1,w:2,h:5},{col:18,row:0,w:15,h:2}]), identical islands, and no
+# objective_site_built key, so decision 25 never fired. Every Echo keeps its cell (col 9,
+# rows 8/5/1/6/2) and so does the enemy (47,3). ONE actor moved: the guide spirit, (23,1) to
+# (17,5). The cause is decision 24 alone — (23,1) does not have eight walkable neighbours and
+# (17,5) does. The host-region filter is inert on this board: the host region is all 223
+# walkable cells. SAVE_HASH did not move; the outcome is still spirit_protected.
+const GUIDE_SPIRIT_ROUNDS_HASH := "2c802d744efc809c1543b85035d822fe5bf81ffe34724406c9349a41898b3c6e"
+const GUIDE_SPIRIT_FINAL_HASH  := "13b4753677246bdc095ceea1416aba2816581db36c5963d75975a69f56471b3f"
 const GUIDE_SPIRIT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
 static func test_guide_spirit() -> Dictionary:
