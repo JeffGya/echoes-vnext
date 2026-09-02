@@ -3058,7 +3058,7 @@
 			},
 
 			"map_shape": {
-				"_comment": "V2-COMBAT-003 terrain commit 3: island_count_min/max and island_size_min/max REPLACE straggler_count_min/max. A straggler was one cell taken from the 8-direction neighbours of existing ground, so it always touched the board at a corner and could never be an island (measured: 838 of 865 cut-off regions touched the main ground at a corner, and 819 of 865 were a single cell). An island is a multi-cell blob with a guaranteed ring of void around it, so realms differentiate by island SIZE and not only by island COUNT. All eleven island_count_*/island_size_* values below are PROPOSED DEFAULTS awaiting Jeff's play tuning — see docs/v2-combat-003-handoff.md section 12.5 for the approved table. island_size_* is a REQUEST, not a promise: StageTerrain clamps it against board area (at most 1/16 of the board per island and 1/4 of the board for all islands together, floor 4 cells), so wisdom's 8..50 gives up to 9 cells per island on a 12x12 combat board and the full authored range on an explore map. An island below 4 cells is discarded rather than emitted. relief is RESERVED for future per-realm art (CONVENTIONS.md) — do not rename it. connect_min_region_cells governs the connectivity repair, which runs BEFORE islands are minted and therefore never sees them.",
+				"_comment": "V2-COMBAT-003 terrain commit 3: island_count_min/max and island_size_min/max REPLACE straggler_count_min/max. A straggler was one cell taken from the 8-direction neighbours of existing ground, so it always touched the board at a corner and could never be an island (measured: 838 of 865 cut-off regions touched the main ground at a corner, and 819 of 865 were a single cell). An island is a multi-cell blob with a guaranteed ring of void around it, so realms differentiate by island SIZE and not only by island COUNT. All eleven island_count_*/island_size_* values below are PROPOSED DEFAULTS awaiting Jeff's play tuning — see docs/v2-combat-003-handoff.md section 12.5 for the approved table. island_size_* is a REQUEST, not a promise: StageTerrain clamps it against board area (at most 1/16 of the board per island and 1/4 of the board for all islands together, floor 4 cells), so wisdom's 8..50 gives up to 9 cells per island on a 12x12 combat board and the full authored range on an explore map. An island below 4 cells is discarded rather than emitted. relief is RESERVED for future per-realm art (CONVENTIONS.md) — do not rename it. connect_min_region_cells governs the connectivity repair, which runs BEFORE islands are minted and therefore never sees them. V2-COMBAT-003 terrain commit 4 adds island_bridge_chance (PROPOSED DEFAULT on all eleven entries, the approved table in docs/v2-combat-003-handoff.md section 12.5): the probability that an island of 6 cells or more is bridged back to a neighbouring region, and the same probability again for each EXTRA side on an island of 20 cells or more (at most one bridge per side, each reaching a different region, which may be another island). An island of 5 cells or fewer is NEVER bridged and stays pure scenery. 0.0 means every island in that realm stays scenery. The default entry is not a virtue and carries 0.3, a middle value, awaiting the same play tuning. A bridged island joins the host region, so it becomes legitimate ground to spawn on and a legal objective site; an unbridged island still touches nothing at all.",
 				"default": {
 					"relief": "default_relief",
 					"plateau_count_min": 2, "plateau_count_max": 4,
@@ -3068,6 +3068,7 @@
 					"bridge_density": 0.2,
 					"island_count_min": 1, "island_count_max": 2,
 					"island_size_min": 4, "island_size_max": 8,
+					"island_bridge_chance": 0.3,
 					"connect_min_region_cells": 6
 				},
 				"by_virtue": {
@@ -3080,6 +3081,7 @@
 						"bridge_density": 0.0,
 						"island_count_min": 1, "island_count_max": 2,
 						"island_size_min": 4, "island_size_max": 8,
+						"island_bridge_chance": 0.3,
 						"connect_min_region_cells": 6
 					},
 					"wisdom": {
@@ -3091,6 +3093,7 @@
 						"bridge_density": 0.6,
 						"island_count_min": 4, "island_count_max": 6,
 						"island_size_min": 8, "island_size_max": 50,
+						"island_bridge_chance": 0.6,
 						"connect_min_region_cells": 6
 					},
 					"leadership": {
@@ -3102,6 +3105,7 @@
 						"bridge_density": 0.3,
 						"island_count_min": 2, "island_count_max": 3,
 						"island_size_min": 5, "island_size_max": 12,
+						"island_bridge_chance": 0.7,
 						"connect_min_region_cells": 6
 					},
 					"acceptance": {
@@ -3113,6 +3117,7 @@
 						"bridge_density": 0.1,
 						"island_count_min": 0, "island_count_max": 1,
 						"island_size_min": 4, "island_size_max": 6,
+						"island_bridge_chance": 0.0,
 						"connect_min_region_cells": 6
 					},
 					"humility": {
@@ -3124,6 +3129,7 @@
 						"bridge_density": 0.2,
 						"island_count_min": 5, "island_count_max": 7,
 						"island_size_min": 4, "island_size_max": 20,
+						"island_bridge_chance": 0.4,
 						"connect_min_region_cells": 6
 					},
 					"forgiveness": {
@@ -3135,6 +3141,7 @@
 						"bridge_density": 0.2,
 						"island_count_min": 1, "island_count_max": 2,
 						"island_size_min": 12, "island_size_max": 30,
+						"island_bridge_chance": 0.8,
 						"connect_min_region_cells": 6
 					},
 					"truth": {
@@ -3146,6 +3153,7 @@
 						"bridge_density": 0.0,
 						"island_count_min": 0, "island_count_max": 1,
 						"island_size_min": 6, "island_size_max": 12,
+						"island_bridge_chance": 0.2,
 						"connect_min_region_cells": 6
 					},
 					"generosity": {
@@ -3157,6 +3165,7 @@
 						"bridge_density": 0.5,
 						"island_count_min": 2, "island_count_max": 3,
 						"island_size_min": 4, "island_size_max": 10,
+						"island_bridge_chance": 0.6,
 						"connect_min_region_cells": 6
 					},
 					"compassion": {
@@ -3168,6 +3177,7 @@
 						"bridge_density": 0.4,
 						"island_count_min": 2, "island_count_max": 3,
 						"island_size_min": 6, "island_size_max": 16,
+						"island_bridge_chance": 0.5,
 						"connect_min_region_cells": 6
 					},
 					"empathy": {
@@ -3179,6 +3189,7 @@
 						"bridge_density": 0.7,
 						"island_count_min": 3, "island_count_max": 4,
 						"island_size_min": 5, "island_size_max": 14,
+						"island_bridge_chance": 0.5,
 						"connect_min_region_cells": 6
 					}
 				}

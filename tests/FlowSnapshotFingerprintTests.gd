@@ -290,7 +290,25 @@ static func test_sanctum_fingerprint() -> Dictionary:
 # terrain included. RealmGenerator._place_situations now refuses a cell off the host region
 # (decision 22), so a situation that used to be dropped on unreachable ground is placed on
 # reachable ground instead. No RNG path was added, removed or reordered to do it.
-const STAGE_EXPLORE_FINGERPRINT_HASH := "57f820b8a0e1592fcf5bfa42c74af35ea65d688d759e33258847dda08bea6837"
+# RE-RECORDED, V2-COMBAT-003 terrain commit 4 (bridges + the erosion leftover fix).
+# Attributed by capturing this exact payload on BOTH trees -- this branch and 95895a0 --
+# and diffing them field by field. The payload differs in exactly three places, and every
+# one follows from a single cause:
+#   1. data.terrain.plateaus[0].cells 101 -> 102 and plateaus[1].cells 108 -> 109.
+#      THE CAUSE. Plateau erosion no longer leaves a cell attached to the plateau at a
+#      corner only; such a cell is absorbed instead. Each plateau therefore gains one cell.
+#   2. data.terrain.islands[0] and islands[1] move (11,3)->(40,12) and (0,19)->(16,30).
+#      Downstream of 1: islands are minted onto the ground that the plateaus left free, so
+#      changed plateaus place the islands elsewhere. Their SIZES are unchanged (4 cells).
+#   3. data.situations 1 entry -> 0 entries. Also downstream of 1, and it is a FOG effect,
+#      not a placement failure: StageExploreSnapshotBuilder.gd:84 emits an entry only for a
+#      situation with revealed=true ("Undiscovered situations: no entry emitted -- true fog
+#      of war"). The changed geometry moves the party opening reveal, so the one situation
+#      that happened to start revealed no longer does. The situation is still on the map.
+#      The previous commit moved this same field 0 -> 1 for the mirror-image reason.
+# data.terrain.bridges is BYTE-IDENTICAL: no island on this particular board drew a bridge,
+# so island bridging contributes nothing to this hash. Nothing else in the payload moved.
+const STAGE_EXPLORE_FINGERPRINT_HASH := "8214628aa3aec9c6ab5057fa314668581b8789a83fad99ce760c2e612eaaf091"
 
 static func test_stage_explore_fingerprint() -> Dictionary:
 	var env := _setup_stage_explore_env("fp_stage_explore")

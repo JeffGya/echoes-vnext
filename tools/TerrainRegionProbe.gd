@@ -286,6 +286,22 @@ static func _measure(regime: String, regime_tag: String, virtues: Array, by_virt
 	var isl_max: Dictionary = {}
 	var isl_sum: Dictionary = {}
 	var touch_violations: Array = []
+	# ── V2-COMBAT-003 terrain commit 4 accumulators ──────────────────────────
+	# 1. THE EROSION LEFTOVERS. Every NON-HOST region that touches a foreign walkable cell
+	#    at a side or a corner, attributed to the terrain list its cells came from. Before
+	#    commit 4 this is dominated by single cells left hanging off a plateau corner by
+	#    erosion (measured: 426 across 1,600 boards, island=0 plateau=426 bridge=0). It
+	#    MUST be zero afterwards, for islands and plateaus alike.
+	var region_touch_count: int = 0
+	var region_touch_by_source: Dictionary = {}
+	var region_touch_by_size: Dictionary = {}
+	var region_touch_examples: Array = []
+	# 2. BRIDGED vs UNBRIDGED islands, against the configured per-realm chance.
+	var isl_eligible: Dictionary = {}   # virtue -> islands of >= 6 cells
+	var isl_bridged: Dictionary = {}    # virtue -> islands carrying >= 1 island bridge
+	var isl_big: Dictionary = {}        # virtue -> islands of >= 20 cells
+	var isl_big_bridges: Dictionary = {}  # virtue -> bridge-count histogram for those
+	var isl_bridge_rects: int = 0
 	var repair_violations: Array = []
 	var entry_off_host: int = 0
 	var entry_examples: Array = []
@@ -341,6 +357,10 @@ static func _measure(regime: String, regime_tag: String, virtues: Array, by_virt
 		isl_max[virtue] = 0
 		isl_sum[virtue] = 0
 		built_sites[virtue] = 0
+		isl_eligible[virtue] = 0
+		isl_bridged[virtue] = 0
+		isl_big[virtue] = 0
+		isl_big_bridges[virtue] = {}
 
 		for i in range(BOARDS_PER_VIRTUE):
 			var realm_seed: int = 1000000 + i * 7919
@@ -353,16 +373,51 @@ static func _measure(regime: String, regime_tag: String, virtues: Array, by_virt
 			var walkable: Dictionary = StageTerrain.walkable_set(terrain)
 			boards += 1
 
+			# ---- V2-COMBAT-003 terrain commit 4: island-bridge bookkeeping ----
+			# An island bridge rect carries island_bridge=true, island_index (the island it
+			# leaves) and target_island (the island it reaches, or -1 for the mainland).
+			# Those two indices are the ONLY foreign ground an island is allowed to touch.
+			var isl_bridge_allow: Dictionary = {}   # island index -> cell set it may touch
+			var isl_bridge_n: Dictionary = {}       # island index -> bridges leaving it
+			for b_v4 in (terrain.get("bridges", []) as Array):
+				var b4: Dictionary = b_v4 if b_v4 is Dictionary else {}
+				if not bool(b4.get("island_bridge", false)):
+					continue
+				isl_bridge_rects += 1
+				var src4: int = int(b4.get("island_index", -1))
+				var tgt4: int = int(b4.get("target_island", -1))
+				isl_bridge_n[src4] = int(isl_bridge_n.get(src4, 0)) + 1
+				for dc4 in range(int(b4.get("w", 1))):
+					for dr4 in range(int(b4.get("h", 1))):
+						var bk4: String = "%d,%d" % [int(b4.get("col", 0)) + dc4, int(b4.get("row", 0)) + dr4]
+						for who in [src4, tgt4]:
+							if who < 0:
+								continue
+							if not isl_bridge_allow.has(who):
+								isl_bridge_allow[who] = {}
+							(isl_bridge_allow[who] as Dictionary)[bk4] = true
+
 			# ---- V2-COMBAT-003 terrain commit 3 measurements ----
 			var islands_v: Variant = terrain.get("islands", [])
 			var islands: Array = islands_v if islands_v is Array else []
-			for isl_v in islands:
+			for isl_i in range(islands.size()):
+				var isl_v: Variant = islands[isl_i]
 				var isl: Dictionary = isl_v if isl_v is Dictionary else {}
 				var own: Dictionary = {}
 				for pr_v in (isl.get("cells", []) as Array):
 					var pr: Array = pr_v
 					own["%d,%d" % [int(pr[0]), int(pr[1])]] = true
 				var sz2: int = own.size()
+				var allow2: Dictionary = isl_bridge_allow.get(isl_i, {})
+				var nbridge2: int = int(isl_bridge_n.get(isl_i, 0))
+				if sz2 >= 6:
+					isl_eligible[virtue] = int(isl_eligible[virtue]) + 1
+					if nbridge2 > 0:
+						isl_bridged[virtue] = int(isl_bridged[virtue]) + 1
+				if sz2 >= 20:
+					isl_big[virtue] = int(isl_big[virtue]) + 1
+					var bh2: Dictionary = isl_big_bridges[virtue]
+					bh2[nbridge2] = int(bh2.get(nbridge2, 0)) + 1
 				isl_total[virtue] = int(isl_total[virtue]) + 1
 				isl_sum[virtue] = int(isl_sum[virtue]) + sz2
 				isl_min[virtue] = mini(int(isl_min[virtue]), sz2)
@@ -370,7 +425,10 @@ static func _measure(regime: String, regime_tag: String, virtues: Array, by_virt
 				var lbl: String = _size_bucket(sz2)
 				(isl_hist[virtue] as Dictionary)[lbl] = int((isl_hist[virtue] as Dictionary).get(lbl, 0)) + 1
 				# THE MOAT. Every 8-direction neighbour of every island cell must be either
-				# this island's own cell or void. One hit here is the whole finding.
+				# this island's own cell, void, or — after terrain commit 4 — a cell of an
+				# island bridge that leaves THIS island or lands on it. One hit here is the
+				# whole finding: an UNBRIDGED island has an empty allow set, so this is also
+				# the "an unbridged island still touches nothing" acceptance test.
 				for own_k in own.keys():
 					var op := (own_k as String).split(",")
 					var oc: int = int(op[0])
@@ -382,16 +440,29 @@ static func _measure(regime: String, regime_tag: String, virtues: Array, by_virt
 							var nk2: String = "%d,%d" % [oc + dc2, orow + dr2]
 							if own.has(nk2):
 								continue
+							if allow2.has(nk2):
+								continue
 							if walkable.has(nk2):
 								touch_violations.append(
-									"    TOUCH %s #%d bounds=%dx%d island cell %s touches foreign walkable %s"
-									% [virtue, i, int(bounds.get("w", 0)), int(bounds.get("h", 0)), own_k, nk2])
+									"    TOUCH %s #%d bounds=%dx%d island %d (%d cells, %d bridges) cell %s touches foreign walkable %s"
+									% [virtue, i, int(bounds.get("w", 0)), int(bounds.get("h", 0)),
+										isl_i, sz2, nbridge2, own_k, nk2])
 
 			# Commit 2's guarantee, measured on the geometry the repair actually governs:
 			# plateaus plus bridges. Islands are minted after the repair by design.
+			# V2-COMBAT-003 terrain commit 4: an ISLAND BRIDGE also belongs to the island
+			# system, so it is stripped alongside the islands. Left in, an island-to-island
+			# bridge would read as a cut-off bridge region and fail commit 2's guarantee for
+			# a reason that has nothing to do with the connectivity repair.
 			var stripped: Dictionary = terrain.duplicate(true)
 			stripped["islands"] = []
 			stripped["stragglers"] = []
+			var kept_bridges: Array = []
+			for kb_v in (stripped.get("bridges", []) as Array):
+				var kb: Dictionary = kb_v if kb_v is Dictionary else {}
+				if not bool(kb.get("island_bridge", false)):
+					kept_bridges.append(kb)
+			stripped["bridges"] = kept_bridges
 			var pb_walkable: Dictionary = StageTerrain.walkable_set(stripped)
 			var pb_regions: Array = _regions_shared_side(pb_walkable)
 			var pb_host: int = _host_index(pb_regions)
@@ -412,6 +483,50 @@ static func _measure(regime: String, regime_tag: String, virtues: Array, by_virt
 			var ss: Array = _regions_shared_side(walkable)
 			region_total += ss.size()
 			var ss_host: int = _host_index(ss)
+
+			# ── V2-COMBAT-003 terrain commit 4 — THE EROSION LEFTOVERS ───────────
+			# Decision 15: a corner touch is the ambiguous case and must go. Measured at
+			# REGION level, not island level, so it catches the cells erosion leaves hanging
+			# off a plateau corner as well as any island that lost its moat. Every non-host
+			# region must touch NOTHING: no foreign walkable cell in any of the 8 directions.
+			var src_map: Dictionary = _source_map(terrain)
+			for rti in range(ss.size()):
+				if rti == ss_host:
+					continue
+				var rcells: Array = ss[rti]
+				var rset: Dictionary = {}
+				for rk in rcells:
+					rset[rk] = true
+				var touched: String = ""
+				for rk2 in rcells:
+					var rp := (rk2 as String).split(",")
+					var rc: int = int(rp[0])
+					var rr: int = int(rp[1])
+					for dcx in range(-1, 2):
+						for drx in range(-1, 2):
+							if dcx == 0 and drx == 0:
+								continue
+							var nkx: String = "%d,%d" % [rc + dcx, rr + drx]
+							if rset.has(nkx):
+								continue
+							if walkable.has(nkx):
+								touched = rk2
+								break
+						if touched != "":
+							break
+					if touched != "":
+						break
+				if touched == "":
+					continue
+				region_touch_count += 1
+				var src: String = str(src_map.get(touched, "unknown"))
+				region_touch_by_source[src] = int(region_touch_by_source.get(src, 0)) + 1
+				var szk: int = rcells.size()
+				region_touch_by_size[szk] = int(region_touch_by_size.get(szk, 0)) + 1
+				if region_touch_examples.size() < 12:
+					region_touch_examples.append(
+						"    LEFTOVER %s #%d bounds=%dx%d region of %d cells (source=%s) touches at %s"
+						% [virtue, i, int(bounds.get("w", 0)), int(bounds.get("h", 0)), szk, src, touched])
 			if ss_host >= 0 and not (ss[ss_host] as Array).has(entry_key):
 				entry_off_host += 1
 				if entry_examples.size() < 6:
@@ -584,9 +699,66 @@ static func _measure(regime: String, regime_tag: String, virtues: Array, by_virt
 	_say("%-14s | %7d | %5s | %5s | %6s | %s" % ["TOTAL", grand, "", "", "", " ".join(PackedStringArray(gparts))])
 	_say("  (an island below 4 cells is impossible by construction — the generator discards it)")
 
+	# ── V2-COMBAT-003 terrain commit 4 ───────────────────────────────────────
+	_say("")
+	_say("EROSION LEFTOVERS (decision 15) — NON-HOST regions touching a foreign walkable")
+	_say("cell at a side OR a corner: %d" % region_touch_count)
+	_say("  MUST BE ZERO. Before commit 4 these are single cells left hanging off a plateau")
+	_say("  corner by erosion; the connectivity repair ignores them because it only acts on")
+	_say("  regions of %d cells or more." % REPORT_MIN_REGION)
+	var rt_srcs: Array = region_touch_by_source.keys()
+	rt_srcs.sort()
+	var rt_src_parts: Array = []
+	for s4 in rt_srcs:
+		rt_src_parts.append("%s=%d" % [str(s4), int(region_touch_by_source[s4])])
+	_say("  by source : %s" % (" ".join(PackedStringArray(rt_src_parts)) if not rt_src_parts.is_empty() else "(none)"))
+	var rt_sizes: Array = region_touch_by_size.keys()
+	rt_sizes.sort()
+	var rt_size_parts: Array = []
+	for z4 in rt_sizes:
+		rt_size_parts.append("%dcell=%d" % [int(z4), int(region_touch_by_size[z4])])
+	_say("  by size   : %s" % (" ".join(PackedStringArray(rt_size_parts)) if not rt_size_parts.is_empty() else "(none)"))
+	for rte in region_touch_examples:
+		_say(str(rte))
+
+	_say("")
+	_say("ISLAND BRIDGING (decisions 17-19) — islands of >= 6 cells, against the configured")
+	_say("island_bridge_chance. Total island-bridge rects emitted: %d" % isl_bridge_rects)
+	_say("%-14s | %8s | %7s | %9s | %6s | %s" % [
+		"virtue", "eligible", "bridged", "unbridged", "rate", "configured"])
+	_say("---------------+----------+---------+-----------+--------+-----------")
+	for v4_v in virtues:
+		var v4: String = str(v4_v)
+		var elig: int = int(isl_eligible.get(v4, 0))
+		var brd: int = int(isl_bridged.get(v4, 0))
+		var cfg_sig_v: Variant = by_virtue.get(v4, {})
+		var cfg_sig: Dictionary = cfg_sig_v if cfg_sig_v is Dictionary else {}
+		_say("%-14s | %8d | %7d | %9d | %6.3f | %10.2f" % [
+			v4, elig, brd, elig - brd,
+			0.0 if elig == 0 else float(brd) / float(elig),
+			float(cfg_sig.get("island_bridge_chance", 0.0))])
+	_say("  An island of 5 cells or fewer is NEVER bridged — it stays scenery.")
+	_say("  A bridge that fails to route (no legal landing on any side) leaves the island")
+	_say("  unbridged, so the measured rate is at most the configured chance, never above.")
+
+	_say("")
+	_say("EXTRA BRIDGES (decision 18) — islands of >= 20 cells, bridges leaving the island:")
+	_say("%-14s | %6s | %s" % ["virtue", "big", "bridge-count histogram (0/1/2/3/4)"])
+	_say("---------------+--------+-----------------------------------")
+	for v5_v in virtues:
+		var v5: String = str(v5_v)
+		var bh5: Dictionary = isl_big_bridges.get(v5, {})
+		var parts5: Array = []
+		for n5 in range(5):
+			parts5.append("%d:%d" % [n5, int(bh5.get(n5, 0))])
+		_say("%-14s | %6d | %s" % [v5, int(isl_big.get(v5, 0)), " ".join(PackedStringArray(parts5))])
+	_say("  An island below 20 cells gets AT MOST ONE bridge, by construction.")
+
 	_say("")
 	_say("MOAT — island cells touching ANY foreign walkable cell at a side OR a corner: %d" % touch_violations.size())
-	_say("  MUST BE ZERO. A corner touch is the ambiguity terrain commit 3 removes.")
+	_say("  MUST BE ZERO. A corner touch is the ambiguity terrain commit 3 removes. After")
+	_say("  commit 4 an island MAY touch a cell of an island bridge that leaves it or lands")
+	_say("  on it, and nothing else — an UNBRIDGED island still touches nothing at all.")
 	for tv in touch_violations.slice(0, 20):
 		_say(str(tv))
 
@@ -718,6 +890,31 @@ static func _probe_actor(id: String) -> Dictionary:
 	a["traits"] = { "courage": 40, "faith": 30, "wisdom": 30 }
 	a["vector_scores"] = { "vanguard": 50, "protector": 20, "seeker": 20, "pillar": 10 }
 	return a
+
+
+## V2-COMBAT-003 terrain commit 4 — which terrain list a walkable cell came from.
+## Written islands first, then bridges, then plateaus, so a cell claimed by two lists is
+## attributed to the EARLIEST generation pass that owns it. That is what makes the erosion
+## leftovers read as "plateau" rather than as whatever later pass happened to overlap them.
+static func _source_map(terrain: Dictionary) -> Dictionary:
+	var out: Dictionary = {}
+	for isl_v in (terrain.get("islands", []) as Array):
+		var isl: Dictionary = isl_v if isl_v is Dictionary else {}
+		for pr_v in (isl.get("cells", []) as Array):
+			var pr: Array = pr_v
+			out["%d,%d" % [int(pr[0]), int(pr[1])]] = "island"
+	for b_v in (terrain.get("bridges", []) as Array):
+		var b: Dictionary = b_v if b_v is Dictionary else {}
+		var tag: String = "islandbridge" if bool(b.get("island_bridge", false)) else "bridge"
+		for dc in range(int(b.get("w", 1))):
+			for dr in range(int(b.get("h", 1))):
+				out["%d,%d" % [int(b.get("col", 0)) + dc, int(b.get("row", 0)) + dr]] = tag
+	for p_v in (terrain.get("plateaus", []) as Array):
+		var p: Dictionary = p_v if p_v is Dictionary else {}
+		for pr2_v in (p.get("cells", []) as Array):
+			var pr2: Array = pr2_v
+			out["%d,%d" % [int(pr2[0]), int(pr2[1])]] = "plateau"
+	return out
 
 
 const _BUCKETS: Array = ["1", "2-3", "4-5", "6-10", "11-25", "26-50", "51+"]

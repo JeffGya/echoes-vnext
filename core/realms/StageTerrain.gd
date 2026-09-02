@@ -37,6 +37,15 @@ extends RefCounted
 #                      "cells": [ [col, row], ... ] }, ... ]
 #   }
 #
+#   V2-COMBAT-003 terrain commit 4 adds THREE OPTIONAL KEYS to a "bridges" entry, present
+#   only on an island bridge and absent on every connectivity/density bridge:
+#     "island_bridge": true, "island_index": int, "target_island": int (-1 = the mainland)
+#   Nothing in the walkable path reads them — an island bridge is an ordinary bridge rect
+#   for `walkable_set` and `bridge_cell_set`. They exist so a test or a probe can strip the
+#   whole island system (islands PLUS the bridges that serve them) in one filter, and so the
+#   moat measurement can tell the ground an island is ALLOWED to touch from the ground it is
+#   not. A test that asserts terrain commit 2's guarantee against `bridges` must drop them.
+#
 #   "cells" is an Array of [col, row] int pairs representing the IRREGULAR BLOB
 #   occupying the plateau's bounding box (col,row,w,h).  Old saved terrain entries
 #   without a "cells" key are handled by walkable_set falling back to bounding-rect
@@ -67,6 +76,10 @@ extends RefCounted
 #     "island_count_max":     int,      # V2-COMBAT-003 commit 3 (was straggler_count_max)
 #     "island_size_min":      int,      # >= 4; clamped down to fit the board — see below
 #     "island_size_max":      int,      # >= island_size_min; clamped down to fit the board
+#     "island_bridge_chance": float,    # 0.0-1.0; V2-COMBAT-003 commit 4. Probability that
+#                                       # an island of >= 6 cells is bridged, and the same
+#                                       # probability again for each EXTRA side on an island
+#                                       # of >= 20 cells. 0.0 = every island stays scenery.
 #     "connect_min_region_cells": int,  # >= 2; default 6 (V2-COMBAT-003 terrain commit 2)
 #   }
 #
@@ -116,9 +129,12 @@ extends RefCounted
 #   Filling concavities before extending a limb is what keeps an island a blob rather than
 #   a one-cell-wide worm.
 #
-#   NOT HERE: bridging an island back to the board is terrain commit 4. Nothing in this
-#   pass connects an island to anything, and nothing may spawn on one (GridService places
-#   every actor inside the host region — commit 1438789).
+#   BRIDGING (V2-COMBAT-003 terrain commit 4) runs AFTER this pass, in `_bridge_islands`.
+#   It gives some islands a way in, on the per-realm `island_bridge_chance`, and a bridged
+#   island joins the host region — so it becomes legitimate ground to spawn on and a legal
+#   place for an objective. Property 1 above is NOT weakened for anything that stays
+#   scenery: an unbridged island still touches nothing at all. Read the ISLAND BRIDGES
+#   block above `_bridge_islands` for how that survives the ordering.
 #
 # RNG PATHS — all APPEND-ONLY (never reorder existing RealmGenerator paths):
 #   The prefix below is "stage.{i}.explore.terrain" when rng_namespace=="".
@@ -141,6 +157,13 @@ extends RefCounted
 #                                        (RENAMED from "{prefix}.straggler.{k}"; an island
 #                                        makes MORE than one draw, a straggler made exactly
 #                                        one. Board geometry moved once, on purpose.)
+#   "{prefix}.island.{k}.bridge"       — island k's BRIDGING decisions (V2-COMBAT-003
+#                                        commit 4, APPEND-ONLY and its own stream, separate
+#                                        from "{prefix}.island.{k}" so a bridge draw can
+#                                        never shift the island's shape): the bridge roll,
+#                                        the pick among the enumerated legal departures,
+#                                        then one roll plus one pick for each extra side.
+#                                        An island below 6 cells makes no draw here at all.
 #
 # IRREGULARIZATION METHOD — seeded border erosion:
 #   After placing each plateau's bounding box, we generate an irregular blob via one
@@ -173,6 +196,7 @@ const _FALLBACK_SIGNATURE: Dictionary = {
 	"island_count_max":     2,
 	"island_size_min":      4,
 	"island_size_max":      8,
+	"island_bridge_chance": 0.0,
 	"connect_min_region_cells": 6,
 }
 
@@ -197,6 +221,21 @@ const _ISLAND_MAX_AREA_DIVISOR: int = 16
 # (floor _ISLAND_MIN_CELLS). Stops a high island_count from eating a small board even when
 # each individual island is legal.
 const _ISLAND_TOTAL_AREA_DIVISOR: int = 4
+
+# V2-COMBAT-003 terrain commit 4 — island bridging (handoff decisions 16-19).
+# An island of fewer than this many cells is NEVER bridged; it stays pure scenery. 6 is the
+# same threshold `connect_min_region_cells` uses and comes from the same measured bimodal
+# distribution (handoff section 12.1).
+const _ISLAND_BRIDGE_MIN_CELLS: int = 6
+# An island of at least this many cells may take EXTRA bridges — at most one per side, each
+# reaching a different neighbouring region. Below it an island takes at most one bridge.
+const _ISLAND_EXTRA_BRIDGE_MIN_CELLS: int = 20
+# The shortest island bridge that may be emitted, in cells along the span. A one-cell span
+# would produce a 1 x bridge_width rect, whose min(w,h) is 1, and `terrain/bridge_width_min2`
+# asserts every bridge rect is at least two cells in BOTH dimensions. An island whose nearest
+# ground on a given ray is a single void cell away simply gets no bridge on that ray; it can
+# still bridge from another row, column or side.
+const _ISLAND_BRIDGE_MIN_SPAN: int = 2
 
 # Margin (cells) kept between any plateau edge and the map border.
 const _BORDER_MARGIN: int = 1
@@ -567,6 +606,15 @@ static func generate(
 		})
 		island_cells_used += blob.size()
 
+	# ---- Island bridges (V2-COMBAT-003 terrain commit 4, decisions 16-19) ----
+	# Runs LAST, after every island exists, so the moat of an island that stays scenery is
+	# judged against the finished island set rather than against a partial one.
+	var island_bridge_chance: float = clampf(float(sig.get("island_bridge_chance", 0.0)), 0.0, 1.0)
+	if not islands.is_empty():
+		_bridge_islands(
+			realm_seed, prefix, islands, walkable_cells, bridges,
+			island_bridge_chance, bridge_width, w, h)
+
 	var out: Dictionary = {
 		"bounds":    { "w": w, "h": h },
 		"plateaus":  plateaus,
@@ -672,6 +720,38 @@ static func walkable_set(terrain: Dictionary) -> Dictionary:
 				if pair.size() >= 2:
 					cells["%d,%d" % [int(pair[0]), int(pair[1])]] = true
 
+	return cells
+
+
+## V2-COMBAT-003 terrain commit 4 (decision 16) — WHICH WALKABLE CELLS ARE BRIDGE CELLS.
+##
+## Returns a Dictionary used as a set, key = "%d,%d" % [col,row], covering every cell of
+## every rect in terrain["bridges"] — connectivity bridges, the density-driven extra
+## bridges, and the island bridges alike. It is always a SUBSET of walkable_set(terrain).
+##
+## This surfaces a distinction that already existed in the data and was lost only at render
+## time: the terrain dict has always kept `plateaus`, `bridges` and `islands` as separate
+## lists, `walkable_set` flattens all three, and both boards then painted every walkable
+## cell with one tile. A bridge is its own tile; the renderers ask this function which cells
+## those are. It invents no new terrain concept and adds no field to the output shape.
+##
+## Returns {} for empty/absent terrain — the legacy all-walkable sentinel has no bridges,
+## and a caller that paints a full rectangle must paint it as ordinary ground.
+static func bridge_cell_set(terrain: Dictionary) -> Dictionary:
+	var cells: Dictionary = {}
+	if terrain.is_empty():
+		return cells
+	var bridges_v: Variant = terrain.get("bridges", [])
+	var bridges: Array = bridges_v if bridges_v is Array else []
+	for b_v in bridges:
+		var b: Dictionary = b_v if b_v is Dictionary else {}
+		var bc: int = int(b.get("col", 0))
+		var br: int = int(b.get("row", 0))
+		var bw: int = int(b.get("w", 1))
+		var bh: int = int(b.get("h", 1))
+		for dc in range(bw):
+			for dr in range(bh):
+				cells["%d,%d" % [bc + dc, br + dr]] = true
 	return cells
 
 
@@ -1427,9 +1507,20 @@ static func _erode_plateau_blob(col: int, row: int, pw: int, ph: int, shape_rng:
 		# Would removing this cell violate min-fill?
 		if cell_set.size() - 1 < min_cells:
 			continue
-		# Check 8-connectivity of candidate set (set minus this cell).
+		# Check SHARED-SIDE connectivity of the candidate set (set minus this cell).
+		# V2-COMBAT-003 terrain commit 4 — THE EROSION LEFTOVERS. This test used to be
+		# 8-connectivity, which accepts a cell joined to the rest of the blob by a single
+		# DIAGONAL. Such a cell is its own region under the shared-side rule the repair and
+		# GridService use, of size 1, so the repair leaves it alone (it only acts on regions
+		# of connect_min_region_cells or more) and it ends up as ground touching a plateau at
+		# a corner only — the ambiguous case handoff decision 15 removes. Measured before
+		# this change: 426 such cells across 1,600 boards, every one attributed to a plateau.
+		# Testing shared-side connectivity keeps the invariant at EVERY erosion step (the
+		# starting bounding rect is shared-side connected), so the finished blob is exactly
+		# one shared-side region and can no longer shed a corner-hung cell. The cell is
+		# absorbed rather than removed: the erosion that would have orphaned it is refused.
 		cell_set.erase(bk)
-		if not _is_8_connected(cell_set):
+		if not _is_side_connected(cell_set):
 			# Restore — would disconnect.
 			cell_set[bk] = true
 
@@ -1464,9 +1555,15 @@ static func _compute_border_cells(cell_set: Dictionary, _col: int, _row: int, _p
 	return result
 
 
-## Check whether a cell-key Dictionary forms a single 8-connected component.
+## Check whether a cell-key Dictionary forms a single SHARED-SIDE component: two cells are
+## joined only when they share a full side, never at a corner.
 ## Returns true if empty (trivially connected) or fully connected.
-static func _is_8_connected(cell_set: Dictionary) -> bool:
+##
+## V2-COMBAT-003 terrain commit 4 replaced the 8-direction deltas here with the four side
+## deltas. It is the SAME rule `_flood_fill_components` uses for regions, deliberately: a
+## plateau blob that is one region under the repair's rule cannot leave behind a cell the
+## repair will not see. See the call site in `_erode_plateau_blob` for the measurement.
+static func _is_side_connected(cell_set: Dictionary) -> bool:
 	if cell_set.is_empty():
 		return true
 	var visited: Dictionary = {}
@@ -1475,9 +1572,9 @@ static func _is_8_connected(cell_set: Dictionary) -> bool:
 	visited[start_key] = true
 	var head: int = 0
 	var deltas: Array = [
-		[-1, -1], [-1, 0], [-1, 1],
-		[ 0, -1],          [ 0, 1],
-		[ 1, -1], [ 1, 0], [ 1, 1],
+		          [ 0, -1],
+		[-1, 0],           [ 1, 0],
+		          [ 0,  1],
 	]
 	while head < queue.size():
 		var cur: String = queue[head]
@@ -1603,3 +1700,362 @@ static func _contacts_8(key: String, blob: Dictionary) -> int:
 				n += 1
 	return n
 
+
+
+# ---------------------------------------------------------------------------
+# ISLAND BRIDGES — V2-COMBAT-003 terrain commit 4
+# ---------------------------------------------------------------------------
+#
+# WHAT THIS PASS DOES, AND WHAT IT MAY NOT BREAK.
+#
+# Terrain commit 3 made every island unreachable by design: a guaranteed ring of void on
+# all eight sides, and nothing may spawn on one. This pass gives SOME of them a way in.
+#
+#   Decision 17 — an island of `_ISLAND_BRIDGE_MIN_CELLS` (6) cells or more may be bridged,
+#                 on the per-realm `island_bridge_chance`. An island of 5 or fewer is NEVER
+#                 bridged; it stays scenery.
+#   Decision 18 — an island of `_ISLAND_EXTRA_BRIDGE_MIN_CELLS` (20) or more may take extra
+#                 bridges, AT MOST ONE PER SIDE, each reaching a DIFFERENT neighbouring
+#                 region, which may be another island. Below 20, at most one bridge.
+#   Decision 19 — a bridge lands ANYWHERE along an edge, never fixed at the midpoint. Every
+#                 legal departure position on every legal side is enumerated first and ONE
+#                 draw picks among them, so two islands of the same size and shape produce
+#                 different pictures.
+#   Decision 16 — a bridge is its own tile. Island bridges are appended to terrain["bridges"]
+#                 (the list that already exists) carrying `island_bridge: true`,
+#                 `island_index` and `target_island`, so `bridge_cell_set` paints them and a
+#                 test can strip the whole island system in one filter.
+#
+# THE GUARANTEE THAT SURVIVES, AND HOW.
+#
+#   An UNBRIDGED island still touches nothing. This is not checked afterwards, it is
+#   impossible by construction: a candidate bridge cell is rejected when ANY cell of its own
+#   3x3 neighbourhood belongs to an island other than the source island and the target
+#   island. So no bridge cell is ever adjacent — side or corner — to a third island, whatever
+#   that island's own bridging outcome turns out to be. Ordering therefore cannot leak: a
+#   later island's bridge cannot spoil an earlier island's moat, and an island whose own
+#   bridge fails to route is not left touching a bridge laid earlier.
+#
+#   The connectivity repair is untouched. It ran long before this pass, and this pass adds
+#   ground only. Because every island bridge joins its island to an EXISTING region, the
+#   number of regions strictly falls; nothing is ever cut off.
+#
+#   Objective clearance and host-region spawning are unaffected in kind: a bridged island
+#   becomes part of the host region, which is more ground to spawn on and a legitimate place
+#   for an objective. Both rules are evaluated downstream on the finished walkable set.
+#
+# DETERMINISM. Every island derives ITS OWN stream, `{prefix}.island.{k}.bridge`, separate
+# from the `{prefix}.island.{k}` stream that shaped it. One island's bridge draws can never
+# shift another island's shape or another island's bridge. Candidates are enumerated in a
+# fixed side order over sorted rows/columns, so Dictionary order never reaches the output.
+
+
+## Bridge one island at a time. Mutates `walkable_cells` and appends to `bridges`.
+## Islands are visited in index order; each one's decisions ride on its own RNG stream.
+static func _bridge_islands(
+	realm_seed: int,
+	prefix: String,
+	islands: Array,
+	walkable_cells: Dictionary,
+	bridges: Array,
+	chance: float,
+	bridge_width: int,
+	map_w: int,
+	map_h: int
+) -> void:
+	# island index -> its cell set, plus the reverse map used to name the target island.
+	var isl_cells: Array = []
+	var island_of: Dictionary = {}
+	for ik in range(islands.size()):
+		var isl: Dictionary = islands[ik] if islands[ik] is Dictionary else {}
+		var own_set: Dictionary = {}
+		for pr_v in (isl.get("cells", []) as Array):
+			var pr: Array = pr_v if pr_v is Array else []
+			if pr.size() < 2:
+				continue
+			var k: String = "%d,%d" % [int(pr[0]), int(pr[1])]
+			own_set[k] = true
+			island_of[k] = ik
+		isl_cells.append(own_set)
+
+	for ik2 in range(islands.size()):
+		var own: Dictionary = isl_cells[ik2]
+		if own.size() < _ISLAND_BRIDGE_MIN_CELLS:
+			continue
+		var b_rng := CampaignSeed.get_rng_from(realm_seed, prefix + ".island.%d.bridge" % ik2)
+		if float(b_rng.randi_range(0, 999)) / 1000.0 >= chance:
+			continue
+
+		var own_keys: Array = own.keys()
+		own_keys.sort_custom(Callable(StageTerrain, "_cell_key_less"))
+		var anchor_key: String = str(own_keys[0])
+
+		var used_sides: Dictionary = {}
+		var max_bridges: int = 1
+		if own.size() >= _ISLAND_EXTRA_BRIDGE_MIN_CELLS:
+			max_bridges = 4
+
+		for attempt in range(max_bridges):
+			if attempt > 0:
+				# Each ADDITIONAL side is offered at the same per-realm chance — "may get
+				# extra bridges", decision 18. A realm with a low chance gets a single
+				# crossing where a high-chance realm gets a hub.
+				if float(b_rng.randi_range(0, 999)) / 1000.0 >= chance:
+					break
+			# THE REGION MAP IS RECOMPUTED EACH ATTEMPT, and that is what makes "a
+			# DIFFERENT neighbouring region" (decision 18) exact rather than bookkept: the
+			# previous bridge merged its target into this island's own region, so a second
+			# bridge back to the same place now reads `target_region == own_region` and is
+			# rejected on the spot. No used-region list can drift out of date, because
+			# there is no used-region list.
+			var region_of: Dictionary = _region_index_map(walkable_cells)
+			var own_region: int = int(region_of.get(anchor_key, -1))
+			var cands: Array = _island_bridge_candidates(
+				ik2, own, island_of, walkable_cells, region_of, own_region,
+				used_sides, bridge_width, map_w, map_h)
+			if cands.is_empty():
+				break
+			var pick: Dictionary = cands[b_rng.randi_range(0, cands.size() - 1)]
+			var rect: Dictionary = {
+				"col": int(pick["col"]), "row": int(pick["row"]),
+				"w":   int(pick["w"]),   "h":   int(pick["h"]),
+				"island_bridge": true,
+				"island_index":  ik2,
+				"target_island": int(pick["target_island"]),
+			}
+			bridges.append(rect)
+			for ck in _cells_from_rect(rect):
+				walkable_cells[ck] = true
+			used_sides[str(pick["side"])] = true
+
+
+## Every legal island bridge this island could take right now, in a fixed order.
+##
+## A candidate is legal when ALL of these hold:
+##   * it leaves the island straight out of one side, from a cell on that side's outer edge
+##     in the chosen row (E/W) or column (N/S) — so the rect always shares a full side with
+##     the island;
+##   * the rect is entirely VOID: the span stops one cell short of the first walkable cell
+##     the ray meets, so a bridge never paints over existing ground;
+##   * the span is at least `_ISLAND_BRIDGE_MIN_SPAN` cells (see that constant);
+##   * every cell of the ray's landing band at the stop column/row belongs to ONE region —
+##     a bridge joins two regions, never three at once;
+##   * that region is not the island's own (which, since the map is recomputed each
+##     attempt, is also what makes each extra bridge reach a DIFFERENT region);
+##   * THE RING GUARD, which is TWO independent rules over the ring of cells surrounding the
+##     rect. Neither one implies the other, and both were needed — each was added only after
+##     a test on a named board proved the previous version wrong:
+##       (a) REGION — every walkable ring cell belongs to the island's own region or to the
+##           target region. Without it a bridge passes DIAGONALLY PAST a third region:
+##           measured on a humility 12x48 board, where an island-to-island bridge left a
+##           44-cell region corner-touching the mainland.
+##       (b) ISLAND IDENTITY — no walkable ring cell belongs to an island other than the
+##           source and the target. Rule (a) does NOT cover this, and an earlier version of
+##           this file claimed it did: once an island is bridged its cells ARE the target
+##           region, so rule (a) waves through a bridge laid straight against it. Measured
+##           on compassion seed 450461, 30x30 — island 0 was bridged into the host region
+##           and island 2's bridge {col 2, row 7, w 2, h 8} then destroyed its moat while
+##           looking legal. A bridged island is still an island reached by a bridge, not a
+##           lump fused onto the mainland (decision 15).
+##     Together they are what makes the moat survive ordering: no bridge can cost any other
+##     island its ring of void, whether that island is bridged, unbridged, or bridged later.
+static func _island_bridge_candidates(
+	ik: int,
+	own: Dictionary,
+	island_of: Dictionary,
+	walkable_cells: Dictionary,
+	region_of: Dictionary,
+	own_region: int,
+	used_sides: Dictionary,
+	bridge_width: int,
+	map_w: int,
+	map_h: int
+) -> Array:
+	var out: Array = []
+	# Rows and columns the island occupies, and its extreme cell on each of them.
+	var rows_seen: Dictionary = {}   # row -> [min_col, max_col]
+	var cols_seen: Dictionary = {}   # col -> [min_row, max_row]
+	for k_v in own.keys():
+		var parts := (k_v as String).split(",")
+		var c: int = int(parts[0])
+		var r: int = int(parts[1])
+		if rows_seen.has(r):
+			var rr: Array = rows_seen[r]
+			rr[0] = mini(int(rr[0]), c)
+			rr[1] = maxi(int(rr[1]), c)
+		else:
+			rows_seen[r] = [c, c]
+		if cols_seen.has(c):
+			var cc: Array = cols_seen[c]
+			cc[0] = mini(int(cc[0]), r)
+			cc[1] = maxi(int(cc[1]), r)
+		else:
+			cols_seen[c] = [r, r]
+
+	var sorted_rows: Array = rows_seen.keys()
+	sorted_rows.sort()
+	var sorted_cols: Array = cols_seen.keys()
+	sorted_cols.sort()
+
+	# Fixed side order: north, east, south, west.
+	for side in ["n", "e", "s", "w"]:
+		if used_sides.has(side):
+			continue
+		var horizontal: bool = (side == "e" or side == "w")
+		var lines: Array = sorted_rows if horizontal else sorted_cols
+		for line_v in lines:
+			var line: int = int(line_v)
+			var extremes: Array = (rows_seen[line] if horizontal else cols_seen[line]) as Array
+			var start: int
+			var step: int
+			match side:
+				"e":
+					start = int(extremes[1]); step = 1
+				"w":
+					start = int(extremes[0]); step = -1
+				"s":
+					start = int(extremes[1]); step = 1
+				_:  # "n"
+					start = int(extremes[0]); step = -1
+			var cand: Dictionary = _island_bridge_ray(
+				ik, line, start, step, horizontal, island_of, walkable_cells,
+				region_of, own_region, bridge_width, map_w, map_h)
+			if cand.is_empty():
+				continue
+			cand["side"] = side
+			out.append(cand)
+	return out
+
+
+## One ray, cast straight out of the island from (line, start) in direction `step`.
+## `horizontal` true means the ray travels along columns and the band spans rows.
+## Returns {} when the ray produces no legal bridge, else the rect plus its target.
+static func _island_bridge_ray(
+	ik: int,
+	line: int,
+	start: int,
+	step: int,
+	horizontal: bool,
+	island_of: Dictionary,
+	walkable_cells: Dictionary,
+	region_of: Dictionary,
+	own_region: int,
+	bridge_width: int,
+	map_w: int,
+	map_h: int
+) -> Dictionary:
+	# The landing band: `bridge_width` cells across, centred on the departure line and
+	# clamped into the board. The clamp can only pull the band toward `line`, never past
+	# it, so the band always CONTAINS `line` — which is what makes the rect share a side
+	# with the island and with the target.
+	var band_limit: int = map_h if horizontal else map_w
+	if band_limit < bridge_width:
+		return {}
+	var band_start: int = clampi(line - bridge_width / 2, 0, band_limit - bridge_width)
+	var travel_limit: int = map_w if horizontal else map_h
+
+	# March outward to the first walkable cell anywhere in the band.
+	var stop: int = -1
+	var pos: int = start + step
+	while pos >= 0 and pos < travel_limit:
+		var hit: bool = false
+		for b in range(bridge_width):
+			var bl: int = band_start + b
+			var key: String = ("%d,%d" % [pos, bl]) if horizontal else ("%d,%d" % [bl, pos])
+			if walkable_cells.has(key):
+				hit = true
+				break
+		if hit:
+			stop = pos
+			break
+		pos += step
+	if stop < 0:
+		# The ray leaves the board without meeting ground. No bridge to nowhere.
+		return {}
+
+	var span: int = absi(stop - start) - 1
+	if span < _ISLAND_BRIDGE_MIN_SPAN:
+		return {}
+	var span_start: int = mini(start + step, stop - step)
+
+	# One region only. Several walkable cells may sit in the band at the stop line; they
+	# must all belong to the same region, or this bridge would merge three regions at once.
+	var target_region: int = -2
+	var target_island: int = -1
+	var target_island_seen: bool = false
+	for b2 in range(bridge_width):
+		var bl2: int = band_start + b2
+		var key2: String = ("%d,%d" % [stop, bl2]) if horizontal else ("%d,%d" % [bl2, stop])
+		if not walkable_cells.has(key2):
+			continue
+		var reg: int = int(region_of.get(key2, -1))
+		if target_region == -2:
+			target_region = reg
+		elif target_region != reg:
+			return {}
+		var isl_here: int = int(island_of.get(key2, -1))
+		if not target_island_seen:
+			target_island = isl_here
+			target_island_seen = true
+		elif target_island != isl_here:
+			target_island = -1
+	if target_region == -2 or target_region < 0 or target_region == own_region:
+		return {}
+
+	var rect: Dictionary
+	if horizontal:
+		rect = { "col": span_start, "row": band_start, "w": span, "h": bridge_width }
+	else:
+		rect = { "col": band_start, "row": span_start, "w": bridge_width, "h": span }
+
+	# THE RING GUARD. Walk the ring of cells that surrounds the rect — the rect grown by one
+	# cell in every direction, minus the rect itself. Every WALKABLE cell there must belong
+	# to the island's own region or to the target region. Anything else means this bridge
+	# would run alongside a third region: at a shared side it would silently merge it, and
+	# at a corner it would leave two regions touching, which decision 15 forbids. The ring
+	# is O(perimeter) rather than the O(area x 9) neighbourhood scan it replaces.
+	var rx: int = int(rect["col"])
+	var ry: int = int(rect["row"])
+	var rw: int = int(rect["w"])
+	var rh: int = int(rect["h"])
+	for gx in range(rx - 1, rx + rw + 1):
+		for gy in range(ry - 1, ry + rh + 1):
+			if gx >= rx and gx < rx + rw and gy >= ry and gy < ry + rh:
+				continue
+			var nk: String = "%d,%d" % [gx, gy]
+			if not walkable_cells.has(nk):
+				continue
+			# (a) REGION. No third region may be touched — side or corner.
+			var reg2: int = int(region_of.get(nk, -1))
+			if reg2 != own_region and reg2 != target_region:
+				return {}
+			# (b) ISLAND IDENTITY. Rule (a) is NOT enough, and this is measured rather than
+			# argued: on compassion seed 450461, 30x30, island 0 (cols 0-2, rows 4-7) had
+			# already been bridged into the host region, so its cells WERE the target region
+			# — and island 2's bridge {col 2, row 7, w 2, h 8} was then laid straight against
+			# them, passing rule (a) while destroying island 0's moat.
+			#
+			# A bridged island is still an ISLAND reached by a bridge, not a lump fused onto
+			# the mainland (decision 15). So no bridge may run alongside any island but its
+			# own source and its own target, whatever region that island has since joined.
+			# The two rules are independent: (a) is about regions and catches an unbridged
+			# stranger, (b) is about identity and catches an island the earlier bridging
+			# already absorbed.
+			var who: int = int(island_of.get(nk, -1))
+			if who >= 0 and who != ik and who != target_island:
+				return {}
+
+	rect["target_region"] = target_region
+	rect["target_island"] = target_island
+	return rect
+
+
+## cell key -> index of its shared-side region. Built from `_flood_fill_components`, so it
+## agrees with the connectivity repair, `entry_cell` and the host rule by construction.
+static func _region_index_map(walkable_cells: Dictionary) -> Dictionary:
+	var out: Dictionary = {}
+	var comps := _flood_fill_components(walkable_cells)
+	for i in range(comps.size()):
+		for k in (comps[i] as Array):
+			out[k] = i
+	return out

@@ -203,11 +203,44 @@ static func _shared_side_regions(walkable: Dictionary) -> Array:
 # luck, because a straggler was a single cell and could not reach the threshold.
 # The legacy "stragglers" key is cleared too, so the helper is honest about the full set
 # walkable_set reads.
+##
+## V2-COMBAT-003 terrain commit 4: an ISLAND BRIDGE is stripped too. It carries
+## `island_bridge: true` and belongs to the island system, not to the connectivity repair —
+## an island-to-island bridge left in would read as a cut-off bridge region and fail
+## commit 2's guarantee for a reason that has nothing to do with the repair.
 static func _walkable_without_islands(terrain: Dictionary) -> Dictionary:
 	var stripped: Dictionary = terrain.duplicate(true)
 	stripped["islands"] = []
 	stripped["stragglers"] = []
+	var kept: Array = []
+	for b_v in (stripped.get("bridges", []) as Array):
+		var b: Dictionary = b_v if b_v is Dictionary else {}
+		if not bool(b.get("island_bridge", false)):
+			kept.append(b)
+	stripped["bridges"] = kept
 	return StageTerrain.walkable_set(stripped)
+
+
+## V2-COMBAT-003 terrain commit 4 — the ground an island is ALLOWED to touch.
+## Returns island index -> cell-key set, covering every island bridge that LEAVES that
+## island (`island_index`) or LANDS on it (`target_island`). Every other walkable cell in an
+## island's 8-direction neighbourhood is a moat violation, and an UNBRIDGED island's allow
+## set is empty — so the moat test doubles as "an unbridged island still touches nothing".
+static func _island_bridge_allowances(terrain: Dictionary) -> Dictionary:
+	var out: Dictionary = {}
+	for b_v in (terrain.get("bridges", []) as Array):
+		var b: Dictionary = b_v if b_v is Dictionary else {}
+		if not bool(b.get("island_bridge", false)):
+			continue
+		for who in [int(b.get("island_index", -1)), int(b.get("target_island", -1))]:
+			if who < 0:
+				continue
+			if not out.has(who):
+				out[who] = {}
+			for dc in range(int(b.get("w", 1))):
+				for dr in range(int(b.get("h", 1))):
+					(out[who] as Dictionary)["%d,%d" % [int(b.get("col", 0)) + dc, int(b.get("row", 0)) + dr]] = true
+	return out
 
 
 # ─── Registration ────────────────────────────────────────────────────────────
@@ -256,6 +289,14 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("terrain/island_size_scales_to_board",     Callable(StageTerrainTests, "_t_island_size_scales_to_board"))
 	runner.register_test("terrain/walkable_set_reads_legacy_stragglers", Callable(StageTerrainTests, "_t_walkable_set_reads_legacy_stragglers"))
 	# V2-COMBAT-003 terrain commit 5 — host-region placement + the objective site.
+	# V2-COMBAT-003 terrain commit 4 — bridges as their own tile, island bridging,
+	# extra bridges above 20 cells, edge placement, and the erosion leftovers.
+	runner.register_test("terrain/plateau_blob_is_one_shared_side_region", Callable(StageTerrainTests, "_t_plateau_blob_is_one_shared_side_region"))
+	runner.register_test("terrain/no_region_touches_another_region",      Callable(StageTerrainTests, "_t_no_region_touches_another_region"))
+	runner.register_test("terrain/bridge_cell_set_matches_rects",         Callable(StageTerrainTests, "_t_bridge_cell_set_matches_rects"))
+	runner.register_test("terrain/island_bridge_chance_is_honored",       Callable(StageTerrainTests, "_t_island_bridge_chance_is_honored"))
+	runner.register_test("terrain/island_extra_bridges_and_edge_placement", Callable(StageTerrainTests, "_t_island_extra_bridges_and_edge_placement"))
+
 	runner.register_test("terrain/host_region_offers_objective_site", Callable(StageTerrainTests, "_t_host_region_offers_objective_site"))
 	runner.register_test("terrain/objective_site_built_when_absent",  Callable(StageTerrainTests, "_t_objective_site_built_when_absent"))
 	runner.register_test("terrain/situations_stay_on_host_region",    Callable(StageTerrainTests, "_t_situations_stay_on_host_region"))
@@ -1054,6 +1095,17 @@ static func _t_repair_terminates_all_virtues() -> Dictionary:
 # regardless of size, this test would fail — and the failure would be silent variety loss,
 # not a crash. So assert the positive: across a realistic sample, at least one board still
 # carries a cut-off region of 5 cells or fewer.
+#
+# V2-COMBAT-003 terrain commit 4 CHANGED WHERE THAT REGION COMES FROM, and the test says so
+# rather than hiding it. This used to run over the island-stripped set, on the reasoning
+# that a deliberate island would let it pass for the wrong reason. That reasoning is now
+# unreachable in play: the erosion fix means a plateau blob is exactly one shared-side
+# region, so the generator no longer produces ANY sub-threshold plateau or bridge region —
+# the 509 (combat) and 991 (explore) corner-hung leftovers measured before the fix were the
+# entire supply. Every sub-threshold region on a generated board is now a deliberate island
+# of 4 or 5 cells, which is precisely the variety the threshold exists to keep. The test
+# therefore asserts BOTH halves: small regions survive on the full set, and there are none
+# left on the stripped set.
 static func _t_small_islands_are_kept() -> Dictionary:
 	var stages_cfg := _load_balance_stages()
 	var map_shape_v: Variant = stages_cfg.get("map_shape", {})
@@ -1066,21 +1118,30 @@ static func _t_small_islands_are_kept() -> Dictionary:
 		return { "ok": false, "error": "humility signature missing from balance.json" }
 
 	var small_found: int = 0
+	var stripped_small: int = 0
 	for i in range(30):
 		var terrain: Dictionary = StageTerrain.generate(
 			700000 + i * 7919, i % 3, sig, { "w": 22, "h": 22 }, "test.island.%d" % i)
-		# Islands stripped ON PURPOSE. This test is about the REPAIR leaving a small
-		# accidental region alone; counting deliberate commit-3 islands would let it pass
-		# for a reason that has nothing to do with the repair.
-		var walkable: Dictionary = _walkable_without_islands(terrain)
+		# The FULL walkable set. V2-COMBAT-003 terrain commit 4 changed what this test can
+		# honestly assert, and the change is the point of that commit — see the note above.
+		var walkable: Dictionary = StageTerrain.walkable_set(terrain)
 		var regions := _shared_side_regions(walkable)
 		for r_v in regions:
 			var r: Array = r_v
 			if r.size() > 0 and r.size() < _MIN_REGION:
 				small_found += 1
+		# The same count with the island system stripped out. It is expected to be ZERO
+		# after commit 4 and is asserted as such, because a non-zero value there would mean
+		# erosion is orphaning cells again.
+		var stripped: Dictionary = _walkable_without_islands(terrain)
+		for r2_v in _shared_side_regions(stripped):
+			if (r2_v as Array).size() > 0 and (r2_v as Array).size() < _MIN_REGION:
+				stripped_small += 1
 	if small_found == 0:
-		return { "ok": false, "error": "no cut-off region below %d cells survived across 30 humility boards — the repair is bridging in the small islands the design keeps" % _MIN_REGION }
-	return { "ok": true }
+		return { "ok": false, "error": "no region below %d cells survived across 30 humility boards — the repair is bridging in the small islands the design keeps" % _MIN_REGION }
+	if stripped_small != 0:
+		return { "ok": false, "error": "%d plateau/bridge region(s) below %d cells survived — after terrain commit 4 erosion may not orphan a cell, so every sub-threshold region on a board must be a deliberate island" % [stripped_small, _MIN_REGION] }
+	return { "ok": true, "note": "%d sub-threshold regions kept, every one of them a deliberate island" % small_found }
 
 
 # ─── THE THRESHOLD IS CONFIG: connect_min_region_cells reaches the generator ──
@@ -1183,8 +1244,22 @@ static func _island_cell_set(island: Dictionary) -> Dictionary:
 #   including another island.
 # Before commit 3 this was false on 838 of 865 measured cut-off regions — 97 % touched the
 # main ground at a CORNER, which reads as connected on screen and is not connected in play.
-# A side touch would be worse still. Both are checked by one condition: every 8-direction
-# neighbour of an island cell is either that same island's cell or not walkable at all.
+# A side touch would be worse still.
+#
+# V2-COMBAT-003 terrain commit 4 SPLITS the claim in two, because bridging makes the old
+# single condition dishonest rather than merely stricter:
+#   UNBRIDGED island — unchanged and absolute. Every 8-direction neighbour of every cell is
+#     that same island's cell or void. This is the acceptance test for "an unbridged island
+#     still touches nothing", and it must hold whatever any OTHER island's bridging did.
+#   BRIDGED island — it is ordinary ground now, part of a larger region, and it may sit
+#     beside any other cell of THAT region: its own bridge, and also a later island's bridge
+#     that legitimately runs past it once both are in the same region. What it may never do
+#     is touch a cell of a DIFFERENT region — that is the corner-touch ambiguity decision 15
+#     removes, and it is asserted here per island as well as board-wide in
+#     terrain/no_region_touches_another_region.
+# Asserting the old condition on a bridged island fails on a correct board: measured on
+# compassion seed 450461, 30x30, where island 0 sits diagonally beside a second island's
+# bridge and both are in the host region.
 static func _t_islands_are_moated() -> Dictionary:
 	var by_virtue := _authored_by_virtue()
 	if by_virtue.is_empty():
@@ -1193,6 +1268,7 @@ static func _t_islands_are_moated() -> Dictionary:
 	var virtues: Array = by_virtue.keys()
 	virtues.sort()
 	var islands_seen: int = 0
+	var unbridged_seen: int = 0
 	for virtue_v in virtues:
 		var virtue: String = str(virtue_v)
 		var sig_v: Variant = by_virtue.get(virtue, {})
@@ -1203,11 +1279,21 @@ static func _t_islands_are_moated() -> Dictionary:
 			var terrain: Dictionary = StageTerrain.generate(
 				realm_seed, i % 3, sig, bounds, "test.moat.%s.%d" % [virtue, i])
 			var walkable: Dictionary = StageTerrain.walkable_set(terrain)
+			var allow := _island_bridge_allowances(terrain)
+			# cell -> shared-side region index, for the bridged half of the claim.
+			var region_of: Dictionary = {}
+			var all_regions := _shared_side_regions(walkable)
+			for reg_i in range(all_regions.size()):
+				for rk in (all_regions[reg_i] as Array):
+					region_of[rk] = reg_i
 			var islands_v: Variant = terrain.get("islands", [])
 			var islands: Array = islands_v if islands_v is Array else []
-			for isl_v in islands:
-				var isl: Dictionary = isl_v if isl_v is Dictionary else {}
+			for isl_i in range(islands.size()):
+				var isl: Dictionary = islands[isl_i] if islands[isl_i] is Dictionary else {}
 				var own := _island_cell_set(isl)
+				var allowed: Dictionary = allow.get(isl_i, {})
+				if allowed.is_empty():
+					unbridged_seen += 1
 				islands_seen += 1
 				for own_k in own.keys():
 					var parts := (own_k as String).split(",")
@@ -1220,11 +1306,15 @@ static func _t_islands_are_moated() -> Dictionary:
 							var nk: String = "%d,%d" % [oc + dc, orow + dr]
 							if own.has(nk):
 								continue
+							if allowed.has(nk):
+								continue
 							if walkable.has(nk):
-								return { "ok": false, "error": "%s seed %d bounds %dx%d: island cell %s touches FOREIGN walkable cell %s (offset %d,%d) — the moat is broken" % [virtue, realm_seed, int(bounds.get("w", 0)), int(bounds.get("h", 0)), own_k, nk, dc, dr] }
+								return { "ok": false, "error": "%s seed %d bounds %dx%d: island %d cell %s touches FOREIGN walkable cell %s (offset %d,%d) — the moat is broken (%d allowed bridge cells, region %d vs %d)" % [virtue, realm_seed, int(bounds.get("w", 0)), int(bounds.get("h", 0)), isl_i, own_k, nk, dc, dr, allowed.size(), int(region_of.get(own_k, -1)), int(region_of.get(nk, -1))] }
 	if islands_seen == 0:
 		return { "ok": false, "error": "no island was generated across the whole sweep — the test proved nothing" }
-	return { "ok": true, "note": "%d islands, every 8-direction neighbour is own-island or void" % islands_seen }
+	if unbridged_seen == 0:
+		return { "ok": false, "error": "every island in the sweep was bridged — the 'unbridged island touches nothing' half of this test proved nothing" }
+	return { "ok": true, "note": "%d islands (%d of them unbridged and touching nothing at all); every other 8-direction neighbour is own-island, an own bridge, or void" % [islands_seen, unbridged_seen] }
 
 
 # ─── SHAPE: >= 4 cells, exactly ONE shared-side region ───────────────────────
@@ -1634,3 +1724,304 @@ static func _eight_walkable(key: String, walkable: Dictionary) -> bool:
 			if not walkable.has("%d,%d" % [c + dc, r + dr]):
 				return false
 	return true
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# V2-COMBAT-003 TERRAIN COMMIT 4
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─── THE EROSION LEFTOVERS — the cause ───────────────────────────────────────
+# Handoff decision 15: a corner touch is the ambiguous case and it must go.
+#
+# THIS TEST FAILS AGAINST 95895a0. Plateau erosion used to check 8-CONNECTIVITY of the
+# candidate blob, which accepts a cell joined to the rest of the plateau by a single
+# DIAGONAL. Under the shared-side rule the repair and GridService use, such a cell is its
+# own region of ONE cell, so the repair — which only acts on regions of
+# connect_min_region_cells (6) or more — leaves it alone, and it ships as ground touching a
+# plateau at a corner and nothing else. Measured before the fix: 426 of them across 1,600
+# boards, attributed island=0 plateau=426 bridge=0.
+#
+# The claim under test is the cause, not the symptom: EVERY plateau blob is exactly ONE
+# shared-side region. Nothing about islands or bridges can mask it.
+static func _t_plateau_blob_is_one_shared_side_region() -> Dictionary:
+	var by_virtue := _authored_by_virtue()
+	if by_virtue.is_empty():
+		return { "ok": false, "error": "data.stages.map_shape.by_virtue is empty — wrong config path" }
+	var bounds_cycle := _island_sweep_bounds()
+	var virtues: Array = by_virtue.keys()
+	virtues.sort()
+	var blobs: int = 0
+	for virtue_v in virtues:
+		var virtue: String = str(virtue_v)
+		var sig_v: Variant = by_virtue.get(virtue, {})
+		var sig: Dictionary = sig_v if sig_v is Dictionary else {}
+		for i in range(8):
+			var realm_seed: int = 420000 + i * 7919
+			var bounds: Dictionary = bounds_cycle[i % bounds_cycle.size()]
+			var terrain: Dictionary = StageTerrain.generate(
+				realm_seed, i % 3, sig, bounds, "test.erosion.%s.%d" % [virtue, i])
+			for p_v in (terrain.get("plateaus", []) as Array):
+				var p: Dictionary = p_v if p_v is Dictionary else {}
+				var cells_v: Variant = p.get("cells", [])
+				var cells: Array = cells_v if cells_v is Array else []
+				if cells.is_empty():
+					continue
+				var cell_set: Dictionary = {}
+				for pr_v in cells:
+					var pr: Array = pr_v if pr_v is Array else []
+					if pr.size() >= 2:
+						cell_set["%d,%d" % [int(pr[0]), int(pr[1])]] = true
+				blobs += 1
+				var regions := _shared_side_regions(cell_set)
+				if regions.size() != 1:
+					var sizes: Array = []
+					for rg in regions:
+						sizes.append((rg as Array).size())
+					return { "ok": false, "error": "%s seed %d bounds %dx%d: a plateau blob of %d cells is %d shared-side regions (sizes %s) — erosion left a cell hanging off a corner" % [virtue, realm_seed, int(bounds.get("w", 0)), int(bounds.get("h", 0)), cell_set.size(), regions.size(), str(sizes)] }
+	if blobs == 0:
+		return { "ok": false, "error": "no plateau blob generated across the sweep — the test proved nothing" }
+	return { "ok": true, "note": "%d plateau blobs, every one a single shared-side region" % blobs }
+
+
+# ─── THE EROSION LEFTOVERS — the board-level outcome ─────────────────────────
+# ALSO FAILS AGAINST 95895a0, for the same cause seen from the other end.
+# No region of the finished board may touch another region at a side or a corner. The only
+# ground an island may touch is a cell of an island bridge that leaves it or lands on it;
+# everything else — plateau leftovers included — must have a clear ring of void.
+static func _t_no_region_touches_another_region() -> Dictionary:
+	var by_virtue := _authored_by_virtue()
+	if by_virtue.is_empty():
+		return { "ok": false, "error": "data.stages.map_shape.by_virtue is empty — wrong config path" }
+	var bounds_cycle := _island_sweep_bounds()
+	var virtues: Array = by_virtue.keys()
+	virtues.sort()
+	var non_host_regions: int = 0
+	for virtue_v in virtues:
+		var virtue: String = str(virtue_v)
+		var sig_v: Variant = by_virtue.get(virtue, {})
+		var sig: Dictionary = sig_v if sig_v is Dictionary else {}
+		for i in range(8):
+			var realm_seed: int = 430000 + i * 7919
+			var bounds: Dictionary = bounds_cycle[i % bounds_cycle.size()]
+			var terrain: Dictionary = StageTerrain.generate(
+				realm_seed, i % 3, sig, bounds, "test.leftover.%s.%d" % [virtue, i])
+			var walkable: Dictionary = StageTerrain.walkable_set(terrain)
+			var regions := _shared_side_regions(walkable)
+			# Host = largest, ties by numerically lowest cell.
+			var host: int = -1
+			for ri in range(regions.size()):
+				if host < 0 or (regions[ri] as Array).size() > (regions[host] as Array).size():
+					host = ri
+			for ri2 in range(regions.size()):
+				if ri2 == host:
+					continue
+				non_host_regions += 1
+				var rset: Dictionary = {}
+				for rk in (regions[ri2] as Array):
+					rset[rk] = true
+				for rk2 in (regions[ri2] as Array):
+					var pp := (rk2 as String).split(",")
+					var rc: int = int(pp[0])
+					var rr: int = int(pp[1])
+					for dc in range(-1, 2):
+						for dr in range(-1, 2):
+							if dc == 0 and dr == 0:
+								continue
+							var nk: String = "%d,%d" % [rc + dc, rr + dr]
+							if rset.has(nk) or not walkable.has(nk):
+								continue
+							return { "ok": false, "error": "%s seed %d bounds %dx%d: a cut-off region of %d cells touches foreign walkable ground — %s is adjacent to %s (offset %d,%d). Decision 15: a corner touch is the ambiguous case and must not exist." % [virtue, realm_seed, int(bounds.get("w", 0)), int(bounds.get("h", 0)), rset.size(), rk2, nk, dc, dr] }
+	if non_host_regions == 0:
+		return { "ok": false, "error": "no cut-off region generated across the sweep — the test proved nothing" }
+	return { "ok": true, "note": "%d cut-off regions, not one of them touching any other region" % non_host_regions }
+
+
+# ─── BRIDGE CELLS ARE THEIR OWN THING (decision 16) ──────────────────────────
+# `bridge_cell_set` must be exactly the union of the bridge rects, and always a subset of
+# `walkable_set`. Both renderers paint from it, so a drift here paints void.
+static func _t_bridge_cell_set_matches_rects() -> Dictionary:
+	if not StageTerrain.bridge_cell_set({}).is_empty():
+		return { "ok": false, "error": "bridge_cell_set({}) must be empty — the legacy all-walkable sentinel has no bridges" }
+	var by_virtue := _authored_by_virtue()
+	var bounds_cycle := _island_sweep_bounds()
+	var virtues: Array = by_virtue.keys()
+	virtues.sort()
+	var seen: int = 0
+	for virtue_v in virtues:
+		var virtue: String = str(virtue_v)
+		var sig_v: Variant = by_virtue.get(virtue, {})
+		var sig: Dictionary = sig_v if sig_v is Dictionary else {}
+		for i in range(6):
+			var bounds: Dictionary = bounds_cycle[i % bounds_cycle.size()]
+			var terrain: Dictionary = StageTerrain.generate(
+				440000 + i * 7919, i % 3, sig, bounds, "test.bridgetile.%s.%d" % [virtue, i])
+			var walkable: Dictionary = StageTerrain.walkable_set(terrain)
+			var bridge_cells: Dictionary = StageTerrain.bridge_cell_set(terrain)
+			var expected: Dictionary = {}
+			for b_v in (terrain.get("bridges", []) as Array):
+				var b: Dictionary = b_v if b_v is Dictionary else {}
+				for dc in range(int(b.get("w", 1))):
+					for dr in range(int(b.get("h", 1))):
+						expected["%d,%d" % [int(b.get("col", 0)) + dc, int(b.get("row", 0)) + dr]] = true
+			if bridge_cells.size() != expected.size():
+				return { "ok": false, "error": "%s bounds %dx%d: bridge_cell_set has %d cells, the rects cover %d" % [virtue, int(bounds.get("w", 0)), int(bounds.get("h", 0)), bridge_cells.size(), expected.size()] }
+			for k in expected.keys():
+				if not bridge_cells.has(k):
+					return { "ok": false, "error": "%s: bridge_cell_set is missing rect cell %s" % [virtue, k] }
+				if not walkable.has(k):
+					return { "ok": false, "error": "%s: bridge cell %s is not in walkable_set — the renderer would paint void" % [virtue, k] }
+			seen += bridge_cells.size()
+	if seen == 0:
+		return { "ok": false, "error": "no bridge cell generated across the sweep — the test proved nothing" }
+	return { "ok": true, "note": "%d bridge cells, all of them rect-exact and walkable" % seen }
+
+
+# ─── THE BRIDGE CHANCE REACHES THE GENERATOR (decision 17) ───────────────────
+# Three settings on IDENTICAL seeds, so nothing but the new key can explain the difference:
+#   0.0 => not one island bridge, on any board
+#   1.0 => island bridges appear, and every island that got one has >= 6 cells
+#   an island of <= 5 cells is NEVER bridged, at any chance
+static func _t_island_bridge_chance_is_honored() -> Dictionary:
+	var bounds: Dictionary = { "w": 40, "h": 40 }
+	var base: Dictionary = {
+		"plateau_count_min": 2, "plateau_count_max": 2,
+		"plateau_w_min": 6, "plateau_w_max": 8,
+		"plateau_h_min": 6, "plateau_h_max": 8,
+		"plateau_shape_bias": "blocky",
+		"bridge_width": 2, "bridge_density": 0.0,
+		"island_count_min": 4, "island_count_max": 4,
+		"island_size_min": 6, "island_size_max": 14,
+		"connect_min_region_cells": 6,
+	}
+	var never: Dictionary = base.duplicate(true)
+	never["island_bridge_chance"] = 0.0
+	var always: Dictionary = base.duplicate(true)
+	always["island_bridge_chance"] = 1.0
+
+	var never_bridges: int = 0
+	var always_bridges: int = 0
+	var small_bridged: int = 0
+	var islands_total: int = 0
+	for i in range(18):
+		var seed_val: int = 450000 + i * 7919
+		var ns: String = "test.bridgechance.%d" % i
+		var t_never: Dictionary = StageTerrain.generate(seed_val, i % 3, never, bounds, ns)
+		var t_always: Dictionary = StageTerrain.generate(seed_val, i % 3, always, bounds, ns)
+		for b_v in (t_never.get("bridges", []) as Array):
+			if bool((b_v as Dictionary).get("island_bridge", false)):
+				never_bridges += 1
+		var islands_v: Variant = t_always.get("islands", [])
+		var islands: Array = islands_v if islands_v is Array else []
+		islands_total += islands.size()
+		var per_island: Dictionary = {}
+		for b_v2 in (t_always.get("bridges", []) as Array):
+			var b2: Dictionary = b_v2 if b_v2 is Dictionary else {}
+			if not bool(b2.get("island_bridge", false)):
+				continue
+			always_bridges += 1
+			var src: int = int(b2.get("island_index", -1))
+			per_island[src] = int(per_island.get(src, 0)) + 1
+		for src_v in per_island.keys():
+			var src2: int = int(src_v)
+			if src2 < 0 or src2 >= islands.size():
+				return { "ok": false, "error": "island bridge names island_index %d, but the board has %d islands" % [src2, islands.size()] }
+			var sz: int = _island_cell_set(islands[src2]).size()
+			if sz < 6:
+				small_bridged += 1
+		# The islands themselves must be byte-identical between the two settings: the
+		# bridge decision rides on its OWN stream and may not move island shape.
+		var isl_never: Variant = t_never.get("islands", [])
+		if str(isl_never) != str(islands_v):
+			return { "ok": false, "error": "seed %d: island_bridge_chance moved the ISLAND SHAPES. The bridge draw must sit on its own stream.\n  chance 0.0: %s\n  chance 1.0: %s" % [seed_val, str(isl_never), str(islands_v)] }
+	if never_bridges != 0:
+		return { "ok": false, "error": "island_bridge_chance 0.0 still produced %d island bridges" % never_bridges }
+	if always_bridges == 0:
+		return { "ok": false, "error": "island_bridge_chance 1.0 produced NO island bridge across %d islands — the key never reaches the generator" % islands_total }
+	if small_bridged != 0:
+		return { "ok": false, "error": "%d island(s) below 6 cells were bridged — decision 17 says an island of 5 or fewer is never bridged" % small_bridged }
+	return { "ok": true, "note": "chance 0.0 => 0 island bridges; chance 1.0 => %d across %d islands; islands byte-identical either way" % [always_bridges, islands_total] }
+
+
+# ─── EXTRA BRIDGES AND EDGE PLACEMENT (decisions 18 and 19) ──────────────────
+# Three claims on one sweep, all driven at chance 1.0 so the sample is large:
+#   18a. an island below 20 cells never carries more than ONE bridge
+#   18b. an island's bridges use distinct SIDES and distinct TARGET REGIONS
+#   19.  a bridge does not always leave from the midpoint of its island's edge
+static func _t_island_extra_bridges_and_edge_placement() -> Dictionary:
+	var base: Dictionary = {
+		"plateau_count_min": 2, "plateau_count_max": 2,
+		"plateau_w_min": 6, "plateau_w_max": 8,
+		"plateau_h_min": 6, "plateau_h_max": 8,
+		"plateau_shape_bias": "blocky",
+		"bridge_width": 2, "bridge_density": 0.0,
+		"island_count_min": 3, "island_count_max": 5,
+		"island_size_min": 8, "island_size_max": 40,
+		"island_bridge_chance": 1.0,
+		"connect_min_region_cells": 6,
+	}
+	var bounds_cycle: Array = [{ "w": 40, "h": 40 }, { "w": 50, "h": 40 }, { "w": 30, "h": 30 }]
+	var multi: int = 0
+	var off_centre: int = 0
+	var bridged_islands: int = 0
+	for i in range(24):
+		var bounds: Dictionary = bounds_cycle[i % bounds_cycle.size()]
+		var terrain: Dictionary = StageTerrain.generate(
+			460000 + i * 7919, i % 3, base, bounds, "test.extrabridge.%d" % i)
+		var islands_v: Variant = terrain.get("islands", [])
+		var islands: Array = islands_v if islands_v is Array else []
+		var per_island: Dictionary = {}
+		for b_v in (terrain.get("bridges", []) as Array):
+			var b: Dictionary = b_v if b_v is Dictionary else {}
+			if not bool(b.get("island_bridge", false)):
+				continue
+			var src: int = int(b.get("island_index", -1))
+			if not per_island.has(src):
+				per_island[src] = []
+			(per_island[src] as Array).append(b)
+		for src_v in per_island.keys():
+			var src2: int = int(src_v)
+			var rects: Array = per_island[src2]
+			var isl: Dictionary = islands[src2] if islands[src2] is Dictionary else {}
+			var sz: int = _island_cell_set(isl).size()
+			bridged_islands += 1
+			if rects.size() > 1:
+				multi += 1
+				if sz < 20:
+					return { "ok": false, "error": "an island of %d cells carries %d bridges — decision 18 allows extra bridges only at 20 cells or more" % [sz, rects.size()] }
+			if rects.size() > 4:
+				return { "ok": false, "error": "an island of %d cells carries %d bridges — at most one per side, so at most 4" % [sz, rects.size()] }
+			# Distinct target islands are not required (two sides may both reach the
+			# mainland's region only if the regions differ), but the same TARGET REGION
+			# twice would be a redundant crossing. The generator tracks region ids; the
+			# observable proxy here is that no two of an island's bridges are identical
+			# rects and none of them overlaps another.
+			for a in range(rects.size()):
+				for b2 in range(a + 1, rects.size()):
+					if str(rects[a]) == str(rects[b2]):
+						return { "ok": false, "error": "an island of %d cells carries the SAME bridge rect twice: %s" % [sz, str(rects[a])] }
+			# Decision 19 — is the departure at the island's midpoint?
+			# For a horizontal bridge the band centre is a row; compare it with the
+			# island's own centre row. A generator that always left from the midpoint
+			# would make this difference zero on every single bridge.
+			for r_v in rects:
+				var r: Dictionary = r_v
+				var horizontal: bool = int(r.get("w", 1)) > int(r.get("h", 1)) \
+					or (int(r.get("h", 1)) == int(r.get("w", 1)) and int(r.get("row", 0)) >= int(isl.get("row", 0)))
+				var band_centre: float
+				var island_centre: float
+				if horizontal:
+					band_centre = float(r.get("row", 0)) + float(int(r.get("h", 1)) - 1) * 0.5
+					island_centre = float(isl.get("row", 0)) + float(int(isl.get("h", 1)) - 1) * 0.5
+				else:
+					band_centre = float(r.get("col", 0)) + float(int(r.get("w", 1)) - 1) * 0.5
+					island_centre = float(isl.get("col", 0)) + float(int(isl.get("w", 1)) - 1) * 0.5
+				if absf(band_centre - island_centre) > 0.75:
+					off_centre += 1
+	if bridged_islands == 0:
+		return { "ok": false, "error": "no island was bridged across the sweep — the test proved nothing" }
+	if multi == 0:
+		return { "ok": false, "error": "no island took more than one bridge across %d bridged islands — decision 18 never fires, so its constraint is untested" % bridged_islands }
+	if off_centre == 0:
+		return { "ok": false, "error": "every one of %d island bridges left from its island's midpoint — decision 19 says a bridge lands anywhere along an edge" % bridged_islands }
+	return { "ok": true, "note": "%d bridged islands, %d with extra bridges (all >= 20 cells), %d bridges leaving off the midpoint" % [bridged_islands, multi, off_centre] }
+
