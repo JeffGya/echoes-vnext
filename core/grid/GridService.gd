@@ -625,7 +625,8 @@ static func _placement_score(actor: Dictionary, place_cfg: Dictionary) -> int:
 	var trait_mod: int = int(trait_table.get(dom_trait, 0))
 
 	# Dominant vector modifier (reads actor.vector_scores fresh — can drift over a run).
-	# Tiebreak: vanguard > seeker > protector > pillar.
+	# All ten V2 vectors are candidates — _dominant_key() scores every key in the dict.
+	# The list below is a TIEBREAK ONLY, for equal values among these four.
 	var vec_table: Dictionary = place_cfg.get("by_dominant_vector", {})
 	var vectors: Dictionary = actor.get("vector_scores", {})
 	var dom_vec: String = _dominant_key(vectors, ["vanguard", "seeker", "protector", "pillar"])
@@ -635,19 +636,46 @@ static func _placement_score(actor: Dictionary, place_cfg: Dictionary) -> int:
 
 
 ## Returns the key with the highest integer value in a Dictionary.
-## tiebreak_order defines which key wins when values are equal (first in list wins).
-## Returns "" if the dict is empty or all values are non-integers.
+##
+## EVERY key present in `scores` is a candidate. The dictionary is the source of truth,
+## so a key added to a taxonomy in balance.json (V2-PROG-003 grew the vectors from 4 to 10)
+## is scored here without a code change. Before V2-COMBAT-003 this function iterated
+## `tiebreak_order` instead of `scores`, so any key absent from that list was invisible —
+## never out-ranked, simply never examined — which silently shadowed six of the ten vectors.
+##
+## `tiebreak_order` is consulted ONLY to break an equal-value tie, which is what its name
+## and this docstring always claimed: the key appearing earliest in the list wins. A key
+## absent from the list ranks after every listed key; two unlisted keys tied on value are
+## broken by ascending key name, so the result never depends on Dictionary insertion order.
+##
+## Returns "" if the dict is empty.
 static func _dominant_key(scores: Dictionary, tiebreak_order: Array) -> String:
 	if scores.is_empty():
 		return ""
+	var unranked: int    = tiebreak_order.size()
+	var have: bool       = false
 	var best_key: String = ""
-	var best_val: int = -9999999
-	# Iterate in tiebreak order so the first key wins ties.
-	for key in tiebreak_order:
-		if not scores.has(key):
-			continue
-		var val: int = int(scores[key])
-		if val > best_val:
-			best_val = val
+	var best_val: int    = -9999999
+	var best_rank: int   = 0
+	for key_v in scores.keys():
+		var key: String = str(key_v)
+		var val: int    = int(scores[key_v])
+		var rank: int   = tiebreak_order.find(key)
+		if rank < 0:
+			rank = unranked
+		var better: bool = false
+		if not have:
+			better = true
+		elif val > best_val:
+			better = true
+		elif val == best_val:
+			if rank < best_rank:
+				better = true
+			elif rank == best_rank:
+				better = key < best_key
+		if better:
+			have     = true
 			best_key = key
+			best_val = val
+			best_rank = rank
 	return best_key

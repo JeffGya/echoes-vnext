@@ -536,7 +536,48 @@ static func _run_mode_fingerprint(
 ## _placement_score() vec_mod term went live once vector_scores stopped being {}, reordering
 ## the five Echoes' starting columns and cascading into every round from round 1 onward.
 ## FINAL_HASH did not move for any of the seven modes (same win condition, same round count).
-const COMBAT_ROUNDS_HASH := "82961d711cd2cc38719b23498661c89adbf3f5dcd0503fc9822f3fa3744c9eba"
+##
+## RE-RECORDED AGAIN, V2-COMBAT-003 — GridService._dominant_key() now examines every key in the
+## scores dict instead of only the four keys in its tiebreak_order argument. THIS IS THE ONLY
+## CONSTANT IN THE SUITE THAT MOVED: one hash, in one mode. COMBAT_FINAL_HASH, COMBAT_SAVE_HASH,
+## the ROUNDS/FINAL/SAVE hashes of the other six modes, and every CombatBaselineTests emotion
+## trace are all untouched.
+##
+## WHAT MOVED, AND WHY — measured by running this file's own harness with a temporary probe that
+## printed, per Echo, the full vector_scores, the dominant key under BOTH the old and the new
+## rule, GridService._placement_score(), and the starting cell; once with the fix in the tree and
+## once with core/grid/GridService.gd reverted, in two separate processes.
+##
+## On the fp_combat board two Echoes change dominant vector, and both for the same reason —
+## `devoted` is their highest score by a wide margin and the old rule never looked at it:
+##   echo_0001  scores {devoted 60, pillar 15, nurturer 15, mediator 5, protector 5}
+##              OLD dominant "pillar" (15!) -> by_dominant_vector -2.0 -> int -2
+##              NEW dominant "devoted" (60) -> by_dominant_vector -1.5 -> int -1   score 5 -> 6
+##   echo_0005  identical scores, identical move                                   score 8 -> 9
+## (echo_0004 also switches, "seeker" -> "skeptic", but 0.0 and -0.5 both truncate to 0, so its
+## score is unchanged at 7. echo_0002 "pillar" and echo_0003 "vanguard" do not switch.)
+##
+## Placement sorts ascending by score with an id tiebreak, so the five scores fully predict both
+## observed row orders in column 1:
+##   before  e1=5 e4=7 e2=8 e5=8 e3=9  ->  rows 1..5 = e1, e4, e2, e5, e3   (measured)
+##   after   e1=6 e4=7 e2=8 e3=9 e5=9  ->  rows 1..5 = e1, e4, e2, e3, e5   (measured)
+## echo_0005 rising 8 -> 9 lifts it into a tie with echo_0003, and "echo_0003" < "echo_0005"
+## puts it last. echo_0001 rising 5 -> 6 changes no ordering. The starting cell SET is identical
+## ({(1,1),(1,2),(1,3),(1,4),(1,5)}); only the echo_0003/echo_0005 assignment swapped.
+##
+## Round one's five destination cells are likewise the SAME SET before and after —
+## {(3,1),(3,2),(3,3),(3,4),(4,6)} — with echo_0003 and echo_0005 swapped between (3,3) and
+## (3,4), which is exactly what a swapped starting slot produces and confirms the terrain and
+## movement layers are untouched. That swap cascades through the remaining rounds (who reaches
+## the enemy first, who takes the counter-attack), which is why the rounds hash moves.
+##
+## WHY THE OTHER SIX MODES DID NOT MOVE — measured, not assumed. Ten more dominant switches occur
+## across them (e.g. fp_recover echo_0002 "protector" -> "nurturer", fp_guide_spirit echo_0002
+## "vanguard" -> "opportunist"), but in every one of those modes the ascending sort order of the
+## five placement scores is unchanged, and the probe confirmed every starting cell is
+## byte-identical before and after. A changed modifier that does not change the sort order
+## changes no placement.
+const COMBAT_ROUNDS_HASH := "c590609a6cae0dc54e5c885ec1e8e1bb6dc43cab5512905186a8a412a938f52e"
 const COMBAT_FINAL_HASH  := "4031c2669731de4b3ca62a24b16378a083a524e048976047208571161098ab5e"
 const COMBAT_SAVE_HASH   := "c278206592ca8e052ad1023a282783bcd37967ac92111a0a909af2d4d31673e7"
 
