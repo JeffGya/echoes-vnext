@@ -713,3 +713,52 @@ doubled and explore-scale boards split often. Quote the shape along with the num
 Structural checks done directly on the commit, not taken from the report: `core/realms/StageTerrain.gd`
 is the only `core/` file touched, `GridService.gd` is untouched, and exactly one recorded constant
 moved (`GUIDE_SPIRIT_ROUNDS_HASH`).
+
+### 12.9 The bridge rate defect, and two pieces of scope held back
+
+**Jeff rejected the first bridge rates: forgiveness configured 80 % delivered 44 %, leadership 70 %
+delivered 50 %.** A configured chance that cannot be met is a broken control, not a tuning knob.
+
+**Cause, measured across 1,800 boards.** The moat guarantees a gap of at least one void cell, so a
+gap of exactly **one** is the commonest island geometry there is — not a rare edge. But
+`_ISLAND_BRIDGE_MIN_SPAN` was 2, so an island one cell offshore could not be bridged on any ray.
+Share of unbridged eligible islands sitting at gap 1: **forgiveness 90 %, wisdom 92 %, leadership
+83 %, humility 80 %**. The floor was the whole shortfall.
+
+**Why the floor existed.** `terrain/bridge_width_min2` asserted `min(w, h) >= 2` on every bridge
+rect, and a one-cell span produces a `1 x bridge_width` rect. **That assertion conflated two
+different rules.** A crossing's WIDTH (across it) must be at least two — that is the traversability
+guarantee. Its LENGTH (along it) may be one; the cells still share full sides with both ends. The
+L-shaped connectivity bridges still need two in both dimensions, because their corner-sharing
+termination proof depends on it.
+
+**Fix:** span floor 1; island bridge rects carry an explicit `across` field; the test asserts the
+width rule on island bridges and the both-dimensions rule on connectivity bridges.
+
+| Virtue | Configured | Before | After |
+|---|---:|---:|---:|
+| forgiveness | 80 % | 44 % | **78 %** |
+| leadership | 70 % | 50 % | **65 %** |
+| wisdom | 60 % | 43 % | 56 % |
+| generosity | 60 % | 61 % | 70 % |
+| compassion | 50 % | 49 % | 55 % |
+| empathy | 50 % | 40 % | 49 % |
+| humility | 40 % | 32 % | 40 % |
+| courage | 30 % | 20 % | 23 % |
+| truth | 20 % | 13 % | 16 % |
+
+Extra bridges on islands of 20 or more rose from 37 to 66 on wisdom — those islands were hitting the
+same wall. No recorded value moved: the fingerprint boards draw no island bridge.
+
+### 12.10 HELD SCOPE — two decisions from Jeff, deliberately not built
+
+Jeff stated both while the rate defect was being fixed, and said to hold them if they grow the scope.
+They do. **Neither is built. Both need a story.**
+
+| Held item | What Jeff said | Why it is not in this story |
+|---|---|---|
+| **Per-realm moat width** | "a moat of 1 is just a threshold — moats can and should be bigger depending on the realm" | A new authored design dimension. Needs a config key per realm, changes island placement everywhere, and moves every board value again. It is a feature, not a repair. |
+| **Bridges of any length and shape** | "bridges can be as long as they need to be and shaped however they need to be" | Island bridges are straight axis rays cast from four sides. Arbitrary routing — L-shapes, dog-legs, longer spans around obstacles — is a routing problem, not a threshold change. It would also raise the bridge rates further on the realms still under target. |
+
+The length half of "as long as they need to be" is **partly** addressed: the minimum is now honest.
+The maximum is still whatever a straight ray finds, and no ray bends.

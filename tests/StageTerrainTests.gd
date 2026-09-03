@@ -369,8 +369,21 @@ static func _t_bridge_width_min2() -> Dictionary:
 				var b: Dictionary = b_v if b_v is Dictionary else {}
 				var bw := int(b.get("w", 0))
 				var bh := int(b.get("h", 0))
-				if min(bw, bh) < 2:
-					return { "ok": false, "error": "Seed %d stage %d: bridge has min(w,h)=%d (w=%d,h=%d) — below minimum 2" % [seed_val, stage_idx, min(bw, bh), bw, bh] }
+				# WIDTH and LENGTH are separate rules, and conflating them was a defect.
+				# A connectivity bridge is L-shaped and its corner-sharing termination proof
+				# needs two cells in BOTH dimensions. An island bridge is a straight rect: its
+				# width (across the crossing) must be at least two, but its length (along the
+				# crossing) may be one, because the moat guarantees a gap of at least one void
+				# cell and a gap of exactly one is the commonest island geometry there is.
+				# A one-cell-long crossing still shares full sides with both ends.
+				if bool(b.get("island_bridge", false)):
+					var across := int(b.get("across", 0))
+					if across < 2:
+						return { "ok": false, "error": "Seed %d stage %d: island bridge has across=%d (w=%d,h=%d) — below minimum width 2" % [seed_val, stage_idx, across, bw, bh] }
+					if min(bw, bh) < 1:
+						return { "ok": false, "error": "Seed %d stage %d: island bridge has a zero dimension (w=%d,h=%d)" % [seed_val, stage_idx, bw, bh] }
+				elif min(bw, bh) < 2:
+					return { "ok": false, "error": "Seed %d stage %d: connectivity bridge has min(w,h)=%d (w=%d,h=%d) — below minimum 2" % [seed_val, stage_idx, min(bw, bh), bw, bh] }
 	return { "ok": true }
 
 

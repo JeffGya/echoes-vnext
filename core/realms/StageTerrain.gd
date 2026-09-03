@@ -230,12 +230,23 @@ const _ISLAND_BRIDGE_MIN_CELLS: int = 6
 # An island of at least this many cells may take EXTRA bridges — at most one per side, each
 # reaching a different neighbouring region. Below it an island takes at most one bridge.
 const _ISLAND_EXTRA_BRIDGE_MIN_CELLS: int = 20
-# The shortest island bridge that may be emitted, in cells along the span. A one-cell span
-# would produce a 1 x bridge_width rect, whose min(w,h) is 1, and `terrain/bridge_width_min2`
-# asserts every bridge rect is at least two cells in BOTH dimensions. An island whose nearest
-# ground on a given ray is a single void cell away simply gets no bridge on that ray; it can
-# still bridge from another row, column or side.
-const _ISLAND_BRIDGE_MIN_SPAN: int = 2
+# The shortest island bridge that may be emitted, in cells ALONG the span (its length).
+# One is correct, and two was a defect. The moat guarantees a gap of at least one void cell,
+# so a gap of exactly one is the COMMONEST island geometry, not a rare one: measured across
+# 1,800 boards, it accounts for 90% of forgiveness's unbridged islands, 92% of wisdom's and
+# 83% of leadership's. A floor of two therefore made the most common island structurally
+# unbridgeable, and island_bridge_chance could never be met -- forgiveness delivered 44%
+# against a configured 80%.
+#
+# The floor existed because `terrain/bridge_width_min2` asserted min(w,h) >= 2 on every
+# bridge rect. That assertion conflates two different things. A crossing's WIDTH (across it)
+# must be at least two, and that is the traversability guarantee. A crossing's LENGTH (along
+# it) may be one -- an island one void cell offshore takes a one-cell bridge, and the cells
+# still share full sides with the island and with the target. Island bridge rects now carry
+# an explicit `across` field so the test can assert the width rule without the length rule.
+# The connectivity repair's L-shaped bridges still require two in BOTH dimensions, because
+# their corner-sharing termination proof depends on it.
+const _ISLAND_BRIDGE_MIN_SPAN: int = 1
 
 # Margin (cells) kept between any plateau edge and the map border.
 const _BORDER_MARGIN: int = 1
@@ -2007,6 +2018,11 @@ static func _island_bridge_ray(
 		rect = { "col": span_start, "row": band_start, "w": span, "h": bridge_width }
 	else:
 		rect = { "col": band_start, "row": span_start, "w": bridge_width, "h": span }
+	# The crossing's WIDTH, recorded explicitly because it cannot be read back off the rect
+	# once the span is shorter than the width. `terrain/bridge_width_min2` asserts on this
+	# for an island bridge, and on min(w,h) for a connectivity bridge. See
+	# _ISLAND_BRIDGE_MIN_SPAN for why length and width are separate rules.
+	rect["across"] = bridge_width
 
 	# THE RING GUARD. Walk the ring of cells that surrounds the rect — the rect grown by one
 	# cell in every direction, minus the rect itself. Every WALKABLE cell there must belong
