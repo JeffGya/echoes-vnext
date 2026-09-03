@@ -285,7 +285,17 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	#                                         in FlowEncounterState._derive_status() uses base value (80).
 	#   Refusing   (fear >= threshold):      Absolute Fear Rule fires; actor.refuse returned
 	#                                         before behavior module is called.
-	if int(_actor.get("fear", 0)) >= fear_threshold:
+	# V2-COMBAT-003 Phase 4 (D97, decision 3): the Absolute Fear Rule is an Echo-only
+	# consequence. An enemy runs this same state machine and receives every fear-raising
+	# term but none of the relief terms (outnumber, kill, ally-KO ripple, passive tick,
+	# identity, leadership dampening — all gated to faction == "echo" elsewhere in this
+	# file and in EmotionService), plus the lowest band threshold in the game (rank 1 ->
+	# nascent -> 65, vs. a grounded Echo's 80). Left ungated, an enemy's fear only ever
+	# rises and the unconditional +1/round alone reaches 65 by round 65 with no contact
+	# required — measured: fear climbs to 100 and holds while the enemy is winning.
+	# Fear still degrades an enemy's score below (fear_factor in BehaviorArbiter); it
+	# simply never forces a permanent actor.refuse for a non-echo actor.
+	if str(_actor.get("faction", "")) == "echo" and int(_actor.get("fear", 0)) >= fear_threshold:
 		var refuse_intent: Dictionary = {
 			"action_type": "actor.refuse",
 			"target_id":   "",

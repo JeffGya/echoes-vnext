@@ -209,8 +209,9 @@ static func _t_moved_actor_logs_idle() -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
-# 3 — An enemy can refuse. The Absolute Fear Rule (ActorStateMachine.gd:288) is not gated by
-# faction.
+# 3 — An enemy can no longer refuse. V2-COMBAT-003 Phase 4 gated the Absolute Fear
+# Rule (ActorStateMachine.gd:288) to faction == "echo" (decision 3, D97): an enemy
+# keeps fear as a score input but never receives the permanent-refusal consequence.
 #
 # Real production call: ActorStateMachine.advance_turn(), the single choke point for intent
 # selection. Reuses MaturityExpressionTests._BALANCE_CFG (the already-proven config fixture
@@ -218,7 +219,7 @@ static func _t_moved_actor_logs_idle() -> Dictionary:
 # either.
 # ---------------------------------------------------------------------------
 
-# KNOWN DEFECT (V2-COMBAT-003 will change this):
+# FIXED (V2-COMBAT-003 Phase 4): was KNOWN DEFECT "an enemy can refuse" — assertion inverted.
 static func _t_enemy_can_refuse() -> Dictionary:
 	var enemy: Dictionary = MaturityExpressionTests._make_enemy("en_refuse", { "col": 0, "row": 0 })
 	enemy["fear"] = 70  # >= nascent's band threshold of 65 (see refusal_thresholds_by_band)
@@ -231,8 +232,8 @@ static func _t_enemy_can_refuse() -> Dictionary:
 	var context := { "actor": enemy, "all_actors": [ally_echo], "cfg": MaturityExpressionTests._BALANCE_CFG, "t": 1 }
 	var intent: Dictionary = sm.advance_turn(context, logger, 1)
 
-	if str(intent.get("action_type", "")) != "actor.refuse":
-		return { "ok": false, "error": "expected an enemy at fear=70 (>= nascent threshold 65) to refuse — the Absolute Fear Rule carries no faction gate. Got: %s" % str(intent) }
+	if str(intent.get("action_type", "")) == "actor.refuse":
+		return { "ok": false, "error": "expected an enemy at fear=70 (>= nascent threshold 65) to NOT refuse — the Absolute Fear Rule is now gated to faction == 'echo'. Got: %s" % str(intent) }
 	return { "ok": true }
 
 
