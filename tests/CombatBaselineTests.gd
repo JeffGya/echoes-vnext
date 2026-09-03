@@ -248,61 +248,78 @@ static func _has_log(logger: StructuredLogger, type: String) -> bool:
 # would be one byte cheaper and useless in a failure — this shape lets the assertion name the
 # mode AND the round index that first diverged, which is what a Phase 6 debugging session needs.
 
+# RE-RECORDED, V2-COMBAT-003 Phase 2b — production-shaped fixtures (ANSWERS.md #50).
+# _setup_encounter() now calls EmotionService.init_echo() + VectorService.init_vectors() on
+# every generated Echo, exactly as the real summon path does (SanctumController.gd:223-225).
+# Root cause of the move, demonstrated on the fp_combat board: with vector_scores no longer
+# {} for every Echo, GridService._placement_score()'s vec_mod term (GridService.gd:627-631,
+# "by_dominant_vector") stops being a no-op — _dominant_key({}, ...) always returned "" before,
+# so every actor got vec_mod=0 and placement order was decided purely by archetype/calling/
+# trait modifiers with an id tiebreak. On this board the five Echoes now score: echo_0001
+# dominant="pillar" -2.0, echo_0002 dominant="pillar" -2.0, echo_0003 dominant="vanguard"
+# +2.0, echo_0004 dominant="seeker" 0.0, echo_0005 dominant="pillar" -2.0 (traits/archetype/
+# calling terms are identical before and after — EchoFactory.generate()'s RNG draw order is
+# untouched). Placement sorts ascending by score with an id tiebreak, so echo_0003 — the only
+# Echo whose score rose — moves later in sort order and is placed further forward (closer to
+# the enemy spawn), while echo_0001/echo_0002/echo_0005 (score -2) are pushed back; echo_0004
+# (score unchanged) keeps its relative slot. The five destination cells produced by round 1's
+# movement are the SAME SET as before the fix ({(3,1),(3,2),(3,3),(3,4),(4,6)}) — only which
+# Echo is assigned to which cell changed — which is exactly what a reordered starting column
+# assignment produces, and confirms the terrain/movement mechanics themselves are untouched.
+# That reshuffle cascades into every subsequent round (who reaches the enemy first, who tanks
+# the counter-attack), which is why every mode's emotion trace diverges starting at round
+# index 0. This is a SEPARATE vector consumer from BehaviorArbiter._score()'s vector_bonus
+# term (BehaviorArbiter.gd:2109-2114) named in ANSWERS.md #50 — both were silently disabled by
+# the same empty vector_scores, and this one turned out to be the dominant cause of the
+# fingerprint moves. Flagged to Jeff separately: GridService._dominant_key()'s tiebreak_order
+# for placement only lists the four legacy vectors (vanguard/seeker/protector/pillar), so six
+# of the ten V2 virtue domains (opportunist/strategist/skeptic/mediator/devoted/nurturer) can
+# never become an Echo's placement-dominant vector even though balance.json's
+# by_dominant_vector table scores all ten — a latent gap, out of this phase's scope.
 const COMBAT_EMOTION_HASHES: Array = [
-	"02d98695226aa349d3bc0d290d080c0d7c51bf17232a4b61e4c4888d894f4942",
-	"23810625aee23d5f719c087ed23f641c138c59bfe7a6b74af453a4c2c19d2f01",
-	"65856aeb0f5db7fe4b8a1e91268dc3a54e8d73729ac9ffb132c680db9d5e2e77",
-	"b147bce40ca61bb578e538c62a9186328fd7a8c22c83aad3f3f9fd3272fdae8e",
-	"0a4883070509f21c99ffe7713fa26d6c1383e79a65309ba7e56c84e97b973d21",
+	"c0e348c181a7d83ce625ae6ed12c93e7c88eb0a247d1061f7aa3ecdab5f383ac",
+	"ce777cfdc61ea886ead439c5c5f16b4c0a9eb79e32294cf74e293d0ab64926e8",
+	"e803ae9d85cbc4036a5a62d6ad59b2b0897330996f7c2e9208f0f4e149beaa71",
+	"79cf0c2b7fc89d31372fcaa8af6a7567aaddf497aa9f589fca05aaf30b4aa95e",
+	"f34e250092201b2601414df05ed762a35800a5bab08a383868c7c472b010458a",
 ]
 const PURIFY_SHRINE_EMOTION_HASHES: Array = [
-	"b0a1a28cf5fab4efd04c78e8d88bdb61e86df8d366e860c6798e3cd4b78cf1a1",
-	"acf21c63cdf575d95485ad060ed487195746239883255c4b5646cbefcf887d24",
-	"017ccd83f41d75a0727193b559d2298a3baea3162f0ebd4fa4d51f2067b83f9c",
-	"0a0ef8747ac8eae256da7f8de4ad43ea0adb7a10d39bf225d9a0bb9e5b6ba5e7",
+	"bd2de7301aa35102d31bc447af0046a9d6cc8432f4bf5358f5a3db9deeed639e",
+	"725ca32c64d227aac4c49c29180c72e03bd29032fde35554ae95930d4b4300c1",
+	"793849651b096d5e47648cc6239d97dfb3b314f87dfc981e628dbda7d2e2ce6f",
+	"ad358527be25272d0ebd5adc3371ff41aebed916d93b89dc9d2d584ac71484f0",
 ]
 const RECOVER_EMOTION_HASHES: Array = [
-	"628671286fc1023cc80ec893d441c0b1164184228ebf46fe25fe3191f5378207",
-	"e61b7e66d74f550214718c123d126cbcb7e8b40cdf0a8ae67b9e36e345472ee1",
+	"61cb0af978317b7b9a7925e250137a68fe5435c3193120a861b317971919dfcd",
+	"42b2541c3e3490c69dd8b76eac35d95a26de37c310a16ccb713930c1effbc3fd",
 ]
 const PROTECT_EMOTION_HASHES: Array = [
-	"6cdb4efc892487a0753668ceda93ebc3b2b5e4c7938184326c50796d990c28eb",
-	"a8cd3cbfe61d3b2ff91389b92252e1923a67ec1a15c7f3a5d3336c5cc983ea06",
-	"314165cda4be77ea72311a0c440b4a14ea6a9954050511b7550a56b55b57beda",
-	"97babd0655c972c41ceac61d5e21956435ba594d2385e312c79e05d4600e6ab8",
+	"814a9f2f861b64efcdf5f9391b44a370fef37fef54cac82b5d0278a3034fea10",
+	"207c3c93af6281a71ce9a544e588891fde6bffaafda26bcb86016212ea059f42",
+	"9305dc7dc32b271bc317d9c5b9c81d067c05aeace6df5aa71e00f3bdf2bfaab1",
+	"c3bab33ff8f4abb2c117bb3ce2f65fb6c675fdec728f5a1d70a779047cc1d4ce",
 ]
 const ENDURE_EMOTION_HASHES: Array = [
-	"02d98695226aa349d3bc0d290d080c0d7c51bf17232a4b61e4c4888d894f4942",
-	"6a991e4303d99b2687bf1a19cc7b4346e05d19dd9c0c793a7cfefb6bab1a4651",
-	"0c8b079cac30bb014d7c241303dbb7baa1efdc004da0f6cf1c5224a74844ed1a",
-	"59697cc76fa36c80a25c08b032b3ea4c97653b6a8ea36af4ffa57dfcbd36f7c8",
-	"12c9dda6e60997c12f9010e850f4e7dacacb1b9ee5b681ea38119ab8db021f17",
+	"93b71ed7260bf0483a28fada3159b989edce9c56edd047317e891c8341089a2a",
+	"164847037991b60263eb09047e1616c8df4cec30ede4c6d1bf0780e014b03bfd",
+	"f4c48dbeff676f15e275bf615edfbba78d0ef62fc8d815d8e267b462af5a592e",
+	"f4bb8aedc7cca179df7702785cd837d284219c19668a5ccc52db68fd132761bf",
+	"50e8f14a68573cf572900508d032fcadf18d91e945cdf606ffbd6a90568a071e",
 ]
 const PURSUE_EMOTION_HASHES: Array = [
-	"5e6f15383743a09765793993107a3a42e183d4d98927eba0084f9c73755b8d77",
-	"72a6bcc3ef7e082d6ff2176923a1bb24c34305d269c33c5439bfee1430d27c06",
-	"355eba76db716818dd2dbcba1282aca1dae6617e63a922081c0ec47bf417baff",
-	"766b8b1d278fb39800b7e49e9816bf7b12398de0f120589f95db8373cf87fbd4",
-	"bc7febd30a33fff204ec63763b68cd78860eb3e40212ff429e1fa2fb6eb873fb",
+	"c5c7a2eca8fe241a9f8d036a0782933c5b14688921e783f11812ffbfc18a5ef7",
+	"fdb03123717e3ae13f0ae1a30391e81294e0c762312e136819141527c00681ae",
+	"4e10fbffadab7ba80b3c4f87facbb03fd241c2fea377235c3c1a1ca7a31589b8",
+	"1b03ff02fc0431ace2a305fde7a2d2d3b753d8e85708b3c0233b20f722dba995",
+	"444c4db18a0c2cb3fa255025e3e6179d4d80686251440f51e62348f88ac3cbad",
 ]
-# RE-RECORDED, V2-COMBAT-003 terrain commit 5. Nine rounds became SIX, and the six that
-# remain are BYTE-IDENTICAL to the first six recorded before — this list is a strict prefix
-# of the old one, not a new trace. The cause is one cell. On this board (60x12,
-# "combat.terrain.realm.01.stage.0.fp_guide_spirit") the terrain is unchanged — walkable 223
-# cells, the same plateaus, the same two bridges, no island change, and decision 25 did not
-# fire — and every Echo and the enemy keep their exact spawn cells. Only the guide spirit
-# moved, from (23,1) to (17,5), because decision 24 now ranks a cell with eight walkable free
-# neighbours ahead of one without: measured on that board, (23,1) has clearance=false and
-# (17,5) has clearance=true. The host-region filter changed nothing here — the whole walkable
-# set is the host region, 223 of 223. A spirit six columns closer to a party spawning at
-# col 9 is protected three rounds sooner.
 const GUIDE_SPIRIT_EMOTION_HASHES: Array = [
-	"1763e7b0005ec4f959d3154cbaf62d510fb1420c607f7c05eb330dd808c691b6",
-	"9436b6ffdbc13f9fbf655165842baefcdff75667adc6ae2cc94539c5a9b76118",
-	"256d8100669e359645a690217d8ee2337716d284d8d5ee7612febc83b4015128",
-	"75d52c6def312b12921a8aec4830ad3f66a8732a6036a416d946265ad9926ea2",
-	"aa28e139148d95d951e42dc66c15449035bf54f1fa6576423d3da30999e1d579",
-	"ea87f2931bda7495deeac1f838bc38934096f7bc1ca427377b74c50f0bcf6d2e",
+	"0981643bfb5b4b834e110bbb1e2e07e43cb67a737695df574f01d4ff0840b399",
+	"fb2362b73ab6e12b88f49fb418a372712b6dab222afb45cb8f176f91060b10e9",
+	"5a0bca46209935550ff752415689db70c12141a8cc534fd23d9d01519a94aedb",
+	"d4a55a31c758c4a7837cb584ffe35f0646041ddfd1c264c626568b66c05a583c",
+	"933a39f1afad9edbef892124e414ddedd6a11ef77ee2874b968b48e0ea32f739",
+	"8d399cecc760a122765ea3d4a7dfa87812e1d06884d676ba664aee1653a43320",
 ]
 
 

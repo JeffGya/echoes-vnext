@@ -126,11 +126,20 @@ static func _setup_encounter(
 	var bal: Dictionary = config.get_balance()
 	var summ_cfg: Dictionary = bal.get("data", {}).get("summoning", {})
 	var expr_cfg: Dictionary = bal.get("data", {}).get("maturity_expression", {})
+	var vec_cfg: Dictionary = bal.get("data", {}).get("vectors", {})
 	var roster: Array = []
 	var party_ids: Array = []
 	for i in range(5):
 		var echo: Dictionary = EchoFactory.generate(seed_tag, "echo." + str(i), i, "summon", summ_cfg, expr_cfg)
 		echo["id"] = "echo_%04d" % (i + 1)
+		# V2-COMBAT-003 Phase 2b: production-shaped fixture. EchoFactory.generate() deliberately
+		# leaves emotion/vector_scores/dominant_vector unpopulated (see EchoFactory.gd:98-101) —
+		# the real summon path (SanctumController.gd:223-225, OnboardingController.gd:237-238)
+		# always calls these two immediately afterwards. Skipping them (as this fixture did
+		# before) gives every Echo dominant_vector="" and vector_scores={}, which silently
+		# disables the vector half of BehaviorArbiter._score() (ANSWERS.md #50).
+		EmotionService.init_echo(echo, logger, t)
+		VectorService.init_vectors(echo, vec_cfg, logger, t)
 		roster.append(echo)
 		party_ids.append(str(echo.get("id", "")))
 	flow_ctx.save_data["sanctum"]["roster"] = roster
@@ -480,9 +489,14 @@ static func _run_mode_fingerprint(
 # subsequent turn — identically to before. FINAL_HASH and SAVE_HASH constants for all seven
 # modes are therefore untouched by this change.
 
-const COMBAT_ROUNDS_HASH := "8d3ef9e9c8e7ce72c61d1592a523cd165a401b7b3ca21d3a64f9eb59e7647d9c"
+## RE-RECORDED, V2-COMBAT-003 Phase 2b — production-shaped fixtures (ANSWERS.md #50). See the
+## detailed cause note above CombatBaselineTests.COMBAT_EMOTION_HASHES: GridService's
+## _placement_score() vec_mod term went live once vector_scores stopped being {}, reordering
+## the five Echoes' starting columns and cascading into every round from round 1 onward.
+## FINAL_HASH did not move for any of the seven modes (same win condition, same round count).
+const COMBAT_ROUNDS_HASH := "82961d711cd2cc38719b23498661c89adbf3f5dcd0503fc9822f3fa3744c9eba"
 const COMBAT_FINAL_HASH  := "4031c2669731de4b3ca62a24b16378a083a524e048976047208571161098ab5e"
-const COMBAT_SAVE_HASH   := "bbe140a53a33fcc97220ce3f9c8c172e2cb1f4ce4a281094a78f9733b40b50a4"
+const COMBAT_SAVE_HASH   := "c278206592ca8e052ad1023a282783bcd37967ac92111a0a909af2d4d31673e7"
 
 
 ## Shared expected-vs-actual assertion for the three hashes of one mode.
@@ -518,16 +532,21 @@ static func test_combat() -> Dictionary:
 	return _assert_hashes("COMBAT", r, COMBAT_ROUNDS_HASH, COMBAT_FINAL_HASH, COMBAT_SAVE_HASH)
 
 
-const PURIFY_SHRINE_ROUNDS_HASH := "520b30ee74de2fd0eb13e3553711e06d016b3f37cac52dd76cb72020e9f38bfa"
+## RE-RECORDED, V2-COMBAT-003 Phase 2b — production-shaped fixtures (ANSWERS.md #50). Same
+## cause as COMBAT above: GridService placement's vec_mod term.
+const PURIFY_SHRINE_ROUNDS_HASH := "2a1f5da35aee32330ec6915431d18182afc49d4bcdea9fc5b064a4c270eda49e"
 const PURIFY_SHRINE_FINAL_HASH  := "8819869f67b59f78577acc99ceb0b132faa6b7fa8282e611c39effd36dcd7c17"
-const PURIFY_SHRINE_SAVE_HASH   := "76aba09618df272bf0310af333218c78aa1e990ca0be9ae3b8db0c30af1d06d6"
+const PURIFY_SHRINE_SAVE_HASH   := "05a8bbd08fb73615c6eae460481463fea9f6180661f1c25119d3f944124a1f08"
 
 static func test_purify_shrine() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(EncounterResolutionModes.PURIFY_SHRINE, "fp_purify_shrine")
 	return _assert_hashes("PURIFY_SHRINE", r, PURIFY_SHRINE_ROUNDS_HASH, PURIFY_SHRINE_FINAL_HASH, PURIFY_SHRINE_SAVE_HASH)
 
 
-const RECOVER_ROUNDS_HASH := "a285c1a051a6084cab26b5e8a78b3ce360e576cf631c122fa183519f9c72d10c"
+## RE-RECORDED, V2-COMBAT-003 Phase 2b — production-shaped fixtures (ANSWERS.md #50). Same
+## cause as COMBAT above: GridService placement's vec_mod term. FINAL_HASH and SAVE_HASH did
+## not move for this mode.
+const RECOVER_ROUNDS_HASH := "fff4980e5195a145feadc7de149936195b2fd9e5e54b40e2e46498d176118ff7"
 const RECOVER_FINAL_HASH  := "09e38fdf70259c9a647c6dd053caa9e1518e5f830364ac5f96fac5dbceb92780"
 const RECOVER_SAVE_HASH   := "bffa34aa225afe79818ec0b15931d59f495930337b8d07b33a997208e0d46c35"
 
@@ -536,7 +555,10 @@ static func test_recover() -> Dictionary:
 	return _assert_hashes("RECOVER", r, RECOVER_ROUNDS_HASH, RECOVER_FINAL_HASH, RECOVER_SAVE_HASH)
 
 
-const PROTECT_ROUNDS_HASH := "a15a5e8822b129b4dfde0e3384fae845f0d008400fb05995bc490ef6e8b2b958"
+## RE-RECORDED, V2-COMBAT-003 Phase 2b — production-shaped fixtures (ANSWERS.md #50). Same
+## cause as COMBAT above: GridService placement's vec_mod term. FINAL_HASH and SAVE_HASH did
+## not move for this mode.
+const PROTECT_ROUNDS_HASH := "0620e0dd379de78fc75ef6ca81fb176fbaa71296aafd3b773133556b66635a3d"
 const PROTECT_FINAL_HASH  := "2dced9c966b40abd0cd2d7bf9d25014ea9a41152d9c304f96664d9e481b2335e"
 const PROTECT_SAVE_HASH   := "bffa34aa225afe79818ec0b15931d59f495930337b8d07b33a997208e0d46c35"
 
@@ -545,7 +567,10 @@ static func test_protect() -> Dictionary:
 	return _assert_hashes("PROTECT", r, PROTECT_ROUNDS_HASH, PROTECT_FINAL_HASH, PROTECT_SAVE_HASH)
 
 
-const ENDURE_ROUNDS_HASH := "2d9ad905ed25f085c2781a642973c296dfc21ec9c9dbb4df33a110ca3d705f83"
+## RE-RECORDED, V2-COMBAT-003 Phase 2b — production-shaped fixtures (ANSWERS.md #50). Same
+## cause as COMBAT above: GridService placement's vec_mod term. FINAL_HASH and SAVE_HASH did
+## not move for this mode.
+const ENDURE_ROUNDS_HASH := "5469698b8b82496f39f6efd825d87d3f638e306ad53a14160d91e5574298bad6"
 const ENDURE_FINAL_HASH  := "106b216e990ac3e55653976f0bf0506f7f96f2d361a1183e87241c3948f7554e"
 const ENDURE_SAVE_HASH   := "cca434e9c009c6ba5607c102d12b1d87883fe6899dbffe4214c9a0cb0934eff7"
 
@@ -554,9 +579,11 @@ static func test_endure() -> Dictionary:
 	return _assert_hashes("ENDURE", r, ENDURE_ROUNDS_HASH, ENDURE_FINAL_HASH, ENDURE_SAVE_HASH)
 
 
-const PURSUE_ROUNDS_HASH := "01ce5ffb913144db24911cea5ffe91f9b1c4cf2e4dee3b8d6a3155a3d6f399c7"
+## RE-RECORDED, V2-COMBAT-003 Phase 2b — production-shaped fixtures (ANSWERS.md #50). Same
+## cause as COMBAT above: GridService placement's vec_mod term.
+const PURSUE_ROUNDS_HASH := "578ebdad82971126d8a09b8515ba9db98f19a86ef68eb36dd5ea04d15e691f2e"
 const PURSUE_FINAL_HASH  := "678b39327b47e4999322d24d3b07d280e48e475ed89fc2e1475f89bc6b8fbedb"
-const PURSUE_SAVE_HASH   := "bbe140a53a33fcc97220ce3f9c8c172e2cb1f4ce4a281094a78f9733b40b50a4"
+const PURSUE_SAVE_HASH   := "f3e41850d026469d228e8c1d30c57e87a9e38279f323fc49f96bc480b1355d05"
 
 static func test_pursue() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(EncounterResolutionModes.PURSUE, "fp_pursue")
@@ -615,7 +642,13 @@ static func test_pursue() -> Dictionary:
 # (17,5). The cause is decision 24 alone — (23,1) does not have eight walkable neighbours and
 # (17,5) does. The host-region filter is inert on this board: the host region is all 223
 # walkable cells. SAVE_HASH did not move; the outcome is still spirit_protected.
-const GUIDE_SPIRIT_ROUNDS_HASH := "2c802d744efc809c1543b85035d822fe5bf81ffe34724406c9349a41898b3c6e"
+#
+# RE-RECORDED AGAIN, V2-COMBAT-003 Phase 2b — production-shaped fixtures (ANSWERS.md #50).
+# Same cause as COMBAT above (see the detailed note there and above
+# CombatBaselineTests.COMBAT_EMOTION_HASHES): GridService._placement_score()'s vec_mod term
+# went live once vector_scores stopped being {}, reordering the party's starting columns.
+# FINAL_HASH and SAVE_HASH did not move — the outcome is still spirit_protected.
+const GUIDE_SPIRIT_ROUNDS_HASH := "b8bf10509d3798fbc89a639c78a4abe562f086d30cc39538916cf89e9c0813d3"
 const GUIDE_SPIRIT_FINAL_HASH  := "13b4753677246bdc095ceea1416aba2816581db36c5963d75975a69f56471b3f"
 const GUIDE_SPIRIT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 

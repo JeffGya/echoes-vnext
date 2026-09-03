@@ -46,12 +46,32 @@ static func register(runner) -> void:
 # "build a raw actor dict for LiveMovementContextService" helper at this shape).
 # ---------------------------------------------------------------------------
 
+## V2-COMBAT-003 Phase 2b: production-shaped vector state. This is an Actor dict (post-
+## EchoActor.from_echo shape), not a roster Echo dict, so the production summon-time pair
+## (EmotionService.init_echo + VectorService.init_vectors, called on the pre-mapped Echo dict —
+## see FlowFingerprintTests._setup_encounter) doesn't apply directly here: an Actor dict never
+## carries "class_origin" in production (EchoActor.gd's field list omits it) and never reads an
+## "emotion" sub-dict for its live fear/morale (those are top-level per the Actor Contract).
+## What DOES apply, and is called directly rather than hand-rolled: VectorService.init_vectors()
+## is the single choke point for turning a class_origin + real archetype_init config into
+## vector_scores/dominant_vector (VectorService.gd:28-65) — exactly the step this fixture
+## skipped, leaving vector_scores={} and silently disabling the vector half of
+## BehaviorArbiter._score() (ANSWERS.md #50). class_origin is added here only to drive that one
+## real call — it does not persist past this function, matching the fact that production never
+## carries it past EchoFactory/EchoActor.from_echo either.
 static func _echo_actor(id: String, col: int, row: int) -> Dictionary:
-	return {
+	var actor: Dictionary = {
 		"id": id, "faction": "echo", "actor_type": "echo", "calling_origin": "uncalled",
-		"traits": {}, "vector_scores": {}, "fear": 0, "morale": 50, "rank": 1,
+		"traits": {}, "class_origin": "vanguard", "vector_scores": {}, "dominant_vector": "",
+		"fear": 0, "morale": 50, "rank": 1,
 		"grid_pos": { "col": col, "row": row }, "stats": { "max_hp": 100 }, "current_hp": 100,
 	}
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var vec_cfg: Dictionary = _real_bdata().get("vectors", {})
+	VectorService.init_vectors(actor, vec_cfg, logger, 0)
+	actor.erase("class_origin")
+	return actor
 
 
 static func _enemy_actor(id: String, col: int, row: int) -> Dictionary:
