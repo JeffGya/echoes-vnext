@@ -213,8 +213,8 @@ static func _t_initiative_tiebreak_order() -> Dictionary:
 # -------------------------
 
 # COMBAT-002/V2-PROG-002: confirmed calling modifier takes priority over birth origin.
-# Actor A: calling_origin="seer", calling="warder"  → resolved key "warder" → +10 modifier.
-# Actor B: calling_origin="seer", calling=""         → resolved key "seer"   → +0 modifier.
+# Actor A: calling_origin="okomfo", calling="okofor"  → resolved key "okofor" → +10 modifier.
+# Actor B: calling_origin="okomfo", calling=""         → resolved key "okomfo"   → +0 modifier.
 # Both have identical base stats (speed=5, agi=5 → base=25).
 # Actor A goes first due to confirmed calling modifier (+10 → score=35 vs 25).
 static func _t_initiative_uses_confirmed_calling() -> Dictionary:
@@ -223,19 +223,19 @@ static func _t_initiative_uses_confirmed_calling() -> Dictionary:
 		"name":           "A",
 		"speed":          5,
 		"stats":          { "agi": 5 },
-		"calling_origin": "seer",
-		"calling":        "warder",  # confirmed — warder modifier (+10) should apply
+		"calling_origin": "okomfo",
+		"calling":        "okofor",  # confirmed — okofor modifier (+10) should apply
 	}
 	var actor_b := {
 		"id":             "echo_seam_b",
 		"name":           "B",
 		"speed":          5,
 		"stats":          { "agi": 5 },
-		"calling_origin": "seer",
-		"calling":        "",  # unconfirmed — seer modifier (0) applies
+		"calling_origin": "okomfo",
+		"calling":        "",  # unconfirmed — okomfo modifier (0) applies
 	}
 	var init_cfg := {
-		"by_calling_origin": { "warder": 10, "seer": 0 },
+		"by_calling_origin": { "okofor": 10, "okomfo": 0 },
 		"by_archetype":      {},
 		"by_dominant_trait": {},
 		"by_dominant_vector": {},
@@ -248,7 +248,7 @@ static func _t_initiative_uses_confirmed_calling() -> Dictionary:
 	if first_id != "echo_seam_a":
 		return {
 			"ok": false,
-			"error": "Confirmed warder (A, +10 modifier) should go first. Got '%s' first — birth origin 'seer' must not override confirmed calling." % first_id,
+			"error": "Confirmed okofor (A, +10 modifier) should go first. Got '%s' first — birth origin 'okomfo' must not override confirmed calling." % first_id,
 		}
 	return { "ok": true }
 

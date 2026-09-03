@@ -1743,11 +1743,13 @@
 					"reflective": -2.0
 				},
 				"by_calling_origin": {
-					"blade": 3.0,
-					"warder": -1.0,
-					"ranger": 1.0,
-					"steward": -2.0,
-					"seer": 0.0,
+					"_comment": "V2 calling ids. sum_okwanfo=3.5 is PROPOSED DEFAULT, no V1 equivalent existed.",
+					"aduro": 3.0,
+					"sum_okwanfo": 3.5,
+					"okofor": -1.0,
+					"onyamesu": -2.0,
+					"okomfo": 0.0,
+					"kra_soro": 1.0,
 					"uncalled": 0.0
 				},
 				"by_dominant_trait": {

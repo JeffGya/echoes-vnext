@@ -22,6 +22,8 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(CombatInitiativeTests, "_t_same_inputs_same_order"))
 	runner.register_test("combat_initiative/dominant_vector_recognizes_all_ten_vectors",
 		Callable(CombatInitiativeTests, "_t_dominant_vector_recognizes_all_ten_vectors"))
+	runner.register_test("combat_initiative/v2_calling_receives_initiative_modifier",
+		Callable(CombatInitiativeTests, "_t_v2_calling_receives_initiative_modifier"))
 
 
 static func _morale_cfg() -> Dictionary:
@@ -200,5 +202,47 @@ static func _t_dominant_vector_recognizes_all_ten_vectors() -> Dictionary:
 			"ok": false,
 			"error": "Expected echo_a first (devoted=100 dominant, vec_mod=30 > echo_b vec_mod=5); "
 				+ "got: %s -- a key absent from vec_tiebreak is being shadowed again" % str(order[0].get("id", ""))
+		}
+	return { "ok": true }
+
+
+# Test 6: v2_calling_receives_initiative_modifier
+# Reads the SHIPPED balance.json (not a hand-authored fixture) so a regression of
+# by_calling_origin back to V1 ids fails here -- "aduro" would silently score 0.
+static func _t_v2_calling_receives_initiative_modifier() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var combat_cfg: Dictionary = (bal.get("data", {}) as Dictionary).get("combat", {})
+	var init_cfg: Dictionary = combat_cfg.get("initiative_modifiers", {})
+	var by_calling: Dictionary = init_cfg.get("by_calling_origin", {})
+
+	if not by_calling.has("aduro"):
+		return { "ok": false, "error": "fixture broken: data.combat.initiative_modifiers.by_calling_origin has no 'aduro' key -- table is not on V2 calling ids" }
+
+	var actor_aduro := {
+		"id":             "echo_aduro",
+		"name":           "Aduro",
+		"speed":          5,
+		"stats":          { "agi": 5 },
+		"calling_origin": "aduro",
+		"calling":        "",
+	}
+	var actor_uncalled := {
+		"id":             "echo_uncalled",
+		"name":           "Uncalled",
+		"speed":          5,
+		"stats":          { "agi": 5 },
+		"calling_origin": "uncalled",
+		"calling":        "",
+	}
+	var state: Dictionary = CombatState.create([actor_aduro, actor_uncalled], "defeat_enemies", 0, init_cfg)
+	var order: Array = state.get("initiative_order", [])
+	if order.size() < 2:
+		return { "ok": false, "error": "initiative_order too short (got %d)" % order.size() }
+	if str(order[0].get("id", "")) != "echo_aduro":
+		return {
+			"ok": false,
+			"error": "Expected 'aduro' (V2 calling, shipped modifier %s) to outrank 'uncalled' (0.0); got '%s' first -- by_calling_origin has regressed to unmigrated V1 ids" % [str(by_calling.get("aduro")), str(order[0].get("id", ""))],
 		}
 	return { "ok": true }

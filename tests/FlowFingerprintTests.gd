@@ -577,9 +577,13 @@ static func _run_mode_fingerprint(
 ## five placement scores is unchanged, and the probe confirmed every starting cell is
 ## byte-identical before and after. A changed modifier that does not change the sort order
 ## changes no placement.
-const COMBAT_ROUNDS_HASH := "c590609a6cae0dc54e5c885ec1e8e1bb6dc43cab5512905186a8a412a938f52e"
-const COMBAT_FINAL_HASH  := "4031c2669731de4b3ca62a24b16378a083a524e048976047208571161098ab5e"
-const COMBAT_SAVE_HASH   := "c278206592ca8e052ad1023a282783bcd37967ac92111a0a909af2d4d31673e7"
+## V2-COMBAT-003: by_calling_origin re-migrated to V2 initiative ids. fp_combat's party has
+## echo_0002 (aduro, unrecognized under V1 keys -> was 0, now +3.0) and echo_0005 (kra_soro,
+## same -> now +1.0). This reorders who acts first each round, on top of the dominant-vector
+## move above, so all three hashes move again.
+const COMBAT_ROUNDS_HASH := "e3e6df5af88c1521b10a55d98892af36d6fb65a4322381bafc9d7bdf06cc1309"
+const COMBAT_FINAL_HASH  := "acd5c49a3496616010028fdcdf8851eba11865a9596203e3d99db39e88da2c21"
+const COMBAT_SAVE_HASH   := "f3e41850d026469d228e8c1d30c57e87a9e38279f323fc49f96bc480b1355d05"
 
 
 ## Shared expected-vs-actual assertion for the three hashes of one mode.

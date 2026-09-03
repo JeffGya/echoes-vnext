@@ -276,12 +276,17 @@ static func _has_log(logger: StructuredLogger, type: String) -> bool:
 # of the ten V2 virtue domains (opportunist/strategist/skeptic/mediator/devoted/nurturer) can
 # never become an Echo's placement-dominant vector even though balance.json's
 # by_dominant_vector table scores all ten — a latent gap, out of this phase's scope.
+# V2-COMBAT-003: by_calling_origin re-migrated to V2 ids. fp_combat's party has echo_0002
+# (aduro) and echo_0005 (kra_soro) -- unrecognized V1-only keys before the fix, so both scored
+# 0; now aduro=+3.0, kra_soro=+1.0. Initiative order shifts, so the fight runs 6 rounds instead
+# of 5 (rounds 1-2 unchanged, diverging from round 3 once the reorder changes who acts first).
 const COMBAT_EMOTION_HASHES: Array = [
 	"c0e348c181a7d83ce625ae6ed12c93e7c88eb0a247d1061f7aa3ecdab5f383ac",
 	"ce777cfdc61ea886ead439c5c5f16b4c0a9eb79e32294cf74e293d0ab64926e8",
-	"e803ae9d85cbc4036a5a62d6ad59b2b0897330996f7c2e9208f0f4e149beaa71",
-	"79cf0c2b7fc89d31372fcaa8af6a7567aaddf497aa9f589fca05aaf30b4aa95e",
-	"f34e250092201b2601414df05ed762a35800a5bab08a383868c7c472b010458a",
+	"4bd5ac19b2d35ae914780100e79b1f63338cb1e5b3840470c92c512dddfa9466",
+	"f9acc19fd364cfd13515e3d44c57aee96b0723ffc136ac8867bf7e8c92750e2b",
+	"0449133a9c40141510337ba49e8cbb8038f5edafeb84091909c9e7721d260b30",
+	"4debb7951d67c4fc2b53ecdb59063514ede57a5ea758e869e094d3871cddf711",
 ]
 const PURIFY_SHRINE_EMOTION_HASHES: Array = [
 	"bd2de7301aa35102d31bc447af0046a9d6cc8432f4bf5358f5a3db9deeed639e",

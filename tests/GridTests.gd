@@ -335,17 +335,17 @@ static func _t_placement_score_places_forward() -> Dictionary:
 	# Use the confirmed modifier tables.
 	var place_cfg := {
 		"by_archetype":        { "brave": 2, "devout": -2 },
-		"by_calling_origin":   { "blade": 2, "ranger": -2 },
+		"by_calling_origin":   { "aduro": 2, "kra_soro": -2 },
 		"by_dominant_trait":   { "courage": 1, "wisdom": -1, "faith": 0 },
 		"by_dominant_vector":  { "vanguard": 2, "pillar": -2, "seeker": 0, "protector": -1 },
 	}
 
-	# High-score echo: brave + blade + courage-dominant + vanguard-dominant.
-	var fast := _make_actor("fast", 5, 5, "brave",  "blade",
+	# High-score echo: brave + aduro + courage-dominant + vanguard-dominant.
+	var fast := _make_actor("fast", 5, 5, "brave",  "aduro",
 		{ "courage": 60, "wisdom": 20, "faith": 20 },
 		{ "vanguard": 70, "protector": 10, "seeker": 10, "pillar": 10 })
-	# Low-score echo: devout + ranger + faith-dominant + pillar-dominant.
-	var slow := _make_actor("slow", 1, 1, "devout", "ranger",
+	# Low-score echo: devout + kra_soro + faith-dominant + pillar-dominant.
+	var slow := _make_actor("slow", 1, 1, "devout", "kra_soro",
 		{ "courage": 15, "wisdom": 20, "faith": 65 },
 		{ "vanguard": 5, "protector": 15, "seeker": 20, "pillar": 60 })
 
