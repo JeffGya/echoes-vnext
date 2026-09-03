@@ -127,13 +127,17 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 			else str(actor.get("calling_origin", ""))
 		var call_mod: int = int(call_table.get(_call_key, 0))
 
-		# Dominant trait modifier — courage > faith > wisdom tiebreak.
+		# Dominant trait modifier. All keys in actor.traits are candidates —
+		# _dominant_key() scores every key in the dict. The list below is a TIEBREAK ONLY,
+		# for equal values (courage > faith > wisdom).
 		var traits_v: Variant = actor.get("traits", {})
 		var traits: Dictionary = traits_v if traits_v is Dictionary else {}
 		var dom_trait: String = _dominant_key(traits, ["courage", "faith", "wisdom"])
 		var trait_mod: int = int(trait_table.get(dom_trait, 0))
 
-		# Dominant vector modifier — vanguard > seeker > protector > pillar tiebreak.
+		# Dominant vector modifier. All ten V2 vectors are candidates — _dominant_key()
+		# scores every key in the dict. The list below is a TIEBREAK ONLY, for equal
+		# values among these four.
 		var vec_v: Variant = actor.get("vector_scores", {})
 		var vectors: Dictionary = vec_v if vec_v is Dictionary else {}
 		var dom_vec: String = _dominant_key(vectors, ["vanguard", "seeker", "protector", "pillar"])
@@ -325,21 +329,47 @@ static func _morale_tier_from_score(morale: int) -> String:
 
 
 ## Returns the key with the highest integer value in a Dictionary.
-## tiebreak_order defines which key wins when values are equal (first in list wins).
+##
+## EVERY key present in `scores` is a candidate — the dictionary is the source of truth, so
+## a key added to a taxonomy in balance.json (V2-PROG-003 grew the vectors from 4 to 10) is
+## scored here without a code change.
+##
+## `tiebreak_order` is consulted ONLY to break an equal-value tie: the key appearing earliest
+## in the list wins. A key absent from the list ranks after every listed key; two unlisted
+## keys tied on value are broken by ascending key name, so the result never depends on
+## Dictionary insertion order.
+##
 ## Returns "" if the dict is empty.
 ## (Mirrors GridService._dominant_key() — kept inline to avoid coupling.)
 static func _dominant_key(scores: Dictionary, tiebreak_order: Array) -> String:
 	if scores.is_empty():
 		return ""
+	var unranked: int    = tiebreak_order.size()
+	var have: bool       = false
 	var best_key: String = ""
-	var best_val: int = -9999999
-	for key in tiebreak_order:
-		if not scores.has(key):
-			continue
-		var val: int = int(scores[key])
-		if val > best_val:
-			best_val = val
-			best_key = key
+	var best_val: int    = -9999999
+	var best_rank: int   = 0
+	for key_v in scores.keys():
+		var key: String = str(key_v)
+		var val: int    = int(scores[key_v])
+		var rank: int   = tiebreak_order.find(key)
+		if rank < 0:
+			rank = unranked
+		var better: bool = false
+		if not have:
+			better = true
+		elif val > best_val:
+			better = true
+		elif val == best_val:
+			if rank < best_rank:
+				better = true
+			elif rank == best_rank:
+				better = key < best_key
+		if better:
+			have      = true
+			best_key  = key
+			best_val  = val
+			best_rank = rank
 	return best_key
 
 

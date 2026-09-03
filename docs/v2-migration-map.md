@@ -568,9 +568,9 @@ These systems are already done and their save seams are live:
 > not out-ranked — they were never examined. An uninventoried reader can silently shadow a
 > completed migration. The rows below are the inventory that was missing.
 >
-> **Only the first row is fixed.** Everything else is recorded for the owner to schedule; several
-> are behaviour changes that will move recorded values and need their own commit with its own
-> before/after evidence.
+> **All three copies are now fixed.** V2-COMBAT-003 closed `GridService` first, then ported the
+> identical correction to `CombatState` and `ShrineService` (below). The three remain separate
+> functions rather than one shared helper — see the note under the table.
 
 ### 8.1 Family one — readers of the 10 vector keys
 
@@ -580,9 +580,18 @@ Canonical keys (`data.vectors.archetype_init`): `vanguard`, `protector`, `seeker
 | Reader | What it does | Verdict | Action | Owner |
 |---|---|---|---|---|
 | `core/grid/GridService.gd` `_dominant_key()` / `_placement_score()` | Placement score's `by_dominant_vector` term | **Genuine gap** — six vectors invisible | ✅ **Fixed (V2-COMBAT-003)** — `_dominant_key` now iterates every key in `scores`; `tiebreak_order` breaks ties only, unlisted keys rank last, unlisted ties break by ascending key name | V2-COMBAT-003 |
-| `core/combat/CombatState.gd:139` `_dominant_key()` | Initiative's `by_dominant_vector` term. A byte-identical private copy of the same function, called with the same 4-key list | **Genuine gap — same defect, not fixed** | Port the GridService fix. Will move initiative order, so every combat fingerprint | *unassigned* |
-| `core/combat/ShrineService.gd:35,147` `_dominant_key()` | `select_purifier()`'s `purify_weight_by_vector` term; third copy of the function, `vec_tiebreak` = the same 4 legacy keys | **Genuine gap — same defect, not fixed.** `data.combat.shrine.purify_weight_by_vector` authors all ten; six are unreachable | Port the fix; consider promoting `_dominant_key` to one shared home instead of three copies | *unassigned* |
-| `core/combat/ShrineService.gd:33` inline default `{pillar, protector, seeker, vanguard}` | Fallback used only when `shrine_cfg` has no `purify_weight_by_vector` | **Harmless** — the real table is present in `balance.json` and has all ten. Stale, not wrong | Refresh when the row above is done | *unassigned* |
+| `core/combat/CombatState.gd:139` `_dominant_key()` | Initiative's `by_dominant_vector` term. A byte-identical private copy of the same function, called with the same 4-key list | **Was the same defect** | ✅ **Fixed (V2-COMBAT-003)** — same correction ported verbatim. Measured against every FlowFingerprintTests board (all 7 modes): individual actors' dominant vector changes in many encounters, but the sort order of the party's readiness scores does not change on any of the seven pinned boards, so **no fingerprint hash moved** (`Tests: 1561 total, 1561 passed, 0 failed` before and after, both watched directly). Two other boards (not pinned by any hash) do change relative order — harmless, since nothing asserts them. Direct unit coverage added: `combat_initiative/dominant_vector_recognizes_all_ten_vectors` | V2-COMBAT-003 |
+| `core/combat/ShrineService.gd:35,147` `_dominant_key()` | `select_purifier()`'s `purify_weight_by_vector` term; third copy of the function, `vec_tiebreak` = the same 4 legacy keys | **Was the same defect.** `data.combat.shrine.purify_weight_by_vector` authors all ten; six were unreachable | ✅ **Fixed (V2-COMBAT-003)** — same correction ported verbatim. Measured against the `fp_purify_shrine`-shaped boards produced by the suite: individual echoes' dominant vector and purify weight change, but the selected purifier (the argmax) is unchanged on every board exercised by the suite, so no fingerprint hash moved. Direct unit coverage added: `shrine/select_purifier_recognizes_all_ten_vectors`, which fails against the pre-fix function (verified: reverting `ShrineService.gd`/`CombatState.gd` alone reproduces `Tests: 1561 total, 1559 passed, 2 failed` on exactly these two new tests, nothing else) | V2-COMBAT-003 |
+| `core/combat/ShrineService.gd:33` inline default `{pillar, protector, seeker, vanguard}` | Fallback used only when `shrine_cfg` has no `purify_weight_by_vector` | **Harmless** — the real table is present in `balance.json` and has all ten. Stale, not wrong | Refresh opportunistically | *unassigned* |
+
+**Not unified into one shared helper.** Three byte-identical copies of the same 20-line function is
+a real argument for consolidation, and the "kept local/inline to avoid coupling" comments on each
+copy predate this fix and were never re-examined. But `GridService` lives in `core/grid/`, and
+`CombatState`/`ShrineService` live in `core/combat/`; a shared helper would need a new home (e.g.
+`core/common/`) that neither module currently depends on, which is a structural change with its own
+blast radius, not a two-line defect fix. All three are now separately proven correct and covered by
+tests. Consolidating them is a legitimate follow-up but is out of scope for this defect closure —
+flagged separately rather than bundled in here.
 | `core/actors/VectorService.gd` | `compute_dominant()` / `accumulate()` / `backfill_vector_scores()` | **Correct** — fully dynamic, no hardcoded keys, as Domain 3 claims. (Minor: `compute_dominant`'s candidate scan has no explicit tiebreak, so an exact tie resolves by Dictionary insertion order. Not reached today — every `archetype_init` profile has a unique maximum) | None | — |
 | `core/actors/behaviors/BehaviorArbiter.gd:106-110` `_DEFAULTS.vector_action_muls` | Fallback mirror of `data.actor.vector_action_muls` | **Correct** — all ten keys present | None | — |
 | `ui/screens/sanctum/SanctumScreen.gd` `_vector_phrase()` | Player-facing vector phrase | **Correct** — all ten arms | None | — |
