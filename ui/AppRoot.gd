@@ -563,6 +563,7 @@ func _run_tests(parts: Array) -> void:
 	SnapshotContractTests.register(runner)  # V2-INFRA-003 Phase 3 Slice B1: universal snapshot contract (type/meta.t/data/actions)
 	VentureCharacterizationTests.register(runner)  # V2-INFRA-003: characterization guard for complete_stage / retreat / scout-return / contact-resolve
 	CombatBaselineTests.register(runner)  # V2-INFRA-003 Phase 6 entry gate: per-round emotion, transition sequence, combat flush reasons, tick-bound retreat, dormant encounter actions
+	CombatMaturityBaselineTests.register(runner)  # V2-COMBAT-003 Phase 3: Whole-band baseline scenario — first fixture with a Standing 4+ Echo, whole-vs-nascent expression-output divergence
 	BehaviorCharacterizationTests.register(runner)  # V2-COMBAT-003 Phase 1: characterization of movement-starvation, actor.idle-while-moved, enemy refusal, spatial-term zeroing, purify delegation, silent legacy fallback, health_ratio divergence
 	PendingResultTests.register(runner)  # V2-INFRA-003 Phase 8B: the durable run result — four outcomes, survives a quit (real reboot off disk), routing + one-shot consumption
 

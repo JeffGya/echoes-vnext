@@ -91,11 +91,22 @@ static func register(runner) -> void:
 ## Deletes any leftover save file at this path first — guarantees root_seed 12346 every run
 ## (SaveService.make_new_save literal seed on a genuinely missing save) regardless of how many
 ## times the suite has already run against this same path.
+## rank_overrides: OPTIONAL, {roster_index: int -> target_rank: int}. Default {} — every
+## existing call site keeps generating five rank-1 Echoes exactly as before, so no recorded
+## fingerprint moves. When present, the named roster index is raised to target_rank through the
+## real production rank-up function (ProgressionService.execute_rank_up), looped one Standing at
+## a time exactly as sanctum.rank_up would drive it — NOT by writing echo["rank"] directly. The
+## one synthetic step: is_rank_up_eligible() gates on echo["level"], and reaching max_level_per_rank
+## through real combat XP would take many encounters, so level is set directly to max_level_per_rank
+## before each iteration rather than earned. (V2-COMBAT-003 Phase 3 — see
+## tests/CombatMaturityBaselineTests.gd for why this exists: no recorded fixture anywhere in the
+## suite previously held a Whole-band Echo.)
 static func _setup_encounter(
 	mode: String,
 	seed_tag: String,
 	guide_mode: String = "",
-	guide_joins: String = ""
+	guide_joins: String = "",
+	rank_overrides: Dictionary = {}
 ) -> Dictionary:
 	# Shared harness: clears the primary save AND SaveService's backup chain beside it.
 	# Primary-only deletion let boot() recover a previous run's campaign. See
@@ -140,6 +151,8 @@ static func _setup_encounter(
 		# disables the vector half of BehaviorArbiter._score() (ANSWERS.md #50).
 		EmotionService.init_echo(echo, logger, t)
 		VectorService.init_vectors(echo, vec_cfg, logger, t)
+		if rank_overrides.has(i):
+			_promote_echo_rank(echo, int(rank_overrides[i]), bal, flow_ctx.campaign_seed, logger, t)
 		roster.append(echo)
 		party_ids.append(str(echo.get("id", "")))
 	flow_ctx.save_data["sanctum"]["roster"] = roster
@@ -166,6 +179,35 @@ static func _setup_encounter(
 		"ectx":      flow_ctx.encounter_ctx,
 		"party_ids": party_ids,
 	}
+
+
+## Raises one echo dict's Standing to target_rank through the real production rank-up path,
+## ProgressionService.execute_rank_up(), called once per Standing exactly as sanctum.rank_up
+## drives it (core/runtime/controllers/ProgressionController.gd:handle_rank_up). Mutates echo
+## in place. No-op if target_rank <= current rank.
+##
+## The one non-production step: is_rank_up_eligible() reads echo["level"], and earning
+## max_level_per_rank through real combat XP would take many played encounters, so level is set
+## directly to max_level_per_rank before each iteration instead of earned via
+## ProgressionService.award_post_combat_xp(). Rank itself is never written directly — every
+## Standing gain, trait drift, calling_eligible flag and derived-stat recompute goes through
+## execute_rank_up() unmodified.
+static func _promote_echo_rank(
+	echo: Dictionary,
+	target_rank: int,
+	bal: Dictionary,
+	campaign_seed,
+	logger,
+	t: int
+) -> void:
+	var data: Dictionary = bal.get("data", {})
+	var prog_cfg: Dictionary    = data.get("progression", {})
+	var birth_stats_cfg: Dictionary = data.get("summoning", {}).get("birth_stats", {})
+	var calling_cfg: Dictionary = data.get("calling", {})
+	var max_level: int = int(prog_cfg.get("max_level_per_rank", 5))
+	while int(echo.get("rank", 1)) < target_rank:
+		echo["level"] = max_level
+		ProgressionService.execute_rank_up(echo, campaign_seed, prog_cfg, birth_stats_cfg, calling_cfg, logger, t)
 
 
 ## id → grid_pos snapshot for every actor currently on the board.
