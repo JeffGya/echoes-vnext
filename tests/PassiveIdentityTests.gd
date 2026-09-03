@@ -7,9 +7,13 @@
 #   3. Seer directive aura: seer_directive_aura situational condition fires when seer present.
 #   4. Ranger fear move bonus: fear increases move score via fear_move_bonus.
 #   5. EchoActor passes equipped_skills through from echo dict.
+#   6. V2-COMBAT-003: ActorStateMachine._update_passive_state writes _anchor_rounds and
+#      _stationary_rounds for the V2 calling ids, and a V1 id ("warder") writes nothing —
+#      guards against the match regressing to V1 arms.
 #
 # Tests 1-4 use BehaviorArbiter.new({}) with inline cfg_data where needed.
 # Test 5 is a pure data-mapping test (no arbiter).
+# Test 6 exercises ActorStateMachine directly (the writer), not BehaviorArbiter (the reader).
 
 class_name PassiveIdentityTests
 extends RefCounted
@@ -20,6 +24,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("passive/seer_directive_aura_fires",          Callable(PassiveIdentityTests, "_t_seer_directive_aura_fires"))
 	runner.register_test("passive/ranger_fear_move_bonus",             Callable(PassiveIdentityTests, "_t_ranger_fear_move_bonus"))
 	runner.register_test("passive/echo_actor_carries_equipped_skills", Callable(PassiveIdentityTests, "_t_echo_actor_carries_equipped_skills"))
+	runner.register_test("passive/v2_calling_writes_passive_counter",  Callable(PassiveIdentityTests, "_t_v2_calling_writes_passive_counter"))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -261,5 +266,29 @@ static func _t_echo_actor_carries_equipped_skills() -> Dictionary:
 	actor["equipped_skills"]["0"] = "mutated"
 	if str(echo["equipped_skills"]["0"]) != "blade_resolve":
 		return { "ok": false, "error": "equipped_skills is not a deep copy — mutation bled back to echo" }
+
+	return { "ok": true }
+
+
+# Test 6: guard against ActorStateMachine._update_passive_state regressing to V1 calling ids.
+# Okofor and onyamesu are V2 ids and must write their idle-round counters; "warder" (V1) must
+# not — if the match arms ever revert, this fails loudly instead of the counters going dead again.
+static func _t_v2_calling_writes_passive_counter() -> Dictionary:
+	var idle_intent := { "action_type": "actor.idle" }
+
+	var okofor := { "id": "echo_v2_okofor", "faction": "echo", "calling_origin": "okofor" }
+	ActorStateMachine.new(okofor)._update_passive_state(idle_intent, { "all_actors": [okofor] }, 1)
+	if int(okofor.get("_anchor_rounds", 0)) != 1:
+		return { "ok": false, "error": "okofor did not accumulate _anchor_rounds, got: %s" % str(okofor.get("_anchor_rounds")) }
+
+	var onyamesu := { "id": "echo_v2_onyamesu", "faction": "echo", "calling_origin": "onyamesu" }
+	ActorStateMachine.new(onyamesu)._update_passive_state(idle_intent, { "all_actors": [onyamesu] }, 1)
+	if int(onyamesu.get("_stationary_rounds", 0)) != 1:
+		return { "ok": false, "error": "onyamesu did not accumulate _stationary_rounds, got: %s" % str(onyamesu.get("_stationary_rounds")) }
+
+	var v1_warder := { "id": "echo_v1_warder", "faction": "echo", "calling_origin": "warder" }
+	ActorStateMachine.new(v1_warder)._update_passive_state(idle_intent, { "all_actors": [v1_warder] }, 1)
+	if v1_warder.has("_anchor_rounds"):
+		return { "ok": false, "error": "V1 id 'warder' matched a passive arm — match regressed to V1 calling ids" }
 
 	return { "ok": true }

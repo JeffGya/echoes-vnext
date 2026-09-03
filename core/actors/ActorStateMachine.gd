@@ -1025,13 +1025,13 @@ func _get_most_feared_ally(allies: Array) -> Dictionary:
 
 
 # PROG-009: Update per-round passive state counters after each turn.
-# Warder: tracks anchor_rounds for guard/protect_ally bonus (+8 per round, cap 3 rounds = +24).
-# Steward: tracks stationary_rounds for soft-taunt eligibility.
+# Okofor: tracks anchor_rounds for guard/protect_ally bonus (+8 per round, cap 3 rounds = +24).
+# Onyamesu: tracks stationary_rounds for soft-taunt eligibility.
 # Skill once-per-combat flags are set here when the skill fires.
 # Skill cooldowns (read_field, withdraw) are ticked at turn START instead.
 ## `logger` is optional so existing direct-drive test callers keep their signature.
 ## When present, the two fear-relieving passives below emit an audit line — without
-## it the Steward/Seer fear relief is invisible to the ledger.
+## it the Onyamesu/Okomfo fear relief is invisible to the ledger.
 func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
 		actual_moved_override: Variant = null, logger: StructuredLogger = null) -> void:
 	var action: String         = str(intent.get("action_type", ""))
@@ -1040,17 +1040,17 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
 		else (action == "actor.move" or action == "actor.withdraw")
 
 	match calling_origin:
-		"warder":
+		"okofor":
 			if moved:
 				_actor["_anchor_rounds"] = 0
 			else:
 				_actor["_anchor_rounds"] = mini(int(_actor.get("_anchor_rounds", 0)) + 1, 3)
-		"steward":
+		"onyamesu":
 			if moved:
 				_actor["_stationary_rounds"] = 0
 			else:
 				_actor["_stationary_rounds"] = int(_actor.get("_stationary_rounds", 0)) + 1
-		"seer":
+		"okomfo":
 			if action == "actor.read_field":
 				var streak: int     = int(_actor.get("_read_field_streak", 0)) + 1
 				var max_streak: int = 3
@@ -1060,7 +1060,7 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
 					_actor["_read_field_cooldown"] = 1
 			else:
 				_actor["_read_field_streak"] = 0  # streak resets on any other action
-			# Seer idle_fear_aura — when idle wins, reduce fear of nearby allies
+			# Okomfo idle_fear_aura — when idle wins, reduce fear of nearby allies
 			if action == "actor.idle":
 				var aura_val: int     = int(_calling_behavior.get("idle_fear_aura", 3))
 				var aura_radius: int  = int(_calling_behavior.get("leadership_radius", 5))
@@ -1088,12 +1088,12 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
 				if ifa_fired:
 					_credit_support_tally("support_actions", 1)
 					if logger != null:
-						logger.debug(t, "actor.fear_idle_aura", "Seer idle aura relieved ally fear", {
+						logger.debug(t, "actor.fear_idle_aura", "Okomfo idle aura relieved ally fear", {
 							"actor_id":       str(_actor.get("id", "")),
 							"affected_count": ifa_count,
 							"total_delta":    -ifa_total,
 						})
-		"ranger":
+		"kra_soro":
 			if action == "actor.withdraw":
 				_actor["_withdraw_cooldown"] = 1
 
