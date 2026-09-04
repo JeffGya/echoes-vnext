@@ -1047,3 +1047,67 @@ support and broke.
 **Approved fix:** extend the relief gates to include `forming`. **Keep the approved thresholds
 unchanged.** This separates how resistant an Echo is from whether it gets help — only the first
 should scale steeply. Sites: `ActorStateMachine.gd` ~:257, ~:264, and `EmotionService.gd` ~:281.
+
+---
+
+## 16. FINDING — `resist_fear` cannot reach combat fear (recorded 2026-09-04, not fixed)
+
+Found while verifying `9fb369e`. **Pre-existing, not caused by that commit.** Jeff's instruction
+stands: no further scope without approval, so this is recorded, not actioned.
+
+### The gap
+
+`resist_fear` reduces an incoming fear delta by 40 %. **Exactly one function reads it** —
+`EmotionService.apply_fear_delta()` (`:283`).
+
+Combat's per-hit fear does not go through that function. `CombatTurnActionService.gd:190-193`
+calls `LeadershipEmotionService.apply_fear_gain()` and then writes `target["fear"]` directly:
+
+```gdscript
+var hit_fear_applied := LeadershipEmotionServiceScript.apply_fear_gain(
+    target, fear_per_hit, ectx.actors, leadership_expr_cfg)
+target["fear"] = mini(100, _fear_before + hit_fear_applied)
+```
+
+`apply_fear_gain` never consults `resilience_traits` or `expression_band`.
+
+**So an Echo with `resist_fear` gets its reduction on contact-fail bleed, weave, vow and Sanctum
+ticks — and nothing at all on being hit in a fight, which is where nearly all combat fear comes
+from.** The trait reads as protective and is decorative in the place that matters most.
+
+This is the **mid-combat direct write** that `AGENTS.md` documents as the one approved exception to
+`EmotionService` being the emotion choke point. The exception is now bypassing two things: the choke
+point, and a trait that only the choke point can apply.
+
+### Same family as two other findings on this branch
+
+| Finding | Shape |
+|---|---|
+| Okomfo `idle_fear_aura` (fixed, `fcb5cf0`) | Authored config a V1/V2 name mismatch made unreachable |
+| `reactive_min_expression_band` (deferred, B1) | Authored config **read nowhere**; the real gate is hardcoded |
+| **`resist_fear` (this)** | Trait read by one function that combat's main fear source never calls |
+
+All three are authored intent that never reaches the thing it was written for, and **none produced a
+failing test** — the suite cannot see a trait that silently does nothing.
+
+### Why B3 could not demonstrate the fear-relief fix
+
+Recorded so the null result is not later read as the fix failing. `9fb369e` widened three relief
+gates to `forming`. Scenario B3's deterministic party carries `self_regulate` x3 and `resist_fear`
+x2, **no** `suppress_panic_spiral`, and never reaches last-stand. Two gates had nothing to attach to,
+and the third cannot reach melee fear at all. A3 *did* move — peak fear 32 → 25, three of five Echoes
+at threshold 85 instead of 80, which is `suppress_panic_spiral` firing at `forming` for the first
+time.
+
+**Compounding factor: the probe cannot vary party composition.** `EchoFactory.generate(seed_tag, …)`
+makes the party a function of the first two characters of the seed tag, so `seed_variant` — the
+documented way to sample several campaigns — does **not** resample traits or callings. Every
+per-trait and per-calling measurement on this branch rests on one party per label.
+
+### Three questions for Jeff, when he wants them
+
+1. Should `resist_fear` apply to combat hits? It is currently decorative where it matters most.
+2. Is the mid-combat direct write still the right exception, now that it bypasses a trait as well as
+   the choke point?
+3. Should the probe be able to vary party composition? It caps the evidence for every trait and
+   calling measurement we take.
