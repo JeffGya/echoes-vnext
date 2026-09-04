@@ -981,14 +981,34 @@ recorded here and filed, not fixed in passing.
 ### 15.1 DEFERRED — the bark side-chat, at the END of this story
 
 Jeff: *"let's start a side chat for barks at the end of this story to tackle these and other issues
-that might arrive."*
+that might arrive."* **This is the full bark backlog. Add to it rather than fixing in passing.**
 
-| Item | Evidence |
+**The surface that exists today** — do not rebuild it, it works:
+
+| Piece | Where |
 |---|---|
-| **`data.voice.reactive_min_expression_band` is dead config.** Authored in `balance.json`, **read nowhere**. The real gate is hardcoded `if _expression_band == "nascent": return` in `ActorStateMachine._check_reactive_bark()`. Same family as the Okomfo aura: authored intent nothing reads. | verified 2026-09-04 |
-| **The bark gate shifted** from Standing 2+ to Standing 3+ as a side effect of the band remap. Jeff accepted it — *"we should not have nascent and forming echoes be barking the whole time"* — and wants it re-examined after a play test. | `c01509e` |
-| **Phase 9's temporary visual and bark budget.** Two response contexts in tier 1, `max_barks_per_round` staying 3 as a proposed default, routed to the existing `BarkPopupDivergence` template. V2-COMBAT-004 removes it. | decisions 5, 6 |
-| **The `combat_attack` / `combat_inspired` bark contexts** are keyed on `melee_attack`, so the phase 5 rename would silence them if missed. | phase 5 inventory |
+| `BarkPopupLayer.show_barks(bark_events)` | `ui/screens/combat/BarkPopupLayer.gd:56` |
+| `resolve_template_kind(bark_context, is_response)` | `BarkPopupLayer.gd:129` |
+| Three authored templates — `BarkPopupOriginal`, `BarkPopupReaction`, **`BarkPopupDivergence`** | `BarkPopupLayer.tscn` |
+| `NarrativeVoiceService.apply_round_bark_budget()` | `core/echoes/NarrativeVoiceService.gd:289` |
+| `ActorStateMachine._check_reactive_bark()` — V2-VOICE-001 same-faction ally response | `ActorStateMachine.gd:841` |
+| Config: `max_barks_per_round` 3, `bark_tiers` 1-3, `reactive_range`, `reactive_high_signal_contexts`, `reactions_exceed_cap`, `max_reactions_per_original`, `sanctum_max_barkers` | `data.voice` |
+
+**The backlog:**
+
+| # | Item | Evidence |
+|---|---|---|
+| B1 | **`reactive_min_expression_band` is dead config.** Authored in `data.voice`, **read nowhere**. The real gate is hardcoded `if _expression_band == "nascent": return` in `_check_reactive_bark()`. Same family as the Okomfo aura — authored intent nothing reads. | verified 2026-09-04 |
+| B2 | **The reactive gate shifted Standing 2+ → 3+** as a side effect of the band remap. Jeff accepted it — *"we should not have nascent and forming echoes be barking the whole time and having tons of opinions"* — and wants it re-examined after a play test. | `c01509e` |
+| B3 | **Phase 9's temporary visual.** Object and Refuse route to the **existing** `BarkPopupDivergence` template via a set test in `resolve_template_kind()`. Marked temporary; V2-COMBAT-004 removes it. **Nothing on the Resolve screen** — it would crowd it. | decision 5 |
+| B4 | **The bark budget.** Two response contexts into **tier 1**, so a response always shows and outranks emotional or situational barks. `max_barks_per_round` stays 3, marked PROPOSED DEFAULT. **Jeff sets the final number during the phase 12 manual test.** Requirement: more than one response must be possible in a round. | decision 6 |
+| B5 | **`combat_attack` and `combat_inspired` are keyed on `melee_attack`** (`ActorStateMachine.gd:718, 734`). The phase 5 rename silences both if missed, and `combat_inspired` is a **tier 2** bark. | phase 5 inventory |
+| B6 | **`CONVENTIONS.md` documents an API that does not exist** — `BarkPopupLayer.enqueue_barks(Array)`. The real function is `show_barks(bark_events)`. Phase 13 corrects the document. | handoff §4 |
+| B7 | **The Okomfo `idle_fear_aura` writes a bark-adjacent log** (`actor.fear_idle_aura`) and now fires **every** idle round with no cooldown. Whether it should announce itself, and how often, is a voice question. | `fcb5cf0` |
+
+**Why a side chat rather than more phases here:** every one of these is presentation and pacing, not
+arbitration. They share a surface, so doing them together is cheaper than threading them through
+phases 9 to 13 one at a time — and this story has already drifted 20 commits past its own subject.
 
 ### 15.2 Leadership — LEFT AS IS
 
