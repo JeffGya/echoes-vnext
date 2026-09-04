@@ -963,3 +963,60 @@ During phase 5 research I told Jeff the `actor.idle` label fix would be **fear-n
 The aura fires on `action == "actor.idle"`, and 53 % of those labels are false (a moving turn wrongly
 labelled idle). **So the label fix now genuinely removes fear relief, and Jeff's original instruction
 — measure the fear curve before and after, then decide — stands.** Do that when phase 5 lands.
+
+---
+
+## 15. Scope drift, and what is deferred — Jeff, 2026-09-04
+
+> "I want the current story to be focused, we have drifted a lot."
+
+**Measured on the branch: 27 commits. 8 terrain, 6 V2 calling migration, 6 docs/process.
+Roughly 7 are the story's own phases.** Every detour was approved and each fixed a real defect that
+the story's own work stands on — but the story is named *one deterministic behavior-arbitration and
+explanation authority*, and **none of that has been built yet.** Phases 5 to 13 remain.
+
+**No further scope may be added without Jeff's explicit approval.** A defect found from here is
+recorded here and filed, not fixed in passing.
+
+### 15.1 DEFERRED — the bark side-chat, at the END of this story
+
+Jeff: *"let's start a side chat for barks at the end of this story to tackle these and other issues
+that might arrive."*
+
+| Item | Evidence |
+|---|---|
+| **`data.voice.reactive_min_expression_band` is dead config.** Authored in `balance.json`, **read nowhere**. The real gate is hardcoded `if _expression_band == "nascent": return` in `ActorStateMachine._check_reactive_bark()`. Same family as the Okomfo aura: authored intent nothing reads. | verified 2026-09-04 |
+| **The bark gate shifted** from Standing 2+ to Standing 3+ as a side effect of the band remap. Jeff accepted it — *"we should not have nascent and forming echoes be barking the whole time"* — and wants it re-examined after a play test. | `c01509e` |
+| **Phase 9's temporary visual and bark budget.** Two response contexts in tier 1, `max_barks_per_round` staying 3 as a proposed default, routed to the existing `BarkPopupDivergence` template. V2-COMBAT-004 removes it. | decisions 5, 6 |
+| **The `combat_attack` / `combat_inspired` bark contexts** are keyed on `melee_attack`, so the phase 5 rename would silence them if missed. | phase 5 inventory |
+
+### 15.2 Leadership — LEFT AS IS
+
+The band remap moved `is_whole_leader()` from Standing 4+ to Standing 9 only, because it tests for
+the `whole` band. Jeff considered a graduated model (always at 9, weaker and rarer below) and ruled:
+**"leadership seems to work as expected"** — no change. Recorded so the shift is not re-discovered
+later and mistaken for a defect.
+
+### 15.3 APPROVED, pending — extend fear relief to `forming`
+
+**Why.** Veteran refusals rose (B3: 0 → 3, peak fear 62 → 100) after the band remap. Jeff's test was
+*why*: **"If it is fear based then its not good. If it is about choices or actions or directives not
+aligning with them then it is better."**
+
+It is fear. **The Absolute Fear Rule is the only refusal path in the game** — `fear >= threshold`.
+No directive-misalignment refusal exists yet; that is what phase 8 builds.
+
+The cause is a double hit on Standing 3-5, which were `whole` and are now `forming`:
+
+| Relief | Gate |
+|---|---|
+| `self_regulate` +3 morale/round | `grounded` or `whole` |
+| `suppress_panic_spiral` +5 threshold | `grounded` or `whole` |
+| Last-stand threshold bonus | `grounded` or `whole` |
+
+They lost every one **and** dropped from threshold 90 to 80. They are not braver; they lost their
+support and broke.
+
+**Approved fix:** extend the relief gates to include `forming`. **Keep the approved thresholds
+unchanged.** This separates how resistant an Echo is from whether it gets help — only the first
+should scale steeply. Sites: `ActorStateMachine.gd` ~:257, ~:264, and `EmotionService.gd` ~:281.
