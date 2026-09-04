@@ -1000,15 +1000,22 @@ that might arrive."* **This is the full bark backlog. Add to it rather than fixi
 |---|---|---|
 | B1 | **`reactive_min_expression_band` is dead config.** Authored in `data.voice`, **read nowhere**. The real gate is hardcoded `if _expression_band == "nascent": return` in `_check_reactive_bark()`. Same family as the Okomfo aura — authored intent nothing reads. | verified 2026-09-04 |
 | B2 | **The reactive gate shifted Standing 2+ → 3+** as a side effect of the band remap. Jeff accepted it — *"we should not have nascent and forming echoes be barking the whole time and having tons of opinions"* — and wants it re-examined after a play test. | `c01509e` |
-| B3 | **Phase 9's temporary visual.** Object and Refuse route to the **existing** `BarkPopupDivergence` template via a set test in `resolve_template_kind()`. Marked temporary; V2-COMBAT-004 removes it. **Nothing on the Resolve screen** — it would crowd it. | decision 5 |
-| B4 | **The bark budget.** Two response contexts into **tier 1**, so a response always shows and outranks emotional or situational barks. `max_barks_per_round` stays 3, marked PROPOSED DEFAULT. **Jeff sets the final number during the phase 12 manual test.** Requirement: more than one response must be possible in a round. | decision 6 |
-| B5 | **`combat_attack` and `combat_inspired` are keyed on `melee_attack`** (`ActorStateMachine.gd:718, 734`). The phase 5 rename silences both if missed, and `combat_inspired` is a **tier 2** bark. | phase 5 inventory |
-| B6 | **`CONVENTIONS.md` documents an API that does not exist** — `BarkPopupLayer.enqueue_barks(Array)`. The real function is `show_barks(bark_events)`. Phase 13 corrects the document. | handoff §4 |
+| ~~B3~~ | **BACK IN THE STORY (Jeff, 2026-09-04): phase 9 stays.** *"Keep phase 9 in the story, if that requires us to do more extensive bark work then we have to do it."* **Phase 9's temporary visual.** Object and Refuse route to the **existing** `BarkPopupDivergence` template via a set test in `resolve_template_kind()`. Marked temporary; V2-COMBAT-004 removes it. **Nothing on the Resolve screen** — it would crowd it. | decision 5 |
+| ~~B4~~ | **BACK IN THE STORY — see B3.** **The bark budget.** Two response contexts into **tier 1**, so a response always shows and outranks emotional or situational barks. `max_barks_per_round` stays 3, marked PROPOSED DEFAULT. **Jeff sets the final number during the phase 12 manual test.** Requirement: more than one response must be possible in a round. | decision 6 |
+| ~~B5~~ | **MOOT.** It only mattered if `melee_attack` were renamed, and Jeff **dropped the rename** on 2026-09-04. `combat_attack` and `combat_inspired` keep working untouched. | phase 5 decision |
+| B6 | **Fold into phase 13**, which already updates the documentation. **`CONVENTIONS.md` documents an API that does not exist** — `BarkPopupLayer.enqueue_barks(Array)`. The real function is `show_barks(bark_events)`. Phase 13 corrects the document. | handoff §4 |
 | B7 | **The Okomfo `idle_fear_aura` writes a bark-adjacent log** (`actor.fear_idle_aura`) and now fires **every** idle round with no cooldown. Whether it should announce itself, and how often, is a voice question. | `fcb5cf0` |
 
-**Why a side chat rather than more phases here:** every one of these is presentation and pacing, not
-arbitration. They share a surface, so doing them together is cheaper than threading them through
-phases 9 to 13 one at a time — and this story has already drifted 20 commits past its own subject.
+**Revised 2026-09-04.** Jeff kept phase 9 in the story, so **B3 and B4 return to it**, B5 is moot
+because the rename was dropped, and B6 folds into phase 13's documentation pass. **Three items
+remain for the side chat: B1, B2 and B7.**
+
+B2 gets its evidence for free — phase 12 *is* the play test after which Jeff wanted the reactive
+gate re-examined.
+
+The consequence of keeping phase 9: the story now delivers both halves — the arbitration authority
+**and** a player who can see it. That is the story as written. It also means the bark surface gets
+touched here rather than later, so anything phase 9 needs from B1 is fair to pull forward.
 
 ### 15.2 Leadership — LEFT AS IS
 
