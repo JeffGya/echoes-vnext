@@ -441,6 +441,13 @@ func _run_tests(parts: Array) -> void:
 		TerrainRegionProbe.register(terrain_probe_runner)
 		terrain_probe_runner.run_all()
 		return
+	# INVESTIGATION TOOL — `tests spatialprobe <arm>` dumps the live movement options'
+	# exposure/congestion/cohesion fields and a per-turn decision log for all seven modes.
+	if parts.size() > 1 and str(parts[1]).to_lower() == "spatialprobe":
+		var spatial_probe_runner := CoreTestRunner.new()
+		SpatialTermProbe.register(spatial_probe_runner)
+		spatial_probe_runner.run_all()
+		return
 	# V2-INFRA-003: `tests <filter>` runs only suites whose reported name matches.
 	# Registration below is cheap (just appends {name, fn} to CoreTestRunner._tests);
 	# the 173s cost is entirely inside run_all(). So we always register everything,

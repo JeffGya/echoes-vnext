@@ -582,9 +582,16 @@ static func _run_mode_fingerprint(
 ## same -> now +1.0). This reorders who acts first each round, on top of the dominant-vector
 ## move above, so all three hashes move again.
 # V2-COMBAT-003 Phase 5 re-record — attributed. LiveMovementContextService.apply_live_activation() now relabels actor.idle as actor.move when the turn traversed cells. Verified turn-by-turn against the pre-fix trace: only the action_type field changed on the affected turns (COMBAT 18, PURIFY_SHRINE 12, RECOVER 3, PROTECT 3, ENDURE 17, PURSUE 14, GUIDE_SPIRIT 7) — every other field (actor_id, target_id, damage, is_kill, positions, mode_state) is byte-identical. FINAL_HASH and SAVE_HASH did not move.
-const COMBAT_ROUNDS_HASH := "ef5ce9d821c5b68f1087735afebfeeccef666293006f0ebb0369a1bdd7262ace"
-const COMBAT_FINAL_HASH  := "acd5c49a3496616010028fdcdf8851eba11865a9596203e3d99db39e88da2c21"
-const COMBAT_SAVE_HASH   := "f3e41850d026469d228e8c1d30c57e87a9e38279f323fc49f96bc480b1355d05"
+# V2-COMBAT-003 Phase 6 re-record — attributed. The live producer now fills exposure, congestion
+# and cohesion from MovementOptionService, so BehaviorArbiter._spatial_utility scores routes it
+# previously scored as if every cell were equally safe. COMBAT ends in 5 rounds instead of 6:
+# echo_0002 attacks from 6,3 in r04 instead of retreating to 5,3, echo_0004 lands the killing
+# blow in r05 from 7,4, and round 6 no longer happens. FINAL moves only on round_ended 6 -> 5;
+# SAVE moves only because the 25 kill XP is now echo_0004's instead of echo_0003's — ase 55 and
+# ekwan 7 are unchanged. The other five modes' hashes did not move at all.
+const COMBAT_ROUNDS_HASH := "5a25f514547053a6a2870086cdd6a72133a753e74156882a86085c11e4f5b9a4"
+const COMBAT_FINAL_HASH  := "4031c2669731de4b3ca62a24b16378a083a524e048976047208571161098ab5e"
+const COMBAT_SAVE_HASH   := "64dc78e3baf7dd7c3ea61b26536f842b3fecda7de923487fb9143904cffabe49"
 
 
 ## Shared expected-vs-actual assertion for the three hashes of one mode.
@@ -623,7 +630,11 @@ static func test_combat() -> Dictionary:
 ## RE-RECORDED, V2-COMBAT-003 Phase 2b — production-shaped fixtures (ANSWERS.md #50). Same
 ## cause as COMBAT above: GridService placement's vec_mod term.
 # V2-COMBAT-003 Phase 5 re-record — same cause as COMBAT_ROUNDS_HASH above.
-const PURIFY_SHRINE_ROUNDS_HASH := "e71528f486585e944b6c8926b01716dde1b546e8730e19e71b6bbbeac0f96dd8"
+# V2-COMBAT-003 Phase 6 re-record — attributed. Same cause as COMBAT above, one turn wide:
+# echo_0003 no longer advances 5,2 -> 6,3 to attack in r03, because that single step runs
+# through the enemy's control (exposure 1.0 x -6.0). The fight still ends in 4 rounds, so
+# FINAL and SAVE did not move.
+const PURIFY_SHRINE_ROUNDS_HASH := "665ca43f923f3167e7e4758b864b56b01d2183ab037c73059378d3c2c1fab01e"
 const PURIFY_SHRINE_FINAL_HASH  := "8819869f67b59f78577acc99ceb0b132faa6b7fa8282e611c39effd36dcd7c17"
 const PURIFY_SHRINE_SAVE_HASH   := "05a8bbd08fb73615c6eae460481463fea9f6180661f1c25119d3f944124a1f08"
 

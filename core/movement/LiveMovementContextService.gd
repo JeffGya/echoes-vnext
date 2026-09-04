@@ -291,7 +291,8 @@ func _movement_direct_option_for_goal(
 	var salt: String = str(movement_context.get("mover_id", ""))
 	var destination_region: Array = goal.get("destination_region", []) as Array
 	if destination_region.has(origin) and str(goal.get("purpose", "")) == "hold":
-		return _movement_build_direct_option(movement_context, profile, goal, origin, [], 0, 0, edge_sources)
+		return _movement_build_direct_option(
+			movement_context, profile, goal, origin, [], 0, 0, edge_sources, edge_costs)
 
 	if destination_region.is_empty():
 		return {}
@@ -368,7 +369,8 @@ func _movement_direct_option_for_goal(
 		return {}
 	var destination: Dictionary = selected_path.back() as Dictionary
 	return _movement_build_direct_option(
-		movement_context, profile, goal, destination, selected_path, selected_cost, selected_cost, edge_sources)
+		movement_context, profile, goal, destination, selected_path, selected_cost, selected_cost,
+		edge_sources, edge_costs)
 
 
 func _movement_planning_walkable(movement_context: Dictionary) -> Dictionary:
@@ -422,7 +424,8 @@ func _movement_build_direct_option(
 	path: Array,
 	route_cost: int,
 	shortest_cost: int,
-	edge_sources: Dictionary = {}
+	edge_sources: Dictionary = {},
+	edge_costs: Dictionary = {}
 ) -> Dictionary:
 	var goal_id: String = str(goal.get("goal_id", "goal.live"))
 	# The option_id is contract-checked by MovementOption._validate_option_id, which demands
@@ -443,19 +446,19 @@ func _movement_build_direct_option(
 		route_cost - shortest_cost,
 		int(profile.get("capacity", 0)),
 		route_cost,
-		# exposure / congestion / cohesion stay 0.0 ON PURPOSE. These three are consumed by
-		# BehaviorArbiter._spatial_utility as WEIGHTED terms (exposure -6.0, cohesion 4.0,
-		# congestion -2.0), so populating them here would silently activate scoring weights
-		# that have never run in a live encounter. Deciding "whether a particular Echo
-		# accepts that risk" is V2-COMBAT-003 (Movement Model Slice C), which owns both
-		# filling these and tuning their weights together. See docs/movement-model.md.
-		0.0,
-		0.0,
-		0.0,
-		# hostile_control_sources + hazard_summary ARE this story's to publish truthfully:
-		# they are declarative route facts, not risk appetite, and V2-COMBAT-003 is written
-		# to consume them. Both were previously hardcoded empty, which was a false claim.
-		# Inert for selection today, so this is a contract-honesty fix with no behaviour change.
+		# exposure / congestion / cohesion come from MovementOptionService's own
+		# implementations — the live path never calls generate_options, so connecting them
+		# here is the only way they reach BehaviorArbiter._spatial_utility. Never write a
+		# second implementation of a scoring term: two copies drift silently.
+		MovementOptionServiceScript._exposure(
+			path, movement_context.get("origin", {}) as Dictionary, edge_costs),
+		MovementOptionServiceScript._congestion(
+			destination,
+			movement_context.get("occupancy", {}) as Dictionary,
+			str(movement_context.get("mover_id", ""))),
+		MovementOptionServiceScript._cohesion(destination, movement_context),
+		# hostile_control_sources reads the same control model exposure does, so the two
+		# always agree: a non-empty source list means a non-zero exposure.
 		MovementOptionServiceScript._hostile_sources(
 			path, movement_context.get("origin", {}) as Dictionary, edge_sources),
 		_movement_hazard_summary(movement_context, path),

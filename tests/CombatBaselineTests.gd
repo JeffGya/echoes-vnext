@@ -280,19 +280,24 @@ static func _has_log(logger: StructuredLogger, type: String) -> bool:
 # (aduro) and echo_0005 (kra_soro) -- unrecognized V1-only keys before the fix, so both scored
 # 0; now aduro=+3.0, kra_soro=+1.0. Initiative order shifts, so the fight runs 6 rounds instead
 # of 5 (rounds 1-2 unchanged, diverging from round 3 once the reorder changes who acts first).
+# V2-COMBAT-003 Phase 6: exposure/congestion/cohesion reach _spatial_utility for the first
+# time. Rounds 1-3 are byte-identical (the first three hashes below are unchanged); the trace
+# diverges at round 4, where echo_0002 attacks from 6,3 instead of retreating to 5,3, and the
+# fight ends in 5 rounds instead of 6.
 const COMBAT_EMOTION_HASHES: Array = [
 	"c0e348c181a7d83ce625ae6ed12c93e7c88eb0a247d1061f7aa3ecdab5f383ac",
 	"ce777cfdc61ea886ead439c5c5f16b4c0a9eb79e32294cf74e293d0ab64926e8",
 	"4bd5ac19b2d35ae914780100e79b1f63338cb1e5b3840470c92c512dddfa9466",
-	"f9acc19fd364cfd13515e3d44c57aee96b0723ffc136ac8867bf7e8c92750e2b",
-	"0449133a9c40141510337ba49e8cbb8038f5edafeb84091909c9e7721d260b30",
-	"4debb7951d67c4fc2b53ecdb59063514ede57a5ea758e869e094d3871cddf711",
+	"6cfc5012fa6ae311c0c28a61f7f950154e8db7eeb2f975434d86f709fdc82701",
+	"798c972de6bf8d7b437875f14d0589ab3276a404eb27b70eb3336fca795ea052",
 ]
+# V2-COMBAT-003 Phase 6: same cause as COMBAT above. Rounds 1-2 unchanged; round 3 diverges
+# because echo_0003 no longer steps 5,2 -> 6,3 into the enemy's control to attack. Still 4 rounds.
 const PURIFY_SHRINE_EMOTION_HASHES: Array = [
 	"bd2de7301aa35102d31bc447af0046a9d6cc8432f4bf5358f5a3db9deeed639e",
 	"725ca32c64d227aac4c49c29180c72e03bd29032fde35554ae95930d4b4300c1",
-	"793849651b096d5e47648cc6239d97dfb3b314f87dfc981e628dbda7d2e2ce6f",
-	"ad358527be25272d0ebd5adc3371ff41aebed916d93b89dc9d2d584ac71484f0",
+	"8a31835fb4cf98b61f9f6526a1e202c6a436343d73b6a5a704300e75f7cdad7c",
+	"4a2b0ff7ffc82682d6efc7f0e78302978271ecd71c2c00ed136f84f0b0ab5f02",
 ]
 const RECOVER_EMOTION_HASHES: Array = [
 	"61cb0af978317b7b9a7925e250137a68fe5435c3193120a861b317971919dfcd",

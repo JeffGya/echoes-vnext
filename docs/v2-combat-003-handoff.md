@@ -186,18 +186,43 @@ and appeared in **zero** captured turns.
 Corrected in `44671aa`. Turns gained: COMBAT +5, PURIFY_SHRINE +4, RECOVER +2, PROTECT +4,
 ENDURE +5, PURSUE +5, GUIDE_SPIRIT +9 — one for each round. The move was proven additive.
 
-### 5.6 The four inert scoring terms
+### 5.6 The four inert scoring terms — THREE FIXED in phase 6, the fourth measured
 
-`_spatial_utility` has 11 terms. The live producer at `LiveMovementContextService.gd:452-454` sends
-literal `0.0` for `exposure`, `congestion` and `cohesion`. That also kills a fourth term, because
-`directive_exposure_acceptance` multiplies `exposure`.
+`_spatial_utility` has 11 terms. The live producer sent literal `0.0` for `exposure`, `congestion`
+and `cohesion`, which also killed a fourth term, because `directive_exposure_acceptance` multiplies
+`exposure`.
 
-Working implementations already exist as `MovementOptionService._exposure`, `._congestion` and
-`._cohesion`. **The live path never calls `generate_options`**, so those implementations are unused.
-Half B connects them; it does not write new ones.
+Phase 6 connected the three fields to the existing `MovementOptionService._exposure`,
+`._congestion` and `._cohesion` — no new implementation was written. Measured on the current tree,
+across all seven modes:
+
+| Term | Weight | Before | After | Decisions it changes |
+|---|---:|---|---|---|
+| `exposure` | −6.0 | 0.0 on every option | 0.0 or 1.0 (2 samples of 0.5 in 454) | 29 turn lines |
+| `cohesion` | 4.0 | 0.0 on every option | 5 distinct values, 0.0–1.0 | 22 turn lines |
+| `congestion` | −2.0 | 0.0 on every option | 5 distinct values, 0.0–0.5 | 19 turn lines |
+| `directive_exposure_acceptance` | 2.0 | inert by consequence | now multiplies a live `exposure` | **0** |
+
+**`exposure` is very nearly binary in live combat.** Routes near contact are one step long and
+capacity floors at 2, so the ratio `controlled_edges / path.size()` collapses to 0 or 1. The −6.0
+weight is therefore a flat "this route enters hostile control" penalty, not a gradient.
+
+**`directive_exposure_acceptance` is still decision-inert, and the field being filled is not the
+reason.** `exposure_acceptance` is authored on `directive.seek_signs` only (0.20); the default
+`directive.scout_carefully` does not carry the key at all. Forcing `seek_signs` and then zeroing
+`directive_exposure_acceptance_weight` changed **zero** turns across all seven modes: at
+2.0 × 0.20 × 1.0 the term is worth at most +0.40 against `exposure`'s −6.0 and
+`objective_progress`'s 8.0, so it never flips a ranking. The term is connected and honest; it is
+too small to decide anything. Left alone — phase 10 owns tuning.
+
+**No weight was changed.** Every mode still resolves in every arm (base, exposure off, cohesion
+off, congestion off, acceptance off, seek_signs), so nothing met the revert condition, and there is
+no measurement that would justify moving an authored value.
 
 **One agent reported these terms as live.** It had read the pure service and missed the live
 producer. Do not repeat that error.
+
+Reproduce any of this with `tools/SpatialTermProbe.gd`: `-- tests spatialprobe <arm>`.
 
 ### 5.7 `terrain_costs` is empty in live combat
 
@@ -239,7 +264,7 @@ change.** Bring the numbers to Jeff and let him place it.
 | 3 | The Whole-band baseline scenario | `sonnet` | Not started |
 | 4 | Limit the refusal to an Echo | `sonnet` | Not started |
 | 5 | The action vocabulary | `opus` table, then `haiku` rename | Table produced, needs approval |
-| 6 | The three inert terms | `opus` | Not started |
+| 6 | The three inert terms | `opus` | **Done** — three connected, the fourth measured and left |
 | 7 | Purify, engage region, `health_ratio`, the step before an attack | `opus` | Not started |
 | 8 | The arbitration and explanation authority | `opus` | Design produced |
 | 9 | The temporary visual and the bark budget | `sonnet` | Not started |

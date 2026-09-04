@@ -35,7 +35,7 @@ static func register(runner) -> void:
 	runner.register_test("behavior_char/moved_actor_can_still_log_actor_idle", func(): return _t_moved_actor_logs_idle())
 	runner.register_test("behavior_char/enemy_can_refuse_no_faction_gate", func(): return _t_enemy_can_refuse())
 	runner.register_test("behavior_char/enemy_nascent_65_vs_grounded_echo_80", func(): return _t_band_thresholds_diverge())
-	runner.register_test("behavior_char/live_options_always_zero_spatial_terms", func(): return _t_live_options_zero_spatial_terms())
+	runner.register_test("behavior_char/live_options_carry_real_spatial_terms", func(): return _t_live_options_zero_spatial_terms())
 	runner.register_test("behavior_char/purify_above_half_health_delegates_to_ordinary_combat", func(): return _t_purify_delegates_to_ordinary_combat())
 	runner.register_test("behavior_char/legacy_selector_fallback_is_silent", func(): return _t_legacy_fallback_silent())
 	runner.register_test("behavior_char/health_ratio_ladders_diverge_on_zero_max_hp", func(): return _t_health_ratio_ladders_diverge())
@@ -272,14 +272,19 @@ static func _t_band_thresholds_diverge() -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
-# 5 — Three live-option fields are always zero: exposure, congestion, cohesion
-# (LiveMovementContextService.gd:452-454).
+# 5 — exposure, congestion and cohesion are published from MovementOptionService's own
+# implementations. They were hardcoded 0.0 until V2-COMBAT-003 phase 6.
 #
 # Same real production method as fact 1 (prepare_live_movement_context), this time with the
 # mover free to move (no boxing-in), so it actually receives >=1 option to inspect.
+#
+# The mover starts 8-adjacent to the only hostile, so every edge it can take is controlled:
+# exposure 1.0, corroborated by hostile_control_sources naming that same enemy. congestion is
+# 1/8 — one of the destination's eight neighbours holds the enemy. cohesion is 0.0 because a
+# two-actor fixture has no friendly actor to be close to; _cohesion returns 0.0 on an empty
+# friend set rather than dividing by zero.
 # ---------------------------------------------------------------------------
 
-# KNOWN DEFECT (V2-COMBAT-003 will change this):
 static func _t_live_options_zero_spatial_terms() -> Dictionary:
 	var mover: Dictionary = _echo_actor("echo.free", 1, 1)
 	var enemy: Dictionary = _enemy_actor("enemy.near", 2, 1)  # adjacent -> a direct "engage" goal+option
@@ -313,10 +318,12 @@ static func _t_live_options_zero_spatial_terms() -> Dictionary:
 		return { "ok": false, "error": "expected at least one live option for a free, adjacent-to-hostile mover — got none, cannot check the spatial fields" }
 	for option_v in options:
 		var option: Dictionary = option_v as Dictionary
-		if not (is_equal_approx(float(option.get("exposure", -1.0)), 0.0)
-				and is_equal_approx(float(option.get("congestion", -1.0)), 0.0)
+		if not (is_equal_approx(float(option.get("exposure", -1.0)), 1.0)
+				and is_equal_approx(float(option.get("congestion", -1.0)), 0.125)
 				and is_equal_approx(float(option.get("cohesion", -1.0)), 0.0)):
-			return { "ok": false, "error": "expected exposure/congestion/cohesion to all be 0.0 (hardcoded), got %s" % str(option) }
+			return { "ok": false, "error": "expected exposure 1.0 / congestion 0.125 / cohesion 0.0, got %s" % str(option) }
+		if (option.get("hostile_control_sources", []) as Array) != ["enemy.near"]:
+			return { "ok": false, "error": "exposure 1.0 must agree with hostile_control_sources, got %s" % str(option) }
 	return { "ok": true }
 
 
