@@ -314,8 +314,12 @@ static func _t_full_tie_and_stationary() -> Dictionary:
 	(fixture["context"] as Dictionary)["actor"]["calling_origin"] = "onyamesu"
 	result = _select(fixture)
 	var intent: Dictionary = result["intent"] as Dictionary
-	if str(intent["goal_id"]) != "goal.legacy.stationary.actor_guard.c0r0" or intent["path"] != [] or intent["pressure_sources"] != []:
-		return _fail("Stationary normalization failed: %s" % str(result))
+	# A zero-step option a GOAL published keeps that goal's identity. Only a candidate
+	# that never had a goal is normalized to a legacy stationary one.
+	if str(intent["goal_id"]) != "goal.combat.hold.baseline.c0r0" \
+			or intent["path"] != [] \
+			or intent["pressure_sources"] != ["mode.combat", "role.baseline"]:
+		return _fail("Goal-derived stay option lost its identity: %s" % str(result))
 	return _pass()
 
 

@@ -278,16 +278,20 @@ static func _t_band_thresholds_diverge() -> Dictionary:
 # Same real production method as fact 1 (prepare_live_movement_context), this time with the
 # mover free to move (no boxing-in), so it actually receives >=1 option to inspect.
 #
-# The mover starts 8-adjacent to the only hostile, so every edge it can take is controlled:
-# exposure 1.0, corroborated by hostile_control_sources naming that same enemy. congestion is
-# 1/8 — one of the destination's eight neighbours holds the enemy. cohesion is 0.0 because a
-# two-actor fixture has no friendly actor to be close to; _cohesion returns 0.0 on an empty
-# friend set rather than dividing by zero.
+# The mover starts two cells from the only hostile, so it must step into that hostile's
+# control to strike: exposure 1.0, corroborated by hostile_control_sources naming that same
+# enemy. congestion is 1/8 — one of the destination's eight neighbours holds the enemy.
+# cohesion is 0.0 because a two-actor fixture has no friendly actor to be close to;
+# _cohesion returns 0.0 on an empty friend set rather than dividing by zero.
+#
+# The gap is load-bearing: a mover already within melee reach gets the zero-step stay
+# option, whose empty path carries exposure 0.0 — truthful, but indistinguishable from the
+# hardcoded 0.0 this fact exists to rule out.
 # ---------------------------------------------------------------------------
 
 static func _t_live_options_zero_spatial_terms() -> Dictionary:
-	var mover: Dictionary = _echo_actor("echo.free", 1, 1)
-	var enemy: Dictionary = _enemy_actor("enemy.near", 2, 1)  # adjacent -> a direct "engage" goal+option
+	var mover: Dictionary = _echo_actor("echo.free", 0, 1)
+	var enemy: Dictionary = _enemy_actor("enemy.near", 2, 1)  # out of reach -> the mover must move to strike
 
 	var ectx := EncounterContext.new()
 	ectx.actors = [mover, enemy]

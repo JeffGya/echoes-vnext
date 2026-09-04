@@ -643,8 +643,15 @@ static func _t_option_exact() -> Dictionary:
 		0, 0, 0, 2, 0, 0.0, 0.0, 1.0, [], {"known_count": 0, "known_ids": []},
 		1.0, _action("actor.guard"), _action("actor.idle")
 	)
-	if not _matches(OptionContract.validate(stay, {"col": 1, "row": 1}), "stationary_option_requires_hold", "purpose"):
-		return _fail("non-hold stationary option accepted")
+	if not _matches(OptionContract.validate(stay, {"col": 1, "row": 1}), "stationary_option_requires_stay_capable_purpose", "purpose"):
+		return _fail("stationary option accepted for a purpose that exists to move")
+	var engage_stay: Dictionary = OptionContract.build(
+		"goal.combat.engage.baseline.c1r1", "option.combat.engage.baseline.c1r1.direct.d1r1.pstay", "engage", {"col": 1, "row": 1}, [],
+		0, 0, 0, 2, 0, 0.0, 0.0, 1.0, [], {"known_count": 0, "known_ids": []},
+		1.0, _action("melee_attack", "enemy.a"), _action("actor.idle")
+	)
+	if not bool(OptionContract.validate(engage_stay, {"col": 1, "row": 1})["valid"]):
+		return _fail("stationary option rejected for a stay-capable purpose")
 	for style_value: Variant in OptionContract.STYLES:
 		var style_option: Dictionary = _option()
 		style_option["option_id"] = str(style_option["option_id"]).replace(".direct.", ".%s." % str(style_value))

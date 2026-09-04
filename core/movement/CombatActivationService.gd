@@ -76,6 +76,42 @@ const ResultContract = preload("res://core/movement/contracts/MovementResult.gd"
 
 const _ACTIVATION_PHASE: String = "activation"
 
+## Chebyshev reach per action type, and the reach for any action absent from the table.
+## THE single authority: every "can I act on that target from here?" question in the
+## movement domain resolves through `reach_for`, never through an adjacency test or a
+## literal 1. Values are all 1 today, so every caller behaves exactly as an adjacency
+## test does — but when a weapon/skill story raises one of them, range-aware behaviour
+## follows with no further edit.
+const ACTION_RANGES: Dictionary = {
+	"melee_attack": 1,
+	"protect_ally": 1,
+	"actor.purify_shrine": 1,
+}
+const DEFAULT_ACTION_RANGE: int = 1
+
+
+## Reach for `action_type`, from a caller-supplied table when there is one.
+static func reach_for(
+	action_type: String,
+	ranges: Dictionary = ACTION_RANGES,
+	default_range: int = DEFAULT_ACTION_RANGE
+) -> int:
+	return int(ranges.get(action_type, default_range))
+
+
+## Is `target_cell` within `action_type`'s reach of `from_cell`?
+static func in_reach(
+	from_cell: Dictionary,
+	target_cell: Dictionary,
+	action_type: String,
+	ranges: Dictionary = ACTION_RANGES,
+	default_range: int = DEFAULT_ACTION_RANGE
+) -> bool:
+	if from_cell.is_empty() or target_cell.is_empty():
+		return false
+	return _chebyshev(from_cell, target_cell) <= reach_for(action_type, ranges, default_range)
+
+
 ## Purpose -> action types permitted as a declared fallback. Mirrors MovementGoal's
 ## plan-for-purpose vocabulary. Unknown purpose (or "read", whose primary is idle)
 ## permits NO fallback. Table-driven so it is trivial to tune / ratify.
@@ -276,10 +312,13 @@ static func _action_valid_at(action: Dictionary, final_cell: Dictionary, action_
 	var positions: Dictionary = action_ctx.get("positions", {}) as Dictionary
 	if not positions.has(target_id):
 		return false
-	var target_pos: Dictionary = positions[target_id] as Dictionary
-	var ranges: Dictionary = action_ctx.get("ranges", {}) as Dictionary
-	var reach: int = int(ranges.get(str(action.get("type", "")), int(action_ctx.get("default_range", 1))))
-	return _chebyshev(final_cell, target_pos) <= reach
+	return in_reach(
+		final_cell,
+		positions[target_id] as Dictionary,
+		str(action.get("type", "")),
+		action_ctx.get("ranges", {}) as Dictionary,
+		int(action_ctx.get("default_range", DEFAULT_ACTION_RANGE))
+	)
 
 
 ## Whether `fallback_type` is a permitted fallback for `purpose` (table-driven).

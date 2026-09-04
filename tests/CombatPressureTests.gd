@@ -198,9 +198,9 @@ static func _t_guide_join_boundary() -> Dictionary:
 	return _pass()
 
 
-## A mover already in melee range must not receive a competing `advance` goal.
-## The remaining engage goal must retain the established non-origin destination
-## contract, so the option can be a legal movement-and-melee activation.
+## A mover already in melee range must not receive a competing `advance` goal, and
+## its engage region must KEEP the mover's own cell, so the option generator can
+## publish the zero-step stay: in range is in range, with or without a step.
 static func _t_adjacent_combat_direct_engage() -> Dictionary:
 	for alignment: String in ["party", "hostile"]:
 		var context: Dictionary = _context("combat", alignment)
@@ -224,7 +224,7 @@ static func _t_adjacent_combat_direct_engage() -> Dictionary:
 		var plan: Dictionary = engage["planned_primary"] as Dictionary
 		if str(engage["purpose"]) != "engage" \
 				or float(engage["urgency"]) != 0.5 \
-				or (engage["destination_region"] as Array).has(origin) \
+				or not (engage["destination_region"] as Array).has(origin) \
 				or str(plan["type"]) != "melee_attack" \
 				or str(plan["target_id"]) != hostile_id:
 			return _fail("adjacent combat %s did not select direct melee engage: %s" % [alignment, str(engage)])

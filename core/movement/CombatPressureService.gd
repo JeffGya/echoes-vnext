@@ -10,6 +10,7 @@ const GoalContract = preload("res://core/movement/contracts/MovementGoal.gd")
 const ActionPlan = preload("res://core/movement/contracts/MovementActionPlan.gd")
 
 const EscapeAuthority = preload("res://core/movement/PursueEscapeService.gd")
+const ReachAuthority = preload("res://core/movement/CombatActivationService.gd")
 
 const BUCKET_DIRECT := "direct"
 const BUCKET_TACTICAL := "tactical"
@@ -141,11 +142,12 @@ static func _add_ordinary_combat(
 ) -> void:
 	for hostile_value: Variant in _hostiles(context):
 		var hostile: Dictionary = hostile_value as Dictionary
-		if _is_adjacent(context["origin"] as Dictionary, hostile["position"] as Dictionary):
-			# The mover is already in melee range, so it must not receive a competing
-			# advance. `engage` remains a legal non-stationary goal: MovementGoal only
-			# admits an origin-containing region for `hold`.
-			var adjacent_region: Array = _adjacent_region(context, hostile["position"] as Dictionary, false)
+		if ReachAuthority.in_reach(
+			context["origin"] as Dictionary, hostile["position"] as Dictionary, "melee_attack"
+		):
+			# Already able to strike: the region keeps the mover's own cell, so staying
+			# and attacking is a candidate rather than only the cells around the target.
+			var adjacent_region: Array = _adjacent_region(context, hostile["position"] as Dictionary, true)
 			_add_goal(
 				candidates, BUCKET_DIRECT, context, pressure, "engage", goal_role,
 				adjacent_region, NORMAL, [str(hostile["id"])]
@@ -175,7 +177,7 @@ static func _add_ordinary_combat(
 		# RETURNS immediately. The `engage baseline` goals in the other objective modes
 		# come from _add_truthful_engage (BUCKET_SAFETY), not from here, so those modes
 		# are untouched.
-		var region: Array = _adjacent_region(context, hostile["position"] as Dictionary, false)
+		var region: Array = _adjacent_region(context, hostile["position"] as Dictionary, true)
 		_add_goal(candidates, BUCKET_TACTICAL, context, pressure, "engage", goal_role, region, HIGH, [str(hostile["id"])])
 
 
@@ -239,7 +241,7 @@ static func _add_protect(
 		var carrier: Dictionary = _actor_by_id(context, str(pressure["carrier_id"]))
 		var carrier_cutoff: Array = pressure["approach_region"] as Array
 		if _is_living_actor(carrier):
-			var carrier_region: Array = _adjacent_region(context, carrier["position"] as Dictionary, false)
+			var carrier_region: Array = _adjacent_region(context, carrier["position"] as Dictionary, true)
 			_add_goal(candidates, BUCKET_DIRECT, context, pressure, "pursue", "hunter", carrier_region, CRITICAL, [str(carrier["id"])])
 			# §13.4 "focus or cut off the enemy carrier" — the fleeing carrier is an
 			# escaper, so its cutoff is projected from its own traversable escape
@@ -269,7 +271,7 @@ static func _add_pursue(candidates: Array, context: Dictionary, pressure: Dictio
 		var quarry: Dictionary = _actor_by_id(context, str(pressure["quarry_id"]))
 		var engaged_elsewhere: Array = []
 		if _is_living_actor(quarry) and bool(quarry["is_quarry"]):
-			var quarry_region: Array = _adjacent_region(context, quarry["position"] as Dictionary, false)
+			var quarry_region: Array = _adjacent_region(context, quarry["position"] as Dictionary, true)
 			_add_goal(candidates, BUCKET_DIRECT, context, pressure, "pursue", "hunter", quarry_region, CRITICAL, [str(quarry["id"])])
 			engaged_elsewhere.append(str(quarry["id"]))
 		# §13.6 — "cutoff projection from the quarry's traversable escape graph
@@ -655,7 +657,7 @@ static func _add_truthful_engage(
 		var hostile: Dictionary = hostile_value as Dictionary
 		if excluded_actor_ids.has(str(hostile["id"])):
 			continue
-		var region: Array = _adjacent_region(context, hostile["position"] as Dictionary, false)
+		var region: Array = _adjacent_region(context, hostile["position"] as Dictionary, true)
 		_add_goal(candidates, BUCKET_SAFETY, context, pressure, "engage", "baseline", region, NORMAL, [str(hostile["id"])])
 
 
@@ -673,7 +675,7 @@ static func _add_objective_engage(
 	var relationship: String = str((context["relationships"] as Dictionary).get(str(objective["id"]), ""))
 	if relationship != "hostile" or bool(objective["is_dead"]) or bool(objective["is_ko"]):
 		return
-	var region: Array = _adjacent_region(context, objective["position"] as Dictionary, false)
+	var region: Array = _adjacent_region(context, objective["position"] as Dictionary, true)
 	_add_goal(candidates, bucket, context, pressure, "engage", goal_role, region, urgency, [str(objective["id"])])
 
 
@@ -691,7 +693,7 @@ static func _add_actor_engage(
 		return
 	if str((context["relationships"] as Dictionary).get(actor_id, "")) != "hostile":
 		return
-	var region: Array = _adjacent_region(context, actor["position"] as Dictionary, false)
+	var region: Array = _adjacent_region(context, actor["position"] as Dictionary, true)
 	_add_goal(candidates, bucket, context, pressure, "engage", goal_role, region, urgency, [actor_id])
 
 
@@ -706,12 +708,12 @@ static func _add_goal(
 	urgency: float,
 	relevant_input: Array
 ) -> void:
-	var region: Array = _truthful_region(context, region_input, purpose == "hold")
-	if region.is_empty():
-		return
 	var relevant: Array = V.canonical_string_array(relevant_input.filter(func(value: Variant) -> bool: return not str(value).is_empty()))
 	var primary: Dictionary = _primary_plan(context, pressure, purpose, relevant)
 	if primary.is_empty():
+		return
+	var region: Array = _truthful_region(context, region_input, _origin_belongs_in_region(context, purpose, primary))
+	if region.is_empty():
 		return
 	var fallback: Dictionary = {} if str(primary["type"]) == "actor.idle" else ActionPlan.build("actor.idle")
 	var anchor: Dictionary = region[0] as Dictionary
@@ -756,6 +758,31 @@ static func _primary_plan(
 		"escort":
 			return ActionPlan.build("protect_ally", target_id)
 	return {}
+
+
+## May the mover's own cell stay in this goal's destination region?
+##
+## `hold` always: the objective cell IS the destination. Every other stay-capable
+## purpose plans a range-bound action against a named target, so the origin qualifies
+## only when that target is already within the action's reach — the range question
+## (`ReachAuthority.in_reach`), never an adjacency test. A target whose position is not
+## perceived cannot be answered for, so it does not qualify.
+static func _origin_belongs_in_region(
+	context: Dictionary, purpose: String, primary: Dictionary
+) -> bool:
+	if purpose == "hold":
+		return true
+	if not GoalContract.STAY_CAPABLE_PURPOSES.has(purpose):
+		return false
+	var target_id: String = str(primary["target_id"])
+	if target_id.is_empty():
+		return false
+	var target: Dictionary = _actor_by_id(context, target_id)
+	if target.is_empty():
+		return false
+	return ReachAuthority.in_reach(
+		context["origin"] as Dictionary, target["position"] as Dictionary, str(primary["type"])
+	)
 
 
 static func _truthful_region(context: Dictionary, input_region: Array, allow_origin: bool) -> Array:

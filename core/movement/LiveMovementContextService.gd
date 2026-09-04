@@ -290,7 +290,10 @@ func _movement_direct_option_for_goal(
 	var origin: Dictionary = movement_context.get("origin", {}) as Dictionary
 	var salt: String = str(movement_context.get("mover_id", ""))
 	var destination_region: Array = goal.get("destination_region", []) as Array
-	if destination_region.has(origin) and str(goal.get("purpose", "")) == "hold":
+	# Already in the region the goal wants: the zero-step stay is the truthful option.
+	# The live producer publishes ONE option per goal, so without this the mover's only
+	# candidate is a route to a different cell it has no reason to walk to.
+	if destination_region.has(origin):
 		return _movement_build_direct_option(
 			movement_context, profile, goal, origin, [], 0, 0, edge_sources, edge_costs)
 
@@ -527,12 +530,8 @@ func apply_live_activation(
 		"goal_id": str(intent.get("goal_id", "")),
 		"option_id": str(intent.get("option_id", "")),
 		"positions": _movement_actor_positions(flow_ctx.encounter_ctx.actors),
-		"ranges": {
-			"melee_attack": 1,
-			"protect_ally": 1,
-			"actor.purify_shrine": 1,
-		},
-		"default_range": 1,
+		"ranges": CombatActivationServiceScript.ACTION_RANGES,
+		"default_range": CombatActivationServiceScript.DEFAULT_ACTION_RANGE,
 		"objective_progress": float(goal.get("objective_progress", 0.0)),
 		"mover_hp": int(actor.get("current_hp", 0)),
 		"mover_ko_only": false,

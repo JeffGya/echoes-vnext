@@ -73,9 +73,10 @@ static func generate_options(
 	if bool(primary.get("failed", false)):
 		return _failure(str(primary["reason"]), str(primary["field"]))
 
-	# A holder already standing on the objective must stay put: the stay option is the only
-	# truthful candidate. Endpoint alternatives could otherwise emit a non-empty hold route
-	# that walks the actor off the objective it is meant to hold.
+	# `hold` alone suppresses the alternatives: its stay option is the only truthful
+	# candidate, and an endpoint route would walk the actor off the objective it holds.
+	# The other stay-capable purposes keep their alternatives, so the arbiter weighs
+	# staying against the other cells the action is still legal from.
 	var holding_in_place: bool = str(goal["purpose"]) == "hold" \
 		and (goal["destination_region"] as Array).has(origin)
 
@@ -173,7 +174,11 @@ static func _build_primary(
 	style: String
 ) -> Dictionary:
 	var origin: Dictionary = context["origin"] as Dictionary
-	if str(goal["purpose"]) == "hold" and (goal["destination_region"] as Array).has(origin):
+	# A mover already standing in its own destination region is in position: the
+	# truthful primary is the zero-step stay, not a route to a different cell in the
+	# same region. Which purposes may admit the origin at all is MovementGoal's
+	# STAY_CAPABLE_PURPOSES, enforced by the goal contract before this runs.
+	if (goal["destination_region"] as Array).has(origin):
 		return _build_option(
 			context, profile, goal, planning_walkable, edge_costs, edge_sources,
 			style, [], 0
@@ -563,8 +568,11 @@ static func _common_option_less(left: Dictionary, right: Dictionary) -> bool:
 	return str(left["option_id"]) < str(right["option_id"])
 
 
+## Progress is a fact about where the option ENDS. Keying it on the origin would score
+## every candidate 1.0 the moment the mover stands in the region — including the ones
+## that walk out of it.
 static func _objective_progress(origin: Dictionary, destination: Dictionary, region: Array) -> float:
-	if region.has(origin):
+	if region.has(destination):
 		return 1.0
 	var origin_distance: int = _distance_to_region(origin, region)
 	var destination_distance: int = _distance_to_region(destination, region)

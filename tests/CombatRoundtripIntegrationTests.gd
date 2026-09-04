@@ -3256,10 +3256,14 @@ static func _first_living(ectx: EncounterContext, faction: String) -> Dictionary
 ## path called hostile_edge_costs(), which discards `edge_sources`. This story owes those
 ## normalized summaries to V2-COMBAT-003; publishing hardcoded emptiness was a false claim.
 ##
-## Guards the fix specifically: a live hostile is parked 8-adjacent to the mover's origin,
-## so every edge leaving that origin is controlled and the sources CANNOT legitimately be
-## empty. Against the pre-fix code this fails on the `hostile_control_sources is empty`
-## branch, because that array was empty for every option on every board.
+## Guards the fix specifically: a live hostile is parked two cells from the mover's origin,
+## so every route that closes to melee crosses that hostile's zone of control and the sources
+## CANNOT legitimately be empty. Against the pre-fix code this fails on the
+## `hostile_control_sources is empty` branch, because that array was empty for every option
+## on every board.
+##
+## Two cells, not adjacent: a mover already within melee reach gets the zero-step stay
+## option, whose empty path crosses no edge and truthfully names no control source.
 static func test_published_option_carries_truthful_control_and_hazards() -> Dictionary:
 	var env: Dictionary = _setup("truthful_control", true, "off", EncounterResolutionModes.COMBAT)
 	if env.is_empty():
@@ -3277,22 +3281,23 @@ static func test_published_option_carries_truthful_control_and_hazards() -> Dict
 	if origin.is_empty():
 		return { "ok": false, "error": "mover has no grid_pos" }
 
-	# Park the hostile 8-adjacent to the mover so its zone of control is unambiguous.
+	# Park the hostile two cells from the mover: close enough that its zone of control covers
+	# every cell the mover must step to, far enough that the mover must actually step.
 	var bdata: Dictionary = runtime.config_service.get_balance().get("data", {}) as Dictionary
 	var board_cfg: Dictionary = _movement_board_cfg(runtime, ectx)
 	var walkable: Dictionary = _full_walkable(board_cfg)
-	var adjacent: Dictionary = {}
-	for dc in range(-1, 2):
-		for dr in range(-1, 2):
-			if dc == 0 and dr == 0:
+	var stand_off: Dictionary = {}
+	for dc in range(-2, 3):
+		for dr in range(-2, 3):
+			if maxi(absi(dc), absi(dr)) != 2:
 				continue
 			var cell: Dictionary = { "col": int(origin["col"]) + dc, "row": int(origin["row"]) + dr }
 			var key: String = "%d,%d" % [int(cell["col"]), int(cell["row"])]
-			if walkable.has(key) and bool(walkable[key]) and adjacent.is_empty():
-				adjacent = cell
-	if adjacent.is_empty():
-		return { "ok": false, "error": "no walkable cell adjacent to the mover" }
-	hostile["grid_pos"] = adjacent.duplicate(true)
+			if walkable.has(key) and bool(walkable[key]) and stand_off.is_empty():
+				stand_off = cell
+	if stand_off.is_empty():
+		return { "ok": false, "error": "no walkable cell two cells from the mover" }
+	hostile["grid_pos"] = stand_off.duplicate(true)
 
 	var prepared: Dictionary = _lm(runtime).prepare_live_movement_context(
 		mover, ectx, ectx.combat_state, board_cfg, bdata, 920)
@@ -3328,5 +3333,5 @@ static func test_published_option_carries_truthful_control_and_hazards() -> Dict
 
 	# The load-bearing assertion. Pre-fix this array was empty for every option, always.
 	if not saw_control:
-		return { "ok": false, "error": "no option reported hostile control despite a hostile adjacent to the mover origin — summaries are still hardcoded empty" }
+		return { "ok": false, "error": "no option reported hostile control despite a hostile two cells from the mover origin — summaries are still hardcoded empty" }
 	return { "ok": true }

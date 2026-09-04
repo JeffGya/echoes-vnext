@@ -110,8 +110,8 @@ static func validate(value: Dictionary, origin: Dictionary) -> Dictionary:
 		if not bool(int_result["valid"]):
 			return int_result
 	if path.is_empty():
-		if str(value["purpose"]) != "hold":
-			return V.failure("stationary_option_requires_hold", "purpose")
+		if not GoalContract.STAY_CAPABLE_PURPOSES.has(str(value["purpose"])):
+			return V.failure("stationary_option_requires_stay_capable_purpose", "purpose")
 		if int(value["route_cost"]) != 0:
 			return V.failure("empty_path_requires_zero_route_cost", "route_cost")
 		if int(value["shortest_cost"]) != 0:

@@ -1128,6 +1128,12 @@ func _stationary_candidate(
 	return result
 
 
+## A goal-derived candidate, INCLUDING a zero-step one. A stay option that a goal
+## published is a spatial decision like any other, so it keeps its goal and option and
+## is scored with the same spatial terms as the routes it competes against. Re-badging
+## it as a legacy stationary candidate (which `_stationary_candidate` still does for
+## candidates that never had a goal) would strip objective_progress, exposure, cohesion
+## and congestion from it and hand every route a standing head start over staying put.
 func _route_candidate(
 	legacy: Dictionary,
 	plan: Dictionary,
@@ -1153,8 +1159,6 @@ func _route_candidate(
 	candidate["_movement_commitment"] = int(option["commitment"])
 	candidate["_movement_fallback"] = (option["fallback"] as Dictionary).duplicate(true)
 	candidate["_movement_pressure_sources"] = (goal["pressure_sources"] as Array).duplicate(true)
-	if (option["path"] as Array).is_empty():
-		_apply_stationary_identity(candidate, plan, movement_context, profile)
 	return candidate
 
 

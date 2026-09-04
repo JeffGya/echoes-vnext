@@ -589,9 +589,13 @@ static func _run_mode_fingerprint(
 # blow in r05 from 7,4, and round 6 no longer happens. FINAL moves only on round_ended 6 -> 5;
 # SAVE moves only because the 25 kill XP is now echo_0004's instead of echo_0003's — ase 55 and
 # ekwan 7 are unchanged. The other five modes' hashes did not move at all.
-const COMBAT_ROUNDS_HASH := "5a25f514547053a6a2870086cdd6a72133a753e74156882a86085c11e4f5b9a4"
-const COMBAT_FINAL_HASH  := "4031c2669731de4b3ca62a24b16378a083a524e048976047208571161098ab5e"
-const COMBAT_SAVE_HASH   := "64dc78e3baf7dd7c3ea61b26536f842b3fecda7de923487fb9143904cffabe49"
+# V2-COMBAT-003 Phase 7a re-record — attributed. A mover already within ranges[melee_attack]
+# now gets a zero-step stay option. FIRST divergence: r03 enemy.dust_wanderer_1 hits echo_0003
+# from 7,1 instead of stepping to 7,2 — same target, same damage 3. The fight runs 6 rounds
+# instead of 5, so FINAL and SAVE move with it.
+const COMBAT_ROUNDS_HASH := "6312819e097d22c780a93774c3fa513db9b9ee3322cdd38f634d5cb9b3eaf264"
+const COMBAT_FINAL_HASH  := "acd5c49a3496616010028fdcdf8851eba11865a9596203e3d99db39e88da2c21"
+const COMBAT_SAVE_HASH   := "bbe140a53a33fcc97220ce3f9c8c172e2cb1f4ce4a281094a78f9733b40b50a4"
 
 
 ## Shared expected-vs-actual assertion for the three hashes of one mode.
@@ -634,7 +638,11 @@ static func test_combat() -> Dictionary:
 # echo_0003 no longer advances 5,2 -> 6,3 to attack in r03, because that single step runs
 # through the enemy's control (exposure 1.0 x -6.0). The fight still ends in 4 rounds, so
 # FINAL and SAVE did not move.
-const PURIFY_SHRINE_ROUNDS_HASH := "665ca43f923f3167e7e4758b864b56b01d2183ab037c73059378d3c2c1fab01e"
+# V2-COMBAT-003 Phase 7a re-record — attributed. FIRST divergence: r03 echo_0004 hits
+# enemy.dust_wanderer_1 from 6,3 instead of stepping to 6,4 — same target, same damage 18. Its
+# candidate set changed from one route (d6r4, exposure 1.0, one control source) to the stay
+# (d6r3, exposure 0.0, none). Still 4 rounds, so FINAL and SAVE did not move.
+const PURIFY_SHRINE_ROUNDS_HASH := "78c646cc075a01b034d7ababe3f568e23563241133b3711d11f37c36b4605912"
 const PURIFY_SHRINE_FINAL_HASH  := "8819869f67b59f78577acc99ceb0b132faa6b7fa8282e611c39effd36dcd7c17"
 const PURIFY_SHRINE_SAVE_HASH   := "05a8bbd08fb73615c6eae460481463fea9f6180661f1c25119d3f944124a1f08"
 
@@ -660,8 +668,11 @@ static func test_recover() -> Dictionary:
 ## cause as COMBAT above: GridService placement's vec_mod term. FINAL_HASH and SAVE_HASH did
 ## not move for this mode.
 # V2-COMBAT-003 Phase 5 re-record — same cause as COMBAT_ROUNDS_HASH above.
-const PROTECT_ROUNDS_HASH := "052c5d1981aa6d53607c552eee162bc90a878e472b3705ddcb92b4a42e812e1e"
-const PROTECT_FINAL_HASH  := "2dced9c966b40abd0cd2d7bf9d25014ea9a41152d9c304f96664d9e481b2335e"
+# V2-COMBAT-003 Phase 7a re-record — attributed. FIRST divergence: r04 enemy.dust_wanderer_1
+# stops walking off 6,4 to swing at echo_0001 for 0 and instead breaks protect_entity_01 for 11
+# from where it stands. The mode is genuinely harder, which is the fix working, not a defect.
+const PROTECT_ROUNDS_HASH := "28938ae1aae8733614b7b3941b2ece412ed2726facc4e0e59135534e5dd5bca2"
+const PROTECT_FINAL_HASH  := "443b49a8c8bfd83a739b0636e6eacc71ebd38e646eb7da9af9b0445d21374ce2"
 const PROTECT_SAVE_HASH   := "bffa34aa225afe79818ec0b15931d59f495930337b8d07b33a997208e0d46c35"
 
 static func test_protect() -> Dictionary:
@@ -673,7 +684,9 @@ static func test_protect() -> Dictionary:
 ## cause as COMBAT above: GridService placement's vec_mod term. FINAL_HASH and SAVE_HASH did
 ## not move for this mode.
 # V2-COMBAT-003 Phase 5 re-record — same cause as COMBAT_ROUNDS_HASH above.
-const ENDURE_ROUNDS_HASH := "9fad73e862ab44de15a88c0479c6f12b8bcd099c28dc0c95a96a509982140eb4"
+# V2-COMBAT-003 Phase 7a re-record — attributed. FIRST divergence: r03, echo_0001 at 6,2.
+# FINAL and SAVE did not move.
+const ENDURE_ROUNDS_HASH := "26c56e0097c17aa190ed040d262459b668ba702577d87c9e2d934adf4f8ca14d"
 const ENDURE_FINAL_HASH  := "106b216e990ac3e55653976f0bf0506f7f96f2d361a1183e87241c3948f7554e"
 const ENDURE_SAVE_HASH   := "cca434e9c009c6ba5607c102d12b1d87883fe6899dbffe4214c9a0cb0934eff7"
 

@@ -284,15 +284,22 @@ static func _has_log(logger: StructuredLogger, type: String) -> bool:
 # time. Rounds 1-3 are byte-identical (the first three hashes below are unchanged); the trace
 # diverges at round 4, where echo_0002 attacks from 6,3 instead of retreating to 5,3, and the
 # fight ends in 5 rounds instead of 6.
+# V2-COMBAT-003 Phase 7a: a mover already within ranges[melee_attack] now gets a zero-step
+# stay option. Rounds 1-2 are byte-identical; the trace diverges at round index 2, the same
+# round the decision log names (r03 enemy.dust_wanderer_1 strikes echo_0003 from 7,1 instead
+# of stepping to 7,2). The fight runs 6 rounds again.
 const COMBAT_EMOTION_HASHES: Array = [
 	"c0e348c181a7d83ce625ae6ed12c93e7c88eb0a247d1061f7aa3ecdab5f383ac",
 	"ce777cfdc61ea886ead439c5c5f16b4c0a9eb79e32294cf74e293d0ab64926e8",
-	"4bd5ac19b2d35ae914780100e79b1f63338cb1e5b3840470c92c512dddfa9466",
-	"6cfc5012fa6ae311c0c28a61f7f950154e8db7eeb2f975434d86f709fdc82701",
-	"798c972de6bf8d7b437875f14d0589ab3276a404eb27b70eb3336fca795ea052",
+	"7f48ab64c8fd275052650427038b8d1b5b27948ab28afe0daeb904d9eeefba75",
+	"8661d8f6cd6a47addaf678031bf1983e94cfba289cdfa869bcea22be9c0f8c18",
+	"8d47825dea6874e5e1042c9d3fb839d757b75a786018a6af5356f0178d857e51",
+	"9d40013eb3b99859a2c1b60408b08cafdf8d8be3f72a1512d3cd32621954c324",
 ]
 # V2-COMBAT-003 Phase 6: same cause as COMBAT above. Rounds 1-2 unchanged; round 3 diverges
 # because echo_0003 no longer steps 5,2 -> 6,3 into the enemy's control to attack. Still 4 rounds.
+# Phase 7a moved this mode's ROUND fingerprint but NOT its emotion trace: the three attackers
+# that stopped stepping kept their targets and their damage, so no emotion changed.
 const PURIFY_SHRINE_EMOTION_HASHES: Array = [
 	"bd2de7301aa35102d31bc447af0046a9d6cc8432f4bf5358f5a3db9deeed639e",
 	"725ca32c64d227aac4c49c29180c72e03bd29032fde35554ae95930d4b4300c1",
@@ -303,18 +310,23 @@ const RECOVER_EMOTION_HASHES: Array = [
 	"61cb0af978317b7b9a7925e250137a68fe5435c3193120a861b317971919dfcd",
 	"42b2541c3e3490c69dd8b76eac35d95a26de37c310a16ccb713930c1effbc3fd",
 ]
+# V2-COMBAT-003 Phase 7a: rounds 1-3 unchanged; diverges at round index 3, the same round the
+# decision log names (r04 enemy.dust_wanderer_1 stops walking off 6,4 to swing at echo_0001 for
+# 0 and breaks protect_entity_01 for 11 from where it stands).
 const PROTECT_EMOTION_HASHES: Array = [
 	"814a9f2f861b64efcdf5f9391b44a370fef37fef54cac82b5d0278a3034fea10",
 	"207c3c93af6281a71ce9a544e588891fde6bffaafda26bcb86016212ea059f42",
 	"9305dc7dc32b271bc317d9c5b9c81d067c05aeace6df5aa71e00f3bdf2bfaab1",
-	"c3bab33ff8f4abb2c117bb3ce2f65fb6c675fdec728f5a1d70a779047cc1d4ce",
+	"9aea81b180a1a4443b9203019aee6c1f6b0480641af273478def1f9297cffa60",
 ]
+# V2-COMBAT-003 Phase 7a: rounds 1-2 unchanged; diverges at round index 2, the same round the
+# decision log names (r03, echo_0001 at 6,2). Still 5 rounds.
 const ENDURE_EMOTION_HASHES: Array = [
 	"93b71ed7260bf0483a28fada3159b989edce9c56edd047317e891c8341089a2a",
 	"164847037991b60263eb09047e1616c8df4cec30ede4c6d1bf0780e014b03bfd",
-	"f4c48dbeff676f15e275bf615edfbba78d0ef62fc8d815d8e267b462af5a592e",
-	"f4bb8aedc7cca179df7702785cd837d284219c19668a5ccc52db68fd132761bf",
-	"50e8f14a68573cf572900508d032fcadf18d91e945cdf606ffbd6a90568a071e",
+	"323355ff907d7fa541b6b7f8892d676c08a16dc1e3c509f142bcb9e408908091",
+	"126424044c9cbf528c27e804b02b0dcc170e69c8ac3a6bdbd70b4afbe2f4a247",
+	"fc03879a00c4f369e9c81a06f1df948907d6b07ec103e85cc1eb58bcf267e700",
 ]
 const PURSUE_EMOTION_HASHES: Array = [
 	"c5c7a2eca8fe241a9f8d036a0782933c5b14688921e783f11812ffbfc18a5ef7",
