@@ -2971,9 +2971,9 @@
 			"foundation_objective_pool": ["combat", "shrine", "recover", "protect", "endure", "pursue", "guide_spirit"],
 
 			"calling_action_bonuses": {
-				"ranger":  ["reveal_adjacent"],
-				"okofor":  ["fortify_position"],
-				"aduro":   ["inspire_push"]
+				"kra_soro": ["reveal_adjacent"],
+				"okofor":   ["fortify_position"],
+				"aduro":    ["inspire_push"]
 			},
 
 			"party_return_fear_threshold": 60,

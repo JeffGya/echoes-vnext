@@ -8,8 +8,8 @@
 #  4. objective/stage_advance_blocked        — cta.proceed_to_stage_map absent when objectives remain
 #  5. objective/stage_advance_unlocked       — cta.proceed_to_stage_map present when all required done
 #  6. objective/mark_objective_completed     — completing situation marks stage.objectives[idx].completed
-#  7. objective/calling_ranger_adds_action   — ranger calling → cta.calling_reveal_adjacent in actions
-#  8. objective/no_ranger_no_action          — party without ranger → cta.calling_reveal_adjacent absent
+#  7. objective/calling_kra_soro_adds_action — kra_soro calling → cta.calling_reveal_adjacent in actions
+#  8. objective/no_kra_soro_no_action        — party without kra_soro → cta.calling_reveal_adjacent absent
 #  9. objective/ignore_sits_clears_pending   — cta.ignore_situation present when pending; situation NOT resolved after
 # 10. objective/repair_defaults              — SaveService repair applies completed/required/objective_index defaults
 # 11. objective/party_requesting_return_high_fear  — party_requesting_return true when avg fear > threshold
@@ -18,6 +18,7 @@
 #     not completable until its objective situations are reached, then it is
 # 14. objective/required_stage_gate_unchanged       — D94 regression guard: a normal stage with a
 #     required objective gates exactly as before
+# 15. objective/calling_action_bonuses_v2_only — guard: calling_action_bonuses config carries no V1 calling id
 
 class_name StageObjectiveTests
 extends RefCounted
@@ -42,7 +43,7 @@ class MockStageConfig extends RefCounted:
 			"data": {
 				"stages": {
 					"calling_action_bonuses": {
-						"ranger": ["reveal_adjacent"],
+						"kra_soro": ["reveal_adjacent"],
 						"okofor": ["fortify_position"],
 						"aduro":  ["inspire_push"]
 					},
@@ -134,14 +135,15 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("objective/stage_advance_blocked",              Callable(StageObjectiveTests, "_t_stage_advance_blocked"))
 	runner.register_test("objective/stage_advance_unlocked",             Callable(StageObjectiveTests, "_t_stage_advance_unlocked"))
 	runner.register_test("objective/mark_objective_completed",           Callable(StageObjectiveTests, "_t_mark_objective_completed"))
-	runner.register_test("objective/calling_ranger_adds_action",         Callable(StageObjectiveTests, "_t_calling_ranger_adds_action"))
-	runner.register_test("objective/no_ranger_no_action",                Callable(StageObjectiveTests, "_t_no_ranger_no_action"))
+	runner.register_test("objective/calling_kra_soro_adds_action",       Callable(StageObjectiveTests, "_t_calling_kra_soro_adds_action"))
+	runner.register_test("objective/no_kra_soro_no_action",              Callable(StageObjectiveTests, "_t_no_kra_soro_no_action"))
 	runner.register_test("objective/ignore_sits_clears_pending",         Callable(StageObjectiveTests, "_t_ignore_clears_pending"))
 	runner.register_test("objective/repair_defaults",                    Callable(StageObjectiveTests, "_t_repair_defaults"))
 	runner.register_test("objective/party_requesting_return_high_fear",  Callable(StageObjectiveTests, "_t_party_requesting_return_high_fear"))
 	runner.register_test("objective/party_requesting_return_low_fear",   Callable(StageObjectiveTests, "_t_party_requesting_return_low_fear"))
 	runner.register_test("objective/zero_required_blocked_until_reached", Callable(StageObjectiveTests, "_t_zero_required_blocked_until_reached"))
 	runner.register_test("objective/required_stage_gate_unchanged",       Callable(StageObjectiveTests, "_t_required_stage_gate_unchanged"))
+	runner.register_test("objective/calling_action_bonuses_v2_only",      Callable(StageObjectiveTests, "_t_calling_action_bonuses_v2_only"))
 
 
 # ─── Tests ────────────────────────────────────────────────────────────────────
@@ -299,19 +301,19 @@ static func _t_mark_objective_completed() -> Dictionary:
 	return { "ok": true, "error": "Objective correctly marked completed" }
 
 
-# 7. Ranger-calling echo in party adds reveal_adjacent action to explore snapshot.
-static func _t_calling_ranger_adds_action() -> Dictionary:
+# 7. Kra-Soro-calling echo in party adds reveal_adjacent action to explore snapshot.
+static func _t_calling_kra_soro_adds_action() -> Dictionary:
 	var ctx := _make_ctx()
 	var obj1 := ObjectiveModelScript.make(0, ObjectiveModelScript.TYPE_COMBAT, 100)
 	var sit1 := SituationModelScript.make("sit.0", SituationModelScript.TYPE_COMBAT, 5, 5, 100, true, 0)
-	var echo_ranger := _make_echo("echo_01", "ranger", 10)
-	_inject_stage(ctx, [obj1], [sit1], [echo_ranger])
+	var echo_kra_soro := _make_echo("echo_01", "kra_soro", 10)
+	_inject_stage(ctx, [obj1], [sit1], [echo_kra_soro])
 
 	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var actions_v: Variant = snap.get("actions", {})
 	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
 	if not actions.has("cta.calling_reveal_adjacent"):
-		return { "ok": false, "error": "cta.calling_reveal_adjacent missing for ranger party" }
+		return { "ok": false, "error": "cta.calling_reveal_adjacent missing for kra_soro party" }
 	var data_v: Variant = snap.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	var pca_v: Variant = data.get("party_calling_actions", [])
@@ -324,23 +326,23 @@ static func _t_calling_ranger_adds_action() -> Dictionary:
 			break
 	if not found:
 		return { "ok": false, "error": "party_calling_actions missing reveal_adjacent entry" }
-	return { "ok": true, "error": "Ranger calling adds reveal_adjacent action" }
+	return { "ok": true, "error": "Kra-Soro calling adds reveal_adjacent action" }
 
 
-# 8. Party without ranger does NOT get reveal_adjacent.
-static func _t_no_ranger_no_action() -> Dictionary:
+# 8. Party without kra_soro does NOT get reveal_adjacent.
+static func _t_no_kra_soro_no_action() -> Dictionary:
 	var ctx := _make_ctx()
 	var obj1 := ObjectiveModelScript.make(0, ObjectiveModelScript.TYPE_COMBAT, 100)
 	var sit1 := SituationModelScript.make("sit.0", SituationModelScript.TYPE_COMBAT, 5, 5, 100, true, 0)
-	var echo_blade := _make_echo("echo_01", "blade", 10)
-	_inject_stage(ctx, [obj1], [sit1], [echo_blade])
+	var echo_aduro := _make_echo("echo_01", "aduro", 10)
+	_inject_stage(ctx, [obj1], [sit1], [echo_aduro])
 
 	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
 	var actions_v: Variant = snap.get("actions", {})
 	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
 	if actions.has("cta.calling_reveal_adjacent"):
-		return { "ok": false, "error": "cta.calling_reveal_adjacent should be absent for non-ranger party" }
-	return { "ok": true, "error": "No ranger — no reveal_adjacent action" }
+		return { "ok": false, "error": "cta.calling_reveal_adjacent should be absent for non-kra_soro party" }
+	return { "ok": true, "error": "No kra_soro — no reveal_adjacent action" }
 
 
 # 9. Ignore action present when pending; situation NOT resolved after dispatch.
@@ -466,7 +468,7 @@ static func _t_party_requesting_return_high_fear() -> Dictionary:
 	var obj1 := ObjectiveModelScript.make(0, ObjectiveModelScript.TYPE_COMBAT, 100)
 	var sit1 := SituationModelScript.make("sit.0", SituationModelScript.TYPE_COMBAT, 5, 5, 100, true, 0)
 	var echo1 := _make_echo("echo_01", "blade", 75)
-	var echo2 := _make_echo("echo_02", "ranger", 70)
+	var echo2 := _make_echo("echo_02", "kra_soro", 70)
 	_inject_stage(ctx, [obj1], [sit1], [echo1, echo2])
 
 	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
@@ -483,7 +485,7 @@ static func _t_party_requesting_return_low_fear() -> Dictionary:
 	var obj1 := ObjectiveModelScript.make(0, ObjectiveModelScript.TYPE_COMBAT, 100)
 	var sit1 := SituationModelScript.make("sit.0", SituationModelScript.TYPE_COMBAT, 5, 5, 100, true, 0)
 	var echo1 := _make_echo("echo_01", "blade", 20)
-	var echo2 := _make_echo("echo_02", "ranger", 15)
+	var echo2 := _make_echo("echo_02", "kra_soro", 15)
 	_inject_stage(ctx, [obj1], [sit1], [echo1, echo2])
 
 	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
@@ -575,3 +577,34 @@ static func _t_required_stage_gate_unchanged() -> Dictionary:
 		return { "ok": false, "error": "Completion action type changed: got '%s'" % str(act.get("type", "")) }
 
 	return { "ok": true, "error": "Normal required-objective stage gates unchanged" }
+
+
+# 15. Reads the SHIPPED balance.json (not the MockStageConfig fixture) so a regression of
+# calling_action_bonuses back to the V1 "ranger" key fails here, and proves reveal_adjacent
+# is reachable end-to-end for a real Kra-Soro echo against the real config.
+static func _t_calling_action_bonuses_v2_only() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var stages_cfg: Dictionary = (bal.get("data", {}) as Dictionary).get("stages", {})
+	var bonuses: Dictionary = stages_cfg.get("calling_action_bonuses", {})
+
+	if bonuses.has("ranger"):
+		return { "ok": false, "error": "data.stages.calling_action_bonuses has regressed to the V1 'ranger' key" }
+	if not bonuses.has("kra_soro"):
+		return { "ok": false, "error": "data.stages.calling_action_bonuses has no 'kra_soro' key -- table is not on V2 calling ids" }
+
+	var ctx := _make_ctx()
+	ctx.config_service = cs
+	var obj1 := ObjectiveModelScript.make(0, ObjectiveModelScript.TYPE_COMBAT, 100)
+	var sit1 := SituationModelScript.make("sit.0", SituationModelScript.TYPE_COMBAT, 5, 5, 100, true, 0)
+	var echo_kra_soro := _make_echo("echo_01", "kra_soro", 10)
+	_inject_stage(ctx, [obj1], [sit1], [echo_kra_soro])
+
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
+	var actions_v: Variant = snap.get("actions", {})
+	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
+	if not actions.has("cta.calling_reveal_adjacent"):
+		return { "ok": false, "error": "Kra-Soro's Scout Ahead did not fire against the real shipped config" }
+
+	return { "ok": true, "error": "calling_action_bonuses is on V2 ids and reveal_adjacent is reachable" }
