@@ -166,11 +166,11 @@ blade: 75, warder: 80, ranger: 80, steward: 85, seer: 85
 |---|---|---|
 | `calling_origin` ambiguity (birth bias vs identity placeholder) | ~~Migration — resolve to two clean fields~~ **Resolved (V2-PROG-002)** | V2-PROG-002 |
 | Calling eligibility gate (rank 3 → Standing 3/6/9) | **Rewrite** (UI milestone flow — pending) | V2-PROG-004+ |
-| Calling names (V1 5 callings → V2 6 callings at S3) | ~~Rewrite~~ **Done (V2-PROG-004)** — 6 V2 IDs active in all backend systems | V2-PROG-004 ✅ |
+| Calling names (V1 5 callings → V2 6 callings at S3) | ~~**Done (V2-PROG-004)** — 6 V2 IDs active in all backend systems~~ **THAT CLAIM WAS FALSE when written.** Three backend readers were still V1: the `ActorStateMachine` passives, `initiative_modifiers.by_calling_origin`, and `calling_action_bonuses.ranger`. Completed 2026-09-04 by V2-COMBAT-003 — see the row below | V2-PROG-004 → **V2-COMBAT-003 ✅** |
 | `calling_eligible`/`calling_options` ephemeral fields | ~~Supersede (safe to drop schema shape)~~ **Superseded (V2-PROG-002)** | V2-PROG-002 |
 | Absolute fear thresholds by calling | ~~Carryover~~ **Done (V2-PROG-004)** — V2 values set in balance.json | V2-PROG-004 ✅ |
 | V1→V2 save migration (blade/warder/steward/ranger/seer) | ~~**Done (V2-PROG-004)** — SaveService repair migrates on load~~ **THIS ROW IS WRONG.** No such repair exists in the tree — verified 2026-09-03, see [Domain 8.2](#82-family-two--readers-of-the-v1-calling-names) | ❌ Not done |
-| **Calling READERS still matching V1 names** (`ActorStateMachine` passives, `data.combat.initiative_modifiers.by_calling_origin`, `data.stages.calling_action_bonuses.ranger`) | **Not inventoried by this domain** — five per-calling passives and the whole per-calling initiative table are dead in play. See [Domain 8.2](#82-family-two--readers-of-the-v1-calling-names) | ⚠️ Open |
+| **Calling READERS still matching V1 names** | ✅ **Closed by V2-COMBAT-003.** `ActorStateMachine` passive arms → `fcb5cf0` (five passives were dead: Okofor anchor, Onyamesu stationary, Okomfo aura + read-field, Kra-Soro withdraw). `initiative_modifiers.by_calling_origin` → `c444662` (the whole per-calling initiative term scored 0 for every V2 calling; `sum_okwanfo` 3.5 is new). `calling_action_bonuses.ranger` → `20d922d` (Kra-Soro Scout Ahead was unreachable in config *and* code) | **V2-COMBAT-003 ✅** |
 
 **V2-PROG-002 resolution (2026-04-06):**
 - `calling_origin` — immutable birth bias. Seeded at summon by EchoFactory. Never changes. Fallback only.
@@ -560,6 +560,23 @@ These systems are already done and their save seams are live:
 ---
 
 ## Domain 8 — Uninventoried readers (V2-COMBAT-003 sweep, 2026-09-03)
+
+
+### Why this domain existed at all
+
+A story marked **Done** was not done, and the record asserting it is the reason nobody looked. The
+map claimed "6 V2 IDs active in all backend systems"; three readers were still V1, and one of them —
+the per-calling initiative term — had been dead since V2-PROG-004 shipped.
+
+Two structural causes, both worth guarding against:
+
+1. **Uninventoried readers.** `GridService` appeared nowhere in this map, so its legacy-four vector
+   list survived V2-PROG-003 untouched. A migration that inventories config and the obvious consumers
+   will miss a pure-static helper every time.
+2. **Tests that author their own stale tables.** `GridTests` and `CombatStateTests` each built their
+   own V1 `by_calling_origin` fixture, so they stayed green no matter what shipped. Nothing in 1,563
+   tests could have caught the initiative gap. **A fixture that mirrors production config hides a
+   production config defect.**
 
 > **Why this section exists.** Domains 2 and 3 record their *config* as migrated, and it is.
 > Neither recorded the **readers**. `core/grid/GridService.gd` does not appear anywhere else in

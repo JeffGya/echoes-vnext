@@ -762,3 +762,204 @@ They do. **Neither is built. Both need a story.**
 
 The length half of "as long as they need to be" is **partly** addressed: the minimum is now honest.
 The maximum is still whatever a straight ray finds, and no ray bends.
+
+---
+
+## Approved 2026-09-03: calling-aligned maturity bands + re-spaced refusal thresholds
+
+Jeff's three answers, all approved:
+1. Fix the virtue-domain reader gap inside V2-COMBAT-003 (not a separate story).
+2. Adopt the calling-aligned bands, AND re-space the thresholds ("relabel and re-space").
+3. Defer the presence inversion to phase 10.
+
+### Why the bands changed
+
+`band_by_standing` was NOT from the GDD. The GDD contains no maturity bands at all -- no
+nascent/forming/grounded/whole. GDD 11.4/11.5 describe wholeness as a continuous rise:
+"an autonomous Echo should become more interpretable and more willful as wholeness rises."
+
+The old table saturated at Standing 4: ranks 4-9 were ALL "whole". Its own config comment
+says ranks 6-9 were BACKFILLED by V2-PROG-012 because only 1-5 were ever defined and a
+fallback was silently covering the gap. So "whole at 4" was never designed -- it was the
+edge of an unfinished table.
+
+Supporting evidence for the calling alignment: `data.combat.movement.capacity.standing_bands`
+is ALREADY aligned to the calling ladder (min_standing 1 -> 3 -> 6). The maturity bands were
+the outlier, not the model.
+
+Correction to a common assumption: the ladder is **9**, not 10. `rank_strength_scale.max_rank`
+is 9; rank_strength = (rank-1)/8. Ten realms and ten virtue domains, nine Standings.
+
+### The approved values (mark both PROPOSED DEFAULT)
+
+band_by_standing:  1-2 nascent | 3-5 forming | 6-8 grounded | 9 whole
+refusal_thresholds_by_band:  nascent 65 | forming 80 | grounded 88 | whole 95
+  (was 65 | 72 | 80 | 90)
+
+Measured effect of the COMBINED change (relabel alone was rejected -- it moved 7 of 9
+standings ALL toward easier refusal, up to -18):
+
+  Std 1  65 -> 65   (--)
+  Std 2  72 -> 65   (-7)
+  Std 3  80 -> 80   (unchanged -- the re-spacing protects it)
+  Std 4  90 -> 80   (-10)
+  Std 5  90 -> 80   (-10)
+  Std 6  90 -> 88   (-2)
+  Std 7  90 -> 88   (-2)
+  Std 8  90 -> 88   (-2)
+  Std 9  90 -> 95   (+5, HARDER -- 'whole' finally means something unique)
+
+Largest single movement 10 points, against 18 under relabel-alone.
+
+### KNOWN CONSEQUENCE -- accepted by Jeff, revisit after a play test
+
+`data.voice.reactive_min_expression_band` is "forming". Today that gates reactive barks at
+Standing 2+. Under the new mapping it becomes Standing 3+.
+
+Jeff's ruling: "Note the barks consequence for now, we might need to change this after a
+test. You are right we should not have nascent and forming echoes be barking the whole time
+and having tons of opinions."
+
+So: keep the gate value as-is, ship the shift, and re-examine after the phase 12 manual test.
+
+---
+
+## Approved 2026-09-03: finish V2-PROG-004 inside V2-COMBAT-003
+
+Jeff: "Do it inside this story." The sweep grew the piece from five dead passives into
+completing a story that was marked Done too early.
+
+### The record was wrong
+`docs/v2-migration-map.md:169` says V2-PROG-004 is Done with "6 V2 IDs active in all backend
+systems". FALSE. Marked wrong in the map rather than editing history.
+
+### Five commits, serial, each its own blast radius
+1. The two duplicate `_dominant_key` copies (CombatState.gd:331 initiative, ShrineService.gd:147
+   purify). Same defect `1bf2730` fixed in GridService. Plus the concealing tests.
+2. `data.combat.initiative_modifiers.by_calling_origin` V1 -> V2.
+3. The five dead per-calling passives (ActorStateMachine V1 calling match).
+4. The stale Ranger "Scout Ahead" (`data.stages.calling_action_bonuses.ranger` + code).
+5. Migration map corrections.
+
+### Commit 2 needs no invented values -- except one
+The V1 initiative table maps 1:1 by identity onto the already-migrated placement sibling,
+values unchanged: blade->aduro 3.0, warder->okofor -1.0, ranger->kra_soro 1.0,
+steward->onyamesu -2.0, seer->okomfo 0.0, uncalled 0.0.
+
+Only `sum_okwanfo` is new (the sixth calling did not exist in V1).
+
+**JEFF'S DECISION: sum_okwanfo initiative = 3.5, the FASTEST calling.**
+His words: "sum_okwanfo should be a bit quicker I see the calling as assasin/rogue type. So
+speed and agility is important here." Grounded in the GDD, which describes Sum-Okwanfo as
+moving "through concealment and timing" -- timing IS initiative. 3.5 places it above Aduro's
+3.0 and inside the system's range (archetypes reach 4.0). Mark PROPOSED DEFAULT.
+
+**Deliberately NOT changed:** sum_okwanfo's *placement* modifier stays 2.0. Placement decides
+the starting column, not speed. Flagged to Jeff as a separate call rather than swept in.
+
+### Note: the vector half of initiative was already migrated
+`initiative_modifiers.by_dominant_vector` already lists all ten V2 vectors with a ten-way
+tiebreak comment. So "initiative is dead" is too broad -- only the CALLING term scores zero
+for every V2 calling. It also shows the commit-1 defect from the other side: the config
+documented ten vectors while CombatState.gd:139 passed the legacy four to the reader.
+
+### Tests that CONCEAL these defects -- fix with the code they cover
+`GridTests.gd:338` and `CombatStateTests.gd:216-238` author their OWN V1 `by_calling_origin`
+tables, so they stay green after balance.json is corrected. Nothing in 1,559 tests could have
+caught the initiative gap. Also: CombatSupportLedgerTests.gd:203, CooldownTests.gd (5 sites),
+BehaviorArbiterTests.gd:458, StageObjectiveTests.gd (5 sites) construct V1 calling ids directly.
+
+### No fourth family
+Archetypes (9 V2 ids both sides), directives, vector_to_calling, traits, morale tiers -- all
+verified clean. Damage bounded to vectors and callings.
+
+---
+
+## TODO before the story closes: comment cleanup pass (Jeff, 2026-09-03)
+
+"Keep a note that we need to clean up the comments in earlier phase 2/3 work towards the end.
+That is way too much comments against actual code."
+
+Rule now recorded as AGENTS.md entry 28 (commit `705c12e`). This pass applies it retroactively
+to work committed BEFORE that entry existed.
+
+**Measured — added lines in .gd files per commit:**
+
+    commit    comment+  code+  ratio  subject
+    3a554f8       27      12   2.25   a bridge may be one cell long
+    44671aa       52      25   2.08   fingerprints watch the first actor
+    1bf2730       56      27   2.07   a dominant key is picked from scores
+    20f0124       71      56   1.26   fixtures get the vector init
+    70ffa81      100     188   0.53   a Whole-band Echo exists in the suite
+    55f0b3d       69     129   0.53   second and third dominant-key copies
+    1438789      159     323   0.49   the region guard
+    1b3badc      107     224   0.47   the placement guard
+    b4dd797      286     635   0.45   islands replace stragglers
+    483c26d      349     779   0.44   bridges are their own tile
+    94bfc9c       29      67   0.43   Absolute Fear Rule / enemy gate
+    3ad5e6a      261     623   0.41   connectivity by shared side
+    207e5b4      134     325   0.41   phase 1 characterization
+    95895a0      223     667   0.33   nothing spawns off the host region
+
+    TOTAL ~1,923 comment lines added on the branch.
+
+**Priority: the four above 1.0.** More comment than code is indefensible at any complexity.
+
+**What to strip, per entry 28:**
+- The same point at the call site AND in the docstring -> keep it once, at the authority.
+- Sentences restating the next line.
+- Story-id narrative ("V2-PROG-003 grew the vectors from 4 to 10") -> commit message only.
+- Measurement tables inside source -> handoff/docs, with the comment pointing there.
+
+**What to KEEP -- do not strip these:**
+- The ring-guard rule (b) explanation in StageTerrain: a bridged island is still an island. A
+  future edit would plausibly "simplify" it back into the bug.
+- `_ISLAND_BRIDGE_MIN_SPAN`'s width-vs-length distinction: the test previously conflated them.
+- `directive_bonus` must stay OUTSIDE the fear/calling bracket in BehaviorArbiter._score() --
+  divergence detection depends on it and no test would fail.
+- `_dominant_key`'s "tiebreak only, every key is a candidate" -- once, in the docstring.
+
+The large terrain commits (~0.4) are lower priority: generation invariants are genuinely subtle
+and the comments mostly earn their place. Judge each, do not sweep by ratio alone.
+
+---
+
+## 14. The V2 calling migration, finished inside this story
+
+Five commits. The sweep that found them started as a one-function fix.
+
+| Commit | What |
+|---|---|
+| `1bf2730` | `GridService._dominant_key` reads the scores, not the tiebreak list |
+| `55f0b3d` | The second and third copies of that defect (`CombatState`, `ShrineService`) |
+| `c444662` | `initiative_modifiers.by_calling_origin` V1 → V2; `sum_okwanfo` 3.5 |
+| `fcb5cf0` | Five per-calling passives finally match callings that exist |
+| `20d922d` | Kra-Soro Scout Ahead reachable in config and code |
+
+### Skills were NOT affected — checked, not assumed
+
+`SkillDefinition.gd` records that **V2-PROG-005 removed `calling_requirement`; the V2 axis is
+`skill_family`.** Skills are keyed by one of six families, and `calling_constellation` maps callings
+to families in fully V2 terms. There is no calling id for production to fail to match, which is
+exactly why this defect class never reached them.
+
+The eight V1-sounding skill ids (`warders_vigil`, `seers_sight`, `rangers_mark` …) are **legacy
+names, not stale references** — each carries a correct `skill_family` and is reachable today.
+Presenting "Warder's Vigil" to an Okofor is a lore/UX inconsistency for Jeff, not a defect.
+
+### Findings recorded, deliberately not fixed
+
+| Finding | Evidence |
+|---|---|
+| **Onyamesu `_stationary_rounds` has no reader anywhere.** Grows unbounded (1,2,3…90). Its comment calls it "soft-taunt eligibility" — a feature never built. Write-only forever. | `fcb5cf0` probe |
+| **Kra-Soro `_withdraw_cooldown` never blocks.** The turn-start decrement runs before the reader checks it, so it has always cleared. Pre-existing in already-V2 code. | `fcb5cf0` probe |
+| **The Okomfo aura fires EVERY idle round**, no cooldown. Ally fear 40 → 0 in ~13 rounds. | `fcb5cf0` probe |
+
+### A conclusion of mine that the aura finding overturned
+
+During phase 5 research I told Jeff the `actor.idle` label fix would be **fear-neutral**, because
+`idle_fear_aura` fired zero times. That was true then and is **false now** — `fcb5cf0` made it live.
+
+The aura fires on `action == "actor.idle"`, and 53 % of those labels are false (a moving turn wrongly
+labelled idle). **So the label fix now genuinely removes fear relief, and Jeff's original instruction
+— measure the fear curve before and after, then decide — stands.** Do that when phase 5 lands.
