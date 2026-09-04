@@ -163,21 +163,18 @@ static func _t_movement_option_starvation() -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
-# 2 — actor.idle is recorded for a turn that logged a real actor.moved path.
+# 2 — a turn that traversed cells is never recorded as actor.idle.
 #
 # Full production drive: reuses FlowFingerprintTests._setup_encounter() +
 # ._drive_and_capture() (the proven mode-forcing round loop) rather than a second copy of it.
 # COMBAT mode, own seed tag so it does not share a save file with any other suite. Scans the
-# captured per-turn projection (already recorded by _drive_and_capture from
-# EncounterContext.last_round_results + before/after grid positions — no new instrumentation
-# added) for at least one turn where the actor's position changed but its logged action_type
-# is still "actor.idle" — the exact shape the V2-INFRA-003 defect register calls "normal": a
-# resolved_action came back empty (target out of range after a partial move), so
-# LiveMovementContextService.gd's activation helper labels the turn actor.idle even though the
-# actor really moved.
+# captured per-turn projection for any turn where the actor's position changed but its logged
+# action_type is still "actor.idle" — V2-COMBAT-003 Phase 5 fixed
+# LiveMovementContextService.apply_live_activation() to relabel such a turn actor.move.
 # ---------------------------------------------------------------------------
 
-# KNOWN DEFECT (V2-COMBAT-003 will change this):
+# FIXED (V2-COMBAT-003 Phase 5): was KNOWN DEFECT "actor.idle recorded for a moved turn" —
+# assertion inverted.
 static func _t_moved_actor_logs_idle() -> Dictionary:
 	var env: Dictionary = FlowFingerprintTests._setup_encounter(EncounterResolutionModes.COMBAT, "cb_char_moved_idle")
 	if env.is_empty():
@@ -186,7 +183,6 @@ static func _t_moved_actor_logs_idle() -> Dictionary:
 	if not bool(drive.get("combat_over", false)):
 		return { "ok": false, "error": "encounter did not conclude within 30 rounds — cannot evaluate the full trace" }
 
-	var found: Dictionary = {}
 	for round_v in drive["rounds"] as Array:
 		var round_data: Dictionary = round_v as Dictionary
 		for turn_v in round_data["turns"] as Array:
@@ -198,13 +194,8 @@ static func _t_moved_actor_logs_idle() -> Dictionary:
 			if from_pos.is_empty() or to_pos.is_empty():
 				continue
 			if JSON.stringify(from_pos) != JSON.stringify(to_pos):
-				found = { "round": round_data["round"], "actor_id": turn["actor_id"], "from_pos": from_pos, "to_pos": to_pos }
-				break
-		if not found.is_empty():
-			break
-
-	if found.is_empty():
-		return { "ok": false, "error": "no turn in a 30-round COMBAT trace showed a moved actor logged as actor.idle — either the trace is too short/uneventful, or this defect no longer reproduces" }
+				return { "ok": false, "error": "round %d actor %s logged actor.idle but moved %s -> %s" \
+					% [int(round_data["round"]), str(turn["actor_id"]), JSON.stringify(from_pos), JSON.stringify(to_pos)] }
 	return { "ok": true }
 
 

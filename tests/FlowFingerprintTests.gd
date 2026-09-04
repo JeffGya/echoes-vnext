@@ -581,7 +581,8 @@ static func _run_mode_fingerprint(
 ## echo_0002 (aduro, unrecognized under V1 keys -> was 0, now +3.0) and echo_0005 (kra_soro,
 ## same -> now +1.0). This reorders who acts first each round, on top of the dominant-vector
 ## move above, so all three hashes move again.
-const COMBAT_ROUNDS_HASH := "e3e6df5af88c1521b10a55d98892af36d6fb65a4322381bafc9d7bdf06cc1309"
+# V2-COMBAT-003 Phase 5 re-record — attributed. LiveMovementContextService.apply_live_activation() now relabels actor.idle as actor.move when the turn traversed cells. Verified turn-by-turn against the pre-fix trace: only the action_type field changed on the affected turns (COMBAT 18, PURIFY_SHRINE 12, RECOVER 3, PROTECT 3, ENDURE 17, PURSUE 14, GUIDE_SPIRIT 7) — every other field (actor_id, target_id, damage, is_kill, positions, mode_state) is byte-identical. FINAL_HASH and SAVE_HASH did not move.
+const COMBAT_ROUNDS_HASH := "ef5ce9d821c5b68f1087735afebfeeccef666293006f0ebb0369a1bdd7262ace"
 const COMBAT_FINAL_HASH  := "acd5c49a3496616010028fdcdf8851eba11865a9596203e3d99db39e88da2c21"
 const COMBAT_SAVE_HASH   := "f3e41850d026469d228e8c1d30c57e87a9e38279f323fc49f96bc480b1355d05"
 
@@ -621,7 +622,8 @@ static func test_combat() -> Dictionary:
 
 ## RE-RECORDED, V2-COMBAT-003 Phase 2b — production-shaped fixtures (ANSWERS.md #50). Same
 ## cause as COMBAT above: GridService placement's vec_mod term.
-const PURIFY_SHRINE_ROUNDS_HASH := "2a1f5da35aee32330ec6915431d18182afc49d4bcdea9fc5b064a4c270eda49e"
+# V2-COMBAT-003 Phase 5 re-record — same cause as COMBAT_ROUNDS_HASH above.
+const PURIFY_SHRINE_ROUNDS_HASH := "e71528f486585e944b6c8926b01716dde1b546e8730e19e71b6bbbeac0f96dd8"
 const PURIFY_SHRINE_FINAL_HASH  := "8819869f67b59f78577acc99ceb0b132faa6b7fa8282e611c39effd36dcd7c17"
 const PURIFY_SHRINE_SAVE_HASH   := "05a8bbd08fb73615c6eae460481463fea9f6180661f1c25119d3f944124a1f08"
 
@@ -633,7 +635,8 @@ static func test_purify_shrine() -> Dictionary:
 ## RE-RECORDED, V2-COMBAT-003 Phase 2b — production-shaped fixtures (ANSWERS.md #50). Same
 ## cause as COMBAT above: GridService placement's vec_mod term. FINAL_HASH and SAVE_HASH did
 ## not move for this mode.
-const RECOVER_ROUNDS_HASH := "fff4980e5195a145feadc7de149936195b2fd9e5e54b40e2e46498d176118ff7"
+# V2-COMBAT-003 Phase 5 re-record — same cause as COMBAT_ROUNDS_HASH above.
+const RECOVER_ROUNDS_HASH := "99f84509ba567b9066e9af4f97a524d2685739f19c7fba02ff90f6243eff60e5"
 const RECOVER_FINAL_HASH  := "09e38fdf70259c9a647c6dd053caa9e1518e5f830364ac5f96fac5dbceb92780"
 const RECOVER_SAVE_HASH   := "bffa34aa225afe79818ec0b15931d59f495930337b8d07b33a997208e0d46c35"
 
@@ -645,7 +648,8 @@ static func test_recover() -> Dictionary:
 ## RE-RECORDED, V2-COMBAT-003 Phase 2b — production-shaped fixtures (ANSWERS.md #50). Same
 ## cause as COMBAT above: GridService placement's vec_mod term. FINAL_HASH and SAVE_HASH did
 ## not move for this mode.
-const PROTECT_ROUNDS_HASH := "0620e0dd379de78fc75ef6ca81fb176fbaa71296aafd3b773133556b66635a3d"
+# V2-COMBAT-003 Phase 5 re-record — same cause as COMBAT_ROUNDS_HASH above.
+const PROTECT_ROUNDS_HASH := "052c5d1981aa6d53607c552eee162bc90a878e472b3705ddcb92b4a42e812e1e"
 const PROTECT_FINAL_HASH  := "2dced9c966b40abd0cd2d7bf9d25014ea9a41152d9c304f96664d9e481b2335e"
 const PROTECT_SAVE_HASH   := "bffa34aa225afe79818ec0b15931d59f495930337b8d07b33a997208e0d46c35"
 
@@ -657,7 +661,8 @@ static func test_protect() -> Dictionary:
 ## RE-RECORDED, V2-COMBAT-003 Phase 2b — production-shaped fixtures (ANSWERS.md #50). Same
 ## cause as COMBAT above: GridService placement's vec_mod term. FINAL_HASH and SAVE_HASH did
 ## not move for this mode.
-const ENDURE_ROUNDS_HASH := "5469698b8b82496f39f6efd825d87d3f638e306ad53a14160d91e5574298bad6"
+# V2-COMBAT-003 Phase 5 re-record — same cause as COMBAT_ROUNDS_HASH above.
+const ENDURE_ROUNDS_HASH := "9fad73e862ab44de15a88c0479c6f12b8bcd099c28dc0c95a96a509982140eb4"
 const ENDURE_FINAL_HASH  := "106b216e990ac3e55653976f0bf0506f7f96f2d361a1183e87241c3948f7554e"
 const ENDURE_SAVE_HASH   := "cca434e9c009c6ba5607c102d12b1d87883fe6899dbffe4214c9a0cb0934eff7"
 
@@ -668,7 +673,8 @@ static func test_endure() -> Dictionary:
 
 ## RE-RECORDED, V2-COMBAT-003 Phase 2b — production-shaped fixtures (ANSWERS.md #50). Same
 ## cause as COMBAT above: GridService placement's vec_mod term.
-const PURSUE_ROUNDS_HASH := "578ebdad82971126d8a09b8515ba9db98f19a86ef68eb36dd5ea04d15e691f2e"
+# V2-COMBAT-003 Phase 5 re-record — same cause as COMBAT_ROUNDS_HASH above.
+const PURSUE_ROUNDS_HASH := "d3b7d31ec0b0cdf0185ccffc883dfe08e5846caf33273d9fe45289904bd05f5c"
 const PURSUE_FINAL_HASH  := "678b39327b47e4999322d24d3b07d280e48e475ed89fc2e1475f89bc6b8fbedb"
 const PURSUE_SAVE_HASH   := "f3e41850d026469d228e8c1d30c57e87a9e38279f323fc49f96bc480b1355d05"
 
@@ -735,7 +741,8 @@ static func test_pursue() -> Dictionary:
 # CombatBaselineTests.COMBAT_EMOTION_HASHES): GridService._placement_score()'s vec_mod term
 # went live once vector_scores stopped being {}, reordering the party's starting columns.
 # FINAL_HASH and SAVE_HASH did not move — the outcome is still spirit_protected.
-const GUIDE_SPIRIT_ROUNDS_HASH := "b8bf10509d3798fbc89a639c78a4abe562f086d30cc39538916cf89e9c0813d3"
+# V2-COMBAT-003 Phase 5 re-record — same cause as COMBAT_ROUNDS_HASH above.
+const GUIDE_SPIRIT_ROUNDS_HASH := "5de726e78f5ecaed7959dd1df767305a91de3cc77f086b6b2ce921f0c0d7bcb0"
 const GUIDE_SPIRIT_FINAL_HASH  := "13b4753677246bdc095ceea1416aba2816581db36c5963d75975a69f56471b3f"
 const GUIDE_SPIRIT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
