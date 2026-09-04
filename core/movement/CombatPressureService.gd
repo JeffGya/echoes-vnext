@@ -187,17 +187,43 @@ static func _add_purify(candidates: Array, context: Dictionary, pressure: Dictio
 		_add_truthful_engage(candidates, context, pressure)
 		return
 	var health: float = float(pressure["objective_health_ratio"])
-	if health < 0.0 or health >= 0.5:
+	# A negative ratio means the objective carries no health fact. There is nothing to
+	# anchor on, so the mode degrades to ordinary combat.
+	if health < 0.0:
 		_add_ordinary_combat(candidates, context, pressure, "baseline")
 		return
+	# `health < 0.5` used to gate the WHOLE branch below. A 200-hp shrine losing 5 a
+	# round reaches that at round 20; these encounters end around round 5, so no part
+	# of the mode's identity had ever run in a live fight. The PURIFIER is now anchored
+	# at every level of shrine health, and health scales its urgency instead
+	# (`_shrine_urgency`): a healthy shrine is a lower call than a failing one, not no
+	# call at all.
+	#
+	# The other three roles stay behind the threshold, and that is a MEASURED limit,
+	# not an oversight. Purifying wins nothing — PURIFY_SHRINE is won by
+	# `all_enemies_defeated` (CombatState.check_end_condition) — so anchoring the
+	# protector, the blocker and the hostile breaker from round 1 puts four of five
+	# Echoes on guard duty and stalls the only win the mode has: measured over 20
+	# seeded encounters it took victories from 20/20 to 17/20 (one shrine destroyed,
+	# two unresolved at 30 rounds). See docs/v2-combat-003-handoff.md §18.
+	var shrine_failing: bool = health < 0.5
 	var alignment: String = str(pressure["mover_alignment"])
 	var role: String = str(pressure["factual_role"])
 	if role == "purifier":
-		var adjacent: bool = _is_adjacent(context["origin"] as Dictionary, pressure["objective_position"] as Dictionary)
-		if adjacent:
-			_add_goal(candidates, BUCKET_DIRECT, context, pressure, "hold", "purifier", [context["origin"]], CRITICAL, [str(pressure["objective_id"])])
+		# Reach, never adjacency: `actor.purify_shrine` is in ACTION_RANGES, so a later
+		# story that raises its value moves this branch with it (handoff §17).
+		var in_reach: bool = ReachAuthority.in_reach(
+			context["origin"] as Dictionary,
+			pressure["objective_position"] as Dictionary,
+			"actor.purify_shrine"
+		)
+		if in_reach:
+			_add_goal(candidates, BUCKET_DIRECT, context, pressure, "hold", "purifier", [context["origin"]], _shrine_urgency(CRITICAL, shrine_failing), [str(pressure["objective_id"])])
 		else:
-			_add_goal(candidates, BUCKET_DIRECT, context, pressure, "advance", "purifier", pressure["destination_region"] as Array, CRITICAL, [str(pressure["objective_id"])])
+			_add_goal(candidates, BUCKET_DIRECT, context, pressure, "advance", "purifier", pressure["destination_region"] as Array, _shrine_urgency(CRITICAL, shrine_failing), [str(pressure["objective_id"])])
+	elif not shrine_failing:
+		_add_ordinary_combat(candidates, context, pressure, "baseline")
+		return
 	elif alignment == "party":
 		_add_goal(candidates, BUCKET_DIRECT, context, pressure, "protect", "protector", pressure["destination_region"] as Array, HIGH, [str(pressure["objective_id"])])
 		_add_goal(candidates, BUCKET_TACTICAL, context, pressure, "intercept", "blocker", pressure["approach_region"] as Array, HIGH, [str(pressure["objective_id"])])
@@ -205,6 +231,13 @@ static func _add_purify(candidates: Array, context: Dictionary, pressure: Dictio
 		_add_goal(candidates, BUCKET_TACTICAL, context, pressure, "advance", "breaker", pressure["approach_region"] as Array, HIGH, [str(pressure["objective_id"])])
 		_add_objective_engage(candidates, BUCKET_DIRECT, context, pressure, "breaker", NORMAL)
 	_add_truthful_engage(candidates, context, pressure)
+
+
+## One urgency band lower while the shrine is above the failing threshold, the full
+## band once it is below. The four urgency constants are 0.25 apart, so one
+## subtraction is the step; LOW is the floor.
+static func _shrine_urgency(base: float, shrine_failing: bool) -> float:
+	return base if shrine_failing else maxf(LOW, base - LOW)
 
 
 static func _add_recover(candidates: Array, context: Dictionary, pressure: Dictionary) -> void:

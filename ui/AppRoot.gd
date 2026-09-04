@@ -441,6 +441,13 @@ func _run_tests(parts: Array) -> void:
 		TerrainRegionProbe.register(terrain_probe_runner)
 		terrain_probe_runner.run_all()
 		return
+	# INVESTIGATION TOOL — `tests purifyprobe [tag]` drives 20 seeded PURIFY_SHRINE encounters
+	# and dumps outcome + purifier goals (V2-COMBAT-003 phase 7b). Reports, never asserts.
+	if parts.size() > 1 and str(parts[1]).to_lower() == "purifyprobe":
+		var purify_probe_runner := CoreTestRunner.new()
+		PurifyOutcomeProbe.register(purify_probe_runner)
+		purify_probe_runner.run_all()
+		return
 	# INVESTIGATION TOOL — `tests spatialprobe <arm>` dumps the live movement options'
 	# exposure/congestion/cohesion fields and a per-turn decision log for all seven modes.
 	if parts.size() > 1 and str(parts[1]).to_lower() == "spatialprobe":

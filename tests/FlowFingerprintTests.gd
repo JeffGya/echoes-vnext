@@ -642,9 +642,19 @@ static func test_combat() -> Dictionary:
 # enemy.dust_wanderer_1 from 6,3 instead of stepping to 6,4 — same target, same damage 18. Its
 # candidate set changed from one route (d6r4, exposure 1.0, one control source) to the stay
 # (d6r3, exposure 0.0, none). Still 4 rounds, so FINAL and SAVE did not move.
-const PURIFY_SHRINE_ROUNDS_HASH := "78c646cc075a01b034d7ababe3f568e23563241133b3711d11f37c36b4605912"
-const PURIFY_SHRINE_FINAL_HASH  := "8819869f67b59f78577acc99ceb0b132faa6b7fa8282e611c39effd36dcd7c17"
-const PURIFY_SHRINE_SAVE_HASH   := "05a8bbd08fb73615c6eae460481463fea9f6180661f1c25119d3f944124a1f08"
+# V2-COMBAT-003 Phase 7b re-record — attributed, and the only mode that moved. The purifier
+# is now anchored on the shrine at every level of shrine health, not only below 0.5.
+# FIRST divergence: r01 echo_0005 (the purifier) takes goal.purify_shrine.advance.purifier and
+# walks 1,4 → 4,6, beside shrine_01 at 4,5, instead of 1,4 → 4,3 towards the enemy. From r02 it
+# holds that cell on actor.guard every round instead of attacking. The enemy therefore loses
+# ~17 damage a round from r03 and the fight runs 6 rounds instead of 4.
+# FINAL and SAVE moved with it: round_ended 4 → 6; shrine_hp 180 → 170 (two more rounds at the
+# unchanged 5-per-round drain — no purify fires, see the two gates named in
+# docs/v2-combat-003-handoff.md §18); ase_awarded 64 → 55 and ekwan 8 → 7 on the slower clear;
+# and the 25 kill XP moves from echo_0005 to echo_0001, who lands the last blow in r06.
+const PURIFY_SHRINE_ROUNDS_HASH := "95b8be3a222617306d298dccdb95822db686818d8f699aa083c40a6f88c2d9a0"
+const PURIFY_SHRINE_FINAL_HASH  := "ef63b2d04666a18ad22c4003b6bbe50d9a54d16b22b3e2b9bfa33dabf9cf7bcf"
+const PURIFY_SHRINE_SAVE_HASH   := "cca434e9c009c6ba5607c102d12b1d87883fe6899dbffe4214c9a0cb0934eff7"
 
 static func test_purify_shrine() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(EncounterResolutionModes.PURIFY_SHRINE, "fp_purify_shrine")

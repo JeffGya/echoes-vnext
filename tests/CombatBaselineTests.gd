@@ -300,11 +300,18 @@ const COMBAT_EMOTION_HASHES: Array = [
 # because echo_0003 no longer steps 5,2 -> 6,3 into the enemy's control to attack. Still 4 rounds.
 # Phase 7a moved this mode's ROUND fingerprint but NOT its emotion trace: the three attackers
 # that stopped stepping kept their targets and their damage, so no emotion changed.
+# Phase 7b: 4 rounds -> 6. The purifier echo_0005 now holds the shrine cell 4,6 on actor.guard
+# from r02 instead of attacking (see FlowFingerprintTests PURIFY_SHRINE for the turn-level
+# attribution). Rounds 1 and 2 are BYTE-IDENTICAL — no damage lands in either round in either
+# arm — and the trace first diverges at r03, the same round the turn trace loses two of its
+# three attackers. Two rounds are appended because the fight now takes two more.
 const PURIFY_SHRINE_EMOTION_HASHES: Array = [
 	"bd2de7301aa35102d31bc447af0046a9d6cc8432f4bf5358f5a3db9deeed639e",
 	"725ca32c64d227aac4c49c29180c72e03bd29032fde35554ae95930d4b4300c1",
-	"8a31835fb4cf98b61f9f6526a1e202c6a436343d73b6a5a704300e75f7cdad7c",
-	"4a2b0ff7ffc82682d6efc7f0e78302978271ecd71c2c00ed136f84f0b0ab5f02",
+	"d9708d3a18d60c39c6c6e5ea4bca128c3389e1cf92b3cf6b91508e3c47a05aad",
+	"bc532c60b3962d5a7cab4600400b24927be0fdf7954bed6a576f2dc087548970",
+	"943a6678ef588e2a4aa3bb548d7ee38618dc0f68e3dec46e7968bf1fcc6d9c86",
+	"007e2df7e88433ef7956ae1f496d1d1e45483485a9f57c5732c14e48f48403c0",
 ]
 const RECOVER_EMOTION_HASHES: Array = [
 	"61cb0af978317b7b9a7925e250137a68fe5435c3193120a861b317971919dfcd",

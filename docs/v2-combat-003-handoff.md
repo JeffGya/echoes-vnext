@@ -1183,3 +1183,61 @@ that fraction room to vary. The two are the same design problem seen from opposi
 
 `docs/calling-reference.md:172` already anticipates it — Kra-Soro's `wiemhwefo` (Sky Watcher) is
 described as "range control and far-seeing watch".
+
+---
+
+## 18. Purify — what phase 7b opened, and the two gates still shut (2026-09-04)
+
+`CombatPressureService._add_purify` gated its whole objective-anchored branch on
+`objective_health_ratio < 0.5`. A 200-hp shrine draining 5 a round reaches that at round 20.
+**Measured over 20 seeded encounters, they end at a mean of round 5.2 (min 4, max 7)** — so the
+purifier's approach and hold, the protector, the blocker and the hostile breaker had never run.
+
+### What shipped
+
+Only the **purifier** arm is anchored at every level of shrine health. Health now scales its
+urgency (`_shrine_urgency`, one 0.25 band) instead of deciding whether the branch exists.
+`_is_adjacent` became `CombatActivationService.in_reach(..., "actor.purify_shrine")` — §17's rule,
+behaviour-identical at today's range of 1.
+
+### Why the other three roles stayed behind the threshold — measured, not assumed
+
+**PURIFY_SHRINE is won by `all_enemies_defeated`. Purifying wins nothing** — it only slows drain,
+and `shrine_destroyed` is a defeat (`CombatState.check_end_condition`). Anchoring the protector,
+the blocker and the hostile breaker from round 1 therefore puts four of five Echoes on guard duty
+against the only win the mode has. The 20-run probe, identical seeds:
+
+| Arm | Victories | Rounds (mean/max) | Shrine end HP (mean/min) |
+|---|---|---|---|
+| Before | 20/20 | 5.2 / 7 | 173.8 / 165 |
+| All four roles anchored | **17/20** (1 shrine destroyed, 2 unresolved at 30 rounds) |  11.7 / 30 | 126.8 / 0 |
+| Purifier only (shipped) | 20/20 | 6.0 / 13 | 170.2 / 135 |
+
+**The scope was narrowed after this measurement, not before it.** The wider change is not
+disproved as a design — it is blocked by the win condition, which is Jeff's call, not a
+builder's.
+
+### The shrine does not survive better, and cannot yet
+
+Shrine HP is still an exact `200 − 5 × rounds` in every one of the 20 runs, before and in the shipped arm:
+**no purify ever fires**, so a slower fight is strictly worse for the shrine (−3.6 HP mean).
+Anchoring the purifier is necessary for the mechanic and not sufficient, because two further
+gates still hold `actor.purify_shrine` shut, both at the same unreachable 0.5:
+
+* `CombatPressureService._primary_plan:~742` — a purifier's `advance` plans `actor.move`, not
+  `actor.purify_shrine`, until the shrine is below 0.5.
+* `BehaviorArbiter:373` (and `:669`, `:1209`) — the 9999 purify override needs
+  `shrine_hp_ratio < 0.5` as well.
+
+Both are `health_ratio` ladders, which phase 7c owns. Until one of them opens, the purifier holds
+a cell it can do nothing from.
+
+### Two contradictions in the phase 7b brief, for the record
+
+1. The brief states encounters end "around round 8". Measured: **mean 5.2**.
+2. The stop condition asks for 20 victories **in rounds 5 to 16**. The unchanged baseline already
+   puts **6 of its 20 encounters at round 4**, so the band's lower bound was unreachable before
+   this change. The shipped change moves 14/20 in-band to 17/20.
+
+Reproduce all of it with `-- tests purifyprobe [tag]` (`tools/PurifyOutcomeProbe.gd`); a tag
+beginning `turns` traces the recorded `fp_purify_shrine` fixture turn by turn instead.
