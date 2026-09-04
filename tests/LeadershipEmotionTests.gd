@@ -42,14 +42,14 @@ static func _t_real_balance_defines_all_emotion_traits() -> Dictionary:
 static func _t_fear_auras_use_strongest_overlap() -> Dictionary:
 	var expr := _real_expr_cfg()
 	var target := _actor("target", 1, 0, 1, [])
-	var fearless := _actor("fearless", 0, 0, 4, ["fearless_example"])
-	var calm := _actor("calm", 2, 0, 4, ["calm_transmission"])
+	var fearless := _actor("fearless", 0, 0, 9, ["fearless_example"])
+	var calm := _actor("calm", 2, 0, 9, ["calm_transmission"])
 	var actors: Array = [target, fearless, calm]
 	if LeadershipEmotionService.apply_fear_gain(target, 10, actors, expr, false) != 7:
 		return { "ok": false, "error": "fearless_example must reduce 10 fear to 7" }
 	if LeadershipEmotionService.apply_fear_gain(target, 10, actors, expr, true) != 3:
 		return { "ok": false, "error": "strongest propagated reduction must win (10 -> 3), not multiply" }
-	var blocker := _actor("blocker", 1, 1, 4, ["block_contagion"])
+	var blocker := _actor("blocker", 1, 1, 9, ["block_contagion"])
 	actors.append(blocker)
 	if LeadershipEmotionService.apply_fear_gain(target, 10, actors, expr, true) != 0:
 		return { "ok": false, "error": "block_contagion must prevent propagated fear" }
@@ -57,7 +57,7 @@ static func _t_fear_auras_use_strongest_overlap() -> Dictionary:
 
 static func _t_source_and_radius_excluded() -> Dictionary:
 	var expr := _real_expr_cfg()
-	var leader := _actor("leader", 0, 0, 4, ["fearless_example"])
+	var leader := _actor("leader", 0, 0, 9, ["fearless_example"])
 	var far := _actor("far", 3, 0, 1, [])
 	if LeadershipEmotionService.apply_fear_gain(leader, 10, [leader], expr) != 10:
 		return { "ok": false, "error": "leader must not protect itself" }
@@ -72,10 +72,10 @@ static func _t_source_and_radius_excluded() -> Dictionary:
 static func _t_morale_anchor_and_forecast_expiry() -> Dictionary:
 	var expr := _real_expr_cfg()
 	var target := _actor("target", 1, 0, 1, [])
-	var anchor := _actor("anchor", 0, 0, 4, ["morale_anchor"])
+	var anchor := _actor("anchor", 0, 0, 9, ["morale_anchor"])
 	if LeadershipEmotionService.apply_morale_loss(target, 10, [target, anchor], expr, 1) != 5:
 		return { "ok": false, "error": "morale_anchor must halve morale loss" }
-	var forecast := _actor("forecast", 0, 1, 4, ["morale_forecast"])
+	var forecast := _actor("forecast", 0, 1, 9, ["morale_forecast"])
 	forecast["_morale_forecast_until_round"] = 3
 	if LeadershipEmotionService.apply_morale_loss(target, 10, [target, anchor, forecast], expr, 3) != 0:
 		return { "ok": false, "error": "morale_forecast must prevent loss through expiry round" }
@@ -91,7 +91,7 @@ static func _t_direct_turn_effects_and_once_flags() -> Dictionary:
 	]
 	for case_v in cases:
 		var case: Array = case_v
-		var leader := _actor("leader_%s" % case[0], 0, 0, 4, [str(case[0])])
+		var leader := _actor("leader_%s" % case[0], 0, 0, 9, [str(case[0])])
 		var ally := _actor("ally_%s" % case[0], 1, 0, 1, [])
 		ally["morale"] = 40
 		ally["fear"] = 30
@@ -104,7 +104,7 @@ static func _t_direct_turn_effects_and_once_flags() -> Dictionary:
 		if int(ally["morale"]) != before_morale + int(case[1]) or int(ally["fear"]) != before_fear + int(case[2]):
 			return { "ok": false, "error": "%s did not apply configured direct effect" % case[0] }
 
-	var rally := _actor("rally", 0, 0, 4, ["rally_call"])
+	var rally := _actor("rally", 0, 0, 9, ["rally_call"])
 	var rally_ally := _actor("rally_ally", 1, 0, 1, [])
 	rally_ally["morale"] = 40
 	var rally_sm := ActorStateMachine.new(rally)
@@ -116,7 +116,7 @@ static func _t_direct_turn_effects_and_once_flags() -> Dictionary:
 	if int(rally_ally["morale"]) != 50 or not rally.get("_rally_call_used", false):
 		return { "ok": false, "error": "rally_call must add 10 exactly once per combat" }
 
-	var forecast := _actor("forecast", 0, 0, 4, ["morale_forecast"])
+	var forecast := _actor("forecast", 0, 0, 9, ["morale_forecast"])
 	var forecast_ally := _actor("forecast_ally", 1, 0, 1, [])
 	var forecast_sm := ActorStateMachine.new(forecast)
 	forecast_sm.advance_turn({ "actor": forecast, "all_actors": [forecast, forecast_ally], "cfg": balance, "round": 4 }, logger, 1)
@@ -126,8 +126,8 @@ static func _t_direct_turn_effects_and_once_flags() -> Dictionary:
 
 static func _t_direct_recovery_stacks() -> Dictionary:
 	var balance := _real_balance()
-	var leader_a := _actor("a", 0, 0, 4, ["inspire_aura"])
-	var leader_b := _actor("b", 2, 0, 4, ["steady_presence"])
+	var leader_a := _actor("a", 0, 0, 9, ["inspire_aura"])
+	var leader_b := _actor("b", 2, 0, 9, ["steady_presence"])
 	var target := _actor("target", 1, 0, 1, [])
 	target["morale"] = 40
 	var logger := StructuredLogger.new()
@@ -146,7 +146,7 @@ static func _t_once_per_combat_false_reactivates() -> Dictionary:
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
 
-	var rally := _actor("repeat_rally", 0, 0, 4, ["rally_call"])
+	var rally := _actor("repeat_rally", 0, 0, 9, ["rally_call"])
 	var rally_ally := _actor("repeat_rally_ally", 1, 0, 1, [])
 	rally_ally["morale"] = 40
 	var rally_sm := ActorStateMachine.new(rally)
@@ -157,7 +157,7 @@ static func _t_once_per_combat_false_reactivates() -> Dictionary:
 	if int(rally_ally["morale"]) != 60 or rally.has("_rally_call_used"):
 		return { "ok": false, "error": "rally_call must reactivate without setting a used flag when once_per_combat is false" }
 
-	var forecast := _actor("repeat_forecast", 0, 0, 4, ["morale_forecast"])
+	var forecast := _actor("repeat_forecast", 0, 0, 9, ["morale_forecast"])
 	var forecast_ally := _actor("repeat_forecast_ally", 1, 0, 1, [])
 	var forecast_sm := ActorStateMachine.new(forecast)
 	var forecast_context := { "actor": forecast, "all_actors": [forecast, forecast_ally], "cfg": balance, "round": 4 }
@@ -180,7 +180,7 @@ static func _t_noop_and_passive_traits_do_not_activate() -> Dictionary:
 		var case: Array = case_v
 		var trait_id := str(case[0])
 		(effects[trait_id] as Dictionary)[str(case[1])] = 0
-		var leader := _actor("noop_%s" % trait_id, 0, 0, 4, [trait_id])
+		var leader := _actor("noop_%s" % trait_id, 0, 0, 9, [trait_id])
 		var ally := _actor("noop_ally_%s" % trait_id, 1, 0, 1, [])
 		var sm := ActorStateMachine.new(leader)
 		sm.advance_turn({ "actor": leader, "all_actors": [leader, ally], "cfg": balance, "round": 1 }, logger, 1)
@@ -194,14 +194,14 @@ static func _t_noop_and_passive_traits_do_not_activate() -> Dictionary:
 	]
 	for trait_id_v in passive_traits:
 		var trait_id := str(trait_id_v)
-		var leader := _actor("passive_%s" % trait_id, 0, 0, 4, [trait_id])
+		var leader := _actor("passive_%s" % trait_id, 0, 0, 9, [trait_id])
 		var ally := _actor("passive_ally_%s" % trait_id, 1, 0, 1, [])
 		var sm := ActorStateMachine.new(leader)
 		sm.advance_turn({ "actor": leader, "all_actors": [leader, ally], "cfg": balance, "round": 1 }, logger, 1)
 		if not str(sm.get_snapshot().get("active_leadership", "")).is_empty():
 			return { "ok": false, "error": "%s falsely activated during the leader turn" % trait_id }
 
-	var capped := _actor("capped_inspire", 0, 0, 4, ["inspire_aura"])
+	var capped := _actor("capped_inspire", 0, 0, 9, ["inspire_aura"])
 	var capped_ally := _actor("capped_ally", 1, 0, 1, [])
 	capped_ally["morale"] = 100
 	var capped_sm := ActorStateMachine.new(capped)
@@ -211,7 +211,7 @@ static func _t_noop_and_passive_traits_do_not_activate() -> Dictionary:
 	return { "ok": true }
 
 static func _t_kill_momentum_radius_and_source_exclusion() -> Dictionary:
-	var source := _actor("source", 0, 0, 4, ["kill_momentum"])
+	var source := _actor("source", 0, 0, 9, ["kill_momentum"])
 	var near := _actor("near", 1, 0, 1, [])
 	var far := _actor("far", 2, 0, 1, [])
 	source["morale"] = 40
@@ -233,7 +233,7 @@ static func _t_kill_momentum_radius_and_source_exclusion() -> Dictionary:
 
 static func _t_surprise_fear_uses_shared_path() -> Dictionary:
 	var expr := _real_expr_cfg()
-	var leader := _actor("leader", 0, 0, 4, ["fearless_example"])
+	var leader := _actor("leader", 0, 0, 9, ["fearless_example"])
 	var ally := _actor("ally", 1, 0, 1, [])
 	var surprise := int(_real_balance().get("data", {}).get("combat", {}).get("encounter_approach", {}).get("surprise_fear", 0))
 	if surprise <= 0:
@@ -257,12 +257,12 @@ static func _t_presence_grades_leadership_strength() -> Dictionary:
 	if canonical <= 0.0:
 		return { "ok": false, "error": "real balance canonical_presence must be positive" }
 
-	var full_leader := _actor("full_presence_leader", 0, 0, 4, ["fearless_example"])
+	var full_leader := _actor("full_presence_leader", 0, 0, 9, ["fearless_example"])
 	full_leader["_presence"] = canonical
 	var target_a := _actor("target_a", 1, 0, 1, [])
 	var applied_full := LeadershipEmotionService.apply_fear_gain(target_a, 20, [full_leader, target_a], expr, false)
 
-	var weak_leader := _actor("half_presence_leader", 0, 0, 4, ["fearless_example"])
+	var weak_leader := _actor("half_presence_leader", 0, 0, 9, ["fearless_example"])
 	weak_leader["_presence"] = canonical * 0.5
 	var target_b := _actor("target_b", 1, 0, 1, [])
 	var applied_weak := LeadershipEmotionService.apply_fear_gain(target_b, 20, [weak_leader, target_b], expr, false)
@@ -288,15 +288,15 @@ static func _t_presence_grades_leadership_radius() -> Dictionary:
 	if canonical <= 0.0:
 		return { "ok": false, "error": "real balance canonical_presence must be positive" }
 
-	var full_leader := _actor("radius_full", 0, 0, 4, ["calm_transmission"])
+	var full_leader := _actor("radius_full", 0, 0, 9, ["calm_transmission"])
 	full_leader["_presence"] = canonical
 	var full_radius := LeadershipEmotionService.get_trait_radius(full_leader, "calm_transmission", expr)
 
-	var half_leader := _actor("radius_half", 0, 0, 4, ["calm_transmission"])
+	var half_leader := _actor("radius_half", 0, 0, 9, ["calm_transmission"])
 	half_leader["_presence"] = canonical * 0.5
 	var half_radius := LeadershipEmotionService.get_trait_radius(half_leader, "calm_transmission", expr)
 
-	var zero_leader := _actor("radius_zero", 0, 0, 4, ["calm_transmission"])
+	var zero_leader := _actor("radius_zero", 0, 0, 9, ["calm_transmission"])
 	zero_leader["_presence"] = 0.0
 	var zero_radius := LeadershipEmotionService.get_trait_radius(zero_leader, "calm_transmission", expr)
 
@@ -307,18 +307,19 @@ static func _t_presence_grades_leadership_radius() -> Dictionary:
 	return { "ok": true }
 
 ## V2-PROG-012 Phase 3, Item 4 #3: pins the deliberate decision to keep is_whole_leader()'s
-## band gate as ELIGIBILITY, separate from Presence grading. A Grounded (non-Whole) Echo
-## with a high _presence must still fail to lead — Presence only grades an already-eligible
-## Whole leader's strength/radius, it does not grant eligibility on its own. Falsifiable: if
+## band gate as ELIGIBILITY, separate from Presence grading. A non-Whole (rank 3, "forming"
+## under V2-COMBAT-003's calling-aligned band_by_standing) Echo with a high _presence must
+## still fail to lead — Presence only grades an already-eligible Whole leader's
+## strength/radius, it does not grant eligibility on its own. Falsifiable: if
 ## is_whole_leader() were changed to check Presence instead of (or in addition to) the
-## expression band, this Grounded leader would start reducing fear and the full-amount
-## (20) assertion below would fail.
+## expression band, this leader would start reducing fear and the full-amount (20)
+## assertion below would fail.
 static func _t_presence_does_not_grant_eligibility() -> Dictionary:
 	var expr := _real_expr_cfg()
-	var grounded_leader := _actor("grounded_high_presence", 0, 0, 3, ["fearless_example"])
-	grounded_leader["_presence"] = 1.0
-	var target := _actor("grounded_target", 1, 0, 1, [])
-	var applied := LeadershipEmotionService.apply_fear_gain(target, 20, [grounded_leader, target], expr, false)
+	var non_whole_leader := _actor("non_whole_high_presence", 0, 0, 3, ["fearless_example"])
+	non_whole_leader["_presence"] = 1.0
+	var target := _actor("non_whole_target", 1, 0, 1, [])
+	var applied := LeadershipEmotionService.apply_fear_gain(target, 20, [non_whole_leader, target], expr, false)
 	if applied != 20:
 		return { "ok": false, "error": "non-Whole leader with high Presence must not reduce fear at all (Whole-band eligibility gate must stay), got %d" % applied }
 	return { "ok": true }
@@ -339,12 +340,12 @@ static func _t_presence_does_not_grant_eligibility() -> Dictionary:
 ## multiplier and applied_reflective == applied_valiant, failing this test.
 static func _t_production_archetypes_grade_differently() -> Dictionary:
 	var expr := _real_expr_cfg()
-	var reflective_leader := _production_leader("reflective_leader", 4, ["fearless_example"], "reflective")
+	var reflective_leader := _production_leader("reflective_leader", 9, ["fearless_example"], "reflective")
 	var target_a := _actor("target_reflective", 1, 0, 1, [])
 	var applied_reflective := LeadershipEmotionService.apply_fear_gain(
 		target_a, 20, [reflective_leader, target_a], expr, false)
 
-	var valiant_leader := _production_leader("valiant_leader", 4, ["fearless_example"], "valiant")
+	var valiant_leader := _production_leader("valiant_leader", 9, ["fearless_example"], "valiant")
 	var target_b := _actor("target_valiant", 1, 0, 1, [])
 	var applied_valiant := LeadershipEmotionService.apply_fear_gain(
 		target_b, 20, [valiant_leader, target_b], expr, false)
@@ -466,8 +467,8 @@ static func _t_score_traits_move_arbiter_scores() -> Dictionary:
 		var trait_id := str(case[0])
 		var action := str(case[1])
 		var expected := float(case[2])
-		var subject := _actor("subject_%s" % trait_id, 1, 0, 4, [])
-		var leader := _actor("leader_%s" % trait_id, 0, 0, 4, [trait_id])
+		var subject := _actor("subject_%s" % trait_id, 1, 0, 9, [])
+		var leader := _actor("leader_%s" % trait_id, 0, 0, 9, [trait_id])
 		var candidate: Dictionary = { "action_type": action, "target_id": "e1", "target_hp_ratio": 1.0 }
 		var alone: Dictionary = arbiter.call("_leadership_score_mods", subject, [subject], expr)
 		if not alone.is_empty():
@@ -495,9 +496,9 @@ static func _t_score_auras_respect_radius_and_self() -> Dictionary:
 	var bdata: Dictionary = _real_balance().get("data", {})
 	var expr: Dictionary = bdata.get("maturity_expression", {})
 	var arbiter := BehaviorArbiter.new(bdata.get("actor", {}), {})
-	var leader := _actor("self_leader", 0, 0, 4, ["hold_formation"])  # authored radius 2
-	var near := _actor("near", 2, 0, 4, [])
-	var far := _actor("far", 5, 0, 4, [])
+	var leader := _actor("self_leader", 0, 0, 9, ["hold_formation"])  # authored radius 2
+	var near := _actor("near", 2, 0, 9, [])
+	var far := _actor("far", 5, 0, 9, [])
 	if not (arbiter.call("_leadership_score_mods", leader, [leader, near], expr) as Dictionary).is_empty():
 		return { "ok": false, "error": "leader applied its own score aura to itself" }
 	if (arbiter.call("_leadership_score_mods", near, [leader, near], expr) as Dictionary).is_empty():
@@ -517,9 +518,9 @@ static func _t_threat_read_holds_the_retreat_gate() -> Dictionary:
 	var expr: Dictionary = bdata.get("maturity_expression", {})
 	var arbiter := BehaviorArbiter.new(bdata.get("actor", {}), {})
 	var calling_behavior: Dictionary = expr.get("calling_behavior", {}).get("okofor", {})
-	var subject := _actor("gate_subject", 1, 0, 4, [])
+	var subject := _actor("gate_subject", 1, 0, 9, [])
 	subject["current_hp"] = 20  # hp_ratio 0.40; okofor retreat_threshold is 0.45
-	var leader := _actor("gate_leader", 0, 0, 4, ["threat_read"])
+	var leader := _actor("gate_leader", 0, 0, 9, ["threat_read"])
 	var enemy := _actor("gate_enemy", 5, 5, 1, [])
 	enemy["actor_type"] = "enemy"
 	enemy["faction"] = "enemy"
@@ -541,8 +542,8 @@ static func _t_cover_positioning_reads_broken_sight_line() -> Dictionary:
 	var bdata: Dictionary = _real_balance().get("data", {})
 	var expr: Dictionary = bdata.get("maturity_expression", {})
 	var arbiter := BehaviorArbiter.new(bdata.get("actor", {}), {})
-	var subject := _actor("cover_subject", 1, 0, 4, [])
-	var leader := _actor("cover_leader", 0, 0, 4, ["cover_positioning"])
+	var subject := _actor("cover_subject", 1, 0, 9, [])
+	var leader := _actor("cover_leader", 0, 0, 9, ["cover_positioning"])
 	var alone: Dictionary = arbiter.call("_leadership_score_mods", subject, [subject], expr)
 	var led: Dictionary = arbiter.call("_leadership_score_mods", subject, [subject, leader], expr)
 	if float(alone.get("_cover_move_bonus", 0.0)) != 0.0:
@@ -563,15 +564,15 @@ static func _t_displacement_immunity_owner_and_radius() -> Dictionary:
 	var expr := _real_expr_cfg()
 	# flow_ctx is never touched by the immunity read, so a bare service is enough here.
 	var live := LiveMovementContextService.new(null, null)
-	var owner := _actor("lock_owner", 0, 0, 4, ["position_lock"])
-	var plain := _actor("lock_plain", 0, 0, 4, [])
+	var owner := _actor("lock_owner", 0, 0, 9, ["position_lock"])
+	var plain := _actor("lock_plain", 0, 0, 9, [])
 	if not bool(live.call("_movement_displacement_immunity", owner, [owner], expr)):
 		return { "ok": false, "error": "position_lock did not protect its owner" }
 	if bool(live.call("_movement_displacement_immunity", plain, [plain], expr)):
 		return { "ok": false, "error": "an actor with no trait was reported immune" }
-	var anchor := _actor("anchor_leader", 0, 0, 4, ["anchor_presence"])
-	var near := _actor("anchor_near", 1, 0, 4, [])
-	var far := _actor("anchor_far", 6, 0, 4, [])
+	var anchor := _actor("anchor_leader", 0, 0, 9, ["anchor_presence"])
+	var near := _actor("anchor_near", 1, 0, 9, [])
+	var far := _actor("anchor_far", 6, 0, 9, [])
 	if not bool(live.call("_movement_displacement_immunity", near, [anchor, near], expr)):
 		return { "ok": false, "error": "anchor_presence did not protect an ally in radius" }
 	if bool(live.call("_movement_displacement_immunity", far, [anchor, far], expr)):

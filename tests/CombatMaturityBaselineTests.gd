@@ -3,9 +3,10 @@
 #
 # PROBLEM THIS FILE FIXES: no recorded fixture anywhere in the suite ever held a Whole-band
 # Echo. EchoFactory mints every Echo at rank 1 (nascent), and band_by_standing puts "whole" at
-# rank 4+. Leadership traits, the maturity band, and every Whole-band behavior branch in
-# ActorStateMachine/BehaviorArbiter were therefore invisible to the entire suite — nothing
-# observed them, so nothing could regress them.
+# rank 9 (V2-COMBAT-003 calling-aligned remap — was rank 4+). Leadership traits, the maturity
+# band, and every Whole-band behavior branch in ActorStateMachine/BehaviorArbiter were
+# therefore invisible to the entire suite — nothing observed them, so nothing could regress
+# them.
 #
 # This file adds a Whole-band Echo to the suite through the real production rank-up path
 # (ProgressionService.execute_rank_up(), looped one Standing at a time — see
@@ -37,7 +38,7 @@ static func register(runner) -> void:
 # 1. The production rank-up path really reaches the Whole band.
 # ---------------------------------------------------------------------------
 
-## Drives a single fresh Echo from rank 1 to rank 4 through ProgressionService.execute_rank_up()
+## Drives a single fresh Echo from rank 1 to rank 9 through ProgressionService.execute_rank_up()
 ## — the same function core/runtime/controllers/ProgressionController.gd:handle_rank_up() calls
 ## for the player-facing "sanctum.rank_up" action — one Standing at a time. Confirms the band
 ## table actually calls that a Whole-band Echo, and that the config values this phase depends on
@@ -55,26 +56,26 @@ static func _t_rank_up_reaches_whole_band() -> Dictionary:
 	if int(echo.get("rank", 0)) != 1:
 		return { "ok": false, "error": "Expected a freshly summoned Echo at rank 1, got %d" % int(echo.get("rank", 0)) }
 
-	FlowFingerprintTests._promote_echo_rank(echo, 4, bal, seed, null, 0)
+	FlowFingerprintTests._promote_echo_rank(echo, 9, bal, seed, null, 0)
 
-	if int(echo.get("rank", 0)) != 4:
-		return { "ok": false, "error": "Expected rank 4 after three real rank-ups, got %d" % int(echo.get("rank", 0)) }
-	if int(echo.get("standing", 0)) != 4:
-		return { "ok": false, "error": "Expected standing==rank==4 (V2-PROG-004 bridge field), got %d" % int(echo.get("standing", 0)) }
+	if int(echo.get("rank", 0)) != 9:
+		return { "ok": false, "error": "Expected rank 9 after eight real rank-ups, got %d" % int(echo.get("rank", 0)) }
+	if int(echo.get("standing", 0)) != 9:
+		return { "ok": false, "error": "Expected standing==rank==9 (V2-PROG-004 bridge field), got %d" % int(echo.get("standing", 0)) }
 	# calling_eligible is set permanently at rank 3 and never cleared by a later rank-up.
 	if not bool(echo.get("calling_eligible", false)):
-		return { "ok": false, "error": "Expected calling_eligible=true once rank 3 was crossed en route to 4" }
+		return { "ok": false, "error": "Expected calling_eligible=true once rank 3 was crossed en route to 9" }
 
 	var band_by_standing: Dictionary = expr_cfg.get("band_by_standing", {})
 	var band: String = MaturityExpressionService.get_expression_band(int(echo["rank"]), band_by_standing)
 	if band != "whole":
-		return { "ok": false, "error": "Expected band_by_standing to call rank 4 'whole', got '%s'" % band }
+		return { "ok": false, "error": "Expected band_by_standing to call rank 9 'whole', got '%s'" % band }
 
 	var max_rank: int = int(expr_cfg.get("rank_strength_scale", {}).get("max_rank", 9))
-	var rank_strength: float = MaturityExpressionService.get_rank_strength(4, max_rank)
+	var rank_strength: float = MaturityExpressionService.get_rank_strength(9, max_rank)
 	var nascent_strength: float = MaturityExpressionService.get_rank_strength(1, max_rank)
 	if not (rank_strength > nascent_strength):
-		return { "ok": false, "error": "Expected rank_strength(4)=%.4f > rank_strength(1)=%.4f" % [rank_strength, nascent_strength] }
+		return { "ok": false, "error": "Expected rank_strength(9)=%.4f > rank_strength(1)=%.4f" % [rank_strength, nascent_strength] }
 
 	return { "ok": true }
 
@@ -84,7 +85,7 @@ static func _t_rank_up_reaches_whole_band() -> Dictionary:
 # ---------------------------------------------------------------------------
 
 ## Builds one COMBAT encounter (5-echo roster, same as every FlowFingerprintTests mode) and
-## promotes roster index 0 to rank 4 (Whole) through the real production path, leaving index 1
+## promotes roster index 0 to rank 9 (Whole) through the real production path, leaving index 1
 ## at rank 1 (Nascent) untouched — both then face the same board, the same enemy roster, the
 ## same round. Drives real rounds via combat.init/confirm_round/next_actor (never flow.new_game
 ## — AGENTS.md #17) and reads the per-turn autonomy outputs ActorStateMachine writes onto each
@@ -96,22 +97,22 @@ static func _t_rank_up_reaches_whole_band() -> Dictionary:
 ## snapshot projection.
 static func _t_whole_vs_nascent_diverges() -> Dictionary:
 	var env: Dictionary = FlowFingerprintTests._setup_encounter(
-		EncounterResolutionModes.COMBAT, "mat_whole_vs_nascent", "", "", { 0: 4 })
+		EncounterResolutionModes.COMBAT, "mat_whole_vs_nascent", "", "", { 0: 9 })
 	if env.is_empty():
 		return { "ok": false, "error": "Encounter setup failed" }
 
 	var runtime: FlowRuntime = env["runtime"]
 	var ectx: EncounterContext = env["ectx"]
 
-	var whole_id := "echo_0001"   # roster index 0 — promoted to rank 4
+	var whole_id := "echo_0001"   # roster index 0 — promoted to rank 9
 	var nascent_id := "echo_0002" # roster index 1 — left at rank 1
 
 	var whole_before: Dictionary = _find_actor(ectx.actors, whole_id)
 	var nascent_before: Dictionary = _find_actor(ectx.actors, nascent_id)
 	if whole_before.is_empty() or nascent_before.is_empty():
 		return { "ok": false, "error": "Could not find both echo_0001 and echo_0002 on the board before combat" }
-	if int(whole_before.get("rank", 0)) != 4:
-		return { "ok": false, "error": "echo_0001 should be rank 4 going into combat, got %d" % int(whole_before.get("rank", 0)) }
+	if int(whole_before.get("rank", 0)) != 9:
+		return { "ok": false, "error": "echo_0001 should be rank 9 going into combat, got %d" % int(whole_before.get("rank", 0)) }
 	if int(nascent_before.get("rank", 0)) != 1:
 		return { "ok": false, "error": "echo_0002 should be rank 1 going into combat, got %d" % int(nascent_before.get("rank", 0)) }
 
@@ -159,7 +160,7 @@ static func _t_whole_vs_nascent_diverges() -> Dictionary:
 		return { "ok": false, "error": "Expected echo_0002's expression_band=='nascent' on its own turn, got '%s'" % nascent_band }
 
 	# --- The numeric difference: rank_strength is a direct, config-verified floor on the gap ---
-	# rank_strength(4)=3/8=0.375, rank_strength(1)=0.0 (rank_strength_scale.max_rank=9). Every one
+	# rank_strength(9)=8/8=1.0, rank_strength(1)=0.0 (rank_strength_scale.max_rank=9). Every one
 	# of judgment/presence/composure/legibility sums rank_strength * a positive weight (see
 	# data.maturity_expression.autonomy_outputs — rank_strength_weight is 0.25/0.20/0.36/0.30
 	# respectively, all > 0, all other terms independent of rank), so this alone guarantees each
@@ -187,24 +188,18 @@ static func _t_whole_vs_nascent_diverges() -> Dictionary:
 	if not (whole_l > nascent_l):
 		return { "ok": false, "error": "Expected legibility(whole)=%.4f > legibility(nascent)=%.4f" % [whole_l, nascent_l] }
 
-	# MEASURED on this fixture (rank_strength(whole)=0.3750, rank_strength(nascent)=0.0000):
-	#   judgment:   whole=0.1688  nascent=0.0550
-	#   composure:  whole=0.3200  nascent=0.1363
-	#   legibility: whole=0.2250  nascent=0.1000
-	#   presence:   whole=0.2335  nascent=0.2560   (see below — NOT gated)
+	# MEASURED on this fixture (rank_strength(whole)=1.0000, rank_strength(nascent)=0.0000):
+	#   judgment:   whole=0.3250  nascent=0.0550
+	#   composure:  whole=0.5281  nascent=0.1363
+	#   legibility: whole=0.4125  nascent=0.1000
+	#   presence:   whole=0.3585  nascent=0.2560
 	#
-	# presence is NOT asserted strictly greater. MEASURED on this fixture: presence(whole)=0.2335,
-	# presence(nascent)=0.2560 — the Whole Echo scores LOWER. presence's formula sums
-	# rank_strength_weight (0.20) alongside archetype_projection_weight (0.25),
-	# calling_family_projection_weight (0.25), bond_density_weight (0.15) and
-	# morale_lift_weight (0.15) — archetype_birth is a random per-Echo birth trait, entirely
-	# independent of Standing, and morale is combat state, also independent of Standing. On this
-	# board those two terms swamp the +0.075 (0.375 * 0.20) rank_strength gap. This is a genuine
-	# finding, not a gap in the test: presence, as currently weighted, is dominated by identity
-	# and mood, not by maturity — unlike judgment/composure/legibility, where rank_strength's
-	# weight (0.25/0.36/0.30) is large enough, and the other summed terms similar enough between
-	# these two actors, that Standing wins in this fixture. Reported to Jeff rather than asserted
-	# away; a differently-weighted presence formula could reverse this on the same fixture.
+	# V2-COMBAT-003: promoting to rank 9 (not the pre-remap rank 4) quadruples rank_strength's
+	# contribution to presence (0.20 weight * 1.0 vs * 0.375), which now clears the
+	# archetype/calling/morale terms that used to swamp it — presence is asserted strictly
+	# greater below too, unlike the pre-remap rank-4 fixture where it was not.
+	if not (whole_p > nascent_p):
+		return { "ok": false, "error": "Expected presence(whole)=%.4f > presence(nascent)=%.4f" % [whole_p, nascent_p] }
 	return { "ok": true }
 
 

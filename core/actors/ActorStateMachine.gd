@@ -217,7 +217,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		_actor["_withdraw_cooldown"] = maxi(0, int(_actor["_withdraw_cooldown"]) - 1)
 
 	# COMBAT-003 + V2-PROG-006 + V2-PROG-010 + V2-PROG-012 Phase 7: Absolute Fear Rule — dynamic threshold.
-	# Band base from refusal_thresholds_by_band (nascent=65, forming=72, grounded=80, whole=90) is now
+	# Band base from refusal_thresholds_by_band (nascent=65, forming=80, grounded=88, whole=95) is now
 	# genuinely load-bearing: the calling value composes as an OFFSET on top of the band baseline
 	# instead of replacing it outright, so "nascent breaks sooner, whole holds longer" (GDD:1422) holds
 	# for every calling, not just uncalled.
@@ -290,7 +290,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	# term but none of the relief terms (outnumber, kill, ally-KO ripple, passive tick,
 	# identity, leadership dampening — all gated to faction == "echo" elsewhere in this
 	# file and in EmotionService), plus the lowest band threshold in the game (rank 1 ->
-	# nascent -> 65, vs. a grounded Echo's 80). Left ungated, an enemy's fear only ever
+	# nascent -> 65, vs. a grounded Echo's 88). Left ungated, an enemy's fear only ever
 	# rises and the unconditional +1/round alone reaches 65 by round 65 with no contact
 	# required — measured: fear climbs to 100 and holds while the enemy is winning.
 	# Fear still degrades an enemy's score below (fear_factor in BehaviorArbiter); it

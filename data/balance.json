@@ -1019,15 +1019,15 @@
 		"maturity_expression": {
 			"_comment": "V2-PROG-006: Maturity-Expression system. Expression band derived from actor rank (Standing). Replaces smartness-tier framing. Calling-specific behavior modifiers. All thresholds config-driven.",
 			"band_by_standing": {
-				"_comment": "V2-PROG-012 Phase 6 Item 3: backfilled ranks 6-9 (all 'whole') so this table agrees with rank_strength_scale.max_rank=9 below — previously only ranks 1-5 were defined and MaturityExpressionService.get_expression_band()'s fallback (band_by_standing.get('5', 'whole')) silently covered 6-9 with the same result, so this is a documentation/agreement fix, not a behavior change. Still matters for refusal_thresholds_by_band and snapshot display even though the directive path no longer keys on the band (V2-PROG-012 Phase 6 Item 1 — see BehaviorArbiter._directive_bonus()'s doc comment).",
+				"_comment": "V2-COMBAT-003 (approved 2026-09-03), PROPOSED DEFAULT: calling-aligned to the calling ladder's milestones at Standing 3/6/9 (data.combat.movement.capacity.standing_bands already used this shape) — replaces the old table, which saturated at Standing 4 (ranks 4-9 all 'whole', a backfilled agreement fix, not a designed band). See docs/v2-combat-003-handoff.md's 'calling-aligned' section for the full reasoning.",
 				"1": "nascent",
-				"2": "forming",
-				"3": "grounded",
-				"4": "whole",
-				"5": "whole",
-				"6": "whole",
-				"7": "whole",
-				"8": "whole",
+				"2": "nascent",
+				"3": "forming",
+				"4": "forming",
+				"5": "forming",
+				"6": "grounded",
+				"7": "grounded",
+				"8": "grounded",
 				"9": "whole"
 			},
 			"calling_behavior": {
@@ -1102,11 +1102,11 @@
 				"max_rank": 9
 			},
 			"refusal_thresholds_by_band": {
-				"_comment": "V2-PROG-010: Base Absolute Fear Rule threshold by expression band. V2-PROG-012 Phase 7: this table is now genuinely load-bearing for every calling — calling_behavior.absolute_fear_offset composes ON TOP of these values (threshold = clamp(band_base + offset, 0, 100)) instead of a calling value replacing them outright, so 'nascent breaks sooner, whole holds longer' (GDD:1422) holds regardless of calling. The legacy flat absolute_fear_threshold override is REMOVED (V2-PROG-012 Phase 7 review-fix) — this table is now unconditionally load-bearing for every calling_behavior entry.",
+				"_comment": "V2-PROG-010: Base Absolute Fear Rule threshold by expression band. V2-PROG-012 Phase 7: this table is now genuinely load-bearing for every calling — calling_behavior.absolute_fear_offset composes ON TOP of these values (threshold = clamp(band_base + offset, 0, 100)) instead of a calling value replacing them outright, so 'nascent breaks sooner, whole holds longer' (GDD:1422) holds regardless of calling. The legacy flat absolute_fear_threshold override is REMOVED (V2-PROG-012 Phase 7 review-fix) — this table is now unconditionally load-bearing for every calling_behavior entry. V2-COMBAT-003 (approved 2026-09-03), PROPOSED DEFAULT: re-spaced alongside band_by_standing's calling-aligned remap (was 65/72/80/90) so the composed per-Standing effect stays small and Standing 3 is unchanged — see docs/v2-combat-003-handoff.md's 'calling-aligned' section for the measured per-Standing deltas.",
 				"nascent": 65,
-				"forming": 72,
-				"grounded": 80,
-				"whole": 90
+				"forming": 80,
+				"grounded": 88,
+				"whole": 95
 			},
 			"identity_weight_scale": {
 				"_comment": "V2-PROG-010: Additional multiplier on trait_bonus and vector_bonus, scaled by interpretation_width (V2-PROG-012 Phase 6, derived from autonomy_outputs.judgment below — NOT rank_strength; see BehaviorArbiter._score()'s doc comment on the identity-weight-scaling block). At interpretation_width=0.0 multiplier=1.0x; at interpretation_width=1.0 multiplier=1.0+scale. Paired with directive_interpretation_mul below as the two halves of ONE budgeted axis — see interpretation_swing_max's _comment for the identity:directive ratio these two blocks are jointly checked against (config-integrity test: tests/BehaviorArbiterTests.gd). V2-PROG-012 Phase 6 Item 2: lowered from 0.6/0.6 (the pre-fix DEFECT 2 value) to 0.35/0.35 — PROPOSED DEFAULT, chosen to fit inside interpretation_swing_max: (1.0+0.35)/directive_interpretation_mul.low(0.75) = 1.80 <= 2.0. 0.6 would give (1.0+0.6)/0.75 = 2.13 > 2.0, failing the budget.",

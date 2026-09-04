@@ -31,11 +31,12 @@ const SocialGraphService = preload("res://core/sanctum/SocialGraphService.gd")
 # ── Expression band ───────────────────────────────────────────────────────────
 
 # Returns the expression band for this actor based on Standing (rank).
-# Possible values: "nascent" | "forming" | "grounded" | "whole"
-#   nascent  — self still assembling (rank 1)
-#   forming  — self taking shape (rank 2)
-#   grounded — rooted, able to assert self; first calling milestone (rank 3)
-#   whole    — integrated, self-commanding (rank 4–5)
+# Possible values: "nascent" | "forming" | "grounded" | "whole" — calling-aligned to the
+# calling ladder's milestones at Standing 3/6/9 (V2-COMBAT-003, PROPOSED DEFAULT):
+#   nascent  — self still assembling (rank 1-2)
+#   forming  — self taking shape (rank 3-5)
+#   grounded — rooted, able to assert self; first calling milestone (rank 6-8)
+#   whole    — integrated, self-commanding (rank 9)
 #
 # band_by_standing: data.maturity_expression.band_by_standing from balance.json
 static func get_expression_band(rank: int, band_by_standing: Dictionary) -> String:
