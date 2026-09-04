@@ -1136,3 +1136,50 @@ per-trait and per-calling measurement on this branch rests on one party per labe
    the choke point?
 3. Should the probe be able to vary party composition? It caps the evidence for every trait and
    calling measurement we take.
+
+---
+
+## 17. Range — the seam to prepare, and the system NOT to build here (Jeff, 2026-09-04)
+
+> "an actor does need to get a range of visibility or range of action type variable that helps decide
+> if they can attack from that range with the equiped weapon skill they have."
+
+**Not built in this story.** Recorded as the direction the seam must point.
+
+### What exists today
+
+`LiveMovementContextService` (~:530) publishes:
+
+```gdscript
+"ranges": { "melee_attack": 1, "protect_ally": 1, "actor.purify_shrine": 1 },
+"default_range": 1,
+```
+
+plus `MovementOptionService._RANGE_BOUND_ACTIONS` (which actions need to be in range at all) and
+`_planned_action_for_destination`, which downgrades an out-of-range strike to a plain move so an
+option never advertises an attack it cannot make.
+
+**The shape is already right. Every value is a literal 1 — adjacency only.**
+
+### The discipline, from phase 7 onward
+
+**Ask "is my target within `ranges[action]`?" — never "is it adjacent", never a hardcoded 1.**
+
+That single rule is the whole preparation. When ranges become per-actor, an archer three cells away
+gets its stay-and-shoot option for free, because the code already asked the right question.
+
+**Do not work ahead:** no per-actor range, no weapon config, no equipment hooks, no new keys. Values
+stay 1 until the weapon story.
+
+### Why it matters more after phase 6
+
+`5bfd375` made `exposure` live. Once an actor can act from a distance, the choice between striking
+from safe ground and stepping into hostile control becomes a real decision — which is what exposure
+was written to price. Today that choice barely exists because everything must close to adjacency.
+
+**So exposure is currently a switch, not a dial** (318 samples at 0.0, 112 at 1.0, 2 in between):
+in-fight routes are one or two cells, and exposure is a fraction of route length. Range is what gives
+that fraction room to vary. The two are the same design problem seen from opposite ends.
+
+`docs/calling-reference.md:172` already anticipates it — Kra-Soro's `wiemhwefo` (Sky Watcher) is
+described as "range control and far-seeing watch".
