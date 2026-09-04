@@ -38,7 +38,7 @@ static func register(runner) -> void:
 	runner.register_test("behavior_char/live_options_carry_real_spatial_terms", func(): return _t_live_options_zero_spatial_terms())
 	runner.register_test("behavior_char/purify_above_half_health_delegates_to_ordinary_combat", func(): return _t_purify_delegates_to_ordinary_combat())
 	runner.register_test("behavior_char/legacy_selector_fallback_is_silent", func(): return _t_legacy_fallback_silent())
-	runner.register_test("behavior_char/health_ratio_ladders_diverge_on_zero_max_hp", func(): return _t_health_ratio_ladders_diverge())
+	runner.register_test("behavior_char/health_ratio_ladders_agree_on_zero_max_hp", func(): return _t_health_ratio_ladders_agree())
 
 
 # ---------------------------------------------------------------------------
@@ -447,21 +447,22 @@ static func _t_legacy_fallback_silent() -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
-# 8 (task's fact 7) — health_ratio has two divergent ladders for the same input:
-# BehaviorArbiter._hp_ratio() returns 1.0 when max_hp <= 0; LiveMovementContextService's
-# per-actor fact builder returns 0.0 for the identical actor dict.
+# 8 (task's fact 7) — health_ratio had two divergent ladders for the same input:
+# BehaviorArbiter's returned 1.0 when max_hp <= 0, LiveMovementContextService's per-actor
+# fact builder 0.0. The arbiter's copy is gone; both sides now read
+# ActorService.health_ratio, and BehaviorArbiter._validate_perceived_actor compares the two
+# every turn, so a new divergence is a movement failure rather than a difference of opinion.
 #
-# FOCUSED unit-level calls into both real static/instance methods with the SAME actor dict —
-# no full encounter needed; this is a pure function comparison.
+# FOCUSED unit-level calls into both real methods with the SAME actor dict — no full
+# encounter needed; this is a pure function comparison.
 # ---------------------------------------------------------------------------
 
-# KNOWN DEFECT (V2-COMBAT-003 will change this):
-static func _t_health_ratio_ladders_diverge() -> Dictionary:
+static func _t_health_ratio_ladders_agree() -> Dictionary:
 	var actor: Dictionary = { "id": "actor.zero_max_hp", "stats": { "max_hp": 0 }, "current_hp": 50 }
 
-	var arbiter_ratio: float = BehaviorArbiterScript._hp_ratio(actor)
+	var arbiter_ratio: float = ActorService.health_ratio(actor)
 	if not is_equal_approx(arbiter_ratio, 1.0):
-		return { "ok": false, "error": "expected BehaviorArbiter._hp_ratio() to return 1.0 for max_hp<=0, got %s" % str(arbiter_ratio) }
+		return { "ok": false, "error": "expected ActorService.health_ratio() to return the absent-data sentinel 1.0 for max_hp<=0, got %s" % str(arbiter_ratio) }
 
 	var flow_ctx := FlowContext.new()
 	var logger := StructuredLogger.new()
@@ -471,9 +472,6 @@ static func _t_health_ratio_ladders_diverge() -> Dictionary:
 	if facts.is_empty():
 		return { "ok": false, "error": "expected one perceived-actor fact back, got none" }
 	var live_ratio: float = float((facts[0] as Dictionary).get("health_ratio", -1.0))
-	if not is_equal_approx(live_ratio, 0.0):
-		return { "ok": false, "error": "expected LiveMovementContextService's per-actor fact builder to return 0.0 for max_hp<=0, got %s" % str(live_ratio) }
-
-	if is_equal_approx(arbiter_ratio, live_ratio):
-		return { "ok": false, "error": "expected the two ladders to DIVERGE for the same actor dict (1.0 vs 0.0) — they agreed instead (%s == %s), so this defect no longer reproduces" % [str(arbiter_ratio), str(live_ratio)] }
+	if not is_equal_approx(arbiter_ratio, live_ratio):
+		return { "ok": false, "error": "expected both ladders to give the same answer for one actor dict, got arbiter=%s live=%s" % [str(arbiter_ratio), str(live_ratio)] }
 	return { "ok": true }

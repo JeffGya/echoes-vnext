@@ -42,6 +42,7 @@ const MovementOptionContract = preload("res://core/movement/contracts/MovementOp
 const MovementIntentContract = preload("res://core/movement/contracts/MovementIntent.gd")
 const MovementActionPlanContract = preload("res://core/movement/contracts/MovementActionPlan.gd")
 const LeadershipEmotionServiceScript = preload("res://core/combat/LeadershipEmotionService.gd")
+const ReachAuthority = preload("res://core/movement/CombatActivationService.gd")
 
 const _MOVEMENT_STYLE_ORDER: Array = [
 	"direct", "safe", "cohesive", "lateral", "screen", "intercept", "conservative",
@@ -363,19 +364,20 @@ func select_intent(context: Dictionary) -> Dictionary:
 		_apply_bond_bias(candidates, actor, bonds_ctx, bond_thresholds_ctx, bond_behavior_cfg)
 
 	# COMBAT-006: actor.purify_shrine override — injected AFTER scoring so 9999 is never overwritten.
-	# Fires when shrine HP drops below 50%, the purifier is adjacent, and cooldown is 0.
-	# HP gate is intentional: purifying at full shrine HP wastes a turn that should be spent
-	# intercepting the enemy. The purifier moves toward the enemy while shrine HP is healthy
-	# and purifies only when the shrine is actually taking meaningful drain damage.
-	# Adjacency check added (COMBAT-BUG-001): prevents a wasted no-op purify from far away.
+	# Fires when the purifier is in reach of a living shrine and its cooldown is spent.
+	#
+	# There is deliberately NO shrine-health condition. It used to require the shrine below
+	# half health, which a 200-hp shrine draining 5 a round reaches at round 20 while these
+	# encounters end near round 5 — so purify never fired at all. `purify_cooldown` is the
+	# throttle that stops the purifier spending every turn here; shrine health scales the
+	# pressure layer's urgency instead (CombatPressureService._shrine_urgency).
 	if context.get("is_purifier", false) \
 			and context.get("shrine_alive", false) \
-			and float(context.get("shrine_hp_ratio", 1.0)) < 0.5 \
 			and int(actor.get("purify_cooldown", 0)) == 0:
 		var my_pos_pu: Dictionary = actor.get("grid_pos", {})
 		for a_v in all_actors:
 			if a_v is Dictionary and a_v.get("is_structure", false) and not a_v.get("is_dead", false):
-				if GridService.is_adjacent(my_pos_pu, a_v.get("grid_pos", {})):
+				if ReachAuthority.in_reach(my_pos_pu, a_v.get("grid_pos", {}), "actor.purify_shrine"):
 					candidates.append({
 						"action_type": "actor.purify_shrine",
 						"target_id":   "",
@@ -666,7 +668,6 @@ func select_movement_intent(
 	# Hard purifier authority remains last and exact after vow/bond adjustments.
 	var purifier_ready: bool = bool(context.get("is_purifier", false)) \
 		and bool(context.get("shrine_alive", false)) \
-		and float(context.get("shrine_hp_ratio", 1.0)) < 0.5 \
 		and int(actor.get("purify_cooldown", 0)) == 0
 	if purifier_ready:
 		for candidate: Dictionary in candidates:
@@ -1043,7 +1044,7 @@ func _crosscheck_perceived_actor(actor: Dictionary, fact: Dictionary, field: Str
 	var actor_kind: String = "structure" if bool(actor.get("is_structure", false)) else str(actor.get("kind", actor.get("actor_type", "")))
 	if actor_kind != str(fact["kind"]):
 		return _movement_failure("perceived_actor_kind_mismatch", "%s.kind" % field)
-	if not is_equal_approx(_hp_ratio(actor), float(fact["health_ratio"])):
+	if not is_equal_approx(ActorService.health_ratio(actor), float(fact["health_ratio"])):
 		return _movement_failure("perceived_actor_health_mismatch", "%s.health_ratio" % field)
 	return {"valid": true, "intent": {}, "reason": "", "field": ""}
 
@@ -1206,7 +1207,6 @@ func _append_legacy_purifier_candidate(
 ) -> void:
 	if not context.get("is_purifier", false) \
 			or not context.get("shrine_alive", false) \
-			or float(context.get("shrine_hp_ratio", 1.0)) >= 0.5 \
 			or int(actor.get("purify_cooldown", 0)) != 0:
 		return
 	var my_pos: Dictionary = actor.get("grid_pos", {}) as Dictionary
@@ -1214,7 +1214,7 @@ func _append_legacy_purifier_candidate(
 		if actor_value is Dictionary:
 			var other: Dictionary = actor_value as Dictionary
 			if other.get("is_structure", false) and not other.get("is_dead", false):
-				if GridService.is_adjacent(my_pos, other.get("grid_pos", {})):
+				if ReachAuthority.in_reach(my_pos, other.get("grid_pos", {}), "actor.purify_shrine"):
 					var candidate: Dictionary = _stationary_candidate(
 						{"action_type": "actor.purify_shrine", "target_id": "", "priority": 1.0},
 						movement_context,
@@ -1408,7 +1408,7 @@ func _generate_candidates(
 			_reveal_bonus = 15.0
 
 	if not nearest_enemy.is_empty():
-		var target_hp_ratio: float = _hp_ratio(nearest_enemy)
+		var target_hp_ratio: float = ActorService.health_ratio(nearest_enemy)
 		if GridService.is_adjacent(my_pos, t_pos):
 			candidates.append({
 				"action_type":     "melee_attack",
@@ -1453,7 +1453,7 @@ func _generate_candidates(
 				var crit_threshold: float = float(
 					(_cfg_get("situational_muls") as Dictionary).get("own_hp_critical", {}).get("threshold", 0.20)
 				)
-				allow_guard = _hp_ratio(actor) <= crit_threshold
+				allow_guard = ActorService.health_ratio(actor) <= crit_threshold
 		if allow_guard:
 			candidates.append({ "action_type": "actor.guard", "target_id": "", "priority": 0.0 })
 
@@ -1476,7 +1476,7 @@ func _generate_candidates(
 			and (expression_band == "forming" or expression_band == "grounded" or expression_band == "whole"):
 		var retreat_threshold: Variant = calling_behavior.get("retreat_threshold", null)
 		if retreat_threshold != null and calling_origin != "aduro":
-			var hp_r: float = _hp_ratio(actor)
+			var hp_r: float = ActorService.health_ratio(actor)
 			# V2-INFRA-003 pass 8: threat_read — a Whole leader in range reads the threat
 			# for its allies, so they hold on longer before retreat enters the pool.
 			var retreat_gate: float = maxf(0.0, float(retreat_threshold)
@@ -1532,7 +1532,7 @@ func _generate_candidates(
 						candidates.append({
 							"action_type":      "actor.press",
 							"target_id":        str(nearest_enemy.get("id", "")),
-							"target_hp_ratio":  _hp_ratio(nearest_enemy),
+							"target_hp_ratio":  ActorService.health_ratio(nearest_enemy),
 							"skill_id":         skill_id,
 							"skill_base_bonus": _resolve_skill_base(calling_origin, weight_tag, 15.0),
 							"priority":         1.0,
@@ -1644,8 +1644,10 @@ func _generate_candidates(
 ## Called once in select_intent() before the scoring loop so the computation runs
 ## once per turn, not once per candidate.
 ##
-## HP sentinel: if current_hp key is absent OR stats.max_hp == 0, hp_ratio = 1.0.
-## This ensures test actors (which don't carry full schema) never trigger HP conditions.
+## HP comes from ActorService.health_ratio. `max_hp` is still read here for one further
+## question the ratio cannot answer: whether real HP data exists at all. An actor without
+## it must not trigger own_hp_low / own_hp_critical, and the reader's absent-data 1.0
+## would be indistinguishable from an unhurt actor.
 ##
 ## last_echo_standing sentinel: requires dead_allies > 0 so a designed 1v1 scenario
 ## (all_actors contains only enemies) never fires the condition.
@@ -1677,11 +1679,8 @@ func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dict
 			if not is_dead:
 				living_enemies += 1
 
-	# HP ratio — sentinel 1.0 when data is absent.
 	var max_hp: int    = int(actor.get("stats", {}).get("max_hp", 0))
-	var hp_ratio: float = 1.0
-	if max_hp > 0 and actor.has("current_hp"):
-		hp_ratio = clampf(float(actor["current_hp"]) / float(max_hp), 0.0, 1.0)
+	var hp_ratio: float = ActorService.health_ratio(actor)
 
 	# Distance to nearest enemy.
 	var nearest_enemy: Dictionary = ActorService.get_nearest_enemy(actor, all_actors)
@@ -2420,7 +2419,7 @@ func _get_most_wounded_enemy(actor: Dictionary, all_actors: Array) -> Dictionary
 			continue
 		if a.get("is_dead", false) or a.get("is_structure", false):
 			continue
-		var r: float = _hp_ratio(a)
+		var r: float = ActorService.health_ratio(a)
 		if r < best_ratio:
 			best_ratio = r
 			best = a
@@ -2498,11 +2497,3 @@ func _apply_bond_bias(
 			c["_score"] = float(c.get("_score", 0.0)) + friend_bonus
 		elif bond_type == "rival":
 			c["_score"] = float(c.get("_score", 0.0)) + rival_penalty
-
-
-# PROG-010: Compute hp_ratio for any actor dict. Returns 1.0 if stats unavailable.
-static func _hp_ratio(actor: Dictionary) -> float:
-	var max_hp: int = int(actor.get("stats", {}).get("max_hp", 0))
-	if max_hp <= 0 or not actor.has("current_hp"):
-		return 1.0
-	return clampf(float(actor["current_hp"]) / float(max_hp), 0.0, 1.0)

@@ -652,8 +652,17 @@ static func test_combat() -> Dictionary:
 # unchanged 5-per-round drain — no purify fires, see the two gates named in
 # docs/v2-combat-003-handoff.md §18); ase_awarded 64 → 55 and ekwan 8 → 7 on the slower clear;
 # and the 25 kill XP moves from echo_0005 to echo_0001, who lands the last blow in r06.
-const PURIFY_SHRINE_ROUNDS_HASH := "95b8be3a222617306d298dccdb95822db686818d8f699aa083c40a6f88c2d9a0"
-const PURIFY_SHRINE_FINAL_HASH  := "ef63b2d04666a18ad22c4003b6bbe50d9a54d16b22b3e2b9bfa33dabf9cf7bcf"
+# V2-COMBAT-003 Phase 7c re-record — attributed, and again the only mode that moved. The
+# purifier can finally act on the cell 7b walked it to: two turns changed, one per gate opened.
+# FIRST divergence: r01 echo_0005 resolves actor.purify_shrine (target shrine_01) on the same
+# 1,4 → 4,6 walk that used to resolve actor.move — the movement layer's advance plan. Then r04
+# is actor.purify_shrine instead of actor.guard, once purify_cooldown (3 rounds) is spent —
+# the arbiter's override. Every other turn of every round is unchanged, and the fight still
+# runs 6 rounds, so SAVE did not move.
+# FINAL moved with shrine_hp 170 → 172: two purify stacks (-3 drain for 2 rounds each, +2 on
+# expiry) net 2 HP back over six rounds.
+const PURIFY_SHRINE_ROUNDS_HASH := "2ebf9494c643704fd1ff06924a197f6780c44e6df89ef618e25051936caadcc4"
+const PURIFY_SHRINE_FINAL_HASH  := "c65a3be16d812a37e9d225dc78df330c0f1d81bb4a9bf3c39b4b9d863bf092f9"
 const PURIFY_SHRINE_SAVE_HASH   := "cca434e9c009c6ba5607c102d12b1d87883fe6899dbffe4214c9a0cb0934eff7"
 
 static func test_purify_shrine() -> Dictionary:

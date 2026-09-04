@@ -1241,3 +1241,120 @@ a cell it can do nothing from.
 
 Reproduce all of it with `-- tests purifyprobe [tag]` (`tools/PurifyOutcomeProbe.gd`); a tag
 beginning `turns` traces the recorded `fp_purify_shrine` fixture turn by turn instead.
+
+---
+
+## 19. Purify fires — phase 7c, and the one health ladder behind both defects (2026-09-04)
+
+### 19.1 The two health ladders
+
+`BehaviorArbiter._hp_ratio` returned **1.0** for `max_hp <= 0`; `LiveMovementContextService`'s
+per-actor fact builder returned **0.0** for the same dict. Both now call
+`ActorService.health_ratio`, which is the one reader. The arbiter's own copy is deleted, not
+shimmed, and `_build_board_summary` and the objective-health ratio (a third and fourth copy of
+the same expression, neither named in the brief) call it too.
+
+**The chosen answer for absent data is 1.0.** An actor whose HP cannot be read must not draw the
+wound-seeking pressure a dying one does: `_weakest_enemy` picks the lowest ratio on the board, so
+0.0 makes every malformed dict the most attractive target there is. 1.0 is also the answer three
+of the four ladders already gave.
+
+**Reconciling the two extra conditions, deliberately:**
+
+* `has("current_hp")` (the arbiter's, not the live one's) is **kept**. The live builder defaulted
+  a missing `current_hp` to 0, which is the same wrong answer — "no HP field means dead" — in a
+  different disguise.
+* the top-level `max_hp` fallback (the live one's, not the arbiter's) is **kept**, but its default
+  drops from 1 to 0, so a dict carrying no max_hp anywhere reaches the sentinel instead of
+  dividing by a fabricated 1.
+
+**No production actor can reach `max_hp <= 0`, so this is hygiene, not behaviour.**
+`DerivedStatService` floors max_hp at `hp_min` = 15 for echoes and enemies alike (enemies go
+through the same `compute_stats`), and every structure is authored above zero — 200 shrine,
+9999 relic, 70 + growth charge, 60 + growth spirit. Nor can a production actor lack `current_hp`:
+`EchoActor`, `EnemyActor` and `StructureActor` all set it at spawn.
+
+**It had teeth anyway.** `BehaviorArbiter._validate_perceived_actor` compares the arbiter's
+ratio against the live fact for the same actor every turn and returns
+`perceived_actor_health_mismatch` when they differ. The divergence was one malformed dict away
+from a movement failure, and the two ladders are now the same function, so a new divergence
+cannot be silent.
+
+`tests/BehaviorCharacterizationTests.gd`'s KNOWN DEFECT probe is inverted: it now asserts the two
+answers **agree**.
+
+### 19.2 The gates, and what purify actually does now
+
+Three conditions at the unreachable 0.5, all removed:
+
+* `CombatPressureService._primary_plan` "advance" — a purifier advancing on the shrine now plans
+  `actor.purify_shrine`, so it arrives with something to do. The guard is truthfulness, not role:
+  the plan may name the objective only when the objective is what the goal advances toward
+  (`target_id == pressure["objective_id"]`), which is also what `MovementGoal`'s advance rule
+  requires.
+* `BehaviorArbiter:373` and `:1209` — the two injected 9999 purify candidates.
+* `BehaviorArbiter:669` — the score bump for a goal that already planned one.
+
+**`purify_cooldown` (3 rounds) is the throttle.** It always was; the health condition was a second
+throttle on top of it, set where no encounter reaches. Shrine health still scales the pressure
+layer's urgency through 7b's `_shrine_urgency`.
+
+`GridService.is_adjacent` became `ReachAuthority.in_reach(..., "actor.purify_shrine")` at both
+arbiter sites — §17's rule, behaviour-identical at today's range of 1.
+
+**The `hold` branch was NOT touched.** A purifier already in reach gets a `hold` goal, and
+`MovementGoal._validate_plan_for_purpose` requires `hold`'s primary to be `actor.guard`. Opening
+that would be a movement-contract change with `docs/movement-model.md` as its authority. It is not
+needed: the arbiter's injected candidate covers the standing purifier, and the measurement below
+shows both mechanisms firing.
+
+### 19.3 Measured — 20 seeded encounters, `-- tests purifyprobe`
+
+The probe now also counts resolved `actor.purify_shrine` turns per run.
+
+| Arm | Victories | Rounds mean / min / max | Shrine end HP mean / min | Purifies |
+|---|---|---|---|---|
+| 7b (shipped before this) | 20/20 | 5.95 / 4 / 13 | 170.25 / 135 | **0** |
+| 7c | **20/20** | 5.70 / 4 / 10 | **174.35** / 153 | **43** |
+
+Round distribution after: 4×1, 5×11, 6×4, 7×3, 10×1. In-band 5..16 moves 17/20 → 19/20; the one
+outlier is the round-4 encounter, and the band's lower bound stays unreachable by construction
+(§18.2).
+
+**The shrine survives better, and the fights are shorter.** Shrine HP is no longer the exact
+`200 − 5 × rounds` of every previous arm: two purify stacks are worth about +2 HP over six rounds
+(−3 drain for 2 rounds, +2 on expiry) and the mean gains 4.1 HP over the 7b arm.
+
+The party did not stop killing: every run still ends on `all_enemies_defeated`, with no shrine
+destroyed and no encounter unresolved at 30 rounds.
+
+### 19.4 Recorded values — two moved, both PURIFY_SHRINE
+
+Attributed from the `fp_purify_shrine` turn trace, before against after. Exactly two turns differ
+in the whole encounter, one per mechanism:
+
+* **r01** echo_0005 resolves `actor.purify_shrine` (target `shrine_01`) on the same 1,4 → 4,6 walk
+  that used to resolve `actor.move` — the pressure layer's advance plan.
+* **r04** `actor.guard` → `actor.purify_shrine` (no target), once the 3-round cooldown is spent —
+  the arbiter's injected candidate.
+
+Every other turn, in all six rounds, is unchanged, and the fight still ends in round 6, so
+`PURIFY_SHRINE_SAVE_HASH` did not move. `PURIFY_SHRINE_ROUNDS_HASH` and `_FINAL_HASH` did;
+FINAL carries shrine_hp 170 → 172.
+
+`PURIFY_SHRINE_EMOTION_HASHES` diverges at **round index 0**, one round earlier than any damage
+changes, and that is the corroboration rather than a contradiction: purify pays morale
+(`data.combat.emotion.morale_on_shrine_purify` 5 to the purifier,
+`morale_ripple_shrine_purify` 2 to each living ally,
+`LiveMovementContextService:612-621`), so r01 moves the moment the action changes.
+
+No other mode's fingerprint or emotion trace moved.
+
+### 19.5 Findings, not fixed
+
+* **`shrine_hp_ratio` is now dead.** `CombatTurnContextService` still computes and publishes it
+  (`:116-123`, `:165`) and nothing in `core/` reads it. Removing it is a turn-context change
+  outside this phase.
+* **A fifth health ladder lives in `CombatTurnContextService:121-123`** for that same field. It
+  already agrees with `ActorService.health_ratio` on absent data (1.0), so it is a duplicate
+  rather than a divergence — and it becomes deletable with the field above.

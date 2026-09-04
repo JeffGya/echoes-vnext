@@ -876,8 +876,7 @@ func _movement_actor_facts(actors: Array) -> Array:
 		if not (actor_value is Dictionary):
 			continue
 		var actor: Dictionary = actor_value
-		var max_hp: int = int((actor.get("stats", {}) as Dictionary).get("max_hp", actor.get("max_hp", 1)))
-		var hp_ratio: float = 0.0 if max_hp <= 0 else clampf(float(actor.get("current_hp", 0)) / float(max_hp), 0.0, 1.0)
+		var hp_ratio: float = ActorService.health_ratio(actor)
 		var is_dead: bool = bool(actor.get("is_dead", false))
 		var is_ko: bool = bool(actor.get("is_ko", false)) or (int(actor.get("current_hp", 1)) <= 0 and not is_dead)
 		var is_structure: bool = bool(actor.get("is_structure", false))
@@ -979,10 +978,11 @@ func _movement_pressure_snapshot(
 		EncounterResolutionModes.ENDURE:
 			progress_current = int(combat_state.get("round_counter", 0))
 			progress_required = int((combat_state.get("objective_params", {}) as Dictionary).get("duration_turns", 0))
+	# -1.0 is the "no objective is perceived" sentinel and stays distinct from every
+	# ratio the reader can return, including its own absent-data 1.0.
 	var objective_health: float = -1.0
 	if objective_known:
-		var max_hp: int = int((objective.get("stats", {}) as Dictionary).get("max_hp", objective.get("max_hp", 1)))
-		objective_health = 0.0 if max_hp <= 0 else clampf(float(objective.get("current_hp", 0)) / float(max_hp), 0.0, 1.0)
+		objective_health = ActorService.health_ratio(objective)
 	return CombatPressureSnapshotScript.build(
 		mode,
 		guide_mode,

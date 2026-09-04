@@ -305,13 +305,19 @@ const COMBAT_EMOTION_HASHES: Array = [
 # attribution). Rounds 1 and 2 are BYTE-IDENTICAL — no damage lands in either round in either
 # arm — and the trace first diverges at r03, the same round the turn trace loses two of its
 # three attackers. Two rounds are appended because the fight now takes two more.
+# Phase 7c: still 6 rounds, but the trace now diverges at round index 0 — earlier than the
+# round fingerprint's own first divergence is visible in damage, because purify pays morale.
+# echo_0005 resolves actor.purify_shrine in r01 (7b: actor.move to the same cell), which awards
+# data.combat.shrine morale_on_shrine_purify 5 to the purifier and morale_ripple_shrine_purify 2
+# to its allies. r04 carries the second purify once the 3-round cooldown is spent. No damage,
+# target or position changed in any round.
 const PURIFY_SHRINE_EMOTION_HASHES: Array = [
-	"bd2de7301aa35102d31bc447af0046a9d6cc8432f4bf5358f5a3db9deeed639e",
-	"725ca32c64d227aac4c49c29180c72e03bd29032fde35554ae95930d4b4300c1",
-	"d9708d3a18d60c39c6c6e5ea4bca128c3389e1cf92b3cf6b91508e3c47a05aad",
-	"bc532c60b3962d5a7cab4600400b24927be0fdf7954bed6a576f2dc087548970",
-	"943a6678ef588e2a4aa3bb548d7ee38618dc0f68e3dec46e7968bf1fcc6d9c86",
-	"007e2df7e88433ef7956ae1f496d1d1e45483485a9f57c5732c14e48f48403c0",
+	"621eb0d0475135babc7a1b8cb73c4cc242423da903c1a1d101b6870daa6a2b96",
+	"4f9267c17aaa9504ed5a20fb92d748acc4e219cef95c4f268f8fa4086dce8a75",
+	"4e4ebe2474dde4dbb5fe0255588e182e30e874b1f7cea0413322226a8153386a",
+	"708c3d14dca5ec044aa14bc123b5c02f4c41363a9e06cb86b8d2824395884a94",
+	"664f102bf07043337c1f8d77c0a845e9d3aab955674b66c46a456e25ff91b2b3",
+	"46c6a7eb4debad887bf99fefb4598ecb0869979b6101e67adf4d37883cc69286",
 ]
 const RECOVER_EMOTION_HASHES: Array = [
 	"61cb0af978317b7b9a7925e250137a68fe5435c3193120a861b317971919dfcd",

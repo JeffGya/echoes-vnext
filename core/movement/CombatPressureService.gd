@@ -772,8 +772,16 @@ static func _primary_plan(
 	var target_id: String = str(relevant[0]) if not relevant.is_empty() else ""
 	match purpose:
 		"advance":
-			if str(pressure["factual_role"]) == "purifier" and float(pressure["objective_health_ratio"]) >= 0.0 and float(pressure["objective_health_ratio"]) < 0.5:
-				return ActionPlan.build("actor.purify_shrine", str(pressure["objective_id"]))
+			# A purifier advancing on the shrine itself arrives to purify it. The old
+			# `objective_health_ratio < 0.5` condition here made that plan an ordinary
+			# move at every shrine health an encounter actually reaches, so the purifier
+			# walked to the shrine and had nothing planned to do there.
+			# Truthfulness, not role, is the guard: the plan may name the objective only
+			# when the objective is what this goal advances toward.
+			if str(pressure["factual_role"]) == "purifier" \
+					and not target_id.is_empty() \
+					and target_id == str(pressure["objective_id"]):
+				return ActionPlan.build("actor.purify_shrine", target_id)
 			return ActionPlan.build("actor.move", target_id)
 		"engage", "pursue":
 			return ActionPlan.build("melee_attack", target_id)

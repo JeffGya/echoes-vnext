@@ -60,6 +60,7 @@ static func run() -> Dictionary:
 
 	var victories: int = 0
 	var in_band: int = 0
+	var purifies: int = 0
 	for index: int in range(RUNS):
 		var seed_tag: String = "p7b_%02d" % index
 		var outcome: Dictionary = _run_outcome(seed_tag)
@@ -71,18 +72,20 @@ static func run() -> Dictionary:
 			var rounds: int = int(outcome["round_ended"])
 			if rounds >= 5 and rounds <= 16:
 				in_band += 1
-		_say("RUN %s victory=%s reason=%-22s round=%2d shrine_hp=%3d/%3d purifier=%s enemies_left=%d echoes_left=%d" % [
+		purifies += int(outcome["purifies"])
+		_say("RUN %s victory=%s reason=%-22s round=%2d shrine_hp=%3d/%3d purifies=%d purifier=%s enemies_left=%d echoes_left=%d" % [
 			seed_tag,
 			str(bool(outcome["victory"])),
 			str(outcome["reason"]),
 			int(outcome["round_ended"]),
 			int(outcome["shrine_hp"]),
 			int(outcome["shrine_max_hp"]),
+			int(outcome["purifies"]),
 			str(outcome["purifier_id"]),
 			int(outcome["enemies_left"]),
 			int(outcome["echoes_left"]),
 		])
-	_say("TOTAL victories=%d/%d in_band_5_16=%d/%d" % [victories, RUNS, in_band, RUNS])
+	_say("TOTAL victories=%d/%d in_band_5_16=%d/%d purifies=%d" % [victories, RUNS, in_band, RUNS, purifies])
 
 	for index: int in range(GOAL_DUMP_RUNS):
 		_dump_goals("p7b_%02d" % index)
@@ -100,10 +103,11 @@ static func _run_outcome(seed_tag: String) -> Dictionary:
 		return {}
 	var runtime: FlowRuntime = env["runtime"]
 	var ectx: EncounterContext = env["ectx"]
-	FlowFingerprintTests._drive_and_capture(runtime, ectx, MAX_ROUNDS)
+	var drive: Dictionary = FlowFingerprintTests._drive_and_capture(runtime, ectx, MAX_ROUNDS)
 	var shrine: Dictionary = _shrine(ectx)
 	var result: Dictionary = ectx.combat_result
 	return {
+		"purifies": _count_action(drive, "actor.purify_shrine"),
 		"victory": bool(result.get("victory", false)),
 		"reason": str(result.get("reason", "no_end_within_%d_rounds" % MAX_ROUNDS)),
 		"round_ended": int(result.get("round_ended", int(ectx.combat_state.get("round_counter", 0)))),
@@ -215,6 +219,16 @@ static func _dump_turns(seed_tag: String) -> void:
 		str(bool(ectx.combat_result.get("victory", false))),
 		int(shrine.get("current_hp", 0)),
 	])
+
+
+## Resolved turns of `action_type` across every round of one captured drive.
+static func _count_action(drive: Dictionary, action_type: String) -> int:
+	var count: int = 0
+	for round_v: Variant in drive.get("rounds", []) as Array:
+		for turn_v: Variant in (round_v as Dictionary).get("turns", []) as Array:
+			if str((turn_v as Dictionary).get("action_type", "")) == action_type:
+				count += 1
+	return count
 
 
 static func _cell(cell: Dictionary) -> String:
