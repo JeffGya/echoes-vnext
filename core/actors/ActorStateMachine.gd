@@ -252,17 +252,18 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		elif _expression_band == "grounded":
 			fear_threshold = int(ls_thresholds.get("grounded", 88))
 			fear_threshold_reason = "last stand"
-	# suppress_panic_spiral: raises threshold +5 on top of band bonus
-	if "suppress_panic_spiral" in resilience_traits \
-			and (_expression_band == "grounded" or _expression_band == "whole"):
+		elif _expression_band == "forming":
+			fear_threshold = int(ls_thresholds.get("forming", 88))
+			fear_threshold_reason = "last stand"
+	# suppress_panic_spiral: raises threshold +5. Any band past the rawest gets relief.
+	if "suppress_panic_spiral" in resilience_traits and _expression_band != "nascent":
 		fear_threshold = min(fear_threshold + 5, 100)
 		fear_threshold_reason += " (steadied)"
 	_actor["_fear_threshold"]        = fear_threshold
 	_actor["_fear_threshold_reason"] = fear_threshold_reason
 
-	# V2-PROG-006: self_regulate tick — Grounded+ +3 morale per round
-	if (_expression_band == "grounded" or _expression_band == "whole") \
-			and "self_regulate" in resilience_traits:
+	# V2-PROG-006: self_regulate tick — +3 morale per round. Any band past the rawest gets relief.
+	if _expression_band != "nascent" and "self_regulate" in resilience_traits:
 		_actor["morale"] = clampi(int(_actor.get("morale", 50)) + 3, 0, 100)
 
 	# V2-PROG-006: Whole last-stand morale tick +5

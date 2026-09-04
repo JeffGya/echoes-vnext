@@ -1092,9 +1092,10 @@
 			"protect_ally_grounded_mul": 1.3,
 			"protect_ally_grounded_hp_threshold": 0.5,
 			"last_stand_fear_threshold": {
-				"_comment": "Absolute Fear Rule threshold override when last_echo_standing is active. Replaces default 80.",
-				"grounded": 88.0,
-				"whole": 95.0
+				"_comment": "PROPOSED DEFAULT. Absolute Fear Rule threshold override when last_echo_standing is active — re-based against refusal_thresholds_by_band's re-spaced bases (80/88/95) so each entry keeps its original bonus (+8 forming/grounded, +5 whole) instead of replacing the base with itself. See docs/v2-combat-003-handoff.md §15.3.",
+				"forming": 88.0,
+				"grounded": 96.0,
+				"whole": 100.0
 			},
 			"last_stand_whole_morale_tick": 5.0,
 			"rank_strength_scale": {

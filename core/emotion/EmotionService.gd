@@ -257,9 +257,10 @@ static func apply_morale_delta(echo: Dictionary, delta: int, cause: String, logg
 ## Stores _last_drift on the emotion block (transient; not saved to disk).
 ##
 ## V2-PROG-006: resilience_traits and expression_band are optional params.
-## If "resist_fear" is in resilience_traits AND expression_band is "grounded" or "whole",
-## the incoming fear delta is reduced by 40%. Sets emotion._resilience_fired = true when
-## a trait fires (cleared each turn by ActorStateMachine before advance_turn).
+## If "resist_fear" is in resilience_traits AND expression_band is anything past the
+## rawest band ("nascent"), the incoming fear delta is reduced by 40%. Sets
+## emotion._resilience_fired = true when a trait fires (cleared each turn by
+## ActorStateMachine before advance_turn).
 static func apply_fear_delta(
 	echo: Dictionary,
 	delta: int,
@@ -274,11 +275,13 @@ static func apply_fear_delta(
 	var emo: Dictionary = echo["emotion"]
 	var old_val := int(emo.get("fear_current", 0))
 
-	# V2-PROG-006: resist_fear — reduce fear delta by 40% at Grounded+
+	# V2-PROG-006: resist_fear — reduce fear delta by 40%. Any band past the rawest
+	# ("nascent") gets relief; enumerating band names is how this gate lost forming
+	# when the band table was re-spaced under it (V2-COMBAT-003 §15.3).
 	var effective_delta := delta
 	var trait_fired := false
-	if delta > 0 and "resist_fear" in resilience_traits \
-			and (expression_band == "grounded" or expression_band == "whole"):
+	if delta > 0 and "resist_fear" in resilience_traits and expression_band != "nascent" \
+			and expression_band != "":
 		effective_delta = int(round(float(delta) * 0.60))
 		trait_fired = true
 
