@@ -43,6 +43,7 @@ const MovementIntentContract = preload("res://core/movement/contracts/MovementIn
 const MovementActionPlanContract = preload("res://core/movement/contracts/MovementActionPlan.gd")
 const LeadershipEmotionServiceScript = preload("res://core/combat/LeadershipEmotionService.gd")
 const ReachAuthority = preload("res://core/movement/CombatActivationService.gd")
+const GuidanceContributionScript = preload("res://core/actors/behaviors/GuidanceContribution.gd")
 
 const _MOVEMENT_STYLE_ORDER: Array = [
 	"direct", "safe", "cohesive", "lateral", "screen", "intercept", "conservative",
@@ -369,6 +370,12 @@ func select_intent(context: Dictionary) -> Dictionary:
 	if not bonds_ctx.is_empty() and str(actor.get("faction", "")) == "echo":
 		_apply_bond_bias(candidates, actor, bonds_ctx, bond_thresholds_ctx, bond_behavior_cfg)
 
+	# V2-COMBAT-003: the Keeper's suggestion, and the Echo's answer to it. Last of the
+	# post-scoring biases and before the purifier override, so it can never outrank a
+	# mechanical certainty. This path publishes no movement goal, so a purpose-only
+	# suggestion cannot reach it — see _guidance_entries().
+	var guidance_response: Dictionary = _apply_guidance(candidates, context, actor, false, 0)
+
 	# COMBAT-006: actor.purify_shrine override — injected AFTER scoring so 9999 is never overwritten.
 	# Fires when the purifier is in reach of a living shrine and its cooldown is spent.
 	#
@@ -547,8 +554,72 @@ func select_intent(context: Dictionary) -> Dictionary:
 		"capacity":       0,
 		"hard_override":  str(candidates[0].get("_hard_override", "")),
 	}
+	if not guidance_response.is_empty():
+		winner["_guidance_response"] = guidance_response
 
 	return winner
+
+
+## The Keeper's suggestion, and this Echo's answer to it (V2-COMBAT-003).
+##
+## GuidanceContribution owns every decision here; this function only normalizes the two
+## candidate shapes into one, hands the request over, and applies the contribution it
+## gets back through _apply_bias — so the guidance is reconstructible from the recorded
+## parts exactly as vow and bond are.
+##
+## Returns {} and touches nothing when no suggestion is active, which is what makes
+## "behaviour is identical without guidance" exact rather than approximate.
+func _apply_guidance(
+	candidates: Array,
+	context: Dictionary,
+	actor: Dictionary,
+	is_movement: bool,
+	capacity: int
+) -> Dictionary:
+	var request: Dictionary = context.get("guidance", {}) as Dictionary
+	if request.is_empty():
+		return {}
+	var entries: Array = _guidance_entries(candidates, is_movement, capacity)
+	var response: Dictionary = GuidanceContributionScript.resolve(
+		request,
+		entries,
+		actor,
+		float(context.get("judgment", 0.3)),
+		float(context.get("composure", 0.4))
+	)
+	if response.is_empty():
+		return {}
+	var deltas: Dictionary = response.get("deltas", {}) as Dictionary
+	for index: int in range(candidates.size()):
+		var delta: float = float(deltas.get(_guidance_key(index), 0.0))
+		if delta != 0.0:
+			_apply_bias(candidates[index] as Dictionary, "guidance", delta)
+	return response
+
+
+## Both arbitration paths reduced to the one shape GuidanceContribution reads. `purpose`
+## and `commitment` exist only on the movement path; on the legacy path they are "" and
+## 0, which makes a purpose-only suggestion unmatched there and the hesitation
+## commitment charge zero — stated rather than hidden, because the legacy path publishes
+## no goal to have a purpose about.
+func _guidance_entries(candidates: Array, is_movement: bool, capacity: int) -> Array:
+	var entries: Array = []
+	for index: int in range(candidates.size()):
+		var candidate: Dictionary = candidates[index] as Dictionary
+		var action_type: String = str((candidate["_movement_plan"] as Dictionary)["type"]) if is_movement \
+			else str(candidate.get("action_type", ""))
+		var goal: Dictionary = candidate.get("_movement_goal", {}) as Dictionary
+		var entry: Dictionary = _decision_entry(candidate, action_type)
+		entry["key"]        = _guidance_key(index)
+		entry["purpose"]    = str(goal.get("purpose", ""))
+		entry["commitment"] = int(candidate.get("_movement_commitment", 0))
+		entry["capacity"]   = capacity
+		entries.append(entry)
+	return entries
+
+
+static func _guidance_key(index: int) -> String:
+	return "c%04d" % index
 
 
 ## One candidate's recorded score decomposition, for DecisionTrace. Every field is
@@ -714,6 +785,11 @@ func select_movement_intent(
 			context.get("bond_behavior_cfg", {}) as Dictionary
 		)
 
+	# V2-COMBAT-003: see select_intent()'s equivalent call. This is the path where a
+	# purpose-only suggestion is meaningful, because these candidates carry goals.
+	var guidance_response: Dictionary = _apply_guidance(
+		candidates, context, actor, true, int(profile["capacity"]))
+
 	# Hard purifier authority remains last and exact after vow/bond adjustments.
 	var purifier_ready: bool = bool(context.get("is_purifier", false)) \
 		and bool(context.get("shrine_alive", false)) \
@@ -861,6 +937,7 @@ func select_movement_intent(
 		"field": "",
 		"_divergence_probe": _divergence_probe,
 		"_decision_inputs": _decision_inputs,
+		"_guidance_response": guidance_response,
 	}
 
 

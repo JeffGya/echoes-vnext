@@ -84,10 +84,16 @@ const _SPATIAL_SOURCE: Dictionary = {
 ## Which `source` each post-scoring bias belongs to. `leadership_cover` is another
 ## Echo's whole-band aura teaching this one to end its route behind terrain — the
 ## nearest §6.6 source is `guidance`.
+## NOTE: `leadership_cover` and `guidance` share the source `guidance`, so a removal
+## takes both out together. That is correct for §6.6's question — both are someone else
+## telling this Echo where to be — and `code` still separates them in the surfaced
+## reason. GuidanceContribution never asks this file about the `guidance` source, so a
+## guidance response's own reason cannot be confused by the pairing.
 const _BIAS_SOURCE: Dictionary = {
 	"vow":              "vow",
 	"bond":             "bond",
 	"leadership_cover": "guidance",
+	"guidance":         "guidance",
 }
 
 ## Reason `code` for the dominant term of a source. Player-readable, no IDs.
@@ -115,6 +121,7 @@ const _TERM_CODE: Dictionary = {
 	"vow":              "vow_held",
 	"bond":             "bond_pull",
 	"leadership_cover": "leader_cover",
+	"guidance":         "keeper_guidance",
 }
 
 ## Presentation tone per source. A projection of the trace, not a new fact about the
@@ -191,7 +198,7 @@ static func build(inputs: Dictionary, legibility: float, divergence_cfg: Diction
 			var entry: Dictionary = material[index] as Dictionary
 			var source: String = str(entry["source"])
 			var reason: Dictionary = _reason(
-				_dominant_code(winner, source),
+				dominant_code(winner, source),
 				source,
 				subject_id,
 				"co_decisive",
@@ -299,7 +306,9 @@ static func _removal_swing(winner: Dictionary, runner_up: Dictionary, source: St
 
 ## Names which of `source`'s terms carried it, by absolute recorded magnitude.
 ## Deterministic: the constant tables above are scanned in declaration order.
-static func _dominant_code(entry: Dictionary, source: String) -> String:
+## Public because GuidanceContribution names the same term for a guidance response —
+## one code vocabulary, one owner.
+static func dominant_code(entry: Dictionary, source: String) -> String:
 	var components: Dictionary = entry.get("components", {}) as Dictionary
 	var spatial_parts: Dictionary = (entry.get("spatial", {}) as Dictionary).get("parts", {}) as Dictionary
 	var bias: Dictionary = entry.get("bias", {}) as Dictionary

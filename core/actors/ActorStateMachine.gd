@@ -27,6 +27,8 @@ var _behavior_module: BehaviorModule
 var _last_intent: Dictionary = {}
 ## docs/movement-model.md §6.6 — the last turn's explanation. Never persisted.
 var _last_decision_trace: Dictionary = {}
+## The last turn's answer to the Keeper's guidance, {} when none reached this actor.
+var _last_guidance_response: Dictionary = {}
 var _last_action: Dictionary = {}
 var _movement_skipped: bool = false  # ACTOR-006: true when actor is_structure; no movement phase
 var _last_morale_tier: String = "steady"  # ACTOR-007: morale tier of the winning intent
@@ -389,6 +391,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 			# across here now that `intent` is a plain working Dictionary again.
 			intent["_divergence_probe"] = movement_selection.get("_divergence_probe", {})
 			intent["_decision_inputs"] = movement_selection.get("_decision_inputs", {})
+			intent["_guidance_response"] = movement_selection.get("_guidance_response", {})
 		else:
 			intent = _behavior_module.select_intent(augmented_context)
 	else:
@@ -503,6 +506,33 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	intent.erase("_decision_inputs")
 	intent.erase("_score_components")
 	intent.erase("_score_bias")
+
+	# V2-COMBAT-003: the Echo's answer to the Keeper's suggestion. Absent when no
+	# suggestion reached her — absence is "unaffected" and must never be read as a
+	# refusal. Logged at info because a response is a story beat, not a per-turn
+	# housekeeping line, and written onto the actor beside the expression outputs so a
+	# probe and (later) a projection can read it after the turn resolves.
+	var guidance_response: Dictionary = intent.get("_guidance_response", {}) as Dictionary
+	intent.erase("_guidance_response")
+	# Erased rather than left standing, so last turn's answer can never be read as this
+	# turn's. Erasing an absent key is a no-op, so an unguided run is untouched.
+	_actor.erase("_guidance_response")
+	if not guidance_response.is_empty():
+		_last_guidance_response = guidance_response
+		_actor["_guidance_response"] = guidance_response
+		var guidance_reason: Dictionary = guidance_response.get("reason", {}) as Dictionary
+		logger.info(t, "actor.guidance_response", "Echo answered the Keeper's guidance", {
+			"actor_id":      str(_actor.get("id", "")),
+			"round":         int(context.get("round", t)),
+			"guidance_id":   str(guidance_response.get("guidance_id", "")),
+			"response":      str(guidance_response.get("response", "")),
+			"reason_text":   str(guidance_response.get("reason_text", "")),
+			"reason_code":   str(guidance_reason.get("code", "")),
+			"reason_source": str(guidance_reason.get("source", "")),
+			"material":      bool(guidance_reason.get("material", false)),
+			"contest":       float(guidance_response.get("contest", 0.0)),
+			"action_type":   str(intent.get("action_type", "")),
+		})
 	if not decision_inputs.is_empty():
 		_last_decision_trace = DecisionTrace.build(
 			decision_inputs, legibility, expr_cfg.get("divergence", {}) as Dictionary
@@ -620,6 +650,12 @@ func update_passive_state_from_activation(intent: Dictionary, context: Dictionar
 ## DecisionTrace.sanitize() of it.
 func get_last_decision_trace() -> Dictionary:
 	return _last_decision_trace
+
+
+## The last turn's guidance response, {} when the Keeper's suggestion did not reach
+## this actor. Absence is "unaffected", never a refusal.
+func get_last_guidance_response() -> Dictionary:
+	return _last_guidance_response
 
 
 func get_snapshot() -> Dictionary:

@@ -1358,3 +1358,91 @@ No other mode's fingerprint or emotion trace moved.
 * **A fifth health ladder lives in `CombatTurnContextService:121-123`** for that same field. It
   already agrees with `ActorService.health_ratio` on absent data (1.0), so it is a duplicate
   rather than a divergence — and it becomes deletable with the field above.
+
+---
+
+## 20. The five guidance responses — phase 8b (2026-09-05)
+
+### 20.1 What was built
+
+`core/actors/behaviors/GuidanceContribution.gd` — one authority for the guidance source
+and the five answers. It owns who the suggestion reaches, what it is worth against her
+own reading, which answer she gives, and the one reason she gives for any answer but
+Align. It derives no identity value: `judgment` and `composure` arrive from
+`MaturityExpressionService`, and `legibility` reaches the explanation only through
+`DivergenceDetector.specificity_band`, which `DecisionTrace` already calls.
+
+**The guidance is a bias, not a score term.** Every answer is a transform on one
+post-scoring contribution applied through `BehaviorArbiter._apply_bias`, beside vow and
+bond. `_score()`'s body is untouched. Two things follow: the locked `directive_bonus`
+placement is preserved by construction, and the unguided case is exact rather than
+approximate — with no request, `resolve()` returns `{}` before it reads a candidate.
+
+**The source is headless** (decision 2): `FlowContext.dev_guidance`, read by
+`CombatTurnContextService`, written only by tests and the `guide` debug command in
+`ui/AppRoot.gd`. V2-COMBAT-004 replaces that seam with the real ping interface and reads
+the same shape.
+
+### 20.2 The contest, and why it is bounded
+
+`contest = (her best score − the suggested option's score) / (best − worst)`. Both ends
+come from the same candidate set, so the contest is in `[0, 1]` by construction: 0 means
+the suggestion IS her own choice, 1 means it is the worst thing on her board. It does not
+depend on how hard the Keeper pushed — a Keeper cannot buy an objection by suggesting
+harder, only by suggesting something she likes less.
+
+### 20.3 The thresholds — measured, then chosen. All PROPOSED DEFAULT
+
+Contest over 678 Echo turns: **293 at exactly 0, 179 at exactly 1, 206 between.** The ends
+are heavy because a suggestion usually either names what she already meant to do or names
+the one thing she was avoiding.
+
+| Constant | Value | Why |
+|---|---:|---|
+| `T_ALIGN` | 0.10 | Above the noise at the bottom of the distribution, below the 206-sample middle |
+| `T_OBJECT` | 0.45 | Leaves a usable band between it and refusal; 17 objections were observed |
+| `T_REFUSE` | 0.80 | Deliberately below 1.0. Composure scales the ladder UP, so a threshold at the top of the range would put refusal out of reach of every steady Echo |
+| `J_INTERPRET` | 0.09 | Judgment as derived runs 0.030–0.214, median 0.060, Standing-6 max 0.214 |
+| `J_OBJECT` | 0.13 | Roughly the median of the matured arm |
+
+**Judgment is compressed low.** Gates chosen on the 0–1 scale the field's type suggests
+would have made Interpret and Object dead code; the first measurement pass proved exactly
+that. This is a finding about `autonomy_outputs`, not about this file.
+
+### 20.4 Reachability — `-- tests guidanceprobe`, 678 Echo turns
+
+`tools/BehaviorResponseProbe.gd`. Three arms (two parties, one of them also promoted
+through the real rank-up path), three resolution modes, eight suggestions.
+
+| Response | Count |
+|---|---:|
+| Align | 373 |
+| Interpret | 6 |
+| Hesitate | 91 |
+| Object | 17 |
+| Refuse | 191 |
+
+**All five are reachable.** Two results need stating plainly:
+
+* **Interpret is rare and conditional.** All 6 occurred in the matured arm, and all under
+  a suggestion that named a SUBJECT. Interpret cannot happen otherwise: a goal's purpose
+  fixes its planned action, so "same purpose, different method" has no room unless the
+  Keeper names something specific the Echo cannot serve. This is a property of the goal
+  vocabulary, not of the threshold.
+* **Refusal is concentrated in the deliberate contradiction.** 143 of 191 came from the
+  `read` suggestion (stand still in a fight). Across the other seven suggestions refusal
+  is 48 of 620 turns.
+
+**Refusal is not idling.** A refusing Echo's action was `actor.move` 75 times,
+`actor.guard` 60, `melee_attack` 34, `actor.idle` 22 — the idle share is what she would
+have chosen anyway, not a consequence of refusing. The test
+`guidance/refusal_is_not_idling` pins the stronger claim: a refused suggestion produces
+the same action as no suggestion at all.
+
+**Two Echoes answered differently, same board, same round: 92 rounds.**
+
+### 20.5 Known probe limit
+
+Party composition follows the first two characters of the seed tag, so changing the mode
+does not resample callings or traits. The probe holds two parties. **No per-calling claim
+may be generalised from it.**

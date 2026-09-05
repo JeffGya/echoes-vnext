@@ -341,6 +341,14 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	# -------------------------
+	# guide dev command (V2-COMBAT-003 / debug only) — the ONE player-side entry to the
+	# headless guidance source. V2-COMBAT-004 replaces it with the real ping interface.
+	# -------------------------
+	if head == "guide":
+		_run_guide_command(parts)
+		return
+
+	# -------------------------
 	# institution shortcuts (V2-SANCTUM-002 / debug only)
 	# -------------------------
 	if head == "institution" or head == "inst":
@@ -348,7 +356,7 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	_debug_print("Unknown command: " + cmd)
-	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | combat_emotion | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear>")
+	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | combat_emotion | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear> | guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id]")
 	
 	_flush_logs_to_console()
 	
@@ -454,6 +462,14 @@ func _run_tests(parts: Array) -> void:
 		var spatial_probe_runner := CoreTestRunner.new()
 		SpatialTermProbe.register(spatial_probe_runner)
 		spatial_probe_runner.run_all()
+		return
+	# INVESTIGATION TOOL — `tests guidanceprobe [dist]` counts the five guidance responses
+	# across many hundreds of Echo turns and prints the contest distribution the five
+	# thresholds are chosen from. Reports, never asserts.
+	if parts.size() > 1 and str(parts[1]).to_lower() == "guidanceprobe":
+		var guidance_probe_runner := CoreTestRunner.new()
+		BehaviorResponseProbe.register(guidance_probe_runner)
+		guidance_probe_runner.run_all()
 		return
 	# V2-INFRA-003: `tests <filter>` runs only suites whose reported name matches.
 	# Registration below is cheap (just appends {name, fn} to CoreTestRunner._tests);
@@ -568,6 +584,7 @@ func _run_tests(parts: Array) -> void:
 	Stage004SeamTests.register(runner)
 	DivergenceDetectorTests.register(runner)  # V2-PROG-012 Phase 4: divergence detection
 	DecisionTraceTests.register(runner)  # V2-COMBAT-003 phase 8a: causal Decision Trace + player-safe projection
+	GuidanceResponseTests.register(runner)  # V2-COMBAT-003 phase 8b: the five guidance responses
 	CombatDivergenceBarkTests.register(runner)  # V2-PROG-012 Phase 5: divergence bark content + wiring
 	ConversationRepairTests.register(runner)  # V2-PROG-012 Phase 8: conversation repairs (npc_line overwrite, storyweight truncation)
 	IdentityIntegrityTests.register(runner)  # V2-PROG-012 Phase 9: canonical vector/virtue/calling identity tables
@@ -1062,6 +1079,44 @@ func _run_force_recruit_command(parts: Array) -> void:
 			_debug_print("force_recruit: override cleared — using seeded roll.")
 		_:
 			_debug_print("Unknown force_recruit op '%s'. Use: success|fail|clear" % op)
+	_flush_logs_to_console()
+
+
+# V2-COMBAT-003: sets the headless Keeper suggestion (flow_ctx.dev_guidance). The
+# suggestion stays active until cleared, and each Echo answers it on her own turn with
+# one of Align / Interpret / Hesitate / Object / Refuse — watch actor.guidance_response
+# in the log. Every preset is a §9 movement purpose plus, where one exists, the plan
+# that serves it; an optional subject id narrows it to one target.
+# Usage: guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id]
+const _GUIDE_PRESETS: Dictionary = {
+	"hold":     {"purpose": "hold",     "action_type": "actor.guard"},
+	"advance":  {"purpose": "advance",  "action_type": "actor.move"},
+	"protect":  {"purpose": "protect",  "action_type": "protect_ally"},
+	"withdraw": {"purpose": "withdraw", "action_type": "actor.move"},
+	"engage":   {"purpose": "engage",   "action_type": "melee_attack"},
+}
+
+func _run_guide_command(parts: Array) -> void:
+	if parts.size() < 2:
+		_debug_print("Usage: guide <%s|show|clear> [subject_id]" % "|".join(_GUIDE_PRESETS.keys()))
+		_flush_logs_to_console()
+		return
+	var op := str(parts[1]).to_lower()
+	if op == "clear":
+		runtime.flow_ctx.dev_guidance = {}
+		_debug_print("guide: cleared — no suggestion is active.")
+	elif op == "show":
+		var active: Dictionary = runtime.flow_ctx.dev_guidance
+		_debug_print("guide: %s" % ("none" if active.is_empty() else str(active)))
+	elif _GUIDE_PRESETS.has(op):
+		var preset: Dictionary = (_GUIDE_PRESETS[op] as Dictionary).duplicate()
+		preset["guidance_id"] = op
+		preset["subject_id"] = str(parts[2]) if parts.size() > 2 else ""
+		preset["recipient_ids"] = []
+		runtime.flow_ctx.dev_guidance = preset
+		_debug_print("guide: suggesting '%s' to every Echo until cleared." % op)
+	else:
+		_debug_print("Unknown guide op '%s'. Use: %s|show|clear" % [op, "|".join(_GUIDE_PRESETS.keys())])
 	_flush_logs_to_console()
 
 
