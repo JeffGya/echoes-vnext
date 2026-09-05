@@ -1,22 +1,23 @@
 # res://tests/GuidanceBarkTests.gd
-# V2-COMBAT-003 phase 9 — the TEMPORARY bark surface for the Echo's answer to
-# the Keeper's guidance (GuidanceContribution.gd). V2-COMBAT-004 removes this
-# surface and replaces it with real UI; every test here pins behaviour that
-# must survive until that removal, not behaviour meant to last.
+# V2-COMBAT-003 phase 9-10 — the TEMPORARY bark surface for the Echo's answer
+# to the Keeper's guidance (GuidanceContribution.gd). V2-COMBAT-004 removes
+# this surface and replaces it with real UI; every test here pins behaviour
+# that must survive until that removal, not behaviour meant to last.
 #
 # What this suite proves:
-#   * object and refuse consent select the two new bark contexts
-#     (combat_guidance_object / combat_guidance_refuse); align and hesitate
-#     select neither — the owner has a separate pending decision on those.
+#   * object, refuse, and align+interpreted consent/reading each select their
+#     own bark context (combat_guidance_object / _refuse / _interpret); plain
+#     align (literal) and hesitate select none — the owner has a separate
+#     pending decision on those.
 #   * the displayed bark line IS GuidanceContribution's own reason_text, with
 #     no second copy of the prose written in ActorStateMachine.
-#   * both new contexts are exempt from the routine per-actor bark cooldown,
+#   * all three contexts are exempt from the routine per-actor bark cooldown,
 #     same treatment as combat_last_stand and friends, so a rare response is
 #     never silently swallowed.
 #   * a guidance bark cannot be overwritten by an ally-reaction bark the same
 #     turn (V2-VOICE-001's _check_reactive_bark).
-#   * both contexts route to the BarkPopupDivergence template, and are a
-#     DIFFERENT context from combat_divergence (V2-PROG-012) — the two share
+#   * all three contexts route to the BarkPopupDivergence template, and are
+#     DIFFERENT contexts from combat_divergence (V2-PROG-012) — they share
 #     only the visual, never the meaning.
 #   * more than one guidance bark can survive NarrativeVoiceService's
 #     round-level bark budget in the same round (the owner's explicit
@@ -30,6 +31,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("guidance_bark/object_consent_selects_object_context", Callable(GuidanceBarkTests, "_t_object_selects_context"))
 	runner.register_test("guidance_bark/refuse_consent_selects_refuse_context", Callable(GuidanceBarkTests, "_t_refuse_selects_context"))
 	runner.register_test("guidance_bark/align_and_hesitate_select_neither", Callable(GuidanceBarkTests, "_t_align_and_hesitate_silent"))
+	runner.register_test("guidance_bark/align_interpreted_selects_interpret_context", Callable(GuidanceBarkTests, "_t_align_interpreted_selects_context"))
+	runner.register_test("guidance_bark/align_literal_stays_silent", Callable(GuidanceBarkTests, "_t_align_literal_silent"))
 	runner.register_test("guidance_bark/line_is_the_reason_text_verbatim", Callable(GuidanceBarkTests, "_t_line_is_reason_text_verbatim"))
 	runner.register_test("guidance_bark/exempt_from_routine_cooldown", Callable(GuidanceBarkTests, "_t_exempt_from_routine_cooldown"))
 	runner.register_test("guidance_bark/not_overwritten_by_reactive_bark", Callable(GuidanceBarkTests, "_t_not_overwritten_by_reaction"))
@@ -87,6 +90,38 @@ static func _t_align_and_hesitate_silent() -> Dictionary:
 			0, 0, false, 10, consent, "she reads it the way you do")
 		if asm._bark_context.begins_with("combat_guidance_"):
 			return _fail("consent '%s' incorrectly selected a guidance bark context '%s'" % [consent, asm._bark_context])
+	return _pass()
+
+
+# Test 3b — FALSIFIABLE: align+interpreted is the rare "she agreed and still
+# found her own way" turn (owner's follow-up to the object/refuse decision
+# above). If the guidance_reading argument were dropped or mis-wired, this
+# would fall through to silence like plain align does.
+static func _t_align_interpreted_selects_context() -> Dictionary:
+	var actor: Dictionary = {"id": "echo.guidance.interpret", "fear": 0, "morale": 50}
+	var asm := ActorStateMachine.new(actor, null, {})
+	asm._expression_band = "whole"
+	asm._select_bark("proud", "", "actor.guard", 0, 0, "steady", "steady", false, false, "",
+		0, 0, false, 10, "align", "she is already moving where it matters", "interpreted")
+	if asm._bark_context != "combat_guidance_interpret":
+		return _fail("expected combat_guidance_interpret, got '%s'" % asm._bark_context)
+	if asm._bark_line != "she is already moving where it matters":
+		return _fail("expected the bark line to be the passed reason_text, got '%s'" % asm._bark_line)
+	return _pass()
+
+
+# Test 3c — THE BOUNDARY: align+literal is the one case that must stay silent
+# — GuidanceContribution._speaks() returns false there, so there is no
+# reason_text to show. If this ever produced a bark, GuidanceContribution and
+# the bark surface would disagree about what "silent" means.
+static func _t_align_literal_silent() -> Dictionary:
+	var actor: Dictionary = {"id": "echo.guidance.literal", "fear": 0, "morale": 50}
+	var asm := ActorStateMachine.new(actor, null, {})
+	asm._expression_band = "whole"
+	asm._select_bark("proud", "", "actor.guard", 0, 0, "steady", "steady", false, false, "",
+		0, 0, false, 10, "align", "", "literal")
+	if asm._bark_context.begins_with("combat_guidance_"):
+		return _fail("align+literal incorrectly selected a guidance bark context '%s'" % asm._bark_context)
 	return _pass()
 
 
@@ -151,11 +186,11 @@ static func _t_not_overwritten_by_reaction() -> Dictionary:
 
 # Test 7 — FALSIFIABLE: this is the whole point of the phase — if
 # resolve_template_kind() were left as a plain equality test against
-# "combat_divergence", both new contexts would fall through to "original"
+# "combat_divergence", the new contexts would fall through to "original"
 # instead of "divergence", contradicting the brief's explicit instruction to
-# route both to the existing BarkPopupDivergence template.
+# route them to the existing BarkPopupDivergence template.
 static func _t_routes_to_divergence_template() -> Dictionary:
-	for context in ["combat_guidance_object", "combat_guidance_refuse"]:
+	for context in ["combat_guidance_object", "combat_guidance_refuse", "combat_guidance_interpret"]:
 		var kind := BarkPopupLayer.resolve_template_kind(context, false)
 		if kind != "divergence":
 			return _fail("expected '%s' to resolve to the divergence template, got '%s'" % [context, kind])
@@ -164,11 +199,11 @@ static func _t_routes_to_divergence_template() -> Dictionary:
 
 # Test 8 — FALSIFIABLE: proves the shared-template claim does not collapse
 # into a shared-context claim. combat_divergence (V2-PROG-012, judgment vs.
-# the standing Directive) and the two guidance contexts (this phase, answer to
-# the Keeper's suggestion) must remain three distinct strings even though all
-# three resolve to the same visual.
+# the standing Directive) and the guidance contexts (this phase, answer to
+# the Keeper's suggestion) must remain distinct strings even though all
+# of them resolve to the same visual.
 static func _t_distinct_from_combat_divergence() -> Dictionary:
-	var contexts: Array = ["combat_divergence", "combat_guidance_object", "combat_guidance_refuse"]
+	var contexts: Array = ["combat_divergence", "combat_guidance_object", "combat_guidance_refuse", "combat_guidance_interpret"]
 	for i in range(contexts.size()):
 		for j in range(contexts.size()):
 			if i != j and contexts[i] == contexts[j]:

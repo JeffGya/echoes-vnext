@@ -115,13 +115,14 @@ const _TEMPLATE_KIND_ORIGINAL: String   = "original"
 
 ## Contexts that route to the BarkPopupDivergence template. combat_divergence
 ## is V2-PROG-012's report of her judgment against the standing Directive.
-## combat_guidance_object and combat_guidance_refuse are V2-COMBAT-003 phase 9
+## combat_guidance_object, _refuse and _interpret are V2-COMBAT-003 phase 9-10
 ## (TEMPORARY — V2-COMBAT-004 removes this bark surface and replaces it with
 ## real UI): her answer to the Keeper's suggestion (GuidanceContribution.gd).
 ## These are different moments with different inputs — they share only this
 ## visual template, never a context key.
 const _DIVERGENCE_TEMPLATE_CONTEXTS: Array = [
-	"combat_divergence", "combat_guidance_object", "combat_guidance_refuse"
+	"combat_divergence", "combat_guidance_object", "combat_guidance_refuse",
+	"combat_guidance_interpret"
 ]
 
 
