@@ -54,7 +54,7 @@
 #     3. smallest BFS distance
 #     4. situation id lexicographic        <- replaces today's implicit
 #                                             dependence on situations[] order
-#     5. canonical cell key "col,row"      <- total-order guard (slice 6 6A/U3)
+#     5. numeric col, then 6. numeric row  <- total-order guard (D57)
 #
 # SLICE 6 PHASE 6A, UNIT 3 — MANHATTAN REMOVED FROM select_frontier.
 #
@@ -749,7 +749,7 @@ static func select_frontier(
 ##   2. greatest configured target_preference weight
 ##   3. smallest BFS distance
 ##   4. situation id lexicographic
-##   5. canonical cell key "col,row"  <- total-order guard, slice 6 phase 6A
+##   5. numeric col, then 6. numeric row  <- total-order guard (D57)
 ##
 ## So weight leads inside the envelope and distance still bounds how far the
 ## party will detour for a preferred category.
@@ -776,8 +776,8 @@ static func select_frontier(
 ## design. That is why the fix is a genuine total-order guard rather than a
 ## documented precondition: the precondition is not one the caller can cheaply
 ## guarantee, because well-formed callers legitimately produce id-less entries.
-## Criterion 5 is the situation's own canonical cell key, distinct for any two
-## situations that are not co-located.
+## Criteria 5 and 6 are the situation's own numeric col and row, distinct for any
+## two situations that are not co-located.
 ##
 ## The RESIDUAL precondition, stated explicitly: two situations that share a
 ## position AND an id are indistinguishable to this function and still resolve by
@@ -785,20 +785,25 @@ static func select_frontier(
 ## deterministic rule can prefer one over the other, and repairing it belongs to
 ## whatever produced them.
 ##
-## KNOWN, ACCEPTED FOR NOW — criterion 5 carries the SAME defect as frontier
-## criterion 4 did. It is a lexicographic string compare of `"col,row"`, so
-## "10,3" < "9,3" and the induced order is jagged, non-monotone in either axis, and
-## flips its favoured compass direction with coordinate magnitude. The earlier
-## claim that this was "acceptable HERE and not there" rested on id-less entries
-## being rare malformed data; since they are in fact ordinary input, that
-## justification does not hold and is withdrawn.
+## D57, FIXED (V2-COMBAT-003 phase 10) — criterion 5 is now a NUMERIC (col, row)
+## compare. It was a lexicographic string compare of the canonical `"col,row"` key,
+## so "10,3" < "9,3": the induced order was jagged, non-monotone in either axis, and
+## flipped its favoured compass direction with coordinate magnitude. Stage boards
+## reach 22 columns and 4x/5x that in one dimension for PURSUE and GUIDE_SPIRIT, so
+## two-digit coordinates are ordinary input, not an edge case.
 ##
-## It is left unchanged in this unit deliberately. The approved scope was frontier
-## criterion 4, whose traffic unit 3 materially increased; this one is reached only
-## after weight AND distance AND id have all tied, so the exposure is far smaller.
-## When it is fixed it FOLLOWS CRITERION 4'S FIX — the same salted `_fnv1a_32` over
-## the canonical key, with the salt threaded in as a parameter — rather than
-## inventing a second mechanism.
+## IT IS A NUMERIC COMPARE, NOT FRONTIER CRITERION 4'S SALTED HASH. The paragraph
+## here previously prescribed the salted `_fnv1a_32`. That prescription is withdrawn,
+## and the defect register (D57) asks for the numeric compare. The two criteria solve
+## different problems. Frontier criterion 4 is the EFFECTIVE tie-break for a whole
+## ring of equidistant candidates, so a fixed compass preference there makes the party
+## drift into one quadrant run after run; only a de-aligner removes that. This
+## criterion is reached only after weight AND distance AND id have all tied, which
+## means duplicate or id-less situations — a small set, never a ring — so there is no
+## systematic compass drift to remove. A salt would also have to be threaded through
+## `select_objective_target` and its three `ActiveStageService` call sites for no
+## measured gain. The numeric compare removes the actual defect: the order is now
+## monotone in each axis and does not change its favoured direction with magnitude.
 ##
 ## Returns a copy of the chosen situation, or {}.
 static func select_objective_target(
@@ -845,9 +850,12 @@ static func select_objective_target(
 			-_target_weight(situation, weights, category_map),
 			distance,
 			str(situation.get("id", "")),
-			# Criterion 5 — the total-order guard. Reached only when weight, distance
-			# AND id all tie, i.e. duplicate or id-less situations. See the docblock.
-			V.canonical_cell_key(entry["pos"] as Dictionary),
+			# Criteria 5 and 6 — the total-order guard, NUMERIC (col, row). Reached
+			# only when weight, distance AND id all tie, i.e. duplicate or id-less
+			# situations. Numeric, not the canonical key string: see D57 in the
+			# docblock. Two situations that are not co-located always differ here.
+			float(int((entry["pos"] as Dictionary)["col"])),
+			float(int((entry["pos"] as Dictionary)["row"])),
 		]
 		if best.is_empty() or _rank_less(rank, best_rank):
 			best = situation
