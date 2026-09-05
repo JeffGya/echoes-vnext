@@ -1541,7 +1541,7 @@ The work still splits in two.
 | Work | Owner | Why |
 |---|---|---|
 | **Widen `request.purpose` to a purpose SET** | **V2-COMBAT-004** | A ping is not one purpose. §8 defines five pings, and each spans a purpose bundle: Hold Ground is hold + protect + return-to-anchor. The headless seam flattens each bundle into one String. **That flattening starves Interpret.** The widening is a prerequisite of the ping interface, so it belongs with it. About one file. No new verbs, no `MovementGoal.PURPOSES` change, no `goal_id` change. |
-| **Re-derive `J_INTERPRET`** | **V2-COMBAT-004** | 0.09 against a 0.060 median is a coin-flip gate. It belongs with the config block that story opens. |
+| ~~Re-derive `J_INTERPRET`~~ **DONE in `11992e9`** | ~~V2-COMBAT-004~~ **V2-COMBAT-003** | Jeff moved it into 8c. Set to **0.045**, PROPOSED DEFAULT: the midpoint of the measured floor 0.030 and the median 0.060, so a median Echo clears it. `J_OBJECT` stays **0.13** — the measurement does not support moving it, and naming a disagreement out loud should not be ordinary. **V2-COMBAT-004 must still re-derive it once purpose bundles exist**, because a bundle changes how often a suggestion can be served at all. |
 | **Build `movement_style`** | **A NEW STORY — not yet filed** | Ten styles across the whole movement layer. It changes how every plan is expressed. It is a movement-model axis, not a combat-UI item. Filing it inside V2-COMBAT-004 would repeat the mistake this story made: a story that quietly absorbs a second subject. |
 
 **Nothing here is filed yet. Jeff files stories.**
@@ -1559,3 +1559,45 @@ not read as willful. She is read as a nag.
 No measurement settles this. The test is cheap: give Align a voice in a build and ask whether the
 Echoes feel more like people. If they do, **the highest-value character work is giving agreement a
 voice, not making disagreement more varied.**
+
+### 21.9 What the axis split actually bought — measured, not assumed
+
+`11992e9` split consent from reading. The probe was then run twice: once with the split alone, once with
+the new threshold.
+
+| Build | interpreted turns |
+|---|---:|
+| Before | 6 |
+| Split only, `J_INTERPRET` held at 0.09 | **6** |
+| Split plus `J_INTERPRET` 0.045 | **10** |
+
+**Every one of the +4 came from the threshold. The split contributed nothing to the count.** That is
+not what the brief expected. It is recorded here so nobody later credits the split with the number.
+
+**What the split did buy is different, and worth more than a count:**
+
+1. **All 10 interpreted turns are `align`** — full consent. The old ladder could not express that
+   combination at all. It reported the word "interpret" *instead of* the consent, so a Keeper could
+   not tell "she agreed and did it her own way" from "she disagreed and did it her own way".
+2. **Four turns were mislabelled `hesitate`.** They had `shares_purpose` true and judgment below the
+   gate. Nothing about them was hesitant, and they were being charged the hesitation commitment cost.
+   They are now `align`.
+
+Final matrix, 678 turns:
+
+| consent | literal | interpreted |
+|---|---:|---:|
+| align | 373 | **10** |
+| hesitate | 87 | 0 |
+| object | 17 | 0 |
+| refuse | 191 | 0 |
+
+Four of eight cells are occupied. `hesitate + interpreted` and `object + interpreted` pass in unit
+tests but did not occur in the probe, for cause 2 in §21.4: every probe suggestion pairs a purpose
+with its own canonical action, so only a subject-bearing suggestion can produce an interpreted
+reading, and only one of the eight does.
+
+**Correction to §21.6's count.** That section said 14 call sites in 5 files read `response`. The real
+figure is **11 references across 4 files**, and only 2 are outside tests and tooling. The fifth file
+(`ui/overlays/realm/ContactModal.gd`) uses `"response"` for a conversation string with no relation to
+guidance. Keeping the legacy field was still correct; the later migration is smaller than stated.
