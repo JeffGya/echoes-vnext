@@ -1,19 +1,29 @@
 # res://core/actors/behaviors/GuidanceContribution.gd
-# The Keeper's guidance as one behaviour contribution, and the five answers an Echo
-# may give it: Align, Interpret, Hesitate, Object, Refuse.
+# The Keeper's guidance as one behaviour contribution, and the answer an Echo gives it.
+#
+# THE ANSWER HAS TWO AXES, NOT FIVE STEPS.
+#   consent — align / hesitate / object / refuse. How much of the suggestion survived.
+#   reading — literal / interpreted. Did she do what you said, or what you meant?
+# The axes are independent. An Echo can align AND interpret, and that combination is
+# the clearest character read the system gives.
+#
+# INTERPRET KEEPS WHAT THE KEEPER INTENDED AND CHANGES ONLY THE METHOD. "She did
+# something else" is Object. A reading axis that carries any sense of doing otherwise
+# turns Interpret into a soft Refuse, which is a different answer.
 #
 # This file owns four things and nothing else:
 #   1. WHO the suggestion reaches (an Echo named as a recipient, and no one else);
 #   2. HOW MUCH the suggestion is worth against her own reading of the board;
-#   3. WHICH of the five answers she gives;
-#   4. THE ONE REASON she gives for any answer but Align, and the proof it is true.
+#   3. WHICH consent she gives and WHICH reading she takes;
+#   4. THE ONE REASON she gives whenever she is not a silent Align, and the proof it
+#      is true.
 #
 # It derives no identity value. `judgment` and `composure` arrive already computed by
 # MaturityExpressionService; nothing here recomputes either, and there is deliberately
 # no obedience number anywhere in this file. Standing buys COHERENCE, not compliance:
-# at the same contest a coherent Echo interprets or objects where a young one only
-# hesitates, so the two are equally likely to end up doing what was suggested — they
-# differ in how clearly they say what they are doing.
+# at the same contest a coherent Echo interprets or objects where a young one reads the
+# suggestion literally or only hesitates, so the two are equally likely to end up doing
+# what was suggested — they differ in how clearly they say what they are doing.
 #
 # THE GUIDANCE IS A BIAS, NOT A SCORE TERM. Every answer is a transform on one
 # post-scoring contribution applied through BehaviorArbiter._apply_bias, beside vow
@@ -34,7 +44,15 @@ class_name GuidanceContribution
 
 const DecisionTraceScript = preload("res://core/actors/behaviors/DecisionTrace.gd")
 
-## The five answers, in ladder order.
+## The two axes. Consent has four values and reading has two. There is no third value
+## on either axis: a third would be a new question, and this file answers two.
+const CONSENT: Array = ["align", "hesitate", "object", "refuse"]
+const READING: Array = ["literal", "interpreted"]
+
+## LEGACY, derived from the two axes for the call sites that still read one word. It
+## flattens `align + interpreted` and `object + interpreted` to the same "interpret",
+## which is exactly the information the split exists to keep. Read `consent` and
+## `reading` in new code.
 const RESPONSES: Array = ["align", "interpret", "hesitate", "object", "refuse"]
 
 ## PROPOSED DEFAULT — the contest at which each answer begins, as a fraction of the
@@ -45,7 +63,7 @@ const RESPONSES: Array = ["align", "interpret", "hesitate", "object", "refuse"]
 ## Measured before they were chosen, over 678 Echo turns: 293 turns at exactly 0, 179 at
 ## exactly 1, 206 spread between. A suggestion usually either names what she already
 ## meant to do or names the one thing she was avoiding, so the ends are heavy — which is
-## why Interpret is not a band here (see the ladder in resolve()) and why T_REFUSE sits
+## why the reading axis is not a band here (see resolve()) and why T_REFUSE sits
 ## below the top of the range rather than at it: composure scales the ladder up, and a
 ## threshold at 1.0 would put refusal out of reach of every steady Echo.
 ##
@@ -57,15 +75,22 @@ const T_OBJECT: float = 0.45
 const T_REFUSE: float = 0.80
 
 ## PROPOSED DEFAULT — the judgment at which an Echo can hold a purpose while changing
-## its method (interpret), and at which she can name a disagreement instead of only
-## showing it (object). Below both she hesitates instead, at every contest. This is the
+## its method (an interpreted reading), and at which she can name a disagreement instead
+## of only showing it (the object consent). Below J_INTERPRET she reads the suggestion
+## literally; below J_OBJECT she hesitates where she would have objected. This is the
 ## whole of what Standing buys: not compliance, articulacy.
 ##
 ## Set from measurement, not from the 0-1 range the field suggests. Judgment as actually
 ## derived is compressed low: over the same 678 turns it ran 0.030 to 0.214, median 0.060,
 ## and a Standing-6 Echo reached only 0.214. Gates chosen at 1.0 scale would have made
 ## Interpret and Object dead code — the first measurement pass proved exactly that.
-const J_INTERPRET: float = 0.09
+##
+## The two gates sit on opposite sides of that median on purpose, because they buy
+## different things. Serving the purpose you meant by another method is ordinary, so
+## J_INTERPRET sits between the floor (0.030) and the median (0.060): a median Echo
+## clears it, and only the least coherent fail. Naming a disagreement out loud is not
+## ordinary, so J_OBJECT stays above the median inside the observed range.
+const J_INTERPRET: float = 0.045
 const J_OBJECT: float = 0.13
 
 ## The suggestion can carry a plan over a gap of at most T_ALIGN spreads — exactly the
@@ -172,7 +197,7 @@ static func resolve(
 	var self_plan: Dictionary = _best_entry(entries)
 	if suggested.is_empty():
 		# Nothing she can do this turn serves the suggestion. That is not disagreement,
-		# so it is not one of the five answers.
+		# so it is not an answer at all.
 		return {}
 
 	# The contest: how far below her own choice the suggestion already sat, measured
@@ -188,87 +213,100 @@ static func resolve(
 	var t_object: float = T_OBJECT * steadiness
 	var t_refuse: float = T_REFUSE * steadiness
 
-	# The ladder. Interpret is deliberately NOT a contest band: keeping a purpose while
-	# changing its method is a STRUCTURAL fact about her own plan, not a magnitude.
-	# Measurement forced this twice. As a contest band it was unreachable, because the
-	# contest is bimodal and almost nothing lands in the middle. As "same purpose,
-	# different candidate" it was unreachable too: a goal's purpose fixes its planned
-	# action, so the best option serving a purpose IS her own choice.
-	#
-	# What is left is the design's own example, and it is common: you name the line, she
-	# cannot serve exactly that, and her own plan still serves what you meant. That is a
-	# suggestion whose most specific form did not match — see _suggested_match.
+	# AXIS 1 — consent. A magnitude, and nothing else: how far below her own choice the
+	# suggestion sat. Judgment gates only the ability to SAY the disagreement; below
+	# J_OBJECT the same contest shows as hesitation instead.
+	var consent: String = "align"
+	if contest >= t_refuse:
+		consent = "refuse"
+	elif contest < t_align:
+		consent = "align"
+	elif contest >= t_object:
+		consent = "object" if judgment >= J_OBJECT else "hesitate"
+	else:
+		consent = "hesitate"
+
+	# AXIS 2 — reading. A STRUCTURAL fact about her own plan, not a magnitude, which is
+	# why it is not a band on the ladder above. Two shapes qualify, and both keep the
+	# purpose the Keeper meant: the suggestion as given is not something she can do this
+	# turn (a relaxed match), or she serves the same purpose by another candidate.
 	var shares_purpose: bool = not str(request.get("purpose", "")).is_empty() \
 		and str(self_plan.get("purpose", "")) == str(request.get("purpose", "")) \
 		and (bool(match_result["relaxed"]) \
 			or str(self_plan.get("key", "")) != str(suggested.get("key", "")))
+	var reading: String = "interpreted" if shares_purpose and judgment >= J_INTERPRET else "literal"
 
-	# Interpret sits ABOVE Align on purpose. When the suggestion as given cannot be served,
-	# she did not do what you said — she did what you meant, and that is a different
-	# answer even when it costs her nothing.
-	var response: String = "align"
-	if contest >= t_refuse:
-		response = "refuse"
-	elif shares_purpose:
-		response = "interpret" if judgment >= J_INTERPRET else "hesitate"
-	elif contest < t_align:
-		response = "align"
-	elif contest >= t_object:
-		response = "object" if judgment >= J_OBJECT else "hesitate"
-	else:
-		response = "hesitate"
-
-	var reason: Dictionary = _reason_for(response, self_plan, suggested, request)
+	var reason: Dictionary = _reason_for(consent, reading, self_plan, suggested, request)
 	return {
 		"guidance_id":       str(request.get("guidance_id", "")),
-		"response":          response,
+		"consent":           consent,
+		"reading":           reading,
+		"response":          _legacy_response(consent, reading),
 		"reason":            reason,
-		"reason_text":       _reason_text(response, reason, self_plan),
+		"reason_text":       _reason_text(consent, reading, reason, self_plan),
 		"contest":           contest,
 		"option_spread":     spread,
 		"suggested_key":     str(suggested.get("key", "")),
 		"self_key":          str(self_plan.get("key", "")),
 		"shares_purpose":    shares_purpose,
-		"recipient_dropped": response == "refuse",
-		"deltas":            _deltas(response, request, entries, suggested, spread),
+		"recipient_dropped": consent == "refuse",
+		"deltas":            _deltas(consent, reading, request, entries, suggested, spread),
 	}
 
 
-## What each answer does to the one contribution. This table IS the difference between
-## the five: nothing else in this file distinguishes them mechanically.
+## LEGACY. Refusal outranks the reading because a refused suggestion carried nothing
+## left to read. Delete this with the last call site that reads `response`.
+static func _legacy_response(consent: String, reading: String) -> String:
+	if consent != "refuse" and reading == "interpreted":
+		return "interpret"
+	return consent
+
+
+## She is silent only when she took the suggestion as given and it cost her nothing.
+static func _speaks(consent: String, reading: String) -> bool:
+	return consent != "align" or reading == "interpreted"
+
+
+## What the answer does to the one contribution. The two axes act on different parts of
+## it, which is what makes them independent rather than five steps.
 ##
-##   align      the suggestion arrives whole — plan and purpose;
-##   interpret  the plan part is dropped; every option serving the same purpose keeps
-##              the full weight, so she goes there her own way;
-##   hesitate   the whole contribution is scaled down AND every option is charged for
-##              how far it commits, so she moves shorter and later;
+## Consent decides HOW MUCH arrives:
+##   align      the contribution arrives whole;
+##   hesitate   it is scaled down AND every option is charged for how far it commits,
+##              so she moves shorter and later;
 ##   object     nothing arrives; she acts on her own judgment and says so;
 ##   refuse     nothing arrives, and she leaves the suggestion's recipients — she still
 ##              acts, on her own purpose, because removing the Keeper's influence
 ##              cannot remove hers.
+##
+## Reading decides WHICH PART arrives:
+##   literal      the plan part and the purpose part;
+##   interpreted  the plan part is dropped, so every option serving the same purpose
+##                keeps the same weight and she goes there her own way.
 static func _deltas(
-	response: String,
+	consent: String,
+	reading: String,
 	request: Dictionary,
 	entries: Array,
 	suggested: Dictionary,
 	spread: float
 ) -> Dictionary:
 	var deltas: Dictionary = {}
-	if response == "object" or response == "refuse" or spread <= SPREAD_EPSILON:
+	if consent == "object" or consent == "refuse" or spread <= SPREAD_EPSILON:
 		return deltas
 	var plan_weight: float = PLAN_AUTHORITY * spread
 	var purpose_weight: float = PURPOSE_AUTHORITY * spread
-	var scale: float = HESITATE_SCALE if response == "hesitate" else 1.0
+	var scale: float = HESITATE_SCALE if consent == "hesitate" else 1.0
 	var purpose: String = str(request.get("purpose", ""))
 	for entry_v: Variant in entries:
 		var entry: Dictionary = entry_v as Dictionary
 		var delta: float = 0.0
-		if response != "interpret" and str(entry.get("key", "")) == str(suggested.get("key", "")):
+		if reading != "interpreted" and str(entry.get("key", "")) == str(suggested.get("key", "")):
 			delta += plan_weight
 		if not purpose.is_empty() and str(entry.get("purpose", "")) == purpose:
 			delta += purpose_weight
 		delta *= scale
-		if response == "hesitate":
+		if consent == "hesitate":
 			var capacity: float = maxf(float(entry.get("capacity", 0.0)), 1.0)
 			delta -= HESITATE_COMMITMENT_COST * spread * (float(entry.get("commitment", 0.0)) / capacity)
 		if delta != 0.0:
@@ -284,13 +322,14 @@ static func _deltas(
 ## When no single source carries that weight the honest answer is not a stronger claim
 ## but a weaker one: §6.6's baseline primary, the purpose she is already serving.
 static func _reason_for(
-	response: String,
+	consent: String,
+	reading: String,
 	self_plan: Dictionary,
 	suggested: Dictionary,
 	request: Dictionary
 ) -> Dictionary:
 	var subject_id: String = str(request.get("subject_id", ""))
-	if response == "align":
+	if not _speaks(consent, reading):
 		return _reason("keeper_guidance", "guidance", subject_id, "co_decisive", true, "none")
 
 	var margin: float = float(self_plan.get("score", 0.0)) - float(suggested.get("score", 0.0))
@@ -315,22 +354,27 @@ static func _reason_for(
 		subject_id,
 		"co_decisive",
 		true,
-		_band_for(response)
+		_band_for(consent, reading)
 	)
 
 
-static func _reason_text(response: String, reason: Dictionary, self_plan: Dictionary) -> String:
-	if response == "align":
+static func _reason_text(
+	consent: String,
+	reading: String,
+	reason: Dictionary,
+	self_plan: Dictionary
+) -> String:
+	if not _speaks(consent, reading):
 		return ""
 	if str(reason.get("source", "")) == "baseline":
 		return str(_PURPOSE_TEXT.get(str(self_plan.get("purpose", "")), "she is already doing what matters more"))
 	return str(_REASON_TEXT.get(str(reason.get("code", "")), "she reads the board differently"))
 
 
-static func _band_for(response: String) -> String:
-	match response:
-		"interpret":
-			return "slight"
+## Consent carries the strength. An interpreted reading with full consent is the
+## gentlest thing she can say and still be saying something.
+static func _band_for(consent: String, reading: String) -> String:
+	match consent:
 		"hesitate":
 			return "moderate"
 		"object":
@@ -338,7 +382,7 @@ static func _band_for(response: String) -> String:
 		"refuse":
 			return "decisive"
 		_:
-			return "none"
+			return "slight" if reading == "interpreted" else "none"
 
 
 ## The option the suggestion names, as her own options express it. Preferring the
@@ -347,8 +391,8 @@ static func _band_for(response: String) -> String:
 ##
 ## Matching relaxes the suggestion's specificity in a fixed order until something she
 ## can actually do this turn matches. Without the cascade, a suggestion whose exact
-## triple she cannot serve would produce no answer at all — and silence is not one of
-## the five.
+## triple she cannot serve would produce no answer at all — and silence is not an
+## answer.
 const _MATCH_TIERS: Array = [
 	["plan", "purpose", "subject"],
 	["plan", "subject"],
@@ -358,8 +402,8 @@ const _MATCH_TIERS: Array = [
 ]
 
 ## Returns the matched entry and whether the match cost the suggestion specificity.
-## `relaxed` is what tells Interpret from Align: it means the suggestion, exactly as the
-## Keeper gave it, is not something this Echo can do this turn.
+## `relaxed` is one of the two shapes that make the reading interpreted: it means the
+## suggestion, exactly as the Keeper gave it, is not something this Echo can do this turn.
 static func _suggested_match(request: Dictionary, entries: Array) -> Dictionary:
 	var tried_specific: bool = false
 	for tier_v: Variant in _MATCH_TIERS:

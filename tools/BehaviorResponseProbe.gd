@@ -4,8 +4,9 @@
 #
 # Answers three questions for V2-COMBAT-003 phase 8b:
 #
-#   COUNTS   — how often each of Align / Interpret / Hesitate / Object / Refuse actually
-#              occurs across many hundreds of real Echo turns. A response that never
+#   COUNTS   — how often each consent (align / hesitate / object / refuse) and each
+#              reading (literal / interpreted) actually occurs across many hundreds of
+#              real Echo turns, and the eight-cell cross of the two. A cell that never
 #              occurs is a reportable result, not a hidden failure.
 #   CONTEST  — the raw distribution of the guidance contest, printed as deciles. The
 #              five thresholds have no decided value until this is read, so run the
@@ -63,6 +64,7 @@ static var _differ_rounds: Array = []
 static var _refuse_actions: Dictionary = {}
 static var _reason_counts: Dictionary = {}
 static var _by_suggestion: Dictionary = {}
+static var _matrix: Dictionary = {}
 
 
 static func register(runner) -> void:
@@ -87,6 +89,7 @@ static func run() -> Dictionary:
 	_refuse_actions = {}
 	_reason_counts = {}
 	_by_suggestion = {}
+	_matrix = {}
 	_say("### ARM %s" % arm)
 	for variant_v: Variant in VARIANTS:
 		var variant: Dictionary = variant_v
@@ -160,8 +163,12 @@ static func _drain(
 		if response.is_empty():
 			continue
 		var name: String = str(response.get("response", ""))
+		var consent: String = str(response.get("consent", ""))
+		var reading: String = str(response.get("reading", ""))
 		_turns += 1
 		_counts[name] = int(_counts.get(name, 0)) + 1
+		var cell: String = "%s|%s" % [consent, reading]
+		_matrix[cell] = int(_matrix.get(cell, 0)) + 1
 		_contests.append(float(response.get("contest", 0.0)))
 		round_responses[actor_id] = name
 		if not _by_suggestion.has(guidance_id):
@@ -174,8 +181,8 @@ static func _drain(
 		if name == "refuse":
 			var acted: String = str(entry.get("action_type", ""))
 			_refuse_actions[acted] = int(_refuse_actions.get(acted, 0)) + 1
-		_say("TURN %s %s r%02d %s %-9s contest=%.4f judgment=%.3f composure=%.3f action=%s reason=%s" % [
-			label, guidance_id, round_index, actor_id, name,
+		_say("TURN %s %s r%02d %s %-8s %-11s contest=%.4f judgment=%.3f composure=%.3f action=%s reason=%s" % [
+			label, guidance_id, round_index, actor_id, consent, reading,
 			float(response.get("contest", 0.0)),
 			float(actor.get("_judgment", 0.0)),
 			float(actor.get("_composure", 0.0)),
@@ -234,6 +241,19 @@ static func _find_actor(ectx: EncounterContext, actor_id: String) -> Dictionary:
 static func _report(arm: String) -> void:
 	_say("")
 	_say("=== ECHO TURNS WITH A RESPONSE: %d" % _turns)
+	_say("")
+	_say("=== CONSENT x READING")
+	_say("%-10s %10s %12s %8s" % ["consent", "literal", "interpreted", "total"])
+	for consent: String in GuidanceContribution.CONSENT:
+		var literal: int = int(_matrix.get("%s|literal" % consent, 0))
+		var interpreted: int = int(_matrix.get("%s|interpreted" % consent, 0))
+		_say("%-10s %10d %12d %8d" % [consent, literal, interpreted, literal + interpreted])
+	var all_interpreted: int = 0
+	for consent: String in GuidanceContribution.CONSENT:
+		all_interpreted += int(_matrix.get("%s|interpreted" % consent, 0))
+	_say("%-10s %10d %12d %8d" % ["TOTAL", _turns - all_interpreted, all_interpreted, _turns])
+	_say("")
+	_say("=== LEGACY FLATTENED COUNTS")
 	for name: String in GuidanceContribution.RESPONSES:
 		_say("COUNT %-10s %5d" % [name, int(_counts.get(name, 0))])
 	_say("")

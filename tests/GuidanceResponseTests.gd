@@ -1,7 +1,7 @@
 # res://tests/GuidanceResponseTests.gd
-# The Keeper's guidance and the five answers to it (V2-COMBAT-003 phase 8b).
+# The Keeper's guidance and the two axes of the answer to it — consent and reading.
 #
-# Every test states the regression it catches. Four are load-bearing:
+# Every test states the regression it catches. Five are load-bearing:
 #   * guidance/absent_request_changes_nothing — the safety property. It fails the
 #     moment guidance leaks into a decision no one guided.
 #   * guidance/refusal_is_not_idling — a refusing Echo still acts, on her own purpose.
@@ -10,6 +10,8 @@
 #     really does change the order. A reason that cannot pass this is not a reason.
 #   * guidance/directive_bonus_stays_outside_the_brackets — the locked invariant that
 #     `self_score = score - directive_bonus` rests on, which no other test would catch.
+#   * guidance/consent_and_reading_are_independent — the axes must not re-flatten. An
+#     Echo who fully agrees can still do it her own way.
 
 class_name GuidanceResponseTests
 extends RefCounted
@@ -32,6 +34,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("guidance/response_is_deterministic", Callable(GuidanceResponseTests, "_t_response_is_deterministic"))
 	runner.register_test("guidance/trace_names_guidance_when_it_carried_the_decision", Callable(GuidanceResponseTests, "_t_trace_names_guidance"))
 	runner.register_test("guidance/directive_bonus_stays_outside_the_brackets", Callable(GuidanceResponseTests, "_t_directive_bonus_stays_outside_the_brackets"))
+	runner.register_test("guidance/consent_and_reading_are_independent", Callable(GuidanceResponseTests, "_t_consent_and_reading_are_independent"))
 
 
 static func _pass() -> Dictionary: return {"ok": true}
@@ -184,9 +187,10 @@ static func _t_five_responses_are_reachable() -> Dictionary:
 	return _pass()
 
 
-# Test 5 — the five differ MECHANICALLY, not only in voice. FALSIFIABLE: an Interpret
-# that still carries the exact plan, or an Object that quietly leaves the contribution
-# applied, would be indistinguishable from its neighbour and fail here.
+# Test 5 — the answers differ MECHANICALLY, not only in voice. Consent decides how much
+# of the contribution arrives; reading decides which part of it does. FALSIFIABLE: an
+# interpreted reading that still carries the exact plan, or an Object that quietly leaves
+# the contribution applied, would be indistinguishable from its neighbour and fail here.
 static func _t_each_response_transforms_the_contribution_differently() -> Dictionary:
 	var entries: Array = _entries()
 	var align: Dictionary = GuidanceScript.resolve(
@@ -194,12 +198,15 @@ static func _t_each_response_transforms_the_contribution_differently() -> Dictio
 	if float((align["deltas"] as Dictionary).get("c0000", 0.0)) <= 0.0:
 		return _fail("Align did not carry the suggested plan")
 
+	# Name a line she cannot serve: the suggestion relaxes to its purpose, so she keeps
+	# what the Keeper meant and drops the plan part.
 	var interpret: Dictionary = GuidanceScript.resolve(
-		_request("b", "melee_attack", "engage", "enemy.b"), entries, _echo(), 0.2, 0.0)
+		_request("b", "melee_attack", "engage", "enemy.absent"), entries, _echo(), 0.2, 0.0)
 	var interpret_deltas: Dictionary = interpret["deltas"] as Dictionary
-	var suggested_key: String = str(interpret["suggested_key"])
+	if str(interpret.get("reading", "")) != "interpreted":
+		return _fail("a suggestion she could not serve as given was read literally")
 	if not is_equal_approx(
-			float(interpret_deltas.get(suggested_key, 0.0)),
+			float(interpret_deltas.get("c0001", 0.0)),
 			float(interpret_deltas.get("c0000", 0.0))):
 		return _fail("Interpret kept the plan part: the named option was weighted above its purpose siblings")
 	if float(interpret_deltas.get("c0002", 0.0)) != 0.0:
@@ -387,4 +394,47 @@ static func _t_directive_bonus_stays_outside_the_brackets() -> Dictionary:
 		return _fail("self_score is no longer score - directive_bonus: %.4f vs %.4f" % [
 			without_directive, float(entry["score"]) - 12.0
 		])
+	return _pass()
+
+
+# Test 15 — THE TWO AXES ARE INDEPENDENT. Consent measures how much of the suggestion
+# survived; reading measures whether she took it as given or as meant. FALSIFIABLE: a
+# build that folds the reading back into the consent ladder — the flattening this split
+# removed — cannot produce `align` together with `interpreted` and fails here.
+static func _t_consent_and_reading_are_independent() -> Dictionary:
+	var entries: Array = _entries()
+	# She cannot reach the line the Keeper named, and her own plan already serves the
+	# purpose behind it. Full consent, and still not what he said.
+	var meant: Dictionary = GuidanceScript.resolve(
+		_request("a", "melee_attack", "engage", "enemy.absent"), entries, _echo(), 0.20, 0.0)
+	if str(meant.get("consent", "")) != "align" or str(meant.get("reading", "")) != "interpreted":
+		return _fail("expected align + interpreted, got %s + %s" % [
+			str(meant.get("consent", "")), str(meant.get("reading", ""))
+		])
+	if str(meant.get("reason_text", "")).is_empty():
+		return _fail("an interpreted reading said nothing about doing it her own way")
+
+	# The same board and the same suggestion, read by an Echo below the interpret gate.
+	var literal: Dictionary = GuidanceScript.resolve(
+		_request("a", "melee_attack", "engage", "enemy.absent"), entries, _echo(), 0.02, 0.0)
+	if str(literal.get("consent", "")) != "align" or str(literal.get("reading", "")) != "literal":
+		return _fail("expected align + literal below the interpret gate, got %s + %s" % [
+			str(literal.get("consent", "")), str(literal.get("reading", ""))
+		])
+
+	# Consent still moves on the contest alone, with the reading held at literal.
+	for case_v: Variant in [
+		["align", _request("b", "melee_attack", "engage")],
+		["object", _request("c", "actor.guard", "hold")],
+		["refuse", _request("d", "actor.idle", "read")],
+	]:
+		var case: Array = case_v
+		var answer: Dictionary = GuidanceScript.resolve(
+			case[1] as Dictionary, entries, _echo(), 0.20, 0.0)
+		if str(answer.get("consent", "")) != str(case[0]):
+			return _fail("expected consent %s, got %s (contest %.4f)" % [
+				str(case[0]), str(answer.get("consent", "")), float(answer.get("contest", -1.0))
+			])
+		if str(answer.get("reading", "")) != "literal":
+			return _fail("a suggestion she could serve as given was read as interpreted")
 	return _pass()

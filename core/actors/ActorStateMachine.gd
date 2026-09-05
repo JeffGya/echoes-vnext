@@ -525,6 +525,8 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 			"actor_id":      str(_actor.get("id", "")),
 			"round":         int(context.get("round", t)),
 			"guidance_id":   str(guidance_response.get("guidance_id", "")),
+			"consent":       str(guidance_response.get("consent", "")),
+			"reading":       str(guidance_response.get("reading", "")),
 			"response":      str(guidance_response.get("response", "")),
 			"reason_text":   str(guidance_response.get("reason_text", "")),
 			"reason_code":   str(guidance_reason.get("code", "")),
