@@ -1446,3 +1446,116 @@ the same action as no suggestion at all.
 Party composition follows the first two characters of the seed tag, so changing the mode
 does not resample callings or traits. The probe holds two parties. **No per-calling claim
 may be generalised from it.**
+
+---
+
+## 21. Interpret: the two-axis decision (Jeff, 2026-09-05)
+
+Two design reviews examined why Interpret occurs 6 times in 678 turns. One used the
+`game-mechanics-designer` skill. One used the `systems-story-designer` skill. Both agree on the
+result. **No code changes in this story.**
+
+### 21.1 Jeff did not misunderstand. He restated his own approved spec.
+
+`docs/proposals/keeper-tactical-guidance-promotion.md` §9.1 already defines Interpret:
+
+> "The Echo accepts the purpose but expresses it through their own identity."
+
+That is a manner, not a fifth response. It is what Jeff said.
+
+His §18.2 also holds this as an open question: *"How should Calling-family grammar shape
+interpretation without flattening individual Callings?"* The implementation reached that question
+early. It answered the question by structure instead of by identity.
+
+### 21.2 The second axis exists in the design. Nobody built it.
+
+`docs/movement-model.md` §9 specifies **ten movement styles**: direct, measured, careful, forceful,
+cohesive, low-exposure, lateral, intercepting, retreating, overcommitted. The document says they
+combine with a purpose. It gives the examples "careful advance" and "forceful engage".
+
+`movement_style` appears **4 times in the design document and 0 times in the code**. Verified 2026-09-05.
+
+The implementation collapsed purpose and style into purpose alone. Interpret then had no place to
+live.
+
+**The decision: guidance has two axes, not five steps.**
+
+| Axis | Values | Question it answers |
+|---|---|---|
+| **Consent** | align, hesitate, object, refuse | How much of your suggestion survived? |
+| **Reading** | literal, interpreted | Did she do what you said, or what you meant? |
+
+`GuidanceContribution.resolve()` already computes `shares_purpose` as a structural fact. It returns
+it as its own field. It then flattens it into the ladder with an `elif`. **The flattening is the
+error. The data is already correct.**
+
+### 21.3 Correction to Jeff's wording
+
+Jeff wrote: *"acted upon in a way that is not as the keeper intended."*
+
+**That describes Object, not Interpret.** Interpret keeps what the Keeper intended. It changes only
+the method. If that phrase reaches the character voice, Interpret becomes a soft Refuse.
+
+The correct sentence: **"She did not do what you said. She did what you meant."**
+
+### 21.4 Three causes for the rarity. The vocabulary is the smallest.
+
+| # | Cause | Size |
+|---|---|---|
+| 1 | **The judgment gate.** Interpret needs `judgment >= 0.09`. Measured judgment is 0.030 to 0.214, **median 0.060**. On a median Echo the gate fails and Interpret becomes Hesitate. | Largest |
+| 2 | **The probe cannot observe it.** All 8 test suggestions pair a purpose with its own canonical action. Every tested suggestion is the literal reading by construction. Only 2 named a subject. All 6 Interprets came from those 2. | Large |
+| 3 | One action per purpose. | Smallest |
+
+**So the count of 6 measures the test as much as the design.**
+
+### 21.5 A qualification on the contest numbers
+
+`SPREAD_EPSILON = 1.0` forces `contest = 0` whenever the option scores are close together.
+
+So handoff §20.3's "293 contests at exactly 0" mixes two different cases: the Keeper suggested her
+own plan, **and** her options all scored the same. Do not read that number as pure redundancy. Do
+not treat the thresholds as validated until it is split.
+
+### 21.6 Every response is silent today
+
+Verified by tracing all consumers. `ActorStateMachine` writes one `logger.info` line and stores the
+value on the actor. The only other readers are the probe and the tests. **There is no UI consumer,
+no bark, and no snapshot field.**
+
+The `combat_divergence` bark is V2-PROG-012's. It reports her judgment against the standing
+**Directive**, not against the Keeper's **suggestion**.
+
+So `GuidanceContribution` ships 19 lines of character prose that no player can read. **Phase 9 must
+supply the first player-visible surface.**
+
+### 21.7 Where the work goes — Jeff's question, 2026-09-05
+
+> "when does it get built? also in Combat-004? Isn't that outside of the scope of that story, that
+> should be more about the front-end visualisation not the back end right?"
+
+**V2-COMBAT-004 is not front-end only.** It already carries four backend items: the combat
+controller (D69), the zero-damage floor, the missing round cap, and the unwinnable escort case.
+
+The work still splits in two.
+
+| Work | Owner | Why |
+|---|---|---|
+| **Widen `request.purpose` to a purpose SET** | **V2-COMBAT-004** | A ping is not one purpose. §8 defines five pings, and each spans a purpose bundle: Hold Ground is hold + protect + return-to-anchor. The headless seam flattens each bundle into one String. **That flattening starves Interpret.** The widening is a prerequisite of the ping interface, so it belongs with it. About one file. No new verbs, no `MovementGoal.PURPOSES` change, no `goal_id` change. |
+| **Re-derive `J_INTERPRET`** | **V2-COMBAT-004** | 0.09 against a 0.060 median is a coin-flip gate. It belongs with the config block that story opens. |
+| **Build `movement_style`** | **A NEW STORY — not yet filed** | Ten styles across the whole movement layer. It changes how every plan is expressed. It is a movement-model axis, not a combat-UI item. Filing it inside V2-COMBAT-004 would repeat the mistake this story made: a story that quietly absorbs a second subject. |
+
+**Nothing here is filed yet. Jeff files stories.**
+
+### 21.8 The risk to play test first
+
+**Does Align read as agreement, or as obedience?**
+
+Align is 55 % of all answers. It is silent by an explicit code branch. Its reason code
+`keeper_guidance` ("she reads it the way you do") exists in the table and is suppressed.
+
+**So the only Echo who ever speaks is the one saying no.** A companion who speaks only to object is
+not read as willful. She is read as a nag.
+
+No measurement settles this. The test is cheap: give Align a voice in a build and ask whether the
+Echoes feel more like people. If they do, **the highest-value character work is giving agreement a
+voice, not making disagreement more varied.**
