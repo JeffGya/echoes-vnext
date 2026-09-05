@@ -586,6 +586,7 @@ func _run_tests(parts: Array) -> void:
 	DecisionTraceTests.register(runner)  # V2-COMBAT-003 phase 8a: causal Decision Trace + player-safe projection
 	GuidanceResponseTests.register(runner)  # V2-COMBAT-003 phase 8b: the five guidance responses
 	CombatDivergenceBarkTests.register(runner)  # V2-PROG-012 Phase 5: divergence bark content + wiring
+	GuidanceBarkTests.register(runner)  # V2-COMBAT-003 phase 9: TEMPORARY bark surface for the Echo's answer to guidance (V2-COMBAT-004 removes it)
 	ConversationRepairTests.register(runner)  # V2-PROG-012 Phase 8: conversation repairs (npc_line overwrite, storyweight truncation)
 	IdentityIntegrityTests.register(runner)  # V2-PROG-012 Phase 9: canonical vector/virtue/calling identity tables
 	BarkPopupLayerTests.register(runner)  # V2-PROG-012 playtest fix: combat_divergence bark visual distinctness

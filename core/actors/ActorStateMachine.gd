@@ -607,9 +607,13 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	# V2-PROG-012 Phase 11 playtest fix: config-driven divergence bark cooldown
 	# — see data.maturity_expression.divergence.bark_cooldown_ticks.
 	var divergence_bark_cooldown: int = int(expr_cfg.get("divergence", {}).get("bark_cooldown_ticks", 10))
+	# V2-COMBAT-003 phase 9 TEMPORARY visual (V2-COMBAT-004 removes it): the
+	# Echo's answer to the Keeper's guidance, so a player can finally see it.
+	var guidance_consent: String = str(guidance_response.get("consent", ""))
+	var guidance_reason_text: String = str(guidance_response.get("reason_text", ""))
 	_select_bark(arch, calling, action_type, start_fear, end_fear, start_morale_tier, end_morale_tier,
 		last_echo_standing, resilience_fired, intent.get("target_id", ""), variation_key, t, diverged_this_turn,
-		divergence_bark_cooldown)
+		divergence_bark_cooldown, guidance_consent, guidance_reason_text)
 	# V2-VOICE-001: check if this actor should react to an ally's high-signal bark
 	_check_reactive_bark(augmented_context, variation_key)
 	# V2-VOICE-001: write bark fields to actor dict so round_bark_events pipeline can read them
@@ -757,7 +761,9 @@ func _select_bark(
 	variation_key: int = 0,
 	t: int = 0,
 	diverged: bool = false,
-	divergence_cooldown_ticks: int = 10
+	divergence_cooldown_ticks: int = 10,
+	guidance_consent: String = "",
+	guidance_reason_text: String = ""
 ) -> void:
 	var context_key := ""
 	var target := str(target_id) if target_id != null else ""
@@ -777,6 +783,19 @@ func _select_bark(
 	# Priority 5: combat_morale_falling (morale dropped a tier)
 	elif start_morale_tier != end_morale_tier and _morale_tier_rank(end_morale_tier) < _morale_tier_rank(start_morale_tier):
 		context_key = "combat_morale_falling"
+	# Priority 5.4: combat_guidance_object / combat_guidance_refuse — V2-COMBAT-003
+	# phase 9 TEMPORARY visual (V2-COMBAT-004 removes this bark surface and
+	# replaces it with real UI): the Echo's answer to the Keeper's suggestion
+	# (GuidanceContribution.gd), surfaced only for object and refuse consent —
+	# align and hesitate stay silent to a player for now (owner decision pending).
+	# NOT the same moment as combat_divergence below: divergence reports her
+	# judgment against the standing Directive; this reports her answer to the
+	# Keeper's suggestion. They keep separate context keys and share only the
+	# BarkPopupDivergence visual template (BarkPopupLayer.resolve_template_kind()).
+	elif guidance_consent == "object":
+		context_key = "combat_guidance_object"
+	elif guidance_consent == "refuse":
+		context_key = "combat_guidance_refuse"
 	# Priority 5.5: combat_divergence — V2-PROG-012 Phase 5: her judgment out-voted
 	# the Directive this turn (see DivergenceDetector.gd). Tier 2 priority — rarer
 	# than the emotional-crisis contexts above it, but more narratively important
@@ -830,9 +849,15 @@ func _select_bark(
 
 	# V2-VOICE-002: cooldown gate — routine barks suppressed until _bark_next_t.
 	# High-priority contexts always fire and reset the cooldown.
+	# V2-COMBAT-003 phase 9 TEMPORARY (V2-COMBAT-004 removes this bark surface):
+	# combat_guidance_object/refuse are exempt for the same reason last_stand
+	# etc. are — the guidance source is headless-only today (V2-COMBAT-004
+	# connects the real interface), so a response is already rare, and the
+	# routine cooldown must never swallow the first player-visible proof of it.
 	const _HIGH_PRIORITY_BARK: Array = [
 		"combat_last_stand", "combat_resilient",
-		"combat_fear_extreme", "combat_fear_rising", "combat_morale_falling"
+		"combat_fear_extreme", "combat_fear_rising", "combat_morale_falling",
+		"combat_guidance_object", "combat_guidance_refuse"
 	]
 	# V2-PROG-012 Phase 11 playtest fix: combat_divergence is exempt from the
 	# routine _bark_next_t gate (see the Priority 5.5 comment above) but is not
@@ -847,6 +872,16 @@ func _select_bark(
 
 	_bark_context = context_key
 	_bark_tier = _expression_band
+
+	if context_key == "combat_guidance_object" or context_key == "combat_guidance_refuse":
+		# V2-COMBAT-003 phase 9 TEMPORARY (V2-COMBAT-004 removes this bark
+		# surface): the bark line IS the reason text GuidanceContribution
+		# already produced (resolve()'s "reason_text"). No ShoutBank lookup
+		# here — writing a second copy of that prose would let the two drift.
+		if not guidance_reason_text.is_empty():
+			_bark_line = guidance_reason_text
+			_actor["_bark_next_t"] = t + _compute_bark_cooldown()
+		return
 
 	# Try expression-shout first (emotion × band × archetype × calling); V2-VOICE-001: variation_key
 	var line := ShoutBank.get_expression_shout(context_key, arch, _expression_band, calling, variation_key)
@@ -928,8 +963,13 @@ func _check_reactive_bark(context: Dictionary, variation_key: int) -> void:
 	# Nascent actors don't react
 	if _expression_band == "nascent":
 		return
-	# Tier 1 own barks are never overridden
-	const _TIER1_R: Array = ["combat_last_stand", "combat_fear_extreme", "combat_resilient", "combat_ko"]
+	# Tier 1 own barks are never overridden. combat_guidance_object/refuse added
+	# V2-COMBAT-003 phase 9 (TEMPORARY — V2-COMBAT-004 removes this bark surface):
+	# an Echo's answer to the Keeper must not be silently stolen by a reaction.
+	const _TIER1_R: Array = [
+		"combat_last_stand", "combat_fear_extreme", "combat_resilient", "combat_ko",
+		"combat_guidance_object", "combat_guidance_refuse"
+	]
 	if _bark_context in _TIER1_R:
 		return
 	var round_bark_events: Array = context.get("round_bark_events", [])
