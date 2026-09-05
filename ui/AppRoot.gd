@@ -567,6 +567,7 @@ func _run_tests(parts: Array) -> void:
 	# combat, charge-pressure bump, ally recruit offer compute-once, projection shapes)
 	Stage004SeamTests.register(runner)
 	DivergenceDetectorTests.register(runner)  # V2-PROG-012 Phase 4: divergence detection
+	DecisionTraceTests.register(runner)  # V2-COMBAT-003 phase 8a: causal Decision Trace + player-safe projection
 	CombatDivergenceBarkTests.register(runner)  # V2-PROG-012 Phase 5: divergence bark content + wiring
 	ConversationRepairTests.register(runner)  # V2-PROG-012 Phase 8: conversation repairs (npc_line overwrite, storyweight truncation)
 	IdentityIntegrityTests.register(runner)  # V2-PROG-012 Phase 9: canonical vector/virtue/calling identity tables

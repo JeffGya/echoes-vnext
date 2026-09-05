@@ -35,11 +35,21 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement_arbiter/truncated_option_keeps_planned_primary", _t_truncated_option_keeps_planned_primary)
 
 
+## The winner also carries the score decomposition DecisionTrace reads
+## (`_score_components`, `_decision_inputs`). Pure reporting, pinned by
+## tests/DecisionTraceTests.gd — this golden stays about the DECISION rather than
+## growing a second copy of the arbiter's arithmetic.
+static func _strip_trace_reporting(winner: Dictionary) -> void:
+	winner.erase("_score_components")
+	winner.erase("_decision_inputs")
+
+
 static func _t_production_golden() -> Dictionary:
 	var actor: Dictionary = _actor()
 	var enemy: Dictionary = _enemy("enemy.a", {"col": 3, "row": 0})
 	var arbiter := BehaviorArbiter.new({})
 	var actual: Dictionary = arbiter.select_intent({"actor": actor, "all_actors": [enemy], "t": 1})
+	_strip_trace_reporting(actual)
 	# V2-PROG-012 Phase 4: select_intent() now also attaches `_divergence_probe`
 	# (score components for DivergenceDetector) to the winner — see BehaviorArbiter's
 	# select_intent(). Context here carries no directive, so directive_bonus is 0.0
@@ -85,6 +95,7 @@ static func _t_production_golden() -> Dictionary:
 	actor["fear"] = 100
 	enemy["grid_pos"] = {"col": 1, "row": 0}
 	actual = arbiter.select_intent({"actor": actor, "all_actors": [enemy], "t": 2})
+	_strip_trace_reporting(actual)
 	# melee_attack's ranked-candidate score (39.77) is a genuine arithmetic result
 	# (not a clean decimal literal), so it lands on a double a few ULPs off whatever
 	# GDScript's own "39.77" literal parses to — is_equal_approx it separately, then

@@ -347,7 +347,13 @@ func select_intent(context: Dictionary) -> Dictionary:
 	# Score each candidate, then sort by the same four-key order used by the
 	# movement-aware selector: score, action type, target id, target cell.
 	for c: Dictionary in candidates:
-		c["_score"] = _score(c["action_type"], actor, directive, board_summary, expression_band, calling_behavior, c, presence_strength, rank_strength, composure, judgment, {}, leadership_mods)
+		# The per-term breakdown is kept on the candidate instead of being discarded:
+		# DecisionTrace needs the RUNNER-UP's terms as well as the winner's to answer
+		# "would removing this contribution have changed the winner?". Reporting only —
+		# `_score()` fills it after computing the value it returns.
+		var components: Dictionary = {}
+		c["_score"] = _score(c["action_type"], actor, directive, board_summary, expression_band, calling_behavior, c, presence_strength, rank_strength, composure, judgment, components, leadership_mods)
+		c["_score_components"] = components
 
 	# VOW-001: apply vow bias additively after base scoring.
 	# Vow bias is always additive, never overrides. Enemies are unaffected (faction != "echo").
@@ -379,10 +385,11 @@ func select_intent(context: Dictionary) -> Dictionary:
 			if a_v is Dictionary and a_v.get("is_structure", false) and not a_v.get("is_dead", false):
 				if ReachAuthority.in_reach(my_pos_pu, a_v.get("grid_pos", {}), "actor.purify_shrine"):
 					candidates.append({
-						"action_type": "actor.purify_shrine",
-						"target_id":   "",
-						"priority":    1.0,
-						"_score":      9999.0,
+						"action_type":    "actor.purify_shrine",
+						"target_id":      "",
+						"priority":       1.0,
+						"_score":         9999.0,
+						"_hard_override": "purify_shrine_in_reach",
 					})
 				break
 
@@ -445,30 +452,30 @@ func select_intent(context: Dictionary) -> Dictionary:
 	# 4's min_contest_ratio=0.35 was calibrated against a contest_ratio sample
 	# drawn from ALL actors, not Echoes only — invalidated that calibration (see
 	# data.maturity_expression.divergence._comment's re-measurement note). Same
-	# pattern this file already uses for VOW-001/BOND-002 bias above. Gated here,
-	# before the per-candidate accumulation loop, so non-echo actors skip the
-	# whole probe — not just the eventual divergence log — at zero extra cost.
+	# pattern this file already uses for VOW-001/BOND-002 bias above. The gate is
+	# on the PROBE below, not on this accumulation loop: DecisionTrace bands a
+	# contribution's strength against `_decision_scale` for every mover, not only
+	# Echoes, and computing it once here beats a second spread computation elsewhere.
 	var _is_echo_faction: bool = str(actor.get("faction", "")) == "echo"
 	var _dbonus_by_type: Dictionary = {}
 	var _repr_by_type: Dictionary = {}
 	var _decision_scale: float = 0.0
-	if _is_echo_faction:
-		var _self_score_min: float = INF
-		var _self_score_max: float = -INF
-		for c: Dictionary in candidates:
-			var _atype: String = str(c.get("action_type", ""))
-			if not _dbonus_by_type.has(_atype):
-				_dbonus_by_type[_atype] = _directive_bonus(_atype, directive, interpretation_width, calling_behavior, leadership_dir_mul)
-				_repr_by_type[_atype] = c
-			var _cbonus: float = float(_dbonus_by_type[_atype])
-			var _cscore: float = float(c.get("_score", 0.0))
-			if _cscore < 9999.0:
-				var _cself_score: float = _cscore - _cbonus
-				if _cself_score < _self_score_min:
-					_self_score_min = _cself_score
-				if _cself_score > _self_score_max:
-					_self_score_max = _cself_score
-		_decision_scale = (_self_score_max - _self_score_min) if _self_score_max >= _self_score_min else 0.0
+	var _self_score_min: float = INF
+	var _self_score_max: float = -INF
+	for c: Dictionary in candidates:
+		var _atype: String = str(c.get("action_type", ""))
+		if not _dbonus_by_type.has(_atype):
+			_dbonus_by_type[_atype] = _directive_bonus(_atype, directive, interpretation_width, calling_behavior, leadership_dir_mul)
+			_repr_by_type[_atype] = c
+		var _cbonus: float = float(_dbonus_by_type[_atype])
+		var _cscore: float = float(c.get("_score", 0.0))
+		if _cscore < 9999.0:
+			var _cself_score: float = _cscore - _cbonus
+			if _cself_score < _self_score_min:
+				_self_score_min = _cself_score
+			if _cself_score > _self_score_max:
+				_self_score_max = _cself_score
+	_decision_scale = (_self_score_max - _self_score_min) if _self_score_max >= _self_score_min else 0.0
 
 	var winner: Dictionary = candidates[0].duplicate()
 	winner.erase("_score")
@@ -495,14 +502,11 @@ func select_intent(context: Dictionary) -> Dictionary:
 	var _winner_score: float = float(candidates[0].get("_score", 0.0))
 	if _is_echo_faction and _winner_score < 9999.0:
 		var _w_action_type: String = str(candidates[0].get("action_type", ""))
-		var _w_components: Dictionary = {}
-		# Recompute is deterministic/pure — identical inputs to the call already made
-		# in the scoring loop above, so this reproduces `_winner_score` exactly while
-		# also capturing the term breakdown _score() didn't have anywhere to put
-		# the first time (see DivergenceDetectorTests for the no-score-drift pin).
-		_score(_w_action_type, actor, directive, board_summary, expression_band, calling_behavior,
-			candidates[0], presence_strength, rank_strength, composure, judgment, _w_components,
-			leadership_mods)
+		# Read, not recomputed: the scoring loop above now keeps each candidate's own
+		# breakdown on the candidate. This used to be a second _score() call with
+		# identical arguments — a duplicate computation of a value the arbiter already
+		# had (see DivergenceDetectorTests for the no-score-drift pin, which still holds).
+		var _w_components: Dictionary = candidates[0].get("_score_components", {}) as Dictionary
 		winner["_divergence_probe"] = {
 			"chosen": {
 				"action_type":             _w_action_type,
@@ -527,7 +531,39 @@ func select_intent(context: Dictionary) -> Dictionary:
 			"decision_scale": _decision_scale,
 		}
 
+	# The raw material DecisionTrace reads. Reporting only — every value here was
+	# computed by the scoring pass above. This path has no movement goal, so there is
+	# no purpose and no commitment to report.
+	winner["_decision_inputs"] = {
+		"winner":         _decision_entry(candidates[0], str(candidates[0].get("action_type", ""))),
+		"runner_up":      _decision_entry(
+			candidates[1] if candidates.size() > 1 else {},
+			str((candidates[1] as Dictionary).get("action_type", "")) if candidates.size() > 1 else ""
+		),
+		"decision_scale": _decision_scale,
+		"purpose":        "",
+		"subject_id":     str(candidates[0].get("target_id", "")),
+		"commitment":     0,
+		"capacity":       0,
+		"hard_override":  str(candidates[0].get("_hard_override", "")),
+	}
+
 	return winner
+
+
+## One candidate's recorded score decomposition, for DecisionTrace. Every field is
+## read off the candidate — nothing here is computed a second time.
+static func _decision_entry(candidate: Dictionary, action_type: String) -> Dictionary:
+	if candidate.is_empty():
+		return {}
+	return {
+		"action_type": action_type,
+		"target_id":   str(candidate.get("target_id", "")),
+		"score":       float(candidate.get("_score", 0.0)),
+		"components":  candidate.get("_score_components", {}) as Dictionary,
+		"spatial":     candidate.get("_spatial_components", {}) as Dictionary,
+		"bias":        candidate.get("_score_bias", {}) as Dictionary,
+	}
 
 
 ## Movement-intent arbitration: scores every generated movement candidate for
@@ -619,6 +655,8 @@ func select_movement_intent(
 	var spatial_cfg: Dictionary = _movement_cfg["spatial_utility"] as Dictionary
 	for candidate: Dictionary in candidates:
 		var plan: Dictionary = candidate["_movement_plan"] as Dictionary
+		# See select_intent()'s scoring loop for why the breakdown is kept.
+		var components: Dictionary = {}
 		var score: float = _score(
 			str(plan["type"]),
 			actor,
@@ -631,16 +669,21 @@ func select_movement_intent(
 			rank_strength,
 			composure,
 			judgment,
-			{},
+			components,
 			leadership_mods
 		)
+		candidate["_score_components"] = components
+		var cover_bonus_applied: float = 0.0
 		if bool(candidate.get("_movement_route", false)):
+			var spatial_parts: Dictionary = {}
 			score += _spatial_utility(
 				candidate["_movement_goal"] as Dictionary,
 				candidate["_movement_option"] as Dictionary,
 				directive,
-				spatial_cfg
+				spatial_cfg,
+				spatial_parts
 			)
+			candidate["_spatial_components"] = spatial_parts
 			# V2-INFRA-003 pass 8: cover_positioning — a Whole leader in range teaches
 			# its allies to end a route behind terrain. Route candidates only: a
 			# stationary candidate is not a repositioning choice.
@@ -648,9 +691,15 @@ func select_movement_intent(
 				candidate["_movement_path"] as Array, movement_context
 			):
 				score += cover_move_bonus
+				cover_bonus_applied = cover_move_bonus
 		if not is_finite(score):
 			return _movement_failure("non_finite_candidate_score", "candidates")
 		candidate["_score"] = score
+		if cover_bonus_applied != 0.0:
+			# Recorded, not re-applied — `score` above already carries it.
+			var bias: Dictionary = candidate.get("_score_bias", {}) as Dictionary
+			bias["leadership_cover"] = cover_bonus_applied
+			candidate["_score_bias"] = bias
 
 	var active_vow: Dictionary = context.get("active_vow", {}) as Dictionary
 	if not active_vow.is_empty() and str(actor.get("faction", "")) == "echo":
@@ -674,6 +723,7 @@ func select_movement_intent(
 			var plan: Dictionary = candidate["_movement_plan"] as Dictionary
 			if str(plan["type"]) == "actor.purify_shrine":
 				candidate["_score"] = 9999.0
+				candidate["_hard_override"] = "purify_shrine_in_reach"
 	_append_legacy_purifier_candidate(candidates, context, actor, all_actors, movement_context, profile)
 	for candidate: Dictionary in candidates:
 		var final_score: Variant = candidate.get("_score", null)
@@ -702,30 +752,28 @@ func select_movement_intent(
 	# this loop).
 	# V2-PROG-012 Phase 5 fix: same faction == "echo" gate as select_intent()'s
 	# equivalent block above — see that comment for the temporary-ally
-	# (actor_type "enemy", faction "echo") reasoning and the miscalibration this
-	# fixes. Gated before the per-candidate accumulation loop so non-echo actors
-	# skip the whole probe at zero extra cost.
+	# (actor_type "enemy", faction "echo") reasoning, the miscalibration it fixes,
+	# and why the gate sits on the probe rather than on this accumulation loop.
 	var _is_echo_faction: bool = str(actor.get("faction", "")) == "echo"
 	var _dbonus_by_type: Dictionary = {}
 	var _repr_by_type: Dictionary = {}
 	var _decision_scale: float = 0.0
-	if _is_echo_faction:
-		var _self_score_min: float = INF
-		var _self_score_max: float = -INF
-		for c: Dictionary in candidates:
-			var _atype: String = str((c["_movement_plan"] as Dictionary)["type"])
-			if not _dbonus_by_type.has(_atype):
-				_dbonus_by_type[_atype] = _directive_bonus(_atype, directive, interpretation_width, calling_behavior, leadership_dir_mul)
-				_repr_by_type[_atype] = c
-			var _cbonus: float = float(_dbonus_by_type[_atype])
-			var _cscore: float = float(c.get("_score", 0.0))
-			if _cscore < 9999.0:
-				var _cself_score: float = _cscore - _cbonus
-				if _cself_score < _self_score_min:
-					_self_score_min = _cself_score
-				if _cself_score > _self_score_max:
-					_self_score_max = _cself_score
-		_decision_scale = (_self_score_max - _self_score_min) if _self_score_max >= _self_score_min else 0.0
+	var _self_score_min: float = INF
+	var _self_score_max: float = -INF
+	for c: Dictionary in candidates:
+		var _atype: String = str((c["_movement_plan"] as Dictionary)["type"])
+		if not _dbonus_by_type.has(_atype):
+			_dbonus_by_type[_atype] = _directive_bonus(_atype, directive, interpretation_width, calling_behavior, leadership_dir_mul)
+			_repr_by_type[_atype] = c
+		var _cbonus: float = float(_dbonus_by_type[_atype])
+		var _cscore: float = float(c.get("_score", 0.0))
+		if _cscore < 9999.0:
+			var _cself_score: float = _cscore - _cbonus
+			if _cself_score < _self_score_min:
+				_self_score_min = _cself_score
+			if _cself_score > _self_score_max:
+				_self_score_max = _cself_score
+	_decision_scale = (_self_score_max - _self_score_min) if _self_score_max >= _self_score_min else 0.0
 
 	var winner: Dictionary = candidates[0]
 	var intent: Dictionary = MovementIntentContract.build(
@@ -762,10 +810,8 @@ func select_movement_intent(
 	if _is_echo_faction and _winner_score < 9999.0:
 		var _w_plan: Dictionary = winner["_movement_plan"] as Dictionary
 		var _w_action_type: String = str(_w_plan["type"])
-		var _w_components: Dictionary = {}
-		_score(_w_action_type, actor, directive, board_summary, expression_band, calling_behavior,
-			winner, presence_strength, rank_strength, composure, judgment, _w_components,
-			leadership_mods)
+		# Read, not recomputed — see select_intent()'s equivalent block.
+		var _w_components: Dictionary = winner.get("_score_components", {}) as Dictionary
 		_divergence_probe = {
 			"chosen": {
 				"action_type":             _w_action_type,
@@ -786,7 +832,36 @@ func select_movement_intent(
 			"decision_scale": _decision_scale,
 		}
 
-	return {"valid": true, "intent": intent, "reason": "", "field": "", "_divergence_probe": _divergence_probe}
+	# The raw material DecisionTrace reads — see select_intent()'s equivalent block.
+	# Travels beside `intent` for the same reason `_divergence_probe` does:
+	# MovementIntentContract.validate() enforces an exact field set on `intent`.
+	var _runner_up: Dictionary = candidates[1] if candidates.size() > 1 else {}
+	var _winner_goal: Dictionary = winner.get("_movement_goal", {}) as Dictionary
+	var _decision_inputs: Dictionary = {
+		"winner":         _decision_entry(winner, str((winner["_movement_plan"] as Dictionary)["type"])),
+		"runner_up":      _decision_entry(
+			_runner_up,
+			str((_runner_up["_movement_plan"] as Dictionary)["type"]) if not _runner_up.is_empty() else ""
+		),
+		"decision_scale": _decision_scale,
+		"purpose":        str(_winner_goal.get("purpose", "")),
+		# The goal names who or what the movement is ABOUT; a stationary candidate has
+		# no goal, so the planned action's own target is the subject instead.
+		"subject_id":     str(_winner_goal.get("subject_id", "")) if not str(_winner_goal.get("subject_id", "")).is_empty() \
+			else str(winner.get("target_id", "")),
+		"commitment":     int(winner["_movement_commitment"]),
+		"capacity":       int(profile["capacity"]),
+		"hard_override":  str(winner.get("_hard_override", "")),
+	}
+
+	return {
+		"valid": true,
+		"intent": intent,
+		"reason": "",
+		"field": "",
+		"_divergence_probe": _divergence_probe,
+		"_decision_inputs": _decision_inputs,
+	}
 
 
 func _validate_movement_inputs(
@@ -1221,15 +1296,23 @@ func _append_legacy_purifier_candidate(
 						profile
 					)
 					candidate["_score"] = 9999.0
+					candidate["_hard_override"] = "purify_shrine_in_reach"
 					candidates.append(candidate)
 				return
 
 
+## `out_parts`, when a non-null Dictionary is passed, receives this call's own
+## decomposition: {parts: {term → weighted value}, raw, cap, value}. Purely additive
+## reporting — the returned float is unchanged. `raw` and `cap` travel with the parts
+## because the return is CLAMPED: a consumer asking "what would this score be without
+## term X" must re-apply the same clamp to `raw - X`, which it cannot do from the
+## clamped value alone.
 func _spatial_utility(
 	goal: Dictionary,
 	option: Dictionary,
 	directive: Dictionary,
-	config: Dictionary
+	config: Dictionary,
+	out_parts: Dictionary = {}
 ) -> float:
 	var urgency: float = clampf(float(goal["urgency"]), 0.0, 1.0)
 	var progress: float = clampf(float(option["objective_progress"]), 0.0, 1.0)
@@ -1265,21 +1348,39 @@ func _spatial_utility(
 	var purpose: String = str(goal["purpose"])
 	var protects: float = 1.0 if purpose in ["protect", "intercept", "escort"] else 0.0
 	var intercepts: float = 1.0 if purpose in ["intercept", "cut_off"] else 0.0
+	var parts: Dictionary = {
+		"urgency":                       float(config["urgency_weight"]) * urgency,
+		"objective_progress":            float(config["objective_progress_weight"]) * progress,
+		"cohesion":                      float(config["cohesion_weight"]) * cohesion,
+		"exposure":                      float(config["exposure_weight"]) * exposure,
+		"congestion":                    float(config["congestion_weight"]) * congestion,
+		"commitment":                    float(config["commitment_weight"]) * commitment_ratio,
+		"directive_objective_advance":   float(config["directive_objective_advance_weight"]) * objective_advance * progress,
+		"directive_avoid_overcommit":    float(config["directive_avoid_overcommit_weight"]) * avoid_overcommit * (1.0 - commitment_ratio),
+		"directive_exposure_acceptance": float(config["directive_exposure_acceptance_weight"]) * exposure_acceptance * exposure,
+		"directive_ally_protection":     float(config["directive_ally_protection_weight"]) * ally_protection * protects,
+		"directive_threat_interception": float(config["directive_threat_interception_weight"]) * threat_interception * intercepts,
+	}
 	var raw: float = (
-		float(config["urgency_weight"]) * urgency
-		+ float(config["objective_progress_weight"]) * progress
-		+ float(config["cohesion_weight"]) * cohesion
-		+ float(config["exposure_weight"]) * exposure
-		+ float(config["congestion_weight"]) * congestion
-		+ float(config["commitment_weight"]) * commitment_ratio
-		+ float(config["directive_objective_advance_weight"]) * objective_advance * progress
-		+ float(config["directive_avoid_overcommit_weight"]) * avoid_overcommit * (1.0 - commitment_ratio)
-		+ float(config["directive_exposure_acceptance_weight"]) * exposure_acceptance * exposure
-		+ float(config["directive_ally_protection_weight"]) * ally_protection * protects
-		+ float(config["directive_threat_interception_weight"]) * threat_interception * intercepts
+		float(parts["urgency"])
+		+ float(parts["objective_progress"])
+		+ float(parts["cohesion"])
+		+ float(parts["exposure"])
+		+ float(parts["congestion"])
+		+ float(parts["commitment"])
+		+ float(parts["directive_objective_advance"])
+		+ float(parts["directive_avoid_overcommit"])
+		+ float(parts["directive_exposure_acceptance"])
+		+ float(parts["directive_ally_protection"])
+		+ float(parts["directive_threat_interception"])
 	)
 	var cap: float = float(config["cap"])
-	return clampf(raw, -cap, cap)
+	var value: float = clampf(raw, -cap, cap)
+	out_parts["parts"] = parts
+	out_parts["raw"]   = raw
+	out_parts["cap"]   = cap
+	out_parts["value"] = value
+	return value
 
 
 static func _movement_goal_before(left: Dictionary, right: Dictionary) -> bool:
@@ -2440,6 +2541,17 @@ func _resolve_skill_base(calling_origin: String, intent_weight_tag: String, bonu
 # VOW-001: Apply vow-specific intent bias additively to all candidates.
 # Each vow may boost or penalise specific action_types based on context.
 # Echo actors only — call site already guards faction == "echo".
+## Applies one post-scoring adjustment to a candidate AND records it under `key` in
+## `_score_bias`. Every term added to `_score` after `_score()` returns must go through
+## here, or DecisionTrace cannot reconstruct the final score from its parts (the
+## reconstruction is pinned by DecisionTraceTests).
+static func _apply_bias(candidate: Dictionary, key: String, delta: float) -> void:
+	candidate["_score"] = float(candidate.get("_score", 0.0)) + delta
+	var bias: Dictionary = candidate.get("_score_bias", {}) as Dictionary
+	bias[key] = float(bias.get(key, 0.0)) + delta
+	candidate["_score_bias"] = bias
+
+
 func _apply_vow_bias(candidates: Array, active_vow: Dictionary, party_size: int) -> void:
 	var vow_id := str(active_vow.get("vow_id", ""))
 	var tier   := int(active_vow.get("tier", 1))
@@ -2456,16 +2568,16 @@ func _apply_vow_bias(candidates: Array, active_vow: Dictionary, party_size: int)
 				for c: Dictionary in candidates:
 					var at: String = str(c.get("action_type", ""))
 					if at == "protect_ally":
-						c["_score"] = float(c.get("_score", 0.0)) + protect_bonus
+						_apply_bias(c, "vow", protect_bonus)
 					elif at == "actor.guard":
-						c["_score"] = float(c.get("_score", 0.0)) + guard_bonus
+						_apply_bias(c, "vow", guard_bonus)
 			else:
 				# Fear bias: active intents depressed (actor prefers idle/guard under doctrine strain)
 				var fear_bias := 6.0 * mul
 				for c: Dictionary in candidates:
 					var at: String = str(c.get("action_type", ""))
 					if at == "melee_attack" or at == "actor.move":
-						c["_score"] = float(c.get("_score", 0.0)) - fear_bias
+						_apply_bias(c, "vow", -fear_bias)
 
 
 # BOND-002: Additive bond score bias for protect_ally candidates.
@@ -2494,6 +2606,6 @@ func _apply_bond_bias(
 		var strength := int(edge.get("strength", 0))
 		var bond_type := SocialGraphService.get_bond_type(strength, thresholds)
 		if bond_type == "friend":
-			c["_score"] = float(c.get("_score", 0.0)) + friend_bonus
+			_apply_bias(c, "bond", friend_bonus)
 		elif bond_type == "rival":
-			c["_score"] = float(c.get("_score", 0.0)) + rival_penalty
+			_apply_bias(c, "bond", rival_penalty)

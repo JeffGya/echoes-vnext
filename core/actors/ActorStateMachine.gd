@@ -20,10 +20,13 @@ const MaturityExpressionService = preload("res://core/actors/MaturityExpressionS
 const LeadershipEmotionService = preload("res://core/combat/LeadershipEmotionService.gd")
 const SocialGraphService = preload("res://core/sanctum/SocialGraphService.gd")
 const DivergenceDetector = preload("res://core/actors/DivergenceDetector.gd")
+const DecisionTrace = preload("res://core/actors/behaviors/DecisionTrace.gd")
 
 var _actor: Dictionary
 var _behavior_module: BehaviorModule
 var _last_intent: Dictionary = {}
+## docs/movement-model.md §6.6 — the last turn's explanation. Never persisted.
+var _last_decision_trace: Dictionary = {}
 var _last_action: Dictionary = {}
 var _movement_skipped: bool = false  # ACTOR-006: true when actor is_structure; no movement phase
 var _last_morale_tier: String = "steady"  # ACTOR-007: morale tier of the winning intent
@@ -385,6 +388,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 			# whole board. It travels on the outer selection dict instead; pull it
 			# across here now that `intent` is a plain working Dictionary again.
 			intent["_divergence_probe"] = movement_selection.get("_divergence_probe", {})
+			intent["_decision_inputs"] = movement_selection.get("_decision_inputs", {})
 		else:
 			intent = _behavior_module.select_intent(augmented_context)
 	else:
@@ -486,6 +490,42 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 				"primary_reason":    str(divergence_result.get("primary_reason", "")),
 			})
 
+	# The Decision Trace (docs/movement-model.md §6.6). Observation only — DecisionTrace
+	# re-scores nothing, so the turn's decision is already made and cannot move. Logged
+	# at debug because it is written every turn for every actor. The full trace stays in
+	# core/logging; only DecisionTrace.sanitize() may reach a player-facing snapshot.
+	var decision_inputs: Dictionary = intent.get("_decision_inputs", {}) as Dictionary
+	# The raw decomposition is consumed here and goes no further. `intent` is handed on
+	# to combat resolution and (via get_snapshot) to callers that must never carry
+	# weights or trait values, so every scoring-internal key comes off it now — the
+	# legacy select_intent() path returns the winning CANDIDATE as the intent, so the
+	# arbiter's own reporting keys ride on it unless removed.
+	intent.erase("_decision_inputs")
+	intent.erase("_score_components")
+	intent.erase("_score_bias")
+	if not decision_inputs.is_empty():
+		_last_decision_trace = DecisionTrace.build(
+			decision_inputs, legibility, expr_cfg.get("divergence", {}) as Dictionary
+		)
+		var trace_primary: Dictionary = _last_decision_trace.get("primary", {}) as Dictionary
+		logger.debug(t, "actor.decision_trace", "Behaviour decision explained", {
+			"actor_id":      str(_actor.get("id", "")),
+			"round":         int(context.get("round", t)),
+			"action_type":   str(intent.get("action_type", "")),
+			"purpose":       str(_last_decision_trace.get("purpose", "")),
+			"reason_code":   str(trace_primary.get("code", "")),
+			"reason_source": str(trace_primary.get("source", "")),
+			"causal_kind":   str(trace_primary.get("causal_kind", "")),
+			"material":      bool(trace_primary.get("material", false)),
+			"strength_band": str(trace_primary.get("strength_band", "")),
+			"subject_id":    str(trace_primary.get("subject_id", "")),
+			"supporting":    (_last_decision_trace.get("supporting", []) as Array).size(),
+			"message_key":   str(_last_decision_trace.get("message_key", "")),
+			"voice_tone":    str(_last_decision_trace.get("voice_tone", "")),
+			"margin":        float((_last_decision_trace.get("debug_components", {}) as Dictionary).get("margin", 0.0)),
+			"swings":        (_last_decision_trace.get("debug_components", {}) as Dictionary).get("swings", {}),
+		})
+
 	# V2-PROG-010: passive fear tick — small per-round fear reduction for echo faction, rank-scaled.
 	var recovery_cfg: Dictionary = expr_cfg.get("fear_self_recovery", {})
 	var passive_max: int = int(recovery_cfg.get("passive_max", 3))
@@ -575,6 +615,13 @@ func update_passive_state_from_activation(intent: Dictionary, context: Dictionar
 ##     "vectors": { "scores": Dictionary<String,int>, "dominant_vector": String }
 ##   }
 ## vectors.scores contains all keys from actor_dict.vector_scores (any N keys — no hardcoded list).
+## The last turn's Decision Trace (docs/movement-model.md §6.6), full and unsanitized.
+## Core and logging may read it; a player-facing snapshot may carry only
+## DecisionTrace.sanitize() of it.
+func get_last_decision_trace() -> Dictionary:
+	return _last_decision_trace
+
+
 func get_snapshot() -> Dictionary:
 	return {
 		"actor_id": _actor.get("id", ""),
