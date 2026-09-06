@@ -294,6 +294,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("terrain/plateau_blob_is_one_shared_side_region", Callable(StageTerrainTests, "_t_plateau_blob_is_one_shared_side_region"))
 	runner.register_test("terrain/no_region_touches_another_region",      Callable(StageTerrainTests, "_t_no_region_touches_another_region"))
 	runner.register_test("terrain/bridge_cell_set_matches_rects",         Callable(StageTerrainTests, "_t_bridge_cell_set_matches_rects"))
+	runner.register_test("terrain/bridge_tile_cell_set_paints_load_bearing_only", Callable(StageTerrainTests, "_t_bridge_tile_cell_set_paints_load_bearing_only"))
 	runner.register_test("terrain/island_bridge_chance_is_honored",       Callable(StageTerrainTests, "_t_island_bridge_chance_is_honored"))
 	runner.register_test("terrain/island_extra_bridges_and_edge_placement", Callable(StageTerrainTests, "_t_island_extra_bridges_and_edge_placement"))
 
@@ -1887,6 +1888,81 @@ static func _t_bridge_cell_set_matches_rects() -> Dictionary:
 	if seen == 0:
 		return { "ok": false, "error": "no bridge cell generated across the sweep — the test proved nothing" }
 	return { "ok": true, "note": "%d bridge cells, all of them rect-exact and walkable" % seen }
+
+
+# ─── bridge_tile_cell_set PAINTS LOAD-BEARING SPANS ONLY ─────────────────────
+# Fixed a bug where the bridge tint covered plateau ground and decorative density spans.
+# Three guarantees, all structural:
+#   1. never a plateau cell (a bridge rect overlaps the plateaus it joins)
+#   2. never a cell whose only owning rect is kind == "density"
+#   3. bridge_tile_cell_set ⊆ bridge_cell_set ⊆ walkable_set
+static func _t_bridge_tile_cell_set_paints_load_bearing_only() -> Dictionary:
+	if not StageTerrain.bridge_tile_cell_set({}).is_empty():
+		return { "ok": false, "error": "bridge_tile_cell_set({}) must be empty" }
+	var by_virtue := _authored_by_virtue()
+	var bounds_cycle := _island_sweep_bounds()
+	var virtues: Array = by_virtue.keys()
+	virtues.sort()
+	var tile_total: int = 0
+	var plateau_hits_checked: int = 0
+	var density_only_checked: int = 0
+	for virtue_v in virtues:
+		var virtue: String = str(virtue_v)
+		var sig_v: Variant = by_virtue.get(virtue, {})
+		var sig: Dictionary = sig_v if sig_v is Dictionary else {}
+		for i in range(6):
+			var bounds: Dictionary = bounds_cycle[i % bounds_cycle.size()]
+			var terrain: Dictionary = StageTerrain.generate(
+				441000 + i * 7919, i % 3, sig, bounds, "test.bridgetileguard.%s.%d" % [virtue, i])
+			var walkable: Dictionary = StageTerrain.walkable_set(terrain)
+			var bridge_cells: Dictionary = StageTerrain.bridge_cell_set(terrain)
+			var tile_cells: Dictionary = StageTerrain.bridge_tile_cell_set(terrain)
+
+			# Subset chain.
+			for tk in tile_cells.keys():
+				if not bridge_cells.has(tk):
+					return { "ok": false, "error": "%s: tile cell %s is not in bridge_cell_set" % [virtue, tk] }
+			for bk in bridge_cells.keys():
+				if not walkable.has(bk):
+					return { "ok": false, "error": "%s: bridge cell %s is not walkable" % [virtue, bk] }
+
+			# Plateau ground.
+			var plateau_cells: Dictionary = {}
+			for p_v in (terrain.get("plateaus", []) as Array):
+				var p: Dictionary = p_v if p_v is Dictionary else {}
+				var blob_v: Variant = p.get("cells", [])
+				var blob: Array = blob_v if blob_v is Array else []
+				for pair_v in blob:
+					var pair: Array = pair_v
+					plateau_cells["%d,%d" % [int(pair[0]), int(pair[1])]] = true
+			for tk2 in tile_cells.keys():
+				if plateau_cells.has(tk2):
+					return { "ok": false, "error": "%s: bridge_tile_cell_set returned plateau cell %s" % [virtue, tk2] }
+				plateau_hits_checked += 1
+
+			# Density-only cells: owned by a density rect and no load-bearing rect.
+			var load_bearing_cells: Dictionary = {}
+			var density_cells: Dictionary = {}
+			for b_v in (terrain.get("bridges", []) as Array):
+				var b: Dictionary = b_v if b_v is Dictionary else {}
+				var kind: String = str(b.get("kind", ""))
+				var target: Dictionary = load_bearing_cells if kind != StageTerrain.BRIDGE_KIND_DENSITY else density_cells
+				for dc in range(int(b.get("w", 1))):
+					for dr in range(int(b.get("h", 1))):
+						target["%d,%d" % [int(b.get("col", 0)) + dc, int(b.get("row", 0)) + dr]] = true
+			for dk in density_cells.keys():
+				if load_bearing_cells.has(dk) or plateau_cells.has(dk):
+					continue
+				if tile_cells.has(dk):
+					return { "ok": false, "error": "%s: bridge_tile_cell_set painted density-only cell %s" % [virtue, dk] }
+				density_only_checked += 1
+
+			tile_total += tile_cells.size()
+	if tile_total == 0:
+		return { "ok": false, "error": "no tile cell generated across the sweep — the test proved nothing" }
+	if plateau_hits_checked == 0 or density_only_checked == 0:
+		return { "ok": false, "error": "sweep produced no plateau or density cell to check against — inconclusive" }
+	return { "ok": true, "note": "%d tile cells; plateau and density-only exclusions held on every board" % tile_total }
 
 
 # ─── THE BRIDGE CHANCE REACHES THE GENERATOR (decision 17) ───────────────────

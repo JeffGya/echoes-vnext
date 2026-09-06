@@ -783,6 +783,44 @@ static func bridge_cell_set(terrain: Dictionary) -> Dictionary:
 	return cells
 
 
+## Which cells a renderer must paint as a bridge. Use this, not bridge_cell_set: a rect
+## reaches into the plateaus at both ends, and a DENSITY rect is ordinary ground. Both are
+## removed here. An untagged rect (terrain saved before `kind` existed) counts as
+## load-bearing, so an old board stays painted instead of going blank.
+## Always a subset of bridge_cell_set(terrain), which is a subset of walkable_set(terrain).
+static func bridge_tile_cell_set(terrain: Dictionary) -> Dictionary:
+	var cells: Dictionary = {}
+	if terrain.is_empty():
+		return cells
+
+	for b_v in (terrain.get("bridges", []) as Array):
+		var b: Dictionary = b_v if b_v is Dictionary else {}
+		var kind: String = str(b.get("kind", ""))
+		if kind != "" and not BRIDGE_KINDS_LOAD_BEARING.has(kind):
+			continue
+		for dc in range(int(b.get("w", 1))):
+			for dr in range(int(b.get("h", 1))):
+				cells["%d,%d" % [int(b.get("col", 0)) + dc, int(b.get("row", 0)) + dr]] = true
+
+	# Subtract plateau ground. A cell claimed by both is plateau, not bridge.
+	for p_v in (terrain.get("plateaus", []) as Array):
+		var p: Dictionary = p_v if p_v is Dictionary else {}
+		var blob_v: Variant = p.get("cells", [])
+		var blob: Array = blob_v if blob_v is Array else []
+		if blob.is_empty():
+			# Backward compat: old terrain has no "cells", only a bounding rect.
+			for dc2 in range(int(p.get("w", 1))):
+				for dr2 in range(int(p.get("h", 1))):
+					cells.erase("%d,%d" % [int(p.get("col", 0)) + dc2, int(p.get("row", 0)) + dr2])
+			continue
+		for pair_v in blob:
+			var pair: Array = pair_v if pair_v is Array else []
+			if pair.size() >= 2:
+				cells.erase("%d,%d" % [int(pair[0]), int(pair[1])])
+
+	return cells
+
+
 ## Returns true if cell {col,row} is walkable.
 ## If walkable is empty (legacy all-walkable sentinel), always returns true.
 static func is_walkable(cell: Dictionary, walkable: Dictionary) -> bool:

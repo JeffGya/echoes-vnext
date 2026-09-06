@@ -829,9 +829,9 @@ func _fill_board(cols: int, rows: int, data: Dictionary = {}, mode: String = "")
 	var terrain_v: Variant = data.get("terrain", {})
 	var terrain: Dictionary = terrain_v if terrain_v is Dictionary else {}
 	var walkable: Dictionary = StageTerrain.walkable_set(terrain)
-	# Which of those cells are BRIDGE cells (V2-COMBAT-003 terrain commit 4, decision 16).
-	# Always a subset of `walkable`; empty for legacy/no-terrain maps.
-	var bridge_cells: Dictionary = StageTerrain.bridge_cell_set(terrain)
+	# Which cells to PAINT as a bridge (V2-COMBAT-003, decision 16). Load-bearing spans
+	# only, plateau ground subtracted — see StageTerrain.bridge_tile_cell_set.
+	var bridge_cells: Dictionary = StageTerrain.bridge_tile_cell_set(terrain)
 
 	# Fog-of-war: explored_cells is the discovered tile set.
 	# Empty dict = no explored data (treat as all discovered for legacy stages).

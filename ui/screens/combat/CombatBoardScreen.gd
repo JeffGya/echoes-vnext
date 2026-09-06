@@ -565,9 +565,9 @@ func _draw_board(cols: int, rows: int, terrain: Dictionary = {}) -> void:
 	# StageTerrain.walkable_set returns {} when terrain is absent/empty — that is
 	# the legacy sentinel meaning "all cells walkable".
 	var walkable: Dictionary = StageTerrain.walkable_set(terrain)
-	# Which of those cells are BRIDGE cells (V2-COMBAT-003 terrain commit 4, decision 16).
-	# Always a subset of `walkable`; empty for legacy/no-terrain boards.
-	var bridge_cells: Dictionary = StageTerrain.bridge_cell_set(terrain)
+	# Which cells to PAINT as a bridge (V2-COMBAT-003, decision 16). Load-bearing spans
+	# only, plateau ground subtracted — see StageTerrain.bridge_tile_cell_set.
+	var bridge_cells: Dictionary = StageTerrain.bridge_tile_cell_set(terrain)
 
 	_board.clear()
 	if _bridge_layer != null:
