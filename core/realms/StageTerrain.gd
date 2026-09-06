@@ -506,10 +506,16 @@ static func generate(
 			if roll < bridge_density:
 				var pa: Dictionary = plateaus[k] if plateaus[k] is Dictionary else {}
 				var pb: Dictionary = plateaus[k + 1] if plateaus[k + 1] is Dictionary else {}
-				var ac: int = int(pa.get("col", 0)) + int(pa.get("w", 1)) / 2
-				var ar: int = int(pa.get("row", 0)) + int(pa.get("h", 1)) / 2
-				var bc: int = int(pb.get("col", 0)) + int(pb.get("w", 1)) / 2
-				var br: int = int(pb.get("row", 0)) + int(pb.get("h", 1)) / 2
+				# Nearest cells, not centres — a centre-to-centre span cuts a strip through
+				# both plateau interiors (see _nearest_cell_pair_between_plateaus).
+				var pair := _nearest_cell_pair_between_plateaus(pa, pb)
+				var ac: int = pair[0];  var ar: int = pair[1]
+				var bc: int = pair[2];  var br: int = pair[3]
+				# Adjacent plateau boxes can already share a cell (their blobs erode
+				# independently, with no cross-plateau check). Zero distance means they
+				# are already one region, so there is nothing to bridge.
+				if ac == bc and ar == br:
+					continue
 				var bridge_rects := _make_bridge_rects(ac, ar, bc, br, bridge_width, w, h, extra_rng)
 				for _brk in bridge_rects:
 					var br_rect: Dictionary = _brk if _brk is Dictionary else {}
@@ -1521,6 +1527,38 @@ static func _make_bridge_rects(
 			"w": hmax_c - hmin_c + 1, "h": bridge_width,
 		})
 	return rects
+
+
+## Nearest cell pair between two plateau blobs, by Chebyshev distance. Ties resolve to the
+## first pair the scan meets, which matches the connectivity repair's scan in `generate`;
+## both rely on `_erode_plateau_blob` returning cells sorted by (col,row).
+## A density span must use this, not the plateau centres: a centre-to-centre span cuts a
+## strip through both plateau interiors. A blob-less plateau falls back to its rect centre.
+static func _nearest_cell_pair_between_plateaus(pa: Dictionary, pb: Dictionary) -> Array:
+	var blob_a_v: Variant = pa.get("cells", [])
+	var blob_a: Array = blob_a_v if blob_a_v is Array and not (blob_a_v as Array).is_empty() else [
+		[int(pa.get("col", 0)) + int(pa.get("w", 1)) / 2, int(pa.get("row", 0)) + int(pa.get("h", 1)) / 2]
+	]
+	var blob_b_v: Variant = pb.get("cells", [])
+	var blob_b: Array = blob_b_v if blob_b_v is Array and not (blob_b_v as Array).is_empty() else [
+		[int(pb.get("col", 0)) + int(pb.get("w", 1)) / 2, int(pb.get("row", 0)) + int(pb.get("h", 1)) / 2]
+	]
+
+	var best_dist: int = 999999
+	var best_a: Array = blob_a[0]
+	var best_b: Array = blob_b[0]
+	for ca in blob_a:
+		var ca_col: int = int(ca[0])
+		var ca_row: int = int(ca[1])
+		for cb in blob_b:
+			var cb_col: int = int(cb[0])
+			var cb_row: int = int(cb[1])
+			var dist: int = max(abs(ca_col - cb_col), abs(ca_row - cb_row))
+			if dist < best_dist:
+				best_dist = dist
+				best_a = ca
+				best_b = cb
+	return [int(best_a[0]), int(best_a[1]), int(best_b[0]), int(best_b[1])]
 
 
 ## Generate an irregular organic blob for a plateau bounding box using seeded
