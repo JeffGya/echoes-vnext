@@ -1856,3 +1856,120 @@ wrong.** I ran the full suite myself at 15:02 with my own save directory, watche
 It also read "verified on a stashed baseline by an earlier phase" as a claim about itself. That
 sentence attributes the check to the phase 8b agent, which did make it. The commit message stands
 unamended.
+
+---
+
+## 24. The bridge tint defect, and the fix set that followed (2026-09-06/07)
+
+### 24.1 The report from play
+
+Jeff saw a dark red-brown layer over large parts of the board, in combat and in stage exploration.
+He called it "fog everywhere that cannot be removed" and noted that the Echoes and enemies rendered
+below it. It was not fog. Combat has no fog layer.
+
+### 24.2 The cause — three defects in one node
+
+The BridgeLayer, added earlier in this story, carried three separate defects.
+
+1. **`z_index = 1` on BridgeLayer.** It was the only explicit `z_index` in either scene.
+   TokenLayer, MoveTelegraphLayer, DistanceLayer and FogLayer all sit at the default 0. A z-index
+   beats tree order inside one canvas layer, so the tint painted over the actor tokens.
+2. **`bridge_cell_set()` returned every cell of every bridge rect.** A bridge rect overlaps the
+   plateaus it joins, so plateau interiors were tinted too. `tools/TerrainRegionProbe.gd`
+   `_source_map` had already solved the same double claim, by attributing a contested cell to the
+   plateau. The renderer had no such rule.
+3. **A DENSITY span was drawn from the centre of plateau A to the centre of plateau B.** That made
+   it a long strip through both plateau interiors, instead of a short span across the gap.
+
+The geometry itself was old. Those rects were always in `walkable_set` and were always painted as
+ordinary ground, so the overlap was invisible. Giving bridges their own tint made a pre-existing
+overlap visible.
+
+### 24.3 Decisions 26–29
+
+- **Decision 26.** A bridge tile marks a crossing the player must use to reach ground they could
+  not otherwise stand on. Only two kinds are load-bearing: CONNECT (a repair span) and ISLAND (the
+  way into a sealed island). A DENSITY span joins two plateaus that already connect, so it renders
+  as ordinary ground. Jeff asked for "only when there is an island to connect to". A cut-off region
+  of 6 or more cells is an island by decision 22, so a repair span is a bridge to one.
+- **Decision 27.** Every bridge rect now records a `kind` field: `"connect"`, `"island"` or
+  `"density"`. The three kinds produce the same rect shape, so the job cannot be told apart after
+  the fact without this field.
+- **Decision 28.** A density span runs between the nearest cells of the two plateaus, not between
+  their centres.
+- **Decision 29.** Bridge and ground render at the same level. Fog still covers an undiscovered
+  bridge.
+
+### 24.4 The commits
+
+| Commit | Subject |
+|---|---|
+| `ed4d7cd` | the bridge tint no longer covers the Echoes (both `.tscn`, `z_index` removed) |
+| `3a20c04` | each bridge rect records what job it does (the `kind` field) |
+| `e7d69b5` | the bridge tile paints only load-bearing spans (`bridge_tile_cell_set` + 2 renderers + a test) |
+| `3a23d15` | two BFS tests must pick a reachable target |
+| `4392f6c` | a density span runs between the nearest cells |
+| `f4a5e40` | pick furthest reachable cell for BFS entry-reachable test |
+| `d15a1c9` | add `kind` field to bridge schema, fix stale paint comment |
+
+### 24.5 The latent test defect, worth recording because it cost time
+
+`_t_next_step_reaches_target` picked its target as the highest-column cell in the whole walkable
+set, then demanded a path to it. Islands are moated by design (`terrain/islands_are_moated`), so
+the walkable set has always held cells with no path to entry. The test passed only because no
+island owned the highest column on seed 42. The shorter density spans changed which cell held that
+column, and the latent defect fired.
+
+`entry_cell` was **not** at fault. It already restricts its pick to the host region, at
+`StageTerrain.gd:947-957`. The stale comment at `tools/TerrainRegionProbe.gd:41-42`, which says
+`entry_cell` can pick an island cell, describes pre-fix behaviour and misled the diagnosis. That
+comment is corrected in `d15a1c9`.
+
+### 24.6 The measurement — share of walkable cells painted as bridge
+
+1,800 boards per regime, ten authored virtue signatures, bounds built the production way.
+Reproduced independently by a second agent.
+
+| Regime | Before | After |
+|---|---:|---:|
+| Combat | 9.67 % | 3.12 % |
+| Explore | 25.32 % | 12.65 % |
+| Worst family — wisdom, explore map | 46.9 % | 23.5 % |
+
+About half the drop comes from the geometry change (decision 28) and half from the tile rule
+(decisions 26–27).
+
+### 24.7 The verification
+
+An independent agent swept 3,600 boards per revision, looking for cut-off ground.
+
+| Check | Before | After |
+|---|---:|---:|
+| Unreachable plateau cells, combat boards | 82 | **0** |
+| Unreachable plateau cells, explore maps | 178 | **0** |
+
+No count rose. One cell became unreachable on seed 42, `(29,25)`. It is island ground; at `ed4d7cd`
+it was not walkable at all.
+
+**A nuance to record precisely.** The density block only adds cells, and it runs after the
+connectivity repair, so on its own it cannot disconnect plateau ground. That argument is not
+complete by itself: the density block runs **before** the island and objective-site passes, and
+those passes read `walkable_cells`. Fewer density cells means a different moat, so islands can land
+elsewhere. The empirical sweep, not the ordering argument, is what settles the result — the
+ordering argument alone would not have been enough to close this.
+
+### 24.8 A consequence for play testing
+
+Explore-map terrain is persisted (`StageExploreModel.gd:70`, `SaveService.gd:1294`). Terrain
+already in a save has no `kind` on its bridge rects. `bridge_tile_cell_set` treats an untagged rect
+as load-bearing, for backward compatibility. An in-progress campaign therefore keeps close to the
+old wide tint until a new map is generated.
+
+Combat boards are generated per encounter (`EncounterSetupService.gd:364`) and show the fix at
+once. **A play test of the explore map needs a new game.**
+
+### 24.9 Still open, not fixed here
+
+Every fight inside one stage uses the same board. `flow_ctx.encounter_id` names the stage, not the
+encounter (`core/runtime/controllers/VentureController.gd:525`). This was introduced by `4b45b3e` /
+V2-INFRA-003, not by this story. Filed to V2-COMBAT-003.5.
