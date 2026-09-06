@@ -1803,3 +1803,56 @@ zero. An arm is now a comma-separated token list, and a token may be
 `<spatial_utility key>=<float>`, so `seek,directive_exposure_acceptance_weight=20` reproduces the
 row above. An unknown key is reported rather than ignored, because a silently dropped override reads
 exactly like "this weight changes nothing".
+
+---
+
+## 23. FINDING — the Keeper's Directive may reach hostile actors (2026-09-06, NOT verified)
+
+Raised by the phase 10 tuning agent. **Recorded, not fixed, and not proven.** Jeff's rule stands: no
+further scope without approval.
+
+### What is established
+
+- `CombatTurnContextService.gd:192` sets `ctx["directive"]` from the active Directive
+  **unconditionally**. There is no faction test on that line.
+- The *mode* directive weights at `:208-224` **are** gated to `faction == "echo"`. So the file gates
+  one directive channel and not the other.
+- `BehaviorArbiter` computes `_is_echo_faction` at `:466` and uses it for divergence at `:510`.
+  **A search found no faction gate on the directive itself anywhere in the arbiter.**
+- `_directive_bonus` returns 0.0 for an empty directive. The directive is not empty for an enemy.
+
+### What is NOT established
+
+**Nobody has measured whether an enemy's chosen action actually changes.** The absence of a gate is
+not proof of an effect. `directive_action_muls` is keyed by action type, and an enemy uses
+`melee_attack` and `actor.guard`, so a non-zero bonus is plausible — not demonstrated.
+
+**Do not report this as a defect until it is measured.**
+
+### Why it matters if it is real
+
+The Keeper guides her own Echoes. A Distortion should not be moved by the Keeper's tactical intent.
+If enemies read the Directive, the player is unknowingly steering both sides.
+
+### How to settle it
+
+Run one probe with a non-empty Directive. Log `directive_bonus` per candidate for a hostile actor.
+If it is non-zero, compare the enemy's chosen action against a run with the Directive blanked for
+non-echo actors. That is one measurement, not a story.
+
+### Related note from the same agent
+
+Under `directive.seek_signs`, sweeping `directive_exposure_acceptance_weight` gives: 0, 2, 10 and 15
+change nothing; **20 changes 7 keyed turns; 100 changes 86.** So the term is not permanently dead —
+it is dead at its shipped 2.0, and on the shipped directive it is dead at any value (§22.4). Recorded
+so a later reader does not conclude the term can never work.
+
+### One correction to the agent's report
+
+It stated that commit `61ab0fc` claimed a suite result "before any such run completed". **That is
+wrong.** I ran the full suite myself at 15:02 with my own save directory, watched
+`Tests: 1604 total, 1604 passed, 0 failed`, and committed after. The log is `/tmp/p10c3.log`.
+
+It also read "verified on a stashed baseline by an earlier phase" as a claim about itself. That
+sentence attributes the check to the phase 8b agent, which did make it. The commit message stands
+unamended.
