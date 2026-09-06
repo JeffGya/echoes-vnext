@@ -37,7 +37,7 @@ static func register(runner) -> void:
 	runner.register_test("behavior_char/enemy_nascent_65_vs_grounded_echo_80", func(): return _t_band_thresholds_diverge())
 	runner.register_test("behavior_char/live_options_carry_real_spatial_terms", func(): return _t_live_options_zero_spatial_terms())
 	runner.register_test("behavior_char/purify_above_half_health_delegates_to_ordinary_combat", func(): return _t_purify_delegates_to_ordinary_combat())
-	runner.register_test("behavior_char/legacy_selector_fallback_is_silent", func(): return _t_legacy_fallback_silent())
+	runner.register_test("behavior_char/legacy_selector_fallback_is_loud", func(): return _t_legacy_fallback_loud())
 	runner.register_test("behavior_char/health_ratio_ladders_agree_on_zero_max_hp", func(): return _t_health_ratio_ladders_agree())
 
 
@@ -397,15 +397,20 @@ static func _t_purify_delegates_to_ordinary_combat() -> Dictionary:
 
 # ---------------------------------------------------------------------------
 # 7 — The legacy selector fallback (ActorStateMachine.gd, select_movement_intent returning
-# valid:false) logs nothing of its own.
+# valid:false) now ANNOUNCES itself. FIXED by V2-COMBAT-003 phase 10, owner decision 7.
 #
-# Real production call: ActorStateMachine.advance_turn(). Compares the exact set of logged
-# event types between (a) a context that never offers movement_context/profile/goals/options at
-# all (the pure legacy path) and (b) a context that offers all four keys but with a movement_context
-# that fails contract validation trivially (an empty dict), forcing select_movement_intent() to
-# return valid:false and advance_turn() to fall through to the legacy _behavior_module.select_intent()
-# call with no log call of its own in between. If the fallback logged anything extra, the two
-# type lists would differ.
+# This test used to pin the SILENCE and was marked "KNOWN DEFECT (V2-COMBAT-003 will change
+# this)". It now pins the opposite, on the same two contexts: (a) a context that never offers
+# movement_context/profile/goals/options at all — the pure legacy route, which stays silent
+# because it is a unit-test idiom, not a contract failure — and (b) a context that offers all
+# four keys but whose movement_context is an empty dict, which fails MovementContext.validate()
+# trivially and makes select_movement_intent() return valid:false.
+#
+# Case (b) must log exactly one extra `actor.legacy_selector_fallback` warning carrying the
+# actor and the exact rejection reason, and must record exactly one ledger entry.
+#
+# THIS TEST CONSUMES ITS OWN LEDGER ENTRY. It induces the fallback deliberately, and
+# MovementFallbackGuardTests fails the whole run on any entry left behind.
 # ---------------------------------------------------------------------------
 
 static func _logged_types(logger: StructuredLogger) -> Array:
@@ -415,11 +420,13 @@ static func _logged_types(logger: StructuredLogger) -> Array:
 	return out
 
 
-# KNOWN DEFECT (V2-COMBAT-003 will change this):
-static func _t_legacy_fallback_silent() -> Dictionary:
+static func _t_legacy_fallback_loud() -> Dictionary:
 	var enemy_for_legacy: Dictionary = _enemy_actor("enemy.legacy", 0, 0)
 	var enemy_for_fallback: Dictionary = _enemy_actor("enemy.fallback", 0, 0)
 	var ally: Dictionary = _echo_actor("echo.witness", 5, 5)
+
+	# Start from a clean ledger so the count below describes this test alone.
+	ActorStateMachine.take_legacy_selector_uses()
 
 	var logger_legacy := StructuredLogger.new()
 	logger_legacy.set_level(StructuredLogger.LEVEL_DEBUG)
@@ -427,22 +434,41 @@ static func _t_legacy_fallback_silent() -> Dictionary:
 	var context_legacy := { "actor": enemy_for_legacy, "all_actors": [ally], "t": 1 }
 	sm_legacy.advance_turn(context_legacy, logger_legacy, 1)
 	var types_legacy: Array = _logged_types(logger_legacy)
+	if types_legacy.has("actor.legacy_selector_fallback"):
+		return { "ok": false, "error": "the no-movement-context route logged the fallback warning; it is a unit-test idiom and must stay silent" }
+	if not ActorStateMachine.legacy_selector_uses.is_empty():
+		return { "ok": false, "error": "the no-movement-context route wrote a ledger entry; only the valid:false fallback may" }
 
 	var logger_fallback := StructuredLogger.new()
 	logger_fallback.set_level(StructuredLogger.LEVEL_DEBUG)
 	var sm_fallback := ActorStateMachine.new(enemy_for_fallback)
-	# All four keys present (so ActorStateMachine even attempts select_movement_intent), but
-	# movement_context is an empty dict, which fails MovementContext.validate()'s required-field
-	# check trivially -> select_movement_intent() returns {"valid": false, ...}.
 	var context_fallback := {
 		"actor": enemy_for_fallback, "all_actors": [ally], "t": 1,
 		"movement_context": {}, "movement_profile": {}, "movement_goals": [], "movement_options": [],
 	}
 	sm_fallback.advance_turn(context_fallback, logger_fallback, 1)
 	var types_fallback: Array = _logged_types(logger_fallback)
+	if not types_fallback.has("actor.legacy_selector_fallback"):
+		return { "ok": false, "error": "the movement-selection-failed fallback logged no warning; it is silent again:\n  types=%s" % JSON.stringify(types_fallback) }
 
-	if JSON.stringify(types_legacy) != JSON.stringify(types_fallback):
-		return { "ok": false, "error": "the movement-selection-failed fallback logged a different set of event types than the pure legacy path — the fallback branch is no longer silent:\n  legacy=%s\n  fallback=%s" % [JSON.stringify(types_legacy), JSON.stringify(types_fallback)] }
+	# The warning must say WHY, not only THAT.
+	var warned: Dictionary = {}
+	for event_v in logger_fallback.get_logs():
+		var event: Dictionary = event_v as Dictionary
+		if str(event.get("type", "")) == "actor.legacy_selector_fallback":
+			warned = event.get("data", {}) as Dictionary
+	if str(warned.get("actor_id", "")) != "enemy.fallback":
+		return { "ok": false, "error": "the warning does not name the actor: %s" % JSON.stringify(warned) }
+	var reason: String = str(warned.get("reason", ""))
+	if reason == "" or reason == "unreported":
+		return { "ok": false, "error": "the warning does not carry a rejection reason: %s" % JSON.stringify(warned) }
+
+	# Consume the deliberate entry, or MovementFallbackGuardTests fails the whole run.
+	var uses: Array = ActorStateMachine.take_legacy_selector_uses()
+	if uses.size() != 1:
+		return { "ok": false, "error": "expected exactly one ledger entry, got %d" % uses.size() }
+	if str((uses[0] as Dictionary).get("reason", "")) != reason:
+		return { "ok": false, "error": "the ledger entry and the warning disagree about the reason" }
 	return { "ok": true }
 
 

@@ -22,6 +22,39 @@ const SocialGraphService = preload("res://core/sanctum/SocialGraphService.gd")
 const DivergenceDetector = preload("res://core/actors/DivergenceDetector.gd")
 const DecisionTrace = preload("res://core/actors/behaviors/DecisionTrace.gd")
 
+## THE LEGACY SELECTOR LEDGER (V2-COMBAT-003 phase 10, owner decision 7).
+##
+## `advance_turn` prefers the movement path. When `select_movement_intent` returns
+## `valid: false` it falls back to `BehaviorModule.select_intent`. That fallback was
+## silent, so a movement-contract defect could reach a merge with nothing to see.
+##
+## The decision: KEEP the fallback, because a player must never see an actor that
+## stops; LOG every use with the actor and the exact rejection reason; and FAIL the
+## test suite on any use, so a defect cannot pass unnoticed.
+##
+## Every entry is one use: `{actor_id, module_id, reason, field, t}`. `reason` and
+## `field` come straight off the arbiter's own `_movement_failure` return, so the
+## log always says WHY, not just that the fallback fired.
+##
+## `MovementFallbackGuardTests` reads this at the end of the suite and fails when it
+## is not empty. A test that induces the fallback on purpose must consume its own
+## entries with `take_legacy_selector_uses()`.
+##
+## This ledger counts ONLY the `valid: false` fallback. The other legacy route — a
+## context that carries no `movement_context` at all — is a unit-test idiom used by
+## about thirty suites that drive `BehaviorModule` directly, not a contract failure,
+## so it is counted separately in `legacy_selector_no_context_uses` and fails nothing.
+static var legacy_selector_uses: Array = []
+static var legacy_selector_no_context_uses: int = 0
+
+
+## Return the recorded uses and clear the ledger.
+static func take_legacy_selector_uses() -> Array:
+	var taken: Array = legacy_selector_uses
+	legacy_selector_uses = []
+	return taken
+
+
 var _actor: Dictionary
 var _behavior_module: BehaviorModule
 var _last_intent: Dictionary = {}
@@ -393,8 +426,28 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 			intent["_decision_inputs"] = movement_selection.get("_decision_inputs", {})
 			intent["_guidance_response"] = movement_selection.get("_guidance_response", {})
 		else:
+			# The movement path rejected the board. Record and announce the exact
+			# reason before falling back — see the legacy selector ledger at the top
+			# of this file for why the fallback stays and why any use fails the suite.
+			var fallback_reason: String = str(movement_selection.get("reason", "unreported"))
+			var fallback_field: String = str(movement_selection.get("field", ""))
+			legacy_selector_uses.append({
+				"actor_id":  str(_actor.get("id", "")),
+				"module_id": _behavior_module.get_module_id(),
+				"reason":    fallback_reason,
+				"field":     fallback_field,
+				"t":         t,
+			})
+			logger.warn(t, "actor.legacy_selector_fallback",
+				"Movement selection was rejected; the legacy selector chose this turn", {
+					"actor_id":  str(_actor.get("id", "")),
+					"module_id": _behavior_module.get_module_id(),
+					"reason":    fallback_reason,
+					"field":     fallback_field,
+				})
 			intent = _behavior_module.select_intent(augmented_context)
 	else:
+		legacy_selector_no_context_uses += 1
 		intent = _behavior_module.select_intent(augmented_context)
 	_last_intent = intent
 	# Persist last_intent to actor dict so _build_board_summary() can read it next turn.
