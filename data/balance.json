@@ -1578,6 +1578,7 @@
 				}
 			},
 			"movement": {
+				"_comment_spatial_utility": "This note is OUTSIDE spatial_utility because BehaviorArbiter._validate_spatial_config rejects any key that is not a weight, and a rejected key discards the whole board. V2-COMBAT-003 phase 10 measured every weight in that block. Two traps. (1) directive_exposure_acceptance_weight is DELIBERATELY INERT, not unfinished: the term is weight x directive.intent_weights.exposure_acceptance x exposure, and exposure_acceptance is authored only on directive.seek_signs, so on the default directive.scout_carefully the term is 0.0 at ANY weight. Raising this number alone can change nothing. (2) exposure is binary in a fight, because _exposure divides controlled edges by a route that is one or two cells long, so exposure_weight is a flat penalty on a boolean, not a slope. Measurements and sweeps: docs/v2-combat-003-handoff.md section 22. All values PROPOSED DEFAULT.",
 				"spatial_utility": {
 					"cap": 20.0,
 					"urgency_weight": 4.0,

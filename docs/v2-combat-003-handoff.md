@@ -215,6 +215,10 @@ reason.** `exposure_acceptance` is authored on `directive.seek_signs` only (0.20
 `objective_progress`'s 8.0, so it never flips a ranking. The term is connected and honest; it is
 too small to decide anything. Left alone — phase 10 owns tuning.
 
+**Phase 10 re-measured all four terms and decided the fourth. See section 22.** The numbers in the
+table above are `5bfd375`'s and are now history; `exposure` in particular reaches far less of the
+board than it did.
+
 **No weight was changed.** Every mode still resolves in every arm (base, exposure off, cohesion
 off, congestion off, acceptance off, seek_signs), so nothing met the revert condition, and there is
 no measurement that would justify moving an authored value.
@@ -1601,3 +1605,201 @@ reading, and only one of the eight does.
 figure is **11 references across 4 files**, and only 2 are outside tests and tooling. The fifth file
 (`ui/overlays/realm/ContactModal.gd`) uses `"response"` for a conversation string with no relation to
 guidance. Keeping the legacy field was still correct; the later migration is smaller than stated.
+
+---
+
+## 22. Phase 10 — the tuning pass. No weight moved, and here is why (2026-09-06)
+
+The rule for this phase was: **give each term its own measured comparison, and move a weight only
+when a measurement supports the move.** Every measurement below was taken with
+`tools/SpatialTermProbe.gd` on all seven resolution modes. **No weight changed.** Section 22.5 says
+what the measurements would have to show before one should.
+
+### 22.1 The metric, and a control run
+
+`5bfd375` reported "turn lines changed" for each weight. That number is
+`diff <base TURN+MODE_END lines> <arm> | grep -c '^[<>]'` — a line count, which double-counts a
+changed line and also counts a line that only shifted position.
+
+To compare the current tree against `5bfd375` honestly, `5bfd375` was checked out into a throwaway
+worktree and the same four arms re-run there. That control **reproduced 29 / 22 / 19 exactly**, so
+the metric is confirmed and the two trees can be compared.
+
+A second, stricter metric is reported beside it: **keyed turns**, which pairs the two arms by
+`(mode, round, actor)` and counts the keys whose action, target, damage or cells differ. It does not
+double-count and it names the actor. Prefer it.
+
+### 22.2 The three activated weights, re-measured
+
+| Weight | Value | `5bfd375` lines | Now, lines | `5bfd375` keyed | Now, keyed |
+|---|---:|---:|---:|---:|---:|
+| `exposure` | −6.0 | 29 | **6** | 16 | **3** |
+| `cohesion` | 4.0 | 22 | **26** | 11 | **13** |
+| `congestion` | −2.0 | 19 | **11** | 11 | **7** |
+
+**All three are still live. None became dead.** The finding is where they act, not whether:
+
+| Weight | `5bfd375`, by mode | Now, by mode |
+|---|---|---|
+| `exposure` | combat 11, endure 3, purify_shrine 2 | **purify_shrine 3 only** |
+| `cohesion` | combat 9, endure 2 | **combat 13 only** |
+| `congestion` | combat 11 | **combat 7 only** |
+
+`exposure` lost every decision it used to make in `combat` and in `endure`. Eight commits landed
+between the two measurements; the zero-step option (`cbee5ed`) is the most likely cause, because an
+actor already in range now publishes an option that moves nowhere, and a route of zero length cannot
+be exposed. That attribution is reasoned, not measured, and is stated as such.
+
+**Named causes for the three weights as they stand today:**
+
+- `exposure` −6.0 stops `echo_0003` stepping `6,3 → 7,2` into the enemy's control in PURIFY_SHRINE
+  r05. With the weight at 0 she takes that step and attacks `enemy.dust_wanderer_1` for 7. The
+  enemy's r05 damage moves 3 → 2 and she stands on `7,2` in r06 instead of `6,3`.
+- `cohesion` 4.0 pulls `echo_0004` forward `2,4 → 4,4` in COMBAT r02. With the weight at 0 she idles
+  at `2,4`, and the whole party line diverges from there.
+- `congestion` −2.0 makes `enemy.dust_wanderer_1` guard at `7,1` in COMBAT r05. With the weight at 0
+  it attacks `echo_0002` instead and **the fight ends in 5 rounds rather than 6**.
+
+Every mode still resolved in every arm. Nothing met the revert condition.
+
+### 22.3 `exposure` is still binary — confirmed, and more so
+
+| Tree | options sampled | 0.0 | 1.0 | in between |
+|---|---:|---:|---:|---:|
+| `5bfd375` | 454 | 318 | 112 | 2 |
+| Now | 481 | 378 | 87 | **1** |
+
+`MovementOptionService._exposure` returns `controlled_edges / max(1, path.size())`. In-fight routes
+are one or two cells, so the fraction collapses to 0 or 1. One sample in 481 is intermediate.
+
+**`exposure_weight` is therefore not a slope. It is a flat penalty on a boolean**, and a sweep shows
+it is also not saturated at −6.0:
+
+| `exposure_weight` | keyed turns changed vs base |
+|---:|---:|
+| 0.0 | 3 |
+| −1.0 | 3 |
+| −3.0 | 3 |
+| −6.0 (shipped) | 0 — this is the base |
+| −12.0 | 11 |
+| −24.0 | 31 |
+
+The decision sets at 0.0, −1.0 and −3.0 are **byte-identical** to each other. There is a dead zone
+from 0 to −3; the shipped −6.0 sits just past its edge and buys 3 turns of the 227 resolved.
+
+### 22.4 `directive_exposure_acceptance` — DECISION: recorded as deliberately inert
+
+The brief offered three options. **The first is impossible**, and that is the finding.
+
+1. *Raise the weight so it can decide something.* On the default `directive.scout_carefully` the
+   key `exposure_acceptance` is absent, so `weights.get(...)` returns 0.0 and the term is exactly
+   0.0 **at any finite weight**. Raising the number alone cannot ever change a decision.
+2. *Author `exposure_acceptance` on the shipped directive.* Not a narrow change. `intent_weights` is
+   also read by `BehaviorArbiter._directive_bonus`, where `exposure_acceptance` carries authored
+   multipliers for `melee_attack` (0.4), `actor.guard` (−0.3) and `actor.idle` (−0.2). Adding the key
+   changes **action selection**, not only movement ranking. Both directives also author exactly four
+   weights summing to 1.0; a fifth key breaks that shape.
+3. **Chosen: record it as deliberately inert.** A `_comment_spatial_utility` note now stands on
+   `data.combat.movement` so a later reader does not read 2.0 as a live term. It sits outside the
+   `spatial_utility` block for the reason in section 22.8.
+
+**The measurement behind the choice.** `directive.seek_signs` is also shipped
+(`unlock_condition: always`) and does author the key at 0.20, so the term is reachable in play. The
+weight was swept there. Forcing `seek_signs` alone moves 82 keyed turns, which proves the arm
+reaches the arbiter:
+
+| `directive_exposure_acceptance_weight` under `seek_signs` | lines changed vs `seek` |
+|---:|---:|
+| 0.0 | 0 |
+| 2.0 (shipped) | 0 |
+| 10.0 | 0 |
+| 15.0 | **0** |
+| 20.0 | **14** |
+| 25.0 | 14 |
+| 30.0 | 14 |
+| 100.0 | 86 |
+
+Weight 20 is **7 keyed turns**: `enemy.dust_wanderer_1` walks out of contact in ENDURE r04 and in
+PURIFY_SHRINE r04, and four ENDURE turns follow from that.
+
+The term first decides anything between **15.0 and 20.0 — between 7.5 and 10 times the shipped
+value**. The reason is arithmetic: the term is `weight × 0.20 × exposure` and it competes with
+`exposure_weight × exposure` at −6.0, so it does nothing until `0.20 × weight` approaches 6.0. At
+weight 30 it cancels exposure exactly; above that it inverts exposure into an attractor.
+
+**So this weight is not a slope either. It is a sign switch on `exposure`.** No value between the
+shipped 2.0 and 15.0 does anything at all, and the first value that acts is most of the way to
+erasing another term. There is no measurement that supports moving it, and it was left alone.
+
+### 22.5 What would justify moving one of these three
+
+Recorded so the next reader does not have to re-derive it:
+
+- **`exposure`**: the real limit is the input, not the weight. A binary input cannot express "this
+  route is briefly exposed" against "this route runs the whole way through hostile control". Making
+  `_exposure` a real gradient — count controlled edges against movement capacity rather than against
+  route length — is a mechanism change and belongs in its own story. Until then, raising −6.0 makes
+  exposure louder without making it more discriminating.
+- **`cohesion` and `congestion`**: both carry well-spread inputs (cohesion 7 distinct values 0–1.0,
+  congestion 6 distinct values 0–0.625) and both still change decisions. They are the two terms a
+  future tuning pass can actually tune. Neither showed a defect to correct here.
+
+### 22.6 FINDING — the Keeper's directive also steers the enemy
+
+`CombatTurnContextService.build_turn_context` sets `ctx["directive"]` from
+`directive_service.get_active_directive()` for **every** actor. Only the STAGE-004 *mode* weight
+injection below it is gated on `faction == "echo"`. The player's chosen directive therefore feeds
+`_spatial_utility` and `_directive_bonus` for hostile actors too.
+
+Corroboration from the sweep: in the `seek_signs` weight-20 arm, the **first** turn to diverge in
+both ENDURE and PURIFY_SHRINE is `enemy.dust_wanderer_1` in r04, before any Echo diverges. The only
+thing that arm changed is a weight multiplied by the directive's `exposure_acceptance`.
+
+Not fixed here. Repairing it would move fingerprints across every mode, which is far outside a
+tuning pass. It needs its own story.
+
+### 22.7 The `presence` inversion is CLOSED
+
+`presence` used to invert at Standing 4 under the old maturity bands: 0.234 for a Whole Echo against
+0.256 for a Nascent one. The calling-aligned remap in `c01509e` fixed it.
+
+Re-measured on this tree through `tests/CombatMaturityBaselineTests.gd`:
+
+| Output | Standing 9, whole | Standing 1, nascent |
+|---|---:|---:|
+| `presence` | **0.3585** | **0.2560** |
+| `judgment` | 0.3250 | 0.0550 |
+| `composure` | 0.5281 | 0.1363 |
+| `legibility` | 0.4125 | 0.1000 |
+
+Unchanged from the values `c01509e` recorded. The suite asserts all four strictly, so the finding is
+guarded, not merely observed. **Closed. No presence weight was touched.**
+
+### 22.8 TRAP — `spatial_utility` is a CLOSED schema
+
+The phase 10 note was first written as a `_comment` **inside**
+`data.combat.movement.spatial_utility`. That broke 17 tests.
+
+There are two validators, and only one of them is lenient:
+
+- `BehaviorArbiter._validate_spatial_utility_cfg` checks that the 12 required weights are present
+  and finite. It ignores any other key. Reading only this one gives the wrong answer.
+- `BehaviorArbiter._validate_spatial_config` (line 1245) also walks `config.keys()` and rejects
+  **any** key outside `_SPATIAL_UTILITY_FIELDS` with `unexpected_spatial_config_field`.
+
+A rejected key does not degrade one option. It **discards the whole board**, the legacy fallback
+runs, and every combat fingerprint and emotion trace drifts. The failure text names the offending
+key, so it is quick to read once seen — but the drifted hashes arrive first and look like a real
+regression.
+
+Every sibling under `data.combat.movement` carries its own `_comment`. `spatial_utility` is the one
+that cannot. The note therefore sits at the `movement` level, as
+`_comment_spatial_utility`, and says why.
+
+### 22.9 The probe now sweeps, not only zeroes
+
+`tools/SpatialTermProbe.gd` took a fixed set of named arms, each of which could only set a weight to
+zero. An arm is now a comma-separated token list, and a token may be
+`<spatial_utility key>=<float>`, so `seek,directive_exposure_acceptance_weight=20` reproduces the
+row above. An unknown key is reported rather than ignored, because a silently dropped override reads
+exactly like "this weight changes nothing".

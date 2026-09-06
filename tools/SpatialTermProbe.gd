@@ -19,6 +19,8 @@
 #   noacc   directive_exposure_acceptance_weight = 0 only
 #   nocoh   cohesion_weight = 0
 #   nocon   congestion_weight = 0
+# Tokens combine with commas, and `<spatial_utility key>=<float>` sweeps a weight to any value:
+#   seek,directive_exposure_acceptance_weight=20
 #
 # Usage: `-- tests spatialprobe <arm>`. Report at user://spatial_term_probe_<arm>.txt.
 
@@ -104,33 +106,45 @@ static func _run_mode(mode: String, tag: String, guide_mode: String, guide_joins
 	_dump_decisions(mode, drive)
 
 
-## Zeroes one or more spatial_utility weights in the in-memory balance. data/balance.json is
+## Overrides one or more spatial_utility weights in the in-memory balance. data/balance.json is
 ## never touched. FlowRuntime re-reads data.combat.movement on every activation, so an override
 ## applied after setup is honoured for the whole fight.
+##
+## An arm is a comma-separated token list. A token is either a named arm above, or a
+## `<spatial_utility key>=<float>` assignment, so a weight can be swept rather than only zeroed:
+##   `seek,directive_exposure_acceptance_weight=10`
 static func _apply_arm(runtime: FlowRuntime, arm: String) -> void:
 	if arm == "base":
 		return
 	var cfg: Dictionary = runtime.config_service._balance \
 		.get("data", {}).get("combat", {}).get("movement", {}).get("spatial_utility", {})
-	match arm:
-		"noexp":
-			cfg["exposure_weight"] = 0.0
-			cfg["directive_exposure_acceptance_weight"] = 0.0
-		"noexpw":
-			cfg["exposure_weight"] = 0.0
-		"noacc":
-			cfg["directive_exposure_acceptance_weight"] = 0.0
-		"nocoh":
-			cfg["cohesion_weight"] = 0.0
-		"nocon":
-			cfg["congestion_weight"] = 0.0
-		"seek":
-			_set_directive(runtime, "directive.seek_signs")
-		"seeknoacc":
-			_set_directive(runtime, "directive.seek_signs")
-			cfg["directive_exposure_acceptance_weight"] = 0.0
-		_:
-			_say("UNKNOWN_ARM %s" % arm)
+	for token: String in arm.split(",", false):
+		match token:
+			"noexp":
+				cfg["exposure_weight"] = 0.0
+				cfg["directive_exposure_acceptance_weight"] = 0.0
+			"noexpw":
+				cfg["exposure_weight"] = 0.0
+			"noacc":
+				cfg["directive_exposure_acceptance_weight"] = 0.0
+			"nocoh":
+				cfg["cohesion_weight"] = 0.0
+			"nocon":
+				cfg["congestion_weight"] = 0.0
+			"seek":
+				_set_directive(runtime, "directive.seek_signs")
+			"seeknoacc":
+				_set_directive(runtime, "directive.seek_signs")
+				cfg["directive_exposure_acceptance_weight"] = 0.0
+			_:
+				var pair: PackedStringArray = token.split("=", false)
+				# An unknown key must not pass silently: it would read as "this weight
+				# changes nothing" when in fact nothing was overridden.
+				if pair.size() != 2 or not cfg.has(pair[0]) or not pair[1].is_valid_float():
+					_say("UNKNOWN_ARM %s" % token)
+					continue
+				cfg[pair[0]] = pair[1].to_float()
+				_say("### OVERRIDE %s = %s" % [pair[0], pair[1]])
 
 
 ## One line per published option, for every living non-structure actor on the starting board.
