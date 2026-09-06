@@ -523,7 +523,9 @@ static func _t_bfs_target_dist0() -> Dictionary:
 	return { "ok": true }
 
 
-# ─── Test 10 — BFS: entry cell is reachable from any walkable target ─────────
+# ─── Test 10 — BFS: entry cell is reachable from any REACHABLE target ────────
+# Islands are moated on purpose (terrain/islands_are_moated), so an arbitrary walkable
+# cell can have no path to entry. Only the cells reachable from entry are valid targets.
 static func _t_bfs_entry_reachable() -> Dictionary:
 	var sig    := _default_sig()
 	var bounds := _default_bounds()
@@ -532,9 +534,10 @@ static func _t_bfs_entry_reachable() -> Dictionary:
 		var walkable: Dictionary = StageTerrain.walkable_set(terrain)
 		var entry: Dictionary    = StageTerrain.entry_cell(walkable, bounds)
 		var entry_key: String    = "%d,%d" % [int(entry.get("col", 0)), int(entry.get("row", 0))]
-		# Pick a cell from the walkable set that is NOT the entry (pick last key)
+		var reachable: Dictionary = StageTerrain.bfs_distance_field(entry, walkable)
+		# Pick a reachable cell that is NOT the entry.
 		var target_key: String = entry_key
-		for k in walkable:
+		for k in reachable:
 			if k != entry_key:
 				target_key = k
 				break
@@ -554,10 +557,14 @@ static func _t_next_step_reaches_target() -> Dictionary:
 	var walkable: Dictionary = StageTerrain.walkable_set(terrain)
 	var entry: Dictionary    = StageTerrain.entry_cell(walkable, bounds)
 
-	# Pick a target: find the walkable cell furthest in column from entry
+	# Islands are moated on purpose (terrain/islands_are_moated), so the walkable set holds
+	# cells with no path to entry. Search the reachable set, not the walkable set.
+	var reachable: Dictionary = StageTerrain.bfs_distance_field(entry, walkable)
+
+	# Pick a target: find the reachable cell furthest in column from entry
 	var target_key := ""
 	var max_col := int(entry.get("col", 0))
-	for k in walkable:
+	for k in reachable:
 		var parts := (k as String).split(",")
 		var c := int(parts[0])
 		if c > max_col:
@@ -565,7 +572,7 @@ static func _t_next_step_reaches_target() -> Dictionary:
 			target_key = k
 	if target_key.is_empty():
 		# All cells in same column — pick any non-entry cell
-		for k in walkable:
+		for k in reachable:
 			if k != ("%d,%d" % [int(entry.get("col", 0)), int(entry.get("row", 0))]):
 				target_key = k
 				break
