@@ -203,6 +203,19 @@ const _FALLBACK_SIGNATURE: Dictionary = {
 # Minimum enforced bridge width (hard floor regardless of signature).
 const _MIN_BRIDGE_WIDTH: int = 2
 
+## What job a bridge rect does. All three kinds emit the same rect shape, so a consumer
+## cannot re-derive this from geometry. The generator must write it.
+##   CONNECT  a repair span. The far region is unreachable without it.
+##   ISLAND   the span that gives an otherwise sealed island a way in.
+##   DENSITY  an optional extra span between two plateaus that are ALREADY connected.
+const BRIDGE_KIND_CONNECT: String = "connect"
+const BRIDGE_KIND_ISLAND:  String = "island"
+const BRIDGE_KIND_DENSITY: String = "density"
+
+## The kinds that earn the bridge tile: a span the player must use to reach ground that is
+## otherwise out of reach. A DENSITY span is ordinary ground.
+const BRIDGE_KINDS_LOAD_BEARING: Array = [BRIDGE_KIND_CONNECT, BRIDGE_KIND_ISLAND]
+
 # V2-COMBAT-003 terrain commit 2 — default `connect_min_region_cells`.
 # A walkable region of at least this many cells that is cut off from the host region is a
 # board split and gets bridged back in. A region below it is scenery and is left alone.
@@ -474,6 +487,8 @@ static func generate(
 		var bridge_rects := _make_bridge_rects(ac, ar, bc, br, bridge_width, w, h, bridge_rng)
 		for _brk in bridge_rects:
 			var br_rect: Dictionary = _brk if _brk is Dictionary else {}
+			# LOAD-BEARING: without this span the region on the far side is unreachable.
+			br_rect["kind"] = BRIDGE_KIND_CONNECT
 			bridges.append(br_rect)
 			var new_cells := _cells_from_rect(br_rect)
 			for ck in new_cells:
@@ -498,6 +513,8 @@ static func generate(
 				var bridge_rects := _make_bridge_rects(ac, ar, bc, br, bridge_width, w, h, extra_rng)
 				for _brk in bridge_rects:
 					var br_rect: Dictionary = _brk if _brk is Dictionary else {}
+					# DECORATIVE: both plateaus are already connected. This span is extra ground.
+					br_rect["kind"] = BRIDGE_KIND_DENSITY
 					bridges.append(br_rect)
 					var new_cells := _cells_from_rect(br_rect)
 					for ck in new_cells:
@@ -1833,6 +1850,7 @@ static func _bridge_islands(
 				"island_bridge": true,
 				"island_index":  ik2,
 				"target_island": int(pick["target_island"]),
+				"kind":          BRIDGE_KIND_ISLAND,
 			}
 			bridges.append(rect)
 			for ck in _cells_from_rect(rect):
