@@ -32,7 +32,8 @@ extends RefCounted
 #     "bounds":    { "w": int, "h": int },
 #     "plateaus":  [ { "col": int, "row": int, "w": int, "h": int,
 #                      "cells": [ [col, row], ... ] }, ... ],
-#     "bridges":   [ { "col": int, "row": int, "w": int, "h": int }, ... ],
+#     "bridges":   [ { "col": int, "row": int, "w": int, "h": int,
+#                      "kind": String }, ... ],  # "connect", "island" or "density"
 #     "islands":   [ { "col": int, "row": int, "w": int, "h": int,
 #                      "cells": [ [col, row], ... ] }, ... ]
 #   }
@@ -1827,8 +1828,8 @@ static func _contacts_8(key: String, blob: Dictionary) -> int:
 #                 different pictures.
 #   Decision 16 — a bridge is its own tile. Island bridges are appended to terrain["bridges"]
 #                 (the list that already exists) carrying `island_bridge: true`,
-#                 `island_index` and `target_island`, so `bridge_cell_set` paints them and a
-#                 test can strip the whole island system in one filter.
+#                 `island_index` and `target_island`, so `bridge_tile_cell_set` paints them
+#                 and a test can strip the whole island system in one filter.
 #
 # THE GUARANTEE THAT SURVIVES, AND HOW.
 #
