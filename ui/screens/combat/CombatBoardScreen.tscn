@@ -83,7 +83,6 @@ y_sort_enabled = true
 tile_set = SubResource("TileSet_board")
 
 [node name="BridgeLayer" type="TileMapLayer" parent="Board" unique_id=1614739805]
-z_index = 1
 tile_set = SubResource("TileSet_board")
 self_modulate = Color(0.87, 0.58, 0.24, 0.55)
 
