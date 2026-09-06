@@ -772,12 +772,9 @@ static func _primary_plan(
 	var target_id: String = str(relevant[0]) if not relevant.is_empty() else ""
 	match purpose:
 		"advance":
-			# A purifier advancing on the shrine itself arrives to purify it. The old
-			# `objective_health_ratio < 0.5` condition here made that plan an ordinary
-			# move at every shrine health an encounter actually reaches, so the purifier
-			# walked to the shrine and had nothing planned to do there.
-			# Truthfulness, not role, is the guard: the plan may name the objective only
-			# when the objective is what this goal advances toward.
+			# Truthfulness, not role, is the guard: name the objective only when it is
+			# what this goal actually advances toward. No shrine-health gate — see
+			# BehaviorArbiter.gd's purify override comment for why that gate never fired.
 			if str(pressure["factual_role"]) == "purifier" \
 					and not target_id.is_empty() \
 					and target_id == str(pressure["objective_id"]):

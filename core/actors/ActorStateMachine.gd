@@ -852,8 +852,6 @@ func _select_bark(
 		context_key = "combat_guidance_object"
 	elif guidance_consent == "refuse":
 		context_key = "combat_guidance_refuse"
-	# She agreed with the suggestion and still reached it her own way (V2-COMBAT-004
-	# names this a TEMPORARY visual, same as object/refuse above).
 	elif guidance_consent == "align" and guidance_reading == "interpreted":
 		context_key = "combat_guidance_interpret"
 	# Priority 5.5: combat_divergence — V2-PROG-012 Phase 5: her judgment out-voted

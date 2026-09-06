@@ -1426,12 +1426,8 @@ static func _t_objective_total_order_survives_missing_ids() -> Dictionary:
 	return _pass()
 
 
-## D57 — criterion 5 compares (col, row) NUMERICALLY, not the "col,row" key string.
-##
-## A string compare puts "10,3" before "9,3", so the order was non-monotone in each
-## axis and its favoured compass direction changed with the digit count. Stage boards
-## are 30 to 38 cells wide, so two-digit columns are ordinary input. This fixture
-## fails under the old string compare and passes under the numeric one.
+## D57 — see StagePartyMovementAdapter.select_objective_target's docblock. Fails
+## under the old string compare of "col,row" (10 sorts before 9), passes numeric.
 static func _t_objective_tie_break_is_numeric_not_lexicographic() -> Dictionary:
 	var category_map: Dictionary = {"npc": "intel"}
 	var weights: Dictionary = {"intel": 1.4}
@@ -1446,7 +1442,6 @@ static func _t_objective_tie_break_is_numeric_not_lexicographic() -> Dictionary:
 	if (chosen.get("pos", {}) as Dictionary) != {"col": 9, "row": 3}:
 		return _fail("expected column 9 before column 10, got %s" % str(chosen.get("pos", {})))
 
-	# Same column: the row is the second numeric criterion, for the same reason.
 	var rows: Array = [
 		{"pos": {"col": 4, "row": 10}, "type": "npc"},
 		{"pos": {"col": 4, "row": 9}, "type": "npc"},

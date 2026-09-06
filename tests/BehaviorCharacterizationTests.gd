@@ -165,16 +165,12 @@ static func _t_movement_option_starvation() -> Dictionary:
 # ---------------------------------------------------------------------------
 # 2 — a turn that traversed cells is never recorded as actor.idle.
 #
-# Full production drive: reuses FlowFingerprintTests._setup_encounter() +
-# ._drive_and_capture() (the proven mode-forcing round loop) rather than a second copy of it.
-# COMBAT mode, own seed tag so it does not share a save file with any other suite. Scans the
-# captured per-turn projection for any turn where the actor's position changed but its logged
-# action_type is still "actor.idle" — V2-COMBAT-003 Phase 5 fixed
-# LiveMovementContextService.apply_live_activation() to relabel such a turn actor.move.
+# Reuses FlowFingerprintTests._setup_encounter() + ._drive_and_capture() (the proven
+# mode-forcing round loop) rather than a second copy. COMBAT mode, own seed tag so it
+# does not share a save file with any other suite.
+#
+# FIXED (V2-COMBAT-003 Phase 5): was a KNOWN DEFECT; assertion inverted.
 # ---------------------------------------------------------------------------
-
-# FIXED (V2-COMBAT-003 Phase 5): was KNOWN DEFECT "actor.idle recorded for a moved turn" —
-# assertion inverted.
 static func _t_moved_actor_logs_idle() -> Dictionary:
 	var env: Dictionary = FlowFingerprintTests._setup_encounter(EncounterResolutionModes.COMBAT, "cb_char_moved_idle")
 	if env.is_empty():
@@ -396,21 +392,12 @@ static func _t_purify_delegates_to_ordinary_combat() -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
-# 7 — The legacy selector fallback (ActorStateMachine.gd, select_movement_intent returning
-# valid:false) now ANNOUNCES itself. FIXED by V2-COMBAT-003 phase 10, owner decision 7.
-#
-# This test used to pin the SILENCE and was marked "KNOWN DEFECT (V2-COMBAT-003 will change
-# this)". It now pins the opposite, on the same two contexts: (a) a context that never offers
-# movement_context/profile/goals/options at all — the pure legacy route, which stays silent
-# because it is a unit-test idiom, not a contract failure — and (b) a context that offers all
-# four keys but whose movement_context is an empty dict, which fails MovementContext.validate()
-# trivially and makes select_movement_intent() return valid:false.
-#
-# Case (b) must log exactly one extra `actor.legacy_selector_fallback` warning carrying the
-# actor and the exact rejection reason, and must record exactly one ledger entry.
-#
-# THIS TEST CONSUMES ITS OWN LEDGER ENTRY. It induces the fallback deliberately, and
-# MovementFallbackGuardTests fails the whole run on any entry left behind.
+# 7 — the legacy selector fallback now announces itself (FIXED, phase 10, owner
+# decision 7 — see ActorStateMachine.gd's ledger docblock for the design). Was
+# pinned silent; now pins that the valid:false fallback (b) logs exactly one
+# actor.legacy_selector_fallback warning and one ledger entry, while the
+# no-movement-context route (a) — a unit-test idiom, not a contract failure —
+# stays silent.
 # ---------------------------------------------------------------------------
 
 static func _logged_types(logger: StructuredLogger) -> Array:

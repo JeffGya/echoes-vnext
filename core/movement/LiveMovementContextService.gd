@@ -561,11 +561,9 @@ func apply_live_activation(
 	else:
 		intent["action_type"] = str(resolved_action.get("type", "actor.idle"))
 		intent["target_id"] = str(resolved_action.get("target_id", ""))
-	# CombatActivationService.activate() truthfully resolves actor.idle as a fallback
-	# (admitted for every purpose in _PURPOSE_FALLBACK_ALLOW) even when the mover just
-	# traversed cells to get here — the ACTION is right, the TURN LABEL is wrong. Correct
-	# the label using the same traversal signal passed to update_passive_state_from_activation
-	# below, rather than a second derived one.
+	# activate() resolves actor.idle as a fallback even after the mover traversed
+	# cells. Relabel using the traversal signal already passed to
+	# update_passive_state_from_activation below, not a second derived one.
 	if str(intent["action_type"]) == "actor.idle" and not actual.is_empty():
 		intent["action_type"] = "actor.move"
 	# Movement/forced hazard damage resolves before the external primary action.

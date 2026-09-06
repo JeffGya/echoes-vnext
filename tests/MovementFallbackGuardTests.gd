@@ -1,10 +1,7 @@
 # res://tests/MovementFallbackGuardTests.gd
-# V2-COMBAT-003 phase 10 — the legacy selector must not be used.
-#
-# Owner decision 7: keep the legacy fallback in `ActorStateMachine.advance_turn`,
-# because a player must never see an actor that stops; log every use with the actor
-# and the exact rejection reason; and fail the test suite on any use, so a movement
-# contract defect cannot reach a merge unnoticed.
+# V2-COMBAT-003 phase 10 — the legacy selector must not be used. See
+# ActorStateMachine.gd's ledger docblock (owner decision 7) for why the fallback
+# stays and is logged.
 #
 # THIS SUITE IS THE FAILURE MECHANISM. It is registered LAST, so `runner.run_all()`
 # reaches it after every other suite has run and the ledger holds every use the whole

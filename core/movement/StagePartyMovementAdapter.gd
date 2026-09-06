@@ -786,24 +786,15 @@ static func select_frontier(
 ## whatever produced them.
 ##
 ## D57, FIXED (V2-COMBAT-003 phase 10) — criterion 5 is now a NUMERIC (col, row)
-## compare. It was a lexicographic string compare of the canonical `"col,row"` key,
-## so "10,3" < "9,3": the induced order was jagged, non-monotone in either axis, and
-## flipped its favoured compass direction with coordinate magnitude. Stage boards
-## reach 22 columns and 4x/5x that in one dimension for PURSUE and GUIDE_SPIRIT, so
-## two-digit coordinates are ordinary input, not an edge case.
+## compare, not a string compare of the canonical `"col,row"` key. The string compare
+## put "10,3" before "9,3": non-monotone in either axis, so ordinary two-digit
+## coordinates broke the order.
 ##
-## IT IS A NUMERIC COMPARE, NOT FRONTIER CRITERION 4'S SALTED HASH. The paragraph
-## here previously prescribed the salted `_fnv1a_32`. That prescription is withdrawn,
-## and the defect register (D57) asks for the numeric compare. The two criteria solve
-## different problems. Frontier criterion 4 is the EFFECTIVE tie-break for a whole
-## ring of equidistant candidates, so a fixed compass preference there makes the party
-## drift into one quadrant run after run; only a de-aligner removes that. This
-## criterion is reached only after weight AND distance AND id have all tied, which
-## means duplicate or id-less situations — a small set, never a ring — so there is no
-## systematic compass drift to remove. A salt would also have to be threaded through
-## `select_objective_target` and its three `ActiveStageService` call sites for no
-## measured gain. The numeric compare removes the actual defect: the order is now
-## monotone in each axis and does not change its favoured direction with magnitude.
+## This is NOT frontier criterion 4's salted hash. That criterion breaks ties over a
+## whole ring of equidistant candidates, so a fixed compass preference there causes
+## visible drift — only a de-aligner fixes that. This criterion fires only after
+## weight, distance AND id have all tied: a small, non-ring set, so there is no drift
+## to remove and a numeric compare is enough.
 ##
 ## Returns a copy of the chosen situation, or {}.
 static func select_objective_target(
@@ -850,10 +841,8 @@ static func select_objective_target(
 			-_target_weight(situation, weights, category_map),
 			distance,
 			str(situation.get("id", "")),
-			# Criteria 5 and 6 — the total-order guard, NUMERIC (col, row). Reached
-			# only when weight, distance AND id all tie, i.e. duplicate or id-less
-			# situations. Numeric, not the canonical key string: see D57 in the
-			# docblock. Two situations that are not co-located always differ here.
+			# Criteria 5-6 (D57): numeric col, then row. See the docblock above for
+			# why this is not the salted hash frontier criterion 4 uses.
 			float(int((entry["pos"] as Dictionary)["col"])),
 			float(int((entry["pos"] as Dictionary)["row"])),
 		]

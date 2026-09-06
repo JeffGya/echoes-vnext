@@ -581,7 +581,11 @@ static func _run_mode_fingerprint(
 ## echo_0002 (aduro, unrecognized under V1 keys -> was 0, now +3.0) and echo_0005 (kra_soro,
 ## same -> now +1.0). This reorders who acts first each round, on top of the dominant-vector
 ## move above, so all three hashes move again.
-# V2-COMBAT-003 Phase 5 re-record — attributed. LiveMovementContextService.apply_live_activation() now relabels actor.idle as actor.move when the turn traversed cells. Verified turn-by-turn against the pre-fix trace: only the action_type field changed on the affected turns (COMBAT 18, PURIFY_SHRINE 12, RECOVER 3, PROTECT 3, ENDURE 17, PURSUE 14, GUIDE_SPIRIT 7) — every other field (actor_id, target_id, damage, is_kill, positions, mode_state) is byte-identical. FINAL_HASH and SAVE_HASH did not move.
+# V2-COMBAT-003 Phase 5 re-record — attributed. apply_live_activation() now relabels
+# actor.idle as actor.move when the turn traversed cells. Verified turn-by-turn against
+# the pre-fix trace: only action_type changed on affected turns; every other field
+# (actor_id, target_id, damage, is_kill, positions, mode_state) is byte-identical.
+# FINAL_HASH and SAVE_HASH did not move.
 # V2-COMBAT-003 Phase 6 re-record — attributed. The live producer now fills exposure, congestion
 # and cohesion from MovementOptionService, so BehaviorArbiter._spatial_utility scores routes it
 # previously scored as if every cell were equally safe. COMBAT ends in 5 rounds instead of 6:
