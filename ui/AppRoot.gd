@@ -355,8 +355,16 @@ func _on_debug_command(command: String) -> void:
 		_run_institution_command(parts)
 		return
 
+	# -------------------------
+	# realm dev command (debug only) — select a realm directly for board comparison,
+	# without playing through the realms before it.
+	# -------------------------
+	if head == "realm":
+		_run_realm_command(parts)
+		return
+
 	_debug_print("Unknown command: " + cmd)
-	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | combat_emotion | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear> | guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id]")
+	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | combat_emotion | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear> | guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id] | realm select <realm.01|realm.02> | realm show")
 	
 	_flush_logs_to_console()
 	
@@ -1527,6 +1535,63 @@ func _run_institution_command(parts: Array) -> void:
 	else:
 		_debug_print("Unknown institution op: %s" % op)
 		_debug_print("Usage: institution unlock <hearth|training_grounds|all> | institution lock <id|all> | institution status")
+
+	_flush_logs_to_console()
+
+
+# realm dev command (debug only) — dispatches the real "flow.select_realm" action, the same
+# action Realm Select sends. No new field: it reads/writes flow_ctx.realm_id and
+# save_data["realms"], both already used by RealmService.
+#   realm select <realm.01|realm.02>
+#   realm show
+func _run_realm_command(parts: Array) -> void:
+	const KNOWN_IDS := ["realm.01", "realm.02"]
+	if parts.size() < 2:
+		_debug_print("Usage: realm select <realm.01|realm.02> | realm show")
+		_flush_logs_to_console()
+		return
+
+	var op := str(parts[1]).to_lower()
+
+	if op == "show":
+		var realm_id := str(runtime.flow_ctx.realm_id)
+		if realm_id.is_empty():
+			_debug_print("realm: no active realm.")
+		else:
+			var model: Dictionary = RealmService.get_active(runtime.flow_ctx)
+			_debug_print("realm: %s (virtue=%s, stages=%d)" % [
+				realm_id,
+				str(model.get("virtue", "")),
+				(model.get("stages", []) as Array).size(),
+			])
+
+	elif op == "select":
+		if parts.size() < 3:
+			_debug_print("Usage: realm select <realm.01|realm.02>")
+			_flush_logs_to_console()
+			return
+		var target := str(parts[2]).to_lower()
+		if not KNOWN_IDS.has(target):
+			_debug_print("Unknown realm id: %s  (known: %s)" % [target, ", ".join(KNOWN_IDS)])
+			_flush_logs_to_console()
+			return
+		var snap := runtime.dispatch({ "type": "flow.select_realm", "realm_id": target })
+		_render_snapshot(snap)
+		# handle_select_realm denies the switch (opening Realm not finished yet) without
+		# touching flow_ctx.realm_id — compare before/after instead of re-checking the gate.
+		if str(runtime.flow_ctx.realm_id) != target:
+			_debug_print("realm select: denied for '%s' — Realms are locked until the opening Realm is complete. Check the log for realm.select.denied." % target)
+		else:
+			var model: Dictionary = RealmService.get_active(runtime.flow_ctx)
+			_debug_print("realm select: now on %s (virtue=%s, stages=%d)" % [
+				target,
+				str(model.get("virtue", "")),
+				(model.get("stages", []) as Array).size(),
+			])
+
+	else:
+		_debug_print("Unknown realm op: %s" % op)
+		_debug_print("Usage: realm select <realm.01|realm.02> | realm show")
 
 	_flush_logs_to_console()
 
