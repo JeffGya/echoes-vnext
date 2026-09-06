@@ -535,12 +535,17 @@ static func _t_bfs_entry_reachable() -> Dictionary:
 		var entry: Dictionary    = StageTerrain.entry_cell(walkable, bounds)
 		var entry_key: String    = "%d,%d" % [int(entry.get("col", 0)), int(entry.get("row", 0))]
 		var reachable: Dictionary = StageTerrain.bfs_distance_field(entry, walkable)
-		# Pick a reachable cell that is NOT the entry.
+		# Pick the FURTHEST reachable cell, by BFS distance from entry, not the first key.
+		# `reachable` keys come back in BFS visit order, so the first non-entry key is
+		# always a distance-1 neighbour — a weak target. The furthest cell is the strongest
+		# target this suite can pick: if entry can reach it, entry can reach any closer cell.
 		var target_key: String = entry_key
+		var max_dist := -1
 		for k in reachable:
-			if k != entry_key:
+			var d := int(reachable[k])
+			if d > max_dist:
+				max_dist = d
 				target_key = k
-				break
 		var parts := target_key.split(",")
 		var target := { "col": int(parts[0]), "row": int(parts[1]) }
 		var dist_field: Dictionary = StageTerrain.bfs_distance_field(target, walkable)
