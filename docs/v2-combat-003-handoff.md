@@ -1973,3 +1973,85 @@ once. **A play test of the explore map needs a new game.**
 Every fight inside one stage uses the same board. `flow_ctx.encounter_id` names the stage, not the
 encounter (`core/runtime/controllers/VentureController.gd:525`). This was introduced by `4b45b3e` /
 V2-INFRA-003, not by this story. Filed to V2-COMBAT-003.5.
+
+## 25. Two more defects from play: bridge tiles still on top, wave spawns on islands (2026-09-07)
+
+### 25.1 DEFECT A — bridge tiles still rendered above the board
+
+Reported in play, after commit `ed4d7cd` in section 24: "the brown tiles are rendering above the
+board rather than under it."
+
+**Cause.** BridgeLayer is a child of Board. Board has `y_sort_enabled = true`. BridgeLayer did not
+set `y_sort_enabled`. A child joins a y-sorted parent's per-row draw list only when the child sets
+`y_sort_enabled` too. Without it, BridgeLayer's tiles painted as one flat block that nothing under
+Board could occlude.
+
+**Correction to 24.2, point 1.** Commit `ed4d7cd` said tree order breaks the tie between BridgeLayer
+and the layers under Board. That claim is false for a child of a y-sorted parent. Tree order only
+breaks ties between Board's sibling layers. The `z_index` removal in `ed4d7cd` was still correct.
+It fixed one defect and left this one behind.
+
+**Fix.** Commit `a779d47` sets `y_sort_enabled = true` on BridgeLayer in both scenes.
+
+**Not yet confirmed.** The visual result needs a human look at the running game. No screenshot or
+play session has confirmed the tiles now render under the board.
+
+### 25.2 DEFECT B — mid-round wave spawns landed on unreachable islands
+
+Reported in play: on an ENDURE objective, enemies spawned on an island that is not connected. The
+play log shows those enemies emitting `actor.idle` every round.
+
+**Cause.** `core/combat/CombatRoundSpawnService.gd` `_place_enemy_spawns()` chose its cell from the
+whole walkable set with no host-region filter. Candidates sort highest column first, so an island
+on the enemy side was picked before host-region ground.
+
+Two callers share the function: ENDURE waves (line 319) and RECOVER reinforcements (line 226).
+Initial placement was always correct — `EncounterSetupService.gd:392` calls
+`GridService.place_actors()`, which restricts to `largest_walkable_region` at `GridService.gd:364`.
+
+**Pre-existing code, exposed by this branch.** `git diff 4b45b3e HEAD -- core/combat/CombatRoundSpawnService.gd`
+was empty before the fix. Branch commit `95895a0` fixed six post-placement spawns and missed these
+two mid-round ones. Before the island rewrite, an island was a single corner-touching cell, so
+landing on one was harmless.
+
+**Measured, production-generated boards, wave cells off the host region:**
+
+| Point | Off-region rate |
+|---|---:|
+| Branch point `4b45b3e` | 27 / 2400 (1.1%) |
+| Before the fix | 684 / 2400 (28.5%) — independent verifier's own probe |
+| After the fix | 0 / 2400 |
+
+Also measured after the fix: 0 / 7200 at three wave cells per board, and 0 / 96000 stressed to
+forty per board. Worst virtues before the fix were humility 182/240 and wisdom 115/240.
+
+**No spawn starvation.** Stressed to 40 wave actors, ten times the configured maximum, zero were
+dropped. Minimum free host-region cells across the 2400 boards was 48.
+
+**Fix.** Commit `3daef3e` filters candidates through
+`GridService.largest_walkable_region(walkable, ectx.terrain.get("bounds", {}))`. Plus a new test,
+`combat_roundtrip/endure_wave_spawn_stays_on_host_region`, confirmed to fail before the fix and
+pass after.
+
+**No recorded value moved.** Verified as benign, not inert: the suite calls `_place_enemy_spawns`
+17 times, the filter runs on all 17, and 16 have `walkable == host` so there is nothing to reject.
+No existing seed puts a cut-off region on a board that reaches this function.
+
+**Suite:** 1606 total, 1606 passed, 0 failed.
+
+### 25.3 Two open observations, not fixed here
+
+- The legacy no-terrain branch of `_place_enemy_spawns` has zero suite coverage.
+- The `not host_region.is_empty()` fallback in the host-region filter is unreachable in practice.
+  `StageTerrain._is_walkable_in_bounds` (`core/realms/StageTerrain.gd:1210`) skips the bounds test
+  when `bounds` is empty, so a terrain with no bounds still yields a non-empty region.
+  `largest_walkable_region` can only return empty when `walkable` is empty, and the enclosing
+  `walkable.is_empty()` guard already excludes that case. The comment at
+  `core/combat/CombatRoundSpawnService.gd:372` is corrected to say so.
+
+### 25.4 Still open — the board is too small for its own terrain
+
+Filed to V2-COMBAT-003.5. The combat board starts at 12x12 and gains +1 per completed realm. Only
+two realms are live today, so the board never exceeds 14x14. The completed-realm counter itself is
+confirmed correct by the owner; the board-size formula is what stays too small for the terrain
+features this story adds.
