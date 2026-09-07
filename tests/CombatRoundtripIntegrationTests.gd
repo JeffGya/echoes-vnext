@@ -48,6 +48,8 @@ static func register(runner) -> void:
 	runner.register_test("combat_roundtrip/recover_reinforcement_spawns_enemy_side", func(): return test_recover_reinforcement())
 	# V2-STAGE-004 Distinctiveness — §4-F ENDURE rising wave + all_waves_spawned
 	runner.register_test("combat_roundtrip/endure_rising_wave_size_and_flag", func(): return test_endure_rising_wave())
+	# V2-COMBAT-003 — a mid-round wave spawn must land on the host region, not a moated island
+	runner.register_test("combat_roundtrip/endure_wave_spawn_stays_on_host_region", func(): return test_endure_wave_spawn_host_region())
 	# V2-STAGE-004 Distinctiveness — §4-G PROTECT theft and recovery on carrier death
 	runner.register_test("combat_roundtrip/protect_theft_and_carrier_recovery", func(): return test_protect_theft())
 	# V2-STAGE-004 PROTECT guard-proximity counter
@@ -723,6 +725,79 @@ static func test_endure_rising_wave() -> Dictionary:
 		return { "ok": false, "error": "Wave 2 expected 2 actors (rising), found %d" % wave2_actors.size() }
 	if wave3_actors.size() != 3:
 		return { "ok": false, "error": "Wave 3 expected 3 actors (rising), found %d" % wave3_actors.size() }
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# V2-COMBAT-003 defect fix: _place_enemy_spawns() picked cells from the WHOLE walkable set,
+# sorted highest column first. An island at a high column was chosen before real host-region
+# ground, so a wave actor could land on ground with no route to anything. The fix filters
+# candidates to GridService.largest_walkable_region() (the same authority initial placement
+# uses). This test hands the encounter a terrain with a big host region (cols 0-4) and a
+# small moated island at the highest columns (cols 8-9, three empty columns of gap — no
+# shared side, so the two regions are not connected). A wave actor must land in the host
+# region.
+# ---------------------------------------------------------------------------
+static func test_endure_wave_spawn_host_region() -> Dictionary:
+	var env: Dictionary = _setup("wave_host_region", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var ectx = env["ectx"]
+	var runtime = env["runtime"]
+
+	ectx.resolution_mode = EncounterResolutionModes.ENDURE
+	ectx.objective_params = {
+		"duration_turns":        10,
+		"wave_interval":         1,
+		"wave_size":             1,
+		"wave_size_rising_step": 0,
+		"wave_size_max":         1,
+		"wave_group":            "group.vale_patrol_sm",
+	}
+
+	# Host region: 30 cells, cols 0-4, rows 0-5. Island: 4 cells, cols 8-9, rows 0-1.
+	# Cols 5-7 hold no walkable cell, so the island shares no side with the host region.
+	var mainland_cells: Array = []
+	for c in range(5):
+		for r in range(6):
+			mainland_cells.append([c, r])
+	var island_cells: Array = [[8, 0], [8, 1], [9, 0], [9, 1]]
+	ectx.terrain = {
+		"bounds":   { "w": 10, "h": 6 },
+		"plateaus": [
+			{ "col": 0, "row": 0, "w": 5, "h": 6, "cells": mainland_cells },
+			{ "col": 8, "row": 0, "w": 2, "h": 2, "cells": island_cells },
+		],
+		"bridges":  [],
+		"islands":  [],
+	}
+
+	runtime.dispatch({ "type": "combat.init" })
+	ectx.combat_state["waves_spawned"]     = 0
+	ectx.combat_state["all_waves_spawned"] = false
+	ectx.combat_state.erase("total_waves")
+
+	runtime.dispatch({ "type": "combat.confirm_round" })
+	var guard: int = 0
+	while guard < 40:
+		guard += 1
+		var cs: Dictionary = ectx.combat_state
+		if bool(cs.get("combat_over", false)): break
+		if str(cs.get("round_phase", "")) != "in_round": break
+		runtime.dispatch({ "type": "combat.next_actor" })
+
+	var wave_actor: Dictionary = {}
+	for a_v in ectx.actors:
+		if str(a_v.get("id", "")).begins_with("wave_1_"):
+			wave_actor = a_v
+			break
+	if wave_actor.is_empty():
+		return { "ok": false, "error": "wave actor was not spawned" }
+
+	var gp: Dictionary = wave_actor.get("grid_pos", {})
+	var col: int = int(gp.get("col", -1))
+	if col > 4:
+		return { "ok": false, "error": "wave actor spawned outside the host region at col=%d row=%d" % [col, int(gp.get("row", -1))] }
 	return { "ok": true }
 
 
