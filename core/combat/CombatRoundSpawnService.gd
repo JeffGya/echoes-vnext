@@ -372,8 +372,11 @@ func _place_enemy_spawns(ectx: EncounterContext, new_actors: Array) -> Array:
 	# Host-region filter (V2-COMBAT-003 defect fix). Without this, a candidate can land on a
 	# moated island: unreachable ground that nothing can walk off. GridService.largest_walkable_region
 	# is the one host-region authority — EncounterSetupService.gd:392 uses the same call for
-	# initial placement. An empty region (walkable has no bounds, or bounds are empty) keeps
-	# every walkable cell as a candidate, so the no-terrain legacy path stays unchanged.
+	# initial placement. The `not host_region.is_empty()` fallback below is defensive. It does not
+	# fire in practice: StageTerrain._is_walkable_in_bounds skips the bounds test when bounds are
+	# empty, so a region with no bounds still comes back non-empty. The `walkable.is_empty()` guard
+	# above already excludes the only case that could return an empty region. The no-terrain legacy
+	# path is protected by that guard, not by this fallback.
 	var host_region: Dictionary = {}
 	if not walkable.is_empty():
 		var bounds: Dictionary = ectx.terrain.get("bounds", {})
