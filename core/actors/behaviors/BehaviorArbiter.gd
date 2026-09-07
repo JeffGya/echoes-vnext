@@ -1617,21 +1617,22 @@ func _generate_candidates(
 	# Score-based penalties alone are insufficient: for high-guard callings (onyamesu base=55)
 	# the morale swing (+40 net) cannot be reliably overcome without over-correcting for other echoes.
 	#
-	# Hard rule: if the echo guarded last round and HP is not critical (> 20%), suppress guard.
-	# This works for ALL callings and morale/fear states. At critical HP (≤ 20%) guard remains
-	# available so a dying echo can try to survive rather than being forced to attack.
+	# Hard rule: if the actor guarded last round and HP is not critical (> 20%), suppress guard.
+	# This works for ALL actor types, callings and morale/fear states. At critical HP (≤ 20%)
+	# guard remains available so a dying actor can try to survive rather than being forced to act.
+	# An enemy is suppressed the same way an echo is — an enemy guard-loop is the same
+	# never-ending-combat failure as an echo guard-loop, just on the other faction.
 	var guard_range: int = int(_cfg_get("guard_range"))
 	if not nearest_enemy.is_empty() and enemy_dist <= guard_range:
 		var allow_guard: bool = true
-		if actor_type == "echo":
-			var last_i_g_v: Variant = actor.get("last_intent", {})
-			var last_i_g: Dictionary = last_i_g_v if last_i_g_v is Dictionary else {}
-			if str(last_i_g.get("action_type", "")) == "actor.guard":
-				# Suppress unless critically wounded — dying echoes may legitimately need to guard.
-				var crit_threshold: float = float(
-					(_cfg_get("situational_muls") as Dictionary).get("own_hp_critical", {}).get("threshold", 0.20)
-				)
-				allow_guard = ActorService.health_ratio(actor) <= crit_threshold
+		var last_i_g_v: Variant = actor.get("last_intent", {})
+		var last_i_g: Dictionary = last_i_g_v if last_i_g_v is Dictionary else {}
+		if str(last_i_g.get("action_type", "")) == "actor.guard":
+			# Suppress unless critically wounded — a dying actor may legitimately need to guard.
+			var crit_threshold: float = float(
+				(_cfg_get("situational_muls") as Dictionary).get("own_hp_critical", {}).get("threshold", 0.20)
+			)
+			allow_guard = ActorService.health_ratio(actor) <= crit_threshold
 		if allow_guard:
 			candidates.append({ "action_type": "actor.guard", "target_id": "", "priority": 0.0 })
 
@@ -1945,13 +1946,15 @@ func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dict
 		if str(last_i.get("action_type", "")) == "actor.move":
 			active.append("repeated_move_penalty")
 
-	# COMBAT-BUG-002: repeated_guard_penalty — fires when echo guarded last round AND enemy is adjacent.
-	# Works in tandem with candidate suppression in _generate_candidates():
-	# - Suppression (hard): guard removed from candidate pool → echo cannot guard again consecutively.
+	# COMBAT-BUG-002: repeated_guard_penalty — fires when an actor guarded last round AND
+	# enemy is adjacent. Applies to every actor type, in step with the candidate
+	# suppression above — an enemy that cannot guard must still be pushed toward melee
+	# over idle, the same as an echo.
+	# - Suppression (hard): guard removed from candidate pool → actor cannot guard again consecutively.
 	# - This penalty (soft): on the suppressed turn, melee_attack gets +15 over idle/protect_ally,
-	#   ensuring the echo attacks rather than idling. Also fires when guard re-enters the pool
+	#   ensuring the actor attacks rather than idling. Also fires when guard re-enters the pool
 	#   (HP critical exception) to moderately discourage it vs melee.
-	if actor_type == "echo" and enemy_dist <= 1:
+	if enemy_dist <= 1:
 		var last_i_rg_v: Variant = actor.get("last_intent", {})
 		var last_i_rg: Dictionary = last_i_rg_v if last_i_rg_v is Dictionary else {}
 		if str(last_i_rg.get("action_type", "")) == "actor.guard":
