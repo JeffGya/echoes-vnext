@@ -2055,3 +2055,52 @@ Filed to V2-COMBAT-003.5. The combat board starts at 12x12 and gains +1 per comp
 two realms are live today, so the board never exceeds 14x14. The completed-realm counter itself is
 confirmed correct by the owner; the board-size formula is what stays too small for the terrain
 features this story adds.
+
+## 26. Play test result (2026-09-08)
+
+The owner ran three test sessions on a fresh save. The owner accepted the result. This section
+records only what the sessions showed.
+
+### 26.1 Session A — boards and bridges: PASSED
+
+- Bridges read correctly.
+- Islands are moated.
+- The ENDURE island-spawn defect (section 25.2) is gone.
+- The owner checked both realms.
+
+**Open note, not a defect.** Island shape looks similar between the two realms. The boards
+themselves do differ by realm. This needs no fix. It is a design note for later.
+
+### 26.2 Session B — fear and refusal: PASSED in the main
+
+- The Absolute Fear Rule fires in play. It fires at the nascent threshold of 65.
+- The owner could not force a stalemate.
+
+**Record this plainly.** The forced-retreat path (section "a fight where nothing moves ends as a
+forced retreat", commit `f5c22f6`) did not fire in play. The fix is proven by test and by
+measurement. It is not proven by observation in play. Do not read this section as a claim that the
+fix was seen working.
+
+### 26.3 Session C — guidance and voice: PASSED
+
+- The log shows "Echo answered the Keeper's guidance" for the `guide protect` and `guide advance`
+  commands.
+- Divergence barks appear.
+
+### 26.4 DEFECT — `combat_emotion` debug command throws (found in play, not fixed)
+
+```
+SCRIPT ERROR: Invalid access to property or key '_emotion_debug' on a base object of type
+'Node2D (CombatTokenLayer)', at ui/AppRoot.gd:1008.
+```
+
+**Cause.** `ui/screens/combat/CombatTokenLayer.gd:52` `set_emotion_debug()` is a deliberate no-op.
+Its own comment says raw fear and morale must stay absent from player-facing combat snapshots.
+The layer was gutted on purpose. `ui/AppRoot.gd:1008` still reads the private `_emotion_debug`
+field that went with it. The command cannot work, even after the crash is fixed, because the field
+it reads is gone by design.
+
+**Decision.** Filed to V2-COMBAT-003.5. Not fixed here.
+
+**Not affected.** The `emotion` debug command already reports fear and morale. It does not use
+`_emotion_debug` and still works.
