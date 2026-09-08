@@ -192,6 +192,8 @@ func setup(t: int) -> void:
 		# COMBAT-002: store initiative modifiers so EncounterRoundsState.enter() can use them.
 		var combat_cfg: Dictionary = bdata.get("combat", {})
 		flow_ctx.encounter_ctx.initiative_cfg = combat_cfg.get("initiative_modifiers", {})
+		# V2-COMBAT-003: store the stalemate config the same way, for the same reader.
+		flow_ctx.encounter_ctx.stalemate_cfg = combat_cfg.get("stalemate", {})
 
 	# Build actors only once (when phase_snapshot is empty = first entry before machine starts).
 	if flow_ctx.encounter_ctx.phase_snapshot.is_empty():

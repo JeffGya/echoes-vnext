@@ -113,6 +113,10 @@ static func register(runner) -> void:
 	# Slice 6E Task C: two actors on one cell must not discard the whole board.
 	runner.register_test("combat_roundtrip/stacked_actors_keep_selection_alive", func(): return test_stacked_actors_keep_selection_alive())
 	runner.register_test("combat_roundtrip/published_option_carries_truthful_control_and_hazards", func(): return test_published_option_carries_truthful_control_and_hazards())
+	# V2-COMBAT-003 — a fight where neither side can deal damage cannot end by any objective
+	# check (both actors refuse/guard/miss forever). The no-progress detector must end it.
+	runner.register_test("combat_roundtrip/no_progress_stalemate_ends_as_forced_retreat", func(): return test_no_progress_stalemate_ends_as_forced_retreat())
+	runner.register_test("combat_roundtrip/forced_retreat_grants_nothing", func(): return test_forced_retreat_grants_nothing())
 
 
 ## V2-INFRA-003 Phase 6 Slice 6G: the live movement helper family moved off FlowRuntime onto
@@ -204,6 +208,167 @@ static func _enemy_pos(ectx) -> Dictionary:
 		if str(a_v.get("faction", "")) == "enemy" and not a_v.get("is_dead", false):
 			return a_v.get("grid_pos", {})
 	return {}
+
+
+# ---------------------------------------------------------------------------
+# V2-COMBAT-003 — no-progress stalemate (a fight where neither side deals damage).
+# ---------------------------------------------------------------------------
+
+## Builds a real 1-echo-vs-1-enemy encounter, using the standard party+board setup, then trims
+## the actor list to exactly those two and zeroes their offense so melee can never deal damage:
+## CombatService._melee_damage() computes base = max(0, atk - eff_def), so atk=0 already floors
+## it at 0 for the attacker's own hit, and def=999 on both sides adds a wide safety margin
+## against the +5 morale_bonus term (attacker morale 100 => (100-50)/10 = +5) that could
+## otherwise push a stray hit above 0 if either actor's morale drifts up during the fight.
+## Returns {} on setup failure or if a living echo/enemy pair could not be found.
+static func _setup_no_progress(seed_tag: String) -> Dictionary:
+	var env: Dictionary = _setup(seed_tag, true, "off", EncounterResolutionModes.COMBAT)
+	if env.is_empty():
+		return {}
+	var ectx: EncounterContext = env["ectx"]
+	var echo: Dictionary = {}
+	var enemy: Dictionary = {}
+	for a_v in ectx.actors:
+		if not (a_v is Dictionary):
+			continue
+		var a: Dictionary = a_v
+		if echo.is_empty() and str(a.get("faction", "")) == "echo" and not a.get("is_dead", false):
+			echo = a
+		elif enemy.is_empty() and str(a.get("faction", "")) == "enemy" and not a.get("is_dead", false):
+			enemy = a
+	if echo.is_empty() or enemy.is_empty():
+		return {}
+	for a in [echo, enemy]:
+		var a_stats: Dictionary = a.get("stats", {})
+		a_stats["atk"] = 0
+		a_stats["def"] = 999
+	ectx.actors = [echo, enemy]
+	return env
+
+
+## Drives combat.init, then up to max_rounds full rounds, stopping as soon as combat ends.
+static func _drive_no_progress(runtime, ectx, max_rounds: int) -> void:
+	runtime.dispatch({ "type": "combat.init" })
+	_drive_no_progress_rounds(runtime, ectx, max_rounds)
+
+
+static func _drive_no_progress_rounds(runtime, ectx, max_rounds: int) -> void:
+	for _r in range(max_rounds):
+		if bool(ectx.combat_state.get("combat_over", false)):
+			break
+		runtime.dispatch({ "type": "combat.confirm_round" })
+		var guard: int = 0
+		while guard < 40:
+			guard += 1
+			var cs: Dictionary = ectx.combat_state
+			if bool(cs.get("combat_over", false)): break
+			if str(cs.get("round_phase", "")) != "in_round": break
+			runtime.dispatch({ "type": "combat.next_actor" })
+
+
+static func _no_progress_round_limit(runtime) -> int:
+	var combat_cfg: Dictionary = runtime.config_service.get_balance().get("data", {}).get("combat", {})
+	var stalemate_cfg: Dictionary = combat_cfg.get("stalemate", {})
+	return int(stalemate_cfg.get("no_progress_round_limit", 0))
+
+
+## Test 1 — a fight neither side can win by damage must still end, exactly at the configured
+## no_progress_round_limit, as a forced retreat. Before the V2-COMBAT-003 fix this fails: there
+## is no branch in CombatState.check_end_condition() that can end a fight with no death and no
+## damage, so combat_over never becomes true and the loop guard (40 actor-turns per round) is
+## the only thing that stops the test — it does not stop the ROUND counter, so this would spin
+## past the limit with combat still active.
+static func test_no_progress_stalemate_ends_as_forced_retreat() -> Dictionary:
+	var env: Dictionary = _setup_no_progress("no_progress_a")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed — could not build a live echo/enemy pair" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var ectx: EncounterContext = env["ectx"]
+
+	var limit: int = _no_progress_round_limit(runtime)
+	if limit <= 0:
+		return { "ok": false, "error": "data.combat.stalemate.no_progress_round_limit is 0 or missing — cannot test" }
+
+	# One round short of the limit: the fight must still be running (no other end condition
+	# can fire — no one can deal damage, so no one can die).
+	_drive_no_progress(runtime, ectx, limit - 1)
+	if bool(ectx.combat_state.get("combat_over", false)):
+		return { "ok": false, "error": "combat ended before the no-progress limit (round_counter=%d, limit=%d)" % [int(ectx.combat_state.get("round_counter", -1)), limit] }
+	if int(ectx.combat_state.get("no_progress_streak", -1)) != limit - 1:
+		return { "ok": false, "error": "expected no_progress_streak=%d after %d damage-free rounds, got %s" % [limit - 1, limit - 1, str(ectx.combat_state.get("no_progress_streak"))] }
+
+	# One more round crosses the limit — the fight must end as a forced retreat.
+	_drive_no_progress_rounds(runtime, ectx, 1)
+
+	if not bool(ectx.combat_state.get("combat_over", false)):
+		return { "ok": false, "error": "combat did not end at the no-progress limit (round_counter=%d, streak=%d, limit=%d)" % [int(ectx.combat_state.get("round_counter", -1)), int(ectx.combat_state.get("no_progress_streak", -1)), limit] }
+	if flow_ctx.encounter_ctx != null:
+		return { "ok": false, "error": "encounter_ctx was not cleared after the forced retreat" }
+	var snap: Dictionary = flow_ctx.last_snapshot
+	if str(snap.get("type", "")) != FlowStateIds.RESOLVE:
+		return { "ok": false, "error": "expected a flow.resolve snapshot, got type=%s" % str(snap.get("type", "")) }
+	var data: Dictionary = snap.get("data", {})
+	if str(data.get("run_type", "")) != "forced_retreat":
+		return { "ok": false, "error": "expected run_type=forced_retreat (never confused with a chosen retreat), got: %s" % str(data.get("run_type", "")) }
+	return { "ok": true }
+
+
+## Test 2 — a forced retreat must grant NOTHING. Before the fix this fails for the same reason
+## as test 1: combat never ends, so there is no forced-retreat outcome to assert zero-payout on
+## in the first place — the round loop still running IS the failure.
+static func test_forced_retreat_grants_nothing() -> Dictionary:
+	var env: Dictionary = _setup_no_progress("no_progress_b")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed — could not build a live echo/enemy pair" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var ectx: EncounterContext = env["ectx"]
+
+	var limit: int = _no_progress_round_limit(runtime)
+	if limit <= 0:
+		return { "ok": false, "error": "data.combat.stalemate.no_progress_round_limit is 0 or missing — cannot test" }
+
+	var ase_before: int = runtime.econ.get_ase()
+	var ekwan_before: int = runtime.econ.get_ekwan()
+	var roster_before: Array = (flow_ctx.save_data.get("sanctum", {}) as Dictionary).get("roster", []) as Array
+	var xp_before: Dictionary = {}
+	for e_v in roster_before:
+		var e: Dictionary = e_v
+		xp_before[str(e.get("id", ""))] = int(e.get("xp_total", -1))
+
+	_drive_no_progress(runtime, ectx, limit)
+
+	if flow_ctx.encounter_ctx != null:
+		return { "ok": false, "error": "the fight did not resolve as a forced retreat — nothing to assert zero-payout on" }
+	var snap: Dictionary = flow_ctx.last_snapshot
+	var data: Dictionary = snap.get("data", {})
+	if str(data.get("run_type", "")) != "forced_retreat":
+		return { "ok": false, "error": "expected the forced_retreat card, got run_type=%s" % str(data.get("run_type", "")) }
+
+	# The card itself must show zero.
+	if int(data.get("ase_awarded", -1)) != 0:
+		return { "ok": false, "error": "forced_retreat card shows non-zero Ase: %s" % str(data.get("ase_awarded")) }
+	if int(data.get("ekwan_awarded", -1)) != 0:
+		return { "ok": false, "error": "forced_retreat card shows non-zero Ekwan: %s" % str(data.get("ekwan_awarded")) }
+	var breakdown: Array = data.get("reward_breakdown", []) as Array
+	if not breakdown.is_empty():
+		return { "ok": false, "error": "forced_retreat card carries a non-empty reward_breakdown: %s" % str(breakdown) }
+
+	# The durable economy and roster Storyweight (xp_total) must be byte-identical to baseline.
+	if runtime.econ.get_ase() != ase_before:
+		return { "ok": false, "error": "Ase changed: %d -> %d" % [ase_before, runtime.econ.get_ase()] }
+	if runtime.econ.get_ekwan() != ekwan_before:
+		return { "ok": false, "error": "Ekwan changed: %d -> %d" % [ekwan_before, runtime.econ.get_ekwan()] }
+	var roster_after: Array = (flow_ctx.save_data.get("sanctum", {}) as Dictionary).get("roster", []) as Array
+	for e_v in roster_after:
+		var e: Dictionary = e_v
+		var eid: String = str(e.get("id", ""))
+		var before: int = int(xp_before.get(eid, -9999))
+		var after: int = int(e.get("xp_total", -9998))
+		if before != after:
+			return { "ok": false, "error": "Storyweight (xp_total) changed for %s: %d -> %d" % [eid, before, after] }
+	return { "ok": true }
 
 
 static func test_live_hazard_union_and_mover_damage() -> Dictionary:

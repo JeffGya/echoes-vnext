@@ -26,6 +26,10 @@ var placement_seed: int = 0
 var combat_state: Dictionary = {}
 # COMBAT-002: initiative config — set by EncounterSetupService.setup() from balance.json data.combat.initiative_modifiers.
 var initiative_cfg: Dictionary = {}
+# V2-COMBAT-003: stalemate config — set by EncounterSetupService.setup() from balance.json
+# data.combat.stalemate. Read once by EncounterRoundsState.enter() to seed CombatState's
+# no-progress counter, so a fight where neither faction deals damage can still end.
+var stalemate_cfg: Dictionary = {}
 # COMBAT-003: transient round action results — cleared at start of each round; NOT persisted.
 var last_round_results: Array = []
 # COMBAT-SEQ: most recent single actor action result — updated after each actor acts; {} between rounds.

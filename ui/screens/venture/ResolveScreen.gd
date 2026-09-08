@@ -131,8 +131,9 @@ func _clear() -> void:
 
 func _render(data: Dictionary, actions: Dictionary) -> void:
 	# V2-ECONOMY-001: scout_return path — partial Ase, no rank/vow/next_stage
+	# V2-COMBAT-003: forced_retreat is the same card shape with zero payout — same renderer.
 	var run_type := str(data.get("run_type", ""))
-	if run_type == "scout_return":
+	if run_type == "scout_return" or run_type == "forced_retreat":
 		_render_scout_return(data, actions)
 		return
 	# V2-STAGE-003: contact_result path — NPC conversation outcome
@@ -497,11 +498,17 @@ func _render_contact_result(data: Dictionary, actions: Dictionary) -> void:
 # ─────────────────────────────────────────────────────────────
 
 func _render_scout_return(data: Dictionary, actions: Dictionary) -> void:
-	_banner.text = "Scout Return"
+	# V2-COMBAT-003: forced_retreat is a stalemate, not a scout return — its own header line
+	# so the player never reads it as a retreat they chose.
+	var _is_forced_retreat := str(data.get("run_type", "")) == "forced_retreat"
+	_banner.text = "Forced Retreat" if _is_forced_retreat else "Scout Return"
 	_banner.add_theme_color_override("font_color", Color("#315E6D"))  # Deep Mist Blue on warm panel
 
-	var intel := int(data.get("intel_count", 0))
-	_reason.text = "%d situation%s revealed" % [intel, "s" if intel != 1 else ""]
+	if _is_forced_retreat:
+		_reason.text = "The fight did not end"
+	else:
+		var intel := int(data.get("intel_count", 0))
+		_reason.text = "%d situation%s revealed" % [intel, "s" if intel != 1 else ""]
 
 	# Phase 1 Close: optional summary_line enrichment (harmless if absent)
 	var summary_line := str(data.get("summary_line", ""))

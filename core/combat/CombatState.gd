@@ -35,9 +35,12 @@ const REQUIRED_FIELDS := [
 ## actors is deep-copied so mutations to the source do not propagate.
 ## initiative_seed: derived from ectx.placement_seed (pass 0 in tests for seed-agnostic checks).
 ## init_cfg: data.combat.initiative_modifiers from balance.json (pass {} for modifier-free checks).
+## stalemate_cfg: data.combat.stalemate from balance.json (pass {} to disable the no-progress
+## forced retreat — no_progress_round_limit defaults to 0, which check_end_condition() reads
+## as "off").
 static func create(actors: Array, objective: String,
 		initiative_seed: int = 0, init_cfg: Dictionary = {},
-		objective_params: Dictionary = {}) -> Dictionary:
+		objective_params: Dictionary = {}, stalemate_cfg: Dictionary = {}) -> Dictionary:
 	return {
 		"actors":                  actors.duplicate(true),
 		"objective":               objective,
@@ -70,6 +73,20 @@ static func create(actors: Array, objective: String,
 		# V2-STAGE-004 P4: temporary-ally death bark guard. Fires once per encounter.
 		# Declared here with the other latches so it is not an undeclared runtime key.
 		"_ally_killed_barked":  false,
+		# V2-COMBAT-003: universal no-progress detector. no_progress_streak counts consecutive
+		# rounds with no damage AND no per-objective progress counter advancing
+		# (FlowRuntime._end_round() writes both fields, scanning ectx.last_round_results for
+		# damage and combat_state's own protect_counter/guide_protect_counter/contain_counter/
+		# hold_counter for progress — a GUIDE_SPIRIT escort or a RECOVER hold can legitimately
+		# run many damage-free rounds while still winning). At no_progress_round_limit,
+		# check_end_condition() ends the fight as a forced retreat — a fallback for every
+		# objective, so a fight where NOTHING moves cannot loop forever. 0 or absent config
+		# disables the check. _no_progress_last_sum is FlowRuntime's own scratch value (the
+		# progress-counter sum as of the previous round) — declared here so it is not an
+		# undeclared runtime key, mirroring _ally_killed_barked above.
+		"no_progress_streak":      0,
+		"no_progress_round_limit": int(stalemate_cfg.get("no_progress_round_limit", 0)),
+		"_no_progress_last_sum":   0,
 	}
 
 
@@ -193,8 +210,11 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 ##   9. GUIDE_SPIRIT (protect mode) survived → victory  (guide_protect_counter >= duration_turns)
 ##      guide_protect_counter advances only on rounds an echo was within escort_radius of the
 ##      living spirit (guard-to-count) and never resets — the party must actually reach the spirit.
+##   10. Universal no-progress stalemate → forced retreat  (checked LAST, every objective;
+##       no_progress_streak >= no_progress_round_limit, both stored on combat_state)
 ##
-## combat_state carries round_counter, protect_counter, objective_params, and hold_counter.
+## combat_state carries round_counter, protect_counter, objective_params, hold_counter,
+## no_progress_streak, and no_progress_round_limit.
 ## Callers that omit combat_state (COMBAT / PURIFY_SHRINE) receive byte-identical results
 ## to the previous 2-arg signature — no new branches fire for those modes.
 static func check_end_condition(actors: Array, objective: String,
@@ -303,6 +323,21 @@ static func check_end_condition(actors: Array, objective: String,
 		var _gs_duration: int = int(obj_params.get("duration_turns", 4))
 		if int(combat_state.get("guide_protect_counter", 0)) >= _gs_duration:
 			return { "over": true, "victory": true, "reason": "spirit_protected" }
+
+	# 10. Universal no-progress stalemate. Checked LAST, after every objective-specific win or
+	# loss, so it only fires when nothing else ended the fight this round. Applies to every
+	# objective, as a fallback for a fight where nothing above can fire — no damage AND no
+	# per-objective counter (protect/guide_protect/contain/hold) advancing, e.g. both actors
+	# refuse or guard every round. FlowRuntime._end_round() is the sole writer of
+	# no_progress_streak; it resets on damage OR on any of those counters rising, so a
+	# GUIDE_SPIRIT escort or a RECOVER hold that is genuinely progressing toward its own win
+	# condition — with zero combat damage the whole time — never gets cut short here. Ends as a
+	# forced retreat, not a defeat: see FlowRuntime._resolve_forced_retreat().
+	var no_progress_limit: int = int(combat_state.get("no_progress_round_limit", 0))
+	if no_progress_limit > 0:
+		var no_progress_streak: int = int(combat_state.get("no_progress_streak", 0))
+		if no_progress_streak >= no_progress_limit:
+			return { "over": true, "victory": false, "reason": "no_progress_forced_retreat" }
 
 	return { "over": false, "victory": false, "reason": "" }
 

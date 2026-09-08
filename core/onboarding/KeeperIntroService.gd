@@ -313,6 +313,8 @@ static func setup_trial_encounter(flow_ctx: FlowContext, cfg: Dictionary, t: int
 	flow_ctx.encounter_machine.register_default_states()
 	var combat_cfg: Dictionary = bd.get("combat", {})
 	flow_ctx.encounter_ctx.initiative_cfg = combat_cfg.get("initiative_modifiers", {})
+	# V2-COMBAT-003: stalemate config, same source and reader as EncounterSetupService.setup().
+	flow_ctx.encounter_ctx.stalemate_cfg = combat_cfg.get("stalemate", {})
 	flow_ctx.encounter_id = "keeper_intro.first_trial"
 	flow_ctx.stage_id = ""
 	flow_ctx.realm_id = ""

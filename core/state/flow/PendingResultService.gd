@@ -90,6 +90,12 @@ const _NON_OUTCOME_RUN_TYPES: Array = ["contact_result", "situation_result"]
 ## `run_type` of the withdrawal card (producer C).
 const _RUN_TYPE_SCOUT_RETURN: String = "scout_return"
 
+## V2-COMBAT-003: `run_type` of the forced-retreat card — a stalemate no faction's damage could
+## end, resolved by the same withdrawal shape as scout_return but paying nothing. Kept as its
+## own run_type (not merged into _RUN_TYPE_SCOUT_RETURN) so the UI and the logs can never
+## confuse a stalemate with a retreat the player chose.
+const _RUN_TYPE_FORCED_RETREAT: String = "forced_retreat"
+
 
 # ---------------------------------------------------------------------------
 # Store — read / write / clear
@@ -154,6 +160,7 @@ static func _flow_dict(save_data: Dictionary) -> Dictionary:
 ##
 ## Read off the snapshot, not off the handler, so all four outcomes have ONE writer:
 ##   run_type "scout_return"                      -> withdrawal   (producer C, both call sites)
+##   run_type "forced_retreat"                     -> withdrawal   (producer C, no-progress stalemate)
 ##   run_type "contact_result"/"situation_result"  -> ""            (mid-stage card)
 ##   no run_type, no encounter_id                  -> ""            (producer F, see below)
 ##   no run_type, victory false                    -> defeat       (producer A)
@@ -178,7 +185,7 @@ static func classify(snapshot: Dictionary) -> String:
 	var data_v: Variant = snapshot.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	var run_type := str(data.get("run_type", ""))
-	if run_type == _RUN_TYPE_SCOUT_RETURN:
+	if run_type == _RUN_TYPE_SCOUT_RETURN or run_type == _RUN_TYPE_FORCED_RETREAT:
 		return OUTCOME_WITHDRAWAL
 	if run_type in _NON_OUTCOME_RUN_TYPES:
 		return ""
