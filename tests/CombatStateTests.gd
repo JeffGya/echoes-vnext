@@ -32,6 +32,11 @@ static func register(runner: CoreTestRunner) -> void:
 	# V2-STAGE-004 Phase 4 (S16b): all_echoes_dead exclusion — is_ally must not keep a wiped party "alive"
 	runner.register_test("combat/all_echoes_dead_excludes_ally", Callable(CombatStateTests, "_t_all_echoes_dead_excludes_ally"))
 	runner.register_test("combat/all_echoes_dead_living_normal_echo_prevents", Callable(CombatStateTests, "_t_all_echoes_dead_living_normal_echo_prevents"))
+	# V2-COMBAT-003 follow-up: GUIDE_SPIRIT escort mode must be exempt from the no-progress
+	# stalemate check, same as PURIFY_SHRINE and for the same reason — its own clock is
+	# invisible to the detector.
+	runner.register_test("combat/no_progress_exempts_guide_spirit_escort", Callable(CombatStateTests, "_t_no_progress_exempts_guide_spirit_escort"))
+	runner.register_test("combat/no_progress_still_applies_to_guide_spirit_protect", Callable(CombatStateTests, "_t_no_progress_still_applies_to_guide_spirit_protect"))
 
 
 # -------------------------
@@ -291,4 +296,58 @@ static func _t_all_echoes_dead_living_normal_echo_prevents() -> Dictionary:
 			"ok": false,
 			"error": "Expected combat NOT over (one normal echo still alive), got over=true reason='%s'" % str(result.get("reason", ""))
 		}
+	return { "ok": true }
+
+
+# -------------------------
+# V2-COMBAT-003 follow-up: no-progress stalemate must exempt GUIDE_SPIRIT escort mode only.
+#
+# The detector sums protect_counter + guide_protect_counter + contain_counter + hold_counter as
+# "progress". guide_protect_counter advances only in protect mode (CombatRoundGuideSpiritService,
+# guarded on guide_mode == "protect"). Escort mode's real progress is distance to the destination,
+# which is not in that sum, so a long, damage-free crossing looks identical to a true stall and
+# the detector would end a still-winnable fight. Protect mode is not exempt: guide_protect_counter
+# IS in the sum there, so the detector is correct and useful.
+#
+# guide_mode is set directly via objective_params — no seeded roll — so both tests are fully
+# deterministic.
+# -------------------------
+
+static func _guide_spirit_actors() -> Array:
+	return [
+		{ "id": "echo_1",   "faction": "echo",  "is_dead": false },
+		{ "id": "enemy_1",  "faction": "enemy", "is_dead": false },
+		{ "id": "spirit_1", "faction": "neutral", "is_dead": false, "is_spirit": true },
+	]
+
+
+static func _t_no_progress_exempts_guide_spirit_escort() -> Dictionary:
+	var actors: Array = _guide_spirit_actors()
+	var combat_state: Dictionary = CombatState.create(
+		actors, EncounterResolutionModes.GUIDE_SPIRIT, 0, {}, { "guide_mode": "escort" },
+		{ "no_progress_round_limit": 15 })
+	# No damage, no counter rose — the streak reached the limit with nothing else to end the fight.
+	combat_state["no_progress_streak"] = 15
+
+	var result: Dictionary = CombatState.check_end_condition(actors, EncounterResolutionModes.GUIDE_SPIRIT, combat_state)
+	if bool(result.get("over", false)):
+		return {
+			"ok": false,
+			"error": "Expected GUIDE_SPIRIT escort to be exempt from the stalemate check, got over=true reason='%s'" % str(result.get("reason", ""))
+		}
+	return { "ok": true }
+
+
+static func _t_no_progress_still_applies_to_guide_spirit_protect() -> Dictionary:
+	var actors: Array = _guide_spirit_actors()
+	var combat_state: Dictionary = CombatState.create(
+		actors, EncounterResolutionModes.GUIDE_SPIRIT, 0, {}, { "guide_mode": "protect" },
+		{ "no_progress_round_limit": 15 })
+	combat_state["no_progress_streak"] = 15
+
+	var result: Dictionary = CombatState.check_end_condition(actors, EncounterResolutionModes.GUIDE_SPIRIT, combat_state)
+	if not bool(result.get("over", false)):
+		return { "ok": false, "error": "Expected GUIDE_SPIRIT protect to still hit the stalemate check, got over=false" }
+	if str(result.get("reason", "")) != "no_progress_forced_retreat":
+		return { "ok": false, "error": "Expected reason='no_progress_forced_retreat', got '%s'" % str(result.get("reason", "")) }
 	return { "ok": true }

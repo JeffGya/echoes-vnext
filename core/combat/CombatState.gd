@@ -211,7 +211,7 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 ##      guide_protect_counter advances only on rounds an echo was within escort_radius of the
 ##      living spirit (guard-to-count) and never resets — the party must actually reach the spirit.
 ##   10. No-progress stalemate → forced retreat  (checked LAST, every objective except
-##       PURIFY_SHRINE, whose shrine drain ends the fight on its own;
+##       PURIFY_SHRINE and GUIDE_SPIRIT escort mode, whose own clocks the detector cannot see;
 ##       no_progress_streak >= no_progress_round_limit, both stored on combat_state)
 ##
 ## combat_state carries round_counter, protect_counter, objective_params, hold_counter,
@@ -335,14 +335,19 @@ static func check_end_condition(actors: Array, objective: String,
 	# time — never gets cut short here. Ends as a forced retreat, not a defeat: see
 	# FlowRuntime._resolve_forced_retreat().
 	#
-	# PURIFY_SHRINE IS EXCLUDED. Its clock advances with no actor acting: the shrine loses
-	# base_drain_per_round hit points every round (CombatRoundShrineService), and one purify
-	# stack can only slow that drain, never stop it, so branch 2 (shrine_destroyed) always ends
-	# the fight. The streak cannot see that drain, so it would end a fight that is still
-	# winnable — a PURIFY_SHRINE win is all_enemies_defeated, which the party can still reach
-	# after a long damage-free spell.
+	# Two objectives are excluded. See data.combat.stalemate._comment in balance.json for the
+	# full reasoning; the short form:
+	#   PURIFY_SHRINE — the shrine loses hit points every round with no actor acting, so branch 2
+	#     (shrine_destroyed) always ends the fight on its own.
+	#   GUIDE_SPIRIT escort mode — the spirit's own steps toward the destination do not advance
+	#     guide_protect_counter (that field only counts protect-mode guard rounds), so a long,
+	#     damage-free crossing looks identical to a true stall. Escort protect mode is NOT
+	#     excluded: it has guide_protect_counter and the detector is useful there.
 	var no_progress_limit: int = int(combat_state.get("no_progress_round_limit", 0))
-	if no_progress_limit > 0 and objective != EncounterResolutionModes.PURIFY_SHRINE:
+	var is_guide_spirit_escort: bool = objective == EncounterResolutionModes.GUIDE_SPIRIT \
+		and str(combat_state.get("guide_mode", "protect")) == "escort"
+	if no_progress_limit > 0 and objective != EncounterResolutionModes.PURIFY_SHRINE \
+			and not is_guide_spirit_escort:
 		var no_progress_streak: int = int(combat_state.get("no_progress_streak", 0))
 		if no_progress_streak >= no_progress_limit:
 			return { "over": true, "victory": false, "reason": "no_progress_forced_retreat" }
