@@ -266,7 +266,49 @@ static func test_sanctum_fingerprint() -> Dictionary:
 ##      `data.directives[<id>]` in balance.json. The old id missed that lookup and fell through to
 ##      the hardcoded default 2; scout_carefully's authored value is 3, so entry fog lifts wider.
 ## Previous value: 528b8d5a584bb06dcc199340d99a78e06776e3ab79d364519701bd169e707e54.
-const STAGE_EXPLORE_FINGERPRINT_HASH := "aee5d5cc22cc484d794f55c967c92d438ba103cb6cb943b61c76fb8b6d4426be"
+##
+## V2-COMBAT-003 terrain commit 3 — RE-RECORDED ONCE. Islands replace stragglers.
+## The payload diff on THIS board is exactly one pair of lines, and nothing else moved:
+##   removed  data.terrain.stragglers = [ {col:22,row:4} ]                 — one single cell
+##   added    data.terrain.islands    = [ {col:11,row:3,w:2,h:2, cells:[[11,3],[11,4],[12,3],[12,4]]},
+##                                        {col:0, row:19,w:2,h:2, cells:[[0,19],[0,20],[1,19],[1,20]]} ]
+## `data.terrain.plateaus` and `data.terrain.bridges` are BYTE-IDENTICAL to the previous
+## recording, which is the direct evidence that the plateau, shape and bridge RNG streams
+## and the connectivity repair were not touched: only the renamed island streams differ.
+##
+## `data.party_pos` is ALSO unchanged, at {col:8,row:13}, and that is the second thing this
+## board demonstrates. The full walkable set's minimum column moved from 8 to 0, because
+## the second island occupies (0,19),(0,20),(1,19),(1,20). Under the pre-commit-3 rule
+## entry_cell took the leftmost column of the whole set, so the party would have started at
+## column 0 — on a 4-cell island with a clear ring of void around it and no legal step in
+## any direction. entry_cell now anchors to the host region, so party_pos does not move.
+## Previous value: aee5d5cc22cc484d794f55c967c92d438ba103cb6cb943b61c76fb8b6d4426be.
+# RE-RECORDED, V2-COMBAT-003 terrain commit 5. The payload diff on this board is exactly one
+# hunk, dumped via the SE_DEBUG print below on this tree and on b4dd797: "situations" goes
+# from [] to one entry — sit.1, type loot, non-objective, now at (11,10) and therefore inside
+# the party's opening reveal radius. Every other line of the payload is byte-identical, the
+# terrain included. RealmGenerator._place_situations now refuses a cell off the host region
+# (decision 22), so a situation that used to be dropped on unreachable ground is placed on
+# reachable ground instead. No RNG path was added, removed or reordered to do it.
+# RE-RECORDED, V2-COMBAT-003 terrain commit 4 (bridges + the erosion leftover fix).
+# Attributed by capturing this exact payload on BOTH trees -- this branch and 95895a0 --
+# and diffing them field by field. The payload differs in exactly three places, and every
+# one follows from a single cause:
+#   1. data.terrain.plateaus[0].cells 101 -> 102 and plateaus[1].cells 108 -> 109.
+#      THE CAUSE. Plateau erosion no longer leaves a cell attached to the plateau at a
+#      corner only; such a cell is absorbed instead. Each plateau therefore gains one cell.
+#   2. data.terrain.islands[0] and islands[1] move (11,3)->(40,12) and (0,19)->(16,30).
+#      Downstream of 1: islands are minted onto the ground that the plateaus left free, so
+#      changed plateaus place the islands elsewhere. Their SIZES are unchanged (4 cells).
+#   3. data.situations 1 entry -> 0 entries. Also downstream of 1, and it is a FOG effect,
+#      not a placement failure: StageExploreSnapshotBuilder.gd:84 emits an entry only for a
+#      situation with revealed=true ("Undiscovered situations: no entry emitted -- true fog
+#      of war"). The changed geometry moves the party opening reveal, so the one situation
+#      that happened to start revealed no longer does. The situation is still on the map.
+#      The previous commit moved this same field 0 -> 1 for the mirror-image reason.
+# data.terrain.bridges is BYTE-IDENTICAL: no island on this particular board drew a bridge,
+# so island bridging contributes nothing to this hash. Nothing else in the payload moved.
+const STAGE_EXPLORE_FINGERPRINT_HASH := "8214628aa3aec9c6ab5057fa314668581b8789a83fad99ce760c2e612eaaf091"
 
 static func test_stage_explore_fingerprint() -> Dictionary:
 	var env := _setup_stage_explore_env("fp_stage_explore")

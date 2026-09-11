@@ -166,10 +166,11 @@ blade: 75, warder: 80, ranger: 80, steward: 85, seer: 85
 |---|---|---|
 | `calling_origin` ambiguity (birth bias vs identity placeholder) | ~~Migration — resolve to two clean fields~~ **Resolved (V2-PROG-002)** | V2-PROG-002 |
 | Calling eligibility gate (rank 3 → Standing 3/6/9) | **Rewrite** (UI milestone flow — pending) | V2-PROG-004+ |
-| Calling names (V1 5 callings → V2 6 callings at S3) | ~~Rewrite~~ **Done (V2-PROG-004)** — 6 V2 IDs active in all backend systems | V2-PROG-004 ✅ |
+| Calling names (V1 5 callings → V2 6 callings at S3) | ~~**Done (V2-PROG-004)** — 6 V2 IDs active in all backend systems~~ **THAT CLAIM WAS FALSE when written.** Three backend readers were still V1: the `ActorStateMachine` passives, `initiative_modifiers.by_calling_origin`, and `calling_action_bonuses.ranger`. Completed 2026-09-04 by V2-COMBAT-003 — see the row below | V2-PROG-004 → **V2-COMBAT-003 ✅** |
 | `calling_eligible`/`calling_options` ephemeral fields | ~~Supersede (safe to drop schema shape)~~ **Superseded (V2-PROG-002)** | V2-PROG-002 |
 | Absolute fear thresholds by calling | ~~Carryover~~ **Done (V2-PROG-004)** — V2 values set in balance.json | V2-PROG-004 ✅ |
-| V1→V2 save migration (blade/warder/steward/ranger/seer) | **Done (V2-PROG-004)** — SaveService repair migrates on load | V2-PROG-004 ✅ |
+| V1→V2 save migration (blade/warder/steward/ranger/seer) | ~~**Done (V2-PROG-004)** — SaveService repair migrates on load~~ **THIS ROW IS WRONG.** No such repair exists in the tree — verified 2026-09-03, see [Domain 8.2](#82-family-two--readers-of-the-v1-calling-names) | ❌ Not done |
+| **Calling READERS still matching V1 names** | ✅ **Closed by V2-COMBAT-003.** `ActorStateMachine` passive arms → `fcb5cf0` (five passives were dead: Okofor anchor, Onyamesu stationary, Okomfo aura + read-field, Kra-Soro withdraw). `initiative_modifiers.by_calling_origin` → `c444662` (the whole per-calling initiative term scored 0 for every V2 calling; `sum_okwanfo` 3.5 is new). `calling_action_bonuses.ranger` → `20d922d` (Kra-Soro Scout Ahead was unreachable in config *and* code) | **V2-COMBAT-003 ✅** |
 
 **V2-PROG-002 resolution (2026-04-06):**
 - `calling_origin` — immutable birth bias. Seeded at summon by EchoFactory. Never changes. Fallback only.
@@ -266,6 +267,7 @@ Humility ↔ Generosity
 | `SaveService.gd` vector repair | **Extend** — calls `VectorService.backfill_vector_scores()` to add 6 new keys to existing echo saves at 0 | V2-PROG-003 | ✅ Done |
 | Existing `vector_scores` save data (4 old keys) | **Migration** — V2-MIG-002 ensures `{}` exists; V2-PROG-003 backfill adds 6 new keys at 0 on load | V2-MIG-002 + V2-PROG-003 | ✅ Done |
 | `dominant_vector` save field | **Carryover** — field name valid; value preserved across backfill | V2-MIG-002 | ✅ Done |
+| **Vector READERS (`GridService`, `CombatState`, `ShrineService`, UI labels)** | **Not inventoried by this domain** — see [Domain 8.1](#81-family-one--readers-of-the-10-vector-keys). `GridService._dominant_key()` could see only 4 of the 10 for the whole of V2-PROG-003 | V2-COMBAT-003 (GridService only) | ⚠️ Partial |
 
 **Invariants (unchanged):**
 - VectorService MUST remain config-driven — do not hardcode virtue names in GDScript
@@ -554,6 +556,131 @@ These systems are already done and their save seams are live:
 - `RealmGenerator` RNG draw order NOT reordered — explore paths appended after all existing draws
 - All situations start `revealed: false`, `resolved: false`, `intel_clues: []`
 - `SaveService` repair is additive — missing `explore_map` gets `StageExploreModel.make_default()`, never removed
+
+---
+
+## Domain 8 — Uninventoried readers (V2-COMBAT-003 sweep, 2026-09-03)
+
+
+### Why this domain existed at all
+
+A story marked **Done** was not done, and the record asserting it is the reason nobody looked. The
+map claimed "6 V2 IDs active in all backend systems"; three readers were still V1, and one of them —
+the per-calling initiative term — had been dead since V2-PROG-004 shipped.
+
+Two structural causes, both worth guarding against:
+
+1. **Uninventoried readers.** `GridService` appeared nowhere in this map, so its legacy-four vector
+   list survived V2-PROG-003 untouched. A migration that inventories config and the obvious consumers
+   will miss a pure-static helper every time.
+2. **Tests that author their own stale tables.** `GridTests` and `CombatStateTests` each built their
+   own V1 `by_calling_origin` fixture, so they stayed green no matter what shipped. Nothing in 1,563
+   tests could have caught the initiative gap. **A fixture that mirrors production config hides a
+   production config defect.**
+
+> **Why this section exists.** Domains 2 and 3 record their *config* as migrated, and it is.
+> Neither recorded the **readers**. `core/grid/GridService.gd` does not appear anywhere else in
+> this document, and a defect lived there for the whole of V2-PROG-003: `_dominant_key()` iterated
+> its `tiebreak_order` argument instead of the `scores` dictionary, so six of the ten vectors were
+> not out-ranked — they were never examined. An uninventoried reader can silently shadow a
+> completed migration. The rows below are the inventory that was missing.
+>
+> **All three copies are now fixed.** V2-COMBAT-003 closed `GridService` first, then ported the
+> identical correction to `CombatState` and `ShrineService` (below). The three remain separate
+> functions rather than one shared helper — see the note under the table.
+
+### 8.1 Family one — readers of the 10 vector keys
+
+Canonical keys (`data.vectors.archetype_init`): `vanguard`, `protector`, `seeker`, `pillar`,
+`strategist`, `skeptic`, `devoted`, `opportunist`, `mediator`, `nurturer`.
+
+| Reader | What it does | Verdict | Action | Owner |
+|---|---|---|---|---|
+| `core/grid/GridService.gd` `_dominant_key()` / `_placement_score()` | Placement score's `by_dominant_vector` term | **Genuine gap** — six vectors invisible | ✅ **Fixed (V2-COMBAT-003)** — `_dominant_key` now iterates every key in `scores`; `tiebreak_order` breaks ties only, unlisted keys rank last, unlisted ties break by ascending key name | V2-COMBAT-003 |
+| `core/combat/CombatState.gd:139` `_dominant_key()` | Initiative's `by_dominant_vector` term. A byte-identical private copy of the same function, called with the same 4-key list | **Was the same defect** | ✅ **Fixed (V2-COMBAT-003)** — same correction ported verbatim. Measured against every FlowFingerprintTests board (all 7 modes): individual actors' dominant vector changes in many encounters, but the sort order of the party's readiness scores does not change on any of the seven pinned boards, so **no fingerprint hash moved** (`Tests: 1561 total, 1561 passed, 0 failed` before and after, both watched directly). Two other boards (not pinned by any hash) do change relative order — harmless, since nothing asserts them. Direct unit coverage added: `combat_initiative/dominant_vector_recognizes_all_ten_vectors` | V2-COMBAT-003 |
+| `core/combat/ShrineService.gd:35,147` `_dominant_key()` | `select_purifier()`'s `purify_weight_by_vector` term; third copy of the function, `vec_tiebreak` = the same 4 legacy keys | **Was the same defect.** `data.combat.shrine.purify_weight_by_vector` authors all ten; six were unreachable | ✅ **Fixed (V2-COMBAT-003)** — same correction ported verbatim. Measured against the `fp_purify_shrine`-shaped boards produced by the suite: individual echoes' dominant vector and purify weight change, but the selected purifier (the argmax) is unchanged on every board exercised by the suite, so no fingerprint hash moved. Direct unit coverage added: `shrine/select_purifier_recognizes_all_ten_vectors`, which fails against the pre-fix function (verified: reverting `ShrineService.gd`/`CombatState.gd` alone reproduces `Tests: 1561 total, 1559 passed, 2 failed` on exactly these two new tests, nothing else) | V2-COMBAT-003 |
+| `core/combat/ShrineService.gd:33` inline default `{pillar, protector, seeker, vanguard}` | Fallback used only when `shrine_cfg` has no `purify_weight_by_vector` | **Harmless** — the real table is present in `balance.json` and has all ten. Stale, not wrong | Refresh opportunistically | *unassigned* |
+
+**Not unified into one shared helper.** Three byte-identical copies of the same 20-line function is
+a real argument for consolidation, and the "kept local/inline to avoid coupling" comments on each
+copy predate this fix and were never re-examined. But `GridService` lives in `core/grid/`, and
+`CombatState`/`ShrineService` live in `core/combat/`; a shared helper would need a new home (e.g.
+`core/common/`) that neither module currently depends on, which is a structural change with its own
+blast radius, not a two-line defect fix. All three are now separately proven correct and covered by
+tests. Consolidating them is a legitimate follow-up but is out of scope for this defect closure —
+flagged separately rather than bundled in here.
+| `core/actors/VectorService.gd` | `compute_dominant()` / `accumulate()` / `backfill_vector_scores()` | **Correct** — fully dynamic, no hardcoded keys, as Domain 3 claims. (Minor: `compute_dominant`'s candidate scan has no explicit tiebreak, so an exact tie resolves by Dictionary insertion order. Not reached today — every `archetype_init` profile has a unique maximum) | None | — |
+| `core/actors/behaviors/BehaviorArbiter.gd:106-110` `_DEFAULTS.vector_action_muls` | Fallback mirror of `data.actor.vector_action_muls` | **Correct** — all ten keys present | None | — |
+| `ui/screens/sanctum/SanctumScreen.gd` `_vector_phrase()` | Player-facing vector phrase | **Correct** — all ten arms | None | — |
+| `core/state/flow/states/venture/FlowStageExploreState.gd:580-594` `_echo_picker_hint()` | Conversation-bid hint phrase | **Correct** — all ten arms plus a default | None | — |
+| `ui/screens/sanctum/EchoPartyScreen.gd:579-585` `_vector_label()` | Party-card vector label | **Genuine gap — cosmetic.** Only 4 arms; the other six fall to `""`, so a `strategist`/`nurturer`/… Echo shows a blank label | Add the six arms (mirror `SanctumScreen._vector_phrase`) | *unassigned* |
+| `ui/AppRoot.gd:865-869` `hero_info` debug print | F1 debug dump prints only the 4 legacy scores | **Harmless** — developer diagnostic, no sim effect. Misleading while debugging vectors | Print the dict | *unassigned* |
+| `core/sanctum/EchoFactory.gd:78` inline `class_origin_weights` default | Fallback when `summoning_cfg` is absent | **Harmless** — `data.summoning.class_origin_weights` has all ten and is always loaded | Refresh opportunistically | — |
+| `core/sanctum/EchoFactory.gd:82`, `:230`, `core/sanctum/RecruitmentService.gd:253` `"protector"` | Last-resort fallback when a roll or a lookup yields nothing | **Harmless** — deliberate deterministic default | None | — |
+| `core/movement/contracts/MovementGoal.gd:21`, `core/movement/CombatPressureService.gd` `"protector"` | Movement **role** name in `MovementGoal` | **Not a vector.** Same word, different namespace — do not migrate | None | — |
+
+### 8.2 Family two — readers of the V1 calling names
+
+Production only ever produces the V2 ids: `uncalled`, `okofor`, `onyamesu`, `aduro`,
+`sum_okwanfo`, `okomfo`, `kra_soro` (the keys of `data.summoning.calling_weights`).
+V1 names `blade` / `warder` / `steward` / `ranger` / `seer` cannot occur on a new save.
+
+> **Correction to Domain 2.** That domain's table says *"V1→V2 save migration
+> (blade/warder/steward/ranger/seer) — **Done (V2-PROG-004)** — SaveService repair migrates on
+> load"*. **No such repair exists in the tree.** `core/save/SaveService.gd` touches `calling` only
+> to initialise it to `""` (`:969-974`), and no file under `core/` maps a V1 calling id to a V2
+> one. A save written before V2-PROG-004 keeps its V1 calling forever.
+>
+> **`core/sanctum/EchoFactory.gd:219-230` is NOT that bridge**, and nothing should treat it as one.
+> Its `class_map` maps a calling id to a **vector** (`"warder": "protector"`), to backfill
+> `class_origin` on an echo that lacks it. It never writes `calling` or `calling_origin`. It reads
+> V1 keys purely so that old saves still resolve — a **deliberate legacy compatibility path**, and
+> correct as written.
+
+| Reader | What it does | Verdict | Action | Owner |
+|---|---|---|---|---|
+| `core/actors/ActorStateMachine.gd:1041-1098` `_update_passive_state()` — `match calling_origin:` arms `"warder"`, `"steward"`, `"seer"`, `"ranger"` | The sole **writer** of five per-calling passive counters | **Genuine dead path — five passives are dead in play.** Warder `_anchor_rounds`; Steward `_stationary_rounds`; Seer `idle_fear_aura`, `_read_field_streak` and `_read_field_cooldown`; Ranger `_withdraw_cooldown`. Measured: `idle_fear_aura` fired **zero** times across seven probe scenarios, one of which had an Okomfo in the party | Rename the arms to the V2 ids. **Behaviour change — own commit, own before/after evidence** | *unassigned* |
+| `core/actors/behaviors/BehaviorArbiter.gd:2168-2175`, `:2189-2240` | **Readers** of `_anchor_rounds` etc., keyed on `"okofor"` / `"aduro"` / `"kra_soro"` / `"okomfo"` / `"onyamesu"` | **Already V2 — the reader is correct.** Okofor's anchor bonus is permanently zero not because this file is stale but because `ActorStateMachine` (row above) never increments the counter. One writer, migrated readers | None here — fixing the row above fixes this | — |
+| `data.maturity_expression.calling_behavior.okomfo.idle_fear_aura = 3.0` | Authored config | **Unreachable** — only read inside the dead `"seer"` arm | Reachable once the writer is renamed | *unassigned* |
+| `data.combat.initiative_modifiers.by_calling_origin` = `{blade, warder, ranger, steward, seer, uncalled}` | Initiative's per-calling modifier, read by `CombatState._calc_initiative()` | ✅ **Fixed (V2-COMBAT-003)** — re-authored on the 7 V2 ids, values unchanged 1:1 by calling identity; `sum_okwanfo=3.5` is a new PROPOSED DEFAULT (no V1 equivalent). Tests `CombatStateTests.gd`/`GridTests.gd` that hid this gap with self-authored V1 tables (8.3) are corrected; a new guard test (`combat_initiative/v2_calling_receives_initiative_modifier`) reads the shipped config so a regression to V1 ids fails loudly. One board's fingerprint moved as a direct result (`fp_combat`'s `aduro`/`kra_soro` party members went from 0 to their real modifier) — `FlowFingerprintTests.gd` and `CombatBaselineTests.gd` re-baselined with attribution comments | Done |
+| `data.stages.calling_action_bonuses` = `{ranger, okofor, aduro}` + `core/state/flow/states/venture/FlowStageExploreState.gd:406-421` | The "[Ranger] Scout Ahead" explore action | ✅ **Fixed (V2-COMBAT-003)** — `ranger` renamed to `kra_soro` in both `balance.json` and `FlowStageExploreState.gd` (label now "[Kra-Soro] Scout Ahead"), value unchanged (`["reveal_adjacent"]`). `StageObjectiveTests.gd` fixture and its four `calling_origin: "ranger"` sites are re-pointed to `kra_soro`; a new guard test (`objective/calling_action_bonuses_v2_only`) reads the shipped config and rebuilds a real explore snapshot for a Kra-Soro echo so a regression to the V1 `ranger` key, or an unreachable action, fails loudly. Demonstrated end-to-end: a Kra-Soro echo now receives `cta.calling_reveal_adjacent` / `reveal_adjacent` against production config | Done |
+| `core/state/flow/states/venture/FlowStageMapState.gd:160` | Comment `` `calling` is the confirmed calling id (e.g. "ranger") `` | **Harmless** — stale comment, no code path | Reword | — |
+| `core/actors/behaviors/BehaviorArbiter.gd:9`, `:270`, `:1403`, `:1624-1627`, `core/actors/ActorStateMachine.gd:1127-1143` — `revealed_by_seer`, `seer_directive_aura` | **Field and flag names** containing "seer", not comparisons against a calling id | **Harmless** — internal identifiers. Renaming them is cosmetic and would move nothing | None | — |
+| `tools/TerrainRegionProbe.gd:889` `calling_origin = "blade"` | Probe fixture | **Harmless** — measures terrain only; no calling term reaches its result | None | — |
+
+### 8.3 Tests that hide family two
+
+These construct an actor with a **V1** calling id directly, so the dead branch executes under test
+and the defect stays green. Each must be re-pointed at a V2 id **in the same commit** that renames
+the production branch, or the fix will look like a regression and the defect will keep hiding.
+
+| Test | Line | What it pins |
+|---|---|---|
+| `tests/CombatSupportLedgerTests.gd` | `:203` | `calling_origin: "seer"` — the only coverage of `idle_fear_aura`; passes today *because* it uses the V1 id |
+| `tests/CooldownTests.gd` | `:33-45`, `:57`, `:75`, `:93`, `:111` | `calling_origin` `"steward"` / `"seer"` and `calling_requirement` `"steward"` / `"seer"` — the read_field streak and cooldown |
+| `tests/CombatStateTests.gd` | `:216-238` | Feeds its **own** `by_calling_origin: {warder: 10, seer: 0}` table, so it proves the confirmed-vs-origin resolution rule and NOT the shipped V1 table. It would stay green after the `balance.json` initiative table is re-authored — meaning nothing in the suite would have caught that gap |
+| `tests/BehaviorArbiterTests.gd` | `:458` | `calling_origin="warder"`, `calling="blade"` |
+| `tests/StageObjectiveTests.gd` | `:45`, `:307`, `:335`, `:468-469`, `:485-486` | `ranger` → `reveal_adjacent`, with its own `calling_action_bonuses` fixture |
+| `tests/GridTests.gd`, `tests/CombatSnapshotTests.gd`, `tests/CombatTerrainTests.gd`, `tests/EchoSchemaTests.gd`, `tests/MoraleInfluenceTests.gd`, `tests/PassiveIdentityTests.gd` | various | `"blade"` / `"warder"` as inert actor labels. Mostly harmless — but `GridTests.gd:338` authors `by_calling_origin: {blade: 2, ranger: -2}`, so the placement calling term is only ever proven against a V1 table too |
+
+### 8.4 Is there a third family?
+
+Checked and clean, as of this sweep:
+
+- **Archetypes** — `data.grid.placement_modifiers.by_archetype` and
+  `data.combat.initiative_modifiers.by_archetype` both hold the nine V2 archetypes that
+  `PersonalityArchetype.from_traits()` actually produces. Migrated on both sides.
+- **Directives** — V1 ids are gone from the registry and a save repair exists (Domain 4).
+- **`data.calling.vector_to_calling`** — all ten vector keys, V2 calling ids on the value side.
+  `CallingService` iterates it dynamically.
+- **Traits** — `courage` / `wisdom` / `faith` is still the live 3-key set (`EchoFactory:132`,
+  `EnemyActor:42`, `SaveService:842`). The `by_dominant_trait` tables match it. Not a migration.
+- **Morale tiers** — `inspired` / `steady` / `shaken` / `broken` remain simulation-internal by
+  design (V2-EMOTION-002); the ten-tier `emotional_status` is the player-facing layer. Not a gap.
+
+**Shape of the two real families.** Family one is *code stale, data complete*. Family two is
+*code stale AND data stale* — and the two halves are stale in different places, which is why
+neither a config audit nor a code audit alone would have found it.
 
 ---
 

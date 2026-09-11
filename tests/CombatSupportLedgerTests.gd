@@ -198,9 +198,9 @@ static func _t_calm_fear_most_feared_only() -> Dictionary:
 	return { "ok": true }
 
 
-# 8: Seer idle_fear_aura relieves nearby ally fear when idling → fear_relieved + support_actions.
+# 8: Okomfo idle_fear_aura relieves nearby ally fear when idling → fear_relieved + support_actions.
 static func _t_seer_idle_aura() -> Dictionary:
-	var actor := { "id": "echo_seer", "faction": "echo", "calling_origin": "seer", "grid_pos": { "col": 0, "row": 0 } }
+	var actor := { "id": "echo_okomfo", "faction": "echo", "calling_origin": "okomfo", "grid_pos": { "col": 0, "row": 0 } }
 	var ally := { "id": "echo_b", "faction": "echo", "grid_pos": { "col": 1, "row": 0 }, "fear": 30 }
 	var sm := ActorStateMachine.new(actor)
 	sm._update_passive_state({ "action_type": "actor.idle" }, { "all_actors": [actor, ally], "cfg": {} }, 1)

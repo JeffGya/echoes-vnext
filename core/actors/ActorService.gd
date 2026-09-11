@@ -102,3 +102,22 @@ static func get_threatened_ally(actor: Dictionary, all_actors: Array, threshold:
 			best = c
 
 	return best
+
+
+## Fraction of health remaining, from `stats.max_hp` (or a top-level `max_hp`) and
+## `current_hp`.
+##
+## THE ONE READER. The arbiter's scoring and the movement layer's perceived-actor facts
+## are cross-checked against each other in
+## `BehaviorArbiter._validate_perceived_actor`, so a second ladder here is a movement
+## failure, not a rounding difference.
+##
+## Absent health data reads 1.0, never 0.0: an actor whose HP cannot be read must not
+## draw the wound-seeking pressure a dying one does. No production actor reaches that
+## branch — `DerivedStatService` floors max_hp at `hp_min`, and every structure is
+## authored above zero — so the sentinel is hygiene, not behaviour.
+static func health_ratio(actor: Dictionary) -> float:
+	var max_hp: int = int((actor.get("stats", {}) as Dictionary).get("max_hp", actor.get("max_hp", 0)))
+	if max_hp <= 0 or not actor.has("current_hp"):
+		return 1.0
+	return clampf(float(actor["current_hp"]) / float(max_hp), 0.0, 1.0)

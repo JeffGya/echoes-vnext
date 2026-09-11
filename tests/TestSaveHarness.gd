@@ -26,13 +26,33 @@
 class_name TestSaveHarness
 extends RefCounted
 
-const ROOT := "/tmp/echoes-vnext-tests/"
+## Default save artifact root, used when ECHOES_TEST_SAVE_DIR is unset. Every path this
+## project writes during a test or a probe stays byte-identical to this when the variable
+## is unset, so `rm -rf /tmp/echoes-vnext-tests` still clears everything.
+const DEFAULT_ROOT := "/tmp/echoes-vnext-tests/"
+
+## Cached after first read — a `const` cannot call a function, so the root is a
+## lazily-initialized static var instead. The environment does not change mid-process.
+static var _root_cache := ""
+
+
+## Save artifact root. Reads ECHOES_TEST_SAVE_DIR when set (normalizing a missing trailing
+## separator), otherwise DEFAULT_ROOT. This is the single source of truth other sites
+## (ui/AppRoot.gd, tools/FearReachabilityProbe.gd, tools/PursueTimingProbe.gd) mirror.
+static func root() -> String:
+	if _root_cache == "":
+		var env: String = OS.get_environment("ECHOES_TEST_SAVE_DIR")
+		if env == "":
+			_root_cache = DEFAULT_ROOT
+		else:
+			_root_cache = env if env.ends_with("/") else env + "/"
+	return _root_cache
 
 
 ## Per-process test save directory, created if absent. Deterministic within one process.
 ## `subdir` is optional and nests below the process directory.
 static func dir(subdir: String = "") -> String:
-	var d: String = "%sp%d/" % [ROOT, OS.get_process_id()]
+	var d: String = "%sp%d/" % [root(), OS.get_process_id()]
 	if subdir != "":
 		d += subdir.trim_prefix("/").trim_suffix("/") + "/"
 	DirAccess.make_dir_recursive_absolute(d)

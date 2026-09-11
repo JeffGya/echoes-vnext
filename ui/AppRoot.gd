@@ -97,7 +97,8 @@ func _ready():
 
 	var cmdline_args := OS.get_cmdline_user_args()
 	var is_test_run := cmdline_args.size() > 0 and cmdline_args[0].to_lower() in ["tests", "test"]
-	var runtime_save_path := "/tmp/echoes-vnext-tests/headless_runtime_slot.json" if is_test_run else SaveSchema.DEFAULT_SAVE_PATH
+	# Root is the single source of truth in tests/TestSaveHarness.gd::root().
+	var runtime_save_path := (TestSaveHarness.root() + "headless_runtime_slot.json") if is_test_run else SaveSchema.DEFAULT_SAVE_PATH
 
 	# Bind renderer to UI elements it can update.
 	renderer.bind_view(snapshot_view, actions_container)
@@ -340,14 +341,30 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	# -------------------------
+	# guide dev command (V2-COMBAT-003 / debug only) — the ONE player-side entry to the
+	# headless guidance source. V2-COMBAT-004 replaces it with the real ping interface.
+	# -------------------------
+	if head == "guide":
+		_run_guide_command(parts)
+		return
+
+	# -------------------------
 	# institution shortcuts (V2-SANCTUM-002 / debug only)
 	# -------------------------
 	if head == "institution" or head == "inst":
 		_run_institution_command(parts)
 		return
 
+	# -------------------------
+	# realm dev command (debug only) — select a realm directly for board comparison,
+	# without playing through the realms before it.
+	# -------------------------
+	if head == "realm":
+		_run_realm_command(parts)
+		return
+
 	_debug_print("Unknown command: " + cmd)
-	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | combat_emotion | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear>")
+	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | combat_emotion | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear> | guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id] | realm select <realm.01|realm.02> | realm show")
 	
 	_flush_logs_to_console()
 	
@@ -432,6 +449,35 @@ func _run_tests(parts: Array) -> void:
 		var pursue_probe_runner := CoreTestRunner.new()
 		PursueTimingProbe.register(pursue_probe_runner)
 		pursue_probe_runner.run_all()
+		return
+	# INVESTIGATION TOOL — `tests terrainprobe` measures cut-off walkable regions per virtue
+	# (V2-COMBAT-003 terrain work). Prints a table rather than asserting.
+	if parts.size() > 1 and str(parts[1]).to_lower() == "terrainprobe":
+		var terrain_probe_runner := CoreTestRunner.new()
+		TerrainRegionProbe.register(terrain_probe_runner)
+		terrain_probe_runner.run_all()
+		return
+	# INVESTIGATION TOOL — `tests purifyprobe [tag]` drives 20 seeded PURIFY_SHRINE encounters
+	# and dumps outcome + purifier goals (V2-COMBAT-003 phase 7b). Reports, never asserts.
+	if parts.size() > 1 and str(parts[1]).to_lower() == "purifyprobe":
+		var purify_probe_runner := CoreTestRunner.new()
+		PurifyOutcomeProbe.register(purify_probe_runner)
+		purify_probe_runner.run_all()
+		return
+	# INVESTIGATION TOOL — `tests spatialprobe <arm>` dumps the live movement options'
+	# exposure/congestion/cohesion fields and a per-turn decision log for all seven modes.
+	if parts.size() > 1 and str(parts[1]).to_lower() == "spatialprobe":
+		var spatial_probe_runner := CoreTestRunner.new()
+		SpatialTermProbe.register(spatial_probe_runner)
+		spatial_probe_runner.run_all()
+		return
+	# INVESTIGATION TOOL — `tests guidanceprobe [dist]` counts the five guidance responses
+	# across many hundreds of Echo turns and prints the contest distribution the five
+	# thresholds are chosen from. Reports, never asserts.
+	if parts.size() > 1 and str(parts[1]).to_lower() == "guidanceprobe":
+		var guidance_probe_runner := CoreTestRunner.new()
+		BehaviorResponseProbe.register(guidance_probe_runner)
+		guidance_probe_runner.run_all()
 		return
 	# V2-INFRA-003: `tests <filter>` runs only suites whose reported name matches.
 	# Registration below is cheap (just appends {name, fn} to CoreTestRunner._tests);
@@ -545,7 +591,10 @@ func _run_tests(parts: Array) -> void:
 	# combat, charge-pressure bump, ally recruit offer compute-once, projection shapes)
 	Stage004SeamTests.register(runner)
 	DivergenceDetectorTests.register(runner)  # V2-PROG-012 Phase 4: divergence detection
+	DecisionTraceTests.register(runner)  # V2-COMBAT-003 phase 8a: causal Decision Trace + player-safe projection
+	GuidanceResponseTests.register(runner)  # V2-COMBAT-003 phase 8b: the five guidance responses
 	CombatDivergenceBarkTests.register(runner)  # V2-PROG-012 Phase 5: divergence bark content + wiring
+	GuidanceBarkTests.register(runner)  # V2-COMBAT-003 phase 9: TEMPORARY bark surface for the Echo's answer to guidance (V2-COMBAT-004 removes it)
 	ConversationRepairTests.register(runner)  # V2-PROG-012 Phase 8: conversation repairs (npc_line overwrite, storyweight truncation)
 	IdentityIntegrityTests.register(runner)  # V2-PROG-012 Phase 9: canonical vector/virtue/calling identity tables
 	BarkPopupLayerTests.register(runner)  # V2-PROG-012 playtest fix: combat_divergence bark visual distinctness
@@ -555,7 +604,12 @@ func _run_tests(parts: Array) -> void:
 	SnapshotContractTests.register(runner)  # V2-INFRA-003 Phase 3 Slice B1: universal snapshot contract (type/meta.t/data/actions)
 	VentureCharacterizationTests.register(runner)  # V2-INFRA-003: characterization guard for complete_stage / retreat / scout-return / contact-resolve
 	CombatBaselineTests.register(runner)  # V2-INFRA-003 Phase 6 entry gate: per-round emotion, transition sequence, combat flush reasons, tick-bound retreat, dormant encounter actions
+	CombatMaturityBaselineTests.register(runner)  # V2-COMBAT-003 Phase 3: Whole-band baseline scenario — first fixture with a Standing 4+ Echo, whole-vs-nascent expression-output divergence
+	BehaviorCharacterizationTests.register(runner)  # V2-COMBAT-003 Phase 1: characterization of movement-starvation, actor.idle-while-moved, enemy refusal, spatial-term zeroing, purify delegation, silent legacy fallback, health_ratio divergence
 	PendingResultTests.register(runner)  # V2-INFRA-003 Phase 8B: the durable run result — four outcomes, survives a quit (real reboot off disk), routing + one-shot consumption
+	# REGISTER LAST, ALWAYS. V2-COMBAT-003 phase 10 owner decision 7: this suite reads the
+	# legacy-selector ledger every earlier suite fills, so it must run after all of them.
+	MovementFallbackGuardTests.register(runner)
 
 	# Suite filter: "tests" with no argument runs everything, unchanged. "tests <filter>"
 	# matches the suite's reported name (text before "/" in each test's registered name,
@@ -1040,6 +1094,46 @@ func _run_force_recruit_command(parts: Array) -> void:
 	_flush_logs_to_console()
 
 
+# V2-COMBAT-003: sets the headless Keeper suggestion (flow_ctx.dev_guidance). The
+# suggestion stays active until cleared, and each Echo answers it on her own turn with
+# one of Align / Interpret / Hesitate / Object / Refuse — watch actor.guidance_response
+# in the log. Every preset is a §9 movement purpose plus, where one exists, the plan
+# that serves it; an optional subject id narrows it to one target.
+# Usage: guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id]
+const _GUIDE_PRESETS: Dictionary = {
+	"hold":     {"purpose": "hold",     "action_type": "actor.guard"},
+	"advance":  {"purpose": "advance",  "action_type": "actor.move"},
+	"protect":  {"purpose": "protect",  "action_type": "protect_ally"},
+	"withdraw": {"purpose": "withdraw", "action_type": "actor.move"},
+	"engage":   {"purpose": "engage",   "action_type": "melee_attack"},
+}
+
+func _run_guide_command(parts: Array) -> void:
+	if parts.size() < 2:
+		_debug_print("Usage: guide <%s|show|clear> [subject_id]" % "|".join(_GUIDE_PRESETS.keys()))
+		_flush_logs_to_console()
+		return
+	var op := str(parts[1]).to_lower()
+	if op == "clear":
+		var snap := runtime.dispatch({ "type": "debug.guidance.set", "guidance": {} })
+		_render_snapshot(snap)
+		_debug_print("guide: cleared — no suggestion is active.")
+	elif op == "show":
+		var active: Dictionary = runtime.flow_ctx.dev_guidance
+		_debug_print("guide: %s" % ("none" if active.is_empty() else str(active)))
+	elif _GUIDE_PRESETS.has(op):
+		var preset: Dictionary = (_GUIDE_PRESETS[op] as Dictionary).duplicate()
+		preset["guidance_id"] = op
+		preset["subject_id"] = str(parts[2]) if parts.size() > 2 else ""
+		preset["recipient_ids"] = []
+		var snap := runtime.dispatch({ "type": "debug.guidance.set", "guidance": preset })
+		_render_snapshot(snap)
+		_debug_print("guide: suggesting '%s' to every Echo until cleared." % op)
+	else:
+		_debug_print("Unknown guide op '%s'. Use: %s|show|clear" % [op, "|".join(_GUIDE_PRESETS.keys())])
+	_flush_logs_to_console()
+
+
 func _run_currency_command(currency: String, parts: Array) -> void:
 	# Usage:
 	#   ase show
@@ -1443,6 +1537,63 @@ func _run_institution_command(parts: Array) -> void:
 	else:
 		_debug_print("Unknown institution op: %s" % op)
 		_debug_print("Usage: institution unlock <hearth|training_grounds|all> | institution lock <id|all> | institution status")
+
+	_flush_logs_to_console()
+
+
+# realm dev command (debug only) — dispatches the real "flow.select_realm" action, the same
+# action Realm Select sends. No new field: it reads/writes flow_ctx.realm_id and
+# save_data["realms"], both already used by RealmService.
+#   realm select <realm.01|realm.02>
+#   realm show
+func _run_realm_command(parts: Array) -> void:
+	const KNOWN_IDS := ["realm.01", "realm.02"]
+	if parts.size() < 2:
+		_debug_print("Usage: realm select <realm.01|realm.02> | realm show")
+		_flush_logs_to_console()
+		return
+
+	var op := str(parts[1]).to_lower()
+
+	if op == "show":
+		var realm_id := str(runtime.flow_ctx.realm_id)
+		if realm_id.is_empty():
+			_debug_print("realm: no active realm.")
+		else:
+			var model: Dictionary = RealmService.get_active(runtime.flow_ctx)
+			_debug_print("realm: %s (virtue=%s, stages=%d)" % [
+				realm_id,
+				str(model.get("virtue", "")),
+				(model.get("stages", []) as Array).size(),
+			])
+
+	elif op == "select":
+		if parts.size() < 3:
+			_debug_print("Usage: realm select <realm.01|realm.02>")
+			_flush_logs_to_console()
+			return
+		var target := str(parts[2]).to_lower()
+		if not KNOWN_IDS.has(target):
+			_debug_print("Unknown realm id: %s  (known: %s)" % [target, ", ".join(KNOWN_IDS)])
+			_flush_logs_to_console()
+			return
+		var snap := runtime.dispatch({ "type": "flow.select_realm", "realm_id": target })
+		_render_snapshot(snap)
+		# handle_select_realm denies the switch (opening Realm not finished yet) without
+		# touching flow_ctx.realm_id — compare before/after instead of re-checking the gate.
+		if str(runtime.flow_ctx.realm_id) != target:
+			_debug_print("realm select: denied for '%s' — Realms are locked until the opening Realm is complete. Check the log for realm.select.denied." % target)
+		else:
+			var model: Dictionary = RealmService.get_active(runtime.flow_ctx)
+			_debug_print("realm select: now on %s (virtue=%s, stages=%d)" % [
+				target,
+				str(model.get("virtue", "")),
+				(model.get("stages", []) as Array).size(),
+			])
+
+	else:
+		_debug_print("Unknown realm op: %s" % op)
+		_debug_print("Usage: realm select <realm.01|realm.02> | realm show")
 
 	_flush_logs_to_console()
 

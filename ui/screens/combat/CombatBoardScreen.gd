@@ -23,6 +23,12 @@ const InitiativeRowScene := preload("res://ui/components/InitiativeRowItem.tscn"
 const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
 
 @onready var _board: TileMapLayer                   = $Board
+# V2-COMBAT-003 terrain commit 4 (decision 16) — a bridge is its own tile. A CHILD of Board,
+# so it inherits every pan, zoom and centring transform with no sync code, and it draws a
+# tinted overlay ON TOP of the ordinary ground tile rather than replacing it — so the board
+# silhouette and the isometric overlap order are byte-identical to before. The tint is a
+# PLACEHOLDER for the real bridge art; the geometry it reads is already in the terrain dict.
+@onready var _bridge_layer: TileMapLayer            = $Board/BridgeLayer
 @onready var _move_telegraph_layer: Node2D          = $MoveTelegraphLayer
 @onready var _token_layer: CombatTokenLayer         = $TokenLayer
 # V2-VOICE-001: bark popup layer — optional; null-checked before use.
@@ -251,6 +257,8 @@ func _reset_transient_ui() -> void:
 	_pending_dispatch_action = {}
 
 	_board.clear()
+	if _bridge_layer != null:
+		_bridge_layer.clear()
 	_distance_layer.clear_distances()
 	_back_button.visible     = false
 	_round_label.visible     = false
@@ -557,8 +565,13 @@ func _draw_board(cols: int, rows: int, terrain: Dictionary = {}) -> void:
 	# StageTerrain.walkable_set returns {} when terrain is absent/empty — that is
 	# the legacy sentinel meaning "all cells walkable".
 	var walkable: Dictionary = StageTerrain.walkable_set(terrain)
+	# Which cells to PAINT as a bridge (V2-COMBAT-003, decision 16). Load-bearing spans
+	# only, plateau ground subtracted — see StageTerrain.bridge_tile_cell_set.
+	var bridge_cells: Dictionary = StageTerrain.bridge_tile_cell_set(terrain)
 
 	_board.clear()
+	if _bridge_layer != null:
+		_bridge_layer.clear()
 
 	if walkable.is_empty():
 		# Legacy / no-terrain path: paint every cell in the bounding rectangle.
@@ -576,7 +589,11 @@ func _draw_board(cols: int, rows: int, terrain: Dictionary = {}) -> void:
 				continue
 			var c: int = int(parts[0])
 			var r: int = int(parts[1])
-			_board.set_cell(Vector2i(c, r), _TILE_SOURCE_ID, _TILE_ATLAS_COORDS)
+			var cell_v := Vector2i(c, r)
+			_board.set_cell(cell_v, _TILE_SOURCE_ID, _TILE_ATLAS_COORDS)
+			# A bridge is its own tile: same ground tile underneath, tinted overlay above.
+			if _bridge_layer != null and bridge_cells.has(key):
+				_bridge_layer.set_cell(cell_v, _TILE_SOURCE_ID, _TILE_ATLAS_COORDS)
 
 
 func _center_board(cols: int, rows: int) -> void:

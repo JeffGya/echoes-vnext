@@ -403,20 +403,20 @@ static func _build_calling_actions(
 				has_protect_objective = true
 				break
 
-	# ranger → reveal_adjacent
-	if "ranger" in callings_in_party:
-		var actions_v: Variant = calling_bonuses.get("ranger", [])
+	# kra_soro → reveal_adjacent
+	if "kra_soro" in callings_in_party:
+		var actions_v: Variant = calling_bonuses.get("kra_soro", [])
 		if actions_v is Array and "reveal_adjacent" in (actions_v as Array):
 			party_calling_actions.append({
-				"calling":     "ranger",
+				"calling":     "kra_soro",
 				"action_type": "reveal_adjacent",
-				"label":       "[Ranger] Scout Ahead",
+				"label":       "[Kra-Soro] Scout Ahead",
 				"slot":        "cta.calling_reveal_adjacent",
 			})
 			slots["cta.calling_reveal_adjacent"] = {
 				"type":  "stage.calling_action",
 				"action_type": "reveal_adjacent",
-				"label": "[Ranger] Scout Ahead",
+				"label": "[Kra-Soro] Scout Ahead",
 				"slot":  "cta.calling_reveal_adjacent",
 			}
 

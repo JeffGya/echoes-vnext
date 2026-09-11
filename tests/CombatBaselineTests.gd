@@ -248,53 +248,113 @@ static func _has_log(logger: StructuredLogger, type: String) -> bool:
 # would be one byte cheaper and useless in a failure — this shape lets the assertion name the
 # mode AND the round index that first diverged, which is what a Phase 6 debugging session needs.
 
+# RE-RECORDED, V2-COMBAT-003 Phase 2b — production-shaped fixtures (ANSWERS.md #50).
+# _setup_encounter() now calls EmotionService.init_echo() + VectorService.init_vectors() on
+# every generated Echo, exactly as the real summon path does (SanctumController.gd:223-225).
+# Root cause of the move, demonstrated on the fp_combat board: with vector_scores no longer
+# {} for every Echo, GridService._placement_score()'s vec_mod term (GridService.gd:627-631,
+# "by_dominant_vector") stops being a no-op — _dominant_key({}, ...) always returned "" before,
+# so every actor got vec_mod=0 and placement order was decided purely by archetype/calling/
+# trait modifiers with an id tiebreak. On this board the five Echoes now score: echo_0001
+# dominant="pillar" -2.0, echo_0002 dominant="pillar" -2.0, echo_0003 dominant="vanguard"
+# +2.0, echo_0004 dominant="seeker" 0.0, echo_0005 dominant="pillar" -2.0 (traits/archetype/
+# calling terms are identical before and after — EchoFactory.generate()'s RNG draw order is
+# untouched). Placement sorts ascending by score with an id tiebreak, so echo_0003 — the only
+# Echo whose score rose — moves later in sort order and is placed further forward (closer to
+# the enemy spawn), while echo_0001/echo_0002/echo_0005 (score -2) are pushed back; echo_0004
+# (score unchanged) keeps its relative slot. The five destination cells produced by round 1's
+# movement are the SAME SET as before the fix ({(3,1),(3,2),(3,3),(3,4),(4,6)}) — only which
+# Echo is assigned to which cell changed — which is exactly what a reordered starting column
+# assignment produces, and confirms the terrain/movement mechanics themselves are untouched.
+# That reshuffle cascades into every subsequent round (who reaches the enemy first, who tanks
+# the counter-attack), which is why every mode's emotion trace diverges starting at round
+# index 0. This is a SEPARATE vector consumer from BehaviorArbiter._score()'s vector_bonus
+# term (BehaviorArbiter.gd:2109-2114) named in ANSWERS.md #50 — both were silently disabled by
+# the same empty vector_scores, and this one turned out to be the dominant cause of the
+# fingerprint moves. Flagged to Jeff separately: GridService._dominant_key()'s tiebreak_order
+# for placement only lists the four legacy vectors (vanguard/seeker/protector/pillar), so six
+# of the ten V2 virtue domains (opportunist/strategist/skeptic/mediator/devoted/nurturer) can
+# never become an Echo's placement-dominant vector even though balance.json's
+# by_dominant_vector table scores all ten — a latent gap, out of this phase's scope.
+# V2-COMBAT-003: by_calling_origin re-migrated to V2 ids. fp_combat's party has echo_0002
+# (aduro) and echo_0005 (kra_soro) -- unrecognized V1-only keys before the fix, so both scored
+# 0; now aduro=+3.0, kra_soro=+1.0. Initiative order shifts, so the fight runs 6 rounds instead
+# of 5 (rounds 1-2 unchanged, diverging from round 3 once the reorder changes who acts first).
+# V2-COMBAT-003 Phase 6: exposure/congestion/cohesion reach _spatial_utility for the first
+# time. Rounds 1-3 are byte-identical (the first three hashes below are unchanged); the trace
+# diverges at round 4, where echo_0002 attacks from 6,3 instead of retreating to 5,3, and the
+# fight ends in 5 rounds instead of 6.
+# V2-COMBAT-003 Phase 7a: a mover already within ranges[melee_attack] now gets a zero-step
+# stay option. Rounds 1-2 are byte-identical; the trace diverges at round index 2, the same
+# round the decision log names (r03 enemy.dust_wanderer_1 strikes echo_0003 from 7,1 instead
+# of stepping to 7,2). The fight runs 6 rounds again.
 const COMBAT_EMOTION_HASHES: Array = [
-	"02d98695226aa349d3bc0d290d080c0d7c51bf17232a4b61e4c4888d894f4942",
-	"23810625aee23d5f719c087ed23f641c138c59bfe7a6b74af453a4c2c19d2f01",
-	"65856aeb0f5db7fe4b8a1e91268dc3a54e8d73729ac9ffb132c680db9d5e2e77",
-	"b147bce40ca61bb578e538c62a9186328fd7a8c22c83aad3f3f9fd3272fdae8e",
-	"0a4883070509f21c99ffe7713fa26d6c1383e79a65309ba7e56c84e97b973d21",
+	"c0e348c181a7d83ce625ae6ed12c93e7c88eb0a247d1061f7aa3ecdab5f383ac",
+	"ce777cfdc61ea886ead439c5c5f16b4c0a9eb79e32294cf74e293d0ab64926e8",
+	"7f48ab64c8fd275052650427038b8d1b5b27948ab28afe0daeb904d9eeefba75",
+	"8661d8f6cd6a47addaf678031bf1983e94cfba289cdfa869bcea22be9c0f8c18",
+	"8d47825dea6874e5e1042c9d3fb839d757b75a786018a6af5356f0178d857e51",
+	"9d40013eb3b99859a2c1b60408b08cafdf8d8be3f72a1512d3cd32621954c324",
 ]
+# V2-COMBAT-003 Phase 6: same cause as COMBAT above. Rounds 1-2 unchanged; round 3 diverges
+# because echo_0003 no longer steps 5,2 -> 6,3 into the enemy's control to attack. Still 4 rounds.
+# Phase 7a moved this mode's ROUND fingerprint but NOT its emotion trace: the three attackers
+# that stopped stepping kept their targets and their damage, so no emotion changed.
+# Phase 7b: 4 rounds -> 6. The purifier echo_0005 now holds the shrine cell 4,6 on actor.guard
+# from r02 instead of attacking (see FlowFingerprintTests PURIFY_SHRINE for the turn-level
+# attribution). Rounds 1 and 2 are BYTE-IDENTICAL — no damage lands in either round in either
+# arm — and the trace first diverges at r03, the same round the turn trace loses two of its
+# three attackers. Two rounds are appended because the fight now takes two more.
+# Phase 7c: still 6 rounds, but the trace now diverges at round index 0 — earlier than the
+# round fingerprint's own first divergence is visible in damage, because purify pays morale.
+# echo_0005 resolves actor.purify_shrine in r01 (7b: actor.move to the same cell), which awards
+# data.combat.shrine morale_on_shrine_purify 5 to the purifier and morale_ripple_shrine_purify 2
+# to its allies. r04 carries the second purify once the 3-round cooldown is spent. No damage,
+# target or position changed in any round.
 const PURIFY_SHRINE_EMOTION_HASHES: Array = [
-	"b0a1a28cf5fab4efd04c78e8d88bdb61e86df8d366e860c6798e3cd4b78cf1a1",
-	"acf21c63cdf575d95485ad060ed487195746239883255c4b5646cbefcf887d24",
-	"017ccd83f41d75a0727193b559d2298a3baea3162f0ebd4fa4d51f2067b83f9c",
-	"0a0ef8747ac8eae256da7f8de4ad43ea0adb7a10d39bf225d9a0bb9e5b6ba5e7",
+	"621eb0d0475135babc7a1b8cb73c4cc242423da903c1a1d101b6870daa6a2b96",
+	"4f9267c17aaa9504ed5a20fb92d748acc4e219cef95c4f268f8fa4086dce8a75",
+	"4e4ebe2474dde4dbb5fe0255588e182e30e874b1f7cea0413322226a8153386a",
+	"708c3d14dca5ec044aa14bc123b5c02f4c41363a9e06cb86b8d2824395884a94",
+	"664f102bf07043337c1f8d77c0a845e9d3aab955674b66c46a456e25ff91b2b3",
+	"46c6a7eb4debad887bf99fefb4598ecb0869979b6101e67adf4d37883cc69286",
 ]
 const RECOVER_EMOTION_HASHES: Array = [
-	"628671286fc1023cc80ec893d441c0b1164184228ebf46fe25fe3191f5378207",
-	"e61b7e66d74f550214718c123d126cbcb7e8b40cdf0a8ae67b9e36e345472ee1",
+	"61cb0af978317b7b9a7925e250137a68fe5435c3193120a861b317971919dfcd",
+	"42b2541c3e3490c69dd8b76eac35d95a26de37c310a16ccb713930c1effbc3fd",
 ]
+# V2-COMBAT-003 Phase 7a: rounds 1-3 unchanged; diverges at round index 3, the same round the
+# decision log names (r04 enemy.dust_wanderer_1 stops walking off 6,4 to swing at echo_0001 for
+# 0 and breaks protect_entity_01 for 11 from where it stands).
 const PROTECT_EMOTION_HASHES: Array = [
-	"6cdb4efc892487a0753668ceda93ebc3b2b5e4c7938184326c50796d990c28eb",
-	"a8cd3cbfe61d3b2ff91389b92252e1923a67ec1a15c7f3a5d3336c5cc983ea06",
-	"314165cda4be77ea72311a0c440b4a14ea6a9954050511b7550a56b55b57beda",
-	"97babd0655c972c41ceac61d5e21956435ba594d2385e312c79e05d4600e6ab8",
+	"814a9f2f861b64efcdf5f9391b44a370fef37fef54cac82b5d0278a3034fea10",
+	"207c3c93af6281a71ce9a544e588891fde6bffaafda26bcb86016212ea059f42",
+	"9305dc7dc32b271bc317d9c5b9c81d067c05aeace6df5aa71e00f3bdf2bfaab1",
+	"9aea81b180a1a4443b9203019aee6c1f6b0480641af273478def1f9297cffa60",
 ]
+# V2-COMBAT-003 Phase 7a: rounds 1-2 unchanged; diverges at round index 2, the same round the
+# decision log names (r03, echo_0001 at 6,2). Still 5 rounds.
 const ENDURE_EMOTION_HASHES: Array = [
-	"02d98695226aa349d3bc0d290d080c0d7c51bf17232a4b61e4c4888d894f4942",
-	"6a991e4303d99b2687bf1a19cc7b4346e05d19dd9c0c793a7cfefb6bab1a4651",
-	"0c8b079cac30bb014d7c241303dbb7baa1efdc004da0f6cf1c5224a74844ed1a",
-	"59697cc76fa36c80a25c08b032b3ea4c97653b6a8ea36af4ffa57dfcbd36f7c8",
-	"12c9dda6e60997c12f9010e850f4e7dacacb1b9ee5b681ea38119ab8db021f17",
+	"93b71ed7260bf0483a28fada3159b989edce9c56edd047317e891c8341089a2a",
+	"164847037991b60263eb09047e1616c8df4cec30ede4c6d1bf0780e014b03bfd",
+	"323355ff907d7fa541b6b7f8892d676c08a16dc1e3c509f142bcb9e408908091",
+	"126424044c9cbf528c27e804b02b0dcc170e69c8ac3a6bdbd70b4afbe2f4a247",
+	"fc03879a00c4f369e9c81a06f1df948907d6b07ec103e85cc1eb58bcf267e700",
 ]
 const PURSUE_EMOTION_HASHES: Array = [
-	"5e6f15383743a09765793993107a3a42e183d4d98927eba0084f9c73755b8d77",
-	"72a6bcc3ef7e082d6ff2176923a1bb24c34305d269c33c5439bfee1430d27c06",
-	"355eba76db716818dd2dbcba1282aca1dae6617e63a922081c0ec47bf417baff",
-	"766b8b1d278fb39800b7e49e9816bf7b12398de0f120589f95db8373cf87fbd4",
-	"bc7febd30a33fff204ec63763b68cd78860eb3e40212ff429e1fa2fb6eb873fb",
+	"c5c7a2eca8fe241a9f8d036a0782933c5b14688921e783f11812ffbfc18a5ef7",
+	"fdb03123717e3ae13f0ae1a30391e81294e0c762312e136819141527c00681ae",
+	"4e10fbffadab7ba80b3c4f87facbb03fd241c2fea377235c3c1a1ca7a31589b8",
+	"1b03ff02fc0431ace2a305fde7a2d2d3b753d8e85708b3c0233b20f722dba995",
+	"444c4db18a0c2cb3fa255025e3e6179d4d80686251440f51e62348f88ac3cbad",
 ]
 const GUIDE_SPIRIT_EMOTION_HASHES: Array = [
-	"1763e7b0005ec4f959d3154cbaf62d510fb1420c607f7c05eb330dd808c691b6",
-	"9436b6ffdbc13f9fbf655165842baefcdff75667adc6ae2cc94539c5a9b76118",
-	"256d8100669e359645a690217d8ee2337716d284d8d5ee7612febc83b4015128",
-	"75d52c6def312b12921a8aec4830ad3f66a8732a6036a416d946265ad9926ea2",
-	"aa28e139148d95d951e42dc66c15449035bf54f1fa6576423d3da30999e1d579",
-	"ea87f2931bda7495deeac1f838bc38934096f7bc1ca427377b74c50f0bcf6d2e",
-	"23f5d1d6eb49a4f310d759483eb57df84b08205bb06d4a0d2aa43b61d202614f",
-	"13c902de0b0a85a0ab273d68d57738420f8c698c471e11eb909453bb6b8be414",
-	"16db26d34cbf646994183bab84bb60719d18debd6a663e5ad6aeec53b90c5e23",
+	"0981643bfb5b4b834e110bbb1e2e07e43cb67a737695df574f01d4ff0840b399",
+	"fb2362b73ab6e12b88f49fb418a372712b6dab222afb45cb8f176f91060b10e9",
+	"5a0bca46209935550ff752415689db70c12141a8cc534fd23d9d01519a94aedb",
+	"d4a55a31c758c4a7837cb584ffe35f0646041ddfd1c264c626568b66c05a583c",
+	"933a39f1afad9edbef892124e414ddedd6a11ef77ee2874b968b48e0ea32f739",
+	"8d399cecc760a122765ea3d4a7dfa87812e1d06884d676ba664aee1653a43320",
 ]
 
 

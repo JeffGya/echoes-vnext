@@ -133,6 +133,12 @@ var _last_paint_key: String = ""
 # ─── @onready refs ────────────────────────────────────────────────────────────
 @onready var _board:              TileMapLayer   = $Board
 @onready var _fog_layer:          TileMapLayer   = $FogLayer
+# V2-COMBAT-003 terrain commit 4 (decision 16) — a bridge is its own tile. A CHILD of Board,
+# so it inherits every pan/zoom/preview transform with no sync code, and it draws a tinted
+# overlay ON TOP of the ordinary ground tile rather than replacing it. FogLayer is a later
+# SIBLING of Board, so fog still darkens a bridge exactly as it darkens any other ground.
+# The tint is a PLACEHOLDER for the real bridge art.
+@onready var _bridge_layer:       TileMapLayer   = $Board/BridgeLayer
 @onready var _situation_layer:    Node2D         = $SituationLayer
 # Preview-mode marker templates (Control nodes, absolute screen-space positioning)
 @onready var _hidden_template:    Control        = $SituationLayer/HiddenMarkerTemplate
@@ -823,6 +829,9 @@ func _fill_board(cols: int, rows: int, data: Dictionary = {}, mode: String = "")
 	var terrain_v: Variant = data.get("terrain", {})
 	var terrain: Dictionary = terrain_v if terrain_v is Dictionary else {}
 	var walkable: Dictionary = StageTerrain.walkable_set(terrain)
+	# Which cells to PAINT as a bridge (V2-COMBAT-003, decision 16). Load-bearing spans
+	# only, plateau ground subtracted — see StageTerrain.bridge_tile_cell_set.
+	var bridge_cells: Dictionary = StageTerrain.bridge_tile_cell_set(terrain)
 
 	# Fog-of-war: explored_cells is the discovered tile set.
 	# Empty dict = no explored data (treat as all discovered for legacy stages).
@@ -852,6 +861,8 @@ func _fill_board(cols: int, rows: int, data: Dictionary = {}, mode: String = "")
 
 	_board.clear()
 	_fog_layer.clear()
+	if _bridge_layer != null:
+		_bridge_layer.clear()
 	_last_paint_key = paint_key
 
 	if walkable.is_empty():
@@ -888,6 +899,9 @@ func _fill_board(cols: int, rows: int, data: Dictionary = {}, mode: String = "")
 			# Paint land tile on Board for every walkable cell (discovered or not).
 			# This ensures fog cells are visually land-shaped, never invisible (void).
 			_board.set_cell(cell_v, _TILE_SOURCE_ID, _TILE_ATLAS_COORDS)
+			# A bridge is its own tile: same ground tile underneath, tinted overlay above.
+			if _bridge_layer != null and bridge_cells.has(key):
+				_bridge_layer.set_cell(cell_v, _TILE_SOURCE_ID, _TILE_ATLAS_COORDS)
 			# Fog overlay: paint on FogLayer if NOT discovered.
 			var is_discovered: bool = (not all_fog) and explored.has(key)
 			if not is_discovered:

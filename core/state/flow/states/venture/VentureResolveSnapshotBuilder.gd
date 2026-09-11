@@ -38,16 +38,24 @@ extends RefCounted
 
 
 ## Producer C — the scout-return / withdrawal resolve card.
-## Moved verbatim from FlowRuntime._build_scout_return_snapshot(). It has TWO callers in
-## different domains: VentureController.handle_return_home() (successful escape) and
-## FlowRuntime._handle_encounter_retreat() (successful retreat, Phase 6's domain). Per
-## core/AGENTS.md a helper used by two or more domains needs one owner, and a producer that
-## READS FlowContext cannot live on ResolveSnapshotBuilder — that builder's purity contract
-## takes no FlowContext at all. It is the "party withdrew from the stage" card, so it belongs
-## to this stage-session service, static with an explicit flow_ctx parameter exactly like
-## count_revealed_situations() and get_stage_base_reward() above.
+## Moved verbatim from FlowRuntime._build_scout_return_snapshot(). It has THREE callers in
+## different domains: VentureController.handle_return_home() (successful escape),
+## FlowRuntime._handle_encounter_retreat() (successful retreat) and
+## FlowRuntime._resolve_forced_retreat() (V2-COMBAT-003, a no-progress stalemate — same shape,
+## zero payout, its own run_type). Per core/AGENTS.md a helper used by two or more domains needs
+## one owner, and a producer that READS FlowContext cannot live on ResolveSnapshotBuilder — that
+## builder's purity contract takes no FlowContext at all. It is the "party withdrew from the
+## stage" card, so it belongs to this stage-session service, static with an explicit flow_ctx
+## parameter exactly like count_revealed_situations() and get_stage_base_reward() above.
+##
+## `run_type` defaults to "scout_return" so the two pre-existing callers are byte-identical.
+## FlowRuntime._resolve_forced_retreat() passes "forced_retreat" — a distinct banner surface
+## and a distinct PendingResultService run_type — so a stalemate the simulation could not
+## resolve is never shown, logged, or recorded as a retreat the player chose. Callers still
+## control every payout by what they leave in pending_scout_return_ase/_intel_count BEFORE
+## calling this — this producer only reads and clears neither.
 ## Pure: two calls with the same arguments return byte-identical payloads.
-static func build_scout_return_snapshot(flow_ctx_arg: FlowContext, t: int) -> Dictionary:
+static func build_scout_return_snapshot(flow_ctx_arg: FlowContext, t: int, run_type: String = "scout_return") -> Dictionary:
 	var _ase   := flow_ctx_arg.pending_scout_return_ase
 	var _intel := flow_ctx_arg.pending_scout_return_intel_count
 	var breakdown: Array = []
@@ -104,7 +112,7 @@ static func build_scout_return_snapshot(flow_ctx_arg: FlowContext, t: int) -> Di
 			"slot":  "cta.continue",
 		}
 	}
-	var _snap: Dictionary = ResolveSnapshotBuilder.build(t, _actions, "scout_return")
+	var _snap: Dictionary = ResolveSnapshotBuilder.build(t, _actions, run_type)
 	var _data: Dictionary = _snap["data"]
 	ResolveSnapshotBuilder.add_ledger(_data, _ase, breakdown)
 	ResolveSnapshotBuilder.add_ekwan(_data, 0)
@@ -113,7 +121,12 @@ static func build_scout_return_snapshot(flow_ctx_arg: FlowContext, t: int) -> Di
 	ResolveSnapshotBuilder.add_victory_flag(_data, false)
 	ResolveSnapshotBuilder.add_grade_rank(_data, "")
 	# P1 CLOSE: additive fields for unified Resolve component.
-	ResolveSnapshotBuilder.add_banner(_data, "scout_return", "%d crossing%s mapped." % [_intel, _intel_plural])
+	# V2-COMBAT-003: forced_retreat gets its own banner text — the fight did not resolve, so
+	# "crossings mapped" (written for a chosen scout return) would misreport what happened.
+	var _banner_line: String = "%d crossing%s mapped." % [_intel, _intel_plural]
+	if run_type == "forced_retreat":
+		_banner_line = "The fight did not end. The party pulled back. Nothing was gained."
+	ResolveSnapshotBuilder.add_banner(_data, run_type, _banner_line)
 	ResolveSnapshotBuilder.add_grade_verdict(_data, "")
 	return _snap
 

@@ -196,6 +196,13 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(CombatTerrainTests, "_t_pathing_dead_end_stay"))
 	runner.register_test("combat_terrain/pathing_legacy_empty_walkable_unchanged",
 		Callable(CombatTerrainTests, "_t_pathing_legacy_empty_walkable_unchanged"))
+	# V2-COMBAT-003 terrain commit 5 — host-region + clearance on the objective spawn path.
+	runner.register_test("combat_terrain/objective_never_lands_on_island",
+		Callable(CombatTerrainTests, "_t_objective_never_lands_on_island"))
+	runner.register_test("combat_terrain/objective_prefers_clearance",
+		Callable(CombatTerrainTests, "_t_objective_prefers_clearance"))
+	runner.register_test("combat_terrain/objective_unfiltered_call_unchanged",
+		Callable(CombatTerrainTests, "_t_objective_unfiltered_call_unchanged"))
 	runner.register_test("combat_terrain/pathing_determinism",
 		Callable(CombatTerrainTests, "_t_pathing_determinism"))
 
@@ -466,8 +473,10 @@ static func _t_terrain_determinism_same_rng_namespace() -> Dictionary:
 		"plateau_shape_bias":  "blocky",
 		"bridge_width":        2,
 		"bridge_density":      0.3,
-		"straggler_count_min": 1,
-		"straggler_count_max": 2,
+		"island_count_min": 1,
+		"island_count_max": 2,
+		"island_size_min": 4,
+		"island_size_max": 8,
 	}
 	var bounds    := { "w": 20, "h": 20 }
 	var realm_seed := 42
@@ -511,7 +520,7 @@ static func _terrain_dicts_equal(a: Dictionary, b: Dictionary) -> bool:
 	var bb: Dictionary = b.get("bounds", {})
 	if int(ba.get("w", -1)) != int(bb.get("w", -1)) or int(ba.get("h", -1)) != int(bb.get("h", -1)):
 		return false
-	for key in ["plateaus", "bridges", "stragglers"]:
+	for key in ["plateaus", "bridges", "islands"]:
 		var arr_a_v: Variant = a.get(key, [])
 		var arr_b_v: Variant = b.get(key, [])
 		var arr_a: Array = arr_a_v if arr_a_v is Array else []
@@ -919,4 +928,106 @@ static func _t_pathing_determinism() -> Dictionary:
 					   int(to_2.get("col",-1)),    int(to_2.get("row",-1))]
 			}
 
+	return { "ok": true }
+
+
+
+# ─── V2-COMBAT-003 terrain commit 5 — the objective spawn path ───────────────
+#
+# EncounterObjectiveSpawnService places the shrine, the relic, the protected entity, the
+# quarry and the guide spirit with exactly two calls: collect_unoccupied_cells over the
+# walkable set minus the actors already placed, then place_on_terrain ranked by a target
+# column. Before this commit neither call knew anything about connectivity, so an island
+# nearest the target column WON. An unreachable shrine is an unwinnable battle.
+#
+# The fixture is a 10x10 mainland with a moated 3x3 island three columns to its right,
+# with a two-column void channel between them, so the island touches nothing at a side or
+# a corner — the shape terrain commit 3 now generates deliberately.
+
+const _ISL_BOUNDS: Dictionary = { "w": 16, "h": 10 }
+
+static func _make_island_walkable() -> Dictionary:
+	var w: Dictionary = {}
+	for c in range(10):
+		for r in range(10):
+			w["%d,%d" % [c, r]] = true
+	for c2 in range(12, 15):
+		for r2 in range(4, 7):
+			w["%d,%d" % [c2, r2]] = true
+	return w
+
+
+## An objective aimed at the island's own column still lands on the mainland.
+## FAILS against b4dd797, where place_on_terrain had no connectivity check at all.
+static func _t_objective_never_lands_on_island() -> Dictionary:
+	var walkable := _make_island_walkable()
+	var occupied: Dictionary = {}
+	var region: Dictionary = GridService.largest_walkable_region(walkable, _ISL_BOUNDS)
+	if region.size() != 100:
+		return { "ok": false, "error": "fixture wrong — host region is %d cells, expected the 100-cell mainland" % region.size() }
+	if region.has("13,5"):
+		return { "ok": false, "error": "fixture wrong — the island is inside the host region" }
+
+	# The mechanism, demonstrated first: with no region filter the island wins outright.
+	var unfiltered: Array = GridService.collect_unoccupied_cells(walkable, occupied)
+	var bad: Dictionary = GridService.place_on_terrain(unfiltered, 13.0, 4.5)
+	if int(bad.get("col", -1)) < 12:
+		return { "ok": false, "error": "fixture does not reproduce the defect — unfiltered call returned %s" % str(bad) }
+
+	var candidates: Array = GridService.collect_unoccupied_cells(walkable, occupied, region)
+	var cell: Dictionary = GridService.place_on_terrain(
+		candidates, 13.0, 4.5, GridService.PLACE_METRIC_AXIS,
+		{ "walkable": walkable, "occupied": occupied })
+	if cell.is_empty():
+		return { "ok": false, "error": "no cell returned" }
+	var key: String = "%d,%d" % [int(cell["col"]), int(cell["row"])]
+	if not region.has(key):
+		return { "ok": false, "error": "objective placed at %s, off the host region" % key }
+	if not GridService.has_clearance(int(cell["col"]), int(cell["row"]), walkable, occupied):
+		return { "ok": false, "error": "objective placed at %s without eight free neighbours" % key }
+	return { "ok": true }
+
+
+## Decision 24 as a ranking rule: of two cells the depth metric scores identically, the one
+## whose eight neighbours are all walkable and free wins.
+static func _t_objective_prefers_clearance() -> Dictionary:
+	var walkable: Dictionary = {}
+	for c in range(10):
+		for r in range(10):
+			walkable["%d,%d" % [c, r]] = true
+	var occupied: Dictionary = { "5,3": true }
+	var region: Dictionary = GridService.largest_walkable_region(walkable, { "w": 10, "h": 10 })
+
+	# Without the clearance context the ranking is the old one: (5,4) and (5,5) tie on both
+	# distance keys and the (col,row) tie-break takes the lower row — the cell whose
+	# neighbour at (5,3) is occupied.
+	var plain: Array = GridService.collect_unoccupied_cells(walkable, occupied, region)
+	var plain_cell: Dictionary = GridService.place_on_terrain(plain, 5.0, 4.5)
+	if int(plain_cell.get("col", -1)) != 5 or int(plain_cell.get("row", -1)) != 4:
+		return { "ok": false, "error": "fixture wrong — unranked winner was %s, expected 5,4" % str(plain_cell) }
+
+	var candidates: Array = GridService.collect_unoccupied_cells(walkable, occupied, region)
+	var cell: Dictionary = GridService.place_on_terrain(
+		candidates, 5.0, 4.5, GridService.PLACE_METRIC_AXIS,
+		{ "walkable": walkable, "occupied": occupied })
+	if int(cell.get("col", -1)) != 5 or int(cell.get("row", -1)) != 5:
+		return { "ok": false, "error": "clearance ranking returned %s, expected 5,5" % str(cell) }
+	return { "ok": true }
+
+
+## The legacy shape is untouched: with no region set and no clearance context, both
+## functions behave exactly as they did before terrain commit 5. This is what keeps every
+## caller that has no bounds to hand — and every recorded value that depends on one —
+## byte-identical.
+static func _t_objective_unfiltered_call_unchanged() -> Dictionary:
+	var walkable := _make_island_walkable()
+	var occupied: Dictionary = { "3,3": true }
+	var a: Array = GridService.collect_unoccupied_cells(walkable, occupied)
+	var b: Array = GridService.collect_unoccupied_cells(walkable, occupied, {})
+	if a.size() != b.size() or a.size() != walkable.size() - 1:
+		return { "ok": false, "error": "unfiltered collect returned %d / %d cells, expected %d" % [a.size(), b.size(), walkable.size() - 1] }
+	var ca: Dictionary = GridService.place_on_terrain(a, 6.0, 4.5)
+	var cb: Dictionary = GridService.place_on_terrain(b, 6.0, 4.5, GridService.PLACE_METRIC_AXIS, {})
+	if ca != cb:
+		return { "ok": false, "error": "default and explicit-empty arguments disagree: %s vs %s" % [str(ca), str(cb)] }
 	return { "ok": true }

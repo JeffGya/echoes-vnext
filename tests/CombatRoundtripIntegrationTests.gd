@@ -48,6 +48,8 @@ static func register(runner) -> void:
 	runner.register_test("combat_roundtrip/recover_reinforcement_spawns_enemy_side", func(): return test_recover_reinforcement())
 	# V2-STAGE-004 Distinctiveness — §4-F ENDURE rising wave + all_waves_spawned
 	runner.register_test("combat_roundtrip/endure_rising_wave_size_and_flag", func(): return test_endure_rising_wave())
+	# V2-COMBAT-003 — a mid-round wave spawn must land on the host region, not a moated island
+	runner.register_test("combat_roundtrip/endure_wave_spawn_stays_on_host_region", func(): return test_endure_wave_spawn_host_region())
 	# V2-STAGE-004 Distinctiveness — §4-G PROTECT theft and recovery on carrier death
 	runner.register_test("combat_roundtrip/protect_theft_and_carrier_recovery", func(): return test_protect_theft())
 	# V2-STAGE-004 PROTECT guard-proximity counter
@@ -111,6 +113,16 @@ static func register(runner) -> void:
 	# Slice 6E Task C: two actors on one cell must not discard the whole board.
 	runner.register_test("combat_roundtrip/stacked_actors_keep_selection_alive", func(): return test_stacked_actors_keep_selection_alive())
 	runner.register_test("combat_roundtrip/published_option_carries_truthful_control_and_hazards", func(): return test_published_option_carries_truthful_control_and_hazards())
+	# V2-COMBAT-003 — a fight where neither side can deal damage cannot end by any objective
+	# check (both actors refuse/guard/miss forever). The no-progress detector must end it.
+	runner.register_test("combat_roundtrip/no_progress_stalemate_ends_as_forced_retreat", func(): return test_no_progress_stalemate_ends_as_forced_retreat())
+	runner.register_test("combat_roundtrip/forced_retreat_grants_nothing", func(): return test_forced_retreat_grants_nothing())
+	# PR #62 review: PURIFY_SHRINE has its own clock — the shrine drains every round — so the
+	# stalemate detector must not end that fight.
+	runner.register_test("combat_roundtrip/purify_shrine_is_exempt_from_the_stalemate_check", func(): return test_purify_shrine_is_exempt_from_the_stalemate_check())
+	# PR #62 review: the "guide" debug command now dispatches. It runs mid-fight, so it must
+	# leave the encounter and its snapshot alone.
+	runner.register_test("combat_roundtrip/guidance_dispatch_leaves_the_encounter_intact", func(): return test_guidance_dispatch_leaves_the_encounter_intact())
 
 
 ## V2-INFRA-003 Phase 6 Slice 6G: the live movement helper family moved off FlowRuntime onto
@@ -202,6 +214,271 @@ static func _enemy_pos(ectx) -> Dictionary:
 		if str(a_v.get("faction", "")) == "enemy" and not a_v.get("is_dead", false):
 			return a_v.get("grid_pos", {})
 	return {}
+
+
+# ---------------------------------------------------------------------------
+# V2-COMBAT-003 — no-progress stalemate (a fight where neither side deals damage).
+# ---------------------------------------------------------------------------
+
+## Builds a real 1-echo-vs-1-enemy encounter, using the standard party+board setup, then trims
+## the actor list to exactly those two and zeroes their offense so melee can never deal damage:
+## CombatService._melee_damage() computes base = max(0, atk - eff_def), so atk=0 already floors
+## it at 0 for the attacker's own hit, and def=999 on both sides adds a wide safety margin
+## against the +5 morale_bonus term (attacker morale 100 => (100-50)/10 = +5) that could
+## otherwise push a stray hit above 0 if either actor's morale drifts up during the fight.
+## Returns {} on setup failure or if a living echo/enemy pair could not be found.
+static func _setup_no_progress(seed_tag: String) -> Dictionary:
+	var env: Dictionary = _setup(seed_tag, true, "off", EncounterResolutionModes.COMBAT)
+	if env.is_empty():
+		return {}
+	var ectx: EncounterContext = env["ectx"]
+	var echo: Dictionary = {}
+	var enemy: Dictionary = {}
+	for a_v in ectx.actors:
+		if not (a_v is Dictionary):
+			continue
+		var a: Dictionary = a_v
+		if echo.is_empty() and str(a.get("faction", "")) == "echo" and not a.get("is_dead", false):
+			echo = a
+		elif enemy.is_empty() and str(a.get("faction", "")) == "enemy" and not a.get("is_dead", false):
+			enemy = a
+	if echo.is_empty() or enemy.is_empty():
+		return {}
+	for a in [echo, enemy]:
+		var a_stats: Dictionary = a.get("stats", {})
+		a_stats["atk"] = 0
+		a_stats["def"] = 999
+	ectx.actors = [echo, enemy]
+	return env
+
+
+## Drives combat.init, then up to max_rounds full rounds, stopping as soon as combat ends.
+static func _drive_no_progress(runtime, ectx, max_rounds: int) -> void:
+	runtime.dispatch({ "type": "combat.init" })
+	_drive_no_progress_rounds(runtime, ectx, max_rounds)
+
+
+static func _drive_no_progress_rounds(runtime, ectx, max_rounds: int) -> void:
+	for _r in range(max_rounds):
+		if bool(ectx.combat_state.get("combat_over", false)):
+			break
+		runtime.dispatch({ "type": "combat.confirm_round" })
+		var guard: int = 0
+		while guard < 40:
+			guard += 1
+			var cs: Dictionary = ectx.combat_state
+			if bool(cs.get("combat_over", false)): break
+			if str(cs.get("round_phase", "")) != "in_round": break
+			runtime.dispatch({ "type": "combat.next_actor" })
+
+
+static func _no_progress_round_limit(runtime) -> int:
+	var combat_cfg: Dictionary = runtime.config_service.get_balance().get("data", {}).get("combat", {})
+	var stalemate_cfg: Dictionary = combat_cfg.get("stalemate", {})
+	return int(stalemate_cfg.get("no_progress_round_limit", 0))
+
+
+## Test 1 — a fight neither side can win by damage must still end, exactly at the configured
+## no_progress_round_limit, as a forced retreat. Before the V2-COMBAT-003 fix this fails: there
+## is no branch in CombatState.check_end_condition() that can end a fight with no death and no
+## damage, so combat_over never becomes true and the loop guard (40 actor-turns per round) is
+## the only thing that stops the test — it does not stop the ROUND counter, so this would spin
+## past the limit with combat still active.
+static func test_no_progress_stalemate_ends_as_forced_retreat() -> Dictionary:
+	var env: Dictionary = _setup_no_progress("no_progress_a")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed — could not build a live echo/enemy pair" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var ectx: EncounterContext = env["ectx"]
+
+	var limit: int = _no_progress_round_limit(runtime)
+	if limit <= 0:
+		return { "ok": false, "error": "data.combat.stalemate.no_progress_round_limit is 0 or missing — cannot test" }
+
+	# One round short of the limit: the fight must still be running (no other end condition
+	# can fire — no one can deal damage, so no one can die).
+	_drive_no_progress(runtime, ectx, limit - 1)
+	if bool(ectx.combat_state.get("combat_over", false)):
+		return { "ok": false, "error": "combat ended before the no-progress limit (round_counter=%d, limit=%d)" % [int(ectx.combat_state.get("round_counter", -1)), limit] }
+	if int(ectx.combat_state.get("no_progress_streak", -1)) != limit - 1:
+		return { "ok": false, "error": "expected no_progress_streak=%d after %d damage-free rounds, got %s" % [limit - 1, limit - 1, str(ectx.combat_state.get("no_progress_streak"))] }
+
+	# One more round crosses the limit — the fight must end as a forced retreat.
+	_drive_no_progress_rounds(runtime, ectx, 1)
+
+	if not bool(ectx.combat_state.get("combat_over", false)):
+		return { "ok": false, "error": "combat did not end at the no-progress limit (round_counter=%d, streak=%d, limit=%d)" % [int(ectx.combat_state.get("round_counter", -1)), int(ectx.combat_state.get("no_progress_streak", -1)), limit] }
+	if flow_ctx.encounter_ctx != null:
+		return { "ok": false, "error": "encounter_ctx was not cleared after the forced retreat" }
+	var snap: Dictionary = flow_ctx.last_snapshot
+	if str(snap.get("type", "")) != FlowStateIds.RESOLVE:
+		return { "ok": false, "error": "expected a flow.resolve snapshot, got type=%s" % str(snap.get("type", "")) }
+	var data: Dictionary = snap.get("data", {})
+	if str(data.get("run_type", "")) != "forced_retreat":
+		return { "ok": false, "error": "expected run_type=forced_retreat (never confused with a chosen retreat), got: %s" % str(data.get("run_type", "")) }
+	return { "ok": true }
+
+
+## Test 2 — a forced retreat must grant NOTHING. Before the fix this fails for the same reason
+## as test 1: combat never ends, so there is no forced-retreat outcome to assert zero-payout on
+## in the first place — the round loop still running IS the failure.
+static func test_forced_retreat_grants_nothing() -> Dictionary:
+	var env: Dictionary = _setup_no_progress("no_progress_b")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed — could not build a live echo/enemy pair" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var ectx: EncounterContext = env["ectx"]
+
+	var limit: int = _no_progress_round_limit(runtime)
+	if limit <= 0:
+		return { "ok": false, "error": "data.combat.stalemate.no_progress_round_limit is 0 or missing — cannot test" }
+
+	var ase_before: int = runtime.econ.get_ase()
+	var ekwan_before: int = runtime.econ.get_ekwan()
+	var roster_before: Array = (flow_ctx.save_data.get("sanctum", {}) as Dictionary).get("roster", []) as Array
+	var xp_before: Dictionary = {}
+	for e_v in roster_before:
+		var e: Dictionary = e_v
+		xp_before[str(e.get("id", ""))] = int(e.get("xp_total", -1))
+
+	_drive_no_progress(runtime, ectx, limit)
+
+	if flow_ctx.encounter_ctx != null:
+		return { "ok": false, "error": "the fight did not resolve as a forced retreat — nothing to assert zero-payout on" }
+	var snap: Dictionary = flow_ctx.last_snapshot
+	var data: Dictionary = snap.get("data", {})
+	if str(data.get("run_type", "")) != "forced_retreat":
+		return { "ok": false, "error": "expected the forced_retreat card, got run_type=%s" % str(data.get("run_type", "")) }
+
+	# The card itself must show zero.
+	if int(data.get("ase_awarded", -1)) != 0:
+		return { "ok": false, "error": "forced_retreat card shows non-zero Ase: %s" % str(data.get("ase_awarded")) }
+	if int(data.get("ekwan_awarded", -1)) != 0:
+		return { "ok": false, "error": "forced_retreat card shows non-zero Ekwan: %s" % str(data.get("ekwan_awarded")) }
+	var breakdown: Array = data.get("reward_breakdown", []) as Array
+	if not breakdown.is_empty():
+		return { "ok": false, "error": "forced_retreat card carries a non-empty reward_breakdown: %s" % str(breakdown) }
+
+	# The durable economy and roster Storyweight (xp_total) must be byte-identical to baseline.
+	if runtime.econ.get_ase() != ase_before:
+		return { "ok": false, "error": "Ase changed: %d -> %d" % [ase_before, runtime.econ.get_ase()] }
+	if runtime.econ.get_ekwan() != ekwan_before:
+		return { "ok": false, "error": "Ekwan changed: %d -> %d" % [ekwan_before, runtime.econ.get_ekwan()] }
+	var roster_after: Array = (flow_ctx.save_data.get("sanctum", {}) as Dictionary).get("roster", []) as Array
+	for e_v in roster_after:
+		var e: Dictionary = e_v
+		var eid: String = str(e.get("id", ""))
+		var before: int = int(xp_before.get(eid, -9999))
+		var after: int = int(e.get("xp_total", -9998))
+		if before != after:
+			return { "ok": false, "error": "Storyweight (xp_total) changed for %s: %d -> %d" % [eid, before, after] }
+	return { "ok": true }
+
+
+## Same trimming as _setup_no_progress, for a PURIFY_SHRINE encounter, and the living shrine is
+## KEPT — it is the actor whose hit points carry that objective's own clock.
+static func _setup_no_progress_purify(seed_tag: String) -> Dictionary:
+	var env: Dictionary = _setup(seed_tag, true, "off", EncounterResolutionModes.PURIFY_SHRINE)
+	if env.is_empty():
+		return {}
+	var ectx: EncounterContext = env["ectx"]
+	var echo: Dictionary = {}
+	var enemy: Dictionary = {}
+	var shrine: Dictionary = {}
+	for a_v in ectx.actors:
+		if not (a_v is Dictionary):
+			continue
+		var a: Dictionary = a_v
+		if a.get("is_structure", false):
+			if shrine.is_empty():
+				shrine = a
+		elif echo.is_empty() and str(a.get("faction", "")) == "echo" and not a.get("is_dead", false):
+			echo = a
+		elif enemy.is_empty() and str(a.get("faction", "")) == "enemy" and not a.get("is_dead", false):
+			enemy = a
+	if echo.is_empty() or enemy.is_empty() or shrine.is_empty():
+		return {}
+	for a in [echo, enemy]:
+		var a_stats: Dictionary = a.get("stats", {})
+		a_stats["atk"] = 0
+		a_stats["def"] = 999
+	ectx.actors = [echo, enemy, shrine]
+	return env
+
+
+## PR #62 review comment — PURIFY_SHRINE must be exempt from the no-progress stalemate check.
+## The shrine loses base_drain_per_round hit points every round with no actor acting, so that
+## objective always reaches its own end (shrine_destroyed, branch 2), and the party can still
+## win by killing every enemy. The detector cannot see the drain: it counts damage and the four
+## per-objective counters, and the shrine is none of those. Ending the fight at the limit
+## therefore takes away a fight that is still live.
+##
+## The test drives one round PAST the limit with no damage possible, then asserts the streak did
+## reach the limit (so the detector really was armed) while the fight is still running and the
+## shrine still alive. Before the fix this fails: the fight resolves as a forced retreat.
+static func test_purify_shrine_is_exempt_from_the_stalemate_check() -> Dictionary:
+	var env: Dictionary = _setup_no_progress_purify("no_progress_purify")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed — could not build a live echo/enemy/shrine set" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var ectx: EncounterContext = env["ectx"]
+
+	var limit: int = _no_progress_round_limit(runtime)
+	if limit <= 0:
+		return { "ok": false, "error": "data.combat.stalemate.no_progress_round_limit is 0 or missing — cannot test" }
+
+	_drive_no_progress(runtime, ectx, limit + 1)
+
+	if flow_ctx.encounter_ctx == null:
+		return { "ok": false, "error": "the PURIFY_SHRINE fight was resolved away — run_type=%s" % str((flow_ctx.last_snapshot.get("data", {}) as Dictionary).get("run_type", "")) }
+	if bool(ectx.combat_state.get("combat_over", false)):
+		return { "ok": false, "error": "the PURIFY_SHRINE fight ended at the stalemate limit (reason=%s)" % str(ectx.combat_result.get("reason", "")) }
+
+	var streak: int = int(ectx.combat_state.get("no_progress_streak", -1))
+	if streak < limit:
+		return { "ok": false, "error": "the detector was never armed (no_progress_streak=%d, limit=%d) — the test proves nothing" % [streak, limit] }
+
+	var shrine_hp: int = -1
+	for a_v in ectx.actors:
+		if a_v is Dictionary and a_v.get("is_structure", false):
+			shrine_hp = int(a_v.get("current_hp", -1))
+			break
+	if shrine_hp <= 0:
+		return { "ok": false, "error": "the shrine died first (hp=%d) — the exemption was not what kept the fight alive" % shrine_hp }
+	return { "ok": true }
+
+
+## PR #62 review comment — the "guide" debug command is used mid-fight. It now goes through
+## dispatch(), which refreshes the snapshot, so this checks the fight survives it: the encounter
+## is still live, the snapshot is still the encounter snapshot, and the suggestion is in place.
+static func test_guidance_dispatch_leaves_the_encounter_intact() -> Dictionary:
+	var env: Dictionary = _setup("guidance_dispatch", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	runtime.dispatch({ "type": "combat.init" })
+	var type_before: String = str(flow_ctx.last_snapshot.get("type", ""))
+
+	runtime.dispatch({
+		"type": "debug.guidance.set",
+		"guidance": {
+			"purpose": "hold", "action_type": "actor.guard", "guidance_id": "hold",
+			"subject_id": "", "recipient_ids": [],
+		},
+	})
+
+	if flow_ctx.encounter_ctx == null:
+		return { "ok": false, "error": "the encounter was dropped by the guidance dispatch" }
+	var type_after: String = str(flow_ctx.last_snapshot.get("type", ""))
+	if type_after != type_before:
+		return { "ok": false, "error": "snapshot type changed: %s -> %s" % [type_before, type_after] }
+	if str((flow_ctx.dev_guidance as Dictionary).get("guidance_id", "")) != "hold":
+		return { "ok": false, "error": "the suggestion did not arrive: %s" % str(flow_ctx.dev_guidance) }
+	return { "ok": true }
 
 
 static func test_live_hazard_union_and_mover_damage() -> Dictionary:
@@ -723,6 +1000,79 @@ static func test_endure_rising_wave() -> Dictionary:
 		return { "ok": false, "error": "Wave 2 expected 2 actors (rising), found %d" % wave2_actors.size() }
 	if wave3_actors.size() != 3:
 		return { "ok": false, "error": "Wave 3 expected 3 actors (rising), found %d" % wave3_actors.size() }
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# V2-COMBAT-003 defect fix: _place_enemy_spawns() picked cells from the WHOLE walkable set,
+# sorted highest column first. An island at a high column was chosen before real host-region
+# ground, so a wave actor could land on ground with no route to anything. The fix filters
+# candidates to GridService.largest_walkable_region() (the same authority initial placement
+# uses). This test hands the encounter a terrain with a big host region (cols 0-4) and a
+# small moated island at the highest columns (cols 8-9, three empty columns of gap — no
+# shared side, so the two regions are not connected). A wave actor must land in the host
+# region.
+# ---------------------------------------------------------------------------
+static func test_endure_wave_spawn_host_region() -> Dictionary:
+	var env: Dictionary = _setup("wave_host_region", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var ectx = env["ectx"]
+	var runtime = env["runtime"]
+
+	ectx.resolution_mode = EncounterResolutionModes.ENDURE
+	ectx.objective_params = {
+		"duration_turns":        10,
+		"wave_interval":         1,
+		"wave_size":             1,
+		"wave_size_rising_step": 0,
+		"wave_size_max":         1,
+		"wave_group":            "group.vale_patrol_sm",
+	}
+
+	# Host region: 30 cells, cols 0-4, rows 0-5. Island: 4 cells, cols 8-9, rows 0-1.
+	# Cols 5-7 hold no walkable cell, so the island shares no side with the host region.
+	var mainland_cells: Array = []
+	for c in range(5):
+		for r in range(6):
+			mainland_cells.append([c, r])
+	var island_cells: Array = [[8, 0], [8, 1], [9, 0], [9, 1]]
+	ectx.terrain = {
+		"bounds":   { "w": 10, "h": 6 },
+		"plateaus": [
+			{ "col": 0, "row": 0, "w": 5, "h": 6, "cells": mainland_cells },
+			{ "col": 8, "row": 0, "w": 2, "h": 2, "cells": island_cells },
+		],
+		"bridges":  [],
+		"islands":  [],
+	}
+
+	runtime.dispatch({ "type": "combat.init" })
+	ectx.combat_state["waves_spawned"]     = 0
+	ectx.combat_state["all_waves_spawned"] = false
+	ectx.combat_state.erase("total_waves")
+
+	runtime.dispatch({ "type": "combat.confirm_round" })
+	var guard: int = 0
+	while guard < 40:
+		guard += 1
+		var cs: Dictionary = ectx.combat_state
+		if bool(cs.get("combat_over", false)): break
+		if str(cs.get("round_phase", "")) != "in_round": break
+		runtime.dispatch({ "type": "combat.next_actor" })
+
+	var wave_actor: Dictionary = {}
+	for a_v in ectx.actors:
+		if str(a_v.get("id", "")).begins_with("wave_1_"):
+			wave_actor = a_v
+			break
+	if wave_actor.is_empty():
+		return { "ok": false, "error": "wave actor was not spawned" }
+
+	var gp: Dictionary = wave_actor.get("grid_pos", {})
+	var col: int = int(gp.get("col", -1))
+	if col > 4:
+		return { "ok": false, "error": "wave actor spawned outside the host region at col=%d row=%d" % [col, int(gp.get("row", -1))] }
 	return { "ok": true }
 
 
@@ -3256,10 +3606,14 @@ static func _first_living(ectx: EncounterContext, faction: String) -> Dictionary
 ## path called hostile_edge_costs(), which discards `edge_sources`. This story owes those
 ## normalized summaries to V2-COMBAT-003; publishing hardcoded emptiness was a false claim.
 ##
-## Guards the fix specifically: a live hostile is parked 8-adjacent to the mover's origin,
-## so every edge leaving that origin is controlled and the sources CANNOT legitimately be
-## empty. Against the pre-fix code this fails on the `hostile_control_sources is empty`
-## branch, because that array was empty for every option on every board.
+## Guards the fix specifically: a live hostile is parked two cells from the mover's origin,
+## so every route that closes to melee crosses that hostile's zone of control and the sources
+## CANNOT legitimately be empty. Against the pre-fix code this fails on the
+## `hostile_control_sources is empty` branch, because that array was empty for every option
+## on every board.
+##
+## Two cells, not adjacent: a mover already within melee reach gets the zero-step stay
+## option, whose empty path crosses no edge and truthfully names no control source.
 static func test_published_option_carries_truthful_control_and_hazards() -> Dictionary:
 	var env: Dictionary = _setup("truthful_control", true, "off", EncounterResolutionModes.COMBAT)
 	if env.is_empty():
@@ -3277,22 +3631,23 @@ static func test_published_option_carries_truthful_control_and_hazards() -> Dict
 	if origin.is_empty():
 		return { "ok": false, "error": "mover has no grid_pos" }
 
-	# Park the hostile 8-adjacent to the mover so its zone of control is unambiguous.
+	# Park the hostile two cells from the mover: close enough that its zone of control covers
+	# every cell the mover must step to, far enough that the mover must actually step.
 	var bdata: Dictionary = runtime.config_service.get_balance().get("data", {}) as Dictionary
 	var board_cfg: Dictionary = _movement_board_cfg(runtime, ectx)
 	var walkable: Dictionary = _full_walkable(board_cfg)
-	var adjacent: Dictionary = {}
-	for dc in range(-1, 2):
-		for dr in range(-1, 2):
-			if dc == 0 and dr == 0:
+	var stand_off: Dictionary = {}
+	for dc in range(-2, 3):
+		for dr in range(-2, 3):
+			if maxi(absi(dc), absi(dr)) != 2:
 				continue
 			var cell: Dictionary = { "col": int(origin["col"]) + dc, "row": int(origin["row"]) + dr }
 			var key: String = "%d,%d" % [int(cell["col"]), int(cell["row"])]
-			if walkable.has(key) and bool(walkable[key]) and adjacent.is_empty():
-				adjacent = cell
-	if adjacent.is_empty():
-		return { "ok": false, "error": "no walkable cell adjacent to the mover" }
-	hostile["grid_pos"] = adjacent.duplicate(true)
+			if walkable.has(key) and bool(walkable[key]) and stand_off.is_empty():
+				stand_off = cell
+	if stand_off.is_empty():
+		return { "ok": false, "error": "no walkable cell two cells from the mover" }
+	hostile["grid_pos"] = stand_off.duplicate(true)
 
 	var prepared: Dictionary = _lm(runtime).prepare_live_movement_context(
 		mover, ectx, ectx.combat_state, board_cfg, bdata, 920)
@@ -3328,5 +3683,5 @@ static func test_published_option_carries_truthful_control_and_hazards() -> Dict
 
 	# The load-bearing assertion. Pre-fix this array was empty for every option, always.
 	if not saw_control:
-		return { "ok": false, "error": "no option reported hostile control despite a hostile adjacent to the mover origin — summaries are still hardcoded empty" }
+		return { "ok": false, "error": "no option reported hostile control despite a hostile two cells from the mover origin — summaries are still hardcoded empty" }
 	return { "ok": true }

@@ -581,6 +581,11 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 			"debug.charge_pressure.set":
 				_apply_action_outcome(_debug_controller().handle_force_charge_pressure(action, t), t)
+
+			# V2-COMBAT-003 dev command: the headless Keeper suggestion. ui/ must never write
+			# flow_ctx itself, so the "guide" debug command dispatches this instead.
+			"debug.guidance.set":
+				_apply_action_outcome(_debug_controller().handle_guidance_set(action, t), t)
 	
 			# ---- Directives (DIRECTIVE-001) ----
 			"directive.select":
@@ -1207,6 +1212,45 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 		_handle_combat_init(t)
 
 
+## V2-COMBAT-003: a fight where neither faction dealt damage for
+## data.combat.stalemate.no_progress_round_limit consecutive rounds cannot end by any objective
+## check (CombatState.check_end_condition() reason "no_progress_forced_retreat"). Called from
+## _end_round() in place of the normal victory/defeat pipeline, so build_final_snapshot(), the
+## reward computation it drives, the bond/Thread consequence block and the recruit-offer check
+## never run for this fight.
+##
+## Reuses the encounter.retreat SUCCESS shape (clear ally fields, drop the encounter, build the
+## scout-return-shaped resolve card, transition to RESOLVE) with EVERY payout that path can grant
+## removed:
+##   - the intel-count read and the partial-Ase award it feeds (encounter.retreat's
+##     "retreat_intel_partial" econ.add_ase call) — never computed here
+##   - pending_scout_return_ase / pending_scout_return_intel_count — forced to 0, so the resolve
+##     card's ledger and intel line both read zero
+##   - apply_run_emotion_modifiers("withdrawal", t) — grants a 1.25x morale-recovery multiplier
+##     on the surviving party; not called
+##   - check_vow_release_condition(t) — not called (no vow benefit was ever staged: that only
+##     happens in the victory branch of the pipeline this function replaces)
+## A stalemate the simulation could not resolve earns the player nothing.
+func _resolve_forced_retreat(t: int) -> void:
+	if flow_ctx.encounter_ctx == null:
+		return
+
+	# Same teardown as a successful encounter.retreat — clearing ally fields and dropping the
+	# encounter is cleanup, not a reward.
+	_recruitment_consequence_service().clear_ally_fields_if_present(t)
+	flow_ctx.encounter_ctx     = null
+	flow_ctx.encounter_machine = null
+	flow_ctx.bond_outcome      = {}
+	flow_ctx.pending_scout_return_ase         = 0
+	flow_ctx.pending_scout_return_intel_count = 0
+	_mark_save_requested("combat.no_progress_forced_retreat")
+
+	flow_ctx.last_snapshot = VentureResolveSnapshotBuilder.build_scout_return_snapshot(
+		flow_ctx, t, "forced_retreat")
+	flow_machine.transition(
+		FlowStateIds.RESOLVE, flow_ctx, logger, t, "combat.no_progress_forced_retreat")
+
+
 ## COMBAT-001: initializes CombatState, logs combat.init, saves, and rebuilds snapshot.
 func _handle_combat_init(t: int) -> void:
 	if flow_ctx.encounter_ctx == null or flow_ctx.encounter_machine == null:
@@ -1530,11 +1574,57 @@ func _end_round(t: int) -> void:
 	_objective_service.apply_protect_guard_round(ectx, round, t)
 	_objective_service.apply_pursue_contain_round(ectx, round, t)
 
+	# V2-COMBAT-003: universal no-progress detector. Any actor-vs-actor damage this round
+	# (either faction) resets the streak. Scans the same ectx.last_round_results the T9
+	# no-damage-streak term above already reads, but with no faction or actor filter — this
+	# counts damage dealt BY EITHER SIDE, not by one echo.
+	var _np_damage_this_round: bool = false
+	for _np_res in ectx.last_round_results:
+		if _np_res is Dictionary and int(_np_res.get("damage", 0)) > 0:
+			_np_damage_this_round = true
+			break
+
+	# CORRECTION (measured, not in the original spec): damage alone false-positives on an
+	# objective that can legitimately run many rounds with NO damage exchange at all —
+	# GUIDE_SPIRIT escort while the party is rarely in escort_radius, RECOVER/PROTECT/PURSUE
+	# while unengaged. combat_baseline/transition_sequence_guide_spirit proved this: its
+	# GUIDE_SPIRIT protect fixture needs more real rounds than the no-progress limit to reach
+	# spirit_protected, with zero melee ever occurring, so a damage-only reset ended it as a
+	# forced retreat instead of the win it was always going to reach. Progress is therefore
+	# damage OR any per-objective progress counter advancing: protect_counter,
+	# guide_protect_counter (documented as monotonic — CombatState.create() — so any rise is
+	# unambiguous progress, never noise), contain_counter, hold_counter. Comparing a SUM is
+	# safe even though hold_counter alone can fall (carrier-down resets it): a fall can only
+	# ever make the sum smaller, never trigger a false reset, and if a carrier is being downed
+	# at all, damage is happening and _np_damage_this_round already resets the streak.
+	var _np_progress_sum: int = int(combat_state.get("protect_counter", 0)) \
+		+ int(combat_state.get("guide_protect_counter", 0)) \
+		+ int(combat_state.get("contain_counter", 0)) \
+		+ int(combat_state.get("hold_counter", 0))
+	var _np_last_progress_sum: int = int(combat_state.get("_no_progress_last_sum", -1))
+	if _np_damage_this_round or _np_progress_sum > _np_last_progress_sum:
+		combat_state["no_progress_streak"] = 0
+	else:
+		combat_state["no_progress_streak"] = int(combat_state.get("no_progress_streak", 0)) + 1
+	combat_state["_no_progress_last_sum"] = _np_progress_sum
+
 	# Check end condition — pass combat_state so RECOVER/PROTECT/ENDURE checks read
 	# round_counter, hold_counter, and objective_params.
 	# COMBAT and PURIFY_SHRINE omit combat_state in the old call but the 3-arg form is
 	# byte-identical for those modes (new branches are gated on their objective strings).
 	var end_check: Dictionary = CombatState.check_end_condition(ectx.actors, ectx.resolution_mode, combat_state)
+	if str(end_check.get("reason", "")) == "no_progress_forced_retreat":
+		logger.info(t, "combat.no_progress_forced_retreat", "Neither side dealt damage — forced retreat", {
+			"round":              round,
+			"no_progress_streak": int(combat_state.get("no_progress_streak", 0)),
+		})
+		combat_state["combat_over"] = true
+		# _resolve_forced_retreat() drops encounter_ctx (and combat_state with it) and
+		# transitions flow_machine to RESOLVE, which rebuilds the snapshot itself
+		# (FlowStateMachine.transition() -> _rebuild_snapshot()) — no separate
+		# refresh_snapshot() call here, matching _handle_encounter_retreat's success branch.
+		_resolve_forced_retreat(t)
+		return
 	if end_check.get("over", false):
 		combat_state["combat_over"] = true
 		# COMBAT-005: store result on ectx so build_snapshot() can surface it.

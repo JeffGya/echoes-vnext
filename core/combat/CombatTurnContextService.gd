@@ -44,6 +44,7 @@
 #           ectx.purifier_id, ectx.terrain, ectx.round_bark_events (shallow-copied into ctx so
 #           no consumer can append to the live array), ectx.combat_state (totem_stolen,
 #           totem_carrier_id, recover_holder_id);
+#           flow_ctx.dev_guidance (the headless Keeper suggestion, V2-COMBAT-003),
 #           flow_ctx.save_data (VowService.get_active_vow, sanctum.bonds),
 #           flow_ctx itself (KeeperIntroService.is_trial_active);
 #           config_service.get_balance() -> data.grid;
@@ -195,6 +196,9 @@ func build_turn_context(
 		"totem_carrier_id":        str(ectx.combat_state.get("totem_carrier_id", "")),
 		# data.combat.objective_modes for BehaviorArbiter._build_board_summary.
 		"objective_modes_cfg":     objective_modes_cfg,
+		# V2-COMBAT-003: the active Keeper suggestion, {} when none. Headless for this
+		# story — see FlowContext.dev_guidance.
+		"guidance":                flow_ctx.dev_guidance,
 	}
 
 	# V2-STAGE-004 Distinctiveness §4-C: mode directive injection.

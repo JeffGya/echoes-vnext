@@ -81,6 +81,13 @@ var dev_guide_joins: String = ""
 # is swapped afterward.
 var dev_force_recruit: String = ""
 
+# V2-COMBAT-003 decision 2: the HEADLESS Keeper-guidance source. Empty means no
+# suggestion is active, and every behaviour decision is then byte-identical to one made
+# with this field absent. Only tests and the AppRoot debug command "guide" write it;
+# V2-COMBAT-004 replaces this seam with the real ping interface and reads the same
+# shape. See GuidanceContribution.resolve() for the fields.
+var dev_guidance: Dictionary = {}
+
 # V2-STAGE-002: index into stage.objectives[] for the currently active encounter.
 # Set by FlowRuntime when stage.engage_situation transitions to ENCOUNTER.
 # Read by EncounterSetupService._resolve_mode_from_stage() to pick encounter resolution mode.

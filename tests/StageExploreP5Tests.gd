@@ -264,7 +264,8 @@ static func _inject_travel_stage(runtime: FlowRuntime, realm_seed: int) -> void:
 		"plateau_w_min": 4, "plateau_w_max": 8,
 		"plateau_h_min": 4, "plateau_h_max": 8,
 		"bridge_width": 2, "bridge_density": 0.3,
-		"straggler_count_min": 1, "straggler_count_max": 2,
+		"island_count_min": 1, "island_count_max": 2,
+		"island_size_min": 4, "island_size_max": 8,
 	}
 	var bounds := { "w": 30, "h": 30 }
 	var terrain: Dictionary = StageTerrainScript.generate(realm_seed, 0, sig, bounds)

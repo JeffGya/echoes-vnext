@@ -352,6 +352,9 @@ func apply_endure_wave_spawn(ectx: EncounterContext, t: int) -> void:
 ## cell; this routine hands out N cells ranked enemy-side-first and treats a dead actor's cell as
 ## free. Forcing the two together would move every wave spawn cell.
 ##
+## Candidates are restricted to the host region (GridService.largest_walkable_region), so a
+## spawn never lands on a moated island it cannot leave.
+##
 ## D09: an actor that gets no cell is not returned, so the caller never appends it to
 ## ectx.actors. Appending it would leave EnemyActor's default grid_pos {0,0} — an echo-side cell
 ## that a living actor may already stand on. A spawn that cannot be placed is dropped; the next
@@ -366,11 +369,27 @@ func _place_enemy_spawns(ectx: EncounterContext, new_actors: Array) -> Array:
 			if not op.is_empty():
 				occupied["%d,%d" % [int(op.get("col", 0)), int(op.get("row", 0))]] = true
 
+	# Host-region filter (V2-COMBAT-003 defect fix). Without this, a candidate can land on a
+	# moated island: unreachable ground that nothing can walk off. GridService.largest_walkable_region
+	# is the one host-region authority — EncounterSetupService.gd:392 uses the same call for
+	# initial placement. The `not host_region.is_empty()` fallback below is defensive. It does not
+	# fire in practice: StageTerrain._is_walkable_in_bounds skips the bounds test when bounds are
+	# empty, so a region with no bounds still comes back non-empty. The `walkable.is_empty()` guard
+	# above already excludes the only case that could return an empty region. The no-terrain legacy
+	# path is protected by that guard, not by this fallback.
+	var host_region: Dictionary = {}
+	if not walkable.is_empty():
+		var bounds: Dictionary = ectx.terrain.get("bounds", {})
+		host_region = GridService.largest_walkable_region(walkable, bounds)
+
 	var candidate_keys: Array = []
 	if not walkable.is_empty():
 		for k in walkable:
-			if not occupied.has(k):
-				candidate_keys.append(k)
+			if occupied.has(k):
+				continue
+			if not host_region.is_empty() and not host_region.has(k):
+				continue
+			candidate_keys.append(k)
 		candidate_keys.sort_custom(func(a: String, b: String) -> bool:
 			var _ap := a.split(","); var _bp := b.split(",")
 			var _ac: int = int(_ap[0]); var _bc: int = int(_bp[0])

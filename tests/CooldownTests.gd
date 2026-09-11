@@ -30,7 +30,7 @@ static func _skills_cfg() -> Dictionary:
 		"definitions": {
 			"stewards_call": {
 				"skill_id":            "stewards_call",
-				"calling_requirement": "steward",
+				"calling_requirement": "onyamesu",
 				"display_name":        "Steward's Call",
 				"target_type":         "ally",
 				"action_type":         "actor.steady_call",
@@ -42,7 +42,7 @@ static func _skills_cfg() -> Dictionary:
 			},
 			"seers_reveal": {
 				"skill_id":            "seers_reveal",
-				"calling_requirement": "seer",
+				"calling_requirement": "okomfo",
 				"display_name":        "Seer's Reveal",
 				"target_type":         "enemy",
 				"action_type":         "actor.reveal",
@@ -54,7 +54,7 @@ static func _skills_cfg() -> Dictionary:
 			},
 			"seers_sight": {
 				"skill_id":              "seers_sight",
-				"calling_requirement":   "seer",
+				"calling_requirement":   "okomfo",
 				"display_name":          "Seer's Sight",
 				"target_type":           "ally",
 				"action_type":           "actor.read_field",
@@ -72,7 +72,7 @@ static func _steward_actor(used: bool) -> Dictionary:
 	var actor := {
 		"id":             "echo_steward_cd_01",
 		"faction":        "echo",
-		"calling_origin": "steward",
+		"calling_origin": "onyamesu",
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
 		"vector_scores":  {},
 		"fear":           0,
@@ -90,7 +90,7 @@ static func _seer_reveal_actor(used: bool) -> Dictionary:
 	var actor := {
 		"id":             "echo_seer_rv_01",
 		"faction":        "echo",
-		"calling_origin": "seer",
+		"calling_origin": "okomfo",
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
 		"vector_scores":  {},
 		"fear":           0,
@@ -108,7 +108,7 @@ static func _seer_sight_actor(cooldown: int) -> Dictionary:
 	var actor := {
 		"id":             "echo_seer_rd_01",
 		"faction":        "echo",
-		"calling_origin": "seer",
+		"calling_origin": "okomfo",
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
 		"vector_scores":  {},
 		"fear":           0,

@@ -126,6 +126,11 @@ script = ExtResource("1_script")
 y_sort_enabled = true
 tile_set = SubResource("TileSet_explore")
 
+[node name="BridgeLayer" type="TileMapLayer" parent="Board" unique_id=2125377741]
+y_sort_enabled = true
+tile_set = SubResource("TileSet_explore")
+self_modulate = Color(0.87, 0.58, 0.24, 0.55)
+
 [node name="GhostFootprintLayer" type="Node2D" parent="Board" unique_id=2125377740]
 unique_name_in_owner = true
 script = ExtResource("8_ghostlayer")

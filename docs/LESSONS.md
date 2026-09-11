@@ -13,6 +13,98 @@ Reviewed at the start of each session.
 
 ## Lessons (most recent first)
 
+### 21 — Price the sum, not the item
+
+**From V2-COMBAT-003, 2026-09-06.** The story is named "one deterministic behavior-arbitration and
+explanation authority". It shipped 49 commits. About 44 % of the code commits were a different
+subject: terrain design, a V2 calling migration, and a maturity band remap.
+
+**Every addition was priced to Jeff before he approved it.** The review checked each one and found
+the cost stated first. **The running total was never priced at all.** No document said "this story is
+now three subjects" until Jeff said it himself.
+
+**Rule.** When a story takes on a second subject, price the **total**, and offer the split at the
+moment the second subject appears — not later.
+
+**The split point existed.** Commit `b4dd797` is the line between repairing a defect and authoring a
+design. Everything before it protected a measurement. Everything after it created board variety on a
+foundation that was already safe.
+
+**Do not read this as "do not fix what you find".** Every detour repaired something the story's own
+conclusion depends on. Phase 10 could honestly report that no weight moved only because the inputs
+were repaired first. The work was right. The packaging was not.
+
+---
+
+### 20 — A brief written by the orchestrator overrides the repo rules
+
+**From V2-COMBAT-003.** A sub-agent reads `AGENTS.md`, then reads the brief. **The brief is later and
+wins on contradiction.**
+
+Restating a repo rule in your own words does not reinforce it. It replaces it, with whatever you got
+wrong. I restated the conditional rule "rebuild the import cache *before believing* a fingerprint
+failure" as an unconditional step. Agents reimported before every run. One two-function commit cost
+five seven-minute suites.
+
+**Rule.** Point briefs at the file. Do not paraphrase it. Never state a conditional rule without its
+condition.
+
+**This class repeated after it was written down.** Three of my briefs on one branch carried numbers I
+had not checked against the code. Agents caught all three. One error came one day after the entry
+about that exact failure.
+
+---
+
+### 19 — A rule written down changes the large cases and not the habit
+
+**From V2-COMBAT-003.** `AGENTS.md` entry 28 says comments must be lean. Measured on the branch:
+
+| Range | Comments | Code | Ratio |
+|---|---:|---:|---:|
+| Before the rule | 1,934 | 4,104 | 0.47 |
+| After the rule | 1,237 | 3,225 | 0.38 |
+
+The aggregate improved. **Four commits after the rule still added more comment than code.** The rule
+worked where the work was large and someone was watching. It failed on small commits, which is
+exactly where a two-line fix attracts a paragraph.
+
+**Rule.** Writing a rule is the start. Check it on the small cases, where nobody is looking.
+
+---
+
+### 18 — Stop the agent, then its processes
+
+**From V2-COMBAT-003.** An agent stalled. I killed its Godot run. It woke, found no result, and
+started another. Three rounds of that.
+
+`TaskStop` ends the agent. Killing a child process does not.
+
+**Rule.** When taking over from a live agent: stop the agent first, then clean up its processes.
+Doing it in the other order guarantees a loop.
+
+---
+
+### 17 — Two measurements were reported as fact and both were wrong
+
+**From V2-COMBAT-003.** I told Jeff islands appear on 60-70 % of boards. That figure came from a
+probe that built `ConfigService` fresh, which returns an empty balance, so it measured a board type
+the game never generates.
+
+I then told him 11 %. That sampled one realm — Courage — which turned out to be one of the two least
+island-prone settings in the game.
+
+The real figure, measured across all ten virtue settings, is between 5 % and 71 % depending on realm.
+
+**This repeats a lesson already in memory:** a probe that does not mirror production construction
+invalidates its own headline. I repeated it anyway, and a design decision was approved on the wrong
+numbers before they were corrected.
+
+**Rule.** Before quoting a probe number, check that the probe builds its inputs the way production
+builds them.
+
+---
+
+
 ---
 
 ### 16 — CanvasLayer visibility must follow inherited shell visibility

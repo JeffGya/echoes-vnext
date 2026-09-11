@@ -45,4 +45,12 @@ tool owns its own command name rather than running as part of the suite. See `ui
 
 - `FearReachabilityProbe.gd` — measures Absolute Fear Rule reachability across many full encounters
 - `PursueTimingProbe.gd` — measures PURSUE-encounter setup/resolution timing
+- `TerrainRegionProbe.gd` — counts cut-off walkable regions per virtue, on combat-board and
+  explore-map bounds, under both the shared-side and the legal-edge adjacency rule
+  (`-- tests terrainprobe`). Run it before and after any change to terrain connectivity.
+  It also drives the two REAL placement paths — `RealmGenerator._place_situations`, and the
+  `collect_unoccupied_cells` → `place_on_terrain` pattern every objective spawn uses — and
+  reports situations and objectives landing off the host region, objectives without eight
+  walkable free neighbours, and how often the objective-site compensation fires per virtue.
+  It takes roughly 12 minutes; run it in the background, not on a Bash timeout.
 - `assemble_contact_responses.py` — Python helper (non-GDScript)

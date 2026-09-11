@@ -87,19 +87,28 @@ filter prints the available suite names and runs nothing.
 
 ### Save isolation — DELETE THE WHOLE SAVE DIRECTORY BEFORE EVERY RUN
 
-Suites write saves into a shared directory under `/tmp`. **Stale files there silently corrupt
-results and produce false failures that survive a cache rebuild.** Always start a verification
-run with the delete:
+Suites write saves into a shared directory under `/tmp`, by default `/tmp/echoes-vnext-tests/`.
+**Stale files there silently corrupt results and produce false failures that survive a cache
+rebuild.** Always start a verification run with the delete:
 
 ```bash
 rm -rf /tmp/echoes-vnext-tests && <godot ... -- tests>
 ```
 
-**Why.** `SaveService` writes six artifacts beside the primary save — `.pending_a`, `.pending_b`,
-`.tmp`, `.bak1`, `.bak2`, `.bak3` ([SaveService.gd:173-181](core/save/SaveService.gd:173)). It
-returns `LOAD_MISSING` only when *no* artifact exists ([SaveService.gd:116-118](core/save/SaveService.gd:116)).
-A helper that deletes only the primary therefore leaves a recoverable backup, `boot()` never
-reaches `make_new_save(<pinned seed>)`, and the test **resumes a previous run's campaign** — other
+**The root is configurable.** Set `ECHOES_TEST_SAVE_DIR` to point every save artifact this
+project writes during a test or a probe at a directory of your choosing instead of the shared
+default (a missing trailing separator is normalized). Leaving it unset reproduces today's
+behaviour byte-for-byte — same path, same `rm -rf /tmp/echoes-vnext-tests` cleanup. This is what
+makes parallel Godot runs possible: see "Agent Orchestration" below. Delete whichever directory
+you used before every run, custom or default — the contamination risk described next applies
+equally to both.
+
+**Why the delete matters.** `SaveService` writes six artifacts beside the primary save —
+`.pending_a`, `.pending_b`, `.tmp`, `.bak1`, `.bak2`, `.bak3`
+([SaveService.gd:173-181](core/save/SaveService.gd:173)). It returns `LOAD_MISSING` only when *no*
+artifact exists ([SaveService.gd:116-118](core/save/SaveService.gd:116)). A helper that deletes
+only the primary therefore leaves a recoverable backup, `boot()` never reaches
+`make_new_save(<pinned seed>)`, and the test **resumes a previous run's campaign** — other
 balances, other XP, another map, another hash. The production behaviour is correct; recovering from
 a backup is what a crash-safe save system is for. The test harness is what is wrong.
 
@@ -234,6 +243,60 @@ Action type format: `domain.subdomain.verb` e.g. `flow.go_state`, `sanctum.party
 - 18 REQUIRED_FIELDS checked by `ActorSchema.validate()` (see `CONVENTIONS.md`)
 - Access top-level fields directly: `actor["speed"]` not `actor["stats"]["speed"]`
 - `current_hp`, `speed`, `morale`, `fear` are top-level, NOT inside `stats`
+
+---
+
+## Agent Orchestration
+
+### Pick the model tier from the difficulty of the work
+
+Set the model explicitly on every delegated call. Omitting it silently inherits the session model.
+
+| Tier | Use it for |
+|---|---|
+| `haiku` | Mechanical bulk work: renames from an approved table, boilerplate, format conversion, log triage |
+| `sonnet` | The default. Well-specified implementation with clear acceptance criteria |
+| `opus` | Genuinely tricky work: concurrency, subtle algorithms, adversarial verification, gnarly debugging |
+
+Choose by difficulty, not by a fixed build-versus-review split. A diagnosis of an unknown mechanism
+is `opus` work even when the fix that follows is `sonnet` work. Split a task across two tiers when
+its halves differ.
+
+### Run agents in parallel whenever it is safe
+
+Parallelize by default. Two agents may run together only when all three conditions hold.
+
+1. **Disjoint files.** Neither agent writes a file or a section the other writes.
+2. **No shared exclusive resource.** **In this project that means Godot.** Every test run writes
+   saves under `/tmp/echoes-vnext-tests/` by default, and that default is a hardcoded absolute
+   path, so **a git worktree alone does not isolate two Godot processes** — a worktree changes the
+   checkout, not `/tmp`. Two Godot processes that share a save directory corrupt each other's
+   saves. **Parallel Godot runs are possible now**, but only when each agent sets its own
+   `ECHOES_TEST_SAVE_DIR` (see "Save isolation" above) to a distinct directory before launching.
+   Two agents that leave the variable unset, or that set it to the same path, still corrupt each
+   other and must run serially.
+3. **Disjoint recorded values.** Two agents that would re-record the same fingerprint or baseline
+   constant stay serial **even when their files differ**. Parallel re-records destroy attribution:
+   you get one large set of moved values and no way to say which change caused which.
+
+Read-only research and design agents satisfy all three almost always. Run those in parallel freely.
+
+### Verification is central, and never self
+
+- A builder never verifies its own work.
+- Where the work of two or more agents merges, an independent agent verifies the **combined** tree,
+  so the agents cannot mask each other's mistakes.
+- The verifier inspects `git diff`, the source and the real `Tests:` line. **Never accept a
+  completion report as evidence.** Check the tree yourself.
+- Give the verifier the claim to attack, not the answer to confirm. Ask it to prove the builder
+  wrong. This works: a `sonnet` agent once concluded a reported defect did not exist, and an `opus`
+  verifier then reproduced it and found the real cause.
+
+### After any agent stops, killed or completed, audit the tree read-only before re-dispatching
+
+A killed agent can leave a tree that reads as finished and is not — for example a harness change
+whose comment claims constants were re-recorded when the agent died before recording them. Read the
+diff. Do not trust the file's own description of itself.
 
 ---
 
@@ -417,6 +480,14 @@ Read `docs/v2-migration-map.md` before starting any Alignment story.
 23. Re-baselining a fingerprint constant to make the suite green before you can explain what moved — a constant you recalibrated without understanding is worse than no guard, because it still looks like protection
 24. Reading a filtered run as green without checking a `Tests:` line came back — an unmatched filter runs nothing, prints nothing, and exits 0. Suite names differ from file names (`Stage004SeamTests` registers as `seam`)
 
+25. **Writing a brief that overrides this file.** An orchestrator's task brief is read *after* AGENTS.md and wins on contradiction. On V2-COMBAT-003 every brief demanded full-suite verification and restated "rebuild the import cache" as an unconditional step, so agents ran five ~7-minute suites per commit and reimported before each one — while line 55 of this file already said "one suite only while working, and the full suite once at the end". The rule did not fail; the brief overrode it. **Point briefs at this file. Do not restate its rules in your own words, and never state a conditional rule (mistake 14) without its condition.**
+26. **Reproduction runs on a deterministic suite.** Re-running an identical suite to check a result "is stable" proves nothing here: seeds are pinned, there is no wall clock, and `core/` makes no `randf()` call. Two identical runs cost 14 minutes and carry the information of one. Run the suite again only when the change could move determinism itself — seeding, dispatch order, draw counts.
+27. **Rigour that does not scale with risk.** The predict-then-observe attribution method (predict a moved value from the numbers, then observe it, then show a structural invariant held) is mandatory when a change moves recorded values. Applying it to a mechanical rename or a config migration with no new values costs a custom probe, ~200k tokens and ~70 tool calls for a two-function edit. Match the method to the blast radius.
+28. **Comments that restate the code, repeat themselves, or narrate history.** Measured on this branch: one ~50-line fix added **61** comment lines, a duplicate-helper fix added **69**, the islands commit added **289**. The failure modes, in order of frequency: the same point made at the call site *and* in the docstring; a sentence that says what the next line plainly says; and story-id narrative ("V2-PROG-003 grew the vectors from 4 to 10") that belongs in the commit message.
+
+    **A comment earns its place only by saying what the code cannot** — a non-obvious constraint, an invariant a future edit would break, a trap, or a decision whose alternative looks equally reasonable. Write it once, at the authority, not at every caller.
+
+    **Where things go:** why the change was made → commit message. Design rationale and measurements → the story's handoff or `docs/`. What a reader needs *at that line* to avoid breaking it → the comment. **A comment block should be shorter than the code it explains**; if it is longer, the reasoning belongs elsewhere and the comment should point there.
 Full lesson history: `docs/LESSONS.md`
 
 ---
