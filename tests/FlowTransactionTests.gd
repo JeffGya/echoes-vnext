@@ -6,8 +6,8 @@
 #      -locked path, which must still fall through to the common closure (encounter bootstrap
 #      + save flush) instead of returning early and stranding an already-queued save.
 #   2. Every action `dispatch()` accepts is registered exactly once in its `match` block —
-#      73 case labels total (two of which carry same-line trailing comments, so a naive
-#      `grep -c '":'` undercounts at 71).
+#      74 case labels total (two of which carry same-line trailing comments, so a naive
+#      `grep -c '":'` undercounts at 72).
 #
 # A "real flush" is counted via the `save.flush` StructuredLogger event that FlowRuntime emits
 # only from inside the actual `SaveService.save_to_file()` call site at the end of dispatch() —
@@ -27,7 +27,7 @@ class_name FlowTransactionTests
 extends RefCounted
 
 const DISPATCH_SOURCE_PATH := "res://core/runtime/FlowRuntime.gd"
-const EXPECTED_ACTION_COUNT := 73
+const EXPECTED_ACTION_COUNT := 74
 
 
 static func register(runner) -> void:
@@ -37,7 +37,10 @@ static func register(runner) -> void:
 	runner.register_test("flow_transaction/weave_locked_blocked_action_still_flushes_queued_save", func(): return _test_weave_locked_flushes_queued_save())
 	runner.register_test("flow_transaction/weave_locked_blocked_action_performs_no_work", func(): return _test_weave_locked_performs_no_work())
 	runner.register_test("flow_transaction/sequential_dispatches_never_exceed_one_flush_each", func(): return _test_sequential_dispatches_never_exceed_one_flush_each())
-	runner.register_test("flow_transaction/dispatch_action_count_is_73", func(): return _test_dispatch_action_count_is_73())
+	runner.register_test("flow_transaction/dispatch_action_count_is_74", func(): return _test_dispatch_action_count_is_74())
+	# PR #62 review: the "guide" debug command must reach flow_ctx through dispatch(), not
+	# through a write from ui/.
+	runner.register_test("flow_transaction/debug_guidance_set_is_dispatched_not_written_from_ui", func(): return _test_debug_guidance_set_is_dispatched())
 	runner.register_test("flow_transaction/dispatch_action_labels_have_no_duplicates", func(): return _test_dispatch_action_labels_have_no_duplicates())
 
 
@@ -290,7 +293,7 @@ static func _dispatch_action_labels() -> Array:
 	return labels
 
 
-static func _test_dispatch_action_count_is_73() -> Dictionary:
+static func _test_dispatch_action_count_is_74() -> Dictionary:
 	var labels := _dispatch_action_labels()
 	if labels.size() != EXPECTED_ACTION_COUNT:
 		return {"ok": false, "error": "expected %d match case labels in dispatch(), found %d: %s" % [EXPECTED_ACTION_COUNT, labels.size(), str(labels)]}
@@ -310,4 +313,37 @@ static func _test_dispatch_action_labels_have_no_duplicates() -> Dictionary:
 			seen[label] = true
 	if not duplicates.is_empty():
 		return {"ok": false, "error": "duplicate action registrations found: %s" % str(duplicates)}
+	return {"ok": true}
+
+
+## PR #62 review comment — the "guide" debug command used to write runtime.flow_ctx.dev_guidance
+## straight from ui/AppRoot.gd. ui/AGENTS.md forbids a ui/ file touching sim state, and
+## FlowRuntime.dispatch() is the single choke point for tick, logger, snapshot and save intent.
+## The command now dispatches debug.guidance.set, which this test drives end to end: set, then
+## clear. Before the change the action type did not exist, dispatch() fell through to its
+## unknown-action branch, and dev_guidance stayed empty.
+static func _test_debug_guidance_set_is_dispatched() -> Dictionary:
+	var env := _make_runtime("debug_guidance")
+	var runtime: FlowRuntime = env["runtime"]
+	var save_path: String = env["save_path"]
+
+	var preset: Dictionary = {
+		"purpose":        "hold",
+		"action_type":    "actor.guard",
+		"guidance_id":    "hold",
+		"subject_id":     "",
+		"recipient_ids":  [],
+	}
+	runtime.dispatch({ "type": "debug.guidance.set", "guidance": preset })
+	var active: Dictionary = runtime.flow_ctx.dev_guidance
+	if str(active.get("guidance_id", "")) != "hold" or str(active.get("action_type", "")) != "actor.guard":
+		_cleanup(save_path)
+		return {"ok": false, "error": "dispatch did not set flow_ctx.dev_guidance — got %s" % str(active)}
+
+	runtime.dispatch({ "type": "debug.guidance.set", "guidance": {} })
+	if not (runtime.flow_ctx.dev_guidance as Dictionary).is_empty():
+		_cleanup(save_path)
+		return {"ok": false, "error": "dispatch did not clear flow_ctx.dev_guidance — got %s" % str(runtime.flow_ctx.dev_guidance)}
+
+	_cleanup(save_path)
 	return {"ok": true}

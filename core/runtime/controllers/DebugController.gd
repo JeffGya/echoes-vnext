@@ -15,8 +15,9 @@
 #     FlowRuntime.dispatch() via flow_ctx.request_save().
 #   - No UI or scene-tree reference.
 #
-# Owns 7 actions: debug.seed.show, debug.seed.set, debug.seed.reset, debug.echo.gen_test,
-# debug.ally.spawn, debug.claimant.force_combat, debug.charge_pressure.set. Moved verbatim
+# Owns 8 actions: debug.seed.show, debug.seed.set, debug.seed.reset, debug.echo.gen_test,
+# debug.ally.spawn, debug.claimant.force_combat, debug.charge_pressure.set, debug.guidance.set.
+# All but debug.guidance.set were moved verbatim
 # (behaviour unchanged) from FlowRuntime.gd: _handle_debug_seed_show, _handle_debug_seed_set,
 # _handle_debug_echo_gen_test, _echo_fingerprint, _handle_debug_spawn_ally,
 # _handle_debug_force_claimant_combat, _handle_debug_force_charge_pressure.
@@ -329,3 +330,20 @@ func handle_force_charge_pressure(action: Dictionary, t: int) -> FlowActionOutco
 		"on": on,
 	})
 	return FlowActionOutcome.snapshot_outcome(flow_ctx.last_snapshot).with_save_reason("debug.charge_pressure.set")
+
+
+## debug.guidance.set — sets or clears the headless Keeper suggestion (flow_ctx.dev_guidance).
+## An empty "guidance" dictionary clears it. The field is session-transient, so no save is
+## requested. See FlowContext.dev_guidance and GuidanceContribution.resolve() for the shape.
+func handle_guidance_set(action: Dictionary, t: int) -> FlowActionOutcome:
+	var guidance_v: Variant = action.get("guidance", {})
+	var guidance: Dictionary = guidance_v if guidance_v is Dictionary else {}
+
+	flow_ctx.dev_guidance = guidance.duplicate(true)
+
+	logger.info(t, "debug.guidance.set", "Dev Keeper guidance set", {
+		"guidance_id": str(guidance.get("guidance_id", "")),
+		"subject_id":  str(guidance.get("subject_id", "")),
+		"cleared":     guidance.is_empty(),
+	})
+	return FlowActionOutcome.snapshot_outcome(flow_ctx.last_snapshot)

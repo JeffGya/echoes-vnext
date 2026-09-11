@@ -581,6 +581,11 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 			"debug.charge_pressure.set":
 				_apply_action_outcome(_debug_controller().handle_force_charge_pressure(action, t), t)
+
+			# V2-COMBAT-003 dev command: the headless Keeper suggestion. ui/ must never write
+			# flow_ctx itself, so the "guide" debug command dispatches this instead.
+			"debug.guidance.set":
+				_apply_action_outcome(_debug_controller().handle_guidance_set(action, t), t)
 	
 			# ---- Directives (DIRECTIVE-001) ----
 			"directive.select":

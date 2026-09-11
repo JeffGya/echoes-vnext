@@ -120,6 +120,9 @@ static func register(runner) -> void:
 	# PR #62 review: PURIFY_SHRINE has its own clock — the shrine drains every round — so the
 	# stalemate detector must not end that fight.
 	runner.register_test("combat_roundtrip/purify_shrine_is_exempt_from_the_stalemate_check", func(): return test_purify_shrine_is_exempt_from_the_stalemate_check())
+	# PR #62 review: the "guide" debug command now dispatches. It runs mid-fight, so it must
+	# leave the encounter and its snapshot alone.
+	runner.register_test("combat_roundtrip/guidance_dispatch_leaves_the_encounter_intact", func(): return test_guidance_dispatch_leaves_the_encounter_intact())
 
 
 ## V2-INFRA-003 Phase 6 Slice 6G: the live movement helper family moved off FlowRuntime onto
@@ -445,6 +448,36 @@ static func test_purify_shrine_is_exempt_from_the_stalemate_check() -> Dictionar
 			break
 	if shrine_hp <= 0:
 		return { "ok": false, "error": "the shrine died first (hp=%d) — the exemption was not what kept the fight alive" % shrine_hp }
+	return { "ok": true }
+
+
+## PR #62 review comment — the "guide" debug command is used mid-fight. It now goes through
+## dispatch(), which refreshes the snapshot, so this checks the fight survives it: the encounter
+## is still live, the snapshot is still the encounter snapshot, and the suggestion is in place.
+static func test_guidance_dispatch_leaves_the_encounter_intact() -> Dictionary:
+	var env: Dictionary = _setup("guidance_dispatch", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	runtime.dispatch({ "type": "combat.init" })
+	var type_before: String = str(flow_ctx.last_snapshot.get("type", ""))
+
+	runtime.dispatch({
+		"type": "debug.guidance.set",
+		"guidance": {
+			"purpose": "hold", "action_type": "actor.guard", "guidance_id": "hold",
+			"subject_id": "", "recipient_ids": [],
+		},
+	})
+
+	if flow_ctx.encounter_ctx == null:
+		return { "ok": false, "error": "the encounter was dropped by the guidance dispatch" }
+	var type_after: String = str(flow_ctx.last_snapshot.get("type", ""))
+	if type_after != type_before:
+		return { "ok": false, "error": "snapshot type changed: %s -> %s" % [type_before, type_after] }
+	if str((flow_ctx.dev_guidance as Dictionary).get("guidance_id", "")) != "hold":
+		return { "ok": false, "error": "the suggestion did not arrive: %s" % str(flow_ctx.dev_guidance) }
 	return { "ok": true }
 
 

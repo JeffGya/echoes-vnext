@@ -1115,7 +1115,8 @@ func _run_guide_command(parts: Array) -> void:
 		return
 	var op := str(parts[1]).to_lower()
 	if op == "clear":
-		runtime.flow_ctx.dev_guidance = {}
+		var snap := runtime.dispatch({ "type": "debug.guidance.set", "guidance": {} })
+		_render_snapshot(snap)
 		_debug_print("guide: cleared — no suggestion is active.")
 	elif op == "show":
 		var active: Dictionary = runtime.flow_ctx.dev_guidance
@@ -1125,7 +1126,8 @@ func _run_guide_command(parts: Array) -> void:
 		preset["guidance_id"] = op
 		preset["subject_id"] = str(parts[2]) if parts.size() > 2 else ""
 		preset["recipient_ids"] = []
-		runtime.flow_ctx.dev_guidance = preset
+		var snap := runtime.dispatch({ "type": "debug.guidance.set", "guidance": preset })
+		_render_snapshot(snap)
 		_debug_print("guide: suggesting '%s' to every Echo until cleared." % op)
 	else:
 		_debug_print("Unknown guide op '%s'. Use: %s|show|clear" % [op, "|".join(_GUIDE_PRESETS.keys())])
