@@ -117,6 +117,9 @@ static func register(runner) -> void:
 	# check (both actors refuse/guard/miss forever). The no-progress detector must end it.
 	runner.register_test("combat_roundtrip/no_progress_stalemate_ends_as_forced_retreat", func(): return test_no_progress_stalemate_ends_as_forced_retreat())
 	runner.register_test("combat_roundtrip/forced_retreat_grants_nothing", func(): return test_forced_retreat_grants_nothing())
+	# PR #62 review: PURIFY_SHRINE has its own clock — the shrine drains every round — so the
+	# stalemate detector must not end that fight.
+	runner.register_test("combat_roundtrip/purify_shrine_is_exempt_from_the_stalemate_check", func(): return test_purify_shrine_is_exempt_from_the_stalemate_check())
 
 
 ## V2-INFRA-003 Phase 6 Slice 6G: the live movement helper family moved off FlowRuntime onto
@@ -368,6 +371,80 @@ static func test_forced_retreat_grants_nothing() -> Dictionary:
 		var after: int = int(e.get("xp_total", -9998))
 		if before != after:
 			return { "ok": false, "error": "Storyweight (xp_total) changed for %s: %d -> %d" % [eid, before, after] }
+	return { "ok": true }
+
+
+## Same trimming as _setup_no_progress, for a PURIFY_SHRINE encounter, and the living shrine is
+## KEPT — it is the actor whose hit points carry that objective's own clock.
+static func _setup_no_progress_purify(seed_tag: String) -> Dictionary:
+	var env: Dictionary = _setup(seed_tag, true, "off", EncounterResolutionModes.PURIFY_SHRINE)
+	if env.is_empty():
+		return {}
+	var ectx: EncounterContext = env["ectx"]
+	var echo: Dictionary = {}
+	var enemy: Dictionary = {}
+	var shrine: Dictionary = {}
+	for a_v in ectx.actors:
+		if not (a_v is Dictionary):
+			continue
+		var a: Dictionary = a_v
+		if a.get("is_structure", false):
+			if shrine.is_empty():
+				shrine = a
+		elif echo.is_empty() and str(a.get("faction", "")) == "echo" and not a.get("is_dead", false):
+			echo = a
+		elif enemy.is_empty() and str(a.get("faction", "")) == "enemy" and not a.get("is_dead", false):
+			enemy = a
+	if echo.is_empty() or enemy.is_empty() or shrine.is_empty():
+		return {}
+	for a in [echo, enemy]:
+		var a_stats: Dictionary = a.get("stats", {})
+		a_stats["atk"] = 0
+		a_stats["def"] = 999
+	ectx.actors = [echo, enemy, shrine]
+	return env
+
+
+## PR #62 review comment — PURIFY_SHRINE must be exempt from the no-progress stalemate check.
+## The shrine loses base_drain_per_round hit points every round with no actor acting, so that
+## objective always reaches its own end (shrine_destroyed, branch 2), and the party can still
+## win by killing every enemy. The detector cannot see the drain: it counts damage and the four
+## per-objective counters, and the shrine is none of those. Ending the fight at the limit
+## therefore takes away a fight that is still live.
+##
+## The test drives one round PAST the limit with no damage possible, then asserts the streak did
+## reach the limit (so the detector really was armed) while the fight is still running and the
+## shrine still alive. Before the fix this fails: the fight resolves as a forced retreat.
+static func test_purify_shrine_is_exempt_from_the_stalemate_check() -> Dictionary:
+	var env: Dictionary = _setup_no_progress_purify("no_progress_purify")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed — could not build a live echo/enemy/shrine set" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var ectx: EncounterContext = env["ectx"]
+
+	var limit: int = _no_progress_round_limit(runtime)
+	if limit <= 0:
+		return { "ok": false, "error": "data.combat.stalemate.no_progress_round_limit is 0 or missing — cannot test" }
+
+	_drive_no_progress(runtime, ectx, limit + 1)
+
+	if flow_ctx.encounter_ctx == null:
+		return { "ok": false, "error": "the PURIFY_SHRINE fight was resolved away — run_type=%s" % str((flow_ctx.last_snapshot.get("data", {}) as Dictionary).get("run_type", "")) }
+	if bool(ectx.combat_state.get("combat_over", false)):
+		return { "ok": false, "error": "the PURIFY_SHRINE fight ended at the stalemate limit (reason=%s)" % str(ectx.combat_result.get("reason", "")) }
+
+	var streak: int = int(ectx.combat_state.get("no_progress_streak", -1))
+	if streak < limit:
+		return { "ok": false, "error": "the detector was never armed (no_progress_streak=%d, limit=%d) — the test proves nothing" % [streak, limit] }
+
+	var shrine_hp: int = -1
+	for a_v in ectx.actors:
+		if a_v is Dictionary and a_v.get("is_structure", false):
+			shrine_hp = int(a_v.get("current_hp", -1))
+			break
+	if shrine_hp <= 0:
+		return { "ok": false, "error": "the shrine died first (hp=%d) — the exemption was not what kept the fight alive" % shrine_hp }
 	return { "ok": true }
 
 

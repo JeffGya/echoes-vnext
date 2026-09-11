@@ -79,9 +79,9 @@ static func create(actors: Array, objective: String,
 		# damage and combat_state's own protect_counter/guide_protect_counter/contain_counter/
 		# hold_counter for progress — a GUIDE_SPIRIT escort or a RECOVER hold can legitimately
 		# run many damage-free rounds while still winning). At no_progress_round_limit,
-		# check_end_condition() ends the fight as a forced retreat — a fallback for every
-		# objective, so a fight where NOTHING moves cannot loop forever. 0 or absent config
-		# disables the check. _no_progress_last_sum is FlowRuntime's own scratch value (the
+		# check_end_condition() ends the fight as a forced retreat, so a fight where NOTHING
+		# moves cannot loop forever. It covers every objective except PURIFY_SHRINE — see
+		# branch 10 of check_end_condition(). 0 or absent config disables the check. _no_progress_last_sum is FlowRuntime's own scratch value (the
 		# progress-counter sum as of the previous round) — declared here so it is not an
 		# undeclared runtime key, mirroring _ally_killed_barked above.
 		"no_progress_streak":      0,
@@ -210,7 +210,8 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 ##   9. GUIDE_SPIRIT (protect mode) survived → victory  (guide_protect_counter >= duration_turns)
 ##      guide_protect_counter advances only on rounds an echo was within escort_radius of the
 ##      living spirit (guard-to-count) and never resets — the party must actually reach the spirit.
-##   10. Universal no-progress stalemate → forced retreat  (checked LAST, every objective;
+##   10. No-progress stalemate → forced retreat  (checked LAST, every objective except
+##       PURIFY_SHRINE, whose shrine drain ends the fight on its own;
 ##       no_progress_streak >= no_progress_round_limit, both stored on combat_state)
 ##
 ## combat_state carries round_counter, protect_counter, objective_params, hold_counter,
@@ -325,16 +326,23 @@ static func check_end_condition(actors: Array, objective: String,
 			return { "over": true, "victory": true, "reason": "spirit_protected" }
 
 	# 10. Universal no-progress stalemate. Checked LAST, after every objective-specific win or
-	# loss, so it only fires when nothing else ended the fight this round. Applies to every
-	# objective, as a fallback for a fight where nothing above can fire — no damage AND no
-	# per-objective counter (protect/guide_protect/contain/hold) advancing, e.g. both actors
-	# refuse or guard every round. FlowRuntime._end_round() is the sole writer of
-	# no_progress_streak; it resets on damage OR on any of those counters rising, so a
-	# GUIDE_SPIRIT escort or a RECOVER hold that is genuinely progressing toward its own win
-	# condition — with zero combat damage the whole time — never gets cut short here. Ends as a
-	# forced retreat, not a defeat: see FlowRuntime._resolve_forced_retreat().
+	# loss, so it only fires when nothing else ended the fight this round. It is the fallback for
+	# a fight where nothing above can fire — no damage AND no per-objective counter
+	# (protect/guide_protect/contain/hold) advancing, e.g. both actors refuse or guard every
+	# round. FlowRuntime._end_round() is the sole writer of no_progress_streak; it resets on
+	# damage OR on any of those counters rising, so a GUIDE_SPIRIT escort or a RECOVER hold that
+	# is genuinely progressing toward its own win condition — with zero combat damage the whole
+	# time — never gets cut short here. Ends as a forced retreat, not a defeat: see
+	# FlowRuntime._resolve_forced_retreat().
+	#
+	# PURIFY_SHRINE IS EXCLUDED. Its clock advances with no actor acting: the shrine loses
+	# base_drain_per_round hit points every round (CombatRoundShrineService), and one purify
+	# stack can only slow that drain, never stop it, so branch 2 (shrine_destroyed) always ends
+	# the fight. The streak cannot see that drain, so it would end a fight that is still
+	# winnable — a PURIFY_SHRINE win is all_enemies_defeated, which the party can still reach
+	# after a long damage-free spell.
 	var no_progress_limit: int = int(combat_state.get("no_progress_round_limit", 0))
-	if no_progress_limit > 0:
+	if no_progress_limit > 0 and objective != EncounterResolutionModes.PURIFY_SHRINE:
 		var no_progress_streak: int = int(combat_state.get("no_progress_streak", 0))
 		if no_progress_streak >= no_progress_limit:
 			return { "over": true, "victory": false, "reason": "no_progress_forced_retreat" }
