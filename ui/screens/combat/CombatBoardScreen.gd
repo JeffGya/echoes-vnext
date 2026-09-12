@@ -1076,7 +1076,12 @@ func _format_objective_label(obj_type: String) -> String:
 		"purify_shrine":   return "Purify the Ancestral Shrine"
 		"defeat_enemies":  return "Defeat all enemies"
 		"pursue":          return "Contain the Fleeing Quarry"
-	return obj_type if not obj_type.is_empty() else "[Battle objective]"
+		"combat":          return "Defeat all enemies"
+		"recover":         return "Hold the relic ground"
+		"protect":         return "Protect the ward"
+		"endure":          return "Survive the onslaught"
+		"guide_spirit":    return "Escort the spirit"
+	return "[Battle objective]"
 
 
 func _on_enter_combat_pressed() -> void:
