@@ -45,7 +45,7 @@ static func register(runner: CoreTestRunner) -> void:
 
 static func _t_state_shape() -> Dictionary:
 	var actors: Array = [{ "id": "a1" }, { "id": "a2" }]
-	var state: Dictionary = CombatState.create(actors, "defeat_enemies")
+	var state: Dictionary = CombatState.create(actors, EncounterResolutionModes.COMBAT)
 
 	if not state.has("actors"):
 		return { "ok": false, "error": "missing 'actors' key" }
@@ -53,7 +53,7 @@ static func _t_state_shape() -> Dictionary:
 		return { "ok": false, "error": "missing 'objective' key" }
 	if not state.has("round_counter"):
 		return { "ok": false, "error": "missing 'round_counter' key" }
-	if str(state["objective"]) != "defeat_enemies":
+	if str(state["objective"]) != EncounterResolutionModes.COMBAT:
 		return { "ok": false, "error": "objective mismatch (got %s)" % str(state["objective"]) }
 	if int(state["round_counter"]) != 0:
 		return { "ok": false, "error": "round_counter should be 0 (got %d)" % int(state["round_counter"]) }
@@ -83,7 +83,7 @@ static func _t_state_actors_deep_copy() -> Dictionary:
 static func _t_rounds_enter_creates_state() -> Dictionary:
 	var ectx := EncounterContext.new()
 	ectx.encounter_id = "test_enc_001"
-	ectx.resolution_mode = "defeat_enemies"
+	ectx.resolution_mode = EncounterResolutionModes.COMBAT
 	ectx.actors = [
 		{ "id": "echo_0001", "faction": "echo" },
 		{ "id": "enemy_01",  "faction": "enemy" },
@@ -125,7 +125,7 @@ static func _t_initiative_shape() -> Dictionary:
 		{ "id": "a1", "name": "Alpha", "speed": 5, "stats": { "agi": 2 } },
 		{ "id": "a2", "name": "Beta",  "speed": 3, "stats": { "agi": 1 } },
 	]
-	var state: Dictionary = CombatState.create(actors, "defeat_enemies", 0, {})
+	var state: Dictionary = CombatState.create(actors, EncounterResolutionModes.COMBAT, 0, {})
 
 	if not state.has("initiative_order"):
 		return { "ok": false, "error": "missing 'initiative_order' key" }
@@ -145,7 +145,7 @@ static func _t_initiative_sort_by_score() -> Dictionary:
 		{ "id": "fast", "name": "Fast", "speed": 10, "stats": { "agi": 8 } },
 		{ "id": "slow", "name": "Slow", "speed": 2,  "stats": { "agi": 1 } },
 	]
-	var state: Dictionary = CombatState.create(actors, "defeat_enemies", 0, {})
+	var state: Dictionary = CombatState.create(actors, EncounterResolutionModes.COMBAT, 0, {})
 	var order: Array = state["initiative_order"] as Array
 
 	if order.size() != 2:
@@ -164,8 +164,8 @@ static func _t_initiative_determinism() -> Dictionary:
 	]
 	var seed: int = 12345
 
-	var state_a: Dictionary = CombatState.create(actors, "defeat_enemies", seed, {})
-	var state_b: Dictionary = CombatState.create(actors, "defeat_enemies", seed, {})
+	var state_a: Dictionary = CombatState.create(actors, EncounterResolutionModes.COMBAT, seed, {})
+	var state_b: Dictionary = CombatState.create(actors, EncounterResolutionModes.COMBAT, seed, {})
 
 	var order_a: Array = state_a["initiative_order"] as Array
 	var order_b: Array = state_b["initiative_order"] as Array
@@ -187,7 +187,7 @@ static func _t_initiative_tiebreak_order() -> Dictionary:
 		{ "id": "first",  "name": "First",  "speed": 5, "stats": { "agi": 5 } },
 		{ "id": "second", "name": "Second", "speed": 5, "stats": { "agi": 5 } },
 	]
-	var state: Dictionary = CombatState.create(actors, "defeat_enemies", 0, {})
+	var state: Dictionary = CombatState.create(actors, EncounterResolutionModes.COMBAT, 0, {})
 	var order: Array = state["initiative_order"] as Array
 
 	if order.size() != 2:
@@ -245,7 +245,7 @@ static func _t_initiative_uses_confirmed_calling() -> Dictionary:
 		"by_dominant_trait": {},
 		"by_dominant_vector": {},
 	}
-	var state: Dictionary = CombatState.create([actor_a, actor_b], "defeat_enemies", 0, init_cfg)
+	var state: Dictionary = CombatState.create([actor_a, actor_b], EncounterResolutionModes.COMBAT, 0, init_cfg)
 	var order: Array = state["initiative_order"] as Array
 	if order.size() != 2:
 		return { "ok": false, "error": "Expected 2 actors in initiative order, got %d" % order.size() }
@@ -272,7 +272,7 @@ static func _t_all_echoes_dead_excludes_ally() -> Dictionary:
 		{ "id": "ally_1",  "faction": "echo",  "is_dead": false, "is_ally": true },
 		{ "id": "enemy_1", "faction": "enemy", "is_dead": false },
 	]
-	var result: Dictionary = CombatState.check_end_condition(actors, "defeat_enemies", {})
+	var result: Dictionary = CombatState.check_end_condition(actors, EncounterResolutionModes.COMBAT, {})
 	if not bool(result.get("over", false)):
 		return { "ok": false, "error": "Expected combat over (party wiped except a living ally), got over=false" }
 	if bool(result.get("victory", false)):
@@ -290,7 +290,7 @@ static func _t_all_echoes_dead_living_normal_echo_prevents() -> Dictionary:
 		{ "id": "echo_2",  "faction": "echo",  "is_dead": false },
 		{ "id": "enemy_1", "faction": "enemy", "is_dead": false },
 	]
-	var result: Dictionary = CombatState.check_end_condition(actors, "defeat_enemies", {})
+	var result: Dictionary = CombatState.check_end_condition(actors, EncounterResolutionModes.COMBAT, {})
 	if bool(result.get("over", false)):
 		return {
 			"ok": false,

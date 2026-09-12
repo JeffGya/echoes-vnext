@@ -586,6 +586,12 @@ func dispatch(action: Dictionary) -> Dictionary:
 			# flow_ctx itself, so the "guide" debug command dispatches this instead.
 			"debug.guidance.set":
 				_apply_action_outcome(_debug_controller().handle_guidance_set(action, t), t)
+
+			# Temporary instrumentation: forces a Standing gain so the owner can verify the
+			# progress.rank_up bark rewrite without a long play session. See
+			# DebugController.handle_force_rank_up().
+			"debug.progression.force_rank_up":
+				_apply_action_outcome(_debug_controller().handle_force_rank_up(action, t), t)
 	
 			# ---- Directives (DIRECTIVE-001) ----
 			"directive.select":

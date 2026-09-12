@@ -19,6 +19,7 @@ const GuideSpiritActivationTestsScript := preload("res://tests/GuideSpiritActiva
 const ProtectCustodyTestsScript := preload("res://tests/ProtectCustodyTests.gd")
 const SpatialModeGoalTestsScript := preload("res://tests/SpatialModeGoalTests.gd")
 const StagePartyMovementTestsScript := preload("res://tests/StagePartyMovementTests.gd")
+const CombatObjectiveLabelTestsScript := preload("res://tests/CombatObjectiveLabelTests.gd")
 
 @onready var snapshot_view: RichTextLabel = %SnapshotView
 @onready var renderer: UISnapshotRenderer = %UISnapshotRenderer
@@ -349,6 +350,14 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	# -------------------------
+	# rankup dev command (debug only) — forces a progression rank-up via
+	# debug.progression.force_rank_up, for verifying the rank-up bark/UI reaction.
+	# -------------------------
+	if head == "rankup":
+		_run_rankup_command(parts)
+		return
+
+	# -------------------------
 	# institution shortcuts (V2-SANCTUM-002 / debug only)
 	# -------------------------
 	if head == "institution" or head == "inst":
@@ -364,7 +373,7 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	_debug_print("Unknown command: " + cmd)
-	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | combat_emotion | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear> | guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id] | realm select <realm.01|realm.02> | realm show")
+	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | combat_emotion | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear> | guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id] | rankup [echo_id] | realm select <realm.01|realm.02> | realm show")
 	
 	_flush_logs_to_console()
 	
@@ -536,6 +545,7 @@ func _run_tests(parts: Array) -> void:
 	CombatRoundTests.register(runner)     # COMBAT-004
 	CombatSnapshotTests.register(runner) # COMBAT-007
 	CombatTokenPresentationTests.register(runner)
+	CombatObjectiveLabelTestsScript.register(runner)
 	RetreatTests.register(runner)        # UI-004
 	ArchetypeTests.register(runner)      # 9-archetype personality system
 	MaturityExpressionTests.register(runner)  # V2-PROG-006
@@ -1131,6 +1141,17 @@ func _run_guide_command(parts: Array) -> void:
 		_debug_print("guide: suggesting '%s' to every Echo until cleared." % op)
 	else:
 		_debug_print("Unknown guide op '%s'. Use: %s|show|clear" % [op, "|".join(_GUIDE_PRESETS.keys())])
+	_flush_logs_to_console()
+
+
+# Usage: rankup [echo_id]
+# Dispatches debug.progression.force_rank_up. echo_id is optional (empty forces the
+# core-side default target).
+func _run_rankup_command(parts: Array) -> void:
+	var echo_id := str(parts[1]) if parts.size() > 1 else ""
+	var snap := runtime.dispatch({ "type": "debug.progression.force_rank_up", "echo_id": echo_id })
+	_render_snapshot(snap)
+	_debug_print("rankup: forced rank-up%s." % (" for '%s'" % echo_id if not echo_id.is_empty() else ""))
 	_flush_logs_to_console()
 
 

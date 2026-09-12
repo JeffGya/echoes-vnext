@@ -39,6 +39,15 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("prog/mid_combat_level_up_partial_heal_boundary", Callable(ProgressionTests, "_test_mid_combat_level_up_partial_heal_boundary"))
 	runner.register_test("prog/mid_combat_level_up_heal_clamps_at_max",    Callable(ProgressionTests, "_test_mid_combat_level_up_heal_clamps_at_max"))
 	runner.register_test("prog/mid_combat_level_up_stats_reach_combat",    Callable(ProgressionTests, "_test_mid_combat_level_up_stats_reach_combat"))
+	# Temporary instrumentation — debug.progression.force_rank_up (owner verification aid for
+	# the progress.rank_up bark rewrite). See DebugController.handle_force_rank_up().
+	runner.register_test("prog/debug_force_rank_up_makes_ineligible_echo_eligible", Callable(ProgressionTests, "_test_debug_force_rank_up_ranks_up"))
+	runner.register_test("prog/debug_force_rank_up_refuses_at_cap",                 Callable(ProgressionTests, "_test_debug_force_rank_up_refuses_at_cap"))
+	# Post-PR-#64-review fix: the returned outcome must carry a REBUILT snapshot, not the
+	# pre-mutation one handed back unchanged.
+	runner.register_test("prog/debug_force_rank_up_rebuilds_echo_party_snapshot",   Callable(ProgressionTests, "_test_debug_force_rank_up_rebuilds_echo_party_snapshot"))
+	runner.register_test("prog/debug_force_rank_up_rebuilds_sanctum_snapshot",      Callable(ProgressionTests, "_test_debug_force_rank_up_rebuilds_sanctum_snapshot"))
+	runner.register_test("prog/debug_force_rank_up_other_screen_no_stale_snapshot", Callable(ProgressionTests, "_test_debug_force_rank_up_other_screen_no_stale_snapshot"))
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -764,4 +773,185 @@ static func _test_realm_mult_nonpositive_rate_is_identity() -> Dictionary:
 	var mult_empty: float = ProgressionService.get_realm_xp_multiplier("realm_courage", save, {})
 	if not is_equal_approx(mult_empty, 1.0):
 		return { "ok": false, "error": "Empty prog_cfg must give 1.0, got %.4f" % mult_empty }
+	return { "ok": true }
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# debug.progression.force_rank_up — DebugController.handle_force_rank_up()
+# ────────────────────────────────────────────────────────────────────────────
+#
+# Constructed the same way CombatMaturityBaselineTests builds a real ConfigService (reads the
+# actual balance.json, so this exercises the same data.progression / data.maturity_expression
+# keys the handler reads in production — not a stub config that could hide a wrong-key bug).
+
+## Builds a DebugController wired to a fresh FlowContext/ConfigService/StructuredLogger, with
+## save_data seeded from _make_save(echo_ids). Mirrors the constructor shape
+## FlowRuntime._debug_controller() uses.
+static func _make_debug_controller_env(echo_ids: Array) -> Dictionary:
+	var config := ConfigService.new()
+	config.load_balance()
+	var flow_ctx := FlowContext.new()
+	flow_ctx.save_data = _make_save(echo_ids)
+	flow_ctx.campaign_seed = CampaignSeed.new(424242)
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	return {
+		"config":  config,
+		"flow_ctx": flow_ctx,
+		"logger":  logger,
+		"dbg":     DebugController.new(flow_ctx, config, logger),
+	}
+
+
+## 25. A roster echo below the rank cap and NOT yet at max_level_per_rank is made eligible
+## (level forced to max_level_per_rank) and then actually ranked up through the real
+## sanctum.rank_up execution path (ProgressionService.execute_rank_up +
+## NarrativeVoiceService bark write) — proving the debug command reaches the same effect the
+## player-facing action does, without reimplementing it.
+static func _test_debug_force_rank_up_ranks_up() -> Dictionary:
+	var env := _make_debug_controller_env(["e1"])
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var dbg: DebugController = env["dbg"]
+
+	var echo_before: Dictionary = flow_ctx.save_data["sanctum"]["roster"][0]
+	if int(echo_before.get("rank", 1)) != 1 or int(echo_before.get("level", 1)) != 1:
+		return { "ok": false, "error": "Fixture assumption broken: expected fresh rank=1/level=1 echo" }
+
+	var outcome: FlowActionOutcome = dbg.handle_force_rank_up({}, 0)
+
+	var echo_after: Dictionary = flow_ctx.save_data["sanctum"]["roster"][0]
+	if int(echo_after.get("rank", 0)) != 2:
+		return { "ok": false, "error": "Expected rank=2 after forced rank-up, got %d" % int(echo_after.get("rank", 0)) }
+	if not outcome.save_reasons.has("debug.progression.force_rank_up"):
+		return { "ok": false, "error": "Expected save reason 'debug.progression.force_rank_up', got %s" % [outcome.save_reasons] }
+
+	# The real progress.rank_up bark write happened — same call sanctum.rank_up makes.
+	var bark_v: Variant = echo_after.get("_sanctum_bark", {})
+	if not (bark_v is Dictionary) or str((bark_v as Dictionary).get("context", "")) != "progress.rank_up":
+		return { "ok": false, "error": "Expected a progress.rank_up bark written to the roster entry, got %s" % [bark_v] }
+	return { "ok": true }
+
+
+## 26. An echo already at the configured rank cap (data.maturity_expression.
+## rank_strength_scale.max_rank) is refused — no rank change, no save reason, no bark.
+static func _test_debug_force_rank_up_refuses_at_cap() -> Dictionary:
+	var env := _make_debug_controller_env(["e1"])
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var dbg: DebugController = env["dbg"]
+	var config: ConfigService = env["config"]
+
+	var max_rank: int = int(config.get_balance().get("data", {}).get("maturity_expression", {}).get("rank_strength_scale", {}).get("max_rank", 9))
+
+	var roster: Array = flow_ctx.save_data["sanctum"]["roster"]
+	roster[0]["rank"] = max_rank
+	roster[0]["level"] = 5
+
+	var outcome: FlowActionOutcome = dbg.handle_force_rank_up({"echo_id": "e1"}, 0)
+
+	var echo_after: Dictionary = flow_ctx.save_data["sanctum"]["roster"][0]
+	if int(echo_after.get("rank", -1)) != max_rank:
+		return { "ok": false, "error": "Rank must stay at cap %d, got %d" % [max_rank, int(echo_after.get("rank", -1))] }
+	if not outcome.save_reasons.is_empty():
+		return { "ok": false, "error": "Refusal must not request a save, got %s" % [outcome.save_reasons] }
+	if echo_after.has("_sanctum_bark"):
+		return { "ok": false, "error": "Refusal must not write a bark" }
+	return { "ok": true }
+
+
+## Post-PR-#64-review fix: from an ECHO_PARTY snapshot, the outcome must carry a REBUILT
+## flow.echo_party snapshot reflecting the new rank/step — not the pre-mutation snapshot handed
+## back unchanged — with data.rank_up_event attached (the field RankUpOverlay reads).
+static func _test_debug_force_rank_up_rebuilds_echo_party_snapshot() -> Dictionary:
+	var env := _make_debug_controller_env(["e1"])
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var config: ConfigService = env["config"]
+	var dbg: DebugController = env["dbg"]
+	flow_ctx.config_service = config
+
+	# Stale pre-mutation snapshot the player is looking at — must not come back unchanged.
+	var stale_snapshot: Dictionary = { "type": FlowStateIds.ECHO_PARTY, "data": { "echoes": [] }, "meta": {}, "actions": {} }
+	flow_ctx.last_snapshot = stale_snapshot
+
+	var outcome: FlowActionOutcome = dbg.handle_force_rank_up({}, 0)
+
+	if not outcome.has_replacement_snapshot:
+		return { "ok": false, "error": "Expected a replacement snapshot for an ECHO_PARTY screen" }
+	if not outcome.suppress_refresh:
+		return { "ok": false, "error": "Expected suppress_refresh, matching ProgressionController.handle_rank_up()" }
+	if outcome.replacement_snapshot == stale_snapshot:
+		return { "ok": false, "error": "Snapshot must be rebuilt, not the same stale dict handed back" }
+	if str(outcome.replacement_snapshot.get("type", "")) != FlowStateIds.ECHO_PARTY:
+		return { "ok": false, "error": "Expected a rebuilt flow.echo_party snapshot" }
+
+	var data_v: Variant = outcome.replacement_snapshot.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var event_v: Variant = data.get("rank_up_event", {})
+	if not (event_v is Dictionary) or (event_v as Dictionary).is_empty():
+		return { "ok": false, "error": "Expected data.rank_up_event attached, matching handle_rank_up()" }
+
+	var roster_v: Variant = data.get("echoes", [])
+	var roster: Array = roster_v if roster_v is Array else []
+	var found := false
+	for entry_v in roster:
+		if entry_v is Dictionary and str((entry_v as Dictionary).get("id", "")) == "e1":
+			found = true
+			if int((entry_v as Dictionary).get("standing", 0)) != 2:
+				return { "ok": false, "error": "Rebuilt snapshot must show the NEW standing (2), got %d" % int((entry_v as Dictionary).get("standing", 0)) }
+	if not found:
+		return { "ok": false, "error": "Rebuilt snapshot's data.echoes must contain e1" }
+	return { "ok": true }
+
+
+## Post-PR-#64-review fix: from a SANCTUM snapshot, the outcome must carry a rebuilt flow.sanctum
+## snapshot (roster-derived fields current), with no rank_up_event attached — SanctumScreen has
+## no RankUpOverlay consumer for that field.
+static func _test_debug_force_rank_up_rebuilds_sanctum_snapshot() -> Dictionary:
+	var env := _make_debug_controller_env(["e1"])
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var config: ConfigService = env["config"]
+	var dbg: DebugController = env["dbg"]
+	flow_ctx.config_service = config
+
+	var stale_snapshot: Dictionary = { "type": FlowStateIds.SANCTUM, "data": {}, "meta": {}, "actions": {} }
+	flow_ctx.last_snapshot = stale_snapshot
+
+	var outcome: FlowActionOutcome = dbg.handle_force_rank_up({}, 0)
+
+	if not outcome.has_replacement_snapshot:
+		return { "ok": false, "error": "Expected a replacement snapshot for a SANCTUM screen" }
+	if not outcome.suppress_refresh:
+		return { "ok": false, "error": "Expected suppress_refresh (same treatment as the ECHO_PARTY branch)" }
+	if outcome.replacement_snapshot == stale_snapshot:
+		return { "ok": false, "error": "Snapshot must be rebuilt, not the same stale dict handed back" }
+	if str(outcome.replacement_snapshot.get("type", "")) != FlowStateIds.SANCTUM:
+		return { "ok": false, "error": "Expected a rebuilt flow.sanctum snapshot" }
+
+	var data_v: Variant = outcome.replacement_snapshot.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	if data.has("rank_up_event"):
+		return { "ok": false, "error": "SANCTUM has no rank_up_event consumer; must not be attached" }
+	return { "ok": true }
+
+
+## Post-PR-#64-review fix: from a screen that shows no roster data (e.g. mid-combat), the
+## handler must NOT hand back a stale snapshot claiming to be updated — it returns
+## handled_outcome() (no replacement snapshot at all). The save still happens.
+static func _test_debug_force_rank_up_other_screen_no_stale_snapshot() -> Dictionary:
+	var env := _make_debug_controller_env(["e1"])
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var dbg: DebugController = env["dbg"]
+
+	var stale_snapshot: Dictionary = { "type": FlowStateIds.ENCOUNTER, "data": { "marker": "unrelated_screen" }, "meta": {}, "actions": {} }
+	flow_ctx.last_snapshot = stale_snapshot
+
+	var outcome: FlowActionOutcome = dbg.handle_force_rank_up({}, 0)
+
+	if outcome.has_replacement_snapshot:
+		return { "ok": false, "error": "Must not fabricate a replacement snapshot for a non-roster screen" }
+	if not outcome.save_reasons.has("debug.progression.force_rank_up"):
+		return { "ok": false, "error": "The mutation must still be saved even without a snapshot rebuild" }
+	# The mutation itself must still have happened.
+	var echo_after: Dictionary = flow_ctx.save_data["sanctum"]["roster"][0]
+	if int(echo_after.get("rank", 0)) != 2:
+		return { "ok": false, "error": "Expected rank=2 after forced rank-up even off a roster screen" }
 	return { "ok": true }

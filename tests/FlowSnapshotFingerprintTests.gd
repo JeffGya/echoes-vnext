@@ -698,7 +698,7 @@ static func test_purity_snapshot_builders_do_not_mutate_bark() -> Dictionary:
 	var final_ectx := EncounterContext.new()
 	final_ectx.encounter_id = "purity_bark_final_001"
 	final_ectx.placement_seed = 1
-	final_ectx.combat_state = { "combat_over": true, "objective": "defeat_enemies", "round_counter": 1 }
+	final_ectx.combat_state = { "combat_over": true, "objective": EncounterResolutionModes.COMBAT, "round_counter": 1 }
 	final_ectx.combat_result = { "victory": true, "reason": "all_enemies_defeated", "round_ended": 1 }
 	var final_actor := {
 		"id": "echo_bark_probe_final", "name": "Bark Probe",
