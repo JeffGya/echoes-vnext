@@ -3,9 +3,12 @@
 **Grep this file; do not read it.** One lookup costs ~50 tokens:
 
 ```bash
-grep -i "snapshot" docs/canon-index.md      # find the section
-sed -n '412,468p' CONVENTIONS.md            # read only that range
+grep -i "snapshot shape" docs/canon-index.md   # -> | `79-89` | ... | Snapshot Shape |
+sed -n '79,89p' CONVENTIONS.md                  # read ONLY the range the lookup returned
 ```
+
+Use the range the lookup actually returns. The two steps are one operation — a hardcoded range
+from a different section defeats the point.
 
 **Never read `CONVENTIONS.md` or the Working GDD end to end** — ~43,000 tokens each. They will
 exhaust an agent's budget before it does any work. `~tok` below is the cost of one section alone.

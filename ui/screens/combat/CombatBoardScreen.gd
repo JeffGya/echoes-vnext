@@ -1023,8 +1023,7 @@ func _show_prebattle_panel(data: Dictionary, actions: Dictionary) -> void:
 	_objective_label.visible = false
 
 	var obj_state: Dictionary = data.get("objective_state", {})
-	var obj_type: String = str(obj_state.get("type", ""))
-	var objective_label := _format_objective_label(obj_type)
+	var objective_label := _format_objective_label(obj_state)
 	_prebattle_objective.text = objective_label
 
 	# V2-STAGE-004 Phase 4 (S15 UI-B): claimant-forced combat intro line — snapshot-driven,
@@ -1071,7 +1070,8 @@ func _show_prebattle_panel(data: Dictionary, actions: Dictionary) -> void:
 	})
 
 ## Maps objective type string to a player-facing label.
-func _format_objective_label(obj_type: String) -> String:
+func _format_objective_label(obj_state: Dictionary) -> String:
+	var obj_type: String = str(obj_state.get("type", ""))
 	match obj_type:
 		"purify_shrine":   return "Purify the Ancestral Shrine"
 		"defeat_enemies":  return "Defeat all enemies"
@@ -1080,7 +1080,12 @@ func _format_objective_label(obj_type: String) -> String:
 		"recover":         return "Hold the relic ground"
 		"protect":         return "Protect the ward"
 		"endure":          return "Survive the onslaught"
-		"guide_spirit":    return "Escort the spirit"
+		"guide_spirit":
+			# guide_mode is a seeded 50/50 per encounter (EncounterObjectiveSpawnService):
+			# "escort" walks the spirit to a destination, "protect" holds it in place.
+			# The two win conditions differ, so the label must too.
+			return "Escort the spirit" if str(obj_state.get("guide_mode", "")) == "escort" \
+				else "Protect the spirit"
 	return "[Battle objective]"
 
 
