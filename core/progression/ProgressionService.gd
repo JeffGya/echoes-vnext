@@ -294,11 +294,10 @@ static func get_realm_xp_multiplier(realm_id: String, save_data: Dictionary, pro
 
 ## Returns true when the echo is eligible to rank up.
 ## Eligible = current level equals max_level_per_rank.
-static func is_rank_up_eligible(echo: Dictionary, prog_cfg: Dictionary) -> bool:
+static func is_rank_up_eligible(echo: Dictionary, prog_cfg: Dictionary, max_rank: int = 9) -> bool:
 	var level: int     = int(echo.get("level", 1))
 	var max_level: int = int(prog_cfg.get("max_level_per_rank", 5))
 	var rank: int      = int(echo.get("rank", 1))
-	var max_rank: int  = 5  # MVP cap
 	return level >= max_level and rank < max_rank
 
 
@@ -308,9 +307,10 @@ static func is_rank_up_eligible(echo: Dictionary, prog_cfg: Dictionary) -> bool:
 static func compute_trait_drift_preview(
 	echo: Dictionary,
 	campaign_seed,
-	prog_cfg: Dictionary
+	prog_cfg: Dictionary,
+	max_rank: int = 9
 ) -> Dictionary:
-	if not is_rank_up_eligible(echo, prog_cfg):
+	if not is_rank_up_eligible(echo, prog_cfg, max_rank):
 		return {}
 	var dominant: String = str(echo.get("dominant_vector", ""))
 	var new_rank: int    = int(echo.get("rank", 1)) + 1

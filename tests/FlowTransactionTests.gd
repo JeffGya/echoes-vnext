@@ -27,7 +27,7 @@ class_name FlowTransactionTests
 extends RefCounted
 
 const DISPATCH_SOURCE_PATH := "res://core/runtime/FlowRuntime.gd"
-const EXPECTED_ACTION_COUNT := 74
+const EXPECTED_ACTION_COUNT := 75
 
 
 static func register(runner) -> void:

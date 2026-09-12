@@ -53,7 +53,7 @@ static func build_trial_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		"board_rows": 5,
 		"actors": [],
 		"placement_seed": 0,
-		"objective_state": { "type": "Survive the Wound", "shrine_hp": 0, "shrine_alive": false },
+		"objective_state": { "type": EncounterResolutionModes.COMBAT, "shrine_hp": 0, "shrine_alive": false },
 		"round": 0,
 		"initiative_order": [],
 		"active_initiative_index": 0,

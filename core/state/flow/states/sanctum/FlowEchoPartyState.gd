@@ -17,6 +17,7 @@ func exit(ctx: RefCounted, t: int) -> void:
 
 static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var max_level: int = 5
+	var max_rank: int = 9
 	var prog_cfg: Dictionary = {}
 	var calling_cfg: Dictionary = {}
 	var skill_defs: Dictionary = {}
@@ -24,6 +25,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	if flow_ctx.config_service != null:
 		var bal: Dictionary = flow_ctx.config_service.get_balance()
 		var bd: Dictionary = bal.get("data", {})
+		max_rank = int(bd.get("maturity_expression", {}).get("rank_strength_scale", {}).get("max_rank", 9))
 		var prog_v: Variant = bd.get("progression", {})
 		if prog_v is Dictionary:
 			prog_cfg = prog_v as Dictionary
@@ -82,13 +84,13 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		var stats_v: Variant = e.get("stats", {})
 		var stats: Dictionary = stats_v if stats_v is Dictionary else {}
 
-		var rank_up_eligible: bool = ProgressionService.is_rank_up_eligible(e, prog_cfg)
+		var rank_up_eligible: bool = ProgressionService.is_rank_up_eligible(e, prog_cfg, max_rank)
 		var calling_eligible: bool = bool(e.get("calling_eligible", false))
 		var dominant_vector: String = str(e.get("dominant_vector", ""))
 
 		var drift_preview: Dictionary = {}
 		if rank_up_eligible and flow_ctx.campaign_seed != null:
-			drift_preview = ProgressionService.compute_trait_drift_preview(e, flow_ctx.campaign_seed, prog_cfg)
+			drift_preview = ProgressionService.compute_trait_drift_preview(e, flow_ctx.campaign_seed, prog_cfg, max_rank)
 
 		# BOND-001: build bond entries from party encounter history
 		var bond_entries: Array = SocialGraphService.build_bond_entries_for_actor(

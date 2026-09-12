@@ -125,18 +125,20 @@ func handle_rank_up(action: Dictionary, t: int) -> FlowActionOutcome:
 	var prog_cfg_v: Variant = {}
 	var birth_stats_v: Variant = {}
 	var calling_cfg_v: Variant = {}
+	var max_rank: int = 9
 	if config_service != null:
 		var bal: Dictionary = config_service.get_balance()
 		var bd: Dictionary  = bal.get("data", {})
 		prog_cfg_v    = bd.get("progression", {})
 		birth_stats_v = bd.get("summoning", {}).get("birth_stats", {})
 		calling_cfg_v = bd.get("calling", {})
+		max_rank      = int(bd.get("maturity_expression", {}).get("rank_strength_scale", {}).get("max_rank", 9))
 	var prog_cfg: Dictionary    = prog_cfg_v if prog_cfg_v is Dictionary else {}
 	var birth_stats: Dictionary = birth_stats_v if birth_stats_v is Dictionary else {}
 	var calling_cfg: Dictionary = calling_cfg_v if calling_cfg_v is Dictionary else {}
 
 	# Guard: must be eligible.
-	if not ProgressionService.is_rank_up_eligible(echo_ref, prog_cfg):
+	if not ProgressionService.is_rank_up_eligible(echo_ref, prog_cfg, max_rank):
 		logger.debug(t, "sanctum.rank_up.denied", "Rank-up denied (not eligible)", {
 			"echo_id": echo_id,
 			"level": int(echo_ref.get("level", 1)),

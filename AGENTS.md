@@ -128,6 +128,28 @@ Tests: 1442 total, 1442 passed, 0 failed
 Pipe output to a file and grep the file. **Never re-run the suite to read a different field** —
 the answer is already in the output you discarded.
 
+**Targeted runs — use these while iterating (V2-INFRA-003).** `tests <filter>` runs only suites
+whose reported name matches, case-insensitively, as a substring. `tests prog` runs the progression
+suites in seconds instead of the whole 1600+ in minutes. `tests snapshot` catches `snapshot_purity`,
+`snapshot_contract` and `snapshot_fingerprint` together. An unmatched filter prints the available
+suites.
+
+```bash
+/usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --quit --path "$(git rev-parse --show-toplevel)" -- tests prog
+```
+
+**Who may run the FULL suite:** only the orchestrator and the QA/verification role. Every other
+agent runs the compile check plus a FILTERED run at most, and asks for a full run rather than
+starting one. A full run takes minutes and blocks the machine.
+
+**Always run the FULL suite before committing.** This codebase has cross-cutting guards — a
+one-file change has broken tests in unrelated suites more than once (the dispatch-action count
+guard, and a UI test that wired nodes from another screen). Filter while iterating; never ship on a
+filtered run alone.
+
+**Only ONE suite run at a time.** Tests share `/tmp/echoes-vnext-tests/`; two concurrent runs
+corrupt each other's save fixtures.
+
 **Test suites** (all in `tests/`):
 EconomyTests, SanctumSummonTests, PartyTests, ActorTests, EchoSchemaTests, ActorStatInitTests,
 DerivedStatTests, BehaviorModuleTests, MeleeTests, BehaviorArbiterTests, StructureTests,

@@ -202,3 +202,90 @@ Exact values and cadences are open — see Working GDD `Economy` section for des
 | Backlog Conventions | `339c3d1ede9281509bcacb334bce5593` |
 
 168 stories. Waves: Alignment / Foundation / Expansion / Full Game. Use `echoes-backlog` skill to query.
+
+---
+
+## Shipped Story Status
+
+**Status 2026-07-15:** **V2-STAGE-004 is DONE — all phases shipped.** Phase 4 (final) delivered the STAGE-003 conversation→combat seams + "Earned Return" recruitment: temporary-ally auto-join (`core/actors/ContactActorBuilder.gd`, party-side walkable spawn, one battle, `is_ally` excluded from `all_echoes_dead`), failed-claimant→immediate combat, failed-non-objective-charge→protect/endure pressure, and the recruitment mechanic (`core/sanctum/RecruitmentService.gd`: earned chance 0–75, `promote_ally_to_echo` mints an `origin:"recruited_ally"` Echo + companion bond debuff). The recruit offer surfaces as a **Sanctum event** (`sanctum.companion_invite`, no-stack, persists until decided; `%CompanionInvite` modal; actions `sanctum.companion.accept/decline`) — NOT on Resolve. Plus Tier-1 combat-contribution ledger (`EncounterContext.echo_action_logs` both-factions damage/kills), ⊕ Companion origin tag across Sanctum surfaces, ally visual line (Mist Blue `#7AB5C8` + ⊕ Odo Nnyew), F1 debug commands (`spawn_ally`/`force_claimant_combat`/`force_charge_pressure`/`force_recruit`), and a folded-in fix for a pre-existing Phase 3c guide_spirit soft-lock (added `guide_spirit` to `SituationResolutionService._ASYNC_OBJ_TYPES`). Suite: **882 tests**. Follow-up chips spawned: Tier-2 support ledger, `is_kill` dead-code, recruitment-config de-dup, venture-screen layering audit, in-explore objective-completion guard. Deferrals: items→V2-ITEM-002, enemy pressure roles→V2-COMBAT-002. Design decisions in `ANSWERS.md` #23–#35. Track: `docs/integration-map.md` + `docs/project_systems_audit.md`.
+
+**Status 2026-08-10:** **V2-PROG-012 (Order 251 — hidden autonomy seam) — DONE, marked 2026-08-30.** Ships four derived outputs (Judgment/Presence/Composure/Legibility, `MaturityExpressionService.derive_expression()`, never persisted), divergence detection (`DivergenceDetector.gd`, `actor.divergence` at info + band-tiered `combat_divergence` bark whose specificity IS Legibility), and five defect fixes: seven unreachable `balance.json` keys (config read from `data.actor` while authored in `data.maturity_expression`), dead `presence_strength`, the identity/directive double-count, `presence_dampen_scale` → `composure_dampen_scale`, and refusal override → offset. Plus conversation repairs (NPC opening lines were overwritten with `""`; Storyweight was `int(0.2)`→0) and the virtue-table consolidation (`vector_virtue_composition` semantic + `virtue_vector_key` bijective + `calling_to_virtue_primary`, guarded by `IdentityIntegrity.validate()`; a composition-faithful bijection is impossible — empathy and forgiveness occur only in `mediator`). Divergence uses `contest_ratio = directive_pull / decision_scale` (a proportion, so one threshold generalises across directives), `min_contest_ratio 0.28`, gated to `faction == "echo"`. Suite 1309 → **1384**. All thresholds marked PROPOSED DEFAULT. Note: **[refusal is unreachable in play](refusal-unreachable-in-play.md)** and divergence is effectively single-directive (`seek_signs` asks for what Echoes already do). Open follow-ups: PURSUE encounter-setup freeze (pre-existing, `core/movement/` full-grid flood fills), fear-economy rebalance, dead-config cleanup.
+
+**Status 2026-08-30:** **V2-INFRA-003 is DONE — merged as PR #61, commit `4b45b3e`.** Two halves on
+one branch: Half A decomposed `core/runtime/FlowRuntime.gd` from **10,061 lines to 1,972** into 9
+controllers, 27 services and 5 snapshot builders, so all **73 dispatch actions have exactly one
+owner**; Half B repaired the opening proof spine, so a first session runs from New Game to ordinary
+Sanctum navigation. 44 commits. Suite **1,401 → 1,519**.
+
+**No `CombatController` was built, deliberately** — the ownership stop condition was already met, and
+three measured blockers are recorded on V2-COMBAT-004.
+
+**97 defect identifiers, each with a recorded outcome** in
+`docs/v2-infra-003-defect-register.md`, now a ledger rather than a worklist: 57 fixed, 3 connected
+(mechanics that had never run), 6 deleted, 3 disproved, 1 reverted, 6 not a defect, 13 deferred to a
+named story, 2 assigned to V2-COMBAT-004, 6 coverage gaps.
+
+**Only one commit moved a recorded value** — two new-save fingerprints, in the commit that stopped
+`make_new_save` writing a V1 directive the load repair then rewrote.
+
+Filed elsewhere: D61→V2-SANCTUM-004; D62 and the NPC reaction bands→**V2-INFRA-007 (new)**; D66,
+D83, D93, D95, D96→V2-ECONOMY-004; D97 and movement-option starvation→V2-COMBAT-003; the
+GUIDE_SPIRIT escort, the zero-damage floor, D59, D60 and four PR-review items→V2-COMBAT-004.
+
+See [what a green suite cannot see](green-suite-cannot-see.md) and
+[verify every file:line claim](verify-file-line-claims.md).
+
+**Status 2026-09-11:** **V2-COMBAT-003 is DONE — merged as PR #62, squash commit `80c31c2`.**
+Suite **1,519 → 1,613**.
+
+The branch carries **four subjects, not one**, and the PR body must say so:
+1. **Arbitration and explanation** — the story's actual scope. `DecisionTrace.gd` and
+   `GuidanceContribution.gd`, guidance split into consent × reading, calling-aligned maturity bands.
+2. **The terrain rewrite** — moated islands, bridges as their own tile, per-realm board character.
+3. **The bridge render fixes** — all three found by the owner's play test, not by the suite:
+   `z_index` put the tint over the actors; `bridge_cell_set` painted plateau interiors because a
+   bridge rect overlaps the plateaus it joins; density spans ran centre-to-centre. Tinted share of
+   the board fell 9.7% → 3.1% on combat and 25.3% → 12.7% on explore, measured over 1,800 boards
+   per regime and reproduced by an independent verifier.
+4. **Two PRE-EXISTING defects fixed in passing** — neither caused by this story:
+   - mid-round wave spawns landed on moated islands (`CombatRoundSpawnService` was byte-identical to
+     the branch point; the island rewrite raised it from 1.1% to 30.3% of wave cells, so the branch
+     exposed it rather than wrote it). Now 0 of 96,000 stressed spawn cells.
+   - a fight where nothing moves could never end (refusal is an absorbing state, `fear_per_round`
+     only rises, no round cap existed). Now ends as a **forced retreat that pays nothing** — the
+     owner chose retreat over defeat because permadeath is planned. Not observed in play; proven by
+     test and measurement only.
+
+**Filed to V2-COMBAT-003.5, all four items:** boards do not vary inside a stage (`encounter_id`
+names the stage, from `4b45b3e`); the combat board is too small for its own terrain (12x12 base,
++1 per completed realm, only two realms live so it never exceeds 14x14 — a design question, and the
+completed-realm counter is confirmed correct); island SHAPE looks alike across realms; the
+`combat_emotion` debug command throws on a field deleted when its feature was deliberately gutted.
+
+See [orchestrator: delegate all repo authoring](orchestrator-delegate-recon.md) — corrected a third
+time on this story.
+
+**V2-COMBAT-003 review round (PR #62).** Codex raised three P2 findings. Two were real and fixed; one
+was refuted with evidence and nothing changed.
+- **Real:** the no-progress stalemate detector could not see a PURIFY_SHRINE's own clock (200 HP,
+  5/round drain, limit 15), so it forced a retreat on a fight that was resolving. Fixed by exempting
+  the objective. Following the reasoning rather than the single report found a **second instance** —
+  GUIDE_SPIRIT in **escort** mode wins by `destination_reached` and advances no watched counter.
+  Exempted escort ONLY; protect mode advances `guide_protect_counter`, is visible to the detector,
+  and keeps it. A control test asserts protect mode still forces the retreat.
+- **Real:** the `guide` debug command wrote `flow_ctx.dev_guidance` from `ui/`. Now dispatches
+  `debug.guidance.set` on `DebugController`, shape copied from `debug.charge_pressure.set`.
+- **Refuted:** the vector tie-break ranks only four legacy vectors, but no production path produces a
+  tied maximum — every `archetype_init` entry has a unique maximum of 60.0, and `accumulate` adds +1
+  twice to the starter Echo only. Changing it would have moved initiative order to fix nothing.
+
+**The exemption list is a patch over a missing progress signal.** ENDURE (clock 5) and PURSUE
+(clock 12) are also invisible to the detector and safe only by margin against the limit of 15. Raise
+PURSUE's `window_turns_max` to 16 and false forced retreats appear with no code change and **no
+failing test**. Filed to V2-COMBAT-003.5 with the real fix named: replace the list with a genuine
+progress signal so a new objective cannot be forgotten.
+
+Also filed to 003.5: `data/balance.json` documents two different vector tie-break orders and the code
+implements neither (nothing reads either comment); and `ui/AGENTS.md` forbids `ui/` from dispatching
+while the contract below it names `AppRoot` as the dispatcher — the forbidden list is written for
+screens, and should say so.
