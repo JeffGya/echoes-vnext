@@ -1034,7 +1034,7 @@ From RealmSelect: StageMap → Stage → Encounter(s) → Resolve → Sanctum
 ### Encounter Resolution
 Encounter ≠ just combat. `ObjectiveType` drives `resolution_mode`:
 - ObjectiveType `shrine` → resolution_mode `purify_shrine`
-- ObjectiveType `combat` → resolution_mode `defeat_enemies`
+- ObjectiveType `combat` → resolution_mode `combat`
 
 EncounterStateMachine phases (scaffold): `setup → blessing → rounds → resolution → aftermath`
 
@@ -1238,7 +1238,7 @@ Echo traits (resilience + leadership) use a **separate derived RNG** at path `<s
 
 **Dispatch actions:**
 - `stage.advance_turn` — moves party toward nearest unresolved situation (directive-guided; Seek Signs prioritises objectives). `_find_target_situation` skips resolved situations **and** situations at Chebyshev distance = 0 (party already parked there after a Pass). Runs reveal check (roll > 50 base, > 35 Seek Signs → `revealed=true`; writes `intel_clues` + `intel_quality`). Parks party with `pending_situation_id` set; player confirms via popup.
-- `stage.engage_situation` — sets `active_encounter_objective_index` on FlowContext, marks situation resolved/revealed, writes firsthand intel; routes by type: combat/shrine → `flow.encounter`; npc/loot/money → config-driven emotion effect (`balance.json data.stages.situation_emotion_effects`) + overlay stub; recover/protect/endure/pursue → stub-complete objective + overlay (V2-STAGE-004 replaces stubs). For combat/shrine, resolved state is held until victory confirmed in `_handle_complete_stage`.
+- `stage.engage_situation` — sets `active_encounter_objective_index` on FlowContext, marks situation resolved/revealed, writes firsthand intel; routes by type: combat/shrine → `flow.encounter`; npc/loot/money → config-driven emotion effect (`balance.json data.stages.situation_emotion_effects`) + overlay stub; recover/protect/endure/pursue → routes through `SituationResolutionService.route()` to real combat (V2-STAGE-004). For combat/shrine, resolved state is held until victory confirmed in `_handle_complete_stage`.
 - `stage.ignore_situation` — V2-STAGE-002: dismisses engagement popup without resolving. Clears `pending_situation_id`; intel preserved. Party stays parked; next `advance_turn` skips this position (distance = 0 guard) and moves to a genuinely new location.
 - `stage.return_home` — escape check (roll > 40 = success → `flow.stage_map`; fail → `data.return_failed = true`). Player-initiated anytime, or party-requested when avg fear > `party_return_fear_threshold` (snapshot: `party_requesting_return: true`).
 - `stage.calling_action` — V2-STAGE-002: bonus explore action for calling-qualified parties (ranger → `reveal_adjacent`, okofor → `fortify_position`, aduro → `inspire_push`; fear-gated → `cautious_advance`). V2-STAGE-003/004 will wire resolution logic.
