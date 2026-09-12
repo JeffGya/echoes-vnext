@@ -62,13 +62,8 @@ const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd
 @onready var _round_ended_label: Label              = $CombatResultOverlay/ResultContent/RoundEndedLabel
 @onready var _end_combat_button: Button             = $CombatResultOverlay/ResultContent/EndCombatButton
 # UI-004: Pre-battle panel (pre_combat phase only).
-@onready var _prebattle_panel: PanelContainer       = $PrebattlePanel
-@onready var _prebattle_objective: Label            = $PrebattlePanel/PrebattleContent/ObjectivePanelLabel
 # V2-STAGE-004 Phase 4 (S15 UI-B): claimant-forced combat intro line — hidden when
 # data.combat_intro_line is "".
-@onready var _prebattle_intro_line: Label           = %IntroLineLabel
-@onready var _retreat_button: Button                = $PrebattlePanel/PrebattleContent/ButtonRow/RetreatButton
-@onready var _enter_combat_button: Button           = $PrebattlePanel/PrebattleContent/ButtonRow/EnterCombatButton
 @onready var _speed_slow_button: Button             = %SpeedSlowButton
 @onready var _speed_normal_button: Button           = %SpeedNormalButton
 @onready var _speed_fast_button: Button             = %SpeedFastButton
@@ -195,9 +190,6 @@ func _ready() -> void:
 	_end_combat_button.pressed.connect(_on_end_combat_pressed)
 
 	# UI-004: Pre-battle panel wiring.
-	_prebattle_panel.visible = false
-	_enter_combat_button.pressed.connect(_on_enter_combat_pressed)
-	_retreat_button.pressed.connect(_on_retreat_pressed)
 
 	# Speed buttons are authored in scene.
 	_speed_slow_button.pressed.connect(func(): _on_speed_pressed(_SPEED_SLOW))
@@ -276,7 +268,6 @@ func _reset_transient_ui() -> void:
 	_end_combat_action      = {}
 
 	# UI-004: hide pre-battle panel; reset cached actions.
-	_prebattle_panel.visible         = false
 	_pending_enter_combat_action     = {}
 	_pending_retreat_action          = {}
 
@@ -422,12 +413,13 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 ## Reads ONLY objective_state fields — no core access. Unknown/missing type hides
 ## the banner entirely (graceful degradation: old snapshots render as before).
 ##
-## Per-mode content:
+## Per-mode content (static instruction text sourced from _objective_instruction_text,
+## the single source shared with the pre-battle modal label — see that function's docstring):
 ##   combat        → "Defeat all enemies"                           (no progress line)
 ##   purify_shrine → "Purify the shrine"        + "Shrine HP x"
-##   recover       → "Secure the relic"         + "Hold h/N"
+##   recover       → "Hold the relic ground"    + "Hold h/N"
 ##   protect       → "Protect <entity>"         + "Guard c/N · HP x"; totem_stolen → urgent
-##   endure        → "Hold your ground"         + "Round r/N · Waves left: w"
+##   endure        → "Survive the onslaught"    + "Round r/N · Waves left: w"
 ##   pursue        → "Contain the quarry"       + "Contain c/N · Window: w" + distance pips
 ##   guide_spirit  → protect: "Keep <name> calm" / escort: "Guide <name> to safety" (+ "Arrived")
 func _render_objective_banner(obj_state: Dictionary, obj_type: String) -> void:
@@ -444,28 +436,25 @@ func _render_objective_banner(obj_state: Dictionary, obj_type: String) -> void:
 	match obj_type:
 		"combat":
 			glyph = "◆"
-			instruction = "Defeat all enemies"
+			instruction = _objective_instruction_text(obj_type, obj_state)
 		"purify_shrine":
 			glyph = "◆"
-			instruction = "Purify the shrine"
+			instruction = _objective_instruction_text(obj_type, obj_state)
 			progress = "Shrine HP %d" % int(obj_state.get("shrine_hp", 0))
 		"recover":
 			glyph = "◆"
-			instruction = "Secure the relic"
+			instruction = _objective_instruction_text(obj_type, obj_state)
 			progress = "Hold %d/%d" % [
 				int(obj_state.get("hold_progress", 0)),
 				int(obj_state.get("hold_required", 0)),
 			]
 		"protect":
 			glyph = "◆"
-			var entity_name: String = str(obj_state.get("entity_name", ""))
 			if bool(obj_state.get("totem_stolen", false)):
 				instruction = "STOLEN — recover it!"
 				urgent = true
-			elif not entity_name.is_empty():
-				instruction = "Protect %s" % entity_name
 			else:
-				instruction = "Protect the totem"
+				instruction = _objective_instruction_text(obj_type, obj_state)
 			progress = "Guard %d/%d · HP %d" % [
 				int(obj_state.get("protect_progress", 0)),
 				int(obj_state.get("protect_required", 0)),
@@ -473,7 +462,7 @@ func _render_objective_banner(obj_state: Dictionary, obj_type: String) -> void:
 			]
 		"endure":
 			glyph = "◆"
-			instruction = "Hold your ground"
+			instruction = _objective_instruction_text(obj_type, obj_state)
 			progress = "Round %d/%d · Waves left: %d" % [
 				int(obj_state.get("round", 0)),
 				int(obj_state.get("rounds_required", 0)),
@@ -481,7 +470,7 @@ func _render_objective_banner(obj_state: Dictionary, obj_type: String) -> void:
 			]
 		"pursue":
 			glyph = "◆"
-			instruction = "Contain the quarry"
+			instruction = _objective_instruction_text(obj_type, obj_state)
 			progress = "Contain %d/%d · Window: %d" % [
 				int(obj_state.get("contain_progress", 0)),
 				int(obj_state.get("contain_required", 0)),
@@ -489,15 +478,10 @@ func _render_objective_banner(obj_state: Dictionary, obj_type: String) -> void:
 			]
 		"guide_spirit":
 			glyph = "◆"
-			var spirit_name: String = str(obj_state.get("spirit_name", ""))
-			var who: String = spirit_name if not spirit_name.is_empty() else "the spirit"
-			if str(obj_state.get("guide_mode", "protect")) == "escort":
-				if bool(obj_state.get("destination_reached", false)):
-					instruction = "Guide %s to safety — Arrived" % who
-				else:
-					instruction = "Guide %s to safety" % who
-			else:
-				instruction = "Keep %s calm" % who
+			instruction = _objective_instruction_text(obj_type, obj_state)
+			if str(obj_state.get("guide_mode", "protect")) == "escort" \
+					and bool(obj_state.get("destination_reached", false)):
+				instruction += " — Arrived"
 			# HP / rounds detail lives in the EchoBar spirit slot — no duplication here.
 		_:
 			# Unknown / missing objective type → hide banner, board renders as today.
@@ -1018,88 +1002,102 @@ func _action_color_for_text(action_text: String) -> Color:
 ## Shows the pre-battle overview panel (pre_combat phase only).
 ## Populates objective label and wires Retreat + Enter Combat buttons from snapshot.
 func _show_prebattle_panel(data: Dictionary, actions: Dictionary) -> void:
-	# Hide the main HUD labels — pre_combat uses its own panel.
+	# The pre-battle step is rendered by AppRoot's ModalHost (realm.prebattle), not in this
+	# scene. This function only assembles the payload.
 	_round_label.visible     = false
 	_objective_label.visible = false
 
 	var obj_state: Dictionary = data.get("objective_state", {})
 	var objective_label := _format_objective_label(obj_state)
-	_prebattle_objective.text = objective_label
 
 	# V2-STAGE-004 Phase 4 (S15 UI-B): claimant-forced combat intro line — snapshot-driven,
-	# never hard-coded. "" (not a claimant-forced fight) hides the label entirely.
+	# never hard-coded. "" (not a claimant-forced fight) means no intro line.
 	var intro_line: String = str(data.get("combat_intro_line", ""))
-	if not intro_line.is_empty():
-		_prebattle_intro_line.text    = intro_line
-		_prebattle_intro_line.visible = true
-	else:
-		_prebattle_intro_line.visible = false
 
-	# Enter Combat button — always enabled; dispatches cta.combat_init.
-	if actions.has("cta.combat_init"):
-		_enter_combat_button.disabled = false
-		_pending_enter_combat_action  = actions["cta.combat_init"]
-	else:
-		_enter_combat_button.disabled = true
-		_pending_enter_combat_action  = {}
+	# Enter Combat — always offered; the action decides whether it is available.
+	_pending_enter_combat_action = actions.get("cta.combat_init", {})
 
-	# Retreat button — always shown; enabled only when eligible.
+	# Retreat — offered only when eligible.
+	var retreat_enabled: bool = false
+	var retreat_label: String = "Retreat is not possible"
 	var retreat_eligible: bool = bool(data.get("retreat_eligible", false))
 	if retreat_eligible and actions.has("cta.retreat"):
-		_pending_retreat_action   = actions["cta.retreat"]
-		_retreat_button.disabled  = false
-		var tier_label: String    = str(data.get("retreat_tier_label", ""))
-		var ase_cost: int         = int(data.get("retreat_ase_cost", 0))
+		_pending_retreat_action = actions["cta.retreat"]
+		retreat_enabled         = true
+		var tier_label: String  = str(data.get("retreat_tier_label", ""))
+		var ase_cost: int       = int(data.get("retreat_ase_cost", 0))
 		if tier_label == "Guaranteed":
-			_retreat_button.text = "Retreat (%d ase)\nEscape guaranteed" % ase_cost
+			retreat_label = "Retreat (%d ase)\nEscape guaranteed" % ase_cost
 		else:
-			_retreat_button.text = "Retreat (%d ase)\nChance of failure: %s" % [ase_cost, tier_label.to_lower()]
+			retreat_label = "Retreat (%d ase)\nChance of failure: %s" % [ase_cost, tier_label.to_lower()]
 	else:
-		_pending_retreat_action  = {}
-		_retreat_button.disabled = true
-		_retreat_button.text     = "Retreat is not possible"
+		_pending_retreat_action = {}
 
-	_prebattle_panel.visible = false
+
 	modal_requested.emit(&"realm.prebattle", {
 		"objective_label": objective_label,
 		"intro_line": intro_line,
 		"enter_action": _pending_enter_combat_action.duplicate(true),
 		"retreat_action": _pending_retreat_action.duplicate(true),
-		"retreat_enabled": not _retreat_button.disabled,
-		"retreat_label": _retreat_button.text,
+		"retreat_enabled": retreat_enabled,
+		"retreat_label": retreat_label,
 	})
 
-## Maps objective type string to a player-facing label.
-func _format_objective_label(obj_state: Dictionary) -> String:
+## Maps objective type string to a player-facing label for the pre-battle modal.
+## Delegates all static wording to _objective_instruction_text — the single source shared
+## with the live ObjectiveBanner (_render_objective_banner) — so the two surfaces cannot
+## drift out of sync again. This function ONLY adds the unknown-type fallback; it applies
+## no dynamic combat-state overrides (no STOLEN branch, no "Arrived" suffix) because a
+## pre-battle modal must never show live combat state.
+static func _format_objective_label(obj_state: Dictionary) -> String:
 	var obj_type: String = str(obj_state.get("type", ""))
+	var text := _objective_instruction_text(obj_type, obj_state)
+	return text if not text.is_empty() else "[Battle objective]"
+
+
+## Single source of truth for the STATIC objective instruction text shown on both the
+## pre-battle modal (_format_objective_label) and the live ObjectiveBanner
+## (_render_objective_banner). Pure string logic: no Node/scene access, callable headless.
+##
+## Returns "" for an unrecognised obj_type; callers apply their own fallback.
+##
+## Per-mode text:
+##   combat        → "Defeat all enemies"
+##   purify_shrine → "Purify the shrine"
+##   pursue        → "Contain the quarry"
+##   recover       → "Hold the relic ground"
+##   endure        → "Survive the onslaught"
+##   protect       → "Protect <entity_name>", or "Protect the totem" when entity_name is empty
+##   guide_spirit  → escort: "Guide <spirit_name> to safety"; protect: "Keep <spirit_name> calm";
+##                   falls back to "the spirit" when spirit_name is empty
+##
+## Dynamic overrides (STOLEN, "— Arrived") are NOT part of this function — they live only in
+## _render_objective_banner, which reacts to live combat state a pre-battle modal must never show.
+static func _objective_instruction_text(obj_type: String, obj_state: Dictionary) -> String:
 	match obj_type:
-		"purify_shrine":   return "Purify the Ancestral Shrine"
-		"pursue":          return "Contain the Fleeing Quarry"
-		"combat":          return "Defeat all enemies"
-		"recover":         return "Hold the relic ground"
-		"protect":         return "Protect the ward"
-		"endure":          return "Survive the onslaught"
+		"combat":
+			return "Defeat all enemies"
+		"purify_shrine":
+			return "Purify the shrine"
+		"pursue":
+			return "Contain the quarry"
+		"recover":
+			return "Hold the relic ground"
+		"endure":
+			return "Survive the onslaught"
+		"protect":
+			var entity_name: String = str(obj_state.get("entity_name", ""))
+			return "Protect %s" % entity_name if not entity_name.is_empty() else "Protect the totem"
 		"guide_spirit":
+			var spirit_name: String = str(obj_state.get("spirit_name", ""))
+			var who: String = spirit_name if not spirit_name.is_empty() else "the spirit"
 			# guide_mode is a seeded 50/50 per encounter (EncounterObjectiveSpawnService):
 			# "escort" walks the spirit to a destination, "protect" holds it in place.
-			# The two win conditions differ, so the label must too.
-			return "Escort the spirit" if str(obj_state.get("guide_mode", "")) == "escort" \
-				else "Protect the spirit"
-	return "[Battle objective]"
-
-
-func _on_enter_combat_pressed() -> void:
-	if not _pending_enter_combat_action.is_empty():
-		var act := _pending_enter_combat_action
-		_pending_enter_combat_action = {}
-		action_requested.emit(act)
-
-
-func _on_retreat_pressed() -> void:
-	if not _pending_retreat_action.is_empty():
-		var act := _pending_retreat_action
-		_pending_retreat_action = {}
-		action_requested.emit(act)
+			# The two win conditions differ, so the instruction must too.
+			if str(obj_state.get("guide_mode", "protect")) == "escort":
+				return "Guide %s to safety" % who
+			return "Keep %s calm" % who
+	return ""
 
 
 # -------------------------
@@ -1338,4 +1336,3 @@ func _apply_responsive_layout() -> void:
 	speed_bar.offset_bottom = -bottom - 120.0
 	_initiative_panel.offset_top = 150.0 + top
 	_initiative_panel.offset_bottom = -bottom - 62.0
-	_prebattle_panel.offset_top = 72.0 + top
