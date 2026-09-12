@@ -1365,11 +1365,8 @@ static func _t_prebattle_modal_route_and_resolve_structure() -> Dictionary:
 	)
 	combat.set("_round_label", combat.get_node("RoundLabel"))
 	combat.set("_objective_label", combat.get_node("ObjectiveLabel"))
-	combat.set("_prebattle_panel", combat.get_node("PrebattlePanel"))
-	combat.set("_prebattle_objective", combat.get_node("PrebattlePanel/PrebattleContent/ObjectivePanelLabel"))
-	combat.set("_prebattle_intro_line", combat.get_node("%IntroLineLabel"))
-	combat.set("_retreat_button", combat.get_node("PrebattlePanel/PrebattleContent/ButtonRow/RetreatButton"))
-	combat.set("_enter_combat_button", combat.get_node("PrebattlePanel/PrebattleContent/ButtonRow/EnterCombatButton"))
+	# PrebattlePanel and its children were removed — the pre-battle step is rendered by the
+	# realm.prebattle modal, so the screen no longer holds in-scene nodes for it.
 	combat.call("_show_prebattle_panel",
 		{
 			"round_phase": "pre_combat",

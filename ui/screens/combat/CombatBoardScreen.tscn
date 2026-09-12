@@ -374,55 +374,6 @@ custom_minimum_size = Vector2(160, 56)
 layout_mode = 2
 text = "Return to Sanctum"
 
-[node name="PrebattlePanel" type="PanelContainer" parent="." unique_id=200000001]
-visible = false
-layout_mode = 1
-anchors_preset = -1
-anchor_left = 0.5
-anchor_top = 0.05
-anchor_right = 0.5
-anchor_bottom = 0.05
-offset_left = -175.0
-offset_right = 175.0
-offset_bottom = 100.0
-grow_horizontal = 2
-
-[node name="PrebattleContent" type="VBoxContainer" parent="PrebattlePanel" unique_id=200000002]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="ObjectivePanelLabel" type="Label" parent="PrebattlePanel/PrebattleContent" unique_id=200000003]
-layout_mode = 2
-theme_override_font_sizes/font_size = 15
-text = "[Battle objective]"
-horizontal_alignment = 1
-
-[node name="IntroLineLabel" type="Label" parent="PrebattlePanel/PrebattleContent" unique_id=200000007]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-theme_override_colors/font_color = Color(0.9607843, 0.94509804, 0.90588236, 1)
-theme_override_font_sizes/font_size = 13
-text = ""
-horizontal_alignment = 1
-autowrap_mode = 2
-
-[node name="ButtonRow" type="HBoxContainer" parent="PrebattlePanel/PrebattleContent" unique_id=200000004]
-layout_mode = 2
-theme_override_constants/separation = 12
-alignment = 1
-
-[node name="RetreatButton" type="Button" parent="PrebattlePanel/PrebattleContent/ButtonRow" unique_id=200000005]
-custom_minimum_size = Vector2(150, 56)
-layout_mode = 2
-text = "Retreat"
-
-[node name="EnterCombatButton" type="Button" parent="PrebattlePanel/PrebattleContent/ButtonRow" unique_id=200000006]
-custom_minimum_size = Vector2(150, 56)
-layout_mode = 2
-theme_type_variation = &"ButtonPrimary"
-text = "Enter Combat"
-
 [node name="TransientLayer" type="CanvasLayer" parent="."]
 layer = 30
 
