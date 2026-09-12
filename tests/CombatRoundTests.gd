@@ -53,7 +53,7 @@ static func _t_not_met_when_enemies_alive() -> Dictionary:
 		{ "id": "echo_01",  "faction": "echo",  "is_dead": false },
 		{ "id": "enemy_01", "faction": "enemy", "is_dead": false },
 	]
-	var result: Dictionary = CombatState.check_end_condition(actors, "defeat_enemies")
+	var result: Dictionary = CombatState.check_end_condition(actors, EncounterResolutionModes.COMBAT)
 
 	if bool(result.get("over", true)) != false:
 		return { "ok": false, "error": "Expected over=false with living enemy, got: %s" % str(result.get("over")) }
@@ -71,7 +71,7 @@ static func _t_victory_all_enemies_dead() -> Dictionary:
 		{ "id": "enemy_01", "faction": "enemy", "is_dead": true  },
 		{ "id": "enemy_02", "faction": "enemy", "is_dead": true  },
 	]
-	var result: Dictionary = CombatState.check_end_condition(actors, "defeat_enemies")
+	var result: Dictionary = CombatState.check_end_condition(actors, EncounterResolutionModes.COMBAT)
 
 	if bool(result.get("over", false)) != true:
 		return { "ok": false, "error": "Expected over=true when all enemies dead, got: %s" % str(result.get("over")) }
@@ -88,7 +88,7 @@ static func _t_defeat_all_echoes_dead() -> Dictionary:
 		{ "id": "echo_01",  "faction": "echo",  "is_dead": true  },
 		{ "id": "enemy_01", "faction": "enemy", "is_dead": false },
 	]
-	var result: Dictionary = CombatState.check_end_condition(actors, "defeat_enemies")
+	var result: Dictionary = CombatState.check_end_condition(actors, EncounterResolutionModes.COMBAT)
 
 	if bool(result.get("over", false)) != true:
 		return { "ok": false, "error": "Expected over=true when all echoes dead, got: %s" % str(result.get("over")) }
@@ -106,7 +106,7 @@ static func _t_reason_strings() -> Dictionary:
 		{ "id": "echo_01",  "faction": "echo",  "is_dead": false },
 		{ "id": "enemy_01", "faction": "enemy", "is_dead": true  },
 	]
-	var r_over: Dictionary = CombatState.check_end_condition(actors_over, "defeat_enemies")
+	var r_over: Dictionary = CombatState.check_end_condition(actors_over, EncounterResolutionModes.COMBAT)
 	if str(r_over.get("reason", "")) != "all_enemies_defeated":
 		return { "ok": false, "error": "Expected reason='all_enemies_defeated', got: %s" % str(r_over.get("reason")) }
 
@@ -115,7 +115,7 @@ static func _t_reason_strings() -> Dictionary:
 		{ "id": "echo_01",  "faction": "echo",  "is_dead": false },
 		{ "id": "enemy_01", "faction": "enemy", "is_dead": false },
 	]
-	var r_not: Dictionary = CombatState.check_end_condition(actors_not_over, "defeat_enemies")
+	var r_not: Dictionary = CombatState.check_end_condition(actors_not_over, EncounterResolutionModes.COMBAT)
 	if str(r_not.get("reason", "X")) != "":
 		return { "ok": false, "error": "Expected reason='' when not over, got: %s" % str(r_not.get("reason")) }
 
@@ -129,7 +129,7 @@ static func _t_victory_priority_when_all_dead() -> Dictionary:
 		{ "id": "echo_01",  "faction": "echo",  "is_dead": true },
 		{ "id": "enemy_01", "faction": "enemy", "is_dead": true },
 	]
-	var result: Dictionary = CombatState.check_end_condition(actors, "defeat_enemies")
+	var result: Dictionary = CombatState.check_end_condition(actors, EncounterResolutionModes.COMBAT)
 
 	if bool(result.get("over", false)) != true:
 		return { "ok": false, "error": "Expected over=true when all actors dead, got: %s" % str(result.get("over")) }
@@ -149,7 +149,7 @@ static func _t_defeat_reason_string() -> Dictionary:
 		{ "id": "echo_02",  "faction": "echo",  "is_dead": true  },
 		{ "id": "enemy_01", "faction": "enemy", "is_dead": false },
 	]
-	var result: Dictionary = CombatState.check_end_condition(actors, "defeat_enemies")
+	var result: Dictionary = CombatState.check_end_condition(actors, EncounterResolutionModes.COMBAT)
 
 	if str(result.get("reason", "")) != "all_echoes_dead":
 		return { "ok": false, "error": "Expected reason='all_echoes_dead', got: %s" % str(result.get("reason")) }
@@ -204,7 +204,7 @@ static func _t_shrine_alive_all_enemies_dead_is_victory() -> Dictionary:
 
 
 # Test 9: shrine_destroyed_non_shrine_objective_ignored
-# living echo + dead shrine + living enemy, objective=defeat_enemies
+# living echo + dead shrine + living enemy, objective=combat
 # Expected: over=false (shrine death is ignored when objective is not purify_shrine)
 static func _t_shrine_destroyed_non_shrine_objective_ignored() -> Dictionary:
 	var actors: Array = [
@@ -212,10 +212,10 @@ static func _t_shrine_destroyed_non_shrine_objective_ignored() -> Dictionary:
 		{ "id": "shrine_01", "faction": "structure", "is_dead": true,  "is_structure": true  },
 		{ "id": "enemy_01",  "faction": "enemy",     "is_dead": false, "is_structure": false },
 	]
-	var result: Dictionary = CombatState.check_end_condition(actors, "defeat_enemies")
+	var result: Dictionary = CombatState.check_end_condition(actors, EncounterResolutionModes.COMBAT)
 
 	if bool(result.get("over", true)) != false:
-		return { "ok": false, "error": "Expected over=false (shrine ignored for defeat_enemies), got: %s" % str(result.get("over")) }
+		return { "ok": false, "error": "Expected over=false (shrine ignored for combat), got: %s" % str(result.get("over")) }
 
 	return { "ok": true }
 

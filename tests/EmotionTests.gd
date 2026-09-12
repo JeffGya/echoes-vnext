@@ -459,7 +459,7 @@ static func _t_resolve_emotion_summary_unified() -> Dictionary:
 	var ectx := EncounterContext.new()
 	ectx.encounter_id  = "test_enc_003"
 	ectx.combat_result = { "victory": true, "reason": "all_enemies_defeated", "round_ended": 2 }
-	ectx.combat_state  = { "combat_over": true, "objective": "defeat_enemies", "round_counter": 2 }
+	ectx.combat_state  = { "combat_over": true, "objective": EncounterResolutionModes.COMBAT, "round_counter": 2 }
 	ectx.actors = [{
 		"id": "echo_01", "name": "Kojo", "faction": "echo",
 		"current_hp": 80, "stats": { "max_hp": 100 },

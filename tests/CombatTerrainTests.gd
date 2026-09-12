@@ -546,7 +546,7 @@ static func _terrain_dicts_equal(a: Dictionary, b: Dictionary) -> bool:
 # 3-arg call: CombatState.create(actors, objective) → objective_params == {}.
 static func _t_objective_params_default_empty() -> Dictionary:
 	var actors: Array = [{ "id": "a1" }, { "id": "a2" }]
-	var state: Dictionary = CombatState.create(actors, "defeat_enemies")
+	var state: Dictionary = CombatState.create(actors, EncounterResolutionModes.COMBAT)
 
 	if not state.has("objective_params"):
 		return { "ok": false, "error": "CombatState missing 'objective_params' key" }
@@ -597,7 +597,7 @@ static func _t_objective_params_legacy_4arg_call() -> Dictionary:
 		{ "id": "fast", "name": "Fast", "speed": 10, "stats": { "agi": 8 } },
 		{ "id": "slow", "name": "Slow", "speed": 2,  "stats": { "agi": 1 } },
 	]
-	var state: Dictionary = CombatState.create(actors, "defeat_enemies", 0, {})
+	var state: Dictionary = CombatState.create(actors, EncounterResolutionModes.COMBAT, 0, {})
 
 	# Must validate cleanly.
 	if not CombatState.validate(state):

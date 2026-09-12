@@ -854,7 +854,7 @@ static func _t_final_snapshot_has_combat_intro_line_and_no_recruit_offer_key() -
 	ectx.encounter_id  = "test_enc_final_snap"
 	ectx.placement_seed = 1
 	ectx.actors = []
-	ectx.combat_state  = { "combat_over": true, "objective": "defeat_enemies", "round_counter": 2 }
+	ectx.combat_state  = { "combat_over": true, "objective": EncounterResolutionModes.COMBAT, "round_counter": 2 }
 	ectx.combat_result = { "victory": true, "reason": "all_enemies_defeated", "round_ended": 2 }
 	ctx.encounter_ctx = ectx
 
@@ -882,7 +882,7 @@ static func _t_final_snapshot_has_combat_intro_line_and_no_recruit_offer_key() -
 # reflecting ectx.charge_pressure_applied.
 static func _t_objective_state_has_charge_pressure_applied_bool() -> Dictionary:
 	var ectx_false := EncounterContext.new()
-	ectx_false.resolution_mode = "defeat_enemies"
+	ectx_false.resolution_mode = EncounterResolutionModes.COMBAT
 	ectx_false.actors = []
 	ectx_false.charge_pressure_applied = false
 	var state_false: Dictionary = EncounterSnapshotBuilder._build_objective_state(ectx_false, {})
@@ -1252,7 +1252,7 @@ static func _final_snapshot_for_actors(actors: Array, encounter_id: String) -> D
 	ectx.encounter_id  = encounter_id
 	ectx.placement_seed = 1
 	ectx.actors = actors
-	ectx.combat_state  = { "combat_over": true, "objective": "defeat_enemies", "round_counter": 2 }
+	ectx.combat_state  = { "combat_over": true, "objective": EncounterResolutionModes.COMBAT, "round_counter": 2 }
 	ectx.combat_result = { "victory": true, "reason": "all_enemies_defeated", "round_ended": 2 }
 	ctx.encounter_ctx = ectx
 
@@ -1376,7 +1376,7 @@ static func _t_prebattle_modal_route_and_resolve_structure() -> Dictionary:
 			"board_cols": 2,
 			"board_rows": 2,
 			"actors": [],
-			"objective_state": { "type": "defeat_enemies" },
+			"objective_state": { "type": EncounterResolutionModes.COMBAT },
 			"combat_intro_line": "Claimant test line",
 			"retreat_eligible": true,
 			"retreat_tier_label": "Risky",

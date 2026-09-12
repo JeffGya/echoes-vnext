@@ -1074,7 +1074,6 @@ func _format_objective_label(obj_state: Dictionary) -> String:
 	var obj_type: String = str(obj_state.get("type", ""))
 	match obj_type:
 		"purify_shrine":   return "Purify the Ancestral Shrine"
-		"defeat_enemies":  return "Defeat all enemies"
 		"pursue":          return "Contain the Fleeing Quarry"
 		"combat":          return "Defeat all enemies"
 		"recover":         return "Hold the relic ground"

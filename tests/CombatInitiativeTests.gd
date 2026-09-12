@@ -53,7 +53,7 @@ static func _t_inspired_scores_higher_than_broken() -> Dictionary:
 		"stats": { "agi": 5 },
 		"morale": 10,  # broken tier (<25)
 	}
-	var state: Dictionary = CombatState.create([actor_a, actor_b], "defeat_enemies", 0, _morale_cfg())
+	var state: Dictionary = CombatState.create([actor_a, actor_b], EncounterResolutionModes.COMBAT, 0, _morale_cfg())
 	var order: Array = state.get("initiative_order", [])
 	if order.size() < 2:
 		return { "ok": false, "error": "initiative_order too short (got %d)" % order.size() }
@@ -71,8 +71,8 @@ static func _t_steady_has_zero_morale_modifier() -> Dictionary:
 		"stats": { "agi": 3 },
 		"morale": 60,  # steady tier (>=50 <75)
 	}
-	var state_with_cfg: Dictionary = CombatState.create([actor], "defeat_enemies", 0, _morale_cfg())
-	var state_no_cfg: Dictionary   = CombatState.create([actor], "defeat_enemies", 0, {})
+	var state_with_cfg: Dictionary = CombatState.create([actor], EncounterResolutionModes.COMBAT, 0, _morale_cfg())
+	var state_no_cfg: Dictionary   = CombatState.create([actor], EncounterResolutionModes.COMBAT, 0, {})
 	var order_cfg: Array = state_with_cfg.get("initiative_order", [])
 	var order_no:  Array = state_no_cfg.get("initiative_order", [])
 	if order_cfg.is_empty() or order_no.is_empty():
@@ -108,9 +108,9 @@ static func _t_directives_do_not_affect_order() -> Dictionary:
 	actor_a_no_dir.erase("active_directive")
 
 	var state_with_dir: Dictionary = CombatState.create(
-		[actor_a_with_dir, actor_b_no_dir], "defeat_enemies", 0, _morale_cfg())
+		[actor_a_with_dir, actor_b_no_dir], EncounterResolutionModes.COMBAT, 0, _morale_cfg())
 	var state_no_dir: Dictionary = CombatState.create(
-		[actor_a_no_dir, actor_b_no_dir], "defeat_enemies", 0, _morale_cfg())
+		[actor_a_no_dir, actor_b_no_dir], EncounterResolutionModes.COMBAT, 0, _morale_cfg())
 
 	var order_with: Array = state_with_dir.get("initiative_order", [])
 	var order_without: Array = state_no_dir.get("initiative_order", [])
@@ -136,8 +136,8 @@ static func _t_same_inputs_same_order() -> Dictionary:
 		{ "id": "e2", "name": "Echo2", "speed": 5, "stats": { "agi": 6 }, "morale": 50 },
 		{ "id": "e3", "name": "Echo3", "speed": 4, "stats": { "agi": 8 }, "morale": 20 },
 	]
-	var state_a: Dictionary = CombatState.create(actors, "defeat_enemies", 42, _morale_cfg())
-	var state_b: Dictionary = CombatState.create(actors, "defeat_enemies", 42, _morale_cfg())
+	var state_a: Dictionary = CombatState.create(actors, EncounterResolutionModes.COMBAT, 42, _morale_cfg())
+	var state_b: Dictionary = CombatState.create(actors, EncounterResolutionModes.COMBAT, 42, _morale_cfg())
 	var order_a: Array = state_a.get("initiative_order", [])
 	var order_b: Array = state_b.get("initiative_order", [])
 	if order_a.size() != order_b.size():
@@ -193,7 +193,7 @@ static func _t_dominant_vector_recognizes_all_ten_vectors() -> Dictionary:
 			"devoted": 0, "vanguard": 50, "seeker": 1, "protector": 1, "pillar": 1,
 		},
 	}
-	var state: Dictionary = CombatState.create([actor_a, actor_b], "defeat_enemies", 0, vec_cfg)
+	var state: Dictionary = CombatState.create([actor_a, actor_b], EncounterResolutionModes.COMBAT, 0, vec_cfg)
 	var order: Array = state.get("initiative_order", [])
 	if order.size() < 2:
 		return { "ok": false, "error": "initiative_order too short (got %d)" % order.size() }
@@ -236,7 +236,7 @@ static func _t_v2_calling_receives_initiative_modifier() -> Dictionary:
 		"calling_origin": "uncalled",
 		"calling":        "",
 	}
-	var state: Dictionary = CombatState.create([actor_aduro, actor_uncalled], "defeat_enemies", 0, init_cfg)
+	var state: Dictionary = CombatState.create([actor_aduro, actor_uncalled], EncounterResolutionModes.COMBAT, 0, init_cfg)
 	var order: Array = state.get("initiative_order", [])
 	if order.size() < 2:
 		return { "ok": false, "error": "initiative_order too short (got %d)" % order.size() }

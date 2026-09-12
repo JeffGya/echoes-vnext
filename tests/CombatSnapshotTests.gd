@@ -57,7 +57,7 @@ static func _make_combat_over_ctx() -> FlowContext:
 	ectx.encounter_id   = "test_enc_002"
 	ectx.placement_seed = 7
 	ectx.actors         = []
-	ectx.combat_state   = { "combat_over": true, "objective": "defeat_enemies", "round_counter": 3 }
+	ectx.combat_state   = { "combat_over": true, "objective": EncounterResolutionModes.COMBAT, "round_counter": 3 }
 	ectx.combat_result  = { "victory": true, "reason": "all_enemies_defeated", "round_ended": 3 }
 	ctx.encounter_ctx   = ectx
 	return ctx
@@ -292,7 +292,7 @@ static func _t_last_actor_action_retains_move_to_pos() -> Dictionary:
 	var ctx: FlowContext = CombatSnapshotTests._make_pre_combat_ctx()
 	ctx.encounter_ctx.combat_state = {
 		"round_phase": "in_round",
-		"objective": "defeat_enemies",
+		"objective": EncounterResolutionModes.COMBAT,
 		"round_counter": 1,
 		"initiative_order": [],
 		"active_initiative_index": 0,
@@ -322,7 +322,7 @@ static func _make_path_ctx(from_pos: Dictionary, path: Array) -> FlowContext:
 	var ctx: FlowContext = CombatSnapshotTests._make_pre_combat_ctx()
 	ctx.encounter_ctx.combat_state = {
 		"round_phase": "in_round",
-		"objective": "defeat_enemies",
+		"objective": EncounterResolutionModes.COMBAT,
 		"round_counter": 1,
 		"initiative_order": [],
 		"active_initiative_index": 0,
