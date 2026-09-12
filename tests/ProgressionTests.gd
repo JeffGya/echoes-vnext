@@ -355,13 +355,17 @@ static func _test_rank_up_eligible() -> Dictionary:
 	var eligible_echo   := _make_echo("e1", 1000, 5)  # level 5, rank 1 — xp=1000 (Option A max)
 	var ineligible_echo := _make_echo("e2", 300, 3)  # level 3, rank 1 — not yet max level
 	var at_max_rank     := _make_echo("e3", 1000, 5)
-	at_max_rank["rank"] = 5  # already at MVP cap — not eligible
+	at_max_rank["rank"] = 9  # at the real config cap (max_rank=9) — not eligible
+	var below_cap       := _make_echo("e4", 1000, 5)
+	below_cap["rank"] = 8  # below the real cap — still eligible
 	if not ProgressionService.is_rank_up_eligible(eligible_echo, cfg):
 		return { "ok": false, "error": "level-5 rank-1 echo should be eligible" }
 	if ProgressionService.is_rank_up_eligible(ineligible_echo, cfg):
 		return { "ok": false, "error": "level-3 echo should NOT be eligible" }
-	if ProgressionService.is_rank_up_eligible(at_max_rank, cfg):
-		return { "ok": false, "error": "rank-5 echo should NOT be eligible (MVP cap)" }
+	if ProgressionService.is_rank_up_eligible(at_max_rank, cfg, 9):
+		return { "ok": false, "error": "rank-9 echo should NOT be eligible (config cap)" }
+	if not ProgressionService.is_rank_up_eligible(below_cap, cfg, 9):
+		return { "ok": false, "error": "rank-8 echo SHOULD be eligible below the cap of 9" }
 	return { "ok": true }
 
 

@@ -213,3 +213,9 @@ Four project-specific skills are installed. Reference docs in `docs/skills/`.
 | `docs/DesignSystem_LivingGrove_Complete_Guide.md` | Living Grove design system reference |
 | `CONVENTIONS.md` | Contracts, action types, screen summaries, decisions made vs deferred |
 | `docs/skills/` | Reference docs for all installed skills |
+
+---
+
+## Integration Status
+
+**Integration status:** `docs/integration-map.md` — per-story ship status. **Always check `docs/project_systems_audit.md` alongside it** — the systems audit must be kept in sync with the integration map whenever either is reviewed or updated.
