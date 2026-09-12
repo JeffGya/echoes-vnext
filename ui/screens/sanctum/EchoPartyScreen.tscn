@@ -191,7 +191,7 @@ flat = true
 [node name="RankKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/CallingRankRow" unique_id=1398091357]
 custom_minimum_size = Vector2(40, 0)
 layout_mode = 2
-text = "Rank"
+text = "Standing"
 
 [node name="DetailRank" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/CallingRankRow" unique_id=1522522669]
 unique_name_in_owner = true
@@ -215,7 +215,7 @@ text = "—"
 [node name="LevelKeyLbl" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/GradeLevelRow" unique_id=1397236627]
 custom_minimum_size = Vector2(40, 0)
 layout_mode = 2
-text = "Level"
+text = "Step"
 
 [node name="DetailLevel" type="Label" parent="RootVBox/ThreePanelRow/DetailContainer/DetailMargin/ScrollContainer/DetailPanel/GradeLevelRow" unique_id=891696826]
 unique_name_in_owner = true
