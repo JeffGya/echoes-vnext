@@ -17,7 +17,13 @@ const StageExploreModelScript := preload("res://core/realms/StageExploreModel.gd
 #   3. Status "completed"       → re-run; create fresh model with incremented run_count
 #
 # Sets save_request on ctx in all creation cases.
-static func get_or_create(realm_id: String, ctx: FlowContext, t: int) -> Dictionary:
+#
+# V2-INFRA-003 Phase 8C: `cfg_overrides` is applied ON TOP of the `data.realms[realm_id]` config
+# entry before anything reads it. Default `{}` means every pre-existing caller is byte-identical.
+# Its one production user is OpeningRealmService, which passes `{"virtue": <starter virtue>}` so
+# the prologue Realm is generated around the fragment the player actually chose — a value that
+# cannot live in realms.json because it differs per campaign.
+static func get_or_create(realm_id: String, ctx: FlowContext, t: int, cfg_overrides: Dictionary = {}) -> Dictionary:
 	# Ensure realms dict exists
 	if not ctx.save_data.has("realms") or typeof(ctx.save_data["realms"]) != TYPE_DICTIONARY:
 		ctx.save_data["realms"] = {}
@@ -44,6 +50,10 @@ static func get_or_create(realm_id: String, ctx: FlowContext, t: int) -> Diction
 
 	var cfg_v: Variant = realms_map[realm_id]
 	var cfg: Dictionary = cfg_v if cfg_v is Dictionary else {}
+	if not cfg_overrides.is_empty():
+		cfg = cfg.duplicate(true)
+		for _ov_key in cfg_overrides:
+			cfg[_ov_key] = cfg_overrides[_ov_key]
 
 	var seed_namespace := str(cfg.get("seed_namespace", "campaign.realm." + realm_id))
 	var stage_min   := int(cfg.get("stage_count_min", 3))
@@ -134,11 +144,7 @@ static func get_or_create(realm_id: String, ctx: FlowContext, t: int) -> Diction
 	})
 
 	# Trigger save flush
-	ctx.save_request = true
-	if ctx.save_request_reason.is_empty():
-		ctx.save_request_reason = "realm_create"
-	else:
-		ctx.save_request_reason += "|realm_create"
+	ctx.request_save("realm_create")
 
 	return model
 
@@ -160,9 +166,15 @@ static func get_active(ctx: FlowContext) -> Dictionary:
 # realm_cfg_list: Array of realm config dicts (each has "id", "locked" etc.)
 # save_realms:    save_data["realms"] dict
 static func compute_runtime_locks(realm_cfg_list: Array, save_realms: Dictionary) -> Dictionary:
-	# Check if any realm is currently active
+	# Check if any realm is currently active.
+	# PHASE 8C: the prologue Realm does not participate in the one-active-Realm lock. Normal
+	# Realms are gated during the prologue by `onboarding.opening_realm_status` (see
+	# OpeningRealmService), not by this lock, and letting an active prologue set `any_active`
+	# would leave every normal Realm reading "locked" for a reason the card cannot explain.
 	var any_active := false
 	for rid in save_realms:
+		if is_prologue_run(str(rid)):
+			continue
 		var rm_v: Variant = save_realms[rid]
 		var rm: Dictionary = rm_v if rm_v is Dictionary else {}
 		if rm.get("status", "") == RealmModel.STATUS_ACTIVE:
@@ -198,8 +210,15 @@ static func compute_runtime_locks(realm_cfg_list: Array, save_realms: Dictionary
 #
 # On success:  returns the mutated model dict.
 # On complete: marks realm is_completed=true, status="completed".
-# Guards:      returns {} if no active model; skips if already completed (idempotent).
+# Guards:      returns {} if no active model, and {} if the realm is ALREADY completed.
 # Always:      sets save_request = true on any mutation.
+#
+# Register D40: the already-completed guard used to return the model. Its caller reads
+# `is_completed` off the returned dict as the trigger to crystallize Threads, so the guard
+# handed back a second reason to mint and duplicated Threads in Continuity. An empty dict is
+# the one return value that says "this call advanced nothing", which is exactly what both
+# guard branches mean. Callers must therefore test the RETURNED dict, never re-read the model
+# from save data, to decide whether a realm completed on THIS call.
 static func advance_stage(ctx: FlowContext, t: int) -> Dictionary:
 	var model := get_active(ctx)
 	if model.is_empty():
@@ -208,12 +227,12 @@ static func advance_stage(ctx: FlowContext, t: int) -> Dictionary:
 		})
 		return {}
 
-	# Idempotency guard — already completed
+	# Idempotency guard — already completed (register D40: return {}, not the model)
 	if bool(model.get("is_completed", false)):
 		ctx.logger.warn(t, "realm.stage.advance.skip", "Realm already completed — skipping advance", {
 			"realm_id": ctx.realm_id,
 		})
-		return model
+		return {}
 
 	var current_index := int(model.get("current_stage_index", 0))
 	var stage_count   := int(model.get("stage_count", 1))
@@ -241,11 +260,7 @@ static func advance_stage(ctx: FlowContext, t: int) -> Dictionary:
 	})
 
 	# Trigger save flush
-	ctx.save_request = true
-	if ctx.save_request_reason.is_empty():
-		ctx.save_request_reason = "realm.stage_advance"
-	else:
-		ctx.save_request_reason += "|realm.stage_advance"
+	ctx.request_save("realm.stage_advance")
 
 	return ctx.save_data["realms"][ctx.realm_id]
 
@@ -254,6 +269,15 @@ static func advance_stage(ctx: FlowContext, t: int) -> Dictionary:
 ## Call BEFORE advance_stage() so current_stage_index still reflects the stage just completed.
 ## combat_grade: "S"/"A"/"B"/"C"/"D"/"F" from RewardCalc._compute_rank().
 ## thread_cfg: data.threads block from balance.json.
+##
+## ONE SEGMENT PER STAGE (V2-INFRA-003, defect D84). The recovery track is a STAGE-cadence
+## record — every entry is keyed by `stage_index` and ThreadService counts the entries — so a
+## second segment for a stage the realm already has would inflate that realm's recovery. The
+## already-recorded stage_index IS the receipt: no new save key is needed, and it is the same
+## "read the stamp, return early" shape as StageSettlementService's settlement_receipt.
+## This is what makes the call safe from the two call sites it now has: the dispatch that ends
+## the stage-clearing fight (so the Resolve card can report the segment) and flow.complete_stage
+## (which still owns the no-encounter path).
 static func contribute_segment(ctx: FlowContext, combat_grade: String, thread_cfg: Dictionary, t: int) -> void:
 	var model := get_active(ctx)
 	if model.is_empty() or bool(model.get("is_completed", false)):
@@ -266,6 +290,14 @@ static func contribute_segment(ctx: FlowContext, combat_grade: String, thread_cf
 	var segments_v: Variant = ctx.save_data["realms"][ctx.realm_id].get("realm_recovery_segments", [])
 	var segments: Array = segments_v if segments_v is Array else []
 	var stage_index := int(model.get("current_stage_index", 0))
+
+	for seg_v in segments:
+		if seg_v is Dictionary and int((seg_v as Dictionary).get("stage_index", -1)) == stage_index:
+			ctx.logger.debug(t, "realm.recovery.segment.already", "Segment already contributed for this stage", {
+				"realm_id":    ctx.realm_id,
+				"stage_index": stage_index,
+			})
+			return
 
 	segments.append({ "stage_index": stage_index, "quality_tier": quality_tier })
 	ctx.save_data["realms"][ctx.realm_id]["realm_recovery_segments"] = segments
@@ -315,12 +347,73 @@ static func calculate_stage_reward(
 	}
 
 
+## V2-INFRA-003 Phase 8 (defect D82): is this `save_data["realms"]` entry a REALM RUN?
+##
+## `save_data["realms"]` is not homogeneous. Alongside the RealmModel dicts written by
+## `RealmModel.make()` it also holds synthetic **segment containers** that were never played —
+## today exactly one, `prologue.first`, written by
+## `KeeperIntroService._grant_first_thread_via_thread_service()` so `ThreadService` has a realm
+## to crystallize the prologue Thread out of. That entry carries four keys (`id`, `virtue`,
+## `run_index`, `realm_recovery_segments`) out of `RealmModel.REQUIRED_FIELDS`' thirteen.
+##
+## The discriminator is the `status` key: `RealmModel.make()` always sets it, and a synthetic
+## container never does. Deliberately NOT `RealmModel.validate()` — an older save whose realm
+## predates a later-added required field would silently stop counting as a run.
+##
+## Only `_count_started_realms()` needed this. Every other whole-map scan in `core/` and `ui/`
+## tests `status == "active"` (FlowRuntime:107, SanctumSnapshotBuilder:57, FlowVowState:51,
+## ConsequencePassService:192, compute_runtime_locks:161, AppRoot:1309) or sums `run_count`
+## (VowService:205), and a container fails both by absence. Verified at each site, 2026-08-25.
+static func is_realm_run(entry: Dictionary) -> bool:
+	return entry.has("status")
+
+
+## V2-INFRA-003 Phase 8C: the opening Realm of the first session.
+##
+## THE PROLOGUE NEEDS A SECOND PREDICATE, not `is_realm_run()`. D82's predicate discriminates on
+## the `status` key, because `prologue.first` is a synthetic segment CONTAINER that was never
+## played. `realm.prologue` is the opposite case: a genuine `RealmModel.make()` run, with stages,
+## a seed and a status, that the player really plays — so it passes `is_realm_run()` and must.
+## What makes it special is that it is not one of the player's REALMS: it is internal, unnamed,
+## absent from `realm_order`, never listed in Realm Select, and it must not count toward anything
+## that measures how far into the game the player is.
+##
+## THE TWO IDS ARE NOT THE SAME AND ARE NOT UNIFIED. `prologue.first` (KeeperIntroService) is the
+## Thread container for the keeper intro; `realm.prologue` is the opening Realm run. Each needs a
+## different predicate, and a scan that wants to exclude both must apply both — every exclusion
+## site below says which it applies and why.
+const PROLOGUE_REALM_ID := "realm.prologue"
+
+
+## The Thread payout of the opening Realm, pinned rather than derived (ThreadService).
+const PROLOGUE_THREAD_COUNT := 1
+
+
+static func is_prologue_run(realm_id: String) -> bool:
+	return realm_id == PROLOGUE_REALM_ID
+
+
 # Count realms that have ever been started (status != "not_started").
+#
+# D82 FIX (V2-INFRA-003 Phase 8): non-run entries are skipped. Before this, `prologue.first`
+# read `""` for its absent `status`, `"" != "not_started"` passed, and every player who
+# finished the keeper intro entered their FIRST real Realm with `run_index = 1` instead of 0 —
+# inflating the virtue bonus, the realm order multiplier (`calculate_stage_reward`) and the
+# realm XP multiplier (`ProgressionService.get_realm_xp_multiplier`).
+## PHASE 8C: the prologue Realm is excluded too. It is a real run (so `is_realm_run()` passes it)
+## but it is not one of the player's Realms, and counting it would put every player's FIRST real
+## Realm on `run_index = 1` — reintroducing exactly the reward inflation D82 removed, by a
+## different door. Both exclusions are needed: `is_realm_run()` for `prologue.first`,
+## `is_prologue_run()` for `realm.prologue`.
 static func _count_started_realms(save_realms: Dictionary) -> int:
 	var count := 0
 	for rid in save_realms:
 		var rm_v: Variant = save_realms[rid]
 		var rm: Dictionary = rm_v if rm_v is Dictionary else {}
+		if not is_realm_run(rm):
+			continue
+		if is_prologue_run(str(rid)):
+			continue
 		if rm.get("status", "") != RealmModel.STATUS_NOT_STARTED:
 			count += 1
 	return count

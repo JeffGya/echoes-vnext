@@ -48,6 +48,8 @@ static func register(runner) -> void:
 	runner.register_test("combat_roundtrip/recover_reinforcement_spawns_enemy_side", func(): return test_recover_reinforcement())
 	# V2-STAGE-004 Distinctiveness — §4-F ENDURE rising wave + all_waves_spawned
 	runner.register_test("combat_roundtrip/endure_rising_wave_size_and_flag", func(): return test_endure_rising_wave())
+	# V2-COMBAT-003 — a mid-round wave spawn must land on the host region, not a moated island
+	runner.register_test("combat_roundtrip/endure_wave_spawn_stays_on_host_region", func(): return test_endure_wave_spawn_host_region())
 	# V2-STAGE-004 Distinctiveness — §4-G PROTECT theft and recovery on carrier death
 	runner.register_test("combat_roundtrip/protect_theft_and_carrier_recovery", func(): return test_protect_theft())
 	# V2-STAGE-004 PROTECT guard-proximity counter
@@ -78,6 +80,9 @@ static func register(runner) -> void:
 	# V2-STAGE-004 P3c review-fix: a JOINED spirit must not self-escort to a spirit_escorted
 	# victory after the real party is wiped — party-wipe defeat must fire instead.
 	runner.register_test("combat_roundtrip/guide_spirit_joined_spirit_does_not_self_escort", func(): return test_guide_spirit_joined_spirit_does_not_self_escort())
+	# D92: an escort that already started does not keep paying out after the party dies —
+	# a wipe must score all_echoes_dead, never spirit_escorted.
+	runner.register_test("combat_roundtrip/guide_spirit_party_wipe_scores_defeat_not_escort", func(): return test_guide_spirit_party_wipe_scores_defeat_not_escort())
 	# Kill-signal fix regression: a killing blow through the LIVE round loop must carry
 	# is_kill=true on the result and fire the kill consumers (boost, ripple, ledger).
 	# Guards against _resolve_melee ever dropping the is_kill key again.
@@ -108,6 +113,24 @@ static func register(runner) -> void:
 	# Slice 6E Task C: two actors on one cell must not discard the whole board.
 	runner.register_test("combat_roundtrip/stacked_actors_keep_selection_alive", func(): return test_stacked_actors_keep_selection_alive())
 	runner.register_test("combat_roundtrip/published_option_carries_truthful_control_and_hazards", func(): return test_published_option_carries_truthful_control_and_hazards())
+	# V2-COMBAT-003 — a fight where neither side can deal damage cannot end by any objective
+	# check (both actors refuse/guard/miss forever). The no-progress detector must end it.
+	runner.register_test("combat_roundtrip/no_progress_stalemate_ends_as_forced_retreat", func(): return test_no_progress_stalemate_ends_as_forced_retreat())
+	runner.register_test("combat_roundtrip/forced_retreat_grants_nothing", func(): return test_forced_retreat_grants_nothing())
+	# PR #62 review: PURIFY_SHRINE has its own clock — the shrine drains every round — so the
+	# stalemate detector must not end that fight.
+	runner.register_test("combat_roundtrip/purify_shrine_is_exempt_from_the_stalemate_check", func(): return test_purify_shrine_is_exempt_from_the_stalemate_check())
+	# PR #62 review: the "guide" debug command now dispatches. It runs mid-fight, so it must
+	# leave the encounter and its snapshot alone.
+	runner.register_test("combat_roundtrip/guidance_dispatch_leaves_the_encounter_intact", func(): return test_guidance_dispatch_leaves_the_encounter_intact())
+
+
+## V2-INFRA-003 Phase 6 Slice 6G: the live movement helper family moved off FlowRuntime onto
+## LiveMovementContextService. These suites reach those helpers by name, so they now build the
+## same object FlowRuntime._resolve_next_actor builds. The service is stateless between calls,
+## so a fresh instance per call site is exact — no shim was left on FlowRuntime (AGENTS.md #20).
+static func _lm(runtime) -> LiveMovementContextService:
+	return LiveMovementContextService.new(runtime.flow_ctx, runtime.logger)
 
 
 static func _drive_one_round(runtime, ectx) -> void:
@@ -135,7 +158,7 @@ static func _setup(
 	var logger := StructuredLogger.new()
 	logger.set_level(log_level)
 	var config := ConfigService.new()
-	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/combat_roundtrip_slot.json")
+	var runtime := FlowRuntime.new(logger, config, TestSaveHarness.dir() + "combat_roundtrip_slot.json")
 	runtime.boot()
 	var flow_ctx: FlowContext = runtime.flow_ctx
 	var t: int = 0
@@ -193,6 +216,271 @@ static func _enemy_pos(ectx) -> Dictionary:
 	return {}
 
 
+# ---------------------------------------------------------------------------
+# V2-COMBAT-003 — no-progress stalemate (a fight where neither side deals damage).
+# ---------------------------------------------------------------------------
+
+## Builds a real 1-echo-vs-1-enemy encounter, using the standard party+board setup, then trims
+## the actor list to exactly those two and zeroes their offense so melee can never deal damage:
+## CombatService._melee_damage() computes base = max(0, atk - eff_def), so atk=0 already floors
+## it at 0 for the attacker's own hit, and def=999 on both sides adds a wide safety margin
+## against the +5 morale_bonus term (attacker morale 100 => (100-50)/10 = +5) that could
+## otherwise push a stray hit above 0 if either actor's morale drifts up during the fight.
+## Returns {} on setup failure or if a living echo/enemy pair could not be found.
+static func _setup_no_progress(seed_tag: String) -> Dictionary:
+	var env: Dictionary = _setup(seed_tag, true, "off", EncounterResolutionModes.COMBAT)
+	if env.is_empty():
+		return {}
+	var ectx: EncounterContext = env["ectx"]
+	var echo: Dictionary = {}
+	var enemy: Dictionary = {}
+	for a_v in ectx.actors:
+		if not (a_v is Dictionary):
+			continue
+		var a: Dictionary = a_v
+		if echo.is_empty() and str(a.get("faction", "")) == "echo" and not a.get("is_dead", false):
+			echo = a
+		elif enemy.is_empty() and str(a.get("faction", "")) == "enemy" and not a.get("is_dead", false):
+			enemy = a
+	if echo.is_empty() or enemy.is_empty():
+		return {}
+	for a in [echo, enemy]:
+		var a_stats: Dictionary = a.get("stats", {})
+		a_stats["atk"] = 0
+		a_stats["def"] = 999
+	ectx.actors = [echo, enemy]
+	return env
+
+
+## Drives combat.init, then up to max_rounds full rounds, stopping as soon as combat ends.
+static func _drive_no_progress(runtime, ectx, max_rounds: int) -> void:
+	runtime.dispatch({ "type": "combat.init" })
+	_drive_no_progress_rounds(runtime, ectx, max_rounds)
+
+
+static func _drive_no_progress_rounds(runtime, ectx, max_rounds: int) -> void:
+	for _r in range(max_rounds):
+		if bool(ectx.combat_state.get("combat_over", false)):
+			break
+		runtime.dispatch({ "type": "combat.confirm_round" })
+		var guard: int = 0
+		while guard < 40:
+			guard += 1
+			var cs: Dictionary = ectx.combat_state
+			if bool(cs.get("combat_over", false)): break
+			if str(cs.get("round_phase", "")) != "in_round": break
+			runtime.dispatch({ "type": "combat.next_actor" })
+
+
+static func _no_progress_round_limit(runtime) -> int:
+	var combat_cfg: Dictionary = runtime.config_service.get_balance().get("data", {}).get("combat", {})
+	var stalemate_cfg: Dictionary = combat_cfg.get("stalemate", {})
+	return int(stalemate_cfg.get("no_progress_round_limit", 0))
+
+
+## Test 1 — a fight neither side can win by damage must still end, exactly at the configured
+## no_progress_round_limit, as a forced retreat. Before the V2-COMBAT-003 fix this fails: there
+## is no branch in CombatState.check_end_condition() that can end a fight with no death and no
+## damage, so combat_over never becomes true and the loop guard (40 actor-turns per round) is
+## the only thing that stops the test — it does not stop the ROUND counter, so this would spin
+## past the limit with combat still active.
+static func test_no_progress_stalemate_ends_as_forced_retreat() -> Dictionary:
+	var env: Dictionary = _setup_no_progress("no_progress_a")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed — could not build a live echo/enemy pair" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var ectx: EncounterContext = env["ectx"]
+
+	var limit: int = _no_progress_round_limit(runtime)
+	if limit <= 0:
+		return { "ok": false, "error": "data.combat.stalemate.no_progress_round_limit is 0 or missing — cannot test" }
+
+	# One round short of the limit: the fight must still be running (no other end condition
+	# can fire — no one can deal damage, so no one can die).
+	_drive_no_progress(runtime, ectx, limit - 1)
+	if bool(ectx.combat_state.get("combat_over", false)):
+		return { "ok": false, "error": "combat ended before the no-progress limit (round_counter=%d, limit=%d)" % [int(ectx.combat_state.get("round_counter", -1)), limit] }
+	if int(ectx.combat_state.get("no_progress_streak", -1)) != limit - 1:
+		return { "ok": false, "error": "expected no_progress_streak=%d after %d damage-free rounds, got %s" % [limit - 1, limit - 1, str(ectx.combat_state.get("no_progress_streak"))] }
+
+	# One more round crosses the limit — the fight must end as a forced retreat.
+	_drive_no_progress_rounds(runtime, ectx, 1)
+
+	if not bool(ectx.combat_state.get("combat_over", false)):
+		return { "ok": false, "error": "combat did not end at the no-progress limit (round_counter=%d, streak=%d, limit=%d)" % [int(ectx.combat_state.get("round_counter", -1)), int(ectx.combat_state.get("no_progress_streak", -1)), limit] }
+	if flow_ctx.encounter_ctx != null:
+		return { "ok": false, "error": "encounter_ctx was not cleared after the forced retreat" }
+	var snap: Dictionary = flow_ctx.last_snapshot
+	if str(snap.get("type", "")) != FlowStateIds.RESOLVE:
+		return { "ok": false, "error": "expected a flow.resolve snapshot, got type=%s" % str(snap.get("type", "")) }
+	var data: Dictionary = snap.get("data", {})
+	if str(data.get("run_type", "")) != "forced_retreat":
+		return { "ok": false, "error": "expected run_type=forced_retreat (never confused with a chosen retreat), got: %s" % str(data.get("run_type", "")) }
+	return { "ok": true }
+
+
+## Test 2 — a forced retreat must grant NOTHING. Before the fix this fails for the same reason
+## as test 1: combat never ends, so there is no forced-retreat outcome to assert zero-payout on
+## in the first place — the round loop still running IS the failure.
+static func test_forced_retreat_grants_nothing() -> Dictionary:
+	var env: Dictionary = _setup_no_progress("no_progress_b")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed — could not build a live echo/enemy pair" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var ectx: EncounterContext = env["ectx"]
+
+	var limit: int = _no_progress_round_limit(runtime)
+	if limit <= 0:
+		return { "ok": false, "error": "data.combat.stalemate.no_progress_round_limit is 0 or missing — cannot test" }
+
+	var ase_before: int = runtime.econ.get_ase()
+	var ekwan_before: int = runtime.econ.get_ekwan()
+	var roster_before: Array = (flow_ctx.save_data.get("sanctum", {}) as Dictionary).get("roster", []) as Array
+	var xp_before: Dictionary = {}
+	for e_v in roster_before:
+		var e: Dictionary = e_v
+		xp_before[str(e.get("id", ""))] = int(e.get("xp_total", -1))
+
+	_drive_no_progress(runtime, ectx, limit)
+
+	if flow_ctx.encounter_ctx != null:
+		return { "ok": false, "error": "the fight did not resolve as a forced retreat — nothing to assert zero-payout on" }
+	var snap: Dictionary = flow_ctx.last_snapshot
+	var data: Dictionary = snap.get("data", {})
+	if str(data.get("run_type", "")) != "forced_retreat":
+		return { "ok": false, "error": "expected the forced_retreat card, got run_type=%s" % str(data.get("run_type", "")) }
+
+	# The card itself must show zero.
+	if int(data.get("ase_awarded", -1)) != 0:
+		return { "ok": false, "error": "forced_retreat card shows non-zero Ase: %s" % str(data.get("ase_awarded")) }
+	if int(data.get("ekwan_awarded", -1)) != 0:
+		return { "ok": false, "error": "forced_retreat card shows non-zero Ekwan: %s" % str(data.get("ekwan_awarded")) }
+	var breakdown: Array = data.get("reward_breakdown", []) as Array
+	if not breakdown.is_empty():
+		return { "ok": false, "error": "forced_retreat card carries a non-empty reward_breakdown: %s" % str(breakdown) }
+
+	# The durable economy and roster Storyweight (xp_total) must be byte-identical to baseline.
+	if runtime.econ.get_ase() != ase_before:
+		return { "ok": false, "error": "Ase changed: %d -> %d" % [ase_before, runtime.econ.get_ase()] }
+	if runtime.econ.get_ekwan() != ekwan_before:
+		return { "ok": false, "error": "Ekwan changed: %d -> %d" % [ekwan_before, runtime.econ.get_ekwan()] }
+	var roster_after: Array = (flow_ctx.save_data.get("sanctum", {}) as Dictionary).get("roster", []) as Array
+	for e_v in roster_after:
+		var e: Dictionary = e_v
+		var eid: String = str(e.get("id", ""))
+		var before: int = int(xp_before.get(eid, -9999))
+		var after: int = int(e.get("xp_total", -9998))
+		if before != after:
+			return { "ok": false, "error": "Storyweight (xp_total) changed for %s: %d -> %d" % [eid, before, after] }
+	return { "ok": true }
+
+
+## Same trimming as _setup_no_progress, for a PURIFY_SHRINE encounter, and the living shrine is
+## KEPT — it is the actor whose hit points carry that objective's own clock.
+static func _setup_no_progress_purify(seed_tag: String) -> Dictionary:
+	var env: Dictionary = _setup(seed_tag, true, "off", EncounterResolutionModes.PURIFY_SHRINE)
+	if env.is_empty():
+		return {}
+	var ectx: EncounterContext = env["ectx"]
+	var echo: Dictionary = {}
+	var enemy: Dictionary = {}
+	var shrine: Dictionary = {}
+	for a_v in ectx.actors:
+		if not (a_v is Dictionary):
+			continue
+		var a: Dictionary = a_v
+		if a.get("is_structure", false):
+			if shrine.is_empty():
+				shrine = a
+		elif echo.is_empty() and str(a.get("faction", "")) == "echo" and not a.get("is_dead", false):
+			echo = a
+		elif enemy.is_empty() and str(a.get("faction", "")) == "enemy" and not a.get("is_dead", false):
+			enemy = a
+	if echo.is_empty() or enemy.is_empty() or shrine.is_empty():
+		return {}
+	for a in [echo, enemy]:
+		var a_stats: Dictionary = a.get("stats", {})
+		a_stats["atk"] = 0
+		a_stats["def"] = 999
+	ectx.actors = [echo, enemy, shrine]
+	return env
+
+
+## PR #62 review comment — PURIFY_SHRINE must be exempt from the no-progress stalemate check.
+## The shrine loses base_drain_per_round hit points every round with no actor acting, so that
+## objective always reaches its own end (shrine_destroyed, branch 2), and the party can still
+## win by killing every enemy. The detector cannot see the drain: it counts damage and the four
+## per-objective counters, and the shrine is none of those. Ending the fight at the limit
+## therefore takes away a fight that is still live.
+##
+## The test drives one round PAST the limit with no damage possible, then asserts the streak did
+## reach the limit (so the detector really was armed) while the fight is still running and the
+## shrine still alive. Before the fix this fails: the fight resolves as a forced retreat.
+static func test_purify_shrine_is_exempt_from_the_stalemate_check() -> Dictionary:
+	var env: Dictionary = _setup_no_progress_purify("no_progress_purify")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed — could not build a live echo/enemy/shrine set" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var ectx: EncounterContext = env["ectx"]
+
+	var limit: int = _no_progress_round_limit(runtime)
+	if limit <= 0:
+		return { "ok": false, "error": "data.combat.stalemate.no_progress_round_limit is 0 or missing — cannot test" }
+
+	_drive_no_progress(runtime, ectx, limit + 1)
+
+	if flow_ctx.encounter_ctx == null:
+		return { "ok": false, "error": "the PURIFY_SHRINE fight was resolved away — run_type=%s" % str((flow_ctx.last_snapshot.get("data", {}) as Dictionary).get("run_type", "")) }
+	if bool(ectx.combat_state.get("combat_over", false)):
+		return { "ok": false, "error": "the PURIFY_SHRINE fight ended at the stalemate limit (reason=%s)" % str(ectx.combat_result.get("reason", "")) }
+
+	var streak: int = int(ectx.combat_state.get("no_progress_streak", -1))
+	if streak < limit:
+		return { "ok": false, "error": "the detector was never armed (no_progress_streak=%d, limit=%d) — the test proves nothing" % [streak, limit] }
+
+	var shrine_hp: int = -1
+	for a_v in ectx.actors:
+		if a_v is Dictionary and a_v.get("is_structure", false):
+			shrine_hp = int(a_v.get("current_hp", -1))
+			break
+	if shrine_hp <= 0:
+		return { "ok": false, "error": "the shrine died first (hp=%d) — the exemption was not what kept the fight alive" % shrine_hp }
+	return { "ok": true }
+
+
+## PR #62 review comment — the "guide" debug command is used mid-fight. It now goes through
+## dispatch(), which refreshes the snapshot, so this checks the fight survives it: the encounter
+## is still live, the snapshot is still the encounter snapshot, and the suggestion is in place.
+static func test_guidance_dispatch_leaves_the_encounter_intact() -> Dictionary:
+	var env: Dictionary = _setup("guidance_dispatch", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	runtime.dispatch({ "type": "combat.init" })
+	var type_before: String = str(flow_ctx.last_snapshot.get("type", ""))
+
+	runtime.dispatch({
+		"type": "debug.guidance.set",
+		"guidance": {
+			"purpose": "hold", "action_type": "actor.guard", "guidance_id": "hold",
+			"subject_id": "", "recipient_ids": [],
+		},
+	})
+
+	if flow_ctx.encounter_ctx == null:
+		return { "ok": false, "error": "the encounter was dropped by the guidance dispatch" }
+	var type_after: String = str(flow_ctx.last_snapshot.get("type", ""))
+	if type_after != type_before:
+		return { "ok": false, "error": "snapshot type changed: %s -> %s" % [type_before, type_after] }
+	if str((flow_ctx.dev_guidance as Dictionary).get("guidance_id", "")) != "hold":
+		return { "ok": false, "error": "the suggestion did not arrive: %s" % str(flow_ctx.dev_guidance) }
+	return { "ok": true }
+
+
 static func test_live_hazard_union_and_mover_damage() -> Dictionary:
 	var env: Dictionary = _setup("live_hazards", true)
 	if env.is_empty():
@@ -207,7 +495,7 @@ static func test_live_hazard_union_and_mover_damage() -> Dictionary:
 			],
 		},
 	}
-	var hazards: Array = runtime._live_combat_known_hazards()
+	var hazards: Array = _lm(runtime)._live_combat_known_hazards()
 	var ids: Array = []
 	for hazard_value: Variant in hazards:
 		ids.append(str((hazard_value as Dictionary).get("id", "")))
@@ -216,22 +504,22 @@ static func test_live_hazard_union_and_mover_damage() -> Dictionary:
 
 	var order_actor: Dictionary = (env["ectx"].actors[0] as Dictionary)
 	order_actor["current_hp"] = 10
-	runtime._apply_live_hazard_outcome(order_actor, {
+	LiveHazardOutcomeService.apply(order_actor, {
 		"events": [
 			{"phase": "movement", "damage": 3},
 			{"phase": "end_activation", "damage": 4},
 		],
 		"stop_reason": "reached_destination",
-	}, 99, false)
+	}, 99, 4, runtime.logger, false)
 	if int(order_actor.get("current_hp", -1)) != 7:
 		return { "ok": false, "error": "movement hazard damage did not resolve before action: %s" % str(order_actor) }
-	runtime._apply_live_hazard_outcome(order_actor, {
+	LiveHazardOutcomeService.apply(order_actor, {
 		"events": [
 			{"phase": "movement", "damage": 3},
 			{"phase": "end_activation", "damage": 4},
 		],
 		"stop_reason": "reached_destination",
-	}, 99, true)
+	}, 99, 4, runtime.logger, true)
 	if int(order_actor.get("current_hp", -1)) != 3:
 		return { "ok": false, "error": "Burning did not resolve after action: %s" % str(order_actor) }
 
@@ -247,41 +535,41 @@ static func test_live_hazard_union_and_mover_damage() -> Dictionary:
 	(env["ectx"].actors as Array).append(wrong_shrine)
 	(env["ectx"].actors as Array).append(matching_shrine)
 	var purify_ctx: Dictionary = {"cfg": runtime.config_service.get_balance()}
-	runtime._apply_live_purify_shrine(purifier, "shrine.match", purify_ctx, 99)
+	_lm(runtime).apply_live_purify_shrine(purifier, "shrine.match", purify_ctx, 99)
 	if (wrong_shrine.get("purify_stacks", []) as Array).size() != 0:
 		return { "ok": false, "error": "non-target shrine mutated during purify" }
 	if (matching_shrine.get("purify_stacks", []) as Array).size() != 1:
 		return { "ok": false, "error": "matching purify target did not receive exactly one stack" }
 	wrong_shrine["is_dead"] = true
-	runtime._apply_live_purify_shrine(purifier, "shrine.wrong", purify_ctx, 99)
+	_lm(runtime).apply_live_purify_shrine(purifier, "shrine.wrong", purify_ctx, 99)
 	if (matching_shrine.get("purify_stacks", []) as Array).size() != 1:
 		return { "ok": false, "error": "dead mismatched target changed the living shrine" }
 
 	var echo: Dictionary = (env["ectx"].actors[0] as Dictionary)
 	echo["current_hp"] = 3
 	echo["is_ko"] = true
-	runtime._apply_live_hazard_outcome(echo, {
+	LiveHazardOutcomeService.apply(echo, {
 		"events": [{ "damage": 3 }],
 		"stop_reason": "death",
-	}, 99)
+	}, 99, 4, runtime.logger)
 	if int(echo.get("current_hp", -1)) != 0 or not bool(echo.get("is_dead", false)) \
-			or echo.has("is_ko") or int(echo.get("death_round", -1)) != 99:
+			or echo.has("is_ko") or int(echo.get("death_round", -1)) != 4:
 		return { "ok": false, "error": "FlowRuntime did not preserve Echo death authority: %s" % str(echo) }
 
 	var enemy: Dictionary = (env["ectx"].actors[-1] as Dictionary)
 	enemy["current_hp"] = 3
 	enemy["is_ko"] = true
-	runtime._apply_live_hazard_outcome(enemy, {
+	LiveHazardOutcomeService.apply(enemy, {
 		"events": [{ "damage": 3 }],
 		"stop_reason": "death",
-	}, 99)
+	}, 99, 4, runtime.logger)
 	if int(enemy.get("current_hp", -1)) != 0 or not bool(enemy.get("is_dead", false)) \
-			or enemy.has("is_ko") or int(enemy.get("death_round", -1)) != 99:
+			or enemy.has("is_ko") or int(enemy.get("death_round", -1)) != 4:
 		return { "ok": false, "error": "FlowRuntime did not preserve enemy death state: %s" % str(enemy) }
 
 	var guide: Dictionary = {"id": "guide.hazard", "is_spirit": true, "current_hp": 3, "is_ko": true}
-	runtime._apply_live_hazard_outcome(guide, {"events": [{"damage": 3}], "stop_reason": "death"}, 99)
-	if not bool(guide.get("is_dead", false)) or guide.has("is_ko") or int(guide.get("death_round", -1)) != 99:
+	LiveHazardOutcomeService.apply(guide, {"events": [{"damage": 3}], "stop_reason": "death"}, 99, 4, runtime.logger)
+	if not bool(guide.get("is_dead", false)) or guide.has("is_ko") or int(guide.get("death_round", -1)) != 4:
 		return {"ok": false, "error": "non-joining guide hazard outcome did not use death authority: %s" % str(guide)}
 	return { "ok": true }
 
@@ -319,14 +607,14 @@ static func test_live_hazard_action_phase_order() -> Dictionary:
 	}
 	var ctx: Dictionary = {"actor": actor, "all_actors": ectx.actors, "cfg": runtime.config_service.get_balance(), "t": 99, "round": 1}
 	var asm := ActorStateMachine.new(actor, null, ctx["cfg"].get("data", {}).get("actor", {}), {})
-	var burning_result: Dictionary = runtime._apply_live_activation(actor, burning_intent, prepared, asm, ctx, 99)
+	var burning_result: Dictionary = _lm(runtime).apply_live_activation(actor, burning_intent, prepared, asm, ctx, 99)
 	if str((burning_result.get("resolved_action", {}) as Dictionary).get("type", "")) != "melee_attack":
 		return { "ok": false, "error": "legal melee was not resolved before Burning: %s" % str(burning_result) }
 	var target_hp_before: int = int(target.get("current_hp", 0))
 	var melee_result: Dictionary = CombatService.resolve_action("melee_attack", actor, target, 1)
 	if melee_result.is_empty() or int(target.get("current_hp", target_hp_before)) >= target_hp_before:
 		return { "ok": false, "error": "legal melee did not execute before end_activation Burning" }
-	runtime._apply_live_hazard_outcome(actor, burning_result, 99, true)
+	LiveHazardOutcomeService.apply(actor, burning_result, 99, 4, runtime.logger, true)
 	if not bool(actor.get("is_dead", false)):
 		return { "ok": false, "error": "lethal Burning did not apply after the melee action" }
 
@@ -353,7 +641,7 @@ static func test_live_hazard_action_phase_order() -> Dictionary:
 	if str(movement_result.get("stop_reason", "")) != "death" \
 			or not (movement_result.get("resolved_action", {}) as Dictionary).is_empty():
 		return { "ok": false, "error": "activation did not skip primary after lethal movement damage: %s" % str(movement_result) }
-	runtime._apply_live_hazard_outcome(movement_actor, movement_result, 100, false)
+	LiveHazardOutcomeService.apply(movement_actor, movement_result, 100, 4, runtime.logger, false)
 	if not bool(movement_actor.get("is_dead", false)):
 		return { "ok": false, "error": "lethal movement damage did not kill the mover" }
 	if not (movement_result.get("resolved_action", {}) as Dictionary).is_empty():
@@ -446,7 +734,7 @@ static func test_live_truncated_engage_advances_before_melee() -> Dictionary:
 		}
 		var ctx: Dictionary = { "actor": actor, "all_actors": ectx.actors, "cfg": runtime.config_service.get_balance(), "t": 90 + activation_index, "round": 1 }
 		var asm := ActorStateMachine.new(actor, null, ctx["cfg"].get("data", {}).get("actor", {}), {})
-		var result: Dictionary = runtime._apply_live_activation(actor, intent, prepared, asm, ctx, 90 + activation_index)
+		var result: Dictionary = _lm(runtime).apply_live_activation(actor, intent, prepared, asm, ctx, 90 + activation_index)
 		var resolved_action: String = str((result.get("resolved_action", {}) as Dictionary).get("type", ""))
 		if resolved_action != expected_action or str(intent.get("action_type", "")) == "actor.idle":
 			return { "ok": false, "error": "live activation resolved %s at activation %d" % [resolved_action, activation_index] }
@@ -712,6 +1000,79 @@ static func test_endure_rising_wave() -> Dictionary:
 		return { "ok": false, "error": "Wave 2 expected 2 actors (rising), found %d" % wave2_actors.size() }
 	if wave3_actors.size() != 3:
 		return { "ok": false, "error": "Wave 3 expected 3 actors (rising), found %d" % wave3_actors.size() }
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# V2-COMBAT-003 defect fix: _place_enemy_spawns() picked cells from the WHOLE walkable set,
+# sorted highest column first. An island at a high column was chosen before real host-region
+# ground, so a wave actor could land on ground with no route to anything. The fix filters
+# candidates to GridService.largest_walkable_region() (the same authority initial placement
+# uses). This test hands the encounter a terrain with a big host region (cols 0-4) and a
+# small moated island at the highest columns (cols 8-9, three empty columns of gap — no
+# shared side, so the two regions are not connected). A wave actor must land in the host
+# region.
+# ---------------------------------------------------------------------------
+static func test_endure_wave_spawn_host_region() -> Dictionary:
+	var env: Dictionary = _setup("wave_host_region", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var ectx = env["ectx"]
+	var runtime = env["runtime"]
+
+	ectx.resolution_mode = EncounterResolutionModes.ENDURE
+	ectx.objective_params = {
+		"duration_turns":        10,
+		"wave_interval":         1,
+		"wave_size":             1,
+		"wave_size_rising_step": 0,
+		"wave_size_max":         1,
+		"wave_group":            "group.vale_patrol_sm",
+	}
+
+	# Host region: 30 cells, cols 0-4, rows 0-5. Island: 4 cells, cols 8-9, rows 0-1.
+	# Cols 5-7 hold no walkable cell, so the island shares no side with the host region.
+	var mainland_cells: Array = []
+	for c in range(5):
+		for r in range(6):
+			mainland_cells.append([c, r])
+	var island_cells: Array = [[8, 0], [8, 1], [9, 0], [9, 1]]
+	ectx.terrain = {
+		"bounds":   { "w": 10, "h": 6 },
+		"plateaus": [
+			{ "col": 0, "row": 0, "w": 5, "h": 6, "cells": mainland_cells },
+			{ "col": 8, "row": 0, "w": 2, "h": 2, "cells": island_cells },
+		],
+		"bridges":  [],
+		"islands":  [],
+	}
+
+	runtime.dispatch({ "type": "combat.init" })
+	ectx.combat_state["waves_spawned"]     = 0
+	ectx.combat_state["all_waves_spawned"] = false
+	ectx.combat_state.erase("total_waves")
+
+	runtime.dispatch({ "type": "combat.confirm_round" })
+	var guard: int = 0
+	while guard < 40:
+		guard += 1
+		var cs: Dictionary = ectx.combat_state
+		if bool(cs.get("combat_over", false)): break
+		if str(cs.get("round_phase", "")) != "in_round": break
+		runtime.dispatch({ "type": "combat.next_actor" })
+
+	var wave_actor: Dictionary = {}
+	for a_v in ectx.actors:
+		if str(a_v.get("id", "")).begins_with("wave_1_"):
+			wave_actor = a_v
+			break
+	if wave_actor.is_empty():
+		return { "ok": false, "error": "wave actor was not spawned" }
+
+	var gp: Dictionary = wave_actor.get("grid_pos", {})
+	var col: int = int(gp.get("col", -1))
+	if col > 4:
+		return { "ok": false, "error": "wave actor spawned outside the host region at col=%d row=%d" % [col, int(gp.get("row", -1))] }
 	return { "ok": true }
 
 
@@ -1145,7 +1506,7 @@ static func test_pursue_quarry_moves() -> Dictionary:
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
 	var config := ConfigService.new()
-	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/combat_roundtrip_pursue.json")
+	var runtime := FlowRuntime.new(logger, config, TestSaveHarness.dir() + "combat_roundtrip_pursue.json")
 	runtime.boot()
 	var flow_ctx: FlowContext = runtime.flow_ctx
 	var t: int = 0
@@ -1208,7 +1569,7 @@ static func test_pursue_no_regular_enemies_spawn() -> Dictionary:
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
 	var config := ConfigService.new()
-	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/combat_pursue_noenemy.json")
+	var runtime := FlowRuntime.new(logger, config, TestSaveHarness.dir() + "combat_pursue_noenemy.json")
 	runtime.boot()
 	var flow_ctx: FlowContext = runtime.flow_ctx
 	var t: int = 0
@@ -1271,7 +1632,7 @@ static func test_pursue_board_is_larger_than_standard() -> Dictionary:
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
 	var config := ConfigService.new()
-	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/combat_pursue_board.json")
+	var runtime := FlowRuntime.new(logger, config, TestSaveHarness.dir() + "combat_pursue_board.json")
 	runtime.boot()
 	var flow_ctx: FlowContext = runtime.flow_ctx
 	var t: int = 0
@@ -1404,7 +1765,7 @@ static func test_guide_spirit_protect_roundtrip() -> Dictionary:
 
 	# (b) objective_state fields — build via the static objective-state helper, same as
 	# other objective_combat/_build_objective_state-style checks in ObjectiveCombatTests.
-	var obj_state: Dictionary = FlowEncounterState._build_objective_state(ectx, ectx.combat_state)
+	var obj_state: Dictionary = EncounterSnapshotBuilder._build_objective_state(ectx, ectx.combat_state)
 	if str(obj_state.get("guide_mode", "")) != "protect":
 		return { "ok": false, "error": "Expected objective_state.guide_mode='protect', got '%s'" % str(obj_state.get("guide_mode", "")) }
 	if not obj_state.has("spirit_alive"):
@@ -1835,7 +2196,7 @@ static func _guide_spawn_env(seed_tag: String, force_mode: String, force_joins: 
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
 	var config := ConfigService.new()
-	var runtime := FlowRuntime.new(logger, config, "/tmp/echoes-vnext-tests/combat_roundtrip_guide_dev.json")
+	var runtime := FlowRuntime.new(logger, config, TestSaveHarness.dir() + "combat_roundtrip_guide_dev.json")
 	runtime.boot()
 	var flow_ctx: FlowContext = runtime.flow_ctx
 	var t: int = 0
@@ -2056,6 +2417,88 @@ static func test_guide_spirit_joined_spirit_does_not_self_escort() -> Dictionary
 	if reason == "spirit_escorted":
 		return { "ok": false, "error": "combat ended 'spirit_escorted' after party wipe -- joined spirit self-escorted" }
 
+	if reason != "all_echoes_dead":
+		return { "ok": false, "error": "Expected 'all_echoes_dead' defeat after party wipe, got '%s'" % reason }
+
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# D92 — the escort win must not survive the party that earned it.
+#
+# The test above starts with escort_started false, so an escort_started guard alone
+# would satisfy it. This one starts with escort_started ALREADY true — a real escort
+# that began earlier in the fight — then wipes the party while the joined spirit stands
+# on the destination. destination_reached is evaluated before all_echoes_dead
+# (CombatState.gd), so an unguarded latch turns a party wipe into a spirit_escorted
+# victory. The living-echo-within-escort_radius guard is what stops it.
+# ---------------------------------------------------------------------------
+static func test_guide_spirit_party_wipe_scores_defeat_not_escort() -> Dictionary:
+	var env: Dictionary = _setup("guide_wipe_defeat", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var ectx = env["ectx"]
+	var runtime = env["runtime"]
+
+	ectx.resolution_mode = EncounterResolutionModes.GUIDE_SPIRIT
+	ectx.objective_params = {
+		"guide_mode":          "escort",
+		"duration_turns":      20,
+		"spirit_def_id":       "guide_spirit",
+		"spirit_name":         "Test Spirit",
+		"spirit_max_hp":       9999,
+		"escort_radius":       2,
+		"skittish_radius":     3,
+		"spirit_joins_battle": true,
+		"destination_col":     5,
+		"destination_row":     5,
+	}
+
+	var spirit: Dictionary = {
+		"id": "guide_spirit_01", "name": "Test Spirit", "faction": "echo",
+		"actor_type": "enemy",
+		"is_structure": false, "is_spirit": true, "is_dead": false,
+		"current_hp": 9999, "stats": { "max_hp": 9999, "def": 0, "atk": 0, "speed": 0 },
+		"speed": 0, "morale": 50, "fear": 0,
+		"grid_pos": { "col": 5, "row": 5 },
+	}
+	ectx.actors.append(spirit)
+
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "echo" and not bool(a_v.get("is_spirit", false)):
+			a_v["is_dead"] = true
+			a_v["current_hp"] = 0
+
+	var enemy_col: int = 9
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "enemy" and not bool(a_v.get("is_structure", false)):
+			a_v["is_dead"] = false
+			a_v["grid_pos"] = { "col": enemy_col, "row": 0 }
+			enemy_col = maxi(0, enemy_col - 1)
+
+	runtime.dispatch({ "type": "combat.init" })
+
+	# The escort really did start earlier in this fight. Only the party is gone now.
+	ectx.combat_state["escort_started"] = true
+
+	runtime.dispatch({ "type": "combat.confirm_round" })
+	var guard: int = 0
+	while guard < 60:
+		guard += 1
+		var cs: Dictionary = ectx.combat_state
+		if bool(cs.get("combat_over", false)): break
+		if str(cs.get("round_phase", "")) != "in_round": break
+		runtime.dispatch({ "type": "combat.next_actor" })
+
+	var cs2: Dictionary = ectx.combat_state
+	if not bool(cs2.get("escort_started", false)):
+		return { "ok": false, "error": "test assumption broken: escort_started was cleared" }
+	if bool(cs2.get("destination_reached", false)):
+		return { "ok": false, "error": "escort win latched with no living echo to escort" }
+
+	var reason: String = str(ectx.combat_result.get("reason", "")) if ectx.combat_result != null else ""
+	if reason == "spirit_escorted":
+		return { "ok": false, "error": "party wipe scored as 'spirit_escorted'" }
 	if reason != "all_echoes_dead":
 		return { "ok": false, "error": "Expected 'all_echoes_dead' defeat after party wipe, got '%s'" % reason }
 
@@ -2365,7 +2808,7 @@ static func test_purify_empty_target_id() -> Dictionary:
 	(ectx.actors as Array).append(living_second)
 
 	var purify_ctx: Dictionary = { "cfg": runtime.config_service.get_balance() }
-	runtime._apply_live_purify_shrine(purifier, "", purify_ctx, 99)
+	_lm(runtime).apply_live_purify_shrine(purifier, "", purify_ctx, 99)
 
 	var first_stacks: Array = living_first.get("purify_stacks", []) as Array
 	if first_stacks.size() != 1:
@@ -2381,7 +2824,7 @@ static func test_purify_empty_target_id() -> Dictionary:
 
 	# Killing the first living structure hands the empty-id match to the next one.
 	living_first["is_dead"] = true
-	runtime._apply_live_purify_shrine(purifier, "", purify_ctx, 100)
+	_lm(runtime).apply_live_purify_shrine(purifier, "", purify_ctx, 100)
 	if (living_first.get("purify_stacks", []) as Array).size() != 1:
 		return { "ok": false, "error": "a newly dead structure was still selected" }
 	if (living_second.get("purify_stacks", []) as Array).size() != 1:
@@ -2455,7 +2898,7 @@ static func test_live_direct_option_id_is_contract_valid() -> Dictionary:
 	}
 	var path: Array = [{ "col": 2, "row": 1 }, { "col": 3, "row": 1 }, { "col": 4, "row": 1 }]
 	# `_movement_build_direct_option` reads only `origin` off the movement context.
-	var option: Dictionary = runtime._movement_build_direct_option(
+	var option: Dictionary = _lm(runtime)._movement_build_direct_option(
 		{ "origin": origin }, { "capacity": 3 }, goal, path.back() as Dictionary, path, 3, 3)
 	if option.is_empty():
 		return {
@@ -2487,7 +2930,7 @@ static func test_live_direct_option_id_is_contract_valid() -> Dictionary:
 		if str(mover.get("faction", "")) != "echo" or bool(mover.get("is_dead", false)):
 			continue
 		t += 1
-		var prepared: Dictionary = runtime._prepare_live_movement_context(
+		var prepared: Dictionary = _lm(runtime).prepare_live_movement_context(
 			mover, ectx, ectx.combat_state, board_cfg, bdata, t)
 		if not bool(prepared.get("valid", false)):
 			continue
@@ -2600,7 +3043,7 @@ static func test_objective_route_truncates_and_stays_movement_aware() -> Diction
 			"error": "objective within capacity (%d <= %d) — the route would not truncate" % [start_dist, capacity],
 		}
 
-	var prepared: Dictionary = runtime._prepare_live_movement_context(
+	var prepared: Dictionary = _lm(runtime).prepare_live_movement_context(
 		mover, ectx, ectx.combat_state, board_cfg, bdata, 300)
 	if not bool(prepared.get("valid", false)):
 		return { "ok": false, "error": "live movement context invalid: %s" % str(prepared.get("reason", "")) }
@@ -2688,7 +3131,7 @@ static func test_objective_route_truncates_and_stays_movement_aware() -> Diction
 			],
 		}
 	# (3) Executing it actually closes distance to the objective.
-	runtime._apply_live_activation(mover, intent, prepared, asm, ctx, 300)
+	_lm(runtime).apply_live_activation(mover, intent, prepared, asm, ctx, 300)
 	var end_dist: int = GridService.chebyshev_distance(mover.get("grid_pos", {}), objective_pos)
 	if end_dist >= start_dist:
 		return {
@@ -2804,7 +3247,7 @@ static func _selection_census(runtime: FlowRuntime, ectx: EncounterContext, t0: 
 		if bool(mover.get("is_structure", false)) or bool(mover.get("is_dead", false)):
 			continue
 		t += 1
-		var prepared: Dictionary = runtime._prepare_live_movement_context(
+		var prepared: Dictionary = _lm(runtime).prepare_live_movement_context(
 			mover, ectx, ectx.combat_state, board_cfg, bdata, t)
 		if not bool(prepared.get("valid", false)) or not bool(prepared.get("selection_enabled", false)):
 			continue
@@ -2882,7 +3325,7 @@ static func test_unroutable_goals_keep_selection_enabled() -> Dictionary:
 				walled.erase("%d,%d" % [int(origin["col"]) + dc, int(origin["row"]) + dr])
 		var cfg: Dictionary = board_cfg.duplicate(true)
 		cfg["walkable"] = walled
-		var attempt: Dictionary = runtime._prepare_live_movement_context(
+		var attempt: Dictionary = _lm(runtime).prepare_live_movement_context(
 			candidate, ectx, ectx.combat_state, cfg, bdata, t)
 		if not bool(attempt.get("valid", false)):
 			continue
@@ -2999,7 +3442,7 @@ static func test_dead_objective_is_not_published() -> Dictionary:
 
 	# (1) Baseline: while the structure lives it IS the published objective, so the
 	#     assertions below cannot pass vacuously.
-	var alive: Dictionary = runtime._movement_pressure_snapshot(
+	var alive: Dictionary = _lm(runtime)._movement_pressure_snapshot(
 		mover, ectx, ectx.combat_state, bounds, walkable)
 	if not bool(alive.get("objective_known", false)):
 		return { "ok": false, "error": "living structure was not published as the objective" }
@@ -3010,10 +3453,10 @@ static func test_dead_objective_is_not_published() -> Dictionary:
 	structure["current_hp"] = 0
 	structure["is_dead"] = true
 
-	if not runtime._movement_objective_actor(ectx, ectx.combat_state).is_empty():
+	if not _lm(runtime)._movement_objective_actor(ectx, ectx.combat_state).is_empty():
 		return { "ok": false, "error": "_movement_objective_actor still returned a destroyed structure" }
 
-	var dead: Dictionary = runtime._movement_pressure_snapshot(
+	var dead: Dictionary = _lm(runtime)._movement_pressure_snapshot(
 		mover, ectx, ectx.combat_state, bounds, walkable)
 	if bool(dead.get("objective_known", false)):
 		return {
@@ -3076,7 +3519,7 @@ static func test_stacked_actors_keep_selection_alive() -> Dictionary:
 	var cell_key: String = "%d,%d" % [int(cell["col"]), int(cell["row"])]
 
 	# (1) The recorded occupant is deterministic — same answer whatever the array order.
-	var occupancy: Dictionary = runtime._movement_occupancy(ectx.actors)
+	var occupancy: Dictionary = _lm(runtime)._movement_occupancy(ectx.actors)
 	if str(occupancy.get(cell_key, "")) != str(low.get("id", "")):
 		return {
 			"ok": false,
@@ -3086,7 +3529,7 @@ static func test_stacked_actors_keep_selection_alive() -> Dictionary:
 		}
 	var reversed_actors: Array = ectx.actors.duplicate()
 	reversed_actors.reverse()
-	var reversed_occupancy: Dictionary = runtime._movement_occupancy(reversed_actors)
+	var reversed_occupancy: Dictionary = _lm(runtime)._movement_occupancy(reversed_actors)
 	if str(reversed_occupancy.get(cell_key, "")) != str(low.get("id", "")):
 		return {
 			"ok": false,
@@ -3098,7 +3541,7 @@ static func test_stacked_actors_keep_selection_alive() -> Dictionary:
 	# (2) The LOSING mover still gets a live board instead of having it discarded.
 	var bdata: Dictionary = runtime.config_service.get_balance().get("data", {}) as Dictionary
 	var board_cfg: Dictionary = _movement_board_cfg(runtime, ectx)
-	var prepared: Dictionary = runtime._prepare_live_movement_context(
+	var prepared: Dictionary = _lm(runtime).prepare_live_movement_context(
 		high, ectx, ectx.combat_state, board_cfg, bdata, 900)
 	if not bool(prepared.get("valid", false)):
 		return { "ok": false, "error": "stacked mover prepare invalid: %s" % str(prepared.get("reason", "")) }
@@ -3163,10 +3606,14 @@ static func _first_living(ectx: EncounterContext, faction: String) -> Dictionary
 ## path called hostile_edge_costs(), which discards `edge_sources`. This story owes those
 ## normalized summaries to V2-COMBAT-003; publishing hardcoded emptiness was a false claim.
 ##
-## Guards the fix specifically: a live hostile is parked 8-adjacent to the mover's origin,
-## so every edge leaving that origin is controlled and the sources CANNOT legitimately be
-## empty. Against the pre-fix code this fails on the `hostile_control_sources is empty`
-## branch, because that array was empty for every option on every board.
+## Guards the fix specifically: a live hostile is parked two cells from the mover's origin,
+## so every route that closes to melee crosses that hostile's zone of control and the sources
+## CANNOT legitimately be empty. Against the pre-fix code this fails on the
+## `hostile_control_sources is empty` branch, because that array was empty for every option
+## on every board.
+##
+## Two cells, not adjacent: a mover already within melee reach gets the zero-step stay
+## option, whose empty path crosses no edge and truthfully names no control source.
 static func test_published_option_carries_truthful_control_and_hazards() -> Dictionary:
 	var env: Dictionary = _setup("truthful_control", true, "off", EncounterResolutionModes.COMBAT)
 	if env.is_empty():
@@ -3184,24 +3631,25 @@ static func test_published_option_carries_truthful_control_and_hazards() -> Dict
 	if origin.is_empty():
 		return { "ok": false, "error": "mover has no grid_pos" }
 
-	# Park the hostile 8-adjacent to the mover so its zone of control is unambiguous.
+	# Park the hostile two cells from the mover: close enough that its zone of control covers
+	# every cell the mover must step to, far enough that the mover must actually step.
 	var bdata: Dictionary = runtime.config_service.get_balance().get("data", {}) as Dictionary
 	var board_cfg: Dictionary = _movement_board_cfg(runtime, ectx)
 	var walkable: Dictionary = _full_walkable(board_cfg)
-	var adjacent: Dictionary = {}
-	for dc in range(-1, 2):
-		for dr in range(-1, 2):
-			if dc == 0 and dr == 0:
+	var stand_off: Dictionary = {}
+	for dc in range(-2, 3):
+		for dr in range(-2, 3):
+			if maxi(absi(dc), absi(dr)) != 2:
 				continue
 			var cell: Dictionary = { "col": int(origin["col"]) + dc, "row": int(origin["row"]) + dr }
 			var key: String = "%d,%d" % [int(cell["col"]), int(cell["row"])]
-			if walkable.has(key) and bool(walkable[key]) and adjacent.is_empty():
-				adjacent = cell
-	if adjacent.is_empty():
-		return { "ok": false, "error": "no walkable cell adjacent to the mover" }
-	hostile["grid_pos"] = adjacent.duplicate(true)
+			if walkable.has(key) and bool(walkable[key]) and stand_off.is_empty():
+				stand_off = cell
+	if stand_off.is_empty():
+		return { "ok": false, "error": "no walkable cell two cells from the mover" }
+	hostile["grid_pos"] = stand_off.duplicate(true)
 
-	var prepared: Dictionary = runtime._prepare_live_movement_context(
+	var prepared: Dictionary = _lm(runtime).prepare_live_movement_context(
 		mover, ectx, ectx.combat_state, board_cfg, bdata, 920)
 	if not bool(prepared.get("valid", false)):
 		return { "ok": false, "error": "live movement context invalid" }
@@ -3235,5 +3683,5 @@ static func test_published_option_carries_truthful_control_and_hazards() -> Dict
 
 	# The load-bearing assertion. Pre-fix this array was empty for every option, always.
 	if not saw_control:
-		return { "ok": false, "error": "no option reported hostile control despite a hostile adjacent to the mover origin — summaries are still hardcoded empty" }
+		return { "ok": false, "error": "no option reported hostile control despite a hostile two cells from the mover origin — summaries are still hardcoded empty" }
 	return { "ok": true }

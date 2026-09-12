@@ -36,7 +36,7 @@ extends RefCounted
 ## ACTOR-008 additions:
 ##   is_dead      — set to true when current_hp <= 0; immutable once true.
 ##                  Echo dicts are preserved intact on death (future relic system).
-##   death_round  — sim tick (t) at which the actor died; 0 = never died.
+##   death_round  — combat round in which the actor died; 0 = never died.
 ## GRID-002 addition:
 ##   grid_pos     — spawn position on the combat board; { col: int, row: int }.
 ##                  Assigned by GridService.assign_grid_pos() during encounter entry.

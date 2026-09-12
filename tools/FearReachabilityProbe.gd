@@ -57,6 +57,16 @@ static func run_all_scenarios() -> Dictionary:
 		 "rank": 1, "fear0": 0, "enemies": 10, "group": "probe.swarm", "enemy_hp_mul": 20},
 		{"label": "B3 outnumbered + unkillable, veteran (5 v 10, rank 5, fear_base 25)",
 		 "rank": 5, "fear0": 25, "enemies": 10, "group": "probe.swarm", "enemy_hp_mul": 20},
+
+		# ── V2-COMBAT-003 Phase 4: does the enemy side refuse? ─────────────
+		# One near-invulnerable enemy (def 500, hp x50) vs. a tanky 5-echo party
+		# (hp x20) so NEITHER side dies inside max_rounds — a long, stable
+		# "the enemy is winning" fight, run to 90 rounds, that isolates the
+		# Absolute Fear Rule's faction gate from combat resolution entirely.
+		{"label": "C1 enemy fear gate (5 v 1, enemy def 500 + hp x50, echo hp x20)",
+		 "rank": 1, "fear0": 0, "enemies": 1, "group": "group.vale_patrol_sm",
+		 "enemy_hp_mul": 50, "enemy_def_override": 500, "echo_hp_mul": 20,
+		 "max_rounds": 90, "track_enemy_curve": true},
 	]
 
 	_sink = FileAccess.open(REPORT_PATH, FileAccess.WRITE)
@@ -109,8 +119,10 @@ static func _run_scenario(sc: Dictionary) -> Dictionary:
 	# encounter seeding, so results depended on scenario order and on earlier or failed
 	# runs — not on `sc` alone. A corrupt leftover could also fail boot() before the
 	# unchecked save_data access below. This is what made runs non-reproducible.
-	var slot_path: String = "/tmp/echoes-vnext-tests/fear_probe_%s_%d.json" \
-		% [seed_tag, int(sc.get("seed_variant", 0))]
+	# Root is the single source of truth in tests/TestSaveHarness.gd::root().
+	var save_root := TestSaveHarness.root()
+	var slot_path: String = "%sfear_probe_%s_%d.json" \
+		% [save_root, seed_tag, int(sc.get("seed_variant", 0))]
 	_clear_slot(slot_path)
 	var runtime := FlowRuntime.new(logger, config, slot_path)
 	runtime.boot()
@@ -146,7 +158,7 @@ static func _run_scenario(sc: Dictionary) -> Dictionary:
 	var t: int = 0
 
 	# PIN THE CAMPAIGN SEED. Clearing the save slot is necessary but not sufficient:
-	# booting without a save mints a NEW campaign, and _generate_seed_root_string() is
+	# booting without a save mints a NEW campaign, and CampaignSeed.generate_seed_root_string() is
 	# deliberately random at New Game. Two runs of the same scenario therefore drew
 	# different campaigns — measured 11 rounds / peak fear 25 against 10 rounds / peak
 	# 46, which is far too loose to tune against. Pinning per scenario makes a run a
@@ -211,12 +223,32 @@ static func _run_scenario(sc: Dictionary) -> Dictionary:
 	# Optional: make enemies effectively unkillable so the party cannot farm the
 	# −15 kill / −5 ripple recovery. This is the "losing fight" condition.
 	var hp_mul: int = int(sc.get("enemy_hp_mul", 1))
-	if hp_mul > 1:
+	var def_override: int = int(sc.get("enemy_def_override", 0))
+	var enemy_ids_list: Array = []
+	if hp_mul > 1 or def_override > 0:
 		for a_v in ectx.actors:
 			if a_v is Dictionary and str((a_v as Dictionary).get("faction", "")) == "enemy":
 				var a: Dictionary = a_v
-				a["max_hp"] = int(a.get("max_hp", 10)) * hp_mul
-				a["current_hp"] = int(a.get("current_hp", 10)) * hp_mul
+				if hp_mul > 1:
+					a["max_hp"] = int(a.get("max_hp", 10)) * hp_mul
+					a["current_hp"] = int(a.get("current_hp", 10)) * hp_mul
+				if def_override > 0:
+					var a_stats: Dictionary = a.get("stats", {})
+					a_stats["def"] = def_override
+					a["stats"] = a_stats
+				enemy_ids_list.append(str(a.get("id", "")))
+
+	# V2-COMBAT-003 Phase 4: keep the ECHO side alive too, so a long "enemy is
+	# winning" fight runs its full duration instead of ending in a party wipe
+	# partway through — the point is to isolate the Absolute Fear Rule's
+	# faction gate, not to characterize combat resolution.
+	var echo_hp_mul: int = int(sc.get("echo_hp_mul", 1))
+	if echo_hp_mul > 1:
+		for a_v in ectx.actors:
+			if a_v is Dictionary and str((a_v as Dictionary).get("faction", "")) == "echo":
+				var a: Dictionary = a_v
+				a["max_hp"] = int(a.get("max_hp", 10)) * echo_hp_mul
+				a["current_hp"] = int(a.get("current_hp", 10)) * echo_hp_mul
 
 	var echo_ids: Dictionary = {}
 	var enemy_n: int = 0
@@ -251,7 +283,7 @@ static func _run_scenario(sc: Dictionary) -> Dictionary:
 		"enemy_damage_to_echo": 0,
 		"enemy_rounds_available": 0,    # sum over rounds of living enemies
 	}
-	var st: Dictionary = {"cursor": logger.get_logs().size(), "peak": 0}
+	var st: Dictionary = {"cursor": logger.get_logs().size(), "peak": 0, "dispatches": 0}
 	_dispatch_tracked(runtime, ectx, {"type": "combat.init"}, echo_ids, tally, logger, st)
 
 	var rounds_run: int = 0
@@ -259,6 +291,19 @@ static func _run_scenario(sc: Dictionary) -> Dictionary:
 	## How many echo-rounds ended with fear pinned at the 0 floor — the single
 	## clearest signal that recovery is not merely winning but overshooting.
 	var zero_echo_rounds: int = 0
+
+	# V2-COMBAT-003 Phase 4: track_enemy_curve records fear PER ROUND (not just
+	# start/end) for one representative enemy AND one representative echo, so the
+	# faction-gate fix can be shown as a curve, not a single before/after number.
+	var track_curve: bool = bool(sc.get("track_enemy_curve", false))
+	var curve_enemy_id: String = str(enemy_ids_list[0]) if not enemy_ids_list.is_empty() else ""
+	var curve_echo_id: String = ""
+	for eid in echo_ids:
+		curve_echo_id = str(eid)
+		break
+	var enemy_fear_curve: Array = []
+	var echo_fear_curve: Array = []
+	var enemy_refusals: int = 0
 
 	for _r in range(max_rounds):
 		if bool(ectx.combat_state.get("combat_over", false)):
@@ -278,6 +323,12 @@ static func _run_scenario(sc: Dictionary) -> Dictionary:
 				break
 			_dispatch_tracked(runtime, ectx, {"type": "combat.next_actor"}, echo_ids, tally, logger, st)
 		rounds_run += 1
+
+		if track_curve:
+			if not curve_enemy_id.is_empty():
+				enemy_fear_curve.append(int(_find(ectx, curve_enemy_id).get("fear", 0)))
+			if not curve_echo_id.is_empty():
+				echo_fear_curve.append(int(_find(ectx, curve_echo_id).get("fear", 0)))
 
 		# ── Phase 0: enemy-activity census ───────────────────────────────────
 		# Hit-based fear contributes only ~+0.22/echo/round in a 5v4 fight. Two very
@@ -341,6 +392,15 @@ static func _run_scenario(sc: Dictionary) -> Dictionary:
 	for id in echo_ids:
 		observed_sum += int(end_fear[id]) - int(start_fear[id])
 
+	# V2-COMBAT-003 Phase 4: how many times did the TRACKED ENEMY actually fire
+	# actor.refuse (ActorStateMachine.gd logs "actor.refused" on every trigger)?
+	if track_curve and not curve_enemy_id.is_empty():
+		for e_v in logger.get_logs():
+			var e: Dictionary = e_v
+			if str(e.get("type", "")) == "actor.refused" \
+					and str(e.get("data", {}).get("actor_id", "")) == curve_enemy_id:
+				enemy_refusals += 1
+
 	return {
 		"rounds": rounds_run,
 		"enemies": enemy_n,
@@ -363,6 +423,10 @@ static func _run_scenario(sc: Dictionary) -> Dictionary:
 		"threshold_note": _threshold_for(ectx, expr_cfg),
 		"combat_over": bool(ectx.combat_state.get("combat_over", false)),
 		"victory": bool(ectx.combat_result.get("victory", false)),
+		"dispatches": int(st.get("dispatches", 0)),
+		"enemy_fear_curve": enemy_fear_curve,
+		"echo_fear_curve": echo_fear_curve,
+		"enemy_refusals": enemy_refusals,
 	}
 
 
@@ -375,6 +439,7 @@ static func _dispatch_tracked(
 	runtime, ectx: EncounterContext, action: Dictionary,
 	echo_ids: Dictionary, tally: Dictionary, logger, st: Dictionary
 ) -> void:
+	st["dispatches"] = int(st.get("dispatches", 0)) + 1
 	var before: Dictionary = {}
 	for id in echo_ids:
 		before[id] = int(_find(ectx, str(id)).get("fear", 0))
@@ -599,6 +664,15 @@ static func _print_report(sc: Dictionary, r: Dictionary) -> void:
 	_say("    fear: %s" % ", ".join(PackedStringArray(line)))
 	_say("    PEAK fear reached by any echo: %d    REFUSALS: %d"
 		% [int(r["peak_fear"]), int(r["refusals"])])
+
+	# V2-COMBAT-003 Phase 4: the per-round curves for the C1 scenario.
+	if not (r.get("enemy_fear_curve", []) as Array).is_empty():
+		var efc: Array = r["enemy_fear_curve"]
+		var ecc: Array = r["echo_fear_curve"]
+		_say("    ENEMY fear per round (%d rounds): %s" % [efc.size(), str(efc)])
+		_say("    tracked ECHO fear per round (%d rounds): %s" % [ecc.size(), str(ecc)])
+		_say("    tracked-enemy REFUSALS: %d    total dispatches this scenario: %d"
+			% [int(r.get("enemy_refusals", 0)), int(r.get("dispatches", 0))])
 
 	# Phase 0: is hit-based fear starved because enemies never act, or because
 	# they act and do not connect?

@@ -10,6 +10,9 @@
 #   8. consequence/bond_rival_lowers_protect_score
 #   9. consequence/vow_boosts_cohesion_actions
 #  10. consequence/vow_penalizes_aggression_small_party
+#  11. consequence/near_death_fires_at_quarter_hp
+#  12. consequence/near_death_silent_above_quarter_hp
+#  13. consequence/near_death_fires_once_per_actor
 #
 # All tests are pure unit tests — no runtime or save file needed.
 # Run via Debug Panel: tests
@@ -38,6 +41,12 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(CombatConsequenceTests, "_t_vow_boosts_cohesion_actions"))
 	runner.register_test("consequence/vow_penalizes_aggression_small_party",
 		Callable(CombatConsequenceTests, "_t_vow_penalizes_aggression_small_party"))
+	runner.register_test("consequence/near_death_fires_at_quarter_hp",
+		Callable(CombatConsequenceTests, "_t_near_death_fires_at_quarter_hp"))
+	runner.register_test("consequence/near_death_silent_above_quarter_hp",
+		Callable(CombatConsequenceTests, "_t_near_death_silent_above_quarter_hp"))
+	runner.register_test("consequence/near_death_fires_once_per_actor",
+		Callable(CombatConsequenceTests, "_t_near_death_fires_once_per_actor"))
 
 
 # -------------------------
@@ -78,7 +87,7 @@ static func _t_interpose_sets_guard_state_on_ally_not_self() -> Dictionary:
 # Test 3: fear does not replace the operational actor status.
 static func _t_alive_status_at_fear_40() -> Dictionary:
 	var actor := { "is_dead": false, "guard_state": false, "fear": 40 }
-	var status: String = FlowEncounterState._derive_status(actor)
+	var status: String = EncounterSnapshotBuilder._derive_status(actor)
 	if status != "alive":
 		return { "ok": false, "error": "Fear must not replace operational status; got: '%s'" % status }
 	return { "ok": true }
@@ -87,7 +96,7 @@ static func _t_alive_status_at_fear_40() -> Dictionary:
 # Test 4: fear=39 → "alive" (below hesitation threshold).
 static func _t_alive_status_at_fear_39() -> Dictionary:
 	var actor := { "is_dead": false, "guard_state": false, "fear": 39 }
-	var status: String = FlowEncounterState._derive_status(actor)
+	var status: String = EncounterSnapshotBuilder._derive_status(actor)
 	if status != "alive":
 		return { "ok": false, "error": "Expected 'alive' at fear=39, got: '%s'" % status }
 	return { "ok": true }
@@ -96,7 +105,7 @@ static func _t_alive_status_at_fear_39() -> Dictionary:
 # Test 5: refusal is an action/event, not an operational actor status.
 static func _t_alive_status_at_fear_80() -> Dictionary:
 	var actor := { "is_dead": false, "guard_state": false, "fear": 80 }
-	var status: String = FlowEncounterState._derive_status(actor)
+	var status: String = EncounterSnapshotBuilder._derive_status(actor)
 	if status != "alive":
 		return { "ok": false, "error": "Refusal must not replace operational status; got: '%s'" % status }
 	return { "ok": true }
@@ -199,4 +208,122 @@ static func _t_vow_penalizes_aggression_small_party() -> Dictionary:
 		return { "ok": false, "error": "melee_attack should be penalized by tikoro vow with small party (<3)" }
 	if float(candidates[1].get("_score", 0.0)) >= move_base:
 		return { "ok": false, "error": "actor.move should be penalized by tikoro vow with small party (<3)" }
+	return { "ok": true }
+
+
+# -------------------------
+# Tests 11–13: near-death trigger (V2-INFRA-003 D01)
+#
+# The trigger fires once per actor when a hit leaves it at or below a quarter of its maximum
+# health, paying data.combat.emotion.morale_on_near_death and .fear_on_near_death. It read
+# max_hp at the top level of the actor dict, where no builder writes it, so the guard default
+# of 1 made `current_hp * 4 <= max_hp` unsatisfiable and the branch never ran. These three
+# tests pin the live branch: it fires exactly at the boundary, stays silent one HP above it,
+# and pays only once.
+#
+# Damage here is exact, not sampled: CombatService._melee_damage is atk − def, plus
+# (morale − 50) / 10, minus fear / 20, with no RNG. atk 10 / def 0 / morale 50 / fear 0 = 10.
+# -------------------------
+
+# max_hp 100, so the boundary is current_hp 25. def 0 keeps the 10 damage exact.
+static func _nd_actor(id: String, faction: String, atk: int, current_hp: int) -> Dictionary:
+	return {
+		"id": id, "name": id, "actor_type": "echo", "faction": faction,
+		"rank": 1, "calling_origin": "okofor", "archetype_birth": "empathic",
+		"is_dead": false, "death_round": 0, "level": 1, "xp_total": 0,
+		"current_hp": current_hp,
+		"stats": { "max_hp": 100, "atk": atk, "def": 0, "agi": 5, "int": 5, "cha": 5 },
+		"speed": 5, "morale": 50, "fear": 0, "fear_base": 0,
+		"grid_pos": { "col": 0, "row": 0 },
+		"traits": { "courage": 50, "wisdom": 50, "faith": 50 }, "vector_scores": {},
+		"leadership_traits": [], "resilience_traits": [],
+	}
+
+
+## One melee activation of `attacker` against `target`, through the production path.
+static func _nd_activate(attacker: Dictionary, target: Dictionary, bdata: Dictionary) -> void:
+	var ectx := EncounterContext.new()
+	ectx.actors = [attacker, target]
+	var svc := CombatTurnActionService.new(StructuredLogger.new())
+	svc.resolve_activation(
+		attacker,
+		{ "action_type": "melee_attack", "target_id": str(target.get("id", "")) },
+		"melee_attack",
+		ActorStateMachine.new(attacker),
+		ectx,
+		bdata,
+		_nd_balance().get("data", {}).get("maturity_expression", {}),
+		1, 1)
+
+
+static func _nd_balance() -> Dictionary:
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/balance.json"))
+	return parsed if parsed is Dictionary else {}
+
+
+# Test 11: a hit landing exactly on 25% of max_hp fires morale + fear, using the authored keys.
+static func _t_near_death_fires_at_quarter_hp() -> Dictionary:
+	var bdata: Dictionary = _nd_balance().get("data", {})
+	var emo: Dictionary = bdata.get("combat", {}).get("emotion", {})
+	var nd_morale: int   = int(emo.get("morale_on_near_death", 0))
+	var nd_fear: int     = int(emo.get("fear_on_near_death", 0))
+	var fear_per_hit: int = int(emo.get("fear_per_hit", 0))
+	if nd_morale <= 0 or nd_fear <= 0:
+		return { "ok": false, "error": "balance.json must authorise morale_on_near_death and fear_on_near_death" }
+
+	var attacker := _nd_actor("nd_attacker", "echo", 10, 100)
+	var target := _nd_actor("nd_target", "enemy", 0, 35)  # 35 − 10 = 25 = exactly 25% of 100
+	_nd_activate(attacker, target, bdata)
+
+	if int(target.get("current_hp", 0)) != 25:
+		return { "ok": false, "error": "fixture drift: expected current_hp 25, got %d" % int(target.get("current_hp", 0)) }
+	if not bool(target.get("_near_death_morale_fired", false)):
+		return { "ok": false, "error": "near-death trigger did not fire at the 25% boundary" }
+	if int(target.get("morale", 0)) != 50 + nd_morale:
+		return { "ok": false, "error": "expected morale %d, got %d" % [50 + nd_morale, int(target.get("morale", 0))] }
+	if int(target.get("fear", 0)) != fear_per_hit + nd_fear:
+		return { "ok": false, "error": "expected fear %d (per-hit + near-death), got %d" % [fear_per_hit + nd_fear, int(target.get("fear", 0))] }
+	return { "ok": true }
+
+
+# Test 12: one HP above the boundary the trigger stays silent — only per-hit fear lands.
+static func _t_near_death_silent_above_quarter_hp() -> Dictionary:
+	var bdata: Dictionary = _nd_balance().get("data", {})
+	var emo: Dictionary = bdata.get("combat", {}).get("emotion", {})
+	var fear_per_hit: int = int(emo.get("fear_per_hit", 0))
+
+	var attacker := _nd_actor("nd_attacker_b", "echo", 10, 100)
+	var target := _nd_actor("nd_target_b", "enemy", 0, 36)  # 36 − 10 = 26, one above the boundary
+	_nd_activate(attacker, target, bdata)
+
+	if int(target.get("current_hp", 0)) != 26:
+		return { "ok": false, "error": "fixture drift: expected current_hp 26, got %d" % int(target.get("current_hp", 0)) }
+	if bool(target.get("_near_death_morale_fired", false)):
+		return { "ok": false, "error": "near-death trigger fired one HP above the 25% boundary" }
+	if int(target.get("morale", 0)) != 50:
+		return { "ok": false, "error": "morale moved above the boundary: %d" % int(target.get("morale", 0)) }
+	if int(target.get("fear", 0)) != fear_per_hit:
+		return { "ok": false, "error": "expected only per-hit fear %d, got %d" % [fear_per_hit, int(target.get("fear", 0))] }
+	return { "ok": true }
+
+
+# Test 13: the trigger pays once per actor — a second hit below the boundary adds only per-hit fear.
+static func _t_near_death_fires_once_per_actor() -> Dictionary:
+	var bdata: Dictionary = _nd_balance().get("data", {})
+	var emo: Dictionary = bdata.get("combat", {}).get("emotion", {})
+	var nd_morale: int    = int(emo.get("morale_on_near_death", 0))
+	var nd_fear: int      = int(emo.get("fear_on_near_death", 0))
+	var fear_per_hit: int = int(emo.get("fear_per_hit", 0))
+
+	var attacker := _nd_actor("nd_attacker_c", "echo", 10, 100)
+	var target := _nd_actor("nd_target_c", "enemy", 0, 35)
+	_nd_activate(attacker, target, bdata)
+	_nd_activate(attacker, target, bdata)  # 25 → 15, still below the boundary
+
+	if int(target.get("current_hp", 0)) != 15:
+		return { "ok": false, "error": "fixture drift: expected current_hp 15, got %d" % int(target.get("current_hp", 0)) }
+	if int(target.get("morale", 0)) != 50 + nd_morale:
+		return { "ok": false, "error": "near-death morale paid twice: %d" % int(target.get("morale", 0)) }
+	if int(target.get("fear", 0)) != (fear_per_hit * 2) + nd_fear:
+		return { "ok": false, "error": "expected fear %d, got %d" % [(fear_per_hit * 2) + nd_fear, int(target.get("fear", 0))] }
 	return { "ok": true }

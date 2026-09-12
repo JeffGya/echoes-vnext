@@ -10,6 +10,18 @@ const PURPOSES: Array = [
 	"advance", "engage", "intercept", "protect", "hold", "pursue", "cut_off",
 	"reposition", "regroup", "withdraw", "read", "escort",
 ]
+## Purposes whose destination region may legally contain the mover's own cell, so a
+## mover already in position gets a truthful stay option instead of only routes away.
+##
+## `hold` is unconditional — standing on the objective IS the purpose. The other four
+## plan a RANGE-BOUND action against a named target (melee_attack / protect_ally), so
+## the producer admits the origin only when the target is already within that action's
+## reach. Purposes that plan `actor.move` (advance, reposition, regroup, withdraw), a
+## targetless `actor.guard` (intercept, cut_off) or `actor.idle` (read) exist to change
+## where the mover stands; a stay option there would be a contradiction, not a choice.
+const STAY_CAPABLE_PURPOSES: Array = [
+	"hold", "engage", "pursue", "protect", "escort",
+]
 const MODES: Array = [
 	"combat", "purify_shrine", "recover", "protect", "endure", "pursue", "guide_spirit",
 	# V2-COMBAT-002 slice 5 (A3): stage exploration. MODES is an allowlist, so
@@ -87,7 +99,8 @@ static func validate(value: Dictionary, mover_origin: Dictionary) -> Dictionary:
 	)
 	if not bool(region_result["valid"]):
 		return region_result
-	if (value["destination_region"] as Array).has(mover_origin) and str(value["purpose"]) != "hold":
+	if (value["destination_region"] as Array).has(mover_origin) \
+			and not STAY_CAPABLE_PURPOSES.has(str(value["purpose"])):
 		return V.failure("goal_region_contains_origin", "destination_region")
 	var id_result: Dictionary = _validate_goal_id(value)
 	if not bool(id_result["valid"]):

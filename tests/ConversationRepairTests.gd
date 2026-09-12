@@ -22,7 +22,7 @@
 #      was indistinguishable from a skipped one in the log).
 #   6. conversation_repair/storyweight_gain_reaches_snapshot — the gain and speaker name from a
 #      winning turn land in the PROJECTED snapshot's contact_pending, not just the internal
-#      contact dict. Fails if the FlowStageExploreState.build_snapshot() hop is missing — this is
+#      contact dict. Fails if the StageExploreSnapshotBuilder.build() hop is missing — this is
 #      the hop that has failed repeatedly in this story (correct value, never reached the UI).
 #   7. conversation_repair/losing_turn_no_gain_no_confirmation — a turn scoring below threshold
 #      produces no storyweight change, no last_turn_storyweight_gain in the snapshot, and no
@@ -32,7 +32,7 @@
 extends RefCounted
 class_name ConversationRepairTests
 
-const TEST_SAVE_PATH := "/tmp/echoes-vnext-tests/conversation_repair_slot.json"
+static var TEST_SAVE_PATH := TestSaveHarness.dir() + "conversation_repair_slot.json"
 const ContactModelScript := preload("res://core/realms/ContactModel.gd")
 
 
@@ -378,7 +378,7 @@ static func _t_storyweight_gain_log_fires_with_correct_values() -> Dictionary:
 
 # ─── Test 6 — the gain reaches the PROJECTED snapshot ────────────────────────
 # Falsifiable: the internal contact dict can hold the right value while the UI-facing
-# snapshot built by FlowStageExploreState.build_snapshot() never receives it — this is
+# snapshot built by StageExploreSnapshotBuilder.build() never receives it — this is
 # the exact failure mode called out in this story (7 prior "correct value, never reached
 # anyone" defects). This test reads ONLY the dispatch() return value (the projected
 # snapshot), never the internal save_data, so it fails if the data-path hop is broken.

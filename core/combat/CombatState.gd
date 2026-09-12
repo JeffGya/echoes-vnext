@@ -35,9 +35,12 @@ const REQUIRED_FIELDS := [
 ## actors is deep-copied so mutations to the source do not propagate.
 ## initiative_seed: derived from ectx.placement_seed (pass 0 in tests for seed-agnostic checks).
 ## init_cfg: data.combat.initiative_modifiers from balance.json (pass {} for modifier-free checks).
+## stalemate_cfg: data.combat.stalemate from balance.json (pass {} to disable the no-progress
+## forced retreat — no_progress_round_limit defaults to 0, which check_end_condition() reads
+## as "off").
 static func create(actors: Array, objective: String,
 		initiative_seed: int = 0, init_cfg: Dictionary = {},
-		objective_params: Dictionary = {}) -> Dictionary:
+		objective_params: Dictionary = {}, stalemate_cfg: Dictionary = {}) -> Dictionary:
 	return {
 		"actors":                  actors.duplicate(true),
 		"objective":               objective,
@@ -55,7 +58,7 @@ static func create(actors: Array, objective: String,
 		"quarry_id":          _find_quarry_id(actors),
 		# V2-STAGE-004 P3c: GUIDE_SPIRIT — escort mode, joined-spirit tracking, destination state.
 		# guide_mode/spirit_joins_battle/destination_col/destination_row are seeded via
-		# objective_params by FlowEncounterState (runtime decisions made at encounter setup).
+		# objective_params by EncounterSetupService / EncounterObjectiveSpawnService (runtime decisions made at encounter setup).
 		# Safe defaults for all modes; only GUIDE_SPIRIT logic writes to escort_started/destination_reached.
 		"guide_mode":           str(objective_params.get("guide_mode", "protect")),
 		"spirit_id":            _find_spirit_id(actors),
@@ -67,6 +70,23 @@ static func create(actors: Array, objective: String,
 			"destination_col":      int(objective_params.get("destination_col", -1)),
 		"destination_row":      int(objective_params.get("destination_row", -1)),
 		"destination_reached":  false,
+		# V2-STAGE-004 P4: temporary-ally death bark guard. Fires once per encounter.
+		# Declared here with the other latches so it is not an undeclared runtime key.
+		"_ally_killed_barked":  false,
+		# V2-COMBAT-003: universal no-progress detector. no_progress_streak counts consecutive
+		# rounds with no damage AND no per-objective progress counter advancing
+		# (FlowRuntime._end_round() writes both fields, scanning ectx.last_round_results for
+		# damage and combat_state's own protect_counter/guide_protect_counter/contain_counter/
+		# hold_counter for progress — a GUIDE_SPIRIT escort or a RECOVER hold can legitimately
+		# run many damage-free rounds while still winning). At no_progress_round_limit,
+		# check_end_condition() ends the fight as a forced retreat, so a fight where NOTHING
+		# moves cannot loop forever. It covers every objective except PURIFY_SHRINE — see
+		# branch 10 of check_end_condition(). 0 or absent config disables the check. _no_progress_last_sum is FlowRuntime's own scratch value (the
+		# progress-counter sum as of the previous round) — declared here so it is not an
+		# undeclared runtime key, mirroring _ally_killed_barked above.
+		"no_progress_streak":      0,
+		"no_progress_round_limit": int(stalemate_cfg.get("no_progress_round_limit", 0)),
+		"_no_progress_last_sum":   0,
 	}
 
 
@@ -124,13 +144,17 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 			else str(actor.get("calling_origin", ""))
 		var call_mod: int = int(call_table.get(_call_key, 0))
 
-		# Dominant trait modifier — courage > faith > wisdom tiebreak.
+		# Dominant trait modifier. All keys in actor.traits are candidates —
+		# _dominant_key() scores every key in the dict. The list below is a TIEBREAK ONLY,
+		# for equal values (courage > faith > wisdom).
 		var traits_v: Variant = actor.get("traits", {})
 		var traits: Dictionary = traits_v if traits_v is Dictionary else {}
 		var dom_trait: String = _dominant_key(traits, ["courage", "faith", "wisdom"])
 		var trait_mod: int = int(trait_table.get(dom_trait, 0))
 
-		# Dominant vector modifier — vanguard > seeker > protector > pillar tiebreak.
+		# Dominant vector modifier. All ten V2 vectors are candidates — _dominant_key()
+		# scores every key in the dict. The list below is a TIEBREAK ONLY, for equal
+		# values among these four.
 		var vec_v: Variant = actor.get("vector_scores", {})
 		var vectors: Dictionary = vec_v if vec_v is Dictionary else {}
 		var dom_vec: String = _dominant_key(vectors, ["vanguard", "seeker", "protector", "pillar"])
@@ -186,8 +210,12 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 ##   9. GUIDE_SPIRIT (protect mode) survived → victory  (guide_protect_counter >= duration_turns)
 ##      guide_protect_counter advances only on rounds an echo was within escort_radius of the
 ##      living spirit (guard-to-count) and never resets — the party must actually reach the spirit.
+##   10. No-progress stalemate → forced retreat  (checked LAST, every objective except
+##       PURIFY_SHRINE and GUIDE_SPIRIT escort mode, whose own clocks the detector cannot see;
+##       no_progress_streak >= no_progress_round_limit, both stored on combat_state)
 ##
-## combat_state carries round_counter, protect_counter, objective_params, and hold_counter.
+## combat_state carries round_counter, protect_counter, objective_params, hold_counter,
+## no_progress_streak, and no_progress_round_limit.
 ## Callers that omit combat_state (COMBAT / PURIFY_SHRINE) receive byte-identical results
 ## to the previous 2-arg signature — no new branches fire for those modes.
 static func check_end_condition(actors: Array, objective: String,
@@ -297,6 +325,33 @@ static func check_end_condition(actors: Array, objective: String,
 		if int(combat_state.get("guide_protect_counter", 0)) >= _gs_duration:
 			return { "over": true, "victory": true, "reason": "spirit_protected" }
 
+	# 10. Universal no-progress stalemate. Checked LAST, after every objective-specific win or
+	# loss, so it only fires when nothing else ended the fight this round. It is the fallback for
+	# a fight where nothing above can fire — no damage AND no per-objective counter
+	# (protect/guide_protect/contain/hold) advancing, e.g. both actors refuse or guard every
+	# round. FlowRuntime._end_round() is the sole writer of no_progress_streak; it resets on
+	# damage OR on any of those counters rising, so a GUIDE_SPIRIT escort or a RECOVER hold that
+	# is genuinely progressing toward its own win condition — with zero combat damage the whole
+	# time — never gets cut short here. Ends as a forced retreat, not a defeat: see
+	# FlowRuntime._resolve_forced_retreat().
+	#
+	# Two objectives are excluded. See data.combat.stalemate._comment in balance.json for the
+	# full reasoning; the short form:
+	#   PURIFY_SHRINE — the shrine loses hit points every round with no actor acting, so branch 2
+	#     (shrine_destroyed) always ends the fight on its own.
+	#   GUIDE_SPIRIT escort mode — the spirit's own steps toward the destination do not advance
+	#     guide_protect_counter (that field only counts protect-mode guard rounds), so a long,
+	#     damage-free crossing looks identical to a true stall. Escort protect mode is NOT
+	#     excluded: it has guide_protect_counter and the detector is useful there.
+	var no_progress_limit: int = int(combat_state.get("no_progress_round_limit", 0))
+	var is_guide_spirit_escort: bool = objective == EncounterResolutionModes.GUIDE_SPIRIT \
+		and str(combat_state.get("guide_mode", "protect")) == "escort"
+	if no_progress_limit > 0 and objective != EncounterResolutionModes.PURIFY_SHRINE \
+			and not is_guide_spirit_escort:
+		var no_progress_streak: int = int(combat_state.get("no_progress_streak", 0))
+		if no_progress_streak >= no_progress_limit:
+			return { "over": true, "victory": false, "reason": "no_progress_forced_retreat" }
+
 	return { "over": false, "victory": false, "reason": "" }
 
 
@@ -322,21 +377,47 @@ static func _morale_tier_from_score(morale: int) -> String:
 
 
 ## Returns the key with the highest integer value in a Dictionary.
-## tiebreak_order defines which key wins when values are equal (first in list wins).
+##
+## EVERY key present in `scores` is a candidate — the dictionary is the source of truth, so
+## a key added to a taxonomy in balance.json (V2-PROG-003 grew the vectors from 4 to 10) is
+## scored here without a code change.
+##
+## `tiebreak_order` is consulted ONLY to break an equal-value tie: the key appearing earliest
+## in the list wins. A key absent from the list ranks after every listed key; two unlisted
+## keys tied on value are broken by ascending key name, so the result never depends on
+## Dictionary insertion order.
+##
 ## Returns "" if the dict is empty.
 ## (Mirrors GridService._dominant_key() — kept inline to avoid coupling.)
 static func _dominant_key(scores: Dictionary, tiebreak_order: Array) -> String:
 	if scores.is_empty():
 		return ""
+	var unranked: int    = tiebreak_order.size()
+	var have: bool       = false
 	var best_key: String = ""
-	var best_val: int = -9999999
-	for key in tiebreak_order:
-		if not scores.has(key):
-			continue
-		var val: int = int(scores[key])
-		if val > best_val:
-			best_val = val
-			best_key = key
+	var best_val: int    = -9999999
+	var best_rank: int   = 0
+	for key_v in scores.keys():
+		var key: String = str(key_v)
+		var val: int    = int(scores[key_v])
+		var rank: int   = tiebreak_order.find(key)
+		if rank < 0:
+			rank = unranked
+		var better: bool = false
+		if not have:
+			better = true
+		elif val > best_val:
+			better = true
+		elif val == best_val:
+			if rank < best_rank:
+				better = true
+			elif rank == best_rank:
+				better = key < best_key
+		if better:
+			have      = true
+			best_key  = key
+			best_val  = val
+			best_rank = rank
 	return best_key
 
 

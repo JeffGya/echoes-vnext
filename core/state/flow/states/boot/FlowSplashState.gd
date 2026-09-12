@@ -26,7 +26,7 @@ func enter(ctx: RefCounted, t:int) -> void:
 			"title": "Legends never die",
 			"subtitle": "Echoes vNext"
 		},
-		"actions": [action],
+		"actions": { "main.cta_primary": action },
 		"meta": {
 			"t": t
 		}

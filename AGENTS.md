@@ -19,21 +19,114 @@ The player runs a Sanctum, summons Echoes (returning fragments of stolen stories
 
 ## How to Run & Verify
 
+> **`--path` must be the checkout you are editing.** If you work in a git worktree
+> (`.claude/worktrees/<branch>/`), pass that path. The literal path below is the main
+> checkout and is usually on a different branch — running it verifies the wrong code.
+
+> **Pass `timeout: 300000` on every Bash call that runs Godot.** The tool auto-backgrounds
+> at 120s and the suite takes ~7 MINUTES (measured 2026-08-25; the old "~173s" in this file was stale by ~4 minutes). A backgrounded run cannot notify a subagent, so its
+> work is lost. This has cost this project many agent-hours.
+
 ### Compile check (no editor needed)
 ```bash
-/usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --check-only --quit --path /Users/jeffreygyamfi/Sites/echoes-vnext
+/usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --check-only --quit --path <checkout>
 ```
 Run this after every GDScript change. Zero errors expected.
 
-### Tests
-Tests run inside Godot via the Debug Panel (`F1` → `tests` command) or headlessly via `CoreTestRunner.gd`.
-There is no standalone CLI test runner — Godot must execute the tests.
+### Rebuild the script class cache — do this FIRST when a new `class_name` file exists
+```bash
+/usr/bin/perl -e 'alarm shift; exec @ARGV' 400 /opt/homebrew/bin/godot --headless --import --path <checkout>
+```
+`--check-only` does **not** register a brand-new `class_name`, so you get
+`Identifier "X" not declared`. Worse, a stale cache makes **existing fingerprint tests fail
+with drifted hashes** — indistinguishable from a real regression. Five agents in a row have
+lost a cycle investigating "pre-existing failures" that a rebuild cleared. Rebuild before you
+believe any fingerprint failure.
 
-Run the full suite behind the same exact watchdog:
+### Tests
+Tests run inside Godot via the Debug Panel (`F1` → `tests`) or headlessly. There is no
+standalone CLI runner — Godot must execute them.
+
+Full suite (**~7 minutes**, measured 2026-08-25 — `fingerprint` alone is ~3 min of it. Pass `timeout: 600000`, NOT 300000; 5 minutes now truncates a healthy run and looks like a hang):
+```bash
+/usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --quit --path <checkout> -- tests
+```
+
+**One suite only (~5s)** — use this while working, and the full suite once at the end:
+```bash
+/usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --quit --path <checkout> -- tests vow
+```
+The filter is a case-insensitive substring match on the suite name. **A filter that matches nothing prints the
+suite list, runs zero tests, and emits NO `Tests:` line — while still exiting 0. Skim past that and
+it reads as a pass.** Always confirm a `Tests:` line came back. Suite names are not file names:
+`Stage004SeamTests` registers as `seam`, so the filter `stage004` matches nothing.
+
+**Get the authoritative list from the runner, never from memory or a planning doc.** Regenerate it:
+```bash
+<godot ...> -- tests __nomatch__ 2>&1 | sed -n 's/.*Debug output "  \([a-z0-9_]*\)"/\1/p'
+```
+The 90 registered suite names, captured 2026-08-22:
+```
+actor arbiter archetype bark_popup behavior behavior_arbiter bond_trigger bridge calling
+calling_behavior combat combat_baseline combat_initiative combat_roundtrip combat_terrain
+combat_ui consequence contact contact_actor continuity conversation_repair cooldown derived
+directive directive_cfg divergence divergence_bark echo_party echofactory economy emotion
+exclusive_action explore explore_p5 expr fingerprint flow_transaction foundation_ui grid
+identity institution intel ko_death leadership melee morale movement movement_arbiter
+movement_option movement_path objective objective_combat old_echo onboarding passive prog realm
+realm_prog realm_reward realm_ui recruit retreat reward sanctum_pulse save_integrity seam
+shrine sit_res situational skill skill_loadout skill_unlock snapshot snapshot_contract
+snapshot_fingerprint snapshot_purity social_graph stage statinit structure support terrain
+thread traversal unified_resolve vector venture_char voice vow weave
+```
+Names that look right and are WRONG: `guide_spirit` (it is under `movement`), `stage_explore`
+(it is `explore`), `stage_objective` (it is `objective`), `stage004` (it is `seam`).
+ `tests snapshot` matches
+`snapshot`, `snapshot_contract`, `snapshot_fingerprint` and `snapshot_purity`. An unmatched
+filter prints the available suite names and runs nothing.
+
+### Save isolation — DELETE THE WHOLE SAVE DIRECTORY BEFORE EVERY RUN
+
+Suites write saves into a shared directory under `/tmp`, by default `/tmp/echoes-vnext-tests/`.
+**Stale files there silently corrupt results and produce false failures that survive a cache
+rebuild.** Always start a verification run with the delete:
 
 ```bash
-/usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --quit --path /Users/jeffreygyamfi/Sites/echoes-vnext -- tests
+rm -rf /tmp/echoes-vnext-tests && <godot ... -- tests>
 ```
+
+**The root is configurable.** Set `ECHOES_TEST_SAVE_DIR` to point every save artifact this
+project writes during a test or a probe at a directory of your choosing instead of the shared
+default (a missing trailing separator is normalized). Leaving it unset reproduces today's
+behaviour byte-for-byte — same path, same `rm -rf /tmp/echoes-vnext-tests` cleanup. This is what
+makes parallel Godot runs possible: see "Agent Orchestration" below. Delete whichever directory
+you used before every run, custom or default — the contamination risk described next applies
+equally to both.
+
+**Why the delete matters.** `SaveService` writes six artifacts beside the primary save —
+`.pending_a`, `.pending_b`, `.tmp`, `.bak1`, `.bak2`, `.bak3`
+([SaveService.gd:173-181](core/save/SaveService.gd:173)). It returns `LOAD_MISSING` only when *no*
+artifact exists ([SaveService.gd:116-118](core/save/SaveService.gd:116)). A helper that deletes
+only the primary therefore leaves a recoverable backup, `boot()` never reaches
+`make_new_save(<pinned seed>)`, and the test **resumes a previous run's campaign** — other
+balances, other XP, another map, another hash. The production behaviour is correct; recovering from
+a backup is what a crash-safe save system is for. The test harness is what is wrong.
+
+Two tells that you are looking at contamination rather than a real regression:
+- the "actual" hash **changes between identical runs**, or differs between a filtered and a full run
+- a payload diff shows every integer arrived as a float (`43` → `43.0`) — that is a JSON round-trip,
+  so the data was read back off disk instead of generated
+
+**Never run two Godot processes against this project at the same time.** They share that directory
+and contaminate each other. This applies to parallel subagents: serialize every test run.
+
+### Reading the result — the runner ALWAYS exits 0
+Exit status is not evidence. Only this line is:
+```
+Tests: 1442 total, 1442 passed, 0 failed
+```
+Pipe output to a file and grep the file. **Never re-run the suite to read a different field** —
+the answer is already in the output you discarded.
 
 **Test suites** (all in `tests/`):
 EconomyTests, SanctumSummonTests, PartyTests, ActorTests, EchoSchemaTests, ActorStatInitTests,
@@ -153,6 +246,139 @@ Action type format: `domain.subdomain.verb` e.g. `flow.go_state`, `sanctum.party
 
 ---
 
+## Agent Orchestration
+
+### Pick the model tier from the difficulty of the work
+
+Set the model explicitly on every delegated call. Omitting it silently inherits the session model.
+
+| Tier | Use it for |
+|---|---|
+| `haiku` | Mechanical bulk work: renames from an approved table, boilerplate, format conversion, log triage |
+| `sonnet` | The default. Well-specified implementation with clear acceptance criteria |
+| `opus` | Genuinely tricky work: concurrency, subtle algorithms, adversarial verification, gnarly debugging |
+
+Choose by difficulty, not by a fixed build-versus-review split. A diagnosis of an unknown mechanism
+is `opus` work even when the fix that follows is `sonnet` work. Split a task across two tiers when
+its halves differ.
+
+### Run agents in parallel whenever it is safe
+
+Parallelize by default. Two agents may run together only when all three conditions hold.
+
+1. **Disjoint files.** Neither agent writes a file or a section the other writes.
+2. **No shared exclusive resource.** **In this project that means Godot.** Every test run writes
+   saves under `/tmp/echoes-vnext-tests/` by default, and that default is a hardcoded absolute
+   path, so **a git worktree alone does not isolate two Godot processes** — a worktree changes the
+   checkout, not `/tmp`. Two Godot processes that share a save directory corrupt each other's
+   saves. **Parallel Godot runs are possible now**, but only when each agent sets its own
+   `ECHOES_TEST_SAVE_DIR` (see "Save isolation" above) to a distinct directory before launching.
+   Two agents that leave the variable unset, or that set it to the same path, still corrupt each
+   other and must run serially.
+3. **Disjoint recorded values.** Two agents that would re-record the same fingerprint or baseline
+   constant stay serial **even when their files differ**. Parallel re-records destroy attribution:
+   you get one large set of moved values and no way to say which change caused which.
+
+Read-only research and design agents satisfy all three almost always. Run those in parallel freely.
+
+### Verification is central, and never self
+
+- A builder never verifies its own work.
+- Where the work of two or more agents merges, an independent agent verifies the **combined** tree,
+  so the agents cannot mask each other's mistakes.
+- The verifier inspects `git diff`, the source and the real `Tests:` line. **Never accept a
+  completion report as evidence.** Check the tree yourself.
+- Give the verifier the claim to attack, not the answer to confirm. Ask it to prove the builder
+  wrong. This works: a `sonnet` agent once concluded a reported defect did not exist, and an `opus`
+  verifier then reproduced it and found the real cause.
+
+### After any agent stops, killed or completed, audit the tree read-only before re-dispatching
+
+A killed agent can leave a tree that reads as finished and is not — for example a harness change
+whose comment claims constants were re-recorded when the agent died before recording them. Read the
+diff. Do not trust the file's own description of itself.
+
+---
+
+## Extraction & Refactor Rules
+
+Learned the hard way during V2-INFRA-003, which took `FlowRuntime.gd` from 10,061 lines to 1,972.
+
+### Extract shared services BEFORE the controllers that need them
+Dependencies point from controllers to services, so services must exist first. If you extract a
+controller while a helper it needs is still private on `FlowRuntime`, that controller has no legal
+option — reaching back is forbidden, and so is duplicating. It will invent a workaround.
+
+### A helper used by two or more domains has an owner. Find it.
+- Reads a named subtree of `balance.json` → a static getter on `ConfigService`, beside
+  `get_bond_thresholds_cfg` and friends. **Not** on a pure domain service: `EmotionService`,
+  `SocialGraphService` and `MaturityExpressionService` all document that they never read
+  `ConfigService` and only accept passed-in dicts. Giving them one breaks their own invariant.
+- Reads save data for a domain → a **static** function on that domain's service.
+- Wraps a domain class → a service placed **beside** that class
+  (`VowConsequenceService` with `VowService`, `NarrativeVoiceService` with `ShoutBank`).
+
+### Never duplicate a helper. Never substitute a lookalike API either.
+Copying is banned — two copies drift. But the second-order mistake is worse: when copying is
+forbidden, the tempting move is to reach for an existing public API that *looks* equivalent.
+A real example: `_get_active_party_echoes()` (a pure `.get()` read, roster order) was swapped for
+`SanctumService.new(save_data).get_party_actors()`. That changed iteration order, changed the data
+shape, and introduced a **constructor that can write to save data**. Every test still passed.
+
+If a helper has no clean owner, **stop and report a blocker.** Do not work around it.
+
+### Constructing a service can mutate. Prefer static reads.
+`SanctumService.new(save_ref)` builds `SanctumState`, which can call
+`_ensure_sanctum_dict_exists()` and write to `save_data`. Never construct a service merely to read.
+Use a static reader, or add one.
+
+### Controllers vs services
+- **Controller** — owns dispatched actions for one domain. Returns a `FlowActionOutcome` describing
+  transition / snapshot / save intent. `FlowRuntime.dispatch()` applies that intent. Give it no
+  `flow_machine`, so it *cannot* transition by itself.
+- **Service** — consequence hooks and shared logic called from several domains. Any controller or
+  service may call it.
+- **Controllers must never call one another.** If two controllers need the same behaviour, it is a
+  service.
+- Neither may call `SaveService`. Request a save with `flow_ctx.request_save(reason)`.
+
+### Tests that reach in by string name break silently
+`runtime.call("_private_name", …)` is invisible to `--check-only`, so moving that method fails only
+at runtime. Find these before extracting, and **rewrite the call site in the same change**. Do not
+leave a delegating shim on `FlowRuntime` — a shim keeps the test green while proving nothing.
+
+### File size and comments
+
+**Aim to keep files under ~1,000 lines — and the guard counts CODE, not comments or blanks.**
+Measure with `grep -vcE '^\s*(#|$)' <file>`, not `wc -l`.
+
+- **Do not fragment a file to satisfy the number.** A new file must earn its existence by owning
+  something. Splitting for a line count produces the same tangle spread across more files, which is
+  harder to follow, not easier.
+- **Core central files may exceed it**, with a written justification in the header saying why the
+  content is one unit.
+
+**Comments: write what a reader needs, not the history of the change.**
+
+| Belongs in the file | Belongs elsewhere |
+|---|---|
+| What this file owns, in a few lines | How it came to be here — that is the commit message |
+| A constraint that prevents a mistake: a determinism hazard, a load-bearing order, a shared-state trap | Alternatives considered and rejected |
+| A defect note at the site, one or two lines | The full defect analysis — that belongs in the owning story's record |
+| | Slice numbers, phase names and process narrative |
+
+**Delete legacy and superseded comments when you encounter them.** A comment describing code that has
+moved, or naming a story that has been renumbered, is not explanation — it is a trap. It also costs
+parse time and reader attention for nothing.
+
+### Characterization before behaviour change
+Record what the code does today, including its bugs, and label each one
+`# KNOWN DEFECT (<story> will change this):`. Invert the assertion in the phase that fixes it.
+A probe that asserts the fixed behaviour before the fix exists tempts the next agent to "fix"
+production code to make its own test pass.
+
+---
+
 ## Naming Conventions
 
 - Folders: `snake_case` (`core/state`, `ui/screens`)
@@ -241,7 +467,27 @@ Read `docs/v2-migration-map.md` before starting any Alignment story.
 10. Letting autowrap determine first-pass geometry without authored/profile wrap widths
 11. Leaving stale offsets on a full-rect container after changing responsive profiles
 12. Hiding a shell Control without synchronizing its independent `CanvasLayer` visibility/input
+13. Running Godot without `timeout: 300000` — the Bash tool auto-backgrounds at 120s and a subagent then loses all its work
+14. Believing a fingerprint failure before rebuilding the script class cache with `--import`
+15. Trusting the runner's exit code — it is always 0; only the `Tests: N total, N passed, M failed` line is evidence
+16. Re-running the full suite to read a different field instead of grepping the log you already produced
+17. Dispatching `flow.new_game` in a characterization test — `_generate_seed_root_string()` uses `Crypto.generate_random_bytes()`, so the campaign seed differs every run. Drive onboarding from `boot()`, which uses the pinned literal seed when no save exists
+18. Constructing a service just to read from it — `SanctumService.new()` can write to `save_data` via `SanctumState._ensure_sanctum_dict_exists()`. Use a static reader
+19. Duplicating a shared helper, **or** swapping in a lookalike API to avoid duplicating it. Both drift. If a helper has no clean owner, stop and report a blocker
+20. Leaving a delegating shim on `FlowRuntime` so a reflection-based test keeps passing — the shim proves the extraction did *not* happen
+21. Diagnosing a fingerprint failure without first deleting the shared `/tmp` save directory — a leftover `.bak1` makes the harness resume an old campaign, and the failure looks exactly like a real regression through a cache rebuild, a clean checkout and four repeat runs
+22. Running two Godot test processes concurrently — they share the save directory and corrupt each other's results
+23. Re-baselining a fingerprint constant to make the suite green before you can explain what moved — a constant you recalibrated without understanding is worse than no guard, because it still looks like protection
+24. Reading a filtered run as green without checking a `Tests:` line came back — an unmatched filter runs nothing, prints nothing, and exits 0. Suite names differ from file names (`Stage004SeamTests` registers as `seam`)
 
+25. **Writing a brief that overrides this file.** An orchestrator's task brief is read *after* AGENTS.md and wins on contradiction. On V2-COMBAT-003 every brief demanded full-suite verification and restated "rebuild the import cache" as an unconditional step, so agents ran five ~7-minute suites per commit and reimported before each one — while line 55 of this file already said "one suite only while working, and the full suite once at the end". The rule did not fail; the brief overrode it. **Point briefs at this file. Do not restate its rules in your own words, and never state a conditional rule (mistake 14) without its condition.**
+26. **Reproduction runs on a deterministic suite.** Re-running an identical suite to check a result "is stable" proves nothing here: seeds are pinned, there is no wall clock, and `core/` makes no `randf()` call. Two identical runs cost 14 minutes and carry the information of one. Run the suite again only when the change could move determinism itself — seeding, dispatch order, draw counts.
+27. **Rigour that does not scale with risk.** The predict-then-observe attribution method (predict a moved value from the numbers, then observe it, then show a structural invariant held) is mandatory when a change moves recorded values. Applying it to a mechanical rename or a config migration with no new values costs a custom probe, ~200k tokens and ~70 tool calls for a two-function edit. Match the method to the blast radius.
+28. **Comments that restate the code, repeat themselves, or narrate history.** Measured on this branch: one ~50-line fix added **61** comment lines, a duplicate-helper fix added **69**, the islands commit added **289**. The failure modes, in order of frequency: the same point made at the call site *and* in the docstring; a sentence that says what the next line plainly says; and story-id narrative ("V2-PROG-003 grew the vectors from 4 to 10") that belongs in the commit message.
+
+    **A comment earns its place only by saying what the code cannot** — a non-obvious constraint, an invariant a future edit would break, a trap, or a decision whose alternative looks equally reasonable. Write it once, at the authority, not at every caller.
+
+    **Where things go:** why the change was made → commit message. Design rationale and measurements → the story's handoff or `docs/`. What a reader needs *at that line* to avoid breaking it → the comment. **A comment block should be shorter than the code it explains**; if it is longer, the reasoning belongs elsewhere and the comment should point there.
 Full lesson history: `docs/LESSONS.md`
 
 ---

@@ -792,7 +792,7 @@ static func _t_rank_benefits_build() -> Dictionary:
 # For every _DEFAULTS key that is also authored somewhere in the real
 # balance.json (loaded via ConfigService, same as FlowRuntime does at
 # runtime), we check two things against a cfg built by calling
-# FlowRuntime._merge_actor_cfg() directly — the actual static helper
+# ConfigService.merge_actor_cfg() directly — the actual static helper
 # _get_actor_cfg_merged() calls in production (data.actor ∪
 # data.maturity_expression, data.actor winning on collision). Calling the
 # production function itself (rather than re-implementing the merge here)
@@ -825,7 +825,7 @@ static func _t_config_defaults_reachable_and_consistent() -> Dictionary:
 
 	# Call the actual production merge helper — not a re-implementation — so this
 	# test cannot drift from what FlowRuntime._get_actor_cfg_merged() really does.
-	var merged_cfg: Dictionary = FlowRuntime._merge_actor_cfg(actor_data_cfg, maturity_cfg)
+	var merged_cfg: Dictionary = ConfigService.merge_actor_cfg(actor_data_cfg, maturity_cfg)
 
 	var defaults: Dictionary = BehaviorArbiter._DEFAULTS
 	var checked: int = 0
@@ -983,7 +983,7 @@ static func _t_derive_expression_no_new_save_fields() -> Dictionary:
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
 	var config := ConfigService.new()
-	var test_path := "/tmp/echoes-vnext-tests/maturity_expr_save_roundtrip_slot.json"
+	var test_path := TestSaveHarness.dir() + "maturity_expr_save_roundtrip_slot.json"
 	var runtime := FlowRuntime.new(logger, config, test_path)
 	runtime.boot()
 	var flow_ctx: FlowContext = runtime.flow_ctx
@@ -1362,7 +1362,7 @@ static func _t_high_fear_base_more_disruption_at_equal_rank() -> Dictionary:
 # technique in expr/config_defaults_reachable_and_consistent, scoped to just
 # composure_dampen_scale: confirms the merged actor cfg (data.actor ∪
 # data.maturity_expression, the real production merge via
-# FlowRuntime._merge_actor_cfg()) carries the renamed key, that the arbiter
+# ConfigService.merge_actor_cfg()) carries the renamed key, that the arbiter
 # resolves the authored balance.json value (not _DEFAULTS), and that a
 # sentinel override is actually reflected — proving _cfg_get() reads _cfg for
 # this key rather than silently falling through.
@@ -1375,7 +1375,7 @@ static func _t_composure_dampen_scale_reachable_from_balance() -> Dictionary:
 	var bdata: Dictionary = bal.get("data", {})
 	var maturity_cfg: Dictionary = bdata.get("maturity_expression", {})
 	var actor_data_cfg: Dictionary = bdata.get("actor", {})
-	var merged_cfg: Dictionary = FlowRuntime._merge_actor_cfg(actor_data_cfg, maturity_cfg)
+	var merged_cfg: Dictionary = ConfigService.merge_actor_cfg(actor_data_cfg, maturity_cfg)
 
 	if not merged_cfg.has("composure_dampen_scale"):
 		return { "ok": false, "error": "composure_dampen_scale not present in the merged actor cfg — the balance.json rename did not land where BehaviorArbiter reads it" }

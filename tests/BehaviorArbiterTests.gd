@@ -38,7 +38,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("arbiter/confirmed_calling_overrides_birth_origin",  Callable(BehaviorArbiterTests, "_t_confirmed_calling_overrides_birth_origin"))
 	# COMBAT-BUG-001: purifier shrine pathing fixes
 	runner.register_test("arbiter/purifier_moves_toward_shrine_not_enemy",    Callable(BehaviorArbiterTests, "_t_purifier_moves_toward_shrine_not_enemy"))
-	runner.register_test("arbiter/purifier_purifies_when_adjacent_to_shrine", Callable(BehaviorArbiterTests, "_t_purifier_purifies_when_adjacent_to_shrine"))
+	runner.register_test("arbiter/purifier_purifies_in_reach_at_any_shrine_health", Callable(BehaviorArbiterTests, "_t_purifier_purifies_in_reach_at_any_shrine_health"))
 	runner.register_test("arbiter/purifier_no_purify_when_on_cooldown",       Callable(BehaviorArbiterTests, "_t_purifier_no_purify_when_on_cooldown"))
 	runner.register_test("arbiter/purifier_attacks_enemy_when_adjacent",      Callable(BehaviorArbiterTests, "_t_purifier_attacks_enemy_when_adjacent"))
 	# COMBAT-BUG-002: guard deadlock fix
@@ -502,16 +502,10 @@ static func _t_confirmed_calling_overrides_birth_origin() -> Dictionary:
 # COMBAT-BUG-001: Purifier shrine pathing tests
 # -------------------------
 
-# Test A1: purifier_moves_shrine_hp_aware
-# Shrine HP gates the purifier's movement redirect.
-#
-# Part A: shrine HP < 50% AND purifier not adjacent → move toward shrine.
-#   The purifier must return to the shrine to purify.
-#
-# Part B: shrine HP ≥ 50% AND purifier not adjacent → move toward enemy.
-#   Shrine is healthy; purifier should intercept the enemy instead.
-#   Without this gate the purifier oscillates: one step toward enemy takes it 2 tiles
-#   from shrine → redirect fires → one step back → adjacent again → redirect off → repeat.
+# Test A1: the legacy arbiter owns no shrine-ward movement redirect, at any shrine health.
+# Both parts put the purifier out of reach of the shrine with its cooldown unspent, and
+# both expect an ordinary move toward the enemy. Where the purifier walks is the movement
+# layer's answer (CombatPressureService), not this one's.
 static func _t_purifier_moves_toward_shrine_not_enemy() -> Dictionary:
 	# --- Part A: shrine below 50% — legacy arbiter no longer owns exact shrine movement ---
 	var purifier_a := {
@@ -546,7 +540,7 @@ static func _t_purifier_moves_toward_shrine_not_enemy() -> Dictionary:
 	if int(tpos_a.get("col", -1)) != 5 or int(tpos_a.get("row", -1)) != 5:
 		return { "ok": false, "error": "Part A: legacy exact shrine redirect should be retired; expected ordinary enemy target {col:5,row:5}, got: %s" % str(tpos_a) }
 
-	# --- Part B: shrine above 50% — pursue enemy, no oscillation ---
+	# --- Part B: shrine above 50% — same answer, the shrine's health is not consulted ---
 	var purifier_b := {
 		"id":             "echo_pur_001b",
 		"faction":        "echo",
@@ -582,13 +576,15 @@ static func _t_purifier_moves_toward_shrine_not_enemy() -> Dictionary:
 	return { "ok": true }
 
 
-# Test A2: purifier_purifies_when_adjacent_and_shrine_below_50pct
-# The HP gate is intentional: purify only fires when shrine HP < 50%.
-# At full/healthy HP the purifier should be intercepting the enemy, not purifying.
+# Test A2: purifier_purifies_in_reach_at_any_shrine_health
+# V2-COMBAT-003 phase 7c inverted Part B. The shrine-health condition is gone: it
+# required the shrine below half, which a 200-hp shrine draining 5 a round reaches at
+# round 20 while these encounters end near round 5, so purify never fired in play.
+# `purify_cooldown` is the throttle now (Test A3 covers it).
 #
-# Part A: shrine at 40% HP → purify fires (adjacent, cooldown=0, HP below threshold).
-# Part B: shrine at 80% HP → purify does NOT fire (HP above threshold despite adjacency).
-static func _t_purifier_purifies_when_adjacent_to_shrine() -> Dictionary:
+# Part A: shrine at 40% HP, in reach, cooldown 0 → purify fires.
+# Part B: shrine at 80% HP, otherwise identical → purify fires too.
+static func _t_purifier_purifies_in_reach_at_any_shrine_health() -> Dictionary:
 	# --- Part A: shrine below 50% — purify fires ---
 	var purifier_a := {
 		"id":             "echo_pur_002a",
@@ -622,7 +618,7 @@ static func _t_purifier_purifies_when_adjacent_to_shrine() -> Dictionary:
 	if str(intent_a.get("action_type", "")) != "actor.purify_shrine":
 		return { "ok": false, "error": "Expected actor.purify_shrine at shrine HP=40%%, got: %s" % str(intent_a.get("action_type")) }
 
-	# --- Part B: shrine above 50% — purify must NOT fire ---
+	# --- Part B: shrine above 50% — purify still fires ---
 	var purifier_b := {
 		"id":             "echo_pur_002b",
 		"faction":        "echo",
@@ -652,8 +648,8 @@ static func _t_purifier_purifies_when_adjacent_to_shrine() -> Dictionary:
 		"actor": purifier_b, "all_actors": [purifier_b, shrine_b, enemy_b],
 		"t": 1, "is_purifier": true, "shrine_alive": true, "shrine_hp_ratio": 0.80,
 	})
-	if str(intent_b.get("action_type", "")) == "actor.purify_shrine":
-		return { "ok": false, "error": "Expected no purify at shrine HP=80%% (HP gate must hold), got: actor.purify_shrine" }
+	if str(intent_b.get("action_type", "")) != "actor.purify_shrine":
+		return { "ok": false, "error": "Expected actor.purify_shrine at shrine HP=80%% too — shrine health no longer gates the override — got: %s" % str(intent_b.get("action_type")) }
 
 	return { "ok": true }
 

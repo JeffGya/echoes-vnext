@@ -788,7 +788,7 @@ static func _t_legacy_shrine_alive_both_factions_not_over() -> Dictionary:
 
 
 # ─── resolve_objective_params() tests ───────────────────────────────────────
-# These call FlowEncounterState.resolve_objective_params() directly (pure static,
+# These call EncounterSetupService.resolve_objective_params() directly (pure static,
 # no FlowRuntime wiring needed). mode_cfg dicts are explicit so assertions are
 # fully deterministic and independent of balance.json.
 
@@ -852,7 +852,7 @@ static func _endure_cfg() -> Dictionary:
 
 # 19. recover at completion_index=0 → hold_rounds == base (2).
 static func _t_resolve_params_recover_base() -> Dictionary:
-	var p := FlowEncounterState.resolve_objective_params("recover", _recover_cfg(), 0, {})
+	var p := EncounterSetupService.resolve_objective_params("recover", _recover_cfg(), 0, {})
 	if int(p.get("hold_rounds", -1)) != 2:
 		return { "ok": false, "error": "Expected hold_rounds=2 at index 0, got %d" % int(p.get("hold_rounds", -1)) }
 	return { "ok": true }
@@ -862,7 +862,7 @@ static func _t_resolve_params_recover_base() -> Dictionary:
 #     This was the broken case: int(0.5)*2=0, so scaled=2==base (no growth).
 #     With the fix: roundi(0.5*2.0)=1, scaled=3.
 static func _t_resolve_params_recover_scales() -> Dictionary:
-	var p := FlowEncounterState.resolve_objective_params("recover", _recover_cfg(), 2, {})
+	var p := EncounterSetupService.resolve_objective_params("recover", _recover_cfg(), 2, {})
 	var got: int = int(p.get("hold_rounds", -1))
 	if got != 3:
 		return { "ok": false, "error": "Expected hold_rounds=3 at index 2, got %d (float-growth fix required)" % got }
@@ -871,7 +871,7 @@ static func _t_resolve_params_recover_scales() -> Dictionary:
 
 # 21. recover clamped at max=4 when completion_index is large (e.g. 6 → 2+round(0.5*6)=2+3=5, clamped to 4).
 static func _t_resolve_params_recover_clamped() -> Dictionary:
-	var p := FlowEncounterState.resolve_objective_params("recover", _recover_cfg(), 6, {})
+	var p := EncounterSetupService.resolve_objective_params("recover", _recover_cfg(), 6, {})
 	var got: int = int(p.get("hold_rounds", -1))
 	if got != 4:
 		return { "ok": false, "error": "Expected hold_rounds=4 (clamped) at index 6, got %d" % got }
@@ -880,7 +880,7 @@ static func _t_resolve_params_recover_clamped() -> Dictionary:
 
 # 22. protect at completion_index=2: duration_turns=4+round(0.5*2)=5, entity_max_hp=70+round(10*2)=90.
 static func _t_resolve_params_protect_scales() -> Dictionary:
-	var p := FlowEncounterState.resolve_objective_params("protect", _protect_cfg(), 2, {})
+	var p := EncounterSetupService.resolve_objective_params("protect", _protect_cfg(), 2, {})
 	var dur: int = int(p.get("duration_turns", -1))
 	var hp: int  = int(p.get("entity_max_hp",  -1))
 	if dur != 5:
@@ -892,7 +892,7 @@ static func _t_resolve_params_protect_scales() -> Dictionary:
 
 # 23. protect clamped: completion_index=10 → duration=4+round(0.5*10)=9, clamped to max=8.
 static func _t_resolve_params_protect_clamped() -> Dictionary:
-	var p := FlowEncounterState.resolve_objective_params("protect", _protect_cfg(), 10, {})
+	var p := EncounterSetupService.resolve_objective_params("protect", _protect_cfg(), 10, {})
 	var dur: int = int(p.get("duration_turns", -1))
 	if dur != 8:
 		return { "ok": false, "error": "Expected duration_turns=8 (clamped) at index 10, got %d" % dur }
@@ -901,7 +901,7 @@ static func _t_resolve_params_protect_clamped() -> Dictionary:
 
 # 24. endure at completion_index=2: duration=5+round(0.5*2)=6, wave_size=2+round(0.5*2)=3.
 static func _t_resolve_params_endure_scales() -> Dictionary:
-	var p := FlowEncounterState.resolve_objective_params("endure", _endure_cfg(), 2, {})
+	var p := EncounterSetupService.resolve_objective_params("endure", _endure_cfg(), 2, {})
 	var dur: int = int(p.get("duration_turns", -1))
 	var ws: int  = int(p.get("wave_size",      -1))
 	if dur != 6:
@@ -914,7 +914,7 @@ static func _t_resolve_params_endure_scales() -> Dictionary:
 # 25. endure clamped: completion_index=10 → duration=5+round(0.5*10)=10, clamped to max=9;
 #     wave_size=2+round(0.5*10)=7, clamped to max=4.
 static func _t_resolve_params_endure_clamped() -> Dictionary:
-	var p := FlowEncounterState.resolve_objective_params("endure", _endure_cfg(), 10, {})
+	var p := EncounterSetupService.resolve_objective_params("endure", _endure_cfg(), 10, {})
 	var dur: int = int(p.get("duration_turns", -1))
 	var ws: int  = int(p.get("wave_size",      -1))
 	if dur != 9:
@@ -927,7 +927,7 @@ static func _t_resolve_params_endure_clamped() -> Dictionary:
 # 26. stage_params override: {hold_rounds: 9} beats scaled value.
 static func _t_resolve_params_stage_override() -> Dictionary:
 	var stage_p := { "hold_rounds": 9 }
-	var p := FlowEncounterState.resolve_objective_params("recover", _recover_cfg(), 2, stage_p)
+	var p := EncounterSetupService.resolve_objective_params("recover", _recover_cfg(), 2, stage_p)
 	var got: int = int(p.get("hold_rounds", -1))
 	if got != 9:
 		return { "ok": false, "error": "Expected hold_rounds=9 (stage override), got %d" % got }
@@ -939,7 +939,7 @@ static func _t_resolve_params_stage_override() -> Dictionary:
 
 # 27. Unknown mode key → returns {}.
 static func _t_resolve_params_unknown_mode_empty() -> Dictionary:
-	var p := FlowEncounterState.resolve_objective_params("combat", {}, 0, {})
+	var p := EncounterSetupService.resolve_objective_params("combat", {}, 0, {})
 	if not p.is_empty():
 		return { "ok": false, "error": "Expected empty dict for unknown mode, got %s" % str(p) }
 	return { "ok": true }
@@ -1054,7 +1054,7 @@ static func _t_objective_state_invulnerable_recover() -> Dictionary:
 	ectx.round_bark_events  = []
 	ectx.echo_action_logs   = {}
 
-	var snap: Dictionary = FlowEncounterState._build_objective_state(ectx, cs)
+	var snap: Dictionary = EncounterSnapshotBuilder._build_objective_state(ectx, cs)
 	if not bool(snap.get("objective_invulnerable", false)):
 		return { "ok": false, "error": "Expected objective_invulnerable=true for RECOVER relic, got false" }
 	return { "ok": true }
@@ -1084,7 +1084,7 @@ static func _t_objective_state_waves_remaining_endure() -> Dictionary:
 	ectx.round_bark_events  = []
 	ectx.echo_action_logs   = {}
 
-	var snap: Dictionary = FlowEncounterState._build_objective_state(ectx, cs)
+	var snap: Dictionary = EncounterSnapshotBuilder._build_objective_state(ectx, cs)
 	if int(snap.get("waves_remaining", -1)) != 1:
 		return { "ok": false, "error": "Expected waves_remaining=1 (3-2), got %d" % int(snap.get("waves_remaining", -1)) }
 	if int(snap.get("wave_total", -1)) != 3:
@@ -1115,7 +1115,7 @@ static func _t_objective_state_totem_stolen_protect() -> Dictionary:
 	ectx.round_bark_events  = []
 	ectx.echo_action_logs   = {}
 
-	var snap: Dictionary = FlowEncounterState._build_objective_state(ectx, cs)
+	var snap: Dictionary = EncounterSnapshotBuilder._build_objective_state(ectx, cs)
 	if not bool(snap.get("totem_stolen", false)):
 		return { "ok": false, "error": "Expected totem_stolen=true in objective_state, got false" }
 	return { "ok": true }
@@ -1164,7 +1164,7 @@ static func _t_protect_counter_partial_advance() -> Dictionary:
 # ENDURE: wave_size_max is now propagated into params.
 # _endure_cfg() has wave_size_max=4.
 static func _t_resolve_params_endure_wave_size_max() -> Dictionary:
-	var p := FlowEncounterState.resolve_objective_params("endure", _endure_cfg(), 0, {})
+	var p := EncounterSetupService.resolve_objective_params("endure", _endure_cfg(), 0, {})
 	var got: int = int(p.get("wave_size_max", -1))
 	if got != 4:
 		return { "ok": false, "error": "Expected wave_size_max=4 in ENDURE params, got %d" % got }
@@ -1174,7 +1174,7 @@ static func _t_resolve_params_endure_wave_size_max() -> Dictionary:
 # ENDURE: wave_size_rising_step is now propagated into params.
 # _endure_cfg() has wave_size_rising_step=1.
 static func _t_resolve_params_endure_wave_size_rising_step() -> Dictionary:
-	var p := FlowEncounterState.resolve_objective_params("endure", _endure_cfg(), 0, {})
+	var p := EncounterSetupService.resolve_objective_params("endure", _endure_cfg(), 0, {})
 	var got: int = int(p.get("wave_size_rising_step", -1))
 	if got != 1:
 		return { "ok": false, "error": "Expected wave_size_rising_step=1 in ENDURE params, got %d" % got }
@@ -1184,7 +1184,7 @@ static func _t_resolve_params_endure_wave_size_rising_step() -> Dictionary:
 # RECOVER: reinforce_interval is now propagated into params.
 # _recover_cfg() has reinforce_interval=3.
 static func _t_resolve_params_recover_reinforce_interval() -> Dictionary:
-	var p := FlowEncounterState.resolve_objective_params("recover", _recover_cfg(), 0, {})
+	var p := EncounterSetupService.resolve_objective_params("recover", _recover_cfg(), 0, {})
 	var got: int = int(p.get("reinforce_interval", -1))
 	if got != 3:
 		return { "ok": false, "error": "Expected reinforce_interval=3 in RECOVER params, got %d" % got }
@@ -1194,7 +1194,7 @@ static func _t_resolve_params_recover_reinforce_interval() -> Dictionary:
 # RECOVER: reinforce_size is now propagated into params.
 # _recover_cfg() has reinforce_size=2.
 static func _t_resolve_params_recover_reinforce_size() -> Dictionary:
-	var p := FlowEncounterState.resolve_objective_params("recover", _recover_cfg(), 0, {})
+	var p := EncounterSetupService.resolve_objective_params("recover", _recover_cfg(), 0, {})
 	var got: int = int(p.get("reinforce_size", -1))
 	if got != 2:
 		return { "ok": false, "error": "Expected reinforce_size=2 in RECOVER params, got %d" % got }
@@ -1204,7 +1204,7 @@ static func _t_resolve_params_recover_reinforce_size() -> Dictionary:
 # RECOVER: reinforce_group is now propagated into params.
 # _recover_cfg() has reinforce_group="group.forest_patrol".
 static func _t_resolve_params_recover_reinforce_group() -> Dictionary:
-	var p := FlowEncounterState.resolve_objective_params("recover", _recover_cfg(), 0, {})
+	var p := EncounterSetupService.resolve_objective_params("recover", _recover_cfg(), 0, {})
 	var got: String = str(p.get("reinforce_group", ""))
 	if got != "group.forest_patrol":
 		return { "ok": false, "error": "Expected reinforce_group='group.forest_patrol' in RECOVER params, got '%s'" % got }
@@ -1214,7 +1214,7 @@ static func _t_resolve_params_recover_reinforce_group() -> Dictionary:
 # RECOVER: reinforce_max_total is now propagated into params.
 # _recover_cfg() has reinforce_max_total=6.
 static func _t_resolve_params_recover_reinforce_max_total() -> Dictionary:
-	var p := FlowEncounterState.resolve_objective_params("recover", _recover_cfg(), 0, {})
+	var p := EncounterSetupService.resolve_objective_params("recover", _recover_cfg(), 0, {})
 	var got: int = int(p.get("reinforce_max_total", -1))
 	if got != 6:
 		return { "ok": false, "error": "Expected reinforce_max_total=6 in RECOVER params, got %d" % got }
@@ -1225,7 +1225,7 @@ static func _t_resolve_params_recover_reinforce_max_total() -> Dictionary:
 # stage_params with reinforce_interval=99 must beat the config value of 3.
 static func _t_resolve_params_recover_reinforce_stage_override_wins() -> Dictionary:
 	var stage_p := { "reinforce_interval": 99 }
-	var p := FlowEncounterState.resolve_objective_params("recover", _recover_cfg(), 0, stage_p)
+	var p := EncounterSetupService.resolve_objective_params("recover", _recover_cfg(), 0, stage_p)
 	var got: int = int(p.get("reinforce_interval", -1))
 	if got != 99:
 		return { "ok": false, "error": "Expected reinforce_interval=99 (stage override), got %d" % got }
@@ -1548,7 +1548,7 @@ static func _t_guide_spirit_damage_debuff() -> Dictionary:
 
 # 36. resolve_objective_params("guide_spirit", ...) — all expected keys present.
 static func _t_resolve_params_guide_spirit_all_keys_present() -> Dictionary:
-	var p := FlowEncounterState.resolve_objective_params("guide_spirit", _guide_spirit_cfg(), 0, {})
+	var p := EncounterSetupService.resolve_objective_params("guide_spirit", _guide_spirit_cfg(), 0, {})
 	var required_keys: Array = [
 		"duration_turns", "spirit_def_id", "spirit_name", "spirit_max_hp",
 		"escort_radius", "skittish_radius", "destination_min_distance",
@@ -1563,12 +1563,12 @@ static func _t_resolve_params_guide_spirit_all_keys_present() -> Dictionary:
 # 37. duration scales with completion_index and clamps at duration_max.
 # base=4, growth=0.5, max=8. At index 2: 4+round(0.5*2)=5. At index 20: clamps to 8.
 static func _t_resolve_params_guide_spirit_duration_scales_and_clamps() -> Dictionary:
-	var p_scaled := FlowEncounterState.resolve_objective_params("guide_spirit", _guide_spirit_cfg(), 2, {})
+	var p_scaled := EncounterSetupService.resolve_objective_params("guide_spirit", _guide_spirit_cfg(), 2, {})
 	var dur_scaled: int = int(p_scaled.get("duration_turns", -1))
 	if dur_scaled != 5:
 		return { "ok": false, "error": "Expected duration_turns=5 at index 2, got %d" % dur_scaled }
 
-	var p_clamped := FlowEncounterState.resolve_objective_params("guide_spirit", _guide_spirit_cfg(), 20, {})
+	var p_clamped := EncounterSetupService.resolve_objective_params("guide_spirit", _guide_spirit_cfg(), 20, {})
 	var dur_clamped: int = int(p_clamped.get("duration_turns", -1))
 	if dur_clamped != 8:
 		return { "ok": false, "error": "Expected duration_turns=8 (clamped) at index 20, got %d" % dur_clamped }

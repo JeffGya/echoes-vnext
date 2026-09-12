@@ -10,6 +10,7 @@ const GoalContract = preload("res://core/movement/contracts/MovementGoal.gd")
 const ActionPlan = preload("res://core/movement/contracts/MovementActionPlan.gd")
 
 const EscapeAuthority = preload("res://core/movement/PursueEscapeService.gd")
+const ReachAuthority = preload("res://core/movement/CombatActivationService.gd")
 
 const BUCKET_DIRECT := "direct"
 const BUCKET_TACTICAL := "tactical"
@@ -141,11 +142,12 @@ static func _add_ordinary_combat(
 ) -> void:
 	for hostile_value: Variant in _hostiles(context):
 		var hostile: Dictionary = hostile_value as Dictionary
-		if _is_adjacent(context["origin"] as Dictionary, hostile["position"] as Dictionary):
-			# The mover is already in melee range, so it must not receive a competing
-			# advance. `engage` remains a legal non-stationary goal: MovementGoal only
-			# admits an origin-containing region for `hold`.
-			var adjacent_region: Array = _adjacent_region(context, hostile["position"] as Dictionary, false)
+		if ReachAuthority.in_reach(
+			context["origin"] as Dictionary, hostile["position"] as Dictionary, "melee_attack"
+		):
+			# Already able to strike: the region keeps the mover's own cell, so staying
+			# and attacking is a candidate rather than only the cells around the target.
+			var adjacent_region: Array = _adjacent_region(context, hostile["position"] as Dictionary, true)
 			_add_goal(
 				candidates, BUCKET_DIRECT, context, pressure, "engage", goal_role,
 				adjacent_region, NORMAL, [str(hostile["id"])]
@@ -175,7 +177,7 @@ static func _add_ordinary_combat(
 		# RETURNS immediately. The `engage baseline` goals in the other objective modes
 		# come from _add_truthful_engage (BUCKET_SAFETY), not from here, so those modes
 		# are untouched.
-		var region: Array = _adjacent_region(context, hostile["position"] as Dictionary, false)
+		var region: Array = _adjacent_region(context, hostile["position"] as Dictionary, true)
 		_add_goal(candidates, BUCKET_TACTICAL, context, pressure, "engage", goal_role, region, HIGH, [str(hostile["id"])])
 
 
@@ -185,17 +187,43 @@ static func _add_purify(candidates: Array, context: Dictionary, pressure: Dictio
 		_add_truthful_engage(candidates, context, pressure)
 		return
 	var health: float = float(pressure["objective_health_ratio"])
-	if health < 0.0 or health >= 0.5:
+	# A negative ratio means the objective carries no health fact. There is nothing to
+	# anchor on, so the mode degrades to ordinary combat.
+	if health < 0.0:
 		_add_ordinary_combat(candidates, context, pressure, "baseline")
 		return
+	# `health < 0.5` used to gate the WHOLE branch below. A 200-hp shrine losing 5 a
+	# round reaches that at round 20; these encounters end around round 5, so no part
+	# of the mode's identity had ever run in a live fight. The PURIFIER is now anchored
+	# at every level of shrine health, and health scales its urgency instead
+	# (`_shrine_urgency`): a healthy shrine is a lower call than a failing one, not no
+	# call at all.
+	#
+	# The other three roles stay behind the threshold, and that is a MEASURED limit,
+	# not an oversight. Purifying wins nothing — PURIFY_SHRINE is won by
+	# `all_enemies_defeated` (CombatState.check_end_condition) — so anchoring the
+	# protector, the blocker and the hostile breaker from round 1 puts four of five
+	# Echoes on guard duty and stalls the only win the mode has: measured over 20
+	# seeded encounters it took victories from 20/20 to 17/20 (one shrine destroyed,
+	# two unresolved at 30 rounds). See docs/v2-combat-003-handoff.md §18.
+	var shrine_failing: bool = health < 0.5
 	var alignment: String = str(pressure["mover_alignment"])
 	var role: String = str(pressure["factual_role"])
 	if role == "purifier":
-		var adjacent: bool = _is_adjacent(context["origin"] as Dictionary, pressure["objective_position"] as Dictionary)
-		if adjacent:
-			_add_goal(candidates, BUCKET_DIRECT, context, pressure, "hold", "purifier", [context["origin"]], CRITICAL, [str(pressure["objective_id"])])
+		# Reach, never adjacency: `actor.purify_shrine` is in ACTION_RANGES, so a later
+		# story that raises its value moves this branch with it (handoff §17).
+		var in_reach: bool = ReachAuthority.in_reach(
+			context["origin"] as Dictionary,
+			pressure["objective_position"] as Dictionary,
+			"actor.purify_shrine"
+		)
+		if in_reach:
+			_add_goal(candidates, BUCKET_DIRECT, context, pressure, "hold", "purifier", [context["origin"]], _shrine_urgency(CRITICAL, shrine_failing), [str(pressure["objective_id"])])
 		else:
-			_add_goal(candidates, BUCKET_DIRECT, context, pressure, "advance", "purifier", pressure["destination_region"] as Array, CRITICAL, [str(pressure["objective_id"])])
+			_add_goal(candidates, BUCKET_DIRECT, context, pressure, "advance", "purifier", pressure["destination_region"] as Array, _shrine_urgency(CRITICAL, shrine_failing), [str(pressure["objective_id"])])
+	elif not shrine_failing:
+		_add_ordinary_combat(candidates, context, pressure, "baseline")
+		return
 	elif alignment == "party":
 		_add_goal(candidates, BUCKET_DIRECT, context, pressure, "protect", "protector", pressure["destination_region"] as Array, HIGH, [str(pressure["objective_id"])])
 		_add_goal(candidates, BUCKET_TACTICAL, context, pressure, "intercept", "blocker", pressure["approach_region"] as Array, HIGH, [str(pressure["objective_id"])])
@@ -203,6 +231,13 @@ static func _add_purify(candidates: Array, context: Dictionary, pressure: Dictio
 		_add_goal(candidates, BUCKET_TACTICAL, context, pressure, "advance", "breaker", pressure["approach_region"] as Array, HIGH, [str(pressure["objective_id"])])
 		_add_objective_engage(candidates, BUCKET_DIRECT, context, pressure, "breaker", NORMAL)
 	_add_truthful_engage(candidates, context, pressure)
+
+
+## One urgency band lower while the shrine is above the failing threshold, the full
+## band once it is below. The four urgency constants are 0.25 apart, so one
+## subtraction is the step; LOW is the floor.
+static func _shrine_urgency(base: float, shrine_failing: bool) -> float:
+	return base if shrine_failing else maxf(LOW, base - LOW)
 
 
 static func _add_recover(candidates: Array, context: Dictionary, pressure: Dictionary) -> void:
@@ -239,7 +274,7 @@ static func _add_protect(
 		var carrier: Dictionary = _actor_by_id(context, str(pressure["carrier_id"]))
 		var carrier_cutoff: Array = pressure["approach_region"] as Array
 		if _is_living_actor(carrier):
-			var carrier_region: Array = _adjacent_region(context, carrier["position"] as Dictionary, false)
+			var carrier_region: Array = _adjacent_region(context, carrier["position"] as Dictionary, true)
 			_add_goal(candidates, BUCKET_DIRECT, context, pressure, "pursue", "hunter", carrier_region, CRITICAL, [str(carrier["id"])])
 			# §13.4 "focus or cut off the enemy carrier" — the fleeing carrier is an
 			# escaper, so its cutoff is projected from its own traversable escape
@@ -269,7 +304,7 @@ static func _add_pursue(candidates: Array, context: Dictionary, pressure: Dictio
 		var quarry: Dictionary = _actor_by_id(context, str(pressure["quarry_id"]))
 		var engaged_elsewhere: Array = []
 		if _is_living_actor(quarry) and bool(quarry["is_quarry"]):
-			var quarry_region: Array = _adjacent_region(context, quarry["position"] as Dictionary, false)
+			var quarry_region: Array = _adjacent_region(context, quarry["position"] as Dictionary, true)
 			_add_goal(candidates, BUCKET_DIRECT, context, pressure, "pursue", "hunter", quarry_region, CRITICAL, [str(quarry["id"])])
 			engaged_elsewhere.append(str(quarry["id"]))
 		# §13.6 — "cutoff projection from the quarry's traversable escape graph
@@ -655,7 +690,7 @@ static func _add_truthful_engage(
 		var hostile: Dictionary = hostile_value as Dictionary
 		if excluded_actor_ids.has(str(hostile["id"])):
 			continue
-		var region: Array = _adjacent_region(context, hostile["position"] as Dictionary, false)
+		var region: Array = _adjacent_region(context, hostile["position"] as Dictionary, true)
 		_add_goal(candidates, BUCKET_SAFETY, context, pressure, "engage", "baseline", region, NORMAL, [str(hostile["id"])])
 
 
@@ -673,7 +708,7 @@ static func _add_objective_engage(
 	var relationship: String = str((context["relationships"] as Dictionary).get(str(objective["id"]), ""))
 	if relationship != "hostile" or bool(objective["is_dead"]) or bool(objective["is_ko"]):
 		return
-	var region: Array = _adjacent_region(context, objective["position"] as Dictionary, false)
+	var region: Array = _adjacent_region(context, objective["position"] as Dictionary, true)
 	_add_goal(candidates, bucket, context, pressure, "engage", goal_role, region, urgency, [str(objective["id"])])
 
 
@@ -691,7 +726,7 @@ static func _add_actor_engage(
 		return
 	if str((context["relationships"] as Dictionary).get(actor_id, "")) != "hostile":
 		return
-	var region: Array = _adjacent_region(context, actor["position"] as Dictionary, false)
+	var region: Array = _adjacent_region(context, actor["position"] as Dictionary, true)
 	_add_goal(candidates, bucket, context, pressure, "engage", goal_role, region, urgency, [actor_id])
 
 
@@ -706,12 +741,12 @@ static func _add_goal(
 	urgency: float,
 	relevant_input: Array
 ) -> void:
-	var region: Array = _truthful_region(context, region_input, purpose == "hold")
-	if region.is_empty():
-		return
 	var relevant: Array = V.canonical_string_array(relevant_input.filter(func(value: Variant) -> bool: return not str(value).is_empty()))
 	var primary: Dictionary = _primary_plan(context, pressure, purpose, relevant)
 	if primary.is_empty():
+		return
+	var region: Array = _truthful_region(context, region_input, _origin_belongs_in_region(context, purpose, primary))
+	if region.is_empty():
 		return
 	var fallback: Dictionary = {} if str(primary["type"]) == "actor.idle" else ActionPlan.build("actor.idle")
 	var anchor: Dictionary = region[0] as Dictionary
@@ -737,8 +772,13 @@ static func _primary_plan(
 	var target_id: String = str(relevant[0]) if not relevant.is_empty() else ""
 	match purpose:
 		"advance":
-			if str(pressure["factual_role"]) == "purifier" and float(pressure["objective_health_ratio"]) >= 0.0 and float(pressure["objective_health_ratio"]) < 0.5:
-				return ActionPlan.build("actor.purify_shrine", str(pressure["objective_id"]))
+			# Truthfulness, not role, is the guard: name the objective only when it is
+			# what this goal actually advances toward. No shrine-health gate — see
+			# BehaviorArbiter.gd's purify override comment for why that gate never fired.
+			if str(pressure["factual_role"]) == "purifier" \
+					and not target_id.is_empty() \
+					and target_id == str(pressure["objective_id"]):
+				return ActionPlan.build("actor.purify_shrine", target_id)
 			return ActionPlan.build("actor.move", target_id)
 		"engage", "pursue":
 			return ActionPlan.build("melee_attack", target_id)
@@ -756,6 +796,31 @@ static func _primary_plan(
 		"escort":
 			return ActionPlan.build("protect_ally", target_id)
 	return {}
+
+
+## May the mover's own cell stay in this goal's destination region?
+##
+## `hold` always: the objective cell IS the destination. Every other stay-capable
+## purpose plans a range-bound action against a named target, so the origin qualifies
+## only when that target is already within the action's reach — the range question
+## (`ReachAuthority.in_reach`), never an adjacency test. A target whose position is not
+## perceived cannot be answered for, so it does not qualify.
+static func _origin_belongs_in_region(
+	context: Dictionary, purpose: String, primary: Dictionary
+) -> bool:
+	if purpose == "hold":
+		return true
+	if not GoalContract.STAY_CAPABLE_PURPOSES.has(purpose):
+		return false
+	var target_id: String = str(primary["target_id"])
+	if target_id.is_empty():
+		return false
+	var target: Dictionary = _actor_by_id(context, target_id)
+	if target.is_empty():
+		return false
+	return ReachAuthority.in_reach(
+		context["origin"] as Dictionary, target["position"] as Dictionary, str(primary["type"])
+	)
 
 
 static func _truthful_region(context: Dictionary, input_region: Array, allow_origin: bool) -> Array:

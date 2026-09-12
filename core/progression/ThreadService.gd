@@ -38,6 +38,12 @@ static func crystallize_threads(
 	# GDD §14.4: every completed Realm guarantees at least 1 usable full Thread.
 	# "one": 0.00 threshold handles this; max(1, ...) is the code-level safety floor.
 	var thread_count: int = max(1, _resolve_count(quality, count_thresholds))
+	# The opening Realm pays a pinned count. Quality is an AVERAGE segment weight, so its single
+	# stage cleared cleanly scores 1.0 and takes the top count — the most a full Realm can pay.
+	# It is also not one of the player's Realms; it teaches what a Thread is and hands over one.
+	# Virtue and quality tier still come from the run; only the count is pinned.
+	if RealmService.is_prologue_run(realm_id):
+		thread_count = RealmService.PROLOGUE_THREAD_COUNT
 
 	var quality_tiers_v: Variant = cfg.get("quality_tiers", {})
 	var quality_tiers: Dictionary = quality_tiers_v if quality_tiers_v is Dictionary else {}

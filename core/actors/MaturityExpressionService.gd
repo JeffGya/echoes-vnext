@@ -31,11 +31,12 @@ const SocialGraphService = preload("res://core/sanctum/SocialGraphService.gd")
 # ── Expression band ───────────────────────────────────────────────────────────
 
 # Returns the expression band for this actor based on Standing (rank).
-# Possible values: "nascent" | "forming" | "grounded" | "whole"
-#   nascent  — self still assembling (rank 1)
-#   forming  — self taking shape (rank 2)
-#   grounded — rooted, able to assert self; first calling milestone (rank 3)
-#   whole    — integrated, self-commanding (rank 4–5)
+# Possible values: "nascent" | "forming" | "grounded" | "whole" — calling-aligned to the
+# calling ladder's milestones at Standing 3/6/9 (V2-COMBAT-003, PROPOSED DEFAULT):
+#   nascent  — self still assembling (rank 1-2)
+#   forming  — self taking shape (rank 3-5)
+#   grounded — rooted, able to assert self; first calling milestone (rank 6-8)
+#   whole    — integrated, self-commanding (rank 9)
 #
 # band_by_standing: data.maturity_expression.band_by_standing from balance.json
 static func get_expression_band(rank: int, band_by_standing: Dictionary) -> String:
@@ -44,6 +45,20 @@ static func get_expression_band(rank: int, band_by_standing: Dictionary) -> Stri
 		return band_by_standing[key]
 	# Clamp to highest defined band if rank exceeds table
 	return band_by_standing.get("5", "whole")
+
+
+## Combinator: resolves the expression band for a save-data/actor echo dict
+## given the band_by_standing config subtree. Falls back to "nascent" if
+## config is missing. band_by_standing is caller-supplied (get it from
+## ConfigService.get_maturity_expression_band_by_standing()) — per the file
+## rule above, this class never loads ConfigService itself.
+## (V2-INFRA-003 Phase 4 Slice 1b — moved out of FlowRuntime/WeaveController,
+## which had duplicated this.)
+static func get_expression_band_for_echo(echo: Dictionary, band_by_standing: Dictionary) -> String:
+	if band_by_standing.is_empty():
+		return "nascent"
+	var rank: int = int(echo.get("rank", 1))
+	return get_expression_band(rank, band_by_standing)
 
 
 # ── Autonomy outputs (V2-PROG-012 Phase 1) ────────────────────────────────────

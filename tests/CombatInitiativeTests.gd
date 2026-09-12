@@ -20,6 +20,10 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(CombatInitiativeTests, "_t_directives_do_not_affect_order"))
 	runner.register_test("combat_initiative/same_inputs_same_order",
 		Callable(CombatInitiativeTests, "_t_same_inputs_same_order"))
+	runner.register_test("combat_initiative/dominant_vector_recognizes_all_ten_vectors",
+		Callable(CombatInitiativeTests, "_t_dominant_vector_recognizes_all_ten_vectors"))
+	runner.register_test("combat_initiative/v2_calling_receives_initiative_modifier",
+		Callable(CombatInitiativeTests, "_t_v2_calling_receives_initiative_modifier"))
 
 
 static func _morale_cfg() -> Dictionary:
@@ -141,4 +145,104 @@ static func _t_same_inputs_same_order() -> Dictionary:
 	for i in range(order_a.size()):
 		if str(order_a[i].get("id", "")) != str(order_b[i].get("id", "")):
 			return { "ok": false, "error": "Order differs at index %d: %s vs %s" % [i, str(order_a[i].get("id", "")), str(order_b[i].get("id", ""))] }
+	return { "ok": true }
+
+
+# Test 5: dominant_vector_recognizes_all_ten_vectors
+# V2-COMBAT-003: CombatState._dominant_key()'s vec_tiebreak = ["vanguard","seeker","protector",
+# "pillar"] is a TIEBREAK list only — every key in vector_scores must be a scoring candidate.
+# Before the fix, _dominant_key() iterated the tiebreak list itself, so a key absent from it
+# (six of the ten V2 vectors) was invisible: never out-ranked, never examined.
+#
+#   echo_a: devoted=100 (true dominant, far above every other key), vanguard/seeker/protector/
+#           pillar all =1. The pre-fix bug only ever looks at those four legacy keys, so it
+#           never sees "devoted" and reports "pillar" (last checked, tied at 1) as dominant.
+#   echo_b: vanguard=50 (true dominant AND the only key in the legacy four that stands out).
+#           Both old and new code agree echo_b's dominant is "vanguard".
+#
+# by_dominant_vector weights "devoted" (30) far above "vanguard" (5) — a margin of 25, larger
+# than the 0-9 deterministic seed nudge could ever close — so:
+#   FIXED rule: echo_a dominant=devoted -> vec_mod 30. echo_b dominant=vanguard -> vec_mod 5.
+#               echo_a leads (30 > 5, unreachable by nudge alone).
+#   BUGGY rule: echo_a dominant=pillar (six vectors invisible) -> vec_mod 0. echo_b unchanged
+#               at vec_mod 5. echo_b would lead instead — the wrong echo, because echo_a's true
+#               100-point dominant vector was never examined.
+static func _t_dominant_vector_recognizes_all_ten_vectors() -> Dictionary:
+	var vec_cfg: Dictionary = {
+		"by_dominant_vector": {
+			"devoted": 30, "vanguard": 5, "seeker": 0, "protector": 0, "pillar": 0,
+		},
+	}
+	var actor_a := {
+		"id":            "echo_a",
+		"name":          "Echo A",
+		"speed":         5,
+		"stats":         { "agi": 5 },
+		"morale":        60,
+		"vector_scores": {
+			"devoted": 100, "vanguard": 1, "seeker": 1, "protector": 1, "pillar": 1,
+		},
+	}
+	var actor_b := {
+		"id":            "echo_b",
+		"name":          "Echo B",
+		"speed":         5,
+		"stats":         { "agi": 5 },
+		"morale":        60,
+		"vector_scores": {
+			"devoted": 0, "vanguard": 50, "seeker": 1, "protector": 1, "pillar": 1,
+		},
+	}
+	var state: Dictionary = CombatState.create([actor_a, actor_b], "defeat_enemies", 0, vec_cfg)
+	var order: Array = state.get("initiative_order", [])
+	if order.size() < 2:
+		return { "ok": false, "error": "initiative_order too short (got %d)" % order.size() }
+	if str(order[0].get("id", "")) != "echo_a":
+		return {
+			"ok": false,
+			"error": "Expected echo_a first (devoted=100 dominant, vec_mod=30 > echo_b vec_mod=5); "
+				+ "got: %s -- a key absent from vec_tiebreak is being shadowed again" % str(order[0].get("id", ""))
+		}
+	return { "ok": true }
+
+
+# Test 6: v2_calling_receives_initiative_modifier
+# Reads the SHIPPED balance.json (not a hand-authored fixture) so a regression of
+# by_calling_origin back to V1 ids fails here -- "aduro" would silently score 0.
+static func _t_v2_calling_receives_initiative_modifier() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var combat_cfg: Dictionary = (bal.get("data", {}) as Dictionary).get("combat", {})
+	var init_cfg: Dictionary = combat_cfg.get("initiative_modifiers", {})
+	var by_calling: Dictionary = init_cfg.get("by_calling_origin", {})
+
+	if not by_calling.has("aduro"):
+		return { "ok": false, "error": "fixture broken: data.combat.initiative_modifiers.by_calling_origin has no 'aduro' key -- table is not on V2 calling ids" }
+
+	var actor_aduro := {
+		"id":             "echo_aduro",
+		"name":           "Aduro",
+		"speed":          5,
+		"stats":          { "agi": 5 },
+		"calling_origin": "aduro",
+		"calling":        "",
+	}
+	var actor_uncalled := {
+		"id":             "echo_uncalled",
+		"name":           "Uncalled",
+		"speed":          5,
+		"stats":          { "agi": 5 },
+		"calling_origin": "uncalled",
+		"calling":        "",
+	}
+	var state: Dictionary = CombatState.create([actor_aduro, actor_uncalled], "defeat_enemies", 0, init_cfg)
+	var order: Array = state.get("initiative_order", [])
+	if order.size() < 2:
+		return { "ok": false, "error": "initiative_order too short (got %d)" % order.size() }
+	if str(order[0].get("id", "")) != "echo_aduro":
+		return {
+			"ok": false,
+			"error": "Expected 'aduro' (V2 calling, shipped modifier %s) to outrank 'uncalled' (0.0); got '%s' first -- by_calling_origin has regressed to unmigrated V1 ids" % [str(by_calling.get("aduro")), str(order[0].get("id", ""))],
+		}
 	return { "ok": true }

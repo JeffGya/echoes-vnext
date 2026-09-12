@@ -54,7 +54,7 @@
 #     3. smallest BFS distance
 #     4. situation id lexicographic        <- replaces today's implicit
 #                                             dependence on situations[] order
-#     5. canonical cell key "col,row"      <- total-order guard (slice 6 6A/U3)
+#     5. numeric col, then 6. numeric row  <- total-order guard (D57)
 #
 # SLICE 6 PHASE 6A, UNIT 3 — MANHATTAN REMOVED FROM select_frontier.
 #
@@ -749,7 +749,7 @@ static func select_frontier(
 ##   2. greatest configured target_preference weight
 ##   3. smallest BFS distance
 ##   4. situation id lexicographic
-##   5. canonical cell key "col,row"  <- total-order guard, slice 6 phase 6A
+##   5. numeric col, then 6. numeric row  <- total-order guard (D57)
 ##
 ## So weight leads inside the envelope and distance still bounds how far the
 ## party will detour for a preferred category.
@@ -776,8 +776,8 @@ static func select_frontier(
 ## design. That is why the fix is a genuine total-order guard rather than a
 ## documented precondition: the precondition is not one the caller can cheaply
 ## guarantee, because well-formed callers legitimately produce id-less entries.
-## Criterion 5 is the situation's own canonical cell key, distinct for any two
-## situations that are not co-located.
+## Criteria 5 and 6 are the situation's own numeric col and row, distinct for any
+## two situations that are not co-located.
 ##
 ## The RESIDUAL precondition, stated explicitly: two situations that share a
 ## position AND an id are indistinguishable to this function and still resolve by
@@ -785,20 +785,16 @@ static func select_frontier(
 ## deterministic rule can prefer one over the other, and repairing it belongs to
 ## whatever produced them.
 ##
-## KNOWN, ACCEPTED FOR NOW — criterion 5 carries the SAME defect as frontier
-## criterion 4 did. It is a lexicographic string compare of `"col,row"`, so
-## "10,3" < "9,3" and the induced order is jagged, non-monotone in either axis, and
-## flips its favoured compass direction with coordinate magnitude. The earlier
-## claim that this was "acceptable HERE and not there" rested on id-less entries
-## being rare malformed data; since they are in fact ordinary input, that
-## justification does not hold and is withdrawn.
+## D57, FIXED (V2-COMBAT-003 phase 10) — criterion 5 is now a NUMERIC (col, row)
+## compare, not a string compare of the canonical `"col,row"` key. The string compare
+## put "10,3" before "9,3": non-monotone in either axis, so ordinary two-digit
+## coordinates broke the order.
 ##
-## It is left unchanged in this unit deliberately. The approved scope was frontier
-## criterion 4, whose traffic unit 3 materially increased; this one is reached only
-## after weight AND distance AND id have all tied, so the exposure is far smaller.
-## When it is fixed it FOLLOWS CRITERION 4'S FIX — the same salted `_fnv1a_32` over
-## the canonical key, with the salt threaded in as a parameter — rather than
-## inventing a second mechanism.
+## This is NOT frontier criterion 4's salted hash. That criterion breaks ties over a
+## whole ring of equidistant candidates, so a fixed compass preference there causes
+## visible drift — only a de-aligner fixes that. This criterion fires only after
+## weight, distance AND id have all tied: a small, non-ring set, so there is no drift
+## to remove and a numeric compare is enough.
 ##
 ## Returns a copy of the chosen situation, or {}.
 static func select_objective_target(
@@ -845,9 +841,10 @@ static func select_objective_target(
 			-_target_weight(situation, weights, category_map),
 			distance,
 			str(situation.get("id", "")),
-			# Criterion 5 — the total-order guard. Reached only when weight, distance
-			# AND id all tie, i.e. duplicate or id-less situations. See the docblock.
-			V.canonical_cell_key(entry["pos"] as Dictionary),
+			# Criteria 5-6 (D57): numeric col, then row. See the docblock above for
+			# why this is not the salted hash frontier criterion 4 uses.
+			float(int((entry["pos"] as Dictionary)["col"])),
+			float(int((entry["pos"] as Dictionary)["row"])),
 		]
 		if best.is_empty() or _rank_less(rank, best_rank):
 			best = situation

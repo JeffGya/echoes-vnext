@@ -47,11 +47,16 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var active_vow := VowService.get_active_vow(flow_ctx.save_data)
 
 	# --- Realm context (informational only — pledging is allowed at any time) ---
+	# V2-INFRA-003 Phase 8C: the prologue Realm is excluded. It is internal and unnamed, so a
+	# Vow screen reporting "a Realm is in progress" during it would name a Realm the player has
+	# never been shown and cannot leave by choosing another.
 	var realm_in_progress := false
 	var realms_v: Variant = flow_ctx.save_data.get("realms", {})
 	if realms_v is Dictionary:
 		var realms: Dictionary = realms_v
 		for rid in realms:
+			if RealmService.is_prologue_run(str(rid)):
+				continue
 			var rm_v: Variant = realms[rid]
 			if rm_v is Dictionary:
 				var rm: Dictionary = rm_v
@@ -171,7 +176,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 
 	return {
 		"type": FlowStateIds.VOW_MANAGE,
-		"meta": { "sim_tick": t },
+		"meta": { "t": t },
 		"data": {
 			"active_vow":                active_display,
 			"available_vows":            available_vows,

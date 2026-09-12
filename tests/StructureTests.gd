@@ -23,6 +23,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("shrine/purify_stack_reduces_drain",                  Callable(StructureTests, "_t_purify_stack_reduces_drain"))
 	runner.register_test("shrine/purify_stack_expiry_adds_penalty",            Callable(StructureTests, "_t_purify_stack_expiry_adds_penalty"))
 	runner.register_test("shrine/select_purifier_prefers_faith_pillar_vector", Callable(StructureTests, "_t_select_purifier_prefers_faith_pillar"))
+	# V2-COMBAT-003: proves _dominant_key() examines all ten V2 vectors, not just the four
+	# legacy names in vec_tiebreak. Before the fix this test fails (wrong echo selected).
+	runner.register_test("shrine/select_purifier_recognizes_all_ten_vectors",  Callable(StructureTests, "_t_select_purifier_recognizes_all_ten_vectors"))
 
 
 # -------------------------
@@ -223,5 +226,58 @@ static func _t_select_purifier_prefers_faith_pillar() -> Dictionary:
 
 	if purifier_id != "echo_b":
 		return { "ok": false, "error": "Expected echo_b (weight=40 > echo_a weight=30), got: %s" % purifier_id }
+
+	return { "ok": true }
+
+
+# Test 9: select_purifier_recognizes_all_ten_vectors
+# V2-COMBAT-003: _dominant_key()'s vec_tiebreak = ["pillar","protector","seeker","vanguard"] is a
+# TIEBREAK list only — every key in vector_scores must be a scoring candidate. This test's two
+# echoes are built so the pre-fix (tiebreak-list-as-candidate-set) bug and the fix disagree on
+# who wins, so a regression back to the old behaviour fails this test:
+#
+#   echo_a: devoted=100 (true dominant, far above every other key), pillar/protector/seeker/
+#           vanguard all =1. Buggy code only ever looks at those four legacy keys, so it never
+#           sees "devoted" and reports "pillar" (first of four equal values) as dominant.
+#   echo_b: vanguard=50 (true dominant AND the only key in the legacy four that stands out),
+#           devoted=0. Both old and new code agree echo_b's dominant is "vanguard".
+#
+# purify_weight_by_vector weights "devoted" (30) higher than "vanguard" (25), which is itself
+# higher than "pillar" (5). So:
+#   FIXED  rule: echo_a dominant=devoted -> weight 0*0.5+30=30.  echo_b dominant=vanguard -> 25.
+#                echo_a wins (30 > 25) — the devoted-dominant echo correctly outranks.
+#   BUGGY  rule: echo_a dominant=pillar (six vectors invisible) -> weight 5. echo_b unchanged
+#                at 25. echo_b wins (25 > 5) — the wrong echo, because echo_a's true 100-point
+#                dominant vector was never examined.
+static func _t_select_purifier_recognizes_all_ten_vectors() -> Dictionary:
+	var echo_a: Dictionary = {
+		"id":            "echo_a",
+		"traits":        { "faith": 0 },
+		"vector_scores": {
+			"devoted": 100, "pillar": 1, "protector": 1, "seeker": 1, "vanguard": 1,
+		},
+	}
+	var echo_b: Dictionary = {
+		"id":            "echo_b",
+		"traits":        { "faith": 0 },
+		"vector_scores": {
+			"devoted": 0, "pillar": 1, "protector": 1, "seeker": 1, "vanguard": 50,
+		},
+	}
+	var shrine_cfg: Dictionary = {
+		"purify_weight_faith": 0.5,
+		"purify_weight_by_vector": {
+			"devoted": 30, "pillar": 5, "protector": 5, "seeker": 5, "vanguard": 25,
+		},
+	}
+
+	var purifier_id: String = ShrineService.select_purifier([echo_a, echo_b], shrine_cfg)
+
+	if purifier_id != "echo_a":
+		return {
+			"ok": false,
+			"error": "Expected echo_a (devoted=100 dominant, weight=30 > echo_b weight=25); "
+				+ "got: %s -- a key absent from vec_tiebreak is being shadowed again" % purifier_id
+		}
 
 	return { "ok": true }

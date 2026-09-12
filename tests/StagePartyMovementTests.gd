@@ -71,6 +71,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement/stage_party/result_resolved_action_can_diverge_from_planned", Callable(StagePartyMovementTests, "_t_result_resolved_action_can_diverge_from_planned"))
 	runner.register_test("movement/stage_party/objective_slack_config_narrows_but_never_widens", Callable(StagePartyMovementTests, "_t_objective_slack_config_narrows_but_never_widens"))
 	runner.register_test("movement/stage_party/objective_total_order_survives_missing_ids", Callable(StagePartyMovementTests, "_t_objective_total_order_survives_missing_ids"))
+	runner.register_test("movement/stage_party/objective_tie_break_is_numeric_not_lexicographic", Callable(StagePartyMovementTests, "_t_objective_tie_break_is_numeric_not_lexicographic"))
 	runner.register_test("movement/stage_party/frontier_diagonal_not_deprioritised_by_manhattan", Callable(StagePartyMovementTests, "_t_frontier_diagonal_not_deprioritised_by_manhattan"))
 
 
@@ -1418,10 +1419,37 @@ static func _t_objective_total_order_survives_missing_ids() -> Dictionary:
 	if not _pick_is_order_independent(duplicated, dist_field, weights, category_map):
 		return _fail("situations sharing an id still resolve by array position")
 
-	# The guard is the canonical cell key, so the pick is the smallest one.
+	# The guard is numeric (col, row), so the pick is the smallest column.
 	var chosen: Dictionary = Adapter.select_objective_target(idless, dist_field, weights, category_map)
 	if (chosen.get("pos", {}) as Dictionary) != {"col": 0, "row": 1}:
-		return _fail("expected the smallest canonical key (0,1), got %s" % str(chosen.get("pos", {})))
+		return _fail("expected the smallest (col, row) (0,1), got %s" % str(chosen.get("pos", {})))
+	return _pass()
+
+
+## D57 — see StagePartyMovementAdapter.select_objective_target's docblock. Fails
+## under the old string compare of "col,row" (10 sorts before 9), passes numeric.
+static func _t_objective_tie_break_is_numeric_not_lexicographic() -> Dictionary:
+	var category_map: Dictionary = {"npc": "intel"}
+	var weights: Dictionary = {"intel": 1.4}
+	var dist_field: Dictionary = {"10,3": 1, "9,3": 1}
+	var idless: Array = [
+		{"pos": {"col": 10, "row": 3}, "type": "npc"},
+		{"pos": {"col": 9, "row": 3}, "type": "npc"},
+	]
+	if not _pick_is_order_independent(idless, dist_field, weights, category_map):
+		return _fail("the pick still depends on array position")
+	var chosen: Dictionary = Adapter.select_objective_target(idless, dist_field, weights, category_map)
+	if (chosen.get("pos", {}) as Dictionary) != {"col": 9, "row": 3}:
+		return _fail("expected column 9 before column 10, got %s" % str(chosen.get("pos", {})))
+
+	var rows: Array = [
+		{"pos": {"col": 4, "row": 10}, "type": "npc"},
+		{"pos": {"col": 4, "row": 9}, "type": "npc"},
+	]
+	var row_field: Dictionary = {"4,10": 1, "4,9": 1}
+	var row_pick: Dictionary = Adapter.select_objective_target(rows, row_field, weights, category_map)
+	if (row_pick.get("pos", {}) as Dictionary) != {"col": 4, "row": 9}:
+		return _fail("expected row 9 before row 10, got %s" % str(row_pick.get("pos", {})))
 	return _pass()
 
 

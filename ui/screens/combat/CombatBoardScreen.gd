@@ -23,6 +23,12 @@ const InitiativeRowScene := preload("res://ui/components/InitiativeRowItem.tscn"
 const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
 
 @onready var _board: TileMapLayer                   = $Board
+# V2-COMBAT-003 terrain commit 4 (decision 16) — a bridge is its own tile. A CHILD of Board,
+# so it inherits every pan, zoom and centring transform with no sync code, and it draws a
+# tinted overlay ON TOP of the ordinary ground tile rather than replacing it — so the board
+# silhouette and the isometric overlap order are byte-identical to before. The tint is a
+# PLACEHOLDER for the real bridge art; the geometry it reads is already in the terrain dict.
+@onready var _bridge_layer: TileMapLayer            = $Board/BridgeLayer
 @onready var _move_telegraph_layer: Node2D          = $MoveTelegraphLayer
 @onready var _token_layer: CombatTokenLayer         = $TokenLayer
 # V2-VOICE-001: bark popup layer — optional; null-checked before use.
@@ -251,6 +257,8 @@ func _reset_transient_ui() -> void:
 	_pending_dispatch_action = {}
 
 	_board.clear()
+	if _bridge_layer != null:
+		_bridge_layer.clear()
 	_distance_layer.clear_distances()
 	_back_button.visible     = false
 	_round_label.visible     = false
@@ -557,8 +565,13 @@ func _draw_board(cols: int, rows: int, terrain: Dictionary = {}) -> void:
 	# StageTerrain.walkable_set returns {} when terrain is absent/empty — that is
 	# the legacy sentinel meaning "all cells walkable".
 	var walkable: Dictionary = StageTerrain.walkable_set(terrain)
+	# Which cells to PAINT as a bridge (V2-COMBAT-003, decision 16). Load-bearing spans
+	# only, plateau ground subtracted — see StageTerrain.bridge_tile_cell_set.
+	var bridge_cells: Dictionary = StageTerrain.bridge_tile_cell_set(terrain)
 
 	_board.clear()
+	if _bridge_layer != null:
+		_bridge_layer.clear()
 
 	if walkable.is_empty():
 		# Legacy / no-terrain path: paint every cell in the bounding rectangle.
@@ -576,7 +589,11 @@ func _draw_board(cols: int, rows: int, terrain: Dictionary = {}) -> void:
 				continue
 			var c: int = int(parts[0])
 			var r: int = int(parts[1])
-			_board.set_cell(Vector2i(c, r), _TILE_SOURCE_ID, _TILE_ATLAS_COORDS)
+			var cell_v := Vector2i(c, r)
+			_board.set_cell(cell_v, _TILE_SOURCE_ID, _TILE_ATLAS_COORDS)
+			# A bridge is its own tile: same ground tile underneath, tinted overlay above.
+			if _bridge_layer != null and bridge_cells.has(key):
+				_bridge_layer.set_cell(cell_v, _TILE_SOURCE_ID, _TILE_ATLAS_COORDS)
 
 
 func _center_board(cols: int, rows: int) -> void:
@@ -798,26 +815,14 @@ func set_emotion_debug(enabled: bool) -> void:
 # _bark_popup_layer.show_barks(). Called every render; only actors with a non-empty
 # bark_line produce an event (bark is consumed on first projection in FlowEncounterState).
 #
-# Priority sort:
-#   Tier 1: combat_last_stand, combat_fear_extreme, combat_ko, combat_resilient — always shown
-#   Tier 2: combat_fear_rising, combat_morale_falling, combat_inspired, combat_taunt, combat_calling_skill
-#   Tier 3: combat_attack, combat_guard, combat_banter, combat_rally_ally (situational)
-# Cap: max 3 originals. Reactions do NOT count against cap.
+# The budget — how many barks a round may show, and their tier order — is applied upstream by
+# NarrativeVoiceService.apply_round_bark_budget() from data.voice. Rows arriving here are
+# already the survivors, ranked by bark_priority (1 = most significant). This function only
+# orders and interleaves them; it must not reintroduce a cap or a tier table of its own.
 # Originals shown immediately; reactions shown after REACTION_DELAY (in BarkPopupLayer).
 func _show_bark_popups(actors: Array, _data: Dictionary) -> void:
 	if _bark_popup_layer == null:
 		return
-
-	var max_originals: int = 3
-	var tier_map: Dictionary = {
-		"combat_last_stand":    1, "combat_fear_extreme": 1,
-		"combat_ko":            1, "combat_resilient":    1,
-		"combat_fear_rising":   2, "combat_morale_falling": 2,
-		"combat_inspired":      2, "combat_taunt":          2,
-		"combat_calling_skill": 2, "combat_divergence":     2,
-		"combat_attack":        3, "combat_guard":          3,
-		"combat_banter":        3,
-	}
 
 	var originals: Array = []
 	var reactions: Array = []
@@ -835,6 +840,7 @@ func _show_bark_popups(actors: Array, _data: Dictionary) -> void:
 			"bark_context":  str(actor.get("bark_context", "")),
 			"bark_tier":     str(actor.get("bark_tier", "")),
 			"bark_target_id": str(actor.get("bark_target_id", "")),
+			"bark_priority": int(actor.get("bark_priority", 3)),
 			"is_response":   bool(actor.get("bark_is_response", false)),
 			"screen_pos":    screen_pos,
 		}
@@ -843,14 +849,10 @@ func _show_bark_popups(actors: Array, _data: Dictionary) -> void:
 		else:
 			originals.append(ev)
 
-	# Sort originals by tier (1 = highest priority shown first).
+	# Sort by the upstream priority (1 = highest, shown first).
 	originals.sort_custom(func(a, b):
-		var ta: int = int(tier_map.get(str(a.get("bark_context", "")), 3))
-		var tb: int = int(tier_map.get(str(b.get("bark_context", "")), 3))
-		return ta < tb
+		return int(a.get("bark_priority", 3)) < int(b.get("bark_priority", 3))
 	)
-	if originals.size() > max_originals:
-		originals = originals.slice(0, max_originals)
 
 	# Interleave: orig → its reaction (if any) → next orig → ...
 	var interleaved: Array = []

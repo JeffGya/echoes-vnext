@@ -404,13 +404,6 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 		else:
 			camp["tick"] = int(camp["tick"])
 			
-		# Ensure seed_root exists (we derive from legacy root_seed)
-		if not camp.has("seed_root") or typeof(camp["seed_root"]) != TYPE_STRING or str(camp["seed_root"]).is_empty():
-			var legacy_seed := int(camp.get("root_seed", 0))
-			camp["seed_root"] = "legacy:%d" % legacy_seed
-			repaired = true
-			repaired_notes.append("campaign.seed_root set from legacy root_seed")
-			
 		# Ensure seed_source exists
 		if not camp.has("seed_source") or typeof(camp["seed_source"]) != TYPE_STRING or str(camp["seed_source"]).is_empty():
 			camp["seed_source"] = "repair"
@@ -519,23 +512,40 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 		repaired = true
 		repaired_notes.append("economy.favor set to 0 (V2 stub)")
 
+	# ---- Flow repairs ----
+	# Older saves carry dead flow.state / flow.context keys. They are left in place:
+	# removing them is not needed, and nothing reads them.
+	if not save.has("flow") or typeof(save["flow"]) != TYPE_DICTIONARY:
+		save["flow"] = {
+			"pending_result": {},
+		}
+		repaired = true
+		repaired_notes.append("flow added with defaults (pending_result)")
+	else:
+		var flow: Dictionary = save["flow"]
+		if not flow.has("pending_result") or typeof(flow["pending_result"]) != TYPE_DICTIONARY:
+			flow["pending_result"] = {}
+			repaired = true
+			repaired_notes.append("flow.pending_result set to {} default (V2-INFRA-003 stub)")
+
 	# ---- Onboarding repairs (Chapter I) ----
 	if not save.has("onboarding") or typeof(save["onboarding"]) != TYPE_DICTIONARY:
-		var _legacy_complete := not bool(save.get("first_boot", true))
 		save["onboarding"] = {
-			"chapter_one_complete": _legacy_complete,
+			"chapter_one_complete": false,
 			"chapter_one_step": "invocation",
 			"fragment_options": [],
 			"heard_fragments": [],
 			"selected_fragment": "",
 			"name_options": [],
-			"keeper_intro_complete": _legacy_complete,
-			"keeper_intro_step": "complete" if _legacy_complete else "",
+			"keeper_intro_complete": false,
+			"keeper_intro_step": "",
 			"keeper_trial_phase": "ready",
 			"keeper_trial_rewind_used": false,
 			"first_thread_id": "",
 			"first_trial_rewards_granted": false,
 			"awakening_choice": "",
+			"opening_realm_id": "",
+			"opening_realm_status": "locked",
 		}
 		repaired = true
 		repaired_notes.append("onboarding added (Chapter I defaults)")
@@ -593,6 +603,15 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			onboarding["awakening_choice"] = ""
 			repaired = true
 			repaired_notes.append("onboarding.awakening_choice set to empty")
+		# V2-INFRA-003 Phase 8 groundwork: opening-realm gating fields (additive stub).
+		if not onboarding.has("opening_realm_id") or typeof(onboarding["opening_realm_id"]) != TYPE_STRING:
+			onboarding["opening_realm_id"] = ""
+			repaired = true
+			repaired_notes.append("onboarding.opening_realm_id set to empty default")
+		if not onboarding.has("opening_realm_status") or typeof(onboarding["opening_realm_status"]) != TYPE_STRING:
+			onboarding["opening_realm_status"] = "locked"
+			repaired = true
+			repaired_notes.append("onboarding.opening_realm_status set to 'locked' default")
 
 	# ---- Sanctum repairs (SANCTUM-001) ----
 	if not save.has("sanctum") or typeof(save["sanctum"]) != TYPE_DICTIONARY:
@@ -706,12 +725,6 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 		var _vc_v: Variant = _balance_for_repair.get("data", {}).get("vectors", {})
 		if typeof(_vc_v) == TYPE_DICTIONARY:
 			_vec_cfg = _vc_v
-
-		# V2-PROG-004: V1 → V2 calling ID map. Defined once here; applied inside the echo loop.
-		var _v1_to_v2_calling: Dictionary = {
-			"blade": "aduro", "warder": "okofor", "steward": "onyamesu",
-			"ranger": "kra_soro", "seer": "okomfo"
-		}
 
 		var roster: Array = sanctum.get("roster", [])
 		for i in range(roster.size()):
@@ -839,25 +852,13 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 					else:
 						tr[k] = int(tr[k])
 
-			# stats (migrate old keys if present)
+			# stats
 			if not echo.has("stats") or typeof(echo["stats"]) != TYPE_DICTIONARY:
 				echo["stats"] = { "max_hp": 0, "atk": 0, "def": 0, "agi": 0, "int": 0, "cha": 0 }
 				repaired = true
 				repaired_notes.append("sanctum.roster[%d].stats set to default dict" % i)
 			else:
 				var st: Dictionary = echo["stats"]
-
-				# Migration: old "spd" -> "agi"
-				if st.has("spd") and (not st.has("agi")):
-					st["agi"] = int(st.get("spd", 0))
-					repaired = true
-					repaired_notes.append("sanctum.roster[%d].stats migrated spd->agi" % i)
-
-				# Migration: old "hp" -> "max_hp" (if it existed)
-				if st.has("hp") and (not st.has("max_hp")):
-					st["max_hp"] = int(st.get("hp", 0))
-					repaired = true
-					repaired_notes.append("sanctum.roster[%d].stats migrated hp->max_hp" % i)
 
 				# Ensure canonical stat keys exist and are ints
 				for k in ["max_hp", "atk", "def", "agi", "int", "cha"]:
@@ -879,15 +880,11 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 				repaired = true
 				repaired_notes.append("sanctum.roster[%d].vector_scores backfilled new V2 keys" % i)
 
-			# rarity (canonical tiers: uncalled/called/chosen; repair legacy 'common')
+			# rarity (canonical tiers: uncalled/called/chosen)
 			if not echo.has("rarity") or typeof(echo["rarity"]) != TYPE_STRING or str(echo["rarity"]).is_empty():
 				echo["rarity"] = "uncalled"
 				repaired = true
 				repaired_notes.append("sanctum.roster[%d].rarity set to 'uncalled' default" % i)
-			elif str(echo["rarity"]) == "common":
-				echo["rarity"] = "uncalled"
-				repaired = true
-				repaired_notes.append("sanctum.roster[%d].rarity repaired common->uncalled" % i)
 
 			# generation_context
 			if not echo.has("generation_context") or typeof(echo["generation_context"]) != TYPE_DICTIONARY:
@@ -976,16 +973,6 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 				repaired = true
 				repaired_notes.append("sanctum.roster[%d].calling initialised as empty" % i)
 
-			# V2-PROG-004: migrate V1 calling IDs to V2 canonical IDs (one-time, idempotent).
-			# calling_origin immutability is a design invariant (player cannot change it);
-			# this is a system-level schema correction, not a player action.
-			for _field in ["calling_origin", "calling"]:
-				var _cv: String = str(echo.get(_field, ""))
-				if _v1_to_v2_calling.has(_cv):
-					echo[_field] = _v1_to_v2_calling[_cv]
-					repaired = true
-					repaired_notes.append("sanctum.roster[%d].%s migrated V1 id '%s' -> V2" % [i, _field, _cv])
-
 		# Roster id uniqueness — guarantees the id-keyed combat round loop can never
 		# resolve two roster echoes to the same actor. Empty ids were already repaired
 		# above; this catches legacy/corrupt saves where two echoes share a NON-empty id.
@@ -1033,27 +1020,8 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			repaired = true
 			repaired_notes.append("sanctum.active_vow set to {} default")
 
-		# V2-MIG-002: vow key migration — unlocked_vows Array → vows Dict
-		# CONVENTIONS.md canonical shape: vows: { vow_id: { tier, discovered_realm } }
-		if sanctum.has("unlocked_vows") and sanctum["unlocked_vows"] is Array:
-			var old_arr: Array = sanctum["unlocked_vows"]
-			var new_dict: Dictionary = {}
-			for entry_v in old_arr:
-				if not (entry_v is Dictionary):
-					continue
-				var entry: Dictionary = entry_v
-				var vid := str(entry.get("vow_id", ""))
-				if vid.is_empty():
-					continue
-				new_dict[vid] = {
-					"tier":             int(entry.get("max_tier_unlocked", 1)),
-					"discovered_realm": str(entry.get("discovered_realm", "")),
-				}
-			sanctum["vows"] = new_dict
-			sanctum.erase("unlocked_vows")
-			repaired = true
-			repaired_notes.append("sanctum.unlocked_vows[] migrated to sanctum.vows{} (V2-MIG-002)")
-		elif not sanctum.has("vows") or not (sanctum["vows"] is Dictionary):
+		# V2-MIG-002: vows Dict, keyed by vow_id -> {tier, discovered_realm}.
+		if not sanctum.has("vows") or not (sanctum["vows"] is Dictionary):
 			sanctum["vows"] = {}
 			repaired = true
 			repaired_notes.append("sanctum.vows set to {} default (V2-MIG-002)")
@@ -1178,7 +1146,6 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			repaired_notes.append("stage_context.active_directive_id set to 'directive.scout_carefully' default")
 		# V2-DIRECTIVE-001: migrate V1 directive IDs to V2 canonical IDs
 		var _v1_dir_map: Dictionary = {
-			"directive.none":     "directive.seek_signs",
 			"directive.scout":    "directive.scout_carefully",
 			"directive.protect":  "directive.scout_carefully",
 			"directive.push":     "directive.scout_carefully",
@@ -1243,6 +1210,14 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 						_stage["explore_map"] = StageExploreModelScript.make_default()
 						repaired = true
 						repaired_notes.append("realm.%s.stage.%s.explore_map defaulted (V2-STAGE-001)" % [_realm_id, _stage_label])
+
+					# V2-INFRA-003 Phase 8 groundwork: settlement_receipt. Additive-only, nothing
+					# reads or writes this yet. {} = not settled. Intended shape once populated:
+					# { version:int, result_id:String, settled:bool, outcome:String, settled_t:int }
+					if not _stage.has("settlement_receipt") or not (_stage["settlement_receipt"] is Dictionary):
+						_stage["settlement_receipt"] = {}
+						repaired = true
+						repaired_notes.append("realm.%s.stage.%s.settlement_receipt defaulted (V2-INFRA-003)" % [_realm_id, _stage_label])
 
 					# V2-STAGE-002: objective completed + required fields
 					var _objs_repair_v: Variant = _stage.get("objectives", [])
@@ -1354,13 +1329,13 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 						# V2-STAGE-004 Phase 4 (S13): durable Charge-pressure flag. Set by a failed
 						# non-objective Charge (FlowRuntime._apply_contact_outcome charge branch);
 						# consumed once by the first PROTECT/ENDURE objective combat fought afterward
-						# (FlowEncounterState._build_objective_params), then cleared back to "".
+						# (EncounterSetupService.setup, charge-pressure block), then cleared back to "".
 						if not _emap_003.has("hostile_charge_sit_id"):
 							_emap_003["hostile_charge_sit_id"] = ""
 							_003_repaired = true
 						# V2-STAGE-004 Phase 4 (S14 redesign): compute-once guard marker for the
 						# earned-return ally recruit roll — tracks which encounter_id's roll was
-						# already evaluated by FlowRuntime._compute_ally_recruit_offer_if_eligible()
+						# already evaluated by RecruitmentConsequenceService.compute_ally_recruit_offer_if_eligible()
 						# so a re-render/Continue never re-rolls. The invite itself now lives on
 						# save_data.sanctum.companion_invite (see the sanctum repair block below).
 						if not _emap_003.has("ally_recruit_rolled_encounter_id"):
@@ -1429,9 +1404,6 @@ static func validate(data: Dictionary, report_errors: bool = true) -> bool:
 	if has_seed_root:
 		if not camp.has("seed_source") or typeof(camp["seed_source"]) != TYPE_STRING:
 			return _validation_failure("Invalid save: missing campaign.seed_source", report_errors)
-		
-	if not data["flow"].has("state"):
-		return _validation_failure("Invalid save: missing flow.state", report_errors)
 		
 	return true
 

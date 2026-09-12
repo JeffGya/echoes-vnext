@@ -113,6 +113,18 @@ const _TEMPLATE_KIND_DIVERGENCE: String = "divergence"
 const _TEMPLATE_KIND_REACTION: String   = "reaction"
 const _TEMPLATE_KIND_ORIGINAL: String   = "original"
 
+## Contexts that route to the BarkPopupDivergence template. combat_divergence
+## is V2-PROG-012's report of her judgment against the standing Directive.
+## combat_guidance_object, _refuse and _interpret are V2-COMBAT-003 phase 9-10
+## (TEMPORARY — V2-COMBAT-004 removes this bark surface and replaces it with
+## real UI): her answer to the Keeper's suggestion (GuidanceContribution.gd).
+## These are different moments with different inputs — they share only this
+## visual template, never a context key.
+const _DIVERGENCE_TEMPLATE_CONTEXTS: Array = [
+	"combat_divergence", "combat_guidance_object", "combat_guidance_refuse",
+	"combat_guidance_interpret"
+]
+
 
 ## Pure selection logic — no scene tree, no nodes, just the bark_context/
 ## is_response inputs mapped to which template kind an event resolves to.
@@ -127,7 +139,7 @@ const _TEMPLATE_KIND_ORIGINAL: String   = "original"
 ## structurally-distinct divergence template wins if that upstream invariant
 ## ever changes.
 static func resolve_template_kind(bark_context: String, is_response: bool) -> String:
-	if bark_context == "combat_divergence":
+	if _DIVERGENCE_TEMPLATE_CONTEXTS.has(bark_context):
 		return _TEMPLATE_KIND_DIVERGENCE
 	elif is_response:
 		return _TEMPLATE_KIND_REACTION

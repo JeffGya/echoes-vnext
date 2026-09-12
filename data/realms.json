@@ -3,11 +3,34 @@
   "data": {
     "_note": "Realm model config. Stages are NOT preset here — they are generated deterministically at runtime by RealmService/RealmGenerator using CampaignSeed + stage_count_min/max. The generator caches results in save_data[\"realms\"] so a player always sees the same stages on the same run. seed_namespace is the CampaignSeed path prefix for this realm.",
 
-    "_terrain_signature_note": "Each realm inherits its landscape signature by virtue from balance.json data.stages.map_shape.by_virtue (keyed by realm.virtue). A realm MAY override this by adding a 'terrain_signature' object directly on its entry — this object must conform to the same schema as the by_virtue entries (relief, plateau_count_min/max, plateau_w/h_min/max, plateau_shape_bias, bridge_width, bridge_density, straggler_count_min/max). Future per-realm visual assets key off realm id + virtue + the signature's 'relief' descriptor. realm.01 (courage) and realm.02 (wisdom) inherit by virtue and do NOT set terrain_signature here.",
+    "_terrain_signature_note": "Each realm inherits its landscape signature by virtue from balance.json data.stages.map_shape.by_virtue (keyed by realm.virtue). A realm MAY override this by adding a 'terrain_signature' object directly on its entry — this object must conform to the same schema as the by_virtue entries (relief, plateau_count_min/max, plateau_w/h_min/max, plateau_shape_bias, bridge_width, bridge_density, island_count_min/max, island_size_min/max, connect_min_region_cells). Future per-realm visual assets key off realm id + virtue + the signature's 'relief' descriptor. realm.01 (courage) and realm.02 (wisdom) inherit by virtue and do NOT set terrain_signature here.",
 
     "realm_order": ["realm.01", "realm.02"],
 
+    "_prologue_note": "realm.prologue is the opening Realm of the first session (V2-INFRA-003 Phase 8C). It is deliberately ABSENT from realm_order, so Realm Select never lists it and the player never picks it: OpeningRealmService opens it once, from the keeper intro, and RealmService.is_prologue_run() keeps it out of every whole-map scan that would otherwise count it as one of the player's Realms. Its 'virtue' is empty here on purpose — the run is created with the player's own starter virtue, passed as a cfg override to RealmService.get_or_create(), so the opening Realm is about the fragment they chose.",
+
     "realms": {
+
+      "realm.prologue": {
+        "id": "realm.prologue",
+        "name": "",
+        "description": "",
+        "virtue": "",
+        "locked": false,
+        "unlock_requires": null,
+        "seed_namespace": "campaign.realm.prologue",
+        "stage_count_min": 1,
+        "stage_count_max": 1,
+        "obj_count_min": 1,
+        "obj_count_max": 1,
+        "sit_count_min": 4,
+        "sit_count_max": 4,
+        "map_width_min": 30,
+        "map_width_max": 30,
+        "map_height_min": 30,
+        "map_height_max": 30,
+        "objective_pool": ["combat"]
+      },
 
       "realm.01": {
         "id": "realm.01",

@@ -1,7 +1,7 @@
 class_name SaveIntegrityTests
 extends RefCounted
 
-const TEST_PATH := "/tmp/echoes-vnext-tests/save_integrity_slot.json"
+static var TEST_PATH := TestSaveHarness.dir() + "save_integrity_slot.json"
 
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("save_integrity/rotates_three_generations", Callable(SaveIntegrityTests, "_test_rotates_three_generations"))

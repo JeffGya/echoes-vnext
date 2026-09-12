@@ -7,6 +7,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("sanctum.party/double_toggle_removes", Callable(PartyTests, "_t_double_toggle_removes"))
 	runner.register_test("sanctum.party/over_cap_capped", Callable(PartyTests, "_t_over_cap_capped"))
 	runner.register_test("sanctum.party/empty_roster_snapshot_valid", Callable(PartyTests, "_t_empty_roster_snapshot_valid"))
+	# V2-INFRA-003 Phase 5 Slice B — static reader must be order-equal to the instance method.
+	runner.register_test("sanctum.party/get_party_actors_static_matches_instance", Callable(PartyTests, "_t_get_party_actors_static_matches_instance"))
 
 
 static func _t_toggle_persists_immediately() -> Dictionary:
@@ -174,6 +176,53 @@ static func _t_empty_roster_snapshot_valid() -> Dictionary:
 	return { "ok": true }
 
 
+## V2-INFRA-003 Phase 5 Slice B.
+## SanctumService.get_party_actors_static() was added so FlowRuntime's scout-return producer
+## can read the party without SanctumService.new(save_data) — a constructor that can WRITE to
+## save_data via SanctumState._ensure_sanctum_dict_exists().
+##
+## The risk the extraction had to avoid was substituting the lookalike
+## get_active_party_echoes(), which iterates the ROSTER rather than active_party_ids and
+## returns raw roster dicts instead of EchoActor views. This proves the static reader is
+## element-for-element and ORDER-equal to the instance method it replaces, using a party whose
+## order is the REVERSE of roster order (so a roster-order implementation cannot pass) plus a
+## dangling id (so the skip-and-warn branch is covered too).
+static func _t_get_party_actors_static_matches_instance() -> Dictionary:
+	var env := _make_runtime_env()
+	if not bool(env.get("ok", false)):
+		return env
+
+	var runtime: FlowRuntime = env["runtime"]
+	var save_ref: Dictionary = runtime.get_save_data()
+	var sanctum_v: Variant = save_ref.get("sanctum", {})
+	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	var roster_v: Variant = sanctum.get("roster", [])
+	var roster: Array = roster_v if roster_v is Array else []
+	if roster.is_empty() or not (roster[0] is Dictionary):
+		return { "ok": false, "error": "Roster empty after onboarding — cannot compare party readers" }
+
+	var echo_a: Dictionary = (roster[0] as Dictionary)
+	var echo_b: Dictionary = echo_a.duplicate(true)
+	echo_b["id"]   = str(echo_a.get("id", "")) + "_second"
+	echo_b["name"] = str(echo_a.get("name", "")) + " II"
+
+	sanctum["roster"] = [echo_a, echo_b]
+	# Reverse of roster order, plus one id that is not in the roster.
+	sanctum["active_party_ids"] = [str(echo_b["id"]), str(echo_a.get("id", "")), "not_in_roster"]
+	save_ref["sanctum"] = sanctum
+
+	var instance_out: Array = SanctumService.new(save_ref).get_party_actors()
+	var static_out: Array   = SanctumService.get_party_actors_static(save_ref)
+
+	if JSON.stringify(static_out, "", true) != JSON.stringify(instance_out, "", true):
+		return { "ok": false, "error": "get_party_actors_static() diverged from get_party_actors()" }
+	if static_out.size() != 2:
+		return { "ok": false, "error": "Expected 2 actors (dangling id skipped), got %d" % static_out.size() }
+	if str((static_out[0] as Dictionary).get("id", "")) != str(echo_b["id"]):
+		return { "ok": false, "error": "Expected PARTY order (active_party_ids), got roster order" }
+	return { "ok": true }
+
+
 static func _make_runtime_env() -> Dictionary:
 	var FlowRuntimeScript := load("res://core/runtime/FlowRuntime.gd")
 	var ConfigServiceScript := load("res://core/config/ConfigService.gd")
@@ -190,15 +239,15 @@ static func _make_runtime_env() -> Dictionary:
 	logger.set_level("off")
 
 	var config = ConfigServiceScript.new()
-	var runtime = FlowRuntimeScript.new(logger, config, "/tmp/echoes-vnext-tests/party_slot.json")
+	var runtime = FlowRuntimeScript.new(logger, config, TestSaveHarness.dir() + "party_slot.json")
 	runtime.boot()
-	runtime.call("_handle_new_game", 2)
+	runtime.dispatch({ "type": "flow.new_game" })
 	var cfg: Dictionary = runtime.config_service.get_balance()
 	var options: Array = OnboardingService.build_fragment_options(runtime.flow_ctx.save_data, cfg)
 	if options.is_empty():
 		return { "ok": false, "error": "Could not create deterministic starter options" }
 	OnboardingService.select_fragment(runtime.flow_ctx.save_data, cfg, str(options[0].get("virtue", "")))
-	runtime.call("_handle_onboarding_fragment_confirm", 3)
+	runtime.dispatch({ "type": "onboarding.fragment.confirm" })
 
 	if not runtime.has_method("get_save_data"):
 		return { "ok": false, "error": "FlowRuntime.get_save_data() missing" }

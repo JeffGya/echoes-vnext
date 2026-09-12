@@ -16,7 +16,7 @@ extends RefCounted
 ##   "def_id"     String     — data.actor.enemy_types template key (data.contact.ally.def_id)
 ##   "damage_mul" float      — melee damage dampener, mirrors _spirit_damage_mul (P3c)
 ##   "actor_cfg"  Dictionary — { "birth_stats": ..., "enemy_types": ... }, same dict
-##                             FlowEncounterState.enter() already builds for every other actor
+##                             EncounterSetupService.setup() already builds for every other actor
 ## t: injected sim tick (forwarded to EnemyActor.from_definition; unused here otherwise).
 ## level: caller-computed level (completion-index scaled, same pattern as other objective actors).
 static func build(contact: Dictionary, cfg: Dictionary, t: int, level: int) -> Dictionary:

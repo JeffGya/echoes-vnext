@@ -82,6 +82,11 @@ script = ExtResource("1_script")
 y_sort_enabled = true
 tile_set = SubResource("TileSet_board")
 
+[node name="BridgeLayer" type="TileMapLayer" parent="Board" unique_id=1614739805]
+y_sort_enabled = true
+tile_set = SubResource("TileSet_board")
+self_modulate = Color(0.87, 0.58, 0.24, 0.55)
+
 [node name="MoveTelegraphLayer" type="Node2D" parent="." unique_id=502557425]
 script = ExtResource("5_move_telegraph")
 visual_config = SubResource("Resource_combat_visual_config")

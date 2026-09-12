@@ -194,8 +194,14 @@ static func _build_intel_group(save_data: Dictionary) -> Dictionary:
 		return {}
 	var realms: Dictionary = realms_v
 
+	# V2-INFRA-003 Phase 8C: the prologue Realm is excluded from the consequence-pass intel
+	# group. The prologue is the player's introduction to hidden information; surfacing its
+	# single stage's intel through the Sanctum consequence pass would answer the question the
+	# stage exists to ask.
 	var active_realm: Dictionary = {}
 	for rid in realms:
+		if RealmService.is_prologue_run(str(rid)):
+			continue
 		var rm_v: Variant = realms[rid]
 		if not (rm_v is Dictionary):
 			continue

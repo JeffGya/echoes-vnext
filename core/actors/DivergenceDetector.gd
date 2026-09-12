@@ -249,14 +249,24 @@ static func _primary_reason(components: Dictionary, legibility: float, divergenc
 	if dominant_key.is_empty():
 		return "her own judgment"
 
-	var bands: Dictionary = divergence_cfg.get("legibility_specificity_bands", {})
-	var vague_max: float = float(bands.get("vague_max", 0.34))
-	var named_max: float = float(bands.get("named_max", 0.67))
 	var label: String = str(_COMPONENT_LABELS.get(dominant_key, "her own judgment"))
+	match specificity_band(legibility, divergence_cfg):
+		"vague":
+			return "her own judgment"
+		"named":
+			return label
+		_:
+			return "%s outweighed the Directive" % label
 
-	if legibility <= vague_max:
-		return "her own judgment"
-	elif legibility <= named_max:
-		return label
-	else:
-		return "%s outweighed the Directive" % label
+
+## How specific an explanation this Echo's legibility permits: vague / named /
+## explicit (data.maturity_expression.divergence.legibility_specificity_bands).
+## The one owner of that question — DecisionTrace.gd reads it here rather than
+## banding legibility a second time.
+static func specificity_band(legibility: float, divergence_cfg: Dictionary) -> String:
+	var bands: Dictionary = divergence_cfg.get("legibility_specificity_bands", {})
+	if legibility <= float(bands.get("vague_max", 0.34)):
+		return "vague"
+	if legibility <= float(bands.get("named_max", 0.67)):
+		return "named"
+	return "explicit"

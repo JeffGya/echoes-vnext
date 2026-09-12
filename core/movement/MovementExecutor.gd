@@ -116,6 +116,10 @@ static func execute(
 	var commitment: int = int(intent.get("commitment", 0))
 	var capacity: int = int(profile.get("capacity", 0))
 	var hazard_config: Dictionary = hazard_ctx.get("config", {}) as Dictionary
+	# V2-INFRA-003 pass 8: leadership displacement immunity (position_lock /
+	# anchor_presence). Injected by the caller on the ledger, beside `config`, because
+	# MovementContext and MovementProfile both validate an EXACT field set.
+	var immune_to_displacement: bool = bool(hazard_ctx.get("immune_to_displacement", false))
 
 	# AUTHORED PACE (see header): a profile carrying a non-empty authored_override
 	# paces in STEPS, not cost. Its allowance is min(override.capacity, commitment)
@@ -200,6 +204,7 @@ static func execute(
 			"seq": seq,
 			"from_cell": from_cell,
 			"is_forced_entry": false,
+			"immune_to_displacement": immune_to_displacement,
 		}
 		var hazard_result: Dictionary = HazardService.resolve_cell_entry(
 			next_cell, hazards, entry_context, ledger

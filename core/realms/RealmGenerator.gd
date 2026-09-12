@@ -330,6 +330,25 @@ static func _place_situations(
 	var situations: Array = []
 	var placed_positions: Array = []  # Array[{col, row}]
 
+	# V2-COMBAT-003 terrain commit 5 — decisions 22 and 24.
+	#
+	# Nothing spawns outside the host region. A situation on a moated island cannot be
+	# reached by the party, and an OBJECTIVE situation there makes the stage impossible to
+	# complete. `region` is computed by GridService.largest_walkable_region — the SAME
+	# authority that places combat actors, deliberately not a second implementation, so the
+	# explore layer and the combat layer can never disagree about which region is the host.
+	#
+	# An objective needs, in addition, all eight neighbouring tiles walkable (decision 24).
+	# StageTerrain.generate guarantees the host region offers at least one such cell,
+	# building a 3x3 block when it does not, so the tightened predicate can always be met.
+	#
+	# DETERMINISM. Not one RNG path is added, removed or reordered here. Every tier still
+	# derives its own stream from its own fixed path string, so tightening what a tier
+	# ACCEPTS cannot shift any other draw — only which cell a given draw lands on.
+	var region: Dictionary = {}
+	if not walkable.is_empty():
+		region = GridService.largest_walkable_region(walkable, { "w": width, "h": height })
+
 	for idx in range(sit_count):
 		var sit_rng  := CampaignSeed.get_rng_from(realm_seed, "stage.%d.explore.sit.%d" % [stage_index, idx])
 		var sit_seed := sit_rng.randi()
@@ -363,9 +382,9 @@ static func _place_situations(
 			var c := try_rng.randi_range(2, width - 1)
 			var r := try_rng.randi_range(0, height - 1)
 
-			# V2-STAGE-004: also require walkability (empty walkable = legacy all-walkable).
-			var walkable_ok: bool = walkable.is_empty() or walkable.has("%d,%d" % [c, r])
-			if _is_far_enough(c, r, placed_positions) and walkable_ok:
+			# Walkable is no longer enough: the cell must be on the host region, and an
+			# objective must additionally clear its eight neighbours.
+			if _is_far_enough(c, r, placed_positions) and _site_ok(c, r, walkable, region, is_obj):
 				col = c
 				row = r
 				placed = true
@@ -379,7 +398,7 @@ static func _place_situations(
 				var wpos_rng := CampaignSeed.get_rng_from(realm_seed, "stage.%d.explore.sit.%d.wpos.%d" % [stage_index, idx, attempt])
 				var c := wpos_rng.randi_range(2, width - 1)
 				var r := wpos_rng.randi_range(0, height - 1)
-				if walkable.has("%d,%d" % [c, r]) and _is_far_enough(c, r, placed_positions):
+				if _site_ok(c, r, walkable, region, is_obj) and _is_far_enough(c, r, placed_positions):
 					col = c
 					row = r
 					placed = true
@@ -394,7 +413,13 @@ static func _place_situations(
 			# When a walkable set exists, replace the fallback cell with a walkable one.
 			# New append-only RNG path "stage.N.explore.sit.M.fallback_walkable" — never existed before.
 			if not walkable.is_empty():
-				var wk_keys: Array = walkable.keys()
+				# The last-resort pool is drawn from the HOST REGION, and for an objective
+				# only from host cells that clear their eight neighbours — the same rule the
+				# two tiers above apply, so the fallback can no longer undo them. The pool is
+				# SORTED: the raw Dictionary key order would leak generation order into the
+				# placement. Each narrowing falls back to the wider pool if it is empty, so
+				# this branch can never fail to produce a cell.
+				var wk_keys: Array = _fallback_pool(walkable, region, is_obj)
 				var fw_rng := CampaignSeed.get_rng_from(realm_seed, "stage.%d.explore.sit.%d.fallback_walkable" % [stage_index, idx])
 				var picked_key: String = str(wk_keys[fw_rng.randi_range(0, wk_keys.size() - 1)])
 				var key_parts := picked_key.split(",")
@@ -422,6 +447,50 @@ static func _place_situations(
 			situations[situations.size() - 1]["role"] = str(contact.get("role", ""))
 
 	return situations
+
+
+## V2-COMBAT-003 terrain commit 5. True when (col,row) may hold a situation:
+## on the host region, and — for an objective — with all eight neighbours walkable.
+## An empty walkable set is the legacy all-walkable sentinel and accepts everything.
+static func _site_ok(col: int, row: int, walkable: Dictionary, region: Dictionary, is_obj: bool) -> bool:
+	if walkable.is_empty():
+		return true
+	var key: String = "%d,%d" % [col, row]
+	if not region.has(key):
+		return false
+	if is_obj and not StageTerrainScript.has_eight_walkable_neighbours(key, walkable):
+		return false
+	return true
+
+
+## The sorted last-resort pool for one situation: host-region cells clearing their eight
+## neighbours for an objective, host-region cells for anything else, the whole walkable set
+## if a narrower pool is empty. Sorted so Dictionary order never reaches the output.
+static func _fallback_pool(walkable: Dictionary, region: Dictionary, is_obj: bool) -> Array:
+	var host_keys: Array = []
+	for k in walkable.keys():
+		if region.is_empty() or region.has(k):
+			host_keys.append(str(k))
+	if host_keys.is_empty():
+		host_keys = []
+		for k2 in walkable.keys():
+			host_keys.append(str(k2))
+	if is_obj:
+		var clear_keys: Array = []
+		for k3 in host_keys:
+			if StageTerrainScript.has_eight_walkable_neighbours(str(k3), walkable):
+				clear_keys.append(str(k3))
+		if not clear_keys.is_empty():
+			host_keys = clear_keys
+	# Numeric (col,row) order, not lexical: "10,5" must not sort before "2,3".
+	host_keys.sort_custom(func(a, b):
+		var pa := (str(a)).split(",")
+		var pb := (str(b)).split(",")
+		if int(pa[0]) != int(pb[0]):
+			return int(pa[0]) < int(pb[0])
+		return int(pa[1]) < int(pb[1])
+	)
+	return host_keys
 
 
 # Returns true if (col, row) is at least _MIN_SIT_DISTANCE (Chebyshev) from all placed positions.

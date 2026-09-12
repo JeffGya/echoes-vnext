@@ -20,10 +20,48 @@ const MaturityExpressionService = preload("res://core/actors/MaturityExpressionS
 const LeadershipEmotionService = preload("res://core/combat/LeadershipEmotionService.gd")
 const SocialGraphService = preload("res://core/sanctum/SocialGraphService.gd")
 const DivergenceDetector = preload("res://core/actors/DivergenceDetector.gd")
+const DecisionTrace = preload("res://core/actors/behaviors/DecisionTrace.gd")
+
+## THE LEGACY SELECTOR LEDGER (V2-COMBAT-003 phase 10, owner decision 7).
+##
+## `advance_turn` prefers the movement path. When `select_movement_intent` returns
+## `valid: false` it falls back to `BehaviorModule.select_intent`. That fallback was
+## silent, so a movement-contract defect could reach a merge with nothing to see.
+##
+## The decision: KEEP the fallback, because a player must never see an actor that
+## stops; LOG every use with the actor and the exact rejection reason; and FAIL the
+## test suite on any use, so a defect cannot pass unnoticed.
+##
+## Every entry is one use: `{actor_id, module_id, reason, field, t}`. `reason` and
+## `field` come straight off the arbiter's own `_movement_failure` return, so the
+## log always says WHY, not just that the fallback fired.
+##
+## `MovementFallbackGuardTests` reads this at the end of the suite and fails when it
+## is not empty. A test that induces the fallback on purpose must consume its own
+## entries with `take_legacy_selector_uses()`.
+##
+## This ledger counts ONLY the `valid: false` fallback. The other legacy route — a
+## context that carries no `movement_context` at all — is a unit-test idiom used by
+## about thirty suites that drive `BehaviorModule` directly, not a contract failure,
+## so it is counted separately in `legacy_selector_no_context_uses` and fails nothing.
+static var legacy_selector_uses: Array = []
+static var legacy_selector_no_context_uses: int = 0
+
+
+## Return the recorded uses and clear the ledger.
+static func take_legacy_selector_uses() -> Array:
+	var taken: Array = legacy_selector_uses
+	legacy_selector_uses = []
+	return taken
+
 
 var _actor: Dictionary
 var _behavior_module: BehaviorModule
 var _last_intent: Dictionary = {}
+## docs/movement-model.md §6.6 — the last turn's explanation. Never persisted.
+var _last_decision_trace: Dictionary = {}
+## The last turn's answer to the Keeper's guidance, {} when none reached this actor.
+var _last_guidance_response: Dictionary = {}
 var _last_action: Dictionary = {}
 var _movement_skipped: bool = false  # ACTOR-006: true when actor is_structure; no movement phase
 var _last_morale_tier: String = "steady"  # ACTOR-007: morale tier of the winning intent
@@ -217,7 +255,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		_actor["_withdraw_cooldown"] = maxi(0, int(_actor["_withdraw_cooldown"]) - 1)
 
 	# COMBAT-003 + V2-PROG-006 + V2-PROG-010 + V2-PROG-012 Phase 7: Absolute Fear Rule — dynamic threshold.
-	# Band base from refusal_thresholds_by_band (nascent=65, forming=72, grounded=80, whole=90) is now
+	# Band base from refusal_thresholds_by_band (nascent=65, forming=80, grounded=88, whole=95) is now
 	# genuinely load-bearing: the calling value composes as an OFFSET on top of the band baseline
 	# instead of replacing it outright, so "nascent breaks sooner, whole holds longer" (GDD:1422) holds
 	# for every calling, not just uncalled.
@@ -252,17 +290,18 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		elif _expression_band == "grounded":
 			fear_threshold = int(ls_thresholds.get("grounded", 88))
 			fear_threshold_reason = "last stand"
-	# suppress_panic_spiral: raises threshold +5 on top of band bonus
-	if "suppress_panic_spiral" in resilience_traits \
-			and (_expression_band == "grounded" or _expression_band == "whole"):
+		elif _expression_band == "forming":
+			fear_threshold = int(ls_thresholds.get("forming", 88))
+			fear_threshold_reason = "last stand"
+	# suppress_panic_spiral: raises threshold +5. Any band past the rawest gets relief.
+	if "suppress_panic_spiral" in resilience_traits and _expression_band != "nascent":
 		fear_threshold = min(fear_threshold + 5, 100)
 		fear_threshold_reason += " (steadied)"
 	_actor["_fear_threshold"]        = fear_threshold
 	_actor["_fear_threshold_reason"] = fear_threshold_reason
 
-	# V2-PROG-006: self_regulate tick — Grounded+ +3 morale per round
-	if (_expression_band == "grounded" or _expression_band == "whole") \
-			and "self_regulate" in resilience_traits:
+	# V2-PROG-006: self_regulate tick — +3 morale per round. Any band past the rawest gets relief.
+	if _expression_band != "nascent" and "self_regulate" in resilience_traits:
 		_actor["morale"] = clampi(int(_actor.get("morale", 50)) + 3, 0, 100)
 
 	# V2-PROG-006: Whole last-stand morale tick +5
@@ -285,7 +324,17 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	#                                         in FlowEncounterState._derive_status() uses base value (80).
 	#   Refusing   (fear >= threshold):      Absolute Fear Rule fires; actor.refuse returned
 	#                                         before behavior module is called.
-	if int(_actor.get("fear", 0)) >= fear_threshold:
+	# V2-COMBAT-003 Phase 4 (D97, decision 3): the Absolute Fear Rule is an Echo-only
+	# consequence. An enemy runs this same state machine and receives every fear-raising
+	# term but none of the relief terms (outnumber, kill, ally-KO ripple, passive tick,
+	# identity, leadership dampening — all gated to faction == "echo" elsewhere in this
+	# file and in EmotionService), plus the lowest band threshold in the game (rank 1 ->
+	# nascent -> 65, vs. a grounded Echo's 88). Left ungated, an enemy's fear only ever
+	# rises and the unconditional +1/round alone reaches 65 by round 65 with no contact
+	# required — measured: fear climbs to 100 and holds while the enemy is winning.
+	# Fear still degrades an enemy's score below (fear_factor in BehaviorArbiter); it
+	# simply never forces a permanent actor.refuse for a non-echo actor.
+	if str(_actor.get("faction", "")) == "echo" and int(_actor.get("fear", 0)) >= fear_threshold:
 		var refuse_intent: Dictionary = {
 			"action_type": "actor.refuse",
 			"target_id":   "",
@@ -324,6 +373,11 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	augmented_context["rank_strength"]     = rank_strength
 	augmented_context["resilience_traits"] = resilience_traits
 	augmented_context["leadership_traits"] = leadership_traits
+	# V2-INFRA-003 pass 8: BehaviorArbiter reads OTHER actors' Whole-band leadership
+	# traits (aura score effects), so it needs the trait table and the band map, not
+	# just this actor's own trait list. Per-call config through context — the arbiter
+	# holds no ConfigService by design.
+	augmented_context["expression_cfg"]    = expr_cfg
 	# V2-PROG-012 Phase 1: hidden autonomy outputs. `composure` has been read by
 	# BehaviorArbiter._score() since Phase 2; `judgment` has been read since Phase 6
 	# (drives interpretation_width — see BehaviorArbiter._score()'s doc comment).
@@ -369,9 +423,31 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 			# whole board. It travels on the outer selection dict instead; pull it
 			# across here now that `intent` is a plain working Dictionary again.
 			intent["_divergence_probe"] = movement_selection.get("_divergence_probe", {})
+			intent["_decision_inputs"] = movement_selection.get("_decision_inputs", {})
+			intent["_guidance_response"] = movement_selection.get("_guidance_response", {})
 		else:
+			# The movement path rejected the board. Record and announce the exact
+			# reason before falling back — see the legacy selector ledger at the top
+			# of this file for why the fallback stays and why any use fails the suite.
+			var fallback_reason: String = str(movement_selection.get("reason", "unreported"))
+			var fallback_field: String = str(movement_selection.get("field", ""))
+			legacy_selector_uses.append({
+				"actor_id":  str(_actor.get("id", "")),
+				"module_id": _behavior_module.get_module_id(),
+				"reason":    fallback_reason,
+				"field":     fallback_field,
+				"t":         t,
+			})
+			logger.warn(t, "actor.legacy_selector_fallback",
+				"Movement selection was rejected; the legacy selector chose this turn", {
+					"actor_id":  str(_actor.get("id", "")),
+					"module_id": _behavior_module.get_module_id(),
+					"reason":    fallback_reason,
+					"field":     fallback_field,
+				})
 			intent = _behavior_module.select_intent(augmented_context)
 	else:
+		legacy_selector_no_context_uses += 1
 		intent = _behavior_module.select_intent(augmented_context)
 	_last_intent = intent
 	# Persist last_intent to actor dict so _build_board_summary() can read it next turn.
@@ -470,6 +546,71 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 				"primary_reason":    str(divergence_result.get("primary_reason", "")),
 			})
 
+	# The Decision Trace (docs/movement-model.md §6.6). Observation only — DecisionTrace
+	# re-scores nothing, so the turn's decision is already made and cannot move. Logged
+	# at debug because it is written every turn for every actor. The full trace stays in
+	# core/logging; only DecisionTrace.sanitize() may reach a player-facing snapshot.
+	var decision_inputs: Dictionary = intent.get("_decision_inputs", {}) as Dictionary
+	# The raw decomposition is consumed here and goes no further. `intent` is handed on
+	# to combat resolution and (via get_snapshot) to callers that must never carry
+	# weights or trait values, so every scoring-internal key comes off it now — the
+	# legacy select_intent() path returns the winning CANDIDATE as the intent, so the
+	# arbiter's own reporting keys ride on it unless removed.
+	intent.erase("_decision_inputs")
+	intent.erase("_score_components")
+	intent.erase("_score_bias")
+
+	# V2-COMBAT-003: the Echo's answer to the Keeper's suggestion. Absent when no
+	# suggestion reached her — absence is "unaffected" and must never be read as a
+	# refusal. Logged at info because a response is a story beat, not a per-turn
+	# housekeeping line, and written onto the actor beside the expression outputs so a
+	# probe and (later) a projection can read it after the turn resolves.
+	var guidance_response: Dictionary = intent.get("_guidance_response", {}) as Dictionary
+	intent.erase("_guidance_response")
+	# Erased rather than left standing, so last turn's answer can never be read as this
+	# turn's. Erasing an absent key is a no-op, so an unguided run is untouched.
+	_actor.erase("_guidance_response")
+	if not guidance_response.is_empty():
+		_last_guidance_response = guidance_response
+		_actor["_guidance_response"] = guidance_response
+		var guidance_reason: Dictionary = guidance_response.get("reason", {}) as Dictionary
+		logger.info(t, "actor.guidance_response", "Echo answered the Keeper's guidance", {
+			"actor_id":      str(_actor.get("id", "")),
+			"round":         int(context.get("round", t)),
+			"guidance_id":   str(guidance_response.get("guidance_id", "")),
+			"consent":       str(guidance_response.get("consent", "")),
+			"reading":       str(guidance_response.get("reading", "")),
+			"response":      str(guidance_response.get("response", "")),
+			"reason_text":   str(guidance_response.get("reason_text", "")),
+			"reason_code":   str(guidance_reason.get("code", "")),
+			"reason_source": str(guidance_reason.get("source", "")),
+			"material":      bool(guidance_reason.get("material", false)),
+			"contest":       float(guidance_response.get("contest", 0.0)),
+			"action_type":   str(intent.get("action_type", "")),
+		})
+	if not decision_inputs.is_empty():
+		_last_decision_trace = DecisionTrace.build(
+			decision_inputs, legibility, expr_cfg.get("divergence", {}) as Dictionary
+		)
+		var trace_primary: Dictionary = _last_decision_trace.get("primary", {}) as Dictionary
+		logger.debug(t, "actor.decision_trace", "Behaviour decision explained", {
+			"actor_id":      str(_actor.get("id", "")),
+			"round":         int(context.get("round", t)),
+			"action_type":   str(intent.get("action_type", "")),
+			"purpose":       str(_last_decision_trace.get("purpose", "")),
+			"reason_code":   str(trace_primary.get("code", "")),
+			"reason_source": str(trace_primary.get("source", "")),
+			"causal_kind":   str(trace_primary.get("causal_kind", "")),
+			"material":      bool(trace_primary.get("material", false)),
+			"strength_band": str(trace_primary.get("strength_band", "")),
+			"subject_id":    str(trace_primary.get("subject_id", "")),
+			"supporting":    (_last_decision_trace.get("supporting", []) as Array).size(),
+			"message_key":   str(_last_decision_trace.get("message_key", "")),
+			"voice_tone":    str(_last_decision_trace.get("voice_tone", "")),
+			"margin":        float((_last_decision_trace.get("debug_components", {}) as Dictionary).get("margin", 0.0)),
+			"swings":        (_last_decision_trace.get("debug_components", {}) as Dictionary).get("swings", {}),
+		})
+
 	# V2-PROG-010: passive fear tick — small per-round fear reduction for echo faction, rank-scaled.
 	var recovery_cfg: Dictionary = expr_cfg.get("fear_self_recovery", {})
 	var passive_max: int = int(recovery_cfg.get("passive_max", 3))
@@ -519,9 +660,14 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	# V2-PROG-012 Phase 11 playtest fix: config-driven divergence bark cooldown
 	# — see data.maturity_expression.divergence.bark_cooldown_ticks.
 	var divergence_bark_cooldown: int = int(expr_cfg.get("divergence", {}).get("bark_cooldown_ticks", 10))
+	# V2-COMBAT-003 phase 9 TEMPORARY visual (V2-COMBAT-004 removes it): the
+	# Echo's answer to the Keeper's guidance, so a player can finally see it.
+	var guidance_consent: String = str(guidance_response.get("consent", ""))
+	var guidance_reading: String = str(guidance_response.get("reading", ""))
+	var guidance_reason_text: String = str(guidance_response.get("reason_text", ""))
 	_select_bark(arch, calling, action_type, start_fear, end_fear, start_morale_tier, end_morale_tier,
 		last_echo_standing, resilience_fired, intent.get("target_id", ""), variation_key, t, diverged_this_turn,
-		divergence_bark_cooldown)
+		divergence_bark_cooldown, guidance_consent, guidance_reason_text, guidance_reading)
 	# V2-VOICE-001: check if this actor should react to an ally's high-signal bark
 	_check_reactive_bark(augmented_context, variation_key)
 	# V2-VOICE-001: write bark fields to actor dict so round_bark_events pipeline can read them
@@ -559,6 +705,19 @@ func update_passive_state_from_activation(intent: Dictionary, context: Dictionar
 ##     "vectors": { "scores": Dictionary<String,int>, "dominant_vector": String }
 ##   }
 ## vectors.scores contains all keys from actor_dict.vector_scores (any N keys — no hardcoded list).
+## The last turn's Decision Trace (docs/movement-model.md §6.6), full and unsanitized.
+## Core and logging may read it; a player-facing snapshot may carry only
+## DecisionTrace.sanitize() of it.
+func get_last_decision_trace() -> Dictionary:
+	return _last_decision_trace
+
+
+## The last turn's guidance response, {} when the Keeper's suggestion did not reach
+## this actor. Absence is "unaffected", never a refusal.
+func get_last_guidance_response() -> Dictionary:
+	return _last_guidance_response
+
+
 func get_snapshot() -> Dictionary:
 	return {
 		"actor_id": _actor.get("id", ""),
@@ -656,7 +815,10 @@ func _select_bark(
 	variation_key: int = 0,
 	t: int = 0,
 	diverged: bool = false,
-	divergence_cooldown_ticks: int = 10
+	divergence_cooldown_ticks: int = 10,
+	guidance_consent: String = "",
+	guidance_reason_text: String = "",
+	guidance_reading: String = ""
 ) -> void:
 	var context_key := ""
 	var target := str(target_id) if target_id != null else ""
@@ -676,6 +838,22 @@ func _select_bark(
 	# Priority 5: combat_morale_falling (morale dropped a tier)
 	elif start_morale_tier != end_morale_tier and _morale_tier_rank(end_morale_tier) < _morale_tier_rank(start_morale_tier):
 		context_key = "combat_morale_falling"
+	# Priority 5.4: combat_guidance_object / _refuse / _interpret — V2-COMBAT-003
+	# phase 9-10 TEMPORARY visual (V2-COMBAT-004 removes this bark surface and
+	# replaces it with real UI): the Echo's answer to the Keeper's suggestion
+	# (GuidanceContribution.gd). Surfaced consent x reading pairs: object, refuse,
+	# and align+interpreted (she agreed and still reached it her own way). Plain
+	# align (literal) and hesitate stay silent — owner decision, not yet approved.
+	# NOT the same moment as combat_divergence below: divergence reports her
+	# judgment against the standing Directive; this reports her answer to the
+	# Keeper's suggestion. They keep separate context keys and share only the
+	# BarkPopupDivergence visual template (BarkPopupLayer.resolve_template_kind()).
+	elif guidance_consent == "object":
+		context_key = "combat_guidance_object"
+	elif guidance_consent == "refuse":
+		context_key = "combat_guidance_refuse"
+	elif guidance_consent == "align" and guidance_reading == "interpreted":
+		context_key = "combat_guidance_interpret"
 	# Priority 5.5: combat_divergence — V2-PROG-012 Phase 5: her judgment out-voted
 	# the Directive this turn (see DivergenceDetector.gd). Tier 2 priority — rarer
 	# than the emotional-crisis contexts above it, but more narratively important
@@ -729,9 +907,15 @@ func _select_bark(
 
 	# V2-VOICE-002: cooldown gate — routine barks suppressed until _bark_next_t.
 	# High-priority contexts always fire and reset the cooldown.
+	# V2-COMBAT-003 phase 9 TEMPORARY (V2-COMBAT-004 removes this bark surface):
+	# combat_guidance_object/refuse/interpret are exempt for the same reason last_stand
+	# etc. are — the guidance source is headless-only today (V2-COMBAT-004
+	# connects the real interface), so a response is already rare, and the
+	# routine cooldown must never swallow the first player-visible proof of it.
 	const _HIGH_PRIORITY_BARK: Array = [
 		"combat_last_stand", "combat_resilient",
-		"combat_fear_extreme", "combat_fear_rising", "combat_morale_falling"
+		"combat_fear_extreme", "combat_fear_rising", "combat_morale_falling",
+		"combat_guidance_object", "combat_guidance_refuse", "combat_guidance_interpret"
 	]
 	# V2-PROG-012 Phase 11 playtest fix: combat_divergence is exempt from the
 	# routine _bark_next_t gate (see the Priority 5.5 comment above) but is not
@@ -746,6 +930,17 @@ func _select_bark(
 
 	_bark_context = context_key
 	_bark_tier = _expression_band
+
+	if context_key == "combat_guidance_object" or context_key == "combat_guidance_refuse" \
+			or context_key == "combat_guidance_interpret":
+		# V2-COMBAT-003 phase 9 TEMPORARY (V2-COMBAT-004 removes this bark
+		# surface): the bark line IS the reason text GuidanceContribution
+		# already produced (resolve()'s "reason_text"). No ShoutBank lookup
+		# here — writing a second copy of that prose would let the two drift.
+		if not guidance_reason_text.is_empty():
+			_bark_line = guidance_reason_text
+			_actor["_bark_next_t"] = t + _compute_bark_cooldown()
+		return
 
 	# Try expression-shout first (emotion × band × archetype × calling); V2-VOICE-001: variation_key
 	var line := ShoutBank.get_expression_shout(context_key, arch, _expression_band, calling, variation_key)
@@ -827,8 +1022,13 @@ func _check_reactive_bark(context: Dictionary, variation_key: int) -> void:
 	# Nascent actors don't react
 	if _expression_band == "nascent":
 		return
-	# Tier 1 own barks are never overridden
-	const _TIER1_R: Array = ["combat_last_stand", "combat_fear_extreme", "combat_resilient", "combat_ko"]
+	# Tier 1 own barks are never overridden. combat_guidance_object/refuse/interpret
+	# added V2-COMBAT-003 phase 9-10 (TEMPORARY — V2-COMBAT-004 removes this bark surface):
+	# an Echo's answer to the Keeper must not be silently stolen by a reaction.
+	const _TIER1_R: Array = [
+		"combat_last_stand", "combat_fear_extreme", "combat_resilient", "combat_ko",
+		"combat_guidance_object", "combat_guidance_refuse", "combat_guidance_interpret"
+	]
 	if _bark_context in _TIER1_R:
 		return
 	var round_bark_events: Array = context.get("round_bark_events", [])
@@ -893,9 +1093,16 @@ func _apply_leadership(
 			_actor, all_actors, radius)
 		if allies.is_empty():
 			continue
-		# Passive aura/event traits are resolved only by their combat emotion choke points.
+		# Passive aura/event traits are resolved by their own choke points, not here:
+		# the first five by the combat emotion services, the rest by BehaviorArbiter
+		# (decision scores, retreat gate, directive weight) and MovementHazardService
+		# (displacement immunity).
 		if trait_id in ["kill_momentum", "fearless_example", "morale_anchor", \
-				"calm_transmission", "block_contagion"]:
+				"calm_transmission", "block_contagion", \
+				"aggression_field", "mark_target", "challenge_call", "safe_path_read", \
+				"hold_formation", "threat_read", "cover_positioning", \
+				"directive_amplify", "directive_echo", \
+				"position_lock", "anchor_presence"]:
 			continue
 		var fired := false
 		match trait_id:
@@ -1003,13 +1210,13 @@ func _get_most_feared_ally(allies: Array) -> Dictionary:
 
 
 # PROG-009: Update per-round passive state counters after each turn.
-# Warder: tracks anchor_rounds for guard/protect_ally bonus (+8 per round, cap 3 rounds = +24).
-# Steward: tracks stationary_rounds for soft-taunt eligibility.
+# Okofor: tracks anchor_rounds for guard/protect_ally bonus (+8 per round, cap 3 rounds = +24).
+# Onyamesu: tracks stationary_rounds for soft-taunt eligibility.
 # Skill once-per-combat flags are set here when the skill fires.
 # Skill cooldowns (read_field, withdraw) are ticked at turn START instead.
 ## `logger` is optional so existing direct-drive test callers keep their signature.
 ## When present, the two fear-relieving passives below emit an audit line — without
-## it the Steward/Seer fear relief is invisible to the ledger.
+## it the Onyamesu/Okomfo fear relief is invisible to the ledger.
 func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
 		actual_moved_override: Variant = null, logger: StructuredLogger = null) -> void:
 	var action: String         = str(intent.get("action_type", ""))
@@ -1018,17 +1225,17 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
 		else (action == "actor.move" or action == "actor.withdraw")
 
 	match calling_origin:
-		"warder":
+		"okofor":
 			if moved:
 				_actor["_anchor_rounds"] = 0
 			else:
 				_actor["_anchor_rounds"] = mini(int(_actor.get("_anchor_rounds", 0)) + 1, 3)
-		"steward":
+		"onyamesu":
 			if moved:
 				_actor["_stationary_rounds"] = 0
 			else:
 				_actor["_stationary_rounds"] = int(_actor.get("_stationary_rounds", 0)) + 1
-		"seer":
+		"okomfo":
 			if action == "actor.read_field":
 				var streak: int     = int(_actor.get("_read_field_streak", 0)) + 1
 				var max_streak: int = 3
@@ -1038,7 +1245,7 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
 					_actor["_read_field_cooldown"] = 1
 			else:
 				_actor["_read_field_streak"] = 0  # streak resets on any other action
-			# Seer idle_fear_aura — when idle wins, reduce fear of nearby allies
+			# Okomfo idle_fear_aura — when idle wins, reduce fear of nearby allies
 			if action == "actor.idle":
 				var aura_val: int     = int(_calling_behavior.get("idle_fear_aura", 3))
 				var aura_radius: int  = int(_calling_behavior.get("leadership_radius", 5))
@@ -1066,12 +1273,12 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
 				if ifa_fired:
 					_credit_support_tally("support_actions", 1)
 					if logger != null:
-						logger.debug(t, "actor.fear_idle_aura", "Seer idle aura relieved ally fear", {
+						logger.debug(t, "actor.fear_idle_aura", "Okomfo idle aura relieved ally fear", {
 							"actor_id":       str(_actor.get("id", "")),
 							"affected_count": ifa_count,
 							"total_delta":    -ifa_total,
 						})
-		"ranger":
+		"kra_soro":
 			if action == "actor.withdraw":
 				_actor["_withdraw_cooldown"] = 1
 

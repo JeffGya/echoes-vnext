@@ -38,7 +38,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int, step: String, flow_id:
 
 static func build_trial_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	if flow_ctx.encounter_ctx != null:
-		var encounter_snap := FlowEncounterState.build_round_snapshot(flow_ctx, t)
+		var encounter_snap := EncounterSnapshotBuilder.build_round_snapshot(flow_ctx, t)
 		var data_v: Variant = encounter_snap.get("data", {})
 		var data: Dictionary = data_v if data_v is Dictionary else {}
 		data["title"] = "First Trial"

@@ -418,6 +418,26 @@ static func apply_passive_effects(save_data: Dictionary, hours_elapsed: float, i
 				logger.info(t, "sanctum.institution.training_grounds.passive", "storyweight applied to all roster echoes", { "delta": delta, "hours": hours_elapsed })
 
 
+## V2-INFRA-003 Phase 4 Slice 7: bank-tick orchestration for all institutions, moved verbatim
+## (behaviour unchanged) out of FlowRuntime._handle_economy_settle_time's V2-SANCTUM-002 block.
+## Called once per economy settle (online, via EconomySettlementService.settle()) with the
+## same now_unix/hours_elapsed the Ase-accrual half of that settle already computed.
+##
+## CHARACTERIZATION — preserve exactly: update_condition + apply_institution_modifiers only run
+## when inst_cfg is non-empty, but apply_passive_effects runs whenever hours_elapsed > 0
+## regardless of inst_cfg (it degrades to per-institution defaults via its own
+## `inst_cfg.get(inst_id, {})` reads — see apply_passive_effects above). This asymmetry is
+## original behaviour, not a bug introduced by this move; do not "fix" it here.
+static func run_settle_tick(save_data: Dictionary, inst_cfg: Dictionary, bldg_cfg: Dictionary, now_unix: int, hours_elapsed: float, logger: StructuredLogger, t: int) -> void:
+	if not inst_cfg.is_empty():
+		for inst_id in ALL_INSTITUTIONS:
+			update_condition(inst_id, save_data, inst_cfg.get(inst_id, {}) as Dictionary, now_unix, logger, t)
+		apply_institution_modifiers(save_data, bldg_cfg, inst_cfg, logger, t)
+
+	if hours_elapsed > 0.0:
+		apply_passive_effects(save_data, hours_elapsed, inst_cfg, logger, t)
+
+
 static func _get_all_roster_echo_ids(save_data: Dictionary) -> Array:
 	var sanctum_v: Variant = save_data.get("sanctum", {})
 	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}

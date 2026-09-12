@@ -75,7 +75,7 @@ static func from_echo(echo: Dictionary) -> Dictionary:
 	# Structural guard: every required field must be present + non-null. We deliberately do
 	# NOT abort here on an empty `id`: an Echo can legitimately reach this mapper with a blank
 	# id (degraded/legacy data). Id-uniqueness for the id-keyed combat round loop is enforced
-	# downstream by FlowEncounterState._ensure_unique_actor_ids() before initiative is built,
+	# downstream by EncounterSetupService._ensure_unique_actor_ids() before initiative is built,
 	# so aborting here would only hide the actor (and break that guard). ActorSchema.validate()
 	# still rejects empty ids elsewhere (e.g. save repair, enemy/structure mappers).
 	assert(ActorSchema.has_all_required_fields(actor), \
