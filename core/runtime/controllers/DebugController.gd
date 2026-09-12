@@ -63,6 +63,8 @@ extends RefCounted
 
 const FlowStageExploreStateScript := preload("res://core/state/flow/states/venture/FlowStageExploreState.gd")
 const ContactModelScript          := preload("res://core/realms/ContactModel.gd")
+const FlowEchoPartyStateScript     := preload("res://core/state/flow/states/sanctum/FlowEchoPartyState.gd")
+const SanctumSnapshotBuilderScript := preload("res://core/state/flow/states/sanctum/SanctumSnapshotBuilder.gd")
 
 var flow_ctx: FlowContext
 var config_service: ConfigService
@@ -365,6 +367,28 @@ func handle_guidance_set(action: Dictionary, t: int) -> FlowActionOutcome:
 ## `flow_ctx.last_snapshot.type == FlowStateIds.ECHO_PARTY` check — a UI-context guard, not a
 ## rank-up rule, so a debug console command run from anywhere would otherwise be denied for the
 ## wrong reason. The rank-cap guard IS a rank-up rule, so it is kept.
+##
+## POST-PR-#64-REVIEW FIX: the success path used to return
+## FlowActionOutcome.snapshot_outcome(flow_ctx.last_snapshot) — the PRE-mutation snapshot,
+## unchanged, re-validated by refresh_snapshot() but never rebuilt. The UI kept showing the old
+## Standing/eligibility/bark until the player left the screen and came back, defeating the
+## command's purpose (verifying the rank-up UI reaction). Fixed by rebuilding the snapshot for
+## whichever roster-showing screen the player is actually on:
+##   - ECHO_PARTY: rebuild via FlowEchoPartyState.build_snapshot() and attach data.rank_up_event,
+##     the exact shape ProgressionController.handle_rank_up() produces, so RankUpOverlay (the
+##     only consumer of rank_up_event — see ui/screens/sanctum/EchoPartyScreen.gd) fires for real.
+##     Uses snapshot_outcome_no_refresh(), matching handle_rank_up() exactly (see that function's
+##     doc comment for why: the pre-extraction path never called refresh_snapshot() on success).
+##   - SANCTUM: rebuild via SanctumSnapshotBuilder.build() so the roster-derived fields the
+##     Sanctum party-manage view shows (Standing, Step, rank_benefits, bark) are current too.
+##     No rank_up_event attach — SanctumScreen has no RankUpOverlay consumer for it, so attaching
+##     it there would be a shape no one reads.
+##   - Any other screen: return handled_outcome() (no snapshot touched at all). Rebuilding an
+##     ECHO_PARTY or SANCTUM snapshot while the player is on, say, a combat or venture screen
+##     would hand the renderer a snapshot type it isn't currently driving — worse than doing
+##     nothing. The save still happens (with_save_reason below applies regardless of branch), so
+##     the mutation is not lost; the player just sees the update on next visit to a roster screen,
+##     same as before this fix for those screens.
 func handle_force_rank_up(action: Dictionary, t: int) -> FlowActionOutcome:
 	var echo_id: String = str(action.get("echo_id", "")).strip_edges()
 
@@ -465,4 +489,17 @@ func handle_force_rank_up(action: Dictionary, t: int) -> FlowActionOutcome:
 		"bark_line": str(bark.get("line", "")),
 	})
 
-	return FlowActionOutcome.snapshot_outcome(flow_ctx.last_snapshot).with_save_reason("debug.progression.force_rank_up")
+	# Rebuild the snapshot for whatever roster-showing screen is currently live, so the UI
+	# reflects the mutation instead of re-rendering the stale pre-rank-up snapshot. See the doc
+	# comment above for why each branch does what it does.
+	var current_snap_type: String = str(flow_ctx.last_snapshot.get("type", ""))
+	if current_snap_type == FlowStateIds.ECHO_PARTY:
+		var new_snapshot: Dictionary = FlowEchoPartyStateScript.build_snapshot(flow_ctx, t)
+		if new_snapshot.has("data") and new_snapshot["data"] is Dictionary:
+			new_snapshot["data"]["rank_up_event"] = event
+		return FlowActionOutcome.snapshot_outcome_no_refresh(new_snapshot).with_save_reason("debug.progression.force_rank_up")
+	elif current_snap_type == FlowStateIds.SANCTUM:
+		var new_sanctum_snapshot: Dictionary = SanctumSnapshotBuilderScript.build(flow_ctx, t)
+		return FlowActionOutcome.snapshot_outcome_no_refresh(new_sanctum_snapshot).with_save_reason("debug.progression.force_rank_up")
+
+	return FlowActionOutcome.handled_outcome().with_save_reason("debug.progression.force_rank_up")
