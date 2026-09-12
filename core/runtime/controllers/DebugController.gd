@@ -15,9 +15,11 @@
 #     FlowRuntime.dispatch() via flow_ctx.request_save().
 #   - No UI or scene-tree reference.
 #
-# Owns 8 actions: debug.seed.show, debug.seed.set, debug.seed.reset, debug.echo.gen_test,
-# debug.ally.spawn, debug.claimant.force_combat, debug.charge_pressure.set, debug.guidance.set.
-# All but debug.guidance.set were moved verbatim
+# Owns 9 actions: debug.seed.show, debug.seed.set, debug.seed.reset, debug.echo.gen_test,
+# debug.ally.spawn, debug.claimant.force_combat, debug.charge_pressure.set, debug.guidance.set,
+# debug.progression.force_rank_up (temporary instrumentation for the progress.rank_up bark
+# rewrite — see handle_force_rank_up below).
+# All but debug.guidance.set and debug.progression.force_rank_up were moved verbatim
 # (behaviour unchanged) from FlowRuntime.gd: _handle_debug_seed_show, _handle_debug_seed_set,
 # _handle_debug_echo_gen_test, _echo_fingerprint, _handle_debug_spawn_ally,
 # _handle_debug_force_claimant_combat, _handle_debug_force_charge_pressure.
@@ -347,3 +349,120 @@ func handle_guidance_set(action: Dictionary, t: int) -> FlowActionOutcome:
 		"cleared":     guidance.is_empty(),
 	})
 	return FlowActionOutcome.snapshot_outcome(flow_ctx.last_snapshot)
+
+
+## debug.progression.force_rank_up — verification aid for the progress.rank_up bark rewrite:
+## reaching a real Standing gain in normal play takes a long session, so this forces one.
+## action.echo_id is optional — when empty, the FIRST roster echo not already at the configured
+## rank cap is used. Makes the target eligible (sets level = prog_cfg.max_level_per_rank, the
+## field ProgressionService.is_rank_up_eligible() checks) then runs the SAME execution path
+## sanctum.rank_up uses: ProgressionService.execute_rank_up() followed by
+## NarrativeVoiceService.select_sanctum_bark_for_echo_data_and_write(echo_ref, "progress.rank_up",
+## t, roster) — see ProgressionController.handle_rank_up(), the real handler this mirrors. Does
+## NOT call ProgressionController (this controller may never call another controller) or
+## reimplement rank-up; it calls the same two domain services directly, so the bark write is the
+## real one. handle_rank_up()'s only gate this command deliberately skips is its
+## `flow_ctx.last_snapshot.type == FlowStateIds.ECHO_PARTY` check — a UI-context guard, not a
+## rank-up rule, so a debug console command run from anywhere would otherwise be denied for the
+## wrong reason. The rank-cap guard IS a rank-up rule, so it is kept.
+func handle_force_rank_up(action: Dictionary, t: int) -> FlowActionOutcome:
+	var echo_id: String = str(action.get("echo_id", "")).strip_edges()
+
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+	var roster_v: Variant = sanctum.get("roster", [])
+	var roster: Array = roster_v if roster_v is Array else []
+
+	# Same balance.json keys ProgressionController.handle_rank_up() reads.
+	var prog_cfg: Dictionary = {}
+	var birth_stats: Dictionary = {}
+	var calling_cfg: Dictionary = {}
+	var max_rank: int = 9
+	if config_service != null:
+		var bal: Dictionary = config_service.get_balance()
+		var bd_v: Variant = bal.get("data", {})
+		var bd: Dictionary = bd_v if bd_v is Dictionary else {}
+		var prog_cfg_v: Variant = bd.get("progression", {})
+		prog_cfg = prog_cfg_v if prog_cfg_v is Dictionary else {}
+		var summ_v: Variant = bd.get("summoning", {})
+		var summ: Dictionary = summ_v if summ_v is Dictionary else {}
+		var birth_stats_v: Variant = summ.get("birth_stats", {})
+		birth_stats = birth_stats_v if birth_stats_v is Dictionary else {}
+		var calling_cfg_v: Variant = bd.get("calling", {})
+		calling_cfg = calling_cfg_v if calling_cfg_v is Dictionary else {}
+		var mat_exp_v: Variant = bd.get("maturity_expression", {})
+		var mat_exp: Dictionary = mat_exp_v if mat_exp_v is Dictionary else {}
+		var rank_scale_v: Variant = mat_exp.get("rank_strength_scale", {})
+		var rank_scale: Dictionary = rank_scale_v if rank_scale_v is Dictionary else {}
+		max_rank = int(rank_scale.get("max_rank", 9))
+	var max_level_per_rank: int = int(prog_cfg.get("max_level_per_rank", 5))
+
+	# Resolve target: named echo_id, or the first roster echo below the rank cap.
+	var echo_ref: Dictionary = {}
+	var echo_idx: int = -1
+	if not echo_id.is_empty():
+		for i in range(roster.size()):
+			if roster[i] is Dictionary and str((roster[i] as Dictionary).get("id", "")) == echo_id:
+				echo_ref = roster[i]
+				echo_idx = i
+				break
+		if echo_idx == -1:
+			logger.info(t, "debug.progression.force_rank_up.denied", "Force rank-up denied (echo not in roster)", {
+				"echo_id": echo_id,
+			})
+			return FlowActionOutcome.handled_outcome()
+	else:
+		for i in range(roster.size()):
+			if roster[i] is Dictionary and int((roster[i] as Dictionary).get("rank", 1)) < max_rank:
+				echo_ref = roster[i]
+				echo_idx = i
+				break
+		if echo_idx == -1:
+			logger.info(t, "debug.progression.force_rank_up.denied", "Force rank-up denied (no roster echo below rank cap)", {
+				"max_rank": max_rank,
+			})
+			return FlowActionOutcome.handled_outcome()
+
+	var old_rank: int = int(echo_ref.get("rank", 1))
+	if old_rank >= max_rank:
+		logger.info(t, "debug.progression.force_rank_up.denied", "Force rank-up denied (echo already at rank cap)", {
+			"echo_id": str(echo_ref.get("id", "")),
+			"rank": old_rank,
+			"max_rank": max_rank,
+		})
+		return FlowActionOutcome.handled_outcome()
+
+	# Make eligible: force level to the configured per-rank cap — exactly what
+	# ProgressionService.is_rank_up_eligible() checks. echo_ref is the same Dictionary
+	# reference stored in roster[echo_idx], so this mutates the roster entry in place.
+	echo_ref["level"] = max_level_per_rank
+
+	# Execute the SAME rank-up path sanctum.rank_up uses — no reimplementation here.
+	var event: Dictionary = ProgressionService.execute_rank_up(
+		echo_ref,
+		flow_ctx.campaign_seed,
+		prog_cfg,
+		birth_stats,
+		calling_cfg,
+		logger,
+		t
+	)
+
+	# Write the progress.rank_up bark for real — same call sanctum.rank_up makes.
+	NarrativeVoiceService.new(flow_ctx, config_service, logger).select_sanctum_bark_for_echo_data_and_write(
+		echo_ref, "progress.rank_up", t, roster
+	)
+	sanctum["roster"] = roster
+	flow_ctx.save_data["sanctum"] = sanctum
+
+	var bark_v: Variant = echo_ref.get("_sanctum_bark", {})
+	var bark: Dictionary = bark_v if bark_v is Dictionary else {}
+
+	logger.info(t, "debug.progression.force_rank_up", "Forced rank-up for verification", {
+		"echo_id": str(echo_ref.get("id", "")),
+		"old_rank": old_rank,
+		"new_rank": int(echo_ref.get("rank", old_rank)),
+		"bark_line": str(bark.get("line", "")),
+	})
+
+	return FlowActionOutcome.snapshot_outcome(flow_ctx.last_snapshot).with_save_reason("debug.progression.force_rank_up")
