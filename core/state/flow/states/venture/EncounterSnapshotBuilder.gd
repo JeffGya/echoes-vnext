@@ -163,8 +163,13 @@ static func _build_objective_state(ectx: EncounterContext, combat_state: Diction
 				objective_alive = _struct_alive
 				break
 
-	# V2-STAGE-004 P3: read round progress from combat_state; objective_params from ectx.
-	var _obj_params: Dictionary = combat_state.get("objective_params", {}) if not combat_state.is_empty() else {}
+	# combat_state exists only from encounter.rounds. At encounter.setup it is empty, so read
+	# objective_params from ectx, where the spawn service has already written them.
+	var _obj_params: Dictionary = {}
+	if not combat_state.is_empty():
+		_obj_params = combat_state.get("objective_params", {})
+	elif ectx != null:
+		_obj_params = ectx.objective_params
 	var _round: int          = int(combat_state.get("round_counter", 0)) if not combat_state.is_empty() else 0
 	var _rounds_required: int = int(_obj_params.get("duration_turns", 0))
 	var _hold_progress: int  = int(combat_state.get("hold_counter", 0)) if not combat_state.is_empty() else 0
