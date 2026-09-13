@@ -389,6 +389,11 @@ Measure with `grep -vcE '^\s*(#|$)' <file>`, not `wc -l`.
 | A defect note at the site, one or two lines | The full defect analysis — that belongs in the owning story's record |
 | | Slice numbers, phase names and process narrative |
 
+**Never treat a comment as evidence.** Comments go stale silently; code does not. Verify the
+behaviour, then decide whether the comment still describes it. A comment that disagrees with the
+code is a finding, not an instruction — and it is usually the comment that is wrong. If you relied
+on one to reach a conclusion, say so, because your conclusion is only as good as that comment.
+
 **Delete legacy and superseded comments when you encounter them.** A comment describing code that has
 moved, or naming a story that has been renumbered, is not explanation — it is a trap. It also costs
 parse time and reader attention for nothing.
