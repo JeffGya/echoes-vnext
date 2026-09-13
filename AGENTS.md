@@ -389,6 +389,16 @@ Measure with `grep -vcE '^\s*(#|$)' <file>`, not `wc -l`.
 | A defect note at the site, one or two lines | The full defect analysis — that belongs in the owning story's record |
 | | Slice numbers, phase names and process narrative |
 
+**Verify a claim against the source it cites, not the document repeating it.** A doc that quotes
+canon can misquote it, and the misquote then spreads to whoever trusts the doc. When a document
+attributes something to the GDD, `CONVENTIONS.md`, a story, or a commit, open that source before you
+act on it. If they disagree, the repeating document is the one to fix.
+
+Three instances on this project, all within one session: a code comment describing intent that was
+never implemented; `docs/v2-migration-map.md` rendering the GDD's "5 to 10 Steps per Standing" as
+"5-10 Standings total", which then reached a commit message and a PR body; and this file's own test
+filter reported as nonexistent twice by someone who had read only part of `_run_tests()`.
+
 **Never treat a comment as evidence.** Comments go stale silently; code does not. Verify the
 behaviour, then decide whether the comment still describes it. A comment that disagrees with the
 code is a finding, not an instruction — and it is usually the comment that is wrong. If you relied
