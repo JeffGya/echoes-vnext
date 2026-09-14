@@ -45,8 +45,14 @@ const LeadershipEmotionServiceScript = preload("res://core/combat/LeadershipEmot
 const ReachAuthority = preload("res://core/movement/CombatActivationService.gd")
 const GuidanceContributionScript = preload("res://core/actors/behaviors/GuidanceContribution.gd")
 
-const _MOVEMENT_STYLE_ORDER: Array = [
-	"direct", "safe", "cohesive", "lateral", "screen", "intercept", "conservative",
+## ROUTE-shape validation order (mirrors MovementOptionService.STYLE_ORDER / OptionContract.STYLES).
+## Most of these words also appear in the separate `movement_style` vocabulary
+## (docs/movement-model.md §9) — but the two lists mean different things even where the
+## words coincide: this one is route-SHAPE mechanics (how the path is built), the other is
+## expressive style (how the move reads to the player).
+const _ROUTE_STYLE_ORDER: Array = [
+	"direct", "safe", "cohesive", "lateral", "screen", "intercept", "conservative", "retreating",
+	"forceful", "overcommitted", "low_exposure",
 ]
 # Whole-band leadership traits that modify DECISION SCORES rather than morale/fear.
 # The morale/fear half of the same trait set is owned by LeadershipEmotionService and
@@ -1085,7 +1091,7 @@ func _validate_movement_inputs(
 			return _movement_failure("option_id_goal_mismatch", "options.%d.option_id" % option_index)
 		var option_remainder: String = option_id.trim_prefix(option_prefix)
 		var style: String = option_remainder.get_slice(".", 0)
-		var style_index: int = _MOVEMENT_STYLE_ORDER.find(style)
+		var style_index: int = _ROUTE_STYLE_ORDER.find(style)
 		if style_index < 0:
 			return _movement_failure("invalid_option_style", "options.%d.option_id" % option_index)
 		var goal_order_index: int = _goal_index(goals, goal_id)

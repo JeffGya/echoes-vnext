@@ -8,7 +8,8 @@ const ActionPlan = preload("res://core/movement/contracts/MovementActionPlan.gd"
 const GoalContract = preload("res://core/movement/contracts/MovementGoal.gd")
 
 const STYLES: Array = [
-	"direct", "safe", "cohesive", "lateral", "screen", "intercept", "conservative",
+	"direct", "safe", "cohesive", "lateral", "screen", "intercept", "conservative", "retreating",
+	"forceful", "overcommitted", "low_exposure",
 ]
 
 const REQUIRED_FIELDS: Array = [

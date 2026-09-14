@@ -288,13 +288,27 @@ static func _has_log(logger: StructuredLogger, type: String) -> bool:
 # stay option. Rounds 1-2 are byte-identical; the trace diverges at round index 2, the same
 # round the decision log names (r03 enemy.dust_wanderer_1 strikes echo_0003 from 7,1 instead
 # of stepping to 7,2). The fight runs 6 rounds again.
+#
+# ALL SEVEN CONSTANTS BELOW RE-RECORDED, V2-COMBAT-003.5 Phase 2d/2f — board size 12..22 ->
+# 18..28 (ANSWERS.md #63). Board bounds are an INPUT to StageTerrain.generate()
+# (EncounterSetupService.gd:363-372), so every fixture fights on a wholly different map, not a
+# stretched one: walkable set, spawn cells and placement order all change. Attribution proved by
+# reverting only the four balance.json numbers with every other Phase 2 core change in place —
+# all 18 tests pass again, so the no-progress rewrite (CombatState.get_progress_watch) and the
+# per-situation encounter_id contribute nothing here. Neither can: no fixture runs the 15 rounds
+# the stall detector needs, and _setup_encounter sets encounter_id literally.
+# These hashes cover emotion fields only, so a round in which no damage lands hashes the same on
+# any map — that is why several traces keep a byte-identical prefix.
+# Phase 2d COMBAT: 6 -> 7 rounds, diverging at round index 2 (rounds 1-2 are damage-free on both
+# maps). The bigger board costs one extra round to close.
 const COMBAT_EMOTION_HASHES: Array = [
 	"c0e348c181a7d83ce625ae6ed12c93e7c88eb0a247d1061f7aa3ecdab5f383ac",
 	"ce777cfdc61ea886ead439c5c5f16b4c0a9eb79e32294cf74e293d0ab64926e8",
-	"7f48ab64c8fd275052650427038b8d1b5b27948ab28afe0daeb904d9eeefba75",
-	"8661d8f6cd6a47addaf678031bf1983e94cfba289cdfa869bcea22be9c0f8c18",
-	"8d47825dea6874e5e1042c9d3fb839d757b75a786018a6af5356f0178d857e51",
-	"9d40013eb3b99859a2c1b60408b08cafdf8d8be3f72a1512d3cd32621954c324",
+	"b9efb78f125d0fafb3c483fd666061fbed385b3507331d2267039e76795503a2",
+	"edee1e8e5d473acd07f6de42307ae438da2684dac4340c0aa3af8959adbd60a7",
+	"1690aa96653c51353bcfe5cfb6bc6b0ba6cf29b3179ec8a0589eb9fec0562b1d",
+	"b9c1703f56f5a04b5fdd5c7650ea31b2369c34c2dcd9fe0b7d6edc530acd7c20",
+	"e613271ce26fd5c5e15f242a52ca8dd735487275bbf5c34a301a0f971d13f54d",
 ]
 # V2-COMBAT-003 Phase 6: same cause as COMBAT above. Rounds 1-2 unchanged; round 3 diverges
 # because echo_0003 no longer steps 5,2 -> 6,3 into the enemy's control to attack. Still 4 rounds.
@@ -311,50 +325,68 @@ const COMBAT_EMOTION_HASHES: Array = [
 # data.combat.shrine morale_on_shrine_purify 5 to the purifier and morale_ripple_shrine_purify 2
 # to its allies. r04 carries the second purify once the 3-round cooldown is spent. No damage,
 # target or position changed in any round.
+# Phase 2d: 6 -> 7 rounds. Round index 0 moves (the shrine sits on a different cell, so the
+# purifier's first round differs and pays different morale) while index 1 is byte-identical —
+# the morale the two arms award by r02 lands on the same totals. Diverges again from index 2.
 const PURIFY_SHRINE_EMOTION_HASHES: Array = [
-	"621eb0d0475135babc7a1b8cb73c4cc242423da903c1a1d101b6870daa6a2b96",
+	"bd2de7301aa35102d31bc447af0046a9d6cc8432f4bf5358f5a3db9deeed639e",
 	"4f9267c17aaa9504ed5a20fb92d748acc4e219cef95c4f268f8fa4086dce8a75",
-	"4e4ebe2474dde4dbb5fe0255588e182e30e874b1f7cea0413322226a8153386a",
-	"708c3d14dca5ec044aa14bc123b5c02f4c41363a9e06cb86b8d2824395884a94",
-	"664f102bf07043337c1f8d77c0a845e9d3aab955674b66c46a456e25ff91b2b3",
-	"46c6a7eb4debad887bf99fefb4598ecb0869979b6101e67adf4d37883cc69286",
+	"53ef8ae48d09d3c5fda53a45355b6cf1d2049ac5dffb480c62d090be2a5a64a4",
+	"202f498e6fa005d49632d1dbe1ad72cd704b1c76979885a5125fa7f2932c8924",
+	"44d1b9225648eb036ba5086d268cc7c6c81b2cc2e053375b8fa09b514a4967d2",
+	"0b087a73d0cb4e0620a4fda6b989ce52de1d806ae97fa28652f636b06830734a",
+	"e956b53bc2e30d056b412dac3745ad2e54c4eb63100e6520d6f99821c1701985",
 ]
+# Phase 2d: 2 -> 3 rounds, both existing hashes byte-identical and one appended. The recover
+# cell is further from the party on the larger map, so the hold takes one more round to finish.
 const RECOVER_EMOTION_HASHES: Array = [
 	"61cb0af978317b7b9a7925e250137a68fe5435c3193120a861b317971919dfcd",
 	"42b2541c3e3490c69dd8b76eac35d95a26de37c310a16ccb713930c1effbc3fd",
+	"895021d10aef2be5027d8223d3d0283551594162f243418a1ee895b84babe102",
 ]
 # V2-COMBAT-003 Phase 7a: rounds 1-3 unchanged; diverges at round index 3, the same round the
 # decision log names (r04 enemy.dust_wanderer_1 stops walking off 6,4 to swing at echo_0001 for
 # 0 and breaks protect_entity_01 for 11 from where it stands).
+# Phase 2d: 4 -> 5 rounds, indices 0-2 byte-identical; diverges at index 3. The attacker needs
+# one more round to reach protect_entity_01 across the larger board.
 const PROTECT_EMOTION_HASHES: Array = [
 	"814a9f2f861b64efcdf5f9391b44a370fef37fef54cac82b5d0278a3034fea10",
 	"207c3c93af6281a71ce9a544e588891fde6bffaafda26bcb86016212ea059f42",
 	"9305dc7dc32b271bc317d9c5b9c81d067c05aeace6df5aa71e00f3bdf2bfaab1",
-	"9aea81b180a1a4443b9203019aee6c1f6b0480641af273478def1f9297cffa60",
+	"c3bab33ff8f4abb2c117bb3ce2f65fb6c675fdec728f5a1d70a779047cc1d4ce",
+	"9ed90bc75a3fa6d7ce11c71b3302d1e139c3763a210df05fb1f12e0480b9a129",
 ]
 # V2-COMBAT-003 Phase 7a: rounds 1-2 unchanged; diverges at round index 2, the same round the
 # decision log names (r03, echo_0001 at 6,2). Still 5 rounds.
+# Phase 2d: still 5 rounds — ENDURE ends on duration_turns, which no board size can move — but
+# the fight inside those rounds differs from index 1 on.
 const ENDURE_EMOTION_HASHES: Array = [
 	"93b71ed7260bf0483a28fada3159b989edce9c56edd047317e891c8341089a2a",
-	"164847037991b60263eb09047e1616c8df4cec30ede4c6d1bf0780e014b03bfd",
-	"323355ff907d7fa541b6b7f8892d676c08a16dc1e3c509f142bcb9e408908091",
-	"126424044c9cbf528c27e804b02b0dcc170e69c8ac3a6bdbd70b4afbe2f4a247",
-	"fc03879a00c4f369e9c81a06f1df948907d6b07ec103e85cc1eb58bcf267e700",
+	"18c88d4e3436998a3f4c7c0607b098ba0703d36af315095a00834e2481b290c6",
+	"867f5bc09c57cf1c2387801e24723fdf552a2537dd4c1ac571672fb011fd8b81",
+	"3104d63b16a36f4cec63e1aa7c116adeff2e16ee6f58e6b54ef002eaa43a0c58",
+	"58661105c1ae035eb339b2dc5491949a4ede1784855b0646f2d7124cf04c9645",
 ]
+# Phase 2d: 5 -> 4 rounds, index 0 byte-identical, diverging from index 1. The long_multiplier
+# is applied AFTER the max clamp (EncounterSetupService.gd:332-347), so this board went 48x12 ->
+# 72x18: the short axis grew as much as the long one. The fight got SHORTER, against the
+# prediction that a longer board delays contact — reported rather than explained away. The
+# mechanism is unattributed at turn level here, because this constant records emotion only.
 const PURSUE_EMOTION_HASHES: Array = [
 	"c5c7a2eca8fe241a9f8d036a0782933c5b14688921e783f11812ffbfc18a5ef7",
-	"fdb03123717e3ae13f0ae1a30391e81294e0c762312e136819141527c00681ae",
-	"4e10fbffadab7ba80b3c4f87facbb03fd241c2fea377235c3c1a1ca7a31589b8",
-	"1b03ff02fc0431ace2a305fde7a2d2d3b753d8e85708b3c0233b20f722dba995",
-	"444c4db18a0c2cb3fa255025e3e6179d4d80686251440f51e62348f88ac3cbad",
+	"69173e8c3a3dd806734e17bc10b8c63aedfe08954b9d8c2f3a111a2300b6c305",
+	"7e50f57a650a2f0b321675d17572ed37bf45a0178b193fe3fd26565fc8fe8bf8",
+	"e10f209a3f298220fa6a7366c356ab0ff22171d84d8e90b44151ddb524597d91",
 ]
+# Phase 2d: 6 -> 5 rounds, indices 0-3 byte-identical (no damage lands in those rounds on either
+# map, and this hash reads emotion only), diverging at index 4. Board went 60x12 -> 90x18. Like
+# PURSUE, this long-axis mode got SHORTER, not longer — recorded, not explained.
 const GUIDE_SPIRIT_EMOTION_HASHES: Array = [
 	"0981643bfb5b4b834e110bbb1e2e07e43cb67a737695df574f01d4ff0840b399",
 	"fb2362b73ab6e12b88f49fb418a372712b6dab222afb45cb8f176f91060b10e9",
 	"5a0bca46209935550ff752415689db70c12141a8cc534fd23d9d01519a94aedb",
 	"d4a55a31c758c4a7837cb584ffe35f0646041ddfd1c264c626568b66c05a583c",
-	"933a39f1afad9edbef892124e414ddedd6a11ef77ee2874b968b48e0ea32f739",
-	"8d399cecc760a122765ea3d4a7dfa87812e1d06884d676ba664aee1653a43320",
+	"85430c438813b50f790c5b83930b52113de61ebabd24f2714df72cc0c8d2d73d",
 ]
 
 

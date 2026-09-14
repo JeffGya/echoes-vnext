@@ -1072,7 +1072,7 @@ static func _t_bridge_connects_shared_side() -> Dictionary:
 # ─── REPAIR: no cut-off region of >= 6 cells survives, on every real signature ─
 # This is the end-to-end statement of the guarantee, run against the ten AUTHORED virtue
 # signatures out of balance.json (not a synthetic one) and against both board-size families
-# the generator serves: the combat board (data.combat.board, 12x12..22x22) and the explore
+# the generator serves: the combat board (data.combat.board, 18x18..28x28) and the explore
 # map (RealmGenerator._generate_explore_map, 30x30 and up). Explore and venture render the
 # same terrain, so a guarantee that only held on combat bounds would be half a guarantee.
 #

@@ -40,6 +40,7 @@ const CombatActivationServiceScript := preload("res://core/movement/CombatActiva
 const MovementOptionScript := preload("res://core/movement/contracts/MovementOption.gd")
 const MovementOptionServiceScript := preload("res://core/movement/MovementOptionService.gd")
 const MovementProfileServiceScript := preload("res://core/movement/MovementProfileService.gd")
+const MovementPathServiceScript := preload("res://core/movement/MovementPathService.gd")
 
 static func register(runner) -> void:
 	runner.register_test("combat_roundtrip/echoes_advance_on_terrain", func(): return test_echoes_advance())
@@ -117,12 +118,24 @@ static func register(runner) -> void:
 	# check (both actors refuse/guard/miss forever). The no-progress detector must end it.
 	runner.register_test("combat_roundtrip/no_progress_stalemate_ends_as_forced_retreat", func(): return test_no_progress_stalemate_ends_as_forced_retreat())
 	runner.register_test("combat_roundtrip/forced_retreat_grants_nothing", func(): return test_forced_retreat_grants_nothing())
-	# PR #62 review: PURIFY_SHRINE has its own clock — the shrine drains every round — so the
-	# stalemate detector must not end that fight.
+	# PR #62 review, generalized by V2-COMBAT-003.5: PURIFY_SHRINE has its own clock — the
+	# shrine drains every round — so the stalemate detector must not end that fight. No longer a
+	# by-name exemption: CombatState.get_progress_watch() sees the shrine HP itself changing.
 	runner.register_test("combat_roundtrip/purify_shrine_is_exempt_from_the_stalemate_check", func(): return test_purify_shrine_is_exempt_from_the_stalemate_check())
+	# V2-COMBAT-003.5 Phase 1c: GUIDE_SPIRIT escort through the real round loop — a genuine
+	# approach must survive the stalemate check, but a genuinely blocked escort must still
+	# force-retreat (no unconditional exemption).
+	runner.register_test("combat_roundtrip/guide_spirit_escort_approach_survives_stalemate_check", func(): return test_guide_spirit_escort_approach_survives_stalemate_check())
+	runner.register_test("combat_roundtrip/guide_spirit_escort_blocked_still_force_retreats", func(): return test_guide_spirit_escort_blocked_still_force_retreats())
 	# PR #62 review: the "guide" debug command now dispatches. It runs mid-fight, so it must
 	# leave the encounter and its snapshot alone.
 	runner.register_test("combat_roundtrip/guidance_dispatch_leaves_the_encounter_intact", func(): return test_guidance_dispatch_leaves_the_encounter_intact())
+	# V2-COMBAT-003.5 Phase 2a: encounter_id used to identify only the STAGE (set once by
+	# flow.select_stage), so every fight inside one stage shared one seed identity and produced
+	# identical terrain/spawn cells. stage.engage_situation now appends the situation id, so two
+	# combat situations in the same stage must diverge.
+	runner.register_test("combat_roundtrip/two_encounters_same_stage_get_distinct_identity", func(): return test_two_encounters_same_stage_get_distinct_identity())
+	runner.register_test("combat_roundtrip/two_encounters_same_stage_get_distinct_terrain_and_spawn", func(): return test_two_encounters_same_stage_get_distinct_terrain_and_spawn())
 
 
 ## V2-INFRA-003 Phase 6 Slice 6G: the live movement helper family moved off FlowRuntime onto
@@ -194,6 +207,166 @@ static func _setup(
 	return { "runtime": runtime, "flow_ctx": flow_ctx, "ectx": flow_ctx.encounter_ctx, "logger": logger }
 
 
+# ---------------------------------------------------------------------------
+# V2-COMBAT-003.5 Phase 2a — encounter identity varies per situation, not per stage.
+# ---------------------------------------------------------------------------
+
+## Boots a runtime on realm.01/stage.0 through the REAL production seam
+## (RealmService.get_or_create, then a hand-populated 5-echo party — same shortcut _setup()
+## takes), forces the stage's first two generated situations to type "combat" (unrevealed,
+## unresolved) so both route "async" through SituationResolutionService.route(), and returns
+## their ids. Unlike _setup(), this does NOT set flow_ctx.encounter_id or call
+## FlowEncounterState.enter() directly — the whole point is to prove
+## VentureController.handle_engage_situation() (dispatched, not hand-invoked) sets it correctly.
+static func _setup_two_combat_situations(seed_tag: String) -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var config := ConfigService.new()
+	var save_path := TestSaveHarness.fresh_save_path("encounter_identity_%s.json" % seed_tag, "combat_roundtrip")
+	var runtime := FlowRuntime.new(logger, config, save_path)
+	runtime.boot()
+	var flow_ctx: FlowContext = runtime.flow_ctx
+	var t: int = 0
+
+	flow_ctx.realm_id = "realm.01"
+	var rm: Dictionary = RealmService.get_or_create("realm.01", flow_ctx, t)
+	if rm.is_empty():
+		return {}
+	flow_ctx.stage_id     = "stage.0"
+	flow_ctx.encounter_id = flow_ctx.realm_id + "." + flow_ctx.stage_id  # mirrors handle_select_stage
+
+	var bal: Dictionary = config.get_balance()
+	var summ_cfg: Dictionary = bal.get("data", {}).get("summoning", {})
+	var expr_cfg: Dictionary = bal.get("data", {}).get("maturity_expression", {})
+	var roster: Array = []
+	var party_ids: Array = []
+	for i in range(5):
+		var echo: Dictionary = EchoFactory.generate(seed_tag, "echo." + str(i), i, "summon", summ_cfg, expr_cfg)
+		echo["id"] = "echo_%04d" % (i + 1)
+		roster.append(echo)
+		party_ids.append(str(echo.get("id", "")))
+	flow_ctx.save_data["sanctum"]["roster"] = roster
+	flow_ctx.save_data["sanctum"]["active_party_ids"] = party_ids
+
+	var stage := FlowStageExploreState._get_current_stage(flow_ctx)
+	var map_v: Variant = stage.get("explore_map", {})
+	var explore_map: Dictionary = map_v if map_v is Dictionary else {}
+	var sits_v: Variant = explore_map.get("situations", [])
+	var situations: Array = sits_v if sits_v is Array else []
+	if situations.size() < 2:
+		return {}
+	var sit_ids: Array = []
+	for i in range(2):
+		var s_v: Variant = situations[i]
+		var s: Dictionary = s_v if s_v is Dictionary else {}
+		s["type"]     = SituationModel.TYPE_COMBAT
+		s["revealed"] = false
+		s["resolved"] = false
+		# Force BOTH situations to the same non-objective binding (objective_index -1).
+		# EncounterSetupService._resolve_mode_from_stage() reads
+		# flow_ctx.active_encounter_objective_index (set from the ENGAGED situation's own
+		# objective_index) and picks resolution_mode from it — PURSUE/GUIDE_SPIRIT modes scale
+		# board bounds. Two situations with different objective_index would make resolution_mode
+		# (and therefore terrain bounds) differ for a reason having nothing to do with this
+		# story's encounter_id fix. Pinning both to -1 isolates encounter_id as the only variable.
+		s["is_objective"]    = false
+		s["objective_index"] = -1
+		situations[i] = s
+		sit_ids.append(str(s.get("id", "")))
+	explore_map["situations"] = situations
+	stage["explore_map"] = explore_map
+	FlowStageExploreState._write_stage_back(flow_ctx, stage)
+
+	return { "runtime": runtime, "flow_ctx": flow_ctx, "sit_ids": sit_ids }
+
+
+## The identity assertion: engaging two distinct combat situations in the same stage must
+## produce two distinct flow_ctx.encounter_id values, both prefixed by the shared stage
+## identity (realm_id + "." + stage_id).
+static func test_two_encounters_same_stage_get_distinct_identity() -> Dictionary:
+	var env: Dictionary = _setup_two_combat_situations("encid_a")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed — stage.0 did not generate 2+ situations" }
+	var runtime: FlowRuntime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var sit_ids: Array = env["sit_ids"]
+	var stage_identity: String = flow_ctx.realm_id + "." + flow_ctx.stage_id
+
+	runtime.dispatch({ "type": "stage.engage_situation", "situation_id": str(sit_ids[0]) })
+	if flow_ctx.encounter_ctx == null:
+		return { "ok": false, "error": "first engage_situation did not enter combat (encounter_ctx null)" }
+	var encounter_id_a: String = flow_ctx.encounter_id
+	if not encounter_id_a.begins_with(stage_identity + "."):
+		return { "ok": false, "error": "encounter_id_a %s lost the stage identity %s" % [encounter_id_a, stage_identity] }
+	if encounter_id_a == stage_identity:
+		return { "ok": false, "error": "encounter_id_a equals the bare stage id — situation id was not appended" }
+
+	# Retreat with a guaranteed roll (success_pct 100 → roll<100 always true, RetreatService.roll_retreat)
+	# to clear encounter_ctx deterministically and free the second situation for engagement.
+	# stage.engage_situation carries no flow-state gate (FlowRuntime.dispatch matches on action
+	# type only), so the second dispatch below is exactly as valid as the first.
+	runtime.dispatch({ "type": "encounter.retreat", "ase_cost": 0, "success_pct": 100 })
+	if flow_ctx.encounter_ctx != null:
+		return { "ok": false, "error": "retreat at success_pct=100 did not clear encounter_ctx" }
+
+	runtime.dispatch({ "type": "stage.engage_situation", "situation_id": str(sit_ids[1]) })
+	if flow_ctx.encounter_ctx == null:
+		return { "ok": false, "error": "second engage_situation did not enter combat (encounter_ctx null)" }
+	var encounter_id_b: String = flow_ctx.encounter_id
+	if not encounter_id_b.begins_with(stage_identity + "."):
+		return { "ok": false, "error": "encounter_id_b %s lost the stage identity %s" % [encounter_id_b, stage_identity] }
+
+	if encounter_id_a == encounter_id_b:
+		return { "ok": false, "error": "both encounters in one stage shared encounter_id %s (BUG-003 regressed)" % encounter_id_a }
+	return { "ok": true }
+
+
+## The observable consequence: two encounters with distinct identity must produce distinct
+## terrain and a distinct party spawn cell — proving the seed paths keyed on encounter_id
+## (EncounterSetupService "combat.terrain." / "combat.placement." + encounter_id) actually vary
+## now, with no change to those call sites themselves.
+static func test_two_encounters_same_stage_get_distinct_terrain_and_spawn() -> Dictionary:
+	var env: Dictionary = _setup_two_combat_situations("encid_b")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed — stage.0 did not generate 2+ situations" }
+	var runtime: FlowRuntime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var sit_ids: Array = env["sit_ids"]
+
+	runtime.dispatch({ "type": "stage.engage_situation", "situation_id": str(sit_ids[0]) })
+	var ectx_a: EncounterContext = flow_ctx.encounter_ctx
+	if ectx_a == null:
+		return { "ok": false, "error": "first engage_situation did not enter combat" }
+	var terrain_a: Dictionary = ectx_a.terrain.duplicate(true)
+	var spawn_a: Dictionary = {}
+	for a_v in ectx_a.actors:
+		if a_v is Dictionary and str((a_v as Dictionary).get("faction", "")) == "echo":
+			spawn_a = (a_v as Dictionary).get("grid_pos", {})
+			break
+
+	runtime.dispatch({ "type": "encounter.retreat", "ase_cost": 0, "success_pct": 100 })
+	if flow_ctx.encounter_ctx != null:
+		return { "ok": false, "error": "retreat at success_pct=100 did not clear encounter_ctx" }
+
+	runtime.dispatch({ "type": "stage.engage_situation", "situation_id": str(sit_ids[1]) })
+	var ectx_b: EncounterContext = flow_ctx.encounter_ctx
+	if ectx_b == null:
+		return { "ok": false, "error": "second engage_situation did not enter combat" }
+	var terrain_b: Dictionary = ectx_b.terrain.duplicate(true)
+	var spawn_b: Dictionary = {}
+	for b_v in ectx_b.actors:
+		if b_v is Dictionary and str((b_v as Dictionary).get("faction", "")) == "echo":
+			spawn_b = (b_v as Dictionary).get("grid_pos", {})
+			break
+
+	if terrain_a == terrain_b and spawn_a == spawn_b:
+		return {
+			"ok": false,
+			"error": "two encounters in one stage produced identical terrain AND identical spawn cell — encounter_id is not varying per fight",
+		}
+	return { "ok": true }
+
+
 # Drive the real round loop for up to `max_rounds` rounds.
 static func _drive(runtime, ectx, max_rounds: int) -> void:
 	runtime.dispatch({ "type": "combat.init" })
@@ -248,6 +421,27 @@ static func _setup_no_progress(seed_tag: String) -> Dictionary:
 		var a_stats: Dictionary = a.get("stats", {})
 		a_stats["atk"] = 0
 		a_stats["def"] = 999
+		a["stats"] = a_stats
+		# morale/fear pinned too: _melee_damage() adds (morale-50)/10 - fear/20 after the atk/def
+		# floor, so an EchoFactory-derived actor with morale above 50 could land a stray positive
+		# hit from the morale term alone. Pinning both makes base=0 the actual floor, not just
+		# the intended one — see _setup_guide_escort's matching pin for the same reasoning.
+		a["morale"] = 50
+		a["fear"] = 0
+	# Spawn already adjacent (col 5,5 / 6,5). (5,5) alone is placed successfully in ~10 other
+	# seed tags in this file (e.g. lines ~1328, 1452, 1514, 1579, 1675, 2115, 2207, 2272, 2601,
+	# 2681) and all pass — informal but real evidence it is walkable on every realm.01/stage.0
+	# terrain roll this file exercises. (Not evidence from
+	# test_guide_spirit_protect_flees_when_enemy_near_no_echo: terrain is seeded on
+	# "combat.terrain." + encounter_id, which includes the seed tag, so a different tag there
+	# means a different board.) Without pinning both cells, the two actors' real spawn cells
+	# land apart, so the board-fingerprint-aware progress watch (CombatState.get_progress_watch)
+	# reads their first rounds of closing distance as genuine progress, delaying
+	# no_progress_streak below what the exact-round-count assertions expect.
+	# Re-verify once board-seeding/board-size work lands later in this story
+	# (V2-COMBAT-003.5 Phase 2) — that phase changes what encounter_id seeds.
+	echo["grid_pos"] = { "col": 5, "row": 5 }
+	enemy["grid_pos"] = { "col": 6, "row": 5 }
 	ectx.actors = [echo, enemy]
 	return env
 
@@ -408,16 +602,16 @@ static func _setup_no_progress_purify(seed_tag: String) -> Dictionary:
 	return env
 
 
-## PR #62 review comment — PURIFY_SHRINE must be exempt from the no-progress stalemate check.
-## The shrine loses base_drain_per_round hit points every round with no actor acting, so that
-## objective always reaches its own end (shrine_destroyed, branch 2), and the party can still
-## win by killing every enemy. The detector cannot see the drain: it counts damage and the four
-## per-objective counters, and the shrine is none of those. Ending the fight at the limit
-## therefore takes away a fight that is still live.
+## PR #62 review comment, generalized by V2-COMBAT-003.5 — PURIFY_SHRINE must not force-retreat
+## via the no-progress stalemate check. The shrine loses base_drain_per_round hit points every
+## round with no actor acting, so that objective always reaches its own end (shrine_destroyed,
+## branch 2), and the party can still win by killing every enemy.
 ##
-## The test drives one round PAST the limit with no damage possible, then asserts the streak did
-## reach the limit (so the detector really was armed) while the fight is still running and the
-## shrine still alive. Before the fix this fails: the fight resolves as a forced retreat.
+## No by-name exemption remains: CombatState.get_progress_watch() reads the shrine's own HP, so
+## the watch differs every round the shrine drains and no_progress_streak resets to 0 each time
+## — it must NEVER climb, let alone reach the limit. The test drives one round PAST the limit
+## with no damage possible and asserts exactly that: streak stays at 0, the fight is still
+## running, and the shrine (draining, not destroyed by anything else here) is still alive.
 static func test_purify_shrine_is_exempt_from_the_stalemate_check() -> Dictionary:
 	var env: Dictionary = _setup_no_progress_purify("no_progress_purify")
 	if env.is_empty():
@@ -438,8 +632,8 @@ static func test_purify_shrine_is_exempt_from_the_stalemate_check() -> Dictionar
 		return { "ok": false, "error": "the PURIFY_SHRINE fight ended at the stalemate limit (reason=%s)" % str(ectx.combat_result.get("reason", "")) }
 
 	var streak: int = int(ectx.combat_state.get("no_progress_streak", -1))
-	if streak < limit:
-		return { "ok": false, "error": "the detector was never armed (no_progress_streak=%d, limit=%d) — the test proves nothing" % [streak, limit] }
+	if streak != 0:
+		return { "ok": false, "error": "expected no_progress_streak=0 every round (shrine HP is always the changing signal), got %d" % streak }
 
 	var shrine_hp: int = -1
 	for a_v in ectx.actors:
@@ -448,6 +642,208 @@ static func test_purify_shrine_is_exempt_from_the_stalemate_check() -> Dictionar
 			break
 	if shrine_hp <= 0:
 		return { "ok": false, "error": "the shrine died first (hp=%d) — the exemption was not what kept the fight alive" % shrine_hp }
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# V2-COMBAT-003.5 Phase 1c — GUIDE_SPIRIT escort through the REAL round loop
+# (FlowRuntime._end_round -> CombatState.check_end_condition), not a hand-built combat_state.
+# Terrain override mirrors test_endure_wave_spawn_host_region (assigned after _setup(), before
+# combat.init). Zeroed offense mirrors _setup_no_progress — no death can end the fight early, so
+# only escort progress or the stalemate detector can end it.
+# ---------------------------------------------------------------------------
+
+## reachable=true: one open rectangle, spirit and destination both inside it — the party CAN
+## close distance every round. reachable=false: two regions with no shared side (mirrors the
+## host-region/moated-island terrain already used above), spirit stranded on the island — the
+## party can NEVER become adjacent to it.
+static func _setup_guide_escort(seed_tag: String, reachable: bool) -> Dictionary:
+	var env: Dictionary = _setup(seed_tag, true, "off", EncounterResolutionModes.GUIDE_SPIRIT)
+	if env.is_empty():
+		return {}
+	var ectx: EncounterContext = env["ectx"]
+
+	var spirit_pos: Dictionary
+	var dest_col: int
+	var dest_row: int
+	if reachable:
+		var cells: Array = []
+		for c in range(20):
+			for r in range(20):
+				cells.append([c, r])
+		ectx.terrain = {
+			"bounds":   { "w": 20, "h": 20 },
+			"plateaus": [ { "col": 0, "row": 0, "w": 20, "h": 20, "cells": cells } ],
+			"bridges":  [],
+			"islands":  [],
+		}
+		spirit_pos = { "col": 5, "row": 5 }
+		dest_col = 19
+		dest_row = 19
+	else:
+		var mainland: Array = []
+		for c in range(10):
+			for r in range(10):
+				mainland.append([c, r])
+		# 3x3 island — room for the spirit AND every enemy, so none of them are reachable either:
+		# an enemy left on the mainland would give the party something to close distance on,
+		# and that approach is itself genuine progress that masks what this test checks.
+		var island: Array = []
+		for c in range(13, 16):
+			for r in range(3):
+				island.append([c, r])
+		ectx.terrain = {
+			"bounds":   { "w": 16, "h": 10 },
+			"plateaus": [
+				{ "col": 0, "row": 0, "w": 10, "h": 10, "cells": mainland },
+				{ "col": 13, "row": 0, "w": 3, "h": 3, "cells": island },
+			],
+			"bridges":  [],
+			"islands":  [],
+		}
+		spirit_pos = { "col": 13, "row": 0 }
+		dest_col = 14
+		dest_row = 1
+
+	var spirit: Dictionary = {
+		"id": "guide_spirit_01", "name": "Test Spirit", "faction": "npc",
+		"is_structure": false, "is_spirit": true, "is_dead": false,
+		"current_hp": 9999, "stats": { "max_hp": 9999, "def": 999, "atk": 0, "speed": 0 },
+		"grid_pos": spirit_pos,
+	}
+	ectx.actors.append(spirit)
+
+	ectx.resolution_mode = EncounterResolutionModes.GUIDE_SPIRIT
+	ectx.objective_params = {
+		"guide_mode":      "escort",
+		"duration_turns":  200,  # protect-mode only; irrelevant here, kept large so nothing else gates on it
+		"spirit_def_id":   "guide_spirit",
+		"spirit_name":     "Test Spirit",
+		"spirit_max_hp":   9999,
+		"escort_radius":   2,
+		"skittish_radius": 3,
+		"destination_col": dest_col,
+		"destination_row": dest_row,
+	}
+
+	# Party spawns far from the spirit — no adjacency at combat start in either case.
+	var echo_row: int = 0
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "echo":
+			a_v["grid_pos"] = { "col": 0, "row": echo_row }
+			echo_row += 1
+
+	# reachable: enemies tucked into a far corner, clear of the party's route to the spirit.
+	# blocked: enemies placed on the SAME unreachable island as the spirit — a mainland enemy
+	# would give the party something to close distance on, and that approach is itself genuine
+	# progress that would mask what this test checks (see the island-sizing comment above).
+	var enemy_col: int = (19 if reachable else 13)
+	var enemy_row: int = (0 if reachable else 2)
+	for a_v in ectx.actors:
+		if str(a_v.get("faction", "")) == "enemy" and not bool(a_v.get("is_structure", false)):
+			a_v["grid_pos"] = { "col": enemy_col, "row": enemy_row }
+			if reachable:
+				enemy_col = maxi(0, enemy_col - 1)
+			else:
+				enemy_col = 13 if enemy_col >= 15 else enemy_col + 1
+
+	# No one can deal damage — only escort progress or the stalemate detector can end the fight.
+	# morale/fear are ALSO pinned, not just atk/def: _melee_damage() adds
+	# (morale-50)/10 - fear/20 AFTER the atk/def floor, so a freshly generated echo whose
+	# starting morale sits above 50 (EchoFactory-derived, not 50 by construction) could otherwise
+	# land a stray positive hit purely from the morale term with atk=0. Pinning morale=50 and
+	# fear=0 zeroes both bonus terms so base=0 (from atk=0) is the actual, not just intended,
+	# floor — same pin as _setup_no_progress uses for the same reason.
+	for a_v in ectx.actors:
+		if not (a_v is Dictionary): continue
+		if bool(a_v.get("is_structure", false)): continue
+		var a_stats: Dictionary = a_v.get("stats", {})
+		a_stats["atk"] = 0
+		a_stats["def"] = 999
+		a_v["stats"] = a_stats
+		a_v["morale"] = 50
+		a_v["fear"] = 0
+
+	return env
+
+
+## The approach itself — before any echo is ever adjacent to the spirit — must not read as a
+## stall: the board fingerprint changes every round an echo moves closer, so no_progress_streak
+## must stay clear of the limit even driven well past it. escort_started may or may not latch
+## during this window; either way nothing here can end the fight (offense is zeroed and the
+## destination is far enough that a completed escort cannot land before the assertion point).
+static func test_guide_spirit_escort_approach_survives_stalemate_check() -> Dictionary:
+	var env: Dictionary = _setup_guide_escort("guide_escort_approach", true)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var runtime = env["runtime"]
+	var ectx: EncounterContext = env["ectx"]
+
+	var limit: int = _no_progress_round_limit(runtime)
+	if limit <= 0:
+		return { "ok": false, "error": "data.combat.stalemate.no_progress_round_limit is 0 or missing — cannot test" }
+
+	_drive(runtime, ectx, limit + 3)
+
+	if bool(ectx.combat_state.get("combat_over", false)):
+		var reason: String = str(ectx.combat_result.get("reason", "")) if ectx.combat_result != null else ""
+		return { "ok": false, "error": "the escort approach ended (reason=%s) at round_counter=%d — expected it still running past the stalemate limit(%d), since the party is genuinely closing distance every round" \
+			% [reason, int(ectx.combat_state.get("round_counter", -1)), limit] }
+
+	var streak: int = int(ectx.combat_state.get("no_progress_streak", -1))
+	if streak >= limit:
+		return { "ok": false, "error": "no_progress_streak(%d) reached the limit(%d) during a genuine approach" % [streak, limit] }
+
+	return { "ok": true }
+
+
+## The other half: a spirit stranded on a region the party can never reach must still force-retreat
+## at the stalemate limit. This proves get_progress_watch()/record_progress_watch() give escort no
+## unconditional exemption — only a board that is actually changing survives the check.
+static func test_guide_spirit_escort_blocked_still_force_retreats() -> Dictionary:
+	var env: Dictionary = _setup_guide_escort("guide_escort_blocked", false)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var ectx: EncounterContext = env["ectx"]
+
+	var limit: int = _no_progress_round_limit(runtime)
+	if limit <= 0:
+		return { "ok": false, "error": "data.combat.stalemate.no_progress_round_limit is 0 or missing — cannot test" }
+
+	runtime.dispatch({ "type": "combat.init" })
+	var escort_started_before_end: bool = false
+	for _r in range(limit + 3):
+		if flow_ctx.encounter_ctx == null:
+			break
+		escort_started_before_end = escort_started_before_end or bool(ectx.combat_state.get("escort_started", false))
+		runtime.dispatch({ "type": "combat.confirm_round" })
+		var guard: int = 0
+		while guard < 40:
+			guard += 1
+			if flow_ctx.encounter_ctx == null: break
+			var cs: Dictionary = ectx.combat_state
+			if bool(cs.get("combat_over", false)): break
+			if str(cs.get("round_phase", "")) != "in_round": break
+			runtime.dispatch({ "type": "combat.next_actor" })
+
+	# The no-progress branch (unlike every other end condition) never writes ectx.combat_result —
+	# it goes straight to _resolve_forced_retreat(), which clears encounter_ctx and rebuilds
+	# flow_ctx.last_snapshot as the flow.resolve card. That snapshot is the only place the reason
+	# survives; matches test_no_progress_stalemate_ends_as_forced_retreat's assertion above.
+	if flow_ctx.encounter_ctx != null:
+		return { "ok": false, "error": "the blocked escort never ended (round_counter=%d, streak=%d, limit=%d) — expected a forced retreat" \
+			% [int(ectx.combat_state.get("round_counter", -1)), int(ectx.combat_state.get("no_progress_streak", -1)), limit] }
+
+	var snap: Dictionary = flow_ctx.last_snapshot
+	var data: Dictionary = snap.get("data", {})
+	if str(data.get("run_type", "")) != "forced_retreat":
+		return { "ok": false, "error": "expected run_type=forced_retreat for an unreachable spirit, got '%s'" % str(data.get("run_type", "")) }
+
+	if escort_started_before_end:
+		return { "ok": false, "error": "escort_started=true at some point for a spirit the party could never reach — setup did not exercise the blocked case" }
+
 	return { "ok": true }
 
 
@@ -3006,6 +3402,12 @@ static func test_objective_route_truncates_and_stays_movement_aware() -> Diction
 	# Stand the mover on the free walkable cell FARTHEST from the objective, so the
 	# objective is guaranteed to be out of movement capacity and the route truncates.
 	# Deterministic: keys are sorted before scanning and the first maximum wins.
+	#
+	# Candidates are restricted to the objective's connected region (capacity ==
+	# walkable.size(), an upper bound on any in-region distance — same idiom as
+	# StagePartyMovementAdapter.select_frontier). A larger board carries more
+	# disconnected islands; without this filter the "farthest cell" search can land on
+	# one, making the objective genuinely unreachable rather than merely truncated.
 	var occupied: Dictionary = {}
 	for actor_value: Variant in ectx.actors:
 		var other: Dictionary = actor_value as Dictionary
@@ -3014,12 +3416,19 @@ static func test_objective_route_truncates_and_stays_movement_aware() -> Diction
 		var pos: Dictionary = other.get("grid_pos", {}) as Dictionary
 		if not pos.is_empty():
 			occupied["%d,%d" % [int(pos.get("col", 0)), int(pos.get("row", 0))]] = true
+	var objective_region: Dictionary = MovementPathServiceScript.reachable_cost_region(
+		objective_pos, maxi(walkable.size(), 1), walkable, {}, {}, {})
+	if not bool(objective_region.get("reachable", false)):
+		return { "ok": false, "error": "objective cell itself is not walkable-reachable" }
+	var connected_costs: Dictionary = objective_region.get("costs", {}) as Dictionary
 	var keys: Array = walkable.keys()
 	keys.sort()
 	var far_cell: Dictionary = {}
 	var far_dist: int = -1
 	for key_value: Variant in keys:
 		if bool(occupied.get(str(key_value), false)):
+			continue
+		if not connected_costs.has(str(key_value)):
 			continue
 		var parts: PackedStringArray = str(key_value).split(",")
 		if parts.size() != 2:
@@ -3030,7 +3439,7 @@ static func test_objective_route_truncates_and_stays_movement_aware() -> Diction
 			far_dist = dist
 			far_cell = cell
 	if far_cell.is_empty():
-		return { "ok": false, "error": "no free walkable cell found" }
+		return { "ok": false, "error": "no free walkable cell connected to the objective" }
 	GridService.assign_grid_pos(mover, int(far_cell["col"]), int(far_cell["row"]))
 
 	var bdata: Dictionary = runtime.config_service.get_balance().get("data", {}) as Dictionary
