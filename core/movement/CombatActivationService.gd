@@ -285,7 +285,8 @@ static func activate(
 		declared_fallback,
 		_project_hazards(events),
 		objective_progress,
-		hostile_constraints
+		hostile_constraints,
+		str(intent.get("movement_style", ""))
 	)
 
 

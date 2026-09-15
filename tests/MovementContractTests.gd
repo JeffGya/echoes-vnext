@@ -851,7 +851,7 @@ static func _t_required_fields_exact_tables() -> Dictionary:
 		{
 			"name": "MovementIntent",
 			"actual": IntentContract.REQUIRED_FIELDS,
-			"expected": ["mover_id", "activation_id", "goal_id", "option_id", "path", "capacity", "commitment", "planned_action", "fallback", "pressure_sources"],
+			"expected": ["mover_id", "activation_id", "goal_id", "option_id", "path", "capacity", "commitment", "planned_action", "fallback", "pressure_sources", "movement_style"],
 			"value": _valid_intent(),
 			"validator": Callable(IntentContract, "validate"),
 			"origin": {"col": 1, "row": 1},
@@ -866,7 +866,7 @@ static func _t_required_fields_exact_tables() -> Dictionary:
 		{
 			"name": "MovementResult",
 			"actual": ResultContract.REQUIRED_FIELDS,
-			"expected": ["mover_id", "activation_id", "goal_id", "option_id", "purpose", "origin", "final_destination", "planned_path", "actual_traversed_cells", "voluntary_cost", "forced_steps", "remaining_capacity", "stop_reason", "events", "planned_action", "resolved_action", "fallback", "hazards", "objective_progress", "hostile_constraints"],
+			"expected": ["mover_id", "activation_id", "goal_id", "option_id", "purpose", "origin", "final_destination", "planned_path", "actual_traversed_cells", "voluntary_cost", "forced_steps", "remaining_capacity", "stop_reason", "events", "planned_action", "resolved_action", "fallback", "hazards", "objective_progress", "hostile_constraints", "movement_style"],
 			"value": _valid_result(),
 			"validator": Callable(ResultContract, "validate"),
 		},

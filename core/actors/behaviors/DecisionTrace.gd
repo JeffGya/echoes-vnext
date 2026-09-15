@@ -31,11 +31,14 @@ class_name DecisionTrace
 
 const DivergenceDetectorScript = preload("res://core/actors/DivergenceDetector.gd")
 
-## §6.6 `source` vocabulary, verbatim. Also the deterministic tie-break order when
-## two sources produce the same swing.
+## §6.6 `source` vocabulary, plus `movement_style` (V2-COMBAT-003.5 Phase 3b — no
+## §6.6 source names the vector/calling/fear/morale/bond/vow blend MovementStyleService
+## produces, so it is its own category rather than forced into one of the narrower
+## ones). Also the deterministic tie-break order when two sources produce the same
+## swing.
 const SOURCES: Array = [
 	"hard_rule", "objective", "danger", "bond", "vow", "calling",
-	"vector", "emotion", "directive", "guidance", "equipment", "baseline",
+	"vector", "movement_style", "emotion", "directive", "guidance", "equipment", "baseline",
 ]
 
 ## §6.6 `causal_kind` vocabulary, verbatim.
@@ -89,11 +92,16 @@ const _SPATIAL_SOURCE: Dictionary = {
 ## telling this Echo where to be — and `code` still separates them in the surfaced
 ## reason. GuidanceContribution never asks this file about the `guidance` source, so a
 ## guidance response's own reason cannot be confused by the pairing.
+## `movement_style` blends vector/calling/fear/morale/bond/vow into one alignment term
+## (MovementStyleService) — no single §6.6 source names that blend, so it gets its own
+## source rather than being forced into `vow`/`bond`/`guidance`, which each mean
+## something narrower.
 const _BIAS_SOURCE: Dictionary = {
 	"vow":              "vow",
 	"bond":             "bond",
 	"leadership_cover": "guidance",
 	"guidance":         "guidance",
+	"movement_style":   "movement_style",
 }
 
 ## Reason `code` for the dominant term of a source. Player-readable, no IDs.
@@ -122,6 +130,7 @@ const _TERM_CODE: Dictionary = {
 	"bond":             "bond_pull",
 	"leadership_cover": "leader_cover",
 	"guidance":         "keeper_guidance",
+	"movement_style":   "style_expression",
 }
 
 ## Presentation tone per source. A projection of the trace, not a new fact about the
@@ -135,6 +144,7 @@ const _SOURCE_TONE: Dictionary = {
 	"vow":       "committed",
 	"calling":   "assured",
 	"vector":    "assured",
+	"movement_style": "assured",
 	"emotion":   "strained",
 	"directive": "focused",
 	"guidance":  "plain",

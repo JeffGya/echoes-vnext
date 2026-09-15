@@ -889,6 +889,71 @@
 					"actor.move": 8.0,
 					"melee_attack": -2.0
 				}
+			},
+			"movement_style_weights": {
+				"_comment": "PROPOSED DEFAULT — V2-COMBAT-003.5 Phase 3b. Deterministic movement_style alignment (docs/movement-model.md §9/§10.4, docs/v2-combat-003.5-decisions.md #18). Every already-generated route candidate is scored for how well its OWN route-shape reads as this actor's identity: alignment = (vector_bias + calling_family_bias + fear_bias + morale_bias + bond_bias + vow_bias + trait_nudge) × alignment_weight. BehaviorArbiter adds that to the candidate's own score before the winner-sort, so style influences which option wins with no post-hoc re-pointing. See MovementStyleService.gd. Not yet playtest-ratified.",
+				"_comment_alignment_weight": "alignment_weight converts identity units into arbiter score units. The raw terms below reach ~50 for a maxed dominant vector, which would outweigh _score() itself; 0.1 makes style a few points of nudge — the same order as a leadership bonus.",
+				"alignment_weight": 0.1,
+				"vector_bias": {
+					"_comment": "§10.4's tendency table, strong/secondary bias per direction. Same shape as vector_action_muls: weight × actor vector_scores[v]. Seeker reads §10.4's \"read, scout, investigate\" as §9's careful `read` intent; lateral stays its secondary, and Opportunist keeps lateral as its own strong bias (§10.4: \"use lateral approaches\").",
+					"vanguard":    { "forceful": 0.5, "direct": 0.25 },
+					"protector":   { "intercepting": 0.5, "cohesive": 0.25 },
+					"seeker":      { "careful": 0.5, "lateral": 0.25 },
+					"strategist":  { "restrained": 0.5, "direct": 0.25 },
+					"skeptic":     { "careful": 0.5, "low_exposure": 0.25 },
+					"pillar":      { "cohesive": 0.5, "restrained": 0.25 },
+					"devoted":     { "cohesive": 0.5, "low_exposure": 0.25 },
+					"opportunist": { "lateral": 0.5, "intercepting": 0.25 },
+					"mediator":    { "cohesive": 0.5, "restrained": 0.25 },
+					"nurturer":    { "low_exposure": 0.5, "cohesive": 0.25 }
+				},
+				"calling_family_bias": {
+					"_comment": "§10.2's family biases, light secondary nudge — flat, not vector-scaled.",
+					"anchor": { "cohesive": 6.0, "low_exposure": 6.0 },
+					"edge":   { "forceful": 6.0, "direct": 6.0 },
+					"sight":  { "lateral": 6.0, "careful": 6.0 }
+				},
+				"fear_weight": {
+					"_comment": "× fear/100. High fear pushes toward exposure avoidance and is what makes a retreating route read as hers at all; it pulls against forceful/overcommitted commitment.",
+					"direct": 0.0,
+					"restrained": 10.0,
+					"careful": 22.0,
+					"forceful": -14.0,
+					"cohesive": 8.0,
+					"low_exposure": 24.0,
+					"lateral": 6.0,
+					"intercepting": -6.0,
+					"retreating": 30.0,
+					"overcommitted": -20.0
+				},
+				"morale_bias": {
+					"_comment": "Flat, by EmotionService.get_morale_tier(). Low morale reads as hesitation (careful/restrained); high morale as follow-through (forceful/direct). steady is the neutral baseline.",
+					"broken":   { "careful": 10.0, "restrained": 10.0, "forceful": -6.0, "overcommitted": -6.0 },
+					"shaken":   { "careful": 5.0, "restrained": 5.0 },
+					"steady":   {},
+					"inspired": { "forceful": 8.0, "direct": 8.0 }
+				},
+				"bond_weight": {
+					"_comment": "× bond_pressure (0-1, scoped to the scored candidate's own goal subject — see BehaviorArbiter._movement_style_bond_pressure). A bonded ally pulls toward closing the gap or covering it.",
+					"intercepting": 10.0,
+					"cohesive": 8.0
+				},
+				"vow_ward_weight": {
+					"_comment": "× ward_lean (0-1, from vow_lean<0 — holding the vow). Ward-leaning biases toward keeping formation and cover.",
+					"cohesive": 8.0,
+					"low_exposure": 8.0
+				},
+				"vow_break_weight": {
+					"_comment": "× break_lean (0-1, from vow_lean>0 — straining against the vow). Break-leaning biases toward force and directness.",
+					"forceful": 8.0,
+					"direct": 8.0
+				},
+				"trait_nudge": {
+					"_comment": "Small tie-break nudge only, mirrors _score()'s trait_bonus role. courage/faith/wisdom are the same 0-100 virtue scores trait_action_muls reads.",
+					"courage": { "forceful": 0.05, "direct": 0.05 },
+					"faith":   { "cohesive": 0.05, "restrained": 0.05 },
+					"wisdom":  { "careful": 0.05, "low_exposure": 0.05 }
+				}
 			}
 		},
 		"vectors": {

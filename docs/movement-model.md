@@ -532,8 +532,8 @@ The authoritative explanation source.
   "primary": {
     "code": String,
     "source": String,                  # hard_rule | objective | danger | bond | vow |
-                                      # calling | vector | emotion | directive |
-                                      # guidance | equipment | baseline
+                                      # calling | vector | movement_style | emotion |
+                                      # directive | guidance | equipment | baseline
     "subject_id": String,
     "causal_kind": String,             # hard_override | co_decisive | baseline
     "material": bool,

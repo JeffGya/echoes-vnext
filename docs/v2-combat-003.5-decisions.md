@@ -26,6 +26,14 @@
 | 15 | interim-wip-commits-per-phase | Adopted WIP commits per shipped phase (local, feature branch) for reviewer traceability, still one PR at the end | 2026-09-14 |
 | 16 | movement-style-dedup-cap-raised | Raised the 4-option dedup cap so forceful/overcommitted/low_exposure are actually reachable through generate_options(), not just allowlisted | 2026-09-14 |
 | 17 | movement-model-doc-rename-synced-now | docs/movement-model.md updated immediately to say "restrained" instead of "measured", keeping the doc in sync with the rename decision rather than deferring to Phase 3b | 2026-09-14 |
+| 18 | movement-style-scoring-integrated-not-repoint | movement_style influences which route option wins by folding style-alignment into BehaviorArbiter._score()'s own pass (like directive_bonus), not by re-pointing the winner after the fact | 2026-09-15 |
+| 19 | movement-style-implementation-calls-ratified | Ratified three rebuild judgment calls: intercept→intercepting rename, Seeker vector bias retuned to careful, alignment_weight=0.1 | 2026-09-15 |
+| 20 | live-movement-wiring-in-scope | LiveMovementContextService gets wired to generate the full route-shape candidate set (not just "direct") in this story, confirmed as V2-COMBAT-003.5's territory per V2-COMBAT-004's own explicit scope exclusion | 2026-09-15 |
+| 21 | overcommitted-ineligible-scores-neutral | Style-ineligible route candidates (e.g. overcommitted on 8 of 12 purposes) score a neutral 0 alignment bonus instead of a hard veto, so they can still win on other mechanical merit | 2026-09-15 |
+| 22 | movement-style-bark-line-set | "She made the only right move" set as _REASON_TEXT["style_expression"]; third person confirmed as the correct form for this table (narration, not spoken dialogue) | 2026-09-15 |
+| 23 | movement-style-source-doc-updated | docs/movement-model.md §6.6 updated to list movement_style as a real 13th decision source, matching the code | 2026-09-15 |
+| 24 | reason-text-pronoun-gap-filed | The _REASON_TEXT table's missing pronoun substitution (all 20 lines always she/her) is pre-existing, filed as a separate task, not fixed in this story | 2026-09-15 |
+| 25 | movement-style-bark-line-lowercased | "She made the only right move" lowercased to match the other 19 lines in the same table | 2026-09-15 |
 
 ---
 
@@ -181,5 +189,77 @@
 **A:** Update now. Keep the doc and decisions in sync rather than letting it contradict a decision already made.
 **Source:** Jeff, 2026-09-14
 **Date:** 2026-09-14
+
+---
+
+### 18. movement-style-scoring-integrated-not-repoint
+
+**Q:** Phase 3b's first build let `movement_style` override which route option wins by re-pointing the winner AFTER `_score()` already picked one — a review found this breaks two documented invariants downstream (`DecisionTrace`'s margin can go negative, violating §6.6's rule against promoting a tie-break into a character explanation; `DivergenceDetector`'s stated precondition that the winner "genuinely won its own arbiter sort" no longer holds). The alternative is making style purely descriptive (never changes the winner), which avoids the invariant breaks but means vector/calling/fear/morale never actually influence behavior, only narrate it after the fact. Which should it be?
+**A:** Style influences selection, but properly — folded into `BehaviorArbiter._score()`'s own scoring pass as a term (same pattern as `directive_bonus`), not as a post-hoc re-point. The winner is honestly the highest-scored candidate from the start, fixing the invariant breaks at the root rather than patching around them.
+**Source:** Jeff, 2026-09-15
+**Date:** 2026-09-15
+
+---
+
+### 19. movement-style-implementation-calls-ratified
+
+**Q:** Three implementation judgment calls from the integrated-scoring rebuild, bundled for ratification: (1) rename style token `intercept`→`intercepting` to match §9's literal spelling and avoid colliding with the `intercept` purpose token; (2) retune Seeker's vector bias from `lateral` (shared with Opportunist) to `careful` (closer to §10.4's "read, scout, investigate" framing); (3) `alignment_weight = 0.1`, scaling identity score into arbiter score units (worth a few points, same order as a leadership bonus, marked PROPOSED DEFAULT pending playtest). Ratify all three?
+**A:** Ratified, all three.
+**Source:** Jeff, 2026-09-15
+**Date:** 2026-09-15
+
+---
+
+### 20. live-movement-wiring-in-scope
+
+**Q:** `movement_style` selection is fully built and correctly wired into `BehaviorArbiter`'s live scoring pass — but `LiveMovementContextService` (the live per-turn option builder, confirmed live in production since V2-COMBAT-002 Slice 6) only ever builds one hardcoded `"direct"`-shaped candidate per turn, so no live fight can ever show style variety. Does closing this gap belong in V2-COMBAT-003.5?
+**A:** Yes. V2-COMBAT-004's own Notion page explicitly disclaims this exact gap ("The movement-style axis is filed to V2-COMBAT-003.5... a movement-layer change across every mode, not a combat-UI item"), and no other story claims it. Wire `LiveMovementContextService` to build the full route-shape candidate set (reusing `MovementOptionService`'s existing shared scoring helpers, per that file's own comment about not duplicating logic) instead of one hardcoded option.
+**Source:** Jeff, 2026-09-15
+**Date:** 2026-09-15
+
+---
+
+### 21. overcommitted-ineligible-scores-neutral
+
+**Q:** `MovementOptionService` builds an `overcommitted` route candidate for every purpose (mechanical layer, purpose-agnostic), but `movement_style`'s eligibility rules only allow `overcommitted` for 4 of 12 purposes — a deliberate narrative restriction. The current `-1.0e6` sentinel permanently vetoes that candidate on the other 8 purposes for every actor, contradicting the whole point of raising the dedup cap to make these styles reachable (decision #16). Score it neutral instead of vetoing, or stop generating the candidate for ineligible purposes?
+**A:** Neutral. Style-ineligible candidates score a 0 alignment bonus instead of a hard veto — they can still win on other mechanical merit (cost, hazard avoidance), they just never get an identity-driven push toward them. This also removes the runner-up margin-inflation side effect the hard veto caused.
+**Source:** Jeff, 2026-09-15
+**Date:** 2026-09-15
+
+---
+
+### 22. movement-style-bark-line-set
+
+**Q:** A decisive movement_style contribution had no bark text — `GuidanceContribution._REASON_TEXT` fell through to a generic line. What line, and what person/pronoun form?
+**A:** "She made the only right move" — third person, matching this table's three existing sibling lines (narration explaining why she acted, not quoted spoken dialogue, which is a different bark surface with its own first-person convention).
+**Source:** Jeff, 2026-09-15
+**Date:** 2026-09-15
+
+---
+
+### 23. movement-style-source-doc-updated
+
+**Q:** `DecisionTrace.SOURCES` grew to 13 with `movement_style`; `docs/movement-model.md` §6.6 still lists 12. Update the doc, or fold `movement_style` into the existing `vector` source instead?
+**A:** Update the doc. `movement_style` is a real 13th source.
+**Source:** Jeff, 2026-09-15
+**Date:** 2026-09-15
+
+---
+
+### 24. reason-text-pronoun-gap-filed
+
+**Q:** All 20 lines in `_REASON_TEXT` always render she/her, with no pronoun substitution for male Echoes (unlike `ConversationService.gd`, which does substitute). Fix now, or file separately?
+**A:** File separately. Pre-existing, affects the whole table not just the new one, keeps this story on one subject.
+**Source:** Jeff, 2026-09-15
+**Date:** 2026-09-15
+
+---
+
+### 25. movement-style-bark-line-lowercased
+
+**Q:** The new bark line "She made the only right move" was capitalized; all 19 other lines in the same table are lowercase clause fragments. Match the lowercase form, or keep as written?
+**A:** Lowercase: "she made the only right move". Matches the other 19 lines, keeps the surface visually consistent.
+**Source:** Jeff, 2026-09-15
+**Date:** 2026-09-15
 
 ---
