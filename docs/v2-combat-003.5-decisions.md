@@ -49,6 +49,7 @@
 | 38 | pursue-fix-built-scout-carefully-masking-accepted | Fix built and verified: PURSUE now wins (was a loss), no fixture flipped win→loss, all 7 re-recorded. Production urgency_progress_gain also suppresses the scout_carefully cliff — accepted as an expected side effect of the approved fix, not a separate masking bug; the unit-test canary (Test D) stays red by keeping its fixture config isolated from the production value | 2026-09-19 |
 | 39 | endure-rank-regression-accepted | ENDURE's re-recorded baseline is a real step down from the last green baseline (A→B, one fewer kill) — accepted, win is preserved, no further investigation | 2026-09-20 |
 | 40 | emotion-trace-fixtures-re-recorded-now | The 6 held emotion_trace_* fixtures (decision #27) get re-recorded now — the hold's reason (cause unknown) no longer applies | 2026-09-20 |
+| 41 | split-into-two-prs-ship-what-is-done-now | Open a PR now for everything committed through Phase 3c; Phase 4 onward becomes a separate PR later — supersedes the original one-PR-at-the-end plan | 2026-09-20 |
 
 ---
 
@@ -415,3 +416,10 @@
 **Date:** 2026-09-20
 
 ---
+
+### 41. split-into-two-prs-ship-what-is-done-now
+
+**Q:** The original plan (Phases 0-9) was one story, one PR at the end. Phases 0-3c are done, committed, reviewed. Phase 4 onward (doc/debug fixes, scattered small defects, combined verification, manual test, docs/PR prep) has not started. Open a PR now for what's done, and a separate PR later for the rest — or hold everything for one PR at the very end as originally planned?
+**A:** Split into two PRs. Open a PR now covering everything committed through Phase 3c. Phase 4 onward becomes a separate PR later. This supersedes the original plan's "one PR at the end" note (plan snapshot, Phase 9).
+**Source:** Jeff, 2026-09-20
+**Date:** 2026-09-20
