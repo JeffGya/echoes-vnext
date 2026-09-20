@@ -24,8 +24,9 @@ The player runs a Sanctum, summons Echoes (returning fragments of stolen stories
 > checkout and is usually on a different branch — running it verifies the wrong code.
 
 > **Pass `timeout: 300000` on every Bash call that runs Godot.** The tool auto-backgrounds
-> at 120s and the suite takes ~7 MINUTES (measured 2026-08-25; the old "~173s" in this file was stale by ~4 minutes). A backgrounded run cannot notify a subagent, so its
-> work is lost. This has cost this project many agent-hours.
+> at 120s and the full serial suite takes **~18 minutes** (measured 2026-09-20, 1667 tests —
+> up from ~7 minutes/1442 tests measured 2026-08-25; the suite has grown). A backgrounded run
+> cannot notify a subagent, so its work is lost. This has cost this project many agent-hours.
 
 ### Compile check (no editor needed)
 ```bash
@@ -47,7 +48,7 @@ believe any fingerprint failure.
 Tests run inside Godot via the Debug Panel (`F1` → `tests`) or headlessly. There is no
 standalone CLI runner — Godot must execute them.
 
-Full suite (**~7 minutes**, measured 2026-08-25 — `fingerprint` alone is ~3 min of it. Pass `timeout: 600000`, NOT 300000; 5 minutes now truncates a healthy run and looks like a hang):
+Full suite (**~18 minutes**, measured 2026-09-20, 1667 tests — `fingerprint` alone was ~3 min of the suite when it was ~7 min/1442 tests on 2026-08-25; the suite has grown since. Pass `timeout: 1200000`, NOT 300000 or 600000; 10 minutes now truncates a healthy run and looks like a hang):
 ```bash
 /usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --quit --path <checkout> -- tests
 ```
@@ -61,29 +62,39 @@ suite list, runs zero tests, and emits NO `Tests:` line — while still exiting 
 it reads as a pass.** Always confirm a `Tests:` line came back. Suite names are not file names:
 `Stage004SeamTests` registers as `seam`, so the filter `stage004` matches nothing.
 
-**Get the authoritative list from the runner, never from memory or a planning doc.** Regenerate it:
+**Get the authoritative list from the runner, never from memory or a planning doc.** Regenerate it
+(the regex includes `.` so dotted suite names like `sanctum.layout` are not dropped):
 ```bash
-<godot ...> -- tests __nomatch__ 2>&1 | sed -n 's/.*Debug output "  \([a-z0-9_]*\)"/\1/p'
+<godot ...> -- tests __nomatch__ 2>&1 | sed -n 's/.*Debug output "  \([a-z0-9_.]*\)"/\1/p'
 ```
-The 90 registered suite names, captured 2026-08-22:
+The 102 registered suite names, captured 2026-09-20 (post-PR #69, which added `movement_style`
+and `live_movement_style`):
 ```
-actor arbiter archetype bark_popup behavior behavior_arbiter bond_trigger bridge calling
-calling_behavior combat combat_baseline combat_initiative combat_roundtrip combat_terrain
+actor arbiter archetype bark_popup behavior behavior_arbiter behavior_char bond_trigger bridge
+calling calling_behavior combat combat_baseline combat_initiative combat_roundtrip combat_terrain
 combat_ui consequence contact contact_actor continuity conversation_repair cooldown derived
 directive directive_cfg divergence divergence_bark echo_party echofactory economy emotion
 exclusive_action explore explore_p5 expr fingerprint flow_transaction foundation_ui grid
-identity institution intel ko_death leadership melee morale movement movement_arbiter
-movement_option movement_path objective objective_combat old_echo onboarding passive prog realm
-realm_prog realm_reward realm_ui recruit retreat reward sanctum_pulse save_integrity seam
-shrine sit_res situational skill skill_loadout skill_unlock snapshot snapshot_contract
-snapshot_fingerprint snapshot_purity social_graph stage statinit structure support terrain
-thread traversal unified_resolve vector venture_char voice vow weave
+guidance guidance_bark identity institution intel ko_death leadership live_movement_style
+maturity_baseline melee morale movement movement_arbiter movement_fallback movement_option
+movement_path movement_style objective objective_combat old_echo onboarding passive
+pending_result prog realm realm_prog realm_reward realm_ui recruit retreat reward
+sanctum.layout sanctum.party sanctum.summon sanctum_pulse save_integrity seam shrine sit_res
+situational skill skill_loadout skill_unlock snapshot snapshot_contract snapshot_fingerprint
+snapshot_purity social_graph stage statinit structure support terrain thread trace traversal
+unified_resolve vector venture_char voice vow weave
 ```
 Names that look right and are WRONG: `guide_spirit` (it is under `movement`), `stage_explore`
 (it is `explore`), `stage_objective` (it is `objective`), `stage004` (it is `seam`).
  `tests snapshot` matches
 `snapshot`, `snapshot_contract`, `snapshot_fingerprint` and `snapshot_purity`. An unmatched
 filter prints the available suite names and runs nothing.
+
+**Exact-match mode — `tests =<name1>,<name2>,...`.** A leading `=` switches from substring
+containment to case-insensitive suite-name EQUALITY, comma-separated, so a caller can isolate a
+suite whose name is a literal substring of a sibling's (`tests =combat_roundtrip` runs only that
+suite, not `combat`/`combat_terrain`/`combat_baseline` too). Additive: plain `tests <filter>`
+substring behaviour is unchanged. Built for scripted/sharded runs; still usable interactively.
 
 ### Save isolation — DELETE THE WHOLE SAVE DIRECTORY BEFORE EVERY RUN
 
@@ -141,6 +152,77 @@ suites.
 **Who may run the FULL suite:** only the orchestrator and the QA/verification role. Every other
 agent runs the compile check plus a FILTERED run at most, and asks for a full run rather than
 starting one. A full run takes minutes and blocks the machine.
+
+### Sharded full-suite runs (parallel, same restriction as the FULL suite)
+
+```bash
+scripts/run-tests-sharded.sh "$(git rev-parse --show-toplevel)"
+```
+
+Launches several headless Godot processes at once — each with its own `ECHOES_TEST_SAVE_DIR`
+under `/tmp/echoes-vnext-sharded/` and a single `tests =<exact suite names>` invocation — and sums
+every shard's `Tests: N total, N passed, M failed` line into one combined result. Wall-clock is
+driven by the single slowest shard, not `serial time / shard count` — line-count-balanced shards
+do NOT balance runtime (measured 2026-09-20: one 18-suite shard took 763s against a ~270-280s
+second-slowest tier). See the shard-map comment in the script for the current split and its
+rationale.
+
+**Measured result (qa-verifier, 2026-09-20): sharding delivers ~1.75x speedup, not the 5-10x a
+naive `serial time / shard count` estimate would suggest.** The `fingerprint` suite (shard6) is
+one indivisible registered suite measured at 623s SOLO/UNCONTENDED, and a subsequent 900s alarm
+under 10-way contention still fired while it was running — so its true contended cost is
+unmeasured beyond ">900s", a hard floor no amount of shard rebalancing can lower, because it
+cannot be split. Closing that gap requires reducing the suite's own cost (tracked as Part B1 in
+the fingerprint-suite refactor plan), not a bigger timeout number. Until that lands, the script's
+**typical** wall-clock is whatever fingerprint actually takes to finish (unmeasured past >900s);
+the other 9 shards all finish comfortably under 10 min even under contention, so the run finishes
+as soon as fingerprint does — see the `ALARM_SECS` paragraph below for why the alarm value is not
+the run's duration.
+
+**Same restriction as the full suite: only the orchestrator and the QA/verification role may run
+it.** It is still exclusive-resource-heavy (several concurrent Godot processes hitting disk) even
+though the wall-clock is shorter — do not run it alongside anything else that touches
+`/tmp/echoes-vnext-*`.
+
+**Exact-match shard map — no collisions, no duplicate counting.** Each shard passes a single
+`tests =<name1>,<name2>,...` invocation (exact suite-name equality, see "Tests" above), so the 102
+live registered suites (regenerated 2026-09-20, updated same day after PR #69 added
+`movement_style`/`live_movement_style`) are split into 10 disjoint sets — every suite appears in
+exactly one shard, none selected twice, none dropped. `qa-verifier`: a sharded run's combined
+total should equal a serial full run's total exactly, no adjustment needed. **When a suite list
+changes** (a new `*Tests.gd` file registered in `ui/AppRoot.gd`), the shard map in
+`scripts/run-tests-sharded.sh` and this count must be updated together — nothing checks this
+automatically yet.
+
+**Per-shard timeout is a HANG CEILING, not an expected duration — `wait` returns as soon as each
+shard's process exits on its own, so a shard that finishes early does not wait out the rest of
+its alarm.** The alarm only fires, and kills the shard, if it is still running past that many
+seconds. Three separate verification passes on 2026-09-20 misread a fired-or-not-yet-fired alarm
+value ("900s") as the run's actual duration — it is not; it is only the point past which we know
+the shard was still running, not how long it actually took.
+
+`ALARM_SECS` in the script (700s as of 2026-09-20) is the DEFAULT, applied to any shard whose map
+entry has no per-shard override. A real measured run found one shard (18 suites,
+line-count-balanced) taking 763s — 4 of 7 shards were killed by the old 200s alarm before that was
+caught. The shard map was then split further (see the script's shard-map comment); this still left
+500s unsafe — qa-verifier's re-measurement found shard6 (`fingerprint` alone) taking 623s
+SOLO/UNCONTENDED, and three more shards landing within 2-42s of the 500s alarm under 10-way
+contention. A subsequent global 900s alarm then STILL killed shard6 under 10-way contention while
+it was still running, proving fingerprint does not fit any value sized for the other 9 shards.
+
+**The shard map (`SHARDS` in the script) now has a per-shard alarm override as its third
+`|`-delimited field**, empty meaning "use the default": 700s covers shard1-5 and shard7-10 with
+real margin over the ~500s worst case seen for shard2/shard3/shard10. `shard6` (`fingerprint`)
+overrides to 2400s (40 min) — a deliberately generous placeholder given its true contended cost
+is unmeasured beyond ">900s", not a validated number. The script's own hang ceiling is therefore
+bounded by shard6's override (~40 min worst case if fingerprint is pathologically slow under
+contention), while its typical wall-clock is unmeasured but bounded below by fingerprint's own
+completion time, since the other 9 shards finish well inside 10 min. The fingerprint-suite
+refactor (plan Part B1) is what actually closes this gap — not a bigger override number.
+
+If any shard's log is missing a `Tests:` line, the script fails loudly (exit 1) rather than
+treating a silent zero as a pass — the same "unmatched filter runs nothing and exits 0" trap
+described above, just per-shard.
 
 **Always run the FULL suite before committing.** This codebase has cross-cutting guards — a
 one-file change has broken tests in unrelated suites more than once (the dispatch-action count

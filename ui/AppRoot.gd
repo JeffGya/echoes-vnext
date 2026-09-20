@@ -628,9 +628,23 @@ func _run_tests(parts: Array) -> void:
 	# the same grouping used for the "✅ suite — N passed" lines below) case-insensitively,
 	# substring match, so "tests snapshot" catches snapshot_purity, snapshot_contract, and
 	# snapshot_fingerprint together.
+	#
+	# "tests =<a>,<b>,..." is an exact-match mode, additive: a leading "=" switches from
+	# substring containment to case-insensitive suite-name EQUALITY, comma-separated, so a
+	# caller (scripted/sharded runs) can select suites whose names collide as substrings of
+	# each other (e.g. "combat_roundtrip" vs. sibling suites containing "combat") without
+	# pulling those siblings in. Ordinary "tests <filter>" behaviour is unchanged.
 	var suite_filter := ""
 	if parts.size() > 1:
 		suite_filter = str(parts[1]).strip_edges().to_lower()
+
+	var exact_mode := suite_filter.begins_with("=")
+	var exact_names: Array = []
+	if exact_mode:
+		for n in suite_filter.substr(1).split(","):
+			var trimmed := str(n).strip_edges()
+			if not trimmed.is_empty():
+				exact_names.append(trimmed)
 
 	if not suite_filter.is_empty():
 		var known_suites: Array = []
@@ -642,7 +656,8 @@ func _run_tests(parts: Array) -> void:
 			var suite_name := rname.substr(0, slash_idx) if slash_idx >= 0 else rname
 			if not known_suites.has(suite_name):
 				known_suites.append(suite_name)
-			if suite_name.to_lower().find(suite_filter) >= 0:
+			var is_match := exact_names.has(suite_name.to_lower()) if exact_mode else suite_name.to_lower().find(suite_filter) >= 0
+			if is_match:
 				matched_tests.append(t)
 				if not matched_suites.has(suite_name):
 					matched_suites.append(suite_name)
