@@ -15,6 +15,15 @@
 #
 # Usage: scripts/run-tests-sharded.sh [checkout_path]
 #   checkout_path defaults to the git worktree this script lives in.
+#
+# KNOWN GAP — movement_fallback does not get full-suite validation here. MovementFallbackGuardTests
+# is registered LAST in ui/AppRoot.gd specifically because it inspects a legacy-selector ledger
+# that every earlier-registered suite in the SAME PROCESS may write to. Sharding puts it in shard4
+# with ~16 sibling suites, not all ~102 — a clean sharded PASS on movement_fallback does NOT mean
+# the real serial suite would also pass; a fallback triggered by a suite in another shard is
+# invisible to it here. This is not fixable by rebalancing shards (it would require running every
+# other suite first, in-process, defeating parallelism for this one guard). Always run the full
+# SERIAL suite before committing anything that could affect legacy-selector fallback behavior.
 
 set -uo pipefail
 
@@ -96,6 +105,43 @@ echo "Sharding across ${#SHARDS[@]} shards. Logs: $LOG_DIR"
 
 pids=()
 shard_names=()
+
+# If this wrapper is killed or interrupted (TERM/INT) before the wait loop below completes, the
+# backgrounded godot subshells (up to 10, one potentially running ~2400s) would otherwise be left
+# orphaned, still writing into the fixed scratch/save directories under $SAVE_ROOT that the NEXT
+# invocation reuses and rm -rf's — reproducing exactly the concurrent-run contamination this
+# script exists to prevent. Kill and reap every recorded PID on exit, interrupt or terminate.
+_cleanup_children() {
+  for pid in "${pids[@]:-}"; do
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      kill -TERM "$pid" 2>/dev/null
+    fi
+  done
+  # Give TERM a few seconds before escalating — a godot process that ignores TERM would
+  # otherwise make this cleanup itself hang forever on an unbounded `wait`.
+  sleep 2
+  for pid in "${pids[@]:-}"; do
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      kill -KILL "$pid" 2>/dev/null
+    fi
+  done
+  for pid in "${pids[@]:-}"; do
+    if [[ -n "$pid" ]]; then
+      wait "$pid" 2>/dev/null
+    fi
+  done
+}
+_on_interrupt() {
+  _cleanup_children
+  # Without this, bash resumes after the interrupted `wait` and prints a misleading
+  # "combined result" computed from truncated logs before exiting — the exit code was
+  # already correct (a killed shard fails the `fail` check), but the output reads as if
+  # the run completed rather than was cut short. 130 is the conventional SIGINT exit code.
+  trap - EXIT
+  exit 130
+}
+trap _cleanup_children EXIT
+trap _on_interrupt INT TERM
 for entry in "${SHARDS[@]}"; do
   name="${entry%%|*}"
   rest="${entry#*|}"
@@ -181,6 +227,19 @@ fi
 
 echo "COMBINED: $total total, $passed passed, $failed failed"
 echo "(Exact-match shards: no suite selected twice, total should equal a serial full run's total.)"
+echo ""
+echo "NOTE: movement_fallback (MovementFallbackGuardTests) only saw its own shard's ~16 suites in" \
+     "this run, not all ~102 — it is a cross-suite ledger guard that must run LAST in the SAME" \
+     "process as everything else to be meaningful (see ui/AppRoot.gd 'REGISTER LAST'). A clean" \
+     "sharded result for movement_fallback does NOT have full-suite validity. Run the full SERIAL" \
+     "suite before committing anything that could affect legacy-selector fallback behavior."
+
+if [[ "$fail" -eq 1 ]]; then
+  echo "COMBINED RESULT: INVALID — at least one shard's process exited non-zero (crashed or was" \
+       "alarm-killed), even though it may have already printed a valid 'Tests:' line before dying." \
+       "See WARNING lines above." >&2
+  exit 1
+fi
 
 if [[ "$failed" -gt 0 ]]; then
   exit 1

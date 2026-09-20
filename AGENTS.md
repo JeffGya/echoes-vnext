@@ -50,8 +50,11 @@ standalone CLI runner — Godot must execute them.
 
 Full suite (**~18 minutes**, measured 2026-09-20, 1667 tests — `fingerprint` alone was ~3 min of the suite when it was ~7 min/1442 tests on 2026-08-25; the suite has grown since. Pass `timeout: 1200000`, NOT 300000 or 600000; 10 minutes now truncates a healthy run and looks like a hang):
 ```bash
-/usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --quit --path <checkout> -- tests
+/usr/bin/perl -e 'alarm shift; exec @ARGV' 1500 /opt/homebrew/bin/godot --headless --quit --path <checkout> -- tests
 ```
+(The perl alarm was previously `200` — stale from before the suite grew to ~18 minutes; that value
+hard-kills a healthy ~1090s+ run at 200s every time. 1500s gives real margin over the measured
+~18-minute/1080s+ cost.)
 
 **One suite only (~5s)** — use this while working, and the full suite once at the end:
 ```bash
@@ -155,9 +158,19 @@ starting one. A full run takes minutes and blocks the machine.
 
 ### Sharded full-suite runs (parallel, same restriction as the FULL suite)
 
+**Pass `timeout: 2700000` (45 minutes) on the Bash call that runs this script.** shard6
+(`fingerprint`) can legitimately run up to its 2400s (40 min) per-shard alarm override before the
+script's own trap fires; 2700000ms gives real margin over that worst case. A shorter timeout risks
+the same "tool auto-backgrounds, subagent never notified, work lost" failure called out above for
+the full serial suite.
+
 ```bash
 scripts/run-tests-sharded.sh "$(git rev-parse --show-toplevel)"
 ```
+
+**Coverage gap — `movement_fallback` is NOT validated by a sharded run.** See "Always run the FULL
+suite before committing" below: that rule exists in part because this guard only sees its own
+shard's ~16 suites here, not all ~102, so a clean sharded run cannot substitute for it.
 
 Launches several headless Godot processes at once — each with its own `ECHOES_TEST_SAVE_DIR`
 under `/tmp/echoes-vnext-sharded/` and a single `tests =<exact suite names>` invocation — and sums
@@ -227,7 +240,12 @@ described above, just per-shard.
 **Always run the FULL suite before committing.** This codebase has cross-cutting guards — a
 one-file change has broken tests in unrelated suites more than once (the dispatch-action count
 guard, and a UI test that wired nodes from another screen). Filter while iterating; never ship on a
-filtered run alone.
+filtered run alone. **This specifically includes the sharded run**: `movement_fallback`
+(`MovementFallbackGuardTests`) is registered LAST in `ui/AppRoot.gd` because it reads a
+legacy-selector ledger that every other suite in the SAME PROCESS may write to. A sharded run only
+puts it alongside its own shard's ~16 sibling suites, not all ~102, so a clean sharded PASS on
+`movement_fallback` does NOT have full-suite validity — a fallback triggered by a suite in a
+different shard is invisible to it. Only the full serial suite validates this guard correctly.
 
 **Only ONE suite run at a time.** Tests share `/tmp/echoes-vnext-tests/`; two concurrent runs
 corrupt each other's save fixtures.

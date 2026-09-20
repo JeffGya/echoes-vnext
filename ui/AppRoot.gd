@@ -670,6 +670,26 @@ func _run_tests(parts: Array) -> void:
 			_flush_logs_to_console()
 			return
 
+		# Exact mode requests a list of specific suite names (scripted/sharded callers). If ANY
+		# requested name matched zero tests — a typo or a stale name after a suite rename — that
+		# suite's tests silently vanish from the total with no error otherwise. Fail loudly, same
+		# severity as the "no suite matches" case above, rather than let one bad name pass silently.
+		if exact_mode:
+			var matched_suites_lower: Array = []
+			for s in matched_suites:
+				matched_suites_lower.append(str(s).to_lower())
+			var unmatched_names: Array = []
+			for requested in exact_names:
+				if not matched_suites_lower.has(requested):
+					unmatched_names.append(requested)
+			if not unmatched_names.is_empty():
+				known_suites.sort()
+				_debug_print("Exact-match filter requested suite name(s) that matched NOTHING: %s. Available suites:" % ", ".join(unmatched_names))
+				for s in known_suites:
+					_debug_print("  " + str(s))
+				_flush_logs_to_console()
+				return
+
 		runner._tests = matched_tests
 		matched_suites.sort()
 		_debug_print("Filter '%s' applied — running %d suite(s): %s" % [
