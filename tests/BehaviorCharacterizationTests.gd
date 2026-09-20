@@ -107,7 +107,7 @@ static func _real_bdata() -> Dictionary:
 # contract-level outcome via a cause the production comment at LiveMovementContextService.gd
 # names explicitly ("boxed in by allies"): the mover has a live, reachable-in-principle combat
 # goal (a hostile exists) but literally no walkable neighbour cell, so no route exists AT ALL,
-# at any cost. `_movement_direct_option_for_goal` returns {} and the option list stays empty
+# at any cost. `MovementOptionService.generate_options` finds no route and the option list stays empty
 # while `CombatPressureService.build_goals` still produced >=1 goal — the exact
 # goals>=1/options==0 shape LiveMovementContextService.gd:211's "gate on goals, not options"
 # comment describes.

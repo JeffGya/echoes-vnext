@@ -1,10 +1,10 @@
 class_name MovementOptionService
 extends RefCounted
 
-## Deterministic movement-option generation from planner-visible facts. Several helper
-## functions (`_build_control`, `_option_id`, `_exposure`, `_congestion`, `_cohesion`,
-## `_hostile_sources`, `_hazard_ids`) are called live via LiveMovementContextService; the
-## style-selection machinery in `generate_options()` is not yet wired into that live path.
+## Deterministic movement-option generation from planner-visible facts. `generate_options()`
+## is the live per-turn option producer, called once per goal by
+## LiveMovementContextService; `_build_control` is additionally called there directly for
+## the edge-cost map the legacy `actor.move` bridge needs.
 
 const ContextContract = preload("res://core/movement/contracts/MovementContext.gd")
 const GoalContract = preload("res://core/movement/contracts/MovementGoal.gd")
@@ -564,15 +564,39 @@ static func _build_endpoint_candidates(
 	keys.sort_custom(func(left: Variant, right: Variant) -> bool:
 		return _cell_less(_cell_from_key(str(left)), _cell_from_key(str(right)))
 	)
+	# One capacity-bounded flood fill replaces one full Dijkstra per unreachable or
+	# unaffordable cell. Dijkstra's minimum cost to a cell is unique, so `costs` holds
+	# exactly the keys the per-cell `shortest_path` below would have accepted — the
+	# surviving set, its order and its options are unchanged. An empty/failed region is
+	# NOT treated as "nothing reachable": the filter is simply skipped.
+	var region: Dictionary = MovementPathService.reachable_cost_region(
+		context["origin"] as Dictionary,
+		int(profile["capacity"]),
+		planning_walkable,
+		context["terrain_costs"] as Dictionary,
+		context["bounds"] as Dictionary,
+		edge_costs
+	)
+	var affordable: Dictionary = region["costs"] as Dictionary if bool(region["reachable"]) else {}
+	var region_usable: bool = not affordable.is_empty()
+	var origin_cell: Dictionary = context["origin"] as Dictionary
+	var destination_region: Array = goal["destination_region"] as Array
 	for key_value: Variant in keys:
 		var key: String = str(key_value)
 		if not bool(planning_walkable[key]):
 			continue
+		if region_usable and not affordable.has(key):
+			continue
 		var destination: Dictionary = _cell_from_key(key)
-		if destination == context["origin"]:
+		if destination == origin_cell:
+			continue
+		# Progress is a fact about origin and destination only, so this is the same test
+		# applied to the built option below — moved ahead of the route search, where it
+		# costs nothing, rather than after it.
+		if _objective_progress(origin_cell, destination, destination_region) <= 0.0:
 			continue
 		var result: Dictionary = MovementPathService.shortest_path(
-			context["origin"] as Dictionary,
+			origin_cell,
 			destination,
 			planning_walkable,
 			context["terrain_costs"] as Dictionary,
@@ -583,7 +607,7 @@ static func _build_endpoint_candidates(
 			continue
 		var option: Dictionary = _build_option(
 			context, profile, goal, planning_walkable, edge_costs, edge_sources,
-			"direct", result["path"] as Array, int(result["cost"])
+			"direct", result["path"] as Array, int(result["cost"]), int(result["cost"])
 		)
 		if float(option["objective_progress"]) > 0.0:
 			candidates.append(option)
@@ -631,7 +655,11 @@ static func _build_option(
 	edge_sources: Dictionary,
 	style: String,
 	path: Array,
-	known_route_cost: int = -1
+	known_route_cost: int = -1,
+	# Only for callers whose `path` came straight out of `shortest_path`: passing the
+	# cost back saves re-running that identical search. Any other caller must leave it
+	# at -1, or `slack` silently reports zero for a detour.
+	known_shortest_cost: int = -1
 ) -> Dictionary:
 	var origin: Dictionary = context["origin"] as Dictionary
 	var destination: Dictionary = origin if path.is_empty() else path.back() as Dictionary
@@ -649,7 +677,9 @@ static func _build_option(
 			return {"failed": true, "reason": str(route_result["reason"]), "field": "path"}
 		route_cost = int(route_result["cost"])
 	var shortest_cost: int = 0
-	if not path.is_empty():
+	if not path.is_empty() and known_shortest_cost >= 0:
+		shortest_cost = known_shortest_cost
+	elif not path.is_empty():
 		var shortest: Dictionary = MovementPathService.shortest_path(
 			origin,
 			destination,
@@ -661,7 +691,11 @@ static func _build_option(
 		if not bool(shortest["reachable"]):
 			return {"failed": true, "reason": "unreachable_destination", "field": "path"}
 		shortest_cost = int(shortest["cost"])
-	var progress: float = _objective_progress(origin, destination, goal["destination_region"] as Array)
+	var destination_region: Array = goal["destination_region"] as Array
+	var progress: float = _objective_progress(origin, destination, destination_region)
+	# Raw distance behind `progress`'s ratio — see BehaviorArbiter._spatial_utility(),
+	# which normalizes commitment against this same value instead of capacity.
+	var progress_origin_distance: int = _distance_to_region(origin, destination_region)
 	var hazard_ids: Array = _hazard_ids(path, context["known_hazards"] as Array)
 	var hostile_sources: Array = _hostile_sources(path, origin, edge_sources)
 	var option_id: String = _option_id(goal, style, destination, path)
@@ -683,28 +717,26 @@ static func _build_option(
 		hostile_sources,
 		{"known_count": hazard_ids.size(), "known_ids": hazard_ids},
 		progress,
+		progress_origin_distance,
 		planned_action,
 		goal["declared_fallback"] as Dictionary
 	)
 
 
-# Actions that require standing on/adjacent to the goal region to be legal. When an
-# option's route stops short of that region (truncated primary, conservative prefix, or
-# a safe/cohesive detour), keeping such an action would advertise an out-of-range strike.
-# In that case the option downgrades to a movement-only advance; the declared fallback is
-# unchanged. Movement-only or intentionally stationary plans are carried through untouched.
-const _RANGE_BOUND_ACTIONS: Array = [
-	"melee_attack", "protect_ally", "actor.guard", "actor.purify_shrine",
-]
-
-
-static func _planned_action_for_destination(goal: Dictionary, destination: Dictionary) -> Dictionary:
-	var planned: Dictionary = goal["planned_primary"] as Dictionary
-	if (goal["destination_region"] as Array).has(destination):
-		return planned
-	if not _RANGE_BOUND_ACTIONS.has(str(planned["type"])):
-		return planned
-	return {"type": "actor.move", "target_id": "", "payload": {}}
+# Every option carries `goal.planned_primary` VERBATIM, including a route that stops
+# short of the goal region. This layer used to rewrite a range-bound primary
+# (melee_attack / protect_ally / actor.guard / actor.purify_shrine) into a bare
+# `actor.move` on such routes, which read as "do not advertise an out-of-range strike".
+# It cost more than it bought:
+#   - BehaviorArbiter._validate_movement_inputs requires planned_action == planned_primary
+#     and answers a mismatch by discarding the WHOLE board, dropping every actor back to
+#     legacy nearest-enemy selection;
+#   - the rewrite dropped `target_id`, so a truncated approach no longer named who it was
+#     closing on;
+#   - it bought no safety: CombatActivationService revalidates the primary at the FINAL
+#     cell and takes the declared fallback when it is out of range.
+static func _planned_action_for_destination(goal: Dictionary, _destination: Dictionary) -> Dictionary:
+	return goal["planned_primary"] as Dictionary
 
 
 ## Public seam for live callers (e.g. FlowRuntime): the hostile-control edge-cost map

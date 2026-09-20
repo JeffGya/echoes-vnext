@@ -892,20 +892,22 @@
 			},
 			"movement_style_weights": {
 				"_comment": "PROPOSED DEFAULT — V2-COMBAT-003.5 Phase 3b. Deterministic movement_style alignment (docs/movement-model.md §9/§10.4, docs/v2-combat-003.5-decisions.md #18). Every already-generated route candidate is scored for how well its OWN route-shape reads as this actor's identity: alignment = (vector_bias + calling_family_bias + fear_bias + morale_bias + bond_bias + vow_bias + trait_nudge) × alignment_weight. BehaviorArbiter adds that to the candidate's own score before the winner-sort, so style influences which option wins with no post-hoc re-pointing. See MovementStyleService.gd. Not yet playtest-ratified.",
-				"_comment_alignment_weight": "alignment_weight converts identity units into arbiter score units. The raw terms below reach ~50 for a maxed dominant vector, which would outweigh _score() itself; 0.1 makes style a few points of nudge — the same order as a leadership bonus.",
-				"alignment_weight": 0.1,
+				"_comment_alignment_weight": "PROPOSED DEFAULT — alignment_weight converts identity units into arbiter score units. The raw terms below reach ~50 for a maxed dominant vector, which would outweigh _score() itself; 0.06 makes style a few points of nudge — the same order as a leadership bonus. Lowered from 0.1 by the V2-COMBAT-003.5 Phase 3c fix (decision #33), where style outranked the whole distance-closing decision in a chase.",
+				"alignment_weight": 0.06,
+				"_comment_urgency_style_damping": "PROPOSED DEFAULT — decision #33. The applied style term is scaled by (1 - urgency_style_damping x goal.urgency). Urgency damps how much style OUTRANKS the board, never what the style is: at urgency 0 she moves entirely as herself, at urgency 1 manners are worth a quarter of that and the board decides.",
+				"urgency_style_damping": 0.75,
 				"vector_bias": {
-					"_comment": "§10.4's tendency table, strong/secondary bias per direction. Same shape as vector_action_muls: weight × actor vector_scores[v]. Seeker reads §10.4's \"read, scout, investigate\" as §9's careful `read` intent; lateral stays its secondary, and Opportunist keeps lateral as its own strong bias (§10.4: \"use lateral approaches\").",
+					"_comment": "§10.4's tendency table, strong/secondary bias per direction. Same shape as vector_action_muls: weight × actor vector_scores[v]. Seeker reads §10.4's \"read, scout, investigate\" as §9's careful `read` intent; lateral stays its secondary, and Opportunist keeps lateral as its own strong bias (§10.4: \"use lateral approaches\"). PROPOSED DEFAULT — decision #35 rebalanced three rows (strategist, devoted, nurturer) because `direct` was the rarest style on any ordinary party, in any situation.",
 					"vanguard":    { "forceful": 0.5, "direct": 0.25 },
 					"protector":   { "intercepting": 0.5, "cohesive": 0.25 },
 					"seeker":      { "careful": 0.5, "lateral": 0.25 },
-					"strategist":  { "restrained": 0.5, "direct": 0.25 },
+					"strategist":  { "direct": 0.5, "restrained": 0.25 },
 					"skeptic":     { "careful": 0.5, "low_exposure": 0.25 },
 					"pillar":      { "cohesive": 0.5, "restrained": 0.25 },
-					"devoted":     { "cohesive": 0.5, "low_exposure": 0.25 },
+					"devoted":     { "cohesive": 0.5, "direct": 0.25 },
 					"opportunist": { "lateral": 0.5, "intercepting": 0.25 },
 					"mediator":    { "cohesive": 0.5, "restrained": 0.25 },
-					"nurturer":    { "low_exposure": 0.5, "cohesive": 0.25 }
+					"nurturer":    { "low_exposure": 0.5, "careful": 0.25 }
 				},
 				"calling_family_bias": {
 					"_comment": "§10.2's family biases, light secondary nudge — flat, not vector-scaled.",
@@ -949,10 +951,10 @@
 					"direct": 8.0
 				},
 				"trait_nudge": {
-					"_comment": "Small tie-break nudge only, mirrors _score()'s trait_bonus role. courage/faith/wisdom are the same 0-100 virtue scores trait_action_muls reads.",
-					"courage": { "forceful": 0.05, "direct": 0.05 },
-					"faith":   { "cohesive": 0.05, "restrained": 0.05 },
-					"wisdom":  { "careful": 0.05, "low_exposure": 0.05 }
+					"_comment": "PROPOSED DEFAULT — decision #36. Traits are the born-in share of movement style: unlike vector_bias, these weights are not scaled by vector_scores, so two Echoes of the same origin never move identically, and every Echo's learned (vector-driven) style grows past the one she was summoned with (traits do drift slightly on rank-up, ProgressionService._compute_drift). This is a floor, not a tie-break: each virtue now carries one dominant style at 0.20 and one supporting style at 0.08. courage/faith/wisdom are the same 0-100 virtue scores trait_action_muls reads.",
+					"courage": { "forceful": 0.08, "direct": 0.20 },
+					"faith":   { "cohesive": 0.20, "restrained": 0.08 },
+					"wisdom":  { "careful": 0.20, "low_exposure": 0.08 }
 				}
 			}
 		},
@@ -1643,10 +1645,11 @@
 				}
 			},
 			"movement": {
-				"_comment_spatial_utility": "This note is OUTSIDE spatial_utility because BehaviorArbiter._validate_spatial_config rejects any key that is not a weight, and a rejected key discards the whole board. V2-COMBAT-003 phase 10 measured every weight in that block. Two traps. (1) directive_exposure_acceptance_weight is DELIBERATELY INERT, not unfinished: the term is weight x directive.intent_weights.exposure_acceptance x exposure, and exposure_acceptance is authored only on directive.seek_signs, so on the default directive.scout_carefully the term is 0.0 at ANY weight. Raising this number alone can change nothing. (2) exposure is binary in a fight, because _exposure divides controlled edges by a route that is one or two cells long, so exposure_weight is a flat penalty on a boolean, not a slope. Measurements and sweeps: docs/v2-combat-003-handoff.md section 22. All values PROPOSED DEFAULT.",
+				"_comment_spatial_utility": "This note is OUTSIDE spatial_utility because BehaviorArbiter._validate_spatial_config rejects any key that is not a weight, and a rejected key discards the whole board. V2-COMBAT-003 phase 10 measured every weight in that block. Two traps. (1) directive_exposure_acceptance_weight is DELIBERATELY INERT, not unfinished: the term is weight x directive.intent_weights.exposure_acceptance x exposure, and exposure_acceptance is authored only on directive.seek_signs, so on the default directive.scout_carefully the term is 0.0 at ANY weight. Raising this number alone can change nothing. (2) exposure is binary in a fight, because _exposure divides controlled edges by a route that is one or two cells long, so exposure_weight is a flat penalty on a boolean, not a slope. Measurements and sweeps: docs/v2-combat-003-handoff.md section 22. All values PROPOSED DEFAULT. (3) V2-COMBAT-003.5 Phase 3c fix, decisions #33/#35, both PROPOSED DEFAULT: urgency_progress_gain multiplies the objective_progress term by (1 + gain x urgency), so closing distance outranks manners when the goal is time-pressured; cap was raised 20.0 -> 28.0 so that amplified progress term is not clipped away by the cap it now reaches.",
 				"spatial_utility": {
-					"cap": 20.0,
+					"cap": 28.0,
 					"urgency_weight": 4.0,
+					"urgency_progress_gain": 1.0,
 					"objective_progress_weight": 8.0,
 					"cohesion_weight": 4.0,
 					"exposure_weight": -6.0,

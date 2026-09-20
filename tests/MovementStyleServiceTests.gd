@@ -301,7 +301,7 @@ static func _t_decisive_style_names_movement_style_in_trace() -> Dictionary:
 	var reason_text: String = GuidanceContribution._reason_text(
 		"object", "literal", {"source": "movement_style", "code": "style_expression"}, {}
 	)
-	if reason_text != "She made the only right move":
+	if reason_text != "she made the only right move":
 		return _fail("style_expression reason text was '%s', not the bark line" % reason_text)
 	return _pass()
 
@@ -423,7 +423,7 @@ static func _options(goal: Dictionary) -> Array:
 		"goal.combat.advance.baseline.c2r0",
 		"option.combat.advance.baseline.c2r0.direct.d2r0.pc1r0-c2r0",
 		"advance", {"col": 2, "row": 0}, [{"col": 1, "row": 0}, {"col": 2, "row": 0}],
-		2, 2, 0, 4, 2, 0.0, 0.0, 0.0, [], {"known_count": 0, "known_ids": []}, 1.0,
+		2, 2, 0, 4, 2, 0.0, 0.0, 0.0, [], {"known_count": 0, "known_ids": []}, 1.0, 2,
 		goal["planned_primary"], goal["declared_fallback"]
 	)
 	var forceful_option: Dictionary = OptionContract.build(
@@ -431,7 +431,11 @@ static func _options(goal: Dictionary) -> Array:
 		"option.combat.advance.baseline.c2r0.forceful.d2r0.pc1r0-c1r1-c2r1-c2r0",
 		"advance", {"col": 2, "row": 0},
 		[{"col": 1, "row": 0}, {"col": 1, "row": 1}, {"col": 2, "row": 1}, {"col": 2, "row": 0}],
-		4, 4, 0, 4, 4, 0.0, 0.0, 0.0, [], {"known_count": 0, "known_ids": []}, 1.0,
+		# V2-COMBAT-003.5 Phase 3c: commitment now normalizes against origin_distance, not
+		# capacity, so a full-progress route no longer differs from `direct` there (both
+		# saturate to 1.0). A small exposure penalty keeps `forceful` mechanically behind
+		# `direct` pre-style, so the style bias below is provably what flips the winner.
+		4, 4, 0, 4, 4, 0.05, 0.0, 0.0, [], {"known_count": 0, "known_ids": []}, 1.0, 2,
 		goal["planned_primary"], goal["declared_fallback"]
 	)
 	return [direct_option, forceful_option]
@@ -445,7 +449,7 @@ static func _options_direct_and_overcommitted(goal: Dictionary) -> Array:
 		"goal.combat.advance.baseline.c2r0",
 		"option.combat.advance.baseline.c2r0.direct.d2r0.pc1r0-c2r0",
 		"advance", {"col": 2, "row": 0}, [{"col": 1, "row": 0}, {"col": 2, "row": 0}],
-		2, 2, 0, 4, 2, 0.0, 0.0, 0.0, [], {"known_count": 0, "known_ids": []}, 1.0,
+		2, 2, 0, 4, 2, 0.0, 0.0, 0.0, [], {"known_count": 0, "known_ids": []}, 1.0, 2,
 		goal["planned_primary"], goal["declared_fallback"]
 	)
 	var overcommitted_option: Dictionary = OptionContract.build(
@@ -453,7 +457,7 @@ static func _options_direct_and_overcommitted(goal: Dictionary) -> Array:
 		"option.combat.advance.baseline.c2r0.overcommitted.d2r0.pc0r1-c1r1-c2r1-c2r0",
 		"advance", {"col": 2, "row": 0},
 		[{"col": 0, "row": 1}, {"col": 1, "row": 1}, {"col": 2, "row": 1}, {"col": 2, "row": 0}],
-		4, 4, 0, 4, 4, 0.0, 0.0, 0.0, [], {"known_count": 0, "known_ids": []}, 1.0,
+		4, 4, 0, 4, 4, 0.0, 0.0, 0.0, [], {"known_count": 0, "known_ids": []}, 1.0, 2,
 		goal["planned_primary"], goal["declared_fallback"]
 	)
 	return [direct_option, overcommitted_option]
@@ -467,7 +471,10 @@ static func _options_overcommitted_wins_by_cost(goal: Dictionary) -> Array:
 		"goal.combat.advance.baseline.c2r0",
 		"option.combat.advance.baseline.c2r0.direct.d2r0.pc1r0-c2r0",
 		"advance", {"col": 2, "row": 0}, [{"col": 1, "row": 0}, {"col": 2, "row": 0}],
-		4, 4, 0, 4, 4, 0.0, 0.0, 0.0, [], {"known_count": 0, "known_ids": []}, 1.0,
+		# V2-COMBAT-003.5 Phase 3c: see `_options()`'s comment — commitment ties once both
+		# routes reach full progress, so a small exposure penalty on `direct` is now what
+		# makes `overcommitted` win mechanically instead.
+		4, 4, 0, 4, 4, 0.05, 0.0, 0.0, [], {"known_count": 0, "known_ids": []}, 1.0, 2,
 		goal["planned_primary"], goal["declared_fallback"]
 	)
 	var overcommitted_option: Dictionary = OptionContract.build(
@@ -475,7 +482,7 @@ static func _options_overcommitted_wins_by_cost(goal: Dictionary) -> Array:
 		"option.combat.advance.baseline.c2r0.overcommitted.d2r0.pc0r1-c1r1-c2r1-c2r0",
 		"advance", {"col": 2, "row": 0},
 		[{"col": 0, "row": 1}, {"col": 1, "row": 1}, {"col": 2, "row": 1}, {"col": 2, "row": 0}],
-		2, 2, 0, 4, 2, 0.0, 0.0, 0.0, [], {"known_count": 0, "known_ids": []}, 1.0,
+		2, 2, 0, 4, 2, 0.0, 0.0, 0.0, [], {"known_count": 0, "known_ids": []}, 1.0, 2,
 		goal["planned_primary"], goal["declared_fallback"]
 	)
 	return [direct_option, overcommitted_option]
@@ -503,9 +510,11 @@ static func _movement_context(mover_kind: String = "echo") -> Dictionary:
 	)
 
 
+## urgency_progress_gain kept at 0.0 here (production: 1.0) so Test D's scout_carefully gap
+## stays visible — see decisions #29/#38 in docs/v2-combat-003.5-decisions.md.
 static func _spatial_cfg() -> Dictionary:
 	return {
-		"cap": 20.0, "urgency_weight": 4.0, "objective_progress_weight": 8.0,
+		"cap": 20.0, "urgency_weight": 4.0, "urgency_progress_gain": 0.0, "objective_progress_weight": 8.0,
 		"cohesion_weight": 4.0, "exposure_weight": -6.0, "congestion_weight": -2.0,
 		"commitment_weight": -2.0, "directive_objective_advance_weight": 4.0,
 		"directive_avoid_overcommit_weight": 2.0, "directive_exposure_acceptance_weight": 2.0,

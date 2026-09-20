@@ -290,7 +290,7 @@ static func _sink_flush_safety() -> void:
 #      _movement_pressure_snapshot, _live_combat_known_hazards, MovementContext.build,
 #      _movement_planning_walkable, MovementOptionService._build_control,
 #      MovementProfileService.derive_profile, CombatPressureService.build_goals,
-#      _movement_live_direct_options) — each timed individually, so the sum of B
+#      _movement_live_options) — each timed individually, so the sum of B
 #      should land close to A. Any gap is reported, not hidden in a residual bucket.
 #   C. escape_graph() / per-escape-cell loop / per-pursuer loop / cutoff_cells() —
 #      the pre-existing breakdown of the piece build_goals() spends on cutoff.
@@ -460,7 +460,7 @@ static func _measure_prepare_seam(
 		gkc[purpose] = int(gkc.get(purpose, 0)) + 1
 		var dest_region: Array = goal.get("destination_region", []) as Array
 		goal_region_sizes[purpose] = dest_region.size()
-		# Mirrors _movement_direct_option_for_goal's own early-return: no shortest_path
+		# Mirrors MovementOptionService._build_primary's own early-return: no shortest_path
 		# calls for a "hold" goal whose region already contains the mover's origin.
 		if dest_region.has(mc_origin) and purpose == "hold":
 			continue
@@ -475,7 +475,7 @@ static func _measure_prepare_seam(
 	if bool(goals_result.get("valid", false)) and not bool(actor.get("is_quarry", false)) \
 			and not goals_arr.is_empty():
 		var t_opt0: int = Time.get_ticks_usec()
-		options = lm._movement_live_direct_options(movement_context, profile, goals_arr, edge_costs, edge_sources)
+		options = lm._movement_live_options(movement_context, profile, goals_arr, 0)
 		var t_opt1: int = Time.get_ticks_usec()
 		option_gen_usec_this_turn = t_opt1 - t_opt0
 		breakdown["option_gen_calls"] = int(breakdown["option_gen_calls"]) + 1
@@ -771,7 +771,7 @@ static func _print_q1_full_breakdown(bd: Dictionary) -> void:
 		["MovementOptionService._build_control (hostile edge costs)", "control_build_usec"],
 		["MovementProfileService.derive_profile", "profile_usec"],
 		["CombatPressureService.build_goals (incl. cutoff_cells)", "build_goals_usec"],
-		["_movement_live_direct_options (option gen)", "option_gen_usec"],
+		["_movement_live_options (option gen)", "option_gen_usec"],
 	]
 	var granular_sum_usec: int = 0
 	for b_v in buckets:
@@ -818,7 +818,7 @@ static func _print_q1_full_breakdown(bd: Dictionary) -> void:
 	for k_v in kinds:
 		_say("        %-12s %d" % [str(k_v), int(gkc[k_v])])
 	_say("    estimated shortest_path() calls inside option generation (sum of every goal's")
-	_say("    destination_region size, mirroring _movement_direct_option_for_goal's own loop):")
+	_say("    destination_region size, mirroring MovementOptionService._candidate_routes' own loop):")
 	_say("        %d calls total across all measured hunter turns" % int(bd["option_gen_shortest_path_calls_total"]))
 
 

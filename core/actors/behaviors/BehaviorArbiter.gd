@@ -76,6 +76,7 @@ const _LEADERSHIP_SCORE_TRAITS: Dictionary = {
 const _SPATIAL_UTILITY_FIELDS: Array = [
 	"cap",
 	"urgency_weight",
+	"urgency_progress_gain",
 	"objective_progress_weight",
 	"cohesion_weight",
 	"exposure_weight",
@@ -804,7 +805,9 @@ func select_movement_intent(
 			# INELIGIBLE_ALIGNMENT is 0.0 (decision #21, neutral not a veto), so a
 			# purpose-ineligible style is indistinguishable here from "no style
 			# counterpart" — both add nothing and need no separate bookkeeping.
-			var style_alignment: float = _style_alignment(candidate, style_inputs)
+			var style_alignment: float = _style_alignment(candidate, style_inputs) * _style_urgency_factor(
+				candidate["_movement_goal"] as Dictionary, style_inputs["cfg"] as Dictionary
+			)
 			if style_alignment != 0.0:
 				score += style_alignment
 				var style_bias: Dictionary = candidate.get("_score_bias", {}) as Dictionary
@@ -1179,7 +1182,12 @@ func _validate_movement_inputs(
 	counted_goal_ids.sort()
 	for goal_id_value: Variant in counted_goal_ids:
 		var counted_goal_id: String = str(goal_id_value)
-		if int(option_counts_by_goal[counted_goal_id]) > 4:
+		# One option per route-shape is the ceiling, matching MovementOptionService's own
+		# dedup cap. A lower number here silently discards the WHOLE board (not the extra
+		# options) the moment a producer emits more, which is how it stayed at 4 after the
+		# generator's cap was raised to the full style set — the live path was still
+		# publishing one option per goal, so nothing could reach the limit.
+		if int(option_counts_by_goal[counted_goal_id]) > _ROUTE_STYLE_ORDER.size():
 			return _movement_failure("option_cap_exceeded", "options")
 	return {"valid": true, "intent": {}, "reason": "", "field": ""}
 
@@ -1473,6 +1481,14 @@ func _spatial_utility(
 	var commitment_ratio: float = 0.0
 	if option_capacity > 0.0:
 		commitment_ratio = clampf(float(option["commitment"]) / option_capacity, 0.0, 1.0)
+	# V2-COMBAT-003.5 Phase 3c: the "commitment" scoring term normalizes against the SAME
+	# distance objective_progress uses, not capacity — a capacity-normalized commitment
+	# term shrank at a different rate than progress, producing a distance cliff past which
+	# every actor's best move dropped to 1 cell regardless of capacity. commitment_ratio
+	# (capacity-normalized) is kept unchanged for directive_avoid_overcommit below.
+	var commitment_progress_ratio: float = clampf(
+		float(option["commitment"]) / maxf(1.0, float(option.get("progress_origin_distance", 1.0))), 0.0, 1.0
+	)
 	var weights: Dictionary = directive.get("intent_weights", {}) as Dictionary
 	var objective_advance: float = clampf(
 		float(weights.get("objective_advance_priority", 0.0)), -1.0, 1.0
@@ -1494,11 +1510,11 @@ func _spatial_utility(
 	var intercepts: float = 1.0 if purpose in ["intercept", "cut_off"] else 0.0
 	var parts: Dictionary = {
 		"urgency":                       float(config["urgency_weight"]) * urgency,
-		"objective_progress":            float(config["objective_progress_weight"]) * progress,
+		"objective_progress":            float(config["objective_progress_weight"]) * progress * (1.0 + maxf(float(config["urgency_progress_gain"]), 0.0) * urgency),
 		"cohesion":                      float(config["cohesion_weight"]) * cohesion,
 		"exposure":                      float(config["exposure_weight"]) * exposure,
 		"congestion":                    float(config["congestion_weight"]) * congestion,
-		"commitment":                    float(config["commitment_weight"]) * commitment_ratio,
+		"commitment":                    float(config["commitment_weight"]) * commitment_progress_ratio,
 		"directive_objective_advance":   float(config["directive_objective_advance_weight"]) * objective_advance * progress,
 		"directive_avoid_overcommit":    float(config["directive_avoid_overcommit_weight"]) * avoid_overcommit * (1.0 - commitment_ratio),
 		"directive_exposure_acceptance": float(config["directive_exposure_acceptance_weight"]) * exposure_acceptance * exposure,
@@ -2790,6 +2806,15 @@ func _style_alignment(candidate: Dictionary, inputs: Dictionary) -> float:
 		float(inputs["vow_lean"]),
 		inputs["cfg"] as Dictionary
 	)
+
+
+## Urgency damps how much style OUTRANKS the board, never what the style is. How she
+## prefers to move is constant; whether that preference should beat closing a chase is
+## not. Without this, a CRITICAL pursue and an idle reposition weigh manners identically.
+static func _style_urgency_factor(goal: Dictionary, cfg: Dictionary) -> float:
+	var urgency: float = clampf(float(goal.get("urgency", 0.0)), 0.0, 1.0)
+	var damping: float = clampf(float(cfg.get("urgency_style_damping", 0.0)), 0.0, 1.0)
+	return 1.0 - damping * urgency
 
 
 ## MovementStyleService's `bond_pressure` input, scoped to ONE subject (the scored

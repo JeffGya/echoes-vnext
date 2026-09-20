@@ -29,6 +29,9 @@ const REQUIRED_FIELDS: Array = [
 	"hostile_control_sources",
 	"hazard_summary",
 	"objective_progress",
+	# V2-COMBAT-003.5 Phase 3c: raw distance behind `objective_progress`'s ratio, so
+	# scoring can normalize commitment against the same denominator progress uses.
+	"progress_origin_distance",
 	"planned_action",
 	"fallback",
 ]
@@ -51,6 +54,7 @@ static func build(
 	hostile_control_sources: Array,
 	hazard_summary: Dictionary,
 	objective_progress: float,
+	progress_origin_distance: int,
 	planned_action: Dictionary,
 	fallback: Dictionary
 ) -> Dictionary:
@@ -71,6 +75,7 @@ static func build(
 		"hostile_control_sources": V.canonical_string_array(hostile_control_sources),
 		"hazard_summary": hazard_summary.duplicate(true),
 		"objective_progress": objective_progress,
+		"progress_origin_distance": progress_origin_distance,
 		"planned_action": planned_action.duplicate(true),
 		"fallback": fallback.duplicate(true),
 	}
@@ -147,6 +152,9 @@ static func validate(value: Dictionary, origin: Dictionary) -> Dictionary:
 		var number_result: Dictionary = V.require_unit_interval(value, field)
 		if not bool(number_result["valid"]):
 			return number_result
+	var progress_distance_result: Dictionary = V.require_non_negative_int(value, "progress_origin_distance")
+	if not bool(progress_distance_result["valid"]):
+		return progress_distance_result
 	var control_result: Dictionary = V.require_strictly_sorted_unique_strings(value, "hostile_control_sources")
 	if not bool(control_result["valid"]):
 		return control_result

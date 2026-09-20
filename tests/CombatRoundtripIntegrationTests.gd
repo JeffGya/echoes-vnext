@@ -3231,11 +3231,11 @@ static func test_purify_empty_target_id() -> Dictionary:
 # ---------------------------------------------------------------------------
 # V2-COMBAT-002 Slice 6E — movement-aware SELECTION regression + E1 coverage.
 #
-# PR #52 shipped `_movement_build_direct_option` with a hand-rolled option_id
+# PR #52 shipped the then-live option builder with a hand-rolled option_id
 # ("option.<goal-suffix>.direct.<col>_<row>") that MovementOption._validate_option_id
 # ALWAYS rejects — the contract demands "option.<goal-suffix>.<style>.d<col>r<row>.p<path>".
-# Every live option therefore validated false → `_movement_build_direct_option`
-# returned {} → `_movement_live_direct_options` returned [] → `selection_enabled`
+# Every live option therefore validated false → the builder returned {} → the live
+# option list was empty → `selection_enabled`
 # was false → FlowRuntime never populated ctx["movement_options"] →
 # ActorStateMachine never reached BehaviorArbiter.select_movement_intent.
 # Movement-aware target selection was completely inert in live combat; every actor
@@ -3293,23 +3293,17 @@ static func test_live_direct_option_id_is_contract_valid() -> Dictionary:
 		"declared_fallback": MovementActionPlanScript.build("actor.idle"),
 	}
 	var path: Array = [{ "col": 2, "row": 1 }, { "col": 3, "row": 1 }, { "col": 4, "row": 1 }]
-	# `_movement_build_direct_option` reads only `origin` off the movement context.
-	var option: Dictionary = _lm(runtime)._movement_build_direct_option(
-		{ "origin": origin }, { "capacity": 3 }, goal, path.back() as Dictionary, path, 3, 3)
-	if option.is_empty():
-		return {
-			"ok": false,
-			"error": "_movement_build_direct_option returned {} for a valid affordable route — option contract regression",
-		}
+	# V2-COMBAT-003.5 Phase 3c: the live builder this half used to call was deleted when the
+	# live path moved onto MovementOptionService.generate_options. The defect it guards is the
+	# id TOKEN, so the guard now sits on the token's sole authority instead.
+	var built_id: String = MovementOptionServiceScript._option_id(
+		goal, "direct", path.back() as Dictionary, path)
 	var expected_id: String = "option.combat.advance.baseline.c4r1.direct.d4r1.pc2r1-c3r1-c4r1"
-	if str(option.get("option_id", "")) != expected_id:
+	if built_id != expected_id:
 		return {
 			"ok": false,
-			"error": "option_id is not canonical: %s (expected %s)" % [str(option.get("option_id", "")), expected_id],
+			"error": "option_id is not canonical: %s (expected %s)" % [built_id, expected_id],
 		}
-	var closed_form: Dictionary = MovementOptionScript.validate(option, origin)
-	if not bool(closed_form.get("valid", false)):
-		return { "ok": false, "error": "closed-form option failed the contract: %s" % str(closed_form) }
 
 	# --- live guard --------------------------------------------------------
 	# Every option the real runtime builds for a real encounter must also validate.
@@ -3320,6 +3314,7 @@ static func test_live_direct_option_id_is_contract_valid() -> Dictionary:
 	var board_cfg: Dictionary = _movement_board_cfg(runtime, ectx)
 	var bdata: Dictionary = runtime.config_service.get_balance().get("data", {}) as Dictionary
 	var live_option_count: int = 0
+	var live_styles_seen: Dictionary = {}
 	var t: int = 200
 	for actor_value: Variant in ectx.actors:
 		var mover: Dictionary = actor_value as Dictionary
@@ -3337,9 +3332,20 @@ static func test_live_direct_option_id_is_contract_valid() -> Dictionary:
 			var validation: Dictionary = MovementOptionScript.validate(live_option, mover_origin)
 			if not bool(validation.get("valid", false)):
 				return { "ok": false, "error": "live option failed the contract: %s" % str(validation) }
+			# Reconstruct with the option's OWN route-shape. Hardcoding "direct" here made
+			# the check vacuous for every other shape the live producer now emits.
+			var live_style: String = _route_style_of(live_option)
+			if not MovementOptionServiceScript.STYLE_ORDER.has(live_style):
+				return {
+					"ok": false,
+					"error": "live option_id carries an unknown route-shape '%s': %s" % [
+						live_style, str(live_option["option_id"]),
+					],
+				}
+			live_styles_seen[live_style] = true
 			var canonical: String = MovementOptionServiceScript._option_id(
 				{ "goal_id": str(live_option["goal_id"]) },
-				"direct",
+				live_style,
 				live_option["destination"] as Dictionary,
 				live_option["path"] as Array
 			)
@@ -3354,7 +3360,23 @@ static func test_live_direct_option_id_is_contract_valid() -> Dictionary:
 			return { "ok": false, "error": "selection_enabled false despite non-empty options" }
 	if live_option_count == 0:
 		return { "ok": false, "error": "the live runtime produced ZERO movement options for every echo" }
+	var seen: Array = live_styles_seen.keys()
+	seen.sort()
+	if seen.size() < 2:
+		return {
+			"ok": false,
+			"error": "the live runtime published only route-shape(s) %s across %d option(s) — "
+				% [str(seen), live_option_count]
+				+ "the canonical-id guard covers one shape and the multi-shape producer is not live",
+		}
 	return { "ok": true }
+
+
+## "option.<goal-suffix>.<style>.d<col>r<row>.p<path>" — the style token follows the
+## goal's own segments, so trimming the goal prefix leaves it first.
+static func _route_style_of(option: Dictionary) -> String:
+	var prefix: String = "option.%s." % str(option["goal_id"]).trim_prefix("goal.")
+	return str(option["option_id"]).trim_prefix(prefix).get_slice(".", 0)
 
 
 # E1 — the whole-runtime case that was impossible to assert before the fix.
@@ -3532,12 +3554,32 @@ static func test_objective_route_truncates_and_stays_movement_aware() -> Diction
 				str(intent.get("target_id", "")), objective_id,
 			],
 		}
-	if str(intent.get("option_id", "")) != str(objective_option.get("option_id", "")):
+	# V2-COMBAT-003.5 Phase 3c: the objective goal now offers one option per route-shape,
+	# so pinning the FIRST one is no longer a statement about the defect — which is that a
+	# truncated route stays movement-aware and objective-directed. Assert that instead:
+	# the winner is one of this goal's options and it did truncate.
+	var selected_option: Dictionary = {}
+	for option_value: Variant in prepared.get("options", []) as Array:
+		var option: Dictionary = option_value as Dictionary
+		if str(option.get("option_id", "")) == str(intent.get("option_id", "")):
+			selected_option = option
+			break
+	if selected_option.is_empty():
 		return {
 			"ok": false,
-			"error": "selected option %s, expected truncated objective option %s" % [
-				str(intent.get("option_id", "")), str(objective_option.get("option_id", "")),
+			"error": "selected option %s is not in the published board" % str(intent.get("option_id", "")),
+		}
+	if str(selected_option.get("goal_id", "")) != str(objective_goal.get("goal_id", "")):
+		return {
+			"ok": false,
+			"error": "selected option belongs to goal %s, expected the objective goal %s" % [
+				str(selected_option.get("goal_id", "")), str(objective_goal.get("goal_id", "")),
 			],
+		}
+	if (objective_goal.get("destination_region", []) as Array).has(selected_option["destination"]):
+		return {
+			"ok": false,
+			"error": "selected option did not truncate: %s" % str(selected_option["destination"]),
 		}
 	# (3) Executing it actually closes distance to the objective.
 	_lm(runtime).apply_live_activation(mover, intent, prepared, asm, ctx, 300)

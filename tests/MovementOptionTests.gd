@@ -20,7 +20,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement_option/conservative_prefix", Callable(MovementOptionTests, "_t_conservative_prefix"))
 	runner.register_test("movement_option/purpose_primary_styles", Callable(MovementOptionTests, "_t_purpose_primary_styles"))
 	runner.register_test("movement_option/truthful_hold", Callable(MovementOptionTests, "_t_truthful_hold"))
-	runner.register_test("movement_option/truncated_attack_downgrades", Callable(MovementOptionTests, "_t_truncated_attack_downgrades"))
+	runner.register_test("movement_option/truncated_attack_keeps_primary", Callable(MovementOptionTests, "_t_truncated_attack_keeps_primary"))
 	runner.register_test("movement_option/hold_in_place_no_endpoints", Callable(MovementOptionTests, "_t_hold_in_place_no_endpoints"))
 	runner.register_test("movement_option/perceived_intersection_and_occupancy", Callable(MovementOptionTests, "_t_perceived_intersection_and_occupancy"))
 	runner.register_test("movement_option/reversed_inputs_stable", Callable(MovementOptionTests, "_t_reversed_inputs_stable"))
@@ -291,9 +291,18 @@ static func _t_truthful_hold() -> Dictionary:
 	return _pass()
 
 
-# A far engage target whose route exceeds capacity must not advertise an out-of-range
-# strike: every option that stops short of the goal region downgrades to a bare actor.move.
-static func _t_truncated_attack_downgrades() -> Dictionary:
+# A far engage target whose route exceeds capacity keeps `planned_primary` VERBATIM on
+# every option, in range or not.
+#
+# INVERTED by V2-COMBAT-003.5 Phase 3c, which made this generator the live per-turn
+# producer. The recorded pre-change fact was the opposite: an option ending outside the
+# goal region rewrote a range-bound primary into a bare `actor.move`. Live, that rewrite
+# is destructive — `BehaviorArbiter._validate_movement_inputs` demands planned_action ==
+# planned_primary and answers a mismatch by discarding the WHOLE board, and the rewrite
+# also drops `target_id`, so a truncated approach stops naming who it is closing on.
+# It protected nothing: `CombatActivationService` revalidates the primary at the final
+# cell and takes the declared fallback when it is out of range.
+static func _t_truncated_attack_keeps_primary() -> Dictionary:
 	var context: Dictionary = _context(_line_cells(0, 5, 0))
 	var goal: Dictionary = MovementGoal.build(
 		"goal.combat.engage.hunter.c5r0",
@@ -312,20 +321,22 @@ static func _t_truncated_attack_downgrades() -> Dictionary:
 	var options: Array = result["options"] as Array
 	if options.is_empty():
 		return _fail("Truncated engage must still emit a movement option: %s" % str(result))
-	var move_plan: Dictionary = ActionPlan.build("actor.move")
+	var out_of_range_seen: bool = false
 	for option_value: Variant in options:
 		var option: Dictionary = option_value as Dictionary
-		var plan: Dictionary = option["planned_action"] as Dictionary
-		if (goal["destination_region"] as Array).has(option["destination"] as Dictionary):
-			if plan != (goal["planned_primary"] as Dictionary):
-				return _fail("In-range endpoint must retain the melee plan: %s" % str(option))
-		elif plan != move_plan:
-			return _fail("Out-of-range endpoint must downgrade to bare actor.move: %s" % str(option))
+		if not (goal["destination_region"] as Array).has(option["destination"] as Dictionary):
+			out_of_range_seen = true
+		if (option["planned_action"] as Dictionary) != (goal["planned_primary"] as Dictionary):
+			return _fail("Every endpoint must carry planned_primary verbatim: %s" % str(option))
+	if not out_of_range_seen:
+		return _fail("Fixture produced no out-of-range endpoint — the assertion is vacuous")
 	var primary: Dictionary = _find_style(options, "direct")
 	if primary.is_empty() or primary["destination"] != _cell(2, 0):
 		return _fail("Primary must truncate to capacity endpoint (2,0): %s" % str(primary))
-	if str((primary["planned_action"] as Dictionary)["type"]) != "actor.move":
-		return _fail("Truncated primary must downgrade melee to actor.move: %s" % str(primary))
+	if str((primary["planned_action"] as Dictionary)["type"]) != "melee_attack":
+		return _fail("Truncated primary must keep the melee plan: %s" % str(primary))
+	if str((primary["planned_action"] as Dictionary)["target_id"]) != "enemy.a":
+		return _fail("Truncated primary must keep naming its target: %s" % str(primary))
 	return _pass()
 
 
