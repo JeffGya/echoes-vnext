@@ -41,7 +41,7 @@ const REQUIRED_FIELDS := [
 static func create(actors: Array, objective: String,
 		initiative_seed: int = 0, init_cfg: Dictionary = {},
 		objective_params: Dictionary = {}, stalemate_cfg: Dictionary = {}) -> Dictionary:
-	return {
+	var state: Dictionary = {
 		"actors":                  actors.duplicate(true),
 		"objective":               objective,
 		"objective_params":        objective_params,
@@ -73,21 +73,20 @@ static func create(actors: Array, objective: String,
 		# V2-STAGE-004 P4: temporary-ally death bark guard. Fires once per encounter.
 		# Declared here with the other latches so it is not an undeclared runtime key.
 		"_ally_killed_barked":  false,
-		# V2-COMBAT-003: universal no-progress detector. no_progress_streak counts consecutive
-		# rounds with no damage AND no per-objective progress counter advancing
-		# (FlowRuntime._end_round() writes both fields, scanning ectx.last_round_results for
-		# damage and combat_state's own protect_counter/guide_protect_counter/contain_counter/
-		# hold_counter for progress — a GUIDE_SPIRIT escort or a RECOVER hold can legitimately
-		# run many damage-free rounds while still winning). At no_progress_round_limit,
-		# check_end_condition() ends the fight as a forced retreat, so a fight where NOTHING
-		# moves cannot loop forever. It covers every objective except PURIFY_SHRINE — see
-		# branch 10 of check_end_condition(). 0 or absent config disables the check. _no_progress_last_sum is FlowRuntime's own scratch value (the
-		# progress-counter sum as of the previous round) — declared here so it is not an
-		# undeclared runtime key, mirroring _ally_killed_barked above.
-		"no_progress_streak":      0,
-		"no_progress_round_limit": int(stalemate_cfg.get("no_progress_round_limit", 0)),
-		"_no_progress_last_sum":   0,
+		# V2-COMBAT-003.5: universal no-progress detector. no_progress_streak counts consecutive
+		# rounds in which no damage was dealt AND get_progress_watch() produced a board state the
+		# fight has already been in. Applies to every objective uniformly — no by-name exemption
+		# list — because the watch carries both generic activity and each objective's own clock.
+		# _no_progress_seen is the set of watch states already visited; declared here so it is
+		# not an undeclared runtime key. Runtime only, never persisted.
+		"no_progress_streak":       0,
+		"no_progress_round_limit":  int(stalemate_cfg.get("no_progress_round_limit", 0)),
+		"_no_progress_seen":        {},
 	}
+	# Seed with the START-of-combat state, so a round 1 in which literally nothing moved counts
+	# as the stall it is.
+	record_progress_watch(state, get_progress_watch(actors, objective, state))
+	return state
 
 
 ## Returns true if all required fields are present in the dictionary.
@@ -210,9 +209,9 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 ##   9. GUIDE_SPIRIT (protect mode) survived → victory  (guide_protect_counter >= duration_turns)
 ##      guide_protect_counter advances only on rounds an echo was within escort_radius of the
 ##      living spirit (guard-to-count) and never resets — the party must actually reach the spirit.
-##   10. No-progress stalemate → forced retreat  (checked LAST, every objective except
-##       PURIFY_SHRINE and GUIDE_SPIRIT escort mode, whose own clocks the detector cannot see;
-##       no_progress_streak >= no_progress_round_limit, both stored on combat_state)
+##   10. No-progress stalemate → forced retreat  (checked LAST, every objective uniformly — see
+##       get_progress_watch(); no_progress_streak >= no_progress_round_limit, both stored on
+##       combat_state)
 ##
 ## combat_state carries round_counter, protect_counter, objective_params, hold_counter,
 ## no_progress_streak, and no_progress_round_limit.
@@ -327,32 +326,111 @@ static func check_end_condition(actors: Array, objective: String,
 
 	# 10. Universal no-progress stalemate. Checked LAST, after every objective-specific win or
 	# loss, so it only fires when nothing else ended the fight this round. It is the fallback for
-	# a fight where nothing above can fire — no damage AND no per-objective counter
-	# (protect/guide_protect/contain/hold) advancing, e.g. both actors refuse or guard every
-	# round. FlowRuntime._end_round() is the sole writer of no_progress_streak; it resets on
-	# damage OR on any of those counters rising, so a GUIDE_SPIRIT escort or a RECOVER hold that
-	# is genuinely progressing toward its own win condition — with zero combat damage the whole
-	# time — never gets cut short here. Ends as a forced retreat, not a defeat: see
+	# a fight where nothing above can fire — no damage AND a board state already seen, e.g. both
+	# actors refuse or guard every round. FlowRuntime._end_round() is the sole writer of
+	# no_progress_streak; it resets whenever get_progress_watch() produces a state this fight has
+	# never been in, so a party still walking toward a spirit, a draining shrine, or an ENDURE
+	# timer running down never gets cut short here. Ends as a forced retreat, not a defeat: see
 	# FlowRuntime._resolve_forced_retreat().
 	#
-	# Two objectives are excluded. See data.combat.stalemate._comment in balance.json for the
-	# full reasoning; the short form:
-	#   PURIFY_SHRINE — the shrine loses hit points every round with no actor acting, so branch 2
-	#     (shrine_destroyed) always ends the fight on its own.
-	#   GUIDE_SPIRIT escort mode — the spirit's own steps toward the destination do not advance
-	#     guide_protect_counter (that field only counts protect-mode guard rounds), so a long,
-	#     damage-free crossing looks identical to a true stall. Escort protect mode is NOT
-	#     excluded: it has guide_protect_counter and the detector is useful there.
+	# No objective is exempt by name (V2-COMBAT-003.5). A new objective is covered as soon as it
+	# exposes its progress in get_progress_watch() — nothing needs adding here.
 	var no_progress_limit: int = int(combat_state.get("no_progress_round_limit", 0))
-	var is_guide_spirit_escort: bool = objective == EncounterResolutionModes.GUIDE_SPIRIT \
-		and str(combat_state.get("guide_mode", "protect")) == "escort"
-	if no_progress_limit > 0 and objective != EncounterResolutionModes.PURIFY_SHRINE \
-			and not is_guide_spirit_escort:
+	if no_progress_limit > 0:
 		var no_progress_streak: int = int(combat_state.get("no_progress_streak", 0))
 		if no_progress_streak >= no_progress_limit:
 			return { "over": true, "victory": false, "reason": "no_progress_forced_retreat" }
 
 	return { "over": false, "victory": false, "reason": "" }
+
+
+## V2-COMBAT-003.5: the no-progress detector's actual signal — one round's worth of "did
+## anything happen". `board` is the generic term and carries most of the weight: every actor's
+## position, hit points and death state. An Echo walking toward a spirit it has not reached yet
+## is activity; two actors standing still swinging for zero damage is not. Fear and morale are
+## deliberately absent — the per-round emotion tick moves them every round, so including them
+## would make every round look like progress and switch the detector off.
+##
+## The counters and the two objective clocks below are kept as explicit terms even though
+## `board` would also move for most of them: they state each objective's own definition of
+## progress at the place the detector reads it.
+##
+## EVERY VALUE MUST BE FLAT (int/String). Godot compares nested Arrays and Dictionaries inside a
+## Dictionary by REFERENCE, so a nested container here would read as "changed" every round and
+## silently disable the detector.
+static func get_progress_watch(actors: Array, objective: String, combat_state: Dictionary) -> Dictionary:
+	var watch: Dictionary = {
+		"protect_counter":       int(combat_state.get("protect_counter", 0)),
+		"guide_protect_counter": int(combat_state.get("guide_protect_counter", 0)),
+		"contain_counter":       int(combat_state.get("contain_counter", 0)),
+		"hold_counter":          int(combat_state.get("hold_counter", 0)),
+		"board":                 _board_fingerprint(actors),
+	}
+	# ENDURE and PURSUE both end on round_counter alone — branch 7 (endured) and branch 8
+	# (window_expired) — so they cannot run forever and a quiet round of either is a player
+	# surviving, not a stall. The countdown to that guaranteed end is their real progress signal.
+	# It clamps at 0, so if the objective ever stops ending on its own the detector re-arms.
+	var obj_params: Dictionary = combat_state.get("objective_params", {})
+	var round_counter: int = int(combat_state.get("round_counter", 0))
+	if objective == EncounterResolutionModes.ENDURE:
+		watch["objective_countdown"] = maxi(0, int(obj_params.get("duration_turns", 5)) - round_counter)
+	if objective == EncounterResolutionModes.PURSUE:
+		watch["objective_countdown"] = maxi(0, int(obj_params.get("window_turns", 8)) - round_counter)
+	if objective == EncounterResolutionModes.PURIFY_SHRINE:
+		var shrine: Dictionary = _find_shrine(actors)
+		if not shrine.is_empty():
+			watch["shrine_hp"] = int(shrine.get("current_hp", 0))
+	if objective == EncounterResolutionModes.GUIDE_SPIRIT \
+			and str(combat_state.get("guide_mode", "protect")) == "escort":
+		var dest_col: int = int(combat_state.get("destination_col", -1))
+		var dest_row: int = int(combat_state.get("destination_row", -1))
+		if dest_col >= 0 and dest_row >= 0:
+			var spirit: Dictionary = _find_spirit(actors)
+			if not spirit.is_empty():
+				var pos: Dictionary = spirit.get("grid_pos", {})
+				# Chebyshev distance, inlined like _dominant_key above — avoids coupling this
+				# pure static class to GridService for one line of arithmetic.
+				watch["spirit_distance"] = maxi(
+					absi(int(pos.get("col", 0)) - dest_col),
+					absi(int(pos.get("row", 0)) - dest_row))
+	return watch
+
+
+## One flat, order-independent line describing where every actor stands and how hurt it is.
+## Sorted by the encoded string so a pure reorder of the actor list (initiative, a late spawn
+## appended) is not mistaken for activity, while a new or removed actor still is.
+static func _board_fingerprint(actors: Array) -> String:
+	var rows: PackedStringArray = PackedStringArray()
+	for actor_v in actors:
+		if not (actor_v is Dictionary):
+			continue
+		var actor: Dictionary = actor_v
+		var pos: Dictionary = actor.get("grid_pos", {})
+		rows.append("%s@%d,%d hp%d d%d" % [
+			str(actor.get("id", "")),
+			int(pos.get("col", -1)),
+			int(pos.get("row", -1)),
+			int(actor.get("current_hp", 0)),
+			1 if bool(actor.get("is_dead", false)) else 0,
+		])
+	rows.sort()
+	return "|".join(rows)
+
+
+## Records this round's watch and reports whether the fight has ever been in this exact state
+## before. Returning to a configuration already seen is NOT progress — that is what separates a
+## party walking toward a spirit it has not reached (a new board every round) from two actors
+## pacing between the same two tiles forever, which a plain "differs from last round" test would
+## read as progress and never end. A counter falling back to a value it already had is caught by
+## the same rule. Called once per round by FlowRuntime._end_round(), the sole writer of
+## no_progress_streak, and once by create() to seed the start-of-combat state.
+static func record_progress_watch(combat_state: Dictionary, watch: Dictionary) -> bool:
+	var seen: Dictionary = combat_state.get("_no_progress_seen", {})
+	var key: String = JSON.stringify(watch)
+	var is_new: bool = not seen.has(key)
+	seen[key] = true
+	combat_state["_no_progress_seen"] = seen
+	return is_new
 
 
 ## Returns the first structure actor (is_structure == true) from the list, or {} if none found.

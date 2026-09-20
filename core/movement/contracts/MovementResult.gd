@@ -40,6 +40,7 @@ const REQUIRED_FIELDS: Array = [
 	"hazards",
 	"objective_progress",
 	"hostile_constraints",
+	"movement_style",
 ]
 
 
@@ -63,7 +64,8 @@ static func build(
 	fallback: Dictionary,
 	hazards: Array,
 	objective_progress: float,
-	hostile_constraints: Dictionary
+	hostile_constraints: Dictionary,
+	movement_style: String = ""
 ) -> Dictionary:
 	return {
 		"mover_id": mover_id,
@@ -86,6 +88,7 @@ static func build(
 		"hazards": hazards.duplicate(true),
 		"objective_progress": objective_progress,
 		"hostile_constraints": hostile_constraints.duplicate(true),
+		"movement_style": movement_style,
 	}
 
 
@@ -194,4 +197,8 @@ static func validate(value: Dictionary) -> Dictionary:
 	var objective_result: Dictionary = V.require_number(value, "objective_progress")
 	if not bool(objective_result["valid"]):
 		return objective_result
+	# §6.7. "" is legal — see MovementIntent.validate()'s identical note.
+	var style_type: Dictionary = V.require_type(value, "movement_style", TYPE_STRING)
+	if not bool(style_type["valid"]):
+		return style_type
 	return V.ok()

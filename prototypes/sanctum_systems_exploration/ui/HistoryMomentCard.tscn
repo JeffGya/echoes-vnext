@@ -1,0 +1,63 @@
+[gd_scene load_steps=2 format=3]
+[ext_resource type="Script" path="res://prototypes/sanctum_systems_exploration/ui/HistoryMomentCard.gd" id="1"]
+[node name="HistoryMomentCard" type="PanelContainer"]
+script = ExtResource("1")
+[node name="Stack" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 6
+[node name="Header" type="HBoxContainer" parent="Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+[node name="MomentType" type="Label" parent="Stack/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "VILLAGE MOMENT"
+size_flags_horizontal = 3
+[node name="EventGlyph" type="Label" parent="Stack/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "•"
+theme_override_font_sizes/font_size = 22
+[node name="MomentBadge" type="Label" parent="Stack/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "REMEMBERED"
+[node name="People" type="Label" parent="Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+[node name="MomentTitle" type="Label" parent="Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "A village moment"
+theme_override_font_sizes/font_size = 18
+autowrap_mode = 2
+[node name="MomentMeta" type="Label" parent="Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+[node name="MomentText" type="Label" parent="Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+[node name="MomentCause" type="Label" parent="Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+[node name="MomentAftermath" type="Label" parent="Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+[node name="Changes" type="Label" parent="Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+[node name="ConsequenceA" type="Label" parent="Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+[node name="ConsequenceB" type="Label" parent="Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2

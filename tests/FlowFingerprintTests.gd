@@ -597,9 +597,44 @@ static func _run_mode_fingerprint(
 # now gets a zero-step stay option. FIRST divergence: r03 enemy.dust_wanderer_1 hits echo_0003
 # from 7,1 instead of stepping to 7,2 — same target, same damage 3. The fight runs 6 rounds
 # instead of 5, so FINAL and SAVE move with it.
-const COMBAT_ROUNDS_HASH := "6312819e097d22c780a93774c3fa513db9b9ee3322cdd38f634d5cb9b3eaf264"
-const COMBAT_FINAL_HASH  := "acd5c49a3496616010028fdcdf8851eba11865a9596203e3d99db39e88da2c21"
-const COMBAT_SAVE_HASH   := "bbe140a53a33fcc97220ce3f9c8c172e2cb1f4ce4a281094a78f9733b40b50a4"
+#
+# RE-RECORDED, V2-COMBAT-003.5 Phase 2d/2g — board size 12..22 -> 18..28 (ANSWERS.md #63).
+# 16 of the 21 constants moved: all seven ROUNDS, six FINAL (not ENDURE), three SAVE (PROTECT,
+# ENDURE, PURSUE). Board bounds are an INPUT to StageTerrain.generate(), so every fixture fights
+# on a wholly different map and every ROUNDS hash must move. Attribution reproduced here by
+# reverting only the four balance.json numbers with the rest of the working tree untouched —
+# fingerprint then returns 10/10 pass, so nothing else in Phase 2 contributes.
+#
+# The five constants that did NOT move are the interesting half, and one rule explains four of
+# them: RewardCalc.compute() pays speed_bonus only when round_ended < speed_bonus_threshold (5),
+# so a round-count change that stays on one side of 5 changes no payout. Round counts measured
+# from this file's own FP_DEBUG payloads, old board -> new board:
+#   COMBAT        6 -> 7   both >= 5, ase 55 / ekwan 7 unchanged, kill XP still echo_0005 -> SAVE held
+#   PURIFY_SHRINE 6 -> 7   same, kill XP still echo_0001 -> SAVE held  (shrine_hp 172 -> 167)
+#   RECOVER       2 -> 3   both < 5, ase 59 / ekwan 7 unchanged, no kill -> SAVE held
+#   GUIDE_SPIRIT  6 -> 5   both >= 5 (5 is not < 5), ase 50 / ekwan 6 unchanged, no kill -> SAVE held
+#   ENDURE        5 -> 5   ends on duration_turns, which no board size can move; FINAL records no
+#                          field the fight changed, so FINAL held while SAVE moved (below)
+# The two modes that cross the threshold move their payout with it: PROTECT 4 -> 5 loses the
+# bonus (ase 59 -> 50, ekwan 7 -> 6, rank S -> A) and PURSUE 5 -> 4 gains it (ase 55 -> 64,
+# ekwan 7 -> 8, rank S both).
+#
+# V2-COMBAT-003.5 Phase 3c fix re-record — all seven, approved in advance (decision #37) on the
+# condition that no fight flips win -> loss. None did; PURSUE flipped loss -> win. Cause:
+# urgency now damps the movement_style term and amplifies objective_progress, so every
+# Standing-1 fixture party re-decides some routes. Measured, before -> after:
+#   COMBAT        r7  S -> r7  S      PURIFY_SHRINE r9  S -> r9  S
+#   RECOVER       r4  A -> r3  S      PROTECT       r6  A -> r5  A
+#   ENDURE        r5  B -> r5  B      GUIDE_SPIRIT  r5  A -> r5  A
+#   PURSUE        r8  F LOSS (window_expired) -> r7 S WIN (all_enemies_defeated)
+# RECOVER's FINAL and PURSUE's pre-Phase-3c win are both restorations, not new values.
+#
+# COMBAT: 6 -> 7 rounds at Phase 2d/2g. The Phase 3c fix re-record above holds the round count
+# at 7 (r7 S -> r7 S) but reshapes routes: ROUNDS and SAVE move (kill XP shifts to echo_0003),
+# FINAL holds (ase 55, ekwan 7, rank S, round_ended 7).
+const COMBAT_ROUNDS_HASH := "f3f9099684309580fb86f700151fe1d80629a061968a8238589dab5ad04ea8be"
+const COMBAT_FINAL_HASH  := "56bd83c9c14ee7d62193d3fb31a5ac04fdcbfb05e299f596527f649220c6e679"
+const COMBAT_SAVE_HASH   := "f3e41850d026469d228e8c1d30c57e87a9e38279f323fc49f96bc480b1355d05"
 
 
 ## Shared expected-vs-actual assertion for the three hashes of one mode.
@@ -665,9 +700,13 @@ static func test_combat() -> Dictionary:
 # runs 6 rounds, so SAVE did not move.
 # FINAL moved with shrine_hp 170 → 172: two purify stacks (-3 drain for 2 rounds each, +2 on
 # expiry) net 2 HP back over six rounds.
-const PURIFY_SHRINE_ROUNDS_HASH := "2ebf9494c643704fd1ff06924a197f6780c44e6df89ef618e25051936caadcc4"
-const PURIFY_SHRINE_FINAL_HASH  := "c65a3be16d812a37e9d225dc78df330c0f1d81bb4a9bf3c39b4b9d863bf092f9"
-const PURIFY_SHRINE_SAVE_HASH   := "cca434e9c009c6ba5607c102d12b1d87883fe6899dbffe4214c9a0cb0934eff7"
+# Phase 2d/2g: 6 -> 7 rounds. FINAL also carries shrine_hp 172 -> 167 — one more round of the
+# unchanged 5-per-round drain. SAVE held at that point: same ase 55 / ekwan 7, kill XP still
+# echo_0001. V2-COMBAT-003.5 Phase 3c fix re-record moved the fixture further (round_ended 9,
+# shrine_hp 157, ase 55, ekwan 7 unchanged) and the kill XP now belongs to echo_0004.
+const PURIFY_SHRINE_ROUNDS_HASH := "7f34f396ee6580db9119478474cbc3b0770c494a31ce98b34fb49a0fc81e0f90"
+const PURIFY_SHRINE_FINAL_HASH  := "35252c716302587163b30d27f00c981a70d64cc9831c78fb9d72f9bb38b58dfe"
+const PURIFY_SHRINE_SAVE_HASH   := "64dc78e3baf7dd7c3ea61b26536f842b3fecda7de923487fb9143904cffabe49"
 
 static func test_purify_shrine() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(EncounterResolutionModes.PURIFY_SHRINE, "fp_purify_shrine")
@@ -678,8 +717,10 @@ static func test_purify_shrine() -> Dictionary:
 ## cause as COMBAT above: GridService placement's vec_mod term. FINAL_HASH and SAVE_HASH did
 ## not move for this mode.
 # V2-COMBAT-003 Phase 5 re-record — same cause as COMBAT_ROUNDS_HASH above.
-const RECOVER_ROUNDS_HASH := "99f84509ba567b9066e9af4f97a524d2685739f19c7fba02ff90f6243eff60e5"
-const RECOVER_FINAL_HASH  := "09e38fdf70259c9a647c6dd053caa9e1518e5f830364ac5f96fac5dbceb92780"
+# Phase 2d/2g: 2 -> 3 rounds, still under the speed-bonus threshold, so SAVE held (ase 59,
+# ekwan 7, no kill). FINAL moves only on round_ended; hold_progress still reaches 2 of 2.
+const RECOVER_ROUNDS_HASH := "cb10495eb5b839c1fbaa78f2871498e8632674fdfb57aeb5ec6fd7068bb86b31"
+const RECOVER_FINAL_HASH  := "a0b143fa6916306dd31ee9816b4f89dc4a06af19b651f2de6d2b568285c5c720"
 const RECOVER_SAVE_HASH   := "bffa34aa225afe79818ec0b15931d59f495930337b8d07b33a997208e0d46c35"
 
 static func test_recover() -> Dictionary:
@@ -694,9 +735,12 @@ static func test_recover() -> Dictionary:
 # V2-COMBAT-003 Phase 7a re-record — attributed. FIRST divergence: r04 enemy.dust_wanderer_1
 # stops walking off 6,4 to swing at echo_0001 for 0 and instead breaks protect_entity_01 for 11
 # from where it stands. The mode is genuinely harder, which is the fix working, not a defect.
-const PROTECT_ROUNDS_HASH := "28938ae1aae8733614b7b3941b2ece412ed2726facc4e0e59135534e5dd5bca2"
-const PROTECT_FINAL_HASH  := "443b49a8c8bfd83a739b0636e6eacc71ebd38e646eb7da9af9b0445d21374ce2"
-const PROTECT_SAVE_HASH   := "bffa34aa225afe79818ec0b15931d59f495930337b8d07b33a997208e0d46c35"
+# Phase 2d/2g: 4 -> 5 rounds, crossing speed_bonus_threshold. All three hashes move. Still won
+# (protect_progress 4 of 4) but ase 59 -> 50, ekwan 7 -> 6, rank S -> A; protect_entity ends on
+# 70 HP instead of 59. No kill either way, so SAVE moves on the payout alone.
+const PROTECT_ROUNDS_HASH := "a3bc99222bbc94efc623a9043f21d8bc34e3a4be189057d9d5f3cc22cef8b510"
+const PROTECT_FINAL_HASH  := "ae75cdb83f206821229bc3d55613fe20ebb0a984e5e4c9416c1944906c806982"
+const PROTECT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
 static func test_protect() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(EncounterResolutionModes.PROTECT, "fp_protect")
@@ -709,9 +753,14 @@ static func test_protect() -> Dictionary:
 # V2-COMBAT-003 Phase 5 re-record — same cause as COMBAT_ROUNDS_HASH above.
 # V2-COMBAT-003 Phase 7a re-record — attributed. FIRST divergence: r03, echo_0001 at 6,2.
 # FINAL and SAVE did not move.
-const ENDURE_ROUNDS_HASH := "26c56e0097c17aa190ed040d262459b668ba702577d87c9e2d934adf4f8ca14d"
-const ENDURE_FINAL_HASH  := "106b216e990ac3e55653976f0bf0506f7f96f2d361a1183e87241c3948f7554e"
-const ENDURE_SAVE_HASH   := "cca434e9c009c6ba5607c102d12b1d87883fe6899dbffe4214c9a0cb0934eff7"
+# Phase 2d/2g: the one mode whose FINAL held at that point. ENDURE ends on duration_turns, so
+# round_ended stayed 5. V2-COMBAT-003.5 Phase 3c fix re-record moved FINAL too, and moved it
+# down: rank B (was A), ase 50 (was 55), ekwan 6 (was 7), zero enemies defeated (was one) — an
+# accepted regression, not a copy error (decision #39). SAVE now carries no kill XP for any
+# party member (the enemy that used to die no longer does).
+const ENDURE_ROUNDS_HASH := "1b17a41ae9b0cf4020822a9cf115ebb716fb9ba052ac078c270bbdb40be0a19d"
+const ENDURE_FINAL_HASH  := "82033486f24fae4e91e343e6a43013d963426d1e2f3d74dea9e1632a7cb4998a"
+const ENDURE_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
 static func test_endure() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(EncounterResolutionModes.ENDURE, "fp_endure")
@@ -721,9 +770,17 @@ static func test_endure() -> Dictionary:
 ## RE-RECORDED, V2-COMBAT-003 Phase 2b — production-shaped fixtures (ANSWERS.md #50). Same
 ## cause as COMBAT above: GridService placement's vec_mod term.
 # V2-COMBAT-003 Phase 5 re-record — same cause as COMBAT_ROUNDS_HASH above.
-const PURSUE_ROUNDS_HASH := "d3b7d31ec0b0cdf0185ccffc883dfe08e5846caf33273d9fe45289904bd05f5c"
-const PURSUE_FINAL_HASH  := "678b39327b47e4999322d24d3b07d280e48e475ed89fc2e1475f89bc6b8fbedb"
-const PURSUE_SAVE_HASH   := "f3e41850d026469d228e8c1d30c57e87a9e38279f323fc49f96bc480b1355d05"
+# Phase 2d/2g: 5 -> 4 rounds, so the board grew and the fight got SHORTER. pursue_override's
+# long_multiplier is applied after the max clamp, so this board went 48x12 -> 72x18 — the short
+# axis grew with the long one. Same win branch (all_enemies_defeated: the quarry dies like any
+# other enemy before the contain window fires), one round earlier. Crossing under
+# speed_bonus_threshold paid the bonus at that point: ase 55 -> 64, ekwan 7 -> 8, rank S both.
+# V2-COMBAT-003.5 Phase 3c fix re-record then flips this fight from a round-8 loss to a round-7
+# win (all_enemies_defeated, per the summary above), so the bonus no longer applies: ase 55,
+# ekwan 7, rank S, round_ended 7. The 25 kill XP now belongs to echo_0001, not echo_0003.
+const PURSUE_ROUNDS_HASH := "86daedae34eceb53717f14cb0d3bae618c1595975c47785423c50859f2f8f27e"
+const PURSUE_FINAL_HASH  := "90e44d309d4c5c41d03568e3e295dfa1c4289b5b38bd1e4712cef3a5b15e2257"
+const PURSUE_SAVE_HASH   := "cca434e9c009c6ba5607c102d12b1d87883fe6899dbffe4214c9a0cb0934eff7"
 
 static func test_pursue() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(EncounterResolutionModes.PURSUE, "fp_pursue")
@@ -789,8 +846,14 @@ static func test_pursue() -> Dictionary:
 # went live once vector_scores stopped being {}, reordering the party's starting columns.
 # FINAL_HASH and SAVE_HASH did not move — the outcome is still spirit_protected.
 # V2-COMBAT-003 Phase 5 re-record — same cause as COMBAT_ROUNDS_HASH above.
-const GUIDE_SPIRIT_ROUNDS_HASH := "5de726e78f5ecaed7959dd1df767305a91de3cc77f086b6b2ce921f0c0d7bcb0"
-const GUIDE_SPIRIT_FINAL_HASH  := "13b4753677246bdc095ceea1416aba2816581db36c5963d75975a69f56471b3f"
+# Phase 2d/2g: 6 -> 5 rounds on a board that went 60x12 -> 90x18 (long_multiplier again applied
+# after the max clamp), so this long-axis mode also got SHORTER. Same win branch
+# (spirit_protected), spirit still on 60 HP. ROUNDS and FINAL move on the round count; SAVE held
+# — 5 is not below speed_bonus_threshold either, so ase 50 / ekwan 6 stand and there is no kill.
+# The "round 9" round counts quoted in the older notes above describe the boards of their own
+# phases, not this one.
+const GUIDE_SPIRIT_ROUNDS_HASH := "a576d42c38f1321deaebd038941ddf4ad7239e698e221445ba6276a84846ebc8"
+const GUIDE_SPIRIT_FINAL_HASH  := "9634aff8ac8d4dbe12f3ad7795d30bff78b5dbb325ab278ce426733e9461072c"
 const GUIDE_SPIRIT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
 static func test_guide_spirit() -> Dictionary:

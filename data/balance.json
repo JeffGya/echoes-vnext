@@ -889,6 +889,73 @@
 					"actor.move": 8.0,
 					"melee_attack": -2.0
 				}
+			},
+			"movement_style_weights": {
+				"_comment": "PROPOSED DEFAULT — V2-COMBAT-003.5 Phase 3b. Deterministic movement_style alignment (docs/movement-model.md §9/§10.4, docs/v2-combat-003.5-decisions.md #18). Every already-generated route candidate is scored for how well its OWN route-shape reads as this actor's identity: alignment = (vector_bias + calling_family_bias + fear_bias + morale_bias + bond_bias + vow_bias + trait_nudge) × alignment_weight. BehaviorArbiter adds that to the candidate's own score before the winner-sort, so style influences which option wins with no post-hoc re-pointing. See MovementStyleService.gd. Not yet playtest-ratified.",
+				"_comment_alignment_weight": "PROPOSED DEFAULT — alignment_weight converts identity units into arbiter score units. The raw terms below reach ~50 for a maxed dominant vector, which would outweigh _score() itself; 0.06 makes style a few points of nudge — the same order as a leadership bonus. Lowered from 0.1 by the V2-COMBAT-003.5 Phase 3c fix (decision #33), where style outranked the whole distance-closing decision in a chase.",
+				"alignment_weight": 0.06,
+				"_comment_urgency_style_damping": "PROPOSED DEFAULT — decision #33. The applied style term is scaled by (1 - urgency_style_damping x goal.urgency). Urgency damps how much style OUTRANKS the board, never what the style is: at urgency 0 she moves entirely as herself, at urgency 1 manners are worth a quarter of that and the board decides.",
+				"urgency_style_damping": 0.75,
+				"vector_bias": {
+					"_comment": "§10.4's tendency table, strong/secondary bias per direction. Same shape as vector_action_muls: weight × actor vector_scores[v]. Seeker reads §10.4's \"read, scout, investigate\" as §9's careful `read` intent; lateral stays its secondary, and Opportunist keeps lateral as its own strong bias (§10.4: \"use lateral approaches\"). PROPOSED DEFAULT — decision #35 rebalanced three rows (strategist, devoted, nurturer) because `direct` was the rarest style on any ordinary party, in any situation.",
+					"vanguard":    { "forceful": 0.5, "direct": 0.25 },
+					"protector":   { "intercepting": 0.5, "cohesive": 0.25 },
+					"seeker":      { "careful": 0.5, "lateral": 0.25 },
+					"strategist":  { "direct": 0.5, "restrained": 0.25 },
+					"skeptic":     { "careful": 0.5, "low_exposure": 0.25 },
+					"pillar":      { "cohesive": 0.5, "restrained": 0.25 },
+					"devoted":     { "cohesive": 0.5, "direct": 0.25 },
+					"opportunist": { "lateral": 0.5, "intercepting": 0.25 },
+					"mediator":    { "cohesive": 0.5, "restrained": 0.25 },
+					"nurturer":    { "low_exposure": 0.5, "careful": 0.25 }
+				},
+				"calling_family_bias": {
+					"_comment": "§10.2's family biases, light secondary nudge — flat, not vector-scaled.",
+					"anchor": { "cohesive": 6.0, "low_exposure": 6.0 },
+					"edge":   { "forceful": 6.0, "direct": 6.0 },
+					"sight":  { "lateral": 6.0, "careful": 6.0 }
+				},
+				"fear_weight": {
+					"_comment": "× fear/100. High fear pushes toward exposure avoidance and is what makes a retreating route read as hers at all; it pulls against forceful/overcommitted commitment.",
+					"direct": 0.0,
+					"restrained": 10.0,
+					"careful": 22.0,
+					"forceful": -14.0,
+					"cohesive": 8.0,
+					"low_exposure": 24.0,
+					"lateral": 6.0,
+					"intercepting": -6.0,
+					"retreating": 30.0,
+					"overcommitted": -20.0
+				},
+				"morale_bias": {
+					"_comment": "Flat, by EmotionService.get_morale_tier(). Low morale reads as hesitation (careful/restrained); high morale as follow-through (forceful/direct). steady is the neutral baseline.",
+					"broken":   { "careful": 10.0, "restrained": 10.0, "forceful": -6.0, "overcommitted": -6.0 },
+					"shaken":   { "careful": 5.0, "restrained": 5.0 },
+					"steady":   {},
+					"inspired": { "forceful": 8.0, "direct": 8.0 }
+				},
+				"bond_weight": {
+					"_comment": "× bond_pressure (0-1, scoped to the scored candidate's own goal subject — see BehaviorArbiter._movement_style_bond_pressure). A bonded ally pulls toward closing the gap or covering it.",
+					"intercepting": 10.0,
+					"cohesive": 8.0
+				},
+				"vow_ward_weight": {
+					"_comment": "× ward_lean (0-1, from vow_lean<0 — holding the vow). Ward-leaning biases toward keeping formation and cover.",
+					"cohesive": 8.0,
+					"low_exposure": 8.0
+				},
+				"vow_break_weight": {
+					"_comment": "× break_lean (0-1, from vow_lean>0 — straining against the vow). Break-leaning biases toward force and directness.",
+					"forceful": 8.0,
+					"direct": 8.0
+				},
+				"trait_nudge": {
+					"_comment": "PROPOSED DEFAULT — decision #36. Traits are the born-in share of movement style: unlike vector_bias, these weights are not scaled by vector_scores, so two Echoes of the same origin never move identically, and every Echo's learned (vector-driven) style grows past the one she was summoned with (traits do drift slightly on rank-up, ProgressionService._compute_drift). This is a floor, not a tie-break: each virtue now carries one dominant style at 0.20 and one supporting style at 0.08. courage/faith/wisdom are the same 0-100 virtue scores trait_action_muls reads.",
+					"courage": { "forceful": 0.08, "direct": 0.20 },
+					"faith":   { "cohesive": 0.20, "restrained": 0.08 },
+					"wisdom":  { "careful": 0.20, "low_exposure": 0.08 }
+				}
 			}
 		},
 		"vectors": {
@@ -1562,12 +1629,12 @@
 		},
 		"combat": {
 			"board": {
-				"_comment": "V2-STAGE-004 P3a: irregular combat-board sizing. Bounds = base + growth_per_completion * realm_completion_index, clamped to [base, max]. Read by FlowEncounterState; terrain generated via StageTerrain per realm virtue signature.",
-				"base_cols": 12.0,
-				"base_rows": 12.0,
+				"_comment": "V2-STAGE-004 P3a: irregular combat-board sizing. Bounds = base + growth_per_completion * realm_completion_index, clamped to [base, max]. Read by FlowEncounterState; terrain generated via StageTerrain per realm virtue signature. Range shifted 12..22 -> 18..28 per ANSWERS.md #63 (BoardSizeOptionsProbe measurement: 18x18 gives Courage 81 islands per 50 boards, down from 0 at 12x12, and reduces Wisdom island-size clamping).",
+				"base_cols": 18.0,
+				"base_rows": 18.0,
 				"growth_per_completion": 1.0,
-				"max_cols": 22.0,
-				"max_rows": 22.0,
+				"max_cols": 28.0,
+				"max_rows": 28.0,
 				"pursue_override": {
 					"_comment": "V2-STAGE-004 P3b: PURSUE mode uses 4x one dimension (randomised wide or tall per encounter seed). long_multiplier applied to cols or rows.",
 					"long_multiplier": 4.0
@@ -1578,10 +1645,11 @@
 				}
 			},
 			"movement": {
-				"_comment_spatial_utility": "This note is OUTSIDE spatial_utility because BehaviorArbiter._validate_spatial_config rejects any key that is not a weight, and a rejected key discards the whole board. V2-COMBAT-003 phase 10 measured every weight in that block. Two traps. (1) directive_exposure_acceptance_weight is DELIBERATELY INERT, not unfinished: the term is weight x directive.intent_weights.exposure_acceptance x exposure, and exposure_acceptance is authored only on directive.seek_signs, so on the default directive.scout_carefully the term is 0.0 at ANY weight. Raising this number alone can change nothing. (2) exposure is binary in a fight, because _exposure divides controlled edges by a route that is one or two cells long, so exposure_weight is a flat penalty on a boolean, not a slope. Measurements and sweeps: docs/v2-combat-003-handoff.md section 22. All values PROPOSED DEFAULT.",
+				"_comment_spatial_utility": "This note is OUTSIDE spatial_utility because BehaviorArbiter._validate_spatial_config rejects any key that is not a weight, and a rejected key discards the whole board. V2-COMBAT-003 phase 10 measured every weight in that block. Two traps. (1) directive_exposure_acceptance_weight is DELIBERATELY INERT, not unfinished: the term is weight x directive.intent_weights.exposure_acceptance x exposure, and exposure_acceptance is authored only on directive.seek_signs, so on the default directive.scout_carefully the term is 0.0 at ANY weight. Raising this number alone can change nothing. (2) exposure is binary in a fight, because _exposure divides controlled edges by a route that is one or two cells long, so exposure_weight is a flat penalty on a boolean, not a slope. Measurements and sweeps: docs/v2-combat-003-handoff.md section 22. All values PROPOSED DEFAULT. (3) V2-COMBAT-003.5 Phase 3c fix, decisions #33/#35, both PROPOSED DEFAULT: urgency_progress_gain multiplies the objective_progress term by (1 + gain x urgency), so closing distance outranks manners when the goal is time-pressured; cap was raised 20.0 -> 28.0 so that amplified progress term is not clipped away by the cap it now reaches.",
 				"spatial_utility": {
-					"cap": 20.0,
+					"cap": 28.0,
 					"urgency_weight": 4.0,
+					"urgency_progress_gain": 1.0,
 					"objective_progress_weight": 8.0,
 					"cohesion_weight": 4.0,
 					"exposure_weight": -6.0,
@@ -1629,7 +1697,7 @@
 			},
 			"_comment": "COMBAT-002: Initiative scoring modifiers. Formula: (speed*3 + agi*2) + arch_mod + calling_mod + trait_mod + vec_mod + nudge. Sort descending. Tiebreak: party list order. Nudge: CampaignSeed.derive_from(placement_seed, actor_id) % 10. All values tunable without code changes.",
 			"stalemate": {
-				"_comment": "PROPOSED DEFAULT. V2-COMBAT-003: a fight where nothing moves for no_progress_round_limit consecutive rounds cannot end by any objective check (both sides refuse, guard, or otherwise land no hit). 'Nothing moves' is damage AND every per-objective progress counter (protect/guide_protect/contain/hold) at once, not damage alone -- a GUIDE_SPIRIT escort or a RECOVER hold can legitimately run many damage-free rounds while still on track to win. Measured: the shipped combat_baseline/transition_sequence_guide_spirit fixture needs up to 12 damage-free, counter-free rounds before its escorting echo reaches the spirit and guide_protect_counter starts moving; 8 (and 10) cut it off as a false stalemate. 15 keeps a comfortable margin above that measured 12, while staying far below the round count of a genuine soft-lock (the reported bug ran to round 122-202+ with fear refusal on one side and an unlimited enemy guard on the other, pre-V2-COMBAT-003). At the limit, CombatState.check_end_condition() ends the encounter as a forced retreat that pays nothing (FlowRuntime._resolve_forced_retreat()). Two objectives are exempt, each because the detector cannot see that objective's own clock: PURIFY_SHRINE, where the shrine loses base_drain_per_round hit points every round with no actor acting, so that objective always ends on its own; and GUIDE_SPIRIT escort mode, where the win is destination_reached and guide_protect_counter (the only progress term the detector reads for this objective) only advances in protect mode, so a long damage-free crossing of the board is invisible to the sum and looks identical to a true stall. GUIDE_SPIRIT protect mode is NOT exempt: guide_protect_counter advances there, so the detector is useful and stays on. ENDURE (duration_turns 5) and PURSUE (window_turns_max 12) are NOT exempt -- both are safe only by margin against the limit of 15 and neither is visible to the detector either; re-check this margin if either value grows.",
+				"_comment": "PROPOSED DEFAULT. V2-COMBAT-003, generalized in V2-COMBAT-003.5: a fight where nothing moves for no_progress_round_limit consecutive rounds cannot end by any objective check (both sides refuse, guard, or otherwise land no hit). 'Nothing moves' is no damage AND a board state the fight has already been in, per CombatState.get_progress_watch() + record_progress_watch(): every actor position, hit-point total and death flag, the four progress counters, plus each objective's own clock (shrine hit points, spirit-to-destination distance, the ENDURE/PURSUE countdown). No objective is exempt by name; a genuinely advancing fight -- including a party still walking toward a spirit it has not reached -- always produces a state it has not been in before and never reaches the limit. The converse does not hold: a fight producing new board states every round is not guaranteed to be genuinely advancing toward a win condition (e.g. aperiodic movement with no damage, such as a fleeing spirit never repeating a position, can run past the limit undetected) -- a known, accepted trade-off (Jeff, 2026-09-13: acceptable, no hard round cap added), narrower than the defect this signal was built to fix. Measured: the shipped combat_baseline/transition_sequence_guide_spirit fixture needs up to 12 damage-free, counter-free rounds before its escorting echo reaches the spirit and guide_protect_counter starts moving; 8 (and 10) cut it off as a false stalemate. 15 keeps a comfortable margin above that measured 12, while staying far below the round count of a genuine soft-lock (the reported bug ran to round 122-202+ with fear refusal on one side and an unlimited enemy guard on the other, pre-V2-COMBAT-003). At the limit, CombatState.check_end_condition() ends the encounter as a forced retreat that pays nothing (FlowRuntime._resolve_forced_retreat()). DEPENDENCY: PURIFY_SHRINE relies on shrine.base_drain_per_round staying non-trivial (5.0 today). The drain is what moves that objective forward with no actor acting; tuned toward 0 the shrine fight would stop generating its own progress signal and would then rest on generic actor activity alone.",
 				"no_progress_round_limit": 15
 			},
 			"shrine": {

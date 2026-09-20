@@ -602,6 +602,8 @@ func _run_tests(parts: Array) -> void:
 	Stage004SeamTests.register(runner)
 	DivergenceDetectorTests.register(runner)  # V2-PROG-012 Phase 4: divergence detection
 	DecisionTraceTests.register(runner)  # V2-COMBAT-003 phase 8a: causal Decision Trace + player-safe projection
+	MovementStyleServiceTests.register(runner)  # V2-COMBAT-003.5 Phase 3b: movement_style selection
+	LiveMovementStyleTests.register(runner)  # V2-COMBAT-003.5 Phase 3c: live per-turn option producer
 	GuidanceResponseTests.register(runner)  # V2-COMBAT-003 phase 8b: the five guidance responses
 	CombatDivergenceBarkTests.register(runner)  # V2-PROG-012 Phase 5: divergence bark content + wiring
 	GuidanceBarkTests.register(runner)  # V2-COMBAT-003 phase 9: TEMPORARY bark surface for the Echo's answer to guidance (V2-COMBAT-004 removes it)

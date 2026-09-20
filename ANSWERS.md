@@ -57,6 +57,17 @@
 | 48 | move-then-attack-was-impossible | An actor that closed to melee range could not attack; 80% of enemy activations produced no action at all | 2026-08-11 |
 | 49 | fear-40-target-retired | The COMBAT-001 "stay below fear 40" target is retired; the band boundaries stay, and the economy rises to use them | 2026-08-11 |
 | 50 | probe-must-mirror-the-summon-path | A probe that calls EchoFactory.generate() without init_vectors builds a party that cannot exist in play | 2026-08-11 |
+| 51 | combat-003.5-scope-is-everything | All five item groups (movement style, board variety+size, stalemate signal, doc/debug fixes, scattered defects) ship under one story, built in sequential phases, one PR at the end | 2026-09-13 |
+| 52 | combat-003.5-board-variety-in-scope | Board variety is in scope for V2-COMBAT-003.5 even though it's absent from the live Notion page — it moved late from V2-COMBAT-003 and the page was never updated | 2026-09-13 |
+| 53 | combat-003.5-board-cosmetic-hazard-deferred | Cosmetic terrain variance (island shape) and hazard/obstacle variance are explicitly out of scope for 003.5, deferred to V2-COMBAT-004; the encounter-identity change must not block that later work | 2026-09-13 |
+| 54 | combat-003.5-board-size-measure-then-choose | Board size (the 12x12-22x22 growth formula) stays in scope; measure the three recorded options on production-generated boards and bring the numbers to Jeff before choosing | 2026-09-13 |
+| 55 | combat-emotion-command-deleted | The dead combat_emotion debug command is deleted, not repaired; `emotion` is unaffected | 2026-09-13 |
+| 56 | balance-json-tiebreak-comments-deleted | Both stale, mutually-contradicting vector tie-break comments in balance.json (near lines 1476, 1768) are deleted rather than reconciled, since neither is read by any code | 2026-09-13 |
+| 57 | ui-agents-md-reworded-to-screens | ui/AGENTS.md's dispatch ban is reworded to name screens specifically; AppRoot.gd remains the sanctioned dispatcher for debug/system commands | 2026-09-13 |
+| 58 | stationary-rounds-counter-removed | The dead `_stationary_rounds` counter is removed; the soft-taunt eligibility feature it was meant to gate is not built in this story | 2026-09-13 |
+| 59 | raw-floats-removed-from-snapshot | `_judgment`/`_composure`/`_legibility`/`_presence` are removed from EncounterSnapshotBuilder's player-facing whitelist, closing the live §6.6 no-raw-values violation | 2026-09-13 |
+| 60 | dominant-key-unified | The three copies of `_dominant_key` (GridService, CombatState, ShrineService) are unified into one shared helper rather than left duplicated with a drift-detection test | 2026-09-13 |
+| 61 | shrine-hp-ratio-deleted | The dead `shrine_hp_ratio` field (computed, never read) is deleted rather than kept for a hypothetical future consumer | 2026-09-13 |
 
 ---
 
@@ -510,5 +521,104 @@
 **A:** **No — that builds a party that cannot exist in play.** `generate()` deliberately leaves `emotion` and `dominant_vector` unpopulated and relies on `EmotionService.init_echo()` and `VectorService.init_vectors()`, which the real summon path calls immediately afterwards (`FlowRuntime` ~:1370). A probe that skips them gives every Echo `dominant_vector = ""`, which silently disables the vector half of the identity-fear-spike gate **and** every vector term in BehaviorArbiter scoring. This invalidated a headline finding: the identity fear spike was reported as "never fires at any rank in any scenario", with the cause named as `uncalled` Echoes failing the calling gate. **Both were wrong.** The `uncalled` weight row already exists and already clears the 30-point threshold; the spike was blocked by the empty vector the probe itself created. With a production-shaped party the spike fires normally, peak fear rose 18 → 45 on the same encounter, and the fight resolved in 9 rounds instead of 13. This is [[reachability-not-just-execution]] applied to the fixture rather than the assertion: production-shaped data means *built by the production path*, not merely *non-empty*.
 **Source:** measured probe, 2026-08-11
 **Date:** 2026-08-11
+
+---
+
+### 51. combat-003.5-scope-is-everything
+
+**Q:** Which of the five item groups found in V2-COMBAT-003.5's scoping pass (movement style, board variety+size, stalemate signal, doc/debug fixes, scattered small defects) should ship under this story?
+**A:** All five. Rather than trimming the bucket per the brief's "final size rule," Jeff chose to ship everything as one story, built in sequential phases with a per-phase review gate, landing as one PR at the end — see the story plan for the phase sequence and rollback conditions per phase.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 52. combat-003.5-board-variety-in-scope
+
+**Q:** The live Notion page for V2-COMBAT-003.5 has 13 numbered items and none of them describe board variety, but the story brief and docs/MEMORY.md both say board-variety work was filed there — which is correct?
+**A:** Board variety is in scope. Jeff confirmed it moved late from V2-COMBAT-003 to 003.5 and the Notion page was never updated to show it — the page is stale on this one point, not the brief. Goal: deterministic random combat boards keyed to realm characteristics, replacing the current stage-identity seed (`encounter_id` = realm+stage) with encounter-identity.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 53. combat-003.5-board-cosmetic-hazard-deferred
+
+**Q:** Does board-variety work in V2-COMBAT-003.5 include cosmetic terrain variance (island shape) or hazard/obstacle variance?
+**A:** No. Both are explicitly deferred to V2-COMBAT-004. This story only changes which seed identity boards are generated from (per-encounter, not per-stage) and board size; the encounter-identity change is meant to be the foundation COMBAT-004 builds cosmetic/hazard variance on, without a second seed-path rework.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 54. combat-003.5-board-size-measure-then-choose
+
+**Q:** Should V2-COMBAT-003.5 fix the board-size formula (12x12 growing to 22x22 only with completed realms, currently capped at 14x14 since only two realms are live)?
+**A:** Yes, sizing is in scope, but the fix isn't chosen yet. Measure what each of the three recorded options produces (raise base_cols/rows; scale island size to board area; accept plain early boards) on production-generated Courage and Wisdom boards, then bring the numbers to Jeff — do not pick on his behalf.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 55. combat-emotion-command-deleted
+
+**Q:** The combat_emotion debug command throws because it reads a field CombatTokenLayer no longer has (raw fear/morale were deliberately removed from player-facing snapshots) — repair it or delete it?
+**A:** Delete it. The feature it debugged was deliberately gutted; keep `emotion` (the working command) untouched.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 56. balance-json-tiebreak-comments-deleted
+
+**Q:** data/balance.json documents two different vector tie-break orders (near lines 1476 and 1768) that disagree with each other and with the code — reconcile into one correct comment, or delete both?
+**A:** Delete both. Neither is read by any code, no production path can produce a tied maximum today, and reconciling two orders nothing uses isn't worth the upkeep.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 57. ui-agents-md-reworded-to-screens
+
+**Q:** ui/AGENTS.md bans `FlowRuntime.dispatch()` in "any ui/ file," but AppRoot.gd (itself in ui/) already dispatches directly for six shipped debug commands — is AppRoot's dispatching the sanctioned exception, or should it change?
+**A:** AppRoot's dispatching is sanctioned and correct, matching the screen contract's `action_requested` → shell → AppRoot → FlowRuntime path. Fix is wording only: reword the ban to name screens specifically, not "any ui/ file."
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 58. stationary-rounds-counter-removed
+
+**Q:** Onyamesu's `_stationary_rounds` counter grows unbounded with no reader — it was meant to gate an unbuilt "soft-taunt eligibility" feature. Build that feature, or remove the dead counter?
+**A:** Remove the dead counter only. Soft-taunt eligibility isn't specced anywhere; don't invent a new mechanic inside a robustness/cleanup story.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 59. raw-floats-removed-from-snapshot
+
+**Q:** Four raw derived floats (`_judgment`, `_composure`, `_legibility`, `_presence`) reach the player-facing snapshot via a whitelist in `EncounterSnapshotBuilder`, violating the §6.6 no-raw-values boundary, but nothing reads them — remove from the whitelist, or leave for a hypothetical future UI?
+**A:** Remove them from the whitelist now. Nothing consumes them, so nothing breaks; re-add deliberately if a future story needs them player-facing.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 60. dominant-key-unified
+
+**Q:** Three copies of `_dominant_key` (`GridService.gd:652`, `CombatState.gd:344`, `ShrineService.gd:158`) behave identically today but could drift silently — unify into one shared implementation, or leave three copies with a regression test guarding against drift?
+**A:** Unify into one shared static helper. Each call site's existing tiebreak-list argument is unchanged — same lists, same order, now evaluated once instead of three times.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 61. shrine-hp-ratio-deleted
+
+**Q:** `shrine_hp_ratio` is computed and published by `CombatTurnContextService` but nothing in `core/` reads it — delete it, or leave it as a future input?
+**A:** Delete the dead field. No consumer exists and none is planned in this story.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
 
 ---

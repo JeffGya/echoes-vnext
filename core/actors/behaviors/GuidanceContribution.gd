@@ -138,6 +138,7 @@ const _REASON_TEXT: Dictionary = {
 	"bond_pull":          "she will not leave the one she is bound to",
 	"leader_cover":       "another already told her where to stand",
 	"keeper_guidance":    "she reads it the way you do",
+	"style_expression":   "she made the only right move",
 }
 
 ## Prose for the baseline answer — §6.6's third permitted primary, used when no single

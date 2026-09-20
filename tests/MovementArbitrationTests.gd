@@ -33,6 +33,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement_arbiter/unmatched_payload_policy", _t_unmatched_payload_policy)
 	runner.register_test("movement_arbiter/mirrored_intent", _t_mirrored_intent)
 	runner.register_test("movement_arbiter/truncated_option_keeps_planned_primary", _t_truncated_option_keeps_planned_primary)
+	runner.register_test("movement_arbiter/commitment_tracks_distance_and_capacity", _t_commitment_tracks_distance_and_capacity)
+	runner.register_test("movement_arbiter/capacity_meaningful_at_range", _t_capacity_meaningful_at_range)
+	runner.register_test("movement_arbiter/hostile_control_still_restrains", _t_hostile_control_still_restrains)
+	runner.register_test("movement_arbiter/avoid_overcommit_stays_proportionate", _t_avoid_overcommit_stays_proportionate)
 
 
 ## The winner also carries the score decomposition DecisionTrace reads
@@ -629,14 +633,12 @@ static func _t_mirrored_intent() -> Dictionary:
 	return _pass()
 
 
-## GUARD for the PR #52 slice-6B fix in FlowRuntime._movement_build_direct_option.
+## GUARD on the planned_action a CAPACITY-TRUNCATED option must carry.
 ##
-## When a route is capacity-truncated (FlowRuntime._movement_affordable_prefix, taken
-## whenever selected_cost > capacity) the option's destination becomes
-## `selected_path.back()`, which is by construction NOT in goal.destination_region.
-## The pre-fix builder reacted by REWRITING the option's planned_action to a bare
-## `actor.move` whenever the goal's planned_primary was range-bound. That rewrite is
-## exactly what this arbiter rejects at BehaviorArbiter.gd:656-657
+## When a route is truncated to what the mover can afford, its destination is
+## `path.back()`, by construction NOT in goal.destination_region. A producer that
+## reacted by REWRITING the option's planned_action to a bare `actor.move` whenever
+## the goal's planned_primary was range-bound is what this arbiter rejects
 ## ("option_action_mismatch"), and the rejection invalidates the WHOLE
 ## select_movement_intent call — so ActorStateMachine (:255-267) fell through to the
 ## legacy nearest-enemy select_intent and the objective route was abandoned.
@@ -675,6 +677,263 @@ static func _t_truncated_option_keeps_planned_primary() -> Dictionary:
 	if not rejected.get("intent", {}).is_empty():
 		return _fail("An invalidated selection must carry no intent: %s" % str(rejected))
 	return _pass()
+
+
+# ---------------------------------------------------------------------------
+# V2-COMBAT-003.5 Phase 3c acceptance set (A-D). These drive the REAL option
+# generator, not a hand-written option, because the defect they guard lived in the
+# relationship between `objective_progress` and `commitment` — two fields only the
+# generator sets together.
+# ---------------------------------------------------------------------------
+
+const _ACCEPTANCE_DISTANCES: Array = [4, 8, 12, 20, 40]
+const _ACCEPTANCE_CAPACITIES: Array = [2, 3, 4, 6]
+
+
+## Test A — no capacity-blind cliff. The chosen route spends min(capacity, distance)
+## on open ground at every distance, instead of collapsing to one cell past a
+## break-even range.
+static func _t_commitment_tracks_distance_and_capacity() -> Dictionary:
+	for distance_value: Variant in _ACCEPTANCE_DISTANCES:
+		var distance: int = int(distance_value)
+		for capacity_value: Variant in _ACCEPTANCE_CAPACITIES:
+			var capacity: int = int(capacity_value)
+			var measured: Dictionary = _measure_commitment(distance, capacity, {}, {})
+			if not bool(measured["ok"]):
+				return _fail("D=%d cap=%d: %s" % [distance, capacity, str(measured["error"])])
+			var expected: int = mini(capacity, distance)
+			if int(measured["commitment"]) != expected:
+				return _fail("D=%d cap=%d: committed %d cells, expected %d" \
+					% [distance, capacity, int(measured["commitment"]), expected])
+	return _pass()
+
+
+## Test B — capacity stays legible at long range: at D=20 each capacity closes its
+## own number of cells per turn, all above the one-cell floor the defect produced.
+static func _t_capacity_meaningful_at_range() -> Dictionary:
+	var previous: int = 0
+	for capacity_value: Variant in _ACCEPTANCE_CAPACITIES:
+		var capacity: int = int(capacity_value)
+		var measured: Dictionary = _measure_commitment(20, capacity, {}, {})
+		if not bool(measured["ok"]):
+			return _fail("cap=%d: %s" % [capacity, str(measured["error"])])
+		var commitment: int = int(measured["commitment"])
+		if commitment != capacity:
+			return _fail("cap=%d at D=20 closed %d cells, expected %d" % [capacity, commitment, capacity])
+		if commitment <= 1:
+			return _fail("cap=%d at D=20 fell back to the one-cell floor" % capacity)
+		if commitment <= previous:
+			return _fail("cap=%d closed %d cells, not more than the previous capacity's %d" \
+				% [capacity, commitment, previous])
+		previous = commitment
+	return _pass()
+
+
+## Test C — restraint survives. A hostile controller beside the corridor must still
+## push some full-capacity routes down, and the penalty must come from the exposure /
+## hostile-control terms, not from distance.
+static func _t_hostile_control_still_restrains() -> Dictionary:
+	# The controller sits beside the first cells of the corridor, inside the 4 cells this
+	# mover can actually reach — a controller at mid-corridor is 16 cells past its horizon
+	# and cannot influence any option.
+	var fixture: Dictionary = _open_fixture(20, 4, {"col": 2, "row": 1}, {})
+	if not bool((fixture["generated"] as Dictionary).get("valid", false)):
+		return _fail("Controlled-corridor fixture produced no options: %s" % str(fixture["generated"]))
+	var open_fixture: Dictionary = _open_fixture(20, 4, {}, {})
+	if not bool((open_fixture["generated"] as Dictionary).get("valid", false)):
+		return _fail("Open fixture produced no options: %s" % str(open_fixture["generated"]))
+
+	var arbiter := BehaviorArbiter.new({}, _spatial_cfg())
+	var cfg: Dictionary = _spatial_cfg()["spatial_utility"]
+	var goal: Dictionary = (fixture["goals"] as Array)[0] as Dictionary
+
+	var exposed_found: bool = false
+	for option_value: Variant in fixture["options"] as Array:
+		var option: Dictionary = option_value as Dictionary
+		if (option["hostile_control_sources"] as Array).is_empty():
+			continue
+		exposed_found = true
+		var parts: Dictionary = {}
+		arbiter._spatial_utility(goal, option, {}, cfg, parts)
+		var terms: Dictionary = parts["parts"] as Dictionary
+		if float(terms["exposure"]) >= 0.0:
+			return _fail("Option %s crossed hostile control with no exposure penalty: %s" \
+				% [str(option["option_id"]), str(terms)])
+		# The same option scored with exposure erased isolates the penalty: if the drop
+		# came from distance or commitment instead, these two would be equal.
+		var unexposed: Dictionary = option.duplicate(true)
+		unexposed["exposure"] = 0.0
+		var clean_parts: Dictionary = {}
+		var clean_value: float = arbiter._spatial_utility(goal, unexposed, {}, cfg, clean_parts)
+		if clean_value <= float(parts["value"]):
+			return _fail("Exposure did not lower option %s" % str(option["option_id"]))
+		if not is_equal_approx(
+			float((clean_parts["parts"] as Dictionary)["commitment"]), float(terms["commitment"])
+		):
+			return _fail("Exposure isolation changed the commitment term for %s" % str(option["option_id"]))
+
+	if not exposed_found:
+		return _fail("No generated option crossed the hostile controller's zone of control")
+
+	for option_value: Variant in open_fixture["options"] as Array:
+		if not ((option_value as Dictionary)["hostile_control_sources"] as Array).is_empty():
+			return _fail("Open board reported hostile control: %s" % str(option_value))
+	return _pass()
+
+
+## Test D — `avoid_overcommit` biases, it does not veto. Scout Carefully must keep the
+## Test A/B shape and stay inside its own weight ceiling.
+## Stays red on purpose: production urgency_progress_gain (1.0) masks this gap during urgent
+## goals, but this fixture's isolated 0.0 config keeps it visible — decisions #29/#38.
+static func _t_avoid_overcommit_stays_proportionate() -> Dictionary:
+	var directives := DirectiveService.new({})
+	var scout: Dictionary = directives.get_directive("directive.scout_carefully")
+	var seek: Dictionary = directives.get_directive("directive.seek_signs")
+	if float((scout["intent_weights"] as Dictionary).get("avoid_overcommit", 0.0)) <= 0.0:
+		return _fail("Scout Carefully no longer carries avoid_overcommit — retune this test")
+	if float((seek["intent_weights"] as Dictionary).get("avoid_overcommit", 0.0)) != 0.0:
+		return _fail("Seek Signs acquired avoid_overcommit — retune this test")
+
+	# weight x clamped directive value x (1 - commitment_ratio) can never exceed this.
+	var ceiling: float = abs(float(_spatial_cfg()["spatial_utility"]["directive_avoid_overcommit_weight"])) \
+		* float((scout["intent_weights"] as Dictionary)["avoid_overcommit"])
+	var arbiter := BehaviorArbiter.new({}, _spatial_cfg())
+	var cfg: Dictionary = _spatial_cfg()["spatial_utility"]
+
+	# Every combination is reported, not just the first — the residual gap is a
+	# distance/capacity SURFACE, and one sample cannot show its shape.
+	var shortfalls: Array[String] = []
+	for distance_value: Variant in _ACCEPTANCE_DISTANCES:
+		var distance: int = int(distance_value)
+		for capacity_value: Variant in _ACCEPTANCE_CAPACITIES:
+			var capacity: int = int(capacity_value)
+			var expected: int = mini(capacity, distance)
+			var careful: Dictionary = _measure_commitment(distance, capacity, {}, scout)
+			if not bool(careful["ok"]):
+				return _fail("scout D=%d cap=%d: %s" % [distance, capacity, str(careful["error"])])
+			var bold: Dictionary = _measure_commitment(distance, capacity, {}, seek)
+			if not bool(bold["ok"]):
+				return _fail("seek D=%d cap=%d: %s" % [distance, capacity, str(bold["error"])])
+			if int(bold["commitment"]) != expected:
+				return _fail("seek_signs D=%d cap=%d committed %d, expected %d" \
+					% [distance, capacity, int(bold["commitment"]), expected])
+			if int(careful["commitment"]) != expected:
+				shortfalls.append("D=%d cap=%d committed %d expected %d%s" \
+					% [distance, capacity, int(careful["commitment"]), expected,
+						_overcommit_diagnostic(distance, capacity, scout)])
+
+			var fixture: Dictionary = _open_fixture(distance, capacity, {}, scout)
+			var goal: Dictionary = (fixture["goals"] as Array)[0] as Dictionary
+			for option_value: Variant in fixture["options"] as Array:
+				var parts: Dictionary = {}
+				arbiter._spatial_utility(goal, option_value as Dictionary, scout, cfg, parts)
+				var term: float = float((parts["parts"] as Dictionary)["directive_avoid_overcommit"])
+				if abs(term) > ceiling + 0.0001:
+					return _fail("avoid_overcommit term %s exceeded its %s ceiling at D=%d cap=%d" \
+						% [term, ceiling, distance, capacity])
+	if not shortfalls.is_empty():
+		return _fail("scout_carefully still collapses to a shorter route: %s" % "\n  ".join(shortfalls))
+	return _pass()
+
+
+## Failure-path only: names every option and the terms that ranked it, so a regression
+## report carries the arithmetic instead of a bare commitment number.
+static func _overcommit_diagnostic(distance: int, capacity: int, directive: Dictionary) -> String:
+	var fixture: Dictionary = _open_fixture(distance, capacity, {}, directive)
+	var arbiter := BehaviorArbiter.new({}, _spatial_cfg())
+	var cfg: Dictionary = _spatial_cfg()["spatial_utility"]
+	var goal: Dictionary = (fixture["goals"] as Array)[0] as Dictionary
+	var lines: Array[String] = []
+	for option_value: Variant in fixture["options"] as Array:
+		var option: Dictionary = option_value as Dictionary
+		var parts: Dictionary = {}
+		var value: float = arbiter._spatial_utility(goal, option, directive, cfg, parts)
+		var terms: Dictionary = parts["parts"] as Dictionary
+		lines.append("%s commitment=%d progress=%s utility=%s progress_term=%s commitment_term=%s avoid_term=%s" % [
+			str(option["option_id"]), int(option["commitment"]), str(option["objective_progress"]),
+			str(value), str(terms["objective_progress"]), str(terms["commitment"]),
+			str(terms["directive_avoid_overcommit"]),
+		])
+	return " | options: %s" % " ;; ".join(lines)
+
+
+static func _measure_commitment(
+	distance: int, capacity: int, hostile: Dictionary, directive: Dictionary
+) -> Dictionary:
+	var fixture: Dictionary = _open_fixture(distance, capacity, hostile, directive)
+	var generated: Dictionary = fixture["generated"] as Dictionary
+	if not bool(generated.get("valid", false)):
+		return {"ok": false, "error": "option generation failed: %s" % str(generated)}
+	if (fixture["options"] as Array).is_empty():
+		return {"ok": false, "error": "option generation produced no options"}
+	var result: Dictionary = _select(fixture)
+	if not bool(result["valid"]):
+		return {"ok": false, "error": "selection failed: %s" % str(result)}
+	var intent: Dictionary = result["intent"] as Dictionary
+	return {"ok": true, "commitment": int(intent["commitment"]), "intent": intent}
+
+
+## An empty corridor `distance` cells long, with the goal region on the far cell and
+## no relevant actor — so nothing but geometry can influence the choice.
+static func _open_fixture(
+	distance: int, capacity: int, hostile: Dictionary, directive: Dictionary
+) -> Dictionary:
+	var actor: Dictionary = _actor()
+	var others: Array = []
+	if not hostile.is_empty():
+		others.append(_enemy("enemy.h", hostile))
+	var movement_context: Dictionary = _corridor_context(actor, others, distance + 2)
+	var goal: Dictionary = GoalContract.build(
+		"goal.combat.advance.baseline.c%dr0" % distance,
+		"advance",
+		[{"col": distance, "row": 0}],
+		1.0,
+		0.0,
+		[],
+		# A place-directed advance must name its objective, or MovementGoal rejects it.
+		["mode.combat", "objective.corridor", "role.baseline"],
+		ActionPlan.build("actor.move"),
+		ActionPlan.build("actor.idle")
+	)
+	var profile: Dictionary = ProfileContract.build(capacity, [], true, "echo", {})
+	var generated: Dictionary = MovementOptionService.generate_options(movement_context, profile, goal)
+	var context: Dictionary = {"actor": actor, "all_actors": others.duplicate(true), "t": 1}
+	if not directive.is_empty():
+		context["directive"] = directive
+	return {
+		"context": context,
+		"movement_context": movement_context,
+		"profile": profile,
+		"goals": [goal],
+		"options": generated.get("options", []) as Array,
+		"generated": generated,
+		"movement_cfg": _spatial_cfg(),
+		"actor_cfg": {},
+	}
+
+
+static func _corridor_context(actor: Dictionary, others: Array, width: int) -> Dictionary:
+	var facts: Array = [_fact(actor)]
+	var occupancy: Dictionary = {"0,0": "echo.a"}
+	var relationships: Dictionary = {}
+	for value: Variant in others:
+		var other: Dictionary = value as Dictionary
+		facts.append(_fact(other))
+		occupancy[_key(other["grid_pos"])] = str(other["id"])
+		relationships[str(other["id"])] = "hostile"
+	facts.sort_custom(func(a: Variant, b: Variant) -> bool:
+		return str((a as Dictionary)["id"]) < str((b as Dictionary)["id"])
+	)
+	var walkable: Dictionary = {}
+	var terrain: Dictionary = {}
+	for col: int in range(width):
+		for row: int in range(3):
+			walkable["%d,%d" % [col, row]] = true
+			terrain["%d,%d" % [col, row]] = 1
+	return ContextContract.build(
+		"echo.a", "activation.a", actor["grid_pos"], {"w": width, "h": 3},
+		walkable, walkable, occupancy, facts, relationships, terrain, [], {}, []
+	)
 
 
 static func _select(fixture: Dictionary, movement_context: Dictionary = {}, options: Array = [], goals: Array = []) -> Dictionary:
@@ -716,13 +975,13 @@ static func _goal(purpose: String, role: String, destination: Dictionary, target
 	return GoalContract.build("goal.combat.%s.%s.c%dr%d" % [purpose, role, int(destination["col"]), int(destination["row"])], purpose, [destination], 1.0, 0.0, relevant, ["mode.combat", "role.%s" % role], ActionPlan.build(action_type, target_id), {} if action_type == "actor.idle" else ActionPlan.build("actor.idle"))
 
 
-static func _option(goal: Dictionary, style: String, destination: Dictionary, path: Array, cost: int, progress: float) -> Dictionary:
+static func _option(goal: Dictionary, style: String, destination: Dictionary, path: Array, cost: int, progress: float, origin_distance: int = cost) -> Dictionary:
 	var cells: Array[String] = []
 	for value: Variant in path:
 		var cell: Dictionary = value as Dictionary; cells.append("c%dr%d" % [int(cell["col"]), int(cell["row"])])
 	var path_token: String = "pstay" if path.is_empty() else "p%s" % "-".join(cells)
 	var id: String = "option.%s.%s.d%dr%d.%s" % [str(goal["goal_id"]).trim_prefix("goal."), style, int(destination["col"]), int(destination["row"]), path_token]
-	return OptionContract.build(str(goal["goal_id"]), id, str(goal["purpose"]), destination, path, cost, cost, 0, 4, cost, 0.0, 0.0, 0.0, [], {"known_count": 0, "known_ids": []}, progress, goal["planned_primary"], goal["declared_fallback"])
+	return OptionContract.build(str(goal["goal_id"]), id, str(goal["purpose"]), destination, path, cost, cost, 0, 4, cost, 0.0, 0.0, 0.0, [], {"known_count": 0, "known_ids": []}, progress, origin_distance, goal["planned_primary"], goal["declared_fallback"])
 
 
 static func _movement_context(actor: Dictionary, others: Array) -> Dictionary:
@@ -770,8 +1029,10 @@ static func _hp(actor: Dictionary) -> float:
 	return clampf(float(actor.get("current_hp", 100)) / float((actor.get("stats", {}) as Dictionary).get("max_hp", 100)), 0.0, 1.0)
 
 
+## urgency_progress_gain kept at 0.0 here (production: 1.0) so Test D's scout_carefully gap
+## stays visible — see decisions #29/#38 in docs/v2-combat-003.5-decisions.md.
 static func _spatial_cfg() -> Dictionary:
-	return {"spatial_utility": {"cap": 20.0, "urgency_weight": 4.0, "objective_progress_weight": 8.0, "cohesion_weight": 4.0, "exposure_weight": -6.0, "congestion_weight": -2.0, "commitment_weight": -2.0, "directive_objective_advance_weight": 4.0, "directive_avoid_overcommit_weight": 2.0, "directive_exposure_acceptance_weight": 2.0, "directive_ally_protection_weight": 2.0, "directive_threat_interception_weight": 2.0}}
+	return {"spatial_utility": {"cap": 20.0, "urgency_weight": 4.0, "urgency_progress_gain": 0.0, "objective_progress_weight": 8.0, "cohesion_weight": 4.0, "exposure_weight": -6.0, "congestion_weight": -2.0, "commitment_weight": -2.0, "directive_objective_advance_weight": 4.0, "directive_avoid_overcommit_weight": 2.0, "directive_exposure_acceptance_weight": 2.0, "directive_ally_protection_weight": 2.0, "directive_threat_interception_weight": 2.0}}
 
 
 static func _cfg_edit(field: String, value: Variant) -> Dictionary:

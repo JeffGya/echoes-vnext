@@ -44,9 +44,16 @@ const MovementActionPlanContract = preload("res://core/movement/contracts/Moveme
 const LeadershipEmotionServiceScript = preload("res://core/combat/LeadershipEmotionService.gd")
 const ReachAuthority = preload("res://core/movement/CombatActivationService.gd")
 const GuidanceContributionScript = preload("res://core/actors/behaviors/GuidanceContribution.gd")
+const MovementStyleServiceScript = preload("res://core/actors/behaviors/MovementStyleService.gd")
 
-const _MOVEMENT_STYLE_ORDER: Array = [
-	"direct", "safe", "cohesive", "lateral", "screen", "intercept", "conservative",
+## ROUTE-shape validation order (mirrors MovementOptionService.STYLE_ORDER / OptionContract.STYLES).
+## Most of these words also appear in the separate `movement_style` vocabulary
+## (docs/movement-model.md §9) — but the two lists mean different things even where the
+## words coincide: this one is route-SHAPE mechanics (how the path is built), the other is
+## expressive style (how the move reads to the player).
+const _ROUTE_STYLE_ORDER: Array = [
+	"direct", "safe", "cohesive", "lateral", "screen", "intercept", "conservative", "retreating",
+	"forceful", "overcommitted", "low_exposure",
 ]
 # Whole-band leadership traits that modify DECISION SCORES rather than morale/fear.
 # The morale/fear half of the same trait set is owned by LeadershipEmotionService and
@@ -69,6 +76,7 @@ const _LEADERSHIP_SCORE_TRAITS: Dictionary = {
 const _SPATIAL_UTILITY_FIELDS: Array = [
 	"cap",
 	"urgency_weight",
+	"urgency_progress_gain",
 	"objective_progress_weight",
 	"cohesion_weight",
 	"exposure_weight",
@@ -289,6 +297,11 @@ const _DEFAULTS := {
 			"melee_attack": 15, "protect_ally": 0, "actor.guard": -20, "actor.idle": -5, "actor.move": 0,
 		},
 	},
+	# V2-COMBAT-003.5 Phase 3b. {} is a true no-op: every candidate's style-alignment
+	# term is 0.0, so the ordinary candidate sort decides alone. Real weights live in
+	# data.actor.movement_style_weights (balance.json). Purpose-ineligible styles are
+	# still penalised — that gate is code, not config.
+	"movement_style_weights": {},
 }
 
 
@@ -723,6 +736,29 @@ func select_movement_intent(
 					profile
 				))
 
+	var active_vow: Dictionary = context.get("active_vow", {}) as Dictionary
+	var bonds_ctx: Array = context.get("bonds", []) as Array
+	var is_echo_faction: bool = str(actor.get("faction", "")) == "echo"
+
+	# V2-COMBAT-003.5 Phase 3b — movement_style (docs/movement-model.md §9/§10.4,
+	# decision #18). Assembled once; `bond_pressure` is the one input that varies per
+	# candidate, so `_style_alignment()` resolves it there.
+	# ASSUMED: only one vow (tikoro_nko_agyina) exists and it is protective/cohesion-
+	# themed, so "a vow is active" reads as fully Ward-leaning until a vow carries its
+	# own Ward/Break strain signal. See the story report's OPEN block.
+	var style_inputs: Dictionary = {
+		"actor":            actor,
+		"bonds":            bonds_ctx if is_echo_faction else [],
+		"bond_thresholds":  context.get("bond_thresholds", {}) as Dictionary,
+		"vector_scores":    actor.get("vector_scores", {}) as Dictionary,
+		"calling_family":   str(context.get("calling_family", "")),
+		"traits":           actor.get("traits", {}) as Dictionary,
+		"fear":             maxf(float(actor.get("fear", 0)), float(actor.get("fear_base", 0))),
+		"morale_tier":      EmotionService.get_morale_tier(int(actor.get("morale", 50))),
+		"vow_lean":         0.0 if active_vow.is_empty() else -1.0,
+		"cfg":              _cfg_get("movement_style_weights") as Dictionary,
+	}
+
 	var spatial_cfg: Dictionary = _movement_cfg["spatial_utility"] as Dictionary
 	for candidate: Dictionary in candidates:
 		var plan: Dictionary = candidate["_movement_plan"] as Dictionary
@@ -763,6 +799,20 @@ func select_movement_intent(
 			):
 				score += cover_move_bonus
 				cover_bonus_applied = cover_move_bonus
+			# Flat additive, applied here rather than inside _score() so it stays
+			# OUTSIDE the fear/calling bracket — the placement `self_score = _score -
+			# directive_bonus` depends on (see _score()'s own comment).
+			# INELIGIBLE_ALIGNMENT is 0.0 (decision #21, neutral not a veto), so a
+			# purpose-ineligible style is indistinguishable here from "no style
+			# counterpart" — both add nothing and need no separate bookkeeping.
+			var style_alignment: float = _style_alignment(candidate, style_inputs) * _style_urgency_factor(
+				candidate["_movement_goal"] as Dictionary, style_inputs["cfg"] as Dictionary
+			)
+			if style_alignment != 0.0:
+				score += style_alignment
+				var style_bias: Dictionary = candidate.get("_score_bias", {}) as Dictionary
+				style_bias["movement_style"] = style_alignment
+				candidate["_score_bias"] = style_bias
 		if not is_finite(score):
 			return _movement_failure("non_finite_candidate_score", "candidates")
 		candidate["_score"] = score
@@ -772,11 +822,9 @@ func select_movement_intent(
 			bias["leadership_cover"] = cover_bonus_applied
 			candidate["_score_bias"] = bias
 
-	var active_vow: Dictionary = context.get("active_vow", {}) as Dictionary
-	if not active_vow.is_empty() and str(actor.get("faction", "")) == "echo":
+	if not active_vow.is_empty() and is_echo_faction:
 		_apply_vow_bias(candidates, active_vow, int(context.get("party_size", 0)))
-	var bonds_ctx: Array = context.get("bonds", []) as Array
-	if not bonds_ctx.is_empty() and str(actor.get("faction", "")) == "echo":
+	if not bonds_ctx.is_empty() and is_echo_faction:
 		_apply_bond_bias(
 			candidates,
 			actor,
@@ -830,7 +878,6 @@ func select_movement_intent(
 	# equivalent block above — see that comment for the temporary-ally
 	# (actor_type "enemy", faction "echo") reasoning, the miscalibration it fixes,
 	# and why the gate sits on the probe rather than on this accumulation loop.
-	var _is_echo_faction: bool = str(actor.get("faction", "")) == "echo"
 	var _dbonus_by_type: Dictionary = {}
 	var _repr_by_type: Dictionary = {}
 	var _decision_scale: float = 0.0
@@ -852,6 +899,28 @@ func select_movement_intent(
 	_decision_scale = (_self_score_max - _self_score_min) if _self_score_max >= _self_score_min else 0.0
 
 	var winner: Dictionary = candidates[0]
+
+	# V2-COMBAT-003.5 Phase 3b — the winner's own route-shape, read back into the §9
+	# movement_style vocabulary. Style already influenced the sort (see
+	# `_style_alignment()` in the scoring loop), so this is a read, never a second
+	# selection: `winner` is genuinely the highest-scored candidate. A stationary
+	# winner, or a `screen` route, has no style word and gets "".
+	var _selected_movement_style: String = ""
+	if bool(winner.get("_movement_route", false)):
+		var _winner_style: String = MovementStyleServiceScript.movement_style_for(
+			_route_style_of(
+				str(winner.get("_movement_option_id", "")), str(winner["_movement_goal_id"])
+			)
+		)
+		# Winning on mechanical merit alone (decision #21) does not make the style
+		# truthful to say aloud: a purpose-ineligible style stays unpublished, same as
+		# the "no preference" case, rather than naming a style the purpose cannot
+		# express (decision #23 gate).
+		var _winner_purpose: String = str((winner.get("_movement_goal", {}) as Dictionary).get("purpose", ""))
+		if not _winner_style.is_empty() \
+				and MovementStyleServiceScript.eligible_styles(_winner_purpose).has(_winner_style):
+			_selected_movement_style = _winner_style
+
 	var intent: Dictionary = MovementIntentContract.build(
 		str(movement_context["mover_id"]),
 		str(movement_context["activation_id"]),
@@ -862,7 +931,8 @@ func select_movement_intent(
 		int(winner["_movement_commitment"]),
 		winner["_movement_plan"] as Dictionary,
 		winner["_movement_fallback"] as Dictionary,
-		winner["_movement_pressure_sources"] as Array
+		winner["_movement_pressure_sources"] as Array,
+		_selected_movement_style
 	)
 	var intent_result: Dictionary = MovementIntentContract.validate(
 		intent, movement_context["origin"] as Dictionary
@@ -883,7 +953,7 @@ func select_movement_intent(
 	# to hand the detector. Skipped for hard score overrides (9999.0 sentinel).
 	var _divergence_probe: Dictionary = {}
 	var _winner_score: float = float(winner.get("_score", 0.0))
-	if _is_echo_faction and _winner_score < 9999.0:
+	if is_echo_faction and _winner_score < 9999.0:
 		var _w_plan: Dictionary = winner["_movement_plan"] as Dictionary
 		var _w_action_type: String = str(_w_plan["type"])
 		# Read, not recomputed — see select_intent()'s equivalent block.
@@ -1085,7 +1155,7 @@ func _validate_movement_inputs(
 			return _movement_failure("option_id_goal_mismatch", "options.%d.option_id" % option_index)
 		var option_remainder: String = option_id.trim_prefix(option_prefix)
 		var style: String = option_remainder.get_slice(".", 0)
-		var style_index: int = _MOVEMENT_STYLE_ORDER.find(style)
+		var style_index: int = _ROUTE_STYLE_ORDER.find(style)
 		if style_index < 0:
 			return _movement_failure("invalid_option_style", "options.%d.option_id" % option_index)
 		var goal_order_index: int = _goal_index(goals, goal_id)
@@ -1112,7 +1182,12 @@ func _validate_movement_inputs(
 	counted_goal_ids.sort()
 	for goal_id_value: Variant in counted_goal_ids:
 		var counted_goal_id: String = str(goal_id_value)
-		if int(option_counts_by_goal[counted_goal_id]) > 4:
+		# One option per route-shape is the ceiling, matching MovementOptionService's own
+		# dedup cap. A lower number here silently discards the WHOLE board (not the extra
+		# options) the moment a producer emits more, which is how it stayed at 4 after the
+		# generator's cap was raised to the full style set — the live path was still
+		# publishing one option per goal, so nothing could reach the limit.
+		if int(option_counts_by_goal[counted_goal_id]) > _ROUTE_STYLE_ORDER.size():
 			return _movement_failure("option_cap_exceeded", "options")
 	return {"valid": true, "intent": {}, "reason": "", "field": ""}
 
@@ -1406,6 +1481,14 @@ func _spatial_utility(
 	var commitment_ratio: float = 0.0
 	if option_capacity > 0.0:
 		commitment_ratio = clampf(float(option["commitment"]) / option_capacity, 0.0, 1.0)
+	# V2-COMBAT-003.5 Phase 3c: the "commitment" scoring term normalizes against the SAME
+	# distance objective_progress uses, not capacity — a capacity-normalized commitment
+	# term shrank at a different rate than progress, producing a distance cliff past which
+	# every actor's best move dropped to 1 cell regardless of capacity. commitment_ratio
+	# (capacity-normalized) is kept unchanged for directive_avoid_overcommit below.
+	var commitment_progress_ratio: float = clampf(
+		float(option["commitment"]) / maxf(1.0, float(option.get("progress_origin_distance", 1.0))), 0.0, 1.0
+	)
 	var weights: Dictionary = directive.get("intent_weights", {}) as Dictionary
 	var objective_advance: float = clampf(
 		float(weights.get("objective_advance_priority", 0.0)), -1.0, 1.0
@@ -1427,11 +1510,11 @@ func _spatial_utility(
 	var intercepts: float = 1.0 if purpose in ["intercept", "cut_off"] else 0.0
 	var parts: Dictionary = {
 		"urgency":                       float(config["urgency_weight"]) * urgency,
-		"objective_progress":            float(config["objective_progress_weight"]) * progress,
+		"objective_progress":            float(config["objective_progress_weight"]) * progress * (1.0 + maxf(float(config["urgency_progress_gain"]), 0.0) * urgency),
 		"cohesion":                      float(config["cohesion_weight"]) * cohesion,
 		"exposure":                      float(config["exposure_weight"]) * exposure,
 		"congestion":                    float(config["congestion_weight"]) * congestion,
-		"commitment":                    float(config["commitment_weight"]) * commitment_ratio,
+		"commitment":                    float(config["commitment_weight"]) * commitment_progress_ratio,
 		"directive_objective_advance":   float(config["directive_objective_advance_weight"]) * objective_advance * progress,
 		"directive_avoid_overcommit":    float(config["directive_avoid_overcommit_weight"]) * avoid_overcommit * (1.0 - commitment_ratio),
 		"directive_exposure_acceptance": float(config["directive_exposure_acceptance_weight"]) * exposure_acceptance * exposure,
@@ -2689,3 +2772,79 @@ func _apply_bond_bias(
 			_apply_bias(c, "bond", friend_bonus)
 		elif bond_type == "rival":
 			_apply_bias(c, "bond", rival_penalty)
+
+
+## How well ONE route candidate's own route-shape reads as this actor's identity
+## (docs/movement-model.md §9/§10.4). Called from the movement scoring loop, so style
+## is part of the score the winner-sort compares — no candidate is ever re-pointed
+## after the sort. `inputs` is the per-actor dict that loop assembles once.
+func _style_alignment(candidate: Dictionary, inputs: Dictionary) -> float:
+	var goal_id: String = str(candidate.get("_movement_goal_id", ""))
+	var route_style: String = _route_style_of(
+		str(candidate.get("_movement_option_id", "")), goal_id
+	)
+	if route_style.is_empty():
+		return 0.0
+	var goal: Dictionary = candidate.get("_movement_goal", {}) as Dictionary
+	var subject_id: String = str(goal.get("subject_id", ""))
+	if subject_id.is_empty():
+		subject_id = str(candidate.get("target_id", ""))
+	return MovementStyleServiceScript.style_alignment_score(
+		route_style,
+		str(goal.get("purpose", "")),
+		inputs["vector_scores"] as Dictionary,
+		str(inputs["calling_family"]),
+		inputs["traits"] as Dictionary,
+		float(inputs["fear"]),
+		str(inputs["morale_tier"]),
+		_movement_style_bond_pressure(
+			inputs["bonds"] as Array,
+			inputs["actor"] as Dictionary,
+			subject_id,
+			inputs["bond_thresholds"] as Dictionary
+		),
+		float(inputs["vow_lean"]),
+		inputs["cfg"] as Dictionary
+	)
+
+
+## Urgency damps how much style OUTRANKS the board, never what the style is. How she
+## prefers to move is constant; whether that preference should beat closing a chase is
+## not. Without this, a CRITICAL pursue and an idle reposition weigh manners identically.
+static func _style_urgency_factor(goal: Dictionary, cfg: Dictionary) -> float:
+	var urgency: float = clampf(float(goal.get("urgency", 0.0)), 0.0, 1.0)
+	var damping: float = clampf(float(cfg.get("urgency_style_damping", 0.0)), 0.0, 1.0)
+	return 1.0 - damping * urgency
+
+
+## MovementStyleService's `bond_pressure` input, scoped to ONE subject (the scored
+## candidate's own goal subject) rather than swept over every candidate the way
+## `_apply_bond_bias` is — this is about one candidate's style reading, not a score
+## adjustment applied across the whole candidate set.
+## SIMPLIFICATION: a "friend" bond alone returns full pressure (1.0); this does not
+## yet read the subject's health/danger state ("harmed/endangered" per the design
+## brief) — see report's OPEN block.
+func _movement_style_bond_pressure(
+	bonds: Array,
+	actor: Dictionary,
+	subject_id: String,
+	thresholds: Dictionary
+) -> float:
+	if subject_id.is_empty():
+		return 0.0
+	var edge: Dictionary = SocialGraphService.get_edge(bonds, str(actor.get("id", "")), subject_id)
+	if edge.is_empty():
+		return 0.0
+	var bond_type: String = SocialGraphService.get_bond_type(int(edge.get("strength", 0)), thresholds)
+	return 1.0 if bond_type == "friend" else 0.0
+
+
+## Route-shape token (MovementOptionService.STYLE_ORDER vocabulary) a candidate's
+## `option_id` was tagged with — same extraction `_validate_movement_inputs()` already
+## does against `_ROUTE_STYLE_ORDER`, kept local rather than reaching into
+## MovementOptionService's private helper of the same purpose.
+func _route_style_of(option_id: String, goal_id: String) -> String:
+	var option_prefix: String = "option.%s." % goal_id.trim_prefix("goal.")
+	if not option_id.begins_with(option_prefix):
+		return ""
+	return option_id.trim_prefix(option_prefix).get_slice(".", 0)

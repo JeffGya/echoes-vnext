@@ -372,6 +372,10 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	augmented_context["presence_strength"] = presence_strength
 	augmented_context["rank_strength"]     = rank_strength
 	augmented_context["resilience_traits"] = resilience_traits
+	# V2-COMBAT-003.5 Phase 3b: BehaviorArbiter's movement-style term reads this.
+	# `ctx_inputs` above carries the same value but only reaches
+	# MaturityExpressionService, so the arbiter saw "" until this line existed.
+	augmented_context["calling_family"]    = calling_family
 	augmented_context["leadership_traits"] = leadership_traits
 	# V2-INFRA-003 pass 8: BehaviorArbiter reads OTHER actors' Whole-band leadership
 	# traits (aura score effects), so it needs the trait table and the band map, not

@@ -17,7 +17,7 @@
 #                                                  │
 #   actor dict writes  <── [this file] ──────────────┘   (+ LiveHazardOutcomeService)
 #
-# WHY HERE, IN core/movement/. Every one of the 27 functions exists solely to feed or drain
+# WHY HERE, IN core/movement/. Every function here exists solely to feed or drain
 # that pure layer, and each pure service's own header states it "never reads live state" /
 # "never touches actor or combat state". Somebody has to, and until this slice that somebody
 # was FlowRuntime. This file is the named owner of that job, filed beside the services it
@@ -56,9 +56,10 @@
 #   NOT TOUCHED  save data (read-only), combat_state, flow_ctx.save_request, any snapshot.
 #
 # DETERMINISM. No RNG anywhere in this file and no OS time; `t` is always injected. Two
-# deliberate ordering guards are preserved exactly: _movement_occupancy keeps the
-# lexicographically smallest id on a stacked cell, and _movement_destination_before is the
-# salted-FNV-1a tie-break for equal-cost destinations. _movement_actor_facts sorts by id.
+# deliberate ordering guards: _movement_occupancy keeps the lexicographically smallest id on
+# a stacked cell, and _movement_destination_before is the salted-FNV-1a tie-break for the
+# equal-cost adjacent cells a legacy actor.move intent can be redirected onto.
+# _movement_actor_facts sorts by id.
 #
 # NAMING. Five methods are public because FlowRuntime (and tools/ + tests) call them across
 # the class boundary: prepare_live_movement_context, apply_live_activation,
@@ -66,17 +67,9 @@
 # movement_rect_walkable. Every other name is BYTE-IDENTICAL to its FlowRuntime original,
 # underscore prefix included, so the bodies read as the same code they were.
 #
-# NO SHIM WAS LEFT ON FlowRuntime (AGENTS.md #20). All 5 production call sites and all
-# 30 by-name reflection call sites in tools/PursueTimingProbe.gd and
-# tests/CombatRoundtripIntegrationTests.gd were rewritten in this same change.
-#
-# SIZE — this file is over the ~1,000-line guard (1,018 lines when this note was written),
-# DELIBERATELY (Half A review correction C5; the guard was weighed, not missed). The 27 functions moved VERBATIM because V2-COMBAT-003
-# owns this behaviour: splitting them would mean choosing new seams inside code another story
-# is about to change, and every such choice is a behaviour decision this extraction is not
-# allowed to take. A file 1.8% over the guard, whose contents are byte-identical to the block
-# they came from, is a smaller risk than a split that pre-empts the story that owns the
-# behaviour. Revisit the split when V2-COMBAT-003 lands, not before.
+# NO SHIM WAS LEFT ON FlowRuntime (AGENTS.md #20). All production call sites and all
+# by-name reflection call sites in tools/PursueTimingProbe.gd and
+# tests/CombatRoundtripIntegrationTests.gd were rewritten in the same change.
 
 class_name LiveMovementContextService
 extends RefCounted
@@ -92,7 +85,6 @@ const MovementPathServiceScript        := preload("res://core/movement/MovementP
 const MovementIntentScript             := preload("res://core/movement/contracts/MovementIntent.gd")
 const MovementActionPlanScript         := preload("res://core/movement/contracts/MovementActionPlan.gd")
 const LeadershipEmotionServiceScript   := preload("res://core/combat/LeadershipEmotionService.gd")
-const MovementOptionScript             := preload("res://core/movement/contracts/MovementOption.gd")
 const CombatActivationServiceScript    := preload("res://core/movement/CombatActivationService.gd")
 const MovementHazardFixturesScript     := preload("res://core/movement/MovementHazardFixtures.gd")
 const PursueEscapeServiceScript        := preload("res://core/movement/PursueEscapeService.gd")
@@ -192,7 +184,7 @@ func prepare_live_movement_context(
 	var goals: Array = goals_result.get("goals", []) as Array
 	var options: Array = []
 	if not bool(actor.get("is_quarry", false)):
-		options = _movement_live_direct_options(movement_context, profile, goals, edge_costs, edge_sources)
+		options = _movement_live_options(movement_context, profile, goals, t)
 	# V2-COMBAT-002 Slice 6E: gate the movement-aware layer on GOALS, not options.
 	# An empty option set only means no destination region was routable this activation
 	# (boxed in by allies, objective behind a wall, capacity 0 after truncation). The
@@ -262,118 +254,44 @@ func _movement_displacement_immunity(
 	return false
 
 
-func _movement_live_direct_options(
+## Every route-shape candidate the shared planner can build for this turn's goals.
+##
+## The full `generate_options()` pipeline is called per goal, NOT a live-only
+## reimplementation of it: the route-shape a mover takes is what `BehaviorArbiter`'s
+## style-alignment term differentiates on, so a live path that publishes one shape can
+## only ever express one style no matter what the Echo's identity says.
+##
+## Goal regions arrive already filtered to plannable cells by
+## `CombatPressureService._truthful_region` (walkable, unoccupied, perceived), which is
+## what lets `generate_options`' stricter `destination_not_plannable` precheck pass on a
+## live board at all.
+##
+## A rejected goal is LOGGED, never dropped in silence — silent option starvation is
+## exactly what hid the Slice 6E `option_id` defect for a whole PR.
+func _movement_live_options(
 	movement_context: Dictionary,
 	profile: Dictionary,
 	goals: Array,
-	edge_costs: Dictionary = {},
-	edge_sources: Dictionary = {}
+	t: int
 ) -> Array:
 	var options: Array = []
 	for goal_value: Variant in goals:
 		if not (goal_value is Dictionary):
 			continue
 		var goal: Dictionary = goal_value
-		var option: Dictionary = _movement_direct_option_for_goal(movement_context, profile, goal, edge_costs, edge_sources)
-		if not option.is_empty():
-			options.append(option)
+		var generated: Dictionary = MovementOptionServiceScript.generate_options(
+			movement_context, profile, goal)
+		if not bool(generated.get("valid", false)):
+			logger.info(t, "movement.options_rejected", "Goal produced no movement options", {
+				"mover_id": str(movement_context.get("mover_id", "")),
+				"goal_id": str(goal.get("goal_id", "")),
+				"reason": str(generated.get("reason", "")),
+				"field": str(generated.get("field", "")),
+			})
+			continue
+		for option_value: Variant in generated.get("options", []) as Array:
+			options.append((option_value as Dictionary).duplicate(true))
 	return options
-
-
-func _movement_direct_option_for_goal(
-	movement_context: Dictionary,
-	profile: Dictionary,
-	goal: Dictionary,
-	edge_costs: Dictionary = {},
-	edge_sources: Dictionary = {}
-) -> Dictionary:
-	var origin: Dictionary = movement_context.get("origin", {}) as Dictionary
-	var salt: String = str(movement_context.get("mover_id", ""))
-	var destination_region: Array = goal.get("destination_region", []) as Array
-	# Already in the region the goal wants: the zero-step stay is the truthful option.
-	# The live producer publishes ONE option per goal, so without this the mover's only
-	# candidate is a route to a different cell it has no reason to walk to.
-	if destination_region.has(origin):
-		return _movement_build_direct_option(
-			movement_context, profile, goal, origin, [], 0, 0, edge_sources, edge_costs)
-
-	if destination_region.is_empty():
-		return {}
-
-	var planning_walkable: Dictionary = _movement_planning_walkable(movement_context)
-	var terrain_costs: Dictionary = movement_context.get("terrain_costs", {}) as Dictionary
-	var bounds: Dictionary = movement_context.get("bounds", {}) as Dictionary
-
-	# PERF (perf/pursue-option-generation): destination_region can be 300+ cells for a
-	# hunter positioned ahead of its quarry (a PURSUE "cut off" goal). The old code ran a
-	# COMPLETE single-target shortest_path from the same origin to every candidate cell
-	# just to keep the cheapest — 300+ full searches per turn instead of one.
-	#
-	# Dijkstra's minimum cost to a given node is independent of tie-break policy (candidate
-	# relaxation here only ever fires on strictly-lower cost — see reachable_cost_region's
-	# `candidate_cost < costs[neighbor_key]` — so the recorded cost is the same regardless of
-	# traversal/extraction order). That means ONE single-source flood fill from `origin`
-	# (reachable_cost_region) yields the exact same cost-to-every-cell that running
-	# shortest_path once per destination would have produced. We use that flood fill only to
-	# pick the WINNING destination (same cost values, same tie-break via
-	# _movement_destination_before as before), then make exactly one shortest_path call for
-	# that single destination — the identical call the old loop would have made for it — so
-	# the returned path is byte-identical (tie-breaks included) to the pre-optimization code.
-	var best_cost: int = 999999
-	var best_destination: Dictionary = {}
-	var region: Dictionary = MovementPathServiceScript.reachable_cost_region(
-		origin, best_cost, planning_walkable, terrain_costs, bounds, edge_costs)
-	var region_costs: Dictionary = region.get("costs", {}) as Dictionary
-	for destination_value: Variant in destination_region:
-		if not (destination_value is Dictionary):
-			continue
-		var destination: Dictionary = destination_value
-		var destination_key: String = _movement_cell_key_runtime(destination)
-		if not region_costs.has(destination_key):
-			continue
-		var cost: int = int(region_costs[destination_key])
-		if cost < best_cost or (cost == best_cost and _movement_destination_before(salt, destination, best_destination)):
-			best_cost = cost
-			best_destination = destination.duplicate(true)
-
-	var best_path: Array = []
-	if not best_destination.is_empty():
-		var winning_route: Dictionary = MovementPathServiceScript.shortest_path(
-			origin,
-			best_destination,
-			planning_walkable,
-			terrain_costs,
-			bounds,
-			edge_costs
-		)
-		if bool(winning_route.get("reachable", false)):
-			best_cost = int(winning_route.get("cost", 0))
-			best_path = (winning_route.get("path", []) as Array).duplicate(true)
-
-	if best_path.is_empty():
-		return {}
-
-	var capacity: int = int(profile.get("capacity", 0))
-	var selected_path: Array = best_path
-	var selected_cost: int = best_cost
-	if selected_cost > capacity:
-		var prefix: Dictionary = _movement_affordable_prefix(
-			origin,
-			best_path,
-			capacity,
-			planning_walkable,
-			movement_context.get("terrain_costs", {}) as Dictionary,
-			movement_context.get("bounds", {}) as Dictionary,
-			edge_costs
-		)
-		selected_path = prefix.get("path", []) as Array
-		selected_cost = int(prefix.get("cost", 0))
-	if selected_path.is_empty():
-		return {}
-	var destination: Dictionary = selected_path.back() as Dictionary
-	return _movement_build_direct_option(
-		movement_context, profile, goal, destination, selected_path, selected_cost, selected_cost,
-		edge_sources, edge_costs)
 
 
 func _movement_planning_walkable(movement_context: Dictionary) -> Dictionary:
@@ -388,116 +306,22 @@ func _movement_planning_walkable(movement_context: Dictionary) -> Dictionary:
 	return result
 
 
-func _movement_affordable_prefix(
-	origin: Dictionary,
-	path: Array,
-	capacity: int,
-	walkable: Dictionary,
-	terrain_costs: Dictionary,
-	bounds: Dictionary,
-	edge_costs: Dictionary = {}
-) -> Dictionary:
-	var best_path: Array = []
-	var best_cost: int = 0
-	for end_index in range(path.size()):
-		var prefix: Array = path.slice(0, end_index + 1)
-		var route: Dictionary = MovementPathServiceScript.validate_route(
-			origin,
-			prefix,
-			walkable,
-			terrain_costs,
-			bounds,
-			edge_costs
-		)
-		if not bool(route.get("valid", false)):
-			break
-		var cost: int = int(route.get("cost", 0))
-		if cost > capacity:
-			break
-		best_path = prefix
-		best_cost = cost
-	return {"path": best_path, "cost": best_cost}
-
-
-func _movement_build_direct_option(
-	movement_context: Dictionary,
-	profile: Dictionary,
-	goal: Dictionary,
-	destination: Dictionary,
-	path: Array,
-	route_cost: int,
-	shortest_cost: int,
-	edge_sources: Dictionary = {},
-	edge_costs: Dictionary = {}
-) -> Dictionary:
-	var goal_id: String = str(goal.get("goal_id", "goal.live"))
-	# The option_id is contract-checked by MovementOption._validate_option_id, which demands
-	# exactly "option.<goal-suffix>.<style>.d<col>r<row>.p<path>". Reuse the canonical builder
-	# from MovementOptionService instead of hand-rolling the token — a hand-rolled id silently
-	# failed validation here, which disabled movement-aware selection for the whole live loop.
-	var option_id: String = MovementOptionServiceScript._option_id(
-		{"goal_id": goal_id}, "direct", destination, path)
-	var planned_action: Dictionary = goal.get("planned_primary", {}) as Dictionary
-	var option: Dictionary = MovementOptionScript.build(
-		goal_id,
-		option_id,
-		str(goal.get("purpose", "advance")),
-		destination,
-		path,
-		route_cost,
-		shortest_cost,
-		route_cost - shortest_cost,
-		int(profile.get("capacity", 0)),
-		route_cost,
-		# exposure / congestion / cohesion come from MovementOptionService's own
-		# implementations — the live path never calls generate_options, so connecting them
-		# here is the only way they reach BehaviorArbiter._spatial_utility. Never write a
-		# second implementation of a scoring term: two copies drift silently.
-		MovementOptionServiceScript._exposure(
-			path, movement_context.get("origin", {}) as Dictionary, edge_costs),
-		MovementOptionServiceScript._congestion(
-			destination,
-			movement_context.get("occupancy", {}) as Dictionary,
-			str(movement_context.get("mover_id", ""))),
-		MovementOptionServiceScript._cohesion(destination, movement_context),
-		# hostile_control_sources reads the same control model exposure does, so the two
-		# always agree: a non-empty source list means a non-zero exposure.
-		MovementOptionServiceScript._hostile_sources(
-			path, movement_context.get("origin", {}) as Dictionary, edge_sources),
-		_movement_hazard_summary(movement_context, path),
-		1.0 if (goal.get("destination_region", []) as Array).has(destination) else 0.25,
-		planned_action,
-		goal.get("declared_fallback", {}) as Dictionary
-	)
-	var validation: Dictionary = MovementOptionScript.validate(
-		option,
-		movement_context.get("origin", {}) as Dictionary
-	)
-	return option if bool(validation.get("valid", false)) else {}
-
-
-## V2-COMBAT-002 Slice 6E: the normalized known-hazard summary this story owes
-## V2-COMBAT-003. Mirrors MovementOptionService's own shape exactly — ids strictly
-## sorted and unique, `known_count` equal to the id count — which MovementOption.validate
-## enforces (`hazard_count_mismatch`). Only hazards the mover actually KNOWS about are
-## published; undiscovered hazards must never influence selection or explanation.
-func _movement_hazard_summary(movement_context: Dictionary, path: Array) -> Dictionary:
-	var hazard_ids: Array = MovementOptionServiceScript._hazard_ids(
-		path, movement_context.get("known_hazards", []) as Array)
-	return {"known_count": hazard_ids.size(), "known_ids": hazard_ids}
-
-
 func _movement_cell_key_runtime(cell: Dictionary) -> String:
 	if cell.is_empty():
 		return ""
 	return "%d,%d" % [int(cell.get("col", 0)), int(cell.get("row", 0))]
 
 
-## Compass-de-aligned, replay-stable tie-break for equal-cost combat destinations.
-## Replaces the old lexicographic "col,row" preference that biased every mover to
-## the top-left cell around its target. Salted FNV-1a (the 6A stage de-aligner),
-## keyed by the mover so attackers spread instead of stacking; numeric col/row is
-## the final total-order fallback on the (rare) hash tie. Pure — replay-exact.
+## Compass-de-aligned, replay-stable tie-break for the equal-cost adjacent cells a
+## LEGACY `actor.move` intent can be redirected onto. Salted FNV-1a (the 6A stage
+## de-aligner), keyed by the mover so attackers spread instead of all preferring the
+## top-left cell; numeric col/row is the final total-order fallback on the (rare) hash
+## tie. Pure — replay-exact.
+##
+## The movement-aware path no longer uses this: its destinations come from
+## `MovementOptionService`, whose own tie-break (`_primary_route_less` -> `_cell_less`)
+## is plain lexicographic. Route-shape variety, not the salt, is what spreads movers
+## there.
 func _movement_destination_before(salt: String, a: Dictionary, b: Dictionary) -> bool:
 	var ha: int = StagePartyMovementAdapterScript.salted_cell_hash(salt, _movement_cell_key_runtime(a))
 	var hb: int = StagePartyMovementAdapterScript.salted_cell_hash(salt, _movement_cell_key_runtime(b))

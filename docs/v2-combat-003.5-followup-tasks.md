@@ -1,0 +1,155 @@
+# V2-COMBAT-003.5 — Spawned follow-up tasks
+
+Suggestion chips created during the V2-COMBAT-003.5 orchestration session (2026-09-13 through
+2026-09-16). Each can be started in a fresh worktree with one click from its chip, or started
+manually by pasting the "Opening prompt" below into a new session. `task_id` is the internal
+reference if you need to dismiss one later.
+
+---
+
+## 1. Fix perceived_actors script error in MovementOptionService
+
+**task_id:** `task_6206db50`
+
+**Why it came up:** Surfaced independently by three separate agents while testing unrelated V2-COMBAT-003.5 work — a script error logged on every run of the `combat_roundtrip` suite, not caused by this story, not failing the test itself.
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo, `core/movement/MovementOptionService.gd:635` (function `_cohesion()`) logs a SCRIPT ERROR — "Invalid access to property or key 'perceived_actors' on a base object of type 'Dictionary'" — during the test `combat_roundtrip/live_direct_option_id_is_contract_valid` in `tests/CombatRoundtripIntegrationTests.gd`. It does not fail the test (the test's own assertions apparently don't reach or don't check the affected code path), but it's a real script error logged on every run of that suite, surfaced independently by three separate agents working on V2-COMBAT-003.5 (2026-09-13).
+>
+> Investigate: is `_cohesion()` accessing a field on a Dictionary using dot-notation where it should use `.get()`, or is a caller passing a Dictionary where a typed object/Resource with a `perceived_actors` property was expected? Read the function and its call sites, determine root cause, and fix it. This is dormant code per `docs/MEMORY.md`'s systems inventory (`MovementOptionService` — "dormant deterministic option generator", V2-COMBAT-002 Slice 2, zero production callers as of that entry), so check whether it's still dormant or has since gone live before fixing, and note that in your report. Run the compile check and the `combat_roundtrip` filtered test suite to confirm the fix clears the script error with no test regressions.
+
+---
+
+## 2. Review PURSUE reward payout after board-size increase
+
+**task_id:** `task_0a287277`
+
+**Why it came up:** V2-COMBAT-003.5 raised board size (ANSWERS.md #63); as a mechanical side effect, one PURSUE fixture resolves one round faster and pays more (Ase 55→64, Ekwan 7→8). Jeff: flag it, out of scope for that story (ANSWERS.md #65).
+
+**Opening prompt:**
+> In the Echoes vNext repo, story V2-COMBAT-003.5 raised combat board size (`data.combat.board`: base_cols/rows 12→18, max_cols/rows 22→28 — see ANSWERS.md #63). A side effect, confirmed by qa-verifier during that story's review: PURSUE mode's `fp_pursue` fixture in `tests/FlowFingerprintTests.gd` now resolves one round faster than before (5→4 rounds) because the bigger board gave the party more room to close on the quarry, and its reward payout moved from Ase 55/Ekwan 7 to Ase 64/Ekwan 8 as a direct consequence — same win condition (`all_enemies_defeated`), unchanged rank (S).
+>
+> Jeff wants this reviewed on its own, separately from V2-COMBAT-003.5 (see ANSWERS.md #65): is a reward payout that shifts as an unintended side effect of an unrelated board-size tuning change (rather than a deliberate balance decision) something the reward formula should be more insulated from? Investigate how PURSUE (and likely other objectives whose resolution speed is board-shape-sensitive) computes its Ase/Ekwan payout, whether "fights faster because the board is bigger" is a sound proxy for "performed better," and whether this warrants a design conversation with Jeff before deciding whether to change anything.
+
+---
+
+## 3. Fix stale PURSUE comment and board-size fallback defaults
+
+**task_id:** `task_d44dccca`
+
+**Why it came up:** Found while `EncounterSetupService.gd` was open for the board-size change; pre-existing (V2-STAGE-004-era), unrelated to V2-COMBAT-003.5's subject. Jeff: file separately (ANSWERS.md #66).
+
+**Opening prompt:**
+> In `core/combat/EncounterSetupService.gd` in the Echoes vNext repo, fix two small pre-existing documentation/fallback staleness issues surfaced during V2-COMBAT-003.5's review (see ANSWERS.md #66), unrelated to that story's actual subject:
+>
+> 1. Around line 334, a comment reads `# V2-STAGE-004 P3b: PURSUE board is 2x one dimension` — but the actual configured value in `data/balance.json` (`data.combat.board.long_multiplier` for PURSUE) is 4.0, and the code's own default at line 336 is 2.0 (which never fires since the config always provides a real value). Correct the comment to state the true multiplier, or make it generic enough not to go stale again when the config value is tuned (e.g. reference the config key instead of a literal number).
+> 2. Around lines 327-331, the function's fallback defaults for `base_cols`/`base_rows`/`max_cols`/`max_rows` still read 12/12/22/22 — stale since V2-COMBAT-003.5 raised the live config to 18/18/28/28 (ANSWERS.md #63). These fallbacks only fire if `data.combat.board` were ever missing from `balance.json`, so there's no live behavior bug today, but they'd silently regenerate the OLD board size if that ever happened. Update them to match the current live values, or reconsider whether hardcoded fallbacks make sense here at all versus failing loudly if the config block is missing.
+>
+> Run the compile check and relevant filtered test suites (`tests combat_terrain`, `tests combat_baseline`) after any change to confirm nothing regresses.
+
+---
+
+## 4. Check if speed_bonus_threshold needs to scale with board size
+
+**task_id:** `task_1868ffd0`
+
+**Why it came up:** During the fingerprint re-baseline, a PROTECT fixture crossed the fixed 5-round `speed_bonus_threshold` downward purely because of the bigger board (losing its speed bonus: rank S→A). Raises the question of whether this threshold, and grading generally, was tuned against the old board pacing — a live-play design question, not just a test-fixture quirk. Explicitly out of scope for V2-COMBAT-003.5 (no rebalancing).
+
+**Opening prompt:**
+> In the Echoes vNext repo, `core/economy/RewardCalc.gd:80-82` pays a speed bonus (better Ase/Ekwan payout, higher rank grade) only when `round_ended < speed_bonus_threshold` (currently 5). Story V2-COMBAT-003.5 raised combat board size (`data.combat.board`: base_cols/rows 12→18, max_cols/rows 22→28 — ANSWERS.md #63), which changes how many rounds a typical fight takes to resolve. During that story's fingerprint re-baseline, a PROTECT test fixture crossed the threshold DOWNWARD (4→5 rounds, losing its speed bonus: rank S→A, Ase 59→50) purely because the bigger board changed pathing — a mechanical side effect, not a balance decision.
+>
+> Investigate: was `speed_bonus_threshold` (and any other round-count-based grading threshold in `RewardCalc.gd` or elsewhere) tuned against the old ~12x12 board pacing? If board size now routinely shifts real fights across that threshold in either direction, grade/reward distribution across live play may have shifted unintentionally, not just in this one test fixture. Determine whether the threshold should scale with board size (or with the objective's own expected-duration signature), stay fixed, or whether this is a non-issue in practice — and bring findings to Jeff for a decision, since this is a design/balance number, not something to change unilaterally (V2-COMBAT-003.5 explicitly excluded rebalancing combat/economy from its scope).
+
+---
+
+## 5. Add pronoun substitution to GuidanceContribution reason text
+
+**task_id:** `task_8b7887b3`
+
+**Why it came up:** Found while adding a new line to `GuidanceContribution._REASON_TEXT` for the movement_style work (decision #22). All 20 lines in that table always render she/her, even for male Echoes, because the table's output skips the pronoun substitution step `ConversationService.gd` already uses for dialogue. Jeff: file separately, pre-existing, affects the whole table (decision #24).
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo, `core/actors/behaviors/GuidanceContribution.gd`'s `_REASON_TEXT` dictionary (around line 121) holds short narration lines explaining why an Echo responded to Keeper guidance the way she did ("her vow holds her", "she will not leave the one she is bound to", "another already told her where to stand", "she reads it the way you do", plus a fifth line added by V2-COMBAT-003.5: "she made the only right move" for the movement_style source). These lines flow straight into `_bark_line` (`ActorStateMachine.gd:945`) with no pronoun substitution step.
+>
+> Compare this to `core/realms/ConversationService.gd:138`, which calls `_substitute_pronouns(response_text, echo_gender)` (defined at line 699) before showing dialogue text. That function exists and works — it just isn't used for this table.
+>
+> Fix: route `_reason_text()`'s output (or its caller) through the same `_substitute_pronouns` pattern, so a male Echo's guidance-reason bark doesn't say "she"/"her". Check `_substitute_pronouns`'s signature and canonical-form convention (per project lesson: author text in one canonical pronoun form, substitute for other genders at runtime) before wiring it in, and confirm the Echo's gender is actually available at the call site in `ActorStateMachine.gd` or wherever `GuidanceContribution.resolve()` is called from. Add a test proving a male Echo's guidance bark no longer contains "she"/"her".
+
+---
+
+## 6. Design a real "stop and hold" movement behavior
+
+**task_id:** `task_afaaec2e`
+
+**Why it came up:** `docs/movement-model.md` §7.5 already commits to Echoes stopping early on purpose and doing something meaningful (guard, observe, mark) rather than silently banking unused movement capacity. This doesn't exist yet. A V2-COMBAT-003.5 fix (the movement commitment scoring fix, Phase 3c) just removed an accidental, wrong-reason stand-in for it, so this is worth its own story before it's forgotten.
+
+**Opening prompt:**
+> In the Echoes vNext repo, `docs/movement-model.md` §7.5 ("Unused capacity") is an existing V1 design decision: "Unused capacity is not banked by default. A careful Echo should stop early because the destination is tactically better, then do something meaningful: observe, guard, mark, stabilize, maintain desired range, preserve a formation, keep a return route, prepare an intercept. Stopping early without a benefit reads as incompetence, not caution."
+>
+> No such mechanism exists yet in `core/actors/behaviors/` or `core/movement/` (grep for `hold_formation` shows a directive-driven score reduction exists, but no generic "stop and do something with the leftover capacity" behavior).
+>
+> Context: a V2-COMBAT-003.5 fix (movement commitment scoring, Phase 3c) just removed a scoring bug that was accidentally producing some actors stopping short of full movement — for the wrong, illegible reason (a unit-mismatch in the scoring formula, not real caution). After that fix, every actor now visibly moves its full capacity every turn unless something specific stops it (hostile control, a directive). §7.5's documented intent — genuine, visible, attributable restraint — still has no real implementation.
+>
+> Design and implement §7.5's "stop and do something meaningful" mechanism: when an Echo's route scoring favors stopping before spending full capacity, that decision should be tied to a legible cause (fear, a bond, a vow, a directive, an identity trait) and should produce a visible, meaningful action with the remaining capacity/turn (guard, observe, mark a target, hold a formation position) rather than simply banking unused movement silently. Read `docs/movement-model.md` §7 in full, `core/actors/behaviors/BehaviorArbiter.gd`'s `_spatial_utility()` and `_score()`, and `core/movement/MovementOptionService.gd` before designing anything.
+
+---
+
+## 7. Fix commitment/distance unit mismatch in movement scoring
+
+**task_id:** `task_311bcc74`
+
+**Why it came up:** Surfaced by qa-verifier during Phase 3c's final review of the movement-crawl fix (decision #28). The fix's `commitment_progress_ratio` term divides move cost by distance — equal today only because terrain cost is uniform. Jeff chose to track this separately rather than fix it now (decision #30).
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo, `core/actors/behaviors/BehaviorArbiter.gd`'s `_spatial_utility()` computes a `commitment` term as `commitment_progress_ratio` (added in V2-COMBAT-003.5 Phase 3c to fix a movement-crawl bug — see `docs/v2-combat-003.5-decisions.md` entry #28). This term divides a movement-cost value by `progress_origin_distance` (raw Chebyshev distance in cells, from `core/movement/MovementOptionService.gd`'s `_build_option()`).
+>
+> qa-verifier flagged during Phase 3c's final review: this mixes units. The numerator is movement cost (movement points spent), the denominator is distance (cells). They are numerically equal today ONLY because the live combat path uses uniform terrain cost (every cell costs 1 point to cross) and 8-way movement. The day non-uniform terrain cost is authored (e.g. difficult terrain costing 2 points/cell) or a hostile-control surcharge is added to cost, this term's meaning silently breaks — it will no longer represent "progress toward the goal, distance-normalized," which was the whole point of the Phase 3c fix.
+>
+> Investigate: should `commitment_progress_ratio` divide by actual movement cost instead of raw distance (so both terms share cost units), or does it need a different normalization entirely? Read `BehaviorArbiter.gd`'s `_spatial_utility()`, `MovementOptionService.gd`'s `_build_option()` and `progress_origin_distance`, and `docs/v2-combat-003.5-decisions.md` entries #28 and #30 for full context on why this term exists. Confirm whether any terrain-cost variance or hostile-control cost surcharge exists in the codebase today (if none does yet, this is a latent-but-real defect, not an active one). Propose a fix, get it feasibility-checked, then implement and add a test that would have caught this (e.g. a synthetic non-uniform-cost scenario). Run the compile check and the `movement_arbiter` test suite to confirm no regression.
+
+---
+
+## 8. Fix silent stand-still when an Echo has no reachable path
+
+**task_id:** `task_c8dfaa47`
+
+**Why it came up:** Found while diagnosing the PURSUE/ENDURE win-to-loss regression (decisions #32-34). Not the cause of that regression — confirmed pre-existing, exposed by longer fights, not caused by V2-COMBAT-003.5.
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo, `core/movement/MovementOptionService.gd`'s `generate_options()` can return `{valid: true, options: []}` when every cell of a movement goal's region is genuinely unreachable from the actor's origin (verified by direct shortest-path check under both the strict and authoritative-only walkable graph). When this happens, `core/movement/LiveMovementContextService.gd`'s `_movement_live_options()` falls back to `goal.legacy.stationary.actor_idle` with no rejection logged — the Echo silently stands still.
+>
+> This defeats `_movement_live_options()`'s own docstring guarantee that "a rejected goal is LOGGED, never dropped in silence." It was found during a V2-COMBAT-003.5 diagnosis (see `docs/v2-combat-003.5-decisions.md` entries #32-34): in the PURSUE fixture fight (seed 12346), from round 6 onward, 3 of 5 Echoes stand still while a fleeing quarry walks away, because their goal region became unreachable on that board — and nothing announces why. This reproduces identically on the pre-Phase-3c code path too, so it predates V2-COMBAT-003.5 and was only exposed by that story's longer fights, not caused by it.
+>
+> Investigate: is a `{valid: true, options: []}` result meant to be a distinct case from `{valid: false, ...}` (a real rejection) in `generate_options()`'s contract, or should an empty options array on a valid goal also trigger the rejection-logging path? Read `MovementOptionService.gd`'s `generate_options()` return contract and `LiveMovementContextService.gd`'s `_movement_live_options()` call site and its rejection-logging code. Fix so a genuinely unreachable goal is always logged, never silently swallowed into idle. Add a test proving an unreachable-goal scenario produces a logged rejection. Run the compile check and the `movement_arbiter`/`live_movement` filtered test suites to confirm no regression.
+
+---
+
+## 9. Review planning-graph narrowing from perceived_planning_cells intersection
+
+**task_id:** `task_e06782cb`
+
+**Why it came up:** Found while diagnosing the same PURSUE/ENDURE regression (decisions #32-34). Confirmed not the cause in the fixture tested (perceived and authoritative walkable sets happened to be identical there), but flagged as a risk on boards with limited perception.
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo, V2-COMBAT-003.5's Phase 3c live-wiring change (`core/movement/LiveMovementContextService.gd` now calling `MovementOptionService.generate_options()`) introduced a semantic narrowing of the movement-planning graph. The old path's `_movement_planning_walkable()` used `authoritative_walkable` only. The new path's `MovementOptionService._planning_walkable()` intersects `authoritative_walkable ∩ perceived_planning_cells`.
+>
+> This was found during a diagnosis of a separate regression (see `docs/v2-combat-003.5-decisions.md` entries #32-34) and confirmed NOT to be the cause of that regression — in the fixture tested (PURSUE, seed 12346), `perceived_planning_cells` happened to equal `authoritative_walkable` exactly (both 279 cells), so the intersection was a no-op there. But on a board where an actor's perception is genuinely limited, this intersection could silently reduce or eliminate viable movement options in a way the old code never did.
+>
+> Investigate: is including `perceived_planning_cells` in the planning graph an intentional design choice (Echoes should only plan routes through cells they can perceive), and if so, is a silent option-starvation risk acceptable, or does it need the same rejection-logging treatment as the sibling "silent stand-still" issue (task #8 above, `task_c8dfaa47`)? Read `MovementOptionService.gd`'s `_planning_walkable()` and `generate_options()`, `LiveMovementContextService.gd`'s old `_movement_planning_walkable()` (check git history/diff around the Phase 3c wiring commit for the pre-change version), and how `perceived_planning_cells` is computed and populated. Determine whether any current board/perception configuration can produce a meaningfully different result between the two graphs, and if so, whether this narrowing should be reverted, kept, or need additional logging. Report findings and a recommendation; only make code changes if the investigation finds a real defect, not just a theoretical one.
+
+---
+
+## 10. Widen class_origin roll to cover all 10 identity vectors
+
+**task_id:** `task_9a58ca1c`
+
+**Why it came up:** Found while refining V2-COMBAT-003.5's movement-style fix (decisions #33-36). Jeff required "2 new Echoes should never be the same" (decision #36) — investigation found summoning only ever rolls 4 of 10 identity-vector origins, so two same-origin Echoes get byte-identical vector_scores at Standing 1.
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo, `core/sanctum/EchoFactory.gd:76-78` rolls a new Echo's `class_origin` from `class_origin_weights`, which lists only 4 options: `protector`, `vanguard`, `seeker`, `pillar`. But `data/balance.json`'s `data.vectors.archetype_init` (and every downstream scoring table, e.g. `data.actor.movement_style_weights.vector_bias`) defines all 10 identity vectors: protector, vanguard, seeker, pillar, strategist, skeptic, devoted, opportunist, mediator, nurturer.
+>
+> This means no newly summoned Echo can ever be born leaning strategist, skeptic, devoted, opportunist, mediator, or nurturer — 6 of 10 possible identities are unreachable at summon. Worse: two Echoes who happen to roll the same `class_origin` get byte-identical `vector_scores` from `archetype_init`, so at Standing 1 they are mechanically indistinguishable in anything vector-driven (movement style, dominant-vector behavior, etc.) until lived experience differentiates them. This was confirmed directly in `tests/CombatBaselineTests.gd:258-260`, whose own comment records a 5-Echo fixture party as pillar, pillar, vanguard, seeker, pillar — 3 of 5 identical.
+>
+> This is a summoning-identity gap, not a movement-scoring bug — it was found while diagnosing/fixing V2-COMBAT-003.5's movement-style regression (see `docs/v2-combat-003.5-decisions.md` entries #33-36), and Jeff explicitly required "2 new Echoes should never be the same" (decision #36). That story's fix (a `trait_nudge` reweight) works around this gap without closing it — traits still differentiate same-origin Echoes, but their vector identity itself stays collided.
+>
+> Investigate: should `class_origin_weights` be widened to cover all 10 vectors (what would the weights be — even distribution, or does the game's summoning fiction favor some origins over others?), or is there a design reason only 4 are summon-able (e.g. the other 6 are meant to be earned/developed through play, never rolled at birth)? Read `docs/movement-model.md` §10.4 and any GDD sections on Echo identity/summoning to check before assuming this is a bug. If it is confirmed a gap that should close, propose the new weight table (a `mid-game-designer`/`sr-game-designer` call, not a unilateral number pick) and implement once approved. This interacts with `GridService._dominant_key()`'s tiebreak order too (a related 4-vector-only gap flagged in `tests/CombatBaselineTests.gd:275-279`) — check whether that should be fixed in the same pass.

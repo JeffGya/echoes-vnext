@@ -1597,22 +1597,16 @@ func _end_round(t: int) -> void:
 	# GUIDE_SPIRIT protect fixture needs more real rounds than the no-progress limit to reach
 	# spirit_protected, with zero melee ever occurring, so a damage-only reset ended it as a
 	# forced retreat instead of the win it was always going to reach. Progress is therefore
-	# damage OR any per-objective progress counter advancing: protect_counter,
-	# guide_protect_counter (documented as monotonic — CombatState.create() — so any rise is
-	# unambiguous progress, never noise), contain_counter, hold_counter. Comparing a SUM is
-	# safe even though hold_counter alone can fall (carrier-down resets it): a fall can only
-	# ever make the sum smaller, never trigger a false reset, and if a carrier is being downed
-	# at all, damage is happening and _np_damage_this_round already resets the streak.
-	var _np_progress_sum: int = int(combat_state.get("protect_counter", 0)) \
-		+ int(combat_state.get("guide_protect_counter", 0)) \
-		+ int(combat_state.get("contain_counter", 0)) \
-		+ int(combat_state.get("hold_counter", 0))
-	var _np_last_progress_sum: int = int(combat_state.get("_no_progress_last_sum", -1))
-	if _np_damage_this_round or _np_progress_sum > _np_last_progress_sum:
+	# damage OR a board state this fight has never been in — see
+	# CombatState.get_progress_watch() and record_progress_watch(). The damage term is kept
+	# alongside it because a round can deal damage and end with the same visible board (a hit
+	# offset by a heal), and damage is the plainest statement that something happened.
+	var _np_watch: Dictionary = CombatState.get_progress_watch(ectx.actors, ectx.resolution_mode, combat_state)
+	var _np_novel: bool = CombatState.record_progress_watch(combat_state, _np_watch)
+	if _np_damage_this_round or _np_novel:
 		combat_state["no_progress_streak"] = 0
 	else:
 		combat_state["no_progress_streak"] = int(combat_state.get("no_progress_streak", 0)) + 1
-	combat_state["_no_progress_last_sum"] = _np_progress_sum
 
 	# Check end condition — pass combat_state so RECOVER/PROTECT/ENDURE checks read
 	# round_counter, hold_counter, and objective_params.

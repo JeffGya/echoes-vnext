@@ -532,8 +532,8 @@ The authoritative explanation source.
   "primary": {
     "code": String,
     "source": String,                  # hard_rule | objective | danger | bond | vow |
-                                      # calling | vector | emotion | directive |
-                                      # guidance | equipment | baseline
+                                      # calling | vector | movement_style | emotion |
+                                      # directive | guidance | equipment | baseline
     "subject_id": String,
     "causal_kind": String,             # hard_override | co_decisive | baseline
     "material": bool,
@@ -1047,7 +1047,7 @@ The vocabulary should stay small enough to learn and broad enough to serve both 
 Movement styles describe how the intent is expressed:
 
 - direct;
-- measured;
+- restrained;
 - careful;
 - forceful;
 - cohesive;
@@ -1064,7 +1064,7 @@ An intent and style may combine:
 - low-exposure reposition;
 - cohesive regroup;
 - lateral cut-off;
-- measured escort.
+- restrained escort.
 
 ---
 

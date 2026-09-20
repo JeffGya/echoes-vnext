@@ -58,6 +58,27 @@ The player is the **Ase Keeper** — they run a Sanctum, summon Echoes (returnin
 - Offload research, codebase exploration, and parallel analysis to subagents.
 - One task per subagent for focused execution.
 - For complex problems, use parallel subagents.
+- Model selection is task-specific: GPT-5.6 Sol for genuinely high-level/tricky
+  work (concurrency, subtle algorithms, adversarial verification/judge panels,
+  gnarly debugging); GPT-5.6 Tera as the preferred general default for clearly
+  specified implementation; GPT-5.6 Luna for genuinely routine general work; and
+  GPT-5.5 for mechanical bulk work such as renames, boilerplate, format conversion,
+  or log triage.
+- Keep delegation token-efficient: the main orchestrator reads shared context and
+  freezes contracts once; agents receive compact no-history briefs, own exclusive
+  file domains, and run targeted checks only. Centralize full integration, capture
+  matrices, repository suites, and final reporting so multiple agents do not repeat
+  the same expensive work.
+
+### Visual-first communication
+- Apply to all future player-facing work across the game and prototypes.
+- Prefer visible behavior and world change, then spatial cues, then compact contextual
+  UI, with dense text reserved for optional reference.
+- Text explains a visual model; it should not become the model.
+- Important outcomes need at least two channels. Protect the active world area, keep
+  eye travel short, match visual weight to urgency, and test worst-case density.
+- At a glance, players should identify who changed, the direction of change, what
+  happens next, and what remains unresolved.
 
 ### Self-Improvement Loop
 - After ANY correction from Jeff: update `docs/LESSONS.md` with the pattern (rule + why + how to apply).

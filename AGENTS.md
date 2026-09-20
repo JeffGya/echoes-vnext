@@ -428,6 +428,24 @@ production code to make its own test pass.
 
 ## UI Rules
 
+### Visual-first player communication
+
+- For every player-facing fact, first ask whether world behavior, composition,
+  animation, posture, orientation, proximity, lighting, VFX, sound, portraits,
+  icons, gauges, or persistent world change can communicate it. Text clarifies the
+  visual read; it must not carry the whole system by default.
+- Follow this information order: world behavior, spatial UI, compact contextual UI,
+  then optional reference UI. Use more than one channel for important outcomes.
+- Protect the current critical focus area and arrange supporting information along
+  the player's eye flow. Show only what matters in the current context.
+- Match visual weight to urgency. A non-actionable signal cannot look blocking, and
+  routine information cannot compete with a major beat.
+- Judge primary compositions at 1920×1080 and test worst-case density. A short glance
+  should reveal participants, direction of change, next action, and unresolved state
+  without reading every sentence.
+- Apply these rules to all future work, not only Sanctum or prototype UI. Review
+  `prototypes/sanctum_systems_exploration/SPEC.md`, section 29, when relevant.
+
 - **Build structure in `.tscn`** — scripts render values and apply profile values such as margins, columns, visibility, wrap widths, and min/max sizes
 - Never create/reparent the UI hierarchy or construct visual styles programmatically in `.gd`; layout relationships and theme hooks belong in `.tscn`
 - Reusable visual treatments belong in `assets/theme/LivingTreeSystem.tres`; extend the theme instead of restyling the same patterns per scene
@@ -538,6 +556,40 @@ Full lesson history: `docs/LESSONS.md`
 - **If Sanctum implementation reality clashes with the approved screen spec:** stop and re-spec with Jeff before continuing
 - **Every story ends with:** compile check → Jeff tests in-game → docs update → git commit
 - **No speculative abstractions** — implement exactly what is asked, no more
+
+### Subagent model tiers
+
+Choose a subagent model deliberately from the work, and state the choice in the
+handoff when it is useful context:
+
+- **GPT-5.6 Sol:** genuinely high-level or tricky work, including concurrency,
+  subtle algorithms, adversarial verification/judge panels, and gnarly debugging.
+- **GPT-5.6 Tera:** preferred general default for well-specified implementation
+  with clear acceptance criteria, unless the work is genuinely routine.
+- **GPT-5.6 Luna:** fast general implementation when the task is clear and less
+  tricky than work that warrants Tera.
+- **GPT-5.5:** mechanical bulk work such as renames, boilerplate, format conversion,
+  and log triage.
+
+Do not default every subagent to the most capable tier. Preserve stable ownership
+domains while selecting the least costly tier suited to the actual difficulty.
+
+### Token-efficient delegation
+
+- Centralize repo reading, contract decisions, final integration, capture generation,
+  and full-suite verification in the main orchestrator. Do them once per milestone.
+- Delegate implementation by exclusive file domain and run those domains
+  sequentially when one depends on another. Do not ask every agent to audit the same
+  files, rerun the same suite, or regenerate the same captures.
+- Use `fork_turns="none"` with a compact task brief that points to the frozen contract.
+  Do not copy the full conversation into a subagent unless its task truly requires it.
+- Agents run only the smallest targeted check needed for their domain. The main
+  orchestrator runs full integration, visual matrices, and repository tests once
+  after implementation freezes.
+- Agent reports are concise: changed files, unresolved blockers, failing check names,
+  and final counts. Do not return long narratives or repeat the contract.
+- Prefer one implementation agent and one final adversarial verifier. Add another
+  implementation agent only when a separate authoritative domain must change.
 
 ---
 
