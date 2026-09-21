@@ -176,6 +176,31 @@ static func _setup_stage_explore_env(seed_tag: String) -> Dictionary:
 	return { "ok": true, "runtime": runtime }
 
 
+## Shared fixture for the four tests below whose comment blocks say "shares the fixture": a fresh
+## FlowRuntime + disk boot + onboarding dispatch chain is the expensive part of this suite, and
+## these four never need a SECOND one — they only need the state _setup_sanctum_env() already
+## produces. Memoized once per test-runner process. A deep copy of the pristine post-onboarding
+## snapshot is cached here too, at creation time, before any of the sharing tests can mutate the
+## runtime — so snapshot_fingerprint/sanctum (the one test here that compares against a hardcoded
+## hash) never observes another shared test's mutation, regardless of which order the runner
+## happens to execute them in. The other three (build_does_not_consume_pending_flags,
+## sanctum_enter_releases_vow, generic_double_build_is_stable) mutate the shared runtime's
+## flow_ctx / save_data for real, but each only asserts relative to state it sets up itself, so
+## sharing them is safe in any order. dispatch_clears_pending_flags_after_publish is deliberately
+## EXCLUDED: it dispatches real sanctum.party.toggle actions, which mutate active-party roster
+## membership through flow_machine.reenter() — a shared-state hazard the other three don't carry.
+static var _shared_sanctum_fixture: Dictionary = {}
+
+static func _shared_sanctum_env() -> Dictionary:
+	if _shared_sanctum_fixture.is_empty():
+		var env := _setup_sanctum_env("fp_sanctum_shared")
+		if bool(env.get("ok", false)):
+			var runtime: FlowRuntime = env["runtime"]
+			env["pristine_snapshot"] = (runtime.flow_ctx.last_snapshot as Dictionary).duplicate(true)
+		_shared_sanctum_fixture = env
+	return _shared_sanctum_fixture
+
+
 ## Canonical fingerprint projection: the full `data` payload plus sorted `actions` slot keys.
 ## Deliberately excludes `meta` (carries only the sim tick `t`, which is not part of the
 ## documented contract for this task and is otherwise deterministic-but-irrelevant scaffolding).
@@ -239,12 +264,14 @@ static func _hash(v: Variant) -> String:
 ## Previous value: cbcc7992a21be3b5e85fe3a558320d0501e75b7f6311a85876ce9c32e834b0e1.
 const SANCTUM_FINGERPRINT_HASH := "a26556e1eaf749a276123e740511222676b7c27f50981573d365042059f832df"
 
+## Shares _shared_sanctum_env() — see its comment. Reads the CACHED pristine snapshot, not
+## runtime.flow_ctx.last_snapshot live, so a later shared test's mutation (vow release, pending
+## flags) can never reach this fixed-hash comparison.
 static func test_sanctum_fingerprint() -> Dictionary:
-	var env := _setup_sanctum_env("fp_sanctum")
+	var env := _shared_sanctum_env()
 	if not bool(env.get("ok", false)):
 		return env
-	var runtime: FlowRuntime = env["runtime"]
-	var snap: Dictionary = runtime.flow_ctx.last_snapshot
+	var snap: Dictionary = env["pristine_snapshot"]
 	if str(snap.get("type", "")) != FlowStateIds.SANCTUM:
 		return { "ok": false, "error": "Expected flow.sanctum snapshot, got type=%s" % str(snap.get("type", "")) }
 
@@ -320,7 +347,6 @@ static func test_stage_explore_fingerprint() -> Dictionary:
 		return { "ok": false, "error": "Expected flow.stage_explore snapshot, got type=%s" % str(snap.get("type", "")) }
 
 	var actual := _hash(_fingerprint_projection(snap))
-	print("SE_DEBUG hash=%s payload=%s" % [actual, JSON.stringify(_fingerprint_projection(snap))])
 	if actual != STAGE_EXPLORE_FINGERPRINT_HASH:
 		return {
 			"ok": false,
@@ -343,8 +369,10 @@ static func test_stage_explore_fingerprint() -> Dictionary:
 ## been published (see test_purity_dispatch_clears_pending_flags_after_publish below).
 ## Formerly KNOWN DEFECT (FlowStateMachine._rebuild_snapshot() used to consume these flags
 ## while "building" the snapshot) — Phase 3 fixed it; this probe now asserts purity directly.
+## Shares _shared_sanctum_env() — see its comment. Safe: this test only asserts relative to the
+## flags it sets on ctx itself, never against a fixed external value.
 static func test_purity_build_does_not_consume_pending_flags() -> Dictionary:
-	var env := _setup_sanctum_env("purity_pending_flags")
+	var env := _shared_sanctum_env()
 	if not bool(env.get("ok", false)):
 		return env
 	var runtime: FlowRuntime = env["runtime"]
@@ -489,8 +517,12 @@ static func test_purity_build_final_snapshot_pays_rewards() -> Dictionary:
 ## probed independently and unconditionally below, since ensure_layout() has no ctx parameter
 ## and so cannot be probed "through" a save-request seam here.)
 ## KNOWN DEFECT — Phase 3 inverts this assertion to "must not mutate".
+## Shares _shared_sanctum_env() — see its comment. Safe: this test asserts relative to the vow it
+## sets up on save_data itself. It mutates save_data["sanctum"]["active_vow"] / save_data["realms"]
+## for real (via FlowSanctumState.enter()), which is exactly why snapshot_fingerprint/sanctum reads
+## a CACHED pristine snapshot rather than the live one — this test's mutation must never reach it.
 static func test_purity_sanctum_enter_releases_vow() -> Dictionary:
-	var env := _setup_sanctum_env("purity_vow_release")
+	var env := _shared_sanctum_env()
 	if not bool(env.get("ok", false)):
 		return env
 	var runtime: FlowRuntime = env["runtime"]
@@ -808,8 +840,11 @@ static func test_purity_ensure_layout_writes_save_data() -> Dictionary:
 ## builder now only READS the flags, so build 1 and build 2 are byte-identical, including
 ## show_awakening_overlay staying true on BOTH — it is the fix, not the probe, that makes this
 ## true; nothing here special-cases the flags to force a match.
+## Shares _shared_sanctum_env() — see its comment. Safe: this test overwrites the pending flags it
+## needs before asserting, and only compares build1 against build2 (both taken after the same
+## overwrite), never against a fixed external value.
 static func test_purity_generic_double_build_is_stable() -> Dictionary:
-	var env := _setup_sanctum_env("purity_double_build")
+	var env := _shared_sanctum_env()
 	if not bool(env.get("ok", false)):
 		return env
 	var runtime: FlowRuntime = env["runtime"]
