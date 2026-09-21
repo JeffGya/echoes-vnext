@@ -200,7 +200,11 @@ for entry in "${SHARDS[@]}"; do
   (
     : > "$shard_log"
     echo "=== shard=$name filter==$suite_names alarm_secs=$shard_alarm_secs ===" >> "$shard_log"
+    shard_start=$(date +%s)
     ECHOES_TEST_SAVE_DIR="$shard_save_dir" /usr/bin/perl -e 'alarm shift; exec @ARGV' "$shard_alarm_secs" "$GODOT_BIN" --headless --quit --path "$CHECKOUT" -- tests "=$suite_names" >> "$shard_log" 2>&1
+    shard_end=$(date +%s)
+    # Real elapsed time, distinct from alarm_secs above (a ceiling that may never fire).
+    echo "elapsed_secs=$((shard_end - shard_start))" >> "$shard_log"
   ) &
   pids+=("$!")
   shard_names+=("$name")

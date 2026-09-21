@@ -38,7 +38,9 @@ own comments and in `AGENTS.md`'s "Sharded full-suite runs" section — recorded
 appears in the durable mistake log, not only at the site of the code.
 
 **Rule.** An alarm timeout that did not fire tells you the run finished before that ceiling. It never
-tells you how long the run actually took. Read the log's own timing output, not the alarm value.
+tells you how long the run actually took. Read the log's own `elapsed_secs=N` line (each shard log's
+final line, written by `scripts/run-tests-sharded.sh` from `date +%s` before/after the run), not the
+alarm value.
 
 ---
 
