@@ -176,29 +176,18 @@ static func _setup_stage_explore_env(seed_tag: String) -> Dictionary:
 	return { "ok": true, "runtime": runtime }
 
 
-## Shared fixture for the four tests below whose comment blocks say "shares the fixture": a fresh
-## FlowRuntime + disk boot + onboarding dispatch chain is the expensive part of this suite, and
-## these four never need a SECOND one — they only need the state _setup_sanctum_env() already
-## produces. Memoized once per test-runner process. A deep copy of the pristine post-onboarding
-## snapshot is cached here too, at creation time, before any of the sharing tests can mutate the
-## runtime — so snapshot_fingerprint/sanctum (the one test here that compares against a hardcoded
-## hash) never observes another shared test's mutation, regardless of which order the runner
-## happens to execute them in. The other three (build_does_not_consume_pending_flags,
-## sanctum_enter_releases_vow, generic_double_build_is_stable) mutate the shared runtime's
-## flow_ctx / save_data for real, but each only asserts relative to state it sets up itself, so
-## sharing them is safe in any order. dispatch_clears_pending_flags_after_publish is deliberately
-## EXCLUDED: it dispatches real sanctum.party.toggle actions, which mutate active-party roster
-## membership through flow_machine.reenter() — a shared-state hazard the other three don't carry.
-static var _shared_sanctum_fixture: Dictionary = {}
-
+## A fresh-per-test FlowRuntime + disk boot + onboarding dispatch chain, same as
+## _setup_sanctum_env() below. A memoized-static-var version of this was tried (shared once per
+## test-runner process across four tests) but reverted per tests/AGENTS.md's isolation rule —
+## "Each test must set up its own environment. Never depend on global state, save files, or test
+## execution order." A static var persists across repeated invocations within the SAME Godot
+## process (e.g. the Debug Panel's `tests` command run twice without restarting the editor), so a
+## later run could silently inherit mutated state from an earlier one even though every
+## within-one-run ordering was proven safe. Not worth that risk for a suite this file's own
+## profiling showed was never the dominant cost (the sharded-runner win came from splitting
+## tests/FlowFingerprintTests.gd's suite registration, not from this file).
 static func _shared_sanctum_env() -> Dictionary:
-	if _shared_sanctum_fixture.is_empty():
-		var env := _setup_sanctum_env("fp_sanctum_shared")
-		if bool(env.get("ok", false)):
-			var runtime: FlowRuntime = env["runtime"]
-			env["pristine_snapshot"] = (runtime.flow_ctx.last_snapshot as Dictionary).duplicate(true)
-		_shared_sanctum_fixture = env
-	return _shared_sanctum_fixture
+	return _setup_sanctum_env("fp_sanctum_shared")
 
 
 ## Canonical fingerprint projection: the full `data` payload plus sorted `actions` slot keys.
@@ -264,14 +253,12 @@ static func _hash(v: Variant) -> String:
 ## Previous value: cbcc7992a21be3b5e85fe3a558320d0501e75b7f6311a85876ce9c32e834b0e1.
 const SANCTUM_FINGERPRINT_HASH := "a26556e1eaf749a276123e740511222676b7c27f50981573d365042059f832df"
 
-## Shares _shared_sanctum_env() — see its comment. Reads the CACHED pristine snapshot, not
-## runtime.flow_ctx.last_snapshot live, so a later shared test's mutation (vow release, pending
-## flags) can never reach this fixed-hash comparison.
 static func test_sanctum_fingerprint() -> Dictionary:
 	var env := _shared_sanctum_env()
 	if not bool(env.get("ok", false)):
 		return env
-	var snap: Dictionary = env["pristine_snapshot"]
+	var runtime: FlowRuntime = env["runtime"]
+	var snap: Dictionary = runtime.flow_ctx.last_snapshot
 	if str(snap.get("type", "")) != FlowStateIds.SANCTUM:
 		return { "ok": false, "error": "Expected flow.sanctum snapshot, got type=%s" % str(snap.get("type", "")) }
 
@@ -311,7 +298,7 @@ static func test_sanctum_fingerprint() -> Dictionary:
 ## any direction. entry_cell now anchors to the host region, so party_pos does not move.
 ## Previous value: aee5d5cc22cc484d794f55c967c92d438ba103cb6cb943b61c76fb8b6d4426be.
 # RE-RECORDED, V2-COMBAT-003 terrain commit 5. The payload diff on this board is exactly one
-# hunk, dumped via the SE_DEBUG print below on this tree and on b4dd797: "situations" goes
+# hunk, captured on this tree and on b4dd797: "situations" goes
 # from [] to one entry — sit.1, type loot, non-objective, now at (11,10) and therefore inside
 # the party's opening reveal radius. Every other line of the payload is byte-identical, the
 # terrain included. RealmGenerator._place_situations now refuses a cell off the host region
@@ -369,8 +356,6 @@ static func test_stage_explore_fingerprint() -> Dictionary:
 ## been published (see test_purity_dispatch_clears_pending_flags_after_publish below).
 ## Formerly KNOWN DEFECT (FlowStateMachine._rebuild_snapshot() used to consume these flags
 ## while "building" the snapshot) — Phase 3 fixed it; this probe now asserts purity directly.
-## Shares _shared_sanctum_env() — see its comment. Safe: this test only asserts relative to the
-## flags it sets on ctx itself, never against a fixed external value.
 static func test_purity_build_does_not_consume_pending_flags() -> Dictionary:
 	var env := _shared_sanctum_env()
 	if not bool(env.get("ok", false)):
@@ -517,10 +502,6 @@ static func test_purity_build_final_snapshot_pays_rewards() -> Dictionary:
 ## probed independently and unconditionally below, since ensure_layout() has no ctx parameter
 ## and so cannot be probed "through" a save-request seam here.)
 ## KNOWN DEFECT — Phase 3 inverts this assertion to "must not mutate".
-## Shares _shared_sanctum_env() — see its comment. Safe: this test asserts relative to the vow it
-## sets up on save_data itself. It mutates save_data["sanctum"]["active_vow"] / save_data["realms"]
-## for real (via FlowSanctumState.enter()), which is exactly why snapshot_fingerprint/sanctum reads
-## a CACHED pristine snapshot rather than the live one — this test's mutation must never reach it.
 static func test_purity_sanctum_enter_releases_vow() -> Dictionary:
 	var env := _shared_sanctum_env()
 	if not bool(env.get("ok", false)):
@@ -840,9 +821,6 @@ static func test_purity_ensure_layout_writes_save_data() -> Dictionary:
 ## builder now only READS the flags, so build 1 and build 2 are byte-identical, including
 ## show_awakening_overlay staying true on BOTH — it is the fix, not the probe, that makes this
 ## true; nothing here special-cases the flags to force a match.
-## Shares _shared_sanctum_env() — see its comment. Safe: this test overwrites the pending flags it
-## needs before asserting, and only compares build1 against build2 (both taken after the same
-## overwrite), never against a fixed external value.
 static func test_purity_generic_double_build_is_stable() -> Dictionary:
 	var env := _shared_sanctum_env()
 	if not bool(env.get("ok", false)):
