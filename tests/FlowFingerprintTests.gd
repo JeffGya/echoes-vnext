@@ -70,17 +70,33 @@ extends RefCounted
 
 
 static func register(runner) -> void:
-	runner.register_test("fingerprint/combat", func(): return test_combat())
-	runner.register_test("fingerprint/purify_shrine", func(): return test_purify_shrine())
-	runner.register_test("fingerprint/recover", func(): return test_recover())
-	runner.register_test("fingerprint/protect", func(): return test_protect())
-	runner.register_test("fingerprint/endure", func(): return test_endure())
-	runner.register_test("fingerprint/pursue", func(): return test_pursue())
-	runner.register_test("fingerprint/guide_spirit", func(): return test_guide_spirit())
-	# Mechanical proof of same-process determinism for all seven modes, on every suite run:
-	# each mode's setup+drive runs twice back-to-back and is diffed round-by-round, turn-by-turn.
-	# Complements (does not replace) the "run the whole suite twice externally" stability proof.
-	runner.register_test("fingerprint/determinism_self_check", func(): return test_determinism_self_check())
+	# One suite name per mode (not the shared "fingerprint" prefix). Each mode runs a genuinely
+	# independent full combat simulation to completion — there is no shared setup to lose by
+	# splitting — so a single shared suite name only forced the sharded runner
+	# (scripts/run-tests-sharded.sh) to run all eight serially in one shard, making "fingerprint"
+	# the project's single biggest indivisible cost. Splitting the suite name lets each mode land
+	# in a different parallel shard. Zero change to test bodies, hash constants, or assertions.
+	runner.register_test("fingerprint_combat/combat", func(): return test_combat())
+	runner.register_test("fingerprint_purify_shrine/purify_shrine", func(): return test_purify_shrine())
+	runner.register_test("fingerprint_recover/recover", func(): return test_recover())
+	runner.register_test("fingerprint_protect/protect", func(): return test_protect())
+	runner.register_test("fingerprint_endure/endure", func(): return test_endure())
+	runner.register_test("fingerprint_pursue/pursue", func(): return test_pursue())
+	runner.register_test("fingerprint_guide_spirit/guide_spirit", func(): return test_guide_spirit())
+	# Mechanical proof of same-process determinism, one suite per mode: each mode's setup+drive
+	# runs twice back-to-back and is diffed round-by-round, turn-by-turn. Complements (does not
+	# replace) the "run the whole suite twice externally" stability proof. Split from a single
+	# "fingerprint_determinism_self_check" suite that looped all seven modes serially in one
+	# process (787s, the sharded runner's critical-path bottleneck) — same "fingerprint_<mode>"
+	# / "fingerprint_determinism_<mode>" pairing as the main split above, so the two families read
+	# together at a glance.
+	runner.register_test("fingerprint_determinism_combat/determinism_combat", func(): return test_determinism_combat())
+	runner.register_test("fingerprint_determinism_purify_shrine/determinism_purify_shrine", func(): return test_determinism_purify_shrine())
+	runner.register_test("fingerprint_determinism_recover/determinism_recover", func(): return test_determinism_recover())
+	runner.register_test("fingerprint_determinism_protect/determinism_protect", func(): return test_determinism_protect())
+	runner.register_test("fingerprint_determinism_endure/determinism_endure", func(): return test_determinism_endure())
+	runner.register_test("fingerprint_determinism_pursue/determinism_pursue", func(): return test_determinism_pursue())
+	runner.register_test("fingerprint_determinism_guide_spirit/determinism_guide_spirit", func(): return test_determinism_guide_spirit())
 
 
 # ---------------------------------------------------------------------------
@@ -864,6 +880,7 @@ static func test_guide_spirit() -> Dictionary:
 
 # ---------------------------------------------------------------------------
 # Determinism self-check — mechanical proof, not just an external "run twice" check.
+# Split per mode below (test_determinism_<mode>) so each can shard independently; see register().
 # ---------------------------------------------------------------------------
 
 ## Runs one mode's setup+drive twice in the SAME process and diffs round-by-round, turn-by-turn.
@@ -911,18 +928,36 @@ static func _probe_mode_same_process(
 	return { "ok": true }
 
 
-static func test_determinism_self_check() -> Dictionary:
-	var modes: Array = [
-		[EncounterResolutionModes.COMBAT, "fp_probe_combat", "", ""],
-		[EncounterResolutionModes.PURIFY_SHRINE, "fp_probe_purify_shrine", "", ""],
-		[EncounterResolutionModes.RECOVER, "fp_probe_recover", "", ""],
-		[EncounterResolutionModes.PROTECT, "fp_probe_protect", "", ""],
-		[EncounterResolutionModes.ENDURE, "fp_probe_endure", "", ""],
-		[EncounterResolutionModes.PURSUE, "fp_probe_pursue", "", ""],
-		[EncounterResolutionModes.GUIDE_SPIRIT, "fp_probe_guide_spirit", "protect", "nojoin"],
-	]
-	for m in modes:
-		var r: Dictionary = _probe_mode_same_process(m[0], m[1], m[2], m[3])
-		if not bool(r.get("ok", false)):
-			return r
-	return { "ok": true }
+## Split from the former single test_determinism_self_check (which looped all seven modes in one
+## process and cost 787s on the sharded runner's critical path — see AGENTS.md). Each function
+## below is exactly one loop iteration of the old body: same seed_tag, same guide_mode/guide_joins,
+## same single call to _probe_mode_same_process, same pass/fail criteria. No shared per-mode state
+## existed to preserve — every iteration built its own isolated env via _setup_encounter — so this
+## is a pure 1-to-1 decomposition, not a behaviour change.
+static func test_determinism_combat() -> Dictionary:
+	return _probe_mode_same_process(EncounterResolutionModes.COMBAT, "fp_probe_combat", "", "")
+
+
+static func test_determinism_purify_shrine() -> Dictionary:
+	return _probe_mode_same_process(EncounterResolutionModes.PURIFY_SHRINE, "fp_probe_purify_shrine", "", "")
+
+
+static func test_determinism_recover() -> Dictionary:
+	return _probe_mode_same_process(EncounterResolutionModes.RECOVER, "fp_probe_recover", "", "")
+
+
+static func test_determinism_protect() -> Dictionary:
+	return _probe_mode_same_process(EncounterResolutionModes.PROTECT, "fp_probe_protect", "", "")
+
+
+static func test_determinism_endure() -> Dictionary:
+	return _probe_mode_same_process(EncounterResolutionModes.ENDURE, "fp_probe_endure", "", "")
+
+
+static func test_determinism_pursue() -> Dictionary:
+	return _probe_mode_same_process(EncounterResolutionModes.PURSUE, "fp_probe_pursue", "", "")
+
+
+static func test_determinism_guide_spirit() -> Dictionary:
+	return _probe_mode_same_process(
+		EncounterResolutionModes.GUIDE_SPIRIT, "fp_probe_guide_spirit", "protect", "nojoin")

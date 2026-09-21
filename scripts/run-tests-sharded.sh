@@ -19,7 +19,7 @@
 # KNOWN GAP — movement_fallback does not get full-suite validation here. MovementFallbackGuardTests
 # is registered LAST in ui/AppRoot.gd specifically because it inspects a legacy-selector ledger
 # that every earlier-registered suite in the SAME PROCESS may write to. Sharding puts it in shard4
-# with ~16 sibling suites, not all ~102 — a clean sharded PASS on movement_fallback does NOT mean
+# with ~16 sibling suites, not all ~115 — a clean sharded PASS on movement_fallback does NOT mean
 # the real serial suite would also pass; a fallback triggered by a suite in another shard is
 # invisible to it here. This is not fixable by rebalancing shards (it would require running every
 # other suite first, in-process, defeating parallelism for this one guard). Always run the full
@@ -41,14 +41,14 @@ CHECKOUT="${1:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 # for shard2/shard3/shard10 under contention across multiple runs — no other shard has come
 # close to needing more.
 #
-# shard6 (`fingerprint` alone) gets its own override (see SHARDS below) because it does not fit
-# the default: qa-verifier measured it at 623s SOLO/UNCONTENDED, and a subsequent 900s alarm
-# under 10-way contention STILL fired while fingerprint was running — so its true contended cost
-# is unmeasured beyond ">900s". Forcing every shard to share one global alarm sized for
-# fingerprint's worst case would push the whole script's hang ceiling to ~15 min for no reason;
-# the other 9 shards finish comfortably under 10 min even under contention. Splitting the alarm
-# per-shard keeps their ceiling tight while giving fingerprint room.
-# Re-verify ALARM_SECS after any suite-list change.
+# The old single `fingerprint` suite (8 tests, one shared suite name) forced all 8 to run
+# serially in one shard — qa-verifier measured that shard at 623s SOLO/UNCONTENDED, and a
+# subsequent 900s alarm under 10-way contention STILL fired while it was running. Both the main
+# suite and its determinism self-check have since been split into 7 per-mode suite names each
+# (see tests/FlowFingerprintTests.gd's register()), which lets all 14 spread across shard1-5/7/8
+# alongside unrelated suites instead of one dedicated shard. No shard currently needs an alarm
+# override as a result — 700s covers the measured ~500s worst case with margin even after adding
+# one ~2x-cost determinism suite per shard. Re-verify ALARM_SECS after any suite-list change.
 GODOT_BIN="/opt/homebrew/bin/godot"
 ALARM_SECS=700
 
@@ -74,29 +74,60 @@ mkdir -p "$LOG_DIR" "$SAVE_ROOT"
 # clock — 2.7x the next-slowest shard — while line-count balance put it at only 18 suites,
 # no different in kind from its siblings. Line count does not predict runtime. The old shard6
 # is now 4 shards:
-#   shard6 — `fingerprint` (tests/FlowFingerprintTests.gd) alone. Not the biggest file (928
-#     lines) but AGENTS.md's own serial-suite measurement (2026-08-25) attributes ~3 of the
-#     ~7 serial minutes to this suite alone — a known-slow cluster independent of line count.
+#   shard6 — was `fingerprint` alone (see below — now split further).
 #   shard7 — `seam` (tests/Stage004SeamTests.gd) alone. 3612 lines, by a wide margin the
 #     largest test source file in the repo (next largest is 1542).
 #   shard8/shard9 — the remaining 16 old-shard6 suites, bin-packed by source-file line count
 #     into two ~3900-line halves (see git history for the exact bin-pack).
 # This is a best-effort split with no per-suite timing data — only shard-level wall clock was
 # measured. Re-verify with a real timed run and adjust further if shard6-9 are still uneven.
+#
+# Updated again 2026-09-20 — the `fingerprint` suite fingerprint-suite refactor landed
+# (tests/FlowFingerprintTests.gd). It registered 8 tests under ONE shared suite name, which is
+# why the old shard6 above could never be split by suite-name sharding: all 8 had to run
+# serially in whatever one shard held "fingerprint". Each of the 7 modes (combat, purify_shrine,
+# recover, protect, endure, pursue, guide_spirit) is now its OWN suite name,
+# `fingerprint_<mode>`, so each can land in a different shard and run in parallel with unrelated
+# suites. They are added one per shard to shard1, shard2, shard3, shard4, shard5, shard7 and
+# shard8 — chosen to spread the real simulation cost rather than concentrate it, with no
+# per-mode timing data available, so shard1 and shard7 (the two smallest shards by suite count:
+# `movement,old_echo` and `seam` alone) absorb one mode each same as every other shard picked.
+# Updated again 2026-09-20 — `test_determinism_self_check` (formerly the dedicated shard6, 2400s
+# override) has been split the same way the main `fingerprint` suite was: one
+# `fingerprint_determinism_<mode>` suite per mode instead of one function looping all seven
+# in-process. Each new determinism suite does 2 full drives of its mode (record + diff) against
+# the main suite's 1, so it costs roughly 2x its corresponding `fingerprint_<mode>` suite
+# (~14-29s each, unmeasured per-suite but bounded by that ratio) — call it ~28-58s. Old shard6
+# is removed entirely; each determinism suite joins the SAME shard as its own mode's main
+# suite (never two ~2x-cost suites in one shard), so no single shard absorbs more than one
+# extra ~2x cost, avoiding a repeat of the old shard6 bottleneck. Re-measure and rebalance if a
+# shard turns out to need it — no per-suite timing data exists yet for these seven.
+#
+# Updated again 2026-09-20 — real timed sharded runs (post-fingerprint-split) showed shard7 at
+# 539-666s across repeat measurements, the new critical path. Splitting the `seam` suite
+# (tests/Stage004SeamTests.gd, 25 tests, then attempted as 5 cost-tiered suite names) was tried
+# and MEASURED to give no improvement (a follow-up run at 592s vs. a 546s pre-attempt baseline —
+# flat/noise, not a regression): `seam` was never the real cost. Reverted back to the single
+# `seam` suite name. The actual driver of shard7 is `fingerprint_pursue` +
+# `fingerprint_determinism_pursue` — two tests, each one full combat encounter run to completion
+# (round 7). That cost is not reducible by suite-name sharding (it's already two separate
+# suites, as small as this approach can make them); making it cheaper means changing the test's
+# own encounter length/assertions, a different and riskier kind of change, not attempted here.
+# shard7's alarm is overridden to 900s (was the 700s default) for real margin over its measured
+# range (539-666s across repeat runs) — the 700s default left as little as 34s of margin against
+# the highest observed figure, thin enough to risk a false alarm-kill under heavier contention.
+# Total sharded wall-clock has measured 546-666s across repeat runs (vs. a 788s pre-fingerprint-
+# split baseline and a ~1090s serial baseline) — real variance under contention on this machine,
+# not a regression from any single change; both figures are still a substantial improvement over
+# serial. Re-measure with repeat runs, not a single sample, before tightening any alarm further.
 SHARDS=(
-  "shard1|movement,old_echo|"
-  "shard2|combat_roundtrip,echofactory,emotion,exclusive_action,ko_death,melee,morale,onboarding,passive,pending_result,sanctum_pulse,sit_res,situational,skill,snapshot,stage|"
-  "shard3|actor,bark_popup,bond_trigger,combat_terrain,conversation_repair,divergence,divergence_bark,movement_arbiter,objective,retreat,sanctum.summon,skill_loadout,snapshot_purity,structure,support,terrain|"
-  "shard4|archetype,behavior_char,calling,calling_behavior,combat_ui,contact,foundation_ui,institution,movement_fallback,movement_option,prog,realm_prog,sanctum.party,snapshot_fingerprint,traversal,vector,weave|"
-  "shard5|consequence,contact_actor,cooldown,directive,explore,leadership,maturity_baseline,movement_path,realm_ui,recruit,reward,sanctum.layout,shrine,skill_unlock,voice,vow|"
-  # shard6 override: fingerprint's true contended cost is unmeasured beyond ">900s" — a 900s
-  # alarm still fired mid-run under 10-way contention. 2400s (40 min) is a deliberately generous
-  # placeholder to stop killing this shard, not a measured value. The real fix is the
-  # fingerprint-suite refactor (plan Part B1), which shrinks the suite itself; do not treat this
-  # number as validated headroom, and re-measure with a run that completes rather than alarms.
-  "shard6|fingerprint|2400"
-  "shard7|seam|"
-  "shard8|behavior,behavior_arbiter,combat_initiative,explore_p5,identity,live_movement_style,statinit,trace|"
+  "shard1|movement,old_echo,fingerprint_combat,fingerprint_determinism_combat|"
+  "shard2|combat_roundtrip,echofactory,emotion,exclusive_action,ko_death,melee,morale,onboarding,passive,pending_result,sanctum_pulse,sit_res,situational,skill,snapshot,stage,fingerprint_purify_shrine,fingerprint_determinism_purify_shrine|"
+  "shard3|actor,bark_popup,bond_trigger,combat_terrain,conversation_repair,divergence,divergence_bark,movement_arbiter,objective,retreat,sanctum.summon,skill_loadout,snapshot_purity,structure,support,terrain,fingerprint_recover,fingerprint_determinism_recover|"
+  "shard4|archetype,behavior_char,calling,calling_behavior,combat_ui,contact,foundation_ui,institution,movement_fallback,movement_option,prog,realm_prog,sanctum.party,snapshot_fingerprint,traversal,vector,weave,fingerprint_protect,fingerprint_determinism_protect|"
+  "shard5|consequence,contact_actor,cooldown,directive,explore,leadership,maturity_baseline,movement_path,realm_ui,recruit,reward,sanctum.layout,shrine,skill_unlock,voice,vow,fingerprint_endure,fingerprint_determinism_endure|"
+  "shard7|seam,fingerprint_pursue,fingerprint_determinism_pursue|900"
+  "shard8|behavior,behavior_arbiter,combat_initiative,explore_p5,identity,live_movement_style,statinit,trace,fingerprint_guide_spirit,fingerprint_determinism_guide_spirit|"
   "shard9|economy,flow_transaction,grid,guidance,guidance_bark,movement_style,social_graph,venture_char|"
   "shard10|arbiter,bridge,combat,combat_baseline,continuity,derived,directive_cfg,echo_party,expr,intel,objective_combat,realm,realm_reward,save_integrity,snapshot_contract,thread,unified_resolve|"
 )
@@ -229,7 +260,7 @@ echo "COMBINED: $total total, $passed passed, $failed failed"
 echo "(Exact-match shards: no suite selected twice, total should equal a serial full run's total.)"
 echo ""
 echo "NOTE: movement_fallback (MovementFallbackGuardTests) only saw its own shard's ~16 suites in" \
-     "this run, not all ~102 — it is a cross-suite ledger guard that must run LAST in the SAME" \
+     "this run, not all ~115 — it is a cross-suite ledger guard that must run LAST in the SAME" \
      "process as everything else to be meaningful (see ui/AppRoot.gd 'REGISTER LAST'). A clean" \
      "sharded result for movement_fallback does NOT have full-suite validity. Run the full SERIAL" \
      "suite before committing anything that could affect legacy-selector fallback behavior."
