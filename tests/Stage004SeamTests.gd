@@ -598,6 +598,7 @@ static func _light_recruitment_env(tag: String) -> Dictionary:
 	var flow_ctx := FlowContext.new()
 	flow_ctx.config_service = config
 	flow_ctx.logger = logger
+	flow_ctx.campaign_seed = CampaignSeed.new(12346)
 	flow_ctx.realm_id = "realm.01"
 	flow_ctx.stage_id = "stage.0"
 	flow_ctx.encounter_id = "realm.01.stage.0." + tag
