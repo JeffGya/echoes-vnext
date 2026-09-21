@@ -50,6 +50,7 @@
 | 39 | endure-rank-regression-accepted | ENDURE's re-recorded baseline is a real step down from the last green baseline (A→B, one fewer kill) — accepted, win is preserved, no further investigation | 2026-09-20 |
 | 40 | emotion-trace-fixtures-re-recorded-now | The 6 held emotion_trace_* fixtures (decision #27) get re-recorded now — the hold's reason (cause unknown) no longer applies | 2026-09-20 |
 | 41 | split-into-two-prs-ship-what-is-done-now | Open a PR now for everything committed through Phase 3c; Phase 4 onward becomes a separate PR later — supersedes the original one-PR-at-the-end plan | 2026-09-20 |
+| 42 | pr-per-phase-going-forward | PR #69 (already a split from one-PR-at-the-end) was still too large for /ultrareview — going forward, one PR per phase, not per story | 2026-09-20 |
 
 ---
 
@@ -421,5 +422,14 @@
 
 **Q:** The original plan (Phases 0-9) was one story, one PR at the end. Phases 0-3c are done, committed, reviewed. Phase 4 onward (doc/debug fixes, scattered small defects, combined verification, manual test, docs/PR prep) has not started. Open a PR now for what's done, and a separate PR later for the rest — or hold everything for one PR at the very end as originally planned?
 **A:** Split into two PRs. Open a PR now covering everything committed through Phase 3c. Phase 4 onward becomes a separate PR later. This supersedes the original plan's "one PR at the end" note (plan snapshot, Phase 9).
+**Source:** Jeff, 2026-09-20
+**Date:** 2026-09-20
+
+---
+
+### 42. pr-per-phase-going-forward
+
+**Q:** `/ultrareview` refused PR #69 outright — 112 files, 21,043 lines, over its size limit, even though it was already a split from the original one-PR-at-the-end plan (decision #41). What PR granularity should the rest of this story (and future stories) use?
+**A:** One PR per phase (or a small cluster of tightly related phases) from now on, not one PR per story. Each of Phase 4, Phase 5, etc. ships as its own PR once reviewed and committed.
 **Source:** Jeff, 2026-09-20
 **Date:** 2026-09-20
