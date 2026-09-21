@@ -300,13 +300,6 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	# -------------------------
-	# combat_emotion debug overlay toggle
-	# -------------------------
-	if head == "combat_emotion" or head == "combat_em":
-		_run_combat_emotion_command()
-		return
-
-	# -------------------------
 	# vow shortcuts (VOW-001 / debug only)
 	# -------------------------
 	if head == "vow":
@@ -373,7 +366,7 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	_debug_print("Unknown command: " + cmd)
-	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | combat_emotion | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear> | guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id] | rankup [echo_id] | realm select <realm.01|realm.02> | realm show")
+	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear> | guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id] | rankup [echo_id] | realm select <realm.01|realm.02> | realm show")
 	
 	_flush_logs_to_console()
 	
@@ -1033,29 +1026,6 @@ func _run_combat_objective_command(parts: Array) -> void:
 		_debug_print("combat_objective set to: %s — encounter reset, re-enter combat to apply" % op)
 	else:
 		_debug_print("Unknown mode '%s'. Use: combat|purify_shrine|recover|protect|endure|pursue|guide_spirit" % op)
-	_flush_logs_to_console()
-
-
-# Toggle the emotion debug overlay on the active CombatBoardScreen.
-# Shows F:<fear> and M:<morale> above each actor token.
-# No-ops gracefully when CombatBoardScreen is not active.
-func _run_combat_emotion_command() -> void:
-	# CombatBoardScreen now lives inside RealmShell — access it via the active overlay.
-	var combat_screen: CombatBoardScreen = null
-	if _realm_shell != null and _realm_shell.visible:
-		var overlay: Control = _realm_shell._active_overlay
-		if overlay is CombatBoardScreen:
-			combat_screen = overlay as CombatBoardScreen
-
-	if combat_screen == null:
-		_debug_print("combat_emotion: CombatBoardScreen not active — command ignored")
-		_flush_logs_to_console()
-		return
-	# Toggle the flag. Read current state from the token layer directly.
-	var currently_on: bool = combat_screen._token_layer._emotion_debug
-	combat_screen.set_emotion_debug(not currently_on)
-	var state_label: String = "ON" if not currently_on else "OFF"
-	_debug_print("Emotion debug: %s" % state_label)
 	_flush_logs_to_console()
 
 

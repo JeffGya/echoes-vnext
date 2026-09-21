@@ -789,12 +789,6 @@ func _move_path_cell_positions(last_actor_action: Dictionary) -> Array[Vector2]:
 	return cell_positions
 
 
-## The legacy raw emotion overlay is unavailable from player-facing snapshots.
-## Called from AppRoot when the "combat_emotion" debug command fires.
-func set_emotion_debug(enabled: bool) -> void:
-	_token_layer.set_emotion_debug(enabled)
-
-
 # V2-VOICE-002: Assembles new bark events for this snapshot and passes them to
 # _bark_popup_layer.show_barks(). Called every render; only actors with a non-empty
 # bark_line produce an event (bark is consumed on first projection in FlowEncounterState).

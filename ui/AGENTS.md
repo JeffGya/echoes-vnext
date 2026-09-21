@@ -1,6 +1,6 @@
 # ui/ — Agent Instructions
 
-> Snapshot renderer. Dispatches actions. Never touches sim state directly.
+> Snapshot renderer. Emits actions for AppRoot.gd to dispatch. Never touches sim state directly.
 > Full contracts: `../CONVENTIONS.md`. Full context: `../docs/CONTEXT.md`.
 
 ---
@@ -19,7 +19,7 @@ When the player acts, the UI emits an action — it never mutates state itself.
 # FORBIDDEN in any ui/ file
 FlowContext.save_data          # no
 SanctumService.get_roster()    # no
-FlowRuntime.dispatch(action)   # no — emit action_requested signal instead
+FlowRuntime.dispatch(action)   # no — emit action_requested; only AppRoot.gd calls dispatch()
 SaveService.flush()            # no
 ```
 
@@ -61,7 +61,8 @@ func set_snapshot(snap: Dictionary) -> void
 signal action_requested(action: Dictionary)
 ```
 
-Screens never call `dispatch()`. They emit `action_requested` → shell → AppRoot → FlowRuntime.
+Screens never call `dispatch()`. They emit `action_requested` → shell → `AppRoot.gd`, the one
+sanctioned dispatcher, which calls `FlowRuntime.dispatch()`.
 
 ---
 
