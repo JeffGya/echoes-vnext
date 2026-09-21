@@ -24,7 +24,7 @@ The player runs a Sanctum, summons Echoes (returning fragments of stolen stories
 > checkout and is usually on a different branch — running it verifies the wrong code.
 
 > **Pass `timeout: 300000` on every Bash call that runs Godot.** The tool auto-backgrounds
-> at 120s and the full serial suite takes **~18 minutes** (measured 2026-09-20, 1667 tests —
+> at 120s and the full serial suite takes **~18 minutes** (measured 2026-09-21, 1673 tests —
 > up from ~7 minutes/1442 tests measured 2026-08-25; the suite has grown). A backgrounded run
 > cannot notify a subagent, so its work is lost. This has cost this project many agent-hours.
 
@@ -48,7 +48,7 @@ believe any fingerprint failure.
 Tests run inside Godot via the Debug Panel (`F1` → `tests`) or headlessly. There is no
 standalone CLI runner — Godot must execute them.
 
-Full suite (**~18 minutes**, measured 2026-09-20, 1667 tests — `fingerprint` alone was ~3 min of the suite when it was ~7 min/1442 tests on 2026-08-25; the suite has grown since. Pass `timeout: 1200000`, NOT 300000 or 600000; 10 minutes now truncates a healthy run and looks like a hang):
+Full suite (**~18 minutes**, measured 2026-09-21, 1673 tests — the `fingerprint` suite (8 tests, ~3 min) has since been decomposed into 14 per-mode suites, adding 6 tests via loop-to-functions unrolling, not a coverage change; it was ~7 min/1442 tests on 2026-08-25 and has grown since. Pass `timeout: 1200000`, NOT 300000 or 600000; 10 minutes now truncates a healthy run and looks like a hang):
 ```bash
 /usr/bin/perl -e 'alarm shift; exec @ARGV' 1500 /opt/homebrew/bin/godot --headless --quit --path <checkout> -- tests
 ```
