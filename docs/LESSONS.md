@@ -13,6 +13,56 @@ Reviewed at the start of each session.
 
 ## Lessons (most recent first)
 
+### 24 — Two similarly-named test files can be silently swapped
+
+**From the test-performance initiative (PRs #70-#72), 2026-09-21.** `tests/FlowFingerprintTests.gd`
+(suite `fingerprint_*`) and `tests/FlowSnapshotFingerprintTests.gd` (suites `snapshot_fingerprint`,
+`snapshot_purity`) sit one letter apart in an editor file list. Early analysis applied a
+fixture-sharing optimization to the wrong one — the file that was never the bottleneck — before the
+mistake was caught by directly reading both files' registered `suite()` names and test counts.
+
+**Rule.** Before optimizing or reasoning about a named test file, confirm its registered suite
+name(s) and test count against the runner output, not against the filename alone. Two files with
+adjacent names are not evidence they cover the same thing.
+
+---
+
+### 23 — A per-shard alarm value is a hang ceiling, not a measured duration
+
+**From the test-performance initiative (PR #71), 2026-09-21.** `wait` in `scripts/run-tests-sharded.sh`
+returns as soon as a backgrounded shard process exits on its own; the `perl alarm` only fires if the
+shard is still running past that many seconds. Three separate verification passes during this
+initiative read a fired-or-not-yet-fired alarm value (e.g. "900s") as if it were the shard's actual
+runtime, leading to wrong conclusions about what was slow. This is already documented in the script's
+own comments and in `AGENTS.md`'s "Sharded full-suite runs" section — recorded here so it also
+appears in the durable mistake log, not only at the site of the code.
+
+**Rule.** An alarm timeout that did not fire tells you the run finished before that ceiling. It never
+tells you how long the run actually took. Read the log's own `elapsed_secs=N` line (each shard log's
+final line, written by `scripts/run-tests-sharded.sh` from `date +%s` before/after the run), not the
+alarm value.
+
+---
+
+### 22 — A shared static-var fixture is unsafe even when every within-run ordering is proven safe
+
+**From the test-performance initiative (PR #71), 2026-09-21.** `FlowSnapshotFingerprintTests.gd`
+memoized one shared, mutable `FlowRuntime` across four tests via a static var, to skip a repeated
+disk-boot-plus-onboarding setup. Every test that used it was confirmed read-only against the shared
+state, or re-verified its own setup afterward — safe for any single run. A Codex review on PR #71
+caught the real problem: a static var persists across repeated invocations within the SAME Godot
+process (e.g. the Debug Panel's `tests` command run twice without restarting), so a later run can
+silently inherit state mutated by an earlier one, even when no test run has ever shown a failure.
+This violates `tests/AGENTS.md`'s isolation rule — "Never depend on global state... or test
+execution order" — which the within-one-run proof never actually satisfied.
+
+**Rule.** Cross-test shared mutable state (a static var, a cached instance) is unsafe regardless of
+how carefully the sharing tests are audited, because the risk is cross-*run*, not cross-test. Prefer
+lighter direct construction instead — build the minimal state directly, bypass the expensive setup,
+and give every test its own instance.
+
+---
+
 ### 21 — Price the sum, not the item
 
 **From V2-COMBAT-003, 2026-09-06.** The story is named "one deterministic behavior-arbitration and

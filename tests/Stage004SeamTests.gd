@@ -574,21 +574,48 @@ static func _t_charge_pressure_bumps_endure_wave_size_and_clears_flag() -> Dicti
 # ─────────────────────────────────────────────────────────────────────────────
 # 8-11, 19-20. Companion invite compute-once / no-stack / gating — V2-INFRA-003 Phase 4
 # Slice 5 moved this to RecruitmentConsequenceService.compute_ally_recruit_offer_if_eligible
-# (is_victory, rounds_total, t), reached via runtime._recruitment_consequence_service().
-# Called directly (underscore is convention only; no real GDScript privacy —
-# precedent: LeadershipEmotionTests.gd calls CombatTurnActionService._apply_kill_momentum(...)).
+# (is_victory, rounds_total, t), instantiated directly by _light_recruitment_env() rather
+# than reached through a full FlowRuntime.
 # flow_ctx.dev_force_recruit forces the roll outcome ("success"/"fail") so these
 # tests don't depend on the seeded roll landing a particular way.
 # ─────────────────────────────────────────────────────────────────────────────
+
+# Lightweight env for RecruitmentConsequenceService methods — these read/write flow_ctx +
+# config_service + logger only (see core/sanctum/RecruitmentConsequenceService.gd), never
+# touch encounter machinery, RealmService terrain, or the roster/EchoFactory setup _boot_env()
+# exists for. Constructs the service directly instead of going through FlowRuntime.new()+
+# boot() (disk save I/O) + RealmService.get_or_create + 3-echo roster generation, none of
+# which this service reads. save_data is a bare dict matching the shape
+# FlowStageExploreState._get_current_stage/_write_stage_back and SanctumService
+# .get_active_party_echoes expect — same minimal-context pattern as
+# _t_final_snapshot_has_combat_intro_line_and_no_recruit_offer_key below.
+static func _light_recruitment_env(tag: String) -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var config := ConfigService.new()
+	config.load_balance()
+
+	var flow_ctx := FlowContext.new()
+	flow_ctx.config_service = config
+	flow_ctx.logger = logger
+	flow_ctx.campaign_seed = CampaignSeed.new(12346)
+	flow_ctx.realm_id = "realm.01"
+	flow_ctx.stage_id = "stage.0"
+	flow_ctx.encounter_id = "realm.01.stage.0." + tag
+	flow_ctx.save_data = {
+		"realms": { "realm.01": { "stages": [ { "index": 0, "explore_map": {} } ] } },
+		"sanctum": {},
+	}
+
+	var service := RecruitmentConsequenceService.new(flow_ctx, config, logger)
+	return { "flow_ctx": flow_ctx, "config_service": config, "logger": logger, "service": service }
+
 
 # Builds a minimal env with a joined is_ally actor + a source ally_contact on
 # explore_map — the two preconditions _compute_ally_recruit_offer_if_eligible
 # requires before it will write anything.
 static func _make_ally_offer_env(tag: String, ally_dead: bool = false) -> Dictionary:
-	var env: Dictionary = _boot_env(tag)
-	if env.is_empty():
-		return {}
-	var runtime = env["runtime"]
+	var env: Dictionary = _light_recruitment_env(tag)
 	var flow_ctx: FlowContext = env["flow_ctx"]
 
 	var ectx := EncounterContext.new()
@@ -615,7 +642,8 @@ static func _make_ally_offer_env(tag: String, ally_dead: bool = false) -> Dictio
 	stage["explore_map"] = explore_map
 	FlowStageExploreState._write_stage_back(flow_ctx, stage)
 
-	return { "runtime": runtime, "flow_ctx": flow_ctx, "ectx": ectx }
+	env["ectx"] = ectx
+	return env
 
 
 # V2-STAGE-004 Phase 4 redesign: the invite now lives on save_data.sanctum.companion_invite
@@ -634,13 +662,11 @@ static func _read_companion_invite(flow_ctx: FlowContext) -> Dictionary:
 # the roll succeeded.
 static func _t_companion_invite_created_on_successful_roll() -> Dictionary:
 	var env: Dictionary = _make_ally_offer_env("invite_created")
-	if env.is_empty():
-		return { "ok": false, "error": "setup failed (realm not created)" }
-	var runtime = env["runtime"]
+	var service: RecruitmentConsequenceService = env["service"]
 	var flow_ctx: FlowContext = env["flow_ctx"]
 	flow_ctx.dev_force_recruit = "success"
 
-	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 0)
+	service.compute_ally_recruit_offer_if_eligible(true, 3, 0)
 
 	var invite: Dictionary = _read_companion_invite(flow_ctx)
 	if invite.is_empty():
@@ -658,14 +684,12 @@ static func _t_companion_invite_created_on_successful_roll() -> Dictionary:
 # touch the already-written invite), even if the ally's underlying state changed between calls.
 static func _t_companion_invite_same_encounter_second_call_does_not_reroll() -> Dictionary:
 	var env: Dictionary = _make_ally_offer_env("invite_noreroll")
-	if env.is_empty():
-		return { "ok": false, "error": "setup failed (realm not created)" }
-	var runtime = env["runtime"]
+	var service: RecruitmentConsequenceService = env["service"]
 	var flow_ctx: FlowContext = env["flow_ctx"]
 	var ectx: EncounterContext = env["ectx"]
 	flow_ctx.dev_force_recruit = "success"
 
-	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 0)
+	service.compute_ally_recruit_offer_if_eligible(true, 3, 0)
 	var invite1: Dictionary = _read_companion_invite(flow_ctx).duplicate(true)
 	if invite1.is_empty():
 		return { "ok": false, "error": "first call did not write a companion invite" }
@@ -675,7 +699,7 @@ static func _t_companion_invite_same_encounter_second_call_does_not_reroll() -> 
 	(ectx.actors[0] as Dictionary)["current_hp"] = 1
 	ectx.echo_action_logs["ally_test_01"] = { "damage_dealt": 0, "damage_taken": 0, "kills": 0 }
 
-	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 1)
+	service.compute_ally_recruit_offer_if_eligible(true, 3, 1)
 	var invite2: Dictionary = _read_companion_invite(flow_ctx)
 
 	if int(invite2.get("chance", -1)) != int(invite1.get("chance", -2)):
@@ -691,13 +715,11 @@ static func _t_companion_invite_same_encounter_second_call_does_not_reroll() -> 
 # invite — the dead-ally gate runs before the roll is ever evaluated.
 static func _t_companion_invite_dead_ally_gate_no_invite() -> Dictionary:
 	var env: Dictionary = _make_ally_offer_env("invite_dead_gate", true)
-	if env.is_empty():
-		return { "ok": false, "error": "setup failed (realm not created)" }
-	var runtime = env["runtime"]
+	var service: RecruitmentConsequenceService = env["service"]
 	var flow_ctx: FlowContext = env["flow_ctx"]
 	flow_ctx.dev_force_recruit = "success"
 
-	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 0)
+	service.compute_ally_recruit_offer_if_eligible(true, 3, 0)
 
 	var invite: Dictionary = _read_companion_invite(flow_ctx)
 	if not invite.is_empty():
@@ -709,13 +731,11 @@ static func _t_companion_invite_dead_ally_gate_no_invite() -> Dictionary:
 # produce an invite.
 static func _t_companion_invite_nonvictory_gate_no_invite() -> Dictionary:
 	var env: Dictionary = _make_ally_offer_env("invite_nonvictory_gate")
-	if env.is_empty():
-		return { "ok": false, "error": "setup failed (realm not created)" }
-	var runtime = env["runtime"]
+	var service: RecruitmentConsequenceService = env["service"]
 	var flow_ctx: FlowContext = env["flow_ctx"]
 	flow_ctx.dev_force_recruit = "success"
 
-	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(false, 3, 0)
+	service.compute_ally_recruit_offer_if_eligible(false, 3, 0)
 
 	var invite: Dictionary = _read_companion_invite(flow_ctx)
 	if not invite.is_empty():
@@ -728,13 +748,11 @@ static func _t_companion_invite_nonvictory_gate_no_invite() -> Dictionary:
 # "failed offer" record like the old resolve-screen field had).
 static func _t_companion_invite_failed_roll_no_invite() -> Dictionary:
 	var env: Dictionary = _make_ally_offer_env("invite_failed_roll")
-	if env.is_empty():
-		return { "ok": false, "error": "setup failed (realm not created)" }
-	var runtime = env["runtime"]
+	var service: RecruitmentConsequenceService = env["service"]
 	var flow_ctx: FlowContext = env["flow_ctx"]
 	flow_ctx.dev_force_recruit = "fail"
 
-	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 0)
+	service.compute_ally_recruit_offer_if_eligible(true, 3, 0)
 
 	var invite: Dictionary = _read_companion_invite(flow_ctx)
 	if not invite.is_empty():
@@ -748,14 +766,12 @@ static func _t_companion_invite_failed_roll_no_invite() -> Dictionary:
 # specifically, distinct from the same-encounter compute-once guard tested above.
 static func _t_companion_invite_no_stack_does_not_overwrite_pending() -> Dictionary:
 	var env: Dictionary = _make_ally_offer_env("invite_nostack")
-	if env.is_empty():
-		return { "ok": false, "error": "setup failed (realm not created)" }
-	var runtime = env["runtime"]
+	var service: RecruitmentConsequenceService = env["service"]
 	var flow_ctx: FlowContext = env["flow_ctx"]
 	var ectx: EncounterContext = env["ectx"]
 	flow_ctx.dev_force_recruit = "success"
 
-	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 0)
+	service.compute_ally_recruit_offer_if_eligible(true, 3, 0)
 	var invite1: Dictionary = _read_companion_invite(flow_ctx).duplicate(true)
 	if invite1.is_empty():
 		return { "ok": false, "error": "first encounter did not write a companion invite" }
@@ -768,7 +784,7 @@ static func _t_companion_invite_no_stack_does_not_overwrite_pending() -> Diction
 		"ally_test_02": { "damage_dealt": 20, "damage_taken": 10, "kills": 1 },
 	}
 
-	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 1)
+	service.compute_ally_recruit_offer_if_eligible(true, 3, 1)
 	var invite2: Dictionary = _read_companion_invite(flow_ctx)
 
 	if str(invite2.get("ally_name", "")) != str(invite1.get("ally_name", "")):
@@ -915,12 +931,13 @@ static func _t_objective_state_has_charge_pressure_applied_bool() -> Dictionary:
 # but must NOT touch a pending sanctum.companion_invite — the invite is Sanctum-scoped now
 # and persists until the player explicitly accepts/declines it (no auto-clear on teardown).
 static func _t_clear_ally_fields_clears_contact_and_intro_not_companion_invite() -> Dictionary:
-	var env: Dictionary = _boot_env("clear_fields")
-	if env.is_empty():
-		return { "ok": false, "error": "setup failed (realm not created)" }
-	var runtime = env["runtime"]
+	# clear_ally_fields_if_present, like compute_ally_recruit_offer_if_eligible above, only
+	# reads/writes flow_ctx + config_service + logger — no encounter machinery, no roster.
+	# Uses the same lightweight env for the same reason.
+	var env: Dictionary = _light_recruitment_env("clear_fields")
+	var service: RecruitmentConsequenceService = env["service"]
 	var flow_ctx: FlowContext = env["flow_ctx"]
-	var t: int = env["t"]
+	var t: int = 0
 
 	var stage: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
 	var explore_map: Dictionary = stage.get("explore_map", {})
@@ -937,7 +954,7 @@ static func _t_clear_ally_fields_clears_contact_and_intro_not_companion_invite()
 		"chance": 60, "ally_name": "Pending Ally",
 	}
 
-	runtime._recruitment_consequence_service().clear_ally_fields_if_present(t)
+	service.clear_ally_fields_if_present(t)
 
 	var stage_after: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
 	var map_after: Dictionary = stage_after.get("explore_map", {})

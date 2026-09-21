@@ -176,6 +176,20 @@ static func _setup_stage_explore_env(seed_tag: String) -> Dictionary:
 	return { "ok": true, "runtime": runtime }
 
 
+## A fresh-per-test FlowRuntime + disk boot + onboarding dispatch chain, same as
+## _setup_sanctum_env() below. A memoized-static-var version of this was tried (shared once per
+## test-runner process across four tests) but reverted per tests/AGENTS.md's isolation rule —
+## "Each test must set up its own environment. Never depend on global state, save files, or test
+## execution order." A static var persists across repeated invocations within the SAME Godot
+## process (e.g. the Debug Panel's `tests` command run twice without restarting the editor), so a
+## later run could silently inherit mutated state from an earlier one even though every
+## within-one-run ordering was proven safe. Not worth that risk for a suite this file's own
+## profiling showed was never the dominant cost (the sharded-runner win came from splitting
+## tests/FlowFingerprintTests.gd's suite registration, not from this file).
+static func _shared_sanctum_env() -> Dictionary:
+	return _setup_sanctum_env("fp_sanctum_shared")
+
+
 ## Canonical fingerprint projection: the full `data` payload plus sorted `actions` slot keys.
 ## Deliberately excludes `meta` (carries only the sim tick `t`, which is not part of the
 ## documented contract for this task and is otherwise deterministic-but-irrelevant scaffolding).
@@ -240,7 +254,7 @@ static func _hash(v: Variant) -> String:
 const SANCTUM_FINGERPRINT_HASH := "a26556e1eaf749a276123e740511222676b7c27f50981573d365042059f832df"
 
 static func test_sanctum_fingerprint() -> Dictionary:
-	var env := _setup_sanctum_env("fp_sanctum")
+	var env := _shared_sanctum_env()
 	if not bool(env.get("ok", false)):
 		return env
 	var runtime: FlowRuntime = env["runtime"]
@@ -284,7 +298,7 @@ static func test_sanctum_fingerprint() -> Dictionary:
 ## any direction. entry_cell now anchors to the host region, so party_pos does not move.
 ## Previous value: aee5d5cc22cc484d794f55c967c92d438ba103cb6cb943b61c76fb8b6d4426be.
 # RE-RECORDED, V2-COMBAT-003 terrain commit 5. The payload diff on this board is exactly one
-# hunk, dumped via the SE_DEBUG print below on this tree and on b4dd797: "situations" goes
+# hunk, captured on this tree and on b4dd797: "situations" goes
 # from [] to one entry — sit.1, type loot, non-objective, now at (11,10) and therefore inside
 # the party's opening reveal radius. Every other line of the payload is byte-identical, the
 # terrain included. RealmGenerator._place_situations now refuses a cell off the host region
@@ -320,7 +334,6 @@ static func test_stage_explore_fingerprint() -> Dictionary:
 		return { "ok": false, "error": "Expected flow.stage_explore snapshot, got type=%s" % str(snap.get("type", "")) }
 
 	var actual := _hash(_fingerprint_projection(snap))
-	print("SE_DEBUG hash=%s payload=%s" % [actual, JSON.stringify(_fingerprint_projection(snap))])
 	if actual != STAGE_EXPLORE_FINGERPRINT_HASH:
 		return {
 			"ok": false,
@@ -344,7 +357,7 @@ static func test_stage_explore_fingerprint() -> Dictionary:
 ## Formerly KNOWN DEFECT (FlowStateMachine._rebuild_snapshot() used to consume these flags
 ## while "building" the snapshot) — Phase 3 fixed it; this probe now asserts purity directly.
 static func test_purity_build_does_not_consume_pending_flags() -> Dictionary:
-	var env := _setup_sanctum_env("purity_pending_flags")
+	var env := _shared_sanctum_env()
 	if not bool(env.get("ok", false)):
 		return env
 	var runtime: FlowRuntime = env["runtime"]
@@ -490,7 +503,7 @@ static func test_purity_build_final_snapshot_pays_rewards() -> Dictionary:
 ## and so cannot be probed "through" a save-request seam here.)
 ## KNOWN DEFECT — Phase 3 inverts this assertion to "must not mutate".
 static func test_purity_sanctum_enter_releases_vow() -> Dictionary:
-	var env := _setup_sanctum_env("purity_vow_release")
+	var env := _shared_sanctum_env()
 	if not bool(env.get("ok", false)):
 		return env
 	var runtime: FlowRuntime = env["runtime"]
@@ -809,7 +822,7 @@ static func test_purity_ensure_layout_writes_save_data() -> Dictionary:
 ## show_awakening_overlay staying true on BOTH — it is the fix, not the probe, that makes this
 ## true; nothing here special-cases the flags to force a match.
 static func test_purity_generic_double_build_is_stable() -> Dictionary:
-	var env := _setup_sanctum_env("purity_double_build")
+	var env := _shared_sanctum_env()
 	if not bool(env.get("ok", false)):
 		return env
 	var runtime: FlowRuntime = env["runtime"]
