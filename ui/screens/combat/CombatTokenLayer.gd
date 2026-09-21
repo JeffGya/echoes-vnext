@@ -48,12 +48,6 @@ func apply_snapshot(tokens: Array[Dictionary], active_actor_id: String = "", las
 	return telegraph_event
 
 
-## Raw fear/morale are intentionally absent from player-facing combat snapshots.
-## Keep the debug command callable, but do not fabricate diagnostic defaults.
-func set_emotion_debug(_enabled: bool) -> void:
-	pass
-
-
 func clear_tokens() -> void:
 	_tokens = []
 	_active_actor_id = ""

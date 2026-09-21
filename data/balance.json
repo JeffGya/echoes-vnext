@@ -1540,7 +1540,7 @@
 					"wisdom": -1.0
 				},
 				"by_dominant_vector": {
-					"_comment": "Dominant vector = highest value in actor.vector_scores. All 10 V2 vectors listed. Tiebreak: vanguard > opportunist > strategist > seeker > skeptic > protector > mediator > devoted > pillar > nurturer.",
+					"_comment": "Dominant vector = highest value in actor.vector_scores. All 10 V2 vectors listed. No named tie-break priority: VectorService.compute_dominant() resolves ties by Dictionary iteration order, not a fixed vector ranking.",
 					"vanguard": 2.0,
 					"opportunist": 1.5,
 					"strategist": 0.5,
@@ -1833,7 +1833,7 @@
 					"wisdom": -1.0
 				},
 				"by_dominant_vector": {
-					"_comment": "Dominant vector = highest value in actor.vector_scores. All 10 V2 vectors listed. Tiebreak: vanguard > opportunist > seeker > strategist > skeptic > protector > mediator > devoted > pillar > nurturer.",
+					"_comment": "Dominant vector = highest value in actor.vector_scores. All 10 V2 vectors listed. No named tie-break priority: VectorService.compute_dominant() resolves ties by Dictionary iteration order, not a fixed vector ranking.",
 					"vanguard": 2.0,
 					"opportunist": 1.5,
 					"seeker": 1.0,
