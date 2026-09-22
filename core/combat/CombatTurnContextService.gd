@@ -184,7 +184,11 @@ func build_turn_context(
 		# entries themselves are read but never written. Reset each round, one entry per
 		# activation, so the copy is a few small dicts.
 		"round_bark_events":       ectx.round_bark_events.duplicate(),
-		"directive":               {} if KeeperIntroServiceScript.is_trial_active(flow_ctx) else (directive_service.get_active_directive() if directive_service != null else {}),
+		# The Directive is the Keeper's order to the party: faction "echo" only, the same gate
+		# as the mode directive below. Not actor_type — temporary allies are actor_type "enemy".
+		"directive":               {} if KeeperIntroServiceScript.is_trial_active(flow_ctx) \
+			or str(actor.get("faction", "")) != "echo" \
+			else (directive_service.get_active_directive() if directive_service != null else {}),
 		# V2-STAGE-004 Distinctiveness: mode identity + PROTECT theft context for BehaviorArbiter.
 		"resolution_mode":         str(ectx.resolution_mode),
 		"totem_stolen":            bool(ectx.combat_state.get("totem_stolen", false)),
