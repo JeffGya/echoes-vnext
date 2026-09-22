@@ -128,8 +128,14 @@ func apply_round_emotion_tick(
 						and str(sp_a.get("id", "")) != ko_id \
 						and str(sp_a.get("faction", "")) == ko_faction \
 						and not sp_a.get("is_structure", false):
-					var ko_fear_applied := LeadershipEmotionServiceScript.apply_fear_gain(
-						sp_a, fear_per_ally_ko, ectx.actors, leadership_expr_cfg, true)
+					# V2-COMBAT-003.5 Phase 5 decision #48: resist_fear after leadership
+					# dampening, same wrapper CombatTurnActionService uses for per-hit /
+					# near-death fear — combat is still live here, so the flag it sets lets
+					# the survivor voice combat_resilient on their own next turn.
+					var ko_fear_applied := CombatTurnActionService._resist_fear(sp_a,
+						LeadershipEmotionServiceScript.apply_fear_gain(
+							sp_a, fear_per_ally_ko, ectx.actors, leadership_expr_cfg, true),
+						leadership_expr_cfg)
 					sp_a["fear"] = mini(100, int(sp_a.get("fear", 0)) + ko_fear_applied)
 					ko_spread_count += 1
 			if ko_spread_count > 0:

@@ -76,8 +76,13 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			if bool(_ak_target.get("is_spirit", false)) or bool(_ak_target.get("is_ally", false)):
 				continue
 			if _ak_fear_knock > 0:
-				var _ak_fear_applied := LeadershipEmotionService.apply_fear_gain(
-					_ak_target, _ak_fear_knock, raw_actors, _ak_expr_cfg)
+				# resist_fear after leadership dampening, as in CombatTurnActionService._resist_fear().
+				# No _resist_fear_fired flag: combat is over, so no turn follows to bark on it.
+				var _ak_fear_applied := EmotionService.apply_resist_fear(
+					LeadershipEmotionService.apply_fear_gain(_ak_target, _ak_fear_knock, raw_actors, _ak_expr_cfg),
+					_ak_target.get("resilience_traits", []) as Array,
+					MaturityExpressionService.get_expression_band_for_echo(
+						_ak_target, _ak_expr_cfg.get("band_by_standing", {}) as Dictionary))
 				raw_actors[_ak_i]["fear"] = clampi(int(_ak_target.get("fear", 0)) + _ak_fear_applied, 0, 100)
 			if _ak_morale_knock > 0:
 				var _ak_morale_applied := LeadershipEmotionService.apply_morale_loss(

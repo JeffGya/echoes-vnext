@@ -102,12 +102,15 @@ static func is_calling_pending(echo: Dictionary) -> bool:
 ## Applies the emotional consequence matching the calling's compatibility tier.
 ## Clears calling_options and writes calling permanently.
 ## Returns the confirmed calling_id on success, "" on failure (invalid id).
+## band_by_standing (data.maturity_expression.band_by_standing) feeds resist_fear on the
+## fear increase; omitted, every echo reads as nascent and the trait never fires.
 static func confirm_calling(
 	echo: Dictionary,
 	chosen_calling_id: String,
 	calling_cfg: Dictionary,
 	logger,
-	t: int
+	t: int,
+	band_by_standing: Dictionary = {}
 ) -> String:
 	var options_v: Variant = echo.get("calling_options", [])
 	var options: Array = options_v if options_v is Array else []
@@ -129,6 +132,11 @@ static func confirm_calling(
 	# Apply emotional consequence
 	var emo_v: Variant = echo.get("emotion", {})
 	var emo: Dictionary = emo_v if emo_v is Dictionary else {}
+	# The resist_fear gate only, not EmotionService.apply_fear_delta(): that wrapper needs a
+	# non-null logger (callers here may pass null) and publishes a fear-only _last_drift the
+	# Sanctum snapshot surfaces, while the morale half of this consequence stays unlogged.
+	var resilience_traits: Array = echo.get("resilience_traits", []) as Array
+	var band := MaturityExpressionService.get_expression_band_for_echo(echo, band_by_standing)
 	match compatibility:
 		"preferred":
 			var boost: int = int(calling_cfg.get("calling_preferred_morale_boost", 10))
@@ -138,11 +146,13 @@ static func confirm_calling(
 			emo["morale_current"] = maxi(0, int(emo.get("morale_current", 50)) - dip)
 		"ambivalent":
 			var m_dip: int = int(calling_cfg.get("calling_ambivalent_morale_dip", 3))
-			var f_inc: int = int(calling_cfg.get("calling_ambivalent_fear_increase", 3))
+			var f_inc: int = EmotionService.apply_resist_fear(
+				int(calling_cfg.get("calling_ambivalent_fear_increase", 3)), resilience_traits, band)
 			emo["morale_current"] = maxi(0, int(emo.get("morale_current", 50)) - m_dip)
 			emo["fear_current"]   = mini(100, int(emo.get("fear_current", 0)) + f_inc)
 		"incompatible":
-			var fear_inc: int = int(calling_cfg.get("calling_incompatible_fear_increase", 10))
+			var fear_inc: int = EmotionService.apply_resist_fear(
+				int(calling_cfg.get("calling_incompatible_fear_increase", 10)), resilience_traits, band)
 			emo["fear_current"] = mini(100, int(emo.get("fear_current", 0)) + fear_inc)
 	echo["emotion"] = emo
 

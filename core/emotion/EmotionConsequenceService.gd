@@ -75,6 +75,7 @@ func apply_encounter_emotion_drift(outcome: String, t: int) -> void:
 	var morale_base_delta     := int(drift.get("morale_base_delta",          1))
 	var morale_base_max       := int(drift.get("morale_base_max",           90))
 	var morale_base_min       := int(drift.get("morale_base_min",           10))
+	var band_by_standing := ConfigService.get_maturity_expression_band_by_standing(config_service)
 	var roster_v: Variant = flow_ctx.save_data.get("sanctum", {}).get("roster", [])
 	var roster: Array = roster_v if roster_v is Array else []
 	for echo_v in roster:
@@ -83,10 +84,14 @@ func apply_encounter_emotion_drift(outcome: String, t: int) -> void:
 		# Morale + fear current deltas (unchanged from EMOTION-002)
 		if outcome == "win":
 			EmotionService.apply_morale_delta(echo_v, int(drift.get("combat_exit_win_morale",   10)), "combat_exit_win",  logger, t)
-			EmotionService.apply_fear_delta(  echo_v, int(drift.get("combat_exit_win_fear",      -5)), "combat_exit_win",  fear_threshold, logger, t)
+			EmotionService.apply_fear_delta(  echo_v, int(drift.get("combat_exit_win_fear",      -5)), "combat_exit_win",  fear_threshold, logger, t,
+				echo_v.get("resilience_traits", []) as Array,
+				MaturityExpressionService.get_expression_band_for_echo(echo_v, band_by_standing))
 		else:
 			EmotionService.apply_morale_delta(echo_v, int(drift.get("combat_exit_loss_morale", -15)), "combat_exit_loss", logger, t)
-			EmotionService.apply_fear_delta(  echo_v, int(drift.get("combat_exit_loss_fear",    20)), "combat_exit_loss", fear_threshold, logger, t)
+			EmotionService.apply_fear_delta(  echo_v, int(drift.get("combat_exit_loss_fear",    20)), "combat_exit_loss", fear_threshold, logger, t,
+				echo_v.get("resilience_traits", []) as Array,
+				MaturityExpressionService.get_expression_band_for_echo(echo_v, band_by_standing))
 
 		# EMOTION-003: mutate fear_base per outcome
 		var emo := EmotionService.get_emotion(echo_v)
@@ -128,6 +133,7 @@ func apply_sanctum_emotion_tick(t: int) -> void:
 	var tick_morale  := int(drift.get("sanctum_tick_morale", 2))
 	# EMOTION-003: abs value used — direction determined by position relative to fear_base
 	var tick_fear_abs: Variant = abs(int(drift.get("sanctum_tick_fear", -3)))
+	var band_by_standing := ConfigService.get_maturity_expression_band_by_standing(config_service)
 	var roster_v: Variant = flow_ctx.save_data.get("sanctum", {}).get("roster", [])
 	var roster: Array = roster_v if roster_v is Array else []
 	for echo_v in roster:
@@ -150,7 +156,9 @@ func apply_sanctum_emotion_tick(t: int) -> void:
 		elif fear_current < fear_base:
 			# Below base (kill euphoria) — tick back up; clamp so result doesn't exceed fear_base
 			var delta := mini(tick_fear_abs, fear_base - fear_current)
-			EmotionService.apply_fear_delta(echo_v, delta, "sanctum_tick", 999, logger, t)
+			EmotionService.apply_fear_delta(echo_v, delta, "sanctum_tick", 999, logger, t,
+				echo_v.get("resilience_traits", []) as Array,
+				MaturityExpressionService.get_expression_band_for_echo(echo_v, band_by_standing))
 
 
 # V2-SANCTUM-001 — Emotion recovery + consequence helpers
