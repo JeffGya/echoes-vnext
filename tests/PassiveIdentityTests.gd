@@ -271,8 +271,8 @@ static func _t_echo_actor_carries_equipped_skills() -> Dictionary:
 
 
 # Test 6: guard against ActorStateMachine._update_passive_state regressing to V1 calling ids.
-# Okofor and onyamesu are V2 ids and must write their idle-round counters; "warder" (V1) must
-# not — if the match arms ever revert, this fails loudly instead of the counters going dead again.
+# Okofor is a V2 id and must write its idle-round counter; "warder" (V1) must not — if the
+# match arms ever revert, this fails loudly instead of the counter going dead again.
 static func _t_v2_calling_writes_passive_counter() -> Dictionary:
 	var idle_intent := { "action_type": "actor.idle" }
 
@@ -280,11 +280,6 @@ static func _t_v2_calling_writes_passive_counter() -> Dictionary:
 	ActorStateMachine.new(okofor)._update_passive_state(idle_intent, { "all_actors": [okofor] }, 1)
 	if int(okofor.get("_anchor_rounds", 0)) != 1:
 		return { "ok": false, "error": "okofor did not accumulate _anchor_rounds, got: %s" % str(okofor.get("_anchor_rounds")) }
-
-	var onyamesu := { "id": "echo_v2_onyamesu", "faction": "echo", "calling_origin": "onyamesu" }
-	ActorStateMachine.new(onyamesu)._update_passive_state(idle_intent, { "all_actors": [onyamesu] }, 1)
-	if int(onyamesu.get("_stationary_rounds", 0)) != 1:
-		return { "ok": false, "error": "onyamesu did not accumulate _stationary_rounds, got: %s" % str(onyamesu.get("_stationary_rounds")) }
 
 	var v1_warder := { "id": "echo_v1_warder", "faction": "echo", "calling_origin": "warder" }
 	ActorStateMachine.new(v1_warder)._update_passive_state(idle_intent, { "all_actors": [v1_warder] }, 1)

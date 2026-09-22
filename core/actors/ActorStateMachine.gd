@@ -249,10 +249,13 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	var last_echo_standing := _is_last_echo_standing(context)
 
 	# PROG-009: tick per-round runtime cooldown counters before candidate generation.
+	# _withdraw_cooldown is ticked at turn END instead (in _update_passive_state) —
+	# ticking it here, before BehaviorArbiter's own cooldown check runs later in this
+	# same call, consumed the cooldown before it ever blocked anything (V2-COMBAT-003.5
+	# Phase 5). _read_field_cooldown keeps the turn-start tick; that is a separate,
+	# already-flagged defect, out of scope here.
 	if _actor.has("_read_field_cooldown"):
 		_actor["_read_field_cooldown"] = maxi(0, int(_actor["_read_field_cooldown"]) - 1)
-	if _actor.has("_withdraw_cooldown"):
-		_actor["_withdraw_cooldown"] = maxi(0, int(_actor["_withdraw_cooldown"]) - 1)
 
 	# COMBAT-003 + V2-PROG-006 + V2-PROG-010 + V2-PROG-012 Phase 7: Absolute Fear Rule — dynamic threshold.
 	# Band base from refusal_thresholds_by_band (nascent=65, forming=80, grounded=88, whole=95) is now
@@ -1215,9 +1218,10 @@ func _get_most_feared_ally(allies: Array) -> Dictionary:
 
 # PROG-009: Update per-round passive state counters after each turn.
 # Okofor: tracks anchor_rounds for guard/protect_ally bonus (+8 per round, cap 3 rounds = +24).
-# Onyamesu: tracks stationary_rounds for soft-taunt eligibility.
 # Skill once-per-combat flags are set here when the skill fires.
-# Skill cooldowns (read_field, withdraw) are ticked at turn START instead.
+# _read_field_cooldown is ticked at turn START (advance_turn); _withdraw_cooldown is
+# ticked here, at turn END — it must still hold at BehaviorArbiter's cooldown check
+# earlier in the same actor's next turn (V2-COMBAT-003.5 Phase 5).
 ## `logger` is optional so existing direct-drive test callers keep their signature.
 ## When present, the two fear-relieving passives below emit an audit line — without
 ## it the Onyamesu/Okomfo fear relief is invisible to the ledger.
@@ -1228,17 +1232,15 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
 	var moved: bool = bool(actual_moved_override) if actual_moved_override != null \
 		else (action == "actor.move" or action == "actor.withdraw")
 
+	if _actor.has("_withdraw_cooldown"):
+		_actor["_withdraw_cooldown"] = maxi(0, int(_actor["_withdraw_cooldown"]) - 1)
+
 	match calling_origin:
 		"okofor":
 			if moved:
 				_actor["_anchor_rounds"] = 0
 			else:
 				_actor["_anchor_rounds"] = mini(int(_actor.get("_anchor_rounds", 0)) + 1, 3)
-		"onyamesu":
-			if moved:
-				_actor["_stationary_rounds"] = 0
-			else:
-				_actor["_stationary_rounds"] = int(_actor.get("_stationary_rounds", 0)) + 1
 		"okomfo":
 			if action == "actor.read_field":
 				var streak: int     = int(_actor.get("_read_field_streak", 0)) + 1
