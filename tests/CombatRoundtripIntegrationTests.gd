@@ -223,8 +223,8 @@ static func _setup_surprise_fear(seed_tag: String, resist: bool) -> Dictionary:
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
 	var config := ConfigService.new()
-	var runtime := FlowRuntime.new(logger, config,
-		TestSaveHarness.dir() + "combat_roundtrip_surprise_" + seed_tag + ".json")
+	var save_path := TestSaveHarness.fresh_save_path("combat_roundtrip_surprise_%s.json" % seed_tag, "combat_roundtrip")
+	var runtime := FlowRuntime.new(logger, config, save_path)
 	runtime.boot()
 	var flow_ctx: FlowContext = runtime.flow_ctx
 	var t: int = 0
