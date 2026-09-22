@@ -512,3 +512,14 @@
 **Date:** 2026-08-11
 
 ---
+
+### 51. armor-mitigation-curve-and-guard
+
+**Q:** Should Echoes vNext adopt a percentage-based armor mitigation formula (`mitigation% = def / (def + K)`, the shape common to Diablo II, League of Legends, and World of Warcraft), and if so how does Guard interact with it?
+**A:** **Yes.** Current combat damage (`CombatService._melee_damage`) is flat subtraction — `base = atk − eff_def`, clamped at 0 — which already has the exact problem the percentage curve exists to solve: once `def ≥ atk`, armor becomes 100% damage immunity and further def is dead weight. The `%` curve keeps every point of def useful and never reaches full immunity, fitting the GDD §19.4 instruction that armor stay light-touch rather than a heavy sim (it's one tuning constant, `K`, not a new system).
+**Guard:** decided **A** — double the def value *before* the curve (`eff_def = def × 2`, then run the curve). This is the option that automatically inherits the curve's "never 100%" guarantee, and it's self-limiting (doubling a low def swings the % a lot; doubling a high def barely moves it). **C** — a flat def bonus instead of a multiplier — is the fallback if A proves too swingy against high-armor endgame builds. **Ruled out:** doubling the resulting percentage, which can push an already-high-mitigation Echo to 100% on guard and reintroduce the exact immunity problem the curve was adopted to avoid.
+**Open, must settle before K is tuned:** `docs/calling-visual-equipment-bible.md` §4.4 gives conduit weapons (bell/gong, talking-drum, thread-bead, story spindle) a separate "story damage" channel (sound, Thread tension, emotion) distinct from physical melee damage — whether the armor curve mitigates story damage too, or story damage needs its own path, is undecided and blocks conduit/skill combat resolution. Separately, §4.7 Calling weapon-family bias (Preferred/Disliked) is explicitly non-numeric today; if skills/blasts/sound-based combat later attaches real modifiers to that bias, it becomes a second multiplier stacking against armor mitigation, and that should be a deliberate call, not a side effect of landing the curve. Recorded on the V2-ITEM-003 Notion story (2026-09-22) so scope isn't lost before implementation.
+**Source:** Jeff, design discussion, 2026-09-22
+**Date:** 2026-09-22
+
+---
