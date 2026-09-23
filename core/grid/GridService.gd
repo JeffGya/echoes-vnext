@@ -621,15 +621,15 @@ static func _placement_score(actor: Dictionary, place_cfg: Dictionary) -> int:
 	# Tiebreak: courage > faith > wisdom (order mirrors modifier magnitude).
 	var trait_table: Dictionary = place_cfg.get("by_dominant_trait", {})
 	var traits: Dictionary = actor.get("traits", {})
-	var dom_trait: String = _dominant_key(traits, ["courage", "faith", "wisdom"])
+	var dom_trait: String = dominant_key(traits, ["courage", "faith", "wisdom"])
 	var trait_mod: int = int(trait_table.get(dom_trait, 0))
 
 	# Dominant vector modifier (reads actor.vector_scores fresh — can drift over a run).
-	# All ten V2 vectors are candidates — _dominant_key() scores every key in the dict.
+	# All ten V2 vectors are candidates — dominant_key() scores every key in the dict.
 	# The list below is a TIEBREAK ONLY, for equal values among these four.
 	var vec_table: Dictionary = place_cfg.get("by_dominant_vector", {})
 	var vectors: Dictionary = actor.get("vector_scores", {})
-	var dom_vec: String = _dominant_key(vectors, ["vanguard", "seeker", "protector", "pillar"])
+	var dom_vec: String = dominant_key(vectors, ["vanguard", "seeker", "protector", "pillar"])
 	var vec_mod: int = int(vec_table.get(dom_vec, 0))
 
 	return base + arch_mod + call_mod + trait_mod + vec_mod
@@ -649,7 +649,13 @@ static func _placement_score(actor: Dictionary, place_cfg: Dictionary) -> int:
 ## broken by ascending key name, so the result never depends on Dictionary insertion order.
 ##
 ## Returns "" if the dict is empty.
-static func _dominant_key(scores: Dictionary, tiebreak_order: Array) -> String:
+##
+## Shared by CombatState.gd and ShrineService.gd (V2-COMBAT-003.5 Phase 5 extraction) —
+## GridService is already "the single source of truth for all grid math" per this file's
+## own header, so this is the one copy. Call sites keep their own tiebreak_order argument;
+## do not change any of them without a design sign-off (ShrineService's vector order is the
+## reverse of GridService's/CombatState's — that is intentional, not a bug).
+static func dominant_key(scores: Dictionary, tiebreak_order: Array) -> String:
 	if scores.is_empty():
 		return ""
 	var unranked: int    = tiebreak_order.size()

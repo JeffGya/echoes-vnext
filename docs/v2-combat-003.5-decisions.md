@@ -51,6 +51,12 @@
 | 40 | emotion-trace-fixtures-re-recorded-now | The 6 held emotion_trace_* fixtures (decision #27) get re-recorded now — the hold's reason (cause unknown) no longer applies | 2026-09-20 |
 | 41 | split-into-two-prs-ship-what-is-done-now | Open a PR now for everything committed through Phase 3c; Phase 4 onward becomes a separate PR later — supersedes the original one-PR-at-the-end plan | 2026-09-20 |
 | 42 | pr-per-phase-going-forward | PR #69 (already a split from one-PR-at-the-end) was still too large for /ultrareview — going forward, one PR per phase, not per story | 2026-09-20 |
+| 43 | resist-fear-fix-all-11-call-sites | resist_fear did nothing anywhere, not just in combat — expand this phase to wire it through all 11 apply_fear_delta() call sites (real count found: 14), not just the combat fix already built | 2026-09-22 |
+| 44 | resist-fear-revert-4-inert-sites | Revert resist_fear wiring at the 4 sites where the delta>0 gate can never fire (always-decreasing fear) — keep the diff honest | 2026-09-22 |
+| 45 | resist-fear-wire-two-remaining-paths | Wire resist_fear into 2 more fear-gain paths that bypass apply_fear_delta() entirely: ally-death knock (FlowEncounterState.gd) and calling-confirmation fear (CallingService.gd) | 2026-09-22 |
+| 46 | resist-fear-combat-bark-visibility | Wire the existing combat_resilient bark to fire for the new combat resist_fear wiring, so the player can see the trait working | 2026-09-22 |
+| 47 | resist-fear-bark-needs-cooldown | Add a cooldown to combat_resilient before shipping — priority-2, no-cooldown bark could crowd out fear/morale/guidance barks for a frontline resist_fear echo | 2026-09-22 |
+| 48 | resist-fear-wire-two-more-paths | Wire resist_fear into 2 more fear-gain paths: KO-spread fear (CombatRoundEmotionService.gd) and surprise/ambush fear (EncounterSetupService.gd) | 2026-09-22 |
 
 ---
 
@@ -433,3 +439,59 @@
 **A:** One PR per phase (or a small cluster of tightly related phases) from now on, not one PR per story. Each of Phase 4, Phase 5, etc. ships as its own PR once reviewed and committed.
 **Source:** Jeff, 2026-09-20
 **Date:** 2026-09-20
+
+---
+
+### 43. resist-fear-fix-all-11-call-sites
+
+**Q:** Phase 5's `resist_fear` build found the plan's premise was wrong — the trait does nothing at ANY of its supposed 11 existing call sites (recovery, sanctum ticks, vow break, weave, contact fail, near-death, institution, keeper intro, etc.), because none of them pass `resilience_traits`/`expression_band` to `EmotionService.apply_fear_delta()`. The build wired combat's per-hit/near-death fear correctly, but that makes combat the ONLY place the trait works, not one more working site among many. Ship the combat fix now and file the other 11 as a follow-up, or expand this phase to fix all 11 now?
+**A:** Expand this phase now. Wire `resilience_traits`/`expression_band` through all 11 `apply_fear_delta()` call sites in this same phase, so the trait works everywhere at once.
+**Source:** Jeff, 2026-09-22
+**Date:** 2026-09-22
+
+> **Correction, 2026-09-22**: the real count is 14 call sites, not 11 — the original recon list was incomplete (missed `SituationEngagementService.gd`'s 2 sites, undercounted others). All 14 were wired. 4 of them can never fire (`resist_fear`'s gate requires `delta > 0`; these 4 always subtract fear — recovery, keeper intro x2, the sanctum-tick direction where fear is already above base and settling down). Decision #44 reverts those 4 to keep the diff honest.
+
+---
+
+### 44. resist-fear-revert-4-inert-sites
+
+**Q:** 4 of the 14 wired `resist_fear` call sites always subtract fear, so the trait's `delta > 0` gate can never fire there (recovery, keeper intro x2, the sanctum-tick "fear above base, settling down" direction). Keep them wired as harmless dead code for consistency, or revert to keep the diff honest?
+**A:** Revert those 4. Keep the diff clean — no wiring that can never do anything.
+**Source:** Jeff, 2026-09-22
+**Date:** 2026-09-22
+
+---
+
+### 45. resist-fear-wire-two-remaining-paths
+
+**Q:** qa-verifier's combined review found 2 more fear-gain paths that bypass `apply_fear_delta()` entirely, so `resist_fear` still doesn't apply there even after decisions #43/#44: `FlowEncounterState.gd` (an ally dying gives every echo a fear knock via `apply_fear_gain`, same shape as the combat fear this phase already fixed) and `CallingService.gd` (confirming an incompatible/ambivalent calling writes `fear_current` directly, skipping `apply_fear_delta()` altogether). Fix these two now, or file as a follow-up?
+**A:** Fix now, in this phase.
+**Source:** Jeff, 2026-09-22
+**Date:** 2026-09-22
+
+---
+
+### 46. resist-fear-combat-bark-visibility
+
+**Q:** qa-verifier found the existing `combat_resilient` bark (triggered by `emotion._resilience_fired`) never fires for the new combat wiring — combat actors have no `emotion` block, and the flag is set during the attacker's turn but the bark-check pattern expects it readable on the target's own turn. `resist_fear` now works correctly in combat, but the player never sees a sign of it. Fix the visibility now, or file as follow-up?
+**A:** Fix now, in this phase.
+**Source:** Jeff, 2026-09-22
+**Date:** 2026-09-22
+
+---
+
+### 47. resist-fear-bark-needs-cooldown
+
+**Q:** The final combined qa-verifier pass (opus, full suite run: 1684/1685, only Test D fails) found `combat_resilient` is priority-2 and has no cooldown, so a Standing 3+ `resist_fear` echo taking regular hits could say it on nearly every one of its turns, potentially crowding out fear/morale/guidance barks. No test can observe this — it needs a real fight to judge. Ship as-is and judge in the Phase 8 manual playtest, or add a cooldown now before shipping?
+**A:** Add a cooldown now, before shipping.
+**Source:** Jeff, 2026-09-22
+**Date:** 2026-09-22
+
+---
+
+### 48. resist-fear-wire-two-more-paths
+
+**Q:** The same qa-verifier pass found 2 more fear-gain paths still skip `resist_fear`, same shape as sites already fixed: `CombatRoundEmotionService.gd:131` (fear spread to the party when a real ally is KO'd mid-fight) and `EncounterSetupService.gd:550` (surprise/ambush fear at fight start). Fix these too, or stop the resist_fear thread here and file them as follow-up?
+**A:** Fix these 2 as well.
+**Source:** Jeff, 2026-09-22
+**Date:** 2026-09-22

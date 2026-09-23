@@ -32,8 +32,10 @@ static func select_purifier(echo_actors: Array, shrine_cfg: Dictionary) -> Strin
 	var vec_weights: Dictionary = shrine_cfg.get("purify_weight_by_vector", {
 		"pillar": 20, "protector": 10, "seeker": 5, "vanguard": 0
 	})
-	# All ten V2 vectors are candidates — _dominant_key() scores every key in the dict.
-	# The list below is a TIEBREAK ONLY, for equal values among these four.
+	# All ten V2 vectors are candidates — GridService.dominant_key() scores every key in
+	# the dict. The list below is a TIEBREAK ONLY, for equal values among these four.
+	# NOTE: this order is the REVERSE of GridService's/CombatState's vector tiebreak —
+	# intentional per-caller, do not "fix" it to match.
 	var vec_tiebreak: Array = ["pillar", "protector", "seeker", "vanguard"]
 
 	var best_id: String = ""
@@ -52,7 +54,7 @@ static func select_purifier(echo_actors: Array, shrine_cfg: Dictionary) -> Strin
 		# Dominant vector contribution.
 		var vecs_v: Variant = actor.get("vector_scores", {})
 		var vecs: Dictionary = vecs_v if vecs_v is Dictionary else {}
-		var dom_vec: String = _dominant_key(vecs, vec_tiebreak)
+		var dom_vec: String = GridService.dominant_key(vecs, vec_tiebreak)
 		var vec_bonus: float = float(vec_weights.get(dom_vec, 0))
 
 		var weight: float = faith * weight_faith + vec_bonus
@@ -140,48 +142,3 @@ static func apply_purify_stack(
 	shrine["purify_stacks"] = stacks
 
 	purifier["purify_cooldown"] = cooldown
-
-
-## Returns the key with the highest integer value in a Dictionary.
-##
-## EVERY key present in `scores` is a candidate — the dictionary is the source of truth, so
-## a key added to a taxonomy in balance.json (V2-PROG-003 grew the vectors from 4 to 10) is
-## scored here without a code change.
-##
-## `tiebreak_order` is consulted ONLY to break an equal-value tie: the key appearing earliest
-## in the list wins. A key absent from the list ranks after every listed key; two unlisted
-## keys tied on value are broken by ascending key name, so the result never depends on
-## Dictionary insertion order.
-##
-## Returns "" if the dict is empty.
-## (Mirrors CombatState._dominant_key / GridService._dominant_key — kept local to avoid coupling.)
-static func _dominant_key(scores: Dictionary, tiebreak_order: Array) -> String:
-	if scores.is_empty():
-		return ""
-	var unranked: int    = tiebreak_order.size()
-	var have: bool       = false
-	var best_key: String = ""
-	var best_val: int    = -9999999
-	var best_rank: int   = 0
-	for key_v in scores.keys():
-		var key: String = str(key_v)
-		var val: int    = int(scores[key_v])
-		var rank: int   = tiebreak_order.find(key)
-		if rank < 0:
-			rank = unranked
-		var better: bool = false
-		if not have:
-			better = true
-		elif val > best_val:
-			better = true
-		elif val == best_val:
-			if rank < best_rank:
-				better = true
-			elif rank == best_rank:
-				better = key < best_key
-		if better:
-			have      = true
-			best_key  = key
-			best_val  = val
-			best_rank = rank
-	return best_key

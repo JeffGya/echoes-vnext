@@ -697,13 +697,16 @@ func apply_contact_outcome(
 			var _fb_roster: Array = _fb_roster_v if _fb_roster_v is Array else []
 			var _fb_party_ids_v: Variant = _fb_sanctum.get("active_party_ids", [])
 			var _fb_party_ids: Array = _fb_party_ids_v if _fb_party_ids_v is Array else []
+			var _fb_bands := ConfigService.get_maturity_expression_band_by_standing(config_service)
 			for _fb_echo_v in _fb_roster:
 				if not (_fb_echo_v is Dictionary):
 					continue
 				var _fb_echo: Dictionary = _fb_echo_v
 				if str(_fb_echo.get("id", "")) not in _fb_party_ids:
 					continue
-				EmotionService.apply_fear_delta(_fb_echo, fear_bleed, "contact.fail.fear_bleed", 80, logger, t)
+				EmotionService.apply_fear_delta(_fb_echo, fear_bleed, "contact.fail.fear_bleed", 80, logger, t,
+					_fb_echo.get("resilience_traits", []) as Array,
+					MaturityExpressionService.get_expression_band_for_echo(_fb_echo, _fb_bands))
 
 	# Mark situation resolved
 	if sit_ref_idx >= 0:

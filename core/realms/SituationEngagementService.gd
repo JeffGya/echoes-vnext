@@ -286,6 +286,7 @@ func engage_situation(sit_id: String, econ: EconomyService, t: int) -> Dictionar
 			int(_in_pre_emo.get("fear_current",   0))
 		)
 
+	var _in_bands := ConfigService.get_maturity_expression_band_by_standing(config_service)
 	for _in_echo_v in _in_roster:
 		if not (_in_echo_v is Dictionary):
 			continue
@@ -294,7 +295,9 @@ func engage_situation(sit_id: String, econ: EconomyService, t: int) -> Dictionar
 			continue
 		if _in_fear_delta != 0:
 			EmotionService.apply_fear_delta(_in_echo, _in_fear_delta,
-				"situation." + sit_type, 80, logger, t)
+				"situation." + sit_type, 80, logger, t,
+				_in_echo.get("resilience_traits", []) as Array,
+				MaturityExpressionService.get_expression_band_for_echo(_in_echo, _in_bands))
 		if _in_morale_delta != 0:
 			EmotionService.apply_morale_delta(_in_echo, _in_morale_delta,
 				"situation." + sit_type, logger, t)
@@ -473,6 +476,7 @@ func resolve_situation_choice(sit_id: String, choice_id: String, t: int) -> Dict
 		)
 
 	# Apply emotion effects to active party.
+	var _rc_bands := ConfigService.get_maturity_expression_band_by_standing(config_service)
 	for _rc_echo_v in _rc_roster:
 		if not (_rc_echo_v is Dictionary):
 			continue
@@ -481,7 +485,9 @@ func resolve_situation_choice(sit_id: String, choice_id: String, t: int) -> Dict
 			continue
 		if _rc_fear_delta != 0:
 			EmotionService.apply_fear_delta(_rc_echo, _rc_fear_delta,
-				"situation." + sit_type, 80, logger, t)
+				"situation." + sit_type, 80, logger, t,
+				_rc_echo.get("resilience_traits", []) as Array,
+				MaturityExpressionService.get_expression_band_for_echo(_rc_echo, _rc_bands))
 		if _rc_morale_delta != 0:
 			EmotionService.apply_morale_delta(_rc_echo, _rc_morale_delta,
 				"situation." + sit_type, logger, t)

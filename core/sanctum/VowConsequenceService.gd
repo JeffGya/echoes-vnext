@@ -385,6 +385,7 @@ func _apply_vow_emotion_to_party(
 	if not (roster_v is Array):
 		return
 	var fear_threshold := int(cfg.get("data", {}).get("emotion", {}).get("fear_threshold", 80))
+	var band_by_standing := ConfigService.get_maturity_expression_band_by_standing(config_service)
 	for echo_v in (roster_v as Array):
 		if not (echo_v is Dictionary):
 			continue
@@ -394,7 +395,9 @@ func _apply_vow_emotion_to_party(
 		if morale_d != 0:
 			EmotionService.apply_morale_delta(echo, morale_d, cause, logger, t)
 		if fear_d != 0:
-			EmotionService.apply_fear_delta(echo, fear_d, cause, fear_threshold, logger, t)
+			EmotionService.apply_fear_delta(echo, fear_d, cause, fear_threshold, logger, t,
+				echo.get("resilience_traits", []) as Array,
+				MaturityExpressionService.get_expression_band_for_echo(echo, band_by_standing))
 
 
 # VOW-001: Apply EmotionRecoveryService.set_modifier on vow break (shared between manual and
@@ -482,6 +485,7 @@ func apply_vow_break_aftermath(summary: Dictionary, cfg: Dictionary, t: int) -> 
 	if not (roster_v is Array):
 		return
 
+	var band_by_standing := ConfigService.get_maturity_expression_band_by_standing(config_service)
 	for echo_v in (roster_v as Array):
 		if not (echo_v is Dictionary):
 			continue
@@ -489,7 +493,9 @@ func apply_vow_break_aftermath(summary: Dictionary, cfg: Dictionary, t: int) -> 
 		if morale_d != 0:
 			EmotionService.apply_morale_delta(echo, morale_d, "vow.break", logger, t)
 		if fear_d != 0:
-			EmotionService.apply_fear_delta(echo, fear_d, "vow.break", fear_threshold, logger, t)
+			EmotionService.apply_fear_delta(echo, fear_d, "vow.break", fear_threshold, logger, t,
+				echo.get("resilience_traits", []) as Array,
+				MaturityExpressionService.get_expression_band_for_echo(echo, band_by_standing))
 		EmotionRecoveryService.set_modifier(echo, vow_morale_mul, vow_fear_mul, mod_ticks, logger, t)
 
 	# V2-VOW-002: enrich vow_outcome with proverb_twi, bond_score_delta, echoes_affected.

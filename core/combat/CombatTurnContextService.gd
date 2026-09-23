@@ -8,7 +8,7 @@
 # terrain-aware board_cfg that the same activation needs afterwards. Five things, in the order
 # they ran before the move and still run now:
 #
-#   1. PURIFY_SHRINE shrine scan          -> shrine_alive / shrine_hp_ratio
+#   1. PURIFY_SHRINE shrine scan          -> shrine_alive
 #   2. VOW-001 active vow                 -> ctx.active_vow
 #   3. BOND-002 social graph              -> ctx.bonds
 #   4. STAGE-004 P3a terrain board_cfg    -> ctx.board_cfg AND the returned board_cfg
@@ -114,14 +114,10 @@ func build_turn_context(
 	var grid_cfg: Dictionary = bdata.get("grid", {})
 	# COMBAT-006: find shrine and compute context fields for purify_shrine objective.
 	var shrine_alive: bool    = false
-	var shrine_hp_ratio: float = 1.0
 	if ectx.resolution_mode == EncounterResolutionModes.PURIFY_SHRINE:
 		for a_v in ectx.actors:
 			if a_v is Dictionary and a_v.get("is_structure", false) and not a_v.get("is_dead", false):
 				shrine_alive = true
-				var s_max: int = int(a_v.get("stats", {}).get("max_hp", 0))
-				if s_max > 0:
-					shrine_hp_ratio = clampf(float(a_v.get("current_hp", s_max)) / float(s_max), 0.0, 1.0)
 				break
 
 	# VOW-001: pass active vow into per-turn context so BehaviorArbiter can apply vow bias.
@@ -163,7 +159,6 @@ func build_turn_context(
 		"purifier_id":             ectx.purifier_id,
 		"is_purifier":             str(actor.get("id", "")) == ectx.purifier_id,
 		"shrine_alive":            shrine_alive,
-		"shrine_hp_ratio":         shrine_hp_ratio,
 		"prefer_objective_target": actor.get("faction", "") == "enemy" \
 			and (ectx.resolution_mode == EncounterResolutionModes.PURIFY_SHRINE \
 				or ectx.resolution_mode == EncounterResolutionModes.PROTECT \
@@ -189,7 +184,11 @@ func build_turn_context(
 		# entries themselves are read but never written. Reset each round, one entry per
 		# activation, so the copy is a few small dicts.
 		"round_bark_events":       ectx.round_bark_events.duplicate(),
-		"directive":               {} if KeeperIntroServiceScript.is_trial_active(flow_ctx) else (directive_service.get_active_directive() if directive_service != null else {}),
+		# The Directive is the Keeper's order to the party: faction "echo" only, the same gate
+		# as the mode directive below. Not actor_type — temporary allies are actor_type "enemy".
+		"directive":               {} if KeeperIntroServiceScript.is_trial_active(flow_ctx) \
+			or str(actor.get("faction", "")) != "echo" \
+			else (directive_service.get_active_directive() if directive_service != null else {}),
 		# V2-STAGE-004 Distinctiveness: mode identity + PROTECT theft context for BehaviorArbiter.
 		"resolution_mode":         str(ectx.resolution_mode),
 		"totem_stolen":            bool(ectx.combat_state.get("totem_stolen", false)),

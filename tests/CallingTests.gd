@@ -30,6 +30,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("calling/confirm_compatible_morale_dip",          Callable(CallingTests, "_test_confirm_compatible"))
 	runner.register_test("calling/confirm_ambivalent_dip_and_fear",        Callable(CallingTests, "_test_confirm_ambivalent"))
 	runner.register_test("calling/confirm_incompatible_fear_increase",     Callable(CallingTests, "_test_confirm_incompatible"))
+	runner.register_test("calling/confirm_resist_fear_reduces_fear_increase", Callable(CallingTests, "_test_confirm_resist_fear_reduces_fear"))
+	runner.register_test("calling/confirm_resist_fear_inert_at_nascent",   Callable(CallingTests, "_test_confirm_resist_fear_inert_at_nascent"))
 	# edge: zero score → incompatible not ambivalent
 	runner.register_test("calling/zero_vector_score_is_incompatible",      Callable(CallingTests, "_test_zero_score_incompatible"))
 	# V2-PROG-002: calling seam — EchoActor projects confirmed calling field into actor dict
@@ -754,4 +756,43 @@ static func _test_count_integrity_catches_cross_calling_s9_duplicate() -> Dictio
 	cfg["definitions"] = defns
 	if CallingService.validate_count_integrity(cfg, null, 0):
 		return { "ok": false, "error": "validate_count_integrity should catch cross-calling S9 duplicate (global count = 3 for okyefo_kesee)" }
+	return { "ok": true }
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# resist_fear on the confirm_calling fear increase, with the real band_by_standing table.
+# Rank 3 is the first band past nascent; rank 1 is the nascent control.
+# ────────────────────────────────────────────────────────────────────────────
+
+## vanguard 350 / pillar 20 / seeker 0 → onyamesu is ambivalent, kra_soro incompatible.
+static func _rf_confirm(chosen: String, rank: int, resist: bool) -> int:
+	var echo := _make_echo("vanguard", {}, { "vanguard": 350, "protector": 40, "pillar": 20, "seeker": 0 })
+	echo["rank"] = rank
+	echo["resilience_traits"] = ["resist_fear"] if resist else []
+	echo["emotion"] = { "morale_current": 60, "fear_current": 10 }
+	echo["calling_options"] = CallingService.compute_all_options(echo, _calling_cfg())
+	var cs := ConfigService.new()
+	cs.load_balance()
+	CallingService.confirm_calling(echo, chosen, _calling_cfg(), null, 0,
+		ConfigService.get_maturity_expression_band_by_standing(cs))
+	return int(echo["emotion"]["fear_current"]) - 10
+
+
+static func _test_confirm_resist_fear_reduces_fear() -> Dictionary:
+	for case_v in [["kra_soro", 10], ["onyamesu", 3]]:
+		var chosen: String = case_v[0]
+		var raw: int = case_v[1]
+		var plain := _rf_confirm(chosen, 3, false)
+		if plain != raw:
+			return { "ok": false, "error": "%s control drift: expected +%d fear, got +%d" % [chosen, raw, plain] }
+		var steady := _rf_confirm(chosen, 3, true)
+		if steady != roundi(float(raw) * 0.6):
+			return { "ok": false, "error": "%s with resist_fear: expected +%d fear, got +%d" % [chosen, roundi(float(raw) * 0.6), steady] }
+	return { "ok": true }
+
+
+static func _test_confirm_resist_fear_inert_at_nascent() -> Dictionary:
+	var got := _rf_confirm("kra_soro", 1, true)
+	if got != 10:
+		return { "ok": false, "error": "resist_fear fired at nascent: expected +10 fear, got +%d" % got }
 	return { "ok": true }

@@ -248,6 +248,7 @@ func _apply_weave_non_chosen_consequences(non_chosen: Array, chosen_id: String, 
 
 	var drift := ConfigService.get_emotion_drift_cfg(config_service)
 	var fear_threshold := int(drift.get("fear_threshold", 80))
+	var band_by_standing := ConfigService.get_maturity_expression_band_by_standing(config_service)
 	var applied := 0
 	for c_v in non_chosen:
 		if not (c_v is Dictionary):
@@ -268,7 +269,9 @@ func _apply_weave_non_chosen_consequences(non_chosen: Array, chosen_id: String, 
 		if morale_delta != 0:
 			EmotionService.apply_morale_delta(echo_ref, morale_delta, "weave.non_chosen", logger, t)
 		if fear_delta != 0:
-			EmotionService.apply_fear_delta(echo_ref, fear_delta, "weave.non_chosen", fear_threshold, logger, t)
+			EmotionService.apply_fear_delta(echo_ref, fear_delta, "weave.non_chosen", fear_threshold, logger, t,
+				echo_ref.get("resilience_traits", []) as Array,
+				MaturityExpressionService.get_expression_band_for_echo(echo_ref, band_by_standing))
 		if bond_delta != 0:
 			bonds = SocialGraphService.apply_score_delta(
 				bonds,

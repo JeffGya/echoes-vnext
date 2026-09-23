@@ -136,6 +136,9 @@ static func register(runner) -> void:
 	# combat situations in the same stage must diverge.
 	runner.register_test("combat_roundtrip/two_encounters_same_stage_get_distinct_identity", func(): return test_two_encounters_same_stage_get_distinct_identity())
 	runner.register_test("combat_roundtrip/two_encounters_same_stage_get_distinct_terrain_and_spawn", func(): return test_two_encounters_same_stage_get_distinct_terrain_and_spawn())
+	# V2-COMBAT-003.5 Phase 5 decision #48: resist_fear must reduce the unscouted-approach
+	# surprise fear bump applied at encounter setup, same as the per-hit/near-death paths.
+	runner.register_test("combat_roundtrip/resist_fear_reduces_surprise_fear", func(): return test_resist_fear_reduces_surprise_fear())
 
 
 ## V2-INFRA-003 Phase 6 Slice 6G: the live movement helper family moved off FlowRuntime onto
@@ -205,6 +208,94 @@ static func _setup(
 	var enc_state := FlowEncounterState.new()
 	enc_state.enter(flow_ctx, t)
 	return { "runtime": runtime, "flow_ctx": flow_ctx, "ectx": flow_ctx.encounter_ctx, "logger": logger }
+
+
+# ---------------------------------------------------------------------------
+# V2-COMBAT-003.5 Phase 5 decision #48 — resist_fear on the surprise/ambush fear bump.
+#
+# Unlike _setup(), the roster is hand-built (not EchoFactory) so resilience_traits/rank are
+# controlled directly, and stage_context.encounter_approach is set BEFORE
+# FlowEncounterState.enter() — EncounterSetupService.setup() applies the surprise bump once,
+# during initial actor construction, so it must already be in place when enter() runs.
+# ---------------------------------------------------------------------------
+
+static func _setup_surprise_fear(seed_tag: String, resist: bool) -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var config := ConfigService.new()
+	var save_path := TestSaveHarness.fresh_save_path("combat_roundtrip_surprise_%s.json" % seed_tag, "combat_roundtrip")
+	var runtime := FlowRuntime.new(logger, config, save_path)
+	runtime.boot()
+	var flow_ctx: FlowContext = runtime.flow_ctx
+	var t: int = 0
+
+	flow_ctx.realm_id = "realm.01"
+	var rm: Dictionary = RealmService.get_or_create("realm.01", flow_ctx, t)
+	if rm.is_empty():
+		return {}
+	flow_ctx.stage_id = "stage.0"
+	flow_ctx.encounter_id = "realm.01.stage.0." + seed_tag
+
+	var roster: Array = []
+	var party_ids: Array = []
+	for i in range(5):
+		var echo: Dictionary = {
+			"id": "sf_echo_%d" % i, "name": "sf_echo_%d" % i, "rank": 3,
+			"resilience_traits": ["resist_fear"] if resist else [],
+		}
+		roster.append(echo)
+		party_ids.append(str(echo["id"]))
+	flow_ctx.save_data["sanctum"]["roster"] = roster
+	flow_ctx.save_data["sanctum"]["active_party_ids"] = party_ids
+
+	# Unscouted approach — the gate EncounterSetupService.gd checks before the surprise bump.
+	flow_ctx.save_data["stage_context"] = {
+		"encounter_approach": { "situation_was_revealed": false },
+	}
+
+	flow_ctx.dev_combat_objective = EncounterResolutionModes.COMBAT
+	flow_ctx.encounter_ctx = null
+	flow_ctx.encounter_machine = null
+
+	var enc_state := FlowEncounterState.new()
+	enc_state.enter(flow_ctx, t)
+	return { "runtime": runtime, "flow_ctx": flow_ctx, "ectx": flow_ctx.encounter_ctx }
+
+
+static func _sf_echo_fear(actors: Array, echo_id: String) -> int:
+	for a_v in actors:
+		if a_v is Dictionary and str((a_v as Dictionary).get("id", "")) == echo_id:
+			return int((a_v as Dictionary).get("fear", -1))
+	return -1
+
+
+static func test_resist_fear_reduces_surprise_fear() -> Dictionary:
+	var bal_svc := ConfigService.new()
+	bal_svc.load_balance()
+	var surprise_fear: int = int(bal_svc.get_balance().get("data", {}) \
+		.get("combat", {}).get("encounter_approach", {}).get("surprise_fear", 0))
+	if surprise_fear <= 0:
+		return { "ok": false, "error": "balance.json must authorise combat.encounter_approach.surprise_fear" }
+
+	var plain_env: Dictionary = _setup_surprise_fear("plain", false)
+	if plain_env.is_empty():
+		return { "ok": false, "error": "setup failed (control)" }
+	var steady_env: Dictionary = _setup_surprise_fear("steady", true)
+	if steady_env.is_empty():
+		return { "ok": false, "error": "setup failed (resist_fear)" }
+
+	var plain_ectx: EncounterContext = plain_env["ectx"]
+	var steady_ectx: EncounterContext = steady_env["ectx"]
+	var plain_fear := _sf_echo_fear(plain_ectx.actors, "sf_echo_0")
+	var steady_fear := _sf_echo_fear(steady_ectx.actors, "sf_echo_0")
+
+	if plain_fear != surprise_fear:
+		return { "ok": false, "error": "control drift: expected fear %d, got %d" % [surprise_fear, plain_fear] }
+	if steady_fear >= plain_fear:
+		return { "ok": false, "error": "resist_fear did not reduce surprise fear: %d vs %d" % [steady_fear, plain_fear] }
+	if steady_fear != roundi(float(surprise_fear) * 0.6):
+		return { "ok": false, "error": "expected 40%% reduction to %d, got %d" % [roundi(float(surprise_fear) * 0.6), steady_fear] }
+	return { "ok": true }
 
 
 # ---------------------------------------------------------------------------

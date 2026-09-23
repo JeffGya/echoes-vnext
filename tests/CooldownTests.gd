@@ -7,8 +7,12 @@
 #   3. actor.reveal NOT generated when _reveal_used == true.
 #   4. actor.read_field NOT generated when _read_field_cooldown > 0.
 #   5. actor.read_field generated when _read_field_cooldown == 0 (or absent).
+#   6. actor.withdraw blocked on the very next advance_turn() after it fires
+#      (V2-COMBAT-003.5 Phase 5 — the cooldown must survive one full actor turn).
 #
-# All tests use BehaviorArbiter.new({}) with skills_cfg injected in context.
+# Tests 1-5 use BehaviorArbiter.new({}) with skills_cfg injected in context.
+# Test 6 drives ActorStateMachine.advance_turn() directly — the cooldown-consuming
+# defect lived in the tick order around that call, not in the arbiter's own check.
 
 class_name CooldownTests
 extends RefCounted
@@ -19,6 +23,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("cooldown/reveal_blocked_when_used",            Callable(CooldownTests, "_t_reveal_blocked_when_used"))
 	runner.register_test("cooldown/read_field_blocked_by_cooldown",      Callable(CooldownTests, "_t_read_field_blocked_by_cooldown"))
 	runner.register_test("cooldown/read_field_fires_when_cooldown_zero", Callable(CooldownTests, "_t_read_field_fires_when_cooldown_zero"))
+	runner.register_test("cooldown/withdraw_blocked_on_next_turn_after_firing",
+		Callable(CooldownTests, "_t_withdraw_blocked_on_next_turn_after_firing"))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -253,4 +259,77 @@ static func _t_read_field_fires_when_cooldown_zero() -> Dictionary:
 			"ok": false,
 			"error": "Expected actor.read_field when cooldown=0, got: %s" % str(intent.get("action_type"))
 		}
+	return { "ok": true }
+
+
+# Test 6: actor.withdraw fires when 2+ enemies are adjacent and the cooldown is
+# clear, then must NOT fire again on the very next advance_turn() while the
+# cooldown holds. Drives ActorStateMachine.advance_turn() (not the arbiter
+# directly) because the defect was in the tick order around that call:
+# _withdraw_cooldown was decremented at turn START, before the arbiter's own
+# `<= 0` check later in the same call — so the cooldown set by turn N's
+# withdraw was already gone by the time turn N+1 checked it.
+#
+# Score arithmetic (BehaviorArbiter._score()), calling=kra_soro, traits/vectors/
+# archetype/morale zeroed, fear=0, 2 adjacent enemies (echo_in_melee active),
+# hp_ratio 0.30 (own_hp_low active, not own_hp_critical):
+#   actor.withdraw: base 55 (skill_base_bonus, kra_soro's actor.move row) + 0
+#     situational — situational_muls has no "actor.withdraw" row for any
+#     condition, so echo_in_melee/own_hp_low contribute nothing here.   = 55
+#   melee_attack:    base 40 (kra_soro) + echo_in_melee(+18) + own_hp_low(-8) = 50
+#   actor.guard:     base 15 (kra_soro) + echo_in_melee(-5)  + own_hp_low(+12) = 22
+# withdraw wins outright; own_hp_low exists only to close melee_attack's
+# echo_in_melee lead (40+18=58 > move's 55 without it).
+static func _t_withdraw_blocked_on_next_turn_after_firing() -> Dictionary:
+	var echo := ActorTests._make_test_echo("echo_withdraw_01", "Ama Withdraw")
+	var actor: Dictionary = EchoActor.from_echo(echo)
+	actor["grid_pos"] = { "col": 5, "row": 5 }
+	actor["equipped_skills"] = { "0": "rangers_withdraw" }
+	actor["calling_origin"] = "kra_soro"
+	actor["traits"] = { "courage": 0, "wisdom": 0, "faith": 0 }
+	actor["vector_scores"] = {}
+	actor["archetype_birth"] = ""
+	actor["morale"] = 50
+	actor["fear"] = 0
+	actor["stats"] = { "max_hp": 100 }
+	actor["current_hp"] = 30  # hp_ratio 0.30: own_hp_low (<0.35), not own_hp_critical (<0.20)
+
+	var enemy_a := { "id": "enemy_wd_a", "faction": "enemy", "is_dead": false, "grid_pos": { "col": 5, "row": 4 } }
+	var enemy_b := { "id": "enemy_wd_b", "faction": "enemy", "is_dead": false, "grid_pos": { "col": 4, "row": 5 } }
+	var all_actors: Array = [enemy_a, enemy_b]
+	var skills_cfg := {
+		"definitions": {
+			"rangers_withdraw": {
+				"skill_id":          "rangers_withdraw",
+				"target_type":       "self",
+				"action_type":       "actor.withdraw",
+				"cooldown_rounds":   1,
+				"scaling_source":    "agi",
+				"intent_weight_tag": "actor.move",
+				"tier_gate":         "",
+			},
+		}
+	}
+
+	# advance_turn() OVERWRITES augmented_context["skills_cfg"] from context["cfg"]["data"]["skills"]
+	# (ActorStateMachine.gd ~:403) — a bare "skills_cfg" key at the top of context, as every
+	# other test in this file passes straight to BehaviorArbiter.select_intent(), is silently
+	# discarded on this path. Route it through "cfg" instead so the skill actually equips.
+	var cfg := { "data": { "skills": skills_cfg } }
+
+	var sm := ActorStateMachine.new(actor)
+	var logger := StructuredLogger.new()
+
+	var ctx1 := { "actor": actor, "all_actors": all_actors, "t": 1, "cfg": cfg }
+	var intent1: Dictionary = sm.advance_turn(ctx1, logger, 1)
+	if str(intent1.get("action_type", "")) != "actor.withdraw":
+		return { "ok": false, "error": "Turn 1: expected actor.withdraw to fire (2 adjacent enemies, no cooldown), got: %s" % str(intent1.get("action_type")) }
+	if int(actor.get("_withdraw_cooldown", 0)) != 1:
+		return { "ok": false, "error": "Turn 1: expected _withdraw_cooldown=1 after withdraw fired, got: %s" % str(actor.get("_withdraw_cooldown")) }
+
+	var ctx2 := { "actor": actor, "all_actors": all_actors, "t": 2, "cfg": cfg }
+	var intent2: Dictionary = sm.advance_turn(ctx2, logger, 2)
+	if str(intent2.get("action_type", "")) == "actor.withdraw":
+		return { "ok": false, "error": "Turn 2: actor.withdraw fired again while on cooldown — cooldown was consumed before the arbiter's check ran" }
+
 	return { "ok": true }

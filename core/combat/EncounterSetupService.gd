@@ -547,8 +547,16 @@ func setup(t: int) -> void:
 				var _ea_expr_cfg: Dictionary = _ea_data.get("maturity_expression", {})
 				for _ea_i in range(echo_actors.size()):
 					var _ea_actor: Dictionary = echo_actors[_ea_i]
-					var _ea_applied := LeadershipEmotionService.apply_fear_gain(
-						_ea_actor, _ea_bump, echo_actors, _ea_expr_cfg)
+					# V2-COMBAT-003.5 Phase 5 decision #48: resist_fear after leadership
+					# dampening, same wrapper CombatTurnActionService uses. Fires before any
+					# actor's first turn, so — like the per-hit path — band must come from
+					# rank, not the not-yet-written _expression_band field; _resist_fear()
+					# already handles that. The flag it sets lets the echo voice
+					# combat_resilient on their own opening turn.
+					var _ea_applied := CombatTurnActionService._resist_fear(_ea_actor,
+						LeadershipEmotionService.apply_fear_gain(
+							_ea_actor, _ea_bump, echo_actors, _ea_expr_cfg),
+						_ea_expr_cfg)
 					echo_actors[_ea_i]["fear"] = clampi(
 						int(_ea_actor.get("fear", 0)) + _ea_applied, 0, 100)
 
