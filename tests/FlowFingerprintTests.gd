@@ -648,9 +648,12 @@ static func _run_mode_fingerprint(
 # COMBAT: 6 -> 7 rounds at Phase 2d/2g. The Phase 3c fix re-record above holds the round count
 # at 7 (r7 S -> r7 S) but reshapes routes: ROUNDS and SAVE move (kill XP shifts to echo_0003),
 # FINAL holds (ase 55, ekwan 7, rank S, round_ended 7).
-const COMBAT_ROUNDS_HASH := "f3f9099684309580fb86f700151fe1d80629a061968a8238589dab5ad04ea8be"
+# V2-COMBAT-003.5 lateral/low_exposure fix re-record (decision #54) — `lateral` now correctly
+# generated and chosen in live combat. Still 7 rounds; ROUNDS and SAVE move (kill XP unchanged
+# on echo_0003), FINAL held (ase 55, ekwan 7, rank S, round_ended 7).
+const COMBAT_ROUNDS_HASH := "da45867fda6572ecb867aa08e7b61736c49a55364939f3b56aecbb7dd1ac86ba"
 const COMBAT_FINAL_HASH  := "56bd83c9c14ee7d62193d3fb31a5ac04fdcbfb05e299f596527f649220c6e679"
-const COMBAT_SAVE_HASH   := "f3e41850d026469d228e8c1d30c57e87a9e38279f323fc49f96bc480b1355d05"
+const COMBAT_SAVE_HASH   := "c278206592ca8e052ad1023a282783bcd37967ac92111a0a909af2d4d31673e7"
 
 
 ## Shared expected-vs-actual assertion for the three hashes of one mode.
@@ -720,8 +723,11 @@ static func test_combat() -> Dictionary:
 # unchanged 5-per-round drain. SAVE held at that point: same ase 55 / ekwan 7, kill XP still
 # echo_0001. V2-COMBAT-003.5 Phase 3c fix re-record moved the fixture further (round_ended 9,
 # shrine_hp 157, ase 55, ekwan 7 unchanged) and the kill XP now belongs to echo_0004.
-const PURIFY_SHRINE_ROUNDS_HASH := "7f34f396ee6580db9119478474cbc3b0770c494a31ce98b34fb49a0fc81e0f90"
-const PURIFY_SHRINE_FINAL_HASH  := "35252c716302587163b30d27f00c981a70d64cc9831c78fb9d72f9bb38b58dfe"
+# V2-COMBAT-003.5 lateral/low_exposure fix re-record (decisions #54-55) — 9 -> 8 rounds, the
+# fight resolving faster as the purifier routes better. ROUNDS and FINAL move; SAVE held (ase
+# 55, ekwan 7, kill XP still echo_0004).
+const PURIFY_SHRINE_ROUNDS_HASH := "d62f09789b02b8c1280ed2c3135cea592686fd6e29c13313c16703666ab4e656"
+const PURIFY_SHRINE_FINAL_HASH  := "992129d703f92ce83c48f3fc1e2daf151975e84645fab2d72217d0dce86ef808"
 const PURIFY_SHRINE_SAVE_HASH   := "64dc78e3baf7dd7c3ea61b26536f842b3fecda7de923487fb9143904cffabe49"
 
 static func test_purify_shrine() -> Dictionary:
@@ -735,7 +741,9 @@ static func test_purify_shrine() -> Dictionary:
 # V2-COMBAT-003 Phase 5 re-record — same cause as COMBAT_ROUNDS_HASH above.
 # Phase 2d/2g: 2 -> 3 rounds, still under the speed-bonus threshold, so SAVE held (ase 59,
 # ekwan 7, no kill). FINAL moves only on round_ended; hold_progress still reaches 2 of 2.
-const RECOVER_ROUNDS_HASH := "cb10495eb5b839c1fbaa78f2871498e8632674fdfb57aeb5ec6fd7068bb86b31"
+# V2-COMBAT-003.5 lateral/low_exposure fix re-record (decision #54) — ROUNDS moves only; still
+# 3 rounds (round_ended unchanged), hold_progress still reaches 2 of 2, so FINAL and SAVE held.
+const RECOVER_ROUNDS_HASH := "4333f3918a028f3bd21d5a20df6626153b0eb20d2d5a15fb6d2ac000e58e392e"
 const RECOVER_FINAL_HASH  := "a0b143fa6916306dd31ee9816b4f89dc4a06af19b651f2de6d2b568285c5c720"
 const RECOVER_SAVE_HASH   := "bffa34aa225afe79818ec0b15931d59f495930337b8d07b33a997208e0d46c35"
 
@@ -774,7 +782,9 @@ static func test_protect() -> Dictionary:
 # down: rank B (was A), ase 50 (was 55), ekwan 6 (was 7), zero enemies defeated (was one) — an
 # accepted regression, not a copy error (decision #39). SAVE now carries no kill XP for any
 # party member (the enemy that used to die no longer does).
-const ENDURE_ROUNDS_HASH := "1b17a41ae9b0cf4020822a9cf115ebb716fb9ba052ac078c270bbdb40be0a19d"
+# V2-COMBAT-003.5 lateral/low_exposure fix re-record (decision #54) — ROUNDS moves only; still
+# 5 rounds (duration_turns unmoved), same outcome, so FINAL and SAVE held.
+const ENDURE_ROUNDS_HASH := "fd9aafaa05e1c9860742af92414f864b08e1fe4cdc524af6e7042ce344ebc150"
 const ENDURE_FINAL_HASH  := "82033486f24fae4e91e343e6a43013d963426d1e2f3d74dea9e1632a7cb4998a"
 const ENDURE_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
@@ -794,9 +804,12 @@ static func test_endure() -> Dictionary:
 # V2-COMBAT-003.5 Phase 3c fix re-record then flips this fight from a round-8 loss to a round-7
 # win (all_enemies_defeated, per the summary above), so the bonus no longer applies: ase 55,
 # ekwan 7, rank S, round_ended 7. The 25 kill XP now belongs to echo_0001, not echo_0003.
-const PURSUE_ROUNDS_HASH := "86daedae34eceb53717f14cb0d3bae618c1595975c47785423c50859f2f8f27e"
-const PURSUE_FINAL_HASH  := "90e44d309d4c5c41d03568e3e295dfa1c4289b5b38bd1e4712cef3a5b15e2257"
-const PURSUE_SAVE_HASH   := "cca434e9c009c6ba5607c102d12b1d87883fe6899dbffe4214c9a0cb0934eff7"
+# V2-COMBAT-003.5 lateral/low_exposure fix re-record (decisions #54-55) — 7 -> 5 rounds, the
+# fight resolving faster as the party routes better. Still all_enemies_defeated, rank S; ase 55,
+# ekwan 7 unchanged. The 25 kill XP now belongs to echo_0004, not echo_0001.
+const PURSUE_ROUNDS_HASH := "ae6537796347bbbf67a51cc5694d8dcd4b0fc6fed3da912a112fc2ce9c98cff2"
+const PURSUE_FINAL_HASH  := "678b39327b47e4999322d24d3b07d280e48e475ed89fc2e1475f89bc6b8fbedb"
+const PURSUE_SAVE_HASH   := "64dc78e3baf7dd7c3ea61b26536f842b3fecda7de923487fb9143904cffabe49"
 
 static func test_pursue() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(EncounterResolutionModes.PURSUE, "fp_pursue")
@@ -868,8 +881,10 @@ static func test_pursue() -> Dictionary:
 # — 5 is not below speed_bonus_threshold either, so ase 50 / ekwan 6 stand and there is no kill.
 # The "round 9" round counts quoted in the older notes above describe the boards of their own
 # phases, not this one.
-const GUIDE_SPIRIT_ROUNDS_HASH := "a576d42c38f1321deaebd038941ddf4ad7239e698e221445ba6276a84846ebc8"
-const GUIDE_SPIRIT_FINAL_HASH  := "9634aff8ac8d4dbe12f3ad7795d30bff78b5dbb325ab278ce426733e9461072c"
+# V2-COMBAT-003.5 lateral/low_exposure fix re-record (decision #54) — ROUNDS and FINAL move;
+# still 5 rounds, same outcome (spirit_protected, spirit HP 49), so SAVE held.
+const GUIDE_SPIRIT_ROUNDS_HASH := "b3a26d6856a4fc952457c9891fb2c444aeb5886ba82e1d58fb7a69ed6541e5f0"
+const GUIDE_SPIRIT_FINAL_HASH  := "eba02ae29b2c8c636125e22d2d3b328991461c1f876b6ca57140a4e178db72b6"
 const GUIDE_SPIRIT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
 static func test_guide_spirit() -> Dictionary:

@@ -57,6 +57,14 @@
 | 46 | resist-fear-combat-bark-visibility | Wire the existing combat_resilient bark to fire for the new combat resist_fear wiring, so the player can see the trait working | 2026-09-22 |
 | 47 | resist-fear-bark-needs-cooldown | Add a cooldown to combat_resilient before shipping — priority-2, no-cooldown bark could crowd out fear/morale/guidance barks for a frontline resist_fear echo | 2026-09-22 |
 | 48 | resist-fear-wire-two-more-paths | Wire resist_fear into 2 more fear-gain paths: KO-spread fear (CombatRoundEmotionService.gd) and surprise/ambush fear (EncounterSetupService.gd) | 2026-09-22 |
+| 49 | phase6-fix-missing-live-styles-before-phase7 | 3 of 10 movement styles never appear in live combat (lateral, low_exposure, retreating) — fix the 2 confirmed bugs (lateral, low_exposure) before Phase 7; retreating's rarity is expected, not a bug | 2026-09-23 |
+| 50 | phase6-fix-followup-tasks-file-now | Follow-up tasks file has wrong info (false premise on #10, stale ANSWERS.md refs, #1 marked open though already fixed) — fix now | 2026-09-23 |
+| 51 | lateral-fix-must-not-relabel-identical-route | lateral steals the name of an unchanged intercept/screen route in ~40% of appearances — block it from surviving dedup under the wrong name, fix now | 2026-09-24 |
+| 52 | low-exposure-hazard-safety-stays-first | low_exposure must never pick a route through more hazards just to stay farther from a live hostile — hazard avoidance stays the strict first priority | 2026-09-24 |
+| 53 | lateral-guard-extended-to-all-candidates | lateral's identical-route guard (decision #51) extended to cover every other candidate style, not just the purpose's primary route — confirmed real, not just theoretical: fired 24 times in a 21-fight sample | 2026-09-24 |
+| 54 | lateral-fix-recorded-values-signed-off | 15 recorded test values (11 fingerprints, 4 emotion traces) re-recorded, all cleanly attributed to the lateral fix, no fixture flips win→loss | 2026-09-24 |
+| 55 | lateral-fix-faster-fights-accepted | 2 fixture fights resolve faster as a side effect (PURSUE, PURIFY_SHRINE) — accepted, same class of already-filed reward-formula concern (follow-up tasks #2/#4) | 2026-09-24 |
+| 56 | lateral-test-failure-message-fixed | New end-to-end test correctly catches the regression but fails at the wrong line with a misleading message — fix the message before commit | 2026-09-24 |
 
 ---
 
@@ -495,3 +503,80 @@
 **A:** Fix these 2 as well.
 **Source:** Jeff, 2026-09-22
 **Date:** 2026-09-22
+
+---
+
+### 49. phase6-fix-missing-live-styles-before-phase7
+
+**Q:** Phase 6's combined verification measured 40 real live fights and found 3 of the 10 movement styles never appear at all: `lateral` (no live goal source — only built for `reposition`/`regroup`, which live combat never creates, only the stage-explore adapter does), `low_exposure` (silently loses a dedup tie against `safe` whenever a board has no known hazards — same bug class decision #16 already fixed elsewhere in the option-generation pipeline), and `retreating` (needs a collapse state, legitimately rare — 0 collapses occurred in the 40-fight sample, not confirmed as a bug). This is the story's headline claim ("Echoes visibly vary in how they act on a shared purpose") not fully holding in live play. Fix the 2 confirmed bugs now before Phase 7, or file as follow-up and continue?
+**A:** Fix now, before Phase 7. `retreating` is not being fixed — its rarity is expected given its real trigger condition, not confirmed as a defect.
+**Source:** Jeff, 2026-09-23
+**Date:** 2026-09-23
+
+---
+
+### 50. phase6-fix-followup-tasks-file-now
+
+**Q:** Phase 6 also found `docs/v2-combat-003.5-followup-tasks.md` has wrong information: task #10's premise (only 4 of 10 vector origins are summon-able) was tested directly and found false — `class_origin_weights` has had all 10 since before this story, confirmed by summoning 200 test Echoes; task #1 (`perceived_actors` script error) is already fixed but still listed open; several cited `ANSWERS.md` entry numbers (#63/#65/#66) don't exist (`ANSWERS.md` ends at #62). Fix the file now, or leave it for Phase 9's docs pass?
+**A:** Fix it now.
+**Source:** Jeff, 2026-09-23
+**Date:** 2026-09-23
+
+---
+
+### 51. lateral-fix-must-not-relabel-identical-route
+
+**Q:** qa-verifier's review of decision #49's fix found `lateral` doesn't create real variety in ~40% of its live appearances — it wins a dedup tie against an identical, unchanged `intercept`/`screen` route (same destination, same path, just renamed), because `lateral` sits earlier in `STYLE_ORDER`. This removed real `intercept` variety that was already working (113→69 moves) and violates decision #11's "no metadata-only styles" rule. Should a `lateral` candidate identical to an existing route be blocked from surviving dedup under the wrong name?
+**A:** Yes, block it. Fix now, before shipping.
+**Source:** Jeff, 2026-09-24
+**Date:** 2026-09-24
+
+---
+
+### 52. low-exposure-hazard-safety-stays-first
+
+**Q:** The `low_exposure` fix's new eligibility test allows a candidate to win on `exposure == primary and threat_distance > primary` with no hazard-count condition — meaning `low_exposure` could in principle pick a route through MORE known hazards than the primary, purely to stay farther from a live hostile. Should hazard avoidance stay the strict first priority, or is distance-from-threat allowed to outweigh it?
+**A:** No — hazard safety stays first. Distance-from-threat is an additional tiebreak only, never allowed to override known hazard avoidance.
+**Source:** Jeff, 2026-09-24
+**Date:** 2026-09-24
+
+---
+
+### 53. lateral-guard-extended-to-all-candidates
+
+**Q:** Decision #51's fix blocked `lateral` from stealing the name of the purpose's PRIMARY route only. The build flagged a narrower, unmeasured edge case: `lateral` could theoretically still collapse onto and steal the name of a different EXTRA candidate (`conservative`, `forceful`, `overcommitted`, `low_exposure`) instead, since the guard only compared against the primary. Not confirmed to happen in live play. Fix now, or file as follow-up?
+**A:** Fix it now too — extend the same guard to compare against every candidate, not just the primary.
+**Source:** Jeff, 2026-09-24
+**Date:** 2026-09-24
+
+> **Correction, 2026-09-24**: qa-verifier's final combined review found this case was NOT
+> theoretical — instrumented across 21 live fights, the wider guard fired 24 times against a
+> non-primary candidate that decision #51's primary-only guard would have missed. Good call to
+> fix it now rather than defer.
+
+---
+
+### 54. lateral-fix-recorded-values-signed-off
+
+**Q:** The complete lateral/low_exposure fix thread (decisions #49-53) moves 15 recorded test values — 11 `fingerprint_<mode>` values and 4 `combat_baseline/emotion_trace_*` values — all cleanly attributed to one cause (the `lateral` extra candidate now correctly existing and being chosen in live combat; the shared-routes refactor and the `low_exposure` reorder were independently confirmed to move nothing). No fixture flips from a win to a loss. Sign off on re-recording?
+**A:** Yes, re-record all 15.
+**Source:** Jeff, 2026-09-24
+**Date:** 2026-09-24
+
+---
+
+### 55. lateral-fix-faster-fights-accepted
+
+**Q:** As a side effect of the fix, 2 fixture fights now resolve faster because Echoes route better with the corrected styles: PURSUE 7→5 rounds, PURIFY_SHRINE 9→8 rounds. This can shift reward payout/grade, same class of side effect already flagged and filed separately (follow-up tasks #2, #4 — reward-formula sensitivity to fight speed). Accept as-is, or investigate before moving on?
+**A:** Accept it. Matches this story's own precedent (decision #4) — reward-formula sensitivity to fight speed is a separate, already-filed concern, not something to fix here.
+**Source:** Jeff, 2026-09-24
+**Date:** 2026-09-24
+
+---
+
+### 56. lateral-test-failure-message-fixed
+
+**Q:** qa-verifier's re-record verification found the new end-to-end test (`_t_generate_options_guards_lateral_against_full_candidate_set`) correctly catches the guard regression, but fails at the wrong line with a misleading message — the `forceful` cell being stolen makes the test's own setup check ("fixture must reach both direct and forceful") fail first, so the real assertion never runs and the failure reads as a bad fixture rather than the actual bug. Fix the message now, or accept and commit?
+**A:** Fix the message now.
+**Source:** Jeff, 2026-09-24
+**Date:** 2026-09-24

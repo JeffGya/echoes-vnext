@@ -14,7 +14,8 @@ const ProfileContract = preload("res://core/movement/contracts/MovementProfile.g
 ## Primary style by purpose (see `_primary_style()`): reposition/regroup -> lateral,
 ## protect/escort -> screen, intercept/cut_off -> intercept, withdraw -> retreating, else ->
 ## direct — all via `_build_primary` except lateral's own builder. `forceful`,
-## `overcommitted` and `low_exposure` are unconditional extra candidates, not tied to purpose.
+## `overcommitted` and `low_exposure` are unconditional extra candidates, not tied to purpose;
+## so is `lateral` for every other purpose (`_build_lateral_extra`).
 const STYLE_ORDER: Array = [
 	"direct", "safe", "cohesive", "lateral", "screen", "intercept", "conservative", "retreating",
 	"forceful", "overcommitted", "low_exposure",
@@ -69,10 +70,15 @@ static func generate_options(
 	var edge_costs: Dictionary = control["edge_costs"] as Dictionary
 	var edge_sources: Dictionary = control["edge_sources"] as Dictionary
 	var primary_style: String = _primary_style(str(goal["purpose"]))
+	# One Dijkstra per region cell, shared by every builder that needs it. Unread when
+	# the origin is already in the region: each builder returns its stay option first.
+	var routes: Array = []
+	if not (goal["destination_region"] as Array).has(origin):
+		routes = _candidate_routes(context, goal, planning_walkable, edge_costs)
 	var primary: Dictionary
 	if primary_style == "lateral":
 		primary = _build_lateral_primary(
-			context, profile, goal, planning_walkable, edge_costs, edge_sources
+			context, profile, goal, planning_walkable, edge_costs, edge_sources, routes
 		)
 	else:
 		primary = _build_primary(
@@ -82,7 +88,8 @@ static func generate_options(
 			planning_walkable,
 			edge_costs,
 			edge_sources,
-			primary_style
+			primary_style,
+			routes
 		)
 	if bool(primary.get("failed", false)):
 		return _failure(str(primary["reason"]), str(primary["field"]))
@@ -114,7 +121,9 @@ static func generate_options(
 		if not cohesive.is_empty():
 			cohesive = _with_style(cohesive, goal, "cohesive")
 			candidates.append(cohesive)
-		var low_exposure: Dictionary = _select_low_exposure(endpoints, primary)
+		var low_exposure: Dictionary = _select_low_exposure(
+			endpoints, primary, _live_hostile_positions(context)
+		)
 		if not low_exposure.is_empty():
 			low_exposure = _with_style(low_exposure, goal, "low_exposure")
 			candidates.append(low_exposure)
@@ -135,10 +144,20 @@ static func generate_options(
 		if not forceful.is_empty():
 			candidates.append(forceful)
 		var overcommitted: Dictionary = _build_overcommitted(
-			context, profile, goal, planning_walkable, edge_costs, edge_sources
+			context, profile, goal, planning_walkable, edge_costs, edge_sources, routes
 		)
 		if not overcommitted.is_empty():
 			candidates.append(overcommitted)
+		if primary_style != "lateral":
+			var taken_destinations: Array = []
+			for taken_value: Variant in candidates:
+				taken_destinations.append((taken_value as Dictionary)["destination"] as Dictionary)
+			var lateral: Dictionary = _build_lateral_extra(
+				context, profile, goal, planning_walkable, edge_costs, edge_sources,
+				taken_destinations, routes
+			)
+			if not lateral.is_empty():
+				candidates.append(lateral)
 
 	var validated: Array = []
 	for candidate_value: Variant in candidates:
@@ -193,7 +212,7 @@ static func _deduplicate_candidates(candidates: Array) -> Dictionary:
 
 
 ## Cost-optimal route to each destination in the goal region, cheapest first.
-## Shared by `_build_primary`, `_build_lateral_primary` (baseline before offset)
+## Shared by `_build_primary`, both lateral builders (baseline before offset)
 ## and `_build_overcommitted` (which re-sorts the same routes the other way).
 static func _candidate_routes(
 	context: Dictionary,
@@ -223,6 +242,20 @@ static func _candidate_routes(
 	return routes
 
 
+## `precomputed_routes` is `_candidate_routes`' result from `generate_options`, or
+## null for a direct caller, which then pays for the search itself.
+static func _routes_or_compute(
+	precomputed_routes: Variant,
+	context: Dictionary,
+	goal: Dictionary,
+	planning_walkable: Dictionary,
+	edge_costs: Dictionary
+) -> Array:
+	if precomputed_routes is Array:
+		return precomputed_routes as Array
+	return _candidate_routes(context, goal, planning_walkable, edge_costs)
+
+
 static func _build_primary(
 	context: Dictionary,
 	profile: Dictionary,
@@ -230,7 +263,8 @@ static func _build_primary(
 	planning_walkable: Dictionary,
 	edge_costs: Dictionary,
 	edge_sources: Dictionary,
-	style: String
+	style: String,
+	precomputed_routes: Variant = null
 ) -> Dictionary:
 	var origin: Dictionary = context["origin"] as Dictionary
 	# A mover already standing in its own destination region is in position: the
@@ -243,7 +277,7 @@ static func _build_primary(
 			style, [], 0
 		)
 
-	var routes: Array = _candidate_routes(context, goal, planning_walkable, edge_costs)
+	var routes: Array = _routes_or_compute(precomputed_routes, context, goal, planning_walkable, edge_costs)
 	if routes.is_empty():
 		return {}
 	var selected: Dictionary = routes[0] as Dictionary
@@ -283,7 +317,8 @@ static func _build_lateral_primary(
 	goal: Dictionary,
 	planning_walkable: Dictionary,
 	edge_costs: Dictionary,
-	edge_sources: Dictionary
+	edge_sources: Dictionary,
+	precomputed_routes: Variant = null
 ) -> Dictionary:
 	var origin: Dictionary = context["origin"] as Dictionary
 	if (goal["destination_region"] as Array).has(origin):
@@ -291,13 +326,14 @@ static func _build_lateral_primary(
 			context, profile, goal, planning_walkable, edge_costs, edge_sources,
 			"lateral", [], 0
 		)
-	var routes: Array = _candidate_routes(context, goal, planning_walkable, edge_costs)
+	var routes: Array = _routes_or_compute(precomputed_routes, context, goal, planning_walkable, edge_costs)
 	if routes.is_empty():
 		return {}
 	var baseline: Dictionary = routes[0] as Dictionary
 	var capacity: int = int(profile["capacity"])
 	var path: Array = _flank_path(
-		context, profile, planning_walkable, edge_costs, baseline["destination"] as Dictionary
+		context, profile, planning_walkable, edge_costs, baseline["destination"] as Dictionary,
+		_flank_reference(context)
 	)
 	var option: Dictionary = {}
 	if not path.is_empty():
@@ -330,7 +366,53 @@ static func _build_lateral_primary(
 	return option
 
 
-## Offset target for `_build_lateral_primary`: the baseline destination shifted
+## `lateral` as an extra candidate for purposes whose primary is not lateral — the
+## §9 "lateral cut-off" / flanking-approach reading. Same flank geometry as
+## `_build_lateral_primary`, with two differences: it flanks a perceived HOSTILE only
+## (flanking around an ally is a regroup/reposition idea, not an approach), and it has
+## no baseline fallback, because the unoffset baseline is the purpose's own primary route.
+## A flank that capacity cuts short can end on a cell already claimed by another candidate
+## for this goal — the primary (whichever style it is) or any of safe/cohesive/low_exposure/
+## conservative/forceful/overcommitted, per the caller's full `taken_destinations` list. It is
+## dropped: `lateral` sorts early in STYLE_ORDER, so dedup would keep it and rename the other
+## candidate. A different middle cell is not a flank.
+static func _build_lateral_extra(
+	context: Dictionary,
+	profile: Dictionary,
+	goal: Dictionary,
+	planning_walkable: Dictionary,
+	edge_costs: Dictionary,
+	edge_sources: Dictionary,
+	taken_destinations: Array,
+	precomputed_routes: Variant = null
+) -> Dictionary:
+	if (goal["destination_region"] as Array).has(context["origin"] as Dictionary):
+		return {}
+	var hostile: Dictionary = _nearest_related_position(context, "hostile")
+	if hostile.is_empty():
+		return {}
+	var routes: Array = _routes_or_compute(precomputed_routes, context, goal, planning_walkable, edge_costs)
+	if routes.is_empty():
+		return {}
+	var path: Array = _flank_path(
+		context, profile, planning_walkable, edge_costs,
+		(routes[0] as Dictionary)["destination"] as Dictionary, hostile
+	)
+	if path.is_empty():
+		return {}
+	var flank_key: String = _cell_key(path.back() as Dictionary)
+	for taken_value: Variant in taken_destinations:
+		if _cell_key(taken_value as Dictionary) == flank_key:
+			return {}
+	var option: Dictionary = _build_option(
+		context, profile, goal, planning_walkable, edge_costs, edge_sources, "lateral", path
+	)
+	if float(option.get("objective_progress", 0.0)) <= 0.0:
+		return {}
+	return option
+
+
+## Offset target for the lateral builders: the baseline destination shifted
 ## one Chebyshev step perpendicular to the reference-to-destination line, tried
 ## on both sides. Returns the affordable, walkable, reachable candidate path
 ## with the canonically smaller destination cell; `[]` when neither side works.
@@ -339,9 +421,9 @@ static func _flank_path(
 	profile: Dictionary,
 	planning_walkable: Dictionary,
 	edge_costs: Dictionary,
-	baseline_destination: Dictionary
+	baseline_destination: Dictionary,
+	reference: Dictionary
 ) -> Array:
-	var reference: Dictionary = _flank_reference(context)
 	if reference.is_empty():
 		return []
 	var delta_col: int = signi(int(baseline_destination["col"]) - int(reference["col"]))
@@ -503,7 +585,8 @@ static func _build_overcommitted(
 	goal: Dictionary,
 	planning_walkable: Dictionary,
 	edge_costs: Dictionary,
-	edge_sources: Dictionary
+	edge_sources: Dictionary,
+	precomputed_routes: Variant = null
 ) -> Dictionary:
 	var origin: Dictionary = context["origin"] as Dictionary
 	if (goal["destination_region"] as Array).has(origin):
@@ -511,7 +594,7 @@ static func _build_overcommitted(
 			context, profile, goal, planning_walkable, edge_costs, edge_sources,
 			"overcommitted", [], 0
 		)
-	var routes: Array = _candidate_routes(context, goal, planning_walkable, edge_costs)
+	var routes: Array = _routes_or_compute(precomputed_routes, context, goal, planning_walkable, edge_costs)
 	if routes.is_empty():
 		return {}
 	var capacity: int = int(profile["capacity"])
@@ -860,24 +943,77 @@ static func _select_safe(candidates: Array, primary: Dictionary) -> Dictionary:
 	return {} if eligible.is_empty() else (eligible[0] as Dictionary).duplicate(true)
 
 
-## Sibling of `_select_safe` with the two metrics reordered: exposure to
-## hostile-control edges is the PRIMARY improvement test here, hazard count only
-## breaks a tie. `_select_safe` orders the other way round. Both read the same
-## already-computed per-candidate metrics, so this needs no new data.
-static func _select_low_exposure(candidates: Array, primary: Dictionary) -> Dictionary:
+## Sibling of `_select_safe` with exposure (hostile-control edges) as the first key.
+## Full priority, for both eligibility and the sort: exposure, then known hazard
+## count, then distance from the destination to the nearest live hostile, then
+## objective progress, then `_common_option_less`. Hazards outrank threat distance
+## (decision #52): at equal exposure a farther cell never beats a less hazardous one.
+## Threat distance is what separates this from `safe` on a hazard-free board.
+## Strictly lower exposure alone still qualifies, as before, whatever the hazards.
+static func _select_low_exposure(
+	candidates: Array, primary: Dictionary, hostile_positions: Array
+) -> Dictionary:
 	var eligible: Array = []
+	var primary_exposure: float = float(primary["exposure"])
+	var primary_hazards: int = int((primary["hazard_summary"] as Dictionary)["known_count"])
+	var primary_threat: int = _threat_distance(primary["destination"] as Dictionary, hostile_positions)
 	for candidate_value: Variant in candidates:
 		var candidate: Dictionary = candidate_value as Dictionary
 		var candidate_exposure: float = float(candidate["exposure"])
-		var primary_exposure: float = float(primary["exposure"])
 		var candidate_hazards: int = int((candidate["hazard_summary"] as Dictionary)["known_count"])
-		var primary_hazards: int = int((primary["hazard_summary"] as Dictionary)["known_count"])
+		var candidate_threat: int = _threat_distance(candidate["destination"] as Dictionary, hostile_positions)
 		var improves: bool = candidate_exposure < primary_exposure \
-			or (candidate_exposure == primary_exposure and candidate_hazards < primary_hazards)
+			or (candidate_exposure == primary_exposure and candidate_hazards < primary_hazards) \
+			or (candidate_exposure == primary_exposure and candidate_hazards == primary_hazards \
+				and candidate_threat > primary_threat)
 		if improves:
 			eligible.append(candidate)
-	eligible.sort_custom(Callable(MovementOptionService, "_low_exposure_less"))
+	eligible.sort_custom(func(left_value: Variant, right_value: Variant) -> bool:
+		var left: Dictionary = left_value as Dictionary
+		var right: Dictionary = right_value as Dictionary
+		if float(left["exposure"]) != float(right["exposure"]):
+			return float(left["exposure"]) < float(right["exposure"])
+		var left_hazards: int = int((left["hazard_summary"] as Dictionary)["known_count"])
+		var right_hazards: int = int((right["hazard_summary"] as Dictionary)["known_count"])
+		if left_hazards != right_hazards:
+			return left_hazards < right_hazards
+		var left_threat: int = _threat_distance(left["destination"] as Dictionary, hostile_positions)
+		var right_threat: int = _threat_distance(right["destination"] as Dictionary, hostile_positions)
+		if left_threat != right_threat:
+			return left_threat > right_threat
+		# Most progress, not `_common_option_less`'s cheapest (least-progress) cell.
+		if float(left["objective_progress"]) != float(right["objective_progress"]):
+			return float(left["objective_progress"]) > float(right["objective_progress"])
+		return _common_option_less(left, right)
+	)
 	return {} if eligible.is_empty() else (eligible[0] as Dictionary).duplicate(true)
+
+
+## Positions of every perceived living, non-KO, non-structure hostile — the same
+## filter `_nearest_related_position` applies.
+static func _live_hostile_positions(context: Dictionary) -> Array:
+	var positions: Array = []
+	var relationships: Dictionary = context["relationships"] as Dictionary
+	for actor_value: Variant in context["perceived_actors"] as Array:
+		var actor: Dictionary = actor_value as Dictionary
+		var actor_id: String = str(actor["id"])
+		if actor_id == str(context["mover_id"]) or str(relationships.get(actor_id, "")) != "hostile":
+			continue
+		if bool(actor["is_dead"]) or bool(actor["is_ko"]) or bool(actor["is_structure"]):
+			continue
+		positions.append((actor["position"] as Dictionary).duplicate(true))
+	return positions
+
+
+## Chebyshev distance from `cell` to the nearest position; 0 with none, so an
+## empty board ties every candidate on this key.
+static func _threat_distance(cell: Dictionary, hostile_positions: Array) -> int:
+	if hostile_positions.is_empty():
+		return 0
+	var best: int = 2147483647
+	for position_value: Variant in hostile_positions:
+		best = mini(best, _chebyshev(cell, position_value as Dictionary))
+	return best
 
 
 static func _select_cohesive(candidates: Array, primary: Dictionary) -> Dictionary:
@@ -922,18 +1058,6 @@ static func _safe_less(left_value: Variant, right_value: Variant) -> bool:
 		return left_hazards < right_hazards
 	if float(left["exposure"]) != float(right["exposure"]):
 		return float(left["exposure"]) < float(right["exposure"])
-	return _common_option_less(left, right)
-
-
-static func _low_exposure_less(left_value: Variant, right_value: Variant) -> bool:
-	var left: Dictionary = left_value as Dictionary
-	var right: Dictionary = right_value as Dictionary
-	if float(left["exposure"]) != float(right["exposure"]):
-		return float(left["exposure"]) < float(right["exposure"])
-	var left_hazards: int = int((left["hazard_summary"] as Dictionary)["known_count"])
-	var right_hazards: int = int((right["hazard_summary"] as Dictionary)["known_count"])
-	if left_hazards != right_hazards:
-		return left_hazards < right_hazards
 	return _common_option_less(left, right)
 
 
