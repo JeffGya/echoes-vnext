@@ -65,6 +65,7 @@
 | 54 | lateral-fix-recorded-values-signed-off | 15 recorded test values (11 fingerprints, 4 emotion traces) re-recorded, all cleanly attributed to the lateral fix, no fixture flips win→loss | 2026-09-24 |
 | 55 | lateral-fix-faster-fights-accepted | 2 fixture fights resolve faster as a side effect (PURSUE, PURIFY_SHRINE) — accepted, same class of already-filed reward-formula concern (follow-up tasks #2/#4) | 2026-09-24 |
 | 56 | lateral-test-failure-message-fixed | New end-to-end test correctly catches the regression but fails at the wrong line with a misleading message — fix the message before commit | 2026-09-24 |
+| 57 | lateral-guard-cell-only-comparison-confirmed | Codex flagged the same cell-vs-full-route ambiguity qa-verifier's finding 5 raised — confirmed: keep cell-only comparison, no code change | 2026-09-24 |
 
 ---
 
@@ -578,5 +579,14 @@
 
 **Q:** qa-verifier's re-record verification found the new end-to-end test (`_t_generate_options_guards_lateral_against_full_candidate_set`) correctly catches the guard regression, but fails at the wrong line with a misleading message — the `forceful` cell being stolen makes the test's own setup check ("fixture must reach both direct and forceful") fail first, so the real assertion never runs and the failure reads as a bad fixture rather than the actual bug. Fix the message now, or accept and commit?
 **A:** Fix the message now.
+**Source:** Jeff, 2026-09-24
+**Date:** 2026-09-24
+
+---
+
+### 57. lateral-guard-cell-only-comparison-confirmed
+
+**Q:** A Codex review comment on PR #77 raised the same ambiguity qa-verifier's second review flagged as unresolved (finding 5): the `lateral` dedup guard (decisions #51/#53) compares only the destination CELL, not the full route (cell + path). A flank that reaches the same cell as another candidate via a genuinely different path still gets blocked, even though the route itself is mechanically distinct. Keep the simpler cell-only comparison, or compare full routes so a same-destination-different-path flank can survive as real variety?
+**A:** Keep cell-only comparison. No code change — a flank landing on the exact same spot as another option doesn't read as a distinct flank on screen, even via a different path.
 **Source:** Jeff, 2026-09-24
 **Date:** 2026-09-24
