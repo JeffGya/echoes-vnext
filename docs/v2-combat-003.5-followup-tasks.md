@@ -1,22 +1,25 @@
 # V2-COMBAT-003.5 — Spawned follow-up tasks
 
 Suggestion chips created during the V2-COMBAT-003.5 orchestration session (2026-09-13 through
-2026-09-16). Each can be started in a fresh worktree with one click from its chip, or started
+2026-09-23). Each can be started in a fresh worktree with one click from its chip, or started
 manually by pasting the "Opening prompt" below into a new session. `task_id` is the internal
 reference if you need to dismiss one later.
 
+> **Corrected 2026-09-23 (Phase 6 combined verification):** item 1 below was already fixed and
+> its task chip dismissed — kept here only as a record. Items 2-4's `ANSWERS.md` citations were
+> wrong (those entry numbers don't exist there) and have been corrected to point at this story's
+> own decision log, `docs/v2-combat-003.5-decisions.md`, where the actual record lives. Item 10's
+> premise was found false by direct test and has been rewritten.
+
 ---
 
-## 1. Fix perceived_actors script error in MovementOptionService
+## 1. ~~Fix perceived_actors script error in MovementOptionService~~ — ALREADY FIXED, chip dismissed
 
-**task_id:** `task_6206db50`
+**task_id:** `task_6206db50` (dismissed 2026-09-23)
 
-**Why it came up:** Surfaced independently by three separate agents while testing unrelated V2-COMBAT-003.5 work — a script error logged on every run of the `combat_roundtrip` suite, not caused by this story, not failing the test itself.
-
-**Opening prompt:**
-> In the Echoes vNext Godot/GDScript repo, `core/movement/MovementOptionService.gd:635` (function `_cohesion()`) logs a SCRIPT ERROR — "Invalid access to property or key 'perceived_actors' on a base object of type 'Dictionary'" — during the test `combat_roundtrip/live_direct_option_id_is_contract_valid` in `tests/CombatRoundtripIntegrationTests.gd`. It does not fail the test (the test's own assertions apparently don't reach or don't check the affected code path), but it's a real script error logged on every run of that suite, surfaced independently by three separate agents working on V2-COMBAT-003.5 (2026-09-13).
->
-> Investigate: is `_cohesion()` accessing a field on a Dictionary using dot-notation where it should use `.get()`, or is a caller passing a Dictionary where a typed object/Resource with a `perceived_actors` property was expected? Read the function and its call sites, determine root cause, and fix it. This is dormant code per `docs/MEMORY.md`'s systems inventory (`MovementOptionService` — "dormant deterministic option generator", V2-COMBAT-002 Slice 2, zero production callers as of that entry), so check whether it's still dormant or has since gone live before fixing, and note that in your report. Run the compile check and the `combat_roundtrip` filtered test suite to confirm the fix clears the script error with no test regressions.
+Phase 6's combined verification (full suite log) found zero `Invalid access`/`perceived_actors`
+script errors anywhere. This was fixed incidentally during the story (exact commit not traced);
+kept as a record only, not an open item.
 
 ---
 
@@ -24,12 +27,12 @@ reference if you need to dismiss one later.
 
 **task_id:** `task_0a287277`
 
-**Why it came up:** V2-COMBAT-003.5 raised board size (ANSWERS.md #63); as a mechanical side effect, one PURSUE fixture resolves one round faster and pays more (Ase 55→64, Ekwan 7→8). Jeff: flag it, out of scope for that story (ANSWERS.md #65).
+**Why it came up:** V2-COMBAT-003.5 raised board size (`docs/v2-combat-003.5-decisions.md` entry #2); as a mechanical side effect, one PURSUE fixture resolves one round faster and pays more (Ase 55→64, Ekwan 7→8). Jeff: flag it, out of scope for that story (`docs/v2-combat-003.5-decisions.md` entry #4).
 
 **Opening prompt:**
-> In the Echoes vNext repo, story V2-COMBAT-003.5 raised combat board size (`data.combat.board`: base_cols/rows 12→18, max_cols/rows 22→28 — see ANSWERS.md #63). A side effect, confirmed by qa-verifier during that story's review: PURSUE mode's `fp_pursue` fixture in `tests/FlowFingerprintTests.gd` now resolves one round faster than before (5→4 rounds) because the bigger board gave the party more room to close on the quarry, and its reward payout moved from Ase 55/Ekwan 7 to Ase 64/Ekwan 8 as a direct consequence — same win condition (`all_enemies_defeated`), unchanged rank (S).
+> In the Echoes vNext repo, story V2-COMBAT-003.5 raised combat board size (`data.combat.board`: base_cols/rows 12→18, max_cols/rows 22→28 — see `docs/v2-combat-003.5-decisions.md` entry #2). A side effect, confirmed by qa-verifier during that story's review: PURSUE mode's `fp_pursue` fixture in `tests/FlowFingerprintTests.gd` now resolves one round faster than before (5→4 rounds) because the bigger board gave the party more room to close on the quarry, and its reward payout moved from Ase 55/Ekwan 7 to Ase 64/Ekwan 8 as a direct consequence — same win condition (`all_enemies_defeated`), unchanged rank (S).
 >
-> Jeff wants this reviewed on its own, separately from V2-COMBAT-003.5 (see ANSWERS.md #65): is a reward payout that shifts as an unintended side effect of an unrelated board-size tuning change (rather than a deliberate balance decision) something the reward formula should be more insulated from? Investigate how PURSUE (and likely other objectives whose resolution speed is board-shape-sensitive) computes its Ase/Ekwan payout, whether "fights faster because the board is bigger" is a sound proxy for "performed better," and whether this warrants a design conversation with Jeff before deciding whether to change anything.
+> Jeff wants this reviewed on its own, separately from V2-COMBAT-003.5 (see `docs/v2-combat-003.5-decisions.md` entry #4): is a reward payout that shifts as an unintended side effect of an unrelated board-size tuning change (rather than a deliberate balance decision) something the reward formula should be more insulated from? Investigate how PURSUE (and likely other objectives whose resolution speed is board-shape-sensitive) computes its Ase/Ekwan payout, whether "fights faster because the board is bigger" is a sound proxy for "performed better," and whether this warrants a design conversation with Jeff before deciding whether to change anything.
 
 ---
 
@@ -37,13 +40,13 @@ reference if you need to dismiss one later.
 
 **task_id:** `task_d44dccca`
 
-**Why it came up:** Found while `EncounterSetupService.gd` was open for the board-size change; pre-existing (V2-STAGE-004-era), unrelated to V2-COMBAT-003.5's subject. Jeff: file separately (ANSWERS.md #66).
+**Why it came up:** Found while `EncounterSetupService.gd` was open for the board-size change; pre-existing (V2-STAGE-004-era), unrelated to V2-COMBAT-003.5's subject. Jeff: file separately (`docs/v2-combat-003.5-decisions.md` entry #5).
 
 **Opening prompt:**
-> In `core/combat/EncounterSetupService.gd` in the Echoes vNext repo, fix two small pre-existing documentation/fallback staleness issues surfaced during V2-COMBAT-003.5's review (see ANSWERS.md #66), unrelated to that story's actual subject:
+> In `core/combat/EncounterSetupService.gd` in the Echoes vNext repo, fix two small pre-existing documentation/fallback staleness issues surfaced during V2-COMBAT-003.5's review (see `docs/v2-combat-003.5-decisions.md` entry #5), unrelated to that story's actual subject:
 >
 > 1. Around line 334, a comment reads `# V2-STAGE-004 P3b: PURSUE board is 2x one dimension` — but the actual configured value in `data/balance.json` (`data.combat.board.long_multiplier` for PURSUE) is 4.0, and the code's own default at line 336 is 2.0 (which never fires since the config always provides a real value). Correct the comment to state the true multiplier, or make it generic enough not to go stale again when the config value is tuned (e.g. reference the config key instead of a literal number).
-> 2. Around lines 327-331, the function's fallback defaults for `base_cols`/`base_rows`/`max_cols`/`max_rows` still read 12/12/22/22 — stale since V2-COMBAT-003.5 raised the live config to 18/18/28/28 (ANSWERS.md #63). These fallbacks only fire if `data.combat.board` were ever missing from `balance.json`, so there's no live behavior bug today, but they'd silently regenerate the OLD board size if that ever happened. Update them to match the current live values, or reconsider whether hardcoded fallbacks make sense here at all versus failing loudly if the config block is missing.
+> 2. Around lines 327-331, the function's fallback defaults for `base_cols`/`base_rows`/`max_cols`/`max_rows` still read 12/12/22/22 — stale since V2-COMBAT-003.5 raised the live config to 18/18/28/28 (`docs/v2-combat-003.5-decisions.md` entry #2). These fallbacks only fire if `data.combat.board` were ever missing from `balance.json`, so there's no live behavior bug today, but they'd silently regenerate the OLD board size if that ever happened. Update them to match the current live values, or reconsider whether hardcoded fallbacks make sense here at all versus failing loudly if the config block is missing.
 >
 > Run the compile check and relevant filtered test suites (`tests combat_terrain`, `tests combat_baseline`) after any change to confirm nothing regresses.
 
@@ -56,7 +59,7 @@ reference if you need to dismiss one later.
 **Why it came up:** During the fingerprint re-baseline, a PROTECT fixture crossed the fixed 5-round `speed_bonus_threshold` downward purely because of the bigger board (losing its speed bonus: rank S→A). Raises the question of whether this threshold, and grading generally, was tuned against the old board pacing — a live-play design question, not just a test-fixture quirk. Explicitly out of scope for V2-COMBAT-003.5 (no rebalancing).
 
 **Opening prompt:**
-> In the Echoes vNext repo, `core/economy/RewardCalc.gd:80-82` pays a speed bonus (better Ase/Ekwan payout, higher rank grade) only when `round_ended < speed_bonus_threshold` (currently 5). Story V2-COMBAT-003.5 raised combat board size (`data.combat.board`: base_cols/rows 12→18, max_cols/rows 22→28 — ANSWERS.md #63), which changes how many rounds a typical fight takes to resolve. During that story's fingerprint re-baseline, a PROTECT test fixture crossed the threshold DOWNWARD (4→5 rounds, losing its speed bonus: rank S→A, Ase 59→50) purely because the bigger board changed pathing — a mechanical side effect, not a balance decision.
+> In the Echoes vNext repo, `core/economy/RewardCalc.gd:80-82` pays a speed bonus (better Ase/Ekwan payout, higher rank grade) only when `round_ended < speed_bonus_threshold` (currently 5). Story V2-COMBAT-003.5 raised combat board size (`data.combat.board`: base_cols/rows 12→18, max_cols/rows 22→28 — `docs/v2-combat-003.5-decisions.md` entry #2), which changes how many rounds a typical fight takes to resolve. During that story's fingerprint re-baseline, a PROTECT test fixture crossed the threshold DOWNWARD (4→5 rounds, losing its speed bonus: rank S→A, Ase 59→50) purely because the bigger board changed pathing — a mechanical side effect, not a balance decision.
 >
 > Investigate: was `speed_bonus_threshold` (and any other round-count-based grading threshold in `RewardCalc.gd` or elsewhere) tuned against the old ~12x12 board pacing? If board size now routinely shifts real fights across that threshold in either direction, grade/reward distribution across live play may have shifted unintentionally, not just in this one test fixture. Determine whether the threshold should scale with board size (or with the objective's own expected-duration signature), stay fixed, or whether this is a non-issue in practice — and bring findings to Jeff for a decision, since this is a design/balance number, not something to change unilaterally (V2-COMBAT-003.5 explicitly excluded rebalancing combat/economy from its scope).
 
@@ -139,20 +142,26 @@ reference if you need to dismiss one later.
 
 ---
 
-## 10. Widen class_origin roll to cover all 10 identity vectors
+## 10. Same-`class_origin` Echoes still get identical vector_scores at Standing 1
 
 **task_id:** `task_9a58ca1c`
 
-**Why it came up:** Found while refining V2-COMBAT-003.5's movement-style fix (decisions #33-36). Jeff required "2 new Echoes should never be the same" (decision #36) — investigation found summoning only ever rolls 4 of 10 identity-vector origins, so two same-origin Echoes get byte-identical vector_scores at Standing 1.
+**Corrected 2026-09-23 (Phase 6 combined verification):** this task's original premise — that
+only 4 of 10 identity-vector origins are ever summon-able — is **false**. Directly tested by
+summoning 200 Echoes: all 10 origins occurred (14-28 times each). `EchoFactory.gd:76-78`'s
+4-entry literal (`protector`, `vanguard`, `seeker`, `pillar`) is only a FALLBACK used if
+`data.summoning.class_origin_weights` is missing from `balance.json` — the real table has had
+all 10 vectors since before this story (`git blame` shows 2026-04-26). The narrower, still-real
+concern below is what's actually left open.
+
+**Why it came up:** Found while refining V2-COMBAT-003.5's movement-style fix (decisions #33-36). Jeff required "2 new Echoes should never be the same" (decision #36) — two Echoes who happen to roll the SAME `class_origin` (out of the real 10 available) still get byte-identical `vector_scores` at Standing 1, since `archetype_init` scores by origin, not by individual Echo.
 
 **Opening prompt:**
-> In the Echoes vNext Godot/GDScript repo, `core/sanctum/EchoFactory.gd:76-78` rolls a new Echo's `class_origin` from `class_origin_weights`, which lists only 4 options: `protector`, `vanguard`, `seeker`, `pillar`. But `data/balance.json`'s `data.vectors.archetype_init` (and every downstream scoring table, e.g. `data.actor.movement_style_weights.vector_bias`) defines all 10 identity vectors: protector, vanguard, seeker, pillar, strategist, skeptic, devoted, opportunist, mediator, nurturer.
+> In the Echoes vNext Godot/GDScript repo, `data/balance.json`'s `data.summoning.class_origin_weights` lists all 10 identity-vector origins (protector, vanguard, seeker, pillar, strategist, skeptic, devoted, opportunist, mediator, nurturer) — confirmed live and reachable, NOT limited to 4 (a prior version of this task wrongly claimed only 4 were reachable; `core/sanctum/EchoFactory.gd:76-78`'s 4-entry literal is a fallback for a missing config block only, never hit in production).
 >
-> This means no newly summoned Echo can ever be born leaning strategist, skeptic, devoted, opportunist, mediator, or nurturer — 6 of 10 possible identities are unreachable at summon. Worse: two Echoes who happen to roll the same `class_origin` get byte-identical `vector_scores` from `archetype_init`, so at Standing 1 they are mechanically indistinguishable in anything vector-driven (movement style, dominant-vector behavior, etc.) until lived experience differentiates them. This was confirmed directly in `tests/CombatBaselineTests.gd:258-260`, whose own comment records a 5-Echo fixture party as pillar, pillar, vanguard, seeker, pillar — 3 of 5 identical.
+> The real, still-open gap: two Echoes who happen to roll the SAME `class_origin` get byte-identical `vector_scores` from `data.vectors.archetype_init`, so at Standing 1 they are mechanically indistinguishable in anything vector-driven (movement style, dominant-vector behavior, etc.) until lived experience differentiates them. Jeff explicitly required "2 new Echoes should never be the same" (decision #36). That story's fix (a `trait_nudge` reweight, decisions #35-36) works around this gap without closing it — traits still differentiate same-origin Echoes, but their vector identity itself stays collided.
 >
-> This is a summoning-identity gap, not a movement-scoring bug — it was found while diagnosing/fixing V2-COMBAT-003.5's movement-style regression (see `docs/v2-combat-003.5-decisions.md` entries #33-36), and Jeff explicitly required "2 new Echoes should never be the same" (decision #36). That story's fix (a `trait_nudge` reweight) works around this gap without closing it — traits still differentiate same-origin Echoes, but their vector identity itself stays collided.
->
-> Investigate: should `class_origin_weights` be widened to cover all 10 vectors (what would the weights be — even distribution, or does the game's summoning fiction favor some origins over others?), or is there a design reason only 4 are summon-able (e.g. the other 6 are meant to be earned/developed through play, never rolled at birth)? Read `docs/movement-model.md` §10.4 and any GDD sections on Echo identity/summoning to check before assuming this is a bug. If it is confirmed a gap that should close, propose the new weight table (a `mid-game-designer`/`sr-game-designer` call, not a unilateral number pick) and implement once approved. This interacts with `GridService._dominant_key()`'s tiebreak order too (a related 4-vector-only gap flagged in `tests/CombatBaselineTests.gd:275-279`) — check whether that should be fixed in the same pass. **Note (2026-09-22): Phase 5 unified the three duplicate `_dominant_key()` copies into one shared `GridService.dominant_key()` — the tiebreak-order gap itself (only 4 of 10 vectors named) is unchanged, but the function is no longer duplicated across `GridService.gd`/`CombatState.gd`/`ShrineService.gd`.**
+> Investigate: should `archetype_init` itself vary per-Echo within a shared origin (e.g. a small deterministic per-Echo variance seeded off the Echo's own id, layered on top of the origin's base scores), or is the `trait_nudge` workaround judged sufficient and this should be closed as won't-fix? Read `docs/movement-model.md` §10.4 and any GDD sections on Echo identity/summoning before proposing a mechanism. If a fix is warranted, propose it to `mid-game-designer`/`sr-game-designer` (a design call, not a unilateral number pick) before implementing. This interacts with `GridService.dominant_key()`'s tiebreak order too (a related 4-vector-only gap, unrelated to the origin-roll question — flagged in `tests/CombatBaselineTests.gd:275-279`) — check whether that's worth fixing in the same pass. **Note (2026-09-22): Phase 5 unified the three duplicate `_dominant_key()` copies into one shared `GridService.dominant_key()` — the tiebreak-order gap itself (only 4 of 10 vectors named) is unchanged, but the function is no longer duplicated across `GridService.gd`/`CombatState.gd`/`ShrineService.gd`.**
 
 ---
 
@@ -166,3 +175,33 @@ reference if you need to dismiss one later.
 > In the Echoes vNext Godot/GDScript repo, `core/actors/behaviors/BehaviorArbiter.gd` is now 2,850 lines (measured during V2-COMBAT-003.5 Phase 5 recon, 2026-09-22). The project's own convention (see prior story plans, e.g. `docs/v2-combat-003.5-plan-snapshot.md`) treats this file's growth as guarded, with a soft target of ~1,000 code lines, on the reasoning that new scoring/behavior logic should get its own bounded file (the precedent set by `DecisionTrace.gd`, `GuidanceContribution.gd`, and `MovementStyleService.gd`, all of which extend `BehaviorArbiter`'s output without growing the file itself). It was ~1,877 lines before V2-COMBAT-003.5's Phase 3c work (which itself mostly avoided growing it further, per decision #18 in `docs/v2-combat-003.5-decisions.md`), but has since crossed 2,850.
 >
 > Investigate: what has been added directly into `BehaviorArbiter.gd` across recent stories (git blame / git log on the file) that could reasonably have been extracted into its own bounded service, following the `MovementStyleService.gd`-style pattern (a pure function/service that `BehaviorArbiter` calls, rather than logic embedded in `_score()` or its neighbors)? Identify 2-4 concrete extraction candidates with a rough line-count estimate for each, and propose a plan for extracting them (a design pass by `sr-game-designer`/`mechanics-developer` jointly, matching how `MovementStyleService.gd` was designed before V2-COMBAT-003.5 built it). Do not extract anything yet — this is a scoping/investigation task; bring findings back for a scope decision before any code moves, since this is a structural refactor that could touch scoring behavior if done carelessly (the `directive_bonus` flat-additive-outside-brackets invariant, and probably others, must survive any extraction unchanged).
+
+---
+
+## 12. Fix _read_field_cooldown's identical ordering bug
+
+**task_id:** `task_3e1b8703`
+
+**Why it came up:** Phase 5 fixed `_withdraw_cooldown`'s decrement-before-check ordering bug (it never blocked anything). `_read_field_cooldown` has the exact same shape and was deliberately left alone as out of scope at the time — found again during Phase 6 verification, still untracked anywhere in the repo.
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo, `core/actors/ActorStateMachine.gd`'s `_read_field_cooldown` (currently ~line 251-253, comment at ~line 260 calls it "already-flagged") is decremented unconditionally at the START of `advance_turn()`, before `BehaviorArbiter.gd`'s own check of it later in the same call (~line 1881 as of this writing, may have shifted). This is the exact same ordering bug `_withdraw_cooldown` had — fixed in V2-COMBAT-003.5 Phase 5 (`docs/v2-combat-003.5-decisions.md`, the mechanical-fixes batch) by moving its decrement to the end of the turn instead of the start.
+>
+> `_read_field_cooldown`'s fix was deliberately deferred at the time ("out of scope for this phase, leave it alone") but was never actually filed anywhere as a follow-up — Phase 6's combined verification (2026-09-23) found it again and confirmed no document in the repo tracks it.
+>
+> Fix it the same way `_withdraw_cooldown` was fixed: move the decrement from the start of `advance_turn()` to the end of the turn (inside `_update_passive_state()` or wherever the `_withdraw_cooldown` fix landed — read that fix's diff/commit for the exact pattern to mirror). Add a test proving the cooldown now actually blocks for at least one turn after it's set, matching the test added for `_withdraw_cooldown` (likely in `tests/CooldownTests.gd`). Run the compile check and relevant filtered suites (`cooldown`, `actor`, `behavior_arbiter`) to confirm no regression.
+
+---
+
+## 13. Hostile-Claimant fights can reuse an earlier fight's encounter_id
+
+**task_id:** `task_d9eb5743`
+
+**Why it came up:** Found during Phase 6 combined verification (2026-09-23), traced in code, not yet reproduced in play. Pre-existing (predates this story), made consequential by this story's board-variety work (decisions #1-3) — previously all stage encounters shared one board anyway, so an id collision was invisible.
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo, `core/runtime/controllers/ContactController.gd:663` transitions into ENCOUNTER state (a hostile Claimant fight) without setting `flow_ctx.encounter_id`. Nothing resets `encounter_id` after a fight ends — the only places that assign it are `core/runtime/controllers/VentureController.gd:258` and `:536`, onboarding, and the keeper intro flow.
+>
+> This means: if the party fights, say, `sit.3` in a stage, and later a Claimant turns hostile in that same stage, the Claimant fight inherits the leftover `encounter_id` from the earlier fight (e.g. `...sit.3`). Since `encounter_id` seeds terrain and spawn generation, the Claimant fight would get the SAME terrain and spawn cells as the earlier fight if both are COMBAT-type encounters. It would also silently skip its own ally-recruit roll, since `RecruitmentConsequenceService.gd:101` runs that roll once per `encounter_id` — and the id would already be "used."
+>
+> Investigate: confirm this reproduces in an actual play session (or a targeted test/probe) — a Claimant-turned-hostile fight in a stage that already had a prior fight should show terrain/spawn cells matching that prior fight, and the ally-recruit roll should not fire. If confirmed, fix by giving the Claimant-hostile transition its own real `encounter_id` (matching the pattern `VentureController.gd` uses), scoped appropriately so it doesn't collide with other fights in the same stage. Add a test. Run the compile check and relevant filtered suites (`contact`, `combat_terrain`, `recruit`) to confirm no regression.
