@@ -26,6 +26,8 @@ Story-specific decisions for the pace bonus story. Project-wide decisions stay i
 | D-19 | defeat-shows-no-pace | A defeat shows nothing about pace: no row, normal colour, no `pace_state` | 2026-09-25 |
 | D-20 | pace-ratio-not-in-snapshot | `pace_ratio` stays out of the snapshot data (#59); the screen uses only `pace_state` | 2026-09-25 |
 | D-21 | pace-one-stage-base | The live colour and the result pace bonus use one stage base, captured once at fight start | 2026-09-25 |
+| D-22 | pace-state-from-ase-paid | `pace_state` is set from the Ase paid: full = maximum, partial = between 0 and maximum, none = 0 | 2026-09-25 |
+| D-23 | reached-enemies-and-ally-kills | A party Echo kill marks the enemy reached; only living enemies become reached; ally and spirit kills pay Ase but leave both sides of the rank | 2026-09-25 |
 
 ---
 
@@ -214,6 +216,30 @@ Story-specific decisions for the pace bonus story. Project-wide decisions stay i
 **Q:** The live pace colour read the stage base through `ActiveStageService.get_stage_base_reward()` (stage found by list position), and the result pace bonus through `FlowEncounterState` (stage found by its `index` field). They agree today. How is this handled? (Raised by mechanics-developer.)
 **A:** One source for pace. The stage base is captured once at fight start and used for the live colour and for the result pace bonus. So the colour and the "Pace bonus" row can never disagree (D-17). The two older lookups stay as they are; unifying them is a separate follow-up.
 **Source:** Jeff, 2026-09-25
+**Date:** 2026-09-25
+
+---
+
+### D-22. pace-state-from-ase-paid
+
+**Q:** A pace ratio just above the full-bonus limit can round up to the full bonus (the merged PURSUE fixture: ratio 1.11, fraction 0.98, pays the full 3 Ase) while `pace_state` says `partial`. How does `pace_state` work? (Raised by mechanics-developer during the merge with main.)
+**A:** `pace_state` is set from the Ase paid, in both directions: `full` when the paid pace bonus equals the maximum pace bonus; `partial` when it is more than 0 and less than the maximum; `none` when it is 0. During the fight, the paid bonus is the bonus that a win in the current round would pay. This extends D-17: the colour and the "Pace bonus" row always agree.
+**Source:** Jeff, 2026-09-25
+**Date:** 2026-09-25
+
+---
+
+### D-23. reached-enemies-and-ally-kills
+
+**Q:** QA found two defects in the reached-enemy count (`PaceService.record_reached_enemies`). (1) A dead enemy is still checked at its last cell, so a normal kill counts as reached. (2) An enemy can die without reaching the party: a Temporary Ally or a joined spirit kills it, or the killer Echo dies in the same round. How do these kills count? (Raised by qa-verifier.)
+**A:** The Temporary Ally and the joined spirit are not party. Their kills do not count toward the rank. The rules:
+1. A kill by a party Echo marks that enemy as reached, at kill time. This is true also when the Echo dies in the same round.
+2. Otherwise, only a living enemy can become reached. A dead enemy is not checked at its last cell.
+3. A Temporary Ally or joined-spirit kill pays the kill Ase (as today), but never counts in the rank. This applies in every mode, COMBAT and PURIFY_SHRINE included. The rank kill term counts only kills by party Echoes. So the fight records which side made each kill.
+4. An enemy that a Temporary Ally or joined spirit kills is removed from both sides of the rank: from the kill term and from the rank maximum (`max_possible`). This applies in every mode. So an ally has no effect on the rank (Jeff, option Y).
+The rank maximum kill term is then: (all enemies in COMBAT and PURIFY_SHRINE, or reached enemies in the other five modes) without the enemies that an ally or spirit killed (a set difference, so an enemy is never subtracted twice).
+Rules 1 and 2 apply to the modes that track reached enemies: PROTECT, ENDURE, RECOVER, PURSUE and GUIDE_SPIRIT.
+**Source:** Jeff, 2026-09-25 ("Pays Ase, not rank"; "Ally is not party, it should not count"; "An ally kill should not count in the rank. It should pay Ase."; option Y)
 **Date:** 2026-09-25
 
 ---

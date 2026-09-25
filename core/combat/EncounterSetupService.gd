@@ -707,7 +707,7 @@ func setup(t: int) -> void:
 ## Writes ectx.pace_cfg for a pace mode (PaceService.compute_par); leaves it {} otherwise.
 func _setup_pace(t: int) -> void:
 	var ectx: EncounterContext = flow_ctx.encounter_ctx
-	# The keeper-intro trial pays no reward, so it is a no-pace fight (design §7).
+	# The keeper-intro trial pays its fixed 40 Ase trial reward and no pace bonus (decisions.md D-18).
 	if not PaceService.is_pace_mode(ectx.resolution_mode) or ectx.encounter_id == "keeper_intro.first_trial":
 		return
 	var capacity_cfg: Dictionary = {}

@@ -97,16 +97,13 @@ the stage base) but does not change any other Ase source (kill and survivor bonu
 virtue bonus, scout return).
 **Owner:** mid-game-designer, with Jeff deciding the values.
 
-## 11. `movement_arbiter/avoid_overcommit_stays_proportionate` fails in the cloud container
+## 11. `movement_arbiter/avoid_overcommit_stays_proportionate` is red on purpose — NO ACTION
 
-**Measured:** the test fails on the unchanged commit `1815c75` in the Linux cloud container
-(Godot 4.6.1), before any pace-bonus change: "scout_carefully still collapses to a shorter route".
-In each failing case, the two route options have the same utility (for example 4.6 and 4.6), so
-the result depends on the tie-break.
-**Not known:** whether the test also fails on Jeff's Mac. If it passes there, the cause is a
-platform difference in floating-point results, and the test needs a tie-break that does not depend
-on the platform. Run `tests =movement_arbiter` on the Mac to decide.
-**Not caused by this story:** phase 3 does not change movement scoring.
+**Correction (2026-09-25):** an earlier version of this item suggested a Linux-only tie-break as
+the cause. That was wrong. The test is red on purpose: the comment above it
+(`tests/MovementArbitrationTests.gd:786`) cites V2-COMBAT-003.5 decisions #29 and #38 in
+`docs/stories/v2-combat-003.5/decisions.md`. It fails on every platform, before and after this
+story. No action for this story.
 
 ## 12. Two lookups for the stage base reward
 

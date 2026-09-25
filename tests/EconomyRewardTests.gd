@@ -15,8 +15,8 @@
 #   10. reward/rank_S_first_run              — perfect score + run_count=0 → rank = "S"
 #   11. reward/rank_F_poor_performance       — poor perf + run_count=5 → rank = "F"
 #   12. reward/economy_service_adds_ase      — both cadence payers add the correct amount
-#   13-27. reward/pace_*                     — par per mode, pace_state, reached enemies, rank
-#          ceiling, the "Pace bonus" row, objective_state and resolve data per mode
+#   13-33. reward/pace_*                     — par per mode, pace_state, reached enemies, rank
+#          ceiling, the "Pace bonus" row, objective_state and resolve data per mode, ally kills
 
 extends RefCounted
 class_name EconomyRewardTests
@@ -85,6 +85,12 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("reward/pace_endure_drive_reached_and_no_pace", Callable(EconomyRewardTests, "_t_pace_endure_drive_reached_and_no_pace"))
 	runner.register_test("reward/pace_keeper_intro_no_pace", Callable(EconomyRewardTests, "_t_pace_keeper_intro_no_pace"))
 	runner.register_test("reward/pace_uses_captured_stage_base", Callable(EconomyRewardTests, "_t_pace_uses_captured_stage_base"))
+	runner.register_test("reward/pace_state_from_ase_paid",  Callable(EconomyRewardTests, "_t_pace_state_from_ase_paid"))
+	runner.register_test("reward/pace_party_kill_marks_reached", Callable(EconomyRewardTests, "_t_pace_party_kill_marks_reached"))
+	runner.register_test("reward/pace_dead_enemy_not_newly_reached", Callable(EconomyRewardTests, "_t_pace_dead_enemy_not_newly_reached"))
+	runner.register_test("reward/pace_ally_kill_out_of_rank", Callable(EconomyRewardTests, "_t_pace_ally_kill_out_of_rank"))
+	runner.register_test("reward/pace_result_reads_combat_state_stage_base", Callable(EconomyRewardTests, "_t_pace_result_reads_combat_state_stage_base"))
+	runner.register_test("reward/pace_keeper_intro_real_path", Callable(EconomyRewardTests, "_t_pace_keeper_intro_real_path"))
 
 
 # ─── Test 1 — single combat objective → base = 30 ────────────────────────────
@@ -625,4 +631,174 @@ static func _t_pace_uses_captured_stage_base() -> Dictionary:
 	var p := RewardCalc.compute(true, objs, 0, 0, 5, 5, 14, 0, _default_cfg(), _COMBAT, 10.0, 0, 30)
 	if str(p.get("pace_state", "")) != PaceService.pace_state(14, 10.0, 1.1, 1.6, 30, 0.05):
 		return { "ok": false, "error": "result pace_state must equal the live state for the same base" }
+	return { "ok": true }
+
+
+# ─── Test 28 — pace_state follows the Ase paid (decisions.md D-22) ────────────
+static func _t_pace_state_from_ase_paid() -> Dictionary:
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1), ObjectiveModel.make(1, ObjectiveModel.TYPE_COMBAT, 1)]
+	# [round, par, stage base, expected bonus Ase, expected state]
+	var cases := [
+		# The merged PURSUE fixture: ratio 1.11, fraction 0.98, 2.93 rounds to the maximum 3.
+		[5, 4.5, 60, 3, PaceService.PACE_FULL],
+		# Fraction 0.6: 1.8 rounds to 2, below the maximum 3.
+		[13, 10.0, 60, 2, PaceService.PACE_PARTIAL],
+		[16, 10.0, 60, 0, PaceService.PACE_NONE],
+		# Base 5: the maximum roundi(0.25) is 0, so even fraction 1.0 pays 0 and is "none".
+		[1, 10.0, 5, 0, PaceService.PACE_NONE],
+	]
+	for c in cases:
+		var live := PaceService.pace_state(c[0], c[1], 1.1, 1.6, c[2], 0.05)
+		var r := RewardCalc.compute(true, objs, 0, 0, 5, 5, c[0], 0, _default_cfg(), EncounterResolutionModes.PURSUE, c[1], 0, c[2])
+		if live != c[4] or str(r.get("pace_state", "")) != c[4] or int(r.get("pace_bonus", -1)) != c[3]:
+			return { "ok": false, "error": "case %s: live %s, result %s" % [str(c), live, str(r)] }
+	return { "ok": true }
+
+
+# ─── Test 29 — a party-echo kill marks the enemy reached, also when that echo is dead ──
+static func _t_pace_party_kill_marks_reached() -> Dictionary:
+	var actors: Array = [
+		# The killer died later in the same round and stands far from the enemy's cell.
+		_actor("echo_a", "echo", 0, 0, { "is_dead": true }),
+		_actor("echo_b", "echo", 0, 9),
+		_actor("enemy_1", "enemy", 7, 7, { "is_dead": true }),
+	]
+	var cs: Dictionary = CombatState.create(actors, EncounterResolutionModes.PURSUE)
+	PaceService.record_kill({ "action_type": "melee_attack", "attacker_id": "echo_a",
+		"target_id": "enemy_1", "is_kill": true }, actors, cs)
+	PaceService.record_reached_enemies(actors, cs)
+	if cs["reached_enemy_ids"] != ["enemy_1"] or not (cs["ally_killed_enemy_ids"] as Array).is_empty():
+		return { "ok": false, "error": "expected reached [enemy_1], got %s / %s" % [str(cs["reached_enemy_ids"]), str(cs["ally_killed_enemy_ids"])] }
+	# A non-kill hit and a non-melee result record nothing.
+	actors.append(_actor("enemy_2", "enemy", 9, 9))
+	PaceService.record_kill({ "action_type": "melee_attack", "attacker_id": "echo_b",
+		"target_id": "enemy_2", "is_kill": false }, actors, cs)
+	PaceService.record_kill({ "action_type": "actor.move", "attacker_id": "echo_b",
+		"target_id": "enemy_2", "is_kill": false }, actors, cs)
+	if cs["reached_enemy_ids"] != ["enemy_1"]:
+		return { "ok": false, "error": "a non-kill must not mark reached: %s" % str(cs["reached_enemy_ids"]) }
+	return { "ok": true }
+
+
+# ─── Test 30 — a dead enemy is not checked at its last cell (QA defect 4) ─────
+static func _t_pace_dead_enemy_not_newly_reached() -> Dictionary:
+	var actors: Array = [
+		_actor("echo_a", "echo", 0, 0),
+		# Died without a party kill (for example a hazard), next to a living echo.
+		_actor("enemy_1", "enemy", 1, 0, { "is_dead": true }),
+		_actor("enemy_2", "enemy", 1, 1),
+	]
+	var cs: Dictionary = CombatState.create(actors, EncounterResolutionModes.ENDURE)
+	PaceService.record_reached_enemies(actors, cs)
+	if cs["reached_enemy_ids"] != ["enemy_2"]:
+		return { "ok": false, "error": "expected [enemy_2] only, got %s" % str(cs["reached_enemy_ids"]) }
+	return { "ok": true }
+
+
+# ─── Test 31 — an ally or spirit kill pays the kill Ase but is out of both rank sides ──
+# base 30, 1 of 5 echoes survives, no pace term (par 0).
+static func _t_pace_ally_kill_out_of_rank() -> Dictionary:
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1)]
+	var cfg := _default_cfg()
+	# record_kill sorts the killers: ally and spirit go to the ally set in every mode.
+	var actors: Array = [
+		_actor("echo_a", "echo", 0, 0),
+		_actor("ally", "echo", 0, 1, { "is_ally": true }),
+		_actor("spirit", "echo", 0, 2, { "is_spirit": true }),
+		_actor("enemy_1", "enemy", 1, 0, { "is_dead": true }),
+		_actor("enemy_2", "enemy", 1, 1, { "is_dead": true }),
+		_actor("enemy_3", "enemy", 1, 2, { "is_dead": true }),
+	]
+	for mode in [EncounterResolutionModes.COMBAT, EncounterResolutionModes.ENDURE]:
+		var cs: Dictionary = CombatState.create(actors, mode)
+		PaceService.record_kill({ "action_type": "melee_attack", "attacker_id": "echo_a", "target_id": "enemy_1", "is_kill": true }, actors, cs)
+		PaceService.record_kill({ "action_type": "melee_attack", "attacker_id": "ally", "target_id": "enemy_2", "is_kill": true }, actors, cs)
+		PaceService.record_kill({ "action_type": "melee_attack", "attacker_id": "spirit", "target_id": "enemy_3", "is_kill": true }, actors, cs)
+		if cs["ally_killed_enemy_ids"] != ["enemy_2", "enemy_3"]:
+			return { "ok": false, "error": "%s: ally set %s" % [mode, str(cs["ally_killed_enemy_ids"])] }
+		var expect_reached: Array = ["enemy_1"] if mode == EncounterResolutionModes.ENDURE else []
+		if cs["reached_enemy_ids"] != expect_reached:
+			return { "ok": false, "error": "%s: reached %s" % [mode, str(cs["reached_enemy_ids"])] }
+
+	# COMBAT, 4 enemies, the ally killed all 4. Kill Ase 20 stays. Rank: 40 / 80 = 0.5 → C.
+	# The old rule counted them on both sides: 60 / 100 = 0.6 → B.
+	var c := RewardCalc.compute(true, objs, 4, 4, 1, 5, 10, 0, cfg, _COMBAT, 0.0, 0, 0, 4)
+	var c_ref := RewardCalc.compute(true, objs, 0, 0, 1, 5, 10, 0, cfg, _COMBAT, 0.0, 0, 0)
+	if int(c.get("enemy_bonus", -1)) != 20 or str(c.get("rank", "")) != "C" or c.get("rank") != c_ref.get("rank"):
+		return { "ok": false, "error": "COMBAT ally kills: expected enemy_bonus 20 and rank C, got %s" % str(c) }
+
+	# ENDURE, reached [e1, e2], the party killed e1, the ally killed the REACHED e2.
+	# rank_reached_count = 1. Kill Ase 10. Rank: (30 + 5 + 10) / (30 + 5 + 50) = 0.53 → C.
+	var ecs: Dictionary = { "reached_enemy_ids": ["e1", "e2"], "ally_killed_enemy_ids": ["e2"] }
+	if PaceService.rank_reached_count(ecs) != 1:
+		return { "ok": false, "error": "set difference: expected 1, got %d" % PaceService.rank_reached_count(ecs) }
+	var e := RewardCalc.compute(true, objs, 2, 6, 1, 5, 5, 0, cfg, EncounterResolutionModes.ENDURE, 0.0,
+		PaceService.rank_reached_count(ecs), 0, 2 - 1)
+	var e_ref := RewardCalc.compute(true, objs, 1, 6, 1, 5, 5, 0, cfg, EncounterResolutionModes.ENDURE, 0.0, 1, 0)
+	if int(e.get("enemy_bonus", -1)) != 10 or str(e.get("rank", "")) != "C" or e.get("rank") != e_ref.get("rank"):
+		return { "ok": false, "error": "ENDURE ally kill of a reached enemy: expected enemy_bonus 10, rank C, got %s" % str(e) }
+	# An ally kill of an enemy that never reached is subtracted once only.
+	var once: Dictionary = { "reached_enemy_ids": ["e1"], "ally_killed_enemy_ids": ["e2"] }
+	if PaceService.rank_reached_count(once) != 1:
+		return { "ok": false, "error": "an unreached ally kill must not lower the reached count" }
+	return { "ok": true }
+
+
+# ─── Test 32 — the result reads combat_state["stage_base"] (decisions.md D-21 wiring) ──
+# The objectives sum to 30 or 60. A captured base of 200 pays a maximum of 10, which only the
+# FlowEncounterState → RewardCalc wiring of combat_state["stage_base"] can produce.
+static func _t_pace_result_reads_combat_state_stage_base() -> Dictionary:
+	var env: Dictionary = FlowFingerprintTests._setup_encounter(EncounterResolutionModes.COMBAT, "pace_stage_base")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var runtime: FlowRuntime = env["runtime"]
+	var ectx: EncounterContext = env["ectx"]
+	runtime.dispatch({ "type": "combat.init" })
+	var cs: Dictionary = ectx.combat_state
+	for c in [[200, PaceService.PACE_FULL], [0, PaceService.PACE_NONE]]:
+		cs["stage_base"] = c[0]
+		cs["round_counter"] = 1
+		ectx.combat_result = { "victory": true, "reason": "all_enemies_defeated", "round_ended": 1, "shrine_hp": 0 }
+		var data: Dictionary = FlowEncounterState.build_final_snapshot(env["flow_ctx"], 0).get("data", {})
+		var expected := PaceService.max_bonus_ase(c[0], float(cs.get("pace_bonus_pct", 0.0)))
+		if int(data.get("pace_bonus_awarded", -1)) != expected or str(data.get("pace_state", "")) != c[1]:
+			return { "ok": false, "error": "stage_base %d: expected bonus %d and %s, got %s / %s" % [
+				c[0], expected, c[1], data.get("pace_bonus_awarded"), data.get("pace_state")] }
+		if str((data.get("objective_state", {}) as Dictionary).get("pace_state", "")) != c[1]:
+			return { "ok": false, "error": "stage_base %d: objective_state.pace_state must be %s" % [c[0], c[1]] }
+	return { "ok": true }
+
+
+# ─── Test 33 — the real keeper-intro path carries no pace data (decisions.md D-18) ──
+# KeeperIntroService.setup_trial_encounter() builds its own encounter context, not through
+# EncounterSetupService._setup_pace(). Drive it through the real dispatches.
+static func _t_pace_keeper_intro_real_path() -> Dictionary:
+	var runtime := OnboardingTests._prepare_named_runtime()
+	runtime.dispatch({ "type": "keeper_intro.call.answer" })
+	var ectx: EncounterContext = runtime.flow_ctx.encounter_ctx
+	if ectx == null or ectx.encounter_id != "keeper_intro.first_trial":
+		return { "ok": false, "error": "keeper trial encounter not set up" }
+	if not ectx.pace_cfg.is_empty():
+		return { "ok": false, "error": "keeper trial pace_cfg must be empty, got %s" % str(ectx.pace_cfg) }
+	runtime.dispatch({ "type": "combat.init" })
+	if float(ectx.combat_state.get("par_rounds", -1.0)) != 0.0:
+		return { "ok": false, "error": "keeper trial par_rounds must be 0.0" }
+	runtime.dispatch({ "type": "combat.confirm_round" })
+	var snaps: Array = [runtime.flow_ctx.last_snapshot]
+	OnboardingTests._defeat_trial_wound(runtime)
+	ectx.combat_result = { "victory": true, "reason": "all_enemies_defeated", "round_ended": 1 }
+	ectx.combat_state["combat_over"] = true
+	snaps.append(FlowEncounterState.build_final_snapshot(runtime.flow_ctx, 7))
+	for snap in snaps:
+		var data: Dictionary = (snap as Dictionary).get("data", {})
+		if not data.has("objective_state"):
+			return { "ok": false, "error": "%s: expected an objective_state to check" % str(snap.get("type", "")) }
+		if (data["objective_state"] as Dictionary).has("pace_state"):
+			return { "ok": false, "error": "%s: objective_state must not carry pace_state" % str(snap.get("type", "")) }
+		for key in ["pace_state", "pace_bonus_awarded", "pace_changed_rank"]:
+			if data.has(key):
+				return { "ok": false, "error": "%s: data must not carry %s" % [str(snap.get("type", "")), key] }
+		for row in data.get("reward_breakdown", []):
+			if str(row.get("label", "")) == "Pace bonus":
+				return { "ok": false, "error": "keeper trial must not show a Pace bonus row" }
 	return { "ok": true }

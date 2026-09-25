@@ -57,7 +57,7 @@ synonym for it.
 | Full-bonus limit | `pace_full_ratio` | The pace ratio at or below which the pace bonus is at its maximum. |
 | Zero-bonus limit | `pace_zero_ratio` | The pace ratio at or above which the pace bonus is zero. |
 | Maximum bonus | `pace_bonus_pct` | The largest fraction of the stage base reward the pace bonus can pay. |
-| Reached enemy | (tracked in `combat_state["reached_enemy_ids"]`) | An enemy that has, at least once, ended a round within Chebyshev distance 1 of a living echo. |
+| Reached enemy | (tracked in `combat_state["reached_enemy_ids"]`) | An enemy that has, at least once, ended a round alive within Chebyshev distance 1 of a living echo, or that a party echo killed (D-23). |
 | Pace mode | — | A mode whose win condition can happen faster or slower: COMBAT, PURIFY_SHRINE, RECOVER, PURSUE. |
 | No-pace mode | — | A mode whose win condition is a fixed duration or is not yet trackable: PROTECT, ENDURE, GUIDE_SPIRIT (both variants). |
 | Pace state | `pace_state` | A three-state value, for pace modes only: `full`, `partial`, or `none`. It compares the current or final round to the two bonus-curve limits (§4). One field carries it during the fight; one field carries it at the result. Both use the same three values (§6). |
@@ -186,6 +186,11 @@ enemies** (§1).
   attack-range concept, because none exists. `CombatService.gd`'s only resolution path is
   `_resolve_melee` (`:70`). Adjacency-1 already is every enemy's actual reach today. A future
   ranged enemy type would need its own range definition; none exists now, so this is out of scope.
+- **Kills and reach (D-23).** A kill by a party echo marks the enemy as reached at kill time, also
+  when that echo dies in the same round. Otherwise only a living enemy can become reached. A
+  Temporary Ally or joined spirit is not party: its kill pays the kill Ase but never counts in the
+  rank, in every mode. The rank kill term counts only kills by party echoes. An enemy that an
+  ally or spirit killed is also removed from `max_possible`, so an ally has no effect on the rank.
 - **Tracking.** The design adds new round-by-round bookkeeping in `core/`, because enemy waves can
   spawn mid-fight (`CombatRoundSpawnService.gd`). An unspawned enemy has not reached yet. An
   enemy that reaches in round 3 and dies in round 5 must still count as reached.
@@ -221,14 +226,15 @@ line. No new screen element is added during the fight.
 `_render_objective_banner`, roughly `:449-477`). For pace modes only, these two existing elements
 change colour, driven by `pace_state` (§1):
 
-| `pace_state` | Meaning | When |
+| `pace_state` | Meaning | When (decisions.md D-17, D-22) |
 |---|---|---|
-| `full` | A win now would earn the full pace bonus. | `round_counter <= pace_full_ratio * par_rounds` |
-| `partial` | A win now would earn part of the pace bonus. | Between the two limits |
-| `none` | A win now would earn no pace bonus. | `round_counter >= pace_zero_ratio * par_rounds` |
+| `full` | A win now would earn the full pace bonus. | The pace bonus a win now would pay equals the maximum pace bonus. |
+| `partial` | A win now would earn part of the pace bonus. | That pace bonus is more than 0 Ase and less than the maximum. |
+| `none` | A win now would earn no pace bonus. | That pace bonus is 0 Ase. |
 
-`par_rounds` is fixed at fight start (§3). Only `round_counter` changes, so `pace_state` is a
-plain comparison, re-evaluated each round. It needs no new tracking. ui-ux-designer and Jeff pick
+The pace bonus a win now would pay is the §4 curve applied to `round_counter` and rounded to whole
+Ase. `par_rounds` and the stage base are fixed at fight start (§3, decisions.md D-21). Only
+`round_counter` changes, so `pace_state` is re-evaluated each round. It needs no new tracking. ui-ux-designer and Jeff pick
 the actual colours; this design names only the three states (`full`, `partial`, `none`), not
 colour values.
 

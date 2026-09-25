@@ -1441,6 +1441,9 @@ func _resolve_next_actor(t: int) -> void:
 	# CombatTurnActionService. Exactly one last_round_results entry is still appended per call.
 	_combat_turn_action_service().resolve_activation(
 		actor, intent, action_type, asm, ectx, bdata, leadership_expr_cfg, round, t)
+	# The killer side of a melee kill, for the rank (decisions.md D-23). Writes only combat_state.
+	if not ectx.last_round_results.is_empty():
+		PaceService.record_kill(ectx.last_round_results.back(), ectx.actors, combat_state)
 
 	# Primary actions resolve before end-of-activation Burning. Purify is an
 	# external side effect and therefore shares this post-action boundary.

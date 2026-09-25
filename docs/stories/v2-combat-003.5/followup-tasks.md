@@ -23,7 +23,9 @@ kept as a record only, not an open item.
 
 ---
 
-## 2. Review PURSUE reward payout after board-size increase
+## 2. ~~Review PURSUE reward payout after board-size increase~~ — ANSWERED by the pace-reward story
+
+**Answered:** the pace-reward story (`docs/stories/pace-reward/`, decisions.md D-01) replaces the fixed round threshold with a pace bonus. Par comes from the board distance, so the payout follows the board size.
 
 **task_id:** `task_0a287277`
 
@@ -52,7 +54,9 @@ kept as a record only, not an open item.
 
 ---
 
-## 4. Check if speed_bonus_threshold needs to scale with board size
+## 4. ~~Check if speed_bonus_threshold needs to scale with board size~~ — ANSWERED by the pace-reward story
+
+**Answered:** the pace-reward story (`docs/stories/pace-reward/`, decisions.md D-01, D-05) removes `speed_bonus_threshold`. The pace bonus uses a par that comes from the board distance.
 
 **task_id:** `task_1868ffd0`
 

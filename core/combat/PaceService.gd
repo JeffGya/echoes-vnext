@@ -1,6 +1,6 @@
 ## PaceService
 ## Pure static owner of the pace bonus rules: which modes carry pace, par at fight start, the
-## pace state and bonus curve, and the reached-enemy set the rank uses.
+## pace state and bonus curve, and the reached-enemy and ally-kill sets the rank uses.
 ## Spec: docs/stories/pace-reward/design.md. No RNG, no config reads, no service calls.
 
 class_name PaceService extends RefCounted
@@ -110,23 +110,30 @@ static func bonus_ase(round_ended: int, par_rounds: float, full_ratio: float, ze
 		* bonus_fraction(round_ended, par_rounds, full_ratio, zero_ratio))
 
 
+## The maximum pace bonus in Ase: the bonus at fraction 1.0.
+static func max_bonus_ase(stage_base: int, bonus_pct: float) -> int:
+	return roundi(float(stage_base) * bonus_pct)
+
+
 ## "full" / "partial" / "none" (design §6). "" when par is 0 (no-pace mode).
-## The colour follows the Ase (design §7): a partial fraction whose bonus rounds to 0 Ase
-## is "none", so the state and the "Pace bonus" row always agree.
+## Set from the Ase paid (decisions.md D-22): full = the maximum, none = 0, partial = between.
+## The live colour and the result both call this, so they cannot disagree with the Ase row.
 static func pace_state(round_counter: int, par_rounds: float, full_ratio: float,
 		zero_ratio: float, stage_base: int, bonus_pct: float) -> String:
 	if par_rounds <= 0.0:
 		return ""
-	if bonus_fraction(round_counter, par_rounds, full_ratio, zero_ratio) >= 1.0:
+	var paid := bonus_ase(round_counter, par_rounds, full_ratio, zero_ratio, stage_base, bonus_pct)
+	# 0 Ase is "none" first, so a maximum that rounds to 0 is never "full".
+	if paid <= 0:
+		return PACE_NONE
+	if paid >= max_bonus_ase(stage_base, bonus_pct):
 		return PACE_FULL
-	if bonus_ase(round_counter, par_rounds, full_ratio, zero_ratio, stage_base, bonus_pct) >= 1:
-		return PACE_PARTIAL
-	return PACE_NONE
+	return PACE_PARTIAL
 
 
-## Appends to combat_state["reached_enemy_ids"] every enemy that ends this round within
-## Chebyshev 1 of a living party echo. Never removes an id. Dead enemies are checked at their
-## last cell, so an enemy killed in the round it arrives still counts.
+## Appends to combat_state["reached_enemy_ids"] every living enemy that ends this round within
+## Chebyshev 1 of a living party echo. Never removes an id. A dead enemy is not checked: a kill
+## reaches only through record_kill() (decisions.md D-23).
 static func record_reached_enemies(actors: Array, combat_state: Dictionary) -> void:
 	if not tracks_reached_enemies(str(combat_state.get("objective", ""))):
 		return
@@ -136,7 +143,7 @@ static func record_reached_enemies(actors: Array, combat_state: Dictionary) -> v
 		if a_v is Dictionary and _is_party_echo(a_v) and not bool(a_v.get("is_dead", false)):
 			echo_cells.append((a_v as Dictionary).get("grid_pos", {}))
 	for a_v in actors:
-		if not (a_v is Dictionary) or not _is_enemy(a_v):
+		if not (a_v is Dictionary) or not _is_enemy(a_v) or bool(a_v.get("is_dead", false)):
 			continue
 		var enemy_id := str((a_v as Dictionary).get("id", ""))
 		if enemy_id in reached:
@@ -149,11 +156,53 @@ static func record_reached_enemies(actors: Array, combat_state: Dictionary) -> v
 	combat_state["reached_enemy_ids"] = reached
 
 
+## Records the killer side of one resolved action, at kill time (decisions.md D-23).
+## result is one ectx.last_round_results entry; only a melee kill of an enemy counts.
+## A Temporary Ally or joined-spirit kill goes to combat_state["ally_killed_enemy_ids"] in every
+## mode. A party-echo kill marks the enemy reached in the reached-enemy modes, also when that
+## echo is already dead (it died in the same round). Reads the killer's flags, never its HP.
+static func record_kill(result: Dictionary, actors: Array, combat_state: Dictionary) -> void:
+	if str(result.get("action_type", "")) != "melee_attack" or not bool(result.get("is_kill", false)):
+		return
+	var target: Dictionary = EncounterContext.find_actor_by_id(actors, str(result.get("target_id", "")))
+	if target.is_empty() or not _is_enemy(target):
+		return
+	var killer: Dictionary = EncounterContext.find_actor_by_id(actors, str(result.get("attacker_id", "")))
+	var key := ""
+	if _is_ally_or_spirit(killer):
+		key = "ally_killed_enemy_ids"
+	elif _is_party_echo(killer) and tracks_reached_enemies(str(combat_state.get("objective", ""))):
+		key = "reached_enemy_ids"
+	if key.is_empty():
+		return
+	var ids: Array = combat_state.get(key, [])
+	var enemy_id := str(target.get("id", ""))
+	if not enemy_id in ids:
+		ids.append(enemy_id)
+	combat_state[key] = ids
+
+
+## The reach-mode rank ceiling count: reached ids minus ally-killed ids, as a set difference
+## (decisions.md D-23), so an enemy is never removed twice.
+static func rank_reached_count(combat_state: Dictionary) -> int:
+	var ally_killed: Array = combat_state.get("ally_killed_enemy_ids", [])
+	var n := 0
+	for id_v in combat_state.get("reached_enemy_ids", []):
+		if not id_v in ally_killed:
+			n += 1
+	return n
+
+
 ## A roster echo: joined allies and spirits are faction "echo" but are not the party
 ## (same exclusion as the reward tally in FlowEncounterState.build_final_snapshot).
 static func _is_party_echo(a: Dictionary) -> bool:
 	return str(a.get("faction", "")) == "echo" \
 		and not bool(a.get("is_ally", false)) and not bool(a.get("is_spirit", false))
+
+
+## A Temporary Ally or a joined guide spirit: it fights for the party but is not the party.
+static func _is_ally_or_spirit(a: Dictionary) -> bool:
+	return bool(a.get("is_ally", false)) or bool(a.get("is_spirit", false))
 
 
 static func _is_enemy(a: Dictionary) -> bool:

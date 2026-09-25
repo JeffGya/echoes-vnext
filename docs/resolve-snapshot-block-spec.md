@@ -133,6 +133,7 @@ it to `""`, so the sentinel is safe).
 | 13 | `combat_seams` | `objectives_remaining`, `guide_spirit_protected`, `combat_intro_line` | A | **none — routing / future seams** |
 | 14 | `scout_intel` | `intel_count` | C | Reason line ("N situations revealed") |
 | 15 | `contact_outcome` | `role`, `role_label`, `outcome`, `outcome_text` | D | Banner colour + reason text |
+| 16 | `pace` | `pace_bonus_awarded`, `pace_state`, `pace_changed_rank` | A (pace-mode win only), G | Round line colour + "Pace bonus" row + rank-cause note |
 
 ### 2.3 Blocks that are partial or forced
 
@@ -282,6 +283,7 @@ Dictionaries are references). Every one returns `void`.
 | 13 | `static func add_combat_seams(data: Dictionary, objectives_remaining: int, guide_spirit_protected: bool, combat_intro_line: String) -> void` |
 | 14 | `static func add_scout_intel(data: Dictionary, intel_count: int) -> void` |
 | 15 | `static func add_contact_outcome(data: Dictionary, role: String, role_label: String, outcome: String, outcome_text: String) -> void` |
+| 16 | `static func add_pace(data: Dictionary, pace_bonus_awarded: int, pace_state: String, pace_changed_rank: bool) -> void` |
 
 ### 4.3 How a producer declares its blocks
 
@@ -311,6 +313,16 @@ Block call list per producer:
 | D | **`contact_result`** + `banner`, `grade_verdict`, `contact_outcome` |
 | E | **`situation_result`** + `banner`, `grade_verdict`, `ledger`, `ekwan`, `emotion`, `effects` |
 | F | `victory_flag` |
+
+Block 16 `pace` was added after this table was measured (`docs/stories/pace-reward/design.md` §7).
+The table rows above are unchanged. The rules for block 16:
+
+1. Producer A calls `pace` only for a pace-mode victory (`FlowEncounterState.build_final_snapshot`).
+   A no-pace fight, a defeat and the keeper-intro trial (producer B) never call it.
+2. Producer G (`PendingResultService.build_snapshot`) rebuilds the card from the stored result. It
+   calls `pace` only when the stored result has `pace_state`.
+3. So the key absence is load-bearing: `ResolveScreen` shows the pace row and colour only when the
+   keys are present.
 
 ### 4.4 Purity contract
 

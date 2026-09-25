@@ -85,13 +85,16 @@ static func create(actors: Array, objective: String,
 		"no_progress_round_limit":  int(stalemate_cfg.get("no_progress_round_limit", 0)),
 		"_no_progress_seen":        {},
 		# Pace (docs/stories/pace-reward/design.md). par_rounds 0.0 = no-pace mode. Runtime only.
-		# reached_enemy_ids only grows: PaceService.record_reached_enemies() appends, nothing removes.
+		# reached_enemy_ids only grows: PaceService.record_reached_enemies() and record_kill()
+		# append, nothing removes. ally_killed_enemy_ids: enemies a Temporary Ally or joined
+		# spirit killed; out of both sides of the rank (decisions.md D-23).
 		"par_rounds":        float(pace_cfg.get("par_rounds", 0.0)),
 		"pace_full_ratio":   float(pace_cfg.get("pace_full_ratio", 0.0)),
 		"pace_zero_ratio":   float(pace_cfg.get("pace_zero_ratio", 0.0)),
 		"pace_bonus_pct":    float(pace_cfg.get("pace_bonus_pct", 0.0)),
 		"stage_base":        int(pace_cfg.get("stage_base", 0)),
 		"reached_enemy_ids": [],
+		"ally_killed_enemy_ids": [],
 	}
 	# Seed with the START-of-combat state, so a round 1 in which literally nothing moved counts
 	# as the stall it is.

@@ -58,11 +58,13 @@ static func redo_multiplier(run_count: int, reward_cfg: Dictionary) -> float:
 ## reward_cfg:       balance.data.rewards dict
 ## resolution_mode:  EncounterResolutionModes value; selects the pace and reached-enemy rules
 ## par_rounds:       combat_state["par_rounds"]; 0.0 for a no-pace mode
-## reached_enemies:  combat_state["reached_enemy_ids"].size(); replaces total_enemies in the
-##                   rank ceiling for PaceService.REACHED_ENEMY_MODES
+## reached_enemies:  PaceService.rank_reached_count(combat_state); replaces total_enemies in
+##                   the rank ceiling for PaceService.REACHED_ENEMY_MODES
 ## pace_stage_base:  combat_state["stage_base"], captured at fight start. The pace bonus, its
 ##                   rank term and pace_state use it, so they match the live pace_state
 ##                   (decisions.md D-21). Every other term keeps `base` below.
+## ally_kills:       combat_state["ally_killed_enemy_ids"].size(). These kills pay the kill Ase
+##                   but leave both sides of the rank (decisions.md D-23).
 static func compute(
 	victory: bool,
 	objectives: Array,
@@ -76,7 +78,8 @@ static func compute(
 	resolution_mode: String,
 	par_rounds: float,
 	reached_enemies: int,
-	pace_stage_base: int
+	pace_stage_base: int,
+	ally_kills: int = 0
 ) -> Dictionary:
 	# Base = sum of objective type weights (single definition — see base_reward() above).
 	var base := base_reward(objectives, reward_cfg)
@@ -92,7 +95,7 @@ static func compute(
 	var full_ratio    := float(reward_cfg.get("pace_full_ratio", 1.1))
 	var zero_ratio    := float(reward_cfg.get("pace_zero_ratio", 1.6))
 	var pace_pct      := float(reward_cfg.get("pace_bonus_pct", 0.05))
-	var max_pace_bonus := roundi(float(pace_stage_base) * pace_pct) if is_pace else 0
+	var max_pace_bonus := PaceService.max_bonus_ase(pace_stage_base, pace_pct) if is_pace else 0
 	var pace_bonus    := 0
 	if is_pace and victory:
 		pace_bonus = PaceService.bonus_ase(round_ended, par_rounds, full_ratio, zero_ratio,
@@ -103,10 +106,13 @@ static func compute(
 
 	# Rank (design §5). A no-pace mode has max_pace_bonus 0, so the bonus is out of both sides.
 	# The reached-enemy modes count only enemies that reached the party in the ceiling.
+	# An ally or spirit kill is out of the kill term and the ceiling, in every mode (D-23);
+	# reached_enemies already excludes those ids.
 	# On defeat: use defeat_payout as numerator so defeat always ranks worse than victory.
 	var defeat_factor  := float(reward_cfg.get("defeat_factor", 0.25))
 	var ceiling_enemies := reached_enemies if PaceService.tracks_reached_enemies(resolution_mode) \
-		else total_enemies
+		else maxi(0, total_enemies - ally_kills)
+	var rank_enemy_bonus := maxi(0, enemies_defeated - ally_kills) * enemy_bonus_per
 	var max_possible   := base \
 		+ (ceiling_enemies * enemy_bonus_per) \
 		+ (total_echoes  * echo_bonus_per) \
@@ -117,7 +123,7 @@ static func compute(
 	var rank: String
 	var rank_without_pace: String
 	if victory:
-		var kept := base + enemy_bonus + echo_bonus
+		var kept := base + rank_enemy_bonus + echo_bonus
 		rank              = _rank_for(kept + pace_bonus, max_possible, redo_mul, run_count, thresholds)
 		rank_without_pace = _rank_for(kept, max_possible, redo_mul, run_count, thresholds)
 	else:
