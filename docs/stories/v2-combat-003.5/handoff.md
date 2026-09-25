@@ -45,7 +45,7 @@ say to him from here forward, including any message right after compaction.
    - `ANSWERS.md` (repo root) — ONLY for answers gathered through a formal `/interview` skill
      invocation. This story's interview happened once, near the start (entries #51-61 there).
      Do not add to it outside a real `/interview` run.
-   - `docs/v2-combat-003.5-decisions.md` — the running decision log for THIS story, for every
+   - `docs/stories/v2-combat-003.5/decisions.md` — the running decision log for THIS story, for every
      other decision made during ordinary orchestration (AskUserQuestion rounds mid-build,
      scope calls, design ratifications). Currently at **entry #28**. Same Q/A/Source/Date format
      as ANSWERS.md, plus an Overview table at the top. Add every new decision here, not to
@@ -65,7 +65,7 @@ say to him from here forward, including any message right after compaction.
    end. Story-only files, never `git add -A`. See "What's committed" below.
 9. **Spawn a task chip (`mcp__ccd_session__spawn_task`) for anything genuinely out of this
    story's scope that you notice in passing** — don't silently fix it, don't silently drop it.
-   Six of these exist so far, tracked in `docs/v2-combat-003.5-followup-tasks.md` (this file was
+   Six of these exist so far, tracked in `docs/stories/v2-combat-003.5/followup-tasks.md` (this file was
    found missing from the repo during this document's own verification pass — it only ever
    existed in a scratchpad and in a file sent to Jeff — and was recreated in the repo
    immediately after, so it is now a real, committed-when-this-phase-commits artifact). Keep it
@@ -78,13 +78,13 @@ approved plan, phases 0-9. Still the governing structure; Phase 3 grew far large
 originally scoped (3a/3b/3c sub-phases) because of what got discovered along the way — that's
 expected and already reflected in the decision log, not a deviation to worry about.
 
-**Repo-tracked fallback copy of the plan**: `docs/v2-combat-003.5-plan-snapshot.md`. The real
+**Repo-tracked fallback copy of the plan**: `docs/stories/v2-combat-003.5/plan-snapshot.md`. The real
 plan file above lives outside the repo, which is a weaker link for post-compaction continuity, so
 this is a point-in-time snapshot of it, placed in the repo as insurance, with two correction
 notes added inline (the `DecisionTrace` vs. Movement Intent/Result placement, and the Phase 3
 sub-phase split). Prefer the real plan file when reachable; fall back to this copy if not. **This
-file is TEMPORARY** — along with `docs/v2-combat-003.5-handoff.md` (this document) and
-`docs/v2-combat-003.5-followup-tasks.md`, Jeff has said these get cleaned up at Phase 9, during
+file is TEMPORARY** — along with `docs/stories/v2-combat-003.5/handoff.md` (this document) and
+`docs/stories/v2-combat-003.5/followup-tasks.md`, Jeff has said these get cleaned up at Phase 9, during
 docs/PR prep, not before. Do not delete any of them earlier than that on your own initiative.
 
 **Committed so far** (on branch `claude/echoes-vnext-docs-review-b8028b`):
@@ -179,7 +179,7 @@ sub-state, in order of what happened:
    this is read post-compaction — check for a `<task-notification>` first).
 2. Resolve whatever it finds. If clean: present the two open questions above to Jeff.
 3. Once Jeff answers: apply his decisions (dispatch a small fix/re-record pass as needed),
-   record the new decisions in `docs/v2-combat-003.5-decisions.md` (next entry is **#29**).
+   record the new decisions in `docs/stories/v2-combat-003.5/decisions.md` (next entry is **#29**).
 4. Get Phase 3c to a genuinely clean, fully-reviewed state — full cold suite run via
    `qa-verifier`, zero unexplained failures (the 7 fingerprint failures are expected until the
    re-record decision is made and executed; after that, zero).
@@ -187,7 +187,7 @@ sub-state, in order of what happened:
    thorough commit message naming every subject the commit carries).
 6. **Only then** move to Phase 4 (doc/debug fixes — Group C: `combat_emotion` deletion done
    already? check decisions #22-25/#55 — the doc/debug items were mostly Phase-agnostic small
-   fixes folded into earlier phases; check `docs/v2-combat-003.5-decisions.md` and the plan file
+   fixes folded into earlier phases; check `docs/stories/v2-combat-003.5/decisions.md` and the plan file
    for what's actually left) and Phase 5 (scattered small defects — Groups D/E from the original
    story scope: `shrine_hp_ratio`, `_divergence_probe`, `resist_fear`, `_stationary_rounds`,
    `_withdraw_cooldown`, `_dominant_key` unification, raw-floats-in-snapshot removal,
@@ -198,7 +198,7 @@ sub-state, in order of what happened:
 
 ## The six spawned follow-up tasks (out of this story's scope, tracked separately)
 
-**The tracking file described below (`docs/v2-combat-003.5-followup-tasks.md`) does not exist in
+**The tracking file described below (`docs/stories/v2-combat-003.5/followup-tasks.md`) does not exist in
 the repo, this worktree, or the scratchpad as of this verification pass.** It was never written
 to disk despite being described as committed and sent to Jeff as a file. Recreate it from the
 task IDs below the first time any of them needs updating, and check with Jeff whether he still
@@ -216,7 +216,7 @@ If you notice anything else out of scope, spawn a 7th and update that file + res
 
 ## Decision log — where the real history lives
 
-`docs/v2-combat-003.5-decisions.md`, 28 entries as of this writing. Read it in full if any doubt
+`docs/stories/v2-combat-003.5/decisions.md`, 28 entries as of this writing. Read it in full if any doubt
 about a past call — it has the Q, the A, and why, for every scope/design/naming decision made
 outside the one formal interview. Do not re-ask something already answered there.
 

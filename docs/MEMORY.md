@@ -221,7 +221,7 @@ Sanctum navigation. 44 commits. Suite **1,401 → 1,519**.
 three measured blockers are recorded on V2-COMBAT-004.
 
 **97 defect identifiers, each with a recorded outcome** in
-`docs/v2-infra-003-defect-register.md`, now a ledger rather than a worklist: 57 fixed, 3 connected
+`docs/stories/v2-infra-003/defect-register.md`, now a ledger rather than a worklist: 57 fixed, 3 connected
 (mechanics that had never run), 6 deleted, 3 disproved, 1 reverted, 6 not a defect, 13 deferred to a
 named story, 2 assigned to V2-COMBAT-004, 6 coverage gaps.
 

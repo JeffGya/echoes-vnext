@@ -362,7 +362,7 @@
 ### 34. side-issues-filed-not-fixed
 
 **Q:** The diagnosis also found two issues that are NOT the cause of the PURSUE/ENDURE regression: (1) some Echoes silently stand still with no path and no logged warning, a pre-existing gap exposed by longer fights; (2) the live-wiring narrows the path-planning view Echoes can see, not observed to cause harm yet but a risk on other boards. Fix now, or file separately?
-**A:** File both separately as follow-up tasks, tracked in `docs/v2-combat-003.5-followup-tasks.md` so they are not lost.
+**A:** File both separately as follow-up tasks, tracked in `docs/stories/v2-combat-003.5/followup-tasks.md` so they are not lost.
 **Source:** Jeff, 2026-09-19
 **Date:** 2026-09-19
 

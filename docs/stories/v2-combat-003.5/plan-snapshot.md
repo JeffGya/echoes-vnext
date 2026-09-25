@@ -152,7 +152,7 @@ provisionally `core/actors/behaviors/MovementStyleService.gd` — a pure, statel
 > **Superseded by decisions #67/#6 in the two decision logs**: `movement_style` actually lives on
 > Movement Intent (§6.5) and Movement Result (§6.7), NOT on `DecisionTrace` — §6.6 does not grant
 > it a field there, and `PLAYER_SAFE_FIELDS` explicitly excludes it. Jeff confirmed: follow the
-> doc as written. See `docs/v2-combat-003.5-decisions.md` #6 for the full record. The bounded
+> doc as written. See `docs/stories/v2-combat-003.5/decisions.md` #6 for the full record. The bounded
 > `MovementStyleService.gd` file itself was still built and is correct — only this one paragraph
 > of the original plan was wrong and has since been corrected in practice.
 
@@ -245,11 +245,11 @@ check, and a highest-tier (`opus`) review against the actual diff before the nex
 cost (`docs/LESSONS.md` #21).
 
 > **Status note, added 2026-09-19**: Phases 0-3a are committed (`369ccfe`). Phase 3b is committed
-> (`603b5de`), after a full architecture rebuild — see `docs/v2-combat-003.5-decisions.md` #18 for
+> (`603b5de`), after a full architecture rebuild — see `docs/stories/v2-combat-003.5/decisions.md` #18 for
 > why. Phase 3 grew a third sub-phase, **3c**, not anticipated by this original plan: live
 > movement wiring (`LiveMovementContextService`), which is what makes `movement_style` and board
 > variety actually observable in real play rather than only in tests. Phase 3c is in progress,
-> uncommitted, as of this snapshot — see `docs/v2-combat-003.5-handoff.md` for its exact current
+> uncommitted, as of this snapshot — see `docs/stories/v2-combat-003.5/handoff.md` for its exact current
 > state and what must happen before Phase 4 starts. Do not begin Phase 4 until Phase 3c is
 > reviewed clean and committed.
 
@@ -332,7 +332,7 @@ out.
 > (route-shape foundation in `MovementOptionService.gd`, committed in `369ccfe`), 3b (the
 > selection scoring architecture described above, after a full rebuild, committed in `603b5de`),
 > and 3c (live wiring, not anticipated by this original plan text, in progress — see
-> `docs/v2-combat-003.5-handoff.md`). `movement_style` ended up on Movement Intent/Result, not
+> `docs/stories/v2-combat-003.5/handoff.md`). `movement_style` ended up on Movement Intent/Result, not
 > `DecisionTrace` — see the Architecture Blueprint correction note above.
 
 ### Phase 4 — Doc/debug fixes (Group C)
@@ -393,7 +393,7 @@ boundary.
 
 **Status note, added 2026-09-19**: Phase 5 has NOT started as of this snapshot. All of its items
 remain open work, to be picked up after Phase 3c and Phase 4 are done. Check
-`docs/v2-combat-003.5-decisions.md` for whether any individual item's default treatment changed
+`docs/stories/v2-combat-003.5/decisions.md` for whether any individual item's default treatment changed
 during Phase 1-3 work (none noted as of this snapshot, but confirm).
 
 ### Phase 6 — Combined verification

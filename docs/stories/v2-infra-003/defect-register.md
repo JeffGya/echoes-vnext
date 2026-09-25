@@ -445,7 +445,7 @@ Two warnings for a later reader:
 ## The register as compiled — V2-INFRA-003 Defect Register
 
 Compiled 2026-08-23 from service/controller headers, in-code `KNOWN DEFECT` /
-`CHARACTERIZATION` labels, `docs/v2-infra-003-handoff.md`, `docs/resolve-snapshot-block-spec.md`,
+`CHARACTERIZATION` labels, `docs/stories/v2-infra-003/handoff.md`, `docs/resolve-snapshot-block-spec.md`,
 and the characterization suites. **Every `file:line` below was re-verified against the worktree**
 (`.claude/worktrees/v2-infra-003-proof-spine-b3c770`); stale locations from the handoff are
 corrected in place and flagged.
@@ -710,7 +710,7 @@ fingerprint constants. `BL` = moves a recorded baseline (`tests/CombatBaselineTe
 **Register accounting.** Identifiers run **D01–D93** (D91 added 2026-08-28, fix pass 1; D92 added 2026-08-28, fix pass 2; D93 added 2026-08-29, prologue Thread payout — recorded and deferred). Six of them (D71–D76) are **coverage gaps,
 not defects**. The defect population is therefore **84 defects + 6 coverage gaps**, not 88.
 (No summary count table exists in this file to correct — the stale "88" the triage refers to lives
-in `docs/v2-infra-003-triage.md`'s source material, not here. The correct accounting is stated
+in `docs/stories/v2-infra-003/triage.md`'s source material, not here. The correct accounting is stated
 above so it cannot drift again.)
 
 **Three entries have been disproved, not two:** **D20**, **D34** and **D41**. The rule above
@@ -1077,7 +1077,7 @@ Three corrections found by the triage:
 | ID | Answer | Source |
 |---|---|---|
 | **D13** | **Per round.** The authored keys are `purify_cooldown_rounds` and `morale_drain_per_wave`. Both are time-based. No authored key is expressed per shrine. The per-shrine implementation is therefore the defect. | `data/balance.json:1627-1631,1646` |
-| **D66** | **V2-ECONOMY-004 owns it. There was no dispute.** That story is the Ekwan loop AND owns reward vocabulary, weights and the Ase/Ekwan split. It therefore owns D66 and D83. Exactly-once payout stayed with V2-INFRA-003. | Register `:198-212`; backlog line 85. The stale "confirm the true owner" note at `docs/v2-infra-003-handoff.md:1011` is superseded. |
+| **D66** | **V2-ECONOMY-004 owns it. There was no dispute.** That story is the Ekwan loop AND owns reward vocabulary, weights and the Ase/Ekwan split. It therefore owns D66 and D83. Exactly-once payout stayed with V2-INFRA-003. | Register `:198-212`; backlog line 85. The stale "confirm the true owner" note at `docs/stories/v2-infra-003/handoff.md:1011` is superseded. |
 
 ### The twelve decisions — Jeff, 2026-08-28
 

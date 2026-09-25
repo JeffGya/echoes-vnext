@@ -290,7 +290,7 @@ static func _has_log(logger: StructuredLogger, type: String) -> bool:
 # of stepping to 7,2). The fight runs 6 rounds again.
 #
 # ALL SEVEN CONSTANTS BELOW RE-RECORDED, V2-COMBAT-003.5 Phase 2d/2f — board size 12..22 ->
-# 18..28 (ANSWERS.md #63). Board bounds are an INPUT to StageTerrain.generate()
+# 18..28 (docs/stories/v2-combat-003.5/decisions.md #2). Board bounds are an INPUT to StageTerrain.generate()
 # (EncounterSetupService.gd:363-372), so every fixture fights on a wholly different map, not a
 # stretched one: walkable set, spawn cells and placement order all change. Attribution proved by
 # reverting only the four balance.json numbers with every other Phase 2 core change in place —
