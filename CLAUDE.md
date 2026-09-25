@@ -90,6 +90,20 @@ pass that confirms there was none.
 
 ---
 
+## Every agent writes in STE
+
+Every agent communicates and writes in ASD Simplified Technical English (STE): reports, documents,
+questions and replies. Put this rule in every brief. The core limits:
+
+- One statement per sentence. Descriptive sentences ≤ 25 words; instructions ≤ 20 words.
+- Active voice. One word for one meaning; define a technical term once, then use only that term.
+- No idioms or metaphors. Use tables and numbered lists for rules and data.
+- Code identifiers and file:line citations stay exactly as they are.
+
+*Jeff, 2026-09-25: text that does double work is open to interpretation. See `docs/LESSONS.md` #26.*
+
+---
+
 ## Questions from agents reach Jeff through you
 
 Subagents cannot reach him. Their reports return here, so **you are the only channel.**
@@ -103,7 +117,9 @@ Every agent ends its report with `## OPEN — questions and assumptions`, carryi
    made on his behalf. Surface any that would change the work if wrong.
 3. **Ask one at a time via `AskUserQuestion`**, naming the agent that raised it. The `interview`
    skill runs this flow and accepts relayed questions as input.
-4. **Record the answer** in `ANSWERS.md` and feed it into the next dispatch.
+4. **Record the answer** and feed it into the next dispatch. A story-specific answer goes to
+   `docs/stories/<story-id>/decisions.md` (numbered D-01, D-02, …). Only a project-wide answer, one
+   that later stories must follow, goes to `ANSWERS.md`. See `docs/LESSONS.md` #25.
 
 Never answer a relayed question on his behalf. Never drop one for looking minor.
 
