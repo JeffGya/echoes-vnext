@@ -172,6 +172,38 @@ choosing it (§0): Ase flows too much today, so the pace bonus must not be gener
 
 ---
 
+
+### 4.5 Re-measured on the implemented code (2026-09-25, commit `f8976f5`)
+
+The same 336 fights (7 modes × 12 seeds × realm.01 and realm.02 × old and new board, stage 0)
+ran again on the merged code. This time the probe read the real game values (`pace_bonus_awarded`,
+`pace_state`, `par_rounds`), not a model. Stage base is 60 Ase in every pace fight, so the maximum
+pace bonus is 3 Ase.
+
+| Board | Mode | Wins | Ratio ≤ 1.10 | `pace_state` full / partial / none | Mean bonus |
+|---|---|---|---|---|---|
+| Old | COMBAT | 22 | 27% | 59% / 18% / 23% | 2.14 |
+| Old | PURIFY_SHRINE | 22 | 5% | 23% / 50% / 27% | 1.41 |
+| Old | RECOVER | 24 | 92% | 92% / 8% / 0% | 2.88 |
+| Old | PURSUE | 10 | 60% | 60% / 40% / 0% | 2.50 |
+| New | COMBAT | 21 | 52% | 62% / 24% / 14% | 2.33 |
+| New | PURIFY_SHRINE | 16 | 50% | 62% / 19% / 19% | 2.19 |
+| New | RECOVER | 24 | 83% | 83% / 8% / 8% | 2.67 |
+| New | PURSUE | 9 | 67% | 67% / 33% / 0% | 2.44 |
+
+Results:
+1. **Mean pace bonus: 2.31 Ase** per pace-mode win. This is the same as §4.0.
+2. **Gap A** (ratio ≤ 1.10 metric, as in §5): largest 45 pp (PURIFY_SHRINE, 5% vs 50%). PASS (≤ 50).
+3. **Gap B** (same metric): largest 87 pp (old board, RECOVER 92% vs PURIFY_SHRINE 5%). PASS (≤ 90).
+4. **`pace_state` full is more common than "ratio ≤ 1.10".** D-22 sets `full` from the Ase paid.
+   With a 3 Ase maximum, a fraction of 5/6 (about 0.83) or more rounds to 3 Ase, so it shows `full`. On the
+   `pace_state` metric, Gap A is 39 pp and Gap B is 69 pp. Both are inside the limits.
+5. No no-pace fight and no defeat carries `pace_state`.
+6. Every win in a pace mode is rank S. The rank spread problem stays open (follow-ups.md #1).
+7. 33 of 336 fights ended in a different round or with a different result than the §4.0 probe.
+   The cause is the merged `main` code (V2-COMBAT-003.5 Phases 4 to 6), not the pace code: no pace
+   commit moved a ROUNDS fingerprint. The §4.0 numbers still hold within those changes.
+
 ## 5. Acceptance criteria (design.md §9, filled in for the decided set)
 
 Criterion 1a and 1b, restated with the decided set's measured gaps and Jeff's limits (ANSWERS.md
