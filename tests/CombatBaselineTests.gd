@@ -304,14 +304,16 @@ static func _has_log(logger: StructuredLogger, type: String) -> bool:
 # V2-COMBAT-003.5 Phase 3c fix re-record (decision #40) — held since decision #27, cause now
 # fixed (decisions #32-38). Round count holds at 7; indices 0-2 stay byte-identical, diverging
 # from index 3 as the urgency fix reshapes routes.
+# V2-COMBAT-003.5 lateral/low_exposure fix re-record (decision #54) — still 7 rounds; indices
+# 0-2 stay byte-identical, diverging again from index 3 as `lateral` now routes correctly.
 const COMBAT_EMOTION_HASHES: Array = [
 	"c0e348c181a7d83ce625ae6ed12c93e7c88eb0a247d1061f7aa3ecdab5f383ac",
 	"ce777cfdc61ea886ead439c5c5f16b4c0a9eb79e32294cf74e293d0ab64926e8",
 	"b9efb78f125d0fafb3c483fd666061fbed385b3507331d2267039e76795503a2",
-	"d562767f5f04265f944a2d7bbf5d3168780eaae7835d0607ef13f453903085ac",
-	"f77d6594bf2176430ecd9d4cc5523e2719cc004ec1c94045be9500d948a1e92a",
-	"35f60449df9a87a4c375b19b8b0ac35538fa38a6151bb3137cfdc39146930b5b",
-	"38173c541394c01749aa3056da44def6315af31622e4aa62f8d603e974f89b4f",
+	"4b486ee8205308d752c1be1d536e33e6bd49efc662cdc0290968706ddedb7e60",
+	"ef457a30015d25c93aa16b0f7095622445c8e5ac5989bb39901f3efbd52443e8",
+	"32a2e2930cb32ae608af977f2d499bba8d55e5d6078366b9e0dc85264256152f",
+	"63118a1dc9794e6da3dc61b4a7ea94cebdcbafd780e4b84e6be50cc9500728a3",
 ]
 # V2-COMBAT-003 Phase 6: same cause as COMBAT above. Rounds 1-2 unchanged; round 3 diverges
 # because echo_0003 no longer steps 5,2 -> 6,3 into the enemy's control to attack. Still 4 rounds.
@@ -335,16 +337,18 @@ const COMBAT_EMOTION_HASHES: Array = [
 # fixed (decisions #32-38). Round count grows 7 -> 9 (matches the FlowFingerprintTests
 # PURIFY_SHRINE round_ended move). Index 0 stays byte-identical; diverges from index 1, with two
 # rounds appended.
+# V2-COMBAT-003.5 lateral/low_exposure fix re-record (decisions #54-55) — 9 -> 8 rounds (matches
+# the FlowFingerprintTests PURIFY_SHRINE round_ended move). Indices 0-3 stay byte-identical,
+# diverging from index 4, with one round removed.
 const PURIFY_SHRINE_EMOTION_HASHES: Array = [
 	"bd2de7301aa35102d31bc447af0046a9d6cc8432f4bf5358f5a3db9deeed639e",
 	"725ca32c64d227aac4c49c29180c72e03bd29032fde35554ae95930d4b4300c1",
 	"08bff9ce9d51053c36415be57efffaf1c358957060fc3b7d0b0083831c00a0cc",
 	"8580cd86a16d8f4b2ca648227f85e0fa9e219f1d6ade6170b944b31ca903a280",
-	"e90ecc2c4b01bbb30d4fc50be6f85d92b7158b5db9dcbee3b0c1a811a05894e5",
-	"01db4ff276c2e207cdfca6cbae9d9b985897c55756e2b31afcf66e1ff4b0dff6",
-	"5e891b1f5a5fe7ca24f82f28efc543dbfaa37ea73854a161dd99e9ebb67797ff",
-	"897ba29cccba0be490fec86b740e0cc53291faa229684d403f4d05c2c61880c1",
-	"4f1a7bb393ed23f49e789eac1f405061d08a21dbb85999c349f4e84c39609253",
+	"ec47d1d3bcf2cd56211c23adfda4854480edee472c082de468555720fd7b94d5",
+	"4632173525cb48b3935fba77fc9359e4344414ecc9d227f3677d53cc4b49406c",
+	"d3fd1453d9539b592f655b0904557c448819f05f9558c40d1da6307e43a84ed4",
+	"1d6abea33d2a46ca348b4c896de43936ce26470947e3d9a46808e8199759cd3a",
 ]
 # Phase 2d: 2 -> 3 rounds, both existing hashes byte-identical and one appended. The recover
 # cell is further from the party on the larger map, so the hold takes one more round to finish.
@@ -391,14 +395,15 @@ const ENDURE_EMOTION_HASHES: Array = [
 # V2-COMBAT-003.5 Phase 3c fix re-record (decision #40) — held since decision #27, cause now
 # fixed (decisions #32-38). Round count grows 4 -> 7 (matches the FlowFingerprintTests PURSUE
 # loss-to-win flip, decision #38); index 0 stays byte-identical, diverging from index 1.
+# V2-COMBAT-003.5 lateral/low_exposure fix re-record (decisions #54-55) — 7 -> 5 rounds (matches
+# the FlowFingerprintTests PURSUE round_ended move). Index 0 stays byte-identical, diverging
+# from index 1, with two rounds removed.
 const PURSUE_EMOTION_HASHES: Array = [
 	"c5c7a2eca8fe241a9f8d036a0782933c5b14688921e783f11812ffbfc18a5ef7",
-	"cd970cd6b6357b053796a5e35fc34a7016e17ec36d78e783c3a7ae711dc1781e",
-	"bccfa8ce5be1c345d1032c1713b52d6450a7e182d06859f32ed6070eb154f526",
-	"5cba9f19a725453817fd043be7af62ebc786d2765e49061a7113345d4559386d",
-	"b14e091f921386193b1a75e93806f57ee755b6529a32df8b2d201b84ccfa43d6",
-	"52a2542b96bb44fa7c6edbe8be3f9a40cee11469299fc5c13b966107abf86770",
-	"f47790bee1e00cbe557f48a7aa0c5bfeb839b614279528fb42b1de57fc46b338",
+	"80a549c9b7acb5452c84ab78c1db055f152ec122a79922b25287ac5aefa388cf",
+	"51b5faedd1fdae8e353b33266ac0096673969a9e67ac92d545ccb4202623aa67",
+	"6023a202b241e0863844574af3d35ec00ccbd83f097bb73b173db3869afa5efe",
+	"5bec3b44fa63807dfb4226070b0845a4de7913918a45705364de785a2a02680f",
 ]
 # Phase 2d: 6 -> 5 rounds, indices 0-3 byte-identical (no damage lands in those rounds on either
 # map, and this hash reads emotion only), diverging at index 4. Board went 60x12 -> 90x18. Like
@@ -406,12 +411,14 @@ const PURSUE_EMOTION_HASHES: Array = [
 # V2-COMBAT-003.5 Phase 3c fix re-record (decision #40) — held since decision #27, cause now
 # fixed (decisions #32-38). Still 5 rounds; indices 0-3 stay byte-identical, diverging only at
 # the final index 4.
+# V2-COMBAT-003.5 lateral/low_exposure fix re-record (decision #54) — still 5 rounds; indices
+# 0-3 stay byte-identical, diverging again only at the final index 4.
 const GUIDE_SPIRIT_EMOTION_HASHES: Array = [
 	"0981643bfb5b4b834e110bbb1e2e07e43cb67a737695df574f01d4ff0840b399",
 	"fb2362b73ab6e12b88f49fb418a372712b6dab222afb45cb8f176f91060b10e9",
 	"5a0bca46209935550ff752415689db70c12141a8cc534fd23d9d01519a94aedb",
 	"d4a55a31c758c4a7837cb584ffe35f0646041ddfd1c264c626568b66c05a583c",
-	"de3c7043789de9117970ae866478fe09498adb7b7f9d901d2ed1296543fcaaf4",
+	"94ed68ae817c7a9da4a869281f57edcac8abc4a740941357b88c06e161abe0eb",
 ]
 
 
