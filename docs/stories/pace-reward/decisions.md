@@ -32,6 +32,7 @@ Story-specific decisions for the pace bonus story. Project-wide decisions stay i
 | D-25 | pace-colours-approved | The six pace colours (dark HUD and light result card) are approved | 2026-09-25 |
 | D-26 | result-screen-findings-to-combat-004 | The Rounds-line position and two other result-screen findings go to V2-COMBAT-004 (004D) | 2026-09-25 |
 | D-27 | rank-cause-note-copy | The rank-cause note reads "The party's effort earned this rank" | 2026-09-25 |
+| D-28 | pace-polish-scope | D-12 allows an animated colour change; build the colour blend, the drop brightening and the muted +0 row; leave the note delay and the Pace-row colour | 2026-09-25 |
 
 ---
 
@@ -288,6 +289,19 @@ They live in `assets/theme/LivingTreeSystem.tres` (theme variations `PaceState*`
 **Q:** What does the rank-cause note next to the rank badge say? It shows only when the pace bonus raised the rank (`pace_changed_rank`). (Raised by ui-ux-designer, which proposed "Pace bonus raised the rank".)
 **A:** "The party's effort earned this rank". The party earns the result, not the player: the fight runs by itself (ANSWERS.md #64).
 **Source:** Jeff, 2026-09-25
+**Date:** 2026-09-25
+
+---
+
+### D-28. pace-polish-scope
+
+**Q:** game-feel-developer proposed five polish items. Does D-12 ("colour only") allow an animated colour change, and which items are built? (Raised by game-feel-developer.)
+**A:** D-12 allows animation of the colour value (no motion, no new element, no text). Build:
+1. A colour blend on the combat HUD when `pace_state` changes. Its time follows the playback speed (the existing `_MOVE_DURATION_*` values).
+2. A short brightening before the blend, only on a drop (full→partial, partial→none).
+3. A "+0 Ase" breakdown row uses the muted colour, not the positive green.
+Do not build: the delayed rank-cause note, and the pace colour on the Pace bonus amount.
+**Source:** Jeff, 2026-09-25 ("Agreed with recommendations. Animation is fine. build 1, 2 and 3. Leave 4 and 5")
 **Date:** 2026-09-25
 
 ---
