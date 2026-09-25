@@ -69,6 +69,8 @@
 | 60 | dominant-key-unified | The three copies of `_dominant_key` (GridService, CombatState, ShrineService) are unified into one shared helper rather than left duplicated with a drift-detection test | 2026-09-13 |
 | 61 | shrine-hp-ratio-deleted | The dead `shrine_hp_ratio` field (computed, never read) is deleted rather than kept for a hypothetical future consumer | 2026-09-13 |
 | 62 | armor-mitigation-curve-and-guard | Armor mitigation moves to a percentage curve (def / (def + K)); Guard doubles def before the curve, with a flat-bonus fallback | 2026-09-22 |
+| 63 | pace-rule-readable-by-player | No per-mode number the player must learn; a formula over each mode's own existing values is allowed if the player can state the rule in one sentence | 2026-09-25 |
+| 64 | autobattler-reward-legibility | Rewards and grades follow autobattler conventions: the goal is visible before/during the fight and the result states its cause | 2026-09-25 |
 
 ---
 
@@ -632,5 +634,23 @@
 **Open, must settle before K is tuned:** `docs/calling-visual-equipment-bible.md` §4.4 gives conduit weapons (bell/gong, talking-drum, thread-bead, story spindle) a separate "story damage" channel (sound, Thread tension, emotion) distinct from physical melee damage — whether the armor curve mitigates story damage too, or story damage needs its own path, is undecided and blocks conduit/skill combat resolution. Separately, §4.7 Calling weapon-family bias (Preferred/Disliked) is explicitly non-numeric today; if skills/blasts/sound-based combat later attaches real modifiers to that bias, it becomes a second multiplier stacking against armor mitigation, and that should be a deliberate call, not a side effect of landing the curve. Recorded on the V2-ITEM-003 Notion story (2026-09-22) so scope isn't lost before implementation.
 **Source:** Jeff, design discussion, 2026-09-22
 **Date:** 2026-09-22
+
+---
+
+### 63. pace-rule-readable-by-player
+
+**Q:** Jeff ruled out "a number per mode, too difficult to understand for a user" — does "user" mean the player or the designer tuning config?
+**A:** The player. The player must be able to state the pace rule in one sentence and never has to learn a separate number per mode. A formula that derives each mode's target from values the mode already has (e.g. PURSUE's window, start distance and movement range) is allowed.
+**Source:** Jeff, 2026-09-25
+**Date:** 2026-09-25
+
+---
+
+### 64. autobattler-reward-legibility
+
+**Q:** Should the reward and grade follow autobattler conventions, as game-feel-developer advised?
+**A:** Yes. The player acts before the fight (party, directives, limited guidance); the fight runs by itself (GDD line 50, "You do not command heroes"). So a reward goal must be visible before or during the fight, and the result screen must state what earned or lost it. Today neither holds: no screen shows the pace goal, and the "Speed bonus" line appears only when earned (`EconomyService.gd:161`).
+**Source:** Jeff, agreeing with game-feel-developer's report, 2026-09-25
+**Date:** 2026-09-25
 
 ---

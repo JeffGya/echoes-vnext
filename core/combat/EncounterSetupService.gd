@@ -81,6 +81,7 @@
 #     data.combat.charge_pressure                 protect_duration_bonus, endure_wave_bonus
 #     data.combat.objective_modes.<mode>          scaled objective params (see D30)
 #     data.combat.encounter_approach.surprise_fear
+#     data.combat.movement.capacity + data.rewards pace_* + stage base -> ectx.pace_cfg
 #     data.contact.ally                           level_base / growth / max, ally build cfg
 #     data.stages                                 terrain signature, via RealmGenerator
 #     data.maturity_expression                    passed to LeadershipEmotionService
@@ -89,7 +90,7 @@
 #
 #   WRITES (flow_ctx.encounter_ctx)
 #     encounter_id, resolution_mode, initiative_cfg, pre_encounter_morale, terrain,
-#     objective_params, charge_pressure_applied, actors, placement_seed, purifier_id
+#     objective_params, charge_pressure_applied, actors, placement_seed, pace_cfg, purifier_id
 #
 #   WRITES (flow_ctx)
 #     encounter_ctx (created), encounter_machine (created), save_request +
@@ -138,7 +139,7 @@
 # resolve_objective_params had 25 call sites in tests/ObjectiveCombatTests.gd, every one of
 # which was repointed to this class in the same change.
 #
-# DEFECT NOTES — recorded in docs/v2-infra-003-defect-register.md, deliberately NOT fixed:
+# DEFECT NOTES — recorded in docs/stories/v2-infra-003/defect-register.md, deliberately NOT fixed:
 # D30 (data.combat.objective_modes still has no ConfigService owner; the read MOVED here, so
 # the site count is unchanged), D17 (answered from this call site: escort destination and
 # spirit spawn CAN coincide, via the relaxation branch), D79 (the depth-scaled placement
@@ -670,6 +671,10 @@ func setup(t: int) -> void:
 		flow_ctx.encounter_ctx.actors = all_actors.duplicate(true)
 		flow_ctx.encounter_ctx.placement_seed = placement_seed
 
+		# Pace par. Computed here, not straight after place_actors(), because the RECOVER relic
+		# and the PURSUE quarry spawn after placement. Reads positions only; draws no RNG.
+		_setup_pace(t)
+
 		# COMBAT-006: select purifier and initialise cooldown field on the actor.
 		if not shrine_actor.is_empty() and not shrine_cfg.is_empty():
 			var purifier_id: String = ShrineService.select_purifier(echo_actors, shrine_cfg)
@@ -697,6 +702,35 @@ func setup(t: int) -> void:
 					{ "purifier_id": flow_ctx.encounter_ctx.purifier_id,
 					  "shrine_id":   shrine_actor.get("id", "") })
 
+
+
+## Writes ectx.pace_cfg for a pace mode (PaceService.compute_par); leaves it {} otherwise.
+func _setup_pace(t: int) -> void:
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	# The keeper-intro trial pays no reward, so it is a no-pace fight (design §7).
+	if not PaceService.is_pace_mode(ectx.resolution_mode) or ectx.encounter_id == "keeper_intro.first_trial":
+		return
+	var capacity_cfg: Dictionary = {}
+	if flow_ctx.config_service != null:
+		capacity_cfg = flow_ctx.config_service.get_balance().get("data", {}).get(
+			"combat", {}).get("movement", {}).get("capacity", {})
+	var reward_cfg: Dictionary = ConfigService.get_rewards_cfg(flow_ctx.config_service)
+	var par: float = PaceService.compute_par(
+		ectx.actors, ectx.resolution_mode, ectx.objective_params, capacity_cfg)
+	ectx.pace_cfg = {
+		"par_rounds":      par,
+		"pace_full_ratio": float(reward_cfg.get("pace_full_ratio", 1.1)),
+		"pace_zero_ratio": float(reward_cfg.get("pace_zero_ratio", 1.6)),
+		"pace_bonus_pct":  float(reward_cfg.get("pace_bonus_pct", 0.05)),
+		# The live state needs the Ase a win would pay (design §7). Pure read, no RNG.
+		"stage_base":      ActiveStageService.get_stage_base_reward(flow_ctx, flow_ctx.config_service),
+	}
+	if logger != null:
+		logger.info(t, "combat.pace.par", "Pace par set at fight start", {
+			"encounter_id": ectx.encounter_id,
+			"mode":         ectx.resolution_mode,
+			"par_rounds":   par,
+		})
 
 
 # Deterministic guard against the id-keyed round-loop freeze. Scans the assembled

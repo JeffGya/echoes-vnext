@@ -891,7 +891,7 @@
 				}
 			},
 			"movement_style_weights": {
-				"_comment": "PROPOSED DEFAULT — V2-COMBAT-003.5 Phase 3b. Deterministic movement_style alignment (docs/movement-model.md §9/§10.4, docs/v2-combat-003.5-decisions.md #18). Every already-generated route candidate is scored for how well its OWN route-shape reads as this actor's identity: alignment = (vector_bias + calling_family_bias + fear_bias + morale_bias + bond_bias + vow_bias + trait_nudge) × alignment_weight. BehaviorArbiter adds that to the candidate's own score before the winner-sort, so style influences which option wins with no post-hoc re-pointing. See MovementStyleService.gd. Not yet playtest-ratified.",
+				"_comment": "PROPOSED DEFAULT — V2-COMBAT-003.5 Phase 3b. Deterministic movement_style alignment (docs/movement-model.md §9/§10.4, docs/stories/v2-combat-003.5/decisions.md #18). Every already-generated route candidate is scored for how well its OWN route-shape reads as this actor's identity: alignment = (vector_bias + calling_family_bias + fear_bias + morale_bias + bond_bias + vow_bias + trait_nudge) × alignment_weight. BehaviorArbiter adds that to the candidate's own score before the winner-sort, so style influences which option wins with no post-hoc re-pointing. See MovementStyleService.gd. Not yet playtest-ratified.",
 				"_comment_alignment_weight": "PROPOSED DEFAULT — alignment_weight converts identity units into arbiter score units. The raw terms below reach ~50 for a maxed dominant vector, which would outweigh _score() itself; 0.06 makes style a few points of nudge — the same order as a leadership bonus. Lowered from 0.1 by the V2-COMBAT-003.5 Phase 3c fix (decision #33), where style outranked the whole distance-closing decision in a chase.",
 				"alignment_weight": 0.06,
 				"_comment_urgency_style_damping": "PROPOSED DEFAULT — decision #33. The applied style term is scaled by (1 - urgency_style_damping x goal.urgency). Urgency damps how much style OUTRANKS the board, never what the style is: at urgency 0 she moves entirely as herself, at urgency 1 manners are worth a quarter of that and the board decides.",
@@ -1086,7 +1086,7 @@
 		"maturity_expression": {
 			"_comment": "V2-PROG-006: Maturity-Expression system. Expression band derived from actor rank (Standing). Replaces smartness-tier framing. Calling-specific behavior modifiers. All thresholds config-driven.",
 			"band_by_standing": {
-				"_comment": "V2-COMBAT-003 (approved 2026-09-03), PROPOSED DEFAULT: calling-aligned to the calling ladder's milestones at Standing 3/6/9 (data.combat.movement.capacity.standing_bands already used this shape) — replaces the old table, which saturated at Standing 4 (ranks 4-9 all 'whole', a backfilled agreement fix, not a designed band). See docs/v2-combat-003-handoff.md's 'calling-aligned' section for the full reasoning.",
+				"_comment": "V2-COMBAT-003 (approved 2026-09-03), PROPOSED DEFAULT: calling-aligned to the calling ladder's milestones at Standing 3/6/9 (data.combat.movement.capacity.standing_bands already used this shape) — replaces the old table, which saturated at Standing 4 (ranks 4-9 all 'whole', a backfilled agreement fix, not a designed band). See docs/stories/v2-combat-003/handoff.md's 'calling-aligned' section for the full reasoning.",
 				"1": "nascent",
 				"2": "nascent",
 				"3": "forming",
@@ -1159,7 +1159,7 @@
 			"protect_ally_grounded_mul": 1.3,
 			"protect_ally_grounded_hp_threshold": 0.5,
 			"last_stand_fear_threshold": {
-				"_comment": "PROPOSED DEFAULT. Absolute Fear Rule threshold override when last_echo_standing is active — re-based against refusal_thresholds_by_band's re-spaced bases (80/88/95) so each entry keeps its original bonus (+8 forming/grounded, +5 whole) instead of replacing the base with itself. See docs/v2-combat-003-handoff.md §15.3.",
+				"_comment": "PROPOSED DEFAULT. Absolute Fear Rule threshold override when last_echo_standing is active — re-based against refusal_thresholds_by_band's re-spaced bases (80/88/95) so each entry keeps its original bonus (+8 forming/grounded, +5 whole) instead of replacing the base with itself. See docs/stories/v2-combat-003/handoff.md §15.3.",
 				"forming": 88.0,
 				"grounded": 96.0,
 				"whole": 100.0
@@ -1170,7 +1170,7 @@
 				"max_rank": 9
 			},
 			"refusal_thresholds_by_band": {
-				"_comment": "V2-PROG-010: Base Absolute Fear Rule threshold by expression band. V2-PROG-012 Phase 7: this table is now genuinely load-bearing for every calling — calling_behavior.absolute_fear_offset composes ON TOP of these values (threshold = clamp(band_base + offset, 0, 100)) instead of a calling value replacing them outright, so 'nascent breaks sooner, whole holds longer' (GDD:1422) holds regardless of calling. The legacy flat absolute_fear_threshold override is REMOVED (V2-PROG-012 Phase 7 review-fix) — this table is now unconditionally load-bearing for every calling_behavior entry. V2-COMBAT-003 (approved 2026-09-03), PROPOSED DEFAULT: re-spaced alongside band_by_standing's calling-aligned remap (was 65/72/80/90) so the composed per-Standing effect stays small and Standing 3 is unchanged — see docs/v2-combat-003-handoff.md's 'calling-aligned' section for the measured per-Standing deltas.",
+				"_comment": "V2-PROG-010: Base Absolute Fear Rule threshold by expression band. V2-PROG-012 Phase 7: this table is now genuinely load-bearing for every calling — calling_behavior.absolute_fear_offset composes ON TOP of these values (threshold = clamp(band_base + offset, 0, 100)) instead of a calling value replacing them outright, so 'nascent breaks sooner, whole holds longer' (GDD:1422) holds regardless of calling. The legacy flat absolute_fear_threshold override is REMOVED (V2-PROG-012 Phase 7 review-fix) — this table is now unconditionally load-bearing for every calling_behavior entry. V2-COMBAT-003 (approved 2026-09-03), PROPOSED DEFAULT: re-spaced alongside band_by_standing's calling-aligned remap (was 65/72/80/90) so the composed per-Standing effect stays small and Standing 3 is unchanged — see docs/stories/v2-combat-003/handoff.md's 'calling-aligned' section for the measured per-Standing deltas.",
 				"nascent": 65,
 				"forming": 80,
 				"grounded": 88,
@@ -1486,8 +1486,9 @@
 			},
 			"enemy_defeated_bonus": 5,
 			"echo_survived_bonus": 10,
-			"speed_bonus_pct": 0.15,
-			"speed_bonus_threshold": 5,
+			"pace_full_ratio": 1.1,
+			"pace_zero_ratio": 1.6,
+			"pace_bonus_pct": 0.05,
 			"redo_penalty_per_run": 0.1,
 			"redo_penalty_floor": 0.5,
 			"defeat_factor": 0.25,
@@ -1633,7 +1634,7 @@
 		},
 		"combat": {
 			"board": {
-				"_comment": "V2-STAGE-004 P3a: irregular combat-board sizing. Bounds = base + growth_per_completion * realm_completion_index, clamped to [base, max]. Read by FlowEncounterState; terrain generated via StageTerrain per realm virtue signature. Range shifted 12..22 -> 18..28 per ANSWERS.md #63 (BoardSizeOptionsProbe measurement: 18x18 gives Courage 81 islands per 50 boards, down from 0 at 12x12, and reduces Wisdom island-size clamping).",
+				"_comment": "V2-STAGE-004 P3a: irregular combat-board sizing. Bounds = base + growth_per_completion * realm_completion_index, clamped to [base, max]. Read by FlowEncounterState; terrain generated via StageTerrain per realm virtue signature. Range shifted 12..22 -> 18..28 per docs/stories/v2-combat-003.5/decisions.md #2 (BoardSizeOptionsProbe measurement: 18x18 gives Courage 81 islands per 50 boards, down from 0 at 12x12, and reduces Wisdom island-size clamping).",
 				"base_cols": 18.0,
 				"base_rows": 18.0,
 				"growth_per_completion": 1.0,
@@ -1649,7 +1650,7 @@
 				}
 			},
 			"movement": {
-				"_comment_spatial_utility": "This note is OUTSIDE spatial_utility because BehaviorArbiter._validate_spatial_config rejects any key that is not a weight, and a rejected key discards the whole board. V2-COMBAT-003 phase 10 measured every weight in that block. Two traps. (1) directive_exposure_acceptance_weight is DELIBERATELY INERT, not unfinished: the term is weight x directive.intent_weights.exposure_acceptance x exposure, and exposure_acceptance is authored only on directive.seek_signs, so on the default directive.scout_carefully the term is 0.0 at ANY weight. Raising this number alone can change nothing. (2) exposure is binary in a fight, because _exposure divides controlled edges by a route that is one or two cells long, so exposure_weight is a flat penalty on a boolean, not a slope. Measurements and sweeps: docs/v2-combat-003-handoff.md section 22. All values PROPOSED DEFAULT. (3) V2-COMBAT-003.5 Phase 3c fix, decisions #33/#35, both PROPOSED DEFAULT: urgency_progress_gain multiplies the objective_progress term by (1 + gain x urgency), so closing distance outranks manners when the goal is time-pressured; cap was raised 20.0 -> 28.0 so that amplified progress term is not clipped away by the cap it now reaches.",
+				"_comment_spatial_utility": "This note is OUTSIDE spatial_utility because BehaviorArbiter._validate_spatial_config rejects any key that is not a weight, and a rejected key discards the whole board. V2-COMBAT-003 phase 10 measured every weight in that block. Two traps. (1) directive_exposure_acceptance_weight is DELIBERATELY INERT, not unfinished: the term is weight x directive.intent_weights.exposure_acceptance x exposure, and exposure_acceptance is authored only on directive.seek_signs, so on the default directive.scout_carefully the term is 0.0 at ANY weight. Raising this number alone can change nothing. (2) exposure is binary in a fight, because _exposure divides controlled edges by a route that is one or two cells long, so exposure_weight is a flat penalty on a boolean, not a slope. Measurements and sweeps: docs/stories/v2-combat-003/handoff.md section 22. All values PROPOSED DEFAULT. (3) V2-COMBAT-003.5 Phase 3c fix, decisions #33/#35, both PROPOSED DEFAULT: urgency_progress_gain multiplies the objective_progress term by (1 + gain x urgency), so closing distance outranks manners when the goal is time-pressured; cap was raised 20.0 -> 28.0 so that amplified progress term is not clipped away by the cap it now reaches.",
 				"spatial_utility": {
 					"cap": 28.0,
 					"urgency_weight": 4.0,
@@ -3139,7 +3140,7 @@
 			},
 
 			"map_shape": {
-				"_comment": "V2-COMBAT-003 terrain commit 3: island_count_min/max and island_size_min/max REPLACE straggler_count_min/max. A straggler was one cell taken from the 8-direction neighbours of existing ground, so it always touched the board at a corner and could never be an island (measured: 838 of 865 cut-off regions touched the main ground at a corner, and 819 of 865 were a single cell). An island is a multi-cell blob with a guaranteed ring of void around it, so realms differentiate by island SIZE and not only by island COUNT. All eleven island_count_*/island_size_* values below are PROPOSED DEFAULTS awaiting Jeff's play tuning — see docs/v2-combat-003-handoff.md section 12.5 for the approved table. island_size_* is a REQUEST, not a promise: StageTerrain clamps it against board area (at most 1/16 of the board per island and 1/4 of the board for all islands together, floor 4 cells), so wisdom's 8..50 gives up to 9 cells per island on a 12x12 combat board and the full authored range on an explore map. An island below 4 cells is discarded rather than emitted. relief is RESERVED for future per-realm art (CONVENTIONS.md) — do not rename it. connect_min_region_cells governs the connectivity repair, which runs BEFORE islands are minted and therefore never sees them. V2-COMBAT-003 terrain commit 4 adds island_bridge_chance (PROPOSED DEFAULT on all eleven entries, the approved table in docs/v2-combat-003-handoff.md section 12.5): the probability that an island of 6 cells or more is bridged back to a neighbouring region, and the same probability again for each EXTRA side on an island of 20 cells or more (at most one bridge per side, each reaching a different region, which may be another island). An island of 5 cells or fewer is NEVER bridged and stays pure scenery. 0.0 means every island in that realm stays scenery. The default entry is not a virtue and carries 0.3, a middle value, awaiting the same play tuning. A bridged island joins the host region, so it becomes legitimate ground to spawn on and a legal objective site; an unbridged island still touches nothing at all.",
+				"_comment": "V2-COMBAT-003 terrain commit 3: island_count_min/max and island_size_min/max REPLACE straggler_count_min/max. A straggler was one cell taken from the 8-direction neighbours of existing ground, so it always touched the board at a corner and could never be an island (measured: 838 of 865 cut-off regions touched the main ground at a corner, and 819 of 865 were a single cell). An island is a multi-cell blob with a guaranteed ring of void around it, so realms differentiate by island SIZE and not only by island COUNT. All eleven island_count_*/island_size_* values below are PROPOSED DEFAULTS awaiting Jeff's play tuning — see docs/stories/v2-combat-003/handoff.md section 12.5 for the approved table. island_size_* is a REQUEST, not a promise: StageTerrain clamps it against board area (at most 1/16 of the board per island and 1/4 of the board for all islands together, floor 4 cells), so wisdom's 8..50 gives up to 9 cells per island on a 12x12 combat board and the full authored range on an explore map. An island below 4 cells is discarded rather than emitted. relief is RESERVED for future per-realm art (CONVENTIONS.md) — do not rename it. connect_min_region_cells governs the connectivity repair, which runs BEFORE islands are minted and therefore never sees them. V2-COMBAT-003 terrain commit 4 adds island_bridge_chance (PROPOSED DEFAULT on all eleven entries, the approved table in docs/stories/v2-combat-003/handoff.md section 12.5): the probability that an island of 6 cells or more is bridged back to a neighbouring region, and the same probability again for each EXTRA side on an island of 20 cells or more (at most one bridge per side, each reaching a different region, which may be another island). An island of 5 cells or fewer is NEVER bridged and stays pure scenery. 0.0 means every island in that realm stays scenery. The default entry is not a virtue and carries 0.3, a middle value, awaiting the same play tuning. A bridged island joins the host region, so it becomes legitimate ground to spawn on and a legal objective site; an unbridged island still touches nothing at all.",
 				"default": {
 					"relief": "default_relief",
 					"plateau_count_min": 2, "plateau_count_max": 4,

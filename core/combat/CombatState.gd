@@ -38,9 +38,11 @@ const REQUIRED_FIELDS := [
 ## stalemate_cfg: data.combat.stalemate from balance.json (pass {} to disable the no-progress
 ## forced retreat — no_progress_round_limit defaults to 0, which check_end_condition() reads
 ## as "off").
+## pace_cfg: ectx.pace_cfg from EncounterSetupService ({} for a no-pace mode).
 static func create(actors: Array, objective: String,
 		initiative_seed: int = 0, init_cfg: Dictionary = {},
-		objective_params: Dictionary = {}, stalemate_cfg: Dictionary = {}) -> Dictionary:
+		objective_params: Dictionary = {}, stalemate_cfg: Dictionary = {},
+		pace_cfg: Dictionary = {}) -> Dictionary:
 	var state: Dictionary = {
 		"actors":                  actors.duplicate(true),
 		"objective":               objective,
@@ -82,6 +84,14 @@ static func create(actors: Array, objective: String,
 		"no_progress_streak":       0,
 		"no_progress_round_limit":  int(stalemate_cfg.get("no_progress_round_limit", 0)),
 		"_no_progress_seen":        {},
+		# Pace (docs/stories/pace-reward/design.md). par_rounds 0.0 = no-pace mode. Runtime only.
+		# reached_enemy_ids only grows: PaceService.record_reached_enemies() appends, nothing removes.
+		"par_rounds":        float(pace_cfg.get("par_rounds", 0.0)),
+		"pace_full_ratio":   float(pace_cfg.get("pace_full_ratio", 0.0)),
+		"pace_zero_ratio":   float(pace_cfg.get("pace_zero_ratio", 0.0)),
+		"pace_bonus_pct":    float(pace_cfg.get("pace_bonus_pct", 0.0)),
+		"stage_base":        int(pace_cfg.get("stage_base", 0)),
+		"reached_enemy_ids": [],
 	}
 	# Seed with the START-of-combat state, so a round 1 in which literally nothing moved counts
 	# as the stall it is.
