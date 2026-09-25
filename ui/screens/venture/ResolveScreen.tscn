@@ -145,6 +145,15 @@ layout_mode = 2
 text = "—"
 theme_override_font_sizes/font_size = 22
 
+[node name="RankCauseLabel" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/RankRow"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"RealmWarmMeta"
+theme_override_font_sizes/font_size = 14
+text = "The party's effort earned this rank"
+vertical_alignment = 1
+
 [node name="AseRow" type="HBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent"]
 layout_mode = 2
 alignment = 1
@@ -220,6 +229,7 @@ theme_override_font_sizes/font_size = 14
 horizontal_alignment = 2
 
 [node name="RoundsKey" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/StatGrid"]
+unique_name_in_owner = true
 layout_mode = 2
 text = "Rounds"
 theme_override_font_sizes/font_size = 14

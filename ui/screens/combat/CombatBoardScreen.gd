@@ -21,6 +21,7 @@ signal modal_requested(modal_id: StringName, payload: Dictionary)
 
 const InitiativeRowScene := preload("res://ui/components/InitiativeRowItem.tscn")
 const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
+const PacePresentation := preload("res://ui/components/PacePresentation.gd")
 
 @onready var _board: TileMapLayer                   = $Board
 # V2-COMBAT-003 terrain commit 4 (decision 16) — a bridge is its own tile. A CHILD of Board,
@@ -86,6 +87,10 @@ const _PIP_COUNT:  int    = 5
 # _normal is the authored base; _urgent is a duplicate re-tinted for the PROTECT stolen state.
 var _normal_banner_style: StyleBoxFlat = null
 var _urgent_banner_style: StyleBoxFlat = null
+# Authored .tscn font colours, restored when the fight has no pace_state.
+var _round_label_color: Color = Color.WHITE
+var _banner_glyph_color: Color = Color.WHITE
+var _banner_progress_color: Color = Color.WHITE
 
 const _SPEED_SLOW:   float = 3.0
 const _SPEED_NORMAL: float = 1.5
@@ -205,6 +210,9 @@ func _ready() -> void:
 	# _normal is the .tscn-authored base; _urgent duplicates it and re-tints bg + border red
 	# for the PROTECT "STOLEN" state (distinct chrome, not just a modulate).
 	_objective_banner.visible = false
+	_round_label_color     = _round_label.get_theme_color("font_color")
+	_banner_glyph_color    = _banner_glyph.get_theme_color("font_color")
+	_banner_progress_color = _banner_progress.get_theme_color("font_color")
 	# get_theme_stylebox() returns the effective stylebox (the .tscn-authored override here) —
 	# Control has no get_theme_stylebox_override() getter, only has_/add_/remove_.
 	_normal_banner_style = _objective_banner.get_theme_stylebox("panel") as StyleBoxFlat
@@ -335,6 +343,7 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	var obj_type: String = str(obj_state.get("type", ""))
 	_objective_label.visible = false
 	_render_objective_banner(obj_state, obj_type)
+	_apply_pace_color(str(obj_state.get("pace_state", "")))
 
 	# V2-STAGE-004 P3b: PURSUE camera — update quarry follow target each snapshot.
 	if obj_type == "pursue":
@@ -512,6 +521,16 @@ func _render_objective_banner(obj_state: Dictionary, obj_type: String) -> void:
 		if _normal_banner_style != null:
 			_objective_banner.add_theme_stylebox_override("panel", _normal_banner_style)
 	_objective_banner.visible = true
+
+
+## Pace modes only (design §6, decisions.md D-12): colour the round label and the banner's
+## glyph and progress line by pace_state. No text is added. No-pace fights keep the authored colour.
+func _apply_pace_color(pace_state: String) -> void:
+	var has_pace := PacePresentation.has_pace(pace_state)
+	var pace_color := PacePresentation.color(pace_state, false) if has_pace else Color.WHITE
+	_round_label.add_theme_color_override("font_color", pace_color if has_pace else _round_label_color)
+	_banner_glyph.add_theme_color_override("font_color", pace_color if has_pace else _banner_glyph_color)
+	_banner_progress.add_theme_color_override("font_color", pace_color if has_pace else _banner_progress_color)
 
 
 ## Fills the pre-authored diamond pips by quarry proximity to the exit edge.

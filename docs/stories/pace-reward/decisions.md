@@ -29,6 +29,9 @@ Story-specific decisions for the pace bonus story. Project-wide decisions stay i
 | D-22 | pace-state-from-ase-paid | `pace_state` is set from the Ase paid: full = maximum, partial = between 0 and maximum, none = 0 | 2026-09-25 |
 | D-23 | reached-enemies-and-ally-kills | A party Echo kill marks the enemy reached; only living enemies become reached; ally and spirit kills pay Ase but leave both sides of the rank | 2026-09-25 |
 | D-24 | hazard-kills-deferred | How a hazard kill counts for the rank is decided by V2-COMBAT-004 (slice 004B), not here | 2026-09-25 |
+| D-25 | pace-colours-approved | The six pace colours (dark HUD and light result card) are approved | 2026-09-25 |
+| D-26 | result-screen-findings-to-combat-004 | The Rounds-line position and two other result-screen findings go to V2-COMBAT-004 (004D) | 2026-09-25 |
+| D-27 | rank-cause-note-copy | The rank-cause note reads "The party's effort earned this rank" | 2026-09-25 |
 
 ---
 
@@ -250,6 +253,41 @@ Rules 1 and 2 apply to the modes that track reached enemies: PROTECT, ENDURE, RE
 **Q:** An enemy killed by a hazard has no killer. How does that kill count for the rank? (Raised by mechanics-developer.)
 **A:** Not in this story. V2-COMBAT-004 decides it, in slice 004B, which places hazards on production boards (filed on its Notion page, 2026-09-25). Today no fight has hazards, so the case cannot happen. The code keeps its current behaviour: the kill pays Ase and counts in the earned rank kill term. See follow-ups.md #13.
 **Source:** Jeff, 2026-09-25 ("H3 this should be handled with hazards not here.")
+**Date:** 2026-09-25
+
+---
+
+### D-25. pace-colours-approved
+
+**Q:** ui-ux-designer proposed six pace colours: one set for the dark combat HUD, one for the light result card. One set cannot pass contrast on both. Approve? (Raised by ui-ux-designer.)
+**A:** Approved. They match the Living Tree system.
+
+| State | Combat HUD (dark) | Result card (light) |
+|---|---|---|
+| full | `#7EE3C0` | `#1D6552` |
+| partial | `#F28C28` | `#7A4B00` |
+| none | `#E5533D` | `#9E2F28` |
+
+They live in `assets/theme/LivingTreeSystem.tres` (theme variations `PaceState*`), read through `ui/components/PacePresentation.gd`. Known risk: amber (partial) and red (none) are hard to separate for colour-blind players (D-12 keeps the display colour-only).
+**Source:** Jeff, 2026-09-25 ("Yes I approve. They seem to match the Living Tree system.")
+**Date:** 2026-09-25
+
+---
+
+### D-26. result-screen-findings-to-combat-004
+
+**Q:** ui-ux-designer found three result-screen issues outside this story: the `Rounds` line is below the visible scroll area at 1600×900; `_format_reason` shows raw ids such as "relic_secured"; the board under the result card keeps its last pace colour. Fix here? (Raised by ui-ux-designer.)
+**A:** No. The UI/UX needs a bigger restructure, and these belong to it. Filed on the V2-COMBAT-004 Notion page (slice 004D, post-battle report), addendum dated 2026-09-25.
+**Source:** Jeff, 2026-09-25
+**Date:** 2026-09-25
+
+---
+
+### D-27. rank-cause-note-copy
+
+**Q:** What does the rank-cause note next to the rank badge say? It shows only when the pace bonus raised the rank (`pace_changed_rank`). (Raised by ui-ux-designer, which proposed "Pace bonus raised the rank".)
+**A:** "The party's effort earned this rank". The party earns the result, not the player: the fight runs by itself (ANSWERS.md #64).
+**Source:** Jeff, 2026-09-25
 **Date:** 2026-09-25
 
 ---
