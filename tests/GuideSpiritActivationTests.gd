@@ -19,8 +19,12 @@ const GoalContract = preload("res://core/movement/contracts/MovementGoal.gd")
 
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement/guide_spirit/escort_steps_exactly_one_cell", Callable(GuideSpiritActivationTests, "_t_escort_one_cell"))
+	runner.register_test("movement/guide_spirit/structure_built_spirit_moves", Callable(GuideSpiritActivationTests, "_t_structure_built_spirit_moves"))
 	runner.register_test("movement/guide_spirit/escort_waits_when_next_cell_occupied", Callable(GuideSpiritActivationTests, "_t_escort_waits_occupied"))
-	runner.register_test("movement/guide_spirit/escort_unreachable_destination_no_route", Callable(GuideSpiritActivationTests, "_t_escort_unreachable"))
+	runner.register_test("movement/guide_spirit/escort_swaps_with_yielding_echo", Callable(GuideSpiritActivationTests, "_t_escort_swaps_with_yielding_echo"))
+	runner.register_test("movement/guide_spirit/escort_hostile_occupant_never_yields", Callable(GuideSpiritActivationTests, "_t_escort_hostile_never_yields"))
+	runner.register_test("movement/guide_spirit/escort_downed_occupant_never_yields", Callable(GuideSpiritActivationTests, "_t_escort_downed_never_yields"))
+	runner.register_test("movement/guide_spirit/escort_unreachable_destination_no_route",Callable(GuideSpiritActivationTests, "_t_escort_unreachable"))
 	runner.register_test("movement/guide_spirit/skittish_steps_away_from_nearest_threat", Callable(GuideSpiritActivationTests, "_t_skittish_away"))
 	runner.register_test("movement/guide_spirit/skittish_mirrored_board_no_row_col_bias", Callable(GuideSpiritActivationTests, "_t_skittish_mirror_no_bias"))
 	runner.register_test("movement/guide_spirit/skittish_skips_occupied_neighbours", Callable(GuideSpiritActivationTests, "_t_skittish_skips_occupied"))
@@ -182,8 +186,30 @@ static func _t_escort_one_cell() -> Dictionary:
 	return _pass()
 
 
-## The chosen step is occupied -> the SHARED executor's occupancy rule makes the
-## spirit wait in place, exactly as it would any other actor.
+## Production construction: the live non-joining spirit comes from StructureActor
+## (is_structure == true). Both modes must still take their one-cell step.
+static func _t_structure_built_spirit_moves() -> Dictionary:
+	var spirit: Dictionary = StructureActor.from_definition(
+		{"id": "spirit.1", "name": "Spirit", "max_hp": 60, "grid_pos": _cell(1, 1)}, 0)
+	spirit["is_spirit"] = true
+	var escort: Dictionary = GuideActivation.activate_spirit(
+		spirit, _ctx(), _escort_state(_cell(5, 1)), _hazard_ctx(), _capacity_cfg()
+	)
+	if (escort["final_destination"] as Dictionary) != _cell(2, 1):
+		return _fail("structure-built escort spirit should step to (2,1), got %s (stop=%s)" % [
+			str(escort["final_destination"]), str(escort["stop_reason"])])
+	var protect_ctx: Dictionary = _ctx({"origin": _cell(3, 3), "bounds": {"w": 7, "h": 7}})
+	var protect: Dictionary = GuideActivation.activate_spirit(
+		spirit, protect_ctx, _protect_state([_cell(4, 4)]), _hazard_ctx(), _capacity_cfg()
+	)
+	if (protect["final_destination"] as Dictionary) != _cell(2, 2):
+		return _fail("structure-built skittish spirit should step to (2,2), got %s (stop=%s)" % [
+			str(protect["final_destination"]), str(protect["stop_reason"])])
+	return _pass()
+
+
+## The chosen step holds an occupant the caller did NOT list in yield_ids -> the
+## shared executor's occupancy rule makes the spirit wait in place.
 static func _t_escort_waits_occupied() -> Dictionary:
 	var context: Dictionary = _ctx({"occupancy": {"2,1": "echo.1"}})
 	var result: Dictionary = GuideActivation.activate_spirit(
@@ -199,6 +225,75 @@ static func _t_escort_waits_occupied() -> Dictionary:
 		return _fail("waiting spirit spent capacity: %d" % int(result["voluntary_cost"]))
 	if not bool(ResultContract.validate(result)["valid"]):
 		return _fail("waiting result rejected: %s" % str(ResultContract.validate(result)))
+	return _pass()
+
+
+## Decision #59 board: spirit (1,1) heading east, a party Echo standing on the step (2,1).
+static func _yield_ctx(relationship: String, echo_fact_overrides: Dictionary = {}) -> Dictionary:
+	var echo_fact: Dictionary = {
+		"id": "echo.1", "position": _cell(2, 1), "is_dead": false, "is_ko": false,
+		"is_structure": false, "is_spirit": false,
+	}
+	for key: Variant in echo_fact_overrides.keys():
+		echo_fact[key] = echo_fact_overrides[key]
+	return _ctx({
+		"occupancy": {"1,1": "spirit.1", "2,1": "echo.1"},
+		"perceived_actors": [echo_fact],
+		"relationships": {"echo.1": relationship},
+	})
+
+
+## A listed, living party Echo on the step trades cells with the spirit: the spirit
+## takes the step instead of stopping "occupied", and yielded_occupant names the Echo.
+static func _t_escort_swaps_with_yielding_echo() -> Dictionary:
+	var context: Dictionary = _yield_ctx("neutral")
+	var context_before: Dictionary = context.duplicate(true)
+	var state: Dictionary = _escort_state(_cell(5, 1), {"yield_ids": ["echo.1"]})
+	var result: Dictionary = GuideActivation.activate_spirit(
+		_spirit(), context, state, _hazard_ctx(), _capacity_cfg()
+	)
+	if str(result["stop_reason"]) == "occupied":
+		return _fail("spirit held on an occupied step instead of swapping")
+	if (result["final_destination"] as Dictionary) != _cell(2, 1):
+		return _fail("spirit should take the Echo's cell (2,1), got %s (stop=%s)" % [
+			str(result["final_destination"]), str(result["stop_reason"])])
+	if int(result["voluntary_cost"]) != 1:
+		return _fail("the swap step should cost the spirit its one step, got %d" % int(result["voluntary_cost"]))
+	if GuideActivation.yielded_occupant(context, state, result) != "echo.1":
+		return _fail("yielded_occupant should name echo.1, got '%s'" % GuideActivation.yielded_occupant(context, state, result))
+	if context != context_before:
+		return _fail("swap mutated the caller's movement context")
+	if not bool(ResultContract.validate(result)["valid"]):
+		return _fail("swap result rejected: %s" % str(ResultContract.validate(result)))
+	return _pass()
+
+
+## Decision #59 never applies to a hostile: even when listed by mistake, a hostile
+## occupant keeps the "occupied" wait, and yielded_occupant stays empty.
+static func _t_escort_hostile_never_yields() -> Dictionary:
+	var context: Dictionary = _yield_ctx("hostile")
+	var state: Dictionary = _escort_state(_cell(5, 1), {"yield_ids": ["echo.1"]})
+	var result: Dictionary = GuideActivation.activate_spirit(
+		_spirit(), context, state, _hazard_ctx(), _capacity_cfg()
+	)
+	if str(result["stop_reason"]) != "occupied":
+		return _fail("hostile occupant: expected occupied wait, got %s" % str(result["stop_reason"]))
+	if (result["final_destination"] as Dictionary) != _cell(1, 1):
+		return _fail("hostile occupant: spirit moved to %s" % str(result["final_destination"]))
+	if not GuideActivation.yielded_occupant(context, state, result).is_empty():
+		return _fail("hostile occupant reported as a yielder")
+	return _pass()
+
+
+## A downed Echo cannot step aside: the spirit waits.
+static func _t_escort_downed_never_yields() -> Dictionary:
+	var context: Dictionary = _yield_ctx("neutral", {"is_ko": true})
+	var state: Dictionary = _escort_state(_cell(5, 1), {"yield_ids": ["echo.1"]})
+	var result: Dictionary = GuideActivation.activate_spirit(
+		_spirit(), context, state, _hazard_ctx(), _capacity_cfg()
+	)
+	if str(result["stop_reason"]) != "occupied":
+		return _fail("downed occupant: expected occupied wait, got %s" % str(result["stop_reason"]))
 	return _pass()
 
 

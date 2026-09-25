@@ -66,6 +66,10 @@
 | 55 | lateral-fix-faster-fights-accepted | 2 fixture fights resolve faster as a side effect (PURSUE, PURIFY_SHRINE) — accepted, same class of already-filed reward-formula concern (follow-up tasks #2/#4) | 2026-09-24 |
 | 56 | lateral-test-failure-message-fixed | New end-to-end test correctly catches the regression but fails at the wrong line with a misleading message — fix the message before commit | 2026-09-24 |
 | 57 | lateral-guard-cell-only-comparison-confirmed | Codex flagged the same cell-vs-full-route ambiguity qa-verifier's finding 5 raised — confirmed: keep cell-only comparison, no code change | 2026-09-24 |
+| 58 | guide-spirit-escort-capacity-bug-fix-before-phase8 | Pre-existing bug (since July, not this story): GUIDE_SPIRIT escort's spirit gets capacity 0 because is_structure is checked before any capacity override — fix before Jeff's Phase 8 playtest | 2026-09-25 |
+| 59 | guide-spirit-blocking-routed-to-sr-game-designer | A guarding Echo can block the spirit's path indefinitely — this is a party-AI design question, routed to sr-game-designer for a proper design pass | 2026-09-25 |
+| 60 | guide-spirit-swap-design-adds-feel-check | sr-game-designer recommended a deterministic yield/swap (blocking Echo trades cells with the spirit, every round, no threshold) — Jeff added a game-feel-developer readability check before mechanics-developer builds it | 2026-09-25 |
+| 61 | spirit-barks-added-to-tier-2-before-commit | qa-verifier found all 5 spirit_* bark contexts missing from data.voice.bark_tiers, so they default to lowest priority and can be silently dropped in a crowded round — add all 5 to tier 2, fix before commit | 2026-09-25 |
 
 ---
 
@@ -590,3 +594,67 @@
 **A:** Keep cell-only comparison. No code change — a flank landing on the exact same spot as another option doesn't read as a distinct flank on screen, even via a different path.
 **Source:** Jeff, 2026-09-24
 **Date:** 2026-09-24
+
+---
+
+### 58. guide-spirit-escort-capacity-bug-fix-before-phase8
+
+**Q:** Phase 7's full-regression/measurement pass found a real, pre-existing bug, unrelated to this story's own scope: in GUIDE_SPIRIT escort fights, the spirit actor is built with `is_structure: true`, and `MovementProfileService.derive_profile()` checks that flag BEFORE checking any movement-capacity override — so the spirit always gets capacity 0 and can never walk to its destination. Confirmed broken since a July commit (V2-COMBAT-002 Slice 3), well before this story. About half of all GUIDE_SPIRIT fights are escort mode, so Jeff's own Phase 8 in-game playtest would likely hit this. A second, related blocker was also found: even with capacity restored, a guarding/protecting Echo standing on the spirit's path can block it indefinitely (the executor doesn't route around occupied cells by design). Fix now before Phase 8, or file as follow-up and playtest with the known caveat?
+**A:** Fix it before Phase 8. Out of this story's original scope, but the playtest should exercise real gameplay, not a known-broken path.
+**Source:** Jeff, 2026-09-25
+**Date:** 2026-09-25
+
+> **Progress, 2026-09-25**: the capacity fix (authored_override checked before is_structure) is
+> built, tested, and confirmed working live — escort fights went from 0/11 winning via
+> spirit_escorted to 2/11 in an 11-fight sample, spirit genuinely accumulates movement across
+> turns. No fingerprint moved (the existing fixture only covers protect mode, not escort, so
+> nothing to re-record). One real problem remains: a guarding Echo can block the spirit's next
+> cell indefinitely (measured: one fight blocked 20 rounds straight), because party AI currently
+> has no reason to ever vacate that cell. This is a party-behavior design question, not a code
+> bug — see decision #59.
+
+---
+
+### 59. guide-spirit-blocking-routed-to-sr-game-designer
+
+**Q:** A guarding/protecting Echo can permanently block the escort spirit's path by standing on its next cell (party AI has no reason to move off it). Three shapes of fix were proposed: (a) Echoes on escort leave the spirit's next cell out of their guard ring, (b) a yield/swap rule where a blocking Echo trades places with the spirit, (c) both plus reinstating the pre-July side-step behavior (the spirit used to route around occupied cells before a live-movement cutover removed that). This changes real party AI behavior, not just a code fix. Quick surgical fix now, route to sr-game-designer for a proper design pass, or accept as-is and file as follow-up?
+**A:** Route to sr-game-designer for a proper design pass — this affects party AI behavior broadly, matching how this story has routed other genuine design forks (e.g. decision #8).
+**Source:** Jeff, 2026-09-25
+**Date:** 2026-09-25
+
+> **Result:** sr-game-designer recommended (b) — a deterministic yield/swap, firing every round
+> with no threshold: when the spirit's planned next cell is occupied by a living friendly
+> non-structure Echo, the spirit and the Echo trade positions as part of the spirit's own
+> activation (no action/movement cost to the Echo). Confirmed no narrative/mechanical case makes
+> indefinite blocking correct (escort/protect only require reach within `escort_radius`, not
+> occupying one specific tile) — ruling out a grace-period design. (a) alone was rejected
+> (depends on an unconfirmed activation-order precondition); reinstating the old side-step (part
+> of (c)) was rejected (mechanics-developer already found free-cell routing often has no option
+> once the guard ring fills). See decision #60 for the added feel-check step before build.
+
+---
+
+### 60. guide-spirit-swap-design-adds-feel-check
+
+**Q:** sr-game-designer's yield/swap design has real player-facing implications (an Echo visibly stepping aside for the spirit, every round it happens). Add a game-feel-developer readability check before mechanics-developer builds it?
+**A:** Yes — "if needed also game feel, we want this to feel and play right." Matches this story's own precedent (decision #10) of a feel check before a feasibility/build pass.
+**Source:** Jeff, 2026-09-25
+**Date:** 2026-09-25
+
+> **Result:** do not ship silent. The existing token-movement lerp already prevents a teleport
+> read (no code path in this game ever snaps an actor's position), but a repeating, unmarked swap
+> reads as a stuck loop rather than "the party is protecting the spirit," especially in the worst
+> case (measured: the same Echo could swap every round for 20 rounds straight). Minimal fix: one
+> new bark context (`spirit_escort_yield` or similar), fired via the existing
+> `NarrativeVoiceService.fire_spirit_bark()` — already used for this exact actor, deterministic
+> rotation avoids repeating the same line, no new system needed. Both the swap mechanic and this
+> bark addition are now fully specified and go to `mechanics-developer` as one build.
+
+---
+
+### 61. spirit-barks-added-to-tier-2-before-commit
+
+**Q:** qa-verifier's combined-tree review of the swap+bark+capacity fix (SHIP verdict) found an adjacent gap: none of the 5 `spirit_*` bark contexts (`spirit_escort_start`, `spirit_first_adjacency`, `spirit_guide_win`, `spirit_killed`, and the new `spirit_escort_yield`) are listed in `data.voice.bark_tiers`. `NarrativeVoiceService.apply_round_bark_budget()` resolves any unlisted context to the lowest priority tier, so in a round with 3+ higher-priority barks already queued, a spirit bark — including the new yield bark decision #60 explicitly required to "not ship silent" — is silently dropped before the player ever sees it. This is pre-existing across all 5 contexts, not introduced by this build. Ship as-is and file a follow-up, fix the tier now, or accept the gap permanently?
+**A:** Fix the tier now, before commit — cover all 5 `spirit_*` contexts (not just the new one), assigned to tier 2 (matching other narratively-important-but-not-urgent barks like `combat_fear_rising`/`combat_inspired`, one tier below true mechanical alerts like `combat_last_stand`/`combat_ko`).
+**Source:** Jeff, 2026-09-25
+**Date:** 2026-09-25

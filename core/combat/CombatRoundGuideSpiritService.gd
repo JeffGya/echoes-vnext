@@ -50,16 +50,17 @@
 #     combat_state["destination_reached"]       escort win latch
 #     combat_state["guide_protect_counter"]     protect-hold accumulator (never resets)
 #     spirit.grid_pos                           via GridService.assign_grid_pos()
+#     yielding Echo grid_pos                    escort swap only (_apply_escort_yield)
 #     spirit.current_hp / is_dead / death_round / is_ko
 #                                              via LiveHazardOutcomeService.apply()
 #     spirit._bark_line / _bark_context / _bark_tier
 #                                              via NarrativeVoiceService.fire_spirit_bark()
 #     ectx.round_bark_events                    APPENDED by fire_spirit_bark — the coupling
 #                                              slice 6A found the expensive way. Confirmed
-#                                              present here: four bark sites (spirit_killed,
+#                                              present here: five bark sites (spirit_killed,
 #                                              spirit_first_adjacency, spirit_escort_start,
-#                                              spirit_guide_win).
-#     five logger lines (combat.guide.no_route x2, combat.guide.escort,
+#                                              spirit_escort_yield, spirit_guide_win).
+#     six logger lines (combat.guide.no_route x2, combat.guide.escort, combat.guide.yield,
 #     combat.guide.skittish, combat.guide.protect_hold)
 #
 #   NOT TOUCHED  save data (never read, never written — the one save read the block used to
@@ -270,19 +271,21 @@ func apply_guide_spirit_round(
 						_gs_goal_id = "guide.escort_caller_gated"
 					var _gs_prepared: Dictionary = prepared
 					if bool(_gs_prepared.get("valid", false)):
+						var _gs_guide_state: Dictionary = {
+							"mode": "escort",
+							"joined": false,
+							"should_move": _gs_should_move,
+							"destination": _gs_dest,
+							"activation_id": "guide.%s.%d" % [_gs_spirit_id, round],
+							"goal_id": _gs_goal_id,
+							"option_id": "guide.escort.step",
+							"mover_ko_only": false,
+							"yield_ids": _escort_yield_ids(ectx),
+						}
 						var _gs_result: Dictionary = GuideSpiritActivationServiceScript.activate_spirit(
 							_gs_spirit,
 							_gs_prepared["context"] as Dictionary,
-							{
-								"mode": "escort",
-								"joined": false,
-								"should_move": _gs_should_move,
-								"destination": _gs_dest,
-								"activation_id": "guide.%s.%d" % [_gs_spirit_id, round],
-								"goal_id": _gs_goal_id,
-								"option_id": "guide.escort.step",
-								"mover_ko_only": false,
-							},
+							_gs_guide_state,
 							_gs_prepared["hazard_ctx"] as Dictionary,
 							_gs_prepared["capacity_cfg"] as Dictionary
 						)
@@ -292,6 +295,10 @@ func apply_guide_spirit_round(
 								int((_gs_result.get("final_destination", {}) as Dictionary).get("col", 0)),
 								int((_gs_result.get("final_destination", {}) as Dictionary).get("row", 0)))
 							_gs_spirit_pos = _gs_spirit.get("grid_pos", {})
+						var _gs_yielder_id: String = GuideSpiritActivationServiceScript.yielded_occupant(
+							_gs_prepared["context"] as Dictionary, _gs_guide_state, _gs_result)
+						if not _gs_yielder_id.is_empty():
+							_apply_escort_yield(ectx, _gs_spirit, _gs_yielder_id, _gs_result, round, t)
 						LiveHazardOutcomeService.apply(_gs_spirit, _gs_result, t, round, logger, false)
 						LiveHazardOutcomeService.apply(_gs_spirit, _gs_result, t, round, logger, true)
 						if _gs_should_move and str(_gs_result.get("stop_reason", "")) == "no_route":
@@ -426,3 +433,47 @@ func apply_guide_spirit_round(
 					"guide_protect_counter": int(combat_state.get("guide_protect_counter", 0)),
 					"near":                  _gs_guard_near,
 				})
+
+
+## Party Echoes that step aside for the escort spirit (decision #59): living, not downed,
+## faction "echo", and neither a spirit nor a structure. Hostiles are never listed.
+static func _escort_yield_ids(ectx: EncounterContext) -> Array:
+	var ids: Array = []
+	for actor_v in ectx.actors:
+		if not (actor_v is Dictionary): continue
+		var actor: Dictionary = actor_v
+		if bool(actor.get("is_dead", false)) or bool(actor.get("is_ko", false)): continue
+		if str(actor.get("faction", "")) != "echo": continue
+		if bool(actor.get("is_spirit", false)) or bool(actor.get("is_structure", false)): continue
+		ids.append(str(actor.get("id", "")))
+	ids.sort()
+	return ids
+
+
+## Completes the trade GuideSpiritActivationService resolved: the yielding Echo takes the
+## spirit's previous cell. Only grid_pos changes — the Echo spends no action or movement.
+## The bark does not replace a spirit bark already fired this round (escort start is a
+## once-per-fight line; the yield can repeat every round).
+func _apply_escort_yield(
+		ectx: EncounterContext,
+		spirit: Dictionary,
+		yielder_id: String,
+		result: Dictionary,
+		round: int,
+		t: int) -> void:
+	var yielder: Dictionary = EncounterContext.find_actor_by_id(ectx.actors, yielder_id)
+	if yielder.is_empty():
+		return
+	var spirit_from: Dictionary = result.get("origin", {}) as Dictionary
+	var echo_from: Dictionary = (yielder.get("grid_pos", {}) as Dictionary).duplicate(true)
+	GridService.assign_grid_pos(yielder, int(spirit_from.get("col", 0)), int(spirit_from.get("row", 0)))
+	logger.info(t, "combat.guide.yield", "GUIDE_SPIRIT escort: Echo stepped aside for the spirit", {
+		"round":      round,
+		"spirit_id":  str(spirit.get("id", "")),
+		"echo_id":    yielder_id,
+		"echo_from":  echo_from,
+		"echo_to":    yielder.get("grid_pos", {}),
+		"spirit_to":  spirit.get("grid_pos", {}),
+	})
+	if str(spirit.get("_bark_line", "")).is_empty():
+		_voice_service().fire_spirit_bark(spirit, "spirit_escort_yield", t)
