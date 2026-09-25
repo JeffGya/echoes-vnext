@@ -33,6 +33,8 @@ Story-specific decisions for the pace bonus story. Project-wide decisions stay i
 | D-26 | result-screen-findings-to-combat-004 | The Rounds-line position and two other result-screen findings go to V2-COMBAT-004 (004D) | 2026-09-25 |
 | D-27 | rank-cause-note-copy | The rank-cause note reads "The party's effort earned this rank" | 2026-09-25 |
 | D-28 | pace-polish-scope | D-12 allows an animated colour change; build the colour blend, the drop brightening and the muted +0 row; leave the note delay and the Pace-row colour | 2026-09-25 |
+| D-29 | zero-row-colour | A "+0 Ase" row uses the muted colour #6E6450 (4.77:1 on the result card) | 2026-09-25 |
+| D-30 | banner-gold-to-combat-004 | The no-pace banner gold looks close to the partial amber; left for V2-COMBAT-004 (004D) | 2026-09-25 |
 
 ---
 
@@ -302,6 +304,24 @@ They live in `assets/theme/LivingTreeSystem.tres` (theme variations `PaceState*`
 3. A "+0 Ase" breakdown row uses the muted colour, not the positive green.
 Do not build: the delayed rank-cause note, and the pace colour on the Pace bonus amount.
 **Source:** Jeff, 2026-09-25 ("Agreed with recommendations. Animation is fine. build 1, 2 and 3. Leave 4 and 5")
+**Date:** 2026-09-25
+
+---
+
+### D-29. zero-row-colour
+
+**Q:** The first muted colour for a "+0 Ase" row, #908870, has a contrast of 2.89:1 on the light result card. That is below the 3:1 minimum for large text. Which colour? (Raised by game-feel-developer.)
+**A:** #6E6450, contrast 4.77:1 (WCAG AA). It is the `color_zero` export in `ui/components/RewardEntryItem.gd`.
+**Source:** Jeff, 2026-09-25 (option A)
+**Date:** 2026-09-25
+
+---
+
+### D-30. banner-gold-to-combat-004
+
+**Q:** In no-pace fights, the objective banner glyph and progress line keep their authored gold (#D4AF37, `CombatBoardScreen.tscn:157,174`). That gold looks close to the partial amber (#F28C28). A player can read an ENDURE banner as "partial pace". Change a colour now? (Raised by game-feel-developer.)
+**A:** No. Leave it for the UI restructure. Filed on the V2-COMBAT-004 Notion page (slice 004D). The round label still separates the two cases: it stays cream in a no-pace fight.
+**Source:** Jeff, 2026-09-25 (option A)
 **Date:** 2026-09-25
 
 ---

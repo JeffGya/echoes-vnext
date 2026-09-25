@@ -8,6 +8,7 @@ class_name PaceUITests
 const PacePresentation := preload("res://ui/components/PacePresentation.gd")
 const CombatScene  := preload("res://ui/screens/combat/CombatBoardScreen.tscn")
 const ResolveScene := preload("res://ui/screens/venture/ResolveScreen.tscn")
+const RewardEntryScene := preload("res://ui/components/RewardEntryItem.tscn")
 const PACE_STATES: Array[String] = ["full", "partial", "none"]
 
 
@@ -17,6 +18,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("combat_ui/pace_result_row_at_zero_and_round_color", Callable(PaceUITests, "_t_result_row_at_zero_and_round_color"))
 	runner.register_test("combat_ui/pace_result_rank_cause_only_when_changed", Callable(PaceUITests, "_t_result_rank_cause_only_when_changed"))
 	runner.register_test("combat_ui/pace_result_nothing_on_defeat_or_no_pace_win", Callable(PaceUITests, "_t_result_nothing_without_pace"))
+	runner.register_test("combat_ui/pace_blend_starts_only_on_state_change", Callable(PaceUITests, "_t_blend_only_on_change"))
+	runner.register_test("combat_ui/pace_blend_brightens_on_drop_and_ends_on_approved_color", Callable(PaceUITests, "_t_blend_drop_brightens_then_settles"))
+	runner.register_test("combat_ui/pace_blend_absent_on_first_snapshot_and_no_pace", Callable(PaceUITests, "_t_blend_absent_first_and_no_pace"))
+	runner.register_test("combat_ui/reward_row_zero_delta_muted", Callable(PaceUITests, "_t_reward_row_zero_delta_muted"))
 
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
@@ -33,12 +38,12 @@ static func _mount(scene: PackedScene) -> Array:
 	return [viewport, screen]
 
 
-static func _combat_snap(objective_state: Dictionary) -> Dictionary:
+static func _combat_snap(objective_state: Dictionary, encounter_id: String = "pace_ui") -> Dictionary:
 	return {
 		"type": "flow.encounter",
 		"meta": { "t": 1 },
 		"data": {
-			"encounter_id": "pace_ui", "board_cols": 4, "board_rows": 4, "round": 3,
+			"encounter_id": encounter_id, "board_cols": 4, "board_rows": 4, "round": 3,
 			"round_phase": "actor_turn", "combat_over": false, "actors": [],
 			"objective_state": objective_state,
 		},
@@ -57,6 +62,19 @@ static func _resolve_snap(victory: bool, extra: Dictionary, pace_row: bool) -> D
 	}
 	data.merge(extra)
 	return { "type": "flow.resolve", "meta": { "t": 2 }, "data": data, "actions": {} }
+
+
+static func _recover(pace_state: String) -> Dictionary:
+	return { "type": "recover", "hold_progress": 1, "hold_required": 3, "pace_state": pace_state }
+
+
+## Returns "" when all three pace labels show `want`, or an error text.
+static func _labels_show(screen: Node, want: Color, what: String) -> String:
+	for path in ["RoundLabel", "%GlyphLabel", "%ProgressLabel"]:
+		var got := _font_color(screen, path)
+		if not got.is_equal_approx(want):
+			return "%s: %s colour %s, expected %s" % [what, path, got, want]
+	return ""
 
 
 static func _font_color(screen: Node, path: String) -> Color:
@@ -80,6 +98,8 @@ static func _t_board_pace_color_per_state() -> Dictionary:
 	var screen: Control = m[1]
 	for state in PACE_STATES:
 		screen.call("set_snapshot", _combat_snap({ "type": "recover", "hold_progress": 1, "hold_required": 3, "pace_state": state }))
+		# D-28: a state change blends; the check is on the colour at the end of the blend.
+		(screen as CombatBoardScreen).step_pace_blend(10.0)
 		var want := PacePresentation.color(state, false)
 		for path in ["RoundLabel", "%GlyphLabel", "%ProgressLabel"]:
 			var got := _font_color(screen, path)
@@ -177,3 +197,106 @@ static func _t_result_nothing_without_pace() -> Dictionary:
 			return { "ok": false, "error": "%s: %s" % [case_name, err] }
 	m[0].free()
 	return { "ok": true }
+
+
+# ── Pace colour blend (decisions.md D-28) ───────────────────────────────────
+# The tween is stepped by hand (CombatBoardScreen.step_pace_blend), so no frame must pass.
+# Normal speed: the brightening takes 0.08 s, the blend 0.36 s (_MOVE_DURATION_NORMAL).
+
+## An actor step with the same pace_state must not restart a running blend.
+static func _t_blend_only_on_change() -> Dictionary:
+	var m := _mount(CombatScene)
+	var screen := m[1] as CombatBoardScreen
+	var err := ""
+	screen.set_snapshot(_combat_snap(_recover("full")))
+	screen.set_snapshot(_combat_snap(_recover("full")))
+	if screen.is_pace_blend_running():
+		err = "blend runs with no state change"
+	if err.is_empty():
+		screen.set_snapshot(_combat_snap(_recover("partial")))
+		if not screen.is_pace_blend_running():
+			err = "no blend on full -> partial"
+	if err.is_empty():
+		screen.step_pace_blend(0.25)
+		screen.set_snapshot(_combat_snap(_recover("partial")))
+		if not screen.is_pace_blend_running():
+			err = "same-state step stopped the blend"
+	if err.is_empty():
+		# 0.25 + 0.25 = 0.50 s > 0.44 s total. A restarted blend would still run here.
+		screen.step_pace_blend(0.25)
+		if screen.is_pace_blend_running():
+			err = "same-state step restarted the blend"
+	if err.is_empty():
+		err = _labels_show(screen, PacePresentation.color("partial", false), "after blend")
+	m[0].free()
+	return { "ok": err.is_empty(), "error": err }
+
+
+static func _t_blend_drop_brightens_then_settles() -> Dictionary:
+	var m := _mount(CombatScene)
+	var screen := m[1] as CombatBoardScreen
+	var err := ""
+	var full := PacePresentation.color("full", false)
+	screen.set_snapshot(_combat_snap(_recover("full")))
+	screen.set_snapshot(_combat_snap(_recover("partial")))
+	screen.step_pace_blend(0.08)
+	err = _labels_show(screen, full.lerp(Color.WHITE, 0.4), "brightening peak")
+	if err.is_empty():
+		screen.step_pace_blend(10.0)
+		err = _labels_show(screen, PacePresentation.color("partial", false), "full -> partial end")
+	if err.is_empty():
+		screen.set_snapshot(_combat_snap(_recover("none")))
+		screen.step_pace_blend(10.0)
+		err = _labels_show(screen, PacePresentation.color("none", false), "partial -> none end")
+	m[0].free()
+	return { "ok": err.is_empty(), "error": err }
+
+
+## D-06 / D-18: a no-pace fight never blends. A new fight shows its first colour with no blend.
+static func _t_blend_absent_first_and_no_pace() -> Dictionary:
+	var m := _mount(CombatScene)
+	var screen := m[1] as CombatBoardScreen
+	var authored := _font_color(screen, "RoundLabel")
+	var err := ""
+	screen.set_snapshot(_combat_snap(_recover("none"), "fight_a"))
+	if screen.is_pace_blend_running():
+		err = "blend on the first snapshot of a fight"
+	if err.is_empty():
+		err = _labels_show(screen, PacePresentation.color("none", false), "first snapshot")
+	if err.is_empty():
+		# A new fight on the same screen instance: the old state must not cause a blend.
+		screen.set_snapshot(_combat_snap(_recover("full"), "fight_b"))
+		if screen.is_pace_blend_running():
+			err = "blend on the first snapshot of the next fight"
+	if err.is_empty():
+		screen.set_snapshot(_combat_snap(_recover("partial"), "fight_b"))
+		screen.set_snapshot(_combat_snap({ "type": "endure", "round": 2, "rounds_required": 6, "waves_remaining": 1 }, "fight_c"))
+		if screen.is_pace_blend_running():
+			err = "blend in a no-pace fight"
+		elif not _font_color(screen, "RoundLabel").is_equal_approx(authored):
+			err = "no-pace fight does not show the authored round colour"
+	m[0].free()
+	return { "ok": err.is_empty(), "error": err }
+
+
+# ── Reward row (decisions.md D-28) ──────────────────────────────────────────
+
+static func _t_reward_row_zero_delta_muted() -> Dictionary:
+	var m := _mount(ResolveScene)
+	var section := (m[1] as Control).get_node("%BreakdownSection")
+	var err := ""
+	for delta in [0, 3, -2]:
+		var item := RewardEntryScene.instantiate() as RewardEntryItem
+		section.add_child(item)
+		item.setup({ "label": "Pace bonus", "delta": delta, "currency": "ase" })
+		var want: Color = item.color_positive
+		if delta == 0:
+			want = Color("#6E6450")
+		elif delta < 0:
+			want = item.color_negative
+		var got := (item.get_node("%DeltaLabel") as Label).get_theme_color("font_color")
+		if not got.is_equal_approx(want):
+			err = "delta %d: colour %s, expected %s" % [delta, got, want]
+			break
+	m[0].free()
+	return { "ok": err.is_empty(), "error": err }
