@@ -654,3 +654,12 @@
 **Date:** 2026-09-25
 
 ---
+
+### 65. screenshot-script-in-repo
+
+**Q:** UI work in the cloud container cannot be seen in play. Where does the screenshot script live?
+**A:** In `scripts/`, committed to the repo, so every later UI story can use it. The script runs Godot on a virtual screen (`xvfb-run`, `--rendering-driver opengl3`) and saves a PNG of a screen. The ui-ux-designer builds it in the pace-reward story, phase 4.
+**Source:** Jeff, 2026-09-25 (option A)
+**Date:** 2026-09-25
+
+---
