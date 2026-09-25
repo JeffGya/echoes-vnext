@@ -204,6 +204,34 @@ Results:
    The cause is the merged `main` code (V2-COMBAT-003.5 Phases 4 to 6), not the pace code: no pace
    commit moved a ROUNDS fingerprint. The §4.0 numbers still hold within those changes.
 
+### 4.6 Reached enemies re-measured on the implemented code (design.md §9 criterion 5)
+
+Same 336-fight probe as §4.5. `reached` is the size of `combat_state["reached_enemy_ids"]` at fight
+end, read from the game. "Contact" is the probe's own independent check (an enemy ends a round
+within Chebyshev 1 of an Echo). The two numbers agree in every mode and board.
+
+| Mode | Board | Fights | Enemies placed | Reached | Contact (probe) | Ally/spirit kills | Win ranks |
+|---|---|---|---|---|---|---|---|
+| PROTECT | Old | 24 | 24 | 21 (88%) | 21 | 0 | S 24 |
+| PROTECT | New | 24 | 24 | 20 (83%) | 20 | 0 | S 24 |
+| ENDURE | Old | 24 | 144 | 58 (40%) | 58 | 0 | S 20, A 4 |
+| ENDURE | New | 24 | 144 | 17 (12%) | 17 | 0 | S 24 |
+| GUIDE_SPIRIT | Old | 24 | 24 | 13 (54%) | 13 | 1 | S 15 |
+| GUIDE_SPIRIT | New | 24 | 24 | 8 (33%) | 8 | 3 | S 16 |
+| RECOVER | Old | 24 | 49 | 11 (22%) | 11 | 0 | S 24 |
+| RECOVER | New | 24 | 57 | 7 (12%) | 7 | 0 | S 24 |
+| PURSUE | Old | 24 | 24 | 11 (46%) | 11 | 0 | S 10 |
+| PURSUE | New | 24 | 24 | 9 (38%) | 9 | 0 | S 9 |
+
+Results:
+1. The implemented reach tracking matches the probe's independent contact count in all 10 rows.
+2. On the new board, most placed enemies never reach the party in ENDURE (12%) and RECOVER (12%).
+   Without the reached-enemy ceiling, those enemies would cap the rank below S (the §5 problem).
+3. Every win in these modes is rank S, except 4 ENDURE wins on the old board (rank A). The rank
+   spread problem stays open (follow-ups.md #1).
+4. Ally or spirit kills happen only in GUIDE_SPIRIT (4 in 48 fights). D-23 takes them out of both
+   sides of the rank.
+
 ## 5. Acceptance criteria (design.md §9, filled in for the decided set)
 
 Criterion 1a and 1b, restated with the decided set's measured gaps and Jeff's limits (ANSWERS.md

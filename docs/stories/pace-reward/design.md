@@ -50,7 +50,7 @@ synonym for it.
 | Round | `round_counter` | One unit of fight time. The fight advances round by round. |
 | Round ended | `round_ended` | The round number at which the fight's win or loss condition triggered. |
 | Par | `par_rounds` | The round count a good win needs in this fight, computed at fight start. |
-| Travel rounds | `travel_par` | The part of par that covers movement: distance to the target divided by the party's mean movement range, floored at 1. |
+| Travel rounds | `travel_par` | The part of par that covers movement: distance to the target divided by the party's mean movement range, with a minimum of 1. The value is not rounded. |
 | Hold rounds | `required_hold` | The part of par that covers holding the objective, after arrival: `max(0, hold_amount - 1)`. |
 | Pace ratio | `pace_ratio` | `round_ended` divided by `par_rounds`. A value of 1.0 means the fight ended exactly at par. |
 | Pace bonus | `pace_bonus_awarded` | A reward paid to a pace-mode win, sized by the pace ratio against the bonus curve (§4). |
@@ -79,9 +79,12 @@ The old line was: "Win with room to spare, and you earn a pace bonus." This line
 Par is `par_rounds = travel_par + required_hold`. The pace ratio is `pace_ratio = round_ended /
 par_rounds`.
 
-**Travel rounds.** `travel_par` = distance divided by mean party movement range, floored at 1, not
-rounded up. The design uses floor, not ceiling. Ceiling systematically raised par for every mode.
-It pulled pace ratios further apart, not closer together (measured in §9).
+**Travel rounds.** `travel_par` = distance divided by mean party movement range, with a minimum
+of 1: `max(1.0, distance / mean_range)`. The value is not rounded. Rounding up (ceiling)
+systematically raised par for every mode and pulled pace ratios further apart (measured in §9).
+The tuned values (`tuning.md` §0) were measured on this unrounded form, and the code uses it
+(`PaceService.gd`). *Corrected 2026-09-25 (QA finding F4): an earlier text said "floored at 1",
+which read as integer floor. The behaviour did not change.*
 
 - Distance uses `GridService.chebyshev_distance` (`core/grid/GridService.gd:81`). The design never
   uses Manhattan distance: all movement is 8-way (`core/combat/CombatActivationService.gd:37-79`).
@@ -271,6 +274,7 @@ has ended.
 | `flow.encounter.data.objective_state` | `pace_state` | string | `full`, `partial`, `none` | Pace mode only; absent otherwise and in the keeper-intro trial (decisions.md D-18) |
 | `flow.resolve.data` | `pace_bonus_awarded` | int (Ase) | any value, mirrors `speed_bonus`'s shape | Pace-mode victory only |
 | `flow.resolve.data` | `pace_state` | string | `full`, `partial`, `none` | Pace-mode victory only; absent after a defeat (decisions.md D-19) |
+| `flow.resolve.data` | `pace_changed_rank` | bool | `true`, `false` | Pace-mode victory only; `true` when the pace bonus raised the rank. Drives the rank-cause note (§6, decisions.md D-13, D-27) |
 
 `pace_ratio` is not in the snapshot data. It is a raw float, and ANSWERS.md #59 keeps raw floats
 out of player-facing data. The screen needs only `pace_state` (decisions.md D-20).
@@ -325,8 +329,11 @@ gradient."
 | `tests/EconomyRewardTests.gd:33-34` | Inline test config sets both keys; migrates too. |
 | `data/balance.json` | Both keys deleted, not left as dead config. |
 
-The story writeup records this as a full-repo audit under the V2-PROG-012 precedent
-(`AGENTS.md:358`), the same way that exception's four prior renames were recorded.
+**Audit record (V2-PROG-012 precedent, `AGENTS.md:358`).** A full-repo search before the
+removal (commit `c2d1662`) found exactly two consumers of the two keys: `core/economy/RewardCalc.gd`
+and `tests/EconomyRewardTests.gd`. Both migrated in the same commit. After the story, no code, data
+or `.tscn` file refers to `speed_bonus_threshold` or `speed_bonus_pct` (phase 6 QA, check 10).
+Historical mentions remain only in `ANSWERS.md`, test comments and older story folders.
 
 ---
 

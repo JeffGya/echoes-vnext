@@ -71,6 +71,7 @@
 | 62 | armor-mitigation-curve-and-guard | Armor mitigation moves to a percentage curve (def / (def + K)); Guard doubles def before the curve, with a flat-bonus fallback | 2026-09-22 |
 | 63 | pace-rule-readable-by-player | No per-mode number the player must learn; a formula over each mode's own existing values is allowed if the player can state the rule in one sentence | 2026-09-25 |
 | 64 | autobattler-reward-legibility | Rewards and grades follow autobattler conventions: the goal is visible before/during the fight and the result states its cause | 2026-09-25 |
+| 65 | screenshot-script-in-repo | The headless screenshot script lives in `scripts/` and is committed, for every later UI story | 2026-09-25 |
 
 ---
 
