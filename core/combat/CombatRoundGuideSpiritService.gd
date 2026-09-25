@@ -282,12 +282,17 @@ func apply_guide_spirit_round(
 							"mover_ko_only": false,
 							"yield_ids": _escort_yield_ids(ectx),
 						}
+						# Reused by yielded_occupant() below so it does not repeat the same
+						# occupancy/yield_ids/relationships/perceived_actors lookup this
+						# activation already resolved.
+						var _gs_yield_cache: Dictionary = {}
 						var _gs_result: Dictionary = GuideSpiritActivationServiceScript.activate_spirit(
 							_gs_spirit,
 							_gs_prepared["context"] as Dictionary,
 							_gs_guide_state,
 							_gs_prepared["hazard_ctx"] as Dictionary,
-							_gs_prepared["capacity_cfg"] as Dictionary
+							_gs_prepared["capacity_cfg"] as Dictionary,
+							_gs_yield_cache
 						)
 						var _gs_actual: Array = _gs_result.get("actual_traversed_cells", []) as Array
 						if not _gs_actual.is_empty():
@@ -296,7 +301,7 @@ func apply_guide_spirit_round(
 								int((_gs_result.get("final_destination", {}) as Dictionary).get("row", 0)))
 							_gs_spirit_pos = _gs_spirit.get("grid_pos", {})
 						var _gs_yielder_id: String = GuideSpiritActivationServiceScript.yielded_occupant(
-							_gs_prepared["context"] as Dictionary, _gs_guide_state, _gs_result)
+							_gs_prepared["context"] as Dictionary, _gs_guide_state, _gs_result, _gs_yield_cache)
 						if not _gs_yielder_id.is_empty():
 							_apply_escort_yield(ectx, _gs_spirit, _gs_yielder_id, _gs_result, round, t)
 						LiveHazardOutcomeService.apply(_gs_spirit, _gs_result, t, round, logger, false)

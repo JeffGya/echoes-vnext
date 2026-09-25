@@ -70,6 +70,7 @@
 | 59 | guide-spirit-blocking-routed-to-sr-game-designer | A guarding Echo can block the spirit's path indefinitely — this is a party-AI design question, routed to sr-game-designer for a proper design pass | 2026-09-25 |
 | 60 | guide-spirit-swap-design-adds-feel-check | sr-game-designer recommended a deterministic yield/swap (blocking Echo trades cells with the spirit, every round, no threshold) — Jeff added a game-feel-developer readability check before mechanics-developer builds it | 2026-09-25 |
 | 61 | spirit-barks-added-to-tier-2-before-commit | qa-verifier found all 5 spirit_* bark contexts missing from data.voice.bark_tiers, so they default to lowest priority and can be silently dropped in a crowded round — add all 5 to tier 2, fix before commit | 2026-09-25 |
+| 62 | pr79-ultrareview-nits-fixed-before-merge | Cloud review of PR #79 found 2 verified nit-severity findings (wasted deep-copy, duplicate eligibility lookup) in the escort-yield swap — fix both now, before merge | 2026-09-26 |
 
 ---
 
@@ -658,3 +659,30 @@
 **A:** Fix the tier now, before commit — cover all 5 `spirit_*` contexts (not just the new one), assigned to tier 2 (matching other narratively-important-but-not-urgent barks like `combat_fear_rising`/`combat_inspired`, one tier below true mechanical alerts like `combat_last_stand`/`combat_ko`).
 **Source:** Jeff, 2026-09-25
 **Date:** 2026-09-25
+
+---
+
+### 62. pr79-ultrareview-nits-fixed-before-merge
+
+**Q:** `/ultrareview` on PR #79 returned 2 nit-severity findings, both in `core/movement/GuideSpiritActivationService.gd`, both verified real against source: (1) `_post_swap_context()` did a full recursive deep-copy (`context.duplicate(true)`) of the whole movement context every escort-yield round, when only the `occupancy` sub-dict is ever mutated; (2) the swap-eligibility check (`_yield_candidate`) ran twice per swap round — once inside `activate_spirit()`, again in `yielded_occupant()` called by the caller right after. Neither is a correctness bug — both are wasted work that repeats every round a swap fires (up to 20 rounds straight in the worst case measured in decision #58's result). Fix now before merge, file as follow-up, or accept as negligible?
+**A:** Fix both now, before merge.
+**Source:** Jeff, 2026-09-26
+**Date:** 2026-09-26
+
+> **Result:** (1) fixed with a shallow top-level `context.duplicate(false)` plus an explicit
+> `.duplicate()` of only the `occupancy` dict before mutating it — every other nested field stays
+> shared by reference, safe because nothing downstream (`ActivationService.activate()` /
+> `MovementExecutor`) ever writes into the context it receives (qa-verifier traced every
+> consumer to confirm read-only). (2) fixed via an optional trailing `out_yield_cache` param on
+> `activate_spirit()` and a matching `in_yield_cache` param on `yielded_occupant()`, both
+> defaulted to `{}` so every existing call site (including all tests) is unaffected and still
+> exercises the fallback recompute path. Two alternatives were considered and correctly rejected:
+> attaching the yielder to the returned `result` dict (would fail `ResultContract.validate()`'s
+> exact-field check — confirmed by reading the validator), and a static cache keyed by
+> `activation_id` (tests reuse the same default id across calls, risking stale cross-call
+> contamination). qa-verifier reviewed the combined fix independently: SHIP, both claims confirmed
+> via source-level tracing (not just tests — Dictionary `!=` in GDScript is by-value, so the
+> existing tests cannot by themselves distinguish a shallow copy from a deep one; the safety proof
+> is the downstream-mutation trace, not the green suite). One informational-only adjacent finding
+> repeated (the same stale "DORMANT" header comment on `GuideSpiritActivationService.gd` already
+> known from earlier in this thread) — not a defect of this fix, no action taken.

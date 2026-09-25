@@ -281,7 +281,8 @@ static func activate_spirit(
 	context: Dictionary,
 	guide_state: Dictionary,
 	hazard_ctx: Dictionary,
-	capacity_cfg: Dictionary
+	capacity_cfg: Dictionary,
+	out_yield_cache: Dictionary = {}
 ) -> Dictionary:
 	var mover_id: String = str(spirit_actor.get("id", "guide.spirit"))
 	var origin: Dictionary = _cell_of(context.get("origin", {}) as Dictionary)
@@ -366,6 +367,11 @@ static func activate_spirit(
 	var executor_context: Dictionary = context
 	if mode == MODE_ESCORT and not step.is_empty():
 		var yielder: String = _yield_candidate(context, guide_state, step)
+		# Handed to yielded_occupant() via out_yield_cache so it need not re-derive the
+		# same occupant this same activation already found. An optional out-param (not a
+		# result field, which ResultContract's exact-field check would reject) keeps this
+		# an opt-in side channel: callers that omit it are unaffected.
+		out_yield_cache["yielder"] = yielder
 		if not yielder.is_empty():
 			executor_context = _post_swap_context(context, origin, step, yielder)
 
@@ -377,12 +383,22 @@ static func activate_spirit(
 ## `context` and `guide_state` must be the ones passed to activate_spirit().
 ## The executor admits the spirit into an occupied step only when the occupant
 ## was cleared for a swap, so "moved + eligible occupant" is exactly "swapped".
-static func yielded_occupant(context: Dictionary, guide_state: Dictionary, result: Dictionary) -> String:
+##
+## `in_yield_cache`: pass the same Dictionary given to activate_spirit() as
+## `out_yield_cache` to reuse its already-computed yielder instead of re-running the
+## occupancy/yield_ids/relationships/perceived_actors lookup. Optional — omitted or a
+## cache miss (e.g. a hand-built `result`, or an unrelated activate_spirit call) falls
+## back to recomputing from `context`/`guide_state`, so this stays correct standalone.
+static func yielded_occupant(
+	context: Dictionary, guide_state: Dictionary, result: Dictionary, in_yield_cache: Dictionary = {}
+) -> String:
 	if str(guide_state.get("mode", "")) != MODE_ESCORT:
 		return ""
 	var planned: Array = result.get("planned_path", []) as Array
 	if planned.is_empty() or (result.get("actual_traversed_cells", []) as Array).is_empty():
 		return ""
+	if in_yield_cache.has("yielder"):
+		return str(in_yield_cache["yielder"])
 	return _yield_candidate(context, guide_state, _cell_of(planned[0] as Dictionary))
 
 
@@ -582,8 +598,14 @@ static func _yield_candidate(context: Dictionary, guide_state: Dictionary, step:
 static func _post_swap_context(
 	context: Dictionary, origin: Dictionary, step: Dictionary, yielder: String
 ) -> Dictionary:
-	var swapped: Dictionary = context.duplicate(true)
-	var occupancy: Dictionary = swapped.get("occupancy", {}) as Dictionary
+	# Shallow top-level copy: only "occupancy" is ever mutated below, and this context
+	# is read-only downstream (MovementExecutor/CombatActivationService never mutate
+	# it), so every other nested field (perceived_actors, known_hazards,
+	# relationships, terrain_costs, movement_history, ...) can stay shared by
+	# reference instead of paying for a full recursive duplicate. Only "occupancy"
+	# itself needs its own copy, so the caller's dict is never mutated in place.
+	var swapped: Dictionary = context.duplicate(false)
+	var occupancy: Dictionary = (context.get("occupancy", {}) as Dictionary).duplicate()
 	occupancy.erase(_cell_key(step))
 	occupancy[_cell_key(origin)] = yielder
 	swapped["occupancy"] = occupancy
