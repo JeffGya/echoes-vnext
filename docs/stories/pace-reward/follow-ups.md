@@ -113,9 +113,9 @@ before this story. They give the same stage while the stages keep their creation
 bonus avoids the risk with one captured value (decisions.md D-21). Unify the two lookups in a
 separate change, following AGENTS.md "Never duplicate a helper".
 
-## 13. How a hazard kill counts for the rank — for the hazard story
+## 13. How a hazard kill counts for the rank — V2-COMBAT-004
 
-**Decided (Jeff, 2026-09-25, decisions.md D-24):** not in this story. The story that places hazards on combat boards decides it.
+**Decided (Jeff, 2026-09-25, decisions.md D-24):** not in this story. **Owner: V2-COMBAT-004, slice 004B** ("Tactical field, generation, validation, and hazards"), which places hazards on production boards. Filed on the V2-COMBAT-004 Notion page as the 2026-09-25 addendum.
 **What:** the hazard damage code (`LiveHazardOutcomeService.apply`) runs for every actor that moves, enemies included (`FlowRuntime.gd:1452`, `LiveMovementContextService.gd:395`). Today no fight has hazards: nothing writes `known_hazards` into `stage_context.encounter_approach` (`SituationEngagementService.gd:218-224`).
 **Behaviour today:** a hazard kill has no killer. It pays the kill Ase and counts in the earned rank kill term. It is never marked reached. In the five modes that track reach, a hazard kill of a never-reached enemy can raise the rank slightly.
 **Options for the hazard story:** (1) treat it like an ally kill (out of both sides of the rank, D-23); (2) treat it like a party kill (as today).
