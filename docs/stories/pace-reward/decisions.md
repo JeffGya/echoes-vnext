@@ -28,6 +28,7 @@ Story-specific decisions for the pace bonus story. Project-wide decisions stay i
 | D-21 | pace-one-stage-base | The live colour and the result pace bonus use one stage base, captured once at fight start | 2026-09-25 |
 | D-22 | pace-state-from-ase-paid | `pace_state` is set from the Ase paid: full = maximum, partial = between 0 and maximum, none = 0 | 2026-09-25 |
 | D-23 | reached-enemies-and-ally-kills | A party Echo kill marks the enemy reached; only living enemies become reached; ally and spirit kills pay Ase but leave both sides of the rank | 2026-09-25 |
+| D-24 | hazard-kills-deferred | How a hazard kill counts for the rank is decided by the hazard story, not here | 2026-09-25 |
 
 ---
 
@@ -240,6 +241,15 @@ Story-specific decisions for the pace bonus story. Project-wide decisions stay i
 The rank maximum kill term is then: (all enemies in COMBAT and PURIFY_SHRINE, or reached enemies in the other five modes) without the enemies that an ally or spirit killed (a set difference, so an enemy is never subtracted twice).
 Rules 1 and 2 apply to the modes that track reached enemies: PROTECT, ENDURE, RECOVER, PURSUE and GUIDE_SPIRIT.
 **Source:** Jeff, 2026-09-25 ("Pays Ase, not rank"; "Ally is not party, it should not count"; "An ally kill should not count in the rank. It should pay Ase."; option Y)
+**Date:** 2026-09-25
+
+---
+
+### D-24. hazard-kills-deferred
+
+**Q:** An enemy killed by a hazard has no killer. How does that kill count for the rank? (Raised by mechanics-developer.)
+**A:** Not in this story. The story that places hazards on combat boards decides it. Today no fight has hazards, so the case cannot happen. The code keeps its current behaviour: the kill pays Ase and counts in the earned rank kill term. See follow-ups.md #13.
+**Source:** Jeff, 2026-09-25 ("H3 this should be handled with hazards not here.")
 **Date:** 2026-09-25
 
 ---
