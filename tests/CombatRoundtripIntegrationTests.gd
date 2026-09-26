@@ -2156,10 +2156,10 @@ static func test_pursue_board_is_larger_than_standard() -> Dictionary:
 	enc_state.enter(flow_ctx, t)
 	var ectx = flow_ctx.encounter_ctx
 
-	# Standard base from balance.json data.combat.board (base_cols=12, base_rows=12).
+	# Standard base from balance.json data.combat.board (base_cols=18, base_rows=18).
 	var board_cfg: Dictionary = bal.get("data", {}).get("combat", {}).get("board", {})
-	var base_cols: int = int(board_cfg.get("base_cols", 12))
-	var base_rows: int = int(board_cfg.get("base_rows", 12))
+	var base_cols: int = int(board_cfg.get("base_cols", 18))
+	var base_rows: int = int(board_cfg.get("base_rows", 18))
 
 	# Read actual terrain bounds from encounter context.
 	var bounds: Dictionary = ectx.terrain.get("bounds", {})
@@ -2174,7 +2174,7 @@ static func test_pursue_board_is_larger_than_standard() -> Dictionary:
 	if not (float(actual_w) >= threshold_w or float(actual_h) >= threshold_h):
 		return {
 			"ok": false,
-			"error": "PURSUE board not 2× in either dimension — actual w=%d h=%d, needed w≥%.0f or h≥%.0f (base %d×%d)" \
+			"error": "PURSUE board not stretched in either dimension — actual w=%d h=%d, needed w≥%.0f or h≥%.0f (base %d×%d)" \
 				% [actual_w, actual_h, threshold_w, threshold_h, base_cols, base_rows]
 		}
 
