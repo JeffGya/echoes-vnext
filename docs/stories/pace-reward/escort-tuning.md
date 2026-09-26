@@ -1,6 +1,6 @@
 # Escort pace — measurement
 
-**Status: MEASURED — values not decided.**
+**Status: MEASURED — decided in decisions.md D-32, D-33.**
 
 **Owner:** mid-game-designer. **Story:** pace-reward, extension under decisions.md D-31.
 **Input:** `docs/stories/pace-reward/escort-design.md` §8 (PROPOSED, not approved).
@@ -220,6 +220,29 @@ Jeff decides; this section lists options with numbers, not a recommendation.
 | A per-round slack term sized to observed blocking | Not measured as a modified formula; only the raw blocking-round counts above are available. |
 
 ---
+
+## 6. Option E re-measure (2026-09-26, orchestrator)
+
+The spirit waits until an Echo stands next to it, so a par must also count the party's walk to the
+spirit. The same 100 non-joined fights ran again (identical outcomes) with one extra field: the
+Echo-to-spirit distance at fight start.
+
+- E-min: `max(1, max(0, nearest Echo→spirit − 1) / party mean range + spirit→destination / spirit range)`.
+- E-mean: the same with the mean Echo distance.
+
+| Par | Board | Escort wins median | Kill wins median | Full share (ratio ≤ 1.10) | `pace_state` full / partial / none | Mean bonus (Ase) | Gap B |
+|---|---|---|---|---|---|---|---|
+| A | old | 1.53 | 0.86 | 36% | 39 / 27 / 33 | 1.67 | 56 |
+| A | new | 1.46 | 0.77 | 44% | 48 / 30 / 22 | 1.78 | 39 |
+| C (max of A, B) | old | 1.05 | 0.84 | 64% | 73 / 12 / 15 | 2.42 | 59 |
+| C (max of A, B) | new | 0.81 | 0.77 | 74% | 81 / 11 / 7 | 2.63 | 24 |
+| **E-min** | old | 0.97 | 0.62 | 88% | 91 / 6 / 3 | 2.82 | 83 |
+| **E-min** | new | 0.98 | 0.50 | 93% | 100 / 0 / 0 | 3.00 | 43 |
+| E-mean | old | 0.96 | 0.59 | 91% | 91 / 6 / 3 | 2.85 | 86 |
+| E-mean | new | 0.97 | 0.49 | 93% | 100 / 0 / 0 | 3.00 | 43 |
+
+Gap A: A 8, C 10, E-min 5, E-mean 2 pp. All options pass Gap A (≤ 50) and Gap B (≤ 90).
+**Decided: E-min (decisions.md D-33).** Escort wins land on par; nearly every escort win earns the full bonus.
 
 ## OPEN — questions and assumptions (mid-game-designer)
 

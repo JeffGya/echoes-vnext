@@ -1,6 +1,6 @@
 # Escort pace — system design proposal
 
-**Status: PROPOSED — not approved.**
+**Status: SUPERSEDED IN PART — decided by Jeff in decisions.md D-31, D-32, D-33. Where this file and those decisions differ, the decisions win: a joined spirit uses the party par (D-32); a non-joined spirit uses E-min, which adds the party's walk to the spirit (D-33).**
 **Owner:** sr-game-designer. **Story:** pace-reward, extension under decisions.md D-31.
 **Depends on:** `docs/stories/pace-reward/design.md` (APPROVED), `docs/stories/pace-reward/decisions.md`
 (D-02, D-06, D-08, D-09, D-10 superseded, D-15, D-16, D-21 to D-23, D-31), ANSWERS.md #63, #64,

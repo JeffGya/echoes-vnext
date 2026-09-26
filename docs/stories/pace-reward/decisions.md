@@ -37,6 +37,7 @@ Story-specific decisions for the pace bonus story. Project-wide decisions stay i
 | D-30 | banner-gold-to-combat-004 | The no-pace banner gold looks close to the partial amber; left for V2-COMBAT-004 (004D) | 2026-09-25 |
 | D-31 | escort-pace-in-this-story | GUIDE_SPIRIT escort gets a pace term in this story, because PR #79 made the escort win reachable; supersedes D-10 | 2026-09-26 |
 | D-32 | joined-spirit-party-par | A GUIDE_SPIRIT escort fight with a joined spirit uses the COMBAT-style party travel par | 2026-09-26 |
+| D-33 | escort-par-e-min | A non-joined escort fight uses par = nearest Echo's walk to the spirit + the spirit's walk to the destination; shared curve; one par for both wins; no slack | 2026-09-26 |
 
 ---
 
@@ -344,6 +345,21 @@ Do not build: the delayed rank-cause note, and the pace colour on the Pace bonus
 **Q:** In a GUIDE_SPIRIT escort fight where the spirit joins the battle, the game never steers the spirit toward the destination (`CombatRoundGuideSpiritService.gd:266`). In the escort probe, 0 of 77 joined-spirit wins were escort wins; all 77 were kill wins (`escort-tuning.md`). Which par does a joined-spirit escort fight use? (Raised by sr-game-designer and mid-game-designer.)
 **A:** The COMBAT-style party travel par: `max(1, mean Echo distance to the nearest enemy / party mean movement range)`, no hold. The fight is a kill fight, so it gets the kill-fight par. Measured full-bonus share: 43% (old board), 49% (new board).
 **Source:** Jeff, 2026-09-26 (option A)
+**Date:** 2026-09-26
+
+---
+
+### D-33. escort-par-e-min
+
+**Q:** Which par does a GUIDE_SPIRIT escort fight with a non-joined spirit use? The spirit does not move until an Echo stands next to it (`CombatRoundGuideSpiritService.gd:231-244`), then walks 1 cell per round while an Echo stays within 2 cells (`:248-265`). Options measured on 100 fights: A (spirit walk only), C (longer of A and the party par), E-min, E-mean (`escort-tuning.md` §6). (Raised by the escort probe.)
+**A:** E-min. Fixed at fight start:
+`par_rounds = max(1, max(0, nearest Echo distance to the spirit - 1) / party mean movement range + spirit distance to the destination / spirit movement range)`, no hold term.
+Consequences Jeff accepted with this choice:
+1. The shared curve applies (full at ratio ≤ 1.10, zero at ≥ 1.60, 5% of the stage base). No escort-only curve (ANSWERS.md #63).
+2. One par for both win reasons (`spirit_escorted` and `all_enemies_defeated`), as in PURSUE.
+3. No separate blocking slack; the party-walk term absorbs it.
+4. Measured: escort wins median ratio 0.97 / 0.98; full bonus in 91% (old board) / 100% (new board) of wins; Gap A 5 pp; Gap B 83 / 43 pp. So escort wins nearly always earn the full bonus.
+**Source:** Jeff, 2026-09-26 ("We will go for E-min.")
 **Date:** 2026-09-26
 
 ---
