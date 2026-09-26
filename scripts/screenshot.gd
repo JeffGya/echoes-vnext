@@ -80,11 +80,15 @@ func _render_fixture(fixture_name: String, snapshots: Array, out_dir: String) ->
 func _fixtures() -> Dictionary:
 	var recover := { "type": "recover", "hold_progress": 1, "hold_required": 3 }
 	var endure := { "type": "endure", "round": 4, "rounds_required": 8, "waves_remaining": 2 }
+	var escort := { "type": "guide_spirit", "guide_mode": "escort", "spirit_name": "Nana", "destination_reached": false }
 	return {
 		"combat_pace_full":    [_combat(3, _with(recover, "pace_state", "full"))],
 		"combat_pace_partial": [_combat(6, _with(recover, "pace_state", "partial"))],
 		"combat_pace_none":    [_combat(9, _with(recover, "pace_state", "none"))],
 		"combat_no_pace":      [_combat(4, endure)],
+		"combat_escort_pace_partial": [_combat(7, _with(escort, "pace_state", "partial"))],
+		"resolve_escort_win":  [_combat(9, escort),
+			_resolve(true, "spirit_escorted", 9, "S", { "pace_state": "full", "pace_bonus_awarded": 3, "pace_changed_rank": false })],
 		"resolve_pace_win":    [_combat(6, recover),
 			_resolve(true, "relic_secured", 6, "B", { "pace_state": "partial", "pace_bonus_awarded": 2, "pace_changed_rank": false })],
 		"resolve_pace_win_rank_changed": [_combat(4, recover),
