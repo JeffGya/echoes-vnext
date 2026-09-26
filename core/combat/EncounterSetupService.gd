@@ -325,17 +325,18 @@ func setup(t: int) -> void:
 			if flow_ctx.config_service != null:
 				var cb_bal2: Dictionary = flow_ctx.config_service.get_balance()
 				cb_board_cfg_block = cb_bal2.get("data", {}).get("combat", {}).get("board", {})
-			var cb_base_cols: int = int(cb_board_cfg_block.get("base_cols",          12))
-			var cb_base_rows: int = int(cb_board_cfg_block.get("base_rows",          12))
+			var cb_base_cols: int = int(cb_board_cfg_block.get("base_cols",          18))
+			var cb_base_rows: int = int(cb_board_cfg_block.get("base_rows",          18))
 			var cb_growth:    int = int(cb_board_cfg_block.get("growth_per_completion", 1))
-			var cb_max_cols:  int = int(cb_board_cfg_block.get("max_cols",            22))
-			var cb_max_rows:  int = int(cb_board_cfg_block.get("max_rows",            22))
+			var cb_max_cols:  int = int(cb_board_cfg_block.get("max_cols",            28))
+			var cb_max_rows:  int = int(cb_board_cfg_block.get("max_rows",            28))
 			var cb_cols: int = mini(cb_base_cols + completion_index * cb_growth, cb_max_cols)
 			var cb_rows: int = mini(cb_base_rows + completion_index * cb_growth, cb_max_rows)
-			# V2-STAGE-004 P3b: PURSUE board is 2× one dimension, randomised per encounter seed.
+			# V2-STAGE-004 P3b: PURSUE board stretches one dimension by
+			# pursue_override.long_multiplier, randomised per encounter seed.
 			if flow_ctx.encounter_ctx.resolution_mode == EncounterResolutionModes.PURSUE:
 				var _pur_override: Dictionary = cb_board_cfg_block.get("pursue_override", {})
-				var _pur_mul: float = float(_pur_override.get("long_multiplier", 2.0))
+				var _pur_mul: float = float(_pur_override.get("long_multiplier", 4.0))
 				var _pur_rng := RandomNumberGenerator.new()
 				if flow_ctx.campaign_seed != null:
 					_pur_rng = flow_ctx.campaign_seed.get_rng(
@@ -346,7 +347,8 @@ func setup(t: int) -> void:
 					cb_cols = int(float(cb_cols) * _pur_mul)
 				else:
 					cb_rows = int(float(cb_rows) * _pur_mul)
-			# V2-STAGE-004 P3c: GUIDE_SPIRIT board is 5× one dimension, randomised per encounter seed.
+			# V2-STAGE-004 P3c: GUIDE_SPIRIT board stretches one dimension by
+			# guide_spirit_override.long_multiplier, randomised per encounter seed.
 			# Same mechanism as the PURSUE override above — both "long board" objectives.
 			if flow_ctx.encounter_ctx.resolution_mode == EncounterResolutionModes.GUIDE_SPIRIT:
 				var _gsb_override: Dictionary = cb_board_cfg_block.get("guide_spirit_override", {})

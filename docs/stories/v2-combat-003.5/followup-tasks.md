@@ -38,9 +38,14 @@ kept as a record only, not an open item.
 
 ---
 
-## 3. Fix stale PURSUE comment and board-size fallback defaults
+## 3. ~~Fix stale PURSUE comment and board-size fallback defaults~~ — DONE 2026-09-26
 
-**task_id:** `task_d44dccca`
+**task_id:** `task_d44dccca` (done 2026-09-26)
+
+**Resolution:** `EncounterSetupService.gd` board fallbacks now match live config (18/18/28/28, PURSUE
+`long_multiplier` 4.0); the PURSUE and GUIDE_SPIRIT comments name the config key instead of a literal
+multiplier. The same stale 12/22 fallbacks were also updated in `tests/CombatRoundtripIntegrationTests.gd`,
+`tools/TerrainRegionProbe.gd` and `tools/BoardSizeOptionsProbe.gd`. Kept as a record only.
 
 **Why it came up:** Found while `EncounterSetupService.gd` was open for the board-size change; pre-existing (V2-STAGE-004-era), unrelated to V2-COMBAT-003.5's subject. Jeff: file separately (`docs/stories/v2-combat-003.5/decisions.md` entry #5).
 
