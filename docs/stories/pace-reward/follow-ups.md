@@ -31,7 +31,7 @@ and every reference updated. Kept at the top of `docs/` by Jeff's decision: `v2-
 `.translation` files) at the top of `docs/`. Godot imports the `.csv`, and the `.csv` still holds
 old document paths. Handle it as a separate task.
 
-## 3. GUIDE_SPIRIT escort is never won by escort
+## 3. GUIDE_SPIRIT escort is never won by escort — DONE (escort pace, D-31 to D-33; PR #78)
 
 **Measured:** 0 of 48 escort fights in the probe ended with `spirit_escorted`. They ended when all
 enemies died, when the spirit died, or after the probe's 30-round limit.
@@ -102,7 +102,7 @@ the stage base) but does not change any other Ase source (kill and survivor bonu
 virtue bonus, scout return).
 **Owner:** mid-game-designer, with Jeff deciding the values.
 
-## 11. `movement_arbiter/avoid_overcommit_stays_proportionate` is red on purpose — NO ACTION
+## 11. `movement_arbiter/avoid_overcommit_stays_proportionate` is red on purpose — CLOSED (no action)
 
 **Correction (2026-09-25):** an earlier version of this item suggested a Linux-only tie-break as
 the cause. That was wrong. The test is red on purpose: the comment above it
@@ -118,7 +118,7 @@ before this story. They give the same stage while the stages keep their creation
 bonus avoids the risk with one captured value (decisions.md D-21). Unify the two lookups in a
 separate change, following AGENTS.md "Never duplicate a helper".
 
-## 13. How a hazard kill counts for the rank — V2-COMBAT-004
+## 13. How a hazard kill counts for the rank — MOVED to V2-COMBAT-004 (slice 004B)
 
 **Decided (Jeff, 2026-09-25, decisions.md D-24):** not in this story. **Owner: V2-COMBAT-004, slice 004B** ("Tactical field, generation, validation, and hazards"), which places hazards on production boards. Filed on the V2-COMBAT-004 Notion page as the 2026-09-25 addendum.
 **What:** the hazard damage code (`LiveHazardOutcomeService.apply`) runs for every actor that moves, enemies included (`FlowRuntime.gd:1452`, `LiveMovementContextService.gd:395`). Today no fight has hazards: nothing writes `known_hazards` into `stage_context.encounter_approach` (`SituationEngagementService.gd:218-224`).
@@ -132,7 +132,7 @@ live combat/flow — only tests consume it". PR #79 wired it in: the live escort
 (`CombatRoundGuideSpiritService.gd:278`), and `PaceService` reads its `AUTHORED_CAPACITY`.
 **Owner:** main / mechanics-developer, as a separate small task (QA finding F4, 2026-09-26).
 
-## 15. Escort fights that do not end within 30 rounds
+## 15. Escort fights that do not end within 30 rounds — MOVED to a new P3 story in Notion
 
 **Measured (`escort-tuning.md` §1a):** 46 of 200 escort fights (23%) did not end within the probe's
 30-round limit; up to 32% on the new board with a non-joined spirit. This is much more than the
