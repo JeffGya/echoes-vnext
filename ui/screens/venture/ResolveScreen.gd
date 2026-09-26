@@ -37,16 +37,21 @@ const RewardEntryScene    := preload("res://ui/components/RewardEntryItem.tscn")
 const EmotionEntryScene   := preload("res://ui/components/EmotionEntryItem.tscn")
 const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
 const EffectChipScene     := preload("res://ui/components/EffectChip.tscn")
+const PacePresentation    := preload("res://ui/components/PacePresentation.gd")
 
 @onready var _banner:            Label         = %BannerLabel
 @onready var _reason:            Label         = %ReasonLabel
 @onready var _rank_badge:        Label         = %RankBadge
+# Rank-cause note. Its text is authored in the .tscn, copy by Jeff: "The party's effort earned
+# this rank" (docs/stories/pace-reward/decisions.md D-13, D-27).
+@onready var _rank_cause:        Label         = %RankCauseLabel
 @onready var _ase_value:         Label         = %AseValue
 @onready var _ekwan_row:         HBoxContainer = %EkwanRow
 @onready var _ekwan_value:       Label         = %EkwanValue
 @onready var _breakdown_section: VBoxContainer = %BreakdownSection
 @onready var _enemies_value:     Label         = %EnemiesDefeatedValue
 @onready var _echoes_value:      Label         = %EchoesAliveValue
+@onready var _rounds_key:        Label         = %RoundsKey
 @onready var _rounds_value:      Label         = %RoundsValue
 @onready var _sanctum_button:    Button        = %SanctumButton
 @onready var _next_stage_button: Button        = %NextStageButton
@@ -106,6 +111,9 @@ func _clear() -> void:
 	_rank_badge.visible = true
 	_rank_badge.text = "—"
 	_rank_badge.remove_theme_color_override("font_color")
+	_rank_cause.visible = false
+	_rounds_key.remove_theme_color_override("font_color")
+	_rounds_value.remove_theme_color_override("font_color")
 	_ase_value.text     = "0"
 	_ekwan_row.visible  = false
 	_ekwan_value.text   = "0"
@@ -164,6 +172,14 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	var rank := str(data.get("rank", "F"))
 	_rank_badge.text = rank
 	_rank_badge.add_theme_color_override("font_color", _rank_color(rank))
+
+	# Pace keys exist only for a pace-mode win (decisions.md D-19); the victory check is a second guard.
+	var pace_state := str(data.get("pace_state", "")) if victory else ""
+	if PacePresentation.has_pace(pace_state):
+		var pace_color := PacePresentation.color(pace_state, true)
+		_rounds_key.add_theme_color_override("font_color", pace_color)
+		_rounds_value.add_theme_color_override("font_color", pace_color)
+		_rank_cause.visible = bool(data.get("pace_changed_rank", false))
 
 	# Ase earned
 	_ase_value.text = str(data.get("ase_awarded", 0)) + " Ase"

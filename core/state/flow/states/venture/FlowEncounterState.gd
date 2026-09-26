@@ -195,8 +195,15 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		total_echoes,
 		round_ended,
 		run_count,
-		reward_cfg
+		reward_cfg,
+		ectx.resolution_mode if ectx != null else "",
+		float(combat_state.get("par_rounds", 0.0)),
+		PaceService.rank_reached_count(combat_state),
+		int(combat_state.get("stage_base", 0)),
+		(combat_state.get("ally_killed_enemy_ids", []) as Array).size(),
+		str(combat_state.get("guide_mode", ""))
 	)
+	var _pace_mode := bool(reward_data.get("pace_mode", false))
 
 	# V2-ECONOMY-001: pre-compute ekwan_factor from first stage objective type
 	var _obj_type := "combat"
@@ -222,7 +229,8 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		enemies_defeated,
 		int(reward_data.get("echo_bonus", 0)),
 		echoes_survived,
-		int(reward_data.get("speed_bonus", 0)),
+		int(reward_data.get("pace_bonus", 0)),
+		_pace_mode,
 		float(reward_data.get("redo_multiplier", 1.0)),
 		str(reward_data.get("rank", "F")),
 		_consolation_eligible,
@@ -370,7 +378,7 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	#
 	# WHAT REMAINS HERE, and why this producer still does not join the pure
 	# EncounterSnapshotBuilder beside producer B:
-	#   1. `reward_encounter_complete()` — the enemies-defeated / echoes-survived / speed bonuses
+	#   1. `reward_encounter_complete()` — the enemies-defeated / echoes-survived / pace bonuses
 	#      and the once-per-situation defeat consolation. Those measure THIS fight and belong to
 	#      the dispatch that ends it, so `ase_awarded`/`ekwan_awarded` below are still real.
 	#   2. The ally-death morale/fear knock at the top of this function, whose writes three
@@ -381,6 +389,10 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var _breakdown: Array = reward_result.get("breakdown", [])
 	var _vow_outcome: Dictionary = flow_ctx.vow_outcome.duplicate() if not flow_ctx.vow_outcome.is_empty() else {}
 
+	# A defeat shows nothing about pace (design §7): no colour on the result round line.
+	var _resolve_objective_state: Dictionary = EncounterSnapshotBuilder._build_objective_state(ectx, combat_state)
+	if not victory:
+		_resolve_objective_state.erase("pace_state")
 	var _snap: Dictionary = ResolveSnapshotBuilder.build(
 		t, EncounterSnapshotBuilder._build_resolve_actions(victory, objectives_remaining)
 	)
@@ -392,13 +404,16 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		round_ended,
 		enemies_defeated,
 		echoes_survived,
-		EncounterSnapshotBuilder._build_objective_state(ectx, combat_state)
+		_resolve_objective_state
 	)
 	ResolveSnapshotBuilder.add_actors(_data, projected_actors)
 	ResolveSnapshotBuilder.add_victory_flag(_data, victory)
 	ResolveSnapshotBuilder.add_ledger(_data, int(reward_result.get("ase_awarded", 0)), _breakdown)
 	ResolveSnapshotBuilder.add_ekwan(_data, int(reward_result.get("ekwan_awarded", 0)))
 	ResolveSnapshotBuilder.add_grade_rank(_data, str(reward_result.get("rank", "F")))
+	if _pace_mode and victory:
+		ResolveSnapshotBuilder.add_pace(_data, int(reward_data.get("pace_bonus", 0)),
+			str(reward_data.get("pace_state", "")), bool(reward_data.get("pace_changed_rank", false)))
 	# PROG-003: per-echo XP events for ResolveScreen and EchoParty display.
 	ResolveSnapshotBuilder.add_progression(_data, formula_inputs, [], xp_events)
 	# V2-EMOTION-001: per-echo emotion delta for ResolveScreen.

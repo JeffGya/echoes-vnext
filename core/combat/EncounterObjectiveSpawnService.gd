@@ -93,7 +93,7 @@
 # see the note there before you change either.
 #
 # DEFECT NOTES — found while standing at this code, recorded in
-# docs/v2-infra-003-defect-register.md and deliberately NOT fixed here: D80 (the shrine's
+# docs/stories/v2-infra-003/defect-register.md and deliberately NOT fixed here: D80 (the shrine's
 # legacy no-terrain default grid_pos col 0 row 4 collides with the RECOVER relic's identical
 # default), D81 (PROTECT's centre column uses integer division on a possibly-negative
 # sentinel when no candidate cell exists).

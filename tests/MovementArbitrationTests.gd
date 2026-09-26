@@ -1030,7 +1030,7 @@ static func _hp(actor: Dictionary) -> float:
 
 
 ## urgency_progress_gain kept at 0.0 here (production: 1.0) so Test D's scout_carefully gap
-## stays visible — see decisions #29/#38 in docs/v2-combat-003.5-decisions.md.
+## stays visible — see decisions #29/#38 in docs/stories/v2-combat-003.5/decisions.md.
 static func _spatial_cfg() -> Dictionary:
 	return {"spatial_utility": {"cap": 20.0, "urgency_weight": 4.0, "urgency_progress_gain": 0.0, "objective_progress_weight": 8.0, "cohesion_weight": 4.0, "exposure_weight": -6.0, "congestion_weight": -2.0, "commitment_weight": -2.0, "directive_objective_advance_weight": 4.0, "directive_avoid_overcommit_weight": 2.0, "directive_exposure_acceptance_weight": 2.0, "directive_ally_protection_weight": 2.0, "directive_threat_interception_weight": 2.0}}
 

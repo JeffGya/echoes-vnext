@@ -390,7 +390,7 @@ func dispatch(action: Dictionary) -> Dictionary:
 			# These six do not, and nothing else in this file would tell you whether
 			# that is a choice or debt. It is a choice. Full write-up and the cost of
 			# reversing it are on the V2-COMBAT-004 Notion page; the decision is also
-			# recorded in docs/v2-infra-003-defect-register.md.
+			# recorded in docs/stories/v2-infra-003/defect-register.md.
 			#
 			# The ownership rule Half A set is "every action has exactly one owner",
 			# not "every domain has a controller". These six have exactly one owner
@@ -1441,6 +1441,9 @@ func _resolve_next_actor(t: int) -> void:
 	# CombatTurnActionService. Exactly one last_round_results entry is still appended per call.
 	_combat_turn_action_service().resolve_activation(
 		actor, intent, action_type, asm, ectx, bdata, leadership_expr_cfg, round, t)
+	# The killer side of a melee kill, for the rank (decisions.md D-23). Writes only combat_state.
+	if not ectx.last_round_results.is_empty():
+		PaceService.record_kill(ectx.last_round_results.back(), ectx.actors, combat_state)
 
 	# Primary actions resolve before end-of-activation Burning. Purify is an
 	# external side effect and therefore shares this post-action boundary.
@@ -1532,7 +1535,7 @@ func _end_round(t: int) -> void:
 	#
 	# THE ORDER IS LOAD-BEARING and must not change:
 	#   SHRINE drain -> emotion tick -> RECOVER -> ENDURE -> GUIDE_SPIRIT -> PROTECT theft ->
-	#   PROTECT guard -> PURSUE contain -> check_end_condition.
+	#   PROTECT guard -> PURSUE contain -> reached enemies -> check_end_condition.
 	# The drain runs first because it can kill the shrine, which the end check must see, and
 	# because the emotion tick re-adjusts the morale it writes. PROTECT guard must follow PROTECT
 	# theft in the same round: check_end_condition reads protect_counter and totem_stolen together.
@@ -1579,6 +1582,10 @@ func _end_round(t: int) -> void:
 	_objective_service.apply_protect_theft_round(ectx, round, t)
 	_objective_service.apply_protect_guard_round(ectx, round, t)
 	_objective_service.apply_pursue_contain_round(ectx, round, t)
+
+	# Reached enemies for the rank ceiling. After the ENDURE wave spawn, so a wave enemy that
+	# lands next to the party counts this round. Writes only combat_state["reached_enemy_ids"].
+	PaceService.record_reached_enemies(ectx.actors, combat_state)
 
 	# V2-COMBAT-003: universal no-progress detector. Any actor-vs-actor damage this round
 	# (either faction) resets the streak. Scans the same ectx.last_round_results the T9

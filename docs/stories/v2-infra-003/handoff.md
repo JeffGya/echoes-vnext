@@ -908,7 +908,7 @@ on `ConfigService` that is behaviour-adjacent and therefore not taken.
 
 ### Phase 7 — thin shell + the Half A review gate ✅
 
-Gate verdict: **APPROVED WITH CORRECTIONS (7)**. `docs/v2-infra-003-half-a-review.md`.
+Gate verdict: **APPROVED WITH CORRECTIONS (7)**. `docs/stories/v2-infra-003/half-a-review.md`.
 
 Verified clean by the gate, independently: 73 actions with one owner each (a naive extraction
 returns 76 rows; three are not cases); no delegating stubs — all 24 factories are real constructors;
@@ -957,7 +957,7 @@ legacy `# COMBAT-004:` comment near the new block that could read as the same th
 
 ## 9d. Phase 11 must also do these
 
-- **Convert `docs/v2-infra-003-defect-register.md` from a worklist into a ledger of completed work.**
+- **Convert `docs/stories/v2-infra-003/defect-register.md` from a worklist into a ledger of completed work.**
   Conversion rules are written at the top of that file. Every one of its entries must end with an
   outcome; deferred items must name the story they were filed against, never "later"; nothing is
   deleted, including the entries that were disproved.
@@ -1021,7 +1021,7 @@ original wording of each entry is kept so the earlier record survives.
 
 ### What genuinely remains for Phase 11
 
-- Convert `docs/v2-infra-003-defect-register.md` from a worklist into a ledger — see section 9d.
+- Convert `docs/stories/v2-infra-003/defect-register.md` from a worklist into a ledger — see section 9d.
 - Remove the "When you reach the site of a known defect" section from `AGENTS.md` — see section 9d.
 - `tests/KODeathTests.gd:47-48` comments its assertion as a tick. The assertion is correct; the
   comment misleads. Raised by pass 7, not fixed.

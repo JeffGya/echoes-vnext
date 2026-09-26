@@ -26,7 +26,7 @@ extends RefCounted
 ## Every block writes into the `data` Dictionary returned inside the skeleton (GDScript
 ## Dictionaries are passed by reference) and returns void.
 ##
-## FIFTEEN BLOCKS. Which producer emits which is the table in
+## SIXTEEN BLOCKS. Which producer emits which is the table in
 ## docs/resolve-snapshot-block-spec.md §4.3 — check it before removing a block that looks unused.
 
 
@@ -195,3 +195,12 @@ static func add_contact_outcome(
 	data["outcome"]      = outcome
 	data["outcome_text"] = outcome_text
 
+
+## 16 — Pace result (docs/stories/pace-reward/design.md §6-§7). Producers A and G, pace-mode wins only:
+## the call is the gate, so a no-pace fight or a defeat carries none of these keys.
+## pace_bonus_awarded is the pre-redo Ase of the "Pace bonus" breakdown row.
+static func add_pace(data: Dictionary, pace_bonus_awarded: int, pace_state: String,
+		pace_changed_rank: bool) -> void:
+	data["pace_bonus_awarded"] = pace_bonus_awarded
+	data["pace_state"]         = pace_state
+	data["pace_changed_rank"]  = pace_changed_rank

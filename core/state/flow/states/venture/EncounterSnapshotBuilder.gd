@@ -237,7 +237,7 @@ static func _build_objective_state(ectx: EncounterContext, combat_state: Diction
 			var _gs_guard_progress: int = int(combat_state.get("guide_protect_counter", 0)) if not combat_state.is_empty() else 0
 			_gs_rounds_remaining = maxi(0, _rounds_required - _gs_guard_progress)
 
-	return {
+	var out: Dictionary = {
 		"type":                  obj_type,
 		"shrine_hp":             shrine_hp,
 		"shrine_alive":          shrine_alive,
@@ -276,6 +276,16 @@ static func _build_objective_state(ectx: EncounterContext, combat_state: Diction
 		# to this encounter's objective. Default false.
 		"charge_pressure_applied": ectx.charge_pressure_applied if ectx != null else false,
 	}
+	# Pace mode only; the key is absent otherwise (design §7). par_rounds stays out of the
+	# snapshot: it is a raw float (ANSWERS.md #59).
+	var _pace_src: Dictionary = combat_state if not combat_state.is_empty() \
+		else (ectx.pace_cfg if ectx != null else {})
+	var _pace: String = PaceService.pace_state(_round, float(_pace_src.get("par_rounds", 0.0)),
+		float(_pace_src.get("pace_full_ratio", 0.0)), float(_pace_src.get("pace_zero_ratio", 0.0)),
+		int(_pace_src.get("stage_base", 0)), float(_pace_src.get("pace_bonus_pct", 0.0)))
+	if not _pace.is_empty():
+		out["pace_state"] = _pace
+	return out
 
 
 ## V2-STAGE-004 S15 prep: short context line for a hostile-claimant-forced combat.

@@ -511,7 +511,7 @@ static func _movement_context(mover_kind: String = "echo") -> Dictionary:
 
 
 ## urgency_progress_gain kept at 0.0 here (production: 1.0) so Test D's scout_carefully gap
-## stays visible — see decisions #29/#38 in docs/v2-combat-003.5-decisions.md.
+## stays visible — see decisions #29/#38 in docs/stories/v2-combat-003.5/decisions.md.
 static func _spatial_cfg() -> Dictionary:
 	return {
 		"cap": 20.0, "urgency_weight": 4.0, "urgency_progress_gain": 0.0, "objective_progress_weight": 8.0,

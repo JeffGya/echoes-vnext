@@ -21,6 +21,7 @@ signal modal_requested(modal_id: StringName, payload: Dictionary)
 
 const InitiativeRowScene := preload("res://ui/components/InitiativeRowItem.tscn")
 const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
+const PacePresentation := preload("res://ui/components/PacePresentation.gd")
 
 @onready var _board: TileMapLayer                   = $Board
 # V2-COMBAT-003 terrain commit 4 (decision 16) — a bridge is its own tile. A CHILD of Board,
@@ -86,6 +87,14 @@ const _PIP_COUNT:  int    = 5
 # _normal is the authored base; _urgent is a duplicate re-tinted for the PROTECT stolen state.
 var _normal_banner_style: StyleBoxFlat = null
 var _urgent_banner_style: StyleBoxFlat = null
+# Authored .tscn font colours, restored when the fight has no pace_state.
+var _round_label_color: Color = Color.WHITE
+var _banner_glyph_color: Color = Color.WHITE
+var _banner_progress_color: Color = Color.WHITE
+# Pace colour blend (decisions.md D-28). The last applied pace_state; "" = none applied yet or a
+# no-pace fight. The blend tween starts only when this value changes between two pace states.
+var _last_pace_state: String = ""
+var _pace_tween: Tween = null
 
 const _SPEED_SLOW:   float = 3.0
 const _SPEED_NORMAL: float = 1.5
@@ -96,6 +105,9 @@ const _MOVE_DURATION_FAST: float = 0.20
 const _TELEGRAPH_DURATION_SLOW: float = 0.28
 const _TELEGRAPH_DURATION_NORMAL: float = 0.16
 const _TELEGRAPH_DURATION_FAST: float = 0.09
+# Pace drop brightening (decisions.md D-28): the fraction toward white, and its time in seconds.
+const _PACE_DROP_BRIGHTEN: float = 0.4
+const _PACE_DROP_BRIGHTEN_TIME: float = 0.08
 
 var _current_cols: int       = 10
 var _current_rows: int       = 10
@@ -205,6 +217,9 @@ func _ready() -> void:
 	# _normal is the .tscn-authored base; _urgent duplicates it and re-tints bg + border red
 	# for the PROTECT "STOLEN" state (distinct chrome, not just a modulate).
 	_objective_banner.visible = false
+	_round_label_color     = _round_label.get_theme_color("font_color")
+	_banner_glyph_color    = _banner_glyph.get_theme_color("font_color")
+	_banner_progress_color = _banner_progress.get_theme_color("font_color")
 	# get_theme_stylebox() returns the effective stylebox (the .tscn-authored override here) —
 	# Control has no get_theme_stylebox_override() getter, only has_/add_/remove_.
 	_normal_banner_style = _objective_banner.get_theme_stylebox("panel") as StyleBoxFlat
@@ -281,6 +296,9 @@ func _reset_presentation_state() -> void:
 	if _bark_popup_layer != null:
 		_bark_popup_layer.clear_all()
 	_last_bark_line = ""
+	# Fresh encounter → the first pace colour shows with no blend.
+	_kill_pace_tween()
+	_last_pace_state = ""
 	# Fresh encounter → neutral camera: clear pan, reset zoom to 1× on every layer.
 	_pan_offset  = Vector2.ZERO
 	_pan_active  = false
@@ -335,6 +353,7 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	var obj_type: String = str(obj_state.get("type", ""))
 	_objective_label.visible = false
 	_render_objective_banner(obj_state, obj_type)
+	_apply_pace_color(str(obj_state.get("pace_state", "")))
 
 	# V2-STAGE-004 P3b: PURSUE camera — update quarry follow target each snapshot.
 	if obj_type == "pursue":
@@ -512,6 +531,71 @@ func _render_objective_banner(obj_state: Dictionary, obj_type: String) -> void:
 		if _normal_banner_style != null:
 			_objective_banner.add_theme_stylebox_override("panel", _normal_banner_style)
 	_objective_banner.visible = true
+
+
+## Pace modes only (design §6, decisions.md D-12): colour the round label and the banner's
+## glyph and progress line by pace_state. No text is added. No-pace fights keep the authored colour.
+## D-28: a change between two pace states blends over the move duration of the current speed.
+## A drop (full → partial, partial → none) first brightens the colour once. This runs on every
+## actor step, so an unchanged state never restarts the blend.
+func _apply_pace_color(pace_state: String) -> void:
+	if not PacePresentation.has_pace(pace_state):
+		_kill_pace_tween()
+		_last_pace_state = ""
+		_round_label.add_theme_color_override("font_color", _round_label_color)
+		_banner_glyph.add_theme_color_override("font_color", _banner_glyph_color)
+		_banner_progress.add_theme_color_override("font_color", _banner_progress_color)
+		return
+	var target := PacePresentation.color(pace_state, false)
+	var previous := _last_pace_state
+	_last_pace_state = pace_state
+	if pace_state == previous:
+		if not is_pace_blend_running():
+			_set_pace_label_color(target)
+		return
+	_kill_pace_tween()
+	if previous.is_empty():
+		_set_pace_label_color(target)
+		return
+	var from := _round_label.get_theme_color("font_color")
+	_pace_tween = create_tween().set_trans(Tween.TRANS_SINE)
+	if PacePresentation.STATES.find(pace_state) > PacePresentation.STATES.find(previous):
+		_pace_tween.tween_method(_set_pace_label_color, from,
+			from.lerp(Color.WHITE, _PACE_DROP_BRIGHTEN), _PACE_DROP_BRIGHTEN_TIME).set_ease(Tween.EASE_OUT)
+		from = from.lerp(Color.WHITE, _PACE_DROP_BRIGHTEN)
+	_pace_tween.tween_method(_set_pace_label_color, from, target, _pace_blend_duration()).set_ease(Tween.EASE_IN_OUT)
+
+
+## True while the pace colour blend runs.
+func is_pace_blend_running() -> bool:
+	return _pace_tween != null and _pace_tween.is_valid() and _pace_tween.is_running()
+
+
+## Advances the pace colour blend by `seconds`. Headless tests use this; the game never calls it.
+func step_pace_blend(seconds: float) -> void:
+	if is_pace_blend_running():
+		_pace_tween.custom_step(seconds)
+
+
+func _set_pace_label_color(c: Color) -> void:
+	_round_label.add_theme_color_override("font_color", c)
+	_banner_glyph.add_theme_color_override("font_color", c)
+	_banner_progress.add_theme_color_override("font_color", c)
+
+
+func _kill_pace_tween() -> void:
+	if _pace_tween != null and _pace_tween.is_valid():
+		_pace_tween.kill()
+	_pace_tween = null
+
+
+## The blend uses the token move duration of the current playback speed.
+func _pace_blend_duration() -> float:
+	if is_equal_approx(_step_delay, _SPEED_SLOW):
+		return _MOVE_DURATION_SLOW
+	if is_equal_approx(_step_delay, _SPEED_FAST):
+		return _MOVE_DURATION_FAST
+	return _MOVE_DURATION_NORMAL
 
 
 ## Fills the pre-authored diamond pips by quarry proximity to the exit edge.

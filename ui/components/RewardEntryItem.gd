@@ -9,6 +9,9 @@ extends HBoxContainer
 @export var color_positive: Color = Color("#f0e8d0")
 @export var color_negative: Color = Color("#908870")
 @export var color_ekwan: Color = Color(0.91, 0.627, 0.188, 1)
+# A row that pays exactly 0 (for example "Pace bonus +0 Ase") is muted, not shown as a gain
+# (docs/stories/pace-reward/decisions.md D-28, D-29).
+@export var color_zero: Color = Color("#6E6450")
 
 @onready var entry_label: Label = %EntryLabel
 @onready var delta_label: Label = %DeltaLabel
@@ -21,7 +24,7 @@ func setup(entry: Dictionary) -> void:
 	if delta >= 0:
 		delta_label.text = "+%d %s" % [delta, currency_label]
 		var pos_color := color_ekwan if currency == "ekwan" else color_positive
-		delta_label.add_theme_color_override("font_color", pos_color)
+		delta_label.add_theme_color_override("font_color", color_zero if delta == 0 else pos_color)
 	else:
 		delta_label.text = "\u2212%d %s" % [abs(delta), currency_label]
 		delta_label.add_theme_color_override("font_color", color_negative)

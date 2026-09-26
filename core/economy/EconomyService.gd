@@ -103,29 +103,29 @@ func spend_ase(amount: int, reason: String, logger: StructuredLogger, t: int) ->
 # could be lost for Ase without limit. That single function is now two, one per cadence:
 #
 #   reward_encounter_complete()  — paid once per ENCOUNTER, in the combat-end dispatch.
-#       Victory: enemies-defeated + echoes-survived + speed bonus, redo-scaled.
+#       Victory: enemies-defeated + echoes-survived + pace bonus, redo-scaled.
 #       Defeat:  the 25% consolation, which is intended design (Jeff, 2026-08-24) — but paid
 #                only ONCE per situation, gated by the caller's `consolation_eligible`.
 #   settle_stage_complete()      — paid once per STAGE, in the `flow.complete_stage` dispatch,
 #       behind the stage's `settlement_receipt` stamp. Base objective weights + virtue bonus.
 #
 # WHAT DID NOT CHANGE. Every component keeps the exact formula and the exact redo exposure it
-# had: redo scaled base+enemy+echo+speed and never the virtue bonus, and it still does — only
+# had: redo scaled base+enemy+echo+pace and never the virtue bonus, and it still does — only
 # now inside two `roundi()` calls instead of one, which is the sole arithmetic consequence of
-# splitting (a possible ±1 Ase against the old single rounding). `RewardCalc.compute()` is
-# untouched, so `speed_bonus` is still `roundi(base × speed_pct)`: the stage's base stays an
-# INPUT to the encounter cadence, it just stops being a PAYOUT of it. The defeat consolation
-# likewise still reads the stage base to take 25% of.
+# splitting (a possible ±1 Ase against the old single rounding). The stage's base stays an
+# INPUT to the encounter cadence (the pace bonus is a share of it), not a PAYOUT of it. The
+# defeat consolation likewise still reads the stage base to take 25% of.
 
 ## Encounter-cadence payout. Paid at every combat end, once per encounter.
 ##
-## victory:   on a win pays `roundi((enemy + echo + speed) × redo)`; on a loss pays the
+## victory:   on a win pays `roundi((enemy + echo + pace) × redo)`; on a loss pays the
 ##            `roundi(base × 0.25 × redo)` consolation.
 ## base_reward: the STAGE's base (sum of its objective weights). An INPUT only — never paid
 ##            here on a victory. Used for the defeat consolation.
 ## consolation_eligible: false on a repeat defeat of a situation that has already paid its
 ##            consolation. Ignored on a victory. When false the defeat branch pays nothing and
 ##            returns an empty breakdown — there is no second consolation to itemise.
+## pace_bonus: RewardCalc's pre-redo pace bonus. pace_mode: RewardCalc's `pace_mode`.
 ## ekwan_factor: fraction of THIS payout to award as Ekwan (V2-ECONOMY-001). 0.0 for none.
 ## Returns reward_result dict with ase_awarded, ekwan_awarded, rank, victory, breakdown.
 func reward_encounter_complete(
@@ -135,7 +135,8 @@ func reward_encounter_complete(
 	enemies_defeated: int,
 	echo_bonus: int,
 	echoes_survived: int,
-	speed_bonus: int,
+	pace_bonus: int,
+	pace_mode: bool,
 	redo_multiplier: float,
 	rank: String,
 	consolation_eligible: bool,
@@ -147,7 +148,7 @@ func reward_encounter_complete(
 	var breakdown: Array  # Array of {label: String, delta: int, currency: String}
 
 	if victory:
-		var pre_redo := enemy_bonus + echo_bonus + speed_bonus
+		var pre_redo := enemy_bonus + echo_bonus + pace_bonus
 		total = roundi(float(pre_redo) * redo_multiplier)
 		var redo_penalty := total - pre_redo  # negative or 0
 
@@ -158,8 +159,9 @@ func reward_encounter_complete(
 		if echo_bonus > 0:
 			var ec_label := "%d %s survived" % [echoes_survived, "echo" if echoes_survived == 1 else "echoes"]
 			breakdown.append({ "label": ec_label, "delta": echo_bonus, "currency": "ase" })
-		if speed_bonus > 0:
-			breakdown.append({ "label": "Speed bonus", "delta": speed_bonus, "currency": "ase" })
+		# Pace modes show the row at every value, 0 included (decisions.md D-13); no-pace modes never.
+		if pace_mode:
+			breakdown.append({ "label": "Pace bonus", "delta": pace_bonus, "currency": "ase" })
 		if redo_penalty < 0:
 			breakdown.append({ "label": "Redo penalty", "delta": redo_penalty, "currency": "ase" })
 	elif consolation_eligible:

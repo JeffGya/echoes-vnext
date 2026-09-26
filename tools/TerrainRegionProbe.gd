@@ -50,7 +50,7 @@ const REPORT_PATH := "user://terrain_region_probe_report.txt"
 static var _sink: FileAccess = null
 
 ## Boards generated per virtue. 10 virtues x 180 = 1,800 boards, matching the sample size
-## of the measurement recorded in docs/v2-combat-003-handoff.md section 12.1.
+## of the measurement recorded in docs/stories/v2-combat-003/handoff.md section 12.1.
 const BOARDS_PER_VIRTUE: int = 180
 
 ## The size at or above which a cut-off region is a defect rather than deliberate scenery.
