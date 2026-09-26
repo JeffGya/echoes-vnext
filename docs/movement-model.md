@@ -1719,6 +1719,15 @@ Two spirit models remain distinct:
 
 The shared model does not automatically increase the non-joining spirit from its authored one-cell round-end pace to the v1 2–6-unit combat envelope. Changing that pace requires an explicit mode decision.
 
+**Escort yield.** A living, friendly, non-structure Echo standing on the escort spirit's next
+planned cell does not hold it indefinitely — win only requires a living Echo within
+`escort_radius` of the spirit, never occupation of one specific tile, so an indefinite hold is
+never the correct outcome. Every round the spirit's step is blocked this way, the Echo and the
+spirit trade cells as part of the spirit's own activation: no action or movement cost to the
+Echo. A hostile, dead, downed, structure, or spirit occupant never yields — those still produce
+the ordinary occupied wait. The trade fires a bark (`spirit_escort_yield`) so a repeating swap
+reads as the party protecting the spirit, not a stuck loop.
+
 ---
 
 ## 14. Enemy Movement Grammar

@@ -289,3 +289,73 @@ Also filed to 003.5: `data/balance.json` documents two different vector tie-brea
 implements neither (nothing reads either comment); and `ui/AGENTS.md` forbids `ui/` from dispatching
 while the contract below it names `AppRoot` as the dispatcher — the forbidden list is written for
 screens, and should say so.
+
+**Status 2026-09-26:** **V2-COMBAT-003.5 is DONE — merged as PRs #69, #74, #75, #76, #77, #79, #80
+(decision #42: one PR per phase, after `/ultrareview` refused an oversized single-PR attempt).**
+Builds the movement-style axis (`docs/movement-model.md` section 9) the shared model always
+specified but the code never selected, and absorbs everything V2-COMBAT-003 filed forward. Suite
+grew across the story; full serial suite green at every phase boundary (only the one known
+pre-existing failure, `movement_arbiter/avoid_overcommit_stays_proportionate`, decisions #29/#38,
+unrelated to this story, present before it started and still present after).
+
+**Phase 0-3c — movement-style selection + board variety.** `MovementStyleService.gd` (new) scores
+the ten styles deterministically per purpose; `BehaviorArbiter`'s `DecisionTrace` now carries
+`movement_style`. Fixed the two board-variety defects V2-COMBAT-003 filed forward: `encounter_id`
+now names one encounter, not one stage (two fights in the same stage get different boards and
+spawn cells); `data.combat.board` range raised 12..22 → 18..28 (measured: 18x18 gives Courage
+81 islands per 50 boards, up from 0 at 12x12).
+
+**Phase 5 — `resist_fear` wired everywhere, 6 mechanical fixes.** The trait had a working
+reduction gate but none of its 14 real call sites ever passed the arguments that gate needs — it
+did nothing anywhere in the game, not just in combat. Wired through combat (per-hit, near-death)
+and 10 previously-inert sites. Plus: dead `shrine_hp_ratio`/`_stationary_rounds` removed,
+`_withdraw_cooldown` ordering fixed (decremented before ever checked), `FearReachabilityProbe.gd`
+seed-variant fixed, three duplicate `_dominant_key()` copies unified into
+`GridService.dominant_key()`, four dead raw-emotion floats removed from the player-facing
+snapshot whitelist. Enemy-directive faction gating fixed: the player's directive was biasing
+enemy AI scoring too (`CombatTurnContextService.gd`, gated to `faction == "echo"`).
+
+**Phase 6 — the movement-style axis's headline claim didn't fully hold in live play.**
+Measured 40 real fights: 3 of 10 styles never occurred (`retreating`'s rarity is expected — it
+needs a real collapse state, none occurred in the sample). The other two were real bugs, both
+fixed: `lateral` had no live trigger (only ever built for goal types live combat never creates) —
+now offers a flanking-cutoff route toward a perceived hostile for any purpose, matching section
+9's own "lateral cut-off" reading. `low_exposure` silently collapsed into `safe` on every
+hazard-free board (both only weighed exposure/hazard count) — fixed with hostile-distance as a
+tiebreak, hazard safety kept as the strict first priority.
+
+**Phase 7-9 — a pre-existing, unrelated bug found during the story's own full-regression pass.**
+In GUIDE_SPIRIT escort fights the spirit is built with `is_structure: true`, and
+`MovementProfileService.derive_profile()` checked that flag before any capacity override — the
+spirit always got capacity 0 and could never move. Broken since a July commit (V2-COMBAT-002
+Slice 3), not caused by this story; about half of all GUIDE_SPIRIT fights are escort mode. Fixed
+by reordering the check (verified live: escort wins via `spirit_escorted` went 0/11 → 2/11 in an
+11-fight sample). A second bug surfaced once capacity was restored: a guarding Echo could block
+the spirit's path indefinitely (measured: one fight blocked 20 rounds straight). Routed to
+`sr-game-designer` for a design pass (this changes party AI behavior, not just a code fix):
+recommended a deterministic yield/swap — every round, if the spirit's planned next cell holds a
+living friendly non-structure Echo, the two trade positions as part of the spirit's own
+activation, at no cost to the Echo. `game-feel-developer` added a readability requirement (a
+repeating unmarked swap reads as "stuck loop," not "party protecting spirit") — one new
+`spirit_escort_yield` bark closes it. `qa-verifier`'s independent review of the combined fix found
+one adjacent gap (none of the 5 `spirit_*` bark contexts were in `data.voice.bark_tiers`, so they
+defaulted to lowest priority and could be silently dropped in a busy round) — fixed by adding all
+5 to tier 2. `/ultrareview` on the PR found 2 real nit-severity findings in the swap (a wasted
+deep-copy, a duplicate eligibility lookup) — both fixed and independently re-verified.
+
+**Phase 8 — Jeff's own in-game playtest surfaced two more pre-existing, unrelated issues, both
+filed as follow-ups (`docs/v2-combat-003.5-followup-tasks.md` #14, #15), not fixed in this story:**
+GUIDE_SPIRIT/PURSUE boards on a low-plateau-count virtue (courage — Ashen Hallow, realm.01) look
+compact instead of stretched, because `StageTerrain.generate()`'s plateau count/size comes only
+from the per-virtue terrain signature with no scaling relative to the board-stretch override; and
+the combat camera does not handle a genuinely large stretched board well. Both pre-existing
+(V2-STAGE-004-era), neither caused by this story. Jeff confirmed both GUIDE_SPIRIT modes
+(protect and escort) work correctly live: bark fires, `GUIDE_SPIRIT escort progress` logs every
+round, clean victories.
+
+**15 follow-up tasks filed** in `docs/v2-combat-003.5-followup-tasks.md`, each with a full
+opening prompt for a fresh session. Full decision trail (64 entries) in
+`docs/v2-combat-003.5-decisions.md`. Every decision routed through Jeff via `AskUserQuestion`;
+every build got an independent `qa-verifier` review (builder never self-verifies); killed-agent
+tree audits (rate limits hit repeatedly) always found the actual code edits complete —
+only the agent's own final report was cut off, never the work itself.
