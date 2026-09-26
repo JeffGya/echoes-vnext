@@ -26,6 +26,7 @@ S, A and B. A fair pace term does not restore a meaningful spread.
 `docs/stories/v2-combat-003/`, `docs/stories/v2-combat-003.5/` and `docs/stories/v2-infra-003/`,
 and every reference updated. Kept at the top of `docs/` by Jeff's decision: `v2-migration-map.md`,
 `resolve-snapshot-block-spec.md`, `combat-modes-distinctiveness.md`, `project_systems_audit.md`.
+**Later change (2026-09-26):** PR #81 (V2-COMBAT-003.5 Phase 9) retired two of the moved files, `docs/stories/v2-combat-003.5/handoff.md` and `plan-snapshot.md`. The merge into this story follows that deletion.
 **Still open:** the Notion backlog export (`Echoes vNext V2 Story Backlog …_all.csv` and 22
 `.translation` files) at the top of `docs/`. Godot imports the `.csv`, and the `.csv` still holds
 old document paths. Handle it as a separate task.

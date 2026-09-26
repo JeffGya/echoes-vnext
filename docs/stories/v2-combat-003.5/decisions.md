@@ -698,7 +698,7 @@
 **Source:** Jeff, 2026-09-26
 **Date:** 2026-09-26
 
-> **Result:** filed as follow-up task #14 in `docs/v2-combat-003.5-followup-tasks.md`
+> **Result:** filed as follow-up task #14 in `docs/stories/v2-combat-003.5/followup-tasks.md`
 > (`task_ashen_hallow_board`) — root cause, evidence, and two candidate fix shapes recorded there
 > for whoever picks it up.
 
@@ -711,6 +711,6 @@
 **Source:** Jeff, 2026-09-26
 **Date:** 2026-09-26
 
-> **Result:** filed as follow-up task #15 in `docs/v2-combat-003.5-followup-tasks.md`
+> **Result:** filed as follow-up task #15 in `docs/stories/v2-combat-003.5/followup-tasks.md`
 > (`task_large_board_camera`) — reproduction steps and the owning script (to be located) recorded
 > there for whoever picks it up.
