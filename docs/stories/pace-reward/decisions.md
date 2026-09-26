@@ -36,6 +36,7 @@ Story-specific decisions for the pace bonus story. Project-wide decisions stay i
 | D-29 | zero-row-colour | A "+0 Ase" row uses the muted colour #6E6450 (4.77:1 on the result card) | 2026-09-25 |
 | D-30 | banner-gold-to-combat-004 | The no-pace banner gold looks close to the partial amber; left for V2-COMBAT-004 (004D) | 2026-09-25 |
 | D-31 | escort-pace-in-this-story | GUIDE_SPIRIT escort gets a pace term in this story, because PR #79 made the escort win reachable; supersedes D-10 | 2026-09-26 |
+| D-32 | joined-spirit-party-par | A GUIDE_SPIRIT escort fight with a joined spirit uses the COMBAT-style party travel par | 2026-09-26 |
 
 ---
 
@@ -334,6 +335,15 @@ Do not build: the delayed rank-cause note, and the pace colour on the Pace bonus
 **Q:** PR #79 (V2-COMBAT-003.5 decisions #58-#60) made the GUIDE_SPIRIT escort spirit walk and added an escort swap rule. Escort wins by escort went from 0 of 11 to 2 of 11 fights. D-10 excluded escort from pace because the escort win was not reachable. Keep that exclusion, or add escort pace now? (Raised by a read-only comparison of main and this story, 2026-09-26.)
 **A:** Add escort pace in this story. The escort spirit now moves, and that movement affects pace. This supersedes D-10. The GUIDE_SPIRIT protect variant keeps no pace term (timer mode, D-06).
 **Source:** Jeff, 2026-09-26 ("B escort needs to move and this would affect pace. So we need to take this into account.")
+**Date:** 2026-09-26
+
+---
+
+### D-32. joined-spirit-party-par
+
+**Q:** In a GUIDE_SPIRIT escort fight where the spirit joins the battle, the game never steers the spirit toward the destination (`CombatRoundGuideSpiritService.gd:266`). In the escort probe, 0 of 77 joined-spirit wins were escort wins; all 77 were kill wins (`escort-tuning.md`). Which par does a joined-spirit escort fight use? (Raised by sr-game-designer and mid-game-designer.)
+**A:** The COMBAT-style party travel par: `max(1, mean Echo distance to the nearest enemy / party mean movement range)`, no hold. The fight is a kill fight, so it gets the kill-fight par. Measured full-bonus share: 43% (old board), 49% (new board).
+**Source:** Jeff, 2026-09-26 (option A)
 **Date:** 2026-09-26
 
 ---
