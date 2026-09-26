@@ -3,7 +3,9 @@
 **Status: MEASURED — decided in decisions.md D-32, D-33.**
 
 **Owner:** mid-game-designer. **Story:** pace-reward, extension under decisions.md D-31.
-**Input:** `docs/stories/pace-reward/escort-design.md` §8 (PROPOSED, not approved).
+**Input:** the escort proposal `escort-design.md` §8 (PROPOSED, not approved). That file is deleted.
+Its text stays in git history at commit `98b462a`. The references to `escort-design.md` below point there.
+The approved escort rules are decisions.md D-31 to D-34 and design.md §3.
 **Purpose:** data for Jeff. This document sets no value and approves no formula.
 
 ---
