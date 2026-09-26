@@ -22,6 +22,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("combat_ui/pace_blend_brightens_on_drop_and_ends_on_approved_color", Callable(PaceUITests, "_t_blend_drop_brightens_then_settles"))
 	runner.register_test("combat_ui/pace_blend_absent_on_first_snapshot_and_no_pace", Callable(PaceUITests, "_t_blend_absent_first_and_no_pace"))
 	runner.register_test("combat_ui/reward_row_zero_delta_muted", Callable(PaceUITests, "_t_reward_row_zero_delta_muted"))
+	runner.register_test("combat_ui/pace_colors_match_approved_hex", Callable(PaceUITests, "_t_pace_colors_match_approved_hex"))
 
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
@@ -300,3 +301,22 @@ static func _t_reward_row_zero_delta_muted() -> Dictionary:
 			break
 	m[0].free()
 	return { "ok": err.is_empty(), "error": err }
+
+
+# ── Approved colours (decisions.md D-25) ────────────────────────────────────
+
+## The six PaceState* theme colours must equal the approved hex values.
+## A changed theme colour must fail here, not pass through PacePresentation.color().
+static func _t_pace_colors_match_approved_hex() -> Dictionary:
+	# [pace_state, on_panel, approved hex]
+	var approved := [
+		["full", false, "#7EE3C0"], ["partial", false, "#F28C28"], ["none", false, "#E5533D"],
+		["full", true, "#1D6552"], ["partial", true, "#7A4B00"], ["none", true, "#9E2F28"],
+	]
+	for c in approved:
+		var got := PacePresentation.color(c[0], c[1])
+		var want := Color(c[2])
+		if got.to_html(false).to_upper() != want.to_html(false).to_upper() or not is_equal_approx(got.a, 1.0):
+			return { "ok": false, "error": "%s (%s): colour #%s, expected %s" % [
+				c[0], "result card" if c[1] else "combat HUD", got.to_html(true).to_upper(), c[2]] }
+	return { "ok": true }

@@ -15,7 +15,7 @@
 #   10. reward/rank_S_first_run              — perfect score + run_count=0 → rank = "S"
 #   11. reward/rank_F_poor_performance       — poor perf + run_count=5 → rank = "F"
 #   12. reward/economy_service_adds_ase      — both cadence payers add the correct amount
-#   13-33. reward/pace_*                     — par per mode, pace_state, reached enemies, rank
+#   13-34. reward/pace_*                     — par per mode, pace_state, reached enemies, rank
 #          ceiling, the "Pace bonus" row, objective_state and resolve data per mode, ally kills
 
 extends RefCounted
@@ -91,6 +91,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("reward/pace_ally_kill_out_of_rank", Callable(EconomyRewardTests, "_t_pace_ally_kill_out_of_rank"))
 	runner.register_test("reward/pace_result_reads_combat_state_stage_base", Callable(EconomyRewardTests, "_t_pace_result_reads_combat_state_stage_base"))
 	runner.register_test("reward/pace_keeper_intro_real_path", Callable(EconomyRewardTests, "_t_pace_keeper_intro_real_path"))
+	runner.register_test("reward/pace_runtime_records_reached_and_kills", Callable(EconomyRewardTests, "_t_pace_runtime_records_reached_and_kills"))
 
 
 # ─── Test 1 — single combat objective → base = 30 ────────────────────────────
@@ -696,7 +697,7 @@ static func _t_pace_dead_enemy_not_newly_reached() -> Dictionary:
 
 
 # ─── Test 31 — an ally or spirit kill pays the kill Ase but is out of both rank sides ──
-# base 30, 1 of 5 echoes survives, no pace term (par 0).
+# base 30, 5 echoes, no pace term (par 0). The COMBAT half has 4 survivors, the ENDURE half 1.
 static func _t_pace_ally_kill_out_of_rank() -> Dictionary:
 	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1)]
 	var cfg := _default_cfg()
@@ -720,12 +721,14 @@ static func _t_pace_ally_kill_out_of_rank() -> Dictionary:
 		if cs["reached_enemy_ids"] != expect_reached:
 			return { "ok": false, "error": "%s: reached %s" % [mode, str(cs["reached_enemy_ids"])] }
 
-	# COMBAT, 4 enemies, the ally killed all 4. Kill Ase 20 stays. Rank: 40 / 80 = 0.5 → C.
-	# The old rule counted them on both sides: 60 / 100 = 0.6 → B.
-	var c := RewardCalc.compute(true, objs, 4, 4, 1, 5, 10, 0, cfg, _COMBAT, 0.0, 0, 0, 4)
-	var c_ref := RewardCalc.compute(true, objs, 0, 0, 1, 5, 10, 0, cfg, _COMBAT, 0.0, 0, 0)
-	if int(c.get("enemy_bonus", -1)) != 20 or str(c.get("rank", "")) != "C" or c.get("rank") != c_ref.get("rank"):
-		return { "ok": false, "error": "COMBAT ally kills: expected enemy_bonus 20 and rank C, got %s" % str(c) }
+	# COMBAT, 4 enemies, the ally killed all 4, 4 of 5 echoes survive. Kill Ase 20 stays.
+	# D-23 rank: (30 + 0 + 40) / (30 + 0 + 50) = 0.875 → A.
+	# Kill term out, ceiling kept: 70 / (30 + 20 + 50) = 0.70 → B.
+	# Both sides kept (the old rule): 90 / 100 = 0.90 → S.
+	var c := RewardCalc.compute(true, objs, 4, 4, 4, 5, 10, 0, cfg, _COMBAT, 0.0, 0, 0, 4)
+	var c_ref := RewardCalc.compute(true, objs, 0, 0, 4, 5, 10, 0, cfg, _COMBAT, 0.0, 0, 0)
+	if int(c.get("enemy_bonus", -1)) != 20 or str(c.get("rank", "")) != "A" or c.get("rank") != c_ref.get("rank"):
+		return { "ok": false, "error": "COMBAT ally kills: expected enemy_bonus 20 and rank A, got %s" % str(c) }
 
 	# ENDURE, reached [e1, e2], the party killed e1, the ally killed the REACHED e2.
 	# rank_reached_count = 1. Kill Ase 10. Rank: (30 + 5 + 10) / (30 + 5 + 50) = 0.53 → C.
@@ -802,3 +805,121 @@ static func _t_pace_keeper_intro_real_path() -> Dictionary:
 			if str(row.get("label", "")) == "Pace bonus":
 				return { "ok": false, "error": "keeper trial must not show a Pace bonus row" }
 	return { "ok": true }
+
+
+# ─── Test 34 — the runtime records reached enemies and kills (decisions.md D-23) ──
+# Drives real fights through FlowRuntime. The test checks the combat_state sets that
+# FlowRuntime writes through PaceService.record_kill() and PaceService.record_reached_enemies().
+# Each fight must show evidence, so an empty set cannot pass:
+#   1. Adjacency evidence: a living enemy is next to a living party echo at round end, and it
+#      was not in reached_enemy_ids before that round. Only record_reached_enemies() adds it.
+#   2. Kill evidence: a party echo kills an enemy that was not in reached_enemy_ids before
+#      that dispatch. The enemy is dead at round end, so only record_kill() adds it.
+static func _t_pace_runtime_records_reached_and_kills() -> Dictionary:
+	# (a) Adjacency. On these fixture seeds no party echo kills an enemy.
+	for f in [[EncounterResolutionModes.ENDURE, "pace_endure"],
+			[EncounterResolutionModes.PURSUE, "pace_pursue"],
+			[EncounterResolutionModes.PROTECT, "pace_protect"]]:
+		var r := _drive_reach_fight(f[0], f[1], false)
+		if not str(r["error"]).is_empty():
+			return { "ok": false, "error": "%s: %s" % [f[0], r["error"]] }
+		if (r["adjacent"] as Array).is_empty():
+			return { "ok": false, "error": "%s: no enemy became reached by adjacency; the test proves nothing" % f[0] }
+	# (b) Kill. Every enemy starts the fight with 1 HP, so the first party hit kills.
+	# On this seed a party echo kills pursue_quarry_01 in the round of first contact.
+	var k := _drive_reach_fight(EncounterResolutionModes.PURSUE, "pace_pursue", true)
+	if not str(k["error"]).is_empty():
+		return { "ok": false, "error": "pursue, weak enemies: %s" % k["error"] }
+	if (k["killed"] as Array).is_empty():
+		return { "ok": false, "error": "pursue, weak enemies: no party kill of an unreached enemy; the test proves nothing" }
+	return { "ok": true }
+
+
+## Drives one fight to its end. Returns { error, adjacent, killed }: error is "" or the first
+## failed check; adjacent and killed hold the ids of the evidence (see Test 34).
+## weak_enemies sets every enemy to 1 HP after combat.init.
+static func _drive_reach_fight(mode: String, seed_tag: String, weak_enemies: bool) -> Dictionary:
+	var out := { "error": "", "adjacent": [], "killed": [] }
+	var env: Dictionary = FlowFingerprintTests._setup_encounter(mode, seed_tag)
+	if env.is_empty():
+		out["error"] = "setup failed"
+		return out
+	var runtime: FlowRuntime = env["runtime"]
+	var ectx: EncounterContext = env["ectx"]
+	runtime.dispatch({ "type": "combat.init" })
+	if weak_enemies:
+		for a in ectx.actors:
+			if str(a.get("faction", "")) == "enemy" and not bool(a.get("is_structure", false)):
+				a["current_hp"] = 1
+	var cs: Dictionary = ectx.combat_state
+	for _r in range(40):
+		var round_start: Array = (ectx.combat_state.get("reached_enemy_ids", []) as Array).duplicate()
+		var first := true
+		var guard := 0
+		while guard < 60:
+			guard += 1
+			var before: Array = (ectx.combat_state.get("reached_enemy_ids", []) as Array).duplicate()
+			var from := 0 if first else ectx.last_round_results.size()
+			runtime.dispatch({ "type": "combat.confirm_round" if first else "combat.next_actor" })
+			first = false
+			cs = ectx.combat_state
+			var err := _check_kills(ectx, from, before, out["killed"])
+			if not err.is_empty():
+				out["error"] = err
+				return out
+			if str(cs.get("round_phase", "")) != "in_round" or bool(cs.get("combat_over", false)):
+				break
+		if bool(cs.get("combat_over", false)):
+			break
+		var err2 := _check_round_end_adjacency(ectx, round_start, out["adjacent"])
+		if not err2.is_empty():
+			out["error"] = err2
+			return out
+	return out
+
+
+## Every party-echo melee kill of an enemy in the new results must be in reached_enemy_ids.
+## Every ally or spirit melee kill of an enemy must be in ally_killed_enemy_ids.
+static func _check_kills(ectx: EncounterContext, from: int, before: Array, evidence: Array) -> String:
+	var cs: Dictionary = ectx.combat_state
+	for i in range(from, ectx.last_round_results.size()):
+		var res: Dictionary = ectx.last_round_results[i]
+		if str(res.get("action_type", "")) != "melee_attack" or not bool(res.get("is_kill", false)):
+			continue
+		var target := EncounterContext.find_actor_by_id(ectx.actors, str(res.get("target_id", "")))
+		var killer := EncounterContext.find_actor_by_id(ectx.actors, str(res.get("attacker_id", "")))
+		if str(target.get("faction", "")) != "enemy" or bool(target.get("is_structure", false)):
+			continue
+		var enemy_id := str(target.get("id", ""))
+		if bool(killer.get("is_ally", false)) or bool(killer.get("is_spirit", false)):
+			if not enemy_id in (cs.get("ally_killed_enemy_ids", []) as Array):
+				return "ally kill of %s is not in ally_killed_enemy_ids" % enemy_id
+		elif str(killer.get("faction", "")) == "echo":
+			if not enemy_id in (cs.get("reached_enemy_ids", []) as Array):
+				return "party kill of %s by %s is not in reached_enemy_ids %s" % [
+					enemy_id, str(killer.get("id", "")), str(cs.get("reached_enemy_ids", []))]
+			if not enemy_id in before:
+				evidence.append(enemy_id)
+	return ""
+
+
+## At round end, every living enemy within Chebyshev 1 of a living party echo is reached.
+static func _check_round_end_adjacency(ectx: EncounterContext, round_start: Array, evidence: Array) -> String:
+	var reached: Array = ectx.combat_state.get("reached_enemy_ids", [])
+	for e in ectx.actors:
+		if str(e.get("faction", "")) != "enemy" or bool(e.get("is_structure", false)) or bool(e.get("is_dead", false)):
+			continue
+		for p in ectx.actors:
+			if str(p.get("faction", "")) != "echo" or bool(p.get("is_dead", false)) \
+					or bool(p.get("is_ally", false)) or bool(p.get("is_spirit", false)):
+				continue
+			if GridService.chebyshev_distance(e.get("grid_pos", {}), p.get("grid_pos", {})) > 1:
+				continue
+			var enemy_id := str(e.get("id", ""))
+			if not enemy_id in reached:
+				return "round %d: %s is next to %s but not in reached_enemy_ids %s" % [
+					int(ectx.combat_state.get("round_counter", 0)), enemy_id, str(p.get("id", "")), str(reached)]
+			if not enemy_id in round_start and not enemy_id in evidence:
+				evidence.append(enemy_id)
+			break
+	return ""
