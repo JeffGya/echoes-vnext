@@ -209,3 +209,31 @@ concern below is what's actually left open.
 > This means: if the party fights, say, `sit.3` in a stage, and later a Claimant turns hostile in that same stage, the Claimant fight inherits the leftover `encounter_id` from the earlier fight (e.g. `...sit.3`). Since `encounter_id` seeds terrain and spawn generation, the Claimant fight would get the SAME terrain and spawn cells as the earlier fight if both are COMBAT-type encounters. It would also silently skip its own ally-recruit roll, since `RecruitmentConsequenceService.gd:101` runs that roll once per `encounter_id` — and the id would already be "used."
 >
 > Investigate: confirm this reproduces in an actual play session (or a targeted test/probe) — a Claimant-turned-hostile fight in a stage that already had a prior fight should show terrain/spawn cells matching that prior fight, and the ally-recruit roll should not fire. If confirmed, fix by giving the Claimant-hostile transition its own real `encounter_id` (matching the pattern `VentureController.gd` uses), scoped appropriately so it doesn't collide with other fights in the same stage. Add a test. Run the compile check and relevant filtered suites (`contact`, `combat_terrain`, `recruit`) to confirm no regression.
+
+---
+
+## 14. GUIDE_SPIRIT/PURSUE board-stretch override ignores per-virtue terrain signature (compact board on low-plateau-count virtues)
+
+**task_id:** `task_ashen_hallow_board`
+
+**Why it came up:** Found during Jeff's Phase 8 in-game playtest of V2-COMBAT-003.5 (2026-09-26). Pre-existing (V2-STAGE-004-era board-stretch mechanism), unrelated to this story's GUIDE_SPIRIT escort-yield subject. Jeff: file as follow-up, do not fix now.
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo, GUIDE_SPIRIT and PURSUE combat boards are meant to stretch 5x (GUIDE_SPIRIT) or 4x (PURSUE) on one randomly-chosen axis — `core/combat/EncounterSetupService.gd` around lines 334-362, config at `data/balance.json` (`data.combat.board.guide_spirit_override.long_multiplier` / `pursue_override.long_multiplier`). This outer-bounds stretch is real (confirmed: a GUIDE_SPIRIT board on realm.01 spawned actors at row 65+ on an 18-col board), but the actual walkable terrain that fills those bounds is generated independently by `StageTerrain.generate()` (same file, ~line 325-360), whose plateau count and plateau width/height come **only** from the realm's virtue-specific terrain signature (`data/balance.json`, `data.combat.terrain_signatures.<virtue>`) — with no scaling relative to the stretched board dimension.
+>
+> Confirmed live in play: realm.01 ("Ashen Hallow"), virtue `courage`, has `plateau_count_min/max: 2/3` and `plateau_w_max: 16, plateau_h_max: 14` (`data/balance.json` ~line 3156-3167). On a courage GUIDE_SPIRIT board stretched to roughly 18 cols x 90 rows, only 2-3 small plateaus (each at most ~16x14) get placed at random positions across that whole span — they tend to land clustered together by chance, producing a small, connected walkable patch with most of the nominal board empty void. Jeff observed this directly: the board "looked compact in both directions, not stretched." By contrast, realm.02 ("wisdom" virtue, `plateau_count_min/max: 5/6`, richer island setup) filled a stretched board correctly and read as genuinely large.
+>
+> Courage's terrain signature was already flagged once before as under-tuned for anything but a small square board (`docs/v2-combat-003.5-decisions.md` entry — the earlier island-generation fix that raised base board size from 12x12 to 18x18 specifically to give courage boards any islands at all — 0 per 50 boards at 12x12).
+>
+> Investigate and fix: either (a) scale plateau count and/or plateau w/h max proportionally to the stretched axis when GUIDE_SPIRIT/PURSUE's board-stretch override is active, or (b) give GUIDE_SPIRIT/PURSUE their own plateau-count/size override per virtue (similar to how the board-bounds stretch already has its own override block), or (c) another approach that ensures every virtue's terrain signature fills a stretched board reasonably, not just wisdom's. This is a design/balance question as much as a code fix — confirm the intended fill density with Jeff (or sr-game-designer) before picking numbers. Add a regression probe (e.g. measure walkable-cell coverage as a fraction of board area across several virtues on a stretched GUIDE_SPIRIT board) so a future board-size or virtue-signature change doesn't silently reintroduce this. Run the compile check and relevant filtered suites (`combat_terrain`, `guide_spirit`) after any change.
+
+---
+
+## 15. Camera does not handle very large (stretched) GUIDE_SPIRIT/PURSUE boards well
+
+**task_id:** `task_large_board_camera`
+
+**Why it came up:** Found during Jeff's Phase 8 in-game playtest of V2-COMBAT-003.5 (2026-09-26), while testing GUIDE_SPIRIT escort mode on a genuinely large stretched board (realm.02, escort mode, board stretched to include a spawn at col 98). Pre-existing UI/camera behavior, unrelated to this story's own subject. Jeff: file as follow-up, out of scope.
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo, GUIDE_SPIRIT and PURSUE combat boards can legitimately stretch 5x/4x on one axis (see follow-up task #14 and `core/combat/EncounterSetupService.gd` ~lines 334-362), producing boards up to roughly 90-100 cells long on the stretched axis. Jeff found during playtesting that the combat camera does not handle a board this large well — investigate the actual symptom (e.g. camera zoom/bounds clamped to a smaller assumed max board size, follow behavior breaking down, or visual/readability issues at extreme zoom-out) in whatever script owns combat camera bounds/follow (likely under `ui/screens/combat/` or a `CombatCamera`-named script — locate it first). Reproduce using the debug console: `combat_objective guide_spirit escort nojoin`, then enter a combat encounter on a realm whose virtue produces a well-filled stretched board (e.g. wisdom), and observe camera behavior as the spirit escort/party traverses the long axis. Propose a fix scoped to camera-only (do not touch board generation, which is task #14's subject). This is likely a design/feel question (how should the camera behave on an extreme-aspect-ratio board) as much as a code fix — loop in game-feel-developer.

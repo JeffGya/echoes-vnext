@@ -139,6 +139,10 @@ static func register(runner) -> void:
 	# V2-COMBAT-003.5 Phase 5 decision #48: resist_fear must reduce the unscouted-approach
 	# surprise fear bump applied at encounter setup, same as the per-hit/near-death paths.
 	runner.register_test("combat_roundtrip/resist_fear_reduces_surprise_fear", func(): return test_resist_fear_reduces_surprise_fear())
+	# Decision #59/#60: an Echo on the escort spirit's next cell trades places with it and the
+	# spirit barks; a hostile on that cell still makes the spirit wait.
+	runner.register_test("combat_roundtrip/guide_spirit_escort_echo_yields_and_spirit_barks", func(): return test_guide_spirit_escort_echo_yields_and_spirit_barks())
+	runner.register_test("combat_roundtrip/guide_spirit_escort_hostile_on_path_still_blocks", func(): return test_guide_spirit_escort_hostile_on_path_still_blocks())
 
 
 ## V2-INFRA-003 Phase 6 Slice 6G: the live movement helper family moved off FlowRuntime onto
@@ -4226,4 +4230,151 @@ static func test_published_option_carries_truthful_control_and_hazards() -> Dict
 	# The load-bearing assertion. Pre-fix this array was empty for every option, always.
 	if not saw_control:
 		return { "ok": false, "error": "no option reported hostile control despite a hostile two cells from the mover origin — summaries are still hardcoded empty" }
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# Decision #59/#60 — GUIDE_SPIRIT escort yield. Drives CombatRoundGuideSpiritService directly on
+# a hand-set board after combat.init, so no actor turn can move a piece between placement and
+# the spirit's activation.
+# ---------------------------------------------------------------------------
+
+## Returns {env, spirit, step, blocker}, or {error}. Puts `blocker` (faction blocker_faction) on
+## the spirit's next escort cell. Uses the production-spawned structure spirit: _setup_guide_escort
+## appends a second actor with the same id, which this removes so the spirit is unambiguous.
+static func _setup_escort_blocker(seed_tag: String, blocker_faction: String) -> Dictionary:
+	var env: Dictionary = _setup_guide_escort(seed_tag, true)
+	if env.is_empty():
+		return { "error": "guide escort env setup failed" }
+	var runtime = env["runtime"]
+	var ectx: EncounterContext = env["ectx"]
+	var spirits: Array = []
+	for a_v in ectx.actors:
+		if a_v is Dictionary and bool(a_v.get("is_spirit", false)):
+			spirits.append(a_v)
+	if spirits.is_empty():
+		return { "error": "no spirit actor on the board" }
+	for extra in spirits.slice(1):
+		ectx.actors.erase(extra)
+	(spirits[0] as Dictionary)["grid_pos"] = { "col": 5, "row": 5 }
+	runtime.dispatch({ "type": "combat.init" })
+	var cs: Dictionary = ectx.combat_state
+	cs["escort_started"] = true
+	cs["_spirit_greeted"] = true
+	cs["destination_col"] = 19
+	cs["destination_row"] = 19
+	var spirit: Dictionary = EncounterContext.find_actor_by_id(ectx.actors, "guide_spirit_01")
+
+	var prepared: Dictionary = _lm(runtime).prepare_guide_spirit_activation_context(
+		spirit, ectx, cs, runtime.config_service.get_balance().get("data", {}), 0)
+	var mctx: Dictionary = prepared.get("context", {}) as Dictionary
+	var route: Dictionary = MovementPathServiceScript.shortest_path(
+		spirit["grid_pos"] as Dictionary, { "col": 19, "row": 19 },
+		mctx.get("authoritative_walkable", {}) as Dictionary,
+		mctx.get("terrain_costs", {}) as Dictionary,
+		mctx.get("bounds", {}) as Dictionary)
+	if (route.get("path", []) as Array).is_empty():
+		return { "error": "no escort route from %s (prepared valid=%s)" % [str(spirit.get("grid_pos")), str(prepared.get("valid"))] }
+	var step: Dictionary = (route["path"] as Array)[0]
+
+	var blocker: Dictionary = {}
+	for a_v in ectx.actors:
+		if a_v is Dictionary and str(a_v.get("faction", "")) == blocker_faction \
+				and not bool(a_v.get("is_structure", false)) and not bool(a_v.get("is_dead", false)):
+			blocker = a_v
+			break
+	if blocker.is_empty():
+		return { "error": "no living %s actor to place on the step" % blocker_faction }
+	blocker["grid_pos"] = { "col": int(step["col"]), "row": int(step["row"]) }
+	# The escort gate needs a living Echo within escort_radius. The echo blocker is that Echo;
+	# with an enemy blocker, one Echo stands beside the spirit, off its path.
+	if blocker_faction == "enemy":
+		for a_v in ectx.actors:
+			if a_v is Dictionary and str(a_v.get("faction", "")) == "echo" \
+					and not bool(a_v.get("is_spirit", false)):
+				a_v["grid_pos"] = { "col": 4, "row": 5 }
+				break
+	ectx.round_bark_events.clear()
+	return { "env": env, "spirit": spirit, "step": step, "blocker": blocker }
+
+
+static func _run_guide_phase(runtime, ectx: EncounterContext, spirit: Dictionary, t: int) -> void:
+	var prepared: Dictionary = _lm(runtime).prepare_guide_spirit_activation_context(
+		spirit, ectx, ectx.combat_state, runtime.config_service.get_balance().get("data", {}), t)
+	CombatRoundGuideSpiritService.new(runtime.flow_ctx, runtime.config_service, runtime.logger) \
+		.apply_guide_spirit_round(ectx, int(ectx.combat_state.get("round_counter", 0)), prepared, t)
+
+
+static func test_guide_spirit_escort_echo_yields_and_spirit_barks() -> Dictionary:
+	var s: Dictionary = _setup_escort_blocker("guide_escort_yield", "echo")
+	if s.has("error"):
+		return { "ok": false, "error": str(s["error"]) }
+	var runtime = (s["env"] as Dictionary)["runtime"]
+	var ectx: EncounterContext = (s["env"] as Dictionary)["ectx"]
+	var spirit: Dictionary = s["spirit"]
+	var echo: Dictionary = s["blocker"]
+	var step: Dictionary = s["step"]
+	var spirit_from: Dictionary = (spirit["grid_pos"] as Dictionary).duplicate(true)
+	var echo_before: Dictionary = echo.duplicate(true)
+
+	_run_guide_phase(runtime, ectx, spirit, 7)
+
+	var spirit_pos: Dictionary = spirit["grid_pos"]
+	if int(spirit_pos["col"]) != int(step["col"]) or int(spirit_pos["row"]) != int(step["row"]):
+		return { "ok": false, "error": "spirit did not take the Echo's cell %s — it is at %s (held as 'occupied'?)" % [str(step), str(spirit_pos)] }
+	var echo_pos: Dictionary = echo["grid_pos"]
+	if int(echo_pos["col"]) != int(spirit_from["col"]) or int(echo_pos["row"]) != int(spirit_from["row"]):
+		return { "ok": false, "error": "Echo should take the spirit's old cell %s, got %s" % [str(spirit_from), str(echo_pos)] }
+	# Only grid_pos may change on the Echo: no action, movement or emotion cost.
+	for key in echo_before.keys():
+		if key == "grid_pos":
+			continue
+		if not echo.has(key) or echo[key] != echo_before[key]:
+			return { "ok": false, "error": "the swap changed Echo field '%s': %s -> %s" % [str(key), str(echo_before[key]), str(echo.get(key))] }
+	if echo.size() != echo_before.size():
+		return { "ok": false, "error": "the swap added fields to the Echo: %s" % str(echo.keys()) }
+
+	if str(spirit.get("_bark_context", "")) != "spirit_escort_yield" or str(spirit.get("_bark_line", "")).is_empty():
+		return { "ok": false, "error": "expected a spirit_escort_yield bark on the spirit, got context='%s' line='%s'" % [str(spirit.get("_bark_context", "")), str(spirit.get("_bark_line", ""))] }
+	var queued: bool = false
+	for ev in ectx.round_bark_events:
+		if str((ev as Dictionary).get("bark_context", "")) == "spirit_escort_yield":
+			queued = true
+	if not queued:
+		return { "ok": false, "error": "spirit_escort_yield was not appended to round_bark_events" }
+	# The published round snapshot must still carry the line after the data.voice budget.
+	var snap: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(runtime.flow_ctx, 7)
+	for row in (snap.get("data", {}) as Dictionary).get("actors", []):
+		if str((row as Dictionary).get("id", "")) == "guide_spirit_01":
+			if str((row as Dictionary).get("bark_line", "")).is_empty():
+				return { "ok": false, "error": "the round bark budget cleared the yield bark" }
+			return { "ok": true }
+	return { "ok": false, "error": "spirit row missing from the round snapshot" }
+
+
+static func test_guide_spirit_escort_hostile_on_path_still_blocks() -> Dictionary:
+	var s: Dictionary = _setup_escort_blocker("guide_escort_hostile_block", "enemy")
+	if s.has("error"):
+		return { "ok": false, "error": str(s["error"]) }
+	var runtime = (s["env"] as Dictionary)["runtime"]
+	var ectx: EncounterContext = (s["env"] as Dictionary)["ectx"]
+	var spirit: Dictionary = s["spirit"]
+	var enemy: Dictionary = s["blocker"]
+	var spirit_from: Dictionary = (spirit["grid_pos"] as Dictionary).duplicate(true)
+	var enemy_from: Dictionary = (enemy["grid_pos"] as Dictionary).duplicate(true)
+
+	_run_guide_phase(runtime, ectx, spirit, 7)
+
+	if spirit["grid_pos"] != spirit_from:
+		return { "ok": false, "error": "spirit moved past a hostile on its path: %s -> %s" % [str(spirit_from), str(spirit["grid_pos"])] }
+	if enemy["grid_pos"] != enemy_from:
+		return { "ok": false, "error": "a hostile was swapped: %s -> %s" % [str(enemy_from), str(enemy["grid_pos"])] }
+	if str(spirit.get("_bark_context", "")) == "spirit_escort_yield":
+		return { "ok": false, "error": "yield bark fired with no swap" }
+	# Control: with the hostile gone the same board moves the spirit, so the hold above came
+	# from the hostile and not from a closed escort gate.
+	enemy["grid_pos"] = { "col": 19, "row": 0 }
+	_run_guide_phase(runtime, ectx, spirit, 8)
+	if spirit["grid_pos"] == spirit_from:
+		return { "ok": false, "error": "control failed: the spirit does not move even with the path clear — the hostile case proved nothing" }
 	return { "ok": true }
