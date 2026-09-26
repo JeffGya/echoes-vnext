@@ -71,6 +71,8 @@
 | 60 | guide-spirit-swap-design-adds-feel-check | sr-game-designer recommended a deterministic yield/swap (blocking Echo trades cells with the spirit, every round, no threshold) — Jeff added a game-feel-developer readability check before mechanics-developer builds it | 2026-09-25 |
 | 61 | spirit-barks-added-to-tier-2-before-commit | qa-verifier found all 5 spirit_* bark contexts missing from data.voice.bark_tiers, so they default to lowest priority and can be silently dropped in a crowded round — add all 5 to tier 2, fix before commit | 2026-09-25 |
 | 62 | pr79-ultrareview-nits-fixed-before-merge | Cloud review of PR #79 found 2 verified nit-severity findings (wasted deep-copy, duplicate eligibility lookup) in the escort-yield swap — fix both now, before merge | 2026-09-26 |
+| 63 | ashen-hallow-board-sizing-filed-as-followup | Phase 8 playtest found GUIDE_SPIRIT boards look compact (not stretched) on low-plateau-count virtues like courage (Ashen Hallow) — pre-existing V2-STAGE-004 gap, unrelated to this story's subject — filed as follow-up task #14 | 2026-09-26 |
+| 64 | large-board-camera-filed-as-followup | Phase 8 playtest found the combat camera does not handle a genuinely large stretched GUIDE_SPIRIT board well — pre-existing UI/camera behavior, unrelated to this story — filed as follow-up task #15 | 2026-09-26 |
 
 ---
 
@@ -686,3 +688,29 @@
 > is the downstream-mutation trace, not the green suite). One informational-only adjacent finding
 > repeated (the same stale "DORMANT" header comment on `GuideSpiritActivationService.gd` already
 > known from earlier in this thread) — not a defect of this fix, no action taken.
+
+---
+
+### 63. ashen-hallow-board-sizing-filed-as-followup
+
+**Q:** During Phase 8's in-game playtest, Jeff observed that GUIDE_SPIRIT boards forced via the debug console (`combat_objective guide_spirit protect nojoin`) on realm.01 ("Ashen Hallow") looked short and narrow in both dimensions, not stretched 5x in one axis as designed. Investigated and confirmed: `StageTerrain.generate()`'s plateau count/size comes only from the realm's virtue-specific terrain signature (`data/balance.json`), with no scaling relative to the board-stretch override. Ashen Hallow's virtue is `courage`, whose signature authors only 2-3 small plateaus (max ~16x14) — on a board stretched to ~18x90, these land clustered together by chance, leaving most of the nominal board an empty void the player never sees filled. Jeff's realm 2 (wisdom virtue, 5-6 plateaus + richer islands) filled a stretched board correctly. This is a pre-existing gap in the V2-STAGE-004 board-stretch mechanism (PURSUE/GUIDE_SPIRIT), not something this story's GUIDE_SPIRIT fix introduced. Fix now, or file as follow-up?
+**A:** File as follow-up. Out of scope for this story.
+**Source:** Jeff, 2026-09-26
+**Date:** 2026-09-26
+
+> **Result:** filed as follow-up task #14 in `docs/v2-combat-003.5-followup-tasks.md`
+> (`task_ashen_hallow_board`) — root cause, evidence, and two candidate fix shapes recorded there
+> for whoever picks it up.
+
+---
+
+### 64. large-board-camera-filed-as-followup
+
+**Q:** While retesting GUIDE_SPIRIT escort mode on realm.02 (a genuinely large, correctly-stretched board — one spawn landed at column 98), Jeff found the combat camera does not handle a board this large well. Pre-existing UI/camera behavior, unrelated to this story's GUIDE_SPIRIT escort-yield subject. Fix now, or file as follow-up?
+**A:** File as follow-up. Out of scope for this story.
+**Source:** Jeff, 2026-09-26
+**Date:** 2026-09-26
+
+> **Result:** filed as follow-up task #15 in `docs/v2-combat-003.5-followup-tasks.md`
+> (`task_large_board_camera`) — reproduction steps and the owning script (to be located) recorded
+> there for whoever picks it up.
