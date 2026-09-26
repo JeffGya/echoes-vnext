@@ -15,8 +15,9 @@
 #   10. reward/rank_S_first_run              — perfect score + run_count=0 → rank = "S"
 #   11. reward/rank_F_poor_performance       — poor perf + run_count=5 → rank = "F"
 #   12. reward/economy_service_adds_ase      — both cadence payers add the correct amount
-#   13-34. reward/pace_*                     — par per mode, pace_state, reached enemies, rank
-#          ceiling, the "Pace bonus" row, objective_state and resolve data per mode, ally kills
+#   13-39. reward/pace_*                     — par per mode, pace_state, reached enemies, rank
+#          ceiling, the "Pace bonus" row, objective_state and resolve data per mode, ally kills,
+#          GUIDE_SPIRIT escort pace (decisions.md D-31 to D-33)
 
 extends RefCounted
 class_name EconomyRewardTests
@@ -92,6 +93,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("reward/pace_result_reads_combat_state_stage_base", Callable(EconomyRewardTests, "_t_pace_result_reads_combat_state_stage_base"))
 	runner.register_test("reward/pace_keeper_intro_real_path", Callable(EconomyRewardTests, "_t_pace_keeper_intro_real_path"))
 	runner.register_test("reward/pace_runtime_records_reached_and_kills", Callable(EconomyRewardTests, "_t_pace_runtime_records_reached_and_kills"))
+	runner.register_test("reward/pace_par_escort_nojoin_e_min", Callable(EconomyRewardTests, "_t_pace_par_escort_nojoin_e_min"))
+	runner.register_test("reward/pace_par_escort_joined_is_kill_par", Callable(EconomyRewardTests, "_t_pace_par_escort_joined_is_kill_par"))
+	runner.register_test("reward/pace_escort_reward_protect_none", Callable(EconomyRewardTests, "_t_pace_escort_reward_protect_none"))
+	runner.register_test("reward/pace_guide_variant_agrees_setup_live_result", Callable(EconomyRewardTests, "_t_pace_guide_variant_agrees_setup_live_result"))
+	runner.register_test("reward/pace_guide_spirit_runtime_escort_vs_protect", Callable(EconomyRewardTests, "_t_pace_guide_spirit_runtime_escort_vs_protect"))
 
 
 # ─── Test 1 — single combat objective → base = 30 ────────────────────────────
@@ -495,7 +501,7 @@ static func _t_pace_objective_state_per_mode() -> Dictionary:
 		[EncounterResolutionModes.PROTECT, {}, false],
 		[EncounterResolutionModes.ENDURE, {}, false],
 		[EncounterResolutionModes.GUIDE_SPIRIT, { "guide_mode": "protect" }, false],
-		[EncounterResolutionModes.GUIDE_SPIRIT, { "guide_mode": "escort" }, false],
+		[EncounterResolutionModes.GUIDE_SPIRIT, { "guide_mode": "escort" }, true],
 	]
 	for m in modes:
 		var actors: Array = _party()
@@ -923,3 +929,178 @@ static func _check_round_end_adjacency(ectx: EncounterContext, round_start: Arra
 				evidence.append(enemy_id)
 			break
 	return ""
+
+
+# ─── GUIDE_SPIRIT escort pace (decisions.md D-31, D-32, D-33) ─────────────────
+## Party A (0,0) cap 2, B (0,2) cap 3 → mean 2.5. Spirit at (4,6), destination (4,13).
+static func _escort_params(joins: bool) -> Dictionary:
+	return { "guide_mode": "escort", "spirit_joins_battle": joins,
+		"destination_col": 4, "destination_row": 13 }
+
+
+# ─── Test 35 — non-joined escort par, E-min (D-33) ────────────────────────────
+# Nearest echo→spirit: A 6, B 4 → (4 − 1) / 2.5 = 1.2 (a mean would give 1.6).
+# Spirit→destination 7 / spirit capacity 1 = 7. Par 8.2, no hold term.
+# The near enemy, the adjacent Temporary Ally and the hold params do not count.
+static func _t_pace_par_escort_nojoin_e_min() -> Dictionary:
+	var actors: Array = _party()
+	actors.append(_actor("spirit", "structure", 4, 6, { "is_structure": true, "is_spirit": true }))
+	actors.append(_actor("enemy_1", "enemy", 1, 0))
+	actors.append(_actor("ally", "echo", 4, 5, { "is_ally": true, "standing": 3 }))
+	var params := _escort_params(false)
+	params["hold_rounds"] = 3
+	params["contain_rounds"] = 3
+	var par := PaceService.compute_par(actors, EncounterResolutionModes.GUIDE_SPIRIT, params, _cap_cfg())
+	if not _near(par, 8.2):
+		return { "ok": false, "error": "Expected escort E-min par 8.2, got %f" % par }
+	# An echo next to a spirit that stands on its destination: max(1, 0 + 0) = 1.
+	var close: Array = [_actor("echo_a", "echo", 3, 6),
+		_actor("spirit", "structure", 4, 6, { "is_structure": true, "is_spirit": true })]
+	var at_dest := { "guide_mode": "escort", "spirit_joins_battle": false,
+		"destination_col": 4, "destination_row": 6 }
+	par = PaceService.compute_par(close, EncounterResolutionModes.GUIDE_SPIRIT, at_dest, _cap_cfg())
+	if not _near(par, 1.0):
+		return { "ok": false, "error": "Expected escort par clamped to 1.0, got %f" % par }
+	return { "ok": true }
+
+
+# ─── Test 36 — joined escort par is the kill-mode party travel par (D-32) ─────
+# Same party and enemy as Test 13: par 2.4. The joined spirit (faction echo, is_spirit,
+# capacity 3) is not party: counted, it would give 1.625.
+static func _t_pace_par_escort_joined_is_kill_par() -> Dictionary:
+	var actors: Array = _party()
+	actors.append(_actor("enemy_1", "enemy", 6, 0))
+	actors.append(_actor("spirit", "echo", 5, 0, { "is_spirit": true, "standing": 3 }))
+	var escort := PaceService.compute_par(actors, EncounterResolutionModes.GUIDE_SPIRIT,
+		_escort_params(true), _cap_cfg())
+	var combat := PaceService.compute_par(actors, _COMBAT, {}, _cap_cfg())
+	if not _near(escort, 2.4) or not _near(escort, combat):
+		return { "ok": false, "error": "Expected joined escort par 2.4 = COMBAT par, got %f / %f" % [escort, combat] }
+	for joins in [false, true]:
+		var protect := { "guide_mode": "protect", "spirit_joins_battle": joins }
+		var p := PaceService.compute_par(actors, EncounterResolutionModes.GUIDE_SPIRIT, protect, _cap_cfg())
+		if p != 0.0:
+			return { "ok": false, "error": "GUIDE_SPIRIT protect must have par 0.0, got %f" % p }
+	return { "ok": true }
+
+
+# ─── Test 37 — escort pays the pace bonus and shows the row; protect and defeat do not ──
+static func _t_pace_escort_reward_protect_none() -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1), ObjectiveModel.make(1, ObjectiveModel.TYPE_COMBAT, 1)]
+	var gs := EncounterResolutionModes.GUIDE_SPIRIT
+	# [victory, guide_mode, expected pace_mode, expected bonus, expected state, expected row]
+	var cases := [
+		[true, "escort", true, 3, PaceService.PACE_FULL, 3],
+		[false, "escort", true, 0, "", null],
+		[true, "protect", false, 0, "", null],
+	]
+	for c in cases:
+		var r := RewardCalc.compute(c[0], objs, 0, 0, 5, 5, 5, 0, _default_cfg(), gs, 8.2, 0, 60, 0, c[1])
+		if bool(r.get("pace_mode", false)) != c[2] or int(r.get("pace_bonus", -1)) != c[3] \
+				or str(r.get("pace_state", "x")) != c[4]:
+			return { "ok": false, "error": "case %s: got %s" % [str(c), str(r)] }
+		var res := EconomyService.new(_make_save()).reward_encounter_complete(c[0], 60,
+			int(r["enemy_bonus"]), 0, int(r["echo_bonus"]), 5, int(r["pace_bonus"]), bool(r["pace_mode"]),
+			1.0, str(r["rank"]), true, 0.0, logger, 0)
+		var rows: Array = (res.get("breakdown", []) as Array).filter(
+			func(row): return str(row.get("label", "")) == "Pace bonus")
+		if c[5] == null:
+			if not rows.is_empty():
+				return { "ok": false, "error": "case %s: expected no Pace bonus row, got %s" % [str(c), str(rows)] }
+		elif rows.size() != 1 or int(rows[0].get("delta", -1)) != int(c[5]):
+			return { "ok": false, "error": "case %s: expected one Pace bonus row of %d, got %s" % [str(c), c[5], str(rows)] }
+	return { "ok": true }
+
+
+# ─── Test 38 — setup, live snapshot and result agree on escort vs protect ─────
+static func _t_pace_guide_variant_agrees_setup_live_result() -> Dictionary:
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1)]
+	for guide_mode in ["escort", "protect"]:
+		var expected: bool = guide_mode == "escort"
+		var flow_ctx := FlowContext.new()
+		var ectx := EncounterContext.new()
+		flow_ctx.encounter_ctx = ectx
+		ectx.encounter_id = "realm.test.stage.0.guide"
+		ectx.resolution_mode = EncounterResolutionModes.GUIDE_SPIRIT
+		ectx.objective_params = _escort_params(false)
+		ectx.objective_params["guide_mode"] = guide_mode
+		var actors: Array = _party()
+		actors.append(_actor("spirit", "structure", 4, 6, { "is_structure": true, "is_spirit": true }))
+		ectx.actors = actors
+		EncounterSetupService.new(flow_ctx)._setup_pace(0)
+		if ectx.pace_cfg.is_empty() == expected:
+			return { "ok": false, "error": "%s: setup pace_cfg=%s" % [guide_mode, str(ectx.pace_cfg)] }
+		var cs: Dictionary = CombatState.create(actors, ectx.resolution_mode, 0, {}, ectx.objective_params, {}, ectx.pace_cfg)
+		cs["round_counter"] = 1
+		for os in [EncounterSnapshotBuilder._build_objective_state(ectx, {}),
+				EncounterSnapshotBuilder._build_objective_state(ectx, cs)]:
+			if os.has("pace_state") != expected:
+				return { "ok": false, "error": "%s: live pace_state present=%s" % [guide_mode, os.has("pace_state")] }
+		var r := RewardCalc.compute(true, objs, 0, 0, 5, 5, 1, 0, _default_cfg(), ectx.resolution_mode,
+			float(cs.get("par_rounds", 0.0)), 0, int(cs.get("stage_base", 0)), 0, str(cs.get("guide_mode", "")))
+		if bool(r.get("pace_mode", false)) != expected:
+			return { "ok": false, "error": "%s: result pace_mode=%s" % [guide_mode, str(r.get("pace_mode"))] }
+	return { "ok": true }
+
+
+# ─── Test 39 — real GUIDE_SPIRIT fights through FlowRuntime ───────────────────
+# Escort (both join states) sets par and a live pace_state; protect sets neither. The result
+# agrees: a win carries pace_state and one Pace bonus row, a defeat carries neither.
+static func _t_pace_guide_spirit_runtime_escort_vs_protect() -> Dictionary:
+	var escort_wins := 0
+	for f in [["escort", "nojoin", true], ["escort", "join", true], ["protect", "nojoin", false]]:
+		var env: Dictionary = FlowFingerprintTests._setup_encounter(
+			EncounterResolutionModes.GUIDE_SPIRIT, "pace_guide_%s_%s" % [f[0], f[1]], f[0], f[1])
+		if env.is_empty():
+			return { "ok": false, "error": "%s: setup failed" % str(f) }
+		var runtime: FlowRuntime = env["runtime"]
+		var flow_ctx: FlowContext = env["flow_ctx"]
+		var ectx: EncounterContext = env["ectx"]
+		if str(ectx.objective_params.get("guide_mode", "")) != f[0]:
+			return { "ok": false, "error": "%s: fixture rolled guide_mode %s" % [str(f), ectx.objective_params.get("guide_mode")] }
+		runtime.dispatch({ "type": "combat.init" })
+		var par := float(ectx.combat_state.get("par_rounds", -1.0))
+		if (par > 0.0) != f[2] or (not f[2] and par != 0.0):
+			return { "ok": false, "error": "%s: par_rounds %f" % [str(f), par] }
+		if f[0] == "escort" and f[1] == "join":
+			# combat.init moves no actor, so ectx.actors still hold the fight-start cells.
+			var cap_cfg: Dictionary = flow_ctx.config_service.get_balance().get("data", {}).get(
+				"combat", {}).get("movement", {}).get("capacity", {})
+			var kill_par := PaceService.compute_par(ectx.actors, _COMBAT, {}, cap_cfg)
+			if not _near(par, kill_par):
+				return { "ok": false, "error": "joined escort par %f != COMBAT-style par %f" % [par, kill_par] }
+		var saw_live := false
+		for _r in range(30):
+			runtime.dispatch({ "type": "combat.confirm_round" })
+			var guard := 0
+			while guard < 60 and str(ectx.combat_state.get("round_phase", "")) == "in_round" \
+					and not bool(ectx.combat_state.get("combat_over", false)):
+				guard += 1
+				runtime.dispatch({ "type": "combat.next_actor" })
+			if bool(ectx.combat_state.get("combat_over", false)):
+				break
+			var live: Dictionary = (flow_ctx.last_snapshot.get("data", {}) as Dictionary).get("objective_state", {})
+			if live.has("pace_state") != f[2]:
+				return { "ok": false, "error": "%s: live pace_state present=%s" % [str(f), live.has("pace_state")] }
+			saw_live = true
+		if not saw_live:
+			return { "ok": false, "error": "%s: the fight ended before a live snapshot; the test proves nothing" % str(f) }
+		if not bool(ectx.combat_state.get("combat_over", false)):
+			return { "ok": false, "error": "%s: fight did not end in 30 rounds" % str(f) }
+		var data: Dictionary = flow_ctx.last_snapshot.get("data", {})
+		var win := bool(data.get("victory", false))
+		var expect_pace: bool = f[2] and win
+		var rows: Array = (data.get("reward_breakdown", []) as Array).filter(
+			func(row): return str(row.get("label", "")) == "Pace bonus")
+		if data.has("pace_state") != expect_pace or rows.size() != (1 if expect_pace else 0):
+			return { "ok": false, "error": "%s win=%s: resolve pace_state=%s rows=%s" % [
+				str(f), win, str(data.get("pace_state", "")), str(rows)] }
+		if expect_pace:
+			escort_wins += 1
+			if int(rows[0].get("delta", -1)) != int(data.get("pace_bonus_awarded", -2)):
+				return { "ok": false, "error": "%s: Pace bonus row %s != pace_bonus_awarded" % [str(f), str(rows)] }
+	if escort_wins == 0:
+		return { "ok": false, "error": "no escort fixture won; the result half proves nothing" }
+	return { "ok": true }

@@ -710,7 +710,8 @@ func setup(t: int) -> void:
 func _setup_pace(t: int) -> void:
 	var ectx: EncounterContext = flow_ctx.encounter_ctx
 	# The keeper-intro trial pays its fixed 40 Ase trial reward and no pace bonus (decisions.md D-18).
-	if not PaceService.is_pace_mode(ectx.resolution_mode) or ectx.encounter_id == "keeper_intro.first_trial":
+	if not PaceService.is_pace_mode(ectx.resolution_mode, str(ectx.objective_params.get("guide_mode", ""))) \
+			or ectx.encounter_id == "keeper_intro.first_trial":
 		return
 	var capacity_cfg: Dictionary = {}
 	if flow_ctx.config_service != null:

@@ -65,6 +65,7 @@ static func redo_multiplier(run_count: int, reward_cfg: Dictionary) -> float:
 ##                   (decisions.md D-21). Every other term keeps `base` below.
 ## ally_kills:       combat_state["ally_killed_enemy_ids"].size(). These kills pay the kill Ase
 ##                   but leave both sides of the rank (decisions.md D-23).
+## guide_mode:       combat_state["guide_mode"]; GUIDE_SPIRIT carries pace only for "escort".
 static func compute(
 	victory: bool,
 	objectives: Array,
@@ -79,7 +80,8 @@ static func compute(
 	par_rounds: float,
 	reached_enemies: int,
 	pace_stage_base: int,
-	ally_kills: int = 0
+	ally_kills: int = 0,
+	guide_mode: String = ""
 ) -> Dictionary:
 	# Base = sum of objective type weights (single definition — see base_reward() above).
 	var base := base_reward(objectives, reward_cfg)
@@ -91,7 +93,7 @@ static func compute(
 	var echo_bonus      := echoes_survived  * echo_bonus_per
 
 	# Pace bonus (design §4): a win pays pace_stage_base × pace_bonus_pct × the curve fraction.
-	var is_pace       := PaceService.is_pace_mode(resolution_mode) and par_rounds > 0.0
+	var is_pace       := PaceService.is_pace_mode(resolution_mode, guide_mode) and par_rounds > 0.0
 	var full_ratio    := float(reward_cfg.get("pace_full_ratio", 1.1))
 	var zero_ratio    := float(reward_cfg.get("pace_zero_ratio", 1.6))
 	var pace_pct      := float(reward_cfg.get("pace_bonus_pct", 0.05))

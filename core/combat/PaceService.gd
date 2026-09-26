@@ -9,6 +9,9 @@ const PACE_FULL := "full"
 const PACE_PARTIAL := "partial"
 const PACE_NONE := "none"
 
+## The GUIDE_SPIRIT variant that carries pace (EncounterObjectiveSpawnService rolls it).
+const GUIDE_ESCORT := "escort"
+
 ## Modes whose win can happen faster or slower (design §3).
 const PACE_MODES := [
 	EncounterResolutionModes.COMBAT,
@@ -28,7 +31,11 @@ const REACHED_ENEMY_MODES := [
 ]
 
 
-static func is_pace_mode(mode: String) -> bool:
+## GUIDE_SPIRIT carries pace only in its escort variant (decisions.md D-31); protect is a
+## timer mode (D-06). guide_mode is objective_params / combat_state["guide_mode"].
+static func is_pace_mode(mode: String, guide_mode: String) -> bool:
+	if mode == EncounterResolutionModes.GUIDE_SPIRIT:
+		return guide_mode == GUIDE_ESCORT
 	return mode in PACE_MODES
 
 
@@ -40,10 +47,14 @@ static func tracks_reached_enemies(mode: String) -> bool:
 ## travel_par = distance / mean party capacity, clamped to at least 1.0 and NOT rounded — the
 ## tuned values (tuning.md §0) were measured on this unrounded form.
 ## actors must hold their fight-start positions.
+## GUIDE_SPIRIT escort: a joined spirit uses the kill-mode par (decisions.md D-32); a non-joined
+## spirit uses _escort_par (D-33).
 static func compute_par(actors: Array, mode: String, objective_params: Dictionary,
 		capacity_cfg: Dictionary) -> float:
-	if not is_pace_mode(mode):
+	if not is_pace_mode(mode, str(objective_params.get("guide_mode", ""))):
 		return 0.0
+	var escort_walk := mode == EncounterResolutionModes.GUIDE_SPIRIT \
+		and not bool(objective_params.get("spirit_joins_battle", false))
 	var echoes: Array = []
 	var targets: Array = []
 	for a_v in actors:
@@ -52,6 +63,9 @@ static func compute_par(actors: Array, mode: String, objective_params: Dictionar
 		var a: Dictionary = a_v
 		if _is_party_echo(a):
 			echoes.append(a)
+		elif escort_walk:
+			if bool(a.get("is_spirit", false)):
+				targets.append(a.get("grid_pos", {}))
 		elif mode == EncounterResolutionModes.RECOVER:
 			if bool(a.get("is_objective_relic", false)):
 				targets.append(a.get("grid_pos", {}))
@@ -67,14 +81,15 @@ static func compute_par(actors: Array, mode: String, objective_params: Dictionar
 	elif mode == EncounterResolutionModes.PURSUE:
 		required_hold = maxi(0, int(objective_params.get("contain_rounds", 0)) - 1)
 
+	if escort_walk:
+		return _escort_par(echoes, targets, objective_params, capacity_cfg)
+
 	var travel_par := 1.0
 	if not echoes.is_empty() and not targets.is_empty():
-		var cap_sum := 0
 		var dist_sum := 0
 		var dist_min := -1
 		for e_v in echoes:
 			var e: Dictionary = e_v
-			cap_sum += int(MovementProfileService.derive_profile(e, capacity_cfg).get("capacity", 0))
 			var near := -1
 			for p_v in targets:
 				var d := GridService.chebyshev_distance(e.get("grid_pos", {}), p_v)
@@ -84,10 +99,42 @@ static func compute_par(actors: Array, mode: String, objective_params: Dictionar
 		# RECOVER: one echo must reach the relic, so the nearest echo sets par (decisions.md D-09).
 		var distance: float = float(dist_min) if mode == EncounterResolutionModes.RECOVER \
 			else float(dist_sum) / float(echoes.size())
-		var mean_cap := float(cap_sum) / float(echoes.size())
+		var mean_cap := _mean_capacity(echoes, capacity_cfg)
 		if mean_cap > 0.0:
 			travel_par = maxf(1.0, distance / mean_cap)
 	return travel_par + float(required_hold)
+
+
+## Non-joined escort par (decisions.md D-33, E-min), no hold term:
+## max(1, max(0, nearest echo→spirit − 1) / party mean capacity + spirit→destination / spirit capacity).
+## The spirit capacity is the authored capacity the game moves it with. The spirit starts to
+## walk only when an echo stands next to it, so the echo walk stops one cell short.
+static func _escort_par(echoes: Array, spirit_cells: Array, objective_params: Dictionary,
+		capacity_cfg: Dictionary) -> float:
+	if echoes.is_empty() or spirit_cells.is_empty():
+		return 1.0
+	var spirit_cell: Dictionary = spirit_cells[0]
+	var near := -1
+	for e_v in echoes:
+		var d := GridService.chebyshev_distance((e_v as Dictionary).get("grid_pos", {}), spirit_cell)
+		near = d if near < 0 else mini(near, d)
+	var mean_cap := _mean_capacity(echoes, capacity_cfg)
+	var party_walk := float(maxi(0, near - 1)) / mean_cap if mean_cap > 0.0 else 0.0
+	# No valid destination (col -1) means no escort win exists; only the party walk counts.
+	var spirit_walk := 0.0
+	var dest := { "col": int(objective_params.get("destination_col", -1)),
+		"row": int(objective_params.get("destination_row", -1)) }
+	if int(dest["col"]) >= 0 and int(dest["row"]) >= 0:
+		spirit_walk = float(GridService.chebyshev_distance(spirit_cell, dest)) \
+			/ float(GuideSpiritActivationService.AUTHORED_CAPACITY)
+	return maxf(1.0, party_walk + spirit_walk)
+
+
+static func _mean_capacity(echoes: Array, capacity_cfg: Dictionary) -> float:
+	var cap_sum := 0
+	for e_v in echoes:
+		cap_sum += int(MovementProfileService.derive_profile(e_v, capacity_cfg).get("capacity", 0))
+	return float(cap_sum) / float(echoes.size())
 
 
 ## Bonus fraction in [0, 1] for a fight that ends on round_ended (design §4). 0.0 when par is 0.

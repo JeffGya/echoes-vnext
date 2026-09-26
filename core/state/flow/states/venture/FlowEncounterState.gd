@@ -200,7 +200,8 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		float(combat_state.get("par_rounds", 0.0)),
 		PaceService.rank_reached_count(combat_state),
 		int(combat_state.get("stage_base", 0)),
-		(combat_state.get("ally_killed_enemy_ids", []) as Array).size()
+		(combat_state.get("ally_killed_enemy_ids", []) as Array).size(),
+		str(combat_state.get("guide_mode", ""))
 	)
 	var _pace_mode := bool(reward_data.get("pace_mode", false))
 
