@@ -141,3 +141,13 @@ other modes (item 4). Not caused by the pace story.
 not a game rule; the game has no round cap. Such fights either end later or stall.
 **Filed (Jeff, 2026-09-26):** separate story, priority P3, in the V2 Story Backlog in Notion
 (https://app.notion.com/p/3e7c3d1ede92815597e9c8112ef6ac72). No story code assigned yet.
+
+## 16. One unexplained crash during Jeff's play test
+
+**What (2026-09-26):** during the phase 7 play test on the Mac, Godot crashed in the middle of a
+PURIFY_SHRINE fight, and did not open again at first. Jeff then confirmed the build "looks all
+good". No log was collected. In the cloud container, 12 headless PURIFY_SHRINE fights on the same
+branch ran with no error, and a read of the new colour-blend code found no crash risk.
+**If it happens again:** collect `~/Library/Application Support/Godot/app_userdata/<project>/logs/godot.log`
+and the macOS crash report. Note: the pace worktree and the normal folder share one `user://` save
+folder, because both have the same project name.
