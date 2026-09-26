@@ -136,4 +136,8 @@ live combat/flow — only tests consume it". PR #79 wired it in: the live escort
 
 **Measured (`escort-tuning.md` §1a):** 46 of 200 escort fights (23%) did not end within the probe's
 30-round limit; up to 32% on the new board with a non-joined spirit. This is much more than the
-other modes (item 4). Not caused by the pace story. To be raised with Jeff.
+other modes (item 4). Not caused by the pace story.
+**Note:** the 30-round limit is the probe's measuring limit (`FlowFingerprintTests._drive_and_capture(..., 30)`),
+not a game rule; the game has no round cap. Such fights either end later or stall.
+**Filed (Jeff, 2026-09-26):** separate story, priority P3, in the V2 Story Backlog in Notion
+(https://app.notion.com/p/3e7c3d1ede92815597e9c8112ef6ac72). No story code assigned yet.
