@@ -23,7 +23,7 @@ kept as a record only, not an open item.
 
 ---
 
-## 2. ~~Review PURSUE reward payout after board-size increase~~ — ANSWERED by the pace-reward story
+## 2. ~~Review PURSUE reward payout after board-size increase~~ — DONE by the pace-reward story (PR #78)
 
 **Answered:** the pace-reward story (`docs/stories/pace-reward/`, decisions.md D-01) replaces the fixed round threshold with a pace bonus. Par comes from the board distance, so the payout follows the board size.
 
@@ -59,7 +59,7 @@ multiplier. The same stale 12/22 fallbacks were also updated in `tests/CombatRou
 
 ---
 
-## 4. ~~Check if speed_bonus_threshold needs to scale with board size~~ — ANSWERED by the pace-reward story
+## 4. ~~Check if speed_bonus_threshold needs to scale with board size~~ — DONE by the pace-reward story (PR #78)
 
 **Answered:** the pace-reward story (`docs/stories/pace-reward/`, decisions.md D-01, D-05) removes `speed_bonus_threshold`. The pace bonus uses a par that comes from the board distance.
 
