@@ -66,8 +66,8 @@ func _initialize() -> void:
 		quit(1)
 		return
 
-	var base_cols: int = int(combat_cfg.get("base_cols", 12))
-	var base_rows: int = int(combat_cfg.get("base_rows", 12))
+	var base_cols: int = int(combat_cfg.get("base_cols", 18))
+	var base_rows: int = int(combat_cfg.get("base_rows", 18))
 	print("Confirmed from data.combat.board: base_cols=%d base_rows=%d (this IS the board at completion_index=0)"
 		% [base_cols, base_rows])
 

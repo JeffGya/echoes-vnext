@@ -217,10 +217,10 @@ static func run_all() -> Dictionary:
 	var combat_cfg: Dictionary = combat_v if combat_v is Dictionary else {}
 	var board_cfg_v: Variant = combat_cfg.get("board", {})
 	var board_cfg: Dictionary = board_cfg_v if board_cfg_v is Dictionary else {}
-	var base_cols: int = int(board_cfg.get("base_cols", 12))
-	var base_rows: int = int(board_cfg.get("base_rows", 12))
-	var max_cols: int = int(board_cfg.get("max_cols", 22))
-	var max_rows: int = int(board_cfg.get("max_rows", 22))
+	var base_cols: int = int(board_cfg.get("base_cols", 18))
+	var base_rows: int = int(board_cfg.get("base_rows", 18))
+	var max_cols: int = int(board_cfg.get("max_cols", 28))
+	var max_rows: int = int(board_cfg.get("max_rows", 28))
 	var growth: int = int(board_cfg.get("growth_per_completion", 1))
 
 	var combat_bounds: Array = []
