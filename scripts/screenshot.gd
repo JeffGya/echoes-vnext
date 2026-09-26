@@ -7,15 +7,15 @@
 #   <fixture>  one key of FIXTURES; "all" renders every fixture; "list" prints the keys.
 #   [out_dir]  an absolute directory; default user://screenshots. Output: <out_dir>/<fixture>.png.
 #
-# The script mounts RealmShell and ModalHost the way AppRoot does and feeds them a hand-built
-# snapshot. It never boots FlowRuntime, so it writes no save and does not touch the test save
+# The layer hierarchy (RealmShell on layer 10, ModalHost on layer 40, as in Approot.tscn) lives
+# in screenshot_harness.tscn (AGENTS.md "Build structure in .tscn"). This script only instances it,
+# feeds it a hand-built snapshot and saves the frame. It never boots FlowRuntime, so it writes no save and does not touch the test save
 # directory. A fixture's snapshots are applied in order; a flow.resolve snapshot opens as the
 # resolve modal over the board before it. To add a screen state, add a FIXTURES entry.
 # A fixture copies the snapshot contract; update it when that contract changes.
 extends SceneTree
 
-const RealmShellScene := preload("res://ui/shells/RealmShell.tscn")
-const ModalHostScene  := preload("res://ui/components/ModalHost.tscn")
+const HarnessScene := preload("res://scripts/screenshot_harness.tscn")
 const SETTLE_FRAMES := 45
 
 
@@ -45,18 +45,10 @@ func _render_fixture(fixture_name: String, snapshots: Array, out_dir: String) ->
 	var layout := ResponsiveLayoutController.calculate_layout(Vector2(root.size))
 	ResponsiveLayoutController.apply_content_scale_size(root, layout)
 
-	var screen_layer := CanvasLayer.new()
-	screen_layer.layer = 10
-	var modal_layer := CanvasLayer.new()
-	modal_layer.layer = 40
-	root.add_child(screen_layer)
-	root.add_child(modal_layer)
-	var shell := RealmShellScene.instantiate() as Control
-	shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	screen_layer.add_child(shell)
-	var modal_host := ModalHostScene.instantiate() as Control
-	modal_host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	modal_layer.add_child(modal_host)
+	var harness := HarnessScene.instantiate()
+	root.add_child(harness)
+	var shell := harness.get_node("ContentLayer/RealmShell") as Control
+	var modal_host := harness.get_node("ModalLayer/ModalHost") as Control
 	shell.modal_requested.connect(func(modal_id: StringName, payload: Dictionary) -> void:
 		modal_host.call("present_modal_for_id", modal_id, shell.call("modal_scene_for", modal_id), payload))
 
@@ -70,8 +62,7 @@ func _render_fixture(fixture_name: String, snapshots: Array, out_dir: String) ->
 	var path := out_dir.path_join(fixture_name + ".png")
 	var err := root.get_texture().get_image().save_png(path)
 	print("SHOT %s -> %s (err=%d)" % [fixture_name, ProjectSettings.globalize_path(path), err])
-	screen_layer.queue_free()
-	modal_layer.queue_free()
+	harness.queue_free()
 	await process_frame
 
 
