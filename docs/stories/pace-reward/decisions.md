@@ -35,6 +35,7 @@ Story-specific decisions for the pace bonus story. Project-wide decisions stay i
 | D-28 | pace-polish-scope | D-12 allows an animated colour change; build the colour blend, the drop brightening and the muted +0 row; leave the note delay and the Pace-row colour | 2026-09-25 |
 | D-29 | zero-row-colour | A "+0 Ase" row uses the muted colour #6E6450 (4.77:1 on the result card) | 2026-09-25 |
 | D-30 | banner-gold-to-combat-004 | The no-pace banner gold looks close to the partial amber; left for V2-COMBAT-004 (004D) | 2026-09-25 |
+| D-31 | escort-pace-in-this-story | GUIDE_SPIRIT escort gets a pace term in this story, because PR #79 made the escort win reachable; supersedes D-10 | 2026-09-26 |
 
 ---
 
@@ -120,6 +121,8 @@ Story-specific decisions for the pace bonus story. Project-wide decisions stay i
 ---
 
 ### D-10. escort-no-pace-until-combat-004
+
+**Superseded by D-31 (2026-09-26).**
 
 **Q:** Should GUIDE_SPIRIT escort carry a pace term in this story?
 **A:** No. In the probe, 0 of 48 escort fights ended with `spirit_escorted` (partly the V2-COMBAT-004 defect: a non-joining escort spirit is an immobile structure), so a pace reward for that win could not be earned. Escort is ranked on kills and survivors for now. The spec keeps the formula ready (spirit → destination, no hold) for when V2-COMBAT-004 is done.
@@ -323,5 +326,14 @@ Do not build: the delayed rank-cause note, and the pace colour on the Pace bonus
 **A:** No. Leave it for the UI restructure. Filed on the V2-COMBAT-004 Notion page (slice 004D). The round label still separates the two cases: it stays cream in a no-pace fight.
 **Source:** Jeff, 2026-09-25 (option A)
 **Date:** 2026-09-25
+
+---
+
+### D-31. escort-pace-in-this-story
+
+**Q:** PR #79 (V2-COMBAT-003.5 decisions #58-#60) made the GUIDE_SPIRIT escort spirit walk and added an escort swap rule. Escort wins by escort went from 0 of 11 to 2 of 11 fights. D-10 excluded escort from pace because the escort win was not reachable. Keep that exclusion, or add escort pace now? (Raised by a read-only comparison of main and this story, 2026-09-26.)
+**A:** Add escort pace in this story. The escort spirit now moves, and that movement affects pace. This supersedes D-10. The GUIDE_SPIRIT protect variant keeps no pace term (timer mode, D-06).
+**Source:** Jeff, 2026-09-26 ("B escort needs to move and this would affect pace. So we need to take this into account.")
+**Date:** 2026-09-26
 
 ---
