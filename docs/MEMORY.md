@@ -221,7 +221,7 @@ Sanctum navigation. 44 commits. Suite **1,401 → 1,519**.
 three measured blockers are recorded on V2-COMBAT-004.
 
 **97 defect identifiers, each with a recorded outcome** in
-`docs/v2-infra-003-defect-register.md`, now a ledger rather than a worklist: 57 fixed, 3 connected
+`docs/stories/v2-infra-003/defect-register.md`, now a ledger rather than a worklist: 57 fixed, 3 connected
 (mechanics that had never run), 6 deleted, 3 disproved, 1 reverted, 6 not a defect, 13 deferred to a
 named story, 2 assigned to V2-COMBAT-004, 6 coverage gaps.
 
@@ -344,7 +344,7 @@ defaulted to lowest priority and could be silently dropped in a busy round) — 
 deep-copy, a duplicate eligibility lookup) — both fixed and independently re-verified.
 
 **Phase 8 — Jeff's own in-game playtest surfaced two more pre-existing, unrelated issues, both
-filed as follow-ups (`docs/v2-combat-003.5-followup-tasks.md` #14, #15), not fixed in this story:**
+filed as follow-ups (`docs/stories/v2-combat-003.5/followup-tasks.md` #14, #15), not fixed in this story:**
 GUIDE_SPIRIT/PURSUE boards on a low-plateau-count virtue (courage — Ashen Hallow, realm.01) look
 compact instead of stretched, because `StageTerrain.generate()`'s plateau count/size comes only
 from the per-virtue terrain signature with no scaling relative to the board-stretch override; and
@@ -353,9 +353,9 @@ the combat camera does not handle a genuinely large stretched board well. Both p
 (protect and escort) work correctly live: bark fires, `GUIDE_SPIRIT escort progress` logs every
 round, clean victories.
 
-**15 follow-up tasks filed** in `docs/v2-combat-003.5-followup-tasks.md`, each with a full
+**15 follow-up tasks filed** in `docs/stories/v2-combat-003.5/followup-tasks.md`, each with a full
 opening prompt for a fresh session. Full decision trail (64 entries) in
-`docs/v2-combat-003.5-decisions.md`. Every decision routed through Jeff via `AskUserQuestion`;
+`docs/stories/v2-combat-003.5/decisions.md`. Every decision routed through Jeff via `AskUserQuestion`;
 every build got an independent `qa-verifier` review (builder never self-verifies); killed-agent
 tree audits (rate limits hit repeatedly) always found the actual code edits complete —
 only the agent's own final report was cut off, never the work itself.

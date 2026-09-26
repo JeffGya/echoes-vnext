@@ -378,7 +378,7 @@
 ### 34. side-issues-filed-not-fixed
 
 **Q:** The diagnosis also found two issues that are NOT the cause of the PURSUE/ENDURE regression: (1) some Echoes silently stand still with no path and no logged warning, a pre-existing gap exposed by longer fights; (2) the live-wiring narrows the path-planning view Echoes can see, not observed to cause harm yet but a risk on other boards. Fix now, or file separately?
-**A:** File both separately as follow-up tasks, tracked in `docs/v2-combat-003.5-followup-tasks.md` so they are not lost.
+**A:** File both separately as follow-up tasks, tracked in `docs/stories/v2-combat-003.5/followup-tasks.md` so they are not lost.
 **Source:** Jeff, 2026-09-19
 **Date:** 2026-09-19
 
@@ -525,7 +525,7 @@
 
 ### 50. phase6-fix-followup-tasks-file-now
 
-**Q:** Phase 6 also found `docs/v2-combat-003.5-followup-tasks.md` has wrong information: task #10's premise (only 4 of 10 vector origins are summon-able) was tested directly and found false — `class_origin_weights` has had all 10 since before this story, confirmed by summoning 200 test Echoes; task #1 (`perceived_actors` script error) is already fixed but still listed open; several cited `ANSWERS.md` entry numbers (#63/#65/#66) don't exist (`ANSWERS.md` ends at #62). Fix the file now, or leave it for Phase 9's docs pass?
+**Q:** Phase 6 also found `docs/stories/v2-combat-003.5/followup-tasks.md` has wrong information: task #10's premise (only 4 of 10 vector origins are summon-able) was tested directly and found false — `class_origin_weights` has had all 10 since before this story, confirmed by summoning 200 test Echoes; task #1 (`perceived_actors` script error) is already fixed but still listed open; several cited `ANSWERS.md` entry numbers (#63/#65/#66) don't exist (`ANSWERS.md` ends at #62). Fix the file now, or leave it for Phase 9's docs pass?
 **A:** Fix it now.
 **Source:** Jeff, 2026-09-23
 **Date:** 2026-09-23
@@ -698,7 +698,7 @@
 **Source:** Jeff, 2026-09-26
 **Date:** 2026-09-26
 
-> **Result:** filed as follow-up task #14 in `docs/v2-combat-003.5-followup-tasks.md`
+> **Result:** filed as follow-up task #14 in `docs/stories/v2-combat-003.5/followup-tasks.md`
 > (`task_ashen_hallow_board`) — root cause, evidence, and two candidate fix shapes recorded there
 > for whoever picks it up.
 
@@ -711,6 +711,6 @@
 **Source:** Jeff, 2026-09-26
 **Date:** 2026-09-26
 
-> **Result:** filed as follow-up task #15 in `docs/v2-combat-003.5-followup-tasks.md`
+> **Result:** filed as follow-up task #15 in `docs/stories/v2-combat-003.5/followup-tasks.md`
 > (`task_large_board_camera`) — reproduction steps and the owning script (to be located) recorded
 > there for whoever picks it up.

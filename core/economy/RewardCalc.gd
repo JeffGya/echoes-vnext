@@ -46,7 +46,7 @@ static func redo_multiplier(run_count: int, reward_cfg: Dictionary) -> float:
 
 
 ## Compute all reward values from encounter result + stage objectives + realm run_count.
-## Returns a dict with pre-computed fields ready for EconomyService.reward_stage_complete().
+## Returns a dict with pre-computed fields ready for EconomyService.reward_encounter_complete().
 ##
 ## victory:         true = win, false = defeat
 ## objectives:      Array of {type: String} dicts from StageModel (includes boss)
@@ -56,6 +56,16 @@ static func redo_multiplier(run_count: int, reward_cfg: Dictionary) -> float:
 ## total_echoes:     total echo actors in the encounter (for max_possible rank calc)
 ## run_count:        from RealmModel — how many times this realm has been completed + restarted
 ## reward_cfg:       balance.data.rewards dict
+## resolution_mode:  EncounterResolutionModes value; selects the pace and reached-enemy rules
+## par_rounds:       combat_state["par_rounds"]; 0.0 for a no-pace mode
+## reached_enemies:  PaceService.rank_reached_count(combat_state); replaces total_enemies in
+##                   the rank ceiling for PaceService.REACHED_ENEMY_MODES
+## pace_stage_base:  combat_state["stage_base"], captured at fight start. The pace bonus, its
+##                   rank term and pace_state use it, so they match the live pace_state
+##                   (decisions.md D-21). Every other term keeps `base` below.
+## ally_kills:       combat_state["ally_killed_enemy_ids"].size(). These kills pay the kill Ase
+##                   but leave both sides of the rank (decisions.md D-23).
+## guide_mode:       combat_state["guide_mode"]; GUIDE_SPIRIT carries pace only for "escort".
 static func compute(
 	victory: bool,
 	objectives: Array,
@@ -65,7 +75,13 @@ static func compute(
 	total_echoes: int,
 	round_ended: int,
 	run_count: int,
-	reward_cfg: Dictionary
+	reward_cfg: Dictionary,
+	resolution_mode: String,
+	par_rounds: float,
+	reached_enemies: int,
+	pace_stage_base: int,
+	ally_kills: int = 0,
+	guide_mode: String = ""
 ) -> Dictionary:
 	# Base = sum of objective type weights (single definition — see base_reward() above).
 	var base := base_reward(objectives, reward_cfg)
@@ -76,43 +92,66 @@ static func compute(
 	var enemy_bonus     := enemies_defeated * enemy_bonus_per
 	var echo_bonus      := echoes_survived  * echo_bonus_per
 
-	# Speed bonus — only if ended before threshold rounds
-	var speed_threshold := int(reward_cfg.get("speed_bonus_threshold", 5))
-	var speed_pct       := float(reward_cfg.get("speed_bonus_pct", 0.15))
-	var speed_bonus     := roundi(float(base) * speed_pct) if round_ended < speed_threshold else 0
+	# Pace bonus (design §4): a win pays pace_stage_base × pace_bonus_pct × the curve fraction.
+	var is_pace       := PaceService.is_pace_mode(resolution_mode, guide_mode) and par_rounds > 0.0
+	var full_ratio    := float(reward_cfg.get("pace_full_ratio", 1.1))
+	var zero_ratio    := float(reward_cfg.get("pace_zero_ratio", 1.6))
+	var pace_pct      := float(reward_cfg.get("pace_bonus_pct", 0.05))
+	var max_pace_bonus := PaceService.max_bonus_ase(pace_stage_base, pace_pct) if is_pace else 0
+	var pace_bonus    := 0
+	if is_pace and victory:
+		pace_bonus = PaceService.bonus_ase(round_ended, par_rounds, full_ratio, zero_ratio,
+			pace_stage_base, pace_pct)
 
 	# Redo multiplier — degrades per run, floor clamped (single definition above)
 	var redo_mul := redo_multiplier(run_count, reward_cfg)
 
-	# Rank — use board totals for max_possible so rank reflects missed opportunities.
+	# Rank (design §5). A no-pace mode has max_pace_bonus 0, so the bonus is out of both sides.
+	# The reached-enemy modes count only enemies that reached the party in the ceiling.
+	# An ally or spirit kill is out of the kill term and the ceiling, in every mode (D-23);
+	# reached_enemies already excludes those ids.
 	# On defeat: use defeat_payout as numerator so defeat always ranks worse than victory.
-	var defeat_factor   := float(reward_cfg.get("defeat_factor", 0.25))
-	var max_speed_bonus := roundi(float(base) * speed_pct)
-	var max_possible    := base \
-		+ (total_enemies * enemy_bonus_per) \
+	var defeat_factor  := float(reward_cfg.get("defeat_factor", 0.25))
+	var ceiling_enemies := reached_enemies if PaceService.tracks_reached_enemies(resolution_mode) \
+		else maxi(0, total_enemies - ally_kills)
+	var rank_enemy_bonus := maxi(0, enemies_defeated - ally_kills) * enemy_bonus_per
+	var max_possible   := base \
+		+ (ceiling_enemies * enemy_bonus_per) \
 		+ (total_echoes  * echo_bonus_per) \
-		+ max_speed_bonus
+		+ max_pace_bonus
 
-	var rank_numerator: int
-	if victory:
-		rank_numerator = base + enemy_bonus + echo_bonus + speed_bonus
-	else:
-		rank_numerator = roundi(float(base) * defeat_factor)
-
-	var perf_ratio  := float(rank_numerator) / float(max_possible) if max_possible > 0 else 0.0
-	var rank_score  := perf_ratio * redo_mul
 	var thresholds_v: Variant = reward_cfg.get("rank_thresholds", {})
 	var thresholds: Dictionary = thresholds_v if thresholds_v is Dictionary else {}
-	var rank := _compute_rank(rank_score, run_count, thresholds)
+	var rank: String
+	var rank_without_pace: String
+	if victory:
+		var kept := base + rank_enemy_bonus + echo_bonus
+		rank              = _rank_for(kept + pace_bonus, max_possible, redo_mul, run_count, thresholds)
+		rank_without_pace = _rank_for(kept, max_possible, redo_mul, run_count, thresholds)
+	else:
+		rank = _rank_for(roundi(float(base) * defeat_factor), max_possible, redo_mul, run_count, thresholds)
+		rank_without_pace = rank
 
 	return {
-		"base_reward":     base,
-		"enemy_bonus":     enemy_bonus,
-		"echo_bonus":      echo_bonus,
-		"speed_bonus":     speed_bonus,
-		"redo_multiplier": redo_mul,
-		"rank":            rank,
+		"base_reward":       base,
+		"enemy_bonus":       enemy_bonus,
+		"echo_bonus":        echo_bonus,
+		"pace_bonus":        pace_bonus,
+		"pace_mode":         is_pace,
+		# A defeat carries no pace state (design §7).
+		"pace_state":        PaceService.pace_state(round_ended, par_rounds, full_ratio, zero_ratio,
+			pace_stage_base, pace_pct) if is_pace and victory else "",
+		# The rank-cause note (design §6): true when the pace bonus moved this rank.
+		"pace_changed_rank": rank != rank_without_pace,
+		"redo_multiplier":   redo_mul,
+		"rank":              rank,
 	}
+
+
+static func _rank_for(numerator: int, max_possible: int, redo_mul: float, run_count: int,
+		thresholds: Dictionary) -> String:
+	var perf_ratio := float(numerator) / float(max_possible) if max_possible > 0 else 0.0
+	return _compute_rank(perf_ratio * redo_mul, run_count, thresholds)
 
 
 static func _compute_rank(rank_score: float, run_count: int, thresholds: Dictionary) -> String:

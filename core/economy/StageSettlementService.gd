@@ -48,7 +48,7 @@
 # tests/SaveBridgeTests.gd:394-431), so a receipt written here survives it.
 #
 # WHAT IS NOT SETTLED HERE, deliberately: the enemies-defeated bonus, the echoes-survived bonus,
-# the speed bonus and per-kill Storyweight. Those measure one FIGHT and are paid at the fight,
+# the pace bonus and per-kill Storyweight. Those measure one FIGHT and are paid at the fight,
 # by `EconomyService.reward_encounter_complete()` and by the mid-combat kill-XP path. See the
 # split writeup at the top of EconomyService.gd's Stage Reward API section.
 

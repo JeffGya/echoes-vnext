@@ -1392,7 +1392,7 @@ static func _mv_bystander(id: String, position: Dictionary, actor_type: String, 
 
 
 ## urgency_progress_gain kept at 0.0 here (production: 1.0) so Test D's scout_carefully gap
-## stays visible — see decisions #29/#38 in docs/v2-combat-003.5-decisions.md.
+## stays visible — see decisions #29/#38 in docs/stories/v2-combat-003.5/decisions.md.
 static func _mv_spatial_cfg() -> Dictionary:
 	return { "spatial_utility": {
 		"cap": 20.0, "urgency_weight": 4.0, "urgency_progress_gain": 0.0, "objective_progress_weight": 8.0,

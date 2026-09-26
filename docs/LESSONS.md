@@ -13,6 +13,45 @@ Reviewed at the start of each session.
 
 ## Lessons (most recent first)
 
+### 26 — Every agent writes in STE
+
+**Rule.** Every agent communicates and writes in ASD Simplified Technical English (STE): one
+statement per sentence, short sentences, active voice, one word for one meaning, no idioms. This
+applies to reports, documents, questions and replies. The limits are in `CLAUDE.md`
+("Every agent writes in STE").
+
+**Why.** Jeff, 2026-09-25, on the pace-reward design spec: "Too much language is doing double work
+and is open for interpretation which needs too much content to explain it. I rather be clear."
+Terms such as "room to spare" and "pace bonus" had no exact definition, and one idea had several
+names.
+
+**How to apply.** Put the STE rule in every agent brief. In a design document, define each
+technical term once in a terms table, then use only that term.
+
+---
+
+### 25 — Story documents go in their own folder, not in `docs/`
+
+**Rule.** A document created for one story (spec, decisions, handoff, plan, follow-up list) goes in
+`docs/stories/<story-id>/`. Use the backlog ID when one exists, otherwise a short working name
+(e.g. `docs/stories/pace-reward/`). The top of `docs/` is for project-wide documents only (GDD,
+MEMORY, LESSONS, canon index, system references).
+
+**Why.** Jeff, 2026-09-25: keep the main `docs/` folder clean. Story files such as
+`v2-combat-003.5-decisions.md` and `v2-infra-003-defect-register.md` had accumulated beside the
+project-wide documents.
+
+**Story decisions too.** Jeff, 2026-09-25: an answer that only concerns one story goes to
+`docs/stories/<story-id>/decisions.md`, numbered D-01, D-02, …, not to `ANSWERS.md`. `ANSWERS.md`
+keeps only project-wide decisions that later stories must follow. Cite a story decision as
+`decisions.md D-NN`, and a project decision as `ANSWERS.md #NN`.
+
+**How to apply.** Before an agent writes a new story document, give it the story folder path in
+the brief. Moving the existing story documents out of `docs/` (and updating every link to them) is
+a separate task, not part of any feature story.
+
+---
+
 ### 24 — Two similarly-named test files can be silently swapped
 
 **From the test-performance initiative (PRs #70-#72), 2026-09-21.** `tests/FlowFingerprintTests.gd`
