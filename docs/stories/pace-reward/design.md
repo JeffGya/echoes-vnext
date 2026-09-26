@@ -146,7 +146,7 @@ escort wins land on par (median ratio 0.97), and 91% (old board) / 100% (new boa
 earn the full bonus. A board with no valid destination (`destination_col` −1) uses spirit walk 0.
 
 PROTECT, ENDURE and GUIDE_SPIRIT's protect variant earn no pace bonus. Their win condition is a
-fixed duration. There is no faster-or-slower version of it (`CombatState.gd:295/301/325`).
+fixed duration. There is no faster-or-slower version of it (`CombatState.gd:302/311/335`).
 
 Measured medians are reported in §9, where the acceptance criteria live. This section states the
 formula; §9 states what it measures to.

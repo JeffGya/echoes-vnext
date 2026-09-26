@@ -38,6 +38,7 @@ Story-specific decisions for the pace bonus story. Project-wide decisions stay i
 | D-31 | escort-pace-in-this-story | GUIDE_SPIRIT escort gets a pace term in this story, because PR #79 made the escort win reachable; supersedes D-10 | 2026-09-26 |
 | D-32 | joined-spirit-party-par | A GUIDE_SPIRIT escort fight with a joined spirit uses the COMBAT-style party travel par | 2026-09-26 |
 | D-33 | escort-par-e-min | A non-joined escort fight uses par = nearest Echo's walk to the spirit + the spirit's walk to the destination; shared curve; one par for both wins; no slack | 2026-09-26 |
+| D-34 | escort-par-party-only | The E-min par counts only party Echoes, not a Temporary Ally, although an ally can start the escort | 2026-09-26 |
 
 ---
 
@@ -360,6 +361,15 @@ Consequences Jeff accepted with this choice:
 3. No separate blocking slack; the party-walk term absorbs it.
 4. Measured: escort wins median ratio 0.97 / 0.98; full bonus in 91% (old board) / 100% (new board) of wins; Gap A 5 pp; Gap B 83 / 43 pp. So escort wins nearly always earn the full bonus.
 **Source:** Jeff, 2026-09-26 ("We will go for E-min.")
+**Date:** 2026-09-26
+
+---
+
+### D-34. escort-par-party-only
+
+**Q:** The game's escort start rule counts any Echo, including a Temporary Ally (`CombatRoundGuideSpiritService.gd:233-260`). The E-min par (D-33) counts only party Echoes. When an ally stands closer to the spirit than the party, the par is slightly long and the bonus slightly easier. Count the ally in the par? (Raised by qa-verifier, finding F5.)
+**A:** No. The par counts party Echoes only, consistent with D-23 (an ally is not party). The small easing is accepted; the game places the ally near the party (`EncounterSetupService.gd:640-648`).
+**Source:** Jeff, 2026-09-26 (option A)
 **Date:** 2026-09-26
 
 ---

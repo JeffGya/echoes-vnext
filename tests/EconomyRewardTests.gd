@@ -961,6 +961,14 @@ static func _t_pace_par_escort_nojoin_e_min() -> Dictionary:
 	par = PaceService.compute_par(close, EncounterResolutionModes.GUIDE_SPIRIT, at_dest, _cap_cfg())
 	if not _near(par, 1.0):
 		return { "ok": false, "error": "Expected escort par clamped to 1.0, got %f" % par }
+	# Column 0 and row 0 are valid destinations (the board edge). The echo is adjacent, so only
+	# the spirit walk counts: 4 cells to col 0, 6 cells to row 0 (QA finding F1).
+	for edge in [[0, 6, 4.0], [4, 0, 6.0]]:
+		var edge_dest := { "guide_mode": "escort", "spirit_joins_battle": false,
+			"destination_col": edge[0], "destination_row": edge[1] }
+		par = PaceService.compute_par(close, EncounterResolutionModes.GUIDE_SPIRIT, edge_dest, _cap_cfg())
+		if not _near(par, edge[2]):
+			return { "ok": false, "error": "Expected escort par %f for destination (%d, %d), got %f" % [edge[2], edge[0], edge[1], par] }
 	return { "ok": true }
 
 

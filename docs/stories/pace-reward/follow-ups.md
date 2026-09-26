@@ -39,7 +39,11 @@ enemies died, when the spirit died, or after the probe's 30-round limit.
 as an immobile structure (approx. 1 in 4 GUIDE_SPIRIT fights cannot be won). Owner: V2-COMBAT-004.
 **Not explained:** the joining-spirit half of the escort fights also never won by escort. The probe
 did not record which spirits joined.
-**Effect on this story:** escort has no pace term until the escort win is reachable.
+**Update (2026-09-26):** PR #79 (V2-COMBAT-003.5 decisions #58 to #60) made the escort spirit walk.
+The escort probe then measured 29 escort wins in 100 non-joined fights. A joined spirit still never
+wins by escort (0 of 77), because the game does not steer it to the destination.
+**Effect on this story:** escort now has a pace term (decisions.md D-31 to D-33). A joined spirit
+uses the party par; a non-joined spirit uses E-min.
 
 ## 4. Fights that do not end within 30 rounds
 
@@ -120,3 +124,16 @@ separate change, following AGENTS.md "Never duplicate a helper".
 **What:** the hazard damage code (`LiveHazardOutcomeService.apply`) runs for every actor that moves, enemies included (`FlowRuntime.gd:1452`, `LiveMovementContextService.gd:395`). Today no fight has hazards: nothing writes `known_hazards` into `stage_context.encounter_approach` (`SituationEngagementService.gd:218-224`).
 **Behaviour today:** a hazard kill has no killer. It pays the kill Ase and counts in the earned rank kill term. It is never marked reached. In the five modes that track reach, a hazard kill of a never-reached enemy can raise the rank slightly.
 **Options for the hazard story:** (1) treat it like an ally kill (out of both sides of the rank, D-23); (2) treat it like a party kill (as today).
+
+## 14. Stale header in `GuideSpiritActivationService.gd` — not this story's file
+
+**What:** `core/movement/GuideSpiritActivationService.gd:7-9` says the service is "NOT wired into
+live combat/flow — only tests consume it". PR #79 wired it in: the live escort calls it
+(`CombatRoundGuideSpiritService.gd:278`), and `PaceService` reads its `AUTHORED_CAPACITY`.
+**Owner:** main / mechanics-developer, as a separate small task (QA finding F4, 2026-09-26).
+
+## 15. Escort fights that do not end within 30 rounds
+
+**Measured (`escort-tuning.md` §1a):** 46 of 200 escort fights (23%) did not end within the probe's
+30-round limit; up to 32% on the new board with a non-joined spirit. This is much more than the
+other modes (item 4). Not caused by the pace story. To be raised with Jeff.
