@@ -27,12 +27,12 @@ The **pace bonus** pays a share of the stage base reward. The share is full at o
 called `pace_full_ratio`, and drops in a straight line to zero at a second limit called
 `pace_zero_ratio`.
 
-Four modes are pace modes: COMBAT and PURIFY_SHRINE (win by killing), RECOVER (win by holding a
-relic), and PURSUE (win by containing a quarry). Three modes are no-pace modes: PROTECT, ENDURE,
-and GUIDE_SPIRIT, which has two variants (protect and escort). Their win condition is a fixed
-duration, not a race. A timer-based fight has no faster-or-slower version of the win, so there is
-nothing for a pace bonus to measure. GUIDE_SPIRIT's escort variant has a separate reason for
-carrying no pace bonus, stated in §3.
+Five fight types are pace fights: COMBAT and PURIFY_SHRINE (win by killing), RECOVER (win by
+holding a relic), PURSUE (win by containing a quarry), and GUIDE_SPIRIT's escort variant (win by
+bringing the spirit to its destination; decisions.md D-31). The no-pace fights are PROTECT, ENDURE
+and GUIDE_SPIRIT's protect variant. Their win condition is a fixed duration, not a race. A
+timer-based fight has no faster-or-slower version of the win, so there is nothing for a pace bonus
+to measure. GUIDE_SPIRIT is a pace fight or not according to its rolled variant, not its mode name.
 
 During the fight, the player sees pace only as a colour on the existing round counter and
 objective progress (§6). At the fight result, the player also sees a "Pace bonus" reward row and,
@@ -58,8 +58,8 @@ synonym for it.
 | Zero-bonus limit | `pace_zero_ratio` | The pace ratio at or above which the pace bonus is zero. |
 | Maximum bonus | `pace_bonus_pct` | The largest fraction of the stage base reward the pace bonus can pay. |
 | Reached enemy | (tracked in `combat_state["reached_enemy_ids"]`) | An enemy that has, at least once, ended a round alive within Chebyshev distance 1 of a living echo, or that a party echo killed (D-23). |
-| Pace mode | — | A mode whose win condition can happen faster or slower: COMBAT, PURIFY_SHRINE, RECOVER, PURSUE. |
-| No-pace mode | — | A mode whose win condition is a fixed duration or is not yet trackable: PROTECT, ENDURE, GUIDE_SPIRIT (both variants). |
+| Pace mode | — | A mode whose win condition can happen faster or slower: COMBAT, PURIFY_SHRINE, RECOVER, PURSUE, and GUIDE_SPIRIT's escort variant (D-31). |
+| No-pace mode | — | A mode whose win condition is a fixed duration: PROTECT, ENDURE, GUIDE_SPIRIT's protect variant. |
 | Pace state | `pace_state` | A three-state value, for pace modes only: `full`, `partial`, or `none`. It compares the current or final round to the two bonus-curve limits (§4). One field carries it during the fight; one field carries it at the result. Both use the same three values (§6). |
 
 ---
@@ -131,15 +131,22 @@ against about 0.85).
 one echo must reach and hold the relic, so the nearest echo's Chebyshev distance sets par, not the
 party mean.
 
-**Decided (Jeff, decisions.md D-10): GUIDE_SPIRIT's escort variant earns no pace bonus at this
-stage.** In the probe data, 0 of 48 escort fights ended in `spirit_escorted`. A non-joining escort
-spirit is currently built as an immobile structure. This is filed as defect V2-COMBAT-004
-(`docs/stories/v2-infra-003/defect-register.md:265`). No code currently tracks a live spirit-to-destination
-distance (`CombatRoundGuideSpiritService.gd:40/259/313` only tests arrival). Once V2-COMBAT-004
-makes the escort win reachable, the design revisits this. Escort would become a contain-type
-mode: spirit to destination, `hold_amount` 0, since arrival is itself the win. PROTECT, ENDURE,
-and GUIDE_SPIRIT's protect variant earn no pace bonus. Their win condition is a fixed duration.
-There is no faster-or-slower version of it (`CombatState.gd:295/301/325`).
+**GUIDE_SPIRIT escort (decisions.md D-31 to D-33; supersedes D-10).** PR #79 (V2-COMBAT-003.5
+decisions #58 to #60) made the escort spirit walk. So the escort variant is a pace fight. Its par
+depends on the rolled join state, and it is fixed at fight start:
+
+| Join state | Par | Why |
+|---|---|---|
+| Spirit joins the battle (D-32) | COMBAT-style: `max(1, mean Echo distance to the nearest enemy / party mean movement range)` | The game never steers a joined spirit to the destination. In the probe, 0 of 77 joined wins were escort wins; all were kill wins. |
+| Spirit does not join (D-33, "E-min") | `max(1, max(0, nearest party Echo distance to the spirit − 1) / party mean movement range + spirit distance to the destination / spirit movement range)` | The spirit waits until an Echo stands next to it (`CombatRoundGuideSpiritService.gd:231-244`), then walks 1 cell per round (`GuideSpiritActivationService.AUTHORED_CAPACITY`). The par counts both walks. |
+
+There is no hold term. One par covers both win reasons (`spirit_escorted` and
+`all_enemies_defeated`). The shared curve applies. Measured (`escort-tuning.md` §6): non-joined
+escort wins land on par (median ratio 0.97), and 91% (old board) / 100% (new board) of those wins
+earn the full bonus. A board with no valid destination (`destination_col` −1) uses spirit walk 0.
+
+PROTECT, ENDURE and GUIDE_SPIRIT's protect variant earn no pace bonus. Their win condition is a
+fixed duration. There is no faster-or-slower version of it (`CombatState.gd:295/301/325`).
 
 Measured medians are reported in §9, where the acceptance criteria live. This section states the
 formula; §9 states what it measures to.
@@ -416,6 +423,10 @@ restated below against those values, not against the formula in isolation.
 8. The result screen's "Pace bonus" row is present, at any value including 0, if and only if the
    mode is a pace mode.
 9. When the pace bonus causes a rank change, the rank badge names it as the cause.
+10. GUIDE_SPIRIT follows its rolled variant (D-31 to D-33): escort has `par_rounds > 0`, a live and a
+    result `pace_state` and a "Pace bonus" row on a win; protect has none of these. A joined escort
+    spirit's par equals the COMBAT-style party par; a non-joined one uses E-min. Verified by
+    `reward/pace_guide_spirit_runtime_escort_vs_protect` and the four other escort tests.
 
 **Recorded values that move.** The 14 fingerprint/determinism suites need FINAL/SAVE
 re-recording for any fixture that touches the pace bonus or the reachability-based kill term.
@@ -437,8 +448,8 @@ written against the old cliff and must be rewritten, not only re-recorded. Kinds
   formula tried in this design closes this gap fully; see §9 for what a tighter fit would need.
 - **Decided (decisions.md D-08 to D-10):** PURSUE charges `contain_rounds - 1` on every fight, regardless
   of the eventual win reason. RECOVER's par uses the nearest echo's walk to the relic.
-  GUIDE_SPIRIT's escort variant earns no pace bonus until V2-COMBAT-004 is fixed. See §3 for the
-  reasoning and the accepted trade-off. These are no longer open questions.
+  GUIDE_SPIRIT's escort variant is a pace fight with its own par per join state (D-31 to D-33,
+  superseding D-10). See §3. These are no longer open questions.
 - **The breakpoint choice decides how equal the modes feel, separately from whether they
   converge.** §9's `R=1.0`/`R=1.5` table shows this. At `R=1.0`, RECOVER and PURSUE pay the bonus
   to 55-91% of winners, while COMBAT and PURIFY_SHRINE pay it to 4-38%. Median convergence does not
