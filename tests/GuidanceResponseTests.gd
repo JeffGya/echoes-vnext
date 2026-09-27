@@ -35,6 +35,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("guidance/trace_names_guidance_when_it_carried_the_decision", Callable(GuidanceResponseTests, "_t_trace_names_guidance"))
 	runner.register_test("guidance/directive_bonus_stays_outside_the_brackets", Callable(GuidanceResponseTests, "_t_directive_bonus_stays_outside_the_brackets"))
 	runner.register_test("guidance/consent_and_reading_are_independent", Callable(GuidanceResponseTests, "_t_consent_and_reading_are_independent"))
+	runner.register_test("guidance/male_echo_reason_text_uses_he_him", Callable(GuidanceResponseTests, "_t_male_echo_reason_text_uses_he_him"))
 
 
 static func _pass() -> Dictionary: return {"ok": true}
@@ -437,4 +438,34 @@ static func _t_consent_and_reading_are_independent() -> Dictionary:
 			])
 		if str(answer.get("reading", "")) != "literal":
 			return _fail("a suggestion she could serve as given was read as interpreted")
+	return _pass()
+
+
+# Test 16 -- A MALE ECHO SAYS "HE", NOT "SHE". The reason text reaches the player verbatim
+# as a bark with no substitution step downstream, so `resolve()` must already carry the
+# right pronoun. FALSIFIABLE: a substitution wired anywhere but `resolve()`, or a fragment
+# replace instead of a whole-string lookup, fails here or produces the wrong grammar on
+# an object-pronoun line.
+static func _t_male_echo_reason_text_uses_he_him() -> Dictionary:
+	# Same fixture as reason_is_materially_true: her own plan is held up entirely by her
+	# virtue scores, so the reason names "values" -> "it goes against what she holds to".
+	var entries: Array = [
+		_entry("c0000", "melee_attack", "enemy.a", "engage", 100.0, "vector_bonus", 60.0),
+		_entry("c0001", "actor.guard", "", "hold", 50.0),
+		_entry("c0002", "actor.idle", "", "read", 0.0),
+	]
+	var request: Dictionary = _request("hold", "actor.guard", "hold")
+
+	var female: Dictionary = GuidanceScript.resolve(request, entries, _echo(), 0.2, 0.0)
+	var female_text: String = str(female.get("reason_text", ""))
+	if not (female_text.to_lower().contains("she") or female_text.to_lower().contains("her")):
+		return _fail("the female-default fixture produced no she/her reason text: '%s'" % female_text)
+
+	var male_actor: Dictionary = {"id": "echo.a", "faction": "echo", "gender": "male"}
+	var male: Dictionary = GuidanceScript.resolve(request, entries, male_actor, 0.2, 0.0)
+	var male_text: String = str(male.get("reason_text", ""))
+	if male_text.to_lower().contains("she") or male_text.to_lower().contains("her"):
+		return _fail("a male Echo's reason text still said she/her: '%s'" % male_text)
+	if male_text != "it goes against what he holds to":
+		return _fail("expected the he-form of the values reason, got '%s'" % male_text)
 	return _pass()
