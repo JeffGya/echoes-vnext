@@ -307,7 +307,7 @@ static func _t_no_score_change() -> Dictionary:
 
 	# Independently recompute the score for the exact same candidate/context this
 	# winner represents, and confirm the probe's `score` is not a different number.
-	var board_summary: Dictionary = arbiter._build_board_summary(actor, [enemy], {}, "nascent", "")
+	var board_summary: Dictionary = BoardAssessmentService.build_board_summary(actor, [enemy], {}, "nascent", "", {}, arbiter._cfg_get("situational_muls"))
 	var candidate: Dictionary = {
 		"action_type": "actor.move", "target_id": "enemy.a", "target_pos": {"col": 3, "row": 0},
 		"target_distance": 3, "target_hp_ratio": 1.0, "priority": 1.0,

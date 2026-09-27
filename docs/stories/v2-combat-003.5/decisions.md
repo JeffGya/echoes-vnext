@@ -795,3 +795,39 @@ follow-up #7.
 > `tests movement_arbiter`: 27 total / 26 passed / 1 failed before the fix (baseline), 28 total /
 > 27 passed / 1 failed after (new test added, same pre-existing `avoid_overcommit_stays_proportionate`
 > failure, untouched — out of scope per follow-up #7 and decision #29/#38).
+
+---
+
+### 67. behaviorarbiter-file-size-extraction-candidates-3-and-4
+
+**Q:** Follow-up #11 (`docs/stories/v2-combat-003.5/followup-tasks.md`) investigated
+`BehaviorArbiter.gd`'s growth past its ~1,000-line soft guard and proposed extraction candidates.
+Which candidates were extracted, and what is the file's line count now?
+**A:** Candidates #3 (board/threat assessment) and #4 (action-candidate generation) were
+extracted. Candidates #1 (bias application: `_apply_bias`, `_apply_vow_bias`, `_apply_bond_bias`)
+and #2 (movement style: `_style_alignment`, `_style_urgency_factor`,
+`_movement_style_bond_pressure`, `_route_style_of`) remain in `BehaviorArbiter.gd` — Jeff decided
+to defer them, out of scope for this pass.
+**Source:** Task brief (follow-up #11 continuation), verified against current source, 2026-09-28
+**Date:** 2026-09-28
+
+> **Result:** `mechanics-developer` created `core/actors/behaviors/BoardAssessmentService.gd`
+> (candidate #3: `build_board_summary`, `is_cover_destination`, `line_is_blocked`,
+> `is_in_leader_radius`, `situational_bonus`, all `static`) and
+> `core/actors/behaviors/ActionCandidateGenerator.gd` (candidate #4: `generate_candidates`,
+> `stationary_candidate`, `route_candidate`, `add_perceived_target_health`,
+> `apply_stationary_identity`, `append_legacy_purifier_candidate`, `resolve_skill_base`, all
+> `static`). Both classes hold no `ConfigService`; every config value (`situational_muls`,
+> `guard_range`, `threat_threshold`, the skill-weight tables) arrives as a parameter resolved by
+> `BehaviorArbiter._cfg_get()`. `BehaviorArbiter.gd` gained two `preload()` consts
+> (`BoardAssessmentServiceScript`, `ActionCandidateGeneratorScript`) and now calls through them at
+> every former call site; `_get_most_wounded_enemy()` was converted from an instance method to
+> `static` (unchanged body) so the new generator file could call it without an arbiter instance.
+> `BehaviorArbiter.gd`: 1,967 code lines before, 1,419 after (grep -vcE '^\s*(#|$)' count).
+> `BoardAssessmentService.gd`: 247 code lines. `ActionCandidateGenerator.gd`: 330 code lines.
+> Five test call sites were repointed from private-method / `.call()` string-dispatch onto the new
+> static functions: `DivergenceDetectorTests.gd`, `MaturityExpressionTests.gd`,
+> `LeadershipEmotionTests.gd` (two sites). Filtered suites unchanged from baseline: `divergence`
+> 25/25, `leadership` 21/21, `expr` 38/38, `movement_arbiter` 27/28 (same pre-existing
+> `avoid_overcommit_stays_proportionate` failure, decisions #29/#38, untouched). Candidates #1 and
+> #2 stay for a future pass if Jeff opens one.

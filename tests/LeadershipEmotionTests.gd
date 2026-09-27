@@ -524,13 +524,17 @@ static func _t_threat_read_holds_the_retreat_gate() -> Dictionary:
 	var enemy := _actor("gate_enemy", 5, 5, 1, [])
 	enemy["actor_type"] = "enemy"
 	enemy["faction"] = "enemy"
-	var alone: Array = arbiter.call("_generate_candidates", subject, [subject, enemy],
-		{}, "whole", calling_behavior, {})
+	var alone: Array = ActionCandidateGenerator.generate_candidates(subject, [subject, enemy],
+		{}, "whole", calling_behavior, {},
+		int(arbiter._cfg_get("guard_range")), float(arbiter._cfg_get("threat_threshold")),
+		arbiter._cfg_get("situational_muls"))
 	if not _has_action(alone, "actor.retreat"):
 		return { "ok": false, "error": "retreat must be offered at 0.40 HP with no leader" }
 	var mods: Dictionary = arbiter.call("_leadership_score_mods", subject, [subject, leader], expr)
-	var led: Array = arbiter.call("_generate_candidates", subject, [subject, leader, enemy],
-		{}, "whole", calling_behavior, mods)
+	var led: Array = ActionCandidateGenerator.generate_candidates(subject, [subject, leader, enemy],
+		{}, "whole", calling_behavior, mods,
+		int(arbiter._cfg_get("guard_range")), float(arbiter._cfg_get("threat_threshold")),
+		arbiter._cfg_get("situational_muls"))
 	if _has_action(led, "actor.retreat"):
 		return { "ok": false, "error": "threat_read did not lower the retreat gate" }
 	return { "ok": true }
@@ -551,9 +555,9 @@ static func _t_cover_positioning_reads_broken_sight_line() -> Dictionary:
 	if float(led.get("_cover_move_bonus", 0.0)) <= 0.0:
 		return { "ok": false, "error": "cover_positioning granted no move bonus" }
 	var path: Array = [{ "col": 4, "row": 4 }]
-	if bool(arbiter.call("_is_cover_destination", path, _cover_context(false))):
+	if bool(BoardAssessmentService.is_cover_destination(path, _cover_context(false))):
 		return { "ok": false, "error": "open ground counted as cover" }
-	if not bool(arbiter.call("_is_cover_destination", path, _cover_context(true))):
+	if not bool(BoardAssessmentService.is_cover_destination(path, _cover_context(true))):
 		return { "ok": false, "error": "terrain on the sight line did not count as cover" }
 	return { "ok": true }
 
