@@ -161,22 +161,35 @@ the exact failure, restored, reconfirmed green. Full suite (both fixes combined)
 as a labeled case — it's an emergent side effect of an empty primary route dict not being
 explicitly `_failure()`'d, not a documented contract state. `_movement_live_options()`'s
 rejection-logging condition only checked `valid == false`, so this shape passed through
-silently. Fix: widened that condition to `not valid or options.is_empty()`, synthesizing
-`reason = "destination_unreachable"` / `field = "goal.destination_region"` only for the
-valid-but-empty case — a genuine `valid: false` rejection still uses `generate_options()`'s
-own `reason`/`field` unchanged. Same log event and payload shape as before, just a wider
-trigger. New test `movement_option/live_options_logs_unreachable_destination_region` in
-`tests/MovementOptionTests.gd`, reusing the existing `_t_perceived_intersection_and_occupancy`
-unreachable-region fixture, asserting the exact `reason`/`mover_id`/`goal_id` values, not just
-"a log exists." `generate_options()` returned exactly two hits project-wide, confirming this
-fix's single call site (`LiveMovementContextService.gd`) is genuinely the only consumer.
-Independently verified by `qa-verifier`: confirmed the mislabeling risk doesn't occur (traced
-that the `reason`/`field` synthesis only fires when `valid == true`), confirmed the reused
-fixture genuinely hits the `valid: true` path and not `_failure()`, reverted and reproduced
-the exact test failure, checked for any routine-firing risk (found none — the empty-options
-shape requires the mover to be genuinely boxed in relative to its perceived world). Compile
-check clean, `movement_arbiter`/`live_movement`/`movement_option` suites pass, full suite
-shows no new failures (`Tests: 1746 total, 1745 passed, 1 failed` — the one failure is the
+silently. Fix: widened that condition to `not valid or options.is_empty()`, synthesizing a
+`reason`/`field` only for the valid-but-empty case — a genuine `valid: false` rejection still
+uses `generate_options()`'s own `reason`/`field` unchanged.
+
+**PR review then found the first label choice itself overclaimed.** The initial fix labeled
+every valid-but-empty case `reason = "destination_unreachable"`. Tracing
+`MovementOptionService._build_primary()` shows it returns an empty dict in THREE distinct
+scenarios, not one: no route exists at all (genuinely unreachable); a route exists but the
+capacity-truncated path is empty (not affordable this turn); or a route and affordable path
+exist but `objective_progress <= 0.0` (not productive this turn). Only the first is actually
+"unreachable" — labeling all three that way is a false diagnostic for the other two. Corrected
+to a genuinely neutral `reason = "no_viable_option"` / `field = "goal"`. The test fixture used
+(reused from `_t_perceived_intersection_and_occupancy`) was independently traced and confirmed
+to hit the true-unreachable case specifically (a single-row walkable grid with the only
+connecting cell blocked), so the test itself stayed valid — only the expected label string
+changed. Scenarios 2/3 aren't separately covered by a test; noted, not required for this fix.
+
+Same log event and payload shape as before throughout, just a wider trigger and a corrected
+label. New test `movement_option/live_options_logs_unreachable_destination_region` in
+`tests/MovementOptionTests.gd` asserts the exact `reason`/`mover_id`/`goal_id` values, not just
+"a log exists." `generate_options()` has exactly two hits project-wide (its definition and one
+call site), confirming this fix's single call site (`LiveMovementContextService.gd`) is
+genuinely the only consumer. Independently verified by `qa-verifier` twice: first pass
+confirmed the mislabeling risk didn't occur in the widening logic itself, reverted and
+reproduced the test failure, checked for routine-firing risk (found none); second pass
+independently re-traced the three-scenario premise from source, confirmed the corrected label
+is genuinely neutral, confirmed no stale reference to the old label remained anywhere. Compile
+check clean, `movement_arbiter`/`live_movement`/`movement_option` suites pass, full suite shows
+no new failures (`Tests: 1746 total, 1745 passed, 1 failed` — the one failure is the
 pre-existing, unrelated follow-up #7 gap).
 
 **Opening prompt (superseded, kept as a record):**

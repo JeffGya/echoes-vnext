@@ -417,7 +417,7 @@ static func _t_live_options_logs_unreachable_destination_region() -> Dictionary:
 	if found.is_empty():
 		return _fail("No movement.options_rejected log entry — a stalled Echo would be silent")
 	var data: Dictionary = found.get("data", {}) as Dictionary
-	if str(data.get("reason", "")) != "destination_unreachable":
+	if str(data.get("reason", "")) != "no_viable_option":
 		return _fail("Wrong rejection reason: %s" % str(data))
 	if str(data.get("mover_id", "")) != "mover.a":
 		return _fail("Wrong mover_id logged: %s" % str(data))

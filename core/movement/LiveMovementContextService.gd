@@ -287,11 +287,13 @@ func _movement_live_options(
 			var reason: String = str(generated.get("reason", ""))
 			var field: String = str(generated.get("field", ""))
 			if generated_valid and reason.is_empty():
-				# generate_options() doesn't label this case itself — an empty primary
-				# route dict just isn't explicitly "failed" — so label it here, where the
-				# rejection is actually observed.
-				reason = "destination_unreachable"
-				field = "goal.destination_region"
+				# generate_options() doesn't distinguish WHY the primary route search came back
+				# empty here — could be no route at all, a capacity-truncated path, or a route
+				# with zero objective progress (MovementOptionService._build_primary()). Label
+				# generically rather than overclaim "unreachable" for cases where a route
+				# exists but isn't usable/productive this turn.
+				reason = "no_viable_option"
+				field = "goal"
 			logger.info(t, "movement.options_rejected", "Goal produced no movement options", {
 				"mover_id": str(movement_context.get("mover_id", "")),
 				"goal_id": str(goal.get("goal_id", "")),
