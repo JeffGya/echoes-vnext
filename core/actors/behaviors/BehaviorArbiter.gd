@@ -1486,8 +1486,12 @@ func _spatial_utility(
 	# term shrank at a different rate than progress, producing a distance cliff past which
 	# every actor's best move dropped to 1 cell regardless of capacity. commitment_ratio
 	# (capacity-normalized) is kept unchanged for directive_avoid_overcommit below.
+	# "commitment" is a cost the hostile-control surcharge can inflate; progress_origin_distance
+	# is a pure cell count that never carries that surcharge. path.size() keeps both terms of
+	# the ratio in the same unit without a new computation.
+	var route_cell_distance: int = (option.get("path", []) as Array).size()
 	var commitment_progress_ratio: float = clampf(
-		float(option["commitment"]) / maxf(1.0, float(option.get("progress_origin_distance", 1.0))), 0.0, 1.0
+		float(route_cell_distance) / maxf(1.0, float(option.get("progress_origin_distance", 1.0))), 0.0, 1.0
 	)
 	var weights: Dictionary = directive.get("intent_weights", {}) as Dictionary
 	var objective_advance: float = clampf(
