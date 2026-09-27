@@ -60,6 +60,10 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(Stage004SeamTests, "_t_no_ally_contact_no_ally_actor"))
 	runner.register_test("seam/claimant_failed_forces_combat_and_sets_markers",
 		Callable(Stage004SeamTests, "_t_claimant_failed_forces_combat_and_sets_markers"))
+	runner.register_test("seam/claimant_failed_sets_fresh_encounter_id",
+		Callable(Stage004SeamTests, "_t_claimant_failed_sets_fresh_encounter_id"))
+	runner.register_test("seam/debug_force_claimant_combat_sets_fresh_encounter_id",
+		Callable(Stage004SeamTests, "_t_debug_force_claimant_combat_sets_fresh_encounter_id"))
 	runner.register_test("seam/nonobjective_charge_failed_sets_hostile_flag",
 		Callable(Stage004SeamTests, "_t_nonobjective_charge_failed_sets_hostile_flag"))
 	runner.register_test("seam/objective_charge_failed_does_not_set_hostile_flag",
@@ -371,6 +375,76 @@ static func _t_claimant_failed_forces_combat_and_sets_markers() -> Dictionary:
 			"ok": false,
 			"error": "Expected explore_map.combat_intro_reason='claimant_hostile', got '%s'" \
 				% str(map_after.get("combat_intro_reason", ""))
+		}
+	return { "ok": true }
+
+
+# Follow-up #13: a hostile-Claimant fight must get its own encounter_id, not inherit
+# a stale one left behind by an earlier fight in the same stage.
+static func _t_claimant_failed_sets_fresh_encounter_id() -> Dictionary:
+	var env: Dictionary = _boot_env("claimant_encid")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed (realm not created)" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var t: int = env["t"]
+
+	var stale_id := "realm.01.stage.0.earlier_fight"
+	flow_ctx.encounter_id = stale_id
+
+	var stage: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
+	var explore_map: Dictionary = stage.get("explore_map", {})
+	var sit_id := "sit_encounter_id_test"
+	var situations: Array = explore_map.get("situations", [])
+	situations.append({ "id": sit_id, "resolved": false, "revealed": true, "is_objective": false, "objective_index": -1 })
+	explore_map["situations"] = situations
+	stage["explore_map"] = explore_map
+	FlowStageExploreState._write_stage_back(flow_ctx, stage)
+
+	var contact: Dictionary = { "id": sit_id, "role": "claimant", "outcome": "failed" }
+	runtime._apply_action_outcome(
+		runtime._contact_controller().apply_contact_outcome(contact, stage, explore_map, t), t)
+
+	var expected := "realm.01.stage.0." + sit_id + ".claimant"
+	if flow_ctx.encounter_id == stale_id:
+		return { "ok": false, "error": "encounter_id still equals the stale sentinel — not reset" }
+	if str(flow_ctx.encounter_id).is_empty():
+		return { "ok": false, "error": "encounter_id is empty after claimant-failed forced combat" }
+	if str(flow_ctx.encounter_id) != expected:
+		return {
+			"ok": false,
+			"error": "Expected encounter_id='%s', got '%s'" % [expected, str(flow_ctx.encounter_id)]
+		}
+	return { "ok": true }
+
+
+# Follow-up #13: the debug force_claimant_combat command has the same bug (its own
+# docstring says it re-implements the claimant-hostile branch) — same fix, keyed
+# by tick instead of a situation id since this command has no real sit_id.
+static func _t_debug_force_claimant_combat_sets_fresh_encounter_id() -> Dictionary:
+	var env: Dictionary = _boot_env("claimant_debug_encid")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed (realm not created)" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+
+	var stale_id := "realm.01.stage.0.earlier_fight"
+	flow_ctx.encounter_id = stale_id
+
+	# dispatch() computes t := _next_tick(), which reads flow_ctx.sim_tick then
+	# increments it — capture that same value here to know the exact t it will use.
+	var expected_t: int = flow_ctx.sim_tick
+	runtime.dispatch({ "type": "debug.claimant.force_combat" })
+
+	var expected := "realm.01.stage.0.claimant_debug." + str(expected_t)
+	if flow_ctx.encounter_id == stale_id:
+		return { "ok": false, "error": "encounter_id still equals the stale sentinel — not reset" }
+	if str(flow_ctx.encounter_id).is_empty():
+		return { "ok": false, "error": "encounter_id is empty after debug.claimant.force_combat" }
+	if str(flow_ctx.encounter_id) != expected:
+		return {
+			"ok": false,
+			"error": "Expected encounter_id='%s', got '%s'" % [expected, str(flow_ctx.encounter_id)]
 		}
 	return { "ok": true }
 

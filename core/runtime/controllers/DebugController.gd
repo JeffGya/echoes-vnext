@@ -307,6 +307,7 @@ func handle_force_claimant_combat(t: int) -> FlowActionOutcome:
 		"stage_id": flow_ctx.stage_id,
 	})
 
+	flow_ctx.encounter_id = flow_ctx.realm_id + "." + flow_ctx.stage_id + ".claimant_debug." + str(t)
 	return FlowActionOutcome.transition_outcome(
 		FlowStateIds.ENCOUNTER, "stage.claimant.combat_forced"
 	).with_save_reason("debug.claimant.force_combat")
