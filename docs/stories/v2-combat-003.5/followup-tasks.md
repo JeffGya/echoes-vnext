@@ -151,13 +151,48 @@ the exact failure, restored, reconfirmed green. Full suite (both fixes combined)
 
 ---
 
-## 8. Fix silent stand-still when an Echo has no reachable path
+## 8. ~~Fix silent stand-still when an Echo has no reachable path~~ — FIXED 2026-09-27
 
-**task_id:** `task_c8dfaa47`
+**task_id:** `task_c8dfaa47` (resolved 2026-09-27)
 
 **Why it came up:** Found while diagnosing the PURSUE/ENDURE win-to-loss regression (decisions #32-34). Not the cause of that regression — confirmed pre-existing, exposed by longer fights, not caused by V2-COMBAT-003.5.
 
-**Opening prompt:**
+**Fix:** Confirmed `generate_options()` doesn't itself distinguish `{valid: true, options: []}`
+as a labeled case — it's an emergent side effect of an empty primary route dict not being
+explicitly `_failure()`'d, not a documented contract state. `_movement_live_options()`'s
+rejection-logging condition only checked `valid == false`, so this shape passed through
+silently. Fix: widened that condition to `not valid or options.is_empty()`, synthesizing a
+`reason`/`field` only for the valid-but-empty case — a genuine `valid: false` rejection still
+uses `generate_options()`'s own `reason`/`field` unchanged.
+
+**PR review then found the first label choice itself overclaimed.** The initial fix labeled
+every valid-but-empty case `reason = "destination_unreachable"`. Tracing
+`MovementOptionService._build_primary()` shows it returns an empty dict in THREE distinct
+scenarios, not one: no route exists at all (genuinely unreachable); a route exists but the
+capacity-truncated path is empty (not affordable this turn); or a route and affordable path
+exist but `objective_progress <= 0.0` (not productive this turn). Only the first is actually
+"unreachable" — labeling all three that way is a false diagnostic for the other two. Corrected
+to a genuinely neutral `reason = "no_viable_option"` / `field = "goal"`. The test fixture used
+(reused from `_t_perceived_intersection_and_occupancy`) was independently traced and confirmed
+to hit the true-unreachable case specifically (a single-row walkable grid with the only
+connecting cell blocked), so the test itself stayed valid — only the expected label string
+changed. Scenarios 2/3 aren't separately covered by a test; noted, not required for this fix.
+
+Same log event and payload shape as before throughout, just a wider trigger and a corrected
+label. New test `movement_option/live_options_logs_unreachable_destination_region` in
+`tests/MovementOptionTests.gd` asserts the exact `reason`/`mover_id`/`goal_id` values, not just
+"a log exists." `generate_options()` has exactly two hits project-wide (its definition and one
+call site), confirming this fix's single call site (`LiveMovementContextService.gd`) is
+genuinely the only consumer. Independently verified by `qa-verifier` twice: first pass
+confirmed the mislabeling risk didn't occur in the widening logic itself, reverted and
+reproduced the test failure, checked for routine-firing risk (found none); second pass
+independently re-traced the three-scenario premise from source, confirmed the corrected label
+is genuinely neutral, confirmed no stale reference to the old label remained anywhere. Compile
+check clean, `movement_arbiter`/`live_movement`/`movement_option` suites pass, full suite shows
+no new failures (`Tests: 1746 total, 1745 passed, 1 failed` — the one failure is the
+pre-existing, unrelated follow-up #7 gap).
+
+**Opening prompt (superseded, kept as a record):**
 > In the Echoes vNext Godot/GDScript repo, `core/movement/MovementOptionService.gd`'s `generate_options()` can return `{valid: true, options: []}` when every cell of a movement goal's region is genuinely unreachable from the actor's origin (verified by direct shortest-path check under both the strict and authoritative-only walkable graph). When this happens, `core/movement/LiveMovementContextService.gd`'s `_movement_live_options()` falls back to `goal.legacy.stationary.actor_idle` with no rejection logged — the Echo silently stands still.
 >
 > This defeats `_movement_live_options()`'s own docstring guarantee that "a rejected goal is LOGGED, never dropped in silence." It was found during a V2-COMBAT-003.5 diagnosis (see `docs/stories/v2-combat-003.5/decisions.md` entries #32-34): in the PURSUE fixture fight (seed 12346), from round 6 onward, 3 of 5 Echoes stand still while a fleeing quarry walks away, because their goal region became unreachable on that board — and nothing announces why. This reproduces identically on the pre-Phase-3c code path too, so it predates V2-COMBAT-003.5 and was only exposed by that story's longer fights, not caused by it.
