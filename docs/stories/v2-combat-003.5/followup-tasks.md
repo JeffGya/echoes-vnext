@@ -263,11 +263,25 @@ one-line assignment mirroring `VentureController.gd:258`'s pattern:
 `seam/debug_force_claimant_combat_sets_fresh_encounter_id`), each seeding a stale sentinel id
 first and asserting the exact expected post-fix string. Independently verified by `qa-verifier`:
 reverted each fix in turn, reproduced the corresponding test failure, restored, confirmed green;
-traced the tick-prediction logic in `FlowRuntime.gd` directly to confirm it isn't fragile; confirmed
-no third entry point into a hostile-Claimant transition exists. Compile check clean,
-`contact`/`combat_terrain`/`recruit`/`seam` suites pass, full suite shows no new failures
-(`Tests: 1744 total, 1743 passed, 1 failed` — the one failure is the pre-existing, unrelated
-follow-up #7 gap).
+confirmed no third entry point into a hostile-Claimant transition exists.
+
+**PR review then found the `DebugController.gd` fix itself wasn't durable, and it took two more
+rounds to actually fix.** `flow_ctx.sim_tick` resets to 0 on every `boot()` and is never restored
+from save, so two sessions with the same dispatch sequence could reproduce the same id — a
+reviewing bot caught this correctly. First correction moved to a counter stored in
+`explore_map.debug_claimant_force_count`, but `qa-verifier` traced the actual re-entry path and
+found `FlowStageExploreState._reset_session_state()` rebuilds `explore_map` from a field
+whitelist on **every** re-entry into `flow.stage_explore` — including after every combat resolves
+— silently wiping that counter back to 0 on the very next use and reintroducing the identical
+collision. Final fix: the counter lives on the `stage` dict itself, a sibling of `explore_map`
+that whitelist rebuild never touches, while `_write_stage_back()` still persists it. The
+regression test was rewritten twice too — first to drop the sim_tick premise entirely, then
+(after `qa-verifier` found *that* version only did a synthetic `sim_tick` reset and never
+exercised the real wipe) to drive `FlowStageExploreState.enter()` directly, the actual post-combat
+re-entry path — confirmed to genuinely fail against each broken intermediate version before
+passing against the final fix. Compile check clean, `contact`/`combat_terrain`/`recruit`/`seam`
+suites pass, full suite shows no new failures (`Tests: 1745 total, 1744 passed, 1 failed` — the
+one failure is the pre-existing, unrelated follow-up #7 gap).
 
 **Not in scope, flagged for later:** a general "clear `encounter_id` on every encounter exit"
 hardening would close this whole class of bug more thoroughly but touches every encounter type,
