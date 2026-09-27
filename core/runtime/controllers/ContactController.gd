@@ -660,6 +660,7 @@ func apply_contact_outcome(
 					"situation_id": sit_id,
 				})
 
+				flow_ctx.encounter_id = flow_ctx.realm_id + "." + flow_ctx.stage_id + "." + sit_id + ".claimant"
 				return FlowActionOutcome.transition_outcome(FlowStateIds.ENCOUNTER, "stage.claimant.combat_forced")
 
 		"temporary_ally":

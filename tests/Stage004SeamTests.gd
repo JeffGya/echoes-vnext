@@ -60,6 +60,12 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(Stage004SeamTests, "_t_no_ally_contact_no_ally_actor"))
 	runner.register_test("seam/claimant_failed_forces_combat_and_sets_markers",
 		Callable(Stage004SeamTests, "_t_claimant_failed_forces_combat_and_sets_markers"))
+	runner.register_test("seam/claimant_failed_sets_fresh_encounter_id",
+		Callable(Stage004SeamTests, "_t_claimant_failed_sets_fresh_encounter_id"))
+	runner.register_test("seam/debug_force_claimant_combat_sets_fresh_encounter_id",
+		Callable(Stage004SeamTests, "_t_debug_force_claimant_combat_sets_fresh_encounter_id"))
+	runner.register_test("seam/debug_force_claimant_combat_survives_tick_reset",
+		Callable(Stage004SeamTests, "_t_debug_force_claimant_combat_survives_tick_reset"))
 	runner.register_test("seam/nonobjective_charge_failed_sets_hostile_flag",
 		Callable(Stage004SeamTests, "_t_nonobjective_charge_failed_sets_hostile_flag"))
 	runner.register_test("seam/objective_charge_failed_does_not_set_hostile_flag",
@@ -372,6 +378,122 @@ static func _t_claimant_failed_forces_combat_and_sets_markers() -> Dictionary:
 			"error": "Expected explore_map.combat_intro_reason='claimant_hostile', got '%s'" \
 				% str(map_after.get("combat_intro_reason", ""))
 		}
+	return { "ok": true }
+
+
+# Follow-up #13: a hostile-Claimant fight must get its own encounter_id, not inherit
+# a stale one left behind by an earlier fight in the same stage.
+static func _t_claimant_failed_sets_fresh_encounter_id() -> Dictionary:
+	var env: Dictionary = _boot_env("claimant_encid")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed (realm not created)" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var t: int = env["t"]
+
+	var stale_id := "realm.01.stage.0.earlier_fight"
+	flow_ctx.encounter_id = stale_id
+
+	var stage: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
+	var explore_map: Dictionary = stage.get("explore_map", {})
+	var sit_id := "sit_encounter_id_test"
+	var situations: Array = explore_map.get("situations", [])
+	situations.append({ "id": sit_id, "resolved": false, "revealed": true, "is_objective": false, "objective_index": -1 })
+	explore_map["situations"] = situations
+	stage["explore_map"] = explore_map
+	FlowStageExploreState._write_stage_back(flow_ctx, stage)
+
+	var contact: Dictionary = { "id": sit_id, "role": "claimant", "outcome": "failed" }
+	runtime._apply_action_outcome(
+		runtime._contact_controller().apply_contact_outcome(contact, stage, explore_map, t), t)
+
+	var expected := "realm.01.stage.0." + sit_id + ".claimant"
+	if flow_ctx.encounter_id == stale_id:
+		return { "ok": false, "error": "encounter_id still equals the stale sentinel — not reset" }
+	if str(flow_ctx.encounter_id).is_empty():
+		return { "ok": false, "error": "encounter_id is empty after claimant-failed forced combat" }
+	if str(flow_ctx.encounter_id) != expected:
+		return {
+			"ok": false,
+			"error": "Expected encounter_id='%s', got '%s'" % [expected, str(flow_ctx.encounter_id)]
+		}
+	return { "ok": true }
+
+
+# Follow-up #13: the debug force_claimant_combat command has the same bug (its own
+# docstring says it re-implements the claimant-hostile branch) — same fix, keyed
+# by a persisted per-stage counter since this command has no real sit_id.
+static func _t_debug_force_claimant_combat_sets_fresh_encounter_id() -> Dictionary:
+	var env: Dictionary = _boot_env("claimant_debug_encid")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed (realm not created)" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+
+	var stale_id := "realm.01.stage.0.earlier_fight"
+	flow_ctx.encounter_id = stale_id
+
+	# Fresh stage — explore_map.debug_claimant_force_count is absent (defaults to 0),
+	# so this first call produces force_count = 1.
+	runtime.dispatch({ "type": "debug.claimant.force_combat" })
+
+	var expected := "realm.01.stage.0.claimant_debug.1"
+	if flow_ctx.encounter_id == stale_id:
+		return { "ok": false, "error": "encounter_id still equals the stale sentinel — not reset" }
+	if str(flow_ctx.encounter_id).is_empty():
+		return { "ok": false, "error": "encounter_id is empty after debug.claimant.force_combat" }
+	if str(flow_ctx.encounter_id) != expected:
+		return {
+			"ok": false,
+			"error": "Expected encounter_id='%s', got '%s'" % [expected, str(flow_ctx.encounter_id)]
+		}
+	return { "ok": true }
+
+
+# Follow-up review fix: qa-verifier found the counter nested inside explore_map, so
+# FlowStageExploreState._reset_session_state() — which runs on EVERY re-entry into
+# flow.stage_explore, including after every combat resolves — silently wiped it back
+# to 0. Proves the counter survives a REAL re-entry, not just a manual sim_tick reset.
+# Drives FlowStageExploreState.enter() directly on a fresh instance — behaviourally
+# identical to the registered singleton's enter() the real flow_machine.transition()
+# calls, since this state has no instance fields (mutation goes through flow_ctx).
+static func _t_debug_force_claimant_combat_survives_tick_reset() -> Dictionary:
+	var env: Dictionary = _boot_env("claimant_debug_tick_reset")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed (realm not created)" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var t: int = env["t"]
+
+	runtime.dispatch({ "type": "debug.claimant.force_combat" })
+	var first_id: String = str(flow_ctx.encounter_id)
+
+	# Sentinel on a field _reset_session_state() always clears to "" — proves the
+	# re-entry below really ran the reset, not a no-op.
+	var stage_before: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
+	var map_before: Dictionary = stage_before.get("explore_map", {})
+	map_before["last_situation_id"] = "sentinel_before_reset"
+	stage_before["explore_map"] = map_before
+	FlowStageExploreState._write_stage_back(flow_ctx, stage_before)
+
+	# Real re-entry into flow.stage_explore — the same path every post-combat return
+	# (win or lose) takes. This is what wiped the old explore_map-nested counter.
+	FlowStageExploreState.new().enter(flow_ctx, t)
+
+	var stage_after: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
+	var map_after: Dictionary = stage_after.get("explore_map", {})
+	if str(map_after.get("last_situation_id", "sentinel_before_reset")) == "sentinel_before_reset":
+		return { "ok": false, "error": "last_situation_id sentinel survived — enter() did not run the real session reset" }
+
+	runtime.dispatch({ "type": "debug.claimant.force_combat" })
+	var second_id: String = str(flow_ctx.encounter_id)
+
+	if first_id != "realm.01.stage.0.claimant_debug.1":
+		return { "ok": false, "error": "Expected first_id='realm.01.stage.0.claimant_debug.1', got '%s'" % first_id }
+	if second_id == first_id:
+		return { "ok": false, "error": "encounter_id did not change after real stage_explore re-entry — still '%s'" % second_id }
+	if second_id != "realm.01.stage.0.claimant_debug.2":
+		return { "ok": false, "error": "Expected second_id='realm.01.stage.0.claimant_debug.2', got '%s'" % second_id }
 	return { "ok": true }
 
 

@@ -299,6 +299,14 @@ func handle_force_claimant_combat(t: int) -> FlowActionOutcome:
 
 	explore_map["combat_intro_reason"] = "claimant_hostile"
 	stage["explore_map"] = explore_map
+
+	# Lives on `stage`, not `explore_map`: _reset_session_state() (FlowStageExploreState.gd)
+	# rebuilds explore_map from a field whitelist on every re-entry, which happens after
+	# every combat — a counter nested there would silently reset each time. `stage`'s other
+	# top-level fields are untouched by that rebuild.
+	var force_count: int = int(stage.get("debug_claimant_force_count", 0)) + 1
+	stage["debug_claimant_force_count"] = force_count
+
 	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
 
 	flow_ctx.active_encounter_objective_index = -1
@@ -307,6 +315,7 @@ func handle_force_claimant_combat(t: int) -> FlowActionOutcome:
 		"stage_id": flow_ctx.stage_id,
 	})
 
+	flow_ctx.encounter_id = flow_ctx.realm_id + "." + flow_ctx.stage_id + ".claimant_debug." + str(force_count)
 	return FlowActionOutcome.transition_outcome(
 		FlowStateIds.ENCOUNTER, "stage.claimant.combat_forced"
 	).with_save_reason("debug.claimant.force_combat")

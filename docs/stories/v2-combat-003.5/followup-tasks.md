@@ -242,13 +242,53 @@ gap — was confirmed to fail identically on the unmodified tree).
 
 ---
 
-## 13. Hostile-Claimant fights can reuse an earlier fight's encounter_id
+## 13. ~~Hostile-Claimant fights can reuse an earlier fight's encounter_id~~ — FIXED 2026-09-27
 
-**task_id:** `task_d9eb5743`
+**task_id:** `task_d9eb5743` (resolved 2026-09-27)
 
 **Why it came up:** Found during Phase 6 combined verification (2026-09-23), traced in code, not yet reproduced in play. Pre-existing (predates this story), made consequential by this story's board-variety work (decisions #1-3) — previously all stage encounters shared one board anyway, so an id collision was invisible.
 
-**Opening prompt:**
+**Fix:** Confirmed by reading the code (mechanism unambiguous: one write-never path, two
+direct readers, no reset) rather than a manual play session — the regression tests below serve
+as the "targeted test" half of the reproduction requirement. Two call sites never set
+`flow_ctx.encounter_id`, not one: `ContactController.apply_contact_outcome()`'s claimant-failed
+branch (the real path) AND `DebugController.handle_force_claimant_combat()` (the
+`force_claimant_combat` debug shortcut, discovered mid-investigation — it deliberately
+re-implements the same branch instead of calling it, with the identical bug). Both fixed with a
+one-line assignment mirroring `VentureController.gd:258`'s pattern:
+`ContactController.gd` uses `realm_id + "." + stage_id + "." + sit_id + ".claimant"`;
+`DebugController.gd` (no real `sit_id` available) uses
+`realm_id + "." + stage_id + ".claimant_debug." + str(t)`. Two new tests in
+`tests/Stage004SeamTests.gd` (`seam/claimant_failed_sets_fresh_encounter_id`,
+`seam/debug_force_claimant_combat_sets_fresh_encounter_id`), each seeding a stale sentinel id
+first and asserting the exact expected post-fix string. Independently verified by `qa-verifier`:
+reverted each fix in turn, reproduced the corresponding test failure, restored, confirmed green;
+confirmed no third entry point into a hostile-Claimant transition exists.
+
+**PR review then found the `DebugController.gd` fix itself wasn't durable, and it took two more
+rounds to actually fix.** `flow_ctx.sim_tick` resets to 0 on every `boot()` and is never restored
+from save, so two sessions with the same dispatch sequence could reproduce the same id — a
+reviewing bot caught this correctly. First correction moved to a counter stored in
+`explore_map.debug_claimant_force_count`, but `qa-verifier` traced the actual re-entry path and
+found `FlowStageExploreState._reset_session_state()` rebuilds `explore_map` from a field
+whitelist on **every** re-entry into `flow.stage_explore` — including after every combat resolves
+— silently wiping that counter back to 0 on the very next use and reintroducing the identical
+collision. Final fix: the counter lives on the `stage` dict itself, a sibling of `explore_map`
+that whitelist rebuild never touches, while `_write_stage_back()` still persists it. The
+regression test was rewritten twice too — first to drop the sim_tick premise entirely, then
+(after `qa-verifier` found *that* version only did a synthetic `sim_tick` reset and never
+exercised the real wipe) to drive `FlowStageExploreState.enter()` directly, the actual post-combat
+re-entry path — confirmed to genuinely fail against each broken intermediate version before
+passing against the final fix. Compile check clean, `contact`/`combat_terrain`/`recruit`/`seam`
+suites pass, full suite shows no new failures (`Tests: 1745 total, 1744 passed, 1 failed` — the
+one failure is the pre-existing, unrelated follow-up #7 gap).
+
+**Not in scope, flagged for later:** a general "clear `encounter_id` on every encounter exit"
+hardening would close this whole class of bug more thoroughly but touches every encounter type,
+not just Claimant fights. The underlying duplication itself (`DebugController` re-implementing
+`ContactController`'s logic instead of calling it) is a design smell worth its own follow-up.
+
+**Opening prompt (superseded, kept as a record):**
 > In the Echoes vNext Godot/GDScript repo, `core/runtime/controllers/ContactController.gd:663` transitions into ENCOUNTER state (a hostile Claimant fight) without setting `flow_ctx.encounter_id`. Nothing resets `encounter_id` after a fight ends — the only places that assign it are `core/runtime/controllers/VentureController.gd:258` and `:536`, onboarding, and the keeper intro flow.
 >
 > This means: if the party fights, say, `sit.3` in a stage, and later a Claimant turns hostile in that same stage, the Claimant fight inherits the leftover `encounter_id` from the earlier fight (e.g. `...sit.3`). Since `encounter_id` seeds terrain and spawn generation, the Claimant fight would get the SAME terrain and spawn cells as the earlier fight if both are COMBAT-type encounters. It would also silently skip its own ally-recruit roll, since `RecruitmentConsequenceService.gd:101` runs that roll once per `encounter_id` — and the id would already be "used."
