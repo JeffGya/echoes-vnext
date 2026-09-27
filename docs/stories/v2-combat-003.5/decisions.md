@@ -756,3 +756,42 @@ system landing, so that system fails loud instead of silent from day one. Not a 
 > asserts no log fires). Logic in the pure `core/movement/` layer (`MovementOptionService.gd`) is
 > untouched, per that file's own header: it is "the DORMANT-by-design pure layer" and the adapter
 > file is the named place for anything that reads live state or logs.
+
+---
+
+### 66. commitment-progress-ratio-unit-mismatch-fixed
+
+**Q:** Follow-up #7 (`docs/stories/v2-combat-003.5/followup-tasks.md`) tracked decision #30's
+unit mismatch: `BehaviorArbiter._spatial_utility()` divided `option["commitment"]` (a move-cost,
+`BehaviorArbiter.gd:1489` old code) by `option["progress_origin_distance"]` (a pure cell count,
+`MovementOptionService.gd:781`). Decision #30 said this had "no live impact today." Was that still
+true?
+**A:** No. It was correct only for terrain-cost variance (terrain cost is uniform, always 1, at
+every live call site). It was NOT correct for the hostile-control edge surcharge, which is live:
+`MovementOptionService._build_control()` adds `+1` to `route_cost` per edge adjacent to a
+controlling hostile (`MovementOptionService.gd:822-893`). `route_cost` feeds `commitment`
+(`MovementOption.gd:149`) but never `progress_origin_distance`. So a route running beside an enemy
+already scored a harsher commitment penalty than an equal-length hostile-free route, from mixed
+units alone, not from any real cost/benefit tradeoff. Fix: replace `option["commitment"]` with
+`(option.get("path", []) as Array).size()` in the ratio's numerator — a pure cell count matching
+`progress_origin_distance`'s unit, restoring apples-to-apples without a new tuning value. Closes
+follow-up #7.
+**Source:** Task brief (follow-up #7), verified against current source, 2026-09-28
+**Date:** 2026-09-28
+
+> **Result:** `mechanics-developer` changed `BehaviorArbiter.gd:1489-1495` (line numbers after the
+> edit shifted to 1493-1496; the brief's 1489-1491 was the pre-edit location, no other drift). Added a
+> `route_cell_distance` local from `option.get("path", [])`, defaulting to 0 for hand-built
+> fixtures without a `"path"` key. `tests/MovementArbitrationTests.gd`: `_t_spatial_base_terms`'s
+> `"commitment"` case gained a 4-cell `"path"` so its `-2.0` assertion still holds under the new
+> formula; all other hand-built-option tests in that file use delta or cancelling comparisons and
+> needed no change. `MovementOptionTests.gd`, `MovementStyleServiceTests.gd`,
+> `MovementSlice2ContractTests.gd`, `MovementContractTests.gd` do not call `_spatial_utility()` and
+> are unaffected. New regression test `_t_commitment_ratio_ignores_hostile_surcharge` builds one
+> hostile-adjacent and one clean fixture at the same distance/capacity, matches an exposed option
+> to a clean option by destination and path length, confirms their `commitment` (cost) values
+> differ (proving the surcharge fixture is live) while their `progress_origin_distance` matches,
+> then asserts the resulting commitment scoring TERM is now equal for both. Filtered suite
+> `tests movement_arbiter`: 27 total / 26 passed / 1 failed before the fix (baseline), 28 total /
+> 27 passed / 1 failed after (new test added, same pre-existing `avoid_overcommit_stays_proportionate`
+> failure, untouched — out of scope per follow-up #7 and decision #29/#38).

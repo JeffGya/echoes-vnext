@@ -37,6 +37,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement_arbiter/capacity_meaningful_at_range", _t_capacity_meaningful_at_range)
 	runner.register_test("movement_arbiter/hostile_control_still_restrains", _t_hostile_control_still_restrains)
 	runner.register_test("movement_arbiter/avoid_overcommit_stays_proportionate", _t_avoid_overcommit_stays_proportionate)
+	runner.register_test("movement_arbiter/commitment_ratio_ignores_hostile_surcharge", _t_commitment_ratio_ignores_hostile_surcharge)
 
 
 ## The winner also carries the score decomposition DecisionTrace reads
@@ -366,6 +367,7 @@ static func _t_spatial_base_terms() -> Dictionary:
 			goal["urgency"] = 1.0
 		elif str(case[0]) == "commitment":
 			option["commitment"] = 4
+			option["path"] = [{"col": 1, "row": 0}, {"col": 2, "row": 0}, {"col": 3, "row": 0}, {"col": 4, "row": 0}]
 		else:
 			option[str(case[0])] = 1.0
 		var actual: float = arbiter._spatial_utility(goal, option, {}, cfg)
@@ -833,6 +835,68 @@ static func _t_avoid_overcommit_stays_proportionate() -> Dictionary:
 						% [term, ceiling, distance, capacity])
 	if not shortfalls.is_empty():
 		return _fail("scout_carefully still collapses to a shorter route: %s" % "\n  ".join(shortfalls))
+	return _pass()
+
+
+## Follow-up #7 / decision #30: two routes of the SAME length must score the SAME
+## commitment term, whether or not one runs beside a hostile controller. Before the
+## fix, `commitment` (a cost the surcharge inflates) was divided by a pure cell count
+## that never carries the surcharge, so the exposed route scored a harsher penalty
+## from mixed units alone.
+static func _t_commitment_ratio_ignores_hostile_surcharge() -> Dictionary:
+	var hostile_fixture: Dictionary = _open_fixture(20, 4, {"col": 2, "row": 1}, {})
+	if not bool((hostile_fixture["generated"] as Dictionary).get("valid", false)):
+		return _fail("Hostile fixture produced no options: %s" % str(hostile_fixture["generated"]))
+	var clean_fixture: Dictionary = _open_fixture(20, 4, {}, {})
+	if not bool((clean_fixture["generated"] as Dictionary).get("valid", false)):
+		return _fail("Clean fixture produced no options: %s" % str(clean_fixture["generated"]))
+
+	var exposed_option: Dictionary = {}
+	for option_value: Variant in hostile_fixture["options"] as Array:
+		var option: Dictionary = option_value as Dictionary
+		if not (option["hostile_control_sources"] as Array).is_empty():
+			exposed_option = option
+			break
+	if exposed_option.is_empty():
+		return _fail("No generated option crossed the hostile controller's zone of control")
+
+	var exposed_path_size: int = (exposed_option["path"] as Array).size()
+	var exposed_destination: Dictionary = exposed_option["destination"] as Dictionary
+	var matched_clean: Dictionary = {}
+	for option_value: Variant in clean_fixture["options"] as Array:
+		var option: Dictionary = option_value as Dictionary
+		var destination: Dictionary = option["destination"] as Dictionary
+		if int(destination["col"]) != int(exposed_destination["col"]) or int(destination["row"]) != int(exposed_destination["row"]):
+			continue
+		if (option["path"] as Array).size() != exposed_path_size:
+			continue
+		matched_clean = option
+		break
+	if matched_clean.is_empty():
+		return _fail("No clean-fixture option matched the exposed option's destination and path length")
+
+	if int(matched_clean["progress_origin_distance"]) != int(exposed_option["progress_origin_distance"]):
+		return _fail("Fixture pair covers different ground: progress_origin_distance %d != %d" \
+			% [int(matched_clean["progress_origin_distance"]), int(exposed_option["progress_origin_distance"])])
+	if int(exposed_option["commitment"]) <= int(matched_clean["commitment"]):
+		return _fail("Fixture does not exercise the surcharge: exposed commitment %d, clean commitment %d" \
+			% [int(exposed_option["commitment"]), int(matched_clean["commitment"])])
+
+	var arbiter := BehaviorArbiter.new({}, _spatial_cfg())
+	var cfg: Dictionary = _spatial_cfg()["spatial_utility"]
+	var goal: Dictionary = (hostile_fixture["goals"] as Array)[0] as Dictionary
+	var exposed_parts: Dictionary = {}
+	arbiter._spatial_utility(goal, exposed_option, {}, cfg, exposed_parts)
+	var clean_parts: Dictionary = {}
+	arbiter._spatial_utility(goal, matched_clean, {}, cfg, clean_parts)
+	var exposed_term: float = float((exposed_parts["parts"] as Dictionary)["commitment"])
+	var clean_term: float = float((clean_parts["parts"] as Dictionary)["commitment"])
+	var commitment_weight: float = float(cfg["commitment_weight"])
+	if is_equal_approx(abs(exposed_term), abs(commitment_weight)) and is_equal_approx(abs(clean_term), abs(commitment_weight)):
+		return _fail("Both commitment terms sit at the clamp ceiling — pick a fixture that leaves headroom")
+	if not is_equal_approx(exposed_term, clean_term):
+		return _fail("Commitment term still differs by hostile exposure alone: exposed %s, clean %s" \
+			% [exposed_term, clean_term])
 	return _pass()
 
 
