@@ -151,13 +151,35 @@ the exact failure, restored, reconfirmed green. Full suite (both fixes combined)
 
 ---
 
-## 8. Fix silent stand-still when an Echo has no reachable path
+## 8. ~~Fix silent stand-still when an Echo has no reachable path~~ — FIXED 2026-09-27
 
-**task_id:** `task_c8dfaa47`
+**task_id:** `task_c8dfaa47` (resolved 2026-09-27)
 
 **Why it came up:** Found while diagnosing the PURSUE/ENDURE win-to-loss regression (decisions #32-34). Not the cause of that regression — confirmed pre-existing, exposed by longer fights, not caused by V2-COMBAT-003.5.
 
-**Opening prompt:**
+**Fix:** Confirmed `generate_options()` doesn't itself distinguish `{valid: true, options: []}`
+as a labeled case — it's an emergent side effect of an empty primary route dict not being
+explicitly `_failure()`'d, not a documented contract state. `_movement_live_options()`'s
+rejection-logging condition only checked `valid == false`, so this shape passed through
+silently. Fix: widened that condition to `not valid or options.is_empty()`, synthesizing
+`reason = "destination_unreachable"` / `field = "goal.destination_region"` only for the
+valid-but-empty case — a genuine `valid: false` rejection still uses `generate_options()`'s
+own `reason`/`field` unchanged. Same log event and payload shape as before, just a wider
+trigger. New test `movement_option/live_options_logs_unreachable_destination_region` in
+`tests/MovementOptionTests.gd`, reusing the existing `_t_perceived_intersection_and_occupancy`
+unreachable-region fixture, asserting the exact `reason`/`mover_id`/`goal_id` values, not just
+"a log exists." `generate_options()` returned exactly two hits project-wide, confirming this
+fix's single call site (`LiveMovementContextService.gd`) is genuinely the only consumer.
+Independently verified by `qa-verifier`: confirmed the mislabeling risk doesn't occur (traced
+that the `reason`/`field` synthesis only fires when `valid == true`), confirmed the reused
+fixture genuinely hits the `valid: true` path and not `_failure()`, reverted and reproduced
+the exact test failure, checked for any routine-firing risk (found none — the empty-options
+shape requires the mover to be genuinely boxed in relative to its perceived world). Compile
+check clean, `movement_arbiter`/`live_movement`/`movement_option` suites pass, full suite
+shows no new failures (`Tests: 1746 total, 1745 passed, 1 failed` — the one failure is the
+pre-existing, unrelated follow-up #7 gap).
+
+**Opening prompt (superseded, kept as a record):**
 > In the Echoes vNext Godot/GDScript repo, `core/movement/MovementOptionService.gd`'s `generate_options()` can return `{valid: true, options: []}` when every cell of a movement goal's region is genuinely unreachable from the actor's origin (verified by direct shortest-path check under both the strict and authoritative-only walkable graph). When this happens, `core/movement/LiveMovementContextService.gd`'s `_movement_live_options()` falls back to `goal.legacy.stationary.actor_idle` with no rejection logged — the Echo silently stands still.
 >
 > This defeats `_movement_live_options()`'s own docstring guarantee that "a rejected goal is LOGGED, never dropped in silence." It was found during a V2-COMBAT-003.5 diagnosis (see `docs/stories/v2-combat-003.5/decisions.md` entries #32-34): in the PURSUE fixture fight (seed 12346), from round 6 onward, 3 of 5 Echoes stand still while a fleeing quarry walks away, because their goal region became unreachable on that board — and nothing announces why. This reproduces identically on the pre-Phase-3c code path too, so it predates V2-COMBAT-003.5 and was only exposed by that story's longer fights, not caused by it.

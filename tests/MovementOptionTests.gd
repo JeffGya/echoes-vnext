@@ -8,6 +8,7 @@ const ActorFact = preload("res://core/movement/contracts/MovementPerceivedActorF
 const HazardFact = preload("res://core/movement/contracts/MovementKnownHazardFact.gd")
 const MovementGoal = preload("res://core/movement/contracts/MovementGoal.gd")
 const MovementProfile = preload("res://core/movement/contracts/MovementProfile.gd")
+const LiveMovement = preload("res://core/movement/LiveMovementContextService.gd")
 
 
 static func register(runner: CoreTestRunner) -> void:
@@ -39,6 +40,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement_option/lateral_extra_never_renames_other_candidate", Callable(MovementOptionTests, "_t_lateral_extra_never_renames_other_candidate"))
 	runner.register_test("movement_option/low_exposure_hazards_outrank_threat_distance", Callable(MovementOptionTests, "_t_low_exposure_hazards_outrank_threat_distance"))
 	runner.register_test("movement_option/generate_options_guards_lateral_against_full_candidate_set", Callable(MovementOptionTests, "_t_generate_options_guards_lateral_against_full_candidate_set"))
+	runner.register_test("movement_option/live_options_logs_unreachable_destination_region", Callable(MovementOptionTests, "_t_live_options_logs_unreachable_destination_region"))
 
 
 static func _t_edge_costs_all_public_apis() -> Dictionary:
@@ -386,6 +388,41 @@ static func _t_perceived_intersection_and_occupancy() -> Dictionary:
 	)
 	if not bool(dead_occupied["valid"]) or not (dead_occupied["options"] as Array).is_empty():
 		return _fail("A dead actor retained in canonical occupancy must still block traversal: %s" % str(dead_occupied))
+	return _pass()
+
+
+## Follow-up #8. generate_options() can legally return {valid: true, options: []} when a
+## goal's whole destination region is unreachable — the same fixture as
+## _t_perceived_intersection_and_occupancy's "hidden" case above. The live per-turn caller,
+## LiveMovementContextService._movement_live_options(), must not let that shape pass
+## through silently: it must log movement.options_rejected so a stalled Echo is
+## explainable, per the docstring guarantee at LiveMovementContextService.gd:269-270.
+static func _t_live_options_logs_unreachable_destination_region() -> Dictionary:
+	var cells: Array = _line_cells(0, 3, 0)
+	var perceived: Dictionary = _walkable(cells)
+	perceived["1,0"] = false
+	var context: Dictionary = _context(cells, [], {}, perceived)
+	var goal: Dictionary = _goal("advance", [_cell(3, 0)])
+	var logger := StructuredLogger.new()
+	var service := LiveMovement.new(FlowContext.new(), logger)
+	var options: Array = service._movement_live_options(context, _profile(3), [goal], 5)
+	if not options.is_empty():
+		return _fail("Unreachable destination region must still publish zero options: %s" % str(options))
+	var found: Dictionary = {}
+	for entry_value: Variant in logger.get_logs():
+		var entry: Dictionary = entry_value as Dictionary
+		if str(entry.get("type", "")) == "movement.options_rejected":
+			found = entry
+			break
+	if found.is_empty():
+		return _fail("No movement.options_rejected log entry — a stalled Echo would be silent")
+	var data: Dictionary = found.get("data", {}) as Dictionary
+	if str(data.get("reason", "")) != "destination_unreachable":
+		return _fail("Wrong rejection reason: %s" % str(data))
+	if str(data.get("mover_id", "")) != "mover.a":
+		return _fail("Wrong mover_id logged: %s" % str(data))
+	if str(data.get("goal_id", "")) != str(goal.get("goal_id", "")):
+		return _fail("Wrong goal_id logged: %s" % str(data))
 	return _pass()
 
 
