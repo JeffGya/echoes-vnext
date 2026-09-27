@@ -41,6 +41,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement_option/low_exposure_hazards_outrank_threat_distance", Callable(MovementOptionTests, "_t_low_exposure_hazards_outrank_threat_distance"))
 	runner.register_test("movement_option/generate_options_guards_lateral_against_full_candidate_set", Callable(MovementOptionTests, "_t_generate_options_guards_lateral_against_full_candidate_set"))
 	runner.register_test("movement_option/live_options_logs_unreachable_destination_region", Callable(MovementOptionTests, "_t_live_options_logs_unreachable_destination_region"))
+	runner.register_test("movement_option/live_options_logs_perception_narrowing", Callable(MovementOptionTests, "_t_live_options_logs_perception_narrowing"))
+	runner.register_test("movement_option/live_options_silent_when_perceived_matches_walkable", Callable(MovementOptionTests, "_t_live_options_silent_when_perceived_matches_walkable"))
 
 
 static func _t_edge_costs_all_public_apis() -> Dictionary:
@@ -423,6 +425,62 @@ static func _t_live_options_logs_unreachable_destination_region() -> Dictionary:
 		return _fail("Wrong mover_id logged: %s" % str(data))
 	if str(data.get("goal_id", "")) != str(goal.get("goal_id", "")):
 		return _fail("Wrong goal_id logged: %s" % str(data))
+	return _pass()
+
+
+## `perceived_planning_cells` is a DORMANT contract field (LiveMovementContextService.gd:310-315):
+## no live call site can currently make it differ from `authoritative_walkable`. This proves the
+## defensive log fires the day it does, using a cell OFF the chosen route so the goal still
+## succeeds — narrowing must be reported even when it does not block movement this turn.
+static func _t_live_options_logs_perception_narrowing() -> Dictionary:
+	var cells: Array = []
+	for col in range(4):
+		for row in range(2):
+			cells.append(_cell(col, row))
+	var walkable: Dictionary = _walkable(cells)
+	var perceived: Dictionary = walkable.duplicate(true)
+	perceived["0,1"] = false
+	var context: Dictionary = _context(cells, [], {}, perceived)
+	var goal: Dictionary = _goal("advance", [_cell(3, 0)])
+	var logger := StructuredLogger.new()
+	var service := LiveMovement.new(FlowContext.new(), logger)
+	var options: Array = service._movement_live_options(context, _profile(3), [goal], 5)
+	if options.is_empty():
+		return _fail("Route stays reachable off the narrowed cell; options must not be empty: %s" % str(options))
+	var found: Dictionary = {}
+	for entry_value: Variant in logger.get_logs():
+		var entry: Dictionary = entry_value as Dictionary
+		if str(entry.get("type", "")) == "movement.options_rejected":
+			found = entry
+			break
+	if found.is_empty():
+		return _fail("No movement.options_rejected log entry for a narrowed planning graph")
+	var data: Dictionary = found.get("data", {}) as Dictionary
+	if str(data.get("reason", "")) != "perception_narrowed_planning_graph":
+		return _fail("Wrong rejection reason: %s" % str(data))
+	if str(data.get("field", "")) != "perceived_planning_cells":
+		return _fail("Wrong field logged: %s" % str(data))
+	if str(data.get("mover_id", "")) != "mover.a":
+		return _fail("Wrong mover_id logged: %s" % str(data))
+	return _pass()
+
+
+## Regression guard: every live call site today passes the same dictionary for both
+## `authoritative_walkable` and `perceived_planning_cells` (LiveMovementContextService.gd:147-148,
+## :600-601). This proves that real shape stays silent — no false alarm on any board in play.
+static func _t_live_options_silent_when_perceived_matches_walkable() -> Dictionary:
+	var cells: Array = _line_cells(0, 3, 0)
+	var context: Dictionary = _context(cells)
+	var goal: Dictionary = _goal("advance", [_cell(3, 0)])
+	var logger := StructuredLogger.new()
+	var service := LiveMovement.new(FlowContext.new(), logger)
+	var options: Array = service._movement_live_options(context, _profile(3), [goal], 5)
+	if options.is_empty():
+		return _fail("Baseline reachable goal must still publish options: %s" % str(options))
+	for entry_value: Variant in logger.get_logs():
+		var entry: Dictionary = entry_value as Dictionary
+		if str(entry.get("type", "")) == "movement.options_rejected":
+			return _fail("Unexpected movement.options_rejected log when perceived matches walkable: %s" % str(entry))
 	return _pass()
 
 

@@ -714,3 +714,45 @@
 > **Result:** filed as follow-up task #15 in `docs/stories/v2-combat-003.5/followup-tasks.md`
 > (`task_large_board_camera`) — reproduction steps and the owning script (to be located) recorded
 > there for whoever picks it up.
+
+---
+
+### 65. planning-graph-narrowing-is-dormant-not-a-phase-3c-defect
+
+**Q:** Follow-up #9 (`task_e06782cb`) named "planning graph narrowing" as a possible live defect:
+`MovementOptionService._planning_walkable()` intersects `authoritative_walkable` with
+`perceived_planning_cells`, which could silently shrink a mover's plannable cells. Is this a
+Phase 3c live-wiring bug, and should it be fixed or just logged?
+**A:** Investigated by `game-orchestrator` before hand-off, confirmed by `mechanics-developer`
+against current source. Not a live defect. The intersection has existed since the service's
+first commit (92b418d, V2-COMBAT-002 Slice 2) — `MovementOptionService.gd:896-905`. Phase 3c only
+wired the already-existing `generate_options()` into the live path; it did not add the
+intersection. Every live call site that builds a `MovementContext` passes the SAME dictionary
+for both `authoritative_walkable` and `perceived_planning_cells`
+(`LiveMovementContextService.gd:147-148` in `prepare_live_movement_context`, and
+`LiveMovementContextService.gd:600-601` in `prepare_guide_spirit_activation_context`), so the
+intersection can never narrow anything on a live board today. No perception-limiting system
+(fog of war, perception radius, line-of-sight) exists anywhere in `core/` or `data/`.
+`CombatPressureService._truthful_region()` (`CombatPressureService.gd:826-830`) also reads
+`perceived_planning_cells` for goal-region filtering, confirming this is a deliberate,
+load-bearing contract field — a planned seam for a future perception system, not a stray
+parameter. Jeff decided: add defensive rejection-logging now anyway, ahead of any perception
+system landing, so that system fails loud instead of silent from day one. Not a bug fix.
+**Source:** Jeff (via game-orchestrator relay), 2026-09-27
+**Date:** 2026-09-27
+
+> **Result:** `mechanics-developer` added `LiveMovementContextService._log_perception_narrowing()`
+> (`LiveMovementContextService.gd:316-331`), called once per activation at the end of
+> `_movement_live_options()` (`LiveMovementContextService.gd:306`). It compares the same
+> `authoritative_walkable` / `perceived_planning_cells` pair `_planning_walkable()` intersects and
+> logs `movement.options_rejected` with `reason: "perception_narrowed_planning_graph"` the first
+> time a cell is dropped. Placed after the per-goal loop, not before, so the existing follow-up
+> #8 test (`movement_option/live_options_logs_unreachable_destination_region`) keeps finding its
+> own `no_viable_option` entry first — logging order was the only thing that could have collided
+> with that test, since both entries share the `movement.options_rejected` type. Two new tests
+> added to `tests/MovementOptionTests.gd`: `live_options_logs_perception_narrowing` (narrows a
+> cell off the chosen route, asserts the log fires even though the goal still succeeds) and
+> `live_options_silent_when_perceived_matches_walkable` (the real, only shape in play today —
+> asserts no log fires). Logic in the pure `core/movement/` layer (`MovementOptionService.gd`) is
+> untouched, per that file's own header: it is "the DORMANT-by-design pure layer" and the adapter
+> file is the named place for anything that reads live state or logs.

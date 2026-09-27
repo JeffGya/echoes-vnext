@@ -303,7 +303,32 @@ func _movement_live_options(
 			continue
 		for option_value: Variant in generated_options:
 			options.append((option_value as Dictionary).duplicate(true))
+	_log_perception_narrowing(movement_context, t)
 	return options
+
+
+## `perceived_planning_cells` is a DORMANT contract field: every live call site today
+## passes the same dictionary for it and `authoritative_walkable`
+## (`prepare_live_movement_context` and `prepare_guide_spirit_activation_context`, both in
+## this file), so no live board can narrow the graph yet. `MovementOptionService._planning_
+## walkable()` intersects the two regardless, and a future perception system will make them
+## differ for real. Logged here, once per activation, so that day fails loud, not silent.
+func _log_perception_narrowing(movement_context: Dictionary, t: int) -> void:
+	var authoritative: Dictionary = movement_context.get("authoritative_walkable", {}) as Dictionary
+	var perceived: Dictionary = movement_context.get("perceived_planning_cells", {}) as Dictionary
+	var keys: Array = authoritative.keys()
+	keys.sort()
+	for key_value: Variant in keys:
+		var key: String = str(key_value)
+		if bool(authoritative[key]) and not bool(perceived.get(key, false)):
+			logger.info(t, "movement.options_rejected",
+				"Perceived planning graph narrower than authoritative walkable", {
+					"mover_id": str(movement_context.get("mover_id", "")),
+					"goal_id": "",
+					"reason": "perception_narrowed_planning_graph",
+					"field": "perceived_planning_cells",
+				})
+			return
 
 
 func _movement_planning_walkable(movement_context: Dictionary) -> Dictionary:
