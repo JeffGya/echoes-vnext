@@ -3,7 +3,9 @@
 **Status: MEASURED — decided in decisions.md D-32, D-33.**
 
 **Owner:** mid-game-designer. **Story:** pace-reward, extension under decisions.md D-31.
-**Input:** `docs/stories/pace-reward/escort-design.md` §8 (PROPOSED, not approved).
+**Input:** the measurement plan of the escort pace proposal (PROPOSED, not approved). That proposal is
+deleted; its text stays in git history at commit `98b462a`. The approved escort rules are
+decisions.md D-31 to D-34 and design.md §3.
 **Purpose:** data for Jeff. This document sets no value and approves no formula.
 
 ---
@@ -29,7 +31,7 @@ Realms are merged per cell, not reported as separate rows, because the story's o
 
 **Validation (seed −1):** the escort probe copy was run at seed −1 with the pre-existing fixture
 settings (`guide_mode = "protect"`, `nojoin`) to check against the old probe
-(`probe/pace_probe3.gd`). Every field matched exactly (`ally_killed`, `ase`, `cr_reason`,
+(the pace probe script behind tuning.md §4.5, a scratch file that is now deleted). Every field matched exactly (`ally_killed`, `ase`, `cr_reason`,
 `d_obj`, `duration_turns`, `guide_mode`, `pace_bonus`, `pace_state`, `par_rounds`, `rank`,
 `reached`, `reason`, `total_echoes`, `total_enemies`, `victory`, `window_turns`, and more) **except**
 `d_mean`/`d_min` (46 vs 38) and `round_ended` (9 vs 6). **Explanation:** `EchoFactory.generate`
@@ -65,7 +67,7 @@ decided curve (`pace_full_ratio` 1.10, `pace_zero_ratio` 1.60, `pace_bonus_pct` 
 `pace_state` follows D-22 (from the Ase paid, both directions). All rows below are victory-only,
 n = the fights with both a valid par and a resolved win.
 
-### 2a. Par A (proposed, escort-design.md §1): `max(1, spirit→destination / spirit capacity)`, no hold
+### 2a. Par A (the proposal's par, the spirit's own walk): `max(1, spirit→destination / spirit capacity)`, no hold
 
 | Join | Board | n (wins) | Median ratio | p10 | p90 | Full % | Partial % | None % | Mean bonus (Ase) |
 |---|---|---|---|---|---|---|---|---|---|
@@ -164,7 +166,8 @@ break the limit, but it is not a small margin either.
    accepted (D-08).
 4. **Joined spirit (open point 3):** across 77 joined-spirit wins (44 old board, 33 new board),
    **zero** ended in `spirit_escorted`. Every joined-spirit win was `all_enemies_defeated`. This
-   confirms escort-design.md §4's flag directly: a joined spirit's arrival at the destination is
+   confirms the proposal's flag directly (the game does not steer a joined spirit to the
+   destination): a joined spirit's arrival at the destination is
    not just noisier than a non-joining spirit's, it did not happen once in this sample. Whatever
    par formula is used for a joined spirit's pace, it is scoring a win that never depended on
    reaching the destination.
@@ -173,9 +176,9 @@ break the limit, but it is not a small margin either.
    before) are common and large: median 7 rounds on both boards, and a median **35% of a win's
    total rounds on the old board, 50% on the new board**. No win in the sample had zero blocking
    rounds. This is a large share of a fight's length spent with the spirit stationary while still
-   in play. It does not by itself say the "no extra slack" recommendation (escort-design.md §5) is
+   in play. It does not by itself say the "no extra slack" recommendation of the proposal is
    wrong — the shared curve already absorbs slack for every mode — but the size of it here is
-   larger than a single blocked step per fight, which is what §5's reasoning pictured.
+   larger than a single blocked step per fight, which is what the proposal's reasoning pictured.
 6. **The 30-round cap (§1a):** 23% of all fights (46 of 200) never resolved in 30 rounds, rising to
    32% on the new board for a non-joining spirit. This was not measured for the other four modes
    at this rate (design.md §9's probes did not report an equivalent share). A non-joining spirit's
@@ -185,7 +188,7 @@ break the limit, but it is not a small margin either.
 
 ---
 
-## 5. Data for the four open items (escort-design.md §8, §9's open list)
+## 5. Data for the four open items of the escort proposal
 
 Jeff decides; this section lists options with numbers, not a recommendation.
 
@@ -201,14 +204,14 @@ Jeff decides; this section lists options with numbers, not a recommendation.
 
 | Option | What the data shows |
 |---|---|
-| One par, either formula (as proposed, §3 of escort-design.md) | Median ratio gap between `spirit_escorted` and `all_enemies_defeated` is ≈0.6–0.7 under either par (§4 finding 3), roughly double PURSUE's accepted gap. |
-| Per-reason par | Not measured. Would need a second par formula defined and re-run; escort-design.md §3 argues against this as a second hidden calibration. |
+| One par, either formula (as proposed) | Median ratio gap between `spirit_escorted` and `all_enemies_defeated` is ≈0.6–0.7 under either par (§4 finding 3), roughly double PURSUE's accepted gap. |
+| Per-reason par | Not measured. Would need a second par formula defined and re-run; the proposal argued against this: a second par is a hidden per-reason calibration (ANSWERS.md #63). |
 
 ### 5.3 Joined spirit: same formula, or its own rule
 
 | Option | What the data shows |
 |---|---|
-| Same formula as non-joining (as proposed, §4 of escort-design.md) | 0 of 77 joined wins were `spirit_escorted`; all were `all_enemies_defeated`. A joined spirit's pace ratio under either par is scoring a win unrelated to the destination it never reached. |
+| Same formula as non-joining (as proposed) | 0 of 77 joined wins were `spirit_escorted`; all were `all_enemies_defeated`. A joined spirit's pace ratio under either par is scoring a win unrelated to the destination it never reached. |
 | Joined spirit gets no pace term (like PROTECT) | Not measured directly, but the data supports the premise: a joined spirit practically never wins by arrival, so an escort-arrival par may not describe what actually happened in a joined-spirit win. |
 | Joined spirit uses `all_enemies_defeated`-only par, mirroring PURSUE's contain-vs-kill split | Not measured as a separate formula; the existing `all_enemies_defeated` rows (§2a, §2b, by-reason tables) are the closest available data, since every joined win is already that reason. |
 
@@ -216,7 +219,7 @@ Jeff decides; this section lists options with numbers, not a recommendation.
 
 | Option | What the data shows |
 |---|---|
-| No extra slack (as proposed, §5 of escort-design.md) | Median blocking share of a win's rounds is 35% (old board) to 50% (new board) (§4 finding 5). The shared curve absorbs this today without failing Gap A/B (§3), but the absorbed amount is large. |
+| No extra slack (as proposed) | Median blocking share of a win's rounds is 35% (old board) to 50% (new board) (§4 finding 5). The shared curve absorbs this today without failing Gap A/B (§3), but the absorbed amount is large. |
 | A per-round slack term sized to observed blocking | Not measured as a modified formula; only the raw blocking-round counts above are available. |
 
 ---
@@ -260,8 +263,8 @@ spirit's death), so this should not have distorted the counts, but it was not di
 actor-by-actor.
 
 **ASSUMED:** Par B's "party" is every actor with `faction == "echo"` and not `is_ally`, matching
-the `caps` list every other probe in this story already builds the same way (`probe/pace_probe3.gd`
-line 101-104). A joined spirit (`faction == "echo"`, `is_spirit == true`) is excluded from this
+the `caps` list every other probe in this story already builds the same way (the pace probe script,
+a deleted scratch file). A joined spirit (`faction == "echo"`, `is_spirit == true`) is excluded from this
 list by the existing `caps` construction, so Par B's party mean never includes the joined spirit
 itself, only the five roster Echoes.
 
