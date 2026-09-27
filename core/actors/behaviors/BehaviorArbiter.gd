@@ -1237,7 +1237,7 @@ func _validate_perceived_actor_context(context: Dictionary, movement_context: Di
 	canonical_actors.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
 		return str(left["id"]) < str(right["id"])
 	)
-	var facts_by_id: Dictionary = _perceived_facts_by_id(movement_context)
+	var facts_by_id: Dictionary = MovementContextContract.facts_by_id(movement_context)
 	var mover: Dictionary = context["actor"] as Dictionary
 	var mover_result: Dictionary = _crosscheck_perceived_actor(mover, facts_by_id[str(mover["id"])] as Dictionary, "context.actor")
 	if not bool(mover_result["valid"]):
@@ -1301,14 +1301,6 @@ func _canonical_perceived_actors(context: Dictionary, movement_context: Dictiona
 	result.sort_custom(func(left: Variant, right: Variant) -> bool:
 		return str((left as Dictionary)["id"]) < str((right as Dictionary)["id"])
 	)
-	return result
-
-
-static func _perceived_facts_by_id(movement_context: Dictionary) -> Dictionary:
-	var result: Dictionary = {}
-	for fact_value: Variant in movement_context["perceived_actors"] as Array:
-		var fact: Dictionary = fact_value as Dictionary
-		result[str(fact["id"])] = fact
 	return result
 
 
@@ -1941,27 +1933,6 @@ static func compute_interpretation_swing(
 	if directive_mul_at_1 <= 0.0:
 		return INF
 	return identity_mul_at_1 / directive_mul_at_1
-
-
-# PROG-010: Returns the most wounded (lowest hp_ratio) enemy relative to this actor.
-# Used for enemy Adept+ focus fire. Falls back to empty if no enemies exist.
-static func _get_most_wounded_enemy(actor: Dictionary, all_actors: Array) -> Dictionary:
-	var my_faction: String = str(actor.get("faction", "echo"))
-	var best: Dictionary = {}
-	var best_ratio: float = 2.0
-	for a_v in all_actors:
-		if not (a_v is Dictionary):
-			continue
-		var a: Dictionary = a_v as Dictionary
-		if str(a.get("faction", "")) == my_faction:
-			continue
-		if a.get("is_dead", false) or a.get("is_structure", false):
-			continue
-		var r: float = ActorService.health_ratio(a)
-		if r < best_ratio:
-			best_ratio = r
-			best = a
-	return best
 
 
 # VOW-001: Apply vow-specific intent bias additively to all candidates.

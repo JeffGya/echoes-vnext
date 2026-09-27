@@ -59,7 +59,7 @@ static func generate_candidates(
 	var nearest_enemy: Dictionary
 	if actor_type == "enemy" \
 			and (expression_band == "forming" or expression_band == "grounded" or expression_band == "whole"):
-		nearest_enemy = BehaviorArbiter._get_most_wounded_enemy(actor, all_actors)
+		nearest_enemy = _get_most_wounded_enemy(actor, all_actors)
 		if nearest_enemy.is_empty():
 			nearest_enemy = ActorService.get_nearest_enemy(actor, all_actors)
 	else:
@@ -301,6 +301,27 @@ static func generate_candidates(
 	return candidates
 
 
+# PROG-010: Returns the most wounded (lowest hp_ratio) enemy relative to this actor.
+# Used for enemy Adept+ focus fire. Falls back to empty if no enemies exist.
+static func _get_most_wounded_enemy(actor: Dictionary, all_actors: Array) -> Dictionary:
+	var my_faction: String = str(actor.get("faction", "echo"))
+	var best: Dictionary = {}
+	var best_ratio: float = 2.0
+	for a_v in all_actors:
+		if not (a_v is Dictionary):
+			continue
+		var a: Dictionary = a_v as Dictionary
+		if str(a.get("faction", "")) == my_faction:
+			continue
+		if a.get("is_dead", false) or a.get("is_structure", false):
+			continue
+		var r: float = ActorService.health_ratio(a)
+		if r < best_ratio:
+			best_ratio = r
+			best = a
+	return best
+
+
 static func stationary_candidate(
 	legacy: Dictionary,
 	movement_context: Dictionary,
@@ -350,7 +371,7 @@ static func add_perceived_target_health(candidate: Dictionary, movement_context:
 	var target_id: String = str(candidate.get("target_id", ""))
 	if target_id.is_empty():
 		return
-	var facts: Dictionary = BehaviorArbiter._perceived_facts_by_id(movement_context)
+	var facts: Dictionary = MovementContext.facts_by_id(movement_context)
 	if facts.has(target_id):
 		candidate["target_hp_ratio"] = float((facts[target_id] as Dictionary)["health_ratio"])
 
