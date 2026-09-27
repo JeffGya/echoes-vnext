@@ -187,13 +187,23 @@ concern below is what's actually left open.
 
 ---
 
-## 12. Fix _read_field_cooldown's identical ordering bug
+## 12. ~~Fix _read_field_cooldown's identical ordering bug~~ — FIXED 2026-09-27
 
-**task_id:** `task_3e1b8703`
+**task_id:** `task_3e1b8703` (resolved 2026-09-27)
 
 **Why it came up:** Phase 5 fixed `_withdraw_cooldown`'s decrement-before-check ordering bug (it never blocked anything). `_read_field_cooldown` has the exact same shape and was deliberately left alone as out of scope at the time — found again during Phase 6 verification, still untracked anywhere in the repo.
 
-**Opening prompt:**
+**Fix:** `core/actors/ActorStateMachine.gd`'s `_read_field_cooldown` decrement moved from the
+start of `advance_turn()` to `_update_passive_state()` (turn end), mirroring the existing
+`_withdraw_cooldown` decrement exactly. New test `cooldown/read_field_blocked_on_next_turn_after_firing`
+in `tests/CooldownTests.gd` drives two consecutive `advance_turn()` calls and proves the cooldown
+now blocks. Independently verified by `qa-verifier`: reverted the fix, reproduced the exact pre-fix
+failure, restored the fix, reconfirmed green. Compile check clean, filtered suites (`cooldown`,
+`actor`, `behavior_arbiter`) pass, full suite shows no new failures (the one unrelated pre-existing
+failure, `movement_arbiter/avoid_overcommit_stays_proportionate` — the follow-up #7 commitment-scoring
+gap — was confirmed to fail identically on the unmodified tree).
+
+**Opening prompt (superseded, kept as a record):**
 > In the Echoes vNext Godot/GDScript repo, `core/actors/ActorStateMachine.gd`'s `_read_field_cooldown` (currently ~line 251-253, comment at ~line 260 calls it "already-flagged") is decremented unconditionally at the START of `advance_turn()`, before `BehaviorArbiter.gd`'s own check of it later in the same call (~line 1881 as of this writing, may have shifted). This is the exact same ordering bug `_withdraw_cooldown` had — fixed in V2-COMBAT-003.5 Phase 5 (`docs/stories/v2-combat-003.5/decisions.md`, the mechanical-fixes batch) by moving its decrement to the end of the turn instead of the start.
 >
 > `_read_field_cooldown`'s fix was deliberately deferred at the time ("out of scope for this phase, leave it alone") but was never actually filed anywhere as a follow-up — Phase 6's combined verification (2026-09-23) found it again and confirmed no document in the repo tracks it.

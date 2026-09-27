@@ -9,9 +9,11 @@
 #   5. actor.read_field generated when _read_field_cooldown == 0 (or absent).
 #   6. actor.withdraw blocked on the very next advance_turn() after it fires
 #      (V2-COMBAT-003.5 Phase 5 — the cooldown must survive one full actor turn).
+#   7. actor.read_field blocked on the very next advance_turn() after it fires
+#      (follow-up #12 — same tick-order defect as test 6, mirrored fix).
 #
 # Tests 1-5 use BehaviorArbiter.new({}) with skills_cfg injected in context.
-# Test 6 drives ActorStateMachine.advance_turn() directly — the cooldown-consuming
+# Tests 6-7 drive ActorStateMachine.advance_turn() directly — the cooldown-consuming
 # defect lived in the tick order around that call, not in the arbiter's own check.
 
 class_name CooldownTests
@@ -25,6 +27,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("cooldown/read_field_fires_when_cooldown_zero", Callable(CooldownTests, "_t_read_field_fires_when_cooldown_zero"))
 	runner.register_test("cooldown/withdraw_blocked_on_next_turn_after_firing",
 		Callable(CooldownTests, "_t_withdraw_blocked_on_next_turn_after_firing"))
+	runner.register_test("cooldown/read_field_blocked_on_next_turn_after_firing",
+		Callable(CooldownTests, "_t_read_field_blocked_on_next_turn_after_firing"))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -331,5 +335,44 @@ static func _t_withdraw_blocked_on_next_turn_after_firing() -> Dictionary:
 	var intent2: Dictionary = sm.advance_turn(ctx2, logger, 2)
 	if str(intent2.get("action_type", "")) == "actor.withdraw":
 		return { "ok": false, "error": "Turn 2: actor.withdraw fired again while on cooldown — cooldown was consumed before the arbiter's check ran" }
+
+	return { "ok": true }
+
+
+# Test 7: actor.read_field fires, sets _read_field_cooldown=1, then must NOT
+# fire again on the very next advance_turn() while the cooldown holds. Mirrors
+# test 6 — drives advance_turn() (not the arbiter directly) because the defect
+# was in the tick order around that call: _read_field_cooldown was decremented
+# at turn START, before the arbiter's own `== 0` check later in the same call,
+# so the cooldown set by turn N's read_field was already gone by turn N+1.
+#
+# _read_field_streak is pre-set to max_streak-1 so turn 1's single
+# actor.read_field push the streak to max and sets the cooldown immediately
+# (see _update_passive_state's okomfo branch).
+static func _t_read_field_blocked_on_next_turn_after_firing() -> Dictionary:
+	var actor := _seer_sight_actor(0)  # no cooldown to start
+	actor["actor_type"] = "echo"       # ActorStateMachine only picks BehaviorArbiter for echo/enemy actor_type; else it falls back to IdleBehaviorModule
+	actor["_read_field_streak"] = 2    # one more actor.read_field hits max_streak=3
+	var ally := _nearby_ally()
+	var all_actors: Array = [ally]
+
+	# advance_turn() reads skills config from context["cfg"]["data"]["skills"],
+	# not a bare "skills_cfg" key (see test 6's comment) — route it through "cfg".
+	var cfg := { "data": { "skills": _skills_cfg() } }
+
+	var sm := ActorStateMachine.new(actor)
+	var logger := StructuredLogger.new()
+
+	var ctx1 := { "actor": actor, "all_actors": all_actors, "t": 1, "cfg": cfg }
+	var intent1: Dictionary = sm.advance_turn(ctx1, logger, 1)
+	if str(intent1.get("action_type", "")) != "actor.read_field":
+		return { "ok": false, "error": "Turn 1: expected actor.read_field to fire, got: %s" % str(intent1.get("action_type")) }
+	if int(actor.get("_read_field_cooldown", 0)) != 1:
+		return { "ok": false, "error": "Turn 1: expected _read_field_cooldown=1 after read_field fired, got: %s" % str(actor.get("_read_field_cooldown")) }
+
+	var ctx2 := { "actor": actor, "all_actors": all_actors, "t": 2, "cfg": cfg }
+	var intent2: Dictionary = sm.advance_turn(ctx2, logger, 2)
+	if str(intent2.get("action_type", "")) == "actor.read_field":
+		return { "ok": false, "error": "Turn 2: actor.read_field fired again while on cooldown — cooldown was consumed before the arbiter's check ran" }
 
 	return { "ok": true }
