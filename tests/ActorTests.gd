@@ -58,6 +58,9 @@ static func _t_from_echo_all_fields_present() -> Dictionary:
 	if str(actor.get("name", "")) != "Kofi Mensah":
 		return { "ok": false, "error": "Expected name='Kofi Mensah', got: %s" % str(actor.get("name", "")) }
 
+	if str(actor.get("gender", "")) != "male":
+		return { "ok": false, "error": "Expected gender='male' (from _make_test_echo), got: %s" % str(actor.get("gender", "")) }
+
 	if int(actor.get("level", 0)) != 1:
 		return { "ok": false, "error": "Expected level=1 (PROG-001 default), got: %d" % int(actor.get("level", 0)) }
 

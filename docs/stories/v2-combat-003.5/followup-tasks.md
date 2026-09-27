@@ -74,13 +74,43 @@ multiplier. The same stale 12/22 fallbacks were also updated in `tests/CombatRou
 
 ---
 
-## 5. Add pronoun substitution to GuidanceContribution reason text
+## 5. ~~Add pronoun substitution to GuidanceContribution reason text~~ — FIXED 2026-09-27
 
-**task_id:** `task_8b7887b3`
+**task_id:** `task_8b7887b3` (resolved 2026-09-27)
 
 **Why it came up:** Found while adding a new line to `GuidanceContribution._REASON_TEXT` for the movement_style work (decision #22). All 20 lines in that table always render she/her, even for male Echoes, because the table's output skips the pronoun substitution step `ConversationService.gd` already uses for dialogue. Jeff: file separately, pre-existing, affects the whole table (decision #24).
 
-**Opening prompt:**
+**Fix:** Investigation found `ConversationService._substitute_pronouns` does NOT generalize to this
+text — it's a closed list of ~48 exact phrases tuned to its own dialogue vocabulary, none of which
+occur in `_REASON_TEXT`/`_PURPOSE_TEXT`, so calling it directly would have been a silent no-op. A
+naive global "her"→"his" replace would also have been grammatically wrong on lines where "her" is
+an object pronoun, not possessive (e.g. "her vow holds her" → "his vow holds him", not "holds his").
+Fix: a new whole-string she-form→he-form lookup table (`_HE_FORM`, 31 entries) and a local
+`_substitute_pronouns(text, gender)` function added to `GuidanceContribution.gd` itself (not
+`ConversationService.gd`), wired into `resolve()`'s single `reason_text` output — the only call site,
+so both downstream readers (the bark line and the debug log) get corrected text with no extra
+plumbing. New test `guidance/male_echo_reason_text_uses_he_him` in `tests/GuidanceResponseTests.gd`
+asserts exact he-form output, not just absence of "she"/"her". Independently verified by
+`qa-verifier`: all 31 pairs confirmed byte-exact against the pre-approved wording, including the
+three object-pronoun lines.
+
+**Second bug found in live play, fixed on the same branch:** in-game testing found the fix above was
+inert — a male Echo still said "she" in the actual bark bubble. Root cause: `core/actors/EchoActor.gd`'s
+`from_echo()` never copied a `gender` field onto the combat actor dict, and `ActorSchema.gd`'s
+`get_defaults()` had none either — so `GuidanceContribution.resolve()`'s `actor.get("gender", "female")`
+always fell back to `"female"` in real combat, regardless of the Echo's true gender in the save.
+`ConversationService.gd` was unaffected (it reads gender from the raw save-roster echo dict, never
+from a combat actor). Fixed by adding `"gender"` to `ActorSchema.get_defaults()` (not to
+`REQUIRED_FIELDS` — same precedent as `calling`, since enemies have no gender) and to
+`EchoActor.from_echo()`'s field mapping. `tests/ActorTests.gd`'s `actor/from_echo_all_fields_present`
+now asserts gender survives the mapping, and `guidance/male_echo_reason_text_uses_he_him` was
+rewritten to build its actor through the real `EchoActor.from_echo()` path instead of a hand-built
+dict — the exact "probe doesn't mirror production construction" gap that let the original bug through
+undetected. Independently verified by `qa-verifier`: reverted just the `EchoActor.gd` line, reproduced
+the exact failure, restored, reconfirmed green. Full suite (both fixes combined): `Tests: 1742 total,
+1741 passed, 1 failed` — the one failure is the pre-existing, unrelated follow-up #7 gap.
+
+**Opening prompt (superseded, kept as a record):**
 > In the Echoes vNext Godot/GDScript repo, `core/actors/behaviors/GuidanceContribution.gd`'s `_REASON_TEXT` dictionary (around line 121) holds short narration lines explaining why an Echo responded to Keeper guidance the way she did ("her vow holds her", "she will not leave the one she is bound to", "another already told her where to stand", "she reads it the way you do", plus a fifth line added by V2-COMBAT-003.5: "she made the only right move" for the movement_style source). These lines flow straight into `_bark_line` (`ActorStateMachine.gd:945`) with no pronoun substitution step.
 >
 > Compare this to `core/realms/ConversationService.gd:138`, which calls `_substitute_pronouns(response_text, echo_gender)` (defined at line 699) before showing dialogue text. That function exists and works — it just isn't used for this table.
