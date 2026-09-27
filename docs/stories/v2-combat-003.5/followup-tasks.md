@@ -92,9 +92,23 @@ so both downstream readers (the bark line and the debug log) get corrected text 
 plumbing. New test `guidance/male_echo_reason_text_uses_he_him` in `tests/GuidanceResponseTests.gd`
 asserts exact he-form output, not just absence of "she"/"her". Independently verified by
 `qa-verifier`: all 31 pairs confirmed byte-exact against the pre-approved wording, including the
-three object-pronoun lines. Compile check clean, `guidance`/`guidance_bark`/`behavior_arbiter`/`actor`
-suites pass, full suite shows no new failures (`Tests: 1742 total, 1741 passed, 1 failed` — the one
-failure is the pre-existing, unrelated follow-up #7 gap).
+three object-pronoun lines.
+
+**Second bug found in live play, fixed on the same branch:** in-game testing found the fix above was
+inert — a male Echo still said "she" in the actual bark bubble. Root cause: `core/actors/EchoActor.gd`'s
+`from_echo()` never copied a `gender` field onto the combat actor dict, and `ActorSchema.gd`'s
+`get_defaults()` had none either — so `GuidanceContribution.resolve()`'s `actor.get("gender", "female")`
+always fell back to `"female"` in real combat, regardless of the Echo's true gender in the save.
+`ConversationService.gd` was unaffected (it reads gender from the raw save-roster echo dict, never
+from a combat actor). Fixed by adding `"gender"` to `ActorSchema.get_defaults()` (not to
+`REQUIRED_FIELDS` — same precedent as `calling`, since enemies have no gender) and to
+`EchoActor.from_echo()`'s field mapping. `tests/ActorTests.gd`'s `actor/from_echo_all_fields_present`
+now asserts gender survives the mapping, and `guidance/male_echo_reason_text_uses_he_him` was
+rewritten to build its actor through the real `EchoActor.from_echo()` path instead of a hand-built
+dict — the exact "probe doesn't mirror production construction" gap that let the original bug through
+undetected. Independently verified by `qa-verifier`: reverted just the `EchoActor.gd` line, reproduced
+the exact failure, restored, reconfirmed green. Full suite (both fixes combined): `Tests: 1742 total,
+1741 passed, 1 failed` — the one failure is the pre-existing, unrelated follow-up #7 gap.
 
 **Opening prompt (superseded, kept as a record):**
 > In the Echoes vNext Godot/GDScript repo, `core/actors/behaviors/GuidanceContribution.gd`'s `_REASON_TEXT` dictionary (around line 121) holds short narration lines explaining why an Echo responded to Keeper guidance the way she did ("her vow holds her", "she will not leave the one she is bound to", "another already told her where to stand", "she reads it the way you do", plus a fifth line added by V2-COMBAT-003.5: "she made the only right move" for the movement_style source). These lines flow straight into `_bark_line` (`ActorStateMachine.gd:945`) with no pronoun substitution step.

@@ -446,6 +446,9 @@ static func _t_consent_and_reading_are_independent() -> Dictionary:
 # right pronoun. FALSIFIABLE: a substitution wired anywhere but `resolve()`, or a fragment
 # replace instead of a whole-string lookup, fails here or produces the wrong grammar on
 # an object-pronoun line.
+#
+# The actor comes from EchoActor.from_echo() — the real production mapper — not a hand-built
+# dict. A hand-built dict let a missing "gender" key in that mapper go undetected.
 static func _t_male_echo_reason_text_uses_he_him() -> Dictionary:
 	# Same fixture as reason_is_materially_true: her own plan is held up entirely by her
 	# virtue scores, so the reason names "values" -> "it goes against what she holds to".
@@ -456,12 +459,16 @@ static func _t_male_echo_reason_text_uses_he_him() -> Dictionary:
 	]
 	var request: Dictionary = _request("hold", "actor.guard", "hold")
 
-	var female: Dictionary = GuidanceScript.resolve(request, entries, _echo(), 0.2, 0.0)
+	var female_echo: Dictionary = ActorTests._make_test_echo("echo.a", "Echo A")
+	female_echo["gender"] = "female"
+	var female_actor: Dictionary = EchoActor.from_echo(female_echo)
+	var female: Dictionary = GuidanceScript.resolve(request, entries, female_actor, 0.2, 0.0)
 	var female_text: String = str(female.get("reason_text", ""))
 	if not (female_text.to_lower().contains("she") or female_text.to_lower().contains("her")):
 		return _fail("the female-default fixture produced no she/her reason text: '%s'" % female_text)
 
-	var male_actor: Dictionary = {"id": "echo.a", "faction": "echo", "gender": "male"}
+	var male_echo: Dictionary = ActorTests._make_test_echo("echo.a", "Echo A")  # gender="male"
+	var male_actor: Dictionary = EchoActor.from_echo(male_echo)
 	var male: Dictionary = GuidanceScript.resolve(request, entries, male_actor, 0.2, 0.0)
 	var male_text: String = str(male.get("reason_text", ""))
 	if male_text.to_lower().contains("she") or male_text.to_lower().contains("her"):
