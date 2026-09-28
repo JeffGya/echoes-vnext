@@ -216,9 +216,33 @@ pre-existing, unrelated follow-up #7 gap).
 
 ---
 
-## 10. Same-`class_origin` Echoes still get identical vector_scores at Standing 1
+## 10. Same-`class_origin` Echoes still get identical vector_scores at Standing 1 — RESOLVED 2026-09-28
 
 **task_id:** `task_9a58ca1c`
+
+**Resolved 2026-09-28.** Split into the two threads this task itself named, both closed:
+
+- **Vector-variance question — won't-fix** (`sr-game-designer`, decision #68 in
+  `docs/stories/v2-combat-003.5/decisions.md`). `trait_nudge` already satisfies decision #36 as
+  Jeff actually stated it ("movement must never be identical," not "vector_scores must differ").
+  Verified: `courage`/`wisdom`/`faith` roll independently per Echo via real RNG before the
+  `class_origin` roll, so two same-origin Echoes matching on all three is ~1-in-69,000; traits
+  drift on rank-up, giving the "grows with maturity" behavior decision #36 asked for; and
+  `docs/movement-model.md` §10.4 names traits, not vector-score variance, as the intended
+  differentiator. Adding a second variance layer on `archetype_init` would re-solve an
+  already-solved problem and risk moving shipped fixtures. No code change.
+- **`dominant_key()` tiebreak gap — fixed** (`mechanics-developer`, decision #69). The tiebreak
+  order at all 3 call sites (`GridService.gd`, `CombatState.gd`, `ShrineService.gd`) now names all
+  10 vectors instead of 4. Original 4 entries kept their relative order at every site;
+  `ShrineService`'s intentional reverse order (vs. `GridService`/`CombatState`) was preserved, not
+  unified. New regression test: `tests/GridTests.gd`
+  `grid/dominant_key_all_ten_vectors_can_win_tie`. All filtered suites (`grid`, `combat_baseline`,
+  `shrine`, `fingerprint`) and the full suite (1750 total, 1749 passed, 1 pre-existing/expected-red
+  canary per decisions #29/#38, unrelated to this fix) pass clean. Zero fingerprint hash drift —
+  no shipped fixture had an exact tie among the 6 newly-reachable vectors, so nothing needed
+  re-recording. Verified independently by `qa-verifier` against the diff and re-run suites.
+
+**Original entry, kept for record:**
 
 **Corrected 2026-09-23 (Phase 6 combined verification):** this task's original premise — that
 only 4 of 10 identity-vector origins are ever summon-able — is **false**. Directly tested by

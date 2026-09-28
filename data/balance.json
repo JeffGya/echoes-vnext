@@ -1545,7 +1545,7 @@
 					"wisdom": -1.0
 				},
 				"by_dominant_vector": {
-					"_comment": "Dominant vector = highest value in actor.vector_scores; all 10 V2 vectors are candidates. Tiebreak via _dominant_key() with tiebreak_order [vanguard, seeker, protector, pillar]: the earliest-listed key wins a tie; an unlisted key ranks after all listed ones; ties among unlisted keys break by ascending key name, never Dictionary iteration order.",
+					"_comment": "Dominant vector = highest value in actor.vector_scores; all 10 V2 vectors are candidates. Tiebreak via dominant_key() with tiebreak_order [vanguard, seeker, protector, pillar, strategist, skeptic, devoted, opportunist, mediator, nurturer]: the earliest-listed key wins a tie. All 10 vectors are listed, so no unlisted-key case remains.",
 					"vanguard": 2.0,
 					"opportunist": 1.5,
 					"strategist": 0.5,
@@ -1838,7 +1838,7 @@
 					"wisdom": -1.0
 				},
 				"by_dominant_vector": {
-					"_comment": "Dominant vector = highest value in actor.vector_scores; all 10 V2 vectors are candidates. Tiebreak via _dominant_key() with tiebreak_order [vanguard, seeker, protector, pillar]: the earliest-listed key wins a tie; an unlisted key ranks after all listed ones; ties among unlisted keys break by ascending key name, never Dictionary iteration order.",
+					"_comment": "Dominant vector = highest value in actor.vector_scores; all 10 V2 vectors are candidates. Tiebreak via dominant_key() with tiebreak_order [vanguard, seeker, protector, pillar, strategist, skeptic, devoted, opportunist, mediator, nurturer]: the earliest-listed key wins a tie. All 10 vectors are listed, so no unlisted-key case remains.",
 					"vanguard": 2.0,
 					"opportunist": 1.5,
 					"seeker": 1.0,

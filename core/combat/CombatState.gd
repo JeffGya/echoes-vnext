@@ -166,10 +166,10 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 
 		# Dominant vector modifier. All ten V2 vectors are candidates —
 		# GridService.dominant_key() scores every key in the dict. The list below is a
-		# TIEBREAK ONLY, for equal values among these four.
+		# TIEBREAK ONLY, for equal values among all ten.
 		var vec_v: Variant = actor.get("vector_scores", {})
 		var vectors: Dictionary = vec_v if vec_v is Dictionary else {}
-		var dom_vec: String = GridService.dominant_key(vectors, ["vanguard", "seeker", "protector", "pillar"])
+		var dom_vec: String = GridService.dominant_key(vectors, ["vanguard", "seeker", "protector", "pillar", "strategist", "skeptic", "devoted", "opportunist", "mediator", "nurturer"])
 		var vec_mod: int = int(vec_table.get(dom_vec, 0))
 
 		# Morale-tier readiness modifier — emotional state at combat start.

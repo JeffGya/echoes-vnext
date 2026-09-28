@@ -831,3 +831,95 @@ to defer them, out of scope for this pass.
 > 25/25, `leadership` 21/21, `expr` 38/38, `movement_arbiter` 27/28 (same pre-existing
 > `avoid_overcommit_stays_proportionate` failure, decisions #29/#38, untouched). Candidates #1 and
 > #2 stay for a future pass if Jeff opens one.
+
+---
+
+### 68. vector-variance-wont-fix-trait-nudge-already-satisfies-decision-36
+
+**Q:** Followup #10. Two Echoes with the same `class_origin` get byte-identical `vector_scores`
+from `data.vectors.archetype_init`. Decision #36 requires two new Echoes to never move
+identically at Standing 1. Does the shipped `trait_nudge` mechanism already meet decision #36, or
+does `archetype_init` need its own per-Echo variance added on top?
+
+**A:** Won't-fix. `trait_nudge` already satisfies decision #36 as Jeff stated it. No further
+design work is needed.
+
+Decision #36's requirement is that movement must visibly differ, not that `vector_scores` must
+differ. `vector_scores` are never shown to the player as a raw number — only movement behaviour
+and derived labels are visible, so a `vector_scores` difference with no behaviour difference would
+not even be visible.
+
+`docs/movement-model.md` §10.4 lists what should separate two Echoes sharing one vector
+direction: Calling, archetype, traits, bonds, fear and morale, vow state, equipment, objective,
+terrain. Vector-score variance is not on this list. Traits are.
+
+`trait_nudge` (`core/actors/behaviors/MovementStyleService.gd:182-185`) adds each Echo's own
+courage/wisdom/faith straight into the movement-style score. It is not scaled by `vector_scores`.
+Weight per trait: 0.20 for that trait's dominant style, 0.08 for its supporting style
+(`data.actor.movement_style_weights.trait_nudge`, `data/balance.json`).
+
+`courage`/`wisdom`/`faith` roll independently per Echo from real RNG, range 30-70
+(`core/sanctum/EchoFactory.gd:71-73`), before and separate from the `class_origin` roll. Two
+Echoes matching on all three trait values happens about once in 68,921 rolls (41³). Two
+same-`class_origin` Echoes will almost always get different `trait_nudge` contributions.
+
+Confirmed against `data.vectors.archetype_init` in `data/balance.json`: a Standing-1 Echo's
+dominant vector seeds at 60.0, not near zero — the correction note under decision #36 already
+recorded this. At that seed, `trait_nudge`'s dominant-style contribution (6.0-14.0 for a trait
+value of 30-70) is a meaningful share next to the vector-driven contribution (example: pillar at
+60.0 × 0.5 weight for `cohesive` = 30.0). That is enough to change which style wins between two
+same-origin Echoes in most cases.
+
+Traits also drift slightly on rank-up (`ProgressionService._compute_drift`, per the
+`trait_nudge` config comment in `balance.json`), so the trait-driven signature grows with
+Standing — matching decision #36's "grows with maturity" requirement. `vector_scores` stay flat
+per origin until the Echo's own play diverges them.
+
+Adding a second, separate offset on `archetype_init` would re-solve an already-solved problem. It
+would not be visible to the player by itself, since raw `vector_scores` are never shown. It would
+also risk moving shipped balance and any fixture that reads `vector_scores` directly — including
+the `dominant_key()` tiebreak call sites fixed in decision #69 below, and calling-milestone
+checks.
+
+**Source:** sr-game-designer, 2026-09-28
+**Date:** 2026-09-28
+
+---
+
+### 69. dominant-key-tiebreak-extended-to-all-10-vectors
+
+**Q:** Followup #10. `GridService.dominant_key()` is called with a hardcoded 4-vector tiebreak
+list at three sites (`GridService.gd:632`, `CombatState.gd:172`, `ShrineService.gd:35`). The
+other 6 vectors (opportunist, strategist, skeptic, mediator, devoted, nurturer) can never win an
+exact-value tie there, even though `dominant_key()` scores all 10. What order should the full
+10-vector tiebreak use at each site?
+
+**A:** Extend each site's existing list to 10 vectors. Keep the current 4 vectors in their
+current relative order at every site — do not reorder them. Append the 6 missing vectors in one
+fixed order: strategist, skeptic, devoted, opportunist, mediator, nurturer. This order matches
+their relative order in `docs/movement-model.md` §10.4's vector table, so the new tail is
+traceable to a written source rather than invented.
+
+`GridService.gd:632` and `CombatState.gd:172` (same list today: vanguard, seeker, protector,
+pillar) become:
+
+```
+vanguard, seeker, protector, pillar, strategist, skeptic, devoted, opportunist, mediator, nurturer
+```
+
+`ShrineService.gd:35` keeps its own reversed order — its own comment states this is intentional
+and must not match the other two sites. Its list becomes the exact reverse of the list above, so
+its existing 4-vector tail order (pillar, protector, seeker, vanguard) stays unbroken and
+unchanged:
+
+```
+nurturer, mediator, opportunist, devoted, skeptic, strategist, pillar, protector, seeker, vanguard
+```
+
+Why not reorder the original 4: ANSWERS.md #60 already chose to keep these lists as they were
+rather than change them, when it unified the three copies into one `dominant_key()` helper.
+Reordering the 4 existing vectors now would change tie outcomes that already ship, for no reported
+problem. Only the missing 6 are broken. Only they need adding.
+
+**Source:** sr-game-designer, 2026-09-28
+**Date:** 2026-09-28
