@@ -193,7 +193,7 @@ func build_turn_context(
 		"resolution_mode":         str(ectx.resolution_mode),
 		"totem_stolen":            bool(ectx.combat_state.get("totem_stolen", false)),
 		"totem_carrier_id":        str(ectx.combat_state.get("totem_carrier_id", "")),
-		# data.combat.objective_modes for BehaviorArbiter._build_board_summary.
+		# data.combat.objective_modes for BoardAssessmentService.build_board_summary.
 		"objective_modes_cfg":     objective_modes_cfg,
 		# V2-COMBAT-003: the active Keeper suggestion, {} when none. Headless for this
 		# story — see FlowContext.dev_guidance.

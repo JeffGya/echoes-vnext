@@ -453,7 +453,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		legacy_selector_no_context_uses += 1
 		intent = _behavior_module.select_intent(augmented_context)
 	_last_intent = intent
-	# Persist last_intent to actor dict so _build_board_summary() can read it next turn.
+	# Persist last_intent to actor dict so BoardAssessmentService.build_board_summary() can read it next turn.
 	# ActorStateMachine is recreated each turn (FlowRuntime.new per actor), so _last_intent
 	# would otherwise reset to {} on every turn — meaning situational conditions that depend
 	# on the previous action (repeated_move_penalty, repeated_guard_penalty) never fire.

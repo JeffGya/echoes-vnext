@@ -45,6 +45,8 @@ const LeadershipEmotionServiceScript = preload("res://core/combat/LeadershipEmot
 const ReachAuthority = preload("res://core/movement/CombatActivationService.gd")
 const GuidanceContributionScript = preload("res://core/actors/behaviors/GuidanceContribution.gd")
 const MovementStyleServiceScript = preload("res://core/actors/behaviors/MovementStyleService.gd")
+const BoardAssessmentServiceScript = preload("res://core/actors/behaviors/BoardAssessmentService.gd")
+const ActionCandidateGeneratorScript = preload("res://core/actors/behaviors/ActionCandidateGenerator.gd")
 
 ## ROUTE-shape validation order (mirrors MovementOptionService.STYLE_ORDER / OptionContract.STYLES).
 ## Most of these words also appear in the separate `movement_style` vocabulary
@@ -183,7 +185,7 @@ const _DEFAULTS := {
 	# Positive = boost, negative = penalty.
 	# Each active condition key is looked up here; its per-action value is summed into situational_bonus.
 	# Stub keys (_stub_*) are never added to active_conditions, so their zero values have no effect.
-	# To activate a stub: remove _stub_ prefix, set values, implement the condition in _build_board_summary().
+	# To activate a stub: remove _stub_ prefix, set values, implement the condition in BoardAssessmentService.build_board_summary().
 	# -------------------------
 	"situational_muls": {
 		# --- Active conditions (computed every turn) ---
@@ -218,7 +220,7 @@ const _DEFAULTS := {
 		"echo_in_melee": {
 			"melee_attack": 18, "actor.press": 18, "protect_ally": -3, "actor.guard": -5, "actor.idle": -12, "actor.move": -5,
 		},
-		# Enemy-type only conditions (gated by actor_type == "enemy" in _build_board_summary).
+		# Enemy-type only conditions (gated by actor_type == "enemy" in BoardAssessmentService.build_board_summary).
 		"enemy_engaged": {
 			# Adjacent to an echo — maintain pressure, don't retreat.
 			"melee_attack": 15, "protect_ally":  0, "actor.guard": -8, "actor.idle": -10, "actor.move":  0,
@@ -229,7 +231,7 @@ const _DEFAULTS := {
 		},
 
 		# --- Stub conditions (zero values — no effect until implemented) ---
-		# To activate: remove _stub_ prefix, tune values, add condition check to _build_board_summary().
+		# To activate: remove _stub_ prefix, tune values, add condition check to BoardAssessmentService.build_board_summary().
 		"near_friendly_structure": {
 			# A living friendly structure (shrine/totem) exists on the board. Soft defensive bonus — only for echo actors.
 			# No move penalty: echoes must still advance freely to intercept enemies heading for the shrine.
@@ -347,7 +349,7 @@ func select_intent(context: Dictionary) -> Dictionary:
 	var interpretation_width: float = clampf(judgment, 0.0, 1.0)
 
 	# Build board summary once — passed to _score() for every candidate to avoid re-computation.
-	var board_summary: Dictionary = _build_board_summary(actor, all_actors, context.get("board_cfg", {}), expression_band, context.get("resolution_mode", ""), context.get("objective_modes_cfg", {}))
+	var board_summary: Dictionary = BoardAssessmentServiceScript.build_board_summary(actor, all_actors, context.get("board_cfg", {}), expression_band, context.get("resolution_mode", ""), context.get("objective_modes_cfg", {}), _cfg_get("situational_muls"))
 
 	# V2-INFRA-003 pass 8: Whole-band leadership score effects from nearby leaders.
 	# Computed once per turn, before candidate generation — threat_read moves the
@@ -356,7 +358,14 @@ func select_intent(context: Dictionary) -> Dictionary:
 		actor, all_actors, context.get("expression_cfg", {}) as Dictionary)
 	var leadership_dir_mul: float = float(leadership_mods.get("_directive_mul", 1.0))
 
-	var candidates: Array[Dictionary] = _generate_candidates(actor, all_actors, context, expression_band, calling_behavior, leadership_mods)
+	var candidates: Array[Dictionary] = ActionCandidateGeneratorScript.generate_candidates(
+		actor, all_actors, context, expression_band, calling_behavior, leadership_mods,
+		int(_cfg_get("guard_range")), float(_cfg_get("threat_threshold")), _cfg_get("situational_muls"),
+		{
+			"intent_weights_by_calling_origin": _cfg_get("intent_weights_by_calling_origin"),
+			"default_intent_weight":            _cfg_get("default_intent_weight"),
+		}
+	)
 
 	# Score each candidate, then sort by the same four-key order used by the
 	# movement-aware selector: score, action type, target id, target cell.
@@ -682,13 +691,14 @@ func select_movement_intent(
 	# default derivation and why this drives interpretation_width.
 	var judgment: float = float(context.get("judgment", 0.3))
 	var interpretation_width: float = clampf(judgment, 0.0, 1.0)
-	var board_summary: Dictionary = _build_board_summary(
+	var board_summary: Dictionary = BoardAssessmentServiceScript.build_board_summary(
 		actor,
 		all_actors,
 		context.get("board_cfg", {}),
 		expression_band,
 		context.get("resolution_mode", ""),
-		context.get("objective_modes_cfg", {})
+		context.get("objective_modes_cfg", {}),
+		_cfg_get("situational_muls")
 	)
 
 	# V2-INFRA-003 pass 8: see select_intent()'s equivalent block.
@@ -697,8 +707,13 @@ func select_movement_intent(
 	var leadership_dir_mul: float = float(leadership_mods.get("_directive_mul", 1.0))
 	var cover_move_bonus: float = float(leadership_mods.get("_cover_move_bonus", 0.0))
 
-	var legacy_candidates: Array[Dictionary] = _generate_candidates(
-		actor, all_actors, context, expression_band, calling_behavior, leadership_mods
+	var legacy_candidates: Array[Dictionary] = ActionCandidateGeneratorScript.generate_candidates(
+		actor, all_actors, context, expression_band, calling_behavior, leadership_mods,
+		int(_cfg_get("guard_range")), float(_cfg_get("threat_threshold")), _cfg_get("situational_muls"),
+		{
+			"intent_weights_by_calling_origin": _cfg_get("intent_weights_by_calling_origin"),
+			"default_intent_weight":            _cfg_get("default_intent_weight"),
+		}
 	)
 	var legacy_by_plan: Dictionary = {}
 	var candidates: Array[Dictionary] = []
@@ -710,7 +725,7 @@ func select_movement_intent(
 			legacy_by_plan[legacy_key] = []
 		(legacy_by_plan[legacy_key] as Array).append(legacy)
 		if str(legacy.get("action_type", "")) != "actor.move":
-			candidates.append(_stationary_candidate(legacy, movement_context, profile))
+			candidates.append(ActionCandidateGeneratorScript.stationary_candidate(legacy, movement_context, profile))
 
 	var goals_by_id: Dictionary = {}
 	for goal_value: Variant in goals:
@@ -724,10 +739,10 @@ func select_movement_intent(
 			_plan_key(str(plan["type"]), str(plan["target_id"])), []
 		) as Array
 		if matches.is_empty():
-			candidates.append(_route_candidate({}, plan, goal, option, movement_context, profile))
+			candidates.append(ActionCandidateGeneratorScript.route_candidate({}, plan, goal, option, movement_context, profile))
 		else:
 			for match_value: Variant in matches:
-				candidates.append(_route_candidate(
+				candidates.append(ActionCandidateGeneratorScript.route_candidate(
 					match_value as Dictionary,
 					plan,
 					goal,
@@ -794,7 +809,7 @@ func select_movement_intent(
 			# V2-INFRA-003 pass 8: cover_positioning — a Whole leader in range teaches
 			# its allies to end a route behind terrain. Route candidates only: a
 			# stationary candidate is not a repositioning choice.
-			if cover_move_bonus > 0.0 and _is_cover_destination(
+			if cover_move_bonus > 0.0 and BoardAssessmentServiceScript.is_cover_destination(
 				candidate["_movement_path"] as Array, movement_context
 			):
 				score += cover_move_bonus
@@ -848,7 +863,7 @@ func select_movement_intent(
 			if str(plan["type"]) == "actor.purify_shrine":
 				candidate["_score"] = 9999.0
 				candidate["_hard_override"] = "purify_shrine_in_reach"
-	_append_legacy_purifier_candidate(candidates, context, actor, all_actors, movement_context, profile)
+	ActionCandidateGeneratorScript.append_legacy_purifier_candidate(candidates, context, actor, all_actors, movement_context, profile)
 	for candidate: Dictionary in candidates:
 		var final_score: Variant = candidate.get("_score", null)
 		if not (final_score is int or final_score is float) or not is_finite(float(final_score)):
@@ -1222,7 +1237,7 @@ func _validate_perceived_actor_context(context: Dictionary, movement_context: Di
 	canonical_actors.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
 		return str(left["id"]) < str(right["id"])
 	)
-	var facts_by_id: Dictionary = _perceived_facts_by_id(movement_context)
+	var facts_by_id: Dictionary = MovementContextContract.facts_by_id(movement_context)
 	var mover: Dictionary = context["actor"] as Dictionary
 	var mover_result: Dictionary = _crosscheck_perceived_actor(mover, facts_by_id[str(mover["id"])] as Dictionary, "context.actor")
 	if not bool(mover_result["valid"]):
@@ -1289,14 +1304,6 @@ func _canonical_perceived_actors(context: Dictionary, movement_context: Dictiona
 	return result
 
 
-static func _perceived_facts_by_id(movement_context: Dictionary) -> Dictionary:
-	var result: Dictionary = {}
-	for fact_value: Variant in movement_context["perceived_actors"] as Array:
-		var fact: Dictionary = fact_value as Dictionary
-		result[str(fact["id"])] = fact
-	return result
-
-
 static func _perceived_actor_ids(movement_context: Dictionary) -> Dictionary:
 	var result: Dictionary = {}
 	for fact_value: Variant in movement_context["perceived_actors"] as Array:
@@ -1343,114 +1350,6 @@ func _validate_spatial_directive(directive: Dictionary) -> Dictionary:
 		if not (value is int or value is float) or not is_finite(float(value)):
 			return _movement_failure("invalid_directive_weight", "context.directive.intent_weights.%s" % key)
 	return {"valid": true, "intent": {}, "reason": "", "field": ""}
-
-
-func _stationary_candidate(
-	legacy: Dictionary,
-	movement_context: Dictionary,
-	profile: Dictionary
-) -> Dictionary:
-	var plan: Dictionary = MovementActionPlanContract.from_legacy_candidate(legacy)
-	var result: Dictionary = legacy.duplicate(true)
-	_apply_stationary_identity(result, plan, movement_context, profile)
-	return result
-
-
-## A goal-derived candidate, INCLUDING a zero-step one. A stay option that a goal
-## published is a spatial decision like any other, so it keeps its goal and option and
-## is scored with the same spatial terms as the routes it competes against. Re-badging
-## it as a legacy stationary candidate (which `_stationary_candidate` still does for
-## candidates that never had a goal) would strip objective_progress, exposure, cohesion
-## and congestion from it and hand every route a standing head start over staying put.
-func _route_candidate(
-	legacy: Dictionary,
-	plan: Dictionary,
-	goal: Dictionary,
-	option: Dictionary,
-	movement_context: Dictionary,
-	profile: Dictionary
-) -> Dictionary:
-	var candidate: Dictionary = legacy.duplicate(true)
-	if candidate.is_empty():
-		candidate = (plan["payload"] as Dictionary).duplicate(true)
-	candidate["action_type"] = str(plan["type"])
-	candidate["target_id"] = str(plan["target_id"])
-	if legacy.is_empty():
-		_add_perceived_target_health(candidate, movement_context)
-	candidate["_movement_plan"] = plan.duplicate(true)
-	candidate["_movement_goal"] = goal
-	candidate["_movement_option"] = option
-	candidate["_movement_route"] = true
-	candidate["_movement_goal_id"] = str(goal["goal_id"])
-	candidate["_movement_option_id"] = str(option["option_id"])
-	candidate["_movement_path"] = (option["path"] as Array).duplicate(true)
-	candidate["_movement_commitment"] = int(option["commitment"])
-	candidate["_movement_fallback"] = (option["fallback"] as Dictionary).duplicate(true)
-	candidate["_movement_pressure_sources"] = (goal["pressure_sources"] as Array).duplicate(true)
-	return candidate
-
-
-func _add_perceived_target_health(candidate: Dictionary, movement_context: Dictionary) -> void:
-	var target_id: String = str(candidate.get("target_id", ""))
-	if target_id.is_empty():
-		return
-	var facts: Dictionary = _perceived_facts_by_id(movement_context)
-	if facts.has(target_id):
-		candidate["target_hp_ratio"] = float((facts[target_id] as Dictionary)["health_ratio"])
-
-
-func _apply_stationary_identity(
-	candidate: Dictionary,
-	plan: Dictionary,
-	movement_context: Dictionary,
-	profile: Dictionary
-) -> void:
-	var origin: Dictionary = movement_context["origin"] as Dictionary
-	var action_token: String = str(plan["type"]).replace(".", "_")
-	var anchor: String = "c%dr%d" % [int(origin["col"]), int(origin["row"])]
-	var goal_id: String = "goal.legacy.stationary.%s.%s" % [action_token, anchor]
-	candidate["_movement_plan"] = plan.duplicate(true)
-	candidate["_movement_goal"] = {}
-	candidate["_movement_option"] = {}
-	candidate["_movement_route"] = false
-	candidate["_movement_goal_id"] = goal_id
-	candidate["_movement_option_id"] = "%s.stationary.d%dr%d.pstay" % [
-		goal_id, int(origin["col"]), int(origin["row"]),
-	]
-	candidate["_movement_path"] = []
-	candidate["_movement_commitment"] = 0
-	candidate["_movement_fallback"] = {}
-	candidate["_movement_pressure_sources"] = []
-	candidate["capacity"] = int(profile["capacity"])
-
-
-func _append_legacy_purifier_candidate(
-	candidates: Array[Dictionary],
-	context: Dictionary,
-	actor: Dictionary,
-	all_actors: Array,
-	movement_context: Dictionary,
-	profile: Dictionary
-) -> void:
-	if not context.get("is_purifier", false) \
-			or not context.get("shrine_alive", false) \
-			or int(actor.get("purify_cooldown", 0)) != 0:
-		return
-	var my_pos: Dictionary = actor.get("grid_pos", {}) as Dictionary
-	for actor_value: Variant in all_actors:
-		if actor_value is Dictionary:
-			var other: Dictionary = actor_value as Dictionary
-			if other.get("is_structure", false) and not other.get("is_dead", false):
-				if ReachAuthority.in_reach(my_pos, other.get("grid_pos", {}), "actor.purify_shrine"):
-					var candidate: Dictionary = _stationary_candidate(
-						{"action_type": "actor.purify_shrine", "target_id": "", "priority": 1.0},
-						movement_context,
-						profile
-					)
-					candidate["_score"] = 9999.0
-					candidate["_hard_override"] = "purify_shrine_in_reach"
-					candidates.append(candidate)
-				return
 
 
 ## `out_parts`, when a non-null Dictionary is passed, receives this call's own
@@ -1607,539 +1506,6 @@ func _validate_spatial_utility_cfg() -> Dictionary:
 # Private helpers
 # -------------------------
 
-## Generates all candidate intents for this turn:
-## - actor.idle: always available (safe fallback, never absent)
-## - actor.guard: only when nearest enemy is within guard_range tiles (balance.json data.actor.guard_range)
-## - melee_attack: only when nearest enemy is at Manhattan distance == 1
-## - actor.move: when nearest enemy exists but is not yet adjacent (dist > 1)
-## - protect_ally: only when a same-faction ally has taken any damage (current_hp < max_hp)
-##
-## Guard and protect_ally are situation-gated — they only enter the pool when the board
-## state makes them meaningful. Scoring still determines the winner among candidates.
-##
-## Adding new action types: add candidate generation here + rows in balance.json tables.
-## _score() needs no changes.
-func _generate_candidates(
-	actor: Dictionary,
-	all_actors: Array,
-	context: Dictionary = {},
-	expression_band: String = "nascent",
-	calling_behavior: Dictionary = {},
-	leadership_mods: Dictionary = {}
-) -> Array[Dictionary]:
-	var candidates: Array[Dictionary] = []
-
-	# actor.idle is always a candidate — the unconditional safe fallback.
-	candidates.append({ "action_type": "actor.idle", "target_id": "", "priority": 0.0 })
-
-	# V2-COMBAT-002 Slice 6B: exact-cell PURIFY/PROTECT/PURSUE redirects were
-	# retired. Pressure regions now describe objective movement; this candidate
-	# generator only supplies ordinary action-score vocabulary.
-	var actor_type: String = str(actor.get("actor_type", "echo"))
-	# V2-PROG-002: prefer confirmed calling (runtime identity) over birth origin.
-	# Once an Echo has confirmed a calling, that identity drives behavior — not the birth weight.
-	var _confirmed_calling: String = str(actor.get("calling", ""))
-	var calling_origin: String = _confirmed_calling \
-		if not _confirmed_calling.is_empty() and _confirmed_calling != "uncalled" \
-		else str(actor.get("calling_origin", "uncalled"))
-	var my_pos: Dictionary = actor.get("grid_pos", { "col": 0, "row": 0 })
-
-	# V2-PROG-006: Enemy Forming+ focus fire — prefer most-wounded echo over nearest.
-	# Echo actors use standard nearest-enemy selection.
-	var nearest_enemy: Dictionary
-	if actor_type == "enemy" \
-			and (expression_band == "forming" or expression_band == "grounded" or expression_band == "whole"):
-		nearest_enemy = _get_most_wounded_enemy(actor, all_actors)
-		if nearest_enemy.is_empty():
-			nearest_enemy = ActorService.get_nearest_enemy(actor, all_actors)
-	else:
-		nearest_enemy = ActorService.get_nearest_enemy(actor, all_actors)
-
-	var enemy_dist: int = 999999
-	var t_pos: Dictionary = {}
-	if not nearest_enemy.is_empty():
-		t_pos = nearest_enemy.get("grid_pos", { "col": 0, "row": 0 })
-		enemy_dist = GridService.chebyshev_distance(my_pos, t_pos)
-
-	# melee_attack: adjacent enemy (Chebyshev distance == 1, all 8 neighbours).
-	# actor.move: enemy exists but not adjacent.
-	# PROG-009: pre-compute mark/reveal bonuses for melee_attack candidates.
-	var _mark_bonus: float   = 0.0
-	var _reveal_bonus: float = 0.0
-	if not nearest_enemy.is_empty():
-		if not str(nearest_enemy.get("marked_by", "")).is_empty():
-			_mark_bonus = 10.0
-		if not str(nearest_enemy.get("revealed_by_seer", "")).is_empty():
-			_reveal_bonus = 15.0
-
-	if not nearest_enemy.is_empty():
-		var target_hp_ratio: float = ActorService.health_ratio(nearest_enemy)
-		if GridService.is_adjacent(my_pos, t_pos):
-			candidates.append({
-				"action_type":     "melee_attack",
-				"target_id":       str(nearest_enemy.get("id", "")),
-				"distance":        enemy_dist,
-				"target_hp_ratio": target_hp_ratio,
-				"priority":        1.0,
-				"_mark_bonus":     _mark_bonus,
-				"_reveal_bonus":   _reveal_bonus,
-			})
-		else:
-			candidates.append({
-				"action_type":     "actor.move",
-				"target_id":       str(nearest_enemy.get("id", "")),
-				"target_pos":      t_pos,
-				"target_distance": enemy_dist,
-				"target_hp_ratio": target_hp_ratio,
-				"priority":        1.0,
-			})
-
-	# actor.guard — only meaningful when an enemy is within guard_range tiles.
-	# No nearby threat → guarding is pointless; omit so scorer never picks it.
-	#
-	# COMBAT-BUG-002: guard candidate suppression after consecutive guard turns.
-	# Guard is a passive action (fear never dampens it), and broken morale adds +20 guard / -20 melee.
-	# Under sustained hits that add fear but deal 0 damage (guard doubles def), the score gap
-	# widens every round until guard wins permanently → combat never resolves → actor.refuse.
-	# Score-based penalties alone are insufficient: for high-guard callings (onyamesu base=55)
-	# the morale swing (+40 net) cannot be reliably overcome without over-correcting for other echoes.
-	#
-	# Hard rule: if the actor guarded last round and HP is not critical (> 20%), suppress guard.
-	# This works for ALL actor types, callings and morale/fear states. At critical HP (≤ 20%)
-	# guard remains available so a dying actor can try to survive rather than being forced to act.
-	# An enemy is suppressed the same way an echo is — an enemy guard-loop is the same
-	# never-ending-combat failure as an echo guard-loop, just on the other faction.
-	var guard_range: int = int(_cfg_get("guard_range"))
-	if not nearest_enemy.is_empty() and enemy_dist <= guard_range:
-		var allow_guard: bool = true
-		var last_i_g_v: Variant = actor.get("last_intent", {})
-		var last_i_g: Dictionary = last_i_g_v if last_i_g_v is Dictionary else {}
-		if str(last_i_g.get("action_type", "")) == "actor.guard":
-			# Suppress unless critically wounded — a dying actor may legitimately need to guard.
-			var crit_threshold: float = float(
-				(_cfg_get("situational_muls") as Dictionary).get("own_hp_critical", {}).get("threshold", 0.20)
-			)
-			allow_guard = ActorService.health_ratio(actor) <= crit_threshold
-		if allow_guard:
-			candidates.append({ "action_type": "actor.guard", "target_id": "", "priority": 0.0 })
-
-	# protect_ally — only when a same-faction ally has taken any damage (current_hp < max_hp).
-	# threshold=0.50 means ally must be below 50% HP (missing ≥50% HP) to qualify as threatened.
-	var threshold: float = _cfg_get("threat_threshold")
-	var threatened: Dictionary = ActorService.get_threatened_ally(actor, all_actors, threshold)
-	if not threatened.is_empty():
-		var ally_id: String = str(threatened.get("id", ""))
-		candidates.append({
-			"action_type":       "protect_ally",
-			"target_id":         ally_id,
-			"protected_actor_id": ally_id,
-			"priority":          1.0,
-		})
-
-	# V2-PROG-006: actor.retreat — calling-aware, Forming+ only. Aduro never retreats.
-	# Only echo actors can retreat.
-	if actor_type == "echo" \
-			and (expression_band == "forming" or expression_band == "grounded" or expression_band == "whole"):
-		var retreat_threshold: Variant = calling_behavior.get("retreat_threshold", null)
-		if retreat_threshold != null and calling_origin != "aduro":
-			var hp_r: float = ActorService.health_ratio(actor)
-			# V2-INFRA-003 pass 8: threat_read — a Whole leader in range reads the threat
-			# for its allies, so they hold on longer before retreat enters the pool.
-			var retreat_gate: float = maxf(0.0, float(retreat_threshold)
-				- float(leadership_mods.get("_retreat_threshold_reduction", 0.0)))
-			if hp_r < retreat_gate:
-				candidates.append({
-					"action_type": "actor.retreat",
-					"target_id":   "",
-					"priority":    1.0,
-				})
-
-	# V2-PROG-006: actor.taunt — Aduro calling Grounded+ only.
-	# Mechanical effect applied by combat loop (taunted_by set on enemy).
-	if actor_type == "echo" and calling_origin == "aduro" \
-			and (expression_band == "grounded" or expression_band == "whole") \
-			and not nearest_enemy.is_empty():
-		candidates.append({
-			"action_type": "actor.taunt",
-			"target_id":   str(nearest_enemy.get("id", "")),
-			"priority":    1.0,
-		})
-
-	# PROG-009: Skill-gated action candidates.
-	# Each echo may have equipped_skills (slot → skill_id). For each equipped skill whose
-	# condition is met this turn, generate a typed candidate with a pre-resolved skill_base_bonus
-	# so _score() doesn't need intent weight rows for every calling skill action_type.
-	if actor_type == "echo":
-		var skills_cfg: Dictionary = context.get("skills_cfg", {})
-		var skill_defs: Dictionary = skills_cfg.get("definitions", {})
-		var equipped: Dictionary   = actor.get("equipped_skills", {})
-		for _slot_key in equipped:
-			var skill_id: String = str(equipped[_slot_key])
-			if skill_id.is_empty():
-				continue
-			var defn: Dictionary = skill_defs.get(skill_id, {})
-			if defn.is_empty():
-				continue
-			var action_t: String = str(defn.get("action_type", ""))
-			if action_t.is_empty():
-				continue
-			var weight_tag: String = str(defn.get("intent_weight_tag", "melee_attack"))
-			match action_t:
-				"actor.press":
-					# Condition: hit same target last round AND still adjacent.
-					var press_li_v: Variant = actor.get("last_intent", {})
-					var press_li: Dictionary = press_li_v if press_li_v is Dictionary else {}
-					if str(press_li.get("action_type", "")) == "melee_attack" \
-							and not str(press_li.get("target_id", "")).is_empty() \
-							and not nearest_enemy.is_empty() \
-							and str(press_li.get("target_id", "")) == str(nearest_enemy.get("id", "")) \
-							and not t_pos.is_empty() \
-							and GridService.is_adjacent(my_pos, t_pos):
-						candidates.append({
-							"action_type":      "actor.press",
-							"target_id":        str(nearest_enemy.get("id", "")),
-							"target_hp_ratio":  ActorService.health_ratio(nearest_enemy),
-							"skill_id":         skill_id,
-							"skill_base_bonus": _resolve_skill_base(calling_origin, weight_tag, 15.0),
-							"priority":         1.0,
-						})
-				"actor.interpose":
-					# Condition: ally threatened.
-					var interpose_ally: Dictionary = ActorService.get_threatened_ally(actor, all_actors, threshold)
-					if not interpose_ally.is_empty():
-						candidates.append({
-							"action_type":      "actor.interpose",
-							"target_id":        str(interpose_ally.get("id", "")),
-							"skill_id":         skill_id,
-							"skill_base_bonus": _resolve_skill_base(calling_origin, weight_tag, 0.0),
-							"priority":         1.0,
-						})
-				"actor.hold_ground":
-					# Condition: adjacent to shrine OR 2+ faction allies within 2 tiles.
-					var hg_shrine: bool = false
-					var hg_allies: int  = 0
-					for hg_av in all_actors:
-						if not (hg_av is Dictionary): continue
-						var hg_a: Dictionary = hg_av
-						if hg_a.get("is_dead", false): continue
-						var hg_pos: Dictionary = hg_a.get("grid_pos", {})
-						if hg_pos.is_empty(): continue
-						if hg_a.get("is_structure", false):
-							if GridService.chebyshev_distance(my_pos, hg_pos) <= 1:
-								hg_shrine = true
-						elif str(hg_a.get("faction", "")) == str(actor.get("faction", "")) \
-								and str(hg_a.get("id", "")) != str(actor.get("id", "")):
-							if GridService.chebyshev_distance(my_pos, hg_pos) <= 2:
-								hg_allies += 1
-					if hg_shrine or hg_allies >= 2:
-						candidates.append({
-							"action_type":      "actor.hold_ground",
-							"target_id":        "",
-							"skill_id":         skill_id,
-							"skill_base_bonus": _resolve_skill_base(calling_origin, weight_tag, 0.0),
-							"priority":         1.0,
-						})
-				"actor.steady_call":
-					# Once per combat; no other condition required.
-					if not bool(actor.get("_steady_call_used", false)):
-						candidates.append({
-							"action_type":      "actor.steady_call",
-							"target_id":        "",
-							"skill_id":         skill_id,
-							"skill_base_bonus": _resolve_skill_base(calling_origin, weight_tag, 10.0),
-							"priority":         1.0,
-						})
-				"actor.mark":
-					# Condition: enemy within 3 tiles AND not already marked.
-					if not nearest_enemy.is_empty() and enemy_dist <= 3 \
-							and str(nearest_enemy.get("marked_by", "")).is_empty():
-						candidates.append({
-							"action_type":      "actor.mark",
-							"target_id":        str(nearest_enemy.get("id", "")),
-							"skill_id":         skill_id,
-							"skill_base_bonus": _resolve_skill_base(calling_origin, weight_tag, 5.0),
-							"priority":         1.0,
-						})
-				"actor.withdraw":
-					# Condition: adjacent to 2+ enemies AND not on cooldown.
-					if int(actor.get("_withdraw_cooldown", 0)) <= 0:
-						var wd_count: int = 0
-						for wd_av in all_actors:
-							if not (wd_av is Dictionary): continue
-							var wd_a: Dictionary = wd_av
-							if wd_a.get("is_dead", false) or wd_a.get("is_structure", false): continue
-							if str(wd_a.get("faction", "")) != str(actor.get("faction", "")):
-								var wd_pos: Dictionary = wd_a.get("grid_pos", {})
-								if not wd_pos.is_empty() and GridService.is_adjacent(my_pos, wd_pos):
-									wd_count += 1
-						if wd_count >= 2:
-							candidates.append({
-								"action_type":      "actor.withdraw",
-								"target_id":        "",
-								"skill_id":         skill_id,
-								"skill_base_bonus": _resolve_skill_base(calling_origin, weight_tag, 0.0),
-								"priority":         1.0,
-							})
-				"actor.read_field":
-					# Condition: _read_field_cooldown == 0.
-					if int(actor.get("_read_field_cooldown", 0)) == 0:
-						candidates.append({
-							"action_type":      "actor.read_field",
-							"target_id":        "",
-							"skill_id":         skill_id,
-							"skill_base_bonus": _resolve_skill_base(calling_origin, weight_tag, 10.0),
-							"priority":         1.0,
-						})
-				"actor.reveal":
-					# Once per combat; condition: nearest enemy not yet revealed by seer.
-					if not bool(actor.get("_reveal_used", false)) \
-							and not nearest_enemy.is_empty() \
-							and str(nearest_enemy.get("revealed_by_seer", "")).is_empty():
-						candidates.append({
-							"action_type":      "actor.reveal",
-							"target_id":        str(nearest_enemy.get("id", "")),
-							"skill_id":         skill_id,
-							"skill_base_bonus": _resolve_skill_base(calling_origin, weight_tag, 10.0),
-							"priority":         1.0,
-						})
-
-	return candidates
-
-
-## Computes a read-only snapshot of the current board state for this actor.
-## Called once in select_intent() before the scoring loop so the computation runs
-## once per turn, not once per candidate.
-##
-## HP comes from ActorService.health_ratio. `max_hp` is still read here for one further
-## question the ratio cannot answer: whether real HP data exists at all. An actor without
-## it must not trigger own_hp_low / own_hp_critical, and the reader's absent-data 1.0
-## would be indistinguishable from an unhurt actor.
-##
-## last_echo_standing sentinel: requires dead_allies > 0 so a designed 1v1 scenario
-## (all_actors contains only enemies) never fires the condition.
-## objective_modes_cfg: data.combat.objective_modes, supplied per turn through
-## context["objective_modes_cfg"] (this class holds no ConfigService by design). Empty {} falls
-## back to the hardcoded defaults below.
-func _build_board_summary(actor: Dictionary, all_actors: Array, _board_cfg: Dictionary, expression_band: String = "nascent", resolution_mode: String = "", objective_modes_cfg: Dictionary = {}) -> Dictionary:
-	var my_id:      String = str(actor.get("id", ""))
-	var my_faction: String = str(actor.get("faction", ""))
-	var actor_type: String = str(actor.get("actor_type", "echo"))
-
-	# Count living/dead allies and enemies in a single pass.
-	var living_allies: int  = 0
-	var living_enemies: int = 0
-	var dead_allies: int    = 0
-	for a_v in all_actors:
-		if not (a_v is Dictionary):
-			continue
-		var a: Dictionary = a_v
-		if str(a.get("id", "")) == my_id:
-			continue  # skip self
-		var is_dead: bool = a.get("is_dead", false)
-		if str(a.get("faction", "")) == my_faction:
-			if is_dead:
-				dead_allies += 1
-			else:
-				living_allies += 1
-		else:
-			if not is_dead:
-				living_enemies += 1
-
-	var max_hp: int    = int(actor.get("stats", {}).get("max_hp", 0))
-	var hp_ratio: float = ActorService.health_ratio(actor)
-
-	# Distance to nearest enemy.
-	var nearest_enemy: Dictionary = ActorService.get_nearest_enemy(actor, all_actors)
-	var my_pos: Dictionary = actor.get("grid_pos", { "col": 0, "row": 0 })
-	var enemy_dist: int = 999999
-	if not nearest_enemy.is_empty():
-		enemy_dist = GridService.chebyshev_distance(my_pos, nearest_enemy.get("grid_pos", { "col": 0, "row": 0 }))
-
-	# Evaluate active conditions.
-	var sit_cfg: Dictionary = _cfg_get("situational_muls")
-	var active: Array[String] = []
-
-	# own_hp_low / own_hp_critical — HP-based; only fire when real HP data exists.
-	var low_threshold:  float = float(sit_cfg.get("own_hp_low",      {}).get("threshold", 0.35))
-	var crit_threshold: float = float(sit_cfg.get("own_hp_critical",  {}).get("threshold", 0.20))
-	if max_hp > 0 and actor.has("current_hp"):
-		if hp_ratio < crit_threshold:
-			active.append("own_hp_critical")
-		if hp_ratio < low_threshold:
-			active.append("own_hp_low")
-
-	# outnumbered: enemies outnumber allies; requires at least 1 living ally so 1v1 doesn't trigger.
-	if living_enemies > living_allies and living_allies > 0:
-		active.append("outnumbered")
-
-	# overwhelming_advantage: allies are at least 2× enemies.
-	if living_enemies > 0 and living_allies >= living_enemies * 2:
-		active.append("overwhelming_advantage")
-
-	# last_echo_standing: all allies fallen; dead_allies > 0 distinguishes real rout from scripted solo.
-	if living_allies == 0 and dead_allies > 0:
-		active.append("last_echo_standing")
-
-	# enemy_far: nearest enemy beyond far threshold.
-	var far_threshold: int = int(sit_cfg.get("enemy_far", {}).get("threshold", 5))
-	if enemy_dist > far_threshold and enemy_dist < 999999:
-		active.append("enemy_far")
-
-	# Echo-type: in_melee — adjacent to an enemy, push to attack.
-	if actor_type == "echo" and enemy_dist <= 1:
-		active.append("echo_in_melee")
-
-	# Enemy-type-only conditions — gated so echo actors never receive them.
-	if actor_type == "enemy" and enemy_dist < 999999:
-		var n_pos: Dictionary = nearest_enemy.get("grid_pos", { "col": 0, "row": 0 })
-		if GridService.is_adjacent(my_pos, n_pos):
-			active.append("enemy_engaged")
-		else:
-			active.append("enemy_advancing")
-
-	# V2-PROG-006: echo_retreating — enemy Forming+ pursuit.
-	# Active when this enemy is Forming+ and any echo is retreating (last_intent == actor.retreat).
-	if actor_type == "enemy" \
-			and (expression_band == "forming" or expression_band == "grounded" or expression_band == "whole"):
-		for a_v in all_actors:
-			if not (a_v is Dictionary):
-				continue
-			var a: Dictionary = a_v as Dictionary
-			if a.get("actor_type", "") == "echo" and not a.get("is_dead", false):
-				var li_v: Variant = a.get("last_intent", {})
-				if li_v is Dictionary and str((li_v as Dictionary).get("action_type", "")) == "actor.retreat":
-					active.append("echo_retreating")
-					break
-
-	# PROG-009: Okomfo directive aura — any echo ally within 3 tiles of a living Okomfo gets a bonus.
-	if actor_type == "echo":
-		for sa_v in all_actors:
-			if not (sa_v is Dictionary): continue
-			var sa: Dictionary = sa_v
-			if sa.get("is_dead", false): continue
-			if str(sa.get("id", "")) == my_id: continue
-			if str(sa.get("faction", "")) == my_faction \
-					and str(sa.get("calling_origin", "")) == "okomfo":
-				var sa_pos: Dictionary = sa.get("grid_pos", {})
-				if not sa_pos.is_empty() and GridService.chebyshev_distance(my_pos, sa_pos) <= 3:
-					active.append("seer_directive_aura")
-					break
-
-	# PROG-009: repeated_move_penalty — echo moved last round AND enemy is nearby but not adjacent.
-	# Fires in the 2-3 tile band: too close to keep running, close enough to act.
-	if actor_type == "echo" and enemy_dist > 1 and enemy_dist <= 3:
-		var last_i_v: Variant = actor.get("last_intent", {})
-		var last_i: Dictionary = last_i_v if last_i_v is Dictionary else {}
-		if str(last_i.get("action_type", "")) == "actor.move":
-			active.append("repeated_move_penalty")
-
-	# COMBAT-BUG-002: repeated_guard_penalty — fires when an actor guarded last round AND
-	# enemy is adjacent. Applies to every actor type, in step with the candidate
-	# suppression above — an enemy that cannot guard must still be pushed toward melee
-	# over idle, the same as an echo.
-	# - Suppression (hard): guard removed from candidate pool → actor cannot guard again consecutively.
-	# - This penalty (soft): on the suppressed turn, melee_attack gets +15 over idle/protect_ally,
-	#   ensuring the actor attacks rather than idling. Also fires when guard re-enters the pool
-	#   (HP critical exception) to moderately discourage it vs melee.
-	if enemy_dist <= 1:
-		var last_i_rg_v: Variant = actor.get("last_intent", {})
-		var last_i_rg: Dictionary = last_i_rg_v if last_i_rg_v is Dictionary else {}
-		if str(last_i_rg.get("action_type", "")) == "actor.guard":
-			active.append("repeated_guard_penalty")
-
-
-	# COMBAT-006: near_friendly_structure / near_hostile_structure based on actor faction.
-	# Echoes get a soft defensive bonus near the shrine; enemies get an aggression boost toward it.
-	for a_v in all_actors:
-		if not (a_v is Dictionary):
-			continue
-		var a: Dictionary = a_v
-		if a.get("is_structure", false) and not a.get("is_dead", false):
-			if str(a.get("faction", "")) == "structure":
-				if actor_type != "enemy":
-					active.append("near_friendly_structure")
-				else:
-					active.append("near_hostile_structure")
-			break
-
-	# §5-A: objective_in_range — RECOVER holder dig-in.
-	# Fires when: mode==recover, actor is echo, AND actor is adjacent (Chebyshev==1) to a living
-	# is_structure actor (the relic). Config row down-weights move/idle so the holder stays put.
-	if resolution_mode == "recover" and actor_type == "echo":
-		for a_v in all_actors:
-			if not (a_v is Dictionary):
-				continue
-			var a: Dictionary = a_v
-			if a.get("is_structure", false) and not a.get("is_dead", false):
-				if GridService.is_adjacent(my_pos, a.get("grid_pos", {})):
-					active.append("objective_in_range")
-				break
-
-	# §5-B: objective_threatened — PROTECT interpose.
-	# Fires when: mode==protect, actor is echo, AND a living is_structure totem exists with
-	# a living enemy within objective_threatened_radius (Chebyshev, default 3).
-	if resolution_mode == "protect" and actor_type == "echo":
-		var protect_radius: int = 3  # default when no objective_modes config is supplied
-		var om_protect_v: Variant = objective_modes_cfg.get("protect", {})
-		var om_protect: Dictionary = om_protect_v if om_protect_v is Dictionary else {}
-		if om_protect.has("objective_threatened_radius"):
-			protect_radius = int(om_protect["objective_threatened_radius"])
-		var totem_pos_pt: Dictionary = {}
-		for a_v in all_actors:
-			if not (a_v is Dictionary):
-				continue
-			var a: Dictionary = a_v
-			if a.get("is_structure", false) and not a.get("is_dead", false):
-				totem_pos_pt = a.get("grid_pos", {})
-				break
-		if not totem_pos_pt.is_empty():
-			for a_v in all_actors:
-				if not (a_v is Dictionary):
-					continue
-				var a: Dictionary = a_v
-				if a.get("is_dead", false) or a.get("is_structure", false):
-					continue
-				if str(a.get("faction", "")) == "enemy":
-					if GridService.chebyshev_distance(totem_pos_pt, a.get("grid_pos", {})) <= protect_radius:
-						active.append("objective_threatened")
-						break
-
-	# §5-C: quarry_near_exit — PURSUE interception urgency.
-	# Fires when: mode==pursue, actor is echo, AND the living quarry is within threshold of a board edge.
-	if resolution_mode == "pursue" and actor_type == "echo":
-		var _qne_threshold: int = 3  # default when no objective_modes config is supplied
-		var _om_pursue_v: Variant = objective_modes_cfg.get("pursue", {})
-		var _om_pursue: Dictionary = _om_pursue_v if _om_pursue_v is Dictionary else {}
-		if _om_pursue.has("quarry_near_exit_threshold"):
-			_qne_threshold = int(_om_pursue["quarry_near_exit_threshold"])
-		var _qne_board_w: int = int(_board_cfg.get("board_cols", 10))
-		var _qne_board_h: int = int(_board_cfg.get("board_rows", 10))
-		for a_v in all_actors:
-			if not (a_v is Dictionary): continue
-			var a_qne: Dictionary = a_v
-			if bool(a_qne.get("is_quarry", false)) and not bool(a_qne.get("is_dead", false)):
-				var _qne_p: Dictionary = a_qne.get("grid_pos", {})
-				var _qne_col: int = int(_qne_p.get("col", 0))
-				var _qne_row: int = int(_qne_p.get("row", 0))
-				var _qne_dist: int = mini(
-					mini(_qne_col, _qne_row),
-					mini(_qne_board_w - 1 - _qne_col, _qne_board_h - 1 - _qne_row)
-				)
-				if _qne_dist <= _qne_threshold:
-					active.append("quarry_near_exit")
-				break
-
-	return {
-		"hp_ratio":          hp_ratio,
-		"enemy_dist":        enemy_dist,
-		"living_allies":     living_allies,
-		"living_enemies":    living_enemies,
-		"dead_allies":       dead_allies,
-		"actor_type":        actor_type,
-		"active_conditions": active,
-	}
-
-
 ## Whole-band leadership SCORE effects pressing on `actor` from nearby leaders.
 ## Same idiom as LeadershipEmotionService.apply_fear_gain()/apply_morale_loss():
 ## a leader never affects itself, the radius comes from
@@ -2182,7 +1548,7 @@ func _leadership_score_mods(actor: Dictionary, all_actors: Array, expr_cfg: Dict
 			if value <= float(per_trait.get(trait_id, 0.0)):
 				continue
 			var radius: int = LeadershipEmotionServiceScript.get_trait_radius(leader, trait_id, expr_cfg)
-			if not _is_in_leader_radius(leader, actor_id, all_actors, radius):
+			if not BoardAssessmentServiceScript.is_in_leader_radius(leader, actor_id, all_actors, radius):
 				continue
 			per_trait[trait_id] = value
 	for trait_id_v: Variant in per_trait:
@@ -2198,110 +1564,6 @@ func _leadership_score_mods(actor: Dictionary, all_actors: Array, expr_cfg: Dict
 			"mul":
 				mods[target] = maxf(float(mods.get(target, 1.0)), value_2)
 	return mods
-
-
-## cover_positioning: does this route END behind terrain, out of sight of the enemy?
-##
-## The board has no line-of-sight system, so "cover" is read off the only physical
-## obstruction the movement layer knows about: an IN-BOUNDS cell that is not walkable.
-## A destination counts as cover when at least one such cell sits on the straight line
-## between it and the nearest hostile perceived actor. Deterministic and side-effect
-## free: a supercover grid walk, no RNG, no config.
-## Returns false when the route is empty, the board has no obstruction, or no hostile
-## is perceived — nothing to take cover from.
-func _is_cover_destination(path: Array, movement_context: Dictionary) -> bool:
-	if path.is_empty():
-		return false
-	var destination: Dictionary = path.back() as Dictionary
-	var walkable: Dictionary = movement_context.get("authoritative_walkable", {}) as Dictionary
-	var bounds: Dictionary = movement_context.get("bounds", {}) as Dictionary
-	var width: int = int(bounds.get("w", 0))
-	var height: int = int(bounds.get("h", 0))
-	if width <= 0 or height <= 0:
-		return false
-	var relationships: Dictionary = movement_context.get("relationships", {}) as Dictionary
-	var threat: Dictionary = {}
-	var best_distance: int = 2147483647
-	for fact_v: Variant in (movement_context.get("perceived_actors", []) as Array):
-		var fact: Dictionary = fact_v as Dictionary
-		if str(relationships.get(str(fact.get("id", "")), "")) != "hostile":
-			continue
-		if fact.get("is_dead", false) or fact.get("is_structure", false):
-			continue
-		var cell: Dictionary = fact.get("position", {}) as Dictionary
-		if cell.is_empty():
-			continue
-		var distance: int = GridService.chebyshev_distance(destination, cell)
-		if distance < best_distance:
-			best_distance = distance
-			threat = cell
-	if threat.is_empty():
-		return false
-	return _line_is_blocked(destination, threat, walkable, width, height)
-
-
-## True when any in-bounds, non-walkable cell lies strictly between `from` and `to`.
-## Walks the line one column/row step at a time (Bresenham with both axes tested),
-## so a diagonal sight line is blocked by an obstruction it clips.
-func _line_is_blocked(
-	from: Dictionary, to: Dictionary, walkable: Dictionary, width: int, height: int
-) -> bool:
-	var col: int = int(from.get("col", 0))
-	var row: int = int(from.get("row", 0))
-	var target_col: int = int(to.get("col", 0))
-	var target_row: int = int(to.get("row", 0))
-	var delta_col: int = absi(target_col - col)
-	var delta_row: int = absi(target_row - row)
-	var step_col: int = 1 if target_col > col else -1
-	var step_row: int = 1 if target_row > row else -1
-	var error: int = delta_col - delta_row
-	while true:
-		if error * 2 > -delta_row:
-			error -= delta_row
-			col += step_col
-		elif error * 2 < delta_col:
-			error += delta_col
-			row += step_row
-		else:
-			break
-		if col == target_col and row == target_row:
-			return false
-		if col < 0 or row < 0 or col >= width or row >= height:
-			continue
-		if not bool(walkable.get("%d,%d" % [col, row], false)):
-			return true
-	return false
-
-
-## True when `actor_id` is one of the leader's nearby living echo allies at `radius`.
-## Routed through the same public helper _apply_leadership() uses so the membership
-## rule (living, echo, positioned, self excluded) has exactly one definition.
-func _is_in_leader_radius(
-	leader: Dictionary, actor_id: String, all_actors: Array, radius: int
-) -> bool:
-	for ally_v: Variant in LeadershipEmotionServiceScript.get_nearby_living_echo_allies(
-		leader, all_actors, radius
-	):
-		if str((ally_v as Dictionary).get("id", "")) == actor_id:
-			return true
-	return false
-
-
-## Flat bonus from all currently active situational conditions.
-## Loops over active_conditions and sums per-action bonuses from situational_muls.
-## Keys starting with "_stub_" are never placed in active_conditions, so stub rows
-## in balance.json have zero effect regardless of their values.
-## Returns 0.0 when board_summary is empty (backward-compatible; existing tests unaffected).
-func _situational_bonus(action_type: String, board_summary: Dictionary) -> float:
-	var conditions: Array = board_summary.get("active_conditions", [])
-	if conditions.is_empty():
-		return 0.0
-	var sit_cfg: Dictionary = _cfg_get("situational_muls")
-	var bonus: float = 0.0
-	for cond_key: String in conditions:
-		var cond_row: Dictionary = sit_cfg.get(cond_key, {})
-		bonus += float(cond_row.get(action_type, 0.0))
-	return bonus
 
 
 ## Generic data-driven score for action_type given this actor's state and active directive.
@@ -2513,7 +1775,7 @@ func _score(
 	# reach it — a terrified Echo does not get the leader's full push.
 	base += float(leadership_mods.get(action_type, 0.0))
 
-	var situational_bonus: float = _situational_bonus(action_type, board_summary)
+	var situational_bonus: float = BoardAssessmentServiceScript.situational_bonus(action_type, board_summary, _cfg_get("situational_muls"))
 
 	# V2-PROG-012 Phase 4: directive_bonus is a FLAT ADDITIVE term OUTSIDE the
 	# fear/calling bracket — this is what makes the Directive's entire contribution
@@ -2671,38 +1933,6 @@ static func compute_interpretation_swing(
 	if directive_mul_at_1 <= 0.0:
 		return INF
 	return identity_mul_at_1 / directive_mul_at_1
-
-
-# PROG-010: Returns the most wounded (lowest hp_ratio) enemy relative to this actor.
-# Used for enemy Adept+ focus fire. Falls back to empty if no enemies exist.
-func _get_most_wounded_enemy(actor: Dictionary, all_actors: Array) -> Dictionary:
-	var my_faction: String = str(actor.get("faction", "echo"))
-	var best: Dictionary = {}
-	var best_ratio: float = 2.0
-	for a_v in all_actors:
-		if not (a_v is Dictionary):
-			continue
-		var a: Dictionary = a_v as Dictionary
-		if str(a.get("faction", "")) == my_faction:
-			continue
-		if a.get("is_dead", false) or a.get("is_structure", false):
-			continue
-		var r: float = ActorService.health_ratio(a)
-		if r < best_ratio:
-			best_ratio = r
-			best = a
-	return best
-
-
-# PROG-009: Resolve base score for a skill candidate.
-# Looks up calling_origin's weight for intent_weight_tag (the action type this skill resembles),
-# then adds a skill-specific bonus. Stored as skill_base_bonus in the candidate dict so
-# _score() can use it in place of the normal action_type table lookup.
-func _resolve_skill_base(calling_origin: String, intent_weight_tag: String, bonus: float) -> float:
-	var origin_table: Dictionary = _cfg_get("intent_weights_by_calling_origin")
-	var calling_row: Dictionary  = origin_table.get(calling_origin, origin_table.get("uncalled", {}))
-	var default_weight: float    = float(_cfg_get("default_intent_weight"))
-	return float(calling_row.get(intent_weight_tag, default_weight)) + bonus
 
 
 # VOW-001: Apply vow-specific intent bias additively to all candidates.

@@ -559,26 +559,28 @@ static func _make_enemy(id: String, grid_pos: Dictionary) -> Dictionary:
 	}
 
 
-# Call _generate_candidates via select_intent and return all candidates before scoring.
-# We use a minimal wrapper: set scores, then extract candidates from the intent.
-# Since _generate_candidates is private, we use select_intent and check the winner type.
-# For candidate presence tests, we inject a custom arbiter subtest that serializes candidates.
+# Builds the candidate pool the same way select_intent() does, via
+# ActionCandidateGenerator.generate_candidates(), fed by the given arbiter's own config
+# (so tests that construct BehaviorArbiter with real vs. empty cfg still see the config
+# they set up).
 static func _get_candidates(arbiter: BehaviorArbiter, actor: Dictionary, all_actors: Array, context: Dictionary) -> Array:
-	# We call select_intent with all 3 candidate types possible and check which action types appear.
-	# Build context array by running through the arbiter and checking the candidate pool indirectly.
-	# Approach: run select_intent once at very high/low values to see which actions appear.
-	# Actually simpler: call _generate_candidates via a test harness that exposes it.
-	# Since it's a private method in GDScript, we can call it directly:
 	var ctx := context.duplicate()
 	if not ctx.has("actor"):
 		ctx["actor"] = actor
 	if not ctx.has("all_actors"):
 		ctx["all_actors"] = all_actors
 
-	# GDScript allows calling "private" methods (no enforcement) — use for test inspection.
 	var expression_band: String = str(ctx.get("expression_band", "nascent"))
 	var calling_behavior: Dictionary = ctx.get("calling_behavior", {})
-	return arbiter._generate_candidates(actor, all_actors, ctx, expression_band, calling_behavior)
+	return ActionCandidateGenerator.generate_candidates(
+		actor, all_actors, ctx, expression_band, calling_behavior, {},
+		int(arbiter._cfg_get("guard_range")), float(arbiter._cfg_get("threat_threshold")),
+		arbiter._cfg_get("situational_muls"),
+		{
+			"intent_weights_by_calling_origin": arbiter._cfg_get("intent_weights_by_calling_origin"),
+			"default_intent_weight":            arbiter._cfg_get("default_intent_weight"),
+		}
+	)
 
 
 static func _has_action(candidates: Array, action_type: String) -> bool:

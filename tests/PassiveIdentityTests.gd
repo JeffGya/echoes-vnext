@@ -178,7 +178,7 @@ static func _t_blade_broken_morale_override() -> Dictionary:
 # seer_directive_aura adds a strategic bonus to non-seer actors when Seer is nearby.
 # We test: uncalled echo near a seer ally has higher guard/protect_ally than alone.
 # Simple proxy: the board summary includes seer_directive_aura = true when seer is within 3 tiles.
-# Since BehaviorArbiter's _build_board_summary() is internal, we verify via intent scoring:
+# Since BoardAssessmentService.build_board_summary() has no test-facing hook here, we verify via intent scoring:
 # an uncalled echo with seer nearby (and no enemy) should still produce a valid intent.
 static func _t_seer_directive_aura_fires() -> Dictionary:
 	var actor := {
