@@ -49,7 +49,14 @@
 #      zero cut-off cells anywhere on the board.
 #  34. dominant_key() tiebreak_order covers all ten V2 vectors — each of the six      (V2-COMBAT-003.5
 #      once-unreachable vectors (opportunist/strategist/skeptic/mediator/devoted/    Followup #10,
-#      nurturer) can win an exact-value ten-way tie.                                 decision #69)
+#      nurturer) can win an exact-value ten-way tie. Uses a synthetic order — proves  decision #69)
+#      the shared helper, not any one real call site's literal.
+#  35. GridService._placement_score()'s REAL tiebreak_order literal (not a synthetic  (V2-COMBAT-003.5
+#      one) resolves a ten-way vector tie to 'vanguard'.                             Followup #10,
+#  36. CombatState._calc_initiative()'s REAL tiebreak_order literal resolves a        review fix)
+#      ten-way vector tie to 'vanguard'.
+#  37. ShrineService.select_purifier()'s REAL REVERSED tiebreak_order literal
+#      resolves a ten-way vector tie to 'nurturer'.
 #
 # All tests are pure unit tests — no runtime or save file needed.
 # Run via Debug Panel: tests
@@ -107,6 +114,12 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(GridTests, "_t_walkable_exhausted_fallback_cause"))
 	runner.register_test("grid/dominant_key_all_ten_vectors_can_win_tie",
 		Callable(GridTests, "_t_dominant_key_all_ten_vectors_can_win_tie"))
+	runner.register_test("grid/placement_score_real_site_new_vectors_beat_old_order",
+		Callable(GridTests, "_t_placement_score_real_site_new_vectors_beat_old_order"))
+	runner.register_test("grid/combat_initiative_real_site_new_vectors_beat_old_order",
+		Callable(GridTests, "_t_combat_initiative_real_site_new_vectors_beat_old_order"))
+	runner.register_test("grid/shrine_purifier_real_site_new_vectors_beat_old_order",
+		Callable(GridTests, "_t_shrine_purifier_real_site_new_vectors_beat_old_order"))
 
 
 # -------------------------
@@ -1056,4 +1069,88 @@ static func _t_dominant_key_all_ten_vectors_can_win_tie() -> Dictionary:
 				"error": "Expected '%s' to win a ten-way tie when first in tiebreak_order, got '%s'" % [v, winner]
 			}
 
+	return { "ok": true }
+
+
+# Test 35: placement_score_real_site_new_vectors_beat_old_order
+# A FULL ten-way tie cannot distinguish the real 10-vector literal at GridService.gd:632 from
+# the pre-fix 4-vector one, because "vanguard" is ranked first in BOTH lists and wins either
+# way. This test ties only 3 of the 6 vectors added by V2-PROG-003 (strategist/skeptic/devoted),
+# excluding vanguard/seeker/protector/pillar entirely. Under the OLD 4-vector literal none of
+# these three are ranked, so dominant_key() falls back to alphabetical order among unranked
+# keys — "devoted" (see GridService.dominant_key()'s tiebreak-within-unranked rule). Under the
+# real 10-vector literal, "strategist" is ranked ahead of "skeptic" and "devoted" and wins on
+# rank instead. A revert to the old literal flips the winner and this test's score.
+static func _t_placement_score_real_site_new_vectors_beat_old_order() -> Dictionary:
+	var actor := _make_actor("tied", 0, 0, "", "", {},
+		{ "strategist": 50, "skeptic": 50, "devoted": 50 })
+	var place_cfg := { "by_dominant_vector": { "strategist": 5, "devoted": -5 } }
+
+	var score: int = GridService._placement_score(actor, place_cfg)
+	if score != 5:
+		return {
+			"ok": false,
+			"error": "Expected GridService._placement_score()'s real 10-vector tiebreak_order " +
+				"to resolve a strategist/skeptic/devoted tie to 'strategist' (score=5); the " +
+				"old 4-vector literal would resolve it to 'devoted' via alphabetical fallback " +
+				"(score=-5). Got score=%d" % score
+		}
+	return { "ok": true }
+
+
+# Test 36: combat_initiative_real_site_new_vectors_beat_old_order
+# Same rationale as test 35, for CombatState._calc_initiative()'s own copy of the
+# tiebreak_order literal at CombatState.gd:172. 'other's dominant vector ("seeker") is
+# unaffected by the literal's order (it is the actor's only vector key), so it anchors a fixed
+# comparison point: 25 under the real order, -15 under the old one — both margins exceed the
+# max seed-nudge spread (0-9), so the nudge cannot mask the flip.
+static func _t_combat_initiative_real_site_new_vectors_beat_old_order() -> Dictionary:
+	var actor_tied := _make_actor("tied", 5, 5, "", "", {},
+		{ "strategist": 50, "skeptic": 50, "devoted": 50 })
+	var actor_other := _make_actor("other", 5, 5, "", "", {}, { "seeker": 100 })
+	var init_cfg := { "by_dominant_vector": { "strategist": 20, "devoted": -20, "seeker": -5 } }
+
+	var order: Array = CombatState._calc_initiative([actor_tied, actor_other], 0, init_cfg)
+	if order.is_empty() or str(order[0].get("id", "")) != "tied":
+		return {
+			"ok": false,
+			"error": "Expected 'tied' first (CombatState's real 10-vector tiebreak_order " +
+				"resolves the strategist/skeptic/devoted tie to 'strategist', vec_mod=20 > " +
+				"'other's -5); the old 4-vector literal would resolve it to 'devoted' " +
+				"(vec_mod=-20 < -5), putting 'other' first instead. Got order=%s" % str(order)
+		}
+	return { "ok": true }
+
+
+# Test 37: shrine_purifier_real_site_new_vectors_beat_old_order
+# Same rationale as test 35/36, for ShrineService.select_purifier()'s own REVERSED
+# tiebreak_order literal at ShrineService.gd:39. A full ten-way tie does not distinguish this
+# site either: under the real reversed order "nurturer" wins, but under the OLD 4-vector
+# literal (["pillar", "protector", "seeker", "vanguard"]) "pillar" is still ranked and beats
+# every unranked key, including "nurturer" — 'tied' wins under both, only its score differs.
+# Tying only nurturer/mediator/opportunist (excluding the legacy 4 entirely) forces a real
+# fallback: alphabetical order picks "mediator" under the old literal, which this cfg weights
+# below 'other', flipping the winner.
+static func _t_shrine_purifier_real_site_new_vectors_beat_old_order() -> Dictionary:
+	var actor_tied := {
+		"id": "tied", "traits": { "faith": 0 },
+		"vector_scores": { "nurturer": 50, "mediator": 50, "opportunist": 50 },
+	}
+	var actor_other := {
+		"id": "other", "traits": { "faith": 0 }, "vector_scores": { "vanguard": 100 },
+	}
+	var shrine_cfg := {
+		"purify_weight_faith": 0.5,
+		"purify_weight_by_vector": { "nurturer": 20, "mediator": -5 },
+	}
+
+	var purifier_id: String = ShrineService.select_purifier([actor_tied, actor_other], shrine_cfg)
+	if purifier_id != "tied":
+		return {
+			"ok": false,
+			"error": "Expected 'tied' (ShrineService's real REVERSED tiebreak_order resolves " +
+				"the nurturer/mediator/opportunist tie to 'nurturer', weight=20 > 'other's " +
+				"default 0); the old 4-vector literal would resolve it to 'mediator' " +
+				"(weight=-5 < 0), putting 'other' first instead. Got purifier_id=%s" % purifier_id
+		}
 	return { "ok": true }
