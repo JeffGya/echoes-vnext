@@ -47,6 +47,9 @@
 #  33. echo_walkable_exhausted_fallback fires (and outside_region does not) when      (V2-COMBAT-003
 #      a faction simply has more actors than the board has walkable cells, with      phase 2c-region)
 #      zero cut-off cells anywhere on the board.
+#  34. dominant_key() tiebreak_order covers all ten V2 vectors — each of the six      (V2-COMBAT-003.5
+#      once-unreachable vectors (opportunist/strategist/skeptic/mediator/devoted/    Followup #10,
+#      nurturer) can win an exact-value ten-way tie.                                 decision #69)
 #
 # All tests are pure unit tests — no runtime or save file needed.
 # Run via Debug Panel: tests
@@ -102,6 +105,8 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(GridTests, "_t_outside_region_fallback_cause"))
 	runner.register_test("grid/walkable_exhausted_fallback_cause",
 		Callable(GridTests, "_t_walkable_exhausted_fallback_cause"))
+	runner.register_test("grid/dominant_key_all_ten_vectors_can_win_tie",
+		Callable(GridTests, "_t_dominant_key_all_ten_vectors_can_win_tie"))
 
 
 # -------------------------
@@ -1023,5 +1028,32 @@ static func _t_walkable_exhausted_fallback_cause() -> Dictionary:
 				"region — the whole walkable set — so nothing can be 'outside' it) — " + \
 				"got %s" % [str(result)]
 		}
+
+	return { "ok": true }
+
+
+# Test 34: dominant_key_all_ten_vectors_can_win_tie
+# All ten vectors tied at the same value. For each vector, put it first in tiebreak_order
+# and confirm it wins — proves the six once-unreachable vectors are real candidates now,
+# not just present in the dict (docs/stories/v2-combat-003.5/decisions.md #69).
+static func _t_dominant_key_all_ten_vectors_can_win_tie() -> Dictionary:
+	var all_vectors: Array = ["vanguard", "seeker", "protector", "pillar", "strategist",
+		"skeptic", "devoted", "opportunist", "mediator", "nurturer"]
+
+	var scores: Dictionary = {}
+	for v in all_vectors:
+		scores[v] = 50
+
+	for v in all_vectors:
+		var order: Array = [v]
+		for other in all_vectors:
+			if other != v:
+				order.append(other)
+		var winner: String = GridService.dominant_key(scores, order)
+		if winner != v:
+			return {
+				"ok": false,
+				"error": "Expected '%s' to win a ten-way tie when first in tiebreak_order, got '%s'" % [v, winner]
+			}
 
 	return { "ok": true }

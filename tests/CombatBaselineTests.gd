@@ -271,11 +271,9 @@ static func _has_log(logger: StructuredLogger, type: String) -> bool:
 # index 0. This is a SEPARATE vector consumer from BehaviorArbiter._score()'s vector_bonus
 # term (BehaviorArbiter.gd:2109-2114) named in ANSWERS.md #50 — both were silently disabled by
 # the same empty vector_scores, and this one turned out to be the dominant cause of the
-# fingerprint moves. Flagged to Jeff separately: GridService._dominant_key()'s tiebreak_order
-# for placement only lists the four legacy vectors (vanguard/seeker/protector/pillar), so six
-# of the ten V2 virtue domains (opportunist/strategist/skeptic/mediator/devoted/nurturer) can
-# never become an Echo's placement-dominant vector even though balance.json's
-# by_dominant_vector table scores all ten — a latent gap, out of this phase's scope.
+# fingerprint moves. GridService.dominant_key()'s placement tiebreak_order once listed only
+# four legacy vectors, so six V2 vectors could never win an exact tie there — fixed by
+# extending the list to all ten (docs/stories/v2-combat-003.5/decisions.md #69).
 # V2-COMBAT-003: by_calling_origin re-migrated to V2 ids. fp_combat's party has echo_0002
 # (aduro) and echo_0005 (kra_soro) -- unrecognized V1-only keys before the fix, so both scored
 # 0; now aduro=+3.0, kra_soro=+1.0. Initiative order shifts, so the fight runs 6 rounds instead

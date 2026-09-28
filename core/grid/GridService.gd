@@ -626,10 +626,10 @@ static func _placement_score(actor: Dictionary, place_cfg: Dictionary) -> int:
 
 	# Dominant vector modifier (reads actor.vector_scores fresh — can drift over a run).
 	# All ten V2 vectors are candidates — dominant_key() scores every key in the dict.
-	# The list below is a TIEBREAK ONLY, for equal values among these four.
+	# The list below is a TIEBREAK ONLY, for equal values among all ten.
 	var vec_table: Dictionary = place_cfg.get("by_dominant_vector", {})
 	var vectors: Dictionary = actor.get("vector_scores", {})
-	var dom_vec: String = dominant_key(vectors, ["vanguard", "seeker", "protector", "pillar"])
+	var dom_vec: String = dominant_key(vectors, ["vanguard", "seeker", "protector", "pillar", "strategist", "skeptic", "devoted", "opportunist", "mediator", "nurturer"])
 	var vec_mod: int = int(vec_table.get(dom_vec, 0))
 
 	return base + arch_mod + call_mod + trait_mod + vec_mod

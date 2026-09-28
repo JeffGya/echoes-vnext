@@ -23,7 +23,7 @@ extends RefCounted
 ##
 ## Purifier = the echo with the highest weight, where:
 ##   weight = faith_trait × purify_weight_faith + purify_weight_by_vector[dominant_vector]
-## Dominant vector = highest value in actor["vector_scores"]; tiebreak: pillar > protector > seeker > vanguard.
+## Dominant vector = highest value in actor["vector_scores"]; ties break via `vec_tiebreak` below.
 ## Actor id tiebreak: lexicographically smallest — ensures determinism.
 ##
 ## Returns the actor_id string of the chosen purifier, or "" if echo_actors is empty.
@@ -33,10 +33,10 @@ static func select_purifier(echo_actors: Array, shrine_cfg: Dictionary) -> Strin
 		"pillar": 20, "protector": 10, "seeker": 5, "vanguard": 0
 	})
 	# All ten V2 vectors are candidates — GridService.dominant_key() scores every key in
-	# the dict. The list below is a TIEBREAK ONLY, for equal values among these four.
+	# the dict. The list below is a TIEBREAK ONLY, for equal values among all ten.
 	# NOTE: this order is the REVERSE of GridService's/CombatState's vector tiebreak —
 	# intentional per-caller, do not "fix" it to match.
-	var vec_tiebreak: Array = ["pillar", "protector", "seeker", "vanguard"]
+	var vec_tiebreak: Array = ["nurturer", "mediator", "opportunist", "devoted", "skeptic", "strategist", "pillar", "protector", "seeker", "vanguard"]
 
 	var best_id: String = ""
 	var best_weight: float = -1.0
