@@ -923,3 +923,214 @@ problem. Only the missing 6 are broken. Only they need adding.
 
 **Source:** sr-game-designer, 2026-09-28
 **Date:** 2026-09-28
+
+---
+
+## Camera feel sign-off
+
+Numbers below are `game-feel-developer` sign-off for the shared `BoardCamera.gd` controller
+(ANSWERS.md #66-69, plan `you-are-game-orchestrator-read-soft-crayon.md`). This is a design pass.
+No code was changed. `ui-ux-designer` builds against these numbers.
+
+### 70. camera-min-zoom-formula-content-derived
+
+**Q:** What formula sets `min_zoom` per screen, so Combat/Stage boards (18 to ~100 cells on one
+axis) and Sanctum's small fixed floor each get a correct zoom-out floor, instead of one shared
+hardcoded range?
+
+**A:** For Combat and Stage:
+
+```
+min_zoom = clamp(
+    (viewport_min_dimension / max(content_span.x, content_span.y)) * 0.90,
+    absolute_floor,
+    absolute_ceiling
+)
+```
+
+- `viewport_min_dimension` = `min(get_viewport_rect().size.x, get_viewport_rect().size.y)`, read at
+  runtime, recomputed on resize (same pattern as Sanctum's existing
+  `_on_spatial_layer_resized` → `_recompute_floor_bounds` → `_clamp_camera_to_floor` chain).
+- `content_span` = the real measured board extent in pixels, from `map_to_local()` corners — both
+  screens already compute this correctly today (Combat: `_board_span_px`; Stage: `map_to_local`
+  calls in `StageExploreScreen.gd`).
+- `0.90` is the safety factor. It is a margin, not a shrink: at the exact-fit zoom
+  (`viewport / content`), the board fills the viewport edge-to-edge with zero room. `0.90` backs off
+  10%, so the full board is visible with a small border at min zoom, on both axes, on any board
+  shape. A factor below 1.0 zooms further OUT, not in — confirmed by checking the direction:
+  smaller `min_zoom` shows more empty margin around the fully-visible content, never crops it.
+
+Worked check against real board sizes (tile size confirmed `Vector2i(128, 64)` for both screens,
+`ui/screens/combat/CombatBoardScreen.tscn` and `ui/screens/venture/StageExploreScreen.tscn`;
+`viewport_min_dimension` taken as `720`, `project.godot`'s base viewport height):
+
+| Board (cols×rows) | Content span (px) | Exact-fit zoom | min_zoom (×0.90) |
+|---|---|---|---|
+| Combat 18×18 (small) | 2304×1152 | 0.313 | 0.28 |
+| Combat 28×28 (large normal) | 3584×1792 | 0.201 | 0.18 |
+| Combat 100×18 (stretched GUIDE_SPIRIT repro) | 7552×3776 | 0.095 | 0.086 |
+| Stage 30×30 (min map) | 3840×1920 | 0.188 | 0.17 |
+| Stage ~55×40 (late-stage bump) | 6080×2560 | 0.118 | 0.11 |
+
+This confirms the old hardcoded `_ZOOM_MIN = 0.4` (`CombatBoardScreen.gd:156`) could never reach
+far enough for the 100×18 repro board (needs ~0.09) — this is the root numeric cause of follow-up
+#15's original bug, confirmed independently of the follow-logic fix already scoped.
+
+**Absolute floor/ceiling (clamp bounds, per screen class):**
+
+| Screen | absolute_floor | absolute_ceiling |
+|---|---|---|
+| Combat | 0.05 | 0.35 |
+| Stage | 0.08 | 0.30 |
+
+`absolute_floor` is a safety net against a pathological board (larger than any config currently
+allows) computing an unreadable near-zero zoom. `absolute_ceiling` guarantees `min_zoom` never rises
+above a level that would remove pan headroom on the smallest legal board for that screen — Stage's
+ceiling is tighter than Combat's because Stage's map never shrinks below `MIN_WIDTH`/`MIN_HEIGHT` =
+30×30 (`StageExploreModel.gd:33-34`), so it never needs Combat's small-board 18×18 case.
+
+**Sanctum does not use this formula.** Its floor is small, fixed-shape, and rendered from a
+`TileMapLayer.get_used_rect()` that rarely changes size mid-session. Decision #72 keeps Sanctum on
+its existing discrete zoom-level list instead.
+
+**Source:** game-feel-developer, 2026-09-29
+**Date:** 2026-09-29
+
+---
+
+### 71. camera-max-and-default-zoom-per-screen
+
+**Q:** What are `max_zoom` and `default_zoom` per screen, given Jeff's explicit ask for a visibly
+closer default on all three, without losing board-edge readability?
+
+**A:**
+
+| Screen | Old default | New default | max_zoom (old → new) |
+|---|---|---|---|
+| Sanctum | 1.5 | 2.0 | 2.0 → 2.5 |
+| Combat | 1.0 | 1.3 | 2.0 → 2.2 |
+| Stage | 0.55 | 0.75 | none → 1.5 |
+
+**Sanctum:** keep the existing discrete list, add one level, shift default up by one step:
+
+```
+_zoom_levels = [0.5, 1.0, 1.5, 2.0, 2.5]   # was [0.5, 1.0, 1.5, 2.0]
+_zoom_index default = 3                     # 2.0×, was index 2 (1.5×)
+```
+
+This preserves the same shape as today — 3 levels below default, 1 above — instead of putting
+default at the top of the range with no zoom-in headroom left. `min_zoom` (0.5, the bottom level)
+is unchanged; Sanctum's floor is small enough that 0.5 already shows it in full.
+`_detail_zoom = Vector2(2.9, 2.9)` (the tap-occupant focus zoom) is untouched — it is not part of
+this ask.
+
+**Combat:** `default_zoom = 1.3` (30% closer than 1.0). At 1.3, the visible width on a 1280px-wide
+viewport is 985px — already less than a normal 18×18 board's 2304px content span. The old default
+of 1.0 (1280px visible) *also* didn't show the full board width; players already rely on pan and
+the new selection-lock to reach the edges. Moving to 1.3 does not newly break edge access — it was
+never fully visible at default zoom, on any board size in the current 18-28 config range.
+`max_zoom = 2.2`, a small bump over the current 2.0, to keep one step of further zoom-in headroom
+above the new, closer default (same ratio-preservation reasoning as Sanctum's change).
+
+**Stage:** `default_zoom = 0.75` (up from `_EXPLORE_INITIAL_SCALE = 0.55`). Flag: the current 0.55
+has a direct, named justification in `StageExploreScreen.gd`'s own comment — showing the "island
+silhouette" around the party's starting position. At 0.75, visible width on a 30×30 map drops from
+~2327px (61% of the 3840px content span, at 0.55) to ~1707px (44%). This is a real trade — less of
+the surrounding shape is visible by default. I recommend 0.75 as the starting number, since Stage
+is gaining manual zoom for the first time and the player can now zoom back out on demand (a
+capability the 0.55 default didn't need to compensate for alone). This specific number is more a
+feel judgment made in-engine than a value derivable from geometry — flagging it for a quick
+in-engine look during Story 3, not holding it back as blocking.
+`max_zoom = 1.5` — lower than Combat's 2.2. Stage shows one party token, not a multi-actor tactical
+board; there is no dense-read reason to zoom in as far as Combat. Raise this later if Jeff wants
+symmetry with Combat instead.
+
+**Source:** game-feel-developer, 2026-09-29
+**Date:** 2026-09-29
+
+---
+
+### 72. camera-follow-tuning-and-discrete-zoom-stays-sanctum-only
+
+**Q:** Keep or retune `FOLLOW_ACTOR`'s lerp speed and the manual-override resume delay? Should
+Sanctum's discrete zoom-level snapping become a shared discrete/continuous toggle on `BoardCamera`,
+or stay Sanctum-only?
+
+**A:**
+
+- **`FOLLOW_ACTOR` lerp speed:** keep `_PURSUE_FOLLOW_SPEED = 5.0` unchanged, now applied
+  universally (every selection-lock, not just PURSUE). No reported problem with the feel itself —
+  only its scope (PURSUE-only) was the bug. Retuning an already-correct value with no complaint
+  against it risks a regression nobody asked for.
+- **Manual-override resume delay:** keep `_PAN_RESUME_DELAY = 3.0`s unchanged, as the shared
+  default across Combat and (where applicable) Sanctum. Same reasoning — proven value, no reported
+  issue.
+- **Discrete zoom-level snapping: stays Sanctum-side only, not a shared toggle.** Reasoning:
+  Combat and Stage need continuous pinch/wheel/wheel-drag zoom over content that varies by an order
+  of magnitude (18 to ~100 cells) — a discrete level table would need to be regenerated per board
+  size, which is more moving parts than the problem needs. Sanctum's discrete stepping is tied to
+  its own small, fixed-shape content and its keyboard `Z`-cycle input, which has no equivalent on
+  the other two screens. Building both a continuous engine and a discrete-snapping mode into one
+  shared component, for one screen's benefit, adds a mode flag and two code paths for a behavior
+  only one screen uses. Simpler and equally correct: `BoardCamera` exposes continuous zoom as its
+  only primitive; Sanctum keeps its own discrete-step wrapper on top of it, calling the shared
+  component's continuous zoom setter at its own four (now five) fixed values — exactly what it does
+  today against its own inline camera code, just retargeted at the shared component instead of
+  Sanctum's own `Camera2D` fields.
+
+**Source:** game-feel-developer, 2026-09-29
+**Date:** 2026-09-29
+
+---
+
+### 73. stage-follow-party-tween-matches-travel-duration-not-pursue-lerp
+
+**Q:** Stage gains `FOLLOW_PARTY` as an always-on default (no manual-override window, per the
+plan) — does it need the same min_zoom formula as Combat, and does it need the same continuous
+`_PURSUE_FOLLOW_SPEED` lerp for camera movement?
+
+**A:** Same min_zoom **formula** — yes, decision #70's formula is content-size-derived and does not
+depend on how the tracked target moves; it applies unchanged.
+
+Same follow **lerp**, however, should not carry over as-is. Combat's `_PURSUE_FOLLOW_SPEED = 5.0`
+lerp is designed for a continuously-moving quarry, chased frame by frame. Stage's party instead
+moves in discrete per-advance tweens (`_TRAVEL_DURATION = 0.5`s,
+`StageExploreScreen.gd`). Applying a continuous per-frame lerp on top of a discrete hop means the
+camera either lags behind and arrives late, or (if the lerp is fast) reaches the destination well
+before the token's own travel tween finishes — both break the sense that camera and token moved
+together, which is the "Continuity" principle this pass is meant to serve.
+
+**Recommendation:** on each advance, tween the camera's `FOLLOW_PARTY` target position over the
+same `_TRAVEL_DURATION` (0.5s) and the same easing as the party token's travel tween, so both
+arrive together. Do not reuse `_PURSUE_FOLLOW_SPEED` for Stage. Manual pan/zoom clamping (the
+`_PAN_MARGIN = 120.0`px pattern) ports unchanged — no new value needed there.
+
+**Source:** game-feel-developer, 2026-09-29
+**Date:** 2026-09-29
+
+---
+
+### 74. stage-card-select-gets-a-transition-cue-not-a-distinct-target
+
+**Q:** (Plan's carried-forward open item.) Should Stage's echo-card tap-to-select get a distinct
+visual treatment, given it resolves to the same party-centroid position `FOLLOW_PARTY` already
+shows?
+
+**A (recommendation, not final — confirm with Jeff if it changes scope):** give the tap a
+distinct **transition**, not a distinct **destination**. Concretely: entering `FOLLOW_ACTOR` from a
+card tap plays a faster, slightly different easing snap into position (e.g. a quick ease-out over
+~150-200ms) instead of reusing whatever steady-state easing `FOLLOW_PARTY` uses ambiently. The
+camera ends up in the same place either way — Stage has only one token to lock onto — but the tap
+now visibly *does something* instead of reading as a no-op, satisfying this project's "Response"
+game-feel principle (every touch produces immediate acknowledgement) without inventing a new zoom
+level or a fake secondary target. This is presentational timing only — no simulation or state
+change — so it is inside `game-feel-developer` scope as stated in the brief. Flagging it as a
+recommendation, not committed scope, since the plan's own open-items list marked it explicitly
+non-blocking.
+
+Out of my scope, noted only: the plan's other open item, `_bark_popup_layer`'s screen-space
+assumptions once Combat's fake camera becomes a real `Camera2D`, is a structural/technical concern
+for `ui-ux-designer` to resolve during implementation — not a numbers question.
+
+**Source:** game-feel-developer, 2026-09-29
+**Date:** 2026-09-29

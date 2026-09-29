@@ -72,6 +72,10 @@
 | 63 | pace-rule-readable-by-player | No per-mode number the player must learn; a formula over each mode's own existing values is allowed if the player can state the rule in one sentence | 2026-09-25 |
 | 64 | autobattler-reward-legibility | Rewards and grades follow autobattler conventions: the goal is visible before/during the fight and the result states its cause | 2026-09-25 |
 | 65 | screenshot-script-in-repo | The headless screenshot script lives in `scripts/` and is committed, for every later UI story | 2026-09-25 |
+| 66 | camera-unify-on-real-camera2d | Combat and Stage Exploration move from a faked node-transform camera to a real `Camera2D`, matching Sanctum, via one shared controller | 2026-09-29 |
+| 67 | camera-universal-selection-lock | Tapping any selectable thing (echo, spirit, enemy, shrine/objective, or a card) locks the camera onto it, in Combat, Stage, and Sanctum alike | 2026-09-29 |
+| 68 | camera-default-is-free | With nothing selected, or after tapping empty board space, the camera is `FREE` (manual pan/zoom only) — not an auto-follow default | 2026-09-29 |
+| 69 | camera-card-select-scope | Echo-card tap-to-select applies to both Combat and Stage (shared `RealmShell` echo bar); Sanctum has no card UI and keeps its existing floor-tap selection | 2026-09-29 |
 
 ---
 
@@ -662,5 +666,41 @@
 **A:** In `scripts/`, committed to the repo, so every later UI story can use it. The script runs Godot on a virtual screen (`xvfb-run`, `--rendering-driver opengl3`) and saves a PNG of a screen. The ui-ux-designer builds it in the pace-reward story, phase 4.
 **Source:** Jeff, 2026-09-25 (option A)
 **Date:** 2026-09-25
+
+---
+
+### 66. camera-unify-on-real-camera2d
+
+**Q:** Follow-up #15 (camera doesn't handle large GUIDE_SPIRIT/PURSUE boards) grew into "camera should be similar across Combat, Stage Exploration, and Sanctum" — build one shared camera component, or keep three separately-tuned implementations?
+**A:** One shared `Camera2D`-based controller (`ui/shared/BoardCamera.gd`) all three screens wire into. Sanctum already has a real `Camera2D`; Combat and Stage currently fake a camera by moving board nodes directly — both migrate onto the shared real-`Camera2D` approach. "Faking it is probably what got us drifting."
+**Source:** Jeff, 2026-09-29
+**Date:** 2026-09-29
+
+---
+
+### 67. camera-universal-selection-lock
+
+**Q:** Should camera follow stay tied to objective-specific flags (`is_quarry` for PURSUE, `is_spirit` for GUIDE_SPIRIT), or become a general player-driven mechanism?
+**A:** General: tapping any selectable thing — echo, spirit, enemy, shrine/objective structure, or an echo's card — zooms and locks the camera onto it, across Combat, Stage, and Sanctum, in every Combat objective mode (no mode-gating). Sanctum already implements the pattern (`SanctumShell._try_open_echo_detail_at_viewport_point_from_hit` → `set_featured_occupant` → camera focus-zoom, which can also open the echo-detail menu) and is the reference precedent. Opening a detail menu on selection is a Sanctum-only behavior for now — may extend to Combat/Stage later, out of scope for this pass. Echoes/enemies/spirits/structures are already unified in the same `actors` array with a `grid_pos` (`is_structure`/`is_spirit`/`is_quarry` flags), so one tap-to-select mechanism covers every selectable type without special-casing.
+**Source:** Jeff, 2026-09-29
+**Date:** 2026-09-29
+
+---
+
+### 68. camera-default-is-free
+
+**Q:** When nothing is selected (fresh encounter/screen entry, or after tapping empty board space), what should the camera default to — follow the party centroid, or sit free?
+**A:** `FREE` (manual pan/zoom only, no auto-follow) is the default in both cases. Party-centroid follow (`FOLLOW_PARTY`) still exists as a mode (e.g. Combat's recenter button, Stage's always-on travel-follow) but is never the passive default when nothing is selected.
+**Source:** Jeff, 2026-09-29
+**Date:** 2026-09-29
+
+---
+
+### 69. camera-card-select-scope
+
+**Q:** The only tappable echo-card component (`EchoCardItem`) lives in `RealmShell.gd`'s shared echo bar, used by both Combat and Stage (Sanctum has no card UI). Should card-tap-to-select apply to both screens, or Combat only, given Stage's board shows just one party token?
+**A:** Both Combat and Stage. On Stage this resolves to the same single-party-token position `FOLLOW_PARTY` would give, but the lock semantics (and any future feel treatment) should exist there too, not just where there's a visually distinct target to follow.
+**Source:** Jeff, 2026-09-29
+**Date:** 2026-09-29
 
 ---
