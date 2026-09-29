@@ -573,6 +573,7 @@ func _run_tests(parts: Array) -> void:
 	VoiceTests.register(runner)           # V2-VOICE-001
 	InstitutionTests.register(runner)     # V2-SANCTUM-002
 	SanctumLayoutTests.register(runner)  # V2-SANCTUM-002: layout + occupant placement
+	BoardCameraInputTests.register(runner)  # V2-COMBAT-003.5 camera unification: input routing
 	ContinuityTests.register(runner)     # V2-CONTINUITY-001
 	SkillUnlockTests.register(runner)    # V2-PROG-009
 	ContactModelTests.register(runner)  # V2-STAGE-003
