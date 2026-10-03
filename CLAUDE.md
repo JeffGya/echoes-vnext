@@ -146,6 +146,6 @@ a named root cause of this project's rework.
 
 ## Engine version
 
-Read `config/features` in `project.godot` for the live version (4.6.x today; a 4.7 migration is
+Read `config/features` in `project.godot` for the live version (a 4.7 migration is
 planned). Never hardcode a patch version. Confirm an engine API against the declared version, and
 flag anything deprecated or renamed in 4.7 rather than adopting it silently.

@@ -10,10 +10,10 @@
 
 ## Project Identity
 
-Godot 4.6.1 GDScript strategy game. Deterministic core simulation with snapshot-driven UI.
+Godot 4 GDScript strategy game (engine version: `config/features` in `project.godot`). Deterministic core simulation with snapshot-driven UI.
 The player runs a Sanctum, summons Echoes (returning fragments of stolen stories), and leads them through Realm trials.
 
-**Stack:** 100% GDScript. No web, no TypeScript, no Python. Godot 4.6.1 only.
+**Stack:** 100% GDScript. No web, no TypeScript, no Python. Godot 4 only.
 
 ---
 
@@ -353,7 +353,7 @@ CONVENTIONS.md    Full architecture contracts
 
 ### Code Boundaries — never cross
 - `core/` has zero UI node refs or Godot scene tree calls
-- `ui/` never calls `dispatch()` directly; never reads `FlowContext`, `SaveService`, or any sim internal
+- `ui/` never calls `dispatch()` directly, except `AppRoot.gd`, the UI host that dispatches the action requests screens emit; `ui/` never reads `FlowContext`, `SaveService`, or any sim internal
 - `data/` is read-only; schema changes are additive only (never remove or rename existing fields)
   - **Exception (V2-PROG-012 precedent):** a rename/removal is permitted when the old name is actively misleading or its value was unreachable (silently falling through to a code default), provided **every** consumer is migrated in the same change and no alias is left behind. V2-PROG-012 renamed four keys under this exception — `presence_dampen_scale` → `composure_dampen_scale`, `directive_band_mul` → `directive_interpretation_mul`, per-calling `absolute_fear_threshold` → `absolute_fear_offset`, `vector_to_virtue_primary` → `virtue_vector_key` — after auditing every `core/`, `ui/`, `tests/`, and `docs/` reference. Default to the additive-only rule; reach for this exception only with the same full-repo audit, and say so in the story writeup.
 
@@ -578,7 +578,7 @@ production code to make its own test pass.
 - **Build structure in `.tscn`** — scripts render values and apply profile values such as margins, columns, visibility, wrap widths, and min/max sizes
 - Never create/reparent the UI hierarchy or construct visual styles programmatically in `.gd`; layout relationships and theme hooks belong in `.tscn`
 - Reusable visual treatments belong in `assets/theme/LivingTreeSystem.tres`; extend the theme instead of restyling the same patterns per scene
-- Godot 4.6.1 responsive base is 1280×720 landscape; desktop starts at 1600×900 and may resize down to 960×540
+- The responsive base is 1280×720 landscape; desktop starts at 1600×900 and may resize down to 960×540
 - Responsive means profile recomposition, capped readable UI, and spatial surplus on wide views — not uniform root scaling or scroll containers everywhere
 - `SanctumShell` owns the inset BottomRail via `_cached_nav` — do NOT inject nav into snapshots
 - `RealmShell` owns the inset, capped EchoBar (88 logical units high) — do NOT render it in individual screens

@@ -116,8 +116,8 @@ func _on_toggle_pressed():
 ## Player-Facing Display Rules
 
 - Show **Standing** not `rank`, **Step** not `level`, **Storyweight** not `xp_total`
-- Show calling by name: Ward / Break / Veil / Path / Rite / Root — not internal ID
-- Show morale as tier: inspired / steady / shaken / broken — not raw number
+- Show the calling by its display name, not the internal ID (callings: Okofor, Aduro, Onyamesu, Okomfo, Kra-Soro, Sum-Okwanfo; see `docs/calling-reference.md`)
+- Show emotion as the projected `emotional_status` (radiant, whole, grounded, uncertain, hesitant, burdened, pressed, strained, fraying, hollow) through `EmotionPresentation.gd` — not raw morale or fear, and not the morale tier
 - Never show internal `id` fields to the player
 
 ---

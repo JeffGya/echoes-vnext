@@ -1,12 +1,11 @@
 # UI/UX Reference — Echoes vNext
 
-> Landscape-first responsive UI/UX patterns for Echoes vNext on Godot 4.6.1.
+> Landscape-first responsive UI/UX patterns for Echoes vNext. Engine version: `config/features` in `project.godot`.
 > Authoritative knowledge of snapshot-to-screen mapping, safe areas, persistent
 > chrome, modal layering, touch targets, screen inventory, Living Tree visual
 > language, and interaction patterns.
 
-**Claude Code:** invoke as `/game-ui-ux-echoes` or `anthropic-skills:game-ui-ux-echoes`
-**Codex / any agent:** read this file directly — all knowledge is self-contained here.
+**Claude Code:** the skill `game-ui-ux-echoes` points here. **Codex / any agent:** read `ui/AGENTS.md` first, then this file. The rules in `ui/AGENTS.md` win over this file.
 
 ## When to consult this document
 - Designing or implementing a new screen
@@ -30,9 +29,9 @@
 
 ## Touch Target Standards
 
-- **Minimum:** 48×48dp for all interactive elements
-- **Preferred:** 56×56dp for primary CTAs
-- **Spacing:** at least 8dp between adjacent touch targets
+- **Minimum:** 48×48 logical units for all interactive elements
+- **Preferred:** 56×56 logical units for primary CTAs
+- **Spacing:** at least 8 logical units between adjacent touch targets
 - **Safe zones:** at least 16 logical units or the converted OS safe inset, whichever is larger
 - **Bottom exclusion:** safe bottom + shell chrome height + 8-unit separation
 
@@ -82,27 +81,14 @@ bottom exclusion and do not render their own party bar.
 | CombatBoardScreen | `flow.encounter` / `flow.keeper_trial` | Responsive isometric board, objective, initiative, pace and camera controls |
 | ResolveScreen | `flow.resolve` | AppRoot modal outcome surface: combat/scout/contact/situation resolution |
 
+### Boot, onboarding and keeper intro
+These screens are in `ui/screens/boot/` and `ui/screens/onboarding/`. See `docs/screens.md`.
+
 ---
 
 ## Snapshot-to-Screen Mapping
 
-Every screen reads a snapshot of shape `{ type, meta, data, actions }`:
-
-| Snapshot type | Screen rendered |
-|--------------|----------------|
-| `flow.sanctum` | SanctumScreen |
-| `flow.summon` | SummonScreen |
-| `flow.echo_party` | EchoPartyScreen |
-| `flow.realm_select` | RealmSelectScreen |
-| `flow.vow_manage` | VowScreen |
-| `flow.weaving_rite` | WeavingRiteScreen |
-| `flow.stage_map` | StageMapScreen |
-| `flow.stage` | StageExploreScreen (preview mode) |
-| `flow.stage_explore` | StageExploreScreen (explore mode) |
-| `flow.encounter` / `flow.keeper_trial` | CombatBoardScreen |
-| `flow.resolve` | ResolveScreen through AppRoot ModalHost |
-
-Routing logic lives in `AppRoot.gd` (shell selection) then `SanctumShell.gd` or `RealmShell.gd` (screen selection).
+Every screen reads a snapshot of shape `{ type, meta, data, actions }`. The mapping from snapshot type to screen is in `AGENTS.md` "Shell Routing" and in `ui/AGENTS.md`. Routing logic lives in `AppRoot.gd` (shell selection), then `SanctumShell.gd` or `RealmShell.gd` (screen selection).
 
 ---
 
@@ -120,7 +106,7 @@ Routing logic lives in `AppRoot.gd` (shell selection) then `SanctumShell.gd` or 
 ## Displaying Progression
 
 - Show **Standing** (not rank) and **Step** (not level) in all player-facing contexts
-- Calling displayed by name (Ward / Break / Veil / Path / Rite / Root), not ID
+- Show the calling by its display name, never its id. The six callings are Okofor, Aduro, Onyamesu, Okomfo, Kra-Soro and Sum-Okwanfo (GDD 10.4; code ids in `docs/calling-reference.md`)
 - Virtue domain (dominant_vector) shown as the echo's current identity — not a stat bar
 - Maturity band (nascent / forming / grounded / whole) can inform visual presence/weight
 
@@ -130,7 +116,8 @@ Routing logic lives in `AppRoot.gd` (shell selection) then `SanctumShell.gd` or 
 
 - **Build structure in `.tscn`, not `.gd`.** Scripts only set values: `text`, `modulate`, `visible`, `disabled`.
 - Responsive scripts may set profile values such as `columns`, margins, visibility,
-  wrap widths, and min/max sizes; do not create or reparent UI structure in code.
+  wrap widths, and min/max sizes. The values come from `ResponsiveLayoutController`.
+  Do not create or reparent UI structure in code.
 - **Shell-cached nav pattern:** SanctumShell owns the BottomRail via `_cached_nav`. Do not inject nav into snapshots.
 - **Realm chrome pattern:** RealmShell owns the 88-unit EchoBar. Screens reserve it.
 - **Spatial-first pattern:** capped cards and controls stop growing on wide views;
@@ -141,7 +128,7 @@ Routing logic lives in `AppRoot.gd` (shell selection) then `SanctumShell.gd` or 
 - **Stage Explore pattern:** capped Living Tree Turn/Objectives/Party HUD with
   directive badge in the same top row; Step/actions live above EchoBar exclusion.
 - **No IDs in player-facing display.** Show names, standings, callings — never internal ID strings.
-- **Per-row actions** are dispatched by the row itself, never put in `snapshot.actions`.
+- **Per-row actions** are not in `snapshot.actions`. A row emits `action_requested`. `AppRoot.gd` dispatches it.
 
 ---
 
@@ -183,7 +170,7 @@ See `docs/art-direction.md` for full direction. Key points:
 
 ## Related Files
 - `docs/art-direction.md` — full art direction document
-- `docs/DesignSystem_LivingGrove_Complete_Guide.md` — Living Grove design system
+- `docs/Living_Grove_Design_System.md` — Living Grove design system (still in progress; it may change)
 - `ui/AppRoot.gd` — shell routing logic
 - `ui/components/ResponsiveLayoutController.gd` — layout/profile/safe-area calculation
 - `ui/components/ModalHost.gd` — app-wide blocking modal ownership
