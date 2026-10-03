@@ -28,7 +28,7 @@ This folder is the home of the project's agent knowledge. The files route you to
 | How do I add a new service / flow state / test? | `godot-echoes-dev.md` |
 | What is a Calling? A Thread? Storyweight? | `echoes-sankofa-gdd.md` (routes to the GDD) |
 | What are the virtue domains? | `echoes-sankofa-gdd.md` (routes to the GDD) |
-| Which story is next in a wave? | `echoes-backlog.md` (the lowest `Order` among Ready rows) |
+| Which story is next in a wave? | `echoes-backlog.md` (the CSV gives the `Order`; confirm the live status in Notion, because the CSV can lag) |
 | Which shell does this screen belong to? | `game-ui-ux-echoes.md` |
 | What touch target size do I use? | `game-ui-ux-echoes.md` |
 | How should emotion be displayed? | `game-ui-ux-echoes.md` |

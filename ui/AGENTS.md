@@ -70,7 +70,7 @@ sanctioned dispatcher, which calls `FlowRuntime.dispatch()`.
 
 | Shell | Handles |
 |-------|---------|
-| `SanctumShell.gd` | `flow.sanctum`, `flow.summon`, `flow.echo_party`, `flow.realm_select`, `flow.vow_manage` |
+| `SanctumShell.gd` | `flow.sanctum`, `flow.summon`, `flow.echo_party`, `flow.realm_select`, `flow.vow_manage`, `flow.weaving_rite` |
 | `RealmShell.gd` | `flow.stage_map`, `flow.stage`, `flow.stage_explore`, `flow.encounter`, `flow.keeper_trial`, `flow.resolve` |
 
 AppRoot routes on `snapshot.type` → shell. Shell routes to screen.
@@ -145,7 +145,7 @@ Pre-stage prep belongs on `StageMapScreen`. When in doubt, ask Jeff before addin
 
 ## Touch Targets
 
-- Minimum: **48×48dp** for all interactive elements
-- Preferred: 56×56dp for primary CTAs
-- Spacing: at least 8dp between adjacent touch targets
-- Safe zone: 16dp margin from screen edges
+- Minimum: **48×48 logical units** for all interactive elements
+- Preferred: 56×56 logical units for primary CTAs
+- Spacing: at least 8 logical units between adjacent touch targets
+- Safe zone: 16 logical units of margin from screen edges
