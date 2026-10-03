@@ -79,6 +79,7 @@
 | 70 | touch-target-48-logical-units | The minimum touch target is 48×48 logical units | 2026-10-02 |
 | 71 | approot-dispatch-host | `AppRoot.gd` is the only `ui/` file that calls `dispatch()`; screens emit `action_requested` | 2026-10-02 |
 | 72 | skills-home-in-repo | Agent knowledge lives in `docs/skills/`; global skills are thin triggers; routing text uses the Akan calling names | 2026-10-02 |
+| 73 | renderer-gl-compatibility | The renderer is GL Compatibility, for wide mobile and desktop reach; `project.godot` now says so | 2026-10-01 |
 
 ---
 
@@ -732,5 +733,14 @@
 **A:** The docs in `docs/skills/` are the home. Global skills in `~/.claude` and `~/.codex` are thin triggers that link to them. Routing text uses the Akan calling names only: Okofor, Aduro, Onyamesu, Okomfo, Kra-Soro, Sum-Okwanfo.
 **Source:** Jeff, 2026-10-02
 **Date:** 2026-10-02
+
+---
+
+### 73. renderer-gl-compatibility
+
+**Q:** Which renderer does Echoes vNext use, given that it ships on mobile and desktop?
+**A:** GL Compatibility. Godot's docs describe it as the renderer with the widest hardware reach, and as usually good enough for 2D. The Mobile renderer needs Vulkan, Direct3D 12 or Metal. `project.godot` said `mobile` while `config/features`, `CLAUDE.md`, the `technical-artist` agent and `scripts/screenshot.gd` all assumed Compatibility; it now says `gl_compatibility`.
+**Source:** Jeff, 2026-10-01
+**Date:** 2026-10-01
 
 ---
