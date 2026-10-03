@@ -72,6 +72,13 @@
 | 63 | pace-rule-readable-by-player | No per-mode number the player must learn; a formula over each mode's own existing values is allowed if the player can state the rule in one sentence | 2026-09-25 |
 | 64 | autobattler-reward-legibility | Rewards and grades follow autobattler conventions: the goal is visible before/during the fight and the result states its cause | 2026-09-25 |
 | 65 | screenshot-script-in-repo | The headless screenshot script lives in `scripts/` and is committed, for every later UI story | 2026-09-25 |
+| 66 | emotion-display-ten-statuses | The player sees the ten `emotional_status` values; morale tiers are simulation data. Docs follow the code | 2026-10-02 |
+| 67 | responsive-values-central-controller | `ui/` scripts may set responsive layout values; the values come from `ResponsiveLayoutController` | 2026-10-02 |
+| 68 | design-system-canonical-file | `docs/Living_Grove_Design_System.md` is the canonical design-system file; it is still in progress | 2026-10-02 |
+| 69 | backlog-superseded-rows-stay | Superseded backlog rows stay; the CSV gets no Done status; filter `Status != Superseded` for current stories | 2026-10-02 |
+| 70 | touch-target-48-logical-units | The minimum touch target is 48×48 logical units | 2026-10-02 |
+| 71 | approot-dispatch-host | `AppRoot.gd` is the only `ui/` file that calls `dispatch()`; screens emit `action_requested` | 2026-10-02 |
+| 72 | skills-home-in-repo | Agent knowledge lives in `docs/skills/`; global skills are thin triggers; routing text uses the Akan calling names | 2026-10-02 |
 
 ---
 
@@ -662,5 +669,68 @@
 **A:** In `scripts/`, committed to the repo, so every later UI story can use it. The script runs Godot on a virtual screen (`xvfb-run`, `--rendering-driver opengl3`) and saves a PNG of a screen. The ui-ux-designer builds it in the pace-reward story, phase 4.
 **Source:** Jeff, 2026-09-25 (option A)
 **Date:** 2026-09-25
+
+---
+
+### 66. emotion-display-ten-statuses
+
+**Q:** Which emotion vocabulary does the player see?
+**A:** The ten `emotional_status` values: radiant, whole, grounded, uncertain, hesitant, burdened, pressed, strained, fraying, hollow (`ui/components/EmotionPresentation.gd`). The morale tiers (inspired, steady, shaken, broken) are simulation data and are not shown. The docs follow the code.
+**Source:** Jeff, 2026-10-02
+**Date:** 2026-10-02
+
+---
+
+### 67. responsive-values-central-controller
+
+**Q:** May `ui/` scripts set responsive layout values?
+**A:** Yes. A script may set profile values such as columns, margins, wrap widths and sizes. The values come from `ui/components/ResponsiveLayoutController.gd`, so the calculation stays in one place.
+**Source:** Jeff, 2026-10-02
+**Date:** 2026-10-02
+
+---
+
+### 68. design-system-canonical-file
+
+**Q:** Which file is the canonical design-system document?
+**A:** `docs/Living_Grove_Design_System.md`. It is still in progress and may change. Docs link to this file, not to the "Complete Guide" file.
+**Source:** Jeff, 2026-10-02
+**Date:** 2026-10-02
+
+---
+
+### 69. backlog-superseded-rows-stay
+
+**Q:** What happens to Superseded rows in the backlog CSV, and does the CSV get a Done status?
+**A:** Superseded rows stay, because they hold relevant information. The CSV gets no Done status. A reader filters `Status != Superseded` for the current story and checks Notion when status matters.
+**Source:** Jeff, 2026-10-02
+**Date:** 2026-10-02
+
+---
+
+### 70. touch-target-48-logical-units
+
+**Q:** What is the minimum touch target size?
+**A:** 48×48 logical units. `docs/art-direction.md` is corrected to match `AGENTS.md`.
+**Source:** Jeff, 2026-10-02
+**Date:** 2026-10-02
+
+---
+
+### 71. approot-dispatch-host
+
+**Q:** May `AppRoot.gd` call `FlowRuntime.dispatch()`?
+**A:** Yes. `AppRoot.gd` is the UI host. Screens emit `action_requested`, and `AppRoot.gd` dispatches it. No other file in `ui/` calls `dispatch()`. The code boundaries in `AGENTS.md` now say so.
+**Source:** Jeff, 2026-10-02
+**Date:** 2026-10-02
+
+---
+
+### 72. skills-home-in-repo
+
+**Q:** Where does agent knowledge live, and which calling names do routing docs use?
+**A:** The docs in `docs/skills/` are the home. Global skills in `~/.claude` and `~/.codex` are thin triggers that link to them. Routing text uses the Akan calling names only: Okofor, Aduro, Onyamesu, Okomfo, Kra-Soro, Sum-Okwanfo.
+**Source:** Jeff, 2026-10-02
+**Date:** 2026-10-02
 
 ---

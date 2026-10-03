@@ -1,153 +1,44 @@
-# GDD Knowledge Base — Echoes vNext Design Reference
+# GDD Routing — Echoes vNext Design Canon
 
-> Complete V2 design knowledge: pillars, glossary, callings, virtue domains, skill families, Weave system, Threads, Storyweight, Continuity, and the Anansi narrative frame.
-> Primary canon is still `docs/Echoes vNext Working GDD.md` — this document distills and navigates it.
+The Working GDD (`docs/Echoes vNext Working GDD.md`) is the only design canon. This file does not copy it. It tells you where to look.
 
-**Claude Code:** invoke as `/echoes-sankofa-gdd` or `anthropic-skills:echoes-sankofa-gdd`
-**Codex / any agent:** read this file directly — all knowledge is self-contained here.
+**Claude Code:** the skill `echoes-sankofa-gdd` points here. **Codex / any agent:** read this file, then follow the steps below.
 
-## When to consult this document
-- Making any design decision or scoping a feature
-- Answering lore or narrative questions
-- Checking calling identities, virtue domain names, or system definitions
-- Understanding Weave, Threads, or Continuity mechanics
+## When to read this file
+- A task needs a design term, a rule, a definition or the reason behind a system.
+- You must check a doc or a skill against the design canon.
 
----
+## How to look up a term
+1. Grep `docs/canon-index.md` for the term. It returns a line range.
+2. Read only that range of the GDD (`sed -n 'A,Bp'`). The GDD is about 43,000 tokens. Never read it whole.
+3. If a doc and the GDD disagree, the GDD wins. Report the difference. Do not fix it unasked.
 
-## Key Design Pillars
+Design numbers, scope and player-facing wording are the user's decisions. Propose them. Do not decide them.
 
-1. **Stories are alive** — Echoes are returning fragments of stolen stories, not just characters. Every action carries narrative weight.
-2. **Sankofa principle** — "Go back and fetch it." Recovery, not just progression. The game is about bringing things home.
-3. **Deterministic fate, meaningful choice** — The world is seeded; what matters is what you do within it.
-4. **Emotional truth** — Fear and Morale are mechanical. They shape what Echoes can and cannot do.
-5. **West African mythic frame** — Anansi narrative structure. The Keeper is a steward, not a commander.
+## Where each topic lives
+Search for the heading text in `docs/canon-index.md`. Three headings are not in the index: "Storyweight, Step, Standing", "Callings" and "Sanctum pulse". Grep the GDD for those.
 
----
-
-## V2 Terminology Glossary
-
-| V2 Term | V1 Term | Meaning |
-|---------|---------|---------|
-| Storyweight | xp_total | Accumulated experience expressed as narrative weight |
-| Standing | rank | Current tier of growth (1–9) |
-| Step | level | Fine-grained position within a Standing |
-| Virtue domain | vector | One of 10 dimensions of character identity |
-| Calling | calling | The echo's fundamental nature/role |
-| Thread | — | A fragment of a stolen story to be recovered |
-| Continuity | — | The Sanctum's accumulated legacy state |
-| Ase | — | Primary spendable currency (life-force energy) |
-| Ekwan | — | Secondary currency for buildings/crafting |
-| Sanctum | — | The Keeper's home base |
-| Weave | — | The system connecting Threads to narrative recovery |
-
----
-
-## The 6 Callings (V2)
-
-Callings define an echo's fundamental nature. Milestone unlocks at Standing 3, 6, 9.
-
-| Calling | Core Identity |
-|---------|--------------|
-| Ward | Protector — shields allies, absorbs harm |
-| Break | Aggressor — shatters defenses, pushes through |
-| Veil | Deceiver/Infiltrator — conceals, misdirects |
-| Path | Guide/Scout — opens routes, reads terrain |
-| Rite | Ritualist — channels power, maintains order |
-| Root | Anchor — stabilises, grounds, sustains |
-
----
-
-## The 10 Virtue Domains (V2)
-
-Replace the legacy 4 vectors. All new work uses these:
-
-1. Courage
-2. Wisdom
-3. Leadership
-4. Acceptance
-5. Humility
-6. Forgiveness
-7. Truth
-8. Generosity
-9. Compassion
-10. Empathy
-
-`dominant_vector` is the highest-scoring domain (3% hysteresis to switch). CLAMP_MAX=1000.
-
----
-
-## Skill Families (V2-PROG-005)
-
-Six skill families aligned to callings:
-
-| Family | Aligned Calling |
-|--------|----------------|
-| Ward skills | Ward |
-| Break skills | Break |
-| Veil skills | Veil |
-| Path skills | Path |
-| Rite skills | Rite |
-| Root skills | Root |
-
-`MAX_SKILL_SLOTS=1` per echo currently. Skill loadout handled at StageMap (not a dedicated screen).
-
----
-
-## Weave System (V2-WEAVE-001)
-
-The Weave is the system through which stolen stories are recovered. Key concepts:
-- **Threads** — fragments of a stolen story. Collected through Realm trials.
-- **Thread recovery** — the act of bringing a Thread back to the Sanctum.
-- **Weave progress** — accumulates as Threads are recovered. Drives narrative resolution.
-
----
-
-## Emotional Mechanics
-
-- **Morale tiers:** inspired / steady / shaken / broken
-- **Fear threshold:** fear ≥ 80 → Absolute Fear Rule → echo refuses to act
-- `EmotionService` is the single choke point for morale/fear mutations
-- Emotion state is initialised once per echo (`init_echo()` is idempotent)
-
----
-
-## Maturity Expression (V2-PROG-006)
-
-Echoes express their maturity through four bands based on Standing:
-
-| Band | Standing Range | Presence Strength |
-|------|---------------|------------------|
-| nascent | 1–2 | 0.1 |
-| forming | 3–5 | 0.25 |
-| grounded | 6–8 | 0.5 |
-| whole | 9 | 1.0 |
-
-Config lives under `balance.data.maturity_expression`.
-
----
-
-## Economy (V2)
-
-| Layer | Items |
+| Topic | GDD heading |
 |---|---|
-| Spendable currencies | Ase (summoning, rites, Thread handling), Ekwan (rooms, crafting, buildings), Relics (rare artifacts) |
-| Visible states | Faith, Harmony, Favor |
-| Progression states | Continuity, Threads, Realm recovery track |
+| Design priorities | 7. Design Priorities |
+| Core loop of the current build | 22.1 Current playable loop in the build |
+| Storyweight, Step, Standing | Storyweight, Step, Standing; 10.1 Storyweight is no longer generic progression |
+| Vectors and virtue domains | 10.3 Vectors are part of self-shape; 13. Thread Domains and Structure; 13.1 Current Thread domains |
+| Callings | 10.4 Callings are remembered or claimed identity; Callings |
+| Mythic Echoes | 10.5 Mythic status is a narrative-mechanical threshold; 11.8 What makes an Echo mythic |
+| The Weave | 12. The Weave System |
+| Threads | 13.2 What a Thread is as a design object |
+| Weaving Rite | 14. Thread Recovery and the Weaving Rite; 16.7 Weaving Rite aftermath |
+| Distortion | 15.4 (distortion families, severity, persistence) |
+| Fear and morale | 17. Fear and Morale in the Weave |
+| Continuity | 18. Continuity: Sanctum Progression |
+| Currencies, items, equipment | 19. Currencies, Items, and Equipment |
+| Sanctum pulse | Sanctum pulse |
+| Anansi frame | Anansi’s role (the GDD uses a curly apostrophe; grep "Anansi") |
 
-Exact values and cadences are open — see Working GDD `Economy` section.
+The six callings are Okofor, Aduro, Onyamesu, Okomfo, Kra-Soro and Sum-Okwanfo. The GDD names them in its vector sections and its calling-family matrix. Code ids: `docs/calling-reference.md`.
 
----
-
-## Anansi Narrative Frame
-
-The overarching structure is Anansi's web — stories stolen from their rightful owners, scattered across Realms, waiting to be recovered. The Keeper is not a hero but a steward who helps Echoes find their way home. Every Realm is a stolen story. Every Thread recovered is a piece of something brought back.
-
----
-
-## Related Files
-- `docs/Echoes vNext Working GDD.md` — **primary canon**
-- `docs/calling-reference.md` — calling reference detail
-- `docs/v2-migration-map.md` — V1→V2 migration map
-- `core/progression/` — skill and progression implementation
-- `core/actors/VectorService.gd` — virtue domain tracking
-- `core/actors/MaturityExpressionService.gd` — maturity expression
+## Where the numbers live
+- Game values: `data/balance.json`. Not the GDD, and not this file.
+- Calling ids in code: `docs/calling-reference.md`.
+- V1 to V2 term map: `docs/v2-migration-map.md`.
