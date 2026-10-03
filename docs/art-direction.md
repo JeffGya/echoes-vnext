@@ -143,7 +143,7 @@ Sourced from Art Direction Bible v2 (global swatches, not virtue-specific):
 
 Used in the Sanctum's Thread Reserve Strip.
 
-- **Size:** 48×48dp (meets mobile touch target)
+- **Size:** 48×48 logical units (meets the touch target)
 - **Shape:** Circle; no rectangular border
 - **Rendering:** `_draw()` via layered `draw_circle()` calls (12 steps) to approximate a radial gradient
   - Inner (center) = quality tier fill color for that virtue
