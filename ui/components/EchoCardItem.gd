@@ -16,6 +16,10 @@
 class_name EchoCardItem
 extends PanelContainer
 
+## Tap on the card. actor_id is the actor's snapshot id, or "" when the data shape has none
+## (Stage party_preview rows).
+signal card_pressed(actor_id: String)
+
 const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
 
 # Gold accent border applied only to the spirit ally slot (Akan Gold). Authored declaratively
@@ -35,11 +39,21 @@ const _ALLY_PANEL_STYLE: StyleBox = preload("res://ui/components/EchoCardAllyAcc
 @onready var ally_badge: Label       = %AllyBadge
 @onready var companion_tag: Label    = %CompanionTag
 
+var _actor_id: String = ""
+
+func _ready() -> void:
+	gui_input.connect(_on_gui_input)
+
+func _on_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		card_pressed.emit(_actor_id)
+
 func setup(actor: Dictionary) -> void:
 	# Reset any accent stylebox left over from a prior setup_ally()/setup_spirit() call on a
 	# reused card instance, so a plain setup() is fully back to the default panel look.
 	remove_theme_stylebox_override("panel")
 
+	_actor_id = str(actor.get("id", ""))
 	var name_str := str(actor.get("name", "?"))
 	name_label.text     = name_str
 	portrait_label.text = name_str.substr(0, 2).to_upper()

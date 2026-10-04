@@ -381,3 +381,106 @@ not just Claimant fights. The underlying duplication itself (`DebugController` r
 
 **Opening prompt:**
 > In the Echoes vNext Godot/GDScript repo, GUIDE_SPIRIT and PURSUE combat boards can legitimately stretch 5x/4x on one axis (see follow-up task #14 and `core/combat/EncounterSetupService.gd` ~lines 334-362), producing boards up to roughly 90-100 cells long on the stretched axis. Jeff found during playtesting that the combat camera does not handle a board this large well — investigate the actual symptom (e.g. camera zoom/bounds clamped to a smaller assumed max board size, follow behavior breaking down, or visual/readability issues at extreme zoom-out) in whatever script owns combat camera bounds/follow (likely under `ui/screens/combat/` or a `CombatCamera`-named script — locate it first). Reproduce using the debug console: `combat_objective guide_spirit escort nojoin`, then enter a combat encounter on a realm whose virtue produces a well-filled stretched board (e.g. wisdom), and observe camera behavior as the spirit escort/party traverses the long axis. Propose a fix scoped to camera-only (do not touch board generation, which is task #14's subject). This is likely a design/feel question (how should the camera behave on an extreme-aspect-ratio board) as much as a code fix — loop in game-feel-developer.
+
+---
+
+## 16. Redesign the initiative panel for phones
+
+**task_id:** `task_initiative_panel_phone`
+
+**Why it came up:** Found during Story 2 (Combat camera), 2026-10-02. Jeff asked to see this panel in screenshots. Jeff decided the panel layout stays unchanged in Story 2 (decisions.md #75).
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo: Redesign the Combat initiative panel (`InitiativeRowItem`) for phone screens. Measured problems: (1) rows are 21 px high with 4 px gaps, and the minimum touch target is 48 px; (2) at 844x390 the panel overlaps the echo cards, so rows 7 and 8 are hidden and cannot be tapped; (3) the action text is clipped at every size; (4) the emotion label is small (font 11) and may fail contrast. Screenshots exist: render the fixture `combat_initiative_full` (8 initiative rows) with `scripts/screenshot.gd`. On macOS, run it from a real window (see the header of that script). Rows must stay tappable, because they lock the camera on an actor. Do not change `core/`. Load the `game-ui-ux-echoes` skill first.
+
+---
+
+## 17. EchoCardItem locks the camera when a scroll drag starts on a card
+
+**task_id:** `task_card_press_scroll_lock`
+
+**Why it came up:** Found during Story 2, 2026-10-02.
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo: `EchoCardItem` emits `card_pressed` on press. A scroll drag in the echo bar that starts on a card therefore locks the camera on that echo. Decide the fix (for example, emit on release when the pointer did not move past a drag threshold). Check `ui/components/EchoCardItem.gd` and the RealmShell echo bar. Keep the Stage behaviour in step with Combat (decisions.md #69).
+
+---
+
+## 18. Trackpad pinch and two-finger scroll pass through full-screen STOP controls
+
+**task_id:** `task_trackpad_pass_through`
+
+**Why it came up:** Found during Story 2, 2026-10-02.
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo: On a trackpad, a pinch (magnify event) and a two-finger scroll pass through full-screen controls that use `MOUSE_FILTER_STOP`. They reach the board camera in Combat and in Sanctum. The ModalHost `InputBlocker` would not stop them. Reproduce, then decide how overlays and modals must consume these events.
+
+---
+
+## 19. Bark bubbles are not hidden with the screen
+
+**task_id:** `task_bark_bubbles_transient_layer`
+
+**Why it came up:** Found during Story 2, 2026-10-02.
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo: Bark bubbles live on `TransientLayer` (layer 30). They are not hidden when the Combat screen hides. Check whether a bubble can stay visible after the screen changes, and hide or free bubbles when the screen hides.
+
+---
+
+## 20. Verify phone pinch-zoom on a real device
+
+**task_id:** `task_phone_pinch_unverified`
+
+**Why it came up:** Found during Story 2, 2026-10-02. Not verified.
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo: Phone pinch-zoom is unverified on a real device. Godot may send a magnify event on Android and not on iOS. Test a two-finger pinch on both platforms. If iOS sends no magnify event, check that the two-finger touch path zooms.
+
+---
+
+## 21. Jeff to test wheel `factor` and focus-out on a real Mac
+
+**task_id:** `task_mac_wheel_and_focus_check`
+
+**Why it came up:** Found during Story 2, 2026-10-02. Not verified.
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo: The wheel `factor` value and the focus-out notification are unverified on a real Mac. Jeff should test two things. First, test mouse-wheel zoom in Combat with a classic wheel and with a trackpad (smooth scroll). Second, press Cmd-Tab in the middle of a drag and check that the camera does not stay stuck. Tune `wheel_zoom_step` (now 1.1, an assumed starting value) from this test.
+
+---
+
+## 22. Stage004SeamTests calls get_node("PrebattlePanel"), a node that does not exist
+
+**task_id:** `task_seam_tests_prebattle_panel`
+
+**Why it came up:** Found during Story 2, 2026-10-02. The node was null before Story 2 as well.
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo: `tests/Stage004SeamTests.gd` still calls `get_node("PrebattlePanel")`. `CombatBoardScreen` has no such node, so the call returns null. Decide whether to remove the call or test a real node. Check that the test still proves what its name says.
+
+---
+
+## 23. Combat test helper _living_echoes leaves out a joined guide spirit
+
+**task_id:** `task_living_echoes_helper_spirit`
+
+**Why it came up:** Found during Story 2, 2026-10-02. Information only. No action requested.
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo: The Combat `_living_echoes` test helper leaves out a joined guide spirit. Production `_party_centroid_world` counts it. A test of the party centroid can therefore differ from production when a guide spirit has joined. No defect is confirmed. Read this before you write a new centroid test.
+
+---
+
+## 24. Board pans behind Sanctum sub-screens
+
+**task_id:** `task_sanctum_subscreen_camera_input`
+
+**Why it came up:** Found by qa-verifier during the Story 2 verification, 2026-10-04. The code comes from Story 1 and Story 2 did not change it. Severity low. Status: not started. Not reproduced in play.
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo: on the Summon, Vows, Weaving, Echo Party and Realm Select sub-screens, the Sanctum camera stays enabled (`SanctumShell.gd:161`: `camera.enabled = effective_visible`) and `space_drag_pan` is true. A Space+LMB drag and a trackpad two-finger pan may therefore still move the board behind the sub-screen. Board taps are already gated on the sub-screen (`SanctumShell._can_accept_spatial_pointer_input`, about lines 387-393). Camera input is not gated. Related: the Space button guard is already scoped to the board view with `guard_space_on_buttons` (decisions.md #92). The same `flow.sanctum` signal (`_current_snap_type`) could gate camera input. Open question for Jeff: should camera pan and zoom be off on sub-screens? Ask Jeff and do a play check first, before you change code.
+>
+> Test plan: run a real-input test. On `flow.summon`, a Space+LMB drag must not move the camera.
+>
+> Acceptance: on every Sanctum sub-screen, camera pan and zoom input does not move the board behind it. On the board view, camera input works as before.

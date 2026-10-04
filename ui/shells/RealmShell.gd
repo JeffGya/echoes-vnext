@@ -137,6 +137,7 @@ func _update_echo_bar(snap: Dictionary) -> void:
 		if actor is Dictionary:
 			var card: EchoCardItem = EchoCardScene.instantiate()
 			_echo_bar.add_child(card)
+			card.card_pressed.connect(_on_echo_card_pressed)
 			if bool(actor.get("is_ally", false)):
 				card.setup_ally(actor)
 			else:
@@ -149,7 +150,15 @@ func _update_echo_bar(snap: Dictionary) -> void:
 			obj_state if obj_state is Dictionary else {})
 		var spirit_card: EchoCardItem = EchoCardScene.instantiate()
 		_echo_bar.add_child(spirit_card)
+		spirit_card.card_pressed.connect(_on_echo_card_pressed)
 		spirit_card.setup_spirit(spirit_actor, progress_text)
+
+
+## ANSWERS.md #77: a card tap locks the active screen's camera onto that actor. Any screen that
+## implements select_board_target() takes it, so the shell names no screen type.
+func _on_echo_card_pressed(actor_id: String) -> void:
+	if _active_overlay != null and _active_overlay.has_method("select_board_target"):
+		_active_overlay.call("select_board_target", actor_id)
 
 
 ## Composes the spirit ally's one-line objective status from objective_state.

@@ -32,6 +32,7 @@ theme_override_constants/separation = 8
 unique_name_in_owner = true
 custom_minimum_size = Vector2(40, 40)
 layout_mode = 2
+mouse_filter = 2
 color = Color(0.172549, 0.180392, 0.211765, 1)
 
 [node name="PortraitLabel" type="Label" parent="VBoxContainer/BodyMargin/BodyRow/PortraitPanel" unique_id=424882850]
@@ -55,6 +56,7 @@ theme_override_constants/separation = 2
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
+mouse_filter = 2
 value = 100.0
 fill_mode = 1
 show_percentage = false

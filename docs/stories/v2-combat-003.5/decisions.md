@@ -73,6 +73,27 @@
 | 62 | pr79-ultrareview-nits-fixed-before-merge | Cloud review of PR #79 found 2 verified nit-severity findings (wasted deep-copy, duplicate eligibility lookup) in the escort-yield swap — fix both now, before merge | 2026-09-26 |
 | 63 | ashen-hallow-board-sizing-filed-as-followup | Phase 8 playtest found GUIDE_SPIRIT boards look compact (not stretched) on low-plateau-count virtues like courage (Ashen Hallow) — pre-existing V2-STAGE-004 gap, unrelated to this story's subject — filed as follow-up task #14 | 2026-09-26 |
 | 64 | large-board-camera-filed-as-followup | Phase 8 playtest found the combat camera does not handle a genuinely large stretched GUIDE_SPIRIT board well — pre-existing UI/camera behavior, unrelated to this story — filed as follow-up task #15 | 2026-09-26 |
+| 75 | initiative-rows-stay-tappable | Initiative rows stay tappable in Story 2. The phone redesign of the panel is a follow-up task | 2026-10-02 |
+| 76 | two-finger-pinch-pan-fixed-in-story-2 | The two-finger pinch no longer pans the board. The fix is part of Story 2 | 2026-10-02 |
+| 77 | locked-actor-death-follows-party | When the locked actor dies, the camera follows the party. Assumed, not confirmed: a dead actor cannot be locked | 2026-10-02 |
+| 78 | combat-wheel-zoom-approved | Mouse-wheel zoom in Combat is approved. It zooms only over open board. Assumed: one notch is 1.1x | 2026-10-02 |
+| 79 | space-drag-speed-differs-combat-vs-sanctum | Space+LMB drag pans 1:1 in Combat and 2.5x in Sanctum. Left open as a design call | 2026-10-02 |
+| 80 | headless-screenshots-need-a-real-window | Godot --headless cannot render screenshots. On macOS, use scripts/screenshot.gd from a real window. Fixture combat_initiative_full added | 2026-10-02 |
+| 81 | app-root-shows-a-shown-screen-once | AppRoot._show_screen hides only the other screens. A second snapshot for the shown screen no longer hides and re-shows it | 2026-10-03 |
+| 82 | combat-buttons-take-no-focus | Every Combat button has focus_mode NONE, so Space (held for Space+drag) cannot press a focused button | 2026-10-03 |
+| 83 | lost-touch-release-safety-net | A finger-0 touch press clears all stale pointer state, so a lost release cannot block the board | 2026-10-03 |
+| 84 | dead-actor-cannot-be-locked | Confirmed: a dead actor cannot be locked by a board tap, an echo card or an initiative row | 2026-10-03 |
+| 85 | wheel-zoom-is-smooth | One wheel notch is 1.1x (confirmed). The zoom eases toward a target over frames; pinch stays immediate | 2026-10-03 |
+| 86 | every-drag-pans-1-to-1 | Mouse drag, finger drag and Space+LMB drag pan 1:1 on every screen, Sanctum included. Trackpad two-finger pan stays 2.5x | 2026-10-03 |
+| 87 | board-camera-swallows-space-for-a-focused-button | While a board camera takes input, Space does not press a focused button. Text fields keep Space | 2026-10-03 |
+| 88 | new-zoom-range-cancels-wheel-ease | configure_zoom_range stops a running wheel ease, so a new range starts at its default zoom | 2026-10-03 |
+| 89 | space-guard-skips-modal-buttons | The Space guard does nothing when the focused button is inside ModalHost, so dialogs keep Space | 2026-10-03 |
+| 90 | space-guard-needs-only-an-enabled-camera | The Space guard needs only camera.enabled, so it also works while the echo detail locks the camera | 2026-10-03 |
+| 91 | space-guard-covers-every-base-button | The Space guard checks BaseButton (Button, TextureButton, CheckBox and others), not only Button | 2026-10-03 |
+| 92 | space-guard-only-on-the-board-view | In Sanctum the Space guard runs only on the board view and its echo detail. Summon, Vows, Weaving, Realm and Echo Party keep Space on their buttons | 2026-10-04 |
+| 93 | z-key-zoom-cycle-is-shared | The Z zoom cycle is a shared BoardCamera option. Combat uses it; Sanctum keeps its own Z. Supersedes the Z part of #72 | 2026-10-04 |
+| 94 | sanctum-zoom-on-the-shared-levels | Sanctum moves onto the shared zoom levels: Z and its wheel step one level and ease. Supersedes the "Sanctum keeps its own Z" part of #93 | 2026-10-04 |
+| 95 | one-wheel-rule-for-every-board-camera | Every board camera uses Combat's wheel: 1.1x per notch, eased, continuous. Sanctum's wheel stops stepping levels; Z keeps the levels. Supersedes the Sanctum-wheel part of #94 | 2026-10-04 |
 
 ---
 
@@ -929,7 +950,7 @@ problem. Only the missing 6 are broken. Only they need adding.
 ## Camera feel sign-off
 
 Numbers below are `game-feel-developer` sign-off for the shared `BoardCamera.gd` controller
-(ANSWERS.md #66-69, plan `you-are-game-orchestrator-read-soft-crayon.md`). This is a design pass.
+(ANSWERS.md #74-77, plan `you-are-game-orchestrator-read-soft-crayon.md`). This is a design pass.
 No code was changed. `ui-ux-designer` builds against these numbers.
 
 ### 70. camera-min-zoom-formula-content-derived
@@ -1065,7 +1086,7 @@ or stay Sanctum-only?
 - **Manual-override resume delay:** keep `_PAN_RESUME_DELAY = 3.0`s unchanged, as the shared
   default across Combat and (where applicable) Sanctum. Same reasoning — proven value, no reported
   issue.
-- **Discrete zoom-level snapping: stays Sanctum-side only, not a shared toggle.** Reasoning:
+- **Discrete zoom-level snapping: stays Sanctum-side only, not a shared toggle.** (**Superseded: for the Z key by #93; the Sanctum-only discrete wheel steps by #94 and then #95.** #72 still covers: the follow lerp speed and the resume delay.) Reasoning:
   Combat and Stage need continuous pinch/wheel/wheel-drag zoom over content that varies by an order
   of magnitude (18 to ~100 cells) — a discrete level table would need to be regenerated per board
   size, which is more moving parts than the problem needs. Sanctum's discrete stepping is tied to
@@ -1134,3 +1155,258 @@ for `ui-ux-designer` to resolve during implementation — not a numbers question
 
 **Source:** game-feel-developer, 2026-09-29
 **Date:** 2026-09-29
+
+### 75. initiative-rows-stay-tappable
+
+**Q:** Should initiative rows stay tappable as camera-lock targets, given that the panel rows are small on a phone?
+**A:** Yes. Initiative rows stay tappable. The panel layout does not change in Story 2. The phone redesign of the panel is a follow-up task (followup-tasks.md #16).
+**Source:** Jeff, 2026-10-02
+**Date:** 2026-10-02
+
+---
+
+### 76. two-finger-pinch-pan-fixed-in-story-2
+
+**Q:** A two-finger pinch on touch pans the board. This bug existed before Story 2. Should Story 2 fix it?
+**A:** Yes. Story 2 fixes it. A two-finger pinch now zooms only and does not pan. A viewport-level finger count is reset on window focus loss, when the screen hides, and on a new encounter.
+**Source:** Jeff, 2026-10-02
+**Date:** 2026-10-02
+
+---
+
+### 77. locked-actor-death-follows-party
+
+**Q:** What does the camera do when the locked actor dies?
+**A:** The camera follows the party (`follow_party()`). It does not go `FREE`. It does not stay locked on the dead actor.
+**ASSUMED, not confirmed by Jeff:** a dead actor cannot be locked. A tap on a dead-only cell does nothing. A card press for a dead echo does nothing. A living actor on the same cell wins. Jeff must confirm this. **Confirmed later: see #84.**
+**Source:** Jeff, 2026-10-02 (the fallback); the orchestrator (the assumption)
+**Date:** 2026-10-02
+
+---
+
+### 78. combat-wheel-zoom-approved
+
+**Q:** Should Combat allow mouse-wheel zoom?
+**A:** Yes (Jeff: "we can allow mousewheel zoom for combat"). The design: `BoardCamera` has opt-in wheel zoom (`wheel_zoom_step` 1.1, `zoom_to_pointer` true, `wheel_surface` is the Combat root). It zooms only when the pointer is over open board, so scrolling panels keep the wheel. A wheel event's `factor` scales the step as pow(step, factor). A factor of 0 or less counts as one ordinary notch. A `FREE` camera zooms toward the pointer. A locked camera zooms about the screen centre. Sanctum keeps its own discrete wheel zoom.
+**ASSUMED, not confirmed by Jeff:** one notch is 1.1x. This is a starting value to tune in play. **Confirmed later, and the zoom made smooth: see #85.**
+**Source:** Jeff, 2026-10-02 (approval); the orchestrator (the 1.1 value)
+**Date:** 2026-10-02
+
+---
+
+### 79. space-drag-speed-differs-combat-vs-sanctum
+
+**Q:** Space+LMB drag pans 1:1 in Combat (`space_drag_pan` is false) and 2.5x in Sanctum. Should the two match?
+**A:** Not decided. This is a design call left open for Jeff. Combat treats Space+LMB the same as a plain drag. Sanctum keeps its 2.5x speed unchanged. **Decided later: see #86 (1:1 everywhere).**
+**Source:** the orchestrator, 2026-10-02 (open item for Jeff)
+**Date:** 2026-10-02
+
+---
+
+### 80. headless-screenshots-need-a-real-window
+
+**Q:** Can `scripts/screenshot.gd` render in Godot `--headless` mode?
+**A:** No. `--headless` uses a dummy renderer and gives a null texture. The older cloud method used `xvfb-run`, which exists only on Linux. On macOS, run the script from a real window: `godot --path <checkout> --resolution WxH --script res://scripts/screenshot.gd -- <fixture> <out_dir>`. A new fixture `combat_initiative_full` (8 initiative rows) was added.
+**Source:** the orchestrator, 2026-10-02 (finding)
+**Date:** 2026-10-02
+
+---
+
+### 81. app-root-shows-a-shown-screen-once
+
+**Q:** `AppRoot._show_screen` hid every shell and then showed one, on every snapshot. This fired `visibility_changed` on the shown shell each time. `CombatBoardScreen` resets its pointer state on that signal, so a drag stopped at every auto-play step. How to fix it?
+**A:** Change `AppRoot._show_screen`. It hides only the screens that are not the target. A screen that is already shown stays shown, and no signal fires. First show, screen switch and a real hide work as before.
+**Dependencies found:** four handlers react to this signal. `SanctumShell._sync_ui_layer_visibility`, `RealmShell._sync_chrome_layer_visibility` and `StageExploreScreen._sync_transient_visibility` only set layer visibility (and Sanctum's `camera.enabled`); the same value is set again, so they are not affected. `EchoPartyScreen._notification` resets its chart UI (the "compare to party average" toggle) when it becomes visible. Before this change, any sanctum-family snapshot while that screen was open reset the toggle. Now it resets only when the screen really becomes visible.
+**Test:** `combat_camera/app_root_rerender_keeps_drag` goes through the real `AppRoot._render_snapshot`.
+**Source:** Jeff, 2026-10-03 (chose the AppRoot fix)
+**Date:** 2026-10-03
+
+---
+
+### 82. combat-buttons-take-no-focus
+
+**Q:** After a click on a Combat button, the button kept keyboard focus. Space (`ui_accept`), held for a Space+drag, then pressed that button again. Fix now or file?
+**A:** Fix now. All 8 Combat buttons in `CombatBoardScreen.tscn` have `focus_mode = 0` (NONE): BackButton, StartCombatButton, AutoToggleButton, SpeedSlowButton, SpeedNormalButton, SpeedFastButton, RecenterButton, EndCombatButton. Cost: these buttons cannot be reached by keyboard focus.
+**Test:** `combat_camera/buttons_take_no_focus_from_clicks`.
+**Source:** Jeff, 2026-10-03
+**Date:** 2026-10-03
+
+---
+
+### 83. lost-touch-release-safety-net
+
+**Q:** A touch release that never arrives (and no focus loss, hide or new encounter follows) leaves the finger count high. Board pan and tap then stay blocked. What safety net?
+**A:** A touch press with index 0 clears all pointer state first. The engine gives a new finger the lowest free index, so index 0 means no finger 0 is down; anything still recorded is from a lost release. A real pinch is not affected: its second finger has index 1. Known cost: if finger 0 lifts and lands again while another finger stays down, that other finger is forgotten.
+**Test:** `combat_camera/lost_touch_release_does_not_block_board`; the pinch tests still pass.
+**Source:** Jeff, 2026-10-03 (fix now); the builder (the rule)
+**Date:** 2026-10-03
+
+---
+
+### 84. dead-actor-cannot-be-locked
+
+**Q:** Can a dead actor be locked? (Assumed in #77.)
+**A:** No. Confirmed. A board tap on a cell with only dead actors, a press on a dead echo's card, and a tap on a dead actor's initiative row all do nothing. A living actor on the same cell wins.
+**Test:** `combat_camera/dead_actor_board_card_and_row_do_nothing` (board, card and row), `combat_camera/living_wins_over_dead_on_one_cell`.
+**Source:** Jeff, 2026-10-03
+**Date:** 2026-10-03
+
+---
+
+### 85. wheel-zoom-is-smooth
+
+**Q:** One wheel notch is 1.1x (assumed in #78). Should the zoom jump or ease?
+**A:** One notch is 1.1x (confirmed). The zoom eases. A notch sets a target zoom; `BoardCamera._process` moves the zoom toward it each frame (lerp speed 12 per second, a per-frame lerp, not a Tween). Notches during an ease multiply the target, so fast scrolling adds up. The target is clamped to min and max zoom. A `FREE` camera with `zoom_to_pointer` keeps the world point under the pointer still in every frame of the ease. A locked camera zooms about the screen centre. A pinch applies at once and stops a running ease. Sanctum's discrete wheel zoom is unchanged. (**Superseded by #95:** Sanctum uses the same wheel rule.)
+**Test:** `combat_camera/wheel_zoom_eases_over_frames`, `combat_camera/wheel_free_zooms_toward_pointer` (checks every frame).
+**Source:** Jeff, 2026-10-03 (smooth, 1.1); the builder (ease speed 12, to tune in play)
+**Date:** 2026-10-03
+
+---
+
+### 86. every-drag-pans-1-to-1
+
+**Q:** Space+LMB drag pans 1:1 in Combat and 2.5x in Sanctum (#79). Should they match?
+**A:** Yes. Every drag pans 1:1: mouse drag, finger drag and Space+LMB drag, on every screen, Sanctum included. The world point under the pointer stays under it. `BoardCamera`'s Space+LMB motion path now calls `drag_pan()` (screen delta divided by zoom). The trackpad two-finger pan (`InputEventPanGesture`) keeps `_PAN_SPEED` 2.5.
+**Test:** `board_camera.input/space_drag_pans_through_stop_chrome` now asserts the exact 1:1 pan.
+**Source:** Jeff, 2026-10-03
+**Date:** 2026-10-03
+
+---
+
+### 87. board-camera-swallows-space-for-a-focused-button
+
+**Q:** After #81, a clicked button in Sanctum or the venture chrome keeps keyboard focus across snapshots. Holding Space to pan then presses that button (Space is part of `ui_accept`). How to stop it?
+**A:** A guard in `BoardCamera._input()`, which runs before the GUI pass. When the camera is enabled and takes manual input, and a `BaseButton` has keyboard focus, the camera marks every Space key event as handled. The button never sees Space. `Input.is_key_pressed(KEY_SPACE)` still reads true, so Space+drag still pans. A focused text field (`LineEdit`, `TextEdit`) is not a `BaseButton`, so it still gets Space.
+**Trade-off:** while a board camera is enabled, Space cannot activate a focused button anywhere on that screen, even with the pointer away from the board. Enter still activates it (`ui_accept` also has Enter). The guard is off when the camera is disabled. **Changed later:** modal buttons are exempt (#89); the guard also works while the camera is locked (#90).
+**Test:** `board_camera.input/space_drag_does_not_press_focused_button`, `board_camera.input/space_still_types_in_focused_line_edit`.
+**Source:** Jeff, 2026-10-03 (guard in BoardCamera, not `focus_mode` NONE on those screens); the builder (the rule)
+**Date:** 2026-10-03
+
+---
+
+### 88. new-zoom-range-cancels-wheel-ease
+
+**Q:** A wheel ease can still be running when a new zoom range is set (new encounter, resize). Should it continue?
+**A:** No. `configure_zoom_range()` clears the ease target, so the new default zoom stays.
+**Test:** `combat_camera/configure_zoom_range_cancels_wheel_ease`.
+**Source:** QA finding, 2026-10-03; fix by the builder
+**Date:** 2026-10-03
+
+---
+
+### 89. space-guard-skips-modal-buttons
+
+**Q:** `ModalHost` moves keyboard focus into a modal dialog (`ModalHost.gd` `_ensure_modal_focus`). Should the Space guard (#87) block Space there?
+**A:** No. The guard walks up from the focused button. If any ancestor is a `ModalHost` (a type check on the `class_name`, not a node name), the guard does nothing and the dialog button gets Space. Every modal is added under `ModalHost`'s `ModalSlot`, so this covers every modal.
+**Test:** `board_camera.input/space_still_presses_modal_button` (a real `ModalHost` scene, `present_modal`).
+**Source:** Jeff, 2026-10-03; the builder (the ancestor rule)
+**Date:** 2026-10-03
+
+---
+
+### 90. space-guard-needs-only-an-enabled-camera
+
+**Q:** In Sanctum's echo detail, the camera is locked with `manual_resume_delay` 0, so `_accepts_manual_input()` is false and the guard (#87) was off. Should it work there?
+**A:** Yes. The guard now needs only `camera.enabled`. A disabled camera (hidden screen) still leaves Space alone.
+**Which case applies:** the echo detail is `EchoDetailPanel` inside the SanctumScreen overlay (UILayer), not inside `ModalHost`. So the modal rule (#89) does not apply. Its buttons (DetailBack, DetailPrev, DetailNext, the Overview/Bonds/Skills tabs) take focus on a click. Result: in the echo detail, Space does not press a focused detail button. Enter still does.
+**Test:** `board_camera.input/space_guard_works_in_echo_detail` (real Sanctum shell, real tap opens the detail, a click on the Bonds tab, then Space), `board_camera.input/space_guard_off_when_camera_disabled`.
+**Source:** Jeff, 2026-10-03
+**Date:** 2026-10-03
+
+---
+
+### 91. space-guard-covers-every-base-button
+
+**Q:** Should the guard check `Button` or `BaseButton`?
+**A:** `BaseButton`. Every `BaseButton` (Button, TextureButton, CheckBox, CheckButton, OptionButton and others) reacts to `ui_accept`, so each one can be pressed by Space.
+**Test:** `board_camera.input/space_guard_covers_any_base_button` (a focused `TextureButton`).
+**Source:** QA finding, 2026-10-03; fix by the builder
+**Date:** 2026-10-03
+
+---
+
+### 92. space-guard-only-on-the-board-view
+
+**Q:** The Sanctum camera stays enabled whenever SanctumShell is visible (`SanctumShell.gd` `_sync_ui_layer_visibility`), also under Summon, Vows, Weaving and Echo Party. So the Space guard (#87, #90) also blocked Space on those screens' buttons. Where should it run?
+**A:** Only on the board view (and its echo detail), and in Combat. New export `BoardCameraController.guard_space_on_buttons` (default true). `SanctumShell.set_snapshot()` sets it to `_current_snap_type == "flow.sanctum"`. This is the same signal `_can_accept_spatial_pointer_input()` already uses for board taps. The echo detail opens inside `flow.sanctum`, so it keeps the guard. Every other sanctum-family type (`flow.summon`, `flow.echo_party`, `flow.realm_select`, `flow.vow_manage`, `flow.weaving_rite`) turns the guard off. Combat never changes the default, so Combat keeps the guard. A disabled camera still leaves Space alone.
+**Test:** `board_camera.input/space_guard_follows_sanctum_view` (board → Summon → board → Echo Party → board, through the real shell), `board_camera.input/space_guard_works_in_echo_detail`.
+**Source:** Jeff, 2026-10-04; the builder (the signal)
+**Date:** 2026-10-04
+
+---
+
+### 93. z-key-zoom-cycle-is-shared
+
+**Q:** Jeff's play test: Z does nothing in Combat. In Sanctum, Z cycles 5 fixed zoom levels. Jeff: "We match Sanctum. Camera should be generic everywhere."
+**A:** The Z cycle is now a shared, opt-in option on `BoardCameraController`:
+- New export `zoom_levels` (`PackedFloat32Array`; empty means Z does nothing). Combat sets `0.5, 1, 1.5, 2, 2.5` (Sanctum's five values).
+- The levels are clamped into the current zoom range, sorted and de-duplicated. In Combat they become 0.5, 1.0, 1.5, 2.0, 2.2.
+- Z goes to the first level above the current zoom (so Z also works after a wheel or pinch zoom). After the highest level it wraps to the lowest.
+- Z eases through the same zoom target as the wheel (#85), about the screen centre.
+- Z is handled in `_unhandled_input`, so a focused text field keeps the letter. It uses the same gate as other manual zoom: an enabled camera that takes manual input. A locked Combat camera zooms about the centre, keeps the actor centred and starts the 3 s hold.
+
+**Sanctum is NOT moved onto the shared Z.** (**Superseded by #94:** Jeff decided Sanctum moves onto the shared levels and accepts the changes below.) It would behave differently in four ways:
+1. Sanctum's Z steps an index (`_zoom_index`); the shared Z uses "the next level above the current zoom". After a Sanctum pinch these differ.
+2. Sanctum's Z sets the zoom at once; the shared Z eases.
+3. Sanctum's wheel steps the same index as its Z. The shared Z has no index.
+4. Sanctum's Z is gated on `_echo_detail_open`, not on the camera's input gate.
+
+So Sanctum keeps its own Z and its `zoom_levels` stays empty.
+
+**Defect found and fixed:** `SanctumShell._unhandled_input` (Z and wheel) also ran while AppRoot hid the shell. If SanctumShell sits later in the tree than RealmShell, it took Z first: Combat did not zoom, and the hidden Sanctum stepped its own zoom. A hidden Sanctum also stepped its zoom on a wheel over a Combat panel. Fix: `SanctumShell._unhandled_input` returns when the shell is not visible in the tree. Shown Sanctum behaviour is unchanged.
+
+**Tests:** `combat_camera/z_steps_through_levels_and_wraps`, `z_after_wheel_goes_to_next_level`, `z_in_focused_line_edit_types_letter`, `z_in_hidden_screen_does_nothing`, `z_while_locked_keeps_actor_centred`, `z_in_combat_with_hidden_sanctum_present`, and `board_camera.input/sanctum_z_cycle_unchanged`.
+**Later QA fixes:** only a plain Z cycles (Shift allowed); Ctrl, Cmd (meta) and Alt+Z do nothing, so undo shortcuts never zoom. A second Z before the ease ends steps from the ease target. Test: `board_camera.zoom/modified_z_does_not_zoom`, `quick_second_z_steps_from_target` (both screens).
+**Source:** Jeff, 2026-10-04 (match Sanctum); the builder (the level rule, and keeping Sanctum on its own Z)
+**Date:** 2026-10-04
+
+---
+
+### 94. sanctum-zoom-on-the-shared-levels
+
+**Q:** #93 kept Sanctum on its own Z because the shared rule would change Sanctum's behaviour. Jeff: the camera is one generic shared component for Sanctum, Combat and Stage.
+**A:** Sanctum moves onto the shared zoom levels. Sanctum's feel changes where the rules below differ from its old index-based steps.
+
+| Input | Sanctum after #94 |
+|---|---|
+| Levels | `zoom_levels` export on the Sanctum camera: 0.5, 1.0, 1.5, 2.0, 2.5. Range 0.5-2.5 comes from the levels. Start zoom 2.0 (`_DEFAULT_ZOOM`). |
+| Z | Shared `BoardCamera` Z: the first level above the current zoom (or the ease target), wraps after 2.5. Eased. |
+| Wheel | (**Superseded by #95**: Sanctum now uses the shared continuous wheel.) One notch up = the next level above, one notch down = the next level below. Clamped at 0.5 and 2.5, no wrap. Eased. `SanctumShell` reads the wheel event and calls the shared `BoardCamera.step_zoom_level(direction)`. |
+| Pinch | Unchanged: immediate, clamped to 0.5-2.5, cancels a running ease. |
+| Echo detail | The detail locks the camera with `manual_resume_delay` 0, so Z and the wheel are ignored (the shared gate). |
+
+What changed in the old behaviour:
+1. Steps are relative to the current zoom, not an index. After a pinch to 1.6, Z goes to 2.0 (the old index could jump elsewhere).
+2. Steps ease instead of jumping.
+3. There is no `_zoom_index`, so nothing can get out of step with the zoom.
+
+**Screen tween versus the ease:** `SanctumShell._animate_camera_to` (the echo-detail focus and restore tween) now calls `camera.begin_screen_animation()` before the tween and `camera.end_screen_animation()` when it ends. `begin_screen_animation()` stops a running ease and blocks manual input until the end. So the ease and the tween never write the zoom in the same frame. The instant path (no tween) calls `camera.cancel_zoom_ease()`. The zoom saved before the detail opens is `camera.zoom_goal()` (the ease target), so closing returns to a real level, not a mid-ease value.
+
+**Removed from SanctumShell:** `_zoom_levels`, `_zoom_index`, the Z branch in `_unhandled_input`, and `_toggle_zoom`. The visibility guard in `_unhandled_input` (#93) is kept as Jeff asked. **Superseded by #95:** the guard was removed with `_unhandled_input`. It is now redundant: a hidden Sanctum's camera is disabled, so the shared gate already rejects Z and the wheel.
+
+**Tests:** `board_camera.zoom/sanctum_z_steps_levels_eased`, `sanctum_wheel_steps_one_level_clamped`, `sanctum_z_after_pinch_goes_to_next_level`, `sanctum_zoom_keys_ignored_in_echo_detail`, `sanctum_ease_does_not_fight_detail_tween`, `hidden_sanctum_takes_no_zoom_input`.
+**Source:** Jeff, 2026-10-04
+**Date:** 2026-10-04
+
+---
+
+### 95. one-wheel-rule-for-every-board-camera
+
+**Q:** After #94, Sanctum's wheel stepped zoom levels and Combat's wheel was continuous. Should every board camera use one wheel rule?
+**A:** Yes: Combat's rule (#85) everywhere. One notch is 1.1x, eased; notches during an ease build on the ease target; the zoom clamps to the camera's range; a `factor` of 0 or less is one notch. A `FREE` camera zooms toward the pointer; a locked camera zooms about the screen centre. Z keeps stepping the levels (#93). Pinch is unchanged.
+
+Sanctum settings (`SanctumShell.tscn`): `wheel_zoom_step = 1.1`, `zoom_to_pointer = true`, range 0.5-2.5 from its levels, start 2.0. `SanctumShell` no longer reads the wheel; it has no `_unhandled_input` any more.
+
+**Where the wheel is read (the generic rule):**
+- `wheel_surface` set (Combat): in `_input`, before the GUI pass, only while the hovered control is `wheel_surface` (open board).
+- `wheel_surface` not set (Sanctum): in `_unhandled_input`, after the GUI pass. A scroll area under the pointer takes the wheel first. A non-scrolling Control passes it on (`mouse_force_pass_scroll_events`, default true), so over open board the camera gets it. This is how Sanctum's wheel was routed before, so its panels keep scrolling.
+
+I chose the second option for Sanctum because Sanctum has no single Control that is the hovered control over open board. Over the board the hovered control is a node inside the active overlay (for example `SanctumScreen/RootMargin/LayoutRoot`), and it changes with each overlay.
+
+The echo detail stays locked (wheel and Z ignored, the shared gate). The detail tween hold stays. A hidden Sanctum takes no wheel: its camera is disabled, so the gate rejects it. The SanctumShell visibility guard (#93) went with its `_unhandled_input`, because nothing was left for it to guard.
+
+**Tests:** `board_camera.zoom/sanctum_wheel_eases_continuous_and_clamps`, `sanctum_wheel_zooms_toward_pointer`, `sanctum_wheel_scrolls_panels_not_board` (the board view's party list and the notification body), `sanctum_wheel_then_z_goes_to_next_level`, `sanctum_zoom_keys_ignored_in_echo_detail`, `hidden_sanctum_takes_no_zoom_input`; `combat_camera/sanctum_wheel_uses_shared_rule`.
+**Source:** Jeff, 2026-10-04 (one wheel rule); the builder (the routing rule)
+**Date:** 2026-10-04
+
+---

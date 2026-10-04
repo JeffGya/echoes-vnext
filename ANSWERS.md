@@ -84,6 +84,9 @@
 | 75 | camera-universal-selection-lock | Tapping any selectable thing (echo, spirit, enemy, shrine/objective, or a card) locks the camera onto it, in Combat, Stage, and Sanctum alike | 2026-09-29 |
 | 76 | camera-default-is-free | With nothing selected, or after tapping empty board space, the camera is `FREE` (manual pan/zoom only) — not an auto-follow default | 2026-09-29 |
 | 77 | camera-card-select-scope | Echo-card tap-to-select applies to both Combat and Stage (shared `RealmShell` echo bar); Sanctum has no card UI and keeps its existing floor-tap selection | 2026-09-29 |
+| 78 | camera-locked-actor-death-follows-party | When a locked camera target dies, the camera follows the party (`follow_party()`), not `FREE`. A dead actor cannot be locked (Jeff confirmed 2026-10-03; decisions.md #84) | 2026-10-02 |
+| 79 | board-wheel-zoom-rule | Board wheel zoom works only over open board. Scrolling panels keep the wheel. A wheel factor of 0 or less is one notch. One notch is 1.1x and the zoom eases over frames (Jeff confirmed 2026-10-03; decisions.md #85) | 2026-10-02 |
+| 80 | board-drag-pans-one-to-one | Mouse drag, finger drag and Space+drag pan 1:1 on every board camera (Sanctum, Combat, Stage). Trackpad two-finger pan keeps 2.5x | 2026-10-03 |
 
 ---
 
@@ -782,5 +785,32 @@
 **A:** Both Combat and Stage. On Stage this resolves to the same single-party-token position `FOLLOW_PARTY` would give, but the lock semantics (and any future feel treatment) should exist there too, not just where there's a visually distinct target to follow.
 **Source:** Jeff, 2026-09-29
 **Date:** 2026-09-29
+
+---
+
+### 78. camera-locked-actor-death-follows-party
+
+**Q:** What does a locked camera do when its target dies?
+**A:** It follows the party centroid (`follow_party()`). It does not go `FREE` and does not stay on the dead actor. This applies to every screen that uses the shared `BoardCamera`. A dead actor cannot be locked: a board tap, an echo card or an initiative row for it does nothing (Jeff confirmed 2026-10-03; decisions.md #84).
+**Source:** Jeff, 2026-10-02 (fallback); assumption by the orchestrator
+**Date:** 2026-10-02
+
+---
+
+### 79. board-wheel-zoom-rule
+
+**Q:** When does a mouse wheel zoom a board camera?
+**A:** Only when the pointer is over open board. A scrolling panel keeps the wheel. A wheel event's `factor` scales the step (pow(step, factor)). A `factor` of 0 or less counts as one ordinary notch. One notch is 1.1x. The zoom eases toward a target over frames; a pinch is immediate (Jeff confirmed 2026-10-03; decisions.md #85).
+**Source:** Jeff, 2026-10-02 (wheel zoom approved for Combat); design by the orchestrator
+**Date:** 2026-10-02
+
+---
+
+### 80. board-drag-pans-one-to-one
+
+**Q:** How fast does a drag pan a board camera?
+**A:** 1:1 on every board camera: Sanctum, Combat and Stage. This covers mouse drag, finger drag and Space+drag. The world point under the pointer stays under the pointer. A trackpad two-finger pan (`InputEventPanGesture`) keeps the faster `_PAN_SPEED` of 2.5x.
+**Source:** Jeff, 2026-10-03
+**Date:** 2026-10-03
 
 ---

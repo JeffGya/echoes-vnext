@@ -42,10 +42,9 @@ var _blocking_modal_active_check: Callable = Callable()
 # The shell owns the persistent nav bar so all sanctum-family screens share it.
 var _cached_nav: Dictionary = {}
 
-# Camera config (Phase B). Discrete zoom-level snapping stays Sanctum-local — decision #72 —
-# BoardCameraController exposes continuous zoom only; this list/index is layered on top of it.
-var _zoom_levels := [Vector2(0.5, 0.5), Vector2(1.0, 1.0), Vector2(1.5, 1.5), Vector2(2.0, 2.0), Vector2(2.5, 2.5)]
-var _zoom_index := 3 # Start at 2.0× (index 3) — decision #71
+# Start zoom. Wheel, pinch and the Z levels are all on BoardCameraController, set in
+# SanctumShell.tscn (decisions.md #95).
+const _DEFAULT_ZOOM := 2.0 # decisions.md #71
 
 var _last_pointer_pos := Vector2.ZERO
 var _current_snap_type := ""
@@ -135,7 +134,8 @@ func _ready() -> void:
 	_center_spatial_view()
 	spatial_layer.resized.connect(_on_spatial_layer_resized)
 
-	camera.configure_zoom_range(_zoom_levels[0].x, _zoom_levels[-1].x, _zoom_levels[_zoom_index].x)
+	var levels := Array(camera.zoom_levels)
+	camera.configure_zoom_range(levels.min(), levels.max(), _DEFAULT_ZOOM)
 	_recompute_floor_bounds()
 	camera.reclamp()
 	# CanvasLayer does not inherit visibility from its Control parent.
@@ -163,6 +163,9 @@ func _sync_ui_layer_visibility() -> void:
 
 func set_snapshot(snap: Dictionary) -> void:
 	_current_snap_type = str(snap.get("type", ""))
+	# The board view (and its echo detail) guards Space; Summon, Vows, Weaving and Echo Party need
+	# Space on their own buttons.
+	camera.guard_space_on_buttons = _current_snap_type == "flow.sanctum"
 	_active_modal_id = &""
 	_active_modal_payload = {}
 
@@ -322,36 +325,6 @@ func _update_notification_layout() -> void:
 	_notification_anchor.offset_bottom = card_top + card_height
 	if _notification_body_scroll != null:
 		_notification_body_scroll.custom_minimum_size.y = 72.0 if profile == &"compact" else 88.0
-
-func _unhandled_input(event: InputEvent) -> void:
-	# Pinch, pan-gesture, and drag-pan now live on BoardCameraController itself
-	# (ui/shared/BoardCamera.gd), gated there by its own FREE/locked mode. Only the discrete
-	# zoom-level list (wheel + keyboard Z) stays Sanctum-local — decision #72.
-
-	# --- Zoom wheel (dev convenience) ---
-	if event is InputEventMouseButton:
-		var mb := event as InputEventMouseButton
-
-		if _echo_detail_open:
-			return
-
-		if mb.pressed and (mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN):
-			_toggle_zoom(mb.button_index == MOUSE_BUTTON_WHEEL_UP)
-			get_viewport().set_input_as_handled()
-			return
-
-	# Z toggles zoom levels
-	if event is InputEventKey and event.pressed and not event.echo:
-		if _echo_detail_open:
-			return
-		var k := event as InputEventKey
-		if k.keycode == KEY_Z:
-			_zoom_index = (_zoom_index + 1) % _zoom_levels.size()
-			camera.zoom = _zoom_levels[_zoom_index]
-			camera.reclamp()
-			get_viewport().set_input_as_handled()
-			return
-
 
 func _input(event: InputEvent) -> void:
 	if not _can_accept_spatial_pointer_input():
@@ -594,17 +567,6 @@ func _update_rail_tone(snap_type: String) -> void:
 		return
 	_bottom_rail.modulate = Color(1, 1, 1, 1.0 if snap_type == "flow.sanctum" else 0.86)
 
-func _toggle_zoom(zoom_in: bool) -> void:
-	# Wheel up = zoom in (closer)
-	if zoom_in:
-		_zoom_index = min(_zoom_index + 1, _zoom_levels.size() - 1)
-	else:
-		_zoom_index = max(_zoom_index - 1, 0)
-
-	camera.zoom = _zoom_levels[_zoom_index]
-	camera.reclamp()
-
-
 # Routes a tap to the correct handler based on the hit occupant kind.
 func _try_open_occupant_at_viewport_point(viewport_point: Vector2) -> bool:
 	if spatial_renderer == null or not spatial_renderer.has_method("find_occupant_at_viewport_point"):
@@ -648,7 +610,8 @@ func _try_open_echo_detail_at_viewport_point_from_hit(hit: Dictionary) -> bool:
 	# board view the player left, not the already-zoomed-in detail framing.
 	if not _echo_detail_open:
 		_saved_camera_position = camera.position
-		_saved_camera_zoom = camera.zoom
+		# The ease target, not a mid-ease value, so closing returns to a real zoom level.
+		_saved_camera_zoom = camera.zoom_goal()
 	_echo_detail_open = true
 	_featured_echo_id = occupant_id
 	_active_overlay.call("open_echo_detail", occupant_id)
@@ -852,15 +815,20 @@ func _animate_camera_to(target_position: Vector2, target_zoom: Vector2, animated
 		_camera_tween.kill()
 	target_position = camera.clamped_position(target_position, target_zoom)
 	if not animated:
+		# A tween killed above never runs its end callback, so release its hold here.
+		camera.cancel_zoom_ease()
+		camera.end_screen_animation()
 		camera.position = target_position
 		camera.zoom = target_zoom
 		camera.reclamp()
 		return
+	camera.begin_screen_animation()
 	_camera_tween = create_tween()
 	_camera_tween.set_trans(Tween.TRANS_SINE)
 	_camera_tween.set_ease(Tween.EASE_OUT)
 	_camera_tween.parallel().tween_property(camera, "zoom", target_zoom, 0.42)
 	_camera_tween.parallel().tween_property(camera, "position", target_position, 0.42)
+	_camera_tween.tween_callback(camera.end_screen_animation)
 	_camera_tween.tween_callback(camera.reclamp)
 	
 func _center_camera_on_floor() -> void:

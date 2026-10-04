@@ -49,6 +49,9 @@ color = Color(0.23921569, 0.3529412, 0.2784314, 1)
 
 [node name="Camera2D" type="Camera2D" parent="WorldLayer/SpatialLayer/SpatialView" unique_id=525201893]
 script = ExtResource("3_bcam1")
+zoom_levels = PackedFloat32Array(0.5, 1, 1.5, 2, 2.5)
+wheel_zoom_step = 1.1
+zoom_to_pointer = true
 
 [node name="SanctumSpatialRenderer2" parent="WorldLayer/SpatialLayer/SpatialView" unique_id=637007143 instance=ExtResource("2_iy4vj")]
 position = Vector2(-4, -1)

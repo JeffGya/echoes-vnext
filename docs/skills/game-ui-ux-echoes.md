@@ -78,7 +78,7 @@ bottom exclusion and do not render their own party bar.
 |--------|-----------|---------|
 | StageMapScreen | `flow.stage_map` | Stage progress list and party prep |
 | StageExploreScreen | `flow.stage` / `flow.stage_explore` | Stage preview plus exploration flow — keep prep UI on StageMap |
-| CombatBoardScreen | `flow.encounter` / `flow.keeper_trial` | Responsive isometric board, objective, initiative, pace and camera controls |
+| CombatBoardScreen | `flow.encounter` / `flow.keeper_trial` | Responsive isometric board, objective, initiative, pace and camera controls (shared `BoardCamera`: tap-to-lock selection, `FREE` default, drag/pinch/wheel zoom, recenter button) |
 | ResolveScreen | `flow.resolve` | AppRoot modal outcome surface: combat/scout/contact/situation resolution |
 
 ### Boot, onboarding and keeper intro

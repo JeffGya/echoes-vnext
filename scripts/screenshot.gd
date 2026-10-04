@@ -7,6 +7,10 @@
 #   <fixture>  one key of FIXTURES; "all" renders every fixture; "list" prints the keys.
 #   [out_dir]  an absolute directory; default user://screenshots. Output: <out_dir>/<fixture>.png.
 #
+# On macOS, run it from a real window without xvfb:
+#   godot --path <checkout> --resolution 1920x1080 --script res://scripts/screenshot.gd -- <fixture> <out_dir>
+# Godot's --headless mode cannot render screenshots (dummy renderer, null texture).
+#
 # The layer hierarchy (RealmShell on layer 10, ModalHost on layer 40, as in Approot.tscn) lives
 # in screenshot_harness.tscn (AGENTS.md "Build structure in .tscn"). This script only instances it,
 # feeds it a hand-built snapshot and saves the frame. It never boots FlowRuntime, so it writes no save and does not touch the test save
@@ -78,6 +82,7 @@ func _fixtures() -> Dictionary:
 		"combat_pace_none":    [_combat(9, _with(recover, "pace_state", "none"))],
 		"combat_no_pace":      [_combat(4, endure)],
 		"combat_escort_pace_partial": [_combat(7, _with(escort, "pace_state", "partial"))],
+		"combat_initiative_full": [_combat_initiative(_with(escort, "pace_state", "partial"))],
 		"resolve_escort_win":  [_combat(9, escort),
 			_resolve(true, "spirit_escorted", 9, "S", { "pace_state": "full", "pace_bonus_awarded": 3, "pace_changed_rank": false })],
 		"resolve_pace_win":    [_combat(6, recover),
@@ -132,6 +137,29 @@ func _combat(round_num: int, objective_state: Dictionary) -> Dictionary:
 		},
 		"actions": {},
 	}
+
+
+## Eight initiative rows: five echoes, the escorted spirit and two enemies, with some action text.
+func _combat_initiative(objective_state: Dictionary) -> Dictionary:
+	var snap := _combat(5, objective_state)
+	var actors: Array = _actors()
+	actors.append(_actor("e4", "Yaw", "echo", 3, 4, 16, 20))
+	actors.append(_actor("e5", "Abena", "echo", 2, 3, 20, 24))
+	actors.append(_actor("s1", "Nana", "spirit", 4, 5, 10, 10))
+	var order: Array = []
+	for a in ["e1", "m1", "e2", "s1", "e3", "m2", "e4", "e5"]:
+		for actor in actors:
+			if actor["id"] == a:
+				order.append({ "id": a, "name": actor["name"] })
+	snap["data"]["actors"] = actors
+	snap["data"]["initiative_order"] = order
+	snap["data"]["active_initiative_index"] = 3
+	snap["data"]["action_results"] = [
+		{ "source_id": "e1", "action_type": "melee_attack", "target_name": "Hollow", "damage": 6 },
+		{ "source_id": "m1", "action_type": "actor.move", "target_name": "Ama" },
+		{ "source_id": "e2", "action_type": "actor.guard" },
+	]
+	return snap
 
 
 ## An empty pace dict omits the "Pace bonus" row, as EconomyService does for a no-pace fight or a defeat.

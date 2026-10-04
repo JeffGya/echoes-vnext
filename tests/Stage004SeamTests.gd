@@ -3358,10 +3358,10 @@ static func _t_realm_target_minima_and_spatial_caps() -> Dictionary:
 	if combat == null:
 		return { "ok": false, "error": "Failed to instantiate CombatBoardScreen" }
 	combat.set("_back_button", combat.get_node("BackButton"))
-	combat.set("_board", combat.get_node("Board"))
-	combat.set("_move_telegraph_layer", combat.get_node("MoveTelegraphLayer"))
-	combat.set("_token_layer", combat.get_node("TokenLayer"))
-	combat.set("_distance_layer", combat.get_node("DistanceLayer"))
+	combat.set("_board", combat.get_node("%Board"))
+	combat.set("_move_telegraph_layer", combat.get_node("%MoveTelegraphLayer"))
+	combat.set("_token_layer", combat.get_node("%TokenLayer"))
+	combat.set("_distance_layer", combat.get_node("%DistanceLayer"))
 	combat.set("_round_label", combat.get_node("RoundLabel"))
 	combat.set("_objective_banner", combat.get_node("%ObjectiveBanner"))
 	combat.set("_recenter_button", combat.get_node("%RecenterButton"))
