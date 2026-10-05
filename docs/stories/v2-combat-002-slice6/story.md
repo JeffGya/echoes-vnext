@@ -30,11 +30,12 @@ and tested in isolation but never wired in (Slices 5-6 never shipped). This is t
   (for example the attacker id and an attempt index). `CampaignSeed.get_rng()` builds a fresh generator
   from the path alone (`core/CampaignSeed.gd:52-57`), so two attempts with the same path get the same
   first `randf()`. One failed roll would then fail every later attempt in that round.
-- **OPEN DESIGN QUESTION (Jeff decides before Subtask 2 starts): double-damage direction.**
-  `_resolve_melee()` (`CombatService.gd:66-77`) doubles the damage the carrier DEALS
-  (`attacker["_carrier_double_damage"]`). `ProtectCustodyService.enemy_carrier_restrictions()` returns
-  `takes_double_damage` (the carrier TAKES double), and `CONVENTIONS.md:823` says the enemy carrier
-  "takes double damage". The two contracts disagree. Settle one direction, then wire it in one place.
+- **DECIDED (Jeff, 2026-10-05): the carrier TAKES double damage.** This matches
+  `CONVENTIONS.md:823` and `ProtectCustodyService.enemy_carrier_restrictions()` (`takes_double_damage`).
+  The current code does the opposite: `_resolve_melee()` (`CombatService.gd:66-77`) doubles the damage
+  the carrier DEALS via `attacker["_carrier_double_damage"]`. Change it to a defender-side multiplier,
+  read from the custody state and `double_damage_mult`. Remove the attacker-side flag and its writes
+  (`_carrier_double_damage`, `_double_damage_mult`). Wire the multiplier in one place only.
 
 ## Subtask 2: Mechanical cutover
 
@@ -158,11 +159,11 @@ other combat mode's goals change. No extra isolation subtask is required.
 
 ## Risk note
 
-**Scope warning (code review, 2026-10-05):** this story is larger than first scoped. It now covers a
-custody-state owner, a pickup producer, the carryability gate, the burden hook, a new pressure-snapshot
-field, a fingerprint re-record and a design question. That is several subjects. Jeff decides whether to
-split it (for example: state owner + pickup producer first, then theft + AI retargeting) before work
-starts. Do not start the build until the double-damage question is answered.
+**Scope is FINAL (Jeff, 2026-10-05): this is one story. Do not split it. Do not add to it.** It covers
+the custody-state owner, the pickup producer, the carryability gate, the burden hook, the carrier-id
+pressure field, the defender-side double damage, the guard gate, the fingerprint re-record and the full
+serial suite. A new finding outside this list is a new story. Do not fold it in. This story is
+not picked up now. This doc records the scope for later.
 
 The `CombatPressureService.gd` goal-targeting risk flagged in the original draft is now RESOLVED: the fix
 is confined to the hostile branch inside `_add_protect()`, calls shared helpers with new arguments only,
@@ -176,3 +177,6 @@ the new guard-block test case from Subtask 5 is also added.
 ## Decisions Jeff has already made
 
 - Guard-block rule: PRESERVE (confirmed 2026-09-26).
+- Double damage: the carrier TAKES double (confirmed 2026-10-05).
+- Scope: one combined story, final, no splits and no additions (confirmed 2026-10-05).
+- Timing: not picked up now. This doc holds the scope until a later pickup.
