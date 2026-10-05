@@ -70,7 +70,7 @@ it reads as a pass.** Always confirm a `Tests:` line came back. Suite names are 
 ```bash
 <godot ...> -- tests __nomatch__ 2>&1 | sed -n 's/.*Debug output "  \([a-z0-9_.]*\)"/\1/p'
 ```
-The 115 registered suite names, captured 2026-09-20 (post-`fingerprint`-suite split — see below.
+The 124 registered suite names (115 captured 2026-09-20, nine camera and pointer suites added since; post-`fingerprint`-suite split — see below.
 A `seam`-suite split was also tried, measured to give no speedup, and reverted — `seam` remains
 one suite):
 ```
@@ -95,6 +95,8 @@ snapshot snapshot_contract snapshot_fingerprint snapshot_purity social_graph sta
 statinit structure support terrain thread trace traversal unified_resolve vector
 venture_char voice vow weave
 ```
+Added since that capture: `board_camera.bounds board_camera.echo_detail board_camera.input
+board_camera.view board_camera.zoom board_camera.pointer board_pointer combat_camera stage_camera` (all in shard9).
 Names that look right and are WRONG: `guide_spirit` (it is under `movement`), `stage_explore`
 (it is `explore`), `stage_objective` (it is `objective`), `stage004` (it is `seam`),
 `fingerprint` (now `fingerprint_combat`, `fingerprint_purify_shrine`, `fingerprint_recover`,
@@ -184,7 +186,7 @@ scripts/run-tests-sharded.sh "$(git rev-parse --show-toplevel)"
 
 **Coverage gap — `movement_fallback` is NOT validated by a sharded run.** See "Always run the FULL
 suite before committing" below: that rule exists in part because this guard only sees its own
-shard's ~16 suites here, not all ~115, so a clean sharded run cannot substitute for it.
+shard's ~16 suites here, not all ~124, so a clean sharded run cannot substitute for it.
 
 Launches several headless Godot processes at once — each with its own `ECHOES_TEST_SAVE_DIR`
 under `/tmp/echoes-vnext-sharded/` and a single `tests =<exact suite names>` invocation — and sums
@@ -221,7 +223,7 @@ though the wall-clock is shorter — do not run it alongside anything else that 
 `/tmp/echoes-vnext-*`.
 
 **Exact-match shard map — no collisions, no duplicate counting.** Each shard passes a single
-`tests =<name1>,<name2>,...` invocation (exact suite-name equality, see "Tests" above), so the 115
+`tests =<name1>,<name2>,...` invocation (exact suite-name equality, see "Tests" above), so the 124
 live registered suites (regenerated 2026-09-20, updated same day after
 `fingerprint_determinism_self_check` was split into 7 per-mode `fingerprint_determinism_<mode>`
 suites, one shared suite name becoming 7) are split into 9 disjoint sets — every suite appears in
@@ -272,7 +274,7 @@ guard, and a UI test that wired nodes from another screen). Filter while iterati
 filtered run alone. **This specifically includes the sharded run**: `movement_fallback`
 (`MovementFallbackGuardTests`) is registered LAST in `ui/AppRoot.gd` because it reads a
 legacy-selector ledger that every other suite in the SAME PROCESS may write to. A sharded run only
-puts it alongside its own shard's ~16 sibling suites, not all ~115, so a clean sharded PASS on
+puts it alongside its own shard's ~16 sibling suites, not all ~124, so a clean sharded PASS on
 `movement_fallback` does NOT have full-suite validity — a fallback triggered by a suite in a
 different shard is invisible to it. Only the full serial suite validates this guard correctly.
 
@@ -672,6 +674,10 @@ Read `docs/v2-migration-map.md` before starting any Alignment story.
     **A comment earns its place only by saying what the code cannot** — a non-obvious constraint, an invariant a future edit would break, a trap, or a decision whose alternative looks equally reasonable. Write it once, at the authority, not at every caller.
 
     **Where things go:** why the change was made → commit message. Design rationale and measurements → the story's handoff or `docs/`. What a reader needs *at that line* to avoid breaking it → the comment. **A comment block should be shorter than the code it explains**; if it is longer, the reasoning belongs elsewhere and the comment should point there.
+29. **Testing real input with `SubViewport.push_input()`.** It does not emulate touch from mouse. For real engine input use `Input.parse_input_event()` and then `Input.flush_buffered_events()` in the root window.
+30. **Instantiating `AppRoot` in a test.** Its `_ready` starts the test runner again. Drive the live `AppRoot` that hosts the run, and restore its previous screen.
+31. **Rendering screenshots with `--headless`.** The dummy renderer gives a null texture. On macOS, run `scripts/screenshot.gd` from a real window (command in the header of that script).
+
 Full lesson history: `docs/LESSONS.md`
 
 ---

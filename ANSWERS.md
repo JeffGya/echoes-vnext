@@ -80,6 +80,13 @@
 | 71 | approot-dispatch-host | `AppRoot.gd` is the only `ui/` file that calls `dispatch()`; screens emit `action_requested` | 2026-10-02 |
 | 72 | skills-home-in-repo | Agent knowledge lives in `docs/skills/`; global skills are thin triggers; routing text uses the Akan calling names | 2026-10-02 |
 | 73 | renderer-gl-compatibility | The renderer is GL Compatibility, for wide mobile and desktop reach; `project.godot` now says so | 2026-10-01 |
+| 74 | camera-unify-on-real-camera2d | Combat and Stage Exploration move from a faked node-transform camera to a real `Camera2D`, matching Sanctum, via one shared controller | 2026-09-29 |
+| 75 | camera-universal-selection-lock | Tapping any selectable thing (echo, spirit, enemy, shrine/objective, or a card) locks the camera onto it, in Combat, Stage, and Sanctum alike | 2026-09-29 |
+| 76 | camera-default-is-free | With nothing selected, or after tapping empty board space, the camera is `FREE` (manual pan/zoom only) — not an auto-follow default | 2026-09-29 |
+| 77 | camera-card-select-scope | Echo-card tap-to-select applies to both Combat and Stage (shared `RealmShell` echo bar); Sanctum has no card UI and keeps its existing floor-tap selection | 2026-09-29 |
+| 78 | camera-locked-actor-death-follows-party | When a locked camera target dies, the camera follows the party (`follow_party()`), not `FREE`. A dead actor cannot be locked (Jeff confirmed 2026-10-03; decisions.md #84) | 2026-10-02 |
+| 79 | board-wheel-zoom-rule | Board wheel zoom works only over open board. Scrolling panels keep the wheel. A wheel factor of 0 or less is one notch. One notch is 1.1x and the zoom eases over frames (Jeff confirmed 2026-10-03; decisions.md #85) | 2026-10-02 |
+| 80 | board-drag-pans-one-to-one | Mouse drag, finger drag and Space+drag pan 1:1 on every board camera (Sanctum, Combat, Stage). Trackpad two-finger pan keeps 2.5x | 2026-10-03 |
 
 ---
 
@@ -742,5 +749,68 @@
 **A:** GL Compatibility. Godot's docs describe it as the renderer with the widest hardware reach, and as usually good enough for 2D. The Mobile renderer needs Vulkan, Direct3D 12 or Metal. `project.godot` said `mobile` while `config/features`, `CLAUDE.md`, the `technical-artist` agent and `scripts/screenshot.gd` all assumed Compatibility; it now says `gl_compatibility`.
 **Source:** Jeff, 2026-10-01
 **Date:** 2026-10-01
+
+---
+
+### 74. camera-unify-on-real-camera2d
+
+**Q:** Follow-up #15 (camera doesn't handle large GUIDE_SPIRIT/PURSUE boards) grew into "camera should be similar across Combat, Stage Exploration, and Sanctum" — build one shared camera component, or keep three separately-tuned implementations?
+**A:** One shared `Camera2D`-based controller (`ui/shared/BoardCamera.gd`) all three screens wire into. Sanctum already has a real `Camera2D`; Combat and Stage currently fake a camera by moving board nodes directly — both migrate onto the shared real-`Camera2D` approach. "Faking it is probably what got us drifting."
+**Source:** Jeff, 2026-09-29
+**Date:** 2026-09-29
+
+---
+
+### 75. camera-universal-selection-lock
+
+**Q:** Should camera follow stay tied to objective-specific flags (`is_quarry` for PURSUE, `is_spirit` for GUIDE_SPIRIT), or become a general player-driven mechanism?
+**A:** General: tapping any selectable thing — echo, spirit, enemy, shrine/objective structure, or an echo's card — zooms and locks the camera onto it, across Combat, Stage, and Sanctum, in every Combat objective mode (no mode-gating). Sanctum already implements the pattern (`SanctumShell._try_open_echo_detail_at_viewport_point_from_hit` → `set_featured_occupant` → camera focus-zoom, which can also open the echo-detail menu) and is the reference precedent. Opening a detail menu on selection is a Sanctum-only behavior for now — may extend to Combat/Stage later, out of scope for this pass. Echoes/enemies/spirits/structures are already unified in the same `actors` array with a `grid_pos` (`is_structure`/`is_spirit`/`is_quarry` flags), so one tap-to-select mechanism covers every selectable type without special-casing.
+**Source:** Jeff, 2026-09-29
+**Date:** 2026-09-29
+
+---
+
+### 76. camera-default-is-free
+
+**Q:** When nothing is selected (fresh encounter/screen entry, or after tapping empty board space), what should the camera default to — follow the party centroid, or sit free?
+**A:** `FREE` (manual pan/zoom only, no auto-follow) is the default in both cases. Party-centroid follow (`FOLLOW_PARTY`) still exists as a mode (e.g. Combat's recenter button, Stage's always-on travel-follow) but is never the passive default when nothing is selected.
+**Source:** Jeff, 2026-09-29
+**Date:** 2026-09-29
+
+---
+
+### 77. camera-card-select-scope
+
+**Q:** The only tappable echo-card component (`EchoCardItem`) lives in `RealmShell.gd`'s shared echo bar, used by both Combat and Stage (Sanctum has no card UI). Should card-tap-to-select apply to both screens, or Combat only, given Stage's board shows just one party token?
+**A:** Both Combat and Stage. On Stage this resolves to the same single-party-token position `FOLLOW_PARTY` would give, but the lock semantics (and any future feel treatment) should exist there too, not just where there's a visually distinct target to follow.
+**Source:** Jeff, 2026-09-29
+**Date:** 2026-09-29
+
+---
+
+### 78. camera-locked-actor-death-follows-party
+
+**Q:** What does a locked camera do when its target dies?
+**A:** It follows the party centroid (`follow_party()`). It does not go `FREE` and does not stay on the dead actor. This applies to every screen that uses the shared `BoardCamera`. A dead actor cannot be locked: a board tap, an echo card or an initiative row for it does nothing (Jeff confirmed 2026-10-03; decisions.md #84).
+**Source:** Jeff, 2026-10-02 (fallback); assumption by the orchestrator
+**Date:** 2026-10-02
+
+---
+
+### 79. board-wheel-zoom-rule
+
+**Q:** When does a mouse wheel zoom a board camera?
+**A:** Only when the pointer is over open board. A scrolling panel keeps the wheel. A wheel event's `factor` scales the step (pow(step, factor)). A `factor` of 0 or less counts as one ordinary notch. One notch is 1.1x. The zoom eases toward a target over frames; a pinch is immediate (Jeff confirmed 2026-10-03; decisions.md #85).
+**Source:** Jeff, 2026-10-02 (wheel zoom approved for Combat); design by the orchestrator
+**Date:** 2026-10-02
+
+---
+
+### 80. board-drag-pans-one-to-one
+
+**Q:** How fast does a drag pan a board camera?
+**A:** 1:1 on every board camera: Sanctum, Combat and Stage. This covers mouse drag, finger drag and Space+drag. The world point under the pointer stays under the pointer. A trackpad two-finger pan (`InputEventPanGesture`) keeps the faster `_PAN_SPEED` of 2.5x.
+**Source:** Jeff, 2026-10-03
+**Date:** 2026-10-03
 
 ---

@@ -68,11 +68,13 @@ mouse_filter = 2
 script = ExtResource("1_bpl_script")
 
 [node name="BarkPopupOriginal" type="VBoxContainer" parent="."]
+mouse_filter = 2
 visible = false
 layout_mode = 0
 theme_override_constants/separation = 0
 
 [node name="BarkPanel" type="PanelContainer" parent="BarkPopupOriginal"]
+mouse_filter = 2
 custom_minimum_size = Vector2(200, 40)
 layout_mode = 2
 size_flags_horizontal = 1
@@ -86,6 +88,7 @@ autowrap_mode = 2
 text = ""
 
 [node name="BarkTail" type="Control" parent="BarkPopupOriginal"]
+mouse_filter = 2
 custom_minimum_size = Vector2(14, 9)
 layout_mode = 2
 size_flags_horizontal = 4
@@ -93,11 +96,13 @@ script = ExtResource("2_bark_tail_script")
 color = Color(0.239, 0.353, 0.278, 0.85)
 
 [node name="BarkPopupReaction" type="VBoxContainer" parent="."]
+mouse_filter = 2
 visible = false
 layout_mode = 0
 theme_override_constants/separation = 0
 
 [node name="BarkPanel" type="PanelContainer" parent="BarkPopupReaction"]
+mouse_filter = 2
 custom_minimum_size = Vector2(180, 36)
 layout_mode = 2
 size_flags_horizontal = 1
@@ -111,6 +116,7 @@ autowrap_mode = 2
 text = ""
 
 [node name="BarkTail" type="Control" parent="BarkPopupReaction"]
+mouse_filter = 2
 custom_minimum_size = Vector2(14, 9)
 layout_mode = 2
 size_flags_horizontal = 4
@@ -118,11 +124,13 @@ script = ExtResource("2_bark_tail_script")
 color = Color(0.961, 0.902, 0.827, 0.9)
 
 [node name="BarkPopupDivergence" type="VBoxContainer" parent="."]
+mouse_filter = 2
 visible = false
 layout_mode = 0
 theme_override_constants/separation = 0
 
 [node name="BarkPanel" type="PanelContainer" parent="BarkPopupDivergence"]
+mouse_filter = 2
 custom_minimum_size = Vector2(200, 40)
 layout_mode = 2
 size_flags_horizontal = 1
@@ -136,6 +144,7 @@ autowrap_mode = 2
 text = ""
 
 [node name="BarkTail" type="Control" parent="BarkPopupDivergence"]
+mouse_filter = 2
 custom_minimum_size = Vector2(14, 9)
 layout_mode = 2
 size_flags_horizontal = 4

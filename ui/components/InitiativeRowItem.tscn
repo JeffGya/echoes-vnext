@@ -3,6 +3,7 @@
 [ext_resource type="Script" path="res://ui/components/InitiativeRowItem.gd" id="1_initiative_row"]
 
 [node name="InitiativeRowItem" type="HBoxContainer"]
+mouse_filter = 0
 script = ExtResource("1_initiative_row")
 
 [node name="NameLabel" type="Label" parent="."]

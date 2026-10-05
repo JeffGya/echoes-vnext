@@ -59,6 +59,18 @@ func reset_presentation() -> void:
 	_presentation_state.reset()
 
 
+## The token's drawn position in board space, with the feet offset removed, so it compares with
+## map_to_local() of a cell. Vector2.INF when the actor has no token.
+func display_cell_position(actor_id: String) -> Vector2:
+	if not _presentation_state.has_actor(actor_id):
+		return Vector2.INF
+	var drawn: Vector2 = _presentation_state.get_display_position(actor_id, Vector2.ZERO)
+	for tok in _tokens:
+		if str(tok.get("actor_id", "")) == actor_id:
+			return drawn if bool(tok.get("is_structure", false)) else drawn - Vector2(0.0, visual_config.feet_offset_y)
+	return drawn
+
+
 func _process(delta: float) -> void:
 	if _presentation_state.advance(delta):
 		queue_redraw()

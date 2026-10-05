@@ -573,6 +573,11 @@ func _run_tests(parts: Array) -> void:
 	VoiceTests.register(runner)           # V2-VOICE-001
 	InstitutionTests.register(runner)     # V2-SANCTUM-002
 	SanctumLayoutTests.register(runner)  # V2-SANCTUM-002: layout + occupant placement
+	BoardCameraInputTests.register(runner)  # V2-COMBAT-003.5 camera unification: input routing
+	CombatCameraSelectTests.register(runner)  # follow-up #15: combat selection-lock camera
+	BoardCameraPointerTests.register(runner)  # Story 3 phase C: Sanctum tap versus drag
+	StageCameraSelectTests.register(runner)  # Story 3 phase D: Stage Exploration camera
+	BoardPointerTrackerTests.register(runner)  # Story 3 phase A: shared board pointer tracker
 	ContinuityTests.register(runner)     # V2-CONTINUITY-001
 	SkillUnlockTests.register(runner)    # V2-PROG-009
 	ContactModelTests.register(runner)  # V2-STAGE-003
@@ -1347,14 +1352,11 @@ func _show_screen(screen: Control) -> void:
 	snapshot_view.visible = false
 	actions_container.visible = false
 
-	if _sanctum_shell != null:
-		_sanctum_shell.visible = false
-	if _realm_shell != null:
-		_realm_shell.visible = false
-	if _active_onboarding_screen != null:
-		_active_onboarding_screen.visible = false
-	if _save_error_screen != null:
-		_save_error_screen.visible = false
+	# Hide only the other screens. Hiding the shown one and showing it again would fire
+	# visibility_changed on every snapshot, and screens reset state on that signal.
+	for other in [_sanctum_shell, _realm_shell, _active_onboarding_screen, _save_error_screen]:
+		if other != null and other != screen:
+			(other as Control).visible = false
 
 	screen.visible = true
 

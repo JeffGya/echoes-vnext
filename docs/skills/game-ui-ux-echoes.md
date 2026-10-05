@@ -77,8 +77,8 @@ bottom exclusion and do not render their own party bar.
 | Screen | Flow State | Purpose |
 |--------|-----------|---------|
 | StageMapScreen | `flow.stage_map` | Stage progress list and party prep |
-| StageExploreScreen | `flow.stage` / `flow.stage_explore` | Stage preview plus exploration flow — keep prep UI on StageMap |
-| CombatBoardScreen | `flow.encounter` / `flow.keeper_trial` | Responsive isometric board, objective, initiative, pace and camera controls |
+| StageExploreScreen | `flow.stage` / `flow.stage_explore` | Stage preview plus exploration flow — keep prep UI on StageMap. Explore uses the shared `BoardCamera` (party-or-situation tap lock, Advance locks the party, `FREE` default, drag/pinch/wheel/Z); preview has no camera |
+| CombatBoardScreen | `flow.encounter` / `flow.keeper_trial` | Responsive isometric board, objective, initiative, pace and camera controls (shared `BoardCamera`: tap-to-lock selection, `FREE` default, drag/pinch/wheel zoom, recenter button) |
 | ResolveScreen | `flow.resolve` | AppRoot modal outcome surface: combat/scout/contact/situation resolution |
 
 ### Boot, onboarding and keeper intro
@@ -165,6 +165,17 @@ See `docs/art-direction.md` for full direction. Key points:
 - Typography: weighted, purposeful — legibility over decoration
 - Animation: deliberate, weighted — not bouncy or playful
 - Sound direction: percussive, organic, grounded
+
+---
+
+## Board camera input
+
+The shared camera is `ui/shared/BoardCamera.gd` (`BoardCameraController`, a real `Camera2D`). Rules for the camera, wheel, pointer and Z are in `docs/stories/v2-combat-003.5/decisions.md` #85, #95, #96, #97 and #100. Do not copy them. These engine facts decide where input code must live:
+- A `CanvasLayer` ignores the camera unless `follow_viewport_enabled = true`. Sanctum shipped without it (commit `1aaebc0`) until Story 1.
+- A full-screen `MOUSE_FILTER_STOP` Control takes mouse buttons before `_unhandled_input`. Handle mouse buttons and Space+drag in `_input()`.
+- Gestures stay in `_unhandled_input()`: `InputEventMagnifyGesture` (pinch) and `InputEventPanGesture` (two-finger trackpad scroll). In `_input()` they steal scrolling from every panel.
+- A plain mouse wheel is `InputEventMouseButton`. `mouse_force_pass_scroll_events` is true by default, so a wheel event that no control uses reaches `_unhandled_input`.
+- `emulate_touch_from_mouse` is on (`project.godot`). One mouse click also makes a touch event. The engine sends the emulated touch before the mouse event.
 
 ---
 

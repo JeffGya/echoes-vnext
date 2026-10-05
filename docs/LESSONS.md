@@ -13,6 +13,15 @@ Reviewed at the start of each session.
 
 ## Lessons (most recent first)
 
+### 27 — A completion notification is not a result
+
+**Rule.** When an agent reports "completed", wait for its report. Read the report before you act on it.
+**Why.** Jeff corrected this in the camera story: the orchestrator treated a notification as finished work, and the work was not finished.
+**How to apply.** After any agent stops, read its report, then audit the tree (see `AGENTS.md`, "After any agent stops, killed or completed"). Do not start the next step on the notification alone.
+**Mistake count:** 1
+
+---
+
 ### 26 — Every agent writes in STE
 
 **Rule.** Every agent communicates and writes in ASD Simplified Technical English (STE): one

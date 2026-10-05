@@ -3238,7 +3238,8 @@ static func _t_realm_target_minima_and_spatial_caps() -> Dictionary:
 	stage_explore.set("_bottom_hud_region", stage_explore.get_node("%BottomHudRegion"))
 	stage_explore.set("_step_budget_row", stage_explore.get_node("%StepBudgetRow"))
 	stage_explore.set("_directive_badge", stage_explore.get_node("%DirectiveBadge"))
-	stage_explore.set("_party_layer", stage_explore.get_node("PartyTokenLayer"))
+	stage_explore.set("_party_layer", stage_explore.get_node("%PartyTokenLayer"))
+	stage_explore.set("_board_root", stage_explore.get_node("%BoardRoot"))
 	stage_explore.call("set_layout", {
 		"profile": &"wide",
 		"logical_size": Vector2(1800, 900),
@@ -3248,8 +3249,9 @@ static func _t_realm_target_minima_and_spatial_caps() -> Dictionary:
 	if directive_badge == null or absf((directive_badge.offset_right - directive_badge.offset_left) - 204.0) > 0.1:
 		stage_explore.queue_free()
 		return { "ok": false, "error": "StageExplore directive badge is not capped while field gains wide space" }
-	var board := stage_explore.get_node_or_null("Board") as TileMapLayer
-	if board == null:
+	var board := stage_explore.get_node_or_null("%Board") as TileMapLayer
+	var board_root := stage_explore.get_node_or_null("%BoardRoot") as Node2D
+	if board == null or board_root == null:
 		stage_explore.queue_free()
 		return { "ok": false, "error": "StageExplore board missing" }
 	board.set_cell(Vector2i(4, 7), 0, Vector2i.ZERO)
@@ -3277,8 +3279,8 @@ static func _t_realm_target_minima_and_spatial_caps() -> Dictionary:
 	var visual_min := center_min - Vector2(64, 64)
 	var visual_max := center_max + Vector2(64, 32)
 	var preview_scale := float(stage_explore.get("_preview_scale"))
-	var transformed_min := board.position + visual_min * preview_scale
-	var transformed_max := board.position + visual_max * preview_scale
+	var transformed_min := board_root.position + visual_min * preview_scale
+	var transformed_max := board_root.position + visual_max * preview_scale
 	var safe_preview: Rect2 = stage_explore.call("_preview_safe_rect")
 	var epsilon := 0.1
 	if transformed_min.x < safe_preview.position.x - epsilon \
@@ -3323,45 +3325,58 @@ static func _t_realm_target_minima_and_spatial_caps() -> Dictionary:
 			"ok": false,
 			"error": "Stage compact preview leaves only %.1f units for the spatial field" % compact_preview_rect.size.y,
 		}
-	stage_explore.set("_current_mode", &"explore")
+	stage_explore.queue_free()
+
+	# Live resize in explore mode, on the real camera: the camera keeps its world point and the
+	# player's zoom, and its zoom floor follows the new viewport.
+	var tree := Engine.get_main_loop() as SceneTree
+	var fixture_host := tree.current_scene.get_node_or_null("UISnapshotRenderer") if tree != null and tree.current_scene != null else null
+	if fixture_host == null:
+		return { "ok": false, "error": "Ready fixture host unavailable for StageExplore live resize test" }
+	var viewport := SubViewport.new()
+	viewport.size = Vector2i(960, 540)
+	viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	fixture_host.add_child(viewport)
+	var resized := stage_explore_scene.instantiate() as StageExploreScreen
+	viewport.add_child(resized)
 	var compact_layout := {
 		"profile": &"compact",
 		"logical_size": Vector2(960, 540),
 		"safe_insets": Vector4.ZERO,
 	}
-	var compact_focus: Vector2 = (stage_explore.call("_explore_spatial_rect", compact_layout) as Rect2).get_center()
-	var focused_world_point := (visual_min + visual_max) * 0.5
-	board.scale = Vector2(0.77, 0.77)
-	board.position = compact_focus - focused_world_point * board.scale.x
-	var compact_board_position := board.position
-	stage_explore.call("set_layout", {
+	resized.set_layout(compact_layout)
+	var big_map := _stage_explore_reuse_snapshot()
+	big_map["data"]["map_width"] = 60
+	big_map["data"]["map_height"] = 60
+	resized.set_snapshot(big_map)
+	var resized_camera := resized.get("camera") as BoardCameraController
+	var compact_min_zoom: float = resized_camera.get("_min_zoom")
+	resized_camera.zoom = Vector2(0.77, 0.77)
+	resized_camera.position = Vector2(123.0, -77.0)
+	viewport.size = Vector2i(1800, 900)
+	resized.set_layout({
 		"profile": &"wide",
 		"logical_size": Vector2(1800, 900),
 		"safe_insets": Vector4.ZERO,
 	})
-	var wide_layout := {
-		"profile": &"wide",
-		"logical_size": Vector2(1800, 900),
-		"safe_insets": Vector4.ZERO,
-	}
-	var wide_focus: Vector2 = (stage_explore.call("_explore_spatial_rect", wide_layout) as Rect2).get_center()
-	var focused_after_resize := (wide_focus - board.position) / board.scale.x
-	if not focused_after_resize.is_equal_approx(focused_world_point) \
-			or board.scale != Vector2(0.77, 0.77) \
-			or board.position == compact_board_position:
-		stage_explore.queue_free()
+	var wide_min_zoom: float = resized_camera.get("_min_zoom")
+	var kept_point := resized_camera.position.is_equal_approx(Vector2(123.0, -77.0))
+	var kept_zoom := resized_camera.zoom.is_equal_approx(Vector2(0.77, 0.77))
+	viewport.free()
+	if not kept_point or not kept_zoom:
 		return { "ok": false, "error": "StageExplore live resize did not preserve its focused world point and zoom" }
-	stage_explore.queue_free()
+	if wide_min_zoom <= compact_min_zoom:
+		return { "ok": false, "error": "StageExplore live resize did not refit the camera zoom floor (%f -> %f)" % [compact_min_zoom, wide_min_zoom] }
 
 	var combat_scene := preload("res://ui/screens/combat/CombatBoardScreen.tscn")
 	var combat := combat_scene.instantiate()
 	if combat == null:
 		return { "ok": false, "error": "Failed to instantiate CombatBoardScreen" }
 	combat.set("_back_button", combat.get_node("BackButton"))
-	combat.set("_board", combat.get_node("Board"))
-	combat.set("_move_telegraph_layer", combat.get_node("MoveTelegraphLayer"))
-	combat.set("_token_layer", combat.get_node("TokenLayer"))
-	combat.set("_distance_layer", combat.get_node("DistanceLayer"))
+	combat.set("_board", combat.get_node("%Board"))
+	combat.set("_move_telegraph_layer", combat.get_node("%MoveTelegraphLayer"))
+	combat.set("_token_layer", combat.get_node("%TokenLayer"))
+	combat.set("_distance_layer", combat.get_node("%DistanceLayer"))
 	combat.set("_round_label", combat.get_node("RoundLabel"))
 	combat.set("_objective_banner", combat.get_node("%ObjectiveBanner"))
 	combat.set("_recenter_button", combat.get_node("%RecenterButton"))
