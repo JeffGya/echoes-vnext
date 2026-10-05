@@ -26,19 +26,40 @@ and tested in isolation but never wired in (Slices 5-6 never shipped). This is t
   `CombatRoundObjectiveService.apply_protect_theft_round()` currently uses) to a draw taken at the new
   attack-triggered hook, keyed `combat.theft.<encounter_id>.<round>` per the existing convention. Per
   the determinism rule, this is a **new** draw at a new point in the sequence — do not attempt to reuse
-  the old round-end draw's position or value.
-- `_resolve_melee()` in `CombatService.gd` already supports carrier double-damage via
-  `attacker["_carrier_double_damage"]` / `attacker["_double_damage_mult"]` — this stays; only the
-  theft-trigger condition changes from "adjacent at round end" to "attack landed on carrier."
+  the old round-end draw's position or value. **Add a stable per-attempt discriminator to the path**
+  (for example the attacker id and an attempt index). `CampaignSeed.get_rng()` builds a fresh generator
+  from the path alone (`core/CampaignSeed.gd:52-57`), so two attempts with the same path get the same
+  first `randf()`. One failed roll would then fail every later attempt in that round.
+- **OPEN DESIGN QUESTION (Jeff decides before Subtask 2 starts): double-damage direction.**
+  `_resolve_melee()` (`CombatService.gd:66-77`) doubles the damage the carrier DEALS
+  (`attacker["_carrier_double_damage"]`). `ProtectCustodyService.enemy_carrier_restrictions()` returns
+  `takes_double_damage` (the carrier TAKES double), and `CONVENTIONS.md:823` says the enemy carrier
+  "takes double damage". The two contracts disagree. Settle one direction, then wire it in one place.
 
 ## Subtask 2: Mechanical cutover
 
 - In `CombatTurnActionService.gd`, at the confirmed hook point, assemble the `attack` dict from `result`,
   `actor`, and `target`, and call `ProtectCustodyService.resolve_theft_on_attack()` when the encounter is
   PROTECT mode and a totem is in custody.
-- Also wire, at their natural call sites: `pickup_action_plan` / `resolve_pickup` (totem pickup),
-  `track_carrier_movement` (carry-burden movement penalty), `resolve_drop` (carrier down/KO), and
-  `enemy_carrier_restrictions` (movement/action limits on an enemy carrying the totem).
+- **Own the custody state.** Every service call returns a new immutable `custody_state`. Production has
+  no owner for it. `totem_stolen` and `totem_carrier_id` cannot hold an Echo carrier, a moving
+  `totem_cell`, or the carrier faction. Define where `custody_state` lives, how it is created at
+  encounter start, how it persists between activations, and how it syncs to the legacy
+  `totem_stolen` / `totem_carrier_id` fields that pressure and snapshots still read.
+- **Pickup needs a producer.** Nothing in production can select `protect.totem_pickup` today.
+  `pickup_action_plan()` is used only by tests, `CombatPressureService._primary_plan()` has no pickup
+  case, and `MovementGoal._validate_plan_for_purpose()` rejects it for every purpose. Scope the
+  pressure facts, goal contract support, action context and arbitration path that emit this action.
+- **Keep the authored carryability gate.** The totem is carryable only 60% of the time
+  (`carryable_chance: 0.6`, `data/actors.json:132`; `docs/combat-modes.md:31-35`).
+  `resolve_pickup()` has no such check. Add a deterministic encounter-time carryable flag and gate both
+  pickup planning and pickup resolution on it.
+- **Carrier burden is `apply_carrier_burden()`, not `track_carrier_movement()`.**
+  `track_carrier_movement()` only moves `totem_cell` (`ProtectCustodyService.gd:319-342`). The
+  capacity penalty and the enemy cap live in `apply_carrier_burden()` (`:162-222`). Add the
+  movement-profile preparation hook that calls it.
+- Also wire, at their natural call sites: `resolve_pickup`, `track_carrier_movement` (totem follows the
+  carrier), `resolve_drop` (carrier down/KO) and `enemy_carrier_restrictions` (movement/action limits).
 - Remove `CombatRoundObjectiveService.apply_protect_theft_round()` and its call from
   `FlowRuntime._end_round` (`core/runtime/FlowRuntime.gd:1579`) — the old proximity/RNG path is fully
   superseded, not left as a fallback.
@@ -77,9 +98,14 @@ the roll). Under the new attack-triggered rule it does nothing useful: the hosti
 structure, and never attacks the holding echo.
 
 The fix: replace that `_add_objective_engage(...)` call with
-`_add_actor_engage(candidates, BUCKET_TACTICAL, context, pressure, "breaker", NORMAL, str(holder_id))`,
+`_add_actor_engage(candidates, BUCKET_TACTICAL, context, pressure, "breaker", NORMAL, <carrier id>)`,
 mirroring the pattern already used at lines 273-287 for the post-theft carrier case, and already proven
 correct for GUIDE_SPIRIT's escort-threat case via `_add_guide()` at line 364.
+
+**Correction (code review):** `holder_id` does not work for PROTECT. `LiveMovementContextService.gd:821`
+fills it only from `combat_state.recover_holder_id`, so in PROTECT it is empty or unrelated, and
+`_add_actor_engage()` then emits no goal. Thread the real custody carrier into the pressure snapshot as
+a new field and target that field. This adds a change in `LiveMovementContextService.gd`.
 
 This change is confined to the hostile pre-theft branch inside `_add_protect()`. The shared helpers it
 calls — `_add_actor_engage` (line 715), `_add_goal` (line 733), `_adjacent_region` (line 851),
@@ -93,13 +119,18 @@ other combat mode's goals change. No extra isolation subtask is required.
   with no attack, drives one round, and asserts on the old `theft_chance=0.5` proximity-roll outcome. It
   must be rewritten to:
   1. Drive an actual melee attack against the carrier and assert the attack-triggered theft outcome.
-  2. Add a new case verifying the guard-block precondition from Subtask 3 still holds — a hostile actor
-     adjacent to the totem does NOT trigger pickup/theft while a living echo is guarding it.
-  The carrier-death recovery half of the test (lines ~1665-1690) is behavior-agnostic to the trigger
-  mechanism and is expected to keep passing largely as-is.
-- **Confirmed unaffected:** `tests/FlowFingerprintTests.gd` only reads `totem_stolen` /
-  `totem_carrier_id` as fixture keys (line ~254-255) — no assertion on trigger mechanism. No change
-  needed.
+  2. Guard gate, attack path: an otherwise-successful attack with a forced low roll against a carrier,
+     while another living Echo guards the totem. Assert no theft. An adjacency-only case is not enough:
+     it passes even with no guard check, because adjacency no longer triggers theft.
+  3. Guard gate, pickup path: an enemy pickup action while an Echo guards the totem. Assert no pickup.
+  4. Carrier death: the recovery half (lines ~1665-1689) is NOT trigger-agnostic. It marks the carrier
+     dead by hand and waits for the old end-round function, which this story removes. Rewrite it to
+     drive a real lethal attack or KO. Assert the immediate drop cell and the synced custody state.
+- **NOT unaffected (corrected):** `tests/FlowFingerprintTests.gd` drives a full PROTECT encounter and
+  hashes actions, positions and `totem_stolen` / `totem_carrier_id` per round
+  (`PROTECT_ROUNDS_HASH`, `PROTECT_FINAL_HASH`, `PROTECT_SAVE_HASH`, lines ~765-771). Pickup,
+  carrier burden, retargeting and attack-time theft all change that surface. Run the PROTECT
+  fingerprints. Re-record any moved hash on purpose, and name the cause of each move.
 - Previously confirmed unaffected (per prior analysis, not re-checked here):
   `tests/ObjectiveCombatTests.gd`, `tests/BehaviorArbiterTests.gd`, `tests/CombatPressureTests.gd`,
   `tests/SpatialModeGoalTests.gd`.
@@ -114,7 +145,8 @@ other combat mode's goals change. No extra isolation subtask is required.
   reference.
 - Update `CONVENTIONS.md` PROTECT-mode section if it documents the old proximity-roll behavior. Note the
   preserved guard-block rule explicitly, so a future reader does not assume the new service enforces it.
-- Commit per project convention after compile check + filtered test run pass.
+- Iterate with filtered tests. Before the commit, run the FULL serial suite (`AGENTS.md:269-277`).
+  A filtered or sharded run cannot validate the `movement_fallback` guard.
 
 ## Explicitly OUT of scope
 
@@ -125,6 +157,12 @@ other combat mode's goals change. No extra isolation subtask is required.
   `mid-game-designer` calls if they come up.
 
 ## Risk note
+
+**Scope warning (code review, 2026-10-05):** this story is larger than first scoped. It now covers a
+custody-state owner, a pickup producer, the carryability gate, the burden hook, a new pressure-snapshot
+field, a fingerprint re-record and a design question. That is several subjects. Jeff decides whether to
+split it (for example: state owner + pickup producer first, then theft + AI retargeting) before work
+starts. Do not start the build until the double-damage question is answered.
 
 The `CombatPressureService.gd` goal-targeting risk flagged in the original draft is now RESOLVED: the fix
 is confined to the hostile branch inside `_add_protect()`, calls shared helpers with new arguments only,
