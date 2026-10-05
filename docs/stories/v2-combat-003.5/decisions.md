@@ -1002,7 +1002,9 @@ far enough for the 100×18 repro board (needs ~0.09) — this is the root numeri
 | Screen | absolute_floor | absolute_ceiling |
 |---|---|---|
 | Combat | 0.05 | 0.35 |
-| Stage | 0.08 | 0.30 |
+| Stage | ~~0.08~~ | ~~0.30~~ |
+
+> **Superseded for Stage by #100 (2026-10-05):** Jeff decided Stage uses Combat's clamp, floor 0.05 and ceiling 0.35. The Stage row above is kept as history only.
 
 `absolute_floor` is a safety net against a pathological board (larger than any config currently
 allows) computing an unreadable near-zero zoom. `absolute_ceiling` guarantees `min_zoom` never rises
@@ -1408,5 +1410,148 @@ The echo detail stays locked (wheel and Z ignored, the shared gate). The detail 
 **Tests:** `board_camera.zoom/sanctum_wheel_eases_continuous_and_clamps`, `sanctum_wheel_zooms_toward_pointer`, `sanctum_wheel_scrolls_panels_not_board` (the board view's party list and the notification body), `sanctum_wheel_then_z_goes_to_next_level`, `sanctum_zoom_keys_ignored_in_echo_detail`, `hidden_sanctum_takes_no_zoom_input`; `combat_camera/sanctum_wheel_uses_shared_rule`.
 **Source:** Jeff, 2026-10-04 (one wheel rule); the builder (the routing rule)
 **Date:** 2026-10-04
+
+---
+
+### 96. one-shared-board-pointer-tracker
+
+**Q:** Combat tracked taps, drags and fingers in its own private fields. Stage and Sanctum need the same rules. Where should the code live?
+**A:** In one script-only helper, `ui/shared/BoardPointerTracker.gd` (`RefCounted`). Combat uses it first (Story 3 phase B); Sanctum and Stage follow. The behaviour of Combat does not change. Jeff decided one helper for all three screens (Story 3 plan D2, D2b).
+
+The helper owns: the per-pointer owner, the finger count, the 8 px tap-versus-drag threshold, the pinch rule (a second finger is never a tap or a drag), Space+press as a drag, the lost-release safety net (a finger-0 press clears stale state, #83) and `reset()`. It holds no screen code.
+
+The screen wires it in four steps:
+- `_input(event)`: `_pointer.note_touch(event)`. It counts every finger and never consumes.
+- `_gui_input(event)`: `if _pointer.handle_event(event): accept_event()`.
+- `_pointer.tap` goes to the screen's tap handler. The `tap` position is local to the screen, so the screen converts it with `get_global_transform_with_canvas() * pos`. `_pointer.drag_pan` goes to `camera.drag_pan`.
+- The screen calls `_pointer.reset()` on focus loss, on hide and on a new encounter.
+
+`accept_event()` has no test that can see it. The screen root has `mouse_filter` STOP, so Godot already consumes every pointer event that reaches it. A test with a node in `_unhandled_input` saw no event, whether the screen accepted it or not.
+
+**Tests:** `board_pointer/*` (13, the helper alone); `combat_camera/tap_uses_viewport_point_when_screen_is_offset` (new); the 47 existing Combat camera tests pass unchanged except 5 reads of removed private fields, now read through the tracker (`finger_count()`, `is_pointer_down()`, `is_drag_active()`).
+**Source:** Jeff (one helper, Story 3 plan D2/D2b); the builder (the API)
+**Date:** 2026-10-04
+
+---
+
+### 97. sanctum-uses-the-shared-pointer-tracker
+
+**Q:** Sanctum opened an echo detail on the press of a plain click and had no plain or one-finger drag pan. Should it use the shared tracker (#96)?
+**A:** Yes (Story 3 plan D2b). This changes Sanctum feel on purpose:
+- A plain mouse drag or a one-finger drag on open board pans the board 1:1.
+- A tap opens or switches the detail on release, and only if the pointer moved under 8 px. A drag is never a tap.
+- Taps keep their meaning: tap an echo opens the detail, tap another echo switches it, tap empty board closes it, tap a building opens the institutions panel, and placement mode still picks a cell.
+
+**Feed.** `SanctumShell._input` feeds the tracker. The STOP chrome (`UILayer/Control`, `LayoutRoot`) takes every press before any board Control could, so a `_gui_input` would see nothing. The shell does not ask the viewport for the hovered control: a touch press arrives before the hover moves. It walks the visible chrome instead (`_classify_press`) and sorts a press into three kinds:
+
+| Press lands on | Result |
+|---|---|
+| a button, field, slider, list or tree (as before) | starts nothing |
+| a panel (`PanelContainer`, `Panel`, `ScrollContainer`, `ColorRect`) | may tap, never pans |
+| open board | may tap and pan |
+
+A control clipped out by its parent does not count. A press while a modal is open, on any snapshot other than `flow.sanctum`, or while the shell is hidden starts nothing. The hidden-shell rule is new: `_input` runs on hidden nodes, and a hidden Sanctum could open a detail from a click in Realm.
+
+**Space+drag.** The camera keeps it (`space_drag_pan` stays true, and `BoardCamera._input` pans once, 1:1, through the STOP chrome). The shell never starts a gesture on a Space press, so there is one owner and no double pan. In practice the camera marks the press handled first, so the Space check in the shell is a safety net that no test can see.
+
+**Detail lock.** `drag_pan` is ignored while the detail locks the camera (`manual_resume_delay` 0, or the focus tween), so a drag does nothing there. Taps still switch echoes and close the detail.
+
+**Resets (`tracker.reset()`).** Focus loss (both notifications), the shell hidden, and any snapshot other than `flow.sanctum`. A `flow.sanctum` refresh never resets, because those arrive every second or two. The echo detail does not reset: it opens on a release, so no gesture is open then.
+
+**Not changed.** Wheel, Z, pinch and the trackpad two-finger pan stay on the camera. Camera input on Sanctum sub-screens stays as it was (follow-up #24).
+
+**Not testable.** `set_input_as_handled()` on the owner's release changes nothing a test can see, because `UILayer/Control` is STOP and already consumes the event. The call stays, as in Combat (#96).
+
+**Tests:** `board_camera.pointer/*` (22, real `SanctumShell`, real input). No existing assertion changed.
+**Source:** Jeff (D2b, 2026-10-04); the builder (the feed and the three press kinds)
+**Date:** 2026-10-04
+
+---
+
+### 98. sanctum-tap-on-release-confirmed
+
+**Q:** Decision #97 moved a Sanctum tap from the press to the release. Does that feel right in play?
+**A:** Yes. Jeff played Sanctum and Combat after phases A-C and confirmed it. A tap acts on release, and only when the pointer moved under 8 px.
+**Source:** Jeff, 2026-10-04
+**Date:** 2026-10-04
+
+---
+
+### 99. echo-detail-panel-tap-closes-the-detail
+
+**Q:** With the echo detail open, a tap on the body of the detail panel closes the detail. Is that right?
+**A:** Yes, it stays. A panel counts as part of the board for taps (decision #97), and a tap on empty space or on the panel body closes the detail. This behaviour is older than Story 3. Jeff confirmed it stays as it is.
+**Source:** Jeff, 2026-10-04
+**Date:** 2026-10-04
+
+---
+
+### 100. stage-explore-on-the-shared-board-camera
+
+**Q:** Stage Exploration had no camera: the Board node was the camera, moved by script. How does it use the shared `BoardCameraController`?
+**A:** Same camera, same rules as Combat (Jeff, Story 3 plan D1-D11).
+
+**Structure (`StageExploreScreen.tscn`).** `WorldLayer` (a `CanvasLayer`, `follow_viewport_enabled`) holds `BoardRoot`, which holds `Board` (with `BridgeLayer` and `GhostFootprintLayer`), `FogLayer`, `SituationLayer` and `PartyTokenLayer`, and a `BoardCamera` next to `BoardRoot`. Sibling order is unchanged: fog over the board, the party on top. The old per-frame copy of the board transform to the fog and situation layers is gone, because they share `BoardRoot`.
+
+**Camera numbers (copied from Combat, not invented).** Min zoom by the board-fit formula (#70: 0.90 of the shorter viewport side over the longest board side). Stage uses Combat's clamp, floor 0.05 and ceiling 0.35 (Jeff, 2026-10-05); this supersedes the Stage row 0.08 / 0.30 in #70, default 1.3, max 2.2, `zoom_levels` 0.5/1/1.5/2/2.5, `manual_resume_delay` 3.0, `wheel_zoom_step` 1.1, `zoom_to_pointer` true, `wheel_surface` the screen root, `space_drag_pan` false. The constants are copied into `StageExploreScreen.gd`; sharing them is a follow-up (a change to the shared camera needs Jeff).
+
+**Bounds.** In explore `BoardRoot` is at scale 1, centred on the world origin (`position = -visual rect centre`, where the rect is the painted board with its tile footprint). The camera bounds are that rect, with no pad.
+
+**Preview (`flow.stage`) has no camera.** The camera is enabled only while the screen is visible and in explore mode. In preview `BoardRoot` itself is scaled and placed to fit the safe body (as the Board node was). Markers and the party token keep their screen size there: markers are scaled by 1 / board scale, the token by `set_token_scale`.
+
+**Fade.** `modulate` on the screen does not reach the `WorldLayer`. The preview fade tween now also fades `BoardRoot`'s modulate, in parallel. A test steps that tween and checks both reach 1.
+
+**Begin hand-over.** The Begin zoom tweens `BoardRoot` x3 as before and emits `cta.start`. The explore snapshot then resets `BoardRoot` to scale 1 on the origin and, on first entry, centres the camera on the party at zoom 1.3, FREE. First entry is every entry from preview and every new Stage instance (RealmShell rebuilds the screen after each combat), so a new Stage starts FREE at the default zoom, centred on the party (D8). Entering preview resets the pointer tracker and the first-entry flag.
+
+**Live resize.** `set_layout` in explore refits the zoom floor and keeps the camera's world point and the player's zoom. `set_layout` does nothing to the camera when it is absent (the seam test builds the screen without a tree).
+
+**Parked snapshots (D10).** A snapshot that moves nobody never moves the camera, so the player's pan and zoom survive it. The old snap to the party is gone.
+
+**Tests:** `stage_camera/*` (34, real `FlowRuntime`, real `RealmShell`, real input); `realm_ui/target_minima_and_spatial_caps` rewritten (see the report).
+**Source:** Jeff (D1-D11); the builder (structure, fade, hand-over)
+**Date:** 2026-10-05
+
+---
+
+### 101. stage-advance-locks-the-party-and-follows-each-cell
+
+**Q:** Advance used to scroll the board under a screen-locked token. What does the camera do now (D1)?
+**A:** An Advance locks the camera on the party (`select("party")`). The lock stays after the walk, until the player taps away. A manual pan or pinch holds the follow for 3 s, as in Combat.
+
+**Tween or lerp.** The camera's own follow lerp (5 per second) moves the camera. The travel tween no longer writes the camera or the board. It only sequences: for each walked cell it calls the party token (moves to that cell over the segment time), pushes the follow target (that cell's world position), then waits the segment time, then drops the ghost and spends one step diamond. Because the tween never writes the camera, there is no `begin_screen_animation()` and nothing fights the lerp.
+
+**Per-segment target.** One follow target per destination cell, as Jeff decided (not a per-frame token position). A snapshot that moves nobody and arrives during the walk leaves the token and the target alone.
+
+**The party token** is in world space under `BoardRoot` and moves cell by cell. The bark bubble stays screen-space: `_process` re-anchors it to the token whenever the token or the camera moves.
+
+**Tests:** `stage_camera/advance_locks_party_and_follows_each_cell`, `lock_stays_after_the_walk`, `manual_pan_holds_then_follow_resumes`, `parked_refresh_during_walk_keeps_token_and_target`, `bark_anchor_tracks_party_on_screen`.
+**Source:** Jeff (D1); the builder (tween only sequences)
+**Date:** 2026-10-05
+
+---
+
+### 102. stage-tap-targets-and-card-lock
+
+**Q:** What can the player tap on Stage, and what does a card do (D3, D5, D7, D11)?
+**A:** Tap targets are the party and the revealed situations, found by cell. The party wins a shared cell. A tap on empty board calls `deselect()` (FREE). Any revealed situation can be tapped, resolved ones included (Jeff, 2026-10-05). `select_board_target(id)`: `""` and `"party"` mean the party, a revealed situation id means that situation, any other id does nothing. Every Stage echo card sends `""`, so any card locks the party (RealmShell forwards it to the screen; no `core/` change; real echo ids are follow-up #27). Tap, drag, wheel, pinch and Z work in explore only.
+
+**Bars.** `ActionBar` and `StepBudgetRow` are `mouse_filter` STOP (before: the container default, PASS). Their gaps are hovered controls, so the wheel does not zoom there (D11), and a tap in a gap is not a board tap that would release the lock. Cost: a drag cannot start in a gap of those two bars.
+
+**Kept (D7).** The Space guard stays on (the camera swallows Space while a button has focus) and Stage buttons keep their focus mode. Enter still presses Advance.
+
+**Tests:** `stage_camera/tap_party_locks_and_follows`, `tap_revealed_situation_locks_and_follows`, `party_wins_a_shared_cell`, `tap_empty_board_releases_to_free`, `unknown_and_unrevealed_ids_are_ignored`, `echo_card_tap_locks_the_party`, `tap_resolved_situation_locks_and_follows`, `tap_uses_viewport_point_when_screen_is_offset`, `wheel_over_echo_bar_and_action_bar_does_not_zoom`, `tap_on_chrome_bar_gaps_keeps_the_lock`.
+**Source:** Jeff (D3, D5, D7, D11); the builder (bar filter)
+**Date:** 2026-10-05
+
+---
+
+### 103. stage-pointer-and-visibility-rules
+
+**Q:** Which rules protect Stage input (shared with Combat #96 and Sanctum #97)?
+**A:** The Stage root is a full-rect STOP Control, so `_gui_input` sees presses on open board and `_input` counts fingers. Both do nothing outside explore mode, and `_input` does nothing while the screen is hidden. `tracker.reset()` runs on focus loss (both notifications), on hide, and when preview is entered (which is how every new Stage entry starts). A hidden Stage disables its camera and hides its `WorldLayer` itself, because neither follows the Control. A hidden Stage takes no Z, wheel, tap or drag in either boot order against a Sanctum shell. A modal covers the board, so nothing reaches it while a modal is open.
+**Not changed.** `_explore_spatial_rect` stays: the HUD geometry test reads it. Nothing in the camera path uses it now.
+**Tests:** `stage_camera/focus_loss_resets_stuck_pointer`, `hide_resets_stuck_pointer`, `new_stage_entry_resets_stuck_pointer`, `hidden_stage_takes_no_input_in_both_boot_orders`, `hidden_screen_disables_camera_and_world`, `shell_swap_hands_viewport_to_shown_camera`, `combat_swap_and_new_stage_start_free`, `modal_blocks_board_input`.
+**Source:** the builder
+**Date:** 2026-10-05
 
 ---

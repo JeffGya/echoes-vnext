@@ -575,6 +575,9 @@ func _run_tests(parts: Array) -> void:
 	SanctumLayoutTests.register(runner)  # V2-SANCTUM-002: layout + occupant placement
 	BoardCameraInputTests.register(runner)  # V2-COMBAT-003.5 camera unification: input routing
 	CombatCameraSelectTests.register(runner)  # follow-up #15: combat selection-lock camera
+	BoardCameraPointerTests.register(runner)  # Story 3 phase C: Sanctum tap versus drag
+	StageCameraSelectTests.register(runner)  # Story 3 phase D: Stage Exploration camera
+	BoardPointerTrackerTests.register(runner)  # Story 3 phase A: shared board pointer tracker
 	ContinuityTests.register(runner)     # V2-CONTINUITY-001
 	SkillUnlockTests.register(runner)    # V2-PROG-009
 	ContactModelTests.register(runner)  # V2-STAGE-003

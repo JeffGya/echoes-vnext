@@ -19,7 +19,7 @@
 # KNOWN GAP — movement_fallback does not get full-suite validation here. MovementFallbackGuardTests
 # is registered LAST in ui/AppRoot.gd specifically because it inspects a legacy-selector ledger
 # that every earlier-registered suite in the SAME PROCESS may write to. Sharding puts it in shard4
-# with ~16 sibling suites, not all ~115 — a clean sharded PASS on movement_fallback does NOT mean
+# with ~16 sibling suites, not all ~124 — a clean sharded PASS on movement_fallback does NOT mean
 # the real serial suite would also pass; a fallback triggered by a suite in another shard is
 # invisible to it here. This is not fixable by rebalancing shards (it would require running every
 # other suite first, in-process, defeating parallelism for this one guard). Always run the full
@@ -128,7 +128,7 @@ SHARDS=(
   "shard5|consequence,contact_actor,cooldown,directive,explore,leadership,maturity_baseline,movement_path,realm_ui,recruit,reward,sanctum.layout,shrine,skill_unlock,voice,vow,fingerprint_endure,fingerprint_determinism_endure|"
   "shard7|seam,fingerprint_pursue,fingerprint_determinism_pursue|900"
   "shard8|behavior,behavior_arbiter,combat_initiative,explore_p5,identity,live_movement_style,statinit,trace,fingerprint_guide_spirit,fingerprint_determinism_guide_spirit|"
-  "shard9|economy,flow_transaction,grid,guidance,guidance_bark,movement_style,social_graph,venture_char|"
+  "shard9|economy,flow_transaction,grid,guidance,guidance_bark,movement_style,social_graph,venture_char,board_camera.bounds,board_camera.echo_detail,board_camera.input,board_camera.view,board_camera.zoom,board_camera.pointer,combat_camera,board_pointer,stage_camera|"
   "shard10|arbiter,bridge,combat,combat_baseline,continuity,derived,directive_cfg,echo_party,expr,intel,objective_combat,realm,realm_reward,save_integrity,snapshot_contract,thread,unified_resolve|"
 )
 
@@ -264,7 +264,7 @@ echo "COMBINED: $total total, $passed passed, $failed failed"
 echo "(Exact-match shards: no suite selected twice, total should equal a serial full run's total.)"
 echo ""
 echo "NOTE: movement_fallback (MovementFallbackGuardTests) only saw its own shard's ~16 suites in" \
-     "this run, not all ~115 — it is a cross-suite ledger guard that must run LAST in the SAME" \
+     "this run, not all ~124 — it is a cross-suite ledger guard that must run LAST in the SAME" \
      "process as everything else to be meaningful (see ui/AppRoot.gd 'REGISTER LAST'). A clean" \
      "sharded result for movement_fallback does NOT have full-suite validity. Run the full SERIAL" \
      "suite before committing anything that could affect legacy-selector fallback behavior."

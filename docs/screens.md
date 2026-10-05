@@ -66,7 +66,7 @@ the cross-shell responsive/layering pass.
 | Sanctum | Blocking events | Awakening, Companion invitation, Rank Up/Calling, Calling information, Institution detail, Vow moments, and Summon reveal render above rail/world through ModalHost. |
 | Realm | Stage Map | Safe responsive stage/party composition; compact single-column and wider spatial allocation. |
 | Realm | Stage preview | Briefing and map refit to safe width and height; preview content does not leave an explore HUD behind. |
-| Realm | Stage exploration | Capped Living Tree Turn/Objectives/Party HUD with same-row directive badge; Step/actions remain above EchoBar; board keeps spatial focus and zoom on live resize. |
+| Realm | Stage exploration | Capped Living Tree Turn/Objectives/Party HUD with same-row directive badge; Step/actions remain above EchoBar; the board runs on the shared `BoardCamera`: tap the party or a revealed situation to lock it, tap empty board for FREE, drag, wheel, pinch and Z; the camera keeps its world point and zoom on live resize. |
 | Realm | Combat board | Objective, initiative, and controls remain capped while wide layouts expose more board; pan/zoom state is preserved where possible. |
 | Realm | Blocking events | Directive, prebattle, engagement, contact/conversation, situation, return-home, and Resolve surfaces use ModalHost above EchoBar. |
 | Onboarding | Invocation, Anansi Web, Forgotten Name, First Sanctum Encounter, Sanctum Naming, Keeper Intro | Safe frames, readable wrapping, reachable focus order, and bounded long content without adding Sanctum/Realm chrome. |

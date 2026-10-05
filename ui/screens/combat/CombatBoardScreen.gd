@@ -152,30 +152,17 @@ var _camera_needs_reset: bool     = true
 # Bark bubbles stay in screen space, so they are re-anchored whenever the camera view changes.
 var _last_canvas_xform: Transform2D = Transform2D.IDENTITY
 
-# Single-pointer tracking (mouse button / touch). A press records the origin; motion beyond
-# _DRAG_THRESHOLD is a drag that pans the camera. A release below the threshold is a board tap,
-# which selects the actor under it or, on empty board, releases the camera to FREE.
-var _drag_pointer_down: bool  = false
-var _drag_active: bool        = false
-var _drag_last_pos: Vector2   = Vector2.ZERO
-# The pointer that owns the interaction: "" (idle), _MOUSE_POINTER, or _touch_pointer(index).
-# project.godot enables emulate_touch_from_mouse, so ONE physical mouse drag delivers BOTH mouse
-# events AND a synthesized touch0 twin. Only the owner moves the drag; otherwise the delta
-# applies twice, or a pinch's two fingers mix into one drag.
-const _MOUSE_POINTER := "mouse"
-var _drag_source: String      = ""
-# Every finger down anywhere in the viewport, counted in _input() before the GUI pass. A second
-# finger on a row, card or button never reaches this root, but it still makes a pinch.
-var _touches_down: Dictionary = {}
-# The current interaction must not end as a tap: a pinch happened, or Space was held.
-var _drag_not_tap: bool       = false
-const _DRAG_THRESHOLD: float  = 8.0
+# Tells a board tap from a drag from a pinch. A tap selects the actor under it or, on empty board,
+# releases the camera to FREE. A drag pans the camera 1:1.
+var _pointer := BoardPointerTracker.new()
 
 # -------------------------
 # Lifecycle
 # -------------------------
 
 func _ready() -> void:
+	_pointer.tap.connect(_on_pointer_tap)
+	_pointer.drag_pan.connect(camera.drag_pan)
 	_back_button.visible = false
 	_back_button.pressed.connect(_on_back_pressed)
 
@@ -264,22 +251,15 @@ func _sync_world_visibility() -> void:
 	_world_layer.visible = shown
 	camera.enabled = shown
 	if not shown:
-		_reset_pointer_state()
+		_pointer.reset()
 
 
 # A release lost to a focus change would leave a finger counted or a drag owned, and board pan and
 # tap would stay dead. Both notifications are handled; the reset is idempotent.
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
-		_reset_pointer_state()
+		_pointer.reset()
 
-
-func _reset_pointer_state() -> void:
-	_touches_down.clear()
-	_drag_pointer_down = false
-	_drag_active       = false
-	_drag_source       = ""
-	_drag_not_tap      = false
 
 func _reset_transient_ui() -> void:
 	_step_timer.stop()
@@ -323,7 +303,7 @@ func _reset_presentation_state() -> void:
 	_last_pace_state = ""
 	# Fresh encounter → FREE camera at default zoom, nothing selected (ANSWERS.md #76).
 	_camera_needs_reset = true
-	_reset_pointer_state()
+	_pointer.reset()
 
 
 func _should_reset_presentation(data: Dictionary) -> bool:
@@ -1290,7 +1270,7 @@ func _on_board_tap(viewport_point: Vector2) -> void:
 		select_board_target(str(on_cell[0].get("id", "")))
 
 
-# Single-pointer drag and board tap (mouse button + touch).
+# Board tap and drag (mouse button + touch), tracked by BoardPointerTracker.
 #
 # ROUTING NOTE: this MUST live in _gui_input, not _unhandled_input. The screen root is a
 # full-rect Control with the default mouse_filter = STOP, so it consumes button/touch/motion
@@ -1299,108 +1279,18 @@ func _on_board_tap(viewport_point: Vector2) -> void:
 # only sees presses on open board. Pinch and two-finger pan are not handled here; they reach
 # BoardCameraController._unhandled_input.
 func _gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton:
-		var mb := event as InputEventMouseButton
-		if mb.button_index == MOUSE_BUTTON_LEFT:
-			if mb.pressed:
-				_begin_pointer_drag(mb.position, _MOUSE_POINTER)
-			elif _end_pointer_drag(mb.position, _MOUSE_POINTER):
-				accept_event()
-		return
-	elif event is InputEventScreenTouch:
-		var st := event as InputEventScreenTouch
-		if st.pressed:
-			_begin_pointer_drag(st.position, _touch_pointer(st.index))
-		elif _end_pointer_drag(st.position, _touch_pointer(st.index)):
-			accept_event()
-		return
-	elif event is InputEventMouseMotion:
-		var mm := event as InputEventMouseMotion
-		# Only pan while the left button is held down over the board.
-		if _drag_pointer_down and (mm.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
-			_update_pointer_drag(mm.position, _MOUSE_POINTER)
-			if _drag_active and _drag_source == _MOUSE_POINTER:
-				accept_event()
-		return
-	elif event is InputEventScreenDrag:
-		var sd := event as InputEventScreenDrag
-		if _drag_pointer_down:
-			_update_pointer_drag(sd.position, _touch_pointer(sd.index))
-			if _drag_active and _drag_source == _touch_pointer(sd.index):
-				accept_event()
-		return
-
-
-static func _touch_pointer(index: int) -> String:
-	return "touch%d" % index
+	if _pointer.handle_event(event):
+		accept_event()
 
 
 ## Counts fingers for the pinch rule. Never marks the event handled, so rows, cards and buttons
 ## still get their taps.
 func _input(event: InputEvent) -> void:
-	if not (event is InputEventScreenTouch):
-		return
-	var st := event as InputEventScreenTouch
-	if st.pressed:
-		# Index 0 starts a new gesture (the engine reuses the lowest free index), so anything still
-		# recorded is from a release that never arrived. Cost: if finger 0 lifts and lands again
-		# while another finger stays down, that other finger is forgotten.
-		if st.index == 0:
-			_reset_pointer_state()
-		_touches_down[st.index] = true
-		if _drag_pointer_down and _touches_down.size() > 1:
-			_drag_not_tap = true
-	else:
-		_touches_down.erase(st.index)
+	_pointer.note_touch(event)
 
 
-## Records a potential drag origin. Does NOT pan yet — panning only begins once the
-## pointer moves past _DRAG_THRESHOLD, so a stationary press is still a plain tap.
-## The first pointer down owns the interaction. A press from the owner itself re-seeds, so a
-## release that never arrived cannot leave the board stuck. Its emulated twin (mouse and touch0,
-## from emulate_touch_from_mouse / emulate_mouse_from_touch) and any other pointer are ignored.
-## Space+click is a pan gesture (the camera's Space drag is off in this scene), never a tap.
-func _begin_pointer_drag(pos: Vector2, source: String) -> void:
-	if _drag_pointer_down and _drag_source != source:
-		return
-	_drag_source       = source
-	_drag_pointer_down = true
-	_drag_active       = false
-	_drag_not_tap      = _touches_down.size() > 1 or Input.is_key_pressed(KEY_SPACE)
-	_drag_last_pos     = pos
-
-
-## Past the threshold, pans the camera by the full 2D delta. On a locked camera this pauses the
-## follow for the camera's manual_resume_delay. Only the owner moves the drag, and not while a
-## second finger is down anywhere; the origin still tracks the owner so the pan does not jump.
-func _update_pointer_drag(pos: Vector2, source: String) -> void:
-	if not _drag_pointer_down or _drag_source != source:
-		return
-	if _touches_down.size() > 1:
-		_drag_last_pos = pos
-		return
-	if not _drag_active:
-		if _drag_last_pos.distance_to(pos) < _DRAG_THRESHOLD:
-			return
-		_drag_active = true
-	var delta: Vector2 = pos - _drag_last_pos
-	_drag_last_pos = pos
-	camera.drag_pan(delta)
-
-
-## Ends the pointer interaction owned by source. A release that never became a drag, had no
-## second finger and no Space is a board tap. Returns true when the release belonged to the owner.
-func _end_pointer_drag(pos: Vector2, source: String) -> bool:
-	if not _drag_pointer_down or _drag_source != source:
-		return false
-	var was_tap := not _drag_active and not _drag_not_tap
-	_drag_pointer_down = false
-	_drag_active       = false
-	_drag_source       = ""
-	_drag_not_tap      = false
-	if was_tap:
-		_on_board_tap(get_global_transform_with_canvas() * pos)
-	return true
+func _on_pointer_tap(pos: Vector2) -> void:
+	_on_board_tap(get_global_transform_with_canvas() * pos)
 
 
 ## Recenter button: follow the living party's centroid until the player selects or taps away.

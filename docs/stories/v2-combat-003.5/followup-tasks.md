@@ -373,17 +373,6 @@ not just Claimant fights. The underlying duplication itself (`DebugController` r
 
 ---
 
-## 15. Camera does not handle very large (stretched) GUIDE_SPIRIT/PURSUE boards well
-
-**task_id:** `task_large_board_camera`
-
-**Why it came up:** Found during Jeff's Phase 8 in-game playtest of V2-COMBAT-003.5 (2026-09-26), while testing GUIDE_SPIRIT escort mode on a genuinely large stretched board (realm.02, escort mode, board stretched to include a spawn at col 98). Pre-existing UI/camera behavior, unrelated to this story's own subject. Jeff: file as follow-up, out of scope.
-
-**Opening prompt:**
-> In the Echoes vNext Godot/GDScript repo, GUIDE_SPIRIT and PURSUE combat boards can legitimately stretch 5x/4x on one axis (see follow-up task #14 and `core/combat/EncounterSetupService.gd` ~lines 334-362), producing boards up to roughly 90-100 cells long on the stretched axis. Jeff found during playtesting that the combat camera does not handle a board this large well — investigate the actual symptom (e.g. camera zoom/bounds clamped to a smaller assumed max board size, follow behavior breaking down, or visual/readability issues at extreme zoom-out) in whatever script owns combat camera bounds/follow (likely under `ui/screens/combat/` or a `CombatCamera`-named script — locate it first). Reproduce using the debug console: `combat_objective guide_spirit escort nojoin`, then enter a combat encounter on a realm whose virtue produces a well-filled stretched board (e.g. wisdom), and observe camera behavior as the spirit escort/party traverses the long axis. Propose a fix scoped to camera-only (do not touch board generation, which is task #14's subject). This is likely a design/feel question (how should the camera behave on an extreme-aspect-ratio board) as much as a code fix — loop in game-feel-developer.
-
----
-
 ## 16. Redesign the initiative panel for phones
 
 **task_id:** `task_initiative_panel_phone`
@@ -484,3 +473,48 @@ not just Claimant fights. The underlying duplication itself (`DebugController` r
 > Test plan: run a real-input test. On `flow.summon`, a Space+LMB drag must not move the camera.
 >
 > Acceptance: on every Sanctum sub-screen, camera pan and zoom input does not move the board behind it. On the board view, camera input works as before.
+
+---
+
+## 25. Sanctum press classifier does not walk AppRoot's OverlayRoot
+
+**task_id:** `task_sanctum_press_walk_overlayroot`
+
+**Why it came up:** Found by qa-verifier in Story 3 phase C, 2026-10-04. Developer-only surface. Jeff approved filing it. Severity low. Status: not started.
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo: `SanctumShell._classify_press` (`ui/shells/SanctumShell.gd:383`) walks only `_ui_layer`, `_chrome_layer` and `_notification_layer` (line 385). The `OverlayRoot` `CanvasLayer` in `ui/AppRoot.tscn` (line 93) is not walked. It holds the F1 debug console (`DebugOverlay`, `DebugInput` a `LineEdit`, `DebugSend` a `Button`) and `SaveRecoveryNotice`. A press on those controls therefore counts as open board (`_PressHit.OPEN_BOARD`). It can start a board tap or pan, and the owner's release is consumed in `_input`. Decide how the classifier should see controls outside the Sanctum layers (for example, treat any visible, non-ignoring Control under the hovered viewport control as a hit). Keep the board view unchanged.
+>
+> Test plan: run a real-input test with the F1 console open. A press on `DebugInput` and a press on `DebugSend` must start no board tap and no pan.
+>
+> Acceptance: a press on any `OverlayRoot` control starts nothing on the board. The Sanctum board view behaves as before. The `sanctum` and `board_camera` suites stay green.
+
+---
+
+## 26. Stage creates SituationMarkerDraw with Node.new and add_child
+
+**task_id:** `task_stage_situation_marker_node_new`
+
+**Why it came up:** Found by ui-ux-designer research for Story 3. The code is older than Story 3. It was not fixed in Story 3 on purpose (Story 3 plan, out-of-scope list). Severity low. Status: not started.
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo: `ui/screens/venture/StageExploreScreen.gd` creates explore markers with `SituationMarkerDraw.new()` (line 1043) and `_situation_layer.add_child(marker)` (line 1047). This breaches `ui/AGENTS.md`, which forbids `Node.new()` and `add_child()` in `.gd` files under `ui/` ("build structure in .tscn"). Line 1013 has another `add_child(marker)` in a different code path; check whether it also breaks the rule. Replace the creation with an instance of a `.tscn` template (for example a `SituationMarkerDraw.tscn`) so the `.gd` has no `Node.new()`. Keep the marker behaviour the same. Load the `game-ui-ux-echoes` skill first.
+>
+> Test plan: run `-- tests seam` and `-- tests explore`. Then play a stage and check that markers appear, reveal and resolve as before.
+>
+> Acceptance: markers come from a scene instance (a `.tscn` template). The `.gd` has no `Node.new()` for markers. The seam tests stay green.
+
+---
+
+## 27. Stage party_preview rows carry no echo id
+
+**task_id:** `task_stage_party_preview_echo_ids`
+
+**Why it came up:** Found during Story 3 planning, 2026-10-04. Jeff chose option a (D5): every echo card on Stage sends `""` and means the party. This item is option b. It is not needed while Stage shows one party token. Severity low. Status: not started.
+
+**Opening prompt:**
+> In the Echoes vNext Godot/GDScript repo: the `party_preview` rows on Stage carry no `id`. Rows are built with `name`, `rank`, `calling_origin` and `emotional_status` only. See `core/state/flow/states/venture/FlowStageState.gd` (lines 84-97) and `core/state/flow/states/venture/StageExploreSnapshotBuilder.gd` (lines 256-275). `FlowStageMapState.gd` (line 153) builds a similar row without an id; check whether it needs the same change. Every Stage echo card therefore sends `""`, and `select_board_target("")` means the party. Option b: core adds the real echo `id` to each `party_preview` row, so a card can address one echo later. This is `core/` work and must come first (backend before frontend): start with `mechanics-developer`, then update snapshot tests. Do not change `EchoCardItem` or `select_board_target` behaviour for `""`. Do not show ids to the player.
+>
+> Test plan: run the snapshot tests for the Stage state and the explore snapshot builder, then `-- tests seam` and `-- tests explore`.
+>
+> Acceptance: `party_preview` rows carry `id`. Snapshot tests are updated. `EchoCardItem` and `select_board_target` behaviour for `""` is unchanged. No id appears in the player-facing display.

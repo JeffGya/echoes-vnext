@@ -46,7 +46,11 @@ var _cached_nav: Dictionary = {}
 # SanctumShell.tscn (decisions.md #95).
 const _DEFAULT_ZOOM := 2.0 # decisions.md #71
 
-var _last_pointer_pos := Vector2.ZERO
+# Tells a board tap from a drag from a pinch. Fed from _input because the STOP chrome over the
+# board takes presses before any Control on the board could see them.
+var _pointer := BoardPointerTracker.new()
+# False when the press that started the gesture landed on a panel: a drag there pans nothing.
+var _drag_pans := true
 var _current_snap_type := ""
 var _echo_detail_open := false
 var _featured_echo_id := ""
@@ -122,6 +126,8 @@ var _modal_scene_by_id: Dictionary = {
 }
 
 func _ready() -> void:
+	_pointer.tap.connect(_on_pointer_tap)
+	_pointer.drag_pan.connect(_on_pointer_drag_pan)
 	_scene_by_flow_type = {
 		"flow.sanctum": _sanctum_scene,
 		"flow.summon": _summon_scene,
@@ -159,10 +165,20 @@ func _sync_ui_layer_visibility() -> void:
 	# Disable it when SanctumShell is hidden so it does not affect the viewport
 	# while RealmShell (or any other screen) is active.
 	camera.enabled = effective_visible
+	if not effective_visible:
+		_pointer.reset()
+
+
+# A release lost to a focus change would leave a finger counted or a drag owned.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_pointer.reset()
 
 
 func set_snapshot(snap: Dictionary) -> void:
 	_current_snap_type = str(snap.get("type", ""))
+	if _current_snap_type != "flow.sanctum":
+		_pointer.reset()
 	# The board view (and its echo detail) guards Space; Summon, Vows, Weaving and Echo Party need
 	# Space on their own buttons.
 	camera.guard_space_on_buttons = _current_snap_type == "flow.sanctum"
@@ -326,36 +342,78 @@ func _update_notification_layout() -> void:
 	if _notification_body_scroll != null:
 		_notification_body_scroll.custom_minimum_size.y = 72.0 if profile == &"compact" else 88.0
 
+enum _PressHit { OPEN_BOARD, PANEL, INTERACTIVE }
+
+# Space+drag stays with BoardCameraController (space_drag_pan), so a Space press never starts a gesture here.
 func _input(event: InputEvent) -> void:
-	if not _can_accept_spatial_pointer_input():
+	if not is_visible_in_tree():
 		return
-	if not (event is InputEventMouseButton):
+	_pointer.note_touch(event)
+	if _is_primary_press(event) and not _begin_board_press(_event_position(event)):
 		return
-	var mb := event as InputEventMouseButton
-	if not mb.pressed or mb.button_index != MOUSE_BUTTON_LEFT:
-		return
-	if Input.is_key_pressed(KEY_SPACE):
-		return
-	if _control_or_ancestor_is_interactive(get_viewport().gui_get_hovered_control()):
-		return
-
-	if _echo_detail_open:
-		if _try_switch_or_close_echo_detail_at_viewport_point(mb.position):
-			get_viewport().set_input_as_handled()
-		return
-
-	if _placement_mode:
-		# _input() fires before GUI/mouse_filter processing, so placement taps are
-		# caught here regardless of what Controls are in the scene tree.
-		# Use gui_get_hover_control() to detect when the cursor is over a UI button
-		# (Cancel, Confirm, strip) and let it handle its own click via _gui_input.
-		if _try_placement_tap(mb.position):
-			get_viewport().set_input_as_handled()
-		return
-
-	# Normal mode: check hit, route by kind.
-	if _try_open_occupant_at_viewport_point(mb.position):
+	if _pointer.handle_event(event):
 		get_viewport().set_input_as_handled()
+
+
+static func _event_position(event: InputEvent) -> Vector2:
+	if event is InputEventMouse:
+		return (event as InputEventMouse).position
+	return (event as InputEventScreenTouch).position
+
+
+static func _is_primary_press(event: InputEvent) -> bool:
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		return mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT
+	return event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed
+
+
+# True when a press may start a tap or drag. A press on a button, field or other control that takes
+# input never does; a press on a panel can tap but not pan.
+func _begin_board_press(point: Vector2) -> bool:
+	if not _can_accept_spatial_pointer_input() or Input.is_key_pressed(KEY_SPACE):
+		return false
+	var hit := _classify_press(point)
+	_drag_pans = hit == _PressHit.OPEN_BOARD
+	return hit != _PressHit.INTERACTIVE
+
+
+# Walks the visible chrome instead of asking the viewport for its hovered control: a touch press
+# arrives before the hover has moved to it.
+func _classify_press(point: Vector2) -> int:
+	var result: int = _PressHit.OPEN_BOARD
+	var pending: Array[Node] = [_ui_layer, _chrome_layer, _notification_layer]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		var control := node as Control
+		if control != null:
+			if not control.visible:
+				continue
+			var local := control.get_global_transform_with_canvas().affine_inverse() * point
+			var inside := Rect2(Vector2.ZERO, control.size).has_point(local)
+			if control.clip_contents and not inside:
+				continue
+			if inside and control.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+				if _control_or_ancestor_is_interactive(control):
+					return _PressHit.INTERACTIVE
+				if control is PanelContainer or control is Panel or control is ScrollContainer or control is ColorRect:
+					result = _PressHit.PANEL
+		pending.append_array(node.get_children())
+	return result
+
+
+func _on_pointer_tap(pos: Vector2) -> void:
+	if _echo_detail_open:
+		_try_switch_or_close_echo_detail_at_viewport_point(pos)
+	elif _placement_mode:
+		_try_placement_tap(pos)
+	else:
+		_try_open_occupant_at_viewport_point(pos)
+
+
+func _on_pointer_drag_pan(screen_delta: Vector2) -> void:
+	if _drag_pans:
+		camera.drag_pan(screen_delta)
 
 func _can_accept_spatial_pointer_input() -> bool:
 	if _blocking_modal_active_check.is_valid() and bool(_blocking_modal_active_check.call()):
@@ -712,14 +770,10 @@ func _enter_placement_mode(inst_id: String, valid_cells: Array, floor_cells: Arr
 	_placement_valid_cells    = valid_cells
 	_placement_floor_cells    = floor_cells
 	_placement_occupied_cells = occupied_cells
-	# Allow map taps to reach _unhandled_input. Three Control layers would
-	# otherwise consume every click before _unhandled_input fires:
-	#   1. UILayer/Control (full-screen, STOP by default)
-	#   2. SanctumScreen overlay (full-screen, STOP by default)
-	#   3. WorldLayer/SpatialLayer (full-screen Control, STOP by default)
-	# Setting all three to PASS lets clicks on empty map space fall through.
-	# Buttons inside the overlay (Cancel, Confirm, strip) keep their own STOP
-	# filter and continue to capture their own clicks correctly.
+	# Placement taps and drags reach the pointer tracker through _input and _classify_press, before
+	# the GUI pass, so a cell pick does not depend on these layers. They are still set to PASS, so neither
+	# full-screen Control (UILayer/Control, the overlay) consumes a press on open map.
+	# Buttons inside the overlay (Cancel, Confirm, strip) keep STOP and take their own clicks.
 	if _overlay_container != null:
 		_overlay_container.mouse_filter = Control.MOUSE_FILTER_PASS
 	if _active_overlay != null:

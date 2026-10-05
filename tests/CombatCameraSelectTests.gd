@@ -63,6 +63,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("combat_camera/wheel_free_zooms_toward_pointer",         Callable(CombatCameraSelectTests, "_t_wheel_free_zooms_toward_pointer"))
 	runner.register_test("combat_camera/wheel_locked_keeps_target_centred",       Callable(CombatCameraSelectTests, "_t_wheel_locked_keeps_target_centred"))
 	runner.register_test("combat_camera/sanctum_wheel_uses_shared_rule",        Callable(CombatCameraSelectTests, "_t_sanctum_wheel_uses_shared_rule"))
+	runner.register_test("combat_camera/tap_uses_viewport_point_when_screen_is_offset", Callable(CombatCameraSelectTests, "_t_tap_uses_viewport_point_when_screen_is_offset"))
 
 
 # ---------------------------------------------------------------------------
@@ -1379,8 +1380,7 @@ static func _t_second_finger_on_chrome_stops_pan() -> Dictionary:
 	_push_touch(vp, 1, b + Vector2(30, 0), false)
 	var mode := cam.mode
 	var target := cam.target_id
-	var down: Dictionary = combat.get("_touches_down")
-	var leftover := down.size()
+	var leftover := (combat.get("_pointer") as BoardPointerTracker).finger_count()
 	vp.free()
 	if not moved.is_zero_approx():
 		return { "ok": false, "error": "Finger 0 kept panning while finger 1 was on a row (moved %s)" % moved }
@@ -1631,12 +1631,12 @@ static func _t_app_root_rerender_keeps_drag() -> Dictionary:
 		move.relative = Vector2(20, 0)
 		move.button_mask = MOUSE_BUTTON_MASK_LEFT
 		root.push_input(move, true)
-		if not bool(combat.get("_drag_active")):
+		if not (combat.get("_pointer") as BoardPointerTracker).is_drag_active():
 			errors.append("Drag did not start on the board in the root viewport; premise failed")
 		else:
 			# Second snapshot of the same encounter, as auto-play sends every actor step.
 			app.call("_render_snapshot", _snapshot(env))
-			var still_down := bool(combat.get("_drag_pointer_down")) and bool(combat.get("_drag_active"))
+			var still_down := (combat.get("_pointer") as BoardPointerTracker).is_pointer_down() and (combat.get("_pointer") as BoardPointerTracker).is_drag_active()
 			var cam_before := combat.camera.position
 			var move2 := move.duplicate() as InputEventMouseMotion
 			move2.position = start + Vector2(60, 0)
@@ -1653,7 +1653,7 @@ static func _t_app_root_rerender_keeps_drag() -> Dictionary:
 			app.call("_render_snapshot", previous_snap)
 			if realm.visible:
 				errors.append("Leaving did not hide RealmShell; premise failed")
-			elif bool(combat.get("_drag_pointer_down")) or not (combat.get("_touches_down") as Dictionary).is_empty():
+			elif (combat.get("_pointer") as BoardPointerTracker).is_pointer_down() or (combat.get("_pointer") as BoardPointerTracker).finger_count() != 0:
 				errors.append("Leaving the screen did not reset the pointer state")
 		var release := press.duplicate() as InputEventMouseButton
 		release.pressed = false
@@ -1782,7 +1782,7 @@ static func _t_lost_touch_release_does_not_block_board() -> Dictionary:
 	_push_touch(vp, 0, a, true)
 	_push_touch(vp, 1, a + Vector2(40, 0), true)
 	_push_touch(vp, 0, a, false)
-	var stuck := (combat.get("_touches_down") as Dictionary).size()
+	var stuck := (combat.get("_pointer") as BoardPointerTracker).finger_count()
 	var target := _living_echoes(fx)[1] as Dictionary
 	var point := _frame_token(fx, target, Vector2(120, 40))
 	_push_touch(vp, 0, point, true)
@@ -1993,3 +1993,35 @@ static func _t_quick_second_z_steps_from_target() -> Dictionary:
 		return { "ok": false, "error": "Two quick Z presses from 1.3 ended at %s, want 2.0" % end }
 	return { "ok": true }
 
+
+# The tracker reports the position local to the screen. The tap must select with the viewport
+# point, so a screen that does not start at the viewport origin still hits the right cell.
+static func _t_tap_uses_viewport_point_when_screen_is_offset() -> Dictionary:
+	var fx := _make_fixture(EncounterResolutionModes.COMBAT)
+	if fx.is_empty():
+		return { "ok": false, "error": "Fixture failed" }
+	var vp := fx["viewport"] as SubViewport
+	var cam := fx["camera"] as BoardCameraController
+	var combat := fx["combat"] as CombatBoardScreen
+	var echo := _living_echoes(fx)[0] as Dictionary
+	combat.position += Vector2(100, 0)
+	var point := _frame_token(fx, echo, Vector2(160, 60))
+	var local_x := point.x - combat.get_global_transform_with_canvas().origin.x
+	if not is_equal_approx(point.x - local_x, 100.0):
+		vp.free()
+		return { "ok": false, "error": "Screen is not offset by 100; premise failed" }
+	_tap(vp, point)
+	var mouse_mode := cam.mode
+	var mouse_target := cam.target_id
+	cam.deselect()
+	_push_touch(vp, 0, point, true)
+	_push_touch(vp, 0, point, false)
+	var touch_mode := cam.mode
+	var touch_target := cam.target_id
+	vp.free()
+	var want := str(echo.get("id", ""))
+	if mouse_mode != BoardCameraController.Mode.FOLLOW_ACTOR or mouse_target != want:
+		return { "ok": false, "error": "Mouse tap on an offset screen did not select (mode %d, target '%s')" % [mouse_mode, mouse_target] }
+	if touch_mode != BoardCameraController.Mode.FOLLOW_ACTOR or touch_target != want:
+		return { "ok": false, "error": "Touch tap on an offset screen did not select (mode %d, target '%s')" % [touch_mode, touch_target] }
+	return { "ok": true }

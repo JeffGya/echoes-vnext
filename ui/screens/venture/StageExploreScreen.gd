@@ -1,14 +1,18 @@
 # res://ui/screens/venture/StageExploreScreen.gd
 # Merged screen for both flow.stage (preview mode) and flow.stage_explore (explore mode).
-# Single Board TileMapLayer is shared across both modes — no scene swap occurs.
+# One Board TileMapLayer serves both modes; no scene swap occurs. The board, fog, situation markers
+# and party token live in WorldLayer/BoardRoot, a CanvasLayer that follows the viewport camera.
 #
 # Preview mode  (snap.type == "flow.stage"):
-#   Board scaled to fit screen; all situations hidden as grey ?-circles; directive overlay shown.
-#   Begin button triggers zoom tween → emits cta.start → backend transitions to flow.stage_explore.
+#   The camera is off. BoardRoot is scaled and placed to fit the safe body; every situation is a grey
+#   ?-circle at a fixed screen size; the directive overlay shows. Begin zooms BoardRoot x3, then emits
+#   cta.start and the backend moves to flow.stage_explore.
 #
 # Explore mode (snap.type == "flow.stage_explore"):
-#   Board at 1:1 scale. Travel animation: board scrolls to follow party (_travel_tween);
-#   SituationLayer tracks board.position each frame via _process() so markers move with it.
+#   BoardRoot sits centred on the world origin at scale 1 and the shared BoardCameraController
+#   (ui/shared/BoardCamera.gd) shows it: tap to lock the party or a situation, tap empty board to go
+#   FREE, drag to pan, wheel/pinch/Z to zoom. Advance locks the party; the camera follows it cell by
+#   cell during the walk and stays locked after it.
 #   Engagement popup offers "Enter" and "Pass"; Pass auto-advances to next situation.
 #   Situation shapes differentiate type: combat=square, shrine=triangle, loot/money=diamond, other=circle.
 #   Resolved objectives are gold; resolved encounters are grey.
@@ -53,13 +57,15 @@ const _PREVIEW_INFO_SEPARATION := 16.0
 const _ZOOM_DURATION:  float = 0.35
 const _ZOOM_SCALE_MUL: float = 3.0
 
-# ─── Explore initial scale ────────────────────────────────────────────────────
-# At 1:1 scale on a 30×30 map the board far exceeds the screen and only the
-# party's immediate neighbours are visible — the surrounding void that defines
-# the island silhouette is off-screen. A modest zoom-out reveals the terrain
-# shape around the party's starting area without losing the sense of traversal.
-# Applied on first entry (not on subsequent advance-turn snapshot updates).
-const _EXPLORE_INITIAL_SCALE: float = 0.55
+# ─── Explore camera zoom (same numbers as CombatBoardScreen; decisions.md #70, #71) ──────────
+# min_zoom derives from the real board span so the whole board fits at full zoom-out.
+const _ZOOM_FIT_FACTOR: float  = 0.90
+const _ZOOM_MIN_FLOOR: float   = 0.05
+const _ZOOM_MIN_CEILING: float = 0.35
+const _ZOOM_MAX: float         = 2.2
+const _ZOOM_DEFAULT: float     = 1.3
+# Camera target ids. Any echo card and a tap on the party both mean the party.
+const _PARTY_TARGET := "party"
 
 # ─── Travel animation ─────────────────────────────────────────────────────────
 const _TRAVEL_DURATION: float = 0.5
@@ -78,6 +84,7 @@ var _preview_scale:  float   = 1.0
 var _preview_center: Vector2 = Vector2.ZERO
 var _is_zooming:     bool    = false
 var _preview_transition_tween: Tween = null
+var _preview_fade_tween: Tween = null
 
 # ─── Situation marker tracking ────────────────────────────────────────────────
 var _situation_markers: Array = []
@@ -131,23 +138,27 @@ var _pending_overlay_actions: Dictionary = {}
 var _last_paint_key: String = ""
 
 # ─── @onready refs ────────────────────────────────────────────────────────────
-@onready var _board:              TileMapLayer   = $Board
-@onready var _fog_layer:          TileMapLayer   = $FogLayer
+# WorldLayer.follow_viewport_enabled (in the .tscn) is what lets the Camera2D move the board.
+# Without it the camera changes only the viewport canvas transform, which a CanvasLayer ignores.
+@onready var _world_layer:        CanvasLayer    = $WorldLayer
+# Content is centred on the world origin in explore mode, because the camera bounds are symmetric about it.
+@onready var _board_root:         Node2D         = %BoardRoot
+@onready var camera:              BoardCameraController = %BoardCamera
+@onready var _board:              TileMapLayer   = %Board
+@onready var _fog_layer:          TileMapLayer   = %FogLayer
 # V2-COMBAT-003 terrain commit 4 (decision 16) — a bridge is its own tile. A CHILD of Board,
 # so it inherits every pan/zoom/preview transform with no sync code, and it draws a tinted
 # overlay ON TOP of the ordinary ground tile rather than replacing it. FogLayer is a later
 # SIBLING of Board, so fog still darkens a bridge exactly as it darkens any other ground.
 # The tint is a PLACEHOLDER for the real bridge art.
-@onready var _bridge_layer:       TileMapLayer   = $Board/BridgeLayer
-@onready var _situation_layer:    Node2D         = $SituationLayer
-# Preview-mode marker templates (Control nodes, absolute screen-space positioning)
-@onready var _hidden_template:    Control        = $SituationLayer/HiddenMarkerTemplate
-@onready var _revealed_template:  Control        = $SituationLayer/RevealedMarkerTemplate
-@onready var _resolved_template:  Control        = $SituationLayer/ResolvedMarkerTemplate
-@onready var _party_layer:        Node2D         = $PartyTokenLayer
-# V2-STAGE-004 P5: board-local ghost trail, authored as a child of Board in the scene so
-# ghosts inherit the board's transform (position + scale) and scroll with the terrain
-# during travel — see GhostFootprintLayer.gd.
+@onready var _bridge_layer:       TileMapLayer   = %BridgeLayer
+@onready var _situation_layer:    Node2D         = %SituationLayer
+# Preview-mode marker templates (Control nodes)
+@onready var _hidden_template:    Control        = %HiddenMarkerTemplate
+@onready var _revealed_template:  Control        = %RevealedMarkerTemplate
+@onready var _resolved_template:  Control        = %ResolvedMarkerTemplate
+@onready var _party_layer:        Node2D         = %PartyTokenLayer
+# Board-local ghost trail, a child of Board so ghosts stay glued to the terrain.
 @onready var _ghost_layer:        Node2D         = %GhostFootprintLayer
 @onready var _hud_strip:          PanelContainer = $HudStrip
 @onready var _turn_label:         Label          = %TurnLabel
@@ -217,9 +228,23 @@ var _layout: Dictionary = {}
 var _current_mode: StringName = &""
 var _current_map_size: Vector2i = Vector2i.ZERO
 
+# ─── Board camera state ───────────────────────────────────────────────────────
+# Tells a board tap from a drag from a pinch (explore mode only).
+var _pointer := BoardPointerTracker.new()
+# Unscaled visual extent of the painted board in pixels.
+var _board_span_px: Vector2 = Vector2(1280.0, 640.0)
+var _party_cell: Vector2i = Vector2i(-1, -1)
+# situation_id → cell, for the revealed situations of the latest explore snapshot.
+var _situation_cells: Dictionary = {}
+# World position the party token is at or walking to. A travel pushes it once per segment cell.
+var _party_follow_world: Vector2 = Vector2.ZERO
+var _last_bark_anchor: Vector2 = Vector2.INF
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
+	_pointer.tap.connect(_on_pointer_tap)
+	_pointer.drag_pan.connect(camera.drag_pan)
 	_hidden_template.visible   = false
 	_revealed_template.visible = false
 	_resolved_template.visible = false
@@ -253,68 +278,33 @@ func _ready() -> void:
 	_directive_overlay.action_requested.connect(_on_overlay_action)
 	_disengage_btn.pressed.connect(_on_disengage_pressed)
 	_confirm_selection_btn.pressed.connect(_on_confirm_selection_pressed)
-	visibility_changed.connect(_sync_transient_visibility)
-	_sync_transient_visibility()
+	visibility_changed.connect(_sync_world_visibility)
+	_sync_world_visibility()
 
 func set_layout(layout: Dictionary) -> void:
-	var previous_layout := _layout.duplicate(true)
-	var preserve_explore_focus := (
-		_current_mode == &"explore"
-		and _board != null
-		and not is_zero_approx(_board.scale.x)
-	)
-	var focused_world_point := Vector2.ZERO
-	if preserve_explore_focus:
-		var old_focus := _explore_spatial_rect(previous_layout).get_center()
-		focused_world_point = (old_focus - _board.position) / _board.scale.x
 	_layout = layout.duplicate(true)
 	_apply_responsive_layout()
 	# Preview is a fit-to-safe-body composition, so live profile changes refit it.
 	if _current_mode == &"preview" and _current_map_size.x > 0 and _current_map_size.y > 0:
 		_build_preview(_current_map_size.x, _current_map_size.y)
-	elif preserve_explore_focus:
-		var new_focus := _explore_spatial_rect(_layout).get_center()
-		_board.position = new_focus - focused_world_point * _board.scale.x
-		_clamp_explore_board_to_spatial_rect()
-		_sync_fog_layer()
-		_sync_situation_layer()
-		_party_layer.call("init_position", new_focus)
+	elif _current_mode == &"explore" and camera != null:
+		# The viewport may have changed, and min_zoom depends on it. The camera keeps its world point
+		# and the player's zoom.
+		var min_zoom := _min_zoom_for_span(_board_span_px)
+		camera.configure_zoom_range(min_zoom, _ZOOM_MAX, clampf(camera.zoom.x, min_zoom, _ZOOM_MAX))
+		camera.reclamp()
 
 
+# The bark bubble is screen-space, so it follows the token only if it is re-anchored when the token
+# or the camera moves.
 func _process(_delta: float) -> void:
-	# During board scroll, keep situation markers locked to the board by mirroring
-	# the board's current position (and scale) onto the situation layer each frame.
-	if _travel_tween != null and _travel_tween.is_valid():
-		_sync_situation_layer()
-		# Party token is screen-locked at centre during travel; keep the bark bubble
-		# pinned to it so it reads as coming from the moving party.
-		if _bark_layer != null:
-			var sc := get_viewport_rect().size * 0.5
-			_bark_layer.call("update_actor_positions", { "party": sc })
-	# Keep fog layer in sync with board at all times (position + scale must match).
-	_sync_fog_layer()
-
-
-# Sync fog layer position and scale to match the board exactly.
-# Called from _process() and after any explicit board position/scale change.
-func _sync_fog_layer() -> void:
-	if _fog_layer == null:
+	if _current_mode != &"explore" or _bark_layer == null or not is_visible_in_tree():
 		return
-	_fog_layer.position = _board.position
-	_fog_layer.scale    = _board.scale
-
-
-# Sync situation marker layer position and scale to match the board exactly.
-# Markers are placed in board-local tile space so the layer must share the board's
-# full transform (position + scale) for markers to land on the correct screen pixels.
-# Called from _process() and after any explicit board position/scale change in explore mode.
-# NOTE: in preview mode the situation layer stays at (0,0) / scale(1,1) because
-# _rebuild_situations_preview uses _board_to_screen() which manually applies the transform.
-func _sync_situation_layer() -> void:
-	if _situation_layer == null:
+	var anchor := _party_bark_anchor()
+	if anchor == _last_bark_anchor:
 		return
-	_situation_layer.position = _board.position
-	_situation_layer.scale    = _board.scale
+	_last_bark_anchor = anchor
+	_bark_layer.call("update_actor_positions", { "party": anchor })
 
 
 # ─── Bespoke Screen Contract ─────────────────────────────────────────────────
@@ -337,6 +327,11 @@ func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 	_cancel_preview_transition()
 	_is_zooming = false
 	_current_mode = &"preview"
+	# Coming back to preview means the next explore entry is a first entry again.
+	_last_party_col = -1
+	_last_party_row = -1
+	_pointer.reset()
+	_sync_world_visibility()
 	_stage_info.modulate = Color.WHITE
 	_stage_info.mouse_filter = Control.MOUSE_FILTER_STOP
 	_back_btn.modulate = Color.WHITE
@@ -353,9 +348,6 @@ func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 	_fill_board(cols, rows, data, "preview")
 	_build_preview(cols, rows)
 
-	# Situation layer in absolute screen-space for preview (board does not scroll here).
-	_situation_layer.position = Vector2.ZERO
-
 	var raw_sits: Variant = data.get("map_situations", [])
 	var map_sits: Array   = raw_sits if raw_sits is Array else []
 	_rebuild_situations_preview(map_sits)
@@ -363,7 +355,8 @@ func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 	var entry_v: Variant    = data.get("map_entry_pos", { "col": 0, "row": 0 })
 	var entry: Dictionary   = entry_v if entry_v is Dictionary else { "col": 0, "row": 0 }
 	var entry_local: Vector2 = _board.map_to_local(Vector2i(int(entry.get("col", 0)), int(entry.get("row", 0))))
-	_party_layer.call("init_position", _board_to_screen(entry_local))
+	_party_layer.call("set_token_scale", 1.0 / maxf(_board_root.scale.x, 0.0001))
+	_party_layer.call("init_position", entry_local)
 
 	_stage_title.text = str(data.get("stage_name", "Stage"))
 	var obj_count := int(data.get("objective_count", 0))
@@ -427,9 +420,15 @@ func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 			"directive": dir_data.duplicate(true),
 		})
 
+	# modulate on this Control does not reach the WorldLayer, so the board fades with it.
 	modulate = Color(1, 1, 1, 0)
-	var tween := create_tween()
-	tween.tween_property(self, "modulate", Color(1, 1, 1, 1), 0.25)
+	_board_root.modulate = Color(1, 1, 1, 0)
+	if _preview_fade_tween != null and _preview_fade_tween.is_valid():
+		_preview_fade_tween.kill()
+	_preview_fade_tween = create_tween()
+	_preview_fade_tween.set_parallel(true)
+	_preview_fade_tween.tween_property(self, "modulate", Color(1, 1, 1, 1), 0.25)
+	_preview_fade_tween.tween_property(_board_root, "modulate", Color(1, 1, 1, 1), 0.25)
 
 
 # ─── Explore mode ─────────────────────────────────────────────────────────────
@@ -457,112 +456,101 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 	var pcol := int(ppos.get("col", 0))
 	var prow := int(ppos.get("row", 0))
 
-	# On first entry (coming from preview), use a modest zoom-out so the island
-	# silhouette and surrounding void are visible around the party's start.
-	# On subsequent advance-turn updates keep whatever scale the player has set
-	# (pinch-zoom state is preserved in _board.scale between snapshot updates).
+	var party_cell := Vector2i(pcol, prow)
+	var prev_cell := Vector2i(_last_party_col, _last_party_row)
 	var is_first_entry := (_last_party_col < 0)
-	if is_first_entry:
-		_board.scale = Vector2(_EXPLORE_INITIAL_SCALE, _EXPLORE_INITIAL_SCALE)
-		_sync_fog_layer()
-		_sync_situation_layer()
-	# else: do not reset scale — preserve the player's current zoom level
-
-	var board_scale   := _board.scale.x
-	var party_local   := _board.map_to_local(Vector2i(pcol, prow))
-	var screen_size   := get_viewport_rect().size
-	var screen_center := Vector2(screen_size.x * 0.5, screen_size.y * 0.5)
-	var board_target  := screen_center - party_local * board_scale
-
-	var is_travel := (not is_first_entry) and (pcol != _last_party_col or prow != _last_party_row)
+	var is_travel := (not is_first_entry) and party_cell != prev_cell
 	_last_party_col = pcol
 	_last_party_row = prow
+	_party_cell = party_cell
 
-	# Situation markers rebuild before the tween so they are correctly positioned
-	# at the start of the scroll. _process() will move them each frame during travel.
+	_board_root.modulate = Color.WHITE
+	_frame_world()
+	_party_layer.call("set_token_scale", 1.0)
+	_sync_world_visibility()
+	var party_local := _board.map_to_local(party_cell)
+	var party_world := _board.to_global(party_local)
+
+	# First entry (from preview, and after every combat that rebuilt this screen): centre on the
+	# party at the default zoom, FREE.
+	if is_first_entry:
+		camera.deselect()
+		camera.configure_zoom_range(_min_zoom_for_span(_board_span_px), _ZOOM_MAX, _ZOOM_DEFAULT)
+		camera.position = party_world
+		camera.reclamp()
+
 	var sits_v: Variant   = data.get("situations", [])
 	var situations: Array = sits_v if sits_v is Array else []
+	_rebuild_situations(situations)
 
 	if is_travel:
 		if _travel_tween != null and _travel_tween.is_valid():
 			_travel_tween.kill()
 
-		# Situation layer anchored to current (pre-scroll) board position + scale.
-		# _process() will sync its full transform to the board each frame during the tween.
-		_sync_situation_layer()
-		_rebuild_situations(situations)
+		# An Advance locks the camera on the party. The lock stays after the walk, until the player
+		# taps away.
+		camera.select(_PARTY_TARGET)
 
-		_travel_tween = create_tween()
-		_travel_tween.set_ease(Tween.EASE_IN_OUT)
-		_travel_tween.set_trans(Tween.TRANS_SINE)
-
-		# V2-STAGE-004-P2: chained tween through each cell in traveled_path so the board
-		# scroll follows the walkable route and never cuts across void.
-		# V2-COMBAT-002 slice 5: traveled_path is now DESTINATIONS ONLY (one entry per cell
-		# entered, origin excluded); the departure cell arrives separately as traveled_origin.
-		# Segment count is therefore traveled_path.size() — unchanged from the old
-		# (origin-prefixed size) - 1, so timing, ghost trail, and diamond count are identical.
-		# Segment duration = _TRAVEL_DURATION / segment_count so total time is unchanged.
+		# V2-COMBAT-002 slice 5: traveled_path is DESTINATIONS ONLY (one entry per cell entered,
+		# origin excluded); the departure cell arrives separately as traveled_origin.
 		var tp_v: Variant = data.get("traveled_path", [])
 		var traveled_path: Array = tp_v if tp_v is Array else []
 		var to_v: Variant = data.get("traveled_origin", {})
 		var traveled_origin: Dictionary = to_v if to_v is Dictionary else {}
-		# Note: board_scale is already declared above in this function scope.
+		var origin_cell := prev_cell
+		if not traveled_origin.is_empty():
+			origin_cell = Vector2i(int(traveled_origin.get("col", 0)), int(traveled_origin.get("row", 0)))
+		var origin_local := _board.map_to_local(origin_cell)
+		_party_layer.call("init_position", origin_local)
+		_party_follow_world = _board.to_global(origin_local)
 
-		# Only use the chained path when at least one step was actually walked.
+		# The tween only sequences the walk: the party token, the follow target, the ghost trail and
+		# the step diamonds. It never writes the camera, so it cannot fight the camera's own follow.
+		_travel_tween = create_tween()
 		if traveled_path.size() >= 1:
 			var seg_count: int = traveled_path.size()
 			# Bar shows one diamond per tile actually walked this advance (depletes to zero).
 			_travel_step_count = seg_count
 			var seg_dur: float = _TRAVEL_DURATION / float(seg_count)
-			# Chain one tween segment per stepped cell. Segment 0 departs from traveled_origin
-			# (the pre-advance cell — already the current board position); every later segment
-			# departs from the preceding path entry.
-			# After each segment, deplete one step diamond so the budget display tracks travel.
-			for _seg_i in range(traveled_path.size()):
+			for _seg_i in range(seg_count):
 				var step_v: Variant = traveled_path[_seg_i]
 				var step: Dictionary = step_v if step_v is Dictionary else {}
 				var step_local: Vector2 = _board.map_to_local(
 					Vector2i(int(step.get("col", 0)), int(step.get("row", 0)))
 				)
-				var step_target: Vector2 = screen_center - step_local * board_scale
-				# Board-local pixel of the cell being VACATED by this segment — traveled_origin
-				# for the first segment, the prior path entry thereafter. Dropped as a ghost when
-				# the segment completes so the trail glues to the terrain and fades behind the party.
-				var _prev: Dictionary = traveled_origin
+				# Board-local pixel of the cell this segment vacates, dropped as a ghost when the
+				# segment completes.
+				var vacated_cell := origin_cell
 				if _seg_i > 0:
-					var _prev_v: Variant = traveled_path[_seg_i - 1]
-					_prev = _prev_v if _prev_v is Dictionary else {}
-				var vacated_local: Vector2 = _board.map_to_local(
-					Vector2i(int(_prev.get("col", 0)), int(_prev.get("row", 0)))
-				)
-				_travel_tween.tween_property(_board, "position", step_target, seg_dur)
-				var spent_after: int = _seg_i + 1
-				_travel_tween.tween_callback(_on_step_consumed.bind(spent_after))
+					var prior_v: Variant = traveled_path[_seg_i - 1]
+					var prior: Dictionary = prior_v if prior_v is Dictionary else {}
+					vacated_cell = Vector2i(int(prior.get("col", 0)), int(prior.get("row", 0)))
+				var vacated_local: Vector2 = _board.map_to_local(vacated_cell)
+				_travel_tween.tween_callback(_on_travel_segment.bind(step_local, seg_dur))
+				_travel_tween.tween_interval(seg_dur)
+				_travel_tween.tween_callback(_on_step_consumed.bind(_seg_i + 1))
 				_travel_tween.tween_callback(_drop_travel_ghost.bind(vacated_local))
 		else:
-			# Fallback: single straight tween (no path data or single-cell move).
+			# Fallback: one straight segment (no path data or single-cell move).
 			_travel_step_count = 1
-			_travel_tween.tween_property(_board, "position", board_target, _TRAVEL_DURATION)
+			_travel_tween.tween_callback(_on_travel_segment.bind(party_local, _TRAVEL_DURATION))
+			_travel_tween.tween_interval(_TRAVEL_DURATION)
 			_travel_tween.tween_callback(_on_step_consumed.bind(1))
-
-		_party_layer.call("init_position", screen_center)
 
 		# Travel-beat presentation: ghost-text snippet + party-token speech bubble.
 		_maybe_play_travel_snippet(str(data.get("travel_snippet", "")))
-		_play_travel_bark(data, screen_center)
+		_play_travel_bark(data)
 
 		_pending_overlay_data    = data
 		_pending_overlay_actions = actions
 		_travel_tween.finished.connect(_apply_pending_overlay, CONNECT_ONE_SHOT)
 	else:
-		# Parked/idle refresh — no travel this snapshot; bar shows full budget.
+		# Parked/idle refresh — no travel this snapshot; bar shows full budget. The camera keeps
+		# the view the player has (a locked camera keeps following its target).
 		_travel_step_count = 0
-		_board.position = board_target
-		_sync_fog_layer()
-		_sync_situation_layer()
-		_rebuild_situations(situations)
-		_party_layer.call("init_position", screen_center)
+		if not _is_travelling():
+			_party_layer.call("init_position", party_local)
+			_party_follow_world = party_world
 		_pending_overlay_data    = {}
 		_pending_overlay_actions = {}
 		# V2-STAGE-004 P5 (playtest fix): Anansi snippets are event-driven and can arrive
@@ -571,6 +559,7 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 		# while the exactly-once guard skips lingering/unchanged text on later rebuilds.
 		_maybe_play_travel_snippet(str(data.get("travel_snippet", "")))
 		_apply_overlay_from(data, actions)
+	_push_camera_follow_target()
 
 	# ── V2-STAGE-004 Phase 5: directive badge (HUD) ──────────────────────────
 	# Data-driven {id,label}; badge hides itself when the field is absent/empty.
@@ -920,11 +909,10 @@ func _build_preview(cols: int, rows: int) -> void:
 		return
 
 	_preview_scale = min(available_w / map_pixel_w, available_h / map_pixel_h)
-	_board.scale   = Vector2(_preview_scale, _preview_scale)
+	_board_root.scale = Vector2(_preview_scale, _preview_scale)
 
 	_preview_center = preview_rect.get_center()
-	_board.position = _preview_center - visual_rect.get_center() * _preview_scale
-	_sync_fog_layer()
+	_board_root.position = _preview_center - visual_rect.get_center() * _preview_scale
 
 func _preview_safe_rect() -> Rect2:
 	var logical_size: Vector2 = _layout.get("logical_size", Vector2.ZERO)
@@ -980,14 +968,15 @@ func _preview_visual_rect(cols: int, rows: int) -> Rect2:
 
 # ─── Situation markers ───────────────────────────────────────────────────────
 
-## Preview mode — uses existing Control templates; SituationLayer stays at (0,0) so
-## markers can use absolute screen-space positions. All situations appear hidden (grey ?)
-## so the player cannot identify objectives or types before entry.
+## Preview mode — uses existing Control templates. BoardRoot is scaled to fit, so each marker is
+## placed in board space and scaled by the inverse to keep its screen size. All situations appear
+## hidden (grey ?) so the player cannot identify objectives or types before entry.
 func _rebuild_situations_preview(map_situations: Array) -> void:
 	for m in _situation_markers:
 		if is_instance_valid(m):
 			m.queue_free()
 	_situation_markers.clear()
+	_situation_cells.clear()
 
 	for sit_v in map_situations:
 		var sit: Dictionary   = sit_v if sit_v is Dictionary else {}
@@ -1004,7 +993,8 @@ func _rebuild_situations_preview(map_situations: Array) -> void:
 			template = _hidden_template
 		var marker: Control  = template.duplicate() as Control
 		var board_local := _board.map_to_local(Vector2i(int(pos_d.get("col", 0)), int(pos_d.get("row", 0))))
-		marker.position      = _board_to_screen(board_local)
+		marker.position      = board_local
+		marker.scale         = Vector2.ONE / maxf(_board_root.scale.x, 0.0001)
 		marker.visible       = true
 		if revealed and not resolved:
 			var type_lbl: Label = marker.get_node_or_null("RevealedCircle/TypeLabel")
@@ -1014,9 +1004,8 @@ func _rebuild_situations_preview(map_situations: Array) -> void:
 		_situation_markers.append(marker)
 
 
-## Explore mode — uses SituationMarkerDraw (Node2D with custom shape drawing).
-## Markers positioned in board-local space; SituationLayer tracks _board.position so
-## markers scroll correctly during the travel tween.
+## Explore mode — uses SituationMarkerDraw (Node2D with custom shape drawing), placed in board-local
+## space under SituationLayer, so they move with the board and the camera.
 ## Shape by type: combat=square, shrine=triangle, loot/money=diamond, other=circle.
 ## Color: grey=hidden, blue=revealed, gold=resolved-objective, grey=resolved-encounter.
 func _rebuild_situations(situations: Array) -> void:
@@ -1025,6 +1014,7 @@ func _rebuild_situations(situations: Array) -> void:
 			m.queue_free()
 	_situation_markers.clear()
 	_marker_by_sit_id.clear()
+	_situation_cells.clear()
 
 	# Newly-revealed situations get a scale-pop; diff current vs previous revealed set.
 	var next_revealed: Dictionary = {}
@@ -1050,6 +1040,7 @@ func _rebuild_situations(situations: Array) -> void:
 		if not sit_id.is_empty():
 			_marker_by_sit_id[sit_id] = marker
 			if revealed:
+				_situation_cells[sit_id] = Vector2i(int(pos_d.get("col", 0)), int(pos_d.get("row", 0)))
 				next_revealed[sit_id] = true
 				if not _prev_revealed_ids.has(sit_id):
 					newly_revealed.append(sit_id)
@@ -1098,12 +1089,12 @@ func _on_begin_pressed() -> void:
 	_preview_transition_tween.set_trans(Tween.TRANS_QUAD)
 
 	var target_scale := Vector2(_preview_scale * _ZOOM_SCALE_MUL, _preview_scale * _ZOOM_SCALE_MUL)
-	var current_pos  := _board.position
+	var current_pos  := _board_root.position
 	var map_offset   := _preview_center - current_pos
 	var target_pos   := _preview_center - map_offset * _ZOOM_SCALE_MUL
 
-	_preview_transition_tween.parallel().tween_property(_board,      "scale",    target_scale,      _ZOOM_DURATION)
-	_preview_transition_tween.parallel().tween_property(_board,      "position", target_pos,        _ZOOM_DURATION)
+	_preview_transition_tween.parallel().tween_property(_board_root, "scale",    target_scale,      _ZOOM_DURATION)
+	_preview_transition_tween.parallel().tween_property(_board_root, "position", target_pos,        _ZOOM_DURATION)
 	_preview_transition_tween.parallel().tween_property(_stage_info, "modulate", Color(1, 1, 1, 0), _ZOOM_DURATION)
 	_preview_transition_tween.parallel().tween_property(_back_btn,   "modulate", Color(1, 1, 1, 0), _ZOOM_DURATION)
 
@@ -1225,9 +1216,9 @@ func _play_travel_snippet(snippet: String) -> void:
 	_snippet_tween.tween_callback(func() -> void: _travel_snippet_lbl.visible = false)
 
 
-## Party-token speech bubble during travel, fed to the instanced BarkPopupLayer.
+## Party-token speech bubble during travel, fed to the instanced BarkPopupLayer. _process keeps it on the token.
 ## Builds one synthetic event for the "party" actor. No-op when travel_bark is empty.
-func _play_travel_bark(data: Dictionary, screen_center: Vector2) -> void:
+func _play_travel_bark(data: Dictionary) -> void:
 	if _bark_layer == null:
 		return
 	var tb_v: Variant  = data.get("travel_bark", {})
@@ -1238,7 +1229,7 @@ func _play_travel_bark(data: Dictionary, screen_center: Vector2) -> void:
 	_bark_layer.call("show_barks", [{
 		"actor_id":    "party",
 		"bark_line":   line,
-		"screen_pos":  screen_center,
+		"screen_pos":  _party_bark_anchor(),
 		"is_response": false,
 	}])
 
@@ -1249,10 +1240,6 @@ func _play_transition_flash() -> void:
 	var tw := create_tween()
 	tw.tween_property(_transition_flash, "modulate:a", 1.0, 0.1)
 	tw.tween_property(_transition_flash, "modulate:a", 0.0, 0.1)
-
-
-func _board_to_screen(board_local: Vector2) -> Vector2:
-	return _board.position + board_local * _board.scale.x
 
 
 func _label_for_directive(dir_id: String) -> String:
@@ -1707,23 +1694,124 @@ func _explore_spatial_rect(layout: Dictionary) -> Rect2:
 		Vector2(maxf(0.0, logical_size.x - left - right), maxf(0.0, bottom - top))
 	)
 
-func _clamp_explore_board_to_spatial_rect() -> void:
-	if _current_map_size.x <= 0 or _current_map_size.y <= 0:
-		return
-	var visual_rect := _preview_visual_rect(_current_map_size.x, _current_map_size.y)
-	var spatial_rect := _explore_spatial_rect(_layout)
-	var scale_value := _board.scale.x
-	var min_position := spatial_rect.end - visual_rect.end * scale_value
-	var max_position := spatial_rect.position - visual_rect.position * scale_value
-	if min_position.x <= max_position.x:
-		_board.position.x = clampf(_board.position.x, min_position.x, max_position.x)
-	else:
-		_board.position.x = spatial_rect.get_center().x - visual_rect.get_center().x * scale_value
-	if min_position.y <= max_position.y:
-		_board.position.y = clampf(_board.position.y, min_position.y, max_position.y)
-	else:
-		_board.position.y = spatial_rect.get_center().y - visual_rect.get_center().y * scale_value
+# ─── Board camera ─────────────────────────────────────────────────────────────
 
-func _sync_transient_visibility() -> void:
+# CanvasLayer visibility and Camera2D.enabled do not follow this Control. A hidden screen draws no
+# world and drives no camera, and the preview has no camera at all (it fits BoardRoot itself).
+func _sync_world_visibility() -> void:
+	var shown := is_visible_in_tree()
 	if _transient_layer != null:
-		_transient_layer.visible = is_visible_in_tree()
+		_transient_layer.visible = shown
+	if _world_layer != null:
+		_world_layer.visible = shown
+	if camera != null:
+		camera.enabled = shown and _current_mode == &"explore"
+	if not shown:
+		_pointer.reset()
+
+
+# A release lost to a focus change would leave a finger counted or a drag owned. Both notifications
+# are handled; the reset is idempotent.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_pointer.reset()
+
+
+## Counts fingers for the pinch rule. Never marks the event handled.
+func _input(event: InputEvent) -> void:
+	if _current_mode == &"explore" and is_visible_in_tree():
+		_pointer.note_touch(event)
+
+
+# This root is a full-rect STOP Control, so it only sees presses on open board: buttons, panels and
+# the action bar sit above it and take their own presses.
+func _gui_input(event: InputEvent) -> void:
+	if _current_mode == &"explore" and _pointer.handle_event(event):
+		accept_event()
+
+
+func _on_pointer_tap(pos: Vector2) -> void:
+	var target := _target_at_cell(_cell_at_viewport_point(get_global_transform_with_canvas() * pos))
+	if target.is_empty():
+		camera.deselect()
+	else:
+		select_board_target(target)
+
+
+## Locks the camera onto the party ("" and "party", which is what any echo card sends) or onto a
+## revealed situation by id. Any other id does nothing. Public: RealmShell forwards echo-card taps here.
+func select_board_target(target_id: String) -> void:
+	if _current_mode != &"explore" or _party_cell.x < 0:
+		return
+	var target := _PARTY_TARGET if target_id.is_empty() else target_id
+	if target != _PARTY_TARGET and not _situation_cells.has(target):
+		return
+	camera.select(target)
+	_push_camera_follow_target()
+
+
+## The party wins a shared cell. Returns "" on empty board.
+func _target_at_cell(cell: Vector2i) -> String:
+	if cell == _party_cell:
+		return _PARTY_TARGET
+	for sit_id in _situation_cells:
+		if _situation_cells[sit_id] == cell:
+			return str(sit_id)
+	return ""
+
+
+func _cell_at_viewport_point(viewport_point: Vector2) -> Vector2i:
+	return _board.local_to_map(_board.get_global_transform_with_canvas().affine_inverse() * viewport_point)
+
+
+## Pushes the lock target for the current camera mode. Called on select and on every snapshot, and
+## once per cell during a walk, so the camera's own follow chases the party.
+func _push_camera_follow_target() -> void:
+	if camera == null:
+		return
+	match camera.mode:
+		BoardCameraController.Mode.FOLLOW_ACTOR:
+			if camera.target_id == _PARTY_TARGET:
+				camera.set_follow_target_local(_party_follow_world)
+			elif _situation_cells.has(camera.target_id):
+				camera.set_follow_target_local(_board.to_global(_board.map_to_local(_situation_cells[camera.target_id])))
+			else:
+				# The locked situation is gone: follow the party.
+				camera.follow_party()
+				camera.set_follow_target_local(_party_follow_world)
+		BoardCameraController.Mode.FOLLOW_PARTY:
+			camera.set_follow_target_local(_party_follow_world)
+
+
+func _on_travel_segment(step_local: Vector2, duration: float) -> void:
+	_party_layer.call("set_party_position", step_local, duration)
+	_party_follow_world = _board.to_global(step_local)
+	_push_camera_follow_target()
+
+
+func _is_travelling() -> bool:
+	return _travel_tween != null and _travel_tween.is_valid() and _travel_tween.is_running()
+
+
+## Centres the painted board on the world origin at scale 1 and hands its extent to the camera.
+func _frame_world() -> void:
+	var rect := _preview_visual_rect(_current_map_size.x, _current_map_size.y)
+	_board_root.scale = Vector2.ONE
+	_board_root.position = -rect.get_center()
+	_board_span_px = rect.size
+	camera.configure_bounds(_board_span_px)
+	camera.reclamp()
+
+
+## decisions.md #70: the whole board fits the shorter viewport side, with a 10% margin.
+func _min_zoom_for_span(span: Vector2) -> float:
+	var view := get_viewport_rect().size
+	var fit := minf(view.x, view.y) / maxf(maxf(span.x, span.y), 1.0)
+	return clampf(fit * _ZOOM_FIT_FACTOR, _ZOOM_MIN_FLOOR, _ZOOM_MIN_CEILING)
+
+
+## The party token's screen position in BarkPopupLayer space. The bark layer does not follow the
+## camera, so the bubble keeps a readable size at any zoom.
+func _party_bark_anchor() -> Vector2:
+	var viewport_pos: Vector2 = _party_layer.get_global_transform_with_canvas() * (_party_layer.call("display_position") as Vector2)
+	return _bark_layer.get_global_transform_with_canvas().affine_inverse() * viewport_pos
