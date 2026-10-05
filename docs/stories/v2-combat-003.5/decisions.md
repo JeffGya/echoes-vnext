@@ -1520,11 +1520,11 @@ A control clipped out by its parent does not count. A press while a modal is ope
 
 **Tween or lerp.** The camera's own follow lerp (5 per second) moves the camera. The travel tween no longer writes the camera or the board. It only sequences: for each walked cell it calls the party token (moves to that cell over the segment time), pushes the follow target (that cell's world position), then waits the segment time, then drops the ghost and spends one step diamond. Because the tween never writes the camera, there is no `begin_screen_animation()` and nothing fights the lerp.
 
-**Per-segment target.** One follow target per destination cell, as Jeff decided (not a per-frame token position). A snapshot that moves nobody and arrives during the walk leaves the token and the target alone.
+**Per-segment target (superseded by #105).** This entry decided one follow target per destination cell. #105 replaced it: the target is the drawn token, every frame. The text below on the tween pushing a target per cell no longer holds.
 
 **The party token** is in world space under `BoardRoot` and moves cell by cell. The bark bubble stays screen-space: `_process` re-anchors it to the token whenever the token or the camera moves.
 
-**Tests:** `stage_camera/advance_locks_party_and_follows_each_cell`, `lock_stays_after_the_walk`, `manual_pan_holds_then_follow_resumes`, `parked_refresh_during_walk_keeps_token_and_target`, `bark_anchor_tracks_party_on_screen`.
+**Tests:** `stage_camera/advance_locks_party_and_follows_the_drawn_token` (replaced the per-cell test, see #105), `lock_stays_after_the_walk`, `manual_pan_holds_then_follow_resumes`, `parked_refresh_during_walk_keeps_token_and_target`, `bark_anchor_tracks_party_on_screen`.
 **Source:** Jeff (D1); the builder (tween only sequences)
 **Date:** 2026-10-05
 
@@ -1552,6 +1552,70 @@ A control clipped out by its parent does not count. A press while a modal is ope
 **Not changed.** `_explore_spatial_rect` stays: the HUD geometry test reads it. Nothing in the camera path uses it now.
 **Tests:** `stage_camera/focus_loss_resets_stuck_pointer`, `hide_resets_stuck_pointer`, `new_stage_entry_resets_stuck_pointer`, `hidden_stage_takes_no_input_in_both_boot_orders`, `hidden_screen_disables_camera_and_world`, `shell_swap_hands_viewport_to_shown_camera`, `combat_swap_and_new_stage_start_free`, `modal_blocks_board_input`.
 **Source:** the builder
+**Date:** 2026-10-05
+
+---
+
+### 104. echo-card-tap-is-a-release-not-a-press
+
+**Q:** `EchoCardItem` emitted `card_pressed` on the mouse press. The Codex bot (PR #92, follow-up #17) says a drag that starts on a card, to scroll the echo bar, locks the camera on that card. Is that true, and what is the fix?
+**A:** True, and worse. A probe in the real `RealmShell` (six cards, the bar overflowing) showed two defects. (1) The card locked the camera on the press (`mode` 1 right after the press). (2) The card had `mouse_filter` STOP, so the bar's `ScrollContainer` saw no event at all when a press started on a card (zero events; with PASS or in a gap it saw the full touch and mouse stream). A drag from a card could never scroll the bar. Scrolling itself cannot be measured in a headless run (the scroll value did not move even from a gap), so the tests check that the `ScrollContainer` receives the drag.
+
+**Fix.**
+- The card is `mouse_filter` PASS, so a drag that starts on it reaches the `ScrollContainer`.
+- The card emits `card_pressed` when a left press and its release complete on the card, the pointer did not move 8 px or more, and the bar did not scroll between press and release. The check is `BoardPointerTracker` (the same 8 px rule and the same handling of the engine's touch twin of a mouse click, so one tap is one signal). The card does not feed finger counting and never counts Space as a "not a tap" key. I chose the shared tracker over a private copy of the rule because it already owns the threshold and the ownership rule; the card only adds two checks.
+- A release outside the card is no tap (press on one card, release on another selects nothing).
+- The bar's own `scroll_deadzone` is 8, the same number as the tracker's.
+
+**`InitiativeRowItem` is not affected.** The Combat initiative rows sit in a `PanelContainer`/`VBoxContainer`, not in a `ScrollContainer`, so no scroll drag can start on a row. It still emits on press and accepts every event on purpose (the board root behind it must not see them). Not changed.
+
+**Same pattern elsewhere.** `RealmCardItem.gd:33` emits `card_pressed` on press too. It is outside this change. Check it if its list scrolls.
+
+**Follow-up #106.** The release-based tap exposed a second defect: the bar rebuilt every card on every snapshot, so a card that took a press could be freed before its release. #106 fixes that.
+
+**Tests:** `combat_camera/card_tap_selects_on_release`, `card_drag_scrolls_the_bar_and_selects_nothing`, `card_press_and_release_on_different_cards_selects_nothing`, `card_tap_is_one_signal_with_emulated_twin`, `card_tap_after_the_bar_scrolled_selects_nothing`; `stage_camera/echo_card_drag_does_not_lock_the_party`.
+**Source:** Codex bot review of PR #92, verified by probe; Jeff (fix now); the builder
+**Date:** 2026-10-05
+
+---
+
+### 105. locked-follow-target-is-the-drawn-token
+
+**Q:** The Codex bot (PR #92) says that when a locked actor moves, the camera target comes from the new snapshot's final cell while the token is drawn at its old or in-between position, so the camera runs ahead of the token. Is that true?
+**A:** True. Probe, Combat, before the fix (one locked echo, a 5-cell move, zoom 1.3, normal speed): the camera was up to 207 world px (about 269 screen px) ahead of the drawn token, and it started moving during the telegraph delay while the token still stood at its old cell. Probe, Stage Advance (3 cells), before the fix: the camera trailed the token by up to 22 world px (29 screen px) with a per-cell target.
+
+**New rule (Combat and Stage).** While a camera is locked on one actor (or the Stage party), the follow target is the DRAWN position of that token, in world space, set again every frame. At rest this equals the cell centre, so a resting lock is unchanged. The telegraph delay holds the token at its old cell, so the camera waits with it. The camera's own follow lerp (5 per second) is unchanged.
+- Combat: `CombatTokenLayer.display_cell_position(actor_id)` gives the drawn position with the feet offset removed (so it compares with `map_to_local` of a cell). `CombatBoardScreen._process` pushes the target each frame while the camera is in `FOLLOW_ACTOR`. A dead actor still sends the camera to the party; `FOLLOW_PARTY` still follows the cell centroid; manual pan hold (3 s), screen-animation behaviour and objective modes are untouched.
+- Stage: `_party_token_world()` (the `PartyTokenLayer` display position) replaces the per-cell push. `_process` pushes it each frame. The travel tween still moves the token one cell at a time and drops ghosts.
+
+**Probe after the fix.** The camera never leads the token (worst lead 0.0 px in both scenes). The final offset at rest is 0.0 px. The telegraph delay does not move the camera. A per-frame target still needs the lerp: the camera now trails the token. Worst cases with the lerp unchanged, 5 cells along one iso axis: normal speed 0.36 s, 400 px (screen) from the centre; fast speed 0.20 s, 569 px; slow speed 0.72 s, 227 px. The other axis is half of that (284 px at fast speed). The view is 1280 x 720, so the token stays in view in every case. Stage walk (3 cells in 0.5 s): at most 73 screen px. So the lerp constant is NOT changed. A faster follow is only needed if the token must stay near the centre during a walk; the numbers do not show a need.
+
+**Supersedes** the per-segment follow target in #101. The 5 per second follow lerp of #72 is unchanged.
+
+**Tests:** `combat_camera/locked_follow_never_leads_the_drawn_token`, `telegraph_delay_does_not_move_the_camera`, `feet_offset_does_not_shift_a_locked_camera`; `stage_camera/advance_locks_party_and_follows_the_drawn_token`, `parked_refresh_during_walk_keeps_token_and_target`. The `CombatCameraSelectTests._step` helper now also advances the token layer (as SceneTree does), because the camera follows the drawn token.
+**Source:** Codex bot review of PR #92, verified by probe; Jeff (fix now); the builder
+**Date:** 2026-10-05
+
+---
+
+### 106. echo-bar-cards-survive-snapshots
+
+**Q:** After #104 a tap needs a press and a release on the same card. `RealmShell._update_echo_bar` freed every card and built new ones on every snapshot. What happens to a tap when a snapshot arrives between its press and release?
+**A:** It was lost. Probe (real `RealmShell`, six cards): press on a card, a snapshot, the old cards freed (what the end of the frame does), release: the camera stayed FREE (mode 0, no target). In Combat auto-play, snapshots arrive every 0.5, 1.5 or 3.0 s, so a normal tap of 100-150 ms could be lost. The next tap worked. (The tap was safe before #104 because the press alone selected.)
+
+**Fix.** Cards now live across snapshots and are updated in place (`setup`, `setup_ally` or `setup_spirit` run again with the new data, so a card looks exactly like a rebuilt one):
+- A card is matched by kind (plain, ally, spirit) and actor id. When the id is empty (Stage `party_preview`), it is matched by kind and position.
+- New actors get new cards, gone actors lose theirs (removed from the bar at once), and the bar keeps the snapshot's order (`move_child`).
+- A card that is mid-press keeps its pointer state across the update.
+- A screen change still replaces the cards: Combat ids and Stage ids never match, and a snapshot type with no party removes every card.
+- `EchoCardItem.slot_key` holds the key. RealmShell already used `instantiate()` and `add_child()` for the cards; the same pattern is kept and no new construction pattern is added.
+
+**Not handled (Jeff, 2026-10-05).** Two actors with the same kind and id in one snapshot are not handled (the bar would gain a card per snapshot). No real data produces this; accepted as unlikely.
+
+**Scroll.** Probe: with the bar scrolled to 300, a snapshot left it at 300 before the change (the old cards stay in the tree until the frame ends, so the content does not shrink) and leaves it at 300 now. The scroll test pins it; it could not be broken by the old rebuild in a headless run.
+
+**Tests:** `combat_camera/card_tap_survives_a_snapshot_between_press_and_release` (same and changed snapshot), `card_tap_with_emulated_twin_survives_a_snapshot`, `snapshot_updates_cards_in_place`, `snapshot_adds_and_removes_cards_in_order`, `snapshot_keeps_the_bar_scroll`, `screen_change_replaces_the_cards`; `stage_camera/echo_card_tap_survives_a_stage_snapshot`.
+**Source:** qa-verifier (probes P1, P1b); Jeff (keep cards across snapshots); the builder
 **Date:** 2026-10-05
 
 ---

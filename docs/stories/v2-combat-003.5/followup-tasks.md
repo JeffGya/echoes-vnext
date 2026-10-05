@@ -388,7 +388,7 @@ not just Claimant fights. The underlying duplication itself (`DebugController` r
 
 **task_id:** `task_card_press_scroll_lock`
 
-**Why it came up:** Found during Story 2, 2026-10-02.
+**Why it came up:** Found during Story 2, 2026-10-02. Also raised by the Codex bot on PR #92. **Status: DONE with PR #92 (2026-10-05), decisions.md #104.**
 
 **Opening prompt:**
 > In the Echoes vNext Godot/GDScript repo: `EchoCardItem` emits `card_pressed` on press. A scroll drag in the echo bar that starts on a card therefore locks the camera on that echo. Decide the fix (for example, emit on release when the pointer did not move past a drag threshold). Check `ui/components/EchoCardItem.gd` and the RealmShell echo bar. Keep the Stage behaviour in step with Combat (decisions.md #69).

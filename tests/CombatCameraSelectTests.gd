@@ -62,6 +62,20 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("combat_camera/wheel_over_panels_does_not_zoom",         Callable(CombatCameraSelectTests, "_t_wheel_over_panels_does_not_zoom"))
 	runner.register_test("combat_camera/wheel_free_zooms_toward_pointer",         Callable(CombatCameraSelectTests, "_t_wheel_free_zooms_toward_pointer"))
 	runner.register_test("combat_camera/wheel_locked_keeps_target_centred",       Callable(CombatCameraSelectTests, "_t_wheel_locked_keeps_target_centred"))
+	runner.register_test("combat_camera/card_tap_selects_on_release",             Callable(CombatCameraSelectTests, "_t_card_tap_selects_on_release"))
+	runner.register_test("combat_camera/card_drag_scrolls_the_bar_and_selects_nothing", Callable(CombatCameraSelectTests, "_t_card_drag_scrolls_the_bar_and_selects_nothing"))
+	runner.register_test("combat_camera/card_press_and_release_on_different_cards_selects_nothing", Callable(CombatCameraSelectTests, "_t_card_press_and_release_on_different_cards_selects_nothing"))
+	runner.register_test("combat_camera/card_tap_is_one_signal_with_emulated_twin", Callable(CombatCameraSelectTests, "_t_card_tap_is_one_signal_with_emulated_twin"))
+	runner.register_test("combat_camera/card_tap_after_the_bar_scrolled_selects_nothing", Callable(CombatCameraSelectTests, "_t_card_tap_after_the_bar_scrolled_selects_nothing"))
+	runner.register_test("combat_camera/card_tap_survives_a_snapshot_between_press_and_release", Callable(CombatCameraSelectTests, "_t_card_tap_survives_a_snapshot_between_press_and_release"))
+	runner.register_test("combat_camera/card_tap_with_emulated_twin_survives_a_snapshot", Callable(CombatCameraSelectTests, "_t_card_tap_with_emulated_twin_survives_a_snapshot"))
+	runner.register_test("combat_camera/snapshot_updates_cards_in_place",         Callable(CombatCameraSelectTests, "_t_snapshot_updates_cards_in_place"))
+	runner.register_test("combat_camera/snapshot_adds_and_removes_cards_in_order", Callable(CombatCameraSelectTests, "_t_snapshot_adds_and_removes_cards_in_order"))
+	runner.register_test("combat_camera/snapshot_keeps_the_bar_scroll",           Callable(CombatCameraSelectTests, "_t_snapshot_keeps_the_bar_scroll"))
+	runner.register_test("combat_camera/screen_change_replaces_the_cards",        Callable(CombatCameraSelectTests, "_t_screen_change_replaces_the_cards"))
+	runner.register_test("combat_camera/locked_follow_never_leads_the_drawn_token", Callable(CombatCameraSelectTests, "_t_locked_follow_never_leads_the_drawn_token"))
+	runner.register_test("combat_camera/feet_offset_does_not_shift_a_locked_camera", Callable(CombatCameraSelectTests, "_t_feet_offset_does_not_shift_a_locked_camera"))
+	runner.register_test("combat_camera/telegraph_delay_does_not_move_the_camera", Callable(CombatCameraSelectTests, "_t_telegraph_delay_does_not_move_the_camera"))
 	runner.register_test("combat_camera/sanctum_wheel_uses_shared_rule",        Callable(CombatCameraSelectTests, "_t_sanctum_wheel_uses_shared_rule"))
 	runner.register_test("combat_camera/tap_uses_viewport_point_when_screen_is_offset", Callable(CombatCameraSelectTests, "_t_tap_uses_viewport_point_when_screen_is_offset"))
 
@@ -236,7 +250,9 @@ static func _step(fx: Dictionary, seconds: float) -> void:
 	var cam := fx["camera"] as BoardCameraController
 	var combat := fx["combat"] as CombatBoardScreen
 	var frames := int(ceil(seconds / 0.05))
+	var tokens := combat.get("_token_layer") as Node2D
 	for i in range(frames):
+		tokens._process(0.05)
 		cam._process(0.05)
 		cam.force_update_scroll()
 		combat._process(0.05)
@@ -2024,4 +2040,486 @@ static func _t_tap_uses_viewport_point_when_screen_is_offset() -> Dictionary:
 		return { "ok": false, "error": "Mouse tap on an offset screen did not select (mode %d, target '%s')" % [mouse_mode, mouse_target] }
 	if touch_mode != BoardCameraController.Mode.FOLLOW_ACTOR or touch_target != want:
 		return { "ok": false, "error": "Touch tap on an offset screen did not select (mode %d, target '%s')" % [touch_mode, touch_target] }
+	return { "ok": true }
+
+
+# Sends a snapshot in which the locked actor moves `cells` cells along one row, with the move
+# action that arms the token walk and the telegraph delay. Returns { "id", "start", "dest" } in world space.
+static func _send_move(fx: Dictionary, actor_id: String, cells: int) -> Dictionary:
+	var combat := fx["combat"] as CombatBoardScreen
+	var board := combat.get("_board") as TileMapLayer
+	var actor := combat.call("_find_actor", actor_id) as Dictionary
+	var start_cell := _cell(actor)
+	var cell := start_cell
+	var path: Array = []
+	for i in range(cells):
+		cell += Vector2i(1, 1)
+		path.append({ "col": cell.x, "row": cell.y })
+	var snap := (fx["snap"] as Dictionary).duplicate(true)
+	for a_v in snap["data"]["actors"]:
+		if str((a_v as Dictionary).get("id", "")) == actor_id:
+			(a_v as Dictionary)["grid_pos"] = { "col": cell.x, "row": cell.y }
+	snap["data"]["last_actor_action"] = { "action_type": "actor.move", "source_id": actor_id, "path": path }
+	(fx["realm"] as RealmShell).set_snapshot(snap)
+	return { "id": actor_id, "start": board.to_global(board.map_to_local(start_cell)), "dest": board.to_global(board.map_to_local(cell)) }
+
+
+# The follow target is the drawn token, not the snapshot's final cell: the camera never gets closer to
+# the destination than the token is, and it ends centred on the token.
+static func _t_locked_follow_never_leads_the_drawn_token() -> Dictionary:
+	var fx := _make_fixture(EncounterResolutionModes.COMBAT)
+	if fx.is_empty():
+		return { "ok": false, "error": "Fixture failed" }
+	var vp := fx["viewport"] as SubViewport
+	var cam := fx["camera"] as BoardCameraController
+	var combat := fx["combat"] as CombatBoardScreen
+	var echo := _living_echoes(fx)[0] as Dictionary
+	var id := str(echo.get("id", ""))
+	combat.select_board_target(id)
+	_step(fx, 4.0)
+	var move := _send_move(fx, id, 5)
+	var board := combat.get("_board") as TileMapLayer
+	var tokens := combat.get("_token_layer") as Node2D
+	var dest: Vector2 = move["dest"]
+	var worst_lead := -1e9
+	var moved_mid_walk := false
+	for f in range(60):
+		_step(fx, 0.05)
+		var drawn: Vector2 = board.to_global(tokens.call("display_cell_position", id))
+		worst_lead = maxf(worst_lead, drawn.distance_to(dest) - cam.position.distance_to(dest))
+		if drawn.distance_to(dest) > 1.0 and drawn.distance_to(move["start"]) > 1.0:
+			moved_mid_walk = true
+	var final_drawn := _token_viewport_pos(fx, _actor_where(fx, func(a): return str(a.get("id", "")) == id))
+	var mode := cam.mode
+	vp.free()
+	if not moved_mid_walk:
+		return { "ok": false, "error": "The token never showed mid-walk; premise failed" }
+	if worst_lead > 0.5:
+		return { "ok": false, "error": "The camera got %s px closer to the destination than the drawn token" % worst_lead }
+	if mode != BoardCameraController.Mode.FOLLOW_ACTOR:
+		return { "ok": false, "error": "The lock dropped during the move (mode %d)" % mode }
+	if final_drawn.distance_to(_CENTER) > 2.0:
+		return { "ok": false, "error": "The camera did not end centred on the token (drawn at %s)" % final_drawn }
+	return { "ok": true }
+
+
+# Before a move the token waits out the telegraph delay at its old cell. The camera waits with it.
+static func _t_telegraph_delay_does_not_move_the_camera() -> Dictionary:
+	var fx := _make_fixture(EncounterResolutionModes.COMBAT)
+	if fx.is_empty():
+		return { "ok": false, "error": "Fixture failed" }
+	var vp := fx["viewport"] as SubViewport
+	var cam := fx["camera"] as BoardCameraController
+	var combat := fx["combat"] as CombatBoardScreen
+	var echo := _living_echoes(fx)[0] as Dictionary
+	var id := str(echo.get("id", ""))
+	combat.select_board_target(id)
+	_step(fx, 4.0)
+	var before := cam.position
+	_send_move(fx, id, 5)
+	var lead_time: float = (combat.get("_token_layer") as Node2D).get("visual_config").telegraph_lead_time
+	var frames := int(floor((lead_time - 0.001) / 0.05))
+	_step(fx, 0.05 * float(frames))
+	var waited := cam.position.is_equal_approx(before)
+	_step(fx, 1.0)
+	var moved_after := not cam.position.is_equal_approx(before)
+	vp.free()
+	if frames < 1:
+		return { "ok": false, "error": "The telegraph delay %s is shorter than one frame; premise failed" % lead_time }
+	if not waited:
+		return { "ok": false, "error": "The camera moved during the telegraph delay (%s frames of %s s)" % [frames, lead_time] }
+	if not moved_after:
+		return { "ok": false, "error": "The camera never followed the move after the delay" }
+	return { "ok": true }
+
+
+
+# The drawn token sits feet_offset_y below its cell centre. A resting lock still centres the cell.
+static func _t_feet_offset_does_not_shift_a_locked_camera() -> Dictionary:
+	var fx := _make_fixture(EncounterResolutionModes.COMBAT)
+	if fx.is_empty():
+		return { "ok": false, "error": "Fixture failed" }
+	var vp := fx["viewport"] as SubViewport
+	var combat := fx["combat"] as CombatBoardScreen
+	var echo := _living_echoes(fx)[0] as Dictionary
+	(combat.get("_token_layer") as Node2D).get("visual_config").feet_offset_y = 20.0
+	_refresh(fx)
+	_step(fx, 1.0)
+	combat.select_board_target(str(echo.get("id", "")))
+	_step(fx, 4.0)
+	var cell_drawn := _token_viewport_pos(fx, _actor_where(fx, func(a): return str(a.get("id", "")) == str(echo.get("id", ""))))
+	vp.free()
+	if cell_drawn.distance_to(_CENTER) > 2.0:
+		return { "ok": false, "error": "A resting lock is %s px from centre with a feet offset of 20" % cell_drawn.distance_to(_CENTER) }
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# Echo cards in the overflowing EchoBar (follow-up #17)
+# ---------------------------------------------------------------------------
+
+# GUIDE_SPIRIT has six cards, which overflow the bar. Returns the fixture plus the bar's parts.
+static func _card_fixture() -> Dictionary:
+	var fx := _make_fixture(EncounterResolutionModes.GUIDE_SPIRIT, "escort")
+	if fx.is_empty():
+		return {}
+	var realm := fx["realm"] as RealmShell
+	var scroll := realm.get_node("%EchoBarScroll") as ScrollContainer
+	var cards: Array = []
+	for child in (realm.get_node("%EchoBar") as HBoxContainer).get_children():
+		if not child.is_queued_for_deletion():
+			cards.append(child)
+	if cards.size() < 3 or scroll.get_h_scroll_bar().max_value <= scroll.get_h_scroll_bar().page:
+		(fx["viewport"] as SubViewport).free()
+		return {}
+	fx["scroll"] = scroll
+	fx["cards"] = cards
+	return fx
+
+
+class _Count extends RefCounted:
+	var n := 0
+	var kinds: Array = []
+	func on_signal(_id: String) -> void:
+		n += 1
+	func on_event(ev: InputEvent) -> void:
+		kinds.append(ev.get_class())
+
+
+# A press on a card selects nothing. The release selects it.
+static func _t_card_tap_selects_on_release() -> Dictionary:
+	var fx := _card_fixture()
+	if fx.is_empty():
+		return { "ok": false, "error": "Fixture failed or the echo bar does not overflow" }
+	var vp := fx["viewport"] as SubViewport
+	var cam := fx["camera"] as BoardCameraController
+	var card := (fx["cards"] as Array)[1] as Control
+	var point := card.get_global_rect().get_center()
+	_push_left_button(vp, point, true)
+	var after_press := cam.mode
+	_push_left_button(vp, point, false)
+	var mode := cam.mode
+	var target := cam.target_id
+	vp.free()
+	if after_press != BoardCameraController.Mode.FREE:
+		return { "ok": false, "error": "A press on a card locked the camera before the release (mode %d)" % after_press }
+	if mode != BoardCameraController.Mode.FOLLOW_ACTOR or target.is_empty():
+		return { "ok": false, "error": "A tap on a card did not lock the camera on release (mode %d, target '%s')" % [mode, target] }
+	return { "ok": true }
+
+
+# A drag that starts on a card goes on to the bar's ScrollContainer (which scrolls it on a touchscreen)
+# and never selects the card.
+static func _t_card_drag_scrolls_the_bar_and_selects_nothing() -> Dictionary:
+	var fx := _card_fixture()
+	if fx.is_empty():
+		return { "ok": false, "error": "Fixture failed or the echo bar does not overflow" }
+	var vp := fx["viewport"] as SubViewport
+	var cam := fx["camera"] as BoardCameraController
+	var scroll := fx["scroll"] as ScrollContainer
+	var card := (fx["cards"] as Array)[1] as Control
+	var point := card.get_global_rect().get_center()
+	var seen := _Count.new()
+	scroll.gui_input.connect(seen.on_event)
+	var errors: Array = []
+	# Mouse drag.
+	_push_left_button(vp, point, true)
+	for i in range(1, 8):
+		_push_motion(vp, point - Vector2(15 * i, 0), Vector2(-15, 0))
+	_push_left_button(vp, point - Vector2(105, 0), false)
+	if cam.mode != BoardCameraController.Mode.FREE:
+		errors.append("a mouse drag over a card locked the camera")
+	# Touch drag, as a touchscreen sends it.
+	_push_touch(vp, 0, point, true)
+	for i in range(1, 8):
+		_push_touch_drag(vp, 0, point - Vector2(15 * i, 0), Vector2(-15, 0))
+	_push_touch(vp, 0, point - Vector2(105, 0), false)
+	if cam.mode != BoardCameraController.Mode.FREE:
+		errors.append("a touch drag over a card locked the camera")
+	scroll.gui_input.disconnect(seen.on_event)
+	vp.free()
+	if not seen.kinds.has("InputEventScreenDrag") or not seen.kinds.has("InputEventScreenTouch") or not seen.kinds.has("InputEventMouseMotion"):
+		errors.append("the bar's ScrollContainer did not see the drag that started on a card (saw %s)" % [seen.kinds])
+	if not errors.is_empty():
+		return { "ok": false, "error": "; ".join(errors) }
+	return { "ok": true }
+
+
+# Press on one card, release on another: not a tap on either.
+static func _t_card_press_and_release_on_different_cards_selects_nothing() -> Dictionary:
+	var fx := _card_fixture()
+	if fx.is_empty():
+		return { "ok": false, "error": "Fixture failed or the echo bar does not overflow" }
+	var vp := fx["viewport"] as SubViewport
+	var cam := fx["camera"] as BoardCameraController
+	var cards: Array = fx["cards"]
+	var a := (cards[0] as Control).get_global_rect().get_center()
+	var b := (cards[1] as Control).get_global_rect().get_center()
+	var counter := _Count.new()
+	for card in cards:
+		(card as EchoCardItem).card_pressed.connect(counter.on_signal)
+	_push_left_button(vp, a, true)
+	_push_left_button(vp, b, false)
+	var mode := cam.mode
+	var signals := counter.n
+	vp.free()
+	if signals != 0 or mode != BoardCameraController.Mode.FREE:
+		return { "ok": false, "error": "A press on one card and a release on another gave %d signals (mode %d)" % [signals, mode] }
+	return { "ok": true }
+
+
+# One tap is one card_pressed, also when the engine sends the touch twin of a mouse click first
+# (emulate_touch_from_mouse: touch 0, then the mouse event).
+static func _t_card_tap_is_one_signal_with_emulated_twin() -> Dictionary:
+	var fx := _card_fixture()
+	if fx.is_empty():
+		return { "ok": false, "error": "Fixture failed or the echo bar does not overflow" }
+	var vp := fx["viewport"] as SubViewport
+	var card := (fx["cards"] as Array)[1] as EchoCardItem
+	var point := card.get_global_rect().get_center()
+	var counter := _Count.new()
+	card.card_pressed.connect(counter.on_signal)
+	_push_left_button(vp, point, true)
+	_push_left_button(vp, point, false)
+	var plain := counter.n
+	_push_touch(vp, 0, point, true)
+	_push_left_button(vp, point, true)
+	_push_touch(vp, 0, point, false)
+	_push_left_button(vp, point, false)
+	var emulated := counter.n - plain
+	vp.free()
+	if plain != 1:
+		return { "ok": false, "error": "A plain click gave %d signals, want 1" % plain }
+	if emulated != 1:
+		return { "ok": false, "error": "A click with its emulated touch twin gave %d signals, want 1" % emulated }
+	return { "ok": true }
+
+
+# The bar scrolled between the press and the release (inertia, wheel): not a tap.
+static func _t_card_tap_after_the_bar_scrolled_selects_nothing() -> Dictionary:
+	var fx := _card_fixture()
+	if fx.is_empty():
+		return { "ok": false, "error": "Fixture failed or the echo bar does not overflow" }
+	var vp := fx["viewport"] as SubViewport
+	var cam := fx["camera"] as BoardCameraController
+	var scroll := fx["scroll"] as ScrollContainer
+	var card := (fx["cards"] as Array)[1] as Control
+	var point := card.get_global_rect().get_center()
+	_push_left_button(vp, point, true)
+	scroll.scroll_horizontal += 5
+	_push_left_button(vp, point, false)
+	var mode := cam.mode
+	vp.free()
+	if mode != BoardCameraController.Mode.FREE:
+		return { "ok": false, "error": "A release after the bar scrolled still selected the card" }
+	return { "ok": true }
+
+
+# ---------------------------------------------------------------------------
+# Echo cards survive snapshots (decisions.md #106)
+# ---------------------------------------------------------------------------
+
+# A frame ends: nodes that were queued for deletion are gone before the next input event.
+static func _frame_end(realm: RealmShell) -> void:
+	for child in (realm.get_node("%EchoBar") as Node).get_children():
+		if child.is_queued_for_deletion():
+			child.free()
+
+
+static func _live_cards(realm: RealmShell) -> Array:
+	var out: Array = []
+	for child in (realm.get_node("%EchoBar") as Node).get_children():
+		if not child.is_queued_for_deletion():
+			out.append(child)
+	return out
+
+
+# The snapshot with one change: every echo actor's hp is set to `hp`.
+static func _snapshot_with_hp(fx: Dictionary, hp: int) -> Dictionary:
+	var snap := (fx["snap"] as Dictionary).duplicate(true)
+	for a_v in snap["data"]["actors"]:
+		var a: Dictionary = a_v
+		if str(a.get("faction", "")) == "echo":
+			a["hp"] = hp
+	return snap
+
+
+# A snapshot arrives between the press and the release (auto-play sends one every 0.5 to 3 s). The
+# card that took the press must still be there: exactly one signal, camera locked. Same snapshot, then a
+# snapshot that changes the data.
+static func _t_card_tap_survives_a_snapshot_between_press_and_release() -> Dictionary:
+	var errors: Array = []
+	for variant in ["same", "changed"]:
+		var fx := _card_fixture()
+		if fx.is_empty():
+			return { "ok": false, "error": "Fixture failed or the echo bar does not overflow" }
+		var vp := fx["viewport"] as SubViewport
+		var realm := fx["realm"] as RealmShell
+		var cam := fx["camera"] as BoardCameraController
+		var card := (fx["cards"] as Array)[1] as EchoCardItem
+		var point := card.get_global_rect().get_center()
+		var counter := _Count.new()
+		card.card_pressed.connect(counter.on_signal)
+		_push_left_button(vp, point, true)
+		realm.set_snapshot(fx["snap"] if variant == "same" else _snapshot_with_hp(fx, 1))
+		_frame_end(realm)
+		_push_left_button(vp, point, false)
+		if counter.n != 1:
+			errors.append("%s snapshot: %d signals, want 1" % [variant, counter.n])
+		if cam.mode != BoardCameraController.Mode.FOLLOW_ACTOR:
+			errors.append("%s snapshot: the camera was not locked (mode %d)" % [variant, cam.mode])
+		vp.free()
+	if not errors.is_empty():
+		return { "ok": false, "error": "; ".join(errors) }
+	return { "ok": true }
+
+
+static func _t_card_tap_with_emulated_twin_survives_a_snapshot() -> Dictionary:
+	var fx := _card_fixture()
+	if fx.is_empty():
+		return { "ok": false, "error": "Fixture failed or the echo bar does not overflow" }
+	var vp := fx["viewport"] as SubViewport
+	var realm := fx["realm"] as RealmShell
+	var cam := fx["camera"] as BoardCameraController
+	var card := (fx["cards"] as Array)[1] as EchoCardItem
+	var point := card.get_global_rect().get_center()
+	var counter := _Count.new()
+	card.card_pressed.connect(counter.on_signal)
+	_push_touch(vp, 0, point, true)
+	_push_left_button(vp, point, true)
+	realm.set_snapshot(_snapshot_with_hp(fx, 2))
+	_frame_end(realm)
+	_push_touch(vp, 0, point, false)
+	_push_left_button(vp, point, false)
+	var signals := counter.n
+	var mode := cam.mode
+	vp.free()
+	if signals != 1:
+		return { "ok": false, "error": "A click with its touch twin and a snapshot in between gave %d signals, want 1" % signals }
+	if mode != BoardCameraController.Mode.FOLLOW_ACTOR:
+		return { "ok": false, "error": "The camera was not locked (mode %d)" % mode }
+	return { "ok": true }
+
+
+# Same instances, new data: the hp line follows the snapshot.
+static func _t_snapshot_updates_cards_in_place() -> Dictionary:
+	var fx := _card_fixture()
+	if fx.is_empty():
+		return { "ok": false, "error": "Fixture failed or the echo bar does not overflow" }
+	var vp := fx["viewport"] as SubViewport
+	var realm := fx["realm"] as RealmShell
+	var before: Array = fx["cards"]
+	var first := before[0] as EchoCardItem
+	var text_before := first.hp_label.text
+	realm.set_snapshot(_snapshot_with_hp(fx, 1))
+	_frame_end(realm)
+	var after := _live_cards(realm)
+	var same := after.size() == before.size()
+	for i in range(mini(after.size(), before.size())):
+		same = same and after[i] == before[i]
+	var text_after := first.hp_label.text
+	vp.free()
+	if not same:
+		return { "ok": false, "error": "A snapshot replaced the card instances instead of updating them" }
+	if text_after == text_before or not text_after.begins_with("HP 1/"):
+		return { "ok": false, "error": "The card text did not follow the snapshot ('%s' -> '%s')" % [text_before, text_after] }
+	return { "ok": true }
+
+
+# A gone actor's card disappears, a new actor's card appears, the others keep their instances and order.
+static func _t_snapshot_adds_and_removes_cards_in_order() -> Dictionary:
+	var fx := _card_fixture()
+	if fx.is_empty():
+		return { "ok": false, "error": "Fixture failed or the echo bar does not overflow" }
+	var vp := fx["viewport"] as SubViewport
+	var realm := fx["realm"] as RealmShell
+	var before: Array = fx["cards"]
+	var snap := (fx["snap"] as Dictionary).duplicate(true)
+	var actors: Array = snap["data"]["actors"]
+	var echo_indices: Array = []
+	for i in range(actors.size()):
+		var a: Dictionary = actors[i]
+		if str(a.get("faction", "")) == "echo" and not bool(a.get("is_spirit", false)):
+			echo_indices.append(i)
+	var removed_id := str((actors[echo_indices[1]] as Dictionary).get("id", ""))
+	var removed_card := before[1] as EchoCardItem
+	var kept_ids: Array = []
+	for i in range(before.size()):
+		if i != 1:
+			kept_ids.append(before[i])
+	actors.remove_at(echo_indices[1])
+	var errors: Array = []
+	realm.set_snapshot(snap)
+	_frame_end(realm)
+	var after := _live_cards(realm)
+	if after.size() != before.size() - 1 or after != kept_ids:
+		errors.append("removing an actor did not drop exactly its card and keep the others in order (%d cards)" % after.size())
+	if is_instance_valid(removed_card) and removed_card.is_inside_tree():
+		errors.append("the removed actor's card (%s) is still in the bar" % removed_id)
+	# A new actor: its card is appended after the party cards, before the spirit card.
+	var newcomer := ((fx["snap"] as Dictionary)["data"]["actors"][echo_indices[1]] as Dictionary).duplicate(true)
+	newcomer["id"] = "echo_new_9999"
+	(snap["data"]["actors"] as Array).insert(echo_indices[1], newcomer)
+	realm.set_snapshot(snap)
+	_frame_end(realm)
+	var grown := _live_cards(realm)
+	if grown.size() != before.size():
+		errors.append("adding an actor gave %d cards, want %d" % [grown.size(), before.size()])
+	elif (grown[1] as EchoCardItem).slot_key != "plain|echo_new_9999":
+		errors.append("the new card is not in the actor's place (slot '%s')" % (grown[1] as EchoCardItem).slot_key)
+	vp.free()
+	if not errors.is_empty():
+		return { "ok": false, "error": "; ".join(errors) }
+	return { "ok": true }
+
+
+static func _t_snapshot_keeps_the_bar_scroll() -> Dictionary:
+	var fx := _card_fixture()
+	if fx.is_empty():
+		return { "ok": false, "error": "Fixture failed or the echo bar does not overflow" }
+	var vp := fx["viewport"] as SubViewport
+	var realm := fx["realm"] as RealmShell
+	var scroll := fx["scroll"] as ScrollContainer
+	scroll.scroll_horizontal = 300
+	realm.set_snapshot(_snapshot_with_hp(fx, 3))
+	_frame_end(realm)
+	SanctumLayoutTests._force_control_layout(realm)
+	var kept := scroll.scroll_horizontal
+	vp.free()
+	if kept != 300:
+		return { "ok": false, "error": "A snapshot moved the bar scroll from 300 to %d" % kept }
+	return { "ok": true }
+
+
+# Combat to Stage: the combat cards are gone and the Stage cards (id "") take their place. A Stage card
+# keeps its instance across Stage snapshots.
+static func _t_screen_change_replaces_the_cards() -> Dictionary:
+	var fx := _card_fixture()
+	if fx.is_empty():
+		return { "ok": false, "error": "Fixture failed or the echo bar does not overflow" }
+	var vp := fx["viewport"] as SubViewport
+	var realm := fx["realm"] as RealmShell
+	var combat_cards: Array = fx["cards"]
+	var party_preview := [{ "name": "Sena Nkrumah", "rank": 1, "calling_origin": "uncalled", "emotional_status": "whole" }]
+	var stage_snap := { "type": "flow.stage_explore", "meta": { "t": 9 }, "data": { "map_width": 6, "map_height": 6, "party_pos": { "col": 1, "row": 1 }, "situations": [], "party_preview": party_preview }, "actions": {} }
+	realm.set_snapshot(stage_snap)
+	_frame_end(realm)
+	var stage_cards := _live_cards(realm)
+	var errors: Array = []
+	if stage_cards.size() != 1 or (stage_cards[0] as EchoCardItem).slot_key != "plain|#0":
+		errors.append("after Combat to Stage the bar has %d cards, want the one Stage card" % stage_cards.size())
+	for c in combat_cards:
+		if is_instance_valid(c) and (c as Node).is_inside_tree():
+			errors.append("a combat card is still in the bar")
+			break
+	if stage_cards.size() == 1:
+		var card := stage_cards[0] as EchoCardItem
+		realm.set_snapshot(stage_snap)
+		_frame_end(realm)
+		var again := _live_cards(realm)
+		if again.size() != 1 or again[0] != card:
+			errors.append("a Stage card (id empty) did not survive a Stage snapshot")
+	vp.free()
+	if not errors.is_empty():
+		return { "ok": false, "error": "; ".join(errors) }
 	return { "ok": true }

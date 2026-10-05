@@ -130,28 +130,55 @@ func _update_echo_bar(snap: Dictionary) -> void:
 			if preview is Array:
 				party = preview
 
-	# Rebuild from scratch — max 5 party cards + optional spirit, trivially fast.
-	for child in _echo_bar.get_children():
-		child.queue_free()
+	# Cards live across snapshots and are updated in place. A card that took a press must still be
+	# there for its release, and the bar must not jump. Cards are matched by kind and actor id (by
+	# kind and position when the id is empty, as on Stage); new ones are added, gone ones removed.
+	var wanted: Array[Dictionary] = []
+	var empty_ids: Dictionary = {}
 	for actor in party:
 		if actor is Dictionary:
-			var card: EchoCardItem = EchoCardScene.instantiate()
-			_echo_bar.add_child(card)
-			card.card_pressed.connect(_on_echo_card_pressed)
-			if bool(actor.get("is_ally", false)):
-				card.setup_ally(actor)
-			else:
-				card.setup(actor)
-
+			var kind := "ally" if bool(actor.get("is_ally", false)) else "plain"
+			wanted.append({ "key": _card_key(kind, str(actor.get("id", "")), empty_ids), "kind": kind, "actor": actor, "progress": "" })
 	# Append the spirit ally slot last so it reads as "one of the party" but stays distinct.
 	if not spirit_actor.is_empty():
 		var obj_state: Variant = data.get("objective_state", {})
 		var progress_text: String = _spirit_progress_text(
 			obj_state if obj_state is Dictionary else {})
-		var spirit_card: EchoCardItem = EchoCardScene.instantiate()
-		_echo_bar.add_child(spirit_card)
-		spirit_card.card_pressed.connect(_on_echo_card_pressed)
-		spirit_card.setup_spirit(spirit_actor, progress_text)
+		wanted.append({ "key": _card_key("spirit", str(spirit_actor.get("id", "")), empty_ids), "kind": "spirit", "actor": spirit_actor, "progress": progress_text })
+
+	var existing: Dictionary = {}
+	for child in _echo_bar.get_children():
+		if child is EchoCardItem and not child.is_queued_for_deletion():
+			existing[(child as EchoCardItem).slot_key] = child
+	for i in range(wanted.size()):
+		var entry: Dictionary = wanted[i]
+		var card: EchoCardItem = existing.get(entry["key"]) as EchoCardItem
+		if card == null:
+			card = EchoCardScene.instantiate()
+			_echo_bar.add_child(card)
+			card.card_pressed.connect(_on_echo_card_pressed)
+			card.slot_key = str(entry["key"])
+		else:
+			existing.erase(entry["key"])
+		match str(entry["kind"]):
+			"ally":
+				card.setup_ally(entry["actor"])
+			"spirit":
+				card.setup_spirit(entry["actor"], str(entry["progress"]))
+			_:
+				card.setup(entry["actor"])
+		_echo_bar.move_child(card, i)
+	for gone in existing.values():
+		_echo_bar.remove_child(gone)
+		(gone as Node).queue_free()
+
+
+static func _card_key(kind: String, actor_id: String, empty_ids: Dictionary) -> String:
+	if not actor_id.is_empty():
+		return "%s|%s" % [kind, actor_id]
+	var n := int(empty_ids.get(kind, 0))
+	empty_ids[kind] = n + 1
+	return "%s|#%d" % [kind, n]
 
 
 ## ANSWERS.md #77: a card tap locks the active screen's camera onto that actor. Any screen that

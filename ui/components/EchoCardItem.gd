@@ -16,8 +16,8 @@
 class_name EchoCardItem
 extends PanelContainer
 
-## Tap on the card. actor_id is the actor's snapshot id, or "" when the data shape has none
-## (Stage party_preview rows).
+## Tap on the card: a press and release on it, with no drag and no scroll of the bar between. actor_id
+## is the actor's snapshot id, or "" when the data shape has none (Stage party_preview rows).
 signal card_pressed(actor_id: String)
 
 const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
@@ -40,13 +40,45 @@ const _ALLY_PANEL_STYLE: StyleBox = preload("res://ui/components/EchoCardAllyAcc
 @onready var companion_tag: Label    = %CompanionTag
 
 var _actor_id: String = ""
+## Set by RealmShell: which bar slot this card fills (kind and actor id), so a snapshot updates it in place.
+var slot_key: String = ""
+# Tells a tap from a drag (same 8 px rule as the board) and ignores the engine's emulated twin of a
+# mouse click, so one tap is one signal. The card has mouse_filter PASS: a drag that starts on it
+# reaches the EchoBar's ScrollContainer, which can scroll.
+var _pointer := BoardPointerTracker.new()
+var _scroll_at_press := Vector2i.ZERO
 
 func _ready() -> void:
+	_pointer.space_held_fn = Callable(self, "_never")
+	_pointer.tap.connect(_on_pointer_tap)
 	gui_input.connect(_on_gui_input)
 
+func _never() -> bool:
+	return false
+
 func _on_gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		card_pressed.emit(_actor_id)
+	if (event is InputEventMouseButton and (event as InputEventMouseButton).pressed) \
+			or (event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed):
+		_scroll_at_press = _scroll_position()
+	_pointer.handle_event(event)
+
+# A release outside the card is no tap (press on one card, release on another). A bar that scrolled
+# since the press is no tap either.
+func _on_pointer_tap(release_pos: Vector2) -> void:
+	if not Rect2(Vector2.ZERO, size).has_point(release_pos):
+		return
+	if _scroll_position() != _scroll_at_press:
+		return
+	card_pressed.emit(_actor_id)
+
+func _scroll_position() -> Vector2i:
+	var node := get_parent()
+	while node != null and not (node is ScrollContainer):
+		node = node.get_parent()
+	if node == null:
+		return Vector2i.ZERO
+	var scroll := node as ScrollContainer
+	return Vector2i(scroll.scroll_horizontal, scroll.scroll_vertical)
 
 func setup(actor: Dictionary) -> void:
 	# Reset any accent stylebox left over from a prior setup_ally()/setup_spirit() call on a

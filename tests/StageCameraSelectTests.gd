@@ -26,7 +26,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("stage_camera/tap_empty_board_releases_to_free",       Callable(StageCameraSelectTests, "_t_tap_empty_board_releases_to_free"))
 	runner.register_test("stage_camera/unknown_and_unrevealed_ids_are_ignored", Callable(StageCameraSelectTests, "_t_unknown_and_unrevealed_ids_are_ignored"))
 	runner.register_test("stage_camera/echo_card_tap_locks_the_party",          Callable(StageCameraSelectTests, "_t_echo_card_tap_locks_the_party"))
-	runner.register_test("stage_camera/advance_locks_party_and_follows_each_cell", Callable(StageCameraSelectTests, "_t_advance_locks_party_and_follows_each_cell"))
+	runner.register_test("stage_camera/echo_card_tap_survives_a_stage_snapshot", Callable(StageCameraSelectTests, "_t_echo_card_tap_survives_a_stage_snapshot"))
+	runner.register_test("stage_camera/echo_card_drag_does_not_lock_the_party", Callable(StageCameraSelectTests, "_t_echo_card_drag_does_not_lock_the_party"))
+	runner.register_test("stage_camera/advance_locks_party_and_follows_the_drawn_token", Callable(StageCameraSelectTests, "_t_advance_locks_party_and_follows_the_drawn_token"))
 	runner.register_test("stage_camera/lock_stays_after_the_walk",              Callable(StageCameraSelectTests, "_t_lock_stays_after_the_walk"))
 	runner.register_test("stage_camera/manual_pan_holds_then_follow_resumes",   Callable(StageCameraSelectTests, "_t_manual_pan_holds_then_follow_resumes"))
 	runner.register_test("stage_camera/drag_pans_one_to_one_and_is_not_a_tap",  Callable(StageCameraSelectTests, "_t_drag_pans_one_to_one_and_is_not_a_tap"))
@@ -549,8 +551,66 @@ static func _t_echo_card_tap_locks_the_party() -> Dictionary:
 	return { "ok": true }
 
 
-# One Advance: the lock is on at once and the follow target is each walked cell in turn.
-static func _t_advance_locks_party_and_follows_each_cell() -> Dictionary:
+# Stage cards carry no id. A snapshot between the press and the release keeps the card (matched by
+# position), so the tap still locks the party.
+static func _t_echo_card_tap_survives_a_stage_snapshot() -> Dictionary:
+	var fx := _make_fixture("card_snap")
+	if fx.is_empty():
+		return _no_fixture()
+	var vp := fx["viewport"] as SubViewport
+	var cam := fx["camera"] as BoardCameraController
+	var realm := fx["realm"] as RealmShell
+	var card := ((realm.get_node("%EchoBar") as Node).get_children()[0]) as EchoCardItem
+	var point := card.get_global_rect().get_center()
+	var counter := CombatCameraSelectTests._Count.new()
+	card.card_pressed.connect(counter.on_signal)
+	CombatCameraSelectTests._push_left_button(vp, point, true)
+	_refresh(fx)
+	CombatCameraSelectTests._frame_end(realm)
+	CombatCameraSelectTests._push_left_button(vp, point, false)
+	var signals := counter.n
+	var mode := cam.mode
+	var target := cam.target_id
+	vp.free()
+	if signals != 1 or mode != BoardCameraController.Mode.FOLLOW_ACTOR or target != "party":
+		return { "ok": false, "error": "A snapshot between press and release lost the Stage card tap (signals %d, mode %d, target '%s')" % [signals, mode, target] }
+	return { "ok": true }
+
+
+# A press on a Stage card selects nothing; a drag that starts on it selects nothing; a tap selects on release.
+static func _t_echo_card_drag_does_not_lock_the_party() -> Dictionary:
+	var fx := _make_fixture("card_drag")
+	if fx.is_empty():
+		return _no_fixture()
+	var vp := fx["viewport"] as SubViewport
+	var cam := fx["camera"] as BoardCameraController
+	var cards: Array = []
+	for child in ((fx["realm"] as RealmShell).get_node("%EchoBar") as HBoxContainer).get_children():
+		if not child.is_queued_for_deletion():
+			cards.append(child)
+	if cards.is_empty():
+		return _fail(fx, "Echo bar has no cards; premise failed")
+	var point := (cards[0] as Control).get_global_rect().get_center()
+	CombatCameraSelectTests._push_left_button(vp, point, true)
+	var after_press := cam.mode
+	CombatCameraSelectTests._push_motion(vp, point + Vector2(30, 0), Vector2(30, 0))
+	CombatCameraSelectTests._push_left_button(vp, point + Vector2(30, 0), false)
+	var after_drag := cam.mode
+	CombatCameraSelectTests._tap(vp, point)
+	var after_tap := cam.mode
+	vp.free()
+	if after_press != BoardCameraController.Mode.FREE:
+		return { "ok": false, "error": "A press on a card locked the party before the release" }
+	if after_drag != BoardCameraController.Mode.FREE:
+		return { "ok": false, "error": "A drag that started on a card locked the party" }
+	if after_tap != BoardCameraController.Mode.FOLLOW_ACTOR:
+		return { "ok": false, "error": "A tap on a card did not lock the party" }
+	return { "ok": true }
+
+
+# One Advance: the lock is on at once and the follow target is the drawn token, frame by frame. The
+# camera never gets closer to the destination than the token is, and the walk ends centred.
+static func _t_advance_locks_party_and_follows_the_drawn_token() -> Dictionary:
 	var fx := _make_fixture("walk")
 	if fx.is_empty():
 		return _no_fixture()
@@ -563,24 +623,31 @@ static func _t_advance_locks_party_and_follows_each_cell() -> Dictionary:
 	var errors: Array = []
 	if cam.mode != BoardCameraController.Mode.FOLLOW_ACTOR or cam.target_id != "party":
 		errors.append("Advance did not lock the party (mode %d, target '%s')" % [cam.mode, cam.target_id])
-	var tween := stage.get("_travel_tween") as Tween
-	if tween == null or not tween.is_valid():
-		return _fail(fx, "The advance built no travel tween")
-	var seg_dur := 0.5 / float(path.size())
-	for i in range(path.size()):
-		tween.custom_step(0.001 if i == 0 else seg_dur)
-		var want := _cell_world(fx, _cell_of(path[i]))
-		var got: Vector2 = cam.get("_follow_target_local")
-		if not got.is_equal_approx(want):
-			errors.append("segment %d: follow target %s, want the cell %s" % [i, got, want])
-	_step(fx, 4.0)
-	var dest := _party_cell(fx)
-	var drawn := _cell_viewport(fx, dest)
-	if drawn.distance_to(_CENTER) > 2.0:
-		errors.append("camera ended with the party drawn at %s, want the centre" % drawn)
-	var token := (stage.get("_party_layer") as Node2D).call("display_position") as Vector2
-	if token.distance_to(_board(fx).map_to_local(dest)) > 0.5:
-		errors.append("party token ended at %s, want the destination cell %s" % [token, _board(fx).map_to_local(dest)])
+	var dest := _cell_world(fx, _party_cell(fx))
+	var party := stage.get("_party_layer") as Node2D
+	var worst_lead := -1e9
+	var target_off := 0.0
+	var mid_walk := false
+	for f in range(60):
+		_step(fx, 0.05)
+		var drawn := _board(fx).to_global(party.call("display_position") as Vector2)
+		worst_lead = maxf(worst_lead, drawn.distance_to(dest) - cam.position.distance_to(dest))
+		target_off = maxf(target_off, (cam.get("_follow_target_local") as Vector2).distance_to(drawn))
+		if drawn.distance_to(dest) > 1.0:
+			mid_walk = true
+	if not mid_walk:
+		errors.append("The token was never seen mid-walk; premise failed")
+	if worst_lead > 0.5:
+		errors.append("The camera got %s px closer to the destination than the drawn token" % worst_lead)
+	if target_off > 0.01:
+		errors.append("The follow target was %s px away from the drawn token" % target_off)
+	var dest_cell := _party_cell(fx)
+	var drawn_final := _cell_viewport(fx, dest_cell)
+	if drawn_final.distance_to(_CENTER) > 2.0:
+		errors.append("camera ended with the party drawn at %s, want the centre" % drawn_final)
+	var token := (party.call("display_position") as Vector2)
+	if token.distance_to(_board(fx).map_to_local(dest_cell)) > 0.5:
+		errors.append("party token ended at %s, want the destination cell %s" % [token, _board(fx).map_to_local(dest_cell)])
 	(fx["viewport"] as SubViewport).free()
 	if not errors.is_empty():
 		return { "ok": false, "error": "; ".join(errors) }
@@ -1201,7 +1268,7 @@ static func _t_hidden_screen_disables_camera_and_world() -> Dictionary:
 
 
 # A snapshot that moves nobody can arrive while the party is still walking. It must not snap the
-# token to its destination or pull the follow target ahead of the walk.
+# token to its destination or pull the follow target ahead of the drawn token.
 static func _t_parked_refresh_during_walk_keeps_token_and_target() -> Dictionary:
 	var fx := _make_fixture("walk_refresh")
 	if fx.is_empty():
@@ -1214,17 +1281,18 @@ static func _t_parked_refresh_during_walk_keeps_token_and_target() -> Dictionary
 	if path.size() < 2 or tween == null or not tween.is_valid():
 		return _fail(fx, "The advance did not walk two cells; premise failed")
 	tween.custom_step(0.001)
-	var first_world := _cell_world(fx, _cell_of(path[0]))
 	var party := stage.get("_party_layer") as Node2D
 	_refresh(fx)
 	var token: Vector2 = party.call("display_position")
 	var dest_local := _board(fx).map_to_local(_party_cell(fx))
+	stage._process(0.05)
 	var target: Vector2 = cam.get("_follow_target_local")
+	var drawn_world := _board(fx).to_global(token)
 	(fx["viewport"] as SubViewport).free()
 	if token.is_equal_approx(dest_local):
 		return { "ok": false, "error": "A parked refresh during the walk snapped the token to its destination" }
-	if not target.is_equal_approx(first_world):
-		return { "ok": false, "error": "A parked refresh during the walk moved the follow target to %s, want the walked cell %s" % [target, first_world] }
+	if not target.is_equal_approx(drawn_world):
+		return { "ok": false, "error": "A parked refresh during the walk moved the follow target to %s, want the drawn token %s" % [target, drawn_world] }
 	return { "ok": true }
 
 

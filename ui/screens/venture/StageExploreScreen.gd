@@ -236,8 +236,6 @@ var _board_span_px: Vector2 = Vector2(1280.0, 640.0)
 var _party_cell: Vector2i = Vector2i(-1, -1)
 # situation_id → cell, for the revealed situations of the latest explore snapshot.
 var _situation_cells: Dictionary = {}
-# World position the party token is at or walking to. A travel pushes it once per segment cell.
-var _party_follow_world: Vector2 = Vector2.ZERO
 var _last_bark_anchor: Vector2 = Vector2.INF
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -300,6 +298,8 @@ func set_layout(layout: Dictionary) -> void:
 func _process(_delta: float) -> void:
 	if _current_mode != &"explore" or _bark_layer == null or not is_visible_in_tree():
 		return
+	# The party token walks cell by cell, so a lock follows the drawn token each frame.
+	_push_camera_follow_target()
 	var anchor := _party_bark_anchor()
 	if anchor == _last_bark_anchor:
 		return
@@ -502,7 +502,6 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 			origin_cell = Vector2i(int(traveled_origin.get("col", 0)), int(traveled_origin.get("row", 0)))
 		var origin_local := _board.map_to_local(origin_cell)
 		_party_layer.call("init_position", origin_local)
-		_party_follow_world = _board.to_global(origin_local)
 
 		# The tween only sequences the walk: the party token, the follow target, the ghost trail and
 		# the step diamonds. It never writes the camera, so it cannot fight the camera's own follow.
@@ -550,7 +549,6 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 		_travel_step_count = 0
 		if not _is_travelling():
 			_party_layer.call("init_position", party_local)
-			_party_follow_world = party_world
 		_pending_overlay_data    = {}
 		_pending_overlay_actions = {}
 		# V2-STAGE-004 P5 (playtest fix): Anansi snippets are event-driven and can arrive
@@ -1764,29 +1762,33 @@ func _cell_at_viewport_point(viewport_point: Vector2) -> Vector2i:
 	return _board.local_to_map(_board.get_global_transform_with_canvas().affine_inverse() * viewport_point)
 
 
-## Pushes the lock target for the current camera mode. Called on select and on every snapshot, and
-## once per cell during a walk, so the camera's own follow chases the party.
+## Pushes the lock target for the current camera mode. Called on select, on every snapshot and every
+## frame in explore, so the camera's own follow chases the drawn party token.
 func _push_camera_follow_target() -> void:
 	if camera == null:
 		return
 	match camera.mode:
 		BoardCameraController.Mode.FOLLOW_ACTOR:
 			if camera.target_id == _PARTY_TARGET:
-				camera.set_follow_target_local(_party_follow_world)
+				camera.set_follow_target_local(_party_token_world())
 			elif _situation_cells.has(camera.target_id):
 				camera.set_follow_target_local(_board.to_global(_board.map_to_local(_situation_cells[camera.target_id])))
 			else:
 				# The locked situation is gone: follow the party.
 				camera.follow_party()
-				camera.set_follow_target_local(_party_follow_world)
+				camera.set_follow_target_local(_party_token_world())
 		BoardCameraController.Mode.FOLLOW_PARTY:
-			camera.set_follow_target_local(_party_follow_world)
+			camera.set_follow_target_local(_party_token_world())
 
 
 func _on_travel_segment(step_local: Vector2, duration: float) -> void:
 	_party_layer.call("set_party_position", step_local, duration)
-	_party_follow_world = _board.to_global(step_local)
-	_push_camera_follow_target()
+
+
+## Where the party token is drawn now, in world space. At rest it is its cell centre. During a walk it
+## is the drawn position, so the camera never gets ahead of the token.
+func _party_token_world() -> Vector2:
+	return _board.to_global(_party_layer.call("display_position") as Vector2)
 
 
 func _is_travelling() -> bool:

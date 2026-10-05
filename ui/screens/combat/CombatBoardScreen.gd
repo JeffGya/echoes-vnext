@@ -1167,6 +1167,9 @@ static func _objective_instruction_text(obj_type: String, obj_state: Dictionary)
 # -------------------------
 
 func _process(_delta: float) -> void:
+	# A locked actor's token animates between cells, so the target follows the drawn token each frame.
+	if camera.mode == BoardCameraController.Mode.FOLLOW_ACTOR and is_visible_in_tree():
+		_push_camera_follow_target()
 	# Bark bubbles are screen-space, so they follow their tokens only if re-anchored on camera moves.
 	if _bark_popup_layer == null or _last_actors.is_empty() or not is_visible_in_tree():
 		return
@@ -1199,7 +1202,7 @@ func _push_camera_follow_target() -> void:
 				camera.follow_party()
 				camera.set_follow_target_local(_party_centroid_world())
 				return
-			camera.set_follow_target_local(_actor_world_pos(actor))
+			camera.set_follow_target_local(_actor_follow_world_pos(actor))
 		BoardCameraController.Mode.FOLLOW_PARTY:
 			camera.set_follow_target_local(_party_centroid_world())
 
@@ -1223,6 +1226,16 @@ static func _actor_is_dead(actor: Dictionary) -> bool:
 # In the camera's parent space (WorldLayer), which is where camera.position lives.
 func _actor_world_pos(actor: Dictionary) -> Vector2:
 	return _board.to_global(_board.map_to_local(_actor_cell(actor)))
+
+
+## Where the locked actor's token is drawn now, in world space. At rest it is the cell centre. While the
+## token animates (a move, or the telegraph delay before it) it is the drawn position, so the camera
+## never gets ahead of the token.
+func _actor_follow_world_pos(actor: Dictionary) -> Vector2:
+	var drawn := _token_layer.display_cell_position(str(actor.get("id", "")))
+	if drawn == Vector2.INF:
+		return _actor_world_pos(actor)
+	return _board.to_global(drawn)
 
 
 ## Centroid of the living party. With no living echo, the board centre (world origin).
