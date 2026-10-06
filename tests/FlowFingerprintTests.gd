@@ -828,8 +828,8 @@ static func test_endure() -> Dictionary:
 # Follow-up #14 re-record (decisions #96) - ROUNDS, FINAL and SAVE all move. The stretched board
 # now takes plateau_count x long_multiplier for virtues with stretch_fill "scatter". Attribution:
 # with every stretch_fill set to "none" the previous hashes were reproduced exactly. Outcome: 5 -> 4
-# rounds, still all_enemies_defeated, ase 58, ekwan 7, rank S; contain_progress 0 -> 2. Which save
-# field moved SAVE was not traced.
+# rounds, still all_enemies_defeated, ase 58, ekwan 7, rank S; contain_progress 0 -> 2. SAVE moves on
+# one field pair only (diffed field by field): the 25 kill XP goes from echo_0004 to echo_0003.
 const PURSUE_ROUNDS_HASH := "73a589295f5e7187ee68ade67f9f805a83a61ed58add7bf480c04b32511a9380"
 const PURSUE_FINAL_HASH  := "9f9cd0632e4f01fbc25e25488d2ba969c222c49fe0bb15603affcf3d88ad1681"
 const PURSUE_SAVE_HASH   := "caca2686f263f70df3fb30a6a0638cadf1f10d749586cd8bc9cb4e36f9bd50ba"
