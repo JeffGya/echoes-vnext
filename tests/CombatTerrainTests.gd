@@ -205,6 +205,12 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(CombatTerrainTests, "_t_objective_unfiltered_call_unchanged"))
 	runner.register_test("combat_terrain/pathing_determinism",
 		Callable(CombatTerrainTests, "_t_pathing_determinism"))
+	runner.register_test("combat_terrain/stretch_fill_keeps_ground_share",
+		Callable(CombatTerrainTests, "_t_stretch_fill_keeps_ground_share"))
+	runner.register_test("combat_terrain/stretch_fill_normal_board_unchanged",
+		Callable(CombatTerrainTests, "_t_stretch_fill_normal_board_unchanged"))
+	runner.register_test("combat_terrain/stretch_fill_unknown_value_changes_nothing",
+		Callable(CombatTerrainTests, "_t_stretch_fill_unknown_value_changes_nothing"))
 
 
 # ─── Test 1 — Walkable placement: every actor lands on a walkable cell ───────
@@ -1030,4 +1036,103 @@ static func _t_objective_unfiltered_call_unchanged() -> Dictionary:
 	var cb: Dictionary = GridService.place_on_terrain(b, 6.0, 4.5, GridService.PLACE_METRIC_AXIS, {})
 	if ca != cb:
 		return { "ok": false, "error": "default and explicit-empty arguments disagree: %s vs %s" % [str(ca), str(cb)] }
+	return { "ok": true }
+
+
+# ─── stretch_fill (follow-up #14) ────────────────────────────────────────────
+
+const _STRETCH_SEEDS: int = 16
+const _STRETCH_BASE_DIM: int = 18
+const _STRETCH_TOLERANCE: float = 0.10
+
+
+static func _stretch_balance_data() -> Dictionary:
+	var f := FileAccess.open("res://data/balance.json", FileAccess.READ)
+	if f == null:
+		return {}
+	var parsed: Variant = JSON.parse_string(f.get_as_text())
+	f.close()
+	return ((parsed as Dictionary).get("data", {}) as Dictionary) if parsed is Dictionary else {}
+
+
+static func _stretch_by_virtue(data: Dictionary) -> Dictionary:
+	return (((data.get("stages", {}) as Dictionary).get("map_shape", {}) as Dictionary)
+		.get("by_virtue", {}) as Dictionary)
+
+
+static func _stretch_mult(data: Dictionary) -> float:
+	return float((((data.get("combat", {}) as Dictionary).get("board", {}) as Dictionary)
+		.get("guide_spirit_override", {}) as Dictionary).get("long_multiplier", 5.0))
+
+
+static func _mean_walkable_share(sig: Dictionary, w: int, h: int, tag: String) -> float:
+	var total: float = 0.0
+	for i in range(_STRETCH_SEEDS):
+		var terrain: Dictionary = StageTerrain.generate(3000000 + i * 7919, i % 3, sig,
+			{ "w": w, "h": h }, "combat.terrain.stretchfill_%s_%d" % [tag, i])
+		total += float(StageTerrain.walkable_set(terrain).size()) / float(w * h)
+	return total / float(_STRETCH_SEEDS)
+
+
+static func _t_stretch_fill_keeps_ground_share() -> Dictionary:
+	var data: Dictionary = _stretch_balance_data()
+	var by_virtue: Dictionary = _stretch_by_virtue(data)
+	if by_virtue.is_empty():
+		return { "ok": false, "error": "data.stages.map_shape.by_virtue is empty - wrong config path" }
+	var mult: float = _stretch_mult(data)
+	var long_dim: int = int(float(_STRETCH_BASE_DIM) * mult)
+	var scatter_seen: int = 0
+	for virtue in by_virtue.keys():
+		var sig: Dictionary = by_virtue[virtue] as Dictionary
+		var scaled: Dictionary = EncounterSetupService.scale_signature_for_stretch(sig, mult)
+		if str(sig.get("stretch_fill", "none")) != "scatter":
+			if scaled != sig:
+				return { "ok": false, "error": "%s: stretch_fill is not scatter but the signature changed" % virtue }
+			continue
+		scatter_seen += 1
+		var base: float = _mean_walkable_share(sig, _STRETCH_BASE_DIM, _STRETCH_BASE_DIM, "%s_base" % virtue)
+		var tall: float = _mean_walkable_share(scaled, _STRETCH_BASE_DIM, long_dim, "%s_tall" % virtue)
+		var wide: float = _mean_walkable_share(scaled, long_dim, _STRETCH_BASE_DIM, "%s_wide" % virtue)
+		if tall < base - _STRETCH_TOLERANCE or wide < base - _STRETCH_TOLERANCE:
+			return { "ok": false, "error": "%s: stretched walkable share (tall %.3f, wide %.3f) is more than %.2f below the 18x18 mean %.3f" % [
+				virtue, tall, wide, _STRETCH_TOLERANCE, base] }
+	if scatter_seen == 0:
+		return { "ok": false, "error": "no virtue has stretch_fill scatter - the scaling path is never exercised" }
+	return { "ok": true }
+
+
+static func _t_stretch_fill_normal_board_unchanged() -> Dictionary:
+	var by_virtue: Dictionary = _stretch_by_virtue(_stretch_balance_data())
+	if by_virtue.is_empty():
+		return { "ok": false, "error": "data.stages.map_shape.by_virtue is empty - wrong config path" }
+	for virtue in by_virtue.keys():
+		var sig: Dictionary = by_virtue[virtue] as Dictionary
+		var passed: Dictionary = EncounterSetupService.scale_signature_for_stretch(sig, 1.0)
+		for i in range(4):
+			var ns: String = "combat.terrain.stretchfill_normal_%s_%d" % [virtue, i]
+			var bounds := { "w": 18, "h": 18 }
+			var plain: Dictionary = StageTerrain.generate(5000 + i, i % 3, sig, bounds, ns)
+			var via_helper: Dictionary = StageTerrain.generate(5000 + i, i % 3, passed, bounds, ns)
+			if not _terrain_dicts_equal(plain, via_helper):
+				return { "ok": false, "error": "%s seed %d: a normal board's terrain changed" % [virtue, i] }
+	return { "ok": true }
+
+
+static func _t_stretch_fill_unknown_value_changes_nothing() -> Dictionary:
+	var by_virtue: Dictionary = _stretch_by_virtue(_stretch_balance_data())
+	var sig: Dictionary = (by_virtue.get("courage", {}) as Dictionary).duplicate(true)
+	if sig.is_empty():
+		return { "ok": false, "error": "courage signature missing" }
+	sig["stretch_fill"] = "bogus"
+	var passed: Dictionary = EncounterSetupService.scale_signature_for_stretch(sig, 5.0)
+	if passed != sig:
+		return { "ok": false, "error": "an unknown stretch_fill value changed the signature" }
+	var bounds := { "w": 18, "h": 90 }
+	var a: Dictionary = StageTerrain.generate(777, 0, sig, bounds, "combat.terrain.stretchfill_unknown")
+	var b: Dictionary = StageTerrain.generate(777, 0, passed, bounds, "combat.terrain.stretchfill_unknown")
+	if not _terrain_dicts_equal(a, b):
+		return { "ok": false, "error": "an unknown stretch_fill value changed the terrain" }
+	var data := { "stages": { "map_shape": { "by_virtue": { "courage": sig } } } }
+	if EncounterSetupService.validate_stretch_fill_config(data, null, 0):
+		return { "ok": false, "error": "validate_stretch_fill_config accepted an unknown value" }
 	return { "ok": true }

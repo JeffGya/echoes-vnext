@@ -53,4 +53,5 @@ tool owns its own command name rather than running as part of the suite. See `ui
   reports situations and objectives landing off the host region, objectives without eight
   walkable free neighbours, and how often the objective-site compensation fires per virtue.
   It takes roughly 12 minutes; run it in the background, not on a Bash timeout.
+- `StretchBoardProbe.gd` — compares walkable ground, regions and empty rows on stretched 18x90 / 90x18 boards against 18x18, per virtue and `default`, with and without a scaled plateau count (`-- tests stretchprobe`). Read-only.
 - `assemble_contact_responses.py` — Python helper (non-GDScript)

@@ -460,6 +460,13 @@ func _run_tests(parts: Array) -> void:
 		TerrainRegionProbe.register(terrain_probe_runner)
 		terrain_probe_runner.run_all()
 		return
+	# INVESTIGATION TOOL — `tests stretchprobe` compares walkable ground on stretched
+	# GUIDE_SPIRIT/PURSUE boards with normal boards (follow-up #14). Prints a table.
+	if parts.size() > 1 and str(parts[1]).to_lower() == "stretchprobe":
+		var stretch_probe_runner := CoreTestRunner.new()
+		StretchBoardProbe.register(stretch_probe_runner)
+		stretch_probe_runner.run_all()
+		return
 	# INVESTIGATION TOOL — `tests purifyprobe [tag]` drives 20 seeded PURIFY_SHRINE encounters
 	# and dumps outcome + purifier goals (V2-COMBAT-003 phase 7b). Reports, never asserts.
 	if parts.size() > 1 and str(parts[1]).to_lower() == "purifyprobe":
