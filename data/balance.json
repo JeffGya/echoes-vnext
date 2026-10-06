@@ -3140,7 +3140,7 @@
 			},
 
 			"map_shape": {
-				"_comment": "V2-COMBAT-003 terrain commit 3: island_count_min/max and island_size_min/max REPLACE straggler_count_min/max. A straggler was one cell taken from the 8-direction neighbours of existing ground, so it always touched the board at a corner and could never be an island (measured: 838 of 865 cut-off regions touched the main ground at a corner, and 819 of 865 were a single cell). An island is a multi-cell blob with a guaranteed ring of void around it, so realms differentiate by island SIZE and not only by island COUNT. All eleven island_count_*/island_size_* values below are PROPOSED DEFAULTS awaiting Jeff's play tuning — see docs/stories/v2-combat-003/handoff.md section 12.5 for the approved table. island_size_* is a REQUEST, not a promise: StageTerrain clamps it against board area (at most 1/16 of the board per island and 1/4 of the board for all islands together, floor 4 cells), so wisdom's 8..50 gives up to 9 cells per island on a 12x12 combat board and the full authored range on an explore map. An island below 4 cells is discarded rather than emitted. relief is RESERVED for future per-realm art (CONVENTIONS.md) — do not rename it. connect_min_region_cells governs the connectivity repair, which runs BEFORE islands are minted and therefore never sees them. V2-COMBAT-003 terrain commit 4 adds island_bridge_chance (PROPOSED DEFAULT on all eleven entries, the approved table in docs/stories/v2-combat-003/handoff.md section 12.5): the probability that an island of 6 cells or more is bridged back to a neighbouring region, and the same probability again for each EXTRA side on an island of 20 cells or more (at most one bridge per side, each reaching a different region, which may be another island). An island of 5 cells or fewer is NEVER bridged and stays pure scenery. 0.0 means every island in that realm stays scenery. The default entry is not a virtue and carries 0.3, a middle value, awaiting the same play tuning. A bridged island joins the host region, so it becomes legitimate ground to spawn on and a legal objective site; an unbridged island still touches nothing at all.",
+				"_comment": "V2-COMBAT-003 terrain commit 3: island_count_min/max and island_size_min/max REPLACE straggler_count_min/max. A straggler was one cell taken from the 8-direction neighbours of existing ground, so it always touched the board at a corner and could never be an island (measured: 838 of 865 cut-off regions touched the main ground at a corner, and 819 of 865 were a single cell). An island is a multi-cell blob with a guaranteed ring of void around it, so realms differentiate by island SIZE and not only by island COUNT. All eleven island_count_*/island_size_* values below are PROPOSED DEFAULTS awaiting Jeff's play tuning — see docs/stories/v2-combat-003/handoff.md section 12.5 for the approved table. island_size_* is a REQUEST, not a promise: StageTerrain clamps it against board area (at most 1/16 of the board per island and 1/4 of the board for all islands together, floor 4 cells), so wisdom's 8..50 gives up to 9 cells per island on a 12x12 combat board and the full authored range on an explore map. An island below 4 cells is discarded rather than emitted. relief is RESERVED for future per-realm art (CONVENTIONS.md) — do not rename it. connect_min_region_cells governs the connectivity repair, which runs BEFORE islands are minted and therefore never sees them. V2-COMBAT-003 terrain commit 4 adds island_bridge_chance (PROPOSED DEFAULT on all eleven entries, the approved table in docs/stories/v2-combat-003/handoff.md section 12.5): the probability that an island of 6 cells or more is bridged back to a neighbouring region, and the same probability again for each EXTRA side on an island of 20 cells or more (at most one bridge per side, each reaching a different region, which may be another island). An island of 5 cells or fewer is NEVER bridged and stays pure scenery. 0.0 means every island in that realm stays scenery. The default entry is not a virtue and carries 0.3, a middle value, awaiting the same play tuning. A bridged island joins the host region, so it becomes legitimate ground to spawn on and a legal objective site; an unbridged island still touches nothing at all. stretch_fill (optional; \"scatter\" or \"none\"; missing means none): on a stretched PURSUE or GUIDE_SPIRIT board, scatter multiplies plateau_count_min/max by the stretch factor.",
 				"default": {
 					"relief": "default_relief",
 					"plateau_count_min": 2, "plateau_count_max": 4,
@@ -3156,6 +3156,7 @@
 				"by_virtue": {
 					"courage": {
 						"relief": "open_flats",
+						"stretch_fill": "scatter",
 						"plateau_count_min": 2, "plateau_count_max": 3,
 						"plateau_w_min": 10, "plateau_w_max": 16, "plateau_h_min": 8, "plateau_h_max": 14,
 						"plateau_shape_bias": "long",
@@ -3168,6 +3169,7 @@
 					},
 					"wisdom": {
 						"relief": "sunken_archipelago",
+						"stretch_fill": "none",
 						"plateau_count_min": 5, "plateau_count_max": 6,
 						"plateau_w_min": 5, "plateau_w_max": 8, "plateau_h_min": 5, "plateau_h_max": 8,
 						"plateau_shape_bias": "small",
@@ -3180,6 +3182,7 @@
 					},
 					"leadership": {
 						"relief": "central_hub",
+						"stretch_fill": "none",
 						"plateau_count_min": 4, "plateau_count_max": 5,
 						"plateau_w_min": 6, "plateau_w_max": 14, "plateau_h_min": 6, "plateau_h_max": 14,
 						"plateau_shape_bias": "blocky",
@@ -3192,6 +3195,7 @@
 					},
 					"acceptance": {
 						"relief": "settled_plains",
+						"stretch_fill": "scatter",
 						"plateau_count_min": 2, "plateau_count_max": 3,
 						"plateau_w_min": 10, "plateau_w_max": 16, "plateau_h_min": 8, "plateau_h_max": 14,
 						"plateau_shape_bias": "blocky",
@@ -3204,6 +3208,7 @@
 					},
 					"humility": {
 						"relief": "scattered_low",
+						"stretch_fill": "none",
 						"plateau_count_min": 4, "plateau_count_max": 6,
 						"plateau_w_min": 5, "plateau_w_max": 8, "plateau_h_min": 5, "plateau_h_max": 8,
 						"plateau_shape_bias": "small",
@@ -3216,6 +3221,7 @@
 					},
 					"forgiveness": {
 						"relief": "two_shores",
+						"stretch_fill": "none",
 						"plateau_count_min": 2, "plateau_count_max": 2,
 						"plateau_w_min": 10, "plateau_w_max": 16, "plateau_h_min": 8, "plateau_h_max": 14,
 						"plateau_shape_bias": "blocky",
@@ -3228,6 +3234,7 @@
 					},
 					"truth": {
 						"relief": "stark_expanse",
+						"stretch_fill": "none",
 						"plateau_count_min": 1, "plateau_count_max": 2,
 						"plateau_w_min": 12, "plateau_w_max": 16, "plateau_h_min": 8, "plateau_h_max": 14,
 						"plateau_shape_bias": "long",
@@ -3240,6 +3247,7 @@
 					},
 					"generosity": {
 						"relief": "rich_sprawl",
+						"stretch_fill": "scatter",
 						"plateau_count_min": 4, "plateau_count_max": 6,
 						"plateau_w_min": 7, "plateau_w_max": 12, "plateau_h_min": 7, "plateau_h_max": 12,
 						"plateau_shape_bias": "blocky",
@@ -3252,6 +3260,7 @@
 					},
 					"compassion": {
 						"relief": "sheltered_cluster",
+						"stretch_fill": "none",
 						"plateau_count_min": 3, "plateau_count_max": 4,
 						"plateau_w_min": 7, "plateau_w_max": 12, "plateau_h_min": 7, "plateau_h_max": 12,
 						"plateau_shape_bias": "blocky",
@@ -3264,6 +3273,7 @@
 					},
 					"empathy": {
 						"relief": "connection_web",
+						"stretch_fill": "none",
 						"plateau_count_min": 4, "plateau_count_max": 6,
 						"plateau_w_min": 6, "plateau_w_max": 11, "plateau_h_min": 6, "plateau_h_max": 11,
 						"plateau_shape_bias": "blocky",

@@ -35,6 +35,7 @@ func load_balance(logger: StructuredLogger= null, t: int = -1) -> bool:
 	# vector/virtue/calling identity tables under data.contact (see
 	# IdentityIntegrity.validate()'s doc comment). Warns only; does not fail the load.
 	IdentityIntegrity.validate(bal_data, logger, t)
+	EncounterSetupService.validate_stretch_fill_config(bal_data, logger, t)
 	_balance = root
 	return true
 
