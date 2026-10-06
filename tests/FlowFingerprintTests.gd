@@ -825,9 +825,14 @@ static func test_endure() -> Dictionary:
 # pace_state from the Ase paid (decisions.md D-22): 3 Ase is the maximum, so objective_state
 # pace_state goes partial -> full. FINAL moves on that one field only (swapping it back
 # reproduces the previous hash). ROUNDS and SAVE held.
-const PURSUE_ROUNDS_HASH := "ae6537796347bbbf67a51cc5694d8dcd4b0fc6fed3da912a112fc2ce9c98cff2"
-const PURSUE_FINAL_HASH  := "995d040468051740514b667bf742f227e5c0ba4041dbad9b94286a5c7e33ef69"
-const PURSUE_SAVE_HASH   := "f592581e966928afa4b2b4817e28ee149c6b1e7d9429008e1fc5f82e5e87f4d8"
+# Follow-up #14 re-record (decisions #96) - ROUNDS, FINAL and SAVE all move. The stretched board
+# now takes plateau_count x long_multiplier for virtues with stretch_fill "scatter". Attribution:
+# with every stretch_fill set to "none" the previous hashes were reproduced exactly. Outcome: 5 -> 4
+# rounds, still all_enemies_defeated, ase 58, ekwan 7, rank S; contain_progress 0 -> 2. SAVE moves on
+# one field pair only (diffed field by field): the 25 kill XP goes from echo_0004 to echo_0003.
+const PURSUE_ROUNDS_HASH := "73a589295f5e7187ee68ade67f9f805a83a61ed58add7bf480c04b32511a9380"
+const PURSUE_FINAL_HASH  := "9f9cd0632e4f01fbc25e25488d2ba969c222c49fe0bb15603affcf3d88ad1681"
+const PURSUE_SAVE_HASH   := "caca2686f263f70df3fb30a6a0638cadf1f10d749586cd8bc9cb4e36f9bd50ba"
 
 static func test_pursue() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(EncounterResolutionModes.PURSUE, "fp_pursue")
@@ -903,8 +908,13 @@ static func test_pursue() -> Dictionary:
 # still 5 rounds, same outcome (spirit_protected, spirit HP 49), so SAVE held.
 # Pace bonus re-record: no-pace mode. Rank A -> S: no speed term, 1 reached enemy, 110/115.
 # FINAL moves on rank only; ase 50 and SAVE held. ROUNDS held.
-const GUIDE_SPIRIT_ROUNDS_HASH := "b3a26d6856a4fc952457c9891fb2c444aeb5886ba82e1d58fb7a69ed6541e5f0"
-const GUIDE_SPIRIT_FINAL_HASH  := "c3ee1111f43e88baa8b7683da34a1c364b7c1638216900e91a37395be6213690"
+# Follow-up #14 re-record (decisions #96) - ROUNDS and FINAL move; SAVE held. Same cause and
+# attribution as PURSUE_ROUNDS_HASH above: stretch_fill "scatter" on the stretched board, and the
+# old hashes return with every stretch_fill set to "none". Outcome: 5 -> 25 rounds on the larger
+# walkable board (the party starts farther from the spirit), still spirit_protected, spirit HP
+# 49 -> 60, ase 50, ekwan 6, rank S. SAVE held.
+const GUIDE_SPIRIT_ROUNDS_HASH := "1cfae2ee850608b548e8f99b66645d5774460542958e5213bc574430bc5c1b06"
+const GUIDE_SPIRIT_FINAL_HASH  := "af7bd3c7577970a1e7d9540a9c3f5a023de1c1ac8c7f9a6c7749c2e65aa03f78"
 const GUIDE_SPIRIT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
 static func test_guide_spirit() -> Dictionary:

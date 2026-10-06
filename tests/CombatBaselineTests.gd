@@ -396,12 +396,14 @@ const ENDURE_EMOTION_HASHES: Array = [
 # V2-COMBAT-003.5 lateral/low_exposure fix re-record (decisions #54-55) — 7 -> 5 rounds (matches
 # the FlowFingerprintTests PURSUE round_ended move). Index 0 stays byte-identical, diverging
 # from index 1, with two rounds removed.
+# Follow-up #14 re-record (decisions #96) - 5 -> 4 rounds. A stretched board of a scatter virtue now
+# takes plateau_count x long_multiplier. With every stretch_fill set to "none" the old 5 hashes return.
+# Matches the FlowFingerprintTests PURSUE round_ended move.
 const PURSUE_EMOTION_HASHES: Array = [
 	"c5c7a2eca8fe241a9f8d036a0782933c5b14688921e783f11812ffbfc18a5ef7",
-	"80a549c9b7acb5452c84ab78c1db055f152ec122a79922b25287ac5aefa388cf",
-	"51b5faedd1fdae8e353b33266ac0096673969a9e67ac92d545ccb4202623aa67",
-	"6023a202b241e0863844574af3d35ec00ccbd83f097bb73b173db3869afa5efe",
-	"5bec3b44fa63807dfb4226070b0845a4de7913918a45705364de785a2a02680f",
+	"69173e8c3a3dd806734e17bc10b8c63aedfe08954b9d8c2f3a111a2300b6c305",
+	"b5edbec4ab14beb3846da3607e941a5dd38c23b9b6bc8e2fde79ce6ff51ad4f8",
+	"f4d5056b486598964ffa3c419e4626164b88251ca9b7d343367eb1d34e526178",
 ]
 # Phase 2d: 6 -> 5 rounds, indices 0-3 byte-identical (no damage lands in those rounds on either
 # map, and this hash reads emotion only), diverging at index 4. Board went 60x12 -> 90x18. Like
@@ -411,12 +413,34 @@ const PURSUE_EMOTION_HASHES: Array = [
 # the final index 4.
 # V2-COMBAT-003.5 lateral/low_exposure fix re-record (decision #54) — still 5 rounds; indices
 # 0-3 stay byte-identical, diverging again only at the final index 4.
+# Follow-up #14 re-record (decisions #96) - 5 -> 25 rounds. Same cause and attribution as
+# PURSUE_EMOTION_HASHES above. Matches the FlowFingerprintTests GUIDE_SPIRIT round_ended move.
 const GUIDE_SPIRIT_EMOTION_HASHES: Array = [
 	"0981643bfb5b4b834e110bbb1e2e07e43cb67a737695df574f01d4ff0840b399",
 	"fb2362b73ab6e12b88f49fb418a372712b6dab222afb45cb8f176f91060b10e9",
 	"5a0bca46209935550ff752415689db70c12141a8cc534fd23d9d01519a94aedb",
 	"d4a55a31c758c4a7837cb584ffe35f0646041ddfd1c264c626568b66c05a583c",
-	"94ed68ae817c7a9da4a869281f57edcac8abc4a740941357b88c06e161abe0eb",
+	"933a39f1afad9edbef892124e414ddedd6a11ef77ee2874b968b48e0ea32f739",
+	"8d399cecc760a122765ea3d4a7dfa87812e1d06884d676ba664aee1653a43320",
+	"07ecfc292ec9be73ad94a8eff5b74fe2ca3c996be78ee5b36e6a0742931cabb0",
+	"484c12b3b8d870713133f930f985b6b8fba4c293e601e489579b0e26d9d170aa",
+	"8efb085e1a3ee0686989faa3534e0d8f8ebcff4d2e3f79e7b98c288b6edc638e",
+	"0797b591ee082534d293de9462c50e1a7e54722995b350365531d9f0d6591be1",
+	"280c6f211163024b93bb7dd949c39acb6dd4902c0c7373ccbb02efafcefff45f",
+	"ce31120c0820f1f184dd628233f58522f71cde12927c61b5ba365e660f352a58",
+	"62c378b313e4658fc4ea024ec52fbe94ef211135b981a46dbb423521d95b7c63",
+	"ed219ae041028fecdbaed071e1f607e87bad181b8588edc6a0a7279d727fe7d2",
+	"04675c19384edb28d78894238f721991479b5333179feb9acc1977b539e0f739",
+	"0e778f47226c796d5b088c8ab82c7bfbd5ef7b2d2c1372cf89e0a9ce08d60694",
+	"a85e9613adb07eba376d349cd8d4064c72e01cccac2794b567843e2afd25c7b4",
+	"fc9a565c85a758bab5f16b804adfd5180103266e1ce6b741fcb52c333f15bc3e",
+	"7394253f4c810abffb98ac2c19b9bea48cd38385469ed9c8218789de8da18260",
+	"46814c8e0ea76de593210b370fc96a4e3d4350df560df40940a46ba7ee9cf5e0",
+	"7f035cf29f8e12e4be48763addf19740b169078f5126f593b87b8ef87fbdfd3f",
+	"41add5672f9740f0d91f657b0c4a9df9981c5350d70b133a339b66fc0dfd5b36",
+	"d4ff8247e9ea553c2b4509630d541d7b445f6a60b55c9df7bd9a457427c53543",
+	"bd08e9846d06f6622627ff4f56fbb0cd8318b1d2f37ad979ce13b1c9ee621e6a",
+	"adaac75cf23e8fe7ee397ba3826005f33c95e28eac8604d44cb13a196c8bd12e",
 ]
 
 

@@ -156,6 +156,10 @@ var config_service
 var logger
 
 
+const STRETCH_FILL_SCATTER: String = "scatter"
+const STRETCH_FILL_VALUES: Array = ["scatter", "none"]
+
+
 func _init(_flow_ctx: FlowContext, _config_service = null, _logger = null) -> void:
 	flow_ctx = _flow_ctx
 	config_service = _config_service
@@ -332,11 +336,13 @@ func setup(t: int) -> void:
 			var cb_max_rows:  int = int(cb_board_cfg_block.get("max_rows",            28))
 			var cb_cols: int = mini(cb_base_cols + completion_index * cb_growth, cb_max_cols)
 			var cb_rows: int = mini(cb_base_rows + completion_index * cb_growth, cb_max_rows)
+			var cb_stretch_mul: float = 1.0
 			# V2-STAGE-004 P3b: PURSUE board stretches one dimension by
 			# pursue_override.long_multiplier, randomised per encounter seed.
 			if flow_ctx.encounter_ctx.resolution_mode == EncounterResolutionModes.PURSUE:
 				var _pur_override: Dictionary = cb_board_cfg_block.get("pursue_override", {})
 				var _pur_mul: float = float(_pur_override.get("long_multiplier", 4.0))
+				cb_stretch_mul = _pur_mul
 				var _pur_rng := RandomNumberGenerator.new()
 				if flow_ctx.campaign_seed != null:
 					_pur_rng = flow_ctx.campaign_seed.get_rng(
@@ -353,6 +359,7 @@ func setup(t: int) -> void:
 			if flow_ctx.encounter_ctx.resolution_mode == EncounterResolutionModes.GUIDE_SPIRIT:
 				var _gsb_override: Dictionary = cb_board_cfg_block.get("guide_spirit_override", {})
 				var _gsb_mul: float = float(_gsb_override.get("long_multiplier", 5.0))
+				cb_stretch_mul = _gsb_mul
 				var _gsb_rng := RandomNumberGenerator.new()
 				if flow_ctx.campaign_seed != null:
 					_gsb_rng = flow_ctx.campaign_seed.get_rng(
@@ -369,7 +376,7 @@ func setup(t: int) -> void:
 			var cb_terrain: Dictionary = StageTerrain.generate(
 				cb_realm_seed,
 				stage_index,
-				cb_signature,
+				scale_signature_for_stretch(cb_signature, cb_stretch_mul),
 				cb_bounds,
 				"combat.terrain." + flow_ctx.encounter_ctx.encounter_id
 			)
@@ -734,6 +741,44 @@ func _setup_pace(t: int) -> void:
 			"mode":         ectx.resolution_mode,
 			"par_rounds":   par,
 		})
+
+
+## Returns `signature` itself unless its `stretch_fill` is "scatter" and the board is stretched
+## (multiplier > 1.0); then returns a copy with plateau_count_min/max scaled. Any other
+## `stretch_fill` value, or none, means "none".
+static func scale_signature_for_stretch(signature: Dictionary, multiplier: float) -> Dictionary:
+	if multiplier <= 1.0 or str(signature.get("stretch_fill", "none")) != STRETCH_FILL_SCATTER:
+		return signature
+	var scaled: Dictionary = signature.duplicate(true)
+	var count_min: int = maxi(int(round(float(signature.get("plateau_count_min", 3)) * multiplier)), 1)
+	var count_max: int = maxi(int(round(float(signature.get("plateau_count_max", 5)) * multiplier)), count_min)
+	scaled["plateau_count_min"] = count_min
+	scaled["plateau_count_max"] = count_max
+	return scaled
+
+
+## Warns about a `stretch_fill` value outside STRETCH_FILL_VALUES. Warn-only, like the
+## other validate_config_integrity checks; the scaling treats an unknown value as "none".
+static func validate_stretch_fill_config(balance_data: Dictionary, logger, t: int) -> bool:
+	var stages_v: Variant = balance_data.get("stages", {})
+	var stages: Dictionary = stages_v if stages_v is Dictionary else {}
+	var shape_v: Variant = stages.get("map_shape", {})
+	var shape: Dictionary = shape_v if shape_v is Dictionary else {}
+	var by_v: Variant = shape.get("by_virtue", {})
+	var by_virtue: Dictionary = by_v if by_v is Dictionary else {}
+	var all_valid := true
+	for virtue in by_virtue:
+		var sig_v: Variant = by_virtue[virtue]
+		if not (sig_v is Dictionary) or not (sig_v as Dictionary).has("stretch_fill"):
+			continue
+		var value: String = str((sig_v as Dictionary)["stretch_fill"])
+		if not STRETCH_FILL_VALUES.has(value):
+			all_valid = false
+			if logger != null:
+				logger.info(t, "terrain.config.warn",
+					"map_shape.by_virtue.%s.stretch_fill '%s' is not one of %s; treated as 'none'." % [virtue, value, STRETCH_FILL_VALUES],
+					{ "virtue": str(virtue), "value": value })
+	return all_valid
 
 
 # Deterministic guard against the id-keyed round-loop freeze. Scans the assembled

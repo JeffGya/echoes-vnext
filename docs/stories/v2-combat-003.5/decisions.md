@@ -94,6 +94,7 @@
 | 93 | z-key-zoom-cycle-is-shared | The Z zoom cycle is a shared BoardCamera option. Combat uses it; Sanctum keeps its own Z. Supersedes the Z part of #72 | 2026-10-04 |
 | 94 | sanctum-zoom-on-the-shared-levels | Sanctum moves onto the shared zoom levels: Z and its wheel step one level and ease. Supersedes the "Sanctum keeps its own Z" part of #93 | 2026-10-04 |
 | 95 | one-wheel-rule-for-every-board-camera | Every board camera uses Combat's wheel: 1.1x per notch, eased, continuous. Sanctum's wheel stops stepping levels; Z keeps the levels. Supersedes the Sanctum-wheel part of #94 | 2026-10-04 |
+| 96 | stretched-board-fill-per-virtue | GUIDE_SPIRIT/PURSUE boards keep each virtue's ground share (follow-up #14). New optional signature key `stretch_fill` in `data.stages.map_shape.by_virtue`: `scatter` multiplies plateau count by the board's stretch multiplier; missing or `none` changes nothing. Scatter: courage, acceptance, generosity. None: wisdom, humility, empathy, forgiveness, truth, leadership, compassion (count is identity; filed for a later follow-up). Jeff's play test 2026-10-06: courage looked right; wisdom with count x5 became one solid mass, so wisdom, humility and empathy moved to none (same reason). Regression tolerance: 10 points below the virtue's 18x18 mean. Measured by `tests stretchprobe` | 2026-10-05 |
 
 ---
 
