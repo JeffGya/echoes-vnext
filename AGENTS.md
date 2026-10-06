@@ -23,10 +23,15 @@ The player runs a Sanctum, summons Echoes (returning fragments of stolen stories
 > (`.claude/worktrees/<branch>/`), pass that path. The literal path below is the main
 > checkout and is usually on a different branch — running it verifies the wrong code.
 
-> **Pass `timeout: 300000` on every Bash call that runs Godot.** The tool auto-backgrounds
-> at 120s and the full serial suite takes **~18 minutes** (measured 2026-09-21, 1673 tests —
-> up from ~7 minutes/1442 tests measured 2026-08-25; the suite has grown). A backgrounded run
-> cannot notify a subagent, so its work is lost. This has cost this project many agent-hours.
+> **Never run Godot on the default Bash timeout.** The tool auto-backgrounds at 120s, and **a
+> backgrounded run cannot notify a subagent** — it finishes without waking the agent and the result
+> is lost. This has cost this project many agent-hours. Each command below carries the `timeout` and
+> `alarm` it needs. Pass them. Never tune one down.
+>
+> **Backgrounding permission differs by layer.** The MAIN conversation may background freely: it is
+> woken when the work finishes and can collect the result. **A SUBAGENT may never background
+> anything** — not a Bash command, not another agent. Nothing wakes it. Where work wants parallel
+> fan-out, a subagent recommends the fan-out and the main conversation runs it.
 
 ### Compile check (no editor needed)
 ```bash
@@ -48,14 +53,13 @@ believe any fingerprint failure.
 Tests run inside Godot via the Debug Panel (`F1` → `tests`) or headlessly. There is no
 standalone CLI runner — Godot must execute them.
 
-Full suite (**~18 minutes**, measured 2026-09-21, 1673 tests — the `fingerprint` suite (8 tests, ~3 min) has since been decomposed into 14 per-mode suites, adding 6 tests via loop-to-functions unrolling, not a coverage change; it was ~7 min/1442 tests on 2026-08-25 and has grown since. Pass `timeout: 1200000`, NOT 300000 or 600000; 10 minutes now truncates a healthy run and looks like a hang):
+Full suite — **pass `timeout: 1200000`**, never 300000 or 600000, and the `alarm` below. Its
+duration grows with the test count and swings with machine load, so no figure is recorded here:
+this file has carried three in turn and each went stale. A too-high timeout costs nothing; a
+too-low one loses the whole run:
 ```bash
 /usr/bin/perl -e 'alarm shift; exec @ARGV' 1500 /opt/homebrew/bin/godot --headless --quit --path <checkout> -- tests
 ```
-(The perl alarm was previously `200` — stale from before the suite grew to ~18 minutes; that value
-hard-kills a healthy ~1090s+ run at 200s every time. 1500s gives real margin over the measured
-~18-minute/1080s+ cost.)
-
 **One suite only (~5s)** — use this while working, and the full suite once at the end:
 ```bash
 /usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --quit --path <checkout> -- tests vow
@@ -653,7 +657,7 @@ Read `docs/v2-migration-map.md` before starting any Alignment story.
 10. Letting autowrap determine first-pass geometry without authored/profile wrap widths
 11. Leaving stale offsets on a full-rect container after changing responsive profiles
 12. Hiding a shell Control without synchronizing its independent `CanvasLayer` visibility/input
-13. Running Godot without `timeout: 300000` — the Bash tool auto-backgrounds at 120s and a subagent then loses all its work
+13. Running Godot on the default Bash timeout — it auto-backgrounds at 120s and a subagent then loses all its work. Use the `timeout` and `alarm` given per command under **Tests**. A subagent may never background anything; the main conversation may.
 14. Believing a fingerprint failure before rebuilding the script class cache with `--import`
 15. Trusting the runner's exit code — it is always 0; only the `Tests: N total, N passed, M failed` line is evidence
 16. Re-running the full suite to read a different field instead of grepping the log you already produced

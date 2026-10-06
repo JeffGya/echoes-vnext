@@ -69,6 +69,12 @@ Run agents together only when **all three** hold:
 
 Read-only research satisfies all three almost always. Parallelise those freely.
 
+**Parallel fan-out is yours, not a subagent's.** You may background agents and commands freely: you
+are woken when they finish and can collect the results. **A subagent may never background anything**
+— nothing wakes it, so the result is lost (root `AGENTS.md`). A nested orchestrator therefore cannot
+parallelise; it dispatches in the foreground, sequentially. When work genuinely wants fan-out, run it
+from here rather than delegating the fan-out itself.
+
 ---
 
 ## Model tiers
