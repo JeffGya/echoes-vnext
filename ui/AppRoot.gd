@@ -566,6 +566,7 @@ func _run_tests(parts: Array) -> void:
 	CooldownTests.register(runner)          # PROG-009
 	PassiveIdentityTests.register(runner)   # PROG-009
 	SkillLoadoutTests.register(runner)      # PROG-009
+	SkillReachTests.register(runner)        # follow-up #6 PR0
 	SocialGraphTests.register(runner)  # BOND-001
 	BondTriggerTests.register(runner)  # BOND-002
 	VowServiceTests.register(runner)  # VOW-001

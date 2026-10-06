@@ -95,6 +95,7 @@
 | 94 | sanctum-zoom-on-the-shared-levels | Sanctum moves onto the shared zoom levels: Z and its wheel step one level and ease. Supersedes the "Sanctum keeps its own Z" part of #93 | 2026-10-04 |
 | 95 | one-wheel-rule-for-every-board-camera | Every board camera uses Combat's wheel: 1.1x per notch, eased, continuous. Sanctum's wheel stops stepping levels; Z keeps the levels. Supersedes the Sanctum-wheel part of #94 | 2026-10-04 |
 | 96 | stretched-board-fill-per-virtue | GUIDE_SPIRIT/PURSUE boards keep each virtue's ground share (follow-up #14). New optional signature key `stretch_fill` in `data.stages.map_shape.by_virtue`: `scatter` multiplies plateau count by the board's stretch multiplier; missing or `none` changes nothing. Scatter: courage, acceptance, generosity. None: wisdom, humility, empathy, forgiveness, truth, leadership, compassion (count is identity; filed for a later follow-up). Jeff's play test 2026-10-06: courage looked right; wisdom with count x5 became one solid mass, so wisdom, humility and empathy moved to none (same reason). Regression tolerance: 10 points below the virtue's 18x18 mean. Measured by `tests stretchprobe` | 2026-10-05 |
+| 107 | skill-mark-and-reveal-reach-fixed-in-its-own-pr | Skill `actor.mark` and `actor.reveal` resolved as idle at distance 2 or more. Fixed in PR0, before the stop-short work (follow-up #6): `ACTION_RANGES` gains `actor.mark: 3` and `actor.reveal: 3`, and the reveal offer gate gains `enemy_dist <= 3`. Jeff chose option O1 and reach 3. No recorded value moved. Index rows 97 to 106 are not listed here; their bodies are below | 2026-10-06 |
 
 ---
 
@@ -1618,5 +1619,24 @@ A control clipped out by its parent does not count. A press while a modal is ope
 **Tests:** `combat_camera/card_tap_survives_a_snapshot_between_press_and_release` (same and changed snapshot), `card_tap_with_emulated_twin_survives_a_snapshot`, `snapshot_updates_cards_in_place`, `snapshot_adds_and_removes_cards_in_order`, `snapshot_keeps_the_bar_scroll`, `screen_change_replaces_the_cards`; `stage_camera/echo_card_tap_survives_a_stage_snapshot`.
 **Source:** qa-verifier (probes P1, P1b); Jeff (keep cards across snapshots); the builder
 **Date:** 2026-10-05
+
+---
+
+### 107. skill-mark-and-reveal-reach-fixed-in-its-own-pr
+
+**Q:** A probe for follow-up #6 (stop-short, movement-model section 7.5) found that skill `actor.mark` and `actor.reveal` resolve as `actor.idle` at distance 2 or more in live combat. How is it fixed?
+**A:** In its own PR, before the stop-short work (PR0). Option O1: `CombatActivationService.ACTION_RANGES` gains `actor.mark` and `actor.reveal`, both set to the new constant `SKILL_REACH` (3, in the same class). The mark offer gate and the reveal offer gate in `ActionCandidateGenerator` both read `ReachAuthority.SKILL_REACH`, so the offer and the reach cannot drift apart. The reveal gate is new: it gains `enemy_dist <= SKILL_REACH`. Jeff asked for the one constant after QA found the literal 3 in three places. Jeff chose O1 and reach 3 for both skills on 2026-10-06. Rejected: O2 (offer only when adjacent; the skill would be worse than the planned generic observe), O3 (move, then act; changes the goal contract).
+
+**Cause.** Both skills are stationary candidates. They carry an empty fallback. The reach table listed no entry for them, so every other action had reach 1 (`CombatActivationService.gd` `ACTION_RANGES`, `DEFAULT_ACTION_RANGE`). Mark was offered within 3 cells and reveal at any distance. With a target at distance 2 or more, the planned action was invalid, no fallback existed, and `apply_live_activation` set `actor.idle` (`LiveMovementContextService.gd:418-421`).
+
+**Probe (before the fix).** 8 Standing 3 combat fights, skills equipped on the roster: `actor.reveal` was selected 23 times and `actor.mark` 2 times. All 25 resolved `actor.idle`. `_reveal_used` is set only in the effect path (`ActorStateMachine.gd:1316`), so reveal could repeat.
+**Probe (after the fix).** Same slices: reveal selected 2 times and mark 2 times, all resolved to the skill, 0 idle. Reveal is no longer selected at distance 11 to 16, because it is no longer offered there.
+
+**Behaviour change to know.** Reveal is now offered only within 3 cells. Before, it was offered at any distance, and every far selection was wasted.
+
+**Recorded values.** None moved. No fingerprint fixture equips skills. The 14 fingerprint suites pass.
+**Tests:** new suite `skill_reach` (4 tests, production-shaped path through `FlowRuntime`): mark resolves at distance 2 and 3; reveal resolves at distance 3 and sets `_reveal_used`; reveal is not offered at distance 4; the mark effect sets `marked_by` and raises the ally melee bonus. On the old code, 3 of the 4 fail.
+**Source:** Jeff (O1 and reach 3); sr-game-designer (section 12 of `followup-6-design.md`); mechanics-developer (probe B4 and the build)
+**Date:** 2026-10-06
 
 ---
