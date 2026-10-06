@@ -52,5 +52,7 @@ tool owns its own command name rather than running as part of the suite. See `ui
   `collect_unoccupied_cells` → `place_on_terrain` pattern every objective spawn uses — and
   reports situations and objectives landing off the host region, objectives without eight
   walkable free neighbours, and how often the objective-site compensation fires per virtue.
-  It takes roughly 12 minutes; run it in the background, not on a Bash timeout.
+  It takes roughly 12 minutes. The MAIN conversation may background it. A SUBAGENT may not — a
+  backgrounded run never wakes it — so a subagent runs it on `timeout: 1200000` with an alarm of
+  1500, or reports that the probe needs the main conversation to run it.
 - `assemble_contact_responses.py` — Python helper (non-GDScript)
