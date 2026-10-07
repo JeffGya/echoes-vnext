@@ -246,7 +246,7 @@ static func generate_candidates(
 						})
 				"actor.mark":
 					# Condition: enemy within 3 tiles AND not already marked.
-					if not nearest_enemy.is_empty() and enemy_dist <= 3 \
+					if not nearest_enemy.is_empty() and enemy_dist <= ReachAuthority.SKILL_REACH \
 							and str(nearest_enemy.get("marked_by", "")).is_empty():
 						candidates.append({
 							"action_type":      "actor.mark",
@@ -288,7 +288,7 @@ static func generate_candidates(
 				"actor.reveal":
 					# Once per combat; condition: nearest enemy not yet revealed by seer.
 					if not bool(actor.get("_reveal_used", false)) \
-							and not nearest_enemy.is_empty() \
+							and not nearest_enemy.is_empty() and enemy_dist <= ReachAuthority.SKILL_REACH \
 							and str(nearest_enemy.get("revealed_by_seer", "")).is_empty():
 						candidates.append({
 							"action_type":      "actor.reveal",
