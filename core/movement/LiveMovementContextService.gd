@@ -379,6 +379,7 @@ func apply_live_activation(
 ) -> Dictionary:
 	_prepare_legacy_move_intent_for_activation(actor, intent, prepared)
 	if not bool(prepared.get("valid", false)) or not intent.has("planned_action"):
+		StopShortContextService.clear_streak(actor)
 		asm.update_passive_state_from_activation(intent, ctx, t, false, logger)
 		return {}
 	var movement_context: Dictionary = prepared["movement_context"] as Dictionary

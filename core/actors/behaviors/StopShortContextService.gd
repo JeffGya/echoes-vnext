@@ -5,6 +5,7 @@
 class_name StopShortContextService
 
 const ReachAuthority = preload("res://core/movement/CombatActivationService.gd")
+const Executor = preload("res://core/movement/MovementExecutor.gd")
 
 const STREAK_KEY: String = "_stop_short_streak"
 
@@ -35,7 +36,7 @@ static func screen(
 			continue
 		var stop_cell: Dictionary = (candidate["_movement_path"] as Array).back() as Dictionary
 		var ctx: Dictionary = _build_ctx(
-			candidate, stop_cell, actor, all_actors, relationships, context, options, capacity)
+			candidate, stop_cell, actor, all_actors, relationships, context, options, capacity, movement_context)
 		var result: Dictionary = StopShortService.evaluate(ctx, cfg)
 		if bool(result["stop"]):
 			candidate["_stop_short"] = result
@@ -119,6 +120,11 @@ static func carry(
 	})
 
 
+## Ends the streak. Every turn that is not a stop-short step must call this, also turns that never reach `finish`.
+static func clear_streak(actor: Dictionary) -> void:
+	actor.erase(STREAK_KEY)
+
+
 ## After activation: consumes `intent["_stop_short"]`, sets the streak flag, logs an interrupted
 ## benefit, and sets `_stop_short_report` (only for a stop-short step).
 static func finish(
@@ -131,7 +137,7 @@ static func finish(
 ) -> void:
 	var stop: Dictionary = intent.get("_stop_short", {}) as Dictionary
 	if stop.is_empty():
-		actor.erase(STREAK_KEY)
+		clear_streak(actor)
 		return
 	intent.erase("_stop_short")
 	var plan: Dictionary = stop["benefit_plan"] as Dictionary
@@ -190,7 +196,8 @@ static func _build_ctx(
 	relationships: Dictionary,
 	context: Dictionary,
 	options: Array,
-	capacity: int
+	capacity: int,
+	movement_context: Dictionary
 ) -> Dictionary:
 	var goal: Dictionary = candidate.get("_movement_goal", {}) as Dictionary
 	var option: Dictionary = candidate.get("_movement_option", {}) as Dictionary
@@ -227,11 +234,24 @@ static func _build_ctx(
 		"guard_state": bool(actor.get("guard_state", false)),
 		"stop_in_hostile_reach": in_reach,
 		"previous_stop_short": bool(actor.get(STREAK_KEY, false)),
-		"stop_cell_hostile_control": not (option.get("hostile_control_sources", []) as Array).is_empty(),
+		"stop_cell_hostile_control": _last_edge_controlled(candidate, movement_context),
 		"cohesion_stop": float(option.get("cohesion", 0.0)),
 		"cohesion_full": _full_route_cohesion(str(candidate.get("_movement_goal_id", "")), options),
 		"hostiles": hostiles,
 	}
+
+
+## True when a hostile controller touches the final edge of the route, by the executor's own rule.
+## The option field `hostile_control_sources` unions every edge, so it cannot answer this.
+static func _last_edge_controlled(candidate: Dictionary, movement_context: Dictionary) -> bool:
+	var path: Array = candidate.get("_movement_path", []) as Array
+	if path.is_empty():
+		return false
+	var from_cell: Dictionary = movement_context.get("origin", {}) as Dictionary
+	if path.size() > 1:
+		from_cell = path[path.size() - 2] as Dictionary
+	return not Executor._edge_hostile_sources(
+		Executor._active_hostiles(movement_context), from_cell, path.back() as Dictionary).is_empty()
 
 
 static func _full_route_cohesion(goal_id: String, options: Array) -> float:

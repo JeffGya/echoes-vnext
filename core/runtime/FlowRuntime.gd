@@ -1335,6 +1335,12 @@ func _handle_combat_confirm_round(t: int) -> void:
 	_resolve_next_actor(t)
 
 
+## One-line text for the `stopshort` debug status. Reads no state outside this runtime.
+func stop_short_status_line() -> String:
+	var actor_cfg: Dictionary = (config_service.get_balance().get("data", {}) as Dictionary).get("actor", {}) as Dictionary
+	return StopShortContextService.status_line(actor_cfg, flow_ctx.dev_stop_short, flow_ctx.encounter_ctx)
+
+
 ## COMBAT-SEQ: advances one step in the current round — resolves the next living actor
 ## and emits a per-actor snapshot.
 func _handle_combat_next_actor(t: int) -> void:

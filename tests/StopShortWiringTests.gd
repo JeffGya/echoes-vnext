@@ -28,6 +28,9 @@ const _TESTS: Array = [
 	"trace_names_benefit_and_cause_only_when_decisive",
 	"trace_player_safe_fields_unchanged",
 	"finish_reports_interrupted_benefit",
+	"refuse_turn_clears_streak",
+	"hostile_control_read_at_last_edge",
+	"runtime_status_line",
 	"observe_mark_strength_and_overwrite_rules",
 	"actor_projection_marks",
 	"debug_emotion_set",
@@ -389,6 +392,76 @@ static func _t_finish_reports_interrupted_benefit() -> Dictionary:
 	StopShortContextService.finish(actor, intent3, {}, asm, logger, 5)
 	_eq(errs, "normal step has no report", intent3.has("_stop_short_report"), false)
 	_eq(errs, "normal step clears the streak", actor.has(StopShortContextService.STREAK_KEY), false)
+	return _res(errs)
+
+
+## An absolute-fear refuse returns early from apply_live_activation, before `finish` runs.
+## The streak must still end, or the next conservative route is vetoed as consecutive.
+static func _t_refuse_turn_clears_streak() -> Dictionary:
+	var errs: Array = []
+	var actor: Dictionary = _actor({ StopShortContextService.STREAK_KEY: true })
+	var logger := StructuredLogger.new()
+	var live := LiveMovementContextService.new(null, logger)
+	var returned: Dictionary = live.apply_live_activation(
+		actor, { "action_type": "actor.refuse" }, {}, ActorStateMachine.new(actor), {}, 7)
+	_eq(errs, "early path returns nothing", returned.is_empty(), true)
+	_eq(errs, "streak cleared", actor.has(StopShortContextService.STREAK_KEY), false)
+	var cands: Array = [_candidate("option.a.conservative")]
+	_eq(errs, "next conservative route not vetoed", _run_screen(cands, actor, 5, _cfg()).size(), 0)
+	_eq(errs, "next conservative route kept", cands.size(), 1)
+	var held: Array = [_candidate("option.a.conservative")]
+	var control: Array = _run_screen(held, _actor({ StopShortContextService.STREAK_KEY: true }), 5, _cfg())
+	_eq(errs, "control: a kept streak still vetoes", control.size(), 1)
+	return _res(errs)
+
+
+static func _controller(id: String, col: int, row: int) -> Dictionary:
+	return { "id": id, "position": _cell(col, row), "is_dead": false, "is_ko": false,
+		"is_structure": false, "controlling_state": true }
+
+
+## Only the final edge of the route decides whether Observe is blocked. Guard is closed
+## (guard_state) and the cause is a sight calling, so Observe is the only legal benefit.
+static func _t_hostile_control_read_at_last_edge() -> Dictionary:
+	var errs: Array = []
+	var cases: Array = [
+		["controlled first edge only", _controller("enemy_2", 0, 1), ["enemy_2"], 0],
+		["controlled last edge", _controller("enemy_2", 4, 2), [], 1],
+	]
+	for case_v: Variant in cases:
+		var c: Array = case_v as Array
+		var cand: Dictionary = _candidate("option.a.conservative")
+		cand["_movement_path"] = [_cell(2, 1), _cell(3, 1)]
+		cand["_movement_option"] = { "cohesion": 0.0, "hostile_control_sources": c[2] }
+		var movement_context: Dictionary = {
+			"relationships": { "enemy_1": "hostile", "enemy_2": "hostile" },
+			"origin": _cell(1, 1), "perceived_actors": [c[1]],
+		}
+		var cands: Array = [cand]
+		var vetoes: Array = StopShortContextService.screen(
+			cands, _actor({ "guard_state": true, "fear": 0 }), _hostiles(5), { "calling_family": "sight", "judgment": 0.8 },
+			movement_context, [], 2, Callable(StopShortWiringTests, "_style_of"), _cfg())
+		_eq(errs, "%s: veto count" % str(c[0]), vetoes.size(), int(c[3]))
+		if int(c[3]) == 1 and vetoes.size() == 1:
+			_eq(errs, "%s: reason" % str(c[0]), (vetoes[0] as Dictionary)["reason"], "no_benefit")
+		if int(c[3]) == 0:
+			_eq(errs, "%s: observe is the benefit" % str(c[0]),
+				((cand.get("_stop_short", {}) as Dictionary).get("benefit_id", "")), "observe")
+	return _res(errs)
+
+
+static func _t_runtime_status_line() -> Dictionary:
+	var errs: Array = []
+	var env: Dictionary = _setup("status_line", {})
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var rt: FlowRuntime = env["runtime"]
+	var actor_cfg: Dictionary = (rt.config_service.get_balance()["data"] as Dictionary)["actor"] as Dictionary
+	_eq(errs, "matches the service line", rt.stop_short_status_line(),
+		StopShortContextService.status_line(actor_cfg, "", rt.flow_ctx.encounter_ctx))
+	_eq(errs, "names the encounter", rt.stop_short_status_line().contains("this encounter = balance.json"), true)
+	rt.dispatch({ "type": "debug.stop_short.set", "mode": "on" })
+	_eq(errs, "shows the override", rt.stop_short_status_line().contains("override = on"), true)
 	return _res(errs)
 
 

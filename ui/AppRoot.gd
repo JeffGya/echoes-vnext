@@ -1119,9 +1119,7 @@ func _run_emotion_set_command(parts: Array) -> void:
 # stopshort on|off  — override data.actor.stop_short.enabled from the NEXT encounter start
 func _run_stop_short_command(parts: Array) -> void:
 	if parts.size() == 1:
-		var actor_cfg: Dictionary = (runtime.config_service.get_balance().get("data", {}) as Dictionary).get("actor", {}) as Dictionary
-		_debug_print(StopShortContextService.status_line(
-			actor_cfg, runtime.flow_ctx.dev_stop_short, runtime.flow_ctx.encounter_ctx))
+		_debug_print(runtime.stop_short_status_line())
 		return
 	var mode: String = str(parts[1]).to_lower()
 	if parts.size() > 2 or not (mode == "on" or mode == "off"):
