@@ -22,6 +22,7 @@ signal modal_requested(modal_id: StringName, payload: Dictionary)
 const InitiativeRowScene := preload("res://ui/components/InitiativeRowItem.tscn")
 const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
 const PacePresentation := preload("res://ui/components/PacePresentation.gd")
+const StopShortMotion := preload("res://ui/screens/combat/CombatStopShortMotion.gd")
 
 # WorldLayer.follow_viewport_enabled (in the .tscn) is what lets the Camera2D move the board.
 # Without it the camera changes only the viewport canvas transform, which a CanvasLayer ignores.
@@ -137,6 +138,11 @@ var _presentation_board_size: Vector2i = Vector2i.ZERO
 # Cached actor projection from the latest snapshot — board-tap hit test and camera follow read it.
 var _last_actors: Array = []
 var _layout: Dictionary = {}
+# Stop-short step state: actor, report, held bark, and rows that switch word at settle.
+var _step_actor_id: String = ""
+var _step_stop_short: Dictionary = {}
+var _held_barks: Array = []
+var _pending_row: Dictionary = {}
 
 # Camera zoom (decisions.md #70, #71). min_zoom derives from the real board span so the whole board
 # fits at full zoom-out on any board shape.
@@ -162,6 +168,7 @@ var _pointer := BoardPointerTracker.new()
 
 func _ready() -> void:
 	_pointer.tap.connect(_on_pointer_tap)
+	_token_layer.actor_settled.connect(_on_actor_settled)
 	_pointer.drag_pan.connect(camera.drag_pan)
 	_back_button.visible = false
 	_back_button.pressed.connect(_on_back_pressed)
@@ -298,6 +305,8 @@ func _reset_presentation_state() -> void:
 	if _bark_popup_layer != null:
 		_bark_popup_layer.clear_all()
 	_last_bark_line = ""
+	_held_barks.clear()
+	_pending_row.clear()
 	# Fresh encounter → the first pace colour shows with no blend.
 	_kill_pace_tween()
 	_last_pace_state = ""
@@ -319,6 +328,7 @@ func _should_reset_presentation(data: Dictionary) -> bool:
 	return next_board_size != _presentation_board_size
 
 func _render(data: Dictionary, actions: Dictionary) -> void:
+	_flush_held_barks()
 	_current_cols = int(data.get("board_cols", 10))
 	_current_rows = int(data.get("board_rows", 10))
 	var terrain_v: Variant = data.get("terrain", {})
@@ -739,17 +749,22 @@ func _on_speed_pressed(delay: float) -> void:
 func _apply_visual_playback_for_delay(delay: float) -> void:
 	var move_duration: float = _MOVE_DURATION_NORMAL
 	var telegraph_duration: float = _TELEGRAPH_DURATION_NORMAL
+	var settle: Vector2 = Vector2(1.0, 0.10)  # stop-short motion scale, badge delay
 
 	if is_equal_approx(delay, _SPEED_SLOW):
 		move_duration = _MOVE_DURATION_SLOW
 		telegraph_duration = _TELEGRAPH_DURATION_SLOW
+		settle = Vector2(1.6, 0.20)
 	elif is_equal_approx(delay, _SPEED_FAST):
 		move_duration = _MOVE_DURATION_FAST
 		telegraph_duration = _TELEGRAPH_DURATION_FAST
+		settle = Vector2(0.0, 0.05)
 
 	if _token_layer != null and _token_layer.visual_config != null:
 		_token_layer.visual_config.move_duration = move_duration
 		_token_layer.visual_config.telegraph_lead_time = telegraph_duration
+		_token_layer.visual_config.motion_scale = settle.x
+		_token_layer.visual_config.badge_delay = settle.y
 	if _move_telegraph_layer != null and _move_telegraph_layer.get("visual_config") != null:
 		var telegraph_cfg: Variant = _move_telegraph_layer.get("visual_config")
 		if telegraph_cfg != null:
@@ -794,6 +809,15 @@ func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}
 			if not tid.is_empty() and dmg > 0:
 				damage_by_id[tid] = "-%d" % dmg
 
+	var last_actor_action: Dictionary = data.get("last_actor_action", {})
+	_step_actor_id = str(last_actor_action.get("source_id", ""))
+	_step_stop_short = last_actor_action.get("stop_short", {}) as Dictionary
+	var step_shown: bool = bool(_step_stop_short.get("performed", false))
+	var hop_lift: float = stop_short_hop_lift(
+		str(_step_stop_short.get("benefit", "")),
+		is_actor_selected(camera.mode, camera.target_id, _step_actor_id), step_shown,
+		camera.zoom.x, _token_layer.visual_config.motion_scale)
+
 	var tokens: Array[Dictionary] = []
 	for actor in actors:
 		var gp: Dictionary = actor.get("grid_pos", {})
@@ -822,9 +846,13 @@ func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}
 			"hp_ratio":           hp_ratio,
 			"damage_text":        damage_by_id.get(actor_id, ""),
 			"emotional_status":   str(actor.get("emotional_status", "")),
+			"status":             str(actor.get("status", "")),
+			"mark_kind":          str(actor.get("mark_kind", "")),
+			"hop_lift":           hop_lift if step_shown and actor_id == _step_actor_id else 0.0,
+			"cause_badge":        stop_short_badge(_step_stop_short) if step_shown and actor_id == _step_actor_id else "",
+			"observe_target":     str(_step_stop_short.get("subject_actor_id", "")) if step_shown and actor_id == _step_actor_id and str(_step_stop_short.get("benefit", "")) == "observe" else "",
 		})
 
-	var last_actor_action: Dictionary = data.get("last_actor_action", {})
 	var telegraph_event: Dictionary = _token_layer.apply_snapshot(
 		tokens,
 		current_actor_id,
@@ -918,7 +946,11 @@ func _show_bark_popups(actors: Array, _data: Dictionary) -> void:
 			prev_line = line
 	if not deduped.is_empty():
 		_last_bark_line = str(deduped.back().get("bark_line", ""))
-		_bark_popup_layer.show_barks(deduped)
+		# The stop-short Echo's own bark waits for the settle; a settled token shows it now.
+		var held: Array = deduped.filter(func(ev: Dictionary) -> bool:
+			return bool(_step_stop_short.get("performed", false)) and str(ev.get("actor_id", "")) == _step_actor_id and not _token_layer.is_settled(_step_actor_id))
+		_held_barks.append_array(held)
+		_bark_popup_layer.show_barks(deduped.filter(func(ev: Dictionary) -> bool: return not held.has(ev)))
 
 
 # V2-VOICE-002: Pushes current actor positions to BarkPopupLayer so speech bubbles
@@ -973,11 +1005,15 @@ func _draw_initiative_panel(data: Dictionary) -> void:
 
 	# Build action-text lookup from action_results resolved so far this round.
 	var action_by_id: Dictionary = {}
+	var stop_row_ids: Dictionary = {}
+	_pending_row.clear()
 	for result_v in data.get("action_results", []):
 		if result_v is Dictionary:
 			var sid: String = str(result_v.get("source_id", ""))
 			if not sid.is_empty():
 				action_by_id[sid] = _format_action(result_v)
+				if bool((result_v.get("stop_short", {}) as Dictionary).get("performed", false)):
+					stop_row_ids[sid] = true
 
 	# V2-EMOTION-001: build actor lookup for emotion fields.
 	var actor_by_id: Dictionary = {}
@@ -996,13 +1032,18 @@ func _draw_initiative_panel(data: Dictionary) -> void:
 		var action_text: String = action_by_id.get(actor_id, "")
 		var row: Node = InitiativeRowScene.instantiate()
 		_initiative_list.add_child(row)
+		# Stop-short step still settling: plain move word now, benefit word at actor_settled.
+		var shown_text: String = action_text
+		if actor_id == _step_actor_id and stop_row_ids.has(actor_id) and not _token_layer.is_settled(actor_id):
+			shown_text = "Moves"
+			_pending_row[actor_id] = { "row": row, "args": [actor_name, action_text, i == active_idx, is_dead, _action_color_for_text(action_text)] }
 		row.call(
 			"setup_row",
 			actor_name,
-			action_text,
+			shown_text,
 			i == active_idx,
 			is_dead,
-			_action_color_for_text(action_text)
+			_action_color_for_text(shown_text)
 		)
 		row.call("set_actor_id", actor_id)
 		row.connect("row_pressed", select_board_target)
@@ -1012,15 +1053,86 @@ func _draw_initiative_panel(data: Dictionary) -> void:
 		var emotion_label := row.get_node("%EmotionLabel") as Label
 		emotion_label.text = EmotionPresentation.display_name(emotion_str)
 		emotion_label.theme_type_variation = EmotionPresentation.text_theme(emotion_str)
-		emotion_label.visible = not emotion_str.is_empty()
+		emotion_label.visible = not emotion_str.is_empty() and not stop_row_ids.has(actor_id)
 
 	_initiative_panel.visible = true
+
+
+
+func _on_actor_settled(actor_id: String) -> void:
+	if actor_id != _step_actor_id or not bool(_step_stop_short.get("performed", false)):
+		return
+	var pending: Dictionary = _pending_row.get(actor_id, {})
+	_pending_row.erase(actor_id)
+	var stopped: Dictionary = _find_actor(actor_id)
+	if not stopped.is_empty():
+		_move_telegraph_layer.show_settle_diamond(_board.map_to_local(_actor_cell(stopped)), _step_stop_short)
+	if not pending.is_empty() and is_instance_valid(pending["row"]):
+		(pending["row"] as Node).callv("setup_row", pending["args"])
+	# Selected: the bubble replaces the bark. Unselected: the held bark shows.
+	if is_actor_selected(camera.mode, camera.target_id, actor_id):
+		_held_barks.clear()
+		_show_stop_short_bubble(actor_id)
+	else:
+		_flush_held_barks()
+
+
+func _flush_held_barks() -> void:
+	if _bark_popup_layer != null:
+		for ev: Dictionary in _held_barks:
+			var actor: Dictionary = _find_actor(str(ev.get("actor_id", "")))
+			if not actor.is_empty():
+				ev["screen_pos"] = _actor_screen_pos(actor)
+				_bark_popup_layer.show_barks([ev])
+	_held_barks.clear()
+
+
+func _show_stop_short_bubble(actor_id: String) -> void:
+	var actor: Dictionary = _find_actor(actor_id)
+	if _bark_popup_layer == null or actor.is_empty():
+		return
+	_bark_popup_layer.show_barks([{
+		"actor_id": actor_id, "bark_line": stop_short_reason(_step_stop_short),
+		"bark_context": "stop_short_reason", "bark_tier": "", "bark_target_id": "",
+		"bark_priority": 1, "is_response": false, "screen_pos": _actor_screen_pos(actor),
+	}])
+
+
+## Selected = the camera is locked on this actor (read at the moment of use, never stored).
+static func is_actor_selected(camera_mode: int, camera_target_id: String, actor_id: String) -> bool:
+	return camera_mode == BoardCameraController.Mode.FOLLOW_ACTOR and camera_target_id == actor_id
+
+
+## World-unit lift of the notice hop: none when selected, not performed, or at Fast (motion scale 0).
+## The marker and the rest pose still show then.
+static func stop_short_hop_lift(benefit: String, selected: bool, performed: bool, zoom_x: float, motion_scale: float) -> float:
+	if selected or not performed or motion_scale <= 0.0:
+		return 0.0
+	return StopShortMotion.hop_lift(benefit, zoom_x)
+
+
+static func stop_short_badge(stop_short: Dictionary) -> String:
+	var args: Dictionary = (stop_short.get("trace", {}) as Dictionary).get("message_args", {})
+	match str(args.get("source", "")):
+		"emotion":
+			return "fear"
+		"calling", "vector":
+			return "identity"
+	return ""
+
+
+static func stop_short_reason(stop_short: Dictionary) -> String:
+	var args: Dictionary = (stop_short.get("trace", {}) as Dictionary).get("message_args", {})
+	return StopShortText.reason_line(str(stop_short.get("benefit", "")), str(args.get("code", "")))
 
 
 ## Formats an action_result entry into a short display string for the initiative panel.
 func _format_action(result: Dictionary) -> String:
 	var atype: String = str(result.get("action_type", ""))
 	var tname: String = str(result.get("target_name", ""))
+	var stop_short: Dictionary = result.get("stop_short", {}) as Dictionary
+	if bool(stop_short.get("performed", false)):
+		return StopShortText.row_word(str(stop_short.get("benefit", "")))
 	match atype:
 		"melee_attack":
 			var target: String = tname if not tname.is_empty() else "?"
@@ -1037,6 +1149,8 @@ func _format_action(result: Dictionary) -> String:
 			return "Idle"
 		"actor.refuse":
 			return "Refuses"
+		"actor.observe":
+			return StopShortText.row_word("observe")
 		"actor.dead":
 			return ""
 	return atype
@@ -1048,7 +1162,7 @@ func _action_color_for_text(action_text: String) -> Color:
 		return Color.RED
 	if action_text.begins_with("Attacks"):
 		return Color.ORANGE
-	if action_text == "Guards":
+	if action_text == "Guards" or action_text in [StopShortText.row_word("guard"), StopShortText.row_word("hold")]:
 		return Color.CYAN
 	if action_text.begins_with("Move →") or action_text == "Moves":
 		return Color(0.6, 0.9, 0.6)
@@ -1189,6 +1303,8 @@ func select_board_target(actor_id: String) -> void:
 		return
 	camera.select(actor_id)
 	_push_camera_follow_target()
+	if actor_id == _step_actor_id and bool(_step_stop_short.get("performed", false)) and _token_layer.is_settled(actor_id):
+		_show_stop_short_bubble(actor_id)
 
 
 ## Pushes the lock target for the current camera mode. Called on select and on every snapshot, so

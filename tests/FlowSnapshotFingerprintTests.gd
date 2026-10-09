@@ -91,6 +91,7 @@ static func register(runner) -> void:
 	runner.register_test("snapshot_purity/dispatch_preserves_pending_return_notification_until_sanctum", func(): return test_purity_dispatch_preserves_pending_return_notification_until_sanctum())
 	# V2-INFRA-003 Phase 5 Slice B — ResolveSnapshotBuilder's own purity guard.
 	runner.register_test("snapshot_purity/resolve_builder_double_build_is_stable", func(): return test_purity_resolve_builder_double_build_is_stable())
+	runner.register_test("snapshot_purity/stop_short_and_mark_keys_are_copies", func(): return test_purity_stop_short_and_mark_keys_are_copies())
 
 
 # ---------------------------------------------------------------------------
@@ -734,6 +735,55 @@ static func test_purity_snapshot_builders_do_not_mutate_bark() -> Dictionary:
 	if final_after1 != final_before:
 		mismatches.append("final: expected build_final_snapshot() to leave actor[\"_bark_line\"] untouched (still \"%s\"), got \"%s\"" % [final_before, final_after1])
 
+	if not mismatches.is_empty():
+		return { "ok": false, "error": " | ".join(mismatches) }
+	return { "ok": true }
+
+
+## Stop-short and mark keys: two builds are identical, nothing is mutated, `stop_short` is a deep copy.
+static func test_purity_stop_short_and_mark_keys_are_copies() -> Dictionary:
+	var ctx := FlowContext.new()
+	ctx.config_service = null
+	var ectx := EncounterContext.new()
+	ectx.encounter_id = "purity_stop_short_001"
+	ectx.placement_seed = 1
+	ectx.combat_state = {}
+	var watched := {
+		"id": "enemy_watched", "name": "Watched", "stats": { "max_hp": 20 }, "current_hp": 20,
+		"fear": 0, "morale": 50, "faction": "enemy", "grid_pos": { "col": 3, "row": 0 },
+		"is_dead": false, "marked_by": "echo_stop", "_mark_kind": "observe",
+	}
+	ectx.actors = [watched]
+	ectx.last_actor_action = {
+		"source_id": "echo_stop",
+		"stop_short": {
+			"benefit": "observe", "performed": true, "stop_cell": { "col": 1, "row": 0 },
+			"subject_actor_id": "enemy_watched", "trace": {},
+		},
+	}
+	ctx.encounter_ctx = ectx
+	var actor_before := JSON.stringify(watched, "", true)
+	var last_before := JSON.stringify(ectx.last_actor_action, "", true)
+	var build1: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(ctx, 1)
+	var build2: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(ctx, 1)
+	var mismatches: Array = []
+	if JSON.stringify(build1, "", true) != JSON.stringify(build2, "", true):
+		mismatches.append("two builds differ")
+	var data: Dictionary = build1.get("data", {}) as Dictionary
+	var stop: Dictionary = (data.get("last_actor_action", {}) as Dictionary).get("stop_short", {}) as Dictionary
+	if str(stop.get("benefit", "")) != "observe":
+		mismatches.append("stop_short not projected: %s" % str(stop))
+	var proj: Dictionary = {}
+	for a_v in data.get("actors", []) as Array:
+		if str((a_v as Dictionary).get("id", "")) == "enemy_watched":
+			proj = a_v as Dictionary
+	if proj.get("is_marked", null) != true or proj.get("mark_kind", null) != "observe":
+		mismatches.append("mark keys: is_marked=%s mark_kind=%s" % [str(proj.get("is_marked")), str(proj.get("mark_kind"))])
+	(stop["stop_cell"] as Dictionary)["col"] = 9
+	if JSON.stringify(watched, "", true) != actor_before:
+		mismatches.append("actor dict changed by the build")
+	if JSON.stringify(ectx.last_actor_action, "", true) != last_before:
+		mismatches.append("ectx.last_actor_action changed (stop_short is aliased, not copied)")
 	if not mismatches.is_empty():
 		return { "ok": false, "error": " | ".join(mismatches) }
 	return { "ok": true }

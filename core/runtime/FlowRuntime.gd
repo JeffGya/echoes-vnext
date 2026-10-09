@@ -592,6 +592,12 @@ func dispatch(action: Dictionary) -> Dictionary:
 			# DebugController.handle_force_rank_up().
 			"debug.progression.force_rank_up":
 				_apply_action_outcome(_debug_controller().handle_force_rank_up(action, t), t)
+
+			"debug.emotion.set":
+				_apply_action_outcome(_debug_controller().handle_emotion_set(action, t), t)
+
+			"debug.stop_short.set":
+				_apply_action_outcome(_debug_controller().handle_stop_short_set(action, t), t)
 	
 			# ---- Directives (DIRECTIVE-001) ----
 			"directive.select":
@@ -1401,7 +1407,8 @@ func _resolve_next_actor(t: int) -> void:
 	# fell through to BehaviorArbiter._DEFAULTS, making the balance.json values decorative.
 	# data.actor wins on collision so existing behaviour is unchanged. See
 	# ConfigService.merge_actor_cfg() / _get_actor_cfg_merged() above for the merge + per-run cache.
-	var actor_cfg: Dictionary = _get_actor_cfg_merged(bdata.get("actor", {}), leadership_expr_cfg)
+	var actor_cfg: Dictionary = StopShortContextService.with_override(
+		_get_actor_cfg_merged(bdata.get("actor", {}), leadership_expr_cfg), ectx.stop_short_override)
 	var prog_cfg_block: Dictionary    = bdata.get("progression", {})
 	var birth_stats_block: Dictionary = bdata.get("summoning", {}).get("birth_stats", {})
 	var round: int = int(combat_state.get("round_counter", 0))
@@ -1487,6 +1494,11 @@ func _resolve_next_actor(t: int) -> void:
 					_path_from_pos = (_mv_result.get("origin", _path_from_pos) as Dictionary).duplicate(true)
 		ectx.last_actor_action["from_pos"] = _path_from_pos
 		ectx.last_actor_action["path"]     = _path_cells
+		# Always present, {} for any step that is not a stop-short.
+		var _stop_short_report: Dictionary = {}
+		if str(ectx.last_actor_action.get("source_id", "")) == str(actor.get("id", "")):
+			_stop_short_report = (intent.get("_stop_short_report", {}) as Dictionary).duplicate(true)
+		ectx.last_actor_action["stop_short"] = _stop_short_report
 
 	# V2-INFRA-003 Phase 6 Slice 6H: the PROG-003 accumulator and the S14b support fold moved to
 	# ContributionLedgerService, which now owns EncounterContext.echo_action_logs outright.

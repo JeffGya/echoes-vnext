@@ -214,7 +214,7 @@ func accumulate_turn(
 			"actor.guard":
 				alog["guard_count"] += 1
 				alog["total_count"] += 1
-			"actor.move", "actor.idle", "actor.refuse":
+			"actor.move", "actor.idle", "actor.refuse", "actor.observe":
 				alog["total_count"] += 1
 
 	# S14b Tier 2: fold this actor's transient support tally into the contribution ledger.

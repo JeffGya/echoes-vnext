@@ -36,6 +36,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("snapshot_contract/vow_manage", Callable(SnapshotContractTests, "_t_vow_manage"))
 	runner.register_test("snapshot_contract/boot_config_error", Callable(SnapshotContractTests, "_t_boot_config_error"))
 	runner.register_test("snapshot_contract/sweep_boot_through_sanctum", Callable(SnapshotContractTests, "_t_sweep_boot_through_sanctum"))
+	runner.register_test("snapshot_contract/combat_stop_short_and_mark_keys", Callable(SnapshotContractTests, "_t_combat_stop_short_and_mark_keys"))
 
 
 # ---------------------------------------------------------------------------
@@ -273,4 +274,51 @@ static func _t_sweep_boot_through_sanctum() -> Dictionary:
 	if str(runtime.flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.SANCTUM:
 		return { "ok": false, "error": "Expected to land on flow.sanctum after keeper_intro.complete" }
 
+	return { "ok": true }
+
+
+
+## A real COMBAT dispatch publishes `last_actor_action.stop_short` as a Dictionary on every
+## step, and every projected actor carries `is_marked` and `mark_kind`.
+static func _t_combat_stop_short_and_mark_keys() -> Dictionary:
+	var env: Dictionary = FlowFingerprintTests._setup_encounter(EncounterResolutionModes.COMBAT, "contract_stop_short")
+	if env.is_empty():
+		return { "ok": false, "error": "encounter setup failed for COMBAT mode" }
+	var runtime: FlowRuntime = env["runtime"]
+	runtime.dispatch({ "type": "combat.init" })
+	var snaps: Array = [runtime.dispatch({ "type": "combat.confirm_round" })]
+	snaps.append(runtime.dispatch({ "type": "combat.next_actor" }))
+	for i: int in snaps.size():
+		var snap: Dictionary = snaps[i] as Dictionary
+		var err := _contract_violation(snap, "combat step %d" % i)
+		if not err.is_empty():
+			return { "ok": false, "error": err }
+		var data: Dictionary = snap["data"] as Dictionary
+		var last_v: Variant = data.get("last_actor_action", null)
+		if not (last_v is Dictionary) or not (last_v as Dictionary).has("stop_short"):
+			return { "ok": false, "error": "step %d: last_actor_action.stop_short missing" % i }
+		if not ((last_v as Dictionary)["stop_short"] is Dictionary):
+			return { "ok": false, "error": "step %d: last_actor_action.stop_short is not a Dictionary" % i }
+		var actors: Array = data.get("actors", []) as Array
+		if actors.is_empty():
+			return { "ok": false, "error": "step %d: no projected actors" % i }
+		for a_v: Variant in actors:
+			var a: Dictionary = a_v as Dictionary
+			if not (a.get("is_marked", null) is bool):
+				return { "ok": false, "error": "step %d: actor %s is_marked missing or not bool" % [i, str(a.get("id", ""))] }
+			if not ["", "observe", "skill"].has(a.get("mark_kind", null)):
+				return { "ok": false, "error": "step %d: actor %s mark_kind invalid" % [i, str(a.get("id", ""))] }
+	var cases: Array = [
+		[{}, false, ""],
+		[{ "marked_by": "e1" }, true, "skill"],
+		[{ "marked_by": "e1", "_mark_kind": "observe" }, true, "observe"],
+	]
+	for c_v: Variant in cases:
+		var c: Array = c_v as Array
+		var actor: Dictionary = { "id": "x", "stats": { "max_hp": 10 }, "current_hp": 10, "faction": "enemy" }
+		actor.merge(c[0] as Dictionary)
+		var proj: Dictionary = EncounterSnapshotBuilder._project_actor(actor)
+		if proj.get("is_marked", null) != c[1] or proj.get("mark_kind", null) != c[2]:
+			return { "ok": false, "error": "projection of %s: got is_marked=%s mark_kind=%s" % [
+				str(c[0]), str(proj.get("is_marked")), str(proj.get("mark_kind"))] }
 	return { "ok": true }

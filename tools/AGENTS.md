@@ -55,5 +55,4 @@ tool owns its own command name rather than running as part of the suite. See `ui
   It takes roughly 12 minutes. The MAIN conversation may background it. A SUBAGENT may not — a
   backgrounded run never wakes it — so a subagent runs it on `timeout: 1200000` with an alarm of
   1500, or reports that the probe needs the main conversation to run it.
-- `StretchBoardProbe.gd` — compares walkable ground, regions and empty rows on stretched 18x90 / 90x18 boards against 18x18, per virtue and `default`, with and without a scaled plateau count (`-- tests stretchprobe`). Read-only.
 - `assemble_contact_responses.py` — Python helper (non-GDScript)

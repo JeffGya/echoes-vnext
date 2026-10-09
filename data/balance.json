@@ -311,6 +311,38 @@
 				"friend_protect_weight_bonus": 12.0,
 				"rival_protect_penalty": -10.0
 			},
+			"stop_short": {
+				"_comment": "Stop-short (movement-model 7.5; decisions.md #108). Starting values; the designer sets every number. Feature is OFF until enabled is true. Fear and low morale favour guard only.",
+				"enabled": false,
+				"stop_short_weight": 6.0,
+				"min_cause_strength": 0.15,
+				"urgency_ceiling": 1.0,
+				"excluded_purposes": ["withdraw", "read", "hold"],
+				"fear": {
+					"floor": 20,
+					"full": 45,
+					"affinity": { "guard": 1.0, "observe": 0.0, "hold": 0.0 }
+				},
+				"morale_strength": { "shaken": 0.0, "broken": 0.8 },
+				"identity": {
+					"judgment_base": 0.5,
+					"family_affinity": {
+						"anchor": { "guard": 0.8, "hold": 0.8, "observe": 0.2 },
+						"sight": { "guard": 0.3, "hold": 0.3, "observe": 0.8 },
+						"edge": { "guard": 0.0, "hold": 0.0, "observe": 0.0 }
+					},
+					"vector_affinity": {
+						"skeptic": { "observe": 0.6 },
+						"seeker": { "observe": 0.6 },
+						"pillar": { "hold": 0.6 },
+						"devoted": { "hold": 0.5 },
+						"protector": { "guard": 0.5 }
+					}
+				},
+				"guard": { "hostile_reach_extra": 1, "min_def": 1 },
+				"observe": { "marked_strength": 5, "mark_rounds": 1 },
+				"hold": { "min_cohesion": 0.5 }
+			},
 			"enemy_types": {
 				"_comment": "Per-type trait values — fed to DerivedStatService using the same birth_stats formula as echoes. Add new types here; no GDScript changes needed.",
 				"guardian": {

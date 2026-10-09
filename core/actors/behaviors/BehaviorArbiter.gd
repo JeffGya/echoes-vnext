@@ -649,7 +649,7 @@ static func _guidance_key(index: int) -> String:
 static func _decision_entry(candidate: Dictionary, action_type: String) -> Dictionary:
 	if candidate.is_empty():
 		return {}
-	return {
+	var entry: Dictionary = {
 		"action_type": action_type,
 		"target_id":   str(candidate.get("target_id", "")),
 		"score":       float(candidate.get("_score", 0.0)),
@@ -657,6 +657,9 @@ static func _decision_entry(candidate: Dictionary, action_type: String) -> Dicti
 		"spatial":     candidate.get("_spatial_components", {}) as Dictionary,
 		"bias":        candidate.get("_score_bias", {}) as Dictionary,
 	}
+	if candidate.has("_stop_short"):
+		entry["stop_short"] = StopShortContextService.trace_tag(candidate)
+	return entry
 
 
 ## Movement-intent arbitration: scores every generated movement candidate for
@@ -774,6 +777,9 @@ func select_movement_intent(
 		"cfg":              _cfg_get("movement_style_weights") as Dictionary,
 	}
 
+	var stop_short_vetoes: Array = StopShortContextService.screen(
+		candidates, actor, all_actors, context, movement_context, options,
+		int(profile["capacity"]), Callable(self, "_route_style_of"), _cfg.get("stop_short", {}) as Dictionary)
 	var spatial_cfg: Dictionary = _movement_cfg["spatial_utility"] as Dictionary
 	for candidate: Dictionary in candidates:
 		var plan: Dictionary = candidate["_movement_plan"] as Dictionary
@@ -828,6 +834,7 @@ func select_movement_intent(
 				var style_bias: Dictionary = candidate.get("_score_bias", {}) as Dictionary
 				style_bias["movement_style"] = style_alignment
 				candidate["_score_bias"] = style_bias
+			score += StopShortContextService.record_bias(candidate)
 		if not is_finite(score):
 			return _movement_failure("non_finite_candidate_score", "candidates")
 		candidate["_score"] = score
@@ -913,6 +920,9 @@ func select_movement_intent(
 				_self_score_max = _cself_score
 	_decision_scale = (_self_score_max - _self_score_min) if _self_score_max >= _self_score_min else 0.0
 
+	# The stop-short screen can veto every route candidate it is given.
+	if candidates.is_empty():
+		return _movement_failure("no_candidates", "candidates")
 	var winner: Dictionary = candidates[0]
 
 	# V2-COMBAT-003.5 Phase 3b — the winner's own route-shape, read back into the §9
@@ -1023,6 +1033,8 @@ func select_movement_intent(
 		"_divergence_probe": _divergence_probe,
 		"_decision_inputs": _decision_inputs,
 		"_guidance_response": guidance_response,
+		"_stop_short": winner.get("_stop_short", {}),
+		"_stop_short_vetoes": stop_short_vetoes,
 	}
 
 

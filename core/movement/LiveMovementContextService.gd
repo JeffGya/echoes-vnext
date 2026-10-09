@@ -397,6 +397,11 @@ func apply_live_activation(
 		"mover_hp": int(actor.get("current_hp", 0)),
 		"mover_ko_only": false,
 	}
+	var stop_short: Dictionary = intent.get("_stop_short", {}) as Dictionary
+	if not stop_short.is_empty():
+		var benefit: Dictionary = stop_short["benefit_plan"] as Dictionary
+		action_ctx["stop_short_benefit"] = MovementActionPlanScript.build(
+			str(benefit["action_type"]), str(benefit["target_id"]))
 	var result: Dictionary = CombatActivationServiceScript.activate(
 		movement_context, intent, profile, hazard_ctx, action_ctx)
 	var final_cell: Dictionary = result.get("final_destination", actor.get("grid_pos", {})) as Dictionary
@@ -434,6 +439,7 @@ func apply_live_activation(
 		intent["action_type"] = "actor.idle"
 		intent["target_id"] = ""
 	intent["movement_result"] = result
+	StopShortContextService.finish(actor, intent, result, asm, logger, t)
 	asm.update_passive_state_from_activation(intent, ctx, t, not actual.is_empty(), logger)
 	return result
 
