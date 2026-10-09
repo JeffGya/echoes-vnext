@@ -269,7 +269,7 @@ func _draw_stance(tok: Dictionary, font: Font, zoom: float) -> void:
 	var extent: float = _token_extent(tok)
 	var base_pos: Vector2 = _presentation_state.get_display_position(actor_id, tok.get("draw_pos", Vector2.ZERO))
 	var s: float = MotionScript.view_scale(zoom)
-	if str(tok.get("mark_kind", "")) == "observe":
+	if str(tok.get("mark_kind", "")) == "observe" and str(tok.get("status", "")) != "dead":
 		for edge_pass in [true, false]:
 			var bracket_w: float = 3.0 * s + (2.0 if edge_pass else 0.0)
 			for sx in [-1.0, 1.0]:
