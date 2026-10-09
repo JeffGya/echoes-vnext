@@ -41,6 +41,8 @@
 #        "mover_hp"           int      : mover's CURRENT hp. When present, KO/death is
 #                                        computed from cumulative hazard damage. When absent,
 #                                        the mover is treated as never downed.
+#        "stop_short_benefit" Dictionary: action plan a stop-short plays first (step 3a);
+#                                        falls through to the planned action when invalid.
 #        "mover_ko_only"      bool      : when the mover would be downed (remaining hp <= 0),
 #                                        report "ko" if true, else "death" (default false).
 #
@@ -84,12 +86,15 @@ const _ACTIVATION_PHASE: String = "activation"
 ## ActionCandidateGenerator read this same constant: a gate wider than the reach makes
 ## activation resolve the planned action as idle.
 const SKILL_REACH: int = 3
+## Reach of the generic `actor.observe` a stop-short can play (decisions.md #108).
+const OBSERVE_REACH: int = 3
 const ACTION_RANGES: Dictionary = {
 	"melee_attack": 1,
 	"protect_ally": 1,
 	"actor.purify_shrine": 1,
 	"actor.mark": SKILL_REACH,
 	"actor.reveal": SKILL_REACH,
+	"actor.observe": OBSERVE_REACH,
 }
 const DEFAULT_ACTION_RANGE: int = 1
 
@@ -206,8 +211,11 @@ static func activate(
 	var downed_in_move: bool = has_hp and (mover_hp - move_damage) <= 0
 
 	if not downed_in_move:
+		var stop_benefit: Dictionary = _plan(action_ctx.get("stop_short_benefit", {}))
+		if not stop_benefit.is_empty() and _action_valid_at(stop_benefit, final_cell, action_ctx):
+			resolved_action = stop_benefit
 		# 3) Revalidate the primary action at the FINAL cell.
-		if _action_valid_at(planned_action, final_cell, action_ctx):
+		elif _action_valid_at(planned_action, final_cell, action_ctx):
 			resolved_action = planned_action.duplicate(true)
 		# 4) Purpose-restricted declared fallback.
 		elif (

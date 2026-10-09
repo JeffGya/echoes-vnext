@@ -300,6 +300,10 @@ func _on_debug_command(command: String) -> void:
 		_run_combat_objective_command(parts)
 		return
 
+	if head == "stopshort":
+		_run_stop_short_command(parts)
+		return
+
 	# -------------------------
 	# vow shortcuts (VOW-001 / debug only)
 	# -------------------------
@@ -367,7 +371,7 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	_debug_print("Unknown command: " + cmd)
-	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear> | guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id] | rankup [echo_id] | realm select <realm.01|realm.02> | realm show")
+	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | emotion set <echo_id> <fear|fear_base|morale> <0-100> | stopshort [on|off] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear> | guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id] | rankup [echo_id] | realm select <realm.01|realm.02> | realm show")
 	
 	_flush_logs_to_console()
 	
@@ -459,13 +463,6 @@ func _run_tests(parts: Array) -> void:
 		var terrain_probe_runner := CoreTestRunner.new()
 		TerrainRegionProbe.register(terrain_probe_runner)
 		terrain_probe_runner.run_all()
-		return
-	# INVESTIGATION TOOL — `tests stretchprobe` compares walkable ground on stretched
-	# GUIDE_SPIRIT/PURSUE boards with normal boards (follow-up #14). Prints a table.
-	if parts.size() > 1 and str(parts[1]).to_lower() == "stretchprobe":
-		var stretch_probe_runner := CoreTestRunner.new()
-		StretchBoardProbe.register(stretch_probe_runner)
-		stretch_probe_runner.run_all()
 		return
 	# INVESTIGATION TOOL — `tests purifyprobe [tag]` drives 20 seeded PURIFY_SHRINE encounters
 	# and dumps outcome + purifier goals (V2-COMBAT-003 phase 7b). Reports, never asserts.
@@ -567,6 +564,8 @@ func _run_tests(parts: Array) -> void:
 	PassiveIdentityTests.register(runner)   # PROG-009
 	SkillLoadoutTests.register(runner)      # PROG-009
 	SkillReachTests.register(runner)        # follow-up #6 PR0
+	StopShortServiceTests.register(runner)
+	StopShortWiringTests.register(runner)
 	SocialGraphTests.register(runner)  # BOND-001
 	BondTriggerTests.register(runner)  # BOND-002
 	VowServiceTests.register(runner)  # VOW-001
@@ -882,6 +881,9 @@ func _run_summon_command(parts: Array) -> void:
 #   emotion          — print emotion block for all roster echoes
 #   emotion <echo_id> — print emotion block for a specific echo by id
 func _run_emotion_command(parts: Array) -> void:
+	if parts.size() >= 2 and str(parts[1]) == "set":
+		_run_emotion_set_command(parts)
+		return
 	var save_ref: Dictionary = runtime.get_save_data()
 	var sanctum: Dictionary = (save_ref.get("sanctum", {}) as Dictionary)
 	var roster: Array = sanctum.get("roster", []) as Array
@@ -1098,6 +1100,34 @@ func _run_force_charge_pressure_command(parts: Array) -> void:
 		_debug_print("Charge pressure ON — next protect/endure objective combat is harder.")
 	else:
 		_debug_print("Charge pressure OFF.")
+	_flush_logs_to_console()
+
+
+func _run_emotion_set_command(parts: Array) -> void:
+	if parts.size() < 5 or not ["fear", "fear_base", "morale"].has(str(parts[3])) or not str(parts[4]).is_valid_int():
+		_debug_print("Usage: emotion set <echo_id> <fear|fear_base|morale> <0-100>")
+		_flush_logs_to_console()
+		return
+	var snap := runtime.dispatch({
+		"type": "debug.emotion.set", "echo_id": str(parts[2]), "field": str(parts[3]), "value": int(str(parts[4])),
+	})
+	_render_snapshot(snap)
+	_flush_logs_to_console()
+
+
+# stopshort         — status: the override, balance.json, and the running encounter
+# stopshort on|off  — override data.actor.stop_short.enabled from the NEXT encounter start
+func _run_stop_short_command(parts: Array) -> void:
+	if parts.size() == 1:
+		_debug_print(runtime.stop_short_status_line())
+		return
+	var mode: String = str(parts[1]).to_lower()
+	if parts.size() > 2 or not (mode == "on" or mode == "off"):
+		_debug_print("Usage: stopshort [on|off]  (no argument = status; takes effect at the next encounter start)")
+		return
+	var snap := runtime.dispatch({ "type": "debug.stop_short.set", "mode": mode })
+	_render_snapshot(snap)
+	_debug_print("stopshort: %s from the next encounter start" % mode)
 	_flush_logs_to_console()
 
 

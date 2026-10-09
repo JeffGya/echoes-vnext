@@ -51,6 +51,13 @@ extends RefCounted
 # COMBAT-007: Pure static helper functions — projection and objective state.
 # ────────────────────────────────────────────────────────────────────────────
 
+## "" when unmarked, "observe" for the generic mark, "skill" for a skill mark.
+static func _mark_kind(actor: Dictionary) -> String:
+	if str(actor.get("marked_by", "")).is_empty():
+		return ""
+	return "observe" if str(actor.get("_mark_kind", "")) == "observe" else "skill"
+
+
 ## Derives the actor's operational combat status.
 ## Emotional state is represented exclusively by emotional_status in the snapshot.
 static func _derive_status(actor: Dictionary) -> String:
@@ -106,6 +113,8 @@ static func _project_actor(actor: Dictionary, contribution_ledger: Variant = nul
 		# PROG-008: active skill slots forwarded for pre-battle and resolve screens.
 		"skill_slots": (actor.get("skill_slots", [""]) as Array).duplicate(),
 		# V2-VOICE-001: bark fields — written by ActorStateMachine, read by CombatBoardScreen.
+		"is_marked":        not str(actor.get("marked_by", "")).is_empty(),
+		"mark_kind":        EncounterSnapshotBuilder._mark_kind(actor),
 		"bark_line":        bark_line_val,
 		"bark_context":     str(actor.get("_bark_context",     "")),
 		"bark_tier":        str(actor.get("_bark_tier",        "")),

@@ -428,6 +428,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 			intent["_divergence_probe"] = movement_selection.get("_divergence_probe", {})
 			intent["_decision_inputs"] = movement_selection.get("_decision_inputs", {})
 			intent["_guidance_response"] = movement_selection.get("_guidance_response", {})
+			StopShortContextService.carry(intent, movement_selection, _actor, logger, t)
 		else:
 			# The movement path rejected the board. Record and announce the exact
 			# reason before falling back — see the legacy selector ledger at the top
@@ -1325,7 +1326,25 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
 				if str(ma.get("id", "")) == mark_target:
 					ma["marked_by"]       = str(_actor.get("id", ""))
 					ma["_mark_duration"]  = 2
+					# A skill mark replaces a weaker observe mark outright.
+					ma.erase("marked_strength")
+					ma.erase("_mark_kind")
 					break
+
+	# Generic observe (a stop-short benefit): a weaker, shorter mark that never replaces one.
+	if action == "actor.observe":
+		var observe_target: String = str(intent.get("target_id", ""))
+		var observe_cfg: Dictionary = ((((context.get("cfg", {}) as Dictionary).get("data", {}) as Dictionary)
+			.get("actor", {}) as Dictionary).get("stop_short", {}) as Dictionary).get("observe", {}) as Dictionary
+		for ob_v in context.get("all_actors", []):
+			if not (ob_v is Dictionary): continue
+			var ob: Dictionary = ob_v
+			if str(ob.get("id", "")) == observe_target and str(ob.get("marked_by", "")).is_empty():
+				ob["marked_by"]       = str(_actor.get("id", ""))
+				ob["_mark_duration"]  = int(observe_cfg.get("mark_rounds", 1))
+				ob["marked_strength"] = float(observe_cfg.get("marked_strength", 5))
+				ob["_mark_kind"]      = "observe"
+				break
 
 	# Tick mark duration — decrement on the marked actor's turn (we do it each round here)
 	if _actor.has("_mark_duration"):
@@ -1333,6 +1352,8 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
 		if dur <= 0:
 			_actor.erase("marked_by")
 			_actor.erase("_mark_duration")
+			_actor.erase("marked_strength")
+			_actor.erase("_mark_kind")
 		else:
 			_actor["_mark_duration"] = dur
 

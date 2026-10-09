@@ -63,13 +63,13 @@ exhaust an agent's budget before it does any work. `~tok` below is the cost of o
 | `1024-1030` | 42 | &nbsp;&nbsp;&nbsp;&nbsp;Macro Loop |
 | `1031-1033` | 44 | &nbsp;&nbsp;&nbsp;&nbsp;Save Triggers (no manual save in MVP) |
 | `1034-1042` | 75 | &nbsp;&nbsp;&nbsp;&nbsp;Encounter Resolution |
-| `1043-1114` | 2182 | &nbsp;&nbsp;Action Type Registry |
-| `1115-1136` | 342 | &nbsp;&nbsp;Log Event Type Registry |
-| `1137-1153` | 236 | &nbsp;&nbsp;Summoning Contract |
-| `1154-1155` | 7 | &nbsp;&nbsp;Decisions Made vs Deferred |
-| `1156-1212` | 5054 | &nbsp;&nbsp;&nbsp;&nbsp;Made (locked) |
-| `1213-1304` | 3395 | &nbsp;&nbsp;&nbsp;&nbsp;V2-STAGE-001 + V2-STAGE-002 — Stage Exploration + Objective Taxonomy |
-| `1305-1311` | 183 | &nbsp;&nbsp;&nbsp;&nbsp;Deferred |
+| `1043-1116` | 2182 | &nbsp;&nbsp;Action Type Registry |
+| `1117-1138` | 342 | &nbsp;&nbsp;Log Event Type Registry |
+| `1139-1155` | 236 | &nbsp;&nbsp;Summoning Contract |
+| `1156-1157` | 7 | &nbsp;&nbsp;Decisions Made vs Deferred |
+| `1158-1214` | 5054 | &nbsp;&nbsp;&nbsp;&nbsp;Made (locked) |
+| `1215-1306` | 3395 | &nbsp;&nbsp;&nbsp;&nbsp;V2-STAGE-001 + V2-STAGE-002 — Stage Exploration + Objective Taxonomy |
+| `1307-1313` | 183 | &nbsp;&nbsp;&nbsp;&nbsp;Deferred |
 
 ## docs/Echoes vNext Working GDD.md  (41,923 tokens total)
 

@@ -88,6 +88,10 @@ var dev_force_recruit: String = ""
 # shape. See GuidanceContribution.resolve() for the fields.
 var dev_guidance: Dictionary = {}
 
+# Play-test toggle: "on"/"off" overrides data.actor.stop_short.enabled, "" uses balance.json.
+# Runtime only, never saved. Copied into EncounterContext at encounter start, so a mid-fight change waits.
+var dev_stop_short: String = ""
+
 # V2-STAGE-002: index into stage.objectives[] for the currently active encounter.
 # Set by FlowRuntime when stage.engage_situation transitions to ENCOUNTER.
 # Read by EncounterSetupService._resolve_mode_from_stage() to pick encounter resolution mode.

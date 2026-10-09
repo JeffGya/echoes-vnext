@@ -176,6 +176,7 @@ func setup(t: int) -> void:
 	if flow_ctx.encounter_ctx == null:
 		flow_ctx.encounter_ctx = EncounterContext.new()
 		flow_ctx.encounter_ctx.encounter_id = flow_ctx.encounter_id
+		flow_ctx.encounter_ctx.stop_short_override = flow_ctx.dev_stop_short
 		# COMBAT-006 dev toggle: use override if set, otherwise default to PURIFY_SHRINE.
 		if not flow_ctx.dev_combat_objective.is_empty():
 			flow_ctx.encounter_ctx.resolution_mode = flow_ctx.dev_combat_objective

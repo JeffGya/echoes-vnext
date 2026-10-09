@@ -34,6 +34,8 @@ var stalemate_cfg: Dictionary = {}
 var last_round_results: Array = []
 # COMBAT-SEQ: most recent single actor action result — updated after each actor acts; {} between rounds.
 var last_actor_action: Dictionary = {}
+# FlowContext.dev_stop_short at encounter start ("" = balance.json). Not saved.
+var stop_short_override: String = ""
 # COMBAT-005: transient combat result — set by FlowRuntime._end_round(); not persisted.
 # Shape: { "victory": bool, "reason": String, "round_ended": int, "shrine_hp": int }
 var combat_result: Dictionary = {}

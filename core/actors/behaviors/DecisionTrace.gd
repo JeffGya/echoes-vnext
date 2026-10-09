@@ -52,6 +52,7 @@ const STRENGTH_BANDS: Array = ["none", "slight", "moderate", "strong", "decisive
 ## set ever widens.
 const PLAYER_SAFE_FIELDS: Array = ["primary", "purpose", "message_key", "message_args", "voice_tone"]
 const PLAYER_SAFE_PRIMARY_FIELDS: Array = ["code", "source", "subject_id"]
+const STOP_SHORT_PREFIX: String = "stop_short."
 
 ## Which `source` each recorded score term belongs to. Traits, virtue scores and
 ## archetype all land on `vector` because §6.6's vocabulary has no finer identity
@@ -233,7 +234,7 @@ static func build(inputs: Dictionary, legibility: float, divergence_cfg: Diction
 		"supporting": supporting,
 		"purpose":    purpose,
 		"message_key": _message_key(primary, band),
-		"message_args": _message_args(primary, purpose, band),
+		"message_args": _message_args(primary, purpose, band, winner),
 		"voice_tone": str(_SOURCE_TONE.get(str(primary["source"]), "plain")),
 		"debug_components": {
 			"winner":         winner,
@@ -298,7 +299,7 @@ static func score_without(entry: Dictionary, source: String) -> float:
 
 	var bias: Dictionary = entry.get("bias", {}) as Dictionary
 	for key: String in bias:
-		if str(_BIAS_SOURCE.get(key, "baseline")) != source:
+		if _bias_source(key, entry) != source:
 			total += float(bias[key])
 	return total
 
@@ -341,13 +342,22 @@ static func dominant_code(entry: Dictionary, source: String) -> String:
 			best_abs = magnitude
 			best_key = part
 	for key: String in bias:
-		if str(_BIAS_SOURCE.get(key, "baseline")) != source:
+		if _bias_source(key, entry) != source:
 			continue
 		var magnitude: float = absf(float(bias[key]))
 		if magnitude > best_abs:
 			best_abs = magnitude
 			best_key = key
+	if best_key.begins_with(STOP_SHORT_PREFIX):
+		return str((entry.get("stop_short", {}) as Dictionary).get("code", source))
 	return str(_TERM_CODE.get(best_key, source))
+
+
+## `stop_short.<cause_id>` biases take their source from the entry's own stop_short tag.
+static func _bias_source(key: String, entry: Dictionary) -> String:
+	if key.begins_with(STOP_SHORT_PREFIX):
+		return str((entry.get("stop_short", {}) as Dictionary).get("source", "baseline"))
+	return str(_BIAS_SOURCE.get(key, "baseline"))
 
 
 static func _strength_band(swing: float, decision_scale: float) -> String:
@@ -394,8 +404,11 @@ static func _message_key(primary: Dictionary, band: String) -> String:
 ## Legibility is what decides how much the message may say: a barely legible Echo
 ## surfaces a purpose and no attribution; a fully legible one names the pressure and
 ## its subject.
-static func _message_args(primary: Dictionary, purpose: String, band: String) -> Dictionary:
+static func _message_args(primary: Dictionary, purpose: String, band: String, winner: Dictionary = {}) -> Dictionary:
 	var args: Dictionary = {"purpose": purpose}
+	var benefit: String = str((winner.get("stop_short", {}) as Dictionary).get("benefit_id", ""))
+	if not benefit.is_empty():
+		args["benefit"] = benefit
 	if str(primary.get("causal_kind", "")) == "baseline":
 		return args
 	if str(primary.get("causal_kind", "")) == "hard_override" or band != "vague":

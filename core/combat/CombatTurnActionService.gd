@@ -56,7 +56,7 @@
 #           leadership_expr_cfg, passed in;
 #           `round` and `t`, passed in — so the log lines and CombatService.resolve_action()
 #           carry the exact values the caller logged for the same turn.
-#   WRITES  ectx.last_round_results (EXACTLY ONE append per call, on every arm);
+#   WRITES  ectx.last_round_results (one append per call, except when the actor.guard arm gets {} from CombatService);
 #           ectx.round_bark_events (the activation bark, and the combat_ko promotion);
 #           ectx.echo_action_logs, through ContributionLedgerService only;
 #           the target actor: fear, _last_attacker_id, morale (guard absorb, near death),
@@ -146,6 +146,7 @@ func resolve_activation(
 	})
 
 	# Resolve the action and append result to last_round_results.
+	var results_before: int = ectx.last_round_results.size()
 	match action_type:
 		"melee_attack":
 			var target_id: String = str(intent.get("target_id", ""))
@@ -422,6 +423,11 @@ func resolve_activation(
 				"damage":      0,
 				"is_kill":     false,
 			})
+
+	# Stop-short step only: the report rides on the entry this call appended, if any.
+	var stop_short_report: Dictionary = intent.get("_stop_short_report", {}) as Dictionary
+	if not stop_short_report.is_empty() and ectx.last_round_results.size() > results_before:
+		(ectx.last_round_results.back() as Dictionary)["stop_short"] = stop_short_report.duplicate(true)
 
 
 ## The target's own resist_fear, applied after leadership dampening, on per-hit and near-death

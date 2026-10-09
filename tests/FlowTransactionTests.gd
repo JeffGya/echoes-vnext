@@ -27,7 +27,7 @@ class_name FlowTransactionTests
 extends RefCounted
 
 const DISPATCH_SOURCE_PATH := "res://core/runtime/FlowRuntime.gd"
-const EXPECTED_ACTION_COUNT := 75
+const EXPECTED_ACTION_COUNT := 77
 
 
 static func register(runner) -> void:
@@ -37,7 +37,7 @@ static func register(runner) -> void:
 	runner.register_test("flow_transaction/weave_locked_blocked_action_still_flushes_queued_save", func(): return _test_weave_locked_flushes_queued_save())
 	runner.register_test("flow_transaction/weave_locked_blocked_action_performs_no_work", func(): return _test_weave_locked_performs_no_work())
 	runner.register_test("flow_transaction/sequential_dispatches_never_exceed_one_flush_each", func(): return _test_sequential_dispatches_never_exceed_one_flush_each())
-	runner.register_test("flow_transaction/dispatch_action_count_is_74", func(): return _test_dispatch_action_count_is_74())
+	runner.register_test("flow_transaction/dispatch_action_count_is_77", func(): return _test_dispatch_action_count_is_77())
 	# PR #62 review: the "guide" debug command must reach flow_ctx through dispatch(), not
 	# through a write from ui/.
 	runner.register_test("flow_transaction/debug_guidance_set_is_dispatched_not_written_from_ui", func(): return _test_debug_guidance_set_is_dispatched())
@@ -293,7 +293,7 @@ static func _dispatch_action_labels() -> Array:
 	return labels
 
 
-static func _test_dispatch_action_count_is_74() -> Dictionary:
+static func _test_dispatch_action_count_is_77() -> Dictionary:
 	var labels := _dispatch_action_labels()
 	if labels.size() != EXPECTED_ACTION_COUNT:
 		return {"ok": false, "error": "expected %d match case labels in dispatch(), found %d: %s" % [EXPECTED_ACTION_COUNT, labels.size(), str(labels)]}

@@ -94,8 +94,10 @@
 | 93 | z-key-zoom-cycle-is-shared | The Z zoom cycle is a shared BoardCamera option. Combat uses it; Sanctum keeps its own Z. Supersedes the Z part of #72 | 2026-10-04 |
 | 94 | sanctum-zoom-on-the-shared-levels | Sanctum moves onto the shared zoom levels: Z and its wheel step one level and ease. Supersedes the "Sanctum keeps its own Z" part of #93 | 2026-10-04 |
 | 95 | one-wheel-rule-for-every-board-camera | Every board camera uses Combat's wheel: 1.1x per notch, eased, continuous. Sanctum's wheel stops stepping levels; Z keeps the levels. Supersedes the Sanctum-wheel part of #94 | 2026-10-04 |
-| 96 | stretched-board-fill-per-virtue | GUIDE_SPIRIT/PURSUE boards keep each virtue's ground share (follow-up #14). New optional signature key `stretch_fill` in `data.stages.map_shape.by_virtue`: `scatter` multiplies plateau count by the board's stretch multiplier; missing or `none` changes nothing. Scatter: courage, acceptance, generosity. None: wisdom, humility, empathy, forgiveness, truth, leadership, compassion (count is identity; filed for a later follow-up). Jeff's play test 2026-10-06: courage looked right; wisdom with count x5 became one solid mass, so wisdom, humility and empathy moved to none (same reason). Regression tolerance: 10 points below the virtue's 18x18 mean. Measured by `tests stretchprobe` | 2026-10-05 |
+| 96 | stretched-board-fill-per-virtue | GUIDE_SPIRIT/PURSUE boards keep each virtue's ground share (follow-up #14). New optional signature key `stretch_fill` in `data.stages.map_shape.by_virtue`: `scatter` multiplies plateau count by the board's stretch multiplier; missing or `none` changes nothing. Scatter: courage, acceptance, generosity. None: wisdom, humility, empathy, forgiveness, truth, leadership, compassion (count is identity; filed for a later follow-up). Jeff's play test 2026-10-06: courage looked right; wisdom with count x5 became one solid mass, so wisdom, humility and empathy moved to none (same reason). Regression tolerance: 10 points below the virtue's 18x18 mean. Measured by `tests stretchprobe` (probe removed; numbers kept) | 2026-10-05 |
 | 107 | skill-mark-and-reveal-reach-fixed-in-its-own-pr | Skill `actor.mark` and `actor.reveal` resolved as idle at distance 2 or more. Fixed in PR0, before the stop-short work (follow-up #6): `ACTION_RANGES` gains `actor.mark: 3` and `actor.reveal: 3`, and the reveal offer gate gains `enemy_dist <= 3`. Jeff chose option O1 and reach 3. No recorded value moved. Index rows 97 to 106 are not listed here; their bodies are below | 2026-10-06 |
+| 108 | stop-short-benefit-after-a-short-route | An Echo whose winning route is the half-capacity `conservative` route now plays one benefit (Guard, Observe or Hold) at the stop cell, only with a cause (fear or low morale; identity) and a benefit. Ships OFF (`data.actor.stop_short.enabled` false, weight 6.0). Follow-up #6, PR1 core | 2026-10-09 |
+| 109 | stop-short-visible-tell | The stop is shown on the board: marker outside the Echo, word chip, hop, rest pose for the whole guarding status. Placeholder art and motion. Follow-up #6, PR1 UI | 2026-10-09 |
 
 ---
 
@@ -1638,5 +1640,34 @@ A control clipped out by its parent does not count. A press while a modal is ope
 **Tests:** new suite `skill_reach` (4 tests, production-shaped path through `FlowRuntime`): mark resolves at distance 2 and 3; reveal resolves at distance 3 and sets `_reveal_used`; reveal is not offered at distance 4; the mark effect sets `marked_by` and raises the ally melee bonus. On the old code, 3 of the 4 fail.
 **Source:** Jeff (O1 and reach 3); sr-game-designer (section 12 of `followup-6-design.md`); mechanics-developer (probe B4 and the build)
 **Date:** 2026-10-06
+
+---
+
+### 108. stop-short-benefit-after-a-short-route
+**Rule.** `docs/movement-model.md` section 7.5: unused capacity is not banked. A short stop needs a cause and a benefit, or it reads as incompetence.
+**Mechanism (option B).** After the move resolves, `CombatActivationService.activate` step 3a plays the benefit at the final cell when the winning option is the existing `conservative` route. The option, goal and intent contracts do not change. `StopShortService` holds the gates and veto reasons. A stop with no cause or no benefit is vetoed.
+**Causes.** One registry. "Fear or low morale": fear from 20, or `broken` morale. Shaken morale does not count. It favours Guard only. "Identity": Calling family or vector, scaled by Standing. Directive, Keeper guidance, Bond and Vow add their own causes later, in V2-DIRECTIVE-002, V2-COMBAT-004, V2-BOND-002 and V2-VOW-002 (notes on those stories are still to be written).
+**Scope.** Echoes only. Enemies keep every route they have today. New action `actor.observe` (reach 3): it marks the target (`mark_kind` observe) and counts as one turn in the ContributionLedger. Guard counts as a guard.
+**Ships OFF.** `data.actor.stop_short.enabled` is false and weight is 6.0. The debug command `stopshort on|off` takes effect at the next encounter start. With the flag off, no recorded value moves.
+**Snapshot.** `last_actor_action.stop_short` is present on every actor step (`{}` when there is no stop). Actors gain `is_marked` and `mark_kind`. `PLAYER_SAFE_FIELDS` is unchanged.
+**Text.** All words come from `data/shouts/stop_short_text.json` through `StopShortText`. First person for the Echo itself. The wording is a placeholder until Jeff approves it.
+**Measured.** Weight is not the lever: about 800 of 931 eligible turns end at `no_benefit`. The 25 percent per-Echo ceiling holds on fights with 8 or more eligible turns. Details are in `followup-6-probe-results.md`, kept outside the commit.
+**Not in PR1.** The Return route, Hold links to allies and the snapshot fields `anchor_actor_ids` and `planned_end_cell` (PR2). Range (weapons story). Reposition and regroup goals in live combat (new story, not yet written). A guard motion for every guard, without the hop (new item).
+**Tests:** suites `stop_short` (31) and `stop_short_wiring` (27); `snapshot_contract`, `flow_transaction` (action count 77) and the fingerprint suites updated or unchanged.
+**Source:** Jeff (decisions V1 to V44); sr-game-designer; mechanics-developer; qa-verifier
+**Date:** 2026-10-09
+
+---
+
+### 109. stop-short-visible-tell
+**Marker.** Drawn outside the Echo in a second pass. Guard: a half arc facing the nearest enemy, continuous, behind the HP bar. Hold: a thick full ring. Observe: four diagonal dashes, the dashed line and bold brackets on the target. Cream with a charcoal edge, no new hue. The HP bar draws on top.
+**Word chip.** "Braces", "Holds" or "Watches" below the token, from zoom 0.8. No cause badge for Guard and Hold: the cause shows in the reason bubble on selection and in the bark. Observe keeps its badge.
+**Motion.** A dip, then a hop (lift `clamp(22/zoom, 16, 28)` world units), a ripple at the landing and a marker pop. Guard adds two small shakes. Landing times at Normal: Guard 0.34 s, Hold 0.36 s, Observe 0.34 s.
+**Rest pose.** For the whole guarding status: Guard leans away from the enemy; Hold shrinks to 0.85. The marker lasts as long as the pose. The pose returns in 0.12 s.
+**Rules kept.** No hop for a selected Echo or at Fast. Ordinary guards, plain moves and skill marks look as before. The Cream settle diamond is off (the code stays until a later pass). Quiet counters are not built.
+**Placeholder.** All shapes, motion and wording are placeholders for the final art pass (follow-up #16).
+**Files:** `ui/screens/combat/CombatStopShortMotion.gd` (new, pure functions), `CombatTokenLayer.gd`, `CombatTokenPresentationState.gd`, `CombatTokenVisualConfig.gd`, `CombatBoardScreen.gd`. The draw code is not covered by any test.
+**Source:** Jeff (play test and mockup review); sr-game-artist; game-feel-developer; ui-ux-designer
+**Date:** 2026-10-09
 
 ---

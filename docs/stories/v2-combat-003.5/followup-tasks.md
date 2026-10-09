@@ -358,7 +358,7 @@ not just Claimant fights. The underlying duplication itself (`DebugController` r
 
 ## 14. ~~GUIDE_SPIRIT/PURSUE board-stretch override ignores per-virtue terrain signature (compact board on low-plateau-count virtues)~~ — FIXED 2026-10-06
 
-**Resolution (2026-10-06, decisions.md #96):** Measured with `tests stretchprobe`: stretched boards had 2-4x less ground share than normal boards. New optional signature key `stretch_fill` (`scatter` | `none`, missing = `none`) in `data.stages.map_shape.by_virtue`. `scatter` multiplies plateau count by the stretch multiplier, in `EncounterSetupService.scale_signature_for_stretch`. Scatter: courage, acceptance, generosity. None: the other seven (count is identity, or count x5 merges the pieces into one mass; Jeff's play test showed this for wisdom). The signature path in the prompt below is wrong: the real path is `data.stages.map_shape.by_virtue`. Fingerprints `fingerprint_pursue` and `fingerprint_guide_spirit` were re-recorded; attribution: with every `stretch_fill` set to `none` the old hashes return. The seven `none` virtues still have sparse stretched boards: see follow-up #28.
+**Resolution (2026-10-06, decisions.md #96):** Measured with `tests stretchprobe` (probe removed; numbers kept): stretched boards had 2-4x less ground share than normal boards. New optional signature key `stretch_fill` (`scatter` | `none`, missing = `none`) in `data.stages.map_shape.by_virtue`. `scatter` multiplies plateau count by the stretch multiplier, in `EncounterSetupService.scale_signature_for_stretch`. Scatter: courage, acceptance, generosity. None: the other seven (count is identity, or count x5 merges the pieces into one mass; Jeff's play test showed this for wisdom). The signature path in the prompt below is wrong: the real path is `data.stages.map_shape.by_virtue`. Fingerprints `fingerprint_pursue` and `fingerprint_guide_spirit` were re-recorded; attribution: with every `stretch_fill` set to `none` the old hashes return. The seven `none` virtues still have sparse stretched boards: see follow-up #28.
 
 **task_id:** `task_ashen_hallow_board`
 
@@ -529,13 +529,13 @@ not just Claimant fights. The underlying duplication itself (`DebugController` r
 
 **Why it came up:** Follow-up #14 (2026-10-06). It fixed stretched GUIDE_SPIRIT/PURSUE boards only for courage, acceptance and generosity. Plateau count is part of the identity of the other virtues (identity matrix in Jeff's realm visual-language table). Plain count x5 broke wisdom in play: it became one solid mass.
 
-**Measured (`tests stretchprobe`, 18x90, 50 seeds, signature unchanged):** walkable share against the 18x18 mean: truth 11% vs 43%, forgiveness 24% vs 64%, compassion 24% vs 58%, leadership 30% vs 64%. Humility, empathy and wisdom were not measured with a fix that keeps their look.
+**Measured (`tests stretchprobe`; probe removed, numbers kept; 18x90, 50 seeds, signature unchanged):** walkable share against the 18x18 mean: truth 11% vs 43%, forgiveness 24% vs 64%, compassion 24% vs 58%, leadership 30% vs 64%. Humility, empathy and wisdom were not measured with a fix that keeps their look.
 
 **Opening prompt:**
 > In the Echoes vNext Godot/GDScript repo: virtues with `stretch_fill: "none"` in `data/balance.json` (`data.stages.map_shape.by_virtue`) keep their normal plateau count on stretched GUIDE_SPIRIT/PURSUE boards, so the boards are mostly void. Design a stretch mode that keeps each virtue's identity. A candidate is a `repeat` mode: the long axis becomes N segments, each with the virtue's normal pattern, joined by the existing bridge repair. Another is a lower scale factor for small-piece virtues. Confirm the design with Jeff (or sr-game-designer) first. It is a design question before it is a code question.
 >
 > Also: the signature (plateau count, plateau size) has no stated reference board size. One table feeds the combat board (18x18 to 28x28, up to 18x90 stretched) and the exploration map (30x30 minimum, bigger per stage). Measure ground share per virtue across combat 18-28 and exploration 30-45. Decide whether signatures should scale with board area. Large exploration maps probably show the same sparse look for low-count virtues; not measured.
 >
-> Use `tests stretchprobe` (tools/StretchBoardProbe.gd) for the baseline. Keep the `relief` keys as they are (reserved for art). Key everything on virtue, not realm name; realm names disagree across sources.
+> Use `tests stretchprobe` (tools/StretchBoardProbe.gd; probe removed, numbers kept) for the baseline. Keep the `relief` keys as they are (reserved for art). Key everything on virtue, not realm name; realm names disagree across sources.
 >
 > Test plan: compile check, `tests combat_terrain`, `tests fingerprint`, `tests terrain`. Moved fingerprints need attribution before re-recording.

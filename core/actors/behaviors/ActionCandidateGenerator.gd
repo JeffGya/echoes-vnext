@@ -76,7 +76,7 @@ static func generate_candidates(
 	var _reveal_bonus: float = 0.0
 	if not nearest_enemy.is_empty():
 		if not str(nearest_enemy.get("marked_by", "")).is_empty():
-			_mark_bonus = 10.0
+			_mark_bonus = float(nearest_enemy.get("marked_strength", 10.0))
 		if not str(nearest_enemy.get("revealed_by_seer", "")).is_empty():
 			_reveal_bonus = 15.0
 
@@ -247,7 +247,8 @@ static func generate_candidates(
 				"actor.mark":
 					# Condition: enemy within 3 tiles AND not already marked.
 					if not nearest_enemy.is_empty() and enemy_dist <= ReachAuthority.SKILL_REACH \
-							and str(nearest_enemy.get("marked_by", "")).is_empty():
+							and (str(nearest_enemy.get("marked_by", "")).is_empty()
+								or str(nearest_enemy.get("_mark_kind", "")) == "observe"):
 						candidates.append({
 							"action_type":      "actor.mark",
 							"target_id":        str(nearest_enemy.get("id", "")),
