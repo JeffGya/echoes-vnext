@@ -8,6 +8,7 @@ extends RefCounted
 
 const Activation = preload("res://core/movement/CombatActivationService.gd")
 const ResultContract = preload("res://core/movement/contracts/MovementResult.gd")
+const HazardFact = preload("res://core/movement/contracts/MovementKnownHazardFact.gd")
 
 const _TESTS: Array = [
 	"activation_plays_benefit_and_result_validates",
@@ -28,6 +29,9 @@ const _TESTS: Array = [
 	"trace_names_benefit_and_cause_only_when_decisive",
 	"trace_player_safe_fields_unchanged",
 	"finish_reports_interrupted_benefit",
+	"binding_halt_short_of_stop_cell_skips_benefit",
+	"stop_cell_reached_still_performs_benefit",
+	"absent_stop_cell_keeps_old_behaviour",
 	"refuse_turn_clears_streak",
 	"hostile_control_read_at_last_edge",
 	"runtime_status_line",
@@ -392,6 +396,64 @@ static func _t_finish_reports_interrupted_benefit() -> Dictionary:
 	StopShortContextService.finish(actor, intent3, {}, asm, logger, 5)
 	_eq(errs, "normal step has no report", intent3.has("_stop_short_report"), false)
 	_eq(errs, "normal step clears the streak", actor.has(StopShortContextService.STREAK_KEY), false)
+	return _res(errs)
+
+
+## Runs a 3-cell stop-short (planned stop (4,1)) through activation and finish. A Binding hazard at
+## `hazard` (empty: none) halts the mover on that cell. `with_cell` false omits "stop_short_cell".
+static func _stop_run(hazard: Dictionary, with_cell: bool) -> Dictionary:
+	var ctx: Dictionary = _activation_ctx()
+	if not hazard.is_empty():
+		ctx["known_hazards"] = [HazardFact.build("h.b", hazard, "binding")]
+	var hazard_ctx: Dictionary = {
+		"triggered": { "unstable": false, "binding": false, "burning": false },
+		"config": { "types": ["unstable", "binding", "burning"], "binding": { "stops_movement": true } },
+	}
+	var action_ctx: Dictionary = {
+		"purpose": "engage", "positions": { "enemy.1": _cell(9, 9) },
+		"stop_short_benefit": _plan("actor.guard"),
+	}
+	if with_cell:
+		action_ctx["stop_short_cell"] = _cell(4, 1)
+	var intent: Dictionary = _intent([_cell(2, 1), _cell(3, 1), _cell(4, 1)], _plan("melee_attack", "enemy.1"), {})
+	var result: Dictionary = Activation.activate(ctx, intent, { "capacity": 6 }, hazard_ctx, action_ctx)
+	var logger := StructuredLogger.new()
+	logger.set_level("info")
+	var actor: Dictionary = _actor()
+	var stop: Dictionary = StopShortService.evaluate({
+		"actor_type": "echo", "purpose": "engage", "urgency": 0.5, "fear": 45, "fear_base": 0, "morale": 60,
+		"capacity": 2, "def": 5, "hostiles": [{ "id": "enemy_1", "dist": 3, "marked": false }],
+	}, _cfg())
+	var stop_intent: Dictionary = { "_stop_short": stop }
+	StopShortContextService.finish(actor, stop_intent, result, ActorStateMachine.new(actor), logger, 3)
+	return { "result": result, "report": stop_intent["_stop_short_report"], "types": _log_types(logger) }
+
+
+static func _t_binding_halt_short_of_stop_cell_skips_benefit() -> Dictionary:
+	var errs: Array = []
+	var run: Dictionary = _stop_run(_cell(3, 1), true)
+	var result: Dictionary = run["result"] as Dictionary
+	_eq(errs, "mover halted short", result["final_destination"], _cell(3, 1))
+	_eq(errs, "benefit not resolved", (result["resolved_action"] as Dictionary).is_empty(), true)
+	_eq(errs, "performed false", (run["report"] as Dictionary)["performed"], false)
+	_eq(errs, "interrupt logged", (run["types"] as Array).has("movement.stop_short_interrupted"), true)
+	return _res(errs)
+
+
+static func _t_stop_cell_reached_still_performs_benefit() -> Dictionary:
+	var errs: Array = []
+	var run: Dictionary = _stop_run({}, true)
+	_eq(errs, "mover reached stop cell", (run["result"] as Dictionary)["final_destination"], _cell(4, 1))
+	_eq(errs, "performed true", (run["report"] as Dictionary)["performed"], true)
+	_eq(errs, "no interrupt log", (run["types"] as Array).has("movement.stop_short_interrupted"), false)
+	return _res(errs)
+
+
+static func _t_absent_stop_cell_keeps_old_behaviour() -> Dictionary:
+	var errs: Array = []
+	var run: Dictionary = _stop_run(_cell(3, 1), false)
+	_eq(errs, "mover halted short", (run["result"] as Dictionary)["final_destination"], _cell(3, 1))
+	_eq(errs, "benefit still performed", (run["report"] as Dictionary)["performed"], true)
 	return _res(errs)
 
 

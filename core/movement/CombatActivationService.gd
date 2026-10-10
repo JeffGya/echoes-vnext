@@ -43,6 +43,8 @@
 #                                        the mover is treated as never downed.
 #        "stop_short_benefit" Dictionary: action plan a stop-short plays first (step 3a);
 #                                        falls through to the planned action when invalid.
+#        "stop_short_cell"    Dictionary: planned stop cell. When present, the stop-short benefit
+#                                        resolves only if the mover really ends there.
 #        "mover_ko_only"      bool      : when the mover would be downed (remaining hp <= 0),
 #                                        report "ko" if true, else "death" (default false).
 #
@@ -212,7 +214,9 @@ static func activate(
 
 	if not downed_in_move:
 		var stop_benefit: Dictionary = _plan(action_ctx.get("stop_short_benefit", {}))
-		if not stop_benefit.is_empty() and _action_valid_at(stop_benefit, final_cell, action_ctx):
+		var planned_stop: Dictionary = action_ctx.get("stop_short_cell", {}) as Dictionary
+		var reached_stop: bool = planned_stop.is_empty() or _same_cell(planned_stop, final_cell)
+		if not stop_benefit.is_empty() and reached_stop and _action_valid_at(stop_benefit, final_cell, action_ctx):
 			resolved_action = stop_benefit
 		# 3) Revalidate the primary action at the FINAL cell.
 		elif _action_valid_at(planned_action, final_cell, action_ctx):
@@ -311,6 +315,10 @@ static func _plan(value: Variant) -> Dictionary:
 	if value is Dictionary:
 		return (value as Dictionary).duplicate(true)
 	return {}
+
+
+static func _same_cell(a: Dictionary, b: Dictionary) -> bool:
+	return int(a.get("col", -1)) == int(b.get("col", -2)) and int(a.get("row", -1)) == int(b.get("row", -2))
 
 
 ## Is `action` still performable from `final_cell`? Empty target -> position

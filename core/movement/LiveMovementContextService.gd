@@ -434,6 +434,9 @@ func apply_live_activation(
 		var benefit: Dictionary = stop_short["benefit_plan"] as Dictionary
 		action_ctx["stop_short_benefit"] = MovementActionPlanScript.build(
 			str(benefit["action_type"]), str(benefit["target_id"]))
+		var stop_path: Array = intent.get("path", []) as Array
+		if not stop_path.is_empty():
+			action_ctx["stop_short_cell"] = (stop_path.back() as Dictionary).duplicate(true)
 	var result: Dictionary = CombatActivationServiceScript.activate(
 		movement_context, intent, profile, hazard_ctx, action_ctx)
 	var final_cell: Dictionary = result.get("final_destination", actor.get("grid_pos", {})) as Dictionary
