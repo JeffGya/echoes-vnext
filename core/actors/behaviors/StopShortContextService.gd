@@ -10,6 +10,140 @@ const Executor = preload("res://core/movement/MovementExecutor.gd")
 const STREAK_KEY: String = "_stop_short_streak"
 
 
+## True when this mover should get prefix-cell side data: an Echo, with `stop_short` and its
+## `cell_search` switch both on in `stop_short_cfg` (the override-aware block).
+static func cell_search_on(actor: Dictionary, stop_short_cfg: Dictionary) -> bool:
+	return str(actor.get("actor_type", "")) == "echo" \
+		and bool(stop_short_cfg.get("enabled", false)) \
+		and bool((stop_short_cfg.get("cell_search", {}) as Dictionary).get("enabled", false))
+
+
+## False when a gate that does not depend on the stop cell already vetoes every cell of this goal.
+static func cell_search_goal_open(actor: Dictionary, goal: Dictionary, stop_short_cfg: Dictionary) -> bool:
+	return not (stop_short_cfg.get("excluded_purposes", []) as Array).has(str(goal.get("purpose", ""))) \
+		and float(goal.get("urgency", 0.0)) < float(stop_short_cfg.get("urgency_ceiling", 1.0)) \
+		and not bool(actor.get(STREAK_KEY, false))
+
+
+## Replaces (or inserts) each goal's `conservative` option in `context["movement_options"]` with the
+## prefix cell that has the strongest legal stop, using the same `_build_ctx` and `evaluate` as `screen`.
+## A goal with no legal prefix keeps its options. Returns at once when no side data was prepared.
+static func apply_cell_search(context: Dictionary, logger: StructuredLogger, t: int) -> void:
+	var entries: Dictionary = context.get("movement_stop_prefixes", {}) as Dictionary
+	if entries.is_empty():
+		return
+	var cfg: Dictionary = ((((context.get("cfg", {}) as Dictionary).get("data", {}) as Dictionary)
+		.get("actor", {}) as Dictionary).get("stop_short", {}) as Dictionary)
+	var actor: Dictionary = context["actor"] as Dictionary
+	var movement_context: Dictionary = context["movement_context"] as Dictionary
+	var relationships: Dictionary = movement_context.get("relationships", {}) as Dictionary
+	var capacity: int = int((context["movement_profile"] as Dictionary)["capacity"])
+	var options: Array = (context["movement_options"] as Array).duplicate()
+	for goal_v: Variant in context["movement_goals"] as Array:
+		var goal: Dictionary = goal_v as Dictionary
+		var goal_id: String = str(goal["goal_id"])
+		if not entries.has(goal_id):
+			continue
+		var entry: Dictionary = entries[goal_id] as Dictionary
+		var tried: Array = []
+		var legal: Array = []
+		for skip_v: Variant in entry["skipped"] as Array:
+			var skip: Dictionary = skip_v as Dictionary
+			tried.append({"k": int(skip["k"]), "destination": skip["destination"], "result": str(skip["reason"])})
+		for prefix_v: Variant in entry["prefixes"] as Array:
+			var prefix: Dictionary = prefix_v as Dictionary
+			var option: Dictionary = prefix["option"] as Dictionary
+			var candidate: Dictionary = {
+				"_movement_route": true,
+				"_movement_goal": goal,
+				"_movement_goal_id": goal_id,
+				"_movement_option": option,
+				"_movement_option_id": str(option["option_id"]),
+				"_movement_path": option["path"],
+			}
+			var ctx: Dictionary = _build_ctx(
+				candidate, option["destination"] as Dictionary, actor, context["all_actors"] as Array,
+				relationships, context, options, capacity, movement_context)
+			var result: Dictionary = StopShortService.evaluate(ctx, cfg)
+			var is_legal: bool = bool(result["stop"])
+			tried.append({
+				"k": int(prefix["k"]), "destination": (option["destination"] as Dictionary).duplicate(true),
+				"result": "legal" if is_legal else str(result["veto"]),
+			})
+			if is_legal:
+				legal.append({"k": int(prefix["k"]), "option": option, "strength": float(result["strength"])})
+		tried.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["k"]) < int(b["k"]))
+		var chosen: Dictionary = _best_legal(legal)
+		if not chosen.is_empty():
+			options = _with_conservative(options, goal_id, chosen["option"] as Dictionary)
+		logger.info(t, "movement.stop_short_cell_search", "Stop-short cell search", {
+			"actor_id": str(actor.get("id", "")), "goal_id": goal_id, "window": int(entry["window"]),
+			"tried": tried, "chosen_k": int(chosen.get("k", 0)),
+			"option_id": _conservative_id(options, goal_id),
+		})
+	context["movement_options"] = options
+
+
+## Highest strength, then objective progress, then lowest exposure, then `option_id`. {} when empty.
+static func _best_legal(legal: Array) -> Dictionary:
+	var best: Dictionary = {}
+	for entry_v: Variant in legal:
+		var entry: Dictionary = entry_v as Dictionary
+		if best.is_empty() or _legal_before(entry, best):
+			best = entry
+	return best
+
+
+static func _legal_before(a: Dictionary, b: Dictionary) -> bool:
+	if float(a["strength"]) != float(b["strength"]):
+		return float(a["strength"]) > float(b["strength"])
+	var a_opt: Dictionary = a["option"] as Dictionary
+	var b_opt: Dictionary = b["option"] as Dictionary
+	if float(a_opt["objective_progress"]) != float(b_opt["objective_progress"]):
+		return float(a_opt["objective_progress"]) > float(b_opt["objective_progress"])
+	if float(a_opt["exposure"]) != float(b_opt["exposure"]):
+		return float(a_opt["exposure"]) < float(b_opt["exposure"])
+	return str(a_opt["option_id"]) < str(b_opt["option_id"])
+
+
+static func _is_conservative_of(option: Dictionary, goal_id: String) -> bool:
+	return str(option.get("goal_id", "")) == goal_id \
+		and MovementOptionService._style_from_option_id(str(option.get("option_id", ""))) == "conservative"
+
+
+static func _conservative_id(options: Array, goal_id: String) -> String:
+	for option_v: Variant in options:
+		if _is_conservative_of(option_v as Dictionary, goal_id):
+			return str((option_v as Dictionary)["option_id"])
+	return ""
+
+
+## `options` without the goal's `conservative` option, plus `chosen` at its canonical place:
+## inside the goal's block, ordered by style rank and then `option_id`.
+static func _with_conservative(options: Array, goal_id: String, chosen: Dictionary) -> Array:
+	var rest: Array = []
+	for option_v: Variant in options:
+		if not _is_conservative_of(option_v as Dictionary, goal_id):
+			rest.append(option_v)
+	var rank: int = MovementOptionService.STYLE_ORDER.find("conservative")
+	var at: int = rest.size()
+	var block_end: int = -1
+	for i: int in range(rest.size()):
+		var other: Dictionary = rest[i] as Dictionary
+		if str(other["goal_id"]) != goal_id:
+			continue
+		block_end = i + 1
+		var other_rank: int = MovementOptionService.STYLE_ORDER.find(
+			MovementOptionService._style_from_option_id(str(other["option_id"])))
+		if at == rest.size() and (other_rank > rank or (
+				other_rank == rank and str(other["option_id"]) > str(chosen["option_id"]))):
+			at = i
+	if block_end >= 0 and at == rest.size():
+		at = block_end
+	rest.insert(at, chosen.duplicate(true))
+	return rest
+
+
 ## Vetoes every `conservative` route candidate of an Echo that has no legal cause and benefit,
 ## and tags the rest with `_stop_short`. Mutates `candidates`. Returns one { goal_id, option_id, reason } per veto.
 ## Non-Echo actors keep every route shape.
@@ -236,7 +370,7 @@ static func _build_ctx(
 		"previous_stop_short": bool(actor.get(STREAK_KEY, false)),
 		"stop_cell_hostile_control": _last_edge_controlled(candidate, movement_context),
 		"cohesion_stop": float(option.get("cohesion", 0.0)),
-		"cohesion_full": _full_route_cohesion(str(candidate.get("_movement_goal_id", "")), options),
+		"cohesion_full": _cohesion_full(str(candidate.get("_movement_goal_id", "")), options, context),
 		"hostiles": hostiles,
 	}
 
@@ -252,6 +386,14 @@ static func _last_edge_controlled(candidate: Dictionary, movement_context: Dicti
 		from_cell = path[path.size() - 2] as Dictionary
 	return not Executor._edge_hostile_sources(
 		Executor._active_hostiles(movement_context), from_cell, path.back() as Dictionary).is_empty()
+
+
+## With cell search on, the true full route is the primary path; otherwise the longest other option.
+static func _cohesion_full(goal_id: String, options: Array, context: Dictionary) -> float:
+	var entry: Variant = (context.get("movement_stop_prefixes", {}) as Dictionary).get(goal_id)
+	if entry is Dictionary:
+		return float((entry as Dictionary)["primary_cohesion"])
+	return _full_route_cohesion(goal_id, options)
 
 
 static func _full_route_cohesion(goal_id: String, options: Array) -> float:

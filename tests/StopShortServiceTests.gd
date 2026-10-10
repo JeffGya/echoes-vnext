@@ -98,7 +98,7 @@ static func _t_block_loads_with_spec_values() -> Dictionary:
 	var cfg: Dictionary = _cfg(false)
 	_eq(errs, "block present", cfg.is_empty(), false)
 	var raw: Dictionary = ((_balance().get("data", {}) as Dictionary).get("actor", {}) as Dictionary).get("stop_short", {}) as Dictionary
-	_eq(errs, "enabled", raw.get("enabled", true), false)
+	_eq(errs, "enabled", raw.get("enabled", false), true)
 	_near(errs, "stop_short_weight", float(cfg["stop_short_weight"]), 6.0)
 	_near(errs, "min_cause_strength", float(cfg["min_cause_strength"]), 0.15)
 	_eq(errs, "fear floor", int(cfg["fear"]["floor"]), 20)
@@ -130,7 +130,7 @@ static func _t_block_loads_with_spec_values() -> Dictionary:
 static func _t_disabled_returns_no_stop() -> Dictionary:
 	# The disabled and non-Echo early returns live in StopShortContextService.screen
 	var errs: Array = []
-	_eq(errs, "shipped data is off", bool(_cfg(false).get("enabled", true)), false)
+	_eq(errs, "disabled copy is off", bool(_cfg(false).get("enabled", true)), false)
 	_eq(errs, "legal base case stops", StopShortService.evaluate(_ctx(), _cfg())["stop"], true)
 	return _res(errs)
 

@@ -655,7 +655,8 @@ static func _run_mode_fingerprint(
 # Kill XP at that record is on echo_0002, not echo_0003 (its SAVE hash decodes to echo_0002).
 # Pace bonus re-record (docs/stories/pace-reward): par 7.3, round 7, ratio 0.96 -> full, +3 Ase.
 # ase 55 -> 58, ekwan 7, rank S. FINAL gains the pace keys; SAVE moves with ase. ROUNDS held.
-const COMBAT_ROUNDS_HASH := "da45867fda6572ecb867aa08e7b61736c49a55364939f3b56aecbb7dd1ac86ba"
+# Re-recorded: stop_short.enabled true. ROUNDS moved.
+const COMBAT_ROUNDS_HASH := "bdd9adf80d5fd71d025eae56a5135b20fc45c63ba6990ed7cd9b18c5e01fe511"
 const COMBAT_FINAL_HASH  := "e0043b496aa493283d87769c19660e63bcb8d39422aae1000833a0402dd8c746"
 const COMBAT_SAVE_HASH   := "5056f0e0672b7f61d14191172ccb1ff82da22fc6731ba9fad023b6eedb528e98"
 
@@ -732,8 +733,9 @@ static func test_combat() -> Dictionary:
 # 55, ekwan 7, kill XP still echo_0004).
 # Pace bonus re-record: par 6.58, round 8, ratio 1.22 -> partial, fraction 0.77, +2 Ase.
 # ase 55 -> 57, ekwan 7, rank S. FINAL gains the pace keys; SAVE moves with ase. ROUNDS held.
-const PURIFY_SHRINE_ROUNDS_HASH := "d62f09789b02b8c1280ed2c3135cea592686fd6e29c13313c16703666ab4e656"
-const PURIFY_SHRINE_FINAL_HASH  := "3cc2e9e4faa8127e44b3e99fa44759f2f474808cfc214556ef3340ec9d01ff92"
+# Re-recorded: stop_short.enabled true, then cell_search.enabled true (ROUNDS and FINAL moved).
+const PURIFY_SHRINE_ROUNDS_HASH := "871ee66b2a87eedb2d721327729f1fb96d8e6c1c13195abe65aa29e2966ae945"
+const PURIFY_SHRINE_FINAL_HASH  := "24c3b92582022ad8558bb323c5e9f7513126b8f1bb04308648d003a1eebcf7e8"
 const PURIFY_SHRINE_SAVE_HASH   := "930439633fdb06e3230da43ce270f90c35b86e4f6cb60f46f953bfb19aa282d4"
 
 static func test_purify_shrine() -> Dictionary:
@@ -751,7 +753,8 @@ static func test_purify_shrine() -> Dictionary:
 # 3 rounds (round_ended unchanged), hold_progress still reaches 2 of 2, so FINAL and SAVE held.
 # Pace bonus re-record: par 3.27, round 3 -> full, +3 Ase replaces the old +9 speed bonus.
 # ase 59 -> 53, ekwan 7 -> 6, rank S (0 of 2 enemies reached). FINAL and SAVE move. ROUNDS held.
-const RECOVER_ROUNDS_HASH := "4333f3918a028f3bd21d5a20df6626153b0eb20d2d5a15fb6d2ac000e58e392e"
+# Re-recorded: stop_short.enabled true. ROUNDS moved.
+const RECOVER_ROUNDS_HASH := "939072d169d4e56100f964fe2e784da2488758f497683db9e26ff2b3876bdc42"
 const RECOVER_FINAL_HASH  := "998e712bbb60a8bde0210851985ffe76eed911e219e0359479ac4fef03794246"
 const RECOVER_SAVE_HASH   := "0b9bb5db21150c1e886ab7b3401b83287d6c82c168317d3d15e239dfa88b12b6"
 
@@ -772,7 +775,8 @@ static func test_recover() -> Dictionary:
 # 70 HP instead of 59. No kill either way, so SAVE moves on the payout alone.
 # Pace bonus re-record: no-pace mode. Rank A -> S: the ceiling drops the old speed term (9) and
 # counts 1 reached enemy, 110/115. FINAL moves on rank only; ase 50 and SAVE held. ROUNDS held.
-const PROTECT_ROUNDS_HASH := "a3bc99222bbc94efc623a9043f21d8bc34e3a4be189057d9d5f3cc22cef8b510"
+# Re-recorded: stop_short.enabled true. ROUNDS moved.
+const PROTECT_ROUNDS_HASH := "221fcc843a33af9fdb321e03859b9cd3b2420230597330e967d1b1e39b2622ee"
 const PROTECT_FINAL_HASH  := "298e2a9335ad20092d836eef06602c82bd297fe6013642836080af8bbc4648a7"
 const PROTECT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
@@ -913,8 +917,9 @@ static func test_pursue() -> Dictionary:
 # old hashes return with every stretch_fill set to "none". Outcome: 5 -> 25 rounds on the larger
 # walkable board (the party starts farther from the spirit), still spirit_protected, spirit HP
 # 49 -> 60, ase 50, ekwan 6, rank S. SAVE held.
-const GUIDE_SPIRIT_ROUNDS_HASH := "1cfae2ee850608b548e8f99b66645d5774460542958e5213bc574430bc5c1b06"
-const GUIDE_SPIRIT_FINAL_HASH  := "af7bd3c7577970a1e7d9540a9c3f5a023de1c1ac8c7f9a6c7749c2e65aa03f78"
+# Re-recorded: stop_short.enabled true. ROUNDS moved (FINAL too). The fight now ends in 24 rounds.
+const GUIDE_SPIRIT_ROUNDS_HASH := "d5030013ec7fd3116af9e2fe82112271ac852446dafb19093a79cc2f3b878556"
+const GUIDE_SPIRIT_FINAL_HASH  := "cf0012793e3ae7385e32b55d95ae345b9789dff7b53a07a9a27b376a7c9b571e"
 const GUIDE_SPIRIT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
 static func test_guide_spirit() -> Dictionary:

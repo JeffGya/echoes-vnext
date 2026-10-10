@@ -1438,6 +1438,8 @@ func _resolve_next_actor(t: int) -> void:
 		ctx["movement_profile"] = movement_prepared["profile"]
 		ctx["movement_goals"] = movement_prepared["goals"]
 		ctx["movement_options"] = movement_prepared["options"]
+		if movement_prepared.has("stop_prefixes"):
+			ctx["movement_stop_prefixes"] = movement_prepared["stop_prefixes"]
 
 	# Resolve this actor's turn.
 	var movement_cfg_for_asm: Dictionary = movement_prepared.get("movement_cfg", {}) as Dictionary

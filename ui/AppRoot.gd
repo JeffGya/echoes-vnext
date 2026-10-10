@@ -566,6 +566,7 @@ func _run_tests(parts: Array) -> void:
 	SkillReachTests.register(runner)        # follow-up #6 PR0
 	StopShortServiceTests.register(runner)
 	StopShortWiringTests.register(runner)
+	StopShortSearchTests.register(runner)
 	SocialGraphTests.register(runner)  # BOND-001
 	BondTriggerTests.register(runner)  # BOND-002
 	VowServiceTests.register(runner)  # VOW-001
