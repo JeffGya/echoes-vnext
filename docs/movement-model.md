@@ -1044,6 +1044,13 @@ The vocabulary should stay small enough to learn and broad enough to serve both 
 | `escort` | Maintain a moving protection relationship |
 | `carry` | Relocate an objective or burden-bearing subject |
 
+**Goal sources in live combat (status, 2026-10-10).** A purpose exists in the model before something creates goals with it. Today live combat creates no goal with the purposes `reposition` or `regroup`. `reposition` is created only by `StagePartyMovementAdapter` (stage exploration). No code creates `regroup`; the arbiter, the option builder and the style service already handle both purposes.
+
+| Purpose | Planned live-combat source | Story |
+|---|---|---|
+| `reposition` | Pre-positioning and mid-battle Keeper guidance; directive stances | V2-COMBAT-004, V2-DIRECTIVE-002 |
+| `regroup` | Keeper guidance; bond rescue, screening and regrouping events | V2-COMBAT-004 (bond triggers from V2-BOND-002) |
+
 Movement styles describe how the intent is expressed:
 
 - direct;
