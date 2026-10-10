@@ -750,4 +750,5 @@ domains while selecting the least costly tier suited to the actual difficulty.
 - `docs/LESSONS.md` — corrected behaviours
 - `docs/skills/godot-echoes-dev.md` — implementation patterns, checklists
 - `docs/skills/echoes-sankofa-gdd.md` — design knowledge, V2 terminology
+- `docs/skills/ponytail.md` — smallest-complete-change coding mode (level `full`); code agents and `qa-verifier` use it
 - `docs/Echoes vNext Working GDD.md` — primary design canon
