@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Echoes vNext — Onboarding & Game Start Flow</title>
+  <style>
+    :root {
+      --ink:#201d1a; --muted:#746d63; --paper:#f5f0e8; --paper-2:#ece4d7;
+      --forest:#3d5a47; --forest-dark:#23372b; --gold:#d4af37; --clay:#c85a54;
+      --ochre:#a67848; --line:#c9bca9; --white:#fffdf8; --shadow:0 16px 42px #2a1e1418;
+      --radius:22px;
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;background:
+      radial-gradient(circle at 12% 0%,#fff9ec 0,transparent 30%),
+      linear-gradient(180deg,#eee6d9 0,#f7f3ec 30%,#eee7dc 100%);
+      color:var(--ink);font:15px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    button{font:inherit}
+    .wrap{width:min(1480px,calc(100% - 40px));margin:auto}
+    .hero{min-height:86vh;padding:28px 0 58px;background:
+      linear-gradient(115deg,#17271fef,#2c4435ed),
+      repeating-linear-gradient(45deg,transparent 0 24px,#ffffff05 24px 26px);color:var(--paper);position:relative;overflow:hidden}
+    .hero:after{content:"";position:absolute;width:520px;height:520px;right:-160px;top:-190px;border:1px solid #d4af3755;border-radius:50%;box-shadow:0 0 0 52px #d4af3708,0 0 0 104px #d4af3708}
+    .topbar{display:flex;align-items:center;justify-content:space-between;position:relative;z-index:2}
+    .brand{display:flex;gap:12px;align-items:center;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+    .mark{width:38px;height:38px;border:1px solid var(--gold);border-radius:50%;display:grid;place-items:center;color:var(--gold)}
+    .stamp{padding:7px 12px;border:1px solid #f5f0e833;border-radius:999px;font-size:12px;color:#f5f0e8bb}
+    .hero-grid{display:grid;grid-template-columns:minmax(0,1.12fr) minmax(360px,.88fr);gap:42px;align-items:center;min-height:68vh;position:relative;z-index:1}
+    .eyebrow{color:var(--gold);font-weight:800;letter-spacing:.16em;text-transform:uppercase;font-size:12px}
+    h1{font-family:Georgia,serif;font-size:clamp(46px,6vw,88px);line-height:.98;margin:14px 0 22px;letter-spacing:-.04em;max-width:920px}
+    .lead{font-size:19px;line-height:1.65;color:#f5f0e8c9;max-width:790px}
+    .slice{display:flex;gap:10px;flex-wrap:wrap;margin-top:28px}
+    .pill{border:1px solid #f5f0e82b;border-radius:999px;padding:9px 13px;background:#ffffff08;font-size:13px}
+    .hero-board{background:#f5f0e80c;border:1px solid #f5f0e822;border-radius:28px;padding:22px;box-shadow:0 30px 80px #0004;backdrop-filter:blur(8px)}
+    .hero-board h2{font:700 16px/1.2 Georgia,serif;margin:0 0 18px;color:#fff8e9}
+    .mini-flow{display:grid;grid-template-columns:1fr 28px 1fr;gap:8px;align-items:center}
+    .moment{padding:13px;border-radius:14px;background:#0d1712aa;border:1px solid #ffffff16;min-height:76px}
+    .moment strong{display:block;color:#fff;font-size:13px}.moment small{color:#f5f0e899}
+    .arrow{text-align:center;color:var(--gold);font-size:18px}
+    .payoff{grid-column:1/-1;margin-top:10px;border:1px solid #d4af3766;background:#d4af3712;border-radius:16px;padding:15px;color:#fff4d4}
+    .mismatch{grid-column:1/-1;margin-top:8px;border-left:3px solid var(--clay);padding:11px 13px;background:#c85a5412;color:#f8d7d3;font-size:13px}
+    nav{position:sticky;top:0;z-index:8;background:#fffdf8ed;border-bottom:1px solid var(--line);backdrop-filter:blur(12px)}
+    nav .wrap{display:flex;gap:8px;overflow:auto;padding:10px 0}
+    nav a{color:var(--forest-dark);text-decoration:none;font-weight:750;font-size:13px;padding:8px 11px;border-radius:10px;white-space:nowrap}
+    nav a:hover{background:var(--paper-2)}
+    section{padding:74px 0}
+    section.alt{background:#e7dfd2a8;border-block:1px solid #d7caba}
+    .section-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,440px);gap:40px;align-items:end;margin-bottom:34px}
+    h2{font:700 clamp(30px,4vw,52px)/1.05 Georgia,serif;margin:8px 0 0;letter-spacing:-.025em}
+    h3{font:700 21px/1.2 Georgia,serif;margin:0 0 12px}
+    .section-head p{margin:0;color:var(--muted)}
+    .journey{display:grid;grid-template-columns:repeat(7,minmax(170px,1fr));gap:12px;overflow:auto;padding:6px 2px 22px}
+    .beat{position:relative;background:var(--white);border:1px solid var(--line);border-radius:18px;padding:17px;min-height:210px;box-shadow:var(--shadow)}
+    .beat:after{content:"→";position:absolute;right:-12px;top:44%;z-index:2;width:22px;height:22px;border-radius:50%;background:var(--forest);color:white;display:grid;place-items:center;font-size:12px}
+    .beat:last-child:after{display:none}
+    .beat .num{display:inline-grid;place-items:center;width:27px;height:27px;border-radius:50%;background:var(--forest-dark);color:white;font-weight:800;font-size:12px}
+    .beat h3{font-family:inherit;font-size:15px;margin:14px 0 8px}.beat p{color:var(--muted);font-size:13px;margin:0 0 14px}
+    .beat .feeling{font-size:12px;color:var(--forest);font-weight:800;border-top:1px solid #e9e1d5;padding-top:10px}
+    .phase-label{grid-column:1/-1;display:flex;align-items:center;gap:12px;color:var(--forest-dark);font-weight:900;text-transform:uppercase;letter-spacing:.12em;font-size:12px;margin-top:10px}
+    .phase-label:after{content:"";height:1px;background:var(--line);flex:1}
+    .handoff-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:14px}
+    .handoff{border-radius:18px;padding:18px;background:var(--forest-dark);color:white;min-height:170px}
+    .handoff:nth-child(2){background:var(--forest)}.handoff:nth-child(3){background:#7d513b}.handoff:nth-child(4){background:#442d29}
+    .handoff small{color:#fff9}.handoff strong{display:block;margin:14px 0 7px;font:700 19px Georgia,serif}
+    .legend{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+    .filter{border:1px solid var(--line);background:var(--white);color:var(--ink);border-radius:999px;padding:8px 12px;cursor:pointer;font-weight:750;font-size:12px}
+    .filter.active{background:var(--forest-dark);color:white;border-color:var(--forest-dark)}
+    .wire-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
+    .wire{background:var(--white);border:1px solid var(--line);border-radius:24px;padding:18px;box-shadow:var(--shadow)}
+    .wire-head{display:flex;justify-content:space-between;align-items:start;gap:14px;margin-bottom:15px}
+    .wire-head h3{margin:3px 0;font-family:inherit;font-size:18px}.snapshot{font:700 11px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--forest);background:#e8efe9;padding:6px 8px;border-radius:8px}
+    .screen{aspect-ratio:16/9;border:2px solid #302d28;border-radius:14px;background:#241f1a;overflow:hidden;position:relative;color:white;display:grid;grid-template-rows:1fr auto}
+    .safe{margin:16px;border:1px dashed #f5f0e855;border-radius:10px;display:grid;place-items:center;padding:12px;position:relative;overflow:hidden}
+    .safe:before{content:"SAFE FRAME";position:absolute;top:6px;left:8px;font-size:9px;letter-spacing:.14em;color:#fff6}
+    .web{position:absolute;inset:0;background:radial-gradient(circle at 50% 48%,#d4af3733 0 2%,transparent 3%),repeating-radial-gradient(circle at 50% 48%,transparent 0 42px,#d4af3715 43px 44px)}
+    .center-copy{z-index:1;text-align:center;max-width:75%}.center-copy b{font:700 clamp(15px,2vw,26px) Georgia,serif;display:block}.center-copy span{font-size:11px;color:#fff9}
+    .cta{align-self:end;justify-self:center;z-index:2;background:var(--gold);color:#211c12;border-radius:10px;padding:9px 18px;font-weight:900;font-size:11px;min-width:128px;text-align:center}
+    .cta.disabled{background:#80786d;color:#d7d0c6;border:1px solid #aaa2}
+    .orb-row{z-index:1;width:90%;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .orb{aspect-ratio:1;border-radius:50%;border:2px solid #d4af3777;background:radial-gradient(circle,#d4af3755,#3d5a4711 57%,transparent 60%);display:grid;place-items:end center;padding-bottom:8px;font-size:9px}
+    .orb.selected{box-shadow:0 0 0 3px #f5f0e8,0 0 28px #d4af3788}
+    .person{z-index:1;display:grid;grid-template-columns:.8fr 1.2fr;gap:12px;width:88%;align-items:center}.portrait{aspect-ratio:3/4;border:1px solid #d4af3777;border-radius:50% 50% 18px 18px;background:radial-gradient(circle at 50% 30%,#d4af3744,transparent 35%),#111a15}.stat-card{background:#ffffff0c;border:1px solid #fff2;border-radius:12px;padding:12px}.stat-card b{font-family:Georgia,serif;font-size:18px}.chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}.chip{font-size:9px;background:#3d5a47;padding:4px 6px;border-radius:999px}
+    .sanctum{z-index:1;width:90%;height:76%;display:grid;grid-template-columns:1.3fr .7fr;gap:10px}.courtyard{border:1px solid #d4af3755;background:linear-gradient(135deg,#3d5a4722,#a6784822);border-radius:12px;position:relative}.flame{position:absolute;left:50%;top:50%;width:42px;height:54px;transform:translate(-50%,-50%);border-radius:50% 50% 45% 45%;background:radial-gradient(circle at 50% 75%,#fff2b5,#d4af37 32%,#c85a54 70%,transparent 72%);filter:drop-shadow(0 0 14px #d4af37)}.side-copy{border-radius:12px;background:#ffffff0c;border:1px solid #fff2;padding:12px;font-size:10px}
+    .combat{z-index:1;width:92%;height:80%;display:grid;grid-template-columns:1fr 150px;gap:10px}.board{display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(5,1fr);transform:skewY(-5deg);gap:2px}.tile{background:#3d5a4733;border:1px solid #d4af3722}.tile.echo{background:#d4af37aa}.tile.enemy{background:#c85a54aa}.hud{border:1px solid #fff2;border-radius:10px;padding:9px;background:#0b100ddd;font-size:9px}.echo-bar{height:42px;background:#18271f;border-top:1px solid #d4af3755;display:flex;gap:8px;align-items:center;padding:6px 14px;font-size:9px}.echo-token{width:27px;height:27px;border:1px solid #d4af37;border-radius:50%}
+    .choices{z-index:1;display:grid;gap:7px;width:78%}.choice{padding:8px;border:1px solid #d4af3766;border-radius:9px;background:#ffffff0c;font-size:10px}.thread{z-index:1;width:76%;display:grid;grid-template-columns:74px 1fr;gap:14px;align-items:center}.sigil{aspect-ratio:1;border-radius:50%;border:5px double var(--gold);box-shadow:0 0 24px #d4af3755;background:radial-gradient(circle,#c8a55a,#6b5a4a)}
+    .bottom-rail{height:46px;background:#18271f;border-top:1px solid #d4af3755;display:flex;align-items:center;justify-content:center;gap:14px;font-size:9px}.rail-item{padding:6px 10px;border-radius:7px;background:#fff1}.rail-item.active{color:#1e271f;background:var(--gold)}
+    .wire-meta{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:14px}
+    .meta-item{padding:10px;border-radius:11px;background:#f0eade;font-size:12px}.meta-item b{display:block;color:var(--forest-dark);font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px}
+    .audit-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}.audit{background:var(--white);border:1px solid var(--line);border-radius:19px;padding:19px;min-height:220px}.score{font:700 42px Georgia,serif;color:var(--forest)}.audit h3{font-family:inherit;font-size:15px;margin:5px 0}.audit p{color:var(--muted);font-size:13px}.signal{margin-top:12px;padding-top:10px;border-top:1px solid #e7dfd4;font-size:12px;font-weight:750;color:var(--forest-dark)}
+    .notes{display:grid;grid-template-columns:repeat(3,1fr);gap:15px}.note{border-radius:19px;padding:20px;background:var(--white);border:1px solid var(--line)}.note.risk{border-top:5px solid var(--clay)}.note.opportunity{border-top:5px solid var(--gold)}.note.decision{border-top:5px solid var(--forest)}.tag{font-size:10px;text-transform:uppercase;letter-spacing:.12em;font-weight:900;color:var(--muted)}.note p,.note li{font-size:13px;color:var(--muted)}
+    .note ul{padding-left:18px;margin-bottom:0}
+    .comparison{display:grid;grid-template-columns:1fr 80px 1fr;gap:18px;align-items:stretch}.compare-card{border-radius:22px;padding:23px;background:var(--white);border:1px solid var(--line)}.compare-card.proposed{background:var(--forest-dark);color:white}.compare-card p{color:var(--muted)}.compare-card.proposed p{color:#fff9}.bridge{display:grid;place-items:center;font-size:34px;color:var(--gold)}
+    .prompts{display:grid;grid-template-columns:repeat(2,1fr);gap:13px;counter-reset:prompt}.prompt{counter-increment:prompt;background:var(--white);border:1px solid var(--line);border-radius:16px;padding:16px 16px 16px 56px;position:relative}.prompt:before{content:counter(prompt);position:absolute;left:16px;top:15px;width:26px;height:26px;display:grid;place-items:center;border-radius:50%;background:var(--forest);color:white;font-weight:900;font-size:12px}.prompt b{display:block;margin-bottom:4px}.prompt span{color:var(--muted);font-size:13px}
+    footer{padding:36px 0 48px;background:#17271f;color:#f5f0e8aa}.footer-grid{display:flex;justify-content:space-between;gap:30px;align-items:center}.footer-grid strong{color:white}
+    [hidden]{display:none!important}
+    @media(max-width:1000px){.hero-grid,.section-head{grid-template-columns:1fr}.hero-grid{padding-top:60px}.journey{grid-template-columns:repeat(7,220px)}.handoff-grid,.audit-grid{grid-template-columns:repeat(2,1fr)}.wire-grid{grid-template-columns:1fr}.notes{grid-template-columns:1fr 1fr}.comparison{grid-template-columns:1fr}.bridge{transform:rotate(90deg)}}
+    @media(max-width:650px){.wrap{width:min(100% - 22px,1480px)}.hero{min-height:auto}.hero-grid{padding:52px 0}.hero-board{padding:15px}.mini-flow{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}h1{font-size:44px}.handoff-grid,.audit-grid,.notes,.prompts{grid-template-columns:1fr}.wire{padding:11px}.wire-meta{grid-template-columns:1fr}.screen{aspect-ratio:16/10}.section-head{gap:14px}section{padding:54px 0}.footer-grid{display:block}}
+    @media print{nav,.legend{display:none}.hero{min-height:auto}.wire,.beat,.note,.audit{break-inside:avoid}.wrap{width:94%}}
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <div class="topbar"><div class="brand"><div class="mark">✦</div> Echoes vNext</div><div class="stamp">UX / GAME-FEEL PROTOTYPE · 16 AUG 2026</div></div>
+      <div class="hero-grid">
+        <div>
+          <div class="eyebrow">Onboarding + game-start player flow</div>
+          <h1>From a forgotten voice to a house worth keeping.</h1>
+          <p class="lead">The player’s first goal is not to build an optimal squad. It is to choose which voice to answer, meet the person who returns, survive one protected wound in the web, and make the dormant Sanctum feel alive.</p>
+          <div class="slice"><span class="pill">Start: first launch / no campaign</span><span class="pill">End: Sanctum unlocked</span><span class="pill">Payoff: stewardship becomes tangible</span></div>
+        </div>
+        <div class="hero-board">
+          <h2>Player slice at a glance</h2>
+          <div class="mini-flow">
+            <div class="moment"><strong>Hear</strong><small>Anansi frames the missing stories.</small></div><div class="arrow">→</div>
+            <div class="moment"><strong>Choose</strong><small>Commit to one forgotten virtue-voice.</small></div>
+            <div class="moment"><strong>Meet</strong><small>A specific unsettled Echo returns.</small></div><div class="arrow">→</div>
+            <div class="moment"><strong>Risk</strong><small>Face a protected first trial together.</small></div>
+            <div class="moment"><strong>Return</strong><small>Carry Ase and a First Thread home.</small></div><div class="arrow">→</div>
+            <div class="moment"><strong>Keep</strong><small>Wake the Flame, weave, claim the house.</small></div>
+            <div class="payoff"><strong>Emotional promise:</strong> “My choice called someone back, and what we survived changed both them and the house.”</div>
+            <div class="mismatch"><strong>Canon tensions:</strong> current implementation creates the starter Echo after the forgotten-name choice, while the GDD’s older opening summary begins with a pre-summoned Echo. It also marks the Flame awakened at house naming before the trial, then stages the visible Awakening Rite after the Thread returns; the GDD wants the visible awakening to follow the return. Resolve these meanings before further onboarding expansion.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <nav><div class="wrap"><a href="#journey">Journey</a><a href="#handoff">Game opens</a><a href="#wireframes">Wireframes</a><a href="#feel">Game feel</a><a href="#friction">Friction</a><a href="#direction">Direction</a><a href="#playtest">Playtest</a><a href="#decisions">Decisions</a></div></nav>
+
+  <main>
+    <section id="journey">
+      <div class="wrap">
+        <div class="section-head"><div><div class="eyebrow">Current-state journey</div><h2>Fourteen beats, one emotional arc</h2></div><p>The implemented flow is split into Chapter I and the Keeper introduction. The key rhythm is mystery → commitment → encounter → pressure → return → stewardship.</p></div>
+        <div class="journey">
+          <div class="phase-label">Chapter I · return a name</div>
+          <article class="beat"><span class="num">1</span><h3>Invocation</h3><p>Enter through mood and myth, without system language.</p><div class="feeling">Curiosity · “What is calling?”</div></article>
+          <article class="beat"><span class="num">2</span><h3>Anansi’s web</h3><p>Learn that stories have been scattered and stolen.</p><div class="feeling">Wonder · “This world is wounded.”</div></article>
+          <article class="beat"><span class="num">3</span><h3>Forgotten voices</h3><p>Hear three fragments, then commit to one.</p><div class="feeling">Responsibility · “Which voice do I answer?”</div></article>
+          <article class="beat"><span class="num">4</span><h3>The meeting</h3><p>The selected voice becomes a named, emotionally legible person.</p><div class="feeling">Attachment · “My choice brought them here.”</div></article>
+          <article class="beat"><span class="num">5</span><h3>Empty Sanctum</h3><p>Enter a dormant house with one unsettled inhabitant.</p><div class="feeling">Fragility · “This place needs us.”</div></article>
+          <article class="beat"><span class="num">6</span><h3>Name the house</h3><p>Choose a suggested name or author one; make the refuge yours.</p><div class="feeling">Ownership · “This is our house.”</div></article>
+          <article class="beat"><span class="num">7</span><h3>Call of the Realm</h3><p>The newly named house is heard; danger answers.</p><div class="feeling">Purpose · “We must respond.”</div></article>
+          <div class="phase-label">Keeper introduction · survive, recover, keep</div>
+          <article class="beat"><span class="num">8</span><h3>First Trial</h3><p>One Echo faces the Fragment Wound in real combat language.</p><div class="feeling">Pressure · “I can guide, not command.”</div></article>
+          <article class="beat"><span class="num">9</span><h3>Possible rewind</h3><p>If the first attempt kills the Echo, Anansi turns the story back once.</p><div class="feeling">Relief + warning · “Future loss will matter.”</div></article>
+          <article class="beat"><span class="num">10</span><h3>Thread returns</h3><p>Victory produces 40 Ase and a virtue-aligned First Thread.</p><div class="feeling">Reward · “Risk brought something home.”</div></article>
+          <article class="beat"><span class="num">11</span><h3>Awakening rite</h3><p>Choose a promise: guard, listen, or return what was stolen.</p><div class="feeling">Identity · “What kind of Keeper am I?”</div></article>
+          <article class="beat"><span class="num">12</span><h3>Ase Flame</h3><p>The promise wakes the house’s center and starts recovery.</p><div class="feeling">Response · “The house heard me.”</div></article>
+          <article class="beat"><span class="num">13</span><h3>First Weaving</h3><p>Settle the recovered Thread into the starter Echo.</p><div class="feeling">Transformation · “Recovery changes a person.”</div></article>
+          <article class="beat"><span class="num">14</span><h3>Into the Keeping</h3><p>Enter the spatial Sanctum with its persistent BottomRail.</p><div class="feeling">Readiness · “Now the real keeping begins.”</div></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="alt" id="handoff">
+      <div class="wrap">
+        <div class="section-head"><div><div class="eyebrow">First-session handoff</div><h2>“Onboarding complete” is not yet “game opened”</h2></div><p>The GDD defines the true opening threshold as summoning becoming available. The implemented handoff currently reaches the Sanctum; the next four beats must preserve the emotional thread rather than becoming a menu tour.</p></div>
+        <div class="handoff-grid">
+          <article class="handoff"><small>Current end state</small><strong>Enter the living Sanctum</strong><span>See the named house, awakened Flame, starter Echo, 40 Ase, and Thread consequence.</span></article>
+          <article class="handoff"><small>Required opening payoff</small><strong>Unlock and summon a second Echo</strong><span>The roster loop begins only after one more stabilizing house beat.</span></article>
+          <article class="handoff"><small>First proper risk</small><strong>Enter the fixed opening Realm</strong><span>Introduce Scout Carefully / Seek Signs, hidden information, and real withdrawal stakes.</span></article>
+          <article class="handoff"><small>First social proof</small><strong>Return to visible consequence</strong><span>Show house change and an early Echo-to-Echo tension or bond beat.</span></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="wireframes">
+      <div class="wrap">
+        <div class="section-head"><div><div class="eyebrow">Representative screen states</div><h2>What the player sees, decides, and receives</h2></div><p>These are mid-fi experience wireframes, grounded in current screen ownership. Onboarding is chrome-free; only the First Trial enters RealmShell and gains the EchoBar.</p></div>
+        <div class="legend" role="group" aria-label="Wireframe filters">
+          <button class="filter active" data-filter="all">All</button><button class="filter" data-filter="choice">Choices</button><button class="filter" data-filter="pressure">Pressure</button><button class="filter" data-filter="feedback">Feedback</button><button class="filter" data-filter="handoff">Handoff</button>
+        </div>
+        <div class="wire-grid">
+          <article class="wire" data-tags="choice">
+            <div class="wire-head"><div><div class="eyebrow">Commitment</div><h3>Forgotten Name</h3></div><span class="snapshot">flow.onboarding_choose_name</span></div>
+            <div class="screen"><div class="safe"><div class="web"></div><div class="orb-row"><div class="orb">VOICE</div><div class="orb selected">HEARD</div><div class="orb">VOICE</div></div><div class="cta disabled">COMMIT TO ONE</div></div></div>
+            <div class="wire-meta"><div class="meta-item"><b>Owner / chrome</b>AppRoot · no persistent shell chrome</div><div class="meta-item"><b>Primary decision</b>Hear, compare, then select one virtue-voice</div><div class="meta-item"><b>Feedback surface</b>Voice line revealed; selected orb gains focus and glow</div><div class="meta-item"><b>Disabled / failure</b>Commit remains disabled until a voice is selected</div></div>
+          </article>
+
+          <article class="wire" data-tags="feedback">
+            <div class="wire-head"><div><div class="eyebrow">Attachment</div><h3>Meet the starter Echo</h3></div><span class="snapshot">flow.onboarding_meeting</span></div>
+            <div class="screen"><div class="safe"><div class="web"></div><div class="person"><div class="portrait"></div><div class="stat-card"><b>A name has returned</b><div>Standing 1 · Step 1 · Storyweight 0</div><div class="chips"><span class="chip">Uncertain</span><span class="chip">Virtue identity</span><span class="chip">Calling seed</span></div></div></div><div class="cta">ENTER THE SANCTUM</div></div></div>
+            <div class="wire-meta"><div class="meta-item"><b>Owner / chrome</b>AppRoot · no persistent shell chrome</div><div class="meta-item"><b>Primary decision</b>Accept the person your commitment returned</div><div class="meta-item"><b>Feedback surface</b>Name, emotional state, identity, traits and capabilities</div><div class="meta-item"><b>Disabled / failure</b>No failure; risk is information overload before attachment lands</div></div>
+          </article>
+
+          <article class="wire" data-tags="pressure">
+            <div class="wire-head"><div><div class="eyebrow">Protected danger</div><h3>First Trial</h3></div><span class="snapshot">flow.keeper_trial</span></div>
+            <div class="screen"><div class="safe"><div class="combat"><div class="board"> <i class="tile"></i><i class="tile"></i><i class="tile"></i><i class="tile"></i><i class="tile enemy"></i><i class="tile"></i><i class="tile"></i><i class="tile"></i><i class="tile"></i><i class="tile"></i><i class="tile echo"></i><i class="tile"></i><i class="tile"></i><i class="tile"></i><i class="tile"></i><i class="tile"></i><i class="tile"></i><i class="tile"></i><i class="tile"></i><i class="tile"></i><i class="tile"></i><i class="tile"></i><i class="tile"></i><i class="tile"></i><i class="tile"></i></div><div class="hud"><b>FIRST TRIAL</b><p>Watch how your Echo moves, guards, and answers danger.</p><hr><span>Survive the Wound</span></div></div></div><div class="echo-bar"><div class="echo-token"></div> Starter Echo · emotional read · initiative</div></div>
+            <div class="wire-meta"><div class="meta-item"><b>Owner / chrome</b>RealmShell · persistent 88-unit EchoBar</div><div class="meta-item"><b>Primary decision</b>Read the Echo’s behavior and advance real combat</div><div class="meta-item"><b>Feedback surface</b>Board action, bark, initiative, health, emotion</div><div class="meta-item"><b>Disabled / failure</b>First lethal outcome rewinds once; future danger is foreshadowed</div></div>
+          </article>
+
+          <article class="wire" data-tags="choice feedback">
+            <div class="wire-head"><div><div class="eyebrow">Keeper identity</div><h3>Awakening Rite</h3></div><span class="snapshot">flow.keeper_awakening</span></div>
+            <div class="screen"><div class="safe"><div class="sanctum"><div class="courtyard"><div class="flame"></div></div><div class="choices"><div class="choice">I will guard this flame.</div><div class="choice">I will listen before I lead.</div><div class="choice">I will bring what was stolen home.</div></div></div></div></div>
+            <div class="wire-meta"><div class="meta-item"><b>Owner / chrome</b>AppRoot · no Sanctum BottomRail yet</div><div class="meta-item"><b>Primary decision</b>Choose the promise that names the Keeper’s stance</div><div class="meta-item"><b>Feedback surface</b>Flame awakens; Echo emotion or virtue shifts</div><div class="meta-item"><b>Disabled / failure</b>No wrong choice; weakness is if consequences feel numerically invisible</div></div>
+          </article>
+
+          <article class="wire" data-tags="feedback">
+            <div class="wire-head"><div><div class="eyebrow">Recovery becomes growth</div><h3>First Weaving</h3></div><span class="snapshot">flow.keeper_weaving</span></div>
+            <div class="screen"><div class="safe"><div class="thread"><div class="sigil"></div><div class="stat-card"><b>First Thread</b><p>Recovered virtue settles into the Echo.</p><div class="chips"><span class="chip">Storyweight +</span><span class="chip">Virtue deepens</span></div></div></div><div class="cta">WEAVE THE FIRST THREAD</div></div></div>
+            <div class="wire-meta"><div class="meta-item"><b>Owner / chrome</b>AppRoot · focused rite surface</div><div class="meta-item"><b>Primary decision</b>Complete the required first integration</div><div class="meta-item"><b>Feedback surface</b>Before/after Storyweight, virtue and Echo response</div><div class="meta-item"><b>Disabled / failure</b>No alternate outcome; avoid pretending this is a strategic choice</div></div>
+          </article>
+
+          <article class="wire" data-tags="handoff">
+            <div class="wire-head"><div><div class="eyebrow">Open-world handoff</div><h3>Sanctum unlocked</h3></div><span class="snapshot">flow.sanctum</span></div>
+            <div class="screen"><div class="safe"><div class="sanctum"><div class="courtyard"><div class="flame"></div></div><div class="side-copy"><b>Your named house</b><p>40 Ase · one Echo · awakened Flame</p><p>Next guidance: stabilize the house, then call another story home.</p></div></div></div><div class="bottom-rail"><span class="rail-item active">House</span><span class="rail-item">Echoes</span><span class="rail-item">Summon</span><span class="rail-item">Realm</span></div></div>
+            <div class="wire-meta"><div class="meta-item"><b>Owner / chrome</b>SanctumShell · inset capped BottomRail</div><div class="meta-item"><b>Primary decision</b>Understand what changed and choose the next house action</div><div class="meta-item"><b>Feedback surface</b>Spatial Flame, starter Echo, resources, Thread consequence</div><div class="meta-item"><b>Disabled / failure</b>Summoning should be visibly gated until the intended stabilizing beat</div></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="alt" id="feel">
+      <div class="wrap">
+        <div class="section-head"><div><div class="eyebrow">Game-feel audit</div><h2>The opening is strongest when cause and consequence stay visible</h2></div><p>Scores indicate current experience confidence, not code quality. The largest risk is that rich systems are introduced as text before the player feels what they mean.</p></div>
+        <div class="audit-grid">
+          <article class="audit"><div class="score">4/5</div><h3>Clarity</h3><p>The linear flow and single CTAs are legible. Forgotten-name selection has a truthful disabled state.</p><div class="signal">Watch: dense Echo stats may compete with the emotional meeting.</div></article>
+          <article class="audit"><div class="score">4/5</div><h3>Motivation</h3><p>Choosing a voice, naming a house, and answering danger forms a coherent mythic purpose.</p><div class="signal">Watch: make the trial’s threat to the house concrete before combat.</div></article>
+          <article class="audit"><div class="score">3/5</div><h3>Response</h3><p>The Flame, Echo creation, reward, and Thread provide strong potential feedback.</p><div class="signal">Need: unmistakable before/after presentation for promise and weave.</div></article>
+          <article class="audit"><div class="score">3/5</div><h3>Satisfaction</h3><p>The first victory returns useful material and the house opens.</p><div class="signal">Risk: 40 Ase + Storyweight can read as ledger updates, not restoration.</div></article>
+          <article class="audit"><div class="score">5/5</div><h3>Fit</h3><p>The flow embodies Sankofa: hear, return, carry home, weave, keep.</p><div class="signal">Protect: stewardship should remain more important than optimization.</div></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="friction">
+      <div class="wrap">
+        <div class="section-head"><div><div class="eyebrow">UX friction + opportunities</div><h2>Where the emotional thread can loosen</h2></div><p>These are player-facing audit findings. They are not implementation authorization.</p></div>
+        <div class="notes">
+          <article class="note risk"><div class="tag">Friction · framing</div><h3>Two different starter premises</h3><p>The live flow lets the player choose the fragment that creates the starter Echo. The GDD summary says one Echo is already present. These establish different kinds of responsibility.</p></article>
+          <article class="note risk"><div class="tag">Friction · causality</div><h3>The Flame wakes twice in meaning</h3><p>The current state marks the Ase Flame awakened when the house is named, before the First Trial, then presents an Awakening Rite after the Thread returns. The GDD’s intended causal story is clearer: recover → return → visibly awaken.</p></article>
+          <article class="note risk"><div class="tag">Friction · pacing</div><h3>Long runway before agency</h3><p>Invocation and Anansi are atmosphere-first. If typing and continue beats run too long, the first meaningful choice arrives after attention has cooled.</p></article>
+          <article class="note risk"><div class="tag">Friction · attachment</div><h3>The meeting risks becoming a character sheet</h3><p>Standing, Step, Storyweight, archetype, identity, emotion, traits and stats all appear immediately. The person may be understood as a build before being felt as unsettled.</p></article>
+          <article class="note risk"><div class="tag">Friction · stakes</div><h3>Protected can feel consequence-free</h3><p>The rewind is a powerful Anansi beat, but only if it teaches that this mercy is exceptional and future Realm loss is real.</p></article>
+          <article class="note risk"><div class="tag">Friction · feedback</div><h3>Promise consequences are subtle</h3><p>Guard, listen, and return change emotion or virtue under the hood. Without a visible Echo response, three evocative choices can feel equivalent.</p></article>
+          <article class="note risk"><div class="tag">Friction · handoff</div><h3>The hub can flatten the climax</h3><p>After a focused mythic sequence, landing in a broad navigation rail can feel like exiting a story into a dashboard unless the changed house is foregrounded.</p></article>
+          <article class="note opportunity"><div class="tag">Opportunity · response</div><h3>Make the Echo answer the promise</h3><p>Add a short reactive line or posture change that reflects guard, listen, or return before showing any numeric shift.</p></article>
+          <article class="note opportunity"><div class="tag">Opportunity · continuity</div><h3>Use one repeated spatial composition</h3><p>Show the same Sanctum center dormant, ember-lit, then awakened so restoration is perceived rather than explained.</p></article>
+          <article class="note opportunity"><div class="tag">Opportunity · focus</div><h3>Progressively reveal identity</h3><p>Lead the meeting with name, emotional status, one identity phrase, and one bark. Defer detailed stats until the player reaches Echo management.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="alt" id="direction">
+      <div class="wrap">
+        <div class="section-head"><div><div class="eyebrow">Recommended experience direction</div><h2>Keep the implemented structure; sharpen its visible causality</h2></div><p>The existing flow already carries the right mythic verbs. The highest-value direction is to connect each decision to a visible person or place response.</p></div>
+        <div class="comparison">
+          <article class="compare-card"><div class="tag">Current experience</div><h3>Choice → stored outcome → next screen</h3><p>The player chooses a fragment, name, promise, and weave. Much of the meaning is explained in copy or reflected in underlying state.</p><ul><li>Strong linear clarity</li><li>Strong canon vocabulary</li><li>Risk of text-led consequence</li></ul></article>
+          <div class="bridge">→</div>
+          <article class="compare-card proposed"><div class="tag">Sharpened experience</div><h3>Choice → visible response → changed space → next screen</h3><p>Every meaningful act receives one immediate emotional response and one persistent environmental or identity echo.</p><ul><li>Fragment: voice becomes person</li><li>Promise: Echo and Flame answer</li><li>Trial: wound yields material</li><li>Weave: before/after identity is readable</li><li>Handoff: changed Sanctum leads the eye</li></ul></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="playtest">
+      <div class="wrap">
+        <div class="section-head"><div><div class="eyebrow">Playtest prompts</div><h2>Questions the first session must answer without explanation</h2></div><p>Run these after a clean save. Ask for recall and feeling first; avoid teaching terms during the debrief.</p></div>
+        <div class="prompts">
+          <div class="prompt"><b>Why did you choose that forgotten voice?</b><span>Checks whether the fragment choice has identity weight beyond visual preference.</span></div>
+          <div class="prompt"><b>Who is the starter Echo to you?</b><span>Checks whether the meeting creates a person, not merely a stat bundle.</span></div>
+          <div class="prompt"><b>What could you influence in the First Trial?</b><span>Checks the guide-not-command fantasy and combat readability.</span></div>
+          <div class="prompt"><b>What did the Realm return to the house?</b><span>Checks whether Ase and the Thread read as recovered story material.</span></div>
+          <div class="prompt"><b>What did your awakening promise change?</b><span>Checks immediate response and whether the choice felt distinct.</span></div>
+          <div class="prompt"><b>What changed in the Echo after weaving?</b><span>Checks visible Storyweight / virtue consequence without formula teaching.</span></div>
+          <div class="prompt"><b>Why was the rewind allowed?</b><span>Checks whether protection reads as a one-time Anansi exception.</span></div>
+          <div class="prompt"><b>What do you want to do next in the Sanctum?</b><span>Checks the transition toward stabilizing, summoning, and the first proper Realm.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="alt" id="decisions">
+      <div class="wrap">
+        <div class="section-head"><div><div class="eyebrow">Settled + open</div><h2>Decisions that protect the journey</h2></div><p>Only the first two open questions materially change the opening’s premise or boundary. Everything else can be evaluated through playtesting.</p></div>
+        <div class="notes">
+          <article class="note decision"><div class="tag">Settled</div><h3>Protected mini-trial</h3><ul><li>Uses real combat language</li><li>No formal Directives or pings</li><li>No permanent death</li><li>Returns Ase and a First Thread</li></ul></article>
+          <article class="note decision"><div class="tag">Settled</div><h3>Chrome ownership</h3><ul><li>Chapter I and rite beats stay chrome-free</li><li>First Trial uses RealmShell + EchoBar</li><li>Sanctum handoff gains BottomRail</li><li>Blocking moments cover all chrome</li></ul></article>
+          <article class="note decision"><div class="tag">Settled</div><h3>Opening vocabulary</h3><ul><li>Storyweight, Standing, Step</li><li>Virtue domain and Thread</li><li>Keeper as steward</li><li>No internal IDs shown to the player</li></ul></article>
+          <article class="note risk"><div class="tag">Open question · premise</div><h3>Is the starter Echo chosen into existence or already waiting?</h3><p>This decides whether the player’s first responsibility is <em>answering a voice</em> or <em>caring for someone already present</em>. The current implementation strongly supports the first.</p></article>
+          <article class="note risk"><div class="tag">Open question · boundary</div><h3>Does onboarding end at “Keep the House” or at summoning unlock?</h3><p>The implemented gate ends at Sanctum entry; the GDD defines start + tutorial as everything before summoning opens. The handoff guidance and playtest length depend on this boundary.</p></article>
+          <article class="note opportunity"><div class="tag">Open question · consequence</div><h3>How visibly should the Keeper promise persist?</h3><p>Should guard/listen/return become recurring player-facing house language, or remain a small opening tilt? Persistence changes expectation and narrative weight.</p></article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer><div class="wrap footer-grid"><div><strong>Echoes vNext · Onboarding / Game Start</strong><br>Standalone visual-plan prototype grounded in the current playable flow and V2.5 design canon.</div><div>No gameplay code changed · HTML artifact only</div></div></footer>
+  <script>
+    const buttons=[...document.querySelectorAll('.filter')];
+    const wires=[...document.querySelectorAll('.wire')];
+    buttons.forEach(button=>button.addEventListener('click',()=>{
+      buttons.forEach(item=>item.classList.toggle('active',item===button));
+      const filter=button.dataset.filter;
+      wires.forEach(wire=>wire.hidden=filter!=='all'&&!wire.dataset.tags.split(' ').includes(filter));
+    }));
+  </script>
+</body>
+</html>

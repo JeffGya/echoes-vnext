@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Echoes · Shared combat actions</title>
+<style>
+:root{--bg:#F6F1E3;--fg:#2A2A3A;--mut:#5a5a6a;--card:#FFFDF2;--line:#cdbf94;--acc:#80630b;color-scheme:light}
+html[data-theme=dark]{--bg:#16221b;--fg:#FFF8DC;--mut:#c9c3a8;--card:#1f2f26;--line:#647a67;--acc:#D4AF37;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;padding:20px;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:1500px;margin:auto}
+h1{font-size:1.55rem;margin:0}h2{font-size:1.15rem;margin:26px 0 4px;color:var(--acc)}h3{margin:0;font-size:1rem}p{margin:4px 0 10px;max-width:82ch}.mut{color:var(--mut);font-size:.9rem}.eyebrow{font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;color:var(--acc);font-weight:700}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0 10px}button{font:inherit;min-height:48px;padding:9px 16px;border:2px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);cursor:pointer}button[aria-pressed=true]{border-color:var(--acc);font-weight:700}button:disabled{cursor:default;opacity:.6}button:hover:not(:disabled){border-color:var(--acc)}button:focus-visible,a:focus-visible,.row:focus-visible{outline:3px solid var(--acc);outline-offset:4px}.speeds{display:flex;gap:8px}.toolbar .theme{margin-left:auto}a{color:var(--acc);text-underline-offset:3px}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}.legend span{display:flex;align-items:center;gap:7px;padding:4px 9px;border:1px solid var(--line);border-radius:6px;font-size:.8rem;background:var(--card)}.legend svg{width:28px;height:28px;flex:none}.legend .mark{font-weight:700}
+.combined{display:grid;grid-template-columns:minmax(0,700px) minmax(230px,1fr);gap:22px;margin:16px 0 18px;align-items:center;border:1px solid var(--line);background:var(--card);border-radius:10px;padding:10px}.combined .board{width:100%;height:auto}.combined figcaption{padding:8px 12px 8px 0}.combined .steps{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}.steps span{border:1px solid var(--line);padding:4px 8px;border-radius:4px;font-size:.8rem}.steps span.current{border-color:var(--acc);font-weight:700}
+.row{display:flex;gap:16px;overflow-x:auto;padding:6px 3px 14px;align-items:flex-start;scrollbar-color:var(--line) var(--bg)}.card{margin:0;flex:0 0 auto;border:1px solid var(--line);border-radius:10px;background:var(--card);padding:8px;width:438px;scroll-margin:20px}.card.wide{width:866px}.card.triple{width:1294px}.card.entrance{width:638px}.board{display:block;border-radius:6px;width:420px;height:280px;max-width:100%;background:#6e3128}.strip{display:flex;gap:8px}.card.entrance .board{width:620px}.card figcaption{display:flex;flex-direction:column;gap:5px;padding:9px 4px 3px;font-size:.85rem;max-width:78ch}.card figcaption p{margin:0;color:var(--mut)}.id{font-size:.72rem;color:var(--acc);letter-spacing:.05em;font-weight:700}.tag{align-self:flex-start;padding:2px 8px;border:1px dashed var(--line);border-radius:999px;font-size:.72rem;color:var(--mut)}.skip{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:10px;min-height:280px;padding:25px;background:var(--bg);border-radius:6px}.skip .quiet{height:2px;width:44px;background:var(--line)}.skip p{font-size:.9rem}.foot{margin:22px 0 8px;border-top:1px solid var(--line);padding-top:14px;font-size:.85rem;color:var(--mut)}details{margin-top:10px}summary{cursor:pointer;color:var(--acc)}details p{padding:8px 0;max-width:90ch}
+svg text{font-family:system-ui,-apple-system,"Segoe UI",sans-serif}svg .name{font-size:11px;font-weight:650;fill:#FFF8DC;paint-order:stroke;stroke:#6e3128;stroke-width:3px;stroke-linejoin:round}svg .initial{font-size:11px;font-weight:750;fill:white}svg .small{font-size:10px;fill:#FFF8DC}svg .damage{font-size:18px;font-weight:850;paint-order:stroke;stroke:#2A2A3A;stroke-width:3px}svg .row-name{font-size:11px;font-weight:650;fill:#FFF8DC}svg .chip-text{fill:#2A2A3A}svg .phase{font-size:11px;fill:#FFF8DC}
+@media(max-width:850px){body{padding:12px}.combined{grid-template-columns:1fr}.combined figcaption{padding:4px}.toolbar .theme{margin-left:0}.combined .board{max-height:330px}.card{width:min(438px,calc(100vw - 32px))}.card.wide{width:866px}.card.entrance{width:638px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="eyebrow">Echoes vNext · visual proposal · section 2 of the inventory</div>
+<h1>Shared combat actions</h1>
+<p class="mut">27 treatments, one token language. Watch the actor, its subject and the result; use Still / rest to inspect the settled read.</p>
+<div class="toolbar" aria-label="Demonstration playback controls">
+<button id="pause" type="button" aria-pressed="false">Pause</button>
+<button id="replay" type="button">Replay</button>
+<button id="rest" type="button" aria-pressed="false">Still / rest</button>
+<div class="speeds" role="group" aria-label="Playback speed">
+<button type="button" data-speed="slow" aria-pressed="false">Slow</button>
+<button type="button" data-speed="normal" aria-pressed="true">Normal</button>
+<button type="button" data-speed="fast" aria-pressed="false">Fast</button>
+</div>
+<button id="theme" class="theme" type="button" aria-pressed="false">Dark page</button>
+</div>
+<p id="playback-status" class="mut" role="status" aria-live="polite">Playing · normal speed</p>
+<div class="legend" aria-label="Semantic legend">
+<span><svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="10" fill="#2f66b8" stroke="#2A2A3A" stroke-width="2"/></svg>Echo · blue circle</span>
+<span><svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="10" fill="#c0282c" stroke="#2A2A3A" stroke-width="2"/></svg>Enemy · red circle</span>
+<span><svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="8" fill="#2f66b8"/><circle cx="14" cy="14" r="12" fill="none" stroke="#7AB5C8" stroke-width="2"/></svg>Joined ally · mist ring</span>
+<span><svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="8" fill="#2f66b8"/><circle cx="14" cy="14" r="12" fill="none" stroke="#ffda59" stroke-width="2"/></svg>Spirit · gold nimbus</span>
+<span><svg viewBox="0 0 28 28" aria-hidden="true"><rect x="4" y="4" width="20" height="20" fill="#85858a" stroke="#2A2A3A" stroke-width="2"/></svg>Structure · stationary square</span>
+<span><svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="11" fill="none" stroke="#FFEB59" stroke-width="2.5"/></svg>Current actor · yellow ring</span>
+<span><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M4 5 Q14 1 24 5 L23 15 Q21 21 14 26 Q7 21 5 15 Z" fill="#FFF8DC" stroke="#2A2A3A" stroke-width="2"/></svg>Normal Guard · shield above</span>
+<span><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M9 3H3V9M19 3H25V9M3 19V25H9M25 19V25H19" fill="none" stroke="#2A2A3A" stroke-width="5"/><path d="M9 3H3V9M19 3H25V9M3 19V25H9M25 19V25H19" fill="none" stroke="#FFF8DC" stroke-width="2.5"/></svg>Mark / Reveal · one bracket</span>
+</div>
+</header>
+<figure class="combined" id="combined">
+<div id="combined-board"></div>
+<figcaption>
+<div class="eyebrow">Combined read · authored sequence</div>
+<h3>Interpose → contact → reply → result</h3>
+<p class="mut">Kweku acts; Ama receives Guard. The Wanderer strikes Ama, then Ama replies. Waiting people and the shrine stay still.</p>
+<div class="steps" aria-label="Sequence phases"><span data-step="0">Interpose</span><span data-step="1">Guarded hit</span><span data-step="2">Reply</span><span data-step="3">Settled result</span></div>
+<p class="mut">One active token and matching initiative row. Damage follows contact; any changed emotion follows the result.</p>
+<p class="mut">Reuses 03, 06, 08, 10, 11, 13, 22 and 24. Demo timing and results are illustrative.</p>
+</figcaption>
+</figure>
+<section aria-labelledby="turn-heading"><h2 id="turn-heading">A. Arrival, attention and stillness</h2><p class="mut">Horizontal rows follow the reference. Scroll each row to compare its treatments.</p><div class="row" tabindex="0" role="region" aria-label="Arrival and attention action cards" id="turn-row"></div></section>
+<section aria-labelledby="contact-heading"><h2 id="contact-heading">B. Contact and defence</h2><div class="row" tabindex="0" role="region" aria-label="Contact and defence action cards" id="contact-row"></div></section>
+<section aria-labelledby="support-heading"><h2 id="support-heading">C. Support and target attention</h2><div class="row" tabindex="0" role="region" aria-label="Support and target action cards" id="support-row"></div></section>
+<section aria-labelledby="choice-heading"><h2 id="choice-heading">D. Choice and objective action</h2><div class="row" tabindex="0" role="region" aria-label="Choice and objective action cards" id="choice-row"></div></section>
+<section aria-labelledby="result-heading"><h2 id="result-heading">E. Vulnerability, death and fallback</h2><div class="row" tabindex="0" role="region" aria-label="Result and fallback action cards" id="result-row"></div></section>
+<footer class="foot">Review proposal, not game implementation or approved final art. All boards retain 128 × 64 cell geometry and radius-20 tokens; page theme changes leave the board unchanged. Normal Guard’s shield is distinct from the reference’s directional stop-short arc. Controls replay immutable examples, not gameplay; barks are existing authored lines. Every example uses 20 maximum HP so signed changes match both health bars.<br>Review focus: can one glance identify the current actor, its subject and what changed, without reading every caption?
+<details><summary>Concept references and proposed motion direction</summary><p>The inspected north-star moodboard and character canvas supply warm ink contours, loose textile rhythm and expressive posture; the approved starter portrait supplies anticipation and vulnerability, and the approved three-realm combat elements supply weighted clay and material fractures. These inform wind-up, commitment, a small recoil and a warm transfer wash; no concept image replaces the tokens, and no new cultural symbol is invented. Edge entrances are a presentation proposal, not a claim about current production spawn routes. Timings and HP examples are starting values for review; the person-recovery panel tests feedback only and establishes no healing skill.</p></details></footer>
+<noscript><p>JavaScript is required to draw these inline SVG demonstrations and coordinate playback.</p></noscript>
+</main>
+<script>
+'use strict';
+(() => {
+const NS='http://www.w3.org/2000/svg', cream='#FFF8DC', ink='#2A2A3A';
+const hpColor=ratio=>ratio>.5?'#0b7d12':ratio>.25?'#FFFF00':'#FF0000';
+const MAX_HP=20, healthUnits=ratio=>Math.round(clamp(ratio)*MAX_HP), healthRatio=ratio=>healthUnits(ratio)/MAX_HP;
+const guardPath='M12.97,-25.94 A29,29 0 0 1 -12.97,25.94 M11.4,-22.81 L14.53,-29.07 M-11.4,22.81 L-14.53,29.07';
+const bracketPath='M-22,-32 H-32 V-22 M22,-32 H32 V-22 M-32,22 V32 H-22 M32,22 V32 H22';
+const actors={
+ echo:{name:'Kweku',initial:'KW',kind:'echo',hp:1,status:'Grounded',x:170,y:87},
+ enemy:{name:'Wanderer',initial:'DW',kind:'enemy',hp:1,status:'Uncertain',x:234,y:119},
+ ally:{name:'Ama',initial:'AM',kind:'ally',hp:.8,status:'Hesitant',x:106,y:119},
+ spirit:{name:'Adwoa',initial:'AD',kind:'spirit',hp:.8,status:null,x:298,y:87},
+ shrine:{name:'Shrine',initial:'SH',kind:'structure',hp:.7,status:null,x:234,y:119},
+ totem:{name:'Totem',initial:'TO',kind:'structure',hp:.7,status:null,x:234,y:119}
+};
+const clone=(key,over={})=>Object.freeze({...actors[key],...over});
+const common=()=>[clone('echo'),clone('enemy'),clone('ally')];
+const items=[
+ [1,'Appearing / entering combat','turn','arrival','Echoes, enemies and joined allies fade and step in from the board edge; objective spirit, shrine and totem fade in place. Edge routes are a presentation proposal, not a changed spawn contract.'],
+ [2,'Waiting for a turn','turn','waiting','Waiting actors stay still; the active ring and initiative highlight identify the acting person. No board-wide idle loops.'],
+ [3,'Active turn / ready to act','turn','active','The existing active ring and initiative-row highlight change together. Only the current actor receives that cue.'],
+ [4,'Thinking / deliberating','turn','thinking','Keep the active ring steady during a visual deliberation beat. This adds no thinking icon or simulation action.',3],
+ [5,'Idle / choosing not to act','turn','idle','Leave the flat token settled. A reason or bark appears only when supplied; this example has none.'],
+ [6,'Melee attack','contact','attack','Wind back, commit to adjacent contact, then follow through into a weighted settle. The affected actor owns the red damage response.'],
+ [7,'Follow-up pressure / Press','contact','skip','Skip for now: Press has no dedicated damage resolution. A follow-up strike would depict an unimplemented effect.'],
+ [8,'Receiving a hit','contact','hit','Recoil, then red signed loss leaves the victim and the same HP loss flashes on its card; structures stay still and fracture. Green inward recovery is shown separately as feedback only, with no healing skill.'],
+ [9,'Zero-damage hit','contact','zero','Commit to contact even when HP stays unchanged. The held shield catches the hit and returns intact without implying Guard was consumed.'],
+ [10,'Guard','contact','guard','Raise a shield above the actor for normal omnidirectional Guard, then clear it at the next round boundary. The directional stop-short arc remains a separate reference cue.'],
+ [11,'Guard absorbs a hit','contact','absorb','Push the shield farther than the actor in the same direction away from the attacker and briefly crack its surface. Reduced damage still uses the shared red result and matching card HP.',8],
+ [12,'Protect an ally','support','skip','Skip direct protection: its resolver is a stub. Only actual movement / proximity may be represented; do not imply Guard or interception.'],
+ [13,'Interpose','support','interpose','Let the source wind up and commit, then raise the recipient shield. A changed source emotion follows once, without a persistent link.'],
+ [14,'Hold Ground','support','holdground','Let the resolved action lead into a bold, brief change of nearby affected emotion chips. No stop-short Hold ring or persistent radius.'],
+ [15,'Steady Call','support','steady','The caller commits, then affected emotion chips visibly lift and change. No lasting area marker or fear meter.'],
+ [16,'Mark a target','support','mark','Hold one shared target bracket while Mark remains relevant to subsequent actors. Source detail stays compact.'],
+ [17,'Reveal a target','support','reveal','Show the same bracket briefly for Reveal, then remove it when the action completes. The scoring effect is not a concealment-removal animation.',16],
+ [18,'Read the field','support','skip','Skip the battlefield scan: the broader field-read / reveal effect is not established. Exposed streak or cooldown detail belongs in compact UI.'],
+ [19,'Refuse through fear','choice','refuse','A quick tremor and small backward flinch lead into one authored refusal bark. The actor stays alive and settled afterward; this is not guidance Refuse.'],
+ [20,'Diverge from broad intent','choice','diverge','The chosen action carries emphasis. A supplied divergence reason appears only after its result, never as a command label.'],
+ [21,'Purify shrine','choice','purify','Kweku commits and a warm ink-like flow travels into the stationary shrine. The resolved restoration draws a green signed gain inward and updates shrine HP.'],
+ [22,'Kill / defeat another actor','result','kill','Use the expressive strike, red loss and confirmed death state as one result sequence. Any actual emotion change follows; no second kill flash.',24],
+ [23,'Near death','result','near','On the first low-health crossing, strongly emphasize the above-token HP bar and mirror damage on the card. A changed emotion chip follows; death does not repeat this HP emphasis.'],
+ [24,'Death / inactive actor','result','death','Confirm death by dimming the person circle, retaining identity and clearing eligibility; keep focus on the living actor. Structures fracture in place, and neither death treatment repeats the low-HP glow.'],
+ [25,'Death of an ally / bond partner','result','witness','Mirror any exposed ally damage on its card, then show only confirmed witness emotion changes on death. Focus stays with the surviving actor; no relationship link.',24],
+ [26,'Last Echo standing','result','last','Use the active ring and a supplied last-stand bark on the actual trigger. No permanent badge or new stance.'],
+ [27,'Invalidated action / fallback','result','fallback','Clear the stale target cue, then show the actual fallback or idle. This example settles to idle without inventing a reason or error icon.']
+].map(([id,title,row,type,description,reuse])=>Object.freeze({id,title,row,type,description,reuse}));
+Object.freeze(items);
+const scenes=[];
+function svgNode(tag,attrs={},text){const el=document.createElementNS(NS,tag);for(const [k,v] of Object.entries(attrs))el.setAttribute(k,String(v));if(text!=null)el.textContent=text;return el;}
+function add(parent,tag,attrs,text){const el=svgNode(tag,attrs,text);parent.append(el);return el;}
+function attr(el,key,value){const s=String(value);if(el.getAttribute(key)!==s)el.setAttribute(key,s);}
+function opacity(el,n){attr(el,'opacity',Math.max(0,Math.min(1,n)).toFixed(3));}
+function setHealth(ref,ratio){const actual=healthRatio(ratio);attr(ref.hp,'width',40*actual);attr(ref.hp,'fill',hpColor(actual));attr(ref.anchor,'data-health',healthUnits(actual));}
+function setActorHealth(s,index,ratio){const r=s.refs[index];setHealth(r,ratio);const row=s.rows.find(x=>x.i===index);if(row){attr(row.hp,'width',(row.width-18)*healthRatio(ratio));attr(row.hp,'fill',hpColor(healthRatio(ratio)));attr(row.g,'data-health',healthUnits(ratio));}}
+const clamp=n=>Math.min(1,Math.max(0,n));
+const ramp=(t,a,b)=>clamp((t-a)/(b-a));
+const pulse=(t,a,b,c)=>t<a?0:t<b?ramp(t,a,b):1-ramp(t,b,c);
+const ease=n=>n*n*(3-2*n);
+function board(width,height){
+ const svg=svgNode('svg',{viewBox:`0 0 ${width} ${height}`,width,height,class:'board',role:'img'});
+ add(svg,'rect',{width,height,fill:'#6e3128'});
+ const grid=add(svg,'g',{fill:'none',stroke:'#e8b080','stroke-opacity':'.22','stroke-width':1});
+ for(let r=-5;r<8;r++)for(let c=-5;c<8;c++){const x=170+(c-r)*64,y=87+(c+r)*32;if(x<-64||x>width+64||y<-32||y>height-36)continue;add(grid,'polygon',{points:`${x-64},${y} ${x},${y-32} ${x+64},${y} ${x},${y+32}`});}
+ return svg;
+}
+function token(svg,a){
+ const anchor=add(svg,'g',{'data-person':a.name,'data-max-hp':MAX_HP,transform:`translate(${a.x},${a.y})`});
+ const shade=add(anchor,'ellipse',{cx:0,cy:18,rx:16,ry:5,fill:'#000','fill-opacity':'.28'});
+ const move=add(anchor,'g',{});
+ const shape=add(move,'g',{});
+ if(a.kind==='spirit'){add(shape,'circle',{r:26,fill:'#ffeb8c','fill-opacity':'.22'});add(shape,'circle',{r:26,fill:'none',stroke:'#ffda59','stroke-opacity':'.85','stroke-width':2.5});add(shape,'circle',{r:30,fill:'none',stroke:'#ffda59','stroke-opacity':'.38','stroke-width':1.75});}
+ if(a.kind==='ally')add(shape,'circle',{r:25,fill:'none',stroke:'#7AB5C8','stroke-width':2.5});
+ const fill=a.kind==='enemy'?'#c0282c':a.kind==='structure'?'#85858a':'#2f66b8';
+ const body=a.kind==='structure'?add(shape,'rect',{x:-20,y:-20,width:40,height:40,fill,stroke:'#2A2A3A','stroke-width':2}):add(shape,'circle',{r:20,fill,stroke:'#000','stroke-opacity':'.7','stroke-width':2});
+ const initials=add(shape,'text',{x:0,y:4,'text-anchor':'middle',class:'initial'},a.initial);
+ const material=add(shape,'path',{d:'M-14,-15 L-5,-6 L-10,2 L2,13 M4,-18 L9,-8 L5,0 L15,9',fill:'none',stroke:ink,'stroke-width':2,opacity:0});
+ const turn=add(move,'circle',{r:24,fill:'none',stroke:'#FFEB59','stroke-width':2.5,opacity:0,'data-cue':'active'});
+ const guard=add(anchor,'g',{opacity:0,'data-cue':'guard-shield'});const guardLight=add(guard,'path',{d:'M-10,-55 Q0,-59 10,-55 L9,-44 Q7,-37 0,-33 Q-7,-37 -9,-44 Z',fill:cream,stroke:ink,'stroke-width':2,'stroke-linejoin':'round'});const guardCrack=add(guard,'path',{d:'M3,-56 L-1,-49 L3,-46 L-3,-39',fill:'none',stroke:'#9b3c30','stroke-width':1.6,opacity:0});
+ const bracket=add(anchor,'g',{opacity:0,'data-cue':'target'});add(bracket,'path',{d:bracketPath,fill:'none',stroke:ink,'stroke-width':5});add(bracket,'path',{d:bracketPath,fill:'none',stroke:cream,'stroke-width':2.5});
+ add(anchor,'text',{x:0,y:-66,'text-anchor':'middle',class:'name'},a.name);
+ const hpBack=add(anchor,'rect',{x:-20,y:-29,width:40,height:5,rx:1,fill:ink,stroke:cream,'stroke-opacity':'.5','stroke-width':'.5'});
+ const hp=add(anchor,'rect',{x:-20,y:-29,width:40*healthRatio(a.hp),height:5,rx:1,fill:hpColor(a.hp),'data-cue':'hp'});
+ const hpAttention=add(anchor,'rect',{x:-23,y:-32,width:46,height:11,rx:2,fill:'none',stroke:cream,'stroke-width':2.5,opacity:0});
+ const hurtWash=add(shape,a.kind==='structure'?'rect':'circle',a.kind==='structure'?{x:-20,y:-20,width:40,height:40,fill:'#ef574d',opacity:0,'data-cue':'hurt-wash'}:{r:20,fill:'#ef574d',opacity:0,'data-cue':'hurt-wash'});
+ const damage=add(anchor,'text',{x:0,y:-4,'text-anchor':'middle',class:'damage',opacity:0,'data-cue':'health-delta'});
+ const scraps=add(anchor,'g',{opacity:0,'data-cue':'impact-fragments'});add(scraps,'path',{d:'M20,-6 L26,-9 L23,-2 M16,10 L22,13 L18,17 M-4,-21 L0,-27 L4,-23',fill:'none',stroke:'#ef574d','stroke-width':2.5,'stroke-linecap':'round'});
+ return {a,anchor,shade,move,shape,body,initials,material,turn,guard,guardLight,guardCrack,bracket,hp,hpBack,hpAttention,hurtWash,damage,scraps};
+}
+function scene(host,type,people=common(),width=420,height=280,label){
+ people=people.map(a=>Object.freeze({...a,y:a.y+20}));
+ const svg=board(width,height);svg.setAttribute('aria-label',label||type);host.append(svg);
+ const footerY=height-72;
+ const phase=add(svg,'text',{x:12,y:18,class:'phase'},'');
+ const refs=people.map(a=>token(svg,a));
+ const livingRows=people.map((a,i)=>({a,i})).filter(({a})=>a.kind!=='structure');
+ add(svg,'rect',{x:0,y:footerY,width,height:72,fill:ink,'fill-opacity':'.96'});
+ const rowW=(width-16)/livingRows.length;
+ const rows=livingRows.map(({a,i},j)=>{
+ const g=add(svg,'g',{transform:`translate(${8+j*rowW},${footerY+6})`});
+ const outline=add(g,'rect',{width:rowW-6,height:60,rx:3,fill:'none',stroke:cream,'stroke-opacity':'.25','stroke-width':1});
+ const healthFlash=add(g,'rect',{width:rowW-6,height:60,rx:3,fill:'#ef574d',opacity:0,'data-cue':'card-health-response'});
+ add(g,'text',{x:7,y:13,class:'row-name'},a.name);
+ let chip=null,chipText=null;
+ add(g,'rect',{x:7,y:21,width:rowW-18,height:5,rx:1,fill:'#171722'});const hp=add(g,'rect',{x:7,y:21,width:(rowW-18)*healthRatio(a.hp),height:5,rx:1,fill:hpColor(a.hp),'data-cue':'card-hp'});
+ if(a.status){chip=add(g,'rect',{x:6,y:34,width:Math.min(92,rowW-18),height:20,rx:3,fill:cream,'fill-opacity':'.88'});chipText=add(g,'text',{x:12,y:48,class:'chip-text'},a.status);}
+ return {i,g,outline,chip,chipText,hp,healthFlash,width:rowW};
+ });
+ const bubble=add(svg,'g',{opacity:0,'data-cue':'bark'});add(bubble,'path',{d:'M42,176 H166 L172,140 L180,176 H366 V198 H42 Z',fill:cream,stroke:ink,'stroke-width':1.5});const bubbleText=add(bubble,'text',{x:204,y:192,'text-anchor':'middle','font-size':11,fill:ink},'');
+ const detail=add(svg,'text',{x:12,y:footerY-8,class:'small'},'');
+ const transfer=add(svg,'g',{opacity:0,'data-cue':'purification-transfer'});const transferPath=add(transfer,'path',{fill:'none',stroke:'#D4AF37','stroke-width':3,'stroke-linecap':'round'});const transferBead=add(transfer,'circle',{r:5,fill:cream,stroke:'#D4AF37','stroke-width':2});
+ const s={svg,type,refs,rows,phase,bubble,bubbleText,detail,transfer,transferPath,transferBead,period:8,restTime:5.5};scenes.push(s);return s;
+}
+function setActive(s,index){s.refs.forEach((r,i)=>opacity(r.turn,i===index?1:0));s.rows.forEach(r=>{attr(r.outline,'stroke',r.i===index?'#FFEB59':cream);attr(r.outline,'stroke-opacity',r.i===index?1:.25);attr(r.outline,'stroke-width',r.i===index?2:1);});}
+function reset(s){
+ s.refs.forEach((r,i)=>{opacity(r.anchor,1);attr(r.anchor,'transform',`translate(${r.a.x},${r.a.y})`);opacity(r.shade,1);opacity(r.shape,1);attr(r.move,'transform','translate(0,0)');opacity(r.guard,0);attr(r.guard,'transform','translate(0,0)');opacity(r.guardCrack,0);opacity(r.bracket,0);opacity(r.material,0);opacity(r.hpAttention,0);opacity(r.hurtWash,0);opacity(r.scraps,0);opacity(r.damage,0);attr(r.damage,'x',0);attr(r.damage,'y',-4);setActorHealth(s,i,r.a.hp);attr(r.body,'fill',r.a.kind==='structure'?'#85858a':r.a.kind==='enemy'?'#c0282c':'#2f66b8');});
+ s.rows.forEach(r=>{opacity(r.g,1);opacity(r.healthFlash,0);if(r.chip){attr(r.chip,'fill',cream);attr(r.chip,'fill-opacity',.88);attr(r.chip,'transform','translate(0,0)');attr(r.chipText,'transform','translate(0,0)');attr(r.chipText,'font-size',10);attr(r.chipText,'font-weight',500);r.chipText.textContent=s.refs[r.i].a.status;}});opacity(s.transfer,0);opacity(s.bubble,0);s.detail.textContent='';setActive(s,0);
+}
+function status(s,index,text,t,at){const row=s.rows.find(r=>r.i===index);if(!row?.chip||t<at)return;const beat=pulse(t,at,at+.2,at+1.2);row.chipText.textContent=text;attr(row.chip,'fill',beat>.05?'#D4AF37':cream);attr(row.chip,'fill-opacity',1);attr(row.chip,'transform',`translate(0,${(-4*beat).toFixed(2)})`);attr(row.chipText,'transform',`translate(0,${(-4*beat).toFixed(2)})`);attr(row.chipText,'font-size',10+1.5*beat);attr(row.chipText,'font-weight',beat>.05?850:650);}
+function bark(s,text,t,at,until=6.5){s.bubbleText.textContent=text;opacity(s.bubble,ramp(t,at,at+.15)*(1-ramp(t,until,until+.3)));}
+function dead(s,index,t,at){if(t<at)return;const r=s.refs[index];opacity(r.shape,1-.65*ramp(t,at,at+.3));setActorHealth(s,index,0);const row=s.rows.find(x=>x.i===index);if(row)opacity(row.g,.4);}
+function sourceBeat(s,index,t,at=.7){const beat=pulse(t,at,at+.3,at+.9);attr(s.refs[index].move,'transform',`rotate(${(-7*beat).toFixed(2)})`);}
+function healthFeedback(s,index,remaining,t,at,ux=0,uy=-1){
+ const r=s.refs[index],delta=healthUnits(remaining)-healthUnits(r.a.hp);if(t<at)return;setActorHealth(s,index,remaining);
+ const motion=ramp(t,at,at+1),visible=ramp(t,at,at+.08)*(1-ramp(t,at+1.1,at+1.5));
+ r.damage.textContent=delta>0?`+${delta}`:delta<0?`−${Math.abs(delta)}`:'0';attr(r.damage,'data-delta',delta);attr(r.damage,'fill',delta>0?'#58cc88':delta<0?'#ef574d':cream);opacity(r.damage,visible);
+ attr(r.damage,'x',((delta>0?-26*(1-ease(motion)):ux*40*ease(motion))).toFixed(2));attr(r.damage,'y',(delta>0?-38*(1-ease(motion))-4:-4+uy*25*ease(motion)-10*motion).toFixed(2));
+ if(delta!==0){attr(r.hurtWash,'fill',delta>0?'#58cc88':'#ef574d');opacity(r.hurtWash,.42*pulse(t,at,at+.1,at+.55));const row=s.rows.find(x=>x.i===index);if(row){attr(row.healthFlash,'fill',delta>0?'#58cc88':'#ef574d');opacity(row.healthFlash,.5*pulse(t,at,at+.12,at+.8));}}
+ if(delta<0){opacity(r.scraps,.8*pulse(t,at,at+.1,at+.55));attr(r.scraps,'transform',`translate(${(ux*14*motion).toFixed(2)},${(uy*14*motion).toFixed(2)}) rotate(${(motion*18).toFixed(2)})`);}
+}
+function attack(s,source,target,t,{remaining=.55,at=.8,guard=false,emotion=null,structure=false,kill=false,low=false}={}){
+ const a=s.refs[source],b=s.refs[target];const dx=b.a.x-a.a.x,dy=b.a.y-a.a.y,length=Math.hypot(dx,dy),ux=dx/length,uy=dy/length;
+ const wind=pulse(t,at,at+.24,at+.4),contact=at+.62,result=at+1.14;
+ const commit=t<at+.4?0:t<contact?ease(ramp(t,at+.4,contact)):1-ease(ramp(t,contact+.08,at+1.07));
+ const lean=-8*wind+Math.max(0,length-40)*commit;attr(a.move,'transform',`translate(${(ux*lean).toFixed(2)},${(uy*lean).toFixed(2)}) rotate(${(-9*wind+4*commit).toFixed(2)})`);
+ const rebound=8*pulse(t,contact+.03,contact+.13,contact+.5);
+ if(!structure)attr(b.move,'transform',`translate(${(ux*rebound).toFixed(2)},${(uy*rebound).toFixed(2)}) rotate(${(ux*4*rebound/8).toFixed(2)})`);
+ if(guard){opacity(b.guard,1);const shieldPush=19*pulse(t,contact+.03,contact+.13,contact+.65);attr(b.guard,'transform',`translate(${(ux*shieldPush).toFixed(2)},${(uy*shieldPush).toFixed(2)}) rotate(${(ux*10*shieldPush/19).toFixed(2)},0,-45)`);opacity(b.guardCrack,pulse(t,contact+.05,contact+.12,contact+1.15));}
+ healthFeedback(s,target,remaining,t,result,ux,uy);
+ if(t>=result&&structure){opacity(b.material,remaining===0?1:.75);attr(b.body,'fill',remaining===0?'#56565d':'#76767d');}
+ if(low&&!kill)opacity(b.hpAttention,pulse(t,result,result+.18,result+1.5));
+ if(kill&&!structure)dead(s,target,t,result+.18);
+ if(emotion)status(s,target,emotion,t,result+.65);
+ return result;
+}
+function draw(s,t){
+ reset(s);s.phase.textContent='';
+ switch(s.type){
+ case 'arrival':
+  setActive(s,t>4.2?0:-1);s.phase.textContent=t<4.2?'Entering combat':'Ready';
+  s.refs.forEach((r,i)=>{const objective=['structure','spirit'].includes(r.a.kind),at=i===1?2.3:.15+i*.18;if(objective){opacity(r.anchor,ramp(t,at,at+.6));return;}const p=ramp(t,at,at+1.55),startX=r.a.kind==='enemy'?655:-35,step=-Math.abs(Math.sin(p*Math.PI*3))*3*(1-p);attr(r.anchor,'transform',`translate(${(startX+(r.a.x-startX)*ease(p)).toFixed(2)},${(r.a.y-28*(1-ease(p))+step).toFixed(2)})`);opacity(r.anchor,ramp(t,at,at+.6));});break;
+ case 'waiting':s.phase.textContent='Kweku acts · others wait';break;
+ case 'active':setActive(s,t<2.7?0:t<5.2?1:2);s.phase.textContent='Current actor';break;
+ case 'thinking':s.phase.textContent=t<2.2?'Choosing':'Settled';break;
+ case 'idle':s.phase.textContent='Kweku · Idle';break;
+ case 'attack':s.phase.textContent='Ama · Melee';attack(s,0,1,t);break;
+ case 'hit':s.phase.textContent='Kweku · Melee';attack(s,0,1,t,{emotion:'Hesitant'});break;
+ case 'structure-hit':s.phase.textContent='Wanderer · Melee';attack(s,0,1,t,{remaining:.45,structure:true});break;
+ case 'zero':s.phase.textContent='Adwoa · Melee';attack(s,0,1,t,{remaining:1,guard:true});break;
+ case 'guard':s.phase.textContent=t<.8?'Kweku · Guard':t<6.3?'Guard held':'Next round · Guard cleared';sourceBeat(s,0,t,.3);opacity(s.refs[0].guard,ramp(t,.55,.85)*(1-ramp(t,6.3,6.6)));break;
+ case 'absorb':s.phase.textContent='Wanderer · Melee';attack(s,0,1,t,{remaining:.8,guard:true});break;
+ case 'interpose':s.phase.textContent='Kweku · Interpose';sourceBeat(s,0,t);opacity(s.refs[2].guard,ramp(t,1.3,1.6));status(s,0,'Whole',t,1.85);break;
+ case 'holdground':s.phase.textContent='Kweku · Hold Ground';sourceBeat(s,0,t);status(s,2,'Grounded',t,1.7);break;
+ case 'steady':s.phase.textContent='Kweku · Steady Call';sourceBeat(s,0,t);status(s,2,'Uncertain',t,1.7);break;
+ case 'mark':case 'reveal':{sourceBeat(s,0,t);const reveal=s.type==='reveal',end=reveal?2.1:6.4;s.phase.textContent=`Kweku · ${reveal?'Reveal':'Mark'}`;opacity(s.refs[1].bracket,ramp(t,1,1.3)*(1-ramp(t,end,end+.3)));if(t>1.3&&t<end+.3)s.detail.textContent=`${reveal?'Reveal':'Mark'} · Kweku → Wanderer`;break;}
+ case 'refuse':{s.phase.textContent='Kweku · Refused';const shake=pulse(t,.65,.8,1.25),x=-3*shake+3*Math.sin((t-.65)*36)*shake;attr(s.refs[0].move,'transform',`translate(${x.toFixed(2)},${(-2*shake).toFixed(2)}) rotate(${(2*Math.sin(t*30)*shake).toFixed(2)})`);bark(s,'I need a moment.',t,.75);break;}
+ case 'diverge':s.phase.textContent='Kweku · Melee';attack(s,0,1,t);bark(s,'Holding protects nothing here. Ending this does.',t,2.8);break;
+ case 'purify':drawPurify(s,t);break;
+ case 'recovery':setActive(s,-1);s.phase.textContent='Recovery · feedback illustration';s.detail.textContent='Presentation study · no healing skill';healthFeedback(s,1,.8,t,1.7);if(t>1.1&&t<2.4){const gather=pulse(t,1.1,1.7,2.4);attr(s.refs[1].move,'transform',`translate(0,${(-3*gather).toFixed(2)}) rotate(${(-4*gather).toFixed(2)})`);}break;
+ case 'kill':s.phase.textContent='Kweku · Melee';attack(s,0,1,t,{remaining:0,kill:true});status(s,0,'Whole',t,2.5);break;
+ case 'near':s.phase.textContent='Wanderer · Melee';attack(s,0,1,t,{remaining:.18,low:true,emotion:'Fraying'});break;
+ case 'death':s.phase.textContent='Kweku · Melee';attack(s,0,1,t,{remaining:0,kill:true});break;
+ case 'structure-death':s.phase.textContent='Wanderer · Melee';attack(s,0,1,t,{remaining:0,structure:true});if(t>2)s.detail.textContent='Totem destroyed';break;
+ case 'witness':s.phase.textContent='Kweku · Current actor';healthFeedback(s,2,0,t,1.7,0,-1);dead(s,2,t,1.95);status(s,0,'Strained',t,2.5);break;
+ case 'last':s.phase.textContent='Kweku · Current actor';dead(s,2,t,0);bark(s,"One left. That's enough.",t,1.2);break;
+ case 'fallback':s.phase.textContent=t<1.8?'Kweku · Targeting':t<2.4?'':'Kweku · Idle';opacity(s.refs[1].bracket,ramp(t,.2,.4)*(1-ramp(t,1.6,1.9)));break;
+ case 'combined':drawCombined(s,t);break;
+ }
+}
+function drawCombined(s,t){
+ const step=t<2.7?0:t<5.8?1:t<8.8?2:3;
+ document.querySelectorAll('[data-step]').forEach((el,i)=>el.classList.toggle('current',step===i));
+ if(step===0){setActive(s,0);s.phase.textContent='Kweku · Interpose';sourceBeat(s,0,t,.4);opacity(s.refs[1].guard,ramp(t,1,1.3));status(s,0,'Whole',t,1.6);}
+ else{
+  status(s,0,'Whole',t,0);opacity(s.refs[1].guard,1);
+  const hitT=t-2.7;
+  if(step===1){setActive(s,2);s.phase.textContent='Wanderer · Melee';attack(s,2,1,hitT,{remaining:.62,guard:true});}
+  else {setActorHealth(s,1,.62);setActive(s,1);s.phase.textContent=step===2?'Ama · Melee':'Ama · Settled';attack(s,1,2,t-5.8,{remaining:0,kill:true});status(s,1,'Grounded',t,8.3);}
+ }
+}
+function drawPurify(s,t){
+ const a=s.refs[0],b=s.refs[1];sourceBeat(s,0,t,.35);s.phase.textContent='Kweku · Purify Shrine';const p=clamp(ramp(t,1,2.4));
+ const dx=b.a.x-a.a.x,dy=b.a.y-a.a.y;
+ attr(s.transferPath,'d',`M${a.a.x+18},${a.a.y} Q${a.a.x+dx*.55},${a.a.y+dy*.3-16} ${b.a.x-18},${b.a.y}`);opacity(s.transfer,pulse(t,.85,1.1,2.65));
+ const x=a.a.x+18+(dx-36)*ease(p),y=a.a.y+dy*ease(p)-12*Math.sin(p*Math.PI);attr(s.transferBead,'cx',x.toFixed(2));attr(s.transferBead,'cy',y.toFixed(2));
+ if(t<2.4)s.detail.textContent='Shrine · purification 2 / 3';else s.detail.textContent='Shrine restored · 3 / 3';attr(b.body,'fill',t<2.4?'#85858a':'#e5dbc1');healthFeedback(s,1,1,t,2.4);
+}
+function makeCard(item){
+ const card=document.createElement('figure');card.className='card';card.id=`action-${String(item.id).padStart(2,'0')}`;card.dataset.action=String(item.id);
+ const host=document.createElement('div');card.append(host);
+ if(item.type==='skip'){
+  host.className='skip';host.innerHTML='<div class="quiet" aria-hidden="true"></div><h3>No separate effect</h3><p>No invented motion in this example.</p>';
+ }else{
+  let people=common();
+  if(item.type==='arrival'){card.classList.add('entrance');people=[clone('echo'),clone('enemy'),clone('ally'),clone('spirit'),clone('shrine',{x:362,y:119}),clone('totem',{x:426,y:87})];scene(host,item.type,people,620,280,'Echo, enemy and joined ally enter from board edges; objective spirit, shrine and totem fade in place.');}
+  else{
+   if(item.type==='attack')people=[clone('ally',{x:170,y:87}),clone('enemy'),clone('echo',{x:106,y:119})];
+   if(item.type==='zero')people=[clone('spirit',{x:170,y:87,status:null}),clone('enemy'),clone('echo',{x:106,y:119})];
+   if(['absorb','near'].includes(item.type))people=[clone('enemy',{x:170,y:87}),clone('echo',{x:234,y:119,hp:item.type==='near'?.45:1}),clone('ally')];
+   if(item.type==='purify')people=[clone('echo'),clone('shrine'),clone('ally')];
+   if(item.type==='refuse')people=[clone('echo',{status:'Fraying'}),clone('enemy'),clone('ally')];
+   if(['witness','last'].includes(item.type))people=[clone('echo'),clone('enemy'),clone('echo',{name:'Ama',initial:'AM',x:106,y:119,status:'Hesitant'})];
+   if(item.type==='kill')people=[clone('echo'),clone('enemy',{hp:.25}),clone('ally')];
+   if(item.type==='death')people=[clone('echo'),clone('enemy',{hp:.25}),clone('ally')];
+   scene(host,item.type,people,420,280,item.title+' demonstration. '+item.description);
+   if(['hit','death'].includes(item.type)){
+    card.classList.add('wide');host.className='strip';scene(host,item.type==='hit'?'structure-hit':'structure-death',[clone('enemy',{x:170,y:87}),clone('totem'),clone('echo',{x:106,y:119})],420,280,item.type==='hit'?'A stationary totem receives surface damage without recoil.':'A stationary totem is destroyed with surface cracks; no body collapse.');
+    if(item.type==='hit'){card.classList.add('triple');scene(host,'recovery',[clone('echo'),clone('ally',{x:234,y:119,hp:.4,status:'Uncertain'}),clone('enemy',{x:106,y:119})],420,280,'Illustrative recovery feedback: green plus eight draws back into Ama while token and card health rise from eight to sixteen. No healing skill is established.');}
+   }
+  }
+ }
+ const cap=document.createElement('figcaption');const id=document.createElement('span');id.className='id';id.textContent=`ACTION-${String(item.id).padStart(2,'0')}`;cap.append(id);
+ const title=document.createElement('h3');title.textContent=item.title;cap.append(title);
+ const p=document.createElement('p');p.textContent=item.description;cap.append(p);
+ if(item.type==='skip'){const tag=document.createElement('span');tag.className='tag';tag.textContent='Explicit skip · incomplete effect';cap.append(tag);}
+ if(item.reuse){const link=document.createElement('a');link.href=`#action-${String(item.reuse).padStart(2,'0')}`;link.textContent=`Shared cue → ACTION-${String(item.reuse).padStart(2,'0')}`;cap.append(link);}
+ if(item.type==='arrival'){const tag=document.createElement('span');tag.className='tag';tag.textContent='Proposed edge entrances · objectives settle in place';cap.append(tag);}
+ if(item.type==='hit'||item.type==='death'){const tag=document.createElement('span');tag.className='tag';tag.textContent=item.type==='hit'?'Person hurt · structure hurt · recovery feedback only (no healing skill)':'Left: person · Right: structure';cap.append(tag);}
+ card.append(cap);document.getElementById(`${item.row}-row`).append(card);
+}
+const composite=scene(document.getElementById('combined-board'),'combined',[
+clone('echo',{x:222,y:105}),clone('ally',{x:286,y:137,status:'Uncertain'}),clone('enemy',{x:350,y:105,hp:.25}),clone('shrine',{x:414,y:137}),clone('spirit',{x:94,y:105})
+],700,330,'Combined sequence: Kweku grants Ama Guard, Wanderer attacks Ama, then Ama defeats Wanderer. Current actor and initiative remain synchronized.');
+composite.period=12;composite.restTime=10.8;
+items.forEach(makeCard);
+const reduced=window.matchMedia('(prefers-reduced-motion: reduce)');
+const player={seconds:0,playing:!reduced.matches,rest:reduced.matches||location.hash==='#rest',speed:'normal',reduced:reduced.matches};
+if(player.rest)player.playing=false;
+const rates={slow:.6,normal:1,fast:1.5};let frame=null,last=null;
+function renderAt(seconds,settled=player.rest){if(!Number.isFinite(seconds))throw new TypeError('Time must be finite.');scenes.forEach(s=>draw(s,settled?s.restTime:((seconds%s.period)+s.period)%s.period));}
+function controls(){
+ const pause=document.getElementById('pause');pause.textContent=player.playing?'Pause':'Play';pause.setAttribute('aria-pressed',String(!player.playing));pause.disabled=player.reduced;
+ document.getElementById('rest').setAttribute('aria-pressed',String(player.rest));
+ document.querySelectorAll('[data-speed]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.speed===player.speed)));
+ document.getElementById('playback-status').textContent=player.reduced?'Reduced motion · settled stills':player.rest?'Still / rest · settled outcomes':`${player.playing?'Playing':'Paused'} · ${player.speed} speed`;
+}
+function stopClock(){if(frame!==null)cancelAnimationFrame(frame);frame=null;last=null;}
+function tick(now){frame=null;if(!player.playing||document.hidden)return;if(last!==null)player.seconds+=Math.min((now-last)/1000,.1)*rates[player.speed];last=now;renderAt(player.seconds,false);frame=requestAnimationFrame(tick);}
+function runClock(){stopClock();if(player.playing&&!document.hidden)frame=requestAnimationFrame(tick);}
+function clearRestHash(){if(location.hash==='#rest'&&window.history?.replaceState)history.replaceState(null,'',location.pathname+location.search);}
+function togglePlay(){if(player.reduced)return;player.playing=!player.playing;if(player.playing){player.rest=false;clearRestHash();}controls();runClock();}
+function replay(){player.seconds=0;player.rest=player.reduced;player.playing=!player.reduced;clearRestHash();renderAt(0);controls();runClock();}
+function showRest(){player.rest=true;player.playing=false;renderAt(0,true);controls();stopClock();}
+function setSpeed(speed){if(!(speed in rates))return;player.speed=speed;controls();}
+document.getElementById('pause').addEventListener('click',togglePlay);
+document.getElementById('replay').addEventListener('click',replay);
+document.getElementById('rest').addEventListener('click',showRest);
+document.querySelectorAll('[data-speed]').forEach(b=>b.addEventListener('click',()=>setSpeed(b.dataset.speed)));
+document.getElementById('theme').addEventListener('click',()=>{const dark=document.documentElement.dataset.theme!=='dark';document.documentElement.dataset.theme=dark?'dark':'light';const b=document.getElementById('theme');b.textContent=dark?'Cream page':'Dark page';b.setAttribute('aria-pressed',String(dark));});
+window.addEventListener('hashchange',()=>{if(location.hash==='#rest')showRest();});
+document.addEventListener('visibilitychange',runClock);
+reduced.addEventListener('change',e=>{player.reduced=e.matches;if(e.matches)showRest();else controls();});
+// One clock drives every immutable example; this hook exposes the authored read for review.
+window.sharedActionsMockup=Object.freeze({renderAt,togglePlay,replay,showRest,setSpeed,get state(){return Object.freeze({...player});},get actions(){return items;},get sceneCount(){return scenes.length;}});
+renderAt(0);controls();runClock();
+})();
+</script>
+</body>
+</html>

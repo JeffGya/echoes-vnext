@@ -1,0 +1,4 @@
+interface:
+  display_name: "Echoes Visual Plan"
+  short_description: "Export Echoes flow scans as HTML prototypes"
+  default_prompt: "Use $echoes-visual-plan to inspect the current Echoes implementation and export an HTML prototype of player flows, wireframes, and gameplay-feel notes before code changes."

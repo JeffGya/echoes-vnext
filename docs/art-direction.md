@@ -58,6 +58,52 @@ Sourced from Art Direction Bible v2 (global swatches, not virtue-specific):
 
 ---
 
+## Echo Identity — Story-Colour Settlement
+
+Story-colour is a physical replacement for part of an Echo's skin, not paint, clothing dye, a wound, transparency, or missing anatomy. An Echo remains physically whole and opaque at every state.
+
+Two visual signals must remain independent:
+
+- **Patch coverage and loose-thread count** show how settled the Echo's story is.
+- **Patch hue** shows the Echo's current mood and may shift without changing patch shape or coverage.
+
+At any one moment, an Echo's story-colour uses one solid hue. Patches may be non-contiguous, but they must remain clean, flat areas of colour against natural brown skin. Clothing, equipment, and hair never inherit story-colour.
+
+| Visual state | Story-colour coverage | Loose Threads | Read |
+|---|---:|---|---|
+| **Unsettled** | At least `1/3`, up to `1/2` of the skin | Many; every colour-to-skin boundary visibly comes undone | A physically whole Echo whose identity is still substantially unresolved |
+| **Weaving / developing** | About `1/4` to `1/3` | Fewer; present around every remaining unsettled boundary | Lived stories and Weavings are reducing and stabilizing the unresolved area |
+| **Settled** | About `1/8` to at most `1/4` | Minimal to none | A small, stable colour patch remains as part of the Echo's visible history |
+| **Mythical** | `0` | None | A rare older Echo whose story has fully settled under separate, specific ascension rules |
+
+Mythical is not an automatic high-Standing costume upgrade. Mythical Echoes sit toward the older end of the approved young-adult-to-early-senior range, remain grounded and recognizably human, and do not need halos, fantasy anatomy, armor, or spectacle to communicate rarity.
+
+---
+
+## Environment Stylization — Shape Before Surface
+
+Environment art must be stylized in its underlying geometry, proportions, perspective, and silhouettes. Painterly texture over realistically proportioned buildings, trees, or terrain does not meet the project style.
+
+- **Architecture:** Start from documented Ghanaian material and construction logic, then simplify it into squat or compressed structures, oversized roof masses, narrow openings, gently bowed rooflines, tapered wall planes, and visibly hand-shaped asymmetry. Use a few thick structural pieces rather than realistic construction density.
+- **Trees:** Build trunks and branches as strong calligraphic curves, roots as broad readable sweeps, and crowns as a small number of large overlapping foliage masses. Avoid botanical anatomy, thousands of individual leaves, and realistic branching density.
+- **Objects and terrain:** Favor chunky, slightly top-heavy silhouettes, broad surface patches, oversized functional forms, and sparse graphic plant fans over realistic scale, micro-rubble, or incidental texture.
+- **World depth:** Compress scenes into a few designed layers. Floating plateaus should have clear flat tops, tapered hanging silhouettes, simplified vegetation, and rhythmic web arcs rather than realistic geology and atmospheric perspective.
+- **Perspective:** A slightly theatrical or gently impossible perspective is acceptable when it improves clarity, rhythm, and emotional staging. Concept art does not need to imitate the game's isometric presentation.
+- **Finish:** Dark-brown contours, matte gouache-like blocks, limited value planes, and paper or woven grain support the style, but they cannot substitute for exaggerated shape design.
+
+The target is an adult illustrated folktale: reverent and grounded, but visibly authored rather than photographed or reconstructed.
+
+### Dormant starting Sanctum
+
+The starting Sanctum is dormant, not broken or ruined. Its structures, sacred tree, vessels, work shelter, and communal hearth remain whole and usable.
+
+- Use closed or resting openings, stored tools, covered work surfaces, settled dust, still air, sparse edge growth, and absence of activity to communicate sleep.
+- The Ase hearth is intact and deliberately placed, but completely cold: no flame, ember, smoke, glow, spark, or recent-burn cue.
+- Age may appear through faded surfaces, subtle staining, hand-shaped irregularity, and quiet maintenance needs, but not through collapsed roofs, missing walls, exposed structural failure, rubble, shattered objects, or dead vegetation.
+- The intended player read is `waiting to wake`, not `waiting to be rebuilt`.
+
+---
+
 ## Rarity Colors
 
 | Rarity | Hex |

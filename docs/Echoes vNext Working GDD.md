@@ -3722,7 +3722,7 @@ Those can arrive later.
 Current starting state:
 
 - one pre-summoned Echo
-- a dormant or broken Sanctum
+- a dormant Sanctum
 - no permanent Sanctum NPC cast required
 
 The starter Echo should begin in an unsettled state.
